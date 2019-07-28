@@ -208,7 +208,7 @@ void nRF5xSPIDisable(DEVINTRF * const pDev)
 {
 	NRF52_SPIDEV *dev = (NRF52_SPIDEV *)pDev->pDevData;
 
-	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	if (dev->pSpiDev->Cfg.Type == SPITYPE_SLAVE)
 	{
 		dev->pDmaSReg->ENABLE = (SPIS_ENABLE_ENABLE_Disabled << SPIS_ENABLE_ENABLE_Pos);
 	}
@@ -228,7 +228,7 @@ void nRF5xSPIEnable(DEVINTRF * const pDev)
 {
 	NRF52_SPIDEV *dev = (NRF52_SPIDEV *)pDev->pDevData;
 
-	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	if (dev->pSpiDev->Cfg.Type == SPITYPE_SLAVE)
 	{
 		dev->pDmaSReg->ENABLE = (SPIS_ENABLE_ENABLE_Enabled << SPIS_ENABLE_ENABLE_Pos);
 	}
@@ -269,7 +269,7 @@ bool nRF5xSPIStartRx(DEVINTRF * const pDev, int DevCs)
 	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PortNo,
 			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PinNo);
 
-	if (dev->pSpiDev->Cfg.Type == SPITYPE_3WIRE)
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
 	{
 #ifdef NRF52_SERIES
         dev->pReg->PSEL.MISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
@@ -354,7 +354,7 @@ void nRF5xSPIStopRx(DEVINTRF * const pDev)
 				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PinNo);
 	}
 
-	if (dev->pSpiDev->Cfg.Type == SPITYPE_3WIRE)
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
 	{
 #ifdef NRF52_SERIES
 //		dev->pReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
@@ -379,7 +379,7 @@ bool nRF5xSPIStartTx(DEVINTRF * const pDev, int DevCs)
 	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PortNo,
 			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PinNo);
 
-    if (dev->pSpiDev->Cfg.Type == SPITYPE_3WIRE)
+    if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
     {
 #ifdef NRF52_SERIES
         dev->pReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
@@ -467,7 +467,7 @@ void nRF5xSPIStopTx(DEVINTRF * const pDev)
 		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PortNo,
 				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PinNo);
 	}
-    if (dev->pSpiDev->Cfg.Type == SPITYPE_3WIRE)
+    if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
     {
 #ifdef NRF52_SERIES
         dev->pReg->PSEL.MOSI = -1;
@@ -483,7 +483,7 @@ void SPIIrqHandler(int DevNo, DEVINTRF * const pDev)
 {
 	NRF52_SPIDEV *dev = (NRF52_SPIDEV *)pDev-> pDevData;
 
-	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	if (dev->pSpiDev->Cfg.Type == SPITYPE_SLAVE)
 	{
 		if (dev->pDmaSReg->EVENTS_ENDRX)
 		{
@@ -543,7 +543,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		return false;
 	}
 
-	if (pCfgData->Mode == SPIMODE_SLAVE && pCfgData->DevNo >= NRF5X_SPISLAVE_MAXDEV)
+	if (pCfgData->Type == SPITYPE_SLAVE && pCfgData->DevNo >= NRF5X_SPISLAVE_MAXDEV)
 	{
 		return false;
 	}
@@ -624,7 +624,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	pDev->DevIntrf.PowerOff = nRF5xSPIPowerOff;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	if (pCfgData->Mode == SPIMODE_SLAVE)
+	if (pCfgData->Type == SPITYPE_SLAVE)
 	{
 		// Force DMA for slave mode
 		pDev->DevIntrf.bDma = true;
@@ -638,7 +638,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
 	uint32_t inten = 0;
 
-    if (pCfgData->Mode == SPIMODE_SLAVE)
+    if (pCfgData->Type == SPITYPE_SLAVE)
 	{
 		NRF_SPIS_Type *sreg = s_nRF52SPIDev[pCfgData->DevNo].pDmaSReg;
 

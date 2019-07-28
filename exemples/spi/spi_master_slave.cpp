@@ -90,8 +90,8 @@ static const IOPINCFG s_SpiMasterPins[] = {
 
 static const SPICFG s_SpiMasterCfg = {
     0,//SPI_DEVNO,
-	SPITYPE_NORMAL,
-    SPIMODE_MASTER,
+	SPIMODE_NORMAL,
+    SPITYPE_MASTER,
 	s_SpiMasterPins,
     sizeof( s_SpiMasterPins ) / sizeof( IOPINCFG ),
     1000000,   // Speed in Hz
@@ -126,8 +126,8 @@ static const IOPINCFG s_SpiSlavePins[] = {
 
 static const SPICFG s_SpiSlaveCfg = {
     1,//SPI_DEVNO,
-	SPITYPE_NORMAL,
-    SPIMODE_SLAVE,
+	SPIMODE_NORMAL,
+    SPITYPE_SLAVE,
 	s_SpiSlavePins,
     sizeof( s_SpiSlavePins ) / sizeof( IOPINCFG ),
     1000000,   // Speed in Hz
@@ -173,9 +173,10 @@ int SpiSlaveHandler(DEVINTRF * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer,
 void HardwareInit()
 {
 	g_Uart.Init(s_UartCfg);
+#ifdef NDEBUG
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
-
+#endif
 	printf("Init SPI Master/Slave demo\r\n");
 }
 

@@ -58,14 +58,14 @@ typedef enum __SPI_Status {
 	SPISTATUS_OK
 } SPISTATUS;
 
-typedef enum __SPI_Mode {
-	SPIMODE_MASTER,
-	SPIMODE_SLAVE
-} SPIMODE;
+typedef enum __SPI_Type {
+	SPITYPE_MASTER,				//!< SPI master
+	SPITYPE_SLAVE				//!< SPI slave
+} SPITYPE;
 
 typedef enum __SPI_Clk_Polarity {
-	SPICLKPOL_HIGH,
-	SPICLKPOL_LOW
+	SPICLKPOL_LOW,				//!< Clock polarity low
+	SPICLKPOL_HIGH,				//!< Clock polarity high
 } SPICLKPOL;
 
 typedef enum __SPI_Data_Phase {
@@ -83,11 +83,12 @@ typedef enum __SPI_Chip_Select {
 	SPICSEL_MAN,	//!< Select control externally by application
 } SPICSEL;
 
-typedef enum __SPI_Type {
-	SPITYPE_NORMAL,				//!< Standard 4 wires CLK, MOSI, MISO, CS
-	SPITYPE_3WIRE,				//!< 3 wires MISO/MOSI mux
-	SPITYPE_QUAD,				//! QSPI
-} SPITYPE;
+typedef enum __SPI_Mode {
+	SPIMODE_NORMAL,				//!< Standard 4 wires CLK, MOSI, MISO, CS
+	SPIMODE_3WIRE,				//!< 3 wires MISO/MOSI mux
+	SPIMODE_QUAD_SDR,			//!< QSPI, single data rate
+	SPIMODE_QUAD_DDR,			//!< QSPI, dual data rate
+} SPIMODE;
 
 #define SPI_MAX_RETRY			5
 
@@ -106,8 +107,8 @@ typedef enum __SPI_Type {
 /// Configuration data used to initialize device
 typedef struct __SPI_Config {
 	int DevNo;				//!< SPI interface number identify by chip select (CS0, CS1,..,CSn)
-	SPITYPE Type;			//!< SPI type (standard, 3 wire, quad
-	SPIMODE Mode;			//!< Master/Slave mode
+	SPIMODE Mode;			//!< SPI type (standard, 3 wire, quad
+	SPITYPE Type;			//!< Master/Slave mode
 	const IOPINCFG *pIOPinMap;	//!< Define I/O pins used by SPI
 	int NbIOPins;			//!< Total number of I/O pins
 	int Rate;				//!< Speed in Hz
