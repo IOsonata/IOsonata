@@ -70,7 +70,7 @@ static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
  * 							1 : GPIO output
  * 							2 : Alternate function (function on bit 4-7)
  * 							3 : Analog
- * 						bit 4-7 : Alternate function 0-7
+ * 						bit 4-7 : Alternate function 0-15
  *
  * 			Dir     : I/O direction
  *			Resistor: Resistor configuration
