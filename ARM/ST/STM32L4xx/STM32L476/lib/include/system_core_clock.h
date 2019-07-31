@@ -55,17 +55,34 @@ extern "C" {
 /**
  * @brief	Setup core clock & update SystemCoreClock variable
  *
- * @param ClkSrc	- Clock source selection
+ * @param	ClkSrc : Clock source selection
  *						CLKSRCSEL_IRC - Internal osc
  *						CLKSRCSEL_MAIN - Main osc
  *						CLKSRCSEL_RTC -	Realtime osc
- * @param CoreFreq 	- Core target frequency
+ * @param	CoreFreq : Core target frequency
  *
  * @return
  * 		Return actual frequency in Hz
  *
  */
 uint32_t SystemCoreClockSet(SYSCLK_SRC ClkSrc, uint32_t CoreFreq);
+
+/**
+ * @brief	Get peripheral clock frequency (PCLK)
+ *
+ * @return	Peripheral clock frequency in Hz.
+ */
+uint32_t SystemPeriphClockGet();
+
+/**
+ * @brief	Set peripheral clock (PCLK) frequency
+ *
+ * @param	Freq : Clock frequency in Hz.
+ *
+ * @return	Actual frequency set in Hz.
+ */
+uint32_t SystemPeriphClockSet(uint32_t Freq);
+
 
 #ifdef __cplusplus
 }

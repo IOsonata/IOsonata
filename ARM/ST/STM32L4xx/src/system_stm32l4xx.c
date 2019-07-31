@@ -240,3 +240,57 @@ void SystemInit(void)
 {
 	SystemCoreClockSet(SYSCLK_SRC_RC, 0);
 }
+
+/**
+ * @brief	Get peripheral clock frequency (PCLK)
+ *
+ * @return	Peripheral clock frequency in Hz.
+ */
+uint32_t SystemPeriphClockGet()
+{
+	uint32_t tmp = (RCC->CFGR & RCC_CFGR_PPRE1_Msk) >> RCC_CFGR_PPRE1_Pos;
+
+	return tmp & 4 ? SystemCoreClock >> ((tmp & 3) + 1) : SystemCoreClock;
+}
+
+/**
+ * @brief	Set peripheral clock (PCLK) frequency
+ *
+ * @param	Freq : Clock frequency in Hz.
+ *
+ * @return	Actual frequency set in Hz.
+ */
+uint32_t SystemPeriphClockSet(uint32_t Freq)
+{
+	uint32_t div = (SystemCoreClock + (Freq >> 1))/ Freq;
+	uint32_t f = 0;
+
+	RCC->CFGR &= RCC_CFGR_PPRE1_Msk;
+	if (div < 2)
+	{
+		f = SystemCoreClock;
+	}
+	else if (div < 4)
+	{
+		RCC->CFGR |= 4 << RCC_CFGR_PPRE1_Pos;
+		f = SystemCoreClock >> 1;
+	}
+	else if (div < 8)
+	{
+		RCC->CFGR |= 5 << RCC_CFGR_PPRE1_Pos;
+		f = SystemCoreClock >> 2;
+	}
+	else if (div < 16)
+	{
+		RCC->CFGR |= 6 << RCC_CFGR_PPRE1_Pos;
+		f = SystemCoreClock >> 3;
+	}
+	else
+	{
+		RCC->CFGR |= 7 << RCC_CFGR_PPRE1_Pos;
+		f = SystemCoreClock >> 4;
+	}
+
+	return f;
+}
+

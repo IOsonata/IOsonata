@@ -321,11 +321,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/intelhex.c</locationURI>
 		</link>
 		<link>
-			<name>src/iopincfg_stm32l4xx.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/iopincfg_stm32l4xx.c</locationURI>
-		</link>
-		<link>
 			<name>src/isha1.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/isha1.c</locationURI>
@@ -566,6 +561,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_mpu9250.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/am_lsm303c.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303c.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/gas_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gas_sensor.h</locationURI>
@@ -661,9 +661,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/iopincfg_stm32l4xx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/iopincfg_stm32l4xx.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_stm32l4xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spi_stm32l4xx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer.cpp</name>
@@ -754,6 +764,11 @@
 			<name>src/sensors/agm_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_mpu9250.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/am_lsm303c.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_lsm303c.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/tph_bme280.cpp</name>
