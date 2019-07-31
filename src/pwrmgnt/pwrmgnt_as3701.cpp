@@ -32,7 +32,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-
+#include "istddef.h"
 #include "pwrmgnt/pwrmgnt_as3701.h"
 
 bool PowerMgntAS3701::Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf)
@@ -53,12 +53,87 @@ bool PowerMgntAS3701::Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf)
 		return false;
 	}
 
+	if (Cfg.pVout != NULL && Cfg.NbVout > 0)
+	{
+		int l = min(Cfg.NbVout, AS3701_VOUT_MAXCNT);
+
+		for (int i = 0; i < l; i ++)
+		{
+			SetVout(i, Cfg.pVout[i].mVout, Cfg.pVout[i].mAlimit);
+		}
+	}
 	return true;
 }
 
-int PowerMgntAS3701::EnableVout(int VoutIdx, int mVolt)
+int PowerMgntAS3701::SetVout(int VoutIdx, int mVolt, uint32_t mALimit)
 {
-	return 0;
+	int v = 0;
+
+	switch (VoutIdx)
+	{
+		case 0:
+			{
+				uint32_t vsel = 0;
+				if (mVolt > 0)
+				{
+					vsel = (mVolt * 10 - 6000) / 125;
+					v = (6000 + vsel * 125) / 10;
+					if (vsel > 0x40)
+					{
+						vsel = ((mVolt - 1400) / 25) & 0xFF;
+						v = 1400 + vsel * 25;
+						vsel += 0x41;
+						if (vsel > 0x70)
+						{
+							vsel = (mVolt - 2600) / 50;
+							v = 2600 + vsel * 50;
+							vsel += 0x71;
+						}
+					}
+				}
+				uint8_t regaddr = AS3701_SD1_VOLTAGE_REG;
+				Write8(&regaddr, 1, vsel & 0xFF);
+			}
+			break;
+		case 1:
+			{
+				uint32_t vsel = 0;
+				vsel = (mVolt - 1200) / 50;
+				if (mVolt > 0 && vsel < 0x2B)
+				{
+					v = 1200 + vsel * 50;
+					vsel |= AS3701_LDO1_VOLTAGE_ON;
+					if (mALimit > 100 || mALimit == 0)
+					{
+						vsel |= AS3701_LDO1_VOLTAGE_ILIMIT_200;
+					}
+				}
+				uint8_t regaddr = AS3701_LDO1_VOLTAGE_REG;
+				Write8(&regaddr, 1, vsel & 0xFF);
+			}
+			break;
+		case 2:
+			{
+				uint32_t vsel = 0;
+				vsel = (mVolt - 1200) / 50;
+				if (mVolt > 0 && vsel < 0x2B)
+				{
+					v = 1200 + vsel * 50;
+					vsel |= AS3701_LDO2_VOLTAGE_ON;
+					if (mALimit > 100 || mALimit == 0)
+					{
+						vsel |= AS3701_LDO2_VOLTAGE_ILIMIT_200;
+					}
+				}
+				uint8_t regaddr = AS3701_LDO2_VOLTAGE_REG;
+				Write8(&regaddr, 1, vsel & 0xFF);
+			}
+			break;
+		default:
+			;
+	}
+
+	return v;
 }
 
 /**
@@ -87,6 +162,21 @@ void PowerMgntAS3701::Disable()
  * @brief	Reset device to it initial default state
  */
 void PowerMgntAS3701::Reset()
+{
+
+}
+
+void PowerMgntAS3701::PowerOff()
+{
+
+}
+
+bool PowerMgntAS3701::EnableCharge(PWR_CHARGE_TYPE Type, uint32_t mACurr)
+{
+	return false;
+}
+
+void PowerMgntAS3701::DisableCharge()
 {
 
 }

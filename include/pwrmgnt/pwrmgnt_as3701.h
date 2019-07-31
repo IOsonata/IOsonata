@@ -47,32 +47,32 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define AS3701_DEVID_16BITS						0x11
 
-#define AS3701_SD1_REG					1
+#define AS3701_SD1_VOLTAGE_REG			1
 
-#define AS3701_SD1_VSEL_MASK								(0x7F)
-#define AS3701_SD1_VSEL_PWRDOWN								(0)
+#define AS3701_SD1_VOLTAGE_SD1_VSEL_MASK					(0x7F)
+#define AS3701_SD1_VOLTAGE_SD1_VSEL_PWRDOWN					(0)
 
-#define AS3701_SD1_FREQ_MASK                				(1<<8)
-#define AS3701_SD1_FREQ_LOW									(0<<8)
-#define AS3701_SD1_FREQ_HIGH								(1<<8)
+#define AS3701_SD1_VOLTAGE_SD1_FREQ_MASK                	(1<<8)
+#define AS3701_SD1_VOLTAGE_SD1_FREQ_LOW						(0<<8)
+#define AS3701_SD1_VOLTAGE_SD1_FREQ_HIGH					(1<<8)
 
-#define AS3701_LDO1_REG					2
+#define AS3701_LDO1_VOLTAGE_REG			2
 
-#define AS3701_LDO1_VSEL_MASK               				(0x3F)
+#define AS3701_LDO1_VOLTAGE_VSEL_MASK          				(0x3F)
 
-#define AS3701_LDO1_ILIMIT_100              				(0<<6)
-#define AS3701_LDO1_ILIMIT_200              				(1<<6)
+#define AS3701_LDO1_VOLTAGE_ILIMIT_100         				(0<<6)
+#define AS3701_LDO1_VOLTAGE_ILIMIT_200         				(1<<6)
 
-#define AS3701_LDO1_SWITCH_OFF								(0<<7)
-#define AS3701_LDO1_SWITCH_ON								(1<<7)
+#define AS3701_LDO1_VOLTAGE_OFF								(0<<7)
+#define AS3701_LDO1_VOLTAGE_ON								(1<<7)
 
-#define AS3701_LDO2_REG					3
+#define AS3701_LDO2_VOLTAGE_REG			3
 
-#define AS3701_LDO2_VSEL_MASK               				(0x3F)
-#define AS3701_LDO2_ILIMIT_100              				(0<<6)
-#define AS3701_LDO2_ILIMIT_200              				(1<<6)
-#define AS3701_LDO2_OFF                     				(0<<7)
-#define AS3701_LDO2_ON                      				(1<<7)
+#define AS3701_LDO2_VOLTAGE_VSEL_MASK          				(0x3F)
+#define AS3701_LDO2_VOLTAGE_ILIMIT_100         				(0<<6)
+#define AS3701_LDO2_VOLTAGE_ILIMIT_200         				(1<<6)
+#define AS3701_LDO2_VOLTAGE_OFF		         				(0<<7)
+#define AS3701_LDO2_VOLTAGE_ON                 				(1<<7)
 
 #define AS3701_GPIO1_CTRL_REG			9
 
@@ -463,10 +463,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define AS3701_ASIC_ID2_VALUE								(0)
 
+#define AS3701_VOUT_MAXCNT					3	//!< Max number of output
+
 class PowerMgntAS3701 : public PowerMgnt {
 public:
 	bool Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf);
-	int EnableVout(int VoutIdx, int mVolt);
+	int SetVout(int VoutIdx, int mVolt, uint32_t CurrLimit);
 
 	/**
 	 * @brief	Power on or wake up device
@@ -488,6 +490,11 @@ public:
 	 * @brief	Reset device to it initial default state
 	 */
 	void Reset();
+
+	void PowerOff();
+
+	bool EnableCharge(PWR_CHARGE_TYPE Type, uint32_t mACurr);
+	void DisableCharge();
 
 protected:
 private:

@@ -49,18 +49,48 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define PWRMGNT_VOUT_MAXCNT			4	//!< Max number of Vout
 
+#pragma pack(push, 1)
+typedef enum __Charge_Type {
+	PWR_CHARGE_TYPE_NORMAL,
+	PWR_CHARGE_TYPE_TRICKLE,
+} PWR_CHARGE_TYPE;
+
+typedef struct __Vout_Cfg {
+	int32_t mVout;						//!< Output voltage in mV
+	uint32_t mAlimit;					//!< Output current limit in mA
+} PWR_VOUT_CFG;
+
 typedef struct __Power_Config {
 	uint32_t DevAddr;					//!< Device address
-	int Vout[PWRMGNT_VOUT_MAXCNT];		//!< V out voltage in mV
-	int CurLimit[PWRMGNT_VOUT_MAXCNT];	//!< Current limit for each V out
+	PWR_VOUT_CFG * const pVout;				//!< Pointer to V out settings
+	int NbVout;							//!< Number of V out
 } PWRCFG;
+
+#pragma pack(pop)
 
 class PowerMgnt : public Device {
 public:
 	virtual bool Init(const PWRCFG &Cfg, DeviceIntrf *pIntrf) = 0;
-	virtual int EnableVout(int VoutIdx, int mVolt) = 0;
+
+	/**
+	 * @brief	Set output voltage
+	 *
+	 * If output voltage is zero, turn off the output.
+	 *
+	 * @param	VoutIdx : Zero based index of output source
+	 * @param	mVolt : Output voltage in mV
+	 * @param	mALimit : Output current limit in mA if available
+	 * 						set to zero for max capacity
+	 *
+	 * @return	Actual output voltage in mV
+	 *
+	 */
+	virtual int SetVout(int VoutIdx, int mVolt, uint32_t mALimit) = 0;
+	virtual bool EnableCharge(PWR_CHARGE_TYPE Type, uint32_t mACurr) = 0;
+	virtual void DisableCharge() = 0;
 
 protected:
+	uint32_t vChrgCurr;				//!< Charge current
 private:
 
 };
