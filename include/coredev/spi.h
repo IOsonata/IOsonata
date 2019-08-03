@@ -79,8 +79,9 @@ typedef enum __SPI_Data_Bit_Order {
 } SPIDATABIT;
 
 typedef enum __SPI_Chip_Select {
-	SPICSEL_AUTO,	//!< Select control internally by hardware or driver
+	SPICSEL_AUTO,	//!< Select control internally by hardware or driver internally
 	SPICSEL_MAN,	//!< Select control externally by application
+	SPICSEL_DRIVER	//!< For driver's internal use only, do not set this in the config.
 } SPICSEL;
 
 typedef enum __SPI_Mode {

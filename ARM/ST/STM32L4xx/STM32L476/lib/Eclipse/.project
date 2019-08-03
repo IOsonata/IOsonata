@@ -571,6 +571,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gas_sensor.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/gyro_l3gd20h.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gyro_l3gd20h.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/gyro_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gyro_sensor.h</locationURI>
@@ -769,6 +774,11 @@
 			<name>src/sensors/am_lsm303c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_lsm303c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/gyro_l3gd20h.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gyro_l3gd20h.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/tph_bme280.cpp</name>

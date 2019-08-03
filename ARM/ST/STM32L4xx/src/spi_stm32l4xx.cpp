@@ -202,6 +202,7 @@ static bool STM32L4xxSPIStartRx(DEVINTRF * const pDev, int DevCs)
 		dev->pSpiDev->CurDevCs = DevCs;
 		IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PortNo,
 				   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PinNo);
+		//dev->pReg->CR1 &= ~SPI_CR1_SSI;
 	}
 
 	return true;
@@ -221,28 +222,34 @@ static int STM32L4xxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
     int cnt = 0;
-    uint32_t d;
+    uint16_t d = 0xFFFF;
 
     while (BuffLen > 0)
     {
-        dev->pReg->DR = 0xFFFF;
+    	uint16_t x = 0;
 
-        if (STM32L4xxSPIWaitRxReady(dev, 100000) == false)
-            break;
 
-        d = dev->pReg->DR;
-
-    	*pBuff = d & 0xFF;
-        BuffLen--;
-        pBuff++;
-        cnt++;
-
-        if (dev->pSpiDev->Cfg.DataSize > 8)
+        if (dev->pSpiDev->Cfg.DataSize > 8)// || BuffLen > 1)
         {
-        	*pBuff = (d >> 8)  & 0xFF;
-            BuffLen--;
-            pBuff++;
-            cnt++;
+            dev->pReg->DR = d;
+            if (STM32L4xxSPIWaitRxReady(dev, 100000) == false)
+                break;
+    		x = dev->pReg->DR;
+        	pBuff[0] = x & 0xff;
+        	pBuff[1] = (x >> 8) & 0xFF;
+        	BuffLen -= 2;
+        	pBuff += 2;
+        	cnt += 2;
+        }
+        else
+        {
+            *(uint8_t*)&dev->pReg->DR = (uint8_t)d;
+            if (STM32L4xxSPIWaitRxReady(dev, 100000) == false)
+                break;
+        	*pBuff = *(uint8_t*)&dev->pReg->DR;
+        	BuffLen--;
+        	pBuff++;
+        	cnt++;
         }
     }
 
@@ -258,6 +265,7 @@ static void STM32L4xxSPIStopRx(DEVINTRF * const pDev)
 	{
 		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PortNo,
 				 dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PinNo);
+		//dev->pReg->CR1 |= SPI_CR1_SSI;
 	}
 }
 
@@ -274,6 +282,7 @@ static bool STM32L4xxSPIStartTx(DEVINTRF * const pDev, int DevCs)
 		dev->pSpiDev->CurDevCs = DevCs;
 		IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PortNo,
 				   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PinNo);
+		//dev->pReg->CR1 &= ~SPI_CR1_SSI;
 	}
 
 	return true;
@@ -293,7 +302,7 @@ static int STM32L4xxSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV*)pDev->pDevData;
     int cnt = 0;
-    uint32_t d;
+    uint16_t d;
 
     if (pData == NULL)
     {
@@ -307,22 +316,27 @@ static int STM32L4xxSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
             break;
         }
 
-		d = pData[0];
-		pData++;
-        DataLen--;
-        cnt++;
-
-        if (dev->pSpiDev->Cfg.DataSize > 8)
+        if (dev->pSpiDev->Cfg.DataSize > 8)// || DataLen > 1)
     	{
-    		d |= (uint16_t)pData[0] << 8;
-    		pData++;
-            DataLen--;
-            cnt++;
+        	dev->pReg->DR = ((uint16_t)pData[1] << 8) | pData[0];
+    		pData += 2;
+            DataLen -= 2;
+            cnt += 2;
+            if (STM32L4xxSPIWaitRxReady(dev, 100000) == false)
+                break;
+            d = dev->pReg->DR;
     	}
-
-        dev->pReg->DR = d;
-
-        d = dev->pReg->DR;
+        else
+        {
+			*(uint8_t*)&dev->pReg->DR = pData[0];
+			pData++;
+			DataLen--;
+			cnt++;
+	        if (STM32L4xxSPIWaitRxReady(dev, 100000) == false)
+	            break;
+			d = *(uint8_t*)&dev->pReg->DR;
+        }
+        printf("w d = %x\r\n", d);
     }
 
     return cnt;
@@ -337,6 +351,7 @@ static void STM32L4xxSPIStopTx(DEVINTRF * const pDev)
 	{
 		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PortNo,
 				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PinNo);
+		//dev->pReg->CR1 |= SPI_CR1_SSI;
 	}
 }
 
@@ -371,7 +386,6 @@ bool STM32L4xxSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		if (pCfgData->NbIOPins > ((SPI_SS_IOPIN_IDX + 1)))
 		{
 			s_STM32L4xxSPIDev[pCfgData->DevNo].pSpiDev->Cfg.ChipSel = SPICSEL_DRIVER;
-			cr1reg = SPI_CR1_SSM | SPI_CR1_SSI;
 		}
 		else
 		{
@@ -390,6 +404,14 @@ bool STM32L4xxSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	if (pCfgData->Type == SPITYPE_MASTER)
 	{
 		cr1reg |= SPI_CR1_MSTR;
+		if (s_STM32L4xxSPIDev[pCfgData->DevNo].pSpiDev->Cfg.ChipSel == SPICSEL_DRIVER)
+		{
+			cr1reg |= SPI_CR1_SSM | SPI_CR1_SSI;
+		}
+	}
+	else
+	{
+		cr1reg |= SPI_CR1_RXONLY;
 	}
 
 	if (pCfgData->ClkPol == SPICLKPOL_HIGH)
@@ -414,7 +436,7 @@ bool STM32L4xxSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
 	if (pCfgData->Mode == SPIMODE_3WIRE)
 	{
-		cr1reg |= SPI_CR1_BIDIMODE | SPI_CR1_RXONLY;
+		cr1reg |= SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE;
 	}
 
 	reg->CR1 = cr1reg;
