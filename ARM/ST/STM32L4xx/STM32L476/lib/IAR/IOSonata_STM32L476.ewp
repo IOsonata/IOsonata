@@ -1033,12 +1033,17 @@
                 </option>
                 <option>
                     <name>IarchiveOutput</name>
-                    <state>Z:\Qsync\I-SYST\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\lib\IAR\Debug\IOsonata_STM32L476.a</state>
+                    <state>Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\lib\IAR\Debug\IOSonata_STM32L476.a</state>
                 </option>
             </data>
         </settings>
         <settings>
             <name>BILINK</name>
+            <archiveVersion>0</archiveVersion>
+            <data />
+        </settings>
+        <settings>
+            <name>Coder</name>
             <archiveVersion>0</archiveVersion>
             <data />
         </settings>
@@ -2085,6 +2090,11 @@
             <archiveVersion>0</archiveVersion>
             <data />
         </settings>
+        <settings>
+            <name>Coder</name>
+            <archiveVersion>0</archiveVersion>
+            <data />
+        </settings>
     </configuration>
     <group>
         <name>include</name>
@@ -2193,7 +2203,13 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\agm_mpu9250.h</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\am_lsm303c.h</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gas_sensor.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gyro_l3gd20h.h</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gyro_sensor.h</name>
@@ -2346,7 +2362,13 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\..\src\spi_stm32l4xx.cpp</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\timer.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\src\timer_lptim_stm32l4xx.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\uart.c</name>
@@ -2407,6 +2429,12 @@
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\agm_mpu9250.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\am_lsm303c.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\gyro_l3gd20h.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tph_bme280.cpp</name>

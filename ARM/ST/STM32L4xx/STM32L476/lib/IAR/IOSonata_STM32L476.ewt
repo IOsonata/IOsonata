@@ -2476,7 +2476,13 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\agm_mpu9250.h</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\am_lsm303c.h</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gas_sensor.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gyro_l3gd20h.h</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gyro_sensor.h</name>
@@ -2629,7 +2635,13 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\..\src\spi_stm32l4xx.cpp</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\timer.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\src\timer_lptim_stm32l4xx.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\uart.c</name>
@@ -2690,6 +2702,12 @@
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\agm_mpu9250.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\am_lsm303c.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\gyro_l3gd20h.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tph_bme280.cpp</name>
