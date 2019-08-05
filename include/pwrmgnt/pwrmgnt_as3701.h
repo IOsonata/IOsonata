@@ -37,7 +37,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdint.h>
 
-#include "pwrmgnt.h"
+#include "pwrmgnt/pwrmgnt.h"
+#include "miscdev/led.h"
 
 /** @addtogroup Power
   * @{
@@ -393,6 +394,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define AS3701_CHARGER_VOLTAGE_CTRL_CHVOL_EOC_MASK			(0x1F<<0)
 #define AS3701_CHARGER_VOLTAGE_CTRL_VSUP_MIN_MASK			(3<<6)
+#define AS3701_CHARGER_VOLTAGE_CTRL_VSUP_MIN_3900			(0<<6)
+#define AS3701_CHARGER_VOLTAGE_CTRL_VSUP_MIN_4200			(1<<6)
+#define AS3701_CHARGER_VOLTAGE_CTRL_VSUP_MIN_4500			(2<<6)
+#define AS3701_CHARGER_VOLTAGE_CTRL_VSUP_MIN_4700			(3<<6)
 
 #define AS3701_CHARGER_CURRENT_CTRL_REG		0x82
 
@@ -465,10 +470,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define AS3701_VOUT_MAXCNT					3	//!< Max number of output
 
-class PowerMgntAS3701 : public PowerMgnt {
+class PowerMgntAS3701 : public PowerMgnt, public Led {
 public:
 	bool Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf);
-	int SetVout(int VoutIdx, int mVolt, uint32_t CurrLimit);
+	int32_t SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit);
 
 	/**
 	 * @brief	Power on or wake up device
@@ -493,8 +498,7 @@ public:
 
 	void PowerOff();
 
-	bool EnableCharge(PWR_CHARGE_TYPE Type, uint32_t mACurr);
-	void DisableCharge();
+	uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr);
 
 protected:
 private:

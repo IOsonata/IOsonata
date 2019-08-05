@@ -62,10 +62,13 @@ bool PowerMgntAS3701::Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf)
 			SetVout(i, Cfg.pVout[i].mVout, Cfg.pVout[i].mAlimit);
 		}
 	}
+
+	SetCharge(PWR_CHARGE_TYPE_AUTO, Cfg.VEndChrg, Cfg.ChrgCurr);
+
 	return true;
 }
 
-int PowerMgntAS3701::SetVout(int VoutIdx, int mVolt, uint32_t mALimit)
+int32_t PowerMgntAS3701::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t mALimit)
 {
 	int v = 0;
 
@@ -168,15 +171,52 @@ void PowerMgntAS3701::Reset()
 
 void PowerMgntAS3701::PowerOff()
 {
+	uint8_t regaddr = AS3701_SD_CTRL1_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~AS3701_SD_CTRL1_SD1_ENBABLE;
 
+	Write8(&regaddr, 1, d);
 }
 
-bool PowerMgntAS3701::EnableCharge(PWR_CHARGE_TYPE Type, uint32_t mACurr)
+uint32_t PowerMgntAS3701::SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr)
 {
-	return false;
+	uint8_t regaddr = AS3701_CHARGER_VOLTAGE_CTRL_REG;
+	uint8_t d = 0;
+
+	if (mVoltEoC > 3820)
+	{
+		d = (mVoltEoC - 3820) / 20;
+	}
+
+	if (mVoltEoC < 3900)
+	{
+		d |= AS3701_CHARGER_VOLTAGE_CTRL_VSUP_MIN_3900;
+	}
+	else if (mVoltEoC < 4200)
+	{
+		d |= AS3701_CHARGER_VOLTAGE_CTRL_VSUP_MIN_4200;
+	}
+	else if (mVoltEoC < 4500)
+	{
+		d |= AS3701_CHARGER_VOLTAGE_CTRL_VSUP_MIN_4500;
+	}
+	else
+	{
+		d |= AS3701_CHARGER_VOLTAGE_CTRL_VSUP_MIN_4700;
+	}
+
+	Write8(&regaddr, 1, d);
+
+	regaddr = AS3701_CHARGER_CURRENT_CTRL_REG;
+
+	if (Type == PWR_CHARGE_TYPE_TRICKLE)
+	{
+		d = (mACurr - 11) / 12;
+	}
+	else
+	{
+		d = (mACurr - 88);
+	}
+
+	return true;
 }
 
-void PowerMgntAS3701::DisableCharge()
-{
-
-}

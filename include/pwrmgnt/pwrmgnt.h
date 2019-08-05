@@ -53,6 +53,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef enum __Charge_Type {
 	PWR_CHARGE_TYPE_NORMAL,
 	PWR_CHARGE_TYPE_TRICKLE,
+	PWR_CHARGE_TYPE_AUTO				//!< Auto select optimum charge by driver implementation
 } PWR_CHARGE_TYPE;
 
 typedef struct __Vout_Cfg {
@@ -62,8 +63,11 @@ typedef struct __Vout_Cfg {
 
 typedef struct __Power_Config {
 	uint32_t DevAddr;					//!< Device address
-	PWR_VOUT_CFG * const pVout;				//!< Pointer to V out settings
-	int NbVout;							//!< Number of V out
+	PWR_VOUT_CFG * const pVout;			//!< Pointer to V out settings
+	size_t NbVout;						//!< Number of V out
+	int32_t VEndChrg;					//!< End of charge voltage level in mV
+	uint32_t ChrgCurr;					//!< Charge current in mA
+	uint32_t ChrgTimeout;				//!< Charge timeout in minutes
 } PWRCFG;
 
 #pragma pack(pop)
@@ -85,9 +89,20 @@ public:
 	 * @return	Actual output voltage in mV
 	 *
 	 */
-	virtual int SetVout(int VoutIdx, int mVolt, uint32_t mALimit) = 0;
-	virtual bool EnableCharge(PWR_CHARGE_TYPE Type, uint32_t mACurr) = 0;
-	virtual void DisableCharge() = 0;
+	virtual int32_t SetVout(size_t VoutIdx, int32_t mVolt, uint32_t mALimit) = 0;
+
+	/**
+	 * @brief	Set battery charging
+	 *
+	 * If charge current is set to zero, charging is turned off
+	 *
+	 * @param	Type : Charging type
+	 * @param	mACurr : Charge current limit
+	 * 					0 : Disable charge
+	 *
+	 * @return	Actual charge current set.
+	 */
+	virtual uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr) = 0;
 
 protected:
 	uint32_t vChrgCurr;				//!< Charge current

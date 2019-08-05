@@ -309,7 +309,61 @@ private:
 	PWM_CHAN_CFG vPwmChanCfg[LEDPWM_MAX];
 };
 
-/** @} end group IMU */
+/// Led type controlled by PWM
+class LedIntrf : public LedDevice {
+public:
+	virtual bool Init(DeviceIntrf * const pIntrf);
+	/**
+	 * @brief	Set LED level
+	 *
+	 * This function set the dimming level of the LED 0-255.  On multi-color LED can be
+	 * used to mix color.
+	 *
+	 * @param Level	: LED dimming Level 0-255.  0 = Off, 255 = 100% On. Up to 4 LEDs can be dimmed.
+	 * 					Bits 0-7  	: LED 0
+	 * 					Bits 8-15 	: LED 1
+	 * 					Bits 16-23	: LED 2
+	 * 					Bits 24-31	: LED 3
+	 *
+	 */
+	virtual void Level(uint32_t Level);
+
+	/**
+	 * Turns all LED 100% on
+	 */
+	virtual void On();
+
+	/**
+	 * Turns all LED off
+	 */
+	virtual void Off();
+
+	/**
+	 * Invert all LED dimming level
+	 */
+	virtual void Toggle();
+
+	/**
+	 * @brief	Power on or wake up device
+	 *
+	 * @return	true - If success
+	 */
+	virtual bool Enable();
+
+	/**
+	 * @brief	Put device in power down or power saving sleep mode
+	 */
+	virtual void Disable();
+
+	/**
+	 * @brief	Reset device to it initial default state
+	 */
+	virtual void Reset();
+
+private:
+};
+
+/** @} end group MiscDev */
 
 #endif // __LED_H__
 
