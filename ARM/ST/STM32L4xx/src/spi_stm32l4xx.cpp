@@ -270,7 +270,7 @@ static int STM32L4xxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen
         		dev->pReg->CR1 &= ~SPI_CR1_BIDIOE;
         	}
 			STM32L4xxSPIWaitRxReady(dev, 100000);
-			*pBuff = dev->pReg->DR & 0xff;
+			*pBuff = dev->pReg->DR;
         	BuffLen--;
         	pBuff++;
         	cnt++;
@@ -551,8 +551,8 @@ SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode)
 	}
 	else
 	{
-		reg->CR1 &= ~SPI_CR1_BIDIMODE;
-		reg->CR1 |= SPI_CR1_BIDIOE;
+		reg->CR1 &= ~(SPI_CR1_BIDIMODE | SPI_CR1_SPE);
+		reg->CR1 |= SPI_CR1_BIDIOE | SPI_CR1_SPE;
 	}
 
 	return Mode;
