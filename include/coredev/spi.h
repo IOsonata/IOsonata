@@ -174,6 +174,19 @@ static inline int SPITxData(SPIDEV * const pDev, uint8_t *pData, int Datalen) {
 }
 static inline void SPIStopTx(SPIDEV * const pDev) { DeviceIntrfStopTx(&pDev->DevIntrf); }
 
+static inline SPIMODE SPIGetMode(SPIDEV * const pDev) { return pDev->Cfg.Mode; }
+
+/**
+ * @brief	Change SPI mode
+ *
+ * This function allows dynamically switching between 3WIRE & NORMAL mode.
+ * It is useful when a 3wire devices and standard devices are sharing the same SPI bus
+ *
+ * @param	pDev : Device Interface Handle
+ * @param	Mode : New SPI mode
+ */
+SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode);	// to be implemented
+
 /**
  * @brief	Set SPI slave data for read command.
  *
@@ -282,6 +295,12 @@ public:
 	 */
 	virtual void SetSlaveTxData(int SlaveIdx, uint8_t * const pData, int DataLen) {
 		SPISetSlaveTxData(&vDevData, SlaveIdx, pData, DataLen);
+	}
+
+	virtual SPIMODE Mode() { return vDevData.Cfg.Mode; }
+	virtual SPIMODE Mode(SPIMODE Mode) {
+		vDevData.Cfg.Mode = SPISetMode(&vDevData, Mode);
+		return vDevData.Cfg.Mode;
 	}
 
 private:

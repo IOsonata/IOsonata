@@ -91,6 +91,18 @@ static bool STM32L4xxSPIWaitTxFifo(STM32L4XX_SPIDEV * const pDev, uint32_t Timeo
     return false;
 }
 
+static bool STM32L4xxSPIWaitTx(STM32L4XX_SPIDEV * const pDev, uint32_t Timeout)
+{
+	do {
+        if (pDev->pReg->SR & SPI_SR_TXE)
+        {
+            return true;
+        }
+    } while (Timeout-- > 0);
+
+    return false;
+}
+
 static bool STM32L4xxSPIWaitBusy(STM32L4XX_SPIDEV * const pDev, uint32_t Timeout)
 {
 	do {
@@ -225,17 +237,23 @@ static int STM32L4xxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
     int cnt = 0;
-    uint16_t d = 0xFFFF;
+    uint16_t d = 0;
 
     while (BuffLen > 0)
     {
     	uint16_t x = 0;
 
+		dev->pReg->CR1 |= SPI_CR1_BIDIOE;
         if (dev->pSpiDev->Cfg.DataSize > 8)
         {
-            *(uint16_t*)&dev->pReg->DR = d;
-            STM32L4xxSPIWaitRxReady(dev, 100000);
+            *(uint16_t*)&dev->pReg->DR = d;	// Dummy write
+        	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+        	{
+        		STM32L4xxSPIWaitTx(dev, 100000);
+        		dev->pReg->CR1 &= ~SPI_CR1_BIDIOE;
+        	}
 
+            STM32L4xxSPIWaitRxReady(dev, 100000);
             uint16_t x = *(uint16_t*)&dev->pReg->DR;
         	pBuff[0] = x & 0xff;
         	pBuff[1] = (x >> 8) & 0xFF;
@@ -245,9 +263,14 @@ static int STM32L4xxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen
         }
         else
         {
-            *(uint8_t*)&dev->pReg->DR = d;
-            STM32L4xxSPIWaitRxReady(dev, 100000);
-        	*pBuff = dev->pReg->DR & 0xff;
+            *(uint8_t*)&dev->pReg->DR = d;	// Dummy write
+        	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+        	{
+        		STM32L4xxSPIWaitTx(dev, 100000);
+        		dev->pReg->CR1 &= ~SPI_CR1_BIDIOE;
+        	}
+			STM32L4xxSPIWaitRxReady(dev, 100000);
+			*pBuff = dev->pReg->DR & 0xff;
         	BuffLen--;
         	pBuff++;
         	cnt++;
@@ -303,11 +326,6 @@ static int STM32L4xxSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
     int cnt = 0;
     uint16_t d;
 
-    if (pData == NULL)
-    {
-        return 0;
-    }
-
     while (DataLen > 0)
     {
         if (STM32L4xxSPIWaitTxFifo(dev, 100000) == false)
@@ -356,9 +374,36 @@ void SPIIrqHandler(int DevNo)
 {
 	STM32L4XX_SPIDEV *dev = &s_STM32L4xxSPIDev[DevNo];
 	uint32_t flag = dev->pReg->SR;
+	uint16_t d;
 
+	if (dev->pReg->SR & SPI_SR_RXNE)
+	{
+		d = dev->pReg->DR;
+		if (dev->pSpiDev->Cfg.EvtCB)
+		{
+			dev->pSpiDev->Cfg.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_RX_DATA, (uint8_t*)&d, 1);
+		}
+	}
+	if (dev->pReg->SR & SPI_SR_TXE)
+	{
+		if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+		{
+			dev->pReg->CR1 &= ~SPI_CR1_BIDIOE;
+		}
+		if (dev->pSpiDev->Cfg.EvtCB)
+		{
+			dev->pSpiDev->Cfg.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_RX_DATA, (uint8_t*)&d, 1);
+		}
+	}
+	if (dev->pReg->SR & SPI_SR_OVR)
+	{
+
+	}
+	if (dev->pReg->SR & SPI_SR_FRE)
+	{
+
+	}
 }
-
 
 bool STM32L4xxSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 {
@@ -493,6 +538,26 @@ bool STM32L4xxQuadSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	return true;
 }
 
+SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode)
+{
+	SPI_TypeDef *reg;
+
+	// Get the correct register map
+	reg = s_STM32L4xxSPIDev[pDev->Cfg.DevNo].pReg;
+
+	if (Mode == SPIMODE_3WIRE)
+	{
+		reg->CR1 |= SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE;
+	}
+	else
+	{
+		reg->CR1 &= ~SPI_CR1_BIDIMODE;
+		reg->CR1 |= SPI_CR1_BIDIOE;
+	}
+
+	return Mode;
+}
+
 bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 {
 	bool retval = false;
@@ -540,6 +605,12 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
     if (pCfgData->bIntEn)
     {
+    	SPI_TypeDef *reg;
+
+    	reg = s_STM32L4xxSPIDev[pCfgData->DevNo].pReg;
+
+    	reg->CR2 |= SPI_CR2_TXEIE | SPI_CR2_RXNEIE | SPI_CR2_ERRIE;
+
     	switch (pCfgData->DevNo)
     	{
     		case 0:
