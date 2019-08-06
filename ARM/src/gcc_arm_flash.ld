@@ -62,7 +62,7 @@ SECTIONS {
 		/*LONG(__StackTop);*/
 
 		/* interrupt vector */
-		KEEP(*(.intvect*))
+		KEEP(*(.vectors*))
 	} > FLASH 
 	
 	/* This is where the firmware informaton is stored. Usefull for bootloader */

@@ -63,7 +63,7 @@ SECTIONS {
 		/*LONG(__StackTop);*/
 
 		/* interrupt vector */
-		KEEP(*(.intvect))
+		KEEP(*(.vectors))
 	} > RAM 
 	
 	/* This is where the firmware informaton is stored. Usefull for bootloader */
