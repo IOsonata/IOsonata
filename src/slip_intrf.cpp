@@ -254,42 +254,47 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 
 		while (DataLen > 0)
 		{
-			p = pData;
+			// Look for conflicting code
 			for (; i < DataLen; i++)
 			{
-				if (p[i] == SLIP_END_CODE)
+				if (*p == SLIP_END_CODE)
 				{
-					p[i] = SLIP_ESC_END_CODE;
+					*p = SLIP_ESC_END_CODE;
 					break;
 				}
-				if (p[i] == SLIP_ESC_CODE)
+				if (*p == SLIP_ESC_CODE)
 				{
-					p[i] = SLIP_ESC_ESC_CODE;
+					*p = SLIP_ESC_ESC_CODE;
 					break;
 				}
+				p++;
 			}
 
-			pData += (i - 1);
-
+			// Flush data
 			while (i > 0)
 			{
-				int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, p, i);
+				int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, pData, i);
 				i -= l;
-				p += l;
+				pData += l;
 				DataLen -= l;
 				cnt += l;
 			}
 
+			pData = p;
+
+			// Set end code
 			if (DataLen > 0)
 			{
-				pData[0] = SLIP_ESC_CODE;
+				pData[0] = SLIP_ESC_END_CODE;
 				DataLen++;
-				i = 2;
+				i = 1;
+				p++;
 			}
 			else
 			{
+				// End of packet, send end code
 				pData[0] = SLIP_END_CODE;
-				dev->pPhyIntrf->TxData(dev->pPhyIntrf, pData, 1);
+				while (dev->pPhyIntrf->TxData(dev->pPhyIntrf, pData, 1) < 1);
 				cnt++;
 			}
 		}
