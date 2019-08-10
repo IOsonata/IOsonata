@@ -31,6 +31,10 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
+#ifdef __ICCARM__
+#include "intrinsics.h"
+#endif
+
 #include "nrf.h"
 
 #include "timer_nrf5x.h"
@@ -335,7 +339,11 @@ uint32_t TimerHFnRF5x::Frequency(uint32_t Freq)
     if (Freq > 0)
     {
         uint32_t divisor = TIMER_NRF5X_HF_BASE_FREQ / Freq;
+#ifdef __ICCARM__
+        prescaler = 31 - __CLZ(divisor);
+#else
         prescaler = 31 - __builtin_clzl(divisor);
+#endif
         if (prescaler > 9)
         {
             prescaler = 9;
