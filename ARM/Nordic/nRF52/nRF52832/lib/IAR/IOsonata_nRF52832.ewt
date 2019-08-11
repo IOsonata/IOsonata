@@ -2629,6 +2629,9 @@
                 <name>$PROJ_DIR$\..\..\..\..\src\ble_app_handler.c</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\..\src\ble_app_nrf52.cpp</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\..\..\src\ble_dev.cpp</name>
             </file>
             <file>
@@ -2681,6 +2684,9 @@
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\src\pdm_nrfx.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\src\pwm_nrf52.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>
@@ -2742,17 +2748,35 @@
                     <name>drivers</name>
                     <group>
                         <name>src</name>
+                        <file>
+                            <name>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\modules\nrfx\drivers\src\nrfx_rng.c</name>
+                        </file>
                     </group>
                 </group>
                 <group>
                     <name>legacy</name>
+                    <file>
+                        <name>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\integration\nrfx\legacy\nrf_drv_rng.c</name>
+                    </file>
                 </group>
             </group>
             <group>
                 <name>proprietary_rf</name>
+                <group>
+                    <name>esb</name>
+                    <file>
+                        <name>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\components\proprietary_rf\esb\nrf_esb.c</name>
+                    </file>
+                </group>
             </group>
             <group>
                 <name>softdevice</name>
+                <group>
+                    <name>common</name>
+                    <file>
+                        <name>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\components\softdevice\common\nrf_sdh_ble.c</name>
+                    </file>
+                </group>
             </group>
         </group>
         <group>
@@ -2794,6 +2818,9 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tphg_bme680.cpp</name>
             </file>
         </group>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\adc_nrf52_saadc.cpp</name>
+        </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\..\..\src\base64.c</name>
         </file>
@@ -2838,6 +2865,12 @@
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\..\..\src\md5.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\nrf_sdh.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\nrf_sdh_soc.c</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\..\..\src\prbs.c</name>

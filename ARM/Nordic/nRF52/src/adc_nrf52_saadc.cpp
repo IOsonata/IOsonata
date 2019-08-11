@@ -42,6 +42,10 @@ Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 
+#ifdef __ICCARM__
+#include "intrinsics.h"
+#endif
+
 #include "adc_nrf52_saadc.h"
 
 typedef struct __ADC_nRF52_Data {
@@ -256,7 +260,11 @@ bool AdcnRF52::Init(const ADC_CFG &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 
 	Resolution(Cfg.Resolution);
 
+#ifdef __ICCARM__
+	int ov = 31 - __CLZ(Cfg.OvrSample);
+#else
 	int ov = 31 - __builtin_clzl(Cfg.OvrSample);
+#endif
 
 	if (ov > 0)
 	{
@@ -537,7 +545,11 @@ bool AdcnRF52::OpenChannel(const ADC_CHAN_CFG *pChanCfg, int NbChan)
 		else
 		{
 			s_AdcnRF52DevData.GainFactor[pChanCfg[i].Chan] /= (float)resdiv * (float)((pChanCfg[i].Gain >> 8)& 0xFF);
+#ifdef __ICCARM__
+			chconfig |= ((5 + (31 - __CLZ(pChanCfg[i].Gain >> 8))) << SAADC_CH_CONFIG_GAIN_Pos) & SAADC_CH_CONFIG_GAIN_Msk;
+#else
 			chconfig |= ((5 + (31 - __builtin_clzl(pChanCfg[i].Gain >> 8))) << SAADC_CH_CONFIG_GAIN_Pos) & SAADC_CH_CONFIG_GAIN_Msk;
+#endif
 		}
 
 		if (pChanCfg[i].PinP.Conn == ADC_PIN_CONN_VDD)

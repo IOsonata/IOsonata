@@ -384,10 +384,51 @@
                     <state>$PROJ_DIR$\..\..\..\..\..\CMSIS\Core\Include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\invn</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\BSEC\algo</state>
-                    <state>"../../../../../../../micro-ecc"</state>
-                    <state>$PROJ_DIR$/../../../../../../../\external\nRF5_SDK\modules\nrfx\mdk</state>
-                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars</state>
+                    <state>$PROJ_DIR$/../../../../../../micro-ecc</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/external/mbedtls/include</state>
+                    <state>$PROJ_DIR$/../../../../../../../external\nRF5_SDK/modules/nrfx/hal</state>
+                    <state>$PROJ_DIR$/../../../../../../../external\nRF5_SDK/modules/nrfx/mdk</state>
+                    <state>$PROJ_DIR$/../../../../../../../external\nRF5_SDK/modules/nrfx/drivers/include</state>
+                    <state>$PROJ_DIR$/../../../../../../../external\nRF5_SDK/modules/nrfx</state>
+                    <state>$PROJ_DIR$/../../../../../../../external\nRF5_SDK/integration/nrfx</state>
+                    <state>$PROJ_DIR$/../../../../../../../external\nRF5_SDK/integration/nrfx/legacy</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/stack_info</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/atomic</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/atomic_flags</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/balloc</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/queue</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/sha256</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto/backend/cifra</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto/backend/optiga</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto/backend/oberon</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto/backend/mbedtls</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto/backend/cc310</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto/backend/cc310_bl</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto/backend/nrf_hw</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crypto/backend/nrf_sw</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/memobj</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/cli</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/log</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/log/src</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/scheduler</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/mutex</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/timer</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/fstorage</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/fds</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/atomic_fifo</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/strerror</state>
                     <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/util</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/delay</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/crc32</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/mem_manager</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/bootloader</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars</state>
+                    <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/libraries/svc</state>
                     <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/ble/nrf_ble_gatt</state>
                     <state>$PROJ_DIR$/../../../../../../../external/nRF5_SDK/components/ble/peer_manager</state>
                     <state>$PROJ_DIR$/../../../../../../../external\nRF5_SDK\components\ble\ble_advertising</state>
@@ -2393,6 +2434,9 @@
                 <name>$PROJ_DIR$\..\..\..\..\src\ble_app_handler.c</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\..\src\ble_app_nrf52.cpp</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\..\..\src\ble_dev.cpp</name>
             </file>
             <file>
@@ -2445,6 +2489,9 @@
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\src\pdm_nrfx.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\src\pwm_nrf52.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>
@@ -2506,17 +2553,35 @@
                     <name>drivers</name>
                     <group>
                         <name>src</name>
+                        <file>
+                            <name>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\modules\nrfx\drivers\src\nrfx_rng.c</name>
+                        </file>
                     </group>
                 </group>
                 <group>
                     <name>legacy</name>
+                    <file>
+                        <name>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\integration\nrfx\legacy\nrf_drv_rng.c</name>
+                    </file>
                 </group>
             </group>
             <group>
                 <name>proprietary_rf</name>
+                <group>
+                    <name>esb</name>
+                    <file>
+                        <name>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\components\proprietary_rf\esb\nrf_esb.c</name>
+                    </file>
+                </group>
             </group>
             <group>
                 <name>softdevice</name>
+                <group>
+                    <name>common</name>
+                    <file>
+                        <name>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\components\softdevice\common\nrf_sdh_ble.c</name>
+                    </file>
+                </group>
             </group>
         </group>
         <group>
@@ -2558,6 +2623,9 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tphg_bme680.cpp</name>
             </file>
         </group>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\adc_nrf52_saadc.cpp</name>
+        </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\..\..\src\base64.c</name>
         </file>
@@ -2602,6 +2670,12 @@
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\..\..\src\md5.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\nrf_sdh.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\nrf_sdh_soc.c</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\..\..\src\prbs.c</name>

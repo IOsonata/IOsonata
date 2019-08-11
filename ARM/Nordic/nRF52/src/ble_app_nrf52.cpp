@@ -43,7 +43,6 @@ Modified by          Date              Description
 #include "nordic_common.h"
 #include "ble_hci.h"
 #include "nrf_error.h"
-#include "nrf_gpio.h"
 #include "ble_gatt.h"
 #include "ble_advdata.h"
 #include "ble_srv_common.h"
@@ -53,8 +52,6 @@ Modified by          Date              Description
 #include "ble_dis.h"
 #include "nrf_ble_gatt.h"
 #include "peer_manager.h"
-//#include "nfc_ble_pair_lib.h"
-//#include "ble_db_discovery.h"
 #include "app_timer.h"
 #include "app_util_platform.h"
 #include "app_scheduler.h"
@@ -68,11 +65,6 @@ Modified by          Date              Description
 #include "nrf_ble_lesc.h"
 #include "nrf_ble_scan.h"
 #include "nrf_drv_rng.h"
-
-//#include "nrf_crypto_keys.h"
-//#include "nrf_log.h"
-//#include "nrf_log_ctrl.h"
-//#include "nrf_log_default_backends.h"
 
 #include "istddef.h"
 #include "coredev/uart.h"
