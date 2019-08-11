@@ -68,9 +68,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/driver/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mpl&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mllite&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo/bin/Lite_version/gcc/Cortex_M4F&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
@@ -249,9 +246,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/driver/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mpl&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mllite&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo/bin/Lite_version/gcc/Cortex_M4F&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
@@ -442,9 +436,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/driver/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mpl&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mllite&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo/bin/Lite_version/gcc/Cortex_M4F&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
@@ -625,9 +616,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/driver/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mpl&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mllite&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo/bin/Lite_version/gcc/Cortex_M4F&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
@@ -820,9 +808,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/driver/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mpl&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mllite&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo/bin/Lite_version/gcc/Cortex_M4F&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
@@ -1001,9 +986,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/driver/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mpl&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mllite&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo/bin/Lite_version/gcc/Cortex_M4F&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
@@ -1196,9 +1178,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/driver/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mpl&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mllite&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo/bin/Lite_version/gcc/Cortex_M4F&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
@@ -1379,9 +1358,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/driver/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mpl&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/MPL/core/mllite&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo/bin/Lite_version/gcc/Cortex_M4F&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/BSEC/algo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
