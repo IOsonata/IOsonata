@@ -106,6 +106,118 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	*pincfgreg |= 1 << IOCON_PIN_HYS;
 }
 
+/**
+ * @brief	Disable I/O pin
+ *
+ * Some hardware such as low power mcu allow I/O pin to be disconnected
+ * in order to save power. There is no enable function. Reconfigure the
+ * I/O pin to re-enable it.
+ *
+ * @param	PortNo 	: Port number
+ * @param	PinNo	: Pin Number
+ */
+void IOPinDisable(int PortNo, int PinNo)
+{
+	if (PortNo == -1 || PinNo == -1)
+		return;
+
+}
+
+/**
+ * @brief	Disable I/O pin sense interrupt
+ *
+ * @param	IntNo : Interrupt number to disable
+ */
+void IOPinDisableInterrupt(int IntNo)
+{
+}
+
+/**
+ * @brief Enable I/O pin sensing interrupt event
+ *
+ * Generate an interrupt when I/O sense a state change.
+ * The IntNo (interrupt number) parameter is processor dependent. Some is
+ * directly the hardware interrupt number other is just an index in an array
+ *
+ * STM32 : IntNo must be same as PinNo.  It is directly related to hardware.
+ *
+ * @param	IntNo	: Interrupt number. -1 for port event interrupt
+ * 			IntPrio : Interrupt priority
+ * 			PortNo  : Port number (up to 32 ports)
+ * 			PinNo   : Pin number (up to 32 pins)
+ * 			Sense   : Sense type of event on the I/O pin
+ * 			pEvtCB	: Pointer to callback function when event occurs
+ */
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+{
+    return true;
+}
+
+int IOPinFindAvailInterrupt()
+{
+	return -1;
+}
+
+/**
+ * @brief	Allocate I/O pin sensing interrupt event
+ *
+ * Generate an interrupt when I/O sense a state change. This function will automatically
+ * allocate available interrupt number to use for the pin.
+ * The IntNo (interrupt number) parameter is processor dependent. Some is
+ * directly the hardware interrupt number other is just an index in an array
+ *
+ *
+ * @Param	IntPrio : Interrupt priority
+ * @Param	PortNo  : Port number (up to 32 ports)
+ * @Param	PinNo   : Pin number (up to 32 pins)
+ * @Param	Sense   : Sense type of event on the I/O pin
+ * @Param	pEvtCB	: Pointer to callback function when event occurs
+ *
+ * @return	Interrupt number on success
+ * 			-1 on failure.
+ */
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+{
+	int intno = IOPinFindAvailInterrupt();
+
+	if (intno >= 0)
+	{
+		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB);
+		if (res == true)
+			return intno;
+	}
+
+	return -1;
+}
+
+/**
+ * @brief Set I/O pin sensing option
+ *
+ * Some hardware allow pin sensing to wake up or active other subsystem without
+ * requiring enabling interrupts. This requires the I/O already configured
+ *
+ * @param	PortNo : Port number (up to 32 ports)
+ * 			PinNo   : Pin number (up to 32 pins)
+ * 			Sense   : Sense type of event on the I/O pin
+ */
+void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
+{
+	// Pin sense is not avail on this STM32.  It only sets in interrupt
+}
+
+/**
+ * @brief Set I/O pin drive strength option
+ *
+ * Some hardware allow setting pin drive strength. This requires the I/O already configured
+ *
+ * @param	PortNo 	: Port number (up to 32 ports)
+ * 			PinNo  	: Pin number (up to 32 pins)
+ * 			Strength: Pin drive strength
+ */
+void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
+{
+	// Not available on this STM32
+}
 
 
 
