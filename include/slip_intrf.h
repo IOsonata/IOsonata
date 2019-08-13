@@ -71,7 +71,7 @@ static inline int SlipTx(SLIPDEV * const pDev, uint8_t *pData, int Datalen) {
 
 class Slip : public DeviceIntrf {
 public:
-	bool Init(DeviceIntrf *pIntrf);
+	bool Init(DeviceIntrf * const pIntrf);
 
 	/**
 	 * @brief	Operator to convert this class to device interface handle to be

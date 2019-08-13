@@ -391,7 +391,7 @@ bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf)
 	return true;
 }
 
-bool Slip::Init(DeviceIntrf *pIntrf)
+bool Slip::Init(DeviceIntrf * const pIntrf)
 {
 	if (pIntrf == nullptr)
 	{
