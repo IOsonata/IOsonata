@@ -1,9 +1,13 @@
 /* Linker script to configure memory regions. */
 SEARCH_DIR(.)
-SEARCH_DIR("../../../../src")
-SEARCH_DIR("../../../../../src")
-SEARCH_DIR("../../../../../../src")
-SEARCH_DIR("../../../../../../../src")
+SEARCH_DIR("../../../../ldscript")
+SEARCH_DIR("../../../../../ldscript")
+SEARCH_DIR("../../../../../../ldscript")
+SEARCH_DIR("../../../../../../../ldscript")
+SEARCH_DIR("../../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lgcc -lc -lnosys)
 
 MEMORY

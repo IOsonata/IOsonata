@@ -426,16 +426,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/i2c_nrf5x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrf5x.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/i2c_spi_nrf5x_irq.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_spi_nrf5x_irq.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/imu</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -556,9 +546,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/spi_nrf5x.cpp</name>
+			<name>src/slip_intrf.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrf5x.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/slip_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/stddev.c</name>
@@ -586,29 +576,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/temp_nrf5x.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/timer_hf_nrf5x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_hf_nrf5x.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/timer_lf_nrf5x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrf5x.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/timer_nrf_app_timer.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrf_app_timer.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/uart_bleintrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_bleintrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/uart_nrf5x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrf5x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>
@@ -796,9 +766,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_mpu9250.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/am_lsm303c.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303c.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/gas_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gas_sensor.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/gyro_l3gd20h.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gyro_l3gd20h.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/gyro_sensor.h</name>
@@ -896,6 +876,26 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/i2c_nrf5x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrf5x.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2c_spi_nrf5x_irq.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_spi_nrf5x_irq.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/iopincfg_nrfx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pdm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/pwm_nrf52.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/pwm_nrf52.cpp</locationURI>
@@ -906,14 +906,39 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/spi_nrf5x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrf5x.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/timer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/timer_hf_nrf5x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_hf_nrf5x.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_lf_nrf5x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrf5x.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_nrf_app_timer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrf_app_timer.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_nrf5x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrf5x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>
@@ -1044,6 +1069,16 @@
 			<name>src/sensors/agm_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_mpu9250.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/am_lsm303c.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_lsm303c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/gyro_l3gd20h.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gyro_l3gd20h.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/tph_bme280.cpp</name>

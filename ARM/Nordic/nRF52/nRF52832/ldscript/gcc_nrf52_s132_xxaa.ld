@@ -1,10 +1,12 @@
 OUTPUT_FORMAT ("elf32-littlearm", "elf32-bigarm", "elf32-littlearm")
 SEARCH_DIR(.)
-SEARCH_DIR("../../../../src")
-SEARCH_DIR("../../../../../src")
-SEARCH_DIR("../../../../../../src")
-SEARCH_DIR("../../../../../../../src")
-SEARCH_DIR("../../../../../../IOsonata/ARM/src")
+SEARCH_DIR("../../../../ldscript")
+SEARCH_DIR("../../../../../ldscript")
+SEARCH_DIR("../../../../../../ldscript")
+SEARCH_DIR("../../../../../../../ldscript")
+SEARCH_DIR("../../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lgcc -lc -lnosys)
 
 MEMORY
