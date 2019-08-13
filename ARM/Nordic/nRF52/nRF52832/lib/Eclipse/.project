@@ -321,6 +321,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/Invn</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/ResetEntry.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
@@ -861,6 +866,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
 		</link>
 		<link>
+			<name>src/Invn/Devices</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_ltc2495.cpp</locationURI>
@@ -1094,6 +1104,11 @@
 			<name>src/sensors/tphg_bme680.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/tphg_bme680.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/mbedtls/library/aes.c</name>
@@ -1382,6 +1397,16 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/softdevice/common</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Ak0991x</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -1749,6 +1774,71 @@
 			<name>src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/softdevice/common/nrf_sdh_soc.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Ak0991x/Ak0991x.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Ak0991x/Ak0991x.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948Augmented.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948Augmented.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948AuxCompassAkm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948AuxCompassAkm.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948AuxTransport.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948AuxTransport.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948DataBaseControl.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948DataBaseControl.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948DataBaseDriver.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948DataBaseDriver.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948DataConverter.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948DataConverter.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948Dmp3Driver.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948Dmp3Driver.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948LoadFirmware.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948LoadFirmware.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948MPUFifoControl.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948MPUFifoControl.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948SelfTest.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948SelfTest.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948Setup.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948Setup.c</locationURI>
+		</link>
+		<link>
+			<name>src/Invn/Devices/Drivers/Icm20948/Icm20948Transport.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Invn/Devices/Drivers/Icm20948/Icm20948Transport.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/ble_services/ble_dis/ble_dis.c</name>
