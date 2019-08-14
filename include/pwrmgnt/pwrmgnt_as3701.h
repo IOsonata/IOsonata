@@ -76,103 +76,42 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define AS3701_LDO2_VOLTAGE_ON                 				(1<<7)
 
 #define AS3701_GPIO1_CTRL_REG			9
-
-#define AS3701_GPIO1_IOSF_MASK              				(0xF)
-#define AS3701_GPIO1_IOSF_NORMAL            				(0x0<<0)
-#define AS3701_GPIO1_IOSF_INTERRUPT_OUT     				(0x1<<0)
-#define AS3701_GPIO1_IOSF_VSUP_LOW          				(0x2<<0)
-#define AS3701_GPIO1_IOSF_INTERRUPT_IN      				(0x3<<0)
-#define AS3701_GPIO1_IOSF_SINK              				(0x4<<0)
-#define AS3701_GPIO1_IOSF_VSELECT           				(0x5<<0)
-#define AS3701_GPIO1_IOSF_STANDBY           				(0x6<<0)
-#define AS3701_GPIO1_IOSF_POWER_GOOD        				(0x7<<0)
-#define AS3701_GPIO1_IOSF_CURRENT1          				(0x8<<0)
-#define AS3701_GPIO1_IOSF_CURRENT2          				(0x9<<0)
-#define AS3701_GPIO1_IOSF_CHARGER_OUT       				(0xA<<0)
-#define AS3701_GPIO1_IOSF_EOC               				(0xB<<0)
-#define AS3701_GPIO1_IOSF_CURRENT3          				(0xC<<0)
-#define AS3701_GPIO1_IOSF_CURRENT4          				(0xD<<0)
-#define AS3701_GPIO1_IOSF_PWM               				(0xE<<0)
-#define AS3701_GPIO1_IOSF_CHARGER_IN        				(0xF<<0)
-
-#define AS3701_GPIO1_MODE_MASK              				(7<<4)
-#define AS3701_GPIO1_MODE_INPUT             				(0<<4)
-#define AS3701_GPIO1_MODE_OUTPUT            				(1<<4)
-#define AS3701_GPIO1_MODE_IO1               				(2<<4)
-#define AS3701_GPIO1_MODE_INPUT_TRI         				(3<<4)
-#define AS3701_GPIO1_MODE_INPUT_UP          				(4<<4)
-#define AS3701_GPIO1_MODE_INPUT_DOWN        				(5<<4)
-#define AS3701_GPIO1_MODE_IO2               				(6<<4)
-#define AS3701_GPIO1_MODE_CURR1             				(7<<4)
-
-#define AS3701_GPIO1_INVERT_NORMAL          				(0<<7)
-#define AS3701_GPIO1_INVERT_INVERT          				(1<<7)
-
 #define AS3701_GPIO2_CTRL_REG			0xA
-
-#define AS3701_GPIO2_IOSF_MASK              				(0xF<<0)
-#define AS3701_GPIO2_IOSF_NORMAL            				(0x0<<0)
-#define AS3701_GPIO2_IOSF_INTERRUPT_OUT     				(0x1<<0)
-#define AS3701_GPIO2_IOSF_VSUP_LOW          				(0x2<<0)
-#define AS3701_GPIO2_IOSF_INTERRUPT_IN      				(0x3<<0)
-#define AS3701_GPIO2_IOSF_SINK              				(0x4<<0)
-#define AS3701_GPIO2_IOSF_VSELECT           				(0x5<<0)
-#define AS3701_GPIO2_IOSF_STANDBY           				(0x6<<0)
-#define AS3701_GPIO2_IOSF_POWER_GOOD        				(0x7<<0)
-#define AS3701_GPIO2_IOSF_CURRENT1          				(0x8<<0)
-#define AS3701_GPIO2_IOSF_CURRENT2          				(0x9<<0)
-#define AS3701_GPIO2_IOSF_CHARGER_OUT       				(0xA<<0)
-#define AS3701_GPIO2_IOSF_EOC               				(0xB<<0)
-#define AS3701_GPIO2_IOSF_CURRENT3          				(0xC<<0)
-#define AS3701_GPIO2_IOSF_CURRENT4          				(0xD<<0)
-#define AS3701_GPIO2_IOSF_PWM               				(0xE<<0)
-#define AS3701_GPIO2_IOSF_CHARGER_IN        				(0xF<<0)
-
-#define AS3701_GPIO2_MODE_MASK								(7<<4)
-#define AS3701_GPIO2_MODE_INPUT             				(0<<4)
-#define AS3701_GPIO2_MODE_OUTPUT            				(1<<4)
-#define AS3701_GPIO2_MODE_IO1               				(2<<4)
-#define AS3701_GPIO2_MODE_INPUT_TRI         				(3<<4)
-#define AS3701_GPIO2_MODE_INPUT_UP          				(4<<4)
-#define AS3701_GPIO2_MODE_INPUT_DOWN        				(5<<4)
-#define AS3701_GPIO2_MODE_IO2               				(6<<4)
-#define AS3701_GPIO2_MODE_CURR2             				(7<<4)
-
-#define AS3701_GPIO2_INVERT_NORMAL          				(0<<7)
-#define AS3701_GPIO2_INVERT_INVERT          				(1<<7)
-
 #define AS3701_GPIO3_CTRL_REG			0xB
+#define AS3701_GPIO4_CTRL_REG			0xC
+#define AS3701_GPIO5_CTRL_REG			0xD
 
-#define AS3701_GPIO3_IOSF_MASK              				(0xF<<0)
-#define AS3701_GPIO3_IOSF_NORMAL            				(0x0<<0)
-#define AS3701_GPIO3_IOSF_INTERRUPT_OUT     				(0x1<<0)
-#define AS3701_GPIO3_IOSF_VSUP_LOW          				(0x2<<0)
-#define AS3701_GPIO3_IOSF_INTERRUPT_IN      				(0x3<<0)
-#define AS3701_GPIO3_IOSF_SINK              				(0x4<<0)
-#define AS3701_GPIO3_IOSF_VSELECT           				(0x5<<0)
-#define AS3701_GPIO3_IOSF_STANDBY           				(0x6<<0)
-#define AS3701_GPIO3_IOSF_POWER_GOOD        				(0x7<<0)
-#define AS3701_GPIO3_IOSF_CURRENT1          				(0x8<<0)
-#define AS3701_GPIO3_IOSF_CURRENT2          				(0x9<<0)
-#define AS3701_GPIO3_IOSF_CHARGER_OUT       				(0xA<<0)
-#define AS3701_GPIO3_IOSF_EOC               				(0xB<<0)
-#define AS3701_GPIO3_IOSF_CURRENT3          				(0xC<<0)
-#define AS3701_GPIO3_IOSF_CURRENT4          				(0xD<<0)
-#define AS3701_GPIO3_IOSF_PWM               				(0xE<<0)
-#define AS3701_GPIO3_IOSF_CHARGER_IN        				(0xF<<0)
+#define AS3701_GPIO_IOSF_MASK              				(0xF)
+#define AS3701_GPIO_IOSF_NORMAL            				(0x0<<0)
+#define AS3701_GPIO_IOSF_INTERRUPT_OUT     				(0x1<<0)
+#define AS3701_GPIO_IOSF_VSUP_LOW          				(0x2<<0)
+#define AS3701_GPIO_IOSF_INTERRUPT_IN      				(0x3<<0)
+#define AS3701_GPIO_IOSF_SINK              				(0x4<<0)
+#define AS3701_GPIO_IOSF_VSELECT           				(0x5<<0)
+#define AS3701_GPIO_IOSF_STANDBY           				(0x6<<0)
+#define AS3701_GPIO_IOSF_POWER_GOOD        				(0x7<<0)
+#define AS3701_GPIO_IOSF_CURRENT1          				(0x8<<0)
+#define AS3701_GPIO_IOSF_CURRENT2          				(0x9<<0)
+#define AS3701_GPIO_IOSF_CHARGER_OUT       				(0xA<<0)
+#define AS3701_GPIO_IOSF_EOC               				(0xB<<0)
+#define AS3701_GPIO_IOSF_CURRENT3          				(0xC<<0)
+#define AS3701_GPIO_IOSF_CURRENT4          				(0xD<<0)
+#define AS3701_GPIO_IOSF_PWM               				(0xE<<0)
+#define AS3701_GPIO_IOSF_CHARGER_IN        				(0xF<<0)
 
-#define AS3701_GPIO3_MODE_MASK								(7<<4)
-#define AS3701_GPIO3_MODE_INPUT             				(0<<4)
-#define AS3701_GPIO3_MODE_OUTPUT            				(1<<4)
-#define AS3701_GPIO3_MODE_IO1               				(2<<4)
-#define AS3701_GPIO3_MODE_INPUT_TRI         				(3<<4)
-#define AS3701_GPIO3_MODE_INPUT_UP         					(4<<4)
-#define AS3701_GPIO3_MODE_INPUT_DOWN        				(5<<4)
-#define AS3701_GPIO3_MODE_IO2               				(6<<4)
-#define AS3701_GPIO3_MODE_CURR2             				(7<<4)
+#define AS3701_GPIO_MODE_MASK              				(7<<4)
+#define AS3701_GPIO_MODE_INPUT             				(0<<4)
+#define AS3701_GPIO_MODE_OUTPUT            				(1<<4)
+#define AS3701_GPIO_MODE_IO1               				(2<<4)
+#define AS3701_GPIO_MODE_INPUT_TRI         				(3<<4)
+#define AS3701_GPIO_MODE_INPUT_UP          				(4<<4)
+#define AS3701_GPIO_MODE_INPUT_DOWN        				(5<<4)
+#define AS3701_GPIO_MODE_IO2               				(6<<4)
+#define AS3701_GPIO_MODE_CURR1             				(7<<4)
 
-#define AS3701_GPIO3_INVERT_NORMAL          				(0<<7)
-#define AS3701_GPIO3_INVERT_INVERT          				(1<<7)
+#define AS3701_GPIO_INVERT_NORMAL          				(0<<7)
+#define AS3701_GPIO_INVERT_INVERT          				(1<<7)
+
 
 #define AS3701_GPIO_SIGNAL_OUT_REG		0x20
 
@@ -469,8 +408,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define AS3701_ASIC_ID2_VALUE								(0)
 
 #define AS3701_VOUT_MAXCNT					3	//!< Max number of output
+#define AS3701_LED_MAXCNT					2
 
-class PowerMgntAS3701 : public PowerMgnt, public Led {
+class PowerMgntAS3701 : public PowerMgnt, public LedDevice {
 public:
 	bool Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf);
 	int32_t SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit);
@@ -500,9 +440,41 @@ public:
 
 	uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr);
 
+	/**
+	 * Turns all LED 100% on
+	 */
+	void On();
+
+	/**
+	 * Turns all LED off
+	 */
+	void Off();
+
+	/**
+	 * Toggle or invert all LED dimming level
+	 */
+	void Toggle();
+
+	/**
+	 * @brief	Set LED level
+	 *
+	 * This function set the dimming level of the LED 0-255.  On multi-color LED can be
+	 * used to mix color.  Usually used for PWM analog led
+	 *
+	 * @param Level	: LED dimming Level 0-255.  0 = Off, 255 = 100% On. Up to 4 LEDs can be dimmed.
+	 * 					Bits 0-7  	: LED 0
+	 * 					Bits 8-15 	: LED 1
+	 * 					Bits 16-23	: LED 2
+	 * 					Bits 24-31	: LED 3
+	 *
+	 */
+	void Level(uint32_t Level);
+
+
 protected:
 private:
-
+	LED_DEV vLed[AS3701_LED_MAXCNT];
+	int vNbLed;
 };
 
 #ifdef __cplusplus

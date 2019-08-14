@@ -65,6 +65,18 @@ bool PowerMgntAS3701::Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf)
 
 	SetCharge(PWR_CHARGE_TYPE_AUTO, Cfg.VEndChrg, Cfg.ChrgCurr);
 
+	vNbLed = min(Cfg.NbLed, AS3701_LED_MAXCNT);
+
+	for (int i = 0; i < vNbLed; i++)
+	{
+		if (Cfg.pLed[i].Pin >= 0)
+		{
+			uint8_t regaddr = AS3701_GPIO1_CTRL_REG + Cfg.pLed[i].Pin;
+			Write8(&regaddr, 1, AS3701_GPIO_MODE_OUTPUT);
+			vLed[i] = Cfg.pLed[i];
+		}
+	}
+
 	return true;
 }
 
@@ -220,3 +232,91 @@ uint32_t PowerMgntAS3701::SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint
 	return true;
 }
 
+/**
+ * Turns all LED 100% on
+ */
+void PowerMgntAS3701::On()
+{
+	uint8_t regaddr = AS3701_GPIO_SIGNAL_OUT_REG;//AS3701_PWM_CONTROL_LOW_REG;//AS3701_CURR1_VALUE_REG;
+	uint8_t mask = 0;
+	uint8_t d =	Read8(&regaddr, 1);
+
+	for (int i = 0; i < vNbLed; i++)
+	{
+		if (vLed[i].Act)
+		{
+			d |= (1 << vLed[i].Pin);
+		}
+		else
+		{
+			d &= ~(1 << vLed[i].Pin);
+		}
+	}
+	Write8(&regaddr, 1, d);
+}
+
+/**
+ * Turns all LED off
+ */
+void PowerMgntAS3701::Off()
+{
+	uint8_t regaddr = AS3701_GPIO_SIGNAL_OUT_REG;//AS3701_PWM_CONTROL_LOW_REG;//AS3701_CURR1_VALUE_REG;
+	uint8_t mask = 0;
+	uint8_t d =	Read8(&regaddr, 1);
+
+	for (int i = 0; i < vNbLed; i++)
+	{
+		if (vLed[i].Act)
+		{
+			d &= ~(1 << vLed[i].Pin);
+		}
+		else
+		{
+			d |= (1 << vLed[i].Pin);
+		}
+	}
+	Write8(&regaddr, 1, d);
+}
+
+/**
+ * Toggle or invert all LED dimming level
+ */
+void PowerMgntAS3701::Toggle()
+{
+
+}
+
+void PowerMgntAS3701::Level(uint32_t Level)
+{
+	uint8_t regaddr = AS3701_GPIO_SIGNAL_OUT_REG;
+	uint32_t mask = 0xff;
+	uint8_t d =	Read8(&regaddr, 1);
+
+	for (int i = 0; i < vNbLed; i++)
+	{
+		if (Level & mask)
+		{
+			if (vLed[i].Act)
+			{
+				d |= (1 << vLed[i].Pin);
+			}
+			else
+			{
+				d &= ~(1 << vLed[i].Pin);
+			}
+		}
+		else
+		{
+			if (vLed[i].Act)
+			{
+				d &= ~(1 << vLed[i].Pin);
+			}
+			else
+			{
+				d |= (1 << vLed[i].Pin);
+			}
+		}
+		mask <<= 8;
+	}
+	Write8(&regaddr, 1, d);
+}

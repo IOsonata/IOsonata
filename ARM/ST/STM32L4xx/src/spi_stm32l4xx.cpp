@@ -603,13 +603,13 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		return false;
 	}
 
-    if (pCfgData->bIntEn)
+    if (pCfgData->bIntEn && pCfgData->Type == SPITYPE_SLAVE)
     {
     	SPI_TypeDef *reg;
 
     	reg = s_STM32L4xxSPIDev[pCfgData->DevNo].pReg;
 
-    	reg->CR2 |= SPI_CR2_TXEIE | SPI_CR2_RXNEIE | SPI_CR2_ERRIE;
+    	reg->CR2 |= SPI_CR2_RXNEIE | SPI_CR2_ERRIE;
 
     	switch (pCfgData->DevNo)
     	{

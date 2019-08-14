@@ -41,6 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "device_intrf.h"
 #include "device.h"
+#include "miscdev/led.h"
 
 /** @addtogroup Power
   * @{
@@ -68,6 +69,8 @@ typedef struct __Power_Config {
 	int32_t VEndChrg;					//!< End of charge voltage level in mV
 	uint32_t ChrgCurr;					//!< Charge current in mA
 	uint32_t ChrgTimeout;				//!< Charge timeout in minutes
+	LED_DEV * const pLed;
+	int NbLed;
 } PWRCFG;
 
 #pragma pack(pop)
@@ -105,9 +108,9 @@ public:
 	virtual uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr) = 0;
 
 protected:
-	uint32_t vChrgCurr;				//!< Charge current
+	uint32_t vChrgCurr;		//!< Charge current
 private:
-
+//	LED_DEV vLed;			//!< Led active level
 };
 
 #ifdef __cplusplus

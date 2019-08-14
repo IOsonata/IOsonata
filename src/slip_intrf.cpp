@@ -160,8 +160,9 @@ int SlipIntrfRxData(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 	if (dev->pPhyIntrf)
 	{
 		uint8_t *p = pBuff;
+		int rtry = 10;
 
-		while (BuffLen > 0)
+		while (BuffLen > 0 && rtry > 0)
 		{
 			if (dev->pPhyIntrf->RxData(dev->pPhyIntrf, pBuff, 1) > 0)
 			{
@@ -172,17 +173,20 @@ int SlipIntrfRxData(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 				if (*pBuff == SLIP_ESC_CODE)
 				{
 					*pBuff = SLIP_END_CODE;
-					while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0);
+					int tinout = 1000;
+					while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0 && tinout-- > 0);
 				}
 				else if (*pBuff == SLIP_ESC_ESC_CODE)
 				{
 					*pBuff = SLIP_ESC_CODE;
-					while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0);
+					int tinout = 1000;
+					while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0 && tinout-- > 0);
 				}
 				pBuff++;
 				BuffLen--;
 				cnt++;
 			}
+			rtry--;
 		}
 	}
 
@@ -254,8 +258,8 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 
 		while (DataLen > 0)
 		{
-			// Look for conflicting code
-			for (; i < DataLen; i++)
+			// Find conflicting code
+			while (i++ < DataLen)
 			{
 				if (*p == SLIP_END_CODE)
 				{
