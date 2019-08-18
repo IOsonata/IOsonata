@@ -105,7 +105,7 @@ uint8_t buff[DISKIO_SECT_SIZE];
 
 g_FlashDisk.SectRead(1, buff);	// Read sector 1
 g_FlashDisk.SectWrite(2, buff);	// Write sector 2
-g_FlashDisk.Erase();			// Masse erase flash
+g_FlashDisk.Erase();			// Mass erase flash
 
 
 @author	Hoang Nguyen Hoan
@@ -216,7 +216,7 @@ public:
 	 * 			- true 	: Success
 	 * 			- false	: Failed
 	 */
-	bool Init(FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
+	bool Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
 	          DISKIO_CACHE_DESC * const pCacheBlk = NULL, int NbChaceBlk = 0);
 
     /**

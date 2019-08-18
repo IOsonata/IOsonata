@@ -292,7 +292,7 @@ SOFTWARE.
 #define LSM303C_INT_SRC_M_NTH_X									(1<<4)
 #define LSM303C_INT_SRC_M_PTH_Z									(1<<5)
 #define LSM303C_INT_SRC_M_PTH_Y									(1<<6)
-#define LSM303C_INT_SRC_M_PTH_Z									(1<<7)
+#define LSM303C_INT_SRC_M_PTH_X									(1<<7)
 
 #define LSM303C_THS_L_M_REG					0x32
 #define LSM303C_THS_H_M_REG					0x33

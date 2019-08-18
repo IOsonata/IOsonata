@@ -64,13 +64,13 @@ typedef enum __SPI_Type {
 } SPITYPE;
 
 typedef enum __SPI_Clk_Polarity {
-	SPICLKPOL_LOW,				//!< Clock polarity low
-	SPICLKPOL_HIGH,				//!< Clock polarity high
+	SPICLKPOL_HIGH,				//!< Clock polarity active high : CPOL=0 idle low
+	SPICLKPOL_LOW,				//!< Clock polarity active low : CPOL=1, idle high
 } SPICLKPOL;
 
 typedef enum __SPI_Data_Phase {
-	SPIDATAPHASE_FIRST_CLK,		//!< Data phase starts on first clock
-	SPIDATAPHASE_SECOND_CLK		//!< Data phase starts on 2nd clock
+	SPIDATAPHASE_FIRST_CLK,		//!< Data phase starts on first clock transition leading : CPHA=0
+	SPIDATAPHASE_SECOND_CLK		//!< Data phase starts on 2nd clock transition trailing : CPHA=1
 } SPIDATAPHASE;
 
 typedef enum __SPI_Data_Bit_Order {
