@@ -9,9 +9,10 @@ For desktop pc version of the library, native compiler and IDE are used.  XCode 
 
 ### IDE limiations :
 
-Eclipse & GCC : Full C++ supports, full file io
-IAR : Full C++ support, no system support for file io
-uVision : Could not create library compilation properly
-CrossWorks : GCC C++ is stripped down to bare bone, no file io supports
-Segger Stusio : Strip down version of CrossWorks.  Even less functional.
+* Eclipse & GCC : Full C++ supports, full file io supports
+* IAR : Full C++ support, no system support for file io.  File io only available with semihosting.
+* uVision : Could not create library compilation properly. To use IOsonata with uVision, you need to add the library sources directly into your firmware project
+* CrossWorks : GCC C++ is stripped down to bare bone, no file io supports, no atomic supports and many others. In order to use full GCC C++, CrossWorks must be configured to use with external compiler
+* Segger Stusio : Strip down version of CrossWorks.  Even less functional. Only supports jlink, cannot be used with any other jtag. SES is not recommended for heavy firmware development. 
+
 

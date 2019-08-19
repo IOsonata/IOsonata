@@ -40,7 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 bool AgBmi160::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Valid())
-		return true;;
+		return true;
 
 	if (pIntrf == NULL)
 		return false;
@@ -73,20 +73,159 @@ bool AgBmi160::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	return true;
 }
 
-bool AgBmi160::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelBmi160::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	if (Init((uint32_t)CfgData.DevAddr, (DeviceIntrf *)pIntrf, (Timer *)pTimer) == false)
 		return false;
+
+	Scale(CfgData.Scale);
+/*
+	uint8_t regaddr = BMI160_ACC_RANGE;
+	if (CfgData.Scale < 4)
+	{
+		Write8(&regaddr, 1, BMI160_ACC_RANGE_ACC_RANGE_2G);
+	}
+	else if (CfgData.Scale < 8)
+	{
+		Write8(&regaddr, 1, BMI160_ACC_RANGE_ACC_RANGE_4G);
+	}
+	else
+	{
+		Write8(&regaddr, 1, BMI160_ACC_RANGE_ACC_RANGE_8G);
+	}
+*/
+	SamplingFrequency(CfgData.Freq);
+
+	AccelSensor::Type(SENSOR_TYPE_ACCEL);
 
 	return true;
 }
 
-bool AgBmi160::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+uint32_t AccelBmi160::SamplingFrequency(uint32_t Freq)
+{
+	uint8_t regaddr = BMI160_ACC_CONF;
+	uint32_t odrval = Read8(&regaddr, 1) & ~BMI160_ACC_CONF_ACC_ODR_MASK;
+	uint32_t f = 0;
+
+	if (Freq < 100)
+	{
+		for (int i = 1; i < 8; i++)
+		{
+			uint32_t t = 25000 >> (0x80 >> i);
+
+			if (t > Freq)
+			{
+				break;
+			}
+			odrval |= i;
+			f = t;
+		}
+	}
+	else
+	{
+		for (int i = 0; i < 5; i++)
+		{
+			uint32_t t = 100000 << i;
+			if (t > Freq)
+			{
+				break;
+			}
+			odrval |= i | 0x8;
+			f = t;
+		}
+	}
+
+
+	Write8(&regaddr, 1, odrval);
+
+	return Sensor::SamplingFrequency(f);
+}
+
+bool GyroBmi160::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
+	Sensitivity(CfgData.Sensitivity);
+	SamplingFrequency(CfgData.Freq);
+
+	GyroSensor::Type(SENSOR_TYPE_GYRO);
+
 	return true;
+}
+
+uint32_t GyroBmi160::SamplingFrequency(uint32_t Freq)
+{
+	uint8_t regaddr = BMI160_GYR_CONF;
+	uint32_t odrval = Read8(&regaddr, 1) & ~BMI160_GYR_CONF_GYR_ODR_MASK;
+	uint32_t f = 0;
+
+	if (Freq < 100)
+	{
+		for (int i = 6; i < 8; i++)
+		{
+			uint32_t t = 25000 >> (0x80 >> i);
+
+			if (t > Freq)
+			{
+				break;
+			}
+			odrval |= i;
+			f = t;
+		}
+	}
+	else
+	{
+		for (int i = 0; i < 6; i++)
+		{
+			uint32_t t = 100000 << i;
+			if (t > Freq)
+			{
+				break;
+			}
+			odrval |= i | 0x8;
+			f = t;
+		}
+	}
+
+
+	Write8(&regaddr, 1, odrval);
+
+	return Sensor::SamplingFrequency(f);
+}
+
+uint32_t GyroBmi160::Sensitivity(uint32_t Value)
+{
+	uint8_t regaddr = BMI160_GYR_RANGE;
+	uint32_t range = 0;
+
+	if (Value < 250)
+	{
+		Write8(&regaddr, 1, BMI160_GYR_RANGE_GYR_RANGE_125);
+		range = 125;
+	}
+	else if (Value < 500)
+	{
+		Write8(&regaddr, 1, BMI160_GYR_RANGE_GYR_RANGE_250);
+		range = 250;
+	}
+	else if (Value < 1000)
+	{
+		Write8(&regaddr, 1, BMI160_GYR_RANGE_GYR_RANGE_500);
+		range = 500;
+	}
+	else if (Value < 2000)
+	{
+		Write8(&regaddr, 1, BMI160_GYR_RANGE_GYR_RANGE_1000);
+		range = 1000;
+	}
+	else
+	{
+		Write8(&regaddr, 1, BMI160_GYR_RANGE_GYR_RANGE_2000);
+		range = 2000;
+	}
+
+	return GyroSensor::Sensitivity(range);
 }
 
 bool AgBmi160::Enable()
@@ -109,9 +248,27 @@ bool AgBmi160::StartSampling()
 	return true;
 }
 
-uint8_t AgBmi160::Scale(uint8_t Value)
+uint8_t AccelBmi160::Scale(uint8_t Value)
 {
-	return 0;
+	uint8_t regaddr = BMI160_ACC_RANGE;
+
+	if (Value < 4)
+	{
+		Write8(&regaddr, 1, BMI160_ACC_RANGE_ACC_RANGE_2G);
+		Value = 2;
+	}
+	else if (Value < 8)
+	{
+		Write8(&regaddr, 1, BMI160_ACC_RANGE_ACC_RANGE_4G);
+		Value = 4;
+	}
+	else
+	{
+		Write8(&regaddr, 1, BMI160_ACC_RANGE_ACC_RANGE_8G);
+		Value = 8;
+	}
+
+	return AccelSensor::Scale(Value);
 }
 
 bool AgBmi160::UpdateData()

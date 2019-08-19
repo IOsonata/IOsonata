@@ -142,7 +142,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 	return true;
 }
 
-bool AgmIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint16_t regaddr;
 	uint8_t d;
@@ -191,7 +191,7 @@ bool AgmIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntr
 	return true;
 }
 
-bool AgmIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool GyroIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
@@ -255,7 +255,7 @@ bool AgmIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf
 	return true;
 }
 
-bool AgmIcm20948::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool MagIcm20948::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint8_t regaddr;
 	uint8_t d[4];

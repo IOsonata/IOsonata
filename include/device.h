@@ -43,7 +43,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __DEVICE_H__
 
 #include <stdint.h>
-#include <string.h>
 
 #ifndef __cplusplus
 #include <stdbool.h>
@@ -270,7 +269,7 @@ public:
 	 */
 	bool Valid() { return vbValid; }
 
-	DEVINTRF_TYPE InterfaceType() { return vpIntrf != NULL ? vpIntrf->Type() : DEVINTRF_TYPE_UNKOWN; }
+	DEVINTRF_TYPE InterfaceType() { return vpIntrf != nullptr ? vpIntrf->Type() : DEVINTRF_TYPE_UNKOWN; }
 
 	/**
 	 * @brief	Get timer pointer used for timestamping
@@ -284,6 +283,21 @@ public:
 	void SetEvtHandler(DEVEVTCB EvtHandler) { vEvtHandler = EvtHandler; }
 
 protected:
+
+	/**
+	 * @brief	Initialization function useful for composite device
+	 *
+	 * @param	DevAddr : Device address is dependent of interface and device type.
+	 * 						For I2C type it would be the 7 bits address, SPI would be CS pin index,
+	 * 						other memory mapped	would be a 32bit address.
+	 * @param	pIntrf : Pointer to the interface object to access this device.  This pointer is kept
+	 * 						internally for the life duration of this device. User app should never delete
+	 * 						the pIntrf object
+	 * @param	pTimer : Same as above for Timer object.
+	 *
+	 */
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = nullptr) { return false; }
+
 	/**
 	 * @brief	Store device id.
 	 *

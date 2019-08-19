@@ -267,6 +267,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BMI160_GYR_RANGE            0x43
 #define BMI160_GYR_RANGE_GYR_RANGE_MASK                     (7<<0)
+#define BMI160_GYR_RANGE_GYR_RANGE_2000						(0<<0)
+#define BMI160_GYR_RANGE_GYR_RANGE_1000						(1<<0)
+#define BMI160_GYR_RANGE_GYR_RANGE_500						(2<<0)
+#define BMI160_GYR_RANGE_GYR_RANGE_250						(3<<0)
+#define BMI160_GYR_RANGE_GYR_RANGE_125						(4<<0)
+
 
 #define BMI160_GYR_CONF             0x42
 #define BMI160_GYR_CONF_GYR_ODR_MASK                        (0xF<<0)
@@ -274,6 +280,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BMI160_ACC_RANGE            0x41
 #define BMI160_ACC_RANGE_ACC_RANGE_MASK                     (0xF)
+#define BMI160_ACC_RANGE_ACC_RANGE_2G						(3)
+#define BMI160_ACC_RANGE_ACC_RANGE_4G						(5)
+#define BMI160_ACC_RANGE_ACC_RANGE_8G						(8)
 
 #define BMI160_ACC_CONF             0x40
 #define BMI160_ACC_CONF_ACC_ODR_MASK                        (0xF)
@@ -386,30 +395,54 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef __cplusplus
 
-class AgBmi160 : public AccelSensor, public GyroSensor {
+class AccelBmi160 : public AccelSensor {
 public:
 	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint8_t Scale(uint8_t Value);
+
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+};
+
+class GyroBmi160 : public GyroSensor {
+public:
 	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint32_t Sensitivity(uint32_t Value);
+
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+};
+
+class AgBmi160 : public AccelBmi160, public GyroBmi160 {
+public:
+	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+		return AccelBmi160::Init(Cfg, pIntrf, pTimer);
+	}
+	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+		return GyroBmi160::Init(Cfg, pIntrf, pTimer);
+	}
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
 	virtual bool StartSampling();
-	virtual uint8_t Scale(uint8_t Value);
 	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(GYROSENSOR_RAWDATA &Data) { return GyroSensor::Read(Data); }
 	virtual bool Read(GYROSENSOR_DATA &Data) { return GyroSensor::Read(Data); }
 
 private:
-	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+
 	bool UpdateData();
-	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
+/*	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
 		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 	}
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
 		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
-
+*/
 	bool vbInitialized;
 };
 

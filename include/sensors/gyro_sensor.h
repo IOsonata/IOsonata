@@ -124,21 +124,21 @@ public:
 	}
 
 	/**
-	 * @brief	Get the current scale value.
+	 * @brief	Get the current sensitivity value.
 	 *
-	 * @return	G scale value
+	 * @return	Sensitivity value
 	 */
 	virtual uint32_t Sensitivity() { return vSensitivity; }
 
 	/**
-	 * @brief	Set the current scale value.
+	 * @brief	Set the current sensitivity value.
 	 *
 	 * NOTE : Implementer must overload this function to add require hardware implement then call
 	 * this function to keep the scale value internally and return the real hardware scale value.
 	 *
-	 * @param 	Value : Wanted scale value
+	 * @param 	Value : Wanted sensitivity value
 	 *
-	 * @return	Real scale value
+	 * @return	Real sensitivity value
 	 */
 	virtual uint32_t Sensitivity(uint32_t Value) { vSensitivity = Value; return vSensitivity; }
 
