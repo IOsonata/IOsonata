@@ -264,6 +264,24 @@ public:
 	 */
 	SENSOR_TYPE Type(SENSOR_TYPE SensorType) { vType = SensorType; return vType; }
 
+	/**
+	 * @brief	Get the current filter cutoff frequency
+	 *
+	 * @return	Frequency in mHz
+	 */
+	virtual uint32_t FilterFreq() { return vFilterrFreq; }
+
+	/**
+	 * @brief	Set and enable filter cutoff frequency
+	 *
+	 * Optional implementation can override this to implement filtering supported by the device
+	 *
+	 * @param	Freq : Filter frequency in mHz
+	 *
+	 * @return	Actual frequency in mHz
+	 */
+	virtual uint32_t FilterFreq(uint32_t Freq) { vFilterrFreq = Freq; return vFilterrFreq; }
+
 protected:
 
 	SENSOR_TYPE vType;			//!< Sensor type
@@ -274,7 +292,8 @@ protected:
 	bool vbSampling;			//!< true - measurement in progress
 	uint64_t vSampleCnt;		//!< Keeping sample count
 	uint64_t vSampleTime;		//!< Time stamp when sampling is started
-	int vTimerTrigId;
+	uint32_t vFilterrFreq;		//!< Filter frequency in mHz, many sensors can set a filter cutoff frequency
+	int vTimerTrigId;			//!< Timer interrupt trigger id (implementation dependent
 };
 
 extern "C" {

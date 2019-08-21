@@ -250,7 +250,7 @@ bool AccelMpu9250::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Tim
 
 	AccelSensor::Range(MPU9250_ACC_MAX_RANGE);
 	Scale(CfgData.Scale);
-	LowPassFreq(CfgData.LPFreq);
+	FilterFreq(CfgData.FltrFreq);
 
 	//regaddr = MPU9250_AG_ACCEL_CONFIG2;
 	//Write8(&regaddr, 1, MPU9250_AG_ACCEL_CONFIG2_ACCEL_FCHOICE_B);
@@ -284,7 +284,7 @@ bool GyroMpu9250::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer
 	uint8_t regaddr;
 	uint8_t d = 0;
 	uint8_t fchoice = 0;
-	uint32_t f = CfgData.LPFreq;////max(CfgData.Freq, vSampFreq);
+	uint32_t f = CfgData.FltrFreq;////max(CfgData.Freq, vSampFreq);
 	GyroSensor::vSampFreq = CfgData.Freq;
 
 	uint16_t smplrt = 1000000 / GyroSensor::vSampFreq;
@@ -679,48 +679,48 @@ uint32_t AgmMpu9250::LowPassFreq(uint32_t Freq)
 	{
 		rate = 4000;
 		d = MPU9250_AG_ACCEL_CONFIG2_ACCEL_FCHOICE_B;
-		AccelSensor::LowPassFreq(1130);
+		AccelSensor::FilterFreq(1130);
 	}
 	else if (Freq < 10)
 	{
 		d = MPU9250_AG_ACCEL_CONFIG2_A_DLPFCFG_5HZ;
-		AccelSensor::LowPassFreq(5);
+		AccelSensor::FilterFreq(5);
 	}
 	else if (Freq < 20)
 	{
 		d = MPU9250_AG_ACCEL_CONFIG2_A_DLPFCFG_10HZ;
-		AccelSensor::LowPassFreq(10);
+		AccelSensor::FilterFreq(10);
 	}
 	else if (Freq < 40)
 	{
 		d = MPU9250_AG_ACCEL_CONFIG2_A_DLPFCFG_20HZ;
-		AccelSensor::LowPassFreq(20);
+		AccelSensor::FilterFreq(20);
 	}
 	else if (Freq < 50)
 	{
 		d = MPU9250_AG_ACCEL_CONFIG2_A_DLPFCFG_41HZ;
-		AccelSensor::LowPassFreq(41);
+		AccelSensor::FilterFreq(41);
 	}
 	else if (Freq < 100)
 	{
 		d = MPU9250_AG_ACCEL_CONFIG2_A_DLPFCFG_92HZ;
-		AccelSensor::LowPassFreq(92);
+		AccelSensor::FilterFreq(92);
 	}
 	else if (Freq < 200)
 	{
 		d = MPU9250_AG_ACCEL_CONFIG2_A_DLPFCFG_184HZ;
-		AccelSensor::LowPassFreq(184);
+		AccelSensor::FilterFreq(184);
 	}
 	else if (Freq < 500)
 	{
 		d = MPU9250_AG_ACCEL_CONFIG2_A_DLPFCFG_460HZ;
-		AccelSensor::LowPassFreq(460);
+		AccelSensor::FilterFreq(460);
 	}
 	else
 	{
 		rate = 4000;
 		d = MPU9250_AG_ACCEL_CONFIG2_ACCEL_FCHOICE_B;
-		AccelSensor::LowPassFreq(1130);
+		AccelSensor::FilterFreq(1130);
 	}
 
 	Write8(&regaddr, 1, d);// | MPU9250_AG_ACCEL_CONFIG2_FIFO_SIZE_1024);
@@ -731,7 +731,7 @@ uint32_t AgmMpu9250::LowPassFreq(uint32_t Freq)
 	Write8(&regaddr, 1, d);
 
 
-	return AccelSensor::LowPassFreq();
+	return AccelSensor::FilterFreq();
 }
 
 // Accel scale

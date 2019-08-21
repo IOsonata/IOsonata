@@ -452,9 +452,9 @@ bool AgmIcm20948::WakeOnEvent(bool bEnable, int Threshold)
 }
 
 // Accel low pass frequency
-uint32_t AgmIcm20948::LowPassFreq(uint32_t Freq)
+uint32_t AgmIcm20948::FilterFreq(uint32_t Freq)
 {
-	return AccelSensor::LowPassFreq();
+	return AccelSensor::FilterFreq();
 }
 
 // Accel scale
