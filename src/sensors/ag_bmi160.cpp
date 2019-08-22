@@ -32,7 +32,9 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
+#include <math.h>
 
+#include "istddef.h"
 #include "coredev/spi.h"
 #include "sensors/ag_bmi160.h"
 #include "idelay.h"
@@ -44,6 +46,7 @@ bool AccelBmi160::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntr
 
 	AccelSensor::Type(SENSOR_TYPE_ACCEL);
 
+	vData.Range = Range(0x7FFF);
 	Scale(CfgData.Scale);
 	SamplingFrequency(CfgData.Freq);
 	FilterFreq(CfgData.FltrFreq);
@@ -72,6 +75,8 @@ uint8_t AccelBmi160::Scale(uint8_t Value)
 		Write8(&regaddr, 1, BMI160_ACC_RANGE_ACC_RANGE_8G);
 		Value = 8;
 	}
+
+	vData.Scale = Value;
 
 	return AccelSensor::Scale(Value);
 }
@@ -128,19 +133,21 @@ uint32_t AccelBmi160::SamplingFrequency(uint32_t Freq)
 	uint8_t regaddr = BMI160_ACC_CONF;
 	uint32_t accconf = Read8(&regaddr, 1) & ~BMI160_ACC_CONF_ACC_ODR_MASK;
 	uint32_t f = 0;
+	uint32_t dif = 100000;
 
 	if (Freq < 100000)
 	{
 		for (int i = 1; i < 8; i++)
 		{
 			uint32_t t = 100000 >> (8 - i);
-
-			if (t > Freq)
+			uint32_t x = labs(Freq - t);
+			if (x < dif)
 			{
-				break;
+				accconf &= ~BMI160_ACC_CONF_ACC_ODR_MASK;
+				accconf |= i;
+				f = t;
+				dif = x;
 			}
-			accconf |= i;
-			f = t;
 		}
 	}
 	else
@@ -148,12 +155,14 @@ uint32_t AccelBmi160::SamplingFrequency(uint32_t Freq)
 		for (int i = 0; i < 5; i++)
 		{
 			uint32_t t = 100000 << i;
-			if (t > Freq)
+			uint32_t x = labs(Freq - t);
+			if (x < dif)
 			{
-				break;
+				accconf &= ~BMI160_ACC_CONF_ACC_ODR_MASK;
+				accconf |= i | 0x8;
+				f = t;
+				dif = x;
 			}
-			accconf |= i | 0x8;
-			f = t;
 		}
 	}
 
@@ -195,7 +204,7 @@ bool AccelBmi160::Enable()
 		Write8(&regaddr, 1, BMI160_CMD_ACC_SET_PMU_MODE_LOWPOWER);
 	}
 
-	msDelay(10); // Require delay, do not remove
+	msDelay(20); // Require delay, do not remove
 
 	regaddr = BMI160_ERR_REG;
 	d = Read8(&regaddr, 1);
@@ -232,17 +241,42 @@ bool GyroBmi160::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf,
 
 	GyroSensor::Type(SENSOR_TYPE_GYRO);
 
+	vData.Range = Range(0x7FFF);
+
 	Sensitivity(CfgData.Sensitivity);
 	SamplingFrequency(CfgData.Freq);
-
-	uint8_t regaddr = BMI160_FIFO_CONFIG_1;
-	uint8_t d = Read8(&regaddr, 1) | BMI160_FIFO_CONFIG_1_FIFO_GYR_EN;
-
-	Write8(&regaddr, 1, d);
+	FilterFreq(CfgData.FltrFreq);
 
 	GyroBmi160::Enable();
 
 	return true;
+}
+
+uint32_t GyroBmi160::FilterFreq(uint32_t Freq)
+{
+	uint8_t t = GyroSensor::SamplingFrequency() / Freq;
+	uint8_t regaddr = BMI160_GYR_CONF;
+	uint8_t d = Read8(&regaddr, 1) & ~BMI160_GYR_CONF_GYR_BWP_MASK;
+
+	if ( t < 4)
+	{
+		d |= BMI160_GYR_CONF_GYR_BWP_OSR2;
+		t = 1;
+	}
+	else if (t < 8)
+	{
+		d |= BMI160_GYR_CONF_GYR_BWP_OSR4;
+		t = 2;
+	}
+	else
+	{
+		d |= BMI160_GYR_CONF_GYR_BWP_NORMAL;
+		t = 3;
+	}
+
+	Write8(&regaddr, 1, d);
+
+	return GyroSensor::FilterFreq(GyroSensor::SamplingFrequency() >> t);
 }
 
 uint32_t GyroBmi160::SamplingFrequency(uint32_t Freq)
@@ -250,35 +284,38 @@ uint32_t GyroBmi160::SamplingFrequency(uint32_t Freq)
 	uint8_t regaddr = BMI160_GYR_CONF;
 	uint32_t odrval = Read8(&regaddr, 1) & ~BMI160_GYR_CONF_GYR_ODR_MASK;
 	uint32_t f = 0;
+	uint32_t dif = 100000;
 
 	if (Freq < 100000)
 	{
 		for (int i = 6; i < 8; i++)
 		{
 			uint32_t t = 100000 >> (8 - i);
-
-			if (t > Freq)
+			uint32_t x = labs(Freq - t);
+			if (x < dif)
 			{
-				break;
+				odrval &= ~BMI160_GYR_CONF_GYR_ODR_MASK;
+				odrval |= i;
+				f = t;
+				dif = x;
 			}
-			odrval |= i;
-			f = t;
 		}
 	}
 	else
 	{
-		for (int i = 0; i < 6; i++)
+		for (int i = 0; i < 5; i++)
 		{
 			uint32_t t = 100000 << i;
-			if (t > Freq)
+			uint32_t x = labs(Freq - t);
+			if (x < dif)
 			{
-				break;
+				odrval &= ~BMI160_GYR_CONF_GYR_ODR_MASK;
+				odrval |= i | 0x8;
+				f = t;
+				dif = x;
 			}
-			odrval |= i | 0x8;
-			f = t;
 		}
 	}
-
 
 	Write8(&regaddr, 1, odrval);
 
@@ -316,6 +353,8 @@ uint32_t GyroBmi160::Sensitivity(uint32_t Value)
 		range = 2000;
 	}
 
+	vData.Scale = Value;
+
 	return GyroSensor::Sensitivity(range);
 }
 
@@ -329,20 +368,20 @@ bool GyroBmi160::Enable()
 
 	Write8(&regaddr, 1, d);
 
-	msDelay(1); // Require delay, do not remove
+	msDelay(5); // Require delay, do not remove
 
 	regaddr = BMI160_CMD;
 
-	if (Sensor::SamplingFrequency() > 12500)
-	{
-		Write8(&regaddr, 1, BMI160_CMD_GYRO_SET_PMU_MODE_NORMAL);
-	}
-	else
+	if (Sensor::SamplingFrequency() < 25000)
 	{
 		Write8(&regaddr, 1, BMI160_CMD_GYRO_SET_PMU_MODE_FASTSTARTUP);
 	}
+	else
+	{
+		Write8(&regaddr, 1, BMI160_CMD_GYRO_SET_PMU_MODE_NORMAL);
+	}
 
-	msDelay(10); // Require delay, do not remove
+	msDelay(40); // Require delay, do not remove
 
 	regaddr = BMI160_ERR_REG;
 	d = Read8(&regaddr, 1);
@@ -411,7 +450,7 @@ bool AgBmi160::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	Write8(&regaddr, 1, BMI160_CMD_FIFO_FLUSH);
 
 	regaddr = BMI160_FIFO_CONFIG_0;
-	Write8(&regaddr, 1, 10);
+	Write8(&regaddr, 1, 7);
 
 	regaddr = BMI160_FIFO_CONFIG_1;
 	d = Read8(&regaddr, 1) | BMI160_FIFO_CONFIG_1_FIFO_HEADER_EN | BMI160_FIFO_CONFIG_1_FIFO_TIME_EN;
@@ -451,7 +490,6 @@ bool AgBmi160::UpdateData()
 {
 	uint8_t regaddr = BMI160_FIFO_LENGTH_0;
 	int len = 0;
-	uint8_t buff[BMI160_FIFO_MAX_SIZE];
 
 	Read(&regaddr, 1, (uint8_t*)&len, 2);
 	if (len <= 0)
@@ -459,39 +497,55 @@ bool AgBmi160::UpdateData()
 		return false;
 	}
 
-	printf("Fifo len %d\r\n", len);
-	memset(buff, 0, BMI160_FIFO_MAX_SIZE);
+	uint8_t buff[BMI160_FIFO_MAX_SIZE];
+
+	len += 4; // read time stamp
 
 	regaddr = BMI160_FIFO_DATA;
-	Read(&regaddr, 1, buff, len);
+	len = Read(&regaddr, 1, buff, len);
 
 	uint8_t *p = buff;
 
 	while (len > 0)
 	{
-		//printf("1-Fifo len %d %x\r\n", len, *p);
 		BMI160_HEADER *hdr = (BMI160_HEADER *)p;
-		p++;
+
 		len--;
+
+		if (*p == 0x80 || len < 1)
+		{
+			break;
+		}
+
+		p++;
+
 		if (hdr->Type == BMI160_FRAME_TYPE_DATA)
 		{
 			//printf("Data frame %x %d\r\n", *p, len);
-			int l = 0;
 			if (hdr->Parm & BMI160_FRAME_DATA_PARM_MAG)
 			{
+				if (len >= 6)
+				{
 //				memcpy(MagBmi160::vData.Val, p, 6);
+				}
 				p += 6;
 				len -= 6;
 			}
 			if (hdr->Parm & BMI160_FRAME_DATA_PARM_GYRO)
 			{
-				memcpy(GyroBmi160::vData.Val, p, 6);
+				if (len >= 6)
+				{
+					memcpy(GyroBmi160::vData.Val, p, 6);
+				}
 				p += 6;
 				len -= 6;
 			}
 			if (hdr->Parm & BMI160_FRAME_DATA_PARM_ACCEL)
 			{
-				memcpy(AccelBmi160::vData.Val, p, 6);
+				if (len >= 6)
+				{
+					memcpy(AccelBmi160::vData.Val, p, 6);
+				}
 				p += 6;
 				len -= 6;
 			}
@@ -501,32 +555,37 @@ bool AgBmi160::UpdateData()
 			switch (hdr->Parm)
 			{
 				case BMI160_FRAME_CONTROL_PARM_SKIP:
-					printf("Skip frame %d %x\r\n", *p, *p);
+					AccelBmi160::vDropCnt += *p;
+					GyroBmi160::vDropCnt = AccelBmi160::vDropCnt;
+					//printf("Skip frame %d %x\r\n", AccelBmi160::vDropCnt, AccelBmi160::vDropCnt);
+					len--;
+					p++;
+					break;
+				case BMI160_FRAME_CONTROL_PARM_TIME:
+					if (len >= 3)
+					{
+						memcpy(&AccelBmi160::vData.Timestamp, p, 3);
+						memcpy(&GyroBmi160::vData.Timestamp, p, 3);
+
+						//printf("Time\r\n");
+					}
+					len -= 3;
+					p += 3;
+					break;
+				case BMI160_FRAME_CONTROL_PARM_INPUT:
+					//Read8(&regaddr, 1);
+					printf("Input\r\n");
 					p++;
 					len--;
 					break;
-				case BMI160_FRAME_CONTROL_PARM_TIME:
-					printf("Time\r\n");
-					break;
-				case BMI160_FRAME_CONTROL_PARM_INPUT:
-					printf("Input\r\n");
-					break;
+				default:
+					printf("Control??\r\n");
 			}
 		}
-	}
-
-	uint32_t t;
-	regaddr = BMI160_SENSORTIME_0;
-	Read(&regaddr, 1, (uint8_t*)&t, 3);
-
-	regaddr = BMI160_PMU_STATUS;
-	uint8_t d = Read8(&regaddr, 1);
-
-	printf("PM Status %x\r\n", d);
-
-	if (vbSensorEnabled[0])
-	{
-
+		else
+		{
+			printf("Unknown\r\n");
+		}
 	}
 
 	return true;

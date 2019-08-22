@@ -161,9 +161,6 @@ public:
 	 */
 	virtual uint16_t Scale(uint16_t Value) { vScale = Value; return vScale; }
 
-	virtual uint16_t Range() { return vRange; }
-	virtual uint16_t Range(uint16_t Value) { vRange = Value; return vRange; }
-
 protected:
 
 	ACCELSENSOR_RAWDATA vData;		//!< Current sensor data updated with UpdateData()
@@ -171,7 +168,6 @@ protected:
 private:
 	ACCELINTCB vIntHandler;
 	uint16_t vScale;			//!< Sensor data scale in g force (2g, 4g, ...)
-	uint16_t vRange;            //!< ADC range of the sensor, contains max value for conversion factor
 };
 
 #endif // __cplusplus

@@ -424,7 +424,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BMI160_CMD_SOFT_RESET						(0xB6)
 #define BMI160_CMD_STEP_CNT_CLR						(0xB2)
 
-#define BMI160_FIFO_MAX_SIZE						0x800
+#define BMI160_FIFO_MAX_SIZE						1024
 
 #pragma pack(push, 1)
 
@@ -496,7 +496,30 @@ public:
 	 *
 	 * @return	Actual frequency in mHz
 	 */
-	virtual uint32_t FilterFreq(uint32_t Freq) { vFilterrFreq = Freq; return vFilterrFreq; }
+	virtual uint32_t FilterFreq(uint32_t Freq);
+	virtual bool Enable();
+	virtual void Disable();
+
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+};
+
+class MagoBmi160 : public MagSensor {
+public:
+	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint32_t Precision(uint32_t Value);
+
+	/**
+	 * @brief	Set and enable filter cutoff frequency
+	 *
+	 * Optional implementation can override this to implement filtering supported by the device
+	 *
+	 * @param	Freq : Filter frequency in mHz
+	 *
+	 * @return	Actual frequency in mHz
+	 */
+	virtual uint32_t FilterFreq(uint32_t Freq);
 	virtual bool Enable();
 	virtual void Disable();
 
@@ -529,10 +552,10 @@ private:
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
 		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 	}
-/*	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
 		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
-*/
+
 	bool vbInitialized;
 	bool vbSensorEnabled[3];
 };

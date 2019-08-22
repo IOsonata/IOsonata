@@ -282,6 +282,29 @@ public:
 	 */
 	virtual uint32_t FilterFreq(uint32_t Freq) { vFilterrFreq = Freq; return vFilterrFreq; }
 
+	/**
+	 * @brief	Get max measurement range of the device
+	 *
+	 * This function gets the maximum positive value of the raw data that can be read from
+	 * the sensor.
+	 *
+	 * @return	Maximum positive range value of the raw data
+	 */
+	virtual uint32_t Range() { return vRange; }
+
+	/**
+	 * @brief	Set max measurement range of the device
+	 *
+	 * This function sets the maximum positive value of the raw data that can be read from
+	 * the sensor. Sensor device can implement this function to allow configuration variable
+	 * range value.
+	 *
+	 * @param	Max positive range value
+	 *
+	 * @return	Actual maximum positive range value of the raw data
+	 */
+	virtual uint32_t Range(uint32_t Value) { vRange = Value; return vRange; }
+
 protected:
 
 	SENSOR_TYPE vType;			//!< Sensor type
@@ -292,8 +315,10 @@ protected:
 	bool vbSampling;			//!< true - measurement in progress
 	uint64_t vSampleCnt;		//!< Keeping sample count
 	uint64_t vSampleTime;		//!< Time stamp when sampling is started
+	uint32_t vDropCnt;			//!< Count the number of sample that was dropped
 	uint32_t vFilterrFreq;		//!< Filter frequency in mHz, many sensors can set a filter cutoff frequency
 	int vTimerTrigId;			//!< Timer interrupt trigger id (implementation dependent
+	uint32_t vRange;            //!< ADC range of the sensor, contains max value for conversion factor
 };
 
 extern "C" {
@@ -301,7 +326,6 @@ extern "C" {
 
 #ifdef __cplusplus
 }
-
 #endif	// __cplusplus
 
 /** @} End of group Sensors */

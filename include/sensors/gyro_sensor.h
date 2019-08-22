@@ -145,7 +145,6 @@ public:
 protected:
 
 	uint32_t vSensitivity;	    //!< Sensitivity level per degree per second
-    uint16_t vRange;            //!< ADC range of the sensor, contains max value for conversion factor
 	GYROSENSOR_RAWDATA vData;	//!< Current sensor data updated with UpdateData()
 };
 

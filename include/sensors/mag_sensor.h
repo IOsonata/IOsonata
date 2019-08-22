@@ -122,10 +122,12 @@ public:
         return true;
     }
 
+    virtual uint8_t Precision() { return vPrecision; }
+    virtual uint8_t Precision(uint8_t Val) { vPrecision = Val; return vPrecision; }
+
 protected:
 	int32_t vScale;			//!< Sample scaling value at the discretion of the implementation
-	int vPrecision;			//!< Sampling precision in bits
-    uint16_t vRange;        //!< ADC range of the sensor, contains max value for conversion factor
+	uint8_t vPrecision;		//!< Sampling precision in bits
 	MAGSENSOR_RAWDATA vData;//!< Current sensor data updated with UpdateData()
 private:
 
