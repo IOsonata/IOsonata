@@ -97,8 +97,8 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void PWM3_IRQHandler(void);
  * overloaded by application function
  *
  */
-__attribute__ ((section(".intvect"), used))
-void (* const g_Vectors[100])(void) =
+__attribute__ ((section(".vectors"), used))
+void (* const __Vectors[100])(void) =
 {
 	(void (*) )((int32_t)&__StackTop),
 	ResetEntry,

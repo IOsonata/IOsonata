@@ -142,8 +142,8 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void FPU_IRQHandler(void);
 __attribute__ ((section(".intvec"), used))
 void (* const __vector_table[])(void) = {
 #else
-__attribute__ ((section(".intvect"), used))
-void (* const g_Vectors[])(void) = {
+__attribute__ ((section(".vectors"), used))
+void (* const __Vectors[])(void) = {
 #endif
   	(void (*)(void) )((uint32_t)&__StackTop),
 	ResetEntry,
@@ -246,6 +246,6 @@ void (* const g_Vectors[])(void) = {
 #ifdef __ICCARM__
 const uint32_t g_iVectorSize = sizeof(__vector_table) + 4;
 #else
-const uint32_t g_iVectorSize = sizeof(g_Vectors) + 4;
+const uint32_t g_iVectorSize = sizeof(__Vectors) + 4;
 #endif
 

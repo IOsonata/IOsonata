@@ -75,8 +75,8 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SWI5_IRQHandler(void);
  * overloaded by application function
  *
  */
-__attribute__ ((section(".intvect"), used))
-void (*const g_Vectors[])(void) =
+__attribute__ ((section(".vectors"), used))
+void (*const __Vectors[])(void) =
 {
 	(void (*) )((int32_t)&__StackTop), //This stack pointer address is handled in ld script
 	ResetEntry,
