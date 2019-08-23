@@ -98,10 +98,14 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void FPU_IRQHandler(void);
  * overloaded by application function
  *
  */
+#ifdef __ICCARM__
+__attribute__ ((section(".intvec"), used))
+void (* const __vector_table[])(void) = {
+#else
 __attribute__ ((section(".vectors"), used))
-void (* const __Vectors[100])(void) =
-{
-	(void (*) )((int32_t)&__StackTop),
+void (* const __Vectors[100])(void) = {
+#endif
+	(void (*)(void) )((uint32_t)&__StackTop),
 	ResetEntry,
 	NMI_Handler,
 	HardFault_Handler,

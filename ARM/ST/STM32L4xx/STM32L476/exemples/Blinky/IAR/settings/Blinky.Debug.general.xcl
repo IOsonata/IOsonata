@@ -2,7 +2,7 @@
 
 "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\arm\bin\armstlink2.dll" 
 
-"Z:\Qsync\I-SYST\swdev\IOSonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\Debug\Blinky.out" 
+"Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\Debug\Blinky.out" 
 
 --plugin="C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\arm\bin\armbat.dll" 
 

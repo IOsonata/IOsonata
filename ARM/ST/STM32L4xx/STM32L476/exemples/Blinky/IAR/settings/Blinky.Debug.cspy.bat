@@ -25,7 +25,7 @@ if not "%~1" == "" goto debugFile
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\Qsync\I-SYST\swdev\IOSonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\settings\Blinky.Debug.general.xcl" --backend -f "Z:\Qsync\I-SYST\swdev\IOSonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\settings\Blinky.Debug.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\settings\Blinky.Debug.general.xcl" --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\settings\Blinky.Debug.driver.xcl" 
 
 @echo off 
 goto end 
@@ -34,7 +34,7 @@ goto end
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\Qsync\I-SYST\swdev\IOSonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\settings\Blinky.Debug.general.xcl" "--debug_file=%~1" --backend -f "Z:\Qsync\I-SYST\swdev\IOSonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\settings\Blinky.Debug.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\settings\Blinky.Debug.general.xcl" "--debug_file=%~1" --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\Blinky\IAR\settings\Blinky.Debug.driver.xcl" 
 
 @echo off 
 :end

@@ -261,6 +261,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/slip_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/slip_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>include/stddev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>

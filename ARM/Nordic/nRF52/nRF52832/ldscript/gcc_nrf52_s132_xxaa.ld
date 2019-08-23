@@ -14,7 +14,7 @@ MEMORY
 	/* nRF52832 has 512KB Flash (0x80000), 64KB RAM (0x10000) */
 
 	FLASH (rx) : ORIGIN = 0x26000, LENGTH = 0x5a000
-	RAM (rwx) :  ORIGIN = 0x20002b00, LENGTH = 0xD500
+	RAM (rwx) :  ORIGIN = 0x20003d00, LENGTH = 0xC300
 
 	/** Location of non initialized RAM. Non initialized RAM is used for exchanging bond information
 	*  from application to bootloader when using buttonless DFU OTA.
