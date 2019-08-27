@@ -296,7 +296,7 @@ protected:
 	 * @param	pTimer : Same as above for Timer object.
 	 *
 	 */
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = nullptr) { return false; }
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = nullptr);
 
 	/**
 	 * @brief	Store device id.

@@ -47,6 +47,27 @@ Device::Device()
 }
 
 /**
+ * @brief	Initialization function useful for composite device
+ *
+ * @param	DevAddr : Device address is dependent of interface and device type.
+ * 						For I2C type it would be the 7 bits address, SPI would be CS pin index,
+ * 						other memory mapped	would be a 32bit address.
+ * @param	pIntrf : Pointer to the interface object to access this device.  This pointer is kept
+ * 						internally for the life duration of this device. User app should never delete
+ * 						the pIntrf object
+ * @param	pTimer : Same as above for Timer object.
+ *
+ */
+bool Device::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
+{
+	vDevAddr = DevAddr;
+	vpIntrf = pIntrf;
+	vpTimer = pTimer;
+
+	return true;
+}
+
+/**
  * @brief	Read device's register/memory block.
  *
  * This default implementation sets bit 7 of the Cmd/Addr byte for SPI read access as most

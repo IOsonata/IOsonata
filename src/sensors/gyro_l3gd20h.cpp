@@ -41,9 +41,7 @@ SOFTWARE.
 /**
  * @brief	Initialize gyro sensor.
  *
- * NOTE: This sensor must be the first to be initialized.
- *
- * @param 	Cfg		: Accelerometer configuration data
+ * @param 	Cfg		: Configuration data
  * @param 	pIntrf	: Pointer to communication interface
  * @param 	pTimer	: Pointer to Timer use for time stamp
  *

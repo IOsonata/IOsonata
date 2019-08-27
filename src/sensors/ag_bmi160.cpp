@@ -41,7 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 bool AccelBmi160::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (Init((uint32_t)CfgData.DevAddr, (DeviceIntrf *)pIntrf, (Timer *)pTimer) == false)
+	if (Init((uint32_t)CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
 	AccelSensor::Type(SENSOR_TYPE_ACCEL);
@@ -236,7 +236,7 @@ void AccelBmi160::Disable()
 
 bool GyroBmi160::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	if (Sensor::Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
 	GyroSensor::Type(SENSOR_TYPE_GYRO);
@@ -491,7 +491,7 @@ bool AgBmi160::UpdateData()
 	uint8_t regaddr = BMI160_FIFO_LENGTH_0;
 	int len = 0;
 
-	Read(&regaddr, 1, (uint8_t*)&len, 2);
+	Device::Read(&regaddr, 1, (uint8_t*)&len, 2);
 	if (len <= 0)
 	{
 		return false;
@@ -502,7 +502,7 @@ bool AgBmi160::UpdateData()
 	len += 4; // read time stamp
 
 	regaddr = BMI160_FIFO_DATA;
-	len = Read(&regaddr, 1, buff, len);
+	len = Device::Read(&regaddr, 1, buff, len);
 
 	uint8_t *p = buff;
 
@@ -589,6 +589,18 @@ bool AgBmi160::UpdateData()
 	}
 
 	return true;
+}
+
+int AgBmi160::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
+{
+	uint8_t regaddr;
+
+
+}
+
+int AgBmi160::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+{
+
 }
 
 void AgBmi160::IntHandler()

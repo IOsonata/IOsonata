@@ -126,6 +126,21 @@ public:
     virtual uint8_t Precision(uint8_t Val) { vPrecision = Val; return vPrecision; }
 
 protected:
+
+    // These functions allow override for device hook up on the secondary interface
+	virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
+		return Read(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	}
+	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+		return Write(vDevAddr, pCmdAddr, CmdAddrLen, pData, DataLen);
+	}
+	virtual int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
+		return vpIntrf->Read(DevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	}
+	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+		return vpIntrf->Write(DevAddr, pCmdAddr, CmdAddrLen, pData, DataLen);
+	}
+
 	int32_t vScale;			//!< Sample scaling value at the discretion of the implementation
 	uint8_t vPrecision;		//!< Sampling precision in bits
 	MAGSENSOR_RAWDATA vData;//!< Current sensor data updated with UpdateData()
