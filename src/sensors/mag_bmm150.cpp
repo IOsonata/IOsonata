@@ -54,7 +54,8 @@ bool MagBmm150::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer
 
 	MagSensor::Type(SENSOR_TYPE_MAG);
 
-	vData.Range = Range(0x7FFF);
+	vData.Range = Range(((1<<15) - 1) >> 1);
+	vData.Scale = 2500;
 
 	uint8_t regaddr = BMM150_CTRL1_REG;
 	uint8_t d = BMM150_CTRL1_POWER_ON;
@@ -96,51 +97,59 @@ uint32_t MagBmm150::SamplingFrequency(uint32_t Freq)
 	if (Freq < 6000)
 	{
 		f = 2000;
-		d |= 1;
+		d |= BMM150_CTRL2_ODR_2HZ;
 	}
 	else if (Freq < 8000)
 	{
 		f = 6000;
-		d |= 2;
+		d |= BMM150_CTRL2_ODR_6HZ;
 	}
 	else if (Freq < 10000)
 	{
 		f = 8000;
-		d |= 3;
+		d |= BMM150_CTRL2_ODR_8HZ;
 	}
 	else if (Freq < 15000)
 	{
 		f = 10000;
+		d |= BMM150_CTRL2_ODR_10HZ;
 	}
 	else if (Freq < 20000)
 	{
 		f = 15000;
-		d |= 4;
+		d |= BMM150_CTRL2_ODR_15HZ;
 	}
 	else if (Freq < 25000)
 	{
 		f = 20000;
-		d |= 5;
+		d |= BMM150_CTRL2_ODR_20HZ;
 	}
 	else if (Freq < 30000)
 	{
 		f = 25000;
-		d |= 6;
+		d |= BMM150_CTRL2_ODR_25HZ;
 	}
 	else
 	{
 		f = 30000;
-		d |= 7;
+		d |= BMM150_CTRL2_ODR_30HZ;
 	}
+
+	MagBmm150::Write(&regaddr, 1, &d, 1);
 
 	return Sensor::SamplingFrequency(f);
 }
 
 bool MagBmm150::Enable()
 {
-	uint8_t regaddr = BMM150_CTRL3_REG;
+	uint8_t regaddr = BMM150_CTRL2_REG;
 	uint8_t d;
 
+	MagBmm150::Read(&regaddr, 1, &d, 1) & ~BMM150_CTRL2_OPMODE_MASK;
+	d |= BMM150_CTRL2_OPMODE_NORMAL;
+	MagBmm150::Write(&regaddr, 1, &d, 1);
+
+	regaddr = BMM150_CTRL3_REG;
 	MagBmm150::Read(&regaddr, 1, &d, 1);
 
 	d &= ~(BMM150_CTRL3_CHAN_X_DIS | BMM150_CTRL3_CHAN_Y_DIS | BMM150_CTRL3_CHAN_Y_DIS);
@@ -157,6 +166,10 @@ void MagBmm150::Disable()
 	MagBmm150::Read(&regaddr, 1, &d, 1);
 
 	d |= (BMM150_CTRL3_CHAN_X_DIS | BMM150_CTRL3_CHAN_Y_DIS | BMM150_CTRL3_CHAN_Y_DIS);
+	MagBmm150::Write(&regaddr, 1, &d, 1);
+
+	MagBmm150::Read(&regaddr, 1, &d, 1) & ~BMM150_CTRL2_OPMODE_MASK;
+	d |= BMM150_CTRL2_OPMODE_SLEEP;
 	MagBmm150::Write(&regaddr, 1, &d, 1);
 }
 
