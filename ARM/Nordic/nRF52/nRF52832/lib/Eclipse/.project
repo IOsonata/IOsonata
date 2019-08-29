@@ -801,6 +801,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/humi_sensor.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/mag_bmm150.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_bmm150.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/mag_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_sensor.h</locationURI>
@@ -1094,6 +1099,11 @@
 			<name>src/sensors/gyro_l3gd20h.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gyro_l3gd20h.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_bmm150.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_bmm150.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/tph_bme280.cpp</name>
