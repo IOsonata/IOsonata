@@ -60,9 +60,22 @@ bool MagBmm150::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer
 	uint8_t d = BMM150_CTRL1_POWER_ON;
 
 	// use this way to allow hook up on the secondary interface of a combo device
-	MagSensor::Write(&regaddr, 1, &d, 1);
+	MagBmm150::Write(&regaddr, 1, &d, 1);
 
-	Precision(Cfg.Precision);
+	msDelay(5);
+
+	regaddr = BMM150_CHIP_ID_REG;
+	MagBmm150::Read(&regaddr, 1, &d, 1);
+
+	if (d != BMM150_CHIP_ID)
+	{
+		return false;
+	}
+
+	// There is no setting to change precision
+	// fix it to lowest value.
+	// X, Y : 13 bits, Z : 15 bits, RHALL : 14 bits
+	Precision(13);
 	SamplingFrequency(Cfg.Freq);
 
 	Enable();
@@ -72,25 +85,90 @@ bool MagBmm150::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer
 
 uint32_t MagBmm150::SamplingFrequency(uint32_t Freq)
 {
+	uint8_t regaddr = BMM150_CTRL2_REG;
+	uint8_t d;
+	uint32_t f = 0;
 
-}
+	MagBmm150::Read(&regaddr, 1, &d, 1);
 
-uint8_t MagBmm150::Precision(uint8_t Value)
-{
+	d &= ~BMM150_CTRL2_ODR_MASK;
 
+	if (Freq < 6000)
+	{
+		f = 2000;
+		d |= 1;
+	}
+	else if (Freq < 8000)
+	{
+		f = 6000;
+		d |= 2;
+	}
+	else if (Freq < 10000)
+	{
+		f = 8000;
+		d |= 3;
+	}
+	else if (Freq < 15000)
+	{
+		f = 10000;
+	}
+	else if (Freq < 20000)
+	{
+		f = 15000;
+		d |= 4;
+	}
+	else if (Freq < 25000)
+	{
+		f = 20000;
+		d |= 5;
+	}
+	else if (Freq < 30000)
+	{
+		f = 25000;
+		d |= 6;
+	}
+	else
+	{
+		f = 30000;
+		d |= 7;
+	}
+
+	return Sensor::SamplingFrequency(f);
 }
 
 bool MagBmm150::Enable()
 {
+	uint8_t regaddr = BMM150_CTRL3_REG;
+	uint8_t d;
+
+	MagBmm150::Read(&regaddr, 1, &d, 1);
+
+	d &= ~(BMM150_CTRL3_CHAN_X_DIS | BMM150_CTRL3_CHAN_Y_DIS | BMM150_CTRL3_CHAN_Y_DIS);
+	MagBmm150::Write(&regaddr, 1, &d, 1);
+
 	return true;
 }
 
 void MagBmm150::Disable()
 {
+	uint8_t regaddr = BMM150_CTRL3_REG;
+	uint8_t d;
+
+	MagBmm150::Read(&regaddr, 1, &d, 1);
+
+	d |= (BMM150_CTRL3_CHAN_X_DIS | BMM150_CTRL3_CHAN_Y_DIS | BMM150_CTRL3_CHAN_Y_DIS);
+	MagBmm150::Write(&regaddr, 1, &d, 1);
 }
 
 void MagBmm150::Reset()
 {
+	uint8_t regaddr = BMM150_CTRL1_REG;
+	uint8_t d;
+
+	MagBmm150::Read(&regaddr, 1, &d, 1);
+
+	d |= BMM150_CTRL1_SOFT_RESET;
+	MagBmm150::Write(&regaddr, 1, &d, 1);
 }
 
 /*

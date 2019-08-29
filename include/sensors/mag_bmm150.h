@@ -142,7 +142,7 @@ class MagBmm150 : public MagSensor {
 public:
 	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
-	virtual uint8_t Precision(uint8_t Value);
+	//virtual uint8_t Precision(uint8_t Value);
 
 	virtual bool Enable();
 	virtual void Disable();

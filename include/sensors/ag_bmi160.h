@@ -216,6 +216,10 @@ SOFTWARE.
 
 #define BMI160_MAG_IF_1             0x4C
 #define BMI160_MAG_IF_1_MAG_RD_BURST_MASK                   (3<<0)
+#define BMI160_MAG_IF_1_MAG_RD_BURST_1						(0<<0)
+#define BMI160_MAG_IF_1_MAG_RD_BURST_2						(1<<0)
+#define BMI160_MAG_IF_1_MAG_RD_BURST_6						(2<<0)
+#define BMI160_MAG_IF_1_MAG_RD_BURST_8						(3<<0)
 #define BMI160_MAG_IF_1_MAG_OFFSET_MASK                     (0xF<<2)
 #define BMI160_MAG_IF_1_MAG_MANUAL_EN                       (1<<7)
 
@@ -374,6 +378,9 @@ SOFTWARE.
 #define BMI160_IF_CONF              0x6B
 #define BMI160_IF_CONF_SPI_3WIRE                            (1<<0)
 #define BMI160_IF_CONF_IF_MODE_MASK                         (3<<4)
+#define BMI160_IF_CONF_IF_MODE_AUTO_OFF						(0<<4)
+#define BMI160_IF_CONF_IF_MODE_I2C_OIS						(1<<4)
+#define BMI160_IF_CONF_IF_MODE_AUTO_MAG						(2<<4)
 
 #define BMI160_PMU_TRIGGER          0x6C
 #define BMI160_PMU_TRIGGER_GYR_SLEEP_TRIGGER_MASK           (7<<0)
@@ -507,7 +514,27 @@ private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
 };
 
-class AgBmi160 : public AccelBmi160, public GyroBmi160, public MagBmm150 {
+class MagBmi160 : public MagBmm150 {
+public:
+	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+		MagBmi160::vDevAddr = Cfg.DevAddr;
+		return MagBmm150::Init(Cfg, pIntrf, pTimer);
+	}
+	virtual bool Enable();
+
+private:
+	uint32_t vDevAddr;
+	int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
+	int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	/**
+	 * @brief	Get device's map address
+	 *
+	 * @return	Address or chip select pin zero based index
+	 */
+	virtual uint32_t DeviceAddress() { return MagBmi160::vDevAddr; }
+};
+
+class AgBmi160 : public AccelBmi160, public GyroBmi160, public MagBmi160 {
 public:
 	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[0] = AccelBmi160::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[0];
@@ -515,9 +542,8 @@ public:
 	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[1] = GyroBmi160::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[1];
 	}
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
-		vbSensorEnabled[2] = MagBmm150::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[2];
-	}
+	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -529,7 +555,7 @@ public:
 	virtual bool StartSampling() { return true; }
 
 	bool UpdateData();
-private:
+protected:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
@@ -538,8 +564,6 @@ private:
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
 		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
-	int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-	int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
 
 	bool vbInitialized;
 	bool vbSensorEnabled[3];
