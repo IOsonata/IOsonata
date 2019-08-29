@@ -553,12 +553,12 @@ bool AgBmi160::UpdateData()
 			//printf("Data frame %x %d\r\n", *p, len);
 			if (hdr->Parm & BMI160_FRAME_DATA_PARM_MAG)
 			{
-				if (len >= 6)
+				if (len >= 8)
 				{
-//				memcpy(MagBmi160::vData.Val, p, 6);
+					memcpy(MagBmi160::vData.Val, p, 6);
 				}
-				p += 6;
-				len -= 6;
+				p += 8;
+				len -= 8;
 			}
 			if (hdr->Parm & BMI160_FRAME_DATA_PARM_GYRO)
 			{
@@ -634,6 +634,16 @@ bool MagBmi160::Enable()
 
 	regaddr = BMI160_CMD;
 	Write8(&regaddr, 1, BMI160_CMD_MAG_SET_PMU_MODE_NORMAL);
+
+	if (MagBmm150::Enable() == false)
+	{
+		return false;
+	}
+
+	regaddr = BMI160_MAG_IF_1;
+	Write8(&regaddr, 1, BMI160_MAG_IF_1_MAG_RD_BURST_8);
+
+	return true;
 }
 
 int MagBmi160::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
@@ -641,7 +651,6 @@ int MagBmi160::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t
 	uint8_t regaddr = BMI160_MAG_IF_4;
 	uint8_t auxaddr = pCmdAddr[0];
 	int cnt = 0;
-	uint8_t b[10];
 
 	while (BuffLen > 0)
 	{
@@ -653,13 +662,15 @@ int MagBmi160::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t
 
 		// Note : data is read from starting from MAG_X register, not from MAG_IF_4
 		regaddr = BMI160_DATA_MAG_X_LSB;
-		len = Device::Read(&regaddr, 1, b, len);
+		len = Device::Read(&regaddr, 1, pBuff, len);
 
 		BuffLen -= len;
 		pBuff += len;
 		cnt += len;
 		auxaddr += len;
 	}
+
+	return cnt;
 }
 
 int MagBmi160::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
@@ -678,6 +689,8 @@ int MagBmi160::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_
 		msDelay(10);
 		cnt++;
 	}
+
+	return cnt;
 }
 
 void AgBmi160::IntHandler()
