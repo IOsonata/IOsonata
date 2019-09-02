@@ -89,4 +89,34 @@ __attribute__((weak)) SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode)
 	return pDev->Cfg.Mode;
 }
 
+/**
+ * @brief	Set Quad SPI Flash size
+ *
+ * This function is available only for Quad SPI
+ *
+ * @param	pDev : Pointer SPI driver data initialized by SPIInit function
+ * @param	Size : Flash memory size in KBytes
+ */
+__attribute__((weak)) void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size)
+{
+}
+
+/**
+ * @brief	Configure and send command on Quad SPI interface
+ *
+ * This is only available and require for Quad SPI interface. Quad SPI is mainly used
+ * for Flash memory
+ *
+ * @param	pDev : SPI device handle
+ * @param	Cmd : Flash command code
+ * @param	Addr : Address offset in flash memory to access. -1 if not used
+ * @param	DataLen : Lenght of data in bytes to transfer
+ *
+ * @return	true - successful
+ */
+__attribute__((weak)) bool QuadSPISendCmd(SPIDEV * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
+{
+	return false;
+}
+
 

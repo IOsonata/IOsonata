@@ -242,6 +242,18 @@ void SystemInit(void)
 }
 
 /**
+ * @brief	Get high frequency clock frequency (HCLK)
+ *
+ * @return	HCLK clock frequency in Hz.
+ */
+uint32_t SystemHFClockGet()
+{
+	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
+
+	return tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
+}
+
+/**
  * @brief	Get peripheral clock frequency (PCLK)
  *
  * @return	Peripheral clock frequency in Hz.

@@ -96,6 +96,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/diskio_flash.h</locationURI>
 		</link>
 		<link>
+			<name>include/diskio_qflash_stm32l4xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/diskio_qflash_stm32l4xx.h</locationURI>
+		</link>
+		<link>
 			<name>include/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
@@ -304,6 +309,11 @@
 			<name>src/diskio_impl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_impl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/diskio_qflash_stm32l4xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/diskio_qflash_stm32l4xx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/fatfs.cpp</name>

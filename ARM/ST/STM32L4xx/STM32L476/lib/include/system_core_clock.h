@@ -68,6 +68,13 @@ extern "C" {
 uint32_t SystemCoreClockSet(SYSCLK_SRC ClkSrc, uint32_t CoreFreq);
 
 /**
+ * @brief	Get high frequency clock frequency (HCLK)
+ *
+ * @return	HCLK clock frequency in Hz.
+ */
+uint32_t SystemHFClockGet();
+
+/**
  * @brief	Get peripheral clock frequency (PCLK)
  *
  * @return	Peripheral clock frequency in Hz.

@@ -55,7 +55,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // SPI Status code
 typedef enum __SPI_Status {
-	SPISTATUS_OK
+	SPISTATUS_OK,
+	SPISTATUS_TIMEOUT
 } SPISTATUS;
 
 typedef enum __SPI_Type {
@@ -85,8 +86,9 @@ typedef enum __SPI_Chip_Select {
 } SPICSEL;
 
 typedef enum __SPI_Mode {
-	SPIMODE_NORMAL,				//!< Standard 4 wires CLK, MOSI, MISO, CS
+	SPIMODE_NORMAL,				//!< Standard single SPI 4 wires CLK, MOSI, MISO, CS
 	SPIMODE_3WIRE,				//!< 3 wires MISO/MOSI mux
+	SPIMODE_DUAL,				//!< Dual SPI D0, D1 or used
 	SPIMODE_QUAD_SDR,			//!< QSPI, single data rate
 	SPIMODE_QUAD_DDR,			//!< QSPI, dual data rate
 } SPIMODE;
@@ -100,7 +102,16 @@ typedef enum __SPI_Mode {
 #define SPI_SCK_IOPIN_IDX		0
 #define SPI_MISO_IOPIN_IDX		1
 #define SPI_MOSI_IOPIN_IDX		2
-#define SPI_SS_IOPIN_IDX		3	//!< Starting index for SPI chip select. This can
+#define SPI_CS_IOPIN_IDX		3	//!< Starting index for SPI chip select. This can
+									//!< grow to allows multiple devices on same SPI.
+
+/// Quad SPI pins indexes
+#define QSPI_SCK_IOPIN_IDX		0
+#define QSPI_D0_IOPIN_IDX		1
+#define QSPI_D1_IOPIN_IDX		2
+#define QSPI_D2_IOPIN_IDX		3
+#define QSPI_D3_IOPIN_IDX		4
+#define QSPI_CS_IOPIN_IDX		5	//!< Starting index for SPI chip select. This can
 									//!< grow to allows multiple devices on same SPI.
 
 #pragma pack(push, 4)
@@ -125,8 +136,18 @@ typedef struct __SPI_Config {
 	DEVINTRF_EVTCB EvtCB;	//!< Event callback
 } SPICFG;
 
+typedef struct __QSPI_Cmd_Setup {
+	uint8_t Cmd;
+	uint8_t CmdMode;
+	uint32_t Addr;
+	uint8_t AddrLen;
+	uint8_t AddrMode;
+	uint32_t DataLen;
+	uint8_t DataMode;
+} QSPI_CMD_SETUP;
+
 /// Device driver data require by low level functions
-typedef struct {
+typedef struct __SPI_Device {
 	SPICFG Cfg;				//!< Config data
 	DEVINTRF DevIntrf;		//!< device interface implementation
 	int	FirstRdData;		//!< This is to keep the first dummy read data of SPI
@@ -185,7 +206,32 @@ static inline SPIMODE SPIGetMode(SPIDEV * const pDev) { return pDev->Cfg.Mode; }
  * @param	pDev : Device Interface Handle
  * @param	Mode : New SPI mode
  */
-SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode);	// to be implemented
+SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode);
+
+/**
+ * @brief	Set Quad SPI Flash size
+ *
+ * This function is available only and require for Quad SPI
+ *
+ * @param	pDev : Pointer SPI driver data initialized by SPIInit function
+ * @param	Size : Flash memory size in KBytes
+ */
+void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size);
+
+/**
+ * @brief	Configure and send command on Quad SPI interface
+ *
+ * This is only available and require for Quad SPI interface. Quad SPI is mainly used
+ * for Flash memory
+ *
+ * @param	pDev : SPI device handle
+ * @param	Cmd : Flash command code
+ * @param	Addr : Address offset in flash memory to access. -1 if not used
+ * @param	DataLen : Lenght of data in bytes to transfer
+ *
+ * @return	true - successful
+ */
+bool QuadSPISendCmd(SPIDEV * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle);
 
 /**
  * @brief	Set SPI slave data for read command.
@@ -193,7 +239,7 @@ SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode);	// to be implemented
  * This function sets internal pointer to the location of data to be returned to SPI master upon
  * receiving read command.
  *
- * @param	pDev	: Pointer SPI driver data initialized be SPIInit function
+ * @param	pDev	: Pointer SPI driver data initialized by SPIInit function
  * @param	SlaveIdx: Slave address index to assign the buffer
  * @param	pBuff	: Pointer to buffer to receive data from master
  * @param	BuffLen	: Total buffer length in bytes

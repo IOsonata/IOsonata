@@ -65,7 +65,7 @@ extern uint32_t SystemCoreClock;
 
 extern	void (* const __Vectors[])(void);
 
-// Just to make the linker to keep the g_Vectors
+// Just to make the linker to keep the __Vectors
 __attribute__ ((used)) static uint32_t s_StackPtr = (uint32_t)__Vectors;
 
 // Nop count for usDelay base on ARM NOP instruction timing on 16MHz clock
