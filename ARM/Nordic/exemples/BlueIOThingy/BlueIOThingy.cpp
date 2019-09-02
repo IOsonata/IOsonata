@@ -352,7 +352,8 @@ bool MX25U1635E_init(int pDevNo, DeviceIntrf* ppInterface);
 static FLASHDISKIO_CFG s_FlashDiskCfg = {
     .DevNo = 1,
     .TotalSize = 16 * 1024 * 1024 / 8,      // 256 Mbits
-    .EraseSize = 4096,
+    .SectSize = 4,
+	.BlkSize = 32,
     .WriteSize = 128,
     .AddrSize = 3,                          // 256+ Mbits needs 4 bytes addressing
     .pInitCB = MX25U1635E_init,//mx66u51235f_init,

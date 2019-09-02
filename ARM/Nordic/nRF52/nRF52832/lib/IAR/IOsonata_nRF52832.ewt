@@ -2648,18 +2648,6 @@
             </file>
         </group>
         <group>
-            <name>imu</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu_invn_icm20948.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu_mpu9250.cpp</name>
-            </file>
-        </group>
-        <group>
             <name>converters</name>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\converters\adc_ltc2495.cpp</name>
@@ -2708,6 +2696,18 @@
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\src\uart_nrf5x.cpp</name>
+            </file>
+        </group>
+        <group>
+            <name>imu</name>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu_invn_icm20948.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu_mpu9250.cpp</name>
             </file>
         </group>
         <group>
@@ -3140,6 +3140,9 @@
             <name>$PROJ_DIR$\..\..\..\..\..\..\src\stddev.c</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\src\system_nrf52832.c</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\..\..\src\temp_nrf5x.cpp</name>
         </file>
         <file>
@@ -3150,6 +3153,9 @@
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\..\..\src\utf8cvt.cpp</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\src\Vectors_nRF52832.c</name>
         </file>
     </group>
 </project>

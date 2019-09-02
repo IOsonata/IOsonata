@@ -262,12 +262,12 @@ bool nRF5xSPIStartRx(DEVINTRF * const pDev, int DevCs)
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
 
-	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_SS_IOPIN_IDX)
+	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
 		return false;
 
 	dev->pSpiDev->CurDevCs = DevCs;
-	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PortNo,
-			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PinNo);
+	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
+			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
 
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
 	{
@@ -350,8 +350,8 @@ void nRF5xSPIStopRx(DEVINTRF * const pDev)
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_AUTO)
 	{
-		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PortNo,
-				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PinNo);
+		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PortNo,
+				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PinNo);
 	}
 
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
@@ -372,12 +372,12 @@ bool nRF5xSPIStartTx(DEVINTRF * const pDev, int DevCs)
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
 
-	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_SS_IOPIN_IDX)
+	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
 		return false;
 
 	dev->pSpiDev->CurDevCs = DevCs;
-	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PortNo,
-			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_SS_IOPIN_IDX].PinNo);
+	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
+			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
 
     if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
     {
@@ -464,8 +464,8 @@ void nRF5xSPIStopTx(DEVINTRF * const pDev)
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_AUTO)
 	{
-		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PortNo,
-				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_SS_IOPIN_IDX].PinNo);
+		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PortNo,
+				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PinNo);
 	}
     if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
     {
@@ -563,7 +563,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	// Configure I/O pins
 	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
 
-	for (int i = SPI_SS_IOPIN_IDX; i < pCfgData->NbIOPins; i++)
+	for (int i = SPI_CS_IOPIN_IDX; i < pCfgData->NbIOPins; i++)
 	{
 		IOPinSet(pCfgData->pIOPinMap[i].PortNo, pCfgData->pIOPinMap[i].PinNo);
 	}
@@ -646,12 +646,12 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
         sreg->PSEL.SCK = (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
         sreg->PSEL.MISO = (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
         sreg->PSEL.MOSI = (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PortNo << 5);
-		sreg->PSEL.CSN = (pCfgData->pIOPinMap[SPI_SS_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_SS_IOPIN_IDX].PortNo << 5);
+		sreg->PSEL.CSN = (pCfgData->pIOPinMap[SPI_CS_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_CS_IOPIN_IDX].PortNo << 5);
 #else
         sreg->PSELSCK = (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
         sreg->PSELMISO = (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
         sreg->PSELMOSI = (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PortNo << 5);
-		sreg->PSELCSN = (pCfgData->pIOPinMap[SPI_SS_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_SS_IOPIN_IDX].PortNo << 5);
+		sreg->PSELCSN = (pCfgData->pIOPinMap[SPI_CS_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_CS_IOPIN_IDX].PortNo << 5);
 #endif
 		sreg->ORC = 0xFF;
 		sreg->STATUS = sreg->STATUS;
