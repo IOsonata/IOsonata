@@ -23,9 +23,9 @@
 
 if ($debugfile -eq "")
 {
-& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\Qsync\I-SYST\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\UartPrbsTest\IAR\settings\UartPrbsTest.Debug.general.xcl" --backend -f "Z:\Qsync\I-SYST\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\UartPrbsTest\IAR\settings\UartPrbsTest.Debug.driver.xcl" 
+& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\UartPrbsTest\IAR\settings\UartPrbsTest.Debug.general.xcl" --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\UartPrbsTest\IAR\settings\UartPrbsTest.Debug.driver.xcl" 
 }
 else
 {
-& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\Qsync\I-SYST\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\UartPrbsTest\IAR\settings\UartPrbsTest.Debug.general.xcl" --debug_file=$debugfile --backend -f "Z:\Qsync\I-SYST\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\UartPrbsTest\IAR\settings\UartPrbsTest.Debug.driver.xcl" 
+& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\UartPrbsTest\IAR\settings\UartPrbsTest.Debug.general.xcl" --debug_file=$debugfile --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\exemples\UartPrbsTest\IAR\settings\UartPrbsTest.Debug.driver.xcl" 
 }

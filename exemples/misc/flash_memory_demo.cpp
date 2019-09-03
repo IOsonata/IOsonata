@@ -150,7 +150,7 @@ bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
 static FLASHDISKIO_CFG s_FlashDiskCfg = {
     .DevNo = 0,
-    .TotalSize = 32 * 1024 * 1024 / 8,      // 32 Mbits
+    .TotalSize = 32 * 1024 / 8,      // 32 Mbits
 	.SectSize = 4,		// 4K
     .BlkSize = 32,		// 32K
     .WriteSize = 256,
@@ -162,7 +162,7 @@ static FLASHDISKIO_CFG s_FlashDiskCfg = {
 // Micron N25Q128A
 static FLASHDISKIO_CFG s_N25Q128A_QFlashCfg = {
     .DevNo = 0,
-    .TotalSize = 128 * 1024 * 1024 / 8,      // 128 Mbits
+    .TotalSize = 128 * 1024 / 8,      // 128 Mbits
 	.SectSize = 4,		// 4K
     .BlkSize = 32,		// 32K
     .WriteSize = 256,
@@ -176,7 +176,7 @@ static FLASHDISKIO_CFG s_N25Q128A_QFlashCfg = {
 // Macronix MX25R3235F
 static FLASHDISKIO_CFG s_MX25R3235F_QFlashCfg = {
     .DevNo = 0,
-    .TotalSize = 32 * 1024 * 1024 / 8,      // 32 Mbits
+    .TotalSize = 32 * 1024 / 8,      // 32 Mbits
 	.SectSize = 4,		// 4K
     .BlkSize = 64,		// 64K
     .WriteSize = 256,
@@ -243,7 +243,10 @@ int main()
 
    // IOPinConfig(FLASH_HOLD_PORT, FLASH_HOLD_PIN, FLASH_HOLD_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 
-//	g_FlashDiskIO.Init(s_FlashDiskCfg, &g_Spi, &g_FlashCache, 1);
+	// Regular SPI FLash
+	//g_FlashDiskIO.Init(s_FlashDiskCfg, &g_Spi, &g_FlashCache, 1);
+
+	// QSPI flash
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 	g_FlashDiskIO.Init(s_MX25R3235F_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 

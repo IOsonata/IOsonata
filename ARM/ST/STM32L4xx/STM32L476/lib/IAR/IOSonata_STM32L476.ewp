@@ -2218,6 +2218,9 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\humi_sensor.h</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\mag_bmm150.h</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\mag_sensor.h</name>
             </file>
             <file>
@@ -2438,6 +2441,9 @@
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\gyro_l3gd20h.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\mag_bmm150.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tph_bme280.cpp</name>

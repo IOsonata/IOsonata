@@ -16,13 +16,13 @@ MX25R1635F :
 
 static const FLASHDISKIO_CFG s_FlashDiskCfg = {
     .DevNo = 0,
-    .TotalSize = 16 * 1024 * 1024 / 8,      	// 16 Mbits
-	.SectSize = 4,		// 4K
-    .BlkSize = 64,		// 64K
-    .WriteSize = 256,						// Write page size
-    .AddrSize = 3,                          // 3 bytes addressing
-	.pInitCB = NULL.						// no special init require.
-    .pWaitCB = NULL,						// blocking, no wait callback
+    .TotalSize = 16 * 1024 / 8,		// 16 Mbits in KBytes
+	.SectSize = 4,					// 4K
+    .BlkSize = 64,					// 64K
+    .WriteSize = 256,				// Write page size
+    .AddrSize = 3,              	// 3 bytes addressing
+	.pInitCB = NULL.				// no special init require.
+    .pWaitCB = NULL,				// blocking, no wait callback
 };
 
 -----
@@ -30,12 +30,12 @@ S25FS :
 
 static const FLASHDISKIO_CFG s_FlashDiskCfg = {
     .DevNo = 0,
-    .TotalSize = 128 * 1024 * 1024 / 8,      // 128 Mbits
-	.SectSize = 4,		// 4K
-    .BlkSize = 64,		// 64K
-    .WriteSize = 512,						// Write page size
+    .TotalSize = 128 * 1024 / 8,	// 128 Mbits
+	.SectSize = 4,					// 4K
+    .BlkSize = 64,					// 64K
+    .WriteSize = 512,				// Write page size
     .AddrSize = 3,
-    .pInitCB = s25fs_init,					// Special initialization require
+    .pInitCB = s25fs_init,			// Special initialization require
     .pWaitCB = NULL,
 };
 
@@ -77,11 +77,11 @@ MX66U51235F :
 
 static const FLASHDISKIO_CFG s_FlashDiskCfg = {
     .DevNo = 0,
-    .TotalSize = 256 * 1024 * 1024 / 8,	// 256 Mbits in bytes
-	.SectSize = 4,		// 4K
-    .BlkSize = 64,		// 64K
-    .WriteSize = 128,						// Write page size
-    .AddrSize = 4,                          // 256+ Mbits needs 4 bytes addressing
+    .TotalSize = 256 * 1024 / 8,	// 256 Mbits in KBytes
+	.SectSize = 4,					// 4K
+    .BlkSize = 64,					// 64K
+    .WriteSize = 128,				// Write page size
+    .AddrSize = 4,                  // 256+ Mbits needs 4 bytes addressing
     .pInitCB = NULL,
     .pWaitCB = NULL
 };
@@ -90,11 +90,11 @@ static const FLASHDISKIO_CFG s_FlashDiskCfg = {
 // Quad SPI Flash Micron N25Q128A
 static FLASHDISKIO_CFG s_N25Q128A_QFlashCfg = {
     .DevNo = 0,
-    .TotalSize = 128 * 1024 * 1024 / 8,	// 128 Mbits in bytes
+    .TotalSize = 128 * 1024 / 8,	// 128 Mbits in KBytes
 	.SectSize = 4,
     .BlkSize = 32,
     .WriteSize = 256,
-    .AddrSize = 3,                          // 3 bytes addressing
+    .AddrSize = 3,					// 3 bytes addressing
     .pInitCB = NULL,//MX25U1635E_init,
     .pWaitCB = NULL,//FlashWriteDelayCallback,
 	.RdCmd = { FLASH_CMD_QREAD, 10},
@@ -104,11 +104,11 @@ static FLASHDISKIO_CFG s_N25Q128A_QFlashCfg = {
 // Quad SPI Flash Macronix MX25R3235F
 static FLASHDISKIO_CFG s_MX25R3235F_QFlashCfg = {
     .DevNo = 0,
-    .TotalSize = 32 * 1024 * 1024 / 8,      // 16 Mbits
+    .TotalSize = 32 * 1024 / 8,		// 16 Mbits
 	.SectSize = 4,
     .BlkSize = 64,
     .WriteSize = 256,
-    .AddrSize = 3,                          // 3 bytes addressing
+    .AddrSize = 3,					// 3 bytes addressing
     .pInitCB = NULL,//MX25U1635E_init,
     .pWaitCB = NULL,//FlashWriteDelayCallback,
 	.RdCmd = { FLASH_CMD_4READ, 6},
