@@ -118,7 +118,7 @@ SOFTWARE.
 #define BMM150_CTRL3_REG			0x4E
 #define BMM150_CTRL3_INT_POL								(1<<0) //!< Interrupt polarity 0-active low, 1-active high
 #define BMM150_CTRL3_INT_LATCH								(1<<1)
-#define BMM150_CTRL3_DATA_RDY_POL							(1<<2) //!< Data ready polatiry
+#define BMM150_CTRL3_DATA_RDY_POL							(1<<2) //!< Data ready polarity
 #define BMM150_CTRL3_CHAN_X_DIS								(1<<3)
 #define BMM150_CTRL3_CHAN_Y_DIS								(1<<4)
 #define BMM150_CTRL3_CHAN_Z_DIS								(1<<5)

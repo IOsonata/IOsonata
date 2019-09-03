@@ -509,6 +509,7 @@ public:
 	virtual uint32_t FilterFreq(uint32_t Freq);
 	virtual bool Enable();
 	virtual void Disable();
+	virtual void Reset() {}
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
@@ -516,10 +517,10 @@ private:
 
 class MagBmi160 : public MagBmm150 {
 public:
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
-		MagBmi160::vDevAddr = Cfg.DevAddr;
-		return MagBmm150::Init(Cfg, pIntrf, pTimer);
-	}
+	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);// {
+//		return MagBmm150::Init(Cfg, pIntrf, pTimer);
+//	}
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual bool Enable();
 
 private:
@@ -532,6 +533,7 @@ private:
 	 * @return	Address or chip select pin zero based index
 	 */
 	virtual uint32_t DeviceAddress() { return MagBmi160::vDevAddr; }
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
 };
 
 class AgBmi160 : public AccelBmi160, public GyroBmi160, public MagBmi160 {
@@ -542,7 +544,9 @@ public:
 	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[1] = GyroBmi160::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[1];
 	}
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+		vbSensorEnabled[2] = MagBmi160::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[2];
+	}
 
 	virtual bool Enable();
 	virtual void Disable();
@@ -551,6 +555,8 @@ public:
 	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(GYROSENSOR_RAWDATA &Data) { return GyroSensor::Read(Data); }
 	virtual bool Read(GYROSENSOR_DATA &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(MAGSENSOR_DATA &Data) { return MagSensor::Read(Data); }
 	virtual void IntHandler();
 	virtual bool StartSampling() { return true; }
 

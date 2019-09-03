@@ -58,12 +58,12 @@ bool MagBmm150::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer
 	vData.Scale = 2500;
 
 	uint8_t regaddr = BMM150_CTRL1_REG;
-	uint8_t d = BMM150_CTRL1_POWER_ON;
+	uint8_t d = BMM150_CTRL1_POWER_ON | BMM150_CTRL1_SOFT_RESET | BMM150_CTRL1_SOFT_RESET2;
 
 	// use this way to allow hook up on the secondary interface of a combo device
 	MagBmm150::Write(&regaddr, 1, &d, 1);
 
-	msDelay(5);
+	msDelay(10);
 
 	regaddr = BMM150_CHIP_ID_REG;
 	MagBmm150::Read(&regaddr, 1, &d, 1);
@@ -145,9 +145,12 @@ bool MagBmm150::Enable()
 	uint8_t regaddr = BMM150_CTRL2_REG;
 	uint8_t d;
 
-	MagBmm150::Read(&regaddr, 1, &d, 1) & ~BMM150_CTRL2_OPMODE_MASK;
+	MagBmm150::Read(&regaddr, 1, &d, 1);
+	d &= ~(BMM150_CTRL2_OPMODE_MASK | BMM150_CTRL2_SELFTEST);
 	d |= BMM150_CTRL2_OPMODE_NORMAL;
 	MagBmm150::Write(&regaddr, 1, &d, 1);
+
+	msDelay(10);
 
 	regaddr = BMM150_CTRL3_REG;
 	MagBmm150::Read(&regaddr, 1, &d, 1);
@@ -168,7 +171,8 @@ void MagBmm150::Disable()
 	d |= (BMM150_CTRL3_CHAN_X_DIS | BMM150_CTRL3_CHAN_Y_DIS | BMM150_CTRL3_CHAN_Y_DIS);
 	MagBmm150::Write(&regaddr, 1, &d, 1);
 
-	MagBmm150::Read(&regaddr, 1, &d, 1) & ~BMM150_CTRL2_OPMODE_MASK;
+	MagBmm150::Read(&regaddr, 1, &d, 1);
+	d &= ~BMM150_CTRL2_OPMODE_MASK;
 	d |= BMM150_CTRL2_OPMODE_SLEEP;
 	MagBmm150::Write(&regaddr, 1, &d, 1);
 }
@@ -182,35 +186,9 @@ void MagBmm150::Reset()
 
 	d |= BMM150_CTRL1_SOFT_RESET;
 	MagBmm150::Write(&regaddr, 1, &d, 1);
+
+	msDelay(1);
+
+	//d |= BMM150_CTRL1_POWER_ON;
+	//MagBmm150::Write(&regaddr, 1, &d, 1);
 }
-
-/*
-uint8_t MagBmm150::Read8(uint8_t *pCmdAddr, int CmdAddrLen)
-{
-	uint8_t d;
-
-	int l = Read(vDevAddr, pCmdAddr, CmdAddrLen, &d, 1);
-
-	return d;
-}
-
-int MagBmm150::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
-{
-	return Read(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
-}
-
-int MagBmm150::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
-{
-	return Write(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
-}
-
-int MagBmm150::Read(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
-{
-//	return Read((uint8_t)vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
-}
-
-int MagBmm150::Write(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
-{
-	//return Write((uint8_t)vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
-}
-*/
