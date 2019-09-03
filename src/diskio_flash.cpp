@@ -67,7 +67,7 @@ bool FlashDiskIO::Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
         vWriteSize = DISKIO_SECT_SIZE;
     else
         vWriteSize = Cfg.WriteSize;
-    vTotalSize      = Cfg.TotalSize / 1024ULL;
+    vTotalSize      = Cfg.TotalSize;
     vAddrSize       = Cfg.AddrSize;
     vRdCmd			= Cfg.RdCmd;
 	vWrCmd			= Cfg.WrCmd;

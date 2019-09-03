@@ -232,8 +232,8 @@ typedef bool (*FLASHDISKIOCB)(int DevNo, DeviceIntrf * const pInterf);
 
 typedef struct {
     int         DevNo;          //!< Device number or address for interface use
-    uint64_t    TotalSize;      //!< Total Flash size in bytes
-    uint16_t    SectSize;		//!< Sector erase size in KByte
+    uint32_t    TotalSize;      //!< Total Flash size in KBytes
+    uint16_t    SectSize;		//!< Sector erase size in KBytes
     uint16_t	BlkSize;		//!< Block erase size in KBytes
     uint32_t    WriteSize;      //!< Writable page size in bytes
     int         AddrSize;       //!< Address size in bytes
@@ -275,9 +275,9 @@ public:
     /**
      * @brief	Get total disk size in bytes.
      *
-     * @return	Total size in bytes
+     * @return	Total size in KBytes
      */
-    virtual uint64_t GetSize(void) { return vTotalSize * 1024ULL; }
+    virtual uint32_t GetSize(void) { return vTotalSize; }
 
     /**
 	 * @brief	Device specific minimum erasable block size in bytes.
