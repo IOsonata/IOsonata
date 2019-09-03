@@ -925,7 +925,7 @@ bool STM32L4xxQuadSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
 	pDev->DevIntrf.PowerOff = STM32L4xxQSPIPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
-	//pDev->SendCmd = STM32L4xxQSPISendCmd;
+
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	reg->FCR = reg->FCR;	// Clear all flags

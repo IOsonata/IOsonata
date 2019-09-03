@@ -311,11 +311,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_impl.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/diskio_qflash_stm32l4xx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/diskio_qflash_stm32l4xx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/fatfs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/fatfs.cpp</locationURI>
@@ -409,11 +404,6 @@
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
-		</link>
-		<link>
-			<name>src/uart_stm32l4xx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/uart_stm32l4xx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>
@@ -606,6 +596,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/humi_sensor.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/mag_bmm150.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_bmm150.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/mag_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_sensor.h</locationURI>
@@ -716,6 +711,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/uart_stm32l4xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_stm32l4xx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/imu/imu.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu.cpp</locationURI>
@@ -799,6 +799,11 @@
 			<name>src/sensors/gyro_l3gd20h.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gyro_l3gd20h.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_bmm150.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_bmm150.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/tph_bme280.cpp</name>

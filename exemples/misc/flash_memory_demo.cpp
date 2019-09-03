@@ -39,7 +39,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "idelay.h"
 
-#include "diskio_qflash_stm32l4xx.h"
 #include "board.h"
 
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
@@ -117,20 +116,6 @@ static const IOPINCFG s_QSpiPins[] = {
 	{QSPI_D3_PORT, QSPI_D3_PIN, QSPI_D3_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{QSPI_FLASH_CS_PORT, QSPI_FLASH_CS_PIN, QSPI_FLASH_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
-
-static const QFLASHDISKIO_CFG s_QFlashCfg = {
-	.DevNo = 0,
-	.pIOPinMap = s_QSpiPins,
-	.NbIOPins = sizeof(s_QSpiPins) / sizeof(IOPINCFG),
-	.bIntEn = true,
-	.IntPrio = 6,
-	.TotalSize = 32 * 1024 * 1024 / 8,
-	.EraseSize = 4096,
-	.WriteSize = 256,
-	.AddrSize = 3
-};
-
-//QFlashDiskIO g_QFlash;
 
 static const SPICFG s_SpiCfg = {
 	.DevNo = QSPI_DEVNO,
@@ -279,7 +264,7 @@ int main()
 	printf("Erasing... Please wait\r\n");
 
 	// Ease could take a few minutes
-	g_FlashDiskIO.EraseSector(0, 1);
+	g_FlashDiskIO.Erase();
 
 	printf("Writing 2KB data...\r\n");
 
@@ -290,7 +275,7 @@ int main()
 	{
 		p[i] = 255 - i;
 	}
-	g_FlashDiskIO.SectWrite(2, buff2);
+	g_FlashDiskIO.SectWrite(2UL, buff2);
 	//g_FlashDiskIO.SectWrite(4, buff);
 	//g_FlashDiskIO.SectWrite(8, buff);
 

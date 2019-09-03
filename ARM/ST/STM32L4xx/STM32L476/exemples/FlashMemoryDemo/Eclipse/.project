@@ -36,19 +36,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/diskio_flash.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/diskio_flash.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/flash_memory_demo.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/misc/flash_memory_demo.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/spi_stm32l4xx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/spi_stm32l4xx.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
