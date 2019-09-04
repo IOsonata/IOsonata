@@ -142,31 +142,10 @@ class MagBmm150 : public MagSensor {
 public:
 	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
-	//virtual uint8_t Precision(uint8_t Value);
 
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
-
-protected:
-	//uint8_t Read8(uint8_t *pCmdAddr, int CmdAddrLen);
-	//virtual bool Write8(uint8_t *pRegAddr, int RegAddrLen, uint8_t Data) {
-	//	return Write(vDevAddr, pRegAddr, RegAddrLen, &Data, 1) > 0;
-	//}
-/*
-	virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
-		return Read(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
-	}
-	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
-		return Write(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
-	}*/
-//	virtual int Read(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-//	virtual int Write(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
-
-private:
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
-		return Device::Init(DevAddr, pIntrf, pTimer);
-	}
 };
 
 

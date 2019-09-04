@@ -49,9 +49,6 @@ SOFTWARE.
  */
 bool MagBmm150::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
-		return false;
-
 	MagSensor::Type(SENSOR_TYPE_MAG);
 
 	vData.Range = Range(((1<<15) - 1) >> 1);

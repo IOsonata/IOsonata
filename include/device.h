@@ -285,20 +285,6 @@ public:
 protected:
 
 	/**
-	 * @brief	Initialization function useful for composite device
-	 *
-	 * @param	DevAddr : Device address is dependent of interface and device type.
-	 * 						For I2C type it would be the 7 bits address, SPI would be CS pin index,
-	 * 						other memory mapped	would be a 32bit address.
-	 * @param	pIntrf : Pointer to the interface object to access this device.  This pointer is kept
-	 * 						internally for the life duration of this device. User app should never delete
-	 * 						the pIntrf object
-	 * @param	pTimer : Same as above for Timer object.
-	 *
-	 */
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = nullptr);
-
-	/**
 	 * @brief	Store device id.
 	 *
 	 * This device id value is implementation specific.  It can store hardware
