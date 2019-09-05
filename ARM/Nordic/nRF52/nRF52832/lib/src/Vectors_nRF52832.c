@@ -36,7 +36,7 @@ Modified by          Date              Description
 #include <stdint.h>
 #include "nrf.h"
 
-//extern unsigned long __StackTop;
+extern unsigned long __StackTop;
 extern void ResetEntry(void);
 
 void DEF_IRQHandler(void) { while(1); }
@@ -105,7 +105,7 @@ void (* const __vector_table[])(void) = {
 __attribute__ ((section(".vectors"), used))
 void (* const __Vectors[100])(void) = {
 #endif
-	(void (*)(void) )0x20010000,//(void (*)(void) )((uint32_t)&__StackTop),
+	(void (*)(void) )((uint32_t)&__StackTop),
 	ResetEntry,
 	NMI_Handler,
 	HardFault_Handler,

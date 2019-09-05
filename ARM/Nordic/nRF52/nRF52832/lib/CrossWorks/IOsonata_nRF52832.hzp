@@ -1,0 +1,63 @@
+<!DOCTYPE CrossStudio_Project_File>
+<solution Name="IOsonata_nRF52832" target="8" version="2">
+  <project Name="IOsonata_nRF52832">
+    <configuration
+      Name="Common"
+      arm_architecture="v7EM"
+      arm_core_type="Cortex-M4"
+      c_preprocessor_definitions="NRF52832_XXAA"
+      c_user_include_directories="../include;../../../../include;../../../../../include;../../../../../../include;../../../../../CMSIS/Core/Include;../../../../../../../external/nRF5_SDK/modules/nrfx/mdk"
+      gcc_c_language_standard="gnu11"
+      gcc_cplusplus_language_standard="gnu++11"
+      project_directory=""
+      project_type="Library" />
+    <folder Name="src">
+      <file file_name="../../../../../../src/base64.c" />
+      <file file_name="../../../../../../src/cfifo.c" />
+      <file file_name="../../../../../../src/crc.c" />
+      <file file_name="../../../../../../src/intelhex.c" />
+      <file file_name="../../../../../../src/isha1.c" />
+      <file file_name="../../../../../../src/isha256.c" />
+      <file file_name="../../../../../../src/md5.c" />
+      <file file_name="../../../../../../src/prbs.c" />
+      <file file_name="../../../../../../src/pulse_train.c" />
+      <file file_name="../../../../../../src/sbuffer.c" />
+      <file file_name="../../../../../../src/stddev.c" />
+      <file file_name="../../../../../../src/sysstatus.c" />
+      <file file_name="../../../../../../src/uart_retarget.c" />
+      <file file_name="../../../../../../src/utf8.c" />
+      <file file_name="../../../../../src/ResetEntry.c" />
+      <file file_name="../src/system_nrf52832.c" />
+      <file file_name="../src/Vectors_nRF52832.c" />
+    </folder>
+  </project>
+  <configuration Name="ARM Debug" inherited_configurations="ARM;Debug" />
+  <configuration
+    Name="ARM"
+    Platform="ARM"
+    arm_instruction_set="ARM"
+    arm_library_instruction_set="ARM"
+    c_preprocessor_definitions="__ARM"
+    hidden="Yes" />
+  <configuration
+    Name="Debug"
+    c_preprocessor_definitions="DEBUG"
+    gcc_debugging_level="Level 3"
+    gcc_omit_frame_pointer="Yes"
+    gcc_optimization_level="None"
+    hidden="Yes" />
+  <configuration
+    Name="ARM Flash Release"
+    inherited_configurations="ARM;Flash;Release" />
+  <configuration
+    Name="Flash"
+    c_preprocessor_definitions="__FLASH_BUILD"
+    hidden="Yes" />
+  <configuration
+    Name="Release"
+    c_preprocessor_definitions="NDEBUG"
+    gcc_debugging_level="None"
+    gcc_omit_frame_pointer="Yes"
+    gcc_optimization_level="Level 1"
+    hidden="Yes" />
+</solution>
