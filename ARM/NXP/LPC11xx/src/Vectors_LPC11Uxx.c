@@ -76,8 +76,8 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void USBWakeup_IRQHandler(void);
  * overloaded by application function
  *
  */
-__attribute__ ((section(".intvect"), used))
-void (* const g_Vectors[])(void) =
+__attribute__ ((section(".vectors"), used))
+void (* const __Vectors[])(void) =
 {
 	(void (*) )((int32_t)&__StackTop),
 	ResetEntry,
@@ -129,5 +129,5 @@ void (* const g_Vectors[])(void) =
     0,                                // 31 - Reserved
 };
 
-const uint32_t g_iVectorSize = sizeof(g_Vectors) + 4;
+const uint32_t g_iVectorSize = sizeof(__Vectors) + 4;
 
