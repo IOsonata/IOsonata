@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <fileVersion>4</fileVersion>
+    <fileChecksum>4073744706</fileChecksum>
+    <configuration>
+        <name>Debug</name>
+        <outputs>
+            <file>$TOOLKIT_DIR$\lib\shb_l.a</file>
+            <file>$PROJ_DIR$\Debug\Obj\blinky.pbi</file>
+            <file>$PROJ_DIR$\Debug\Obj\Blinky.pbd</file>
+            <file>$TOOLKIT_DIR$\inc\c\yvals.h</file>
+            <file>$PROJ_DIR$\..\src\board.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\ycheck.h</file>
+            <file>$TOOLKIT_DIR$\lib\rt7M_tl.a</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\misc\blinky.c</file>
+            <file>$TOOLKIT_DIR$\lib\dl7M_tlf.a</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\mpu_armv7.h</file>
+            <file>$TOOLKIT_DIR$\lib\m7M_tls.a</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdbool.h</file>
+            <file>$PROJ_DIR$\..\..\..\lib\include\system_core_clock.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\..\external\nRF5_SDK\modules\nrfx\mdk\system_nrf52.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\ysizet.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\core_cm4.h</file>
+            <file>$PROJ_DIR$\Debug\Obj\blinky.o</file>
+            <file>$TOOLKIT_DIR$\inc\c\iccarm_builtin.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Config_Full.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\pulse_train.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\iopincfg.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdint.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\include\iopinctrl.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\..\external\nRF5_SDK\modules\nrfx\mdk\nrf51_to_nrf52.h</file>
+            <file>$PROJ_DIR$\Debug\List\Blinky.map</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_iccarm.h</file>
+            <file>$PROJ_DIR$\..\..\..\lib\IAR\Debug\Exe\IOsonata_nRF52832.a</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\include\idelay.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_compiler.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\..\external\nRF5_SDK\modules\nrfx\mdk\nrf52_bitfields.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\..\external\nRF5_SDK\modules\nrfx\mdk\nrf.h</file>
+            <file>$PROJ_DIR$\Debug\Exe\Blinky.out</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\..\external\nRF5_SDK\modules\nrfx\mdk\nrf52.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_version.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdio.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\..\external\nRF5_SDK\modules\nrfx\mdk\compiler_abstraction.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Product.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Defaults.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\include\blueio_board.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\..\external\nRF5_SDK\modules\nrfx\mdk\nrf52_name_change.h</file>
+            <file>$PROJ_DIR$\..\..\..\ldscript\iar_nrf52832_xxaa.icf</file>
+        </outputs>
+        <file>
+            <name>[ROOT_NODE]</name>
+            <outputs>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 31 24</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\misc\blinky.c</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 16</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 1</file>
+                </tool>
+            </outputs>
+            <inputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 34 5 3 37 18 36 14 11 20 21 22 30 32 15 33 28 25 17 9 13 29 23 39 35 27 12 19 4 38</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 18 25 37 39 17 27 5 3 11 21 13 20 4 14 36 29 9 22 19 34 30 32 23 35 15 33 28 38 12</file>
+                </tool>
+            </inputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\Debug\Exe\Blinky.out</name>
+            <outputs>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 24</file>
+                </tool>
+            </outputs>
+            <inputs>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 40 16 26 0 6 10 8</file>
+                </tool>
+            </inputs>
+        </file>
+        <forcedrebuild>
+            <name>[MULTI_TOOL]</name>
+            <tool>ILINK</tool>
+        </forcedrebuild>
+    </configuration>
+    <configuration>
+        <name>Release</name>
+        <outputs />
+        <forcedrebuild>
+            <name>[MULTI_TOOL]</name>
+            <tool>ILINK</tool>
+        </forcedrebuild>
+    </configuration>
+</project>
