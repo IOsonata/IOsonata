@@ -75,54 +75,14 @@ static const UARTCFG s_UartCfg = {
 
 UART g_Uart;
 
-#if 0
-//********** SPI Master **********
-static const IOPINCFG s_SpiPins[] = {
-    {SPI_SCK_PORT, SPI_SCK_PIN, SPI_SCK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
-    {SPI_MISO_PORT, SPI_MISO_PIN, SPI_MISO_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// MISO
-    {SPI_MOSI_PORT, SPI_MOSI_PIN, SPI_MOSI_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
-    {SPI_FLASH_CS_PORT, SPI_FLASH_CS_PIN, SPI_FLASH_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// CS
-};
+static const IOPINCFG s_SpiPins[] = SPI_PINS_CFG;
 
 static const SPICFG s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
-	.Mode = SPIMODE_NORMAL,
+	.Mode = SPI_MODE,
     .Type = SPITYPE_MASTER,
 	.pIOPinMap = s_SpiPins,
-    .NbIOPins = sizeof( s_SpiPins ) / sizeof( IOPINCFG ),
-    .Rate = 2000000,   // Speed in Hz
-    .DataSize = 8,      // Data Size
-    .MaxRetry = 5,      // Max retries
-    .BitOrder = SPIDATABIT_MSB,
-    .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
-    .ClkPol = SPICLKPOL_HIGH,         // clock polarity
-    .ChipSel = SPICSEL_AUTO,
-	.bDmaEn = true,	// DMA
-	.bIntEn = false,
-    .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
-    .EvtCB = NULL
-};
-
-SPI g_Spi;
-#endif
-
-FlashDiskIO g_FlashDiskIO;
-#if 1
-static const IOPINCFG s_QSpiPins[] = {
-	{QSPI_SCK_PORT, QSPI_SCK_PIN, QSPI_SCK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{QSPI_D0_PORT, QSPI_D0_PIN, QSPI_D0_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{QSPI_D1_PORT, QSPI_D1_PIN, QSPI_D1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{QSPI_D2_PORT, QSPI_D2_PIN, QSPI_D2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{QSPI_D3_PORT, QSPI_D3_PIN, QSPI_D3_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{QSPI_FLASH_CS_PORT, QSPI_FLASH_CS_PIN, QSPI_FLASH_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-};
-
-static const SPICFG s_SpiCfg = {
-	.DevNo = QSPI_DEVNO,
-	.Mode = SPIMODE_QUAD_SDR,
-    .Type = SPITYPE_MASTER,
-	.pIOPinMap = s_QSpiPins,
-	.NbIOPins = sizeof(s_QSpiPins) / sizeof(IOPINCFG),
+	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPINCFG),
     .Rate = 4000000,   // Speed in Hz
     .DataSize = 8,      // Data Size
     .MaxRetry = 5,      // Max retries
@@ -138,12 +98,7 @@ static const SPICFG s_SpiCfg = {
 
 SPI g_Spi;
 
-#endif
-
-static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
-DISKIO_CACHE_DESC g_FlashCache = {
-    -1, 0xFFFFFFFF, s_FlashCacheMem
-};
+//#endif
 
 bool MX25U1635E_init(int pDevNo, DeviceIntrf* ppInterface);
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
@@ -185,6 +140,13 @@ static FLASHDISKIO_CFG s_MX25R3235F_QFlashCfg = {
     .pWaitCB = NULL,
 	.RdCmd = { FLASH_CMD_4READ, 6},
 	.WrCmd = { FLASH_CMD_4WRITE, 0 },
+};
+
+FlashDiskIO g_FlashDiskIO;
+
+static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
+DISKIO_CACHE_DESC g_FlashCache = {
+    -1, 0xFFFFFFFF, s_FlashCacheMem
 };
 
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
@@ -230,7 +192,7 @@ bool MX25U1635E_init(int DevNo, DeviceIntrf* pInterface)
 //
 int main()
 {
-	g_Uart.Init(s_UartCfg);
+	//g_Uart.Init(s_UartCfg);
 
 	// Retarget printf to UART
 	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
@@ -244,11 +206,11 @@ int main()
    // IOPinConfig(FLASH_HOLD_PORT, FLASH_HOLD_PIN, FLASH_HOLD_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 
 	// Regular SPI FLash
-	//g_FlashDiskIO.Init(s_FlashDiskCfg, &g_Spi, &g_FlashCache, 1);
+	g_FlashDiskIO.Init(s_FlashDiskCfg, &g_Spi, &g_FlashCache, 1);
 
 	// QSPI flash
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
-	g_FlashDiskIO.Init(s_MX25R3235F_QFlashCfg, &g_Spi, &g_FlashCache, 1);
+	//g_FlashDiskIO.Init(s_MX25R3235F_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 
 	//g_QFlash.Init(s_QFlashCfg, &g_FlashCache, 1);
 
@@ -267,7 +229,7 @@ int main()
 	printf("Erasing... Please wait\r\n");
 
 	// Ease could take a few minutes
-	g_FlashDiskIO.Erase();
+	g_FlashDiskIO.EraseSector(0, 4);
 
 	printf("Writing 2KB data...\r\n");
 
