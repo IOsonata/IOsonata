@@ -53,6 +53,35 @@ bool AccelBmi160::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntr
 
 	AccelBmi160::Enable();
 
+	if (CfgData.bInter)
+	{
+		uint8_t regaddr = BMI160_INT_EN_0;
+		uint8_t d = 0;//BMI160_INT_EN_0_INT_ANYMO_X_EN | BMI160_INT_EN_0_INT_ANYMO_Y_EN | BMI160_INT_EN_0_INT_ANYMO_Z_EN;
+
+		Write8(&regaddr, 1, d);
+
+		regaddr = BMI160_INT_EN_1;
+		Write8(&regaddr, 1, BMI160_INT_EN_1_INT_HIGHG_X_EN | BMI160_INT_EN_1_INT_HIGHG_Y_EN |
+				BMI160_INT_EN_1_INT_HIGHG_Z_EN | BMI160_INT_EN_1_INT_DRDY_EN);
+
+		regaddr = BMI160_INT_OUT_CTRL;
+		d = BMI160_INT_OUT_CTRL_INT1_OUTPUT_EN | BMI160_INT_OUT_CTRL_INT2_OUTPUT_EN |
+			BMI160_INT_OUT_CTRL_INT1_EDGE_CTRL | BMI160_INT_OUT_CTRL_INT2_EDGE_CTRL;
+
+		if (CfgData.IntPol == DEVINTR_POL_HIGH)
+		{
+			d |= BMI160_INT_OUT_CTRL_INT1_LVL | BMI160_INT_OUT_CTRL_INT2_LVL;
+		}
+
+		Write8(&regaddr, 1, d);
+
+		//regaddr = BMI160_INT_MAP_0;
+		//Write8(&regaddr, 1, BMI160_INT_MAP_0_INT1_HIGHG | BMI160_INT_MAP_0_INT1_ANYMOTION);
+
+		regaddr = BMI160_INT_MAP_1;
+		Write8(&regaddr, 1, BMI160_INT_MAP_1_INT1_DRDY);
+	}
+
 	return true;
 }
 
@@ -640,9 +669,9 @@ void AgBmi160::Reset()
 
 	msDelay(1);
 
-	MagBmi160::Reset();
+	//MagBmi160::Reset();
 
-	msDelay(5);
+//	msDelay(5);
 
 	// Read err register to clear
 	regaddr = BMI160_ERR_REG;
@@ -767,6 +796,19 @@ bool AgBmi160::UpdateData()
 
 void AgBmi160::IntHandler()
 {
+	UpdateData();
+
+	uint8_t regaddr = BMI160_INT_STATUS_0;
+	uint8_t d = Read8(&regaddr, 1);
+
+	regaddr = BMI160_INT_STATUS_1;
+	d = Read8(&regaddr, 1);
+
+	regaddr = BMI160_INT_STATUS_2;
+	d = Read8(&regaddr, 1);
+
+	regaddr = BMI160_INT_STATUS_3;
+	d = Read8(&regaddr, 1);
 
 }
 

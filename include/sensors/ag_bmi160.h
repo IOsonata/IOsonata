@@ -107,42 +107,42 @@ SOFTWARE.
 #define BMI160_STATUS_DRDY_GYR                              (1<<6)
 #define BMI160_STATUS_DRDY_ACC                              (1<<7)
 
-#define BMI160_STATUS_0             0x1C
-#define BMI160_STATUS_0_STEP_INT                            (1<<0)
-#define BMI160_STATUS_0_SIGMOT_INT                          (1<<1)
-#define BMI160_STATUS_0_ANYM_INT                            (1<<2)
-#define BMI160_STATUS_0_PMU_TRIGGER_INT                     (1<<3)
-#define BMI160_STATUS_0_D_TAP_INT                           (1<<4)
-#define BMI160_STATUS_0_S_TAP_INT                           (1<<5)
-#define BMI160_STATUS_0_ORIENT_INT                          (1<<6)
-#define BMI160_STATUS_0_FLAT_INT                            (1<<7)
+#define BMI160_INT_STATUS_0             0x1C
+#define BMI160_INT_STATUS_0_STEP_INT                            (1<<0)
+#define BMI160_INT_STATUS_0_SIGMOT_INT                          (1<<1)
+#define BMI160_INT_STATUS_0_ANYM_INT                            (1<<2)
+#define BMI160_INT_STATUS_0_PMU_TRIGGER_INT                     (1<<3)
+#define BMI160_INT_STATUS_0_D_TAP_INT                           (1<<4)
+#define BMI160_INT_STATUS_0_S_TAP_INT                           (1<<5)
+#define BMI160_INT_STATUS_0_ORIENT_INT                          (1<<6)
+#define BMI160_INT_STATUS_0_FLAT_INT                            (1<<7)
 
-#define BMI160_STATUS_1             0x1D
-#define BMI160_STATUS_1_HIGHG_INT                           (1<<2)
-#define BMI160_STATUS_1_LOWG_INT                            (1<<3)
-#define BMI160_STATUS_1_DRDY_INT                            (1<<4)
-#define BMI160_STATUS_1_FFULL_INT                           (1<<5)
-#define BMI160_STATUS_1_FWM_INT                             (1<<6)
-#define BMI160_STATUS_1_NOMO_INT                            (1<<7)
+#define BMI160_INT_STATUS_1             0x1D
+#define BMI160_INT_STATUS_1_HIGHG_INT                           (1<<2)
+#define BMI160_INT_STATUS_1_LOWG_INT                            (1<<3)
+#define BMI160_INT_STATUS_1_DRDY_INT                            (1<<4)
+#define BMI160_INT_STATUS_1_FFULL_INT                           (1<<5)
+#define BMI160_INT_STATUS_1_FWM_INT                             (1<<6)
+#define BMI160_INT_STATUS_1_NOMO_INT                            (1<<7)
 
-#define BMI160_STATUS_2             0x1E
-#define BMI160_STATUS_2_ANYM_FIRST_X                        (1<<0)
-#define BMI160_STATUS_2_ANYM_FIRST_Y                        (1<<1)
-#define BMI160_STATUS_2_ANYM_FIRST_Z                        (1<<2)
-#define BMI160_STATUS_2_ANYM_SIGN                           (1<<3)
-#define BMI160_STATUS_2_TAP_FIRST_X                         (1<<4)
-#define BMI160_STATUS_2_TAP_FIRST_Y                         (1<<5)
-#define BMI160_STATUS_2_TAP_FIRST_Z                         (1<<6)
-#define BMI160_STATUS_2_TAP_SIGN                            (1<<7)
+#define BMI160_INT_STATUS_2             0x1E
+#define BMI160_INT_STATUS_2_ANYM_FIRST_X                        (1<<0)
+#define BMI160_INT_STATUS_2_ANYM_FIRST_Y                        (1<<1)
+#define BMI160_INT_STATUS_2_ANYM_FIRST_Z                        (1<<2)
+#define BMI160_INT_STATUS_2_ANYM_SIGN                           (1<<3)
+#define BMI160_INT_STATUS_2_TAP_FIRST_X                         (1<<4)
+#define BMI160_INT_STATUS_2_TAP_FIRST_Y                         (1<<5)
+#define BMI160_INT_STATUS_2_TAP_FIRST_Z                         (1<<6)
+#define BMI160_INT_STATUS_2_TAP_SIGN                            (1<<7)
 
-#define BMI160_STATUS_3             0x1F
-#define BMI160_STATUS_3_HIGH_FIRST_X                        (1<<0)
-#define BMI160_STATUS_3_HIGH_FIRST_Y                        (1<<1)
-#define BMI160_STATUS_3_HIHI_FIRST_Z                        (1<<2)
-#define BMI160_STATUS_3_HIGH_SIGN                           (1<<3)
-#define BMI160_STATUS_3_ORIENT_1_0_MASK                     (3<<4)
-#define BMI160_STATUS_3_ORIENT_2                            (1<<6)
-#define BMI160_STATUS_3_FLAT                                (1<<7)
+#define BMI160_INT_STATUS_3             0x1F
+#define BMI160_INT_STATUS_3_HIGH_FIRST_X                        (1<<0)
+#define BMI160_INT_STATUS_3_HIGH_FIRST_Y                        (1<<1)
+#define BMI160_INT_STATUS_3_HIHI_FIRST_Z                        (1<<2)
+#define BMI160_INT_STATUS_3_HIGH_SIGN                           (1<<3)
+#define BMI160_INT_STATUS_3_ORIENT_1_0_MASK                     (3<<4)
+#define BMI160_INT_STATUS_3_ORIENT_2                            (1<<6)
+#define BMI160_INT_STATUS_3_FLAT                                (1<<7)
 
 #define BMI160_TEMPERATURE_0        0x20
 
@@ -517,11 +517,10 @@ private:
 
 class MagBmi160 : public MagBmm150 {
 public:
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);// {
-//		return MagBmm150::Init(Cfg, pIntrf, pTimer);
-//	}
+	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual bool Enable();
+	virtual void Reset() { MagBmm150::Reset(); }
 
 private:
 	uint32_t vDevAddr;
