@@ -1,7 +1,7 @@
 <!DOCTYPE CrossStudio_Session_File>
 <session>
  <Bookmarks/>
- <Breakpoints groups="" active_group="Breakpoints"/>
+ <Breakpoints groups="Breakpoints" active_group="Breakpoints"/>
  <ExecutionProfileWindow/>
  <FrameBufferWindow>
   <FrameBufferWindow bufferHeight="-1" addressSpace="" addressText="" bufferWidth="-1"/>
@@ -40,10 +40,10 @@
  </Watch4>
  <Files>
   <SessionOpenFile windowGroup="DockEditLeft" x="0" y="35" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../../../src/base64.c" selected="0" top="0" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="9" y="40" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../../../src/pulse_train.c" selected="1" top="0" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="9" y="42" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../include/iopinctrl.h" selected="0" top="0" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="79" y="7" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../../../src/pulse_train.c" selected="1" top="0" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="42" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../include/iopinctrl.h" selected="0" top="0" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="0" y="95" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../../../../external/nRF5_SDK/modules/nrfx/mdk/nrf.h" selected="0" top="74" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="0" y="149" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../../../../external/nRF5_SDK/modules/nrfx/mdk/nrf52.h" selected="0" top="83" codecName="Default"/>
  </Files>
- <ARMCrossStudioWindow activeProject="IOsonata_nRF52832" fileDialogDefaultFilter="*.c" autoConnectTarget="" buildConfiguration="ARM Debug" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="/Users/hoan/swdev/IOsonata/src" debugSearchPath="" autoConnectCapabilities="0"/>
+ <ARMCrossStudioWindow activeProject="IOsonata_nRF52832" fileDialogDefaultFilter="*.c" autoConnectTarget="" buildConfiguration="Debug" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF52/nRF52832/lib/src" debugSearchPath="" autoConnectCapabilities="0"/>
 </session>

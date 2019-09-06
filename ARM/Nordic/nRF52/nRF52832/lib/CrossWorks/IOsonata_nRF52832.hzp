@@ -5,6 +5,8 @@
       Name="Common"
       arm_architecture="v7EM"
       arm_core_type="Cortex-M4"
+      build_intermediate_directory="$(Configuration)"
+      build_output_directory="$(Configuration)"
       c_preprocessor_definitions="NRF52832_XXAA"
       c_user_include_directories="../include;../../../../include;../../../../../include;../../../../../../include;../../../../../CMSIS/Core/Include;../../../../../../../external/nRF5_SDK/modules/nrfx/mdk"
       gcc_c_language_standard="gnu11"
@@ -31,7 +33,9 @@
       <file file_name="../src/Vectors_nRF52832.c" />
     </folder>
   </project>
-  <configuration Name="ARM Debug" inherited_configurations="ARM;Debug" />
+  <configuration
+    Name="Debug"
+    inherited_configurations="ARM;Debug Config;Flash" />
   <configuration
     Name="ARM"
     Platform="ARM"
@@ -40,21 +44,21 @@
     c_preprocessor_definitions="__ARM"
     hidden="Yes" />
   <configuration
-    Name="Debug"
+    Name="Debug Config"
     c_preprocessor_definitions="DEBUG"
     gcc_debugging_level="Level 3"
     gcc_omit_frame_pointer="Yes"
     gcc_optimization_level="None"
     hidden="Yes" />
   <configuration
-    Name="ARM Flash Release"
-    inherited_configurations="ARM;Flash;Release" />
+    Name="Release"
+    inherited_configurations="ARM;Flash;Release Config" />
   <configuration
     Name="Flash"
     c_preprocessor_definitions="__FLASH_BUILD"
     hidden="Yes" />
   <configuration
-    Name="Release"
+    Name="Release Config"
     c_preprocessor_definitions="NDEBUG"
     gcc_debugging_level="None"
     gcc_omit_frame_pointer="Yes"
