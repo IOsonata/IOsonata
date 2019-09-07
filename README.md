@@ -31,7 +31,8 @@ external vendors' SDK and library required :
  
 <p align="center"> 
   
-[BLYST Nano sensor board](https://www.crowdsupply.com/i-syst/blyst-nano)
+[Buy : BLUEIO-TAG-EVIM (BLYST Nano sensor board)](https://www.crowdsupply.com/i-syst/blyst-nano).  
+[Nordic Thingy App compatible firmware project](https://github.com/IOsonata/IOsonata/tree/master/ARM/Nordic/nRF52/nRF52832/exemples/BlueIOThingy) 
  
 </p> 
 
@@ -55,21 +56,23 @@ The way the IOsonata folder is structure is simple.  The deeper you go inside th
  |   |...
  |   |
  |-- IOsonata      - Put the IOsonata here
- |   |-- include     - Generic include common to all platform
+ |   |-- include     - Generic include common to all platforms
  |   |   |-- bluetooth   - Generic definition for Bluetooth
  |   |   |-- converters  - Generic definition for ADV, DAC, etc...
- |   |   |-- coredev     - Generic core processor builtin devices such as i2c, uart, spi, timer, etc...
+ |   |   |-- coredev     - Generic definition MCU builtin devices such as i2c, uart, spi, timer, etc...
  |   |   |-- miscdev     - Generic definition for other non categorized devices
  |   |   |-- sensors     - Generic definition for al sort of sensors (environmental, motion, etc...)
  |   |   |-- usb         - Generic definition for USB
- |   |-- src         - Generic implementation source common to all platform
- |   |   |-- bluetooth   - Generic definition for Bluetooth
- |   |   |-- converters  - Generic definition for ADV, DAC, etc...
- |   |   |-- coredev     - Generic core processor builtin devices such as i2c, uart, spi, timer, etc...
- |   |   |-- miscdev     - Generic definition for other non categorized devices
- |   |   |-- sensors     - Generic definition for al sort of sensors (environmental, motion, etc...)
- |   |   |-- usb         - Generic definition for USB
- |   |
+ |   |   |...
+ |   |-- src         - Generic implementation source common to all platforms
+ |   |   |-- bluetooth   - Generic source for Bluetooth
+ |   |   |-- converters  - Generic source for ADV, DAC, etc...
+ |   |   |-- coredev     - Generic source for MCU builtin devices such as i2c, uart, spi, timer, etc...
+ |   |   |-- miscdev     - Generic source for other non categorized devices
+ |   |   |-- sensors     - Generic source for al sort of sensors (environmental, motion, etc...)
+ |   |   |-- usb         - Generic source for USB
+ |   |   |...
+ |   |    
  |   |-- ARM         - ARM series based MCU
  |   |   |-- include     - Common include for all ARM platform
  |   |   |-- src         - Common source for all ARM platform
