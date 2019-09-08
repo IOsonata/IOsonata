@@ -413,7 +413,7 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
-		return AccelLsm9ds18::Init(Cfg, pIntrf, pTimer);
+		return AccelLsm9ds1::Init(Cfg, pIntrf, pTimer);
 	}
 
 	/**
@@ -478,6 +478,7 @@ public:
 	virtual void IntHandler();
 
 private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) { return true; }
 };
 
 #endif // __cplusplus

@@ -42,9 +42,9 @@ bool MagAk09916::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Time
 
 	Read(AK09916_I2C_7BITS_DEVADDR, &regaddr, 1, (uint8_t*)&d, 2);
 
-	if (d == AK09916_COMPANY_DEVICE_ID)
+	if (d != AK09916_COMPANY_DEVICE_ID)
 	{
-		return true;
+		return false;
 	}
 
 	regaddr = AK09916_CTRL3_REG;
@@ -57,7 +57,7 @@ bool MagAk09916::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Time
 	Range(32752);
 	vScale = 4912;
 
-	return false;
+	return true;
 }
 
 uint32_t MagAk09916::SamplingFrequency(uint32_t Freq)

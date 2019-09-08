@@ -40,7 +40,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/iopincfg.h"
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
-#include "sensors/mag_sensor.h"
+#include "sensors/mag_ak09916.h"
+#include "sensors/temp_sensor.h"
 
 #define ICM20948_I2C_DEV_ADDR0			0x68		// AD0 low
 #define ICM20948_I2C_DEV_ADDR1			0x69		// AD0 high
@@ -540,7 +541,9 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	virtual uint16_t Scale(uint16_t Value);			// Accel
+	virtual uint16_t Scale(uint16_t Value);
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint32_t FilterFreq(uint32_t Freq);
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
@@ -561,12 +564,14 @@ public:
 	 */
 	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint32_t FilterFreq(uint32_t Freq);
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
 };
 
-class MagIcm20948 : public MagSensor {
+class MagIcm20948 : public MagAk09916 {
 public:
 	/**
 	 * @brief	Initialize magnetometer sensor.
@@ -580,23 +585,26 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
-	virtual bool Enable();
-	virtual void Disable();
+//	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	//virtual bool Enable();
+	//virtual void Disable();
 
 protected:
-	int Read(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-	int Write(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) = 0;
+	int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) = 0;
 
 	uint8_t vMagCtrl1Val;
 	int16_t vMagSenAdj[3];
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
-	virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) = 0;
-	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) = 0;
+	//virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) = 0;
+	//virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) = 0;
+
+	uint32_t vDevAddr;
 };
 
-class AgmIcm20948 : public AccelIcm20948, public GyroIcm20948, public MagIcm20948 {
+class AgmIcm20948 : public AccelIcm20948, public GyroIcm20948, public MagIcm20948, public TempSensor {
 public:
 	/**
 	 * @brief	Initialize accelerometer sensor.
@@ -643,6 +651,25 @@ public:
 		return MagIcm20948::Init(Cfg, pIntrf, pTimer);
 	}
 
+	/**
+	 * @brief	Initialize sensor (require implementation).
+	 *
+	 * @param 	CfgData : Reference to configuration data
+	 * @param	pIntrf 	: Pointer to interface to the sensor.
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 * @param	pTimer	: Pointer to timer for retrieval of time stamp
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 *
+	 * @return
+	 * 			- true	: Success
+	 * 			- false	: Failed
+	 */
+	virtual bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -669,6 +696,7 @@ public:
 	virtual bool Read(GYROSENSOR_DATA &Data) { return GyroSensor::Read(Data); }
 	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return MagSensor::Read(Data); }
 	virtual bool Read(MAGSENSOR_DATA &Data) { return MagSensor::Read(Data); }
+	virtual void Read(TEMPSENSOR_DATA &Data) { return TempSensor::Read(Data); }
 
 	int Read(uint16_t RegAddr, uint8_t *pBuff, int BuffLen) {
 		return Read((uint8_t*)&RegAddr, 2, pBuff, BuffLen);
@@ -679,8 +707,8 @@ public:
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
-	int Read(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-	int Write(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
+	int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
 	bool SelectBank(uint8_t BankNo);
 
 	bool UpdateData();

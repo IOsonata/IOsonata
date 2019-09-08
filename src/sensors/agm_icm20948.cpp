@@ -99,8 +99,6 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 	// the chip would not respond properly to motion detection
 	usDelay(500000);
 
-	//inv_icm20948_initialize_lower_driver(&icm_device, SERIAL_INTERFACE_SPI, NULL, 0);//, dmp3_image_size);
-
 	regaddr = ICM20948_USER_CTRL;
 	Write8((uint8_t*)&regaddr, 2, userctrl);
 
@@ -150,6 +148,22 @@ bool AccelIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIn
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
+	SamplingFrequency(CfgData.Freq);
+	Scale(CfgData.Scale);
+	FilterFreq(CfgData.FltrFreq);
+
+	msDelay(100);
+
+	return true;
+}
+
+uint16_t AccelIcm20948::Scale(uint16_t Value)
+{
+	return 0;
+}
+
+uint32_t AccelIcm20948::SamplingFrequency(uint32_t Freq)
+{
 	// ODR = 1.125 kHz/(1+ACCEL_SMPLRT_DIV[11:0])
 
 	// Find closes DIV value
@@ -159,7 +173,7 @@ bool AccelIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIn
 	for (int i = 0; i < 0x1000; i++)
 	{
 		uint32_t f = 1125 / (1 + i);
-		int df = CfgData.Freq > f ? CfgData.Freq - f : f - CfgData.Freq;
+		int df = Freq > f ? Freq - f : f - Freq;
 
 		if (df < diff)
 		{
@@ -169,26 +183,18 @@ bool AccelIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIn
 		}
 	}
 
-	regaddr = ICM20948_ACCEL_SMPLRT_DIV_1;
+	uint16_t regaddr = ICM20948_ACCEL_SMPLRT_DIV_1;
 	Write8((uint8_t*)&regaddr, 2, div >> 8);
 
 	regaddr = ICM20948_ACCEL_SMPLRT_DIV_2;
 	Write8((uint8_t*)&regaddr, 2, div & 0xFF);
 
-	Scale(CfgData.Scale);
-	//LowPassFreq(vSampFreq / 2000);
+	return AccelSensor::vSampFreq;
+}
 
-	//regaddr = MPU9250_AG_INT_ENABLE;
-	//Write8(&regaddr, 1, MPU9250_AG_INT_ENABLE_DMP_EN);
-
-//	Reset();
-
-	msDelay(100);
-
-//	regaddr = MPU9250_AG_PWR_MGMT_1;
-//	Write8(&regaddr, 1, MPU9250_AG_PWR_MGMT_1_CYCLE);
-
-	return true;
+uint32_t AccelIcm20948::FilterFreq(uint32_t Freq)
+{
+	return Freq;
 }
 
 bool GyroIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
@@ -196,63 +202,49 @@ bool GyroIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntr
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
-	uint16_t regaddr;
-	uint8_t d = 0;
-	uint8_t fchoice = 0;
-	uint32_t f = CfgData.Freq >> 1;
-#if 0
-	if (f == 0)
-	{
-		fchoice = 1;
-	}
-	if (f < 10000)
-	{
-		d = MPU9250_AG_CONFIG_DLPF_CFG_5HZ;
-	}
-	else if (f < 20000)
-	{
-		d = MPU9250_AG_CONFIG_DLPF_CFG_10HZ;
-	}
-	else if (f < 30000)
-	{
-		d = MPU9250_AG_CONFIG_DLPF_CFG_20HZ;
-	}
-	else if (f < 60000)
-	{
-		d = MPU9250_AG_CONFIG_DLPF_CFG_41HZ;
-	}
-	else if (f < 150000)
-	{
-		d = MPU9250_AG_CONFIG_DLPF_CFG_92HZ;
-	}
-	else if (f < 220000)
-	{
-		d = MPU9250_AG_CONFIG_DLPF_CFG_184HZ;
-	}
-	else if (f < 40000)
-	{
-		d = MPU9250_AG_CONFIG_DLPF_CFG_250HZ;
-	}
-	else if (f < 400000)
-	{
-		d = MPU9250_AG_CONFIG_DLPF_CFG_3600HZ;
-	}
-	else
-	{
-		// 8800Hz
-		fchoice = 1;
-	}
+	SamplingFrequency(CfgData.Freq);
 
-	regaddr = MPU9250_AG_CONFIG;
-	Write8(&regaddr, 1, d);
-
-	regaddr = MPU9250_AG_GYRO_CONFIG;
-	Write8(&regaddr, 1, fchoice);
-
-#endif
 	Sensitivity(CfgData.Sensitivity);
 
 	return true;
+}
+
+uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
+{
+	return 0;
+
+}
+
+uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
+{
+	// ODR = 1.1 kHz/(1+GYRO_SMPLRT_DIV[7:0])
+
+	// Find closes DIV value
+	uint16_t div = 0;
+	int diff = 1200;
+
+	for (int i = 0; i < 0x100; i++)
+	{
+		uint32_t f = 1100 / (1 + i);
+		int df = Freq > f ? Freq - f : f - Freq;
+
+		if (df < diff)
+		{
+			diff = df;
+			div = i;
+			GyroSensor::vSampFreq = f;
+		}
+	}
+
+	uint16_t regaddr = ICM20948_GYRO_SMPLRT_DIV;
+	Write8((uint8_t*)&regaddr, 2, div);
+
+	return GyroSensor::vSampFreq;
+}
+
+uint32_t GyroIcm20948::FilterFreq(uint32_t Freq)
+{
+	return Freq;
 }
 
 bool MagIcm20948::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
@@ -265,102 +257,16 @@ bool MagIcm20948::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf,
 
 	msDelay(200);
 
-	regaddr = ICM20948_AK09916_WIA1;
-	Read(AK09916_I2C_ADDR1, &regaddr, 1, d, 2);
-
-	if (d[0] != ICM20948_AK09916_WIA1_ID)
-	{
-		Read(AK09916_I2C_ADDR2, &regaddr, 1, d, 2);
-		if (d[0] != ICM20948_AK09916_WIA1_ID)
-			return false;
-	}
-
-	msDelay(1);
-#if 0
-	// Read ROM sensitivity adjustment values
-	regaddr = MPU9250_MAG_CTRL1;
-	d[0] = MPU9250_MAG_CTRL1_MODE_PWRDOWN;
-	Write(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, d, 1);
-
-	msDelay(1);
-
-	d[0] = MPU9250_MAG_CTRL1_MODE_FUSEROM_ACCESS;
-	Write(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, d, 1);
-
-	msDelay(100);
-
-	regaddr = MPU9250_MAG_ASAX;
-	Read(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, d, 3);
-
-	vMagSenAdj[0] = (int16_t)d[0] - 128;
-	vMagSenAdj[1] = (int16_t)d[1] - 128;
-	vMagSenAdj[2] = (int16_t)d[2] - 128;
-
-	// Transition out of reading ROM
-	regaddr = MPU9250_MAG_CTRL1;
-	d[0] = MPU9250_MAG_CTRL1_MODE_PWRDOWN;
-	Write(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, d, 1);
-
-	MagSensor::vPrecision = 14;
-	vMagCtrl1Val = 0;
-	MagSensor::vScale = 8190;
-
-	if (CfgData.Precision >= 16)
-	{
-		MagSensor::vPrecision = 16;
-		MagSensor::vScale = 32760;
-		vMagCtrl1Val = MPU9250_MAG_CTRL1_BIT_16;
-	}
-
-	if (CfgData.OpMode == SENSOR_OPMODE_CONTINUOUS)
-	{
-		if (CfgData.Freq < 50000)
-		{
-			// Select 8Hz
-			vMagCtrl1Val |= MPU9250_MAG_CTRL1_MODE_8HZ;
-			MagSensor::Mode(CfgData.OpMode, 8000000);
-		}
-		else
-		{
-			// Select 100Hz
-			vMagCtrl1Val |= MPU9250_MAG_CTRL1_MODE_100HZ;
-			MagSensor::Mode(CfgData.OpMode, 100000000);
-		}
-	}
-	else
-	{
-		vMagCtrl1Val |= MPU9250_MAG_CTRL1_MODE_SINGLE;
-		MagSensor::Mode(CfgData.OpMode, 0);
-	}
-
-	msDelay(10);
-
-	regaddr = MPU9250_MAG_CTRL1;
-	Write(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, &vMagCtrl1Val, 1);
-#endif
-	return true;
+	return MagAk09916::Init(CfgData, pIntrf, pTimer);
 }
+
+//uint32_t MagIcm20948::SamplingFrequency(uint32_t Freq)
+//{
+//	return Freq;
+//}
 
 bool AgmIcm20948::Enable()
 {
-#if 0
-	uint8_t regaddr = MPU9250_AG_PWR_MGMT_1;
-
-	Write8(&regaddr, 1, MPU9250_AG_PWR_MGMT_1_CYCLE | MPU9250_AG_PWR_MGMT_1_GYRO_STANDBY |
-			MPU9250_AG_PWR_MGMT_1_CLKSEL_INTERNAL);
-
-	regaddr = MPU9250_AG_PWR_MGMT_2;
-
-	// Enable Accel & Gyro
-	Write8(&regaddr, 1,
-			MPU9250_AG_PWR_MGMT_2_DIS_ZG |
-			MPU9250_AG_PWR_MGMT_2_DIS_YG |
-			MPU9250_AG_PWR_MGMT_2_DIS_XG);
-
-	// Enable Mag
-	//regaddr = MPU9250_MAG_CTRL1;
-	//Write(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, &vMagCtrl1Val, 1);
-#endif
 	return true;
 }
 
@@ -472,6 +378,7 @@ uint32_t AgmIcm20948::Sensitivity(uint32_t Value)
 
 bool AgmIcm20948::UpdateData()
 {
+	MagIcm20948::UpdateData();
 #if 0
 	uint8_t regaddr = MPU9250_AG_FIFO_COUNT_H;//MPU9250_AG_ACCEL_XOUT_H;
 	int8_t d[20];
@@ -576,7 +483,7 @@ int AgmIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int Da
 	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 }
 
-int AgmIcm20948::Read(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
+int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
 	int retval = 0;
 
@@ -674,7 +581,7 @@ int AgmIcm20948::Read(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_
 	return retval;
 }
 
-int AgmIcm20948::Write(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int AgmIcm20948::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
 {
 	int retval = 0;
 
@@ -731,6 +638,38 @@ void AgmIcm20948::IntHandler()
 	{
 		UpdateData();
 	}
+}
+
+/**
+ * @brief	Initialize sensor (require implementation).
+ *
+ * @param 	CfgData : Reference to configuration data
+ * @param	pIntrf 	: Pointer to interface to the sensor.
+ * 					  This pointer will be kept internally
+ * 					  for all access to device.
+ * 					  DONOT delete this object externally
+ * @param	pTimer	: Pointer to timer for retrieval of time stamp
+ * 					  This pointer will be kept internally
+ * 					  for all access to device.
+ * 					  DONOT delete this object externally
+ *
+ * @return
+ * 			- true	: Success
+ * 			- false	: Failed
+ */
+bool AgmIcm20948::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+{
+	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+		return false;
+
+	uint16_t regaddr = ICM20948_PWR_MGMT_1_DEVICE_RESET;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2);
+
+	// Enable temperature sensor
+	d &= ~ICM20948_PWR_MGMT_1_TEMP_DIS;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	return true;
 }
 
 

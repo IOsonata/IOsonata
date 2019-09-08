@@ -315,7 +315,7 @@ uint32_t AgmInvnIcm20948::Sensitivity(uint32_t Value)
 
 bool AgmInvnIcm20948::UpdateData()
 {
-//	inv_icm20948_poll_sensor(&vIcmDevice, (void*)this, SensorEventHandler);
+	inv_icm20948_poll_sensor(&vIcmDevice, (void*)this, SensorEventHandler);
 
 	return true;
 }

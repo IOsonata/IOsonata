@@ -315,7 +315,7 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	virtual uint16_t Scale(uint16_t Value) {}			// Accel
+	virtual uint16_t Scale(uint16_t Value) { return 0; }			// Accel
 
 	virtual bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
 
@@ -326,9 +326,9 @@ public:
 	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
 
-	bool UpdateData() {}
+	bool UpdateData() { return false; }
 
-	virtual bool StartSampling() {}
+	virtual bool StartSampling() { return false; }
 
 	/**
 	 * @brief	Read device's register/memory block.
@@ -392,9 +392,9 @@ public:
 	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return MagSensor::Read(Data); }
 	virtual bool Read(MAGSENSOR_DATA &Data) { return MagSensor::Read(Data); }
 
-	bool UpdateData() {}
+	bool UpdateData() { return false; }
 
-	virtual bool StartSampling() {}
+	virtual bool StartSampling() { return false; }
 
 private:
 	// Default base initialization. Does detection and set default config for all sensor.
