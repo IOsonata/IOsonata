@@ -88,6 +88,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define ICM20948_PWR_MGMT_1_CLKSEL_MASK				(7<<0)	// Clock source
 #define ICM20948_PWR_MGMT_1_CLKSEL_BITPOS			(0)
+#define ICM20948_PWR_MGMT_1_CLKSEL_INTERN_20MHZ		(0<<0)
+#define ICM20948_PWR_MGMT_1_CLKSEL_AUTO				(1<<0)
 #define ICM20948_PWR_MGMT_1_CLKSEL_STOP				(7<<0)
 #define ICM20948_PWR_MGMT_1_TEMP_DIS				(1<3)	// Disable temperature sensor
 #define ICM20948_PWR_MGMT_1_LP_EN					(1<<5)	// Low Power enable
@@ -262,6 +264,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_2000DPS			(3<<1)
 
 #define ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_MASK			(7<<3)
+#define ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS			3
 
 #define ICM20948_GYRO_CONFIG_2			(ICM20948_REG_BANK2 | 2)
 
@@ -313,7 +316,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_8G				(2<<1)	// Full scale select 8g
 #define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_16G				(3<<1)	// Full scale select 16g
 
-#define ICM20948_ACCEL_CONFIG_DLPFCFG_MASK					(7<<3)	// Low pass filter config
+#define ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_MASK			(7<<3)	// Low pass filter config
+#define ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS			3
 
 #define ICM20948_ACCEL_CONFIG_2			(ICM20948_REG_BANK2 | 21)
 
@@ -520,6 +524,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define ICM20948_AK09916_CNTL3_SRST							(1<<0)	// Soft-reset
 
+#define ICM20948_ACC_MAX_RANGE			32767
 
 #pragma pack(push, 1)
 
@@ -684,10 +689,10 @@ public:
 	virtual bool WakeOnEvent(bool bEnable, int Threshold);
 
 	virtual bool StartSampling();
-	virtual uint32_t FilterFreq(uint32_t Freq);
+	//virtual uint32_t FilterFreq(uint32_t Freq);
 
-	virtual uint16_t Scale(uint16_t Value);			// Accel
-	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
+	//virtual uint16_t Scale(uint16_t Value);			// Accel
+	//virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
 
 
 	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }

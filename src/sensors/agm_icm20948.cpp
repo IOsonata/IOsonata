@@ -31,18 +31,12 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#include "Devices/Drivers/Icm20948/Icm20948.h"
-#include "Devices/Drivers/Icm20948/Icm20948Defs.h"
-#include "Devices/Drivers/Icm20948/Icm20948Dmp3Driver.h"
-
-#include "Devices/Drivers/Icm20948/Icm20948DataBaseControl.h"
-
+#include "istddef.h"
+#include "convutil.h"
 #include "idelay.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 #include "sensors/agm_icm20948.h"
-
-static inv_icm20948_t icm_device;
 
 static const uint8_t dmp3_image[] = {
 #include "imu/icm20948_img_dmp3a.h"
@@ -97,43 +91,35 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 
 	// NOTE : require delay for reset to stabilize
 	// the chip would not respond properly to motion detection
-	usDelay(500000);
+	msDelay(500);
 
 	regaddr = ICM20948_USER_CTRL;
 	Write8((uint8_t*)&regaddr, 2, userctrl);
 
 	regaddr = ICM20948_PWR_MGMT_1;
-	Write8((uint8_t*)&regaddr, 2, 1);
+	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
 
 	regaddr = ICM20948_PWR_MGMT_2;
-	Write8((uint8_t*)&regaddr, 2, 0x7f);
+	Write8((uint8_t*)&regaddr, 2, 0x3f);
 
 	// Init master I2C interface
 
-	regaddr = ICM20948_FIFO_EN_1;
-	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_1_SLV_0_FIFO_EN);
+	//regaddr = ICM20948_FIFO_EN_1;
+	//Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_1_SLV_0_FIFO_EN);
 
 	//regaddr = ICM20948_LP_CONFIG;
 	//Write8((uint8_t*)&regaddr, 2, lpconfig);
 
-
+/*
 	regaddr = ICM20948_I2C_MST_CTRL;
 	d = 0;
 	Write8((uint8_t*)&regaddr, 2, d);
 
 	regaddr = ICM20948_I2C_MST_ODR_CONFIG;
 	Write8((uint8_t*)&regaddr, 2, 0);
-
-#if 0
-	regaddr = ICM20948_AK09916_WIA1;
-	uint8_t x[2];
-	Read(AK09916_I2C_ADDR1, (uint8_t*)&regaddr, 1, x, 2);
-
-	if (x[0] != ICM20948_AK09916_WIA1_ID)
-	{
-		return false;
-	}
-#endif
+*/
+	regaddr = ICM20948_ODR_ALIGN_EN;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
 
 	vbInitialized  = true;
 
@@ -148,18 +134,49 @@ bool AccelIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIn
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
+	AccelSensor::Range(ICM20948_ACC_MAX_RANGE);
+
 	SamplingFrequency(CfgData.Freq);
 	Scale(CfgData.Scale);
 	FilterFreq(CfgData.FltrFreq);
 
-	msDelay(100);
+	regaddr = ICM20948_PWR_MGMT_2;
+	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+
+	Write8((uint8_t*)&regaddr, 2, d);
 
 	return true;
 }
 
 uint16_t AccelIcm20948::Scale(uint16_t Value)
 {
-	return 0;
+	uint16_t regaddr = ICM20948_ACCEL_CONFIG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_MASK;
+
+	if (Value < 4)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_2G;
+		Value = 2;
+	}
+	else if (Value < 8)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_4G;
+		Value = 4;
+	}
+	else if (Value < 16)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_8G;
+		Value = 8;
+	}
+	else
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_16G;
+		Value = 16;
+	}
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	return AccelSensor::Scale(Value);
 }
 
 uint32_t AccelIcm20948::SamplingFrequency(uint32_t Freq)
@@ -194,7 +211,56 @@ uint32_t AccelIcm20948::SamplingFrequency(uint32_t Freq)
 
 uint32_t AccelIcm20948::FilterFreq(uint32_t Freq)
 {
-	return Freq;
+	uint16_t regaddr = ICM20948_ACCEL_CONFIG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_MASK | ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE);
+
+	if (Freq == 0)
+	{
+		Freq = 1248000;
+	}
+	else if (Freq < 11000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (6 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 8300;	// NBW
+	}
+	else if (Freq < 23000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (5 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 17000;
+	}
+	else if (Freq < 50000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (4 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 34400;
+	}
+	else if (Freq < 110000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (3 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 68800;
+	}
+	else if (Freq < 240000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (2 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 136000;
+	}
+	else if (Freq < 470000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (1 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 265000;
+	}
+	else if (Freq < 1000000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (7 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 499000;
+	}
+	else
+	{
+		Freq = 1248000;
+	}
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	return AccelSensor::FilterFreq(Freq);
 }
 
 bool GyroIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
@@ -206,13 +272,41 @@ bool GyroIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntr
 
 	Sensitivity(CfgData.Sensitivity);
 
+	uint16_t regaddr = ICM20948_PWR_MGMT_2;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
 	return true;
 }
 
 uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 {
-	return 0;
+	uint16_t regaddr = ICM20948_GYRO_CONFIG_1;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_MASK;
 
+	if (Value < 500)
+	{
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_250DPS;
+		Value = 250;
+	}
+	else if (Value < 1000)
+	{
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_500DPS;
+		Value = 500;
+	}
+	else if (Value < 2000)
+	{
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS;
+		Value = 1000;
+	}
+	else
+	{
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_2000DPS;
+		Value = 2000;
+	}
+
+	return GyroSensor::Sensitivity(Value);
 }
 
 uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
@@ -244,26 +338,82 @@ uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
 
 uint32_t GyroIcm20948::FilterFreq(uint32_t Freq)
 {
-	return Freq;
+	uint16_t regaddr = ICM20948_GYRO_CONFIG_1;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_MASK | ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE);
+
+	if (Freq == 0)
+	{
+		Freq = 12316000;
+	}
+	else if (Freq < 11000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (6 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 8900;	// NBW
+	}
+	else if (Freq < 23000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (5 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 17800;
+	}
+	else if (Freq < 50000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (4 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 35900;
+	}
+	else if (Freq < 110000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (3 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 73300;
+	}
+	else if (Freq < 150000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (2 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 154300;
+	}
+	else if (Freq < 190000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (1 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 187600;
+	}
+	else if (Freq < 360000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (0 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 229800;
+	}
+	else if (Freq < 1000000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (7 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 376500;
+	}
+	else
+	{
+		Freq = 12316000;
+	}
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	return GyroSensor::FilterFreq(Freq);
 }
 
 bool MagIcm20948::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	uint8_t regaddr;
-	uint8_t d[4];
+	uint16_t regaddr;
+	uint8_t d;
 
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
 	msDelay(200);
 
+	regaddr = ICM20948_I2C_MST_CTRL;
+	d = 0;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = ICM20948_I2C_MST_ODR_CONFIG;
+	Write8((uint8_t*)&regaddr, 2, 0);
+
 	return MagAk09916::Init(CfgData, pIntrf, pTimer);
 }
-
-//uint32_t MagIcm20948::SamplingFrequency(uint32_t Freq)
-//{
-//	return Freq;
-//}
 
 bool AgmIcm20948::Enable()
 {
@@ -289,37 +439,6 @@ void AgmIcm20948::Disable()
 	regaddr = ICM20948_PWR_MGMT_1;
 	d = ICM20948_PWR_MGMT_1_TEMP_DIS | ICM20948_PWR_MGMT_1_SLEEP;// | ICM20948_PWR_MGMT_1_CLKSEL_STOP;
 	Write8((uint8_t*)&regaddr, 2, d);
-
-
-#if 0
-	uint8_t regaddr = MPU9250_AG_PWR_MGMT_2;
-
-Reset();
-msDelay(2000);
-
-	regaddr = MPU9250_AG_PWR_MGMT_1;
-	Write8(&regaddr, 1, MPU9250_AG_PWR_MGMT_1_SLEEP | MPU9250_AG_PWR_MGMT_1_PD_PTAT |
-						MPU9250_AG_PWR_MGMT_1_GYRO_STANDBY);
-
-	//return;
-
-	regaddr = MPU9250_AG_USER_CTRL;
-	Write8(&regaddr, 1, MPU9250_AG_USER_CTRL_I2C_MST_EN);
-
-	// Disable Mag
-	regaddr = MPU9250_MAG_CTRL1;
-	uint8_t d = 0;
-	Write(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, &d, 1);
-
-	// Disable Accel Gyro
-	Write8(&regaddr, 1,
-		 MPU9250_AG_PWR_MGMT_2_DIS_ZG | MPU9250_AG_PWR_MGMT_2_DIS_YG | MPU9250_AG_PWR_MGMT_2_DIS_XG |
-		 MPU9250_AG_PWR_MGMT_2_DIS_ZA | MPU9250_AG_PWR_MGMT_2_DIS_YA | MPU9250_AG_PWR_MGMT_2_DIS_XA);
-
-	regaddr = MPU9250_AG_PWR_MGMT_1;
-	Write8(&regaddr, 1, MPU9250_AG_PWR_MGMT_1_SLEEP | MPU9250_AG_PWR_MGMT_1_PD_PTAT |
-						MPU9250_AG_PWR_MGMT_1_GYRO_STANDBY);
-#endif
 }
 
 void AgmIcm20948::Reset()
@@ -356,7 +475,7 @@ bool AgmIcm20948::WakeOnEvent(bool bEnable, int Threshold)
 
 	return true;
 }
-
+/*
 // Accel low pass frequency
 uint32_t AgmIcm20948::FilterFreq(uint32_t Freq)
 {
@@ -375,79 +494,40 @@ uint32_t AgmIcm20948::Sensitivity(uint32_t Value)
 
 	return GyroSensor::Sensitivity();
 }
-
+*/
 bool AgmIcm20948::UpdateData()
 {
-	MagIcm20948::UpdateData();
-#if 0
-	uint8_t regaddr = MPU9250_AG_FIFO_COUNT_H;//MPU9250_AG_ACCEL_XOUT_H;
+	bool res;// = MagIcm20948::UpdateData();
+	uint16_t regaddr = ICM20948_ACCEL_XOUT_H;
 	int8_t d[20];
-	int32_t val;
 
-	Read(&regaddr, 1, (uint8_t*)d, 2);
-	val = ((d[0] & 0xF) << 8) | d[1];
+	regaddr = ICM20948_DATA_RDY_STATUS;
+	d[0] = Read8((uint8_t*)&regaddr, 2);
 
-	//printf("%d\r\n", val);
-
-	if (val > 0)
+	if (d[0] & 1)
 	{
-		int cnt = min(val, 18);
-		regaddr = MPU9250_AG_FIFO_R_W;
-	//	Read(&regaddr, 1, d, cnt);
+		regaddr = ICM20948_ACCEL_XOUT_H;
+		Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 20);
+
+		AccelSensor::vData.X = ((int16_t)d[0] << 8) | d[1];
+		AccelSensor::vData.Y = ((int16_t)d[2] << 8) | d[3];
+		AccelSensor::vData.Z = ((int16_t)d[4] << 8) | d[5];
+		GyroSensor::vData.X = ((int16_t)d[6] << 8) | d[7];
+		GyroSensor::vData.Y = ((int16_t)d[8] << 8) | d[9];
+		GyroSensor::vData.Z = ((int16_t)d[10] << 8) | d[11];
+
+
+		// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
+		int16_t t = ((int16_t)d[12] << 8) | d[13];
+		TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | d[13]) * 100 / 33387 + 2100;
+		printf("Temp : %d %d\r\n", t, TempSensor::vData.Temperature);
+
+		MagSensor::vData.X = ((int16_t)d[14] << 8) | d[15];
+		MagSensor::vData.Y = ((int16_t)d[16] << 8) | d[17];
+		MagSensor::vData.Z = ((int16_t)d[18] << 8) | d[19];
 	}
 
-	vSampleCnt++;
-
-	if (vpTimer)
-	{
-		vSampleTime = vpTimer->uSecond();
-	}
-
-	regaddr = MPU9250_AG_ACCEL_XOUT_H;
-	Read(&regaddr, 1, (uint8_t*)d, 6);
-
-	int32_t scale =  AccelSensor::Scale();
-	val = (((((int32_t)d[0] << 8) | d[1]) * scale) << 8L) / 0x7FFF;
-	AccelSensor::vData.X = val;
-	val = (((((int32_t)d[2] << 8) | d[3]) * scale) << 8L) / 0x7FFF;
-	AccelSensor::vData.Y = val;
-	val = (((((int32_t)d[4] << 8) | d[5]) * scale) << 8L) / 0x7FFF;
-	AccelSensor::vData.Z = val;
-	AccelSensor::vData.Timestamp = vSampleTime;
-
-	regaddr = MPU9250_AG_GYRO_XOUT_H;
-
-	Read(&regaddr, 1, (uint8_t*)d, 6);
-
-	val = ((((int16_t)d[0] << 8) | d[1]) << 8) / GyroSensor::vSensitivity;
-	GyroSensor::vData.X = val;
-	val = ((((int16_t)d[2] << 8) | d[3]) << 8) / GyroSensor::vSensitivity;
-	GyroSensor::vData.Y = val;
-	val = ((((int32_t)d[4] << 8) | d[5]) << 8L) / GyroSensor::vSensitivity;
-	GyroSensor::vData.Z = val;
-	GyroSensor::vData.Timestamp = vSampleTime;
-
-	regaddr = MPU9250_MAG_ST1;
-	Read(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, (uint8_t*)d, 8);
-
-	if (d[14] & MPU9250_MAG_ST1_DRDY)
-	{
-		val = (((int16_t)d[0]) << 8L) | d[1];
-		val += (val * vMagSenAdj[0]) >> 8L;
-		MagSensor::vData.X = (int16_t)(val * (MPU9250_MAG_MAX_FLUX_DENSITY << 8) / MagSensor::vScale);
-
-		val = (((int16_t)d[2]) << 8) | d[3];
-		val += (val * vMagSenAdj[1]) >> 8L;
-		MagSensor::vData.Y = (int16_t)(val * (MPU9250_MAG_MAX_FLUX_DENSITY << 8) / MagSensor::vScale);
-
-		val = (((int16_t)d[4]) << 8) | d[5];
-		val += (val * vMagSenAdj[2]) >> 8L;
-		MagSensor::vData.Z = (int16_t)(val * (MPU9250_MAG_MAX_FLUX_DENSITY << 8) / MagSensor::vScale);
-
-		MagSensor::vData.Timestamp = vSampleTime;
-	}
-#endif
-	return true;
+	return res;
 }
 
 int AgmIcm20948::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
@@ -662,7 +742,7 @@ bool AgmIcm20948::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
-	uint16_t regaddr = ICM20948_PWR_MGMT_1_DEVICE_RESET;
+	uint16_t regaddr = ICM20948_PWR_MGMT_1;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2);
 
 	// Enable temperature sensor

@@ -297,20 +297,20 @@ bool AgmInvnIcm20948::WakeOnEvent(bool bEnable, int Threshold)
 // Accel low pass frequency
 uint32_t AgmInvnIcm20948::FilterFreq(uint32_t Freq)
 {
-	return AccelSensor::FilterFreq();
+	return AccelSensor::FilterFreq(Freq);
 }
 
 // Accel scale
 uint16_t AgmInvnIcm20948::Scale(uint16_t Value)
 {
-	return AccelSensor::Scale();
+	return AccelSensor::Scale(Value);
 }
 
 // Gyro scale
 uint32_t AgmInvnIcm20948::Sensitivity(uint32_t Value)
 {
 
-	return GyroSensor::Sensitivity();
+	return GyroSensor::Sensitivity(Value);
 }
 
 bool AgmInvnIcm20948::UpdateData()
