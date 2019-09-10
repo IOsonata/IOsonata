@@ -569,37 +569,20 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
-		uint16_t regaddr;
-		uint8_t userctrl;
-		uint8_t lpconfig;
-
-		regaddr = ICM20948_USER_CTRL;
-		//Write8(&regaddr, 1, ICM20948_USER_CTRL_I2C_IF_DIS | ICM20948_USER_CTRL_I2C_MST_EN);
-		userctrl = Read8((uint8_t*)&regaddr, 2) | ICM20948_USER_CTRL_I2C_MST_EN;
-
-		regaddr = ICM20948_LP_CONFIG;
-		lpconfig = Read8((uint8_t*)&regaddr, 2);
-
-		//Write8((uint8_t*)&regaddr, 2, 0);
+		uint16_t regaddr = ICM20948_USER_CTRL;
+		uint8_t userctrl = Read8((uint8_t*)&regaddr, 2) | ICM20948_USER_CTRL_I2C_MST_EN;
 
 #if 1
-		uint8_t d[8];
-
-
-//		regaddr = ICM20948_I2C_SLV0_CTRL;
-//		Write8(&regaddr, 1, 0);
+		uint8_t d[4];
 
 		regaddr = ICM20948_I2C_SLV0_ADDR;
 
-		//d[0] = ICM20948_I2C_SLV0_ADDR;
 		d[0] = (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD;
 		d[1] = *pCmdAddr;
 
 		while (BuffLen > 0)
 		{
 			int cnt = min(ICM20948_I2C_SLV_MAXLEN, BuffLen);
-
-			SelectBank(3);
 
 			d[2] = ICM20948_I2C_SLV0_CTRL_I2C_SLV0_EN | (cnt & ICM20948_I2C_SLV0_CTRL_I2C_SLV0_LENG_MASK);
 
@@ -621,10 +604,8 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 			pBuff += cnt;
 			BuffLen -= cnt;
 			retval += cnt;
+			d[1] += cnt;
 		}
-		regaddr = ICM20948_LP_CONFIG;
-
-		//Write8((uint8_t*)&regaddr, 2, lpconfig);
 #else
 		regaddr = ICM20948_I2C_SLV0_ADDR;
 		Write8((uint8_t*)&regaddr, 2, (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD);
@@ -674,7 +655,7 @@ int AgmIcm20948::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint
 		Write8((uint8_t*)&regaddr, 2, (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_WR);
 
 		d[0] = *pCmdAddr;
-		d[1] = 1;	// Length : Write is done 1 byte at a time
+		d[1] = 1 | ICM20948_I2C_SLV0_CTRL_I2C_SLV0_EN;	// Length : Write is done 1 byte at a time
 
 		while (DataLen > 0)
 		{
