@@ -196,9 +196,9 @@ public:
 	virtual bool Read(GYROSENSOR_RAWDATA &Data) { return GyroSensor::Read(Data); }
 	virtual bool Read(GYROSENSOR_DATA &Data) { return GyroSensor::Read(Data); }
 
-	bool UpdateData() {}
+	bool UpdateData() { return true; }
 
-	virtual bool StartSampling() {}
+	virtual bool StartSampling() { return true; }
 
 private:
 

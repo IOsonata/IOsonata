@@ -87,9 +87,13 @@ uint32_t MagAk09916::SamplingFrequency(uint32_t Freq)
 		d |= AK09916_CTRL2_MODE_CONTINUOUS_100HZ;
 		Freq = 100000;
 	}
-
+	d = 4;
+	printf("wd=%d\r\n", d);
 	Write(AK09916_I2C_7BITS_DEVADDR, &regaddr, 1, &d, 1);
 
+	d = 0;
+	Read(AK09916_I2C_7BITS_DEVADDR, &regaddr, 1, &d, 1);
+printf("d=%d\r\n", d);
 	return MagSensor::SamplingFrequency(Freq);
 }
 

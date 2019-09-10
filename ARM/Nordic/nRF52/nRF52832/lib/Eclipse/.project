@@ -676,6 +676,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu.h</locationURI>
 		</link>
 		<link>
+			<name>include/imu/imu_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_icm20948.h</locationURI>
+		</link>
+		<link>
 			<name>include/imu/imu_invn_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_invn_icm20948.h</locationURI>
@@ -776,6 +781,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_mpu9250.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/am_fxos8700cq.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_fxos8700cq.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/am_lsm303c.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303c.h</locationURI>
@@ -799,6 +809,11 @@
 			<name>include/sensors/humi_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/humi_sensor.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/mag_ak09916.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_ak09916.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/mag_bmm150.h</name>
@@ -966,6 +981,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/imu/imu_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_icm20948.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/imu/imu_invn_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_invn_icm20948.cpp</locationURI>
@@ -1091,6 +1111,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_mpu9250.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sensors/am_fxos8700cq.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_fxos8700cq.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sensors/am_lsm303c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_lsm303c.cpp</locationURI>
@@ -1099,6 +1124,11 @@
 			<name>src/sensors/gyro_l3gd20h.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gyro_l3gd20h.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_ak09916.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_ak09916.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/mag_bmm150.cpp</name>

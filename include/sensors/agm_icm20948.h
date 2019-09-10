@@ -8,27 +8,27 @@
 
 @license
 
-Copyright (c) 2018, I-SYST inc., all rights reserved
+MIT License
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Copyright (c) 2019 I-SYST inc. All rights reserved.
 
-For info or contributing contact : hnhoan at i-syst dot com
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
@@ -100,8 +100,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK		(7<<0)	// 0 : Gyro on, 7 : Gyro off
 #define ICM20948_PWR_MGMT_2_DISABLE_GYRO_BITPOS		(0)
-#define ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK		(7<<3)	// 0 : Accel om, 7 Accel off
+#define ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK		(7<<3)	// 0 : Accel on, 7 Accel off
 #define ICM20948_PWR_MGMT_2_DISABLE_ACCEL_BITPOS	(3)
+#define ICM20948_PWR_MGMT_2_DISABLE_PRESSURE_MASK	(3<<6)	// Undoc - 1 : off
+#define ICM20948_PWR_MGMT_2_DISABLE_PRESSURE_BITPOS	(6)
+#define ICM20948_PWR_MGMT_2_DISABLE_ALL				(0x7f)
+
 
 #define ICM20948_INT_PIN_CFG			(ICM20948_REG_BANK0 | 15)
 
@@ -719,10 +723,13 @@ public:
 	bool UpdateData();
 	virtual void IntHandler();
 
+	bool InitDMP(uint32_t DmpStartAddr, uint8_t * const pDmpImage, int Len);
+
 private:
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
+	bool UploadDMPImage(uint8_t * const pDmpImage, int Len);
 
 	bool vbInitialized;
 	uint8_t vMagCtrl1Val;
