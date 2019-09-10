@@ -61,7 +61,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.72672627" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -78,7 +78,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1756081403" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -174,7 +174,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.334905809" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -191,7 +191,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.949170984" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -290,7 +290,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.485862268" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -307,7 +307,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1527114429" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -405,7 +405,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.967697788" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -422,7 +422,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1323465157" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
