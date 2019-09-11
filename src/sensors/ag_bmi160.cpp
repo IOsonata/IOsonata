@@ -639,12 +639,18 @@ bool AgBmi160::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	regaddr = BMI160_CMD;
 	Write8(&regaddr, 1, BMI160_CMD_FIFO_FLUSH);
 
+	msDelay(10);
+
 	regaddr = BMI160_FIFO_CONFIG_0;
 	Write8(&regaddr, 1, 7);
+
+	msDelay(2);
 
 	regaddr = BMI160_FIFO_CONFIG_1;
 	d = Read8(&regaddr, 1) | BMI160_FIFO_CONFIG_1_FIFO_HEADER_EN | BMI160_FIFO_CONFIG_1_FIFO_TIME_EN;
 	Write8(&regaddr, 1, d);
+
+	msDelay(2);
 
 	return true;
 }
