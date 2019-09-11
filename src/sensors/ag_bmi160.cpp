@@ -60,9 +60,12 @@ bool AccelBmi160::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntr
 
 		Write8(&regaddr, 1, d);
 
+		regaddr = BMI160_LATCH;
+		Write8(&regaddr, 1, BMI160_LATCH_INT_LATCH_MASK);
+
 		regaddr = BMI160_INT_EN_1;
-		Write8(&regaddr, 1, BMI160_INT_EN_1_INT_HIGHG_X_EN | BMI160_INT_EN_1_INT_HIGHG_Y_EN |
-				BMI160_INT_EN_1_INT_HIGHG_Z_EN | BMI160_INT_EN_1_INT_DRDY_EN);
+		Write8(&regaddr, 1, /*BMI160_INT_EN_1_INT_HIGHG_X_EN | BMI160_INT_EN_1_INT_HIGHG_Y_EN |
+				BMI160_INT_EN_1_INT_HIGHG_Z_EN |*/ BMI160_INT_EN_1_INT_DRDY_EN);
 
 		regaddr = BMI160_INT_OUT_CTRL;
 		d = BMI160_INT_OUT_CTRL_INT1_OUTPUT_EN | BMI160_INT_OUT_CTRL_INT2_OUTPUT_EN |
@@ -690,6 +693,12 @@ bool AgBmi160::UpdateData()
 	}
 
 	uint8_t buff[BMI160_FIFO_MAX_SIZE];
+	uint64_t t = 0;
+
+	if (vpTimer)
+	{
+		t = vpTimer->uSecond();
+	}
 
 	//regaddr = BMI160_DATA_MAG_X_LSB;
 	//Device::Read(&regaddr, 1, (uint8_t*)MagSensor::vData.Val, 6);
@@ -701,6 +710,7 @@ bool AgBmi160::UpdateData()
 	len = Device::Read(&regaddr, 1, buff, len);
 
 	uint8_t *p = buff;
+	uint8_t dflag = 0;
 
 	while (len > 0)
 	{
@@ -722,7 +732,9 @@ bool AgBmi160::UpdateData()
 			{
 				if (len >= 8)
 				{
+					dflag |= (1<<2);
 					memcpy(MagSensor::vData.Val, p, 6);
+					MagSensor::vData.Timestamp = t;
 				//	printf("m %d %d %d\r\n", MagSensor::vData.X, MagSensor::vData.Y, MagSensor::vData.Z);
 					MagSensor::vData.Val[0] >>= 3;
 					MagSensor::vData.Val[1] >>= 3;
@@ -738,7 +750,9 @@ bool AgBmi160::UpdateData()
 			{
 				if (len >= 6)
 				{
+					dflag |= (1<<1);
 					memcpy(GyroBmi160::vData.Val, p, 6);
+					GyroBmi160::vData.Timestamp = t;
 				}
 				p += 6;
 				len -= 6;
@@ -747,7 +761,9 @@ bool AgBmi160::UpdateData()
 			{
 				if (len >= 6)
 				{
+					dflag |= (1<<0);
 					memcpy(AccelBmi160::vData.Val, p, 6);
+					AccelBmi160::vData.Timestamp = t;
 				}
 				p += 6;
 				len -= 6;
@@ -760,17 +776,33 @@ bool AgBmi160::UpdateData()
 				case BMI160_FRAME_CONTROL_PARM_SKIP:
 					AccelBmi160::vDropCnt += *p;
 					GyroBmi160::vDropCnt = AccelBmi160::vDropCnt;
-					//printf("Skip frame %d %x\r\n", AccelBmi160::vDropCnt, AccelBmi160::vDropCnt);
 					len--;
 					p++;
 					break;
 				case BMI160_FRAME_CONTROL_PARM_TIME:
 					if (len >= 3)
 					{
-						memcpy(&AccelBmi160::vData.Timestamp, p, 3);
-						memcpy(&GyroBmi160::vData.Timestamp, p, 3);
+						uint64_t t = 0;
 
-						//printf("Time\r\n");
+						memcpy(&t, p, 3);
+						t &= 0xFFFFFF;
+						t *= BMI160_TIME_RESOLUTION_USEC;
+
+						if (vpTimer == nullptr)
+						{
+							if (dflag & 1)
+							{
+								AccelBmi160::vData.Timestamp = t;
+							}
+							if (dflag & 2)
+							{
+								GyroBmi160::vData.Timestamp = t;
+							}
+							if (dflag & 4)
+							{
+								MagBmi160::vData.Timestamp = t;
+							}
+						}
 					}
 					len -= 3;
 					p += 3;
@@ -791,12 +823,17 @@ bool AgBmi160::UpdateData()
 		}
 	}
 
+	if (vEvtHandler)
+	{
+		vEvtHandler(this, DEV_EVT_DATA_RDY);
+	}
+
 	return true;
 }
 
 void AgBmi160::IntHandler()
 {
-	UpdateData();
+	bool res = false;
 
 	uint8_t regaddr = BMI160_INT_STATUS_0;
 	uint8_t d = Read8(&regaddr, 1);
@@ -804,11 +841,15 @@ void AgBmi160::IntHandler()
 	regaddr = BMI160_INT_STATUS_1;
 	d = Read8(&regaddr, 1);
 
+	if (d & BMI160_INT_STATUS_1_DRDY_INT)
+	{
+		UpdateData();
+	}
+
 	regaddr = BMI160_INT_STATUS_2;
 	d = Read8(&regaddr, 1);
 
 	regaddr = BMI160_INT_STATUS_3;
 	d = Read8(&regaddr, 1);
-
 }
 

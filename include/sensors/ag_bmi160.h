@@ -267,7 +267,7 @@ SOFTWARE.
 #define BMI160_INT_OUT_CTRL_INT2_OUTPUT_EN                  (1<<7)
 
 #define BMI160_LATCH                0x54
-#define BMI160_LATCH_INT_LATCH_MASK                         (0xFF)
+#define BMI160_LATCH_INT_LATCH_MASK                         (0xF)
 #define BMI160_LATCH_INT1_INPUT_EN                          (1<<4)
 #define BMI160_LATCH_INT2_INPUT_EN                          (1<<5)
 
@@ -454,6 +454,7 @@ typedef enum __BMI160_Frame_Mode {
 #define BMI160_FRAME_DATA_PARM_GYRO					2
 #define BMI160_FRAME_DATA_PARM_MAG					4
 
+#define BMI160_TIME_RESOLUTION_USEC					39
 
 typedef union __BMI160_Fifo_Header {
 	uint8_t Hdr;
