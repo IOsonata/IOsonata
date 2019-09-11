@@ -195,8 +195,10 @@ SOFTWARE.
 
 #define BMI160_FIFO_DOWNS           0x45
 #define BMI160_FIFO_DOWNS_GYR_FIFO_DOWNS_MASK               (7<<0)
+#define BMI160_FIFO_DOWNS_GYR_FIFO_DOWNS_BITPOS				0
 #define BMI160_FIFO_DOWNS_GYR_FIFO_FILT_DATA                (1<<3)
 #define BMI160_FIFO_DOWNS_ACC_FIFO_DOWNS_MASK               (7<<4)
+#define BMI160_FIFO_DOWNS_ACC_FIFO_DOWNS_BITPOS             4
 #define BMI160_FIFO_DOWNS_ACC_FIFO_FILT_DATA                (1<<7)
 
 #define BMI160_FIFO_CONFIG_0        0x46

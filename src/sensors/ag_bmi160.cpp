@@ -210,6 +210,8 @@ uint32_t AccelBmi160::SamplingFrequency(uint32_t Freq)
 
 	Write8(&regaddr, 1, accconf);
 
+	msDelay(1);
+
 	return Sensor::SamplingFrequency(f);
 }
 
@@ -335,7 +337,7 @@ uint32_t GyroBmi160::SamplingFrequency(uint32_t Freq)
 	}
 	else
 	{
-		for (int i = 0; i < 5; i++)
+		for (int i = 0; i < 6; i++)
 		{
 			uint32_t t = 100000 << i;
 			uint32_t x = labs(Freq - t);
@@ -350,6 +352,8 @@ uint32_t GyroBmi160::SamplingFrequency(uint32_t Freq)
 	}
 
 	Write8(&regaddr, 1, odrval);
+
+	msDelay(1);
 
 	return Sensor::SamplingFrequency(f);
 }
@@ -482,11 +486,11 @@ uint32_t MagBmi160::SamplingFrequency(uint32_t Freq)
 	uint32_t f = 0;
 	uint32_t dif = 100000;
 
-	if (Freq < 100000)
+	if (Freq < 50000)
 	{
-		for (int i = 6; i < 8; i++)
+		for (int i = 0; i < 7; i++)
 		{
-			uint32_t t = 100000 >> (8 - i);
+			uint32_t t = 50000 >> (7 - i);
 			uint32_t x = labs(Freq - t);
 			if (x < dif)
 			{
@@ -501,12 +505,12 @@ uint32_t MagBmi160::SamplingFrequency(uint32_t Freq)
 	{
 		for (int i = 0; i < 5; i++)
 		{
-			uint32_t t = 100000 << i;
+			uint32_t t = 50000 << i;
 			uint32_t x = labs(Freq - t);
 			if (x < dif)
 			{
 				odrval &= ~BMI160_MAG_CONF_MAG_ODR_MASK;
-				odrval |= i | 0x8;
+				odrval |= (i | 0x8) - 1;
 				f = t;
 				dif = x;
 			}
@@ -514,6 +518,8 @@ uint32_t MagBmi160::SamplingFrequency(uint32_t Freq)
 	}
 
 	Write8(&regaddr, 1, odrval);
+
+	msDelay(2);
 
 	return MagBmm150::SamplingFrequency(f);
 }
@@ -647,10 +653,15 @@ bool AgBmi160::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	msDelay(2);
 
 	regaddr = BMI160_FIFO_CONFIG_1;
-	d = Read8(&regaddr, 1) | BMI160_FIFO_CONFIG_1_FIFO_HEADER_EN | BMI160_FIFO_CONFIG_1_FIFO_TIME_EN;
-	Write8(&regaddr, 1, d);
+	d = Read8(&regaddr, 1) & ~(BMI160_FIFO_CONFIG_1_FIFO_TIME_EN | BMI160_FIFO_CONFIG_1_FIFO_HEADER_EN);
+
+	Write8(&regaddr, 1, d | BMI160_FIFO_CONFIG_1_FIFO_TIME_EN | BMI160_FIFO_CONFIG_1_FIFO_HEADER_EN);
 
 	msDelay(2);
+
+	//regaddr = BMI160_FIFO_DOWNS;
+	//Write8(&regaddr, 1, (2<<BMI160_FIFO_DOWNS_GYR_FIFO_DOWNS_BITPOS) | BMI160_FIFO_DOWNS_GYR_FIFO_FILT_DATA |
+	//					(2<<BMI160_FIFO_DOWNS_ACC_FIFO_DOWNS_BITPOS) | BMI160_FIFO_DOWNS_ACC_FIFO_FILT_DATA);
 
 	return true;
 }
@@ -698,6 +709,8 @@ bool AgBmi160::UpdateData()
 		return false;
 	}
 
+	//printf("len %d\r\n", len);
+
 	uint8_t buff[BMI160_FIFO_MAX_SIZE];
 	uint64_t t = 0;
 
@@ -717,6 +730,7 @@ bool AgBmi160::UpdateData()
 
 	uint8_t *p = buff;
 	uint8_t dflag = 0;
+	bool res = false;
 
 	while (len > 0)
 	{
@@ -741,13 +755,9 @@ bool AgBmi160::UpdateData()
 					dflag |= (1<<2);
 					memcpy(MagSensor::vData.Val, p, 6);
 					MagSensor::vData.Timestamp = t;
-				//	printf("m %d %d %d\r\n", MagSensor::vData.X, MagSensor::vData.Y, MagSensor::vData.Z);
 					MagSensor::vData.Val[0] >>= 3;
 					MagSensor::vData.Val[1] >>= 3;
 					MagSensor::vData.Val[2] >>= 1;
-					//MagSensor::vData.X = MagSensor::vData.X * 2500 / 1300;
-					//MagSensor::vData.Y = MagSensor::vData.Y * 2500 / 1300;
-
 				}
 				p += 8;
 				len -= 8;
@@ -788,6 +798,7 @@ bool AgBmi160::UpdateData()
 				case BMI160_FRAME_CONTROL_PARM_TIME:
 					if (len >= 3)
 					{
+						dflag |= (1<<3);
 						uint64_t t = 0;
 
 						memcpy(&t, p, 3);
@@ -829,33 +840,27 @@ bool AgBmi160::UpdateData()
 		}
 	}
 
-	if (vEvtHandler)
+	if (dflag == 0xf && vEvtHandler)
 	{
 		vEvtHandler(this, DEV_EVT_DATA_RDY);
 	}
 
-	return true;
+	return res;
 }
 
 void AgBmi160::IntHandler()
 {
 	bool res = false;
 
-	uint8_t regaddr = BMI160_INT_STATUS_0;
-	uint8_t d = Read8(&regaddr, 1);
+	uint8_t regaddr = BMI160_STATUS;
+	uint8_t d[8];
 
-	regaddr = BMI160_INT_STATUS_1;
-	d = Read8(&regaddr, 1);
+	// Read all status
+	Read(&regaddr, 1, d, 5);
 
-	if (d & BMI160_INT_STATUS_1_DRDY_INT)
+	if (d[2] & BMI160_INT_STATUS_1_DRDY_INT)
 	{
 		UpdateData();
 	}
-
-	regaddr = BMI160_INT_STATUS_2;
-	d = Read8(&regaddr, 1);
-
-	regaddr = BMI160_INT_STATUS_3;
-	d = Read8(&regaddr, 1);
 }
 
