@@ -156,6 +156,8 @@ public:
 	virtual void SetCalibration(float Gain[3][3], float Offset[3]);
 	virtual void ClearCalibration();
 
+	AccelSensor() { ClearCalibration(); }
+
 protected:
 
 	ACCELSENSOR_RAWDATA vData;		//!< Current sensor data updated with UpdateData()
