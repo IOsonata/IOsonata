@@ -1091,6 +1091,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/a_adxl362.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sensors/accel_sensor.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_sensor.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sensors/ag_bmi160.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_bmi160.cpp</locationURI>
@@ -1124,6 +1129,11 @@
 			<name>src/sensors/gyro_l3gd20h.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gyro_l3gd20h.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/gyro_sensor.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gyro_sensor.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/mag_ak09916.cpp</name>

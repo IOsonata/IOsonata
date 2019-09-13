@@ -142,10 +142,15 @@ public:
 	 */
 	virtual uint32_t Sensitivity(uint32_t Value) { vSensitivity = Value; return vSensitivity; }
 
+	virtual void SetCalibration(float Gain[3][3], float Offset[3]);
+	virtual void ClearCalibration();
+
 protected:
 
 	uint32_t vSensitivity;	    //!< Sensitivity level per degree per second
 	GYROSENSOR_RAWDATA vData;	//!< Current sensor data updated with UpdateData()
+	float vCalibGain[3][3];
+	float vCalibOffset[3];
 };
 
 #endif // __cplusplus

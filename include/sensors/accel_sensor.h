@@ -132,15 +132,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(ACCELSENSOR_DATA &Data) {
-		if (vData.Range == 0)
-			return false;
-		Data.Timestamp = vData.Timestamp;
-		Data.X = (float)(vData.X * vData.Scale) / (float)vData.Range;
-        Data.Y = (float)(vData.Y * vData.Scale) / (float)vData.Range;
-        Data.Z = (float)(vData.Z * vData.Scale) / (float)vData.Range;
-		return true;
-	}
+	virtual bool Read(ACCELSENSOR_DATA &Data);
 
 	/**
 	 * @brief	Get the current G scale value.
@@ -159,7 +151,10 @@ public:
 	 *
 	 * @return	Real scale value
 	 */
-	virtual uint16_t Scale(uint16_t Value) { vScale = Value; return vScale; }
+	virtual uint16_t Scale(uint16_t Value);
+
+	virtual void SetCalibration(float Gain[3][3], float Offset[3]);
+	virtual void ClearCalibration();
 
 protected:
 
@@ -168,6 +163,8 @@ protected:
 private:
 	ACCELINTCB vIntHandler;
 	uint16_t vScale;			//!< Sensor data scale in g force (2g, 4g, ...)
+	float vCalibGain[3][3];
+	float vCalibOffset[3];
 };
 
 #endif // __cplusplus
