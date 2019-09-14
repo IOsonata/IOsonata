@@ -731,13 +731,12 @@ public:
 	bool UpdateData();
 	virtual void IntHandler();
 
-	bool InitDMP(uint32_t DmpStartAddr, uint8_t * const pDmpImage, int Len, uint16_t MemAddr);
+	bool UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t MemAddr);
 
 private:
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
-	bool UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t MemAddr);
 
 	bool vbInitialized;
 	uint8_t vMagCtrl1Val;

@@ -748,43 +748,6 @@ bool AgmIcm20948::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf
 	return true;
 }
 
-bool AgmIcm20948::InitDMP(uint32_t DmpStartAddr, uint8_t * const pDmpImage, int Len, uint16_t MemAddr)
-{
-	bool res = false;
-	uint16_t regaddr;
-	uint8_t d[2];
-
-	if (pDmpImage == NULL || Len == 0)
-		return false;
-
-	// load external image
-	res = UploadDMPImage(pDmpImage, Len, MemAddr);
-
-	if (res)
-	{
-		vbDmpEnabled = true;
-
-		d[0] = DmpStartAddr >> 8;//DMP_START_ADDR >> 8;
-		d[1] = DmpStartAddr & 0xFF;//DMP_START_ADDR & 0xFF;
-
-		// Write DMP program start address
-		regaddr = ICM20948_DMP_PROG_START_ADDRH;
-		Write((uint8_t*)&regaddr, 2, d, 2);
-
-		// Undocumented : Enable DMP
-		//regaddr = MPU9250_AG_USER_CTRL;
-		//d[0] = Read8(&regaddr, 1) | MPU9250_AG_USER_CTRL_DMP_EN;
-		//Write8(&regaddr, 1, d[0]);
-
-		// DMP require fifo
-		//EnableFifo();
-
-		res = true;
-	}
-
-	return res;
-}
-
 bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t MemAddr)
 {
 	int len = Len;

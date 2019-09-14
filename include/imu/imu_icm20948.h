@@ -41,8 +41,8 @@ SOFTWARE.
 class ImuIcm20948 : public Imu {
 public:
 
-	//bool Init(const IMU_CFG &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	bool Init(const IMU_CFG &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	bool Init(const IMU_CFG &Cfg, AgmIcm20948 *pIcm);
+
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -102,6 +102,7 @@ public:
 	virtual bool Read(MAGSENSOR_DATA &Data) { return Imu::Read(Data); }
 
 protected:
+	bool Init(const IMU_CFG &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 
 private:
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
