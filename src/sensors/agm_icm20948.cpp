@@ -38,10 +38,6 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "sensors/agm_icm20948.h"
 
-static const uint8_t dmp3_image[] = {
-#include "imu/icm20948_img_dmp3a.h"
-};
-
 bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	//if (vbInitialized)
@@ -99,8 +95,8 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 	regaddr = ICM20948_PWR_MGMT_1;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
 
-	regaddr = ICM20948_PWR_MGMT_2;
-	Write8((uint8_t*)&regaddr, 2, 0x3f);
+	//regaddr = ICM20948_PWR_MGMT_2;
+	//Write8((uint8_t*)&regaddr, 2, 0x3f);
 
 	// Init master I2C interface
 
@@ -412,7 +408,12 @@ bool MagIcm20948::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf,
 	regaddr = ICM20948_I2C_MST_ODR_CONFIG;
 	Write8((uint8_t*)&regaddr, 2, 0);
 
-	return MagAk09916::Init(CfgData, pIntrf, pTimer);
+	if (MagAk09916::Init(CfgData, pIntrf, pTimer) == false)
+	{
+		return false;
+	}
+
+	return true;
 }
 
 bool AgmIcm20948::Enable()
@@ -497,21 +498,28 @@ uint32_t AgmIcm20948::Sensitivity(uint32_t Value)
 */
 bool AgmIcm20948::UpdateData()
 {
-	bool res;// = MagIcm20948::UpdateData();
+	bool res = MagIcm20948::UpdateData();
 	uint16_t regaddr = ICM20948_ACCEL_XOUT_H;
 	int8_t d[20];
+	uint64_t t;
+	if (vpTimer)
+	{
+		t = vpTimer->uSecond();
+	}
 
-	regaddr = ICM20948_DATA_RDY_STATUS;
+	regaddr = ICM20948_INT_STATUS_1;//ICM20948_DATA_RDY_STATUS;
 	d[0] = Read8((uint8_t*)&regaddr, 2);
 
 	if (d[0] & 1)
 	{
 		regaddr = ICM20948_ACCEL_XOUT_H;
-		Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 20);
+		Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 14);
 
+		AccelSensor::vData.Timestamp = t;
 		AccelSensor::vData.X = ((int16_t)d[0] << 8) | d[1];
 		AccelSensor::vData.Y = ((int16_t)d[2] << 8) | d[3];
 		AccelSensor::vData.Z = ((int16_t)d[4] << 8) | d[5];
+		GyroSensor::vData.Timestamp = t;
 		GyroSensor::vData.X = ((int16_t)d[6] << 8) | d[7];
 		GyroSensor::vData.Y = ((int16_t)d[8] << 8) | d[9];
 		GyroSensor::vData.Z = ((int16_t)d[10] << 8) | d[11];
@@ -522,9 +530,7 @@ bool AgmIcm20948::UpdateData()
 		TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | d[13]) * 100 / 33387 + 2100;
 		printf("Temp : %d %d\r\n", t, TempSensor::vData.Temperature);
 
-		MagSensor::vData.X = ((int16_t)d[14] << 8) | d[15];
-		MagSensor::vData.Y = ((int16_t)d[16] << 8) | d[17];
-		MagSensor::vData.Z = ((int16_t)d[18] << 8) | d[19];
+		res = true;
 	}
 
 	return res;
@@ -742,12 +748,96 @@ bool AgmIcm20948::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf
 	return true;
 }
 
-bool AgmIcm20948::InitDMP(uint32_t DmpStartAddr, uint8_t * const pDmpImage, int Len)
+bool AgmIcm20948::InitDMP(uint32_t DmpStartAddr, uint8_t * const pDmpImage, int Len, uint16_t MemAddr)
 {
-	return true;
+	bool res = false;
+	uint16_t regaddr;
+	uint8_t d[2];
+
+	if (pDmpImage == NULL || Len == 0)
+		return false;
+
+	// load external image
+	res = UploadDMPImage(pDmpImage, Len, MemAddr);
+
+	if (res)
+	{
+		vbDmpEnabled = true;
+
+		d[0] = DmpStartAddr >> 8;//DMP_START_ADDR >> 8;
+		d[1] = DmpStartAddr & 0xFF;//DMP_START_ADDR & 0xFF;
+
+		// Write DMP program start address
+		regaddr = ICM20948_DMP_PROG_START_ADDRH;
+		Write((uint8_t*)&regaddr, 2, d, 2);
+
+		// Undocumented : Enable DMP
+		//regaddr = MPU9250_AG_USER_CTRL;
+		//d[0] = Read8(&regaddr, 1) | MPU9250_AG_USER_CTRL_DMP_EN;
+		//Write8(&regaddr, 1, d[0]);
+
+		// DMP require fifo
+		//EnableFifo();
+
+		res = true;
+	}
+
+	return res;
 }
 
-bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len)
+bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t MemAddr)
 {
+	int len = Len;
+	uint8_t *p = pDmpImage;
+	uint8_t regaddr;
+	uint16_t memaddr = MemAddr;
+
+	SelectBank(0);
+
+	while (len > 0)
+	{
+		int l = min(len, ICM20948_DMP_MEM_BANK_SIZE - (memaddr & 0xff));
+
+		regaddr = ICM20948_DMP_MEM_BANKSEL;
+		Write8(&regaddr, 1, memaddr >> 8);
+		regaddr = ICM20948_DMP_MEM_STARTADDR;
+		Write8(&regaddr, 1, memaddr & 0xFF);
+
+		regaddr = ICM20948_DMP_MEM_RW;
+		Write(&regaddr, 1, p, l);
+
+		p += l;
+		memaddr += l;
+		len -= l;
+	}
+
+	len = Len;
+	p = pDmpImage;
+	memaddr = MemAddr;
+
+	// Verify
+	while (len > 0)
+	{
+		uint8_t m[ICM20948_DMP_MEM_BANK_SIZE];
+		int l = min(len, ICM20948_DMP_MEM_BANK_SIZE - (memaddr & 0xff));
+
+		regaddr = ICM20948_DMP_MEM_BANKSEL;
+		Write8(&regaddr, 1, memaddr >> 8);
+		regaddr = ICM20948_DMP_MEM_STARTADDR;
+		Write8(&regaddr, 1, memaddr & 0xFF);
+
+		regaddr = ICM20948_DMP_MEM_RW;
+		Read(&regaddr, 1, m, l);
+
+		if (memcmp(p, m, l) != 0)
+		{
+			return false;
+		}
+
+		p += l;
+		memaddr += l;
+		len -= l;
+	}
+
 	return true;
 }

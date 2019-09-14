@@ -530,6 +530,14 @@ SOFTWARE.
 
 #define ICM20948_ACC_MAX_RANGE			32767
 
+#define ICM20948_DMP_MEM_STARTADDR		(ICM20948_REG_BANK0 | 0x7C)
+#define ICM20948_DMP_MEM_RW           	(ICM20948_REG_BANK0 | 0x7D)
+#define ICM20948_DMP_MEM_BANKSEL		(ICM20948_REG_BANK0 | 0x7E)
+#define ICM20948_DMP_PROG_START_ADDRH	(ICM20948_REG_BANK2 | 0x50)
+#define ICM20948_DMP_PROG_START_ADDRL	(ICM20948_REG_BANK2 | 0x51)
+
+#define ICM20948_DMP_MEM_BANK_SIZE		256
+
 #pragma pack(push, 1)
 
 #pragma pack(pop)
@@ -723,13 +731,13 @@ public:
 	bool UpdateData();
 	virtual void IntHandler();
 
-	bool InitDMP(uint32_t DmpStartAddr, uint8_t * const pDmpImage, int Len);
+	bool InitDMP(uint32_t DmpStartAddr, uint8_t * const pDmpImage, int Len, uint16_t MemAddr);
 
 private:
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
-	bool UploadDMPImage(uint8_t * const pDmpImage, int Len);
+	bool UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t MemAddr);
 
 	bool vbInitialized;
 	uint8_t vMagCtrl1Val;
