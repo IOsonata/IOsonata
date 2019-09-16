@@ -389,7 +389,7 @@ uint32_t GyroBmi160::Sensitivity(uint32_t Value)
 		range = 2000;
 	}
 
-	vData.Scale = Value;
+	vData.Sensitivity = range;
 
 	return GyroSensor::Sensitivity(range);
 }
@@ -754,6 +754,7 @@ bool AgBmi160::UpdateData()
 				{
 					dflag |= (1<<2);
 					memcpy(MagSensor::vData.Val, p, 6);
+
 					MagSensor::vData.Timestamp = t;
 					MagSensor::vData.Val[0] >>= 3;
 					MagSensor::vData.Val[1] >>= 3;
@@ -769,6 +770,7 @@ bool AgBmi160::UpdateData()
 					dflag |= (1<<1);
 					memcpy(GyroBmi160::vData.Val, p, 6);
 					GyroBmi160::vData.Timestamp = t;
+					GyroBmi160::vData.Sensitivity = GyroSensor::Sensitivity();
 				}
 				p += 6;
 				len -= 6;
@@ -780,6 +782,7 @@ bool AgBmi160::UpdateData()
 					dflag |= (1<<0);
 					memcpy(AccelBmi160::vData.Val, p, 6);
 					AccelBmi160::vData.Timestamp = t;
+					AccelBmi160::vData.Scale = AccelSensor::Scale();
 				}
 				p += 6;
 				len -= 6;

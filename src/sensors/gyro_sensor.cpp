@@ -35,9 +35,45 @@ SOFTWARE.
 
 #include "sensors/gyro_sensor.h"
 
+bool GyroSensor::Read(GYROSENSOR_DATA &Data)
+{
+	Data.Timestamp = vData.Timestamp;
+	Data.X = (float)vData.X * vCalibGain[0][0] + vData.Y * vCalibGain[1][0] + vData.Z * vCalibGain[2][0] + vCalibOffset[0];
+	Data.Y = (float)vData.X * vCalibGain[0][1] + vData.Y * vCalibGain[1][1] + vData.Z * vCalibGain[2][1] + vCalibOffset[1];
+	Data.Z = (float)vData.X * vCalibGain[0][2] + vData.Y * vCalibGain[1][2] + vData.Z * vCalibGain[2][2] + vCalibOffset[2];
+
+	return true;
+}
+
+uint16_t GyroSensor::Sensitivity(uint16_t Value)
+{
+	float scale = 0.0;
+
+	if (vSensitivity != 0)
+	{
+		scale = (float)Value / (float)vSensitivity;
+	}
+	else
+	{
+		scale = (float)Value / (float)vRange;
+	}
+
+	for (int i = 0; i < 3; i++)
+	{
+		vCalibGain[0][i] *= scale;
+		vCalibGain[1][i] *= scale;
+		vCalibGain[2][i] *= scale;
+		vCalibOffset[i] *= scale;
+	}
+
+	vSensitivity = Value;
+
+	return vSensitivity;
+}
+
 void GyroSensor::SetCalibration(float Gain[3][3], float Offset[3])
 {
-	float scale = (float)vData.Scale / (float)vData.Range;
+	float scale = (float)vSensitivity / (float)vRange;
 
 	for (int i = 0; i < 3; i++)
 	{
@@ -53,7 +89,16 @@ void GyroSensor::ClearCalibration()
 	memset(vCalibOffset, 0, sizeof(float) * 3);
 	memset(vCalibGain, 0, sizeof(float) * 9);
 
-	vCalibGain[0][0] = (float)vData.Scale / (float)vData.Range;
-	vCalibGain[1][1] = vCalibGain[0][0];
-	vCalibGain[2][2] = vCalibGain[0][0];
+	if (vSensitivity == 0 || vRange == 0)
+	{
+		vCalibGain[0][0] = 1.0;
+		vCalibGain[1][1] = vCalibGain[0][0];
+		vCalibGain[2][2] = vCalibGain[0][0];
+	}
+	else
+	{
+		vCalibGain[0][0] = (float)vSensitivity / (float)vRange;
+		vCalibGain[1][1] = vCalibGain[0][0];
+		vCalibGain[2][2] = vCalibGain[0][0];
+	}
 }
