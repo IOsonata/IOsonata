@@ -52,7 +52,7 @@ uint16_t AccelSensor::Scale(uint16_t Value)
 {
 	float scale = 0.0;
 
-	if (vScale != 0)
+	if (vScale != 0.0)
 	{
 		scale = (float)Value / (float)vScale;
 	}
@@ -92,7 +92,16 @@ void AccelSensor::ClearCalibration()
 	memset(vCalibOffset, 0, sizeof(float) * 3);
 	memset(vCalibGain, 0, sizeof(float) * 9);
 
-	vCalibGain[0][0] = (float)vData.Scale / (float)vData.Range;
-	vCalibGain[1][1] = vCalibGain[0][0];
-	vCalibGain[2][2] = vCalibGain[0][0];
+	if (vScale == 0 || vRange == 0)
+	{
+		vCalibGain[0][0] = 1.0;
+		vCalibGain[1][1] = vCalibGain[0][0];
+		vCalibGain[2][2] = vCalibGain[0][0];
+	}
+	else
+	{
+		vCalibGain[0][0] = (float)vScale / (float)vRange;
+		vCalibGain[1][1] = vCalibGain[0][0];
+		vCalibGain[2][2] = vCalibGain[0][0];
+	}
 }
