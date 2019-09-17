@@ -81,7 +81,7 @@ SOFTWARE.
 #define LSM303C_CTRL_REG3_A_INT_XL_IG2							(1<<4)	//!< Interrupt generator 2 enable
 #define LSM303C_CTRL_REG3_A_INT_XL_INACT						(1<<5)	//!< Inactivity interrupt enable
 #define LSM303C_CTRL_REG3_A_STOP_FTH							(1<<6)	//!< Enable Fifo threshold level
-#define LSM303C_CTRL_REG3_A_FIFO_EN								(1<<7)	//!< Fifo neable
+#define LSM303C_CTRL_REG3_A_FIFO_EN								(1<<7)	//!< Fifo enable
 
 #define LSM303C_CTRL_REG4_A_REG				0x23
 
@@ -144,7 +144,7 @@ SOFTWARE.
 
 #define LSM303C_FIFO_CTRL_REG				0x2E
 
-#define LSM303C_FIFO_CTRL_FTH_MASK								(0x1F<<0)	//!< Fifo threashold
+#define LSM303C_FIFO_CTRL_FTH_MASK								(0x1F<<0)	//!< Fifo threshold
 #define LSM303C_FIFO_CTRL_FMODE_MASK							(7<<5)		//!< Fifo mode
 
 #define LSM303C_FIFO_SRC_REG				0x2F
