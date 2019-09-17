@@ -51,8 +51,8 @@ bool MagBmm150::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer
 {
 	MagSensor::Type(SENSOR_TYPE_MAG);
 
-	vData.Range = Range(((1<<15) - 1) >> 1);
-	vData.Scale = 2500;
+	//vData.Range = Range(((1<<15) - 1) >> 1);
+	//vData.Scale = 2500;
 
 	uint8_t regaddr = BMM150_CTRL1_REG;
 	uint8_t d = BMM150_CTRL1_POWER_ON | BMM150_CTRL1_SOFT_RESET | BMM150_CTRL1_SOFT_RESET2;
@@ -73,7 +73,18 @@ bool MagBmm150::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer
 	// There is no setting to change precision
 	// fix it to lowest value.
 	// X, Y : 13 bits, Z : 15 bits, RHALL : 14 bits
-	Precision(13);
+	vPrecision = MAGSENSOR_PRECISION_LOW;
+	vSensitivity[0] = BMI150_FLUX_DENSITY_XY / BMI150_ADC_RANGE_XY;
+	vSensitivity[1] = vSensitivity[0];
+	vSensitivity[2] = BMI150_FLUX_DENSITY_Z / BMI150_ADC_RANGE_Z;
+
+	vRange = BMI150_ADC_RANGE_XY;
+	vData.Sensitivity[0] = vSensitivity[0];
+	vData.Sensitivity[1] = vSensitivity[1];
+	vData.Sensitivity[2] = vSensitivity[2];
+
+	ClearCalibration();
+
 	SamplingFrequency(Cfg.Freq);
 
 	Enable();
@@ -188,4 +199,32 @@ void MagBmm150::Reset()
 
 	//d |= BMM150_CTRL1_POWER_ON;
 	//MagBmm150::Write(&regaddr, 1, &d, 1);
+}
+
+bool MagBmm150::UpdateData()
+{
+	uint8_t regaddr = BMM150_INT_STATUS_REG;
+	uint8_t d = 0;
+	bool res = false;
+
+	MagBmm150::Read(&regaddr, 1, &d, 1);
+	if (d)
+	{
+		int16_t buff[4];
+		regaddr = BMM150_DATA_X_LSB_REG;
+
+		if (vpTimer)
+		{
+			vData.Timestamp = vpTimer->uSecond();
+		}
+		MagBmm150::Read(&regaddr, 1, (uint8_t*)buff, 8);
+
+		vData.X = buff[0] >> 3;
+		vData.Y = buff[1] >> 3;
+		vData.Z = buff[2] >> 1;
+
+		res = true;
+	}
+
+	return res;
 }

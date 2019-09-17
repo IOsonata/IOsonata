@@ -53,9 +53,18 @@ bool MagAk09916::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Time
 	Write(AK09916_I2C_7BITS_DEVADDR, &regaddr, 1, (uint8_t*)&d, 1);
 
 	SamplingFrequency(Cfg.Freq);
-	MagSensor::Precision(16);
-	Range(32752);
-	vScale = 4912;
+
+	Range(AK09916_ADC_RANGE);
+
+	vSensitivity[0] = AK09916_FLUX_DENSITY / AK09916_ADC_RANGE;
+	vSensitivity[1] = vSensitivity[0];
+	vSensitivity[2] = vSensitivity[0];
+
+	vData.Sensitivity[0] = vSensitivity[0];
+	vData.Sensitivity[1] = vSensitivity[1];
+	vData.Sensitivity[2] = vSensitivity[2];
+
+	ClearCalibration();
 
 	return true;
 }

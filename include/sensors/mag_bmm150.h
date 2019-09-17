@@ -130,6 +130,11 @@ SOFTWARE.
 #define BMM150_REPETITION_XY_REG	0x51
 #define BMM150_REPETITION_Z_REG		0x52
 
+#define BMI150_ADC_RANGE_XY			((1<<12) - 1)	// 13 bits
+#define BMI150_ADC_RANGE_Z			((1<<14) - 1)	// 13 bits
+
+#define BMI150_FLUX_DENSITY_XY		1300000 //!< max flux density in nT
+#define BMI150_FLUX_DENSITY_Z		2500000 //!< max flux density in nT
 
 #pragma pack(push, 1)
 
@@ -146,6 +151,7 @@ public:
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
+	virtual bool UpdateData();
 };
 
 

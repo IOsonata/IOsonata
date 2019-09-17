@@ -1146,6 +1146,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_bmm150.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sensors/mag_sensor.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_sensor.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sensors/tph_bme280.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/tph_bme280.cpp</locationURI>

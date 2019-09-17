@@ -248,7 +248,7 @@ bool AccelMpu9250::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Tim
 		AccelSensor::vSampFreq = 500000;	// 500 Hz
 	}
 
-	AccelSensor::Range(MPU9250_ACC_MAX_RANGE);
+	AccelSensor::Range(MPU9250_AG_ADC_RANGE);
 	Scale(CfgData.Scale);
 	FilterFreq(CfgData.FltrFreq);
 
@@ -469,16 +469,20 @@ bool MagMpu9250::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *
 
 	//msDelay(10);
 
-	MagSensor::vPrecision = 14;
+	//MagSensor::vPrecision = 14;
 	vMagCtrl1Val = 0;
-	MagSensor::vScale = 8190;
+	MagSensor::vRange = MPU9250_MAG_ADC_LOW_RANGE;
 
 	if (CfgData.Precision >= 16)
 	{
-		MagSensor::vPrecision = 16;
-		MagSensor::vScale = 32760;
+		//MagSensor::vPrecision = 16;
+		MagSensor::vRange = MPU9250_MAG_ADC_HIGH_RANGE;
 		vMagCtrl1Val = MPU9250_MAG_CTRL1_BIT_16;
 	}
+
+	MagSensor::vSensitivity[0] = MPU9250_MAG_MAX_FLUX_DENSITY / MagSensor::vRange;
+	MagSensor::vSensitivity[1] = MPU9250_MAG_MAX_FLUX_DENSITY / MagSensor::vRange;
+	MagSensor::vSensitivity[2] = MPU9250_MAG_MAX_FLUX_DENSITY / MagSensor::vRange;
 
 	if (CfgData.OpMode == SENSOR_OPMODE_CONTINUOUS)
 	{
@@ -514,7 +518,42 @@ bool MagMpu9250::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *
 	intval |= MPU9250_AG_INT_ENABLE_RAW_RDY_EN;
 	Write8(&regaddr, 1, intval);
 
+	ClearCalibration();
+
 	return true;
+}
+
+MAGSENSOR_PRECISION MagMpu9250::Precision(MAGSENSOR_PRECISION Val)
+{
+	if (Val == vPrecision)
+	{
+		return vPrecision;
+	}
+
+	uint16_t sen[3];
+
+	if (MAGSENSOR_PRECISION_HIGH)
+	{
+		sen[0] = MPU9250_MAG_MAX_FLUX_DENSITY / MPU9250_MAG_ADC_HIGH_RANGE;
+		vMagCtrl1Val = MPU9250_MAG_CTRL1_BIT_16;
+	}
+	else
+	{
+		sen[0] = MPU9250_MAG_MAX_FLUX_DENSITY / MPU9250_MAG_ADC_LOW_RANGE;
+		vMagCtrl1Val &= ~MPU9250_MAG_CTRL1_BIT_16;
+	}
+
+	uint8_t regaddr = MPU9250_MAG_CTRL1;
+	Write(MPU9250_MAG_I2C_DEVADDR, &regaddr, 1, &vMagCtrl1Val, 1);
+
+	sen[1] = sen[0];
+	sen[2] = sen[0];
+
+	Sensitivity(sen);
+
+	vPrecision = Val;
+
+	return vPrecision;
 }
 
 bool AgmMpu9250::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
@@ -885,17 +924,17 @@ bool AgmMpu9250::UpdateData()
 		{
 			val = (((int16_t)d[idx]) << 8L) | d[idx + 1];
 			val += (val * vMagSenAdj[0]) >> 8L;
-			MagSensor::vData.X = (int16_t)(val * (MPU9250_MAG_MAX_FLUX_DENSITY << 8) / MagSensor::vScale);
+			MagSensor::vData.X = (int16_t)(val * (MPU9250_MAG_MAX_FLUX_DENSITY << 8) / MagSensor::vRange);
 
 			idx += 2;
 			val = (((int16_t)d[idx]) << 8) | d[idx + 1];
 			val += (val * vMagSenAdj[1]) >> 8L;
-			MagSensor::vData.Y = (int16_t)(val * (MPU9250_MAG_MAX_FLUX_DENSITY << 8) / MagSensor::vScale);
+			MagSensor::vData.Y = (int16_t)(val * (MPU9250_MAG_MAX_FLUX_DENSITY << 8) / MagSensor::vRange);
 
 			idx += 2;
 			val = (((int16_t)d[idx]) << 8) | d[idx + 1];
 			val += (val * vMagSenAdj[2]) >> 8L;
-			MagSensor::vData.Z = (int16_t)(val * (MPU9250_MAG_MAX_FLUX_DENSITY << 8) / MagSensor::vScale);
+			MagSensor::vData.Z = (int16_t)(val * (MPU9250_MAG_MAX_FLUX_DENSITY << 8) / MagSensor::vRange);
 
 			MagSensor::vData.Timestamp = t;
 			MagSensor::vSampleTime = t;

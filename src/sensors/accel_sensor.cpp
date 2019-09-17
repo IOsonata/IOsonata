@@ -74,7 +74,7 @@ uint16_t AccelSensor::Scale(uint16_t Value)
 	return vScale;
 }
 
-void AccelSensor::SetCalibration(float Gain[3][3], float Offset[3])
+void AccelSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])
 {
 	float scale = (float)vScale / (float)vRange;
 

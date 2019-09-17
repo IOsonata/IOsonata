@@ -44,9 +44,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /// Magnetometer raw sensor data
 typedef struct __MagSensor_Raw_Data {
-    uint64_t Timestamp; //!< Time stamp count in usec
-    uint16_t Scale;     //!< Scale in miliGauss of the sensor
-    uint16_t Range;     //!< Sensor ADC range
+    uint64_t Timestamp; 		//!< Time stamp count in usec
+    uint16_t Sensitivity[3];	//!< Scale factor in nanoTesla of the sensor
     union {
         int16_t Val[3];
         struct {
@@ -59,9 +58,9 @@ typedef struct __MagSensor_Raw_Data {
 
 /// Magnetometer sensor data
 typedef struct __MagSensor_Data {
-	uint64_t Timestamp;	//!< Time stamp count in usec
+	uint64_t Timestamp;			//!< Time stamp count in usec
 	union {
-	    float Val[3];
+	    float Val[3];	//!< Mag data in uT
 		struct {
 	        float X;			//!< X axis
 	        float Y;			//!< Y axis
@@ -70,12 +69,17 @@ typedef struct __MagSensor_Data {
 	};
 } MAGSENSOR_DATA;
 
+typedef enum __MagSensor_Precision {
+	MAGSENSOR_PRECISION_LOW,
+	MAGSENSOR_PRECISION_HIGH
+} MAGSENSOR_PRECISION;
+
 /// Mag configuration data
 typedef struct __MagSensor_Config {
 	uint32_t		DevAddr;	//!< Either I2C 7 bits device address or CS index select if SPI is used
 	SENSOR_OPMODE 	OpMode;		//!< Operating mode
 	uint32_t		Freq;		//!< Sampling frequency in mHz (miliHertz) if continuous mode is used
-	int				Precision;	//!< Sampling precision in bits
+	MAGSENSOR_PRECISION	Precision;	//!< Sampling precision in bits
 	bool 			bInter;		//!< true - enable interrupt
 	DEVINTR_POL		IntPol;		//!< Interrupt polarity
 } MAGSENSOR_CFG;
@@ -114,16 +118,13 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-    virtual bool Read(MAGSENSOR_DATA &Data) {
-        Data.Timestamp = vData.Timestamp;
-        Data.X = (float)(vData.X * vData.Scale) / (float)vData.Range;
-        Data.Y = (float)(vData.Y * vData.Scale) / (float)vData.Range;
-        Data.Z = (float)(vData.Z * vData.Scale) / (float)vData.Range;
-        return true;
-    }
+    virtual bool Read(MAGSENSOR_DATA &Data);
 
-    virtual uint8_t Precision() { return vPrecision; }
-    virtual uint8_t Precision(uint8_t Val) { vPrecision = Val; return vPrecision; }
+    virtual MAGSENSOR_PRECISION Precision() { return vPrecision; }
+    virtual MAGSENSOR_PRECISION Precision(MAGSENSOR_PRECISION Val) { vPrecision = Val; return vPrecision; }
+    virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
+    virtual void ClearCalibration();
+    virtual void Sensitivity(uint16_t (&Sen)[3]);
 
 protected:
     // These functions allow override for device hook up on the secondary interface
@@ -140,9 +141,11 @@ protected:
 		return vpIntrf->Write(DevAddr, pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
 
-	int32_t vScale;			//!< Sample scaling value at the discretion of the implementation
-	uint8_t vPrecision;		//!< Sampling precision in bits
-	MAGSENSOR_RAWDATA vData;//!< Current sensor data updated with UpdateData()
+	uint16_t vSensitivity[3];		//!< Sample scaling factor in nanoTesla
+	MAGSENSOR_PRECISION vPrecision;	//!< Sampling precision in bits
+	MAGSENSOR_RAWDATA vData;	//!< Current sensor data updated with UpdateData()
+	float vCalibGain[3][3];
+	float vCalibOffset[3];
 private:
 
 };

@@ -44,12 +44,12 @@ SOFTWARE.
 #define AK09916_I2C_7BITS_DEVADDR							0xC
 
 #define AK09916_WIA1_REG		0
-#define AK09916_WIA1_COMPANY_ID									0x48
+#define AK09916_WIA1_COMPANY_ID								0x48
 
 #define AK09916_WIA2_REG		1
-#define AK09916_WIA2_DEVICE_ID									0x9
+#define AK09916_WIA2_DEVICE_ID								0x9
 
-#define AK09916_COMPANY_DEVICE_ID								0x948	// Combine company & device id
+#define AK09916_COMPANY_DEVICE_ID							0x948		// Combine company & device id
 
 #define AK09916_ST1_REG				0x10	//!< Status register 1
 #define AK09916_ST1_DRDY									(1<<0)		//!< Data ready
@@ -78,6 +78,9 @@ SOFTWARE.
 #define AK09916_CTRL3_REG			0x32
 #define AK09916_CTRL3_SRST									(1<<0)
 
+#define AK09916_ADC_RANGE					32752
+#define AK09916_FLUX_DENSITY				4912000	//!< Max flux density in nT
+
 #pragma pack(push, 1)
 
 
@@ -94,7 +97,7 @@ public:
 	 * @brief	Power off the device completely.
 	 *
 	 * If supported, this will put the device in complete power down.
-	 * Full re-intialization is required to re-enable the device.
+	 * Full re-initialization is required to re-enable the device.
 	 */
 	virtual void PowerOff();
 	virtual bool Enable();

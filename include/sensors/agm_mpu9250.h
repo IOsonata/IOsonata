@@ -413,8 +413,12 @@ SOFTWARE.
 #define MPU9250_MAG_ASAY				0x11
 #define MPU9250_MAG_ASAZ				0x12
 
-#define MPU9250_MAG_MAX_FLUX_DENSITY	4912
-#define MPU9250_ACC_MAX_RANGE			32767
+#define MPU9250_MAG_MAX_FLUX_DENSITY	4912000
+#define MPU9250_MAG_ADC_HIGH_RANGE		32760
+#define MPU9250_MAG_ADC_LOW_RANGE		8190
+
+#define MPU9250_AG_ADC_RANGE			((1<<15) - 1)
+
 
 #define MPU9250_DMP_MEM_PAGE_SIZE			256		// DMP memory page size
 
@@ -480,6 +484,7 @@ public:
 	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 	virtual bool Enable();
 	virtual void Disable();
+    virtual MAGSENSOR_PRECISION Precision(MAGSENSOR_PRECISION Val);
 
 protected:
 	int Read(uint8_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);

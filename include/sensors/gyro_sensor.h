@@ -136,7 +136,7 @@ public:
 	 */
 	virtual uint16_t Sensitivity(uint16_t Value);
 
-	virtual void SetCalibration(float Gain[3][3], float Offset[3]);
+    virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
 	virtual void ClearCalibration();
 
 protected:

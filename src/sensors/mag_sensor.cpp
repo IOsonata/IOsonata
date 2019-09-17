@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	gyro_sensor.cpp
+@file	mag_sensor.cpp
 
-@brief	Generic accelerometer sensor abstraction
+@brief	Generic magnetometer sensor abstraction
 
 @author	Hoang Nguyen Hoan
-@date	Nov. 18, 2017
+@date	Sept. 16, 2019
 
 @license
 
@@ -33,72 +33,47 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "sensors/gyro_sensor.h"
+#include "sensors/mag_sensor.h"
 
-bool GyroSensor::Read(GYROSENSOR_DATA &Data)
+bool MagSensor::Read(MAGSENSOR_DATA &Data)
 {
 	Data.Timestamp = vData.Timestamp;
-	Data.X = (float)vData.X * vCalibGain[0][0] + vData.Y * vCalibGain[1][0] + vData.Z * vCalibGain[2][0] + vCalibOffset[0];
-	Data.Y = (float)vData.X * vCalibGain[0][1] + vData.Y * vCalibGain[1][1] + vData.Z * vCalibGain[2][1] + vCalibOffset[1];
-	Data.Z = (float)vData.X * vCalibGain[0][2] + vData.Y * vCalibGain[1][2] + vData.Z * vCalibGain[2][2] + vCalibOffset[2];
+	Data.X = (float)vData.X * vCalibGain[0][0] + (float)vData.Y * vCalibGain[1][0] + (float)vData.Z * vCalibGain[2][0] + vCalibOffset[0];
+	Data.Y = (float)vData.X * vCalibGain[0][1] + (float)vData.Y * vCalibGain[1][1] + (float)vData.Z * vCalibGain[2][1] + vCalibOffset[1];
+	Data.Z = (float)vData.X * vCalibGain[0][2] + (float)vData.Y * vCalibGain[1][2] + (float)vData.Z * vCalibGain[2][2] + vCalibOffset[2];
 
 	return true;
 }
 
-uint16_t GyroSensor::Sensitivity(uint16_t Value)
+void MagSensor::Sensitivity(uint16_t (&Sen)[3])
 {
-	float scale = 0.0;
-
-	if (vSensitivity != 0)
-	{
-		scale = (float)Value / (float)vSensitivity;
-	}
-	else
-	{
-		scale = (float)Value / (float)vRange;
-	}
-
 	for (int i = 0; i < 3; i++)
 	{
-		vCalibGain[0][i] *= scale;
-		vCalibGain[1][i] *= scale;
-		vCalibGain[2][i] *= scale;
-		vCalibOffset[i] *= scale;
-	}
-
-	vSensitivity = Value;
-
-	return vSensitivity;
-}
-
-void GyroSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])
-{
-	float scale = (float)vSensitivity / (float)vRange;
-
-	for (int i = 0; i < 3; i++)
-	{
-		vCalibGain[0][i] = Gain[0][i] * scale;
-		vCalibGain[1][i] = Gain[1][i] * scale;
-		vCalibGain[2][i] = Gain[2][i] * scale;
-		vCalibOffset[i] = Offset[i] * scale;
+		vCalibGain[0][i] = (vCalibGain[0][i] * Sen[i]) / (vSensitivity[i] * 1000.0);
+		vCalibGain[1][i] = (vCalibGain[1][i] * Sen[i]) / (vSensitivity[i] * 1000.0);
+		vCalibGain[2][i] = (vCalibGain[2][i] * Sen[i]) / (vSensitivity[i] * 1000.0);
+		vCalibOffset[i] = (vCalibOffset[i] * Sen[i]) / (vSensitivity[i] * 1000.0);
+		vSensitivity[i] = Sen[i];
 	}
 }
 
-void GyroSensor::ClearCalibration()
+void MagSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])
+{
+	for (int i = 0; i < 3; i++)
+	{
+		vCalibGain[0][i] = Gain[0][i] * vSensitivity[i] / 1000.0;
+		vCalibGain[1][i] = Gain[1][i] * vSensitivity[i] / 1000.0;
+		vCalibGain[2][i] = Gain[2][i] * vSensitivity[i] / 1000.0;
+		vCalibOffset[i] = Offset[i] * vSensitivity[i] / 1000.0;
+	}
+}
+
+void MagSensor::ClearCalibration()
 {
 	memset(vCalibOffset, 0, sizeof(float) * 3);
 	memset(vCalibGain, 0, sizeof(float) * 9);
 
-	if (vSensitivity == 0 || vRange == 0)
-	{
-		vCalibGain[0][0] = 1.0;
-		vCalibGain[1][1] = vCalibGain[0][0];
-		vCalibGain[2][2] = vCalibGain[0][0];
-	}
-	else
-	{
-		vCalibGain[0][0] = (float)vSensitivity / (float)vRange;
-		vCalibGain[1][1] = vCalibGain[0][0];
-		vCalibGain[2][2] = vCalibGain[0][0];
-	}
+	vCalibGain[0][0] = vSensitivity[0] / 1000.0;
+	vCalibGain[1][1] = vSensitivity[1] / 1000.0;
+	vCalibGain[2][2] = vSensitivity[2] / 1000.0;
 }
