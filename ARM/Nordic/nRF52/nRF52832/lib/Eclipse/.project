@@ -786,6 +786,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_fxos8700cq.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/am_lsm303agr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303agr.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/am_lsm303c.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303c.h</locationURI>
@@ -1119,6 +1124,11 @@
 			<name>src/sensors/am_fxos8700cq.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_fxos8700cq.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/am_lsm303agr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_lsm303agr.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/am_lsm303c.cpp</name>
