@@ -470,8 +470,8 @@ public:
 	 */
 	void Level(uint32_t Level);
 
+	void IrqHandler();
 
-protected:
 private:
 	LED_DEV vLed[AS3701_LED_MAXCNT];
 	int vNbLed;

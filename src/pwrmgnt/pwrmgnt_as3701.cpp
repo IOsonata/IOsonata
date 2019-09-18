@@ -71,10 +71,20 @@ bool PowerMgntAS3701::Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf)
 	{
 		if (Cfg.pLed[i].Pin >= 0)
 		{
-			uint8_t regaddr = AS3701_GPIO1_CTRL_REG + Cfg.pLed[i].Pin;
+			regaddr = AS3701_GPIO1_CTRL_REG + Cfg.pLed[i].Pin;
 			Write8(&regaddr, 1, AS3701_GPIO_MODE_OUTPUT);
 			vLed[i] = Cfg.pLed[i];
 		}
+	}
+
+	if (Cfg.bIntEn)
+	{
+		regaddr = AS3701_INTERRUPT_MASK1_REG;
+		Write8(&regaddr, 1, AS3701_INTERRUPT_MASK1_EOC | AS3701_INTERRUPT_MASK1_CHDET |
+				AS3701_INTERRUPT_MASK1_ONKEY | AS3701_INTERRUPT_MASK1_OVTMP | AS3701_INTERRUPT_MASK1_LOWBAT);
+
+		regaddr = AS3701_INTERRUPT_MASK2_REG;
+		Write8(&regaddr, 1, AS3701_INTERRUPT_MASK2_BAT_TEMP);
 	}
 
 	return true;
@@ -229,6 +239,12 @@ uint32_t PowerMgntAS3701::SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint
 		d = (mACurr - 88);
 	}
 
+	Write8(&regaddr, 1, d);
+
+	regaddr = AS3701_CHARGER_CTRL_REG;
+	d = Read8(&regaddr, 1) | AS3701_CHARGER_CTRL_USB_CHGEN | AS3701_CHARGER_CTRL_BAT_CHARGING_ENABLE;
+	Write8(&regaddr, 1, d);
+
 	return true;
 }
 
@@ -319,4 +335,33 @@ void PowerMgntAS3701::Level(uint32_t Level)
 		mask <<= 8;
 	}
 	Write8(&regaddr, 1, d);
+}
+
+void PowerMgntAS3701::IrqHandler()
+{
+	uint8_t regaddr = AS3701_INTERRUPT_STATUS1_REG;
+	uint8_t flag = Read8(&regaddr, 1);
+
+	regaddr = AS3701_INTERRUPT_STATUS2_REG;
+	uint8_t flag1 = Read8(&regaddr, 1);
+
+	if (vpEvtHandler)
+	{
+		if (flag & AS3701_INTERRUPT_STATUS1_EOC_INT)
+		{
+			vpEvtHandler(this, PWREVT_CHARGE_FULL);
+		}
+		if (flag & AS3701_INTERRUPT_STATUS1_OVTMP_INT)
+		{
+			vpEvtHandler(this, PWREVT_OVER_HEAT);
+		}
+		if (flag & AS3701_INTERRUPT_STATUS1_LOWBAT_INT)
+		{
+			vpEvtHandler(this, PWREVT_LOW_BAT);
+		}
+		if (flag & AS3701_INTERRUPT_STATUS1_CHDET_INT)
+		{
+			vpEvtHandler(this, PWREVT_CHARGE_DETECTED);
+		}
+	}
 }

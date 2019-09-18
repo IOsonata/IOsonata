@@ -50,6 +50,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define PWRMGNT_VOUT_MAXCNT			4	//!< Max number of Vout
 
+class PowerMgnt;
+
 #pragma pack(push, 1)
 typedef enum __Charge_Type {
 	PWR_CHARGE_TYPE_NORMAL,
@@ -62,6 +64,15 @@ typedef struct __Vout_Cfg {
 	uint32_t mAlimit;					//!< Output current limit in mA
 } PWR_VOUT_CFG;
 
+typedef enum __PowerMgnt_Evt {
+	PWREVT_CHARGE_FULL,					//!< Battery full
+	PWREVT_LOW_BAT,						//!< Battery low
+	PWREVT_OVER_HEAT,					//!< Over heat detected
+	PWREVT_CHARGE_DETECTED				//!< Charge source detected
+} PWREVT;
+
+typedef void (*PWRMGNT_EVTCB)(PowerMgnt *pSelf, PWREVT Evt);
+
 typedef struct __Power_Config {
 	uint32_t DevAddr;					//!< Device address
 	PWR_VOUT_CFG * const pVout;			//!< Pointer to V out settings
@@ -69,8 +80,11 @@ typedef struct __Power_Config {
 	int32_t VEndChrg;					//!< End of charge voltage level in mV
 	uint32_t ChrgCurr;					//!< Charge current in mA
 	uint32_t ChrgTimeout;				//!< Charge timeout in minutes
+	bool bIntEn;						//!< Interrupt enable
+	int IntPrio;						//!< Interrupt priority
 	LED_DEV * const pLed;
 	int NbLed;
+	PWRMGNT_EVTCB pEvtHandler;
 } PWRCFG;
 
 #pragma pack(pop)
@@ -100,6 +114,7 @@ public:
 	 * If charge current is set to zero, charging is turned off
 	 *
 	 * @param	Type : Charging type
+	 * @param	mVoltEoC : End of charge voltage in mV
 	 * @param	mACurr : Charge current limit
 	 * 					0 : Disable charge
 	 *
@@ -107,8 +122,18 @@ public:
 	 */
 	virtual uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr) = 0;
 
+	/**
+	 * @brief	Interrupt handler
+	 *
+	 * Optional implementation to handle interrupt. This is device specific.
+	 *
+	 */
+	virtual void IrqHandler() {}
+
 protected:
 	uint32_t vChrgCurr;		//!< Charge current
+	PWRMGNT_EVTCB vpEvtHandler;
+
 private:
 //	LED_DEV vLed;			//!< Led active level
 };
