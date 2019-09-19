@@ -716,6 +716,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/led_apa102.h</locationURI>
 		</link>
 		<link>
+			<name>include/miscdev/led_ncp5623b.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/led_ncp5623b.h</locationURI>
+		</link>
+		<link>
 			<name>include/miscdev/ledmx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/ledmx.h</locationURI>
@@ -1039,6 +1044,11 @@
 			<name>src/miscdev/led_gpio.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/led_gpio.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/led_ncp5623b.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/led_ncp5623b.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/led_pwm.cpp</name>
