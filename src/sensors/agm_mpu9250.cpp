@@ -57,7 +57,7 @@ bool AgmMpu9250::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 	uint8_t mst = 0;
 
 	Interface(pIntrf);
-	DeviceAddess(DevAddr);
+	DeviceAddress(DevAddr);
 	vbSensorEnabled[0] = vbSensorEnabled[1] = vbSensorEnabled[2] = false;
 
 	if (pTimer != NULL)

@@ -90,7 +90,7 @@ bool AccLsm303c::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * cons
 	uint8_t mst = 0;
 
 	Interface(pIntrf);
-	DeviceAddess(DevAddr);
+	DeviceAddress(DevAddr);
 
 	if (pTimer != NULL)
 	{

@@ -51,7 +51,7 @@ bool AdcLTC2495::Calibrate()
 bool AdcLTC2495::Init(const ADC_CFG &Cfg, DeviceIntrf *pIntrf)
 {
 	Interface(pIntrf);
-	DeviceAddess(Cfg.DevAddr);
+	DeviceAddress(Cfg.DevAddr);
 
 	if (Cfg.NbRefVolt < 1 || Cfg.pRefVolt == NULL)
 		return false;

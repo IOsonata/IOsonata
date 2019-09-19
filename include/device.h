@@ -128,7 +128,7 @@ public:
 	 *
 	 * @param 	Addr : Device's address or zero based chip select index
 	 */
-	virtual void DeviceAddess(uint32_t Addr) { vDevAddr =  Addr; }
+	virtual void DeviceAddress(uint32_t Addr) { vDevAddr =  Addr; }
 
 	/**
 	 * @brief	Get device's map address

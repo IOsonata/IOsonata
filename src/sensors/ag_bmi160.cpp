@@ -619,7 +619,7 @@ bool AgBmi160::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	uint8_t d;
 
 	Interface(pIntrf);
-	DeviceAddess(DevAddr);
+	Device::DeviceAddress(DevAddr);
 
 	if (pTimer != NULL)
 	{

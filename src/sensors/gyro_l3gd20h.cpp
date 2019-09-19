@@ -66,7 +66,7 @@ bool GyroL3gd20h::Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Ti
 	}
 
 	Interface(pIntrf);
-	DeviceAddess(Cfg.DevAddr);
+	DeviceAddress(Cfg.DevAddr);
 
 	Reset();
 
