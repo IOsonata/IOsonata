@@ -440,6 +440,8 @@ public:
 
 	uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr);
 
+	bool Charging();
+
 	/**
 	 * Turns all LED 100% on
 	 */

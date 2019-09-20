@@ -122,6 +122,8 @@ public:
 	 */
 	virtual uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr) = 0;
 
+	virtual bool Charging() { return false; }
+
 	/**
 	 * @brief	Interrupt handler
 	 *

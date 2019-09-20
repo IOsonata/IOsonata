@@ -337,6 +337,26 @@ void PowerMgntAS3701::Level(uint32_t Level)
 	Write8(&regaddr, 1, d);
 }
 
+bool PowerMgntAS3701::Charging()
+{
+	uint8_t regaddr = AS3701_CHARGER_STATUS1_REG;
+	uint8_t flag = Read8(&regaddr, 1);
+
+	regaddr = AS3701_CHARGER_STATUS2_REG;
+	uint8_t flag2 = Read8(&regaddr, 1);
+
+	if (flag2 & AS3701_CHARGER_STATUS2_CHDET)
+	{
+		if (flag & AS3701_CHARGER_STATUS1_EOC)
+		{
+			return false;
+		}
+
+		return true;
+	}
+	return false;
+}
+
 void PowerMgntAS3701::IrqHandler()
 {
 	uint8_t regaddr = AS3701_INTERRUPT_STATUS1_REG;
