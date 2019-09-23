@@ -84,7 +84,7 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 
 #define APP_TIMER_OP_QUEUE_SIZE         10                                           /**< Size of timer operation queues. */
 
-#define SCHED_MAX_EVENT_DATA_SIZE sizeof(app_timer_event_t) /**< Maximum size of scheduler events. Note that scheduler BLE stack events do not contain any data, as the events are being pulled from the stack in the event handler. */
+#define SCHED_MAX_EVENT_DATA_SIZE 		20 /**< Maximum size of scheduler events. Note that scheduler BLE stack events do not contain any data, as the events are being pulled from the stack in the event handler. */
 #ifdef SVCALL_AS_NORMAL_FUNCTION
 #define SCHED_QUEUE_SIZE                20                                         /**< Maximum number of events in the scheduler queue. More is needed in case of Serialization. */
 #else
@@ -291,13 +291,13 @@ void BleAppDisconnect()
     }
 }
 
-void BleAppGapDeviceNameSet(const char* ppDeviceName)
+void BleAppGapDeviceNameSet(const char* pDeviceName)
 {
     uint32_t                err_code;
 
     err_code = sd_ble_gap_device_name_set(&s_gap_conn_mode,
-                                          (const uint8_t *)ppDeviceName,
-                                          strlen( ppDeviceName ));
+                                          (const uint8_t *)pDeviceName,
+                                          strlen( pDeviceName ));
     APP_ERROR_CHECK(err_code);
     ble_advertising_restart_without_whitelist(&g_AdvInstance);
 }
