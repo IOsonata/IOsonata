@@ -228,6 +228,7 @@ void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size);
  * @param	Cmd : Flash command code
  * @param	Addr : Address offset in flash memory to access. -1 if not used
  * @param	DataLen : Lenght of data in bytes to transfer
+ * @param	DummyCycle : Number of dummy clock cycle
  *
  * @return	true - successful
  */

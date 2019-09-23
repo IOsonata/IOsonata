@@ -78,7 +78,16 @@ bool FlashDiskIO::Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
     	SPIDEV *dev = *(SPI*)pInterf;
     	QuadSPISetMemSize(dev, vTotalSize);
     }
-    uint32_t d = ReadId();
+
+    if (Cfg.DevIdSize > 0 && (int)Cfg.DevIdSize > 0)
+    {
+		uint32_t d = ReadId(Cfg.DevIdSize);
+
+		if (d != Cfg.DevId)
+		{
+			return false;
+		}
+    }
 
     if (pCacheBlk && NbCacheBlk > 0)
     {
@@ -88,26 +97,32 @@ bool FlashDiskIO::Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
     return true;
 }
 
-uint32_t FlashDiskIO::ReadId()
+uint32_t FlashDiskIO::ReadId(int Len)
 {
 	uint32_t id = -1;
 
-    if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
-    {
-		vpInterf->StartRx(vDevNo);
-    	QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_READID, -1, 0, 4, 0);
-		vpInterf->RxData((uint8_t*)&id, 4);
-		vpInterf->StopRx();
-    }
-    else
-    {
-    	uint8_t cmd = FLASH_CMD_READID;
+	if (Len > 0)
+	{
+		id = 0;
 
-		vpInterf->StartRx(vDevNo);
-		vpInterf->TxData(&cmd, 1);
-		vpInterf->RxData((uint8_t*)&id, 4);
-		vpInterf->StopRx();
-    }
+		if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+		{
+			vpInterf->StartRx(vDevNo);
+			QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_READID, -1, 0, Len, 0);
+			vpInterf->RxData((uint8_t*)&id, Len);
+			vpInterf->StopRx();
+		}
+		else
+		{
+			uint8_t cmd = FLASH_CMD_READID;
+
+			vpInterf->StartRx(vDevNo);
+			vpInterf->TxData(&cmd, 1);
+			vpInterf->RxData((uint8_t*)&id, Len);
+			vpInterf->StopRx();
+		}
+
+	}
 
     return id;
 }

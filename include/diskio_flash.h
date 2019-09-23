@@ -237,6 +237,8 @@ typedef struct {
     uint16_t	BlkSize;		//!< Block erase size in KBytes
     uint32_t    WriteSize;      //!< Writable page size in bytes
     int         AddrSize;       //!< Address size in bytes
+    uint32_t	DevId;			//!< Device ID, read using FLASH_CMD_READID
+    int			DevIdSize;		//!< Length of device id in bytes to read (max 4 bytes)
     FLASHDISKIOCB pInitCB; 		//!< For custom initialization. Set to NULL if not used
     FLASHDISKIOCB pWaitCB;		//!< If provided, this is called when there are
     							//!< long delays, such as mass erase, to allow application
@@ -346,9 +348,11 @@ public:
     /**
      * @brief	Read Flash ID
      *
+     * @param	Len : Length of id to read in bytes
+     *
      * @return	Flash ID
      */
-    uint32_t ReadId();
+    uint32_t ReadId(int Len);
 
     /**
      * @brief	Read Flash status.
