@@ -42,7 +42,7 @@ static const MAGSENSOR_CFG s_MagCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,//SENSOR_OPMODE_SINGLE,
 	.Freq = 50000,
-	.Precision = 14,
+	.Precision = MAGSENSOR_PRECISION_HIGH,
 };
 
 AgmMpu9250 g_Mpu9250;
