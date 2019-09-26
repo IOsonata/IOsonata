@@ -6949,7 +6949,7 @@
 // <e> USBD_ENABLED - nrf_drv_usbd - Software Component
 //==========================================================
 #ifndef USBD_ENABLED
-#define USBD_ENABLED 0
+#define USBD_ENABLED 1
 #endif
 // <o> USBD_CONFIG_IRQ_PRIORITY  - Interrupt priority
  
@@ -7051,6 +7051,59 @@
 //==========================================================
 
 // <h> nrfx_usbd - USBD peripheral driver
+// <e> NRFX_USBD_ENABLED - nrfx_usbd - USBD peripheral driver
+//==========================================================
+#ifndef NRFX_USBD_ENABLED
+#define NRFX_USBD_ENABLED 1
+#endif
+// <o> NRFX_USBD_CONFIG_IRQ_PRIORITY  - Interrupt priority
+
+// <0=> 0 (highest)
+// <1=> 1
+// <2=> 2
+// <3=> 3
+// <4=> 4
+// <5=> 5
+// <6=> 6
+// <7=> 7
+
+#ifndef NRFX_USBD_CONFIG_IRQ_PRIORITY
+#define NRFX_USBD_CONFIG_IRQ_PRIORITY 6
+#endif
+
+// <o> NRFX_USBD_CONFIG_DMASCHEDULER_MODE  - USBD DMA scheduler working scheme
+
+// <0=> Prioritized access
+// <1=> Round Robin
+
+#ifndef NRFX_USBD_CONFIG_DMASCHEDULER_MODE
+#define NRFX_USBD_CONFIG_DMASCHEDULER_MODE 0
+#endif
+
+// <q> NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST  - Give priority to isochronous transfers
+
+
+// <i> This option gives priority to isochronous transfers.
+// <i> Enabling it assures that isochronous transfers are always processed,
+// <i> even if multiple other transfers are pending.
+// <i> Isochronous endpoints are prioritized before the usbd_dma_scheduler_algorithm
+// <i> function is called, so the option is independent of the algorithm chosen.
+
+#ifndef NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST
+#define NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST 1
+#endif
+
+// <q> NRFX_USBD_CONFIG_ISO_IN_ZLP  - Respond to an IN token on ISO IN endpoint with ZLP when no data is ready
+
+
+// <i> If set, ISO IN endpoint will respond to an IN token with ZLP when no data is ready to be sent.
+// <i> Else, there will be no response.
+
+#ifndef NRFX_USBD_CONFIG_ISO_IN_ZLP
+#define NRFX_USBD_CONFIG_ISO_IN_ZLP 0
+#endif
+
+// </e>
 
 //==========================================================
 // </h> 
@@ -7260,7 +7313,7 @@
 // <e> APP_USBD_ENABLED - app_usbd - USB Device library
 //==========================================================
 #ifndef APP_USBD_ENABLED
-#define APP_USBD_ENABLED 0
+#define APP_USBD_ENABLED 1
 #endif
 // <o> APP_USBD_VID - Vendor ID.  <0x0000-0xFFFF> 
 
@@ -7269,7 +7322,7 @@
 // <i> Vendor ID ordered from USB IF: http://www.usb.org/developers/vendor/
 
 #ifndef APP_USBD_VID
-#define APP_USBD_VID 0
+#define APP_USBD_VID 0x1915
 #endif
 
 // <o> APP_USBD_PID - Product ID.  <0x0000-0xFFFF> 
@@ -7279,7 +7332,7 @@
 // <i> Selected Product ID
 
 #ifndef APP_USBD_PID
-#define APP_USBD_PID 0
+#define APP_USBD_PID 0x520F
 #endif
 
 // <o> APP_USBD_DEVICE_VER_MAJOR - Device version, major part.  <0-99> 
@@ -8425,7 +8478,7 @@
  
 
 #ifndef APP_USBD_CDC_ACM_ENABLED
-#define APP_USBD_CDC_ACM_ENABLED 0
+#define APP_USBD_CDC_ACM_ENABLED 1
 #endif
 
 // <q> APP_USBD_CDC_ACM_ZLP_ON_EPSIZE_WRITE  - Send ZLP on write with same size as endpoint
