@@ -1,0 +1,620 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 50;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		406FC775233A00C400106BCA /* sysstatus.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D2233A00C400106BCA /* sysstatus.h */; };
+		406FC776233A00C400106BCA /* blueio_types.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D3233A00C400106BCA /* blueio_types.h */; };
+		406FC777233A00C400106BCA /* device.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D4233A00C400106BCA /* device.h */; };
+		406FC778233A00C400106BCA /* diskio.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D5233A00C400106BCA /* diskio.h */; };
+		406FC779233A00C400106BCA /* slip_intrf.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D6233A00C400106BCA /* slip_intrf.h */; };
+		406FC77A233A00C400106BCA /* base64.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D7233A00C400106BCA /* base64.h */; };
+		406FC77B233A00C400106BCA /* device bridge.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D8233A00C400106BCA /* device bridge.h */; };
+		406FC77C233A00C400106BCA /* device_intrf.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D9233A00C400106BCA /* device_intrf.h */; };
+		406FC77D233A00C400106BCA /* prbs.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6DA233A00C400106BCA /* prbs.h */; };
+		406FC77E233A00C400106BCA /* sysstatusdef.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6DB233A00C400106BCA /* sysstatusdef.h */; };
+		406FC77F233A00C400106BCA /* pwm.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6DC233A00C400106BCA /* pwm.h */; };
+		406FC780233A00C400106BCA /* crc.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6DD233A00C400106BCA /* crc.h */; };
+		406FC781233A00C400106BCA /* fatfs.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6DE233A00C400106BCA /* fatfs.h */; };
+		406FC782233A00C400106BCA /* md5.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6DF233A00C400106BCA /* md5.h */; };
+		406FC783233A00C400106BCA /* pulse_train.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6E0233A00C400106BCA /* pulse_train.h */; };
+		406FC788233A00C400106BCA /* seep.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6E6233A00C400106BCA /* seep.h */; };
+		406FC789233A00C400106BCA /* sdcard.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6E7233A00C400106BCA /* sdcard.h */; };
+		406FC78A233A00C400106BCA /* usb_def.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6E9233A00C400106BCA /* usb_def.h */; };
+		406FC78B233A00C400106BCA /* usb_cdcdef.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6EA233A00C400106BCA /* usb_cdcdef.h */; };
+		406FC78C233A00C400106BCA /* usb_hiddef.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6EB233A00C400106BCA /* usb_hiddef.h */; };
+		406FC78D233A00C400106BCA /* usb_hidhost.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6EC233A00C400106BCA /* usb_hidhost.h */; };
+		406FC78E233A00C400106BCA /* usb_mscdef.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6ED233A00C400106BCA /* usb_mscdef.h */; };
+		406FC796233A00C400106BCA /* istddef.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6F6233A00C400106BCA /* istddef.h */; };
+		406FC798233A00C400106BCA /* isha256.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6F9233A00C400106BCA /* isha256.h */; };
+		406FC79B233A00C400106BCA /* cfifo.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6FD233A00C400106BCA /* cfifo.h */; };
+		406FC79C233A00C400106BCA /* isha1.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6FE233A00C400106BCA /* isha1.h */; };
+		406FC79D233A00C400106BCA /* pdm.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC700233A00C400106BCA /* pdm.h */; };
+		406FC79E233A00C400106BCA /* uart.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC701233A00C400106BCA /* uart.h */; };
+		406FC79F233A00C400106BCA /* timer.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC702233A00C400106BCA /* timer.h */; };
+		406FC7A0233A00C400106BCA /* spi.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC703233A00C400106BCA /* spi.h */; };
+		406FC7A1233A00C400106BCA /* iopincfg.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC704233A00C400106BCA /* iopincfg.h */; };
+		406FC7A2233A00C400106BCA /* i2c.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC705233A00C400106BCA /* i2c.h */; };
+		406FC7A3233A00C400106BCA /* diskio_flash.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC706233A00C400106BCA /* diskio_flash.h */; };
+		406FC7A4233A00C400106BCA /* convutil.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC707233A00C400106BCA /* convutil.h */; };
+		406FC7A5233A00C400106BCA /* ledmxfont.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC709233A00C400106BCA /* ledmxfont.h */; };
+		406FC7A6233A00C400106BCA /* modem.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC70A233A00C400106BCA /* modem.h */; };
+		406FC7A7233A00C400106BCA /* led_apa102.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC70B233A00C400106BCA /* led_apa102.h */; };
+		406FC7A8233A00C400106BCA /* ledmx.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC70C233A00C400106BCA /* ledmx.h */; };
+		406FC7A9233A00C400106BCA /* led.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC70D233A00C400106BCA /* led.h */; };
+		406FC7AA233A00C400106BCA /* led_ncp5623b.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC70E233A00C400106BCA /* led_ncp5623b.h */; };
+		406FC7AB233A00C400106BCA /* buzzer.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC70F233A00C400106BCA /* buzzer.h */; };
+		406FC7AC233A00C400106BCA /* tca6424a.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC710233A00C400106BCA /* tca6424a.h */; };
+		406FC7AD233A00C400106BCA /* utf8cvt.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC711233A00C400106BCA /* utf8cvt.h */; };
+		406FC7B0233A00C400106BCA /* intelhex.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC715233A00C400106BCA /* intelhex.h */; };
+		406FC7B1233A00C400106BCA /* stddev.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC716233A00C400106BCA /* stddev.h */; };
+		406FC7B2233A00C400106BCA /* utf8.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC717233A00C400106BCA /* utf8.h */; };
+		406FC7B3233A00C400106BCA /* isha256.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC719233A00C400106BCA /* isha256.c */; };
+		406FC7B4233A00C400106BCA /* device_intrf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC71A233A00C400106BCA /* device_intrf.cpp */; };
+		406FC7C7233A00C400106BCA /* isha1.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC72E233A00C400106BCA /* isha1.c */; };
+		406FC7C9233A00C400106BCA /* cfifo.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC730233A00C400106BCA /* cfifo.c */; };
+		406FC7CD233A00C400106BCA /* diskio_impl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC734233A00C400106BCA /* diskio_impl.cpp */; };
+		406FC7CE233A00C400106BCA /* adc_ltc2495.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC736233A00C400106BCA /* adc_ltc2495.cpp */; };
+		406FC7CF233A00C400106BCA /* device.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC737233A00C400106BCA /* device.cpp */; };
+		406FC7D0233A00C400106BCA /* uart_retarget.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC738233A00C400106BCA /* uart_retarget.c */; };
+		406FC7D1233A00C400106BCA /* sbuffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC739233A00C400106BCA /* sbuffer.c */; };
+		406FC7D2233A00C400106BCA /* utf8.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC73A233A00C400106BCA /* utf8.c */; };
+		406FC7D3233A00C400106BCA /* stddev.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC73B233A00C400106BCA /* stddev.c */; };
+		406FC7D5233A00C400106BCA /* intelhex.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC73D233A00C400106BCA /* intelhex.c */; };
+		406FC7DB233A00C400106BCA /* usb_hidhost.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC744233A00C400106BCA /* usb_hidhost.cpp */; };
+		406FC7DC233A00C400106BCA /* prbs.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC745233A00C400106BCA /* prbs.c */; };
+		406FC7DD233A00C400106BCA /* base64.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC746233A00C400106BCA /* base64.c */; };
+		406FC7DF233A00C400106BCA /* timer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC749233A00C400106BCA /* timer.cpp */; };
+		406FC7E0233A00C400106BCA /* spi.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC74A233A00C400106BCA /* spi.cpp */; };
+		406FC7E1233A00C400106BCA /* uart.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC74B233A00C400106BCA /* uart.c */; };
+		406FC7EC233A00C400106BCA /* slip_intrf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC757233A00C400106BCA /* slip_intrf.cpp */; };
+		406FC7ED233A00C400106BCA /* crc.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC758233A00C400106BCA /* crc.c */; };
+		406FC7F0233A00C400106BCA /* utf8cvt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC75C233A00C400106BCA /* utf8cvt.cpp */; };
+		406FC7FD233A013E00106BCA /* usb_hidhost_impl.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC7FB233A013E00106BCA /* usb_hidhost_impl.h */; };
+		406FC7FE233A013E00106BCA /* uart_osx.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC7FC233A013E00106BCA /* uart_osx.h */; };
+		406FC801233A016300106BCA /* usb_hidhost_impl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC7FF233A016300106BCA /* usb_hidhost_impl.cpp */; };
+		406FC802233A016300106BCA /* uart_osx.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC800233A016300106BCA /* uart_osx.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		406FC66D2339FDA800106BCA /* libIOsonata_OSX.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libIOsonata_OSX.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		406FC6D2233A00C400106BCA /* sysstatus.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sysstatus.h; sourceTree = "<group>"; };
+		406FC6D3233A00C400106BCA /* blueio_types.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = blueio_types.h; sourceTree = "<group>"; };
+		406FC6D4233A00C400106BCA /* device.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = device.h; sourceTree = "<group>"; };
+		406FC6D5233A00C400106BCA /* diskio.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = diskio.h; sourceTree = "<group>"; };
+		406FC6D6233A00C400106BCA /* slip_intrf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = slip_intrf.h; sourceTree = "<group>"; };
+		406FC6D7233A00C400106BCA /* base64.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = base64.h; sourceTree = "<group>"; };
+		406FC6D8233A00C400106BCA /* device bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "device bridge.h"; sourceTree = "<group>"; };
+		406FC6D9233A00C400106BCA /* device_intrf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = device_intrf.h; sourceTree = "<group>"; };
+		406FC6DA233A00C400106BCA /* prbs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = prbs.h; sourceTree = "<group>"; };
+		406FC6DB233A00C400106BCA /* sysstatusdef.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sysstatusdef.h; sourceTree = "<group>"; };
+		406FC6DC233A00C400106BCA /* pwm.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pwm.h; sourceTree = "<group>"; };
+		406FC6DD233A00C400106BCA /* crc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = crc.h; sourceTree = "<group>"; };
+		406FC6DE233A00C400106BCA /* fatfs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = fatfs.h; sourceTree = "<group>"; };
+		406FC6DF233A00C400106BCA /* md5.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = md5.h; sourceTree = "<group>"; };
+		406FC6E0233A00C400106BCA /* pulse_train.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pulse_train.h; sourceTree = "<group>"; };
+		406FC6E6233A00C400106BCA /* seep.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = seep.h; sourceTree = "<group>"; };
+		406FC6E7233A00C400106BCA /* sdcard.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sdcard.h; sourceTree = "<group>"; };
+		406FC6E9233A00C400106BCA /* usb_def.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = usb_def.h; sourceTree = "<group>"; };
+		406FC6EA233A00C400106BCA /* usb_cdcdef.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = usb_cdcdef.h; sourceTree = "<group>"; };
+		406FC6EB233A00C400106BCA /* usb_hiddef.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = usb_hiddef.h; sourceTree = "<group>"; };
+		406FC6EC233A00C400106BCA /* usb_hidhost.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = usb_hidhost.h; sourceTree = "<group>"; };
+		406FC6ED233A00C400106BCA /* usb_mscdef.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = usb_mscdef.h; sourceTree = "<group>"; };
+		406FC6F6233A00C400106BCA /* istddef.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = istddef.h; sourceTree = "<group>"; };
+		406FC6F9233A00C400106BCA /* isha256.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = isha256.h; sourceTree = "<group>"; };
+		406FC6FD233A00C400106BCA /* cfifo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cfifo.h; sourceTree = "<group>"; };
+		406FC6FE233A00C400106BCA /* isha1.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = isha1.h; sourceTree = "<group>"; };
+		406FC700233A00C400106BCA /* pdm.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pdm.h; sourceTree = "<group>"; };
+		406FC701233A00C400106BCA /* uart.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uart.h; sourceTree = "<group>"; };
+		406FC702233A00C400106BCA /* timer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = timer.h; sourceTree = "<group>"; };
+		406FC703233A00C400106BCA /* spi.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = spi.h; sourceTree = "<group>"; };
+		406FC704233A00C400106BCA /* iopincfg.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = iopincfg.h; sourceTree = "<group>"; };
+		406FC705233A00C400106BCA /* i2c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = i2c.h; sourceTree = "<group>"; };
+		406FC706233A00C400106BCA /* diskio_flash.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = diskio_flash.h; sourceTree = "<group>"; };
+		406FC707233A00C400106BCA /* convutil.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = convutil.h; sourceTree = "<group>"; };
+		406FC709233A00C400106BCA /* ledmxfont.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ledmxfont.h; sourceTree = "<group>"; };
+		406FC70A233A00C400106BCA /* modem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = modem.h; sourceTree = "<group>"; };
+		406FC70B233A00C400106BCA /* led_apa102.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = led_apa102.h; sourceTree = "<group>"; };
+		406FC70C233A00C400106BCA /* ledmx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ledmx.h; sourceTree = "<group>"; };
+		406FC70D233A00C400106BCA /* led.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = led.h; sourceTree = "<group>"; };
+		406FC70E233A00C400106BCA /* led_ncp5623b.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = led_ncp5623b.h; sourceTree = "<group>"; };
+		406FC70F233A00C400106BCA /* buzzer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = buzzer.h; sourceTree = "<group>"; };
+		406FC710233A00C400106BCA /* tca6424a.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tca6424a.h; sourceTree = "<group>"; };
+		406FC711233A00C400106BCA /* utf8cvt.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = utf8cvt.h; sourceTree = "<group>"; };
+		406FC715233A00C400106BCA /* intelhex.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = intelhex.h; sourceTree = "<group>"; };
+		406FC716233A00C400106BCA /* stddev.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = stddev.h; sourceTree = "<group>"; };
+		406FC717233A00C400106BCA /* utf8.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = utf8.h; sourceTree = "<group>"; };
+		406FC719233A00C400106BCA /* isha256.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = isha256.c; sourceTree = "<group>"; };
+		406FC71A233A00C400106BCA /* device_intrf.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = device_intrf.cpp; sourceTree = "<group>"; };
+		406FC72E233A00C400106BCA /* isha1.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = isha1.c; sourceTree = "<group>"; };
+		406FC730233A00C400106BCA /* cfifo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cfifo.c; sourceTree = "<group>"; };
+		406FC734233A00C400106BCA /* diskio_impl.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = diskio_impl.cpp; sourceTree = "<group>"; };
+		406FC736233A00C400106BCA /* adc_ltc2495.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = adc_ltc2495.cpp; sourceTree = "<group>"; };
+		406FC737233A00C400106BCA /* device.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = device.cpp; sourceTree = "<group>"; };
+		406FC738233A00C400106BCA /* uart_retarget.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = uart_retarget.c; sourceTree = "<group>"; };
+		406FC739233A00C400106BCA /* sbuffer.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sbuffer.c; sourceTree = "<group>"; };
+		406FC73A233A00C400106BCA /* utf8.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = utf8.c; sourceTree = "<group>"; };
+		406FC73B233A00C400106BCA /* stddev.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stddev.c; sourceTree = "<group>"; };
+		406FC73D233A00C400106BCA /* intelhex.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = intelhex.c; sourceTree = "<group>"; };
+		406FC744233A00C400106BCA /* usb_hidhost.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = usb_hidhost.cpp; sourceTree = "<group>"; };
+		406FC745233A00C400106BCA /* prbs.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prbs.c; sourceTree = "<group>"; };
+		406FC746233A00C400106BCA /* base64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = base64.c; sourceTree = "<group>"; };
+		406FC749233A00C400106BCA /* timer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = timer.cpp; sourceTree = "<group>"; };
+		406FC74A233A00C400106BCA /* spi.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = spi.cpp; sourceTree = "<group>"; };
+		406FC74B233A00C400106BCA /* uart.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = uart.c; sourceTree = "<group>"; };
+		406FC757233A00C400106BCA /* slip_intrf.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = slip_intrf.cpp; sourceTree = "<group>"; };
+		406FC758233A00C400106BCA /* crc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = crc.c; sourceTree = "<group>"; };
+		406FC75C233A00C400106BCA /* utf8cvt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = utf8cvt.cpp; sourceTree = "<group>"; };
+		406FC7FB233A013E00106BCA /* usb_hidhost_impl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = usb_hidhost_impl.h; path = include/usb_hidhost_impl.h; sourceTree = SOURCE_ROOT; };
+		406FC7FC233A013E00106BCA /* uart_osx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = uart_osx.h; path = include/uart_osx.h; sourceTree = SOURCE_ROOT; };
+		406FC7FF233A016300106BCA /* usb_hidhost_impl.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = usb_hidhost_impl.cpp; path = src/usb_hidhost_impl.cpp; sourceTree = SOURCE_ROOT; };
+		406FC800233A016300106BCA /* uart_osx.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = uart_osx.cpp; path = src/uart_osx.cpp; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		406FC66B2339FDA800106BCA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		406FC6642339FDA800106BCA = {
+			isa = PBXGroup;
+			children = (
+				406FC6B8233A00C400106BCA /* include */,
+				406FC718233A00C400106BCA /* src */,
+				406FC66E2339FDA800106BCA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		406FC66E2339FDA800106BCA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				406FC66D2339FDA800106BCA /* libIOsonata_OSX.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		406FC6B8233A00C400106BCA /* include */ = {
+			isa = PBXGroup;
+			children = (
+				406FC7FC233A013E00106BCA /* uart_osx.h */,
+				406FC7FB233A013E00106BCA /* usb_hidhost_impl.h */,
+				406FC6D2233A00C400106BCA /* sysstatus.h */,
+				406FC6D3233A00C400106BCA /* blueio_types.h */,
+				406FC6D4233A00C400106BCA /* device.h */,
+				406FC6D5233A00C400106BCA /* diskio.h */,
+				406FC6D6233A00C400106BCA /* slip_intrf.h */,
+				406FC6D7233A00C400106BCA /* base64.h */,
+				406FC6D8233A00C400106BCA /* device bridge.h */,
+				406FC6D9233A00C400106BCA /* device_intrf.h */,
+				406FC6DA233A00C400106BCA /* prbs.h */,
+				406FC6DB233A00C400106BCA /* sysstatusdef.h */,
+				406FC6DC233A00C400106BCA /* pwm.h */,
+				406FC6DD233A00C400106BCA /* crc.h */,
+				406FC6DE233A00C400106BCA /* fatfs.h */,
+				406FC6DF233A00C400106BCA /* md5.h */,
+				406FC6E0233A00C400106BCA /* pulse_train.h */,
+				406FC6E6233A00C400106BCA /* seep.h */,
+				406FC6E7233A00C400106BCA /* sdcard.h */,
+				406FC6E8233A00C400106BCA /* usb */,
+				406FC6F6233A00C400106BCA /* istddef.h */,
+				406FC6F9233A00C400106BCA /* isha256.h */,
+				406FC6FD233A00C400106BCA /* cfifo.h */,
+				406FC6FE233A00C400106BCA /* isha1.h */,
+				406FC6FF233A00C400106BCA /* coredev */,
+				406FC706233A00C400106BCA /* diskio_flash.h */,
+				406FC707233A00C400106BCA /* convutil.h */,
+				406FC708233A00C400106BCA /* miscdev */,
+				406FC711233A00C400106BCA /* utf8cvt.h */,
+				406FC715233A00C400106BCA /* intelhex.h */,
+				406FC716233A00C400106BCA /* stddev.h */,
+				406FC717233A00C400106BCA /* utf8.h */,
+			);
+			name = include;
+			path = ../../include;
+			sourceTree = "<group>";
+		};
+		406FC6E8233A00C400106BCA /* usb */ = {
+			isa = PBXGroup;
+			children = (
+				406FC6E9233A00C400106BCA /* usb_def.h */,
+				406FC6EA233A00C400106BCA /* usb_cdcdef.h */,
+				406FC6EB233A00C400106BCA /* usb_hiddef.h */,
+				406FC6EC233A00C400106BCA /* usb_hidhost.h */,
+				406FC6ED233A00C400106BCA /* usb_mscdef.h */,
+			);
+			path = usb;
+			sourceTree = "<group>";
+		};
+		406FC6FF233A00C400106BCA /* coredev */ = {
+			isa = PBXGroup;
+			children = (
+				406FC700233A00C400106BCA /* pdm.h */,
+				406FC701233A00C400106BCA /* uart.h */,
+				406FC702233A00C400106BCA /* timer.h */,
+				406FC703233A00C400106BCA /* spi.h */,
+				406FC704233A00C400106BCA /* iopincfg.h */,
+				406FC705233A00C400106BCA /* i2c.h */,
+			);
+			path = coredev;
+			sourceTree = "<group>";
+		};
+		406FC708233A00C400106BCA /* miscdev */ = {
+			isa = PBXGroup;
+			children = (
+				406FC709233A00C400106BCA /* ledmxfont.h */,
+				406FC70A233A00C400106BCA /* modem.h */,
+				406FC70B233A00C400106BCA /* led_apa102.h */,
+				406FC70C233A00C400106BCA /* ledmx.h */,
+				406FC70D233A00C400106BCA /* led.h */,
+				406FC70E233A00C400106BCA /* led_ncp5623b.h */,
+				406FC70F233A00C400106BCA /* buzzer.h */,
+				406FC710233A00C400106BCA /* tca6424a.h */,
+			);
+			path = miscdev;
+			sourceTree = "<group>";
+		};
+		406FC718233A00C400106BCA /* src */ = {
+			isa = PBXGroup;
+			children = (
+				406FC800233A016300106BCA /* uart_osx.cpp */,
+				406FC7FF233A016300106BCA /* usb_hidhost_impl.cpp */,
+				406FC719233A00C400106BCA /* isha256.c */,
+				406FC71A233A00C400106BCA /* device_intrf.cpp */,
+				406FC72E233A00C400106BCA /* isha1.c */,
+				406FC730233A00C400106BCA /* cfifo.c */,
+				406FC734233A00C400106BCA /* diskio_impl.cpp */,
+				406FC735233A00C400106BCA /* converters */,
+				406FC737233A00C400106BCA /* device.cpp */,
+				406FC738233A00C400106BCA /* uart_retarget.c */,
+				406FC739233A00C400106BCA /* sbuffer.c */,
+				406FC73A233A00C400106BCA /* utf8.c */,
+				406FC73B233A00C400106BCA /* stddev.c */,
+				406FC73D233A00C400106BCA /* intelhex.c */,
+				406FC744233A00C400106BCA /* usb_hidhost.cpp */,
+				406FC745233A00C400106BCA /* prbs.c */,
+				406FC746233A00C400106BCA /* base64.c */,
+				406FC747233A00C400106BCA /* coredev */,
+				406FC757233A00C400106BCA /* slip_intrf.cpp */,
+				406FC758233A00C400106BCA /* crc.c */,
+				406FC75C233A00C400106BCA /* utf8cvt.cpp */,
+			);
+			name = src;
+			path = ../../src;
+			sourceTree = "<group>";
+		};
+		406FC735233A00C400106BCA /* converters */ = {
+			isa = PBXGroup;
+			children = (
+				406FC736233A00C400106BCA /* adc_ltc2495.cpp */,
+			);
+			path = converters;
+			sourceTree = "<group>";
+		};
+		406FC747233A00C400106BCA /* coredev */ = {
+			isa = PBXGroup;
+			children = (
+				406FC749233A00C400106BCA /* timer.cpp */,
+				406FC74A233A00C400106BCA /* spi.cpp */,
+				406FC74B233A00C400106BCA /* uart.c */,
+			);
+			path = coredev;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		406FC6692339FDA800106BCA /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				406FC7AB233A00C400106BCA /* buzzer.h in Headers */,
+				406FC7B0233A00C400106BCA /* intelhex.h in Headers */,
+				406FC78A233A00C400106BCA /* usb_def.h in Headers */,
+				406FC7A8233A00C400106BCA /* ledmx.h in Headers */,
+				406FC781233A00C400106BCA /* fatfs.h in Headers */,
+				406FC77B233A00C400106BCA /* device bridge.h in Headers */,
+				406FC77A233A00C400106BCA /* base64.h in Headers */,
+				406FC777233A00C400106BCA /* device.h in Headers */,
+				406FC79F233A00C400106BCA /* timer.h in Headers */,
+				406FC798233A00C400106BCA /* isha256.h in Headers */,
+				406FC775233A00C400106BCA /* sysstatus.h in Headers */,
+				406FC7A5233A00C400106BCA /* ledmxfont.h in Headers */,
+				406FC7B2233A00C400106BCA /* utf8.h in Headers */,
+				406FC7A2233A00C400106BCA /* i2c.h in Headers */,
+				406FC78D233A00C400106BCA /* usb_hidhost.h in Headers */,
+				406FC78C233A00C400106BCA /* usb_hiddef.h in Headers */,
+				406FC7FE233A013E00106BCA /* uart_osx.h in Headers */,
+				406FC789233A00C400106BCA /* sdcard.h in Headers */,
+				406FC7A3233A00C400106BCA /* diskio_flash.h in Headers */,
+				406FC7A6233A00C400106BCA /* modem.h in Headers */,
+				406FC780233A00C400106BCA /* crc.h in Headers */,
+				406FC779233A00C400106BCA /* slip_intrf.h in Headers */,
+				406FC7B1233A00C400106BCA /* stddev.h in Headers */,
+				406FC7A9233A00C400106BCA /* led.h in Headers */,
+				406FC79B233A00C400106BCA /* cfifo.h in Headers */,
+				406FC78E233A00C400106BCA /* usb_mscdef.h in Headers */,
+				406FC79D233A00C400106BCA /* pdm.h in Headers */,
+				406FC7A1233A00C400106BCA /* iopincfg.h in Headers */,
+				406FC77E233A00C400106BCA /* sysstatusdef.h in Headers */,
+				406FC79E233A00C400106BCA /* uart.h in Headers */,
+				406FC7AD233A00C400106BCA /* utf8cvt.h in Headers */,
+				406FC77F233A00C400106BCA /* pwm.h in Headers */,
+				406FC7AA233A00C400106BCA /* led_ncp5623b.h in Headers */,
+				406FC77C233A00C400106BCA /* device_intrf.h in Headers */,
+				406FC7AC233A00C400106BCA /* tca6424a.h in Headers */,
+				406FC7A0233A00C400106BCA /* spi.h in Headers */,
+				406FC783233A00C400106BCA /* pulse_train.h in Headers */,
+				406FC788233A00C400106BCA /* seep.h in Headers */,
+				406FC79C233A00C400106BCA /* isha1.h in Headers */,
+				406FC796233A00C400106BCA /* istddef.h in Headers */,
+				406FC7A7233A00C400106BCA /* led_apa102.h in Headers */,
+				406FC78B233A00C400106BCA /* usb_cdcdef.h in Headers */,
+				406FC778233A00C400106BCA /* diskio.h in Headers */,
+				406FC776233A00C400106BCA /* blueio_types.h in Headers */,
+				406FC77D233A00C400106BCA /* prbs.h in Headers */,
+				406FC7A4233A00C400106BCA /* convutil.h in Headers */,
+				406FC7FD233A013E00106BCA /* usb_hidhost_impl.h in Headers */,
+				406FC782233A00C400106BCA /* md5.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		406FC66C2339FDA800106BCA /* IOsonata_OSX */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 406FC6712339FDA800106BCA /* Build configuration list for PBXNativeTarget "IOsonata_OSX" */;
+			buildPhases = (
+				406FC6692339FDA800106BCA /* Headers */,
+				406FC66A2339FDA800106BCA /* Sources */,
+				406FC66B2339FDA800106BCA /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = IOsonata_OSX;
+			productName = IOsonata_OSX;
+			productReference = 406FC66D2339FDA800106BCA /* libIOsonata_OSX.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		406FC6652339FDA800106BCA /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1100;
+				ORGANIZATIONNAME = "Nguyen Hoan Hoang";
+				TargetAttributes = {
+					406FC66C2339FDA800106BCA = {
+						CreatedOnToolsVersion = 11.0;
+					};
+				};
+			};
+			buildConfigurationList = 406FC6682339FDA800106BCA /* Build configuration list for PBXProject "IOsonata_OSX" */;
+			compatibilityVersion = "Xcode 9.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 406FC6642339FDA800106BCA;
+			productRefGroup = 406FC66E2339FDA800106BCA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				406FC66C2339FDA800106BCA /* IOsonata_OSX */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		406FC66A2339FDA800106BCA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				406FC7DC233A00C400106BCA /* prbs.c in Sources */,
+				406FC7ED233A00C400106BCA /* crc.c in Sources */,
+				406FC7CF233A00C400106BCA /* device.cpp in Sources */,
+				406FC7C7233A00C400106BCA /* isha1.c in Sources */,
+				406FC7E1233A00C400106BCA /* uart.c in Sources */,
+				406FC7E0233A00C400106BCA /* spi.cpp in Sources */,
+				406FC7B3233A00C400106BCA /* isha256.c in Sources */,
+				406FC7CE233A00C400106BCA /* adc_ltc2495.cpp in Sources */,
+				406FC7EC233A00C400106BCA /* slip_intrf.cpp in Sources */,
+				406FC7F0233A00C400106BCA /* utf8cvt.cpp in Sources */,
+				406FC7D5233A00C400106BCA /* intelhex.c in Sources */,
+				406FC801233A016300106BCA /* usb_hidhost_impl.cpp in Sources */,
+				406FC7B4233A00C400106BCA /* device_intrf.cpp in Sources */,
+				406FC7DF233A00C400106BCA /* timer.cpp in Sources */,
+				406FC7CD233A00C400106BCA /* diskio_impl.cpp in Sources */,
+				406FC7D3233A00C400106BCA /* stddev.c in Sources */,
+				406FC7DB233A00C400106BCA /* usb_hidhost.cpp in Sources */,
+				406FC802233A016300106BCA /* uart_osx.cpp in Sources */,
+				406FC7D1233A00C400106BCA /* sbuffer.c in Sources */,
+				406FC7DD233A00C400106BCA /* base64.c in Sources */,
+				406FC7C9233A00C400106BCA /* cfifo.c in Sources */,
+				406FC7D2233A00C400106BCA /* utf8.c in Sources */,
+				406FC7D0233A00C400106BCA /* uart_retarget.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		406FC66F2339FDA800106BCA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		406FC6702339FDA800106BCA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		406FC6722339FDA800106BCA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				USER_HEADER_SEARCH_PATHS = (
+					../../include,
+					../include,
+					include,
+				);
+			};
+			name = Debug;
+		};
+		406FC6732339FDA800106BCA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				USER_HEADER_SEARCH_PATHS = (
+					../../include,
+					../include,
+					include,
+				);
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		406FC6682339FDA800106BCA /* Build configuration list for PBXProject "IOsonata_OSX" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				406FC66F2339FDA800106BCA /* Debug */,
+				406FC6702339FDA800106BCA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		406FC6712339FDA800106BCA /* Build configuration list for PBXNativeTarget "IOsonata_OSX" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				406FC6722339FDA800106BCA /* Debug */,
+				406FC6732339FDA800106BCA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 406FC6652339FDA800106BCA /* Project object */;
+}
