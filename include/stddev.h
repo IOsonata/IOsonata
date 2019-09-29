@@ -80,7 +80,7 @@ extern "C" {
  * @brief	Install block device into stdio syscall
  *
  * @param	pDev 	: Pointer to standard device descriptor structure
- * @param	MapIp	: Mapping id
+ * @param	MapId	: Mapping id
  * 						STDIN_FILENO 	- to replace stdin
  * 						STDOUT_FILENO 	- to replace stdout
  * 						STDERR_FILENO	- to replace stderr

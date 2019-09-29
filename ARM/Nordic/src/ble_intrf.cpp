@@ -203,7 +203,6 @@ bool BleIntrfNotify(BLEINTRF *pIntrf)
     if (pIntrf->TransBuffLen > 0)
     {
         res = BleSrvcCharNotify(pIntrf->pBleSrv, pIntrf->TxCharIdx, pIntrf->TransBuff, pIntrf->TransBuffLen);
-        BleSrvcCharSetValue(pIntrf->pBleSrv, pIntrf->TxCharIdx, pIntrf->TransBuff, pIntrf->TransBuffLen);
     }
     if (res != NRF_ERROR_RESOURCES)
     {
@@ -219,7 +218,6 @@ bool BleIntrfNotify(BLEINTRF *pIntrf)
                     pIntrf->TransBuffLen = pkt->Len;
                     break;
                 }
-                BleSrvcCharSetValue(pIntrf->pBleSrv, pIntrf->TxCharIdx, pIntrf->TransBuff, pIntrf->TransBuffLen);
             }
         } while (pkt != NULL);
     }
