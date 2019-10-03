@@ -93,7 +93,7 @@ SOFTWARE.
 #define H3LIS331DL_CTRL_REG4_FS_200G							(1<<4)	//!< 200G
 #define H3LIS331DL_CTRL_REG4_FS_400G							(3<<4)	//!< 400G
 #define H3LIS331DL_CTRL_REG4_BLE_BIG							(1<<6)	//!< Big endian MSB first
-#define H3LIS331DL_CTRL_REG4_BDU_SINGLE							(1<<7)	//!< Block data update osingle
+#define H3LIS331DL_CTRL_REG4_BDU_SINGLE							(1<<7)	//!< Block data update single
 
 #define H3LIS331DL_CTRL_REG5_REG			0x24
 
@@ -191,12 +191,33 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	virtual uint16_t Scale(uint16_t Value) { return 0; }			// Accel
+	bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+
+	uint16_t Scale(uint16_t Value);
+	/**
+	 * @brief	Set sampling frequency.
+	 *
+	 * The sampling frequency is relevant only in continuous mode.
+	 *
+	 * @return	Frequency in mHz (milliHerz)
+	 */
+	uint32_t SamplingFrequency(uint32_t Freq);
+
+	/**
+	 * @brief	Set and enable filter cutoff frequency
+	 *
+	 * Optional implementation can override this to implement filtering supported by the device
+	 *
+	 * @param	Freq : Filter frequency in mHz
+	 *
+	 * @return	Actual frequency in mHz
+	 */
+	uint32_t FilterFreq(uint32_t Freq);
 
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
+	void IntHandler();
 
 	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
@@ -205,44 +226,7 @@ public:
 
 	virtual bool StartSampling() { return false; }
 
-	/**
-	 * @brief	Read device's register/memory block.
-	 *
-	 * This default implementation sets bit 7 of the Cmd/Addr byte for SPI read access as most
-	 * devices work this way on SPI interface. Overwrite this implementation if SPI access is different
-	 *
-	 * @param 	pCmdAddr 	: Buffer containing command or address to be written
-	 * 						  prior reading data back
-	 * @param	CmdAddrLen 	: Command buffer size
-	 * @param	pBuff		: Data buffer container
-	 * @param	BuffLen		: Data buffer size
-	 *
-	 * @return	Actual number of bytes read
-	 */
-	//virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-
-	/**
-	 * @brief	Write to device's register/memory block
-	 *
-	 * This default implementation clears bit 7 of the Cmd/Addr byte for SPI write access as most
-	 * devices work this way on SPI interface.  Overwrite this implementation if SPI access is different
-	 *
-	 * @param 	pCmdAddr 	: Buffer containing command or address to be written
-	 * 						  prior writing data back
-	 * @param	CmdAddrLen 	: Command buffer size
-	 * @param	pData		: Data buffer to be written to the device
-	 * @param	DataLen		: Size of data
-	 *
-	 * @return	Actual number of bytes written
-	 */
-	//virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
-
 private:
-	// Default base initialization. Does detection and set default config for all sensor.
-	// All sensor init must call this first prio to initializing itself
-	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
-
-	bool vbInitialized;
 };
 
 #endif // __ACCEL_H3LIS331DL_H__
