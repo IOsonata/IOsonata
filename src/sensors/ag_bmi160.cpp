@@ -640,7 +640,7 @@ bool AgBmi160::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	DeviceID(d);
 	Valid(true);
 
-	msDelay(10);
+	msDelay(50);
 
 	regaddr = BMI160_CMD;
 	Write8(&regaddr, 1, BMI160_CMD_FIFO_FLUSH);
