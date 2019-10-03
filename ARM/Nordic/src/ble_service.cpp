@@ -114,12 +114,22 @@ void BleSrvcEvtHandler(BLESRVC *pSrvc, ble_evt_t *pBleEvt)
 						//printf("Long Write\r\n");
 						GATLWRHDR *hdr = (GATLWRHDR *)pSrvc->pLongWrBuff;
 					    uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
-						while (hdr->Handle == pSrvc->pCharArray[i].Hdl.value_handle)
+						if (hdr->Handle == pSrvc->pCharArray[i].Hdl.value_handle)
 					    {
+							bool done = false;
+							GATLWRHDR hdr1;
+							uint8_t *p1 = p + hdr->Len;
+							memcpy(&hdr1, p1, sizeof(GATLWRHDR));
+
+							while (hdr1.Handle == hdr->Handle)
+							{
+								p1 += sizeof(GATLWRHDR);
+								memcpy(&p[hdr->Len], p1, pSrvc->LongWrBuffSize - hdr->Len - sizeof(GATLWRHDR));
+								hdr->Len += hdr1.Len;
+								p1 = p + hdr->Len;
+								memcpy(&hdr1, p1, sizeof(GATLWRHDR));
+							}
 							pSrvc->pCharArray[i].WrCB(pSrvc, p, hdr->Offset, hdr->Len);
-							p += hdr->Len;
-							hdr = (GATLWRHDR*)p;
-							p += sizeof(GATLWRHDR);
 					    }
 					}
 					else
