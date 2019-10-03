@@ -90,6 +90,18 @@ uint32_t BleSrvcCharSetValue(BLESRVC *pSrvc, int Idx, uint8_t *pData, uint16_t D
     return err_code;
 }
 
+void GatherLongWrBuff(GATLWRHDR *pHdr)
+{
+	uint8_t *p = (uint8_t*)pHdr + pHdr->Len + sizeof(GATLWRHDR);
+	GATLWRHDR *hdr = (GATLWRHDR*)p;
+	if (hdr->Handle == pHdr->Handle)
+	{
+		GatherLongWrBuff(hdr);
+		pHdr->Len += hdr->Len;
+		memcpy(p, p + sizeof(GATLWRHDR), hdr->Len);
+	}
+}
+
 void BleSrvcEvtHandler(BLESRVC *pSrvc, ble_evt_t *pBleEvt)
 {
     switch (pBleEvt->header.evt_id)
@@ -116,6 +128,9 @@ void BleSrvcEvtHandler(BLESRVC *pSrvc, ble_evt_t *pBleEvt)
 					    uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
 						if (hdr->Handle == pSrvc->pCharArray[i].Hdl.value_handle)
 					    {
+							GatherLongWrBuff(hdr);
+							pSrvc->pCharArray[i].WrCB(pSrvc, p, hdr->Offset, hdr->Len);
+#if 0
 							bool done = false;
 							GATLWRHDR hdr1;
 							uint8_t *p1 = p + hdr->Len;
@@ -130,6 +145,7 @@ void BleSrvcEvtHandler(BLESRVC *pSrvc, ble_evt_t *pBleEvt)
 								memcpy(&hdr1, p1, sizeof(GATLWRHDR));
 							}
 							pSrvc->pCharArray[i].WrCB(pSrvc, p, hdr->Offset, hdr->Len);
+#endif
 					    }
 					}
 					else
