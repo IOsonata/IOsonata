@@ -361,6 +361,25 @@ public:
      */
     uint8_t ReadStatus();
 
+    /**
+     * @brief	Get the sector erase size
+     *
+     * The return value is normally set via configuration structure at init
+     *
+     * @return	Size in KBytes
+     */
+    uint16_t SectEraseSize() { return vSectSize; }
+
+    /**
+     * @brief	Get the block erase size
+     *
+     * The return value is normally set via configuration structure at init
+     *
+     * @return	Size in KBytes
+     */
+    uint16_t BlockEraseSize() { return vBlkSize; }
+
+
 protected:
 
     /**
