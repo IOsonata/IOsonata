@@ -80,8 +80,6 @@ bool AccelH3lis331dl::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntr
 	regaddr = H3LIS331DL_WHO_AM_I_REG;
 	d = Read8(&regaddr, 1);
 
-	printf("Chip Id %x\r\n", d);
-
 	if (d != H3LIS331DL_WHO_AM_I_ID)
 	{
 		return false;
@@ -102,14 +100,9 @@ bool AccelH3lis331dl::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntr
 
 	vOpMode = Cfg.OpMode;
 
-	regaddr = H3LIS331DL_STATUS_REG_REG;
-	d = Read8(&regaddr, 1);
-	printf("Status0 %x\n", d);
-
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
 	FilterFreq(Cfg.FltrFreq);
-
 
 	if (Cfg.bInter)
 	{
@@ -133,17 +126,6 @@ bool AccelH3lis331dl::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntr
 	regaddr = H3LIS331DL_CTRL_REG1_REG;
 	d = Read8(&regaddr, 1) | H3LIS331DL_CTRL_REG1_XEN | H3LIS331DL_CTRL_REG1_YEN | H3LIS331DL_CTRL_REG1_ZEN;
 	Write8(&regaddr, 1, d);
-
-	printf("%x\n", d);
-
-	regaddr = H3LIS331DL_STATUS_REG_REG;
-	d = Read8(&regaddr, 1);
-	printf("Status %x\n", d);
-
-	regaddr = H3LIS331DL_CTRL_REG5_REG;
-	d = Read8(&regaddr, 1);
-	printf("Reg5 %x\n", d);
-	Write8(&regaddr, 1, 3);
 
 	return true;
 }
@@ -382,6 +364,9 @@ bool AccelH3lis331dl::UpdateData()
 		regaddr = H3LIS331DL_OUT_X_L_REG;
 		Read(&regaddr, 1, (uint8_t*)vData.Val, 6);
 
+		//regaddr = H3LIS331DL_OUT_X_H_REG;
+		//vData.X = Read8(&regaddr, 1);
+
 		return true;
 	}
 
@@ -426,8 +411,15 @@ int AccelH3lis331dl::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int
 			*pCmdAddr |= 0x40;	// Multi bytes read with address auto increments
 		}
 	}
+	else
+	{
+		if (BuffLen > 1)
+		{
+			*pCmdAddr |= 0x80;	// Multi bytes read with address auto increments
+		}
+	}
 
-	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	return vpIntrf->Read(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 }
 
 /**
@@ -448,12 +440,21 @@ int AccelH3lis331dl::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, in
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
+		*pCmdAddr &= 0x3F;
 		if (DataLen > 1)
 		{
 			*pCmdAddr |= 0x40;	// Multi bytes write with address auto increments
 		}
 	}
+	else
+	{
+		*pCmdAddr &= 0x7F;
+		if (DataLen > 1)
+		{
+			*pCmdAddr |= 0x80;	// Multi bytes write with address auto increments
+		}
+	}
 
-	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+	return vpIntrf->Write(vDevAddr, pCmdAddr, CmdAddrLen, pData, DataLen);
 }
 
