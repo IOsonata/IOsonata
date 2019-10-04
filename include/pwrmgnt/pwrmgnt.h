@@ -71,6 +71,13 @@ typedef enum __PowerMgnt_Evt {
 	PWREVT_CHARGE_DETECTED				//!< Charge source detected
 } PWREVT;
 
+typedef struct __Bat_Profile {
+	uint32_t OpVolt;		//!< Battery nominal operating voltage in mV
+	uint32_t ChrgVolt;		//!< Battery charge voltage in mV
+	uint32_t Capacity;		//!< Battery capacity in mAh
+	uint32_t ThermBConst;	//!< Thermistor B constant
+} BAT_PROFILE;
+
 typedef void (*PWRMGNT_EVTCB)(PowerMgnt *pSelf, PWREVT Evt);
 
 typedef struct __Power_Config {
@@ -138,6 +145,36 @@ protected:
 
 private:
 //	LED_DEV vLed;			//!< Led active level
+};
+
+// Low battery event handler
+typedef void (*FGLOWCB)(PowerMgnt * const pPwrMnt);
+
+typedef struct __FuelGauge_Cfg {
+	BAT_PROFILE &BatProf;		//!< Reference to battery profile
+	FGLOWCB	BatLowHandler;		//!< Battery low event handler
+} FUELGAUGE_CFG;
+
+class FuelGauge : public Device {
+public:
+	virtual bool Init(const FUELGAUGE_CFG &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt) = 0;
+
+	/**
+	 * @brief	Get battery level
+	 *
+	 * @return	Battery level in (0-100) %
+	 */
+	virtual uint8_t BatLevel() = 0;
+	virtual int32_t BatTemperature() = 0;
+	virtual int32_t BatVoltage() = 0;
+
+protected:
+	void LowBatAlert() { if (vBatLowHandler) vBatLowHandler(vpPwrMgnt); }
+
+private:
+	FGLOWCB	vBatLowHandler;		//!< Low battery event handler
+	BAT_PROFILE vBetProfile;
+	PowerMgnt * const vpPwrMgnt;
 };
 
 #ifdef __cplusplus
