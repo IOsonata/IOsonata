@@ -102,6 +102,10 @@ bool AccelH3lis331dl::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntr
 
 	vOpMode = Cfg.OpMode;
 
+	regaddr = H3LIS331DL_STATUS_REG_REG;
+	d = Read8(&regaddr, 1);
+	printf("Status0 %x\n", d);
+
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
 	FilterFreq(Cfg.FltrFreq);
@@ -128,6 +132,18 @@ bool AccelH3lis331dl::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntr
 
 	regaddr = H3LIS331DL_CTRL_REG1_REG;
 	d = Read8(&regaddr, 1) | H3LIS331DL_CTRL_REG1_XEN | H3LIS331DL_CTRL_REG1_YEN | H3LIS331DL_CTRL_REG1_ZEN;
+	Write8(&regaddr, 1, d);
+
+	printf("%x\n", d);
+
+	regaddr = H3LIS331DL_STATUS_REG_REG;
+	d = Read8(&regaddr, 1);
+	printf("Status %x\n", d);
+
+	regaddr = H3LIS331DL_CTRL_REG5_REG;
+	d = Read8(&regaddr, 1);
+	printf("Reg5 %x\n", d);
+	Write8(&regaddr, 1, 3);
 
 	return true;
 }
@@ -364,7 +380,7 @@ bool AccelH3lis331dl::UpdateData()
 			vData.Timestamp = vpTimer->uSecond();
 		}
 		regaddr = H3LIS331DL_OUT_X_L_REG;
-		Device::Read(&regaddr, 1, (uint8_t*)vData.Val, 6);
+		Read(&regaddr, 1, (uint8_t*)vData.Val, 6);
 
 		return true;
 	}
@@ -383,3 +399,61 @@ void AccelH3lis331dl::IntHandler()
 
 	UpdateData();
 }
+
+/**
+ * @brief	Read device's register/memory block.
+ *
+ * This default implementation sets bit 7 of the Cmd/Addr byte for SPI read access as most
+ * devices work this way on SPI interface. Overwrite this implementation if SPI access is different
+ *
+ * @param 	pCmdAddr 	: Buffer containing command or address to be written
+ * 						  prior reading data back
+ * @param	CmdAddrLen 	: Command buffer size
+ * @param	pBuff		: Data buffer container
+ * @param	BuffLen		: Data buffer size
+ *
+ * @return	Actual number of bytes read
+ */
+int AccelH3lis331dl::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
+{
+	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+		// Most sensor that supports SPI have this for reading registers
+		// overload this function if different
+		*pCmdAddr |= 0x80;
+		if (BuffLen > 1)
+		{
+			*pCmdAddr |= 0x40;	// Multi bytes read with address auto increments
+		}
+	}
+
+	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+}
+
+/**
+ * @brief	Write to device's register/memory block
+ *
+ * This default implementation clears bit 7 of the Cmd/Addr byte for SPI write access as most
+ * devices work this way on SPI interface.  Overwrite this implementation if SPI access is different
+ *
+ * @param 	pCmdAddr 	: Buffer containing command or address to be written
+ * 						  prior writing data back
+ * @param	CmdAddrLen 	: Command buffer size
+ * @param	pData		: Data buffer to be written to the device
+ * @param	DataLen		: Size of data
+ *
+ * @return	Actual number of bytes written
+ */
+int AccelH3lis331dl::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+{
+	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+		if (DataLen > 1)
+		{
+			*pCmdAddr |= 0x40;	// Multi bytes write with address auto increments
+		}
+	}
+
+	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+}
+

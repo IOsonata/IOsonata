@@ -226,6 +226,38 @@ public:
 
 	virtual bool StartSampling() { return false; }
 
+	/**
+	 * @brief	Read device's register/memory block.
+	 *
+	 * This default implementation sets bit 7 of the Cmd/Addr byte for SPI read access as most
+	 * devices work this way on SPI interface. Overwrite this implementation if SPI access is different
+	 *
+	 * @param 	pCmdAddr 	: Buffer containing command or address to be written
+	 * 						  prior reading data back
+	 * @param	CmdAddrLen 	: Command buffer size
+	 * @param	pBuff		: Data buffer container
+	 * @param	BuffLen		: Data buffer size
+	 *
+	 * @return	Actual number of bytes read
+	 */
+	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
+
+	/**
+	 * @brief	Write to device's register/memory block
+	 *
+	 * This default implementation clears bit 7 of the Cmd/Addr byte for SPI write access as most
+	 * devices work this way on SPI interface.  Overwrite this implementation if SPI access is different
+	 *
+	 * @param 	pCmdAddr 	: Buffer containing command or address to be written
+	 * 						  prior writing data back
+	 * @param	CmdAddrLen 	: Command buffer size
+	 * @param	pData		: Data buffer to be written to the device
+	 * @param	DataLen		: Size of data
+	 *
+	 * @return	Actual number of bytes written
+	 */
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+
 private:
 };
 
