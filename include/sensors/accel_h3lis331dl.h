@@ -41,8 +41,8 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/accel_sensor.h"
 
-#define H3LIS331DL_I2C_DEVADDR				0x18	//!< 7 bit i2c address for SA0 = 0
-#define H3LIS331DL_I2C_DEVADDR1				0x19	//!< 7 bit i2c address for SA0 = 1
+#define H3LIS331DL_I2C_DEVADDR				0x18	//!< 7 bits i2c address for SA0 = 0
+#define H3LIS331DL_I2C_DEVADDR1				0x19	//!< 7 bits i2c address for SA0 = 1
 
 // ***** XL
 #define H3LIS331DL_WHO_AM_I_REG				0x0F
@@ -223,8 +223,6 @@ public:
 	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
 
 	bool UpdateData();
-
-	virtual bool StartSampling() { return false; }
 
 	/**
 	 * @brief	Read device's register/memory block.
