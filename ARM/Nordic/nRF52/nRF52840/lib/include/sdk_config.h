@@ -11523,7 +11523,7 @@
 // <e> NFC_BLE_OOB_ADVDATA_ENABLED - nfc_ble_oob_advdata - AD data for OOB pairing encoder
 //==========================================================
 #ifndef NFC_BLE_OOB_ADVDATA_ENABLED
-#define NFC_BLE_OOB_ADVDATA_ENABLED 0
+#define NFC_BLE_OOB_ADVDATA_ENABLED 1
 #endif
 // <o> ADVANCED_ADVDATA_SUPPORT  - Non-mandatory AD types for BLE OOB pairing are encoded inside the NDEF message (e.g. service UUIDs)
  
@@ -11540,13 +11540,13 @@
  
 
 #ifndef NFC_BLE_OOB_ADVDATA_PARSER_ENABLED
-#define NFC_BLE_OOB_ADVDATA_PARSER_ENABLED 0
+#define NFC_BLE_OOB_ADVDATA_PARSER_ENABLED 1
 #endif
 
 // <e> NFC_BLE_PAIR_LIB_ENABLED - nfc_ble_pair_lib - Library parameters
 //==========================================================
 #ifndef NFC_BLE_PAIR_LIB_ENABLED
-#define NFC_BLE_PAIR_LIB_ENABLED 0
+#define NFC_BLE_PAIR_LIB_ENABLED 1
 #endif
 // <e> NFC_BLE_PAIR_LIB_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -11737,7 +11737,7 @@
 // <e> NFC_NDEF_MSG_ENABLED - nfc_ndef_msg - NFC NDEF Message generator module
 //==========================================================
 #ifndef NFC_NDEF_MSG_ENABLED
-#define NFC_NDEF_MSG_ENABLED 0
+#define NFC_NDEF_MSG_ENABLED 1
 #endif
 // <o> NFC_NDEF_MSG_TAG_TYPE  - NFC Tag Type
  
@@ -11907,7 +11907,7 @@
 // <e> NFC_T4T_APDU_ENABLED - nfc_t4t_apdu - APDU encoder/decoder for Type 4 Tag
 //==========================================================
 #ifndef NFC_T4T_APDU_ENABLED
-#define NFC_T4T_APDU_ENABLED 0
+#define NFC_T4T_APDU_ENABLED 1
 #endif
 // <e> NFC_T4T_APDU_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -11991,7 +11991,7 @@
 // <e> NFC_T4T_HL_DETECTION_PROCEDURES_ENABLED - nfc_t4t_hl_detection_procedures - NDEF Detection Procedure for Type 4 Tag
 //==========================================================
 #ifndef NFC_T4T_HL_DETECTION_PROCEDURES_ENABLED
-#define NFC_T4T_HL_DETECTION_PROCEDURES_ENABLED 0
+#define NFC_T4T_HL_DETECTION_PROCEDURES_ENABLED 1
 #endif
 // <e> NFC_T4T_HL_DETECTION_PROCEDURES_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -12043,7 +12043,7 @@
 // <e> NFC_T4T_TLV_BLOCK_PARSER_ENABLED - nfc_t4t_tlv_block - TLV block for Type 4 Tag
 //==========================================================
 #ifndef NFC_T4T_TLV_BLOCK_PARSER_ENABLED
-#define NFC_T4T_TLV_BLOCK_PARSER_ENABLED 0
+#define NFC_T4T_TLV_BLOCK_PARSER_ENABLED 1
 #endif
 // <e> NFC_T4T_TLV_BLOCK_PARSER_LOG_ENABLED - Enables logging in the module.
 //==========================================================
