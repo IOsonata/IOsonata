@@ -250,7 +250,7 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 	int cnt = 0;
-	uint8_t escend = 0;
+	uint8_t d[2] = {SLIP_ESC_CODE, 0};
 
 	if (dev->pPhyIntrf)
 	{
@@ -262,18 +262,16 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 			// Find conflicting code
 			if (*p == SLIP_END_CODE)
 			{
-				*p = SLIP_ESC_CODE;
-				escend = SLIP_ESC_END_CODE;
+				d[1] = SLIP_ESC_END_CODE;
 			}
-			if (*p == SLIP_ESC_CODE)
+			else if (*p == SLIP_ESC_CODE)
 			{
-				*p = SLIP_ESC_CODE;
-				escend = SLIP_ESC_ESC_CODE;
+				d[1] = SLIP_ESC_ESC_CODE;
 			}
 
-			if (escend != 0)
+			if (d[1] != 0)
 			{
-				i++;
+				// Flush data
 				while (i > 0)
 				{
 					int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, pData, i);
@@ -282,11 +280,20 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 					DataLen -= l;
 					cnt += l;
 				}
+
+				// Send escape code
+				i = 2;
+				uint8_t *p1 = d;
+				while (i > 0)
+				{
+					int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, p1, i);
+					p1 += l;
+					i -= l;
+					cnt += l;
+				}
+
 				i = 0;
-				*p = escend;
-				pData = p;
-				DataLen++;
-				escend = 0;
+				d[1] = 0;
 			}
 			p++;
 			i++;
@@ -302,14 +309,12 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 					DataLen -= l;
 					cnt += l;
 				}
-				*p = SLIP_END_CODE;
+				d[0] = SLIP_END_CODE;
 
-				while (dev->pPhyIntrf->TxData(dev->pPhyIntrf, p, 1) < 1);
+				while (dev->pPhyIntrf->TxData(dev->pPhyIntrf, d, 1) < 1);
 				cnt++;
 			}
 		}
-
-
 	}
 
 	return cnt;
