@@ -155,6 +155,7 @@ public:
 
     virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
 	virtual void ClearCalibration();
+	virtual bool StartSampling() { return true; }
 
 	AccelSensor() { ClearCalibration(); }
 
