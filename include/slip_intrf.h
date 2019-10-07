@@ -46,7 +46,7 @@ typedef struct __Slip_Device {
 	DEVINTRF DevIntrf;					//!< This interface
 	DEVINTRF *pPhyIntrf;				//!< Physical transport interface
 	void *pObj;							//!< Slip object instance
-	uint8_t Buff[SLIP_MAX_BUFFER_SIZE];
+	//uint8_t Buff[SLIP_MAX_BUFFER_SIZE];
 } SLIPDEV;
 
 #ifdef __cplusplus
@@ -195,7 +195,7 @@ public:
 
 private:
 	SLIPDEV vDevData;
-	DeviceIntrf *vpPhyIntrf;
+	//DeviceIntrf *vpPhyIntrf;
 };
 
 #endif

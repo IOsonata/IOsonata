@@ -31,6 +31,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+
 #include "slip_intrf.h"
 
 #define SLIP_END_CODE				0xC0
@@ -160,9 +161,8 @@ int SlipIntrfRxData(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 	if (dev->pPhyIntrf)
 	{
 		uint8_t *p = pBuff;
-		int rtry = 10;
 
-		while (BuffLen > 0 && rtry > 0)
+		while (BuffLen > 0)
 		{
 			if (dev->pPhyIntrf->RxData(dev->pPhyIntrf, pBuff, 1) > 0)
 			{
@@ -172,21 +172,21 @@ int SlipIntrfRxData(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 				}
 				if (*pBuff == SLIP_ESC_CODE)
 				{
-					*pBuff = SLIP_END_CODE;
 					int tinout = 1000;
 					while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0 && tinout-- > 0);
-				}
-				else if (*pBuff == SLIP_ESC_ESC_CODE)
-				{
-					*pBuff = SLIP_ESC_CODE;
-					int tinout = 1000;
-					while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0 && tinout-- > 0);
+					if (d == SLIP_ESC_END_CODE)
+					{
+						*pBuff = SLIP_END_CODE;
+					}
+					else if (d == SLIP_ESC_ESC_CODE)
+					{
+						*pBuff = SLIP_ESC_CODE;
+					}
 				}
 				pBuff++;
 				BuffLen--;
 				cnt++;
 			}
-			rtry--;
 		}
 	}
 
@@ -250,6 +250,7 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 	int cnt = 0;
+	uint8_t escend = 0;
 
 	if (dev->pPhyIntrf)
 	{
@@ -259,46 +260,51 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 		while (DataLen > 0)
 		{
 			// Find conflicting code
-			while (i++ < DataLen)
+			if (*p == SLIP_END_CODE)
 			{
-				if (*p == SLIP_END_CODE)
-				{
-					*p = SLIP_ESC_END_CODE;
-					break;
-				}
-				if (*p == SLIP_ESC_CODE)
-				{
-					*p = SLIP_ESC_ESC_CODE;
-					break;
-				}
-				p++;
+				*p = SLIP_ESC_CODE;
+				escend = SLIP_ESC_END_CODE;
+			}
+			if (*p == SLIP_ESC_CODE)
+			{
+				*p = SLIP_ESC_CODE;
+				escend = SLIP_ESC_ESC_CODE;
 			}
 
-			// Flush data
-			while (i > 0)
+			if (escend != 0)
 			{
-				int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, pData, i);
-				i -= l;
-				pData += l;
-				DataLen -= l;
-				cnt += l;
-			}
-
-			pData = p;
-
-			// Set end code
-			if (DataLen > 0)
-			{
-				pData[0] = SLIP_ESC_END_CODE;
+				i++;
+				while (i > 0)
+				{
+					int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, pData, i);
+					i -= l;
+					pData += l;
+					DataLen -= l;
+					cnt += l;
+				}
+				i = 0;
+				*p = escend;
+				pData = p;
 				DataLen++;
-				i = 1;
-				p++;
+				escend = 0;
 			}
-			else
+			p++;
+			i++;
+
+			if (i >= DataLen)
 			{
 				// End of packet, send end code
-				pData[0] = SLIP_END_CODE;
-				while (dev->pPhyIntrf->TxData(dev->pPhyIntrf, pData, 1) < 1);
+				while (i > 0)
+				{
+					int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, pData, i);
+					i -= l;
+					pData += l;
+					DataLen -= l;
+					cnt += l;
+				}
+				*p = SLIP_END_CODE;
+
+				while (dev->pPhyIntrf->TxData(dev->pPhyIntrf, p, 1) < 1);
 				cnt++;
 			}
 		}
