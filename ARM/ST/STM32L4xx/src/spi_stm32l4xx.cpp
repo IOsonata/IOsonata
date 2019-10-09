@@ -694,6 +694,10 @@ bool STM32L4xxQSPISendCmd(DEVINTRF * const pDev, uint8_t Cmd, uint32_t Addr, uin
 	}
 	else
 	{
+		if (Addr != -1)
+		{
+			dev->CcrReg |= QUADSPI_CCR_ADMODE_0;
+		}
 		dev->pQReg->DLR = 0;
 	}
 

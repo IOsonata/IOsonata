@@ -81,12 +81,20 @@ bool FlashDiskIO::Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
 
     if (Cfg.DevIdSize > 0 && (int)Cfg.DevIdSize > 0)
     {
-		uint32_t d = ReadId(Cfg.DevIdSize);
+    	int rtry = 5;
 
-		if (d != Cfg.DevId)
-		{
-			return false;
-		}
+    	do {
+    		uint32_t d = ReadId(Cfg.DevIdSize);
+    		if (d == Cfg.DevId)
+    		{
+    			break;
+    		}
+    	} while (rtry-- > 0);
+
+    	if (rtry <= 0)
+    	{
+    		return false;
+    	}
     }
 
     if (pCacheBlk && NbCacheBlk > 0)
@@ -94,7 +102,7 @@ bool FlashDiskIO::Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
         SetCache(pCacheBlk, NbCacheBlk);
     }
 
-    return true;
+	return true;
 }
 
 uint32_t FlashDiskIO::ReadId(int Len)
@@ -115,11 +123,14 @@ uint32_t FlashDiskIO::ReadId(int Len)
 		else
 		{
 			uint8_t cmd = FLASH_CMD_READID;
-
+#if 1
+			vpInterf->Read(vDevNo, &cmd, 1, (uint8_t*)&id, Len);
+#else
 			vpInterf->StartRx(vDevNo);
 			vpInterf->TxData(&cmd, 1);
 			vpInterf->RxData((uint8_t*)&id, Len);
 			vpInterf->StopRx();
+#endif
 		}
 
 	}
@@ -269,6 +280,7 @@ void FlashDiskIO::EraseBlock(uint32_t BlkNo, int NbBlk)
         }
         addr += vBlkSize * 1024;
     }
+    WaitReady(-1, 1000000);
     WriteDisable();
 }
 
@@ -309,6 +321,7 @@ void FlashDiskIO::EraseSector(uint32_t SectNo, int NbSect)
         }
         addr += vSectSize * 1024;
     }
+    WaitReady(-1, 1000000);
     WriteDisable();
 }
 

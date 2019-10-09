@@ -96,11 +96,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/diskio_flash.h</locationURI>
 		</link>
 		<link>
-			<name>include/diskio_qflash_stm32l4xx.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/diskio_qflash_stm32l4xx.h</locationURI>
-		</link>
-		<link>
 			<name>include/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>

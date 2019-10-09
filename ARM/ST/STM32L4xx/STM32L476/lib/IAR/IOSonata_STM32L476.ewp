@@ -355,7 +355,7 @@
                     <state>$PROJ_DIR$\..\..\..\..\..\include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\CMSIS\Core\Include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\BSEC\algo</state>
+                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\BSEC\algo\lite_version\inc</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\invn</state>
                 </option>
                 <option>
