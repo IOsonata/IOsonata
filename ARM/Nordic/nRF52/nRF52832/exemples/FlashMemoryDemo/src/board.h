@@ -134,6 +134,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define I2C0_SCL_PINOP					BLUEIO_TAG_BME680_I2C_SCL_PINOP
 #endif
 
+#ifdef BLUEIO_TAG_EVIM
 #define SPI_DEVNO      					1
 #define SPI_MODE						SPIMODE_NORMAL
 #define SPI_MISO_PORT       			0
@@ -156,12 +157,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SPI2_SCK_PORT        			0
 #define SPI2_SCK_PIN         			17
 #define SPI2_SCK_PINOP       			1
-
-#define BME280_CS_IDX          		0
-#define BME280_CS_PORT         		0
-#define BME280_CS_PIN          		26
-#define BME280_CS_PINOP        		1
-
 #define SPI_FLASH_CS_PORT          	0
 #define SPI_FLASH_CS_PIN           	26
 #define SPI_FLASH_CS_PINOP         	0
@@ -169,6 +164,33 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define FLASH_HOLD_PORT            	0
 #define FLASH_HOLD_PIN             	26
 #define FLASH_HOLD_PINOP           	0
+#else
+#define SPI_DEVNO      					1
+#define SPI_MODE						SPIMODE_NORMAL
+#define SPI_MISO_PORT       			0
+#define SPI_MISO_PIN        			5//13
+#define SPI_MISO_PINOP      			1
+#define SPI_MOSI_PORT       			0
+#define SPI_MOSI_PIN        			7//12
+#define SPI_MOSI_PINOP      			1
+#define SPI_SCK_PORT        			0
+#define SPI_SCK_PIN         			4
+#define SPI_SCK_PINOP       			1
+
+#define SPI_FLASH_CS_PORT          	0
+#define SPI_FLASH_CS_PIN           	18
+#define SPI_FLASH_CS_PINOP         	0
+
+#define FLASH_HOLD_PORT            	0
+#define FLASH_HOLD_PIN             	26
+#define FLASH_HOLD_PINOP           	0
+#endif
+
+#define BME280_CS_IDX          		0
+#define BME280_CS_PORT         		0
+#define BME280_CS_PIN          		26
+#define BME280_CS_PINOP        		1
+
 
 #define BLUEIO_TAG_EVIM_IMU_INT_NO		0
 

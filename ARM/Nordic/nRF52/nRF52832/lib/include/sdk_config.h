@@ -11940,7 +11940,7 @@
 // <e> NFC_T4T_APDU_ENABLED - nfc_t4t_apdu - APDU encoder/decoder for Type 4 Tag
 //==========================================================
 #ifndef NFC_T4T_APDU_ENABLED
-#define NFC_T4T_APDU_ENABLED 0
+#define NFC_T4T_APDU_ENABLED 1
 #endif
 // <e> NFC_T4T_APDU_LOG_ENABLED - Enables logging in the module.
 //==========================================================
