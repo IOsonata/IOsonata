@@ -1,4 +1,3 @@
-/Debug
-/Release
-/Debug S110
-/RTX_Debug/
+/Debug*/
+/Release*/
+/.settings/
