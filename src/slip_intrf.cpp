@@ -31,10 +31,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <string.h>
+#include <stdio.h>
 
 #include "slip_intrf.h"
 
-#define SLIP_END_CODE				0xC0
 #define SLIP_ESC_CODE				0xDB
 #define SLIP_ESC_END_CODE			0xDC
 #define SLIP_ESC_ESC_CODE			0xDD
@@ -143,8 +144,9 @@ bool SlipIntrfStartRx(DEVINTRF * const pDevIntrf, int DevAddr)
 }
 
 /**
- * @brief	Receive data into pBuff passed in parameter.  Assuming StartRx was
- * called prior calling this function to get the actual data
+ * @brief	Receive and decode data into pBuff passed in parameter.
+ *
+ * This function is blocking until full packet is received, i.e. SLIP_END_CODE is received
  *
  * @param	pDevIntrf : Pointer to an instance of the Device Interface
  * @param	pBuff 	  : Pointer to memory area to receive data.
@@ -152,47 +154,169 @@ bool SlipIntrfStartRx(DEVINTRF * const pDevIntrf, int DevAddr)
  *
  * @return	Number of bytes read
  */
-int SlipIntrfRxData(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
+int SlipIntrfRxDataBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 	int cnt = 0;
 	uint8_t d;
 
-	if (dev->pPhyIntrf)
-	{
-		uint8_t *p = pBuff;
+	uint8_t *p = pBuff;
 
-		while (BuffLen > 0)
+	while (BuffLen > 0)
+	{
+		if (dev->pPhyIntrf->RxData(dev->pPhyIntrf, pBuff, 1) > 0)
 		{
-			if (dev->pPhyIntrf->RxData(dev->pPhyIntrf, pBuff, 1) > 0)
+			if (*pBuff == SLIP_END_CODE)
 			{
-				if (*pBuff == SLIP_END_CODE)
-				{
-					return cnt;
-				}
-				if (*pBuff == SLIP_ESC_CODE)
-				{
-					int tinout = 1000;
-					while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0 && tinout-- > 0);
-					if (d == SLIP_ESC_END_CODE)
-					{
-						*pBuff = SLIP_END_CODE;
-					}
-					else if (d == SLIP_ESC_ESC_CODE)
-					{
-						*pBuff = SLIP_ESC_CODE;
-					}
-				}
-				pBuff++;
-				BuffLen--;
-				cnt++;
+				return cnt;
 			}
+			if (*pBuff == SLIP_ESC_CODE)
+			{
+				while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0);
+				if (d == SLIP_ESC_END_CODE)
+				{
+					*pBuff = SLIP_END_CODE;
+				}
+				else if (d == SLIP_ESC_ESC_CODE)
+				{
+					*pBuff = SLIP_ESC_CODE;
+				}
+			}
+			pBuff++;
+			BuffLen--;
+			cnt++;
 		}
 	}
 
 	return cnt;
 }
 
+/**
+ * @brief	Receive and decode data into pBuff passed in parameter.
+ *
+ * This function is non blocking. It will return after one read.  Application must
+ * manage received buffer and verify the last byte received for the SLIP_END_CODE.
+ * Call again to receive more byte until SLIP_END_CODE is received.
+ *
+ * NOTE: Make sure buffer is large enough to contain full packet + SLIP_END_CODE byte
+ *
+ * @param	pDevIntrf : Pointer to an instance of the Device Interface
+ * @param	pBuff 	  : Pointer to memory area to receive data.
+ * @param	BuffLen   : Length of buffer memory in bytes
+ *
+ * @return	Number of bytes read
+ */
+int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
+{
+	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	int cnt = 0;
+	uint8_t d;
+
+	uint8_t *p = pBuff;
+
+	while (BuffLen > 0)
+	{
+		if (dev->pPhyIntrf->RxData(dev->pPhyIntrf, pBuff, 1) <= 0)
+		{
+			pBuff[cnt] = 0xFF;
+			break;
+		}
+
+		if (*pBuff == SLIP_END_CODE)
+		{
+			return cnt;
+		}
+		if (*pBuff == SLIP_ESC_CODE)
+		{
+			while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0);
+			if (d == SLIP_ESC_END_CODE)
+			{
+				*pBuff = SLIP_END_CODE;
+			}
+			else if (d == SLIP_ESC_ESC_CODE)
+			{
+				*pBuff = SLIP_ESC_CODE;
+			}
+		}
+		pBuff++;
+		BuffLen--;
+		cnt++;
+	}
+
+	return cnt;
+}
+
+
+#if 0
+int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
+{
+	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	int cnt = dev->CurLen;
+	uint8_t d;
+	int len = SLIP_BUFF_MAX - dev->CurLen;
+	uint8_t *p = &dev->Buf[dev->CurLen];
+
+	if (dev->bEsc)
+	{
+		p--;
+		cnt--;
+	}
+
+	int l = dev->pPhyIntrf->RxData(dev->pPhyIntrf, &dev->Buf[dev->CurLen], len);
+	if (l > 0)
+	{
+		dev->CurLen += l;
+		len -= l;
+
+		while (cnt < dev->CurLen)
+		{
+			if (*p == SLIP_END_CODE)
+			{
+				memcpy(pBuff, dev->Buf, cnt);
+				p++;
+				l--;
+				memcpy(dev->Buf, p, l);
+				dev->CurLen = l;
+
+				return cnt;
+			}
+			if (*p == SLIP_ESC_CODE || dev->bEsc)
+			{
+				l--;
+				if (l <= 0)
+				{
+					l = dev->pPhyIntrf->RxData(dev->pPhyIntrf, &dev->Buf[dev->CurLen], len);
+					if (l <= 0)
+					{
+						dev->bEsc = true;
+
+						return 0;
+					}
+					dev->CurLen += l;
+					len -= l;
+				}
+
+				if (p[1] == SLIP_ESC_END_CODE)
+				{
+					*p = SLIP_END_CODE;
+				}
+				else if (p[1] == SLIP_ESC_ESC_CODE)
+				{
+					*p = SLIP_ESC_CODE;
+				}
+				dev->CurLen--;
+				memcpy(p + 1, p + 2, l);
+				dev->bEsc = false;
+			}
+			p++;
+			l--;
+			cnt++;
+		}
+	}
+
+	return 0;
+}
+#endif
 
 /**
  * @brief	Completion of read data phase. Do require post processing
@@ -375,7 +499,7 @@ void SlipIntrfPowerOff(DEVINTRF * const pDevIntrf)
 
 
 
-bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf)
+bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf, bool bBlocking)
 {
 	if (pDev == nullptr || pPhyIntrf == nullptr)
 	{
@@ -390,7 +514,16 @@ bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf)
 	pDev->DevIntrf.GetRate = SlipIntrfGetRate;
 	pDev->DevIntrf.SetRate = SlipIntrfSetRate;
 	pDev->DevIntrf.StartRx = SlipIntrfStartRx;
-	pDev->DevIntrf.RxData = SlipIntrfRxData;
+
+	if (bBlocking == true)
+	{
+		pDev->DevIntrf.RxData = SlipIntrfRxDataBlocking;
+	}
+	else
+	{
+		pDev->DevIntrf.RxData = SlipIntrfRxDataNonBlocking;
+	}
+
 	pDev->DevIntrf.StopRx = SlipIntrfStopRx;
 	pDev->DevIntrf.StartTx = SlipIntrfStartTx;
 	pDev->DevIntrf.TxData = SlipIntrfTxData;
@@ -401,18 +534,22 @@ bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf)
 	pDev->DevIntrf.bDma = false;
 	pDev->DevIntrf.PowerOff = SlipIntrfPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
+	pDev->CurLen = 0;
+	pDev->bEsc = false;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	return true;
 }
 
-bool Slip::Init(DeviceIntrf * const pIntrf)
+bool Slip::Init(DeviceIntrf * const pIntrf, bool bBlocking)
 {
 	if (pIntrf == nullptr)
 	{
 		return false;
 	}
 
-	return SlipInit(&vDevData, *pIntrf);
+	memset(&vDevData, 0, sizeof(SLIPDEV));
+
+	return SlipInit(&vDevData, *pIntrf, bBlocking);
 }
 

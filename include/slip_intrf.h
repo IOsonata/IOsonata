@@ -40,17 +40,24 @@ SOFTWARE.
 
 #include "device_intrf.h"
 
+#define SLIP_END_CODE				0xC0
+
+#define SLIP_BUFF_MAX				512
+
 typedef struct __Slip_Device {
 	DEVINTRF DevIntrf;					//!< This interface
 	DEVINTRF *pPhyIntrf;				//!< Physical transport interface
 	void *pObj;							//!< Slip object instance
+	int CurLen;
+	bool bEsc;
+	uint8_t Buf[SLIP_BUFF_MAX];
 } SLIPDEV;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf);
+bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf, bool bBlocking);
 static inline int SlipGetRate(SLIPDEV * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
 static inline int SlipSetRate(SLIPDEV * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }
 static inline void SlipEnable(SLIPDEV * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
@@ -68,7 +75,7 @@ static inline int SlipTx(SLIPDEV * const pDev, uint8_t *pData, int Datalen) {
 
 class Slip : public DeviceIntrf {
 public:
-	bool Init(DeviceIntrf * const pIntrf);
+	bool Init(DeviceIntrf * const pIntrf, bool bBlocking = true);
 
 	/**
 	 * @brief	Operator to convert this class to device interface handle to be
