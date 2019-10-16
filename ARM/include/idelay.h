@@ -78,7 +78,8 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
 			" SUBS r0, #1\n"
 			" BGT 1b\n"
 		"2:\n"
-#ifdef __GNUC__
+#if defined ( __ARMCC_VERSION )
+#elif defined ( __GNUC__ )
 		".syntax divided\n"
 #endif
 		:
@@ -107,7 +108,8 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt) {
 			" SUBS r1, #1\n"
 			" BGT 1b\n"
 		"2:\n"
-#ifdef __GNUC__
+#if defined ( __ARMCC_VERSION )
+#elif defined ( __GNUC__ )
 		".syntax divided\n"
 #endif
 		:
