@@ -95,7 +95,7 @@
                             							
                             <targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.1523393725" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
                             							
-                            <builder buildPath="${workspace_loc:/IOsonata_nRF52840}/Debug" id="ilg.gnuarmeclipse.managedbuild.cross.builder.492473547" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
+                            <builder buildPath="${workspace_loc:/IOsonata_nRF52840}/Debug" id="ilg.gnuarmeclipse.managedbuild.cross.builder.492473547" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
                             							
                             <tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.1250714184" name="GNU ARM Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
                                 								
@@ -4027,6 +4027,46 @@
     	
     <storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
     	
-    <storageModule moduleId="refreshScope"/>
+    <storageModule moduleId="refreshScope" versionNumber="2">
+        		
+        <configuration configurationName="Release_FPU">
+            			
+            <resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
+            		
+        </configuration>
+        		
+        <configuration configurationName="Debug_FPU">
+            			
+            <resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
+            		
+        </configuration>
+        		
+        <configuration configurationName="Release_NoNFC">
+            			
+            <resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
+            		
+        </configuration>
+        		
+        <configuration configurationName="Debug_NoNFC">
+            			
+            <resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
+            		
+        </configuration>
+        		
+        <configuration configurationName="Debug">
+            			
+            <resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
+            		
+        </configuration>
+        		
+        <configuration configurationName="Release">
+            			
+            <resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
+            		
+        </configuration>
+        	
+    </storageModule>
+    	
+    <storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
     
 </cproject>
