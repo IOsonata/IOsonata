@@ -38,6 +38,9 @@ Modified by          Date              Description
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);
+extern void Reset_Handler(void);
+extern char Image$$ER_ZI$$Base[];
+extern char Image$$ARM_LIB_STACK$$ZI$$Base[];
 
 void DEF_IRQHandler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
@@ -105,8 +108,13 @@ void (* const __vector_table[])(void) = {
 __attribute__ ((section(".vectors"), used))
 void (* const __Vectors[100])(void) = {
 #endif
+#if defined ( __ARMCC_VERSION )
+	(void (*)(void) )((uint32_t)0x20000000 + 0x10000),
+	Reset_Handler,
+#else
 	(void (*)(void) )((uint32_t)&__StackTop),
 	ResetEntry,
+#endif
 	NMI_Handler,
 	HardFault_Handler,
 	MemoryManagement_Handler,

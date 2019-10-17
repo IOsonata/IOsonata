@@ -39,6 +39,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <system_core_clock.h>
 
+#if defined ( __ARMCC_VERSION )
+extern int Image$$ER_ZI$$Length;
+extern char Image$$ER_ZI$$Base[];
+#else
 extern unsigned long __etext;	// Begin of data in FLASH location
 extern unsigned long __data_loc__;
 extern unsigned long __data_start__;	// RAM data start
@@ -47,6 +51,7 @@ extern unsigned long __data_end__;
 extern unsigned long __bss_start__;
 extern unsigned long __bss_end__;
 extern unsigned long __bss_size__;
+#endif
 
 #ifdef __ICCARM__
 extern void __iar_init_core( void );
@@ -58,6 +63,7 @@ extern void _call_main(void);
 extern void _start();
 extern void _rtos_start();
 extern int main (void);
+extern int __main (void);
 extern void __libc_init_array(void);
 extern void SystemInit(void);
 extern void SystemCoreClockUpdate(void);
@@ -75,6 +81,14 @@ uint32_t SystemMicroSecLoopCnt = 1;
  *	This is entry point after reset
  */
 __attribute__ ((section (".AppStart")))
+#if defined ( __ARMCC_VERSION )
+void Reset_Handler (void)
+{
+	/*
+	 * Clear the ".bss" segment.
+	 */
+	memset(Image$$ER_ZI$$Base, 0, (size_t)&Image$$ER_ZI$$Length);
+#else
 void ResetEntry (void)
 {
 #ifdef __ICCARM__
@@ -94,6 +108,8 @@ void ResetEntry (void)
 	 */
 	memset((void *)&__bss_start__, 0, (size_t)&__bss_size__);
 #endif
+#endif
+
 	/*
 	 * Core clock initialization using CMSIS
 	 */
@@ -118,11 +134,15 @@ void ResetEntry (void)
 	 */
 #ifndef __CMSIS_RTOS
 	// Bare bone app
+#if defined ( __ARMCC_VERSION )
+	main();
+#else
 #ifdef __ICCARM__
 	   //__iar_program_start();
 	   _call_main();
 #else
 	_start();
+#endif
 #endif
 #else
 	// RTX based app

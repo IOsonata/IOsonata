@@ -389,11 +389,6 @@
               <FilePath>..\src\system_nrf52832.c</FilePath>
             </File>
             <File>
-              <FileName>Vectors_nRF52832.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Vectors_nRF52832.c</FilePath>
-            </File>
-            <File>
               <FileName>iosonata_dfu_public_key.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\..\..\src\iosonata_dfu_public_key.c</FilePath>
@@ -407,11 +402,6 @@
               <FileName>pdm_nrfx.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\..\..\..\src\pdm_nrfx.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>ResetEntry.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\src\ResetEntry.c</FilePath>
             </File>
             <File>
               <FileName>base64.c</FileName>
@@ -557,6 +547,16 @@
               <FileName>modem.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\..\..\..\..\..\src\miscdev\modem.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>ResetEntry.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\src\ResetEntry.c</FilePath>
+            </File>
+            <File>
+              <FileName>Vectors_nRF52832.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Vectors_nRF52832.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -1585,11 +1585,6 @@
               <FilePath>..\src\system_nrf52832.c</FilePath>
             </File>
             <File>
-              <FileName>Vectors_nRF52832.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\src\Vectors_nRF52832.c</FilePath>
-            </File>
-            <File>
               <FileName>iosonata_dfu_public_key.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\..\..\src\iosonata_dfu_public_key.c</FilePath>
@@ -1603,11 +1598,6 @@
               <FileName>pdm_nrfx.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\..\..\..\src\pdm_nrfx.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>ResetEntry.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\src\ResetEntry.c</FilePath>
             </File>
             <File>
               <FileName>base64.c</FileName>
@@ -1753,6 +1743,16 @@
               <FileName>modem.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\..\..\..\..\..\src\miscdev\modem.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>ResetEntry.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\src\ResetEntry.c</FilePath>
+            </File>
+            <File>
+              <FileName>Vectors_nRF52832.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\Vectors_nRF52832.c</FilePath>
             </File>
           </Files>
         </Group>
