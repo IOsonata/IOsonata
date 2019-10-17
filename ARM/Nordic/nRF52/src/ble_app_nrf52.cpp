@@ -61,7 +61,11 @@ Modified by          Date              Description
 #include "nrf_sdh_soc.h"
 #include "nrf_sdh_ble.h"
 #include "nrf_dfu_settings.h"
+
+#ifndef __ARMCC_VERSION
 #include "nrf_crypto.h"
+#endif
+
 #include "nrf_ble_lesc.h"
 #include "nrf_ble_scan.h"
 #include "nrf_drv_rng.h"
@@ -1370,7 +1374,13 @@ bool BleAppStackInit(int CentLinkCount, int PeriLinkCount, bool bConnectable)
     ble_cfg.gatts_cfg.service_changed.service_changed = 1;
     err_code = sd_ble_cfg_set(BLE_GATTS_CFG_SERVICE_CHANGED, &ble_cfg, ram_start);
     APP_ERROR_CHECK(err_code);
-
+#if 0
+    memset(&ble_cfg, 0, sizeof ble_cfg);
+    ble_cfg.conn_cfg.conn_cfg_tag 					= BLEAPP_CONN_CFG_TAG;
+    ble_cfg.conn_cfg.params.gatts_conn_cfg.hvn_tx_queue_size = 10;
+    err_code = sd_ble_cfg_set(BLE_CONN_CFG_GATTS, &ble_cfg, ram_start);
+    APP_ERROR_CHECK(err_code);
+#endif
     // Enable BLE stack.
     err_code = nrf_sdh_ble_enable(&ram_start);
 	APP_ERROR_CHECK(err_code);
@@ -1454,6 +1464,8 @@ bool BleAppInit(const BLEAPP_CFG *pBleAppCfg, bool bEraseBond)
 			g_BleAppData.SDEvtHandler = pBleAppCfg->SDEvtHandler;
 
 			break;
+			default:
+				;
     }
 
 //    nrf_ble_lesc_init();
@@ -1730,6 +1742,8 @@ extern "C" void SD_EVT_IRQHandler(void)
                  g_BleAppData.SDEvtHandler();
              }
              break;
+				 default:
+					 ;
      }
 }
 
@@ -1742,6 +1756,7 @@ NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO)
     .p_context = NULL,
 };
 
+#ifndef __ARMCC_VERSION
 
 #if NRF_MODULE_ENABLED(NRF_CRYPTO) && NRF_MODULE_ENABLED(NRF_CRYPTO_BACKEND_CC310)
 extern nrf_crypto_backend_info_t const cc310_backend;
@@ -1754,3 +1769,6 @@ extern nrf_crypto_backend_info_t const nrf_hw_backend;
 // Just to make the linker to keep the nrf_hw_backend
 __attribute__ ((used)) static uint32_t s_pnrf_hw_backend_info = (uint32_t)&nrf_hw_backend;
 #endif
+
+#endif
+

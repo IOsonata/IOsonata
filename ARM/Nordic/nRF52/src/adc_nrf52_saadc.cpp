@@ -507,6 +507,8 @@ bool AdcnRF52::OpenChannel(const ADC_CHAN_CFG *pChanCfg, int NbChan)
 				case ADC_PIN_CONN_VDD:
 					chconfig |= (SAADC_CH_CONFIG_RESN_VDD1_2 << SAADC_CH_CONFIG_RESN_Pos);
 					break;
+				default:
+					;
 			}
 		}
 		else
@@ -628,8 +630,9 @@ bool AdcnRF52::StartConversion()
 	if (vbInterrupt == false)
 	{
 	    int timeout = 10000;
-	    while (NRF_SAADC->EVENTS_STARTED == 0 && timeout-- > 0);
-        NRF_SAADC->EVENTS_STARTED = 0;
+	    while (NRF_SAADC->EVENTS_STARTED == 0 && timeout-- > 0)
+				;
+      NRF_SAADC->EVENTS_STARTED = 0;
 	    NRF_SAADC->TASKS_SAMPLE = 1;
 		s_AdcnRF52DevData.SampleCnt++;
 	}
