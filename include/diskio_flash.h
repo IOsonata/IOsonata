@@ -1,7 +1,7 @@
 /**--------------------------------------------------------------------------
 @file	diskio_flash.h
 
-@brief	Desc   : Generic flash disk I/O driver class
+@brief	Generic flash disk I/O driver class
 
 Most Flash devices work in MSB bit order. This implementation only support MSB.
 Make sure that the Flash is configure for MSB mode
