@@ -39,13 +39,20 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 
+#if __DARWIN_UNIX03
+#else
 #include "coredev/iopincfg.h"
+#endif
 #include "coredev/uart.h"
 #include "prbs.h"
 #include "slip_intrf.h"
 
 // This include contain i/o definition the board in use
+#if __DARWIN_UNIX03
+#define UART_NO 	0
+#else
 #include "board.h"
+#endif
 
 #define SLIPTEST_BUFSIZE		64
 
@@ -57,18 +64,27 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 
 uint8_t g_TxBuff[FIFOSIZE];
 
+#if __DARWIN_UNIX03
+char s_UartPort[] = "/dev/cu.usbmodem0006824306701";
+#else
 static IOPINCFG s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
+#endif
 
 // UART configuration data
 const UARTCFG g_UartCfg = {
 	.DevNo = UART_NO,
+#if __DARWIN_UNIX03
+	.pIOPinMap = s_UartPort,
+	.NbIOPins = static_cast<int>(strlen(s_UartPort)),
+#else
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPINCFG),
+#endif
 	.Rate = 1000000,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
@@ -126,7 +142,7 @@ int main()
 	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf);
 #else
 	res = g_Uart.Init(g_UartCfg);
-	g_Uart.printf("UART PRBS Test\n\r");
+	//g_Uart.printf("UART PRBS Test\n\r");
 	g_Slip.Init(&g_Uart);
 #endif
 
