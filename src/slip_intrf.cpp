@@ -212,13 +212,33 @@ int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int B
 	int cnt = 0;
 	uint8_t d;
 
-	uint8_t *p = pBuff;
+	if (*pBuff == SLIP_ESC_CODE)
+	{
+		if (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0)
+		{
+			return 0;
+		}
+		if (d == SLIP_ESC_END_CODE)
+		{
+			*pBuff = SLIP_END_CODE;
+		}
+		else if (d == SLIP_ESC_ESC_CODE)
+		{
+			*pBuff = SLIP_ESC_CODE;
+		}
+		pBuff++;
+		BuffLen--;
+		cnt++;
+	}
 
 	while (BuffLen > 0)
 	{
 		if (dev->pPhyIntrf->RxData(dev->pPhyIntrf, pBuff, 1) <= 0)
 		{
-			pBuff[cnt] = 0xFF;
+			if (*pBuff != SLIP_ESC_CODE)
+			{
+				*pBuff = 0xFF;
+			}
 			break;
 		}
 
@@ -228,7 +248,10 @@ int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int B
 		}
 		if (*pBuff == SLIP_ESC_CODE)
 		{
-			while (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0);
+			if (dev->pPhyIntrf->RxData(dev->pPhyIntrf, &d, 1) <= 0)
+			{
+				break;
+			}
 			if (d == SLIP_ESC_END_CODE)
 			{
 				*pBuff = SLIP_END_CODE;
@@ -316,6 +339,83 @@ int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int B
 
 	return 0;
 }
+//#else
+int SlipIntrfRxDataNonBlock(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
+{
+	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	int cnt = dev->CurLen;
+	uint8_t d;
+	int len = SLIP_BUFF_MAX - dev->CurLen;
+	uint8_t *p = &dev->Buf[dev->CurLen];
+
+	if (len <= 0)
+	{
+//		printf("bug\n");
+		dev->CurLen = 0;
+		p = dev->Buf;
+		cnt = 0;
+		len = SLIP_BUFF_MAX;
+	}
+
+	int l = dev->pPhyIntrf->RxData(dev->pPhyIntrf, p, len);
+	if (l <= 0)
+	{
+		return 0;
+	}
+
+	dev->CurLen += l;
+	len -= l;
+
+	while (l > 0)
+	{
+		if (*p == SLIP_END_CODE)
+		{
+			// end slip
+			memcpy(pBuff, dev->Buf, cnt);
+			l = dev->CurLen - cnt - 1;
+			if (l > 0)
+			{
+				p++;
+				memcpy(dev->Buf, p, l);
+				dev->CurLen = l;
+			}
+			else
+			{
+				dev->CurLen = 0;
+			}
+
+			return cnt;
+		}
+
+		if (*p == SLIP_ESC_CODE)
+		{
+			l--;
+			if (l <= 0)
+			{
+				while ((l = dev->pPhyIntrf->RxData(dev->pPhyIntrf, &p[1], len)) <= 0);
+				dev->CurLen += l;
+				len -= l;
+			}
+			if (p[1] == SLIP_ESC_END_CODE)
+			{
+				*p = SLIP_END_CODE;
+			}
+			else if (p[1] == SLIP_ESC_ESC_CODE)
+			{
+				*p = SLIP_ESC_CODE;
+			}
+			p++;
+			l--;
+			dev->CurLen--;
+			memcpy(p, &p[1], l);
+		}
+		l--;
+		p++;
+		cnt++;
+	}
+
+	return 0;
+}
 #endif
 
 /**
@@ -370,6 +470,7 @@ bool SlipIntrfStartTx(DEVINTRF * const pDevIntrf, int DevAddr)
  *
  * @return	Number of bytes sent including the SLIP code
  */
+#if 0
 int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
@@ -396,6 +497,7 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 			if (d[1] != 0)
 			{
 				// Flush data
+				i--;
 				while (i > 0)
 				{
 					int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, pData, i);
@@ -404,6 +506,7 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 					DataLen -= l;
 					cnt += l;
 				}
+				pData++;
 
 				// Send escape code
 				i = 2;
@@ -443,6 +546,65 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 
 	return cnt;
 }
+#else
+
+int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
+{
+	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	int cnt = 0;
+	uint8_t d[2] = {SLIP_ESC_CODE, 0};
+
+	if (dev->pPhyIntrf)
+	{
+		uint8_t *p = pData;
+		int i = 0;
+
+		while (DataLen > 0)
+		{
+			// Find conflicting code
+			if (*p == SLIP_END_CODE)
+			{
+				d[1] = SLIP_ESC_END_CODE;
+				uint8_t *p1 = d;
+				i = 2;
+				while (i > 0)
+				{
+					int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, p1, i);
+					p1 += l;
+					i -= l;
+					cnt += l;
+				}
+			}
+			else if (*p == SLIP_ESC_CODE)
+			{
+				d[1] = SLIP_ESC_ESC_CODE;
+				uint8_t *p1 = d;
+				i = 2;
+				while (i > 0)
+				{
+					int l = dev->pPhyIntrf->TxData(dev->pPhyIntrf, p1, i);
+					p1 += l;
+					i -= l;
+					cnt += l;
+				}
+			}
+			else
+			{
+				while (dev->pPhyIntrf->TxData(dev->pPhyIntrf, p, 1) < 1);
+			}
+
+			DataLen--;
+			p++;
+			cnt++;
+		}
+		d[0] = SLIP_END_CODE;
+
+		while (dev->pPhyIntrf->TxData(dev->pPhyIntrf, d, 1) < 1);
+	}
+
+	return cnt;
+}
+#endif
 
 /**
  * @brief	Completion of sending data via TxData.  Do require post processing
