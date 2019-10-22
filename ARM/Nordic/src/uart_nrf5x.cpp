@@ -41,7 +41,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "iopinctrl.h"
 #include "coredev/uart.h"
-#include "idelay.h"
 #include "interrupt.h"
 
 #define NRF5X_UART_HWFIFO_SIZE		6
