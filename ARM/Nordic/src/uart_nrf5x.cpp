@@ -411,13 +411,20 @@ static void UART_IRQHandler(NRF5X_UARTDEV * const pDev)
 	}
 }
 
-extern "C" void UART0_IRQHandler()
+#ifdef __cplusplus
+extern "C" {
+   void UART0_IRQHandler();
+   void UARTE1_IRQHandler();
+}
+#endif	// __cplusplus
+
+void UART0_IRQHandler()
 {
 	UART_IRQHandler(&s_nRFUartDev[0]);
 }
 
 #ifdef NRF52840_XXAA
-extern "C" void UARTE1_IRQHandler()
+void UARTE1_IRQHandler()
 {
 	UART_IRQHandler(&s_nRFUartDev[1]);
 }
