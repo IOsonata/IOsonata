@@ -235,16 +235,15 @@ int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int B
 	{
 		if (dev->pPhyIntrf->RxData(dev->pPhyIntrf, pBuff, 1) <= 0)
 		{
-			if (*pBuff != SLIP_ESC_CODE)
-			{
-				*pBuff = 0xFF;
-			}
+			*pBuff = 0xFF;
+
 			break;
 		}
 
 		if (*pBuff == SLIP_END_CODE)
 		{
-			return cnt;
+			cnt++;
+			break;
 		}
 		if (*pBuff == SLIP_ESC_CODE)
 		{
@@ -268,155 +267,6 @@ int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int B
 
 	return cnt;
 }
-
-
-#if 0
-int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
-{
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
-	int cnt = dev->CurLen;
-	uint8_t d;
-	int len = SLIP_BUFF_MAX - dev->CurLen;
-	uint8_t *p = &dev->Buf[dev->CurLen];
-
-	if (dev->bEsc)
-	{
-		p--;
-		cnt--;
-	}
-
-	int l = dev->pPhyIntrf->RxData(dev->pPhyIntrf, &dev->Buf[dev->CurLen], len);
-	if (l > 0)
-	{
-		dev->CurLen += l;
-		len -= l;
-
-		while (cnt < dev->CurLen)
-		{
-			if (*p == SLIP_END_CODE)
-			{
-				memcpy(pBuff, dev->Buf, cnt);
-				p++;
-				l--;
-				memcpy(dev->Buf, p, l);
-				dev->CurLen = l;
-
-				return cnt;
-			}
-			if (*p == SLIP_ESC_CODE || dev->bEsc)
-			{
-				l--;
-				if (l <= 0)
-				{
-					l = dev->pPhyIntrf->RxData(dev->pPhyIntrf, &dev->Buf[dev->CurLen], len);
-					if (l <= 0)
-					{
-						dev->bEsc = true;
-
-						return 0;
-					}
-					dev->CurLen += l;
-					len -= l;
-				}
-
-				if (p[1] == SLIP_ESC_END_CODE)
-				{
-					*p = SLIP_END_CODE;
-				}
-				else if (p[1] == SLIP_ESC_ESC_CODE)
-				{
-					*p = SLIP_ESC_CODE;
-				}
-				dev->CurLen--;
-				memcpy(p + 1, p + 2, l);
-				dev->bEsc = false;
-			}
-			p++;
-			l--;
-			cnt++;
-		}
-	}
-
-	return 0;
-}
-//#else
-int SlipIntrfRxDataNonBlock(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
-{
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
-	int cnt = dev->CurLen;
-	uint8_t d;
-	int len = SLIP_BUFF_MAX - dev->CurLen;
-	uint8_t *p = &dev->Buf[dev->CurLen];
-
-	if (len <= 0)
-	{
-//		printf("bug\n");
-		dev->CurLen = 0;
-		p = dev->Buf;
-		cnt = 0;
-		len = SLIP_BUFF_MAX;
-	}
-
-	int l = dev->pPhyIntrf->RxData(dev->pPhyIntrf, p, len);
-	if (l <= 0)
-	{
-		return 0;
-	}
-
-	dev->CurLen += l;
-	len -= l;
-
-	while (l > 0)
-	{
-		if (*p == SLIP_END_CODE)
-		{
-			// end slip
-			memcpy(pBuff, dev->Buf, cnt);
-			l = dev->CurLen - cnt - 1;
-			if (l > 0)
-			{
-				p++;
-				memcpy(dev->Buf, p, l);
-				dev->CurLen = l;
-			}
-			else
-			{
-				dev->CurLen = 0;
-			}
-
-			return cnt;
-		}
-
-		if (*p == SLIP_ESC_CODE)
-		{
-			l--;
-			if (l <= 0)
-			{
-				while ((l = dev->pPhyIntrf->RxData(dev->pPhyIntrf, &p[1], len)) <= 0);
-				dev->CurLen += l;
-				len -= l;
-			}
-			if (p[1] == SLIP_ESC_END_CODE)
-			{
-				*p = SLIP_END_CODE;
-			}
-			else if (p[1] == SLIP_ESC_ESC_CODE)
-			{
-				*p = SLIP_ESC_CODE;
-			}
-			p++;
-			l--;
-			dev->CurLen--;
-			memcpy(p, &p[1], l);
-		}
-		l--;
-		p++;
-		cnt++;
-	}
-
-	return 0;
-}
-#endif
 
 /**
  * @brief	Completion of read data phase. Do require post processing
@@ -470,7 +320,7 @@ bool SlipIntrfStartTx(DEVINTRF * const pDevIntrf, int DevAddr)
  *
  * @return	Number of bytes sent including the SLIP code
  */
-#if 0
+#if 1
 int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
@@ -696,8 +546,6 @@ bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf, bool bBlocking)
 	pDev->DevIntrf.bDma = false;
 	pDev->DevIntrf.PowerOff = SlipIntrfPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
-	pDev->CurLen = 0;
-	pDev->bEsc = false;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	return true;

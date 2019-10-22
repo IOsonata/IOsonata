@@ -48,9 +48,6 @@ typedef struct __Slip_Device {
 	DEVINTRF DevIntrf;					//!< This interface
 	DEVINTRF *pPhyIntrf;				//!< Physical transport interface
 	void *pObj;							//!< Slip object instance
-	int CurLen;
-	bool bEsc;
-	uint8_t Buf[SLIP_BUFF_MAX];
 } SLIPDEV;
 
 #ifdef __cplusplus

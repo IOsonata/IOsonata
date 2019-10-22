@@ -54,7 +54,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 #endif
 
-#define SLIPTEST_BUFSIZE		64
+#define SLIPTEST_BUFSIZE		92
 
 //#define DEMO_C
 
@@ -65,7 +65,7 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 uint8_t g_TxBuff[FIFOSIZE];
 
 #if __DARWIN_UNIX03
-char s_UartPort[] = "/dev/cu.usbmodem0006824306701";
+char s_UartPort[] = "/dev/cu.usbserial-DM00NN8S";
 #else
 static IOPINCFG s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
@@ -85,7 +85,7 @@ const UARTCFG g_UartCfg = {
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPINCFG),
 #endif
-	.Rate = 1000000,
+	.Rate = 460800,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -148,7 +148,8 @@ int main()
 
 	uint8_t d = 0xff;
 	uint8_t buff[SLIPTEST_BUFSIZE];
-
+	uint32_t lcnt = 0;
+	
 	while(1)
 	{
 		for (int i = 0; i < SLIPTEST_BUFSIZE; i++)
@@ -161,6 +162,11 @@ int main()
 #else
 		g_Slip.Tx(0, buff, SLIPTEST_BUFSIZE);
 #endif
+		lcnt++;
+		if ((lcnt & 0xffff) == 0)
+		{
+			printf("cnt %u\n", lcnt);
+		}
 	}
 	return 0;
 }

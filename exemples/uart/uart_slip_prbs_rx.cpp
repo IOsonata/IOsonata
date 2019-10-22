@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	uart_slip_prbs_rx.cpp
 
-@brief	UART PRBS transmit test over SLIP protocol
+@brief	UART PRBS receive test over SLIP protocol
 
 This example sends PRBS byte though UART over SLIP protocole. The example
 shows UART & SLIP interface use in both C and C++.
@@ -60,8 +60,8 @@ uint8_t g_RxBuff[FIFOSIZE];
 static IOPINCFG s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
+	//{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
+	//{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
 
 // UART configuration data
@@ -126,50 +126,77 @@ int main()
 	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf);
 #else
 	res = g_Uart.Init(g_UartCfg);
-	g_Uart.printf("UART PRBS Test\n\r");
-	g_Slip.Init(&g_Uart);
+	g_Slip.Init(&g_Uart, false);
 #endif
 
-    uint8_t val = 0;
+	printf("UART PRBS Test\n\r");
+
+	uint8_t val = 0;
     uint32_t errcnt = 0;
     uint32_t cnt = 0;
 	uint8_t d = 0xff;
 	uint8_t buf[SLIPTEST_BUFSIZE];
+	uint32_t lcnt = 0;
+	uint32_t pkcnt = 0;
+	uint8_t *p = buf;
+	int len = SLIPTEST_BUFSIZE;
 
 	while(1)
 	{
 #ifdef DEMO_C
-        int l = SlipRx(&g_SlipDev, buf, SLIPTEST_BUFSIZE);
+        int l = SlipRx(&g_SlipDev, p, SLIPTEST_BUFSIZE);
 #else
-        int l = g_Slip.Rx(0, buf, SLIPTEST_BUFSIZE);
+        int l = g_Slip.Rx(0, p, len);
 #endif
 //		e += difftime(time(NULL), t);
-		for (int i = 0; i < l; i++)
-		{
-            cnt++;
+        if (l > 0)
+        {
+            lcnt++;
+        	if (p[l-1] == SLIP_END_CODE)
+        	{
+        		l--;
+        		pkcnt++;
+				for (int i = 0; i < l; i++)
+				{
+					cnt++;
 
-			if (val == 0)
-			{
-				val = buf[i];
-			}
-			// If success send next code
-            if (val != buf[i])
-            {
-                errcnt++;
-                if ((cnt & 0xf) == 0)
-                {
-                	printf("Err %d\n", errcnt);
-                }
-               // printf("PRBS %u errors %x %x\n", errcnt, val, d);
-            }
-/*            else if ((cnt & 0x7fff) == 0)
-            {
-                printf("PRBS %d rate %.3f B/s, err : %u\n", l, cnt / e, errcnt);
-//                printf("PRBS rate %.3f B/s, err : %u\n", cnt / elapse.count(), errcnt);
+					if (val == 0)
+					{
+						val = buf[i];
+					}
+					// If success send next code
+					if (val != buf[i])
+					{
+						errcnt++;
+						if ((cnt & 0xf) == 0)
+						{
+							printf("Err %d\n", errcnt);
+						}
+						printf("PRBS %u errors %x %x\n", errcnt, val, buf[i]);
+					}
+		/*            else if ((cnt & 0x7fff) == 0)
+					{
+						printf("PRBS %d rate %.3f B/s, err : %u\n", l, cnt / e, errcnt);
+		//                printf("PRBS rate %.3f B/s, err : %u\n", cnt / elapse.count(), errcnt);
 
-            }*/
-			val = Prbs8(buf[i]);
-		}
+					}*/
+					val = Prbs8(buf[i]);
+				}
+	        	p = buf;
+	        	len = SLIPTEST_BUFSIZE;
+        	}
+        	else
+        	{
+        		p += l;
+        		len -= l;
+        		if (len <= 0)
+        		{
+        			printf("Err len %u %u %p\n", lcnt, pkcnt, p);
+        			p = buf;
+        			len = SLIPTEST_BUFSIZE;
+        		}
+        	}
+        }
 	}
 	return 0;
 }
