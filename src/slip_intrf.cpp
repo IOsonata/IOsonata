@@ -168,7 +168,9 @@ int SlipIntrfRxDataBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int Buff
 		{
 			if (*pBuff == SLIP_END_CODE)
 			{
-				return cnt;
+				cnt++;
+
+				break;
 			}
 			if (*pBuff == SLIP_ESC_CODE)
 			{
@@ -320,7 +322,7 @@ bool SlipIntrfStartTx(DEVINTRF * const pDevIntrf, int DevAddr)
  *
  * @return	Number of bytes sent including the SLIP code
  */
-#if 1
+#if 0
 int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
