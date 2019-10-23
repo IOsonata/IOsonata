@@ -63,7 +63,6 @@ extern void _call_main(void);
 extern void _start();
 extern void _rtos_start();
 extern int main (void);
-extern int __main (void);
 extern void __libc_init_array(void);
 extern void SystemInit(void);
 extern void SystemCoreClockUpdate(void);
@@ -80,8 +79,8 @@ uint32_t SystemMicroSecLoopCnt = 1;
 /**
  *	This is entry point after reset
  */
-__attribute__ ((section (".AppStart")))
 #if defined ( __ARMCC_VERSION )
+__attribute__ ((section (".AppStart")))
 void Reset_Handler (void)
 {
 	/*
@@ -89,6 +88,7 @@ void Reset_Handler (void)
 	 */
 	memset(Image$$ER_ZI$$Base, 0, (size_t)&Image$$ER_ZI$$Length);
 #else
+__attribute__ ((section (".AppStart")))
 void ResetEntry (void)
 {
 #ifdef __ICCARM__
