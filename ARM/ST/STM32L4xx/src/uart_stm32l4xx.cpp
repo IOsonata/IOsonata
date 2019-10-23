@@ -239,25 +239,27 @@ static int STM32L4xUARTSetRate(DEVINTRF * const pDev, int Rate)
 	uint32_t fclk2 = s_FclkFreq << 1;
 	uint32_t rem8 = fclk2 % Rate;
 	uint32_t rem16 = s_FclkFreq % Rate;
+	uint32_t div;
 
 	if (rem8 < rem16)
 	{
 		// /8 better
 		s_Stm32l4xUartDev[dev->DevNo].pReg->CR1 |= USART_CR1_OVER8;
 
-		uint32_t div = (fclk2 + (Rate >> 1)) / Rate;
+		div = (fclk2 + (Rate >> 1)) / Rate;
 		dev->pUartDev->Rate = (fclk2 + (div >> 1)) / div;
-		s_Stm32l4xUartDev[dev->DevNo].pReg->BRR = ((div & 0xf) >> 1) | (div & 0xFFFFFFF0);
+		div = ((div & 0xf) >> 1) | (div & 0xFFFFFFF0);
 	}
 	else
 	{
 		// /16 better
 		s_Stm32l4xUartDev[dev->DevNo].pReg->CR1 &= ~USART_CR1_OVER8;
 
-		uint32_t div = (s_FclkFreq + (Rate >> 1)) / Rate;
-		dev->pUartDev->Rate = (s_FclkFreq + (div >> 1))/ div;
-		s_Stm32l4xUartDev[dev->DevNo].pReg->BRR = div;
+		div = (s_FclkFreq + (Rate >> 1)) / Rate;
+		dev->pUartDev->Rate = (s_FclkFreq + (div >> 1)) / div;
 	}
+
+	s_Stm32l4xUartDev[dev->DevNo].pReg->BRR = div;
 
 	return dev->pUartDev->Rate;
 }
