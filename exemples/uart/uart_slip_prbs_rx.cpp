@@ -39,7 +39,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 
-#include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 #include "prbs.h"
 #include "slip_intrf.h"
@@ -47,28 +46,23 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
-#define SLIPTEST_BUFSIZE		600
-
-//#define DEMO_C
+#define DEMO_C
 
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
+#define SLIPTEST_BUFSIZE		600
 #define FIFOSIZE			CFIFO_MEMSIZE(SLIPTEST_BUFSIZE * 4)
-
 uint8_t g_RxBuff[FIFOSIZE];
 
-static IOPINCFG s_UartPins[] = {
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
-	//{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	//{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
-};
+// This defines the s_UartPortPins map and pin count.
+// See board.h for target device specific definitions
+static const UART_PORTPINS;
 
 // UART configuration data
 const UARTCFG g_UartCfg = {
 	.DevNo = UART_NO,
-	.pIOPinMap = s_UartPins,
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPINCFG),
+	.pIOPinMap = s_UartPortPins,
+	.NbIOPins = UART_PORTPIN_COUNT,
 	.Rate = 460800,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
@@ -76,7 +70,7 @@ const UARTCFG g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 1,
-	.EvtCallback = nRFUartEvthandler,
+	.EvtCallback = NULL,//nRFUartEvthandler,
 	.bFifoBlocking = true,
 	.RxMemSize = FIFOSIZE,
 	.pRxMem = g_RxBuff,
@@ -99,8 +93,7 @@ Slip g_Slip;
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
-	uint8_t buff[SLIPTEST_BUFSIZE];
-	uint8_t *p;
+	//uint8_t buff[SLIPTEST_BUFSIZE];
 
 	switch (EvtId)
 	{
@@ -123,7 +116,7 @@ int main()
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &g_UartCfg);
-	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf);
+	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf, false);
 #else
 	res = g_Uart.Init(g_UartCfg);
 	g_Slip.Init(&g_Uart, false);
