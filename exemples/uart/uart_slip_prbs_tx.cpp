@@ -39,52 +39,31 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 
-#if __DARWIN_UNIX03
-#else
-#include "coredev/iopincfg.h"
-#endif
 #include "coredev/uart.h"
 #include "prbs.h"
 #include "slip_intrf.h"
 
 // This include contain i/o definition the board in use
-#if __DARWIN_UNIX03
-#define UART_NO 	0
-#else
 #include "board.h"
-#endif
 
-#define SLIPTEST_BUFSIZE		92
-
-//#define DEMO_C
+#define DEMO_C
 
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-#define FIFOSIZE			CFIFO_MEMSIZE(256)
-
+// Allocate FIFO memory
+#define SLIPTEST_BUFSIZE		92
+#define FIFOSIZE				CFIFO_MEMSIZE(256)
 uint8_t g_TxBuff[FIFOSIZE];
 
-#if __DARWIN_UNIX03
-char s_UartPort[] = "/dev/cu.usbserial-DM00NN8S";
-#else
-static IOPINCFG s_UartPins[] = {
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
-};
-#endif
+// This defines the s_UartPortPins map and pin count.
+// See board.h for target device specific definitions
+static const UART_PORTPINS;
 
 // UART configuration data
 const UARTCFG g_UartCfg = {
 	.DevNo = UART_NO,
-#if __DARWIN_UNIX03
-	.pIOPinMap = s_UartPort,
-	.NbIOPins = static_cast<int>(strlen(s_UartPort)),
-#else
-	.pIOPinMap = s_UartPins,
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPINCFG),
-#endif
+	.pIOPinMap = s_UartPortPins,
+	.NbIOPins = UART_PORTPIN_COUNT,
 	.Rate = 460800,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
@@ -92,7 +71,7 @@ const UARTCFG g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 1,
-	.EvtCallback = nRFUartEvthandler,
+	.EvtCallback = NULL,//nRFUartEvthandler,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = NULL,
@@ -115,14 +94,13 @@ Slip g_Slip;
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
-	uint8_t buff[SLIPTEST_BUFSIZE];
-	uint8_t *p;
+//	uint8_t buff[SLIPTEST_BUFSIZE];
 
 	switch (EvtId)
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			UARTRx(pDev, buff, BufferLen);
+//			UARTRx(pDev, buff, BufferLen);
 			break;
 		case UART_EVT_TXREADY:
 			break;
@@ -137,12 +115,13 @@ int main()
 {
 	bool res;
 
+	printf("UART Slip PRBS Demo\n");
+
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &g_UartCfg);
-	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf);
+	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf, true);
 #else
 	res = g_Uart.Init(g_UartCfg);
-	//g_Uart.printf("UART PRBS Test\n\r");
 	g_Slip.Init(&g_Uart);
 #endif
 
@@ -163,7 +142,7 @@ int main()
 		g_Slip.Tx(0, buff, SLIPTEST_BUFSIZE);
 #endif
 		lcnt++;
-		if ((lcnt & 0xffff) == 0)
+		if ((lcnt & 0xff) == 0)
 		{
 			printf("cnt %u\n", lcnt);
 		}

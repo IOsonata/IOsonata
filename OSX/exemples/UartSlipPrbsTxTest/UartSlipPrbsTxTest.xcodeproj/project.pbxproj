@@ -25,6 +25,7 @@
 
 /* Begin PBXFileReference section */
 		C905043A235E3B1300DD7F2B /* libIOsonata_OSX.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libIOsonata_OSX.a; path = ../../lib/DerivedData/IOsonata_OSX/Build/Products/Debug/libIOsonata_OSX.a; sourceTree = "<group>"; };
+		C9741F90236097FC007CDDDB /* board.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = board.h; sourceTree = "<group>"; };
 		C98CBD13235E34F000BED66B /* UartSlipPrbsTxTest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = UartSlipPrbsTxTest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C98CBD1F235E357700BED66B /* uart_slip_prbs_tx.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = uart_slip_prbs_tx.cpp; path = ../../../../exemples/uart/uart_slip_prbs_tx.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -69,6 +70,7 @@
 		C98CBD15235E34F000BED66B /* UartSlipPrbsTxTest */ = {
 			isa = PBXGroup;
 			children = (
+				C9741F90236097FC007CDDDB /* board.h */,
 				C98CBD1F235E357700BED66B /* uart_slip_prbs_tx.cpp */,
 			);
 			path = UartSlipPrbsTxTest;
