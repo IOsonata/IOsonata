@@ -143,6 +143,7 @@ static void UART_IRQHandler(STM32L4X_UARTDEV * const pDev)
 			{
 				pDev->RxDropCnt++;
 				dev->bRxReady = true;
+				break;
 			}
 			*p = (uint16_t)pDev->pReg->RDR & 0xFF;
 			//pDev->pReg->ICR = USART_ISR_RXNE;
