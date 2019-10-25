@@ -39,6 +39,7 @@ Modified by          Date              Description
 #include "cfifo.h"
 #include "ble_intrf.h"
 #include "ble_app.h"
+#include "interrupt.h"
 
 #define NRFBLEINTRF_PACKET_SIZE		((NRF_BLE_MAX_MTU_SIZE - 3) + sizeof(BLEINTRF_PKT) - 1)
 #define NRFBLEINTRF_CFIFO_SIZE		CFIFO_TOTAL_MEMSIZE(2, NRFBLEINTRF_PACKET_SIZE)
@@ -208,7 +209,9 @@ bool BleIntrfNotify(BLEINTRF *pIntrf)
     {
         pIntrf->TransBuffLen = 0;
         do {
+            uint32_t state = DisableInterrupt();
             pkt = (BLEINTRF_PKT *)CFifoGet(pIntrf->hTxFifo);
+            EnableInterrupt(state);
             if (pkt != NULL)
             {
                 uint32_t res = BleSrvcCharNotify(pIntrf->pBleSrv, pIntrf->TxCharIdx, pkt->Data, pkt->Len);
@@ -241,22 +244,29 @@ int BleIntrfTxData(DEVINTRF *pDevIntrf, uint8_t *pData, int DataLen)
 {
 	BLEINTRF *intrf = (BLEINTRF*)pDevIntrf->pDevData;
     BLEINTRF_PKT *pkt;
-    int maxlen = intrf->hTxFifo->BlkSize - sizeof(pkt->Len);
+    int maxlen = intrf->PacketSize - sizeof(pkt->Len);
 	int cnt = 0;
+	pkt->Len = 0;
 
-	while (DataLen > 0)
+    uint32_t state = DisableInterrupt();
+	//while (DataLen > 0)
 	{
 		pkt = (BLEINTRF_PKT *)CFifoPut(intrf->hTxFifo);
-		if (pkt == NULL)
-			break;
+		//if (pkt == NULL)
+		//	break;
+		if (pkt)
+		{
         int l = min(DataLen, maxlen);
 		memcpy(pkt->Data, pData, l);
 		pkt->Len = l;
 		DataLen -= l;
 		pData += l;
 		cnt += l;
+		}
 	}
-	BleIntrfNotify(intrf);
+    EnableInterrupt(state);
+
+    BleIntrfNotify(intrf);
 
 	return cnt;
 }
@@ -311,7 +321,7 @@ void BleIntrfRxWrCB(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len)
 		pkt = (BLEINTRF_PKT *)CFifoPut(intrf->hRxFifo);
 		if (pkt == NULL)
 			break;
-		int l = min(intrf->PacketSize, Len);
+		int l = min(intrf->PacketSize - 4, Len);
 		memcpy(pkt->Data, pData, l);
 		pkt->Len = l;
 		Len -= l;
