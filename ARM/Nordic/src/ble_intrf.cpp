@@ -248,7 +248,7 @@ int BleIntrfTxData(DEVINTRF *pDevIntrf, uint8_t *pData, int DataLen)
 	int cnt = 0;
 	pkt->Len = 0;
 
-    uint32_t state = DisableInterrupt();
+    //uint32_t state = DisableInterrupt();
 	//while (DataLen > 0)
 	{
 		pkt = (BLEINTRF_PKT *)CFifoPut(intrf->hTxFifo);
@@ -256,15 +256,19 @@ int BleIntrfTxData(DEVINTRF *pDevIntrf, uint8_t *pData, int DataLen)
 		//	break;
 		if (pkt)
 		{
-        int l = min(DataLen, maxlen);
-		memcpy(pkt->Data, pData, l);
-		pkt->Len = l;
-		DataLen -= l;
-		pData += l;
-		cnt += l;
+			int l = min(DataLen, maxlen);
+			memcpy(pkt->Data, pData, l);
+			pkt->Len = l;
+			DataLen -= l;
+			pData += l;
+			cnt += l;
+		}
+		else
+		{
+			intrf->TxDropCnt++;
 		}
 	}
-    EnableInterrupt(state);
+   // EnableInterrupt(state);
 
     BleIntrfNotify(intrf);
 
@@ -320,7 +324,10 @@ void BleIntrfRxWrCB(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len)
 	while (Len > 0) {
 		pkt = (BLEINTRF_PKT *)CFifoPut(intrf->hRxFifo);
 		if (pkt == NULL)
+		{
+			intrf->RxDropCnt++;
 			break;
+		}
 		int l = min(intrf->PacketSize - 4, Len);
 		memcpy(pkt->Data, pData, l);
 		pkt->Len = l;
@@ -382,6 +389,8 @@ bool BleIntrfInit(BLEINTRF *pBleIntrf, const BLEINTRF_CFG *pCfg)
 	pBleIntrf->DevIntrf.MaxRetry = 0;
 	pBleIntrf->DevIntrf.EvtCB = pCfg->EvtCB;
 	pBleIntrf->TransBuffLen = 0;
+	pBleIntrf->RxDropCnt = 0;
+	pBleIntrf->TxDropCnt = 0;
 	atomic_flag_clear(&pBleIntrf->DevIntrf.bBusy);
 
 	return true;
