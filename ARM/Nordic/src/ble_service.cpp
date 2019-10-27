@@ -128,9 +128,10 @@ void BleSrvcEvtHandler(BLESRVC *pSrvc, ble_evt_t *pBleEvt)
 					    uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
 						if (hdr->Handle == pSrvc->pCharArray[i].Hdl.value_handle)
 					    {
+#if 1
 							GatherLongWrBuff(hdr);
 							pSrvc->pCharArray[i].WrCB(pSrvc, p, hdr->Offset, hdr->Len);
-#if 0
+#else
 							bool done = false;
 							GATLWRHDR hdr1;
 							uint8_t *p1 = p + hdr->Len;

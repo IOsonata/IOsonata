@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>MotionSensorDemo</name>
+	<name>UartPrbsRxTest</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -36,24 +36,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/mot_sensor_demo.cpp</name>
+			<name>src/uart_prbs_rx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/sensor/mot_sensor_demo.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/sensors/agm_icm20948.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/uart/uart_prbs_rx.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
