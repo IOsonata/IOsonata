@@ -648,6 +648,15 @@ static void STM32L4xxQSPIPowerOff(DEVINTRF * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
+	STM32L4xxQSPIDisable(pDev);
+
+	RCC->AHB3ENR &= ~RCC_AHB3ENR_QSPIEN;
+
+	for (int i = 0; i < dev->pSpiDev->Cfg.NbIOPins; i++)
+	{
+		IOPinConfig(dev->pSpiDev->Cfg.pIOPinMap[i].PortNo, dev->pSpiDev->Cfg.pIOPinMap[i].PinNo,
+					0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	}
 }
 
 bool STM32L4xxQSPISendCmd(DEVINTRF * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
