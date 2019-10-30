@@ -51,9 +51,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define RCC_CCIPR_USARTSEL(n, clk)		(clk<<((n-1) << 1))
 
-#define STM32L4X_UART_HWFIFO_SIZE		6
+#define STM32L4X_UART_HWFIFO_SIZE		4
 #define STM32L4X_UART_RXTIMEOUT			15
-#define STM32L4X_UART_BUFF_SIZE			16
+#define STM32L4X_UART_BUFF_SIZE			(4 * STM32L4X_UART_HWFIFO_SIZE)
 #define STM32L4X_UART_CFIFO_SIZE		CFIFO_MEMSIZE(STM32L4X_UART_BUFF_SIZE)
 
 #pragma pack(push, 4)
@@ -64,7 +64,6 @@ typedef struct _STM32L4X_UART_Dev {
 	UARTDEV	*pUartDev;		// Pointer to generic UART dev. data
 	uint32_t RxDropCnt;
 	uint32_t RxTimeoutCnt;
-	uint32_t TxDropCnt;
 	uint32_t ErrCnt;
 	uint32_t RxPin;
 	uint32_t TxPin;
@@ -73,6 +72,7 @@ typedef struct _STM32L4X_UART_Dev {
 	uint8_t TxDmaCache[STM32L4X_UART_BUFF_SIZE];
 	uint8_t RxFifoMem[STM32L4X_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[STM32L4X_UART_CFIFO_SIZE];
+	uint32_t ErrFlag;
 } STM32L4X_UARTDEV;
 
 #pragma pack(pop)
@@ -136,19 +136,20 @@ static void UART_IRQHandler(STM32L4X_UARTDEV * const pDev)
 
 	if (iflag & USART_ISR_RXNE)
 	{
-		int cnt = 4;
+		int cnt = STM32L4X_UART_HWFIFO_SIZE;
 		do {
 			uint8_t *p = CFifoPut(dev->hRxFifo);
 			if (p == NULL)
 			{
 				pDev->RxDropCnt++;
 				dev->bRxReady = true;
+				uint8_t x = (uint16_t)pDev->pReg->RDR & 0xFF;
+				pDev->pReg->ICR = USART_ISR_RXNE;
 				break;
 			}
 			*p = (uint16_t)pDev->pReg->RDR & 0xFF;
 			//pDev->pReg->ICR = USART_ISR_RXNE;
 		} while (pDev->pReg->ISR & USART_ISR_RXNE && cnt-- > 0);
-
 		if (dev->EvtCallback)
 		{
 			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
@@ -189,6 +190,7 @@ static void UART_IRQHandler(STM32L4X_UARTDEV * const pDev)
 	{
 		// error
 		pDev->ErrCnt++;
+		pDev->ErrFlag = iflag & (USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE);
 		//pDev->pReg->ICR = (USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE);
 	}
 	pDev->pReg->ICR = iflag & 0x121BDF;
@@ -375,7 +377,6 @@ static void STM32L4xUARTEnable(DEVINTRF * const pDev)
 	dev->ErrCnt = 0;
 	dev->RxTimeoutCnt = 0;
 	dev->RxDropCnt = 0;
-	dev->TxDropCnt = 0;
 	atomic_flag_clear(&pDev->bBusy);
 
 	CFifoFlush(dev->pUartDev->hTxFifo);
@@ -603,7 +604,6 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
     s_Stm32l4xUartDev[devno].ErrCnt = 0;
     s_Stm32l4xUartDev[devno].RxTimeoutCnt = 0;
     s_Stm32l4xUartDev[devno].RxDropCnt = 0;
-    s_Stm32l4xUartDev[devno].TxDropCnt = 0;
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
 	pDev->Mode = pCfg->Mode;
