@@ -1403,7 +1403,7 @@
                     <state>$PROJ_DIR$\..\..\..\..\..\include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\CMSIS\Core\Include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\BSEC\algo</state>
+                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\BSEC\algo\lite_version\inc</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\invn</state>
                 </option>
                 <option>
@@ -2081,7 +2081,7 @@
                 </option>
                 <option>
                     <name>IarchiveOutput</name>
-                    <state>Z:\Qsync\I-SYST\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\lib\IAR\Release\IOsonata_STM32L476.a</state>
+                    <state>Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L476\lib\IAR\Release\IOSonata_STM32L476.a</state>
                 </option>
             </data>
         </settings>
