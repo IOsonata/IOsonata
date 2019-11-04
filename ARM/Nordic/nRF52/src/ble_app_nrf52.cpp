@@ -467,6 +467,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
         	g_BleAppData.bAdvertising = false;
         	BleConnLedOn();
         	g_BleAppData.ConnHdl = p_ble_evt->evt.gap_evt.conn_handle;
+        	g_BleAppData.bScan = false;
 
             break;
 
