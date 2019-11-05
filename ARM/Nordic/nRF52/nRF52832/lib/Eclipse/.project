@@ -621,9 +621,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_device.h</locationURI>
 		</link>
 		<link>
+			<name>include/converters/adc_hx711.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_hx711.h</locationURI>
+		</link>
+		<link>
 			<name>include/converters/adc_ltc2495.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_ltc2495.h</locationURI>
+		</link>
+		<link>
+			<name>include/converters/adc_nau7802.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_nau7802.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/analog_comp.h</name>
@@ -1339,6 +1349,11 @@
 			<name>src/mbedtls/library/platform.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/platform.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/sha256.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/sha256.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/ble_advertising</name>
