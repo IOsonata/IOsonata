@@ -81,6 +81,7 @@ typedef void (*DEVEVTCB)(Device * const pDev, DEV_EVT Evt);
 class Device {
 public:
 	Device();
+	virtual ~Device() {}
 
 	//
 	// *** Require implementations ***
