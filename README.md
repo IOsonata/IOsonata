@@ -1,7 +1,13 @@
 # IOsonata
 IOsonata multi-platform multi-architecture optimized software library for fast and easy iot products development
 
-This is the new refactoring of the EHAL library (https://github.com/I-SYST/EHAL).
+This is the new refactoring of the EHAL library (https://github.com/I-SYST/EHAL). 
+
+Turorial blog posts : 
+
+[Bluetooth Low Energy firmware with a few lines of code](http://embeddedsoftdev.blogspot.com/2018/01/bluetooth-le-with-nordic-nrf51-nrf52.html) 
+
+[Nordic nRF51 & nRF52 series firmware development with Eclipse](http://embeddedsoftdev.blogspot.com/p/ehal-nrf51.html)
 
 Although this refactoring includes supports for multiple IDE/Compilers.  The prefered IDE is still Eclipse/GCC.  GCC is the facto standard for embedded software development. Eclipse is 100% free and the most flexible IDE.  It could be little overwhelming for newbies at first (like any other IDE if you are new to it anyway).
 
