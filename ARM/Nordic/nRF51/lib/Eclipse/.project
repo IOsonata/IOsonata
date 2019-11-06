@@ -976,9 +976,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/pwrmgnt/pwrmgnt_as3701.cpp</name>
+			<name>src/pwrmgnt/fg_lc709203f.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/pwrmgnt/pwrmgnt_as3701.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/src/pwrmgnt/fg_lc709203f.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_as3701.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/pwrmgnt/pm_as3701.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/rtx/RTX_Conf_CM.c</name>
