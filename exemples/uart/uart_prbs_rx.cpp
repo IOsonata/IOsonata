@@ -41,29 +41,32 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <chrono>
 #include <time.h>
 
-#include "uart.h"
+#include "coredev/uart.h"
 #include "prbs.h"
+#include "board.h"
 
-
-char s_DevPath[] = {"/dev/cu.usbmodem142122"};
+// This defines the s_UartPortPins map and pin count.
+// See board.h for target device specific definitions
+static const UART_PORTPINS;
 
 // UART configuration data
 const UARTCFG g_UartCfg = {
-	0,
-	s_DevPath,
-	static_cast<int>(strlen(s_DevPath)),
-	1000000,	// Rate
-	8,
-	UART_PARITY_NONE,
-	1,	// Stop bit
-	UART_FLWCTRL_NONE,
-	true,
-	1, //  use APP_IRQ_PRIORITY_LOW with Softdevice
-	nullptr,
-	0,
-	nullptr,
-	0,
-	nullptr,
+	.DevNo = 0,
+	.pIOPinMap = s_UartPortPins,
+	.NbIOPins = UART_PORTPIN_COUNT,
+	.Rate = 1000000,	// Rate
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,	// Stop bit
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 1, //  use APP_IRQ_PRIORITY_LOW with Softdevice
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,
+	.pRxMem = nullptr,
+	.TxMemSize = 0,
+	.pTxMem = nullptr,
 };
 
 #define DEMO_C
