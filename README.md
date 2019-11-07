@@ -29,7 +29,7 @@ external vendors' SDK and library required :
 
 [nrf5_SDK_Mesh](https://www.nordicsemi.com/Software-and-Tools/Software/nRF5-SDK-for-Mesh/Download#infotabs) : Nordic nRF5 SDK for Bluetoth Mesh
 
-[ICM-20948 Motion_Driver](https://www.invensense.com/developers) : Create a user at https://www.invensense.com/developers. Under "Downloads" download "DK-20948 eMD-SmartMotion ...". Unzip the downloaded file and navigate to EMD-Core/sources. Copy the folder Invn to external/Invn as indected in the folder tree bellow.
+[ICM-20948 Motion_Driver](https://www.invensense.com/developers) : Create a user at https://www.invensense.com/developers. Under "Downloads" download "DK-20948 eMD-SmartMotion ...". Unzip the downloaded file and navigate to EMD-Core/sources. Copy the folder Invn to external/Invn as indicated in the folder tree bellow.
 
 [BSEC](https://www.bosch-sensortec.com/bst/products/all_products/bsec) : Bosch Sensortec Environmental Cluster (BSEC) Software for #BME680 environmental sensor.  BSEC is needed for calculating Air Quality Index.  Go to https://www.bosch-sensortec.com/bst/products/all_products/bsec at the end of the page.  Select checkbox to accept license terms to download.  Unzip the the downloaded file. Rename the extracted folder BSEC and copy the whole folder to external as indicated in the folder tree bellow.  
 
