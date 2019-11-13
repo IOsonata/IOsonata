@@ -33,6 +33,18 @@ external vendors' SDK and library required :
 
 [BSEC](https://www.bosch-sensortec.com/bst/products/all_products/bsec) : Bosch Sensortec Environmental Cluster (BSEC) Software for #BME680 environmental sensor.  BSEC is needed for calculating Air Quality Index.  Go to https://www.bosch-sensortec.com/bst/products/all_products/bsec at the end of the page.  Select checkbox to accept license terms to download.  Unzip the the downloaded file. Rename the extracted folder BSEC and copy the whole folder to external as indicated in the folder tree bellow.  
 
+
+![IDK-BLYST-NANO](https://www.i-syst.com/images/IDK-BLYST-NANO_photo640.png) 
+
+<p align="center"> 
+
+BLYST Nano nRF52832 BLuetooth 5 / Bluetooth Mesh development board with builtin IDAP-M CMSIS-DAP Debug JTag  
+[Buy : IDK-BLYST-NANO (BLYST Nano development board)](https://www.tindie.com/products/hnhoan/bluetooth5mesh-nrf52832-arm-m4f-nano-devkit/).  
+ 
+</p> 
+
+
+
 ![BLUEIO-TAG-EVIM](https://www.i-syst.com/images/BLUEIO-TAG-EVIM_page.png) 
  
 <p align="center"> 
