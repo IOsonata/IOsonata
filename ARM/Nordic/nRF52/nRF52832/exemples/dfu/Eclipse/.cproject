@@ -26,7 +26,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.1285369634" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.814708751" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.1991133397" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.580086301" name="ARM family" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.580086301" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.927969643" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.665835884" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.1647727661" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
@@ -181,7 +181,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="nrf_bootloader.c|nRF5_SDK/boards|nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c|nRF5_SDK/libraries/bootloader/serial_dfu/nrf_serial_dfu.c|nRF5_SDK/libraries/log|nRF5_SDK/segger_rtt|nRF5_SDK/libraries/crypto/nrf_crypto_svc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry excluding="nRF5_SDK/libraries/hci|nRF5_SDK/libraries/balloc|nRF5_SDK/libraries/fds|nRF5_SDK/libraries/scheduler|nRF5_SDK/libraries/queue|nRF5_SDK/libraries/mem_manager|nRF5_SDK/libraries/util|nRF5_SDK/libraries/timer|nRF5_SDK/libraries/slip|nRF5_SDK/libraries/sha256|nRF5_SDK/libraries/experimental_section_vars|nRF5_SDK/libraries/atomic_flags|nRF5_SDK/libraries/atomic_fifo|nRF5_SDK/libraries/atomic|nRF5_SDK/ble|micro-ecc|nrf_bootloader.c|nRF5_SDK/boards|nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c|nRF5_SDK/libraries/bootloader/serial_dfu/nrf_serial_dfu.c|nRF5_SDK/libraries/log|nRF5_SDK/segger_rtt|nRF5_SDK/libraries/crypto/nrf_crypto_svc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -212,7 +212,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.1931315977" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.549651755" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.1870421257" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.831021985" name="ARM family" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.831021985" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.1441226529" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.683509446" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.1391230916" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
@@ -242,7 +242,7 @@
 									<listOptionValue builtIn="false" value="NRF_DFU_DEBUG_VERSION"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=5"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
 									<listOptionValue builtIn="false" value="BOARD_CUSTOM"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -318,8 +318,8 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.1021895488" name="Cross ARM C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections.1688742305" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.gcsections" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other.1576403935" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
-								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile.1743570774" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" valueType="stringList">
-									<listOptionValue builtIn="false" value="../../src/secure_dfu_gcc_nrf52_debug.ld"/>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile.1743570774" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
+									<listOptionValue builtIn="false" value="../../src/secure_dfu_gcc_nrf52.ld"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths.9850305" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" useByScannerDiscovery="false" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../lib/Eclipse/Release&quot;"/>
@@ -364,7 +364,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="nrf_bootloader.c|nRF5_SDK/boards|nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c|nRF5_SDK/libraries/bootloader/serial_dfu/nrf_serial_dfu.c|nRF5_SDK/libraries/log|nRF5_SDK/segger_rtt|nRF5_SDK/libraries/crypto/nrf_crypto_svc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry excluding="nRF5_SDK/libraries/hci|nRF5_SDK/libraries/balloc|nRF5_SDK/libraries/fds|nRF5_SDK/libraries/scheduler|nRF5_SDK/libraries/queue|nRF5_SDK/libraries/mem_manager|nRF5_SDK/libraries/util|nRF5_SDK/libraries/timer|nRF5_SDK/libraries/slip|nRF5_SDK/libraries/sha256|nRF5_SDK/libraries/experimental_section_vars|nRF5_SDK/libraries/atomic_flags|nRF5_SDK/libraries/atomic_fifo|nRF5_SDK/libraries/atomic|nRF5_SDK/ble|micro-ecc|nrf_bootloader.c|nRF5_SDK/boards|nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c|nRF5_SDK/libraries/bootloader/serial_dfu/nrf_serial_dfu.c|nRF5_SDK/libraries/log|nRF5_SDK/segger_rtt|nRF5_SDK/libraries/crypto/nrf_crypto_svc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
