@@ -282,6 +282,7 @@ public:
 	virtual operator Timer * const () { return vpTimer; }	// Get device interface data (handle)
 
 	void SetEvtHandler(DEVEVTCB EvtHandler) { vEvtHandler = EvtHandler; }
+	virtual void EvtHandler(DEV_EVT Evt) { if (vEvtHandler) vEvtHandler(this, Evt); }
 
 protected:
 

@@ -50,7 +50,7 @@ Modified by          Date              Description
 
 typedef struct __ADC_nRF52_Data {
 	AdcnRF52 *pDevObj;
-	ADC_EVTCB EvtHandler;
+	//DEVEVTCB EvtHandler;
 	int NbChanAct;
     int SampleCnt;
 	uint16_t ChanState[SAADC_NRF52_MAX_CHAN];
@@ -72,7 +72,7 @@ static ADCNRF52_DATA s_AdcnRF52DevData = {
 
 extern "C" void SAADC_IRQHandler()
 {
-	ADC_EVT evt = ADC_EVT_UNKNOWN;
+	DEV_EVT evt = DEV_EVT_DATA_RDY;
 
 	if (NRF_SAADC->EVENTS_STARTED)
 	{
@@ -120,9 +120,9 @@ extern "C" void SAADC_IRQHandler()
 				}
 			}
 
-	        evt = ADC_EVT_DATA_READY;
+	        evt = DEV_EVT_DATA_RDY;
 
-			s_AdcnRF52DevData.EvtHandler(s_AdcnRF52DevData.pDevObj, evt);
+			s_AdcnRF52DevData.pDevObj->EvtHandler(evt);
 		}
 
         NRF_SAADC->EVENTS_RESULTDONE = 0;
@@ -294,7 +294,7 @@ bool AdcnRF52::Init(const ADC_CFG &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 
 	SetRefVoltage(Cfg.pRefVolt, Cfg.NbRefVolt);
 	SetEvtHandler(Cfg.EvtHandler);
-	s_AdcnRF52DevData.EvtHandler = Cfg.EvtHandler;
+	//s_AdcnRF52DevData.EvtHandler = Cfg.EvtHandler;
 
 	NVIC_ClearPendingIRQ(SAADC_IRQn);
 
