@@ -47,7 +47,6 @@
  */
 
 #include <stdint.h>
-#include "boards.h"
 #include "nrf_mbr.h"
 #include "nrf_bootloader.h"
 #include "nrf_bootloader_app_start.h"
@@ -61,16 +60,17 @@
 #include "nrf_bootloader_info.h"
 #include "nrf_delay.h"
 
-#include "coredev/iopincfg.h"
 #include "iopinctrl.h"
-#include "blueio_board.h"
 
-static const IOPINCFG s_IOPins[] = {
-//	{BLUEIO_BUT2_PORT, BLUEIO_BUT2_PIN, BLUEIO_BUT2_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
-	{BLUEIO_LED1_PORT, BLUEIO_LED1_PIN, BLUEIO_LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+#include "board.h"
+
+static const IOPINCFG s_PinsCfg[] = {
+	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL},
+	{BUT2_PORT, BUT2_PIN, BUT2_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL},
 };
 
-static const int s_NbIOPins = sizeof(s_IOPins) / sizeof(IOPINCFG);
+static const int s_NbPins = sizeof(s_PinsCfg) / sizeof(IOPINCFG);
 
 static void on_error(void)
 {
@@ -117,21 +117,20 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
         case NRF_DFU_EVT_DFU_FAILED:
         case NRF_DFU_EVT_DFU_ABORTED:
         case NRF_DFU_EVT_DFU_INITIALIZED:
-            //bsp_board_init(BSP_INIT_LEDS);
-            //bsp_board_led_on(BSP_BOARD_LED_0);
-            //bsp_board_led_on(BSP_BOARD_LED_1);
-            //bsp_board_led_off(BSP_BOARD_LED_2);
+//            bsp_board_init(BSP_INIT_LEDS);
+//           bsp_board_led_on(BSP_BOARD_LED_0);
+//            bsp_board_led_on(BSP_BOARD_LED_1);
+//            bsp_board_led_off(BSP_BOARD_LED_2);
+        	IOPinClear(LED1_PORT, LED1_PIN);
             break;
         case NRF_DFU_EVT_TRANSPORT_ACTIVATED:
-            //bsp_board_led_off(BSP_BOARD_LED_1);
-            //bsp_board_led_on(BSP_BOARD_LED_2);
+//            bsp_board_led_off(BSP_BOARD_LED_1);
+//            bsp_board_led_on(BSP_BOARD_LED_2);
             break;
         case NRF_DFU_EVT_DFU_STARTED:
-        	IOPinClear(BLUEIO_LED1_PORT, BLUEIO_LED1_PIN);
             break;
         case NRF_DFU_EVT_DFU_COMPLETED:
-        	IOPinSet(BLUEIO_LED1_PORT, BLUEIO_LED1_PIN);
-        	break;
+        	IOPinSet(LED1_PORT, LED1_PIN);
         default:
             break;
     }
@@ -143,8 +142,10 @@ int main(void)
 {
     uint32_t ret_val;
 
-    IOPinCfg(s_IOPins, s_NbIOPins);
-    IOPinClear(BLUEIO_LED1_PORT, BLUEIO_LED1_PIN);
+    IOPinCfg(s_PinsCfg, s_NbPins);
+
+    // Must happen before flash protection is applied, since it edits a protected page.
+    nrf_bootloader_mbr_addrs_populate();
 
     // Protect MBR and bootloader code from being overwritten.
     ret_val = nrf_bootloader_flash_protect(0, MBR_SIZE, false);
@@ -160,13 +161,12 @@ int main(void)
     ret_val = nrf_bootloader_init(dfu_observer);
     APP_ERROR_CHECK(ret_val);
 
-    // Either there was no DFU functionality enabled in this project or the DFU module detected
-    // no ongoing DFU operation and found a valid main application.
-    // Boot the main application.
-    nrf_bootloader_app_start();
+    NRF_LOG_FLUSH();
 
-    // Should never be reached.
-    NRF_LOG_INFO("After main");
+    NRF_LOG_ERROR("After main, should never be reached.");
+    NRF_LOG_FLUSH();
+
+    APP_ERROR_CHECK_BOOL(false);
 }
 
 /**

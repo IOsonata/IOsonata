@@ -25,6 +25,11 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>src/board.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
+		</link>
+		<link>
 			<name>src/iosonata_dfu_public_key.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/iosonata_dfu_public_key.c</locationURI>
@@ -45,9 +50,19 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/nrf_bootloader.c</locationURI>
 		</link>
 		<link>
+			<name>src/nrf_crypto_allocator.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrf_crypto_allocator.h</locationURI>
+		</link>
+		<link>
 			<name>src/sdk_config.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/sdk_config.h</locationURI>
+		</link>
+		<link>
+			<name>src/secure_bootloader_gcc_nrf52.ld</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/secure_bootloader_gcc_nrf52.ld</locationURI>
 		</link>
 		<link>
 			<name>src/secure_dfu_gcc_nrf52.ld</name>
