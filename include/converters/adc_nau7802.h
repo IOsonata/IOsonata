@@ -3,7 +3,8 @@
 
 @brief	Nuvoton NAU7802 24-Bit Dual-Channel ADC For Bridge Sensors
 
-This device has 2 channels multiplexed. Same settings for both.
+This device has 2 channels multiplexed. Same settings for both. In order
+to capture both channel.
 For single channel operation, channel 0 (VIN1P/N) must used and filter caps must be
 enabled on channel 1 (VIN2P/N)
 

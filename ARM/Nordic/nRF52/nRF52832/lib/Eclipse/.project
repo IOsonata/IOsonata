@@ -136,6 +136,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
+			<name>include/direct_link.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/direct_link.h</locationURI>
+		</link>
+		<link>
 			<name>include/diskio.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/diskio.h</locationURI>
@@ -409,6 +414,11 @@
 			<name>src/device_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/direct_link.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/direct_link.c</locationURI>
 		</link>
 		<link>
 			<name>src/diskio_flash.cpp</name>
