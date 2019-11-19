@@ -13,6 +13,7 @@ Although this refactoring includes supports for multiple IDE/Compilers.  The pre
 
 For desktop pc version of the library, native compiler and IDE are used.  XCode for OSX, Visual Studio for Windows, Eclipse for Linux.
 
+--- 
 ### IDE limiations :
 
 * Eclipse & GCC : Full C++ supports, full file io supports
@@ -21,9 +22,9 @@ For desktop pc version of the library, native compiler and IDE are used.  XCode 
 * CrossWorks : GCC C++ is stripped down to bare bone, no file io supports, no atomic supports and many others. In order to use full GCC C++, CrossWorks must be configured to use with external compiler
 * Segger Stusio : Strip down version of CrossWorks.  Even less functional. Only supports jlink, cannot be used with any other jtag. SES is not recommended for heavy firmware development. 
 
-
-external vendors' SDK and library required :
 --- 
+### external vendors' SDK and library required :
+ 
  
 [nRF5_SDK](https://developer.nordicsemi.com)  : Nordic nRF5x Bluetooth Low Energy
 
@@ -34,9 +35,11 @@ external vendors' SDK and library required :
 [BSEC](https://www.bosch-sensortec.com/bst/products/all_products/bsec) : Bosch Sensortec Environmental Cluster (BSEC) Software for #BME680 environmental sensor.  BSEC is needed for calculating Air Quality Index.  Go to https://www.bosch-sensortec.com/bst/products/all_products/bsec at the end of the page.  Select checkbox to accept license terms to download.  Unzip the the downloaded file. Rename the extracted folder BSEC and copy the whole folder to external as indicated in the folder tree bellow.  
  
  
+--- 
+
 <p align="center"> 
  
-## IDK-BLYST-NANO : nRF52832 BLuetooth 5/Bluetooth Mesh development board with builtin IDAP-M CMSIS-DAP Debug JTag  
+### IDK-BLYST-NANO : nRF52832 BLuetooth 5/Bluetooth Mesh development board with builtin IDAP-M CMSIS-DAP Debug JTag  
   
 ![IDK-BLYST-NANO](https://www.i-syst.com/images/IDK-BLYST-NANO_photo640.png) 
 
@@ -54,9 +57,10 @@ external vendors' SDK and library required :
 [Nordic Thingy App compatible firmware project](https://github.com/IOsonata/IOsonata/tree/master/ARM/Nordic/nRF52/nRF52832/exemples/BlueIOThingy) 
  
 </p> 
+ 
+--- 
+### IOsonata folder structure
 
-IOsonata folder structure
----
  
 The way the IOsonata folder is structure is simple.  The deeper you go inside the more it is specific the the architecture or platform.  The parent folder contains all that is commonly available to the child folder.  Which means, source file from child folder can access any source in the upper parent folder but not the other way around.  This is the way to keep the abstraction separated from implementation and easier to keep track of things.
 
