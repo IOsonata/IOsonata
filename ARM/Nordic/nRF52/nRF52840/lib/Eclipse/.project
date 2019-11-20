@@ -1726,17 +1726,7 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dis/ble_dis.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend/cc310_bl</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cifra</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -1801,71 +1791,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_usbd_errata.h</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_aes.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_aes.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_aes_aead.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_aes_aead.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_chacha_poly_aead.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_chacha_poly_aead.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_ecc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_ecc.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_ecdh.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_ecdh.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_ecdsa.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_ecdsa.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_eddsa.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_eddsa.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_hash.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_hash.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_hmac.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_hmac.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_init.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_init.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_mutex.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_mutex.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_rng.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_rng.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cc310/cc310_backend_shared.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310/cc310_backend_shared.c</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend/cc310_bl/cc310_bl_backend_ecc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310_bl/cc310_bl_backend_ecc.c</locationURI>
@@ -1889,11 +1814,6 @@
 			<name>src/nRF5_SDK/libraries/crypto/backend/cc310_bl/cc310_bl_backend_shared.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310_bl/cc310_bl_backend_shared.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/crypto/backend/cifra/cifra_backend_aes_aead.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cifra/cifra_backend_aes_aead.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_hw/nrf_hw_backend_init.c</name>
