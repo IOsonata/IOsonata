@@ -371,6 +371,11 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/softdevice/common/nrf_sdh_ble.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/softdevice/common/nrf_sdh_soc.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/bootloader/ble_dfu/nrf_dfu_ble.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/ble_dfu/nrf_dfu_ble.c</locationURI>

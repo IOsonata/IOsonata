@@ -106,14 +106,14 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
         case NRF_DFU_EVT_DFU_FAILED:
         case NRF_DFU_EVT_DFU_ABORTED:
         case NRF_DFU_EVT_DFU_INITIALIZED:
-//            bsp_board_init(BSP_INIT_LEDS);
-//            bsp_board_led_on(BSP_BOARD_LED_0);
-//            bsp_board_led_on(BSP_BOARD_LED_1);
-//            bsp_board_led_off(BSP_BOARD_LED_2);
+            //bsp_board_init(BSP_INIT_LEDS);
+            //bsp_board_led_on(BSP_BOARD_LED_0);
+            //bsp_board_led_on(BSP_BOARD_LED_1);
+            //bsp_board_led_off(BSP_BOARD_LED_2);
             break;
         case NRF_DFU_EVT_TRANSPORT_ACTIVATED:
-//            bsp_board_led_off(BSP_BOARD_LED_1);
-//            bsp_board_led_on(BSP_BOARD_LED_2);
+            //bsp_board_led_off(BSP_BOARD_LED_1);
+            //bsp_board_led_on(BSP_BOARD_LED_2);
             break;
         case NRF_DFU_EVT_DFU_STARTED:
             break;
@@ -127,6 +127,9 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
 int main(void)
 {
     uint32_t ret_val;
+
+    // Must happen before flash protection is applied, since it edits a protected page.
+    nrf_bootloader_mbr_addrs_populate();
 
     // Protect MBR and bootloader code from being overwritten.
     ret_val = nrf_bootloader_flash_protect(0, MBR_SIZE, false);
@@ -142,16 +145,14 @@ int main(void)
     ret_val = nrf_bootloader_init(dfu_observer);
     APP_ERROR_CHECK(ret_val);
 
-    // Either there was no DFU functionality enabled in this project or the DFU module detected
-    // no ongoing DFU operation and found a valid main application.
-    // Boot the main application.
-    nrf_bootloader_app_start();
+    NRF_LOG_FLUSH();
 
-    // Should never be reached.
-    NRF_LOG_INFO("After main");
+    NRF_LOG_ERROR("After main, should never be reached.");
+    NRF_LOG_FLUSH();
+
+    APP_ERROR_CHECK_BOOL(false);
 }
 
 /**
  * @}
  */
-
