@@ -68,10 +68,16 @@ static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int Pi
 
 #endif
 
+	reg->PIN_CNF[PinNo] &= ~GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos;
 	if (Dir == IOPINDIR_OUTPUT)
+	{
+		reg->PIN_CNF[PinNo] |= GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos;
 		reg->DIRSET = (1 << PinNo);
+	}
 	else if (Dir == IOPINDIR_INPUT)
+	{
 		reg->DIRCLR = (1 << PinNo);
+	}
 }
 
 /**
