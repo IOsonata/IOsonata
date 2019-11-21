@@ -766,3 +766,7 @@ bool AdcnRF52::Read(int Chan, ADC_DATA *pBuff)
 	return true;
 }
 
+bool AdcnRF52::UpdateData()
+{
+	return true;
+}
