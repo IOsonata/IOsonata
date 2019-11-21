@@ -311,7 +311,7 @@ static const int s_NbRefVolt = sizeof(s_RefVolt) / sizeof(ADC_REFVOLT);
 
 #define ADC_CFIFO_SIZE		CFIFO_TOTAL_MEMSIZE(200, sizeof(ADC_DATA))
 
-void ADCEventHandler(AdcDevice *pAdcDev, ADC_EVT Evt);
+void ADCEventHandler(Device *pAdcDev, DEV_EVT Evt);
 
 static uint8_t s_AdcFifoMem[ADC_CFIFO_SIZE];
 
@@ -352,9 +352,9 @@ static const int s_NbChan = sizeof(s_ChanCfg) / sizeof(ADC_CHAN_CFG);
 volatile bool g_bDataReady = false;
 BLUEIO_DATA_BAT g_BatData;
 
-void ADCEventHandler(AdcDevice *pAdcDev, ADC_EVT Evt)
+void ADCEventHandler(Device *pAdcDev, DEV_EVT Evt)
 {
-	if (Evt == ADC_EVT_DATA_READY)
+	if (Evt == DEV_EVT_DATA_RDY)
 	{
 		g_bDataReady = true;
 		int cnt = 0;
