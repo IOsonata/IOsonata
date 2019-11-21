@@ -163,7 +163,7 @@ volatile bool g_bDataReady = false;
 
 void ADVEventHandler(Device *pAdcDev, DEV_EVT Evt)
 {
-	if (Evt == ADC_EVT_DATA_READY)
+	if (Evt == DEV_EVT_DATA_RDY)
 	{
 		g_bDataReady = true;
 #ifdef ADC_DEMO_INTERRUPT_ENABLE
