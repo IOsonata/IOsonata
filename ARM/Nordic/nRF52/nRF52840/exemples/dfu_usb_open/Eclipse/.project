@@ -56,11 +56,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/drivers_nrf</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -71,19 +66,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/boards/boards.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/boards/boards.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/drivers_nrf/nrf_soc_nosd</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/bootloader</name>
@@ -144,21 +129,6 @@
 			<name>src/nRF5_SDK/nano-pb/pb_encode.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/external/nano-pb/pb_encode.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c</name>
-			<type>1</type>
-			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/drivers_nrf/nrf_soc_nosd/nrf_soc.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/bootloader/dfu</name>
@@ -326,21 +296,6 @@
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/usbd/app_usbd_core.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_clock.c</name>
-			<type>1</type>
-			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c</name>
-			<type>1</type>
-			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_power.c</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/bootloader/dfu/dfu-cc.pb.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/bootloader/dfu/dfu-cc.pb.c</locationURI>
@@ -431,16 +386,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_clock.c</name>
-			<type>1</type>
-			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_power.c</name>
-			<type>1</type>
-			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_power.c</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend/cc310_bl/cc310_bl_backend_ecc.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/crypto/backend/cc310_bl/cc310_bl_backend_ecc.c</locationURI>
@@ -468,16 +413,16 @@
 	</linkedResources>
 	<variableList>
 		<variable>
+			<name>$%7BPARENT-8-PROJECT_LOC%7D</name>
+			<value>$%7BPARENT-3-copy_PARENT%7D</value>
+		</variable>
+		<variable>
 			<name>copy_PARENT</name>
 			<value>$%7BPARENT-4-PROJECT_LOC%7D</value>
 		</variable>
 		<variable>
 			<name>copy_PARENT1</name>
 			<value>$%7Bcopy_PARENT%7D/nRF52/nRF52840/exemples/open_bootloader</value>
-		</variable>
-		<variable>
-			<name>$%7BPARENT-8-PROJECT_LOC%7D</name>
-			<value>$%7BPARENT-3-copy_PARENT%7D</value>
 		</variable>
 	</variableList>
 </projectDescription>

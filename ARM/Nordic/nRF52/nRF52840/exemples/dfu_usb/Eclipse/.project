@@ -31,11 +31,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/iosonata_dfu_public_key.c</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/iosonata_dfu_public_key.c</locationURI>
-		</link>
-		<link>
 			<name>src/main.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.c</locationURI>
@@ -56,16 +51,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/secure_bootloader_gcc_nrf52.ld</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/drivers</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/legacy</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -74,26 +59,6 @@
 			<name>src/nRF5_SDK/nano-pb</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/utf_converter</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/drivers/src</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/legacy/nrf_drv_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/legacy/nrf_drv_power.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_power.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/bootloader</name>
@@ -134,31 +99,6 @@
 			<name>src/nRF5_SDK/nano-pb/pb_encode.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/nano-pb/pb_encode.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/utf_converter/utf.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/utf_converter/utf.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/drivers/src/nrfx_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/drivers/src/nrfx_power.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_power.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/drivers/src/nrfx_systick.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_systick.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/drivers/src/nrfx_usbd.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_usbd.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/bootloader/dfu</name>

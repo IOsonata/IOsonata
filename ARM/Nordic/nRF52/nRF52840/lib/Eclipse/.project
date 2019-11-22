@@ -1676,6 +1676,16 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/hal/nrf_nvmc.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_clock.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_clock.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_power.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_rng.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_rng.c</locationURI>
@@ -1781,9 +1791,19 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_clock.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_clock.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_nvmc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_nvmc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_power.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_power.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_rng.c</name>
