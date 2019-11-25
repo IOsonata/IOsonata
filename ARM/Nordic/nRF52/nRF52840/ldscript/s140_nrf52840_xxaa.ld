@@ -14,7 +14,7 @@ MEMORY
 {
 	/* nRF52840 has 1MB Flash (0x100000), 256KB RAM (0x40000) */
 	
-	FLASH (rx) : ORIGIN = 0x26000, LENGTH = 0xda000
+	FLASH (rx) : ORIGIN = 0x27000, LENGTH = 0xd9000
 	RAM (rwx) :  ORIGIN = 0x20002900, LENGTH = 0x3d700
 
 	/** Location of non initialized RAM. Non initialized RAM is used for exchanging bond information
@@ -23,7 +23,7 @@ MEMORY
 	NOINIT (rwx) :  ORIGIN = 0x20007F80, LENGTH = 0x80
 
 	/** Location of bootloader setting in flash. */
-	BOOTLOADER_SETTINGS (rw) : ORIGIN = 0x0007F000, LENGTH = 0x1000
+	BOOTLOADER_SETTINGS (rw) : ORIGIN = 0x000FF000, LENGTH = 0x1000
 }
 
 
