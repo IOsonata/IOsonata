@@ -85,11 +85,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/softdevice</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -128,11 +123,6 @@
 			<name>src/nRF5_SDK/nano-pb/pb_encode.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/nano-pb/pb_encode.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/hal</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/softdevice/common</name>
@@ -278,11 +268,6 @@
 			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_sd.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_sd.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/hal/nrf_nvmc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/hal/nrf_nvmc.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/softdevice/common/nrf_sdh.c</name>

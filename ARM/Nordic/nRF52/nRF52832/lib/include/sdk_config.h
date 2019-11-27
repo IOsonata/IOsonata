@@ -8050,7 +8050,11 @@
 // <2=> NRF_FSTORAGE_SD 
 
 #ifndef FDS_BACKEND
+#ifdef SOFTDEVICE_PRESENT
 #define FDS_BACKEND 	NRF_FSTORAGE_SD
+#else
+#define FDS_BACKEND 	NRF_FSTORAGE_NVMC
+#endif
 #endif
 
 // </h> 
@@ -8549,7 +8553,7 @@
 // <i> Increase this value if API calls frequently return the error @ref NRF_ERROR_NO_MEM.
 
 #ifndef NRF_FSTORAGE_SD_QUEUE_SIZE
-#define NRF_FSTORAGE_SD_QUEUE_SIZE 4
+#define NRF_FSTORAGE_SD_QUEUE_SIZE 6
 #endif
 
 // <o> NRF_FSTORAGE_SD_MAX_RETRIES - Maximum number of attempts at executing an operation when the SoftDevice is busy 
@@ -8735,7 +8739,7 @@
  
 
 #ifndef NRF_STRERROR_ENABLED
-#define NRF_STRERROR_ENABLED 1
+#define NRF_STRERROR_ENABLED 0
 #endif
 
 // <q> NRF_TWI_MNGR_ENABLED  - nrf_twi_mngr - TWI transaction manager
