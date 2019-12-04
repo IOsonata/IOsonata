@@ -44,7 +44,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.858461739" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.default" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id.1535456594" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id" value="1287942917" valueType="string"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.1028714714" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
-							<builder buildPath="${workspace_loc:/dfu}/Debug" id="ilg.gnuarmeclipse.managedbuild.cross.builder.1771599699" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
+							<builder buildPath="${workspace_loc:/dfu_ble}/Debug" id="ilg.gnuarmeclipse.managedbuild.cross.builder.1771599699" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.582995288" name="Cross ARM GNU Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor.716586387" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.500440447" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
@@ -182,7 +182,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="iosonata_dfu_public_key.c|nRF5_SDK/libraries/hci|nRF5_SDK/libraries/balloc|nRF5_SDK/libraries/fds|nRF5_SDK/libraries/scheduler|nRF5_SDK/libraries/queue|nRF5_SDK/libraries/mem_manager|nRF5_SDK/libraries/util|nRF5_SDK/libraries/timer|nRF5_SDK/libraries/slip|nRF5_SDK/libraries/sha256|nRF5_SDK/libraries/experimental_section_vars|nRF5_SDK/libraries/atomic_flags|nRF5_SDK/libraries/atomic_fifo|nRF5_SDK/libraries/atomic|nRF5_SDK/ble|micro-ecc|nrf_bootloader.c|nRF5_SDK/boards|nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c|nRF5_SDK/libraries/bootloader/serial_dfu/nrf_serial_dfu.c|nRF5_SDK/libraries/log|nRF5_SDK/segger_rtt|nRF5_SDK/libraries/crypto/nrf_crypto_svc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -231,7 +231,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.714276158" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.default" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id.1039481748" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id" value="1287942917" valueType="string"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.648695191" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
-							<builder buildPath="${workspace_loc:/dfu}/Release" id="ilg.gnuarmeclipse.managedbuild.cross.builder.31130685" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
+							<builder buildPath="${workspace_loc:/dfu_ble}/Release" id="ilg.gnuarmeclipse.managedbuild.cross.builder.31130685" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.198585525" name="Cross ARM GNU Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor.534808570" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.614594118" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
@@ -366,7 +366,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="iosonata_dfu_public_key.c|nRF5_SDK/libraries/hci|nRF5_SDK/libraries/balloc|nRF5_SDK/libraries/fds|nRF5_SDK/libraries/scheduler|nRF5_SDK/libraries/queue|nRF5_SDK/libraries/mem_manager|nRF5_SDK/libraries/util|nRF5_SDK/libraries/timer|nRF5_SDK/libraries/slip|nRF5_SDK/libraries/sha256|nRF5_SDK/libraries/experimental_section_vars|nRF5_SDK/libraries/atomic_flags|nRF5_SDK/libraries/atomic_fifo|nRF5_SDK/libraries/atomic|nRF5_SDK/ble|micro-ecc|nrf_bootloader.c|nRF5_SDK/boards|nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c|nRF5_SDK/libraries/bootloader/serial_dfu/nrf_serial_dfu.c|nRF5_SDK/libraries/log|nRF5_SDK/segger_rtt|nRF5_SDK/libraries/crypto/nrf_crypto_svc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

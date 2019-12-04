@@ -303,7 +303,7 @@
 // <e> NRF_CRYPTO_ENABLED - nrf_crypto - Cryptography library.
 //==========================================================
 #ifndef NRF_CRYPTO_ENABLED
-#define NRF_CRYPTO_ENABLED 0
+#define NRF_CRYPTO_ENABLED 1
 #endif
 // <o> NRF_CRYPTO_ALLOCATOR  - Memory allocator
  
@@ -337,7 +337,7 @@
  
 
 #ifndef NRF_CRYPTO_BACKEND_CC310_BL_ECC_SECP256R1_ENABLED
-#define NRF_CRYPTO_BACKEND_CC310_BL_ECC_SECP256R1_ENABLED 1
+#define NRF_CRYPTO_BACKEND_CC310_BL_ECC_SECP256R1_ENABLED 0
 #endif
 
 // <q> NRF_CRYPTO_BACKEND_CC310_BL_HASH_SHA256_ENABLED  - CC310_BL SHA-256 hash functionality.
@@ -346,7 +346,7 @@
 // <i> CC310_BL backend implementation for hardware-accelerated SHA-256.
 
 #ifndef NRF_CRYPTO_BACKEND_CC310_BL_HASH_SHA256_ENABLED
-#define NRF_CRYPTO_BACKEND_CC310_BL_HASH_SHA256_ENABLED 1
+#define NRF_CRYPTO_BACKEND_CC310_BL_HASH_SHA256_ENABLED 0
 #endif
 
 // <q> NRF_CRYPTO_BACKEND_CC310_BL_HASH_AUTOMATIC_RAM_BUFFER_ENABLED  - nrf_cc310_bl buffers to RAM before running hash operation
@@ -355,7 +355,7 @@
 // <i> Enabling this makes hashing of addresses in FLASH range possible. Size of buffer allocated for hashing is set by NRF_CRYPTO_BACKEND_CC310_BL_HASH_AUTOMATIC_RAM_BUFFER_SIZE
 
 #ifndef NRF_CRYPTO_BACKEND_CC310_BL_HASH_AUTOMATIC_RAM_BUFFER_ENABLED
-#define NRF_CRYPTO_BACKEND_CC310_BL_HASH_AUTOMATIC_RAM_BUFFER_ENABLED 1
+#define NRF_CRYPTO_BACKEND_CC310_BL_HASH_AUTOMATIC_RAM_BUFFER_ENABLED 0
 #endif
 
 // <o> NRF_CRYPTO_BACKEND_CC310_BL_HASH_AUTOMATIC_RAM_BUFFER_SIZE - nrf_cc310_bl hash outputs digests in little endian 
@@ -371,7 +371,7 @@
 // <i> Select a library version compatible with the configuration. When interrupts are disable, a version named _noint must be used
 
 #ifndef NRF_CRYPTO_BACKEND_CC310_BL_INTERRUPTS_ENABLED
-#define NRF_CRYPTO_BACKEND_CC310_BL_INTERRUPTS_ENABLED 1
+#define NRF_CRYPTO_BACKEND_CC310_BL_INTERRUPTS_ENABLED 0
 #endif
 
 // </e>
@@ -808,7 +808,7 @@
 // <e> NRF_CRYPTO_BACKEND_MICRO_ECC_ENABLED - Enable the micro-ecc backend.
 //==========================================================
 #ifndef NRF_CRYPTO_BACKEND_MICRO_ECC_ENABLED
-#define NRF_CRYPTO_BACKEND_MICRO_ECC_ENABLED 0
+#define NRF_CRYPTO_BACKEND_MICRO_ECC_ENABLED 1
 #endif
 // <q> NRF_CRYPTO_BACKEND_MICRO_ECC_ECC_SECP192R1_ENABLED  - Enable secp192r1 (NIST 192-bit) curve
  
@@ -871,7 +871,7 @@
 // <i> The nRF SW cryptography backend (only used in bootloader context).
 //==========================================================
 #ifndef NRF_CRYPTO_BACKEND_NRF_SW_ENABLED
-#define NRF_CRYPTO_BACKEND_NRF_SW_ENABLED 0
+#define NRF_CRYPTO_BACKEND_NRF_SW_ENABLED 1
 #endif
 // <q> NRF_CRYPTO_BACKEND_NRF_SW_HASH_SHA256_ENABLED  - nRF SW hash backend support for SHA-256
  
@@ -1386,7 +1386,7 @@
 
 
 #ifndef NRF_DFU_SERIAL_UART_USES_HWFC
-#define NRF_DFU_SERIAL_UART_USES_HWFC 0
+#define NRF_DFU_SERIAL_UART_USES_HWFC 1
 #endif
 
 // <o> NRF_DFU_SERIAL_UART_RX_BUFFERS - Number of RX buffers.

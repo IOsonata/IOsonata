@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/board.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
+		</link>
+		<link>
 			<name>src/main.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/main.c</locationURI>
@@ -51,11 +56,6 @@
 			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/sdk_config.h</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/boards</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -69,11 +69,6 @@
 			<name>src/nRF5_SDK/nrfx</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/boards/boards.c</name>
-			<type>1</type>
-			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/boards/boards.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/bootloader</name>
@@ -97,6 +92,11 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/low_power_pwm</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/sha256</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -266,11 +266,6 @@
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/crypto/nrf_crypto_shared.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c</name>
-			<type>1</type>
-			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/crypto/nrf_crypto_svc.c</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/led_softblink/led_softblink.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/led_softblink/led_softblink.c</locationURI>
@@ -279,6 +274,11 @@
 			<name>src/nRF5_SDK/libraries/low_power_pwm/low_power_pwm.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/low_power_pwm/low_power_pwm.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/sha256/sha256.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/sha256/sha256.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/slip/slip.c</name>
@@ -391,6 +391,16 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/serial_dfu/nrf_dfu_serial_uart.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_sw</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uart.c</locationURI>
@@ -404,6 +414,26 @@
 			<name>src/nRF5_SDK/nrfx/drivers/src/prs</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdh.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdh.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdsa.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c</name>

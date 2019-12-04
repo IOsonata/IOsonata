@@ -61,6 +61,18 @@
 #include "nrf_bootloader_info.h"
 #include "nrf_delay.h"
 
+#include "iopinctrl.h"
+
+#include "board.h"
+
+static const IOPINCFG s_PinsCfg[] = {
+	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL},
+	{BUT2_PORT, BUT2_PIN, BUT2_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL},
+};
+
+static const int s_NbPins = sizeof(s_PinsCfg) / sizeof(IOPINCFG);
+
 static void on_error(void)
 {
     NRF_LOG_FINAL_FLUSH();
@@ -105,11 +117,13 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
     {
         case NRF_DFU_EVT_DFU_FAILED:
         case NRF_DFU_EVT_DFU_ABORTED:
+        	break;
         case NRF_DFU_EVT_DFU_INITIALIZED:
 //            bsp_board_init(BSP_INIT_LEDS);
 //            bsp_board_led_on(BSP_BOARD_LED_0);
 //            bsp_board_led_on(BSP_BOARD_LED_1);
 //            bsp_board_led_off(BSP_BOARD_LED_2);
+        	IOPinClear(LED1_PORT, LED1_PIN);
             break;
         case NRF_DFU_EVT_TRANSPORT_ACTIVATED:
 //            bsp_board_led_off(BSP_BOARD_LED_1);
@@ -117,6 +131,8 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
             break;
         case NRF_DFU_EVT_DFU_STARTED:
             break;
+        case NRF_DFU_EVT_DFU_COMPLETED:
+        	IOPinSet(LED1_PORT, LED1_PIN);
         default:
             break;
     }
@@ -127,6 +143,8 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
 int main(void)
 {
     uint32_t ret_val;
+
+    IOPinCfg(s_PinsCfg, s_NbPins);
 
     // Must happen before flash protection is applied, since it edits a protected page.
     nrf_bootloader_mbr_addrs_populate();
