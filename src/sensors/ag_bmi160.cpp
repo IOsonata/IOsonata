@@ -721,15 +721,7 @@ bool AgBmi160::UpdateData()
 		return false;
 	}
 
-	if (len > 1024)
-	{
-		uint8_t regaddr = BMI160_CMD;
-		Write8(&regaddr, 1, BMI160_CMD_FIFO_FLUSH);
-
-		msDelay(10);
-
-		return false;
-	}
+	len = min(len, BMI160_FIFO_MAX_SIZE);
 	//printf("len %d\r\n", len);
 
 	uint8_t buff[BMI160_FIFO_MAX_SIZE];
