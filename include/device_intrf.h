@@ -39,13 +39,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __DEVICEINTRF_H__
 
 #include <stdint.h>
-#include <stdbool.h>
 
 #ifdef __cplusplus
 	#include <atomic>
 	using namespace std;
 #else
-	#include <stdatomic.h>
+#include <stdbool.h>
+#include <stdatomic.h>
 #endif
 
 /** @addtogroup device_intrf	Device Interface
