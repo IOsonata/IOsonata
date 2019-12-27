@@ -136,11 +136,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/direct_link.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/direct_link.h</locationURI>
-		</link>
-		<link>
 			<name>include/diskio.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/diskio.h</locationURI>
@@ -154,6 +149,11 @@
 			<name>include/esb_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/esb_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/excelitas_serlink.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/excelitas_serlink.h</locationURI>
 		</link>
 		<link>
 			<name>include/fatfs.h</name>
@@ -416,11 +416,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/direct_link.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/direct_link.c</locationURI>
-		</link>
-		<link>
 			<name>src/diskio_flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_flash.cpp</locationURI>
@@ -434,6 +429,11 @@
 			<name>src/esb_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/esb_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/excelitas_serlink.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/excelitas_serlink.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/fatfs.cpp</name>
@@ -634,6 +634,11 @@
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/nrf_mesh_config_app.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrf_mesh_config_app.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/nrf_mesh_config_core.h</name>
