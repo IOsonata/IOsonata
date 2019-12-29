@@ -540,13 +540,16 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
             if (  p_ble_evt->evt.gap_evt.params.adv_set_terminated.reason == BLE_GAP_EVT_ADV_SET_TERMINATED_REASON_TIMEOUT
                 ||p_ble_evt->evt.gap_evt.params.adv_set_terminated.reason == BLE_GAP_EVT_ADV_SET_TERMINATED_REASON_LIMIT_REACHED)
             {
-            	g_BleAppData.bAdvertising = false;
+            	// Latest SDK restart advertising automatically.  Therefore this flag should not change
+            	//g_BleAppData.bAdvertising = false;
                 BleAppAdvTimeoutHandler();
             }
             break;
 
         case BLE_GAP_EVT_TIMEOUT:
-            if (p_ble_evt->evt.gap_evt.params.timeout.src == BLE_GAP_EVT_ADV_SET_TERMINATED_REASON_TIMEOUT)//BLE_GAP_TIMEOUT_SRC_ADVERTISING)
+#if 0
+        	// The SDK no longer set this event
+        	if (p_ble_evt->evt.gap_evt.params.timeout.src == BLE_GAP_EVT_ADV_SET_TERMINATED_REASON_TIMEOUT)//BLE_GAP_TIMEOUT_SRC_ADVERTISING)
             {
             	g_BleAppData.bAdvertising = false;
             	BleAppAdvTimeoutHandler();
@@ -556,6 +559,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
             			//APP_ERROR_CHECK(err_code);
 				}
             }
+#endif
             if (p_ble_evt->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN)
             {
             	g_BleAppData.bScan = false;
@@ -966,7 +970,7 @@ static void sec_req_timeout_handler(void * p_context)
     }
 }
 
-void BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
+bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
 	uint32_t err;
 
@@ -998,7 +1002,7 @@ void BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 		APP_ERROR_CHECK(err);
 	}
 
-	// SDK15 doesn't allow dynamicaly updating adv data.  Have to stop and re-start advertising
+	// SDK15 doesn't allow dynamically updating adv data.  Have to stop and re-start advertising
 	if (g_BleAppData.bAdvertising == true)
 	{
 		sd_ble_gap_adv_stop(g_AdvInstance.adv_handle);
@@ -1019,12 +1023,16 @@ void BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
     memcpy(g_AdvInstance.manuf_data_array, pData, l);
     uint32_t ret = ble_advdata_set(&(g_AdvInstance.advdata), &g_BleAppData.SRData);
 #endif
+
+    return g_BleAppData.bAdvertising;
 }
 
 void BleAppAdvStart(BLEAPP_ADVMODE AdvMode)
 {
 	if (g_BleAppData.bAdvertising == true)
 		return;
+
+	g_BleAppData.bAdvertising = true;
 
 	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
 	{
@@ -1039,7 +1047,6 @@ void BleAppAdvStart(BLEAPP_ADVMODE AdvMode)
 			 APP_ERROR_CHECK(err_code);
 		}
 	}
-	g_BleAppData.bAdvertising = true;
 }
 
 void BleAppAdvStop()
