@@ -246,7 +246,6 @@ int BleIntrfTxData(DEVINTRF *pDevIntrf, uint8_t *pData, int DataLen)
     BLEINTRF_PKT *pkt;
     int maxlen = intrf->PacketSize - sizeof(pkt->Len);
 	int cnt = 0;
-	pkt->Len = 0;
 
     //uint32_t state = DisableInterrupt();
 	//while (DataLen > 0)
