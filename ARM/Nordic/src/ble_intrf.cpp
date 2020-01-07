@@ -35,6 +35,8 @@ Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
+#include "app_util_platform.h"
+
 #include "istddef.h"
 #include "cfifo.h"
 #include "ble_intrf.h"
@@ -198,34 +200,34 @@ bool BleIntrfStartTx(DEVINTRF *pDevIntrf, int DevAddr)
 
 bool BleIntrfNotify(BLEINTRF *pIntrf)
 {
-    BLEINTRF_PKT *pkt;
+    BLEINTRF_PKT *pkt = NULL;
     uint32_t res = NRF_SUCCESS;
 
     if (pIntrf->TransBuffLen > 0)
     {
         res = BleSrvcCharNotify(pIntrf->pBleSrv, pIntrf->TxCharIdx, pIntrf->TransBuff, pIntrf->TransBuffLen);
     }
-    if (res != NRF_ERROR_RESOURCES)
-    {
-        pIntrf->TransBuffLen = 0;
-        do {
-            uint32_t state = DisableInterrupt();
-            pkt = (BLEINTRF_PKT *)CFifoGet(pIntrf->hTxFifo);
-            EnableInterrupt(state);
-            if (pkt != NULL)
-            {
-                uint32_t res = BleSrvcCharNotify(pIntrf->pBleSrv, pIntrf->TxCharIdx, pkt->Data, pkt->Len);
-                if (res == NRF_ERROR_RESOURCES)
-                {
-                    memcpy(pIntrf->TransBuff, pkt->Data, pkt->Len);
-                    pIntrf->TransBuffLen = pkt->Len;
-                    break;
-                }
-            }
-        } while (pkt != NULL);
-    }
 
-    return true;
+    while (res == NRF_SUCCESS)
+	{
+		pIntrf->TransBuffLen = 0;
+		uint32_t state = DisableInterrupt();
+		pkt = (BLEINTRF_PKT *)CFifoGet(pIntrf->hTxFifo);
+		EnableInterrupt(state);
+		if (pkt == NULL)
+		{
+			return true;
+		}
+		res = BleSrvcCharNotify(pIntrf->pBleSrv, pIntrf->TxCharIdx, pkt->Data, pkt->Len);
+	}
+
+	if (pkt != NULL)
+	{
+		memcpy(pIntrf->TransBuff, pkt->Data, pkt->Len);
+		pIntrf->TransBuffLen = pkt->Len;
+	}
+
+	return false;
 }
 
 /**
@@ -375,6 +377,7 @@ bool BleIntrfInit(BLEINTRF *pBleIntrf, const BLEINTRF_CFG *pCfg)
 	pBleIntrf->pBleSrv->pCharArray[pBleIntrf->RxCharIdx].WrCB = BleIntrfRxWrCB;
 	pBleIntrf->pBleSrv->pCharArray[pBleIntrf->TxCharIdx].TxCompleteCB = BleIntrfTxComplete;
 
+	pBleIntrf->DevIntrf.Type = DEVINTRF_TYPE_BLE;
 	pBleIntrf->DevIntrf.Enable = BleIntrfEnable;
 	pBleIntrf->DevIntrf.Disable = BleIntrfDisable;
 	pBleIntrf->DevIntrf.GetRate = BleIntrfGetRate;
@@ -391,6 +394,8 @@ bool BleIntrfInit(BLEINTRF *pBleIntrf, const BLEINTRF_CFG *pCfg)
 	pBleIntrf->RxDropCnt = 0;
 	pBleIntrf->TxDropCnt = 0;
 	atomic_flag_clear(&pBleIntrf->DevIntrf.bBusy);
+
+	DeviceIntrfEnable(&pBleIntrf->DevIntrf);
 
 	return true;
 }
