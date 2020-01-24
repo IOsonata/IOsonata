@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------
-@file	ble_app.cpp
+@file	ble_app_nrf52.cpp
 
 @brief	Nordic SDK based BLE peripheral application creation helper
 
@@ -61,6 +61,7 @@ Modified by          Date              Description
 #include "nrf_sdh_soc.h"
 #include "nrf_sdh_ble.h"
 #include "nrf_dfu_settings.h"
+#include "nrf_bootloader_info.h"
 
 #ifndef __ARMCC_VERSION
 #include "nrf_crypto.h"
@@ -246,7 +247,7 @@ void BleAppEnterDfu()
 {
     // SDK14 use this
     uint32_t err_code = sd_power_gpregret_clr(0, 0xffffffff);
-    err_code = sd_power_gpregret_set(0, 0xB1);//BOOTLOADER_DFU_START);
+    err_code = sd_power_gpregret_set(0, BOOTLOADER_DFU_START);
     NVIC_SystemReset();
 #if 0
 
