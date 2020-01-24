@@ -79,12 +79,12 @@ SOFTWARE.
 
 #define LIS2DH12_CTRL_REG2					0x21
 #define LIS2DH12_CTRL_REG2_HP_IA1							(1<<0)	//!< High pass filter enable for AOI on int1
-#define LIS2DH12_CTRL_REG2_HP_IA1							(1<<1)	//!< High pass filter enable for AOI on int2
+#define LIS2DH12_CTRL_REG2_HP_IA2							(1<<1)	//!< High pass filter enable for AOI on int2
 #define LIS2DH12_CTRL_REG2_HP_CLICK							(1<<2)	//!< High pass filter enable on click function
 #define LIS2DH12_CTRL_REG2_FDS								(1<<3)	//!< Filtered data
 #define LIS2DH12_CTRL_REG2_HPCF_MASK						(3<<4)	//!< High pass cut off freq
 #define LIS2DH12_CTRL_REG2_HPM_MASK							(3<<6)	//!< High pass filter mode
-#define LIS2DH12_CTRL_REG2_HPM_NORMAL						(0<<6)
+#define LIS2DH12_CTRL_REG2_HPM_NORMALRST					(0<<6)	//!< Normal mode (reset by reading register)
 #define LIS2DH12_CTRL_REG2_HPM_REFSIG						(1<<6)
 #define LIS2DH12_CTRL_REG2_HPM_NORMAL						(2<<6)
 #define LIS2DH12_CTRL_REG2_HPM_AUTORST						(3<<6)	//!< Auto reset on interrupt event
@@ -285,44 +285,16 @@ public:
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
+
+	/**
+	 * @brief	Power off the device completely.
+	 *
+	 * If supported, this will put the device in complete power down.
+	 * Full re-intialization is required to re-enable the device.
+	 */
+	void PowerOff();
 	void IntHandler();
-
-	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
-
 	bool UpdateData();
-
-	/**
-	 * @brief	Read device's register/memory block.
-	 *
-	 * This default implementation sets bit 7 of the Cmd/Addr byte for SPI read access as most
-	 * devices work this way on SPI interface. Overwrite this implementation if SPI access is different
-	 *
-	 * @param 	pCmdAddr 	: Buffer containing command or address to be written
-	 * 						  prior reading data back
-	 * @param	CmdAddrLen 	: Command buffer size
-	 * @param	pBuff		: Data buffer container
-	 * @param	BuffLen		: Data buffer size
-	 *
-	 * @return	Actual number of bytes read
-	 */
-	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-
-	/**
-	 * @brief	Write to device's register/memory block
-	 *
-	 * This default implementation clears bit 7 of the Cmd/Addr byte for SPI write access as most
-	 * devices work this way on SPI interface.  Overwrite this implementation if SPI access is different
-	 *
-	 * @param 	pCmdAddr 	: Buffer containing command or address to be written
-	 * 						  prior writing data back
-	 * @param	CmdAddrLen 	: Command buffer size
-	 * @param	pData		: Data buffer to be written to the device
-	 * @param	DataLen		: Size of data
-	 *
-	 * @return	Actual number of bytes written
-	 */
-	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
 
 private:
 };
