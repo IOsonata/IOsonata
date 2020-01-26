@@ -1030,7 +1030,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 
 void BleAppAdvStart(BLEAPP_ADVMODE AdvMode)
 {
-	if (g_BleAppData.bAdvertising == true)
+	if (g_BleAppData.bAdvertising == true || g_BleAppData.ConnHdl != BLE_CONN_HANDLE_INVALID)
 		return;
 
 	g_BleAppData.bAdvertising = true;
