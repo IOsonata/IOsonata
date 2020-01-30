@@ -215,6 +215,11 @@ __ALIGN(4) static ble_gap_lesc_p256_pk_t    s_lesc_public_key;      /**< LESC EC
 __ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC ECC DH Key*/
 static ble_gap_conn_sec_mode_t s_gap_conn_mode;
 
+bool isConnected()
+{
+	return g_BleAppData.ConnHdl != BLE_CONN_HANDLE_INVALID;
+}
+
 static void BleConnLedOff() {
 	if (g_BleAppData.ConnLedPort < 0 || g_BleAppData.ConnLedPin < 0)
 		return;

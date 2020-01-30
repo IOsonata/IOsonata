@@ -244,6 +244,7 @@ bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * cons
 bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);
 bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DatLen);
 int8_t GetValidTxPower(int TxPwr);
+bool isConnected();
 
 #ifdef __cplusplus
 }
