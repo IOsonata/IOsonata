@@ -36,6 +36,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "idelay.h"
+#include "interrupt.h"
 
 #include "excelitas_serlink.h"
 
@@ -221,6 +222,8 @@ void SerialIn(SERIALIN_DEV *pDev, uint32_t Data, int NbBits)
 {
 	uint32_t mask = 1 << (NbBits - 1);
 
+	uint32_t state = DisableInterrupt();
+
 	while (mask != 0)
 	{
 		IOPinClear(pDev->Pin.PortNo, pDev->Pin.PinNo);
@@ -234,6 +237,8 @@ void SerialIn(SERIALIN_DEV *pDev, uint32_t Data, int NbBits)
 		mask >>= 1;
 	}
 	IOPinClear(pDev->Pin.PortNo, pDev->Pin.PinNo);
+
+	EnableInterrupt(state);
 
 	msDelay(1);
 }
