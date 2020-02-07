@@ -711,6 +711,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/accel_lis2dh12.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/accel_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_sensor.h</locationURI>
@@ -746,9 +751,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_fxos8700cq.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/am_lsm303agr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303agr.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/am_lsm303c.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303c.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/bsec_datatypes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/bsec_datatypes.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/bsec_interface.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/bsec_interface.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/gas_sensor.h</name>
@@ -1006,6 +1026,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_h3lis331dl.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sensors/accel_lis2dh12.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_lis2dh12.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sensors/accel_sensor.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_sensor.cpp</locationURI>
@@ -1059,6 +1084,11 @@
 			<name>src/sensors/mag_bmm150.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_bmm150.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_sensor.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_sensor.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/temp_nrf5x.cpp</name>
