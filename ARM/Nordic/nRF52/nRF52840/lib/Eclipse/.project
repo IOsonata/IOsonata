@@ -701,9 +701,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
 		</link>
 		<link>
-			<name>include/sensors/a_adxl362.h</name>
+			<name>include/sensors/accel_adxl362.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/a_adxl362.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_adxl362.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_h3lis331dl.h</name>
@@ -1016,9 +1016,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/sensors/a_adxl362.cpp</name>
+			<name>src/sensors/accel_adxl362.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/a_adxl362.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_adxl362.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_h3lis331dl.cpp</name>
