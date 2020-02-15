@@ -75,12 +75,12 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	uint32_t cnf = 0;
 
 #ifdef NRF9160_XXAA
-	NRF_GPIO_Type *reg = NRF_P0_NS;
+	NRF_GPIO_Type *reg = NRF_P0_S;
 
 	if (PortNo & 0x80)
 	{
-		// secure access
-		reg = NRF_P0_S;
+		// non-secure access
+		reg = NRF_P0_NS;
 	}
 
 #else
@@ -144,12 +144,12 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 void IOPinDisable(int PortNo, int PinNo)
 {
 #ifdef NRF9160_XXAA
-	NRF_GPIO_Type *reg = NRF_P0_NS;
+	NRF_GPIO_Type *reg = NRF_P0_S;
 
 	if (PortNo & 0x80)
 	{
-		// secure access
-		reg = NRF_P0_S;
+		// non-secure access
+		reg = NRF_P0_NS;
 	}
 
 #else
@@ -181,10 +181,10 @@ void IOPinDisableInterrupt(int IntNo)
         return;
 
 #ifdef NRF9160_XXAA
-	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE1_NS;
+	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE0_S;
     if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
     {
-    	gpiotereg = NRF_GPIOTE0_S;
+    	gpiotereg = NRF_GPIOTE1_NS;
     }
 
 #else
@@ -200,7 +200,11 @@ void IOPinDisableInterrupt(int IntNo)
     else
     {
 #ifdef NRF9160_XXAA
-    	NRF_GPIO_Type *reg = NRF_P0_NS;
+    	NRF_GPIO_Type *reg = NRF_P0_S;
+        if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+        {
+        	reg = NRF_P0_NS;
+        }
 #else
         NRF_GPIO_Type *reg = NRF_GPIO;
 
@@ -270,14 +274,14 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 		return false;
 
 #ifdef NRF9160_XXAA
-    NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE1_NS;
-	NRF_GPIO_Type *reg = NRF_P0_NS;
+    NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE0_S;
+	NRF_GPIO_Type *reg = NRF_P0_S;
 
 	if (PortNo & 0x80)
 	{
-		// secure access
-		reg = NRF_P0_S;
-		gpiotereg = NRF_GPIOTE0_S;
+		// non-secure access
+		reg = NRF_P0_NS;
+		gpiotereg = NRF_GPIOTE1_NS;
 	}
 
 #else
@@ -419,12 +423,12 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
 #ifdef NRF9160_XXAA
-	NRF_GPIO_Type *reg = NRF_P0_NS;
+	NRF_GPIO_Type *reg = NRF_P0_S;
 
 	if (PortNo & 0x80)
 	{
-		// secure access
-		reg = NRF_P0_S;
+		// non-secure access
+		reg = NRF_P0_NS;
 	}
 
 #else
@@ -471,12 +475,12 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 {
 #ifdef NRF9160_XXAA
-	NRF_GPIO_Type *reg = NRF_P0_NS;
+	NRF_GPIO_Type *reg = NRF_P0_S;
 
 	if (PortNo & 0x80)
 	{
-		// secure access
-		reg = NRF_P0_S;
+		// non-secure access
+		reg = NRF_P0_NS;
 	}
 
 #else
