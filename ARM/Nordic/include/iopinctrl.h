@@ -57,7 +57,11 @@ static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int Pi
 #ifndef NRF91_SERIES
 	NRF_GPIO_Type *reg = NRF_GPIO;
 #else
-	NRF_GPIO_Type *reg = NRF_P0_NS;
+	NRF_GPIO_Type *reg = NRF_P0_S;
+	if (PortNo & 0x80)
+	{
+		reg = NRF_P0_NS;
+	}
 #endif
 
 #ifdef NRF52840_XXAA
@@ -90,7 +94,11 @@ static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int Pi
  */
 static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo) {
 #ifdef NRF91_SERIES
-	return (NRF_P0_NS->IN >> PinNo) & 1;
+	if (PortNo & 0x80)
+	{
+		return (NRF_P0_NS->IN >> PinNo) & 1;
+	}
+	return (NRF_P0_S->IN >> PinNo) & 1;
 #else
 
 #ifdef NRF52840_XXAA
@@ -114,7 +122,15 @@ static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo
  */
 static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo) {
 #ifdef NRF91_SERIES
-	NRF_P0_NS->OUTSET = (1 << PinNo);
+	if (PortNo & 0x80)
+	{
+		NRF_P0_NS->OUTSET = (1 << PinNo);
+	}
+	else
+	{
+		NRF_P0_S->OUTSET = (1 << PinNo);
+	}
+
 #else
 
 #ifdef NRF52840_XXAA
@@ -138,7 +154,14 @@ static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo
  */
 static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int PinNo) {
 #ifdef NRF91_SERIES
-	NRF_P0_NS->OUTCLR = (1 << PinNo);
+	if (PortNo & 0x80)
+	{
+		NRF_P0_NS->OUTCLR = (1 << PinNo);
+	}
+	else
+	{
+		NRF_P0_S->OUTCLR = (1 << PinNo);
+	}
 #else
 
 #ifdef NRF52840_XXAA
@@ -162,7 +185,14 @@ static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int Pin
  */
 static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int PinNo) {
 #ifdef NRF91_SERIES
-	NRF_P0_NS->OUT ^= (1 << PinNo);
+	if (PortNo & 0x80)
+	{
+		NRF_P0_NS->OUT ^= (1 << PinNo);
+	}
+	else
+	{
+		NRF_P0_S->OUT ^= (1 << PinNo);
+	}
 #else
 
 #ifdef NRF52840_XXAA
@@ -187,7 +217,11 @@ static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int Pi
  */
 static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) {
 #ifdef NRF91_SERIES
-	return NRF_P0_NS->IN;
+	if (PortNo & 0x80)
+	{
+		return NRF_P0_NS->IN;
+	}
+	return NRF_P0_S->IN;
 #else
 
 #ifdef NRF52840_XXAA
@@ -211,7 +245,14 @@ static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) 
  */
 static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uint32_t Data) {
 #ifdef NRF91_SERIES
-	NRF_P0_NS->OUT = Data;
+	if (PortNo & 0x80)
+	{
+		NRF_P0_NS->OUT = Data;
+	}
+	else
+	{
+		NRF_P0_S->OUT = Data;
+	}
 #else
 
 #ifdef NRF52840_XXAA
