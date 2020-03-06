@@ -146,6 +146,7 @@ SECTIONS {
 		*(.gcc_except_table .gcc_except_table.*) 
 	} > FLASH
 	
+	. = ALIGN(4);
 	__text_end__ = .;
     __etext = .;
 	
