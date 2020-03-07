@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------
-File   : gcc_arm.ld
+File   : gcc_arm_flash.ld
 
 Author : Hoang Nguyen Hoan          Jan. 19, 2012
 
@@ -41,7 +41,7 @@ Hoan				July 3, 2015	Add Freescale Flash security config area
 
 /* 
 Require custom section definitions
-   .intvect - ARM interrupt vector
+   .vectors - ARM interrupt vector
    .Version - Firmware version data 
 */
 
