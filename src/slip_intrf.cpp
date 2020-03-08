@@ -160,7 +160,6 @@ int SlipIntrfRxDataBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int Buff
 	int cnt = 0;
 	uint8_t d;
 
-	uint8_t *p = pBuff;
 	dev->bSlipEnd = false;
 
 	while (BuffLen > 0)
@@ -528,6 +527,8 @@ bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf, bool bBlocking)
 
 	pDev->DevIntrf.pDevData = pDev;
 	pDev->pPhyIntrf = pPhyIntrf;
+	pDev->pObj = nullptr;
+	pDev->bSlipEnd = false;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_SPI;
 	pDev->DevIntrf.Disable = SlipIntrfDisable;
 	pDev->DevIntrf.Enable = SlipIntrfEnable;
@@ -565,8 +566,6 @@ bool Slip::Init(DeviceIntrf * const pIntrf, bool bBlocking)
 	{
 		return false;
 	}
-
-	memset(&vDevData, 0, sizeof(SLIPDEV));
 
 	return SlipInit(&vDevData, *pIntrf, bBlocking);
 }

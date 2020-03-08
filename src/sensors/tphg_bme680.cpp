@@ -88,7 +88,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "device_intrf.h"
 #include "coredev/iopincfg.h"
 #include "sensors/tphg_bme680.h"
-#include "bsec_interface.h"
+#include "sensors/bsec_interface.h"
 
 
 // 16 bits binary fixed point

@@ -277,7 +277,9 @@ void FlashDiskIO::EraseBlock(uint32_t BlkNo, int NbBlk)
         else
         {
             for (int i = 1; i <= vAddrSize; i++)
+            {
                 d[i] = p[vAddrSize - i];
+            }
         	vpInterf->Tx(vDevNo, d, vAddrSize + 1);
         }
         addr += vBlkSize * 1024;
@@ -318,7 +320,9 @@ void FlashDiskIO::EraseSector(uint32_t SectNo, int NbSect)
         else
         {
             for (int i = 1; i <= vAddrSize; i++)
+            {
                 d[i] = p[vAddrSize - i];
+            }
         	vpInterf->Tx(vDevNo, d, vAddrSize + 1);
         }
         addr += vSectSize * 1024;

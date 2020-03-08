@@ -521,7 +521,7 @@ bool AccelLis2dh12::UpdateData()
 		{
 			AccelSensor::vData.Timestamp = ts;
 		}
-		for (int i = 0; i < fstatus & 0x1f; i++)
+		for (int i = 0; i < (fstatus & 0x1f); i++)
 		{
 			regaddr = LIS2DH12_OUT_X_L | 0x40;
 			Device::Read(&regaddr, 1, (uint8_t*)AccelSensor::vData.Val, 6);

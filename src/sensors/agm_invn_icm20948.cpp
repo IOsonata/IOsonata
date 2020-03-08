@@ -148,7 +148,7 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 
 	inv_icm20948_register_aux_compass(&vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, (uint8_t)AK0991x_DEFAULT_I2C_ADDR);
 
-	int rc = 	rc = inv_icm20948_get_whoami(&vIcmDevice, &d);
+	int rc = inv_icm20948_get_whoami(&vIcmDevice, &d);
 
 	if (d != ICM20948_WHO_AM_I_ID)
 	{

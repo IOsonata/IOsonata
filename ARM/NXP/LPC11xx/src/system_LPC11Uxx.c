@@ -66,7 +66,7 @@ void SystemCoreClockUpdate(void)
 	uint32_t mainclk = LPC_SYSCON->MAINCLKSEL;
 	int32_t	p = 1, m;
 
-	//sysclk = GetSysClk();
+	sysclk = GetSysPllClk();
 
 	switch (mainclk & MAINCLKSEL_MASK)
 	{
