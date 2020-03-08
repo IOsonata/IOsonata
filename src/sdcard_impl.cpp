@@ -299,7 +299,7 @@ int SDCard::WriteData(uint8_t *pData, int Len)
 		if ((d[0] & 0x1f) != 0x5)
 		{
 			// Failed write, read status
-			int r = Cmd(13, 0);
+			Cmd(13, 0);
 			//printf("SDCard Write resp error: %x %d, r = %x\n\r", d[0], t, r);
 			return 0;
 		}

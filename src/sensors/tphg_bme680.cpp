@@ -583,7 +583,8 @@ bool TphgBme680::StartSampling()
 
 	    bsec_bme_settings_t sensor_settings;
 
-		bsec_library_return_t bsec_status = bsec_sensor_control(TphSensor::vSampleTime * 1000LL, &sensor_settings);
+		//bsec_library_return_t bsec_status =
+		bsec_sensor_control(TphSensor::vSampleTime * 1000LL, &sensor_settings);
 
 		return true;
 	}

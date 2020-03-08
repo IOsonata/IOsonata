@@ -348,7 +348,7 @@ bool FlashDiskIO::SectRead(uint32_t SectNo, uint8_t *pBuff)
     {
 		vpInterf->StartRx(vDevNo);
     	QuadSPISendCmd(*(SPI*)vpInterf, vRdCmd.Cmd , addr, vAddrSize, DISKIO_SECT_SIZE, vRdCmd.DummyCycle);
-		int l = vpInterf->RxData(pBuff, DISKIO_SECT_SIZE);
+		vpInterf->RxData(pBuff, DISKIO_SECT_SIZE);
 		vpInterf->StopRx();
     }
     else

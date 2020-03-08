@@ -194,7 +194,7 @@ int LpcSSPTxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
 			}
 			//if (LpcSSPWaitRxFifo(dev, 100000))
 			{
-				int d = dev->pSspReg->DR;
+				dev->pSspReg->DR;
 			}
 		}
 	}
