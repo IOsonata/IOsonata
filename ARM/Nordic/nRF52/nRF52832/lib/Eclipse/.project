@@ -1641,6 +1641,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/strerror</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/timer</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -2139,6 +2144,11 @@
 			<name>src/nRF5_SDK/libraries/sha256/sha256.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/sha256/sha256.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/strerror/nrf_strerror.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/strerror/nrf_strerror.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/timer/app_timer.c</name>

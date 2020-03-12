@@ -110,6 +110,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -238,6 +239,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -445,6 +447,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -574,6 +577,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -785,6 +789,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -913,6 +918,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -1122,6 +1128,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -1251,6 +1258,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -1460,6 +1468,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -1589,6 +1598,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -1797,6 +1807,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -1927,6 +1938,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -2137,6 +2149,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -2259,6 +2272,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -2461,6 +2475,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
@@ -2584,6 +2599,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/timer&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>

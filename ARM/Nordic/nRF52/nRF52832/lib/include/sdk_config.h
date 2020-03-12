@@ -8739,7 +8739,7 @@
  
 
 #ifndef NRF_STRERROR_ENABLED
-#define NRF_STRERROR_ENABLED 0
+#define NRF_STRERROR_ENABLED 1
 #endif
 
 // <q> NRF_TWI_MNGR_ENABLED  - nrf_twi_mngr - TWI transaction manager
