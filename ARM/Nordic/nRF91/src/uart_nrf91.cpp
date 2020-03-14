@@ -465,6 +465,36 @@ void nRFUARTPowerOff(DEVINTRF * const pDev)
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 0;
 }
 
+static void apply_workaround_for_enable_anomaly(NRF91_UARTDEV * const pDev)
+{
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || defined(NRF9160_XXAA)
+    // Apply workaround for anomalies:
+    // - nRF9160 - anomaly 23
+    // - nRF5340 - anomaly 44
+    volatile uint32_t const * rxenable_reg =
+        (volatile uint32_t *)(((uint32_t)pDev->pReg) + 0x564);
+    volatile uint32_t const * txenable_reg =
+        (volatile uint32_t *)(((uint32_t)pDev->pReg) + 0x568);
+
+    if (*txenable_reg == 1)
+    {
+    	pDev->pReg->TASKS_STOPTX = 1;
+    }
+
+    if (*rxenable_reg == 1)
+    {
+    	pDev->pReg->ENABLE = UARTE_ENABLE_ENABLE_Msk;
+    	pDev->pReg->TASKS_STOPRX = 1;
+
+        while (*rxenable_reg) {}
+
+        pDev->pReg->ERRORSRC = pDev->pReg->ERRORSRC;
+
+        pDev->pReg->ENABLE = 0;
+    }
+#endif // defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || defined(NRF9160_XXAA)
+}
+
 bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 {
 	// Config I/O pins
@@ -600,6 +630,8 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->DevIntrf.PowerOff = nRFUARTPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
+
+	apply_workaround_for_enable_anomaly(&s_nRFUartDev[devno]);
 
 	s_nRFUartDev[devno].pReg->ENABLE = (UARTE_ENABLE_ENABLE_Enabled << UARTE_ENABLE_ENABLE_Pos);
 

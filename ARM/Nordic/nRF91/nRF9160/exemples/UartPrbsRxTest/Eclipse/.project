@@ -36,11 +36,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/uart_nrf91.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrf91.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/uart_prbs_rx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/uart/uart_prbs_rx.cpp</locationURI>
