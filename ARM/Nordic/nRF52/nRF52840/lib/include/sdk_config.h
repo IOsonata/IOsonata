@@ -7711,7 +7711,11 @@
 // <2=> NRF_FSTORAGE_SD 
 
 #ifndef FDS_BACKEND
-#define FDS_BACKEND 2
+#ifdef SOFTDEVICE_PRESENT
+#define FDS_BACKEND 	NRF_FSTORAGE_SD
+#else
+#define FDS_BACKEND 	NRF_FSTORAGE_NVMC
+#endif
 #endif
 
 // </h> 
@@ -7764,7 +7768,7 @@
 //==========================================================
 // <o> FDS_MAX_USERS - Maximum number of callbacks that can be registered. 
 #ifndef FDS_MAX_USERS
-#define FDS_MAX_USERS 4
+#define FDS_MAX_USERS 6
 #endif
 
 // </h> 
