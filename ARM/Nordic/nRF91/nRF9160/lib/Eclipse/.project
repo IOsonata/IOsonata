@@ -431,6 +431,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/shared_irq_nrf91.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/shared_irq_nrf91.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/spi.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
@@ -691,6 +696,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/shared_irq_nrf91.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/shared_irq_nrf91.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
@@ -704,6 +714,11 @@
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_nrf91.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_nrf91.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>

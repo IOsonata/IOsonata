@@ -32,8 +32,8 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
-#ifndef __SHARED_IRQ_NRFX_H__
-#define __SHARED_IRQ_NRFX_H__
+#ifndef __SHARED_IRQ_NRF91_H__
+#define __SHARED_IRQ_NRF91_H__
 
 typedef void (*IRQHANDLER)(int DevNo, DEVINTRF *pDev);
 
@@ -47,4 +47,4 @@ void SetSharedIntHandler(int DevNo, DEVINTRF * const pDev, IRQHANDLER Handler);
 }
 #endif
 
-#endif // __SHARED_IRQ_NRFX_H__
+#endif // __SHARED_IRQ_NRF91_H__

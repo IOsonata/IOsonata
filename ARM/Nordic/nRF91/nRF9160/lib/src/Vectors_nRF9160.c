@@ -120,6 +120,7 @@ void (* const __Vectors[200])(void) = {
 /* External Interrupts */
 	0, 0, 0,
 	SPU_IRQHandler,
+	0,
 	CLOCK_POWER_IRQHandler,
 	0, 0,
 	UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQHandler,

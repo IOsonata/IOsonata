@@ -49,7 +49,7 @@ typedef struct {
 
 static IRQDATA s_DevIrq[MAX_NB_DEV] = { {NULL, }, };
 
-void SetI2cSpiIntHandler(int DevNo, DEVINTRF *pDev, IRQHANDLER Handler)
+void SetSharedIntHandler(int DevNo, DEVINTRF *pDev, IRQHANDLER Handler)
 {
 	if (DevNo < 0 || DevNo >= MAX_NB_DEV)
 	{
