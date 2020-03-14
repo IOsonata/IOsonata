@@ -246,18 +246,18 @@ void UartIrqHandler(int DevNo, DEVINTRF * const pDev)
 	{
 		dev->pReg->EVENTS_ERROR = 0;
 		uint32_t err = dev->pReg->ERRORSRC;
-		if (err & 1)	// Overrrun
+		if (err & UARTE_ERRORSRC_OVERRUN_Msk)
 		{
 			dev->pReg->TASKS_FLUSHRX;
 			dev->pUartDev->RxOvrErrCnt++;
 
 		}
-		if (err & 2)
+		if (err & UARTE_ERRORSRC_PARITY_Msk)
 		{
 			// Parity error
 			dev->pUartDev->ParErrCnt++;
 		}
-		if (err & 4)
+		if (err & UARTE_ERRORSRC_FRAMING_Msk)
 		{
 			// Framing error
 			dev->pUartDev->FramErrCnt++;

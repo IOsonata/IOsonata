@@ -69,10 +69,6 @@ typedef struct _nRF_UART_Dev {
 #endif
 	};
 	UARTDEV	*pUartDev;				// Pointer to generic UART dev. data
-	uint32_t RxDropCnt;
-	uint32_t RxTimeoutCnt;
-	uint32_t TxDropCnt;
-	uint32_t ErrCnt;
 	uint32_t RxPin;
 	uint32_t TxPin;
 	uint32_t CtsPin;
@@ -166,7 +162,7 @@ static void UART_IRQHandler(NRF5X_UARTDEV * const pDev)
 
 	if (rxto && pDev->pUartDev->DevIntrf.bDma == true)
 	{
-		pDev->RxTimeoutCnt++;
+		//pDev->pUartDev->rRxTimeoutCnt++;
 		pDev->pDmaReg->TASKS_FLUSHRX = 1;
 		pDev->pDmaReg->EVENTS_RXTO = 0;
 	}
@@ -187,7 +183,7 @@ static void UART_IRQHandler(NRF5X_UARTDEV * const pDev)
 			if (d == NULL)
 			{
 				pDev->pUartDev->bRxReady = true;
-				pDev->RxDropCnt++;// g_nRF51RxDropCnt++;
+				pDev->pUartDev->RxDropCnt++;// g_nRF51RxDropCnt++;
 				break;
 			}
 			*d = pDev->pReg->RXD;
@@ -339,10 +335,11 @@ static void UART_IRQHandler(NRF5X_UARTDEV * const pDev)
 
 	if (pDev->pReg->EVENTS_ERROR)
 	{
+		uint32_t err = pDev->pReg->ERRORSRC;
 		pDev->pReg->EVENTS_ERROR = 0;
-		if (pDev->pReg->ERRORSRC & 1)	// Overrrun
+		if (err & UART_ERRORSRC_OVERRUN_Msk)
 		{
-			pDev->ErrCnt++;//g_nRF51RxErrCnt++;
+			pDev->pUartDev->RxOvrErrCnt++;//g_nRF51RxErrCnt++;
 			len = 0;
 			cnt = 0;
 			//int l = 0;
@@ -365,6 +362,14 @@ static void UART_IRQHandler(NRF5X_UARTDEV * const pDev)
 				len = CFifoUsed(pDev->pUartDev->hRxFifo);
 				pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_RXDATA, NULL, len);
 			}
+		}
+		if (err & UART_ERRORSRC_FRAMING_Msk)
+		{
+			pDev->pUartDev->FramErrCnt++;
+		}
+		if (err & UART_ERRORSRC_PARITY_Msk)
+		{
+			pDev->pUartDev->ParErrCnt++;
 		}
 		pDev->pReg->ERRORSRC = pDev->pReg->ERRORSRC;
 		len = 0;
@@ -576,10 +581,11 @@ static void nRFUARTEnable(DEVINTRF * const pDev)
 {
 	NRF5X_UARTDEV *dev = (NRF5X_UARTDEV *)pDev->pDevData;
 
-	dev->ErrCnt = 0;
-	dev->RxTimeoutCnt = 0;
-	dev->RxDropCnt = 0;
-	dev->TxDropCnt = 0;
+	dev->pUartDev->RxOvrErrCnt = 0;
+	dev->pUartDev->ParErrCnt = 0;
+	dev->pUartDev->FramErrCnt = 0;
+	dev->pUartDev->RxDropCnt = 0;
+	dev->pUartDev->TxDropCnt = 0;
 
 	dev->pReg->PSELRXD = dev->RxPin;
 	dev->pReg->PSELTXD = dev->TxPin;
@@ -740,10 +746,11 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 
 	s_nRFUartDev[devno].pUartDev->bRxReady = false;
 	s_nRFUartDev[devno].pUartDev->bTxReady = true;
-	s_nRFUartDev[devno].ErrCnt = 0;
-	s_nRFUartDev[devno].RxTimeoutCnt = 0;
-	s_nRFUartDev[devno].RxDropCnt = 0;
-	s_nRFUartDev[devno].TxDropCnt = 0;
+	s_nRFUartDev[devno].pUartDev->RxOvrErrCnt = 0;
+	s_nRFUartDev[devno].pUartDev->ParErrCnt = 0;
+	s_nRFUartDev[devno].pUartDev->FramErrCnt = 0;
+	s_nRFUartDev[devno].pUartDev->RxDropCnt = 0;
+	s_nRFUartDev[devno].pUartDev->TxDropCnt = 0;
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
 	pDev->DataBits = pCfg->DataBits;
