@@ -130,7 +130,6 @@ void (* const __Vectors[200])(void) = {
 	0,
 	GPIOTE0_IRQHandler,
 	SAADC_IRQHandler,
-	SAADC_IRQHandler,
 	TIMER0_IRQHandler,
     TIMER1_IRQHandler,
     TIMER2_IRQHandler,
