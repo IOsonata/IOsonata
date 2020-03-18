@@ -36,6 +36,121 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/base64.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/base64.h</locationURI>
+		</link>
+		<link>
+			<name>include/blueio_types.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/blueio_types.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/cfifo.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cfifo.h</locationURI>
+		</link>
+		<link>
+			<name>include/convutil.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/convutil.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/crc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crc.h</locationURI>
+		</link>
+		<link>
+			<name>include/device bridge.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/device%20bridge.h</locationURI>
+		</link>
+		<link>
+			<name>include/device.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/device.h</locationURI>
+		</link>
+		<link>
+			<name>include/device_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/fatfs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
+		</link>
+		<link>
+			<name>include/intelhex.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
+		</link>
+		<link>
+			<name>include/isha1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/isha1.h</locationURI>
+		</link>
+		<link>
+			<name>include/isha256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/isha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/istddef.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/istddef.h</locationURI>
+		</link>
+		<link>
+			<name>include/md5.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/md5.h</locationURI>
+		</link>
+		<link>
+			<name>include/prbs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwm.h</locationURI>
+		</link>
+		<link>
+			<name>include/seep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/seep.h</locationURI>
+		</link>
+		<link>
+			<name>include/slip_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/slip_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/stddev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
+		</link>
+		<link>
+			<name>include/sysstatus.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatus.h</locationURI>
+		</link>
+		<link>
+			<name>include/sysstatusdef.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatusdef.h</locationURI>
+		</link>
+		<link>
 			<name>include/system_core_clock.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/include/system_core_clock.h</locationURI>
@@ -46,14 +161,74 @@
 			<locationURI>PARENT-1-PROJECT_LOC/include/system_nrf5340_network.h</locationURI>
 		</link>
 		<link>
+			<name>include/utf8.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/utf8.h</locationURI>
+		</link>
+		<link>
+			<name>include/utf8cvt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/utf8cvt.h</locationURI>
+		</link>
+		<link>
 			<name>src/Vectors_nRF5340_Net.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_nRF5340_Net.c</locationURI>
 		</link>
 		<link>
+			<name>src/shared_irq_nrf5340_network.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/shared_irq_nrf5340_network.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/system_nrf5340_network.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/system_nrf5340_network.c</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bleadv_mandata.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/blueio_blesrvc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/i2c.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2c.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/iopincfg.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/iopincfg.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/pdm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/shared_irq.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_irq.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/spi.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/timer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/uart.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -3,7 +3,8 @@
 
 @brief	Shared IRQ handler
 
-Implementation of shared IRQ for nRF91
+Implementation of shared IRQ for nRF5340 Network MCU
+
 
 @author	Nguyen Hoan Hoang
 @date	Mar. 12, 2020
@@ -47,7 +48,7 @@ typedef struct {
 } IRQDATA;
 #pragma pack(pop)
 
-#define MAX_NB_DEV		4
+#define MAX_NB_DEV		1
 
 static IRQDATA s_DevIrq[MAX_NB_DEV] = { {NULL, }, };
 
@@ -62,39 +63,13 @@ void SetSharedIntHandler(int DevNo, DEVINTRF *pDev, IRQHANDLER Handler)
 	s_DevIrq[DevNo].Handler = Handler;
 }
 
-extern "C" void UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQHandler(void)
+extern "C" void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void)
 {
 	if (s_DevIrq[0].pDev != NULL)
 	{
 		s_DevIrq[0].Handler(0, s_DevIrq[0].pDev);
 	}
-	NVIC_ClearPendingIRQ(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn);
+	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
 }
 
-extern "C" void UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQHandler(void)
-{
-	if (s_DevIrq[1].pDev != NULL)
-	{
-		s_DevIrq[1].Handler(1, s_DevIrq[1].pDev);
-	}
-	NVIC_ClearPendingIRQ(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn);
-}
-
-extern "C" void UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQHandler(void)
-{
-    if (s_DevIrq[2].pDev != NULL)
-    {
-        s_DevIrq[2].Handler(2, s_DevIrq[2].pDev);
-    }
-    NVIC_ClearPendingIRQ(UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQn);
-}
-
-extern "C" void UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQHandler(void)
-{
-    if (s_DevIrq[3].pDev != NULL)
-    {
-        s_DevIrq[3].Handler(3, s_DevIrq[3].pDev);
-    }
-    NVIC_ClearPendingIRQ(UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQn);
-}
 
