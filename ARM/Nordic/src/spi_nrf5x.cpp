@@ -36,7 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "coredev/spi.h"
 #include "iopinctrl.h"
-#include "i2c_spi_nrf5x_irq.h"
+#include "coredev/shared_irq.h"
 
 #pragma pack(push, 4)
 typedef struct {
@@ -690,7 +690,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
     if (pCfgData->bIntEn)
     {
-    	SetI2cSpiIntHandler(pCfgData->DevNo, &pDev->DevIntrf, SPIIrqHandler);
+    	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, SPIIrqHandler);
 
     	switch (pCfgData->DevNo)
     	{

@@ -37,8 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/i2c.h"
 #include "iopinctrl.h"
 #include "idelay.h"
-
-#include "i2c_spi_nrf5x_irq.h"
+#include "coredev/shared_irq.h"
 
 #define NRF5X_I2C_MAXDEV        2
 
@@ -672,7 +671,7 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
 
     if (pCfgData->bIntEn)
     {
-    	SetI2cSpiIntHandler(pCfgData->DevNo, &pDev->DevIntrf, I2CIrqHandler);
+    	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, I2CIrqHandler);
 
     	if (pCfgData->DevNo == 0)
     	{
