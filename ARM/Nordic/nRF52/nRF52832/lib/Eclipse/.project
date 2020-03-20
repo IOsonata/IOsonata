@@ -221,6 +221,16 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/nrf_log_backend_uart.h</locationURI>
 		</link>
 		<link>
+			<name>include/nrf_mesh_config_app.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrf_mesh_config_app.h</locationURI>
+		</link>
+		<link>
+			<name>include/nrf_mesh_config_core.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrf_mesh_config_core.h</locationURI>
+		</link>
+		<link>
 			<name>include/nrfthingy.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/nrfthingy.h</locationURI>
