@@ -102,46 +102,6 @@ The way the IOsonata folder is structure is simple.  The deeper you go inside th
  |   |   |-- DbgConfig   - Debugger configuration files.
  |   |   |-- ldscript    - Linker script files
  |   |   |
- |   |   |-- NXP         - NXP based MCU
- |   |   |   |-- LPC11xx      - LPC11xx series MCU
- |   |   |   |   |-- include     - Common include for this target series
- |   |   |   |   |-- src         - Common source for this target series
- |   |   |   |   |-- LPC11U35    - LPC11U35 target
- |   |   |   |   |   |-- lib        - IOsonata library for this target
- |   |   |   |   |   |   |-- Eclipse   - Eclipse project for this lib
- |   |   |   |   |   |   |-- IAR       - IAR project for this lib
- |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this lib
- |   |   |   |   |   |   |...
- |   |   |   |   |   |   
- |   |   |   |   |   |-- exemples   - Example projects for this target
- |   |   |   |   |   |   |-- Blink     - Blink example
- |   |   |   |   |   |   |   |-- src      - Source code for this exaple
- |   |   |   |   |   |   |   |-- Eclipse  - Eclipse project for this example
- |   |   |   |   |   |   |   |-- IAR      - IAR project for this example
- |   |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this example
- |   |   |   |   |   |   |   |...
- |   |   |   |   |   |   |-- Many other examples same
- |   |   |   |   |   |   |
- |   |   |   |-- LPC17xx      - LPC17xx series MCU
- |   |   |   |   |-- include     - Common include for this target series
- |   |   |   |   |-- src         - Common source for this target series
- |   |   |   |   |-- LPC176x     - LPC176x target
- |   |   |   |   |   |-- lib        - IOsonata library for this target
- |   |   |   |   |   |   |-- Eclipse   - Eclipse project for this lib
- |   |   |   |   |   |   |-- IAR       - IAR project for this lib
- |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this lib
- |   |   |   |   |   |   |...
- |   |   |   |   |   |   
- |   |   |   |   |   |-- exemples   - Example projects for this target
- |   |   |   |   |   |   |-- Blink     - Blink example
- |   |   |   |   |   |   |   |-- src      - Source code for this exaple
- |   |   |   |   |   |   |   |-- Eclipse  - Eclipse project for this example
- |   |   |   |   |   |   |   |-- IAR      - IAR project for this example
- |   |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this example
- |   |   |   |   |   |   |   |...
- |   |   |   |   |   |   |-- Many other examples same
- |   |   |   |   |   |   |
- |   |   |
  |   |   |-- Nordic      - Nordic Semiconductor based  MCU
  |   |   |   |-- nRF51        - nRF51 series MCU
  |   |   |   |   |-- include     - Common include for this target series
@@ -160,7 +120,7 @@ The way the IOsonata folder is structure is simple.  The deeper you go inside th
  |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this example
  |   |   |   |   |   |   |   |...
  |   |   |   |   |   |-- Many other examples same
- |   |   |   |   |
+ |   |   |   |   
  |   |   |   |-- nRF52        - nRF52 serie MCU
  |   |   |   |   |-- include     - Common include for this target series
  |   |   |   |   |-- src         - Common source for this target series
@@ -195,11 +155,88 @@ The way the IOsonata folder is structure is simple.  The deeper you go inside th
  |   |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this example
  |   |   |   |   |   |   |   |...
  |   |   |   |   |   |   |-- Many other examples same
- |   |   |   |
- |   |   |   |-- nRF91        - Target series MCU
+ |   |   |   |   
+ |   |   |   |-- nRF53        - nRF53 series MCU
+ |   |   |   |   |-- include     - Common include for this target series
+ |   |   |   |   |-- src         - Common source for this target series
+ |   |   |   |   |-- nRF5340_App   	- Target MCU
+ |   |   |   |   |   |-- lib        - IOsonata library for this target
+ |   |   |   |   |   |   |-- Eclipse   - Eclipse project for this lib
+ |   |   |   |   |   |   |-- IAR       - IAR project for this lib
+ |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this lib
+ |   |   |   |   |   |   |...
+ |   |   |   |   |   |   
+ |   |   |   |   |   |-- exemples   - Example projects for this target
+ |   |   |   |   |   |   |-- Blink     - Blink example
+ |   |   |   |   |   |   |   |-- src      - Source code for this exaple
+ |   |   |   |   |   |   |   |-- Eclipse  - Eclipse project for this example
+ |   |   |   |   |   |   |   |-- IAR      - IAR project for this example
+ |   |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this example
+ |   |   |   |   |   |   |   |...
+ |   |   |   |   |   |   |-- Many other examples same
+ |   |   |   |   |   |   |
+ |   |   |   |   |   
+ |   |   |   |   |-- nRF5340_Net   	- Target MCU
+ |   |   |   |   |   |-- lib        - IOsonata library for this target
+ |   |   |   |   |   |   |-- Eclipse   - Eclipse project for this lib
+ |   |   |   |   |   |   |-- IAR       - IAR project for this lib
+ |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this lib
+ |   |   |   |   |   |   |...
+ |   |   |   |   |   |   
+ |   |   |   |   |   |-- exemples   - Example projects for this target
+ |   |   |   |   |   |   |-- Blink     - Blink example
+ |   |   |   |   |   |   |   |-- src      - Source code for this exaple
+ |   |   |   |   |   |   |   |-- Eclipse  - Eclipse project for this example
+ |   |   |   |   |   |   |   |-- IAR      - IAR project for this example
+ |   |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this example
+ |   |   |   |   |   |   |   |...
+ |   |   |   |   |   |   |-- Many other examples same
+ |   |   |   |   |   |   |
+ |   |   |   |   
+ |   |   |   |-- nRF91        - nRF91 series MCU
  |   |   |   |   |-- include     - Common include for this target series
  |   |   |   |   |-- src         - Common source for this target series
  |   |   |   |   |-- nRF9160     - Target MCU
+ |   |   |   |   |   |-- lib        - IOsonata library for this target
+ |   |   |   |   |   |   |-- Eclipse   - Eclipse project for this lib
+ |   |   |   |   |   |   |-- IAR       - IAR project for this lib
+ |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this lib
+ |   |   |   |   |   |   |...
+ |   |   |   |   |   |   
+ |   |   |   |   |   |-- exemples   - Example projects for this target
+ |   |   |   |   |   |   |-- Blink     - Blink example
+ |   |   |   |   |   |   |   |-- src      - Source code for this exaple
+ |   |   |   |   |   |   |   |-- Eclipse  - Eclipse project for this example
+ |   |   |   |   |   |   |   |-- IAR      - IAR project for this example
+ |   |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this example
+ |   |   |   |   |   |   |   |...
+ |   |   |   |   |   |   |-- Many other examples same
+ |   |   |   |   |   |   |
+ |   |   |
+ |   |   |-- NXP         - NXP based MCU
+ |   |   |   |-- LPC11xx      - LPC11xx series MCU
+ |   |   |   |   |-- include     - Common include for this target series
+ |   |   |   |   |-- src         - Common source for this target series
+ |   |   |   |   |-- LPC11U35    - LPC11U35 target
+ |   |   |   |   |   |-- lib        - IOsonata library for this target
+ |   |   |   |   |   |   |-- Eclipse   - Eclipse project for this lib
+ |   |   |   |   |   |   |-- IAR       - IAR project for this lib
+ |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this lib
+ |   |   |   |   |   |   |...
+ |   |   |   |   |   |   
+ |   |   |   |   |   |-- exemples   - Example projects for this target
+ |   |   |   |   |   |   |-- Blink     - Blink example
+ |   |   |   |   |   |   |   |-- src      - Source code for this exaple
+ |   |   |   |   |   |   |   |-- Eclipse  - Eclipse project for this example
+ |   |   |   |   |   |   |   |-- IAR      - IAR project for this example
+ |   |   |   |   |   |   |   |-- CrossWorks- CrossWorks project for this example
+ |   |   |   |   |   |   |   |...
+ |   |   |   |   |   |   |-- Many other examples same
+ |   |   |   |   |   |   |
+ |   |   |   |-- LPC17xx      - LPC17xx series MCU
+ |   |   |   |   |-- include     - Common include for this target series
+ |   |   |   |   |-- src         - Common source for this target series
+ |   |   |   |   |-- LPC176x     - LPC176x target
  |   |   |   |   |   |-- lib        - IOsonata library for this target
  |   |   |   |   |   |   |-- Eclipse   - Eclipse project for this lib
  |   |   |   |   |   |   |-- IAR       - IAR project for this lib
