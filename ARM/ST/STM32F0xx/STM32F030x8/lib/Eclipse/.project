@@ -236,6 +236,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_STM32F030x8.c</locationURI>
 		</link>
 		<link>
+			<name>src/atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/atomic.c</locationURI>
+		</link>
+		<link>
 			<name>src/base64.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/base64.c</locationURI>
