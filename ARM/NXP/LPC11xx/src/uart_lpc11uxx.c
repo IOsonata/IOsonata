@@ -82,7 +82,7 @@ void UART_IRQHandler(void)
 					uint32_t r = LPC_USART->LSR;
 					if (r & LPCUART_LSR_OE)
 					{
-						g_LpcUartDev->pUartDev->RxOECnt++;
+						g_LpcUartDev->pUartDev->RxOvrErrCnt++;
 					}
 					if (g_LpcUartDev->pUartDev->EvtCallback)
 					{
@@ -204,6 +204,12 @@ inline void LpcUARTDisable(DEVINTRF *pDev)
 
 void LpcUARTEnable(DEVINTRF *pDev)
 {
+	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->pDevData;
+
+	dev->pUartDev->RxOvrErrCnt = 0;
+	dev->pUartDev->RxDropCnt = 0;
+	dev->pUartDev->ParErrCnt = 0;
+	dev->pUartDev->TxDropCnt = 0;
 }
 
 bool UARTInit(UARTDEV *pDev, const UARTCFG *pCfg)
@@ -317,7 +323,10 @@ bool UARTInit(UARTDEV *pDev, const UARTCFG *pCfg)
 	LPC_USART->TER = LPCUART_TER_TXEN;
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
-	pDev->RxOECnt = 0;
+	pDev->RxOvrErrCnt = 0;
+	pDev->RxDropCnt = 0;
+	pDev->ParErrCnt = 0;
+	pDev->TxDropCnt = 0;
 	pDev->DataBits = pCfg->DataBits;
 	pDev->FlowControl = pCfg->FlowControl;
 	pDev->StopBits = pCfg->StopBits;
