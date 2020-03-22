@@ -453,32 +453,30 @@ void AccelLis2dh12::PowerOff()
 
 void AccelLis2dh12::IntHandler()
 {
-	//uint8_t regaddr = LIS2DH12_STATUS_REG;
-	//uint8_t d = Read8(&regaddr, 1);
+	uint8_t regaddr = LIS2DH12_STATUS_REG;
+	uint8_t status = Read8(&regaddr, 1);
 
-	uint8_t regaddr = LIS2DH12_FIFO_SRC_REG;
+	regaddr = LIS2DH12_FIFO_SRC_REG;
 	uint8_t fstatus = Read8(&regaddr, 1);
 
-//	printf("%x\r\n", fstatus);
-
 	regaddr = LIS2DH12_INT1_SRC;
-	uint8_t istatus1 = Read8(&regaddr, 1);
+	uint8_t isrc1 = Read8(&regaddr, 1);
 
 	regaddr = LIS2DH12_INT2_SRC;
-	uint8_t istatus2 = Read8(&regaddr, 1);
+	uint8_t isrc2 = Read8(&regaddr, 1);
 
-	if (UpdateData() == true)
+	if ((fstatus & LIS2DH12_FIFO_SRC_REG_WTM) || isrc1 || isrc2)
 	{
-		if (vIntHandler)
+		if (UpdateData() == true)
 		{
-			ACCELSENSOR_DATA data;
+			if (vIntHandler)
+			{
+				ACCELSENSOR_DATA data;
 
-			AccelSensor::Read(data);
+				AccelSensor::Read(data);
 
-			vIntHandler(&data);
-
-//			TEMPSENSOR_DATA tdata;
-//			TempSensor::Read(tdata);
+				vIntHandler(&data);
+			}
 		}
 	}
 
