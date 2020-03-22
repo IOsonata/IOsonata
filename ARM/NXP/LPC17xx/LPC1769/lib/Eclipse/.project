@@ -766,6 +766,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_lpcxx.c</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/iopincfg.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/iopincfg.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
@@ -784,6 +789,11 @@
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_lpc17xx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_lpc17xx.c</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/uart_lpcxx.c</name>
@@ -839,16 +849,6 @@
 			<name>src/miscdev/modem.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/pwrmgnt/pwrmgnt_as3701.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pwrmgnt_as3701.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/a_adxl362.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/a_adxl362.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/ag_bmi160.cpp</name>
