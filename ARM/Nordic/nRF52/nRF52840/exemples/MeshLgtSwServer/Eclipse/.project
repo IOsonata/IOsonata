@@ -40,6 +40,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.c</locationURI>
 		</link>
 		<link>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -48,6 +53,11 @@
 			<name>src/nrf_mesh_config_app.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/nrf_mesh_config_app.h</locationURI>
+		</link>
+		<link>
+			<name>src/micro-ecc/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples</name>
