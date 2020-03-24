@@ -365,7 +365,7 @@ static void RxTask(void * pvParameter)
 /* This function gets events from the SoftDevice and processes them. */
 static void BleTask(void * pvParameter)
 {
-	g_Uart.printf("UART over BLE with FreeRTOS\r\n");
+	//g_Uart.printf("UART over BLE with FreeRTOS\r\n");
 
     BleAppRun();
 }
@@ -380,8 +380,8 @@ void FreeRTOSInit()
     BaseType_t xReturned = xTaskCreate(BleTask,
                                        "BLE",
                                        NRF_BLE_FREERTOS_SDH_TASK_STACK,
-                                       g_QueHandle,
-                                       2,
+                                       NULL,//g_QueHandle,
+									   configMAX_SYSCALL_INTERRUPT_PRIORITY,
                                        &g_BleTask);
     if (xReturned != pdPASS)
     {
@@ -391,7 +391,7 @@ void FreeRTOSInit()
     xReturned = xTaskCreate(RxTask, "RX",
                             NRF_BLE_FREERTOS_SDH_TASK_STACK,
                                        NULL,
-                              2,
+									   tskIDLE_PRIORITY,
                              &g_RxTask);
 }
 

@@ -59,7 +59,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "blueio_board.h"
 #include "idelay.h"
 
-#include "bsec_interface.h"
+#include "sensors/bsec_interface.h"
 
 #define BME680		// To use Bosch BME680 with Air Quality Index
 #include "board.h"

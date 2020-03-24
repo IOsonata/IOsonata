@@ -57,7 +57,7 @@ SOFTWARE.
 #include "ble_app.h"
 #include "ble_service.h"
 
-#include "bsec_interface.h"
+#include "sensors/bsec_interface.h"
 
 #include "blueio_board.h"
 #include "coredev/uart.h"

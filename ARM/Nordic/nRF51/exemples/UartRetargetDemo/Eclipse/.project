@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>UartPrbsTest</name>
+	<name>UartRetargetDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -36,9 +36,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/uart_prbs_tx.cpp</name>
+			<name>src/uart_retarget_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/exemples/uart/uart_prbs_tx.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/exemples/uart/uart_retarget_demo.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

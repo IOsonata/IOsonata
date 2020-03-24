@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "blueio_board.h"
 
 //#define NORDIC_DK
-#define NEBLINA
+//#define NEBLINA
 
 #define UART_NO				0
 
