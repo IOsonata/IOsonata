@@ -35,5 +35,10 @@
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/exemples/ADCDemo.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/board.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
