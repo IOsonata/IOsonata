@@ -150,6 +150,11 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crc32/crc32.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/crypto/nrf_crypto_aead.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/nrf_crypto_aead.c</locationURI>
@@ -293,6 +298,61 @@
 			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_ver_validation.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_ver_validation.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_sw</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecc.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdh.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdh.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdh.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdh.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdsa.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdsa.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdsa.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_shared.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_shared.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.h</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

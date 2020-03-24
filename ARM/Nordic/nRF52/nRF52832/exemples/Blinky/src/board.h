@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	board.h
+@file	board.h
 
 @brief	Board specific definitions
 

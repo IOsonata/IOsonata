@@ -48,7 +48,7 @@
 		<link>
 			<name>src/sdk_config.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/sdk_config.h</locationURI>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/UartSdkPrbsTest/src/sdk_config.h</location>
 		</link>
 		<link>
 			<name>src/nrfx/drivers</name>

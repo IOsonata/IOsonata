@@ -371,6 +371,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_sw</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uart.c</locationURI>
@@ -399,6 +404,16 @@
 			<name>src/nRF5_SDK/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdsa.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/micro_ecc/micro_ecc_backend_ecdsa.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c</name>

@@ -87,7 +87,7 @@ void system_off( void )
 #endif //NRF52
 
     // Turn off LEDs before sleeping to conserve energy.
-    bsp_board_leds_off();
+    //bsp_board_leds_off();
 
     // Set nRF5 into System OFF. Reading out value and looping after setting the register
     // to guarantee System OFF in nRF52.
@@ -220,7 +220,7 @@ void gpio_init( void )
     // Workaround for PAN_028 rev1.1 anomaly 22 - System: Issues with disable System OFF mechanism
     nrf_delay_ms(1);
 
-    bsp_board_init(BSP_INIT_LEDS);
+   // bsp_board_init(BSP_INIT_LEDS);
 }
 
 
