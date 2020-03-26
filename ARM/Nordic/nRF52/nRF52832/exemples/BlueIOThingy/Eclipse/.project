@@ -82,9 +82,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/gcc_nrf52_thingy_xxaa.ld</name>
+			<name>src/gcc_nrf52832_thingy_xxaa.ld</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/exemples/BlueIOThingy/gcc_nrf52_thingy_xxaa.ld</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/gcc_nrf52832_thingy_xxaa.ld</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>
