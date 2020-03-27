@@ -3,6 +3,8 @@
 
 @brief	nRF91 UART implementation
 
+Note : UART/I2C/SPI are shared.
+
 @author	Nguyen Hoan Hoang
 @date	Mar. 12, 2020
 
