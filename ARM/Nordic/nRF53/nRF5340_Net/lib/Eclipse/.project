@@ -176,6 +176,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_nRF5340_Net.c</locationURI>
 		</link>
 		<link>
+			<name>src/coredev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/shared_irq_nrf5340_network.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/shared_irq_nrf5340_network.cpp</locationURI>
@@ -206,6 +211,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/iopincfg.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/iopinctrl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
@@ -229,6 +239,36 @@
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2c.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2c_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
