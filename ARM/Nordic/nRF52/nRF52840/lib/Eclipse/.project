@@ -956,9 +956,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/uart_nrf5x.cpp</name>
+			<name>src/coredev/uart_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrf5x.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>

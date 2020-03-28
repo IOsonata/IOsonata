@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "nrf_peripherals.h"
 
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 #define NRFX_SPI_MAXDEV			SPIM_COUNT
 #else
 #define NRFX_SPI_MAXDEV			SPI_COUNT
@@ -57,10 +57,10 @@ typedef struct {
 	int DevNo;
 	SPIDEV *pSpiDev;
 	union {
-#ifdef SPI_COUNT
+#ifdef SPI_PRESENT
 		NRF_SPI_Type  *pReg;	// Master I/O register map
 #endif
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 		NRF_SPIM_Type *pDmaReg;	// Master DMA register map
 #endif
 #ifdef SPIS_COUNT
@@ -77,7 +77,7 @@ typedef struct {
 #pragma pack(pop)
 
 static const NRFX_SPIFREQ s_nRFxSPIFreq[] = {
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 		{125000, SPIM_FREQUENCY_FREQUENCY_K125},
 		{250000, SPIM_FREQUENCY_FREQUENCY_K250},
 		{500000, SPIM_FREQUENCY_FREQUENCY_K500},
@@ -142,7 +142,7 @@ static NRFX_SPIDEV s_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 #endif
 };
 
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 bool nRFxSPIWaitDMA(NRFX_SPIDEV * const pDev, uint32_t Timeout)
 {
 	uint32_t val = 0;
@@ -159,7 +159,7 @@ bool nRFxSPIWaitDMA(NRFX_SPIDEV * const pDev, uint32_t Timeout)
 }
 #endif
 
-#ifdef SPI_COUNT
+#ifdef SPI_PRESENT
 bool nRFxSPIWaitReady(NRFX_SPIDEV * const pDev, uint32_t Timeout)
 {
 	do {
@@ -174,7 +174,7 @@ bool nRFxSPIWaitReady(NRFX_SPIDEV * const pDev, uint32_t Timeout)
 }
 #endif
 
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 bool nRFxSPIWaitRX(NRFX_SPIDEV * const pDev, uint32_t Timeout)
 {
 	uint32_t val = 0;
@@ -218,7 +218,7 @@ int nRFxSPISetRate(DEVINTRF * const pDev, int Rate)
 		}
 	}
 
-#ifdef SPI_COUNT
+#ifdef SPI_PRESENT
 	dev->pReg->FREQUENCY = regval;
 #else
 	dev->pDmaReg->FREQUENCY = regval;
@@ -235,13 +235,13 @@ void nRFxSPIDisable(DEVINTRF * const pDev)
 	{
 		dev->pDmaSReg->ENABLE = (SPIS_ENABLE_ENABLE_Disabled << SPIS_ENABLE_ENABLE_Pos);
 	}
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 	else if (pDev->bDma)
 	{
 		dev->pDmaReg->ENABLE = (SPIM_ENABLE_ENABLE_Disabled << SPIM_ENABLE_ENABLE_Pos);
 	}
 #endif
-#ifdef SPI_COUNT
+#ifdef SPI_PRESENT
 	else
 	{
         dev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Disabled << SPI_ENABLE_ENABLE_Pos);
@@ -257,13 +257,13 @@ void nRFxSPIEnable(DEVINTRF * const pDev)
 	{
 		dev->pDmaSReg->ENABLE = (SPIS_ENABLE_ENABLE_Enabled << SPIS_ENABLE_ENABLE_Pos);
 	}
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 	else if (pDev->bDma)
 	{
 		dev->pDmaReg->ENABLE = (SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos);
 	}
 #endif
-#ifdef SPI_COUNT
+#ifdef SPI_PRESENT
 	else
 	{
         dev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
@@ -276,7 +276,7 @@ void nRFxSPIPowerOff(DEVINTRF * const pDev)
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 
 	// Undocumented Power down.  Nordic Bug with DMA causing high current consumption
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC) = 0;
@@ -304,7 +304,7 @@ bool nRFxSPIStartRx(DEVINTRF * const pDev, int DevCs)
 
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
 	{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
         dev->pDmaReg->PSEL.MISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
 		dev->pDmaReg->PSEL.MOSI = -1;
 #else
@@ -322,7 +322,7 @@ int nRFxSPIRxDataDma(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 	int cnt = 0;
 
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
     dev->pDmaReg->TXD.PTR = 0;
     dev->pDmaReg->TXD.MAXCNT = 0;
     dev->pDmaReg->TXD.LIST = 0;
@@ -357,7 +357,7 @@ int nRFxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
     NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
     int cnt = 0;
 
-#ifdef SPI_COUNT
+#ifdef SPI_PRESENT
     dev->pReg->EVENTS_READY = 0;
 
     while (BuffLen > 0)
@@ -391,7 +391,7 @@ void nRFxSPIStopRx(DEVINTRF * const pDev)
 
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
 	{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 //		dev->pReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
 #else
 //		dev->pReg->PSELMOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
@@ -416,7 +416,7 @@ bool nRFxSPIStartTx(DEVINTRF * const pDev, int DevCs)
 
     if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
     {
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
         dev->pDmaReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
         dev->pDmaReg->PSEL.MISO = -1;
 #else
@@ -433,7 +433,7 @@ int nRFxSPITxDataDma(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 	int cnt = 0;
 
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 	dev->pDmaReg->RXD.PTR = 0;
     dev->pDmaReg->RXD.MAXCNT = 0;
     dev->pDmaReg->RXD.LIST = 0;
@@ -468,7 +468,7 @@ int nRFxSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
     NRFX_SPIDEV *dev = (NRFX_SPIDEV*)pDev->pDevData;
     int cnt = 0;
 
-#ifdef SPI_COUNT
+#ifdef SPI_PRESENT
     if (pData == NULL)
     {
         return 0;
@@ -507,7 +507,7 @@ void nRFxSPIStopTx(DEVINTRF * const pDev)
 	}
     if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
     {
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
         dev->pDmaReg->PSEL.MOSI = -1;
         dev->pDmaReg->PSEL.MISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
 #else
@@ -537,7 +537,7 @@ void SPIIrqHandler(int DevNo, DEVINTRF * const pDev)
 		{
 			if (dev->pSpiDev->Cfg.EvtCB)
 			{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 				dev->pSpiDev->Cfg.EvtCB(pDev, DEVINTRF_EVT_COMPLETED, (uint8_t*)dev->pDmaSReg->RXD.PTR, dev->pDmaSReg->RXD.AMOUNT);
 #else
 				dev->pSpiDev->Cfg.EvtCB(pDev, DEVINTRF_EVT_COMPLETED, (uint8_t*)dev->pDmaSReg->RXDPTR, dev->pDmaSReg->AMOUNTRX);
@@ -554,7 +554,7 @@ void SPIIrqHandler(int DevNo, DEVINTRF * const pDev)
 			}
 			dev->pDmaSReg->STATUS = dev->pDmaSReg->STATUS;
 
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 			dev->pDmaSReg->RXD.PTR = (uint32_t)dev->pSpiDev->pRxBuff[0];
 			dev->pDmaSReg->RXD.MAXCNT = dev->pSpiDev->RxBuffLen[0];
 			dev->pDmaSReg->TXD.PTR = (uint32_t)dev->pSpiDev->pTxData[0];
@@ -591,7 +591,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	uint32_t cfgreg = 0;
 
 	// Get the correct register map
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 	NRF_SPIM_Type *reg = reg = s_nRFxSPIDev[pCfgData->DevNo].pDmaReg;
 #else
 	NRF_SPI_Type *reg = reg = s_nRFxSPIDev[pCfgData->DevNo].pReg;
@@ -611,7 +611,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
 	if (pCfgData->BitOrder == SPIDATABIT_LSB)
 	{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 		cfgreg |= SPIM_CONFIG_ORDER_LsbFirst;
 #else
 		cfgreg |= SPI_CONFIG_ORDER_LsbFirst;
@@ -619,7 +619,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	}
 	else
 	{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 		cfgreg |= SPIM_CONFIG_ORDER_MsbFirst;
 #else
 		cfgreg |= SPI_CONFIG_ORDER_MsbFirst;
@@ -628,7 +628,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
 	if (pCfgData->DataPhase == SPIDATAPHASE_SECOND_CLK)
 	{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 		cfgreg |= (SPIM_CONFIG_CPHA_Trailing << SPIM_CONFIG_CPHA_Pos);
 #else
 		cfgreg |= (SPI_CONFIG_CPHA_Trailing << SPI_CONFIG_CPHA_Pos);
@@ -636,7 +636,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	}
 	else
 	{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 		cfgreg |= (SPIM_CONFIG_CPHA_Leading << SPIM_CONFIG_CPHA_Pos);
 #else
 		cfgreg |= (SPI_CONFIG_CPHA_Leading << SPI_CONFIG_CPHA_Pos);
@@ -645,7 +645,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
 	if (pCfgData->ClkPol == SPICLKPOL_LOW)
 	{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 		cfgreg |= (SPIM_CONFIG_CPOL_ActiveLow << SPIM_CONFIG_CPOL_Pos);
 #else
 		cfgreg |= (SPI_CONFIG_CPOL_ActiveLow << SPI_CONFIG_CPOL_Pos);
@@ -654,7 +654,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	}
 	else
 	{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 		cfgreg |= (SPIM_CONFIG_CPOL_ActiveHigh << SPIM_CONFIG_CPOL_Pos);
 #else
 		cfgreg |= (SPI_CONFIG_CPOL_ActiveHigh << SPI_CONFIG_CPOL_Pos);
@@ -695,7 +695,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		pDev->DevIntrf.bDma = true;
 	}
 
-#ifndef SPI_COUNT
+#ifndef SPI_PRESENT
 	// only DMA mode avail.  Force DMA
 	pDev->DevIntrf.bDma = true;
 #endif
@@ -712,7 +712,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	{
 		NRF_SPIS_Type *sreg = s_nRFxSPIDev[pCfgData->DevNo].pDmaSReg;
 
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
         sreg->PSEL.SCK = (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
         sreg->PSEL.MISO = (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
         sreg->PSEL.MOSI = (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PortNo << 5);
@@ -739,7 +739,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	}
 	else
 	{
-#ifdef SPIM_COUNT
+#ifdef SPIM_PRESENT
 		reg->PSEL.SCK = (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
 		reg->PSEL.MISO = (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
 		reg->PSEL.MOSI = (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PortNo << 5);

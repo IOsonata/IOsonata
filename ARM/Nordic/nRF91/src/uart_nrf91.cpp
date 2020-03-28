@@ -586,8 +586,10 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
     	s_nRFUartDev[devno].RtsPin = (pincfg[UARTPIN_RTS_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_RTS_IDX].PortNo << 5);
     	s_nRFUartDev[devno].pReg->PSEL.CTS = s_nRFUartDev[devno].CtsPin;
     	s_nRFUartDev[devno].pReg->PSEL.RTS = s_nRFUartDev[devno].RtsPin;
-		NRF_P0_S->OUTCLR = (1 << pincfg[UARTPIN_CTS_IDX].PinNo);
-		NRF_P0_S->OUTCLR = (1 << pincfg[UARTPIN_RTS_IDX].PinNo);
+        IOPinClear(pincfg[UARTPIN_CTS_IDX].PortNo, pincfg[UARTPIN_CTS_IDX].PinNo);
+        IOPinClear(pincfg[UARTPIN_RTS_IDX].PortNo, pincfg[UARTPIN_RTS_IDX].PinNo);
+//		NRF_P0_S->OUTCLR = (1 << pincfg[UARTPIN_CTS_IDX].PinNo);
+//		NRF_P0_S->OUTCLR = (1 << pincfg[UARTPIN_RTS_IDX].PinNo);
 	}
 	else
 	{

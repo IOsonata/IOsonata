@@ -581,11 +581,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/uart_bleintrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/uart_nrf5x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/uart_nrf5x.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/uart_retarget.c</locationURI>
@@ -884,6 +879,11 @@
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>

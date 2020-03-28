@@ -35,6 +35,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include "nrf.h"
+#include "nrf_peripherals.h"
+
 
 #include "istddef.h"
 #include "coredev/i2c.h"
@@ -42,15 +44,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 #include "coredev/shared_irq.h"
 
-#include "nrf_peripherals.h"
-
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
 #define NRFX_I2C_MAXDEV				TWIM_COUNT
 #else
 #define NRFX_I2C_MAXDEV				TWI_COUNT
 #endif
 
-#ifdef TWIS_COUNT
+#ifdef TWIS_PRESENT
 #define NRFX_I2CSLAVE_MAXDEV		TWIS_COUNT
 #else
 #define NRFX_I2CSLAVE_MAXDEV		0
@@ -64,10 +64,10 @@ typedef struct {
 	int DevNo;
 	I2CDEV *pI2cDev;
 	union {
-#ifdef TWI_COUNT
+#ifdef TWI_PRESENT
 		NRF_TWI_Type *pReg;		// Master register map
 #endif
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
 		NRF_TWIM_Type *pDmaReg;	// Master DMA register map
 		NRF_TWIS_Type *pDmaSReg;// Slave DMA register map
 #endif
@@ -83,7 +83,7 @@ typedef struct {
 #pragma pack(pop)
 
 static const NRFX_I2CFREQ s_nRFxI2CFreq[] = {
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
 	{100000, TWIM_FREQUENCY_FREQUENCY_K100},
 	{250000, TWIM_FREQUENCY_FREQUENCY_K250},
 	{400000, TWIM_FREQUENCY_FREQUENCY_K400},
@@ -128,7 +128,7 @@ static NRFX_I2CDEV s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
 
 bool nRFxI2CWaitStop(NRFX_I2CDEV * const pDev, int Timeout)
 {
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
 	NRF_TWIM_Type *reg = pDev->pDmaReg;
 #else
 	NRF_TWI_Type *reg = pDev->pReg;
@@ -152,7 +152,7 @@ bool nRFxI2CWaitStop(NRFX_I2CDEV * const pDev, int Timeout)
             // not be updated with correct value
             reg->EVENTS_STOPPED = 0;
 
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
             pDev->pDmaReg->EVENTS_TXSTARTED = 0;
             pDev->pDmaReg->EVENTS_RXSTARTED = 0;
 #endif
@@ -222,7 +222,7 @@ bool nRFxI2CWaitTxComplete(NRFX_I2CDEV * const pDev, int Timeout)
             return false;
         }
 
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
         if (pDev->pI2cDev->DevIntrf.bDma)
         {
 			if (pDev->pDmaReg->EVENTS_LASTTX)
@@ -236,7 +236,7 @@ bool nRFxI2CWaitTxComplete(NRFX_I2CDEV * const pDev, int Timeout)
         else
 #endif
         {
-#ifdef TWI_COUNT
+#ifdef TWI_PRESENT
             if (pDev->pReg->EVENTS_TXDSENT)
             {
                 pDev->pReg->EVENTS_TXDSENT = 0;
@@ -254,7 +254,7 @@ void nRFxI2CDisable(DEVINTRF * const pDev)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
 	dev->pDmaReg->ENABLE = (TWIM_ENABLE_ENABLE_Disabled << TWIM_ENABLE_ENABLE_Pos);
 #else
 	dev->pReg->ENABLE = (TWI_ENABLE_ENABLE_Disabled << TWI_ENABLE_ENABLE_Pos);
@@ -265,7 +265,7 @@ void nRFxI2CEnable(DEVINTRF * const pDev)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
     if (dev->pI2cDev->DevIntrf.bDma)
     {
 		if (dev->pI2cDev->Mode == I2CMODE_SLAVE)
@@ -280,7 +280,7 @@ void nRFxI2CEnable(DEVINTRF * const pDev)
     else
 #endif
 	{
-#ifdef TWI_COUNT
+#ifdef TWI_PRESENT
     	dev->pReg->ENABLE = (TWI_ENABLE_ENABLE_Enabled << TWI_ENABLE_ENABLE_Pos);
 #endif
     }
@@ -291,7 +291,7 @@ void nRFxI2CPowerOff(DEVINTRF * const pDev)
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
 	// Undocumented Power down I2C.  Nordic Bug with DMA causing high current consumption
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
 	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC) = 0;
@@ -323,7 +323,7 @@ int nRFxI2CSetRate(DEVINTRF * const pDev, int RateHz)
 		}
 	}
 
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
 	dev->pDmaReg->FREQUENCY = regval;
 #else
 	dev->pReg->FREQUENCY = regval;
@@ -336,7 +336,7 @@ bool nRFxI2CStartRx(DEVINTRF * const pDev, int DevAddr)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
-#ifdef TWI_COUNT
+#ifdef TWI_PRESENT
 	dev->pReg->ADDRESS = DevAddr;
 	dev->pReg->INTENCLR = 0xFFFFFFFF;
 #else
@@ -353,7 +353,7 @@ int nRFxI2CRxDataDMA(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
-#ifdef TWIM_COUNT
+#ifdef TWIM_PRESENT
 	while (BuffLen > 0)
 	{
 		int l = min(BuffLen, NRFX_I2C_DMA_MAXCNT);
@@ -389,7 +389,7 @@ int nRFxI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
 		return 0;
 	}
 
-#ifdef TWI_COUNT
+#ifdef TWI_PRESENT
 
 	dev->pReg->EVENTS_STOPPED = 0;
 	dev->pReg->TASKS_STARTRX = 1;
@@ -428,7 +428,7 @@ void nRFxI2CStopRx(DEVINTRF * const pDev)
     {
         // must read dummy last byte to generate NACK & STOP condition
     	nRFxI2CWaitRxComplete(dev, 100000);
-#ifdef TWI_COUNT
+#ifdef TWI_PRESENT
     	(void)reg->RXD;
 #endif
     }
@@ -439,7 +439,7 @@ bool nRFxI2CStartTx(DEVINTRF * const pDev, int DevAddr)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
-#ifdef TWI_COUNT
+#ifdef TWI_PRESENT
 	dev->pReg->ADDRESS = DevAddr;
 	dev->pReg->INTENCLR = 0xFFFFFFFF;
 #else

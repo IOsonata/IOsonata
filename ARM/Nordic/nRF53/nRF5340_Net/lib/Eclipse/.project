@@ -171,6 +171,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/utf8cvt.h</locationURI>
 		</link>
 		<link>
+			<name>src/ResetEntry.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
+		</link>
+		<link>
 			<name>src/Vectors_nRF5340_Net.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_nRF5340_Net.c</locationURI>
@@ -251,6 +256,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/iopincfg_nrfx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
@@ -269,6 +279,11 @@
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

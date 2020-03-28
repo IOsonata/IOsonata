@@ -48,17 +48,19 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //#define DEMO_C
 
+#define TEST_BUFSIZE		64
+
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-#define FIFOSIZE			CFIFO_MEMSIZE(256)
+#define FIFOSIZE			CFIFO_MEMSIZE(TEST_BUFSIZE * 4)
 
 uint8_t g_TxBuff[FIFOSIZE];
 
 static IOPINCFG s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
+	//{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
+	//{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
 
 // UART configuration data
@@ -79,7 +81,7 @@ const UARTCFG g_UartCfg = {
 	.pRxMem = NULL,
 	.TxMemSize = FIFOSIZE,
 	.pTxMem = g_TxBuff,
-	.bDMAMode = false,
+	.bDMAMode = true,
 };
 
 #ifdef DEMO_C
@@ -94,7 +96,7 @@ UART g_Uart;
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
-	uint8_t buff[20];
+	uint8_t buff[TEST_BUFSIZE];
 	uint8_t *p;
 
 	switch (EvtId)
@@ -124,17 +126,28 @@ int main()
 #endif
 
 	uint8_t d = 0xff;
+	uint8_t buff[TEST_BUFSIZE];
 
 	while(1)
 	{
+		for (int i = 0; i < TEST_BUFSIZE; i++)
+		{
+			d = Prbs8(d);
+			buff[i] = d;
+		}
 #ifdef DEMO_C
 		if (UARTTx(&g_UartDev, &d, 1) > 0)
 #else
-		if (g_Uart.Tx(&d, 1) > 0)
-#endif
+		int len = TEST_BUFSIZE;
+		uint8_t *p = buff;
+		while (len > 0)
 		{
+			int l = g_Uart.Tx(p, len);
+			len -= l;
+			p += l;
+#endif
 			// If success send next code
-			d = Prbs8(d);
+			//d = Prbs8(d);
 		}
 	}
 	return 0;

@@ -51,22 +51,23 @@ static const UART_PORTPINS;
 
 // UART configuration data
 const UARTCFG g_UartCfg = {
-	.DevNo = 0,
+	.DevNo = UART_NO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = UART_PORTPIN_COUNT,
-	.Rate = 1000000,	// Rate
+	.Rate = 1000000,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
-	.StopBits = 1,	// Stop bit
+	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
-	.IntPrio = 1, //  use APP_IRQ_PRIORITY_LOW with Softdevice
-	.EvtCallback = nullptr,
+	.IntPrio = 1,
+	.EvtCallback = nullptr,//nRFUartEvthandler,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = nullptr,
 	.TxMemSize = 0,
 	.pTxMem = nullptr,
+	.bDMAMode = true,
 };
 
 #define DEMO_C
@@ -129,7 +130,8 @@ int main()
             cnt++;
             
 			// If success send next code
-           // printf("%x ", d);
+            //printf("%x\n", d);
+            UARTTx(&g_UartDev, &d, 1);
             if (val != d)
             {
                 errcnt++;
