@@ -911,9 +911,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/i2c_nrf5x.cpp</name>
+			<name>src/coredev/i2c_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrf5x.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/i2c_spi_nrf5x_irq.cpp</name>
@@ -931,9 +931,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/spi_nrf5x.cpp</name>
+			<name>src/coredev/spi_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrf5x.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer.cpp</name>

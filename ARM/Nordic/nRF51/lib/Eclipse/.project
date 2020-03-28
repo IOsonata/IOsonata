@@ -426,11 +426,6 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/i2c_nrf5x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_nrf5x.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/i2c_spi_nrf5x_irq.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_spi_nrf5x_irq.cpp</locationURI>
@@ -544,11 +539,6 @@
 			<name>src/slip_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/slip_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/spi_nrf5x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/spi_nrf5x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/stddev.c</name>
@@ -871,9 +861,19 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/i2c_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer.cpp</name>

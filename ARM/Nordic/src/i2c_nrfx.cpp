@@ -1,7 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	i2c_nrf5x.cpp
+@file	i2c_nrfx.cpp
 
-@brief	I2C implementation on nRF52 series MCU using EasyDMA
+@brief	I2C implementation on nRFx series MCU
+
+Note: I2C device are shared with other device such as SPI therefore be careful
+not to use the same device number on an other device.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2016
@@ -39,69 +42,111 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 #include "coredev/shared_irq.h"
 
-#define NRF5X_I2C_MAXDEV        2
+#include "nrf_peripherals.h"
 
-#ifdef NRF52_SERIES
-
-#define NRF5X_I2CSLAVE_MAXDEV	2
-
-#ifdef NRF52840_XXAA
-#define NRF52_I2C_DMA_MAXCNT    65535
+#ifdef TWIM_COUNT
+#define NRFX_I2C_MAXDEV				TWIM_COUNT
 #else
-#define NRF52_I2C_DMA_MAXCNT    255
+#define NRFX_I2C_MAXDEV				TWI_COUNT
 #endif
 
+#ifdef TWIS_COUNT
+#define NRFX_I2CSLAVE_MAXDEV		TWIS_COUNT
 #else
-#define NRF5X_I2CSLAVE_MAXDEV	0
+#define NRFX_I2CSLAVE_MAXDEV		0
 #endif
+#define NRFX_I2C_DMA_MAXCNT			((1<<TWIS0_EASYDMA_MAXCNT_SIZE)-1)
 
-#define NRF5X_I2C_TRBUFF_SIZE	4
+#define NRFX_I2C_TRBUFF_SIZE	4
 
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;
 	I2CDEV *pI2cDev;
 	union {
+#ifdef TWI_COUNT
 		NRF_TWI_Type *pReg;		// Master register map
-#ifdef NRF52_SERIES
+#endif
+#ifdef TWIM_COUNT
 		NRF_TWIM_Type *pDmaReg;	// Master DMA register map
 		NRF_TWIS_Type *pDmaSReg;// Slave DMA register map
 #endif
 	};
-	uint8_t TRData[NRF5X_I2CSLAVE_MAXDEV][NRF5X_I2C_TRBUFF_SIZE];
-} NRF5X_I2CDEV;
+	uint8_t TRData[NRFX_I2CSLAVE_MAXDEV][NRFX_I2C_TRBUFF_SIZE];
+} NRFX_I2CDEV;
+
+typedef struct {
+	uint32_t Freq;
+	uint32_t RegVal;
+} NRFX_I2CFREQ;
+
 #pragma pack(pop)
 
-static NRF5X_I2CDEV s_nRF5xI2CDev[NRF5X_I2C_MAXDEV] = {
+static const NRFX_I2CFREQ s_nRFxI2CFreq[] = {
+#ifdef TWIM_COUNT
+	{100000, TWIM_FREQUENCY_FREQUENCY_K100},
+	{250000, TWIM_FREQUENCY_FREQUENCY_K250},
+	{400000, TWIM_FREQUENCY_FREQUENCY_K400},
+#else
+	{100000, TWI_FREQUENCY_FREQUENCY_K100},
+	{250000, TWI_FREQUENCY_FREQUENCY_K250},
+	{400000, TWI_FREQUENCY_FREQUENCY_K400},
+#endif
+};
+
+static const int s_NbI2CFreq = sizeof(s_nRFxI2CFreq) / sizeof(NRFX_I2CFREQ);
+
+static NRFX_I2CDEV s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
+#ifdef NRF9160_XXAA
+		{
+			0, NULL, (NRF_TWIM_Type *)NRF_TWIM0_S_BASE
+		},
+		{
+			1, NULL, (NRF_TWIM_Type *)NRF_TWIM1_S_BASE
+		},
+		{
+			2, NULL, (NRF_TWIM_Type *)NRF_TWIM2_S_BASE
+		},
+		{
+			3, NULL, (NRF_TWIM_Type *)NRF_TWIM3_S_BASE
+		},
+#else
 	{
 		0, NULL, (NRF_TWI_Type *)NRF_TWI0_BASE
 	},
 	{
 		1, NULL, (NRF_TWI_Type *)NRF_TWI1_BASE
 	},
+#endif
 };
 
-bool nRF5xI2CWaitStop(NRF5X_I2CDEV * const pDev, int Timeout)
+bool nRFxI2CWaitStop(NRFX_I2CDEV * const pDev, int Timeout)
 {
+#ifdef TWIM_COUNT
+	NRF_TWIM_Type *reg = pDev->pDmaReg;
+#else
+	NRF_TWI_Type *reg = pDev->pReg;
+#endif
+
     do {
-        if (pDev->pReg->EVENTS_ERROR)
+        if (reg->EVENTS_ERROR)
         {
             // Abort in case error
-            pDev->pReg->ERRORSRC = pDev->pReg->ERRORSRC;
-            pDev->pReg->EVENTS_ERROR = 0;
-            pDev->pReg->TASKS_RESUME = 1;
-            pDev->pReg->TASKS_STOP = 1;
-            while( !pDev->pReg->EVENTS_STOPPED );
+            reg->ERRORSRC = reg->ERRORSRC;
+            reg->EVENTS_ERROR = 0;
+            reg->TASKS_RESUME = 1;
+            reg->TASKS_STOP = 1;
+            while( !reg->EVENTS_STOPPED );
 
             return false;
         }
-        if (pDev->pReg->EVENTS_STOPPED)
+        if (reg->EVENTS_STOPPED)
         {
             // Must wait for stop, other wise DMA count would
             // not be updated with correct value
-            pDev->pReg->EVENTS_STOPPED = 0;
+            reg->EVENTS_STOPPED = 0;
 
-#ifdef NRF52_SERIES
+#ifdef TWIM_COUNT
             pDev->pDmaReg->EVENTS_TXSTARTED = 0;
             pDev->pDmaReg->EVENTS_RXSTARTED = 0;
 #endif
@@ -112,16 +157,22 @@ bool nRF5xI2CWaitStop(NRF5X_I2CDEV * const pDev, int Timeout)
     return false;
 }
 
-bool nRF5xI2CWaitRxComplete(NRF5X_I2CDEV * const pDev, int Timeout)
+bool nRFxI2CWaitRxComplete(NRFX_I2CDEV * const pDev, int Timeout)
 {
-    do {
-        if (pDev->pReg->EVENTS_ERROR)
+#ifdef TWIM_PRESENT
+	NRF_TWIM_Type *reg = pDev->pDmaReg;
+#else
+	NRF_TWI_Type *reg = pDev->pReg;
+#endif
+
+	do {
+        if (reg->EVENTS_ERROR)
         {
-            while ( !nRF5xI2CWaitStop( pDev, Timeout ) );
+            while ( !nRFxI2CWaitStop( pDev, Timeout ) );
 
             return false;
         }
-#ifdef NRF52_SERIES
+#ifdef TWIM_PRESENT
         if (pDev->pI2cDev->DevIntrf.bDma)
         {
 			if (pDev->pDmaReg->EVENTS_LASTRX)
@@ -135,29 +186,37 @@ bool nRF5xI2CWaitRxComplete(NRF5X_I2CDEV * const pDev, int Timeout)
         else
 #endif
         {
+#ifdef TWI_PRESENT
             if (pDev->pReg->EVENTS_RXDREADY)
             {
-                pDev->pReg->EVENTS_RXDREADY = 0;
+            	pDev->pReg->EVENTS_RXDREADY = 0;
 
                 return true;
             }
+#endif
         }
     } while (Timeout-- >  0);
 
     return false;
 }
 
-bool nRF5xI2CWaitTxComplete(NRF5X_I2CDEV * const pDev, int Timeout)
+bool nRFxI2CWaitTxComplete(NRFX_I2CDEV * const pDev, int Timeout)
 {
-    do {
-        if (pDev->pReg->EVENTS_ERROR)
+#ifdef TWIM_PRESENT
+	NRF_TWIM_Type *reg = pDev->pDmaReg;
+#else
+	NRF_TWI_Type *reg = pDev->pReg;
+#endif
+
+	do {
+        if (reg->EVENTS_ERROR)
         {
-            while ( !nRF5xI2CWaitStop( pDev, Timeout ) );
+            while ( !nRFxI2CWaitStop( pDev, Timeout ) );
 
             return false;
         }
 
-#ifdef NRF52_SERIES
+#ifdef TWIM_COUNT
         if (pDev->pI2cDev->DevIntrf.bDma)
         {
 			if (pDev->pDmaReg->EVENTS_LASTTX)
@@ -171,118 +230,138 @@ bool nRF5xI2CWaitTxComplete(NRF5X_I2CDEV * const pDev, int Timeout)
         else
 #endif
         {
+#ifdef TWI_COUNT
             if (pDev->pReg->EVENTS_TXDSENT)
             {
                 pDev->pReg->EVENTS_TXDSENT = 0;
 
                 return true;
             }
+#endif
         }
     } while (Timeout-- >  0);
 
     return false;
 }
 
-void nRF5xI2CDisable(DEVINTRF * const pDev)
+void nRFxI2CDisable(DEVINTRF * const pDev)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
+#ifdef TWIM_COUNT
+	dev->pDmaReg->ENABLE = (TWIM_ENABLE_ENABLE_Disabled << TWIM_ENABLE_ENABLE_Pos);
+#else
 	dev->pReg->ENABLE = (TWI_ENABLE_ENABLE_Disabled << TWI_ENABLE_ENABLE_Pos);
+#endif
 }
 
-void nRF5xI2CEnable(DEVINTRF * const pDev)
+void nRFxI2CEnable(DEVINTRF * const pDev)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
-#ifdef NRF52_SERIES
+#ifdef TWIM_COUNT
     if (dev->pI2cDev->DevIntrf.bDma)
     {
 		if (dev->pI2cDev->Mode == I2CMODE_SLAVE)
 		{
-			dev->pReg->ENABLE = (TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos);
+			dev->pDmaReg->ENABLE = (TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos);
 		}
 		else
 		{
-			dev->pReg->ENABLE = (TWIM_ENABLE_ENABLE_Enabled << TWIM_ENABLE_ENABLE_Pos);
+			dev->pDmaReg->ENABLE = (TWIM_ENABLE_ENABLE_Enabled << TWIM_ENABLE_ENABLE_Pos);
 		}
     }
     else
 #endif
 	{
+#ifdef TWI_COUNT
     	dev->pReg->ENABLE = (TWI_ENABLE_ENABLE_Enabled << TWI_ENABLE_ENABLE_Pos);
+#endif
     }
 }
 
-void nRF5xI2CPowerOff(DEVINTRF * const pDev)
+void nRFxI2CPowerOff(DEVINTRF * const pDev)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
 	// Undocumented Power down I2C.  Nordic Bug with DMA causing high current consumption
+#ifdef TWIM_COUNT
+	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC);
+	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC) = 1;
+	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC) = 0;
+#else
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 0;
+#endif
 }
 
-int nRF5xI2CGetRate(DEVINTRF * const pDev)
+int nRFxI2CGetRate(DEVINTRF * const pDev)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
 	return dev->pI2cDev->Rate;
 }
 
-int nRF5xI2CSetRate(DEVINTRF * const pDev, int RateHz)
+int nRFxI2CSetRate(DEVINTRF * const pDev, int RateHz)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	uint32_t regval = 0;
 
-	if (RateHz < 250000)
+	for (int i = 0; i < s_NbI2CFreq; i++)
 	{
-		dev->pReg->FREQUENCY = TWI_FREQUENCY_FREQUENCY_K100;
-		dev->pI2cDev->Rate = 100000;
+		if (s_nRFxI2CFreq[i].Freq <= RateHz)
+		{
+			regval =  s_nRFxI2CFreq[i].RegVal;
+			dev->pI2cDev->Rate = s_nRFxI2CFreq[i].Freq;
+		}
 	}
-	else if (RateHz < 400000)
-	{
-		dev->pReg->FREQUENCY = TWI_FREQUENCY_FREQUENCY_K250;
-		dev->pI2cDev->Rate = 250000;
-	}
-	else
-	{
-		dev->pReg->FREQUENCY = TWI_FREQUENCY_FREQUENCY_K400;
-		dev->pI2cDev->Rate = 400000;
-	}
+
+#ifdef TWIM_COUNT
+	dev->pDmaReg->FREQUENCY = regval;
+#else
+	dev->pReg->FREQUENCY = regval;
+#endif
 
 	return dev->pI2cDev->Rate;
 }
 
-bool nRF5xI2CStartRx(DEVINTRF * const pDev, int DevAddr)
+bool nRFxI2CStartRx(DEVINTRF * const pDev, int DevAddr)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
+#ifdef TWI_COUNT
 	dev->pReg->ADDRESS = DevAddr;
 	dev->pReg->INTENCLR = 0xFFFFFFFF;
+#else
+	dev->pDmaReg->ADDRESS = DevAddr;
+	dev->pDmaReg->INTENCLR = 0xFFFFFFFF;
+#endif
+
 	return true;
 }
 
 // Receive Data only, no Start/Stop condition
-int nRF5xI2CRxDataDMA(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+int nRFxI2CRxDataDMA(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
-#ifdef NRF52_SERIES
+#ifdef TWIM_COUNT
 	while (BuffLen > 0)
 	{
-		int l = min(BuffLen, NRF52_I2C_DMA_MAXCNT);
-		dev->pReg->EVENTS_ERROR = 0;
-		dev->pReg->EVENTS_STOPPED = 0;
+		int l = min(BuffLen, NRFX_I2C_DMA_MAXCNT);
+		dev->pDmaReg->EVENTS_ERROR = 0;
+		dev->pDmaReg->EVENTS_STOPPED = 0;
 		dev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
 		dev->pDmaReg->RXD.MAXCNT = l;
 		dev->pDmaReg->RXD.LIST = 0;
-		dev->pReg->SHORTS = TWIM_SHORTS_LASTRX_STOP_Msk;
-		dev->pReg->EVENTS_SUSPENDED = 0;
-		dev->pReg->TASKS_RESUME = 1;
-		dev->pReg->TASKS_STARTRX = 1;
+		dev->pDmaReg->SHORTS = TWIM_SHORTS_LASTRX_STOP_Msk;
+		dev->pDmaReg->EVENTS_SUSPENDED = 0;
+		dev->pDmaReg->TASKS_RESUME = 1;
+		dev->pDmaReg->TASKS_STARTRX = 1;
 
-		if (nRF5xI2CWaitRxComplete(dev, 1000000) == false)
+		if (nRFxI2CWaitRxComplete(dev, 1000000) == false)
 		    break;
 
 		BuffLen -= l;
@@ -294,9 +373,9 @@ int nRF5xI2CRxDataDMA(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 }
 
 // Receive Data only, no Start/Stop condition
-int nRF5xI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
+int nRFxI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	int cnt = 0;
 
 	if (pBuff == NULL || BuffLen <= 0)
@@ -304,12 +383,14 @@ int nRF5xI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
 		return 0;
 	}
 
+#ifdef TWI_COUNT
+
 	dev->pReg->EVENTS_STOPPED = 0;
 	dev->pReg->TASKS_STARTRX = 1;
 
 	while (BuffLen > 0)
 	{
-		if (nRF5xI2CWaitRxComplete(dev, 100000) == false)
+		if (nRFxI2CWaitRxComplete(dev, 100000) == false)
 		{
 			break;
 		}
@@ -320,61 +401,75 @@ int nRF5xI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
 		pBuff++;
 		cnt++;
 	}
+#endif
 
 	return cnt;
 }
 
-void nRF5xI2CStopRx(DEVINTRF * const pDev)
+void nRFxI2CStopRx(DEVINTRF * const pDev)
 {
-    NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
-    dev->pReg->TASKS_RESUME = 1;
-    dev->pReg->TASKS_STOP = 1;
+    NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+#ifdef TWIM_PRESENT
+	NRF_TWIM_Type *reg = dev->pDmaReg;
+#else
+	NRF_TWI_Type *reg = dev->pReg;
+#endif
+
+	reg->TASKS_RESUME = 1;
+    reg->TASKS_STOP = 1;
 
     if (dev->pI2cDev->DevIntrf.bDma == false)
     {
         // must read dummy last byte to generate NACK & STOP condition
-    	nRF5xI2CWaitRxComplete(dev, 100000);
-    	uint8_t d __attribute__((unused)) = dev->pReg->RXD;
+    	nRFxI2CWaitRxComplete(dev, 100000);
+#ifdef TWI_COUNT
+    	(void)reg->RXD;
+#endif
     }
-    nRF5xI2CWaitStop(dev, 1000);
+    nRFxI2CWaitStop(dev, 1000);
 }
 
-bool nRF5xI2CStartTx(DEVINTRF * const pDev, int DevAddr)
+bool nRFxI2CStartTx(DEVINTRF * const pDev, int DevAddr)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
+#ifdef TWI_COUNT
 	dev->pReg->ADDRESS = DevAddr;
 	dev->pReg->INTENCLR = 0xFFFFFFFF;
+#else
+	dev->pDmaReg->ADDRESS = DevAddr;
+	dev->pDmaReg->INTENCLR = 0xFFFFFFFF;
+#endif
 
 	return true;
 }
 
 // Send Data only, no Start/Stop condition
-int nRF5xI2CTxDataDMA(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+int nRFxI2CTxDataDMA(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
 
-#ifdef NRF52_SERIES
+#ifdef TWIM_PRESENT
 	while (DataLen > 0)
 	{
-		int l = min(DataLen, NRF52_I2C_DMA_MAXCNT);
+		int l = min(DataLen, NRFX_I2C_DMA_MAXCNT);
 
-		dev->pReg->EVENTS_ERROR = 0;
-		dev->pReg->EVENTS_STOPPED = 0;
+		dev->pDmaReg->EVENTS_ERROR = 0;
+		dev->pDmaReg->EVENTS_STOPPED = 0;
 	    if (dev->pI2cDev->DevIntrf.bDma)
 	    {
 			dev->pDmaReg->TXD.PTR = (uint32_t)pData;
 			dev->pDmaReg->TXD.MAXCNT = l;
 			dev->pDmaReg->TXD.LIST = 0;
 	    }
-		dev->pReg->SHORTS = (TWIM_SHORTS_LASTTX_SUSPEND_Enabled << TWIM_SHORTS_LASTTX_SUSPEND_Pos);
-		dev->pReg->EVENTS_SUSPENDED = 0;
-		dev->pReg->TASKS_RESUME = 1;
-		dev->pReg->TASKS_STARTTX = 1;
+		dev->pDmaReg->SHORTS = (TWIM_SHORTS_LASTTX_SUSPEND_Enabled << TWIM_SHORTS_LASTTX_SUSPEND_Pos);
+		dev->pDmaReg->EVENTS_SUSPENDED = 0;
+		dev->pDmaReg->TASKS_RESUME = 1;
+		dev->pDmaReg->TASKS_STARTTX = 1;
 
-		if (nRF5xI2CWaitTxComplete(dev, 100000) == false)
+		if (nRFxI2CWaitTxComplete(dev, 100000) == false)
             break;
 
 		DataLen -= l;
@@ -385,19 +480,20 @@ int nRF5xI2CTxDataDMA(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 	return cnt;
 }
 
-int nRF5xI2CTxData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+int nRFxI2CTxData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 {
-	NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
 
+#ifdef TWI_PRESENT
 	dev->pReg->TASKS_STARTTX = 1;
 
 	while (DataLen > 0)
 	{
 		dev->pReg->TXD = *pData;
 
-		if (nRF5xI2CWaitTxComplete(dev, 10000) == false)
+		if (nRFxI2CWaitTxComplete(dev, 10000) == false)
 		{
 			break;
 		}
@@ -406,33 +502,42 @@ int nRF5xI2CTxData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 		pData++;
 		cnt++;
 	}
+#endif
 	return cnt;
 }
 
-void nRF5xI2CStopTx(DEVINTRF * const pDev)
+void nRFxI2CStopTx(DEVINTRF * const pDev)
 {
-    NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+    NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+#ifdef TWIM_PRESENT
+	NRF_TWIM_Type *reg = dev->pDmaReg;
 
-#ifdef NRF52_SERIES
-    if (dev->pI2cDev->DevIntrf.bDma)
+	if (dev->pI2cDev->DevIntrf.bDma)
     {
-		if (dev->pDmaReg->EVENTS_LASTTX == 1)
+		if (reg->EVENTS_LASTTX == 1)
 		{
-			dev->pDmaReg->EVENTS_LASTTX = 0;
+			reg->EVENTS_LASTTX = 0;
 		}
     }
+#else
+	NRF_TWI_Type *reg = dev->pReg;
 #endif
-	dev->pReg->EVENTS_SUSPENDED = 0;
-	dev->pReg->TASKS_RESUME = 1;
-    dev->pReg->TASKS_STOP = 1;
-    nRF5xI2CWaitStop(dev, 1000);
+
+	reg->EVENTS_SUSPENDED = 0;
+	reg->TASKS_RESUME = 1;
+    reg->TASKS_STOP = 1;
+
+    nRFxI2CWaitStop(dev, 1000);
 }
 
-void nRF5xI2CReset(DEVINTRF * const pDev)
+void nRFxI2CReset(DEVINTRF * const pDev)
 {
-    NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+    I2CDEV *dev = (I2CDEV*)((NRFX_I2CDEV*)pDev->pDevData)->pI2cDev;
 
-    nRF5xI2CDisable(pDev);
+    I2CBusReset(dev);
+
+#if 0
+    nRFxI2CDisable(pDev);
 
     IOPinConfig(0, dev->pReg->PSELSCL, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
     IOPinConfig(0, dev->pReg->PSELSDA, 0, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
@@ -453,17 +558,18 @@ void nRF5xI2CReset(DEVINTRF * const pDev)
     usDelay(2);
     IOPinSet(0, dev->pReg->PSELSDA);
 
-    nRF5xI2CEnable(pDev);
+    nRFxI2CEnable(pDev);
+#endif
 }
 
 void I2CIrqHandler(int DevNo, DEVINTRF * const pDev)
 {
-    NRF5X_I2CDEV *dev = (NRF5X_I2CDEV*)pDev->pDevData;
+    NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
     if (dev->pI2cDev->Mode == I2CMODE_SLAVE)
     {
     	// Slave mode
-#ifdef NRF52_SERIES
+#ifdef TWIM_PRESENT
     	if (dev->pDmaSReg->EVENTS_READ)
     	{
     		// Read command received
@@ -539,26 +645,26 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
 		return false;
 	}
 
-    if (pCfgData->Mode == I2CMODE_SLAVE && pCfgData->DevNo >= NRF5X_I2CSLAVE_MAXDEV)
+    if (pCfgData->Mode == I2CMODE_SLAVE && pCfgData->DevNo >= NRFX_I2CSLAVE_MAXDEV)
     {
     	return false;
     }
 
-    if (pCfgData->DevNo < 0 || pCfgData->DevNo >= NRF5X_I2C_MAXDEV)
+    if (pCfgData->DevNo < 0 || pCfgData->DevNo >= NRFX_I2C_MAXDEV)
 	{
 		return false;
 	}
 
 	// Get the correct register map
-#ifdef NRF52_SERIES
-	NRF_TWIM_Type *reg = s_nRF5xI2CDev[pCfgData->DevNo].pDmaReg;
+#ifdef TWIM_PRESENT
+	NRF_TWIM_Type *reg = s_nRFxI2CDev[pCfgData->DevNo].pDmaReg;
 #else
-	NRF_TWI_Type *reg = s_nRF5xI2CDev[pCfgData->DevNo].pReg;
+	NRF_TWI_Type *reg = s_nRFxI2CDev[pCfgData->DevNo].pReg;
 #endif
 
 	// Force power on in case it was powered off previously
-	*(volatile uint32_t *)((uint32_t)s_nRF5xI2CDev[pCfgData->DevNo].pReg + 0xFFC);
-	*(volatile uint32_t *)((uint32_t)s_nRF5xI2CDev[pCfgData->DevNo].pReg + 0xFFC) = 1;
+	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
+	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
 
 	memcpy(pDev->Pins, pCfgData->Pins, sizeof(IOPINCFG) * I2C_MAX_NB_IOPIN);
 
@@ -567,7 +673,7 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
     IOPinSet(pCfgData->Pins[I2C_SDA_IOPIN_IDX].PortNo, pCfgData->Pins[I2C_SDA_IOPIN_IDX].PinNo);
     IOPinSet(pCfgData->Pins[I2C_SCL_IOPIN_IDX].PortNo, pCfgData->Pins[I2C_SCL_IOPIN_IDX].PinNo);
 
-#ifdef NRF52_SERIES
+#ifdef TWIM_PRESENT
     reg->PSEL.SCL = (pCfgData->Pins[I2C_SCL_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->Pins[I2C_SCL_IOPIN_IDX].PortNo << 5);
     reg->PSEL.SDA = (pCfgData->Pins[I2C_SDA_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->Pins[I2C_SDA_IOPIN_IDX].PortNo << 5);
 #else
@@ -577,36 +683,41 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
     //pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
     pDev->Mode = pCfgData->Mode;
 
-	s_nRF5xI2CDev[pCfgData->DevNo].pI2cDev  = pDev;
-	pDev->DevIntrf.pDevData = (void*)&s_nRF5xI2CDev[pCfgData->DevNo];
+	s_nRFxI2CDev[pCfgData->DevNo].pI2cDev  = pDev;
+	pDev->DevIntrf.pDevData = (void*)&s_nRFxI2CDev[pCfgData->DevNo];
 
 
-	nRF5xI2CSetRate(&pDev->DevIntrf, pCfgData->Rate);
+	nRFxI2CSetRate(&pDev->DevIntrf, pCfgData->Rate);
 
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;
 	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
-	pDev->DevIntrf.Disable = nRF5xI2CDisable;
-	pDev->DevIntrf.Enable = nRF5xI2CEnable;
-	pDev->DevIntrf.PowerOff = nRF5xI2CPowerOff;
-	pDev->DevIntrf.GetRate = nRF5xI2CGetRate;
-	pDev->DevIntrf.SetRate = nRF5xI2CSetRate;
-	pDev->DevIntrf.StartRx = nRF5xI2CStartRx;
-	pDev->DevIntrf.StopRx = nRF5xI2CStopRx;
-	pDev->DevIntrf.StartTx = nRF5xI2CStartTx;
+	pDev->DevIntrf.Disable = nRFxI2CDisable;
+	pDev->DevIntrf.Enable = nRFxI2CEnable;
+	pDev->DevIntrf.PowerOff = nRFxI2CPowerOff;
+	pDev->DevIntrf.GetRate = nRFxI2CGetRate;
+	pDev->DevIntrf.SetRate = nRFxI2CSetRate;
+	pDev->DevIntrf.StartRx = nRFxI2CStartRx;
+	pDev->DevIntrf.StopRx = nRFxI2CStopRx;
+	pDev->DevIntrf.StartTx = nRFxI2CStartTx;
+
+#ifndef TWI_PRESENT
+	// Only DMA mode avail.  Force DMA
+	pDev->DevIntrf.bDma = true;
+#endif
 
 	if (pDev->DevIntrf.bDma)
 	{
-		pDev->DevIntrf.RxData = nRF5xI2CRxDataDMA;
-		pDev->DevIntrf.TxData = nRF5xI2CTxDataDMA;
+		pDev->DevIntrf.RxData = nRFxI2CRxDataDMA;
+		pDev->DevIntrf.TxData = nRFxI2CTxDataDMA;
 	}
 	else
 	{
-		pDev->DevIntrf.RxData = nRF5xI2CRxData;
-		pDev->DevIntrf.TxData = nRF5xI2CTxData;
+		pDev->DevIntrf.RxData = nRFxI2CRxData;
+		pDev->DevIntrf.TxData = nRFxI2CTxData;
 	}
-	pDev->DevIntrf.StopTx = nRF5xI2CStopTx;
-	pDev->DevIntrf.Reset = nRF5xI2CReset;
+	pDev->DevIntrf.StopTx = nRFxI2CStopTx;
+	pDev->DevIntrf.Reset = nRFxI2CReset;
 	pDev->DevIntrf.IntPrio = pCfgData->IntPrio;
 	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
@@ -625,7 +736,7 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
 
     usDelay(1000);
 
-#ifdef NRF52_SERIES
+#ifdef TWIM_PRESENT
     reg->EVENTS_LASTRX = 0;
     reg->EVENTS_LASTTX = 0;
     reg->EVENTS_RXSTARTED = 0;
@@ -634,19 +745,24 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
     reg->EVENTS_SUSPENDED = 0;
     reg->EVENTS_STOPPED = 0;
 
-    uint32_t enval = (TWI_ENABLE_ENABLE_Enabled << TWI_ENABLE_ENABLE_Pos);
+    uint32_t enval = 0;
     uint32_t inten = 0;
 
-#ifdef NRF52_SERIES
+#ifdef TWIM_PRESENT
+
     if (pDev->DevIntrf.bDma)
     {
     	enval = (TWIM_ENABLE_ENABLE_Enabled << TWIM_ENABLE_ENABLE_Pos);
     }
+#else
+    enval = (TWI_ENABLE_ENABLE_Enabled << TWI_ENABLE_ENABLE_Pos);
+#endif
 
+#ifdef TWIS_PRESENT
     if (pCfgData->Mode == I2CMODE_SLAVE)
     {
-    	NRF_TWIS_Type *sreg = s_nRF5xI2CDev[pCfgData->DevNo].pDmaSReg;
-        pDev->NbSlaveAddr = min(pCfgData->NbSlaveAddr, NRF5X_I2CSLAVE_MAXDEV);
+    	NRF_TWIS_Type *sreg = s_nRFxI2CDev[pCfgData->DevNo].pDmaSReg;
+        pDev->NbSlaveAddr = min(pCfgData->NbSlaveAddr, NRFX_I2CSLAVE_MAXDEV);
 
         sreg->CONFIG = 0;
         sreg->ORC = 0xff;
@@ -668,27 +784,50 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
         inten = (TWIS_INTEN_READ_Enabled << TWIS_INTEN_READ_Pos) | (TWIS_INTEN_WRITE_Enabled << TWIS_INTEN_WRITE_Pos) |
         		(TWIS_INTEN_STOPPED_Enabled << TWIS_INTEN_STOPPED_Pos);
     }
+#endif
 
-    if (pCfgData->bIntEn)
+    if (inten != 0)
     {
     	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, I2CIrqHandler);
 
-    	if (pCfgData->DevNo == 0)
+    	switch (pCfgData->DevNo)
     	{
-    		NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
-    		NVIC_SetPriority(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn, pCfgData->IntPrio);
-    		NVIC_EnableIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
+#ifdef NRF9160_XXAA
+    		case 0:
+                NVIC_ClearPendingIRQ(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn);
+                NVIC_SetPriority(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn, pCfgData->IntPrio);
+                NVIC_EnableIRQ(UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQn);
+                break;
+    	    case 1:
+                NVIC_ClearPendingIRQ(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn);
+                NVIC_SetPriority(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn, pCfgData->IntPrio);
+                NVIC_EnableIRQ(UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQn);
+                break;
+    	    case 2:
+                NVIC_ClearPendingIRQ(UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQn);
+                NVIC_SetPriority(UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQn, pCfgData->IntPrio);
+                NVIC_EnableIRQ(UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQn);
+                break;
+    	    case 3:
+                NVIC_ClearPendingIRQ(UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQn);
+                NVIC_SetPriority(UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQn, pCfgData->IntPrio);
+                NVIC_EnableIRQ(UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQn);
+                break;
+#elif defined(NRF52_SERIES)
+    	    case 0:
+				NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
+				NVIC_SetPriority(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
+				break;
+    	    case 1:
+				NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
+				NVIC_SetPriority(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
+				break;
+#endif
     	}
-    	else
-    	{
-    		NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
-    		NVIC_SetPriority(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn, pCfgData->IntPrio);
-    		NVIC_EnableIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
-    	}
-
     	reg->INTENSET = inten;
     }
-#endif
 
     reg->ENABLE = enval;
 
