@@ -129,7 +129,7 @@ const static TIMER_CFG s_TimerCfg = {
 #ifdef NRF51
 TimerAppTimer g_Timer;
 #else
-TimerLFnRF5x g_Timer;
+TimerLFnRFx g_Timer;
 #endif
 
 const BLEAPP_CFG s_BleAppCfg = {
