@@ -47,15 +47,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 /// Buttons & LED pins map
-static const IOPINCFG s_IOPins[] = BUT_N_LED_PINS_MAP;
-/*{
-	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// LED 1
-	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// LED 2
-	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL},	// But 1
-	{BUT2_PORT, BUT2_PIN, BUT2_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL},	// But 2
-};
-*/
-static const int s_NbIOPin = sizeof(s_IOPins) / sizeof(IOPINCFG);
+static const IOPINCFG s_Buttons[] = BUTTON_PINS_MAP;
+static const int s_NbButtons = sizeof(s_Buttons) / sizeof(IOPINCFG);
+
+static const IOPINCFG s_Leds[] = LED_PINS_MAP;
+static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPINCFG);
 
 /// Pulse train config
 static const PULSE_TRAIN_PIN s_PulseTrainPins[] = PULSE_TRAIN_PINS_MAP;
@@ -63,8 +59,8 @@ static const PULSE_TRAIN_PIN s_PulseTrainPins[] = PULSE_TRAIN_PINS_MAP;
 PULSE_TRAIN_CFG g_PulseTrainCfg = {
 	.pPins = (PULSE_TRAIN_PIN *)s_PulseTrainPins,
 	.NbPins = sizeof(s_PulseTrainPins) / sizeof(PULSE_TRAIN_PIN),
-	.Period = 1000,
-	.Pol = PULSE_TRAIN_POL_LOW
+	.Period = 1,
+	.Pol = PULSE_TRAIN_POL_HIGH
 };
 
 volatile bool g_bBut1Pressed = false;
@@ -104,20 +100,23 @@ void But2Handler(int IntNo)
 int main()
 {
 	// Configure
-	IOPinCfg(s_IOPins, s_NbIOPin);
+	IOPinCfg(s_Buttons, s_NbButtons);
 	IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler);
-	IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler);
+//	IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler);
+	IOPinCfg(s_Leds, s_NbLeds);
 
-	for (int i = 0; i < 5; i++)
+#if 1
+	for (int j = 0; j < 5; j++)
 	{
-		IOPinSet(LED1_PORT, LED1_PIN);
-		msDelay(250);
-		IOPinClear(LED1_PORT, LED1_PIN);
-		IOPinSet(LED2_PORT, LED2_PIN);
-		msDelay(250);
-		IOPinClear(LED2_PORT, LED2_PIN);
+		for (int i = 0; i < s_NbLeds; i++)
+		{
+			IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
+			msDelay(250);
+			IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
+			msDelay(250);
+		}
 	}
-
+#endif
 	PulseTrain(&g_PulseTrainCfg, 0);
 
 	return 0;
