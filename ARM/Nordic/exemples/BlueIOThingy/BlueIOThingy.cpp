@@ -69,7 +69,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/tphg_bme680.h"
 #include "sensors/agm_mpu9250.h"
 #include "sensors/accel_adxl362.h"
-#include "timer_nrf5x.h"
+#include "timer_nrfx.h"
 #include "board.h"
 #include "idelay.h"
 #include "seep.h"
@@ -144,7 +144,7 @@ const static TIMER_CFG s_TimerCfg = {
 #ifdef NRF51
 TimerAppTimer g_Timer;
 #else
-TimerLFnRF5x g_Timer;
+TimerLFnRFx g_Timer;
 //TimerAppTimer g_Timer;
 #endif
 

@@ -501,11 +501,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh_soc.c</locationURI>
 		</link>
 		<link>
-			<name>src/pdm_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/prbs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/prbs.c</locationURI>
@@ -514,11 +509,6 @@
 			<name>src/pulse_train.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pulse_train.c</locationURI>
-		</link>
-		<link>
-			<name>src/pwm_nrf52.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/pwm_nrf52.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sbuffer.c</name>
@@ -919,6 +909,16 @@
 			<name>src/coredev/iopincfg_nrfx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pdm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pwm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>

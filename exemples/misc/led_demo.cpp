@@ -39,7 +39,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "miscdev/led.h"
-#include "app_util.h"
 
 //#define BLUEIO_TAG
 
@@ -114,7 +113,7 @@ int main()
 	g_Led4.Init(LED4_PORT, LED4_PIN, LED_LOGIC_LOW);
 #endif
 
-	while (1)
+	//while (1)
 	{
 		g_Led1.Toggle();
 		msDelay(1000);
@@ -146,16 +145,16 @@ int main()
 
 		msDelay(100);
 
-		g_Led2.Toggle();
+		//g_Led2.Toggle();
 
-		x += 0xFF800F;
-	/*
+//		x += 0xFF800F;
+
 		x >>= 1;
 
 		if (x == 0)
 		{
 			x = 0xFFFFFF;
-		}*/
+		}
 		msDelay(10);
 	}
 }

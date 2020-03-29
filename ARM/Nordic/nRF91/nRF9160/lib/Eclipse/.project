@@ -701,6 +701,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/pwm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_nrfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/shared_irq_nrf91.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/shared_irq_nrf91.cpp</locationURI>
