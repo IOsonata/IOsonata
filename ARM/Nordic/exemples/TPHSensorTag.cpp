@@ -69,7 +69,7 @@ SOFTWARE.
 #include "sensors/tph_bme280.h"
 #include "sensors/tph_ms8607.h"
 #include "sensors/tphg_bme680.h"
-#include "timer_nrf5x.h"
+#include "timer_nrfx.h"
 #ifdef NRF51
 #include "timer_nrf_app_timer.h"
 #else

@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/spi.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
-#include "timer_nrf5x.h"
+#include "timer_nrfx.h"
 #include "sensors/agm_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 #include "sensors/agm_mpu9250.h"
@@ -51,6 +51,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/ag_bmi160.h"
 #include "sensors/accel_h3lis331dl.h"
 #include "imu/imu_invn_icm20948.h"
+#include "imu/imu_icm20948.h"
 #include "imu/imu_mpu9250.h"
 
 #include "board.h"
@@ -124,7 +125,7 @@ const static TIMER_CFG s_TimerCfg = {
 	.EvtHandler = TimerHandler,
 };
 
-TimerLFnRF5x g_Timer;
+TimerLFnRFx g_Timer;
 
 static const ACCELSENSOR_CFG s_AccelCfg = {
 	.DevAddr = 1,
@@ -157,14 +158,14 @@ static const IMU_CFG s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
-#define ICM20948
+//#define ICM20948
 //#define MPU9250
 //#define BMI160
-//#define H3LIS331DL
+#define H3LIS331DL
 
 #ifdef ICM20948
-ImuInvnIcm20948 g_Imu;
-AgmInvnIcm20948 g_MotSensor;
+ImuIcm20948 g_Imu;
+AgmIcm20948 g_MotSensor;
 #elif 0
 AgmIcm20948 g_MotSensor;
 #elif defined(MPU9250)
