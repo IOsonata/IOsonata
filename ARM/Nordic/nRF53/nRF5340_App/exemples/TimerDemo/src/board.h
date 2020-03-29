@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	board.h
+@file	board.h
 
 @brief	Board specific definitions
 
@@ -41,23 +41,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blueio_board.h"
 
-// Nordic DK
-// Button 1
-#define BUT1_PORT		0
-#define BUT1_PIN		6
-#define BUT1_PINOP		0
-#define BUT1_SENSE		IOPINSENSE_LOW_TRANSITION
-#define BUT1_SENSE_INT	0
-#define BUT1_INT_PRIO	6
+#define NORDIC_DK
 
-// Button 2
-#define BUT2_PORT		0
-#define BUT2_PIN		7
-#define BUT2_PINOP		0
-#define BUT2_SENSE		IOPINSENSE_LOW_TRANSITION
-#define BUT2_SENSE_INT	BUT2_PIN
-#define BUT2_INT_PRIO	6
-
+#ifdef NORDIC_DK
 
 #define LED1_PORT		0
 #define LED1_PIN		2
@@ -75,10 +61,35 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED4_PIN		5
 #define LED4_PINOP		0
 
-#define BUTTON_PINS_MAP		{ \
-	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL}, \
-	{BUT2_PORT, BUT2_PIN, BUT2_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL}, \
-}
+#define UART_RX_PORT		0
+#define UART_RX_PIN			28
+#define UART_RX_PINOP		1
+#define UART_TX_PORT		0
+#define UART_TX_PIN			29
+#define UART_TX_PINOP		1
+#define UART_CTS_PORT		0
+#define UART_CTS_PIN		26
+#define UART_CTS_PINOP		1
+#define UART_RTS_PORT		0
+#define UART_RTS_PIN		27
+#define UART_RTS_PINOP		1
+
+#else
+
+
+#define UART_RX_PORT		BLUEIO_UART_RX_PORT
+#define UART_RX_PIN			BLUEIO_UART_RX_PIN
+#define UART_RX_PINOP		BLUEIO_UART_RX_PINOP
+#define UART_TX_PORT		BLUEIO_UART_TX_PORT
+#define UART_TX_PIN			BLUEIO_UART_TX_PIN
+#define UART_TX_PINOP		BLUEIO_UART_TX_PINOP
+#define UART_CTS_PORT		BLUEIO_UART_CTS_PORT
+#define UART_CTS_PIN		BLUEIO_UART_CTS_PIN
+#define UART_CTS_PINOP		BLUEIO_UART_CTS_PINOP
+#define UART_RTS_PORT		BLUEIO_UART_RTS_PORT
+#define UART_RTS_PIN		BLUEIO_UART_RTS_PIN
+#define UART_RTS_PINOP		BLUEIO_UART_RTS_PINOP
+#endif
 
 #define LED_PINS_MAP	{ \
 	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
@@ -87,13 +98,5 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{LED4_PORT, LED4_PIN, LED4_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-#define PULSE_TRAIN_PINS_MAP	{ \
-	{0, 2, 0}, {0, 3, 0}, {0, 4, 0}, {0, 5, 0}, {0, 6, 0}, {0, 7, 0}, \
-	{0, 8, 0}, {0, 9, 0}, {0, 10, 0}, {0, 11, 0}, {0, 12, 0}, {0, 13, 0}, {0, 14, 0}, {0, 15, 0}, \
-	{0, 16, 0}, {0, 17, 0}, {0, 18, 0}, {0, 19, 0}, {0, 20, 0}, {0, 21, 0}, {0, 22, 0}, {0, 23, 0}, \
-	{0, 24, 0}, {0, 25, 0}, {0, 26, 0}, {0, 27, 0}, {0, 28, 0}, {0, 29, 0}, {0, 30, 0}, {0, 31, 0}, \
-	{1, 0, 0}, {1, 1, 0}, {1, 2, 0}, {1, 3, 0}, {1, 4, 0}, {1, 5, 0}, {1, 6, 0}, {1, 7, 0}, \
-	{1, 8, 0}, {1, 9, 0}, {1, 10, 0}, {1, 11, 0}, {1, 12, 0}, {1, 13, 0}, {1, 14, 0}, {1, 15, 0}, \
-}
-
 #endif // __BOARD_H__
+

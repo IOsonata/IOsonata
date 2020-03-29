@@ -311,11 +311,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/temp_nrf5x.h</locationURI>
 		</link>
 		<link>
-			<name>include/timer_nrf5x.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/timer_nrf5x.h</locationURI>
-		</link>
-		<link>
 			<name>include/timer_nrf_app_timer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/timer_nrf_app_timer.h</locationURI>
@@ -721,6 +716,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/timer_nrfx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/timer_nrfx.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
@@ -1041,14 +1041,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/timer_hf_nrf5x.cpp</name>
+			<name>src/coredev/timer_hf_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_hf_nrf5x.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_hf_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/timer_lf_nrf5x.cpp</name>
+			<name>src/coredev/timer_lf_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrf5x.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer_nrf_app_timer.cpp</name>

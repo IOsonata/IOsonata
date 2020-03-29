@@ -38,18 +38,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include "nrf.h"
 
-#include "timer_nrf5x.h"
-#include "timer_nrf_app_timer.h"
-
-#include "coredev/iopincfg.h"
+#include "timer_nrfx.h"
 #include "iopinctrl.h"
-#include "coredev/uart.h"
-#include "stddev.h"
+
+#include "board.h"
+
+void TimerHandler(Timer *pTimer, uint32_t Evt);
+
+static const IOPINCFG s_Leds[] = LED_PINS_MAP;
+static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPINCFG);
 
 uint64_t g_TickCount = 0;
 uint32_t g_Diff = 0;
-
-void TimerHandler(Timer *pTimer, uint32_t Evt);
 
 const static TIMER_CFG s_TimerCfg = {
     .DevNo = 0,
@@ -61,11 +61,10 @@ const static TIMER_CFG s_TimerCfg = {
 
 #if 1
 // Using RTC
-TimerLFnRF5x g_Timer;
-//TimerAppTimer g_Timer;
+TimerLFnRFx g_Timer;
 #else
 // Using Timer
-TimerHFnRF5x g_Timer;
+TimerHFnRFx g_Timer;
 #endif
 
 void TimerHandler(Timer *pTimer, uint32_t Evt)
@@ -73,8 +72,8 @@ void TimerHandler(Timer *pTimer, uint32_t Evt)
     if (Evt & TIMER_EVT_TRIGGER(0))
     {
     	// Flip GPIO for oscilloscope measurement
-    	IOPinToggle(0, 22);
-#if 0
+    	IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
+#if 1
     	uint64_t c = pTimer->nSecond();
     	g_Diff = c - g_TickCount;
     	g_TickCount = c;
@@ -87,16 +86,16 @@ void TimerHandler(Timer *pTimer, uint32_t Evt)
  */
 int main(void)
 {
-	IOPinConfig(0, 22, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinCfg(s_Leds, s_NbLeds);
 
     g_Timer.Init(s_TimerCfg);
-	uint64_t period = g_Timer.EnableTimerTrigger(0, 500000000ULL, TIMER_TRIG_TYPE_CONTINUOUS);
+	uint64_t period = g_Timer.EnableTimerTrigger(0, 100000000ULL, TIMER_TRIG_TYPE_CONTINUOUS);
 
 	//printf("Period = %u\r\n", (uint32_t)period);
     while (1)
     {
         __WFE();
-//        printf("Count = %u, Diff = %u\r\n", (uint32_t)g_TickCount, g_Diff);
+        printf("Count = %u, Diff = %u\r\n", (uint32_t)g_TickCount, g_Diff);
     }
 }
 /** @} */
