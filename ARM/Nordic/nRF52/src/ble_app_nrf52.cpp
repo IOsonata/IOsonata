@@ -142,8 +142,16 @@ typedef struct _BleAppData {
 
 #pragma pack(pop)
 
+// S132 tx_power values: -40dBm, -20dBm, -16dBm, -12dBm, -8dBm, -4dBm, 0dBm, +3dBm and +4dBm
+// S140 tx_power values: -40dBm, -20dBm, -16dBm, -12dBm, -8dBm, -4dBm, 0dBm, +2dBm, +3dBm, +4dBm, +5dBm, +6dBm, +7dBm and +8dBm.
+
 static const int8_t s_TxPowerdBm[] = {
-	-40, -30, -20, -16, -12, -8, -4, 0, 4
+	-40, -20, -16, -12, -8, -4, 0,
+#ifdef S132
+	3, 4
+#else
+	2, 3, 4, 5, 6, 7, 8
+#endif
 };
 
 static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);

@@ -336,11 +336,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_nRF52840.c</locationURI>
 		</link>
 		<link>
-			<name>src/adc_nrf52_saadc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/adc_nrf52_saadc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/analog_comp_nrf5x.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/analog_comp_nrf5x.cpp</locationURI>
@@ -349,36 +344,6 @@
 			<name>src/base64.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/base64.c</locationURI>
-		</link>
-		<link>
-			<name>src/ble_app_handler.c</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_app_handler.c</locationURI>
-		</link>
-		<link>
-			<name>src/ble_app_nrf52.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/ble_app_nrf52.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/ble_dev.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_dev.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/ble_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/ble_service.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_service.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/blueio_blesrvc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/blueio_blesrvc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/cfifo.c</name>
@@ -491,16 +456,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/nrf_log_backend_uart.c</locationURI>
 		</link>
 		<link>
-			<name>src/nrf_sdh.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh.c</locationURI>
-		</link>
-		<link>
-			<name>src/nrf_sdh_soc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh_soc.c</locationURI>
-		</link>
-		<link>
 			<name>src/prbs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/prbs.c</locationURI>
@@ -549,11 +504,6 @@
 			<name>src/system_nrf52840.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/system_nrf52840.c</locationURI>
-		</link>
-		<link>
-			<name>src/uart_bleintrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/uart_bleintrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>
@@ -886,9 +836,59 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/ble_app_handler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/ble_app_handler.c</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/ble_app_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/ble_app_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/ble_dev.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/ble_dev.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/ble_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/ble_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/ble_service.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/ble_service.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/blueio_blesrvc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/blueio_blesrvc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/nrf_sdh.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh.c</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/nrf_sdh_soc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh_soc.c</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/uart_bleintrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/uart_bleintrf.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_ltc2495.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/converters/adc_nrf52_saadc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/adc_nrf52_saadc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/i2c.cpp</name>
