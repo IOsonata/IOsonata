@@ -2661,6 +2661,11 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrf5_SDK_Mesh/external/app_timer/app_timer_mesh.c</locationURI>
 		</link>
 		<link>
+			<name>src/nrf5_SDK_Mesh/external/app_timer/app_timer_workaround.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrf5_SDK_Mesh/external/app_timer/app_timer_workaround.c</locationURI>
+		</link>
+		<link>
 			<name>src/nrf5_SDK_Mesh/foundation/config/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>

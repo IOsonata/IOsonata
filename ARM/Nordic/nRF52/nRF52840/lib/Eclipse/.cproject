@@ -67,6 +67,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -198,6 +199,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -411,6 +413,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -543,6 +546,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -757,6 +761,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -889,6 +894,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -1102,6 +1108,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -1235,6 +1242,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -1451,6 +1459,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -1576,6 +1585,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -1784,6 +1794,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
@@ -1910,6 +1921,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
