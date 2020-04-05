@@ -166,7 +166,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define FLASH_HOLD_PINOP           	0
 #else
 #define SPI_DEVNO      					1
-#define SPI_MODE						SPIMODE_NORMAL
+#define SPI_PHY							SPIPHY_NORMAL
 #define SPI_MISO_PORT       			0
 #define SPI_MISO_PIN        			5//13
 #define SPI_MISO_PINOP      			1

@@ -231,7 +231,7 @@ void nRFxSPIDisable(DEVINTRF * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 
-	if (dev->pSpiDev->Cfg.Type == SPITYPE_SLAVE)
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
 		dev->pDmaSReg->ENABLE = (SPIS_ENABLE_ENABLE_Disabled << SPIS_ENABLE_ENABLE_Pos);
 	}
@@ -253,7 +253,7 @@ void nRFxSPIEnable(DEVINTRF * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 
-	if (dev->pSpiDev->Cfg.Type == SPITYPE_SLAVE)
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
 		dev->pDmaSReg->ENABLE = (SPIS_ENABLE_ENABLE_Enabled << SPIS_ENABLE_ENABLE_Pos);
 	}
@@ -302,7 +302,7 @@ bool nRFxSPIStartRx(DEVINTRF * const pDev, int DevCs)
 	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
 			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
 
-	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
 	{
 #ifdef SPIM_PRESENT
         dev->pDmaReg->PSEL.MISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
@@ -389,7 +389,7 @@ void nRFxSPIStopRx(DEVINTRF * const pDev)
 				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PinNo);
 	}
 
-	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
 	{
 #ifdef SPIM_PRESENT
 //		dev->pReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
@@ -414,7 +414,7 @@ bool nRFxSPIStartTx(DEVINTRF * const pDev, int DevCs)
 	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
 			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
 
-    if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+    if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
     {
 #ifdef SPIM_PRESENT
         dev->pDmaReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
@@ -505,7 +505,7 @@ void nRFxSPIStopTx(DEVINTRF * const pDev)
 		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PortNo,
 				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PinNo);
 	}
-    if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+    if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
     {
 #ifdef SPIM_PRESENT
         dev->pDmaReg->PSEL.MOSI = -1;
@@ -521,7 +521,7 @@ void SPIIrqHandler(int DevNo, DEVINTRF * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 
-	if (dev->pSpiDev->Cfg.Type == SPITYPE_SLAVE)
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
 		if (dev->pDmaSReg->EVENTS_ENDRX)
 		{
@@ -578,7 +578,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		return false;
 	}
 
-	if (pCfgData->Type == SPITYPE_SLAVE && pCfgData->DevNo >= NRFX_SPISLAVE_MAXDEV)
+	if (pCfgData->Mode == SPIMODE_SLAVE && pCfgData->DevNo >= NRFX_SPISLAVE_MAXDEV)
 	{
 		return false;
 	}
@@ -689,7 +689,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	pDev->DevIntrf.PowerOff = nRFxSPIPowerOff;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	if (pCfgData->Type == SPITYPE_SLAVE)
+	if (pCfgData->Mode == SPIMODE_SLAVE)
 	{
 		// Force DMA for slave mode
 		pDev->DevIntrf.bDma = true;
@@ -708,7 +708,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
 	uint32_t inten = 0;
 
-    if (pCfgData->Type == SPITYPE_SLAVE)
+    if (pCfgData->Mode == SPIMODE_SLAVE)
 	{
 		NRF_SPIS_Type *sreg = s_nRFxSPIDev[pCfgData->DevNo].pDmaSReg;
 

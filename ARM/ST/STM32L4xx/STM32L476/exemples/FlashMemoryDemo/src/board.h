@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	board.h
+@file	board.h
 
 @brief	Board specific definitions
 
@@ -94,7 +94,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SPI_FLASH_CS_PINOP  (0x52)	// AF5
 
 #define SPI_DEVNO			QSPI_DEVNO
-#define SPI_MODE			SPIMODE_QUAD_SDR
+#define SPI_PHY				SPIPHY_QUAD_SDR
 
 #define SPI_PINS_CFG	{ \
 	{QSPI_SCK_PORT, QSPI_SCK_PIN, QSPI_SCK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \

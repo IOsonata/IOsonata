@@ -90,8 +90,8 @@ static const IOPINCFG s_SpiMasterPins[] = {
 
 static const SPICFG s_SpiMasterCfg = {
 	SPI_MASTER_DEVNO,
-	SPIMODE_NORMAL,
-    SPITYPE_MASTER,
+	SPIPHY_NORMAL,
+    SPIMODE_MASTER,
 	s_SpiMasterPins,
     sizeof( s_SpiMasterPins ) / sizeof( IOPINCFG ),
     1000000,   // Speed in Hz
@@ -126,8 +126,8 @@ static const IOPINCFG s_SpiSlavePins[] = {
 
 static const SPICFG s_SpiSlaveCfg = {
 	SPI_SLAVE_DEVNO,
-	SPIMODE_NORMAL,
-    SPITYPE_SLAVE,
+	SPIPHY_NORMAL,
+    SPIMODE_SLAVE,
 	s_SpiSlavePins,
     sizeof( s_SpiSlavePins ) / sizeof( IOPINCFG ),
     1000000,   // Speed in Hz

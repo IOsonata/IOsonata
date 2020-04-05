@@ -225,8 +225,8 @@ static const IOPINCFG s_SpiPins[] = {
 
 static const SPICFG s_SpiCfg = {
     .DevNo = SPI2_DEVNO,
-    .Mode = SPIMODE_NORMAL,
-	.Type = SPITYPE_MASTER,
+    .Phy = SPIPHY_NORMAL,
+	.Mode = SPIMODE_MASTER,
     .pIOPinMap = s_SpiPins,
     .NbIOPins = sizeof(s_SpiPins) / sizeof(IOPINCFG),
     .Rate = 1000000,   // Speed in Hz

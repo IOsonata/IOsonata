@@ -82,11 +82,11 @@ void SPISetSlaveTxData(SPIDEV * const pDev, int SlaveIdx, uint8_t * const pData,
 	pDev->TxDataLen[SlaveIdx] = DataLen;
 }
 
-__attribute__((weak)) SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode)
+__attribute__((weak)) SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy)
 {
-	pDev->Cfg.Mode = Mode;
+	pDev->Cfg.Phy = Phy;
 
-	return pDev->Cfg.Mode;
+	return pDev->Cfg.Phy;
 }
 
 /**

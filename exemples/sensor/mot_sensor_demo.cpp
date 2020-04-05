@@ -87,11 +87,11 @@ static const IOPINCFG s_SpiPins[] = {
 
 static const SPICFG s_SpiCfg = {
     SPI_DEVNO,
-	SPIMODE_NORMAL,
-    SPITYPE_MASTER,
+	SPIPHY_NORMAL,
+    SPIMODE_MASTER,
     s_SpiPins,
     sizeof(s_SpiPins) / sizeof(IOPINCFG),
-    4000000,   // Speed in Hz
+    2000000,   // Speed in Hz
     8,      // Data Size
     5,      // Max retries
     SPIDATABIT_MSB,
@@ -128,7 +128,7 @@ const static TIMER_CFG s_TimerCfg = {
 TimerLFnRFx g_Timer;
 
 static const ACCELSENSOR_CFG s_AccelCfg = {
-	.DevAddr = 1,
+	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 1000,
 	.Scale = 2,
@@ -159,9 +159,9 @@ static const IMU_CFG s_ImuCfg = {
 };
 
 //#define ICM20948
-//#define MPU9250
+#define MPU9250
 //#define BMI160
-#define H3LIS331DL
+//#define H3LIS331DL
 
 #ifdef ICM20948
 ImuIcm20948 g_Imu;

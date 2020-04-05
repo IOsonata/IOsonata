@@ -91,7 +91,7 @@ bool SPIInit(SPIDEV *pDev, const SPICFG *pCfgData)
 
 	d = LPCSSP_CR1_SSP_EN;
 
-	if (pCfgData->Type == SPITYPE_SLAVE)
+	if (pCfgData->Mode == SPIMODE_SLAVE)
 	{
 		d |= LPCSSP_CR1_MS_SLAVE;
 	}

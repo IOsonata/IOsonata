@@ -258,7 +258,7 @@ static int STM32L4xxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen
         if (dev->pSpiDev->Cfg.DataSize > 8)
         {
             *(uint16_t*)&dev->pReg->DR = d;	// Dummy write
-        	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+        	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
         	{
         		STM32L4xxSPIWaitTx(dev, 100000);
         		dev->pReg->CR1 &= ~SPI_CR1_BIDIOE;
@@ -275,7 +275,7 @@ static int STM32L4xxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen
         else
         {
             *(uint8_t*)&dev->pReg->DR = d;	// Dummy write
-        	if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+        	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
         	{
         		STM32L4xxSPIWaitTx(dev, 100000);
         		dev->pReg->CR1 &= ~SPI_CR1_BIDIOE;
@@ -397,7 +397,7 @@ void SPIIrqHandler(int DevNo)
 	}
 	if (dev->pReg->SR & SPI_SR_TXE)
 	{
-		if (dev->pSpiDev->Cfg.Mode == SPIMODE_3WIRE)
+		if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
 		{
 			dev->pReg->CR1 &= ~SPI_CR1_BIDIOE;
 		}
@@ -416,11 +416,11 @@ void SPIIrqHandler(int DevNo)
 	}
 }
 
-SPIMODE STM32L4xxSPIMode(SPIDEV * const pDev, SPIMODE Mode)
+SPIPHY STM32L4xxSPIPhy(SPIDEV * const pDev, SPIPHY Phy)
 {
-	switch (Mode)
+	switch (Phy)
 	{
-		case SPIMODE_3WIRE:
+		case SPIPHY_3WIRE:
 			if (pDev->Cfg.DevNo < STM32L4XX_SPI_MAXDEV - 2)
 			{
 				SPI_TypeDef *reg;
@@ -428,10 +428,10 @@ SPIMODE STM32L4xxSPIMode(SPIDEV * const pDev, SPIMODE Mode)
 				reg = s_STM32L4xxSPIDev[pDev->Cfg.DevNo].pReg;
 				reg->CR1 |= SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE;
 
-				pDev->Cfg.Mode = SPIMODE_3WIRE;
+				pDev->Cfg.Phy = SPIPHY_3WIRE;
 			}
 			break;
-		case SPIMODE_NORMAL:
+		case SPIPHY_NORMAL:
 			if (pDev->Cfg.DevNo < STM32L4XX_SPI_MAXDEV - 2)
 			{
 				SPI_TypeDef *reg;
@@ -440,12 +440,12 @@ SPIMODE STM32L4xxSPIMode(SPIDEV * const pDev, SPIMODE Mode)
 				reg->CR1 &= ~(SPI_CR1_BIDIMODE | SPI_CR1_SPE);
 				reg->CR1 |= SPI_CR1_BIDIOE | SPI_CR1_SPE;
 
-				pDev->Cfg.Mode = SPIMODE_NORMAL;
+				pDev->Cfg.Phy = SPIPHY_NORMAL;
 			}
 			break;
 	}
 
-	return Mode;
+	return Phy;
 }
 
 bool STM32L4xxSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
@@ -499,7 +499,7 @@ bool STM32L4xxSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
 	reg->CR2 = tmp;
 
-	if (pCfgData->Type == SPITYPE_MASTER)
+	if (pCfgData->Mode == SPIMODE_MASTER)
 	{
 		cr1reg |= SPI_CR1_MSTR;
 		if (s_STM32L4xxSPIDev[pCfgData->DevNo].pSpiDev->Cfg.ChipSel == SPICSEL_DRIVER)
@@ -532,7 +532,7 @@ bool STM32L4xxSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		cr1reg |= SPI_CR1_LSBFIRST;
 	}
 
-	if (pCfgData->Mode == SPIMODE_3WIRE)
+	if (pCfgData->Phy == SPIPHY_3WIRE)
 	{
 		cr1reg |= SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE;
 	}
@@ -914,7 +914,7 @@ bool STM32L4xxQuadSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	reg->CR &= ~(QUADSPI_CR_FTHRES_Msk | QUADSPI_CR_SSHIFT);
 	//reg->CR |= 0 << QUADSPI_CR_FTHRES_Pos | QUADSPI_CR_SSHIFT;
 
-	if (pCfgData->Mode == SPIMODE_QUAD_DDR)
+	if (pCfgData->Phy == SPIPHY_QUAD_DDR)
 	{
 		dev->CcrReg = QUADSPI_CCR_DDRM;
 	}
@@ -988,13 +988,13 @@ bool QuadSPISendCmd(SPIDEV * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t Add
 	return false;
 }
 
-SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode)
+SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy)
 {
-	if (Mode != pDev->Cfg.Mode)
+	if (Phy != pDev->Cfg.Phy)
 	{
 		if (pDev->Cfg.DevNo == STM32L4XX_SPI_MAXDEV - 1)
 		{
-			if (Mode == SPIMODE_QUAD_DDR)
+			if (Phy == SPIPHY_QUAD_DDR)
 			{
 				STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->DevIntrf.pDevData;
 				dev->CcrReg = QUADSPI_CCR_DDRM;
@@ -1002,11 +1002,11 @@ SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode)
 		}
 		else
 		{
-			STM32L4xxSPIMode(pDev, Mode);
+			STM32L4xxSPIPhy(pDev, Phy);
 		}
 	}
 
-	return pDev->Cfg.Mode;
+	return pDev->Cfg.Phy;
 }
 
 bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
@@ -1051,7 +1051,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		return false;
 	}
 
-    if (pCfgData->bIntEn && pCfgData->Type == SPITYPE_SLAVE)
+    if (pCfgData->bIntEn && pCfgData->Mode == SPIMODE_SLAVE)
     {
     	SPI_TypeDef *reg;
 

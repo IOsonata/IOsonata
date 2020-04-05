@@ -127,8 +127,8 @@ static const IOPINCFG s_SpiPins[] = {
 
 static const SPICFG s_SpiCfg = {
     0,//SPI_DEVNO,
-	SPIMODE_NORMAL,
-    SPITYPE_MASTER,
+	SPIPHY_NORMAL,
+    SPIMODE_MASTER,
 	s_SpiPins,
     sizeof( s_SpiPins ) / sizeof( IOPINCFG ),
     1000000,   // Speed in Hz
@@ -255,7 +255,7 @@ int main()
 
 	if (bsec_status != BSEC_OK)
 	{
-		printf("BSEC init failed\r\n");
+		g_Uart.printf("BSEC init failed\r\n");
 
 		return 1;
 	}
@@ -265,7 +265,7 @@ int main()
 
 	if (res == false)
 	{
-		printf("Init error\r\n");
+		g_Uart.printf("Init error\r\n");
 	}
 
 #ifdef BME680
@@ -287,7 +287,7 @@ int main()
 		g_EnvSensor.Read(gdata);
 
 #endif
-		printf("T=%" PRIu64 " : Temp : %.2f C, Press : %.3f KPa, Humi : %.2f %% ",
+		g_Uart.printf("T=%" PRIu64 " : Temp : %.2f C, Press : %.3f KPa, Humi : %.2f %% ",
 				tphdata.Timestamp,
 				(float)tphdata.Temperature / 100.0,
 				(float)tphdata.Pressure / 1000.0,
@@ -298,7 +298,7 @@ int main()
 		{
 			lastiaq = gdata.AirQualIdx;
 		}
-		printf("Gas = %d %.2f\r\n", gdata.GasRes[gdata.MeasIdx], gdata.AirQualIdx);
+		g_Uart.printf("Gas = %d %.2f\r\n", gdata.GasRes[gdata.MeasIdx], gdata.AirQualIdx);
 #else
 		printf("\r\n");
 #endif

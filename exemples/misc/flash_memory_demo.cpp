@@ -79,8 +79,8 @@ static const IOPINCFG s_SpiPins[] = SPI_PINS_CFG;
 
 static const SPICFG s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
-	.Mode = SPI_MODE,
-    .Type = SPITYPE_MASTER,
+	.Phy = SPI_PHY,
+    .Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPINCFG),
     .Rate = 4000000,   // Speed in Hz
@@ -90,7 +90,7 @@ static const SPICFG s_SpiCfg = {
     .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
     .ClkPol = SPICLKPOL_HIGH,         // clock polarity
     .ChipSel = SPICSEL_AUTO,
-	.bDmaEn = true,	// DMA
+	.bDmaEn = false,	// DMA
 	.bIntEn = false,
     .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
     .EvtCB = NULL
@@ -110,8 +110,8 @@ static FLASHDISKIO_CFG s_FlashDiskCfg = {
     .BlkSize = 32,		// 32K
     .WriteSize = 256,
     .AddrSize = 3,                          // 3 bytes addressing
-    .pInitCB = NULL,//MX25U1635E_init,
-    .pWaitCB = NULL,//FlashWriteDelayCallback,
+    .pInitCB = MX25U1635E_init,
+    .pWaitCB = FlashWriteDelayCallback,
 };
 
 // Micron N25Q128A
@@ -121,9 +121,11 @@ static FLASHDISKIO_CFG s_N25Q128A_QFlashCfg = {
 	.SectSize = 4,		// 4K
     .BlkSize = 32,		// 32K
     .WriteSize = 256,
-    .AddrSize = 3,                          // 3 bytes addressing
+    .AddrSize = 3,      // 3 bytes addressing
+	//.DevId = 0x18ba20,//0x1628c2,	// C21628
+	//.DevIdSize = 3,
     .pInitCB = NULL,
-    .pWaitCB = NULL,
+    .pWaitCB = FlashWriteDelayCallback,
 	.RdCmd = { FLASH_CMD_QREAD, 10},
 	.WrCmd = { FLASH_CMD_QWRITE, 0 },
 };
@@ -136,6 +138,8 @@ static FLASHDISKIO_CFG s_MX25R3235F_QFlashCfg = {
     .BlkSize = 64,		// 64K
     .WriteSize = 256,
     .AddrSize = 3,                          // 3 bytes addressing
+//	.DevId = 0x1628c2,	// C21628
+//	.DevIdSize = 3,
     .pInitCB = NULL,
     .pWaitCB = NULL,
 	.RdCmd = { FLASH_CMD_4READ, 6},
@@ -167,8 +171,8 @@ bool MX25U1635E_init(int DevNo, DeviceIntrf* pInterface)
 
     d = FLASH_CMD_READID;
     cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 2 );
-    if ( r != 0x25C2 )
-    	return false;
+    //if ( r != 0x28C2 )
+    //	return false;
 
     printf("Flash found!\r\n");
     // Enable write
@@ -206,11 +210,11 @@ int main()
    // IOPinConfig(FLASH_HOLD_PORT, FLASH_HOLD_PIN, FLASH_HOLD_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 
 	// Regular SPI FLash
-	g_FlashDiskIO.Init(s_FlashDiskCfg, &g_Spi, &g_FlashCache, 1);
+	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 
 	// QSPI flash
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
-	//g_FlashDiskIO.Init(s_MX25R3235F_QFlashCfg, &g_Spi, &g_FlashCache, 1);
+	g_FlashDiskIO.Init(s_MX25R3235F_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 
 	//g_QFlash.Init(s_QFlashCfg, &g_FlashCache, 1);
 
@@ -219,26 +223,25 @@ int main()
 	uint8_t tmp[512];
 	uint16_t *p = (uint16_t*)buff;
 
-	memset(tmp, 0, 512);
+	memset(tmp, 0xa5, 512);
 	for (int i = 0; i < 256; i++)
 	{
-		p[i] = i;
+		p[i] = 255-i;
 	}
-
 
 	printf("Erasing... Please wait\r\n");
 
 	// Ease could take a few minutes
-	g_FlashDiskIO.EraseSector(0, 4);
-
+	//g_FlashDiskIO.EraseBlock(0, 4);
+	//g_FlashDiskIO.Erase();
 	printf("Writing 2KB data...\r\n");
 
-	g_FlashDiskIO.SectWrite(0, buff);
+	g_FlashDiskIO.SectWrite(1, buff);
 
 	p = (uint16_t*)buff2;
 	for (int i = 0; i < 256; i++)
 	{
-		p[i] = 255 - i;
+		p[i] = i;
 	}
 	g_FlashDiskIO.SectWrite(2UL, buff2);
 	//g_FlashDiskIO.SectWrite(4, buff);
@@ -246,7 +249,7 @@ int main()
 
 	printf("Validate readback...\r\n");
 
-	g_FlashDiskIO.SectRead(0, tmp);
+	g_FlashDiskIO.SectRead(1, tmp);
 
 	for (int i = 0; i < 512; i++)
 	{
@@ -282,6 +285,32 @@ int main()
 	else
 	{
 		printf("Sector 2 verify success\r\n");
+	}
+	g_FlashDiskIO.EraseSector(0, 1);
+	msDelay(1000);
+	g_FlashDiskIO.SectRead(0, tmp);
+
+	memset(buff, 0xff, 512);
+	if (memcmp(buff, tmp, 512) != 0)
+	{
+		printf("Sector 1 verify erase failed\r\n");
+	}
+	else
+	{
+		printf("Sector 1 verify erase success\r\n");
+	}
+
+
+	g_FlashDiskIO.SectWrite(0, buff2);
+	g_FlashDiskIO.SectRead(0, tmp);
+
+	if (memcmp(buff2, tmp, 512) != 0)
+	{
+		printf("Sector 0 verify failed\r\n");
+	}
+	else
+	{
+		printf("Sector 0 verify success\r\n");
 	}
 
 	memset(tmp, 0, 512);

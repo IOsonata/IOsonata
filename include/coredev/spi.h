@@ -59,10 +59,10 @@ typedef enum __SPI_Status {
 	SPISTATUS_TIMEOUT
 } SPISTATUS;
 
-typedef enum __SPI_Type {
-	SPITYPE_MASTER,				//!< SPI master
-	SPITYPE_SLAVE				//!< SPI slave
-} SPITYPE;
+typedef enum __SPI_Mode {
+	SPIMODE_MASTER,				//!< SPI master
+	SPIMODE_SLAVE				//!< SPI slave
+} SPIMODE;
 
 typedef enum __SPI_Clk_Polarity {
 	SPICLKPOL_HIGH,				//!< Clock polarity active high : CPOL=0 idle low
@@ -85,13 +85,15 @@ typedef enum __SPI_Chip_Select {
 	SPICSEL_DRIVER	//!< For driver's internal use only, do not set this in the config.
 } SPICSEL;
 
-typedef enum __SPI_Mode {
-	SPIMODE_NORMAL,				//!< Standard single SPI 4 wires CLK, MOSI, MISO, CS
-	SPIMODE_3WIRE,				//!< 3 wires MISO/MOSI mux
-	SPIMODE_DUAL,				//!< Dual SPI D0, D1 or used
-	SPIMODE_QUAD_SDR,			//!< QSPI, single data rate
-	SPIMODE_QUAD_DDR,			//!< QSPI, dual data rate
-} SPIMODE;
+// SPI physical interface
+typedef enum __SPI_Phy {
+	SPIPHY_NORMAL,				//!< Standard single SPI 4 wires CLK, MOSI, MISO, CS
+	SPIPHY_4WIRE = SPIPHY_NORMAL,
+	SPIPHY_3WIRE,				//!< 3 wires MISO/MOSI mux
+	SPIPHY_DUAL,				//!< Dual SPI D0, D1 or used
+	SPIPHY_QUAD_SDR,			//!< QSPI, single data rate
+	SPIPHY_QUAD_DDR,			//!< QSPI, dual data rate
+} SPIPHY;
 
 #define SPI_MAX_RETRY			5
 
@@ -119,9 +121,9 @@ typedef enum __SPI_Mode {
 /// Configuration data used to initialize device
 typedef struct __SPI_Config {
 	int DevNo;				//!< SPI interface number identify by chip select (CS0, CS1,..,CSn)
-	SPIMODE Mode;			//!< SPI type (standard, 3 wire, quad
-	SPITYPE Type;			//!< Master/Slave mode
-	const IOPINCFG *pIOPinMap;	//!< Define I/O pins used by SPI
+	SPIPHY Phy;				//!< SPI physical interface type (standard, 3 wire, quad,..)
+	SPIMODE Mode;			//!< Master/Slave mode
+	const IOPINCFG *pIOPinMap;	//!< Define I/O pins used by SPI (including CS array)
 	int NbIOPins;			//!< Total number of I/O pins
 	int Rate;				//!< Speed in Hz
 	uint32_t DataSize; 		//!< Data Size 4-16 bits
@@ -195,18 +197,21 @@ static inline int SPITxData(SPIDEV * const pDev, uint8_t *pData, int Datalen) {
 }
 static inline void SPIStopTx(SPIDEV * const pDev) { DeviceIntrfStopTx(&pDev->DevIntrf); }
 
-static inline SPIMODE SPIGetMode(SPIDEV * const pDev) { return pDev->Cfg.Mode; }
+/**
+ * @brief	Get current physical interface type
+ */
+static inline SPIPHY SPIGetPhy(SPIDEV * const pDev) { return pDev->Cfg.Phy; }
 
 /**
- * @brief	Change SPI mode
+ * @brief	Change SPI physical interface type
  *
  * This function allows dynamically switching between 3WIRE & NORMAL mode.
  * It is useful when a 3wire devices and standard devices are sharing the same SPI bus
  *
  * @param	pDev : Device Interface Handle
- * @param	Mode : New SPI mode
+ * @param	Phy	 : New SPI physical interface type
  */
-SPIMODE SPISetMode(SPIDEV * const pDev, SPIMODE Mode);
+SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy);
 
 /**
  * @brief	Set Quad SPI Flash size
@@ -344,10 +349,10 @@ public:
 		SPISetSlaveTxData(&vDevData, SlaveIdx, pData, DataLen);
 	}
 
-	virtual SPIMODE Mode() { return vDevData.Cfg.Mode; }
-	virtual SPIMODE Mode(SPIMODE Mode) {
-		vDevData.Cfg.Mode = SPISetMode(&vDevData, Mode);
-		return vDevData.Cfg.Mode;
+	virtual SPIPHY Phy() { return vDevData.Cfg.Phy; }
+	virtual SPIPHY Phy(SPIPHY Phy) {
+		vDevData.Cfg.Phy = SPISetPhy(&vDevData, Phy);
+		return vDevData.Cfg.Phy;
 	}
 
 private:
