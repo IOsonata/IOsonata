@@ -116,7 +116,7 @@ public:
 	 * @brief	Power off the device completely.
 	 *
 	 * If supported, this will put the device in complete power down.
-	 * Full re-intialization is required to re-enable the device.
+	 * Full re-initialization is required to re-enable the device.
 	 */
 	virtual void PowerOff() {}
 

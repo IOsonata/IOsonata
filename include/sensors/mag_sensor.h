@@ -125,7 +125,10 @@ public:
     virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
     virtual void ClearCalibration();
     virtual void Sensitivity(uint16_t (&Sen)[3]);
-    MagSensor() { ClearCalibration(); }
+    MagSensor() {
+    	Type(SENSOR_TYPE_MAG);
+    	ClearCalibration();
+    }
 
 protected:
     // These functions allow override for device hook up on the secondary interface
