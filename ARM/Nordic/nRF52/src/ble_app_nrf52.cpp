@@ -1552,7 +1552,7 @@ bool BleAppInit(const BLEAPP_CFG *pBleAppCfg, bool bEraseBond)
     //err_code = ble_lesc_ecc_keypair_generate_and_set();
     //APP_ERROR_CHECK(err_code);
 
-    if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL || pBleAppCfg->AppMode == BLEAPP_MODE_NOCONNECT)
+    if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
     {
         BleAppAdvInit(pBleAppCfg);
 
