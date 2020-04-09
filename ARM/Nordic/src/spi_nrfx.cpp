@@ -517,6 +517,11 @@ void nRFxSPIStopTx(DEVINTRF * const pDev)
     }
 }
 
+void nRFxSPIReset(DEVINTRF * const pDev)
+{
+
+}
+
 void SPIIrqHandler(int DevNo, DEVINTRF * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
@@ -687,6 +692,8 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
 	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
 	pDev->DevIntrf.PowerOff = nRFxSPIPowerOff;
+	pDev->DevIntrf.Reset = nRFxSPIReset;
+
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	if (pCfgData->Mode == SPIMODE_SLAVE)
