@@ -289,7 +289,7 @@ public:
 
 	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
 	operator SPIDEV& () { return vDevData; };			// Get config data
-	operator SPIDEV * const () { return &vDevData; };	// Get ponter to config data
+	operator SPIDEV * const () { return &vDevData; };	// Get pointer to device data
 	int Rate(int RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
 	int Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }

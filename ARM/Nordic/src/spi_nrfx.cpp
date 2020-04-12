@@ -392,9 +392,9 @@ void nRFxSPIStopRx(DEVINTRF * const pDev)
 	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
 	{
 #ifdef SPIM_PRESENT
-//		dev->pReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
+		dev->pReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
 #else
-//		dev->pReg->PSELMOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
+		dev->pReg->PSELMOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
 #endif
 	}
 }
@@ -751,8 +751,18 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		reg->PSEL.MISO = (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
 		reg->PSEL.MOSI = (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MOSI_IOPIN_IDX].PortNo << 5);
 
-		reg->ORC = 0xFF;
-		reg->ENABLE = (SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos);
+		if (pDev->DevIntrf.bDma)
+		{
+			reg->ORC = 0xFF;
+			reg->ENABLE = (SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos);
+		}
+		else
+		{
+#ifdef SPI_PRESENT
+			s_nRFxSPIDev[pCfgData->DevNo].pReg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
+			s_nRFxSPIDev[pCfgData->DevNo].pReg->EVENTS_READY = 0;
+#endif
+		}
 #else
 		reg->PSELSCK = (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
 		reg->PSELMISO = (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
