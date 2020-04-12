@@ -754,16 +754,6 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
     uint32_t enval = 0;
     uint32_t inten = 0;
 
-#ifdef TWIM_PRESENT
-
-    if (pDev->DevIntrf.bDma)
-    {
-    	enval = (TWIM_ENABLE_ENABLE_Enabled << TWIM_ENABLE_ENABLE_Pos);
-    }
-#else
-    enval = (TWI_ENABLE_ENABLE_Enabled << TWI_ENABLE_ENABLE_Pos);
-#endif
-
 #ifdef TWIS_PRESENT
     if (pCfgData->Mode == I2CMODE_SLAVE)
     {
@@ -789,9 +779,28 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
         enval = TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos;
         inten = (TWIS_INTEN_READ_Enabled << TWIS_INTEN_READ_Pos) | (TWIS_INTEN_WRITE_Enabled << TWIS_INTEN_WRITE_Pos) |
         		(TWIS_INTEN_STOPPED_Enabled << TWIS_INTEN_STOPPED_Pos);
+	    reg->ENABLE = enval;
     }
+    else
 #endif
+    {
+#ifdef TWIM_PRESENT
 
+		if (pDev->DevIntrf.bDma)
+		{
+			enval = (TWIM_ENABLE_ENABLE_Enabled << TWIM_ENABLE_ENABLE_Pos);
+		    reg->ENABLE = enval;
+		}
+		else
+#endif
+		{
+#ifdef TWI_PRESENT
+			enval = (TWI_ENABLE_ENABLE_Enabled << TWI_ENABLE_ENABLE_Pos);
+			s_nRFxI2CDev[pCfgData->DevNo].pReg->EVENTS_RXDREADY = 0;
+			s_nRFxI2CDev[pCfgData->DevNo].pReg->ENABLE = enval;
+#endif
+		}
+    }
     if (inten != 0)
     {
     	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, I2CIrqHandler);
@@ -858,7 +867,7 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
     	reg->INTENSET = inten;
     }
 
-    reg->ENABLE = enval;
+//    reg->ENABLE = enval;
 
 	return true;
 }
