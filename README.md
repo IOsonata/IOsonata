@@ -1,4 +1,5 @@
-# IOsonata
+![IOsonata Logo](/docs/iosonata_logo_400.png)
+# IOsonata - make your I/Os sing
 IOsonata multi-platform multi-architecture optimized software library for fast and easy iot products development
 
 This is the new refactoring of the EHAL library (https://github.com/I-SYST/EHAL). 
