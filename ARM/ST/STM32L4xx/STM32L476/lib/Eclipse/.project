@@ -96,6 +96,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/diskio_flash.h</locationURI>
 		</link>
 		<link>
+			<name>include/display</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
@@ -311,6 +316,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_impl.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/display</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/fatfs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/fatfs.cpp</locationURI>
@@ -471,6 +481,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
 		</link>
 		<link>
+			<name>include/display/eink_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>include/imu/icm20948_img_dmp3a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/icm20948_img_dmp3a.h</locationURI>
@@ -536,9 +551,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
 		</link>
 		<link>
-			<name>include/sensors/a_adxl362.h</name>
+			<name>include/sensors/accel_adxl362.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/a_adxl362.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_adxl362.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/accel_h3lis331dl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/accel_lis2dh12.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_sensor.h</name>
@@ -586,6 +611,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303c.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/bsec_datatypes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/bsec_datatypes.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/bsec_interface.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/bsec_interface.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/gas_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gas_sensor.h</locationURI>
@@ -629,11 +664,6 @@
 			<name>include/sensors/sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/sensor.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/sensors</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/temp_sensor.h</name>
@@ -744,6 +774,11 @@
 			<name>src/coredev/uart_stm32l4xx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/uart_stm32l4xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/eink_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>
@@ -889,11 +924,6 @@
 			<name>src/sensors/tphg_bme680.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/tphg_bme680.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/sensors/mag_ak09916.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_ak09916.h</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers</name>

@@ -146,6 +146,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/diskio_flash.h</locationURI>
 		</link>
 		<link>
+			<name>include/display</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/esb_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/esb_intrf.h</locationURI>
@@ -346,6 +351,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/base64.c</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/cfifo.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/cfifo.c</locationURI>
@@ -384,6 +394,11 @@
 			<name>src/diskio_impl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_impl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/esb_intrf.cpp</name>
@@ -589,6 +604,11 @@
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/eink_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/imu/icm20948_img_dmp3a.h</name>
@@ -954,6 +974,11 @@
 			<name>src/coredev/uart_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/eink_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>

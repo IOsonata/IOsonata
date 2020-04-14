@@ -96,6 +96,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/diskio_flash.h</locationURI>
 		</link>
 		<link>
+			<name>include/display</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
@@ -279,6 +284,11 @@
 			<name>src/diskio_impl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_impl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/fatfs.cpp</name>
@@ -479,6 +489,11 @@
 			<name>include/coredev/uart_lpcxx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/uart_lpcxx.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/eink_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/imu/icm20948_img_dmp3a.h</name>
@@ -794,6 +809,11 @@
 			<name>src/coredev/usb_lpc11uxx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/usb_lpc11uxx.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/eink_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>
