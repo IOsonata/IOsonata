@@ -1674,7 +1674,6 @@
 									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
 									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
 									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
-									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1297780892" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -1715,7 +1714,6 @@
 									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
 									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
 									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
-									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1234665393" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
@@ -2053,7 +2051,7 @@
 									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
 									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
 									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
-									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
+									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.323743927" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -2094,7 +2092,6 @@
 									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
 									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
 									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
-									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.490227085" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
