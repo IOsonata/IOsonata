@@ -3,6 +3,10 @@
 
 @brief	Implementation of ST LSM303AGR accel, mag sensor
 
+This device is a combination of 2 independent entities.  Therefore the
+implementation consists of 2 independent objects.
+
+
 @author	Hoang Nguyen Hoan
 @date	Sept. 18, 2019
 
@@ -48,39 +52,8 @@ SOFTWARE.
  *
  * @return	true - Success
  */
-bool AccLsm303agr::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AcceLsm303agr::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
-		return false;
-
-	return true;
-}
-
-bool AccLsm303agr::Init(const TEMPSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
-{
-	return true;
-}
-
-bool AccLsm303agr::Enable()
-{
-	return true;
-}
-void AccLsm303agr::Disable()
-{
-
-}
-void AccLsm303agr::Reset()
-{
-
-}
-
-// Default base initialization. Does detection and set default config for all sensor.
-// All sensor init must call this first prio to initializing itself
-bool AccLsm303agr::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
-{
-	if (vbInitialized)
-		return true;;
-
 	if (pIntrf == NULL)
 		return false;
 
@@ -90,14 +63,14 @@ bool AccLsm303agr::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * co
 	uint8_t mst = 0;
 
 	Interface(pIntrf);
-	DeviceAddress(DevAddr);
+	DeviceAddress(Cfg.DevAddr);
 
 	if (pTimer != NULL)
 	{
 		AccelSensor::vpTimer = pTimer;
 	}
 
-	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI || DevAddr != LSM303AGR_ACCEL_I2C_DEVADDR)
+	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI || Cfg.DevAddr != LSM303AGR_ACCEL_I2C_DEVADDR)
 	{
 		regaddr = LSM303AGR_CTRL_REG4_A_REG;
 		Write8(&regaddr, 1, LSM303AGR_CTRL_REG4_A_SPI_3WIRE_ENABLE);
@@ -106,7 +79,6 @@ bool AccLsm303agr::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * co
 	// Read chip id
 	regaddr = LSM303AGR_WHO_AM_I_A_REG;
 	d = Read8(&regaddr, 1);
-printf("Chip Id %x\r\n", d);
 
 	if (d != LSM303AGR_WHO_AM_I_A_ID)
 	{
@@ -118,27 +90,188 @@ printf("Chip Id %x\r\n", d);
 	DeviceID(d);
 	Valid(true);
 
+	Scale(Cfg.Scale);
+	SamplingFrequency(Cfg.Freq);
+
 	return true;
 }
 
+bool AcceLsm303agr::Init(const TEMPSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+{
+	return true;
+}
+
+uint32_t AcceLsm303agr::SamplingFrequency(uint32_t Freq)
+{
+	uint8_t regaddr;
+	uint32_t r = (1 << 12) - 1;
+	uint32_t f = 0;
+	uint8_t ctrl = 0;
+	uint8_t ctrl4 = 0;
+
+	regaddr = LSM303AGR_CTRL_REG1_A_REG;
+	ctrl = Read8(&regaddr, 1) & ~(LSM303AGR_CTRL_REG1_A_ODR_MASK | LSM303AGR_CTRL_REG1_A_LPEN);
+
+	regaddr = LSM303AGR_CTRL_REG4_A_REG;
+	ctrl4 = Read8(&regaddr, 1) & ~(LSM303AGR_CTRL_REG4_A_HR);
+
+
+	if (Freq < 2000)
+	{
+		f = 1000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_1HZ;
+		ctrl4 |= LSM303AGR_CTRL_REG4_A_HR;
+	}
+	else if (Freq < 15000)
+	{
+		f = 10000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_10HZ;
+		ctrl4 |= LSM303AGR_CTRL_REG4_A_HR;
+	}
+	else if (Freq < 35000)
+	{
+		f = 25000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_25HZ;
+		ctrl4 |= LSM303AGR_CTRL_REG4_A_HR;
+	}
+	else if (Freq < 70000)
+	{
+		f = 50000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_50HZ;
+		ctrl4 |= LSM303AGR_CTRL_REG4_A_HR;
+	}
+	else if (Freq < 150000)
+	{
+		f = 100000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_100HZ;
+		ctrl4 |= LSM303AGR_CTRL_REG4_A_HR;
+	}
+	else if (Freq < 300000)
+	{
+		f = 200000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_200HZ;
+		ctrl4 |= LSM303AGR_CTRL_REG4_A_HR;
+	}
+	else if (Freq < 700000)
+	{
+		f = 400000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_400HZ;
+		ctrl4 |= LSM303AGR_CTRL_REG4_A_HR;
+	}
+	else if (Freq < 1400000)
+	{
+		f = 1344000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_1344_5376HZ;
+		ctrl4 |= LSM303AGR_CTRL_REG4_A_HR;
+	}
+	else if (Freq < 2500000)
+	{
+		f = 1620000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_1620HZ | LSM303AGR_CTRL_REG1_A_LPEN;
+		r = 255;
+	}
+	else
+	{
+		f = 5376000;
+		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_1344_5376HZ | LSM303AGR_CTRL_REG1_A_LPEN;
+		r = 255;
+	}
+
+	regaddr = LSM303AGR_CTRL_REG4_A_REG;
+	Write8(&regaddr, 1, ctrl4);
+
+	regaddr = LSM303AGR_CTRL_REG1_A_REG;
+	Write8(&regaddr, 1, ctrl);
+
+	AccelSensor::Range(r);
+
+	return AccelSensor::SamplingFrequency(f);
+}
+
+uint8_t AcceLsm303agr::Scale(uint8_t Value)
+{
+	uint8_t regaddr;
+	uint8_t d;
+	uint32_t f = 0;
+	uint8_t ctrl = 0;
+	uint8_t g = 0;
+
+	regaddr = LSM303AGR_CTRL_REG4_A_REG;
+	ctrl = Read8(&regaddr, 1) & ~(LSM303AGR_CTRL_REG4_A_FS_MASK);
+
+	if (Value < 3)
+	{
+		g = 2;
+		ctrl |= LSM303AGR_CTRL_REG4_A_FS_2G;
+	}
+	else if (Value < 6)
+	{
+		g = 4;
+		ctrl |= LSM303AGR_CTRL_REG4_A_FS_4G;
+	}
+	else if (Value < 12)
+	{
+		g = 8;
+		ctrl |= LSM303AGR_CTRL_REG4_A_FS_8G;
+	}
+	else
+	{
+		g = 16;
+		ctrl |= LSM303AGR_CTRL_REG4_A_FS_16G;
+	}
+
+	Write8(&regaddr, 1, ctrl);
+
+	return AccelSensor::Scale(g);
+}
 
 /**
- * @brief	Initialize magnetometer sensor.
+ * @brief	Set and enable filter cutoff frequency
  *
- * NOTE : Accelerometer must be initialized first prior to this one.
+ * Optional implementation can override this to implement filtering supported by the device
  *
- * @param 	Cfg		: Accelerometer configuration data
- * @param 	pIntrf	: Pointer to communication interface
- * @param 	pTimer	: Pointer to Timer use for time stamp
+ * @param	Freq : Filter frequency in mHz
  *
- * @return	true - Success
+ * @return	Actual frequency in mHz
  */
-bool MagLsm303agr::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer)
+uint32_t AcceLsm303agr::FilterFreq(uint32_t Freq)
 {
-	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
-		return false;
+	return AccelSensor::FilterFreq(Freq);
+}
+
+bool AcceLsm303agr::Enable()
+{
+	uint8_t regaddr;
+	uint8_t d;
+
+	regaddr = LSM303AGR_CTRL_REG1_A_REG;
+	d = Read8(&regaddr, 1);
+	Write8(&regaddr, 1, d | LSM303AGR_CTRL_REG1_A_XEN | LSM303AGR_CTRL_REG1_A_YEN | LSM303AGR_CTRL_REG1_A_ZEN);
 
 	return true;
+}
+void AcceLsm303agr::Disable()
+{
+	uint8_t regaddr;
+	uint8_t d;
+
+	regaddr = LSM303AGR_CTRL_REG1_A_REG;
+	d = Read8(&regaddr, 1) & ~(LSM303AGR_CTRL_REG1_A_XEN | LSM303AGR_CTRL_REG1_A_YEN | LSM303AGR_CTRL_REG1_A_ZEN);
+	Write8(&regaddr, 1, d);
+}
+
+void AcceLsm303agr::Reset()
+{
+
+}
+
+void AcceLsm303agr::PowerOff()
+{
+	uint8_t regaddr;
+	uint8_t d;
+
+	regaddr = LSM303AGR_CTRL_REG1_A_REG;
+	Write8(&regaddr, 1, 0);
 }
 
 /**
@@ -155,7 +288,7 @@ bool MagLsm303agr::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Tim
  *
  * @return	Actual number of bytes read
  */
-int AccLsm303agr::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
+int AcceLsm303agr::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
@@ -186,7 +319,7 @@ int AccLsm303agr::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int Bu
  *
  * @return	Actual number of bytes written
  */
-int AccLsm303agr::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int AcceLsm303agr::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
@@ -201,5 +334,27 @@ int AccLsm303agr::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int D
 	}
 
 	return retval;
+}
+
+void AcceLsm303agr::IntHandler()
+{
+
+}
+
+/**
+ * @brief	Initialize magnetometer sensor.
+ *
+ * NOTE : Accelerometer must be initialized first prior to this one.
+ *
+ * @param 	Cfg		: Accelerometer configuration data
+ * @param 	pIntrf	: Pointer to communication interface
+ * @param 	pTimer	: Pointer to Timer use for time stamp
+ *
+ * @return	true - Success
+ */
+bool MagLsm303agr::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer)
+{
+
+	return true;
 }
 

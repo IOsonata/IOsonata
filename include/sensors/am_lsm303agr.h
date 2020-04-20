@@ -334,7 +334,7 @@ SOFTWARE.
 
 
 // Accel, Mag, Temperature
-class AccLsm303agr : public AccelSensor, public TempSensor  {
+class AcceLsm303agr : public AccelSensor, public TempSensor  {
 public:
 	/**
 	 * @brief	Initialize accelerometer sensor.
@@ -348,20 +348,31 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	virtual uint16_t Scale(uint16_t Value) { return 0; }			// Accel
-
 	virtual bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint8_t Scale(uint8_t Value);
+
+	/**
+	 * @brief	Set and enable filter cutoff frequency
+	 *
+	 * Optional implementation can override this to implement filtering supported by the device
+	 *
+	 * @param	Freq : Filter frequency in mHz
+	 *
+	 * @return	Actual frequency in mHz
+	 */
+	virtual uint32_t FilterFreq(uint32_t Freq);
+
 
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
+	virtual void PowerOff();
 
 	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
 
 	bool UpdateData() { return false; }
-
-	virtual bool StartSampling() { return false; }
 
 	/**
 	 * @brief	Read device's register/memory block.
@@ -395,12 +406,15 @@ public:
 	 */
 	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
 
-private:
-	// Default base initialization. Does detection and set default config for all sensor.
-	// All sensor init must call this first prio to initializing itself
-	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
+	/**
+	 * @brief	Interrupt handler (optional)
+	 *
+	 * Sensor that supports interrupt can implement this to handle interrupt.
+	 * Use generic DEVEVTCB callback and DEV_EVT to send event to user application
+	 */
+	virtual void IntHandler();
 
-	bool vbInitialized;
+private:
 };
 
 class MagLsm303agr : public MagSensor  {
@@ -430,11 +444,6 @@ public:
 	virtual bool StartSampling() { return false; }
 
 private:
-	// Default base initialization. Does detection and set default config for all sensor.
-	// All sensor init must call this first prio to initializing itself
-	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
-
-	bool vbInitialized;
 };
 
 

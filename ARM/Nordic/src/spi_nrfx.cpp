@@ -6,6 +6,8 @@
 Note: SPI device are shared with other device such as I2C therefore be careful
 not to use the same device number on an other device.
 
+For 3 wire support : Set both MISO & MOSI to the same pin.
+
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2016
 
