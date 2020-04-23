@@ -159,11 +159,11 @@ SOFTWARE.
 #define LSM303AGR_FIFO_CTRL_FTH_MASK							(0x1F<<0)	//!< Fifo threshold
 #define LSM303AGR_FIFO_CTRL_TR_INT1								(0<<5)		//!< Trigger selection on INT1
 #define LSM303AGR_FIFO_CTRL_TR_INT2								(1<<5)		//!< Trigger selection on INT2
-#define LSM303AGR_FIFO_CTRL_FMODE_MASK							(3<<6)		//!< Fifo mode
-#define LSM303AGR_FIFO_CTRL_FMODE_BYPASS						(0<<6)
-#define LSM303AGR_FIFO_CTRL_FMODE_FIFO_MODE						(1<<6)
-#define LSM303AGR_FIFO_CTRL_FMODE_STREAM_MODE					(2<<6)
-#define LSM303AGR_FIFO_CTRL_FMODE_STREAM_TO_FIFO_MODE			(3<<6)
+#define LSM303AGR_FIFO_CTRL_FM_MASK								(3<<6)		//!< Fifo mode
+#define LSM303AGR_FIFO_CTRL_FM_BYPASS							(0<<6)		//!< Bypass
+#define LSM303AGR_FIFO_CTRL_FM_FIFO								(1<<6)		//!< FIFO mode
+#define LSM303AGR_FIFO_CTRL_FM_STREAM							(2<<6)		//!< Stream mode
+#define LSM303AGR_FIFO_CTRL_FM_STREAM_TO_FIFO					(3<<6)		//!< Stream-to-FIFO mode
 
 #define LSM303AGR_FIFO_SRC_REG				0x2F
 #define LSM303AGR_FIFO_SRC_FSS_MASK								(0x1F<<0)	//!< Fifo stored data level
@@ -334,7 +334,7 @@ SOFTWARE.
 
 
 // Accel, Mag, Temperature
-class AcceLsm303agr : public AccelSensor, public TempSensor  {
+class AccelLsm303agr : public AccelSensor, public TempSensor  {
 public:
 	/**
 	 * @brief	Initialize accelerometer sensor.
@@ -372,7 +372,7 @@ public:
 	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
 
-	bool UpdateData() { return false; }
+	bool UpdateData();
 
 	/**
 	 * @brief	Read device's register/memory block.
@@ -413,8 +413,10 @@ public:
 	 * Use generic DEVEVTCB callback and DEV_EVT to send event to user application
 	 */
 	virtual void IntHandler();
+	virtual bool StartSampling() { return true; }
 
 private:
+	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
 };
 
 class MagLsm303agr : public MagSensor  {

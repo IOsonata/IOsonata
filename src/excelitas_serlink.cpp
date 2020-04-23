@@ -151,9 +151,9 @@ int DirectLinkRead(DIRECTLINK_DEV *pDev, int NbBits, uint8_t *pBuf)
 	return (NbBits + 7) >> 3;
 }
 
-uint32_t DirectLinkRead2(DIRECTLINK_DEV *pDev, int NbBits)
+uint64_t DirectLinkRead2(DIRECTLINK_DEV *pDev, int NbBits)
 {
-	uint32_t val = 0;
+	uint64_t val = 0;
 
 	IOPinSet(pDev->Pin.PortNo, pDev->Pin.PinNo);
 	IOPinSetDir(pDev->Pin.PortNo, pDev->Pin.PinNo, IOPINDIR_OUTPUT);
@@ -168,7 +168,7 @@ uint32_t DirectLinkRead2(DIRECTLINK_DEV *pDev, int NbBits)
 		IOPinSetDir(pDev->Pin.PortNo, pDev->Pin.PinNo, IOPINDIR_INPUT);
 		uint32_t d = IOPinRead(pDev->Pin.PortNo, pDev->Pin.PinNo);
 		usDelay(10);
-		val <<= 1;
+		val <<= 1ULL;
 		val |= IOPinRead(pDev->Pin.PortNo, pDev->Pin.PinNo) & d;;
 	}
 

@@ -39,9 +39,16 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "device_intrf.h"
 
-#define EXCELITAS_PYRO_2592		2592U
-#define EXCELITAS_PYRO_2792		2792U
+#define EXCELITAS_PYD2592		2592U
+#define EXCELITAS_PYD2792		2792U
 
+#define EXCELITAS_PYD2592_DATA_SIZE			40	//!< 2592 data size 40 bits
+#define EXCELITAS_PYD2592_REG_BITPOS		0ULL
+#define EXCELITAS_PYD2592_REG_MASK			0x1FFFFFFULL
+#define EXCELITAS_PYD2592_ADCCOUNT_BITPOS	25ULL
+#define EXCELITAS_PYD2592_ADCCOUNT_MASK		(0x3FFFULL << EXCELITAS_PYD2592_ADCCOUNT_BITPOS)
+#define EXCELITAS_PYD2592_OUTRANGE_BITPOS	39ULL
+#define EXCELITAS_PYD2592_OUTRANGE_MASK		(1ULL << EXCELITAS_PYD2592_OUTRANGE_BITPOS)
 
 typedef void (*INTHANDLER)();
 
@@ -90,6 +97,16 @@ typedef struct __Excel_Serial {
 	int NbBits;
 } EXCELSERDEV;
 
+typedef union __Pyd2592_Data {
+	uint32_t Timestamp;				//!< usec timestamp
+	uint64_t Val;					//!< Register value
+	struct {
+		uint32_t CfgReg:25;			//!< Register settings
+		int32_t AdcCount:14;		//!< ADC counts
+		uint32_t OutRange:1;		//!< 0: PIR was reset 1: Normal operation
+	};
+} PYD2592_DATA;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -100,6 +117,7 @@ bool ExcelitasIntrfInit(EXCELSERDEV * const pDev, EXCELSER_CFG * const pCFG);
 
 bool DirectLinkInit(DIRECTLINK_DEV * const pDev, int PortNo, int PinNo, int PinOp);
 int DirectLinkRead(DIRECTLINK_DEV * const pDev, int NbBits, uint8_t * const pBuf);
+uint64_t DirectLinkRead2(DIRECTLINK_DEV *pDev, int NbBits);
 bool SerialInInit(SERIALIN_DEV *const pDev, int PortNo, int PinNo, int PinOp);
 void SerialIn(SERIALIN_DEV *pDev, uint32_t Data, int NbBits);
 
