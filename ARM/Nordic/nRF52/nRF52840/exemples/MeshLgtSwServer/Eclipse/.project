@@ -40,11 +40,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.c</locationURI>
 		</link>
 		<link>
-			<name>src/micro-ecc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -55,12 +50,12 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/nrf_mesh_config_app.h</locationURI>
 		</link>
 		<link>
-			<name>src/micro-ecc/uECC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
+			<name>src/nRF5_SDK/examples</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/examples</name>
+			<name>src/nRF5_SDK/external</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -70,7 +65,17 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/external/rtt</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/examples/common/src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/external/rtt/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -88,6 +93,11 @@
 			<name>src/nRF5_SDK/examples/common/src/app_onoff.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_onoff.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/src/app_transition.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_transition.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/assertion_handler_weak.c</name>
@@ -120,9 +130,24 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/mesh_provisionee.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/examples/common/src/rtt_input.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/rtt_input.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/examples/common/src/simple_hal.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/simple_hal.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/external/rtt/src/SEGGER_RTT.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/external/rtt/src/SEGGER_RTT.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/external/rtt/src/SEGGER_RTT_printf.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/external/rtt/src/SEGGER_RTT_printf.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -4,7 +4,7 @@
 
 @brief	Motion sensor demo
 
-	This application demo shows UART Rx/Tx over BLE custom service using EHAL library.
+	This application demo shows how to use Motion sensors.
 
 @author	Hoang Nguyen Hoan
 @date	Dec. 21, 2018
