@@ -301,8 +301,6 @@ bool nRFxSPIStartRx(DEVINTRF * const pDev, int DevCs)
 		return false;
 
 	dev->pSpiDev->CurDevCs = DevCs;
-	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
-			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
 
 	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
 	{
@@ -314,6 +312,9 @@ bool nRFxSPIStartRx(DEVINTRF * const pDev, int DevCs)
 		dev->pReg->PSELMOSI = -1;
 #endif
 	}
+
+	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
+			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
 
 	return true;
 }
@@ -390,15 +391,6 @@ void nRFxSPIStopRx(DEVINTRF * const pDev)
 		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PortNo,
 				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PinNo);
 	}
-
-	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
-	{
-#ifdef SPIM_PRESENT
-		dev->pDmaReg->PSEL.MOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
-#else
-		dev->pReg->PSELMOSI = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
-#endif
-	}
 }
 
 // Initiate transmit
@@ -413,8 +405,6 @@ bool nRFxSPIStartTx(DEVINTRF * const pDev, int DevCs)
 		return false;
 
 	dev->pSpiDev->CurDevCs = DevCs;
-	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
-			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
 
     if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
     {
@@ -426,6 +416,10 @@ bool nRFxSPIStartTx(DEVINTRF * const pDev, int DevCs)
         dev->pReg->PSELMISO = -1;
 #endif
     }
+
+	IOPinClear(dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PortNo,
+			   dev->pSpiDev->Cfg.pIOPinMap[DevCs + SPI_CS_IOPIN_IDX].PinNo);
+
 	return true;
 }
 
