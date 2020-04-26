@@ -112,6 +112,10 @@ void BleSrvcEvtHandler(BLESRVC *pSrvc, ble_evt_t *pBleEvt)
 
         case BLE_GAP_EVT_DISCONNECTED:
         	pSrvc->ConnHdl = BLE_CONN_HANDLE_INVALID;
+        	for (int i = 0; i < pSrvc->NbChar; i++)
+        	{
+        		pSrvc->pCharArray[i].bNotify = false;
+        	}
             break;
 
         case BLE_GATTS_EVT_WRITE:
@@ -164,7 +168,9 @@ void BleSrvcEvtHandler(BLESRVC *pSrvc, ble_evt_t *pBleEvt)
 							}
 							// Set notify callback
 							if (pSrvc->pCharArray[i].SetNotifCB)
+							{
 								pSrvc->pCharArray[i].SetNotifCB(pSrvc, pSrvc->pCharArray[i].bNotify);
+							}
 						}
 						else if ((p_evt_write->handle == pSrvc->pCharArray[i].Hdl.value_handle) &&
 								 (pSrvc->pCharArray[i].WrCB != NULL))
@@ -409,6 +415,7 @@ uint32_t BleSrvcInit(BLESRVC *pSrvc, const BLESRVC_CFG *pCfg)
         {
             return err;
         }
+        pSrvc->pCharArray[i].bNotify = false;
     }
 
     pSrvc->pLongWrBuff = pCfg->pLongWrBuff;
