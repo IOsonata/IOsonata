@@ -24,7 +24,7 @@ For desktop pc version of the library, native compiler and IDE are used.  XCode 
 * Segger Stusio : Strip down version of CrossWorks.  Even less functional. Only supports jlink, cannot be used with any other jtag. SES is not recommended for heavy firmware development. 
 
 --- 
-### external vendors' SDK and library required :
+### Require install external SDK and libraries :
  
  
 [nRF5_SDK](https://developer.nordicsemi.com)  : Nordic nRF5x Bluetooth Low Energy
@@ -35,7 +35,8 @@ For desktop pc version of the library, native compiler and IDE are used.  XCode 
 
 [BSEC](https://www.bosch-sensortec.com/bst/products/all_products/bsec) : Bosch Sensortec Environmental Cluster (BSEC) Software for #BME680 environmental sensor.  BSEC is needed for calculating Air Quality Index.  Go to https://www.bosch-sensortec.com/bst/products/all_products/bsec at the end of the page.  Select checkbox to accept license terms to download.  Unzip the the downloaded file. Rename the extracted folder BSEC and copy the whole folder to external as indicated in the folder tree bellow.  
  
- 
+[LWIP](https://savannah.nongnu.org/projects/lwip/) : A Lightweight TCP/IP stack. This library is require for IoT network connectivity over Ethernet, Wifi, LTE, ... Download it via this link https://download.savannah.nongnu.org/releases/lwip/. Rename the extracted folder as lwip and copy it to external.
+
 --- 
 
 <p align="center"> 
@@ -76,6 +77,7 @@ The way the IOsonata folder is structure is simple.  The deeper you go inside th
  |   |-- Invn            - Invensense SmartMotion Driver (download https://www.invensense.com/developers) 
  |   |   |-- Devices
  |   |   |...
+ |   |-- lwip            - Lightweight TCP/IP stack (download https://download.savannah.nongnu.org/releases/lwip/)
  |   |-- Others as require
  |   |...
  |   |
