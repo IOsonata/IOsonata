@@ -81,6 +81,8 @@ typedef enum __Dev_Intrf_Type {
     DEVINTRF_TYPE_UART,         //!< UART or Serial port
     DEVINTRF_TYPE_USB,          //!< USB
     DEVINTRF_TYPE_WIFI,         //!< Wifi
+	DEVINTRF_TYPE_I2S,			//!< I2S
+	DEVINTRF_TYPE_PDM,			//!< PDM
 } DEVINTRF_TYPE;
 
 /// @brief	Device Interface forward data structure type definition.

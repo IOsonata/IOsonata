@@ -96,9 +96,6 @@ bool AccelLsm303agr::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * 
  */
 bool AccelLsm303agr::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (pIntrf == NULL)
-		return false;
-
 	if (vbValid == false)
 	{
 		if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
@@ -112,18 +109,13 @@ bool AccelLsm303agr::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf
 	uint8_t userctrl = 0;
 	uint8_t mst = 0;
 
-	if (Cfg.IntHandler)
-	{
-		vIntHandler = Cfg.IntHandler;
-	}
-
 	// High res 12bits default
 	regaddr = LSM303AGR_CTRL_REG4_A_REG;
 	d = Read8(&regaddr, 1) | LSM303AGR_CTRL_REG4_A_HR;
 	Write8(&regaddr, 1, d);
 
-
-	AccelSensor::vData.Range = AccelSensor::Range((1<<12)-1);
+	vRShift = 4;
+	AccelSensor::vData.Range = AccelSensor::Range((1<<11)-1);
 
 	Scale(Cfg.Scale);
 	uint32_t f = SamplingFrequency(Cfg.Freq);
@@ -132,6 +124,8 @@ bool AccelLsm303agr::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf
 
 	if (Cfg.bInter)
 	{
+		vIntHandler = Cfg.IntHandler;
+
 		regaddr = LSM303AGR_CTRL_REG3_A_REG;
 		Write8(&regaddr, 1, LSM303AGR_CTRL_REG3_A_I1_OVERRUN | LSM303AGR_CTRL_REG3_A_I1_WTM);
 
@@ -209,7 +203,8 @@ bool AccelLsm303agr::Init(const TEMPSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf,
 uint32_t AccelLsm303agr::SamplingFrequency(uint32_t Freq)
 {
 	uint8_t regaddr;
-	uint32_t r = (1 << 12) - 1;
+	uint32_t r = (1 << 11) - 1;
+	uint32_t tr = 511;
 	uint32_t f = 0;
 	uint8_t ctrl = 0;
 	uint8_t ctrl4 = 0;
@@ -273,13 +268,17 @@ uint32_t AccelLsm303agr::SamplingFrequency(uint32_t Freq)
 	{
 		f = 1620000;
 		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_1620HZ | LSM303AGR_CTRL_REG1_A_LPEN;
-		r = 255;
+		tr = r = 127;
+		vRShift = 8;
+
 	}
 	else
 	{
 		f = 5376000;
 		ctrl |= LSM303AGR_CTRL_REG1_A_ODR_1344_5376HZ | LSM303AGR_CTRL_REG1_A_LPEN;
-		r = 255;
+		tr = r = 127;
+		vRShift = 8;
+
 	}
 
 	regaddr = LSM303AGR_CTRL_REG4_A_REG;
@@ -289,6 +288,8 @@ uint32_t AccelLsm303agr::SamplingFrequency(uint32_t Freq)
 	Write8(&regaddr, 1, ctrl);
 
 	AccelSensor::Range(r);
+	AccelSensor::vData.Range = r;
+	TempSensor::Range(tr);
 
 	return AccelSensor::SamplingFrequency(f);
 }
@@ -326,6 +327,7 @@ uint8_t AccelLsm303agr::Scale(uint8_t Value)
 	}
 
 	Write8(&regaddr, 1, ctrl);
+	AccelSensor::vData.Scale = g;
 
 	return AccelSensor::Scale(g);
 }
@@ -370,7 +372,7 @@ bool AccelLsm303agr::Enable()
 	{
 		regaddr = LSM303AGR_CTRL_REG5_A_REG;
 		d = Read8(&regaddr, 1);
-		//Write8(&regaddr, 1, d | LSM303AGR_CTRL_REG5_A_FIFO_EN);
+		Write8(&regaddr, 1, d | LSM303AGR_CTRL_REG5_A_FIFO_EN);
 
 		regaddr = LSM303AGR_FIFO_CTRL_REG;
 		d = Read8(&regaddr, 1) & ~(LSM303AGR_FIFO_CTRL_FTH_MASK | LSM303AGR_FIFO_CTRL_FM_MASK);
@@ -384,8 +386,8 @@ bool AccelLsm303agr::Enable()
 	else
 	{
 		regaddr = LSM303AGR_CTRL_REG5_A_REG;
-		d = Read8(&regaddr, 1) & LSM303AGR_CTRL_REG5_A_FIFO_EN;
-		//Write8(&regaddr, 1, d);
+		d = Read8(&regaddr, 1) & ~LSM303AGR_CTRL_REG5_A_FIFO_EN;
+		Write8(&regaddr, 1, d);
 
 		regaddr = LSM303AGR_FIFO_CTRL_REG;
 		d = Read8(&regaddr, 1) & ~(LSM303AGR_FIFO_CTRL_FTH_MASK | LSM303AGR_FIFO_CTRL_FM_MASK);
@@ -487,10 +489,16 @@ bool AccelLsm303agr::UpdateData()
 		// New data avail
 		AccelSensor::vData.Timestamp = ts;
 
-		//for (int i = 0; i < (fstatus & 0x1f); i++)
+		for (int i = 0; i < (fstatus & 0x1f); i++)
 		{
 			regaddr = LSM303AGR_OUT_X_L_A_REG | 0x40;
 			Read(&regaddr, 1, (uint8_t*)AccelSensor::vData.Val, 6);
+		}
+
+		// Right justify to get correct value
+		for (int i = 0; i < 3; i++)
+		{
+			AccelSensor::vData.Val[i] >>= vRShift;
 		}
 	}
 
@@ -541,15 +549,19 @@ int AccelLsm303agr::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int 
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
-		((SPI*)vpIntrf)->Phy(SPIPHY_3WIRE);
+//		((SPI*)vpIntrf)->Phy(SPIPHY_3WIRE);
+		*pCmdAddr &= 0x3F;
+		if (BuffLen > 1)
+		{
+			*pCmdAddr |= 0x40;
+		}
 	}
-
 	int retval = Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 
-	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+/*	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		((SPI*)vpIntrf)->Phy(SPIPHY_NORMAL);
-	}
+	}*/
 
 	return retval;
 }
@@ -572,15 +584,20 @@ int AccelLsm303agr::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
-		((SPI*)vpIntrf)->Phy(SPIPHY_3WIRE);
+	//	((SPI*)vpIntrf)->Phy(SPIPHY_3WIRE);
+		*pCmdAddr &= 0x3F;
+		if (DataLen > 1)
+		{
+			*pCmdAddr |= 0x40;
+		}
 	}
 
 	int retval = Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 
-	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+/*	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		((SPI*)vpIntrf)->Phy(SPIPHY_NORMAL);
-	}
+	}*/
 
 	return retval;
 }
