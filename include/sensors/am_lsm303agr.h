@@ -417,6 +417,8 @@ public:
 
 private:
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
+
+	int32_t vRShift;
 };
 
 class MagLsm303agr : public MagSensor  {
@@ -446,6 +448,7 @@ public:
 	virtual bool StartSampling() { return false; }
 
 private:
+	int32_t vRShift;
 };
 
 
