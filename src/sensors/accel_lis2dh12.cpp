@@ -166,8 +166,6 @@ bool AccelLis2dh12::Init(const TEMPSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, 
 		}
 	}
 
-	TempSensor::Type(SENSOR_TYPE_TEMP);
-
 	uint8_t regaddr = LIS2DH12_TEMP_CFG_REG;
 	Write8(&regaddr, 1, LIS2DH12_TEMP_CFG_EN);
 

@@ -504,8 +504,8 @@ void nRFxSPIStopTx(DEVINTRF * const pDev)
     if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
     {
 #ifdef SPIM_PRESENT
-        dev->pDmaReg->PSEL.MOSI = -1;
         dev->pDmaReg->PSEL.MISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
+        dev->pDmaReg->PSEL.MOSI = -1;
 #else
         dev->pReg->PSELMOSI = -1;
         dev->pReg->PSELMISO = (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PinNo & 0x1f) | (dev->pSpiDev->Cfg.pIOPinMap[SPI_MISO_IOPIN_IDX].PortNo << 5);
