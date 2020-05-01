@@ -160,7 +160,8 @@ uint8_t g_LWrBuffer[512];
 /// Service definition
 const BLESRVC_CFG s_UartSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
-	.UuidBase = BLE_UART_UUID_BASE,			// Base UUID
+	.UuidBase = {BLE_UART_UUID_BASE,},		// Base UUID
+	1,
 	.UuidSvc = BLE_UART_UUID_SERVICE,		// Service UUID
 	.NbChar = s_BleUartNbChar,				// Total number of characteristics for the service
 	.pCharArray = g_UartChars,				// Pointer a an array of characteristic

@@ -129,7 +129,8 @@ uint8_t g_LWrBuffer[512];
 
 const BLESRVC_CFG s_UartSrvcCfg = {
 	BLESRVC_SECTYPE_NONE,	    // Secure or Open service/char
-	BLUEIO_UUID_BASE,           // Base UUID
+	{BLUEIO_UUID_BASE,},        // Base UUID
+	1,
 	BLUEIO_UUID_UART_SERVICE,   // Service UUID
 	2,                          // Total number of characteristics for the service
 	g_UartChars,                // Pointer a an array of characteristic
