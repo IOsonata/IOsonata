@@ -332,6 +332,7 @@ SOFTWARE.
 #define LSM303AGR_OUTZ_L_REG_M_REG				0x6C
 #define LSM303AGR_OUTZ_H_REG_M_REG				0x6D
 
+#define LSM303AGR_MAG_SENSITTIVITY				150		// nanoTesla per bit
 
 // Accel, Mag, Temperature
 class AccelLsm303agr : public AccelSensor, public TempSensor  {
@@ -418,7 +419,7 @@ public:
 private:
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
 
-	int32_t vRShift;
+	int32_t vRShift;	//!< Data are left justify. This var contains shift right value to right justify
 };
 
 class MagLsm303agr : public MagSensor  {
@@ -435,17 +436,25 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	uint32_t SamplingFrequency(uint32_t Freq);
 
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
 
+	bool UpdateData();
+
 	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return MagSensor::Read(Data); }
 	virtual bool Read(MAGSENSOR_DATA &Data) { return MagSensor::Read(Data); }
 
-	bool UpdateData() { return false; }
-
-	virtual bool StartSampling() { return false; }
+	/**
+	 * @brief	Interrupt handler (optional)
+	 *
+	 * Sensor that supports interrupt can implement this to handle interrupt.
+	 * Use generic DEVEVTCB callback and DEV_EVT to send event to user application
+	 */
+	virtual void IntHandler();
+	virtual bool StartSampling() { return true; }
 
 private:
 	int32_t vRShift;

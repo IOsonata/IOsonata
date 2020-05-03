@@ -71,6 +71,8 @@ bool AccelLsm303agr::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * 
 	// Read chip id
 	regaddr = LSM303AGR_WHO_AM_I_A_REG;
 	d = Read8(&regaddr, 1);
+	d = Read8(&regaddr, 1);
+	d = Read8(&regaddr, 1);
 
 	if (d != LSM303AGR_WHO_AM_I_A_ID)
 	{
@@ -368,30 +370,23 @@ bool AccelLsm303agr::Enable()
 	d = Read8(&regaddr, 1);
 	Write8(&regaddr, 1, d | LSM303AGR_CTRL_REG1_A_XEN | LSM303AGR_CTRL_REG1_A_YEN | LSM303AGR_CTRL_REG1_A_ZEN);
 
+	regaddr = LSM303AGR_CTRL_REG5_A_REG;
+	d = Read8(&regaddr, 1);
+	Write8(&regaddr, 1, d | LSM303AGR_CTRL_REG5_A_FIFO_EN);
+
+	regaddr = LSM303AGR_FIFO_CTRL_REG;
+	d = Read8(&regaddr, 1) & ~(LSM303AGR_FIFO_CTRL_FTH_MASK | LSM303AGR_FIFO_CTRL_FM_MASK);
+
+	// stop fifo first
+	Write8(&regaddr, 1, d);
+
 	if (vbIntEn)
 	{
-		regaddr = LSM303AGR_CTRL_REG5_A_REG;
-		d = Read8(&regaddr, 1);
-		Write8(&regaddr, 1, d | LSM303AGR_CTRL_REG5_A_FIFO_EN);
-
-		regaddr = LSM303AGR_FIFO_CTRL_REG;
-		d = Read8(&regaddr, 1) & ~(LSM303AGR_FIFO_CTRL_FTH_MASK | LSM303AGR_FIFO_CTRL_FM_MASK);
-
-		// stop fifo first
-		Write8(&regaddr, 1, d);
-
 		d |= LSM303AGR_FIFO_CTRL_FM_STREAM | 1;
 		Write8(&regaddr, 1, d);
 	}
 	else
 	{
-		regaddr = LSM303AGR_CTRL_REG5_A_REG;
-		d = Read8(&regaddr, 1) & ~LSM303AGR_CTRL_REG5_A_FIFO_EN;
-		Write8(&regaddr, 1, d);
-
-		regaddr = LSM303AGR_FIFO_CTRL_REG;
-		d = Read8(&regaddr, 1) & ~(LSM303AGR_FIFO_CTRL_FTH_MASK | LSM303AGR_FIFO_CTRL_FM_MASK);
-		Write8(&regaddr, 1, d);
 		d |= LSM303AGR_FIFO_CTRL_FM_STREAM | 6;
 		Write8(&regaddr, 1, d);
 	}
@@ -402,6 +397,7 @@ bool AccelLsm303agr::Enable()
 
 	return true;
 }
+
 void AccelLsm303agr::Disable()
 {
 	uint8_t regaddr;
@@ -549,21 +545,14 @@ int AccelLsm303agr::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int 
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
-//		((SPI*)vpIntrf)->Phy(SPIPHY_3WIRE);
 		*pCmdAddr &= 0x3F;
 		if (BuffLen > 1)
 		{
 			*pCmdAddr |= 0x40;
 		}
 	}
-	int retval = Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 
-/*	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
-	{
-		((SPI*)vpIntrf)->Phy(SPIPHY_NORMAL);
-	}*/
-
-	return retval;
+	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 }
 
 /**
@@ -584,7 +573,6 @@ int AccelLsm303agr::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
-	//	((SPI*)vpIntrf)->Phy(SPIPHY_3WIRE);
 		*pCmdAddr &= 0x3F;
 		if (DataLen > 1)
 		{
@@ -592,14 +580,7 @@ int AccelLsm303agr::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int
 		}
 	}
 
-	int retval = Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
-
-/*	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
-	{
-		((SPI*)vpIntrf)->Phy(SPIPHY_NORMAL);
-	}*/
-
-	return retval;
+	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 }
 
 void AccelLsm303agr::IntHandler()
@@ -655,7 +636,178 @@ void AccelLsm303agr::IntHandler()
  */
 bool MagLsm303agr::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer)
 {
+	if (pIntrf == NULL)
+	{
+		return false;
+	}
+
+	uint8_t regaddr;
+	uint8_t d;
+
+	Interface(pIntrf);
+	DeviceAddress(Cfg.DevAddr);
+
+	if (pTimer != NULL)
+	{
+		vpTimer = pTimer;
+	}
+
+	Reset();
+
+	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI || Cfg.DevAddr != LSM303AGR_MAG_I2C_DEVADDR)
+	{
+		regaddr = LSM303AGR_CFG_REG_C_M_REG;
+		Write8(&regaddr, 1, LSM303AGR_CFG_REG_C_M_I2C_DIS);
+	}
+
+	// Read chip id
+	regaddr = LSM303AGR_WHO_AM_I_M_REG;
+	d = Read8(&regaddr, 1);
+
+	if (d != LSM303AGR_WHO_AM_I_M_ID)
+	{
+		return false;
+	}
+
+	DeviceID(d);
+	Valid(true);
+
+	vSensitivity[0] = vSensitivity[1] = vSensitivity[2] = LSM303AGR_MAG_SENSITTIVITY;
+
+	ClearCalibration();
+
+	SamplingFrequency(Cfg.Freq);
+
+	regaddr = LSM303AGR_CFG_REG_B_M_REG;
+	Write8(&regaddr, 1,  LSM303AGR_CFG_REG_B_M_LPF | LSM303AGR_CFG_REG_B_M_OFF_CANC);
+
+	regaddr = LSM303AGR_OFFSET_X_REG_L_M_REG;
+	int16_t dta[3];
+	MagSensor::Read(&regaddr, 1, (uint8_t*)dta, 6);
+
+	printf("Offset %d, %d, %d\n", dta[0], dta[1], dta[2]);
+
+	regaddr = LSM303AGR_INT_CTRL_REG_M_REG;
+	vbIntEn = Cfg.bInter;
+
+	if (vbIntEn)
+	{
+		Write8(&regaddr, 1, LSM303AGR_INT_CTRL_REG_M_IEN | LSM303AGR_INT_CTRL_REG_M_IEL |
+							LSM303AGR_INT_CTRL_REG_M_IEA | LSM303AGR_INT_CTRL_REG_M_ZIEN |
+							LSM303AGR_INT_CTRL_REG_M_YIEN | LSM303AGR_INT_CTRL_REG_M_XIEN);
+		regaddr = LSM303AGR_INT_THS_L_REG_M_REG;
+		Write16(&regaddr, 1, 1);
+	}
+	else
+	{
+		Write8(&regaddr, 1, 0);
+	}
+
+	Enable();
 
 	return true;
+}
+
+uint32_t MagLsm303agr::SamplingFrequency(uint32_t Freq)
+{
+	uint8_t regaddr;
+	uint8_t d;
+	uint32_t f = 0;
+	uint8_t cfg = 3;
+
+	cfg = Read8(&regaddr, 1);
+
+	if (Freq < 15)
+	{
+		f = 10000;
+		cfg |= LSM303AGR_CTRL_REG_A_M_ODR_10HZ;
+	}
+	else if (Freq < 30)
+	{
+		f = 20000;
+		cfg |= LSM303AGR_CTRL_REG_A_M_ODR_20HZ;
+	}
+	else if (Freq < 70)
+	{
+		f = 50000;
+		cfg |= LSM303AGR_CTRL_REG_A_M_ODR_50HZ;
+	}
+	else if (Freq < 125)
+	{
+		f = 100000;
+		cfg |= LSM303AGR_CTRL_REG_A_M_ODR_100HZ;
+	}
+	else
+	{
+		f = 150000;
+		cfg |= LSM303AGR_CTRL_REG_A_M_ODR_100HZ | LSM303AGR_CTRL_REG_A_M_LP;
+
+	}
+
+	Write8(&regaddr, 1, cfg);
+
+	return MagSensor::SamplingFrequency(f);
+}
+
+bool MagLsm303agr::Enable()
+{
+	uint8_t regaddr = LSM303AGR_CTRL_REG_A_M_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~LSM303AGR_CTRL_REG_A_M_MD_MASK;
+
+	Write8(&regaddr, 1, d);
+
+	return true;
+}
+
+void MagLsm303agr::Disable()
+{
+	uint8_t regaddr = LSM303AGR_CTRL_REG_A_M_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~LSM303AGR_CTRL_REG_A_M_MD_MASK;
+
+	Write8(&regaddr, 1, d | LSM303AGR_CTRL_REG_A_M_MD_IDLE);
+}
+
+void MagLsm303agr::Reset()
+{
+	uint8_t regaddr;
+	uint8_t d;
+
+	regaddr = LSM303AGR_CTRL_REG_A_M_REG;
+	d = Read8(&regaddr, 1);
+	Write8(&regaddr, 1, LSM303AGR_CTRL_REG_A_M_SOFT_RST | d);
+
+	do {
+		d = Read8(&regaddr, 1);
+	} while (d & LSM303AGR_CTRL_REG_A_M_SOFT_RST);
+}
+
+bool MagLsm303agr::UpdateData()
+{
+	uint8_t regaddr = LSM303AGR_STATUS_REG_M_REG;
+	uint8_t status = Read8(&regaddr, 1);
+
+	if (status)
+	{
+		if (vpTimer)
+		{
+			vData.Timestamp = vpTimer->uSecond();
+		}
+
+		regaddr = LSM303AGR_OUTX_L_REG_M_REG;
+		MagSensor::Read(&regaddr, 1, (uint8_t*)vData.Val, 6);
+	}
+
+	return true;
+}
+
+void MagLsm303agr::IntHandler()
+{
+	uint8_t regaddr = LSM303AGR_INT_SOURCE_REG_M_REG;
+	uint8_t status = Read8(&regaddr, 1);
+
+	if (status)
+	{
+		UpdateData();
+	}
 }
 
