@@ -682,10 +682,7 @@ bool MagLsm303agr::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Tim
 	Write8(&regaddr, 1,  LSM303AGR_CFG_REG_B_M_LPF | LSM303AGR_CFG_REG_B_M_OFF_CANC);
 
 	regaddr = LSM303AGR_OFFSET_X_REG_L_M_REG;
-	int16_t dta[3];
-	MagSensor::Read(&regaddr, 1, (uint8_t*)dta, 6);
-
-	printf("Offset %d, %d, %d\n", dta[0], dta[1], dta[2]);
+	MagSensor::Read(&regaddr, 1, (uint8_t*)vOffset, 6);
 
 	regaddr = LSM303AGR_INT_CTRL_REG_M_REG;
 	vbIntEn = Cfg.bInter;
@@ -795,6 +792,10 @@ bool MagLsm303agr::UpdateData()
 
 		regaddr = LSM303AGR_OUTX_L_REG_M_REG;
 		MagSensor::Read(&regaddr, 1, (uint8_t*)vData.Val, 6);
+
+		vData.X += vOffset[0];
+		vData.Y += vOffset[1];
+		vData.Z += vOffset[2];
 	}
 
 	return true;

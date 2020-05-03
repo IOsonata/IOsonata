@@ -457,7 +457,8 @@ public:
 	virtual bool StartSampling() { return true; }
 
 private:
-	int32_t vRShift;
+
+	int16_t vOffset[3];
 };
 
 
