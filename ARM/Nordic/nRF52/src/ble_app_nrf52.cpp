@@ -78,6 +78,7 @@ Modified by          Date              Description
 #include "iopinctrl.h"
 #include "ble_app.h"
 #include "ble_dev.h"
+#include "ble_service.h"
 
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
@@ -520,6 +521,13 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
             err_code = sd_ble_gap_phy_update(p_ble_evt->evt.gap_evt.conn_handle, &phys);
             APP_ERROR_CHECK(err_code);
         } break;
+
+        case BLE_GAP_EVT_PHY_UPDATE:
+        	if (p_ble_evt->evt.gap_evt.params.phy_update.status == 0)
+        	{
+        		printf("%x %x\n", p_ble_evt->evt.gap_evt.params.phy_update.rx_phy, p_ble_evt->evt.gap_evt.params.phy_update.tx_phy);
+        	}
+        	break;
 
         case BLE_GAP_EVT_DATA_LENGTH_UPDATE_REQUEST:
        {
@@ -1302,7 +1310,21 @@ void BleAppGattInit(void)
     if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
     {
     	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, g_BleAppData.MaxMtu);
-      APP_ERROR_CHECK(err_code);
+    	APP_ERROR_CHECK(err_code);
+
+    	if (g_BleAppData.MaxMtu > 23)
+    	{
+    		uint16_t data_length = ((uint8_t)g_BleAppData.MaxMtu - 3);
+    		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, data_length);
+    		APP_ERROR_CHECK(err_code);
+    	}
+      	ble_opt_t opt;
+
+      	memset(&opt, 0x00, sizeof(opt));
+      	opt.common_opt.conn_evt_ext.enable = 1;
+
+      	err_code = sd_ble_opt_set(BLE_COMMON_OPT_CONN_EVT_EXT, &opt);
+      	APP_ERROR_CHECK(err_code);
     }
 
     if (g_BleAppData.AppRole & BLEAPP_ROLE_CENTRAL)
@@ -1361,10 +1383,10 @@ bool BleAppStackInit(int CentLinkCount, int PeriLinkCount, bool bConnectable)
 
     // Configure the number of custom UUIDS.
     memset(&ble_cfg, 0, sizeof(ble_cfg));
-    if (CentLinkCount > 0)
-        ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 4;
-    else
-    	ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 2;
+    //if (CentLinkCount > 0)
+        ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = BLESVC_UUID_BASE_MAXCNT;
+    //else
+    //	ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 2;
     err_code = sd_ble_cfg_set(BLE_COMMON_CFG_VS_UUID, &ble_cfg, ram_start);
     APP_ERROR_CHECK(err_code);
 
