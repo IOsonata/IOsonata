@@ -96,6 +96,9 @@ typedef struct __BleDeviceInterf {
 } BLEINTRF;
 #pragma pack(pop)
 
+#define BLEINTRF_PKHDR_LEN			(sizeof(BLEINTRF_PKT) - 1)
+#define BLEINTRF_CFIFO_MEMSIZE(npk, pksize)	CFIFO_TOTAL_MEMSIZE(npk, pksize + BLEINTRF_PKHDR_LEN)
+
 #ifdef __cplusplus
 
 class BleIntrf : public DeviceIntrf {
