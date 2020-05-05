@@ -51,31 +51,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/base64.h</locationURI>
 		</link>
 		<link>
-			<name>include/ble_app.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app.h</locationURI>
-		</link>
-		<link>
-			<name>include/ble_app_central.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app_central.h</locationURI>
-		</link>
-		<link>
-			<name>include/ble_dev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_dev.h</locationURI>
-		</link>
-		<link>
-			<name>include/ble_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/ble_service.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_service.h</locationURI>
-		</link>
-		<link>
 			<name>include/blueio_board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/blueio_board.h</locationURI>
@@ -536,6 +511,31 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/utf8cvt.cpp</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/ble_app.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/ble_app_central.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app_central.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/ble_dev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/ble_dev.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/ble_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/ble_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/ble_service.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/ble_service.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bleadv_mandata.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
@@ -544,6 +544,11 @@
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/nrf_ble_gatt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/nrf_ble_gatt.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_device.h</name>
@@ -884,6 +889,11 @@
 			<name>src/bluetooth/blueio_blesrvc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/blueio_blesrvc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/nrf_ble_gatt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_ble_gatt.c</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/nrf_sdh.c</name>
