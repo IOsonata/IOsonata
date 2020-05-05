@@ -1314,8 +1314,7 @@ void BleAppGattInit(void)
 
     	if (g_BleAppData.MaxMtu > 23)
     	{
-    		uint16_t data_length = ((uint8_t)g_BleAppData.MaxMtu - 3);
-    		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, data_length);
+    		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, g_BleAppData.MaxMtu - 3);
     		APP_ERROR_CHECK(err_code);
     	}
       	ble_opt_t opt;
