@@ -44,7 +44,7 @@ Modified by          Date              Description
 #include "interrupt.h"
 
 #define NRFBLEINTRF_PACKET_SIZE		(NRF_BLE_MAX_MTU_SIZE - 3)// + sizeof(BLEINTRF_PKT) - 1)
-#define NRFBLEINTRF_CFIFO_SIZE		BLEINTRF_CFIFO_MEMSIZE(2, NRFBLEINTRF_PACKET_SIZE)
+#define NRFBLEINTRF_CFIFO_SIZE		BLEINTRF_CFIFO_TOTAL_MEMSIZE(2, NRFBLEINTRF_PACKET_SIZE)
 
 alignas(4) static uint8_t s_nRFBleRxFifoMem[NRFBLEINTRF_CFIFO_SIZE];
 alignas(4) static uint8_t s_nRFBleTxFifoMem[NRFBLEINTRF_CFIFO_SIZE];
