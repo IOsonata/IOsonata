@@ -1312,9 +1312,12 @@ void BleAppGattInit(void)
     	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, g_BleAppData.MaxMtu);
     	APP_ERROR_CHECK(err_code);
 
-    	if (g_BleAppData.MaxMtu > 23)
+    	if (g_BleAppData.MaxMtu >= 27)
     	{
-    		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, g_BleAppData.MaxMtu - 3);
+    		// 251 bytes is max dat length as per Bluetooth core spec 5, vol 6, part b, section 4.5.10
+    		// 27 - 251 bytes is hardcoded in nrf_ble_gat of the SDK.
+    		uint8_t dlen = g_BleAppData.MaxMtu > 251 ? 251: g_BleAppData.MaxMtu - 3;
+    		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
     		APP_ERROR_CHECK(err_code);
     	}
       	ble_opt_t opt;
