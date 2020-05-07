@@ -611,11 +611,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/nrf_ble_gatt.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/nrf_ble_gatt.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/nrf_mesh_config_app.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/nrf_mesh_config_app.h</locationURI>
@@ -994,11 +989,6 @@
 			<name>src/bluetooth/blueio_blesrvc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/blueio_blesrvc.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/nrf_ble_gatt.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_ble_gatt.c</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/nrf_sdh.c</name>
