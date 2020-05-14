@@ -63,6 +63,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #endif
 
+#define BLE_MAX_DATA_LEN				251
+
 typedef enum __BleApp_AdvMode {
 	BLEAPP_ADVMODE_IDLE,				//!< no connectable advertising is ongoing.
 	BLEAPP_ADVMODE_DIRECTED,			//!< Directed advertising attempts to connect to the most recently disconnected peer.
