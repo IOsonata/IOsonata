@@ -57,17 +57,17 @@ static void EInkIntrfEnable(DEVINTRF * const pDev)
 
 }
 
-static int EInkIntrfGetRate(DEVINTRF * const pDev)
+static uint32_t EInkIntrfGetRate(DEVINTRF * const pDev)
 {
 	return 1;
 }
 
-static int EInkIntrfSetRate(DEVINTRF * const pDev, int Rate)
+static uint32_t EInkIntrfSetRate(DEVINTRF * const pDev, uint32_t Rate)
 {
 	return 1;
 }
 
-static bool EInkIntrfStartRx(DEVINTRF * const pDev, int DevAddr)
+static bool EInkIntrfStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 {
 	EIINTRFDEV *dev = (EIINTRFDEV*)pDev->pDevData;
 
@@ -128,7 +128,7 @@ static void EInkIntrfStopRx(DEVINTRF * const pDev)
 	}
 }
 
-static bool EInkIntrfStartTx(DEVINTRF * const pDev, int DevAddr)
+static bool EInkIntrfStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
 {
 	EIINTRFDEV *dev = (EIINTRFDEV*)pDev->pDevData;
 

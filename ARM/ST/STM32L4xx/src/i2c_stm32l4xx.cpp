@@ -64,7 +64,7 @@ static STM32L4XX_I2CDEV s_STM32L4xxI2CDev[STM32L4XX_I2C_MAXDEV] = {
 	},
 };
 
-static int STM32L4xxI2CGetRate(DEVINTRF * const pDev)
+static uint32_t STM32L4xxI2CGetRate(DEVINTRF * const pDev)
 {
 	int rate = 0;
 
@@ -73,7 +73,7 @@ static int STM32L4xxI2CGetRate(DEVINTRF * const pDev)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-static int STM32L4xxI2CSetRate(DEVINTRF * const pDev, int DataRate)
+static uint32_t STM32L4xxI2CSetRate(DEVINTRF * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
@@ -102,7 +102,7 @@ static void STM32L4xxI2CPowerOff(DEVINTRF * const pDev)
 }
 
 // Initial receive
-static bool STM32L4xxI2CStartRx(DEVINTRF * const pDev, int DevCs)
+static bool STM32L4xxI2CStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
@@ -136,7 +136,7 @@ static void STM32L4xxI2CStopRx(DEVINTRF * const pDev)
 }
 
 // Initiate transmit
-static bool STM32L4xxI2CStartTx(DEVINTRF * const pDev, int DevCs)
+static bool STM32L4xxI2CStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
 

@@ -302,14 +302,14 @@ void nRFxI2CPowerOff(DEVINTRF * const pDev)
 #endif
 }
 
-int nRFxI2CGetRate(DEVINTRF * const pDev)
+uint32_t nRFxI2CGetRate(DEVINTRF * const pDev)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
 	return dev->pI2cDev->Rate;
 }
 
-int nRFxI2CSetRate(DEVINTRF * const pDev, int RateHz)
+uint32_t nRFxI2CSetRate(DEVINTRF * const pDev, uint32_t RateHz)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	uint32_t regval = 0;
@@ -332,7 +332,7 @@ int nRFxI2CSetRate(DEVINTRF * const pDev, int RateHz)
 	return dev->pI2cDev->Rate;
 }
 
-bool nRFxI2CStartRx(DEVINTRF * const pDev, int DevAddr)
+bool nRFxI2CStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
@@ -435,7 +435,7 @@ void nRFxI2CStopRx(DEVINTRF * const pDev)
     nRFxI2CWaitStop(dev, 1000);
 }
 
-bool nRFxI2CStartTx(DEVINTRF * const pDev, int DevAddr)
+bool nRFxI2CStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 

@@ -235,11 +235,11 @@ public:
 	bool Init(const I2CCFG &CfgData) { return I2CInit(&vDevData, &CfgData); }
 	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
 	operator I2CDEV& () { return vDevData; };	// Get config data
-	int Rate(int RateHz) { return DeviceIntrfSetRate(&vDevData.DevIntrf, RateHz); }
-	int Rate(void) { return vDevData.Rate; };	// Get rate in Hz
+	uint32_t Rate(uint32_t RateHz) { return DeviceIntrfSetRate(&vDevData.DevIntrf, RateHz); }
+	uint32_t Rate(void) { return vDevData.Rate; };	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
 	void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
-	virtual bool StartRx(int DevAddr) {
+	virtual bool StartRx(uint32_t DevAddr) {
 		return DeviceIntrfStartRx(&vDevData.DevIntrf, DevAddr);
 	}
 	// Receive Data only, no Start/Stop condition
@@ -247,7 +247,7 @@ public:
 		return DeviceIntrfRxData(&vDevData.DevIntrf, pBuff, BuffLen);
 	}
 	virtual void StopRx(void) { DeviceIntrfStopRx(&vDevData.DevIntrf); }
-	virtual bool StartTx(int DevAddr) {
+	virtual bool StartTx(uint32_t DevAddr) {
 		return DeviceIntrfStartTx(&vDevData.DevIntrf, DevAddr);
 	}
 	// Send Data only, no Start/Stop condition

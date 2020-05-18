@@ -38,7 +38,7 @@ Hoan				Feb. 20, 2015	New EHAL
 
 extern uint32_t SystemCoreClock;
 
-int LpcSSPGetRate(DEVINTRF *pDev)
+uint32_t LpcSSPGetRate(DEVINTRF *pDev)
 {
 	int rate = 0;
 
@@ -50,7 +50,7 @@ int LpcSSPGetRate(DEVINTRF *pDev)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-int LpcSSPSetRate(DEVINTRF *pDev, int DataRate)
+uint32_t LpcSSPSetRate(DEVINTRF *pDev, uint32_t DataRate)
 {
 	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
 	int div = dev->pSspReg->CPSR & 0xff;
@@ -72,7 +72,7 @@ int LpcSSPSetRate(DEVINTRF *pDev, int DataRate)
 }
 
 // Initial receive
-bool LpcSSPStartRx(DEVINTRF *pDev, int DevAddr)
+bool LpcSSPStartRx(DEVINTRF *pDev, uint32_t DevAddr)
 {
 	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
 
@@ -149,7 +149,7 @@ int LpcSSPRx(DEVINTRF *pDev, int DevAddr, uint8_t *pBuff, int BuffLen)
 
 
 // Initiate transmit
-bool LpcSSPStartTx(DEVINTRF *pDev, int DevAddr)
+bool LpcSSPStartTx(DEVINTRF *pDev, uint32_t DevAddr)
 {
 	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
 
@@ -209,7 +209,7 @@ void LpcSSPStopTx(DEVINTRF *pDev)
 }
 
 // Transmit stream
-int LpcSSPTx(DEVINTRF *pDev, int DevAddr, uint8_t *pData, int DataLen)
+int LpcSSPTx(DEVINTRF *pDev, uint32_t DevAddr, uint8_t *pData, int DataLen)
 {
 	int cnt = 0;
 

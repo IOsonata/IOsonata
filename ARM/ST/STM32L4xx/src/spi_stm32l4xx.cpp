@@ -126,7 +126,7 @@ static bool STM32L4xxSPIWaitBusy(STM32L4XX_SPIDEV * const pDev, uint32_t Timeout
     return false;
 }
 
-static int STM32L4xxSPIGetRate(DEVINTRF * const pDev)
+static uint32_t STM32L4xxSPIGetRate(DEVINTRF * const pDev)
 {
 	int rate = 0;
 
@@ -138,7 +138,7 @@ static int STM32L4xxSPIGetRate(DEVINTRF * const pDev)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-static int STM32L4xxSPISetRate(DEVINTRF * const pDev, int DataRate)
+static uint32_t STM32L4xxSPISetRate(DEVINTRF * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -214,7 +214,7 @@ static void STM32L4xxSPIPowerOff(DEVINTRF * const pDev)
 }
 
 // Initial receive
-static bool STM32L4xxSPIStartRx(DEVINTRF * const pDev, int DevCs)
+static bool STM32L4xxSPIStartRx(DEVINTRF * const pDev, uint32_t DevCs)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -304,7 +304,7 @@ static void STM32L4xxSPIStopRx(DEVINTRF * const pDev)
 }
 
 // Initiate transmit
-static bool STM32L4xxSPIStartTx(DEVINTRF * const pDev, int DevCs)
+static bool STM32L4xxSPIStartTx(DEVINTRF * const pDev, uint32_t DevCs)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 
@@ -609,7 +609,7 @@ bool STM32L4xxQSPIWaitFifo(STM32L4XX_SPIDEV *pDev, int Timeout)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-static int STM32L4xxQSPISetRate(DEVINTRF * const pDev, int DataRate)
+static uint32_t STM32L4xxQSPISetRate(DEVINTRF * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -723,7 +723,7 @@ bool STM32L4xxQSPISendCmd(DEVINTRF * const pDev, uint8_t Cmd, uint32_t Addr, uin
 }
 
 // Initial receive
-static bool STM32L4xxQSPIStartRx(DEVINTRF * const pDev, int DevCs)
+static bool STM32L4xxQSPIStartRx(DEVINTRF * const pDev, uint32_t DevCs)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -808,7 +808,7 @@ static void STM32L4xxQSPIStopRx(DEVINTRF * const pDev)
 }
 
 // Initiate transmit
-static bool STM32L4xxQSPIStartTx(DEVINTRF * const pDev, int DevCs)
+static bool STM32L4xxQSPIStartTx(DEVINTRF * const pDev, uint32_t DevCs)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 

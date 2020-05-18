@@ -84,7 +84,7 @@ void SlipIntrfEnable(DEVINTRF * const pDevIntrf)
  *
  * @return	Transfer rate per second
  */
-int SlipIntrfGetRate(DEVINTRF * const pDevIntrf)
+uint32_t SlipIntrfGetRate(DEVINTRF * const pDevIntrf)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -107,7 +107,7 @@ int SlipIntrfGetRate(DEVINTRF * const pDevIntrf)
  * @return 	Actual transfer rate per second set.  It is the real capable rate
  * 			closest to rate being requested.
  */
-int SlipIntrfSetRate(DEVINTRF * const pDevIntrf, int Rate)
+uint32_t SlipIntrfSetRate(DEVINTRF * const pDevIntrf, uint32_t Rate)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -131,7 +131,7 @@ int SlipIntrfSetRate(DEVINTRF * const pDevIntrf, int Rate)
  * @return 	true - Success\n
  * 			false - failed.
  */
-bool SlipIntrfStartRx(DEVINTRF * const pDevIntrf, int DevAddr)
+bool SlipIntrfStartRx(DEVINTRF * const pDevIntrf, uint32_t DevAddr)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -304,7 +304,7 @@ void SlipIntrfStopRx(DEVINTRF * const pDevIntrf)
  * @return 	true - Success\n
  * 			false - failed
  */
-bool SlipIntrfStartTx(DEVINTRF * const pDevIntrf, int DevAddr)
+bool SlipIntrfStartTx(DEVINTRF * const pDevIntrf, uint32_t DevAddr)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 

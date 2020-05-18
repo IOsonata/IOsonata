@@ -193,7 +193,7 @@ bool nRFxSPIWaitRX(NRFX_SPIDEV * const pDev, uint32_t Timeout)
 }
 #endif
 
-int nRFxSPIGetRate(DEVINTRF * const pDev)
+uint32_t nRFxSPIGetRate(DEVINTRF * const pDev)
 {
 	int rate = 0;
 
@@ -205,7 +205,7 @@ int nRFxSPIGetRate(DEVINTRF * const pDev)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-int nRFxSPISetRate(DEVINTRF * const pDev, int Rate)
+uint32_t nRFxSPISetRate(DEVINTRF * const pDev, uint32_t Rate)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 	uint32_t regval = 0;
@@ -290,7 +290,7 @@ void nRFxSPIPowerOff(DEVINTRF * const pDev)
 }
 
 // Initial receive
-bool nRFxSPIStartRx(DEVINTRF * const pDev, int DevCs)
+bool nRFxSPIStartRx(DEVINTRF * const pDev, uint32_t DevCs)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 
@@ -394,7 +394,7 @@ void nRFxSPIStopRx(DEVINTRF * const pDev)
 }
 
 // Initiate transmit
-bool nRFxSPIStartTx(DEVINTRF * const pDev, int DevCs)
+bool nRFxSPIStartTx(DEVINTRF * const pDev, uint32_t DevCs)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 

@@ -115,7 +115,7 @@ void LpcI2CEnable(DEVINTRF *pDev)
 		((LPCI2CDEV*)pDev->pDevData)->pI2CReg->I2CONSET |= LPCI2C_I2CONSET_I2EN;
 }
 
-int LpcI2CGetRate(DEVINTRF *pDev)
+uint32_t LpcI2CGetRate(DEVINTRF *pDev)
 {
 	int rate = 0;
 
@@ -125,7 +125,7 @@ int LpcI2CGetRate(DEVINTRF *pDev)
 	return rate;
 }
 
-int LpcI2CSetRate(DEVINTRF *pDev, int RateHz)
+uint32_t LpcI2CSetRate(DEVINTRF *pDev, uint32_t RateHz)
 {
 	if (pDev == NULL || pDev->pDevData == NULL)
 		return 0;
@@ -142,7 +142,7 @@ int LpcI2CSetRate(DEVINTRF *pDev, int RateHz)
 	return RateHz;
 }
 
-bool LpcI2CStartRx(DEVINTRF *pDev, int DevAddr)
+bool LpcI2CStartRx(DEVINTRF *pDev, uint32_t DevAddr)
 {
 	if (pDev == NULL || pDev->pDevData == NULL)
 		return false;
@@ -219,7 +219,7 @@ void LpcI2CStopRx(DEVINTRF *pDev)
 	LpcI2CStopCond((LPCI2CDEV *)pDev->pDevData);
 }
 
-bool LpcI2CStartTx(DEVINTRF *pDev, int DevAddr)
+bool LpcI2CStartTx(DEVINTRF *pDev, uint32_t DevAddr)
 {
 	if (pDev == NULL || pDev->pDevData == NULL)
 		return false;

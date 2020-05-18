@@ -290,14 +290,14 @@ public:
 	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
 	operator SPIDEV& () { return vDevData; };			// Get config data
 	operator SPIDEV * const () { return &vDevData; };	// Get pointer to device data
-	int Rate(int RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
-	int Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
+	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
+	uint32_t Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
 	void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
 
 	// DevCs is the ordinal starting from 0 of device connected to the SPI bus.
 	// It is translated to CS index in the I/O pin map
-	virtual bool StartRx(int DevCs) {
+	virtual bool StartRx(uint32_t DevCs) {
 		return DeviceIntrfStartRx(&vDevData.DevIntrf, DevCs);
 	}
 	// Receive Data only, no Start/Stop condition
@@ -307,7 +307,7 @@ public:
 	virtual void StopRx(void) { DeviceIntrfStopRx(&vDevData.DevIntrf); }
 	// DevAddr is the ordinal starting from 0 of device connected to the SPI bus.
 	// It is translated to CS index in the I/O pin map
-	virtual bool StartTx(int DevCs) {
+	virtual bool StartTx(uint32_t DevCs) {
 		return DeviceIntrfStartTx(&vDevData.DevIntrf, DevCs);
 	}
 	// Send Data only, no Start/Stop condition

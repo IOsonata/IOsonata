@@ -266,12 +266,12 @@ extern "C" {
 uint32_t LpcGetUartClk();
 void LpcUARTDisable(DEVINTRF *pDev);
 void LpcUARTEnable(DEVINTRF *pDev);
-int LpcUARTGetRate(DEVINTRF *pDev);
-int LpcUARTSetRate(DEVINTRF *pDev, int Rate);
-static inline bool LpcUARTStartRx(DEVINTRF *pSerDev, int DevAddr) { return true; }
+uint32_t LpcUARTGetRate(DEVINTRF *pDev);
+uint32_t LpcUARTSetRate(DEVINTRF *pDev, uint32_t Rate);
+static inline bool LpcUARTStartRx(DEVINTRF *pSerDev, uint32_t DevAddr) { return true; }
 int LpcUARTRxData(DEVINTRF *pDev, uint8_t *pBuff, int Bufflen);
 static inline void LpcUARTStopRx(DEVINTRF *pSerDev) {}
-static inline bool LpcUARTStartTx(DEVINTRF *pDev, int DevAddr) { return true; }
+static inline bool LpcUARTStartTx(DEVINTRF *pDev, uint32_t DevAddr) { return true; }
 int LpcUARTTxData(DEVINTRF *pDev, uint8_t *pData, int Datalen);
 static inline void LpcUARTStopTx(DEVINTRF *pDev) {}
 bool LpcUARTWaitForRxFifo(LPCUARTDEV *pDev, uint32_t Timeout);

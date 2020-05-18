@@ -227,11 +227,12 @@ extern "C" void UART6_IRQHandler()
 }
 #endif
 
-static inline int STM32F03xUARTGetRate(DEVINTRF * const pDev) {
+static uint32_t STM32F03xUARTGetRate(DEVINTRF * const pDev)
+{
 	return ((STM32F0X_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
 }
 
-static int STM32F03xUARTSetRate(DEVINTRF * const pDev, int Rate)
+static uint32_t STM32F03xUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 	uint32_t fclk2 = s_FclkFreq << 1;
@@ -260,7 +261,8 @@ static int STM32F03xUARTSetRate(DEVINTRF * const pDev, int Rate)
 	return dev->pUartDev->Rate;
 }
 
-static inline bool STM32F03xUARTStartRx(DEVINTRF * const pSerDev, int DevAddr) {
+static bool STM32F03xUARTStartRx(DEVINTRF * const pSerDev, uint32_t DevAddr)
+{
 	return true;
 }
 
@@ -296,10 +298,11 @@ static int STM32F03xUARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Buffle
 	return cnt;
 }
 
-static inline void STM32F03xUARTStopRx(DEVINTRF * const pDev) {
+static void STM32F03xUARTStopRx(DEVINTRF * const pDev) {
 }
 
-static inline bool STM32F03xUARTStartTx(DEVINTRF * const pDev, int DevAddr) {
+static bool STM32F03xUARTStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
+{
 	return true;
 }
 

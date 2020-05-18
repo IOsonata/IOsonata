@@ -109,11 +109,11 @@ static inline void LpcSSPDisable(DEVINTRF *pDev) {}
 static inline void LpcSSPEnable(DEVINTRF *pDev) {}
 
 // Get current data rate in bits/sec (Hz)
-int LpcSSPGetRate(DEVINTRF *pDev);
+uint32_t LpcSSPGetRate(DEVINTRF *pDev);
 // Set data rate in bits/sec (Hz)
-int LpcSSPSetRate(DEVINTRF *pDev, int DataRate);
+uint32_t LpcSSPSetRate(DEVINTRF *pDev, uint32_t DataRate);
 // Initiate receive
-bool LpcSSPStartRx(DEVINTRF *pDev, int DevAddr);
+bool LpcSSPStartRx(DEVINTRF *pDev, uint32_t DevAddr);
 // Receive Data only, no Start/Stop condition
 int LpcSSPRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen);
 // Stop receive
@@ -122,7 +122,7 @@ void LpcSSPStopRx(DEVINTRF *pDev);
 //int LpcSSPRx(SSPDEV *pDev, int DevAddr, uint8_t *pBuff, int BuffLen);
 
 // Initiate transmit
-bool LpcSSPStartTx(DEVINTRF *pDev, int DevAddr);
+bool LpcSSPStartTx(DEVINTRF *pDev, uint32_t DevAddr);
 // Transmit Data only, no Start/Stop condition
 int LpcSSPTxData(DEVINTRF *pDev, uint8_t *pData, int DataLen);
 // Stop transmit

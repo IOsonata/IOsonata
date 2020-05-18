@@ -505,11 +505,12 @@ static void UartIrqHandler(int DevNo, DEVINTRF * const pDev)
 	}
 }
 
-static inline int nRFUARTGetRate(DEVINTRF * const pDev) {
+static uint32_t nRFUARTGetRate(DEVINTRF * const pDev)
+{
 	return ((NRFX_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
 }
 
-static int nRFUARTSetRate(DEVINTRF * const pDev, int Rate)
+static uint32_t nRFUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 {
 	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
 
@@ -532,7 +533,8 @@ static int nRFUARTSetRate(DEVINTRF * const pDev, int Rate)
 	return rate;
 }
 
-static inline bool nRFUARTStartRx(DEVINTRF * const pSerDev, int DevAddr) {
+static bool nRFUARTStartRx(DEVINTRF * const pSerDev, uint32_t DevAddr)
+{
 	return true;
 }
 
@@ -576,10 +578,12 @@ static int nRFUARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
 	return cnt;
 }
 
-static inline void nRFUARTStopRx(DEVINTRF * const pDev) {
+static void nRFUARTStopRx(DEVINTRF * const pDev)
+{
 }
 
-static inline bool nRFUARTStartTx(DEVINTRF * const pDev, int DevAddr) {
+static bool nRFUARTStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
+{
 	return true;
 }
 
@@ -647,7 +651,8 @@ static int nRFUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
     return cnt;
 }
 
-static inline void nRFUARTStopTx(DEVINTRF * const pDev) {
+static void nRFUARTStopTx(DEVINTRF * const pDev)
+{
 }
 
 static void nRFUARTDisable(DEVINTRF * const pDev)

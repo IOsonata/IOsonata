@@ -125,8 +125,8 @@ public:
 	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
 	operator EIINTRFDEV& () { return vDevData; };			// Get config data
 	operator EIINTRFDEV * const () { return &vDevData; };	// Get pointer to device data
-	int Rate(int RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
-	int Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
+	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
+	uint32_t Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
 	void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
 
@@ -140,7 +140,7 @@ public:
 
 	// DevCs is the ordinal starting from 0 of device connected to the SPI bus.
 	// It is translated to CS index in the I/O pin map
-	virtual bool StartRx(int DevCs) {
+	virtual bool StartRx(uint32_t DevCs) {
 		return DeviceIntrfStartRx(&vDevData.DevIntrf, DevCs);
 	}
 
@@ -152,7 +152,7 @@ public:
 
 	// DevAddr is the ordinal starting from 0 of device connected to the SPI bus.
 	// It is translated to CS index in the I/O pin map
-	virtual bool StartTx(int DevCs) {
+	virtual bool StartTx(uint32_t DevCs) {
 		return DeviceIntrfStartTx(&vDevData.DevIntrf, DevCs);
 	}
 
