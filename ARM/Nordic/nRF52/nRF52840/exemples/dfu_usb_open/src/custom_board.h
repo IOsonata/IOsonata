@@ -40,29 +40,29 @@ Modified by          Date              Description
 #include "nrf.h"
 #include "blueio_board.h"
 
-#define LEDS_NUMBER    3
+#define LEDS_NUMBER    1
 
-#define LED_START      BLUEIO_LED3_PIN
-#define LED_1          BLUEIO_LED1_PIN
-#define LED_2          BLUEIO_LED2_PIN
-#define LED_3          BLUEIO_LED3_PIN
+#define LED_START      BLUEIO_LED1_PIN
+#define LED_1          41
+//#define LED_2          40
+//#define LED_3          41
 #define LED_STOP       BLUEIO_LED1_PIN
 
 #define LEDS_ACTIVE_STATE 0
 
 #define LEDS_INV_MASK  LEDS_MASK
 
-#define LEDS_LIST { LED_1, LED_2, LED_3 }
+#define LEDS_LIST { LED_1 }//, LED_2, LED_3 }
 
 #define BSP_LED_0      LED_1
-#define BSP_LED_1      LED_2
-#define BSP_LED_2      LED_3
+//#define BSP_LED_1      LED_2
+//#define BSP_LED_2      LED_3
 
 #define BUTTONS_NUMBER 2
 
 #define BUTTON_START   BLUEIO_BUT1_PIN
-#define BUTTON_1       BLUEIO_BUT1_PIN
-#define BUTTON_2       BLUEIO_BUT2_PIN
+#define BUTTON_1       13
+#define BUTTON_2       4
 #define BUTTON_STOP    BLUEIO_BUT2_PIN
 #define BUTTON_PULL    NRF_GPIO_PIN_PULLUP
 
@@ -72,7 +72,7 @@ Modified by          Date              Description
 
 #define BSP_BUTTON_0   BUTTON_1
 #define BSP_BUTTON_1   BUTTON_2
-#define BSP_BUTTON_3   BUTTON_2		// Remap for Nordic DFU
+//#define BSP_BUTTON_3   BUTTON_2		// Remap for Nordic DFU
 
 #define RX_PIN_NUMBER		BLUEIO_UART_RX_PIN
 #define TX_PIN_NUMBER		BLUEIO_UART_TX_PIN
