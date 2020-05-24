@@ -126,7 +126,7 @@
 // <e> NRF_BL_DFU_ENTER_METHOD_BUTTON - Enter DFU mode on button press.
 //==========================================================
 #ifndef NRF_BL_DFU_ENTER_METHOD_BUTTON
-#define NRF_BL_DFU_ENTER_METHOD_BUTTON 0
+#define NRF_BL_DFU_ENTER_METHOD_BUTTON 1
 #endif
 // <o> NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN  - Button for entering DFU mode.
  
@@ -180,7 +180,7 @@
 // <47=> 47 (P1.15) 
 
 #ifndef NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN
-#define NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN 34
+#define NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN 13
 #endif
 
 // </e>
@@ -196,14 +196,14 @@
  
 
 #ifndef NRF_BL_DFU_ENTER_METHOD_GPREGRET
-#define NRF_BL_DFU_ENTER_METHOD_GPREGRET 0
+#define NRF_BL_DFU_ENTER_METHOD_GPREGRET 1
 #endif
 
 // <q> NRF_BL_DFU_ENTER_METHOD_BUTTONLESS  - Enter DFU mode when the Boolean enter_buttonless_dfu in DFU settings is true.
  
 
 #ifndef NRF_BL_DFU_ENTER_METHOD_BUTTONLESS
-#define NRF_BL_DFU_ENTER_METHOD_BUTTONLESS 0
+#define NRF_BL_DFU_ENTER_METHOD_BUTTONLESS 1
 #endif
 
 // </h> 

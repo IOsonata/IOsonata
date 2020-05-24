@@ -142,7 +142,7 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
             err_code = app_timer_stop(m_dfu_progress_led_timer);
             APP_ERROR_CHECK(err_code);
 
-            err_code = led_softblink_start(BSP_LED_1_MASK);
+            err_code = led_softblink_start(BSP_LED_0_MASK);
             APP_ERROR_CHECK(err_code);
 
             break;
@@ -157,10 +157,10 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
             err_code = app_timer_init();
             APP_ERROR_CHECK(err_code);
 
-            led_sb_init_params_t led_sb_init_param = LED_SB_INIT_DEFAULT_PARAMS(BSP_LED_1_MASK);
+            led_sb_init_params_t led_sb_init_param = LED_SB_INIT_DEFAULT_PARAMS(BSP_LED_0_MASK);
 
             uint32_t ticks = APP_TIMER_TICKS(DFU_LED_CONFIG_TRANSPORT_INACTIVE_BREATH_MS);
-            led_sb_init_param.p_leds_port    = BSP_LED_1_PORT;
+            led_sb_init_param.p_leds_port    = BSP_LED_0_PORT;
             led_sb_init_param.on_time_ticks  = ticks;
             led_sb_init_param.off_time_ticks = ticks;
             led_sb_init_param.duty_cycle_max = 255;
@@ -168,7 +168,7 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
             err_code = led_softblink_init(&led_sb_init_param);
             APP_ERROR_CHECK(err_code);
 
-            err_code = led_softblink_start(BSP_LED_1_MASK);
+            err_code = led_softblink_start(BSP_LED_0_MASK);
             APP_ERROR_CHECK(err_code);
             break;
         }

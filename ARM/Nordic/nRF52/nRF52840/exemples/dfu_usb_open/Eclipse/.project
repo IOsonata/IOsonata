@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/custom_board.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/custom_board.h</locationURI>
+		</link>
+		<link>
 			<name>src/main.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/main.c</locationURI>
