@@ -97,13 +97,15 @@ typedef struct __Excel_Serial {
 	int NbBits;
 } EXCELSERDEV;
 
-typedef union __Pyd2592_Data {
+typedef struct __Pyd2592_Data {
 	uint32_t Timestamp;				//!< usec timestamp
-	uint64_t Val;					//!< Register value
-	struct {
-		uint32_t CfgReg:25;			//!< Register settings
-		int32_t AdcCount:14;		//!< ADC counts
-		uint32_t OutRange:1;		//!< 0: PIR was reset 1: Normal operation
+	union {
+		uint64_t Val;					//!< Register value
+		struct {
+			uint32_t CfgReg:25;			//!< Register settings
+			int32_t AdcCount:14;		//!< ADC counts
+			uint32_t OutRange:1;		//!< 0: PIR was reset 1: Normal operation
+		};
 	};
 } PYD2592_DATA;
 
