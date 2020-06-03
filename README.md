@@ -2,15 +2,13 @@
 # IOsonata - makes your I/Os sing
 IOsonata multi-platform multi-architecture optimized software library for fast and easy iot products development
 
-This is the new refactoring of the EHAL library (https://github.com/I-SYST/EHAL). 
-
 Turorial blog posts : 
 
 [Bluetooth Low Energy firmware with a few lines of code](http://embeddedsoftdev.blogspot.com/2018/01/bluetooth-le-with-nordic-nrf51-nrf52.html) 
 
 [Nordic nRF51 & nRF52 series firmware development with Eclipse](http://embeddedsoftdev.blogspot.com/p/ehal-nrf51.html)
 
-Although this refactoring includes supports for multiple IDE/Compilers.  The prefered IDE is still Eclipse/GCC.  GCC is the facto standard for embedded software development. Eclipse is 100% free and the most flexible IDE.  It could be little overwhelming for newbies at first (like any other IDE if you are new to it anyway).
+Although this library supports multiple IDE/Compilers.  The prefered IDE is still Eclipse/GCC.  GCC is the facto standard for embedded software development. Eclipse is 100% free and the most flexible IDE.  It could be little overwhelming for newbies at first (like any other IDE if you are new to it anyway).
 
 For desktop pc version of the library, native compiler and IDE are used.  XCode for OSX, Visual Studio for Windows, Eclipse for Linux.
 
@@ -24,7 +22,9 @@ For desktop pc version of the library, native compiler and IDE are used.  XCode 
 * Segger Stusio : Strip down version of CrossWorks.  Even less functional. Only supports jlink, cannot be used with any other jtag. SES is not recommended for heavy firmware development. 
 
 --- 
-### Require install external SDK and libraries :
+### Require installation of external SDK and libraries :
+
+In order to compile the IOsonata target libraries. These external SDK & lib are required. Follow the instructions bellow to download and install into appropriate folder locations and naming. 
  
  
 [nRF5_SDK](https://developer.nordicsemi.com)  : Nordic nRF5x Bluetooth Low Energy
@@ -41,7 +41,7 @@ For desktop pc version of the library, native compiler and IDE are used.  XCode 
 
 <p align="center"> 
  
-### IDK-BLYST-NANO : nRF52832 BLuetooth 5/Bluetooth Mesh development board with builtin IDAP-M CMSIS-DAP Debug JTag  
+### IDK-BLYST-NANO : nRF52832 BLuetooth 5.2/Bluetooth Mesh development board with builtin IDAP-M CMSIS-DAP Debug JTag  
   
 ![IDK-BLYST-NANO](https://www.i-syst.com/images/IDK-BLYST-NANO_photo640.png) 
 
