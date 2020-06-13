@@ -409,117 +409,117 @@ void WDT_Handler        ( void );
 /*@{*/
 
 #if (defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__))
-#define PWM        (0x40000000U) /**< \brief (PWM       ) Base Address */
-#define PDC_PWM    (0x40000100U) /**< \brief (PDC_PWM   ) Base Address */
-#define AES        (0x40004000U) /**< \brief (AES       ) Base Address */
-#define CAN0       (0x40010000U) /**< \brief (CAN0      ) Base Address */
-#define CAN1       (0x40014000U) /**< \brief (CAN1      ) Base Address */
-#define GMAC       (0x40034000U) /**< \brief (GMAC      ) Base Address */
-#define SMC        (0x40060000U) /**< \brief (SMC       ) Base Address */
-#define UART1      (0x40060600U) /**< \brief (UART1     ) Base Address */
-#define PDC_UART1  (0x40060700U) /**< \brief (PDC_UART1 ) Base Address */
-#define HSMCI      (0x40080000U) /**< \brief (HSMCI     ) Base Address */
-#define PDC_HSMCI  (0x40080100U) /**< \brief (PDC_HSMCI ) Base Address */
-#define UDP        (0x40084000U) /**< \brief (UDP       ) Base Address */
-#define SPI        (0x40088000U) /**< \brief (SPI       ) Base Address */
-#define PDC_SPI    (0x40088100U) /**< \brief (PDC_SPI   ) Base Address */
-#define TC0        (0x40090000U) /**< \brief (TC0       ) Base Address */
-#define PDC_TC0    (0x40090100U) /**< \brief (PDC_TC0   ) Base Address */
-#define TC1        (0x40094000U) /**< \brief (TC1       ) Base Address */
-#define PDC_TC1    (0x40094100U) /**< \brief (PDC_TC1   ) Base Address */
-#define TC2        (0x40098000U) /**< \brief (TC2       ) Base Address */
-#define USART0     (0x400A0000U) /**< \brief (USART0    ) Base Address */
-#define PDC_USART0 (0x400A0100U) /**< \brief (PDC_USART0) Base Address */
-#define USART1     (0x400A4000U) /**< \brief (USART1    ) Base Address */
-#define PDC_USART1 (0x400A4100U) /**< \brief (PDC_USART1) Base Address */
-#define TWI0       (0x400A8000U) /**< \brief (TWI0      ) Base Address */
-#define PDC_TWI0   (0x400A8100U) /**< \brief (PDC_TWI0  ) Base Address */
-#define TWI1       (0x400AC000U) /**< \brief (TWI1      ) Base Address */
-#define PDC_TWI1   (0x400AC100U) /**< \brief (PDC_TWI1  ) Base Address */
-#define AFEC0      (0x400B0000U) /**< \brief (AFEC0     ) Base Address */
-#define PDC_AFEC0  (0x400B0100U) /**< \brief (PDC_AFEC0 ) Base Address */
-#define AFEC1      (0x400B4000U) /**< \brief (AFEC1     ) Base Address */
-#define PDC_AFEC1  (0x400B4100U) /**< \brief (PDC_AFEC1 ) Base Address */
-#define DACC       (0x400B8000U) /**< \brief (DACC      ) Base Address */
-#define PDC_DACC   (0x400B8100U) /**< \brief (PDC_DACC  ) Base Address */
-#define ACC        (0x400BC000U) /**< \brief (ACC       ) Base Address */
-#define DMAC       (0x400C0000U) /**< \brief (DMAC      ) Base Address */
-#define CMCC       (0x400C4000U) /**< \brief (CMCC      ) Base Address */
-#define MATRIX     (0x400E0200U) /**< \brief (MATRIX    ) Base Address */
-#define PMC        (0x400E0400U) /**< \brief (PMC       ) Base Address */
-#define UART0      (0x400E0600U) /**< \brief (UART0     ) Base Address */
-#define PDC_UART0  (0x400E0700U) /**< \brief (PDC_UART0 ) Base Address */
-#define CHIPID     (0x400E0740U) /**< \brief (CHIPID    ) Base Address */
-#define EFC        (0x400E0A00U) /**< \brief (EFC       ) Base Address */
-#define PIOA       (0x400E0E00U) /**< \brief (PIOA      ) Base Address */
-#define PDC_PIOA   (0x400E0F68U) /**< \brief (PDC_PIOA  ) Base Address */
-#define PIOB       (0x400E1000U) /**< \brief (PIOB      ) Base Address */
-#define PIOC       (0x400E1200U) /**< \brief (PIOC      ) Base Address */
-#define PIOD       (0x400E1400U) /**< \brief (PIOD      ) Base Address */
-#define PIOE       (0x400E1600U) /**< \brief (PIOE      ) Base Address */
-#define RSTC       (0x400E1800U) /**< \brief (RSTC      ) Base Address */
-#define SUPC       (0x400E1810U) /**< \brief (SUPC      ) Base Address */
-#define RTT        (0x400E1830U) /**< \brief (RTT       ) Base Address */
-#define WDT        (0x400E1850U) /**< \brief (WDT       ) Base Address */
-#define RTC        (0x400E1860U) /**< \brief (RTC       ) Base Address */
-#define GPBR       (0x400E1890U) /**< \brief (GPBR      ) Base Address */
-#define RSWDT      (0x400E1900U) /**< \brief (RSWDT     ) Base Address */
+#define SAM4E_PWM        (0x40000000U) /**< \brief (PWM       ) Base Address */
+#define SAM4E_PDC_PWM    (0x40000100U) /**< \brief (PDC_PWM   ) Base Address */
+#define SAM4E_AES        (0x40004000U) /**< \brief (AES       ) Base Address */
+#define SAM4E_CAN0       (0x40010000U) /**< \brief (CAN0      ) Base Address */
+#define SAM4E_CAN1       (0x40014000U) /**< \brief (CAN1      ) Base Address */
+#define SAM4E_GMAC       (0x40034000U) /**< \brief (GMAC      ) Base Address */
+#define SAM4E_SMC        (0x40060000U) /**< \brief (SMC       ) Base Address */
+#define SAM4E_UART1      (0x40060600U) /**< \brief (UART1     ) Base Address */
+#define SAM4E_PDC_UART1  (0x40060700U) /**< \brief (PDC_UART1 ) Base Address */
+#define SAM4E_HSMCI      (0x40080000U) /**< \brief (HSMCI     ) Base Address */
+#define SAM4E_PDC_HSMCI  (0x40080100U) /**< \brief (PDC_HSMCI ) Base Address */
+#define SAM4E_UDP        (0x40084000U) /**< \brief (UDP       ) Base Address */
+#define SAM4E_SPI        (0x40088000U) /**< \brief (SPI       ) Base Address */
+#define SAM4E_PDC_SPI    (0x40088100U) /**< \brief (PDC_SPI   ) Base Address */
+#define SAM4E_TC0        (0x40090000U) /**< \brief (TC0       ) Base Address */
+#define SAM4E_PDC_TC0    (0x40090100U) /**< \brief (PDC_TC0   ) Base Address */
+#define SAM4E_TC1        (0x40094000U) /**< \brief (TC1       ) Base Address */
+#define SAM4E_PDC_TC1    (0x40094100U) /**< \brief (PDC_TC1   ) Base Address */
+#define SAM4E_TC2        (0x40098000U) /**< \brief (TC2       ) Base Address */
+#define SAM4E_USART0     (0x400A0000U) /**< \brief (USART0    ) Base Address */
+#define SAM4E_PDC_USART0 (0x400A0100U) /**< \brief (PDC_USART0) Base Address */
+#define SAM4E_USART1     (0x400A4000U) /**< \brief (USART1    ) Base Address */
+#define SAM4E_PDC_USART1 (0x400A4100U) /**< \brief (PDC_USART1) Base Address */
+#define SAM4E_TWI0       (0x400A8000U) /**< \brief (TWI0      ) Base Address */
+#define SAM4E_PDC_TWI0   (0x400A8100U) /**< \brief (PDC_TWI0  ) Base Address */
+#define SAM4E_TWI1       (0x400AC000U) /**< \brief (TWI1      ) Base Address */
+#define SAM4E_PDC_TWI1   (0x400AC100U) /**< \brief (PDC_TWI1  ) Base Address */
+#define SAM4E_AFEC0      (0x400B0000U) /**< \brief (AFEC0     ) Base Address */
+#define SAM4E_PDC_AFEC0  (0x400B0100U) /**< \brief (PDC_AFEC0 ) Base Address */
+#define SAM4E_AFEC1      (0x400B4000U) /**< \brief (AFEC1     ) Base Address */
+#define SAM4E_PDC_AFEC1  (0x400B4100U) /**< \brief (PDC_AFEC1 ) Base Address */
+#define SAM4E_DACC       (0x400B8000U) /**< \brief (DACC      ) Base Address */
+#define SAM4E_PDC_DACC   (0x400B8100U) /**< \brief (PDC_DACC  ) Base Address */
+#define SAM4E_ACC        (0x400BC000U) /**< \brief (ACC       ) Base Address */
+#define SAM4E_DMAC       (0x400C0000U) /**< \brief (DMAC      ) Base Address */
+#define SAM4E_CMCC       (0x400C4000U) /**< \brief (CMCC      ) Base Address */
+#define SAM4E_MATRIX     (0x400E0200U) /**< \brief (MATRIX    ) Base Address */
+#define SAM4E_PMC        (0x400E0400U) /**< \brief (PMC       ) Base Address */
+#define SAM4E_UART0      (0x400E0600U) /**< \brief (UART0     ) Base Address */
+#define SAM4E_PDC_UART0  (0x400E0700U) /**< \brief (PDC_UART0 ) Base Address */
+#define SAM4E_CHIPID     (0x400E0740U) /**< \brief (CHIPID    ) Base Address */
+#define SAM4E_EFC        (0x400E0A00U) /**< \brief (EFC       ) Base Address */
+#define SAM4E_PIOA       (0x400E0E00U) /**< \brief (PIOA      ) Base Address */
+#define SAM4E_PDC_PIOA   (0x400E0F68U) /**< \brief (PDC_PIOA  ) Base Address */
+#define SAM4E_PIOB       (0x400E1000U) /**< \brief (PIOB      ) Base Address */
+#define SAM4E_PIOC       (0x400E1200U) /**< \brief (PIOC      ) Base Address */
+#define SAM4E_PIOD       (0x400E1400U) /**< \brief (PIOD      ) Base Address */
+#define SAM4E_PIOE       (0x400E1600U) /**< \brief (PIOE      ) Base Address */
+#define SAM4E_RSTC       (0x400E1800U) /**< \brief (RSTC      ) Base Address */
+#define SAM4E_SUPC       (0x400E1810U) /**< \brief (SUPC      ) Base Address */
+#define SAM4E_RTT        (0x400E1830U) /**< \brief (RTT       ) Base Address */
+#define SAM4E_WDT        (0x400E1850U) /**< \brief (WDT       ) Base Address */
+#define SAM4E_RTC        (0x400E1860U) /**< \brief (RTC       ) Base Address */
+#define SAM4E_GPBR       (0x400E1890U) /**< \brief (GPBR      ) Base Address */
+#define SAM4E_RSWDT      (0x400E1900U) /**< \brief (RSWDT     ) Base Address */
 #else
-#define PWM        ((Pwm    *)0x40000000U) /**< \brief (PWM       ) Base Address */
-#define PDC_PWM    ((Pdc    *)0x40000100U) /**< \brief (PDC_PWM   ) Base Address */
-#define AES        ((Aes    *)0x40004000U) /**< \brief (AES       ) Base Address */
-#define CAN0       ((Can    *)0x40010000U) /**< \brief (CAN0      ) Base Address */
-#define CAN1       ((Can    *)0x40014000U) /**< \brief (CAN1      ) Base Address */
-#define GMAC       ((Gmac   *)0x40034000U) /**< \brief (GMAC      ) Base Address */
-#define SMC        ((Smc    *)0x40060000U) /**< \brief (SMC       ) Base Address */
-#define UART1      ((Uart   *)0x40060600U) /**< \brief (UART1     ) Base Address */
-#define PDC_UART1  ((Pdc    *)0x40060700U) /**< \brief (PDC_UART1 ) Base Address */
-#define HSMCI      ((Hsmci  *)0x40080000U) /**< \brief (HSMCI     ) Base Address */
-#define PDC_HSMCI  ((Pdc    *)0x40080100U) /**< \brief (PDC_HSMCI ) Base Address */
-#define UDP        ((Udp    *)0x40084000U) /**< \brief (UDP       ) Base Address */
-#define SPI        ((Spi    *)0x40088000U) /**< \brief (SPI       ) Base Address */
-#define PDC_SPI    ((Pdc    *)0x40088100U) /**< \brief (PDC_SPI   ) Base Address */
-#define TC0        ((Tc     *)0x40090000U) /**< \brief (TC0       ) Base Address */
-#define PDC_TC0    ((Pdc    *)0x40090100U) /**< \brief (PDC_TC0   ) Base Address */
-#define TC1        ((Tc     *)0x40094000U) /**< \brief (TC1       ) Base Address */
-#define PDC_TC1    ((Pdc    *)0x40094100U) /**< \brief (PDC_TC1   ) Base Address */
-#define TC2        ((Tc     *)0x40098000U) /**< \brief (TC2       ) Base Address */
-#define USART0     ((Usart  *)0x400A0000U) /**< \brief (USART0    ) Base Address */
-#define PDC_USART0 ((Pdc    *)0x400A0100U) /**< \brief (PDC_USART0) Base Address */
-#define USART1     ((Usart  *)0x400A4000U) /**< \brief (USART1    ) Base Address */
-#define PDC_USART1 ((Pdc    *)0x400A4100U) /**< \brief (PDC_USART1) Base Address */
-#define TWI0       ((Twi    *)0x400A8000U) /**< \brief (TWI0      ) Base Address */
-#define PDC_TWI0   ((Pdc    *)0x400A8100U) /**< \brief (PDC_TWI0  ) Base Address */
-#define TWI1       ((Twi    *)0x400AC000U) /**< \brief (TWI1      ) Base Address */
-#define PDC_TWI1   ((Pdc    *)0x400AC100U) /**< \brief (PDC_TWI1  ) Base Address */
-#define AFEC0      ((Afec   *)0x400B0000U) /**< \brief (AFEC0     ) Base Address */
-#define PDC_AFEC0  ((Pdc    *)0x400B0100U) /**< \brief (PDC_AFEC0 ) Base Address */
-#define AFEC1      ((Afec   *)0x400B4000U) /**< \brief (AFEC1     ) Base Address */
-#define PDC_AFEC1  ((Pdc    *)0x400B4100U) /**< \brief (PDC_AFEC1 ) Base Address */
-#define DACC       ((Dacc   *)0x400B8000U) /**< \brief (DACC      ) Base Address */
-#define PDC_DACC   ((Pdc    *)0x400B8100U) /**< \brief (PDC_DACC  ) Base Address */
-#define ACC        ((Acc    *)0x400BC000U) /**< \brief (ACC       ) Base Address */
-#define DMAC       ((Dmac   *)0x400C0000U) /**< \brief (DMAC      ) Base Address */
-#define CMCC       ((Cmcc   *)0x400C4000U) /**< \brief (CMCC      ) Base Address */
-#define MATRIX     ((Matrix *)0x400E0200U) /**< \brief (MATRIX    ) Base Address */
-#define PMC        ((Pmc    *)0x400E0400U) /**< \brief (PMC       ) Base Address */
-#define UART0      ((Uart   *)0x400E0600U) /**< \brief (UART0     ) Base Address */
-#define PDC_UART0  ((Pdc    *)0x400E0700U) /**< \brief (PDC_UART0 ) Base Address */
-#define CHIPID     ((Chipid *)0x400E0740U) /**< \brief (CHIPID    ) Base Address */
-#define EFC        ((Efc    *)0x400E0A00U) /**< \brief (EFC       ) Base Address */
-#define PIOA       ((Pio    *)0x400E0E00U) /**< \brief (PIOA      ) Base Address */
-#define PDC_PIOA   ((Pdc    *)0x400E0F68U) /**< \brief (PDC_PIOA  ) Base Address */
-#define PIOB       ((Pio    *)0x400E1000U) /**< \brief (PIOB      ) Base Address */
-#define PIOC       ((Pio    *)0x400E1200U) /**< \brief (PIOC      ) Base Address */
-#define PIOD       ((Pio    *)0x400E1400U) /**< \brief (PIOD      ) Base Address */
-#define PIOE       ((Pio    *)0x400E1600U) /**< \brief (PIOE      ) Base Address */
-#define RSTC       ((Rstc   *)0x400E1800U) /**< \brief (RSTC      ) Base Address */
-#define SUPC       ((Supc   *)0x400E1810U) /**< \brief (SUPC      ) Base Address */
-#define RTT        ((Rtt    *)0x400E1830U) /**< \brief (RTT       ) Base Address */
-#define WDT        ((Wdt    *)0x400E1850U) /**< \brief (WDT       ) Base Address */
-#define RTC        ((Rtc    *)0x400E1860U) /**< \brief (RTC       ) Base Address */
-#define GPBR       ((Gpbr   *)0x400E1890U) /**< \brief (GPBR      ) Base Address */
-#define RSWDT      ((Rswdt  *)0x400E1900U) /**< \brief (RSWDT     ) Base Address */
+#define SAM4E_PWM        ((Pwm    *)0x40000000U) /**< \brief (PWM       ) Base Address */
+#define SAM4E_PDC_PWM    ((Pdc    *)0x40000100U) /**< \brief (PDC_PWM   ) Base Address */
+#define SAM4E_AES        ((Aes    *)0x40004000U) /**< \brief (AES       ) Base Address */
+#define SAM4E_CAN0       ((Can    *)0x40010000U) /**< \brief (CAN0      ) Base Address */
+#define SAM4E_CAN1       ((Can    *)0x40014000U) /**< \brief (CAN1      ) Base Address */
+#define SAM4E_GMAC       ((Gmac   *)0x40034000U) /**< \brief (GMAC      ) Base Address */
+#define SAM4E_SMC        ((Smc    *)0x40060000U) /**< \brief (SMC       ) Base Address */
+#define SAM4E_UART1      ((Uart   *)0x40060600U) /**< \brief (UART1     ) Base Address */
+#define SAM4E_PDC_UART1  ((Pdc    *)0x40060700U) /**< \brief (PDC_UART1 ) Base Address */
+#define SAM4E_HSMCI      ((Hsmci  *)0x40080000U) /**< \brief (HSMCI     ) Base Address */
+#define SAM4E_PDC_HSMCI  ((Pdc    *)0x40080100U) /**< \brief (PDC_HSMCI ) Base Address */
+#define SAM4E_UDP        ((Udp    *)0x40084000U) /**< \brief (UDP       ) Base Address */
+#define SAM4E_SPI        ((Spi    *)0x40088000U) /**< \brief (SPI       ) Base Address */
+#define SAM4E_PDC_SPI    ((Pdc    *)0x40088100U) /**< \brief (PDC_SPI   ) Base Address */
+#define SAM4E_TC0        ((Tc     *)0x40090000U) /**< \brief (TC0       ) Base Address */
+#define SAM4E_PDC_TC0    ((Pdc    *)0x40090100U) /**< \brief (PDC_TC0   ) Base Address */
+#define SAM4E_TC1        ((Tc     *)0x40094000U) /**< \brief (TC1       ) Base Address */
+#define SAM4E_PDC_TC1    ((Pdc    *)0x40094100U) /**< \brief (PDC_TC1   ) Base Address */
+#define SAM4E_TC2        ((Tc     *)0x40098000U) /**< \brief (TC2       ) Base Address */
+#define SAM4E_USART0     ((Usart  *)0x400A0000U) /**< \brief (USART0    ) Base Address */
+#define SAM4E_PDC_USART0 ((Pdc    *)0x400A0100U) /**< \brief (PDC_USART0) Base Address */
+#define SAM4E_USART1     ((Usart  *)0x400A4000U) /**< \brief (USART1    ) Base Address */
+#define SAM4E_PDC_USART1 ((Pdc    *)0x400A4100U) /**< \brief (PDC_USART1) Base Address */
+#define SAM4E_TWI0       ((Twi    *)0x400A8000U) /**< \brief (TWI0      ) Base Address */
+#define SAM4E_PDC_TWI0   ((Pdc    *)0x400A8100U) /**< \brief (PDC_TWI0  ) Base Address */
+#define SAM4E_TWI1       ((Twi    *)0x400AC000U) /**< \brief (TWI1      ) Base Address */
+#define SAM4E_PDC_TWI1   ((Pdc    *)0x400AC100U) /**< \brief (PDC_TWI1  ) Base Address */
+#define SAM4E_AFEC0      ((Afec   *)0x400B0000U) /**< \brief (AFEC0     ) Base Address */
+#define SAM4E_PDC_AFEC0  ((Pdc    *)0x400B0100U) /**< \brief (PDC_AFEC0 ) Base Address */
+#define SAM4E_AFEC1      ((Afec   *)0x400B4000U) /**< \brief (AFEC1     ) Base Address */
+#define SAM4E_PDC_AFEC1  ((Pdc    *)0x400B4100U) /**< \brief (PDC_AFEC1 ) Base Address */
+#define SAM4E_DACC       ((Dacc   *)0x400B8000U) /**< \brief (DACC      ) Base Address */
+#define SAM4E_PDC_DACC   ((Pdc    *)0x400B8100U) /**< \brief (PDC_DACC  ) Base Address */
+#define SAM4E_ACC        ((Acc    *)0x400BC000U) /**< \brief (ACC       ) Base Address */
+#define SAM4E_DMAC       ((Dmac   *)0x400C0000U) /**< \brief (DMAC      ) Base Address */
+#define SAM4E_CMCC       ((Cmcc   *)0x400C4000U) /**< \brief (CMCC      ) Base Address */
+#define SAM4E_MATRIX     ((Matrix *)0x400E0200U) /**< \brief (MATRIX    ) Base Address */
+#define SAM4E_PMC        ((Pmc    *)0x400E0400U) /**< \brief (PMC       ) Base Address */
+#define SAM4E_UART0      ((Uart   *)0x400E0600U) /**< \brief (UART0     ) Base Address */
+#define SAM4E_PDC_UART0  ((Pdc    *)0x400E0700U) /**< \brief (PDC_UART0 ) Base Address */
+#define SAM4E_CHIPID     ((Chipid *)0x400E0740U) /**< \brief (CHIPID    ) Base Address */
+#define SAM4E_EFC        ((Efc    *)0x400E0A00U) /**< \brief (EFC       ) Base Address */
+#define SAM4E_PIOA       ((Pio    *)0x400E0E00U) /**< \brief (PIOA      ) Base Address */
+#define SAM4E_PDC_PIOA   ((Pdc    *)0x400E0F68U) /**< \brief (PDC_PIOA  ) Base Address */
+#define SAM4E_PIOB       ((Pio    *)0x400E1000U) /**< \brief (PIOB      ) Base Address */
+#define SAM4E_PIOC       ((Pio    *)0x400E1200U) /**< \brief (PIOC      ) Base Address */
+#define SAM4E_PIOD       ((Pio    *)0x400E1400U) /**< \brief (PIOD      ) Base Address */
+#define SAM4E_PIOE       ((Pio    *)0x400E1600U) /**< \brief (PIOE      ) Base Address */
+#define SAM4E_RSTC       ((Rstc   *)0x400E1800U) /**< \brief (RSTC      ) Base Address */
+#define SAM4E_SUPC       ((Supc   *)0x400E1810U) /**< \brief (SUPC      ) Base Address */
+#define SAM4E_RTT        ((Rtt    *)0x400E1830U) /**< \brief (RTT       ) Base Address */
+#define SAM4E_WDT        ((Wdt    *)0x400E1850U) /**< \brief (WDT       ) Base Address */
+#define SAM4E_RTC        ((Rtc    *)0x400E1860U) /**< \brief (RTC       ) Base Address */
+#define SAM4E_GPBR       ((Gpbr   *)0x400E1890U) /**< \brief (GPBR      ) Base Address */
+#define SAM4E_RSWDT      ((Rswdt  *)0x400E1900U) /**< \brief (RSWDT     ) Base Address */
 #endif /* (defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__)) */
 /*@}*/
 
