@@ -102,10 +102,6 @@ static STM32L4X_UARTDEV s_Stm32l4xUartDev[] = {
 	},
 	{
 		.DevNo = 5,
-		.pReg = UART5,
-	},
-	{
-		.DevNo = 6,
 		.pReg = LPUART1,
 	},
 };
@@ -240,29 +236,42 @@ static uint32_t STM32L4xUARTGetRate(DEVINTRF * const pDev)
 static uint32_t STM32L4xUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
-	uint32_t fclk2 = s_FclkFreq << 1;
-	uint32_t rem8 = fclk2 % Rate;
-	uint32_t rem16 = s_FclkFreq % Rate;
 	uint32_t div;
 
-	if (rem8 < rem16)
+	if (dev->DevNo == 5)
 	{
-		// /8 better
-		s_Stm32l4xUartDev[dev->DevNo].pReg->CR1 |= USART_CR1_OVER8;
-
+		uint32_t fclk2 = s_FclkFreq << 8;
 		div = (fclk2 + (Rate >> 1)) / Rate;
-		dev->pUartDev->Rate = (fclk2 + (div >> 1)) / div;
-		div = ((div & 0xf) >> 1) | (div & 0xFFFFFFF0);
+		if (div > 0x100000)
+		{
+			printf("bad rate\r");
+		}
+		dev->pUartDev->Rate = fclk2 / div;
 	}
 	else
 	{
-		// /16 better
-		s_Stm32l4xUartDev[dev->DevNo].pReg->CR1 &= ~USART_CR1_OVER8;
+		uint32_t fclk2 = s_FclkFreq << 1;
+		uint32_t rem8 = fclk2 % Rate;
+		uint32_t rem16 = s_FclkFreq % Rate;
 
-		div = (s_FclkFreq + (Rate >> 1)) / Rate;
-		dev->pUartDev->Rate = (s_FclkFreq + (div >> 1)) / div;
+		if (rem8 < rem16)
+		{
+			// /8 better
+			s_Stm32l4xUartDev[dev->DevNo].pReg->CR1 |= USART_CR1_OVER8;
+
+			div = (fclk2 + (Rate >> 1)) / Rate;
+			dev->pUartDev->Rate = (fclk2 + (div >> 1)) / div;
+			div = ((div & 0xf) >> 1) | (div & 0xFFFFFFF0);
+		}
+		else
+		{
+			// /16 better
+			s_Stm32l4xUartDev[dev->DevNo].pReg->CR1 &= ~USART_CR1_OVER8;
+
+			div = (s_FclkFreq + (Rate >> 1)) / Rate;
+			dev->pUartDev->Rate = (s_FclkFreq + (div >> 1)) / div;
+		}
 	}
-
 	s_Stm32l4xUartDev[dev->DevNo].pReg->BRR = div;
 
 	return dev->pUartDev->Rate;
@@ -438,7 +447,7 @@ static void STM32L4xUARTPowerOff(DEVINTRF * const pDev)
 			break;
 	}
 
-	dev->pReg->CR2 &= ~USART_CR2_CLKEN;
+	//dev->pReg->CR2 &= ~USART_CR2_CLKEN;
 }
 
 static void STM32L4xUARTReset(DEVINTRF * const pDev)
@@ -526,8 +535,6 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	}
 	RCC->CCIPR = tmp;
 
-	//reg->CR2 |= USART_CR2_CLKEN;
-
 	msDelay(1);
 
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
@@ -593,6 +600,9 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	{
 		reg->CR2 |= 2;
 	}
+
+	// Swap
+	//reg->CR2 |= USART_CR2_SWAP;
 
     if (pCfg->FlowControl == UART_FLWCTRL_HW)
 	{

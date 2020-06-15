@@ -85,6 +85,14 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 
 	uint32_t tmp;
 
+	if (PortNo == 6 && PinNo > 0)
+	{
+		// Port G requires VDDIO2
+		RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+		PWR->CR2 = PWR_CR2_IOSV;
+		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
+	}
+
 	RCC->AHB2ENR |= 1 << PortNo;
 
 	uint32_t pos = PinNo << 1;
