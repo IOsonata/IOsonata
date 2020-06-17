@@ -154,10 +154,9 @@ static void UART_IRQHandler(STM32L4X_UARTDEV * const pDev)
 	if (iflag & USART_ISR_TXE)// | USART_ISR_TC))
 	{
 		//pDev->pReg->ICR = USART_ISR_TXE;
-		int cnt = 4;
+		int cnt = STM32L4X_UART_HWFIFO_SIZE;
 
 		do {
-
 			uint8_t *p = CFifoGet(dev->hTxFifo);
 			if (p == NULL)
 			{
@@ -240,12 +239,8 @@ static uint32_t STM32L4xUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 
 	if (dev->DevNo == 5)
 	{
-		uint32_t fclk2 = s_FclkFreq << 8;
-		div = (fclk2 + (Rate >> 1)) / Rate;
-		if (div > 0x100000)
-		{
-			printf("bad rate\r");
-		}
+		uint64_t fclk2 = (uint64_t)s_FclkFreq << 8ULL;
+		div = (fclk2 + (uint64_t)(Rate >> 1ULL)) / Rate;
 		dev->pUartDev->Rate = fclk2 / div;
 	}
 	else
@@ -354,6 +349,11 @@ static int STM32L4xUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen
         		dev->pReg->TDR = *p;
         	}
         }
+    }
+
+    if (rtry <= 0)
+    {
+    	dev->pUartDev->TxDropCnt += Datalen - cnt;
     }
     return cnt;
 }
@@ -567,8 +567,13 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 			IOPinSetSpeed(pincfg[i].PortNo, pincfg[i].PinNo, IOPINSPEED_TURBO);
 		}
 	}
+
+	msDelay(1);
+
     // Set baud
     pDev->Rate = STM32L4xUARTSetRate(&pDev->DevIntrf, pCfg->Rate);
+
+    msDelay(1);
 
 	switch (pCfg->Parity)
 	{
@@ -690,7 +695,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	reg->ICR = 0xFFFFFFFF;
 	reg->RQR |= USART_RQR_RXFRQ;
 
-	//(void)reg->RDR;
+	(void)reg->RDR;
 
 	// Disable all interrupts
 	tmp &= ~(USART_CR1_PEIE | USART_CR1_TXEIE | USART_CR1_RTOIE | USART_CR1_TCIE | USART_CR1_RXNEIE | USART_CR1_IDLEIE);
@@ -741,6 +746,8 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 				break;
 		}
     }
+
+	msDelay(1);
 
 	// Enable USART
 	tmp |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
