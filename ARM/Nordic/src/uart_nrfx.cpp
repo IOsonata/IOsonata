@@ -602,7 +602,10 @@ static int nRFUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
             int l = Datalen;
             uint8_t *p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
             if (p == NULL)
-                break;
+            {
+//            	dev->pUartDev->TxDropCnt++;
+            	break;
+            }
             memcpy(p, pData, l);
             Datalen -= l;
             pData += l;
@@ -648,6 +651,12 @@ static int nRFUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
             }
         }
     }
+
+    if (rtry <= 0)
+    {
+    	dev->pUartDev->TxDropCnt += Datalen- cnt;
+    }
+
     return cnt;
 }
 
