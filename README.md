@@ -1,4 +1,4 @@
-![IOsonata Logo](/docs/iosonata_logo_400.png)
+![IOsonata Logo](/docs/logo/iosonata_logo_400.png)
 # IOsonata - makes your I/Os sing
 IOsonata multi-platform multi-architecture optimized software library for fast and easy iot products development
 
