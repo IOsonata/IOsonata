@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016 - 2019, Nordic Semiconductor ASA
+ * Copyright (c) 2016 - 2020, Nordic Semiconductor ASA
  *
  * All rights reserved.
  *
@@ -52,7 +52,7 @@
 #include "app_util.h"
 
 #include "nrf_cli.h"
-#include "nrf_cli_rtt.h"
+//#include "nrf_cli_rtt.h"
 #include "nrf_cli_types.h"
 
 #include "boards.h"
@@ -81,10 +81,12 @@
 #include "app_usbd_cdc_acm.h"
 #endif //CLI_OVER_USB_CDC_ACM
 
+#if 0
 #if defined(TX_PIN_NUMBER) && defined(RX_PIN_NUMBER)
 #define CLI_OVER_UART 1
 #else
 #define CLI_OVER_UART 0
+#endif
 #endif
 
 #if CLI_OVER_UART
@@ -176,13 +178,14 @@ NRF_CLI_DEF(m_cli_uart,
             '\r',
             CLI_EXAMPLE_LOG_QUEUE_SIZE);
 #endif
-
+#if 0
 NRF_CLI_RTT_DEF(m_cli_rtt_transport);
 NRF_CLI_DEF(m_cli_rtt,
             "rtt_cli:~$ ",
             &m_cli_rtt_transport.transport,
             '\n',
             CLI_EXAMPLE_LOG_QUEUE_SIZE);
+#endif
 
 static void timer_handle(void * p_context)
 {
@@ -208,9 +211,10 @@ static void cli_start(void)
     ret = nrf_cli_start(&m_cli_uart);
     APP_ERROR_CHECK(ret);
 #endif
-
+#if 0
     ret = nrf_cli_start(&m_cli_rtt);
     APP_ERROR_CHECK(ret);
+#endif
 }
 
 static void cli_init(void)
@@ -230,9 +234,10 @@ static void cli_init(void)
     ret = nrf_cli_init(&m_cli_uart, &uart_config, true, true, NRF_LOG_SEVERITY_INFO);
     APP_ERROR_CHECK(ret);
 #endif
-
+#if 0
     ret = nrf_cli_init(&m_cli_rtt, NULL, true, true, NRF_LOG_SEVERITY_INFO);
     APP_ERROR_CHECK(ret);
+#endif
 }
 
 
@@ -280,8 +285,9 @@ static void cli_process(void)
 #if CLI_OVER_UART
     nrf_cli_process(&m_cli_uart);
 #endif
-
+#if 0
     nrf_cli_process(&m_cli_rtt);
+#endif
 }
 
 

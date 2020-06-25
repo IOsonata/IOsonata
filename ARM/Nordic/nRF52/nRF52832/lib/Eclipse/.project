@@ -46,6 +46,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/analog_comp_nrf5x.h</locationURI>
 		</link>
 		<link>
+			<name>include/audio</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/base64.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/base64.h</locationURI>
@@ -356,6 +361,11 @@
 			<locationURI>copy_PARENT/src/Vectors_nRF52832.c</locationURI>
 		</link>
 		<link>
+			<name>src/audio</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/base64.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/base64.c</locationURI>
@@ -599,6 +609,21 @@
 			<name>src/utf8cvt.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/utf8cvt.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/audio/audiodev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev.h</locationURI>
+		</link>
+		<link>
+			<name>include/audio/audiodev_i2s.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_i2s.h</locationURI>
+		</link>
+		<link>
+			<name>include/audio/audiodev_pdm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bleadv_mandata.h</name>
@@ -959,6 +984,11 @@
 			<name>src/Invn/Devices</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/audio/audiodev.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/audiodev.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/ble_app_handler.c</name>
@@ -1391,6 +1421,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/mbedtls/library/CMakeLists.txt</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/CMakeLists.txt</locationURI>
+		</link>
+		<link>
 			<name>src/mbedtls/library/aes.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/aes.c</locationURI>
@@ -1404,6 +1439,11 @@
 			<name>src/mbedtls/library/arc4.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/arc4.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/aria.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/aria.c</locationURI>
 		</link>
 		<link>
 			<name>src/mbedtls/library/asn1parse.c</name>
@@ -1446,6 +1486,16 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/certs.c</locationURI>
 		</link>
 		<link>
+			<name>src/mbedtls/library/chacha20.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/chacha20.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/chachapoly.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/chachapoly.c</locationURI>
+		</link>
+		<link>
 			<name>src/mbedtls/library/cipher.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/cipher.c</locationURI>
@@ -1464,6 +1514,11 @@
 			<name>src/mbedtls/library/ctr_drbg.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ctr_drbg.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/debug.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/debug.c</locationURI>
 		</link>
 		<link>
 			<name>src/mbedtls/library/des.c</name>
@@ -1501,6 +1556,21 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ecp_curves.c</locationURI>
 		</link>
 		<link>
+			<name>src/mbedtls/library/entropy.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/entropy.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/entropy_poll.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/entropy_poll.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/error.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/error.c</locationURI>
+		</link>
+		<link>
 			<name>src/mbedtls/library/gcm.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/gcm.c</locationURI>
@@ -1511,9 +1581,104 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/havege.c</locationURI>
 		</link>
 		<link>
+			<name>src/mbedtls/library/hkdf.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/hkdf.c</locationURI>
+		</link>
+		<link>
 			<name>src/mbedtls/library/hmac_drbg.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/hmac_drbg.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/md.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/md.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/md2.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/md2.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/md4.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/md4.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/md5.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/md5.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/md_wrap.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/md_wrap.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/memory_buffer_alloc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/memory_buffer_alloc.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/net_sockets.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/net_sockets.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/nist_kw.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/nist_kw.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/oid.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/oid.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/padlock.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/padlock.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/pem.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/pem.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/pk.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/pk.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/pk_wrap.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/pk_wrap.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/pkcs11.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/pkcs11.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/pkcs12.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/pkcs12.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/pkcs5.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/pkcs5.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/pkparse.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/pkparse.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/pkwrite.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/pkwrite.c</locationURI>
 		</link>
 		<link>
 			<name>src/mbedtls/library/platform.c</name>
@@ -1521,9 +1686,104 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/platform.c</locationURI>
 		</link>
 		<link>
+			<name>src/mbedtls/library/platform_util.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/platform_util.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/poly1305.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/poly1305.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/ripemd160.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ripemd160.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/rsa.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/rsa.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/rsa_internal.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/rsa_internal.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/sha1.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/sha1.c</locationURI>
+		</link>
+		<link>
 			<name>src/mbedtls/library/sha256.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/sha256.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/sha512.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/sha512.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/ssl_cache.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ssl_cache.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/ssl_ciphersuites.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ssl_ciphersuites.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/ssl_cli.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ssl_cli.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/ssl_cookie.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ssl_cookie.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/ssl_srv.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ssl_srv.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/ssl_ticket.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ssl_ticket.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/ssl_tls.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/ssl_tls.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/threading.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/threading.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/timing.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/timing.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/version.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/version.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/version_features.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/version_features.c</locationURI>
+		</link>
+		<link>
+			<name>src/mbedtls/library/xtea.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/xtea.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/ble_advertising</name>

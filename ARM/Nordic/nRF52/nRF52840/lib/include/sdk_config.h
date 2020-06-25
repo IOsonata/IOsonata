@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2017 - 2019, Nordic Semiconductor ASA
+ * Copyright (c) 2017 - 2020, Nordic Semiconductor ASA
  *
  * All rights reserved.
  *
@@ -46,1106 +46,6 @@
 #ifdef USE_APP_CONFIG
 #include "app_config.h"
 #endif
-// <h> nRF_ANT 
-
-//==========================================================
-// <e> ANTFS_ENABLED - ant_fs - ANT File Share module.
-//==========================================================
-#ifndef ANTFS_ENABLED
-#define ANTFS_ENABLED 0
-#endif
-// <o> ANTFS_CONFIG_NETWORK_NUMBER - ANT-FS network number. 
-#ifndef ANTFS_CONFIG_NETWORK_NUMBER
-#define ANTFS_CONFIG_NETWORK_NUMBER 0
-#endif
-
-// <o> ANTFS_CONFIG_CHANNEL_NUMBER - ANT-FS channel number. 
-#ifndef ANTFS_CONFIG_CHANNEL_NUMBER
-#define ANTFS_CONFIG_CHANNEL_NUMBER 0
-#endif
-
-// <o> ANTFS_CONFIG_PAIRING_TIMEOUT - Pairing timeout - how long the UI will wait for a response to a pairing request before switching to the link layer, in seconds. 
-#ifndef ANTFS_CONFIG_PAIRING_TIMEOUT
-#define ANTFS_CONFIG_PAIRING_TIMEOUT 120
-#endif
-
-// <o> ANTFS_CONFIG_LINK_COMMAND_TIMEOUT - Command timeout - how long the client will wait without receiving any commands before switching to the link layer, in seconds. 
-#ifndef ANTFS_CONFIG_LINK_COMMAND_TIMEOUT
-#define ANTFS_CONFIG_LINK_COMMAND_TIMEOUT 10
-#endif
-
-// <o> ANTFS_CONFIG_TRANS_TYPE - ANT-FS Transmission Type. 
-#ifndef ANTFS_CONFIG_TRANS_TYPE
-#define ANTFS_CONFIG_TRANS_TYPE 10
-#endif
-
-// <o> ANTFS_CONFIG_DEVICE_TYPE - ANT device type for channel configuration. 
-#ifndef ANTFS_CONFIG_DEVICE_TYPE
-#define ANTFS_CONFIG_DEVICE_TYPE 1
-#endif
-
-// <o> ANTFS_CONFIG_BEACON_STATUS_PERIOD  - ANT-FS Beacon Message Period.
- 
-// <0=> 0.5 Hz 
-// <1=> 1 Hz 
-// <2=> 2 Hz 
-// <3=> 4 Hz 
-// <4=> 8 Hz 
-
-#ifndef ANTFS_CONFIG_BEACON_STATUS_PERIOD
-#define ANTFS_CONFIG_BEACON_STATUS_PERIOD 3
-#endif
-
-// <o> ANTFS_CONFIG_TRANSMIT_POWER  - ANT Transmit Power.
- 
-// <0=> Lowest ANT Tx power level setting. (-20dBm) 
-// <1=> ANT Tx power > Lvl 0. (-12dBm) 
-// <2=> ANT Tx power > Lvl 1. (-4dBm) 
-// <3=> ANT Tx power > Lvl 2. Default tx power level. (0dBm) 
-// <4=> ANT Tx power > Lvl 3. (+4dBm) 
-// <128=> Custom tx power selection 
-
-#ifndef ANTFS_CONFIG_TRANSMIT_POWER
-#define ANTFS_CONFIG_TRANSMIT_POWER 3
-#endif
-
-// <o> ANTFS_CONFIG_CUSTOM_TRANSMIT_POWER - ANT Custom Transmit Power. 
-#ifndef ANTFS_CONFIG_CUSTOM_TRANSMIT_POWER
-#define ANTFS_CONFIG_CUSTOM_TRANSMIT_POWER 0
-#endif
-
-// <q> ANTFS_CONFIG_AUTH_TYPE_PAIRING_ENABLED  - Use pairing and key exchange authentication.
- 
-
-#ifndef ANTFS_CONFIG_AUTH_TYPE_PAIRING_ENABLED
-#define ANTFS_CONFIG_AUTH_TYPE_PAIRING_ENABLED 0
-#endif
-
-// <q> ANTFS_CONFIG_AUTH_TYPE_PASSKEY_ENABLED  - Use passkey authentication.
- 
-
-#ifndef ANTFS_CONFIG_AUTH_TYPE_PASSKEY_ENABLED
-#define ANTFS_CONFIG_AUTH_TYPE_PASSKEY_ENABLED 0
-#endif
-
-// <q> ANTFS_CONFIG_AUTH_TYPE_PASSTHROUGH_ENABLED  - Allow host to bypass authentication.
- 
-
-#ifndef ANTFS_CONFIG_AUTH_TYPE_PASSTHROUGH_ENABLED
-#define ANTFS_CONFIG_AUTH_TYPE_PASSTHROUGH_ENABLED 0
-#endif
-
-// <q> ANTFS_CONFIG_UPLOAD_ENABLED  - Support upload operation.
- 
-
-#ifndef ANTFS_CONFIG_UPLOAD_ENABLED
-#define ANTFS_CONFIG_UPLOAD_ENABLED 0
-#endif
-
-// <q> ANTFS_CONFIG_DEBUG_LED_ENABLED  - Enables LED debug in the module.
- 
-
-#ifndef ANTFS_CONFIG_DEBUG_LED_ENABLED
-#define ANTFS_CONFIG_DEBUG_LED_ENABLED 0
-#endif
-
-// </e>
-
-// <e> ANT_BPWR_ENABLED - ant_bpwr - Bicycle Power Profile
-//==========================================================
-#ifndef ANT_BPWR_ENABLED
-#define ANT_BPWR_ENABLED 0
-#endif
-// <e> ANT_BPWR_LOG_ENABLED - Enables general logging in the module.
-//==========================================================
-#ifndef ANT_BPWR_LOG_ENABLED
-#define ANT_BPWR_LOG_ENABLED 0
-#endif
-// <o> ANT_BPWR_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BPWR_LOG_LEVEL
-#define ANT_BPWR_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BPWR_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BPWR_INFO_COLOR
-#define ANT_BPWR_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BPWR_COMMON_LOG_ENABLED - Enables logging of BPWR tracing common data.
-//==========================================================
-#ifndef ANT_BPWR_COMMON_LOG_ENABLED
-#define ANT_BPWR_COMMON_LOG_ENABLED 0
-#endif
-// <o> ANT_BPWR_COMMON_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BPWR_COMMON_LOG_LEVEL
-#define ANT_BPWR_COMMON_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BPWR_COMMON_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BPWR_COMMON_INFO_COLOR
-#define ANT_BPWR_COMMON_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BPWR_PAGE_TORQUE_LOG_ENABLED - Enables logging of BPWR torque page in the module.
-//==========================================================
-#ifndef ANT_BPWR_PAGE_TORQUE_LOG_ENABLED
-#define ANT_BPWR_PAGE_TORQUE_LOG_ENABLED 0
-#endif
-// <o> ANT_BPWR_PAGE_TORQUE_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BPWR_PAGE_TORQUE_LOG_LEVEL
-#define ANT_BPWR_PAGE_TORQUE_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BPWR_PAGE_TORQUE_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BPWR_PAGE_TORQUE_INFO_COLOR
-#define ANT_BPWR_PAGE_TORQUE_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BPWR_PAGE_1_LOG_ENABLED - Enables logging of BPWR page 1 in the module.
-//==========================================================
-#ifndef ANT_BPWR_PAGE_1_LOG_ENABLED
-#define ANT_BPWR_PAGE_1_LOG_ENABLED 0
-#endif
-// <o> ANT_BPWR_PAGE_1_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BPWR_PAGE_1_LOG_LEVEL
-#define ANT_BPWR_PAGE_1_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BPWR_PAGE_1_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BPWR_PAGE_1_INFO_COLOR
-#define ANT_BPWR_PAGE_1_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BPWR_PAGE_16_LOG_ENABLED - Enables logging of BPWR page 16 in the module.
-//==========================================================
-#ifndef ANT_BPWR_PAGE_16_LOG_ENABLED
-#define ANT_BPWR_PAGE_16_LOG_ENABLED 0
-#endif
-// <o> ANT_BPWR_PAGE_16_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BPWR_PAGE_16_LOG_LEVEL
-#define ANT_BPWR_PAGE_16_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BPWR_PAGE_16_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BPWR_PAGE_16_INFO_COLOR
-#define ANT_BPWR_PAGE_16_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BPWR_PAGE_17_LOG_ENABLED - Enables logging of BPWR page 17 in the module.
-//==========================================================
-#ifndef ANT_BPWR_PAGE_17_LOG_ENABLED
-#define ANT_BPWR_PAGE_17_LOG_ENABLED 0
-#endif
-// <o> ANT_BPWR_PAGE_17_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BPWR_PAGE_17_LOG_LEVEL
-#define ANT_BPWR_PAGE_17_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BPWR_PAGE_17_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BPWR_PAGE_17_INFO_COLOR
-#define ANT_BPWR_PAGE_17_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BPWR_PAGE_18_LOG_ENABLED - Enables logging of BPWR page 18 in the module.
-//==========================================================
-#ifndef ANT_BPWR_PAGE_18_LOG_ENABLED
-#define ANT_BPWR_PAGE_18_LOG_ENABLED 0
-#endif
-// <o> ANT_BPWR_PAGE_18_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BPWR_PAGE_18_LOG_LEVEL
-#define ANT_BPWR_PAGE_18_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BPWR_PAGE_18_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BPWR_PAGE_18_INFO_COLOR
-#define ANT_BPWR_PAGE_18_INFO_COLOR 0
-#endif
-
-// </e>
-
-// </e>
-
-// <e> ANT_BSC_ENABLED - ant_bsc - Bicycle Speed and Cadence Profile
-//==========================================================
-#ifndef ANT_BSC_ENABLED
-#define ANT_BSC_ENABLED 0
-#endif
-// <e> ANT_BSC_LOG_ENABLED - Enables general logging in the module.
-//==========================================================
-#ifndef ANT_BSC_LOG_ENABLED
-#define ANT_BSC_LOG_ENABLED 0
-#endif
-// <o> ANT_BSC_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BSC_LOG_LEVEL
-#define ANT_BSC_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BSC_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BSC_INFO_COLOR
-#define ANT_BSC_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BSC_COMBINED_PAGE_0_LOG_ENABLED - Enables logging of BSC Combined page 0 in the module.
-//==========================================================
-#ifndef ANT_BSC_COMBINED_PAGE_0_LOG_ENABLED
-#define ANT_BSC_COMBINED_PAGE_0_LOG_ENABLED 0
-#endif
-// <o> ANT_BSC_COMBINED_PAGE_0_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BSC_COMBINED_PAGE_0_LOG_LEVEL
-#define ANT_BSC_COMBINED_PAGE_0_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BSC_COMBINED_PAGE_0_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BSC_COMBINED_PAGE_0_INFO_COLOR
-#define ANT_BSC_COMBINED_PAGE_0_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BSC_PAGE_0_LOG_ENABLED - Enables logging of BSC page 0 in the module.
-//==========================================================
-#ifndef ANT_BSC_PAGE_0_LOG_ENABLED
-#define ANT_BSC_PAGE_0_LOG_ENABLED 0
-#endif
-// <o> ANT_BSC_PAGE_0_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BSC_PAGE_0_LOG_LEVEL
-#define ANT_BSC_PAGE_0_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BSC_PAGE_0_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BSC_PAGE_0_INFO_COLOR
-#define ANT_BSC_PAGE_0_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BSC_PAGE_1_LOG_ENABLED - Enables logging of BSC page 1 in the module.
-//==========================================================
-#ifndef ANT_BSC_PAGE_1_LOG_ENABLED
-#define ANT_BSC_PAGE_1_LOG_ENABLED 0
-#endif
-// <o> ANT_BSC_PAGE_1_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BSC_PAGE_1_LOG_LEVEL
-#define ANT_BSC_PAGE_1_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BSC_PAGE_1_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BSC_PAGE_1_INFO_COLOR
-#define ANT_BSC_PAGE_1_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BSC_PAGE_2_LOG_ENABLED - Enables logging of BSC page 2 in the module.
-//==========================================================
-#ifndef ANT_BSC_PAGE_2_LOG_ENABLED
-#define ANT_BSC_PAGE_2_LOG_ENABLED 0
-#endif
-// <o> ANT_BSC_PAGE_2_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BSC_PAGE_2_LOG_LEVEL
-#define ANT_BSC_PAGE_2_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BSC_PAGE_2_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BSC_PAGE_2_INFO_COLOR
-#define ANT_BSC_PAGE_2_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BSC_PAGE_3_LOG_ENABLED - Enables logging of BSC page 3 in the module.
-//==========================================================
-#ifndef ANT_BSC_PAGE_3_LOG_ENABLED
-#define ANT_BSC_PAGE_3_LOG_ENABLED 0
-#endif
-// <o> ANT_BSC_PAGE_3_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BSC_PAGE_3_LOG_LEVEL
-#define ANT_BSC_PAGE_3_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BSC_PAGE_3_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BSC_PAGE_3_INFO_COLOR
-#define ANT_BSC_PAGE_3_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BSC_PAGE_4_LOG_ENABLED - Enables logging of BSC page 4 in the module.
-//==========================================================
-#ifndef ANT_BSC_PAGE_4_LOG_ENABLED
-#define ANT_BSC_PAGE_4_LOG_ENABLED 0
-#endif
-// <o> ANT_BSC_PAGE_4_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BSC_PAGE_4_LOG_LEVEL
-#define ANT_BSC_PAGE_4_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BSC_PAGE_4_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BSC_PAGE_4_INFO_COLOR
-#define ANT_BSC_PAGE_4_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_BSC_PAGE_5_LOG_ENABLED - Enables logging of BSC page 5 in the module.
-//==========================================================
-#ifndef ANT_BSC_PAGE_5_LOG_ENABLED
-#define ANT_BSC_PAGE_5_LOG_ENABLED 0
-#endif
-// <o> ANT_BSC_PAGE_5_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_BSC_PAGE_5_LOG_LEVEL
-#define ANT_BSC_PAGE_5_LOG_LEVEL 3
-#endif
-
-// <o> ANT_BSC_PAGE_5_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_BSC_PAGE_5_INFO_COLOR
-#define ANT_BSC_PAGE_5_INFO_COLOR 0
-#endif
-
-// </e>
-
-// </e>
-
-// <q> ANT_CHANNEL_CONFIG_ENABLED  - ant_channel_config - ANT common channel configuration
- 
-
-#ifndef ANT_CHANNEL_CONFIG_ENABLED
-#define ANT_CHANNEL_CONFIG_ENABLED 0
-#endif
-
-// <e> ANT_COMMON_PAGE_70_ENABLED - ant_common_page_70 - ANT+ common page 70
-//==========================================================
-#ifndef ANT_COMMON_PAGE_70_ENABLED
-#define ANT_COMMON_PAGE_70_ENABLED 0
-#endif
-// <e> ANT_COMMON_PAGE_70_LOG_ENABLED - Enables logging of common page 70 in the module.
-//==========================================================
-#ifndef ANT_COMMON_PAGE_70_LOG_ENABLED
-#define ANT_COMMON_PAGE_70_LOG_ENABLED 0
-#endif
-// <o> ANT_COMMON_PAGE_70_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_COMMON_PAGE_70_LOG_LEVEL
-#define ANT_COMMON_PAGE_70_LOG_LEVEL 3
-#endif
-
-// <o> ANT_COMMON_PAGE_70_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_COMMON_PAGE_70_INFO_COLOR
-#define ANT_COMMON_PAGE_70_INFO_COLOR 0
-#endif
-
-// </e>
-
-// </e>
-
-// <e> ANT_COMMON_PAGE_80_ENABLED - ant_common_page_80 - ANT+ common page 80
-//==========================================================
-#ifndef ANT_COMMON_PAGE_80_ENABLED
-#define ANT_COMMON_PAGE_80_ENABLED 0
-#endif
-// <e> ANT_COMMON_PAGE_80_LOG_ENABLED - Enables logging of common page 80 in the module.
-//==========================================================
-#ifndef ANT_COMMON_PAGE_80_LOG_ENABLED
-#define ANT_COMMON_PAGE_80_LOG_ENABLED 0
-#endif
-// <o> ANT_COMMON_PAGE_80_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_COMMON_PAGE_80_LOG_LEVEL
-#define ANT_COMMON_PAGE_80_LOG_LEVEL 3
-#endif
-
-// <o> ANT_COMMON_PAGE_80_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_COMMON_PAGE_80_INFO_COLOR
-#define ANT_COMMON_PAGE_80_INFO_COLOR 0
-#endif
-
-// </e>
-
-// </e>
-
-// <e> ANT_COMMON_PAGE_81_ENABLED - ant_common_page_81 - ANT+ common page 81
-//==========================================================
-#ifndef ANT_COMMON_PAGE_81_ENABLED
-#define ANT_COMMON_PAGE_81_ENABLED 0
-#endif
-// <e> ANT_COMMON_PAGE_81_LOG_ENABLED - Enables logging of common page 81 in the module.
-//==========================================================
-#ifndef ANT_COMMON_PAGE_81_LOG_ENABLED
-#define ANT_COMMON_PAGE_81_LOG_ENABLED 0
-#endif
-// <o> ANT_COMMON_PAGE_81_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_COMMON_PAGE_81_LOG_LEVEL
-#define ANT_COMMON_PAGE_81_LOG_LEVEL 3
-#endif
-
-// <o> ANT_COMMON_PAGE_81_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_COMMON_PAGE_81_INFO_COLOR
-#define ANT_COMMON_PAGE_81_INFO_COLOR 0
-#endif
-
-// </e>
-
-// </e>
-
-// <q> ANT_ENCRYPT_CONFIG_ENABLED  - ant_encrypt_config - Cryptographic ANT stack configuration
- 
-
-#ifndef ANT_ENCRYPT_CONFIG_ENABLED
-#define ANT_ENCRYPT_CONFIG_ENABLED 0
-#endif
-
-// <q> ANT_ENCRYPT_NEGOTIATION_SLAVE_ENABLED  - ant_encrypt_negotiation_slave - Encryption negotiation for encrypted ANT slave channels
- 
-
-#ifndef ANT_ENCRYPT_NEGOTIATION_SLAVE_ENABLED
-#define ANT_ENCRYPT_NEGOTIATION_SLAVE_ENABLED 0
-#endif
-
-// <e> ANT_HRM_ENABLED - ant_hrm - Heart Rate Monitor Profile
-//==========================================================
-#ifndef ANT_HRM_ENABLED
-#define ANT_HRM_ENABLED 0
-#endif
-// <e> ANT_HRM_LOG_ENABLED - Enables general logging in the module.
-//==========================================================
-#ifndef ANT_HRM_LOG_ENABLED
-#define ANT_HRM_LOG_ENABLED 0
-#endif
-// <o> ANT_HRM_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_HRM_LOG_LEVEL
-#define ANT_HRM_LOG_LEVEL 3
-#endif
-
-// <o> ANT_HRM_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_HRM_INFO_COLOR
-#define ANT_HRM_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_HRM_PAGE_0_LOG_ENABLED - Enables logging of HRM page 0 in the module.
-//==========================================================
-#ifndef ANT_HRM_PAGE_0_LOG_ENABLED
-#define ANT_HRM_PAGE_0_LOG_ENABLED 0
-#endif
-// <o> ANT_HRM_PAGE_0_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_HRM_PAGE_0_LOG_LEVEL
-#define ANT_HRM_PAGE_0_LOG_LEVEL 3
-#endif
-
-// <o> ANT_HRM_PAGE_0_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_HRM_PAGE_0_INFO_COLOR
-#define ANT_HRM_PAGE_0_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_HRM_PAGE_1_LOG_ENABLED - Enables logging of HRM page 1 in the module.
-//==========================================================
-#ifndef ANT_HRM_PAGE_1_LOG_ENABLED
-#define ANT_HRM_PAGE_1_LOG_ENABLED 0
-#endif
-// <o> ANT_HRM_PAGE_1_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_HRM_PAGE_1_LOG_LEVEL
-#define ANT_HRM_PAGE_1_LOG_LEVEL 3
-#endif
-
-// <o> ANT_HRM_PAGE_1_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_HRM_PAGE_1_INFO_COLOR
-#define ANT_HRM_PAGE_1_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_HRM_PAGE_2_LOG_ENABLED - Enables logging of HRM page 2 in the module.
-//==========================================================
-#ifndef ANT_HRM_PAGE_2_LOG_ENABLED
-#define ANT_HRM_PAGE_2_LOG_ENABLED 0
-#endif
-// <o> ANT_HRM_PAGE_2_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_HRM_PAGE_2_LOG_LEVEL
-#define ANT_HRM_PAGE_2_LOG_LEVEL 3
-#endif
-
-// <o> ANT_HRM_PAGE_2_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_HRM_PAGE_2_INFO_COLOR
-#define ANT_HRM_PAGE_2_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_HRM_PAGE_3_LOG_ENABLED - Enables logging of HRM page 3 in the module.
-//==========================================================
-#ifndef ANT_HRM_PAGE_3_LOG_ENABLED
-#define ANT_HRM_PAGE_3_LOG_ENABLED 0
-#endif
-// <o> ANT_HRM_PAGE_3_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_HRM_PAGE_3_LOG_LEVEL
-#define ANT_HRM_PAGE_3_LOG_LEVEL 3
-#endif
-
-// <o> ANT_HRM_PAGE_3_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_HRM_PAGE_3_INFO_COLOR
-#define ANT_HRM_PAGE_3_INFO_COLOR 0
-#endif
-
-// </e>
-
-// <e> ANT_HRM_PAGE_4_LOG_ENABLED - Enables logging of HRM page 4 in the module.
-//==========================================================
-#ifndef ANT_HRM_PAGE_4_LOG_ENABLED
-#define ANT_HRM_PAGE_4_LOG_ENABLED 0
-#endif
-// <o> ANT_HRM_PAGE_4_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_HRM_PAGE_4_LOG_LEVEL
-#define ANT_HRM_PAGE_4_LOG_LEVEL 3
-#endif
-
-// <o> ANT_HRM_PAGE_4_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_HRM_PAGE_4_INFO_COLOR
-#define ANT_HRM_PAGE_4_INFO_COLOR 0
-#endif
-
-// </e>
-
-// </e>
-
-// <q> ANT_KEY_MANAGER_ENABLED  - ant_key_manager - Software Component
- 
-
-#ifndef ANT_KEY_MANAGER_ENABLED
-#define ANT_KEY_MANAGER_ENABLED 0
-#endif
-
-// <q> ANT_REQUEST_CONTROLLER_ENABLED  - ant_request_controller - ANT+ request controller
- 
-
-#ifndef ANT_REQUEST_CONTROLLER_ENABLED
-#define ANT_REQUEST_CONTROLLER_ENABLED 0
-#endif
-
-// <e> ANT_SDM_ENABLED - ant_sdm - Stride Based Speed and Distance Monitor Profile
-//==========================================================
-#ifndef ANT_SDM_ENABLED
-#define ANT_SDM_ENABLED 0
-#endif
-// <e> ANT_SDM_LOG_ENABLED - Enables general logging in the module.
-//==========================================================
-#ifndef ANT_SDM_LOG_ENABLED
-#define ANT_SDM_LOG_ENABLED 0
-#endif
-// <o> ANT_SDM_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef ANT_SDM_LOG_LEVEL
-#define ANT_SDM_LOG_LEVEL 3
-#endif
-
-// <o> ANT_SDM_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef ANT_SDM_INFO_COLOR
-#define ANT_SDM_INFO_COLOR 0
-#endif
-
-// </e>
-
-// </e>
-
-// <e> ANT_SEARCH_CONFIG_ENABLED - ant_search_config - ANT common search configuration
-//==========================================================
-#ifndef ANT_SEARCH_CONFIG_ENABLED
-#define ANT_SEARCH_CONFIG_ENABLED 0
-#endif
-// <o> ANT_DEFAULT_LOW_PRIORITY_TIMEOUT - Default low priority search time-out.  <0-255> 
-
-
-#ifndef ANT_DEFAULT_LOW_PRIORITY_TIMEOUT
-#define ANT_DEFAULT_LOW_PRIORITY_TIMEOUT 2
-#endif
-
-// <o> ANT_DEFAULT_HIGH_PRIORITY_TIMEOUT - Default high priority search time-out.  <0-255> 
-
-
-#ifndef ANT_DEFAULT_HIGH_PRIORITY_TIMEOUT
-#define ANT_DEFAULT_HIGH_PRIORITY_TIMEOUT 10
-#endif
-
-// </e>
-
-// <e> ANT_STATE_INDICATOR_ENABLED - ant_state_indicator - ANT state indicator using BSP
-//==========================================================
-#ifndef ANT_STATE_INDICATOR_ENABLED
-#define ANT_STATE_INDICATOR_ENABLED 0
-#endif
-// <o> ANT_STATE_INDICATOR_CONFIG_SHUTDOWN_HANDLER_PRIORITY - Shutdown observer priority. 
-#ifndef ANT_STATE_INDICATOR_CONFIG_SHUTDOWN_HANDLER_PRIORITY
-#define ANT_STATE_INDICATOR_CONFIG_SHUTDOWN_HANDLER_PRIORITY 1
-#endif
-
-// </e>
-
-// </h> 
-//==========================================================
-
 // <h> nRF_BLE 
 
 //==========================================================
@@ -1156,18 +56,11 @@
 #define BLE_ADVERTISING_ENABLED 1
 #endif
 
-// <q> BLE_DB_DISCOVERY_ENABLED  - ble_db_discovery - Database discovery module
-
-
-#ifndef BLE_DB_DISCOVERY_ENABLED
-#define BLE_DB_DISCOVERY_ENABLED 1
-#endif
-
 // <q> BLE_DTM_ENABLED  - ble_dtm - Module for testing RF/PHY using DTM commands
  
 
 #ifndef BLE_DTM_ENABLED
-#define BLE_DTM_ENABLED 0
+#define BLE_DTM_ENABLED 1
 #endif
 
 // <q> BLE_RACP_ENABLED  - ble_racp - Record Access Control Point library
@@ -1212,7 +105,6 @@
 #define NRF_BLE_LESC_ENABLED 1
 #endif
 
-
 // <e> NRF_BLE_QWR_ENABLED - nrf_ble_qwr - Queued writes support module (prepare/execute write)
 //==========================================================
 #ifndef NRF_BLE_QWR_ENABLED
@@ -1222,8 +114,6 @@
 #ifndef NRF_BLE_QWR_MAX_ATTR
 #define NRF_BLE_QWR_MAX_ATTR 0
 #endif
-
-// </e>
 
 // <e> NRF_BLE_SCAN_ENABLED - nrf_ble_scan - Scanning Module
 //==========================================================
@@ -1507,7 +397,7 @@
  
 
 #ifndef BLE_CSCS_ENABLED
-#define BLE_CSCS_ENABLED 1
+#define BLE_CSCS_ENABLED 0
 #endif
 
 // <q> BLE_CTS_C_ENABLED  - ble_cts_c - Current Time Service Client
@@ -1528,14 +418,14 @@
  
 
 #ifndef BLE_GLS_ENABLED
-#define BLE_GLS_ENABLED 1
+#define BLE_GLS_ENABLED 0
 #endif
 
 // <q> BLE_HIDS_ENABLED  - ble_hids - Human Interface Device Service
  
 
 #ifndef BLE_HIDS_ENABLED
-#define BLE_HIDS_ENABLED 1
+#define BLE_HIDS_ENABLED 0
 #endif
 
 // <q> BLE_HRS_C_ENABLED  - ble_hrs_c - Heart Rate Service Client
@@ -1549,14 +439,14 @@
  
 
 #ifndef BLE_HRS_ENABLED
-#define BLE_HRS_ENABLED 1
+#define BLE_HRS_ENABLED 0
 #endif
 
 // <q> BLE_HTS_ENABLED  - ble_hts - Health Thermometer Service
  
 
 #ifndef BLE_HTS_ENABLED
-#define BLE_HTS_ENABLED 1
+#define BLE_HTS_ENABLED 0
 #endif
 
 // <q> BLE_IAS_C_ENABLED  - ble_ias_c - Immediate Alert Service Client
@@ -1569,7 +459,7 @@
 // <e> BLE_IAS_ENABLED - ble_ias - Immediate Alert Service
 //==========================================================
 #ifndef BLE_IAS_ENABLED
-#define BLE_IAS_ENABLED 1
+#define BLE_IAS_ENABLED 0
 #endif
 // <e> BLE_IAS_CONFIG_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -1649,13 +539,13 @@
  
 
 #ifndef BLE_NUS_C_ENABLED
-#define BLE_NUS_C_ENABLED 0
+#define BLE_NUS_C_ENABLED 1
 #endif
 
 // <e> BLE_NUS_ENABLED - ble_nus - Nordic UART Service
 //==========================================================
 #ifndef BLE_NUS_ENABLED
-#define BLE_NUS_ENABLED 0
+#define BLE_NUS_ENABLED 1
 #endif
 // <e> BLE_NUS_CONFIG_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -1728,7 +618,7 @@
  
 
 #ifndef BLE_TPS_ENABLED
-#define BLE_TPS_ENABLED 0
+#define BLE_TPS_ENABLED 1
 #endif
 
 // </h> 
@@ -1773,13 +663,6 @@
 
 // </e>
 
-// <q> NRF_DFU_SETTINGS_COMPATIBILITY_MODE  - nrf_dfu_settings - DFU Settings
-
-
-#ifndef NRF_DFU_SETTINGS_COMPATIBILITY_MODE
-#define NRF_DFU_SETTINGS_COMPATIBILITY_MODE 1
-#endif
-
 // </h> 
 //==========================================================
 
@@ -1816,7 +699,7 @@
  
 
 #ifndef NRF_CRYPTO_BACKEND_CC310_BL_ECC_SECP224R1_ENABLED
-#define NRF_CRYPTO_BACKEND_CC310_BL_ECC_SECP224R1_ENABLED 1
+#define NRF_CRYPTO_BACKEND_CC310_BL_ECC_SECP224R1_ENABLED 0
 #endif
 
 // <q> NRF_CRYPTO_BACKEND_CC310_BL_ECC_SECP256R1_ENABLED  - Enable the secp256r1 elliptic curve support using CC310_BL.
@@ -2347,7 +1230,7 @@
 // <i> Enable mbed TLS CTR-DRBG standardized by NIST (NIST SP 800-90A Rev. 1). The nRF HW RNG is used as an entropy source for seeding.
 
 #ifndef NRF_CRYPTO_BACKEND_NRF_HW_RNG_MBEDTLS_CTR_DRBG_ENABLED
-#define NRF_CRYPTO_BACKEND_NRF_HW_RNG_MBEDTLS_CTR_DRBG_ENABLED 0
+#define NRF_CRYPTO_BACKEND_NRF_HW_RNG_MBEDTLS_CTR_DRBG_ENABLED 1
 #endif
 
 // </e>
@@ -2947,7 +1830,7 @@
 // <e> NRFX_CLOCK_ENABLED - nrfx_clock - CLOCK peripheral driver
 //==========================================================
 #ifndef NRFX_CLOCK_ENABLED
-#define NRFX_CLOCK_ENABLED 1
+#define NRFX_CLOCK_ENABLED 0
 #endif
 // <o> NRFX_CLOCK_CONFIG_LF_SRC  - LF Clock Source
  
@@ -3570,6 +2453,79 @@
 
 // </e>
 
+// <e> NRFX_NFCT_ENABLED - nrfx_nfct - NFCT peripheral driver
+//==========================================================
+#ifndef NRFX_NFCT_ENABLED
+#define NRFX_NFCT_ENABLED 1
+#endif
+// <o> NRFX_NFCT_CONFIG_IRQ_PRIORITY  - Interrupt priority
+ 
+// <0=> 0 (highest) 
+// <1=> 1 
+// <2=> 2 
+// <3=> 3 
+// <4=> 4 
+// <5=> 5 
+// <6=> 6 
+// <7=> 7 
+
+#ifndef NRFX_NFCT_CONFIG_IRQ_PRIORITY
+#define NRFX_NFCT_CONFIG_IRQ_PRIORITY 6
+#endif
+
+// <e> NRFX_NFCT_CONFIG_LOG_ENABLED - Enables logging in the module.
+//==========================================================
+#ifndef NRFX_NFCT_CONFIG_LOG_ENABLED
+#define NRFX_NFCT_CONFIG_LOG_ENABLED 0
+#endif
+// <o> NRFX_NFCT_CONFIG_LOG_LEVEL  - Default Severity level
+ 
+// <0=> Off 
+// <1=> Error 
+// <2=> Warning 
+// <3=> Info 
+// <4=> Debug 
+
+#ifndef NRFX_NFCT_CONFIG_LOG_LEVEL
+#define NRFX_NFCT_CONFIG_LOG_LEVEL 3
+#endif
+
+// <o> NRFX_NFCT_CONFIG_INFO_COLOR  - ANSI escape code prefix.
+ 
+// <0=> Default 
+// <1=> Black 
+// <2=> Red 
+// <3=> Green 
+// <4=> Yellow 
+// <5=> Blue 
+// <6=> Magenta 
+// <7=> Cyan 
+// <8=> White 
+
+#ifndef NRFX_NFCT_CONFIG_INFO_COLOR
+#define NRFX_NFCT_CONFIG_INFO_COLOR 0
+#endif
+
+// <o> NRFX_NFCT_CONFIG_DEBUG_COLOR  - ANSI escape code prefix.
+ 
+// <0=> Default 
+// <1=> Black 
+// <2=> Red 
+// <3=> Green 
+// <4=> Yellow 
+// <5=> Blue 
+// <6=> Magenta 
+// <7=> Cyan 
+// <8=> White 
+
+#ifndef NRFX_NFCT_CONFIG_DEBUG_COLOR
+#define NRFX_NFCT_CONFIG_DEBUG_COLOR 0
+#endif
+
+// </e>
+
+// </e>
+
 // <e> NRFX_PDM_ENABLED - nrfx_pdm - PDM peripheral driver
 //==========================================================
 #ifndef NRFX_PDM_ENABLED
@@ -3714,7 +2670,7 @@
 // <e> NRFX_PPI_ENABLED - nrfx_ppi - PPI peripheral allocator
 //==========================================================
 #ifndef NRFX_PPI_ENABLED
-#define NRFX_PPI_ENABLED 0
+#define NRFX_PPI_ENABLED 1
 #endif
 // <e> NRFX_PPI_CONFIG_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -3793,6 +2749,13 @@
 
 #ifndef NRFX_PWM2_ENABLED
 #define NRFX_PWM2_ENABLED 0
+#endif
+
+// <q> NRFX_PWM3_ENABLED  - Enable PWM3 instance
+ 
+
+#ifndef NRFX_PWM3_ENABLED
+#define NRFX_PWM3_ENABLED 0
 #endif
 
 // <o> NRFX_PWM_DEFAULT_CONFIG_OUT0_PIN - Out0 pin  <0-31> 
@@ -3938,40 +2901,12 @@
 
 // </e>
 
-// <e> NRFX_PWM_NRF52_ANOMALY_109_WORKAROUND_ENABLED - Enables nRF52 Anomaly 109 workaround for PWM.
-
-// <i> The workaround uses interrupts to wake up the CPU and ensure
-// <i> it is active when PWM is about to start a DMA transfer. For
-// <i> initial transfer, done when a playback is started via PPI,
-// <i> a specific EGU instance is used to generate the interrupt.
-// <i> During the playback, the PWM interrupt triggered on SEQEND
-// <i> event of a preceding sequence is used to protect the transfer
-// <i> done for the next sequence to be played.
-//==========================================================
-#ifndef NRFX_PWM_NRF52_ANOMALY_109_WORKAROUND_ENABLED
-#define NRFX_PWM_NRF52_ANOMALY_109_WORKAROUND_ENABLED 0
-#endif
-// <o> NRFX_PWM_NRF52_ANOMALY_109_EGU_INSTANCE  - EGU instance used by the nRF52 Anomaly 109 workaround for PWM.
- 
-// <0=> EGU0 
-// <1=> EGU1 
-// <2=> EGU2 
-// <3=> EGU3 
-// <4=> EGU4 
-// <5=> EGU5 
-
-#ifndef NRFX_PWM_NRF52_ANOMALY_109_EGU_INSTANCE
-#define NRFX_PWM_NRF52_ANOMALY_109_EGU_INSTANCE 5
-#endif
-
-// </e>
-
 // </e>
 
 // <e> NRFX_QDEC_ENABLED - nrfx_qdec - QDEC peripheral driver
 //==========================================================
 #ifndef NRFX_QDEC_ENABLED
-#define NRFX_QDEC_ENABLED 0
+#define NRFX_QDEC_ENABLED 1
 #endif
 // <o> NRFX_QDEC_CONFIG_REPORTPER  - Report period
  
@@ -4117,6 +3052,134 @@
 #endif
 
 // </e>
+
+// </e>
+
+// <e> NRFX_QSPI_ENABLED - nrfx_qspi - QSPI peripheral driver
+//==========================================================
+#ifndef NRFX_QSPI_ENABLED
+#define NRFX_QSPI_ENABLED 0
+#endif
+// <o> NRFX_QSPI_CONFIG_SCK_DELAY - tSHSL, tWHSL and tSHWL in number of 16 MHz periods (62.5 ns).  <0-255> 
+
+
+#ifndef NRFX_QSPI_CONFIG_SCK_DELAY
+#define NRFX_QSPI_CONFIG_SCK_DELAY 1
+#endif
+
+// <o> NRFX_QSPI_CONFIG_XIP_OFFSET - Address offset in the external memory for Execute in Place operation. 
+#ifndef NRFX_QSPI_CONFIG_XIP_OFFSET
+#define NRFX_QSPI_CONFIG_XIP_OFFSET 0
+#endif
+
+// <o> NRFX_QSPI_CONFIG_READOC  - Number of data lines and opcode used for reading.
+ 
+// <0=> FastRead 
+// <1=> Read2O 
+// <2=> Read2IO 
+// <3=> Read4O 
+// <4=> Read4IO 
+
+#ifndef NRFX_QSPI_CONFIG_READOC
+#define NRFX_QSPI_CONFIG_READOC 0
+#endif
+
+// <o> NRFX_QSPI_CONFIG_WRITEOC  - Number of data lines and opcode used for writing.
+ 
+// <0=> PP 
+// <1=> PP2O 
+// <2=> PP4O 
+// <3=> PP4IO 
+
+#ifndef NRFX_QSPI_CONFIG_WRITEOC
+#define NRFX_QSPI_CONFIG_WRITEOC 0
+#endif
+
+// <o> NRFX_QSPI_CONFIG_ADDRMODE  - Addressing mode.
+ 
+// <0=> 24bit 
+// <1=> 32bit 
+
+#ifndef NRFX_QSPI_CONFIG_ADDRMODE
+#define NRFX_QSPI_CONFIG_ADDRMODE 0
+#endif
+
+// <o> NRFX_QSPI_CONFIG_MODE  - SPI mode.
+ 
+// <0=> Mode 0 
+// <1=> Mode 1 
+
+#ifndef NRFX_QSPI_CONFIG_MODE
+#define NRFX_QSPI_CONFIG_MODE 0
+#endif
+
+// <o> NRFX_QSPI_CONFIG_FREQUENCY  - Frequency divider.
+ 
+// <0=> 32MHz/1 
+// <1=> 32MHz/2 
+// <2=> 32MHz/3 
+// <3=> 32MHz/4 
+// <4=> 32MHz/5 
+// <5=> 32MHz/6 
+// <6=> 32MHz/7 
+// <7=> 32MHz/8 
+// <8=> 32MHz/9 
+// <9=> 32MHz/10 
+// <10=> 32MHz/11 
+// <11=> 32MHz/12 
+// <12=> 32MHz/13 
+// <13=> 32MHz/14 
+// <14=> 32MHz/15 
+// <15=> 32MHz/16 
+
+#ifndef NRFX_QSPI_CONFIG_FREQUENCY
+#define NRFX_QSPI_CONFIG_FREQUENCY 15
+#endif
+
+// <s> NRFX_QSPI_PIN_SCK - SCK pin value.
+#ifndef NRFX_QSPI_PIN_SCK
+#define NRFX_QSPI_PIN_SCK NRF_QSPI_PIN_NOT_CONNECTED
+#endif
+
+// <s> NRFX_QSPI_PIN_CSN - CSN pin value.
+#ifndef NRFX_QSPI_PIN_CSN
+#define NRFX_QSPI_PIN_CSN NRF_QSPI_PIN_NOT_CONNECTED
+#endif
+
+// <s> NRFX_QSPI_PIN_IO0 - IO0 pin value.
+#ifndef NRFX_QSPI_PIN_IO0
+#define NRFX_QSPI_PIN_IO0 NRF_QSPI_PIN_NOT_CONNECTED
+#endif
+
+// <s> NRFX_QSPI_PIN_IO1 - IO1 pin value.
+#ifndef NRFX_QSPI_PIN_IO1
+#define NRFX_QSPI_PIN_IO1 NRF_QSPI_PIN_NOT_CONNECTED
+#endif
+
+// <s> NRFX_QSPI_PIN_IO2 - IO2 pin value.
+#ifndef NRFX_QSPI_PIN_IO2
+#define NRFX_QSPI_PIN_IO2 NRF_QSPI_PIN_NOT_CONNECTED
+#endif
+
+// <s> NRFX_QSPI_PIN_IO3 - IO3 pin value.
+#ifndef NRFX_QSPI_PIN_IO3
+#define NRFX_QSPI_PIN_IO3 NRF_QSPI_PIN_NOT_CONNECTED
+#endif
+
+// <o> NRFX_QSPI_CONFIG_IRQ_PRIORITY  - Interrupt priority
+ 
+// <0=> 0 (highest) 
+// <1=> 1 
+// <2=> 2 
+// <3=> 3 
+// <4=> 4 
+// <5=> 5 
+// <6=> 6 
+// <7=> 7 
+
+#ifndef NRFX_QSPI_CONFIG_IRQ_PRIORITY
+#define NRFX_QSPI_CONFIG_IRQ_PRIORITY 6
+#endif
 
 // </e>
 
@@ -4446,6 +3509,20 @@
 #define NRFX_SPIM2_ENABLED 0
 #endif
 
+// <q> NRFX_SPIM3_ENABLED  - Enable SPIM3 instance
+ 
+
+#ifndef NRFX_SPIM3_ENABLED
+#define NRFX_SPIM3_ENABLED 0
+#endif
+
+// <q> NRFX_SPIM_EXTENDED_ENABLED  - Enable extended SPIM features
+ 
+
+#ifndef NRFX_SPIM_EXTENDED_ENABLED
+#define NRFX_SPIM_EXTENDED_ENABLED 0
+#endif
+
 // <o> NRFX_SPIM_MISO_PULL_CFG  - MISO pin pull configuration.
  
 // <0=> NRF_GPIO_PIN_NOPULL 
@@ -4521,20 +3598,6 @@
 #endif
 
 // </e>
-
-// <q> NRFX_SPIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED  - Enables nRF52 anomaly 109 workaround for SPIM.
- 
-
-// <i> The workaround uses interrupts to wake up the CPU by catching
-// <i> a start event of zero-length transmission to start the clock. This 
-// <i> ensures that the DMA transfer will be executed without issues and
-// <i> that the proper transfer will be started. See more in the Errata 
-// <i> document or Anomaly 109 Addendum located at 
-// <i> https://infocenter.nordicsemi.com/
-
-#ifndef NRFX_SPIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED
-#define NRFX_SPIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED 0
-#endif
 
 // </e>
 
@@ -4643,20 +3706,6 @@
 #endif
 
 // </e>
-
-// <q> NRFX_SPIS_NRF52_ANOMALY_109_WORKAROUND_ENABLED  - Enables nRF52 Anomaly 109 workaround for SPIS.
- 
-
-// <i> The workaround uses a GPIOTE channel to generate interrupts
-// <i> on falling edges detected on the CSN line. This will make
-// <i> the CPU active for the moment when SPIS starts DMA transfers,
-// <i> and this way the transfers will be protected.
-// <i> This workaround uses GPIOTE driver, so this driver must be
-// <i> enabled as well.
-
-#ifndef NRFX_SPIS_NRF52_ANOMALY_109_WORKAROUND_ENABLED
-#define NRFX_SPIS_NRF52_ANOMALY_109_WORKAROUND_ENABLED 0
-#endif
 
 // </e>
 
@@ -5118,19 +4167,6 @@
 
 // </e>
 
-// <q> NRFX_TWIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED  - Enables nRF52 anomaly 109 workaround for TWIM.
- 
-
-// <i> The workaround uses interrupts to wake up the CPU by catching
-// <i> the start event of zero-frequency transmission, clear the 
-// <i> peripheral, set desired frequency, start the peripheral, and
-// <i> the proper transmission. See more in the Errata document or
-// <i> Anomaly 109 Addendum located at https://infocenter.nordicsemi.com/
-
-#ifndef NRFX_TWIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED
-#define NRFX_TWIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED 0
-#endif
-
 // </e>
 
 // <e> NRFX_TWIS_ENABLED - nrfx_twis - TWIS peripheral driver
@@ -5375,11 +4411,16 @@
 // <e> NRFX_UARTE_ENABLED - nrfx_uarte - UARTE peripheral driver
 //==========================================================
 #ifndef NRFX_UARTE_ENABLED
-#define NRFX_UARTE_ENABLED 0
+#define NRFX_UARTE_ENABLED 1
 #endif
 // <o> NRFX_UARTE0_ENABLED - Enable UARTE0 instance 
 #ifndef NRFX_UARTE0_ENABLED
-#define NRFX_UARTE0_ENABLED 0
+#define NRFX_UARTE0_ENABLED 1
+#endif
+
+// <o> NRFX_UARTE1_ENABLED - Enable UARTE1 instance 
+#ifndef NRFX_UARTE1_ENABLED
+#define NRFX_UARTE1_ENABLED 1
 #endif
 
 // <o> NRFX_UARTE_DEFAULT_CONFIG_HWFC  - Hardware Flow Control
@@ -5496,11 +4537,11 @@
 // <e> NRFX_UART_ENABLED - nrfx_uart - UART peripheral driver
 //==========================================================
 #ifndef NRFX_UART_ENABLED
-#define NRFX_UART_ENABLED 0
+#define NRFX_UART_ENABLED 1
 #endif
 // <o> NRFX_UART0_ENABLED - Enable UART0 instance 
 #ifndef NRFX_UART0_ENABLED
-#define NRFX_UART0_ENABLED 0
+#define NRFX_UART0_ENABLED 1
 #endif
 
 // <o> NRFX_UART_DEFAULT_CONFIG_HWFC  - Hardware Flow Control
@@ -5614,6 +4655,60 @@
 
 // </e>
 
+// <e> NRFX_USBD_ENABLED - nrfx_usbd - USBD peripheral driver
+//==========================================================
+#ifndef NRFX_USBD_ENABLED
+#define NRFX_USBD_ENABLED 1
+#endif
+// <o> NRFX_USBD_CONFIG_IRQ_PRIORITY  - Interrupt priority
+ 
+// <0=> 0 (highest) 
+// <1=> 1 
+// <2=> 2 
+// <3=> 3 
+// <4=> 4 
+// <5=> 5 
+// <6=> 6 
+// <7=> 7 
+
+#ifndef NRFX_USBD_CONFIG_IRQ_PRIORITY
+#define NRFX_USBD_CONFIG_IRQ_PRIORITY 6
+#endif
+
+// <o> NRFX_USBD_CONFIG_DMASCHEDULER_MODE  - USBD DMA scheduler working scheme
+ 
+// <0=> Prioritized access 
+// <1=> Round Robin 
+
+#ifndef NRFX_USBD_CONFIG_DMASCHEDULER_MODE
+#define NRFX_USBD_CONFIG_DMASCHEDULER_MODE 0
+#endif
+
+// <q> NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST  - Give priority to isochronous transfers
+ 
+
+// <i> This option gives priority to isochronous transfers.
+// <i> Enabling it assures that isochronous transfers are always processed,
+// <i> even if multiple other transfers are pending.
+// <i> Isochronous endpoints are prioritized before the usbd_dma_scheduler_algorithm
+// <i> function is called, so the option is independent of the algorithm chosen.
+
+#ifndef NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST
+#define NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST 1
+#endif
+
+// <q> NRFX_USBD_CONFIG_ISO_IN_ZLP  - Respond to an IN token on ISO IN endpoint with ZLP when no data is ready
+ 
+
+// <i> If set, ISO IN endpoint will respond to an IN token with ZLP when no data is ready to be sent.
+// <i> Else, there will be no response.
+
+#ifndef NRFX_USBD_CONFIG_ISO_IN_ZLP
+#define NRFX_USBD_CONFIG_ISO_IN_ZLP 0
+#endif
+
+// </e>
+
 // <e> NRFX_WDT_ENABLED - nrfx_wdt - WDT peripheral driver
 //==========================================================
 #ifndef NRFX_WDT_ENABLED
@@ -5630,7 +4725,7 @@
 #define NRFX_WDT_CONFIG_BEHAVIOUR 1
 #endif
 
-// <o> NRFX_WDT_CONFIG_RELOAD_VALUE - Reload value  <15-4294967295> 
+// <o> NRFX_WDT_CONFIG_RELOAD_VALUE - Reload value in ms  <1-131072000> 
 
 
 #ifndef NRFX_WDT_CONFIG_RELOAD_VALUE
@@ -5717,7 +4812,7 @@
 // <e> NRF_CLOCK_ENABLED - nrf_drv_clock - CLOCK peripheral driver - legacy layer
 //==========================================================
 #ifndef NRF_CLOCK_ENABLED
-#define NRF_CLOCK_ENABLED 1
+#define NRF_CLOCK_ENABLED 0
 #endif
 // <o> CLOCK_CONFIG_LF_SRC  - LF Clock Source
  
@@ -5978,33 +5073,12 @@
 #define PWM2_ENABLED 0
 #endif
 
-// <e> PWM_NRF52_ANOMALY_109_WORKAROUND_ENABLED - Enables nRF52 Anomaly 109 workaround for PWM.
-
-// <i> The workaround uses interrupts to wake up the CPU and ensure
-// <i> it is active when PWM is about to start a DMA transfer. For
-// <i> initial transfer, done when a playback is started via PPI,
-// <i> a specific EGU instance is used to generate the interrupt.
-// <i> During the playback, the PWM interrupt triggered on SEQEND
-// <i> event of a preceding sequence is used to protect the transfer
-// <i> done for the next sequence to be played.
-//==========================================================
-#ifndef PWM_NRF52_ANOMALY_109_WORKAROUND_ENABLED
-#define PWM_NRF52_ANOMALY_109_WORKAROUND_ENABLED 0
-#endif
-// <o> PWM_NRF52_ANOMALY_109_EGU_INSTANCE  - EGU instance used by the nRF52 Anomaly 109 workaround for PWM.
+// <q> PWM3_ENABLED  - Enable PWM3 instance
  
-// <0=> EGU0 
-// <1=> EGU1 
-// <2=> EGU2 
-// <3=> EGU3 
-// <4=> EGU4 
-// <5=> EGU5 
 
-#ifndef PWM_NRF52_ANOMALY_109_EGU_INSTANCE
-#define PWM_NRF52_ANOMALY_109_EGU_INSTANCE 5
+#ifndef PWM3_ENABLED
+#define PWM3_ENABLED 0
 #endif
-
-// </e>
 
 // </e>
 
@@ -6244,7 +5318,7 @@
 // <e> RNG_ENABLED - nrf_drv_rng - RNG peripheral driver - legacy layer
 //==========================================================
 #ifndef RNG_ENABLED
-#define RNG_ENABLED 1
+#define RNG_ENABLED 0
 #endif
 // <q> RNG_CONFIG_ERROR_CORRECTION  - Error correction
  
@@ -6476,20 +5550,6 @@
 #define SPIS2_ENABLED 0
 #endif
 
-// <q> SPIS_NRF52_ANOMALY_109_WORKAROUND_ENABLED  - Enables nRF52 Anomaly 109 workaround for SPIS.
- 
-
-// <i> The workaround uses a GPIOTE channel to generate interrupts
-// <i> on falling edges detected on the CSN line. This will make
-// <i> the CPU active for the moment when SPIS starts DMA transfers,
-// <i> and this way the transfers will be protected.
-// <i> This workaround uses GPIOTE driver, so this driver must be
-// <i> enabled as well.
-
-#ifndef SPIS_NRF52_ANOMALY_109_WORKAROUND_ENABLED
-#define SPIS_NRF52_ANOMALY_109_WORKAROUND_ENABLED 0
-#endif
-
 // </e>
 
 // <e> SPI_ENABLED - nrf_drv_spi - SPI/SPIM peripheral driver - legacy layer
@@ -6565,20 +5625,6 @@
 #endif
 
 // </e>
-
-// <q> SPIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED  - Enables nRF52 anomaly 109 workaround for SPIM.
- 
-
-// <i> The workaround uses interrupts to wake up the CPU by catching
-// <i> a start event of zero-length transmission to start the clock. This 
-// <i> ensures that the DMA transfer will be executed without issues and
-// <i> that the proper transfer will be started. See more in the Errata 
-// <i> document or Anomaly 109 Addendum located at 
-// <i> https://infocenter.nordicsemi.com/
-
-#ifndef SPIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED
-#define SPIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED 0
-#endif
 
 // </e>
 
@@ -6838,25 +5884,12 @@
 
 // </e>
 
-// <q> TWIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED  - Enables nRF52 anomaly 109 workaround for TWIM.
- 
-
-// <i> The workaround uses interrupts to wake up the CPU by catching
-// <i> the start event of zero-frequency transmission, clear the 
-// <i> peripheral, set desired frequency, start the peripheral, and
-// <i> the proper transmission. See more in the Errata document or
-// <i> Anomaly 109 Addendum located at https://infocenter.nordicsemi.com/
-
-#ifndef TWIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED
-#define TWIM_NRF52_ANOMALY_109_WORKAROUND_ENABLED 0
-#endif
-
 // </e>
 
 // <e> UART_ENABLED - nrf_drv_uart - UART/UARTE peripheral driver - legacy layer
 //==========================================================
 #ifndef UART_ENABLED
-#define UART_ENABLED 0
+#define UART_ENABLED 1
 #endif
 // <o> UART_DEFAULT_CONFIG_HWFC  - Hardware Flow Control
  
@@ -6944,6 +5977,13 @@
 
 // </e>
 
+// <e> UART1_ENABLED - Enable UART1 instance
+//==========================================================
+#ifndef UART1_ENABLED
+#define UART1_ENABLED 0
+#endif
+// </e>
+
 // </e>
 
 // <e> USBD_ENABLED - nrf_drv_usbd - Software Component
@@ -6995,6 +6035,7 @@
 
 // <i> If set, ISO IN endpoint will respond to an IN token with ZLP when no data is ready to be sent.
 // <i> Else, there will be no response.
+// <i> NOTE: This option does not work on Engineering A chip.
 
 #ifndef USBD_CONFIG_ISO_IN_ZLP
 #define USBD_CONFIG_ISO_IN_ZLP 0
@@ -7043,71 +6084,6 @@
 #endif
 
 // </e>
-
-// <h> nrfx_qspi - QSPI peripheral driver
-
-//==========================================================
-// </h> 
-//==========================================================
-
-// <h> nrfx_usbd - USBD peripheral driver
-// <e> NRFX_USBD_ENABLED - nrfx_usbd - USBD peripheral driver
-//==========================================================
-#ifndef NRFX_USBD_ENABLED
-#define NRFX_USBD_ENABLED 1
-#endif
-// <o> NRFX_USBD_CONFIG_IRQ_PRIORITY  - Interrupt priority
-
-// <0=> 0 (highest)
-// <1=> 1
-// <2=> 2
-// <3=> 3
-// <4=> 4
-// <5=> 5
-// <6=> 6
-// <7=> 7
-
-#ifndef NRFX_USBD_CONFIG_IRQ_PRIORITY
-#define NRFX_USBD_CONFIG_IRQ_PRIORITY 6
-#endif
-
-// <o> NRFX_USBD_CONFIG_DMASCHEDULER_MODE  - USBD DMA scheduler working scheme
-
-// <0=> Prioritized access
-// <1=> Round Robin
-
-#ifndef NRFX_USBD_CONFIG_DMASCHEDULER_MODE
-#define NRFX_USBD_CONFIG_DMASCHEDULER_MODE 0
-#endif
-
-// <q> NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST  - Give priority to isochronous transfers
-
-
-// <i> This option gives priority to isochronous transfers.
-// <i> Enabling it assures that isochronous transfers are always processed,
-// <i> even if multiple other transfers are pending.
-// <i> Isochronous endpoints are prioritized before the usbd_dma_scheduler_algorithm
-// <i> function is called, so the option is independent of the algorithm chosen.
-
-#ifndef NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST
-#define NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST 1
-#endif
-
-// <q> NRFX_USBD_CONFIG_ISO_IN_ZLP  - Respond to an IN token on ISO IN endpoint with ZLP when no data is ready
-
-
-// <i> If set, ISO IN endpoint will respond to an IN token with ZLP when no data is ready to be sent.
-// <i> Else, there will be no response.
-
-#ifndef NRFX_USBD_CONFIG_ISO_IN_ZLP
-#define NRFX_USBD_CONFIG_ISO_IN_ZLP 0
-#endif
-
-// </e>
-
-//==========================================================
-// </h> 
-//==========================================================
 
 // </h> 
 //==========================================================
@@ -7322,7 +6298,7 @@
 // <i> Vendor ID ordered from USB IF: http://www.usb.org/developers/vendor/
 
 #ifndef APP_USBD_VID
-#define APP_USBD_VID 0x1915
+#define APP_USBD_VID 0
 #endif
 
 // <o> APP_USBD_PID - Product ID.  <0x0000-0xFFFF> 
@@ -7332,26 +6308,29 @@
 // <i> Selected Product ID
 
 #ifndef APP_USBD_PID
-#define APP_USBD_PID 0x520F
+#define APP_USBD_PID 0
 #endif
 
-// <o> APP_USBD_DEVICE_VER_MAJOR - Device version, major part.  <0-99> 
+// <o> APP_USBD_DEVICE_VER_MAJOR - Major device version  <0-99> 
 
 
-// <i> Device version, will be converted automatically to BCD notation. Use just decimal values.
+// <i> Major device version, will be converted automatically to BCD notation. Use just decimal values.
 
 #ifndef APP_USBD_DEVICE_VER_MAJOR
 #define APP_USBD_DEVICE_VER_MAJOR 1
 #endif
 
-// <o> APP_USBD_DEVICE_VER_MINOR - Device version, minor part.  <0-99> 
+// <o> APP_USBD_DEVICE_VER_MINOR - Minor device version  <0-9> 
 
 
-// <i> Device version, will be converted automatically to BCD notation. Use just decimal values.
+// <i> Minor device version, will be converted automatically to BCD notation. Use just decimal values.
 
 #ifndef APP_USBD_DEVICE_VER_MINOR
 #define APP_USBD_DEVICE_VER_MINOR 0
 #endif
+
+// <o> APP_USBD_DEVICE_VER_SUB - Sub-minor device version  <0-9> 
+
 
 // <i> Sub-minor device version, will be converted automatically to BCD notation. Use just decimal values.
 
@@ -7390,7 +6369,7 @@
 // <i> Functions that modify USBD state are functions for sleep, wakeup, start, stop, enable, and disable.
 //==========================================================
 #ifndef APP_USBD_CONFIG_EVENT_QUEUE_ENABLE
-#define APP_USBD_CONFIG_EVENT_QUEUE_ENABLE 0
+#define APP_USBD_CONFIG_EVENT_QUEUE_ENABLE 1
 #endif
 // <o> APP_USBD_CONFIG_EVENT_QUEUE_SIZE - The size of the event queue.  <16-64> 
 
@@ -7523,7 +6502,7 @@
  
 
 #ifndef APP_USBD_STRING_SERIAL_EXTERN
-#define APP_USBD_STRING_SERIAL_EXTERN 1
+#define APP_USBD_STRING_SERIAL_EXTERN 0
 #endif
 
 // <s> APP_USBD_STRING_SERIAL - String descriptor for the serial number.
@@ -7531,7 +6510,7 @@
 // <i> Note: This value is not editable in Configuration Wizard.
 // <i> Serial number that is defined the same way like in @ref APP_USBD_STRINGS_MANUFACTURER.
 #ifndef APP_USBD_STRING_SERIAL
-#define APP_USBD_STRING_SERIAL g_extern_serial_number//APP_USBD_STRING_DESC("000000000000")
+#define APP_USBD_STRING_SERIAL APP_USBD_STRING_DESC("000000000000")
 #endif
 
 // </e>
@@ -7610,28 +6589,28 @@
  
 
 #ifndef APP_USBD_HID_GENERIC_ENABLED
-#define APP_USBD_HID_GENERIC_ENABLED 1
+#define APP_USBD_HID_GENERIC_ENABLED 0
 #endif
 
 // <q> APP_USBD_HID_KBD_ENABLED  - app_usbd_hid_kbd - USB HID keyboard
  
 
 #ifndef APP_USBD_HID_KBD_ENABLED
-#define APP_USBD_HID_KBD_ENABLED 1
+#define APP_USBD_HID_KBD_ENABLED 0
 #endif
 
 // <q> APP_USBD_HID_MOUSE_ENABLED  - app_usbd_hid_mouse - USB HID mouse
  
 
 #ifndef APP_USBD_HID_MOUSE_ENABLED
-#define APP_USBD_HID_MOUSE_ENABLED 1
+#define APP_USBD_HID_MOUSE_ENABLED 0
 #endif
 
 // <q> APP_USBD_MSC_ENABLED  - app_usbd_msc - USB MSC class
  
 
 #ifndef APP_USBD_MSC_ENABLED
-#define APP_USBD_MSC_ENABLED 1
+#define APP_USBD_MSC_ENABLED 0
 #endif
 
 // <q> CRC16_ENABLED  - crc16 - CRC16 calculation routines
@@ -7711,11 +6690,7 @@
 // <2=> NRF_FSTORAGE_SD 
 
 #ifndef FDS_BACKEND
-#ifdef SOFTDEVICE_PRESENT
-#define FDS_BACKEND 	NRF_FSTORAGE_SD
-#else
-#define FDS_BACKEND 	NRF_FSTORAGE_NVMC
-#endif
+#define FDS_BACKEND 2
 #endif
 
 // </h> 
@@ -7768,7 +6743,7 @@
 //==========================================================
 // <o> FDS_MAX_USERS - Maximum number of callbacks that can be registered. 
 #ifndef FDS_MAX_USERS
-#define FDS_MAX_USERS 6
+#define FDS_MAX_USERS 4
 #endif
 
 // </h> 
@@ -7780,7 +6755,7 @@
  
 
 #ifndef HARDFAULT_HANDLER_ENABLED
-#define HARDFAULT_HANDLER_ENABLED 1
+#define HARDFAULT_HANDLER_ENABLED 0
 #endif
 
 // <e> HCI_MEM_POOL_ENABLED - hci_mem_pool - memory pool implementation used by HCI
@@ -7867,7 +6842,7 @@
 // <e> HCI_TRANSPORT_ENABLED - hci_transport - HCI transport
 //==========================================================
 #ifndef HCI_TRANSPORT_ENABLED
-#define HCI_TRANSPORT_ENABLED 0
+#define HCI_TRANSPORT_ENABLED 1
 #endif
 // <o> HCI_MAX_PACKET_SIZE_IN_BITS - Maximum size of a single application packet in bits. 
 #ifndef HCI_MAX_PACKET_SIZE_IN_BITS
@@ -8214,7 +7189,7 @@
 // <i> Increase this value if API calls frequently return the error @ref NRF_ERROR_NO_MEM.
 
 #ifndef NRF_FSTORAGE_SD_QUEUE_SIZE
-#define NRF_FSTORAGE_SD_QUEUE_SIZE 8
+#define NRF_FSTORAGE_SD_QUEUE_SIZE 4
 #endif
 
 // <o> NRF_FSTORAGE_SD_MAX_RETRIES - Maximum number of attempts at executing an operation when the SoftDevice is busy 
@@ -8244,7 +7219,7 @@
  
 
 #ifndef NRF_GFX_ENABLED
-#define NRF_GFX_ENABLED 0
+#define NRF_GFX_ENABLED 1
 #endif
 
 // <q> NRF_MEMOBJ_ENABLED  - nrf_memobj - Linked memory allocator module
@@ -8300,6 +7275,22 @@
 // <29=> 29 (P0.29) 
 // <30=> 30 (P0.30) 
 // <31=> 31 (P0.31) 
+// <32=> 32 (P1.0) 
+// <33=> 33 (P1.1) 
+// <34=> 34 (P1.2) 
+// <35=> 35 (P1.3) 
+// <36=> 36 (P1.4) 
+// <37=> 37 (P1.5) 
+// <38=> 38 (P1.6) 
+// <39=> 39 (P1.7) 
+// <40=> 40 (P1.8) 
+// <41=> 41 (P1.9) 
+// <42=> 42 (P1.10) 
+// <43=> 43 (P1.11) 
+// <44=> 44 (P1.12) 
+// <45=> 45 (P1.13) 
+// <46=> 46 (P1.14) 
+// <47=> 47 (P1.15) 
 // <4294967295=> Not connected 
 
 #ifndef NRF_PWR_MGMT_SLEEP_DEBUG_PIN
@@ -8386,7 +7377,7 @@
  
 
 #ifndef NRF_SORTLIST_ENABLED
-#define NRF_SORTLIST_ENABLED 0
+#define NRF_SORTLIST_ENABLED 1
 #endif
 
 // <q> NRF_SPI_MNGR_ENABLED  - nrf_spi_mngr - SPI transaction manager
@@ -8420,7 +7411,7 @@
 // <e> TASK_MANAGER_ENABLED - task_manager - Task manager.
 //==========================================================
 #ifndef TASK_MANAGER_ENABLED
-#define TASK_MANAGER_ENABLED 0
+#define TASK_MANAGER_ENABLED 1
 #endif
 // <q> TASK_MANAGER_CLI_CMDS  - Enable CLI commands specific to the module
  
@@ -8511,7 +7502,7 @@
  
 
 #ifndef NRF_CLI_ENABLED
-#define NRF_CLI_ENABLED 0
+#define NRF_CLI_ENABLED 1
 #endif
 
 // <o> NRF_CLI_ARGC_MAX - Maximum number of parameters passed to the command handler. 
@@ -8612,7 +7603,7 @@
  
 
 #ifndef NRF_FPRINTF_ENABLED
-#define NRF_FPRINTF_ENABLED 1
+#define NRF_FPRINTF_ENABLED 0
 #endif
 
 // <q> NRF_FPRINTF_FLAG_AUTOMATIC_CR_ON_LF_ENABLED  - For each printed LF, function will add CR.
@@ -8620,6 +7611,13 @@
 
 #ifndef NRF_FPRINTF_FLAG_AUTOMATIC_CR_ON_LF_ENABLED
 #define NRF_FPRINTF_FLAG_AUTOMATIC_CR_ON_LF_ENABLED 1
+#endif
+
+// <q> NRF_FPRINTF_DOUBLE_ENABLED  - Enable IEEE-754 double precision formatting.
+ 
+
+#ifndef NRF_FPRINTF_DOUBLE_ENABLED
+#define NRF_FPRINTF_DOUBLE_ENABLED 0
 #endif
 
 // </h> 
@@ -8634,7 +7632,7 @@
 // <e> NRF_LOG_ENABLED - nrf_log - Logger
 //==========================================================
 #ifndef NRF_LOG_ENABLED
-#define NRF_LOG_ENABLED 0
+#define NRF_LOG_ENABLED 1
 #endif
 // <h> Log message pool - Configuration of log message pool
 
@@ -8723,6 +7721,17 @@
 
 #ifndef NRF_LOG_FILTERS_ENABLED
 #define NRF_LOG_FILTERS_ENABLED 0
+#endif
+
+// <q> NRF_LOG_NON_DEFFERED_CRITICAL_REGION_ENABLED  - Enable use of critical region for non deffered mode when flushing logs.
+ 
+
+// <i> When enabled NRF_LOG_FLUSH is called from critical section when non deffered mode is used.
+// <i> Log output will never be corrupted as access to the log backend is exclusive
+// <i> but system will spend significant amount of time in critical section
+
+#ifndef NRF_LOG_NON_DEFFERED_CRITICAL_REGION_ENABLED
+#define NRF_LOG_NON_DEFFERED_CRITICAL_REGION_ENABLED 0
 #endif
 
 // <o> NRF_LOG_STR_PUSH_BUFFER_SIZE  - Size of the buffer dedicated for strings stored using @ref NRF_LOG_PUSH.
@@ -8821,9 +7830,6 @@
 #endif
 
 // </e>
-#ifndef NRF_LOG_BACKEND_UART_ENABLED
-#define NRF_LOG_BACKEND_UART_ENABLED		1
-#endif
 
 // <h> nrf_log module configuration 
 
@@ -9244,13 +8250,6 @@
 #endif
 
 // </e>
-
-// <q> NRFX_SYSTICK_ENABLED  - nrfx_systick - ARM(R) SysTick driver
-
-
-#ifndef NRFX_SYSTICK_ENABLED
-#define NRFX_SYSTICK_ENABLED 1
-#endif
 
 // <e> NRFX_USBD_CONFIG_LOG_ENABLED - Enable logging in the module
 //==========================================================
@@ -10081,6 +9080,73 @@
 // <h> nrf_log in nRF_Libraries 
 
 //==========================================================
+// <e> APP_BUTTON_CONFIG_LOG_ENABLED - Enables logging in the module.
+//==========================================================
+#ifndef APP_BUTTON_CONFIG_LOG_ENABLED
+#define APP_BUTTON_CONFIG_LOG_ENABLED 0
+#endif
+// <o> APP_BUTTON_CONFIG_LOG_LEVEL  - Default Severity level
+ 
+// <0=> Off 
+// <1=> Error 
+// <2=> Warning 
+// <3=> Info 
+// <4=> Debug 
+
+#ifndef APP_BUTTON_CONFIG_LOG_LEVEL
+#define APP_BUTTON_CONFIG_LOG_LEVEL 3
+#endif
+
+// <o> APP_BUTTON_CONFIG_INITIAL_LOG_LEVEL  - Initial severity level if dynamic filtering is enabled.
+ 
+
+// <i> If module generates a lot of logs, initial log level can
+// <i> be decreased to prevent flooding. Severity level can be
+// <i> increased on instance basis.
+// <0=> Off 
+// <1=> Error 
+// <2=> Warning 
+// <3=> Info 
+// <4=> Debug 
+
+#ifndef APP_BUTTON_CONFIG_INITIAL_LOG_LEVEL
+#define APP_BUTTON_CONFIG_INITIAL_LOG_LEVEL 3
+#endif
+
+// <o> APP_BUTTON_CONFIG_INFO_COLOR  - ANSI escape code prefix.
+ 
+// <0=> Default 
+// <1=> Black 
+// <2=> Red 
+// <3=> Green 
+// <4=> Yellow 
+// <5=> Blue 
+// <6=> Magenta 
+// <7=> Cyan 
+// <8=> White 
+
+#ifndef APP_BUTTON_CONFIG_INFO_COLOR
+#define APP_BUTTON_CONFIG_INFO_COLOR 0
+#endif
+
+// <o> APP_BUTTON_CONFIG_DEBUG_COLOR  - ANSI escape code prefix.
+ 
+// <0=> Default 
+// <1=> Black 
+// <2=> Red 
+// <3=> Green 
+// <4=> Yellow 
+// <5=> Blue 
+// <6=> Magenta 
+// <7=> Cyan 
+// <8=> White 
+
+#ifndef APP_BUTTON_CONFIG_DEBUG_COLOR
+#define APP_BUTTON_CONFIG_DEBUG_COLOR 0
+#endif
+
+// </e>
+
 // <e> APP_TIMER_CONFIG_LOG_ENABLED - Enables logging in the module.
 //==========================================================
 #ifndef APP_TIMER_CONFIG_LOG_ENABLED
@@ -11094,7 +10160,7 @@
 // <e> NRF_SDH_ANT_LOG_ENABLED - Enable logging in SoftDevice handler (ANT) module.
 //==========================================================
 #ifndef NRF_SDH_ANT_LOG_ENABLED
-#define NRF_SDH_ANT_LOG_ENABLED 1
+#define NRF_SDH_ANT_LOG_ENABLED 0
 #endif
 // <o> NRF_SDH_ANT_LOG_LEVEL  - Default Severity level
  
@@ -11145,7 +10211,7 @@
 // <e> NRF_SDH_BLE_LOG_ENABLED - Enable logging in SoftDevice handler (BLE) module.
 //==========================================================
 #ifndef NRF_SDH_BLE_LOG_ENABLED
-#define NRF_SDH_BLE_LOG_ENABLED 1
+#define NRF_SDH_BLE_LOG_ENABLED 0
 #endif
 // <o> NRF_SDH_BLE_LOG_LEVEL  - Default Severity level
  
@@ -11196,7 +10262,7 @@
 // <e> NRF_SDH_LOG_ENABLED - Enable logging in SoftDevice handler module.
 //==========================================================
 #ifndef NRF_SDH_LOG_ENABLED
-#define NRF_SDH_LOG_ENABLED 1
+#define NRF_SDH_LOG_ENABLED 0
 #endif
 // <o> NRF_SDH_LOG_LEVEL  - Default Severity level
  
@@ -11247,7 +10313,7 @@
 // <e> NRF_SDH_SOC_LOG_ENABLED - Enable logging in SoftDevice handler (SoC) module.
 //==========================================================
 #ifndef NRF_SDH_SOC_LOG_ENABLED
-#define NRF_SDH_SOC_LOG_ENABLED 1
+#define NRF_SDH_SOC_LOG_ENABLED 0
 #endif
 // <o> NRF_SDH_SOC_LOG_LEVEL  - Default Severity level
  
@@ -11400,7 +10466,7 @@
 // <e> PM_LOG_ENABLED - Enable logging in Peer Manager and its submodules.
 //==========================================================
 #ifndef PM_LOG_ENABLED
-#define PM_LOG_ENABLED 1
+#define PM_LOG_ENABLED 0
 #endif
 // <o> PM_LOG_LEVEL  - Default Severity level
  
@@ -11530,14 +10596,14 @@
  
 
 #ifndef NFC_AC_REC_ENABLED
-#define NFC_AC_REC_ENABLED 0
+#define NFC_AC_REC_ENABLED 1
 #endif
 
 // <q> NFC_AC_REC_PARSER_ENABLED  - nfc_ac_rec_parser - Alternative Carrier record parser
  
 
 #ifndef NFC_AC_REC_PARSER_ENABLED
-#define NFC_AC_REC_PARSER_ENABLED 0
+#define NFC_AC_REC_PARSER_ENABLED 1
 #endif
 
 // <e> NFC_BLE_OOB_ADVDATA_ENABLED - nfc_ble_oob_advdata - AD data for OOB pairing encoder
@@ -11551,7 +10617,7 @@
 // <0=> Disabled 
 
 #ifndef ADVANCED_ADVDATA_SUPPORT
-#define ADVANCED_ADVDATA_SUPPORT 0
+#define ADVANCED_ADVDATA_SUPPORT 1
 #endif
 
 // </e>
@@ -11702,7 +10768,7 @@
  
 
 #ifndef NFC_BLE_PAIR_MSG_ENABLED
-#define NFC_BLE_PAIR_MSG_ENABLED 0
+#define NFC_BLE_PAIR_MSG_ENABLED 1
 #endif
 
 // <q> NFC_CH_COMMON_ENABLED  - nfc_ble_pair_common - OOB pairing common data
@@ -11773,7 +10839,7 @@
 // <e> NFC_NDEF_MSG_PARSER_ENABLED - nfc_ndef_msg_parser - NFC NDEF message parser module
 //==========================================================
 #ifndef NFC_NDEF_MSG_PARSER_ENABLED
-#define NFC_NDEF_MSG_PARSER_ENABLED 0
+#define NFC_NDEF_MSG_PARSER_ENABLED 1
 #endif
 // <e> NFC_NDEF_MSG_PARSER_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -11816,13 +10882,13 @@
  
 
 #ifndef NFC_NDEF_RECORD_ENABLED
-#define NFC_NDEF_RECORD_ENABLED 0
+#define NFC_NDEF_RECORD_ENABLED 1
 #endif
 
 // <e> NFC_NDEF_RECORD_PARSER_ENABLED - nfc_ndef_record_parser - NFC NDEF Record parser module
 //==========================================================
 #ifndef NFC_NDEF_RECORD_PARSER_ENABLED
-#define NFC_NDEF_RECORD_PARSER_ENABLED 0
+#define NFC_NDEF_RECORD_PARSER_ENABLED 1
 #endif
 // <e> NFC_NDEF_RECORD_PARSER_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -11882,10 +10948,68 @@
 #define NFC_NDEF_URI_REC_ENABLED 0
 #endif
 
+// <e> NFC_PLATFORM_ENABLED - nfc_platform - NFC platform module for Clock control.
+//==========================================================
+#ifndef NFC_PLATFORM_ENABLED
+#define NFC_PLATFORM_ENABLED 1
+#endif
+// <e> NFC_PLATFORM_LOG_ENABLED - Enables logging in the module.
+//==========================================================
+#ifndef NFC_PLATFORM_LOG_ENABLED
+#define NFC_PLATFORM_LOG_ENABLED 0
+#endif
+// <o> NFC_PLATFORM_LOG_LEVEL  - Default Severity level
+ 
+// <0=> Off 
+// <1=> Error 
+// <2=> Warning 
+// <3=> Info 
+// <4=> Debug 
+
+#ifndef NFC_PLATFORM_LOG_LEVEL
+#define NFC_PLATFORM_LOG_LEVEL 3
+#endif
+
+// <o> NFC_PLATFORM_INFO_COLOR  - ANSI escape code prefix.
+ 
+// <0=> Default 
+// <1=> Black 
+// <2=> Red 
+// <3=> Green 
+// <4=> Yellow 
+// <5=> Blue 
+// <6=> Magenta 
+// <7=> Cyan 
+// <8=> White 
+
+#ifndef NFC_PLATFORM_INFO_COLOR
+#define NFC_PLATFORM_INFO_COLOR 0
+#endif
+
+// <o> NFC_PLATFORM_DEBUG_COLOR  - ANSI escape code prefix.
+ 
+// <0=> Default 
+// <1=> Black 
+// <2=> Red 
+// <3=> Green 
+// <4=> Yellow 
+// <5=> Blue 
+// <6=> Magenta 
+// <7=> Cyan 
+// <8=> White 
+
+#ifndef NFC_PLATFORM_DEBUG_COLOR
+#define NFC_PLATFORM_DEBUG_COLOR 0
+#endif
+
+// </e>
+
+// </e>
+
 // <e> NFC_T2T_PARSER_ENABLED - nfc_type_2_tag_parser - Parser for decoding Type 2 Tag data
 //==========================================================
 #ifndef NFC_T2T_PARSER_ENABLED
-#define NFC_T2T_PARSER_ENABLED 0
+#define NFC_T2T_PARSER_ENABLED 1
 #endif
 // <e> NFC_T2T_PARSER_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -11969,7 +11093,7 @@
 // <e> NFC_T4T_CC_FILE_PARSER_ENABLED - nfc_t4t_cc_file - Capability Container file for Type 4 Tag
 //==========================================================
 #ifndef NFC_T4T_CC_FILE_PARSER_ENABLED
-#define NFC_T4T_CC_FILE_PARSER_ENABLED 0
+#define NFC_T4T_CC_FILE_PARSER_ENABLED 1
 #endif
 // <e> NFC_T4T_CC_FILE_PARSER_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -12108,122 +11232,6 @@
 // <h> nRF_SoftDevice 
 
 //==========================================================
-// <e> NRF_SDH_ANT_ENABLED - nrf_sdh_ant - SoftDevice ANT event handler
-//==========================================================
-#ifndef NRF_SDH_ANT_ENABLED
-#define NRF_SDH_ANT_ENABLED 0
-#endif
-// <h> ANT Channels 
-
-//==========================================================
-// <o> NRF_SDH_ANT_TOTAL_CHANNELS_ALLOCATED - Allocated ANT channels. 
-#ifndef NRF_SDH_ANT_TOTAL_CHANNELS_ALLOCATED
-#define NRF_SDH_ANT_TOTAL_CHANNELS_ALLOCATED 0
-#endif
-
-// <o> NRF_SDH_ANT_ENCRYPTED_CHANNELS - Encrypted ANT channels. 
-#ifndef NRF_SDH_ANT_ENCRYPTED_CHANNELS
-#define NRF_SDH_ANT_ENCRYPTED_CHANNELS 0
-#endif
-
-// </h> 
-//==========================================================
-
-// <h> ANT Queues 
-
-//==========================================================
-// <o> NRF_SDH_ANT_EVENT_QUEUE_SIZE - Event queue size. 
-#ifndef NRF_SDH_ANT_EVENT_QUEUE_SIZE
-#define NRF_SDH_ANT_EVENT_QUEUE_SIZE 32
-#endif
-
-// <o> NRF_SDH_ANT_BURST_QUEUE_SIZE - ANT burst queue size. 
-#ifndef NRF_SDH_ANT_BURST_QUEUE_SIZE
-#define NRF_SDH_ANT_BURST_QUEUE_SIZE 128
-#endif
-
-// </h> 
-//==========================================================
-
-// <h> ANT Observers - Observers and priority levels
-
-//==========================================================
-// <o> NRF_SDH_ANT_OBSERVER_PRIO_LEVELS - Total number of priority levels for ANT observers. 
-// <i> This setting configures the number of priority levels available for the ANT event handlers.
-// <i> The priority level of a handler determines the order in which it receives events, with respect to other handlers.
-
-#ifndef NRF_SDH_ANT_OBSERVER_PRIO_LEVELS
-#define NRF_SDH_ANT_OBSERVER_PRIO_LEVELS 2
-#endif
-
-// <h> ANT Observers priorities - Invididual priorities
-
-//==========================================================
-// <o> ANT_BPWR_ANT_OBSERVER_PRIO  
-// <i> Priority with which ANT events are dispatched to the Bicycle Power Profile.
-
-#ifndef ANT_BPWR_ANT_OBSERVER_PRIO
-#define ANT_BPWR_ANT_OBSERVER_PRIO 1
-#endif
-
-// <o> ANT_BSC_ANT_OBSERVER_PRIO  
-// <i> Priority with which ANT events are dispatched to the Bicycle Speed and Cadence Profile.
-
-#ifndef ANT_BSC_ANT_OBSERVER_PRIO
-#define ANT_BSC_ANT_OBSERVER_PRIO 1
-#endif
-
-// <o> ANT_ENCRYPT_ANT_OBSERVER_PRIO  
-// <i> Priority with which ANT events are dispatched to the Cryptographic ANT stack configuration module.
-
-#ifndef ANT_ENCRYPT_ANT_OBSERVER_PRIO
-#define ANT_ENCRYPT_ANT_OBSERVER_PRIO 1
-#endif
-
-// <o> ANT_HRM_ANT_OBSERVER_PRIO  
-// <i> Priority with which ANT events are dispatched to the Heart Rate Monitor.
-
-#ifndef ANT_HRM_ANT_OBSERVER_PRIO
-#define ANT_HRM_ANT_OBSERVER_PRIO 1
-#endif
-
-// <o> ANT_SDM_ANT_OBSERVER_PRIO  
-// <i> Priority with which ANT events are dispatched to the Stride Based Speed and Distance Monitor Profile.
-
-#ifndef ANT_SDM_ANT_OBSERVER_PRIO
-#define ANT_SDM_ANT_OBSERVER_PRIO 1
-#endif
-
-// <o> ANT_STATE_INDICATOR_ANT_OBSERVER_PRIO  
-// <i> Priority with which ANT events are dispatched to the ANT state indicator module.
-
-#ifndef ANT_STATE_INDICATOR_ANT_OBSERVER_PRIO
-#define ANT_STATE_INDICATOR_ANT_OBSERVER_PRIO 1
-#endif
-
-// <o> BSP_BTN_ANT_OBSERVER_PRIO  
-// <i> Priority with which ANT events are dispatched to the Button Control module.
-
-#ifndef BSP_BTN_ANT_OBSERVER_PRIO
-#define BSP_BTN_ANT_OBSERVER_PRIO 1
-#endif
-
-// <o> NRF_DFU_ANT_EVT_HANDLER_PRIO - DFU ANT event handling priority. 
-// <i> Priority used to register the ANT event handler for DFU purposes. Change this if there is other ANT event handlers that should be higher priority.
-
-#ifndef NRF_DFU_ANT_EVT_HANDLER_PRIO
-#define NRF_DFU_ANT_EVT_HANDLER_PRIO 1
-#endif
-
-// </h> 
-//==========================================================
-
-// </h> 
-//==========================================================
-
-
-// </e>
-
 // <e> NRF_SDH_BLE_ENABLED - nrf_sdh_ble - SoftDevice BLE event handler
 //==========================================================
 #ifndef NRF_SDH_BLE_ENABLED
@@ -12269,7 +11277,7 @@
 
 // <o> NRF_SDH_BLE_GATT_MAX_MTU_SIZE - Static maximum MTU size. 
 #ifndef NRF_SDH_BLE_GATT_MAX_MTU_SIZE
-#define NRF_SDH_BLE_GATT_MAX_MTU_SIZE 247
+#define NRF_SDH_BLE_GATT_MAX_MTU_SIZE 512
 #endif
 
 // <o> NRF_SDH_BLE_GATTS_ATTR_TAB_SIZE - Attribute Table size in bytes. The size must be a multiple of 4. 
@@ -12586,6 +11594,13 @@
 #define NRF_BLE_GATT_BLE_OBSERVER_PRIO 1
 #endif
 
+// <o> NRF_BLE_GQ_BLE_OBSERVER_PRIO  
+// <i> Priority with which BLE events are dispatched to the GATT Queue module.
+
+#ifndef NRF_BLE_GQ_BLE_OBSERVER_PRIO
+#define NRF_BLE_GQ_BLE_OBSERVER_PRIO 1
+#endif
+
 // <o> NRF_BLE_QWR_BLE_OBSERVER_PRIO  
 // <i> Priority with which BLE events are dispatched to the Queued writes module.
 
@@ -12800,14 +11815,11 @@
 
 // <h> SoC Observers priorities - Invididual priorities
 
-//==========================================================
-// <o> BLE_ADV_SOC_OBSERVER_PRIO  
-// <i> Priority with which SoC events are dispatched to the Advertising module.
-
 #ifndef BLE_ADV_SOC_OBSERVER_PRIO
 #define BLE_ADV_SOC_OBSERVER_PRIO 1
 #endif
 
+//==========================================================
 // <o> BLE_DFU_SOC_OBSERVER_PRIO  
 // <i> Priority with which BLE events are dispatched to the DFU Service.
 

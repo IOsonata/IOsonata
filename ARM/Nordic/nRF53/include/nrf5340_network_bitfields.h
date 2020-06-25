@@ -1,32 +1,41 @@
 /*
 
-Copyright (c) 2010 - 2018, Nordic Semiconductor ASA All rights reserved.
+Copyright (c) 2010 - 2020, Nordic Semiconductor ASA
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
 
 1. Redistributions of source code must retain the above copyright notice, this
    list of conditions and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above copyright
-   notice, this list of conditions and the following disclaimer in the
-   documentation and/or other materials provided with the distribution.
+2. Redistributions in binary form, except as embedded into a Nordic
+   Semiconductor ASA integrated circuit in a product or a software update for
+   such product, must reproduce the above copyright notice, this list of
+   conditions and the following disclaimer in the documentation and/or other
+   materials provided with the distribution.
 
 3. Neither the name of Nordic Semiconductor ASA nor the names of its
    contributors may be used to endorse or promote products derived from this
    software without specific prior written permission.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
+4. This software, with or without modification, must only be used with a
+   Nordic Semiconductor ASA integrated circuit.
+
+5. Any software provided in binary form under this license must not be reverse
+   engineered, decompiled, modified and/or disassembled.
+
+THIS SOFTWARE IS PROVIDED BY NORDIC SEMICONDUCTOR ASA "AS IS" AND ANY EXPRESS
+OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
 LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
@@ -9899,6 +9908,18 @@ POSSIBILITY OF SUCH DAMAGE.
 /* Register: TIMER_SHORTS */
 /* Description: Shortcuts between local events and tasks */
 
+/* Bit 23 : Shortcut between event COMPARE[7] and task STOP */
+#define TIMER_SHORTS_COMPARE7_STOP_Pos (23UL) /*!< Position of COMPARE7_STOP field. */
+#define TIMER_SHORTS_COMPARE7_STOP_Msk (0x1UL << TIMER_SHORTS_COMPARE7_STOP_Pos) /*!< Bit mask of COMPARE7_STOP field. */
+#define TIMER_SHORTS_COMPARE7_STOP_Disabled (0UL) /*!< Disable shortcut */
+#define TIMER_SHORTS_COMPARE7_STOP_Enabled (1UL) /*!< Enable shortcut */
+
+/* Bit 22 : Shortcut between event COMPARE[6] and task STOP */
+#define TIMER_SHORTS_COMPARE6_STOP_Pos (22UL) /*!< Position of COMPARE6_STOP field. */
+#define TIMER_SHORTS_COMPARE6_STOP_Msk (0x1UL << TIMER_SHORTS_COMPARE6_STOP_Pos) /*!< Bit mask of COMPARE6_STOP field. */
+#define TIMER_SHORTS_COMPARE6_STOP_Disabled (0UL) /*!< Disable shortcut */
+#define TIMER_SHORTS_COMPARE6_STOP_Enabled (1UL) /*!< Enable shortcut */
+
 /* Bit 21 : Shortcut between event COMPARE[5] and task STOP */
 #define TIMER_SHORTS_COMPARE5_STOP_Pos (21UL) /*!< Position of COMPARE5_STOP field. */
 #define TIMER_SHORTS_COMPARE5_STOP_Msk (0x1UL << TIMER_SHORTS_COMPARE5_STOP_Pos) /*!< Bit mask of COMPARE5_STOP field. */
@@ -9934,6 +9955,18 @@ POSSIBILITY OF SUCH DAMAGE.
 #define TIMER_SHORTS_COMPARE0_STOP_Msk (0x1UL << TIMER_SHORTS_COMPARE0_STOP_Pos) /*!< Bit mask of COMPARE0_STOP field. */
 #define TIMER_SHORTS_COMPARE0_STOP_Disabled (0UL) /*!< Disable shortcut */
 #define TIMER_SHORTS_COMPARE0_STOP_Enabled (1UL) /*!< Enable shortcut */
+
+/* Bit 7 : Shortcut between event COMPARE[7] and task CLEAR */
+#define TIMER_SHORTS_COMPARE7_CLEAR_Pos (7UL) /*!< Position of COMPARE7_CLEAR field. */
+#define TIMER_SHORTS_COMPARE7_CLEAR_Msk (0x1UL << TIMER_SHORTS_COMPARE7_CLEAR_Pos) /*!< Bit mask of COMPARE7_CLEAR field. */
+#define TIMER_SHORTS_COMPARE7_CLEAR_Disabled (0UL) /*!< Disable shortcut */
+#define TIMER_SHORTS_COMPARE7_CLEAR_Enabled (1UL) /*!< Enable shortcut */
+
+/* Bit 6 : Shortcut between event COMPARE[6] and task CLEAR */
+#define TIMER_SHORTS_COMPARE6_CLEAR_Pos (6UL) /*!< Position of COMPARE6_CLEAR field. */
+#define TIMER_SHORTS_COMPARE6_CLEAR_Msk (0x1UL << TIMER_SHORTS_COMPARE6_CLEAR_Pos) /*!< Bit mask of COMPARE6_CLEAR field. */
+#define TIMER_SHORTS_COMPARE6_CLEAR_Disabled (0UL) /*!< Disable shortcut */
+#define TIMER_SHORTS_COMPARE6_CLEAR_Enabled (1UL) /*!< Enable shortcut */
 
 /* Bit 5 : Shortcut between event COMPARE[5] and task CLEAR */
 #define TIMER_SHORTS_COMPARE5_CLEAR_Pos (5UL) /*!< Position of COMPARE5_CLEAR field. */
@@ -9974,6 +10007,18 @@ POSSIBILITY OF SUCH DAMAGE.
 /* Register: TIMER_INTEN */
 /* Description: Enable or disable interrupt */
 
+/* Bit 23 : Enable or disable interrupt for event COMPARE[7] */
+#define TIMER_INTEN_COMPARE7_Pos (23UL) /*!< Position of COMPARE7 field. */
+#define TIMER_INTEN_COMPARE7_Msk (0x1UL << TIMER_INTEN_COMPARE7_Pos) /*!< Bit mask of COMPARE7 field. */
+#define TIMER_INTEN_COMPARE7_Disabled (0UL) /*!< Disable */
+#define TIMER_INTEN_COMPARE7_Enabled (1UL) /*!< Enable */
+
+/* Bit 22 : Enable or disable interrupt for event COMPARE[6] */
+#define TIMER_INTEN_COMPARE6_Pos (22UL) /*!< Position of COMPARE6 field. */
+#define TIMER_INTEN_COMPARE6_Msk (0x1UL << TIMER_INTEN_COMPARE6_Pos) /*!< Bit mask of COMPARE6 field. */
+#define TIMER_INTEN_COMPARE6_Disabled (0UL) /*!< Disable */
+#define TIMER_INTEN_COMPARE6_Enabled (1UL) /*!< Enable */
+
 /* Bit 21 : Enable or disable interrupt for event COMPARE[5] */
 #define TIMER_INTEN_COMPARE5_Pos (21UL) /*!< Position of COMPARE5 field. */
 #define TIMER_INTEN_COMPARE5_Msk (0x1UL << TIMER_INTEN_COMPARE5_Pos) /*!< Bit mask of COMPARE5 field. */
@@ -10012,6 +10057,20 @@ POSSIBILITY OF SUCH DAMAGE.
 
 /* Register: TIMER_INTENSET */
 /* Description: Enable interrupt */
+
+/* Bit 23 : Write '1' to enable interrupt for event COMPARE[7] */
+#define TIMER_INTENSET_COMPARE7_Pos (23UL) /*!< Position of COMPARE7 field. */
+#define TIMER_INTENSET_COMPARE7_Msk (0x1UL << TIMER_INTENSET_COMPARE7_Pos) /*!< Bit mask of COMPARE7 field. */
+#define TIMER_INTENSET_COMPARE7_Disabled (0UL) /*!< Read: Disabled */
+#define TIMER_INTENSET_COMPARE7_Enabled (1UL) /*!< Read: Enabled */
+#define TIMER_INTENSET_COMPARE7_Set (1UL) /*!< Enable */
+
+/* Bit 22 : Write '1' to enable interrupt for event COMPARE[6] */
+#define TIMER_INTENSET_COMPARE6_Pos (22UL) /*!< Position of COMPARE6 field. */
+#define TIMER_INTENSET_COMPARE6_Msk (0x1UL << TIMER_INTENSET_COMPARE6_Pos) /*!< Bit mask of COMPARE6 field. */
+#define TIMER_INTENSET_COMPARE6_Disabled (0UL) /*!< Read: Disabled */
+#define TIMER_INTENSET_COMPARE6_Enabled (1UL) /*!< Read: Enabled */
+#define TIMER_INTENSET_COMPARE6_Set (1UL) /*!< Enable */
 
 /* Bit 21 : Write '1' to enable interrupt for event COMPARE[5] */
 #define TIMER_INTENSET_COMPARE5_Pos (21UL) /*!< Position of COMPARE5 field. */
@@ -10057,6 +10116,20 @@ POSSIBILITY OF SUCH DAMAGE.
 
 /* Register: TIMER_INTENCLR */
 /* Description: Disable interrupt */
+
+/* Bit 23 : Write '1' to disable interrupt for event COMPARE[7] */
+#define TIMER_INTENCLR_COMPARE7_Pos (23UL) /*!< Position of COMPARE7 field. */
+#define TIMER_INTENCLR_COMPARE7_Msk (0x1UL << TIMER_INTENCLR_COMPARE7_Pos) /*!< Bit mask of COMPARE7 field. */
+#define TIMER_INTENCLR_COMPARE7_Disabled (0UL) /*!< Read: Disabled */
+#define TIMER_INTENCLR_COMPARE7_Enabled (1UL) /*!< Read: Enabled */
+#define TIMER_INTENCLR_COMPARE7_Clear (1UL) /*!< Disable */
+
+/* Bit 22 : Write '1' to disable interrupt for event COMPARE[6] */
+#define TIMER_INTENCLR_COMPARE6_Pos (22UL) /*!< Position of COMPARE6 field. */
+#define TIMER_INTENCLR_COMPARE6_Msk (0x1UL << TIMER_INTENCLR_COMPARE6_Pos) /*!< Bit mask of COMPARE6 field. */
+#define TIMER_INTENCLR_COMPARE6_Disabled (0UL) /*!< Read: Disabled */
+#define TIMER_INTENCLR_COMPARE6_Enabled (1UL) /*!< Read: Enabled */
+#define TIMER_INTENCLR_COMPARE6_Clear (1UL) /*!< Disable */
 
 /* Bit 21 : Write '1' to disable interrupt for event COMPARE[5] */
 #define TIMER_INTENCLR_COMPARE5_Pos (21UL) /*!< Position of COMPARE5 field. */

@@ -70,11 +70,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/segger_rtt</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/fnmatch/fnmatch.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/fnmatch/fnmatch.c</locationURI>
@@ -138,21 +133,6 @@
 			<name>src/nRF5_SDK/nrfx/legacy</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/segger_rtt/SEGGER_RTT.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/segger_rtt/SEGGER_RTT.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/segger_rtt/SEGGER_RTT_Syscalls_GCC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/segger_rtt/SEGGER_RTT_Syscalls_GCC.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/segger_rtt/SEGGER_RTT_printf.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/segger_rtt/SEGGER_RTT_printf.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/cli/cdc_acm</name>

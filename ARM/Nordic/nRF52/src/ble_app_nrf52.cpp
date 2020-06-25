@@ -1317,7 +1317,7 @@ void BleAppGattInit(void)
     	{
     		// 251 bytes is max dat length as per Bluetooth core spec 5, vol 6, part b, section 4.5.10
     		// 27 - 251 bytes is hardcoded in nrf_ble_gat of the SDK.
-    		uint8_t dlen = g_BleAppData.MaxMtu > 251 ? 251: g_BleAppData.MaxMtu - 3;
+    		uint8_t dlen = g_BleAppData.MaxMtu > 254 ? 251: g_BleAppData.MaxMtu - 3;
     		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
     		APP_ERROR_CHECK(err_code);
     	}
@@ -1808,10 +1808,10 @@ extern "C" void SD_EVT_IRQHandler(void)
 // which is require for Softdevice to function properly
 // Create section set "sdh_soc_observers".
 // This is needed for FSTORAGE event to work.
-NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {
-    .handler   = nrf_sdh_soc_evts_poll,
-    .p_context = NULL,
-};
+//NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {
+//    .handler   = nrf_sdh_soc_evts_poll,
+//    .p_context = NULL,
+//};
 
 #ifndef __ARMCC_VERSION
 
