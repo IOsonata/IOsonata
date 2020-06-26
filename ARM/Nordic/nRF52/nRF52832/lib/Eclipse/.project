@@ -1756,11 +1756,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/threading.c</locationURI>
 		</link>
 		<link>
-			<name>src/mbedtls/library/timing.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/timing.c</locationURI>
-		</link>
-		<link>
 			<name>src/mbedtls/library/xtea.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/xtea.c</locationURI>
