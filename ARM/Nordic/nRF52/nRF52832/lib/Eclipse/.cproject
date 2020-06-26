@@ -374,7 +374,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -754,7 +754,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1134,7 +1134,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1515,7 +1515,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1892,7 +1892,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2270,7 +2270,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2651,7 +2651,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -3033,7 +3033,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

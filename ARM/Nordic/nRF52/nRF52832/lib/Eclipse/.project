@@ -1421,11 +1421,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/mbedtls/library/CMakeLists.txt</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/CMakeLists.txt</locationURI>
-		</link>
-		<link>
 			<name>src/mbedtls/library/aes.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/aes.c</locationURI>
@@ -1621,11 +1616,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/memory_buffer_alloc.c</locationURI>
 		</link>
 		<link>
-			<name>src/mbedtls/library/net_sockets.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/net_sockets.c</locationURI>
-		</link>
-		<link>
 			<name>src/mbedtls/library/nist_kw.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/nist_kw.c</locationURI>
@@ -1769,16 +1759,6 @@
 			<name>src/mbedtls/library/timing.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/timing.c</locationURI>
-		</link>
-		<link>
-			<name>src/mbedtls/library/version.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/version.c</locationURI>
-		</link>
-		<link>
-			<name>src/mbedtls/library/version_features.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/external/mbedtls/library/version_features.c</locationURI>
 		</link>
 		<link>
 			<name>src/mbedtls/library/xtea.c</name>

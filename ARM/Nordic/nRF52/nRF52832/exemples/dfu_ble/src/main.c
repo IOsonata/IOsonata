@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016 - 2019, Nordic Semiconductor ASA
+ * Copyright (c) 2016 - 2020, Nordic Semiconductor ASA
  *
  * All rights reserved.
  *
@@ -47,6 +47,7 @@
  */
 
 #include <stdint.h>
+//#include "boards.h"
 #include "nrf_mbr.h"
 #include "nrf_bootloader.h"
 #include "nrf_bootloader_app_start.h"
@@ -61,7 +62,6 @@
 #include "nrf_delay.h"
 
 #include "iopinctrl.h"
-
 #include "board.h"
 
 static const IOPINCFG s_PinsCfg[] = {
@@ -117,20 +117,21 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
         case NRF_DFU_EVT_DFU_FAILED:
         case NRF_DFU_EVT_DFU_ABORTED:
         case NRF_DFU_EVT_DFU_INITIALIZED:
-//            bsp_board_init(BSP_INIT_LEDS);
-//           bsp_board_led_on(BSP_BOARD_LED_0);
-//            bsp_board_led_on(BSP_BOARD_LED_1);
-//            bsp_board_led_off(BSP_BOARD_LED_2);
+            //bsp_board_init(BSP_INIT_LEDS);
+            //bsp_board_led_on(BSP_BOARD_LED_0);
+            //bsp_board_led_on(BSP_BOARD_LED_1);
+            //bsp_board_led_off(BSP_BOARD_LED_2);
         	IOPinClear(LED1_PORT, LED1_PIN);
             break;
         case NRF_DFU_EVT_TRANSPORT_ACTIVATED:
-//            bsp_board_led_off(BSP_BOARD_LED_1);
-//            bsp_board_led_on(BSP_BOARD_LED_2);
+            //bsp_board_led_off(BSP_BOARD_LED_1);
+            //bsp_board_led_on(BSP_BOARD_LED_2);
             break;
         case NRF_DFU_EVT_DFU_STARTED:
             break;
         case NRF_DFU_EVT_DFU_COMPLETED:
         	IOPinSet(LED1_PORT, LED1_PIN);
+        	break;
         default:
             break;
     }
@@ -142,15 +143,13 @@ int main(void)
 {
     uint32_t ret_val;
 
-    IOPinCfg(s_PinsCfg, s_NbPins);
-
     // Must happen before flash protection is applied, since it edits a protected page.
     nrf_bootloader_mbr_addrs_populate();
 
     // Protect MBR and bootloader code from being overwritten.
-    ret_val = nrf_bootloader_flash_protect(0, MBR_SIZE, false);
+    ret_val = nrf_bootloader_flash_protect(0, MBR_SIZE);
     APP_ERROR_CHECK(ret_val);
-    ret_val = nrf_bootloader_flash_protect(BOOTLOADER_START_ADDR, BOOTLOADER_SIZE, false);
+    ret_val = nrf_bootloader_flash_protect(BOOTLOADER_START_ADDR, BOOTLOADER_SIZE);
     APP_ERROR_CHECK(ret_val);
 
     (void) NRF_LOG_INIT(nrf_bootloader_dfu_timer_counter_get);
