@@ -1808,10 +1808,10 @@ extern "C" void SD_EVT_IRQHandler(void)
 // which is require for Softdevice to function properly
 // Create section set "sdh_soc_observers".
 // This is needed for FSTORAGE event to work.
-//NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {
-//    .handler   = nrf_sdh_soc_evts_poll,
-//    .p_context = NULL,
-//};
+NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {
+    .handler   = nrf_sdh_soc_evts_poll,
+    .p_context = NULL,
+};
 
 #ifndef __ARMCC_VERSION
 
