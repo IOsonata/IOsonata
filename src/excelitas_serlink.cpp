@@ -136,7 +136,7 @@ int DirectLinkRead(DIRECTLINK_DEV *pDev, int NbBits, uint8_t *pBuf)
 		usDelay(1);
 		IOPinSetDir(pDev->Pin.PortNo, pDev->Pin.PinNo, IOPINDIR_INPUT);
 		uint32_t d = IOPinRead(pDev->Pin.PortNo, pDev->Pin.PinNo);
-		usDelay(10);
+		usDelay(13);
 		val <<= 1;
 		val |= IOPinRead(pDev->Pin.PortNo, pDev->Pin.PinNo) & d;
 	}
@@ -227,13 +227,14 @@ void SerialIn(SERIALIN_DEV *pDev, uint32_t Data, int NbBits)
 	while (mask != 0)
 	{
 		IOPinClear(pDev->Pin.PortNo, pDev->Pin.PinNo);
-		usDelay(1);
+		usDelay(1);		// DO NOT remove.
 		IOPinSet(pDev->Pin.PortNo, pDev->Pin.PinNo);
+		usDelay(1);		// DO NOT remove.
 		if ((Data & mask) == 0)
 		{
 			IOPinClear(pDev->Pin.PortNo, pDev->Pin.PinNo);
 		}
-		usDelay(100);
+		usDelay(100);	// DO NOT remove.
 		mask >>= 1;
 	}
 	IOPinClear(pDev->Pin.PortNo, pDev->Pin.PinNo);
