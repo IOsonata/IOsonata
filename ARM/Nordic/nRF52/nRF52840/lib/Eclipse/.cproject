@@ -342,7 +342,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -690,7 +690,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1037,7 +1037,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1385,7 +1385,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1729,7 +1729,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2074,7 +2074,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2422,7 +2422,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2771,7 +2771,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
