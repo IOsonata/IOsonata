@@ -231,11 +231,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatusdef.h</locationURI>
 		</link>
 		<link>
-			<name>include/system_core_clock.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/system_core_clock.h</locationURI>
-		</link>
-		<link>
 			<name>include/system_sam4e.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/system_sam4e.h</locationURI>
@@ -509,6 +504,11 @@
 			<name>include/coredev/spi.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/system_core_clock.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/timer.h</name>

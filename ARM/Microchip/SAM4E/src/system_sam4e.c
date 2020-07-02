@@ -37,6 +37,9 @@ SOFTWARE.
 
 #include "system_sam4e.h"
 
+#define SYSTEM_CORE_CLOCK				120000000UL	// Default core frequency
+#define SYSTEM_NSDELAY_CORE_FACTOR		(27UL)		// Adjustment value for nanosec delay
+
 #define MAINOSC_FREQ_MIN		3000000
 #define MAINOSC_FREQ_MAX		20000000
 
@@ -65,19 +68,19 @@ static OSC s_MainOsc = {
 	12000000
 };
 
-uint32_t SystemCoreClock = 120000000;
+uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
+uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
-
-bool SystemSetMainOsc(OSC_TYPE Type, uint32_t Freq)
+bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 {
 	if (Freq < MAINOSC_FREQ_MIN || Freq > 20000000)
 	{
 		return false;
 	}
 
-	s_MainOsc.Type = Type;
+	s_MainOsc.Type = ClkSrc;
 
-	if (Type == OSC_TYPE_RC)
+	if (ClkSrc == OSC_TYPE_RC)
 	{
 		if (Freq < 8000000)
 		{
@@ -97,6 +100,13 @@ bool SystemSetMainOsc(OSC_TYPE Type, uint32_t Freq)
 		s_MainOsc.Freq = Freq;
 	}
 	SystemInit();
+
+	return true;
+}
+
+bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	return true;
 }
 
 void SystemSetPLLA()
@@ -268,5 +278,37 @@ void SystemCoreClockUpdate( void )
 	{
 		SAM4E_EFC->EEFC_FMR = EEFC_FMR_FWS(5) | EEFC_FMR_CLOE;
 	}
+}
+
+uint32_t SystemCoreClockGet()
+{
+	return SystemCoreClock;
+}
+
+/**
+ * @brief	Get peripheral clock frequency (PCLK)
+ *
+ * @param	Idx : Zero based peripheral clock number. Many processors can
+ * 				  have more than 1 peripheral clock settings.
+ *
+ * @return	Peripheral clock frequency in Hz.
+ */
+uint32_t SystemPeriphClockGet(int Idx)
+{
+	return 0;
+}
+
+/**
+ * @brief	Set peripheral clock (PCLK) frequency
+ *
+ * @param	Idx  : Zero based peripheral clock number. Many processors can
+ * 				   have more than 1 peripheral clock settings.
+ * @param	Freq : Clock frequency in Hz.
+ *
+ * @return	Actual frequency set in Hz.
+ */
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+{
+	return 0;
 }
 

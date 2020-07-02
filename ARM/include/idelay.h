@@ -38,9 +38,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __IDELAY_H__
 
 #include <stdint.h>
-#include "system_core_clock.h"
+#include "coredev/system_core_clock.h"
 
 extern uint32_t SystemMicroSecLoopCnt;
+extern uint32_t SystemnsDelayFactor;
 
 /** @addtogroup Utilities
   * @{
@@ -113,7 +114,8 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt) {
 		".syntax divided\n"
 #endif
 		:
-		: [ucnt] "l" ((cnt + (SYSTEM_NSDELAY_CORE_FACTOR >> 1)) / SYSTEM_NSDELAY_CORE_FACTOR)
+		: [ucnt] "l" ((cnt + (SystemnsDelayFactor >> 1)) / SystemnsDelayFactor)//(SYSTEM_NSDELAY_CORE_FACTOR >> 1)) / SYSTEM_NSDELAY_CORE_FACTOR)
+//		: [ucnt] "l" ((cnt + (SYSTEM_NSDELAY_CORE_FACTOR >> 1)) / SYSTEM_NSDELAY_CORE_FACTOR)
 		:"r1"
 		 );
 }

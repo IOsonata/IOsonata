@@ -37,14 +37,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 
 #include "stm32l4xx.h"
-#include "system_core_clock.h"
+#include "coredev/system_core_clock.h"
 
 #define DEFAULT_RC_FREQ		48000000
 #define XTAL_FREQ			16000000
 
-uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
+#define SYSTEM_CORE_CLOCK				80000000UL	// TODO: Adjust value for CPU with fixed core frequency
+#define SYSTEM_NSDELAY_CORE_FACTOR		(40UL)		// TODO: Adjustment value for nanosec delay
 
-static SYSCLK_SRC s_Clksrc = SYSCLK_SRC_RC;
+uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
+uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
+
+static OSC_TYPE s_Clksrc = OSC_TYPE_RC;
 static uint32_t s_ClkSrcFreq = DEFAULT_RC_FREQ;
 static const uint32_t s_MsiClkRange[] = {
 	100000, 200000, 400000, 800000, 1000000, 2000000, 4000000, 8000000, 16000000, 24000000, 32000000, 48000000
@@ -171,7 +175,7 @@ void SystemCoreClockUpdate(void)
 	SetFlashWaitState(SystemCoreClock);
 }
 
-uint32_t SystemCoreClockSet(SYSCLK_SRC ClkSrc, uint32_t ClkFreq)
+bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t cfgr = 0;
 	uint32_t pllcfgr = 0;
@@ -201,10 +205,10 @@ uint32_t SystemCoreClockSet(SYSCLK_SRC ClkSrc, uint32_t ClkFreq)
 
 	switch (ClkSrc)
 	{
-		case SYSCLK_SRC_OSC:
+		case OSC_TYPE_TCXO:
 			RCC->CR |= RCC_CR_HSEBYP;
-		case SYSCLK_SRC_XTAL:
-			s_ClkSrcFreq = ClkFreq;
+		case OSC_TYPE_XTAL:
+			s_ClkSrcFreq = OscFreq;
 
 			RCC->CR |= RCC_CR_HSION;
 
@@ -233,12 +237,14 @@ uint32_t SystemCoreClockSet(SYSCLK_SRC ClkSrc, uint32_t ClkFreq)
 
 	RCC->CFGR = cfgr;
 
-	return SYSTEM_CORE_CLOCK;
+	SystemCoreClockUpdate();
+
+	return true;//SYSTEM_CORE_CLOCK;
 }
 
 void SystemInit(void)
 {
-	SystemCoreClockSet(SYSCLK_SRC_RC, 0);
+	SystemCoreClockSelect(OSC_TYPE_RC, DEFAULT_RC_FREQ);
 }
 
 /**
@@ -258,7 +264,7 @@ uint32_t SystemHFClockGet()
  *
  * @return	Peripheral clock frequency in Hz.
  */
-uint32_t SystemPeriphClockGet()
+uint32_t SystemPeriphClockGet(int Idx)
 {
 	uint32_t tmp = (RCC->CFGR & RCC_CFGR_PPRE1_Msk) >> RCC_CFGR_PPRE1_Pos;
 
@@ -272,7 +278,7 @@ uint32_t SystemPeriphClockGet()
  *
  * @return	Actual frequency set in Hz.
  */
-uint32_t SystemPeriphClockSet(uint32_t Freq)
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
 	uint32_t div = (SystemCoreClock + (Freq >> 1))/ Freq;
 	uint32_t f = 0;
@@ -306,3 +312,7 @@ uint32_t SystemPeriphClockSet(uint32_t Freq)
 	return f;
 }
 
+uint32_t SystemCoreClockGet()
+{
+	return SystemCoreClock;
+}

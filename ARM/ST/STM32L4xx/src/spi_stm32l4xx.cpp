@@ -36,7 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "coredev/spi.h"
 #include "iopinctrl.h"
-#include "system_core_clock.h"
+#include "coredev/system_core_clock.h"
 #include "idelay.h"
 #include "diskio_flash.h"
 
@@ -141,8 +141,10 @@ static uint32_t STM32L4xxSPIGetRate(DEVINTRF * const pDev)
 static uint32_t STM32L4xxSPISetRate(DEVINTRF * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
+	uint32_t pclk = tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
 
-	uint32_t pclk = SystemPeriphClockGet();
+//	uint32_t pclk = SystemPeriphClockGet(0);
 	uint32_t div = (pclk + (DataRate >> 1)) / DataRate;
 
 	dev->pReg->CR1 &= ~SPI_CR1_BR_Msk;
@@ -612,8 +614,10 @@ bool STM32L4xxQSPIWaitFifo(STM32L4XX_SPIDEV *pDev, int Timeout)
 static uint32_t STM32L4xxQSPISetRate(DEVINTRF * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
+	uint32_t hclk = tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
 
-	uint32_t hclk = SystemHFClockGet();
+	//uint32_t hclk = SystemHFClockGet();
 	int32_t div = (hclk + (DataRate >> 1)) / DataRate - 1;
 
 	if (div < 0)

@@ -36,7 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "coredev/i2c.h"
 #include "iopinctrl.h"
-#include "system_core_clock.h"
+#include "coredev/system_core_clock.h"
 #include "idelay.h"
 #include "diskio_flash.h"
 
@@ -77,7 +77,7 @@ static uint32_t STM32L4xxI2CSetRate(DEVINTRF * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
-	uint32_t pclk = SystemPeriphClockGet();
+	uint32_t pclk = SystemPeriphClockGet(0);
 	uint32_t div = (pclk + (DataRate >> 1)) / DataRate;
 
 	return DataRate;

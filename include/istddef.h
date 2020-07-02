@@ -108,17 +108,6 @@ typedef struct __App_Info {
 	uint8_t Private[APPINFO_PRIVATESIZE_MAX];//!< APPINFO_PRIVATESIZE_MAX bytes private data
 } APP_INFO;
 
-///
-/// Enum defining clock oscillator types
-///
-/// Many integrated circuits allow the section of different type of oscillator to use as clock
-/// source. This enum defines commonly used types.
-typedef enum __Osc_Type {
-	OSC_TYPE_RC,	//!< internal RC
-	OSC_TYPE_XTAL,	//!< external crystal
-	OSC_TYPE_TCXO,	//!< external oscillator
-} OSC_TYPE;
-
 #pragma pack(pop)
 
 #ifdef __cplusplus
