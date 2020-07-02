@@ -35,10 +35,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include <stdio.h>
 
-
-
-#include <system_core_clock.h>
-
 #if defined ( __ARMCC_VERSION )
 extern int Image$$ER_ZI$$Length;
 extern char Image$$ER_ZI$$Base[];
@@ -101,7 +97,9 @@ void ResetEntry (void)
 	 * from the flash to ram.
 	 */
 	if (&__data_start__ != &__data_loc__)
+	{
 		memcpy((void *)&__data_start__, (void *)&__data_loc__, (size_t)&__data_size__);
+	}
 
 	/*
 	 * Clear the ".bss" segment.
@@ -127,7 +125,7 @@ void ResetEntry (void)
 	SystemCoreClockUpdate();
 
 	// Update count for usDelay
-	SystemMicroSecLoopCnt = (SystemCoreClock + 800000UL) / 16000000;
+	SystemMicroSecLoopCnt = (SystemCoreClock + 8000000) / 16000000;
 
 	/*
 	 * We are ready to enter main application
