@@ -46,16 +46,6 @@ SOFTWARE.
 #define USB_FREQ				48000000
 #define PLLA_FREQ				240000000
 
-/* Clock Settings (120MHz) */
-#define SYS_BOARD_OSCOUNT   (CKGR_MOR_MOSCXTST(0x8U))
-#define SYS_BOARD_PLLAR     (CKGR_PLLAR_ONE \
-		| CKGR_PLLAR_MULA(0x13U) \
-		| CKGR_PLLAR_PLLACOUNT(0x3fU) \
-		| CKGR_PLLAR_DIVA(0x1U))
-#define SYS_BOARD_MCKR      (PMC_MCKR_PRES_CLK_2 | PMC_MCKR_CSS_PLLA_CLK)
-
-#define SYS_CKGR_MOR_KEY_VALUE	CKGR_MOR_KEY_PASSWD/* Key to unlock MOR register */
-
 #pragma pack(push, 4)
 typedef struct {
 	OSC_TYPE Type;

@@ -36,18 +36,22 @@ Modified by          Date              Description
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "system_core_clock.h"
+#include "coredev/system_core_clock.h"
 #include "LPC11Uxx.h"
 
 
 #define OSC_FREQ				XTAL_FREQ_12MHZ	// Installed oscillator frequency
 #define IRC_FREQ				(12000000UL)	// Internal RC freq */
 
+#define SYSTEM_CORE_CLOCK				48000000UL		// TODO: Adjust value for CPU with fixed core frequency
+#define SYSTEM_NSDELAY_CORE_FACTOR		(93UL)			// TODO: Adjustment value
+
 // Select system clock oscillator source
 #define DEF_CLK_SRC				IRC_FREQ
 
 uint32_t SystemCoreClock = 48000000UL;	// System Clock Frequency (Core Clock)
 uint32_t SystemMainClkFreq = IRC_FREQ;		// System clock frequency, reset default IRC
+uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
 static inline uint32_t GetSysPllClk(void)
 {
