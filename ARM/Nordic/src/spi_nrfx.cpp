@@ -287,6 +287,14 @@ void nRFxSPIPowerOff(DEVINTRF * const pDev)
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 0;
 #endif
+
+	if (dev->pSpiDev->Cfg.NbIOPins > 3)
+	{
+		for (int i = 0; i < dev->pSpiDev->Cfg.NbIOPins; i++)
+		{
+			IOPinDisable(dev->pSpiDev->Cfg.pIOPinMap[i].PortNo, dev->pSpiDev->Cfg.pIOPinMap[i].PinNo);
+		}
+	}
 }
 
 // Initial receive
