@@ -42,10 +42,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEFAULT_RC_FREQ		48000000
 #define XTAL_FREQ			16000000
 
-#define SYSTEM_CORE_CLOCK				80000000UL	// TODO: Adjust value for CPU with fixed core frequency
+#define SYSTEM_CORE_CLOCK_MAX			80000000UL	// TODO: Adjust value for CPU with fixed core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(40UL)		// TODO: Adjustment value for nanosec delay
 
-uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
+uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
 static OSC_TYPE s_Clksrc = OSC_TYPE_RC;
@@ -105,7 +105,7 @@ uint32_t FindPllCfg(uint32_t SrcFreq)
 
 	// find matching clock mul/div
 	uint32_t pllm = 1;
-	int32_t cdiff = SYSTEM_CORE_CLOCK;
+	int32_t cdiff = SYSTEM_CORE_CLOCK_MAX;
 	uint32_t plln = 8;
 	uint32_t pllr = 0;
 	uint32_t pllcfgr = 0;
@@ -122,9 +122,9 @@ uint32_t FindPllCfg(uint32_t SrcFreq)
 			{
 				uint32_t sysclk = vco / r;
 
-				if (sysclk <= SYSTEM_CORE_CLOCK)
+				if (sysclk <= SYSTEM_CORE_CLOCK_MAX)
 				{
-					int diff = SYSTEM_CORE_CLOCK - sysclk;
+					int diff = SYSTEM_CORE_CLOCK_MAX - sysclk;
 					if (diff < cdiff)
 					{
 						cdiff = diff;
@@ -189,7 +189,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	RCC->CIER = 0;
 
 	// Flash wait state to max core freq.
-	SetFlashWaitState(SYSTEM_CORE_CLOCK);
+	SetFlashWaitState(SYSTEM_CORE_CLOCK_MAX);
 
 	// internal default 48MHz RC, ready for USB clock
 	RCC->CR &= ~RCC_CR_MSIRANGE_Msk;
@@ -262,11 +262,32 @@ uint32_t SystemHFClockGet()
 /**
  * @brief	Get peripheral clock frequency (PCLK)
  *
+ * Most often the PCLK numbering starts from 1 (PCLK1, PCLK2,...).
+ * Therefore the clock Idx parameter = 0 indicate PCK1, 1 indicate PCLK2
+ *
+ * @param	Idx : Zero based peripheral clock number. Many processors can
+ * 				  have more than 1 peripheral clock settings.
+ *
  * @return	Peripheral clock frequency in Hz.
+ * 			0 - Bad clock number
  */
 uint32_t SystemPeriphClockGet(int Idx)
 {
-	uint32_t tmp = (RCC->CFGR & RCC_CFGR_PPRE1_Msk) >> RCC_CFGR_PPRE1_Pos;
+	if (Idx < 0 || Idx > 1)
+	{
+		return 0;
+	}
+
+	uint32_t tmp = 0;
+
+	if (Idx == 1)
+	{
+		tmp = (RCC->CFGR & RCC_CFGR_PPRE2_Msk) >> RCC_CFGR_PPRE2_Pos;
+	}
+	else
+	{
+		tmp = (RCC->CFGR & RCC_CFGR_PPRE1_Msk) >> RCC_CFGR_PPRE1_Pos;
+	}
 
 	return tmp & 4 ? SystemCoreClock >> ((tmp & 3) + 1) : SystemCoreClock;
 }
@@ -274,39 +295,66 @@ uint32_t SystemPeriphClockGet(int Idx)
 /**
  * @brief	Set peripheral clock (PCLK) frequency
  *
+ * Most often the PCLK numbering starts from 1 (PCLK1, PCLK2,...).
+ * Therefore the clock Idx parameter = 0 indicate PCK1, 1 indicate PCLK2
+ *
+ * @param	Idx  : Zero based peripheral clock number. Many processors can
+ * 				   have more than 1 peripheral clock settings.
  * @param	Freq : Clock frequency in Hz.
  *
  * @return	Actual frequency set in Hz.
+ * 			0 - Failed
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
+	if (Idx < 0 || Idx > 1 || Freq > SYSTEM_CORE_CLOCK_MAX)
+	{
+		return 0;
+	}
+
 	uint32_t div = (SystemCoreClock + (Freq >> 1))/ Freq;
 	uint32_t f = 0;
+	uint32_t ppreval = 0;
 
-	RCC->CFGR &= RCC_CFGR_PPRE1_Msk;
 	if (div < 2)
 	{
+		// Div 1
 		f = SystemCoreClock;
 	}
 	else if (div < 4)
 	{
-		RCC->CFGR |= 4 << RCC_CFGR_PPRE1_Pos;
+		// Div 2
+		ppreval = 4;
 		f = SystemCoreClock >> 1;
 	}
 	else if (div < 8)
 	{
-		RCC->CFGR |= 5 << RCC_CFGR_PPRE1_Pos;
+		// Div 4
+		ppreval = 5;
 		f = SystemCoreClock >> 2;
 	}
 	else if (div < 16)
 	{
-		RCC->CFGR |= 6 << RCC_CFGR_PPRE1_Pos;
+		// Div 8
+		ppreval = 6;
 		f = SystemCoreClock >> 3;
 	}
 	else
 	{
-		RCC->CFGR |= 7 << RCC_CFGR_PPRE1_Pos;
+		// Div 16
+		ppreval = 7;
 		f = SystemCoreClock >> 4;
+	}
+
+	if (Idx == 1)
+	{
+		RCC->CFGR &= RCC_CFGR_PPRE2_Msk;
+		RCC->CFGR |= ppreval << RCC_CFGR_PPRE2_Pos;
+	}
+	else
+	{
+		RCC->CFGR &= RCC_CFGR_PPRE1_Msk;
+		RCC->CFGR |= ppreval << RCC_CFGR_PPRE1_Pos;
 	}
 
 	return f;

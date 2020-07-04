@@ -100,21 +100,29 @@ uint32_t SystemCoreClockGet();
 /**
  * @brief	Get peripheral clock frequency (PCLK)
  *
+ * Most often the PCLK numbering starts from 1 (PCLK1, PCLK2,...).
+ * Therefore the clock Idx parameter = 0 indicate PCK1, 1 indicate PCLK2
+ *
  * @param	Idx : Zero based peripheral clock number. Many processors can
  * 				  have more than 1 peripheral clock settings.
  *
  * @return	Peripheral clock frequency in Hz.
+ * 			0 - Bad clock number
  */
 uint32_t SystemPeriphClockGet(int Idx);
 
 /**
  * @brief	Set peripheral clock (PCLK) frequency
  *
+ * Most often the PCLK numbering starts from 1 (PCLK1, PCLK2,...).
+ * Therefore the clock Idx parameter = 0 indicate PCK1, 1 indicate PCLK2
+ *
  * @param	Idx  : Zero based peripheral clock number. Many processors can
  * 				   have more than 1 peripheral clock settings.
  * @param	Freq : Clock frequency in Hz.
  *
  * @return	Actual frequency set in Hz.
+ * 			0 - Failed
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq);
 
