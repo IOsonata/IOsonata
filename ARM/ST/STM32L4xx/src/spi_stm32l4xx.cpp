@@ -141,10 +141,18 @@ static uint32_t STM32L4xxSPIGetRate(DEVINTRF * const pDev)
 static uint32_t STM32L4xxSPISetRate(DEVINTRF * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
-	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
-	uint32_t pclk = tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
 
-//	uint32_t pclk = SystemPeriphClockGet(0);
+	uint32_t pclk;
+
+	if (dev->DevNo == 1)
+	{
+		pclk = SystemPeriphClockGet(1);
+	}
+	else
+	{
+		pclk = SystemPeriphClockGet(0);
+	}
+
 	uint32_t div = (pclk + (DataRate >> 1)) / DataRate;
 
 	dev->pReg->CR1 &= ~SPI_CR1_BR_Msk;
