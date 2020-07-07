@@ -44,7 +44,9 @@ SOFTWARE.
 #define MAINOSC_FREQ_MAX		20000000
 
 #define USB_FREQ				48000000
-#define PLLA_FREQ				240000000
+#define PLLA_FREQ				240000000UL
+
+#define PERIPH_CLOCK_MAX		3
 
 #pragma pack(push, 4)
 typedef struct {
@@ -58,8 +60,14 @@ static OSC s_MainOsc = {
 	12000000
 };
 
+static OSC s_SlowOsc = {
+	OSC_TYPE_RC,
+	32000
+};
+
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
+static uint32_t g_PllAFreq = PLLA_FREQ;
 
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 {
@@ -96,6 +104,17 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
+	if (ClkSrc == OSC_TYPE_RC)
+	{
+		s_SlowOsc.Type = OSC_TYPE_RC;
+		s_SlowOsc.Freq = 32000;
+	}
+	else
+	{
+		s_SlowOsc.Type = OSC_TYPE_XTAL;
+		s_SlowOsc.Freq = 32768;
+	}
+
 	return true;
 }
 
@@ -118,6 +137,8 @@ void SystemSetPLLA()
 	SAM4E_PMC->CKGR_PLLAR = CKGR_PLLAR_ONE | CKGR_PLLAR_PLLACOUNT(0x3f) |
 							CKGR_PLLAR_DIVA(div) | CKGR_PLLAR_MULA(mul);
 	while ((SAM4E_PMC->PMC_SR & PMC_SR_LOCKA) == 0);
+
+	g_PllAFreq = (mul + 1) * s_MainOsc.Freq / div;
 }
 
 void SystemInit()
@@ -285,7 +306,33 @@ uint32_t SystemCoreClockGet()
  */
 uint32_t SystemPeriphClockGet(int Idx)
 {
-	return 0;
+	if (Idx < 0 || Idx >= PERIPH_CLOCK_MAX)
+	{
+		return 0;
+	}
+
+	uint32_t f = 0;
+	uint32_t d = SAM4E_PMC->PMC_PCK[Idx];
+
+	switch (d & PMC_PCK_CSS_Msk)
+	{
+		case PMC_PCK_CSS_SLOW_CLK:
+			f = s_SlowOsc.Freq;
+			break;
+		case PMC_PCK_CSS_MAIN_CLK:
+			f = s_MainOsc.Freq;
+			break;
+		case PMC_PCK_CSS_PLLA_CLK:
+			f = g_PllAFreq;
+			break;
+		case PMC_PCK_CSS_MCK:
+			f = SystemCoreClock;
+			break;
+	}
+
+	f = f >> ((d & PMC_PCK_CSS_Msk) >> PMC_PCK_CSS_Pos);
+
+	return f;
 }
 
 /**
@@ -299,6 +346,16 @@ uint32_t SystemPeriphClockGet(int Idx)
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-	return 0;
+	if (Idx < 0 || Idx >= PERIPH_CLOCK_MAX)
+	{
+		return 0;
+	}
+
+	uint32_t div = g_PllAFreq / Freq - 1;
+	uint32_t bit = 32 - __CLZ(div);
+
+	SAM4E_PMC->PMC_PCK[Idx] = PMC_PCK_CSS_PLLA_CLK | ((bit << PMC_PCK_PRES_Pos) & PMC_PCK_PRES_Msk);
+
+	return SystemPeriphClockGet(Idx);
 }
 
