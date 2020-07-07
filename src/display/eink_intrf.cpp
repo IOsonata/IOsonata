@@ -39,7 +39,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "display/eink_intrf.h"
 
-static bool EInkIntrfWaitBusy(EIINTRFDEV * const pDev, uint32_t Timeout = 0)
+static bool EInkIntrfWaitBusy(EIINTRF_DEV * const pDev, uint32_t Timeout = 0)
 {
 	while ((--Timeout > 0) &&
 		   (IOPinRead(pDev->pIOPinMap[EIINTRF_BUSY_PIN_IDX].PortNo, pDev->pIOPinMap[EIINTRF_BUSY_PIN_IDX].PinNo) == 0));
@@ -69,7 +69,7 @@ static uint32_t EInkIntrfSetRate(DEVINTRF * const pDev, uint32_t Rate)
 
 static bool EInkIntrfStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 {
-	EIINTRFDEV *dev = (EIINTRFDEV*)pDev->pDevData;
+	EIINTRF_DEV *dev = (EIINTRF_DEV*)pDev->pDevData;
 
 	EInkIntrfSetDataMode(dev, true);
 
@@ -88,7 +88,7 @@ static bool EInkIntrfStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 
 static int EInkIntrfRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	EIINTRFDEV *dev = (EIINTRFDEV*)pDev->pDevData;
+	EIINTRF_DEV *dev = (EIINTRF_DEV*)pDev->pDevData;
 	int cnt = 0;
 
 	if (dev->Type == EIINTRF_TYPE_SPI)
@@ -115,7 +115,7 @@ static int EInkIntrfRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 
 static void EInkIntrfStopRx(DEVINTRF * const pDev)
 {
-	EIINTRFDEV *dev = (EIINTRFDEV*)pDev->pDevData;
+	EIINTRF_DEV *dev = (EIINTRF_DEV*)pDev->pDevData;
 
 	if (dev->Type == EIINTRF_TYPE_BITBANG)
 	{
@@ -130,7 +130,7 @@ static void EInkIntrfStopRx(DEVINTRF * const pDev)
 
 static bool EInkIntrfStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
 {
-	EIINTRFDEV *dev = (EIINTRFDEV*)pDev->pDevData;
+	EIINTRF_DEV *dev = (EIINTRF_DEV*)pDev->pDevData;
 
 	if (dev->Type == EIINTRF_TYPE_BITBANG)
 	{
@@ -146,7 +146,7 @@ static bool EInkIntrfStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
 
 static int EInkIntrfTxData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 {
-	EIINTRFDEV *dev = (EIINTRFDEV*)pDev->pDevData;
+	EIINTRF_DEV *dev = (EIINTRF_DEV*)pDev->pDevData;
 	int cnt = 0;
 
 	if (dev->Type == EIINTRF_TYPE_SPI)
@@ -185,7 +185,7 @@ static int EInkIntrfTxData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 
 static void EInkIntrfStopTx(DEVINTRF * const pDev)
 {
-	EIINTRFDEV *dev = (EIINTRFDEV*)pDev->pDevData;
+	EIINTRF_DEV *dev = (EIINTRF_DEV*)pDev->pDevData;
 
 	if (dev->Type == EIINTRF_TYPE_BITBANG)
 	{
@@ -199,7 +199,7 @@ static void EInkIntrfStopTx(DEVINTRF * const pDev)
 
 static void EInkIntrfReset(DEVINTRF * const pDev)
 {
-	EIINTRFDEV *dev = (EIINTRFDEV*)pDev->pDevData;
+	EIINTRF_DEV *dev = (EIINTRF_DEV*)pDev->pDevData;
 
 	IOPinClear(dev->pIOPinMap[EIINTRF_RST_PIN_IDX].PortNo, dev->pIOPinMap[EIINTRF_RST_PIN_IDX].PinNo);
 	usDelay(500);
@@ -211,7 +211,7 @@ static void EInkIntrfPowerOff(DEVINTRF * const pDev)
 
 }
 
-void EInkIntrfSetDataMode(EIINTRFDEV *pDev, bool bDataMode)
+void EInkIntrfSetDataMode(EIINTRF_DEV *pDev, bool bDataMode)
 {
 	if (bDataMode)
 	{
@@ -223,7 +223,33 @@ void EInkIntrfSetDataMode(EIINTRFDEV *pDev, bool bDataMode)
 	}
 }
 
-bool EInkIntrfInit(EIINTRFDEV * const pDev, const EIINTRFCFG *pCfgData)
+int EInkIntrfWrite(EIINTRF_DEV * const pDev, uint8_t *pCmd, int CmdLen, uint8_t *pData, int DataLen)
+{
+    int count = 0;
+
+    if ((CmdLen + DataLen) <= 0)
+        return 0;
+
+    EInkIntrfSetDataMode(pDev, false);
+    if (DeviceIntrfStartTx(&pDev->DevIntrf, pDev->SpiCsIdx))
+    {
+    	if (CmdLen > 0)
+    	{
+    		count += EInkIntrfTxData(&pDev->DevIntrf, pCmd, CmdLen);
+    	}
+
+    	if (DataLen > 0)
+    	{
+    		EInkIntrfSetDataMode(pDev, true);
+    		count += EInkIntrfTxData(&pDev->DevIntrf, pData, DataLen);
+    	}
+		DeviceIntrfStopTx(&pDev->DevIntrf);
+    }
+
+    return count;
+}
+
+bool EInkIntrfInit(EIINTRF_DEV * const pDev, const EIINTRF_CFG *pCfgData)
 {
 	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
 	IOPinSet(pDev->pIOPinMap[EIINTRF_RST_PIN_IDX].PortNo, pDev->pIOPinMap[EIINTRF_RST_PIN_IDX].PinNo);
@@ -283,7 +309,7 @@ bool EInkIntrfInit(EIINTRFDEV * const pDev, const EIINTRFCFG *pCfgData)
 	return true;
 }
 
-bool EInkIntrf::Init(const EIINTRFCFG &Cfg)
+bool EInkIntrf::Init(const EIINTRF_CFG &Cfg)
 {
 	return EInkIntrfInit(&vDevData, &Cfg);
 }

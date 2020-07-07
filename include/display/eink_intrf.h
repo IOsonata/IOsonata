@@ -40,7 +40,7 @@ SOFTWARE.
 #define __EINK_INTRF_H__
 
 #include "coredev/spi.h"
-#include "device.h"
+//#include "device.h"
 
 /// E-Ink interface type
 typedef enum __EInk_Intrt_Type {
@@ -64,17 +64,17 @@ typedef struct __EInk_Intrf_Cfg {
 	int NbIOPins;					//!< Total number of pin to use
 	SPIDEV * const pSpiDev;			//!< Pointer to SPI device data if SPI mode is used
 	int SpiCsIdx;					//!< CS index in the SPI driver
-} EIINTRFCFG;
+} EIINTRF_CFG;
 
 /// E-Ink interface driver data
-typedef struct __EInk_Intrf_Device {
+typedef struct __EInk_Device_Intrf {
 	EIINTRF_TYPE Type;
 	const IOPINCFG *pIOPinMap;
 	int NbIOPins;
 	DEVINTRF DevIntrf;
 	SPIDEV *pSpiDev;
 	int SpiCsIdx;
-} EIINTRFDEV;
+} EIINTRF_DEV;
 
 #ifdef __cplusplus
 extern "C" {
@@ -88,7 +88,7 @@ extern "C" {
  *
  * @return	true - success
  */
-bool EInkIntrfInit(EIINTRFDEV * const pDev, const EIINTRFCFG *pCfgData);
+bool EInkIntrfInit(EIINTRF_DEV * const pDev, const EIINTRF_CFG *pCfgData);
 
 /**
  * @brief	Select data/cmd mode
@@ -96,14 +96,15 @@ bool EInkIntrfInit(EIINTRFDEV * const pDev, const EIINTRFCFG *pCfgData);
  * @param	pDev : Pointer to E-Ink device data (this driver data)
  * @param	bDataMode : true - Data mode, false : Command mode
  */
-void EInkIntrfSetDataMode(EIINTRFDEV *pDev, bool bDataMode);
-static inline void EInkIntrfReset(EIINTRFDEV * const pDev) { DeviceIntrfReset(&pDev->DevIntrf);}
-static inline int EInkIntrfRx(EIINTRFDEV * const pDev, uint8_t *pBuff, int BuffLen) {
+void EInkIntrfSetDataMode(EIINTRF_DEV *pDev, bool bDataMode);
+static inline void EInkIntrfReset(EIINTRF_DEV * const pDev) { DeviceIntrfReset(&pDev->DevIntrf);}
+static inline int EInkIntrfRx(EIINTRF_DEV * const pDev, uint8_t *pBuff, int BuffLen) {
 	return DeviceIntrfRx(&pDev->DevIntrf, pDev->SpiCsIdx, pBuff, BuffLen);
 }
-static inline int EInkIntrfTx(EIINTRFDEV * const pDev, uint8_t *pData, int DataLen) {
+static inline int EInkIntrfTx(EIINTRF_DEV * const pDev, uint8_t *pData, int DataLen) {
 	return DeviceIntrfTx(&pDev->DevIntrf, pDev->SpiCsIdx, pData, DataLen);
 }
+int EInkIntrfWrite(EIINTRF_DEV * const pDev, uint8_t *pCmd, int CmdLen, uint8_t *pData, int DataLen);
 
 #ifdef __cplusplus
 }
@@ -121,10 +122,10 @@ public:
 	 *
 	 * @return	true - success
 	 */
-	bool Init(const EIINTRFCFG &Cfg);
+	bool Init(const EIINTRF_CFG &Cfg);
 	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
-	operator EIINTRFDEV& () { return vDevData; };			// Get config data
-	operator EIINTRFDEV * const () { return &vDevData; };	// Get pointer to device data
+	operator EIINTRF_DEV& () { return vDevData; };			// Get config data
+	operator EIINTRF_DEV * const () { return &vDevData; };	// Get pointer to device data
 	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
 	uint32_t Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
@@ -161,10 +162,13 @@ public:
 		return DeviceIntrfTxData(&vDevData.DevIntrf, pData, DataLen);
 	}
 	virtual void StopTx(void) { DeviceIntrfStopTx(&vDevData.DevIntrf); }
+	virtual int Write(uint8_t *pCmd, int CmdLen, uint8_t *pData, int DataLen) {
+		return EInkIntrfWrite(&vDevData, pCmd, CmdLen, pData, DataLen);
+	}
 
 protected:
 private:
-	EIINTRFDEV vDevData;	//!< This driver data
+	EIINTRF_DEV vDevData;	//!< This driver data
 };
 
 #endif
