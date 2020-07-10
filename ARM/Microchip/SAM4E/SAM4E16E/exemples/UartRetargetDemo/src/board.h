@@ -39,19 +39,65 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#define UART_RX_PORT		0
-#define UART_RX_PIN			21//9
-#define UART_RX_PINOP		1
-#define UART_TX_PORT		0
-#define UART_TX_PIN			22//10
-#define UART_TX_PINOP		1
+#define UART_DEVNO			1
+
+#if UART_DEVNO == 0
+// UART0
+#define UART_RX_PORT		0	// Port A
+#define UART_RX_PIN			9
+#define UART_RX_PINOP		1	// Periph A
+#define UART_TX_PORT		0	// Port A
+#define UART_TX_PIN			10
+#define UART_TX_PINOP		1	// Periph A
 #define UART_CTS_PORT		-1
 #define UART_CTS_PIN		-1
 #define UART_CTS_PINOP		0
 #define UART_RTS_PORT		-1
 #define UART_RTS_PIN		-1
 #define UART_RTS_PINOP		0
-
+#elif UART_DEVNO == 1
+// UART1
+#define UART_RX_PORT		0	// Port A
+#define UART_RX_PIN			5
+#define UART_RX_PINOP		3	// Periph C
+#define UART_TX_PORT		0	// Port A
+#define UART_TX_PIN			6
+#define UART_TX_PINOP		3	// Periph C
+#define UART_CTS_PORT		-1
+#define UART_CTS_PIN		-1
+#define UART_CTS_PINOP		0
+#define UART_RTS_PORT		-1
+#define UART_RTS_PIN		-1
+#define UART_RTS_PINOP		0
+#elif UART_DEVNO == 2
+// USART0
+#define UART_RX_PORT		1	// Port B
+#define UART_RX_PIN			0
+#define UART_RX_PINOP		3	// Periph C
+#define UART_TX_PORT		1	// Port B
+#define UART_TX_PIN			1
+#define UART_TX_PINOP		3	// Periph C
+#define UART_CTS_PORT		-1
+#define UART_CTS_PIN		-1
+#define UART_CTS_PINOP		0
+#define UART_RTS_PORT		-1
+#define UART_RTS_PIN		-1
+#define UART_RTS_PINOP		0
+#else
+// USART1
+#define UART_RX_PORT		0	// Port A
+#define UART_RX_PIN			21
+#define UART_RX_PINOP		1	// Periph A
+#define UART_TX_PORT		0	// Port A
+#define UART_TX_PIN			22
+#define UART_TX_PINOP		1	// Periph A
+#define UART_CTS_PORT		-1
+#define UART_CTS_PIN		-1
+#define UART_CTS_PINOP		0
+#define UART_RTS_PORT		-1
+#define UART_RTS_PIN		-1
+#define UART_RTS_PINOP		0
+#endif
 
 #endif // __BOARD_H__
 
