@@ -297,7 +297,9 @@ uint32_t SystemCoreClockGet()
 }
 
 /**
- * @brief	Get peripheral clock frequency (PCLK)
+ * @brief	Get peripheral clock frequency
+ *
+ * Peripheral clock on the SAM4E is the same as MCK which is the core clock
  *
  * @param	Idx : Zero based peripheral clock number. Many processors can
  * 				  have more than 1 peripheral clock settings.
@@ -306,37 +308,14 @@ uint32_t SystemCoreClockGet()
  */
 uint32_t SystemPeriphClockGet(int Idx)
 {
-	if (Idx < 0 || Idx >= PERIPH_CLOCK_MAX)
-	{
-		return 0;
-	}
-
-	uint32_t f = 0;
-	uint32_t d = SAM4E_PMC->PMC_PCK[Idx];
-
-	switch (d & PMC_PCK_CSS_Msk)
-	{
-		case PMC_PCK_CSS_SLOW_CLK:
-			f = s_SlowOsc.Freq;
-			break;
-		case PMC_PCK_CSS_MAIN_CLK:
-			f = s_MainOsc.Freq;
-			break;
-		case PMC_PCK_CSS_PLLA_CLK:
-			f = g_PllAFreq;
-			break;
-		case PMC_PCK_CSS_MCK:
-			f = SystemCoreClock;
-			break;
-	}
-
-	f = f >> ((d & PMC_PCK_CSS_Msk) >> PMC_PCK_CSS_Pos);
-
-	return f;
+	return SystemCoreClock;
 }
 
 /**
  * @brief	Set peripheral clock (PCLK) frequency
+ *
+ * Peripheral clock on the SAM4E is the same as MCK which is the core clock
+ * there is no settings to change freq.
  *
  * @param	Idx  : Zero based peripheral clock number. Many processors can
  * 				   have more than 1 peripheral clock settings.
@@ -346,16 +325,6 @@ uint32_t SystemPeriphClockGet(int Idx)
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-	if (Idx < 0 || Idx >= PERIPH_CLOCK_MAX)
-	{
-		return 0;
-	}
-
-	uint32_t div = g_PllAFreq / Freq - 1;
-	uint32_t bit = 32 - __CLZ(div);
-
-	SAM4E_PMC->PMC_PCK[Idx] = PMC_PCK_CSS_PLLA_CLK | ((bit << PMC_PCK_PRES_Pos) & PMC_PCK_PRES_Msk);
-
 	return SystemPeriphClockGet(Idx);
 }
 
