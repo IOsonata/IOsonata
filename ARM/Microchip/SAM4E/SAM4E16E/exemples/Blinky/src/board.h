@@ -69,5 +69,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{3, 0, 0}, {3, 1, 0}, {3, 2, 0}, {3, 3, 0}, {3, 4, 0}, {3, 5, 0}, {3, 6, 0}, {3, 7, 0}, \
 }
 
+#define BOARD_OSC			{ OSC_TYPE_XTAL, 16000000, OSC_TYPE_RC,	32000 }
+
 #endif // __BOARD_H__
 
