@@ -42,6 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 #include "prbs.h"
+#include "coredev/system_core_clock.h"
 
 // This include contain i/o definition the board in use
 #include "board.h"
@@ -65,10 +66,10 @@ static IOPINCFG s_UartPins[] = {
 
 // UART configuration data
 const UARTCFG g_UartCfg = {
-	.DevNo = UART_NO,
+	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPINCFG),
-	.Rate = 1000000,
+	.Rate = 921600,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -91,6 +92,10 @@ UARTDEV g_UartDev;
 // For C++ object programming
 // UART object instance
 UART g_Uart;
+#endif
+
+#ifdef BOARD_OSC
+MCU_OSC g_McuOsc = BOARD_OSC;
 #endif
 
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
