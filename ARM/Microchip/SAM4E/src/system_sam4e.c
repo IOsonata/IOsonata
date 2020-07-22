@@ -196,6 +196,12 @@ void SystemInit()
 	while ((SAM4E_PMC->PMC_SR & PMC_SR_MCKRDY) );
 
 	SystemCoreClockUpdate();
+
+#if (__FPU_USED == 1)
+    SCB->CPACR |= (3UL << 20) | (3UL << 22);
+    __DSB();
+    __ISB();
+#endif
 }
 
 void SystemCoreClockUpdate( void )
