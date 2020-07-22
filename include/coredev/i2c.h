@@ -54,6 +54,19 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   * @{
   */
 
+/// Minimum timing
+#define I2C_SCL_STD_MODE_MAX_SPEED			100		// KHz
+#define I2C_SCL_TLOW_STD_MODE_MIN			4700	// ns
+#define I2C_SCL_THIGH_STD_MODE_MIN			4000	// ns
+
+#define I2C_SCL_FAST_MODE_MAX_SPEED			400		// KHz
+#define I2C_SCL_TLOW_FAST_MODE_MIN			1300	// ns
+#define I2C_SCL_THIGH_FAST_MODE_MIN			600		// ns
+
+#define I2C_SCL_FAST_MODE_PLUS_MAX_SPEED	1000	// KHz
+#define I2C_SCL_TLOW_FAST_MODE_PLUS_MIN		500		// ns
+#define I2C_SCL_THIGH_FAST_MODE_PLUS_MIN	260		// ns
+
 /// I2C Status code
 typedef enum __I2C_Status {
 	I2CSTATUS_START_COND = 8,		//!< Start condition transmitted
