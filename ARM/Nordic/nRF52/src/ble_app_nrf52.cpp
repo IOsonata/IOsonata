@@ -563,7 +563,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
                 ||p_ble_evt->evt.gap_evt.params.adv_set_terminated.reason == BLE_GAP_EVT_ADV_SET_TERMINATED_REASON_LIMIT_REACHED)
             {
             	// Latest SDK restart advertising automatically.  Therefore this flag should not change
-            	//g_BleAppData.bAdvertising = false;
+            	g_BleAppData.bAdvertising = false;
                 BleAppAdvTimeoutHandler();
             }
             break;
