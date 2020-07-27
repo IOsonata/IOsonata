@@ -40,15 +40,5 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/sensor/mot_sensor_demo.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/sensors</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_mpu9250.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_mpu9250.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>

@@ -289,7 +289,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								
@@ -639,7 +639,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								

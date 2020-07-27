@@ -83,9 +83,9 @@
                             							
                             <option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id.848497435" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id" value="1287942917" valueType="string"/>
                             							
-                            <option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.1912492702" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
+                            <option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.1912492702" name="Float ABI" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
                             							
-                            <option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.753875483" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv4spd16" valueType="enumerated"/>
+                            <option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.753875483" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv4spd16" valueType="enumerated"/>
                             							
                             <targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.1412254428" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
                             							
@@ -227,7 +227,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								
@@ -267,7 +267,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								
@@ -401,9 +401,9 @@
                             							
                             <option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm.1471733219" name="Remove command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm" value="rm" valueType="string"/>
                             							
-                            <option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.2103583205" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
+                            <option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.2103583205" name="Float ABI" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
                             							
-                            <option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.197072585" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv4spd16" valueType="enumerated"/>
+                            <option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.197072585" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv4spd16" valueType="enumerated"/>
                             							
                             <targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.1729409988" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
                             							
@@ -545,7 +545,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								
@@ -585,7 +585,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								

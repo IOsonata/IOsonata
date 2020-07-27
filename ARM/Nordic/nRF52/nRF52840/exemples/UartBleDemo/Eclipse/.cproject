@@ -287,9 +287,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
-                                    									
-                                    <listOptionValue builtIn="false" value=":nfc_t2t_lib_gcc_no_fpu.a"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     									
                                     <listOptionValue builtIn="false" value=":nfc_t2t_lib_gcc.a"/>
                                     								
@@ -335,9 +333,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
-                                    									
-                                    <listOptionValue builtIn="false" value=":nfc_t2t_lib_gcc.a"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     									
                                     <listOptionValue builtIn="false" value=":nfc_t2t_lib_gcc.a"/>
                                     								
@@ -677,9 +673,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
-                                    									
-                                    <listOptionValue builtIn="false" value=":nfc_t2t_lib_gcc_no_fpu.a"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     									
                                     <listOptionValue builtIn="false" value=":nfc_t2t_lib_gcc.a"/>
                                     								
@@ -715,9 +709,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
-                                    									
-                                    <listOptionValue builtIn="false" value=":nfc_t2t_lib_gcc.a"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     									
                                     <listOptionValue builtIn="false" value=":nfc_t2t_lib_gcc.a"/>
                                     								

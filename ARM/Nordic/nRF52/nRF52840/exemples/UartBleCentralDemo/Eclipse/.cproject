@@ -261,7 +261,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								
@@ -293,7 +293,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								
@@ -385,7 +385,7 @@
             			
             <storageModule moduleId="cdtBuildSystem" version="4.0.0">
                 				
-                <configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="" id="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release.810515700" name="Release" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release">
+                <configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="" id="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release.810515700" name="Release" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release">
                     					
                     <folderInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release.810515700." name="/" resourcePath="">
                         						
@@ -617,7 +617,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								
@@ -649,7 +649,7 @@
                                     									
                                     <listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
                                     									
-                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.12"/>
+                                    <listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
                                     								
                                 </option>
                                 								
