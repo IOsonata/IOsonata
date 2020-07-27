@@ -61,7 +61,7 @@
 #include "bsp.h"
 #include "bsp_cli.h"
 #include "nrf_cli.h"
-#include "nrf_cli_uart.h"
+//#include "nrf_cli_uart.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -70,12 +70,12 @@
 /**
  * @brief CLI interface over UART
  */
-NRF_CLI_UART_DEF(m_cli_uart_transport, 0, 64, 16);
-NRF_CLI_DEF(m_cli_uart,
-            "uart_cli:~$ ",
-            &m_cli_uart_transport.transport,
-            '\r',
-            4);
+//NRF_CLI_UART_DEF(m_cli_uart_transport, 0, 64, 16);
+//NRF_CLI_DEF(m_cli_uart,
+//            "uart_cli:~$ ",
+//            &m_cli_uart_transport.transport,
+//            '\r',
+//            4);
 
 /**@file
  * @defgroup usbd_cdc_acm_example main.c
@@ -150,7 +150,7 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
             bsp_board_led_on(LED_CDC_ACM_OPEN);
 
             /*Setup first transfer*/
-            ret_code_t ret = app_usbd_cdc_acm_read(&m_app_cdc_acm,
+            ret_code_t ret = app_usbd_cdc_acm_read_any(&m_app_cdc_acm,
                                                    m_rx_buffer,
                                                    READ_SIZE);
             UNUSED_VARIABLE(ret);
@@ -269,7 +269,7 @@ static void init_bsp(void)
 }
 
 static void init_cli(void)
-{
+{/*
     ret_code_t ret;
     ret = bsp_cli_init(bsp_event_callback);
     APP_ERROR_CHECK(ret);
@@ -280,7 +280,7 @@ static void init_cli(void)
     ret = nrf_cli_init(&m_cli_uart, &uart_config, true, true, NRF_LOG_SEVERITY_INFO);
     APP_ERROR_CHECK(ret);
     ret = nrf_cli_start(&m_cli_uart);
-    APP_ERROR_CHECK(ret);
+    APP_ERROR_CHECK(ret);*/
 }
 
 int main(void)
@@ -307,7 +307,7 @@ int main(void)
     APP_ERROR_CHECK(ret);
 
     init_bsp();
-    init_cli();
+    //init_cli();
 
     app_usbd_serial_num_generate();
 
@@ -352,9 +352,9 @@ int main(void)
             }
         }
         
-        nrf_cli_process(&m_cli_uart);
+       // nrf_cli_process(&m_cli_uart);
 
-        UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
+        //UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
         /* Sleep CPU only if there was no interrupt since last loop processing */
         __WFE();
     }
