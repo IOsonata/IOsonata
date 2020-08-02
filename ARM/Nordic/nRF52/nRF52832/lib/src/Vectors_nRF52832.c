@@ -181,11 +181,6 @@ __WEAK void FPU_IRQHandler(void)
     uint32_t * fpscr = (uint32_t * )(FPU->FPCAR + 0x40);
     // Execute FPU instruction to activate lazy stacking
     (void)__get_FPSCR();
-    // Check exception flags
-    //if (*fpscr & 0x...)
-    //{
-    //
-    //}
     // Clear flags in stacked FPSCR register. To clear IDC, IXC, UFC, OFC, DZC and IOC flags, use 0x0000009F mask.
     *fpscr = *fpscr & ~(0x0000009F);
 }
