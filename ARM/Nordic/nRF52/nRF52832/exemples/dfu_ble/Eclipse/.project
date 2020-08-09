@@ -85,6 +85,11 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/nano-pb/pb_encode.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/softdevice</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/bootloader</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -96,6 +101,11 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/softdevice/common</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -223,6 +233,21 @@
 			<name>src/nRF5_SDK/libraries/crypto/nrf_crypto_shared.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/nrf_crypto_shared.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/softdevice/common/nrf_sdh.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/softdevice/common/nrf_sdh.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/softdevice/common/nrf_sdh_ble.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/softdevice/common/nrf_sdh_ble.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/softdevice/common/nrf_sdh_soc.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/bootloader/ble_dfu/nrf_dfu_ble.c</name>
