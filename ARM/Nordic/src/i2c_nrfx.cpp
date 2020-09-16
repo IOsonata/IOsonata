@@ -429,7 +429,7 @@ void nRFxI2CStopRx(DEVINTRF * const pDev)
         // must read dummy last byte to generate NACK & STOP condition
     	nRFxI2CWaitRxComplete(dev, 100000);
 #ifdef TWI_PRESENT
-    	(void)reg->RXD;
+    	(void)dev->pReg->RXD;
 #endif
     }
     nRFxI2CWaitStop(dev, 1000);
@@ -442,11 +442,17 @@ bool nRFxI2CStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
 #ifdef TWI_PRESENT
 	dev->pReg->ADDRESS = DevAddr;
 	dev->pReg->INTENCLR = 0xFFFFFFFF;
+	NRF_TWI_Type *reg = dev->pReg;
 #else
 	dev->pDmaReg->ADDRESS = DevAddr;
 	dev->pDmaReg->INTENCLR = 0xFFFFFFFF;
+	NRF_TWIM_Type *reg = dev->pDmaReg;
 #endif
-
+    if (reg->EVENTS_ERROR)
+    {
+    	reg->ERRORSRC = reg->ERRORSRC;
+    	reg->EVENTS_ERROR = 0;
+    }
 	return true;
 }
 
