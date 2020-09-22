@@ -1,32 +1,41 @@
 /*
 
-Copyright (c) 2010 - 2018, Nordic Semiconductor ASA All rights reserved.
+Copyright (c) 2010 - 2020, Nordic Semiconductor ASA
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
 
 1. Redistributions of source code must retain the above copyright notice, this
    list of conditions and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above copyright
-   notice, this list of conditions and the following disclaimer in the
-   documentation and/or other materials provided with the distribution.
+2. Redistributions in binary form, except as embedded into a Nordic
+   Semiconductor ASA integrated circuit in a product or a software update for
+   such product, must reproduce the above copyright notice, this list of
+   conditions and the following disclaimer in the documentation and/or other
+   materials provided with the distribution.
 
 3. Neither the name of Nordic Semiconductor ASA nor the names of its
    contributors may be used to endorse or promote products derived from this
    software without specific prior written permission.
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
+4. This software, with or without modification, must only be used with a
+   Nordic Semiconductor ASA integrated circuit.
+
+5. Any software provided in binary form under this license must not be reverse
+   engineered, decompiled, modified and/or disassembled.
+
+THIS SOFTWARE IS PROVIDED BY NORDIC SEMICONDUCTOR ASA "AS IS" AND ANY EXPRESS
+OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
 LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
@@ -34,6 +43,18 @@ POSSIBILITY OF SUCH DAMAGE.
 #define _COMPILER_ABSTRACTION_H
 
 /*lint ++flb "Enter library region" */
+
+#ifndef NRF_STRING_CONCATENATE_IMPL
+    #define NRF_STRING_CONCATENATE_IMPL(lhs, rhs) lhs ## rhs
+#endif
+#ifndef NRF_STRING_CONCATENATE
+    #define NRF_STRING_CONCATENATE(lhs, rhs) NRF_STRING_CONCATENATE_IMPL(lhs, rhs)
+#endif
+#if  __LINT__ == 1
+    #ifndef NRF_STATIC_ASSERT
+        #define NRF_STATIC_ASSERT(cond, msg)
+    #endif
+#endif
 
 #if defined ( __CC_ARM )
 
@@ -62,6 +83,11 @@ POSSIBILITY OF SUCH DAMAGE.
     #endif
 
     #define GET_SP()                __current_sp()
+
+    #ifndef NRF_STATIC_ASSERT
+        #define NRF_STATIC_ASSERT(cond, msg) \
+            ;enum { NRF_STRING_CONCATENATE(static_assert_on_line_, __LINE__) = 1 / (!!(cond)) }
+    #endif
     
 #elif defined (__ARMCC_VERSION) && (__ARMCC_VERSION >= 6010050)
 
@@ -90,6 +116,10 @@ POSSIBILITY OF SUCH DAMAGE.
     #endif
 
     #define GET_SP()                __current_sp()
+
+    #ifndef NRF_STATIC_ASSERT
+        #define NRF_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
+    #endif
 
 #elif defined ( __ICCARM__ )
 
@@ -120,7 +150,11 @@ POSSIBILITY OF SUCH DAMAGE.
     
     #define GET_SP()                __get_SP()
 
-#elif defined   ( __GNUC__ )
+    #ifndef NRF_STATIC_ASSERT
+        #define NRF_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+    #endif
+
+#elif defined   ( __GNUC__ ) ||  defined   ( __clang__ )
 
     #ifndef __ASM
         #define __ASM               __asm
@@ -150,9 +184,14 @@ POSSIBILITY OF SUCH DAMAGE.
 
     static inline unsigned int gcc_current_sp(void)
     {
-        register unsigned sp __ASM("sp");
-        return sp;
+        unsigned int stack_pointer = 0;
+        __asm__ __volatile__ ("mov %0, sp" : "=r"(stack_pointer));
+        return stack_pointer;
     }
+
+    #ifndef NRF_STATIC_ASSERT
+        #define NRF_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
+    #endif
 
 #elif defined   ( __TASKING__ )
 
@@ -183,7 +222,27 @@ POSSIBILITY OF SUCH DAMAGE.
 
     #define GET_SP()                __get_MSP()
 
+    #ifndef NRF_STATIC_ASSERT
+        #define NRF_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+    #endif
+
 #endif
+
+#define NRF_MDK_VERSION_ASSERT_AT_LEAST(major, minor, micro) \
+    NRF_STATIC_ASSERT( \
+        ( \
+            (major < MDK_MAJOR_VERSION) || \
+            (major == MDK_MAJOR_VERSION && minor < MDK_MINOR_VERSION) || \
+            (major == MDK_MAJOR_VERSION && minor == MDK_MINOR_VERSION && micro < MDK_MICRO_VERSION) \
+        ), "MDK version mismatch.")
+
+#define NRF_MDK_VERSION_ASSERT_EXACT(major, minor, micro) \
+    NRF_STATIC_ASSERT( \
+        ( \
+            (major != MDK_MAJOR_VERSION) || \
+            (major != MDK_MAJOR_VERSION) || \
+            (major != MDK_MAJOR_VERSION) \
+        ), "MDK version mismatch.")
 
 /*lint --flb "Leave library region" */
 

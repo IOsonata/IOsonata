@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2009-2018 ARM Limited. All rights reserved.
+Copyright (c) 2009-2020 ARM Limited. All rights reserved.
 
     SPDX-License-Identifier: Apache-2.0
 
@@ -26,7 +26,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include <stdint.h>
 #include <stdbool.h>
 #include "nrf.h"
-#include "nrf91_erratas.h"
+#include "nrf_erratas.h"
 #include "system_nrf9160.h"
 
 /*lint ++flb "Enter library region" */
