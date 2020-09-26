@@ -69,7 +69,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/tphg_bme680.h"
 #include "sensors/agm_mpu9250.h"
 #include "sensors/accel_adxl362.h"
-#include "timer_nrfx.h"
+#include "coredev/timer.h"
 #include "board.h"
 #include "idelay.h"
 #include "seep.h"
@@ -131,7 +131,7 @@ BLEADV_MANDATA &g_AdvData = *(BLEADV_MANDATA*)g_AdvDataBuff;
 BLEADV_MANDATA_TPHSENSOR &g_TPHData = *(BLEADV_MANDATA_TPHSENSOR *)g_AdvData.Data;
 BLEADV_MANDATA_GASSENSOR &g_GasData = *(BLEADV_MANDATA_GASSENSOR *)g_AdvData.Data;
 
-void TimerHandler(Timer *pTimer, uint32_t Evt);
+void TimerHandler(TIMER * const pTimer, uint32_t Evt);
 
 const static TIMER_CFG s_TimerCfg = {
     .DevNo = 2,
@@ -141,12 +141,7 @@ const static TIMER_CFG s_TimerCfg = {
 	.EvtHandler = NULL,//TimerHandler
 };
 
-#ifdef NRF51
-TimerAppTimer g_Timer;
-#else
-TimerLFnRFx g_Timer;
-//TimerAppTimer g_Timer;
-#endif
+Timer g_Timer;
 
 static const ble_uuid_t  s_AdvUuids[] = {
     {BLE_UUID_TCS_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
@@ -440,7 +435,7 @@ void SchedAdvData(void * p_event_data, uint16_t event_size)
 	ReadPTHData();
 }
 
-void AppTimerHandler(Timer *pTimer, int TrigNo, void *pContext)
+void AppTimerHandler(TIMER * const pTimer, int TrigNo, void *pContext)
 {
 	if (TrigNo == 0)
 	{

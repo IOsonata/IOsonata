@@ -49,6 +49,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
+#define BYTE_MODE
+#define TEST_BUFSIZE		64
+
 #define SDK_NRFX	// Use nrfx_uarte, comment out this define to use app_uart_fifo
 
 #ifndef SDK_NRFX
@@ -94,6 +97,7 @@ int main()
 {
     uint32_t err_code;
 	uint8_t d = 0xff;
+	uint8_t buff[TEST_BUFSIZE];
 
 #ifdef SDK_NRFX
     g_UarteCfg.pselrxd = UART_RX_PIN;
@@ -111,11 +115,20 @@ int main()
 
 	while(1)
 	{
+#ifdef BYTE_MODE
 		if (nrfx_uarte_tx(&g_Uarte, &d, 1) == NRF_SUCCESS)
 		{
 			// If success send next code
 			d = Prbs8(d);
 		}
+#else
+		for (int i = 0; i < TEST_BUFSIZE; i++)
+		{
+			d = Prbs8(d);
+			buff[i] = d;
+		}
+		while (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) != NRF_SUCCESS)
+#endif
 	}
 #else
 

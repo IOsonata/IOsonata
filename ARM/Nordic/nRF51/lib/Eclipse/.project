@@ -641,11 +641,6 @@
 			<locationURI>PARENT-5-PROJECT_LOC/include/coredev/timer.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/timer_nrf_app_timer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/timer_nrf_app_timer.h</locationURI>
-		</link>
-		<link>
 			<name>include/coredev/timer_nrfx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/timer_nrfx.h</locationURI>
@@ -886,9 +881,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/timer_lf_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/timer_nrf_app_timer.cpp</name>
+			<name>src/coredev/timer_nrfx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/timer_nrf_app_timer.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/uart.c</name>

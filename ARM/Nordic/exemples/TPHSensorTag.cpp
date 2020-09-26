@@ -71,7 +71,7 @@ SOFTWARE.
 #include "sensors/tphg_bme680.h"
 #include "timer_nrfx.h"
 #ifdef NRF51
-#include "timer_nrf_app_timer.h"
+//#include "timer_nrf_app_timer.h"
 #else
 #include "adc_nrf52_saadc.h"
 #endif
@@ -105,7 +105,7 @@ SOFTWARE.
 #define APP_ADV_TIMEOUT_IN_SECONDS      MSEC_TO_UNITS(120000, UNIT_10_MS)           /**< The advertising timeout (in units of seconds). */
 #endif
 
-void TimerHandler(Timer *pTimer, uint32_t Evt);
+void TimerHandler(TIMER * const pTimer, uint32_t Evt);
 
 uint8_t g_AdvDataBuff[10] = {
 	BLEADV_MANDATA_TYPE_TPH,
@@ -126,11 +126,7 @@ const static TIMER_CFG s_TimerCfg = {
 	.EvtHandler = TimerHandler
 };
 
-#ifdef NRF51
-TimerAppTimer g_Timer;
-#else
-TimerLFnRFx g_Timer;
-#endif
+Timer g_Timer;
 
 const BLEAPP_CFG s_BleAppCfg = {
 	{ // Clock config nrf_clock_lf_cfg_t
@@ -452,7 +448,7 @@ void ReadPTHData()
 	gascnt++;
 }
 
-void TimerHandler(Timer *pTimer, uint32_t Evt)
+void TimerHandler(TIMER * const pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
     {

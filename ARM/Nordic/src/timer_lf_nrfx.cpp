@@ -8,30 +8,30 @@
 
 @license
 
+MIT License
+
 Copyright (c) 2017, I-SYST inc., all rights reserved
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-For info or contributing contact : hnhoan at i-syst dot com
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include "nrf.h"
+#include <atomic>
 
 #include "timer_nrfx.h"
 
@@ -50,50 +50,84 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define CLOCK_LFCLKSRC_SRC_Xtal		CLOCK_LFCLKSRC_SRC_LFXO
 #endif
 
-static TimerLFnRFx *s_pnRFxRTC[TIMER_NRFX_RTC_MAX] = {
-	NULL,
+typedef struct {
+	int DevNo;
+	uint32_t MaxFreq;
+    NRF_RTC_Type *pReg;
+    int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
+    uint32_t CC[TIMER_NRFX_RTC_MAX_TRIGGER_EVT];
+    TIMER_TRIGGER Trigger[TIMER_NRFX_RTC_MAX_TRIGGER_EVT];
+    TIMER *pTimer;
+} NRFX_RTC_DATA;
+
+static NRFX_RTC_DATA s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
+	// RTC LF timer first
+	{
+		.DevNo = 0,
+		.MaxFreq = TIMER_NRFX_RTC_BASE_FREQ,
+		.pReg = NRF_RTC0,
+		.MaxNbTrigEvt = RTC0_CC_NUM,
+	},
+	{
+		.DevNo = 1,
+		.MaxFreq = TIMER_NRFX_RTC_BASE_FREQ,
+		.pReg = NRF_RTC1,
+		.MaxNbTrigEvt = RTC1_CC_NUM,
+	},
+#if TIMER_NRFX_RTC_MAX > 2
+	{
+		.DevNo = 2,
+		.MaxFreq = TIMER_NRFX_RTC_BASE_FREQ,
+		.pReg = NRF_RTC2,
+		.MaxNbTrigEvt = RTC2_CC_NUM,
+	},
+#endif
 };
 
-void TimerLFnRFx::IRQHandler()
-{
-    uint32_t evt = 0;
-    uint32_t count = vpReg->COUNTER;
+static std::atomic<int> s_nRfxLFClockSem(0);
 
-    if (vpReg->EVENTS_TICK)
+static void RtcIRQHandler(int DevNo)
+{
+	NRF_RTC_Type *reg = s_nRfxRtcData[DevNo].pReg;
+	TIMER *timer = s_nRfxRtcData[DevNo].pTimer;
+    uint32_t evt = 0;
+    uint32_t count = reg->COUNTER;
+
+    if (reg->EVENTS_TICK)
     {
         evt |= TIMER_EVT_TICK;
-        vpReg->EVENTS_TICK = 0;
+        reg->EVENTS_TICK = 0;
     }
 
-    if (vpReg->EVENTS_OVRFLW)
+    if (reg->EVENTS_OVRFLW)
     {
-        vRollover += 0x1000000ULL;
+    	timer->Rollover += 0x1000000ULL;
         evt |= TIMER_EVT_COUNTER_OVR;
-        vpReg->EVENTS_OVRFLW = 0;
+        reg->EVENTS_OVRFLW = 0;
     }
 
-    for (int i = 0; i < vMaxNbTrigEvt; i++)
+    for (int i = 0; i < s_nRfxRtcData[DevNo].MaxNbTrigEvt; i++)
     {
-        if (vpReg->EVENTS_COMPARE[i])
+        if (reg->EVENTS_COMPARE[i])
         {
             evt |= 1 << (i + 2);
-            vpReg->EVENTS_COMPARE[i] = 0;
-            if (vTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+            reg->EVENTS_COMPARE[i] = 0;
+            if (s_nRfxRtcData[DevNo].Trigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
             {
-            	vpReg->CC[i] = (count + vCC[i]) & 0xffffff;
+            	reg->CC[i] = (count + s_nRfxRtcData[DevNo].CC[i]) & 0xffffff;
             }
-            if (vTrigger[i].Handler)
+            if (s_nRfxRtcData[DevNo].Trigger[i].Handler)
             {
-            	vTrigger[i].Handler(this, i, vTrigger[i].pContext);
+            	s_nRfxRtcData[DevNo].Trigger[i].Handler(timer, i, s_nRfxRtcData[DevNo].Trigger[i].pContext);
             }
         }
     }
 
-    vLastCount = count;
+    timer->LastCount = count;
 
-    if (vEvtHandler)
+    if (timer->EvtHandler)
     {
-        vEvtHandler(this, evt);
+        timer->EvtHandler(timer, evt);
     }
 }
 
@@ -101,136 +135,30 @@ extern "C" {
 
 __WEAK void RTC0_IRQHandler()
 {
-	if (s_pnRFxRTC[0])
-		s_pnRFxRTC[0]->IRQHandler();
+	RtcIRQHandler(0);
 }
 
 __WEAK void RTC1_IRQHandler()
 {
-	if (s_pnRFxRTC[1])
-		s_pnRFxRTC[1]->IRQHandler();
+	RtcIRQHandler(1);
 }
 #if TIMER_NRFX_RTC_MAX > 2
 __WEAK void RTC2_IRQHandler()
 {
-	if (s_pnRFxRTC[2])
-		s_pnRFxRTC[2]->IRQHandler();
+	RtcIRQHandler(2);
 }
 #endif
 
 }   // extern "C"
 
-TimerLFnRFx::TimerLFnRFx()
-{
 
-}
-
-TimerLFnRFx::~TimerLFnRFx()
-{
-
-}
-
-bool TimerLFnRFx::Init(const TIMER_CFG &Cfg)
-{
-    if (Cfg.DevNo < 0 || Cfg.DevNo >= TIMER_NRFX_RTC_MAX)
-        return false;
-
-	switch (Cfg.DevNo)
-    {
-        case 0:
-			s_pnRFxRTC[0] = this;
-			vpReg = NRF_RTC0;
-    		vMaxNbTrigEvt = RTC0_CC_NUM;
-            break;
-        case 1:
-			s_pnRFxRTC[1] = this;
-			vpReg = NRF_RTC1;
-    		vMaxNbTrigEvt = RTC1_CC_NUM;
-            break;
-#if TIMER_NRFX_RTC_MAX > 2
-        case 2:
-			s_pnRFxRTC[2] = this;
-			vpReg = NRF_RTC2;
-    		vMaxNbTrigEvt = RTC2_CC_NUM;
-            break;
-#endif
-    }
-
-    vpReg->TASKS_STOP = 1;
-    vpReg->TASKS_CLEAR = 1;
-    NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-
-    switch (Cfg.ClkSrc)
-    {
-    	case TIMER_CLKSRC_DEFAULT:
-        case TIMER_CLKSRC_LFRC:
-            NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos;
-            break;
-        case TIMER_CLKSRC_LFXTAL:
-            NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos;
-            break;
-#if defined(NRF52_SERIES) || (NRF51)
-        case TIMER_CLKSRC_HFRC:
-        case TIMER_CLKSRC_HFXTAL:
-            NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Synth << CLOCK_LFCLKSRC_SRC_Pos;
-            break;
-#endif
-    }
-    NRF_CLOCK->TASKS_LFCLKSTART = 1;
-
-    int timout = 1000000;
-
-    do
-    {
-        if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) || NRF_CLOCK->EVENTS_LFCLKSTARTED)
-            break;
-
-    } while (timout-- > 0);
-
-    if (timout <= 0)
-        return false;
-
-    NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-
-    vEvtHandler = Cfg.EvtHandler;
-
-    vDevNo = Cfg.DevNo;
-
-	switch (Cfg.DevNo)
-	{
-		case 0:
-			NVIC_ClearPendingIRQ(RTC0_IRQn);
-			NVIC_SetPriority(RTC0_IRQn, Cfg.IntPrio);
-			NVIC_EnableIRQ(RTC0_IRQn);
-			break;
-		case 1:
-			NVIC_ClearPendingIRQ(RTC1_IRQn);
-			NVIC_SetPriority(RTC1_IRQn, Cfg.IntPrio);
-			NVIC_EnableIRQ(RTC1_IRQn);
-			break;
-#if TIMER_NRFX_RTC_MAX > 2
-		case 2:
-			NVIC_ClearPendingIRQ(RTC2_IRQn);
-			NVIC_SetPriority(RTC2_IRQn, Cfg.IntPrio);
-			NVIC_EnableIRQ(RTC2_IRQn);
-			break;
-#endif
-	}
-
-	// Enable tick & overflow interrupt
-	vpReg->INTENSET = RTC_INTENSET_OVRFLW_Msk;
-    vpReg->EVTENSET = RTC_EVTEN_OVRFLW_Msk;
-
-    Frequency(Cfg.Freq);
-
-    return true;
-}
-
-bool TimerLFnRFx::Enable()
+static bool nRFxRtcEnable(TIMER * const pTimer)
 {
     NRF_CLOCK->TASKS_LFCLKSTART = 1;
 
-    switch (vDevNo)
+    s_nRfxLFClockSem++;
+
+    switch (pTimer->DevNo)
     {
         case 0:
             NVIC_ClearPendingIRQ(RTC0_IRQn);
@@ -248,16 +176,16 @@ bool TimerLFnRFx::Enable()
 #endif
     }
 
-    vpReg->TASKS_START = 1;
+    s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_START = 1;
 
     return true;
 }
 
-void TimerLFnRFx::Disable()
+static void nRFxRtcDisable(TIMER * const pTimer)
 {
-    vpReg->TASKS_STOP = 1;
+	s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_STOP = 1;
 
-    switch (vDevNo)
+    switch (pTimer->DevNo)
     {
         case 0:
             NVIC_ClearPendingIRQ(RTC0_IRQn);
@@ -275,17 +203,23 @@ void TimerLFnRFx::Disable()
 #endif
     }
 
-    NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+    s_nRfxLFClockSem--;
+
+    if (s_nRfxLFClockSem <= 0)
+    {
+    	s_nRfxLFClockSem = 0;
+    	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+    }
 }
 
-void TimerLFnRFx::Reset()
+static void nRFxRtcReset(TIMER * const pTimer)
 {
-    vpReg->TASKS_CLEAR = 1;
+	s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_CLEAR = 1;
 }
 
-uint32_t TimerLFnRFx::Frequency(uint32_t Freq)
+static uint32_t nRFxRtcSetFrequency(TIMER * const pTimer, uint32_t Freq)
 {
-    vpReg->TASKS_STOP = 1;
+	s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_STOP = 1;
 
     uint32_t prescaler = 1;
 
@@ -299,81 +233,179 @@ uint32_t TimerLFnRFx::Frequency(uint32_t Freq)
     	}
     }
 
-    vpReg->PRESCALER = prescaler - 1;
+    s_nRfxRtcData[pTimer->DevNo].pReg->PRESCALER = prescaler - 1;
 
-    vFreq = TIMER_NRFX_RTC_BASE_FREQ / prescaler;
+    pTimer->Freq = TIMER_NRFX_RTC_BASE_FREQ / prescaler;
 
     // Pre-calculate periods for faster timer counter to time conversion use later
-    vnsPeriod = 1000000000ULL / (uint64_t)vFreq;     // Period in nsec
+    pTimer->nsPeriod = 1000000000ULL / (uint64_t)pTimer->Freq;     // Period in nsec
 
-    vpReg->TASKS_START = 1;
+    s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_START = 1;
 
-    return vFreq;
+    return pTimer->Freq;
 }
 
-uint64_t TimerLFnRFx::TickCount()
+static uint64_t nRFxRtcGetTickCount(TIMER * const pTimer)
 {
-	return (uint64_t)vpReg->COUNTER + vRollover;
+	return (uint64_t)s_nRfxRtcData[pTimer->DevNo].pReg->COUNTER + pTimer->Rollover;
 }
 
-uint64_t TimerLFnRFx::EnableTimerTrigger(int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
-                                          TIMER_TRIGCB Handler, void *pContext)
+static int nRFxRtcGetMaxTrigger(TIMER * const pTimer)
 {
-    if (TrigNo < 0 || TrigNo >= vMaxNbTrigEvt)
+	return s_nRfxRtcData[pTimer->DevNo].MaxNbTrigEvt;
+}
+
+static uint64_t nRFxRtcEnableTrigger(TIMER * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
+                              TIMER_TRIGCB Handler, void *pContext)
+{
+	NRFX_RTC_DATA &rtc = s_nRfxRtcData[pTimer->DevNo];
+
+    if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
         return 0;
 
-    uint32_t cc = (nsPeriod + (vnsPeriod >> 1)) / vnsPeriod;
+    uint32_t cc = (nsPeriod + (pTimer->nsPeriod >> 1)) / pTimer->nsPeriod;
 
     if (cc <= 0)
     {
         return 0;
     }
 
-    vTrigger[TrigNo].Type = Type;
-    vCC[TrigNo] = cc;
-    vpReg->EVTENSET = RTC_EVTEN_COMPARE0_Msk << TrigNo;
+    rtc.Trigger[TrigNo].Type = Type;
+    rtc.CC[TrigNo] = cc;
+    rtc.pReg->EVTENSET = RTC_EVTEN_COMPARE0_Msk << TrigNo;
 
-	vpReg->INTENSET = RTC_INTENSET_COMPARE0_Msk << TrigNo;
+    rtc.pReg->INTENSET = RTC_INTENSET_COMPARE0_Msk << TrigNo;
 
-    vpReg->CC[TrigNo] = vCC[TrigNo] + vpReg->COUNTER;
+    rtc.pReg->CC[TrigNo] =rtc.CC[TrigNo] + rtc.pReg->COUNTER;
 
-    vTrigger[TrigNo].nsPeriod = vnsPeriod * (uint64_t)cc;
-    vTrigger[TrigNo].Handler = Handler;
-    vTrigger[TrigNo].pContext = pContext;
+    rtc.Trigger[TrigNo].nsPeriod = pTimer->nsPeriod * (uint64_t)cc;
+    rtc.Trigger[TrigNo].Handler = Handler;
+    rtc.Trigger[TrigNo].pContext = pContext;
 
-    return vnsPeriod * (uint64_t)cc; // Return real period in nsec
+    return pTimer->nsPeriod * (uint64_t)cc; // Return real period in nsec
 }
-/*
-uint32_t TimerLFnRFx::EnableTimerTrigger(int TrigNo, uint32_t msPeriod, TIMER_TRIG_TYPE Type,
-                                          TIMER_TRIGCB Handler, void *pContext)
+
+static void nRFxRtcDisableTrigger(TIMER * const pTimer, int TrigNo)
 {
-	return (uint32_t)(EnableTimerTrigger(TrigNo, (uint64_t)msPeriod * 1000000ULL, Type, Handler, pContext) / 1000000ULL);
-}
-*/
-void TimerLFnRFx::DisableTimerTrigger(int TrigNo)
-{
-    if (TrigNo < 0 || TrigNo >= vMaxNbTrigEvt)
+	NRFX_RTC_DATA &rtc = s_nRfxRtcData[pTimer->DevNo];
+
+	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
         return;
 
-    vCC[TrigNo] = 0;
-    vpReg->CC[TrigNo] = 0;
-    vpReg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << TrigNo;
-    vpReg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << TrigNo;
+    rtc.CC[TrigNo] = 0;
+    rtc.pReg->CC[TrigNo] = 0;
+    rtc.pReg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << TrigNo;
+    rtc.pReg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << TrigNo;
 
-    vTrigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
-    vTrigger[TrigNo].Handler = NULL;
-    vTrigger[TrigNo].pContext = NULL;
-    vTrigger[TrigNo].nsPeriod = 0;
+    rtc.Trigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
+    rtc.Trigger[TrigNo].Handler = NULL;
+    rtc.Trigger[TrigNo].pContext = NULL;
+    rtc.Trigger[TrigNo].nsPeriod = 0;
 }
 
-int TimerLFnRFx::FindAvailTimerTrigger(void)
+static int nRFxRtcFindAvailTrigger(TIMER * const pTimer)
 {
-	for (int i = 0; i < vMaxNbTrigEvt; i++)
+	for (int i = 0; i < s_nRfxRtcData[pTimer->DevNo].MaxNbTrigEvt; i++)
 	{
-		if (vTrigger[i].nsPeriod == 0)
+		if (s_nRfxRtcData[pTimer->DevNo].Trigger[i].nsPeriod == 0)
 			return i;
 	}
 
 	return -1;
+}
+
+bool nRFxRtcInit(TIMER * const pTimer, const TIMER_CFG * const pCfg)
+{
+    if (pCfg->DevNo < 0 || pCfg->DevNo >= TIMER_NRFX_RTC_MAX || pCfg->Freq > TIMER_NRFX_RTC_BASE_FREQ)
+    {
+    	return false;
+    }
+
+    pTimer->DevNo = pCfg->DevNo;
+    pTimer->EvtHandler = pCfg->EvtHandler;
+	NRFX_RTC_DATA &rtc = s_nRfxRtcData[pTimer->DevNo];
+	NRF_RTC_Type *reg = s_nRfxRtcData[pTimer->DevNo].pReg;
+
+    rtc.pTimer = pTimer;
+
+    memset(rtc.Trigger, 0, sizeof(rtc.Trigger));
+
+
+    pTimer->Disable = nRFxRtcDisable;
+    pTimer->Enable = nRFxRtcEnable;
+    pTimer->Reset = nRFxRtcReset;
+    pTimer->GetTickCount = nRFxRtcGetTickCount;
+    pTimer->SetFrequency = nRFxRtcSetFrequency;
+    pTimer->GetMaxTrigger = nRFxRtcGetMaxTrigger;
+    pTimer->FindAvailTrigger = nRFxRtcFindAvailTrigger;
+    pTimer->DisableTrigger = nRFxRtcDisableTrigger;
+    pTimer->EnableTrigger = nRFxRtcEnableTrigger;
+
+    reg->TASKS_STOP = 1;
+    reg->TASKS_CLEAR = 1;
+    NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+
+    switch (pCfg->ClkSrc)
+    {
+    	case TIMER_CLKSRC_DEFAULT:
+        case TIMER_CLKSRC_LFRC:
+            NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos;
+            break;
+        case TIMER_CLKSRC_LFXTAL:
+            NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos;
+            break;
+#if defined(NRF52_SERIES) || (NRF51)
+        case TIMER_CLKSRC_HFRC:
+        case TIMER_CLKSRC_HFXTAL:
+            NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Synth << CLOCK_LFCLKSRC_SRC_Pos;
+            break;
+#endif
+    }
+
+    s_nRfxLFClockSem++;
+    NRF_CLOCK->TASKS_LFCLKSTART = 1;
+
+    int timout = 1000000;
+
+    do
+    {
+        if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) || NRF_CLOCK->EVENTS_LFCLKSTARTED)
+            break;
+
+    } while (timout-- > 0);
+
+    if (timout <= 0)
+        return false;
+
+    NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
+
+	switch (pCfg->DevNo)
+	{
+		case 0:
+			NVIC_ClearPendingIRQ(RTC0_IRQn);
+			NVIC_SetPriority(RTC0_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(RTC0_IRQn);
+			break;
+		case 1:
+			NVIC_ClearPendingIRQ(RTC1_IRQn);
+			NVIC_SetPriority(RTC1_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(RTC1_IRQn);
+			break;
+#if TIMER_NRFX_RTC_MAX > 2
+		case 2:
+			NVIC_ClearPendingIRQ(RTC2_IRQn);
+			NVIC_SetPriority(RTC2_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(RTC2_IRQn);
+			break;
+#endif
+	}
+
+	// Enable tick & overflow interrupt
+	reg->INTENSET = RTC_INTENSET_OVRFLW_Msk;
+    reg->EVTENSET = RTC_EVTEN_OVRFLW_Msk;
+
+    nRFxRtcSetFrequency(pTimer, pCfg->Freq);
+
+    return true;
 }
 

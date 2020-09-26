@@ -691,6 +691,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
 		</link>
 		<link>
+			<name>include/sys/socket.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sys/socket.h</locationURI>
+		</link>
+		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_ltc2495.cpp</locationURI>
@@ -749,6 +754,11 @@
 			<name>src/coredev/timer_lf_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/uart.c</name>

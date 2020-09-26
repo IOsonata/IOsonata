@@ -70,13 +70,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                               /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
 #define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                               /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
 
-#define APP_ADV_INTERVAL                MSEC_TO_UNITS(64, UNIT_0_625_MS)             /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
-#define APP_ADV_TIMEOUT_IN_SECONDS      180                                         /**< The advertising timeout (in units of seconds). */
+#define APP_ADV_INTERVAL                MSEC_TO_UNITS(300, UNIT_0_625_MS)             /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
+#define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 
 #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(10, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(40, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
-#define NRF_BLE_FREERTOS_SDH_TASK_STACK 256
+#define NRF_BLE_FREERTOS_SDH_TASK_STACK 512
 
 void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
 
@@ -328,21 +328,26 @@ uint32_t SD_FreeRTOS_Handler(void)
 #else
     vTaskNotifyGiveFromISR(g_BleTask, &yield_req);
 #endif
+    if (yield_req == pdTRUE)
+    {
+    	//taskYIELD();
+        portYIELD_FROM_ISR(yield_req);
+    }
 }
 
 
 void BleAppRtosWaitEvt(void)
 {
 
+    nrf_sdh_evts_poll();                    /* let the handlers run first, incase the EVENT occured before creating this task */
 #ifdef RTOS_QUEUE
     uint32_t item;
     BaseType_t lError = xQueueReceive( g_QueHandle, &item, -1 );
 #else
 
-    ulTaskNotifyTake(pdTRUE,         /* Clear the notification value before exiting (equivalent to the binary semaphore). */
+    ulTaskNotifyTake(pdFALSE,         /* Clear the notification value before exiting (equivalent to the binary semaphore). */
                      portMAX_DELAY); /* Block indefinitely (INCLUDE_vTaskSuspend has to be enabled).*/
 #endif
-    nrf_sdh_evts_poll();                    /* let the handlers run first, incase the EVENT occured before creating this task */
 
 }
 
@@ -382,7 +387,7 @@ void FreeRTOSInit()
                                        "BLE",
                                        NRF_BLE_FREERTOS_SDH_TASK_STACK,
                                        NULL,//g_QueHandle,
-									   configMAX_SYSCALL_INTERRUPT_PRIORITY,
+									   configKERNEL_INTERRUPT_PRIORITY,//configMAX_SYSCALL_INTERRUPT_PRIORITY,
                                        &g_BleTask);
     if (xReturned != pdPASS)
     {

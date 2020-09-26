@@ -52,7 +52,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/spi.h"
 #include "coredev/uart.h"
 #include "stddev.h"
-#include "timer_nrfx.h"
+#include "coredev/timer.h"
 #include "sensors/tph_bme280.h"
 #include "sensors/tphg_bme680.h"
 #include "sensors/tph_ms8607.h"
@@ -74,7 +74,7 @@ const static TIMER_CFG s_TimerCfg = {
 	.EvtHandler = NULL,//TimerHandler
 };
 
-TimerLFnRFx g_Timer;
+Timer g_Timer;
 
 //********** UART **********
 //int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);

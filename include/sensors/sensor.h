@@ -235,7 +235,7 @@ public:
 	virtual SENSOR_STATE State() { return vState; }
 	operator SENSOR_STATE () { return vState; }
 
-	static void TimerTrigHandler(Timer * const pTimer, int TrigNo, void * const pContext) {
+	static void TimerTrigHandler(TIMER * const pTimer, int TrigNo, void * const pContext) {
 	    Sensor *sensor = (Sensor*)pContext;
 
 	    sensor->UpdateData();

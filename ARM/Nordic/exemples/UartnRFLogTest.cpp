@@ -51,8 +51,8 @@ uint8_t g_TxBuff[FIFOSIZE];
 static IOPINCFG s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
+	//{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
+	//{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
 
 // UART configuration data
@@ -64,7 +64,7 @@ static const UARTCFG s_UartCfg = {
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,					// Stop bit
-	.FlowControl = UART_FLWCTRL_HW,
+	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = 1, 					// use APP_IRQ_PRIORITY_LOW with Softdevice
 	.EvtCallback = nRFUartEvthandler,
@@ -114,6 +114,7 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 int main()
 {
 	g_Uart.Init(s_UartCfg);
+	g_Uart.printf("nRFLOG started\n");
 	nrf_log_uart_init(g_Uart);
 
 	NRF_LOG_INIT(NULL);

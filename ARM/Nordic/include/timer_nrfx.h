@@ -9,27 +9,27 @@
 
 @license
 
-Copyright (c) 2017, I-SYST inc., all rights reserved
+MIT License
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Copyright (c) 2017 I-SYST inc. All rights reserved.
 
-For info or contributing contact : hnhoan at i-syst dot com
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
@@ -49,6 +49,27 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define TIMER_NRFX_RTC_MAX                 	RTC_COUNT	//!< Number RTC available
 #define TIMER_NRFX_RTC_MAX_TRIGGER_EVT     	RTC1_CC_NUM	//!< Max number of supported counter trigger event
 
+/// High frequency timer using Timer 16MHz clock source.
+///
+#define TIMER_NRFX_HF_BASE_FREQ   			16000000
+#define TIMER_NRFX_HF_MAX              		TIMER_COUNT		//!< Number high frequency timer available
+#if TIMER_NRFX_HF_MAX < 4
+#define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER2_CC_NUM	//!< Max number of supported counter trigger event
+#else
+#define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER3_CC_NUM	//!< Max number of supported counter trigger event
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+bool nRFxRtcInit(TIMER * const pTimer, const TIMER_CFG * const pCfg);
+bool nRFxTimerInit(TIMER * const pTimer, const TIMER_CFG * const pCfg);
+
+#ifdef __cplusplus
+}
+#endif
+#if 0
 /// Low frequency timer implementation class.
 ///
 class TimerLFnRFx : public Timer {
@@ -112,16 +133,6 @@ private:
     uint32_t vCC[TIMER_NRFX_RTC_MAX_TRIGGER_EVT];
     TIMER_TRIGGER vTrigger[TIMER_NRFX_RTC_MAX_TRIGGER_EVT];
 };
-
-/// High frequency timer using Timer 16MHz clock source.
-///
-#define TIMER_NRFX_HF_BASE_FREQ   			16000000
-#define TIMER_NRFX_HF_MAX              		TIMER_COUNT		//!< Number high frequency timer available
-#if TIMER_NRFX_HF_MAX < 4
-#define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER2_CC_NUM	//!< Max number of supported counter trigger event
-#else
-#define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER3_CC_NUM	//!< Max number of supported counter trigger event
-#endif
 
 /// High frequency timer implementation class
 ///
@@ -187,7 +198,7 @@ private:
     uint32_t vCC[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
     TIMER_TRIGGER vTrigger[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
 };
-
+#endif
 // For backward compatibility, uncomment the lines bellow
 //typedef TimerLFnRFx		TimerLFnRF5x;
 //typedef TimerHFnRFx		TimerHFnRF5x;
