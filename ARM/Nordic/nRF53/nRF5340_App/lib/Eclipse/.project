@@ -871,6 +871,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/timer_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
