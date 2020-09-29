@@ -17,4 +17,13 @@ MEMORY
   RAM (rwx) :  ORIGIN = 0x20000000, LENGTH = 0x40000
 }
 
+SECTIONS 
+{
+ 	.bsdlib 0x20010000 : {KEEP(*(.bsdlibData))}
+ 	.nrf_rpc : 
+ 	{
+		KEEP(*(SORT_BY_NAME(".nrf_rpc.*")))
+	} > FLASH
+}
+
 INCLUDE "gcc_arm_flash.ld"
