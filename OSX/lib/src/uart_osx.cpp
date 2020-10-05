@@ -54,17 +54,17 @@ void UARTSetCtrlLineState(UARTDEV *pDev, uint32_t LineState)
     
 }
 
-int OsxUARTGetRate(DEVINTRF *pDev)
+uint32_t OsxUARTGetRate(DEVINTRF *pDev)
 {
     return 0;
 }
 
-int OsxUARTSetRate(DEVINTRF *pDev, int Rate)
+uint32_t OsxUARTSetRate(DEVINTRF *pDev, uint32_t Rate)
 {
     return 0;
 }
 
-static inline bool OsxUARTStartRx(DEVINTRF *pSerDev, int DevAddr) {
+static inline bool OsxUARTStartRx(DEVINTRF *pSerDev, uint32_t DevAddr) {
     return true;
 }
 
@@ -94,7 +94,7 @@ int OsxUARTRxData(DEVINTRF *pDev, uint8_t *pBuff, int Bufflen)
 
 static inline void OsxUARTStopRx(DEVINTRF *pSerDev) {}
 
-static inline bool OsxUARTStartTx(DEVINTRF *pDev, int DevAddr) {
+static inline bool OsxUARTStartTx(DEVINTRF *pDev, uint32_t DevAddr) {
     return true;
 }
 
