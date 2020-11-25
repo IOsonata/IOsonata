@@ -71,7 +71,9 @@ typedef struct {
 	STDDEVRW	Read;		//!< Pointer to Read function
 	STDDEVRW	Write;		//!< Pointer to Write function
 	STDDEVSEEK	Seek;		//!< Pointer to Seek function
-} STDDEV;
+} StdDev_t;
+
+typedef StdDev_t	STDDEV;
 
 #pragma pack(pop)
 
@@ -94,7 +96,7 @@ extern "C" {
  * 	@return	Handle : if succeeded
  * 				- 1 : Failed
  */
-int InstallBlkDev(STDDEV * const pDev, int MapId);
+int InstallBlkDev(StdDev_t * const pDev, int MapId);
 
 /**
  * @brief	Remove block device from stdio syscall

@@ -88,7 +88,10 @@ typedef struct __Version {
 	};
 	uint16_t SubVers;		//!< Subversion
 	uint32_t Build;			//!< Build number
-} VERS;
+} Vers_t;
+
+typedef Vers_t	VERS;
+
 #pragma pack(pop)
 
 #define APPINFO_NAMESIZE_MAX		16		//!< Max size in bytes for application name
@@ -106,7 +109,9 @@ typedef struct __App_Info {
 	char Name[APPINFO_NAMESIZE_MAX];	//!< Application signature
 	VERS Vers;							//!< Version number
 	uint8_t Private[APPINFO_PRIVATESIZE_MAX];//!< APPINFO_PRIVATESIZE_MAX bytes private data
-} APP_INFO;
+} AppInfo_t;
+
+typedef AppInfo_t	APP_INFO;
 
 #pragma pack(pop)
 

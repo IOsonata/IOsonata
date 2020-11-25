@@ -49,24 +49,26 @@ typedef struct __Slip_Device {
 	DevIntrf_t *pPhyIntrf;				//!< Physical transport interface
 	void *pObj;							//!< Slip object instance
 	volatile bool bSlipEnd;				//!< true - indicate slip packet complete
-} SLIPDEV;
+} SlipDev_t;
+
+typedef SlipDev_t	SLIPDEV;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool SlipInit(SLIPDEV * const pDev, DevIntrf_t * const pPhyIntrf, bool bBlocking);
-static inline int SlipGetRate(SLIPDEV * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
-static inline int SlipSetRate(SLIPDEV * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }
-static inline void SlipEnable(SLIPDEV * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
-static inline void SlipDisable(SLIPDEV * const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
-static inline int SlipRx(SLIPDEV * const pDev, uint8_t *pBuff, int Bufflen) {
+bool SlipInit(SlipDev_t * const pDev, DevIntrf_t * const pPhyIntrf, bool bBlocking);
+static inline int SlipGetRate(SlipDev_t * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
+static inline int SlipSetRate(SlipDev_t * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }
+static inline void SlipEnable(SlipDev_t * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
+static inline void SlipDisable(SlipDev_t * const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
+static inline int SlipRx(SlipDev_t * const pDev, uint8_t *pBuff, int Bufflen) {
 	return DeviceIntrfRx(&pDev->DevIntrf, 0, pBuff, Bufflen);
 }
-static inline int SlipTx(SLIPDEV * const pDev, uint8_t *pData, int Datalen) {
+static inline int SlipTx(SlipDev_t * const pDev, uint8_t *pData, int Datalen) {
 	return DeviceIntrfTx(&pDev->DevIntrf, 0, pData, Datalen);
 }
-static inline bool SlipRxCompleted(SLIPDEV * const pDev) { return pDev->bSlipEnd; }
+static inline bool SlipRxCompleted(SlipDev_t * const pDev) { return pDev->bSlipEnd; }
 
 #ifdef __cplusplus
 }
@@ -82,7 +84,7 @@ public:
 	 * @return	Pointer to internal DEVINTRF to be used with C interface functions
 	 */
 	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
-	operator SLIPDEV * const () { return &vDevData; }
+	operator SlipDev_t * const () { return &vDevData; }
 
 	/**
 	 * @brief	Set data rate of the interface in Hertz.
@@ -198,7 +200,7 @@ public:
 	bool RxCompleted() { return vDevData.bSlipEnd; }
 
 private:
-	SLIPDEV vDevData;
+	SlipDev_t vDevData;
 };
 
 #endif

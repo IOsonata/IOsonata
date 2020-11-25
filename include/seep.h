@@ -174,7 +174,9 @@ typedef struct __Seep_Config {
 					    //<! for a device to complete its write cycle
    					    //<! This is to allow application to perform other tasks
    					    //<! while waiting. Set to NULL is not used
-} SEEP_CFG;
+} SeepCfg_t;
+
+typedef SeepCfg_t	SEEP_CFG;
 
 /// @brief Device internal data.
 ///
@@ -191,7 +193,9 @@ typedef struct __Seep_Device {
 					    //<! for a device to complete its write cycle
    					    //<! This is to allow application to perform other tasks
    					    //<! while waiting. Set to NULL is not used
-} SEEPDEV;
+} SeepDev_t;
+
+typedef SeepDev_t	SEEPDEV;
 
 #pragma pack(pop)
 
@@ -209,7 +213,7 @@ extern "C" {
  *
  * @return  true - initialization successful
  */
-bool SeepInit(SEEPDEV * const pDev, const SEEP_CFG *pCfgData, DevIntrf_t * const pInterf);
+bool SeepInit(SeepDev_t * const pDev, const SeepCfg_t *pCfgData, DevIntrf_t * const pInterf);
 
 /**
  * @brief Get EEPROM size.
@@ -218,7 +222,7 @@ bool SeepInit(SEEPDEV * const pDev, const SEEP_CFG *pCfgData, DevIntrf_t * const
  *
  * @return  Total size in bytes
  */
-static inline uint32_t SeepGetSize(SEEPDEV * const pDev) {
+static inline uint32_t SeepGetSize(SeepDev_t * const pDev) {
     return pDev ? pDev->Size : 0;
 }
 
@@ -229,7 +233,7 @@ static inline uint32_t SeepGetSize(SEEPDEV * const pDev) {
  *
  * @return  Page size in bytes
  */
-static inline uint16_t SeepGetPageSize(SEEPDEV * const pDev) {
+static inline uint16_t SeepGetPageSize(SeepDev_t * const pDev) {
     return pDev? pDev->PageSize : 0;
 }
 
@@ -243,7 +247,7 @@ static inline uint16_t SeepGetPageSize(SEEPDEV * const pDev) {
  *
  * @return  Number of bytes read
  */
-int SeepRead(SEEPDEV * const pDev, uint32_t Addr, uint8_t *pBuff, int Len);
+int SeepRead(SeepDev_t * const pDev, uint32_t Addr, uint8_t *pBuff, int Len);
 
 /**
  * @brief Write to data to Serial EEPROM.
@@ -255,7 +259,7 @@ int SeepRead(SEEPDEV * const pDev, uint32_t Addr, uint8_t *pBuff, int Len);
  *
  * @return  Number of bytes written
  */
-int SeepWrite(SEEPDEV * const pDev, uint32_t Addr, uint8_t *pData, int Len);
+int SeepWrite(SeepDev_t * const pDev, uint32_t Addr, uint8_t *pData, int Len);
 
 /**
  * @brief Set the write protect pin.
@@ -264,7 +268,7 @@ int SeepWrite(SEEPDEV * const pDev, uint32_t Addr, uint8_t *pData, int Len);
  * @param   bVal     : true - Enable write protect
  *                     false - Disable write protect
  */
-void SeepSetWriteProt(SEEPDEV * const pDev, bool bVal);
+void SeepSetWriteProt(SeepDev_t * const pDev, bool bVal);
 
 #ifdef __cplusplus
 }
@@ -288,7 +292,7 @@ public:
      *
      * @return  true - initialization successful
      */
-    virtual bool Init(const SEEP_CFG &Cfg, DeviceIntrf * const pInterf) {
+    virtual bool Init(const SeepCfg_t &Cfg, DeviceIntrf * const pInterf) {
         return SeepInit(&vDevData, &Cfg, *pInterf);
     }
 
@@ -335,11 +339,11 @@ public:
      *
      * @return	Pointer to internal SEEPDEV data.
      */
-    operator SEEPDEV*  const () { return &vDevData; }
+    operator SeepDev_t*  const () { return &vDevData; }
 
 protected:
 
-    SEEPDEV vDevData;	//!< Device address.
+    SeepDev_t vDevData;	//!< Device address.
 };
 
 #endif

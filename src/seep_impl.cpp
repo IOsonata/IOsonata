@@ -43,14 +43,14 @@ using namespace std;
 
 Seep::Seep()
 {
-    memset(&vDevData, 0, sizeof(SEEPDEV));
+    memset(&vDevData, 0, sizeof(SeepDev_t));
 }
 
 Seep::~Seep()
 {
 }
 
-bool SeepInit(SEEPDEV * const pDev, const SEEP_CFG *pCfgData, DevIntrf_t * const pInterf)
+bool SeepInit(SeepDev_t * const pDev, const SeepCfg_t *pCfgData, DevIntrf_t * const pInterf)
 {
     pDev->pInterf = pInterf;
     pDev->DevAddr = pCfgData->DevAddr;
@@ -74,7 +74,7 @@ bool SeepInit(SEEPDEV * const pDev, const SEEP_CFG *pCfgData, DevIntrf_t * const
     return true;
 }
 
-int SeepRead(SEEPDEV * const pDev, uint32_t Addr, uint8_t *pData, int Len)
+int SeepRead(SeepDev_t * const pDev, uint32_t Addr, uint8_t *pData, int Len)
 {
     uint8_t ad[4];
     uint8_t *p = (uint8_t*)&Addr;
@@ -115,7 +115,7 @@ int SeepRead(SEEPDEV * const pDev, uint32_t Addr, uint8_t *pData, int Len)
 }
 
 // Note: Sequential write is bound by page size boundary
-int SeepWrite(SEEPDEV * const pDev, uint32_t Addr, uint8_t *pData, int Len)
+int SeepWrite(SeepDev_t * const pDev, uint32_t Addr, uint8_t *pData, int Len)
 {
     int count = 0;
     uint8_t ad[4];
@@ -163,7 +163,7 @@ int SeepWrite(SEEPDEV * const pDev, uint32_t Addr, uint8_t *pData, int Len)
     return count;
 }
 
-void SeepSetWriteProt(SEEPDEV * const pDev, bool bVal)
+void SeepSetWriteProt(SeepDev_t * const pDev, bool bVal)
 {
     if (pDev->WrProtPin.PortNo < 0 || pDev->WrProtPin.PinNo < 0)
         return;

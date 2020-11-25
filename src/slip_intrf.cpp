@@ -52,7 +52,7 @@ SOFTWARE.
  */
 void SlipIntrfDisable(DevIntrf_t * const pDevIntrf)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -67,7 +67,7 @@ void SlipIntrfDisable(DevIntrf_t * const pDevIntrf)
  */
 void SlipIntrfEnable(DevIntrf_t * const pDevIntrf)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -86,7 +86,7 @@ void SlipIntrfEnable(DevIntrf_t * const pDevIntrf)
  */
 uint32_t SlipIntrfGetRate(DevIntrf_t * const pDevIntrf)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -109,7 +109,7 @@ uint32_t SlipIntrfGetRate(DevIntrf_t * const pDevIntrf)
  */
 uint32_t SlipIntrfSetRate(DevIntrf_t * const pDevIntrf, uint32_t Rate)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -133,7 +133,7 @@ uint32_t SlipIntrfSetRate(DevIntrf_t * const pDevIntrf, uint32_t Rate)
  */
 bool SlipIntrfStartRx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -156,7 +156,7 @@ bool SlipIntrfStartRx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
  */
 int SlipIntrfRxDataBlocking(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 	int cnt = 0;
 	uint8_t d;
 
@@ -211,7 +211,7 @@ int SlipIntrfRxDataBlocking(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int Bu
  */
 int SlipIntrfRxDataNonBlocking(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 	int cnt = 0;
 	uint8_t d;
 
@@ -284,7 +284,7 @@ int SlipIntrfRxDataNonBlocking(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int
  */
 void SlipIntrfStopRx(DevIntrf_t * const pDevIntrf)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -306,7 +306,7 @@ void SlipIntrfStopRx(DevIntrf_t * const pDevIntrf)
  */
 bool SlipIntrfStartTx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -407,7 +407,7 @@ int SlipIntrfTxData(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen)
 
 int SlipIntrfTxData(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 	int cnt = 0;
 	uint8_t d[2] = {SLIP_ESC_CODE, 0};
 
@@ -472,7 +472,7 @@ int SlipIntrfTxData(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen)
  */
 void SlipIntrfStopTx(DevIntrf_t * const pDevIntrf)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -488,7 +488,7 @@ void SlipIntrfStopTx(DevIntrf_t * const pDevIntrf)
  */
 void SlipIntrfReset(DevIntrf_t * const pDevIntrf)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -508,7 +508,7 @@ void SlipIntrfReset(DevIntrf_t * const pDevIntrf)
  */
 void SlipIntrfPowerOff(DevIntrf_t * const pDevIntrf)
 {
-	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
+	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 
 	if (dev->pPhyIntrf)
 	{
@@ -518,7 +518,7 @@ void SlipIntrfPowerOff(DevIntrf_t * const pDevIntrf)
 
 
 
-bool SlipInit(SLIPDEV * const pDev, DevIntrf_t * const pPhyIntrf, bool bBlocking)
+bool SlipInit(SlipDev_t * const pDev, DevIntrf_t * const pPhyIntrf, bool bBlocking)
 {
 	if (pDev == nullptr || pPhyIntrf == nullptr)
 	{

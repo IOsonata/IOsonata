@@ -63,7 +63,7 @@ static const I2CCfg_t s_I2cCfg = {
 
 I2CDev_t g_I2CDev;
 
-static const SEEP_CFG s_SeepCfg = {
+static const SeepCfg_t s_SeepCfg = {
 	.DevAddr = 0x50,
 	.AddrLen = 2,
 	.PageSize = 32,
@@ -72,7 +72,7 @@ static const SEEP_CFG s_SeepCfg = {
 	.WrProtPin = {-1, -1,},
 };
 
-SEEPDEV g_SeepDev;
+SeepDev_t g_SeepDev;
 
 //
 // Print a greeting message on standard output and exit.
