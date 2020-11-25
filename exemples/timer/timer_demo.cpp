@@ -36,22 +36,22 @@ SOFTWARE.
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "nrf.h"
 
+#include "idelay.h"
 #include "coredev/timer.h"
 #include "iopinctrl.h"
-
+//#include "bsdlib_os_bare.h"
 #include "board.h"
 
-void TimerHandler(TIMER * const pTimer, uint32_t Evt);
+void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
-static const IOPINCFG s_Leds[] = LED_PINS_MAP;
-static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPINCFG);
+static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
+static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
 uint64_t g_TickCount = 0;
 uint32_t g_Diff = 0;
 
-const static TIMER_CFG s_TimerCfg = {
+const static TimerCfg_t s_TimerCfg = {
     .DevNo = 2,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
@@ -61,7 +61,7 @@ const static TIMER_CFG s_TimerCfg = {
 
 Timer g_Timer;
 
-void TimerHandler(TIMER *pTimer, uint32_t Evt)
+void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
     {
@@ -80,6 +80,15 @@ void TimerHandler(TIMER *pTimer, uint32_t Evt)
  */
 int main(void)
 {
+	NRF_REGULATORS_S->DCDCEN = REGULATORS_DCDCEN_DCDCEN_Enabled;
+	NRF_CLOCK_S->LFCLKSRC = CLOCK_LFCLKSRCCOPY_SRC_LFXO;
+
+	msDelay(2000);
+	int res = bsdlid_init(NULL, true);
+
+	printf("res = %d %x\n", res, res);
+	msDelay(1000);
+
 	IOPinCfg(s_Leds, s_NbLeds);
 
     g_Timer.Init(s_TimerCfg);

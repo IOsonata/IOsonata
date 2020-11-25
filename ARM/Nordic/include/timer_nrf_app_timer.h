@@ -49,7 +49,7 @@ public:
     virtual bool Enable() { return true; }
     virtual void Disable() {}
     virtual void Reset() {}
-    virtual uint32_t Frequency(uint32_t Freq) { vFreq = Freq; return vFreq;}
+    virtual uint32_t Frequency(uint32_t Freq) { vTimer.Freq = Freq; return vFreq;}
     virtual uint64_t TickCount() { return app_timer_cnt_get(); }
     int MaxTimerTrigger() { return 1; }
 

@@ -78,12 +78,12 @@ typedef struct __BleDeviceInterfConfig {
 	uint8_t	*pRxFifoMem;	//!< Pointer to memory to be used by CFIFO
 	int		TxFifoMemSize;	//!< Total memory size for CFIFO
 	uint8_t	*pTxFifoMem;	//!< Pointer to memory to be used by CFIFO
-	DEVINTRF_EVTCB EvtCB;	//!< Event callback
+	DevIntrfEvtHandler_t EvtCB;	//!< Event callback
 } BLEINTRF_CFG;
 
 // BLE interf instance data
 typedef struct __BleDeviceInterf {
-    DEVINTRF	DevIntrf;	//!< Base Device Interface
+	DevIntrf_t	DevIntrf;	//!< Base Device Interface
     BLESRVC		*pBleSrv;	//!< BLE Service
     int			RxCharIdx;	//!< Write characteristic index (from BLE)
     int			TxCharIdx;	//!< Read characteristic index (to BLE)
@@ -103,7 +103,7 @@ class BleIntrf : public DeviceIntrf {
 public:
 	bool Init(const BLEINTRF_CFG &Cfg);
 
-	operator DEVINTRF * const () { return &vBleIntrf.DevIntrf; }	// Get device interface data
+	operator DevIntrf_t * const () { return &vBleIntrf.DevIntrf; }	// Get device interface data
 	operator BLESRVC * const () { return vBleIntrf.pBleSrv; }
 	// Set data rate in bits/sec (Hz)
 	virtual uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vBleIntrf.DevIntrf, DataRate); }

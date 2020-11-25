@@ -81,8 +81,8 @@ typedef enum __Timer_Trigger_Type {
 
 #define TIMER_EVT_TRIGGER(n)              		(1<<(n+2))	//!< Trigger event id
 
-//class Timer;
-typedef struct __Timer_Handle	TIMER;
+typedef struct __Timer_Device	TimerDev_t;
+typedef TimerDev_t		TIMER;
 
 /**
  * @brief	Timer event handler type.
@@ -91,7 +91,7 @@ typedef struct __Timer_Handle	TIMER;
  * @param	Evt		: Event ID for which this callback is activated
  */
 //typedef void (*TIMER_EVTCB)(Timer * const pTimer, uint32_t Evt);
-typedef void (*TIMER_EVTCB)(TIMER * const pTimer, uint32_t Evt);
+typedef void (*TimerEvtHandler_t)(TimerDev_t * const pTimer, uint32_t Evt);
 
 /**
  * @brief	Timer trigger handler type
@@ -101,16 +101,18 @@ typedef void (*TIMER_EVTCB)(TIMER * const pTimer, uint32_t Evt);
  * @param   pContext: Pointer to user context (user private data, could be a class or structure)
  */
 //typedef void (*TIMER_TRIGCB)(Timer * const pTimer, int TrigNo, void * const pContext);
-typedef void (*TIMER_TRIGCB)(TIMER * const pTimer, int TrigNo, void * const pContext);
+typedef void (*TimerTrigEvtHandler_t)(TimerDev_t * const pTimer, int TrigNo, void * const pContext);
 
 #pragma pack(push, 4)
 
 typedef struct __Timer_Trigger_Info {
 	TIMER_TRIG_TYPE Type;	//!< Trigger type
 	uint64_t nsPeriod;		//!< Trigger period in nanosecond
-	TIMER_TRIGCB Handler;	//!< Trigger event callback
+	TimerTrigEvtHandler_t Handler;	//!< Trigger event callback
 	void *pContext;         //!<< Pointer to user private data to be passed to callback
-} TIMER_TRIGGER;
+} TimerTrig_t;
+
+typedef TimerTrig_t		TIMER_TRIGGER;
 
 /// @brief	Timer configuration data.
 ///
@@ -124,21 +126,23 @@ typedef struct __Timer_Config {
     uint32_t        Freq;       //!< Frequency in Hz, 0 - to auto select max timer frequency
     int             IntPrio;    //!< Interrupt priority. recommended to use highest
     							//!< priority if precision timing is required
-    TIMER_EVTCB     EvtHandler; //!< Interrupt handler
-} TIMER_CFG;
+    TimerEvtHandler_t     EvtHandler; //!< Interrupt handler
+} TimerCfg_t;
 
-struct __Timer_Handle {
+typedef TimerCfg_t	TIMER_CFG;
+
+struct __Timer_Device {
     int DevNo;				//!< Timer device number.
 	uint32_t Freq;			//!< Frequency in Hz
 	uint64_t nsPeriod;		//!< Period in nsec
 	uint64_t Rollover;     	//!< Rollover counter adjustment
 	uint32_t LastCount;		//!< Last counter read value
-	TIMER_EVTCB EvtHandler;	//!< Pointer to user event handler callback
+	TimerEvtHandler_t EvtHandler;	//!< Pointer to user event handler callback
 	void *pObj;				//!< Pointer reference to Timer class
 
-	void (*Disable)(TIMER * const pTimerDev);
-	bool (*Enable)(TIMER * const pTimerDev);
-	void (*Reset)(TIMER * const pTimerDev);
+	void (*Disable)(TimerDev_t * const pTimerDev);
+	bool (*Enable)(TimerDev_t * const pTimerDev);
+	void (*Reset)(TimerDev_t * const pTimerDev);
 
 	/**
      * @brief   Get the current tick count.
@@ -147,7 +151,7 @@ struct __Timer_Handle {
      *
      * @return  Total tick count since last reset
      */
-	uint64_t (*GetTickCount)(TIMER * const pTimerDev);
+	uint64_t (*GetTickCount)(TimerDev_t * const pTimerDev);
 
 	/**
 	 * @brief	Set timer main frequency.
@@ -159,14 +163,14 @@ struct __Timer_Handle {
 	 *
 	 * @return  Real frequency
 	 */
-	uint32_t (*SetFrequency)(TIMER * const pTimerDev, uint32_t Freq);
+	uint32_t (*SetFrequency)(TimerDev_t * const pTimerDev, uint32_t Freq);
 
 	/**
 	 * @brief	Get maximum available timer trigger event for the timer.
 	 *
 	 * @return	count
 	 */
-	int (*GetMaxTrigger)(TIMER * const pTimerDev);
+	int (*GetMaxTrigger)(TimerDev_t * const pTimerDev);
 
 	/**
 	 * @brief	Get first available timer trigger index.
@@ -177,14 +181,14 @@ struct __Timer_Handle {
 	 * @return	success : Timer trigger index
 	 * 			fail : -1
 	 */
-	int (*FindAvailTrigger)(TIMER * const pTimerDev);
+	int (*FindAvailTrigger)(TimerDev_t * const pTimerDev);
 
 	/**
 	 * @brief   Disable timer trigger event.
 	 *
 	 * @param   TrigNo : Trigger number to disable. Index value starting at 0
 	 */
-	void (*DisableTrigger)(TIMER * const pTimer, int TrigNo);
+	void (*DisableTrigger)(TimerDev_t * const pTimer, int TrigNo);
 
     /**
 	 * @brief	Enable a specific nanosecond timer trigger event.
@@ -198,8 +202,8 @@ struct __Timer_Handle {
 	 *
 	 * @return  real period in nsec based on clock calculation
 	 */
-	uint64_t (*EnableTrigger)(TIMER * const pTimerDev, int TrigNo, uint64_t nsPeriod,
-							  TIMER_TRIG_TYPE Type, TIMER_TRIGCB const Handler,
+	uint64_t (*EnableTrigger)(TimerDev_t * const pTimerDev, int TrigNo, uint64_t nsPeriod,
+							  TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 							  void * const pContext);
 };
 
@@ -221,7 +225,7 @@ extern "C" {
  * 			- true 	: Success
  * 			- false : Otherwise
  */
-bool TimerInit(TIMER * const pTimer, const TIMER_CFG * const pCfg);
+bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 
 int TimerGetLowFreqDevCount();
 int TimerGetHighFreqDevCount();
@@ -235,7 +239,7 @@ int TimerGetHighFreqDevNo();
  *
  * @param	pTimer	: Pointer to Timer device private data (timer handle)
  */
-static inline void TimerDisable(TIMER * const pTimer) { pTimer->Disable(pTimer); }
+static inline void TimerDisable(TimerDev_t * const pTimer) { pTimer->Disable(pTimer); }
 
 /**
  * @brief   Turn on timer.
@@ -247,18 +251,18 @@ static inline void TimerDisable(TIMER * const pTimer) { pTimer->Disable(pTimer);
  *
  * @return	true : Success
  */
-static inline bool TimerEnable(TIMER * const pTimer)  { return pTimer->Enable(pTimer); }
+static inline bool TimerEnable(TimerDev_t * const pTimer)  { return pTimer->Enable(pTimer); }
 
 /**
  * @brief   Reset timer.
  *
  * @param	pTimer	: Pointer to Timer device private data (timer handle)
  */
-static inline void TimerReset(TIMER * const pTimer) { pTimer->Reset(pTimer); }
-static inline int TimerGetMaxTrigger(TIMER * const pTimer) { return pTimer->GetMaxTrigger(pTimer); }
-static inline uint64_t TimerGetTickCount(TIMER * const pTimer) { return pTimer->GetTickCount(pTimer); }
-static inline uint32_t TimerGetFrequency(TIMER * const pTimer) { return pTimer->Freq; }
-static inline uint32_t TimerSetFrequency(TIMER * const pTimer, uint32_t Freq) {
+static inline void TimerReset(TimerDev_t * const pTimer) { pTimer->Reset(pTimer); }
+static inline int TimerGetMaxTrigger(TimerDev_t * const pTimer) { return pTimer->GetMaxTrigger(pTimer); }
+static inline uint64_t TimerGetTickCount(TimerDev_t * const pTimer) { return pTimer->GetTickCount(pTimer); }
+static inline uint32_t TimerGetFrequency(TimerDev_t * const pTimer) { return pTimer->Freq; }
+static inline uint32_t TimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq) {
 	return pTimer->SetFrequency(pTimer, Freq);
 }
 /**
@@ -266,14 +270,14 @@ static inline uint32_t TimerSetFrequency(TIMER * const pTimer, uint32_t Freq) {
  *
  * @param   TrigNo : Trigger number to disable. Index value starting at 0
  */
-static inline void TimerDisableTrigger(TIMER * const pTimer, int TrigNo) { pTimer->DisableTrigger(pTimer, TrigNo); }
-static inline uint64_t nsTimerEnableTrigger(TIMER * const pTimer, int TrigNo, uint64_t nsPeriod,
-										 	TIMER_TRIG_TYPE Type, TIMER_TRIGCB const Handler,
+static inline void TimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo) { pTimer->DisableTrigger(pTimer, TrigNo); }
+static inline uint64_t nsTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod,
+										 	TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 											void * const pContext) {
 	return pTimer->EnableTrigger(pTimer, TrigNo, nsPeriod, Type, Handler, pContext);
 }
-static inline uint64_t msTimerEnableTimerTrigger(TIMER * const pTimer,  int TrigNo, uint32_t msPeriod,
-										 	TIMER_TRIG_TYPE Type, TIMER_TRIGCB const Handler,
+static inline uint64_t msTimerEnableTimerTrigger(TimerDev_t * const pTimer,  int TrigNo, uint32_t msPeriod,
+										 	TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 											void * const pContext) {
 	return (uint32_t)((uint64_t )pTimer->EnableTrigger(pTimer, TrigNo, (uint64_t)((uint64_t)msPeriod * 1000000ULL),
 													   Type, Handler, pContext) / 1000000ULL);
@@ -286,7 +290,7 @@ static inline uint64_t msTimerEnableTimerTrigger(TIMER * const pTimer,  int Trig
  *
  * @return  Counter in millisecond
  */
-static inline uint32_t TimerGetMilisecond(TIMER * const pTimer) {
+static inline uint32_t TimerGetMilisecond(TimerDev_t * const pTimer) {
 	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod / 1000000LL;
 }
 
@@ -297,7 +301,7 @@ static inline uint32_t TimerGetMilisecond(TIMER * const pTimer) {
  *
  * @return  Converted count in millisecond
  */
-static inline uint32_t TimerTickToMilisecond(TIMER * const pTimer, uint64_t Count) {
+static inline uint32_t TimerTickToMilisecond(TimerDev_t * const pTimer, uint64_t Count) {
 	return Count * pTimer->nsPeriod / 1000000LL;
 }
 
@@ -308,7 +312,7 @@ static inline uint32_t TimerTickToMilisecond(TIMER * const pTimer, uint64_t Coun
  *
  * @return  Counter in microsecond
  */
-static inline uint32_t TimerGetMicrosecond(TIMER * const pTimer) {
+static inline uint32_t TimerGetMicrosecond(TimerDev_t * const pTimer) {
 	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod / 1000LL;
 }
 
@@ -319,7 +323,7 @@ static inline uint32_t TimerGetMicrosecond(TIMER * const pTimer) {
  *
  * @return  Converted count in microsecond
  */
-static inline uint32_t TimerTickToMicrosecond(TIMER * const pTimer, uint64_t Count) {
+static inline uint32_t TimerTickToMicrosecond(TimerDev_t * const pTimer, uint64_t Count) {
 	return Count * pTimer->nsPeriod / 1000LL;
 }
 
@@ -330,7 +334,7 @@ static inline uint32_t TimerTickToMicrosecond(TIMER * const pTimer, uint64_t Cou
  *
  * @return  Counter in nanosecond
  */
-static inline uint32_t TimerGetNanosecond(TIMER * const pTimer) {
+static inline uint32_t TimerGetNanosecond(TimerDev_t * const pTimer) {
 	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod;
 }
 
@@ -341,7 +345,7 @@ static inline uint32_t TimerGetNanosecond(TIMER * const pTimer) {
  *
  * @return  Converted count in nanosecond
  */
-static inline uint32_t TimerTickToNanosecond(TIMER * const pTimer, uint64_t Count) {
+static inline uint32_t TimerTickToNanosecond(TimerDev_t * const pTimer, uint64_t Count) {
 	return Count * pTimer->nsPeriod;
 }
 
@@ -354,7 +358,7 @@ public:
 
 	Timer() { vTimer.pObj = this; }
 
-	virtual operator TIMER * const () { return &vTimer; }
+	virtual operator TimerDev_t * const () { return &vTimer; }
 
     /**
      * @brief   Timer initialization.
@@ -367,7 +371,7 @@ public:
      * 			- true 	: Success
      * 			- false : Otherwise
      */
-    virtual bool Init(const TIMER_CFG &Cfg) { return TimerInit(&vTimer, &Cfg); }
+    virtual bool Init(const TimerCfg_t &Cfg) { return TimerInit(&vTimer, &Cfg); }
 
     /**
      * @brief   Turn on timer.
@@ -438,7 +442,7 @@ public:
 	 * @return  real period in nsec based on clock calculation
 	 */
 	virtual uint64_t EnableTimerTrigger(int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
-	                                    TIMER_TRIGCB const Handler = NULL, void * const pContext = NULL) {
+										TimerTrigEvtHandler_t const Handler = NULL, void * const pContext = NULL) {
 		return vTimer.EnableTrigger(&vTimer, TrigNo, nsPeriod, Type, Handler, pContext);
 	}
 
@@ -455,7 +459,7 @@ public:
 	 * @return  real period in msec based on clock calculation
 	 */
 	virtual uint32_t EnableTimerTrigger(int TrigNo, uint32_t msPeriod, TIMER_TRIG_TYPE Type,
-	                           	   	    TIMER_TRIGCB const Handler = NULL, void * const pContext = NULL)
+										TimerTrigEvtHandler_t const Handler = NULL, void * const pContext = NULL)
 	{
 		return (uint32_t)((uint64_t )EnableTimerTrigger(TrigNo, (uint64_t)((uint64_t)msPeriod * 1000000ULL), Type, Handler, pContext) / 1000000ULL);
 	}
@@ -473,7 +477,7 @@ public:
 	 * 			-1 : Failed
 	 */
 	virtual int EnableTimerTrigger(uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
-	                               TIMER_TRIGCB const Handler = NULL, void * const pContext = NULL);
+								   TimerTrigEvtHandler_t const Handler = NULL, void * const pContext = NULL);
 
 	/**
 	 * @brief	Enable millisecond timer trigger event.
@@ -488,7 +492,7 @@ public:
 	 * 			-1 : Failed
 	 */
 	int EnableTimerTrigger(uint32_t msPeriod, TIMER_TRIG_TYPE Type,
-	                       TIMER_TRIGCB const Handler = NULL, void * const pContext = NULL);
+						   TimerTrigEvtHandler_t const Handler = NULL, void * const pContext = NULL);
 
 	/**
 	 * @brief   Disable timer trigger event.
@@ -574,7 +578,7 @@ protected:
 	uint32_t vLastCount;	//!< Last counter read value
 #endif
 private:
-	TIMER vTimer;
+	TimerDev_t vTimer;
 };
 
 #endif  //  __cplusplus

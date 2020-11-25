@@ -63,8 +63,8 @@ SOFTWARE.
 extern "C" {
 #endif
 
-bool nRFxRtcInit(TIMER * const pTimer, const TIMER_CFG * const pCfg);
-bool nRFxTimerInit(TIMER * const pTimer, const TIMER_CFG * const pCfg);
+bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
+bool nRFxTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 
 #ifdef __cplusplus
 }

@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stm32l4xx.h"
 
 #include "idelay.h"
-#include "timer_lptim_stm32l4xx.h"
+#include "timer_stm32l4x.h"
 
 #define STM32L4XX_LPTIMER_CLKSRC_PCLK		0
 #define STM32L4XX_LPTIMER_CLKSRC_LSI		1
@@ -52,7 +52,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 typedef struct {
 	LPTIM_TypeDef *pReg;
-	LPTimerSTM32L4xx *pInstance;
+	uint32_t BaseFreq;
+    uint32_t CC[STM32L4XX_LPTIMER_TRIG_MAXCNT];
+    TimerTrig_t Trigger[STM32L4XX_LPTIMER_TRIG_MAXCNT];
+    TimerDev_t *pTimer;
 } LPTIM_DATA;
 
 static LPTIM_DATA s_Stm32l4LptimData[STM32L4XX_LPTIMER_MAXCNT] = {
@@ -60,124 +63,6 @@ static LPTIM_DATA s_Stm32l4LptimData[STM32L4XX_LPTIMER_MAXCNT] = {
 	{ LPTIM2, 0 }
 };
 
-/**
- * @brief   Timer initialization.
- *
- * This is specific to each architecture.
- *
- * @param	Cfg	: Timer configuration data.
- *
- * @return
- * 			- true 	: Success
- * 			- false : Otherwise
- */
-bool LPTimerSTM32L4xx::Init(const TIMER_CFG &Cfg)
-{
-	if (Cfg.DevNo < 0 || Cfg.DevNo >= STM32L4XX_LPTIMER_MAXCNT || Cfg.Freq > 16000000)
-	{
-		return false;
-	}
-
-	vDevNo = Cfg.DevNo;
-	s_Stm32l4LptimData[vDevNo].pInstance = this;
-	vEvtHandler = Cfg.EvtHandler;
-
-	vpReg = LPTIM1;
-
-	if (vDevNo > 0)
-	{
-		vpReg = LPTIM2;
-	}
-	vpReg->CR &= ~LPTIM_CR_ENABLE;
-
-	uint32_t tmp = RCC_CCIPR_LPTIM1SEL_Msk << (Cfg.DevNo << 1);
-
-	RCC->CCIPR &= ~tmp;
-
-	switch (Cfg.ClkSrc)
-	{
-		case TIMER_CLKSRC_LFRC:
-			vBaseFreq = 32000;
-			RCC->BDCR &= ~RCC_BDCR_LSEON;
-			RCC->BDCR |= RCC_BDCR_LSEBYP;
-
-			RCC->CSR |= RCC_CSR_LSION;
-
-			while ((RCC->CSR & RCC_CSR_LSIRDY) == 0);
-
-			tmp = STM32L4XX_LPTIMER_CLKSRC_LSI << (RCC_CCIPR_LPTIM1SEL_Pos + (Cfg.DevNo << 1));
-			break;
-		case TIMER_CLKSRC_LFXTAL:
-			vBaseFreq = 32768;
-
-			RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
-			PWR->CR1 |= PWR_CR1_DBP;
-			RCC->BDCR |= RCC_BDCR_BDRST;
-			RCC->BDCR &= ~RCC_BDCR_BDRST;
-
-			RCC->BDCR &= ~RCC_BDCR_LSEBYP;
-
-			RCC->BDCR |= RCC_BDCR_LSEON;
-
-			while ((RCC->BDCR & RCC_BDCR_LSERDY) == 0);
-
-			PWR->CR1 &= ~PWR_CR1_DBP;
-			RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
-
-			tmp = STM32L4XX_LPTIMER_CLKSRC_LSE << (RCC_CCIPR_LPTIM1SEL_Pos + (Cfg.DevNo << 1));
-			break;
-		case TIMER_CLKSRC_HFRC:
-		case TIMER_CLKSRC_HFXTAL:
-		default:
-			vBaseFreq = 16000000;
-			RCC->CR |= RCC_CR_HSION;
-
-			while ((RCC->CR & RCC_CR_HSIRDY) == 0);
-
-			tmp = STM32L4XX_LPTIMER_CLKSRC_HSI << (RCC_CCIPR_LPTIM1SEL_Pos + (Cfg.DevNo << 1));
-	}
-
-	RCC->CCIPR |= tmp;
-
-	if (vDevNo == 0)
-	{
-		RCC->APB1ENR1 |= RCC_APB1ENR1_LPTIM1EN;
-
-		NVIC_ClearPendingIRQ(LPTIM1_IRQn);
-		NVIC_SetPriority(LPTIM1_IRQn, Cfg.IntPrio);
-		NVIC_EnableIRQ(LPTIM1_IRQn);
-	}
-	else
-	{
-		RCC->APB1ENR2 |= RCC_APB1ENR2_LPTIM2EN;
-
-		NVIC_ClearPendingIRQ(LPTIM2_IRQn);
-		NVIC_SetPriority(LPTIM2_IRQn, Cfg.IntPrio);
-		NVIC_EnableIRQ(LPTIM2_IRQn);
-	}
-
-	Frequency(Cfg.Freq);
-
-	vpReg->OR = 0;
-	vpReg->CR = LPTIM_CR_ENABLE;
-
-	vpReg->ARR = 0xFFFF;
-	vpReg->CMP = 0;
-
-	// Wait for the value to set, otherwise it will cause wrong frequency to set in.
-	while ((vpReg->ISR & LPTIM_ISR_ARROK) == 0);
-
-	// NOTE : Single mode causes the counter to stop.
-	// continuous mode is always on in order for the counter to keep counting
-
-	vpReg->CR |= LPTIM_CR_CNTSTRT;
-	vpReg->ICR = vpReg->ISR;
-
-	// Enable overflow to adjust timer counter properly.
-    vpReg->IER |= LPTIM_IER_ARRMIE;
-
-	return true;
-}
 
 /**
  * @brief   Turn on timer.
@@ -185,9 +70,9 @@ bool LPTimerSTM32L4xx::Init(const TIMER_CFG &Cfg)
  * This is used to re-enable timer after it was disabled for power
  * saving.  It normally does not go through full initialization sequence
  */
-bool LPTimerSTM32L4xx::Enable()
+static bool Stm32l4LptEnable(TimerDev_t * const pTimer)
 {
-	vpReg->CR = LPTIM_CR_ENABLE;
+	s_Stm32l4LptimData[pTimer->DevNo].pReg->CR = LPTIM_CR_ENABLE;
 	//vpReg->CR |= LPTIM_CR_CNTSTRT;
 	return true;
 }
@@ -198,18 +83,18 @@ bool LPTimerSTM32L4xx::Enable()
  * This is used to disable timer for power saving. Call Enable() to
  * re-enable timer instead of full initialization sequence
  */
-void LPTimerSTM32L4xx::Disable()
+static void Stm32l4LptDisable(TimerDev_t * const pTimer)
 {
-	vpReg->CR = 0;
+	s_Stm32l4LptimData[pTimer->DevNo].pReg->CR = 0;
 }
 
 /**
  * @brief   Reset timer.
  */
-void LPTimerSTM32L4xx::Reset()
+static void Stm32l4LptReset(TimerDev_t * const pTimer)
 {
-	vpReg->ICR = vpReg->ISR;
-	vpReg->CNT = 0;
+	s_Stm32l4LptimData[pTimer->DevNo].pReg->ICR = s_Stm32l4LptimData[pTimer->DevNo].pReg->ISR;
+	s_Stm32l4LptimData[pTimer->DevNo].pReg->CNT = 0;
 }
 
 /**
@@ -222,9 +107,10 @@ void LPTimerSTM32L4xx::Reset()
  *
  * @return  Real frequency
  */
-uint32_t LPTimerSTM32L4xx::Frequency(uint32_t Freq)
+static uint32_t Stm32l4LptSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
-	uint32_t div = Freq > 0 ? (vBaseFreq + (Freq >> 1)) / Freq : 1;
+	LPTIM_DATA *dev = &s_Stm32l4LptimData[pTimer->DevNo];
+	uint32_t div = Freq > 0 ? (dev->BaseFreq + (Freq >> 1)) / Freq : 1;
 	uint32_t tmp = 0;
 
 	if (div < 2)
@@ -260,14 +146,24 @@ uint32_t LPTimerSTM32L4xx::Frequency(uint32_t Freq)
 		tmp = 7;
 	}
 
-	vFreq = vBaseFreq >> tmp;
+	pTimer->Freq = dev->BaseFreq >> tmp;
 
 	// Pre-calculate periods for faster timer counter to time conversion use later
-    vnsPeriod = (1000000000ULL + ((uint64_t)vFreq >> 1))/ (uint64_t)vFreq;     // Period in nsec
+    pTimer->nsPeriod = (1000000000ULL + ((uint64_t)pTimer->Freq >> 1))/ (uint64_t)pTimer->Freq;     // Period in nsec
 
-	vpReg->CFGR = (vpReg->CFGR & ~LPTIM_CFGR_PRESC_Msk) | (tmp << LPTIM_CFGR_PRESC_Pos);
+	dev->pReg->CFGR = (dev->pReg->CFGR & ~LPTIM_CFGR_PRESC_Msk) | (tmp << LPTIM_CFGR_PRESC_Pos);
 
-	return vFreq;
+	return pTimer->Freq;
+}
+
+static uint64_t Stm32l4LptGetTickCount(TimerDev_t * const pTimer)
+{
+	LPTIM_DATA *dev = &s_Stm32l4LptimData[pTimer->DevNo];
+    uint32_t cnt = dev->pReg->CNT;
+    while (cnt != dev->pReg->CNT) {
+    	cnt = dev->pReg->CNT;
+    }
+	return (uint64_t)cnt + pTimer->Rollover;
 }
 
 /**
@@ -275,7 +171,7 @@ uint32_t LPTimerSTM32L4xx::Frequency(uint32_t Freq)
  *
  * @return	count
  */
-int LPTimerSTM32L4xx::MaxTimerTrigger()
+int Stm32l4LptGetMaxTrigger(TimerDev_t * const pTimer)
 {
 	return STM32L4XX_LPTIMER_TRIG_MAXCNT;
 }
@@ -292,13 +188,14 @@ int LPTimerSTM32L4xx::MaxTimerTrigger()
  *
  * @return  real period in nsec based on clock calculation
  */
-uint64_t LPTimerSTM32L4xx::EnableTimerTrigger(int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
-											  TIMER_TRIGCB const Handler, void * const pContext)
+uint64_t Stm32l4LptEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
+								 TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
     if (TrigNo < 0 || TrigNo >= STM32L4XX_LPTIMER_TRIG_MAXCNT)
         return 0;
 
-    uint64_t cc = (nsPeriod + (vnsPeriod >> 1ULL)) / vnsPeriod;
+	LPTIM_DATA *dev = &s_Stm32l4LptimData[pTimer->DevNo];
+    uint64_t cc = (nsPeriod + (pTimer->nsPeriod >> 1ULL)) / pTimer->nsPeriod;
 
     if (cc <= 0ULL || cc >= 0x10000ULL)
     {
@@ -307,23 +204,23 @@ uint64_t LPTimerSTM32L4xx::EnableTimerTrigger(int TrigNo, uint64_t nsPeriod, TIM
 
     uint64_t retval = 0;
 
-    vTrigger[TrigNo].Type = Type;
-    vCC[TrigNo] = cc & 0xFFFF;
+    dev->Trigger[TrigNo].Type = Type;
+    dev->CC[TrigNo] = cc & 0xFFFF;
 
-    vTrigger[TrigNo].nsPeriod = vnsPeriod * (uint64_t)cc;
-    vTrigger[TrigNo].Handler = Handler;
-    vTrigger[TrigNo].pContext = pContext;
+    dev->Trigger[TrigNo].nsPeriod = pTimer->nsPeriod * (uint64_t)cc;
+    dev->Trigger[TrigNo].Handler = Handler;
+    dev->Trigger[TrigNo].pContext = pContext;
 
-    uint32_t count = vpReg->CNT;
-    while (count != vpReg->CNT) {
-    	count = vpReg->CNT;
+    uint32_t count = dev->pReg->CNT;
+    while (count != dev->pReg->CNT) {
+    	count = dev->pReg->CNT;
     }
 
-    vpReg->CMP = (cc + count) & 0xFFFF;
+    dev->pReg->CMP = (cc + count) & 0xFFFF;
 
-	while ((vpReg->ISR & LPTIM_ISR_CMPOK) == 0);
+	while ((dev->pReg->ISR & LPTIM_ISR_CMPOK) == 0);
 
-    vpReg->IER |= LPTIM_IER_CMPMIE;
+	dev->pReg->IER |= LPTIM_IER_CMPMIE;
 
 	// NOTE : Single mode causes the counter to stop.
 	// continuous mode is always on in order for the counter to keep counting
@@ -340,7 +237,7 @@ uint64_t LPTimerSTM32L4xx::EnableTimerTrigger(int TrigNo, uint64_t nsPeriod, TIM
     	vpReg->CR |= LPTIM_CR_SNGSTRT;
     }
 */
-    return vnsPeriod * cc; // Return real period in nsec
+    return pTimer->nsPeriod * cc; // Return real period in nsec
 }
 
 /**
@@ -348,55 +245,56 @@ uint64_t LPTimerSTM32L4xx::EnableTimerTrigger(int TrigNo, uint64_t nsPeriod, TIM
  *
  * @param   TrigNo : Trigger number to disable. Index value starting at 0
  */
-void LPTimerSTM32L4xx::DisableTimerTrigger(int TrigNo)
+void Stm32l4LptDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
-	vpReg->IER &= ~LPTIM_IER_CMPMIE;
-	vpReg->CMP = 0;
+	s_Stm32l4LptimData[pTimer->DevNo].pReg->IER &= ~LPTIM_IER_CMPMIE;
+	s_Stm32l4LptimData[pTimer->DevNo].pReg->CMP = 0;
 }
 
-void LPTimerSTM32L4xx::IRQHandler()
+void Stm32l4LptIRQHandler(TimerDev_t * const pTimer)
 {
-	uint32_t flag = vpReg->ISR;
+	LPTIM_DATA *dev = &s_Stm32l4LptimData[pTimer->DevNo];
+	uint32_t flag = dev->pReg->ISR;
 	uint32_t evt = 0;
-    uint32_t count = vpReg->CNT;
-    while (count != vpReg->CNT) {
-    	count = vpReg->CNT;
+    uint32_t count = dev->pReg->CNT;
+    while (count != dev->pReg->CNT) {
+    	count = dev->pReg->CNT;
     }
 
 	if (flag & LPTIM_ISR_ARRM)
 	{
-        vRollover += 0x10000ULL;
+        pTimer->Rollover += 0x10000ULL;
         evt |= TIMER_EVT_COUNTER_OVR;
 	}
 
-	if ((flag & LPTIM_ISR_CMPM) && (vpReg->IER & LPTIM_IER_CMPMIE))
+	if ((flag & LPTIM_ISR_CMPM) && (dev->pReg->IER & LPTIM_IER_CMPMIE))
 	{
 		// NOTE : Single mode cause the counter to stop
 		// Reset compare and disable interrupt for single mode
-		if (vTrigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+		if (dev->Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
-			vpReg->CMP = (count + vCC[0]) & 0xFFFF;
+			dev->pReg->CMP = (count + dev->CC[0]) & 0xFFFF;
 		}
 		else
 		{
-			vpReg->CMP = 0;
-			vpReg->IER &= ~LPTIM_IER_CMPMIE;
+			dev->pReg->CMP = 0;
+			dev->pReg->IER &= ~LPTIM_IER_CMPMIE;
 		}
 		evt |= TIMER_EVT_TRIGGER(0);
-        if (vTrigger[0].Handler)
+        if (dev->Trigger[0].Handler)
         {
-        	vTrigger[0].Handler(this, 0, vTrigger[0].pContext);
+        	dev->Trigger[0].Handler(pTimer, 0, dev->Trigger[0].pContext);
         }
 	}
 
-    vLastCount = count;
+	pTimer->LastCount = count;
 
-    if (vEvtHandler)
+    if (pTimer->EvtHandler)
 	{
-		vEvtHandler(this, evt);
+    	pTimer->EvtHandler(pTimer, evt);
 	}
 
-	vpReg->ICR = flag;
+	dev->pReg->ICR = flag;
 }
 
 /**
@@ -408,21 +306,149 @@ void LPTimerSTM32L4xx::IRQHandler()
  * @return	success : Timer trigger index
  * 			fail : -1
  */
-int LPTimerSTM32L4xx::FindAvailTimerTrigger(void)
+int Stm32l4LptFindAvailTrigger(TimerDev_t * const pTimer)
 {
 	return 0;
 }
 
 extern "C" void LPTIM1_IRQHandler()
 {
-	s_Stm32l4LptimData[0].pInstance->IRQHandler();
+//	s_Stm32l4LptimData[0].pInstance->IRQHandler();
+	Stm32l4LptIRQHandler(s_Stm32l4LptimData[0].pTimer);
 
 	NVIC_ClearPendingIRQ(LPTIM1_IRQn);
 }
 
 extern "C" void LPTIM2_IRQHandler()
 {
-	s_Stm32l4LptimData[1].pInstance->IRQHandler();
+//	s_Stm32l4LptimData[1].pInstance->IRQHandler();
+	Stm32l4LptIRQHandler(s_Stm32l4LptimData[1].pTimer);
 
 	NVIC_ClearPendingIRQ(LPTIM2_IRQn);
 }
+
+/**
+ * @brief   Timer initialization.
+ *
+ * This is specific to each architecture.
+ *
+ * @param	Cfg	: Timer configuration data.
+ *
+ * @return
+ * 			- true 	: Success
+ * 			- false : Otherwise
+ */
+bool Stm32l4LPTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+{
+	if (pCfg->DevNo < 0 || pCfg->DevNo >= STM32L4XX_LPTIMER_MAXCNT || pCfg->Freq > 16000000)
+	{
+		return false;
+	}
+
+	LPTIM_DATA *dev = &s_Stm32l4LptimData[pCfg->DevNo];
+
+	pTimer->DevNo = pCfg->DevNo;
+	LPTIM_TypeDef *reg = s_Stm32l4LptimData[pTimer->DevNo].pReg;
+//	s_Stm32l4LptimData[pTimer->DevNo].pInstance = this;
+	pTimer->EvtHandler = pCfg->EvtHandler;
+    pTimer->Disable = Stm32l4LptDisable;
+    pTimer->Enable = Stm32l4LptEnable;
+    pTimer->Reset = Stm32l4LptReset;
+    pTimer->GetTickCount = Stm32l4LptGetTickCount;
+    pTimer->SetFrequency = Stm32l4LptSetFrequency;
+    pTimer->GetMaxTrigger = Stm32l4LptGetMaxTrigger;
+    pTimer->FindAvailTrigger = Stm32l4LptFindAvailTrigger;
+    pTimer->DisableTrigger = Stm32l4LptDisableTrigger;
+    pTimer->EnableTrigger = Stm32l4LptEnableTrigger;
+
+	reg->CR &= ~LPTIM_CR_ENABLE;
+
+	uint32_t tmp = RCC_CCIPR_LPTIM1SEL_Msk << (pTimer->DevNo << 1);
+
+	RCC->CCIPR &= ~tmp;
+
+	switch (pCfg->ClkSrc)
+	{
+		case TIMER_CLKSRC_LFRC:
+			s_Stm32l4LptimData[pTimer->DevNo].BaseFreq = 32000;
+			RCC->BDCR &= ~RCC_BDCR_LSEON;
+			RCC->BDCR |= RCC_BDCR_LSEBYP;
+
+			RCC->CSR |= RCC_CSR_LSION;
+
+			while ((RCC->CSR & RCC_CSR_LSIRDY) == 0);
+
+			tmp = STM32L4XX_LPTIMER_CLKSRC_LSI << (RCC_CCIPR_LPTIM1SEL_Pos + (pCfg->DevNo << 1));
+			break;
+		case TIMER_CLKSRC_LFXTAL:
+			s_Stm32l4LptimData[pTimer->DevNo].BaseFreq = 32768;
+
+			RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+			PWR->CR1 |= PWR_CR1_DBP;
+			RCC->BDCR |= RCC_BDCR_BDRST;
+			RCC->BDCR &= ~RCC_BDCR_BDRST;
+
+			RCC->BDCR &= ~RCC_BDCR_LSEBYP;
+
+			RCC->BDCR |= RCC_BDCR_LSEON;
+
+			while ((RCC->BDCR & RCC_BDCR_LSERDY) == 0);
+
+			PWR->CR1 &= ~PWR_CR1_DBP;
+			RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
+
+			tmp = STM32L4XX_LPTIMER_CLKSRC_LSE << (RCC_CCIPR_LPTIM1SEL_Pos + (pCfg->DevNo << 1));
+			break;
+		case TIMER_CLKSRC_HFRC:
+		case TIMER_CLKSRC_HFXTAL:
+		default:
+			s_Stm32l4LptimData[pTimer->DevNo].BaseFreq = 16000000;
+			RCC->CR |= RCC_CR_HSION;
+
+			while ((RCC->CR & RCC_CR_HSIRDY) == 0);
+
+			tmp = STM32L4XX_LPTIMER_CLKSRC_HSI << (RCC_CCIPR_LPTIM1SEL_Pos + (pCfg->DevNo << 1));
+	}
+
+	RCC->CCIPR |= tmp;
+
+	if (pTimer->DevNo == 0)
+	{
+		RCC->APB1ENR1 |= RCC_APB1ENR1_LPTIM1EN;
+
+		NVIC_ClearPendingIRQ(LPTIM1_IRQn);
+		NVIC_SetPriority(LPTIM1_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(LPTIM1_IRQn);
+	}
+	else
+	{
+		RCC->APB1ENR2 |= RCC_APB1ENR2_LPTIM2EN;
+
+		NVIC_ClearPendingIRQ(LPTIM2_IRQn);
+		NVIC_SetPriority(LPTIM2_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(LPTIM2_IRQn);
+	}
+
+	Stm32l4LptSetFrequency(pTimer, pCfg->Freq);
+
+	dev->pReg->OR = 0;
+	dev->pReg->CR = LPTIM_CR_ENABLE;
+
+	dev->pReg->ARR = 0xFFFF;
+	dev->pReg->CMP = 0;
+
+	// Wait for the value to set, otherwise it will cause wrong frequency to set in.
+	while ((dev->pReg->ISR & LPTIM_ISR_ARROK) == 0);
+
+	// NOTE : Single mode causes the counter to stop.
+	// continuous mode is always on in order for the counter to keep counting
+
+	dev->pReg->CR |= LPTIM_CR_CNTSTRT;
+	dev->pReg->ICR = dev->pReg->ISR;
+
+	// Enable overflow to adjust timer counter properly.
+    dev->pReg->IER |= LPTIM_IER_ARRMIE;
+
+	return true;
+}
+

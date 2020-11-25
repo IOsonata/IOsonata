@@ -44,7 +44,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 
 #include "stm32l4xx.h"
-#include "coredev/timer.h"
+#include "timer_stm32l4x.h"
 
 #define STM32L4XX_LPTIMER_MAXFREQ			16000000
 
@@ -188,6 +188,7 @@ private:
     uint32_t vCC[STM32L4XX_LPTIMER_TRIG_MAXCNT];
     TIMER_TRIGGER vTrigger[STM32L4XX_LPTIMER_TRIG_MAXCNT];
     uint32_t vBaseFreq;
+    TIMER vTimer;
 };
 
 #endif // __TIMER_STM32L4XX_H__

@@ -253,7 +253,7 @@ bool nRFUARTWaitForTxReady(NRFX_UARTDEV * const pDev, uint32_t Timeout)
 }
 
 //static void UartIrqHandler(NRFX_UARTDEV * const pDev)
-static void UartIrqHandler(int DevNo, DEVINTRF * const pDev)
+static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
 	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev-> pDevData;
 	int len = 0;
@@ -505,12 +505,12 @@ static void UartIrqHandler(int DevNo, DEVINTRF * const pDev)
 	}
 }
 
-static uint32_t nRFUARTGetRate(DEVINTRF * const pDev)
+static uint32_t nRFUARTGetRate(DevIntrf_t * const pDev)
 {
 	return ((NRFX_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
 }
 
-static uint32_t nRFUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
+static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
 
@@ -533,12 +533,12 @@ static uint32_t nRFUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 	return rate;
 }
 
-static bool nRFUARTStartRx(DEVINTRF * const pSerDev, uint32_t DevAddr)
+static bool nRFUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
 {
 	return true;
 }
 
-static int nRFUARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
+static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
 	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
@@ -578,16 +578,16 @@ static int nRFUARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
 	return cnt;
 }
 
-static void nRFUARTStopRx(DEVINTRF * const pDev)
+static void nRFUARTStopRx(DevIntrf_t * const pDev)
 {
 }
 
-static bool nRFUARTStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
+static bool nRFUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	return true;
 }
 
-static int nRFUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
+static int nRFUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 {
 	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
     int cnt = 0;
@@ -660,11 +660,11 @@ static int nRFUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
     return cnt;
 }
 
-static void nRFUARTStopTx(DEVINTRF * const pDev)
+static void nRFUARTStopTx(DevIntrf_t * const pDev)
 {
 }
 
-static void nRFUARTDisable(DEVINTRF * const pDev)
+static void nRFUARTDisable(DevIntrf_t * const pDev)
 {
 	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
 #ifdef UART_PRESENT
@@ -687,7 +687,7 @@ static void nRFUARTDisable(DEVINTRF * const pDev)
 	reg->ENABLE = 0;
 }
 
-static void nRFUARTEnable(DEVINTRF * const pDev)
+static void nRFUARTEnable(DevIntrf_t * const pDev)
 {
 	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
 
@@ -733,7 +733,7 @@ static void nRFUARTEnable(DEVINTRF * const pDev)
 	dev->pUartDev->bTxReady = true;
 }
 
-void nRFUARTPowerOff(DEVINTRF * const pDev)
+void nRFUARTPowerOff(DevIntrf_t * const pDev)
 {
 	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
 #ifdef UART_PRESENT
@@ -825,7 +825,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		pDev->hTxFifo = CFifoInit(s_nRFxUARTDev[devno].TxFifoMem, NRFX_UART_CFIFO_SIZE, 1, pCfg->bFifoBlocking);
 	}
 
-	IOPINCFG *pincfg = (IOPINCFG*)pCfg->pIOPinMap;
+	IOPinCfg_t *pincfg = (IOPinCfg_t*)pCfg->pIOPinMap;
 
 	IOPinSet(pincfg[UARTPIN_TX_IDX].PortNo, pincfg[UARTPIN_TX_IDX].PinNo);
 	IOPinCfg(pincfg, pCfg->NbIOPins);

@@ -45,8 +45,8 @@ SOFTWARE.
 #define SLIP_BUFF_MAX				512
 
 typedef struct __Slip_Device {
-	DEVINTRF DevIntrf;					//!< This interface
-	DEVINTRF *pPhyIntrf;				//!< Physical transport interface
+	DevIntrf_t DevIntrf;					//!< This interface
+	DevIntrf_t *pPhyIntrf;				//!< Physical transport interface
 	void *pObj;							//!< Slip object instance
 	volatile bool bSlipEnd;				//!< true - indicate slip packet complete
 } SLIPDEV;
@@ -55,7 +55,7 @@ typedef struct __Slip_Device {
 extern "C" {
 #endif
 
-bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf, bool bBlocking);
+bool SlipInit(SLIPDEV * const pDev, DevIntrf_t * const pPhyIntrf, bool bBlocking);
 static inline int SlipGetRate(SLIPDEV * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
 static inline int SlipSetRate(SLIPDEV * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }
 static inline void SlipEnable(SLIPDEV * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
@@ -81,7 +81,7 @@ public:
 	 *
 	 * @return	Pointer to internal DEVINTRF to be used with C interface functions
 	 */
-	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
+	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
 	operator SLIPDEV * const () { return &vDevData; }
 
 	/**

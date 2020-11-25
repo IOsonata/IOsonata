@@ -68,7 +68,8 @@ typedef enum __Device_Event {
 
 class Device;
 
-typedef void (*DEVEVTCB)(Device * const pDev, DEV_EVT Evt);
+typedef void (*DevEvtHandler_t)(Device * const pDev, DEV_EVT Evt);
+typedef DevEvtHandler_t		DEVEVTCB;
 
 /// @brief	Device base class.
 ///
@@ -328,7 +329,7 @@ protected:
 	uint64_t	vDevId;			//!< This is implementation specific data for device identifier
 	 	 	 	 	 	 	 	//!< could be value read from hardware register or serial number
 	bool 		vbIntEn;		//!< Interrupt enabled
-	DEVEVTCB 	vEvtHandler;	//!< Event handler callback
+	DevEvtHandler_t	vEvtHandler;	//!< Event handler callback
 };
 
 extern "C" {

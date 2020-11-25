@@ -50,7 +50,7 @@ SOFTWARE.
  *
  * @param	pDevIntrf : Pointer to an instance of the Device Interface
  */
-void SlipIntrfDisable(DEVINTRF * const pDevIntrf)
+void SlipIntrfDisable(DevIntrf_t * const pDevIntrf)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -65,7 +65,7 @@ void SlipIntrfDisable(DEVINTRF * const pDevIntrf)
  *
  * @param	pDevIntrf : Pointer to an instance of the Device Interface
  */
-void SlipIntrfEnable(DEVINTRF * const pDevIntrf)
+void SlipIntrfEnable(DevIntrf_t * const pDevIntrf)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -84,7 +84,7 @@ void SlipIntrfEnable(DEVINTRF * const pDevIntrf)
  *
  * @return	Transfer rate per second
  */
-uint32_t SlipIntrfGetRate(DEVINTRF * const pDevIntrf)
+uint32_t SlipIntrfGetRate(DevIntrf_t * const pDevIntrf)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -107,7 +107,7 @@ uint32_t SlipIntrfGetRate(DEVINTRF * const pDevIntrf)
  * @return 	Actual transfer rate per second set.  It is the real capable rate
  * 			closest to rate being requested.
  */
-uint32_t SlipIntrfSetRate(DEVINTRF * const pDevIntrf, uint32_t Rate)
+uint32_t SlipIntrfSetRate(DevIntrf_t * const pDevIntrf, uint32_t Rate)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -131,7 +131,7 @@ uint32_t SlipIntrfSetRate(DEVINTRF * const pDevIntrf, uint32_t Rate)
  * @return 	true - Success\n
  * 			false - failed.
  */
-bool SlipIntrfStartRx(DEVINTRF * const pDevIntrf, uint32_t DevAddr)
+bool SlipIntrfStartRx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -154,7 +154,7 @@ bool SlipIntrfStartRx(DEVINTRF * const pDevIntrf, uint32_t DevAddr)
  *
  * @return	Number of bytes read
  */
-int SlipIntrfRxDataBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
+int SlipIntrfRxDataBlocking(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 	int cnt = 0;
@@ -209,7 +209,7 @@ int SlipIntrfRxDataBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int Buff
  *
  * @return	Number of bytes read
  */
-int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
+int SlipIntrfRxDataNonBlocking(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 	int cnt = 0;
@@ -282,7 +282,7 @@ int SlipIntrfRxDataNonBlocking(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int B
  *
  * @param	pDevIntrf : Pointer to an instance of the Device Interface
  */
-void SlipIntrfStopRx(DEVINTRF * const pDevIntrf)
+void SlipIntrfStopRx(DevIntrf_t * const pDevIntrf)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -304,7 +304,7 @@ void SlipIntrfStopRx(DEVINTRF * const pDevIntrf)
  * @return 	true - Success\n
  * 			false - failed
  */
-bool SlipIntrfStartTx(DEVINTRF * const pDevIntrf, uint32_t DevAddr)
+bool SlipIntrfStartTx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -328,7 +328,7 @@ bool SlipIntrfStartTx(DEVINTRF * const pDevIntrf, uint32_t DevAddr)
  * @return	Number of bytes sent including the SLIP code
  */
 #if 0
-int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
+int SlipIntrfTxData(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 	int cnt = 0;
@@ -405,7 +405,7 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
 }
 #else
 
-int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
+int SlipIntrfTxData(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 	int cnt = 0;
@@ -470,7 +470,7 @@ int SlipIntrfTxData(DEVINTRF * const pDevIntrf, uint8_t *pData, int DataLen)
  *
  * @param	pDevIntrf : Pointer to an instance of the Device Interface
  */
-void SlipIntrfStopTx(DEVINTRF * const pDevIntrf)
+void SlipIntrfStopTx(DevIntrf_t * const pDevIntrf)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -486,7 +486,7 @@ void SlipIntrfStopTx(DEVINTRF * const pDevIntrf)
  *
  * @param	pDevIntrf : Pointer to an instance of the Device Interface
  */
-void SlipIntrfReset(DEVINTRF * const pDevIntrf)
+void SlipIntrfReset(DevIntrf_t * const pDevIntrf)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -506,7 +506,7 @@ void SlipIntrfReset(DEVINTRF * const pDevIntrf)
  *
  * @param	pDevIntrf : Pointer to an instance of the Device Interface
  */
-void SlipIntrfPowerOff(DEVINTRF * const pDevIntrf)
+void SlipIntrfPowerOff(DevIntrf_t * const pDevIntrf)
 {
 	SLIPDEV *dev = (SLIPDEV *)pDevIntrf->pDevData;
 
@@ -518,7 +518,7 @@ void SlipIntrfPowerOff(DEVINTRF * const pDevIntrf)
 
 
 
-bool SlipInit(SLIPDEV * const pDev, DEVINTRF * const pPhyIntrf, bool bBlocking)
+bool SlipInit(SLIPDEV * const pDev, DevIntrf_t * const pPhyIntrf, bool bBlocking)
 {
 	if (pDev == nullptr || pPhyIntrf == nullptr)
 	{

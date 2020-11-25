@@ -118,7 +118,7 @@ typedef enum __I2C_Mode {
 /// Configuration data used to initialize device
 typedef struct __I2C_Config {
 	int DevNo;				//!< I2C interface number
-	IOPINCFG Pins[I2C_MAX_NB_IOPIN];	//!< Define I/O pins used by I2C
+	IOPinCfg_t Pins[I2C_MAX_NB_IOPIN];	//!< Define I/O pins used by I2C
 	int Rate;				//!< Speed in Hz
 	I2CMODE Mode;			//!< Master/Slave mode
 	int MaxRetry;			//!< Max number of retry
@@ -127,7 +127,7 @@ typedef struct __I2C_Config {
 	bool bDmaEn;			//!< true - Use DMA mode only on supported devices
 	bool bIntEn;			//!< true - Interrupt enable
 	int	IntPrio;			//!< Interrupt priority.  Value is implementation specific
-	DEVINTRF_EVTCB EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
+	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
 	bool bSmBus;			//!< Enable SMBUS support
 } I2CCFG;
 
@@ -137,8 +137,8 @@ typedef struct {
 	int 	Rate;			//!< Speed in Hz
 	int 	NbSlaveAddr;	//!< Number of slave mode address configured
 	uint8_t	SlaveAddr[I2C_SLAVEMODE_MAX_ADDR];	//!< I2C slave address used in slave mode only
-	DEVINTRF DevIntrf;		//!< I2C device interface implementation
-	IOPINCFG Pins[I2C_MAX_NB_IOPIN];			//!< Define I/O pins used by I2C
+	DevIntrf_t DevIntrf;		//!< I2C device interface implementation
+	IOPinCfg_t Pins[I2C_MAX_NB_IOPIN];			//!< Define I/O pins used by I2C
 	uint8_t *pRRData[I2C_SLAVEMODE_MAX_ADDR];	//!< Pointer to data buffer to return upon receiving read request
 	int RRDataLen[I2C_SLAVEMODE_MAX_ADDR];		//!< Read request data length in bytes
 	uint8_t *pTRBuff[I2C_SLAVEMODE_MAX_ADDR];	//!< Pointer to buffer to receive data upon receiving write request
@@ -248,7 +248,7 @@ public:
 	I2C(I2C&);	// Copy ctor not allowed
 
 	bool Init(const I2CCFG &CfgData) { return I2CInit(&vDevData, &CfgData); }
-	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
+	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
 	operator I2CDEV& () { return vDevData; };	// Get config data
 	uint32_t Rate(uint32_t RateHz) { return DeviceIntrfSetRate(&vDevData.DevIntrf, RateHz); }
 	uint32_t Rate(void) { return vDevData.Rate; };	// Get rate in Hz

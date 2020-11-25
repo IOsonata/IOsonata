@@ -60,7 +60,7 @@ alignas(4) static uint8_t s_nRFBleTxFifoMem[NRFBLEINTRF_CFIFO_SIZE];
  *
  * @return None
  */
-void BleIntrfDisable(DEVINTRF *pDevIntrf)
+void BleIntrfDisable(DevIntrf_t *pDevIntrf)
 {
 	// TODO:
 }
@@ -74,7 +74,7 @@ void BleIntrfDisable(DEVINTRF *pDevIntrf)
  *
  * @return None
  */
-void BleIntrfEnable(DEVINTRF *pDevIntrf)
+void BleIntrfEnable(DevIntrf_t *pDevIntrf)
 {
 	// TODO:
 }
@@ -90,7 +90,7 @@ void BleIntrfEnable(DEVINTRF *pDevIntrf)
  *
  * @return Transfer rate per second
  */
-uint32_t BleIntrfGetRate(DEVINTRF *pDevIntrf)
+uint32_t BleIntrfGetRate(DevIntrf_t *pDevIntrf)
 {
 	return 0;	// BLE has no rate
 }
@@ -108,7 +108,7 @@ uint32_t BleIntrfGetRate(DEVINTRF *pDevIntrf)
  * @return 	Actual transfer rate per second set.  It is the real capable rate
  * 			closes to rate being requested.
  */
-uint32_t BleIntrfSetRate(DEVINTRF *pDevIntrf, uint32_t Rate)
+uint32_t BleIntrfSetRate(DevIntrf_t *pDevIntrf, uint32_t Rate)
 {
 	return 0; // BLE has no rate
 }
@@ -127,7 +127,7 @@ uint32_t BleIntrfSetRate(DEVINTRF *pDevIntrf, uint32_t Rate)
  * @return 	true - Success
  * 			false - failed.
  */
-bool BleIntrfStartRx(DEVINTRF *pDevIntrf, uint32_t DevAddr)
+bool BleIntrfStartRx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 {
 	return true;
 }
@@ -147,7 +147,7 @@ bool BleIntrfStartRx(DEVINTRF *pDevIntrf, uint32_t DevAddr)
  *
  * @return	Number of bytes read
  */
-int BleIntrfRxData(DEVINTRF *pDevIntrf, uint8_t *pBuff, int BuffLen)
+int BleIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
 	BLEINTRF *intrf = (BLEINTRF*)pDevIntrf->pDevData;
 	BLEINTRF_PKT *pkt;
@@ -174,7 +174,7 @@ int BleIntrfRxData(DEVINTRF *pDevIntrf, uint8_t *pBuff, int BuffLen)
  *
  * @return	None
  */
-void BleIntrfStopRx(DEVINTRF *pSerDev)
+void BleIntrfStopRx(DevIntrf_t *pSerDev)
 {
 	// TODO:
 }
@@ -193,7 +193,7 @@ void BleIntrfStopRx(DEVINTRF *pSerDev)
  * @return 	true - Success
  * 			false - failed
  */
-bool BleIntrfStartTx(DEVINTRF *pDevIntrf, uint32_t DevAddr)
+bool BleIntrfStartTx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 {
 	return true;
 }
@@ -242,7 +242,7 @@ bool BleIntrfNotify(BLEINTRF *pIntrf)
  *
  * @return	Number of bytes sent
  */
-int BleIntrfTxData(DEVINTRF *pDevIntrf, uint8_t *pData, int DataLen)
+int BleIntrfTxData(DevIntrf_t *pDevIntrf, uint8_t *pData, int DataLen)
 {
 	BLEINTRF *intrf = (BLEINTRF*)pDevIntrf->pDevData;
     BLEINTRF_PKT *pkt;
@@ -283,7 +283,7 @@ int BleIntrfTxData(DEVINTRF *pDevIntrf, uint8_t *pData, int DataLen)
  *
  * @return	None
  */
-void BleIntrfStopTx(DEVINTRF *pDevIntrf)
+void BleIntrfStopTx(DevIntrf_t *pDevIntrf)
 {
 
 }
@@ -298,7 +298,7 @@ void BleIntrfStopTx(DEVINTRF *pDevIntrf)
  *
  * @return  None
  */
-void BleIntrfReset(DEVINTRF *pDevIntrf)
+void BleIntrfReset(DevIntrf_t *pDevIntrf)
 {
 
 }

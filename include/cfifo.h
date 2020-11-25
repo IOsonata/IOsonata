@@ -57,21 +57,23 @@ typedef struct __CFIFO_Header {
 	uint32_t BlkSize;			//!< Block size in bytes
 	uint32_t MemSize;			//!< Total FIFO memory size allocated
 	uint8_t *pMemStart;			//!< Start of FIFO data memory
-} CFIFOHDR;
+} CFifo_t;
 
 #pragma pack(pop)
+
+//typedef CFifo_t			CFIFOHDR;
 
 /// @brief	CFIFO handle.
 ///
 /// This handle is used for all CFIFO function calls. It is the pointer to to CFIFO memory block.
 ///
-typedef CFIFOHDR* HCFIFO;
+typedef CFifo_t* HCFIFO;
 
 /// This macro calculates total memory require in bytes including header for byte based FIFO.
-#define CFIFO_MEMSIZE(FSIZE)					((FSIZE) + sizeof(CFIFOHDR))
+#define CFIFO_MEMSIZE(FSIZE)					((FSIZE) + sizeof(CFifo_t))
 
 /// This macro calculates total memory require in bytes including header for block based FIFO.
-#define CFIFO_TOTAL_MEMSIZE(NbBlk, BlkSize)		((NbBlk) * (BlkSize) + sizeof(CFIFOHDR))
+#define CFIFO_TOTAL_MEMSIZE(NbBlk, BlkSize)		((NbBlk) * (BlkSize) + sizeof(CFifo_t))
 
 #ifdef __cplusplus
 extern "C" {

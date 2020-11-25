@@ -72,16 +72,16 @@ typedef union __Pyro_Cfg_Reg {
 		uint32_t Threshold:8;		//!< Detection threshold on BPF value
 	};
 	uint32_t Val;
-} PYROCFG_REG;
+} PyroCfg_reg_t;//PYROCFG_REG;
 
 typedef struct __Direct_Link_Dev {
-	IOPINCFG Pin;
-	INTHANDLER IntHnadler;
-} DIRECTLINK_DEV;
+	IOPinCfg_t Pin;
+	//INTHANDLER IntHnadler;
+} DirectLinkDev_t;////DIRECTLINK_DEV;
 
 typedef struct __Serial_In_Dev {
-	IOPINCFG Pin;
-} SERIALIN_DEV;
+	IOPinCfg_t Pin;
+} SerialInDev_t;//SERIALIN_DEV;
 
 #define EXCELITAS_PIN_MAX		2
 
@@ -89,17 +89,17 @@ typedef struct __Serial_In_Dev {
 #define EXCELITAS_SI_PIN_IDX	1		// Serial in pin index
 
 
-typedef struct __Excel_Serial_Cfg {
-	IOPINCFG Pins[EXCELITAS_PIN_MAX];
-	DEVINTRF_EVTCB EvtHandler;			// Event handler
-} EXCELSER_CFG;
+typedef struct __Excelitas_Serial_Cfg {
+	IOPinCfg_t Pins[EXCELITAS_PIN_MAX];
+	DevIntrfEvtHandler_t EvtHandler;			// Event handler
+} ExcelitasSerCfg_t;//EXCELSER_CFG;
 
 
-typedef struct __Excel_Serial {
-	IOPINCFG Pins[EXCELITAS_PIN_MAX];
-	DEVINTRF DevIntrf;
+typedef struct __Excelitas_Serial_Dev {
+	IOPinCfg_t Pins[EXCELITAS_PIN_MAX];
+	DevIntrf_t DevIntrf;
 	int NbBits;
-} EXCELSERDEV;
+} ExcelitasSerDev_t;//EXCELSERDEV;
 
 typedef struct __Pyd2592_Data {
 	uint32_t Timestamp;				//!< usec timestamp
@@ -119,13 +119,13 @@ typedef struct __Pyd2592_Data {
 extern "C" {
 #endif
 
-bool ExcelitasIntrfInit(EXCELSERDEV * const pDev, EXCELSER_CFG * const pCFG);
+bool ExcelitasIntrfInit(ExcelitasSerDev_t * const pDev, ExcelitasSerCfg_t * const pCFG);
 
-bool DirectLinkInit(DIRECTLINK_DEV * const pDev, int PortNo, int PinNo, int PinOp);
-int DirectLinkRead(DIRECTLINK_DEV * const pDev, int NbBits, uint8_t * const pBuf);
-uint64_t DirectLinkRead2(DIRECTLINK_DEV *pDev, int NbBits);
-bool SerialInInit(SERIALIN_DEV *const pDev, int PortNo, int PinNo, int PinOp);
-void SerialIn(SERIALIN_DEV *pDev, uint32_t Data, int NbBits);
+bool DirectLinkInit(DirectLinkDev_t * const pDev, int PortNo, int PinNo, int PinOp);
+int DirectLinkRead(DirectLinkDev_t * const pDev, int NbBits, uint8_t * const pBuf);
+uint64_t DirectLinkRead2(DirectLinkDev_t *pDev, int NbBits);
+bool SerialInInit(SerialInDev_t *const pDev, int PortNo, int PinNo, int PinOp);
+void SerialIn(SerialInDev_t *pDev, uint32_t Data, int NbBits);
 
 #ifdef __cplusplus
 }

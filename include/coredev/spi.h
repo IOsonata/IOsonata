@@ -123,7 +123,7 @@ typedef struct __SPI_Config {
 	int DevNo;				//!< SPI interface number identify by chip select (CS0, CS1,..,CSn)
 	SPIPHY Phy;				//!< SPI physical interface type (standard, 3 wire, quad,..)
 	SPIMODE Mode;			//!< Master/Slave mode
-	const IOPINCFG *pIOPinMap;	//!< Define I/O pins used by SPI (including CS array)
+	const IOPinCfg_t *pIOPinMap;	//!< Define I/O pins used by SPI (including CS array)
 	int NbIOPins;			//!< Total number of I/O pins
 	int Rate;				//!< Speed in Hz
 	uint32_t DataSize; 		//!< Data Size 4-16 bits
@@ -135,7 +135,7 @@ typedef struct __SPI_Config {
 	bool bDmaEn;			//!< true - Use DMA mode only on supported devices
 	bool bIntEn;			//!< Interrupt enable
 	int IntPrio;			//!< Interrupt priority
-	DEVINTRF_EVTCB EvtCB;	//!< Event callback
+	DevIntrfEvtHandler_t EvtCB;	//!< Event callback
 } SPICFG;
 
 typedef struct __QSPI_Cmd_Setup {
@@ -151,7 +151,7 @@ typedef struct __QSPI_Cmd_Setup {
 /// Device driver data require by low level functions
 typedef struct __SPI_Device {
 	SPICFG Cfg;				//!< Config data
-	DEVINTRF DevIntrf;		//!< device interface implementation
+	DevIntrf_t DevIntrf;		//!< device interface implementation
 	int	FirstRdData;		//!< This is to keep the first dummy read data of SPI
 							//!< there are devices that may return a status code through this
 	int	CurDevCs;			//!< Current active device CS
@@ -287,7 +287,7 @@ public:
 
 	bool Init(const SPICFG &CfgData) { return SPIInit(&vDevData, &CfgData); }
 
-	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
+	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
 	operator SPIDEV& () { return vDevData; };			// Get config data
 	operator SPIDEV * const () { return &vDevData; };	// Get pointer to device data
 	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }

@@ -86,7 +86,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLE_UART_UUID_WRITE_CHAR		BLUEIO_UUID_UART_TX_CHAR		//!< Command control characteristic
 #endif
 
-int BleIntrfEvtCallback(DEVINTRF *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 static const ble_uuid_t  s_AdvUuids[] = {
 	{BLE_UART_UUID_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
@@ -221,7 +221,7 @@ alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
 alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
 
-static const IOPINCFG s_UartPins[] = {
+static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
@@ -232,7 +232,7 @@ static const IOPINCFG s_UartPins[] = {
 const UARTCFG g_UartCfg = {
 	.DevNo = 0,							// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPINCFG),	// Total number of UART pins used
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
 	.Rate = 115200,						// Baudrate
 	.DataBits = 8,						// Data bits
 	.Parity = UART_PARITY_NONE,			// Parity
@@ -253,7 +253,7 @@ UART g_Uart;
 
 int g_DelayCnt = 0;
 
-int BleIntrfEvtCallback(DEVINTRF *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 

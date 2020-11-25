@@ -64,7 +64,7 @@ static STM32L4XX_I2CDEV s_STM32L4xxI2CDev[STM32L4XX_I2C_MAXDEV] = {
 	},
 };
 
-static uint32_t STM32L4xxI2CGetRate(DEVINTRF * const pDev)
+static uint32_t STM32L4xxI2CGetRate(DevIntrf_t * const pDev)
 {
 	int rate = 0;
 
@@ -73,7 +73,7 @@ static uint32_t STM32L4xxI2CGetRate(DEVINTRF * const pDev)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-static uint32_t STM32L4xxI2CSetRate(DEVINTRF * const pDev, uint32_t DataRate)
+static uint32_t STM32L4xxI2CSetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
@@ -83,26 +83,26 @@ static uint32_t STM32L4xxI2CSetRate(DEVINTRF * const pDev, uint32_t DataRate)
 	return DataRate;
 }
 
-void STM32L4xxI2CDisable(DEVINTRF * const pDev)
+void STM32L4xxI2CDisable(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 	int32_t timout = 100000;
 }
 
-static void STM32L4xxI2CEnable(DEVINTRF * const pDev)
+static void STM32L4xxI2CEnable(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
 }
 
-static void STM32L4xxI2CPowerOff(DEVINTRF * const pDev)
+static void STM32L4xxI2CPowerOff(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
 }
 
 // Initial receive
-static bool STM32L4xxI2CStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
+static bool STM32L4xxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
@@ -110,7 +110,7 @@ static bool STM32L4xxI2CStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 }
 
 // Receive Data only, no Start/Stop condition
-static int STM32L4xxI2CRxDataDma(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+static int STM32L4xxI2CRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
 	int cnt = 0;
@@ -119,7 +119,7 @@ static int STM32L4xxI2CRxDataDma(DEVINTRF * const pDev, uint8_t *pBuff, int Buff
 }
 
 // Receive Data only, no Start/Stop condition
-static int STM32L4xxI2CRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+static int STM32L4xxI2CRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
     int cnt = 0;
@@ -129,14 +129,14 @@ static int STM32L4xxI2CRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen
 }
 
 // Stop receive
-static void STM32L4xxI2CStopRx(DEVINTRF * const pDev)
+static void STM32L4xxI2CStopRx(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
 
 }
 
 // Initiate transmit
-static bool STM32L4xxI2CStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
+static bool STM32L4xxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
 
@@ -144,7 +144,7 @@ static bool STM32L4xxI2CStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
 }
 
 // Transmit Data only, no Start/Stop condition
-static int STM32L4xxI2CTxDataDma(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+static int STM32L4xxI2CTxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
 	int cnt = 0;
@@ -153,7 +153,7 @@ static int STM32L4xxI2CTxDataDma(DEVINTRF * const pDev, uint8_t *pData, int Data
 }
 
 // Send Data only, no Start/Stop condition
-static int STM32L4xxI2CTxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
+static int STM32L4xxI2CTxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV*)pDev->pDevData;
     int cnt = 0;
@@ -164,7 +164,7 @@ static int STM32L4xxI2CTxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
 }
 
 // Stop transmit
-static void STM32L4xxI2CStopTx(DEVINTRF * const pDev)
+static void STM32L4xxI2CStopTx(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
 

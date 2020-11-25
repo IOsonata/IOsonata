@@ -84,7 +84,7 @@ typedef enum __I2S_Channel {
 /// Configuration data used to initialize device
 typedef struct __I2S_Config {
 	int DevNo;			//!< Device physical instance number
-	const IOPINCFG *pIOPinMap;	//!< Define I/O pins used by I2S (standard pins : SCK, SDA, WS. Other MCU may have 5 pins)
+	const IOPinCfg_t *pIOPinMap;	//!< Define I/O pins used by I2S (standard pins : SCK, SDA, WS. Other MCU may have 5 pins)
 	int NbIOPins;		//!< Total number of I/O pins
 	I2SMODE Mode;		//!< Master/Slave mode
 	I2SFMT Format;		//!< Format I2S/aligned-left/aligned-right
@@ -95,7 +95,7 @@ typedef struct __I2S_Config {
 	bool bDmaEn;		//!< true - Use DMA mode
 	bool bIntEn;		//!< true - Interrupt enable
 	int IntPrio;		//!< Interrupt priority
-	DEVINTRF_EVTCB EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
+	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
 	uint8_t *pRxFifoMem;
 	int RxFifoMemSize;
 	uint8_t *pTxFifoMem;
@@ -110,12 +110,12 @@ typedef struct __I2S_Device {
 	uint32_t Freq;		//! sampling frequency in mHz
 	I2SCHAN Chan;		//! Channel stereo/left/right
 	uint32_t MClkFreq;	//!< Master clock frequency in Hz
-	DEVINTRF DevIntrf;	//!< Device interface instance
-	const IOPINCFG *pIOPinMap;	//!< Define I/O pins used by I2S (standard pins : SCK, SDA, WS. Other MCU may have 5 pins)
+	DevIntrf_t DevIntrf;	//!< Device interface instance
+	const IOPinCfg_t *pIOPinMap;	//!< Define I/O pins used by I2S (standard pins : SCK, SDA, WS. Other MCU may have 5 pins)
 	int NbIOPins;			//!< Total number of I/O pins
 	HCFIFO hRxFifo;
 	HCFIFO hTxFifo;
-	DEVINTRF_EVTCB EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
+	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
 } I2SDEV;
 
 #pragma pack(pop)
@@ -145,7 +145,7 @@ static inline void I2SDisable(I2SDEV *const pDev) { DeviceIntrfDisable(&pDev->De
 class I2S : public DeviceIntrf {
 public:
 	bool Init(const I2SCFG &Cfg) { return I2SInit(&vDevData, &Cfg); }
-	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
+	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
 	operator I2SDEV& () { return vDevData; }
 	operator I2SDEV* const () { return &vDevData; }
 	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }

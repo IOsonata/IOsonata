@@ -1,16 +1,16 @@
 /**-------------------------------------------------------------------------
-@file	timer_nrfx.cpp
+@file	timer_stm32l4x.cpp
 
-@brief	timer implementation on Nordic nRFx series
+@brief	timer implementation on STM32L4xx series
 
 @author	Hoang Nguyen Hoan
-@date	Sep. 7, 2017
+@date	Nov. 24, 2020
 
 @license
 
 MIT License
 
-Copyright (c) 2017 I-SYST inc. All rights reserved.
+Copyright (c) 2020 I-SYST inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -35,9 +35,7 @@ SOFTWARE.
 #include "intrinsics.h"
 #endif
 
-#include "nrf.h"
-
-#include "timer_nrfx.h"
+#include "timer_stm32l4x.h"
 
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
@@ -46,26 +44,25 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
-	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX)
+	if (pCfg->DevNo < STM32L4XX_LPTIMER_MAXCNT)
 	{
-		return nRFxRtcInit(pTimer, pCfg);
+		return Stm32l4LPTimerInit(pTimer, pCfg);
 	}
 
-	return nRFxTimerInit(pTimer, pCfg);
+	return Stm32l4TimerInit(pTimer, pCfg);
 }
 
 int TimerGetLowFreqDevCount()
 {
-	return TIMER_NRFX_RTC_MAX;
+	return STM32L4XX_LPTIMER_MAXCNT;
 }
 
 int TimerGetHighFreqDevCount()
 {
-	return TIMER_NRFX_HF_MAX;
+	return STM32L4XX_LPTIMER_MAXCNT;
 }
 
 int TimerGetHighFreqDevNo()
 {
-	return TIMER_NRFX_RTC_MAX;
+	return STM32L4XX_TIMER_MAXCNT;
 }
-

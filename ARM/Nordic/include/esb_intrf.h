@@ -62,12 +62,12 @@ typedef struct __EsbDeviceInterfConfig {
     int     TxFifoMemSize;  //!< Total memory size for CFIFO
     uint8_t *pTxFifoMem;    // Pointer to memory to be used by CFIFO
     uint8_t	IntPrio;		//!< Interrupt priority
-    DEVINTRF_EVTCB EvtCB;   //!< Event callback
+    DevIntrfEvtHandler_t EvtCB;   //!< Event callback
 } ESBINTRF_CFG;
 
 // BLE interf instance data
 typedef struct __BleDeviceInterf {
-    DEVINTRF    DevIntrf;   // Base Device Interface
+	DevIntrf_t    DevIntrf;   // Base Device Interface
     int         PacketSize; // BLE packet size
     nrf_esb_bitrate_t Rate;
     HCFIFO      hRxFifo;
@@ -86,7 +86,7 @@ public:
 
     bool Init(const ESBINTRF_CFG &Cfg);
 
-    operator DEVINTRF *  const () { return &vEsbIntrf.DevIntrf; }   // No C implementation, just return NULL
+    operator DevIntrf_t *  const () { return &vEsbIntrf.DevIntrf; }   // No C implementation, just return NULL
     // Set data rate in bits/sec (Hz)
     uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vEsbIntrf.DevIntrf, DataRate); }
     // Get current data rate in bits/sec (Hz)

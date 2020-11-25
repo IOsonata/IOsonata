@@ -131,9 +131,9 @@ BLEADV_MANDATA &g_AdvData = *(BLEADV_MANDATA*)g_AdvDataBuff;
 BLEADV_MANDATA_TPHSENSOR &g_TPHData = *(BLEADV_MANDATA_TPHSENSOR *)g_AdvData.Data;
 BLEADV_MANDATA_GASSENSOR &g_GasData = *(BLEADV_MANDATA_GASSENSOR *)g_AdvData.Data;
 
-void TimerHandler(TIMER * const pTimer, uint32_t Evt);
+void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
-const static TIMER_CFG s_TimerCfg = {
+const static TimerCfg_t s_TimerCfg = {
     .DevNo = 2,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
@@ -184,7 +184,7 @@ const BLEAPP_CFG s_BleAppCfg = {
 	.MaxMtu = 53,
 };
 
-static const IOPINCFG s_GpioPins[] = {
+static const IOPinCfg_t s_GpioPins[] = {
     {BLUEIO_BUT1_PORT, BLUEIO_BUT1_PIN, BLUEIO_BUT1_PINOP,
      IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 	{BLUEIO_BUT2_PORT, BLUEIO_BUT2_PIN, BLUEIO_BUT2_PINOP,
@@ -203,9 +203,9 @@ static const IOPINCFG s_GpioPins[] = {
 	 IOPINDIR_OUTPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL},
 };
 
-static const int s_NbGpioPins = sizeof(s_GpioPins) / sizeof(IOPINCFG);
+static const int s_NbGpioPins = sizeof(s_GpioPins) / sizeof(IOPinCfg_t);
 
-static const IOPINCFG s_SpiPins[] = {
+static const IOPinCfg_t s_SpiPins[] = {
     {SPI2_SCK_PORT, SPI2_SCK_PIN, SPI2_SCK_PINOP,
 		IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
     {SPI2_MISO_PORT, SPI2_MISO_PIN, SPI2_MISO_PINOP,
@@ -223,7 +223,7 @@ static const SPICFG s_SpiCfg = {
     .Phy = SPIPHY_NORMAL,
 	.Mode = SPIMODE_MASTER,
     .pIOPinMap = s_SpiPins,
-    .NbIOPins = sizeof(s_SpiPins) / sizeof(IOPINCFG),
+    .NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
     .Rate = 1000000,   // Speed in Hz
     .DataSize = 8,      // Data Size
     .MaxRetry = 5,      // Max retries
@@ -435,7 +435,7 @@ void SchedAdvData(void * p_event_data, uint16_t event_size)
 	ReadPTHData();
 }
 
-void AppTimerHandler(TIMER * const pTimer, int TrigNo, void *pContext)
+void AppTimerHandler(TimerDev_t * const pTimer, int TrigNo, void *pContext)
 {
 	if (TrigNo == 0)
 	{

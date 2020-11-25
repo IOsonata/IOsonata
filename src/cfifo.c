@@ -45,15 +45,15 @@ HCFIFO const CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t 
 	if (pMemBlk == NULL)
 		return NULL;
 
-	CFIFOHDR *hdr = (CFIFOHDR *)pMemBlk;
+	CFifo_t *hdr = (CFifo_t *)pMemBlk;
 	hdr->bBlocking = bBlocking;
 	hdr->DropCnt = 0;
 	hdr->PutIdx = 0;
 	hdr->GetIdx = -1;
 	hdr->BlkSize = BlkSize;
 	hdr->MemSize = TotalMemSize;
-	hdr->MaxIdxCnt = (TotalMemSize - sizeof(CFIFOHDR)) / BlkSize;
-	hdr->pMemStart = (uint8_t*)(pMemBlk + sizeof(CFIFOHDR));
+	hdr->MaxIdxCnt = (TotalMemSize - sizeof(CFifo_t)) / BlkSize;
+	hdr->pMemStart = (uint8_t*)(pMemBlk + sizeof(CFifo_t));
 
 	return hdr;
 }

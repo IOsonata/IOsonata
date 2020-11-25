@@ -193,7 +193,7 @@ bool nRFxSPIWaitRX(NRFX_SPIDEV * const pDev, uint32_t Timeout)
 }
 #endif
 
-uint32_t nRFxSPIGetRate(DEVINTRF * const pDev)
+uint32_t nRFxSPIGetRate(DevIntrf_t * const pDev)
 {
 	int rate = 0;
 
@@ -205,7 +205,7 @@ uint32_t nRFxSPIGetRate(DEVINTRF * const pDev)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-uint32_t nRFxSPISetRate(DEVINTRF * const pDev, uint32_t Rate)
+uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 	uint32_t regval = 0;
@@ -229,7 +229,7 @@ uint32_t nRFxSPISetRate(DEVINTRF * const pDev, uint32_t Rate)
 	return dev->pSpiDev->Cfg.Rate;
 }
 
-void nRFxSPIDisable(DEVINTRF * const pDev)
+void nRFxSPIDisable(DevIntrf_t * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 
@@ -251,7 +251,7 @@ void nRFxSPIDisable(DEVINTRF * const pDev)
 #endif
 }
 
-void nRFxSPIEnable(DEVINTRF * const pDev)
+void nRFxSPIEnable(DevIntrf_t * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 
@@ -273,7 +273,7 @@ void nRFxSPIEnable(DEVINTRF * const pDev)
 #endif
 }
 
-void nRFxSPIPowerOff(DEVINTRF * const pDev)
+void nRFxSPIPowerOff(DevIntrf_t * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 
@@ -298,7 +298,7 @@ void nRFxSPIPowerOff(DEVINTRF * const pDev)
 }
 
 // Initial receive
-bool nRFxSPIStartRx(DEVINTRF * const pDev, uint32_t DevCs)
+bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev->pDevData;
 
@@ -328,7 +328,7 @@ bool nRFxSPIStartRx(DEVINTRF * const pDev, uint32_t DevCs)
 }
 
 // Receive Data only, no Start/Stop condition
-int nRFxSPIRxDataDma(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 	int cnt = 0;
@@ -363,7 +363,7 @@ int nRFxSPIRxDataDma(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 }
 
 // Receive Data only, no Start/Stop condition
-int nRFxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
     NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
     int cnt = 0;
@@ -390,7 +390,7 @@ int nRFxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 }
 
 // Stop receive
-void nRFxSPIStopRx(DEVINTRF * const pDev)
+void nRFxSPIStopRx(DevIntrf_t * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 
@@ -402,7 +402,7 @@ void nRFxSPIStopRx(DEVINTRF * const pDev)
 }
 
 // Initiate transmit
-bool nRFxSPIStartTx(DEVINTRF * const pDev, uint32_t DevCs)
+bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 
@@ -432,7 +432,7 @@ bool nRFxSPIStartTx(DEVINTRF * const pDev, uint32_t DevCs)
 }
 
 // Transmit Data only, no Start/Stop condition
-int nRFxSPITxDataDma(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+int nRFxSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 	int cnt = 0;
@@ -467,7 +467,7 @@ int nRFxSPITxDataDma(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 }
 
 // Send Data only, no Start/Stop condition
-int nRFxSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
+int nRFxSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 {
     NRFX_SPIDEV *dev = (NRFX_SPIDEV*)pDev->pDevData;
     int cnt = 0;
@@ -500,7 +500,7 @@ int nRFxSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
 }
 
 // Stop transmit
-void nRFxSPIStopTx(DEVINTRF * const pDev)
+void nRFxSPIStopTx(DevIntrf_t * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 
@@ -521,12 +521,12 @@ void nRFxSPIStopTx(DEVINTRF * const pDev)
     }
 }
 
-void nRFxSPIReset(DEVINTRF * const pDev)
+void nRFxSPIReset(DevIntrf_t * const pDev)
 {
 
 }
 
-void SPIIrqHandler(int DevNo, DEVINTRF * const pDev)
+void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
 	NRFX_SPIDEV *dev = (NRFX_SPIDEV *)pDev-> pDevData;
 

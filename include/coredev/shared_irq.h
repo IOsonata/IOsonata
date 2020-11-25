@@ -38,13 +38,13 @@ SOFTWARE.
 #ifndef __SHARED_IRQ_H__
 #define __SHARED_IRQ_H__
 
-typedef void (*IRQHANDLER)(int DevNo, DEVINTRF *pDev);
+typedef void (*IRQHANDLER)(int DevNo, DevIntrf_t *pDev);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void SetSharedIntHandler(int DevNo, DEVINTRF * const pDev, IRQHANDLER Handler);
+void SetSharedIntHandler(int DevNo, DevIntrf_t * const pDev, IRQHANDLER Handler);
 
 #ifdef __cplusplus
 }

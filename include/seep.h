@@ -157,7 +157,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * @return	true - success
  */
-typedef bool (*SEEPCB)(int DevAddr, DEVINTRF * const pInterf);
+typedef bool (*SEEPCB)(int DevAddr, DevIntrf_t * const pInterf);
 
 /// Structure defining Serial EEPROM device
 typedef struct __Seep_Config {
@@ -166,7 +166,7 @@ typedef struct __Seep_Config {
     uint16_t PageSize;	//<! Wrap around page size in bytes
     uint32_t Size;      //<! Total EEPROM size in bytes
     uint32_t WrDelay;   //<! Write delay time in msec
-    IOPINCFG WrProtPin; //<! if Write protect pin is not used, set {-1, -1, }
+    IOPinCfg_t WrProtPin; //<! if Write protect pin is not used, set {-1, -1, }
                         //<! This pin is assumed active high,
                         //<! ie. Set to 1 to enable Write Protect
 	SEEPCB pInitCB;	    //<! For custom initialization. Set to NULL if not used
@@ -185,8 +185,8 @@ typedef struct __Seep_Device {
 	uint16_t PageSize;	//<! Wrap around page size
 	uint32_t Size;      //<! Total EEPROM size in bytes
 	uint32_t WrDelay;   //<! Write delay in usec
-	IOPINCFG WrProtPin; //<! Write protect I/O pin
-	DEVINTRF *pInterf;  //<! Device interface
+	IOPinCfg_t WrProtPin; //<! Write protect I/O pin
+	DevIntrf_t *pInterf;  //<! Device interface
 	SEEPCB pWaitCB;	    //<! If provided, this is called when there are long delays
 					    //<! for a device to complete its write cycle
    					    //<! This is to allow application to perform other tasks
@@ -209,7 +209,7 @@ extern "C" {
  *
  * @return  true - initialization successful
  */
-bool SeepInit(SEEPDEV * const pDev, const SEEP_CFG *pCfgData, DEVINTRF * const pInterf);
+bool SeepInit(SEEPDEV * const pDev, const SEEP_CFG *pCfgData, DevIntrf_t * const pInterf);
 
 /**
  * @brief Get EEPROM size.

@@ -250,7 +250,7 @@ bool nRFxI2CWaitTxComplete(NRFX_I2CDEV * const pDev, int Timeout)
     return false;
 }
 
-void nRFxI2CDisable(DEVINTRF * const pDev)
+void nRFxI2CDisable(DevIntrf_t * const pDev)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
@@ -261,7 +261,7 @@ void nRFxI2CDisable(DEVINTRF * const pDev)
 #endif
 }
 
-void nRFxI2CEnable(DEVINTRF * const pDev)
+void nRFxI2CEnable(DevIntrf_t * const pDev)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
@@ -286,7 +286,7 @@ void nRFxI2CEnable(DEVINTRF * const pDev)
     }
 }
 
-void nRFxI2CPowerOff(DEVINTRF * const pDev)
+void nRFxI2CPowerOff(DevIntrf_t * const pDev)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
@@ -302,14 +302,14 @@ void nRFxI2CPowerOff(DEVINTRF * const pDev)
 #endif
 }
 
-uint32_t nRFxI2CGetRate(DEVINTRF * const pDev)
+uint32_t nRFxI2CGetRate(DevIntrf_t * const pDev)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
 	return dev->pI2cDev->Rate;
 }
 
-uint32_t nRFxI2CSetRate(DEVINTRF * const pDev, uint32_t RateHz)
+uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	uint32_t regval = 0;
@@ -332,7 +332,7 @@ uint32_t nRFxI2CSetRate(DEVINTRF * const pDev, uint32_t RateHz)
 	return dev->pI2cDev->Rate;
 }
 
-bool nRFxI2CStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
+bool nRFxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
@@ -348,7 +348,7 @@ bool nRFxI2CStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 }
 
 // Receive Data only, no Start/Stop condition
-int nRFxI2CRxDataDMA(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	uint32_t d;
@@ -379,7 +379,7 @@ int nRFxI2CRxDataDMA(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 }
 
 // Receive Data only, no Start/Stop condition
-int nRFxI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
+int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	int cnt = 0;
@@ -412,7 +412,7 @@ int nRFxI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
 	return cnt;
 }
 
-void nRFxI2CStopRx(DEVINTRF * const pDev)
+void nRFxI2CStopRx(DevIntrf_t * const pDev)
 {
     NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 #ifdef TWIM_PRESENT
@@ -435,7 +435,7 @@ void nRFxI2CStopRx(DEVINTRF * const pDev)
     nRFxI2CWaitStop(dev, 1000);
 }
 
-bool nRFxI2CStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
+bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
@@ -457,7 +457,7 @@ bool nRFxI2CStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
 }
 
 // Send Data only, no Start/Stop condition
-int nRFxI2CTxDataDMA(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	uint32_t d;
@@ -492,7 +492,7 @@ int nRFxI2CTxDataDMA(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 	return cnt;
 }
 
-int nRFxI2CTxData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+int nRFxI2CTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 	uint32_t d;
@@ -518,7 +518,7 @@ int nRFxI2CTxData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 	return cnt;
 }
 
-void nRFxI2CStopTx(DEVINTRF * const pDev)
+void nRFxI2CStopTx(DevIntrf_t * const pDev)
 {
     NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 #ifdef TWIM_PRESENT
@@ -542,7 +542,7 @@ void nRFxI2CStopTx(DEVINTRF * const pDev)
     nRFxI2CWaitStop(dev, 1000);
 }
 
-void nRFxI2CReset(DEVINTRF * const pDev)
+void nRFxI2CReset(DevIntrf_t * const pDev)
 {
     I2CDEV *dev = (I2CDEV*)((NRFX_I2CDEV*)pDev->pDevData)->pI2cDev;
 
@@ -574,7 +574,7 @@ void nRFxI2CReset(DEVINTRF * const pDev)
 #endif
 }
 
-void I2CIrqHandler(int DevNo, DEVINTRF * const pDev)
+void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
     NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
@@ -678,7 +678,7 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
 
-	memcpy(pDev->Pins, pCfgData->Pins, sizeof(IOPINCFG) * I2C_MAX_NB_IOPIN);
+	memcpy(pDev->Pins, pCfgData->Pins, sizeof(IOPinCfg_t) * I2C_MAX_NB_IOPIN);
 
 	// Configure I/O pins
 	IOPinCfg(pCfgData->Pins, I2C_MAX_NB_IOPIN);

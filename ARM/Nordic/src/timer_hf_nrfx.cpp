@@ -61,8 +61,8 @@ typedef struct {
     NRF_TIMER_Type *pReg;
     int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
     uint32_t CC[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
-    TIMER_TRIGGER Trigger[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
-    TIMER *pTimer;
+    TimerTrig_t Trigger[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
+    TimerDev_t *pTimer;
 } NRFX_TIMER_DATA;
 
 static NRFX_TIMER_DATA s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
@@ -106,7 +106,7 @@ static void TimerIRQHandler(int DevNo)
 {
 	NRF_TIMER_Type *reg = s_nRFxTimerData[DevNo].pReg;
 	NRFX_TIMER_DATA &tdata = s_nRFxTimerData[DevNo];
-	TIMER *timer = s_nRFxTimerData[DevNo].pTimer;
+	TimerDev_t *timer = s_nRFxTimerData[DevNo].pTimer;
     uint32_t evt = 0;
     uint32_t count;
 
@@ -177,7 +177,7 @@ void TIMER4_IRQHandler()
 
 }   // extern "C"
 
-static bool nRFxTimerEnable(TIMER * const pTimer)
+static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 {
 	NRF_TIMER_Type *reg = s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX].pReg;
 
@@ -236,7 +236,7 @@ static bool nRFxTimerEnable(TIMER * const pTimer)
     return true;
 }
 
-static void nRFxTimerDisable(TIMER * const pTimer)
+static void nRFxTimerDisable(TimerDev_t * const pTimer)
 {
 	NRF_TIMER_Type *reg = s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX].pReg;
 
@@ -279,12 +279,12 @@ static void nRFxTimerDisable(TIMER * const pTimer)
     reg->INTENSET = 0;
 }
 
-static void nRFxTimerReset(TIMER * const pTimer)
+static void nRFxTimerReset(TimerDev_t * const pTimer)
 {
 	s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX].pReg->TASKS_CLEAR = 1;
 }
 
-static uint32_t nRFxTimerSetFrequency(TIMER * const pTimer, uint32_t Freq)
+static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
 	NRF_TIMER_Type *reg = s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX].pReg;
 
@@ -319,7 +319,7 @@ static uint32_t nRFxTimerSetFrequency(TIMER * const pTimer, uint32_t Freq)
     return pTimer->Freq;
 }
 
-static uint64_t nRFxTimerGetTickCount(TIMER * const pTimer)
+static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
 {
 	NRF_TIMER_Type *reg = s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX].pReg;
 
@@ -341,8 +341,8 @@ static uint64_t nRFxTimerGetTickCount(TIMER * const pTimer)
 	return (uint64_t)pTimer->LastCount + pTimer->Rollover;
 }
 
-static uint64_t nRFxTimerEnableTrigger(TIMER * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
-                                       TIMER_TRIGCB const Handler, void * const pContext)
+static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
+                                       TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
 	NRFX_TIMER_DATA &tdata = s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX];
 	NRF_TIMER_Type *reg = tdata.pReg;
@@ -385,7 +385,7 @@ static uint64_t nRFxTimerEnableTrigger(TIMER * const pTimer, int TrigNo, uint64_
     return pTimer->nsPeriod * (uint64_t)cc / 10ULL; // Return real period in nsec
 }
 
-static void nRFxTimerDisableTrigger(TIMER * const pTimer, int TrigNo)
+static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
 	NRFX_TIMER_DATA &tdata = s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX];
 	NRF_TIMER_Type *reg = tdata.pReg;
@@ -403,7 +403,7 @@ static void nRFxTimerDisableTrigger(TIMER * const pTimer, int TrigNo)
     tdata.Trigger[TrigNo].nsPeriod = 0;
 }
 
-static int nRFxTimerFindAvailTrigger(TIMER * const pTimer)
+static int nRFxTimerFindAvailTrigger(TimerDev_t * const pTimer)
 {
 	NRFX_TIMER_DATA &tdata = s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX];
 
@@ -416,12 +416,12 @@ static int nRFxTimerFindAvailTrigger(TIMER * const pTimer)
 	return -1;
 }
 
-static int nRFxTimerGetMaxTrigger(TIMER * const pTimer)
+static int nRFxTimerGetMaxTrigger(TimerDev_t * const pTimer)
 {
 	return s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX].MaxNbTrigEvt;
 }
 
-bool nRFxTimerInit(TIMER * const pTimer, const TIMER_CFG * const pCfg)
+bool nRFxTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
     if (pCfg->DevNo < 0 || pCfg->DevNo >= TIMER_NRFX_HF_MAX || pCfg->Freq > TIMER_NRFX_HF_BASE_FREQ)
     {

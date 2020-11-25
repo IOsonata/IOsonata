@@ -54,7 +54,7 @@ extern "C" {
 #include "paper.h"
 #include "board.h"
 
-static const IOPINCFG s_DispPins[] = {
+static const IOPinCfg_t s_DispPins[] = {
 	{EINK_DC_PORT, EINK_DC_PIN, EINK_DC_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{EINK_BUSY_PORT, EINK_BUSY_PIN, EINK_BUSY_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{EINK_RESET_PORT, EINK_RESET_PIN, EINK_RESET_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
@@ -64,9 +64,9 @@ static const IOPINCFG s_DispPins[] = {
 	{EINK_CS_PORT, EINK_CS_PIN, EINK_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
-static const int s_NbDispPins = sizeof(s_DispPins) / sizeof(IOPINCFG);
+static const int s_NbDispPins = sizeof(s_DispPins) / sizeof(IOPinCfg_t);
 
-static const IOPINCFG s_SpiPins[] = {
+static const IOPinCfg_t s_SpiPins[] = {
     {EINK_SCK_PORT, EINK_SCK_PIN, EINK_SCK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
    // {EINK_SDA_PORT, EINK_SDA_PIN, EINK_SDA_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
     {-1, -1, -1, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// MISO
@@ -79,7 +79,7 @@ static const SPICFG s_SpiCfg = {
 	.Phy = SPIPHY_NORMAL,
     .Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
-	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPINCFG),
+	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
     .Rate = 4000000,   // Speed in Hz
     .DataSize = 8,      // Data Size
     .MaxRetry = 5,      // Max retries
@@ -95,7 +95,7 @@ static const SPICFG s_SpiCfg = {
 
 SPI g_Spi;
 
-const EIINTRFCFG s_EInkIntrfCfg = {
+const EInkIntrfCfg_t s_EInkIntrfCfg = {
 	.Type = EIINTRF_TYPE_BITBANG,
 	.pIOPinMap = s_DispPins,
 	.NbIOPins = s_NbDispPins,
@@ -106,14 +106,14 @@ const EIINTRFCFG s_EInkIntrfCfg = {
 EInkIntrf g_EInkIntrf;
 
 #ifdef QTD
-static const IOPINCFG s_LedPins[] = {
+static const IOPinCfg_t s_LedPins[] = {
 	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{LED3_PORT, LED3_PIN, LED3_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{LED4_PORT, LED4_PIN, LED4_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
-static const int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPINCFG);
+static const int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPinCfg_t);
 #endif
 
 //
@@ -217,13 +217,13 @@ int main()
 	IOPinSet(LED2_PORT, LED2_PIN);
 #endif
 	EPD_Init();
-	msDelay(1000);
+	msDelay(2000);
 
 	nrf_gfx_init(&lcd);
 #ifdef QTD
 	IOPinSet(LED3_PORT, LED3_PIN);
 #endif
-	EPD_Display_White();
+	EPD_Display_Black();
 	// draw a horizontal line
 	nrf_gfx_line_t hline = NRF_GFX_LINE(0, nrf_gfx_height_get(&lcd) / 2,
 										nrf_gfx_width_get(&lcd),
@@ -252,4 +252,95 @@ int main()
 	return 0;
 }
 
+#define PAPER_BYTE_WIDTH ((PAPER_PIXEL_WIDTH % 8 == 0) ? PAPER_PIXEL_WIDTH / 8 : PAPER_PIXEL_WIDTH / 8 + 1)
+#define PAPER_BYTE_HEIGHT PAPER_PIXEL_HEIGHT
+#define PAPER_BUFLEN PAPER_BYTE_WIDTH * PAPER_BYTE_HEIGHT
 
+extern uint8_t paper_buffer[PAPER_BUFLEN];
+extern "C" void  check_busy_high();
+#if 0
+extern "C" ret_code_t _paper_display(void)
+{
+  ret_code_t ret = 0;
+
+  /*
+   * TODO transfer chunks of 256 bytes rather than calling nrf_drv_spi_transfer
+   * for each byte.
+   */
+
+  uint8_t command[1];
+#if 0
+  command[0] = 0x10;
+  ret = paper_tx_cmd(command, 1);
+  //if (ret != NRF_SUCCESS) return ret;
+
+  //paper_begin_data();
+  for (int i = 0; i < PAPER_BUFLEN; i++) {
+  	uint16_t d = 0x100 | ~paper_buffer[i];//paper_prev_buffer[i];
+  	 spi_9b_send_9b(d);
+
+   // ret = nrf_drv_spi_transfer(&spi, paper_prev_buffer + i, 1, NULL, 0);
+    if (ret != NRF_SUCCESS) return ret;
+  }
+
+  msDelay(10);
+#endif
+  spi_9b_send_9b( 0x10 );
+
+  EInkIntrfSetDataMode(g_EInkIntrf, true);
+
+  uint8_t d = 0;
+  for (int i = 0; i < PAPER_BUFLEN; i++)
+  {
+  	EInkIntrfTx(g_EInkIntrf, &d, 1);
+  }
+
+  /*
+   * TODO i'm not yet sure about the purpose of sending the previous buffer too.
+   * just sending 0x00s works pretty good. when sending the actual previous
+   * image buffer, it looks like sections that have not changed become kinda
+   * dirty / greyish (which could be useful because one can use three colors).
+   */
+
+  // memcpy(paper_prev_buffer, paper_buffer, PAPER_BUFLEN);
+#if 0
+  command[0] = 0x13;
+  ret = paper_tx_cmd(command, 1);
+  if (ret != NRF_SUCCESS) return ret;
+
+  //paper_begin_data();
+  for (int i = 0; i < PAPER_BUFLEN; i++) {
+	  	uint16_t d = 0x100 | paper_buffer[i];
+	  	 spi_9b_send_9b(d);
+   // ret = nrf_drv_spi_transfer(&spi, paper_buffer + i, 1, NULL, 0);
+    if (ret != NRF_SUCCESS) return ret;
+  }
+#endif
+  //spi_9b_send_9b( 0x13 );
+  //EInkIntrfSetDataMode(g_EInkIntrf, true);
+
+  //EInkIntrfTx(g_EInkIntrf, paper_buffer, PAPER_BUFLEN);
+  uint8_t cmd = 0x13;
+
+  EInkIntrfWrite(g_EInkIntrf, &cmd, 1, paper_buffer, PAPER_BUFLEN);
+
+  msDelay(10);
+
+  //ret = paper_tx_lut();
+  //if (ret != NRF_SUCCESS) return ret;
+
+  //spi_9b_send_9b( DRF );
+  //check_busy_high();
+  spi_9b_send_9b( 0x12);//DRF );
+  check_busy_high();
+
+//  spi_9b_send_9b( POF );
+//  check_busy_low();
+//  ret = paper_tx_cmd(paper_cmd_disp, sizeof(paper_cmd_disp));
+//  if (ret != NRF_SUCCESS) return ret;
+
+  msDelay(100); // TODO use busy pin rather than arbitrary delays
+
+  return ret;
+}
+#endif

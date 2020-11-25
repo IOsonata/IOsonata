@@ -47,7 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 uint8_t g_UarTxBuff[FIFOSIZE];
 
 // Assign UART pins
-static IOPINCFG s_UartPins[] = {
+static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
@@ -58,7 +58,7 @@ static IOPINCFG s_UartPins[] = {
 static const UARTCFG s_UartCfg = {
 	UART_DEVNO,
 	s_UartPins,
-	sizeof(s_UartPins) / sizeof(IOPINCFG),
+	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
 	1000000,			// Rate
 	8,
 	UART_PARITY_NONE,
@@ -77,7 +77,7 @@ static const UARTCFG s_UartCfg = {
 UART g_Uart;
 
 //********** SPI Master **********
-static const IOPINCFG s_SpiMasterPins[] = {
+static const IOPinCfg_t s_SpiMasterPins[] = {
     {SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN, SPI_MASTER_SCK_PINOP,
      IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
     {SPI_MASTER_MISO_PORT, SPI_MASTER_MISO_PIN, SPI_MASTER_MISO_PINOP,
@@ -93,7 +93,7 @@ static const SPICFG s_SpiMasterCfg = {
 	SPIPHY_NORMAL,
     SPIMODE_MASTER,
 	s_SpiMasterPins,
-    sizeof( s_SpiMasterPins ) / sizeof( IOPINCFG ),
+    sizeof(s_SpiMasterPins) / sizeof(IOPinCfg_t),
     1000000,   // Speed in Hz
     8,      // Data Size
     5,      // Max retries
@@ -111,9 +111,9 @@ SPI g_SpiMaster;
 
 //********** SPI Slave **********
 
-int SpiSlaveHandler(DEVINTRF * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
+int SpiSlaveHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
 
-static const IOPINCFG s_SpiSlavePins[] = {
+static const IOPinCfg_t s_SpiSlavePins[] = {
     {SPI_SLAVE_SCK_PORT, SPI_SLAVE_SCK_PIN, SPI_SLAVE_SCK_PINOP,
      IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
     {SPI_SLAVE_MISO_PORT, SPI_SLAVE_MISO_PIN, SPI_SLAVE_MISO_PINOP,
@@ -129,7 +129,7 @@ static const SPICFG s_SpiSlaveCfg = {
 	SPIPHY_NORMAL,
     SPIMODE_SLAVE,
 	s_SpiSlavePins,
-    sizeof( s_SpiSlavePins ) / sizeof( IOPINCFG ),
+    sizeof(s_SpiSlavePins) / sizeof(IOPinCfg_t),
     1000000,   // Speed in Hz
     8,      // Data Size
     5,      // Max retries
@@ -148,7 +148,7 @@ SPI g_SpiSlave;
 uint8_t g_SpiSlaveTxBuff[512];
 uint8_t g_SpiSlaveRxBuff[512];
 
-int SpiSlaveHandler(DEVINTRF * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
+int SpiSlaveHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
 	switch (EvtId)
 	{

@@ -1,16 +1,16 @@
 /**-------------------------------------------------------------------------
-@file	timer_nrfx.cpp
+@file	timer_stm32l4x.h
 
-@brief	timer implementation on Nordic nRFx series
+@brief	timer implementation on STM32L4xx series
 
 @author	Hoang Nguyen Hoan
-@date	Sep. 7, 2017
+@date	Nov. 24, 2020
 
 @license
 
 MIT License
 
-Copyright (c) 2017 I-SYST inc. All rights reserved.
+Copyright (c) 2020 I-SYST inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -31,41 +31,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifdef __ICCARM__
-#include "intrinsics.h"
+#ifndef __TIMER_STM32L4X_H__
+#define __TIMER_STM32L4X_H__
+
+#include <stdint.h>
+
+#include "coredev/timer.h"
+
+/// Low Power Timer
+#define STM32L4XX_LPTIMER_MAXFREQ			16000000
+
+#define STM32L4XX_LPTIMER_MAXCNT			2
+#define STM32L4XX_LPTIMER_TRIG_MAXCNT		1
+
+///
+#define STM32L4XX_TIMER_MAXFREQ				16000000
+
+#define STM32L4XX_TIMER_MAXCNT				11
+#define STM32L4XX_TIMER_TRIG_MAXCNT			1
+
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#include "nrf.h"
+bool Stm32l4LPTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
+bool Stm32l4TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 
-#include "timer_nrfx.h"
-
-bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
-{
-	if (pTimer == NULL || pCfg == NULL)
-	{
-		return false;
-	}
-
-	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX)
-	{
-		return nRFxRtcInit(pTimer, pCfg);
-	}
-
-	return nRFxTimerInit(pTimer, pCfg);
+#ifdef __cplusplus
 }
+#endif
 
-int TimerGetLowFreqDevCount()
-{
-	return TIMER_NRFX_RTC_MAX;
-}
-
-int TimerGetHighFreqDevCount()
-{
-	return TIMER_NRFX_HF_MAX;
-}
-
-int TimerGetHighFreqDevNo()
-{
-	return TIMER_NRFX_RTC_MAX;
-}
-
+#endif // __TIMER_STM32L4X_H__

@@ -40,9 +40,9 @@ SOFTWARE.
 
 #include "excelitas_serlink.h"
 
-bool DirectLinkStartRx(DEVINTRF * const pDevIntrf, int DevAddr)
+bool DirectLinkStartRx(DevIntrf_t * const pDevIntrf, int DevAddr)
 {
-	EXCELSERDEV *dev = (EXCELSERDEV*)pDevIntrf->pDevData;
+	ExcelitasSerDev_t *dev = (ExcelitasSerDev_t*)pDevIntrf->pDevData;
 
 	IOPinSet(dev->Pins[EXCELITAS_DL_PIN_IDX].PortNo, dev->Pins[EXCELITAS_DL_PIN_IDX].PinNo);
 	IOPinSetDir(dev->Pins[EXCELITAS_DL_PIN_IDX].PortNo, dev->Pins[EXCELITAS_DL_PIN_IDX].PinNo, IOPINDIR_OUTPUT);
@@ -53,9 +53,9 @@ bool DirectLinkStartRx(DEVINTRF * const pDevIntrf, int DevAddr)
 	return true;
 }
 
-int DirectLinkRxData(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
+int DirectLinkRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
-	EXCELSERDEV *dev = (EXCELSERDEV*)pDevIntrf->pDevData;
+	ExcelitasSerDev_t *dev = (ExcelitasSerDev_t*)pDevIntrf->pDevData;
 	uint64_t val = 0;
 	int cnt = 0;
 
@@ -75,7 +75,7 @@ int DirectLinkRxData(DEVINTRF * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 	return cnt;
 }
 
-bool ExcelitasIntrfInit(EXCELSERDEV * const pDev, EXCELSER_CFG * const pCfg)
+bool ExcelitasIntrfInit(ExcelitasSerDev_t * const pDev, ExcelitasSerCfg_t * const pCfg)
 {
 	if (pDev == NULL || pCfg == NULL)
 	{
@@ -90,7 +90,7 @@ bool ExcelitasIntrfInit(EXCELSERDEV * const pDev, EXCELSER_CFG * const pCfg)
 	return true;
 }
 
-bool DirectLinkInit(DIRECTLINK_DEV *pDev, int PortNo, int PinNo, int PinOp)
+bool DirectLinkInit(DirectLinkDev_t *pDev, int PortNo, int PinNo, int PinOp)
 {
 	if (pDev == NULL)
 	{
@@ -114,7 +114,7 @@ bool DirectLinkInit(DIRECTLINK_DEV *pDev, int PortNo, int PinNo, int PinOp)
 	return true;
 }
 
-int DirectLinkRead(DIRECTLINK_DEV *pDev, int NbBits, uint8_t *pBuf)
+int DirectLinkRead(DirectLinkDev_t *pDev, int NbBits, uint8_t *pBuf)
 {
 	uint64_t val = 0;
 
@@ -151,7 +151,7 @@ int DirectLinkRead(DIRECTLINK_DEV *pDev, int NbBits, uint8_t *pBuf)
 	return (NbBits + 7) >> 3;
 }
 
-uint64_t DirectLinkRead2(DIRECTLINK_DEV *pDev, int NbBits)
+uint64_t DirectLinkRead2(DirectLinkDev_t *pDev, int NbBits)
 {
 	uint64_t val = 0;
 
@@ -195,7 +195,7 @@ uint64_t DirectLinkRead2(DIRECTLINK_DEV *pDev, int NbBits)
 	return val;
 }
 
-bool SerialInInit(SERIALIN_DEV *pDev, int PortNo, int PinNo, int PinOp)
+bool SerialInInit(SerialInDev_t *pDev, int PortNo, int PinNo, int PinOp)
 {
 	if (pDev == NULL)
 	{
@@ -218,7 +218,7 @@ bool SerialInInit(SERIALIN_DEV *pDev, int PortNo, int PinNo, int PinOp)
 	return true;
 }
 
-void SerialIn(SERIALIN_DEV *pDev, uint32_t Data, int NbBits)
+void SerialIn(SerialInDev_t *pDev, uint32_t Data, int NbBits)
 {
 	uint32_t mask = 1 << (NbBits - 1);
 

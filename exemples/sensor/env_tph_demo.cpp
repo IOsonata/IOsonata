@@ -64,9 +64,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BME680		// To use Bosch BME680 with Air Quality Index
 #include "board.h"
 
-void TimerHandler(Timer *pTimer, uint32_t Evt);
+void TimerHandler(TimerDev_t *pTimer, uint32_t Evt);
 
-const static TIMER_CFG s_TimerCfg = {
+const static TimerCfg_t s_TimerCfg = {
     .DevNo = 1,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
@@ -84,7 +84,7 @@ Timer g_Timer;
 uint8_t g_TxBuff[FIFOSIZE];
 
 // Assign UART pins
-static IOPINCFG s_UartPins[] = {
+static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
@@ -95,7 +95,7 @@ static IOPINCFG s_UartPins[] = {
 const UARTCFG g_UartCfg = {
 	0,
 	s_UartPins,
-	sizeof(s_UartPins) / sizeof(IOPINCFG),
+	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
 	1000000,			// Rate
 	8,
 	UART_PARITY_NONE,
@@ -114,7 +114,7 @@ const UARTCFG g_UartCfg = {
 UART g_Uart;
 
 //********** SPI **********
-static const IOPINCFG s_SpiPins[] = {
+static const IOPinCfg_t s_SpiPins[] = {
     {SPI_SCK_PORT, SPI_SCK_PIN, SPI_SCK_PINOP,
      IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
     {SPI_MISO_PORT, SPI_MISO_PIN, SPI_MISO_PINOP,
@@ -130,7 +130,7 @@ static const SPICFG s_SpiCfg = {
 	SPIPHY_NORMAL,
     SPIMODE_MASTER,
 	s_SpiPins,
-    sizeof( s_SpiPins ) / sizeof( IOPINCFG ),
+    sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
     1000000,   // Speed in Hz
     8,      // Data Size
     5,      // Max retries

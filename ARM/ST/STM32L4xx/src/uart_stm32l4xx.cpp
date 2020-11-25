@@ -227,12 +227,12 @@ extern "C" void LPUART1_IRQHandler()
 	NVIC_ClearPendingIRQ(LPUART1_IRQn);
 }
 
-static uint32_t STM32L4xUARTGetRate(DEVINTRF * const pDev)
+static uint32_t STM32L4xUARTGetRate(DevIntrf_t * const pDev)
 {
 	return ((STM32L4X_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
 }
 
-static uint32_t STM32L4xUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
+static uint32_t STM32L4xUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
 	uint32_t div;
@@ -272,12 +272,12 @@ static uint32_t STM32L4xUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 	return dev->pUartDev->Rate;
 }
 
-static bool STM32L4xUARTStartRx(DEVINTRF * const pSerDev, uint32_t DevAddr)
+static bool STM32L4xUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
 {
 	return true;
 }
 
-static int STM32L4xUARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
+static int STM32L4xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
@@ -309,15 +309,15 @@ static int STM32L4xUARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen
 	return cnt;
 }
 
-static void STM32L4xUARTStopRx(DEVINTRF * const pDev) {
+static void STM32L4xUARTStopRx(DevIntrf_t * const pDev) {
 }
 
-static bool STM32L4xUARTStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
+static bool STM32L4xUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	return true;
 }
 
-static int STM32L4xUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
+static int STM32L4xUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
     int cnt = 0;
@@ -358,11 +358,11 @@ static int STM32L4xUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen
     return cnt;
 }
 
-static void STM32L4xUARTStopTx(DEVINTRF * const pDev)
+static void STM32L4xUARTStopTx(DevIntrf_t * const pDev)
 {
 }
 
-static void STM32L4xUARTDisable(DEVINTRF * const pDev)
+static void STM32L4xUARTDisable(DevIntrf_t * const pDev)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
 
@@ -383,7 +383,7 @@ static void STM32L4xUARTDisable(DEVINTRF * const pDev)
 	}
 }
 
-static void STM32L4xUARTEnable(DEVINTRF * const pDev)
+static void STM32L4xUARTEnable(DevIntrf_t * const pDev)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
 
@@ -413,7 +413,7 @@ static void STM32L4xUARTEnable(DEVINTRF * const pDev)
 
 }
 
-static void STM32L4xUARTPowerOff(DEVINTRF * const pDev)
+static void STM32L4xUARTPowerOff(DevIntrf_t * const pDev)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
 
@@ -450,7 +450,7 @@ static void STM32L4xUARTPowerOff(DEVINTRF * const pDev)
 	//dev->pReg->CR2 &= ~USART_CR2_CLKEN;
 }
 
-static void STM32L4xUARTReset(DEVINTRF * const pDev)
+static void STM32L4xUARTReset(DevIntrf_t * const pDev)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
 
@@ -556,7 +556,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	}
 
 	// Configure UART pins
-	IOPINCFG *pincfg = (IOPINCFG*)pCfg->pIOPinMap;
+	IOPinCfg_t *pincfg = (IOPinCfg_t*)pCfg->pIOPinMap;
 
 	IOPinCfg(pincfg, pCfg->NbIOPins);
 

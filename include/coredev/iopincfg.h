@@ -95,7 +95,9 @@ typedef struct __iopin_cfg {
 	IOPINDIR	PinDir;			//!< Pin direction
 	IOPINRES 	Res;			//!< Pin resistor setting
 	IOPINTYPE	Type;			//!< I/O type
-} IOPINCFG;
+} IOPinCfg_t;
+
+typedef IOPinCfg_t		IOPINCFG;
 
 #pragma pack(pop)
 
@@ -104,7 +106,9 @@ typedef struct __iopin_cfg {
  *
  * @param	IntNo : Interrupt number to which the I/O pin sense was assigned to.
  */
-typedef void (*IOPINEVT_CB)(int IntNo);
+typedef void (*IOPinEvtHandler_t)(int IntNo);
+
+typedef IOPinEvtHandler_t	IOPINEVT_CB;
 
 #ifdef 	__cplusplus
 extern "C" {
@@ -130,7 +134,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
  * @param	pCfg   : Pointer to an array gpio pin configuration
  * @Param	NbPins : Number of gpio pins to configure
  */
-static inline void IOPinCfg(const IOPINCFG *pCfg, int NbPins) {
+static inline void IOPinCfg(const IOPinCfg_t *pCfg, int NbPins) {
 	if (pCfg == NULL || NbPins <= 0)
 		return;
 
@@ -177,7 +181,7 @@ void IOPinDisableInterrupt(int IntNo);
  *
  * @return	true - success
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB);
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB);
 
 /**
  * @brief	Allocate I/O pin sensing interrupt event
@@ -197,7 +201,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
  * @return	Interrupt number on success
  * 			-1 on failure.
  */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB);
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB);
 
 /**
  * @brief Set I/O pin sensing option

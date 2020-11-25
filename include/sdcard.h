@@ -54,14 +54,14 @@ typedef struct {
 
 typedef struct {
 	int Rate;
-	DEVINTRF *pSerIntrf;
+	DevIntrf_t *pSerIntrf;
 } SDCFG;
 
 typedef struct {
 	int SectSize;
 	int TotalSect;
 	SDCSD Csd;
-	DEVINTRF *pSerIntrf;
+	DevIntrf_t *pSerIntrf;
 } SDDEV;
 
 #pragma pack(pop)

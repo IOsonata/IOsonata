@@ -36,11 +36,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "adc_nrf52_saadc.h"
 #include "coredev/uart.h"
 #include "stddev.h"
+#include "iopinctrl.h"
 
 // This include contain i/o definition the board in use
 #include "board.h"
 
-#define ADC_DEMO_INTERRUPT_ENABLE
+//#define ADC_DEMO_INTERRUPT_ENABLE
 
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void ADVEventHandler(Device *pDevObj, DEV_EVT Evt);
@@ -49,7 +50,7 @@ void ADVEventHandler(Device *pDevObj, DEV_EVT Evt);
 
 uint8_t g_TxBuff[FIFOSIZE];
 
-static IOPINCFG s_UartPins[] = {
+static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
@@ -60,7 +61,7 @@ static IOPINCFG s_UartPins[] = {
 static const UARTCFG s_UartCfg = {
 	0,
 	s_UartPins,
-	sizeof(s_UartPins) / sizeof(IOPINCFG),
+	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
 	1000000,			// Rate
 	8,
 	UART_PARITY_NONE,
@@ -101,7 +102,7 @@ static const ADC_CFG s_AdcCfg = {
 	.NbRefVolt = s_NbRefVolt,
 	.DevAddr = 0,
 	.Resolution = 10,
-	.Rate = 8000,
+	.Rate = 1000,
 	.OvrSample = 0,
 #ifdef ADC_DEMO_INTERRUPT_ENABLE
 	.bInterrupt = true,
@@ -124,7 +125,7 @@ static const ADC_CHAN_CFG s_ChanCfg[] = {
 		.AcqTime = 10,
 		.BurstMode = false,
 		.PinP = { .PinNo = 8, .Conn = ADC_PIN_CONN_NONE },
-		.PinN = { .PinNo = 0, .Conn = ADC_PIN_CONN_PULLDOWN },
+		.PinN = { .PinNo = 5, .Conn = ADC_PIN_CONN_PULLDOWN },
 		.FifoMemSize = ADC_CFIFO_SIZE,
 		.pFifoMem = s_AdcFifoMem,
 	},
@@ -135,7 +136,7 @@ static const ADC_CHAN_CFG s_ChanCfg[] = {
 		.Gain = 6,//1 << 8,
 		.AcqTime = 0,
 		.BurstMode = false,
-		.PinP = { .PinNo = 1, .Conn = ADC_PIN_CONN_VDD },
+		.PinP = { .PinNo = 1, .Conn = ADC_PIN_CONN_NONE },
 	},
 	{
 		.Chan = 2,
@@ -144,7 +145,7 @@ static const ADC_CHAN_CFG s_ChanCfg[] = {
 		.Gain = 6,//1 << 8,
 		.AcqTime = 0,
 		.BurstMode = false,
-		.PinP = { .PinNo = 2, .Conn = ADC_PIN_CONN_PULLDOWN },
+		.PinP = { .PinNo = 0, .Conn = ADC_PIN_CONN_NONE },
 	},
 	{
 		.Chan = 3,
@@ -173,8 +174,8 @@ void ADVEventHandler(Device *pAdcDev, DEV_EVT Evt)
 		cnt = g_Adc.Read(df, s_NbChan);
 		if (cnt > 0)
 		{
-			g_Uart.printf("%d ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
-					df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
+//			/*g_Uart.*/printf("%d ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
+//					df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
 		}
 
 		if (g_Adc.Mode() == ADC_CONV_MODE_SINGLE)
@@ -212,7 +213,12 @@ void HardwareInit()
 //	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
 	printf("Init ADC\r\n");
+	IOPinDisable(0, 2);
+	IOPinDisable(0, 3);
 
+	//IOPinSet(0, 2);
+	//IOPinConfig(0, 2, 0, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	//IOPinClear(0, 3);
 	g_Adc.Init(s_AdcCfg);
 	g_Adc.OpenChannel(s_ChanCfg, s_NbChan);
 }
@@ -224,7 +230,7 @@ void HardwareInit()
 // For example, for toolchains derived from GNU Tools for Embedded,
 // to enable semi-hosting, the following was added to the linker:
 //
-// --specs=rdimon.specs -Wl,--start-group -lgcc -lc -lc -lm -lrdimon -Wl,--end-group
+// --specs=rdimon.specs -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group
 //
 // Adjust it for other toolchains.
 //
@@ -250,8 +256,8 @@ int main()
 		cnt = g_Adc.Read(df, s_NbChan);
 		if (cnt > 0)
 		{
-		//	g_Uart.printf("%d ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
-		//			df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
+			/*g_Uart.*/printf("%d ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
+					df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
 		}
 		g_Adc.StartConversion();
 #endif

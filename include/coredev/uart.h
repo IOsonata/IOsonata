@@ -176,7 +176,7 @@ struct __Uart_Dev {
 	bool bIrDAInvert;			//!< IrDA input inverted
 	bool bIrDAFixPulse;			//!< Enable IrDA fix pulse
 	int	IrDAPulseDiv;			//!< Fix pulse divider
-	DEVINTRF DevIntrf;			//!< Device interface implementation
+	DevIntrf_t DevIntrf;			//!< Device interface implementation
 	UARTEVTCB EvtCallback;		//!< UART event callback
 	void *pObj;					//!< Pointer to UART object instance
 	HCFIFO hRxFifo;				//!< Rx FIFO handle
@@ -238,7 +238,7 @@ public:
 		return UARTInit(&vDevData, &CfgData);
 	}
 
-	operator DEVINTRF * const () { return &vDevData.DevIntrf; }
+	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
 	operator UARTDEV *  const () { return &vDevData; }
 
 	// Set data baudrate

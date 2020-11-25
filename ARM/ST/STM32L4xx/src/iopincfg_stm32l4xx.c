@@ -49,7 +49,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma pack(push, 4)
 typedef struct {
 	IOPINSENSE Sense;
-	IOPINEVT_CB SensEvtCB;
+	IOPinEvtHandler_t SensEvtCB;
     uint16_t PortPinNo;
 } IOPINSENS_EVTHOOK;
 #pragma pack(pop)
@@ -277,7 +277,7 @@ void IOPinDisableInterrupt(int IntNo)
  * 			Sense   : Sense type of event on the I/O pin
  * 			pEvtCB	: Pointer to callback function when event occurs
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB)
 {
 	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || IntNo != PinNo)
 	{
@@ -395,7 +395,7 @@ int IOPinFindAvailInterrupt()
  * @return	Interrupt number on success
  * 			-1 on failure.
  */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB)
 {
 	int intno = IOPinFindAvailInterrupt();
 

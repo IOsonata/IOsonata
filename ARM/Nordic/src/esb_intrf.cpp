@@ -61,7 +61,7 @@ static volatile bool s_bEsbTxReady = true;
  *
  * @return None
  */
-void EsbIntrfDisable(DEVINTRF *pDevIntrf)
+void EsbIntrfDisable(DevIntrf_t *pDevIntrf)
 {
     //nrf_esb_disable();
 
@@ -78,7 +78,7 @@ void EsbIntrfDisable(DEVINTRF *pDevIntrf)
  *
  * @return None
  */
-void EsbIntrfEnable(DEVINTRF *pDevIntrf)
+void EsbIntrfEnable(DevIntrf_t *pDevIntrf)
 {
 	// We are using nrf_esb_suspend().  No need to re-enable
 	// just return
@@ -111,7 +111,7 @@ void EsbIntrfEnable(DEVINTRF *pDevIntrf)
  *
  * @return Transfer rate per second
  */
-uint32_t EsbIntrfGetRate(DEVINTRF *pDevIntrf)
+uint32_t EsbIntrfGetRate(DevIntrf_t *pDevIntrf)
 {
     ESBINTRF *dev = (ESBINTRF*)pDevIntrf->pDevData;
     int rate = 0;
@@ -148,7 +148,7 @@ uint32_t EsbIntrfGetRate(DEVINTRF *pDevIntrf)
  * @return  Actual transfer rate per second set.  It is the real capable rate
  *          closes to rate being requested.
  */
-uint32_t EsbIntrfSetRate(DEVINTRF *pDevIntrf, uint32_t Rate)
+uint32_t EsbIntrfSetRate(DevIntrf_t *pDevIntrf, uint32_t Rate)
 {
     // Data rate can't be changed on the fly
     // just return current rate
@@ -170,7 +170,7 @@ uint32_t EsbIntrfSetRate(DEVINTRF *pDevIntrf, uint32_t Rate)
  * @return  true - Success
  *          false - failed.
  */
-bool EsbIntrfStartRx(DEVINTRF *pDevIntrf, uint32_t DevAddr)
+bool EsbIntrfStartRx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 {
     return true;
 }
@@ -190,7 +190,7 @@ bool EsbIntrfStartRx(DEVINTRF *pDevIntrf, uint32_t DevAddr)
  *
  * @return  Number of bytes read
  */
-int EsbIntrfRxData(DEVINTRF *pDevIntrf, uint8_t *pBuff, int BuffLen)
+int EsbIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
     ESBINTRF *intrf = (ESBINTRF*)pDevIntrf->pDevData;
     nrf_esb_payload_t *payload;
@@ -221,7 +221,7 @@ int EsbIntrfRxData(DEVINTRF *pDevIntrf, uint8_t *pBuff, int BuffLen)
  *
  * @return  None
  */
-void EsbIntrfStopRx(DEVINTRF *pSerDev)
+void EsbIntrfStopRx(DevIntrf_t *pSerDev)
 {
     // TODO:
 }
@@ -240,7 +240,7 @@ void EsbIntrfStopRx(DEVINTRF *pSerDev)
  * @return  true - Success
  *          false - failed
  */
-bool EsbIntrfStartTx(DEVINTRF *pDevIntrf, uint32_t DevAddr)
+bool EsbIntrfStartTx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 {
     return true;
 }
@@ -257,7 +257,7 @@ bool EsbIntrfStartTx(DEVINTRF *pDevIntrf, uint32_t DevAddr)
  *
  * @return  Number of bytes sent
  */
-int EsbIntrfTxData(DEVINTRF *pDevIntrf, uint8_t *pData, int DataLen)
+int EsbIntrfTxData(DevIntrf_t *pDevIntrf, uint8_t *pData, int DataLen)
 {
     ESBINTRF *intrf = (ESBINTRF*)pDevIntrf->pDevData;
     nrf_esb_payload_t *payload;
@@ -307,7 +307,7 @@ int EsbIntrfTxData(DEVINTRF *pDevIntrf, uint8_t *pData, int DataLen)
  *
  * @return  None
  */
-void EsbIntrfStopTx(DEVINTRF *pDevIntrf)
+void EsbIntrfStopTx(DevIntrf_t *pDevIntrf)
 {
 
 }
@@ -322,7 +322,7 @@ void EsbIntrfStopTx(DEVINTRF *pDevIntrf)
  *
  * @return  None
  */
-void EsbIntrfReset(DEVINTRF *pDevIntrf)
+void EsbIntrfReset(DevIntrf_t *pDevIntrf)
 {
 
 }
@@ -333,7 +333,7 @@ void nRFEsbEventHandler(nrf_esb_evt_t const * p_event)
         return;
 
     nrf_esb_payload_t *payload = NULL;
-    DEVINTRF *devintrf = (DEVINTRF*)*s_pEsbDevice;
+    DevIntrf_t *devintrf = (DevIntrf_t*)*s_pEsbDevice;
     ESBINTRF *esbintrf = (ESBINTRF *)devintrf->pDevData;
     uint32_t err;
 

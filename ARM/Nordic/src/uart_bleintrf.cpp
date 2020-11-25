@@ -40,7 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble_intrf.h"
 #include "blueio_board.h"
 
-int BleIntrfEvtCallback(DEVINTRF *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
@@ -218,7 +218,7 @@ static UARTCFG s_UartCfg = {
 
 static UART s_Uart;
 */
-int BleIntrfEvtCallback(DEVINTRF *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 
@@ -294,7 +294,7 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 	return cnt;
 }*/
 
-BleIntrf * const NusBleIntrfInit(DEVINTRF_EVTCB EvtCB)
+BleIntrf * const NusBleIntrfInit(DevIntrfEvtHandler_t EvtCB)
 {
     uint32_t err_code = BleSrvcInit(&s_NUSBleSrvc, &s_NUSBleSrvcCfg);
     APP_ERROR_CHECK(err_code);
@@ -309,7 +309,7 @@ BleIntrf * const NusBleIntrfInit(DEVINTRF_EVTCB EvtCB)
     return NULL;
 }
 
-BleIntrf * const UartBleIntrfInit(DEVINTRF_EVTCB EvtCB)
+BleIntrf * const UartBleIntrfInit(DevIntrfEvtHandler_t EvtCB)
 {
     uint32_t err_code = BleSrvcInit(&s_UartBleSrvc, &s_UartSrvcCfg);
     APP_ERROR_CHECK(err_code);

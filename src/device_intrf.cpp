@@ -46,7 +46,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // DeviceIntrfStartTx
 // DeviceIntrfStopTx
 //
-int DeviceIntrfRx(DEVINTRF * const pDev, uint32_t DevAddr, uint8_t *pBuff, int BuffLen)
+int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int BuffLen)
 {
 	if (pBuff == NULL || BuffLen <= 0)
 		return 0;
@@ -64,7 +64,7 @@ int DeviceIntrfRx(DEVINTRF * const pDev, uint32_t DevAddr, uint8_t *pBuff, int B
 	return count;
 }
 
-int DeviceIntrfTx(DEVINTRF * const pDev, uint32_t DevAddr, uint8_t *pBuff, int BuffLen)
+int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int BuffLen)
 {
 	if (pBuff == NULL || BuffLen <= 0)
 		return 0;
@@ -82,7 +82,7 @@ int DeviceIntrfTx(DEVINTRF * const pDev, uint32_t DevAddr, uint8_t *pBuff, int B
 	return count;
 }
 
-int DeviceIntrfRead(DEVINTRF * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen,
+int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen,
                  uint8_t *pRxBuff, int RxLen)
 {
     int count = 0;
@@ -120,7 +120,7 @@ int DeviceIntrfRead(DEVINTRF * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, in
     return count;
 }
 
-int DeviceIntrfWrite(DEVINTRF * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen,
+int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen,
                   uint8_t *pData, int DataLen)
 {
     int count = 0, txlen = AdCmdLen;

@@ -224,7 +224,7 @@ static uint8_t s_UartRxFifo[UARTFIFOSIZE];
 static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
 /// UART pins definitions
-static IOPINCFG s_UartPins[] = {
+static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
@@ -235,7 +235,7 @@ static IOPINCFG s_UartPins[] = {
 const UARTCFG g_UartCfg = {
 	.DevNo = 0,							// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPINCFG),	// Total number of UART pins used
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
 	.Rate = 115200,						// Baudrate
 	.DataBits = 8,						// Data bits
 	.Parity = UART_PARITY_NONE,			// Parity
@@ -254,20 +254,20 @@ const UARTCFG g_UartCfg = {
 /// UART object instance
 UART g_Uart;
 
-static const IOPINCFG s_LedPins[] = {
+static const IOPinCfg_t s_LedPins[] = {
 	{BLUEIO_LED_BLUE_PORT, BLUEIO_LED_BLUE_PIN, BLUEIO_LED_BLUE_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// LED1 (Blue)
 	{BLUEIO_LED_GREEN_PORT, BLUEIO_LED_GREEN_PIN, BLUEIO_LED_GREEN_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// LED2 (Green)
 	{BLUEIO_LED_RED_PORT, BLUEIO_LED_RED_PIN, BLUEIO_LED_RED_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// LED3 (Red)
 };
 
-static int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPINCFG);
+static int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPinCfg_t);
 
-static const IOPINCFG s_ButPins[] = {
+static const IOPinCfg_t s_ButPins[] = {
 	{BUTTON1_PORT, BUTTON1_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 1
 	{BUTTON2_PORT, BUTTON2_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 2
 };
 
-static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPINCFG);
+static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
 
 int g_DelayCnt = 0;
 volatile bool g_bUartState = false;

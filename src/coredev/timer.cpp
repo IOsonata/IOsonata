@@ -34,7 +34,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/timer.h"
 
-int Timer::EnableTimerTrigger(uint64_t nsPeriod, TIMER_TRIG_TYPE Type, TIMER_TRIGCB const Handler, void * const pContext)
+int Timer::EnableTimerTrigger(uint64_t nsPeriod, TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
 	int idx = FindAvailTimerTrigger();
 	if (idx < 0)
@@ -45,7 +45,7 @@ int Timer::EnableTimerTrigger(uint64_t nsPeriod, TIMER_TRIG_TYPE Type, TIMER_TRI
 	return idx;
 }
 
-int Timer::EnableTimerTrigger(uint32_t msPeriod, TIMER_TRIG_TYPE Type, TIMER_TRIGCB const Handler, void * const pContext)
+int Timer::EnableTimerTrigger(uint32_t msPeriod, TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
 	int idx = FindAvailTimerTrigger();
 	if (idx < 0)

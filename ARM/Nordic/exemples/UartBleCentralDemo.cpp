@@ -111,7 +111,7 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 
 // UART configuration data
 
-static IOPINCFG s_UartPins[] = {
+static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
@@ -121,7 +121,7 @@ static IOPINCFG s_UartPins[] = {
 const UARTCFG g_UartCfg = {
 	0,
 	s_UartPins,
-	sizeof(s_UartPins) / sizeof(IOPINCFG),
+	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
 	1000000,
 	8,
 	UART_PARITY_NONE,

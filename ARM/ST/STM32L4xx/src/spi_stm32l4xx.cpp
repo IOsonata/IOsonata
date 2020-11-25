@@ -126,7 +126,7 @@ static bool STM32L4xxSPIWaitBusy(STM32L4XX_SPIDEV * const pDev, uint32_t Timeout
     return false;
 }
 
-static uint32_t STM32L4xxSPIGetRate(DEVINTRF * const pDev)
+static uint32_t STM32L4xxSPIGetRate(DevIntrf_t * const pDev)
 {
 	int rate = 0;
 
@@ -138,7 +138,7 @@ static uint32_t STM32L4xxSPIGetRate(DEVINTRF * const pDev)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-static uint32_t STM32L4xxSPISetRate(DEVINTRF * const pDev, uint32_t DataRate)
+static uint32_t STM32L4xxSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -199,7 +199,7 @@ static uint32_t STM32L4xxSPISetRate(DEVINTRF * const pDev, uint32_t DataRate)
 	return dev->pSpiDev->Cfg.Rate;
 }
 
-void STM32L4xxSPIDisable(DEVINTRF * const pDev)
+void STM32L4xxSPIDisable(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 	int32_t timout = 100000;
@@ -210,21 +210,21 @@ void STM32L4xxSPIDisable(DEVINTRF * const pDev)
     dev->pReg->CR1 &= ~SPI_CR1_SPE;
 }
 
-static void STM32L4xxSPIEnable(DEVINTRF * const pDev)
+static void STM32L4xxSPIEnable(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
     dev->pReg->CR1 |= SPI_CR1_SPE;
 }
 
-static void STM32L4xxSPIPowerOff(DEVINTRF * const pDev)
+static void STM32L4xxSPIPowerOff(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
 }
 
 // Initial receive
-static bool STM32L4xxSPIStartRx(DEVINTRF * const pDev, uint32_t DevCs)
+static bool STM32L4xxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -245,7 +245,7 @@ static bool STM32L4xxSPIStartRx(DEVINTRF * const pDev, uint32_t DevCs)
 }
 
 // Receive Data only, no Start/Stop condition
-static int STM32L4xxSPIRxDataDma(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+static int STM32L4xxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 	int cnt = 0;
@@ -254,7 +254,7 @@ static int STM32L4xxSPIRxDataDma(DEVINTRF * const pDev, uint8_t *pBuff, int Buff
 }
 
 // Receive Data only, no Start/Stop condition
-static int STM32L4xxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+static int STM32L4xxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
     int cnt = 0;
@@ -302,7 +302,7 @@ static int STM32L4xxSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen
 }
 
 // Stop receive
-static void STM32L4xxSPIStopRx(DEVINTRF * const pDev)
+static void STM32L4xxSPIStopRx(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 
@@ -314,7 +314,7 @@ static void STM32L4xxSPIStopRx(DEVINTRF * const pDev)
 }
 
 // Initiate transmit
-static bool STM32L4xxSPIStartTx(DEVINTRF * const pDev, uint32_t DevCs)
+static bool STM32L4xxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 
@@ -332,7 +332,7 @@ static bool STM32L4xxSPIStartTx(DEVINTRF * const pDev, uint32_t DevCs)
 }
 
 // Transmit Data only, no Start/Stop condition
-static int STM32L4xxSPITxDataDma(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+static int STM32L4xxSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 	int cnt = 0;
@@ -341,7 +341,7 @@ static int STM32L4xxSPITxDataDma(DEVINTRF * const pDev, uint8_t *pData, int Data
 }
 
 // Send Data only, no Start/Stop condition
-static int STM32L4xxSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
+static int STM32L4xxSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV*)pDev->pDevData;
     int cnt = 0;
@@ -378,7 +378,7 @@ static int STM32L4xxSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
 }
 
 // Stop transmit
-static void STM32L4xxSPIStopTx(DEVINTRF * const pDev)
+static void STM32L4xxSPIStopTx(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 
@@ -619,7 +619,7 @@ bool STM32L4xxQSPIWaitFifo(STM32L4XX_SPIDEV *pDev, int Timeout)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-static uint32_t STM32L4xxQSPISetRate(DEVINTRF * const pDev, uint32_t DataRate)
+static uint32_t STM32L4xxQSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
@@ -640,7 +640,7 @@ static uint32_t STM32L4xxQSPISetRate(DEVINTRF * const pDev, uint32_t DataRate)
 	return dev->pSpiDev->Cfg.Rate;
 }
 
-void STM32L4xxQSPIDisable(DEVINTRF * const pDev)
+void STM32L4xxQSPIDisable(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -649,14 +649,14 @@ void STM32L4xxQSPIDisable(DEVINTRF * const pDev)
     dev->pQReg->CR &= ~QUADSPI_CR_EN;
 }
 
-static void STM32L4xxQSPIEnable(DEVINTRF * const pDev)
+static void STM32L4xxQSPIEnable(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
     dev->pQReg->CR |= QUADSPI_CR_EN;
 }
 
-static void STM32L4xxQSPIPowerOff(DEVINTRF * const pDev)
+static void STM32L4xxQSPIPowerOff(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -671,7 +671,7 @@ static void STM32L4xxQSPIPowerOff(DEVINTRF * const pDev)
 	}
 }
 
-bool STM32L4xxQSPISendCmd(DEVINTRF * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
+bool STM32L4xxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -735,7 +735,7 @@ bool STM32L4xxQSPISendCmd(DEVINTRF * const pDev, uint8_t Cmd, uint32_t Addr, uin
 }
 
 // Initial receive
-static bool STM32L4xxQSPIStartRx(DEVINTRF * const pDev, uint32_t DevCs)
+static bool STM32L4xxQSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 
@@ -759,7 +759,7 @@ static bool STM32L4xxQSPIStartRx(DEVINTRF * const pDev, uint32_t DevCs)
 }
 
 // Receive Data only, no Start/Stop condition
-static int STM32L4xxQSPIRxDataDma(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+static int STM32L4xxQSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 	int cnt = 0;
@@ -768,7 +768,7 @@ static int STM32L4xxQSPIRxDataDma(DEVINTRF * const pDev, uint8_t *pBuff, int Buf
 }
 
 // Receive Data only, no Start/Stop condition
-static int STM32L4xxQSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+static int STM32L4xxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 	QUADSPI_TypeDef *reg = dev->pQReg;
@@ -808,7 +808,7 @@ static int STM32L4xxQSPIRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLe
 }
 
 // Stop receive
-static void STM32L4xxQSPIStopRx(DEVINTRF * const pDev)
+static void STM32L4xxQSPIStopRx(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 
@@ -820,7 +820,7 @@ static void STM32L4xxQSPIStopRx(DEVINTRF * const pDev)
 }
 
 // Initiate transmit
-static bool STM32L4xxQSPIStartTx(DEVINTRF * const pDev, uint32_t DevCs)
+static bool STM32L4xxQSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 
@@ -843,7 +843,7 @@ static bool STM32L4xxQSPIStartTx(DEVINTRF * const pDev, uint32_t DevCs)
 }
 
 // Transmit Data only, no Start/Stop condition
-static int STM32L4xxQSPITxDataDma(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+static int STM32L4xxQSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
 	int cnt = 0;
@@ -852,7 +852,7 @@ static int STM32L4xxQSPITxDataDma(DEVINTRF * const pDev, uint8_t *pData, int Dat
 }
 
 // Send Data only, no Start/Stop condition
-static int STM32L4xxQSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
+static int STM32L4xxQSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV*)pDev->pDevData;
 	QUADSPI_TypeDef *reg = dev->pQReg;
@@ -885,7 +885,7 @@ static int STM32L4xxQSPITxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
 }
 
 // Stop transmit
-static void STM32L4xxQSPIStopTx(DEVINTRF * const pDev)
+static void STM32L4xxQSPIStopTx(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
 	QUADSPI_TypeDef *reg = dev->pQReg;

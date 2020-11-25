@@ -235,7 +235,7 @@ I2C g_I2c;
 DeviceIntrf *g_pIntrf = &g_I2c;
 #endif
 
-static const IOPINCFG s_GpioPins[] = {
+static const IOPinCfg_t s_GpioPins[] = {
 	{BLUEIO_BUT1_PORT, BLUEIO_BUT1_PIN, BLUEIO_BUT1_PINOP,	// Button 1
 	 IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 	{BLUEIO_BUT2_PORT, BLUEIO_BUT2_PIN, BLUEIO_BUT2_PINOP,	// Button 2
@@ -252,7 +252,7 @@ static const IOPINCFG s_GpioPins[] = {
 //	     IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
-static const int s_NbGpioPins = sizeof(s_GpioPins) / sizeof(IOPINCFG);
+static const int s_NbGpioPins = sizeof(s_GpioPins) / sizeof(IOPinCfg_t);
 
 // Configure environmental sensor
 static TPHSENSOR_CFG s_TphSensorCfg = {

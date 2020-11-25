@@ -39,7 +39,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/shared_irq.h"
 
 typedef struct {
-	DEVINTRF *pDev;				// Device interface data
+	DevIntrf_t *pDev;				// Device interface data
 	IRQHANDLER Handler ;		// Device interface interrupt handler
 } IRQDATA;
 
@@ -52,7 +52,7 @@ typedef struct {
 static IRQDATA s_DevIrq[MAX_NB_DEV] = { {NULL, }, };
 
 //void SetI2cSpiIntHandler(int DevNo, DEVINTRF *pDev, IRQHANDLER Handler)
-void SetSharedIntHandler(int DevNo, DEVINTRF * const pDev, IRQHANDLER Handler)
+void SetSharedIntHandler(int DevNo, DevIntrf_t * const pDev, IRQHANDLER Handler)
 {
 	if (DevNo < 0 || DevNo >= MAX_NB_DEV)
 	{

@@ -46,7 +46,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 uint8_t g_UarTxBuff[FIFOSIZE];
 
 // Assign UART pins
-static IOPINCFG s_UartPins[] = {
+static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
@@ -57,7 +57,7 @@ static IOPINCFG s_UartPins[] = {
 static const UARTCFG s_UartCfg = {
 	.DevNo = 0,
 	.pIOPinMap = s_UartPins,
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPINCFG),
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
 	.Rate = 1000000,			// Rate
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
@@ -75,14 +75,14 @@ static const UARTCFG s_UartCfg = {
 
 UART g_Uart;
 
-static const IOPINCFG s_SpiPins[] = SPI_PINS_CFG;
+static const IOPinCfg_t s_SpiPins[] = SPI_PINS_CFG;
 
 static const SPICFG s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
 	.Phy = SPI_PHY,
     .Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
-	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPINCFG),
+	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
     .Rate = 4000000,   // Speed in Hz
     .DataSize = 8,      // Data Size
     .MaxRetry = 5,      // Max retries
@@ -214,7 +214,10 @@ int main()
 
 	// QSPI flash
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
-	g_FlashDiskIO.Init(s_MX25R3235F_QFlashCfg, &g_Spi, &g_FlashCache, 1);
+	if (g_FlashDiskIO.Init(s_MX25R3235F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
+	{
+		printf("Init Flash failed\r\n");
+	}
 
 	//g_QFlash.Init(s_QFlashCfg, &g_FlashCache, 1);
 
@@ -233,7 +236,7 @@ int main()
 
 	// Ease could take a few minutes
 	//g_FlashDiskIO.EraseBlock(0, 4);
-	//g_FlashDiskIO.Erase();
+	g_FlashDiskIO.Erase();
 	printf("Writing 2KB data...\r\n");
 
 	g_FlashDiskIO.SectWrite(1, buff);
