@@ -38,7 +38,7 @@ Hoan				Feb. 20, 2015	New EHAL
 
 extern uint32_t SystemCoreClock;
 
-uint32_t LpcSSPGetRate(DEVINTRF *pDev)
+uint32_t LpcSSPGetRate(DevIntrf_t *pDev)
 {
 	int rate = 0;
 
@@ -50,7 +50,7 @@ uint32_t LpcSSPGetRate(DEVINTRF *pDev)
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-uint32_t LpcSSPSetRate(DEVINTRF *pDev, uint32_t DataRate)
+uint32_t LpcSSPSetRate(DevIntrf_t *pDev, uint32_t DataRate)
 {
 	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
 	int div = dev->pSspReg->CPSR & 0xff;
@@ -72,7 +72,7 @@ uint32_t LpcSSPSetRate(DEVINTRF *pDev, uint32_t DataRate)
 }
 
 // Initial receive
-bool LpcSSPStartRx(DEVINTRF *pDev, uint32_t DevAddr)
+bool LpcSSPStartRx(DevIntrf_t *pDev, uint32_t DevAddr)
 {
 	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
 
@@ -85,7 +85,7 @@ bool LpcSSPStartRx(DEVINTRF *pDev, uint32_t DevAddr)
 }
 
 // Receive Data only, no Start/Stop condition
-int LpcSSPRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
+int LpcSSPRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
 {
 	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
 	int cnt = 0;
@@ -128,13 +128,13 @@ int LpcSSPRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
 }
 
 // Stop receive
-void LpcSSPStopRx(DEVINTRF *pDev)
+void LpcSSPStopRx(DevIntrf_t *pDev)
 {
 
 }
 
 // Receive stream
-int LpcSSPRx(DEVINTRF *pDev, int DevAddr, uint8_t *pBuff, int BuffLen)
+int LpcSSPRx(DevIntrf_t *pDev, int DevAddr, uint8_t *pBuff, int BuffLen)
 {
 	int cnt = 0;
 
@@ -149,7 +149,7 @@ int LpcSSPRx(DEVINTRF *pDev, int DevAddr, uint8_t *pBuff, int BuffLen)
 
 
 // Initiate transmit
-bool LpcSSPStartTx(DEVINTRF *pDev, uint32_t DevAddr)
+bool LpcSSPStartTx(DevIntrf_t *pDev, uint32_t DevAddr)
 {
 	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
 
@@ -161,7 +161,7 @@ bool LpcSSPStartTx(DEVINTRF *pDev, uint32_t DevAddr)
 }
 
 // Transmit Data only, no Start/Stop condition
-int LpcSSPTxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
+int LpcSSPTxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 {
 	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
 	int cnt = 0;
@@ -203,13 +203,13 @@ int LpcSSPTxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
 }
 
 // Stop transmit
-void LpcSSPStopTx(DEVINTRF *pDev)
+void LpcSSPStopTx(DevIntrf_t *pDev)
 {
 
 }
 
 // Transmit stream
-int LpcSSPTx(DEVINTRF *pDev, uint32_t DevAddr, uint8_t *pData, int DataLen)
+int LpcSSPTx(DevIntrf_t *pDev, uint32_t DevAddr, uint8_t *pData, int DataLen)
 {
 	int cnt = 0;
 

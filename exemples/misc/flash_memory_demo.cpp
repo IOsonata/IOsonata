@@ -77,7 +77,7 @@ UART g_Uart;
 
 static const IOPinCfg_t s_SpiPins[] = SPI_PINS_CFG;
 
-static const SPICFG s_SpiCfg = {
+static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
 	.Phy = SPI_PHY,
     .Mode = SPIMODE_MASTER,

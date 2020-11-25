@@ -57,8 +57,8 @@ bool LpcUARTWaitForTxFifo(LPCUARTDEV *pDev, uint32_t Timeout);
 #define UART_RX_CFIFO_SIZE			16
 #define UART_TX_CFIFO_SIZE			16
 
-#define UART_RX_CFIFO_MEM_SIZE			(UART_RX_CFIFO_SIZE + sizeof(CFIFOHDR))
-#define UART_TX_CFIFO_MEM_SIZE			(UART_TX_CFIFO_SIZE + sizeof(CFIFOHDR))
+#define UART_RX_CFIFO_MEM_SIZE			(UART_RX_CFIFO_SIZE + sizeof(CFifo_t))
+#define UART_TX_CFIFO_MEM_SIZE			(UART_TX_CFIFO_SIZE + sizeof(CFifo_t))
 
 uint8_t s_UARTRxFifoMem[UART_RX_CFIFO_MEM_SIZE];
 uint8_t s_UARTTxFifoMem[UART_TX_CFIFO_MEM_SIZE];
@@ -198,11 +198,11 @@ uint32_t LpcGetUartClk()
 	return SystemMainClkFreq / LPC_SYSCON->UARTCLKDIV;
 }
 
-inline void LpcUARTDisable(DEVINTRF *pDev)
+inline void LpcUARTDisable(DevIntrf_t *pDev)
 {
 }
 
-void LpcUARTEnable(DEVINTRF *pDev)
+void LpcUARTEnable(DevIntrf_t *pDev)
 {
 	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->pDevData;
 

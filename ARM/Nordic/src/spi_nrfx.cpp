@@ -57,7 +57,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;
-	SPIDEV *pSpiDev;
+	SPIDev_t *pSpiDev;
 	union {
 #ifdef SPI_PRESENT
 		NRF_SPI_Type  *pReg;	// Master I/O register map
@@ -580,7 +580,7 @@ void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	}
 }
 
-bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
+bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 {
 	if (pDev == NULL || pCfgData == NULL)
 	{

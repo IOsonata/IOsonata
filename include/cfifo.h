@@ -61,7 +61,7 @@ typedef struct __CFIFO_Header {
 
 #pragma pack(pop)
 
-//typedef CFifo_t			CFIFOHDR;
+typedef CFifo_t			CFIFOHDR;
 
 /// @brief	CFIFO handle.
 ///

@@ -52,7 +52,7 @@ void UARTSetCtrlLineState(UARTDEV *pDev, uint32_t LineState)
 	dev->pUartReg->MCR |= LineState & 3;
 }
 
-uint32_t LpcUARTGetRate(DEVINTRF *pDev)
+uint32_t LpcUARTGetRate(DevIntrf_t *pDev)
 {
 	int rate = 0;
 
@@ -127,7 +127,7 @@ int LpcUARTSetRate(DEVINTRF *pDev, int Rate)
 	return dev->pUartDev->Rate;
 }
 #else
-uint32_t LpcUARTSetRate(DEVINTRF *pDev, uint32_t Rate)
+uint32_t LpcUARTSetRate(DevIntrf_t *pDev, uint32_t Rate)
 {
 	uint32_t pclk = LpcGetUartClk();
 	uint32_t rate16 = Rate << 4;
@@ -237,7 +237,7 @@ uint32_t LpcUARTSetRate(DEVINTRF *pDev, uint32_t Rate)
 }
 #endif
 
-int LpcUARTRxData(DEVINTRF *pDev, uint8_t *pBuff, int Bufflen)
+int LpcUARTRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 {
 	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->pDevData;
 	int cnt = 0;
@@ -274,7 +274,7 @@ int LpcUARTRxData(DEVINTRF *pDev, uint8_t *pBuff, int Bufflen)
 	return cnt;
 }
 
-int LpcUARTTxData(DEVINTRF *pDev, uint8_t *pData, int Datalen)
+int LpcUARTTxData(DevIntrf_t *pDev, uint8_t *pData, int Datalen)
 {
 	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->pDevData;
 	int cnt = 0;

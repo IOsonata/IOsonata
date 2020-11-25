@@ -8,7 +8,7 @@
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#define UART_NO						0
+#define UART_DEVNO					0
 #define UART_RX_PORT				0
 #define UART_RX_PIN					18
 #define UART_RX_PINOP				1

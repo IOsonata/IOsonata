@@ -157,7 +157,7 @@ typedef struct __Imu_Rotation_Data {
 
 
 typedef struct __Imu_Config {
-	DEVEVTCB EvtHandler;
+	DevEvtHandler_t EvtHandler;
 } IMU_CFG;
 
 #ifdef __cplusplus

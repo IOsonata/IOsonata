@@ -129,7 +129,7 @@ typedef struct __ADC_Config {
 	int			OvrSample;		//!< Oversample
 	bool		bInterrupt;		//!< Enable/Disable interrupt
 	int			IntPrio;		//!< Interrupt priority
-	DEVEVTCB	EvtHandler;		//!< Device event handler
+	DevEvtHandler_t	EvtHandler;		//!< Device event handler
 } ADC_CFG;
 
 typedef struct __ADC_Data_Packet {

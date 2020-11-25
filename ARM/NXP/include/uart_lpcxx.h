@@ -264,16 +264,16 @@ extern "C" {
 
 // Common to all LPC series
 uint32_t LpcGetUartClk();
-void LpcUARTDisable(DEVINTRF *pDev);
-void LpcUARTEnable(DEVINTRF *pDev);
-uint32_t LpcUARTGetRate(DEVINTRF *pDev);
-uint32_t LpcUARTSetRate(DEVINTRF *pDev, uint32_t Rate);
-static inline bool LpcUARTStartRx(DEVINTRF *pSerDev, uint32_t DevAddr) { return true; }
-int LpcUARTRxData(DEVINTRF *pDev, uint8_t *pBuff, int Bufflen);
-static inline void LpcUARTStopRx(DEVINTRF *pSerDev) {}
-static inline bool LpcUARTStartTx(DEVINTRF *pDev, uint32_t DevAddr) { return true; }
-int LpcUARTTxData(DEVINTRF *pDev, uint8_t *pData, int Datalen);
-static inline void LpcUARTStopTx(DEVINTRF *pDev) {}
+void LpcUARTDisable(DevIntrf_t *pDev);
+void LpcUARTEnable(DevIntrf_t *pDev);
+uint32_t LpcUARTGetRate(DevIntrf_t *pDev);
+uint32_t LpcUARTSetRate(DevIntrf_t *pDev, uint32_t Rate);
+static inline bool LpcUARTStartRx(DevIntrf_t *pSerDev, uint32_t DevAddr) { return true; }
+int LpcUARTRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen);
+static inline void LpcUARTStopRx(DevIntrf_t *pSerDev) {}
+static inline bool LpcUARTStartTx(DevIntrf_t *pDev, uint32_t DevAddr) { return true; }
+int LpcUARTTxData(DevIntrf_t *pDev, uint8_t *pData, int Datalen);
+static inline void LpcUARTStopTx(DevIntrf_t *pDev) {}
 bool LpcUARTWaitForRxFifo(LPCUARTDEV *pDev, uint32_t Timeout);
 bool LpcUARTWaitForTxFifo(LPCUARTDEV *pDev, uint32_t Timeout);
 UART_STATUS LpcUARTGetStatus(LPCUARTDEV *pDev);

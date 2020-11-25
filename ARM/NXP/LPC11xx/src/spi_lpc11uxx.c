@@ -53,7 +53,7 @@ SSPDEV g_SspDev[LPC11U_MAX_SSPDEV] = {
 		{1, 0, (LPCSSPREG*)LPC_SSP1,},
 };
 
-bool SPIInit(SPIDEV *pDev, const SPICFG *pCfgData)
+bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 {
 	SSPDEV *dev = NULL;
 

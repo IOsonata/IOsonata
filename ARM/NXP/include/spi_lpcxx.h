@@ -98,35 +98,35 @@ typedef struct {
 	int 		DevNo;			// SSP device number
 	uint32_t	PClkFreq;		// Peripheral clock freq in Hz
 	LPCSSPREG 	*pSspReg;
-	SPIDEV		*pSpiDev;		// Pointer to generic SPI dev. data
+	SPIDev_t		*pSpiDev;		// Pointer to generic SPI dev. data
 } SSPDEV;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-static inline void LpcSSPDisable(DEVINTRF *pDev) {}
-static inline void LpcSSPEnable(DEVINTRF *pDev) {}
+static inline void LpcSSPDisable(DevIntrf_t *pDev) {}
+static inline void LpcSSPEnable(DevIntrf_t *pDev) {}
 
 // Get current data rate in bits/sec (Hz)
-uint32_t LpcSSPGetRate(DEVINTRF *pDev);
+uint32_t LpcSSPGetRate(DevIntrf_t *pDev);
 // Set data rate in bits/sec (Hz)
-uint32_t LpcSSPSetRate(DEVINTRF *pDev, uint32_t DataRate);
+uint32_t LpcSSPSetRate(DevIntrf_t *pDev, uint32_t DataRate);
 // Initiate receive
-bool LpcSSPStartRx(DEVINTRF *pDev, uint32_t DevAddr);
+bool LpcSSPStartRx(DevIntrf_t *pDev, uint32_t DevAddr);
 // Receive Data only, no Start/Stop condition
-int LpcSSPRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen);
+int LpcSSPRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen);
 // Stop receive
-void LpcSSPStopRx(DEVINTRF *pDev);
+void LpcSSPStopRx(DevIntrf_t *pDev);
 // Receive stream
 //int LpcSSPRx(SSPDEV *pDev, int DevAddr, uint8_t *pBuff, int BuffLen);
 
 // Initiate transmit
-bool LpcSSPStartTx(DEVINTRF *pDev, uint32_t DevAddr);
+bool LpcSSPStartTx(DevIntrf_t *pDev, uint32_t DevAddr);
 // Transmit Data only, no Start/Stop condition
-int LpcSSPTxData(DEVINTRF *pDev, uint8_t *pData, int DataLen);
+int LpcSSPTxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen);
 // Stop transmit
-void LpcSSPStopTx(DEVINTRF *pDev);
+void LpcSSPStopTx(DevIntrf_t *pDev);
 // Transmit stream
 //int LpcSSPTx(SSPDEV *pDev, int DevAddr, uint8_t *pData, int DataLen);
 
