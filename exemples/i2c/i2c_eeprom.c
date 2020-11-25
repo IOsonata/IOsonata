@@ -44,7 +44,7 @@ SOFTWARE.
 
 #include "board.h"
 
-static const I2CCFG s_I2cCfg = {
+static const I2CCfg_t s_I2cCfg = {
 	.DevNo = I2C_DEVNO,			// I2C device number
 	.Pins = {
 		{I2C_SDA_PORT, I2C_SDA_PIN, I2C_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// SDA
@@ -61,7 +61,7 @@ static const I2CCFG s_I2cCfg = {
 	.EvtCB = NULL				// Event callback
 };
 
-I2CDEV g_I2CDev;
+I2CDev_t g_I2CDev;
 
 static const SEEP_CFG s_SeepCfg = {
 	.DevAddr = 0x50,
@@ -98,11 +98,12 @@ int main()
 	uint8_t x[512];
 	uint8_t y[512];
 
+
 	// Filling test pattern
 	for (int i = 0; i < 256; i++)
 	{
-		x[i + 256] = i;
-		x[i] = 256 - i;
+		x[i] = i;
+		x[i + 256] = 256 - i;
 	}
 
 	SeepWrite(&g_SeepDev, 0, x, 512);
@@ -119,6 +120,8 @@ int main()
 		}
 	}
 
+	memset(y, 0, 512);
+	SeepWrite(&g_SeepDev, 0, y, 512);
 	return 0;
 }
 

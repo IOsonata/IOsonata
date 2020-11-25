@@ -39,7 +39,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "iopinctrl.h"
 #include "coredev/i2c.h"
 
-void I2CBusReset(I2CDEV * const pDev)
+void I2CBusReset(I2CDev_t * const pDev)
 {
 	if (pDev == NULL)
 	{
@@ -89,7 +89,7 @@ void I2CBusReset(I2CDEV * const pDev)
  *
  * @return	None
  */
-void I2CSetReadRqstData(I2CDEV * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen) {
+void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen) {
 	if (SlaveIdx < 0 || SlaveIdx >= I2C_SLAVEMODE_MAX_ADDR || pDev == NULL)
 		return;
 
@@ -110,7 +110,7 @@ void I2CSetReadRqstData(I2CDEV * const pDev, int SlaveIdx, uint8_t * const pData
  *
  * @return	None
  */
-void I2CSetWriteRqstBuffer(I2CDEV * const pDev, int SlaveIdx, uint8_t * const pBuff, int BuffLen)
+void I2CSetWriteRqstBuffer(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pBuff, int BuffLen)
 {
 	if (SlaveIdx < 0 || SlaveIdx >= I2C_SLAVEMODE_MAX_ADDR || pDev == NULL)
 		return;

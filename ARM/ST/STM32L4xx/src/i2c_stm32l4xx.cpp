@@ -46,7 +46,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 typedef struct {
 	int DevNo;
-	I2CDEV *pI2cDev;
+	I2CDev_t *pI2cDev;
 	I2C_TypeDef	*pReg;
 } STM32L4XX_I2CDEV;
 
@@ -176,7 +176,7 @@ void I2CIrqHandler(int DevNo)
 }
 
 
-bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
+bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 {
 	I2C_TypeDef *reg;
 	uint32_t cr1reg = 0;

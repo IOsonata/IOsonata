@@ -77,7 +77,7 @@ static const UARTCFG s_UartCfg = {
 UART g_Uart;
 
 //********** I2C Master **********
-static const I2CCFG s_I2cCfgMaster = {
+static const I2CCfg_t s_I2cCfgMaster = {
 	I2C_MASTER_DEVNO,			// I2C device number
 	{
 		{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
@@ -102,7 +102,7 @@ I2C g_I2CMaster;
 
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-static const I2CCFG s_I2cCfgSlave = {
+static const I2CCfg_t s_I2cCfgSlave = {
 	I2C_SLAVE_DEVNO,			// I2C device number
 	{
 		{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},		// SDA

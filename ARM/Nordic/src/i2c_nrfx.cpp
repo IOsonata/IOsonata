@@ -62,7 +62,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;
-	I2CDEV *pI2cDev;
+	I2CDev_t *pI2cDev;
 	union {
 #ifdef TWI_PRESENT
 		NRF_TWI_Type *pReg;		// Master register map
@@ -544,7 +544,7 @@ void nRFxI2CStopTx(DevIntrf_t * const pDev)
 
 void nRFxI2CReset(DevIntrf_t * const pDev)
 {
-    I2CDEV *dev = (I2CDEV*)((NRFX_I2CDEV*)pDev->pDevData)->pI2cDev;
+	I2CDev_t *dev = (I2CDev_t*)((NRFX_I2CDEV*)pDev->pDevData)->pI2cDev;
 
     I2CBusReset(dev);
 
@@ -650,7 +650,7 @@ void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
 
 }
 
-bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
+bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 {
 	if (pDev == NULL || pCfgData == NULL)
 	{

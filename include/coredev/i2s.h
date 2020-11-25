@@ -100,7 +100,7 @@ typedef struct __I2S_Config {
 	int RxFifoMemSize;
 	uint8_t *pTxFifoMem;
 	int TxFifoMemSize;
-} I2SCFG;
+} I2SCfg_t;
 
 /// Device driver data require by low level functions
 typedef struct __I2S_Device {
@@ -116,7 +116,7 @@ typedef struct __I2S_Device {
 	HCFIFO hRxFifo;
 	HCFIFO hTxFifo;
 	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
-} I2SDEV;
+} I2SDev_t;
 
 #pragma pack(pop)
 
@@ -134,20 +134,20 @@ extern "C" {
  *
  * @return	true - Initialization success
  */
-bool I2SInit(I2SDEV * const pDev, const I2SCFG * const pCfg);
+bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfg);
 
-static inline void I2SEnable(I2SDEV *const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
-static inline void I2SDisable(I2SDEV *const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
+static inline void I2SEnable(I2SDev_t *const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
+static inline void I2SDisable(I2SDev_t *const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
 
 #ifdef __cplusplus
 }
 
 class I2S : public DeviceIntrf {
 public:
-	bool Init(const I2SCFG &Cfg) { return I2SInit(&vDevData, &Cfg); }
+	bool Init(const I2SCfg_t &Cfg) { return I2SInit(&vDevData, &Cfg); }
 	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
-	operator I2SDEV& () { return vDevData; }
-	operator I2SDEV* const () { return &vDevData; }
+	operator I2SDev_t& () { return vDevData; }
+	operator I2SDev_t* const () { return &vDevData; }
 	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
 	uint32_t Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
@@ -176,7 +176,7 @@ public:
 
 protected:
 private:
-	I2SDEV vDevData;
+	I2SDev_t vDevData;
 };
 
 #endif // __cplusplus

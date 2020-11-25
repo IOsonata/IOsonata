@@ -242,7 +242,7 @@ SPI g_Spi;
 //DeviceIntrf *g_pIntrf = &g_Spi;
 
 // Configure I2C interface
-static const I2CCFG s_I2cCfg = {
+static const I2CCfg_t s_I2cCfg = {
 	.DevNo = 0,			// I2C device number
 	.Pins = {
 #if defined(TPH_BME280) || defined(TPH_BME680)

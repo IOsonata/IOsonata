@@ -205,7 +205,7 @@ DeviceIntrf *g_pIntrf = &g_Spi;
 #else
 
 // Configure I2C interface
-static const I2CCFG s_I2cCfg = {
+static const I2CCfg_t s_I2cCfg = {
 	0,			// I2C device number
 	{
 

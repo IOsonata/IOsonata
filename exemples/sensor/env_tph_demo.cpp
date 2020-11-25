@@ -147,7 +147,7 @@ static const SPICFG s_SpiCfg = {
 SPI g_Spi;
 
 //********** I2C **********
-static const I2CCFG s_I2cCfg = {
+static const I2CCfg_t s_I2cCfg = {
 	0,			// I2C device number
 	{
 		{I2C0_SDA_PORT, I2C0_SDA_PIN, I2C0_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
