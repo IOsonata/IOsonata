@@ -62,7 +62,7 @@ typedef struct __EInk_Intrf_Cfg {
 	EIINTRF_TYPE Type;				//!< Interface type SPI or Bitbanging
 	const IOPinCfg_t *pIOPinMap;		//!< Control pins
 	int NbIOPins;					//!< Total number of pin to use
-	SPIDEV * const pSpiDev;			//!< Pointer to SPI device data if SPI mode is used
+	SPIDev_t * const pSpiDev;			//!< Pointer to SPI device data if SPI mode is used
 	int SpiCsIdx;					//!< CS index in the SPI driver
 } EInkIntrfCfg_t;//EIINTRF_CFG;
 
@@ -72,7 +72,7 @@ typedef struct __EInk_Device_Intrf {
 	const IOPinCfg_t *pIOPinMap;
 	int NbIOPins;
 	DevIntrf_t DevIntrf;
-	SPIDEV *pSpiDev;
+	SPIDev_t *pSpiDev;
 	int SpiCsIdx;
 } EInkIntrf_t;//EIINTRF_DEV;
 

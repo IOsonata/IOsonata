@@ -77,7 +77,7 @@ bool FlashDiskIO::Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
 
     if (pInterf->Type() == DEVINTRF_TYPE_QSPI)
     {
-    	SPIDEV *dev = *(SPI*)pInterf;
+    	SPIDev_t *dev = *(SPI*)pInterf;
     	QuadSPISetMemSize(dev, vTotalSize);
     }
 

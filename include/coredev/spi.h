@@ -136,7 +136,9 @@ typedef struct __SPI_Config {
 	bool bIntEn;			//!< Interrupt enable
 	int IntPrio;			//!< Interrupt priority
 	DevIntrfEvtHandler_t EvtCB;	//!< Event callback
-} SPICFG;
+} SPICfg_t;
+
+typedef SPICfg_t	SPICFG;
 
 typedef struct __QSPI_Cmd_Setup {
 	uint8_t Cmd;
@@ -146,11 +148,13 @@ typedef struct __QSPI_Cmd_Setup {
 	uint8_t AddrMode;
 	uint32_t DataLen;
 	uint8_t DataMode;
-} QSPI_CMD_SETUP;
+} QSPICmdSetup_t;
+
+typedef QSPICmdSetup_t	QSPI_CMD_SETUP;
 
 /// Device driver data require by low level functions
 typedef struct __SPI_Device {
-	SPICFG Cfg;				//!< Config data
+	SPICfg_t Cfg;				//!< Config data
 	DevIntrf_t DevIntrf;		//!< device interface implementation
 	int	FirstRdData;		//!< This is to keep the first dummy read data of SPI
 							//!< there are devices that may return a status code through this
@@ -159,7 +163,9 @@ typedef struct __SPI_Device {
 	int RxBuffLen[SPI_SLAVEMODE_MAX_DEV];	//!< Rx buffer length in bytes
 	uint8_t *pTxData[SPI_SLAVEMODE_MAX_DEV];//!< Pointer to slave mode tx data
 	int TxDataLen[SPI_SLAVEMODE_MAX_DEV];	//!< Tx data length in bytes
-} SPIDEV;
+} SPIDev_t;
+
+typedef SPIDev_t	SPIDEV;
 
 #pragma pack(pop)
 
@@ -168,39 +174,39 @@ extern "C" {
 #endif	// __cplusplus
 
 // Require implementations
-bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData);
+bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData);
 
-static inline int SPIGetRate(SPIDEV * const pDev) { return pDev->DevIntrf.GetRate(&pDev->DevIntrf); }
-static inline int SPISetRate(SPIDEV * const pDev, int Rate) {
+static inline int SPIGetRate(SPIDev_t * const pDev) { return pDev->DevIntrf.GetRate(&pDev->DevIntrf); }
+static inline int SPISetRate(SPIDev_t * const pDev, int Rate) {
 	return pDev->DevIntrf.SetRate(&pDev->DevIntrf, Rate);
 }
-static inline void SPIEnable(SPIDEV * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
-static inline void SPIDisable(SPIDEV * const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
-static inline int SPIRx(SPIDEV * const pDev, int DevCs, uint8_t *pBuff, int Bufflen) {
+static inline void SPIEnable(SPIDev_t * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
+static inline void SPIDisable(SPIDev_t * const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
+static inline int SPIRx(SPIDev_t * const pDev, int DevCs, uint8_t *pBuff, int Bufflen) {
 	return DeviceIntrfRx(&pDev->DevIntrf, DevCs, pBuff, Bufflen);
 }
-static inline int SPITx(SPIDEV * const pDev, int DevCs, uint8_t *pData, int DataLen) {
+static inline int SPITx(SPIDev_t * const pDev, int DevCs, uint8_t *pData, int DataLen) {
 	return DeviceIntrfTx(&pDev->DevIntrf, DevCs, pData, DataLen);
 }
-static inline bool SPIStartRx(SPIDEV * const pDev, int DevAddr) {
+static inline bool SPIStartRx(SPIDev_t * const pDev, int DevAddr) {
 	return DeviceIntrfStartRx(&pDev->DevIntrf, DevAddr);
 }
-static inline int SPIRxData(SPIDEV * const pDev, uint8_t *pBuff, int Bufflen) {
+static inline int SPIRxData(SPIDev_t * const pDev, uint8_t *pBuff, int Bufflen) {
 	return DeviceIntrfRxData(&pDev->DevIntrf, pBuff, Bufflen);
 }
-static inline void SPIStopRx(SPIDEV * const pDev) { DeviceIntrfStopRx(&pDev->DevIntrf); }
-static inline bool SPIStartTx(SPIDEV * const pDev, int DevAddr) {
+static inline void SPIStopRx(SPIDev_t * const pDev) { DeviceIntrfStopRx(&pDev->DevIntrf); }
+static inline bool SPIStartTx(SPIDev_t * const pDev, int DevAddr) {
 	return DeviceIntrfStartTx(&pDev->DevIntrf, DevAddr);
 }
-static inline int SPITxData(SPIDEV * const pDev, uint8_t *pData, int Datalen) {
+static inline int SPITxData(SPIDev_t * const pDev, uint8_t *pData, int Datalen) {
 	return DeviceIntrfTxData(&pDev->DevIntrf, pData, Datalen);
 }
-static inline void SPIStopTx(SPIDEV * const pDev) { DeviceIntrfStopTx(&pDev->DevIntrf); }
+static inline void SPIStopTx(SPIDev_t * const pDev) { DeviceIntrfStopTx(&pDev->DevIntrf); }
 
 /**
  * @brief	Get current physical interface type
  */
-static inline SPIPHY SPIGetPhy(SPIDEV * const pDev) { return pDev->Cfg.Phy; }
+static inline SPIPHY SPIGetPhy(SPIDev_t * const pDev) { return pDev->Cfg.Phy; }
 
 /**
  * @brief	Change SPI physical interface type
@@ -211,7 +217,7 @@ static inline SPIPHY SPIGetPhy(SPIDEV * const pDev) { return pDev->Cfg.Phy; }
  * @param	pDev : Device Interface Handle
  * @param	Phy	 : New SPI physical interface type
  */
-SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy);
+SPIPHY SPISetPhy(SPIDev_t * const pDev, SPIPHY Phy);
 
 /**
  * @brief	Set Quad SPI Flash size
@@ -221,7 +227,7 @@ SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy);
  * @param	pDev : Pointer SPI driver data initialized by SPIInit function
  * @param	Size : Flash memory size in KBytes
  */
-void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size);
+void QuadSPISetMemSize(SPIDev_t * const pDev, uint32_t Size);
 
 /**
  * @brief	Configure and send command on Quad SPI interface
@@ -237,7 +243,7 @@ void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size);
  *
  * @return	true - successful
  */
-bool QuadSPISendCmd(SPIDEV * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle);
+bool QuadSPISendCmd(SPIDev_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle);
 
 /**
  * @brief	Set SPI slave data for read command.
@@ -252,7 +258,7 @@ bool QuadSPISendCmd(SPIDEV * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t Add
  *
  * @return	None
  */
-void SPISetSlaveRxBuffer(SPIDEV * const pDev, int SlaveIdx, uint8_t * const pBuff, int BuffLen);
+void SPISetSlaveRxBuffer(SPIDev_t * const pDev, int SlaveIdx, uint8_t * const pBuff, int BuffLen);
 
 /**
  * @brief	Set I2C slave buff for write command.
@@ -267,7 +273,7 @@ void SPISetSlaveRxBuffer(SPIDEV * const pDev, int SlaveIdx, uint8_t * const pBuf
  *
  * @return	None
  */
-void SPISetSlaveTxData(SPIDEV * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen);
+void SPISetSlaveTxData(SPIDev_t * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen);
 
 
 #ifdef __cplusplus
@@ -285,11 +291,11 @@ public:
 
 	SPI(SPI&);	// Copy ctor not allowed
 
-	bool Init(const SPICFG &CfgData) { return SPIInit(&vDevData, &CfgData); }
+	bool Init(const SPICfg_t &CfgData) { return SPIInit(&vDevData, &CfgData); }
 
 	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
-	operator SPIDEV& () { return vDevData; };			// Get config data
-	operator SPIDEV * const () { return &vDevData; };	// Get pointer to device data
+	operator SPIDev_t& () { return vDevData; };			// Get config data
+	operator SPIDev_t * const () { return &vDevData; };	// Get pointer to device data
 	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
 	uint32_t Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
@@ -356,7 +362,7 @@ public:
 	}
 
 private:
-	SPIDEV vDevData;
+	SPIDev_t vDevData;
 };
 
 #endif	// __cplusplus

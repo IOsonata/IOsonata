@@ -125,7 +125,7 @@ static const IOPinCfg_t s_SpiPins[] = {
      IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 };
 
-static const SPICFG s_SpiCfg = {
+static const SPICfg_t s_SpiCfg = {
     0,//SPI_DEVNO,
 	SPIPHY_NORMAL,
     SPIMODE_MASTER,

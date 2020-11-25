@@ -131,7 +131,7 @@ typedef struct __I2C_Config {
 	bool bSmBus;			//!< Enable SMBUS support
 } I2CCfg_t;
 
-//typedef I2CCfg_t	I2CCFG;
+typedef I2CCfg_t	I2CCFG;
 
 /// Device driver data require by low level functions
 typedef struct {
@@ -148,7 +148,7 @@ typedef struct {
 	bool bSmBus;			//!< SMBUS support
 } I2CDev_t;
 
-//typedef I2CDev_t	I2CDEV;
+typedef I2CDev_t	I2CDEV;
 
 #pragma pack(pop)
 

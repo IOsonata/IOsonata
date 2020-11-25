@@ -88,7 +88,7 @@ static const IOPinCfg_t s_SpiMasterPins[] = {
      IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// CS
 };
 
-static const SPICFG s_SpiMasterCfg = {
+static const SPICfg_t s_SpiMasterCfg = {
 	SPI_MASTER_DEVNO,
 	SPIPHY_NORMAL,
     SPIMODE_MASTER,
@@ -124,7 +124,7 @@ static const IOPinCfg_t s_SpiSlavePins[] = {
      IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 };
 
-static const SPICFG s_SpiSlaveCfg = {
+static const SPICfg_t s_SpiSlaveCfg = {
 	SPI_SLAVE_DEVNO,
 	SPIPHY_NORMAL,
     SPIMODE_SLAVE,

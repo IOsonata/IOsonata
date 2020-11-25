@@ -52,7 +52,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * @return	None
  */
-void SPISetSlaveRxBuffer(SPIDEV * const pDev, int SlaveIdx, uint8_t * const pBuff, int BuffLen) {
+void SPISetSlaveRxBuffer(SPIDev_t * const pDev, int SlaveIdx, uint8_t * const pBuff, int BuffLen) {
 	if (SlaveIdx < 0 || SlaveIdx >= SPI_SLAVEMODE_MAX_DEV || pDev == NULL)
 		return;
 
@@ -73,7 +73,7 @@ void SPISetSlaveRxBuffer(SPIDEV * const pDev, int SlaveIdx, uint8_t * const pBuf
  *
  * @return	None
  */
-void SPISetSlaveTxData(SPIDEV * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen)
+void SPISetSlaveTxData(SPIDev_t * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen)
 {
 	if (SlaveIdx < 0 || SlaveIdx >= SPI_SLAVEMODE_MAX_DEV || pDev == NULL)
 		return;
@@ -82,7 +82,7 @@ void SPISetSlaveTxData(SPIDEV * const pDev, int SlaveIdx, uint8_t * const pData,
 	pDev->TxDataLen[SlaveIdx] = DataLen;
 }
 
-__attribute__((weak)) SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy)
+__attribute__((weak)) SPIPHY SPISetPhy(SPIDev_t * const pDev, SPIPHY Phy)
 {
 	pDev->Cfg.Phy = Phy;
 
@@ -97,7 +97,7 @@ __attribute__((weak)) SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy)
  * @param	pDev : Pointer SPI driver data initialized by SPIInit function
  * @param	Size : Flash memory size in KBytes
  */
-__attribute__((weak)) void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size)
+__attribute__((weak)) void QuadSPISetMemSize(SPIDev_t * const pDev, uint32_t Size)
 {
 }
 
@@ -115,7 +115,7 @@ __attribute__((weak)) void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size)
  *
  * @return	true - successful
  */
-__attribute__((weak)) bool QuadSPISendCmd(SPIDEV * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
+__attribute__((weak)) bool QuadSPISendCmd(SPIDev_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
 {
 	return false;
 }
