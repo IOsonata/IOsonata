@@ -69,7 +69,7 @@ typedef struct _nRF_UART_Dev {
 		NRF_UARTE_Type *pDmaReg;	// UART registers
 #endif
 	};
-	UARTDEV	*pUartDev;				// Pointer to generic UART dev. data
+	UARTDev_t *pUartDev;				// Pointer to generic UART dev. data
 	uint32_t RxPin;
 	uint32_t TxPin;
 	uint32_t CtsPin;
@@ -778,7 +778,7 @@ static void apply_workaround_for_enable_anomaly(NRFX_UARTDEV * const pDev)
 #endif // defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || defined(NRF9160_XXAA)
 }
 
-bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
+bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 {
 	// Config I/O pins
 	if (pDev == NULL || pCfg == NULL)
@@ -1095,13 +1095,13 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	return true;
 }
 
-void UARTSetCtrlLineState(UARTDEV * const pDev, uint32_t LineState)
+void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 {
 //	NRFUARTDEV *dev = (NRFUARTDEV *)pDev->SerIntrf.pDevData;
 
 }
 
-UARTDEV * const UARTGetInstance(int DevNo)
+UARTDev_t * const UARTGetInstance(int DevNo)
 {
 	return s_nRFxUARTDev[DevNo].pUartDev;
 }

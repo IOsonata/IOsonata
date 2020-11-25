@@ -40,13 +40,13 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "nrf_log_backend_uart.h"
 
-UARTDEV *g_pUart = NULL;
+UARTDev_t *g_pUart = NULL;
 
 #define BACKEND_BUFFER_SIZE 255//NRF_LOG_BACKEND_UART_TEMP_BUFFER_SIZE
 
 static uint8_t g_UartLogBuff[BACKEND_BUFFER_SIZE];
 
-void nrf_log_uart_init(UARTDEV * const pUart)
+void nrf_log_uart_init(UARTDev_t * const pUart)
 {
 	if (pUart)
 	{

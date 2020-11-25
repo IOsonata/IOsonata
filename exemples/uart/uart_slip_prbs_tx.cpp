@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define DEMO_C
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 // Allocate FIFO memory
 #define SLIPTEST_BUFSIZE		92
@@ -60,7 +60,7 @@ uint8_t g_TxBuff[FIFOSIZE];
 static const UART_PORTPINS;
 
 // UART configuration data
-const UARTCFG g_UartCfg = {
+const UARTCfg_t g_UartCfg = {
 	.DevNo = UART_NO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = UART_PORTPIN_COUNT,
@@ -82,7 +82,7 @@ const UARTCFG g_UartCfg = {
 
 #ifdef DEMO_C
 // For C programming
-UARTDEV g_UartDev;
+UARTDev_t g_UartDev;
 SLIPDEV g_SlipDev;
 #else
 // For C++ object programming
@@ -91,7 +91,7 @@ UART g_Uart;
 Slip g_Slip;
 #endif
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 //	uint8_t buff[SLIPTEST_BUFSIZE];

@@ -51,7 +51,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define TEST_BUFSIZE		64
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE			CFIFO_MEMSIZE(TEST_BUFSIZE * 4)
 
@@ -65,7 +65,7 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 // UART configuration data
-const UARTCFG g_UartCfg = {
+const UARTCfg_t g_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
@@ -87,7 +87,7 @@ const UARTCFG g_UartCfg = {
 
 #ifdef DEMO_C
 // For C programming
-UARTDEV g_UartDev;
+UARTDev_t g_UartDev;
 #else
 // For C++ object programming
 // UART object instance
@@ -98,7 +98,7 @@ UART g_Uart;
 MCU_OSC g_McuOsc = BOARD_OSC;
 #endif
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[TEST_BUFSIZE];

@@ -92,7 +92,7 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 // UART configuration data
-const UARTCFG g_UartCfg = {
+const UARTCfg_t g_UartCfg = {
 	0,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),

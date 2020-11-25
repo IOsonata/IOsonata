@@ -105,14 +105,16 @@ typedef enum {
 
 #define UART_RETRY_MAX			100
 
-typedef struct __Uart_Dev UARTDEV;
-
 typedef enum {
 	UART_EVT_RXTIMEOUT,
 	UART_EVT_RXDATA,
 	UART_EVT_TXREADY,
 	UART_EVT_LINESTATE,
 } UART_EVT;
+
+typedef struct __Uart_Dev UARTDev_t;
+typedef UARTDev_t	UARTDEV;
+
 
 /**
  * @brief	Event handler callback. This is normally being called within interrupts, avoid blocking
@@ -131,7 +133,8 @@ typedef enum {
  *
  * @return number of bytes written to pBuffer for transmit
  */
-typedef int (*UARTEVTCB)(UARTDEV * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+typedef int (*UARTEvtHandler_t)(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+typedef UARTEvtHandler_t	UARTEVTCB;
 
 #pragma pack(push, 4)
 
@@ -147,7 +150,7 @@ typedef struct {
 	UART_FLWCTRL FlowControl;	//!< Flow control
 	bool bIntMode;				//!< Interrupt mode support
 	int IntPrio;				//!< Interrupt priority
-	UARTEVTCB EvtCallback;		//!< UART event callback
+	UARTEvtHandler_t EvtCallback;		//!< UART event callback
 	bool bFifoBlocking;			//!< CFIFO operating mode, false : drop when full
 	int RxMemSize;				//!< Memory size in bytes for Rx CFIFO
 	uint8_t *pRxMem;			//!< Pointer to memory allocated for RX CFIFO
@@ -160,7 +163,9 @@ typedef struct {
 	int	IrDAPulseDiv;			//!< Fix pulse divider
 	UART_DUPLEX Duplex;			//!< Duplex mode
 	UART_MODE Mode;				//!< UART operation mode async, sync, network...
-} UARTCFG;
+} UARTCfg_t;
+
+typedef UARTCfg_t	UARTCFG;
 
 /// Device driver data require by low level functions
 struct __Uart_Dev {
@@ -177,7 +182,7 @@ struct __Uart_Dev {
 	bool bIrDAFixPulse;			//!< Enable IrDA fix pulse
 	int	IrDAPulseDiv;			//!< Fix pulse divider
 	DevIntrf_t DevIntrf;			//!< Device interface implementation
-	UARTEVTCB EvtCallback;		//!< UART event callback
+	UARTEvtHandler_t EvtCallback;		//!< UART event callback
 	void *pObj;					//!< Pointer to UART object instance
 	HCFIFO hRxFifo;				//!< Rx FIFO handle
 	HCFIFO hTxFifo;				//!< Tx Fifo handle
@@ -200,24 +205,24 @@ extern "C" {
 #endif	// __cplusplus
 
 // Require implementations
-bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfgData);
-void UARTSetCtrlLineState(UARTDEV * const pDev, uint32_t LineState);
-UARTDEV * const UARTGetInstance(int DevNo);
+bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfgData);
+void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState);
+UARTDev_t * const UARTGetInstance(int DevNo);
 
-static inline int UARTGetRate(UARTDEV * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
-static inline int UARTSetRate(UARTDEV * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }
-static inline void UARTEnable(UARTDEV * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
-static inline void UARTDisable(UARTDEV * const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
-static inline int UARTRx(UARTDEV * const pDev, uint8_t *pBuff, int Bufflen) {
+static inline int UARTGetRate(UARTDev_t * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
+static inline int UARTSetRate(UARTDev_t * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }
+static inline void UARTEnable(UARTDev_t * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
+static inline void UARTDisable(UARTDev_t * const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
+static inline int UARTRx(UARTDev_t * const pDev, uint8_t *pBuff, int Bufflen) {
 	return DeviceIntrfRx(&pDev->DevIntrf, 0, pBuff, Bufflen);
 }
-static inline int UARTTx(UARTDEV * const pDev, uint8_t *pData, int Datalen) {
+static inline int UARTTx(UARTDev_t * const pDev, uint8_t *pData, int Datalen) {
 	return DeviceIntrfTx(&pDev->DevIntrf, 0, pData, Datalen);
 }
-void UARTprintf(UARTDEV * const pDev, const char *pFormat, ...);
-void UARTvprintf(UARTDEV * const pDev, const char *pFormat, va_list vl);
-void UARTRetargetEnable(UARTDEV * const pDev, int FileNo);
-void UARTRetargetDisable(UARTDEV * const pDev, int FileNo);
+void UARTprintf(UARTDev_t * const pDev, const char *pFormat, ...);
+void UARTvprintf(UARTDev_t * const pDev, const char *pFormat, va_list vl);
+void UARTRetargetEnable(UARTDev_t * const pDev, int FileNo);
+void UARTRetargetDisable(UARTDev_t * const pDev, int FileNo);
 
 #ifdef __cplusplus
 }
@@ -234,12 +239,12 @@ public:
 	virtual ~UART() {}
 	UART(UART&);
 
-	virtual bool Init(const UARTCFG &CfgData) {
+	virtual bool Init(const UARTCfg_t &CfgData) {
 		return UARTInit(&vDevData, &CfgData);
 	}
 
 	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
-	operator UARTDEV *  const () { return &vDevData; }
+	operator UARTDev_t *  const () { return &vDevData; }
 
 	// Set data baudrate
 	virtual uint32_t Rate(uint32_t DataRate) { return UARTSetRate(&vDevData, DataRate); }
@@ -280,7 +285,7 @@ public:
     }
 
 private:
-	UARTDEV	vDevData;
+	UARTDev_t	vDevData;
 };
 
 

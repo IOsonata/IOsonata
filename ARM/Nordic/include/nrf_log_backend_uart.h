@@ -66,7 +66,7 @@ typedef struct {
     NRF_LOG_BACKEND_DEF(_name, nrf_log_backend_uart_api, NULL)
 
 void nrf_log_backend_uart_init(void);
-void nrf_log_uart_init(UARTDEV * const pUartDev);
+void nrf_log_uart_init(UARTDev_t * const pUartDev);
 
 #ifdef __cplusplus
 }

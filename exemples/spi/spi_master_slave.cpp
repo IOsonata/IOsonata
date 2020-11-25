@@ -55,7 +55,7 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 // UART configuration data
-static const UARTCFG s_UartCfg = {
+static const UARTCfg_t s_UartCfg = {
 	UART_DEVNO,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),

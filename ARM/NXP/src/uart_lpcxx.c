@@ -44,7 +44,7 @@ Modified by          Date              Description
 extern uint32_t SystemCoreClock;
 extern uint32_t SystemClkFreq;
 
-void UARTSetCtrlLineState(UARTDEV *pDev, uint32_t LineState)
+void UARTSetCtrlLineState(UARTDev_t *pDev, uint32_t LineState)
 {
 	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->DevIntrf.pDevData;
 

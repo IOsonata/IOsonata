@@ -211,7 +211,7 @@ static const BLEINTRF_CFG s_BleInrfCfg = {
 
 BleIntrf g_BleIntrf;
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 // UART configuration data
 
@@ -229,7 +229,7 @@ static const IOPinCfg_t s_UartPins[] = {
 };
 
 /// UART configuration
-const UARTCFG g_UartCfg = {
+const UARTCfg_t g_UartCfg = {
 	.DevNo = 0,							// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
@@ -326,7 +326,7 @@ void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 	}
 }
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];

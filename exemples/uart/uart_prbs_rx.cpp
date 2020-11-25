@@ -50,7 +50,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 static const UART_PORTPINS;
 
 // UART configuration data
-const UARTCFG g_UartCfg = {
+const UARTCfg_t g_UartCfg = {
 	.DevNo = UART_NO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = UART_PORTPIN_COUNT,
@@ -73,7 +73,7 @@ const UARTCFG g_UartCfg = {
 #define DEMO_C
 #ifdef DEMO_C
 // For C
-UARTDEV g_UartDev;
+UARTDev_t g_UartDev;
 #else
 // For C++
 // UART object instance

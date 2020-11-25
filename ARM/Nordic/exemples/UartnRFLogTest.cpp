@@ -42,7 +42,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "board.h"
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE			CFIFO_MEMSIZE(64)
 
@@ -56,7 +56,7 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 // UART configuration data
-static const UARTCFG s_UartCfg = {
+static const UARTCfg_t s_UartCfg = {
 	.DevNo = 0,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
@@ -78,7 +78,7 @@ static const UARTCFG s_UartCfg = {
 
 UART g_Uart;
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];

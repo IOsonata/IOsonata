@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern char s_Buffer[];	// defined in sbuffer.c
 extern int s_BufferSize;
 
-void UARTprintf(UARTDEV * const pDev, const char *pFormat, ...)
+void UARTprintf(UARTDev_t * const pDev, const char *pFormat, ...)
 {
 	va_list vl;
     va_start(vl, pFormat);
@@ -50,7 +50,7 @@ void UARTprintf(UARTDEV * const pDev, const char *pFormat, ...)
     va_end(vl);
 }
 
-void UARTvprintf(UARTDEV * const pDev, const char *pFormat, va_list vl)
+void UARTvprintf(UARTDev_t * const pDev, const char *pFormat, va_list vl)
 {
     vsnprintf(s_Buffer, s_BufferSize, pFormat, vl);
     int len = strlen(s_Buffer);

@@ -66,7 +66,7 @@ STDDEV g_UartStdDev = {
 	NULL
 };
 
-void UARTRetargetEnable(UARTDEV * const pDev, int FileNo)
+void UARTRetargetEnable(UARTDev_t * const pDev, int FileNo)
 {
 	if (g_UartStdDev.pDevObj == NULL)
 		g_UartStdDev.pDevObj = pDev;
@@ -85,7 +85,7 @@ void UARTRetargetEnable(UARTDEV * const pDev, int FileNo)
 	}
 }
 
-void UARTRetargetDisable(UARTDEV * const pDev, int FileNo)
+void UARTRetargetDisable(UARTDev_t * const pDev, int FileNo)
 {
 	switch (FileNo)
 	{
@@ -115,7 +115,7 @@ int UARTStdDevClose(void * const pDevObj, int Handle)
 
 int UARTStdDevRead(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len)
 {
-	UARTDEV *dev = (UARTDEV *)pDevObj;
+	UARTDev_t *dev = (UARTDev_t *)pDevObj;
 	int l = 0;
 
 	if (Handle == dev->hStdIn)
@@ -141,7 +141,7 @@ int UARTStdDevRead(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len)
 
 int UARTStdDevWrite(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len)
 {
-	UARTDEV *dev = (UARTDEV *)pDevObj;
+	UARTDev_t *dev = (UARTDev_t *)pDevObj;
 
 	if (Handle == dev->hStdOut)
 	{

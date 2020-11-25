@@ -212,7 +212,7 @@ void LpcUARTEnable(DevIntrf_t *pDev)
 	dev->pUartDev->TxDropCnt = 0;
 }
 
-bool UARTInit(UARTDEV *pDev, const UARTCFG *pCfg)
+bool UARTInit(UARTDev_t *pDev, const UARTCfg_t *pCfg)
 {
 	LPCUARTREG *reg = NULL;
 
@@ -228,7 +228,7 @@ bool UARTInit(UARTDEV *pDev, const UARTCFG *pCfg)
 	}
 
 	// Configure I/O pins
-	IOPINCFG *pincfg = (IOPINCFG*)pCfg->pIOPinMap;
+	IOPinCfg_t *pincfg = (IOPinCfg_t*)pCfg->pIOPinMap;
 	IOPinCfg(pincfg, pCfg->NbIOPins);
 
 

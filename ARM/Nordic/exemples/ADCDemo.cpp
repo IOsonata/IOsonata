@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //#define ADC_DEMO_INTERRUPT_ENABLE
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void ADVEventHandler(Device *pDevObj, DEV_EVT Evt);
 
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
@@ -58,7 +58,7 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 // UART configuration data
-static const UARTCFG s_UartCfg = {
+static const UARTCfg_t s_UartCfg = {
 	0,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
@@ -186,7 +186,7 @@ void ADVEventHandler(Device *pAdcDev, DEV_EVT Evt)
 	}
 }
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];

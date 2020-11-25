@@ -54,7 +54,7 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 // UART configuration data
-static const UARTCFG s_UartCfg = {
+static const UARTCfg_t s_UartCfg = {
 	.DevNo = 0,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),

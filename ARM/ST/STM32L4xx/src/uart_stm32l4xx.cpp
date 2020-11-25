@@ -61,7 +61,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef struct _STM32L4X_UART_Dev {
 	int DevNo;				// UART interface number
 	USART_TypeDef *pReg;	// UART registers
-	UARTDEV	*pUartDev;		// Pointer to generic UART dev. data
+	UARTDev_t	*pUartDev;		// Pointer to generic UART dev. data
 	uint32_t RxDropCnt;
 	uint32_t RxTimeoutCnt;
 	uint32_t ErrCnt;
@@ -108,7 +108,7 @@ static STM32L4X_UARTDEV s_Stm32l4xUartDev[] = {
 
 static const int s_NbUartDev = sizeof(s_Stm32l4xUartDev) / sizeof(STM32L4X_UARTDEV);
 
-UARTDEV * const UARTGetInstance(int DevNo)
+UARTDev_t * const UARTGetInstance(int DevNo)
 {
 	return s_Stm32l4xUartDev[DevNo].pUartDev;
 }
@@ -125,7 +125,7 @@ bool STM32L4xUARTWaitForTxReady(STM32L4X_UARTDEV * const pDev, uint32_t Timeout)
 
 static void UART_IRQHandler(STM32L4X_UARTDEV * const pDev)
 {
-	UARTDEV *dev = (UARTDEV *)pDev->pUartDev;
+	UARTDev_t *dev = (UARTDev_t *)pDev->pUartDev;
 	int len = 0;
 	int cnt = 0;
 	uint32_t iflag = pDev->pReg->ISR;
@@ -474,7 +474,7 @@ static void STM32L4xUARTReset(DevIntrf_t * const pDev)
 	}
 }
 
-bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
+bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 {
 	// Config I/O pins
 	if (pDev == NULL || pCfg == NULL)
@@ -758,7 +758,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	return true;
 }
 
-void UARTSetCtrlLineState(UARTDEV * const pDev, uint32_t LineState)
+void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->DevIntrf.pDevData;
 

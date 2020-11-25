@@ -107,7 +107,7 @@ const BLEAPP_CFG s_BleAppCfg = {
 	NULL						// RTOS Softdevice handler
 };
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 // UART configuration data
 
@@ -118,7 +118,7 @@ static IOPinCfg_t s_UartPins[] = {
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
 
-const UARTCFG g_UartCfg = {
+const UARTCfg_t g_UartCfg = {
 	0,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
@@ -300,7 +300,7 @@ void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 	}
 }
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];

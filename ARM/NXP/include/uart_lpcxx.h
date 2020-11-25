@@ -253,7 +253,7 @@ typedef struct _PLC_UART_Dev {
 	int DevNo;					// UART interface number
 	LPCUARTREG *pUartReg;		// Pointer to UART register map
 	bool DMAMode;				// DMA transfer support
-	UARTDEV	*pUartDev;			// Pointer to generic UART dev. data
+	UARTDev_t	*pUartDev;			// Pointer to generic UART dev. data
 	volatile bool bTxReady;
 } LPCUARTDEV;
 

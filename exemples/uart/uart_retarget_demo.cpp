@@ -47,7 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
 
@@ -61,7 +61,7 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 // UART configuration data
-const UARTCFG g_UartCfg = {
+const UARTCfg_t g_UartCfg = {
 	UART_DEVNO,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
@@ -82,7 +82,7 @@ const UARTCFG g_UartCfg = {
 
 #ifdef DEMO_C
 // For C programming
-UARTDEV g_UartDev;
+UARTDev_t g_UartDev;
 #else
 // For C++ object programming
 // UART object instance
@@ -93,7 +93,7 @@ UART g_Uart;
 MCU_OSC g_McuOsc = BOARD_OSC;
 #endif
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];
