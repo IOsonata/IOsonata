@@ -80,14 +80,14 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
  */
 int main(void)
 {
-	NRF_REGULATORS_S->DCDCEN = REGULATORS_DCDCEN_DCDCEN_Enabled;
-	NRF_CLOCK_S->LFCLKSRC = CLOCK_LFCLKSRCCOPY_SRC_LFXO;
+//	NRF_REGULATORS_S->DCDCEN = REGULATORS_DCDCEN_DCDCEN_Enabled;
+//	NRF_CLOCK_S->LFCLKSRC = CLOCK_LFCLKSRCCOPY_SRC_LFXO;
 
-	msDelay(2000);
-	int res = bsdlid_init(NULL, true);
+	//msDelay(2000);
+//	int res = bsdlid_init(NULL, true);
 
-	printf("res = %d %x\n", res, res);
-	msDelay(1000);
+	//printf("res = %d %x\n", res, res);
+	//msDelay(1000);
 
 	IOPinCfg(s_Leds, s_NbLeds);
 
