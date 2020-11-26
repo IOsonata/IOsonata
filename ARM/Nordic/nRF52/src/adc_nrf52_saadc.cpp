@@ -103,7 +103,7 @@ extern "C" void SAADC_IRQHandler()
 				{
 					if (s_AdcnRF52DevData.hFifo[i] != NULL)
 					{
-						ADC_DATA *p = (ADC_DATA*)CFifoPut(s_AdcnRF52DevData.hFifo[i]);
+						AdcData_t *p = (AdcData_t*)CFifoPut(s_AdcnRF52DevData.hFifo[i]);
 						if (p == NULL)
 							break;
 
@@ -229,7 +229,7 @@ bool AdcnRF52::Calibrate()
 	return false;
 }
 
-bool AdcnRF52::Init(const ADC_CFG &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
+bool AdcnRF52::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 {
 	if (s_AdcnRF52DevData.pDevObj != NULL && s_AdcnRF52DevData.pDevObj != this)
 		return false;
@@ -448,7 +448,7 @@ uint16_t AdcnRF52::Resolution(uint16_t Val)
 	return vResolution;
 }
 
-bool AdcnRF52::OpenChannel(const ADC_CHAN_CFG *pChanCfg, int NbChan)
+bool AdcnRF52::OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan)
 {
 	if (pChanCfg == NULL || NbChan == 0)
 		return false;
@@ -459,9 +459,9 @@ bool AdcnRF52::OpenChannel(const ADC_CHAN_CFG *pChanCfg, int NbChan)
 	{
 		uint32_t chconfig = 0;	// CH[].CONFIG register value
 
-		if (pChanCfg[i].pFifoMem != NULL && pChanCfg[i].FifoMemSize > CFIFO_TOTAL_MEMSIZE(2, sizeof(ADC_DATA)))
+		if (pChanCfg[i].pFifoMem != NULL && pChanCfg[i].FifoMemSize > CFIFO_TOTAL_MEMSIZE(2, sizeof(AdcData_t)))
 		{
-			s_AdcnRF52DevData.hFifo[i] = CFifoInit(pChanCfg[i].pFifoMem, pChanCfg[i].FifoMemSize, sizeof(ADC_DATA), false);
+			s_AdcnRF52DevData.hFifo[i] = CFifoInit(pChanCfg[i].pFifoMem, pChanCfg[i].FifoMemSize, sizeof(AdcData_t), false);
 		}
 		else
 		{
@@ -649,7 +649,7 @@ void AdcnRF52::StopConversion()
 	NRF_SAADC->RESULT.MAXCNT = 0;
 }
 
-int AdcnRF52::Read(ADC_DATA *pBuff, int Len)
+int AdcnRF52::Read(AdcData_t *pBuff, int Len)
 {
 	int cnt = 0;
 
@@ -661,10 +661,10 @@ int AdcnRF52::Read(ADC_DATA *pBuff, int Len)
 			{
 				if (s_AdcnRF52DevData.hFifo[i])
 				{
-					ADC_DATA *p = (ADC_DATA *)CFifoGet(s_AdcnRF52DevData.hFifo[i]);
+					AdcData_t *p = (AdcData_t *)CFifoGet(s_AdcnRF52DevData.hFifo[i]);
 					if (p != NULL)
 					{
-						memcpy(pBuff, p, sizeof(ADC_DATA));
+						memcpy(pBuff, p, sizeof(AdcData_t));
 						pBuff++;
 						cnt ++;
 						Len--;
@@ -728,20 +728,20 @@ int AdcnRF52::Read(ADC_DATA *pBuff, int Len)
  *
  * @return	true - data available
  */
-bool AdcnRF52::Read(int Chan, ADC_DATA *pBuff)
+bool AdcnRF52::Read(int Chan, AdcData_t *pBuff)
 {
 	if (pBuff == NULL || Chan < 0 || Chan >= SAADC_NRF52_MAX_CHAN)
 		return false;
 
 	if (vbInterrupt)
 	{
-		ADC_DATA *p = (ADC_DATA *)CFifoGet(s_AdcnRF52DevData.hFifo[Chan]);
+		AdcData_t *p = (AdcData_t *)CFifoGet(s_AdcnRF52DevData.hFifo[Chan]);
 		if (p == NULL)
 		{
 			pBuff->Chan = -1;
 			return false;
 		}
-		memcpy(pBuff, p, sizeof(ADC_DATA));
+		memcpy(pBuff, p, sizeof(AdcData_t));
 	}
 	else if (nRF52ADCWaitForEnd(100000))
 	{

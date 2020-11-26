@@ -44,7 +44,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
-static const PWM_CFG s_PwmCfg = {
+static const PwmCfg_t s_PwmCfg = {
 	.DevNo = 0,
 	.Freq = 100,
 	.Mode = PWM_MODE_EDGE,
@@ -53,7 +53,7 @@ static const PWM_CFG s_PwmCfg = {
 	.pEvtHandler = NULL
 };
 
-static const PWM_CHAN_CFG s_PwmChanCfg[] = {
+static const PwmChanCfg_t s_PwmChanCfg[] = {
 	{
 		.Chan = 0,
 		.Pol = PWM_POL_HIGH,
@@ -74,7 +74,7 @@ static const PWM_CHAN_CFG s_PwmChanCfg[] = {
 	},
 };
 
-const int s_NbPwmChan = sizeof(s_PwmChanCfg) / sizeof(PWM_CHAN_CFG);
+const int s_NbPwmChan = sizeof(s_PwmChanCfg) / sizeof(PwmChanCfg_t);
 
 Pwm g_Pwm;
 
@@ -128,7 +128,7 @@ int main()
 		g_Led4.Off();
 	}
 
-	g_Led2Pwm.Init(&g_Pwm, (PWM_CHAN_CFG*)s_PwmChanCfg, s_NbPwmChan);
+	g_Led2Pwm.Init(&g_Pwm, (PwmChanCfg_t*)s_PwmChanCfg, s_NbPwmChan);
 	g_Led1.On();
 	g_Led2Pwm.Level(0xFF);
 	g_Led2Pwm.Level(0xFF00);

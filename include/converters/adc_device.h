@@ -94,12 +94,16 @@ typedef struct __ADC_Reference_Voltage {
 	ADC_REFVOLT_TYPE	Type;		//!< Reference voltage type
 	float				Voltage;	//!< Reference voltage value
 	int					Pin;		//!< External reference input number
-} ADC_REFVOLT;
+} AdcRefVolt_t;
+
+typedef AdcRefVolt_t	ADC_REFVOLT;
 
 typedef struct __ADC_Pin_Config {
 	int PinNo;				//!<
 	ADC_PIN_CONN Conn;		//!< Pin internal connection
-} ADC_PIN_CFG;
+} AdcPinCfg_t;
+
+typedef AdcPinCfg_t		ADC_PIN_CFG;
 
 typedef struct __ADC_Channel_Config {
 	int 			Chan;				//!< Channel number
@@ -108,11 +112,13 @@ typedef struct __ADC_Channel_Config {
 	uint32_t 		Gain;				//!< Bit 0-7 : Fractional gain value (2 = 1/2, 3 = 1/3, ...)
 	int 			AcqTime;			//!< Acquisition time usec
 	bool 			BurstMode;			//!< Oversampling
-	ADC_PIN_CFG 	PinP;				//!< Pin positive
-	ADC_PIN_CFG 	PinN;				//!< Pin negative
+	AdcPinCfg_t 	PinP;				//!< Pin positive
+	AdcPinCfg_t 	PinN;				//!< Pin negative
 	int				FifoMemSize;		//!< Total memory size for CFIFO, CFIFO is used with interrupt enabled mode
 	uint8_t			*pFifoMem;			//!< pointer to memory for CFIFO
-} ADC_CHAN_CFG;
+} AdcChanCfg_t;
+
+typedef AdcChanCfg_t	ADC_CHAN_CFG;
 
 class AdcDevice;	// Forward declare
 
@@ -120,7 +126,7 @@ class AdcDevice;	// Forward declare
 
 typedef struct __ADC_Config {
     ADC_CONV_MODE Mode;			//!< Conversion mode
-	const ADC_REFVOLT *pRefVolt;//!< Pointer to reference voltage array.
+	const AdcRefVolt_t *pRefVolt;//!< Pointer to reference voltage array.
 								//!< Many ADC can have multiple reference voltage input
 	int			NbRefVolt;		//!< Total number of reference voltage input
 	uint8_t		DevAddr;		//!< Device address. For example I2C device address
@@ -130,13 +136,17 @@ typedef struct __ADC_Config {
 	bool		bInterrupt;		//!< Enable/Disable interrupt
 	int			IntPrio;		//!< Interrupt priority
 	DevEvtHandler_t	EvtHandler;		//!< Device event handler
-} ADC_CFG;
+} AdcCfg_t;
+
+typedef AdcCfg_t	ADC_CFG;
 
 typedef struct __ADC_Data_Packet {
 	uint32_t Timestamp;		//!< Time stamp base on conversion rate in continuous mode, 0 if SINGLE
 	int Chan;				//!< Channel number
 	float Data;				//!< Converted data in Volt
-} ADC_DATA;
+} AdcData_t;
+
+typedef AdcData_t	ADC_DATA;
 
 #pragma pack(pop)
 
@@ -157,7 +167,7 @@ public:
 	 * 			- True	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool Init(const ADC_CFG &Cfg, Timer * const pTimer, DeviceIntrf * const pIntrf) = 0;
+	virtual bool Init(const AdcCfg_t &Cfg, Timer * const pTimer, DeviceIntrf * const pIntrf) = 0;
 
 	/**
 	 * @brief	Set conversion rate for continuous mode only
@@ -199,7 +209,7 @@ public:
 	 *
 	 * @return	True - Success
 	 */
-	virtual bool OpenChannel(const ADC_CHAN_CFG * const pChanCfg, int NbChan) = 0;
+	virtual bool OpenChannel(const AdcChanCfg_t * const pChanCfg, int NbChan) = 0;
 
 	/**
 	 * @brief	Close ADC channel
@@ -235,7 +245,7 @@ public:
 	 *
 	 * @return	Number of ADC data in array.
 	 */
-	virtual int Read(ADC_DATA *pBuff, int Len) = 0;
+	virtual int Read(AdcData_t *pBuff, int Len) = 0;
 
 	/**
 	 * @brief	Read ADC data of one channel
@@ -245,7 +255,7 @@ public:
 	 *
 	 * @return	true - data available
 	 */
-	virtual bool Read(int Chan, ADC_DATA *pBuff) = 0;
+	virtual bool Read(int Chan, AdcData_t *pBuff) = 0;
 
 	/**
 	 * @brief	Execute auto calibration
@@ -259,7 +269,7 @@ public:
 
 protected:
 	//void SetEvtHandler(ADC_EVTCB EvtHandler) { vEvtHandler = EvtHandler; }
-	void SetRefVoltage(const ADC_REFVOLT * const pRefVolt, int NbRefVolt) {
+	void SetRefVoltage(const AdcRefVolt_t * const pRefVolt, int NbRefVolt) {
 		vpRefVolt = pRefVolt;
 		vNbRefVolt = NbRefVolt;
 	}
@@ -269,7 +279,7 @@ protected:
 			vEvtHandler(this, Evt);
 	}
 */
-	const ADC_REFVOLT *vpRefVolt;	//!< pointer to array of predefined reference voltages
+	const AdcRefVolt_t *vpRefVolt;	//!< pointer to array of predefined reference voltages
 	int vNbRefVolt;					//!< number of reference voltages (array size)
 	uint16_t vResolution;			//!< Resolution in bits
 	uint32_t vRate;					//!< Sampling rate in Hz

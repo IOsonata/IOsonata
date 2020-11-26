@@ -83,7 +83,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "iopinctrl.h"
 #include "miscdev/led.h"
 
-bool LedPwm::Init(Pwm * const pPwm, PWM_CHAN_CFG * const pChanCfg, int NbChan)
+bool LedPwm::Init(Pwm * const pPwm, PwmChanCfg_t * const pChanCfg, int NbChan)
 {
 	if (pPwm == nullptr || pChanCfg == nullptr || NbChan == 0)
 	{
@@ -95,7 +95,7 @@ bool LedPwm::Init(Pwm * const pPwm, PWM_CHAN_CFG * const pChanCfg, int NbChan)
 	vpPwm = pPwm;
 	vNbLeds = NbChan;
 
-	memcpy(vPwmChanCfg, pChanCfg, vNbLeds * sizeof(PWM_CHAN_CFG));
+	memcpy(vPwmChanCfg, pChanCfg, vNbLeds * sizeof(PwmChanCfg_t));
 
 	vpPwm->OpenChannel(vPwmChanCfg, vNbLeds);
 	for (int i = 0; i < vNbLeds; i++)

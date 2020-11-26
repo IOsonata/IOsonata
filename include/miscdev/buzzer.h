@@ -42,10 +42,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   */
 
 typedef struct __Buzzer_Device {
-	PWM_DEV *pPwm;			//!< Pointer to external PWM interface
+	PwmDev_t *pPwm;			//!< Pointer to external PWM interface
 	int DutyCycle;			//!< PWM duty cycle value for volume
 	int Chan;				//!< PWM Channel used for the buzzer
-} BUZZER_DEV;
+} BuzzerDev_t;
 
 #ifdef __cplusplus
 

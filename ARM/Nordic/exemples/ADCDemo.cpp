@@ -80,19 +80,19 @@ static const UARTCfg_t s_UartCfg = {
 UART g_Uart;
 
 // Define available voltage sources
-static const ADC_REFVOLT s_RefVolt[] = {
+static const AdcRefVolt_t s_RefVolt[] = {
 	{.Type = ADC_REFVOLT_TYPE_INTERNAL, .Voltage = 0.6 },
 	{.Type = ADC_REFVOLT_TYPE_SUPPLY, .Voltage = 3.3 / 4.0},
 };
 
-static const int s_NbRefVolt = sizeof(s_RefVolt) / sizeof(ADC_REFVOLT);
+static const int s_NbRefVolt = sizeof(s_RefVolt) / sizeof(AdcRefVolt_t);
 
-#define ADC_CFIFO_SIZE		CFIFO_TOTAL_MEMSIZE(200, sizeof(ADC_DATA))
+#define ADC_CFIFO_SIZE		CFIFO_TOTAL_MEMSIZE(200, sizeof(AdcData_t))
 
 static uint8_t s_AdcFifoMem[ADC_CFIFO_SIZE];
 
 // Define ADC device
-static const ADC_CFG s_AdcCfg = {
+static const AdcCfg_t s_AdcCfg = {
 #ifdef ADC_DEMO_SINGLE_SHOT
 	.Mode = ADC_CONV_MODE_SINGLE,
 #else
@@ -116,7 +116,7 @@ static const ADC_CFG s_AdcCfg = {
 AdcnRF52 g_Adc;
 
 // Define ADC channel
-static const ADC_CHAN_CFG s_ChanCfg[] = {
+static const AdcChanCfg_t s_ChanCfg[] = {
 	{
 		.Chan = 0,
 		.RefVoltIdx = 0,
@@ -158,7 +158,7 @@ static const ADC_CHAN_CFG s_ChanCfg[] = {
 	}
 };
 
-static const int s_NbChan = sizeof(s_ChanCfg) / sizeof(ADC_CHAN_CFG);
+static const int s_NbChan = sizeof(s_ChanCfg) / sizeof(AdcChanCfg_t);
 
 volatile bool g_bDataReady = false;
 
@@ -251,7 +251,7 @@ int main()
 #else
 		int cnt = 0;
 
-		ADC_DATA df[s_NbChan];
+		AdcData_t df[s_NbChan];
 		memset(df, 0, sizeof(df));
 		cnt = g_Adc.Read(df, s_NbChan);
 		if (cnt > 0)

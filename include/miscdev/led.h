@@ -127,7 +127,7 @@ typedef struct __LED_Dev {
 	uint8_t Pin;
 	LED_LOGIC Act;
 	LED_TYPE Type;
-} LED_DEV;
+} LedDev_t;
 
 /// LED device abstract base class
 ///
@@ -253,7 +253,7 @@ public:
 	 *
 	 * @return	true on success
 	 */
-	virtual bool Init(Pwm * const pPwm, PWM_CHAN_CFG * const pPwmChan, int NbChan);
+	virtual bool Init(Pwm * const pPwm, PwmChanCfg_t * const pPwmChan, int NbChan);
 
 	/**
 	 * @brief	Set LED level
@@ -306,7 +306,7 @@ private:
 	uint32_t vLevel;
 	int	vNbLeds;
 	Pwm *vpPwm;
-	PWM_CHAN_CFG vPwmChanCfg[LEDPWM_MAX];
+	PwmChanCfg_t vPwmChanCfg[LEDPWM_MAX];
 };
 
 /** @} end group MiscDev */

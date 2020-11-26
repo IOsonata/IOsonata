@@ -93,7 +93,7 @@ typedef struct __Power_Config {
 	int IntPrio;						//!< Interrupt priority
 	int OffSwPin;						//!< Power switch button I/O pin assignment
 	int OffSwHold;						//!< Power switch off hold time in seconds
-	LED_DEV * const pLed;
+	LedDev_t * const pLed;
 	int NbLed;
 	PWRMGNT_EVTCB pEvtHandler;
 } PWRCFG;

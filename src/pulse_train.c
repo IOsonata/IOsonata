@@ -47,7 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @param	Loop : Number of time to pulse train loop
  * 					0 - loop forever, well almost forever (4 billion times).
  */
-void PulseTrain(PULSE_TRAIN_CFG *pCfg, uint32_t Loop)
+void PulseTrain(PulseTrainCfg_t *pCfg, uint32_t Loop)
 {
 	// Configure pins as output and reset all pins to zero
 	for (int i = 0; i < pCfg->NbPins; i++ )

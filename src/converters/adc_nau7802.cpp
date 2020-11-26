@@ -44,7 +44,7 @@ SOFTWARE.
 #include "convutil.h"
 #include "converters/adc_nau7802.h"
 
-bool AdcNau7802::Init(const ADC_CFG &Cfg, Timer * const pTimer, DeviceIntrf * const pIntrf)
+bool AdcNau7802::Init(const AdcCfg_t &Cfg, Timer * const pTimer, DeviceIntrf * const pIntrf)
 {
 	if (pIntrf == NULL)
 	{
@@ -162,7 +162,7 @@ uint16_t AdcNau7802::Resolution(uint16_t Val)
 	return AdcDevice::Resolution(24);
 }
 
-bool AdcNau7802::OpenChannel(const ADC_CHAN_CFG * const pChanCfg, int NbChan)
+bool AdcNau7802::OpenChannel(const AdcChanCfg_t * const pChanCfg, int NbChan)
 {
 	if (pChanCfg == NULL || NbChan == 0)
 		return false;
@@ -291,12 +291,12 @@ void AdcNau7802::StopConversion()
 	Write8(&regaddr, 1, d);
 }
 
-int AdcNau7802::Read(ADC_DATA *pBuff, int Len)
+int AdcNau7802::Read(AdcData_t *pBuff, int Len)
 {
 	return 0;
 }
 
-bool AdcNau7802::Read(int Chan, ADC_DATA *pBuff)
+bool AdcNau7802::Read(int Chan, AdcData_t *pBuff)
 {
 	pBuff->Chan = 0;
 	pBuff->Data = (float)vAdcVal[0];

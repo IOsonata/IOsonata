@@ -54,11 +54,11 @@ static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
 static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
 /// Pulse train config
-static const PULSE_TRAIN_PIN s_PulseTrainPins[] = PULSE_TRAIN_PINS_MAP;
+static const PulseTrainPin_t s_PulseTrainPins[] = PULSE_TRAIN_PINS_MAP;
 
-PULSE_TRAIN_CFG g_PulseTrainCfg = {
-	.pPins = (PULSE_TRAIN_PIN *)s_PulseTrainPins,
-	.NbPins = sizeof(s_PulseTrainPins) / sizeof(PULSE_TRAIN_PIN),
+PulseTrainCfg_t g_PulseTrainCfg = {
+	.pPins = (PulseTrainPin_t *)s_PulseTrainPins,
+	.NbPins = sizeof(s_PulseTrainPins) / sizeof(PulseTrainPin_t),
 	.Period = 1,
 	.Pol = PULSE_TRAIN_POL_HIGH
 };

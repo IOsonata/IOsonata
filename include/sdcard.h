@@ -61,7 +61,7 @@ typedef struct {
 	int SectSize;
 	int TotalSect;
 	SDCSD Csd;
-	DevIntrf_t *pSerIntrf;
+	DevIntrf_t *pIntrf;
 } SDDEV;
 
 #pragma pack(pop)

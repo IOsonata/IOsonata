@@ -107,7 +107,7 @@ typedef Vers_t	VERS;
 /// access to validate.
 typedef struct __App_Info {
 	char Name[APPINFO_NAMESIZE_MAX];	//!< Application signature
-	VERS Vers;							//!< Version number
+	Vers_t Vers;							//!< Version number
 	uint8_t Private[APPINFO_PRIVATESIZE_MAX];//!< APPINFO_PRIVATESIZE_MAX bytes private data
 } AppInfo_t;
 

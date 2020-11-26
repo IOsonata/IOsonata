@@ -477,7 +477,7 @@ public:
 	void IrqHandler();
 
 private:
-	LED_DEV vLed[AS3701_LED_MAXCNT];
+	LedDev_t vLed[AS3701_LED_MAXCNT];
 	int vNbLed;
 };
 

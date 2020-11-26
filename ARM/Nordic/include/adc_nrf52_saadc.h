@@ -59,7 +59,7 @@ public:
 	 *
 	 * @return	True - Success
 	 */
-	virtual bool Init(const ADC_CFG &Cfg, Timer * const pTimer = NULL, DeviceIntrf * const pIntrf = NULL);
+	virtual bool Init(const AdcCfg_t &Cfg, Timer * const pTimer = NULL, DeviceIntrf * const pIntrf = NULL);
 
 	/**
 	 * @brief	Set conversion rate for continuous mode only
@@ -87,7 +87,7 @@ public:
 	 *
 	 * @return	True - Success
 	 */
-	virtual bool OpenChannel(const ADC_CHAN_CFG *pChanCfg, int NbChan);
+	virtual bool OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan);
 
 	/**
 	 * @brief	Close ADC channel
@@ -116,7 +116,7 @@ public:
 	 *
 	 * @return	Number of ADC data in array.
 	 */
-	virtual int Read(ADC_DATA *pBuff, int Len);
+	virtual int Read(AdcData_t *pBuff, int Len);
 
 	/**
 	 * @brief	Read ADC data of one channel
@@ -126,7 +126,7 @@ public:
 	 *
 	 * @return	true - data available
 	 */
-	virtual bool Read(int Chan, ADC_DATA *pBuff);
+	virtual bool Read(int Chan, AdcData_t *pBuff);
 
 	/**
 	 * @brief	Execute auto calibration

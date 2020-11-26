@@ -48,7 +48,7 @@ bool AdcLTC2495::Calibrate()
 	return true;
 }
 
-bool AdcLTC2495::Init(const ADC_CFG &Cfg, DeviceIntrf *pIntrf)
+bool AdcLTC2495::Init(const AdcCfg_t &Cfg, DeviceIntrf *pIntrf)
 {
 	Interface(pIntrf);
 	DeviceAddress(Cfg.DevAddr);
@@ -67,7 +67,7 @@ bool AdcLTC2495::Init(const ADC_CFG &Cfg, DeviceIntrf *pIntrf)
 	return true;
 }
 
-bool AdcLTC2495::OpenChannel(const ADC_CHAN_CFG *pChanCfg, int NbChan)
+bool AdcLTC2495::OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan)
 {
 	uint8_t d[2];
 
@@ -166,7 +166,7 @@ int AdcLtc2495::Read(float *pBuff, int Len)
 	return 0;
 }
 */
-int AdcLTC2495::Read(ADC_DATA *pBuff, int Len)
+int AdcLTC2495::Read(AdcData_t *pBuff, int Len)
 {
 	return true;
 }

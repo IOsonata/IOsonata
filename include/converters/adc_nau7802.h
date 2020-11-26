@@ -181,21 +181,21 @@ public:
 	void Reset();
 	uint32_t Rate(uint32_t Val);
 	uint16_t Resolution(uint16_t Val);
-	bool OpenChannel(const ADC_CHAN_CFG * const pChanCfg, int NbChan);
+	bool OpenChannel(const AdcChanCfg_t * const pChanCfg, int NbChan);
 	void CloseChannel(int Chan);
 	bool StartConversion();
 	void StopConversion();
-	int Read(ADC_DATA *pBuff, int Len);
-	bool Read(int Chan, ADC_DATA *pBuff);
+	int Read(AdcData_t *pBuff, int Len);
+	bool Read(int Chan, AdcData_t *pBuff);
 	bool Calibrate();
-	bool Init(const ADC_CFG &Cfg, Timer * const pTimer, DeviceIntrf * const pIntrf);
+	bool Init(const AdcCfg_t &Cfg, Timer * const pTimer, DeviceIntrf * const pIntrf);
 	void IntHandler() { UpdateData(); }
 	bool UpdateData();
 
 private:
 	uint8_t vChanOpened;
 	int32_t vAdcVal[NAU7802_MAX_CHAN];
-	ADC_DATA vData[NAU7802_MAX_CHAN];
+	AdcData_t vData[NAU7802_MAX_CHAN];
 };
 
 /** @} End of group Converters */

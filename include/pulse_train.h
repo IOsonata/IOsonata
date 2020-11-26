@@ -54,15 +54,15 @@ typedef struct __Pulse_train_pins {
 	int PortNo;						//!< GPIO port number
 	int PinNo;						//!< GPIO pin number
 	int PinOp;						//!< Pin GPIO mode select
-} PULSE_TRAIN_PIN;
+} PulseTrainPin_t;//PULSE_TRAIN_PIN;
 
 /// Pulse train configuration data
 typedef struct __Pulse_train_config {
-	PULSE_TRAIN_PIN * const pPins;	//!< IO pins array to pulse
+	PulseTrainPin_t * const pPins;	//!< IO pins array to pulse
 	int NbPins;						//!< Total number of pins
 	uint32_t Period;				//!< Pulse period in usec
 	PULSE_TRAIN_POL Pol;			//!< Pulse train polarity
-} PULSE_TRAIN_CFG;
+} PulseTrainCfg_t; //PULSE_TRAIN_CFG;
 
 #pragma pack(pop)
 
@@ -77,7 +77,7 @@ extern "C" {
  * @param	Loop : Number of time to pulse train loop
  * 					0 - loop forever, well almost forever (4 billion times).
  */
-void PulseTrain(PULSE_TRAIN_CFG *pCfg, uint32_t Loop);
+void PulseTrain(PulseTrainCfg_t *pCfg, uint32_t Loop);
 
 #ifdef __cplusplus
 }
