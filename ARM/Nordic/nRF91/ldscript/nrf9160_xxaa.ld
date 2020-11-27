@@ -20,10 +20,11 @@ MEMORY
 SECTIONS 
 {
  	.bsdlib 0x20010000 : {KEEP(*(.bsdlibData))}
- 	.nrf_rpc : 
+/* 	.nrf_rpc : 
  	{
 		KEEP(*(SORT_BY_NAME(".nrf_rpc.*")))
-	} > FLASH
+		KEEP(*(SORT_BY_NAME(".bsd_init.*")))
+	} > FLASH*/
 }
 
 INCLUDE "gcc_arm_flash.ld"
