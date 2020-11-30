@@ -1,15 +1,18 @@
 /**-------------------------------------------------------------------------
-@file	analog_comp_nrf5x.h
+@file	board.h
 
-@brief	Analog comparator implementation on nRF52
+@brief	Board specific definitions
 
+This file contains all I/O definitions for a specific board for the
+application firmware.  This files should be located in each project and
+modified to suit the need for the application use case.
 
 @author	Hoang Nguyen Hoan
-@date	Aug. 13, 2018
+@date	Nov. 16, 2016
 
 @license
 
-Copyright (c) 2018, I-SYST inc., all rights reserved
+Copyright (c) 2016, I-SYST inc., all rights reserved
 
 Permission to use, copy, modify, and distribute this software for any purpose
 with or without fee is hereby granted, provided that the above copyright
@@ -32,22 +35,34 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __ANALOG_COMP_NRF52_H__
-#define __ANALOG_COMP_NRF52_H__
 
-#include "converters/analog_comp.h"
+#ifndef __BOARD_H__
+#define __BOARD_H__
 
-class AnalogCompnRF52LPComp : public AnalogComp {
-public:
-	bool Init(const AnalogCompCfg_t &Cfg);
-	bool Enable();
-	void Disable();
-	bool Start();
-	void Stop();
+#include "blueio_board.h"
 
-protected:
-private:
-};
+//#define NORDIC_DK
 
-#endif // __ANALOG_COMP_NRF52_H__
+#ifdef NORDIC_DK
+#define UART_TX_PIN			9//7
+#define UART_RX_PIN			11//8
+#define UART_RTS_PIN		8//11
+#define UART_CTS_PIN		10//12
+#else
+#define UART_RX_PORT		BLUEIO_UART_RX_PORT
+#define UART_RX_PIN			BLUEIO_UART_RX_PIN
+#define UART_RX_PINOP		BLUEIO_UART_RX_PINOP
+#define UART_TX_PORT		BLUEIO_UART_TX_PORT
+#define UART_TX_PIN			BLUEIO_UART_TX_PIN
+#define UART_TX_PINOP		BLUEIO_UART_TX_PINOP
+#define UART_CTS_PORT		BLUEIO_UART_CTS_PORT
+#define UART_CTS_PIN		BLUEIO_UART_CTS_PIN
+#define UART_CTS_PINOP		BLUEIO_UART_CTS_PINOP
+#define UART_RTS_PORT		BLUEIO_UART_RTS_PORT
+#define UART_RTS_PIN		BLUEIO_UART_RTS_PIN
+#define UART_RTS_PINOP		BLUEIO_UART_RTS_PINOP
+#endif
+
+
+#endif // __BOARD_H__
 
