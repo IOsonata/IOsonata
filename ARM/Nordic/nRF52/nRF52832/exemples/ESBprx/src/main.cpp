@@ -26,7 +26,7 @@
 #include "board.h"
 #include "stddev.h"
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
@@ -35,7 +35,7 @@ static IOPinCfg_t s_UartPins[] = {
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
 
-const UARTCFG g_UartCfg = {
+const UARTCfg_t g_UartCfg = {
 	0,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
@@ -126,7 +126,7 @@ uint32_t esb_init( void )
     return err_code;
 }
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];
