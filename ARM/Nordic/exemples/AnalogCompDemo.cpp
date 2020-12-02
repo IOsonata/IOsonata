@@ -33,7 +33,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include "nrf.h"
-#include "analog_comp_nrf5x.h"
+#include "converters/analog_comp.h"
 #include "coredev/uart.h"
 #include "stddev.h"
 #include "coredev/iopincfg.h"
