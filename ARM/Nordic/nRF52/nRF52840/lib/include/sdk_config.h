@@ -6478,7 +6478,7 @@
  
 
 #ifndef APP_USBD_STRINGS_PRODUCT_EXTERN
-#define APP_USBD_STRINGS_PRODUCT_EXTERN 0
+#define APP_USBD_STRINGS_PRODUCT_EXTERN 1
 #endif
 
 // <s> APP_USBD_STRINGS_PRODUCT - String descriptor for the product name.
@@ -6486,7 +6486,8 @@
 // <i> Note: This value is not editable in Configuration Wizard.
 // <i> List of product names that is defined the same way like in @ref APP_USBD_STRINGS_MANUFACTURER.
 #ifndef APP_USBD_STRINGS_PRODUCT
-#define APP_USBD_STRINGS_PRODUCT APP_USBD_STRING_DESC("nRF52 USB Product")
+//#define APP_USBD_STRINGS_PRODUCT APP_USBD_STRING_DESC("nRF52 USB Product")
+#define APP_USBD_STRINGS_PRODUCT	g_extern_usbd_product_string
 #endif
 
 // </e>
@@ -6502,7 +6503,7 @@
  
 
 #ifndef APP_USBD_STRING_SERIAL_EXTERN
-#define APP_USBD_STRING_SERIAL_EXTERN 0
+#define APP_USBD_STRING_SERIAL_EXTERN 1
 #endif
 
 // <s> APP_USBD_STRING_SERIAL - String descriptor for the serial number.
@@ -6510,7 +6511,8 @@
 // <i> Note: This value is not editable in Configuration Wizard.
 // <i> Serial number that is defined the same way like in @ref APP_USBD_STRINGS_MANUFACTURER.
 #ifndef APP_USBD_STRING_SERIAL
-#define APP_USBD_STRING_SERIAL APP_USBD_STRING_DESC("000000000000")
+#define APP_USBD_STRING_SERIAL g_extern_usbd_serial_number
+//#define APP_USBD_STRING_SERIAL APP_USBD_STRING_DESC("000000000000")
 #endif
 
 // </e>

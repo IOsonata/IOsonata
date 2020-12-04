@@ -306,9 +306,29 @@
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/timer/drv_rtc.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/usbd/app_usbd.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/app_usbd.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/usbd/app_usbd_core.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/usbd/app_usbd_core.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/app_usbd_serial_num.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/app_usbd_string_desc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/class</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c</name>
@@ -406,6 +426,16 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/usbd/class/cdc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/class/nrf_dfu_trigger</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend/cc310_bl/cc310_bl_backend_ecc.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/crypto/backend/cc310_bl/cc310_bl_backend_ecc.c</locationURI>
@@ -429,6 +459,21 @@
 			<name>src/nRF5_SDK/libraries/crypto/backend/cc310_bl/cc310_bl_backend_shared.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/crypto/backend/cc310_bl/cc310_bl_backend_shared.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/class/cdc/acm</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/class/nrf_dfu_trigger/app_usbd_nrf_dfu_trigger.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/nrf_dfu_trigger/app_usbd_nrf_dfu_trigger.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>
