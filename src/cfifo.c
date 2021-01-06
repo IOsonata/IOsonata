@@ -36,7 +36,22 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
+
+#ifndef WIN32
 #include <stdatomic.h>
+#else
+#include <signal.h>
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+typedef sig_atomic_t		atomic_int;
+
+static inline void atomic_store(atomic_int *pVar, sig_atomic_t NewVal) {
+	InterlockedExchange(pVar, NewVal);
+}
+
+#endif
 
 #include "cfifo.h"
 
@@ -260,7 +275,7 @@ int CFifoRead(HCFIFO const pFifo, uint8_t *pBuff, int BuffLen)
 
 	int cnt = 0;
 
-	if (BuffLen <= pFifo->BlkSize)
+	if (BuffLen <= (int)pFifo->BlkSize)
 	{
 		// Single block
 		uint8_t *p = CFifoGet(pFifo);
@@ -309,7 +324,7 @@ int CFifoWrite(HCFIFO const pFifo, uint8_t *pData, int DataLen)
 
 	int cnt = 0;
 
-	if (DataLen <= pFifo->BlkSize)
+	if (DataLen <= (int)pFifo->BlkSize)
 	{
 		// Single block
 		uint8_t *p = CFifoPut(pFifo);
