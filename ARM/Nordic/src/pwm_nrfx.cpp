@@ -282,7 +282,7 @@ bool PWMOpenChannel(PwmDev_t *pDev, const PwmChanCfg_t *pChanCfg, int NbChan)
 	{
 		if (pChanCfg[i].Chan >= 0 && pChanCfg[i].Chan < PWM_NRF5_MAX_CHAN)
 		{
-			dev->pReg->PSEL.OUT[pChanCfg[i].Chan] = pChanCfg[i].Pin;
+			dev->pReg->PSEL.OUT[pChanCfg[i].Chan] = (pChanCfg[i].Pin & 0x1f) | ((pChanCfg[i].Port & 1) << 5);
 			dev->Pol[pChanCfg[i].Chan] = pChanCfg[i].Pol;
 		}
 	}
