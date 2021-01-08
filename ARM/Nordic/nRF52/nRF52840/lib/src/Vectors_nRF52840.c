@@ -34,8 +34,12 @@ Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include "nrf.h"
+
 extern unsigned long __StackTop;
 extern void ResetEntry(void);
+extern char Image$$ER_ZI$$Base[];
+extern char Image$$ARM_LIB_STACK$$ZI$$Base[];
 
 void DEF_IRQHandler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
@@ -83,7 +87,11 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void PWM2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPIM2_SPIS2_SPI2_IRQHandler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void RTC2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2S_IRQHandler(void);
+#if (__FPU_USED == 1)
+__WEAK void FPU_IRQHandler(void);
+#else
 __attribute__((weak, alias("DEF_IRQHandler"))) void FPU_IRQHandler(void);
+#endif
 __attribute__((weak, alias("DEF_IRQHandler"))) void USBD_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UARTE1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void QSPI_IRQHandler(void);
@@ -104,8 +112,13 @@ void (* const __vector_table[])(void) = {
 __attribute__ ((section(".vectors"), used))
 void (* const __Vectors[100])(void) = {
 #endif
+#if defined ( __ARMCC_VERSION )
+	(void (*)(void) )((uint32_t)0x20000000 + 0x10000),
+	Reset_Handler,
+#else
 	(void (*)(void) )((uint32_t)&__StackTop),
 	ResetEntry,
+#endif
 	NMI_Handler,
 	HardFault_Handler,
 	MemoryManagement_Handler,
