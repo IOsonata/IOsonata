@@ -39,7 +39,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "display/eink_intrf.h"
 
-static bool EInkIntrfWaitBusy(EInkIntrf_t * const pDev, uint32_t Timeout = 0)
+static bool EInkIntrfWaitBusy(EInkIntrfDev_t * const pDev, uint32_t Timeout = 0)
 {
 	while ((--Timeout > 0) &&
 		   (IOPinRead(pDev->pIOPinMap[EIINTRF_BUSY_PIN_IDX].PortNo, pDev->pIOPinMap[EIINTRF_BUSY_PIN_IDX].PinNo) == 0));
@@ -59,17 +59,31 @@ static void EInkIntrfEnable(DevIntrf_t * const pDev)
 
 static uint32_t EInkIntrfGetRate(DevIntrf_t * const pDev)
 {
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
+
+	if (dev->Type == EIINTRF_TYPE_SPI)
+	{
+		return SPIGetRate(dev->pSpiDev);
+	}
+
 	return 1;
 }
 
 static uint32_t EInkIntrfSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
+
+	if (dev->Type == EIINTRF_TYPE_SPI)
+	{
+		return SPISetRate(dev->pSpiDev, Rate);
+	}
+
 	return 1;
 }
 
 static bool EInkIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	EInkIntrf_t *dev = (EInkIntrf_t*)pDev->pDevData;
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 
 	EInkIntrfSetDataMode(dev, true);
 
@@ -88,7 +102,7 @@ static bool EInkIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 
 static int EInkIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	EInkIntrf_t *dev = (EInkIntrf_t*)pDev->pDevData;
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 	int cnt = 0;
 
 	if (dev->Type == EIINTRF_TYPE_SPI)
@@ -115,7 +129,7 @@ static int EInkIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 
 static void EInkIntrfStopRx(DevIntrf_t * const pDev)
 {
-	EInkIntrf_t *dev = (EInkIntrf_t*)pDev->pDevData;
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 
 	if (dev->Type == EIINTRF_TYPE_BITBANG)
 	{
@@ -130,7 +144,7 @@ static void EInkIntrfStopRx(DevIntrf_t * const pDev)
 
 static bool EInkIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	EInkIntrf_t *dev = (EInkIntrf_t*)pDev->pDevData;
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 
 	if (dev->Type == EIINTRF_TYPE_BITBANG)
 	{
@@ -146,7 +160,7 @@ static bool EInkIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 
 static int EInkIntrfTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
-	EInkIntrf_t *dev = (EInkIntrf_t*)pDev->pDevData;
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 	int cnt = 0;
 
 	if (dev->Type == EIINTRF_TYPE_SPI)
@@ -185,7 +199,7 @@ static int EInkIntrfTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 
 static void EInkIntrfStopTx(DevIntrf_t * const pDev)
 {
-	EInkIntrf_t *dev = (EInkIntrf_t*)pDev->pDevData;
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 
 	if (dev->Type == EIINTRF_TYPE_BITBANG)
 	{
@@ -199,7 +213,7 @@ static void EInkIntrfStopTx(DevIntrf_t * const pDev)
 
 static void EInkIntrfReset(DevIntrf_t * const pDev)
 {
-	EInkIntrf_t *dev = (EInkIntrf_t*)pDev->pDevData;
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 
 	IOPinClear(dev->pIOPinMap[EIINTRF_RST_PIN_IDX].PortNo, dev->pIOPinMap[EIINTRF_RST_PIN_IDX].PinNo);
 	usDelay(500);
@@ -211,7 +225,7 @@ static void EInkIntrfPowerOff(DevIntrf_t * const pDev)
 
 }
 
-void EInkIntrfSetDataMode(EInkIntrf_t *pDev, bool bDataMode)
+void EInkIntrfSetDataMode(EInkIntrfDev_t *pDev, bool bDataMode)
 {
 	if (bDataMode)
 	{
@@ -223,7 +237,7 @@ void EInkIntrfSetDataMode(EInkIntrf_t *pDev, bool bDataMode)
 	}
 }
 
-int EInkIntrfWrite(EInkIntrf_t * const pDev, uint8_t *pCmd, int CmdLen, uint8_t *pData, int DataLen)
+int EInkIntrfWrite(EInkIntrfDev_t * const pDev, uint8_t *pCmd, int CmdLen, uint8_t *pData, int DataLen)
 {
     int count = 0;
 
@@ -249,7 +263,7 @@ int EInkIntrfWrite(EInkIntrf_t * const pDev, uint8_t *pCmd, int CmdLen, uint8_t 
     return count;
 }
 
-bool EInkIntrfInit(EInkIntrf_t * const pDev, const EInkIntrfCfg_t *pCfgData)
+bool EInkIntrfInit(EInkIntrfDev_t * const pDev, const EInkIntrfCfg_t *pCfgData)
 {
 	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
 	IOPinSet(pDev->pIOPinMap[EIINTRF_RST_PIN_IDX].PortNo, pDev->pIOPinMap[EIINTRF_RST_PIN_IDX].PinNo);
