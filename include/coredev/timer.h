@@ -75,11 +75,19 @@ typedef enum __Timer_Trigger_Type {
     TIMER_TRIG_TYPE_CONTINUOUS	//!< Continuous trigger
 } TIMER_TRIG_TYPE;
 
-#define TIMER_EVT_TICK                          (1<<0)   //!< Timer tick counter event
-#define TIMER_EVT_COUNTER_OVR                   (1<<1)   //!< Timer overflow event
-#define TIMER_EVT_TRIGGER0                		(1<<2)   //!< Periodic timer event start at this bit
+typedef enum __Timer_ExtTrig_Sense {
+	TIMER_EXTTRIG_SENSE_DISABLE,			//!< Disable external trig sense
+	TIMER_EXTTRIG_SENSE_LOW_TRANSITION,		//!< Event on falling edge
+	TIMER_EXTTRIG_SENSE_HIGH_TRANSITION,	//!< Event on raising edge
+	TIMER_EXTTRIG_SENSE_TOGGLE				//!< Event on state change
+} TIMER_EXTTRIG_SENSE;
 
-#define TIMER_EVT_TRIGGER(n)              		(1<<(n+2))	//!< Trigger event id
+#define TIMER_EVT_TICK                          (1<<0)	//!< Timer tick counter event
+#define TIMER_EVT_COUNTER_OVR                   (1<<1)	//!< Timer overflow event
+#define TIMER_EVT_EXTTRIG						(1<<2)	//!< External timer trigger event
+#define TIMER_EVT_TRIGGER0                		(1<<3)	//!< Periodic timer event start at this bit
+
+#define TIMER_EVT_TRIGGER(n)              		(1<<(n+3))	//!< Trigger event id
 
 typedef struct __Timer_Device	TimerDev_t;
 typedef TimerDev_t		TIMER;
@@ -126,7 +134,7 @@ typedef struct __Timer_Config {
     uint32_t        Freq;       //!< Frequency in Hz, 0 - to auto select max timer frequency
     int             IntPrio;    //!< Interrupt priority. recommended to use highest
     							//!< priority if precision timing is required
-    TimerEvtHandler_t     EvtHandler; //!< Interrupt handler
+    TimerEvtHandler_t EvtHandler; //!< Interrupt handler
 } TimerCfg_t;
 
 typedef TimerCfg_t	TIMER_CFG;
@@ -205,6 +213,23 @@ struct __Timer_Device {
 	uint64_t (*EnableTrigger)(TimerDev_t * const pTimerDev, int TrigNo, uint64_t nsPeriod,
 							  TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 							  void * const pContext);
+
+	/**
+	 * @brief   Disable timer trigger event.
+	 *
+	 * @param   TrigNo : Trigger number to disable. Index value starting at 0
+	 */
+	void (*DisableExtTrigger)(TimerDev_t * const pTimerDev);
+
+    /**
+	 * @brief	Enable external timer trigger event.
+	 *
+	 * @param   TrigDevNo : External trigger device number to enable. Index value starting at 0
+	 * @param	Sense : External level sense
+	 *
+	 * @return  true - Success
+	 */
+	bool (*EnableExtTrigger)(TimerDev_t * const pTimerDev, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense);
 };
 
 #pragma pack(pop)
@@ -268,6 +293,7 @@ static inline uint32_t TimerSetFrequency(TimerDev_t * const pTimer, uint32_t Fre
 /**
  * @brief   Disable timer trigger event.
  *
+ * @param	pTimer	: Pointer to Timer device private data (timer handle)
  * @param   TrigNo : Trigger number to disable. Index value starting at 0
  */
 static inline void TimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo) { pTimer->DisableTrigger(pTimer, TrigNo); }
@@ -284,6 +310,25 @@ static inline uint64_t msTimerEnableTimerTrigger(TimerDev_t * const pTimer,  int
 }
 
 /**
+ * @brief   Disable timer trigger event.
+ *
+ * @param	pTimer	: Pointer to Timer device private data (timer handle)
+ */
+static inline void TimerDisableExtTrigger(TimerDev_t * const pTimerDev) { pTimerDev->DisableExtTrigger(pTimerDev); }
+
+/**
+ * @brief	Enable external timer trigger event.
+ *
+ * @param	pTimer	: Pointer to Timer device private data (timer handle)
+ * @param   TrigDevNo : External trigger device number to enable. Index value starting at 0
+ *
+ * @return  true - Success
+ */
+static inline bool TimerEnableExtTrigger(TimerDev_t * const pTimerDev, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense) {
+	return pTimerDev->EnableExtTrigger(pTimerDev, TrigDevNo, Sense);
+}
+
+/**
  * @brief   Get current timer counter in millisecond.
  *
  * This function return the current timer in msec since last reset.
@@ -291,7 +336,7 @@ static inline uint64_t msTimerEnableTimerTrigger(TimerDev_t * const pTimer,  int
  * @return  Counter in millisecond
  */
 static inline uint32_t TimerGetMilisecond(TimerDev_t * const pTimer) {
-	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod / 1000000LL;
+	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod / 1000000ULL;
 }
 
 /**
@@ -302,7 +347,7 @@ static inline uint32_t TimerGetMilisecond(TimerDev_t * const pTimer) {
  * @return  Converted count in millisecond
  */
 static inline uint32_t TimerTickToMilisecond(TimerDev_t * const pTimer, uint64_t Count) {
-	return Count * pTimer->nsPeriod / 1000000LL;
+	return Count * pTimer->nsPeriod / 1000000ULL;
 }
 
 /**
@@ -313,7 +358,7 @@ static inline uint32_t TimerTickToMilisecond(TimerDev_t * const pTimer, uint64_t
  * @return  Counter in microsecond
  */
 static inline uint32_t TimerGetMicrosecond(TimerDev_t * const pTimer) {
-	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod / 1000LL;
+	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod / 1000ULL;
 }
 
 /**
@@ -324,7 +369,7 @@ static inline uint32_t TimerGetMicrosecond(TimerDev_t * const pTimer) {
  * @return  Converted count in microsecond
  */
 static inline uint32_t TimerTickToMicrosecond(TimerDev_t * const pTimer, uint64_t Count) {
-	return Count * pTimer->nsPeriod / 1000LL;
+	return Count * pTimer->nsPeriod / 1000ULL;
 }
 
 /**
@@ -334,7 +379,7 @@ static inline uint32_t TimerTickToMicrosecond(TimerDev_t * const pTimer, uint64_
  *
  * @return  Counter in nanosecond
  */
-static inline uint32_t TimerGetNanosecond(TimerDev_t * const pTimer) {
+static inline uint64_t TimerGetNanosecond(TimerDev_t * const pTimer) {
 	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod;
 }
 
@@ -345,7 +390,7 @@ static inline uint32_t TimerGetNanosecond(TimerDev_t * const pTimer) {
  *
  * @return  Converted count in nanosecond
  */
-static inline uint32_t TimerTickToNanosecond(TimerDev_t * const pTimer, uint64_t Count) {
+static inline uint64_t TimerTickToNanosecond(TimerDev_t * const pTimer, uint64_t Count) {
 	return Count * pTimer->nsPeriod;
 }
 
@@ -502,13 +547,30 @@ public:
     virtual void DisableTimerTrigger(int TrigNo) { vTimer.DisableTrigger(&vTimer, TrigNo); }
 
     /**
+     * @brief   Disable timer trigger event.
+     *
+     */
+    void DisableExtTrigger() { vTimer.DisableExtTrigger(&vTimer); }
+
+    /**
+     * @brief	Enable external timer trigger event.
+     *
+     * @param   TrigDevNo : External trigger device number to enable. Index value starting at 0
+     *
+     * @return  true - Success
+     */
+    bool EnableExtTrigger(int TrigDevNo, TIMER_EXTTRIG_SENSE Sense) {
+    	return vTimer.EnableExtTrigger(&vTimer, TrigDevNo, Sense);
+    }
+
+    /**
      * @brief   Get current timer counter in millisecond.
      *
      * This function return the current timer in msec since last reset.
      *
      * @return  Counter in millisecond
      */
-	virtual uint32_t mSecond() { return vTimer.GetTickCount(&vTimer) * vTimer.nsPeriod / 1000000LL; }
+	virtual uint32_t mSecond() { return vTimer.GetTickCount(&vTimer) * vTimer.nsPeriod / 1000000ULL; }
 
 	/**
 	 * @brief   Convert tick count to millisecond.
@@ -517,7 +579,7 @@ public:
 	 *
 	 * @return  Converted count in millisecond
 	 */
-	virtual uint32_t mSecond(uint64_t Count) { return Count * vTimer.nsPeriod / 1000000LL; }
+	virtual uint32_t mSecond(uint64_t Count) { return Count * vTimer.nsPeriod / 1000000ULL; }
 
 	/**
      * @brief   Get current timer counter in microsecond.
@@ -526,7 +588,7 @@ public:
      *
      * @return  Counter in microsecond
      */
-	virtual uint32_t uSecond() { return vTimer.GetTickCount(&vTimer) * vTimer.nsPeriod / 1000LL; }
+	virtual uint32_t uSecond() { return vTimer.GetTickCount(&vTimer) * vTimer.nsPeriod / 1000ULL; }
 
 	/**
 	 * @brief   Convert tick count to microsecond.
@@ -535,7 +597,7 @@ public:
 	 *
 	 * @return  Converted count in microsecond
 	 */
-	virtual uint32_t uSecond(uint64_t Count) { return Count * vTimer.nsPeriod / 1000LL; }
+	virtual uint32_t uSecond(uint64_t Count) { return Count * vTimer.nsPeriod / 1000ULL; }
 
 	/**
      * @brief   Get current timer counter in nanosecond.
@@ -544,7 +606,7 @@ public:
      *
      * @return  Counter in nanosecond
      */
-	virtual uint32_t nSecond() { return vTimer.GetTickCount(&vTimer) * vTimer.nsPeriod; }
+	virtual uint64_t nSecond() { return vTimer.GetTickCount(&vTimer) * vTimer.nsPeriod; }
 
 	/**
      * @brief   Convert tick count to nanosecond
@@ -553,7 +615,7 @@ public:
      *
      * @return  Converted count in nanosecond
      */
-	virtual uint32_t nSecond(uint64_t Count) { return Count * vTimer.nsPeriod; }
+	virtual uint64_t nSecond(uint64_t Count) { return Count * vTimer.nsPeriod; }
 
 	/**
 	 * @brief	Get first available timer trigger index.

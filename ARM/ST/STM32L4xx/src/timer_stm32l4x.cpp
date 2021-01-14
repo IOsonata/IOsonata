@@ -35,7 +35,25 @@ SOFTWARE.
 #include "intrinsics.h"
 #endif
 
+#include "stm32l4xx.h"
+
 #include "timer_stm32l4x.h"
+
+STM32L4XX_TimerData_t g_Stm32l4TimerData[STM32L4XX_TIMER_MAXCNT] = {
+	{ 0, {.pLPTimReg = LPTIM1} , 0 },
+	{ 1, {.pLPTimReg = LPTIM2}, 0 },
+	{ 2, {.pTimReg = TIM1}, 0 },
+	{ 3, {.pTimReg = TIM2}, 0 },
+	{ 4, {.pTimReg = TIM3}, 0 },
+	{ 5, {.pTimReg = TIM4}, 0 },
+	{ 6, {.pTimReg = TIM5}, 0 },
+	{ 7, {.pTimReg = TIM6}, 0 },
+	{ 8, {.pTimReg = TIM7}, 0 },
+	{ 9, {.pTimReg = TIM8}, 0 },
+	{ 10, {.pTimReg = TIM15}, 0 },
+	{ 11, {.pTimReg = TIM16}, 0 },
+	{ 12, {.pTimReg = TIM17}, 0 },
+};
 
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
@@ -44,25 +62,33 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
-	if (pCfg->DevNo < STM32L4XX_LPTIMER_MAXCNT)
+	if (pCfg->DevNo < 0 || pCfg->DevNo >= STM32L4XX_TIMER_MAXCNT)
 	{
-		return Stm32l4LPTimerInit(pTimer, pCfg);
+		return false;
 	}
 
-	return Stm32l4TimerInit(pTimer, pCfg);
+	g_Stm32l4TimerData[pCfg->DevNo].pTimer = pTimer;
+
+	if (pCfg->DevNo < STM32L4XX_LPTIM_CNT)
+	{
+		return Stm32l4LPTimInit(&g_Stm32l4TimerData[pCfg->DevNo], pCfg);
+	}
+
+	return Stm32l4TimInit(&g_Stm32l4TimerData[pCfg->DevNo], pCfg);
 }
 
 int TimerGetLowFreqDevCount()
 {
-	return STM32L4XX_LPTIMER_MAXCNT;
+	return STM32L4XX_LPTIM_CNT;
 }
 
 int TimerGetHighFreqDevCount()
 {
-	return STM32L4XX_LPTIMER_MAXCNT;
+	return STM32L4XX_TIM_CNT;
 }
 
 int TimerGetHighFreqDevNo()
 {
 	return STM32L4XX_TIMER_MAXCNT;
 }
+

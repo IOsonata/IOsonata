@@ -314,6 +314,29 @@ static int nRFxRtcFindAvailTrigger(TimerDev_t * const pTimer)
 	return -1;
 }
 
+/**
+ * @brief   Disable timer trigger event.
+ *
+ * @param   TrigNo : Trigger number to disable. Index value starting at 0
+ */
+static inline void nRFxRtcDisableExtTrigger(TimerDev_t * const pTimer) {
+}
+
+/**
+ * @brief	Enable external timer trigger event.
+ *
+ * @param   TrigDevNo : External trigger device number to enable. Index value starting at 0
+ * @param   pContext : Optional pointer to user private data to be passed
+ *                     to the callback. This could be a class or structure pointer.
+ *
+ * @return  true - Success
+ */
+bool nRFxRtcEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense)
+{
+	// No support for external trigger
+	return false;
+}
+
 bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
     if (pCfg->DevNo < 0 || pCfg->DevNo >= TIMER_NRFX_RTC_MAX || pCfg->Freq > TIMER_NRFX_RTC_BASE_FREQ)
@@ -340,6 +363,8 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     pTimer->FindAvailTrigger = nRFxRtcFindAvailTrigger;
     pTimer->DisableTrigger = nRFxRtcDisableTrigger;
     pTimer->EnableTrigger = nRFxRtcEnableTrigger;
+    pTimer->DisableExtTrigger = nRFxRtcDisableExtTrigger;
+    pTimer->EnableExtTrigger = nRFxRtcEnableExtTrigger;
 
     reg->TASKS_STOP = 1;
     reg->TASKS_CLEAR = 1;
