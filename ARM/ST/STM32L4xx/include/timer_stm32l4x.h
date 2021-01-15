@@ -38,25 +38,35 @@ SOFTWARE.
 
 #include "coredev/timer.h"
 
-/// Low Power Timer
-#define STM32L4XX_LPTIMER_MAXFREQ			16000000
+#define STM32L4XX_LPTIM_CNT					2	// LPTIM1, LPTIM2
+#define STM32L4XX_TIM_CNT					11	// TIM1..8 + TIM15..17
+#define STM32L4XX_TIMER_MAXCNT				(STM32L4XX_LPTIM_CNT + STM32L4XX_TIM_CNT)
 
-#define STM32L4XX_LPTIMER_MAXCNT			2
-#define STM32L4XX_LPTIMER_TRIG_MAXCNT		1
-
-///
-#define STM32L4XX_TIMER_MAXFREQ				16000000
-
-#define STM32L4XX_TIMER_MAXCNT				11
+#define STM32L4XX_TIMER_CC_MAXCNT			1
 #define STM32L4XX_TIMER_TRIG_MAXCNT			1
 
+#pragma pack(push, 4)
+
+typedef struct {
+	int DevNo;		//!< Device number (index)
+	union {
+		LPTIM_TypeDef *pLPTimReg;
+		TIM_TypeDef *pTimReg;
+	};
+	uint32_t BaseFreq;
+    uint32_t CC[STM32L4XX_TIMER_CC_MAXCNT];
+    TimerTrig_t Trigger[STM32L4XX_TIMER_TRIG_MAXCNT];
+    TimerDev_t *pTimer;
+} STM32L4XX_TimerData_t;
+
+#pragma pack(pop)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool Stm32l4LPTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
-bool Stm32l4TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
+bool Stm32l4LPTimInit(STM32L4XX_TimerData_t * const pTimerData, const TimerCfg_t * const pCfg);
+bool Stm32l4TimInit(STM32L4XX_TimerData_t * const pTimerData, const TimerCfg_t * const pCfg);
 
 #ifdef __cplusplus
 }

@@ -191,7 +191,7 @@ uint64_t Stm32l4LptEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t
     STM32L4XX_TimerData_t *dev = &g_Stm32l4TimerData[pTimer->DevNo];
     uint64_t cc = (nsPeriod + (pTimer->nsPeriod >> 1ULL)) / pTimer->nsPeriod;
 
-    if (cc <= 0ULL || cc >= 0x10000ULL)
+    if (cc <= 2ULL || cc >= 0x10000ULL)
     {
         return 0;
     }
@@ -211,9 +211,8 @@ uint64_t Stm32l4LptEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t
     }
 
     dev->pLPTimReg->IER &= ~LPTIM_IER_CMPMIE;
-    do {
-    	dev->pLPTimReg->CMP = (cc + count) & 0xFFFF;
-    } while ((dev->pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
+   	dev->pLPTimReg->CMP = (cc + count) & 0xFFFF;
+    while ((dev->pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
 
     dev->pLPTimReg->IER |= LPTIM_IER_CMPMIE;
 
@@ -244,6 +243,7 @@ void Stm32l4LptDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
 	g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->IER &= ~LPTIM_IER_CMPMIE;
 	g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->CMP = 0;
+	while ((g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
 }
 
 /**
@@ -323,13 +323,13 @@ void Stm32l4LptIRQHandler(TimerDev_t * const pTimer)
 		if (dev->Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
 			dev->pLPTimReg->CMP = (count + dev->CC[0]) & 0xFFFF;
+			while ((dev->pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
 		}
 		else
 		{
-			//dev->pLPTimReg->IER &= ~LPTIM_IER_CMPMIE;
-		    do {
-		    	dev->pLPTimReg->CMP = 0;
-		    } while ((dev->pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
+			dev->pLPTimReg->IER &= ~LPTIM_IER_CMPMIE;
+	    	dev->pLPTimReg->CMP = 0;
+		    while ((dev->pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
 		}
 		evt |= TIMER_EVT_TRIGGER(0);
         if (dev->Trigger[0].Handler)
