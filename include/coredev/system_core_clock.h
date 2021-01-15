@@ -83,6 +83,20 @@ extern "C" {
 #endif
 
 /**
+ * @brief	Get system low frequency oscillator type
+ *
+ * @return	Return oscillator type either internal RC or external crystal/osc
+ */
+OSC_TYPE GetLowFreqOscType();
+
+/**
+ * @brief	Get system high frequency oscillator type
+ *
+ * @return	Return oscillator type either internal RC or external crystal/osc
+ */
+OSC_TYPE GetHighFreqOscType();
+
+/**
  * @brief	Select core clock oscillator type
  *
  * @param	ClkSrc : Clock source selection

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	Vector_STM32L476xx.c
+@file	Vector_STM32L496xx.c
 
-@brief	Interrupt Vectors table for ARM Cortex-M4 STM32L476xx.
+@brief	Interrupt Vectors table for ARM Cortex-M4 STM32L496xx.
 
 		 CMSIS & GCC compiler
 		 linker section name .Vectors is used for the table
@@ -39,6 +39,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern unsigned long __StackTop;
 
 extern void ResetEntry(void);
+extern void Reset_Handler(void);
+extern char Image$$ER_ZI$$Base[];
+extern char Image$$ARM_LIB_STACK$$ZI$$Base[];
 
 void DEF_IRQHandler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
@@ -130,11 +133,20 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SWPMI1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void TSC_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void LCD_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RNG_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void CRS_IRQHandler(void);
 #if (__FPU_USED == 1)
 __WEAK void FPU_IRQHandler(void) {}
 #else
 __attribute__((weak, alias("DEF_IRQHandler"))) void FPU_IRQHandler(void);
 #endif
+__attribute__((weak, alias("DEF_IRQHandler"))) void I2C4_EV_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void I2C4_ER_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void DCMI_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void CAN2_TX_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void CAN2_RX0_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void CAN2_RX1_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void CAN2_SCE_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void DMA2D_IRQHandler(void);
 
 /**
  * This interrupt vector is by default located in FLASH. Though it can not be
@@ -163,7 +175,7 @@ void (* const __Vectors[])(void) = {
 	PendSV_Handler,
 	SysTick_Handler,
 
-// STM32L476 specific
+// STM32L496 specific
     WWDG_IRQHandler,					// Window WatchDog
 	PVD_PVM_IRQHandler,
 	TAMP_STAMP_IRQHandler,
@@ -245,11 +257,20 @@ void (* const __Vectors[])(void) = {
 	LCD_IRQHandler,
 	0,
 	RNG_IRQHandler,
-	FPU_IRQHandler
+	FPU_IRQHandler,
+	CRS_IRQHandler,
+	I2C4_EV_IRQHandler,
+	I2C4_ER_IRQHandler,
+	DCMI_IRQHandler,
+	CAN2_TX_IRQHandler,
+	CAN2_RX0_IRQHandler,
+	CAN2_RX1_IRQHandler,
+	CAN2_SCE_IRQHandler,
+	DMA2D_IRQHandler,
 };
+
 #ifdef __ICCARM__
 const uint32_t g_iVectorSize = sizeof(__vector_table) + 4;
 #else
 const uint32_t g_iVectorSize = sizeof(__Vectors) + 4;
 #endif
-

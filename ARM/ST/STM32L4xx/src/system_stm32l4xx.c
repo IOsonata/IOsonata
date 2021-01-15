@@ -9,27 +9,27 @@
 
 @license
 
-Copyright (c) 2019, I-SYST inc., all rights reserved
+MIT License
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Copyright (c) 2019 I-SYST inc. All rights reserved.
 
-For info or contributing contact : hnhoan at i-syst dot com
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
@@ -42,17 +42,54 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEFAULT_RC_FREQ		48000000
 #define XTAL_FREQ			16000000
 
+#define HSE_OSC_FREQ_MIN	4000000UL		// 4 MHz
+#define HSE_OSC_FREQ_MAX	48000000UL		// 48 MHz
+
+#define HSI_RC_OSC_FREQ		16000000UL		// 16 MHz
+
+#define MSI_RC_OSC_FREQ_MIN	100000UL		// 100 KHz
+#define MSI_RC_OSC_FREQ_MAX	48000000UL		// 48 MHz
+
+#define OSC_FREQ_MAX		48000000UL		// Max oscillator freq internal or external
+
 #define SYSTEM_CORE_CLOCK_MAX			80000000UL	// TODO: Adjust value for CPU with fixed core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(40UL)		// TODO: Adjustment value for nanosec delay
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
-static OSC_TYPE s_Clksrc = OSC_TYPE_RC;
-static uint32_t s_ClkSrcFreq = DEFAULT_RC_FREQ;
+//static OSC_TYPE s_Clksrc = OSC_TYPE_RC;
+//static uint32_t s_ClkSrcFreq = DEFAULT_RC_FREQ;
 static const uint32_t s_MsiClkRange[] = {
 	100000, 200000, 400000, 800000, 1000000, 2000000, 4000000, 8000000, 16000000, 24000000, 32000000, 48000000
 };
+
+__WEAK MCU_OSC s_McuOsc = {
+	OSC_TYPE_RC,
+	48000000,
+	OSC_TYPE_XTAL,
+	32768
+};
+
+/**
+ * @brief	Get system low frequency oscillator type
+ *
+ * @return	Return oscillator type either internal RC or external crystal/osc
+ */
+OSC_TYPE GetLowFreqOscType()
+{
+	return s_McuOsc.LFType;
+}
+
+/**
+ * @brief	Get system high frequency oscillator type
+ *
+ * @return	Return oscillator type either internal RC or external crystal/osc
+ */
+OSC_TYPE GetHighFreqOscType()
+{
+	return s_McuOsc.HFType;
+}
 
 void SetFlashWaitState(uint32_t CoreFreq)
 {
@@ -156,7 +193,7 @@ void SystemCoreClockUpdate(void)
 	}
 	else if (pllcfgr & RCC_PLLCFGR_PLLSRC_HSE)
 	{
-		SystemCoreClock = s_ClkSrcFreq;
+		SystemCoreClock = s_McuOsc.HFFreq;//s_ClkSrcFreq;
 	}
 	else if (pllcfgr & RCC_PLLCFGR_PLLSRC_HSI)
 	{
@@ -175,8 +212,46 @@ void SystemCoreClockUpdate(void)
 	SetFlashWaitState(SystemCoreClock);
 }
 
+/**
+ * @brief	Select core clock oscillator type
+ *
+ * @param	ClkSrc : Clock source selection
+ *						OSC_TYPE_RC - Internal RC
+ *						OSC_TYPE_XTAL - External crystal
+ *						OSC_TYPE_CTXO -	External oscillator
+ * @param	OscFreq : Oscillator frequency
+ *
+ * @return	true - success
+ *
+ */
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
+	if (OscFreq > OSC_FREQ_MAX)
+	{
+		return false;
+	}
+
+	if (ClkSrc == OSC_TYPE_RC)
+	{
+		if (OscFreq < MSI_RC_OSC_FREQ_MIN)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		if (OscFreq < HSE_OSC_FREQ_MIN)
+		{
+			return false;
+		}
+	}
+
+	s_McuOsc.HFType = ClkSrc;
+	s_McuOsc.HFFreq = OscFreq;
+
+	SystemInit();
+#if 0
+
 	uint32_t cfgr = 0;
 	uint32_t pllcfgr = 0;
 
@@ -238,13 +313,79 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	RCC->CFGR = cfgr;
 
 	SystemCoreClockUpdate();
+#endif
 
 	return true;//SYSTEM_CORE_CLOCK;
 }
 
 void SystemInit(void)
 {
-	SystemCoreClockSelect(OSC_TYPE_RC, DEFAULT_RC_FREQ);
+//	SystemCoreClockSelect(s_McuOsc.HFType, s_McuOsc.HFFreq);
+	uint32_t cfgr = 0;
+	uint32_t pllcfgr = 0;
+
+#if (__FPU_PRESENT == 1) && (__FPU_USED == 1)
+  /* enable FPU if available and used */
+  SCB->CPACR |= ((3UL << 10*2) |             /* set CP10 Full Access               */
+                 (3UL << 11*2)  );           /* set CP11 Full Access               */
+#endif
+
+	RCC->CFGR = 0;
+	RCC->PLLCFGR &= ~RCC_PLLCFGR_PLLREN;
+
+	RCC->CR |= RCC_CR_MSION;
+	RCC->CR &= ~(RCC_CR_PLLON | RCC_CR_HSEBYP | RCC_CR_CSSON | RCC_CR_HSEON);
+	while ((RCC->CR & RCC_CR_PLLRDY) != 0);
+	RCC->CIER = 0;
+
+	// Flash wait state to max core freq.
+	SetFlashWaitState(SYSTEM_CORE_CLOCK_MAX);
+
+	// internal default 48MHz RC, ready for USB clock
+	RCC->CR &= ~RCC_CR_MSIRANGE_Msk;
+	RCC->CR |= GetMsiRange(DEFAULT_RC_FREQ) | RCC_CR_MSIRGSEL;
+
+	// Select MSI 48MHz USB clock
+	RCC->CCIPR |= RCC_CCIPR_CLK48SEL_Msk;
+
+	// Always select PLL for max core frequency
+	cfgr |= RCC_CFGR_SW_PLL;
+
+	switch (s_McuOsc.HFType)
+	{
+		case OSC_TYPE_TCXO:
+			RCC->CR |= RCC_CR_HSEBYP;
+		case OSC_TYPE_XTAL:
+//			s_ClkSrcFreq = OscFreq;
+
+			RCC->CR |= RCC_CR_HSION;
+
+			while ((RCC->CR & RCC_CR_HSIRDY) == 0);
+
+			//RCC->CR |= RCC_CR_CSSON;
+			RCC->CR |= RCC_CR_HSEON;
+
+			while ((RCC->CR & RCC_CR_HSERDY) == 0);
+
+			pllcfgr |= RCC_PLLCFGR_PLLSRC_HSE;
+
+		default:	// MSI
+			//s_ClkSrcFreq = DEFAULT_RC_FREQ;
+			pllcfgr |= RCC_PLLCFGR_PLLSRC_MSI;
+	}
+
+	pllcfgr |= FindPllCfg(s_McuOsc.HFType);
+
+	RCC->PLLCFGR = pllcfgr;
+
+	RCC->CR |= RCC_CR_PLLON;
+	RCC->PLLCFGR |= RCC_PLLCFGR_PLLREN;
+
+	while ((RCC->CR & RCC_CR_PLLRDY) == 0);
+
+	RCC->CFGR = cfgr;
+
+	SystemCoreClockUpdate();
 }
 
 /**
