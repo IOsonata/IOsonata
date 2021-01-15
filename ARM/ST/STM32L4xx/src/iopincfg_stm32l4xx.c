@@ -287,7 +287,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 
 	int idx = IntNo >> 2;
-	uint32_t pos = (IntNo & 0xFF) << 2;
+	uint32_t pos = (IntNo & 0x3) << 2;
 	uint32_t mask = 0xF << pos;
 
 	SYSCFG->EXTICR[idx] &= ~mask;
@@ -297,7 +297,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 
 	EXTI->IMR1 |= mask;
 
-	mask &= 0x7DFF;
+	mask &= 0x7DFFFF;
 
 	switch (Sense)
 	{
