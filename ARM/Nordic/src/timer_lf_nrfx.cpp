@@ -110,7 +110,7 @@ static void RtcIRQHandler(int DevNo)
     {
         if (reg->EVENTS_COMPARE[i])
         {
-            evt |= 1 << (i + 2);
+            evt |= TIMER_EVT_TRIGGER(i);
             reg->EVENTS_COMPARE[i] = 0;
             if (s_nRfxRtcData[DevNo].Trigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
             {
