@@ -149,11 +149,11 @@ bool BleIntrfStartRx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
  */
 int BleIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
-	BLEINTRF *intrf = (BLEINTRF*)pDevIntrf->pDevData;
-	BLEINTRF_PKT *pkt;
+	BleIntrf_t *intrf = (BleIntrf_t*)pDevIntrf->pDevData;
+	BleIntrfPkt_t *pkt;
 	int cnt = 0;
 
-	pkt = (BLEINTRF_PKT *)CFifoGet(intrf->hRxFifo);
+	pkt = (BleIntrfPkt_t *)CFifoGet(intrf->hRxFifo);
 	if (pkt != NULL)
 	{
 	    cnt = min(BuffLen, pkt->Len);
@@ -198,9 +198,9 @@ bool BleIntrfStartTx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 	return true;
 }
 
-bool BleIntrfNotify(BLEINTRF *pIntrf)
+bool BleIntrfNotify(BleIntrf_t *pIntrf)
 {
-    BLEINTRF_PKT *pkt = NULL;
+	BleIntrfPkt_t *pkt = NULL;
     uint32_t res = NRF_SUCCESS;
 
     if (pIntrf->TransBuffLen > 0)
@@ -212,7 +212,7 @@ bool BleIntrfNotify(BLEINTRF *pIntrf)
 	{
 		pIntrf->TransBuffLen = 0;
 		uint32_t state = DisableInterrupt();
-		pkt = (BLEINTRF_PKT *)CFifoGet(pIntrf->hTxFifo);
+		pkt = (BleIntrfPkt_t *)CFifoGet(pIntrf->hTxFifo);
 		EnableInterrupt(state);
 		if (pkt == NULL)
 		{
@@ -244,15 +244,15 @@ bool BleIntrfNotify(BLEINTRF *pIntrf)
  */
 int BleIntrfTxData(DevIntrf_t *pDevIntrf, uint8_t *pData, int DataLen)
 {
-	BLEINTRF *intrf = (BLEINTRF*)pDevIntrf->pDevData;
-    BLEINTRF_PKT *pkt;
+	BleIntrf_t *intrf = (BleIntrf_t*)pDevIntrf->pDevData;
+	BleIntrfPkt_t *pkt;
     int maxlen = intrf->PacketSize - BLEINTRF_PKHDR_LEN;
 	int cnt = 0;
 
 	while (DataLen > 0)
 	{
 	    uint32_t state = DisableInterrupt();
-		pkt = (BLEINTRF_PKT *)CFifoPut(intrf->hTxFifo);
+		pkt = (BleIntrfPkt_t *)CFifoPut(intrf->hTxFifo);
 		EnableInterrupt(state);
 		if (pkt == NULL)
 		{
@@ -307,19 +307,19 @@ void BleIntrfReset(DevIntrf_t *pDevIntrf)
  *
  *
  */
-void BleIntrfTxComplete(BLESRVC *pBleSvc, int CharIdx)
+void BleIntrfTxComplete(BleSrvc_t *pBleSvc, int CharIdx)
 {
-    BleIntrfNotify((BLEINTRF*)pBleSvc->pContext);
+    BleIntrfNotify((BleIntrf_t*)pBleSvc->pContext);
 }
 
-void BleIntrfRxWrCB(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len)
+void BleIntrfRxWrCB(BleSrvc_t *pBleSvc, uint8_t *pData, int Offset, int Len)
 {
-	BLEINTRF *intrf = (BLEINTRF*)pBleSvc->pContext;
-    BLEINTRF_PKT *pkt;
+	BleIntrf_t *intrf = (BleIntrf_t*)pBleSvc->pContext;
+	BleIntrfPkt_t *pkt;
     //int maxlen = intrf->hTxFifo->BlkSize - sizeof(pkt->Len);
 
 	while (Len > 0) {
-		pkt = (BLEINTRF_PKT *)CFifoPut(intrf->hRxFifo);
+		pkt = (BleIntrfPkt_t *)CFifoPut(intrf->hRxFifo);
 		if (pkt == NULL)
 		{
 			intrf->RxDropCnt++;
@@ -338,7 +338,7 @@ void BleIntrfRxWrCB(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len)
 	}
 }
 
-bool BleIntrfInit(BLEINTRF *pBleIntrf, const BLEINTRF_CFG *pCfg)
+bool BleIntrfInit(BleIntrf_t *pBleIntrf, const BleIntrfCfg_t *pCfg)
 {
 	if (pBleIntrf == NULL || pCfg == NULL)
 		return false;
@@ -396,7 +396,7 @@ bool BleIntrfInit(BLEINTRF *pBleIntrf, const BLEINTRF_CFG *pCfg)
 	return true;
 }
 
-bool BleIntrf::Init(const BLEINTRF_CFG &Cfg)
+bool BleIntrf::Init(const BleIntrfCfg_t &Cfg)
 {
 	return BleIntrfInit(&vBleIntrf, &Cfg);
 }

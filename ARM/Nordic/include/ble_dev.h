@@ -51,24 +51,28 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef struct __Ble_Dev_Cfg {
 	char Name[BLEDEV_NAME_MAXLEN];			//!< Device name
 	uint8_t Addr[6];						//!< Device MAC address
-} BLEDEV_CFG;
+} BleDevCfg_t;
+
+typedef BleDevCfg_t	BLEDEV_CFG;
 
 #define BLEPERIPH_DEV_SERVICE_MAXCNT	10
 #define BLEPERIPH_DEV_NAME_MAXLEN		20
 
-typedef struct __BlePeriphDevData {
+typedef struct __BleDevData {
 	char Name[BLEPERIPH_DEV_NAME_MAXLEN];
 	ble_gap_addr_t Addr;
 	uint16_t ConnHdl;
 	int NbSrvc;
 	ble_gatt_db_srv_t Services[BLEPERIPH_DEV_SERVICE_MAXCNT];
-} BLEPERIPH_DEV;
+} BleDev_t;
+
+typedef BleDev_t	BLEPERIPH_DEV;
 
 #ifdef __cplusplus
 
 class BleDev : public Device {
 public:
-	virtual bool Init(BLEDEV_CFG &Cfg, DeviceIntrf * const pIntrf);
+	virtual bool Init(BleDevCfg_t &Cfg, DeviceIntrf * const pIntrf);
 	virtual bool Connect();
 	virtual void Disconnect();
 	virtual int BleSend(uint8_t * const pData, int DataLen);
@@ -76,13 +80,13 @@ public:
 
 protected:
 private:
-	BLEPERIPH_DEV Dev;
+	BleDev_t Dev;
 };
 
 extern "C" {
 #endif
 
-bool BleAppDiscoverDevice(BLEPERIPH_DEV * const pDev);
+bool BleAppDiscoverDevice(BleDev_t * const pDev);
 /**
  * @brief	Peripheral discovered callback.
  *
@@ -95,9 +99,9 @@ bool BleAppDiscoverDevice(BLEPERIPH_DEV * const pDev);
  *
  * @param	pDev :	Pointer to peripheral device data
  */
-void BleDevDiscovered(BLEPERIPH_DEV *pDev);
-int BleDevFindService(BLEPERIPH_DEV * const pDev, uint16_t Uuid);
-int BleDevFindCharacteristic(BLEPERIPH_DEV * const pDev, int SrvcIdx, uint16_t Uuid);
+void BleDevDiscovered(BleDev_t *pDev);
+int BleDevFindService(BleDev_t * const pDev, uint16_t Uuid);
+int BleDevFindCharacteristic(BleDev_t * const pDev, int SrvcIdx, uint16_t Uuid);
 
 #ifdef __cplusplus
 }

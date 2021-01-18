@@ -327,7 +327,7 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
  *          the device. It also sets the permissions and appearance.
  */
 
-static void BleAppGapParamInit(const BLEAPP_CFG *pBleAppCfg)
+static void BleAppGapParamInit(const BleAppCfg_t *pBleAppCfg)
 {
     uint32_t                err_code;
     ble_gap_conn_params_t   gap_conn_params;
@@ -1079,7 +1079,7 @@ void BleAppAdvStop()
 
 /**@brief Overloadable function for initializing the Advertising functionality.
  */
-__WEAK void BleAppAdvInit(const BLEAPP_CFG *pCfg)
+__WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
     uint32_t               err_code;
 //    ble_advdata_manuf_data_t mdata;
@@ -1248,7 +1248,7 @@ __WEAK void BleAppAdvInit(const BLEAPP_CFG *pCfg)
 	ble_advertising_conn_cfg_tag_set(&g_AdvInstance, BLEAPP_CONN_CFG_TAG);
 }
 
-void BleAppDisInit(const BLEAPP_CFG *pBleAppCfg)
+void BleAppDisInit(const BleAppCfg_t *pBleAppCfg)
 {
     ble_dis_init_t   dis_init;
     ble_dis_pnp_id_t pnp_id;
@@ -1350,7 +1350,7 @@ static void fds_evt_handler(fds_evt_t const * const p_fds_evt)
     }
 }
 
-bool BleAppConnectable(const BLEAPP_CFG *pBleAppCfg, bool bEraseBond)
+bool BleAppConnectable(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 {
 	uint32_t err_code;
 
@@ -1468,7 +1468,7 @@ int8_t GetValidTxPower(int TxPwr)
  *
  * @details This function initializes the SoftDevice and the BLE event interrupt.
  */
-bool BleAppInit(const BLEAPP_CFG *pBleAppCfg, bool bEraseBond)
+bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 {
 	ret_code_t err_code;
 
@@ -1669,7 +1669,7 @@ void BleAppScanStop()
 	}
 }
 
-bool BleAppScanInit(BLEAPP_SCAN_CFG *pCfg)
+bool BleAppScanInit(BleAppScanCfg_t *pCfg)
 {
 	if (pCfg == NULL)
 	{

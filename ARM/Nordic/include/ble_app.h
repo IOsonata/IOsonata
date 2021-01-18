@@ -111,7 +111,9 @@ typedef struct __BleApp_DevInfo {
 	const char *pSerialNoStr;	//!< Serial number string
 	const char *pFwVerStr;		//!< Firmware version string
 	const char *pHwVerStr;		//!< Hardware version string
-} BLEAPP_DEVDESC;
+} BleAppDevInfo_t;
+
+typedef BleAppDevInfo_t	BLEAPP_DEVDESC;
 
 /// BLE App configuration
 typedef struct __BleApp_Config {
@@ -124,7 +126,7 @@ typedef struct __BleApp_Config {
 	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
 	uint16_t ProductVer;			//!< PnP product version
 	bool bEnDevInfoService;			//!< Enable device information service (DIS)
-	const BLEAPP_DEVDESC *pDevDesc;	//!< Pointer device info descriptor
+	const BleAppDevInfo_t *pDevDesc;//!< Pointer device info descriptor
 	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise
 	int AdvManDataLen;				//!< Length of manufacture specific data
 	const uint8_t *pSrManData;		//!< Addition Manufacture specific data to advertise in scan response
@@ -147,7 +149,9 @@ typedef struct __BleApp_Config {
 	int	MaxMtu;						//!< Max MTU size or 0 for default
 	int PeriphDevCnt;				//!< Max number of peripheral connection
 //	BLEPERIPH_DEV *pPeriphDev;		//!< Connected peripheral data table
-} BLEAPP_CFG;
+} BleAppCfg_t;
+
+typedef BleAppCfg_t	BLEAPP_CFG;
 
 typedef struct __BleApp_Scan_Cfg {
 	uint32_t Interval;			//!< Scan interval in msec
@@ -155,7 +159,9 @@ typedef struct __BleApp_Scan_Cfg {
 	uint32_t Timeout;			//!< Scan timeout in sec
 	ble_uuid128_t BaseUid;		//!< Base UUID to look for
 	ble_uuid_t ServUid;			//!< Service Uid to look for
-} BLEAPP_SCAN_CFG;
+} BleAppScanCfg_t;
+
+typedef BleAppScanCfg_t	BLEAPP_SCAN_CFG;
 
 #pragma pack(pop)
 
@@ -163,7 +169,7 @@ typedef struct __BleApp_Scan_Cfg {
 
 class BleApp {
 public:
-	virtual bool Init(BLEAPP_CFG &CfgData);
+	virtual bool Init(BleAppCfg_t &CfgData);
 
 	virtual void InitCustomData() = 0;
 	virtual void InitServices() = 0;
@@ -222,7 +228,7 @@ void BleAppRtosWaitEvt(void);
  *
  * @return	true - success
  */
-bool BleAppInit(const BLEAPP_CFG *pBleAppCfg, bool bEraseBond);
+bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond);
 void BleAppEnterDfu();
 void BleAppRun();
 uint16_t BleAppGetConnHandle();
@@ -239,7 +245,7 @@ void BleAppAdvStart(BLEAPP_ADVMODE AdvMode);
 void BleAppAdvStop();
 void BleAppDisconnect();
 
-bool BleAppScanInit(BLEAPP_SCAN_CFG *pCfg);
+bool BleAppScanInit(BleAppScanCfg_t *pCfg);
 void BleAppScan();
 void BleAppScanStop();
 bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);

@@ -41,7 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "blueio_board.h"
 
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
+void UartTxSrvcCallback(BleSrvc_t *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 // NUS BLE
@@ -55,7 +55,7 @@ static const char s_NUSTxCharDescString[] = {
 };
 
 /// Characteristic definitions
-static BLESRVC_CHAR s_NUSChars[] = {
+static BleSrvcChar_t s_NUSChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLE_UUID_NUS_TX_CHARACTERISTIC,
@@ -82,12 +82,12 @@ static BLESRVC_CHAR s_NUSChars[] = {
 	},
 };
 
-static const int s_NbNUSChar = sizeof(s_NUSChars) / sizeof(BLESRVC_CHAR);
+static const int s_NbNUSChar = sizeof(s_NUSChars) / sizeof(BleSrvcChar_t);
 
 //uint8_t g_LWrBuffer[512];
 
 /// Service definition
-const BLESRVC_CFG s_NUSBleSrvcCfg = {
+const BleSrvcCfg_t s_NUSBleSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.UuidBase = NUS_BASE_UUID,				// Base UUID
 	.UuidSvc = BLE_UUID_NUS_SERVICE,		// Service UUID
@@ -97,14 +97,14 @@ const BLESRVC_CFG s_NUSBleSrvcCfg = {
 	.LongWrBuffSize = 0,//sizeof(g_LWrBuffer),	// long write buffer size
 };
 
-static BLESRVC s_NUSBleSrvc;
+static BleSrvc_t s_NUSBleSrvc;
 
-#define NUS_INTRF_CFIFO_MEMSIZE			CFIFO_TOTAL_MEMSIZE(20, BLE_NUSUART_MAX_DATA_LEN + sizeof(BLEINTRF_PKT) - 1)
+#define NUS_INTRF_CFIFO_MEMSIZE			CFIFO_TOTAL_MEMSIZE(20, BLE_NUSUART_MAX_DATA_LEN + sizeof(BleIntrfPkt_t) - 1)
 
 alignas(4) static uint8_t s_NUSIntrfRxBuff[NUS_INTRF_CFIFO_MEMSIZE];
 alignas(4) static uint8_t s_NUSIntrfTxBuff[NUS_INTRF_CFIFO_MEMSIZE];
 
-static BLEINTRF_CFG s_NUSBleIntrfCfg = {
+static BleIntrfCfg_t s_NUSBleIntrfCfg = {
 	.pBleSrv = &s_NUSBleSrvc,
 	.RxCharIdx = 1,
 	.TxCharIdx = 0,
@@ -130,7 +130,7 @@ static const char s_TxCharDescString[] = {
 };
 
 /// Characteristic definitions
-static BLESRVC_CHAR s_UartChars[] = {
+static BleSrvcChar_t s_UartChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLUEIO_UUID_UART_RX_CHAR,
@@ -157,12 +157,12 @@ static BLESRVC_CHAR s_UartChars[] = {
 	},
 };
 
-static const int s_NbUartChar = sizeof(s_UartChars) / sizeof(BLESRVC_CHAR);
+static const int s_NbUartChar = sizeof(s_UartChars) / sizeof(BleSrvcChar_t);
 
 //uint8_t g_LWrBuffer[512];
 
 /// Service definition
-const BLESRVC_CFG s_UartSrvcCfg = {
+const BleSrvcCfg_t s_UartSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.UuidBase = BLUEIO_UUID_BASE,			// Base UUID
 	.UuidSvc = BLUEIO_UUID_UART_SERVICE,	// Service UUID
@@ -172,15 +172,15 @@ const BLESRVC_CFG s_UartSrvcCfg = {
 	.LongWrBuffSize = 0,//sizeof(g_LWrBuffer),	// long write buffer size
 };
 
-static BLESRVC s_UartBleSrvc;
+static BleSrvc_t s_UartBleSrvc;
 
 
-#define BLUEIO_INTRF_CFIFO_MEMSIZE			CFIFO_TOTAL_MEMSIZE(20, BLE_NUSUART_MAX_DATA_LEN + sizeof(BLEINTRF_PKT) - 1)
+#define BLUEIO_INTRF_CFIFO_MEMSIZE			CFIFO_TOTAL_MEMSIZE(20, BLE_NUSUART_MAX_DATA_LEN + sizeof(BleIntrfPkt_t) - 1)
 
 alignas(4) static uint8_t s_BlueIOIntrfRxBuff[BLUEIO_INTRF_CFIFO_MEMSIZE];
 alignas(4) static uint8_t s_BlueIOIntrfTxBuff[BLUEIO_INTRF_CFIFO_MEMSIZE];
 
-static BLEINTRF_CFG s_BlueIOBleIntrfCfg = {
+static BleIntrfCfg_t s_BlueIOBleIntrfCfg = {
 	.pBleSrv = &s_UartBleSrvc,
 	.RxCharIdx = 0,
 	.TxCharIdx = 1,

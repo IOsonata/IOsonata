@@ -44,7 +44,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context);
 
-static BLEPERIPH_DEV *s_pBlePeriphData = NULL;
+static BleDev_t *s_pBlePeriphData = NULL;
 
 __attribute__ ((section("." "sdh_ble_observers1"))) __attribute__((used))
 static nrf_sdh_ble_evt_observer_t s_BlePeriphDiscObs = {
@@ -59,12 +59,12 @@ static int s_CurSrvcIdx = 0;
 static int s_CurCharIdx = 0;
 static ble_gattc_handle_range_t s_CurRange;
 
-__WEAK void BleDevDiscovered(BLEPERIPH_DEV *pDev)
+__WEAK void BleDevDiscovered(BleDev_t *pDev)
 {
 
 }
 
-bool BleAppDiscoverDevice(BLEPERIPH_DEV * const pDev)
+bool BleAppDiscoverDevice(BleDev_t * const pDev)
 {
 	s_pBlePeriphData = pDev;
 	s_CurSrvcIdx = 0;
@@ -75,7 +75,7 @@ bool BleAppDiscoverDevice(BLEPERIPH_DEV * const pDev)
     return err_code == NRF_SUCCESS;
 }
 
-int BleDevFindService(BLEPERIPH_DEV * const pDev, uint16_t Uuid)
+int BleDevFindService(BleDev_t * const pDev, uint16_t Uuid)
 {
     for (int i = 0; i < pDev->NbSrvc; i++)
     {
@@ -88,7 +88,7 @@ int BleDevFindService(BLEPERIPH_DEV * const pDev, uint16_t Uuid)
     return -1;
 }
 
-int BleDevFindCharacteristic(BLEPERIPH_DEV * const pDev, int SrvcIdx, uint16_t Uuid)
+int BleDevFindCharacteristic(BleDev_t * const pDev, int SrvcIdx, uint16_t Uuid)
 {
     for (int i = 0; i < pDev->Services[SrvcIdx].char_count; i++)
     {
@@ -139,7 +139,7 @@ void BlePeriphDiscService(uint16_t ConnHandle, ble_uuid_t * const pSrvcUuid)
 
 void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 {
-	BLEPERIPH_DEV *periph = *(BLEPERIPH_DEV**)p_context;
+	BleDev_t *periph = *(BleDev_t**)p_context;
 	ble_gattc_evt_t    const * p_ble_gattc_evt = &(p_ble_evt->evt.gattc_evt);
 
     switch (p_ble_evt->header.evt_id)

@@ -37,7 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __TPHTHINGY_H__
 #define __TPHTHINGY_H__
 
-#define DEVICE_NAME                     "EHAL_Thingy"                            /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "IOSonataThingy"                            /**< Name of device. Will be included in the advertising data. */
 
 #define THINGY_BASE_UUID    {{0x42, 0x00, 0x74, 0xA9, 0xFF, 0x52, 0x10, 0x9B, 0x33, 0x49, 0x35, 0x9B, 0x00, 0x00, 0x68, 0xEF}} /**< Used vendor specific UUID. */
 

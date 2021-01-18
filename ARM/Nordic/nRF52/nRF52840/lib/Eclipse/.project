@@ -36,16 +36,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/adc_nrf52_saadc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/adc_nrf52_saadc.h</locationURI>
-		</link>
-		<link>
-			<name>include/analog_comp_nrf5x.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/analog_comp_nrf5x.h</locationURI>
-		</link>
-		<link>
 			<name>include/audio</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -574,6 +564,11 @@
 			<name>include/converters/adc_ltc2495.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_ltc2495.h</locationURI>
+		</link>
+		<link>
+			<name>include/converters/adc_nrf52_saadc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/adc_nrf52_saadc.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/analog_comp.h</name>

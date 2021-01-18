@@ -273,10 +273,10 @@ typedef struct __BlueIO_Srvc_Cfg {
 extern "C" {
 #endif
 
-BLESRVC *GetBlueIOCtrlSrvcInstance();
-BLESRVC *GetBlueIOIoSrvcInstance();
-BLESRVC *GetUartSrvcInstance();
-BLESRVC *GetNUSSrvcInstance();
+BleSrvc_t *GetBlueIOCtrlSrvcInstance();
+BleSrvc_t *GetBlueIOIoSrvcInstance();
+BleSrvc_t *GetUartSrvcInstance();
+BleSrvc_t *GetNUSSrvcInstance();
 bool BlueIOSrvcInit(BLUEIOSRVC_CFG * const pCfg);
 void BlueIOSrvcEvtHandler(ble_evt_t * p_ble_evt);
 

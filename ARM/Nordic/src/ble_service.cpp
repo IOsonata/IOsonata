@@ -56,7 +56,7 @@ typedef struct {
 
 #pragma pack(pop)
 
-uint32_t BleSrvcCharNotify(BLESRVC *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
+uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 {
 	if (pSrvc->ConnHdl == BLE_CONN_HANDLE_INVALID)
 		return NRF_ERROR_INVALID_STATE;
@@ -77,7 +77,7 @@ uint32_t BleSrvcCharNotify(BLESRVC *pSrvc, int Idx, uint8_t *pData, uint16_t Dat
     return err_code;
 }
 
-uint32_t BleSrvcCharSetValue(BLESRVC *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
+uint32_t BleSrvcCharSetValue(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 {
 	ble_gatts_value_t value;
 
@@ -105,7 +105,7 @@ void GatherLongWrBuff(GATLWRHDR *pHdr)
 	}
 }
 
-void BleSrvcEvtHandler(BLESRVC *pSrvc, ble_evt_t *pBleEvt)
+void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
 {
     switch (pBleEvt->header.evt_id)
     {
@@ -271,7 +271,7 @@ static void BleSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode, BLESRVC_SECTYPE Sec
  *
  * @return      NRF_SUCCESS on success, otherwise an error code.
  */
-static uint32_t BlueIOBleSrvcCharAdd(BLESRVC *pSrvc, BLESRVC_CHAR *pChar,
+static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
 									 BLESRVC_SECTYPE SecType)
 {
     ble_gatts_char_md_t char_md;
@@ -382,7 +382,7 @@ static uint32_t BlueIOBleSrvcCharAdd(BLESRVC *pSrvc, BLESRVC_CHAR *pChar,
  * @param [in/out]	pSrvc : Service handle
  * @param [in]		pCfg  : Service configuration data
  */
-uint32_t BleSrvcInit(BLESRVC *pSrvc, const BLESRVC_CFG *pCfg)
+uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 {
     uint32_t   err;
     ble_uuid_t ble_uuid;

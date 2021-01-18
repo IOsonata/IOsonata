@@ -65,37 +65,49 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef struct __BleApp_Advertising_ManData {
 	uint8_t Type;		//!< Data types (see defined code above)
 	uint8_t Data[1];	//!< Type specific data follows can be more than 1 bytes
-} BLEADV_MANDATA;
+} BleAdvManData_t;
+
+//typedef BleAdvManData_t	BLEADV_MANDATA;
 
 /// Environmental sensor data
 typedef struct __EnvTPHData {
 	uint32_t Pressure;		//!< Barometric pressure in Pa no decimal
 	int16_t  Temperature;	//!< Temperature in degree C, 2 decimals fixed point
 	uint16_t Humidity;		//!< Relative humidity in %, 2 decimals fixed point
-} BLEADV_MANDATA_TPHSENSOR;
+} BleAdvManData_TphSensor_t;
+
+//BleAdvManData_TphSensor_t	BLEADV_MANDATA_TPHSENSOR;
 
 /// Gas sensor data
 typedef struct __EnvGasData {
 	uint32_t GasRes;		//!< Gas resistance
 	uint16_t AirQIdx;		//!< Air quality index
-} BLEADV_MANDATA_GASSENSOR;
+} BleAdvManData_GasSensor_t;
+
+//typedef BleAdvManData_GasSensor_t	BLEADV_MANDATA_GASSENSOR;
 
 /// IMU data
 typedef struct __AGM_Raw_Data {
 	uint16_t x;
 	uint16_t y;
 	uint16_t z;
-} BLEADV_MANDATA_IMUSENSOR;
+} BleAdvManData_ImuSensor_t;
+
+//typedef BleAdvManData_ImuSensor_t	BLEADV_MANDATA_IMUSENSOR;
 
 /// I/O pin state
 typedef struct __GPIO_Pin_State {
 	uint32_t State;		//!< Bit field pins state
-} BLEADV_MANDATA_GPIO;
+} BleAdvManData_Gpio_t;
+
+//typedef BleAdvManData_Gpio_t	BLEADV_MANDATA_GPIO;
 
 /// Button/Switch state
 typedef struct __ButSwitch_State {
 	uint32_t State;		//!< Bit field state state 0 = close, 1 = open
-} BLEADV_MANDATA_BUT;
+} BleAdvManData_But_t;
+
+//typedef BleAdvManData_But_t	BLEADV_MANDATA_BUT;
 
 #pragma pack(pop)
 

@@ -58,19 +58,22 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef struct __BleDeviceInterfPacket {
     uint16_t    Len;    // Valid data length
     uint8_t     Data[1];// Data container array
-} BLEINTRF_PKT;
+} BleIntrfPkt_t;
+
+typedef BleIntrfPkt_t	BLEINTRF_PKT;
+
 #pragma pack(pop)
 
 /**
  * Calculate require mem
  */
-#define BLEINTRF_PKHDR_LEN			(sizeof(BLEINTRF_PKT) - 1)
+#define BLEINTRF_PKHDR_LEN			(sizeof(BleIntrfPkt_t) - 1)
 #define BLEINTRF_CFIFO_TOTAL_MEMSIZE(npk, pksize)	CFIFO_TOTAL_MEMSIZE(npk, pksize + BLEINTRF_PKHDR_LEN)
 
 #pragma pack(push, 4)
 
 typedef struct __BleDeviceInterfConfig {
-    BLESRVC	*pBleSrv;		//!< BLE Service
+	BleSrvc_t *pBleSrv;		//!< BLE Service
     int		RxCharIdx;		//!< Write characteristic index (From BLE)
     int		TxCharIdx;		//!< Read characteristic index (to BLE)
     int		PacketSize;		//!< BLE packet size
@@ -79,12 +82,14 @@ typedef struct __BleDeviceInterfConfig {
 	int		TxFifoMemSize;	//!< Total memory size for CFIFO
 	uint8_t	*pTxFifoMem;	//!< Pointer to memory to be used by CFIFO
 	DevIntrfEvtHandler_t EvtCB;	//!< Event callback
-} BLEINTRF_CFG;
+} BleIntrfCfg_t;
+
+typedef BleIntrfCfg_t	BLEINTRF_CFG;
 
 // BLE interf instance data
 typedef struct __BleDeviceInterf {
 	DevIntrf_t	DevIntrf;	//!< Base Device Interface
-    BLESRVC		*pBleSrv;	//!< BLE Service
+	BleSrvc_t	*pBleSrv;	//!< BLE Service
     int			RxCharIdx;	//!< Write characteristic index (from BLE)
     int			TxCharIdx;	//!< Read characteristic index (to BLE)
     int			PacketSize;	//!< BLE packet size
@@ -94,17 +99,20 @@ typedef struct __BleDeviceInterf {
     uint32_t	TxDropCnt;
     uint8_t     TransBuff[BLEINTRF_TRANSBUFF_MAXLEN];  //
     int         TransBuffLen;   //!< Data length
-} BLEINTRF;
+} BleIntrf_t;
+
+typedef BleIntrf_t	BLEINTRF;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
 
 class BleIntrf : public DeviceIntrf {
 public:
-	bool Init(const BLEINTRF_CFG &Cfg);
+	bool Init(const BleIntrfCfg_t &Cfg);
 
 	operator DevIntrf_t * const () { return &vBleIntrf.DevIntrf; }	// Get device interface data
-	operator BLESRVC * const () { return vBleIntrf.pBleSrv; }
+	operator BleSrvc_t * const () { return vBleIntrf.pBleSrv; }
 	// Set data rate in bits/sec (Hz)
 	virtual uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vBleIntrf.DevIntrf, DataRate); }
 	// Get current data rate in bits/sec (Hz)
@@ -142,13 +150,13 @@ public:
 
 private:
 
-	BLEINTRF vBleIntrf;
+	BleIntrf_t vBleIntrf;
 };
 
 extern "C" {
 #endif
 
-bool BleIntrfInit(BLEINTRF * const pBleIntrf, const BLEINTRF_CFG *pCfg);
+bool BleIntrfInit(BleIntrf_t * const pBleIntrf, const BleIntrfCfg_t *pCfg);
 
 #ifdef __cplusplus
 }

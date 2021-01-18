@@ -56,17 +56,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /// First UUID base is always used for the service.
 #define BLESVC_UUID_BASE_MAXCNT			4
 
-typedef struct __BLE_Service_Data BLESRVC;
+typedef struct __BLE_Service_Data	BleSrvc_t;
+typedef BleSrvc_t					BLESRVC;
 
 /**
  * @brief	Callback on write
  */
-typedef void (*BLESRVC_WRCB) (BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len);
+typedef void (*BLESRVC_WRCB) (BleSrvc_t *pBleSvc, uint8_t *pData, int Offset, int Len);
 
 /**
  * @brief	Callback on set notification
  */
-typedef void (*BLESRVC_SETNOTCB) (BLESRVC *pBleSvc, bool bEnable);
+typedef void (*BLESRVC_SETNOTCB) (BleSrvc_t *pBleSvc, bool bEnable);
 
 /**
  * @brief	Callback when transmission is completed
@@ -74,7 +75,7 @@ typedef void (*BLESRVC_SETNOTCB) (BLESRVC *pBleSvc, bool bEnable);
  * @param	pBlueIOSvc
  * @param	CharIdx
  */
-typedef void (*BLESRVC_TXCOMPLETE) (BLESRVC *pBleSvc, int CharIdx);
+typedef void (*BLESRVC_TXCOMPLETE) (BleSrvc_t *pBleSvc, int CharIdx);
 
 /**
  * @brief	Callback on authorization request
@@ -82,7 +83,7 @@ typedef void (*BLESRVC_TXCOMPLETE) (BLESRVC *pBleSvc, int CharIdx);
  * @param	pBlueIOSvc
  * @param	p_ble_evt
  */
-typedef void (*BLESRVC_AUTHREQ)(BLESRVC *pBleSvc, ble_evt_t * p_ble_evt);
+typedef void (*BLESRVC_AUTHREQ)(BleSrvc_t *pBleSvc, ble_evt_t * p_ble_evt);
 
 // Service connection security types
 typedef enum {
@@ -109,7 +110,9 @@ typedef struct __BLE_Service_Char_Data {
     ble_gatts_char_handles_t Hdl;       //!< char handle
     bool bNotify;                       //!< Notify flag for read characteristic
     uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
-} BLESRVC_CHAR;
+} BleSrvcChar_t;
+
+typedef BleSrvcChar_t		BLESRVC_CHAR;
 
 /*
  * User configuration for the service to be created
@@ -120,11 +123,13 @@ typedef struct __BLE_Service_Config {
 	int				NbUuidBase;			//!< Number of UUID defined in the UuidBase array
 	uint16_t		UuidSvc;			//!< Service UUID
 	int             NbChar;				//!< Total number of characteristics for the service
-	BLESRVC_CHAR *pCharArray;           //!< Pointer a an array of characteristic
+	BleSrvcChar_t	*pCharArray;           //!< Pointer a an array of characteristic
     uint8_t			*pLongWrBuff;		//!< pointer to user long write buffer
     int				LongWrBuffSize;		//!< long write buffer size
     BLESRVC_AUTHREQ	AuthReqCB;			//!< Authorization request callback
-} BLESRVC_CFG;
+} BleSrvcCfg_t;
+
+typedef BleSrvcCfg_t	BLESRVC_CFG;
 
 /*
  * Blue IO Service private data to be passed when calling service related functions.
@@ -134,7 +139,7 @@ typedef struct __BLE_Service_Config {
  */
 struct __BLE_Service_Data {
     int             NbChar;				//!< Number of characteristic defined for this service
-    BLESRVC_CHAR 	*pCharArray;        //!< Pointer to array of characteristics
+    BleSrvcChar_t 	*pCharArray;        //!< Pointer to array of characteristics
     uint16_t        SrvcHdl;            //!< Service handle
     uint16_t        ConnHdl;			//!< Connection handle
     uint16_t        UuidSvc;            //!< Service UUID
@@ -160,7 +165,7 @@ extern "C" {
  *
  * @return	0 - Success
  */
-uint32_t BleSrvcInit(BLESRVC *pSrvc, const BLESRVC_CFG *pCfg);
+uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg);
 
 /**
  * @brief	Notify characteristic data
@@ -172,7 +177,7 @@ uint32_t BleSrvcInit(BLESRVC *pSrvc, const BLESRVC_CFG *pCfg);
  *
  * @return	0 - Success
  */
-uint32_t BleSrvcCharNotify(BLESRVC *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
+uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
 
 /**
  * @brief	Update characteristic data
@@ -184,7 +189,7 @@ uint32_t BleSrvcCharNotify(BLESRVC *pSrvc, int Idx, uint8_t *pData, uint16_t Dat
  *
  * @return	0 - Success
  */
-uint32_t BleSrvcCharSetValue(BLESRVC *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
+uint32_t BleSrvcCharSetValue(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
 
 /**
  * @brief	Check connection state of the service
@@ -196,7 +201,7 @@ uint32_t BleSrvcCharSetValue(BLESRVC *pSrvc, int Idx, uint8_t *pData, uint16_t D
  * @return	true - Connected
  * 			false - Not connected
  */
-static inline bool IsBleSrvcConnected(BLESRVC *pSrvc) { return pSrvc->ConnHdl != BLE_CONN_HANDLE_INVALID; }
+static inline bool IsBleSrvcConnected(BleSrvc_t *pSrvc) { return pSrvc->ConnHdl != BLE_CONN_HANDLE_INVALID; }
 
 /**
  * @brief	Check for notification state of a characteristic
@@ -210,12 +215,12 @@ static inline bool IsBleSrvcConnected(BLESRVC *pSrvc) { return pSrvc->ConnHdl !=
  * @return	true - Notification is enabled
  * 			false - Otherwise
  */
-static inline bool IsBleSrvcCharNotifyEnabled(BLESRVC *pSrvc, int CharIdx) { return pSrvc->pCharArray[CharIdx].bNotify; }
+static inline bool IsBleSrvcCharNotifyEnabled(BleSrvc_t *pSrvc, int CharIdx) { return pSrvc->pCharArray[CharIdx].bNotify; }
 
 /**
  * #brief	Service event handler.  Call this within BLE dispatch event callback
  */
-void BleSrvcEvtHandler(BLESRVC *pSrvc, ble_evt_t *pBleEvt);
+void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt);
 
 #ifdef __cplusplus
 }
@@ -225,7 +230,7 @@ class BleService {
 	BleService() {}
 	virtual ~BleService() {}
 
-	virtual uint32_t Init(BLESRVC_CFG &Cfg) {
+	virtual uint32_t Init(BleSrvcCfg_t &Cfg) {
 	    vSrvc.pContext = (void*)this;
 
 		return BleSrvcInit(&vSrvc, &Cfg);
@@ -236,10 +241,10 @@ class BleService {
 	virtual uint32_t CharSetValue(int Idx, uint8_t *pData, int DataLen) {
 		return BleSrvcCharSetValue(&vSrvc, Idx, pData, DataLen);
 	}
-	virtual operator BLESRVC* () { return &vSrvc; }
+	virtual operator BleSrvc_t* () { return &vSrvc; }
 
 public:
-	BLESRVC vSrvc;
+	BleSrvc_t vSrvc;
 };
 
 #endif

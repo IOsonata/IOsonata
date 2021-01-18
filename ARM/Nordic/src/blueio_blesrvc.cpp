@@ -40,7 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
 
-void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
+void UartTxSrvcCallback(BleSrvc_t *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
 
 static const char s_NUSRxCharDescString[] = {
 	"NUS Rx characteristic",
@@ -51,7 +51,7 @@ static const char s_NUSTxCharDescString[] = {
 };
 
 /// Characteristic definitions
-BLESRVC_CHAR g_NUSChars[] = {
+BleSrvcChar_t g_NUSChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLE_UUID_NUS_RX_CHARACTERISTIC,
@@ -78,12 +78,12 @@ BLESRVC_CHAR g_NUSChars[] = {
 	},
 };
 
-static const int s_NbNUSChar = sizeof(g_NUSChars) / sizeof(BLESRVC_CHAR);
+static const int s_NbNUSChar = sizeof(g_NUSChars) / sizeof(BleSrvcChar_t);
 
 //uint8_t g_LWrBuffer[512];
 
 /// Service definition
-const BLESRVC_CFG s_NUSSrvcCfg = {
+const BleSrvcCfg_t s_NUSSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.UuidBase = NUS_BASE_UUID,				// Base UUID
 	.UuidSvc = BLE_UUID_NUS_SERVICE,		// Service UUID
@@ -93,7 +93,7 @@ const BLESRVC_CFG s_NUSSrvcCfg = {
 	.LongWrBuffSize = 0,//sizeof(g_LWrBuffer),	// long write buffer size
 };
 
-BLESRVC g_NUSBleSrvc;
+BleSrvc_t g_NUSBleSrvc;
 
 static const char s_RxCharDescString[] = {
 	"UART Rx characteristic",
@@ -104,7 +104,7 @@ static const char s_TxCharDescString[] = {
 };
 
 /// Characteristic definitions
-BLESRVC_CHAR g_UartChars[] = {
+BleSrvcChar_t g_UartChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLUEIO_UUID_UART_RX_CHAR,
@@ -131,12 +131,12 @@ BLESRVC_CHAR g_UartChars[] = {
 	},
 };
 
-static const int s_NbUartChar = sizeof(g_UartChars) / sizeof(BLESRVC_CHAR);
+static const int s_NbUartChar = sizeof(g_UartChars) / sizeof(BleSrvcChar_t);
 
 //uint8_t g_LWrBuffer[512];
 
 /// Service definition
-const BLESRVC_CFG s_UartSrvcCfg = {
+const BleSrvcCfg_t s_UartSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.UuidBase = BLUEIO_UUID_BASE,			// Base UUID
 	.UuidSvc = BLUEIO_UUID_UART_SERVICE,	// Service UUID
@@ -146,7 +146,7 @@ const BLESRVC_CFG s_UartSrvcCfg = {
 	.LongWrBuffSize = 0,//sizeof(g_LWrBuffer),	// long write buffer size
 };
 
-BLESRVC g_UartBleSrvc;
+BleSrvc_t g_UartBleSrvc;
 
 /// BlueIO Control Service
 static const char s_BlueIOCtrlCmdCharDescString[] = {
@@ -158,7 +158,7 @@ static const char s_BlueIOCtrlDataCharDescString[] = {
 };
 
 /// Characteristic definitions
-BLESRVC_CHAR g_BlueIOCtrlChars[] = {
+BleSrvcChar_t g_BlueIOCtrlChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLUEIO_UUID_CTRL_DATACHAR,
@@ -185,12 +185,12 @@ BLESRVC_CHAR g_BlueIOCtrlChars[] = {
 	},
 };
 
-static const int s_NbBlueIOCtrlChar = sizeof(g_BlueIOCtrlChars) / sizeof(BLESRVC_CHAR);
+static const int s_NbBlueIOCtrlChar = sizeof(g_BlueIOCtrlChars) / sizeof(BleSrvcChar_t);
 
 uint8_t g_LWrBuffer[512];
 
 /// Service definition
-const BLESRVC_CFG s_BlueIOCtrlSrvcCfg = {
+const BleSrvcCfg_t s_BlueIOCtrlSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.UuidBase = BLUEIO_UUID_BASE,			// Base UUID
 	.UuidSvc = BLUEIO_UUID_CTRL_SERVICE,			// Service UUID
@@ -200,7 +200,7 @@ const BLESRVC_CFG s_BlueIOCtrlSrvcCfg = {
 	.LongWrBuffSize = sizeof(g_LWrBuffer),	// long write buffer size
 };
 
-BLESRVC g_BlueIOCtrlSrvc;
+BleSrvc_t g_BlueIOCtrlSrvc;
 
 /// BlueIO I/O Service
 static const char s_BlueIOIoGpioCharDescString[] = {
@@ -212,7 +212,7 @@ static const char s_BlueIOIoButCharDescString[] = {
 };
 
 /// Characteristic definitions
-BLESRVC_CHAR g_BlueIOIoChars[] = {
+BleSrvcChar_t g_BlueIOIoChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLUEIO_UUID_IO_GPIO_CHAR,
@@ -251,10 +251,10 @@ BLESRVC_CHAR g_BlueIOIoChars[] = {
 	},
 };
 
-static const int s_NbBlueIOIoChar = sizeof(g_BlueIOIoChars) / sizeof(BLESRVC_CHAR);
+static const int s_NbBlueIOIoChar = sizeof(g_BlueIOIoChars) / sizeof(BleSrvcChar_t);
 
 /// Service definition
-const BLESRVC_CFG s_BlueIOIoSrvcCfg = {
+const BleSrvcCfg_t s_BlueIOIoSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.UuidBase = BLUEIO_UUID_BASE,			// Base UUID
 	.UuidSvc = BLUEIO_UUID_IO_SERVICE,			// Service UUID
@@ -264,7 +264,7 @@ const BLESRVC_CFG s_BlueIOIoSrvcCfg = {
 	.LongWrBuffSize = 0,	// long write buffer size
 };
 
-BLESRVC g_BlueIOIoSrvc;
+BleSrvc_t g_BlueIOIoSrvc;
 
 
 
@@ -273,7 +273,7 @@ BLESRVC g_BlueIOIoSrvc;
 static uint8_t g_BlueIOIntrfRxBuff[BLUEIO_INTRF_CFIFO_MEMSIZE];
 static uint8_t g_BlueIOIntrfTxBuff[BLUEIO_INTRF_CFIFO_MEMSIZE];
 
-static const BLEINTRF_CFG s_BlueIOBleIntrfCfg = {
+static const BleIntrfCfg_t s_BlueIOBleIntrfCfg = {
 	.pBleSrv = &g_BlueIOCtrlSrvc,
 	.RxCharIdx = 1,
 	.TxCharIdx = 0,
@@ -284,26 +284,26 @@ static const BLEINTRF_CFG s_BlueIOBleIntrfCfg = {
 	.pTxFifoMem = g_BlueIOIntrfTxBuff,
 };
 
-BLEINTRF g_BlueIOBleIntrf;
+BleIntrf_t g_BlueIOBleIntrf;
 
 static bool g_BlueIOSrvcInitialized = false;
 
-BLESRVC *GetUartSrvcInstance()
+BleSrvc_t *GetUartSrvcInstance()
 {
 	return &g_UartBleSrvc;
 }
 
-BLESRVC *GetBlueIOCtrlSrvcInstance()
+BleSrvc_t *GetBlueIOCtrlSrvcInstance()
 {
 	return &g_BlueIOCtrlSrvc;
 }
 
-BLESRVC *GetBlueIOIoSrvcInstance()
+BleSrvc_t *GetBlueIOIoSrvcInstance()
 {
 	return &g_BlueIOIoSrvc;
 }
 
-BLESRVC *GetNUSSrvcInstance()
+BleSrvc_t *GetNUSSrvcInstance()
 {
 	return &g_NUSBleSrvc;
 }
