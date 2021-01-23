@@ -288,11 +288,14 @@ void nRFxSPIPowerOff(DevIntrf_t * const pDev)
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 0;
 #endif
 
-	if (dev->pSpiDev->Cfg.NbIOPins > 3)
+//	if (dev->pSpiDev->Cfg.NbIOPins > 3)
 	{
 		for (int i = 0; i < dev->pSpiDev->Cfg.NbIOPins; i++)
 		{
-			IOPinDisable(dev->pSpiDev->Cfg.pIOPinMap[i].PortNo, dev->pSpiDev->Cfg.pIOPinMap[i].PinNo);
+			if (dev->pSpiDev->Cfg.pIOPinMap[i].PortNo != -1 && dev->pSpiDev->Cfg.pIOPinMap[i].PinNo != -1)
+			{
+				IOPinDisable(dev->pSpiDev->Cfg.pIOPinMap[i].PortNo, dev->pSpiDev->Cfg.pIOPinMap[i].PinNo);
+			}
 		}
 	}
 }
