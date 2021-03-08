@@ -243,7 +243,7 @@ void Stm32l4LptDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
 	g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->IER &= ~LPTIM_IER_CMPMIE;
 	g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->CMP = 0;
-	while ((g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
+	//while ((g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
 }
 
 /**
