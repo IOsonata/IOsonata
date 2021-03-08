@@ -222,7 +222,17 @@ static void EInkIntrfReset(DevIntrf_t * const pDev)
 
 static void EInkIntrfPowerOff(DevIntrf_t * const pDev)
 {
+	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 
+	IOPinDisable(dev->pIOPinMap[EIINTRF_RST_PIN_IDX].PortNo, dev->pIOPinMap[EIINTRF_RST_PIN_IDX].PinNo);
+	IOPinDisable(dev->pIOPinMap[EIINTRF_DC_PIN_IDX].PortNo, dev->pIOPinMap[EIINTRF_DC_PIN_IDX].PinNo);
+
+	if (dev->Type == EIINTRF_TYPE_BITBANG)
+	{
+		IOPinDisable(dev->pIOPinMap[EIINTRF_SCL_PIN_IDX].PortNo, dev->pIOPinMap[EIINTRF_SCL_PIN_IDX].PinNo);
+		IOPinDisable(dev->pIOPinMap[EIINTRF_SDA_PIN_IDX].PortNo, dev->pIOPinMap[EIINTRF_SDA_PIN_IDX].PinNo);
+		IOPinDisable(dev->pIOPinMap[EIINTRF_CS_PIN_IDX].PortNo, dev->pIOPinMap[EIINTRF_CS_PIN_IDX].PinNo);
+	}
 }
 
 void EInkIntrfSetDataMode(EInkIntrfDev_t *pDev, bool bDataMode)
