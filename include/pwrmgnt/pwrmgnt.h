@@ -133,7 +133,18 @@ public:
 	 */
 	virtual uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr) = 0;
 
+	/**
+	 * @brief	Charging status
+	 *
+	 * @return	true - Charging
+	 */
 	virtual bool Charging() { return false; }
+
+	/**
+	 * @brief	Battery present status
+	 *
+	 * @return	true - Battery present
+	 */
 	virtual bool Battery() { return false; }
 
 	/**
