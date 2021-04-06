@@ -84,7 +84,7 @@ static const uint32_t s_Ratio[] = {
 
 static const int s_NbRatio = sizeof(s_Ratio) / sizeof(uint32_t);
 
-static I2SDEV *s_pI2SDev = NULL;
+static I2SDev_t *s_pI2SDev = NULL;
 
 #define I2S_BUFF_MAX		4
 
@@ -94,7 +94,7 @@ alignas(4) static uint32_t s_I2S_TxBuffer[I2S_BUFF_MAX] = { 0xA500A4, 0xA600a7, 
 static int s_RxBuffLen = 0;
 static int s_TxBuffLen = 0;
 
-bool nRFxI2SWaitStop(I2SDEV * const pDev, int32_t Timeout)
+bool nRFxI2SWaitStop(I2SDev_t * const pDev, int32_t Timeout)
 {
 	do {
 		if (NRF_I2S->EVENTS_STOPPED)
@@ -108,7 +108,7 @@ bool nRFxI2SWaitStop(I2SDEV * const pDev, int32_t Timeout)
 	return false;
 }
 
-bool nRFxI2SWaitRx(I2SDEV * const pDev, int32_t Timeout)
+bool nRFxI2SWaitRx(I2SDev_t * const pDev, int32_t Timeout)
 {
 	do {
 		if (NRF_I2S->EVENTS_RXPTRUPD)
@@ -122,7 +122,7 @@ bool nRFxI2SWaitRx(I2SDEV * const pDev, int32_t Timeout)
 	return false;
 }
 
-bool nRFxI2SWaitTx(I2SDEV * const pDev, int32_t Timeout)
+bool nRFxI2SWaitTx(I2SDev_t * const pDev, int32_t Timeout)
 {
 	do {
 		if (NRF_I2S->EVENTS_TXPTRUPD)
@@ -144,7 +144,7 @@ static void nRFxI2SDisable(DEVINTRF * const pDev)
 
 static void nRFxI2SEnable(DEVINTRF * const pDev)
 {
-	I2SDEV *dev = (I2SDEV*)pDev->pDevData;
+	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
 
 	if (NRF_I2S->PSEL.SDIN != -1)
 	{
@@ -168,14 +168,14 @@ static void nRFxI2SPowerOff(DEVINTRF * const pDev)
 
 static uint32_t nRFxI2SGetRate(DEVINTRF * const pDev)
 {
-	I2SDEV *dev = (I2SDEV*)pDev->pDevData;
+	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
 
 	return dev->Freq;
 }
 
 static uint32_t nRFxI2SSetRate(DEVINTRF * const pDev, uint32_t Rate)
 {
-	I2SDEV *dev = (I2SDEV*)pDev->pDevData;
+	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
 	uint32_t diff = -1;
 	int idx = 0;
 	int ratio = 0;
@@ -231,7 +231,7 @@ bool nRFxI2SStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 
 int nRFxI2SRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	I2SDEV *dev = (I2SDEV*)pDev->pDevData;
+	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
 
 
 	//NRF_I2S->RXD.PTR = (uint32_t)pBuff;
@@ -280,7 +280,7 @@ void nRFxI2SReset(DEVINTRF * const pDev)
  *
  * @return	true - Initialization success
  */
-bool I2SInit(I2SDEV * const pDev, const I2SCFG * const pCfgData)
+bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfgData)
 {
 	if (pDev == nullptr || pCfgData == nullptr)
 	{

@@ -38,7 +38,7 @@ SOFTWARE.
 
 #define CRC_ATM_POLYNOMIAL		0x107
 
-bool FgLc709203f::Init(const FUELGAUGE_CFG &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt)
+bool FgLc709203f::Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt)
 {
 	if (pIntrf == NULL || Cfg.DevAddr != LC709203F_I2C_7BITS_DEV_ADDR)
 	{

@@ -35,7 +35,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "pwrmgnt/pm_as3701.h"
 
-bool PmAs3701::Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf)
+bool PmAs3701::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	if (pIntrf == NULL)
 	{
@@ -63,7 +63,7 @@ bool PmAs3701::Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf)
 		}
 	}
 
-	SetCharge(PWR_CHARGE_TYPE_AUTO, Cfg.VEndChrg, Cfg.ChrgCurr);
+	SetCharge(PWRMGNT_CHARGE_TYPE_AUTO, Cfg.VEndChrg, Cfg.ChrgCurr);
 
 	if (Cfg.pBatProf)
 	{
@@ -243,7 +243,7 @@ void PmAs3701::PowerOff()
 	Write8(&regaddr, 1, d);
 }
 
-uint32_t PmAs3701::SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr)
+uint32_t PmAs3701::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr)
 {
 	uint8_t regaddr = AS3701_CHARGER_VOLTAGE_CTRL_REG;
 	uint8_t d = 0;
@@ -417,19 +417,19 @@ void PmAs3701::IrqHandler()
 	{
 		if (flag & AS3701_INTERRUPT_STATUS1_EOC_INT)
 		{
-			vpEvtHandler(this, PWREVT_CHARGE_FULL);
+			vpEvtHandler(this, PWRMGNT_EVT_CHARGE_FULL);
 		}
 		if (flag & AS3701_INTERRUPT_STATUS1_OVTMP_INT)
 		{
-			vpEvtHandler(this, PWREVT_OVER_HEAT);
+			vpEvtHandler(this, PWRMGNT_EVT_OVER_HEAT);
 		}
 		if (flag & AS3701_INTERRUPT_STATUS1_LOWBAT_INT)
 		{
-			vpEvtHandler(this, PWREVT_LOW_BAT);
+			vpEvtHandler(this, PWRMGNT_EVT_LOW_BAT);
 		}
 		if (flag & AS3701_INTERRUPT_STATUS1_CHDET_INT)
 		{
-			vpEvtHandler(this, PWREVT_CHARGE_DETECTED);
+			vpEvtHandler(this, PWRMGNT_EVT_CHARGE_DETECTED);
 		}
 	}
 }

@@ -232,12 +232,11 @@ SOFTWARE.
 #define MP2696A_REG08_JEITA_VSET_100MV		(0<<7)	//!< Vbatfull - 100mV
 #define MP2696A_REG08_JEITA_VSET_200MV		(1<<7)	//!< Vbatfull - 200mV
 
-
 #ifdef __cplusplus
 
 class PmMp2696a : public PowerMgnt {
 public:
-	bool Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf);
+	bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf);
 
 	/**
 	 * @brief	Set output voltage
@@ -289,7 +288,7 @@ public:
 	 *
 	 * @return	Actual charge current set.
 	 */
-	uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr);
+	uint32_t SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr);
 
 	/**
 	 * @brief	Charging status

@@ -34,7 +34,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "pwrmgnt/pm_mp2696a.h"
 
-bool PmMp2696a::Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf)
+bool PmMp2696a::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	if (pIntrf == NULL || Cfg.DevAddr != MP2696A_I2C_DEVADDR)
 	{
@@ -156,7 +156,7 @@ void PmMp2696a::PowerOff()
 	Disable();
 }
 
-uint32_t PmMp2696a::SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr)
+uint32_t PmMp2696a::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr)
 {
 	uint8_t regaddr = MP2696A_REG02;
 	uint8_t d = Read(&regaddr, 1, &d, 1) & ~MP2696A_REG02_BATT_REG_MASK;

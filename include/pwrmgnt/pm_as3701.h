@@ -412,7 +412,7 @@ SOFTWARE.
 
 class PmAs3701 : public PowerMgnt, public LedDevice {
 public:
-	bool Init(const PWRCFG &Cfg, DeviceIntrf * const pIntrf);
+	bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf);
 	int32_t SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit);
 
 	/**
@@ -438,7 +438,7 @@ public:
 
 	void PowerOff();
 
-	uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr);
+	uint32_t SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr);
 
 	bool Charging();
 	bool Battery();

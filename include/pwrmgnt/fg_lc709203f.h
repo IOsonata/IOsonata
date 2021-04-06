@@ -70,7 +70,7 @@ SOFTWARE.
 
 class FgLc709203f : public FuelGauge {
 public:
-	bool Init(const FUELGAUGE_CFG &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt);
+	bool Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt);
 
 	/**
 	 * @brief	Get battery level

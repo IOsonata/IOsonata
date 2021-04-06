@@ -57,7 +57,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef struct __TemperatureSensor_Data {
 	uint64_t Timestamp;		//!< Time stamp count in usec
 	int32_t  Temperature;	//!< Temperature in degree C, 2 decimals fixed point
-} TEMPSENSOR_DATA;
+} TempSensorData_t;
+
+typedef TempSensorData_t	TEMPSENSOR_DATA;
 
 #pragma pack(pop)
 
@@ -78,7 +80,9 @@ typedef struct __TempSensor_Config {
 	int	TempOvrs;				//!< Oversampling measurement for temperature
 	uint32_t FilterCoeff;		//!< Filter coefficient select value (this value is device dependent)
 	TEMPDATRDY_EVTCB DataRdyCB;	//!< Data ready handler
-} TEMPSENSOR_CFG;
+} TempSensorCfg_t;
+
+typedef TempSensorCfg_t		TEMPSENSOR_CFG;
 
 #pragma pack(pop)
 

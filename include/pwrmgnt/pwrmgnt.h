@@ -54,22 +54,22 @@ class PowerMgnt;
 
 #pragma pack(push, 1)
 typedef enum __Charge_Type {
-	PWR_CHARGE_TYPE_NORMAL,
-	PWR_CHARGE_TYPE_TRICKLE,
-	PWR_CHARGE_TYPE_AUTO				//!< Auto select optimum charge by driver implementation
-} PWR_CHARGE_TYPE;
+	PWRMGNT_CHARGE_TYPE_NORMAL,
+	PWRMGNT_CHARGE_TYPE_TRICKLE,
+	PWRMGNT_CHARGE_TYPE_AUTO				//!< Auto select optimum charge by driver implementation
+} PWRMGNT_CHARGE_TYPE;
 
 typedef struct __Vout_Cfg {
 	int32_t mVout;						//!< Output voltage in mV
 	uint32_t mAlimit;					//!< Output current limit in mA
-} PWR_VOUT_CFG;
+} PwrMgntVoutCfg_t;
 
 typedef enum __PowerMgnt_Evt {
-	PWREVT_CHARGE_FULL,					//!< Battery full
-	PWREVT_LOW_BAT,						//!< Battery low
-	PWREVT_OVER_HEAT,					//!< Over heat detected
-	PWREVT_CHARGE_DETECTED				//!< Charge source detected
-} PWREVT;
+	PWRMGNT_EVT_CHARGE_FULL,					//!< Battery full
+	PWRMGNT_EVT_LOW_BAT,						//!< Battery low
+	PWRMGNT_EVT_OVER_HEAT,					//!< Over heat detected
+	PWRMGNT_EVT_CHARGE_DETECTED				//!< Charge source detected
+} PWRMGNT_EVT;
 
 typedef struct __Bat_Profile {
 	uint32_t OpVolt;		//!< Battery nominal operating voltage in mV
@@ -77,32 +77,32 @@ typedef struct __Bat_Profile {
 	uint32_t Capacity;		//!< Battery capacity in mAh
 	uint32_t ThermBetaConst;//!< Thermistor Beta constant
 	uint32_t ThermResistor;	//!< Thermistor resistor value in KOhms
-} BAT_PROFILE;
+} BatProfile_t;
 
-typedef void (*PWRMGNT_EVTCB)(PowerMgnt *pSelf, PWREVT Evt);
+typedef void (*PwrMgntEvtHandler_t)(PowerMgnt *pSelf, PWRMGNT_EVT Evt);
 
-typedef struct __Power_Config {
+typedef struct __PowerMgnt_Config {
 	uint32_t DevAddr;					//!< Device address
-	PWR_VOUT_CFG * const pVout;			//!< Pointer to V out settings
+	PwrMgntVoutCfg_t * const pVout;			//!< Pointer to V out settings
 	size_t NbVout;						//!< Number of V out
 	int32_t VEndChrg;					//!< End of charge voltage level in mV
 	uint32_t ChrgCurr;					//!< Charge current in mA
 	uint32_t ChrgTimeout;				//!< Charge timeout in minutes
-	BAT_PROFILE * const pBatProf;		//!< Pointer to battery profile
+	BatProfile_t * const pBatProf;		//!< Pointer to battery profile
 	bool bIntEn;						//!< Interrupt enable
 	int IntPrio;						//!< Interrupt priority
 	int OffSwPin;						//!< Power switch button I/O pin assignment
 	int OffSwHold;						//!< Power switch off hold time in seconds
 	LedDev_t * const pLed;
 	int NbLed;
-	PWRMGNT_EVTCB pEvtHandler;
-} PWRCFG;
+	PwrMgntEvtHandler_t pEvtHandler;
+} PwrMgntCfg_t;
 
 #pragma pack(pop)
 
 class PowerMgnt : public Device {
 public:
-	virtual bool Init(const PWRCFG &Cfg, DeviceIntrf *pIntrf) = 0;
+	virtual bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf *pIntrf) = 0;
 
 	/**
 	 * @brief	Set output voltage
@@ -131,7 +131,7 @@ public:
 	 *
 	 * @return	Actual charge current set.
 	 */
-	virtual uint32_t SetCharge(PWR_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr) = 0;
+	virtual uint32_t SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr) = 0;
 
 	/**
 	 * @brief	Charging status
@@ -157,24 +157,24 @@ public:
 
 protected:
 	uint32_t vChrgCurr;		//!< Charge current
-	PWRMGNT_EVTCB vpEvtHandler;
+	PwrMgntEvtHandler_t vpEvtHandler;
 
 private:
 //	LED_DEV vLed;			//!< Led active level
 };
 
 // Low battery event handler
-typedef void (*FGLOWCB)(PowerMgnt * const pPwrMnt);
+typedef void (*FGBatLowEvtHandler_t)(PowerMgnt * const pPwrMnt);
 
 typedef struct __FuelGauge_Cfg {
 	uint8_t DevAddr;
-	const BAT_PROFILE &BatProf;		//!< Reference to battery profile
-	FGLOWCB	BatLowHandler;		//!< Battery low event handler
-} FUELGAUGE_CFG;
+	const BatProfile_t &BatProf;//!< Reference to battery profile
+	FGBatLowEvtHandler_t BatLowHandler;		//!< Battery low event handler
+} FuelGaugeCfg_t;
 
 class FuelGauge : public Device {
 public:
-	virtual bool Init(const FUELGAUGE_CFG &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt) = 0;
+	virtual bool Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt) = 0;
 
 	/**
 	 * @brief	Get battery level
@@ -202,8 +202,8 @@ protected:
 	void LowBatAlert() { if (vBatLowHandler) vBatLowHandler(vpPwrMgnt); }
 
 protected:
-	FGLOWCB	vBatLowHandler;		//!< Low battery event handler
-	BAT_PROFILE vBatProfile;
+	FGBatLowEvtHandler_t	vBatLowHandler;		//!< Low battery event handler
+	BatProfile_t vBatProfile;
 	PowerMgnt *vpPwrMgnt;
 };
 
