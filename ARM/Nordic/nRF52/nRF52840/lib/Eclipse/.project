@@ -566,6 +566,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_ltc2495.h</locationURI>
 		</link>
 		<link>
+			<name>include/converters/adc_nau7802.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_nau7802.h</locationURI>
+		</link>
+		<link>
 			<name>include/converters/adc_nrf52_saadc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/adc_nrf52_saadc.h</locationURI>
@@ -919,6 +924,11 @@
 			<name>src/converters/adc_ltc2495.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_ltc2495.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/converters/adc_nau7802.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_nau7802.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/converters/adc_nrf52_saadc.cpp</name>
