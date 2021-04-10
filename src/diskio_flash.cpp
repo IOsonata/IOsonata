@@ -47,8 +47,8 @@ FlashDiskIO::FlashDiskIO() : DiskIO()
 	vpInterf = NULL;
 }
 
-bool FlashDiskIO::Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
-                       DISKIO_CACHE_DESC * const pCacheBlk, int NbCacheBlk)
+bool FlashDiskIO::Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,
+					   DiskIOCache_t * const pCacheBlk, int NbCacheBlk)
 {
     if (pInterf == NULL)
         return false;
@@ -81,7 +81,7 @@ bool FlashDiskIO::Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
     	QuadSPISetMemSize(dev, vTotalSize);
     }
 
-    if (Cfg.DevIdSize > 0 && (int)Cfg.DevIdSize > 0)
+    if (Cfg.DevIdSize > 0 && Cfg.DevId != 0)
     {
     	int rtry = 5;
 
@@ -436,6 +436,21 @@ bool FlashDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 	WriteDisable();
 
 	return true;
+}
+
+/**
+ * @brief	Reset DiskIO to its default state
+ */
+void FlashDiskIO::Reset()
+{
+	uint8_t d = FLASH_CMD_RESET_ENABLE;
+
+	vpInterf->Tx(vDevNo, &d, 1);
+
+	d = FLASH_CMD_RESET_DEVICE;
+	vpInterf->Tx(vDevNo, &d, 1);
+
+	DiskIO::Reset();
 }
 
 

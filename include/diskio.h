@@ -53,13 +53,17 @@ typedef struct __DiskPartition {
 	uint8_t CHSEnd[3];		//!< CHS End partition
 	uint32_t LBAStart;		//!< LBA Start partition
 	uint32_t LBASize;		//!< Number of sectors in partition
-} DISKPART;
+} DiskPart_t;
+
+typedef DiskPart_t	DISKPART;
 
 typedef struct __MasterBootRecord {
 	uint8_t Boostrap[446];	// All zeroes
-	DISKPART Part[4];
+	DiskPart_t Part[4];
 	uint16_t Sig;
-} MBR;
+} Mbr_t;
+
+typedef Mbr_t	MBR;
 
 #pragma pack(pop)
 
@@ -71,7 +75,9 @@ typedef struct __DiskIO_Cache_Desc {
 	volatile int UseCnt;	//!< semaphore
 	uint32_t    SectNo;		//!< sector number of this cache
 	uint8_t		*pSectData;	//!< Pointer to sector cache memory. Must be at least 1 sector size
-} DISKIO_CACHE_DESC;
+} DiskIOCache_t;
+
+typedef DiskIOCache_t	DISKIO_CACHE_DESC;
 
 #pragma pack(pop)
 
@@ -151,7 +157,7 @@ public:
 	virtual void Erase() {}
 
 	int	GetCacheSect(uint32_t SectNo, bool bLock = false);
-	void SetCache(DISKIO_CACHE_DESC * const pCacheBlk, int NbCacheBlk);
+	void SetCache(DiskIOCache_t * const pCacheBlk, int NbCacheBlk);
 	void Flush();
 
 protected:
@@ -159,7 +165,7 @@ protected:
 private:
 	int vLastIdx;	    //!< Last cache sector accessed
 	int vNbCache;       //!< Number of cache sector
-	DISKIO_CACHE_DESC *vpCacheSect;	//!< pointer to static disk cache
+	DiskIOCache_t *vpCacheSect;	//!< pointer to static disk cache
 };
 
 extern "C" {

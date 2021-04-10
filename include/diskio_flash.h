@@ -206,6 +206,9 @@ SOFTWARE.
 #define FLASH_CMD_BULK_ERASE        0xC7	//!< Chip erase
 #define FLASH_CMD_BULK_ERASE_ALT	0x60	//!< Alternate chip erase command
 
+#define FLASH_CMD_RESET_ENABLE		0x66	//!< Enable reset
+#define FLASH_CMD_RESET_DEVICE		0x99	//!< Reset
+
 #define FLASH_STATUS_WIP            (1<<0)  // Write In Progress
 
 #pragma pack(push, 1)
@@ -215,7 +218,9 @@ SOFTWARE.
 typedef struct __Quad_Flash_Cmd {
 	uint8_t Cmd;				//!< Command code
 	uint8_t DummyCycle;			//!< Dummy cycle
-} CMDCYCLE;
+} CmdCycle_t;
+
+typedef CmdCycle_t	CMDCYCLE;
 
 /**
  * @brief FlashDiskIO callback function.
@@ -228,7 +233,8 @@ typedef struct __Quad_Flash_Cmd {
  * @return  true - Success\n
  *          false - Failed.
  */
-typedef bool (*FLASHDISKIOCB)(int DevNo, DeviceIntrf * const pInterf);
+typedef bool (*FlaskDiskIOCb_t)(int DevNo, DeviceIntrf * const pInterf);
+typedef FlaskDiskIOCb_t	FLASHDISKIOCB;
 
 typedef struct {
     int         DevNo;          //!< Device number or address for interface use
@@ -239,13 +245,15 @@ typedef struct {
     int         AddrSize;       //!< Address size in bytes
     uint32_t	DevId;			//!< Device ID, read using FLASH_CMD_READID
     int			DevIdSize;		//!< Length of device id in bytes to read (max 4 bytes)
-    FLASHDISKIOCB pInitCB; 		//!< For custom initialization. Set to NULL if not used
-    FLASHDISKIOCB pWaitCB;		//!< If provided, this is called when there are
+    FlaskDiskIOCb_t pInitCB; 	//!< For custom initialization. Set to NULL if not used
+    FlaskDiskIOCb_t pWaitCB;	//!< If provided, this is called when there are
     							//!< long delays, such as mass erase, to allow application
     							//!< to perform other tasks while waiting
-    CMDCYCLE	RdCmd;			//!< QSPI read cmd and dummy cycle
-    CMDCYCLE	WrCmd;			//!< QSPI write cmd and dummy cycle
-} FLASHDISKIO_CFG;
+    CmdCycle_t	RdCmd;			//!< QSPI read cmd and dummy cycle
+    CmdCycle_t	WrCmd;			//!< QSPI write cmd and dummy cycle
+} FlashDiskIOCfg_t;
+
+typedef FlashDiskIOCfg_t	FLASHDISKIO_CFG;
 
 #pragma pack(pop)
 
@@ -271,8 +279,8 @@ public:
 	 * 			- true 	: Success
 	 * 			- false	: Failed
 	 */
-	bool Init(const FLASHDISKIO_CFG &Cfg, DeviceIntrf * const pInterf,
-	          DISKIO_CACHE_DESC * const pCacheBlk = NULL, int NbCacheBlk = 0);
+	bool Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,
+			  DiskIOCache_t * const pCacheBlk = NULL, int NbCacheBlk = 0);
 
     /**
      * @brief	Get total disk size in bytes.
@@ -379,6 +387,10 @@ public:
      */
     uint16_t BlockEraseSize() { return vBlkSize; }
 
+	/**
+	 * @brief	Reset DiskIO to its default state
+	 */
+	virtual void Reset();
 
 protected:
 
@@ -418,10 +430,10 @@ private:
     int         vAddrSize;		//!< Address size in bytes
     int         vDevNo;			//!< Device No
     DeviceIntrf *vpInterf;		//!< Device interface to access Flash
-    FLASHDISKIOCB vpWaitCB;		//!< User wait callback when long wait time is required. This is to allows
+    FlaskDiskIOCb_t vpWaitCB;		//!< User wait callback when long wait time is required. This is to allows
     							//!< user application to perform task switch or other thing while waiting.
-    CMDCYCLE	vRdCmd;			//!< QSPI read/write and dummy cycle
-    CMDCYCLE	vWrCmd;			//!< QSPI read/write and dummy cycle
+    CmdCycle_t	vRdCmd;			//!< QSPI read/write and dummy cycle
+    CmdCycle_t	vWrCmd;			//!< QSPI read/write and dummy cycle
 };
 
 #ifdef __cplusplus
