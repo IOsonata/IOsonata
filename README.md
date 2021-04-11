@@ -8,6 +8,8 @@ Turorial blog posts :
 
 [Nordic nRF51 & nRF52 series firmware development with Eclipse](http://embeddedsoftdev.blogspot.com/p/ehal-nrf51.html)
 
+[Eclipse IDE installation guide](https://www.i-syst.com/article/eclipse-ide-firmware-development-iosonata)
+
 Although this library supports multiple IDE/Compilers, the preferred IDE is still Eclipse/GCC.  GCC is the de facto standard for embedded software development. Eclipse is 100% free and the most flexible IDE.  It could be little overwhelming for newbies at first (like any other IDE if you are new to it anyway).
 
 For desktop PC version of the library, native compiler and IDE are used.  XCode for OSX, Visual Studio for Windows, Eclipse for Linux.
