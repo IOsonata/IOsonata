@@ -91,29 +91,52 @@ typedef enum __SPI_Phy {
 	SPIPHY_4WIRE = SPIPHY_NORMAL,
 	SPIPHY_3WIRE,				//!< 3 wires MISO/MOSI mux
 	SPIPHY_DUAL,				//!< Dual SPI D0, D1 or used
-	SPIPHY_QUAD_SDR,			//!< QSPI, single data rate
-	SPIPHY_QUAD_DDR,			//!< QSPI, dual data rate
+	SPIPHY_QUAD_SDR,			//!< QuadSPI, single data rate
+	SPIPHY_QUAD_DDR,			//!< QuadSPI, dual data rate
+	SPIPHY_OCTO_SDR,			//!< OctoSPI, single data rate
+	SPIPHY_OCTO_DDR,			//!< OctoSPI, dual data rate
+	SPIPHY_OCTO_HYPER,			//!< OctoSPI, HyperBus
 } SPIPHY;
+
+/// Quad/Octo SPI phase
+typedef enum __QOSPI_Phase {
+	QOSPI_PHASE_IDLE,			//!< Quad/Octo SPI idle phase
+	QOSPI_PHASE_INST,			//!< Quad/Octo SPI instruction phase
+	QOSPI_PHASE_DATA			//!< Quad/Octo SPI data phase
+} QOSPI_PHASE;
 
 #define SPI_MAX_RETRY			5
 
 #define SPI_SLAVEMODE_MAX_DEV	4	//!< Max number of device (CS) supported in slave mode
  	 	 	 	 	 	 	 	 	//!< the real implementation may support less depending on hardware
 
-/// SPI pins indexes
+/// SPI pin indexes
 #define SPI_SCK_IOPIN_IDX		0
 #define SPI_MISO_IOPIN_IDX		1
 #define SPI_MOSI_IOPIN_IDX		2
 #define SPI_CS_IOPIN_IDX		3	//!< Starting index for SPI chip select. This can
 									//!< grow to allows multiple devices on same SPI.
 
-/// Quad SPI pins indexes
+/// Quad SPI pin indexes
 #define QSPI_SCK_IOPIN_IDX		0
 #define QSPI_D0_IOPIN_IDX		1
 #define QSPI_D1_IOPIN_IDX		2
 #define QSPI_D2_IOPIN_IDX		3
 #define QSPI_D3_IOPIN_IDX		4
 #define QSPI_CS_IOPIN_IDX		5	//!< Starting index for SPI chip select. This can
+									//!< grow to allows multiple devices on same SPI.
+
+/// Octo SPI pin indexes
+#define OSPI_SCK_IOPIN_IDX		0
+#define OSPI_D0_IOPIN_IDX		1
+#define OSPI_D1_IOPIN_IDX		2
+#define OSPI_D2_IOPIN_IDX		3
+#define OSPI_D3_IOPIN_IDX		4
+#define OSPI_D4_IOPIN_IDX		5
+#define OSPI_D5_IOPIN_IDX		6
+#define OSPI_D6_IOPIN_IDX		7
+#define OSPI_D7_IOPIN_IDX		8
+#define OSPI_CS_IOPIN_IDX		9	//!< Starting index for SPI chip select. This can
 									//!< grow to allows multiple devices on same SPI.
 
 #pragma pack(push, 4)
