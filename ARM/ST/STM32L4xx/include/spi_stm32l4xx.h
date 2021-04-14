@@ -50,12 +50,6 @@ SOFTWARE.
 
 #pragma pack(push, 4)
 
-typedef enum {
-	QSPI_PHASE_IDLE,
-	QSPI_PHASE_INST,
-	QSPI_PHASE_DATA
-} QSPI_PHASE;
-
 typedef struct {
 	int DevNo;
 	SPIDEV *pSpiDev;
@@ -67,7 +61,7 @@ typedef struct {
 		QUADSPI_TypeDef	*pQReg;
 #endif
 	};
-	QSPI_PHASE QPhase;
+	QOSPI_PHASE QOPhase;
 	int AdSize;
 	uint32_t CcrReg;	// used by QuadSPI only
 } STM32L4XX_SPIDEV;

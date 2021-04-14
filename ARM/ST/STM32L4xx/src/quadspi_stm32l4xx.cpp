@@ -216,7 +216,7 @@ static bool STM32L4xxQSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 				   dev->pSpiDev->Cfg.pIOPinMap[DevCs + QSPI_CS_IOPIN_IDX].PinNo);
 	}
 
-	dev->QPhase = QSPI_PHASE_INST;
+	dev->QOPhase = QOSPI_PHASE_INST;
 
 	return true;
 }
@@ -300,7 +300,7 @@ static bool STM32L4xxQSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 				   dev->pSpiDev->Cfg.pIOPinMap[DevCs + QSPI_CS_IOPIN_IDX].PinNo);
 	}
 
-	dev->QPhase = QSPI_PHASE_INST;
+	dev->QOPhase = QOSPI_PHASE_INST;
 
 	return true;
 }

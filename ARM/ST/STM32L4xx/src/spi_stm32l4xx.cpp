@@ -579,7 +579,10 @@ SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy)
 			if (Phy == SPIPHY_QUAD_DDR)
 			{
 				STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->DevIntrf.pDevData;
+#ifdef STM32L4S9xx
+#else
 				dev->CcrReg = QUADSPI_CCR_DDRM;
+#endif
 			}
 		}
 		else
@@ -624,8 +627,13 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	}
 	else
 	{
+#ifdef STM32L4S9xx
+		// Octo SPI
+		//retval = STM32L4xxOctoSPIInit(pDev, pCfgData);
+#else
 		// Quad SPI
 		retval = STM32L4xxQuadSPIInit(pDev, pCfgData);
+#endif
 	}
 
 	if (retval == false)

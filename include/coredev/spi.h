@@ -105,6 +105,12 @@ typedef enum __QOSPI_Phase {
 	QOSPI_PHASE_DATA			//!< Quad/Octo SPI data phase
 } QOSPI_PHASE;
 
+typedef enum __QOSPI_Mode {
+	QOSPI_MODE_NORMAL,
+	QOSPI_MODE_INDIRECT,
+	QOSPI_MODE_MEMMAP			//!< memory mapped
+} QOSPI_MODE;
+
 #define SPI_MAX_RETRY			5
 
 #define SPI_SLAVEMODE_MAX_DEV	4	//!< Max number of device (CS) supported in slave mode
