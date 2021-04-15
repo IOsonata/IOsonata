@@ -223,7 +223,7 @@
                     					
                     <sourceEntries>
                         						
-                        <entry excluding="src/coredev/octospi_stm32l4xx.cpp|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                         					
                     </sourceEntries>
                     				
@@ -453,7 +453,7 @@
                     					
                     <sourceEntries>
                         						
-                        <entry excluding="src/coredev/octospi_stm32l4xx.cpp|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                         					
                     </sourceEntries>
                     				
@@ -689,7 +689,7 @@
                     					
                     <sourceEntries>
                         						
-                        <entry excluding="src/coredev/octospi_stm32l4xx.cpp|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                         					
                     </sourceEntries>
                     				
@@ -923,7 +923,7 @@
                     					
                     <sourceEntries>
                         						
-                        <entry excluding="src/coredev/octospi_stm32l4xx.cpp|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+                        <entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                         					
                     </sourceEntries>
                     				
