@@ -82,9 +82,14 @@ void uart_error_handle(app_uart_evt_t * p_event)
 
 #else
 
-nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(0);
-nrfx_uarte_config_t g_UarteCfg = NRFX_UARTE_DEFAULT_CONFIG;
-
+const nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(0);
+const nrfx_uarte_config_t g_UarteCfg = {
+	.pselrxd = UART_RX_PIN,
+	.pseltxd = UART_TX_PIN,
+	.hwfc = NRF_UARTE_HWFC_DISABLED,
+	.baudrate = NRF_UARTE_BAUDRATE_1000000,
+	.interrupt_priority = 1
+};
 
 void uart_error_handle(nrfx_uarte_event_t const * p_event, void *ctx)
 {
@@ -100,18 +105,15 @@ int main()
 	uint8_t buff[TEST_BUFSIZE];
 
 #ifdef SDK_NRFX
-    g_UarteCfg.pselrxd = UART_RX_PIN;
-    g_UarteCfg.pseltxd = UART_TX_PIN;
-    g_UarteCfg.hwfc = NRF_UARTE_HWFC_DISABLED;
-    g_UarteCfg.baudrate = NRF_UARTE_BAUDRATE_1000000;
-    g_UarteCfg.interrupt_priority = 1;
 
-     err_code = nrfx_uarte_init(&g_Uarte, &g_UarteCfg, uart_error_handle);
+    err_code = nrfx_uarte_init(&g_Uarte, &g_UarteCfg, uart_error_handle);
     if (err_code != NRF_SUCCESS)
     {
-    	printf("Error %x\n\r", err_code);
+    	//printf("Error %x\n\r", err_code);
     }
 
+    sprintf(buff, "UART PRBS Test\n\r");
+    while (nrfx_uarte_tx(&g_Uarte, buff, strlen(buff)) != NRF_SUCCESS);
 
 	while(1)
 	{
@@ -127,7 +129,7 @@ int main()
 			d = Prbs8(d);
 			buff[i] = d;
 		}
-		while (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) != NRF_SUCCESS)
+		while (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) != NRF_SUCCESS);
 #endif
 	}
 #else

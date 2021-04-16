@@ -47,7 +47,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
-//#define DEMO_C
+//#define DEMO_C	// Select demo C code
+#define BYTE_MODE
 
 #define TEST_BUFSIZE		64
 
@@ -55,21 +56,14 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 
 #define FIFOSIZE			CFIFO_MEMSIZE(TEST_BUFSIZE * 4)
 
-uint8_t g_TxBuff[FIFOSIZE];
-
-static IOPinCfg_t s_UartPins[] = {
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
-	//{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	//{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
-};
+static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
 // UART configuration data
-const UARTCfg_t g_UartCfg = {
+static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 921600,
+	.Rate = 1000000,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -80,8 +74,8 @@ const UARTCfg_t g_UartCfg = {
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = NULL,
-	.TxMemSize = FIFOSIZE,
-	.pTxMem = g_TxBuff,
+	.TxMemSize = 0,//FIFOSIZE,
+	.pTxMem = NULL,//g_TxBuff,
 	.bDMAMode = true,
 };
 
@@ -100,15 +94,10 @@ MCU_OSC g_McuOsc = BOARD_OSC;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
-	int cnt = 0;
-	uint8_t buff[TEST_BUFSIZE];
-	uint8_t *p;
-
 	switch (EvtId)
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			UARTRx(pDev, buff, BufferLen);
 			break;
 		case UART_EVT_TXREADY:
 			break;
@@ -116,7 +105,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 			break;
 	}
 
-	return cnt;
+	return 0;
 }
 
 int main()
@@ -124,36 +113,48 @@ int main()
 	bool res;
 
 #ifdef DEMO_C
-	res = UARTInit(&g_UartDev, &g_UartCfg);
+	res = UARTInit(&g_UartDev, &s_UartCfg);
+	UARTprintf(&g_UartDev, "UART PRBS Test\n\r");
 #else
-	res = g_Uart.Init(g_UartCfg);
+	res = g_Uart.Init(s_UartCfg);
 	g_Uart.printf("UART PRBS Test\n\r");
 #endif
 
 	uint8_t d = 0xff;
 	uint8_t buff[TEST_BUFSIZE];
 
-	while(1)
+	while (1)
 	{
+#ifdef BYTE_MODE
+		// Demo transfer byte by byte
+#ifdef DEMO_C
+		if (UARTTx(&g_UartDev, &d, 1) > 0)
+#else
+		if (g_Uart.Tx(&d, 1) > 0)
+#endif
+		{
+			d = Prbs8(d);
+		}
+#else
+		// Demo transfer buffer
 		for (int i = 0; i < TEST_BUFSIZE; i++)
 		{
 			d = Prbs8(d);
 			buff[i] = d;
 		}
-#ifdef DEMO_C
-		if (UARTTx(&g_UartDev, &d, 1) > 0)
-#else
 		int len = TEST_BUFSIZE;
 		uint8_t *p = buff;
 		while (len > 0)
 		{
+#ifdef DEMO_C
+			int l = UARTTx(&g_UartDev, p, len);
+#else
 			int l = g_Uart.Tx(p, len);
+#endif
 			len -= l;
 			p += l;
-#endif
-			// If success send next code
-			//d = Prbs8(d);
 		}
+#endif
 	}
 	return 0;
 }

@@ -156,6 +156,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/nrfx_glue.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/nrfx_glue.h</locationURI>
+		</link>
+		<link>
 			<name>include/prbs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
@@ -342,6 +347,16 @@
 		</link>
 		<link>
 			<name>src/miscdev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrf_modem_os_bare.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_modem_os_bare.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -841,6 +856,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx/drivers</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/pwrmgnt/fg_lc709203f.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/fg_lc709203f.cpp</locationURI>
@@ -944,6 +964,16 @@
 			<name>src/sensors/tphg_bme680.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/tphg_bme680.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_ipc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_ipc.c</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>
