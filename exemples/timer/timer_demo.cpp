@@ -40,7 +40,7 @@ SOFTWARE.
 #include "idelay.h"
 #include "coredev/timer.h"
 #include "iopinctrl.h"
-//#include "bsdlib_os_bare.h"
+
 #include "board.h"
 
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
@@ -52,7 +52,7 @@ uint64_t g_TickCount = 0;
 uint32_t g_Diff = 0;
 
 const static TimerCfg_t s_TimerCfg = {
-    .DevNo = 2,
+    .DevNo = 0,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
 	.IntPrio = 7,
@@ -80,19 +80,12 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
  */
 int main(void)
 {
-//	NRF_REGULATORS_S->DCDCEN = REGULATORS_DCDCEN_DCDCEN_Enabled;
-//	NRF_CLOCK_S->LFCLKSRC = CLOCK_LFCLKSRCCOPY_SRC_LFXO;
-
-	//msDelay(2000);
-//	int res = bsdlid_init(NULL, true);
-
-	//printf("res = %d %x\n", res, res);
-	//msDelay(1000);
-
 	IOPinCfg(s_Leds, s_NbLeds);
 
     g_Timer.Init(s_TimerCfg);
-	//uint64_t period = g_Timer.EnableTimerTrigger(0, 100000000ULL, TIMER_TRIG_TYPE_CONTINUOUS);
+
+    // Configure 100ms timer interrupt trigger
+	uint64_t period = g_Timer.EnableTimerTrigger(0, 100000000ULL, TIMER_TRIG_TYPE_CONTINUOUS);
 
 	//printf("Period = %u\r\n", (uint32_t)period);
     while (1)
