@@ -43,10 +43,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "iopinctrl.h"
 #include "idelay.h"
 #include "pulse_train.h"
-//#include "bsdlib_os_bare.h"
+
 #include "board.h"
 
-/// Buttons & LED pins map
 static const IOPinCfg_t s_Buttons[] = BUTTON_PINS_MAP;
 static const int s_NbButtons = sizeof(s_Buttons) / sizeof(IOPinCfg_t);
 
@@ -101,89 +100,32 @@ void But2Handler(int IntNo)
 
 int main()
 {
-	// Configure
-	//IOPinCfg(s_Buttons, s_NbButtons);
-	//IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler);
-	//IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler);
+	// Configure Leds
 	IOPinCfg(s_Leds, s_NbLeds);
 
-//	uint64_t id = (uint64_t)NRF_FICR_S->INFO.DEVICEID[0] | ((uint64_t)NRF_FICR_S->INFO.DEVICEID[1] << 32);
-
-	//IOPinConfig(0, 28, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-	//IOPinConfig(0, 29, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-	//IOPinConfig(0, 30, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-	//IOPinConfig(0, 31, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-//	IOPinConfig(6, 8, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-#if 0
-	while(1)
+	// Clear all leds
+	for (int i = 0; i < s_NbLeds; i++)
 	{
-		//IOPinClear(LED1_PORT, LED1_PIN);
-		//msDelay(250);
-		//IOPinSet(LED1_PORT, LED1_PIN);
-		IOPinClear(0, 28);
-		msDelay(1000);
-		IOPinSet(0, 28);
-		IOPinClear(0, 29);
-		//IOPinToggle(3, 28);
-		msDelay(1000);
-		IOPinSet(0, 29);
-		IOPinClear(0, 30);
-		//IOPinToggle(3, 28);
-		msDelay(1000);
-		IOPinSet(0, 30);
-		IOPinClear(0, 31);
-		//IOPinToggle(3, 28);
-		msDelay(1000);
-		IOPinSet(0, 31);
+		IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
 	}
 
-#endif
-	//while(1) __WFE();
-#if 0
-	NRF_REGULATORS_S->DCDCEN = REGULATORS_DCDCEN_DCDCEN_Enabled;
-	NRF_CLOCK_S->LFCLKSRC = CLOCK_LFCLKSRCCOPY_SRC_LFXO;
+	// Configure buttons
+	IOPinCfg(s_Buttons, s_NbButtons);
+	IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler);
+	//IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler);
 
-	NRF_CLOCK_S->TASKS_LFCLKSTART = 1;
 
-	do {
+	int i = 0;
 
-	} while (NRF_CLOCK_S->EVENTS_LFCLKSTARTED == 0);
-	NRF_CLOCK_S->EVENTS_LFCLKSTARTED = 0;
-
-	int res = bsdlid_init(NULL, true);
-	if (res == 0)
+	// Loop until button pressed
+	while (g_bBut1Pressed == false)
 	{
-		while (1)
-		{
-			IOPinClear(s_Leds[0].PortNo, s_Leds[0].PinNo);
-			msDelay(250);
-			IOPinSet(s_Leds[0].PortNo, s_Leds[0].PinNo);
-			msDelay(250);
-		}
-	}
-#endif
-#if 0
-	for (int j = 0; j < 5; j++)
-	{
-		for (int i = 0; i < s_NbLeds; i++)
-		{
-			IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
-		}
+		IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
 		msDelay(250);
-		for (int i = 0; i < s_NbLeds; i++)
-		{
-			if (res & (1<<i))
-			{
-				IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
-			}
-			else
-			{
-				IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
-			}
-		}
+		IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
 		msDelay(250);
 	}
-#endif
+
 	PulseTrain(&g_PulseTrainCfg, 0);
 
 	return 0;
