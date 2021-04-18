@@ -207,6 +207,26 @@ static void STM32L4xxSPIEnable(DevIntrf_t * const pDev)
     dev->pReg->CR1 |= SPI_CR1_SPE;
 }
 
+static void STM32L4xxSPIReset(DevIntrf_t * const pDev)
+{
+	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+
+	if (dev->DevNo > 0)
+	{
+		RCC->APB1ENR1 |= RCC_APB1ENR1_SPI2EN << (dev->DevNo - 1);
+		RCC->APB1RSTR1 |= RCC_APB1RSTR1_SPI2RST << (dev->DevNo - 1);
+		msDelay(1);
+		RCC->APB1RSTR1 &= ~(RCC_APB1RSTR1_SPI2RST << (dev->DevNo - 1));
+	}
+	else
+	{
+		RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+		RCC->APB2RSTR |= RCC_APB2RSTR_SPI1RST;
+		msDelay(1);
+		RCC->APB2RSTR &= ~RCC_APB2RSTR_SPI1RST;
+	}
+}
+
 static void STM32L4xxSPIPowerOff(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
@@ -557,11 +577,12 @@ bool STM32L4xxSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	pDev->DevIntrf.StartTx = STM32L4xxSPIStartTx;
 	pDev->DevIntrf.TxData = STM32L4xxSPITxData;
 	pDev->DevIntrf.StopTx = STM32L4xxSPIStopTx;
+	pDev->DevIntrf.Reset = STM32L4xxSPIReset;
+	pDev->DevIntrf.PowerOff = STM32L4xxSPIPowerOff;
 	pDev->DevIntrf.IntPrio = pCfgData->IntPrio;
 	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
 	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
-	pDev->DevIntrf.PowerOff = STM32L4xxSPIPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 

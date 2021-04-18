@@ -121,6 +121,8 @@ typedef enum __LED_Logic_level {
 	LED_LOGIC_HIGH = 1		//!< LED_LOGIC_HIGH
 } LED_LOGIC;
 
+#pragma pack(push, 4)
+
 typedef struct __LED_Dev {
 	int Chan;
 	uint8_t Port;
@@ -128,6 +130,8 @@ typedef struct __LED_Dev {
 	LED_LOGIC Act;
 	LED_TYPE Type;
 } LedDev_t;
+
+#pragma pack(pop)
 
 /// LED device abstract base class
 ///

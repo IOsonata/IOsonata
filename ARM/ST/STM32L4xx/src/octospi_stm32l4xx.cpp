@@ -119,6 +119,15 @@ static void STM32L4xxOSPIEnable(DevIntrf_t * const pDev)
     dev->pOReg->CR |= OCTOSPI_CR_EN;
 }
 
+static void STM32L4xxOSPIReset(DevIntrf_t * const pDev)
+{
+	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+
+	RCC->AHB3RSTR |= RCC_AHB3RSTR_OSPI1RST_Msk << (dev->DevNo - STM32L4XX_OSPI_DEVNO_START);
+	msDelay(1);
+	RCC->AHB3RSTR &= ~(RCC_AHB3RSTR_OSPI1RST_Msk << (dev->DevNo - STM32L4XX_OSPI_DEVNO_START));
+}
+
 static void STM32L4xxOSPIPowerOff(DevIntrf_t * const pDev)
 {
 	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
@@ -386,10 +395,7 @@ bool STM32L4xxQuadSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	// Get the correct register map
 	reg = s_STM32L4xxSPIDev[pCfgData->DevNo].pOReg;
 
-	RCC->AHB3RSTR |= 1 << (RCC_AHB3RSTR_OSPI1RST_Pos + dev->DevNo - STM32L4XX_OSPI_DEVNO_START);
-	RCC->AHB3RSTR &= ~(1 << (RCC_AHB3RSTR_OSPI1RST_Pos + dev->DevNo - STM32L4XX_OSPI_DEVNO_START));
-
-	msDelay(1);
+	STM32L4xxOSPIReset(&pDev->DevIntrf);
 
 	RCC->AHB3ENR |= 1 << (RCC_AHB3ENR_OSPI1EN + dev->DevNo - STM32L4XX_OSPI_DEVNO_START);
 	RCC->AHB3SMENR &= ~(1 << (RCC_AHB3ENR_OSPI1EN + dev->DevNo - STM32L4XX_OSPI_DEVNO_START));
@@ -416,11 +422,12 @@ bool STM32L4xxQuadSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	pDev->DevIntrf.StartTx = STM32L4xxOSPIStartTx;
 	pDev->DevIntrf.TxData = STM32L4xxOSPITxData;
 	pDev->DevIntrf.StopTx = STM32L4xxOSPIStopTx;
+	pDev->DevIntrf.Reset = STM32L4xxOSPIReset;
+	pDev->DevIntrf.PowerOff = STM32L4xxOSPIPowerOff;
 	pDev->DevIntrf.IntPrio = pCfgData->IntPrio;
 	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
 	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
-	pDev->DevIntrf.PowerOff = STM32L4xxOSPIPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
 
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
