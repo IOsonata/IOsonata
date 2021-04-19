@@ -56,7 +56,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @Param	Dir     : I/O direction
  */
 static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir) {
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
+	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + (PortNo << 10));
 
 	PinNo <<= 1;
 
@@ -76,7 +76,7 @@ static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int Pi
  * @return	Pin state 1 or 0
  */
 static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo) {
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
+	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + (PortNo << 10));
 
 	return (reg->IDR >> PinNo) & 1;
 }
@@ -88,7 +88,7 @@ static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo) {
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
+	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + (PortNo << 10));
 
 	reg->BSRR = (1 << PinNo) & 0xFFFF;
 }
@@ -100,7 +100,7 @@ static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int PinNo) {
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
+	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + (PortNo << 10));
 
 	reg->BRR = (1 << PinNo) & 0xFFFF;
 }
@@ -112,7 +112,7 @@ static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int Pin
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int PinNo) {
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
+	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + (PortNo << 10));
 
 	reg->ODR ^= (1 << PinNo) & 0xFFFF;
 }
@@ -125,7 +125,7 @@ static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int Pi
  * @return	Bit field pin states
  */
 static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) {
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
+	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + (PortNo << 10));
 
 	return reg->IDR & 0xFFFF;
 }
@@ -137,7 +137,7 @@ static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) 
  * @Param	Data	: Bit field state of all pins on port
  */
 static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uint32_t Data) {
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
+	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + (PortNo << 10));
 
 	reg->ODR = Data & 0xFFFF;
 }
