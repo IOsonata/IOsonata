@@ -401,9 +401,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
 		</link>
 		<link>
-			<name>src/system_stm32l4xx.c</name>
+			<name>src/system_stm32l4plus.c</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/system_stm32l4xx.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/system_stm32l4plus.c</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>
