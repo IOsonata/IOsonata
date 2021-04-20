@@ -374,7 +374,7 @@ void SystemInit(void)
 			pllcfgr |= RCC_PLLCFGR_PLLSRC_MSI;
 	}
 
-	pllcfgr |= FindPllCfg(s_McuOsc.HFType);
+	pllcfgr |= FindPllCfg(s_McuOsc.HFFreq);
 
 	RCC->PLLCFGR = pllcfgr;
 
