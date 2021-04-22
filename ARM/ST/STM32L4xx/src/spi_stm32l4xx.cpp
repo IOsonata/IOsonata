@@ -134,12 +134,14 @@ static uint32_t STM32L4xxSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 
 	uint32_t pclk;
 
-	if (dev->DevNo == 1)
+	if (dev->DevNo == 0)
 	{
+		// SPI1 is on PCLK2
 		pclk = SystemPeriphClockGet(1);
 	}
 	else
 	{
+		// SPI2 & SPI3 is on PCLK1
 		pclk = SystemPeriphClockGet(0);
 	}
 
