@@ -79,10 +79,10 @@ typedef struct __EnvTPHData {
 //BleAdvManData_TphSensor_t	BLEADV_MANDATA_TPHSENSOR;
 
 /// Gas sensor data
-typedef struct __EnvGasData {
+typedef struct __EnvAirQualityData {
 	uint32_t GasRes;		//!< Gas resistance
 	uint16_t AirQIdx;		//!< Air quality index
-} BleAdvManData_GasSensor_t;
+} BleAdvManData_AqSensor_t;
 
 //typedef BleAdvManData_GasSensor_t	BLEADV_MANDATA_GASSENSOR;
 

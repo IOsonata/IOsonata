@@ -125,11 +125,11 @@ uint8_t g_AdvDataBuff[10] = {
 	BLEADV_MANDATA_TYPE_TPH,
 };
 
-BLEADV_MANDATA &g_AdvData = *(BLEADV_MANDATA*)g_AdvDataBuff;
+BleAdvManData_t &g_AdvData = *(BleAdvManData_t*)g_AdvDataBuff;
 
 // Evironmental Sensor Data to advertise
-BLEADV_MANDATA_TPHSENSOR &g_TPHData = *(BLEADV_MANDATA_TPHSENSOR *)g_AdvData.Data;
-BLEADV_MANDATA_GASSENSOR &g_GasData = *(BLEADV_MANDATA_GASSENSOR *)g_AdvData.Data;
+BleAdvManData_TphSensor_t &g_TPHData = *(BleAdvManData_TphSensor_t *)g_AdvData.Data;
+BleAdvManData_AqSensor_t &g_GasData = *(BleAdvManData_AqSensor_t *)g_AdvData.Data;
 
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
@@ -394,7 +394,7 @@ void ReadPTHData()
 	if (g_TphSensor.DeviceID() == BME680_ID && (gascnt & 0x3) == 0)
 	{
 		GASSENSOR_DATA gdata;
-		BLEADV_MANDATA_GASSENSOR gas;
+		BleAdvManData_AqSensor_t gas;
 
 		g_GasSensor.Read(gdata);
 
@@ -402,7 +402,7 @@ void ReadPTHData()
 		gas.GasRes = gdata.GasRes[gdata.MeasIdx];
 		gas.AirQIdx = gdata.AirQualIdx;
 
-		memcpy(&g_GasData, &gas, sizeof(BLEADV_MANDATA_GASSENSOR));
+		memcpy(&g_GasData, &gas, sizeof(BleAdvManData_AqSensor_t));
 	}
 	else
 	{
@@ -411,7 +411,7 @@ void ReadPTHData()
 		// NOTE : M0 does not access unaligned data
 		// use local 4 bytes align stack variable then mem copy
 		// skip timestamp as advertising pack is limited in size
-		memcpy(&g_TPHData, ((uint8_t*)&data) + sizeof(data.Timestamp), sizeof(BLEADV_MANDATA_TPHSENSOR));
+		memcpy(&g_TPHData, ((uint8_t*)&data) + sizeof(data.Timestamp), sizeof(BleAdvManData_TphSensor_t));
 	}
 
 
@@ -650,7 +650,7 @@ void HardwareInit()
 	g_AdvData.Type = BLEADV_MANDATA_TYPE_TPH;
 	// Do memcpy to adv data. Due to byte alignment, cannot read directly into
 	// adv data
-	memcpy(g_AdvData.Data, ((uint8_t*)&tphdata) + 4, sizeof(BLEADV_MANDATA_TPHSENSOR));
+	memcpy(g_AdvData.Data, ((uint8_t*)&tphdata) + 4, sizeof(BleAdvManData_TphSensor_t));
 
 //#ifdef USE_TIMER_UPDATE
 	// Only with SDK14
