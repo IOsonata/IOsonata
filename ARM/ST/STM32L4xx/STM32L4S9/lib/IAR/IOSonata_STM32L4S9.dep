@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project>
     <fileVersion>4</fileVersion>
-    <fileChecksum>1184694984</fileChecksum>
+    <fileChecksum>531196488</fileChecksum>
     <configuration>
         <name>Debug</name>
         <outputs>
@@ -3874,10 +3874,6 @@
                     <name>ICCARM</name>
                     <file> 18 413 328 25 42 50 37 64 354 6 12 36 60 371 26 265 355 404 65 335 21 391 30 57 293 362 53 370 332 23 350 334 62 40 45 70 51 359 342 348 278 282</file>
                 </tool>
-                <tool>
-                    <name>BICOMP</name>
-                    <file> 332 64 25 42 391 404 51 342 12 21 362 334 355 278 328 6 50 354 36 65 335 57 370 40 265 359 348 413 26 371 37 60 18 293 30 53 70 350 62 23 282 45</file>
-                </tool>
             </inputs>
         </file>
         <file>
@@ -3918,6 +3914,10 @@
         <forcedrebuild>
             <name>$PROJ_DIR$\..\..\..\src\quadspi_stm32l4xx.cpp</name>
             <tool>ICCARM</tool>
+        </forcedrebuild>
+        <forcedrebuild>
+            <name>[MULTI_TOOL]</name>
+            <tool>IARCHIVE</tool>
         </forcedrebuild>
     </configuration>
 </project>

@@ -2641,9 +2641,6 @@
                 <name>$PROJ_DIR$\..\..\..\src\octospi_stm32l4xx.cpp</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\src\quadspi_stm32l4xx.cpp</name>
-            </file>
-            <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>
             </file>
             <file>
