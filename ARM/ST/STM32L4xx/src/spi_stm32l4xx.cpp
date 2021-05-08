@@ -40,7 +40,11 @@ SOFTWARE.
 #include "idelay.h"
 #include "diskio_flash.h"
 
+#ifdef STM32L4S9xx
+bool STM32L4xxOctoSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData);
+#else
 bool STM32L4xxQuadSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData);
+#endif
 
 STM32L4XX_SPIDEV s_STM32L4xxSPIDev[STM32L4XX_SPI_MAXDEV] = {
 	{
@@ -652,7 +656,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	{
 #ifdef STM32L4S9xx
 		// Octo SPI
-		//retval = STM32L4xxOctoSPIInit(pDev, pCfgData);
+		retval = STM32L4xxOctoSPIInit(pDev, pCfgData);
 #else
 		// Quad SPI
 		retval = STM32L4xxQuadSPIInit(pDev, pCfgData);

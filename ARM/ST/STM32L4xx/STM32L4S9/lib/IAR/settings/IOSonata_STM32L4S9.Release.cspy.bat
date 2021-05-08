@@ -25,7 +25,7 @@ if not "%~1" == "" goto debugFile
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L496\lib\IAR\settings\IOSonata_STM32L496.Release.general.xcl" --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L496\lib\IAR\settings\IOSonata_STM32L496.Release.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\settings\IOSonata_STM32L4S9.Release.general.xcl" --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\settings\IOSonata_STM32L4S9.Release.driver.xcl" 
 
 @echo off 
 goto end 
@@ -34,7 +34,7 @@ goto end
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L496\lib\IAR\settings\IOSonata_STM32L496.Release.general.xcl" "--debug_file=%~1" --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L496\lib\IAR\settings\IOSonata_STM32L496.Release.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\settings\IOSonata_STM32L4S9.Release.general.xcl" "--debug_file=%~1" --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\settings\IOSonata_STM32L4S9.Release.driver.xcl" 
 
 @echo off 
 :end

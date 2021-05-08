@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workspace>
+    <project>
+        <path>$WS_DIR$\..\exemples\FlashMemoryDemo\IAR\FlashMemoryDemo.ewp</path>
+    </project>
+    <project>
+        <path>$WS_DIR$\..\lib\IAR\IOSonata_STM32L4S9.ewp</path>
+    </project>
+    <batchBuild />
+</workspace>

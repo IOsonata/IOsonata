@@ -380,7 +380,7 @@ static void STM32L4xxOSPIStopTx(DevIntrf_t * const pDev)
 	}
 }
 
-bool STM32L4xxQuadSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
+bool STM32L4xxOctoSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 {
 	OCTOSPI_TypeDef *reg;
 	uint32_t ctrlreg = 0;

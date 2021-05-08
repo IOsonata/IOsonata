@@ -2638,6 +2638,12 @@
                 <name>$PROJ_DIR$\..\..\..\src\iopincfg_stm32l4xx.c</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\..\src\octospi_stm32l4xx.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\src\quadspi_stm32l4xx.cpp</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>
             </file>
             <file>
@@ -2798,7 +2804,7 @@
             <name>$PROJ_DIR$\..\..\..\..\..\..\src\utf8cvt.cpp</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\src\Vector_STM32L496xx.c</name>
+            <name>$PROJ_DIR$\..\src\Vector_STM32L4S9xx.c</name>
         </file>
     </group>
 </project>
