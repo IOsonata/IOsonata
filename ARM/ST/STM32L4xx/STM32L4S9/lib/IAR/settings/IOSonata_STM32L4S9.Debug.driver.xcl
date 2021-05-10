@@ -6,11 +6,11 @@
 
 "-p" 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\arm\CONFIG\debugger\ST\STM32L4A6ZG.ddf" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\arm\CONFIG\debugger\ST\STM32L4S9AI.ddf" 
 
 "--semihosting" 
 
-"--device=STM32L4A6ZG" 
+"--device=STM32L4S9AI" 
 
 "--multicore_nr_of_cores=1" 
 

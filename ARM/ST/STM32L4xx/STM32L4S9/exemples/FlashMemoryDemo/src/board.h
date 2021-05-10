@@ -90,28 +90,28 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SPI0_MOSI_PINOP     (0x52)	// AF5
 
 //#define SPI_DEVNO			3
-#define SPI_CLK_PORT		1//4		//PB3
-#define SPI_CLK_PIN			3//10
-#define SPI_CLK_PINOP		0x62//0xA2	// AF10
-#define SPI_MISO_PORT		1//4		//PE10
-#define SPI_MISO_PIN		4//10
-#define SPI_MISO_PINOP		0x62//0xA2	// AF10
-#define SPI_MOSI_PORT		2//4		//PE10
-#define SPI_MOSI_PIN		12//10
-#define SPI_MOSI_PINOP		0x62//0xA2	// AF10
+#define SPI_CLK_PORT		1		// PB3
+#define SPI_CLK_PIN			3
+#define SPI_CLK_PINOP		0x62	// AF6
+#define SPI_MISO_PORT		1		// PB4
+#define SPI_MISO_PIN		4
+#define SPI_MISO_PINOP		0x62	// AF6
+#define SPI_MOSI_PORT		2		// PC12
+#define SPI_MOSI_PIN		12
+#define SPI_MOSI_PINOP		0x62	// AF6
 
 #if 0
 #define SPI_FLASH_CS_PORT	2		// PE12
 #define SPI_FLASH_CS_PIN    12
 #define SPI_FLASH_CS_PINOP  (0x52)	// AF5
 #else
-#define SPI_FLASH_CS_PORT	0//4		//PE11
-#define SPI_FLASH_CS_PIN	15//11
-#define SPI_FLASH_CS_PINOP	0//0x62//0xA2	//AF6
+#define SPI_FLASH_CS_PORT	0		//PA15
+#define SPI_FLASH_CS_PIN	15
+#define SPI_FLASH_CS_PINOP	1		// GPIO Output
 #endif
 
-#define SPI_DEVNO			2//QSPI_DEVNO
-#define SPI_PHY				SPIPHY_NORMAL//SPIPHY_QUAD_SDR
+#define SPI_DEVNO			2
+#define SPI_PHY				SPIPHY_NORMAL	//SPIPHY_QUAD_SDR
 #define SPI_CS_MODE			SPICSEL_DRIVER
 
 #if 0
