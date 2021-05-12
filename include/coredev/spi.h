@@ -61,7 +61,8 @@ typedef enum __SPI_Status {
 
 typedef enum __SPI_Mode {
 	SPIMODE_MASTER,				//!< SPI master
-	SPIMODE_SLAVE				//!< SPI slave
+	SPIMODE_SLAVE,				//!< SPI slave
+	SPIMODE_MMASTER				//!< SPI Multi-master, not all MCU supports this mode
 } SPIMODE;
 
 typedef enum __SPI_Clk_Polarity {
