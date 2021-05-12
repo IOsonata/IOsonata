@@ -42,6 +42,19 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdbool.h>
 
+/// Defining port name
+/// Many MCU name its GPIO port by letter starting from A instead of numerical
+#define IOPIN_PORTA				0
+#define IOPIN_PORTB				1
+#define IOPIN_PORTC				2
+#define IOPIN_PORTD				3
+#define IOPIN_PORTE				4
+#define IOPIN_PORTF				5
+#define IOPIN_PORTG				6
+#define IOPIN_PORTH				7
+#define IOPIN_PORTI				8
+#define IOPIN_PORTJ				9
+
 /// I/O pin resistor configuration
 typedef enum __iopin_resistor {
 	IOPINRES_NONE,				//!< No pullup or pulldown
