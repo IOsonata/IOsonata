@@ -131,84 +131,102 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{
-		0,
+		.DevNo = 0,
 		{ .pDmaReg = NRF_UARTE0_NS, },
-		NULL,
-		0, 0, 0,
-		false,
-		true,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+		.RxDmaCahce = false,
 	},
 #else
 	{
-		0,
+		.DevNo = 0,
 		{ .pDmaReg = NRF_UARTE0_S, },
-		NULL,
-		0, 0, 0,
-		false,
-		true,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+		.RxDmaCahce = false,
 	},
 	{
-		1,
+		.DevNo = 1,
 		{ .pDmaReg = NRF_UARTE1_S, },
-		NULL,
-		0, 0, 0,
-		false,
-		true,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+		.RxDmaCahce = false,
 	},
 	{
-		2,
+		.DevNo = 2,
 		{ .pDmaReg = NRF_UARTE2_S, },
-		NULL,
-		0, 0, 0,
-		false,
-		true,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+		.RxDmaCahce = false,
 	},
 	{
-		3,
+		.DevNo = 3,
 		{ .pDmaReg = NRF_UARTE3_S, },
-		NULL,
-		0, 0, 0,
-		false,
-		true,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+		.RxDmaCahce = false,
 	},
 #endif
 #else
 	{
-		0,
+		.DevNo = 0,
 		{ .pReg = NRF_UART0, },
-		NULL,
-		0, 0, 0,
-		false,
-		true,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+		.RxDmaCache = false,
 	},
 #if NRFX_UART_MAXDEV > 1
 	{
-		1,
+		.DevNo = 1,
 		{ .pDmaReg = NRF_UARTE1, },
-		NULL,
-		0, 0, 0,
-		false,
-		true,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+		.RxDmaCahce = false,
 	},
 #endif
 #if NRFX_UART_MAXDEV > 2
 	{
-		2,
+		.DevNo = 2,
 		{ .pDmaReg = NRF_UARTE2, },
-		NULL,
-		0, 0, 0,
-		false,
-		true,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+		.RxDmaCahce = false,
 	},
 #endif
 #if NRFX_UART_MAXDEV > 3
 	{
-		3,
+		.DevNo = 3,
 		{ .pDmaReg = NRF_UARTE3, },
-		NULL,
-		0, 0, 0,
-		false,
-		true,
+		.pUartDev = NULL,
+		.RxPin = (uint32_t)-1,
+		.TxPin = (uint32_t)-1,
+		.CtsPin = (uint32_t)-1,
+		.RtsPin = (uint32_t)-1,
+		.RxDmaCahce = false,
 	},
 #endif
 #endif
@@ -746,6 +764,23 @@ void nRFUARTPowerOff(DevIntrf_t * const pDev)
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 0;
+
+	if (dev->CtsPin != -1)
+	{
+		IOPinDisable(dev->CtsPin >> 5, dev->CtsPin & 0x1F);
+	}
+	if (dev->RtsPin != -1)
+	{
+		IOPinDisable(dev->RtsPin >> 5, dev->RtsPin & 0x1F);
+	}
+	if (dev->RxPin != -1)
+	{
+		IOPinDisable(dev->RxPin >> 5, dev->RxPin & 0x1F);
+	}
+	if (dev->TxPin != -1)
+	{
+		IOPinDisable(dev->TxPin >> 5, dev->TxPin & 0x1F);
+	}
 }
 
 static void apply_workaround_for_enable_anomaly(NRFX_UARTDEV * const pDev)
