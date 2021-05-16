@@ -40,7 +40,17 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 #include "diskio_flash.h"
 
+#ifdef STM32L4S9xx
+#define STM32L4XX_I2C_MAXDEV		4
+#else
 #define STM32L4XX_I2C_MAXDEV		3
+#endif
+
+#define RCC_CCIPR_I2CSEL_PCLK		0
+#define RCC_CCIPR_I2CSEL_SYSCLK		1
+#define RCC_CCIPR_I2CSEL_HSI16		2
+
+#define I2CCLK_HZ					16000000
 
 #pragma pack(push, 4)
 
@@ -62,49 +72,246 @@ static STM32L4XX_I2CDEV s_STM32L4xxI2CDev[STM32L4XX_I2C_MAXDEV] = {
 	{
 		2, NULL, .pReg = I2C3
 	},
+#ifdef STM32L4S9xx
+	{
+		2, NULL, .pReg = I2C4
+	},
+#endif
 };
+
+static bool STM32L4xxI2CWaitBusy(STM32L4XX_I2CDEV *pDev, int Timeout)
+{
+	while (Timeout-- > 0)
+	{
+		if ((pDev->pReg->ISR & I2C_ISR_BUSY) == 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool STM32L4xxI2CWaitStop(STM32L4XX_I2CDEV *pDev, int Timeout)
+{
+	while (Timeout-- > 0)
+	{
+		if ((pDev->pReg->ISR & I2C_ISR_STOPF))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool STM32L4xxI2CWaitTxComplete(STM32L4XX_I2CDEV *pDev, int Timeout)
+{
+	while (Timeout-- > 0)
+	{
+		if ((pDev->pReg->ISR & (I2C_ISR_TC | I2C_ISR_TCR)))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool STM32L4xxI2CWaitTxRdy(STM32L4XX_I2CDEV *pDev, int Timeout)
+{
+	while (Timeout-- > 0)
+	{
+		if (pDev->pReg->ISR & I2C_ISR_TXIS)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool STM32L4xxI2CWaitRx(STM32L4XX_I2CDEV *pDev, int Timeout)
+{
+	while (Timeout-- > 0)
+	{
+		if (pDev->pReg->ISR & I2C_ISR_RXNE)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void STM32L4xxI2CReset(DevIntrf_t * const pDev)
+{
+	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
+
+	dev->pReg->CR1 &= ~I2C_CR1_PE;
+
+	if (dev->DevNo < 3)
+	{
+		RCC->APB1RSTR1 |= RCC_APB1RSTR1_I2C1RST << dev->DevNo;
+		usDelay(100);
+		RCC->APB1RSTR1 &= ~(RCC_APB1RSTR1_I2C1RST << dev->DevNo);
+	}
+	else
+	{
+		RCC->APB1RSTR2 |= RCC_APB1RSTR2_I2C4RST;
+		usDelay(100);
+		RCC->APB1RSTR2 &= ~RCC_APB1RSTR2_I2C4RST;
+	}
+}
 
 static uint32_t STM32L4xxI2CGetRate(DevIntrf_t * const pDev)
 {
-	int rate = 0;
+	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
-	return rate;
+	return dev->pI2cDev->Cfg.Rate;
 }
 
 // Set data rate in bits/sec (Hz)
 // return actual rate
-static uint32_t STM32L4xxI2CSetRate(DevIntrf_t * const pDev, uint32_t DataRate)
+// Calculation
+// SCL period = tsync1 + tsync2 + ((SCLL+1) + (SCLH+1)) * (PRESC+1)) * ti2cclk
+//
+static uint32_t STM32L4xxI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
+	uint32_t iclk = I2CCLK_HZ;	// default i2cclk 8MHz for fast mode
 
-	uint32_t pclk = SystemPeriphClockGet(0);
-	uint32_t div = (pclk + (DataRate >> 1)) / DataRate;
+	// Get PCLK1
+	uint32_t clk = SystemPeriphClockGet(0);
 
-	return DataRate;
+	if (Rate <= 100000)
+	{
+		// use lower clock rate for standard mode
+		iclk = 4000000; // 4Mhz
+	}
+
+	// Select clock source. We want to use 8MHz as i2cclk (I2CCLK_HZ)
+
+	if (clk < iclk)
+	{
+		// Get SYSCLK
+		clk = SystemCoreClockGet();
+
+		if (dev->DevNo < 3)
+		{
+			RCC->CCIPR &= ~(RCC_CCIPR_I2C1SEL_Msk << (dev->DevNo << 1));
+			RCC->CCIPR |= RCC_CCIPR_I2CSEL_SYSCLK << (RCC_CCIPR_I2C1SEL_Pos + (dev->DevNo << 1));
+		}
+		else
+		{
+			RCC->CCIPR2 &= ~RCC_CCIPR2_I2C4SEL_Msk;
+			RCC->CCIPR2 |= RCC_CCIPR_I2CSEL_SYSCLK << RCC_CCIPR2_I2C4SEL_Pos;
+		}
+	}
+	else
+	{
+		// PCLK1
+		if (dev->DevNo < 3)
+		{
+			RCC->CCIPR &= ~(RCC_CCIPR_I2C1SEL_Msk << (dev->DevNo << 1));
+			RCC->CCIPR |= RCC_CCIPR_I2CSEL_PCLK << (RCC_CCIPR_I2C1SEL_Pos + (dev->DevNo << 1));
+		}
+		else
+		{
+			RCC->CCIPR2 &= ~RCC_CCIPR2_I2C4SEL_Msk;
+			RCC->CCIPR2 |= RCC_CCIPR_I2CSEL_PCLK << RCC_CCIPR2_I2C4SEL_Pos;
+		}
+	}
+
+	uint32_t presc = (clk / iclk - 1) & 0xf;
+	iclk = clk / (presc + 1);
+	uint32_t period = 1000000000ULL / iclk;
+	uint32_t scldel;
+	uint32_t sdadel;
+	uint32_t dnf = ((dev->pReg->CR1 & I2C_CR1_DNF_Msk) >> I2C_CR1_DNF_Pos) * period;
+	uint32_t af = (1 - ((dev->pReg->CR1 & I2C_CR1_ANFOFF_Msk) >> I2C_CR1_ANFOFF_Pos)) * 50;
+
+	if (Rate <= 100000)
+	{
+		scldel = ((I2C_TR_STDMODE_MAX + I2C_TSUDAT_STDMODE_MIN + period * 2) / period - 1) & 0xf;
+		sdadel = ((I2C_TF_STDMODE_MAX - af - dnf - period * 2) / period - 1) & 0xf;
+	}
+	else if (Rate <= 400000)
+	{
+		scldel = ((I2C_TR_FASTMODE_MAX + I2C_TSUDAT_FASTMODE_MIN + period * 2) / period - 1) & 0xf;
+		sdadel = ((I2C_TF_FASTMODE_MAX - af - dnf  - period * 2) / period - 1) & 0xf;
+	}
+	else
+	{
+		scldel = ((I2C_TR_FASTMODEPLUS_MAX + I2C_TSUDAT_FASTMODEPLUS_MIN + period * 2) / period - 1) & 0xf;
+		sdadel = ((I2C_TF_FASTMODEPLUS_MAX - af - dnf - period * 2) / period - 1) & 0xf;
+	}
+	uint32_t scll = ((iclk / (Rate << 1)) -1);//+ (scldel + 1) - 1) & 0xff;
+	uint32_t sclh = ((iclk / (Rate << 1)) -1);// (sdadel + 1) - 1) & 0xff;
+
+	uint32_t timingr = (presc << 28) | (scldel << 20) | (sdadel << 16) |
+						 (sclh << 8) | scll;
+	dev->pReg->TIMINGR = timingr;
+/*
+	printf("%d timingr: %x\n", clk, timingr);
+	uint32_t r = 1000000000 / ((scll + sclh) * period);
+	printf("presc:%x, scldel:%x, sdadel:%x\n", presc, scldel, sdadel);
+	printf("%d, %d, %x, %x, r = %d\n", iclk, Rate, scll, sclh, r);
+*/
+	return Rate;
 }
 
 void STM32L4xxI2CDisable(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
-	int32_t timout = 100000;
+
+	dev->pReg->CR1 &= ~I2C_CR1_PE;
+
+	if (dev->DevNo < 3)
+	{
+		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_I2C1EN << dev->DevNo);
+	}
+	else
+	{
+		RCC->APB1ENR2 &= ~RCC_APB1ENR2_I2C4EN;
+	}
 }
 
 static void STM32L4xxI2CEnable(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
+	if (dev->DevNo < 3)
+	{
+		RCC->APB1ENR1 |= RCC_APB1ENR1_I2C1EN << dev->DevNo;
+	}
+	else
+	{
+		RCC->APB1ENR2 |= RCC_APB1ENR2_I2C4EN;
+	}
 }
 
 static void STM32L4xxI2CPowerOff(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
+	if (dev->DevNo < 3)
+	{
+		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_I2C1EN << dev->DevNo);
+	}
+	else
+	{
+		RCC->APB1ENR2 &= ~RCC_APB1ENR2_I2C4EN;
+	}
 }
 
 // Initial receive
 static bool STM32L4xxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
+
+	dev->pReg->CR2 = ((DevAddr << 1) & I2C_CR2_SADD_Msk) | I2C_CR2_RD_WRN;
+	dev->pReg->CR2 |= I2C_CR2_START;
 
 	return true;
 }
@@ -125,6 +332,28 @@ static int STM32L4xxI2CRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffL
     int cnt = 0;
     uint16_t d = 0;
 
+    while (BuffLen > 0)
+    {
+        int len = min(BuffLen, 255);
+
+        uint32_t cr2 = dev->pReg->CR2 & ~I2C_CR2_NBYTES_Msk;
+    	cr2 |= (len << I2C_CR2_NBYTES_Pos);
+    	dev->pReg->CR2 = cr2;
+
+    	while (len > 0)
+    	{
+			if (STM32L4xxI2CWaitRx(dev, 1000000) == false)
+			{
+				return cnt;
+			}
+			*pBuff = dev->pReg->RXDR;
+			pBuff++;
+			cnt++;
+			BuffLen--;
+			len--;
+    	}
+    }
+
     return cnt;
 }
 
@@ -133,12 +362,17 @@ static void STM32L4xxI2CStopRx(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
 
+	dev->pReg->CR2 |= I2C_CR2_STOP;
+	STM32L4xxI2CWaitStop(dev, 100000);
 }
 
 // Initiate transmit
 static bool STM32L4xxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
+
+	dev->pReg->CR2 = ((DevAddr << 1) & I2C_CR2_SADD_Msk) | I2C_CR2_RELOAD;
+	dev->pReg->CR2 |= I2C_CR2_START;
 
 	return true;
 }
@@ -157,8 +391,28 @@ static int STM32L4xxI2CTxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV*)pDev->pDevData;
     int cnt = 0;
-    uint16_t d;
 
+    while (DataLen > 0)
+    {
+    	int len = min(DataLen, 255);
+        uint32_t cr2 = dev->pReg->CR2 & ~I2C_CR2_NBYTES_Msk;
+
+        cr2 |= (len << I2C_CR2_NBYTES_Pos) | I2C_CR2_RELOAD;
+		dev->pReg->CR2 = cr2;
+
+		while (len > 0)
+		{
+			if (STM32L4xxI2CWaitTxRdy(dev, 1000000) == false)
+			{
+				return cnt;
+			}
+			dev->pReg->TXDR = *pData;
+			pData++;
+			len--;
+			cnt++;
+			DataLen--;
+		}
+    }
 
     return cnt;
 }
@@ -168,6 +422,9 @@ static void STM32L4xxI2CStopTx(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev-> pDevData;
 
+	STM32L4xxI2CWaitTxComplete(dev, 100000);
+	dev->pReg->CR2 |= I2C_CR2_STOP;
+	STM32L4xxI2CWaitStop(dev, 1000000);
 }
 
 void I2CIrqHandler(int DevNo)
@@ -193,28 +450,14 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		return false;
 	}
 
-	pDev->Mode = pCfgData->Mode;
+	// Save config data
+	memcpy(&pDev->Cfg, pCfgData, sizeof(I2CCfg_t));
+
 	s_STM32L4xxI2CDev[pCfgData->DevNo].pI2cDev  = pDev;
 	pDev->DevIntrf.pDevData = (void*)&s_STM32L4xxI2CDev[pCfgData->DevNo];
 
-	// Configure I/O pins
-	memcpy(pDev->Pins, pCfgData->Pins, sizeof(pDev->Pins));
-
-	IOPinCfg(pCfgData->Pins, I2C_MAX_NB_IOPIN);
-
-	for (int i = 0; i < I2C_MAX_NB_IOPIN; i++)
-	{
-		IOPinSetSpeed(pCfgData->Pins[i].PortNo, pCfgData->Pins[i].PinNo, IOPINSPEED_TURBO);
-	}
-
-	// Get the correct register map
-	reg = s_STM32L4xxI2CDev[pCfgData->DevNo].pReg;
-
-
-	// Note : this function call will modify CR1 register
-	STM32L4xxI2CSetRate(&pDev->DevIntrf, pCfgData->Rate);
-
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_SPI;
+	pDev->DevIntrf.Reset = STM32L4xxI2CReset;
 	pDev->DevIntrf.Disable = STM32L4xxI2CDisable;
 	pDev->DevIntrf.Enable = STM32L4xxI2CEnable;
 	pDev->DevIntrf.GetRate = STM32L4xxI2CGetRate;
@@ -233,8 +476,66 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
+	if (pDev->Cfg.DevNo < 3)
+	{
+		RCC->APB1ENR1 |= RCC_APB1ENR1_I2C1EN << pDev->Cfg.DevNo;
+	}
+	else
+	{
+		RCC->APB1ENR2 |= RCC_APB1ENR2_I2C4EN;
+	}
+
+	// Reset I2C engine
+	STM32L4xxI2CReset(&pDev->DevIntrf);
+
+	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
+
+	for (int i = 0; i < pDev->Cfg.NbIOPins; i++)
+	{
+		IOPinSetSpeed(pDev->Cfg.pIOPinMap[i].PortNo, pDev->Cfg.pIOPinMap[i].PinNo, IOPINSPEED_TURBO);
+	}
+
+	// Get the correct register map
+	reg = s_STM32L4xxI2CDev[pCfgData->DevNo].pReg;
+
+
+	// Note : this function call will modify CR1 register
+	STM32L4xxI2CSetRate(&pDev->DevIntrf, pCfgData->Rate);
+
+	// Enable fast mode
+	SYSCFG->CFGR1 |= SYSCFG_CFGR1_I2C1_FMP << pDev->Cfg.DevNo;
+
+	uint32_t cr1 = 0;
+
+	if (pDev->Cfg.Mode == I2CMODE_SLAVE)
+	{
+		pDev->Cfg.bIntEn = true;	// Force interrupt in slave mode
+
+		if (pDev->Cfg.bClkStretch == false)
+		{
+			// Clock stretching enable
+			cr1 |= I2C_CR1_NOSTRETCH;
+		}
+
+
+	}
+	else
+	{
+		reg->OAR1 = 0x3FF;
+		reg->OAR2 = 0;
+	}
+
+	if (pDev->Cfg.bDmaEn)
+	{
+		// DMA enable
+		cr1 |= I2C_CR1_RXDMAEN | I2C_CR1_TXDMAEN;
+	}
+
     if (pCfgData->bIntEn && pCfgData->Mode == I2CMODE_SLAVE)
     {
+    	cr1 |= I2C_CR1_ERRIE | I2C_CR1_TCIE | I2C_CR1_STOPIE | I2C_CR1_NACKIE |
+    		   I2C_CR1_ADDRIE | I2C_CR1_RXIE | I2C_CR1_TXIE;
+
     	switch (pCfgData->DevNo)
     	{
     		case 0:
@@ -255,12 +556,10 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     	}
     }
 
+    reg->CR1 = cr1 | I2C_CR1_PE | I2C_CR1_RXIE | I2C_CR1_STOPIE | I2C_CR1_NACKIE | I2C_CR1_TCIE | I2C_CR1_RXIE;
+	reg->ICR = 0x3F38;
+
 	return true;
-}
-
-void QSPIIrqHandler()
-{
-
 }
 
 extern "C" void I2C1_EV_IRQHandler(void)

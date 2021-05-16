@@ -268,7 +268,7 @@ void nRFxI2CEnable(DevIntrf_t * const pDev)
 #ifdef TWIM_PRESENT
     if (dev->pI2cDev->DevIntrf.bDma)
     {
-		if (dev->pI2cDev->Mode == I2CMODE_SLAVE)
+		if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 		{
 			dev->pDmaReg->ENABLE = (TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos);
 		}
@@ -306,7 +306,7 @@ uint32_t nRFxI2CGetRate(DevIntrf_t * const pDev)
 {
 	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
-	return dev->pI2cDev->Rate;
+	return dev->pI2cDev->Cfg.Rate;
 }
 
 uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
@@ -319,7 +319,7 @@ uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 		if (s_nRFxI2CFreq[i].Freq <= RateHz)
 		{
 			regval =  s_nRFxI2CFreq[i].RegVal;
-			dev->pI2cDev->Rate = s_nRFxI2CFreq[i].Freq;
+			dev->pI2cDev->Cfg.Rate = s_nRFxI2CFreq[i].Freq;
 		}
 	}
 
@@ -329,7 +329,7 @@ uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 	dev->pReg->FREQUENCY = regval;
 #endif
 
-	return dev->pI2cDev->Rate;
+	return dev->pI2cDev->Cfg.Rate;
 }
 
 bool nRFxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
@@ -578,7 +578,7 @@ void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
     NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
 
-    if (dev->pI2cDev->Mode == I2CMODE_SLAVE)
+    if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
     {
     	// Slave mode
 #ifdef TWIM_PRESENT
@@ -678,22 +678,20 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
 
-	memcpy(pDev->Pins, pCfgData->Pins, sizeof(IOPinCfg_t) * I2C_MAX_NB_IOPIN);
+	memcpy(&pDev->Cfg, pCfgData, sizeof(I2CCfg_t));
 
 	// Configure I/O pins
-	IOPinCfg(pCfgData->Pins, I2C_MAX_NB_IOPIN);
-    IOPinSet(pCfgData->Pins[I2C_SDA_IOPIN_IDX].PortNo, pCfgData->Pins[I2C_SDA_IOPIN_IDX].PinNo);
-    IOPinSet(pCfgData->Pins[I2C_SCL_IOPIN_IDX].PortNo, pCfgData->Pins[I2C_SCL_IOPIN_IDX].PinNo);
+	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
+    IOPinSet(pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo);
+    IOPinSet(pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo);
 
 #ifdef TWIM_PRESENT
-    reg->PSEL.SCL = (pCfgData->Pins[I2C_SCL_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->Pins[I2C_SCL_IOPIN_IDX].PortNo << 5);
-    reg->PSEL.SDA = (pCfgData->Pins[I2C_SDA_IOPIN_IDX].PinNo & 0x1f) | (pCfgData->Pins[I2C_SDA_IOPIN_IDX].PortNo << 5);
+    reg->PSEL.SCL = (pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo << 5);
+    reg->PSEL.SDA = (pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PortNo << 5);
 #else
-    reg->PSELSCL = (pCfgData->Pins[I2C_SCL_IOPIN_IDX].PinNo & 0x1f);
-    reg->PSELSDA = (pCfgData->Pins[I2C_SDA_IOPIN_IDX].PinNo & 0x1f);
+    reg->PSELSCL = (pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo & 0x1f);
+    reg->PSELSDA = (pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo & 0x1f);
 #endif
-    //pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
-    pDev->Mode = pCfgData->Mode;
 
 	s_nRFxI2CDev[pCfgData->DevNo].pI2cDev  = pDev;
 	pDev->DevIntrf.pDevData = (void*)&s_nRFxI2CDev[pCfgData->DevNo];
@@ -764,16 +762,15 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     if (pCfgData->Mode == I2CMODE_SLAVE)
     {
     	NRF_TWIS_Type *sreg = s_nRFxI2CDev[pCfgData->DevNo].pDmaSReg;
-        pDev->NbSlaveAddr = min(pCfgData->NbSlaveAddr, NRFX_I2CSLAVE_MAXDEV);
+        pDev->Cfg.NbSlaveAddr = min(pCfgData->NbSlaveAddr, NRFX_I2CSLAVE_MAXDEV);
 
         sreg->CONFIG = 0;
         sreg->ORC = 0xff;
 
-        for (int i = 0; i < pDev->NbSlaveAddr; i++)
+        for (int i = 0; i < pDev->Cfg.NbSlaveAddr; i++)
         {
-        	pDev->SlaveAddr[i] = pCfgData->SlaveAddr[i];
-        	sreg->ADDRESS[i] = (uint32_t)pCfgData->SlaveAddr[i];
-        	if (pDev->SlaveAddr[i] != 0)
+        	sreg->ADDRESS[i] = (uint32_t)pDev->Cfg.SlaveAddr[i];
+        	if (pDev->Cfg.SlaveAddr[i] != 0)
         	{
         		sreg->CONFIG |= 1<<i;
         	}

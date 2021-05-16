@@ -4,37 +4,42 @@
 @brief	Generic I2C driver definitions
 
 Current implementation
- 	 - Master mode
- 	 - Slave mode
- 	 - Polling
- 	 - Interrupt
+	- Master mode
+	- Slave mode
+	- Polling
+	- Interrupt
 
+Each MCU supports different max speed. Currently known max speed.
+	- Standard : 100 KHz
+	- Fast mode : 400 KHz
+	- Fast mode+ : 1000 KHz
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 20, 2011
 
+@license
 
-Copyright (c) 2011, I-SYST inc., all rights reserved
+MIT License
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Copyright (c) 2011-2021 I-SYST inc. All rights reserved.
 
-For info or contributing contact : hnhoan at i-syst dot com
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #ifndef __I2C_H__
@@ -67,6 +72,26 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define I2C_SCL_TLOW_FAST_MODE_PLUS_MIN		500		// ns
 #define I2C_SCL_THIGH_FAST_MODE_PLUS_MIN	260		// ns
 
+// Data setup time
+#define I2C_TSUDAT_STDMODE_MIN				250		// ns
+#define I2C_TSUDAT_FASTMODE_MIN				100		// ns
+#define I2C_TSUDAT_FASTMODEPLUS_MIN			50 		// ns
+
+// Data setup time
+#define I2C_THDDAT_STDMODE_MAX				3450	// ns
+#define I2C_THDDAT_FASTMODE_MAX				900		// ns
+#define I2C_THDDAT_FASTMODEPLUS_MAX			450 	// ns
+
+// Rising time
+#define I2C_TR_STDMODE_MAX					1000	// ns
+#define I2C_TR_FASTMODE_MAX					300		// ns
+#define I2C_TR_FASTMODEPLUS_MAX				120		// ns
+
+// Falling time
+#define I2C_TF_STDMODE_MAX					300		// ns
+#define I2C_TF_FASTMODE_MAX					300		// ns
+#define I2C_TF_FASTMODEPLUS_MAX				120		// ns
+
 /// I2C Status code
 typedef enum __I2C_Status {
 	I2CSTATUS_START_COND = 8,		//!< Start condition transmitted
@@ -96,59 +121,66 @@ typedef enum __I2C_Status {
 	I2CSTATUS_S_LAST_TXDAT_ACK = 0xC8,	//!< Last data byte in I2DAT has been transmitted (AA = 0); ACK has been received
 } I2CSTATUS;
 
+typedef enum __I2C_Type {
+	I2CTYPE_STANDARD,				//!< Standard I2C
+	I2CTYPE_SMBUS					//!< SMBus
+} I2CTYPE;
+
 typedef enum __I2C_Mode {
 	I2CMODE_MASTER,
 	I2CMODE_SLAVE
 } I2CMODE;
 
+typedef enum __I2C_Address_Type {
+	I2CADDR_TYPE_NORMAL,			//!< normal 7 bits
+	I2CADDR_TYPE_EXT				//!< extended 10 bits address length
+} I2CADDR_TYPE;
 
 #define I2C_SLAVEMODE_MAX_ADDR		4	//!< Max number of response addresses in slave mode
 	 									//!< the real implementation may support less depending on hardware
 
 #define I2C_MAX_RETRY				5	//!< Max number of retries
 
-#define I2C_MAX_NB_IOPIN			2	//!< Number of I/O pins needed by I2C
-
 /// I/O pin map index
 #define I2C_SDA_IOPIN_IDX			0	//!< SDA pin index
 #define I2C_SCL_IOPIN_IDX			1	//!< SCL pin index
+#define I2C_SMBA_IOPIN_IDX			2	//!< SMBus Alert
+
 
 #pragma pack(push, 4)
 
 /// Configuration data used to initialize device
 typedef struct __I2C_Config {
 	int DevNo;				//!< I2C interface number
-	IOPinCfg_t Pins[I2C_MAX_NB_IOPIN];	//!< Define I/O pins used by I2C
-	int Rate;				//!< Speed in Hz
+	I2CTYPE	Type;			//!< I2C type standard or SMBus
 	I2CMODE Mode;			//!< Master/Slave mode
+	const IOPinCfg_t *pIOPinMap;//!< Define I/O pins used by I2C
+	int NbIOPins;			//!< Number of IO pins mapped
+	uint32_t Rate;			//!< Speed in Hz
 	int MaxRetry;			//!< Max number of retry
+	I2CADDR_TYPE AddrType;	//!< I2C address type normal 7bits or extended 10bits
 	int NbSlaveAddr;		//!< Number of slave mode address configured
 	uint8_t SlaveAddr[I2C_SLAVEMODE_MAX_ADDR];	//!< I2C slave address used in slave mode only
 	bool bDmaEn;			//!< true - Use DMA mode only on supported devices
 	bool bIntEn;			//!< true - Interrupt enable
 	int	IntPrio;			//!< Interrupt priority.  Value is implementation specific
+	bool bClkStretch;		//!< Clock stretching enable
 	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
-	bool bSmBus;			//!< Enable SMBUS support
 } I2CCfg_t;
 
-typedef I2CCfg_t	I2CCFG;
+//typedef I2CCfg_t	I2CCFG;
 
 /// Device driver data require by low level functions
 typedef struct {
-	I2CMODE Mode;			//!< Operating mode Master/Slave
-	int 	Rate;			//!< Speed in Hz
-	int 	NbSlaveAddr;	//!< Number of slave mode address configured
-	uint8_t	SlaveAddr[I2C_SLAVEMODE_MAX_ADDR];	//!< I2C slave address used in slave mode only
-	DevIntrf_t DevIntrf;		//!< I2C device interface implementation
-	IOPinCfg_t Pins[I2C_MAX_NB_IOPIN];			//!< Define I/O pins used by I2C
+	I2CCfg_t Cfg;			//!< Config data
+	DevIntrf_t DevIntrf;	//!< I2C device interface implementation
 	uint8_t *pRRData[I2C_SLAVEMODE_MAX_ADDR];	//!< Pointer to data buffer to return upon receiving read request
 	int RRDataLen[I2C_SLAVEMODE_MAX_ADDR];		//!< Read request data length in bytes
 	uint8_t *pTRBuff[I2C_SLAVEMODE_MAX_ADDR];	//!< Pointer to buffer to receive data upon receiving write request
 	int TRBuffLen[I2C_SLAVEMODE_MAX_ADDR];		//!< Write request buffer length in bytes
-	bool bSmBus;			//!< SMBUS support
 } I2CDev_t;
 
-typedef I2CDev_t	I2CDEV;
+//typedef I2CDev_t	I2CDEV;
 
 #pragma pack(pop)
 
@@ -256,7 +288,7 @@ public:
 	operator I2CDev_t& () { return vDevData; };	// Get device data
 	operator I2CDev_t* const () { return &vDevData; };	// Get pointer to device data
 	uint32_t Rate(uint32_t RateHz) { return DeviceIntrfSetRate(&vDevData.DevIntrf, RateHz); }
-	uint32_t Rate(void) { return vDevData.Rate; };	// Get rate in Hz
+	uint32_t Rate(void) { return vDevData.Cfg.Rate; };	// Get rate in Hz
 	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
 	void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
 	virtual bool StartRx(uint32_t DevAddr) {

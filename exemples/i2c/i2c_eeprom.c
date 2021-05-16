@@ -44,15 +44,20 @@ SOFTWARE.
 
 #include "board.h"
 
+static const IOPinCfg_t s_Pins[] = {
+	{I2C_SDA_PORT, I2C_SDA_PIN, I2C_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// SDA
+	{I2C_SCL_PORT, I2C_SCL_PIN, I2C_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// SCL
+};
+
 static const I2CCfg_t s_I2cCfg = {
 	.DevNo = I2C_DEVNO,			// I2C device number
-	.Pins = {
-		{I2C_SDA_PORT, I2C_SDA_PIN, I2C_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// SDA
-		{I2C_SCL_PORT, I2C_SCL_PIN, I2C_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// SCL
-	},
-	.Rate = 200000,				// Rate
+	.Type = I2CTYPE_STANDARD,
 	.Mode = I2CMODE_MASTER,
+	.pIOPinMap = s_Pins,
+	.NbIOPins = sizeof(s_Pins) / sizeof(IOPinCfg_t),
+	.Rate = 400000,				// Rate
 	.MaxRetry = 5,				// Retry
+	.AddrType = I2CADDR_TYPE_NORMAL,
 	.NbSlaveAddr = 0,			// Number of slave addresses
 	.SlaveAddr = {0,},			// Slave addresses
 	.bDmaEn = false,
@@ -68,7 +73,7 @@ static const SeepCfg_t s_SeepCfg = {
 	.AddrLen = 2,
 	.PageSize = 32,
 	.Size = 128 * 32,
-	.WrDelay = 5,
+	.WrDelay = 100,
 	.WrProtPin = {-1, -1,},
 };
 
@@ -102,8 +107,8 @@ int main()
 	// Filling test pattern
 	for (int i = 0; i < 256; i++)
 	{
-		x[i] = i;
-		x[i + 256] = 256 - i;
+		x[i] = 255 - i;
+		x[i + 256] = i;
 	}
 
 	SeepWrite(&g_SeepDev, 0, x, 512);
@@ -112,16 +117,25 @@ int main()
 
 	SeepRead(&g_SeepDev, 0, y, 512);
 
-	for (int i = 0; i < 512; i++)
+	if (memcmp(x, y, 512) == 0)
 	{
-		if (x[i] != y[i])
+		printf("Success\n");
+	}
+	else
+	{
+		for (int i = 0; i < 512; i++)
 		{
-			printf("Bad %d : %x %x\r\n", i, x, y);
+			if (x[i] != y[i])
+			{
+				printf("Bad %d : %x %x\r\n", i, x[i], y[i]);
+			}
 		}
 	}
-
 	memset(y, 0, 512);
 	SeepWrite(&g_SeepDev, 0, y, 512);
+
+	while (1);
+
 	return 0;
 }
 

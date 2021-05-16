@@ -50,7 +50,7 @@ SOFTWARE.
 typedef struct {
 	int DevNo;
 	uint32_t SamDevId;
-	I2CDEV *pI2cDev;
+	I2CDev_t *pI2cDev;
 	Sam4eTwi *pReg;
 	Sam4ePdc *pPdc;
 	uint8_t TRData[SAM4E_I2C_TRBUFF_SIZE];
@@ -144,7 +144,7 @@ void Sam4eI2CEnable(DEVINTRF * const pDev)
     if (dev->pI2cDev->DevIntrf.bDma)
     {
     }
-	if (dev->pI2cDev->Mode == I2CMODE_SLAVE)
+	if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 	{
 		dev->pReg->TWI_CR = TWI_CR_SVEN;
 	}
@@ -163,7 +163,7 @@ uint32_t Sam4eI2CGetRate(DEVINTRF * const pDev)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
-	return dev->pI2cDev->Rate;
+	return dev->pI2cDev->Cfg.Rate;
 }
 
 uint32_t Sam4eI2CSetRate(DEVINTRF * const pDev, uint32_t RateHz)
@@ -191,10 +191,10 @@ uint32_t Sam4eI2CSetRate(DEVINTRF * const pDev, uint32_t RateHz)
 
 	if (ckdiv != -1)
 	{
-		dev->pI2cDev->Rate = (2 * mck / (cldiv * (1<<ckdiv) + 4));
+		dev->pI2cDev->Cfg.Rate = (2 * mck / (cldiv * (1<<ckdiv) + 4));
 		dev->pReg->TWI_CWGR = TWI_CWGR_CLDIV(cldiv) | TWI_CWGR_CHDIV(cldiv) |
 							  TWI_CWGR_CKDIV(ckdiv);
-		return dev->pI2cDev->Rate;
+		return dev->pI2cDev->Cfg.Rate;
 	}
 
 	return 0;
@@ -204,7 +204,7 @@ bool Sam4eI2CStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
-	if (dev->pI2cDev->Mode == I2CMODE_SLAVE)
+	if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 	{
 
 	}
@@ -338,7 +338,7 @@ void I2CIrqHandler(int DevNo, DEVINTRF * const pDev)
 {
     SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
-    if (dev->pI2cDev->Mode == I2CMODE_SLAVE)
+    if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
     {
     	// Slave mode
     }
@@ -350,7 +350,7 @@ void I2CIrqHandler(int DevNo, DEVINTRF * const pDev)
 
 }
 
-bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
+bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 {
 	if (pDev == NULL || pCfgData == NULL)
 	{
@@ -367,7 +367,7 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
 	// Get the correct register map
 	Sam4eTwi *reg = s_Sam4eI2CDev[devno].pReg;
 
-	memcpy(pDev->Pins, pCfgData->Pins, sizeof(IOPINCFG) * I2C_MAX_NB_IOPIN);
+	memcpy(&pDev->Cfg, pCfgData, sizeof(I2CCfg_t));
 
 
 	if (s_Sam4eI2CDev[devno].SamDevId < 32)
@@ -380,11 +380,9 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
 	}
 
 	// Configure I/O pins
-	IOPinCfg(pCfgData->Pins, I2C_MAX_NB_IOPIN);
-    IOPinSet(pCfgData->Pins[I2C_SDA_IOPIN_IDX].PortNo, pCfgData->Pins[I2C_SDA_IOPIN_IDX].PinNo);
-    IOPinSet(pCfgData->Pins[I2C_SCL_IOPIN_IDX].PortNo, pCfgData->Pins[I2C_SCL_IOPIN_IDX].PinNo);
-
-    pDev->Mode = pCfgData->Mode;
+	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
+    IOPinSet(pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo);
+    IOPinSet(pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo);
 
 	s_Sam4eI2CDev[pCfgData->DevNo].pI2cDev  = pDev;
 	pDev->DevIntrf.pDevData = (void*)&s_Sam4eI2CDev[pCfgData->DevNo];
@@ -437,9 +435,9 @@ bool I2CInit(I2CDEV * const pDev, const I2CCFG *pCfgData)
 
     if (pCfgData->Mode == I2CMODE_SLAVE)
     {
-        pDev->NbSlaveAddr = 1;	// Only 1 slave address
-    	pDev->SlaveAddr[0] = pCfgData->SlaveAddr[0];
-    	reg->TWI_SMR = TWI_SMR_SADR(pDev->SlaveAddr[0]);
+        pDev->Cfg.NbSlaveAddr = 1;	// Only 1 slave address
+    	pDev->Cfg.SlaveAddr[0] = pCfgData->SlaveAddr[0];
+    	reg->TWI_SMR = TWI_SMR_SADR(pDev->Cfg.SlaveAddr[0]);
 
     	reg->TWI_CR = TWI_CR_SVEN;
     	inten = TWI_IER_SVACC | TWI_IER_EOSACC;

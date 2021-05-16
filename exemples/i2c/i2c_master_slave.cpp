@@ -77,21 +77,27 @@ static const UARTCfg_t s_UartCfg = {
 UART g_Uart;
 
 //********** I2C Master **********
+
+static const IOPinCfg_t s_I2cMasterPins[] = {
+	{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
+	{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
+};
+
 static const I2CCfg_t s_I2cCfgMaster = {
-	I2C_MASTER_DEVNO,			// I2C device number
-	{
-		{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
-		{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
-	},
-	100000,		// Rate
-	I2CMODE_MASTER,
-	5,			// Retry
-	0,			// Number of slave addresses
-	{0,},		// Slave addresses
-	true,
-	false,
-	7,			// Interrupt prio
-	NULL		// Event callback
+	.DevNo = I2C_MASTER_DEVNO,			// I2C device number
+	.Type = I2CTYPE_STANDARD,
+	.Mode = I2CMODE_MASTER,
+	.pIOPinMap = s_I2cMasterPins,
+	.NbIOPins = sizeof(s_I2cMasterPins) / sizeof(IOPinCfg_t),
+	.Rate = 100000,		// Rate in Hz
+	.MaxRetry = 5,			// Retry
+	.AddrType = I2CADDR_TYPE_NORMAL,
+	.NbSlaveAddr = 0,			// Number of slave addresses
+	.SlaveAddr = {0,},		// Slave addresses
+	.bDmaEn = true,
+	.bIntEn = false,
+	.IntPrio = 7,			// Interrupt prio
+	.EvtCB = NULL		// Event callback
 };
 
 I2C g_I2CMaster;
@@ -102,21 +108,26 @@ I2C g_I2CMaster;
 
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
+static const IOPinCfg_t s_I2cSlavePins[] = {
+	{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},		// SDA
+	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
+};
+
 static const I2CCfg_t s_I2cCfgSlave = {
-	I2C_SLAVE_DEVNO,			// I2C device number
-	{
-		{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},		// SDA
-		{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
-	},
-	100000,		// Rate
-	I2CMODE_SLAVE,
-	5,			// Retry
-	1,			// Number of slave addresses
-	{I2C_SLAVE_ADDR, },	// Slave mode response addresses
-	true,
-	true,
-	7,			// Interrupt prio
-	I2CSlaveIntrfHandler	// Event callback
+	.DevNo = I2C_SLAVE_DEVNO,			// I2C device number
+	.Type = I2CTYPE_STANDARD,
+	.Mode = I2CMODE_SLAVE,
+	.pIOPinMap = s_I2cMasterPins,
+	.NbIOPins = sizeof(s_I2cMasterPins) / sizeof(IOPinCfg_t),
+	.Rate = 100000,		// Rate in Hz
+	.MaxRetry = 5,			// Retry
+	.AddrType = I2CADDR_TYPE_NORMAL,
+	.NbSlaveAddr = 0,			// Number of slave addresses
+	.SlaveAddr = {I2C_SLAVE_ADDR,},		// Slave addresses
+	.bDmaEn = true,
+	.bIntEn = true,
+	.IntPrio = 7,			// Interrupt prio
+	.EvtCB = I2CSlaveIntrfHandler		// Event callback
 };
 
 I2C g_I2CSlave;

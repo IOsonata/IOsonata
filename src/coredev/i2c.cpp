@@ -46,10 +46,10 @@ void I2CBusReset(I2CDev_t * const pDev)
 		return;
 	}
 
-	int sclport = pDev->Pins[I2C_SCL_IOPIN_IDX].PortNo;
-	int sclpin = pDev->Pins[I2C_SCL_IOPIN_IDX].PinNo;
-	int sdaport = pDev->Pins[I2C_SDA_IOPIN_IDX].PortNo;
-	int sdapin = pDev->Pins[I2C_SDA_IOPIN_IDX].PinNo;
+	int sclport = pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo;
+	int sclpin = pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo;
+	int sdaport = pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PortNo;
+	int sdapin = pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo;
 
 	pDev->DevIntrf.Disable(&pDev->DevIntrf);
 
