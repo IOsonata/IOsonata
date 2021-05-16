@@ -55,6 +55,13 @@ SOFTWARE.
 #define SYSTEM_CORE_CLOCK_MAX			120000000UL	// TODO: Adjust value for CPU with fixed core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(34UL)	// TODO: Adjustment value for nanosec delay
 
+#define PLLM_DIV_MAX		16
+#define PLLN_MUL_MIN		8
+#define PLLN_MUL_MAX		128
+#define PLLR_DIV_MAX		8
+#define VCO_FREQ_MIN		64000000
+#define VCO_FREQ_MAX		344000000
+
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
@@ -147,15 +154,15 @@ uint32_t FindPllCfg(uint32_t SrcFreq)
 	uint32_t pllr = 0;
 	uint32_t pllcfgr = 0;
 
-	for (int m = 1; m <= 8; m++)
+	for (int m = 1; m <= PLLM_DIV_MAX; m++)
 	{
 		uint32_t clk = SrcFreq / m;
 
-		for (int n = 8; n <= 86 && clk >= 4000000 && clk <= 16000000; n++)
+		for (int n = PLLN_MUL_MIN; n <= PLLN_MUL_MAX && clk >= 4000000 && clk <= 48000000; n++)
 		{
 			uint32_t vco = clk * n;
 
-			for (int r = 2; r <= 8 && vco >= 64000000 && vco <= 344000000; r += 2)
+			for (int r = 2; r <= PLLR_DIV_MAX && vco >= (SYSTEM_CORE_CLOCK_MAX << 1) && vco <= VCO_FREQ_MAX; r += 2)
 			{
 				uint32_t sysclk = vco / r;
 
@@ -491,12 +498,12 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 
 	if (Idx == 1)
 	{
-		RCC->CFGR &= RCC_CFGR_PPRE2_Msk;
+		RCC->CFGR &= ~RCC_CFGR_PPRE2_Msk;
 		RCC->CFGR |= ppreval << RCC_CFGR_PPRE2_Pos;
 	}
 	else
 	{
-		RCC->CFGR &= RCC_CFGR_PPRE1_Msk;
+		RCC->CFGR &= ~RCC_CFGR_PPRE1_Msk;
 		RCC->CFGR |= ppreval << RCC_CFGR_PPRE1_Pos;
 	}
 
