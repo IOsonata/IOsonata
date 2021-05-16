@@ -2,7 +2,7 @@
 
 "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\arm\bin\armjlink2.dll" 
 
-"Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\EepromDemo\IAR\Release\Exe\EepromDemo.out" 
+"Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\FlashMemoryDemo\IAR\Release\Exe\FlashMemoryDemo.out" 
 
 --plugin="C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\arm\bin\armbat.dll" 
 

@@ -1,104 +1,103 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project>
     <fileVersion>4</fileVersion>
-    <fileChecksum>971450653</fileChecksum>
+    <fileChecksum>4196599865</fileChecksum>
     <configuration>
         <name>Debug</name>
         <outputs>
-            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4s9xx.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\core_cm4.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_version.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</file>
-            <file>$PROJ_DIR$\..\..\..\lib\IAR\Debug\IOSonata_STM32L4S9.a</file>
-            <file>$TOOLKIT_DIR$\inc\c\DLib_Product.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\ysizet.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\stdbool.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\i2c.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\stdint.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\string.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\yvals.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\DLib_Product_string.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\device_intrf.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\stdatomic.h</file>
+            <file>$TOOLKIT_DIR$\lib\dlpp7M_tl_fc.a</file>
             <file>$TOOLKIT_DIR$\inc\c\xatomic.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\include\iopinctrl.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4xx.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\ycheck.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdint.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\i2c.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Product_string.h</file>
             <file>$TOOLKIT_DIR$\inc\c\stdio.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\DLib_Defaults.h</file>
+            <file>$TOOLKIT_DIR$\lib\dl7M_tlf.a</file>
+            <file>$TOOLKIT_DIR$\inc\c\iccarm_builtin.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\system_core_clock.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\ycheck.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\yvals.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\device_intrf.h</file>
+            <file>$TOOLKIT_DIR$\lib\rt7M_tl.a</file>
+            <file>$PROJ_DIR$\Debug\List\EepromDemo.map</file>
+            <file>$PROJ_DIR$\Debug\Obj\i2c_eeprom.xcl</file>
             <file>$TOOLKIT_DIR$\inc\c\stddef.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\iopincfg.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\DLib_Config_Full.h</file>
-            <file>$TOOLKIT_DIR$\lib\shb_l.a</file>
-            <file>$TOOLKIT_DIR$\lib\rt7M_tl.a</file>
-            <file>$TOOLKIT_DIR$\lib\m7M_tls.a</file>
-            <file>$TOOLKIT_DIR$\lib\dl7M_tlf.a</file>
-            <file>$TOOLKIT_DIR$\lib\dlpp7M_tl_fc.a</file>
-            <file>$PROJ_DIR$\Debug\List\EepromDemo.map</file>
-            <file>$TOOLKIT_DIR$\inc\c\iccarm_builtin.h</file>
-            <file>$PROJ_DIR$\Debug\Obj\EepromDemo.pbd</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\mpu_armv7.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\system_core_clock.h</file>
-            <file>$PROJ_DIR$\Debug\Obj\i2c_eeprom.xcl</file>
+            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4xx.h</file>
             <file>$PROJ_DIR$\..\..\..\..\include\system_stm32l4xx.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\mpu_armv7.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\include\iopinctrl.h</file>
+            <file>$PROJ_DIR$\Debug\Obj\EepromDemo.pbd</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\seep.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\idelay.h</file>
+            <file>$TOOLKIT_DIR$\lib\shb_l.a</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Defaults.h</file>
+            <file>$TOOLKIT_DIR$\lib\m7M_tls.a</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Config_Full.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\string.h</file>
             <file>$PROJ_DIR$\Debug\Obj\flash_memory_demo.o</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdbool.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdatomic.h</file>
+            <file>$PROJ_DIR$\..\src\board.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\core_cm4.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Product.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\ysizet.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\i2c\i2c_eeprom.c</file>
+            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4s9xx.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</file>
+            <file>$PROJ_DIR$\..\..\..\lib\IAR\Debug\IOSonata_STM32L4S9.a</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_version.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_compiler.h</file>
+            <file>$PROJ_DIR$\Debug\Exe\EepromDemo.out</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\misc\flash_memory_demo.cpp</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_iccarm.h</file>
             <file>$PROJ_DIR$\Debug\Exe\EepromDemo.hex</file>
             <file>$PROJ_DIR$\Debug\Obj\i2c_eeprom.o</file>
-            <file>$PROJ_DIR$\Debug\Exe\EepromDemo.out</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\i2c\i2c_eeprom.c</file>
             <file>$PROJ_DIR$\Debug\Obj\flash_memory_demo.xcl</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_compiler.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_iccarm.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\src\ResetEntry.c</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\misc\flash_memory_demo.cpp</file>
-            <file>$PROJ_DIR$\..\src\board.h</file>
         </outputs>
         <file>
             <name>[ROOT_NODE]</name>
             <outputs>
                 <tool>
                     <name>ILINK</name>
-                    <file> 41 29</file>
+                    <file> 42 13</file>
                 </tool>
             </outputs>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\Debug\Exe\EepromDemo.out</name>
-            <outputs>
-                <tool>
-                    <name>ILINK</name>
-                    <file> 29</file>
-                </tool>
-                <tool>
-                    <name>OBJCOPY</name>
-                    <file> 39</file>
-                </tool>
-            </outputs>
-            <inputs>
-                <tool>
-                    <name>ILINK</name>
-                    <file> 3 40 4 24 25 28 26 27</file>
-                </tool>
-            </inputs>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\i2c\i2c_eeprom.c</name>
             <outputs>
                 <tool>
                     <name>ICCARM</name>
-                    <file> 40</file>
+                    <file> 46</file>
                 </tool>
                 <tool>
                     <name>BICOMP</name>
-                    <file> 34</file>
+                    <file> 14</file>
                 </tool>
             </outputs>
             <inputs>
                 <tool>
                     <name>ICCARM</name>
-                    <file> 19 18 11 20 23 5 6 7 8 9 10 12 13 14 21 15 22 16 17 0 1 2 44 45 30 32 35 37 33 36 48</file>
+                    <file> 5 9 10 25 27 34 35 30 3 2 28 4 11 31 15 1 16 20 17 37 33 40 41 44 7 19 18 23 8 22 32</file>
+                </tool>
+            </inputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\Debug\Exe\EepromDemo.out</name>
+            <outputs>
+                <tool>
+                    <name>OBJCOPY</name>
+                    <file> 45</file>
+                </tool>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 13</file>
+                </tool>
+            </outputs>
+            <inputs>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 38 46 39 24 12 0 26 6</file>
                 </tool>
             </inputs>
         </file>
@@ -107,11 +106,11 @@
             <outputs>
                 <tool>
                     <name>ICCARM</name>
-                    <file> 38</file>
+                    <file> 29</file>
                 </tool>
                 <tool>
                     <name>BICOMP</name>
-                    <file> 43</file>
+                    <file> 47</file>
                 </tool>
             </outputs>
         </file>
@@ -119,98 +118,96 @@
     <configuration>
         <name>Release</name>
         <outputs>
-            <file>$PROJ_DIR$\..\..\..\lib\IAR\Release\IOSonata_STM32L4S9.a</file>
-            <file>$PROJ_DIR$\Release\Obj\i2c_eeprom.__cstat.et</file>
-            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4s9xx.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\core_cm4.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_version.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</file>
-            <file>$TOOLKIT_DIR$\inc\c\DLib_Product.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\ysizet.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\stdbool.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\i2c.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\stdint.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\string.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\yvals.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\DLib_Product_string.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\device_intrf.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\stdatomic.h</file>
+            <file>$TOOLKIT_DIR$\lib\dlpp7M_tl_fc.a</file>
             <file>$TOOLKIT_DIR$\inc\c\xatomic.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\include\iopinctrl.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4xx.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\ycheck.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdint.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\i2c.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Product_string.h</file>
             <file>$TOOLKIT_DIR$\inc\c\stdio.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\DLib_Defaults.h</file>
+            <file>$TOOLKIT_DIR$\lib\dl7M_tlf.a</file>
+            <file>$TOOLKIT_DIR$\inc\c\iccarm_builtin.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\system_core_clock.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\ycheck.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\yvals.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\device_intrf.h</file>
+            <file>$TOOLKIT_DIR$\lib\rt7M_tl.a</file>
             <file>$TOOLKIT_DIR$\inc\c\stddef.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\iopincfg.h</file>
-            <file>$TOOLKIT_DIR$\inc\c\DLib_Config_Full.h</file>
-            <file>$TOOLKIT_DIR$\lib\shb_l.a</file>
-            <file>$TOOLKIT_DIR$\lib\rt7M_tl.a</file>
-            <file>$TOOLKIT_DIR$\lib\m7M_tls.a</file>
-            <file>$TOOLKIT_DIR$\lib\dl7M_tlf.a</file>
-            <file>$TOOLKIT_DIR$\lib\dlpp7M_tl_fc.a</file>
-            <file>$PROJ_DIR$\Release\Exe\EepromDemo.out</file>
-            <file>$PROJ_DIR$\Release\Obj\EepromDemo.pbd</file>
-            <file>$TOOLKIT_DIR$\inc\c\iccarm_builtin.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\mpu_armv7.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\system_core_clock.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4xx.h</file>
             <file>$PROJ_DIR$\..\..\..\..\include\system_stm32l4xx.h</file>
-            <file>$PROJ_DIR$\Release\Obj\i2c_eeprom.o</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\mpu_armv7.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\include\iopinctrl.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\seep.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\idelay.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\i2c\i2c_eeprom.c</file>
-            <file>$PROJ_DIR$\Release\Obj\i2c_eeprom.xcl</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_compiler.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_iccarm.h</file>
-            <file>$PROJ_DIR$\Release\List\EepromDemo.map</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\src\ResetEntry.c</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\misc\flash_memory_demo.cpp</file>
+            <file>$TOOLKIT_DIR$\lib\shb_l.a</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Defaults.h</file>
+            <file>$TOOLKIT_DIR$\lib\m7M_tls.a</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Config_Full.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\string.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdbool.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdatomic.h</file>
             <file>$PROJ_DIR$\..\src\board.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\core_cm4.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Product.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\ysizet.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\i2c\i2c_eeprom.c</file>
+            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4s9xx.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_version.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_compiler.h</file>
+            <file>$PROJ_DIR$\Release\Obj\i2c_eeprom.o</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_iccarm.h</file>
+            <file>$PROJ_DIR$\Release\Obj\EepromDemo.pbd</file>
+            <file>$PROJ_DIR$\Release\Obj\i2c_eeprom.xcl</file>
+            <file>$PROJ_DIR$\Release\List\EepromDemo.map</file>
+            <file>$PROJ_DIR$\..\..\..\lib\IAR\Release\IOSonata_STM32L4S9.a</file>
+            <file>$PROJ_DIR$\Release\Exe\EepromDemo.out</file>
+            <file>$PROJ_DIR$\Release\Exe\EepromDemo.hex</file>
         </outputs>
         <file>
             <name>[ROOT_NODE]</name>
             <outputs>
                 <tool>
                     <name>ILINK</name>
-                    <file> 30 43</file>
+                    <file> 43 41</file>
                 </tool>
             </outputs>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\Release\Exe\EepromDemo.out</name>
-            <outputs>
-                <tool>
-                    <name>ILINK</name>
-                    <file> 43</file>
-                </tool>
-            </outputs>
-            <inputs>
-                <tool>
-                    <name>ILINK</name>
-                    <file> 5 36 0 25 26 29 27 28</file>
-                </tool>
-            </inputs>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\i2c\i2c_eeprom.c</name>
             <outputs>
                 <tool>
                     <name>ICCARM</name>
-                    <file> 36</file>
+                    <file> 37</file>
                 </tool>
                 <tool>
                     <name>BICOMP</name>
                     <file> 40</file>
                 </tool>
-                <tool>
-                    <name>__cstat</name>
-                    <file> 1</file>
-                </tool>
             </outputs>
             <inputs>
                 <tool>
                     <name>ICCARM</name>
-                    <file> 20 19 12 21 24 6 7 8 9 10 11 13 14 15 22 16 23 17 18 2 3 4 41 42 32 33 35 38 34 37 46</file>
+                    <file> 5 9 10 22 24 30 31 26 3 2 25 4 11 27 13 1 14 18 15 33 29 35 36 38 7 17 16 20 8 19 28</file>
+                </tool>
+            </inputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\Release\Exe\EepromDemo.out</name>
+            <outputs>
+                <tool>
+                    <name>OBJCOPY</name>
+                    <file> 44</file>
+                </tool>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 41</file>
+                </tool>
+            </outputs>
+            <inputs>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 34 37 42 21 12 0 23 6</file>
                 </tool>
             </inputs>
         </file>

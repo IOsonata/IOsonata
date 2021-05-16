@@ -1285,7 +1285,6 @@
                 </option>
                 <option>
                     <name>CCDefines</name>
-                    <state>NDEBUG</state>
                     <state>STM32L4S9xx</state>
                 </option>
                 <option>
@@ -1351,7 +1350,7 @@
                 </option>
                 <option>
                     <name>CCDebugInfo</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>IEndianMode</name>
@@ -1375,7 +1374,7 @@
                 </option>
                 <option>
                     <name>CCSignedPlainChar</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>CCRequirePrototypes</name>
@@ -1582,7 +1581,7 @@
                 </option>
                 <option>
                     <name>ADebug</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>AltRegisterNames</name>
@@ -1708,7 +1707,7 @@
                 <option>
                     <name>OOCOutputFormat</name>
                     <version>3</version>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>OCOutputOverride</name>
@@ -1716,7 +1715,7 @@
                 </option>
                 <option>
                     <name>OOCOutputFile</name>
-                    <state></state>
+                    <state>EepromDemo.hex</state>
                 </option>
                 <option>
                     <name>OOCCommandLineProducer</name>
@@ -1724,7 +1723,7 @@
                 </option>
                 <option>
                     <name>OOCObjCopyEnable</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
             </data>
         </settings>
@@ -1883,7 +1882,7 @@
                 </option>
                 <option>
                     <name>IlinkAdditionalLibs</name>
-                    <state>$PROJ_DIR$/../../../lib/IAR/Release/IOSonata_STM32L4S9.a</state>
+                    <state>$PROJ_DIR$\..\..\..\lib\IAR\Release\IOSonata_STM32L4S9.a</state>
                 </option>
                 <option>
                     <name>IlinkOverrideProgramEntryLabel</name>
@@ -1986,11 +1985,11 @@
                 </option>
                 <option>
                     <name>IlinkOptInline</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>IlinkOptExceptionsAllow</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>IlinkOptExceptionsForce</name>
@@ -2006,7 +2005,7 @@
                 </option>
                 <option>
                     <name>IlinkOptUseVfe</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>IlinkOptForceVfe</name>
@@ -2068,7 +2067,7 @@
                 </option>
                 <option>
                     <name>IlinkTrustzoneImportLibraryOut</name>
-                    <state>EepromDemo_import_lib.o</state>
+                    <state>FlashMemoryDemo_import_lib.o</state>
                 </option>
                 <option>
                     <name>OILinkExtraOption</name>
