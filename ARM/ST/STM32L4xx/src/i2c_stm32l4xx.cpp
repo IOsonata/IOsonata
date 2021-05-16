@@ -156,12 +156,14 @@ static void STM32L4xxI2CReset(DevIntrf_t * const pDev)
 		usDelay(100);
 		RCC->APB1RSTR1 &= ~(RCC_APB1RSTR1_I2C1RST << dev->DevNo);
 	}
+#ifdef STM32L4S9xx
 	else
 	{
 		RCC->APB1RSTR2 |= RCC_APB1RSTR2_I2C4RST;
 		usDelay(100);
 		RCC->APB1RSTR2 &= ~RCC_APB1RSTR2_I2C4RST;
 	}
+#endif
 }
 
 static uint32_t STM32L4xxI2CGetRate(DevIntrf_t * const pDev)
@@ -202,11 +204,13 @@ static uint32_t STM32L4xxI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 			RCC->CCIPR &= ~(RCC_CCIPR_I2C1SEL_Msk << (dev->DevNo << 1));
 			RCC->CCIPR |= RCC_CCIPR_I2CSEL_SYSCLK << (RCC_CCIPR_I2C1SEL_Pos + (dev->DevNo << 1));
 		}
+#ifdef STM32L4S9xx
 		else
 		{
 			RCC->CCIPR2 &= ~RCC_CCIPR2_I2C4SEL_Msk;
 			RCC->CCIPR2 |= RCC_CCIPR_I2CSEL_SYSCLK << RCC_CCIPR2_I2C4SEL_Pos;
 		}
+#endif
 	}
 	else
 	{
@@ -216,11 +220,13 @@ static uint32_t STM32L4xxI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 			RCC->CCIPR &= ~(RCC_CCIPR_I2C1SEL_Msk << (dev->DevNo << 1));
 			RCC->CCIPR |= RCC_CCIPR_I2CSEL_PCLK << (RCC_CCIPR_I2C1SEL_Pos + (dev->DevNo << 1));
 		}
+#ifdef STM32L4S9xx
 		else
 		{
 			RCC->CCIPR2 &= ~RCC_CCIPR2_I2C4SEL_Msk;
 			RCC->CCIPR2 |= RCC_CCIPR_I2CSEL_PCLK << RCC_CCIPR2_I2C4SEL_Pos;
 		}
+#endif
 	}
 
 	uint32_t presc = (clk / iclk - 1) & 0xf;
@@ -271,10 +277,12 @@ void STM32L4xxI2CDisable(DevIntrf_t * const pDev)
 	{
 		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_I2C1EN << dev->DevNo);
 	}
+#ifdef STM32L4S9xx
 	else
 	{
 		RCC->APB1ENR2 &= ~RCC_APB1ENR2_I2C4EN;
 	}
+#endif
 }
 
 static void STM32L4xxI2CEnable(DevIntrf_t * const pDev)
@@ -285,10 +293,12 @@ static void STM32L4xxI2CEnable(DevIntrf_t * const pDev)
 	{
 		RCC->APB1ENR1 |= RCC_APB1ENR1_I2C1EN << dev->DevNo;
 	}
+#ifdef STM32L4S9xx
 	else
 	{
 		RCC->APB1ENR2 |= RCC_APB1ENR2_I2C4EN;
 	}
+#endif
 }
 
 static void STM32L4xxI2CPowerOff(DevIntrf_t * const pDev)
@@ -299,10 +309,12 @@ static void STM32L4xxI2CPowerOff(DevIntrf_t * const pDev)
 	{
 		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_I2C1EN << dev->DevNo);
 	}
+#ifdef STM32L4S9xx
 	else
 	{
 		RCC->APB1ENR2 &= ~RCC_APB1ENR2_I2C4EN;
 	}
+#endif
 }
 
 // Initial receive
@@ -480,10 +492,12 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	{
 		RCC->APB1ENR1 |= RCC_APB1ENR1_I2C1EN << pDev->Cfg.DevNo;
 	}
+#ifdef STM32L4S9xx
 	else
 	{
 		RCC->APB1ENR2 |= RCC_APB1ENR2_I2C4EN;
 	}
+#endif
 
 	// Reset I2C engine
 	STM32L4xxI2CReset(&pDev->DevIntrf);
