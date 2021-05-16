@@ -6,7 +6,7 @@
 
 "-p" 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\arm\CONFIG\debugger\ST\STM32L476VG.ddf" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\arm\CONFIG\debugger\ST\STM32L476VG.ddf" 
 
 "--semihosting=none" 
 

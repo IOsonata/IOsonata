@@ -16,7 +16,7 @@
                 <debug>1</debug>
                 <option>
                     <name>ExePath</name>
-                    <state>Debug</state>
+                    <state>Debug\Exe</state>
                 </option>
                 <option>
                     <name>ObjPath</name>
@@ -40,7 +40,7 @@
                 </option>
                 <option>
                     <name>GOutputBinary</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>OGCoreOrChip</name>
@@ -58,7 +58,7 @@
                 </option>
                 <option>
                     <name>RTDescription</name>
-                    <state>To be used with the full configuration of the C/C++ runtime library. Full locale interface, C locale, file descriptor support, multibytes in printf and scanf, and hex floats in strtod.</state>
+                    <state>Use the full configuration of the C/C++ runtime library. Full locale interface, C locale, file descriptor support, multibytes in printf and scanf, and hex floats in strtod.</state>
                 </option>
                 <option>
                     <name>OGProductVersion</name>
@@ -66,7 +66,7 @@
                 </option>
                 <option>
                     <name>OGLastSavedByProductVersion</name>
-                    <state>8.32.1.18618</state>
+                    <state>8.40.1.21529</state>
                 </option>
                 <option>
                     <name>GeneralEnableMisra</name>
@@ -129,7 +129,7 @@
                 </option>
                 <option>
                     <name>GRuntimeLibThreads</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>CoreVariant</name>
@@ -224,9 +224,7 @@
                 </option>
                 <option>
                     <name>CCDefines</name>
-                    <state>__PROGRAM_START</state>
                     <state>STM32L4S9xx</state>
-                    <state>SPRT_BUFFER_SIZE=256</state>
                 </option>
                 <option>
                     <name>CCPreprocFile</name>
@@ -351,13 +349,12 @@
                 </option>
                 <option>
                     <name>CCIncludePath2</name>
-                    <state>$PROJ_DIR$\..\include</state>
-                    <state>$PROJ_DIR$\..\..\..\include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\include</state>
+                    <state>$PROJ_DIR$\..\src</state>
+                    <state>$PROJ_DIR$\..\..\..\..\include</state>
+                    <state>$PROJ_DIR$\..\..\..\lib\include</state>
+                    <state>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\CMSIS\Core\Include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\BSEC\algo\lite_version\inc</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\invn</state>
+                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\include</state>
                 </option>
                 <option>
                     <name>CCStdIncCheck</name>
@@ -373,7 +370,7 @@
                 </option>
                 <option>
                     <name>CCOptLevel</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>CCOptStrategy</name>
@@ -382,7 +379,7 @@
                 </option>
                 <option>
                     <name>CCOptLevelSlave</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>CompilerMisraRules98</name>
@@ -607,7 +604,7 @@
                 </option>
                 <option>
                     <name>AOutputFile</name>
-                    <state>$FILE_BNAME$.o</state>
+                    <state></state>
                 </option>
                 <option>
                     <name>ALimitErrorsCheck</name>
@@ -649,7 +646,7 @@
                 <option>
                     <name>OOCOutputFormat</name>
                     <version>3</version>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>OCOutputOverride</name>
@@ -657,7 +654,7 @@
                 </option>
                 <option>
                     <name>OOCOutputFile</name>
-                    <state></state>
+                    <state>EepromDemo.hex</state>
                 </option>
                 <option>
                     <name>OOCCommandLineProducer</name>
@@ -665,7 +662,7 @@
                 </option>
                 <option>
                     <name>OOCObjCopyEnable</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
             </data>
         </settings>
@@ -772,11 +769,11 @@
                 </option>
                 <option>
                     <name>IlinkIcfOverride</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>IlinkIcfFile</name>
-                    <state></state>
+                    <state>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</state>
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
@@ -824,7 +821,7 @@
                 </option>
                 <option>
                     <name>IlinkAdditionalLibs</name>
-                    <state></state>
+                    <state>$PROJ_DIR$\..\..\..\lib\IAR\Debug\IOSonata_STM32L4S9.a</state>
                 </option>
                 <option>
                     <name>IlinkOverrideProgramEntryLabel</name>
@@ -836,7 +833,7 @@
                 </option>
                 <option>
                     <name>IlinkProgramEntryLabel</name>
-                    <state></state>
+                    <state>__iar_program_start</state>
                 </option>
                 <option>
                     <name>DoFill</name>
@@ -931,7 +928,7 @@
                 </option>
                 <option>
                     <name>IlinkOptExceptionsAllow</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>IlinkOptExceptionsForce</name>
@@ -947,7 +944,7 @@
                 </option>
                 <option>
                     <name>IlinkOptUseVfe</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>IlinkOptForceVfe</name>
@@ -1009,7 +1006,7 @@
                 </option>
                 <option>
                     <name>IlinkTrustzoneImportLibraryOut</name>
-                    <state>###Unitialized###</state>
+                    <state>FlashMemoryDemo_import_lib.o</state>
                 </option>
                 <option>
                     <name>OILinkExtraOption</name>
@@ -1050,7 +1047,7 @@
                 </option>
                 <option>
                     <name>IarchiveOutput</name>
-                    <state>Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\Debug\IOSonata_STM32L4S9.a</state>
+                    <state>###Unitialized###</state>
                 </option>
             </data>
         </settings>
@@ -1080,7 +1077,7 @@
                 <debug>0</debug>
                 <option>
                     <name>ExePath</name>
-                    <state>Release</state>
+                    <state>Release\Exe</state>
                 </option>
                 <option>
                     <name>ObjPath</name>
@@ -1104,7 +1101,7 @@
                 </option>
                 <option>
                     <name>GOutputBinary</name>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>OGCoreOrChip</name>
@@ -1122,7 +1119,7 @@
                 </option>
                 <option>
                     <name>RTDescription</name>
-                    <state>To be used with the full configuration of the C/C++ runtime library. Full locale interface, C locale, file descriptor support, multibytes in printf and scanf, and hex floats in strtod.</state>
+                    <state>Use the full configuration of the C/C++ runtime library. Full locale interface, C locale, file descriptor support, multibytes in printf and scanf, and hex floats in strtod.</state>
                 </option>
                 <option>
                     <name>OGProductVersion</name>
@@ -1142,11 +1139,11 @@
                 </option>
                 <option>
                     <name>OGChipSelectEditMenu</name>
-                    <state>STM32L476VG	ST STM32L476VG</state>
+                    <state>STM32L4S9AI	ST STM32L4S9AI</state>
                 </option>
                 <option>
                     <name>GenLowLevelInterface</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>GEndianModeBE</name>
@@ -1202,7 +1199,7 @@
                 </option>
                 <option>
                     <name>GFPUDeviceSlave</name>
-                    <state>STM32L476VG	ST STM32L476VG</state>
+                    <state>STM32L4S9AI	ST STM32L4S9AI</state>
                 </option>
                 <option>
                     <name>FPU2</name>
@@ -1289,9 +1286,7 @@
                 <option>
                     <name>CCDefines</name>
                     <state>NDEBUG</state>
-                    <state>__PROGRAM_START</state>
                     <state>STM32L4S9xx</state>
-                    <state>SPRT_BUFFER_SIZE=256</state>
                 </option>
                 <option>
                     <name>CCPreprocFile</name>
@@ -1380,7 +1375,7 @@
                 </option>
                 <option>
                     <name>CCSignedPlainChar</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>CCRequirePrototypes</name>
@@ -1416,13 +1411,12 @@
                 </option>
                 <option>
                     <name>CCIncludePath2</name>
-                    <state>$PROJ_DIR$\..\include</state>
-                    <state>$PROJ_DIR$\..\..\..\include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\include</state>
+                    <state>$PROJ_DIR$\..\src</state>
+                    <state>$PROJ_DIR$\..\..\..\..\include</state>
+                    <state>$PROJ_DIR$\..\..\..\lib\include</state>
+                    <state>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\CMSIS\Core\Include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\BSEC\algo\lite_version\inc</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\invn</state>
+                    <state>$PROJ_DIR$\..\..\..\..\..\..\..\include</state>
                 </option>
                 <option>
                     <name>CCStdIncCheck</name>
@@ -1443,7 +1437,7 @@
                 <option>
                     <name>CCOptStrategy</name>
                     <version>0</version>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>CCOptLevelSlave</name>
@@ -1506,7 +1500,7 @@
                 <option>
                     <name>CCOptStrategySlave</name>
                     <version>0</version>
-                    <state>1</state>
+                    <state>0</state>
                 </option>
                 <option>
                     <name>CCGuardCalls</name>
@@ -1672,7 +1666,7 @@
                 </option>
                 <option>
                     <name>AOutputFile</name>
-                    <state>$FILE_BNAME$.o</state>
+                    <state></state>
                 </option>
                 <option>
                     <name>ALimitErrorsCheck</name>
@@ -1837,11 +1831,11 @@
                 </option>
                 <option>
                     <name>IlinkIcfOverride</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>IlinkIcfFile</name>
-                    <state></state>
+                    <state>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</state>
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
@@ -1889,7 +1883,7 @@
                 </option>
                 <option>
                     <name>IlinkAdditionalLibs</name>
-                    <state></state>
+                    <state>$PROJ_DIR$/../../../lib/IAR/Release/IOSonata_STM32L4S9.a</state>
                 </option>
                 <option>
                     <name>IlinkOverrideProgramEntryLabel</name>
@@ -1901,7 +1895,7 @@
                 </option>
                 <option>
                     <name>IlinkProgramEntryLabel</name>
-                    <state></state>
+                    <state>__iar_program_start</state>
                 </option>
                 <option>
                     <name>DoFill</name>
@@ -2074,7 +2068,7 @@
                 </option>
                 <option>
                     <name>IlinkTrustzoneImportLibraryOut</name>
-                    <state>###Unitialized###</state>
+                    <state>EepromDemo_import_lib.o</state>
                 </option>
                 <option>
                     <name>OILinkExtraOption</name>
@@ -2115,7 +2109,7 @@
                 </option>
                 <option>
                     <name>IarchiveOutput</name>
-                    <state>Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\Release\IOSonata_STM32L4S9.a</state>
+                    <state>###Unitialized###</state>
                 </option>
             </data>
         </settings>
@@ -2130,448 +2124,10 @@
             <data />
         </settings>
     </configuration>
-    <group>
-        <name>include</name>
-        <group>
-            <name>converters</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\converters\adc_device.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\converters\adc_ltc2495.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\converters\analog_comp.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\converters\dac_device.h</name>
-            </file>
-        </group>
-        <group>
-            <name>coredev</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\i2c.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\iopincfg.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\pdm.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\spi.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\timer.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\uart.h</name>
-            </file>
-        </group>
-        <group>
-            <name>imu</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\imu\icm20948_img_dmp3a.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\imu\imu.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\imu\imu_invn_icm20948.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\imu\imu_mpu9250.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\imu\mpu9250_dmpkey.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\imu\mpu9250_dmpmap.h</name>
-            </file>
-        </group>
-        <group>
-            <name>miscdev</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\buzzer.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\led.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\led_apa102.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\ledmx.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\ledmxfont.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\modem.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\tca6424a.h</name>
-            </file>
-        </group>
-        <group>
-            <name>sensors</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\a_adxl362.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\accel_sensor.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\ag_bmi160.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\agm_icm20948.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\agm_invn_icm20948.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\agm_lsm9ds1.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\agm_mpu9250.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\am_lsm303c.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gas_sensor.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gyro_l3gd20h.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gyro_sensor.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\humi_sensor.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\mag_bmm150.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\mag_sensor.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\press_sensor.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\sensor.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\temp_sensor.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\tph_bme280.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\tph_ms8607.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\tph_sensor.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\tphg_bme680.h</name>
-            </file>
-        </group>
-        <group>
-            <name>sys</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sys\dirent.h</name>
-            </file>
-        </group>
-        <group>
-            <name>usb</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\usb\usb_cdcdef.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\usb\usb_def.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\usb\usb_hiddef.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\usb\usb_hidhost.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\usb\usb_mscdef.h</name>
-            </file>
-        </group>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\base64.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\blueio_types.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\cfifo.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\convutil.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\crc.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\device bridge.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\device.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\device_intrf.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\diskio.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\diskio_flash.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\fatfs.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\intelhex.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\isha1.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\isha256.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\istddef.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\md5.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\prbs.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\pulse_train.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\pwm.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\sdcard.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\seep.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\slip_intrf.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\stddev.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\sysstatus.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\sysstatusdef.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\utf8.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\include\utf8cvt.h</name>
-        </file>
-    </group>
-    <group>
-        <name>src</name>
-        <group>
-            <name>converters</name>
-        </group>
-        <group>
-            <name>coredev</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\i2c.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\src\i2c_stm32l4xx.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\src\iopincfg_stm32l4xx.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\src\octospi_stm32l4xx.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\src\spi_stm32l4xx.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\timer.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\src\timer_lptim_stm32l4xx.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\src\timer_stm32l4x.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\src\timer_tim_stm32l4xx.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\uart.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\src\uart_stm32l4xx.cpp</name>
-            </file>
-        </group>
-        <group>
-            <name>imu</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu_invn_icm20948.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu_mpu9250.cpp</name>
-            </file>
-        </group>
-        <group>
-            <name>miscdev</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\buzzer.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\led_apa102.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\led_gpio.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\led_pwm.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\ledmx.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\ledmxfont.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\modem.cpp</name>
-            </file>
-        </group>
-        <group>
-            <name>sensors</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\ag_bmi160.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\agm_icm20948.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\agm_invn_icm20948.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\agm_mpu9250.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\am_lsm303c.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\gyro_l3gd20h.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\mag_bmm150.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tph_bme280.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tph_ms8607.cpp</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tphg_bme680.cpp</name>
-            </file>
-        </group>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\base64.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\cfifo.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\CppRuntimeOverload.cpp</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\crc.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\device.cpp</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\device_intrf.cpp</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\diskio_flash.cpp</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\diskio_impl.cpp</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\intelhex.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\isha1.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\isha256.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\md5.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\prbs.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\pulse_train.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\src\ResetEntry.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\sbuffer.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\sdcard_impl.cpp</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\seep_impl.cpp</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\slip_intrf.cpp</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\stddev.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\src\system_stm32l4plus.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\uart_retarget.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\utf8.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\utf8cvt.cpp</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\src\Vector_STM32L4S9xx.c</name>
-        </file>
-    </group>
+    <file>
+        <name>$PROJ_DIR$\..\src\board.h</name>
+    </file>
+    <file>
+        <name>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\i2c\i2c_eeprom.c</name>
+    </file>
 </project>

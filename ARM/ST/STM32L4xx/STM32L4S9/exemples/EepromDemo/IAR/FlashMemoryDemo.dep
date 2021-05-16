@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <fileVersion>4</fileVersion>
+    <fileChecksum>1464344666</fileChecksum>
+    <configuration>
+        <name>Debug</name>
+        <outputs>
+            <file>$PROJ_DIR$\..\src\board.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\misc\flash_memory_demo.cpp</file>
+            <file>$PROJ_DIR$\..\..\..\..\include\system_stm32l4xx.h</file>
+            <file>$PROJ_DIR$\Debug\Exe\FlashMemoryDemo.hex</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdbool.h</file>
+            <file>$TOOLKIT_DIR$\lib\dl7M_tlf.a</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\device_intrf.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\yvals.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Product_stdlib.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_iccarm.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4xx.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Defaults.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\uart.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\cfifo.h</file>
+            <file>$TOOLKIT_DIR$\inc\cpp\cstddef</file>
+            <file>$PROJ_DIR$\Debug\Obj\flash_memory_demo.pbi</file>
+            <file>$TOOLKIT_DIR$\inc\c\stddef.h</file>
+            <file>$PROJ_DIR$\Debug\Exe\FlashMemoryDemo.out</file>
+            <file>$TOOLKIT_DIR$\lib\shb_l.a</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\diskio.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\system_core_clock.h</file>
+            <file>$PROJ_DIR$\Debug\Obj\flash_memory_demo.__cstat.et</file>
+            <file>$TOOLKIT_DIR$\inc\cpp\initializer_list</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\iopincfg.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\iccarm_builtin.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\include\stm32l4s9xx.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Product.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\string.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Product_string.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdio.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\diskio_flash.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdint.h</file>
+            <file>$TOOLKIT_DIR$\inc\cpp\atomic</file>
+            <file>$TOOLKIT_DIR$\lib\dlpp7M_tl_fc.a</file>
+            <file>$TOOLKIT_DIR$\inc\cpp\cstdlib</file>
+            <file>$TOOLKIT_DIR$\inc\c\xatomic.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\core_cm4.h</file>
+            <file>$PROJ_DIR$\Debug\List\FlashMemoryDemo.map</file>
+            <file>$TOOLKIT_DIR$\inc\cpp\cstdint</file>
+            <file>$TOOLKIT_DIR$\lib\m7M_tls.a</file>
+            <file>$PROJ_DIR$\Debug\Obj\flash_memory_demo.o</file>
+            <file>$TOOLKIT_DIR$\inc\c\ysizet.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_version.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdarg.h</file>
+            <file>$TOOLKIT_DIR$\inc\cpp\xstddef</file>
+            <file>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</file>
+            <file>$TOOLKIT_DIR$\inc\c\stdlib.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\include\idelay.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\stddev.h</file>
+            <file>$TOOLKIT_DIR$\inc\c\ycheck.h</file>
+            <file>$TOOLKIT_DIR$\inc\cpp\type_traits</file>
+            <file>$PROJ_DIR$\..\..\..\lib\IAR\Debug\IOSonata_STM32L4S9.a</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\mpu_armv7.h</file>
+            <file>$TOOLKIT_DIR$\inc\cpp\xtr1common</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\..\include\coredev\spi.h</file>
+            <file>$TOOLKIT_DIR$\lib\rt7M_tl.a</file>
+            <file>$TOOLKIT_DIR$\inc\c\DLib_Config_Full.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\CMSIS\Core\Include\cmsis_compiler.h</file>
+        </outputs>
+        <file>
+            <name>[ROOT_NODE]</name>
+            <outputs>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 17 37</file>
+                </tool>
+            </outputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\..\..\..\exemples\misc\flash_memory_demo.cpp</name>
+            <outputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 40</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 15</file>
+                </tool>
+                <tool>
+                    <name>__cstat</name>
+                    <file> 21</file>
+                </tool>
+            </outputs>
+            <inputs>
+                <tool>
+                    <name>ICCARM</name>
+                    <file> 29 49 7 11 56 26 41 12 31 27 28 6 32 38 50 44 14 16 34 46 8 22 53 35 13 4 54 23 30 19 48 47 20 0 10 25 36 42 57 9 24 52 2</file>
+                </tool>
+                <tool>
+                    <name>BICOMP</name>
+                    <file> 38 31 4 56 41 14 6 27 20 48 7 29 54 0 26 13 49 28 22 34 10 36 42 52 12 30 47 11 43 32 50 35 44 53 16 46 8 23 19 25 2 24 57 9</file>
+                </tool>
+            </inputs>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\Debug\Exe\FlashMemoryDemo.out</name>
+            <outputs>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 37</file>
+                </tool>
+                <tool>
+                    <name>OBJCOPY</name>
+                    <file> 3</file>
+                </tool>
+            </outputs>
+            <inputs>
+                <tool>
+                    <name>ILINK</name>
+                    <file> 45 40 51 18 55 33 39 5</file>
+                </tool>
+            </inputs>
+        </file>
+    </configuration>
+    <configuration>
+        <name>Release</name>
+        <outputs />
+        <forcedrebuild>
+            <name>[MULTI_TOOL]</name>
+            <tool>ILINK</tool>
+        </forcedrebuild>
+    </configuration>
+</project>

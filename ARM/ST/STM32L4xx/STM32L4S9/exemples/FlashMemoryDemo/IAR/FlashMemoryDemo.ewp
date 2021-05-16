@@ -66,7 +66,7 @@
                 </option>
                 <option>
                     <name>OGLastSavedByProductVersion</name>
-                    <state>8.32.1.18618</state>
+                    <state>8.40.1.21529</state>
                 </option>
                 <option>
                     <name>GeneralEnableMisra</name>
@@ -116,7 +116,7 @@
                 </option>
                 <option>
                     <name>GBECoreSlave</name>
-                    <version>26</version>
+                    <version>27</version>
                     <state>39</state>
                 </option>
                 <option>
@@ -133,7 +133,7 @@
                 </option>
                 <option>
                     <name>CoreVariant</name>
-                    <version>26</version>
+                    <version>27</version>
                     <state>39</state>
                 </option>
                 <option>
@@ -156,7 +156,7 @@
                 </option>
                 <option>
                     <name>GFPUCoreSlave2</name>
-                    <version>26</version>
+                    <version>27</version>
                     <state>39</state>
                 </option>
                 <option>
@@ -692,7 +692,7 @@
             <name>ILINK</name>
             <archiveVersion>0</archiveVersion>
             <data>
-                <version>22</version>
+                <version>23</version>
                 <wantNonLocal>1</wantNonLocal>
                 <debug>1</debug>
                 <option>
@@ -773,7 +773,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFile</name>
-                    <state>Z:\swdev\IOsonata\ARM\ST\STM32L4xx\ldscript\stm32l4s9xx_flash.icf</state>
+                    <state>$PROJ_DIR$\..\..\..\..\ldscript\stm32l4s9xx_flash.icf</state>
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
@@ -821,7 +821,7 @@
                 </option>
                 <option>
                     <name>IlinkAdditionalLibs</name>
-                    <state>Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\Debug\IOSonata_STM32L4S9.a</state>
+                    <state>$PROJ_DIR$/../../../lib/IAR/Debug/IOSonata_STM32L4S9.a</state>
                 </option>
                 <option>
                     <name>IlinkOverrideProgramEntryLabel</name>
@@ -1012,6 +1012,22 @@
                     <name>OILinkExtraOption</name>
                     <state>1</state>
                 </option>
+                <option>
+                    <name>IlinkRawBinaryFile2</name>
+                    <state></state>
+                </option>
+                <option>
+                    <name>IlinkRawBinarySymbol2</name>
+                    <state></state>
+                </option>
+                <option>
+                    <name>IlinkRawBinarySegment2</name>
+                    <state></state>
+                </option>
+                <option>
+                    <name>IlinkRawBinaryAlign2</name>
+                    <state></state>
+                </option>
             </data>
         </settings>
         <settings>
@@ -1161,7 +1177,7 @@
                 </option>
                 <option>
                     <name>GBECoreSlave</name>
-                    <version>26</version>
+                    <version>27</version>
                     <state>38</state>
                 </option>
                 <option>
@@ -1178,7 +1194,7 @@
                 </option>
                 <option>
                     <name>CoreVariant</name>
-                    <version>26</version>
+                    <version>27</version>
                     <state>38</state>
                 </option>
                 <option>
@@ -1201,7 +1217,7 @@
                 </option>
                 <option>
                     <name>GFPUCoreSlave2</name>
-                    <version>26</version>
+                    <version>27</version>
                     <state>38</state>
                 </option>
                 <option>
@@ -1732,7 +1748,7 @@
             <name>ILINK</name>
             <archiveVersion>0</archiveVersion>
             <data>
-                <version>22</version>
+                <version>23</version>
                 <wantNonLocal>1</wantNonLocal>
                 <debug>0</debug>
                 <option>
@@ -2051,6 +2067,22 @@
                 <option>
                     <name>OILinkExtraOption</name>
                     <state>1</state>
+                </option>
+                <option>
+                    <name>IlinkRawBinaryFile2</name>
+                    <state></state>
+                </option>
+                <option>
+                    <name>IlinkRawBinarySymbol2</name>
+                    <state></state>
+                </option>
+                <option>
+                    <name>IlinkRawBinarySegment2</name>
+                    <state></state>
+                </option>
+                <option>
+                    <name>IlinkRawBinaryAlign2</name>
+                    <state></state>
                 </option>
             </data>
         </settings>

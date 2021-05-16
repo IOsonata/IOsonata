@@ -23,9 +23,9 @@
 
 if ($debugfile -eq "")
 {
-& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\FlashMemoryDemo\IAR\settings\FlashMemoryDemo.Debug.general.xcl" --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\FlashMemoryDemo\IAR\settings\FlashMemoryDemo.Debug.driver.xcl" 
+& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\EepromDemo\IAR\settings\EepromDemo.Release.general.xcl" --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\EepromDemo\IAR\settings\EepromDemo.Release.driver.xcl" 
 }
 else
 {
-& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\FlashMemoryDemo\IAR\settings\FlashMemoryDemo.Debug.general.xcl" --debug_file=$debugfile --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\FlashMemoryDemo\IAR\settings\FlashMemoryDemo.Debug.driver.xcl" 
+& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\common\bin\cspybat" -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\EepromDemo\IAR\settings\EepromDemo.Release.general.xcl" --debug_file=$debugfile --backend -f "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\exemples\EepromDemo\IAR\settings\EepromDemo.Release.driver.xcl" 
 }

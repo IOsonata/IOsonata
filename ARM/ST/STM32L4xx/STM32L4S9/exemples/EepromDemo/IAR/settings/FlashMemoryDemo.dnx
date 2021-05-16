@@ -43,7 +43,7 @@
         <EnableCache>1</EnableCache>
     </ArmDriver>
     <DebugChecksum>
-        <Checksum>2474886728</Checksum>
+        <Checksum>3284556366</Checksum>
     </DebugChecksum>
     <Exceptions>
         <StopOnUncaught>_ 0</StopOnUncaught>
@@ -82,9 +82,7 @@
         <NoPCCapture>0</NoPCCapture>
     </ETMTraceWindow>
     <CodeCoverage>
-        <Enabled>0</Enabled>
-        <ShowSource>0</ShowSource>
-        <HideCovered>0</HideCovered>
+        <Enabled>_ 0</Enabled>
     </CodeCoverage>
     <JLinkDriver>
         <CStepIntDis>_ 0</CStepIntDis>
@@ -180,6 +178,7 @@
         <Mode>1</Mode>
         <Graph>0</Graph>
         <Symbiont>0</Symbiont>
+        <Exclusions />
     </DriverProfiling>
     <CallStackLog>
         <Enabled>0</Enabled>

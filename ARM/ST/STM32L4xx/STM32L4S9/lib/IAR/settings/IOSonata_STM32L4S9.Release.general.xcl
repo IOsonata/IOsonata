@@ -1,12 +1,12 @@
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\arm\bin\armproc.dll" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\arm\bin\armproc.dll" 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\arm\bin\armsim2.dll" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\arm\bin\armsim2.dll" 
 
 "Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\Release\IOSonata_STM32L4S9.out" 
 
---plugin="C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\arm\bin\armbat.dll" 
+--plugin="C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\arm\bin\armbat.dll" 
 
---device_macro="C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.3\arm\config\debugger\ST\STM32L4xx.dmac" 
+--device_macro="C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.4\arm\config\debugger\ST\STM32L4xx.dmac" 
 
 
 
