@@ -59,7 +59,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #pragma pack(push, 4)
 // Device driver data require by low level functions
-typedef struct _nRF_UART_Dev {
+typedef struct __nRF_UART_Dev {
 	int DevNo;				// UART interface number
 	union {
 #ifdef UART_PRESENT
@@ -138,7 +138,7 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCahce = false,
+		.RxDmaCache = false,
 	},
 #else
 	{
@@ -149,7 +149,7 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCahce = false,
+		.RxDmaCache = false,
 	},
 	{
 		.DevNo = 1,
@@ -159,7 +159,7 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCahce = false,
+		.RxDmaCache = false,
 	},
 	{
 		.DevNo = 2,
@@ -169,7 +169,7 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCahce = false,
+		.RxDmaCache = false,
 	},
 	{
 		.DevNo = 3,
@@ -179,7 +179,7 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCahce = false,
+		.RxDmaCache = false,
 	},
 #endif
 #else
@@ -202,7 +202,7 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCahce = false,
+		.RxDmaCache = false,
 	},
 #endif
 #if NRFX_UART_MAXDEV > 2
@@ -214,7 +214,7 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCahce = false,
+		.RxDmaCache = false,
 	},
 #endif
 #if NRFX_UART_MAXDEV > 3
@@ -226,7 +226,7 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCahce = false,
+		.RxDmaCache = false,
 	},
 #endif
 #endif
