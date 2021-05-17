@@ -41,7 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/spi.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
-#include "timer_nrfx.h"
+#include "coredev/timer.h"
 #include "sensors/agm_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 #include "sensors/agm_mpu9250.h"
