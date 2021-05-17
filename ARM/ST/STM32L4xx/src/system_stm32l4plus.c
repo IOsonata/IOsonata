@@ -65,12 +65,18 @@ SOFTWARE.
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
-//static OSC_TYPE s_Clksrc = OSC_TYPE_RC;
-//static uint32_t s_ClkSrcFreq = DEFAULT_RC_FREQ;
-static const uint32_t s_MsiClkRange[] = {
+// Keep this name for compatibility with STM code
+const uint32_t MSIRangeTable[] = {
 	100000, 200000, 400000, 800000, 1000000, 2000000, 4000000, 8000000, 16000000, 24000000, 32000000, 48000000
 };
+const uint8_t AHBPrescTable[16] = {
+	0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 1U, 2U, 3U, 4U, 6U, 7U, 8U, 9U
+};
+const uint8_t APBPrescTable[8] = {
+	0U, 0U, 0U, 0U, 1U, 2U, 3U, 4U
+};
 
+// Overload this variable in application firmware to change oscillator
 __WEAK MCU_OSC s_McuOsc = {
 	OSC_TYPE_RC,
 	48000000,
@@ -128,10 +134,10 @@ void SetFlashWaitState(uint32_t CoreFreq)
 
 uint32_t GetMsiRange(uint32_t Freq)
 {
-	int retval = sizeof(s_MsiClkRange) / sizeof(uint32_t) - 1;
+	int retval = sizeof(MSIRangeTable) / sizeof(uint32_t) - 1;
 
 	do {
-		if (s_MsiClkRange[retval] <= Freq)
+		if (MSIRangeTable[retval] <= Freq)
 		{
 			break;
 		}
@@ -196,7 +202,7 @@ void SystemCoreClockUpdate(void)
 	if (pllcfgr & RCC_PLLCFGR_PLLSRC_MSI)
 	{
 		int ridx = (RCC->CR & RCC_CR_MSIRANGE_Msk) >> RCC_CR_MSIRANGE_Pos;
-		SystemCoreClock = s_MsiClkRange[ridx];
+		SystemCoreClock = MSIRangeTable[ridx];
 	}
 	else if (pllcfgr & RCC_PLLCFGR_PLLSRC_HSE)
 	{
@@ -259,77 +265,12 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	s_McuOsc.HFFreq = OscFreq;
 
 	SystemInit();
-#if 0
-
-	uint32_t cfgr = 0;
-	uint32_t pllcfgr = 0;
-
-	RCC->CFGR = 0;
-	RCC->PLLCFGR &= ~RCC_PLLCFGR_PLLREN;
-
-	RCC->CR |= RCC_CR_MSION;
-	RCC->CR &= ~(RCC_CR_PLLON | RCC_CR_HSEBYP | RCC_CR_CSSON | RCC_CR_HSEON);
-	while ((RCC->CR & RCC_CR_PLLRDY) != 0);
-	RCC->CIER = 0;
-
-	// Flash wait state to max core freq.
-	SetFlashWaitState(SYSTEM_CORE_CLOCK_MAX);
-
-	// internal default 48MHz RC, ready for USB clock
-	RCC->CR &= ~RCC_CR_MSIRANGE_Msk;
-	RCC->CR |= GetMsiRange(DEFAULT_RC_FREQ) | RCC_CR_MSIRGSEL;
-
-	// Select MSI 48MHz USB clock
-	RCC->CCIPR |= RCC_CCIPR_CLK48SEL_Msk;
-
-	// Always select PLL for max core frequency
-	cfgr |= RCC_CFGR_SW_PLL;
-
-	s_Clksrc = ClkSrc;
-
-	switch (ClkSrc)
-	{
-		case OSC_TYPE_TCXO:
-			RCC->CR |= RCC_CR_HSEBYP;
-		case OSC_TYPE_XTAL:
-			s_ClkSrcFreq = OscFreq;
-
-			RCC->CR |= RCC_CR_HSION;
-
-			while ((RCC->CR & RCC_CR_HSIRDY) == 0);
-
-			//RCC->CR |= RCC_CR_CSSON;
-			RCC->CR |= RCC_CR_HSEON;
-
-			while ((RCC->CR & RCC_CR_HSERDY) == 0);
-
-			pllcfgr |= RCC_PLLCFGR_PLLSRC_HSE;
-
-		default:	// MSI
-			s_ClkSrcFreq = DEFAULT_RC_FREQ;
-			pllcfgr |= RCC_PLLCFGR_PLLSRC_MSI;
-	}
-
-	pllcfgr |= FindPllCfg(s_ClkSrcFreq);
-
-	RCC->PLLCFGR = pllcfgr;
-
-	RCC->CR |= RCC_CR_PLLON;
-	RCC->PLLCFGR |= RCC_PLLCFGR_PLLREN;
-
-	while ((RCC->CR & RCC_CR_PLLRDY) == 0);
-
-	RCC->CFGR = cfgr;
-
-	SystemCoreClockUpdate();
-#endif
 
 	return true;//SYSTEM_CORE_CLOCK;
 }
 
 void SystemInit(void)
 {
-//	SystemCoreClockSelect(s_McuOsc.HFType, s_McuOsc.HFFreq);
 	uint32_t cfgr = 0;
 	uint32_t pllcfgr = 0;
 
@@ -364,14 +305,12 @@ void SystemInit(void)
 	{
 		case OSC_TYPE_TCXO:
 			RCC->CR |= RCC_CR_HSEBYP;
-		case OSC_TYPE_XTAL:
-//			s_ClkSrcFreq = OscFreq;
 
+		case OSC_TYPE_XTAL:
 			RCC->CR |= RCC_CR_HSION;
 
 			while ((RCC->CR & RCC_CR_HSIRDY) == 0);
 
-			//RCC->CR |= RCC_CR_CSSON;
 			RCC->CR |= RCC_CR_HSEON;
 
 			while ((RCC->CR & RCC_CR_HSERDY) == 0);
@@ -379,7 +318,6 @@ void SystemInit(void)
 			pllcfgr |= RCC_PLLCFGR_PLLSRC_HSE;
 
 		default:	// MSI
-			//s_ClkSrcFreq = DEFAULT_RC_FREQ;
 			pllcfgr |= RCC_PLLCFGR_PLLSRC_MSI;
 	}
 
@@ -393,6 +331,37 @@ void SystemInit(void)
 	while ((RCC->CR & RCC_CR_PLLRDY) == 0);
 
 	RCC->CFGR = cfgr;
+
+	if (s_McuOsc.LFType == OSC_TYPE_XTAL)
+	{
+		if ((RCC->APB1ENR1 & RCC_APB1ENR1_PWREN) == 0)
+		{
+			RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+			while ((RCC->APB1ENR1 & RCC_APB1ENR1_PWREN) == 0);
+		}
+
+		if ((PWR->CR1 & PWR_CR1_DBP) == 0)
+		{
+			PWR->CR1 |= PWR_CR1_DBP;
+			while ((PWR->CR1 & PWR_CR1_DBP) == 0);
+		}
+#if defined(STM32L4P5xx) || defined(STM32L4Q5xx)
+		RCC->BDCR |= RCC_BDCR_LSESYSDIS;
+#endif
+		RCC->BDCR &= ~RCC_BDCR_RTCSEL_Msk;
+
+		RCC->BDCR |= RCC_BDCR_LSEON;
+
+		// if stuck here, board does not have 32768 Hz crystal
+		while ((RCC->BDCR & RCC_BDCR_LSERDY) == 0);
+
+#if defined(STM32L4P5xx) || defined(STM32L4Q5xx)
+		RCC->BDCR &= ~RCC_BDCR_LSESYSDIS;
+#endif
+
+		RCC->BDCR |= RCC_BDCR_RTCSEL_0;	// RTC source LSE
+		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
+	}
 
 	SystemCoreClockUpdate();
 }
