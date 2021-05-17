@@ -111,11 +111,11 @@ uint8_t g_AdvDataBuff[10] = {
 	BLEADV_MANDATA_TYPE_TPH,
 };
 
-BLEADV_MANDATA &g_AdvData = *(BLEADV_MANDATA*)g_AdvDataBuff;
+BleAdvManData_t &g_AdvData = *(BleAdvManData_t*)g_AdvDataBuff;
 
 // Evironmental Sensor Data to advertise
-BLEADV_MANDATA_TPHSENSOR &g_TPHData = *(BLEADV_MANDATA_TPHSENSOR *)g_AdvData.Data;
-BLEADV_MANDATA_GASSENSOR &g_GasData = *(BLEADV_MANDATA_GASSENSOR *)g_AdvData.Data;
+BleAdvManData_TphSensor_t &g_TPHData = *(BleAdvManData_TphSensor_t *)g_AdvData.Data;
+BleAdvManData_AqSensor_t &g_GasData = *(BleAdvManData_AqSensor_t *)g_AdvData.Data;
 BLUEIO_DATA_BAT &g_AdvBat = *(BLUEIO_DATA_BAT *)g_AdvData.Data;
 
 const static TIMER_CFG s_TimerCfg = {
@@ -205,10 +205,7 @@ DeviceIntrf *g_pIntrf = &g_Spi;
 #else
 
 // Configure I2C interface
-static const I2CCfg_t s_I2cCfg = {
-	0,			// I2C device number
-	{
-
+static const IOPinCfg_t s_I2cPins[] = {
 #if defined(TPH_BME280) || defined(TPH_BME680)
 		{I2C0_SDA_PORT, I2C0_SDA_PIN, I2C0_SDA_PINOP, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL},
 		{I2C0_SCL_PORT, I2C0_SCL_PIN, I2C0_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -217,10 +214,17 @@ static const I2CCfg_t s_I2cCfg = {
 		{0, 4, 0, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL},
 		{0, 3, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 #endif
-	},
-	100000,	// Rate
+};
+
+static const I2CCfg_t s_I2cCfg = {
+	0,			// I2C device number
+	I2CTYPE_STANDARD,
 	I2CMODE_MASTER,
+	s_I2cPins,
+	sizeof(s_I2cPins) / sizeof(IOPinCfg_t),
+	100000,	// Rate
 	5,			// Retry
+	I2CADDR_TYPE_NORMAL,
 	0,			// Number of slave addresses
 	{0,},		// Slave addresses
 	true,
@@ -408,7 +412,7 @@ void ReadPTHData()
 	}
 	else if ((gascnt & 0x3) == 0)
 	{
-		BLEADV_MANDATA_GASSENSOR gas;
+		BleAdvManData_AqSensor_t gas;
 
 		g_GasSensor.Read(gdata);
 
@@ -416,7 +420,7 @@ void ReadPTHData()
 		gas.GasRes = gdata.GasRes[gdata.MeasIdx];
 		gas.AirQIdx = gdata.AirQualIdx;
 
-		memcpy(&g_GasData, &gas, sizeof(BLEADV_MANDATA_GASSENSOR));
+		memcpy(&g_GasData, &gas, sizeof(BleAdvManData_AqSensor_t));
 
 		g_TphSensor.StartSampling();
 	}
@@ -427,7 +431,7 @@ void ReadPTHData()
 		// NOTE : M0 does not access unaligned data
 		// use local 4 bytes align stack variable then mem copy
 		// skip timestamp as advertising pack is limited in size
-		memcpy(&g_TPHData, ((uint8_t*)&data) + sizeof(data.Timestamp), sizeof(BLEADV_MANDATA_TPHSENSOR));
+		memcpy(&g_TPHData, ((uint8_t*)&data) + sizeof(data.Timestamp), sizeof(BleAdvManData_TphSensor_t));
 	}
 
 //	g_TphSensor.StartSampling();
@@ -557,7 +561,7 @@ void HardwareInit()
 	g_AdvData.Type = BLEADV_MANDATA_TYPE_TPH;
 	// Do memcpy to adv data. Due to byte alignment, cannot read directly into
 	// adv data
-	memcpy(g_AdvData.Data, ((uint8_t*)&tphdata) + sizeof(tphdata.Timestamp), sizeof(BLEADV_MANDATA_TPHSENSOR));
+	memcpy(g_AdvData.Data, ((uint8_t*)&tphdata) + sizeof(tphdata.Timestamp), sizeof(BleAdvManData_TphSensor_t));
 
 
 	g_I2c.Disable();

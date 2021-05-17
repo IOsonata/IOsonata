@@ -242,9 +242,7 @@ SPI g_Spi;
 //DeviceIntrf *g_pIntrf = &g_Spi;
 
 // Configure I2C interface
-static const I2CCfg_t s_I2cCfg = {
-	.DevNo = 0,			// I2C device number
-	.Pins = {
+static const IOPinCfg_t s_I2cPins[] {
 #if defined(TPH_BME280) || defined(TPH_BME680)
 		{I2C0_SDA_PORT, I2C0_SDA_PIN, I2C0_SDA_PINOP, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL},
 		{I2C0_SCL_PORT, I2C0_SCL_PIN, I2C0_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -253,10 +251,17 @@ static const I2CCfg_t s_I2cCfg = {
 		{0, 4, 0, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL},
 		{0, 3, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 #endif
-	},
-	.Rate = 100000,		// Rate
+};
+
+static const I2CCfg_t s_I2cCfg = {
+	.DevNo = 0,			// I2C device number
+	.Type = I2CTYPE_STANDARD,
 	.Mode = I2CMODE_MASTER,
+	.pIOPinMap = s_I2cPins,
+	.NbIOPins = 2,
+	.Rate = 100000,		// Rate
 	.MaxRetry = 5,			// Retry
+	.AddrType = I2CADDR_TYPE_NORMAL,
 	.NbSlaveAddr = 0,			// Number of slave addresses
 	.SlaveAddr = {0,},		// Slave addresses
 	.bDmaEn = true,

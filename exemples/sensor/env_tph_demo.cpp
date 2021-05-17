@@ -147,15 +147,20 @@ static const SPICfg_t s_SpiCfg = {
 SPI g_Spi;
 
 //********** I2C **********
+static const IOPinCfg_t s_I2cPins[] = {
+	{I2C0_SDA_PORT, I2C0_SDA_PIN, I2C0_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
+	{I2C0_SCL_PORT, I2C0_SCL_PIN, I2C0_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
+};
+
 static const I2CCfg_t s_I2cCfg = {
-	0,			// I2C device number
-	{
-		{I2C0_SDA_PORT, I2C0_SDA_PIN, I2C0_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
-		{I2C0_SCL_PORT, I2C0_SCL_PIN, I2C0_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
-	},
-	100000,	// Rate
-	I2CMODE_MASTER,
-	5,			// Retry
+	.DevNo = 0,			// I2C device number
+	.Type = I2CTYPE_STANDARD,
+	.Mode = I2CMODE_MASTER,
+	.pIOPinMap = s_I2cPins,
+	.NbIOPins = sizeof(s_I2cPins) / sizeof(IOPinCfg_t),
+	.Rate = 100000,	// Rate
+	.MaxRetry = 5,			// Retry
+	.AddrType = I2CADDR_TYPE_NORMAL,
 	0,			// Number of slave addresses
 	{0,},		// Slave addresses
 	true,	// DMA
