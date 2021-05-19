@@ -52,6 +52,9 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <string.h>
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
 
 /// Clock source used for the timer
 typedef enum __Timer_Clock_Src {
