@@ -99,7 +99,7 @@ bool DirectLinkInit(DirectLinkDev_t *pDev, int PortNo, int PinNo, int PinOp)
 
 	pDev->Pin.PortNo = PortNo;
 	pDev->Pin.PinNo = PinNo;
-	pDev->Pin.PinOp = PinOp;
+	pDev->Pin.PinOp = IOPINOP_GPIO;
 	pDev->Pin.PinDir = IOPINDIR_INPUT;
 	pDev->Pin.Res = IOPINRES_NONE;
 	pDev->Pin.Type = IOPINTYPE_NORMAL;
@@ -206,7 +206,7 @@ bool SerialInInit(SerialInDev_t *pDev, int PortNo, int PinNo, int PinOp)
 
 	pDev->Pin.PortNo = PortNo;
 	pDev->Pin.PinNo = PinNo;
-	pDev->Pin.PinOp = PinOp;
+	pDev->Pin.PinOp = IOPINOP_GPIO;
 	pDev->Pin.PinDir = IOPINDIR_OUTPUT;
 	pDev->Pin.Res = IOPINRES_NONE;
 	pDev->Pin.Type = IOPINTYPE_NORMAL;

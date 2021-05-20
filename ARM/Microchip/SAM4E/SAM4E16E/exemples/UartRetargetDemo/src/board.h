@@ -57,12 +57,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_RTS_PINOP		0
 #elif UART_DEVNO == 1
 // UART1
-#define UART_RX_PORT		0	// Port A
+#define UART_RX_PORT		IOPORTA	// Port A
 #define UART_RX_PIN			5
-#define UART_RX_PINOP		3	// Periph C
-#define UART_TX_PORT		0	// Port A
+#define UART_RX_PINOP		IOPINOP_PERIPHC	// Periph C
+#define UART_TX_PORT		IOPORTA	// Port A
 #define UART_TX_PIN			6
-#define UART_TX_PINOP		3	// Periph C
+#define UART_TX_PINOP		IOPINOP_PERIPHC	// Periph C
 #define UART_CTS_PORT		-1
 #define UART_CTS_PIN		-1
 #define UART_CTS_PINOP		0
