@@ -16,10 +16,9 @@ define symbol __ICFEDIT_size_heap__   = 0x1000;
 
 define symbol __region_SRAM1_start__  = 0x20000000;
 define symbol __region_SRAM1_end__    = 0x20017FFF;
-define symbol __StackTop = 0x20018000 - 4;
 define symbol __region_SRAM2_start__  = 0x10000000;
 define symbol __region_SRAM2_end__    = 0x10007FFF;
-
+define symbol __StackTop = 0x20018000;
 
 export symbol __StackTop;
 
