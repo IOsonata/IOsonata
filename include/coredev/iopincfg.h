@@ -55,6 +55,43 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define IOPORTI				8
 #define IOPORTJ				9
 
+/// PINOP indicates pin operating mode as GPIO or alternative functionalities
+/// each MCU brand defines its own function code & naming. Implementation must
+/// map this function value to the appropriate function code. For example
+/// Microchip alternate function as Peripheral A, B, C...
+/// STM32 name it as AF0...AF15
+/// NXP as pin function
+/// Nordic does not use pin function
+#define IOPINOP_GPIO		0		//!< Normal GPIO
+#define IOPINOP_FUNC0		1		//!< Alternate function or Peripheral function
+#define IOPINOP_FUNC1		2
+#define IOPINOP_FUNC2		3
+#define IOPINOP_FUNC3		4
+#define IOPINOP_FUNC4		5
+#define IOPINOP_FUNC5		6
+#define IOPINOP_FUNC6		7
+#define IOPINOP_FUNC7		8
+#define IOPINOP_FUNC8		9
+#define IOPINOP_FUNC9		10
+#define IOPINOP_FUNC10		11
+#define IOPINOP_FUNC11		12
+#define IOPINOP_FUNC12		13
+#define IOPINOP_FUNC13		14
+#define IOPINOP_FUNC14		15
+#define IOPINOP_FUNC15		16
+#define IOPINOP_FUNC16		17
+// MCU such as Microchip name it peripheral A-X
+#define IOPINOP_PERIPHA		IOPINOP_FUNC0
+#define IOPINOP_PERIPHB		IOPINOP_FUNC1
+#define IOPINOP_PERIPHC		IOPINOP_FUNC2
+#define IOPINOP_PERIPHD		IOPINOP_FUNC3
+#define IOPINOP_PERIPHE		IOPINOP_FUNC4
+#define IOPINOP_PERIPHF		IOPINOP_FUNC5
+#define IOPINOP_PERIPHG		IOPINOP_FUNC6
+#define IOPINOP_PERIPHH		IOPINOP_FUNC7
+#define IOPINOP_PERIPHI		IOPINOP_FUNC8
+#define IOPINOP_PERIPHJ		IOPINOP_FUNC9
+
 /// I/O pin resistor configuration
 typedef enum __iopin_resistor {
 	IOPINRES_NONE,				//!< No pullup or pulldown

@@ -65,13 +65,8 @@ static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
  * 			PinNo  	: Pin number
  * 			PinOp	: Pin function index from 0. MCU dependent
  * 						for STM32
- * 						bit 0-3 :
- * 							0 : GPIO input
- * 							1 : GPIO output
- * 							2 : Alternate function (function on bit 4-7)
- * 							3 : Analog
- * 						bit 4-7 : Alternate function 0-15
- *
+ * 						IOPINOP_FUNC_0 - IOPINOP_FUNC_15 -> AF0 - AF15
+ * 						IOPINOP_FUNC_16 -> Analog
  * 			Dir     : I/O direction
  *			Resistor: Resistor configuration
  *			Type	: I/O type
@@ -97,7 +92,32 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 
 	uint32_t pos = PinNo << 1;
 	tmp = reg->MODER & ~(GPIO_MODER_MODE0_Msk << pos);
+#if 1
+	if (PinOp == IOPINOP_GPIO)
+	{
+		if (Dir == IOPINDIR_OUTPUT)
+		{
+			tmp |= 1 << pos;
+		}
+	}
+	else if (PinOp < IOPINOP_FUNC16)
+	{
+		// Alternate function
 
+		tmp |= 2 << pos;
+
+		pos = (PinNo & 0x7) << 2;
+		int idx = PinNo >> 3;
+
+		reg->AFR[idx] &= ~(0xf << pos);
+		reg->AFR[idx] |= ((PinOp - 1) & 0xf) << pos;
+	}
+	else
+	{
+		// Analog
+		tmp |= 3 << pos;
+	}
+#else
 	switch (PinOp & 0xF)
 	{
 		case 0:	// GPIO input
@@ -124,7 +144,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 			tmp |= 3 << pos;
 			break;
 	}
-
+#endif
 	reg->MODER = tmp;
 
 	pos = PinNo << 1;

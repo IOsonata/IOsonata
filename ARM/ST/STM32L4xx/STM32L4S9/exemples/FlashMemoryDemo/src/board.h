@@ -45,11 +45,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_NO				1
 #define UART_RX_PORT		IOPORTD
 #define UART_RX_PIN			6
-#define UART_RX_PINOP		(0x72)
+#define UART_RX_PINOP		IOPINOP_FUNC7//(0x72)
 
 #define UART_TX_PORT		IOPORTD
 #define UART_TX_PIN			5
-#define UART_TX_PINOP		(0x72)
+#define UART_TX_PINOP		IOPINOP_FUNC7//(0x72)
 
 #define UART_CTS_PORT		-1
 #define UART_CTS_PIN		-1
@@ -61,53 +61,53 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define QSPI_DEVNO			3
 #define QSPI_SCK_PORT       IOPORTE		// PE10
 #define QSPI_SCK_PIN        10
-#define QSPI_SCK_PINOP      (0xA2)	// AF10
+#define QSPI_SCK_PINOP      IOPINOP_FUNC10//(0xA2)	// AF10
 #define QSPI_D0_PORT		IOPORTE		// PE12
 #define QSPI_D0_PIN        	12
-#define QSPI_D0_PINOP      	(0xA2)	// AF10
+#define QSPI_D0_PINOP      	IOPINOP_FUNC10//(0xA2)	// AF10
 #define QSPI_D1_PORT		IOPORTE		// PE13
 #define QSPI_D1_PIN        	13
-#define QSPI_D1_PINOP      	(0xA2)	// AF10
+#define QSPI_D1_PINOP      	IOPINOP_FUNC10//(0xA2)	// AF10
 #define QSPI_D2_PORT		IOPORTE		// PE14
 #define QSPI_D2_PIN        	14
-#define QSPI_D2_PINOP      	(0xA2)	// AF10
+#define QSPI_D2_PINOP      	IOPINOP_FUNC10//(0xA2)	// AF10
 #define QSPI_D3_PORT		IOPORTE		// PE15
 #define QSPI_D3_PIN        	15
-#define QSPI_D3_PINOP      	(0xA2)	// AF10
+#define QSPI_D3_PINOP      	IOPINOP_FUNC10//(0xA2)	// AF10
 #define QSPI_FLASH_CS_PORT	IOPORTE		// PE11
 #define QSPI_FLASH_CS_PIN   11
-#define QSPI_FLASH_CS_PINOP (0xA2)	// AF10
+#define QSPI_FLASH_CS_PINOP IOPINOP_FUNC10//(0xA2)	// AF10
 
 #define SPI0_DEVNO			0
 #define SPI0_SCK_PORT       IOPORTE		// PE13
 #define SPI0_SCK_PIN        13
-#define SPI0_SCK_PINOP      (0x52)	// AF5
+#define SPI0_SCK_PINOP      IOPINOP_FUNC5//(0x52)	// AF5
 #define SPI0_MISO_PORT		IOPORTE		// PE14
 #define SPI0_MISO_PIN		14
-#define SPI0_MISO_PINOP		(0x52)	// AF5
+#define SPI0_MISO_PINOP		IOPINOP_FUNC5//(0x52)	// AF5
 #define SPI0_MOSI_PORT      IOPORTE		// PE15
 #define SPI0_MOSI_PIN       15
-#define SPI0_MOSI_PINOP     (0x52)	// AF5
+#define SPI0_MOSI_PINOP     IOPINOP_FUNC5//(0x52)	// AF5
 
 //#define SPI_DEVNO			3
 #define SPI_CLK_PORT		IOPORTB		// PB3
 #define SPI_CLK_PIN			3
-#define SPI_CLK_PINOP		0x62	// AF6
+#define SPI_CLK_PINOP		IOPINOP_FUNC6//0x62	// AF6
 #define SPI_MISO_PORT		IOPORTB		// PB4
 #define SPI_MISO_PIN		4
-#define SPI_MISO_PINOP		0x62	// AF6
+#define SPI_MISO_PINOP		IOPINOP_FUNC6//0x62	// AF6
 #define SPI_MOSI_PORT		IOPORTC		// PC12
 #define SPI_MOSI_PIN		12
-#define SPI_MOSI_PINOP		0x62	// AF6
+#define SPI_MOSI_PINOP		IOPINOP_FUNC6//0x62	// AF6
 
 #if 0
 #define SPI_FLASH_CS_PORT	2		// PE12
 #define SPI_FLASH_CS_PIN    12
-#define SPI_FLASH_CS_PINOP  (0x52)	// AF5
+#define SPI_FLASH_CS_PINOP  IOPINOP_FUNC5//(0x52)	// AF5
 #else
 #define SPI_FLASH_CS_PORT	IOPORTA		//PA15
 #define SPI_FLASH_CS_PIN	15
-#define SPI_FLASH_CS_PINOP	1		// GPIO Output
+#define SPI_FLASH_CS_PINOP	0		// GPIO Output
 #endif
 
 #define SPI_DEVNO			2
