@@ -122,10 +122,11 @@ static bool STM32L4xxI2CWaitTxRdy(STM32L4XX_I2CDEV *pDev, int Timeout)
 {
 	while (Timeout-- > 0)
 	{
-		if (pDev->pReg->ISR & I2C_ISR_TXIS)
+		if (pDev->pReg->ISR & (/*I2C_ISR_TXIS |*/ I2C_ISR_TXE))
 		{
 			return true;
 		}
+		usDelay(1);
 	}
 
 	return false;
@@ -437,6 +438,7 @@ static void STM32L4xxI2CStopTx(DevIntrf_t * const pDev)
 	STM32L4xxI2CWaitTxComplete(dev, 100000);
 	dev->pReg->CR2 |= I2C_CR2_STOP;
 	STM32L4xxI2CWaitStop(dev, 1000000);
+	dev->pReg->ICR = dev->pReg->ISR;
 }
 
 void I2CIrqHandler(int DevNo)

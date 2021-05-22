@@ -37,6 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
+#include "istddef.h"
 #include "device_intrf.h"
 
 // NOTE : For thread safe use
@@ -138,11 +139,11 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd,
 	// NOTE : Some I2C devices that uses DMA transfer may require that the tx to be combined
     // into single tx. Because it may generate a end condition at the end of the DMA
     memcpy(d, pAdCmd, AdCmdLen);
-
     if (pData != NULL && DataLen > 0)
     {
-    	memcpy(&d[AdCmdLen], pData, DataLen);
-    	txlen += DataLen;
+    	int l = min(DataLen, sizeof(d) - AdCmdLen);
+    	memcpy(&d[AdCmdLen], pData, l);
+    	txlen += l;
     }
 
     do {
