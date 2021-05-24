@@ -188,8 +188,7 @@ static inline void IOPinCfg(const IOPinCfg_t *pCfg, int NbPins) {
 	if (pCfg == NULL || NbPins <= 0)
 		return;
 
-	for (int i = 0; i < NbPins; i++)
-	{
+	for (int i = 0; i < NbPins; i++) {
 		IOPinConfig(pCfg[i].PortNo, pCfg[i].PinNo, pCfg[i].PinOp, pCfg[i].PinDir,
 					pCfg[i].Res, pCfg[i].Type);
 	}
@@ -206,6 +205,22 @@ static inline void IOPinCfg(const IOPinCfg_t *pCfg, int NbPins) {
  * @param	PinNo	: Pin Number
  */
 void IOPinDisable(int PortNo, int PinNo);
+
+/**
+ * @brief	Batch disable I/O pin
+ *
+ * Some hardware such as low power mcu allow I/O pin to be disconnected
+ * in order to save power. There is no enable function. Reconfigure the
+ * I/O pin to re-enable it.
+ *
+ * @param	pCfg   : Pointer to an array gpio pin to disable
+ * @Param	NbPins : Number of gpio pins to disable
+ */
+static inline void IOPinDis(const IOPinCfg_t *pCfg, int NbPins) {
+	for (int i = 0; i < NbPins; i++) {
+		IOPinDisable(pCfg[i].PortNo, pCfg[i].PinNo);
+	}
+}
 
 /**
  * @brief	Disable I/O pin sense interrupt
