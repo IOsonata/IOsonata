@@ -194,11 +194,22 @@ void IOPinDisable(int PortNo, int PinNo)
 
 	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
 	uint32_t pos = PinNo << 1;
-	uint32_t tmp = reg->MODER & ~(GPIO_MODER_MODE0_Msk << pos);
-	reg->MODER = tmp;
 
-	tmp = reg->PUPDR & ~(GPIO_PUPDR_PUPD0_Msk << pos);
-	reg->PUPDR = tmp;
+	reg->MODER |=  (GPIO_MODER_MODE0 << pos);
+	reg->OSPEEDR &= ~(GPIO_OSPEEDR_OSPEED0 << pos);
+	reg->PUPDR &= ~(GPIO_PUPDR_PUPD0 << pos);
+
+	pos = (PinNo & 0x7) << 2;
+	int idx = PinNo >> 3;
+
+	reg->AFR[idx] &= ~(0xf << pos);
+	reg->OTYPER &= ~(GPIO_OTYPER_OT0 << PinNo);
+
+#if defined(STM32L471xx) || defined(STM32L475xx) || defined(STM32L476xx) || defined(STM32L485xx) || defined(STM32L486xx)
+      /* Deactivate the Control bit of Analog mode for the current IO */
+	reg->ASCR &= ~(GPIO_ASCR_ASC0<< PinNo);
+#endif /* STM32L471xx || STM32L475xx || STM32L476xx || STM32L485xx || STM32L486xx */
+
 }
 
 /**
