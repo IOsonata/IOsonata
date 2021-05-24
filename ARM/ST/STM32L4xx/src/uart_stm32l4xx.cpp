@@ -72,10 +72,8 @@ typedef struct _STM32L4X_UART_Dev {
 	uint32_t RxDropCnt;
 	uint32_t RxTimeoutCnt;
 	uint32_t ErrCnt;
-	uint32_t RxPin;
-	uint32_t TxPin;
-	uint32_t CtsPin;
-	uint32_t RtsPin;
+	const IOPinCfg_t *pIOPinMap;
+	int NbPins;
 	uint8_t TxDmaCache[STM32L4X_UART_BUFF_SIZE];
 	uint8_t RxFifoMem[STM32L4X_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[STM32L4X_UART_CFIFO_SIZE];
@@ -388,6 +386,8 @@ static void STM32L4xUARTDisable(DevIntrf_t * const pDev)
 	{
 		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_USART2EN << (dev->DevNo - 1));
 	}
+
+	IOPinDis(dev->pIOPinMap, dev->NbPins);
 }
 
 static void STM32L4xUARTEnable(DevIntrf_t * const pDev)
@@ -415,9 +415,18 @@ static void STM32L4xUARTEnable(DevIntrf_t * const pDev)
 	{
 		RCC->APB1ENR1 |= (RCC_APB1ENR1_USART2EN << (dev->DevNo - 1));
 	}
+
+	IOPinCfg(dev->pIOPinMap, dev->NbPins);
+	for (int i = 0; i < dev->NbPins; i++)
+	{
+		if (dev->pIOPinMap[i].PortNo >= 0)
+		{
+			IOPinSetSpeed(dev->pIOPinMap[i].PortNo, dev->pIOPinMap[i].PinNo, IOPINSPEED_TURBO);
+		}
+	}
+
 	dev->pReg->CR1 |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
 	dev->pReg->CR2 |= USART_CR2_RTOEN;
-
 }
 
 static void STM32L4xUARTPowerOff(DevIntrf_t * const pDev)
@@ -455,6 +464,7 @@ static void STM32L4xUARTPowerOff(DevIntrf_t * const pDev)
 	}
 
 	//dev->pReg->CR2 &= ~USART_CR2_CLKEN;
+	IOPinDis(dev->pIOPinMap, dev->NbPins);
 }
 
 static void STM32L4xUARTReset(DevIntrf_t * const pDev)
@@ -505,7 +515,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	pDev->DevIntrf.pDevData = &s_Stm32l4xUartDev[devno];
 	s_Stm32l4xUartDev[devno].pUartDev = pDev;
-
+	s_Stm32l4xUartDev[devno].pIOPinMap = (const IOPinCfg_t*)pCfg->pIOPinMap;
+	s_Stm32l4xUartDev[devno].NbPins = pCfg->NbIOPins;
 	STM32L4xUARTReset(&pDev->DevIntrf);
 
 	// Disable UART first because some field can't be set is it is already enabled
