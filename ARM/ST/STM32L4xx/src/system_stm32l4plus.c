@@ -345,6 +345,10 @@ void SystemInit(void)
 			PWR->CR1 |= PWR_CR1_DBP;
 			while ((PWR->CR1 & PWR_CR1_DBP) == 0);
 		}
+
+		RCC->BDCR |= RCC_BDCR_BDRST;
+		RCC->BDCR &= ~RCC_BDCR_BDRST;
+
 #if defined(STM32L4P5xx) || defined(STM32L4Q5xx)
 		RCC->BDCR |= RCC_BDCR_LSESYSDIS;
 #endif
@@ -359,7 +363,7 @@ void SystemInit(void)
 		RCC->BDCR &= ~RCC_BDCR_LSESYSDIS;
 #endif
 
-		RCC->BDCR |= RCC_BDCR_RTCSEL_0;	// RTC source LSE
+		RCC->BDCR |= RCC_BDCR_RTCSEL_0 | RCC_BDCR_RTCEN;	// RTC source LSE
 		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
 	}
 

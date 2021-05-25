@@ -66,7 +66,17 @@ extern STM32L4XX_TimerData_t g_Stm32l4TimerData[STM32L4XX_TIMER_MAXCNT];
  */
 static bool Stm32l4LptEnable(TimerDev_t * const pTimer)
 {
-	g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->CR = LPTIM_CR_ENABLE;
+	STM32L4XX_TimerData_t *dev = &g_Stm32l4TimerData[pTimer->DevNo];
+
+	if (dev->pTimer->DevNo == 0)
+	{
+		RCC->APB1ENR1 |= RCC_APB1ENR1_LPTIM1EN;
+	}
+	else
+	{
+		RCC->APB1ENR2 |= RCC_APB1ENR2_LPTIM2EN;
+	}
+	dev->pLPTimReg->CR = LPTIM_CR_ENABLE | LPTIM_CR_CNTSTRT;
 	//vpLPTimReg->CR |= LPTIM_CR_CNTSTRT;
 	return true;
 }
@@ -79,7 +89,18 @@ static bool Stm32l4LptEnable(TimerDev_t * const pTimer)
  */
 static void Stm32l4LptDisable(TimerDev_t * const pTimer)
 {
-	g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->CR = 0;
+	STM32L4XX_TimerData_t *dev = &g_Stm32l4TimerData[pTimer->DevNo];
+
+	dev->pLPTimReg->CR &= ~(LPTIM_CR_ENABLE | LPTIM_CR_CNTSTRT);
+	dev->pLPTimReg->IER &= ~LPTIM_IER_ARRMIE;
+	if (dev->pTimer->DevNo == 0)
+	{
+		RCC->APB1ENR1 &= ~RCC_APB1ENR1_LPTIM1EN;
+	}
+	else
+	{
+		RCC->APB1ENR2 &= ~RCC_APB1ENR2_LPTIM2EN;
+	}
 }
 
 /**
@@ -434,8 +455,15 @@ bool Stm32l4LPTimInit(STM32L4XX_TimerData_t * const pTimerData, const TimerCfg_t
 	{
 		case TIMER_CLKSRC_LFRC:
 			pTimerData->BaseFreq = 32000;
+
+			RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+			PWR->CR1 |= PWR_CR1_DBP;
+
 			RCC->BDCR &= ~RCC_BDCR_LSEON;
 			RCC->BDCR |= RCC_BDCR_LSEBYP;
+
+			PWR->CR1 &= ~PWR_CR1_DBP;
+			RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
 
 			RCC->CSR |= RCC_CSR_LSION;
 
@@ -446,19 +474,33 @@ bool Stm32l4LPTimInit(STM32L4XX_TimerData_t * const pTimerData, const TimerCfg_t
 		case TIMER_CLKSRC_LFXTAL:
 			pTimerData->BaseFreq = 32768;
 
-			RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
-			PWR->CR1 |= PWR_CR1_DBP;
-			RCC->BDCR |= RCC_BDCR_BDRST;
-			RCC->BDCR &= ~RCC_BDCR_BDRST;
+			if ((RCC->BDCR & RCC_BDCR_LSEON) == 0)
+			{
+				if ((RCC->APB1ENR1 & RCC_APB1ENR1_PWREN) == 0)
+				{
+					RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+					while ((RCC->APB1ENR1 & RCC_APB1ENR1_PWREN) == 0);
+				}
 
-			RCC->BDCR &= ~RCC_BDCR_LSEBYP;
+				if ((PWR->CR1 & PWR_CR1_DBP) == 0)
+				{
+					PWR->CR1 |= PWR_CR1_DBP;
+					while ((PWR->CR1 & PWR_CR1_DBP) == 0);
+				}
+//				RCC->BDCR |= RCC_BDCR_BDRST;
+//				RCC->BDCR &= ~RCC_BDCR_BDRST;
 
-			RCC->BDCR |= RCC_BDCR_LSEON;
+				RCC->BDCR &= ~RCC_BDCR_LSEBYP;
+#if defined(STM32L4P5xx) || defined(STM32L4Q5xx)
+				RCC->BDCR &= ~RCC_BDCR_LSESYSDIS;
+#endif
 
-			while ((RCC->BDCR & RCC_BDCR_LSERDY) == 0);
+				RCC->BDCR |= RCC_BDCR_LSEON;
+				while ((RCC->BDCR & RCC_BDCR_LSERDY) == 0);
+//				PWR->CR1 &= ~PWR_CR1_DBP;
+				RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
+			}
 
-			PWR->CR1 &= ~PWR_CR1_DBP;
-			RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
 
 			tmp = STM32L4XX_LPTIMER_CLKSRC_LSE << (RCC_CCIPR_LPTIM1SEL_Pos + (pCfg->DevNo << 1));
 			break;
