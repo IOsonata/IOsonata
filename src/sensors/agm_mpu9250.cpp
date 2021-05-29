@@ -159,7 +159,7 @@ bool AgmMpu9250::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 	return true;
 }
 
-bool AccelMpu9250::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool AccelMpu9250::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	uint8_t regaddr;
 	uint8_t d;
@@ -268,7 +268,7 @@ bool AccelMpu9250::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Tim
 	return true;
 }
 
-bool GyroMpu9250::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool GyroMpu9250::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
@@ -371,7 +371,7 @@ bool GyroMpu9250::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer
 	return true;
 }
 
-bool MagMpu9250::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool MagMpu9250::Init(const MagSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	uint8_t regaddr;
 	uint8_t d[4];
@@ -545,7 +545,7 @@ MAGSENSOR_PRECISION MagMpu9250::Precision(MAGSENSOR_PRECISION Val)
 	return vPrecision;
 }
 
-bool AgmMpu9250::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AgmMpu9250::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;

@@ -557,7 +557,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint16_t Scale(uint16_t Value);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t FilterFreq(uint32_t Freq);
@@ -579,7 +579,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t FilterFreq(uint32_t Freq);
@@ -601,7 +601,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 //	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	//virtual bool Enable();
 	//virtual void Disable();
@@ -634,7 +634,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		return AccelIcm20948::Init(Cfg, pIntrf, pTimer);
 	}
 
@@ -649,7 +649,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
 		return GyroIcm20948::Init(Cfg, pIntrf, pTimer);
 	}
 
@@ -664,7 +664,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
 		return MagIcm20948::Init(Cfg, pIntrf, pTimer);
 	}
 
@@ -685,7 +685,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
 
 	virtual bool Enable();
 	virtual void Disable();
@@ -707,13 +707,13 @@ public:
 	//virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
 
 
-	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(GYROSENSOR_RAWDATA &Data) { return GyroSensor::Read(Data); }
-	virtual bool Read(GYROSENSOR_DATA &Data) { return GyroSensor::Read(Data); }
-	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return MagSensor::Read(Data); }
-	virtual bool Read(MAGSENSOR_DATA &Data) { return MagSensor::Read(Data); }
-	virtual void Read(TEMPSENSOR_DATA &Data) { return TempSensor::Read(Data); }
+	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(GyroSensorRawData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(MagSensorRawData_t &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return MagSensor::Read(Data); }
+	virtual void Read(TempSensorData_t &Data) { return TempSensor::Read(Data); }
 
 	int Read(uint16_t RegAddr, uint8_t *pBuff, int BuffLen) {
 		return Read((uint8_t*)&RegAddr, 2, pBuff, BuffLen);

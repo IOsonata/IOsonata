@@ -173,7 +173,7 @@ bool TphBme280::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 }
 
 //bool TphBme280::Init(const TPHSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
-bool TphBme280::Init(const HUMISENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool TphBme280::Init(const HumiSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	uint8_t regaddr = BME280_REG_ID;
 	uint8_t d;
@@ -205,7 +205,7 @@ bool TphBme280::Init(const HUMISENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *
 	return found;
 }
 
-bool TphBme280::Init(const PRESSSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool TphBme280::Init(const PressureSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	vCtrlReg &= ~BME280_REG_CTRL_MEAS_OSRS_P_MASK;
 	vCtrlReg |= (CfgData.PresOvrs << BME280_REG_CTRL_MEAS_OSRS_P_BITPOS) & BME280_REG_CTRL_MEAS_OSRS_P_MASK;
@@ -216,7 +216,7 @@ bool TphBme280::Init(const PRESSSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer 
 	return true;
 }
 
-bool TphBme280::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool TphBme280::Init(const TempSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	uint8_t d;
 	uint8_t regaddr = BME280_REG_CONFIG;

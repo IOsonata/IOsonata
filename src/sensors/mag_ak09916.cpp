@@ -35,7 +35,7 @@ SOFTWARE.
 
 #include "sensors/mag_ak09916.h"
 
-bool MagAk09916::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool MagAk09916::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint8_t regaddr = AK09916_WIA1_REG;
 	uint16_t d;

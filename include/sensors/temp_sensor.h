@@ -59,13 +59,13 @@ typedef struct __TemperatureSensor_Data {
 	int32_t  Temperature;	//!< Temperature in degree C, 2 decimals fixed point
 } TempSensorData_t;
 
-typedef TempSensorData_t	TEMPSENSOR_DATA;
+//typedef TempSensorData_t	TEMPSENSOR_DATA;
 
 #pragma pack(pop)
 
 class TempSensor;
 
-typedef void (*TEMPDATRDY_EVTCB)(TempSensor * const pSensor, TEMPSENSOR_DATA *pData);
+typedef void (*TempDataRdyCb_t)(TempSensor * const pSensor, TempSensorData_t *pData);
 
 #pragma pack(push, 4)
 
@@ -79,10 +79,10 @@ typedef struct __TempSensor_Config {
 	bool bIntEn;				//!< Interrupt enable
 	int	TempOvrs;				//!< Oversampling measurement for temperature
 	uint32_t FilterCoeff;		//!< Filter coefficient select value (this value is device dependent)
-	TEMPDATRDY_EVTCB DataRdyCB;	//!< Data ready handler
+	TempDataRdyCb_t DataRdyCB;	//!< Data ready handler
 } TempSensorCfg_t;
 
-typedef TempSensorCfg_t		TEMPSENSOR_CFG;
+//typedef TempSensorCfg_t		TEMPSENSOR_CFG;
 
 #pragma pack(pop)
 
@@ -111,7 +111,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
+	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
 
 	/**
 	 * @brief	Read temperature data.
@@ -122,7 +122,7 @@ public:
 	 *
 	 * @return	None
 	 */
-	virtual void Read(TEMPSENSOR_DATA &Data) { Data = vData; }
+	virtual void Read(TempSensorData_t &Data) { Data = vData; }
 
 	/**
 	 * @brief	Read temperature (require implementation).
@@ -133,8 +133,8 @@ public:
 
 protected:
 
-	TEMPSENSOR_DATA	vData;				//!< Last measured data
-	TEMPDATRDY_EVTCB vDataRdyHandler;	//!< Data ready event handler
+	TempSensorData_t	vData;				//!< Last measured data
+	TempDataRdyCb_t vDataRdyHandler;	//!< Data ready event handler
 };
 
 extern "C" {

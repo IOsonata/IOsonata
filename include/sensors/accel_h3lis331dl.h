@@ -191,7 +191,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
 	uint16_t Scale(uint16_t Value);
 	/**
@@ -219,8 +219,8 @@ public:
 	virtual void Reset();
 	void IntHandler();
 
-	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
 
 	bool UpdateData();
 

@@ -59,7 +59,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
 	/**
 	 * @brief	Initialize gyroscope sensor.
@@ -72,7 +72,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 
 	/**
 	 * @brief	Initialize magnetometer sensor.
@@ -85,7 +85,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 
 	virtual bool Enable();
 	virtual void Disable();
@@ -106,12 +106,12 @@ public:
 	virtual uint16_t Scale(uint16_t Value);			// Accel
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
 
-	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(GYROSENSOR_RAWDATA &Data) { return GyroSensor::Read(Data); }
-	virtual bool Read(GYROSENSOR_DATA &Data) { return GyroSensor::Read(Data); }
-	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return MagSensor::Read(Data); }
-	virtual bool Read(MAGSENSOR_DATA &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(GyroSensorRawData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(MagSensorRawData_t &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return MagSensor::Read(Data); }
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);

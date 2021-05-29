@@ -48,7 +48,7 @@ SOFTWARE.
  *
  * @return	true - Success
  */
-bool AccelH3lis331dl::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelH3lis331dl::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (pIntrf == NULL)
 		return false;

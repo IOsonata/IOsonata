@@ -161,7 +161,7 @@ bool ImuInvnIcm20948::Init(const IMU_CFG &Cfg, uint32_t DevAddr, DeviceIntrf * c
 }
 #endif
 
-bool ImuInvnIcm20948::Init(const IMU_CFG &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool ImuInvnIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == NULL)
 	{

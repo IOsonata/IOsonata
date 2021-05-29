@@ -261,7 +261,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
 	/**
 	 * @brief	Initialize sensor (require implementation).
@@ -280,7 +280,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
 
 	uint16_t Scale(uint16_t Value);
 	/**
@@ -317,9 +317,9 @@ public:
 	void IntHandler();
 	bool UpdateData();
 
-	bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
-	bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
-	void Read(TEMPSENSOR_DATA &Data) { TempSensor::Read(Data); }
+	bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
+	bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
+	void Read(TempSensorData_t &Data) { TempSensor::Read(Data); }
 	bool StartSampling() { return true; }
 
 private:

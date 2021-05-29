@@ -185,7 +185,7 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 	return true;
 }
 
-bool AgmInvnIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool AgmInvnIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
@@ -210,7 +210,7 @@ bool AgmInvnIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, 
 	return true;
 }
 
-bool AgmInvnIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool AgmInvnIcm20948::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
@@ -226,7 +226,7 @@ bool AgmInvnIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, T
 	return true;
 }
 
-bool AgmInvnIcm20948::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool AgmInvnIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;

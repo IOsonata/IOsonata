@@ -81,7 +81,7 @@ bool AccelLis2dh12::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * c
  *
  * @return	true - Success
  */
-bool AccelLis2dh12::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelLis2dh12::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (vbValid == false)
 	{
@@ -156,7 +156,7 @@ bool AccelLis2dh12::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf,
 	return true;
 }
 
-bool AccelLis2dh12::Init(const TEMPSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelLis2dh12::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (vbValid == false)
 	{
@@ -468,7 +468,7 @@ void AccelLis2dh12::IntHandler()
 		{
 			if (vIntHandler)
 			{
-				ACCELSENSOR_DATA data;
+				AccelSensorData_t data;
 
 				AccelSensor::Read(data);
 

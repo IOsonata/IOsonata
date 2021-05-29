@@ -474,7 +474,7 @@ typedef union __BMI160_Fifo_Header {
 
 class AccelBmi160 : public AccelSensor {
 public:
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint8_t Scale(uint8_t Value);
 
@@ -497,7 +497,7 @@ private:
 
 class GyroBmi160 : public GyroSensor {
 public:
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t Sensitivity(uint32_t Value);
 
@@ -521,7 +521,7 @@ private:
 
 class MagBmi160 : public MagBmm150 {
 public:
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual bool Enable();
 	virtual void Disable();
@@ -542,25 +542,25 @@ private:
 
 class AgBmi160 : public AccelBmi160, public GyroBmi160, public MagBmi160 {
 public:
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[0] = AccelBmi160::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[0];
 	}
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[1] = GyroBmi160::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[1];
 	}
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[2] = MagBmi160::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[2];
 	}
 
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
-	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(GYROSENSOR_RAWDATA &Data) { return GyroSensor::Read(Data); }
-	virtual bool Read(GYROSENSOR_DATA &Data) { return GyroSensor::Read(Data); }
-	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return MagSensor::Read(Data); }
-	virtual bool Read(MAGSENSOR_DATA &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(GyroSensorRawData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(MagSensorRawData_t &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return MagSensor::Read(Data); }
 	virtual void IntHandler();
 	virtual bool StartSampling() { return true; }
 

@@ -186,15 +186,15 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	virtual bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
 
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
 
-	virtual bool Read(GYROSENSOR_RAWDATA &Data) { return GyroSensor::Read(Data); }
-	virtual bool Read(GYROSENSOR_DATA &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(GyroSensorRawData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return GyroSensor::Read(Data); }
 
 	bool UpdateData() { return true; }
 

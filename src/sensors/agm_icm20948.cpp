@@ -122,7 +122,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 	return true;
 }
 
-bool AccelIcm20948::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint16_t regaddr;
 	uint8_t d;
@@ -259,7 +259,7 @@ uint32_t AccelIcm20948::FilterFreq(uint32_t Freq)
 	return AccelSensor::FilterFreq(Freq);
 }
 
-bool GyroIcm20948::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool GyroIcm20948::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
@@ -391,7 +391,7 @@ uint32_t GyroIcm20948::FilterFreq(uint32_t Freq)
 	return GyroSensor::FilterFreq(Freq);
 }
 
-bool MagIcm20948::Init(const MAGSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool MagIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint16_t regaddr;
 	uint8_t d;
@@ -733,7 +733,7 @@ void AgmIcm20948::IntHandler()
  * 			- true	: Success
  * 			- false	: Failed
  */
-bool AgmIcm20948::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AgmIcm20948::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;

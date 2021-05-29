@@ -47,7 +47,7 @@ bool Imu::Init(const IMU_CFG &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf,
 	return true;
 }
 */
-bool Imu::Init(const IMU_CFG &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool Imu::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	vpAccel = pAccel;
 	vpGyro = pGyro;

@@ -187,9 +187,9 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	bool Init(const HUMISENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	bool Init(const PRESSSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	bool Init(const HumiSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	bool Init(const PressureSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
 	/**
 	 * @brief	Set current sensor state
@@ -253,9 +253,9 @@ public:
 	 * @return	true - new data
 	 * 			false - old data
 	 */
-	void Read(HUMISENSOR_DATA &Data) { HumiSensor::Read(Data); }
-	void Read(PRESSSENSOR_DATA &Data) { PressSensor::Read(Data); }
-	void Read(TEMPSENSOR_DATA &Data) { TempSensor::Read(Data); }
+	void Read(HumiSensorData_t &Data) { HumiSensor::Read(Data); }
+	void Read(PressureSensorData_t &Data) { PressSensor::Read(Data); }
+	void Read(TempSensorData_t &Data) { TempSensor::Read(Data); }
 /*
 	float ReadTemperature() {
 		TPHSENSOR_DATA tphdata;

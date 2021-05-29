@@ -48,7 +48,7 @@ SOFTWARE.
  *
  * @return	true - Success
  */
-bool AccLsm303c::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccLsm303c::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;
@@ -56,7 +56,7 @@ bool AccLsm303c::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Ti
 	return true;
 }
 
-bool AccLsm303c::Init(const TEMPSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccLsm303c::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	return true;
 }
@@ -133,7 +133,7 @@ printf("Chip Id %x\r\n", d);
  *
  * @return	true - Success
  */
-bool MagLsm303c::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer)
+bool MagLsm303c::Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer)
 {
 	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;

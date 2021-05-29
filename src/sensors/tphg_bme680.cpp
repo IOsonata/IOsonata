@@ -249,7 +249,7 @@ uint8_t TphgBme680::CalcHeaterResistance(uint16_t Temp)
 }
 
 // TPH sensor init
-bool TphgBme680::Init(const TPHSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool TphgBme680::Init(const TPHSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	uint8_t regaddr;
 	uint8_t d;
@@ -375,7 +375,7 @@ bool TphgBme680::Init(const TPHSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *
 }
 
 // Gas sensor init
-bool TphgBme680::Init(const GASSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool TphgBme680::Init(const GasSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	if (pIntrf != NULL && pIntrf != Interface())
 	{
@@ -421,7 +421,7 @@ bool TphgBme680::Init(const GASSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *
 	vbGasData = false;
 
 	vNbHeatPoint = CfgData.NbHeatPoint;
-	memcpy(vHeatPoints, CfgData.pHeatProfile, vNbHeatPoint * sizeof(GASSENSOR_HEAT));
+	memcpy(vHeatPoints, CfgData.pHeatProfile, vNbHeatPoint * sizeof(GasSensorHeater_t));
 
 	SetHeatingProfile(CfgData.NbHeatPoint, CfgData.pHeatProfile);
 
@@ -441,7 +441,7 @@ bool TphgBme680::Init(const GASSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *
  *
  * @return	true - success
  */
-bool TphgBme680::SetHeatingProfile(int Count, const GASSENSOR_HEAT *pProfile)
+bool TphgBme680::SetHeatingProfile(int Count, const GasSensorHeater_t *pProfile)
 {
 	if (Count == 0 || pProfile == NULL)
 		return false;
@@ -706,7 +706,7 @@ bool TphgBme680::UpdateData()
 	return false;
 }
 
-bool TphgBme680::Read(TPHSENSOR_DATA &TphData)
+bool TphgBme680::Read(TPHSensorData_t &TphData)
 {
 	bool retval = UpdateData();
 
@@ -715,19 +715,19 @@ bool TphgBme680::Read(TPHSENSOR_DATA &TphData)
 
 	Write(&reg, 1, &d, 1);
 
-	memcpy(&TphData, &vTphData, sizeof(TPHSENSOR_DATA));
+	memcpy(&TphData, &vTphData, sizeof(TPHSensorData_t));
 
 	return retval;
 }
 
-bool TphgBme680::Read(GASSENSOR_DATA &GasData)
+bool TphgBme680::Read(GaseSensorData_t &GasData)
 {
 	bool retval = vbGasData;
 
 	if (vbGasData == false)
 		retval = UpdateData();
 
-	memcpy(&GasData, &vGasData, sizeof(GASSENSOR_DATA));
+	memcpy(&GasData, &vGasData, sizeof(GaseSensorData_t));
 
 	uint8_t reg = BME680_REG_CTRL_GAS1;
 

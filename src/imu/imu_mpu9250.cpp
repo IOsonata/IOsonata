@@ -490,7 +490,7 @@ bool ValidateQuat(int32_t Q[4])
 	return true;
 }
 
-bool ImuMpu9250::Init(const IMU_CFG &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool ImuMpu9250::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == NULL)
 	{

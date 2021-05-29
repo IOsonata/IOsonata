@@ -41,7 +41,7 @@ SOFTWARE.
 class ImuIcm20948 : public Imu {
 public:
 
-	bool Init(const IMU_CFG &Cfg, AgmIcm20948 *pIcm);
+	bool Init(const ImuCfg_t &Cfg, AgmIcm20948 *pIcm);
 
 	virtual bool Enable();
 	virtual void Disable();
@@ -56,8 +56,8 @@ public:
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 
-	virtual bool Read(IMU_QUAT &Data) { return Imu::Read(Data); }
-	virtual bool Read(IMU_EULER &Data) { return Imu::Read(Data); }
+	virtual bool Read(ImuQuat_t &Data) { return Imu::Read(Data); }
+	virtual bool Read(ImuEuler_t &Data) { return Imu::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -71,7 +71,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(ACCELSENSOR_DATA &Data) { return Imu::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return Imu::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -85,7 +85,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(GYROSENSOR_DATA &Data) { return Imu::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return Imu::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -99,10 +99,10 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(MAGSENSOR_DATA &Data) { return Imu::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return Imu::Read(Data); }
 
 protected:
-	bool Init(const IMU_CFG &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 
 private:
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);

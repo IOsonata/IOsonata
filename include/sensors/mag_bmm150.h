@@ -145,7 +145,7 @@ SOFTWARE.
 
 class MagBmm150 : public MagSensor {
 public:
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 
 	virtual bool Enable();

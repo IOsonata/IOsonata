@@ -96,7 +96,7 @@ bool AccelLsm303agr::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * 
  *
  * @return	true - Success
  */
-bool AccelLsm303agr::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelLsm303agr::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (vbValid == false)
 	{
@@ -169,7 +169,7 @@ bool AccelLsm303agr::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf
 	return true;
 }
 
-bool AccelLsm303agr::Init(const TEMPSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelLsm303agr::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (vbValid == false)
 	{
@@ -603,7 +603,7 @@ void AccelLsm303agr::IntHandler()
 		{
 			if (vIntHandler)
 			{
-				ACCELSENSOR_DATA data;
+				AccelSensorData_t data;
 
 				AccelSensor::Read(data);
 
@@ -634,7 +634,7 @@ void AccelLsm303agr::IntHandler()
  *
  * @return	true - Success
  */
-bool MagLsm303agr::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer)
+bool MagLsm303agr::Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer)
 {
 	if (pIntrf == NULL)
 	{

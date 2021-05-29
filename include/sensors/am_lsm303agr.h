@@ -348,8 +348,8 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	virtual bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint8_t Scale(uint8_t Value);
 
@@ -370,8 +370,8 @@ public:
 	virtual void Reset();
 	virtual void PowerOff();
 
-	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
 
 	bool UpdateData();
 
@@ -435,7 +435,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	uint32_t SamplingFrequency(uint32_t Freq);
 
 	virtual bool Enable();
@@ -444,8 +444,8 @@ public:
 
 	bool UpdateData();
 
-	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return MagSensor::Read(Data); }
-	virtual bool Read(MAGSENSOR_DATA &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(MagSensorRawData_t &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return MagSensor::Read(Data); }
 
 	/**
 	 * @brief	Interrupt handler (optional)

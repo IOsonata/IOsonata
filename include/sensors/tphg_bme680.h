@@ -294,7 +294,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	bool Init(const TPHSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer);
+	bool Init(const TPHSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer);
 
 	/**
 	 * @brief	Secondary initialization gas sensor.
@@ -313,7 +313,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	bool Init(const GASSENSOR_CFG &CfgData, DeviceIntrf *pIntrf = NULL, Timer *pTimer = NULL);
+	bool Init(const GasSensorCfg_t &CfgData, DeviceIntrf *pIntrf = NULL, Timer *pTimer = NULL);
 
 	/**
 	 * @brief	Set current sensor state
@@ -336,7 +336,7 @@ public:
 	 *
 	 * @return	true - success
 	 */
-	virtual bool SetHeatingProfile(int Count, const GASSENSOR_HEAT *pProfile);
+	virtual bool SetHeatingProfile(int Count, const GasSensorHeater_t *pProfile);
 
 	/**
 	 * @brief Set operating mode
@@ -388,7 +388,7 @@ public:
 	 * @return	true - new data
 	 * 			false - old data
 	 */
-	bool Read(GASSENSOR_DATA &GasData);
+	bool Read(GaseSensorData_t &GasData);
 
 	/**
 	 * @brief	Read TPH data
@@ -400,7 +400,7 @@ public:
 	 * @return	true - new data
 	 * 			false - old data
 	 */
-	bool Read(TPHSENSOR_DATA &TphData);
+	bool Read(TPHSensorData_t &TphData);
 
 	/**
 	 * @brief	Read temperature
@@ -408,7 +408,7 @@ public:
 	 * @return	Temperature in degree C
 	 */
 	float ReadTemperature() {
-		TPHSENSOR_DATA tphdata;
+		TPHSensorData_t tphdata;
 		Read(tphdata);
 		return (float)tphdata.Temperature / 100.0;
 	}
@@ -419,7 +419,7 @@ public:
 	 * @return	Barometric pressure in Pascal
 	 */
 	float ReadPressure() {
-		TPHSENSOR_DATA tphdata;
+		TPHSensorData_t tphdata;
 		Read(tphdata);
 		return (float)tphdata.Pressure / 100.0;
 	}
@@ -430,7 +430,7 @@ public:
 	 * @return	Relative humidity in %
 	 */
 	float ReadHumidity() {
-		TPHSENSOR_DATA tphdata;
+		TPHSensorData_t tphdata;
 		Read(tphdata);
 		return (float)tphdata.Humidity / 100.0;
 	}
@@ -460,7 +460,7 @@ private:
 	bool vbMeasGas;			// Do gas measurement
 	bool vbGasData;
 	int vNbHeatPoint;		// Number of heating points
-	GASSENSOR_HEAT vHeatPoints[BME680_GAS_HEAT_PROFILE_MAX];
+	GasSensorHeater_t vHeatPoints[BME680_GAS_HEAT_PROFILE_MAX];
 };
 
 extern "C" {

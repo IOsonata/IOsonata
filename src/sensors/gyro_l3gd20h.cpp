@@ -47,7 +47,7 @@ SOFTWARE.
  *
  * @return	true - Success
  */
-bool GyroL3gd20h::Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool GyroL3gd20h::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (vbInitialized)
 		return true;;
@@ -96,7 +96,7 @@ bool GyroL3gd20h::Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Ti
 	return true;
 }
 
-bool GyroL3gd20h::Init(const TEMPSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool GyroL3gd20h::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	return true;
 }

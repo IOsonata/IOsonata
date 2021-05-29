@@ -445,7 +445,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint16_t Scale(uint16_t Value);			// Accel
 
 private:
@@ -465,7 +465,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
 
 private:
@@ -485,7 +485,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 	virtual bool Enable();
 	virtual void Disable();
     virtual MAGSENSOR_PRECISION Precision(MAGSENSOR_PRECISION Val);
@@ -516,7 +516,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[MPU9250_ACCEL_IDX] = AccelMpu9250::Init(Cfg, pIntrf, pTimer);
 		return vbSensorEnabled[MPU9250_ACCEL_IDX];
 	}
@@ -532,7 +532,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[MPU9250_GYRO_IDX] = GyroMpu9250::Init(Cfg, pIntrf, pTimer);
 		return vbSensorEnabled[MPU9250_GYRO_IDX];
 	}
@@ -548,12 +548,12 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[MPU9250_MAG_IDX] = MagMpu9250::Init(Cfg, pIntrf, pTimer);
 		return vbSensorEnabled[MPU9250_MAG_IDX];
 	}
 
-	virtual bool Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
 
 	virtual bool Enable();
 	virtual void Disable();
@@ -571,13 +571,13 @@ public:
 	virtual bool StartSampling();
 	virtual uint32_t LowPassFreq(uint32_t Freq);
 
-	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(ACCELSENSOR_DATA &Data) { return AccelSensor::Read(Data); }
-	virtual bool Read(GYROSENSOR_RAWDATA &Data) { return GyroSensor::Read(Data); }
-	virtual bool Read(GYROSENSOR_DATA &Data) { return GyroSensor::Read(Data); }
-	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return MagSensor::Read(Data); }
-	virtual bool Read(MAGSENSOR_DATA &Data) { return MagSensor::Read(Data); }
-	virtual void Read(TEMPSENSOR_DATA &Data) { return TempSensor::Read(Data); }
+	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(GyroSensorRawData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(MagSensorRawData_t &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return MagSensor::Read(Data); }
+	virtual void Read(TempSensorData_t &Data) { return TempSensor::Read(Data); }
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);

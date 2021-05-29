@@ -50,7 +50,7 @@ SOFTWARE.
  *
  * @return	true - Success
  */
-bool AmFxos8700cq::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AmFxos8700cq::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;
@@ -58,7 +58,7 @@ bool AmFxos8700cq::Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, 
 	return true;
 }
 
-bool AmFxos8700cq::Init(const TEMPSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AmFxos8700cq::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	return true;
 }
@@ -135,7 +135,7 @@ printf("Chip Id %x\r\n", d);
  *
  * @return	true - Success
  */
-bool AmFxos8700cq::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer)
+bool AmFxos8700cq::Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer)
 {
 	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;

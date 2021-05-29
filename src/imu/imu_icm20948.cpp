@@ -297,7 +297,7 @@ static const float s_CfgMountingMatrix[9]= {
 	0, 0, 1.f
 };
 
-bool ImuIcm20948::Init(const IMU_CFG &Cfg, AgmIcm20948 * const pIcm)
+bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 {
 	if (pIcm == NULL)
 	{
@@ -325,7 +325,7 @@ bool ImuIcm20948::Init(const IMU_CFG &Cfg, AgmIcm20948 * const pIcm)
 	return false;
 }
 
-bool ImuIcm20948::Init(const IMU_CFG &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == NULL)
 	{

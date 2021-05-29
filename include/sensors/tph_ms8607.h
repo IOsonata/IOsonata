@@ -117,7 +117,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool Init(const TPHSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const TPHSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
 	/**
 	 * @brief	Power on or wake up device
@@ -177,7 +177,7 @@ public:
 	 * @return	true - new data
 	 * 			false - old data
 	 */
-	bool Read(TPHSENSOR_DATA &TphData);
+	bool Read(TPHSensorData_t &TphData);
 	float ReadTemperature();
 	float ReadPressure();
 	float ReadHumidity();

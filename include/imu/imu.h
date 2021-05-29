@@ -104,7 +104,7 @@ typedef struct __Imu_Quat {
 	};
 } ImuQuat_t;
 
-typedef ImuQuat_t IMU_QUAT;
+//typedef ImuQuat_t IMU_QUAT;
 
 typedef struct __Imu_Euler {
 	uint64_t Timestamp;	//!< Time stamp count in usec
@@ -113,7 +113,7 @@ typedef struct __Imu_Euler {
 	float Roll;
 } ImuEuler_t;
 
-typedef ImuEuler_t	IMU_EULER;
+//typedef ImuEuler_t	IMU_EULER;
 
 typedef struct __Imu_Gravity {
 	uint64_t Timestamp;	//!< Time stamp count in usec
@@ -127,7 +127,7 @@ typedef struct __Imu_Gravity {
 	};
 } ImuGravity_t;
 
-typedef ImuGravity_t	IMU_GRAVITY;
+//typedef ImuGravity_t	IMU_GRAVITY;
 
 /// External acceleration vector
 typedef struct __Imu_Extrn_Accel {
@@ -142,7 +142,7 @@ typedef struct __Imu_Extrn_Accel {
 	};
 } ImuExtAccel_t;
 
-typedef ImuExtAccel_t	IMU_EXT_ACCEL;
+//typedef ImuExtAccel_t	IMU_EXT_ACCEL;
 
 /// Pedometer
 typedef struct __Imu_Pedometer {
@@ -156,7 +156,7 @@ typedef struct __Imu_Pedometer {
     uint16_t TotalDistance;	//!< in dm
 } ImuPedometer_t;
 
-typedef ImuPedometer_t	IMU_PEDOMETER;
+//typedef ImuPedometer_t	IMU_PEDOMETER;
 
 /// Rotation data
 typedef struct __Imu_Rotation_Data {
@@ -165,14 +165,14 @@ typedef struct __Imu_Rotation_Data {
     uint16_t Rpm; 			//!< Revolutions per minute
 } ImuRotation_t;
 
-typedef ImuRotation_t	IMU_ROTATION;
+//typedef ImuRotation_t	IMU_ROTATION;
 
 
 typedef struct __Imu_Config {
 	DevEvtHandler_t EvtHandler;
 } ImuCfg_t;
 
-typedef ImuCfg_t	IMU_CFG;
+//typedef ImuCfg_t	IMU_CFG;
 
 #ifdef __cplusplus
 

@@ -73,7 +73,7 @@ uint8_t crc4_PT(uint16_t *pData)
 	return (n_rem ^ 0x00);
 }
 
-bool TphMS8607::Init(const TPHSENSOR_CFG &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool TphMS8607::Init(const TPHSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	//TPHSENSOR_CFG *cfg = (TPHSENSOR_CFG*)pCfgData;
 
@@ -179,7 +179,7 @@ void TphMS8607::Reset()
 	vpIntrf->Tx(MS8607_RHDEV_ADDR, &cmd, 1);
 }
 
-bool TphMS8607::Read(TPHSENSOR_DATA &TphData)
+bool TphMS8607::Read(TPHSensorData_t &TphData)
 {
 //	bool retval = false;
 
@@ -194,7 +194,7 @@ bool TphMS8607::Read(TPHSENSOR_DATA &TphData)
 		vTphData.Timestamp = vpTimer->mSecond();
 	}
 
-	memcpy(&TphData, &vTphData, sizeof(TPHSENSOR_DATA));
+	memcpy(&TphData, &vTphData, sizeof(TPHSensorData_t));
 
 	return true;
 }

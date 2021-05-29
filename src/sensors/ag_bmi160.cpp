@@ -40,7 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/ag_bmi160.h"
 #include "idelay.h"
 
-bool AccelBmi160::Init(const ACCELSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelBmi160::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init((uint32_t)CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
@@ -276,7 +276,7 @@ void AccelBmi160::Disable()
 	Write8(&regaddr, 1, d);
 }
 
-bool GyroBmi160::Init(const GYROSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool GyroBmi160::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
@@ -455,7 +455,7 @@ void GyroBmi160::Disable()
 	Write8(&regaddr, 1, d);
 }
 
-bool MagBmi160::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool MagBmi160::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint8_t regaddr = BMI160_CMD;
 	uint8_t d;

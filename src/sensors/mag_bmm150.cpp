@@ -47,7 +47,7 @@ SOFTWARE.
  *
  * @return	true - Success
  */
-bool MagBmm150::Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool MagBmm150::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	MagSensor::Type(SENSOR_TYPE_MAG);
 
