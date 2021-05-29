@@ -35,7 +35,7 @@ SOFTWARE.
 
 #include "sensors/accel_sensor.h"
 
-bool AccelSensor::Read(ACCELSENSOR_DATA &Data)
+bool AccelSensor::Read(AccelSensorData_t &Data)
 {
 	if (vData.Range == 0)
 		return false;

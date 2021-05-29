@@ -57,13 +57,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef struct __PressureSensor_Data {
 	uint64_t Timestamp;		//!< Time stamp count in usec
 	uint32_t Pressure;		//!< Barometric pressure in Pa no decimal
-} PRESSSENSOR_DATA;
+} PressureSensorData_t;
+
+typedef PressureSensorData_t	PRESSSENSOR_DATA;
 
 #pragma pack(pop)
 
 class PressSensor;
 
-typedef void (*PRESSSENSOR_EVTCB)(PressSensor * const pSensor, PRESSSENSOR_DATA *pData);
+typedef void (*PressureSensorEvtHandler_t)(PressSensor * const pSensor, PressureSensorData_t *pData);
 
 #pragma pack(push, 4)
 
@@ -75,8 +77,10 @@ typedef struct __PressureSensor_Config {
 	uint32_t		Freq;			//!< Sampling frequency in mHz (milliHerz) if continuous mode is used
 	int				PresOvrs;		//!< Oversampling measurement for pressure
 	uint32_t		FilterCoeff;	//!< Filter coefficient select value (this value is device dependent)
-	PRESSSENSOR_EVTCB EvtHandler;//!< Event handler
-} PRESSSENSOR_CFG;
+	PressureSensorEvtHandler_t EvtHandler;//!< Event handler
+} PressureSensorCfg_t;
+
+typedef PressureSensorCfg_t	PRESSSENSOR_CFG;
 
 #pragma pack(pop)
 
@@ -105,7 +109,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool Init(const PRESSSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
+	virtual bool Init(const PressureSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
 
 	/**
 	 * @brief	Read pressure data.
@@ -116,7 +120,7 @@ public:
 	 *
 	 * @return	None
 	 */
-	virtual void Read(PRESSSENSOR_DATA &Data) { Data = vData; }
+	virtual void Read(PressureSensorData_t &Data) { Data = vData; }
 
 	/**
 	 * @brief	Read pressure).
@@ -127,8 +131,8 @@ public:
 
 protected:
 
-	PRESSSENSOR_DATA	vData;			//!< Last measured data
-	PRESSSENSOR_EVTCB 	vEvtyHandler;	//!< Event handler
+	PressureSensorData_t vData;			//!< Last measured data
+	PressureSensorEvtHandler_t vEvtyHandler;	//!< Event handler
 };
 
 extern "C" {

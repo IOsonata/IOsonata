@@ -58,13 +58,17 @@ typedef struct __GasSensor_Data {
 	uint32_t GasRes[GASSENSOR_MEASUREMENT_POINT_MAX];	//!< Gas resistance value
 	int		 MeasIdx;			//!< Latest measure point index
 	float	 AirQualIdx;		//!< Air Quality Index
-} GASSENSOR_DATA;
+} GaseSensorData_t;
+
+typedef GaseSensorData_t	GASSENSOR_DATA;
 
 /// @brief	Heating temperature setting point for the heating profile
 typedef struct __GasSensor_Heater {
 	int16_t	Temp;				//!< Heater temperature in Celsius in 2 decimal fix point (3145 = 31.45 Degree)
 	int16_t Dur;				//!< heating duration in msec
-} GASSENSOR_HEAT;
+} GasSensorHeater_t;
+
+typedef GasSensorHeater_t	GASSENSOR_HEAT;
 
 #pragma pack(pop)
 
@@ -76,8 +80,10 @@ typedef struct __GasSensor_Config {
 	SENSOR_OPMODE 	OpMode;		//!< Operating mode
 	uint32_t		Freq;		//!< Sampling frequency in Hz if continuous mode is used
 	int				NbHeatPoint;//!< Number of heating point in profile
-	const GASSENSOR_HEAT *pHeatProfile;	//!< Pointer to array of heating temperature profile
-} GASSENSOR_CFG;
+	const GasSensorHeater_t *pHeatProfile;	//!< Pointer to array of heating temperature profile
+} GasSensorCfg_t;
+
+typedef GasSensorCfg_t	GASSENSOR_CFG;
 
 #pragma pack(pop)
 
@@ -102,7 +108,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GASSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
+	virtual bool Init(const GasSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
 
 	/**
 	 * @brief	Read gas sensor data (require implementation).
@@ -115,7 +121,7 @@ public:
 	 * 			- true	: If new data is returned
 	 * 			- false	: If old data is returned
 	 */
-	virtual bool Read(GASSENSOR_DATA &GasData) = 0;
+	virtual bool Read(GaseSensorData_t &GasData) = 0;
 
 	/**
 	 * @brief	Set gas heating profile (require implementation).
@@ -127,11 +133,11 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool SetHeatingProfile(int Count, const GASSENSOR_HEAT * const pProfile) = 0;
+	virtual bool SetHeatingProfile(int Count, const GasSensorHeater_t * const pProfile) = 0;
 
 protected:
 
-	GASSENSOR_DATA vGasData;	//!< Last measured data
+	GaseSensorData_t vGasData;	//!< Last measured data
 };
 
 extern "C" {

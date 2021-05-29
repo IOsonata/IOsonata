@@ -102,14 +102,18 @@ typedef struct __Imu_Quat {
 			float Q4;
 		};
 	};
-} IMU_QUAT;
+} ImuQuat_t;
+
+typedef ImuQuat_t IMU_QUAT;
 
 typedef struct __Imu_Euler {
 	uint64_t Timestamp;	//!< Time stamp count in usec
 	float Yaw;
 	float Pitch;
 	float Roll;
-} IMU_EULER;
+} ImuEuler_t;
+
+typedef ImuEuler_t	IMU_EULER;
 
 typedef struct __Imu_Gravity {
 	uint64_t Timestamp;	//!< Time stamp count in usec
@@ -121,7 +125,9 @@ typedef struct __Imu_Gravity {
 			float Z;
 		};
 	};
-} IMU_GRAVITY;
+} ImuGravity_t;
+
+typedef ImuGravity_t	IMU_GRAVITY;
 
 /// External acceleration vector
 typedef struct __Imu_Extrn_Accel {
@@ -134,7 +140,9 @@ typedef struct __Imu_Extrn_Accel {
 			float Z;
 		};
 	};
-} IMU_EXT_ACCEL;
+} ImuExtAccel_t;
+
+typedef ImuExtAccel_t	IMU_EXT_ACCEL;
 
 /// Pedometer
 typedef struct __Imu_Pedometer {
@@ -146,26 +154,32 @@ typedef struct __Imu_Pedometer {
     uint16_t DownCount; 	//!< Number of downstairs taken
     uint8_t StrideLength;	//!< in cm
     uint16_t TotalDistance;	//!< in dm
-} IMU_PEDOMETER;
+} ImuPedometer_t;
+
+typedef ImuPedometer_t	IMU_PEDOMETER;
 
 /// Rotation data
 typedef struct __Imu_Rotation_Data {
 	uint64_t Timestamp;		//!< Time stamp count in usec
     uint32_t Count; 		//!< Number of rotations
     uint16_t Rpm; 			//!< Revolutions per minute
-} IMU_ROTATION;
+} ImuRotation_t;
+
+typedef ImuRotation_t	IMU_ROTATION;
 
 
 typedef struct __Imu_Config {
 	DevEvtHandler_t EvtHandler;
-} IMU_CFG;
+} ImuCfg_t;
+
+typedef ImuCfg_t	IMU_CFG;
 
 #ifdef __cplusplus
 
 class Imu : virtual public Device {
 public:
 
-	virtual bool Init(const IMU_CFG &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	virtual bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool UpdateData() = 0;
 	virtual void IntHandler() = 0;
 	virtual bool Calibrate() = 0;
@@ -174,8 +188,8 @@ public:
 	virtual bool Pedometer(bool bEn) = 0;
 	virtual bool Quaternion(bool bEn, int NbAxis) = 0;
 	virtual bool Tap(bool bEn) = 0;
-	virtual bool Read(IMU_QUAT &Data) { Data = vQuat; return true; }
-	virtual bool Read(IMU_EULER &Data) { Data = vEuler; return true; }
+	virtual bool Read(ImuQuat_t &Data) { Data = vQuat; return true; }
+	virtual bool Read(ImuEuler_t &Data) { Data = vEuler; return true; }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -189,8 +203,8 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(ACCELSENSOR_RAWDATA &Data) { return vpAccel->Read(Data); }
-	virtual bool Read(ACCELSENSOR_DATA &Data) { return vpAccel->Read(Data); }
+	virtual bool Read(AccelSensorRawData_t &Data) { return vpAccel->Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return vpAccel->Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -204,8 +218,8 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(GYROSENSOR_RAWDATA &Data) { return vpGyro->Read(Data); }
-	virtual bool Read(GYROSENSOR_DATA &Data) { return vpGyro->Read(Data); }
+	virtual bool Read(GyroSensorRawData_t &Data) { return vpGyro->Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return vpGyro->Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -219,8 +233,8 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(MAGSENSOR_RAWDATA &Data) { return vpMag->Read(Data); }
-	virtual bool Read(MAGSENSOR_DATA &Data) { return vpMag->Read(Data); }
+	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
 
 	virtual IMU_FEATURE Feature() { return vActiveFeature; }
 	virtual IMU_FEATURE Feature(IMU_FEATURE FeatureBit, bool bEnDis);
@@ -247,8 +261,8 @@ protected:
 	GyroSensor *vpGyro;		//!< Pointer to gyro sensor
 	MagSensor *vpMag;		//!< Pointer to magnetometer Sensor
 	IMU_FEATURE vActiveFeature;	//!< Orable feature enabled bits - Bit set to 1 : Enabled, 0 : Disabled
-	IMU_QUAT vQuat;			//!< Last updated quaternion values
-	IMU_EULER vEuler;		//!< Last updated euler value
+	ImuQuat_t vQuat;			//!< Last updated quaternion values
+	ImuEuler_t vEuler;		//!< Last updated euler value
 	uint32_t vRate;			//!< Data rate in mHz (mili-Hz)
 };
 

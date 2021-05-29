@@ -35,7 +35,7 @@ SOFTWARE.
 
 #include "sensors/mag_sensor.h"
 
-bool MagSensor::Read(MAGSENSOR_DATA &Data)
+bool MagSensor::Read(MagSensorData_t &Data)
 {
 	Data.Timestamp = vData.Timestamp;
 	Data.X = (float)vData.X * vCalibGain[0][0] + (float)vData.Y * vCalibGain[1][0] + (float)vData.Z * vCalibGain[2][0] + vCalibOffset[0];

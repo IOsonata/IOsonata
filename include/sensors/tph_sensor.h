@@ -59,13 +59,15 @@ typedef struct __TPHSensor_Data {
 	uint32_t Pressure;		//!< Barometric pressure in Pa no decimal
 	int16_t  Temperature;	//!< Temperature in degree C, 2 decimals fixed point
 	uint16_t Humidity;		//!< Relative humidity in %, 2 decimals fixed point
-} TPHSENSOR_DATA;
+} TPHSensorData_t;
+
+typedef TPHSensorData_t	TPHSENSOR_DATA;
 
 #pragma pack(pop)
 
 class TphSensor;
 
-typedef void (*TPHDATRDY_EVTCB)(TphSensor * const pSensor, TPHSENSOR_DATA *pData);
+typedef void (*TPHDataRdyHandler_t)(TphSensor * const pSensor, TPHSensorData_t *pData);
 
 #pragma pack(push, 4)
 
@@ -79,8 +81,10 @@ typedef struct __TPHSensor_Config {
 	int				PresOvrs;		//!< Oversampling measurement for pressure
 	int 			HumOvrs;		//!< Oversampling measurement for humidity
 	uint32_t		FilterCoeff;	//!< Filter coefficient select value (this value is device dependent)
-	TPHDATRDY_EVTCB	DataRdyCB;		//!< Callback handler for data ready
-} TPHSENSOR_CFG;
+	TPHDataRdyHandler_t	DataRdyCB;		//!< Callback handler for data ready
+} TPHSensorCfg_t;
+
+typedef TPHSensorCfg_t	TPHSENSOR_CFG;
 
 #pragma pack(pop)
 
@@ -107,7 +111,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool Init(const TPHSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
+	virtual bool Init(const TPHSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
 
 	/**
 	 * @brief	Read TPH data (require implementation).
@@ -120,7 +124,7 @@ public:
 	 * 			- true	: If new data is returned
 	 * 			- false	: If old data is returned
 	 */
-	virtual bool Read(TPHSENSOR_DATA &TphData) = 0;
+	virtual bool Read(TPHSensorData_t &TphData) = 0;
 
 	/**
 	 * @brief	Read temperature (require implementation).
@@ -145,8 +149,8 @@ public:
 
 protected:
 
-	TPHSENSOR_DATA 	vTphData;			//!< Last measured data
-	TPHDATRDY_EVTCB	vDataRdyHandler;	//!< Callback data ready handler
+	TPHSensorData_t vTphData;			//!< Last measured data
+	TPHDataRdyHandler_t vDataRdyHandler;	//!< Callback data ready handler
 };
 
 extern "C" {

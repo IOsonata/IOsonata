@@ -54,7 +54,9 @@ typedef struct __MagSensor_Raw_Data {
             int16_t Z;          //!< Z axis
         };
     };
-} MAGSENSOR_RAWDATA;
+} MagSensorRawData_t;
+
+typedef MagSensorRawData_t	MAGSENSOR_RAWDATA;
 
 /// Magnetometer sensor data
 typedef struct __MagSensor_Data {
@@ -67,7 +69,9 @@ typedef struct __MagSensor_Data {
 	        float Z;			//!< Z axis
 		};
 	};
-} MAGSENSOR_DATA;
+} MagSensorData_t;
+
+typedef MagSensorData_t	MAGSENSOR_DATA;
 
 typedef enum __MagSensor_Precision {
 	MAGSENSOR_PRECISION_LOW,
@@ -82,7 +86,9 @@ typedef struct __MagSensor_Config {
 	MAGSENSOR_PRECISION	Precision;	//!< Sampling precision in bits
 	bool 			bInter;		//!< true - enable interrupt
 	DEVINTR_POL		IntPol;		//!< Interrupt polarity
-} MAGSENSOR_CFG;
+} MagSensorCfg_t;
+
+typedef MagSensorCfg_t	MAGSENSOR_CFG;
 
 #pragma pack(pop)
 
@@ -99,9 +105,9 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer) = 0;
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer) = 0;
 
-    virtual bool Read(MAGSENSOR_RAWDATA &Data) {
+    virtual bool Read(MagSensorRawData_t &Data) {
         Data = vData;
         return true;
     }
@@ -118,7 +124,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-    virtual bool Read(MAGSENSOR_DATA &Data);
+    virtual bool Read(MagSensorData_t &Data);
 
     virtual MAGSENSOR_PRECISION Precision() { return vPrecision; }
     virtual MAGSENSOR_PRECISION Precision(MAGSENSOR_PRECISION Val) { vPrecision = Val; return vPrecision; }
@@ -145,7 +151,7 @@ protected:
 
 	uint16_t vSensitivity[3];		//!< Sample scaling factor in nanoTesla
 	MAGSENSOR_PRECISION vPrecision;	//!< Sampling precision in bits
-	MAGSENSOR_RAWDATA vData;	//!< Current sensor data updated with UpdateData()
+	MagSensorRawData_t vData;	//!< Current sensor data updated with UpdateData()
 	float vCalibGain[3][3];
 	float vCalibOffset[3];
 private:

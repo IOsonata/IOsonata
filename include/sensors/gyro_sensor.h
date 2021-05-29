@@ -55,7 +55,9 @@ typedef struct __GyroSensor_Raw_Data {
             int16_t Z;      //!< Z axis
         };
     };
-} GYROSENSOR_RAWDATA;
+} GyroSensorRawData_t;
+
+typedef GyroSensorRawData_t	GYROSENSOR_RAWDATA;
 
 /// Gyroscope sensor data
 typedef struct __GyroSensor_Data {
@@ -68,7 +70,9 @@ typedef struct __GyroSensor_Data {
 	        float Z;		//!< Z axis
 		};
 	};
-} GYROSENSOR_DATA;
+} GyroSensorData_t;
+
+typedef GyroSensorData_t	GYROSENSOR_DATA;
 
 typedef struct __GyroSensor_Config {
 	uint32_t		DevAddr;		//!< Either I2C dev address or CS index select if SPI is used
@@ -78,7 +82,9 @@ typedef struct __GyroSensor_Config {
 	uint32_t		FltrFreq;		//!< Filter cutoff frequency in mHz
 	bool 			bInter;			//!< true - enable interrupt
 	DEVINTR_POL		IntPol;			//!< Interrupt pin polarity
-} GYROSENSOR_CFG;
+} GyroSensorCfg_t;
+
+typedef GyroSensorCfg_t	GYROSENSOR_CFG;
 
 #pragma pack(pop)
 
@@ -96,9 +102,9 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer) = 0;
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer) = 0;
 
-    virtual bool Read(GYROSENSOR_RAWDATA &Data) {
+    virtual bool Read(GyroSensorRawData_t &Data) {
         Data = vData;
         return true;
     }
@@ -115,7 +121,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(GYROSENSOR_DATA &Data);
+	virtual bool Read(GyroSensorData_t &Data);
 
 	/**
 	 * @brief	Get the current sensitivity value.
@@ -146,7 +152,7 @@ public:
 protected:
 
 	uint16_t vSensitivity;	    //!< Sensitivity level per degree per second
-	GYROSENSOR_RAWDATA vData;	//!< Current sensor data updated with UpdateData()
+	GyroSensorRawData_t vData;	//!< Current sensor data updated with UpdateData()
 	float vCalibGain[3][3];
 	float vCalibOffset[3];
 };

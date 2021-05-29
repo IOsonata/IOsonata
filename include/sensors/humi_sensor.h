@@ -57,13 +57,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 typedef struct __HumiditySensor_Data {
 	uint64_t Timestamp;		//!< Time stamp count in usec
 	uint16_t Humidity;		//!< Relative humidity in %, 2 decimals fixed point
-} HUMISENSOR_DATA;
+} HumiSensorData_t;
+
+typedef HumiSensorData_t	HUMISENSOR_DATA;
 
 #pragma pack(pop)
 
 class HumiSensor;
 
-typedef void (*HUMISENSOR_EVTCB)(HumiSensor * const pSensor, HUMISENSOR_DATA *pData);
+typedef void (*HumiSensorEvtCb_t)(HumiSensor * const pSensor, HUMISENSOR_DATA *pData);
 
 #pragma pack(push, 4)
 
@@ -75,8 +77,10 @@ typedef struct __HumiditySensor_Config {
 	uint32_t		Freq;			//!< Sampling frequency in mHz (milliHerz) if continuous mode is used
 	int 			HumOvrs;		//!< Oversampling measurement for humidity
 	uint32_t		FilterCoeff;	//!< Filter coefficient select value (this value is device dependent)
-	HUMISENSOR_EVTCB EvtHandler;	//!< Event handler callback
-} HUMISENSOR_CFG;
+	HumiSensorEvtCb_t EvtHandler;	//!< Event handler callback
+} HumiSensorCfg_t;
+
+typedef HumiSensorCfg_t	HUMISENSOR_CFG;
 
 #pragma pack(pop)
 
@@ -105,7 +109,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool Init(const HUMISENSOR_CFG &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
+	virtual bool Init(const HumiSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) = 0;
 
 	/**
 	 * @brief	Read current data.
@@ -116,7 +120,7 @@ public:
 	 *
 	 * @return	None
 	 */
-	virtual void Read(HUMISENSOR_DATA &Data) { Data = vData; }
+	virtual void Read(HumiSensorData_t &Data) { Data = vData; }
 
 	/**
 	 * @brief	Read relative humidity
@@ -127,8 +131,8 @@ public:
 
 protected:
 
-	HUMISENSOR_DATA 	vData;			//!< Last measured data
-	HUMISENSOR_EVTCB	vEvtHandler;	//!< Event handler
+	HumiSensorData_t 	vData;			//!< Last measured data
+	HumiSensorEvtCb_t	vEvtHandler;	//!< Event handler
 };
 
 extern "C" {

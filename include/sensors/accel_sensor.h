@@ -55,7 +55,9 @@ typedef struct __AccelSensor_Raw_Data {
 			int16_t Z;			//!< Z axis
 		};
 	};
-} ACCELSENSOR_RAWDATA;
+} AccelSensorRawData_t;
+
+typedef AccelSensorRawData_t	ACCELSENSOR_RAWDATA;
 
 /// Accelerometer sensor data in G
 typedef struct __AccelSensor_Data {
@@ -68,9 +70,11 @@ typedef struct __AccelSensor_Data {
 		    float Z;			//!< Z axis
 		};
 	};
-} ACCELSENSOR_DATA;
+} AccelSensorData_t;
 
-typedef void (*ACCELINTCB)(ACCELSENSOR_DATA *pData);
+typedef AccelSensorData_t	ACCELSENSOR_DATA;
+
+typedef void (*AccelSensorEvtCb_t)(AccelSensorData_t *pData);
 
 /// Accel configuration data
 typedef struct __AccelSensor_Config {
@@ -81,8 +85,10 @@ typedef struct __AccelSensor_Config {
 	uint32_t		FltrFreq;	//!< Filter cutoff frequency in mHz
 	bool 			bInter;		//!< true - enable interrupt
 	DEVINTR_POL		IntPol;		//!< interrupt polarity
-	ACCELINTCB		IntHandler;
-} ACCELSENSOR_CFG;
+	AccelSensorEvtCb_t IntHandler;
+} AccelSensorCfg_t;
+
+typedef AccelSensorCfg_t	ACCELSENSOR_CFG;
 
 #pragma pack(pop)
 
@@ -101,7 +107,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer) = 0;
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer) = 0;
 
     /**
      * @brief   Read last updated sensor raw data
@@ -115,7 +121,7 @@ public:
      *
      * @return  True - Success.
      */
-	virtual bool Read(ACCELSENSOR_RAWDATA &Data) {
+	virtual bool Read(AccelSensorRawData_t &Data) {
 		Data = vData;
 		return true;
 	}
@@ -132,7 +138,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(ACCELSENSOR_DATA &Data);
+	virtual bool Read(AccelSensorData_t &Data);
 
 	/**
 	 * @brief	Get the current G scale value.
@@ -178,8 +184,8 @@ public:
 
 protected:
 
-	ACCELSENSOR_RAWDATA vData;		//!< Current sensor data updated with UpdateData()
-	ACCELINTCB vIntHandler;
+	AccelSensorRawData_t vData;		//!< Current sensor data updated with UpdateData()
+	AccelSensorEvtCb_t vIntHandler;
 
 private:
 	uint16_t vScale;			//!< Sensor data scale in g force (2g, 4g, ...)

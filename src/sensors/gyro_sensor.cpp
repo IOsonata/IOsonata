@@ -35,7 +35,7 @@ SOFTWARE.
 
 #include "sensors/gyro_sensor.h"
 
-bool GyroSensor::Read(GYROSENSOR_DATA &Data)
+bool GyroSensor::Read(GyroSensorData_t &Data)
 {
 	Data.Timestamp = vData.Timestamp;
 	Data.X = (float)vData.X * vCalibGain[0][0] + vData.Y * vCalibGain[1][0] + vData.Z * vCalibGain[2][0] + vCalibOffset[0];
