@@ -351,7 +351,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint16_t Scale(uint16_t Value);			// Accel
 
 private:
@@ -371,7 +371,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
 
 private:
@@ -391,7 +391,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 	virtual bool Enable();
 	virtual void Disable();
 
@@ -412,7 +412,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const ACCELSENSOR_CFG &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		return AccelLsm9ds1::Init(Cfg, pIntrf, pTimer);
 	}
 
@@ -427,7 +427,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const GYROSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
 		return GyroLsm9ds1::Init(Cfg, pIntrf, pTimer);
 	}
 
@@ -442,7 +442,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Init(const MAGSENSOR_CFG &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
 		return MagLsm9ds1::Init(Cfg, pIntrf, pTimer);
 	}
 
@@ -466,9 +466,9 @@ public:
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
 
 
-	virtual bool Read(ACCELSENSOR_DATA &Data);
-	virtual bool Read(GYROSENSOR_DATA &Data);
-	virtual bool Read(MAGSENSOR_DATA &Data);
+	virtual bool Read(AccelSensorData_t &Data);
+	virtual bool Read(GyroSensorData_t &Data);
+	virtual bool Read(MagSensorData_t &Data);
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);

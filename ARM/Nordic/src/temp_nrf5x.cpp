@@ -37,15 +37,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static TempnRF5x *s_pTempnRF5x = NULL;
 
-extern "C" void TEMP_IRQHandler(void)
-{
-	if (s_pTempnRF5x != NULL)
-	{
-		s_pTempnRF5x->IntHandler();
-	}
-    NVIC_ClearPendingIRQ(TEMP_IRQn);
-}
-
 void TempnRF5x::IntHandler()
 {
 	if (UpdateData() == true)
@@ -57,7 +48,7 @@ void TempnRF5x::IntHandler()
 	}
 }
 
-bool TempnRF5x::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool TempnRF5x::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	vpTimer = pTimer;
 	vpIntrf = NULL;
@@ -65,9 +56,11 @@ bool TempnRF5x::Init(const TEMPSENSOR_CFG &CfgData, DeviceIntrf * const pIntrf, 
 
 	s_pTempnRF5x = this;
 
-    NRF_TEMP->INTENSET = 1;
+   // NRF_TEMP->TASKS_STOP = 1;
+    //NRF_TEMP->EVENTS_DATARDY = 0;
+    //NRF_TEMP->INTENSET = 1;
 
-	NVIC_ClearPendingIRQ(TEMP_IRQn);
+    NVIC_ClearPendingIRQ(TEMP_IRQn);
 	NVIC_SetPriority(TEMP_IRQn, CfgData.IntPrio);
 	NVIC_EnableIRQ(TEMP_IRQn);
 
@@ -134,6 +127,17 @@ bool TempnRF5x::UpdateData()
 	}
 
 	return false;
+}
+
+extern "C" void TEMP_IRQHandler(void)
+{
+	NRF_TEMP->TASKS_STOP = 1;
+
+	if (s_pTempnRF5x != NULL)
+	{
+		s_pTempnRF5x->IntHandler();
+	}
+    NVIC_ClearPendingIRQ(TEMP_IRQn);
 }
 
 

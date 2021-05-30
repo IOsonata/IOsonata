@@ -125,7 +125,7 @@ const static TimerCfg_t s_TimerCfg = {
 
 Timer g_Timer;
 
-static const ACCELSENSOR_CFG s_AccelCfg = {
+static const AccelSensorCfg_t s_AccelCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 1000,
@@ -135,7 +135,7 @@ static const ACCELSENSOR_CFG s_AccelCfg = {
 	.IntPol = DEVINTR_POL_LOW,
 };
 
-static const GYROSENSOR_CFG s_GyroCfg = {
+static const GyroSensorCfg_t s_GyroCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
@@ -143,7 +143,7 @@ static const GYROSENSOR_CFG s_GyroCfg = {
 	.FltrFreq = 200,
 };
 
-static const MAGSENSOR_CFG s_MagCfg = {
+static const MagSensorCfg_t s_MagCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,//SENSOR_OPMODE_SINGLE,
 	.Freq = 50000,
@@ -152,7 +152,7 @@ static const MAGSENSOR_CFG s_MagCfg = {
 
 void ImuEvtHandler(Device * const pDev, DEV_EVT Evt);
 
-static const IMU_CFG s_ImuCfg = {
+static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
@@ -193,8 +193,8 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 
 void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 {
-	ACCELSENSOR_DATA accdata;
-	IMU_QUAT quat;
+	AccelSensorData_t accdata;
+	ImuQuat_t quat;
 
 	switch (Evt)
 	{
@@ -320,16 +320,16 @@ int main()
 
 	printf("MotionSensorDemo\r\n");
 
-	ACCELSENSOR_RAWDATA arawdata;
-	ACCELSENSOR_DATA accdata;
-	GYROSENSOR_RAWDATA grawdata;
-	GYROSENSOR_DATA gyrodata;
-	MAGSENSOR_RAWDATA mrawdata;
-	IMU_QUAT quat;
+	AccelSensorRawData_t arawdata;
+	AccelSensorData_t accdata;
+	GyroSensorRawData_t grawdata;
+	GyroSensorData_t gyrodata;
+	MagSensorRawData_t mrawdata;
+	ImuQuat_t quat;
 
-	memset(&arawdata, 0, sizeof(ACCELSENSOR_RAWDATA));
-	memset(&accdata, 0, sizeof(ACCELSENSOR_DATA));
-	memset(&gyrodata, 0, sizeof(GYROSENSOR_DATA));
+	memset(&arawdata, 0, sizeof(AccelSensorRawData_t));
+	memset(&accdata, 0, sizeof(AccelSensorData_t));
+	memset(&gyrodata, 0, sizeof(GyroSensorData_t));
 
 
 	uint32_t prevt = 0;
