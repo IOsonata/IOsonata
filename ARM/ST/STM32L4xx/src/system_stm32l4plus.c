@@ -221,6 +221,10 @@ void SystemCoreClockUpdate(void)
 		SystemCoreClock = (SystemCoreClock * n / (m * r));
 	}
 
+	if (SystemCoreClock > 80000000)
+	{
+		PWR->CR5 &= ~PWR_CR5_R1MODE;
+	}
 	// Update Flash wait state to current core freq.
 	SetFlashWaitState(SystemCoreClock);
 	SystemPeriphClockSet(0, SystemCoreClock >> 1);
