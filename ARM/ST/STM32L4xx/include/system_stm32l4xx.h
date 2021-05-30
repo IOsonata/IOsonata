@@ -41,9 +41,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
-extern uint32_t SystemCoreClock;     /*!< System Clock Frequency (Core Clock)  */
-
-
 /**
  * Initialize the system
  *
@@ -69,5 +66,10 @@ void SystemCoreClockUpdate (void);
 #ifdef __cplusplus
 }
 #endif
+
+extern uint32_t SystemCoreClock;     /*!< System Clock Frequency (Core Clock)  */
+extern const uint8_t  AHBPrescTable[16];    /*!< AHB prescalers table values */
+extern const uint8_t  APBPrescTable[8];     /*!< APB prescalers table values */
+extern const uint32_t MSIRangeTable[12];    /*!< MSI ranges table values     */
 
 #endif // __SYSTEM_STM32L4xx_H__
