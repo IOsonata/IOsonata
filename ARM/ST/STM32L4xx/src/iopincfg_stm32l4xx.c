@@ -92,7 +92,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 
 	uint32_t pos = PinNo << 1;
 	tmp = reg->MODER & ~(GPIO_MODER_MODE0_Msk << pos);
-#if 1
+
 	if (PinOp == IOPINOP_GPIO)
 	{
 		if (Dir == IOPINDIR_OUTPUT)
@@ -117,34 +117,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 		// Analog
 		tmp |= 3 << pos;
 	}
-#else
-	switch (PinOp & 0xF)
-	{
-		case 0:	// GPIO input
-		case 1:	// GPIO ouput
-			if (Dir == IOPINDIR_OUTPUT)
-			{
-				tmp |= 1 << pos;
-			}
 
-			break;
-		case 2:	// Alternate function
-			{
-				tmp |= 2 << pos;
-
-				pos = (PinNo & 0x7) << 2;
-				int idx = PinNo >> 3;
-
-				reg->AFR[idx] &= ~(0xf << pos);
-				reg->AFR[idx] |= ((PinOp >> 4) & 0xf) << pos;
-
-			}
-			break;
-		case 3:	// Analog
-			tmp |= 3 << pos;
-			break;
-	}
-#endif
 	reg->MODER = tmp;
 
 	pos = PinNo << 1;
