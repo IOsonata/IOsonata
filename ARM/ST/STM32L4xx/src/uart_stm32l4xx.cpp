@@ -58,7 +58,7 @@ SOFTWARE.
 #define USART_CR1_RXNEIE		USART_CR1_RXNEIE_RXFNEIE
 #endif
 
-#define STM32L4X_UART_HWFIFO_SIZE		4
+#define STM32L4X_UART_HWFIFO_SIZE		8
 #define STM32L4X_UART_RXTIMEOUT			15
 #define STM32L4X_UART_BUFF_SIZE			(4 * STM32L4X_UART_HWFIFO_SIZE)
 #define STM32L4X_UART_CFIFO_SIZE		CFIFO_MEMSIZE(STM32L4X_UART_BUFF_SIZE)
@@ -87,27 +87,27 @@ static uint32_t s_FclkFreq = SystemCoreClock;		// FCLK frequency in Hz
 static STM32L4X_UARTDEV s_Stm32l4xUartDev[] = {
 	{
 		.DevNo = 0,
-		.pReg = USART1,
+		.pReg = LPUART1,
 	},
 	{
 		.DevNo = 1,
-		.pReg = USART2,
+		.pReg = USART1,
 	},
 	{
 		.DevNo = 2,
-		.pReg = USART3,
+		.pReg = USART2,
 	},
 	{
 		.DevNo = 3,
-		.pReg = UART4,
+		.pReg = USART3,
 	},
 	{
 		.DevNo = 4,
-		.pReg = UART5,
+		.pReg = UART4,
 	},
 	{
 		.DevNo = 5,
-		.pReg = LPUART1,
+		.pReg = UART5,
 	},
 };
 
@@ -242,11 +242,22 @@ static uint32_t STM32L4xUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
 	uint32_t div;
 
-	if (dev->DevNo == 5)
+	if (dev->DevNo == 0)
 	{
-		uint64_t fclk2 = (uint64_t)s_FclkFreq << 8ULL;
+		uint64_t fclk2 = 16000000 << 8;
+		uint32_t tmp = RCC->CCIPR;
+		if (GetLowFreqOscType() == OSC_TYPE_XTAL && Rate < 10922)
+		{
+			fclk2 = 32768 << 8;
+			tmp = (tmp & ~RCC_CCIPR_LPUART1SEL_Msk) | RCC_CCIPR_USARTSEL(6, RCC_CCIPR_USARTSEL_LSE);
+		}
+		else if (Rate < 5333333)
+		{
+			tmp = (tmp & ~RCC_CCIPR_LPUART1SEL_Msk) | RCC_CCIPR_USARTSEL(6, RCC_CCIPR_USARTSEL_HSI16);
+		}
 		div = (fclk2 + (uint64_t)(Rate >> 1ULL)) / Rate;
 		dev->pUartDev->Rate = fclk2 / div;
+		RCC->CCIPR = tmp;
 	}
 	else
 	{
@@ -527,28 +538,35 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	switch (devno)
 	{
 		case 0:
+			if (GetLowFreqOscType() == OSC_TYPE_XTAL)
+			{
+				tmp = (tmp & ~RCC_CCIPR_LPUART1SEL_Msk) | RCC_CCIPR_USARTSEL(6, RCC_CCIPR_USARTSEL_LSE);
+			}
+			else
+			{
+				tmp = (tmp & ~RCC_CCIPR_LPUART1SEL_Msk) | RCC_CCIPR_USARTSEL(6, RCC_CCIPR_USARTSEL_HSI16);
+			}
+			RCC->APB1ENR2 |= RCC_APB1ENR2_LPUART1EN;
+			break;
+		case 1:
 			tmp = (tmp & ~RCC_CCIPR_USART1SEL_Msk) | RCC_CCIPR_USARTSEL(1, RCC_CCIPR_USARTSEL_SYSCLK);
 			RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
 			break;
-		case 1:
+		case 2:
 			tmp = (tmp & ~RCC_CCIPR_USART2SEL_Msk) | RCC_CCIPR_USARTSEL(2, RCC_CCIPR_USARTSEL_SYSCLK);
 			RCC->APB1ENR1 |= RCC_APB1ENR1_USART2EN;
 			break;
-		case 2:
+		case 3:
 			tmp = (tmp & ~RCC_CCIPR_USART3SEL_Msk) | RCC_CCIPR_USARTSEL(3, RCC_CCIPR_USARTSEL_SYSCLK);
 			RCC->APB1ENR1 |= RCC_APB1ENR1_USART3EN;
 			break;
-		case 3:
+		case 4:
 			tmp = (tmp & ~RCC_CCIPR_UART4SEL_Msk) | RCC_CCIPR_USARTSEL(4, RCC_CCIPR_USARTSEL_SYSCLK);
 			RCC->APB1ENR1 |= RCC_APB1ENR1_UART4EN;
 			break;
-		case 4:
+		case 5:
 			tmp = (tmp & ~RCC_CCIPR_UART5SEL_Msk) | RCC_CCIPR_USARTSEL(5, RCC_CCIPR_USARTSEL_SYSCLK);
 			RCC->APB1ENR1 |= RCC_APB1ENR1_UART5EN;
-			break;
-		case 5:
-			tmp = (tmp & ~RCC_CCIPR_LPUART1SEL_Msk) | RCC_CCIPR_USARTSEL(6, RCC_CCIPR_USARTSEL_SYSCLK);
-			RCC->APB1ENR2 |= RCC_APB1ENR2_LPUART1EN;
 			break;
 	}
 	RCC->CCIPR = tmp;
