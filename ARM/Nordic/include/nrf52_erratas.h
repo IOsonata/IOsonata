@@ -3,7 +3,9 @@
 
 /*
 
-Copyright (c) 2010 - 2020, Nordic Semiconductor ASA All rights reserved.
+Copyright (c) 2010 - 2021, Nordic Semiconductor ASA All rights reserved.
+
+SPDX-License-Identifier: BSD-3-Clause
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -213,7 +215,26 @@ static bool nrf52_errata_232(void) __UNUSED;
 static bool nrf52_errata_233(void) __UNUSED;
 static bool nrf52_errata_236(void) __UNUSED;
 static bool nrf52_errata_237(void) __UNUSED;
+static bool nrf52_errata_242(void) __UNUSED;
+static bool nrf52_errata_243(void) __UNUSED;
+static bool nrf52_errata_244(void) __UNUSED;
+static bool nrf52_errata_245(void) __UNUSED;
+static bool nrf52_errata_246(void) __UNUSED;
 static bool nrf52_errata_248(void) __UNUSED;
+static bool nrf52_errata_249(void) __UNUSED;
+static bool nrf52_errata_250(void) __UNUSED;
+
+/* ========= Errata 1 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_1_PRESENT 1
+#else
+    #define NRF52_ERRATA_1_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_1_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_1_ENABLE_WORKAROUND NRF52_ERRATA_1_PRESENT
+#endif
 
 static bool nrf52_errata_1(void)
 {
@@ -239,6 +260,8 @@ static bool nrf52_errata_1(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -247,6 +270,18 @@ static bool nrf52_errata_1(void)
         return false;
     #endif
 }
+
+/* ========= Errata 2 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_2_PRESENT 1
+#else
+    #define NRF52_ERRATA_2_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_2_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_2_ENABLE_WORKAROUND NRF52_ERRATA_2_PRESENT
+#endif
 
 static bool nrf52_errata_2(void)
 {
@@ -272,6 +307,8 @@ static bool nrf52_errata_2(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -280,6 +317,18 @@ static bool nrf52_errata_2(void)
         return false;
     #endif
 }
+
+/* ========= Errata 3 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_3_PRESENT 1
+#else
+    #define NRF52_ERRATA_3_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_3_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_3_ENABLE_WORKAROUND NRF52_ERRATA_3_PRESENT
+#endif
 
 static bool nrf52_errata_3(void)
 {
@@ -305,6 +354,8 @@ static bool nrf52_errata_3(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -313,6 +364,18 @@ static bool nrf52_errata_3(void)
         return false;
     #endif
 }
+
+/* ========= Errata 4 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_4_PRESENT 1
+#else
+    #define NRF52_ERRATA_4_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_4_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_4_ENABLE_WORKAROUND NRF52_ERRATA_4_PRESENT
+#endif
 
 static bool nrf52_errata_4(void)
 {
@@ -338,6 +401,8 @@ static bool nrf52_errata_4(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -346,6 +411,18 @@ static bool nrf52_errata_4(void)
         return false;
     #endif
 }
+
+/* ========= Errata 7 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_7_PRESENT 1
+#else
+    #define NRF52_ERRATA_7_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_7_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_7_ENABLE_WORKAROUND NRF52_ERRATA_7_PRESENT
+#endif
 
 static bool nrf52_errata_7(void)
 {
@@ -371,6 +448,8 @@ static bool nrf52_errata_7(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -379,6 +458,18 @@ static bool nrf52_errata_7(void)
         return false;
     #endif
 }
+
+/* ========= Errata 8 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_8_PRESENT 1
+#else
+    #define NRF52_ERRATA_8_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_8_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_8_ENABLE_WORKAROUND NRF52_ERRATA_8_PRESENT
+#endif
 
 static bool nrf52_errata_8(void)
 {
@@ -404,6 +495,8 @@ static bool nrf52_errata_8(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -412,6 +505,18 @@ static bool nrf52_errata_8(void)
         return false;
     #endif
 }
+
+/* ========= Errata 9 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_9_PRESENT 1
+#else
+    #define NRF52_ERRATA_9_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_9_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_9_ENABLE_WORKAROUND NRF52_ERRATA_9_PRESENT
+#endif
 
 static bool nrf52_errata_9(void)
 {
@@ -437,6 +542,8 @@ static bool nrf52_errata_9(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -445,6 +552,18 @@ static bool nrf52_errata_9(void)
         return false;
     #endif
 }
+
+/* ========= Errata 10 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_10_PRESENT 1
+#else
+    #define NRF52_ERRATA_10_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_10_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_10_ENABLE_WORKAROUND NRF52_ERRATA_10_PRESENT
+#endif
 
 static bool nrf52_errata_10(void)
 {
@@ -470,6 +589,8 @@ static bool nrf52_errata_10(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -478,6 +599,18 @@ static bool nrf52_errata_10(void)
         return false;
     #endif
 }
+
+/* ========= Errata 11 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_11_PRESENT 1
+#else
+    #define NRF52_ERRATA_11_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_11_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_11_ENABLE_WORKAROUND NRF52_ERRATA_11_PRESENT
+#endif
 
 static bool nrf52_errata_11(void)
 {
@@ -503,6 +636,8 @@ static bool nrf52_errata_11(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -511,6 +646,18 @@ static bool nrf52_errata_11(void)
         return false;
     #endif
 }
+
+/* ========= Errata 12 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_12_PRESENT 1
+#else
+    #define NRF52_ERRATA_12_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_12_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_12_ENABLE_WORKAROUND NRF52_ERRATA_12_PRESENT
+#endif
 
 static bool nrf52_errata_12(void)
 {
@@ -547,6 +694,8 @@ static bool nrf52_errata_12(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -555,6 +704,22 @@ static bool nrf52_errata_12(void)
         return false;
     #endif
 }
+
+/* ========= Errata 15 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_15_PRESENT 1
+#else
+    #define NRF52_ERRATA_15_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_15_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_15_ENABLE_WORKAROUND NRF52_ERRATA_15_PRESENT
+#endif
 
 static bool nrf52_errata_15(void)
 {
@@ -597,6 +762,8 @@ static bool nrf52_errata_15(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -614,6 +781,10 @@ static bool nrf52_errata_15(void)
                     case 0x02ul:
                         return false;
                     case 0x03ul:
+                        return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
                         return false;
                     default:
                         return false;
@@ -662,6 +833,18 @@ static bool nrf52_errata_15(void)
     #endif
 }
 
+/* ========= Errata 16 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_16_PRESENT 1
+#else
+    #define NRF52_ERRATA_16_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_16_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_16_ENABLE_WORKAROUND NRF52_ERRATA_16_PRESENT
+#endif
+
 static bool nrf52_errata_16(void)
 {
     #ifndef NRF52_SERIES
@@ -686,6 +869,8 @@ static bool nrf52_errata_16(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -694,6 +879,18 @@ static bool nrf52_errata_16(void)
         return false;
     #endif
 }
+
+/* ========= Errata 17 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_17_PRESENT 1
+#else
+    #define NRF52_ERRATA_17_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_17_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_17_ENABLE_WORKAROUND NRF52_ERRATA_17_PRESENT
+#endif
 
 static bool nrf52_errata_17(void)
 {
@@ -719,6 +916,8 @@ static bool nrf52_errata_17(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -727,6 +926,24 @@ static bool nrf52_errata_17(void)
         return false;
     #endif
 }
+
+/* ========= Errata 20 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_20_PRESENT 1
+#else
+    #define NRF52_ERRATA_20_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_20_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_20_ENABLE_WORKAROUND NRF52_ERRATA_20_PRESENT
+#endif
 
 static bool nrf52_errata_20(void)
 {
@@ -771,6 +988,8 @@ static bool nrf52_errata_20(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -788,6 +1007,10 @@ static bool nrf52_errata_20(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -816,6 +1039,8 @@ static bool nrf52_errata_20(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -857,6 +1082,8 @@ static bool nrf52_errata_20(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -865,6 +1092,18 @@ static bool nrf52_errata_20(void)
         return false;
     #endif
 }
+
+/* ========= Errata 23 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_23_PRESENT 1
+#else
+    #define NRF52_ERRATA_23_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_23_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_23_ENABLE_WORKAROUND NRF52_ERRATA_23_PRESENT
+#endif
 
 static bool nrf52_errata_23(void)
 {
@@ -890,6 +1129,8 @@ static bool nrf52_errata_23(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -898,6 +1139,18 @@ static bool nrf52_errata_23(void)
         return false;
     #endif
 }
+
+/* ========= Errata 24 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_24_PRESENT 1
+#else
+    #define NRF52_ERRATA_24_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_24_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_24_ENABLE_WORKAROUND NRF52_ERRATA_24_PRESENT
+#endif
 
 static bool nrf52_errata_24(void)
 {
@@ -923,6 +1176,8 @@ static bool nrf52_errata_24(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -931,6 +1186,18 @@ static bool nrf52_errata_24(void)
         return false;
     #endif
 }
+
+/* ========= Errata 25 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_25_PRESENT 1
+#else
+    #define NRF52_ERRATA_25_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_25_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_25_ENABLE_WORKAROUND NRF52_ERRATA_25_PRESENT
+#endif
 
 static bool nrf52_errata_25(void)
 {
@@ -956,6 +1223,8 @@ static bool nrf52_errata_25(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -964,6 +1233,18 @@ static bool nrf52_errata_25(void)
         return false;
     #endif
 }
+
+/* ========= Errata 26 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_26_PRESENT 1
+#else
+    #define NRF52_ERRATA_26_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_26_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_26_ENABLE_WORKAROUND NRF52_ERRATA_26_PRESENT
+#endif
 
 static bool nrf52_errata_26(void)
 {
@@ -989,6 +1270,8 @@ static bool nrf52_errata_26(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -997,6 +1280,18 @@ static bool nrf52_errata_26(void)
         return false;
     #endif
 }
+
+/* ========= Errata 27 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_27_PRESENT 1
+#else
+    #define NRF52_ERRATA_27_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_27_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_27_ENABLE_WORKAROUND NRF52_ERRATA_27_PRESENT
+#endif
 
 static bool nrf52_errata_27(void)
 {
@@ -1022,6 +1317,8 @@ static bool nrf52_errata_27(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1030,6 +1327,18 @@ static bool nrf52_errata_27(void)
         return false;
     #endif
 }
+
+/* ========= Errata 28 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_28_PRESENT 1
+#else
+    #define NRF52_ERRATA_28_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_28_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_28_ENABLE_WORKAROUND NRF52_ERRATA_28_PRESENT
+#endif
 
 static bool nrf52_errata_28(void)
 {
@@ -1055,6 +1364,8 @@ static bool nrf52_errata_28(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1063,6 +1374,18 @@ static bool nrf52_errata_28(void)
         return false;
     #endif
 }
+
+/* ========= Errata 29 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_29_PRESENT 1
+#else
+    #define NRF52_ERRATA_29_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_29_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_29_ENABLE_WORKAROUND NRF52_ERRATA_29_PRESENT
+#endif
 
 static bool nrf52_errata_29(void)
 {
@@ -1088,6 +1411,8 @@ static bool nrf52_errata_29(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1096,6 +1421,18 @@ static bool nrf52_errata_29(void)
         return false;
     #endif
 }
+
+/* ========= Errata 30 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_30_PRESENT 1
+#else
+    #define NRF52_ERRATA_30_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_30_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_30_ENABLE_WORKAROUND NRF52_ERRATA_30_PRESENT
+#endif
 
 static bool nrf52_errata_30(void)
 {
@@ -1121,6 +1458,8 @@ static bool nrf52_errata_30(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1129,6 +1468,21 @@ static bool nrf52_errata_30(void)
         return false;
     #endif
 }
+
+/* ========= Errata 31 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_31_PRESENT 1
+#else
+    #define NRF52_ERRATA_31_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_31_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_31_ENABLE_WORKAROUND NRF52_ERRATA_31_PRESENT
+#endif
 
 static bool nrf52_errata_31(void)
 {
@@ -1169,6 +1523,8 @@ static bool nrf52_errata_31(void)
                     case 0x05ul:
                         return true;
                     case 0x06ul:
+                        return true;
+                    case 0x07ul:
                         return true;
                     default:
                         return true;
@@ -1217,6 +1573,18 @@ static bool nrf52_errata_31(void)
     #endif
 }
 
+/* ========= Errata 32 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_32_PRESENT 1
+#else
+    #define NRF52_ERRATA_32_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_32_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_32_ENABLE_WORKAROUND NRF52_ERRATA_32_PRESENT
+#endif
+
 static bool nrf52_errata_32(void)
 {
     #ifndef NRF52_SERIES
@@ -1241,6 +1609,8 @@ static bool nrf52_errata_32(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1249,6 +1619,18 @@ static bool nrf52_errata_32(void)
         return false;
     #endif
 }
+
+/* ========= Errata 33 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_33_PRESENT 1
+#else
+    #define NRF52_ERRATA_33_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_33_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_33_ENABLE_WORKAROUND NRF52_ERRATA_33_PRESENT
+#endif
 
 static bool nrf52_errata_33(void)
 {
@@ -1274,6 +1656,8 @@ static bool nrf52_errata_33(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1282,6 +1666,18 @@ static bool nrf52_errata_33(void)
         return false;
     #endif
 }
+
+/* ========= Errata 34 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_34_PRESENT 1
+#else
+    #define NRF52_ERRATA_34_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_34_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_34_ENABLE_WORKAROUND NRF52_ERRATA_34_PRESENT
+#endif
 
 static bool nrf52_errata_34(void)
 {
@@ -1307,6 +1703,8 @@ static bool nrf52_errata_34(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1315,6 +1713,18 @@ static bool nrf52_errata_34(void)
         return false;
     #endif
 }
+
+/* ========= Errata 35 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_35_PRESENT 1
+#else
+    #define NRF52_ERRATA_35_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_35_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_35_ENABLE_WORKAROUND NRF52_ERRATA_35_PRESENT
+#endif
 
 static bool nrf52_errata_35(void)
 {
@@ -1340,6 +1750,8 @@ static bool nrf52_errata_35(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1348,6 +1760,24 @@ static bool nrf52_errata_35(void)
         return false;
     #endif
 }
+
+/* ========= Errata 36 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_36_PRESENT 1
+#else
+    #define NRF52_ERRATA_36_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_36_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_36_ENABLE_WORKAROUND NRF52_ERRATA_36_PRESENT
+#endif
 
 static bool nrf52_errata_36(void)
 {
@@ -1392,6 +1822,8 @@ static bool nrf52_errata_36(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -1409,6 +1841,10 @@ static bool nrf52_errata_36(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -1437,6 +1873,8 @@ static bool nrf52_errata_36(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -1478,6 +1916,8 @@ static bool nrf52_errata_36(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -1486,6 +1926,18 @@ static bool nrf52_errata_36(void)
         return false;
     #endif
 }
+
+/* ========= Errata 37 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_37_PRESENT 1
+#else
+    #define NRF52_ERRATA_37_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_37_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_37_ENABLE_WORKAROUND NRF52_ERRATA_37_PRESENT
+#endif
 
 static bool nrf52_errata_37(void)
 {
@@ -1511,6 +1963,8 @@ static bool nrf52_errata_37(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1519,6 +1973,18 @@ static bool nrf52_errata_37(void)
         return false;
     #endif
 }
+
+/* ========= Errata 38 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_38_PRESENT 1
+#else
+    #define NRF52_ERRATA_38_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_38_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_38_ENABLE_WORKAROUND NRF52_ERRATA_38_PRESENT
+#endif
 
 static bool nrf52_errata_38(void)
 {
@@ -1544,6 +2010,8 @@ static bool nrf52_errata_38(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1552,6 +2020,18 @@ static bool nrf52_errata_38(void)
         return false;
     #endif
 }
+
+/* ========= Errata 39 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_39_PRESENT 1
+#else
+    #define NRF52_ERRATA_39_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_39_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_39_ENABLE_WORKAROUND NRF52_ERRATA_39_PRESENT
+#endif
 
 static bool nrf52_errata_39(void)
 {
@@ -1577,6 +2057,8 @@ static bool nrf52_errata_39(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1585,6 +2067,18 @@ static bool nrf52_errata_39(void)
         return false;
     #endif
 }
+
+/* ========= Errata 40 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_40_PRESENT 1
+#else
+    #define NRF52_ERRATA_40_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_40_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_40_ENABLE_WORKAROUND NRF52_ERRATA_40_PRESENT
+#endif
 
 static bool nrf52_errata_40(void)
 {
@@ -1610,6 +2104,8 @@ static bool nrf52_errata_40(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1618,6 +2114,18 @@ static bool nrf52_errata_40(void)
         return false;
     #endif
 }
+
+/* ========= Errata 41 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_41_PRESENT 1
+#else
+    #define NRF52_ERRATA_41_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_41_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_41_ENABLE_WORKAROUND NRF52_ERRATA_41_PRESENT
+#endif
 
 static bool nrf52_errata_41(void)
 {
@@ -1643,6 +2151,8 @@ static bool nrf52_errata_41(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1651,6 +2161,18 @@ static bool nrf52_errata_41(void)
         return false;
     #endif
 }
+
+/* ========= Errata 42 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_42_PRESENT 1
+#else
+    #define NRF52_ERRATA_42_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_42_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_42_ENABLE_WORKAROUND NRF52_ERRATA_42_PRESENT
+#endif
 
 static bool nrf52_errata_42(void)
 {
@@ -1676,6 +2198,8 @@ static bool nrf52_errata_42(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1684,6 +2208,18 @@ static bool nrf52_errata_42(void)
         return false;
     #endif
 }
+
+/* ========= Errata 43 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_43_PRESENT 1
+#else
+    #define NRF52_ERRATA_43_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_43_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_43_ENABLE_WORKAROUND NRF52_ERRATA_43_PRESENT
+#endif
 
 static bool nrf52_errata_43(void)
 {
@@ -1709,6 +2245,8 @@ static bool nrf52_errata_43(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1717,6 +2255,18 @@ static bool nrf52_errata_43(void)
         return false;
     #endif
 }
+
+/* ========= Errata 44 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_44_PRESENT 1
+#else
+    #define NRF52_ERRATA_44_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_44_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_44_ENABLE_WORKAROUND NRF52_ERRATA_44_PRESENT
+#endif
 
 static bool nrf52_errata_44(void)
 {
@@ -1742,6 +2292,8 @@ static bool nrf52_errata_44(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1750,6 +2302,18 @@ static bool nrf52_errata_44(void)
         return false;
     #endif
 }
+
+/* ========= Errata 46 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_46_PRESENT 1
+#else
+    #define NRF52_ERRATA_46_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_46_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_46_ENABLE_WORKAROUND NRF52_ERRATA_46_PRESENT
+#endif
 
 static bool nrf52_errata_46(void)
 {
@@ -1775,6 +2339,8 @@ static bool nrf52_errata_46(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1783,6 +2349,18 @@ static bool nrf52_errata_46(void)
         return false;
     #endif
 }
+
+/* ========= Errata 47 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_47_PRESENT 1
+#else
+    #define NRF52_ERRATA_47_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_47_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_47_ENABLE_WORKAROUND NRF52_ERRATA_47_PRESENT
+#endif
 
 static bool nrf52_errata_47(void)
 {
@@ -1808,6 +2386,8 @@ static bool nrf52_errata_47(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1816,6 +2396,18 @@ static bool nrf52_errata_47(void)
         return false;
     #endif
 }
+
+/* ========= Errata 48 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_48_PRESENT 1
+#else
+    #define NRF52_ERRATA_48_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_48_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_48_ENABLE_WORKAROUND NRF52_ERRATA_48_PRESENT
+#endif
 
 static bool nrf52_errata_48(void)
 {
@@ -1841,6 +2433,8 @@ static bool nrf52_errata_48(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1849,6 +2443,18 @@ static bool nrf52_errata_48(void)
         return false;
     #endif
 }
+
+/* ========= Errata 49 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_49_PRESENT 1
+#else
+    #define NRF52_ERRATA_49_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_49_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_49_ENABLE_WORKAROUND NRF52_ERRATA_49_PRESENT
+#endif
 
 static bool nrf52_errata_49(void)
 {
@@ -1874,6 +2480,8 @@ static bool nrf52_errata_49(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1882,6 +2490,18 @@ static bool nrf52_errata_49(void)
         return false;
     #endif
 }
+
+/* ========= Errata 51 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_51_PRESENT 1
+#else
+    #define NRF52_ERRATA_51_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_51_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_51_ENABLE_WORKAROUND NRF52_ERRATA_51_PRESENT
+#endif
 
 static bool nrf52_errata_51(void)
 {
@@ -1918,6 +2538,8 @@ static bool nrf52_errata_51(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -1926,6 +2548,19 @@ static bool nrf52_errata_51(void)
         return false;
     #endif
 }
+
+/* ========= Errata 54 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_54_PRESENT 1
+#else
+    #define NRF52_ERRATA_54_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_54_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_54_ENABLE_WORKAROUND NRF52_ERRATA_54_PRESENT
+#endif
 
 static bool nrf52_errata_54(void)
 {
@@ -1965,6 +2600,8 @@ static bool nrf52_errata_54(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -1983,6 +2620,10 @@ static bool nrf52_errata_54(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -1991,6 +2632,21 @@ static bool nrf52_errata_54(void)
         return false;
     #endif
 }
+
+/* ========= Errata 55 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_55_PRESENT 1
+#else
+    #define NRF52_ERRATA_55_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_55_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_55_ENABLE_WORKAROUND NRF52_ERRATA_55_PRESENT
+#endif
 
 static bool nrf52_errata_55(void)
 {
@@ -2032,6 +2688,8 @@ static bool nrf52_errata_55(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2050,6 +2708,10 @@ static bool nrf52_errata_55(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2063,6 +2725,8 @@ static bool nrf52_errata_55(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -2080,6 +2744,8 @@ static bool nrf52_errata_55(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -2088,6 +2754,18 @@ static bool nrf52_errata_55(void)
         return false;
     #endif
 }
+
+/* ========= Errata 57 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_57_PRESENT 1
+#else
+    #define NRF52_ERRATA_57_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_57_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_57_ENABLE_WORKAROUND NRF52_ERRATA_57_PRESENT
+#endif
 
 static bool nrf52_errata_57(void)
 {
@@ -2113,6 +2791,8 @@ static bool nrf52_errata_57(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -2121,6 +2801,19 @@ static bool nrf52_errata_57(void)
         return false;
     #endif
 }
+
+/* ========= Errata 58 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_58_PRESENT 1
+#else
+    #define NRF52_ERRATA_58_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_58_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_58_ENABLE_WORKAROUND NRF52_ERRATA_58_PRESENT
+#endif
 
 static bool nrf52_errata_58(void)
 {
@@ -2160,6 +2853,8 @@ static bool nrf52_errata_58(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2178,6 +2873,10 @@ static bool nrf52_errata_58(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -2186,6 +2885,18 @@ static bool nrf52_errata_58(void)
         return false;
     #endif
 }
+
+/* ========= Errata 62 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_62_PRESENT 1
+#else
+    #define NRF52_ERRATA_62_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_62_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_62_ENABLE_WORKAROUND NRF52_ERRATA_62_PRESENT
+#endif
 
 static bool nrf52_errata_62(void)
 {
@@ -2211,6 +2922,8 @@ static bool nrf52_errata_62(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -2219,6 +2932,18 @@ static bool nrf52_errata_62(void)
         return false;
     #endif
 }
+
+/* ========= Errata 63 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_63_PRESENT 1
+#else
+    #define NRF52_ERRATA_63_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_63_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_63_ENABLE_WORKAROUND NRF52_ERRATA_63_PRESENT
+#endif
 
 static bool nrf52_errata_63(void)
 {
@@ -2244,6 +2969,8 @@ static bool nrf52_errata_63(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -2252,6 +2979,18 @@ static bool nrf52_errata_63(void)
         return false;
     #endif
 }
+
+/* ========= Errata 64 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_64_PRESENT 1
+#else
+    #define NRF52_ERRATA_64_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_64_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_64_ENABLE_WORKAROUND NRF52_ERRATA_64_PRESENT
+#endif
 
 static bool nrf52_errata_64(void)
 {
@@ -2288,6 +3027,8 @@ static bool nrf52_errata_64(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2296,6 +3037,18 @@ static bool nrf52_errata_64(void)
         return false;
     #endif
 }
+
+/* ========= Errata 65 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_65_PRESENT 1
+#else
+    #define NRF52_ERRATA_65_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_65_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_65_ENABLE_WORKAROUND NRF52_ERRATA_65_PRESENT
+#endif
 
 static bool nrf52_errata_65(void)
 {
@@ -2321,6 +3074,8 @@ static bool nrf52_errata_65(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -2329,6 +3084,24 @@ static bool nrf52_errata_65(void)
         return false;
     #endif
 }
+
+/* ========= Errata 66 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_66_PRESENT 1
+#else
+    #define NRF52_ERRATA_66_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_66_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_66_ENABLE_WORKAROUND NRF52_ERRATA_66_PRESENT
+#endif
 
 static bool nrf52_errata_66(void)
 {
@@ -2373,6 +3146,8 @@ static bool nrf52_errata_66(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2390,6 +3165,10 @@ static bool nrf52_errata_66(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -2418,6 +3197,8 @@ static bool nrf52_errata_66(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -2459,6 +3240,8 @@ static bool nrf52_errata_66(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2467,6 +3250,18 @@ static bool nrf52_errata_66(void)
         return false;
     #endif
 }
+
+/* ========= Errata 67 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_67_PRESENT 1
+#else
+    #define NRF52_ERRATA_67_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_67_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_67_ENABLE_WORKAROUND NRF52_ERRATA_67_PRESENT
+#endif
 
 static bool nrf52_errata_67(void)
 {
@@ -2503,6 +3298,8 @@ static bool nrf52_errata_67(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2511,6 +3308,22 @@ static bool nrf52_errata_67(void)
         return false;
     #endif
 }
+
+/* ========= Errata 68 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_68_PRESENT 1
+#else
+    #define NRF52_ERRATA_68_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_68_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_68_ENABLE_WORKAROUND NRF52_ERRATA_68_PRESENT
+#endif
 
 static bool nrf52_errata_68(void)
 {
@@ -2553,6 +3366,8 @@ static bool nrf52_errata_68(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2570,6 +3385,10 @@ static bool nrf52_errata_68(void)
                     case 0x02ul:
                         return false;
                     case 0x03ul:
+                        return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
                         return false;
                     default:
                         return false;
@@ -2618,6 +3437,18 @@ static bool nrf52_errata_68(void)
     #endif
 }
 
+/* ========= Errata 70 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_70_PRESENT 1
+#else
+    #define NRF52_ERRATA_70_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_70_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_70_ENABLE_WORKAROUND NRF52_ERRATA_70_PRESENT
+#endif
+
 static bool nrf52_errata_70(void)
 {
     #ifndef NRF52_SERIES
@@ -2642,6 +3473,8 @@ static bool nrf52_errata_70(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -2650,6 +3483,18 @@ static bool nrf52_errata_70(void)
         return false;
     #endif
 }
+
+/* ========= Errata 71 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_71_PRESENT 1
+#else
+    #define NRF52_ERRATA_71_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_71_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_71_ENABLE_WORKAROUND NRF52_ERRATA_71_PRESENT
+#endif
 
 static bool nrf52_errata_71(void)
 {
@@ -2675,6 +3520,8 @@ static bool nrf52_errata_71(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -2683,6 +3530,18 @@ static bool nrf52_errata_71(void)
         return false;
     #endif
 }
+
+/* ========= Errata 72 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_72_PRESENT 1
+#else
+    #define NRF52_ERRATA_72_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_72_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_72_ENABLE_WORKAROUND NRF52_ERRATA_72_PRESENT
+#endif
 
 static bool nrf52_errata_72(void)
 {
@@ -2719,6 +3578,8 @@ static bool nrf52_errata_72(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2727,6 +3588,18 @@ static bool nrf52_errata_72(void)
         return false;
     #endif
 }
+
+/* ========= Errata 73 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_73_PRESENT 1
+#else
+    #define NRF52_ERRATA_73_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_73_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_73_ENABLE_WORKAROUND NRF52_ERRATA_73_PRESENT
+#endif
 
 static bool nrf52_errata_73(void)
 {
@@ -2752,6 +3625,8 @@ static bool nrf52_errata_73(void)
                         return false;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -2760,6 +3635,18 @@ static bool nrf52_errata_73(void)
         return false;
     #endif
 }
+
+/* ========= Errata 74 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_74_PRESENT 1
+#else
+    #define NRF52_ERRATA_74_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_74_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_74_ENABLE_WORKAROUND NRF52_ERRATA_74_PRESENT
+#endif
 
 static bool nrf52_errata_74(void)
 {
@@ -2796,6 +3683,8 @@ static bool nrf52_errata_74(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2804,6 +3693,18 @@ static bool nrf52_errata_74(void)
         return false;
     #endif
 }
+
+/* ========= Errata 75 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_75_PRESENT 1
+#else
+    #define NRF52_ERRATA_75_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_75_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_75_ENABLE_WORKAROUND NRF52_ERRATA_75_PRESENT
+#endif
 
 static bool nrf52_errata_75(void)
 {
@@ -2840,6 +3741,8 @@ static bool nrf52_errata_75(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2848,6 +3751,18 @@ static bool nrf52_errata_75(void)
         return false;
     #endif
 }
+
+/* ========= Errata 76 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_76_PRESENT 1
+#else
+    #define NRF52_ERRATA_76_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_76_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_76_ENABLE_WORKAROUND NRF52_ERRATA_76_PRESENT
+#endif
 
 static bool nrf52_errata_76(void)
 {
@@ -2884,6 +3799,8 @@ static bool nrf52_errata_76(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2892,6 +3809,21 @@ static bool nrf52_errata_76(void)
         return false;
     #endif
 }
+
+/* ========= Errata 77 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_77_PRESENT 1
+#else
+    #define NRF52_ERRATA_77_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_77_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_77_ENABLE_WORKAROUND NRF52_ERRATA_77_PRESENT
+#endif
 
 static bool nrf52_errata_77(void)
 {
@@ -2933,6 +3865,8 @@ static bool nrf52_errata_77(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -2979,6 +3913,24 @@ static bool nrf52_errata_77(void)
         return false;
     #endif
 }
+
+/* ========= Errata 78 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_78_PRESENT 1
+#else
+    #define NRF52_ERRATA_78_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_78_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_78_ENABLE_WORKAROUND NRF52_ERRATA_78_PRESENT
+#endif
 
 static bool nrf52_errata_78(void)
 {
@@ -3023,6 +3975,8 @@ static bool nrf52_errata_78(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3040,6 +3994,10 @@ static bool nrf52_errata_78(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -3068,6 +4026,8 @@ static bool nrf52_errata_78(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -3109,6 +4069,8 @@ static bool nrf52_errata_78(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3117,6 +4079,18 @@ static bool nrf52_errata_78(void)
         return false;
     #endif
 }
+
+/* ========= Errata 79 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_79_PRESENT 1
+#else
+    #define NRF52_ERRATA_79_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_79_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_79_ENABLE_WORKAROUND NRF52_ERRATA_79_PRESENT
+#endif
 
 static bool nrf52_errata_79(void)
 {
@@ -3153,6 +4127,8 @@ static bool nrf52_errata_79(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3161,6 +4137,22 @@ static bool nrf52_errata_79(void)
         return false;
     #endif
 }
+
+/* ========= Errata 81 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_81_PRESENT 1
+#else
+    #define NRF52_ERRATA_81_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_81_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_81_ENABLE_WORKAROUND NRF52_ERRATA_81_PRESENT
+#endif
 
 static bool nrf52_errata_81(void)
 {
@@ -3203,6 +4195,8 @@ static bool nrf52_errata_81(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3220,6 +4214,10 @@ static bool nrf52_errata_81(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -3267,6 +4265,22 @@ static bool nrf52_errata_81(void)
         return false;
     #endif
 }
+
+/* ========= Errata 83 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_83_PRESENT 1
+#else
+    #define NRF52_ERRATA_83_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_83_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_83_ENABLE_WORKAROUND NRF52_ERRATA_83_PRESENT
+#endif
 
 static bool nrf52_errata_83(void)
 {
@@ -3309,6 +4323,8 @@ static bool nrf52_errata_83(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3326,6 +4342,10 @@ static bool nrf52_errata_83(void)
                     case 0x02ul:
                         return false;
                     case 0x03ul:
+                        return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
                         return false;
                     default:
                         return false;
@@ -3374,6 +4394,18 @@ static bool nrf52_errata_83(void)
     #endif
 }
 
+/* ========= Errata 84 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_84_PRESENT 1
+#else
+    #define NRF52_ERRATA_84_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_84_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_84_ENABLE_WORKAROUND NRF52_ERRATA_84_PRESENT
+#endif
+
 static bool nrf52_errata_84(void)
 {
     #ifndef NRF52_SERIES
@@ -3409,6 +4441,8 @@ static bool nrf52_errata_84(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3417,6 +4451,18 @@ static bool nrf52_errata_84(void)
         return false;
     #endif
 }
+
+/* ========= Errata 86 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_86_PRESENT 1
+#else
+    #define NRF52_ERRATA_86_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_86_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_86_ENABLE_WORKAROUND NRF52_ERRATA_86_PRESENT
+#endif
 
 static bool nrf52_errata_86(void)
 {
@@ -3453,6 +4499,8 @@ static bool nrf52_errata_86(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3461,6 +4509,21 @@ static bool nrf52_errata_86(void)
         return false;
     #endif
 }
+
+/* ========= Errata 87 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_87_PRESENT 1
+#else
+    #define NRF52_ERRATA_87_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_87_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_87_ENABLE_WORKAROUND NRF52_ERRATA_87_PRESENT
+#endif
 
 static bool nrf52_errata_87(void)
 {
@@ -3502,6 +4565,8 @@ static bool nrf52_errata_87(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3520,6 +4585,10 @@ static bool nrf52_errata_87(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3533,6 +4602,8 @@ static bool nrf52_errata_87(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -3549,15 +4620,32 @@ static bool nrf52_errata_87(void)
                     case 0x01ul:
                         return true;
                     case 0x02ul:
-                        return true;
+                        return false;
+                    case 0x03ul:
+                        return false;
                     default:
-                        return true;
+                        return false;
                 }
             }
         #endif
         return false;
     #endif
 }
+
+/* ========= Errata 88 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_88_PRESENT 1
+#else
+    #define NRF52_ERRATA_88_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_88_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_88_ENABLE_WORKAROUND NRF52_ERRATA_88_PRESENT
+#endif
 
 static bool nrf52_errata_88(void)
 {
@@ -3598,6 +4686,8 @@ static bool nrf52_errata_88(void)
                     case 0x05ul:
                         return true;
                     case 0x06ul:
+                        return true;
+                    case 0x07ul:
                         return true;
                     default:
                         return true;
@@ -3646,6 +4736,19 @@ static bool nrf52_errata_88(void)
     #endif
 }
 
+/* ========= Errata 89 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_89_PRESENT 1
+#else
+    #define NRF52_ERRATA_89_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_89_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_89_ENABLE_WORKAROUND NRF52_ERRATA_89_PRESENT
+#endif
+
 static bool nrf52_errata_89(void)
 {
     #ifndef NRF52_SERIES
@@ -3684,6 +4787,8 @@ static bool nrf52_errata_89(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3702,6 +4807,10 @@ static bool nrf52_errata_89(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -3710,6 +4819,18 @@ static bool nrf52_errata_89(void)
         return false;
     #endif
 }
+
+/* ========= Errata 91 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_91_PRESENT 1
+#else
+    #define NRF52_ERRATA_91_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_91_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_91_ENABLE_WORKAROUND NRF52_ERRATA_91_PRESENT
+#endif
 
 static bool nrf52_errata_91(void)
 {
@@ -3746,14 +4867,27 @@ static bool nrf52_errata_91(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return false;
                     default:
-                        return true;
+                        return false;
                 }
             }
         #endif
         return false;
     #endif
 }
+
+/* ========= Errata 94 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_94_PRESENT 1
+#else
+    #define NRF52_ERRATA_94_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_94_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_94_ENABLE_WORKAROUND NRF52_ERRATA_94_PRESENT
+#endif
 
 static bool nrf52_errata_94(void)
 {
@@ -3777,6 +4911,10 @@ static bool nrf52_errata_94(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -3785,6 +4923,17 @@ static bool nrf52_errata_94(void)
         return false;
     #endif
 }
+
+/* ========= Errata 96 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_96_PRESENT 1
+#else
+    #define NRF52_ERRATA_96_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_96_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_96_ENABLE_WORKAROUND NRF52_ERRATA_96_PRESENT
+#endif
 
 static bool nrf52_errata_96(void)
 {
@@ -3808,6 +4957,10 @@ static bool nrf52_errata_96(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -3816,6 +4969,19 @@ static bool nrf52_errata_96(void)
         return false;
     #endif
 }
+
+/* ========= Errata 97 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_97_PRESENT 1
+#else
+    #define NRF52_ERRATA_97_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_97_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_97_ENABLE_WORKAROUND NRF52_ERRATA_97_PRESENT
+#endif
 
 static bool nrf52_errata_97(void)
 {
@@ -3855,6 +5021,8 @@ static bool nrf52_errata_97(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3873,6 +5041,10 @@ static bool nrf52_errata_97(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -3881,6 +5053,17 @@ static bool nrf52_errata_97(void)
         return false;
     #endif
 }
+
+/* ========= Errata 98 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_98_PRESENT 1
+#else
+    #define NRF52_ERRATA_98_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_98_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_98_ENABLE_WORKAROUND NRF52_ERRATA_98_PRESENT
+#endif
 
 static bool nrf52_errata_98(void)
 {
@@ -3904,6 +5087,10 @@ static bool nrf52_errata_98(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -3912,6 +5099,18 @@ static bool nrf52_errata_98(void)
         return false;
     #endif
 }
+
+/* ========= Errata 101 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_101_PRESENT 1
+#else
+    #define NRF52_ERRATA_101_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_101_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_101_ENABLE_WORKAROUND NRF52_ERRATA_101_PRESENT
+#endif
 
 static bool nrf52_errata_101(void)
 {
@@ -3948,6 +5147,8 @@ static bool nrf52_errata_101(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -3956,6 +5157,18 @@ static bool nrf52_errata_101(void)
         return false;
     #endif
 }
+
+/* ========= Errata 102 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_102_PRESENT 1
+#else
+    #define NRF52_ERRATA_102_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_102_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_102_ENABLE_WORKAROUND NRF52_ERRATA_102_PRESENT
+#endif
 
 static bool nrf52_errata_102(void)
 {
@@ -3992,6 +5205,8 @@ static bool nrf52_errata_102(void)
                         return true;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4000,6 +5215,17 @@ static bool nrf52_errata_102(void)
         return false;
     #endif
 }
+
+/* ========= Errata 103 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_103_PRESENT 1
+#else
+    #define NRF52_ERRATA_103_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_103_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_103_ENABLE_WORKAROUND NRF52_ERRATA_103_PRESENT
+#endif
 
 static bool nrf52_errata_103(void)
 {
@@ -4023,6 +5249,10 @@ static bool nrf52_errata_103(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4031,6 +5261,17 @@ static bool nrf52_errata_103(void)
         return false;
     #endif
 }
+
+/* ========= Errata 104 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_104_PRESENT 1
+#else
+    #define NRF52_ERRATA_104_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_104_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_104_ENABLE_WORKAROUND NRF52_ERRATA_104_PRESENT
+#endif
 
 static bool nrf52_errata_104(void)
 {
@@ -4054,6 +5295,10 @@ static bool nrf52_errata_104(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4062,6 +5307,18 @@ static bool nrf52_errata_104(void)
         return false;
     #endif
 }
+
+/* ========= Errata 106 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_106_PRESENT 1
+#else
+    #define NRF52_ERRATA_106_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_106_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_106_ENABLE_WORKAROUND NRF52_ERRATA_106_PRESENT
+#endif
 
 static bool nrf52_errata_106(void)
 {
@@ -4098,6 +5355,8 @@ static bool nrf52_errata_106(void)
                         return true;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4106,6 +5365,18 @@ static bool nrf52_errata_106(void)
         return false;
     #endif
 }
+
+/* ========= Errata 107 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_107_PRESENT 1
+#else
+    #define NRF52_ERRATA_107_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_107_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_107_ENABLE_WORKAROUND NRF52_ERRATA_107_PRESENT
+#endif
 
 static bool nrf52_errata_107(void)
 {
@@ -4142,6 +5413,8 @@ static bool nrf52_errata_107(void)
                         return true;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4150,6 +5423,18 @@ static bool nrf52_errata_107(void)
         return false;
     #endif
 }
+
+/* ========= Errata 108 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_108_PRESENT 1
+#else
+    #define NRF52_ERRATA_108_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_108_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_108_ENABLE_WORKAROUND NRF52_ERRATA_108_PRESENT
+#endif
 
 static bool nrf52_errata_108(void)
 {
@@ -4186,6 +5471,8 @@ static bool nrf52_errata_108(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -4194,6 +5481,18 @@ static bool nrf52_errata_108(void)
         return false;
     #endif
 }
+
+/* ========= Errata 109 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_109_PRESENT 1
+#else
+    #define NRF52_ERRATA_109_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_109_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_109_ENABLE_WORKAROUND NRF52_ERRATA_109_PRESENT
+#endif
 
 static bool nrf52_errata_109(void)
 {
@@ -4230,6 +5529,8 @@ static bool nrf52_errata_109(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -4238,6 +5539,17 @@ static bool nrf52_errata_109(void)
         return false;
     #endif
 }
+
+/* ========= Errata 110 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_110_PRESENT 1
+#else
+    #define NRF52_ERRATA_110_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_110_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_110_ENABLE_WORKAROUND NRF52_ERRATA_110_PRESENT
+#endif
 
 static bool nrf52_errata_110(void)
 {
@@ -4261,6 +5573,10 @@ static bool nrf52_errata_110(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4269,6 +5585,17 @@ static bool nrf52_errata_110(void)
         return false;
     #endif
 }
+
+/* ========= Errata 111 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_111_PRESENT 1
+#else
+    #define NRF52_ERRATA_111_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_111_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_111_ENABLE_WORKAROUND NRF52_ERRATA_111_PRESENT
+#endif
 
 static bool nrf52_errata_111(void)
 {
@@ -4292,6 +5619,10 @@ static bool nrf52_errata_111(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4300,6 +5631,17 @@ static bool nrf52_errata_111(void)
         return false;
     #endif
 }
+
+/* ========= Errata 112 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_112_PRESENT 1
+#else
+    #define NRF52_ERRATA_112_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_112_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_112_ENABLE_WORKAROUND NRF52_ERRATA_112_PRESENT
+#endif
 
 static bool nrf52_errata_112(void)
 {
@@ -4323,6 +5665,10 @@ static bool nrf52_errata_112(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4331,6 +5677,19 @@ static bool nrf52_errata_112(void)
         return false;
     #endif
 }
+
+/* ========= Errata 113 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_113_PRESENT 1
+#else
+    #define NRF52_ERRATA_113_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_113_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_113_ENABLE_WORKAROUND NRF52_ERRATA_113_PRESENT
+#endif
 
 static bool nrf52_errata_113(void)
 {
@@ -4370,6 +5729,8 @@ static bool nrf52_errata_113(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -4388,6 +5749,10 @@ static bool nrf52_errata_113(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4396,6 +5761,17 @@ static bool nrf52_errata_113(void)
         return false;
     #endif
 }
+
+/* ========= Errata 115 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_115_PRESENT 1
+#else
+    #define NRF52_ERRATA_115_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_115_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_115_ENABLE_WORKAROUND NRF52_ERRATA_115_PRESENT
+#endif
 
 static bool nrf52_errata_115(void)
 {
@@ -4419,6 +5795,10 @@ static bool nrf52_errata_115(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4427,6 +5807,17 @@ static bool nrf52_errata_115(void)
         return false;
     #endif
 }
+
+/* ========= Errata 116 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_116_PRESENT 1
+#else
+    #define NRF52_ERRATA_116_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_116_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_116_ENABLE_WORKAROUND NRF52_ERRATA_116_PRESENT
+#endif
 
 static bool nrf52_errata_116(void)
 {
@@ -4450,6 +5841,10 @@ static bool nrf52_errata_116(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4458,6 +5853,17 @@ static bool nrf52_errata_116(void)
         return false;
     #endif
 }
+
+/* ========= Errata 117 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_117_PRESENT 1
+#else
+    #define NRF52_ERRATA_117_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_117_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_117_ENABLE_WORKAROUND NRF52_ERRATA_117_PRESENT
+#endif
 
 static bool nrf52_errata_117(void)
 {
@@ -4481,6 +5887,10 @@ static bool nrf52_errata_117(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4489,6 +5899,17 @@ static bool nrf52_errata_117(void)
         return false;
     #endif
 }
+
+/* ========= Errata 118 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_118_PRESENT 1
+#else
+    #define NRF52_ERRATA_118_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_118_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_118_ENABLE_WORKAROUND NRF52_ERRATA_118_PRESENT
+#endif
 
 static bool nrf52_errata_118(void)
 {
@@ -4512,6 +5933,10 @@ static bool nrf52_errata_118(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4520,6 +5945,17 @@ static bool nrf52_errata_118(void)
         return false;
     #endif
 }
+
+/* ========= Errata 119 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_119_PRESENT 1
+#else
+    #define NRF52_ERRATA_119_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_119_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_119_ENABLE_WORKAROUND NRF52_ERRATA_119_PRESENT
+#endif
 
 static bool nrf52_errata_119(void)
 {
@@ -4543,6 +5979,10 @@ static bool nrf52_errata_119(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4551,6 +5991,17 @@ static bool nrf52_errata_119(void)
         return false;
     #endif
 }
+
+/* ========= Errata 120 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_120_PRESENT 1
+#else
+    #define NRF52_ERRATA_120_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_120_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_120_ENABLE_WORKAROUND NRF52_ERRATA_120_PRESENT
+#endif
 
 static bool nrf52_errata_120(void)
 {
@@ -4574,6 +6025,10 @@ static bool nrf52_errata_120(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4582,6 +6037,17 @@ static bool nrf52_errata_120(void)
         return false;
     #endif
 }
+
+/* ========= Errata 121 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_121_PRESENT 1
+#else
+    #define NRF52_ERRATA_121_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_121_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_121_ENABLE_WORKAROUND NRF52_ERRATA_121_PRESENT
+#endif
 
 static bool nrf52_errata_121(void)
 {
@@ -4605,6 +6071,10 @@ static bool nrf52_errata_121(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4613,6 +6083,17 @@ static bool nrf52_errata_121(void)
         return false;
     #endif
 }
+
+/* ========= Errata 122 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_122_PRESENT 1
+#else
+    #define NRF52_ERRATA_122_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_122_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_122_ENABLE_WORKAROUND NRF52_ERRATA_122_PRESENT
+#endif
 
 static bool nrf52_errata_122(void)
 {
@@ -4636,6 +6117,10 @@ static bool nrf52_errata_122(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -4644,6 +6129,17 @@ static bool nrf52_errata_122(void)
         return false;
     #endif
 }
+
+/* ========= Errata 127 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_127_PRESENT 1
+#else
+    #define NRF52_ERRATA_127_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_127_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_127_ENABLE_WORKAROUND NRF52_ERRATA_127_PRESENT
+#endif
 
 static bool nrf52_errata_127(void)
 {
@@ -4667,6 +6163,10 @@ static bool nrf52_errata_127(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4675,6 +6175,17 @@ static bool nrf52_errata_127(void)
         return false;
     #endif
 }
+
+/* ========= Errata 128 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_128_PRESENT 1
+#else
+    #define NRF52_ERRATA_128_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_128_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_128_ENABLE_WORKAROUND NRF52_ERRATA_128_PRESENT
+#endif
 
 static bool nrf52_errata_128(void)
 {
@@ -4698,6 +6209,10 @@ static bool nrf52_errata_128(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4706,6 +6221,17 @@ static bool nrf52_errata_128(void)
         return false;
     #endif
 }
+
+/* ========= Errata 131 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_131_PRESENT 1
+#else
+    #define NRF52_ERRATA_131_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_131_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_131_ENABLE_WORKAROUND NRF52_ERRATA_131_PRESENT
+#endif
 
 static bool nrf52_errata_131(void)
 {
@@ -4729,6 +6255,10 @@ static bool nrf52_errata_131(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4737,6 +6267,18 @@ static bool nrf52_errata_131(void)
         return false;
     #endif
 }
+
+/* ========= Errata 132 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_132_PRESENT 1
+#else
+    #define NRF52_ERRATA_132_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_132_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_132_ENABLE_WORKAROUND NRF52_ERRATA_132_PRESENT
+#endif
 
 static bool nrf52_errata_132(void)
 {
@@ -4773,6 +6315,8 @@ static bool nrf52_errata_132(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -4781,6 +6325,17 @@ static bool nrf52_errata_132(void)
         return false;
     #endif
 }
+
+/* ========= Errata 133 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_133_PRESENT 1
+#else
+    #define NRF52_ERRATA_133_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_133_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_133_ENABLE_WORKAROUND NRF52_ERRATA_133_PRESENT
+#endif
 
 static bool nrf52_errata_133(void)
 {
@@ -4804,6 +6359,10 @@ static bool nrf52_errata_133(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4812,6 +6371,17 @@ static bool nrf52_errata_133(void)
         return false;
     #endif
 }
+
+/* ========= Errata 134 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_134_PRESENT 1
+#else
+    #define NRF52_ERRATA_134_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_134_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_134_ENABLE_WORKAROUND NRF52_ERRATA_134_PRESENT
+#endif
 
 static bool nrf52_errata_134(void)
 {
@@ -4835,6 +6405,10 @@ static bool nrf52_errata_134(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4843,6 +6417,17 @@ static bool nrf52_errata_134(void)
         return false;
     #endif
 }
+
+/* ========= Errata 135 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_135_PRESENT 1
+#else
+    #define NRF52_ERRATA_135_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_135_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_135_ENABLE_WORKAROUND NRF52_ERRATA_135_PRESENT
+#endif
 
 static bool nrf52_errata_135(void)
 {
@@ -4866,6 +6451,10 @@ static bool nrf52_errata_135(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -4874,6 +6463,24 @@ static bool nrf52_errata_135(void)
         return false;
     #endif
 }
+
+/* ========= Errata 136 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_136_PRESENT 1
+#else
+    #define NRF52_ERRATA_136_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_136_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_136_ENABLE_WORKAROUND NRF52_ERRATA_136_PRESENT
+#endif
 
 static bool nrf52_errata_136(void)
 {
@@ -4918,6 +6525,8 @@ static bool nrf52_errata_136(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -4935,6 +6544,10 @@ static bool nrf52_errata_136(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -4963,6 +6576,8 @@ static bool nrf52_errata_136(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -5004,6 +6619,8 @@ static bool nrf52_errata_136(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5012,6 +6629,18 @@ static bool nrf52_errata_136(void)
         return false;
     #endif
 }
+
+/* ========= Errata 138 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_138_PRESENT 1
+#else
+    #define NRF52_ERRATA_138_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_138_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_138_ENABLE_WORKAROUND NRF52_ERRATA_138_PRESENT
+#endif
 
 static bool nrf52_errata_138(void)
 {
@@ -5048,6 +6677,8 @@ static bool nrf52_errata_138(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5056,6 +6687,17 @@ static bool nrf52_errata_138(void)
         return false;
     #endif
 }
+
+/* ========= Errata 140 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_140_PRESENT 1
+#else
+    #define NRF52_ERRATA_140_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_140_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_140_ENABLE_WORKAROUND NRF52_ERRATA_140_PRESENT
+#endif
 
 static bool nrf52_errata_140(void)
 {
@@ -5079,6 +6721,10 @@ static bool nrf52_errata_140(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5087,6 +6733,18 @@ static bool nrf52_errata_140(void)
         return false;
     #endif
 }
+
+/* ========= Errata 141 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_141_PRESENT 1
+#else
+    #define NRF52_ERRATA_141_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_141_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_141_ENABLE_WORKAROUND NRF52_ERRATA_141_PRESENT
+#endif
 
 static bool nrf52_errata_141(void)
 {
@@ -5123,6 +6781,8 @@ static bool nrf52_errata_141(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5131,6 +6791,17 @@ static bool nrf52_errata_141(void)
         return false;
     #endif
 }
+
+/* ========= Errata 142 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_142_PRESENT 1
+#else
+    #define NRF52_ERRATA_142_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_142_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_142_ENABLE_WORKAROUND NRF52_ERRATA_142_PRESENT
+#endif
 
 static bool nrf52_errata_142(void)
 {
@@ -5154,6 +6825,10 @@ static bool nrf52_errata_142(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5162,6 +6837,19 @@ static bool nrf52_errata_142(void)
         return false;
     #endif
 }
+
+/* ========= Errata 143 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_143_PRESENT 1
+#else
+    #define NRF52_ERRATA_143_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_143_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_143_ENABLE_WORKAROUND NRF52_ERRATA_143_PRESENT
+#endif
 
 static bool nrf52_errata_143(void)
 {
@@ -5201,6 +6889,8 @@ static bool nrf52_errata_143(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5219,6 +6909,10 @@ static bool nrf52_errata_143(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5227,6 +6921,17 @@ static bool nrf52_errata_143(void)
         return false;
     #endif
 }
+
+/* ========= Errata 144 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_144_PRESENT 1
+#else
+    #define NRF52_ERRATA_144_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_144_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_144_ENABLE_WORKAROUND NRF52_ERRATA_144_PRESENT
+#endif
 
 static bool nrf52_errata_144(void)
 {
@@ -5250,6 +6955,10 @@ static bool nrf52_errata_144(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5258,6 +6967,17 @@ static bool nrf52_errata_144(void)
         return false;
     #endif
 }
+
+/* ========= Errata 145 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_145_PRESENT 1
+#else
+    #define NRF52_ERRATA_145_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_145_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_145_ENABLE_WORKAROUND NRF52_ERRATA_145_PRESENT
+#endif
 
 static bool nrf52_errata_145(void)
 {
@@ -5281,6 +7001,10 @@ static bool nrf52_errata_145(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5289,6 +7013,18 @@ static bool nrf52_errata_145(void)
         return false;
     #endif
 }
+
+/* ========= Errata 146 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_146_PRESENT 1
+#else
+    #define NRF52_ERRATA_146_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_146_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_146_ENABLE_WORKAROUND NRF52_ERRATA_146_PRESENT
+#endif
 
 static bool nrf52_errata_146(void)
 {
@@ -5325,6 +7061,8 @@ static bool nrf52_errata_146(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5333,6 +7071,17 @@ static bool nrf52_errata_146(void)
         return false;
     #endif
 }
+
+/* ========= Errata 147 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_147_PRESENT 1
+#else
+    #define NRF52_ERRATA_147_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_147_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_147_ENABLE_WORKAROUND NRF52_ERRATA_147_PRESENT
+#endif
 
 static bool nrf52_errata_147(void)
 {
@@ -5356,6 +7105,10 @@ static bool nrf52_errata_147(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5364,6 +7117,18 @@ static bool nrf52_errata_147(void)
         return false;
     #endif
 }
+
+/* ========= Errata 149 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_149_PRESENT 1
+#else
+    #define NRF52_ERRATA_149_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_149_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_149_ENABLE_WORKAROUND NRF52_ERRATA_149_PRESENT
+#endif
 
 static bool nrf52_errata_149(void)
 {
@@ -5400,6 +7165,8 @@ static bool nrf52_errata_149(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5408,6 +7175,20 @@ static bool nrf52_errata_149(void)
         return false;
     #endif
 }
+
+/* ========= Errata 150 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_150_PRESENT 1
+#else
+    #define NRF52_ERRATA_150_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_150_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_150_ENABLE_WORKAROUND NRF52_ERRATA_150_PRESENT
+#endif
 
 static bool nrf52_errata_150(void)
 {
@@ -5448,6 +7229,8 @@ static bool nrf52_errata_150(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5465,6 +7248,10 @@ static bool nrf52_errata_150(void)
                     case 0x02ul:
                         return false;
                     case 0x03ul:
+                        return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
                         return false;
                     default:
                         return false;
@@ -5489,6 +7276,17 @@ static bool nrf52_errata_150(void)
     #endif
 }
 
+/* ========= Errata 151 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_151_PRESENT 1
+#else
+    #define NRF52_ERRATA_151_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_151_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_151_ENABLE_WORKAROUND NRF52_ERRATA_151_PRESENT
+#endif
+
 static bool nrf52_errata_151(void)
 {
     #ifndef NRF52_SERIES
@@ -5511,6 +7309,10 @@ static bool nrf52_errata_151(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5520,12 +7322,27 @@ static bool nrf52_errata_151(void)
     #endif
 }
 
+/* ========= Errata 153 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_153_PRESENT 1
+#else
+    #define NRF52_ERRATA_153_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_153_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_153_ENABLE_WORKAROUND NRF52_ERRATA_153_PRESENT
+#endif
+
 static bool nrf52_errata_153(void)
 {
     #ifndef NRF52_SERIES
         return false;
     #else
-        #if defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+        #if defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)\
+         || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)\
+         || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
             uint32_t var1 = *(uint32_t *)0x10000130ul;
             uint32_t var2 = *(uint32_t *)0x10000134ul;
         #endif
@@ -5542,6 +7359,36 @@ static bool nrf52_errata_153(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)
+            if (var1 == 0x0A)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return false;
+                    case 0x01ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)
+            if (var1 == 0x0E)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5550,6 +7397,17 @@ static bool nrf52_errata_153(void)
         return false;
     #endif
 }
+
+/* ========= Errata 154 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_154_PRESENT 1
+#else
+    #define NRF52_ERRATA_154_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_154_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_154_ENABLE_WORKAROUND NRF52_ERRATA_154_PRESENT
+#endif
 
 static bool nrf52_errata_154(void)
 {
@@ -5573,6 +7431,10 @@ static bool nrf52_errata_154(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5581,6 +7443,22 @@ static bool nrf52_errata_154(void)
         return false;
     #endif
 }
+
+/* ========= Errata 155 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_155_PRESENT 1
+#else
+    #define NRF52_ERRATA_155_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_155_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_155_ENABLE_WORKAROUND NRF52_ERRATA_155_PRESENT
+#endif
 
 static bool nrf52_errata_155(void)
 {
@@ -5623,6 +7501,8 @@ static bool nrf52_errata_155(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5640,6 +7520,10 @@ static bool nrf52_errata_155(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -5687,6 +7571,22 @@ static bool nrf52_errata_155(void)
         return false;
     #endif
 }
+
+/* ========= Errata 156 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_156_PRESENT 1
+#else
+    #define NRF52_ERRATA_156_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_156_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_156_ENABLE_WORKAROUND NRF52_ERRATA_156_PRESENT
+#endif
 
 static bool nrf52_errata_156(void)
 {
@@ -5729,6 +7629,8 @@ static bool nrf52_errata_156(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5746,6 +7648,10 @@ static bool nrf52_errata_156(void)
                     case 0x02ul:
                         return false;
                     case 0x03ul:
+                        return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
                         return false;
                     default:
                         return false;
@@ -5794,6 +7700,17 @@ static bool nrf52_errata_156(void)
     #endif
 }
 
+/* ========= Errata 158 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_158_PRESENT 1
+#else
+    #define NRF52_ERRATA_158_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_158_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_158_ENABLE_WORKAROUND NRF52_ERRATA_158_PRESENT
+#endif
+
 static bool nrf52_errata_158(void)
 {
     #ifndef NRF52_SERIES
@@ -5816,6 +7733,10 @@ static bool nrf52_errata_158(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5824,6 +7745,17 @@ static bool nrf52_errata_158(void)
         return false;
     #endif
 }
+
+/* ========= Errata 160 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_160_PRESENT 1
+#else
+    #define NRF52_ERRATA_160_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_160_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_160_ENABLE_WORKAROUND NRF52_ERRATA_160_PRESENT
+#endif
 
 static bool nrf52_errata_160(void)
 {
@@ -5847,6 +7779,10 @@ static bool nrf52_errata_160(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5855,6 +7791,17 @@ static bool nrf52_errata_160(void)
         return false;
     #endif
 }
+
+/* ========= Errata 162 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_162_PRESENT 1
+#else
+    #define NRF52_ERRATA_162_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_162_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_162_ENABLE_WORKAROUND NRF52_ERRATA_162_PRESENT
+#endif
 
 static bool nrf52_errata_162(void)
 {
@@ -5878,6 +7825,10 @@ static bool nrf52_errata_162(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5886,6 +7837,18 @@ static bool nrf52_errata_162(void)
         return false;
     #endif
 }
+
+/* ========= Errata 163 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_163_PRESENT 1
+#else
+    #define NRF52_ERRATA_163_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_163_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_163_ENABLE_WORKAROUND NRF52_ERRATA_163_PRESENT
+#endif
 
 static bool nrf52_errata_163(void)
 {
@@ -5922,6 +7885,8 @@ static bool nrf52_errata_163(void)
                         return true;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5930,6 +7895,17 @@ static bool nrf52_errata_163(void)
         return false;
     #endif
 }
+
+/* ========= Errata 164 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_164_PRESENT 1
+#else
+    #define NRF52_ERRATA_164_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_164_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_164_ENABLE_WORKAROUND NRF52_ERRATA_164_PRESENT
+#endif
 
 static bool nrf52_errata_164(void)
 {
@@ -5953,6 +7929,10 @@ static bool nrf52_errata_164(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -5961,6 +7941,17 @@ static bool nrf52_errata_164(void)
         return false;
     #endif
 }
+
+/* ========= Errata 166 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_166_PRESENT 1
+#else
+    #define NRF52_ERRATA_166_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_166_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_166_ENABLE_WORKAROUND NRF52_ERRATA_166_PRESENT
+#endif
 
 static bool nrf52_errata_166(void)
 {
@@ -5984,6 +7975,10 @@ static bool nrf52_errata_166(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -5992,6 +7987,19 @@ static bool nrf52_errata_166(void)
         return false;
     #endif
 }
+
+/* ========= Errata 170 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_170_PRESENT 1
+#else
+    #define NRF52_ERRATA_170_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_170_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_170_ENABLE_WORKAROUND NRF52_ERRATA_170_PRESENT
+#endif
 
 static bool nrf52_errata_170(void)
 {
@@ -6017,6 +8025,10 @@ static bool nrf52_errata_170(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6030,6 +8042,8 @@ static bool nrf52_errata_170(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -6047,6 +8061,8 @@ static bool nrf52_errata_170(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -6055,6 +8071,17 @@ static bool nrf52_errata_170(void)
         return false;
     #endif
 }
+
+/* ========= Errata 171 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_171_PRESENT 1
+#else
+    #define NRF52_ERRATA_171_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_171_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_171_ENABLE_WORKAROUND NRF52_ERRATA_171_PRESENT
+#endif
 
 static bool nrf52_errata_171(void)
 {
@@ -6078,6 +8105,10 @@ static bool nrf52_errata_171(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6086,6 +8117,17 @@ static bool nrf52_errata_171(void)
         return false;
     #endif
 }
+
+/* ========= Errata 172 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_172_PRESENT 1
+#else
+    #define NRF52_ERRATA_172_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_172_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_172_ENABLE_WORKAROUND NRF52_ERRATA_172_PRESENT
+#endif
 
 static bool nrf52_errata_172(void)
 {
@@ -6109,6 +8151,10 @@ static bool nrf52_errata_172(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6117,6 +8163,24 @@ static bool nrf52_errata_172(void)
         return false;
     #endif
 }
+
+/* ========= Errata 173 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_173_PRESENT 1
+#else
+    #define NRF52_ERRATA_173_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_173_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_173_ENABLE_WORKAROUND NRF52_ERRATA_173_PRESENT
+#endif
 
 static bool nrf52_errata_173(void)
 {
@@ -6161,6 +8225,8 @@ static bool nrf52_errata_173(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6178,6 +8244,10 @@ static bool nrf52_errata_173(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -6206,6 +8276,8 @@ static bool nrf52_errata_173(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -6247,6 +8319,8 @@ static bool nrf52_errata_173(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6255,6 +8329,17 @@ static bool nrf52_errata_173(void)
         return false;
     #endif
 }
+
+/* ========= Errata 174 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_174_PRESENT 1
+#else
+    #define NRF52_ERRATA_174_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_174_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_174_ENABLE_WORKAROUND NRF52_ERRATA_174_PRESENT
+#endif
 
 static bool nrf52_errata_174(void)
 {
@@ -6278,6 +8363,10 @@ static bool nrf52_errata_174(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6286,6 +8375,24 @@ static bool nrf52_errata_174(void)
         return false;
     #endif
 }
+
+/* ========= Errata 176 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_176_PRESENT 1
+#else
+    #define NRF52_ERRATA_176_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_176_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_176_ENABLE_WORKAROUND NRF52_ERRATA_176_PRESENT
+#endif
 
 static bool nrf52_errata_176(void)
 {
@@ -6330,6 +8437,8 @@ static bool nrf52_errata_176(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6347,6 +8456,10 @@ static bool nrf52_errata_176(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -6375,6 +8488,8 @@ static bool nrf52_errata_176(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -6416,6 +8531,8 @@ static bool nrf52_errata_176(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6424,6 +8541,18 @@ static bool nrf52_errata_176(void)
         return false;
     #endif
 }
+
+/* ========= Errata 178 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_178_PRESENT 1
+#else
+    #define NRF52_ERRATA_178_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_178_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_178_ENABLE_WORKAROUND NRF52_ERRATA_178_PRESENT
+#endif
 
 static bool nrf52_errata_178(void)
 {
@@ -6460,6 +8589,8 @@ static bool nrf52_errata_178(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6468,6 +8599,22 @@ static bool nrf52_errata_178(void)
         return false;
     #endif
 }
+
+/* ========= Errata 179 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_179_PRESENT 1
+#else
+    #define NRF52_ERRATA_179_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_179_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_179_ENABLE_WORKAROUND NRF52_ERRATA_179_PRESENT
+#endif
 
 static bool nrf52_errata_179(void)
 {
@@ -6510,6 +8657,8 @@ static bool nrf52_errata_179(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6527,6 +8676,10 @@ static bool nrf52_errata_179(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -6575,6 +8728,17 @@ static bool nrf52_errata_179(void)
     #endif
 }
 
+/* ========= Errata 180 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_180_PRESENT 1
+#else
+    #define NRF52_ERRATA_180_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_180_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_180_ENABLE_WORKAROUND NRF52_ERRATA_180_PRESENT
+#endif
+
 static bool nrf52_errata_180(void)
 {
     #ifndef NRF52_SERIES
@@ -6597,6 +8761,10 @@ static bool nrf52_errata_180(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -6605,6 +8773,19 @@ static bool nrf52_errata_180(void)
         return false;
     #endif
 }
+
+/* ========= Errata 181 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_181_PRESENT 1
+#else
+    #define NRF52_ERRATA_181_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_181_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_181_ENABLE_WORKAROUND NRF52_ERRATA_181_PRESENT
+#endif
 
 static bool nrf52_errata_181(void)
 {
@@ -6644,6 +8825,8 @@ static bool nrf52_errata_181(void)
                         return true;
                     case 0x06ul:
                         return false;
+                    case 0x07ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -6662,6 +8845,10 @@ static bool nrf52_errata_181(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -6670,6 +8857,18 @@ static bool nrf52_errata_181(void)
         return false;
     #endif
 }
+
+/* ========= Errata 182 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_182_PRESENT 1
+#else
+    #define NRF52_ERRATA_182_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_182_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_182_ENABLE_WORKAROUND NRF52_ERRATA_182_PRESENT
+#endif
 
 static bool nrf52_errata_182(void)
 {
@@ -6695,6 +8894,8 @@ static bool nrf52_errata_182(void)
                         return false;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6703,6 +8904,23 @@ static bool nrf52_errata_182(void)
         return false;
     #endif
 }
+
+/* ========= Errata 183 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_183_PRESENT 1
+#else
+    #define NRF52_ERRATA_183_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_183_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_183_ENABLE_WORKAROUND NRF52_ERRATA_183_PRESENT
+#endif
 
 static bool nrf52_errata_183(void)
 {
@@ -6746,6 +8964,8 @@ static bool nrf52_errata_183(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6763,6 +8983,10 @@ static bool nrf52_errata_183(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -6791,6 +9015,8 @@ static bool nrf52_errata_183(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -6820,6 +9046,8 @@ static bool nrf52_errata_183(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -6828,6 +9056,22 @@ static bool nrf52_errata_183(void)
         return false;
     #endif
 }
+
+/* ========= Errata 184 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_184_PRESENT 1
+#else
+    #define NRF52_ERRATA_184_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_184_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_184_ENABLE_WORKAROUND NRF52_ERRATA_184_PRESENT
+#endif
 
 static bool nrf52_errata_184(void)
 {
@@ -6856,6 +9100,10 @@ static bool nrf52_errata_184(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6883,6 +9131,8 @@ static bool nrf52_errata_184(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -6924,6 +9174,8 @@ static bool nrf52_errata_184(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -6932,6 +9184,17 @@ static bool nrf52_errata_184(void)
         return false;
     #endif
 }
+
+/* ========= Errata 186 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_186_PRESENT 1
+#else
+    #define NRF52_ERRATA_186_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_186_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_186_ENABLE_WORKAROUND NRF52_ERRATA_186_PRESENT
+#endif
 
 static bool nrf52_errata_186(void)
 {
@@ -6955,6 +9218,10 @@ static bool nrf52_errata_186(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -6963,6 +9230,19 @@ static bool nrf52_errata_186(void)
         return false;
     #endif
 }
+
+/* ========= Errata 187 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_187_PRESENT 1
+#else
+    #define NRF52_ERRATA_187_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_187_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_187_ENABLE_WORKAROUND NRF52_ERRATA_187_PRESENT
+#endif
 
 static bool nrf52_errata_187(void)
 {
@@ -6988,6 +9268,10 @@ static bool nrf52_errata_187(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7001,6 +9285,8 @@ static bool nrf52_errata_187(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -7018,6 +9304,8 @@ static bool nrf52_errata_187(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7026,6 +9314,17 @@ static bool nrf52_errata_187(void)
         return false;
     #endif
 }
+
+/* ========= Errata 189 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_189_PRESENT 1
+#else
+    #define NRF52_ERRATA_189_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_189_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_189_ENABLE_WORKAROUND NRF52_ERRATA_189_PRESENT
+#endif
 
 static bool nrf52_errata_189(void)
 {
@@ -7049,6 +9348,10 @@ static bool nrf52_errata_189(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -7057,6 +9360,19 @@ static bool nrf52_errata_189(void)
         return false;
     #endif
 }
+
+/* ========= Errata 190 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_190_PRESENT 1
+#else
+    #define NRF52_ERRATA_190_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_190_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_190_ENABLE_WORKAROUND NRF52_ERRATA_190_PRESENT
+#endif
 
 static bool nrf52_errata_190(void)
 {
@@ -7082,6 +9398,10 @@ static bool nrf52_errata_190(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7095,6 +9415,8 @@ static bool nrf52_errata_190(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -7112,6 +9434,8 @@ static bool nrf52_errata_190(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -7120,6 +9444,17 @@ static bool nrf52_errata_190(void)
         return false;
     #endif
 }
+
+/* ========= Errata 191 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_191_PRESENT 1
+#else
+    #define NRF52_ERRATA_191_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_191_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_191_ENABLE_WORKAROUND NRF52_ERRATA_191_PRESENT
+#endif
 
 static bool nrf52_errata_191(void)
 {
@@ -7143,6 +9478,10 @@ static bool nrf52_errata_191(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7151,6 +9490,20 @@ static bool nrf52_errata_191(void)
         return false;
     #endif
 }
+
+/* ========= Errata 192 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_192_PRESENT 1
+#else
+    #define NRF52_ERRATA_192_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_192_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_192_ENABLE_WORKAROUND NRF52_ERRATA_192_PRESENT
+#endif
 
 static bool nrf52_errata_192(void)
 {
@@ -7191,6 +9544,8 @@ static bool nrf52_errata_192(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7208,6 +9563,10 @@ static bool nrf52_errata_192(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
                         return false;
                     default:
                         return false;
@@ -7232,6 +9591,17 @@ static bool nrf52_errata_192(void)
     #endif
 }
 
+/* ========= Errata 193 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_193_PRESENT 1
+#else
+    #define NRF52_ERRATA_193_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_193_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_193_ENABLE_WORKAROUND NRF52_ERRATA_193_PRESENT
+#endif
+
 static bool nrf52_errata_193(void)
 {
     #ifndef NRF52_SERIES
@@ -7254,6 +9624,10 @@ static bool nrf52_errata_193(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7262,6 +9636,21 @@ static bool nrf52_errata_193(void)
         return false;
     #endif
 }
+
+/* ========= Errata 194 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_194_PRESENT 1
+#else
+    #define NRF52_ERRATA_194_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_194_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_194_ENABLE_WORKAROUND NRF52_ERRATA_194_PRESENT
+#endif
 
 static bool nrf52_errata_194(void)
 {
@@ -7303,6 +9692,8 @@ static bool nrf52_errata_194(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7321,6 +9712,10 @@ static bool nrf52_errata_194(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7334,6 +9729,8 @@ static bool nrf52_errata_194(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -7351,6 +9748,8 @@ static bool nrf52_errata_194(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -7359,6 +9758,17 @@ static bool nrf52_errata_194(void)
         return false;
     #endif
 }
+
+/* ========= Errata 195 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_195_PRESENT 1
+#else
+    #define NRF52_ERRATA_195_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_195_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_195_ENABLE_WORKAROUND NRF52_ERRATA_195_PRESENT
+#endif
 
 static bool nrf52_errata_195(void)
 {
@@ -7382,6 +9792,10 @@ static bool nrf52_errata_195(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7390,6 +9804,21 @@ static bool nrf52_errata_195(void)
         return false;
     #endif
 }
+
+/* ========= Errata 196 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_196_PRESENT 1
+#else
+    #define NRF52_ERRATA_196_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_196_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_196_ENABLE_WORKAROUND NRF52_ERRATA_196_PRESENT
+#endif
 
 static bool nrf52_errata_196(void)
 {
@@ -7431,6 +9860,8 @@ static bool nrf52_errata_196(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7449,6 +9880,10 @@ static bool nrf52_errata_196(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7462,6 +9897,8 @@ static bool nrf52_errata_196(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -7479,6 +9916,8 @@ static bool nrf52_errata_196(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -7487,6 +9926,17 @@ static bool nrf52_errata_196(void)
         return false;
     #endif
 }
+
+/* ========= Errata 197 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_197_PRESENT 1
+#else
+    #define NRF52_ERRATA_197_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_197_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_197_ENABLE_WORKAROUND NRF52_ERRATA_197_PRESENT
+#endif
 
 static bool nrf52_errata_197(void)
 {
@@ -7510,6 +9960,10 @@ static bool nrf52_errata_197(void)
                         return true;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -7518,6 +9972,17 @@ static bool nrf52_errata_197(void)
         return false;
     #endif
 }
+
+/* ========= Errata 198 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_198_PRESENT 1
+#else
+    #define NRF52_ERRATA_198_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_198_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_198_ENABLE_WORKAROUND NRF52_ERRATA_198_PRESENT
+#endif
 
 static bool nrf52_errata_198(void)
 {
@@ -7541,6 +10006,10 @@ static bool nrf52_errata_198(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7549,6 +10018,17 @@ static bool nrf52_errata_198(void)
         return false;
     #endif
 }
+
+/* ========= Errata 199 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_199_PRESENT 1
+#else
+    #define NRF52_ERRATA_199_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_199_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_199_ENABLE_WORKAROUND NRF52_ERRATA_199_PRESENT
+#endif
 
 static bool nrf52_errata_199(void)
 {
@@ -7572,6 +10052,10 @@ static bool nrf52_errata_199(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7580,6 +10064,17 @@ static bool nrf52_errata_199(void)
         return false;
     #endif
 }
+
+/* ========= Errata 200 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_200_PRESENT 1
+#else
+    #define NRF52_ERRATA_200_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_200_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_200_ENABLE_WORKAROUND NRF52_ERRATA_200_PRESENT
+#endif
 
 static bool nrf52_errata_200(void)
 {
@@ -7603,6 +10098,10 @@ static bool nrf52_errata_200(void)
                         return false;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -7611,6 +10110,20 @@ static bool nrf52_errata_200(void)
         return false;
     #endif
 }
+
+/* ========= Errata 201 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_201_PRESENT 1
+#else
+    #define NRF52_ERRATA_201_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_201_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_201_ENABLE_WORKAROUND NRF52_ERRATA_201_PRESENT
+#endif
 
 static bool nrf52_errata_201(void)
 {
@@ -7651,6 +10164,8 @@ static bool nrf52_errata_201(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7668,6 +10183,10 @@ static bool nrf52_errata_201(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
                         return false;
                     default:
                         return false;
@@ -7692,6 +10211,17 @@ static bool nrf52_errata_201(void)
     #endif
 }
 
+/* ========= Errata 202 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_202_PRESENT 1
+#else
+    #define NRF52_ERRATA_202_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_202_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_202_ENABLE_WORKAROUND NRF52_ERRATA_202_PRESENT
+#endif
+
 static bool nrf52_errata_202(void)
 {
     #ifndef NRF52_SERIES
@@ -7714,6 +10244,10 @@ static bool nrf52_errata_202(void)
                         return true;
                     case 0x03ul:
                         return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -7722,6 +10256,20 @@ static bool nrf52_errata_202(void)
         return false;
     #endif
 }
+
+/* ========= Errata 204 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_204_PRESENT 1
+#else
+    #define NRF52_ERRATA_204_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_204_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_204_ENABLE_WORKAROUND NRF52_ERRATA_204_PRESENT
+#endif
 
 static bool nrf52_errata_204(void)
 {
@@ -7762,6 +10310,8 @@ static bool nrf52_errata_204(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7779,6 +10329,10 @@ static bool nrf52_errata_204(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -7803,6 +10357,17 @@ static bool nrf52_errata_204(void)
     #endif
 }
 
+/* ========= Errata 208 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_208_PRESENT 1
+#else
+    #define NRF52_ERRATA_208_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_208_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_208_ENABLE_WORKAROUND NRF52_ERRATA_208_PRESENT
+#endif
+
 static bool nrf52_errata_208(void)
 {
     #ifndef NRF52_SERIES
@@ -7825,6 +10390,10 @@ static bool nrf52_errata_208(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7833,6 +10402,17 @@ static bool nrf52_errata_208(void)
         return false;
     #endif
 }
+
+/* ========= Errata 209 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_209_PRESENT 1
+#else
+    #define NRF52_ERRATA_209_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_209_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_209_ENABLE_WORKAROUND NRF52_ERRATA_209_PRESENT
+#endif
 
 static bool nrf52_errata_209(void)
 {
@@ -7856,6 +10436,10 @@ static bool nrf52_errata_209(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7864,6 +10448,24 @@ static bool nrf52_errata_209(void)
         return false;
     #endif
 }
+
+/* ========= Errata 210 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_210_PRESENT 1
+#else
+    #define NRF52_ERRATA_210_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_210_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_210_ENABLE_WORKAROUND NRF52_ERRATA_210_PRESENT
+#endif
 
 static bool nrf52_errata_210(void)
 {
@@ -7908,6 +10510,8 @@ static bool nrf52_errata_210(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -7925,6 +10529,10 @@ static bool nrf52_errata_210(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -7953,6 +10561,8 @@ static bool nrf52_errata_210(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -7994,6 +10604,8 @@ static bool nrf52_errata_210(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8002,6 +10614,19 @@ static bool nrf52_errata_210(void)
         return false;
     #endif
 }
+
+/* ========= Errata 211 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_211_PRESENT 1
+#else
+    #define NRF52_ERRATA_211_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_211_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_211_ENABLE_WORKAROUND 0
+#endif
 
 static bool nrf52_errata_211(void)
 {
@@ -8027,6 +10652,10 @@ static bool nrf52_errata_211(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8040,6 +10669,8 @@ static bool nrf52_errata_211(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -8057,6 +10688,8 @@ static bool nrf52_errata_211(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8065,6 +10698,24 @@ static bool nrf52_errata_211(void)
         return false;
     #endif
 }
+
+/* ========= Errata 212 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_212_PRESENT 1
+#else
+    #define NRF52_ERRATA_212_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_212_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_212_ENABLE_WORKAROUND NRF52_ERRATA_212_PRESENT
+#endif
 
 static bool nrf52_errata_212(void)
 {
@@ -8109,6 +10760,8 @@ static bool nrf52_errata_212(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8126,6 +10779,10 @@ static bool nrf52_errata_212(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -8154,6 +10811,8 @@ static bool nrf52_errata_212(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -8195,6 +10854,8 @@ static bool nrf52_errata_212(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -8203,6 +10864,21 @@ static bool nrf52_errata_212(void)
         return false;
     #endif
 }
+
+/* ========= Errata 213 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_213_PRESENT 1
+#else
+    #define NRF52_ERRATA_213_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_213_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_213_ENABLE_WORKAROUND NRF52_ERRATA_213_PRESENT
+#endif
 
 static bool nrf52_errata_213(void)
 {
@@ -8244,6 +10920,8 @@ static bool nrf52_errata_213(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8261,6 +10939,10 @@ static bool nrf52_errata_213(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -8297,6 +10979,17 @@ static bool nrf52_errata_213(void)
     #endif
 }
 
+/* ========= Errata 214 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_214_PRESENT 1
+#else
+    #define NRF52_ERRATA_214_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_214_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_214_ENABLE_WORKAROUND NRF52_ERRATA_214_PRESENT
+#endif
+
 static bool nrf52_errata_214(void)
 {
     #ifndef NRF52_SERIES
@@ -8319,6 +11012,10 @@ static bool nrf52_errata_214(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8327,6 +11024,17 @@ static bool nrf52_errata_214(void)
         return false;
     #endif
 }
+
+/* ========= Errata 215 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_215_PRESENT 1
+#else
+    #define NRF52_ERRATA_215_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_215_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_215_ENABLE_WORKAROUND NRF52_ERRATA_215_PRESENT
+#endif
 
 static bool nrf52_errata_215(void)
 {
@@ -8350,6 +11058,10 @@ static bool nrf52_errata_215(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8358,6 +11070,17 @@ static bool nrf52_errata_215(void)
         return false;
     #endif
 }
+
+/* ========= Errata 216 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_216_PRESENT 1
+#else
+    #define NRF52_ERRATA_216_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_216_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_216_ENABLE_WORKAROUND NRF52_ERRATA_216_PRESENT
+#endif
 
 static bool nrf52_errata_216(void)
 {
@@ -8381,6 +11104,10 @@ static bool nrf52_errata_216(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8389,6 +11116,19 @@ static bool nrf52_errata_216(void)
         return false;
     #endif
 }
+
+/* ========= Errata 217 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)
+    #define NRF52_ERRATA_217_PRESENT 1
+#else
+    #define NRF52_ERRATA_217_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_217_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_217_ENABLE_WORKAROUND NRF52_ERRATA_217_PRESENT
+#endif
 
 static bool nrf52_errata_217(void)
 {
@@ -8443,6 +11183,21 @@ static bool nrf52_errata_217(void)
     #endif
 }
 
+/* ========= Errata 218 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_218_PRESENT 1
+#else
+    #define NRF52_ERRATA_218_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_218_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_218_ENABLE_WORKAROUND NRF52_ERRATA_218_PRESENT
+#endif
+
 static bool nrf52_errata_218(void)
 {
     #ifndef NRF52_SERIES
@@ -8483,6 +11238,8 @@ static bool nrf52_errata_218(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8501,6 +11258,10 @@ static bool nrf52_errata_218(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8514,6 +11275,8 @@ static bool nrf52_errata_218(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -8531,6 +11294,8 @@ static bool nrf52_errata_218(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -8539,6 +11304,24 @@ static bool nrf52_errata_218(void)
         return false;
     #endif
 }
+
+/* ========= Errata 219 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_219_PRESENT 1
+#else
+    #define NRF52_ERRATA_219_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_219_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_219_ENABLE_WORKAROUND NRF52_ERRATA_219_PRESENT
+#endif
 
 static bool nrf52_errata_219(void)
 {
@@ -8583,6 +11366,8 @@ static bool nrf52_errata_219(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8600,6 +11385,10 @@ static bool nrf52_errata_219(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -8628,6 +11417,8 @@ static bool nrf52_errata_219(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -8669,6 +11460,8 @@ static bool nrf52_errata_219(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8677,6 +11470,18 @@ static bool nrf52_errata_219(void)
         return false;
     #endif
 }
+
+/* ========= Errata 220 ========= */
+#if    defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+    #define NRF52_ERRATA_220_PRESENT 1
+#else
+    #define NRF52_ERRATA_220_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_220_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_220_ENABLE_WORKAROUND NRF52_ERRATA_220_PRESENT
+#endif
 
 static bool nrf52_errata_220(void)
 {
@@ -8713,6 +11518,8 @@ static bool nrf52_errata_220(void)
                         return true;
                     case 0x06ul:
                         return true;
+                    case 0x07ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8721,6 +11528,18 @@ static bool nrf52_errata_220(void)
         return false;
     #endif
 }
+
+/* ========= Errata 223 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+    #define NRF52_ERRATA_223_PRESENT 1
+#else
+    #define NRF52_ERRATA_223_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_223_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_223_ENABLE_WORKAROUND NRF52_ERRATA_223_PRESENT
+#endif
 
 static bool nrf52_errata_223(void)
 {
@@ -8741,6 +11560,8 @@ static bool nrf52_errata_223(void)
                         return true;
                     case 0x01ul:
                         return true;
+                    case 0x02ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8757,6 +11578,8 @@ static bool nrf52_errata_223(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8765,6 +11588,18 @@ static bool nrf52_errata_223(void)
         return false;
     #endif
 }
+
+/* ========= Errata 225 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+    #define NRF52_ERRATA_225_PRESENT 1
+#else
+    #define NRF52_ERRATA_225_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_225_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_225_ENABLE_WORKAROUND NRF52_ERRATA_225_PRESENT
+#endif
 
 static bool nrf52_errata_225(void)
 {
@@ -8785,6 +11620,8 @@ static bool nrf52_errata_225(void)
                         return true;
                     case 0x01ul:
                         return true;
+                    case 0x02ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8801,6 +11638,8 @@ static bool nrf52_errata_225(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8809,6 +11648,21 @@ static bool nrf52_errata_225(void)
         return false;
     #endif
 }
+
+/* ========= Errata 228 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_228_PRESENT 1
+#else
+    #define NRF52_ERRATA_228_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_228_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_228_ENABLE_WORKAROUND NRF52_ERRATA_228_PRESENT
+#endif
 
 static bool nrf52_errata_228(void)
 {
@@ -8835,6 +11689,10 @@ static bool nrf52_errata_228(void)
                     case 0x02ul:
                         return true;
                     case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
                         return true;
                     default:
                         return true;
@@ -8864,6 +11722,8 @@ static bool nrf52_errata_228(void)
                         return true;
                     case 0x01ul:
                         return true;
+                    case 0x02ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8892,6 +11752,8 @@ static bool nrf52_errata_228(void)
                         return true;
                     case 0x02ul:
                         return true;
+                    case 0x03ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -8900,6 +11762,17 @@ static bool nrf52_errata_228(void)
         return false;
     #endif
 }
+
+/* ========= Errata 230 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)
+    #define NRF52_ERRATA_230_PRESENT 1
+#else
+    #define NRF52_ERRATA_230_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_230_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_230_ENABLE_WORKAROUND NRF52_ERRATA_230_PRESENT
+#endif
 
 static bool nrf52_errata_230(void)
 {
@@ -8921,6 +11794,8 @@ static bool nrf52_errata_230(void)
                         return false;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -8929,6 +11804,17 @@ static bool nrf52_errata_230(void)
         return false;
     #endif
 }
+
+/* ========= Errata 231 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)
+    #define NRF52_ERRATA_231_PRESENT 1
+#else
+    #define NRF52_ERRATA_231_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_231_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_231_ENABLE_WORKAROUND NRF52_ERRATA_231_PRESENT
+#endif
 
 static bool nrf52_errata_231(void)
 {
@@ -8950,6 +11836,8 @@ static bool nrf52_errata_231(void)
                         return false;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -8958,6 +11846,18 @@ static bool nrf52_errata_231(void)
         return false;
     #endif
 }
+
+/* ========= Errata 232 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)
+    #define NRF52_ERRATA_232_PRESENT 1
+#else
+    #define NRF52_ERRATA_232_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_232_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_232_ENABLE_WORKAROUND NRF52_ERRATA_232_PRESENT
+#endif
 
 static bool nrf52_errata_232(void)
 {
@@ -8999,6 +11899,19 @@ static bool nrf52_errata_232(void)
     #endif
 }
 
+/* ========= Errata 233 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_233_PRESENT 1
+#else
+    #define NRF52_ERRATA_233_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_233_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_233_ENABLE_WORKAROUND NRF52_ERRATA_233_PRESENT
+#endif
+
 static bool nrf52_errata_233(void)
 {
     #ifndef NRF52_SERIES
@@ -9023,6 +11936,10 @@ static bool nrf52_errata_233(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -9036,6 +11953,8 @@ static bool nrf52_errata_233(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -9052,15 +11971,32 @@ static bool nrf52_errata_233(void)
                     case 0x01ul:
                         return true;
                     case 0x02ul:
-                        return false;
+                        return true;
+                    case 0x03ul:
+                        return true;
                     default:
-                        return false;
+                        return true;
                 }
             }
         #endif
         return false;
     #endif
 }
+
+/* ========= Errata 236 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_236_PRESENT 1
+#else
+    #define NRF52_ERRATA_236_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_236_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_236_ENABLE_WORKAROUND NRF52_ERRATA_236_PRESENT
+#endif
 
 static bool nrf52_errata_236(void)
 {
@@ -9088,6 +12024,10 @@ static bool nrf52_errata_236(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -9115,6 +12055,8 @@ static bool nrf52_errata_236(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -9144,6 +12086,8 @@ static bool nrf52_errata_236(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -9152,6 +12096,21 @@ static bool nrf52_errata_236(void)
         return false;
     #endif
 }
+
+/* ========= Errata 237 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_237_PRESENT 1
+#else
+    #define NRF52_ERRATA_237_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_237_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_237_ENABLE_WORKAROUND NRF52_ERRATA_237_PRESENT
+#endif
 
 static bool nrf52_errata_237(void)
 {
@@ -9179,6 +12138,10 @@ static bool nrf52_errata_237(void)
                         return true;
                     case 0x03ul:
                         return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
                     default:
                         return true;
                 }
@@ -9206,6 +12169,8 @@ static bool nrf52_errata_237(void)
                     case 0x00ul:
                         return true;
                     case 0x01ul:
+                        return true;
+                    case 0x02ul:
                         return true;
                     default:
                         return true;
@@ -9235,6 +12200,8 @@ static bool nrf52_errata_237(void)
                         return true;
                     case 0x02ul:
                         return false;
+                    case 0x03ul:
+                        return false;
                     default:
                         return false;
                 }
@@ -9244,11 +12211,799 @@ static bool nrf52_errata_237(void)
     #endif
 }
 
+/* ========= Errata 242 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_242_PRESENT 1
+#else
+    #define NRF52_ERRATA_242_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_242_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_242_ENABLE_WORKAROUND NRF52_ERRATA_242_PRESENT
+#endif
+
+static bool nrf52_errata_242(void)
+{
+    #ifndef NRF52_SERIES
+        return false;
+    #else
+        #if defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805)\
+         || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)\
+         || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)\
+         || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            uint32_t var1 = *(uint32_t *)0x10000130ul;
+            uint32_t var2 = *(uint32_t *)0x10000134ul;
+        #endif
+        #if defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            if (var1 == 0x08)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)
+            if (var1 == 0x0A)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)
+            if (var1 == 0x0E)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805)
+            if (var1 == 0x0F)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        return false;
+    #endif
+}
+
+/* ========= Errata 243 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_243_PRESENT 1
+#else
+    #define NRF52_ERRATA_243_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_243_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_243_ENABLE_WORKAROUND NRF52_ERRATA_243_PRESENT
+#endif
+
+static bool nrf52_errata_243(void)
+{
+    #ifndef NRF52_SERIES
+        return false;
+    #else
+        #if defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)\
+         || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)\
+         || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            uint32_t var1 = *(uint32_t *)0x10000130ul;
+            uint32_t var2 = *(uint32_t *)0x10000134ul;
+        #endif
+        #if defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            if (var1 == 0x08)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+            if (var1 == 0x0D)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)
+            if (var1 == 0x10)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        return false;
+    #endif
+}
+
+/* ========= Errata 244 ========= */
+#if    defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_244_PRESENT 1
+#else
+    #define NRF52_ERRATA_244_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_244_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_244_ENABLE_WORKAROUND NRF52_ERRATA_244_PRESENT
+#endif
+
+static bool nrf52_errata_244(void)
+{
+    #ifndef NRF52_SERIES
+        return false;
+    #else
+        #if defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            uint32_t var1 = *(uint32_t *)0x10000130ul;
+            uint32_t var2 = *(uint32_t *)0x10000134ul;
+        #endif
+        #if defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            if (var1 == 0x08)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        return false;
+    #endif
+}
+
+/* ========= Errata 245 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_245_PRESENT 1
+#else
+    #define NRF52_ERRATA_245_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_245_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_245_ENABLE_WORKAROUND 0
+#endif
+
+static bool nrf52_errata_245(void)
+{
+    #ifndef NRF52_SERIES
+        return false;
+    #else
+        #if defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832)\
+         || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+            uint32_t var1;
+            uint32_t var2;
+
+            if (*(uint32_t *)0x10000130ul == 0xFFFFFFFF)
+            {
+                var1 = ((*(uint32_t *)0xF0000FE0ul) & 0x000000FFul);
+                var2 = ((*(uint32_t *)0xF0000FE8ul) & 0x000000F0ul) >> 4;
+            }
+            else
+            {
+                var1 = *(uint32_t *)0x10000130ul;
+                var2 = *(uint32_t *)0x10000134ul;
+            }
+        #elif defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805)\
+         || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)\
+         || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)\
+         || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)\
+         || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)\
+         || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            uint32_t var1 = *(uint32_t *)0x10000130ul;
+            uint32_t var2 = *(uint32_t *)0x10000134ul;
+        #endif
+        #if defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832)\
+         || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+            if (var1 == 0x06)
+            {
+                switch(var2)
+                {
+                    case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
+                    case 0x06ul:
+                        return true;
+                    case 0x07ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            if (var1 == 0x08)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)
+            if (var1 == 0x0A)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+            if (var1 == 0x0D)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)
+            if (var1 == 0x0E)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805)
+            if (var1 == 0x0F)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)
+            if (var1 == 0x10)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        return false;
+    #endif
+}
+
+/* ========= Errata 246 ========= */
+#if    defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805) \
+    || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_246_PRESENT 1
+#else
+    #define NRF52_ERRATA_246_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_246_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_246_ENABLE_WORKAROUND NRF52_ERRATA_246_PRESENT
+#endif
+
+static bool nrf52_errata_246(void)
+{
+    #ifndef NRF52_SERIES
+        return false;
+    #else
+        #if defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805)\
+         || defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)\
+         || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)\
+         || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)\
+         || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)\
+         || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            uint32_t var1 = *(uint32_t *)0x10000130ul;
+            uint32_t var2 = *(uint32_t *)0x10000134ul;
+        #endif
+        #if defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            if (var1 == 0x08)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)
+            if (var1 == 0x0A)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+            if (var1 == 0x0D)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)
+            if (var1 == 0x0E)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52805_XXAA) || defined (DEVELOP_IN_NRF52805)
+            if (var1 == 0x0F)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)
+            if (var1 == 0x10)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        return false;
+    #endif
+}
+
+/* ========= Errata 248 ========= */
+#if    defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810) \
+    || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811) \
+    || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_248_PRESENT 1
+#else
+    #define NRF52_ERRATA_248_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_248_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_248_ENABLE_WORKAROUND NRF52_ERRATA_248_PRESENT
+#endif
+
 static bool nrf52_errata_248(void)
 {
     #ifndef NRF52_SERIES
         return false;
     #else
+        #if defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)\
+         || defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)\
+         || defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)\
+         || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)\
+         || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            uint32_t var1 = *(uint32_t *)0x10000130ul;
+            uint32_t var2 = *(uint32_t *)0x10000134ul;
+        #endif
+        #if defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            if (var1 == 0x08)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52810_XXAA) || defined (DEVELOP_IN_NRF52810)
+            if (var1 == 0x0A)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return false;
+                    case 0x01ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+            if (var1 == 0x0D)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52811_XXAA) || defined (DEVELOP_IN_NRF52811)
+            if (var1 == 0x0E)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)
+            if (var1 == 0x10)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        return false;
+    #endif
+}
+
+/* ========= Errata 249 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833) \
+    || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+    #define NRF52_ERRATA_249_PRESENT 1
+#else
+    #define NRF52_ERRATA_249_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_249_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_249_ENABLE_WORKAROUND NRF52_ERRATA_249_PRESENT
+#endif
+
+static bool nrf52_errata_249(void)
+{
+    #ifndef NRF52_SERIES
+        return false;
+    #else
+        #if defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)\
+         || defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832)\
+         || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)\
+         || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)\
+         || defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            uint32_t var1 = *(uint32_t *)0x10000130ul;
+            uint32_t var2 = *(uint32_t *)0x10000134ul;
+        #endif
+        #if defined (NRF52832_XXAA) || defined (DEVELOP_IN_NRF52832)\
+         || defined (NRF52832_XXAB) || defined (DEVELOP_IN_NRF52832)
+            if (var1 == 0x06)
+            {
+                switch(var2)
+                {
+                    case 0x03ul:
+                        return false;
+                    case 0x04ul:
+                        return false;
+                    case 0x05ul:
+                        return false;
+                    case 0x06ul:
+                        return false;
+                    case 0x07ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52840_XXAA) || defined (DEVELOP_IN_NRF52840)
+            if (var1 == 0x08)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return false;
+                    case 0x01ul:
+                        return false;
+                    case 0x02ul:
+                        return false;
+                    case 0x03ul:
+                        return false;
+                    case 0x04ul:
+                        return true;
+                    case 0x05ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+            if (var1 == 0x0D)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return false;
+                    case 0x01ul:
+                        return false;
+                    case 0x02ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)
+            if (var1 == 0x10)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return false;
+                    case 0x01ul:
+                        return false;
+                    case 0x02ul:
+                        return false;
+                    case 0x03ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        return false;
+    #endif
+}
+
+/* ========= Errata 250 ========= */
+#if    defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820) \
+    || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+    #define NRF52_ERRATA_250_PRESENT 1
+#else
+    #define NRF52_ERRATA_250_PRESENT 0
+#endif
+
+#ifndef NRF52_ERRATA_250_ENABLE_WORKAROUND
+    #define NRF52_ERRATA_250_ENABLE_WORKAROUND NRF52_ERRATA_250_PRESENT
+#endif
+
+static bool nrf52_errata_250(void)
+{
+    #ifndef NRF52_SERIES
+        return false;
+    #else
+        #if defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)\
+         || defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+            uint32_t var1 = *(uint32_t *)0x10000130ul;
+            uint32_t var2 = *(uint32_t *)0x10000134ul;
+        #endif
+        #if defined (NRF52833_XXAA) || defined (DEVELOP_IN_NRF52833)
+            if (var1 == 0x0D)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
+        #if defined (NRF52820_XXAA) || defined (DEVELOP_IN_NRF52820)
+            if (var1 == 0x10)
+            {
+                switch(var2)
+                {
+                    case 0x00ul:
+                        return true;
+                    case 0x01ul:
+                        return true;
+                    case 0x02ul:
+                        return true;
+                    case 0x03ul:
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        #endif
         return false;
     #endif
 }
