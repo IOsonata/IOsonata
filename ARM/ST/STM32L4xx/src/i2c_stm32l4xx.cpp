@@ -292,6 +292,7 @@ static void STM32L4xxI2CEnable(DevIntrf_t * const pDev)
 
 	if (dev->DevNo < 3)
 	{
+		RCC->CCIPR &= ~(RCC_CCIPR_I2C1SEL_Msk << (dev->DevNo << 1));
 		RCC->APB1ENR1 |= RCC_APB1ENR1_I2C1EN << dev->DevNo;
 	}
 #ifdef STM32L4S9xx
@@ -306,16 +307,22 @@ static void STM32L4xxI2CPowerOff(DevIntrf_t * const pDev)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV *)pDev->pDevData;
 
+	dev->pReg->CR1 &= ~I2C_CR1_PE;
+
 	if (dev->DevNo < 3)
 	{
+		RCC->CCIPR &= ~(RCC_CCIPR_I2C1SEL_Msk << (dev->DevNo << 1));
 		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_I2C1EN << dev->DevNo);
 	}
 #ifdef STM32L4S9xx
 	else
 	{
+		RCC->CCIPR2 &= ~RCC_CCIPR2_I2C4SEL_Msk;
 		RCC->APB1ENR2 &= ~RCC_APB1ENR2_I2C4EN;
 	}
 #endif
+
+	IOPinDis(dev->pI2cDev->Cfg.pIOPinMap, dev->pI2cDev->Cfg.NbIOPins);
 }
 
 // Initial receive
