@@ -49,7 +49,7 @@ AgmMpu9250 g_Mpu9250;
 
 static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt);
 
-static const IMU_CFG s_ImuCfg = {
+static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
@@ -136,7 +136,7 @@ static void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 	ACCELSENSOR_DATA accdata;
 	GYROSENSOR_DATA gyrodata;
 	MAGSENSOR_DATA magdata;
-	IMU_QUAT quat;
+	ImuQuat_t quat;
 	long q[4];
 
 	s_Imu.Read(accdata);
@@ -173,7 +173,7 @@ static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 	}
 }
 
-void MPU9250IntHandler(int IntNo)
+void MPU9250IntHandler(int IntNo, void *pCtx)
 {
 	s_Imu.IntHandler();
 
@@ -288,7 +288,7 @@ bool MPU9250Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 			IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 	IOPinEnableInterrupt(BLUEIO_TAG_EVIM_IMU_INT_NO, 6, BLUEIO_TAG_EVIM_IMU_INT_PORT,
 						 BLUEIO_TAG_EVIM_IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION,
-						 MPU9250IntHandler);
+						 MPU9250IntHandler, NULL);
 
 
 
@@ -452,7 +452,7 @@ int drv_mpu9250_int_register(struct int_param_s * p_int_param)
 			IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
 	IOPinEnableInterrupt(BLUEIO_TAG_EVIM_IMU_INT_NO, 6, BLUEIO_TAG_EVIM_IMU_INT_PORT,
 						 BLUEIO_TAG_EVIM_IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION,
-						 MPU9250IntHandler);
+						 MPU9250IntHandler, NULL);
 
 	return 0;
 }

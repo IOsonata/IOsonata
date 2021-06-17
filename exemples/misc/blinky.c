@@ -65,7 +65,7 @@ PulseTrainCfg_t g_PulseTrainCfg = {
 volatile bool g_bBut1Pressed = false;
 volatile bool g_bBut2Pressed = false;
 
-void But1Handler(int IntNo)
+void But1Handler(int IntNo, void *pCtx)
 {
 	if (IntNo == BUT1_SENSE_INT)
 	{
@@ -75,7 +75,7 @@ void But1Handler(int IntNo)
 }
 
 #ifdef BUT2_SENSE_INT
-void But2Handler(int IntNo)
+void But2Handler(int IntNo, void *pCtx)
 {
 	if (IntNo == BUT2_SENSE_INT)
 	{
@@ -111,7 +111,7 @@ int main()
 
 	// Configure buttons
 	IOPinCfg(s_Buttons, s_NbButtons);
-	IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler);
+	IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler, NULL);
 	//IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler);
 
 

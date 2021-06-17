@@ -54,7 +54,7 @@ static const MAGSENSOR_CFG s_MagCfg = {
 
 static AgmInvnIcm20948 s_MotSensor;
 
-static const IMU_CFG s_ImuCfg = {
+static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
@@ -67,7 +67,7 @@ void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 	ACCELSENSOR_DATA accdata;
 	GYROSENSOR_DATA gyrodata;
 	MAGSENSOR_DATA magdata;
-	IMU_QUAT quat;
+	ImuQuat_t quat;
 	long q[4];
 
 	s_Imu.Read(accdata);
@@ -119,7 +119,7 @@ void inv_icm20948_sleep_us(int us)
 	usDelay(us);
 }
 
-void ICM20948IntHandler(int IntNo)
+void ICM20948IntHandler(int IntNo, void *pCtx)
 {
 	if (IntNo == BLUEIO_TAG_EVIM_IMU_INT_NO)
 	{
@@ -135,7 +135,7 @@ bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 			IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
 	IOPinEnableInterrupt(BLUEIO_TAG_EVIM_IMU_INT_NO, 6, BLUEIO_TAG_EVIM_IMU_INT_PORT,
 						 BLUEIO_TAG_EVIM_IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION,
-						 ICM20948IntHandler);
+						 ICM20948IntHandler, NULL);
 
 	bool res = s_MotSensor.Init(s_AccelCfg, pIntrF);
 	if (res == true)
