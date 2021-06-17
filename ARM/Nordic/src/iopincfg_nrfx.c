@@ -52,6 +52,7 @@ typedef struct {
 	IOPINSENSE Sense;
 	IOPINEVT_CB SensEvtCB;
     uint16_t PortPinNo;
+    void *pCtx;
 } IOPINSENS_EVTHOOK;
 #pragma pack(pop)
 
@@ -237,6 +238,7 @@ void IOPinDisableInterrupt(int IntNo)
     s_GpIOSenseEvt[IntNo].PortPinNo = -1;
     s_GpIOSenseEvt[IntNo].Sense = IOPINSENSE_DISABLE;
     s_GpIOSenseEvt[IntNo].SensEvtCB = NULL;
+    s_GpIOSenseEvt[IntNo].pCtx = NULL;
 
     for (int i = 0; i <= IOPIN_MAX_INT; i++)
     {
@@ -284,8 +286,9 @@ void IOPinDisableInterrupt(int IntNo)
  * 			PinNo   : Pin number (up to 32 pins)
  * 			Sense   : Sense type of event on the I/O pin
  * 			pEvtCB	: Pointer to callback function when event occurs
+ * 			pCtx	: Pointer to context data to be pass to the handler function
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
 {
     if (IntNo >= IOPIN_MAX_INT)
 		return false;
@@ -366,6 +369,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
     s_GpIOSenseEvt[IntNo].Sense = Sense;
 	s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
 	s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
+	s_GpIOSenseEvt[IntNo].pCtx = pCtx;
 
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
@@ -417,22 +421,23 @@ int IOPinFindAvailInterrupt()
  * directly the hardware interrupt number other is just an index in an array
  *
  *
- * @Param	IntPrio : Interrupt priority
- * @Param	PortNo  : Port number (up to 32 ports)
- * @Param	PinNo   : Pin number (up to 32 pins)
- * @Param	Sense   : Sense type of event on the I/O pin
- * @Param	pEvtCB	: Pointer to callback function when event occurs
+ * @param	IntPrio : Interrupt priority
+ * @param	PortNo  : Port number (up to 32 ports)
+ * @param	PinNo   : Pin number (up to 32 pins)
+ * @param	Sense   : Sense type of event on the I/O pin
+ * @param	pEvtCB	: Pointer to callback function when event occurs
+ * @param	pCtx	: Pointer to context data to be pass to the handler function
  *
  * @return	Interrupt number on success
  * 			-1 on failure.
  */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
 {
 	int intno = IOPinFindAvailInterrupt();
 
 	if (intno >= 0)
 	{
-		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB);
+		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB, pCtx);
 		if (res == true)
 			return intno;
 	}
@@ -551,14 +556,14 @@ void __WEAK GPIOTE_IRQHandler(void)
 		if (NRF_GPIOTE_NS->EVENTS_IN[i])
 		{
 			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i);
+				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE_NS->EVENTS_IN[i] = 0;
 		}
 	}
 	if (NRF_GPIOTE_NS->EVENTS_PORT)
 	{
         if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1);
+            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE_NS->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -573,14 +578,14 @@ void __WEAK GPIOTE0_IRQHandler(void)
 		if (NRF_GPIOTE0_S->EVENTS_IN[i])
 		{
 			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i);
+				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE0_S->EVENTS_IN[i] = 0;
 		}
 	}
 	if (NRF_GPIOTE0_S->EVENTS_PORT)
 	{
         if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1);
+            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE0_S->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -595,14 +600,14 @@ void __WEAK GPIOTE1_IRQHandler(void)
 		if (NRF_GPIOTE1_NS->EVENTS_IN[i])
 		{
 			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i);
+				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE1_NS->EVENTS_IN[i] = 0;
 		}
 	}
 	if (NRF_GPIOTE1_NS->EVENTS_PORT)
 	{
         if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1);
+            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE1_NS->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -618,14 +623,14 @@ void __WEAK GPIOTE_IRQHandler(void)
 		if (NRF_GPIOTE->EVENTS_IN[i])
 		{
 			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i);
+				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE->EVENTS_IN[i] = 0;
 		}
 	}
 	if (NRF_GPIOTE->EVENTS_PORT)
 	{
         if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1);
+            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE->EVENTS_PORT = 0;
 #ifdef NRF52_SERIES
 	    NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch

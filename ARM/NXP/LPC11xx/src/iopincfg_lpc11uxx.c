@@ -147,8 +147,9 @@ void IOPinDisableInterrupt(int IntNo)
  * 			PinNo   : Pin number (up to 32 pins)
  * 			Sense   : Sense type of event on the I/O pin
  * 			pEvtCB	: Pointer to callback function when event occurs
+ * 			pCtx	: Pointer to context data to be pass to the handler function
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
 {
     return true;
 }
@@ -176,13 +177,13 @@ int IOPinFindAvailInterrupt()
  * @return	Interrupt number on success
  * 			-1 on failure.
  */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
 {
 	int intno = IOPinFindAvailInterrupt();
 
 	if (intno >= 0)
 	{
-		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB);
+		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB, pCtx);
 		if (res == true)
 			return intno;
 	}

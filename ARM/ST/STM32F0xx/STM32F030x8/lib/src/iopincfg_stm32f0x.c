@@ -46,6 +46,7 @@ typedef struct {
 	IOPINSENSE Sense;
 	IOPINEVT_CB SensEvtCB;
     uint16_t PortPinNo;
+    void *pCtx;
 } IOPINSENS_EVTHOOK;
 #pragma pack(pop)
 
@@ -212,6 +213,7 @@ void IOPinDisableInterrupt(int IntNo)
     s_GpIOSenseEvt[IntNo].PortPinNo = -1;
     s_GpIOSenseEvt[IntNo].Sense = IOPINSENSE_DISABLE;
     s_GpIOSenseEvt[IntNo].SensEvtCB = NULL;
+    s_GpIOSenseEvt[IntNo].pCtx = NULL;
 
     if (IntNo < 2)
     {
@@ -258,8 +260,9 @@ void IOPinDisableInterrupt(int IntNo)
  * 			PinNo   : Pin number (up to 32 pins)
  * 			Sense   : Sense type of event on the I/O pin
  * 			pEvtCB	: Pointer to callback function when event occurs
+ * 			pCtx	: Pointer to context data to be pass to the handler function
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
 {
 	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || IntNo != PinNo)
 	{
@@ -298,6 +301,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
     s_GpIOSenseEvt[IntNo].Sense = Sense;
 	s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
 	s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
+	s_GpIOSenseEvt[IntNo].pCtx = pCtx;
+
 
 	if (IntNo < 2)
     {
@@ -343,22 +348,23 @@ int IOPinFindAvailInterrupt()
  * directly the hardware interrupt number other is just an index in an array
  *
  *
- * @Param	IntPrio : Interrupt priority
- * @Param	PortNo  : Port number (up to 32 ports)
- * @Param	PinNo   : Pin number (up to 32 pins)
- * @Param	Sense   : Sense type of event on the I/O pin
- * @Param	pEvtCB	: Pointer to callback function when event occurs
+ * @param	IntPrio : Interrupt priority
+ * @param	PortNo  : Port number (up to 32 ports)
+ * @param	PinNo   : Pin number (up to 32 pins)
+ * @param	Sense   : Sense type of event on the I/O pin
+ * @param	pEvtCB	: Pointer to callback function when event occurs
+ * @param	pCtx	: Pointer to context data to be pass to the handler function
  *
  * @return	Interrupt number on success
  * 			-1 on failure.
  */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
 {
 	int intno = IOPinFindAvailInterrupt();
 
 	if (intno >= 0)
 	{
-		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB);
+		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB, pCtx);
 		if (res == true)
 			return intno;
 	}
@@ -435,7 +441,7 @@ void __WEAK EXTI0_1_IRQHandler(void)
 		EXTI->PR = 1;
 
 		if (s_GpIOSenseEvt[0].SensEvtCB)
-			s_GpIOSenseEvt[0].SensEvtCB(0);
+			s_GpIOSenseEvt[0].SensEvtCB(0, s_GpIOSenseEvt[0].pCtx);
 
 	}
 	if (EXTI->PR & 2)
@@ -443,7 +449,7 @@ void __WEAK EXTI0_1_IRQHandler(void)
 		EXTI->PR = 2;
 
 		if (s_GpIOSenseEvt[1].SensEvtCB)
-			s_GpIOSenseEvt[1].SensEvtCB(1);
+			s_GpIOSenseEvt[1].SensEvtCB(1, s_GpIOSenseEvt[1].pCtx);
 
 	}
 
@@ -457,7 +463,7 @@ void __WEAK EXTI2_3_IRQHandler(void)
 		EXTI->PR = 4;
 
 		if (s_GpIOSenseEvt[2].SensEvtCB)
-			s_GpIOSenseEvt[2].SensEvtCB(2);
+			s_GpIOSenseEvt[2].SensEvtCB(2, s_GpIOSenseEvt[2].pCtx);
 
 	}
 	if (EXTI->PR & 8)
@@ -465,7 +471,7 @@ void __WEAK EXTI2_3_IRQHandler(void)
 		EXTI->PR = 8;
 
 		if (s_GpIOSenseEvt[3].SensEvtCB)
-			s_GpIOSenseEvt[3].SensEvtCB(3);
+			s_GpIOSenseEvt[3].SensEvtCB(3, s_GpIOSenseEvt[3].pCtx);
 
 	}
 
@@ -482,7 +488,7 @@ void __WEAK EXTI4_15_IRQHandler(void)
 		{
 			EXTI->PR = mask;
 			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i);
+				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
 
 		}
 		mask <<= 1;

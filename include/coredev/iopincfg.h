@@ -156,7 +156,7 @@ typedef IOPinCfg_t		IOPINCFG;
  *
  * @param	IntNo : Interrupt number to which the I/O pin sense was assigned to.
  */
-typedef void (*IOPinEvtHandler_t)(int IntNo);
+typedef void (*IOPinEvtHandler_t)(int IntNo, void *pCtx);
 
 typedef IOPinEvtHandler_t	IOPINEVT_CB;
 
@@ -169,12 +169,12 @@ extern "C" {
  *
  * This function is MCU dependent. Needs to be implemented per MCU
  *
- * @Param 	PortNo	: Port number
- * @Param	PinNo  	: Pin number
- * @Param	PinOp	: Pin function. MCU dependent, see implementation for details
- * @Param	Dir     : I/O direction
- * @Param	Resistor : Resistor config
- * @Param	Type 	: I/O type
+ * @param 	PortNo	: Port number
+ * @param	PinNo  	: Pin number
+ * @param	PinOp	: Pin function. MCU dependent, see implementation for details
+ * @param	Dir     : I/O direction
+ * @param	Resistor : Resistor config
+ * @param	Type 	: I/O type
  */
 void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type);
 
@@ -182,7 +182,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
  * @brief	Configure I/O pin with IOPIN_CFG data structure. Can be used for batch configuration
  *
  * @param	pCfg   : Pointer to an array gpio pin configuration
- * @Param	NbPins : Number of gpio pins to configure
+ * @param	NbPins : Number of gpio pins to configure
  */
 static inline void IOPinCfg(const IOPinCfg_t *pCfg, int NbPins) {
 	if (pCfg == NULL || NbPins <= 0)
@@ -214,7 +214,7 @@ void IOPinDisable(int PortNo, int PinNo);
  * I/O pin to re-enable it.
  *
  * @param	pCfg   : Pointer to an array gpio pin to disable
- * @Param	NbPins : Number of gpio pins to disable
+ * @param	NbPins : Number of gpio pins to disable
  */
 static inline void IOPinDis(const IOPinCfg_t *pCfg, int NbPins) {
 	for (int i = 0; i < NbPins; i++) {
@@ -238,15 +238,16 @@ void IOPinDisableInterrupt(int IntNo);
  *
  *
  * @param	IntNo	: Interrupt number.
- * @Param	IntPrio : Interrupt priority
- * @Param	PortNo  : Port number (up to 32 ports)
- * @Param	PinNo   : Pin number (up to 32 pins)
- * @Param	Sense   : Sense type of event on the I/O pin
- * @Param	pEvtCB	: Pointer to callback function when event occurs
+ * @param	IntPrio : Interrupt priority
+ * @param	PortNo  : Port number (up to 32 ports)
+ * @param	PinNo   : Pin number (up to 32 pins)
+ * @param	Sense   : Sense type of event on the I/O pin
+ * @param	pEvtCB	: Pointer to callback function when event occurs
+ * @param	pCtx	: Pointer to context data to be pass to the handler function
  *
  * @return	true - success
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB);
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx);
 
 /**
  * @brief	Allocate I/O pin sensing interrupt event
@@ -257,16 +258,17 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
  * directly the hardware interrupt number other is just an index in an array
  *
  *
- * @Param	IntPrio : Interrupt priority
- * @Param	PortNo  : Port number (up to 32 ports)
- * @Param	PinNo   : Pin number (up to 32 pins)
- * @Param	Sense   : Sense type of event on the I/O pin
- * @Param	pEvtCB	: Pointer to callback function when event occurs
+ * @param	IntPrio : Interrupt priority
+ * @param	PortNo  : Port number (up to 32 ports)
+ * @param	PinNo   : Pin number (up to 32 pins)
+ * @param	Sense   : Sense type of event on the I/O pin
+ * @param	pEvtCB	: Pointer to callback function when event occurs
+ * @param	pCtx	: Pointer to context data to be pass to the handler function
  *
  * @return	Interrupt number on success
  * 			-1 on failure.
  */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB);
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx);
 
 /**
  * @brief Set I/O pin sensing option
@@ -275,8 +277,8 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
  * requiring enabling interrupts. This requires the I/O already configured
  *
  * @param	PortNo : Port number (up to 32 ports)
- * @Param	PinNo   : Pin number (up to 32 pins)
- * @Param	Sense   : Sense type of event on the I/O pin
+ * @param	PinNo   : Pin number (up to 32 pins)
+ * @param	Sense   : Sense type of event on the I/O pin
  */
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense);
 
@@ -286,8 +288,8 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense);
  * Some hardware allow setting pin drive strength. This requires the I/O already configured
  *
  * @param	PortNo 	: Port number (up to 32 ports)
- * @Param	PinNo  	: Pin number (up to 32 pins)
- * @Param	Strength: Pin drive strength
+ * @param	PinNo  	: Pin number (up to 32 pins)
+ * @param	Strength: Pin drive strength
  */
 void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength);
 
@@ -297,8 +299,8 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength);
  * Some hardware allow setting pin speed. This requires the I/O already configured
  *
  * @param	PortNo 	: Port number (up to 32 ports)
- * @Param	PinNo  	: Pin number (up to 32 pins)
- * @Param	Speed	: Pin speed
+ * @param	PinNo  	: Pin number (up to 32 pins)
+ * @param	Speed	: Pin speed
  */
 void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed);
 
