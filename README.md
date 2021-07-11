@@ -29,7 +29,7 @@ For desktop PC version of the library, native compiler and IDE are used.  XCode 
 In order to compile the IOsonata target libraries these external SDK & lib are required. Follow the instructions below to download and install into appropriate folder locations and naming. 
  
  
-[nRF5_SDK](https://developer.nordicsemi.com)  : Nordic nRF5x Bluetooth Low Energy
+[nRF5_SDK](https://www.nordicsemi.com/Products/Development-software/nRF5-SDK/Download#infotabs)  : Nordic nRF5x Bluetooth Low Energy
 
 [nrf5_SDK_Mesh](https://www.nordicsemi.com/Software-and-Tools/Software/nRF5-SDK-for-Mesh/Download#infotabs) : Nordic nRF5 SDK for Bluetoth Mesh
 
