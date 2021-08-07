@@ -197,8 +197,8 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
             break;
 #if TIMER_NRFX_RTC_MAX > 2
         case 2:
-            NVIC_ClearPendingIRQ(RTC2_IRQn);
             NVIC_DisableIRQ(RTC2_IRQn);
+            NVIC_ClearPendingIRQ(RTC2_IRQn);
             break;
 #endif
     }
