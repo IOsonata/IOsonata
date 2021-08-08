@@ -255,7 +255,7 @@ void BleAppInitUserServices()
     APP_ERROR_CHECK(err_code);
 }
 
-void ButEvent(int IntNo)
+void ButEvent(int IntNo, void *pCtx)
 {
     if (IntNo == 0)
     {
@@ -285,7 +285,7 @@ void HardwareInit()
 
 	IOPinCfg(s_ButPins, s_NbButPins);
 
-    IOPinEnableInterrupt(0, APP_IRQ_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent);
+    IOPinEnableInterrupt(0, APP_IRQ_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
 void BleAppInitUserData()
