@@ -459,7 +459,7 @@ typedef struct {
   RoReg8  Reserved3[0xC];
   RoReg   SPI_FEATURES;       /**< \brief (SPI Offset: 0xF8) Features Register */
   RoReg   SPI_VERSION;        /**< \brief (SPI Offset: 0xFC) Version Register */
-} Sam4lSpi;
+} Spi;
 #endif /* !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__)) */
 
 /*@}*/
