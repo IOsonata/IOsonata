@@ -59,6 +59,7 @@ typedef struct {
 	IOPINSENSE Sense;
 	IOPINEVT_CB SensEvtCB;
     uint16_t PortPinNo;
+    void *pCtx;		//!< Event context parameter to pass to the callback function
 } IOPINSENS_EVTHOOK;
 #pragma pack(pop)
 
@@ -239,8 +240,10 @@ void IOPinDisableInterrupt(int IntNo)
  * 			PinNo   : Pin number (up to 32 pins)
  * 			Sense   : Sense type of event on the I/O pin
  * 			pEvtCB	: Pointer to callback function when event occurs
+ * 			pCtx	: Pointer to context parameter to passe to callback function
+ * 					  This context pointer is a private data from application firmware
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
 {
 	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || IntNo != PortNo)
 	{
@@ -254,6 +257,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
     s_GpIOSenseEvt[IntNo].Sense = Sense;
 	s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
 	s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
+	s_GpIOSenseEvt[IntNo].pCtx = pCtx;
 
 	reg->PIO_IER = 1 << PinNo; 
 	
@@ -316,17 +320,19 @@ int IOPinFindAvailInterrupt()
  * @Param	PinNo   : Pin number (up to 32 pins)
  * @Param	Sense   : Sense type of event on the I/O pin
  * @Param	pEvtCB	: Pointer to callback function when event occurs
+ * 			pCtx	: Pointer to context parameter to passe to callback function
+ * 					  This context pointer is a private data from application firmware
  *
  * @return	Interrupt number on success
  * 			-1 on failure.
  */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB)
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
 {
 	int intno = IOPinFindAvailInterrupt();
 
 	if (intno >= 0)
 	{
-		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB);
+		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB, pCtx);
 		if (res == true)
 			return intno;
 	}
@@ -405,7 +411,7 @@ void PIOA_Handler(void)
 	if (status)
 	{
 		if (s_GpIOSenseEvt[0].SensEvtCB)
-			s_GpIOSenseEvt[0].SensEvtCB(status);
+			s_GpIOSenseEvt[0].SensEvtCB(status, s_GpIOSenseEvt[0].pCtx);
 	}
 
 	NVIC_ClearPendingIRQ(PIOA_IRQn);
@@ -418,7 +424,7 @@ void PIOB_Handler(void)
 	if (status)
 	{
 		if (s_GpIOSenseEvt[1].SensEvtCB)
-			s_GpIOSenseEvt[1].SensEvtCB(status);
+			s_GpIOSenseEvt[1].SensEvtCB(status, s_GpIOSenseEvt[1].pCtx);
 	}
 
 	NVIC_ClearPendingIRQ(PIOB_IRQn);
@@ -431,7 +437,7 @@ void PIOC_Handler(void)
 	if (status)
 	{
 		if (s_GpIOSenseEvt[2].SensEvtCB)
-			s_GpIOSenseEvt[2].SensEvtCB(status);
+			s_GpIOSenseEvt[2].SensEvtCB(status, s_GpIOSenseEvt[2].pCtx);
 	}
 
 	NVIC_ClearPendingIRQ(PIOC_IRQn);
@@ -444,7 +450,7 @@ void PIOD_Handler(void)
 	if (status)
 	{
 		if (s_GpIOSenseEvt[3].SensEvtCB)
-			s_GpIOSenseEvt[3].SensEvtCB(status);
+			s_GpIOSenseEvt[3].SensEvtCB(status, s_GpIOSenseEvt[3].pCtx);
 	}
 
 	NVIC_ClearPendingIRQ(PIOD_IRQn);
@@ -457,7 +463,7 @@ void PIOE_Handler(void)
 	if (status)
 	{
 		if (s_GpIOSenseEvt[4].SensEvtCB)
-			s_GpIOSenseEvt[4].SensEvtCB(status);
+			s_GpIOSenseEvt[4].SensEvtCB(status, s_GpIOSenseEvt[4].pCtx);
 	}
 
 	NVIC_ClearPendingIRQ(PIOE_IRQn);
