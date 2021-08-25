@@ -716,7 +716,7 @@ void TWIM3_Handler               ( void );
 #define SAM4L_PM_ADDR                       (0x400E0000U) /**< \brief (PM) APB Base Address */
 #define SAM4L_PM_INST_NUM       1                         /**< \brief (PM) Number of instances */
 #define SAM4L_PM_INSTS          { PM }                    /**< \brief (PM) Instances List */
-        SAM4L_
+
 #define SAM4L_SCIF              ((Scif     *)0x400E0800U) /**< \brief (SCIF) APB Base Address */
 #define SAM4L_SCIF_ADDR                     (0x400E0800U) /**< \brief (SCIF) APB Base Address */
 #define SAM4L_SCIF_INST_NUM     1                         /**< \brief (SCIF) Number of instances */
