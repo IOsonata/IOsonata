@@ -32,7 +32,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.1970265681" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format" useByScannerDiscovery="true"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.52934405" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" useByScannerDiscovery="false" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.497378123" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.619357833" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.619357833" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.1393511698" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.1769246188" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" useByScannerDiscovery="false" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.480586434" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" useByScannerDiscovery="false" value="gcc" valueType="string"/>
@@ -167,6 +167,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1097513215" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
@@ -208,6 +209,7 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.770573359" name="Cross ARM C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.2142111484" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
@@ -374,7 +376,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -411,7 +413,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.986971999" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.2049490241" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.252087926" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.2082213263" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.2082213263" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.195912715" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.153555637" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.1753134328" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
@@ -754,7 +756,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -792,7 +794,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.2088083764" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format" useByScannerDiscovery="true"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.1538097791" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" useByScannerDiscovery="false" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.1586110968" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.2029538649" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.2029538649" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.1791459527" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.378538395" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" useByScannerDiscovery="false" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.112905685" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" useByScannerDiscovery="false" value="gcc" valueType="string"/>
@@ -927,6 +929,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.920557457" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
@@ -968,6 +971,7 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.1761139255" name="Cross ARM C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.858562664" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
@@ -1134,7 +1138,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1172,7 +1176,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.1575296930" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.1479734932" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.726745942" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.1033472778" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.1033472778" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.1238483307" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.1636413371" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.1167465115" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
@@ -1515,7 +1519,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1552,7 +1556,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.357046178" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format" useByScannerDiscovery="true"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.1170207472" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" useByScannerDiscovery="false" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.1677555554" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.2063005511" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.2063005511" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.95774809" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.60380797" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" useByScannerDiscovery="false" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.304734228" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" useByScannerDiscovery="false" value="gcc" valueType="string"/>
@@ -1687,6 +1691,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1923786466" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
@@ -1727,6 +1732,7 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.1930374605" name="Cross ARM C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.773445802" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
@@ -1892,7 +1898,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1929,7 +1935,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.2025570842" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.1937753381" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.965432069" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.1260440559" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.1260440559" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.717846000" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.1931038032" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.2113687373" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
@@ -2270,7 +2276,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2307,7 +2313,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.1482653552" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format" useByScannerDiscovery="true"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.1338364202" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" useByScannerDiscovery="false" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.2006728083" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.192518944" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.192518944" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.1806746735" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" useByScannerDiscovery="false" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.1796040133" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" useByScannerDiscovery="false" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.1525366353" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" useByScannerDiscovery="false" value="gcc" valueType="string"/>
@@ -2442,6 +2448,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1026137999" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="NRF_LOG_ENABLED=1"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -2484,6 +2491,7 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.83050888" name="Cross ARM C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1613744326" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="NRF_LOG_ENABLED=1"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -2651,7 +2659,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2688,7 +2696,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.1297017782" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.1913696965" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.900987425" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.2095425784" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.2095425784" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.1722440855" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.1921545791" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.267904038" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
@@ -3033,7 +3041,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -3070,7 +3078,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.465344851" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.346662591" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.692411135" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.508127970" name="ARM family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.508127970" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m4" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.1177003194" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix.339966551" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.c.894438353" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
@@ -3413,7 +3421,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

@@ -981,6 +981,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/audio/audiodev.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/audio/i2s_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2s_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/audio/pdm_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/ble_app_handler.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/ble_app_handler.c</locationURI>
@@ -1099,6 +1109,11 @@
 			<name>src/coredev/timer_lf_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_nrf_app_timer.cpp</name>
+			<type>1</type>
+			<locationURI>$%7BPARENT-4-PROJECT_LOC%7D/src/timer_nrf_app_timer.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer_nrfx.cpp</name>
