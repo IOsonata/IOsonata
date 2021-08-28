@@ -3,6 +3,42 @@
 
 @brief	CMSIS System initializations
 
+Clock scheme
+
+Generic clock source (OSCSEL)
+	0 - RCSYS
+	1 - OSC32K
+	2 - DFPLL0
+	3 - OSC0
+	4 - RC80M
+	5 - RCFAST
+	6 - RC1M
+	7 - CLK_CPU
+	8 - CLK_HSB
+	9 - CLK_PBA
+	10 - CLK_PBB
+	11 - CLK_PBC
+	12 - CLK_PBD
+	13 - RC32K
+	14 - Reserved
+	15 - CLK_1K
+	16 - PLL0
+	17 - HRP
+	18 - FP
+	19-20 - GCLK_IN[0-1]
+	21 - GCLK11
+
+PLL0 clock source (PLLOSC)
+	0 - OSC0
+	1 - Generic clock 9
+
+High Resolution/Fractional Prescaler clock source (CKSEL)
+	0 - OSC0
+	1 - PLL0
+	2 - DFPLL0
+	3 - Reserved
+	4 - RC80M
+
 
 @author	Hoang Nguyen Hoan
 @date	June. 30, 2021
@@ -149,8 +185,32 @@ void SystemSetPLL()
 	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL |= SCIF_PLL_PLLOSC(0);
 	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL |= SCIF_PLL_PLLEN;
 */
+	uint32_t oscgain = 0;
+
+	if (g_McuOsc.HFFreq < 2000000)
+	{
+		oscgain = 0;
+	}
+	else if (g_McuOsc.HFFreq < 4000000)
+	{
+		oscgain = 1;
+	}
+	else if (g_McuOsc.HFFreq < 8000000)
+	{
+		oscgain = 2;
+	}
+	else if (g_McuOsc.HFFreq < 16000000)
+	{
+		oscgain = 3;
+	}
+	else
+	{
+		oscgain = 4;
+	}
+
+
 	pll |= SCIF_PLL_PLLDIV(div) | SCIF_PLL_PLLMUL(mul) | SCIF_PLL_PLLOPT(pllopt - 1) |
-		   SCIF_PLL_PLLOSC(0);
+		   SCIF_PLL_PLLOSC(oscgain);
 	SAM4L_SCIF->SCIF_UNLOCK = SCIF_UNLOCK_KEY(0xAAu) | SCIF_UNLOCK_ADDR((uint32_t)&SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL -
 					 	 (uint32_t)SAM4L_SCIF);
 	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL = pll;
@@ -161,7 +221,7 @@ void SystemSetPLL()
 
 void SystemInit()
 {
-	uint32_t scif = 0;
+	uint32_t temp = 0;
 	//uint32_t state = DisableInterrupt();
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
 		| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_PBBMASK - (uint32_t)SAM4L_PM);
@@ -205,6 +265,18 @@ void SystemInit()
 			case 8000000:
 			case 12000000:
 				// using RCFAST
+
+				temp = SAM4L_SCIF->SCIF_RCFASTCFG & ~SCIF_RCFASTCFG_FRANGE_Msk;
+
+				SAM4L_SCIF->SCIF_UNLOCK = SCIF_UNLOCK_KEY(0xAAu)
+					| SCIF_UNLOCK_ADDR((uint32_t)&SAM4L_SCIF->SCIF_RCFASTCFG - (uint32_t)SAM4L_SCIF);
+				SAM4L_SCIF->SCIF_RCFASTCFG = temp | SCIF_RCFASTCFG_EN
+					| SCIF_RCFASTCFG_FRANGE(g_McuOsc.HFFreq / 4000000 - 1);
+				while ((SAM4L_SCIF->SCIF_RCFASTCFG & (SCIF_RCFASTCFG_EN)) == 0);
+
+				SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
+					| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_MCCTRL - (uint32_t)SAM4L_PM);
+				SAM4L_PM->PM_MCCTRL = PM_MCCTRL_MCSEL_RCFAST;
 				break;
 		}
 	}
@@ -229,11 +301,11 @@ void SystemInit()
 		| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_CPUSEL - (uint32_t)SAM4L_PM);
 	if (g_MaiClkFreq <= SYSTEM_CORE_CLOCK)
 	{
-		SAM4L_PM->PM_CPUSEL &= ~PM_CPUSEL_CPUDIV;
+		SAM4L_PM->PM_CPUSEL = 0;
 	}
 	else
 	{
-		SAM4L_PM->PM_CPUSEL |= PM_CPUSEL_CPUDIV;
+		SAM4L_PM->PM_CPUSEL = PM_CPUSEL_CPUDIV | ((g_MaiClkFreq / 48000000) - 1);
 	}
 
 
