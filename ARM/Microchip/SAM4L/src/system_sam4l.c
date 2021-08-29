@@ -97,6 +97,30 @@ uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 uint32_t g_MaiClkFreq = SYSTEM_CORE_CLOCK;
 
+/**
+ * @brief	Get system low frequency oscillator type
+ *
+ * @return	Return oscillator type either internal RC or external crystal/osc
+ */
+OSC_TYPE GetLowFreqOscType()
+{
+	return g_McuOsc.LFType;
+}
+
+/**
+ * @brief	Get system high frequency oscillator type
+ *
+ * @return	Return oscillator type either internal RC or external crystal/osc
+ */
+OSC_TYPE GetHighFreqOscType()
+{
+	return g_McuOsc.HFType;
+}
+
+void SetFlashWaitState(uint32_t CoreFreq)
+{
+}
+
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 {
 	if (Freq < MAINOSC_FREQ_MIN || Freq > 20000000)
@@ -177,14 +201,7 @@ void SystemSetPLL()
 		}
 		coreclk <<= 1;
 	}
-/*
-	SAM4L_SCIF->SCIF_UNLOCK = SCIF_UNLOCK_KEY(0xAAu) | SCIF_UNLOCK_ADDR((uint32_t)&SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL -
-					 	 (uint32_t)SAM4L_SCIF);
-	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL = 0;
-	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL |= SCIF_PLL_PLLDIV(div) | SCIF_PLL_PLLMUL(mul) | SCIF_PLL_PLLOPT(pllopt - 1);
-	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL |= SCIF_PLL_PLLOSC(0);
-	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL |= SCIF_PLL_PLLEN;
-*/
+
 	uint32_t oscgain = 0;
 
 	if (g_McuOsc.HFFreq < 2000000)
@@ -208,7 +225,6 @@ void SystemSetPLL()
 		oscgain = 4;
 	}
 
-
 	pll |= SCIF_PLL_PLLDIV(div) | SCIF_PLL_PLLMUL(mul) | SCIF_PLL_PLLOPT(pllopt - 1) |
 		   SCIF_PLL_PLLOSC(oscgain);
 	SAM4L_SCIF->SCIF_UNLOCK = SCIF_UNLOCK_KEY(0xAAu) | SCIF_UNLOCK_ADDR((uint32_t)&SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL -
@@ -222,12 +238,11 @@ void SystemSetPLL()
 void SystemInit()
 {
 	uint32_t temp = 0;
-	//uint32_t state = DisableInterrupt();
+
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
 		| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_PBBMASK - (uint32_t)SAM4L_PM);
 	SAM4L_PM->PM_PBBMASK |= PM_PBBMASK_HCACHE;
 
-	//sysclk_enable_peripheral_clock(HCACHE);
 	SAM4L_HCACHE->HCACHE_CTRL = HCACHE_CTRL_CEN_YES;
 	while (!(SAM4L_HCACHE->HCACHE_SR & HCACHE_SR_CSTS_EN));
 
@@ -308,16 +323,12 @@ void SystemInit()
 		SAM4L_PM->PM_CPUSEL = PM_CPUSEL_CPUDIV | ((g_MaiClkFreq / 48000000) - 1);
 	}
 
-
-//	system_init_flash(48000000);
-
-//	EnableInterrupt(state);
-
-//	SystemCoreClockUpdate();
+	SystemCoreClockUpdate();
 }
 
-void SystemCoreClockUpdate( void )
+void SystemCoreClockUpdate(void)
 {
+	SetFlashWaitState(SystemCoreClock);
 }
 
 uint32_t SystemCoreClockGet()
