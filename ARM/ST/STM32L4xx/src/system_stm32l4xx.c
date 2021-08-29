@@ -77,7 +77,7 @@ const uint8_t APBPrescTable[8] = {
 };
 
 // Overload this variable in application firmware to change oscillator
-__WEAK MCU_OSC s_McuOsc = {
+__WEAK MCU_OSC g_McuOsc = {
 	OSC_TYPE_RC,
 	48000000,
 	OSC_TYPE_XTAL,
@@ -91,7 +91,7 @@ __WEAK MCU_OSC s_McuOsc = {
  */
 OSC_TYPE GetLowFreqOscType()
 {
-	return s_McuOsc.LFType;
+	return g_McuOsc.LFType;
 }
 
 /**
@@ -101,7 +101,7 @@ OSC_TYPE GetLowFreqOscType()
  */
 OSC_TYPE GetHighFreqOscType()
 {
-	return s_McuOsc.HFType;
+	return g_McuOsc.HFType;
 }
 
 void SetFlashWaitState(uint32_t CoreFreq)
@@ -206,7 +206,7 @@ void SystemCoreClockUpdate(void)
 	}
 	else if (pllcfgr & RCC_PLLCFGR_PLLSRC_HSE)
 	{
-		SystemCoreClock = s_McuOsc.HFFreq;//s_ClkSrcFreq;
+		SystemCoreClock = g_McuOsc.HFFreq;//s_ClkSrcFreq;
 	}
 	else if (pllcfgr & RCC_PLLCFGR_PLLSRC_HSI)
 	{
@@ -261,8 +261,8 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		}
 	}
 
-	s_McuOsc.HFType = ClkSrc;
-	s_McuOsc.HFFreq = OscFreq;
+	g_McuOsc.HFType = ClkSrc;
+	g_McuOsc.HFFreq = OscFreq;
 
 	SystemInit();
 
@@ -301,7 +301,7 @@ void SystemInit(void)
 	// Always select PLL for max core frequency
 	cfgr |= RCC_CFGR_SW_PLL;
 
-	switch (s_McuOsc.HFType)
+	switch (g_McuOsc.HFType)
 	{
 		case OSC_TYPE_TCXO:
 			RCC->CR |= RCC_CR_HSEBYP;
@@ -321,7 +321,7 @@ void SystemInit(void)
 			pllcfgr |= RCC_PLLCFGR_PLLSRC_MSI;
 	}
 
-	pllcfgr |= FindPllCfg(s_McuOsc.HFFreq);
+	pllcfgr |= FindPllCfg(g_McuOsc.HFFreq);
 
 	RCC->PLLCFGR = pllcfgr;
 
@@ -332,7 +332,7 @@ void SystemInit(void)
 
 	RCC->CFGR = cfgr;
 
-	if (s_McuOsc.LFType == OSC_TYPE_XTAL)
+	if (g_McuOsc.LFType == OSC_TYPE_XTAL)
 	{
 		if ((RCC->APB1ENR1 & RCC_APB1ENR1_PWREN) == 0)
 		{
