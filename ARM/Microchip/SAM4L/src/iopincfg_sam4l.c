@@ -37,7 +37,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdbool.h>
 
-#include "sam4l.h"
+#include "sam4lxxx.h"
 #include "coredev/iopincfg.h"
 
 #define IOPIN_MAX_PINOP			(7)
@@ -83,8 +83,8 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	uint32_t pinmask = 1 << PinNo;
 
 	// Enable peripheral clock
-	SAM4L_SCIF->SCIF_UNLOCK = SCIF_UNLOCK_KEY(0xAAu)
-		| SCIF_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_PBCMASK - (uint32_t)SAM4L_PM);
+	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
+		| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_PBCMASK - (uint32_t)SAM4L_PM);
 	SAM4L_PM->PM_PBCMASK |= PM_PBCMASK_GPIO;
 
 	if (PinOp > 0 && PinOp <= IOPIN_MAX_PINOP)

@@ -69,7 +69,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
-#include "sam4l.h"
+#include "sam4lxxx.h"
 
 #include "system_sam4l.h"
 #include "coredev/system_core_clock.h"

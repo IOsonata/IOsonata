@@ -46,7 +46,7 @@ SOFTWARE.
 #define IOSONATA
 #endif
 
-#include "sam4l.h"
+#include "sam4lxxx.h"
 #include "coredev/iopincfg.h"
 
 /**
