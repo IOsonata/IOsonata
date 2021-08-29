@@ -34,7 +34,8 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-#include "sam4l.h"
+
+#include "sam4lxxx.h"
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);

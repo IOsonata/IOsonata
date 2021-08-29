@@ -34,6 +34,51 @@ SOFTWARE.
 #ifndef __SAM4LXXX_H__
 #define __SAM4LXXX_H__
 
+#include "cmsis_compiler.h"
+
+#if !defined(SAM4LCXA) && !defined(SAM4LCXB) && !defined(SAM4LCXC) && !defined(SAM4LSXA) && !defined(SAM4LSXB) && !defined(SAM4LSXC)
+	#if defined(__ATSAM4LC2A__) || defined(__SAM4LC2A__) || defined(__ATSAM4LC4A__) || defined(__SAM4LC4A__) || defined(__ATSAM4LC8A__) || defined(__SAM4LC8A__)
+		#define SAM4LCXA
+	#elif defined(__ATSAM4LC2B__) || defined(__SAM4LC2B__) || defined(__ATSAM4LC4B__) || defined(__SAM4LC4B__) || defined(__ATSAM4LC8B__) || defined(__SAM4LC8B__)
+		#define SAM4LCXB
+	#elif defined(__ATSAM4LC2C__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC4C__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC8C__) || defined(__SAM4LC8C__)
+		#define SAM4LCXC
+	#elif defined(__ATSAM4LS2A__) || defined(__SAM4LS2A__) || defined(__ATSAM4LS4A__) || defined(__SAM4LS4A__) || defined(__ATSAM4LS8A__) || defined(__SAM4LS8A__)
+		#define SAM4LSXA
+	#elif defined(__ATSAM4LS2B__) || defined(__SAM4LS2B__) || defined(__ATSAM4LS4B__) || defined(__SAM4LS4B__) || defined(__ATSAM4LS8B__) || defined(__SAM4LS8B__)
+		#define SAM4LSXB
+	#elif defined(__ATSAM4LS2C__) || defined(__SAM4LS2C__) || defined(__ATSAM4LS4C__) || defined(__SAM4LS4C__) || defined(__ATSAM4LS8C__) || defined(__SAM4LS8C__)
+		#define SAM4LSXC
+	#endif
+#else
+// Set default __SAM4Lx8x__ if none defined
+	#ifdef SAM4LCXA
+		#if !defined(__ATSAM4LC2A__) && !defined(__SAM4LC2A__) && !defined(__ATSAM4LC4A__) && !defined(__SAM4LC4A__) && !defined(__ATSAM4LC8A__) && !defined(__SAM4LC8A__)
+		#define __SAM4LC8A__
+		#endif
+	#elif defined(SAM4LCXB)
+		#if !defined(__ATSAM4LC2B__) && !defined(__SAM4LC2B__) && !defined(__ATSAM4LC4B__) && !defined(__SAM4LC4B__) && !defined(__ATSAM4LC8B__) && !defined(__SAM4LC8B__)
+		#define __SAM4LC8B__
+		#endif
+	#elif defined(SAM4LCXC)
+		#if !defined(__ATSAM4LC2C__) && !defined(__SAM4LC2C__) && !defined(__ATSAM4LC4C__) && !defined(__SAM4LC4C__) && !defined(__ATSAM4LC8C__) && !defined(__SAM4LC8C__)
+		#define __SAM4LC8C__
+		#endif
+	#elif defined(SAM4LSXA)
+		#if !defined(__ATSAM4LS2A__) && !defined(__SAM4LS2A__) && !defined(__ATSAM4LS4A__) && !defined(__SAM4LS4A__) && !defined(__ATSAM4LS8A__) && !defined(__SAM4LS8A__)
+		#define __SAM4LS8A__
+		#endif
+	#elif defined(SAM4LSXB)
+		#if !defined(__ATSAM4LS2B__) && !defined(__SAM4LS2B__) && !defined(__ATSAM4LS4B__) && !defined(__SAM4LS4B__) && !defined(__ATSAM4LS8B__) && !defined(__SAM4LS8B__)
+		#define __SAM4LS8B__
+		#endif
+	#elif defined(SAM4LSXC)
+		#if !defined(__ATSAM4LS2C__) && !defined(__SAM4LS2C__) && !defined(__ATSAM4LS4C__) && !defined(__SAM4LS4C__) && !defined(__ATSAM4LS8C__) && !defined(__SAM4LS8C__)
+		#define __SAM4LS8C__
+		#endif
+	#endif
+#endif
+
 #if !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__))
 #include <stdint.h>
 #ifndef __cplusplus
@@ -93,9 +138,7 @@ typedef enum IRQn
   USBC_IRQn                = 18, /**< 18 SAM4LC2A USB 2.0 Interface (USBC) */
   PEVC_TR_IRQn             = 19, /**< 19 SAM4LC2A Peripheral Event Controller (PEVC) */
   PEVC_OV_IRQn             = 20, /**< 20 SAM4LC2A Peripheral Event Controller (PEVC) */
-#if defined(__SAM4LC2A__) || defined(__SAM4LC2B__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC2A__) || defined(__ATSAM4LC2B__) || defined(__ATSAM4LC2C__) || \
-	defined(__SAM4LC4A__) || defined(__SAM4LC4B__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC4A__) || defined(__ATSAM4LC4B__) || defined(__ATSAM4LC4C__) || \
-	defined(__SAM4LC8A__) || defined(__SAM4LC8B__) || defined(__SAM4LC8C__) || defined(__ATSAM4LC8A__) || defined(__ATSAM4LC8B__) || defined(__ATSAM4LC8C__)
+#if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
   AESA_IRQn                = 21, /**< 21 SAM4LC2A Advanced Encryption Standard (AESA) */
 #endif
   PM_IRQn                  = 22, /**< 22 SAM4LC2A Power Manager (PM) */
@@ -154,9 +197,7 @@ typedef enum IRQn
   CATB_IRQn                = 75, /**< 75 SAM4LC2A Capacitive Touch Module B (CATB) */
   TWIM2_IRQn               = 77, /**< 77 SAM4LC2A Two-wire Master Interface 2 (TWIM2) */
   TWIM3_IRQn               = 78, /**< 78 SAM4LC2A Two-wire Master Interface 3 (TWIM3) */
-#if defined(__SAM4LC2A__) || defined(__SAM4LC2B__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC2A__) || defined(__ATSAM4LC2B__) || defined(__ATSAM4LC2C__) || \
-	defined(__SAM4LC4A__) || defined(__SAM4LC4B__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC4A__) || defined(__ATSAM4LC4B__) || defined(__ATSAM4LC4C__) || \
-	defined(__SAM4LC8A__) || defined(__SAM4LC8B__) || defined(__SAM4LC8C__) || defined(__ATSAM4LC8A__) || defined(__ATSAM4LC8B__) || defined(__ATSAM4LC8C__)
+#if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
   LCDCA_IRQn               = 79, /**< 79 SAM4LC2A LCD Controller (LCDCA) */
 #endif
   PERIPH_COUNT_IRQn        = 80  /**< Number of peripheral IDs */
@@ -195,9 +236,7 @@ void CRCCU_Handler               ( void );
 void USBC_Handler                ( void );
 void PEVC_TR_Handler             ( void );
 void PEVC_OV_Handler             ( void );
-#if defined(__SAM4LC2A__) || defined(__SAM4LC2B__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC2A__) || defined(__ATSAM4LC2B__) || defined(__ATSAM4LC2C__) || \
-	defined(__SAM4LC4A__) || defined(__SAM4LC4B__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC4A__) || defined(__ATSAM4LC4B__) || defined(__ATSAM4LC4C__) || \
-	defined(__SAM4LC8A__) || defined(__SAM4LC8B__) || defined(__SAM4LC8C__) || defined(__ATSAM4LC8A__) || defined(__ATSAM4LC8B__) || defined(__ATSAM4LC8C__)
+#if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
 void AESA_Handler                ( void );
 #endif
 void PM_Handler                  ( void );
@@ -256,11 +295,24 @@ void PARC_Handler                ( void );
 void CATB_Handler                ( void );
 void TWIM2_Handler               ( void );
 void TWIM3_Handler               ( void );
-#if defined(__SAM4LC2A__) || defined(__SAM4LC2B__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC2A__) || defined(__ATSAM4LC2B__) || defined(__ATSAM4LC2C__) || \
-	defined(__SAM4LC4A__) || defined(__SAM4LC4B__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC4A__) || defined(__ATSAM4LC4B__) || defined(__ATSAM4LC4C__) || \
-	defined(__SAM4LC8A__) || defined(__SAM4LC8B__) || defined(__SAM4LC8C__) || defined(__ATSAM4LC8A__) || defined(__ATSAM4LC8B__) || defined(__ATSAM4LC8C__)
+#if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
 void LCDCA_Handler               ( void );
 #endif
+
+#define __BB_PRESENT           0         /*!< BIT_BANDING present or not */
+#define __CLKGATE_PRESENT      1         /*!< CLKGATE present or not */
+#define __CM4_REV              1         /*!< Core revision r0p1 */
+#define __DEBUG_LVL            3         /*!< Full debug plus DWT data matching */
+#define __FPU_PRESENT          0         /*!< FPU present or not */
+#define __JTAG_PRESENT         1         /*!< JTAG present or not */
+#define __MPU_PRESENT          1         /*!< MPU present or not */
+#define __NVIC_PRIO_BITS       4         /*!< Number of bits used for Priority Levels */
+#define __TRACE_LVL            1         /*!< Standard trace: ITM and DWT triggers and counters, but no ETM */
+#define __Vendor_SysTickConfig 0         /*!< Set to 1 if different SysTick Config is used */
+#define __WIC_PRESENT          0         /*!< WIC present or not */
+
+#include <core_cm4.h>
+#include "system_sam4l.h"
 
 /* ************************************************************************** */
 /**  SOFTWARE PERIPHERAL API DEFINITION FOR SAM4LC2A */
@@ -379,9 +431,7 @@ void LCDCA_Handler               ( void );
 #define ID_CATB          19 /**< \brief Capacitive Touch Module B (CATB) */
 #define ID_TWIM2         20 /**< \brief Two-wire Master Interface TWIM (TWIM2) */
 #define ID_TWIM3         21 /**< \brief Two-wire Master Interface TWIM (TWIM3) */
-#if defined(__SAM4LC2A__) || defined(__SAM4LC2B__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC2A__) || defined(__ATSAM4LC2B__) || defined(__ATSAM4LC2C__) || \
-	defined(__SAM4LC4A__) || defined(__SAM4LC4B__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC4A__) || defined(__ATSAM4LC4B__) || defined(__ATSAM4LC4C__) || \
-	defined(__SAM4LC8A__) || defined(__SAM4LC8B__) || defined(__SAM4LC8C__) || defined(__ATSAM4LC8A__) || defined(__ATSAM4LC8B__) || defined(__ATSAM4LC8C__)
+#if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
 #define ID_LCDCA         22 /**< \brief LCD Controller (LCDCA) */
 #endif
 
@@ -427,9 +477,7 @@ void LCDCA_Handler               ( void );
 #define SAM4L_ADCIFE_INST_NUM   1                         /**< \brief (ADCIFE) Number of instances */
 #define SAM4L_ADCIFE_INSTS      { ADCIFE }                /**< \brief (ADCIFE) Instances List */
 
-#if defined(__SAM4LC2A__) || defined(__SAM4LC2B__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC2A__) || defined(__ATSAM4LC2B__) || defined(__ATSAM4LC2C__) || \
-	defined(__SAM4LC4A__) || defined(__SAM4LC4B__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC4A__) || defined(__ATSAM4LC4B__) || defined(__ATSAM4LC4C__) || \
-	defined(__SAM4LC8A__) || defined(__SAM4LC8B__) || defined(__SAM4LC8C__) || defined(__ATSAM4LC8A__) || defined(__ATSAM4LC8B__) || defined(__ATSAM4LC8C__)
+#if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
 
 #define SAM4L_AESA              ((Aesa     *)0x400B0000U) /**< \brief (AESA) AHB Base Address */
 #define SAM4L_AESA_ADDR                     (0x400B0000U) /**< \brief (AESA) AHB Base Address */
@@ -517,9 +565,7 @@ void LCDCA_Handler               ( void );
 #define SAM4L_IISC_INST_NUM     1                         /**< \brief (IISC) Number of instances */
 #define SAM4L_IISC_INSTS        { IISC }                  /**< \brief (IISC) Instances List */
 
-#if defined(__SAM4LC2A__) || defined(__SAM4LC2B__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC2A__) || defined(__ATSAM4LC2B__) || defined(__ATSAM4LC2C__) || \
-	defined(__SAM4LC4A__) || defined(__SAM4LC4B__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC4A__) || defined(__ATSAM4LC4B__) || defined(__ATSAM4LC4C__) || \
-	defined(__SAM4LC8A__) || defined(__SAM4LC8B__) || defined(__SAM4LC8C__) || defined(__ATSAM4LC8A__) || defined(__ATSAM4LC8B__) || defined(__ATSAM4LC8C__)
+#if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
 
 #define SAM4L_LCDCA             ((Lcdca    *)0x40080000U) /**< \brief (LCDCA) APB Base Address */
 #define SAM4L_LCDCA_ADDR                    (0x40080000U) /**< \brief (LCDCA) APB Base Address */
@@ -620,18 +666,18 @@ void LCDCA_Handler               ( void );
 #define SAM4L_WDT_INSTS         { WDT }                   /**< \brief (WDT) Instances List */
 
 
-#if defined(__ATSAM4LC2A__) || defined(__SAM4LC2A__) || defined(__ATSAM4LS2A__) || defined(__SAM4LS2A__) || \
-	defined(__ATSAM4LC4A__) || defined(__SAM4LC4A__) || defined(__ATSAM4LS4A__) || defined(__SAM4LS4A__) || \
-	defined(__ATSAM4LC8A__) || defined(__SAM4LC8A__) || defined(__ATSAM4LS8A__) || defined(__SAM4LS8A__)
-#include "pio/pio_sam4lxxa.h"
-#elif defined(__ATSAM4LC2B__) || defined(__SAM4LC2B__) || defined(__ATSAM4LS2B__) || defined(__SAM4LS2B__) || \
-	  defined(__ATSAM4LC4B__) || defined(__SAM4LC4B__) || defined(__ATSAM4LS4B__) || defined(__SAM4LS4B__) || \
-	  defined(__ATSAM4LC8B__) || defined(__SAM4LC8B__) || defined(__ATSAM4LS8B__) || defined(__SAM4LS8B__)
-#include "pio/pio_sam4lxxb.h"
-#elif defined(__ATSAM4LC2C__) || defined(__SAM4LC2C__) || defined(__ATSAM4LS2C__) || defined(__SAM4LS2C__) || \
-	  defined(__ATSAM4LC4C__) || defined(__SAM4LC4C__) || defined(__ATSAM4LS4C__) || defined(__SAM4LS4C__) || \
-	  defined(__ATSAM4LC8C__) || defined(__SAM4LC8C__) || defined(__ATSAM4LS8C__) || defined(__SAM4LS8C__)
-#include "pio/pio_sam4lxxc.h"
+#if defined(SAM4LCXA)
+#include "pio/pio_sam4lcxa.h"
+#elif defined(SAM4LCXB)
+#include "pio/pio_sam4lcxb.h"
+#elif defined(SAM4LCXC)
+#include "pio/pio_sam4lcxc.h"
+#elif defined(SAM4LSXA)
+#include "pio/pio_sam4lsxa.h"
+#elif defined(SAM4LSXB)
+#include "pio/pio_sam4lsxb.h"
+#elif defined(SAM4LSXC)
+#include "pio/pio_sam4lsxc.h"
 #endif
 
 /* ************************************************************************** */
@@ -695,7 +741,8 @@ void LCDCA_Handler               ( void );
 /* **************************************************************************/
 /**  MEMORY MAPPING DEFINITIONS 											*/
 /* **************************************************************************/
-#if defined(__SAM4LC2A__) || defined(__SAM4LC2B__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC2A__) || defined(__ATSAM4LC2B__) || defined(__ATSAM4LC2C__)
+#if defined(__SAM4LC2A__) || defined(__SAM4LC2B__) || defined(__SAM4LC2C__) || defined(__ATSAM4LC2A__) || defined(__ATSAM4LC2B__) || defined(__ATSAM4LC2C__) || \
+	defined(__SAM4LS2A__) || defined(__SAM4LS2B__) || defined(__SAM4LS2C__) || defined(__ATSAM4LS2A__) || defined(__ATSAM4LS2B__) || defined(__ATSAM4LS2C__)
 
 #define FLASH_SIZE            0x20000 /* 128 kB */
 #define FLASH_PAGE_SIZE       512
@@ -708,7 +755,8 @@ void LCDCA_Handler               ( void );
 #define HRAMC0_ADDR           (0x20000000U) /**< HRAMC0 base address */
 #define HRAMC1_ADDR           (0x21000000U) /**< HRAMC1 base address */
 
-#elif defined(__SAM4LC4A__) || defined(__SAM4LC4B__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC4A__) || defined(__ATSAM4LC4B__) || defined(__ATSAM4LC4C__)
+#elif defined(__SAM4LC4A__) || defined(__SAM4LC4B__) || defined(__SAM4LC4C__) || defined(__ATSAM4LC4A__) || defined(__ATSAM4LC4B__) || defined(__ATSAM4LC4C__) || \
+	  defined(__SAM4LS4A__) || defined(__SAM4LS4B__) || defined(__SAM4LS4C__) || defined(__ATSAM4LS4A__) || defined(__ATSAM4LS4B__) || defined(__ATSAM4LS4C__)
 
 #define FLASH_SIZE            0x40000 /* 256 kB */
 #define FLASH_PAGE_SIZE       512
@@ -721,7 +769,8 @@ void LCDCA_Handler               ( void );
 #define HRAMC0_ADDR           (0x20000000U) /**< HRAMC0 base address */
 #define HRAMC1_ADDR           (0x21000000U) /**< HRAMC1 base address */
 
-#elif defined(__SAM4LC8A__) || defined(__SAM4LC8B__) || defined(__SAM4LC8C__) || defined(__ATSAM4LC8A__) || defined(__ATSAM4LC8B__) || defined(__ATSAM4LC8C__)
+#elif defined(__SAM4LC8A__) || defined(__SAM4LC8B__) || defined(__SAM4LC8C__) || defined(__ATSAM4LC8A__) || defined(__ATSAM4LC8B__) || defined(__ATSAM4LC8C__) || \
+	  defined(__SAM4LS8A__) || defined(__SAM4LS8B__) || defined(__SAM4LS8C__) || defined(__ATSAM4LS8A__) || defined(__ATSAM4LS8B__) || defined(__ATSAM4LS8C__)
 
 #define FLASH_SIZE            0x80000 /* 512 kB */
 #define FLASH_PAGE_SIZE       512
