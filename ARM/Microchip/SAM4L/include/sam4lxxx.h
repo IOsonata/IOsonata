@@ -465,66 +465,66 @@ void LCDCA_Handler               ( void );
 #define SAM4L_ABDACB            ((Abdacb   *)0x40064000U) /**< \brief (ABDACB) APB Base Address */
 #define SAM4L_ABDACB_ADDR                   (0x40064000U) /**< \brief (ABDACB) APB Base Address */
 #define SAM4L_ABDACB_INST_NUM   1                         /**< \brief (ABDACB) Number of instances */
-#define SAM4L_ABDACB_INSTS      { ABDACB }                /**< \brief (ABDACB) Instances List */
+#define SAM4L_ABDACB_INSTS      { SAM4L_ABDACB }                /**< \brief (ABDACB) Instances List */
 
 #define SAM4L_ACIFC             ((Acifc    *)0x40040000U) /**< \brief (ACIFC) APB Base Address */
 #define SAM4L_ACIFC_ADDR                    (0x40040000U) /**< \brief (ACIFC) APB Base Address */
 #define SAM4L_ACIFC_INST_NUM    1                         /**< \brief (ACIFC) Number of instances */
-#define SAM4L_ACIFC_INSTS       { ACIFC }                 /**< \brief (ACIFC) Instances List */
+#define SAM4L_ACIFC_INSTS       { SAM4L_ACIFC }                 /**< \brief (ACIFC) Instances List */
 
 #define SAM4L_ADCIFE            ((Adcife   *)0x40038000U) /**< \brief (ADCIFE) APB Base Address */
 #define SAM4L_ADCIFE_ADDR                   (0x40038000U) /**< \brief (ADCIFE) APB Base Address */
 #define SAM4L_ADCIFE_INST_NUM   1                         /**< \brief (ADCIFE) Number of instances */
-#define SAM4L_ADCIFE_INSTS      { ADCIFE }                /**< \brief (ADCIFE) Instances List */
+#define SAM4L_ADCIFE_INSTS      { SAM4L_ADCIFE }                /**< \brief (ADCIFE) Instances List */
 
 #if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
 
 #define SAM4L_AESA              ((Aesa     *)0x400B0000U) /**< \brief (AESA) AHB Base Address */
 #define SAM4L_AESA_ADDR                     (0x400B0000U) /**< \brief (AESA) AHB Base Address */
 #define SAM4L_AESA_INST_NUM     1                         /**< \brief (AESA) Number of instances */
-#define SAM4L_AESA_INSTS        { AESA }                  /**< \brief (AESA) Instances List */
+#define SAM4L_AESA_INSTS        { SAM4L_AESA }                  /**< \brief (AESA) Instances List */
 
 #endif
 
 #define SAM4L_AST               ((Ast      *)0x400F0800U) /**< \brief (AST) APB Base Address */
 #define SAM4L_AST_ADDR                      (0x400F0800U) /**< \brief (AST) APB Base Address */
 #define SAM4L_AST_INST_NUM      1                         /**< \brief (AST) Number of instances */
-#define SAM4L_AST_INSTS         { AST }                   /**< \brief (AST) Instances List */
+#define SAM4L_AST_INSTS         { SAM4L_AST }                   /**< \brief (AST) Instances List */
 
 #define SAM4L_BPM               ((Bpm      *)0x400F0000U) /**< \brief (BPM) APB Base Address */
 #define SAM4L_BPM_ADDR                      (0x400F0000U) /**< \brief (BPM) APB Base Address */
 #define SAM4L_BPM_INST_NUM      1                         /**< \brief (BPM) Number of instances */
-#define SAM4L_BPM_INSTS         { BPM }                   /**< \brief (BPM) Instances List */
+#define SAM4L_BPM_INSTS         { SAM4L_BPM }                   /**< \brief (BPM) Instances List */
 
 #define SAM4L_BSCIF             ((Bscif    *)0x400F0400U) /**< \brief (BSCIF) APB Base Address */
 #define SAM4L_BSCIF_ADDR                    (0x400F0400U) /**< \brief (BSCIF) APB Base Address */
 #define SAM4L_BSCIF_INST_NUM    1                         /**< \brief (BSCIF) Number of instances */
-#define SAM4L_BSCIF_INSTS       { BSCIF }                 /**< \brief (BSCIF) Instances List */
+#define SAM4L_BSCIF_INSTS       { SAM4L_BSCIF }                 /**< \brief (BSCIF) Instances List */
 
 #define SAM4L_CATB              ((Catb     *)0x40070000U) /**< \brief (CATB) APB Base Address */
 #define SAM4L_CATB_ADDR                     (0x40070000U) /**< \brief (CATB) APB Base Address */
 #define SAM4L_CATB_INST_NUM     1                         /**< \brief (CATB) Number of instances */
-#define SAM4L_CATB_INSTS        { CATB }                  /**< \brief (CATB) Instances List */
+#define SAM4L_CATB_INSTS        { SAM4L_CATB }                  /**< \brief (CATB) Instances List */
 
 #define SAM4L_CHIPID            ((Chipid   *)0x400E0400U) /**< \brief (CHIPID) APB Base Address */
 #define SAM4L_CHIPID_ADDR                   (0x400E0400U) /**< \brief (CHIPID) APB Base Address */
 #define SAM4L_CHIPID_INST_NUM   1                         /**< \brief (CHIPID) Number of instances */
-#define SAM4L_CHIPID_INSTS      { CHIPID }                /**< \brief (CHIPID) Instances List */
+#define SAM4L_CHIPID_INSTS      { SAM4L_CHIPID }                /**< \brief (CHIPID) Instances List */
 
 #define SAM4L_CRCCU             ((Crccu    *)0x400A4000U) /**< \brief (CRCCU) APB Base Address */
 #define SAM4L_CRCCU_ADDR                    (0x400A4000U) /**< \brief (CRCCU) APB Base Address */
 #define SAM4L_CRCCU_INST_NUM    1                         /**< \brief (CRCCU) Number of instances */
-#define SAM4L_CRCCU_INSTS       { CRCCU }                 /**< \brief (CRCCU) Instances List */
+#define SAM4L_CRCCU_INSTS       { SAM4L_CRCCU }                 /**< \brief (CRCCU) Instances List */
 
 #define SAM4L_DACC              ((Dacc     *)0x4003C000U) /**< \brief (DACC) APB Base Address */
 #define SAM4L_DACC_ADDR                     (0x4003C000U) /**< \brief (DACC) APB Base Address */
 #define SAM4L_DACC_INST_NUM     1                         /**< \brief (DACC) Number of instances */
-#define SAM4L_DACC_INSTS        { DACC }                  /**< \brief (DACC) Instances List */
+#define SAM4L_DACC_INSTS        { SAM4L_DACC }                  /**< \brief (DACC) Instances List */
 
 #define SAM4L_EIC               ((Eic      *)0x400F1000U) /**< \brief (EIC) APB Base Address */
 #define SAM4L_EIC_ADDR                      (0x400F1000U) /**< \brief (EIC) APB Base Address */
 #define SAM4L_EIC_INST_NUM      1                         /**< \brief (EIC) Number of instances */
-#define SAM4L_EIC_INSTS         { EIC }                   /**< \brief (EIC) Instances List */
+#define SAM4L_EIC_INSTS         { SAM4L_EIC }                   /**< \brief (EIC) Instances List */
 
 #define SAM4L_HFLASHC           ((Flashcalw *)0x400A0000U) /**< \brief (HFLASHC) APB Base Address */
 #define SAM4L_HFLASHC_ADDR                  (0x400A0000U) /**< \brief (HFLASHC) APB Base Address */
@@ -533,98 +533,98 @@ void LCDCA_Handler               ( void );
 #define SAM4L_HFLASHC_USER      ((Flashcalw *)0x00800000U) /**< \brief (HFLASHC) USER Base Address */
 #define SAM4L_HFLASHC_USER_ADDR             (0x00800000U) /**< \brief (HFLASHC) USER Base Address */
 #define SAM4L_FLASHCALW_INST_NUM 1                         /**< \brief (FLASHCALW) Number of instances */
-#define SAM4L_FLASHCALW_INSTS   { HFLASHC }               /**< \brief (FLASHCALW) Instances List */
+#define SAM4L_FLASHCALW_INSTS   { SAM4L_HFLASHC }               /**< \brief (FLASHCALW) Instances List */
 
 #define SAM4L_FREQM             ((Freqm    *)0x400E0C00U) /**< \brief (FREQM) APB Base Address */
 #define SAM4L_FREQM_ADDR                    (0x400E0C00U) /**< \brief (FREQM) APB Base Address */
 #define SAM4L_FREQM_INST_NUM    1                         /**< \brief (FREQM) Number of instances */
-#define SAM4L_FREQM_INSTS       { FREQM }                 /**< \brief (FREQM) Instances List */
+#define SAM4L_FREQM_INSTS       { SAM4L_FREQM }                 /**< \brief (FREQM) Instances List */
 
 #define SAM4L_GLOC              ((Gloc     *)0x40060000U) /**< \brief (GLOC) APB Base Address */
 #define SAM4L_GLOC_ADDR                     (0x40060000U) /**< \brief (GLOC) APB Base Address */
 #define SAM4L_GLOC_INST_NUM     1                         /**< \brief (GLOC) Number of instances */
-#define SAM4L_GLOC_INSTS        { GLOC }                  /**< \brief (GLOC) Instances List */
+#define SAM4L_GLOC_INSTS        { SAM4L_GLOC }                  /**< \brief (GLOC) Instances List */
 
 #define SAM4L_GPIO              ((Gpio     *)0x400E1000U) /**< \brief (GPIO) APB Base Address */
 #define SAM4L_GPIO_ADDR                     (0x400E1000U) /**< \brief (GPIO) APB Base Address */
 #define SAM4L_GPIO_INST_NUM     1                         /**< \brief (GPIO) Number of instances */
-#define SAM4L_GPIO_INSTS        { GPIO }                  /**< \brief (GPIO) Instances List */
+#define SAM4L_GPIO_INSTS        { SAM4L_GPIO }                  /**< \brief (GPIO) Instances List */
 
 #define SAM4L_HCACHE            ((Hcache   *)0x400A0400U) /**< \brief (HCACHE) APB Base Address */
 #define SAM4L_HCACHE_ADDR                   (0x400A0400U) /**< \brief (HCACHE) APB Base Address */
 #define SAM4L_HCACHE_INST_NUM   1                         /**< \brief (HCACHE) Number of instances */
-#define SAM4L_HCACHE_INSTS      { HCACHE }                /**< \brief (HCACHE) Instances List */
+#define SAM4L_HCACHE_INSTS      { SAM4L_HCACHE }                /**< \brief (HCACHE) Instances List */
 
 #define SAM4L_HMATRIX           ((Hmatrixb *)0x400A1000U) /**< \brief (HMATRIX) APB Base Address */
 #define SAM4L_HMATRIX_ADDR                  (0x400A1000U) /**< \brief (HMATRIX) APB Base Address */
 #define SAM4L_HMATRIXB_INST_NUM 1                         /**< \brief (HMATRIXB) Number of instances */
-#define SAM4L_HMATRIXB_INSTS    { HMATRIX }               /**< \brief (HMATRIXB) Instances List */
+#define SAM4L_HMATRIXB_INSTS    { SAM4L_HMATRIX }               /**< \brief (HMATRIXB) Instances List */
 
 #define SAM4L_IISC              ((Iisc     *)0x40004000U) /**< \brief (IISC) APB Base Address */
 #define SAM4L_IISC_ADDR                     (0x40004000U) /**< \brief (IISC) APB Base Address */
 #define SAM4L_IISC_INST_NUM     1                         /**< \brief (IISC) Number of instances */
-#define SAM4L_IISC_INSTS        { IISC }                  /**< \brief (IISC) Instances List */
+#define SAM4L_IISC_INSTS        { SAM4L_IISC }                  /**< \brief (IISC) Instances List */
 
 #if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
 
 #define SAM4L_LCDCA             ((Lcdca    *)0x40080000U) /**< \brief (LCDCA) APB Base Address */
 #define SAM4L_LCDCA_ADDR                    (0x40080000U) /**< \brief (LCDCA) APB Base Address */
 #define SAM4L_LCDCA_INST_NUM    1                         /**< \brief (LCDCA) Number of instances */
-#define SAM4L_LCDCA_INSTS       { LCDCA }                 /**< \brief (LCDCA) Instances List */
+#define SAM4L_LCDCA_INSTS       { SAM4L_LCDCA }                 /**< \brief (LCDCA) Instances List */
 
 #endif
 
 #define SAM4L_PARC              ((Parc     *)0x4006C000U) /**< \brief (PARC) APB Base Address */
 #define SAM4L_PARC_ADDR                     (0x4006C000U) /**< \brief (PARC) APB Base Address */
 #define SAM4L_PARC_INST_NUM     1                         /**< \brief (PARC) Number of instances */
-#define SAM4L_PARC_INSTS        { PARC }                  /**< \brief (PARC) Instances List */
+#define SAM4L_PARC_INSTS        { SAM4L_PARC }                  /**< \brief (PARC) Instances List */
 
 #define SAM4L_PDCA              ((Pdca     *)0x400A2000U) /**< \brief (PDCA) APB Base Address */
 #define SAM4L_PDCA_ADDR                     (0x400A2000U) /**< \brief (PDCA) APB Base Address */
 #define SAM4L_PDCA_INST_NUM     1                         /**< \brief (PDCA) Number of instances */
-#define SAM4L_PDCA_INSTS        { PDCA }                  /**< \brief (PDCA) Instances List */
+#define SAM4L_PDCA_INSTS        { SAM4L_PDCA }                  /**< \brief (PDCA) Instances List */
 
 #define SAM4L_PEVC              ((Pevc     *)0x400A6000U) /**< \brief (PEVC) APB Base Address */
 #define SAM4L_PEVC_ADDR                     (0x400A6000U) /**< \brief (PEVC) APB Base Address */
 #define SAM4L_PEVC_INST_NUM     1                         /**< \brief (PEVC) Number of instances */
-#define SAM4L_PEVC_INSTS        { PEVC }                  /**< \brief (PEVC) Instances List */
+#define SAM4L_PEVC_INSTS        { SAM4L_PEVC }                  /**< \brief (PEVC) Instances List */
 
 #define SAM4L_PICOUART          ((Picouart *)0x400F1400U) /**< \brief (PICOUART) APB Base Address */
 #define SAM4L_PICOUART_ADDR                 (0x400F1400U) /**< \brief (PICOUART) APB Base Address */
 #define SAM4L_PICOUART_INST_NUM 1                         /**< \brief (PICOUART) Number of instances */
-#define SAM4L_PICOUART_INSTS    { PICOUART }              /**< \brief (PICOUART) Instances List */
+#define SAM4L_PICOUART_INSTS    { SAM4L_PICOUART }              /**< \brief (PICOUART) Instances List */
 
 #define SAM4L_PM                ((Pm       *)0x400E0000U) /**< \brief (PM) APB Base Address */
 #define SAM4L_PM_ADDR                       (0x400E0000U) /**< \brief (PM) APB Base Address */
 #define SAM4L_PM_INST_NUM       1                         /**< \brief (PM) Number of instances */
-#define SAM4L_PM_INSTS          { PM }                    /**< \brief (PM) Instances List */
+#define SAM4L_PM_INSTS          { SAM4L_PM }                    /**< \brief (PM) Instances List */
 
 #define SAM4L_SCIF              ((Scif     *)0x400E0800U) /**< \brief (SCIF) APB Base Address */
 #define SAM4L_SCIF_ADDR                     (0x400E0800U) /**< \brief (SCIF) APB Base Address */
 #define SAM4L_SCIF_INST_NUM     1                         /**< \brief (SCIF) Number of instances */
-#define SAM4L_SCIF_INSTS        { SCIF }                  /**< \brief (SCIF) Instances List */
+#define SAM4L_SCIF_INSTS        { SAM4L_SCIF }                  /**< \brief (SCIF) Instances List */
 
 #define SAM4L_SMAP              ((Smap     *)0x400A3000U) /**< \brief (SMAP) APB Base Address */
 #define SAM4L_SMAP_ADDR                     (0x400A3000U) /**< \brief (SMAP) APB Base Address */
 #define SAM4L_SMAP_INST_NUM     1                         /**< \brief (SMAP) Number of instances */
-#define SAM4L_SMAP_INSTS        { SMAP }                  /**< \brief (SMAP) Instances List */
+#define SAM4L_SMAP_INSTS        { SAM4L_SMAP }                  /**< \brief (SMAP) Instances List */
 
 #define SAM4L_SPI               ((Spi      *)0x40008000U) /**< \brief (SPI) APB Base Address */
 #define SAM4L_SPI_ADDR                      (0x40008000U) /**< \brief (SPI) APB Base Address */
 #define SAM4L_SPI_INST_NUM      1                         /**< \brief (SPI) Number of instances */
-#define SAM4L_SPI_INSTS         { SPI }                   /**< \brief (SPI) Instances List */
+#define SAM4L_SPI_INSTS         { SAM4L_SPI }                   /**< \brief (SPI) Instances List */
 
 #define SAM4L_TC0               ((Tc       *)0x40010000U) /**< \brief (TC0) APB Base Address */
 #define SAM4L_TC0_ADDR                      (0x40010000U) /**< \brief (TC0) APB Base Address */
 #define SAM4L_TC1               ((Tc       *)0x40014000U) /**< \brief (TC1) APB Base Address */
 #define SAM4L_TC1_ADDR                      (0x40014000U) /**< \brief (TC1) APB Base Address */
 #define SAM4L_TC_INST_NUM       2                         /**< \brief (TC) Number of instances */
-#define SAM4L_TC_INSTS          { TC0, TC1 }              /**< \brief (TC) Instances List */
+#define SAM4L_TC_INSTS          { SAM4L_TC0, SAM4L_TC1 }              /**< \brief (TC) Instances List */
 
 #define SAM4L_TRNG              ((Trng     *)0x40068000U) /**< \brief (TRNG) APB Base Address */
 #define SAM4L_TRNG_ADDR                     (0x40068000U) /**< \brief (TRNG) APB Base Address */
 #define SAM4L_TRNG_INST_NUM     1                         /**< \brief (TRNG) Number of instances */
-#define SAM4L_TRNG_INSTS        { TRNG }                  /**< \brief (TRNG) Instances List */
+#define SAM4L_TRNG_INSTS        { SAM4L_TRNG }                  /**< \brief (TRNG) Instances List */
 
 #define SAM4L_TWIM0             ((Twim     *)0x40018000U) /**< \brief (TWIM0) APB Base Address */
 #define SAM4L_TWIM0_ADDR                    (0x40018000U) /**< \brief (TWIM0) APB Base Address */
@@ -635,14 +635,14 @@ void LCDCA_Handler               ( void );
 #define SAM4L_TWIM3             ((Twim     *)0x4007C000U) /**< \brief (TWIM3) APB Base Address */
 #define SAM4L_TWIM3_ADDR                    (0x4007C000U) /**< \brief (TWIM3) APB Base Address */
 #define SAM4L_TWIM_INST_NUM     4                         /**< \brief (TWIM) Number of instances */
-#define SAM4L_TWIM_INSTS        { TWIM0, TWIM1, TWIM2, TWIM3 } /**< \brief (TWIM) Instances List */
+#define SAM4L_TWIM_INSTS        { SAM4L_TWIM0, SAM4L_TWIM1, SAM4L_TWIM2, SAM4L_TWIM3 } /**< \brief (TWIM) Instances List */
 
 #define SAM4L_TWIS0             ((Twis     *)0x40018400U) /**< \brief (TWIS0) APB Base Address */
 #define SAM4L_TWIS0_ADDR                    (0x40018400U) /**< \brief (TWIS0) APB Base Address */
 #define SAM4L_TWIS1             ((Twis     *)0x4001C400U) /**< \brief (TWIS1) APB Base Address */
 #define SAM4L_TWIS1_ADDR                    (0x4001C400U) /**< \brief (TWIS1) APB Base Address */
 #define SAM4L_TWIS_INST_NUM     2                         /**< \brief (TWIS) Number of instances */
-#define SAM4L_TWIS_INSTS        { TWIS0, TWIS1 }          /**< \brief (TWIS) Instances List */
+#define SAM4L_TWIS_INSTS        { SAM4L_TWIS0, SAM4L_TWIS1 }          /**< \brief (TWIS) Instances List */
 
 #define SAM4L_USART0            ((Usart    *)0x40024000U) /**< \brief (USART0) APB Base Address */
 #define SAM4L_USART0_ADDR                   (0x40024000U) /**< \brief (USART0) APB Base Address */
@@ -653,17 +653,17 @@ void LCDCA_Handler               ( void );
 #define SAM4L_USART3            ((Usart    *)0x40030000U) /**< \brief (USART3) APB Base Address */
 #define SAM4L_USART3_ADDR                   (0x40030000U) /**< \brief (USART3) APB Base Address */
 #define SAM4L_USART_INST_NUM    4                         /**< \brief (USART) Number of instances */
-#define SAM4L_USART_INSTS       { USART0, USART1, USART2, USART3 } /**< \brief (USART) Instances List */
+#define SAM4L_USART_INSTS       { SAM4L_USART0, SAM4L_USART1, SAM4L_USART2, SAM4L_USART3 } /**< \brief (USART) Instances List */
 
 #define SAM4L_USBC              ((Usbc     *)0x400A5000U) /**< \brief (USBC) APB Base Address */
 #define SAM4L_USBC_ADDR                     (0x400A5000U) /**< \brief (USBC) APB Base Address */
 #define SAM4L_USBC_INST_NUM     1                         /**< \brief (USBC) Number of instances */
-#define SAM4L_USBC_INSTS        { USBC }                  /**< \brief (USBC) Instances List */
+#define SAM4L_USBC_INSTS        { SAM4L_USBC }                  /**< \brief (USBC) Instances List */
 
 #define SAM4L_WDT               ((Wdt      *)0x400F0C00U) /**< \brief (WDT) APB Base Address */
 #define SAM4L_WDT_ADDR                      (0x400F0C00U) /**< \brief (WDT) APB Base Address */
 #define SAM4L_WDT_INST_NUM      1                         /**< \brief (WDT) Number of instances */
-#define SAM4L_WDT_INSTS         { WDT }                   /**< \brief (WDT) Instances List */
+#define SAM4L_WDT_INSTS         { SAM4L_WDT }                   /**< \brief (WDT) Instances List */
 
 
 #if defined(SAM4LCXA)
