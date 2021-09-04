@@ -3,6 +3,10 @@
 
 @brief	timer implementation on Nordic nRFx series
 
+Low freq timers, RTC, are assigned to device number from 0 to TIMER_NRFX_RTC_MAX - 1
+High freq timers, TIMER, are assigned to device number from TIMER_NRFX_RTC_MAX to
+TIMER_NRFX_RTC_MAX + TIMER_NRFX_HF_MAX -1
+
 @author	Hoang Nguyen Hoan
 @date	Sep. 7, 2017
 
