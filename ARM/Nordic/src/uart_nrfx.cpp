@@ -933,10 +933,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
     if (pCfg->FlowControl == UART_FLWCTRL_HW)
 	{
     	s_nRFxUARTDev[devno].pReg->CONFIG |= (UART_CONFIG_HWFC_Enabled << UART_CONFIG_HWFC_Pos);
-    	s_nRFxUARTDev[devno].CtsPin = pincfg[UARTPIN_CTS_IDX].PinNo;
-    	s_nRFxUARTDev[devno].RtsPin = pincfg[UARTPIN_RTS_IDX].PinNo;
-    	s_nRFxUARTDev[devno].pReg->PSELCTS = pincfg[UARTPIN_CTS_IDX].PinNo;
-    	s_nRFxUARTDev[devno].pReg->PSELRTS = pincfg[UARTPIN_RTS_IDX].PinNo;
+    	s_nRFxUARTDev[devno].CtsPin = (pincfg[UARTPIN_CTS_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_CTS_IDX].PortNo << 5);
+    	s_nRFxUARTDev[devno].RtsPin = (pincfg[UARTPIN_RTS_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_RTS_IDX].PortNo << 5);
+    	s_nRFxUARTDev[devno].pReg->PSELCTS = s_nRFxUARTDev[devno].CtsPin;
+    	s_nRFxUARTDev[devno].pReg->PSELRTS = s_nRFxUARTDev[devno].RtsPin;
 	}
 	else
 	{
