@@ -176,68 +176,52 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 // Fvco = SYSTEM_CORE_CLOCK = (PLLMUL+1)/PLLDIV • Fref
 // SYSTEM_CORE_CLOCK / Fref = (PLLMUL+1)/PLLDIV
 // SYSTEM_CORE_CLOCK * PLLDIV / Fref - 1 = PLLMUL
-
-void SystemSetPLL()
+/// @return PLL frequency
+uint32_t SystemSetPLL()
 {
 	uint32_t div = 0;
 	uint32_t mul = 0;
-	uint32_t coreclk = SYSTEM_CORE_CLOCK;
+	uint32_t fvco = 240000000;//(96000000UL / SYSTEM_CORE_CLOCK) * SYSTEM_CORE_CLOCK;
 	bool found = false;
 	uint32_t pllopt = 0;
-	uint32_t pll = 0;
 
-	for (int j = 0; j < 2 && !found; j++, pllopt++)
+	for (int j = 0; j < 2 && !found; j++)
 	{
 		for (int i = 1; i < 15; i++)
 		{
 			uint32_t freq =  g_McuOsc.HFFreq / i;
-			if ((coreclk % freq) == 0)
+			if ((fvco % freq) == 0)
 			{
 				div = i;
-				mul = coreclk / freq - 1;
+				mul = fvco / freq - 1;
 				found = true;
 				break;
 			}
 		}
-		coreclk <<= 1;
+		fvco >>= 1;
 	}
 
-	uint32_t oscgain = 0;
+	uint32_t fpll = (mul + 1) * g_McuOsc.HFFreq / div;
 
-	if (g_McuOsc.HFFreq < 2000000)
+	if (g_MaiClkFreq > 160000000)
 	{
-		oscgain = 0;
-	}
-	else if (g_McuOsc.HFFreq < 4000000)
-	{
-		oscgain = 1;
-	}
-	else if (g_McuOsc.HFFreq < 8000000)
-	{
-		oscgain = 2;
-	}
-	else if (g_McuOsc.HFFreq < 16000000)
-	{
-		oscgain = 3;
-	}
-	else
-	{
-		oscgain = 4;
+		pllopt = 1;
 	}
 
-	pll |= SCIF_PLL_PLLDIV(div) | SCIF_PLL_PLLMUL(mul) | SCIF_PLL_PLLOPT(pllopt - 1) |
-		   SCIF_PLL_PLLOSC(oscgain);
-	SAM4L_SCIF->SCIF_UNLOCK = SCIF_UNLOCK_KEY(0xAAu) | SCIF_UNLOCK_ADDR((uint32_t)&SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL -
-					 	 (uint32_t)SAM4L_SCIF);
-	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL = pll;
-	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL |= SCIF_PLL_PLLEN;
+	SAM4L_SCIF->SCIF_UNLOCK = SCIF_UNLOCK_KEY(0xAAu) |
+			SCIF_UNLOCK_ADDR((uint32_t)&SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL - (uint32_t)SAM4L_SCIF);
+	SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL = SCIF_PLL_PLLDIV(div) | SCIF_PLL_PLLMUL(mul) |
+			   	   	   	   	   	   	   SCIF_PLL_PLLOPT(pllopt - 1) | SCIF_PLL_PLLCOUNT_Msk |
+			   	   	   	   	   	   	   SCIF_PLL_PLLEN;
+	while (!(SAM4L_SCIF->SCIF_PCLKSR & SCIF_PCLKSR_PLL0LOCK));
 
-	g_MaiClkFreq = (mul + 1) * g_McuOsc.HFFreq / div;
+	return fpll;
 }
 
 void SystemInit()
 {
 	uint32_t temp = 0;
+	uint32_t mainclk = 0;
 
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
 		| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_PBBMASK - (uint32_t)SAM4L_PM);
@@ -302,21 +286,27 @@ void SystemInit()
 
 		SAM4L_SCIF->SCIF_UNLOCK = SCIF_UNLOCK_KEY(0xAAu)
 			| SCIF_UNLOCK_ADDR((uint32_t)&SAM4L_SCIF->SCIF_OSCCTRL0 - (uint32_t)SAM4L_SCIF);
-		SAM4L_SCIF->SCIF_OSCCTRL0 = SCIF_OSCCTRL0_OSCEN | SCIF_OSCCTRL0_MODE | SCIF_OSCCTRL0_GAIN(gain);
+		SAM4L_SCIF->SCIF_OSCCTRL0 = SCIF_OSCCTRL0_OSCEN | SCIF_OSCCTRL0_MODE | SCIF_OSCCTRL0_GAIN(gain) | SCIF_OSCCTRL0_STARTUP(2);
 		while ((SAM4L_SCIF->SCIF_PCLKSR & SCIF_PCLKSR_OSC0RDY) == 0);
 
-		SystemSetPLL();
+		mainclk = SystemSetPLL();
 
-		SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
-			| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_MCCTRL - (uint32_t)SAM4L_PM);
-		SAM4L_PM->PM_MCCTRL = PM_MCCTRL_MCSEL_PLL0;
+		if (SAM4L_SCIF->SCIF_PCLKSR & SCIF_PCLKSR_PLL0LOCK)
+		{
+			SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
+				| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_MCCTRL - (uint32_t)SAM4L_PM);
+			SAM4L_PM->PM_MCCTRL = PM_MCCTRL_MCSEL_PLL0;
+		}
 	}
 
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
 		| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_CPUSEL - (uint32_t)SAM4L_PM);
-	if (g_MaiClkFreq <= SYSTEM_CORE_CLOCK)
+	if (mainclk <= SYSTEM_CORE_CLOCK)
 	{
 		SAM4L_PM->PM_CPUSEL = 0;
+		SAM4L_PM->PM_PBASEL = 0;
+		SAM4L_PM->PM_PBBSEL = 0;
+		SAM4L_PM->PM_PBCSEL = 0;
 	}
 	else
 	{
