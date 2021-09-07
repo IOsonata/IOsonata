@@ -103,7 +103,7 @@ __WEAK MCU_OSC g_McuOsc = {
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
-uint32_t g_MaiClkFreq = SYSTEM_CORE_CLOCK;
+static uint32_t s_PllFreq = SYSTEM_CORE_CLOCK;
 
 /**
  * @brief	Get system low frequency oscillator type
@@ -245,7 +245,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 // SYSTEM_CORE_CLOCK / Fref = (PLLMUL+1)/PLLDIV
 // SYSTEM_CORE_CLOCK * PLLDIV / Fref - 1 = PLLMUL
 /// @return PLL frequency
-uint32_t SystemSetPLL()
+void SystemSetPLL()
 {
 	uint32_t div = 0;
 	uint32_t mul = 0;
@@ -269,9 +269,9 @@ uint32_t SystemSetPLL()
 		fvco >>= 1;
 	}
 
-	uint32_t fpll = (mul + 1) * g_McuOsc.HFFreq / div;
+	s_PllFreq = (mul + 1) * g_McuOsc.HFFreq / div;
 
-	if (g_MaiClkFreq > 160000000)
+	if (s_PllFreq > 160000000)
 	{
 		pllopt = 1;
 	}
@@ -282,14 +282,11 @@ uint32_t SystemSetPLL()
 			   	   	   	   	   	   	   SCIF_PLL_PLLOPT(pllopt - 1) | SCIF_PLL_PLLCOUNT_Msk |
 			   	   	   	   	   	   	   SCIF_PLL_PLLEN;
 	while (!(SAM4L_SCIF->SCIF_PCLKSR & SCIF_PCLKSR_PLL0LOCK));
-
-	return fpll;
 }
 
 void SystemInit()
 {
 	uint32_t temp = 0;
-	uint32_t mainclk = 0;
 
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
 		| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_PBBMASK - (uint32_t)SAM4L_PM);
@@ -365,7 +362,7 @@ void SystemInit()
 		SAM4L_SCIF->SCIF_OSCCTRL0 = SCIF_OSCCTRL0_OSCEN | mode | SCIF_OSCCTRL0_GAIN(gain) | SCIF_OSCCTRL0_STARTUP(2);
 		while ((SAM4L_SCIF->SCIF_PCLKSR & SCIF_PCLKSR_OSC0RDY) == 0);
 
-		mainclk = SystemSetPLL();
+		SystemSetPLL();
 
 		if (SAM4L_SCIF->SCIF_PCLKSR & SCIF_PCLKSR_PLL0LOCK)
 		{
@@ -377,10 +374,10 @@ void SystemInit()
 
 	uint32_t cpudiv = 0;
 
-	if (mainclk > SYSTEM_CORE_CLOCK)
+	if (s_PllFreq > SYSTEM_CORE_CLOCK)
 	{
-		cpudiv = g_MaiClkFreq / 48000000;
-		SystemCoreClock = g_MaiClkFreq / cpudiv;
+		cpudiv = s_PllFreq / 48000000;
+		SystemCoreClock = s_PllFreq / cpudiv;
 
 		cpudiv = (cpudiv - 1) | PM_CPUSEL_CPUDIV;
 	}
