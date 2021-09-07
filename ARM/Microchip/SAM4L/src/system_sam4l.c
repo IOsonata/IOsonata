@@ -68,6 +68,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <stdbool.h>
 
 #include "sam4lxxx.h"
 
@@ -82,9 +83,16 @@ SOFTWARE.
 #define MAINOSC_FREQ_MAX		20000000
 
 #define USB_FREQ				48000000
-#define PLLA_FREQ				240000000UL
+
+#if defined(SAM4LSXA) || defined(SAM4LSXB) || defined(SAM4LSXC)
+#define FVCO_FREQ_MAX			192000000UL
+#else
+#define FVCO_FREQ_MAX			240000000UL
+#endif
 
 #define PERIPH_CLOCK_MAX		3
+
+// Flash waitstate
 
 __WEAK MCU_OSC g_McuOsc = {
 	OSC_TYPE_XTAL,
@@ -117,8 +125,68 @@ OSC_TYPE GetHighFreqOscType()
 	return g_McuOsc.HFType;
 }
 
+bool FlashWaitReady(uint32_t Timeout)
+{
+	bool res = false;
+
+	while (Timeout != 0 && res == false)
+	{
+		res = SAM4L_HFLASHC->FLASHCALW_FSR & FLASHCALW_FSR_FRDY;
+		Timeout--;
+	}
+
+	return res;
+}
+
+void FlashSendCommand(uint32_t Cmd, int PgNo)
+{
+	uint32_t d;
+
+	if (FlashWaitReady(1000000))
+	{
+		d = SAM4L_HFLASHC->FLASHCALW_FCMD & ~FLASHCALW_FCMD_CMD_Msk;
+
+		if (PgNo >= 0)
+		{
+			d = FLASHCALW_FCMD_KEY_KEY | FLASHCALW_FCMD_PAGEN(PgNo) | Cmd;
+		}
+		else
+		{
+			d |= (FLASHCALW_FCMD_KEY_KEY | Cmd);
+		}
+
+		SAM4L_HFLASHC->FLASHCALW_FCMD = d;
+		FlashWaitReady(1000000);
+	}
+}
+
 void SetFlashWaitState(uint32_t CoreFreq)
 {
+	if (CoreFreq < 12000000UL)
+	{
+		FlashSendCommand(FLASHCALW_FCMD_CMD_HSDIS, -1);
+		SAM4L_HFLASHC->FLASHCALW_FCR = (SAM4L_HFLASHC->FLASHCALW_FCR & ~(FLASHCALW_FCR_FWS | FLASHCALW_FCR_WS1OPT)) |
+										FLASHCALW_FCR_FWS_0;
+
+	}
+	else if (CoreFreq < 24000000UL)
+	{
+		FlashSendCommand(FLASHCALW_FCMD_CMD_HSDIS, -1);
+		SAM4L_HFLASHC->FLASHCALW_FCR = (SAM4L_HFLASHC->FLASHCALW_FCR & ~FLASHCALW_FCR_FWS) |
+										FLASHCALW_FCR_FWS_1 | FLASHCALW_FCR_WS1OPT;
+	}
+	else if (CoreFreq < 48000000UL)
+	{
+		FlashSendCommand(FLASHCALW_FCMD_CMD_HSEN, -1);
+		SAM4L_HFLASHC->FLASHCALW_FCR = (SAM4L_HFLASHC->FLASHCALW_FCR & ~(FLASHCALW_FCR_FWS | FLASHCALW_FCR_WS1OPT)) |
+										FLASHCALW_FCR_FWS_0;
+	}
+	else
+	{
+		FlashSendCommand(FLASHCALW_FCMD_CMD_HSEN, -1);
+		SAM4L_HFLASHC->FLASHCALW_FCR = (SAM4L_HFLASHC->FLASHCALW_FCR & ~FLASHCALW_FCR_FWS) |
+										FLASHCALW_FCR_FWS_1 | FLASHCALW_FCR_WS1OPT;
+	}
 }
 
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
@@ -181,7 +249,7 @@ uint32_t SystemSetPLL()
 {
 	uint32_t div = 0;
 	uint32_t mul = 0;
-	uint32_t fvco = 240000000;//(96000000UL / SYSTEM_CORE_CLOCK) * SYSTEM_CORE_CLOCK;
+	uint32_t fvco = FVCO_FREQ_MAX;//(96000000UL / SYSTEM_CORE_CLOCK) * SYSTEM_CORE_CLOCK;
 	bool found = false;
 	uint32_t pllopt = 0;
 
@@ -233,7 +301,9 @@ void SystemInit()
 	// WDT is on by default.  Disable it.
 	SAM4L_WDT->WDT_CTRL &= ~WDT_CTRL_EN;
 
-	SAM4L_HFLASHC->FLASHCALW_FCR = FLASHCALW_FCR_FWS_1;
+	FlashSendCommand(FLASHCALW_FCMD_CMD_HSEN, -1);
+	SAM4L_HFLASHC->FLASHCALW_FCR = (SAM4L_HFLASHC->FLASHCALW_FCR & ~FLASHCALW_FCR_FWS) |
+									FLASHCALW_FCR_FWS_1 | FLASHCALW_FCR_WS1OPT;
 
 	if (g_McuOsc.HFType == OSC_TYPE_RC)
 	{
@@ -281,12 +351,18 @@ void SystemInit()
 	}
 	else
 	{
-		// External oscillator
+		// External crystal/tcxo
 		uint32_t gain = g_McuOsc.HFFreq / 4000000;
+		uint32_t mode = 0;	// Default external oscillator TXO
 
+		if (g_McuOsc.HFType == OSC_TYPE_XTAL)
+		{
+			// external crystal
+			mode = (0x1u << SCIF_OSCCTRL0_MODE_Pos);
+		}
 		SAM4L_SCIF->SCIF_UNLOCK = SCIF_UNLOCK_KEY(0xAAu)
 			| SCIF_UNLOCK_ADDR((uint32_t)&SAM4L_SCIF->SCIF_OSCCTRL0 - (uint32_t)SAM4L_SCIF);
-		SAM4L_SCIF->SCIF_OSCCTRL0 = SCIF_OSCCTRL0_OSCEN | SCIF_OSCCTRL0_MODE | SCIF_OSCCTRL0_GAIN(gain) | SCIF_OSCCTRL0_STARTUP(2);
+		SAM4L_SCIF->SCIF_OSCCTRL0 = SCIF_OSCCTRL0_OSCEN | mode | SCIF_OSCCTRL0_GAIN(gain) | SCIF_OSCCTRL0_STARTUP(2);
 		while ((SAM4L_SCIF->SCIF_PCLKSR & SCIF_PCLKSR_OSC0RDY) == 0);
 
 		mainclk = SystemSetPLL();
@@ -299,26 +375,28 @@ void SystemInit()
 		}
 	}
 
+	uint32_t cpudiv = 0;
+
+	if (mainclk > SYSTEM_CORE_CLOCK)
+	{
+		cpudiv = g_MaiClkFreq / 48000000;
+		SystemCoreClock = g_MaiClkFreq / cpudiv;
+
+		cpudiv = (cpudiv - 1) | PM_CPUSEL_CPUDIV;
+	}
+
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
 		| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_CPUSEL - (uint32_t)SAM4L_PM);
-	if (mainclk <= SYSTEM_CORE_CLOCK)
-	{
-		SAM4L_PM->PM_CPUSEL = 0;
-		SAM4L_PM->PM_PBASEL = 0;
-		SAM4L_PM->PM_PBBSEL = 0;
-		SAM4L_PM->PM_PBCSEL = 0;
-	}
-	else
-	{
-		SAM4L_PM->PM_CPUSEL = PM_CPUSEL_CPUDIV | ((g_MaiClkFreq / 48000000) - 1);
-	}
+	SAM4L_PM->PM_CPUSEL = cpudiv;
+
+	SetFlashWaitState(SystemCoreClock);
 
 	SystemCoreClockUpdate();
 }
 
 void SystemCoreClockUpdate(void)
 {
-	SetFlashWaitState(SystemCoreClock);
+	//SetFlashWaitState(SystemCoreClock);
 }
 
 uint32_t SystemCoreClockGet()
