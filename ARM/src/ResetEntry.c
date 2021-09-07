@@ -104,7 +104,8 @@ void ResetEntry (void)
 	/*
 	 * Clear the ".bss" segment.
 	 */
-	memset((void *)&__bss_start__, 0, (size_t)&__bss_size__);
+	uint32_t sz = (uint32_t)&__bss_size__; // this is a workaround some optimization issue
+	memset((void *)&__bss_start__, 0, sz);
 #endif
 #endif
 
