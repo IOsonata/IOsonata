@@ -203,6 +203,10 @@ typedef enum IRQn
   PERIPH_COUNT_IRQn        = 80  /**< Number of peripheral IDs */
 } IRQn_Type;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Cortex-M4 processor handlers */
 void NMI_Handler                 ( void );
 void HardFault_Handler           ( void );
@@ -297,6 +301,10 @@ void TWIM2_Handler               ( void );
 void TWIM3_Handler               ( void );
 #if defined(SAM4LCXA) || defined(SAM4LCXB) || defined(SAM4LCXC)
 void LCDCA_Handler               ( void );
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #define __BB_PRESENT           0         /*!< BIT_BANDING present or not */
