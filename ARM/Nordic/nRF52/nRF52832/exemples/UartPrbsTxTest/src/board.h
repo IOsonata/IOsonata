@@ -72,19 +72,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_RTS_PORT		0
 #define UART_RTS_PIN		28
 #define UART_RTS_PINOP		1
-#elif defined(PELAGIC)
-#define UART_RX_PORT		0
-#define UART_RX_PIN			8
-#define UART_RX_PINOP		0
-#define UART_TX_PORT		0
-#define UART_TX_PIN			6
-#define UART_TX_PINOP		0
-#define UART_CTS_PORT		-1
-#define UART_CTS_PIN		-1
-#define UART_CTS_PINOP		0
-#define UART_RTS_PORT		-1
-#define UART_RTS_PIN		-1
-#define UART_RTS_PINOP		0
 #else
 #define UART_RX_PORT		BLUEIO_UART_RX_PORT
 #define UART_RX_PIN			BLUEIO_UART_RX_PIN

@@ -40,6 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 
 #include "coredev/uart.h"
+#include "coredev/iopincfg.h"
 #include "prbs.h"
 #include "slip_intrf.h"
 
@@ -51,18 +52,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define SLIPTEST_BUFSIZE		600
-#define FIFOSIZE			CFIFO_MEMSIZE(SLIPTEST_BUFSIZE * 4)
+#define FIFOSIZE				CFIFO_MEMSIZE(SLIPTEST_BUFSIZE * 4)
 uint8_t g_RxBuff[FIFOSIZE];
 
 // This defines the s_UartPortPins map and pin count.
 // See board.h for target device specific definitions
-static const UART_PORTPINS;
+static const IOPINCFG s_UartPortPins[] = UART_PORTPINS;
 
 // UART configuration data
 const UARTCfg_t g_UartCfg = {
 	.DevNo = UART_NO,
 	.pIOPinMap = s_UartPortPins,
-	.NbIOPins = UART_PORTPIN_COUNT,
+	.NbIOPins = sizeof(s_UartPortPins) / sizeof(IOPINCFG),
 	.Rate = 115200,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
