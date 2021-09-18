@@ -45,7 +45,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   * @{
   */
 
-#define BLEINTRF_TRANSBUFF_MAXLEN       509
+#define BLEINTRF_TRANSBUFF_MAXLEN       512
 
 /**
  * This structure define the CFIFO data packet
