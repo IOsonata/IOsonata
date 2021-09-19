@@ -36,6 +36,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __PDM_H__
 
 #include "device_intrf.h"
+#include "coredev/iopincfg.h"
+#include "cfifo.h"
 
 #pragma pack(push, 1)
 
@@ -45,29 +47,37 @@ typedef enum __PDM_OpMode {
 } PDM_OPMODE;
 
 typedef enum __PDM_SamplMode {
-	PDM_SMPLMODE_FALING,
+	PDM_SMPLMODE_FALLING,
 	PDM_SMPLMODE_RISING
 } PDM_SMPLMODE;
 
-typedef struct __PDM_DevInterf	PDMDEV;
+typedef struct __PDM_DevInterf	PdmDev_t;
 
-typedef void (*PDMEvtHandler)(PDMDEV *pDev);
+typedef void (*PDMEvtHandler)(PdmDev_t *pDev, DEVINTRF_EVT Evt);
+
+#define PDM_CLKPIN_IDX				0
+#define PDM_DINPIN_IDX				1
 
 typedef struct __PDM_Config {
-	uint8_t PinClk;					//!< Clock pin
-	uint8_t PinDIn;					//!< Data in pin
+	const IOPinCfg_t *pPins;		//!< Pointer to pins configuration
+	int NbPins;						//!< Nb Pins
 	uint32_t Freq;					//!< PDM clock frequency
 	PDM_SMPLMODE SmplMode;
 	PDM_OPMODE OpMode;
 	int8_t GainLeft;
 	int8_t GainRight;
-	bool bIntEn;					//! Interrupt enable
-	int	IntPrio;					//! Interrupt priority
-	PDMEvtHandler *EvtHandler;		//! Pointer to event handler
-} PDM_CFG;
+	bool bIntEn;					//!< Interrupt enable
+	int	IntPrio;					//!< Interrupt priority
+	PDMEvtHandler EvtHandler;		//!< Pointer to event handler
+	uint8_t *pFifoMem;				//!< Pointer to CFifo memory
+	uint32_t FifoMemSize;			//!< Total reserved memory size for CFifo
+	uint32_t FifoBlkSize;			//!< Fifo block size
+} PdmCfg_t;
 
 struct __PDM_DevInterf {
-	PDM_CFG CfgData;
+	PdmCfg_t CfgData;
+	HCFIFO hFifo;					//!< CFifo handle
+	int NbSamples;
 };
 
 #pragma pack(pop)
@@ -76,7 +86,13 @@ struct __PDM_DevInterf {
 extern "C" {
 #endif
 
-bool PdmInit(PDMDEV *pDev, PDM_CFG *pCfg);
+bool PdmInit(PdmDev_t * const pDev, const PdmCfg_t * const pCfg);
+uint16_t *PdmGetSamples(PdmDev_t *pDev);
+bool PdmEnable(PdmDev_t *pDev);
+void PdmDisable(PdmDev_t *pDev);
+bool PdmStart(PdmDev_t *pDev);
+void PdmStop(PdmDev_t *pDev);
+void PdmSetMode(PdmDev_t *pDev, PDM_OPMODE Mode);
 
 #ifdef __cplusplus
 }
