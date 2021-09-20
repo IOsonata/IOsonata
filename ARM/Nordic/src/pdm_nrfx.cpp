@@ -111,6 +111,7 @@ uint32_t PdmSetClockFrequency(uint32_t Freq)
 		Freq = 1032000;
 		clkfreq = PDM_PDMCLKCTRL_FREQ_Default;
 	}
+#if defined(NRF52840_XXAA)
 	else if (Freq < 1231000)
 	{
 		Freq = 1067000;
@@ -131,6 +132,13 @@ uint32_t PdmSetClockFrequency(uint32_t Freq)
 		Freq = 1333000;
 		clkfreq = PDM_PDMCLKCTRL_FREQ_1333K;
 	}
+#else
+	else
+	{
+		Freq = 1067000;
+		clkfreq = PDM_PDMCLKCTRL_FREQ_1067K;
+	}
+#endif
 
 	NRF_PDM->PDMCLKCTRL = clkfreq;
 
