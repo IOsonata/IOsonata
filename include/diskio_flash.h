@@ -186,6 +186,7 @@ SOFTWARE.
 #define FLASH_CMD_RDCR              0x15    //!< Read configuration register
 #define FLASH_CMD_WRSR              0x01    //!< Write Register (Status 1, Configuration 1)
 #define FLASH_CMD_WRITE             0x2
+#define FLASH_CMD_DWRITE            0xA2
 #define FLASH_CMD_4WRITE            0x38
 #define FLASH_CMD_QWRITE			0x32
 #define FLASH_CMD_E4WRITE			0x12
@@ -199,7 +200,7 @@ SOFTWARE.
 #define FLASH_CMD_READSTATUS        0x5
 #define FLASH_CMD_WRENABLE          0x6
 #define FLASH_CMD_EN4B              0xB7    //!< Enable 4 bytes address
-#define FLASH_CMD_EX4B              0xE9    //!< Disable 4 bytes address
+#define FLASH_CMD_DIS4B             0xE9    //!< Disable 4 bytes address
 #define FLASH_CMD_SECTOR_ERASE		0x20	//!< Sector erase
 #define FLASH_CMD_BLOCK_ERASE_32    0x52	//!< 32KB Block erase
 #define FLASH_CMD_BLOCK_ERASE       0xD8	//!< Block erase
@@ -210,6 +211,8 @@ SOFTWARE.
 #define FLASH_CMD_RESET_DEVICE		0x99	//!< Reset
 
 #define FLASH_STATUS_WIP            (1<<0)  // Write In Progress
+#define FLASH_STATUS_WEL			(1<<1)	// Write enable
+#define FLASH_STATUS_QE				(1<<6)	// Quad enable
 
 #pragma pack(push, 1)
 /// Quad SPI flash can have different command code and dummy cycle.
@@ -221,6 +224,7 @@ typedef struct __Quad_Flash_Cmd {
 } CmdCycle_t;
 
 typedef CmdCycle_t	CMDCYCLE;
+#ifdef __cplusplus
 
 /**
  * @brief FlashDiskIO callback function.
@@ -436,7 +440,6 @@ private:
 	CmdCycle_t	vWrCmd;			//!< QSPI read/write and dummy cycle
 };
 
-#ifdef __cplusplus
 extern "C" {
 #endif
 
