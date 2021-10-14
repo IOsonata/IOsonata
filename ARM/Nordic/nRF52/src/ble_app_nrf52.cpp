@@ -1031,7 +1031,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 	}
 
 	err = sd_ble_gap_adv_set_configure(&g_AdvInstance.adv_handle, &g_AdvInstance.adv_data, NULL);
-	APP_ERROR_CHECK(err);
+//	APP_ERROR_CHECK(err);
 
 	if (g_BleAppData.bAdvertising == true)
 	{
@@ -1276,7 +1276,28 @@ void BleAppDisInit(const BleAppCfg_t *pBleAppCfg)
     //BLE_GAP_CONN_SEC_MODE_SET_OPEN(&dis_init.dis_attr_md.read_perm);
     //BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&dis_init.dis_attr_md.write_perm);
 
-    dis_init.dis_char_rd_sec = SEC_OPEN;
+    switch (pBleAppCfg->SecType)
+    {
+    	case BLEAPP_SECTYPE_STATICKEY_NO_MITM:
+    	    dis_init.dis_char_rd_sec = SEC_JUST_WORKS;
+    		break;
+    	case BLEAPP_SECTYPE_STATICKEY_MITM:
+    	    dis_init.dis_char_rd_sec = SEC_MITM;
+    		break;
+    	case BLEAPP_SECTYPE_LESC_MITM:
+    	    dis_init.dis_char_rd_sec = SEC_JUST_WORKS;
+    		break;
+    	case BLEAPP_SECTYPE_SIGNED_NO_MITM:
+    	    dis_init.dis_char_rd_sec = SEC_SIGNED;
+    		break;
+    	case BLEAPP_SECTYPE_SIGNED_MITM:
+    	    dis_init.dis_char_rd_sec = SEC_SIGNED_MITM;
+    		break;
+    	case BLEAPP_SECTYPE_NONE:
+    	default:
+    	    dis_init.dis_char_rd_sec = SEC_OPEN;
+    	    break;
+    }
 
     uint32_t err_code = ble_dis_init(&dis_init);
     APP_ERROR_CHECK(err_code);
