@@ -81,11 +81,11 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 
 	uint32_t tmp;
 
-	if (PortNo == 6 && PinNo > 0)
+	if (PortNo == 6 && PinNo > 0 && Dir != IOPINDIR_INPUT && PinOp == IOPINOP_GPIO )
 	{
 		// Port G requires VDDIO2
 		RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
-		PWR->CR2 = PWR_CR2_IOSV;
+		PWR->CR2 |= PWR_CR2_IOSV;
 		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
 	}
 
@@ -183,6 +183,14 @@ void IOPinDisable(int PortNo, int PinNo)
       /* Deactivate the Control bit of Analog mode for the current IO */
 	reg->ASCR &= ~(GPIO_ASCR_ASC0<< PinNo);
 #endif /* STM32L471xx || STM32L475xx || STM32L476xx || STM32L485xx || STM32L486xx */
+
+ 	if (PortNo == 6 && PinNo > 0 && (reg->MODER & 0x55555554) == 0 )
+	{
+		// Port G requires VDDIO2
+		RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+		PWR->CR2 &= ~PWR_CR2_IOSV;
+		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
+	}
 
 }
 
