@@ -253,7 +253,6 @@ void SystemSetPLL()
 	uint32_t div = 0;
 	uint32_t mul = 0;
 	uint32_t fvco = 0;//(96000000UL / SYSTEM_CORE_CLOCK) * SYSTEM_CORE_CLOCK;
-	bool found = false;
 	uint32_t pllopt = 0;
 
 	for (int i = 15; i > 0; i--)
@@ -261,7 +260,7 @@ void SystemSetPLL()
 		for (int j = 1; j < 16; j++)
 		{
 			uint32_t f = g_McuOsc.HFFreq * (i + 1) / j;
-			for (int x = 0; x < s_FvcoCnt && !found; x++)
+			for (int x = 0; x < s_FvcoCnt; x++)
 			{
 				if (f == s_Fvco[x] && (f > fvco))
 				{
@@ -439,7 +438,34 @@ void SystemInit()
 
 void SystemCoreClockUpdate(void)
 {
-	//SetFlashWaitState(SystemCoreClock);
+	if (g_McuOsc.HFType == OSC_TYPE_RC)
+	{
+
+	}
+	else
+	{
+		// XTAL
+		uint32_t pll = SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL;
+		uint32_t mul = (pll & SCIF_PLL_PLLMUL_Msk) >> SCIF_PLL_PLLMUL_Pos;
+		uint32_t div = (pll & SCIF_PLL_PLLDIV_Msk) >> SCIF_PLL_PLLDIV_Pos;
+		uint32_t fvco = div > 0 ? (mul + 1) * g_McuOsc.HFFreq / div : ((mul + 1) << 1) * g_McuOsc.HFFreq;
+		uint32_t cpusel = SAM4L_PM->PM_CPUSEL;
+
+		if (pll & SCIF_PLL_PLLOPT(2))
+		{
+			fvco >>= 1;
+		}
+
+		if (cpusel & PM_CPUSEL_CPUDIV)
+		{
+			SystemCoreClock = fvco / (1 << ((cpusel & PM_CPUSEL_CPUSEL_Msk) + 1));
+		}
+		else
+		{
+			SystemCoreClock = fvco;
+		}
+	}
+	SetFlashWaitState(SystemCoreClock);
 }
 
 uint32_t SystemCoreClockGet()
