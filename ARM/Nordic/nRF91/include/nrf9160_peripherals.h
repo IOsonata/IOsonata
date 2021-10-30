@@ -1,6 +1,8 @@
 /*
 
-Copyright (c) 2010 - 2020, Nordic Semiconductor ASA All rights reserved.
+Copyright (c) 2010 - 2021, Nordic Semiconductor ASA All rights reserved.
+
+SPDX-License-Identifier: BSD-3-Clause
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -201,6 +203,8 @@ POSSIBILITY OF SUCH DAMAGE.
 /* SPU */
 #define SPU_PRESENT
 #define SPU_COUNT 1
+
+#define SPU_RAMREGION_SIZE 0x2000ul
 
 /* CRYPTOCELL */
 #define CRYPTOCELL_PRESENT

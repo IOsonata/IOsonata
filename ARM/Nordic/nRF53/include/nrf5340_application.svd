@@ -357,6 +357,11 @@ POSSIBILITY OF SUCH DAMAGE.
                     <value>0x2000</value>
                   </enumeratedValue>
                   <enumeratedValue>
+                    <name>CL</name>
+                    <description>CLxx - WLCSP</description>
+                    <value>0x2005</value>
+                  </enumeratedValue>
+                  <enumeratedValue>
                     <name>Unspecified</name>
                     <description>Unspecified</description>
                     <value>0xFFFFFFFF</value>

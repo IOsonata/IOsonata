@@ -3241,6 +3241,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #define FICR_INFO_PACKAGE_PACKAGE_Pos (0UL) /*!< Position of PACKAGE field. */
 #define FICR_INFO_PACKAGE_PACKAGE_Msk (0xFFFFFFFFUL << FICR_INFO_PACKAGE_PACKAGE_Pos) /*!< Bit mask of PACKAGE field. */
 #define FICR_INFO_PACKAGE_PACKAGE_QK (0x2000UL) /*!< QKxx - 94-pin aQFN */
+#define FICR_INFO_PACKAGE_PACKAGE_CL (0x2005UL) /*!< CLxx - WLCSP */
 #define FICR_INFO_PACKAGE_PACKAGE_Unspecified (0xFFFFFFFFUL) /*!< Unspecified */
 
 /* Register: FICR_INFO_RAM */

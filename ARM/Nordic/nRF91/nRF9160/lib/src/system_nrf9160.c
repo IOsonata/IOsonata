@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2009-2020 ARM Limited. All rights reserved.
+Copyright (c) 2009-2021 ARM Limited. All rights reserved.
 
     SPDX-License-Identifier: Apache-2.0
 
@@ -26,11 +26,13 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include <stdint.h>
 #include <stdbool.h>
 #include "nrf.h"
-#include "nrf_erratas.h"
+#include "nrf_peripherals.h"
+#include "nrf91_erratas.h"
 #include "system_nrf9160.h"
 
 /*lint ++flb "Enter library region" */
 
+void SystemStoreFICRNS();
 
 #define __SYSTEM_CLOCK      (64000000UL)     /*!< nRF9160 Application core uses a fixed System Clock Frequency of 64MHz */
 
@@ -115,6 +117,10 @@ void SystemInit(void)
             *((volatile uint32_t *)0x50004710ul) = 0x1;
         }
 
+        #if !defined(NRF_SKIP_FICR_NS_COPY_TO_RAM)
+            SystemStoreFICRNS();
+        #endif
+
         /* Trimming of the device. Copy all the trimming values from FICR into the target addresses. Trim
          until one ADDR is not initialized. */
         uint32_t index = 0;
@@ -192,24 +198,24 @@ void SystemInit(void)
             // Set trace port speed to 32 MHz
             NRF_TAD_S->TRACEPORTSPEED = TAD_TRACEPORTSPEED_TRACEPORTSPEED_32MHz;
 
-            *((uint32_t *)(0xE0053000ul)) = 0x00000001ul;
+            *((volatile uint32_t *)(0xE0053000ul)) = 0x00000001ul;
             
-            *((uint32_t *)(0xE005AFB0ul))  = 0xC5ACCE55ul;
-            *((uint32_t *)(0xE005A000ul)) &= 0xFFFFFF00ul;
-            *((uint32_t *)(0xE005A004ul))  = 0x00000009ul;
-            *((uint32_t *)(0xE005A000ul))  = 0x00000303ul;
-            *((uint32_t *)(0xE005AFB0ul))  = 0x00000000ul;
+            *((volatile uint32_t *)(0xE005AFB0ul))  = 0xC5ACCE55ul;
+            *((volatile uint32_t *)(0xE005A000ul)) &= 0xFFFFFF00ul;
+            *((volatile uint32_t *)(0xE005A004ul))  = 0x00000009ul;
+            *((volatile uint32_t *)(0xE005A000ul))  = 0x00000303ul;
+            *((volatile uint32_t *)(0xE005AFB0ul))  = 0x00000000ul;
 
-            *((uint32_t *)(0xE005BFB0ul))  = 0xC5ACCE55ul;
-            *((uint32_t *)(0xE005B000ul)) &= 0xFFFFFF00ul;
-            *((uint32_t *)(0xE005B004ul))  = 0x00003000ul;
-            *((uint32_t *)(0xE005B000ul))  = 0x00000308ul;
-            *((uint32_t *)(0xE005BFB0ul))  = 0x00000000ul;
+            *((volatile uint32_t *)(0xE005BFB0ul))  = 0xC5ACCE55ul;
+            *((volatile uint32_t *)(0xE005B000ul)) &= 0xFFFFFF00ul;
+            *((volatile uint32_t *)(0xE005B004ul))  = 0x00003000ul;
+            *((volatile uint32_t *)(0xE005B000ul))  = 0x00000308ul;
+            *((volatile uint32_t *)(0xE005BFB0ul))  = 0x00000000ul;
 
-            *((uint32_t *)(0xE0058FB0ul)) = 0xC5ACCE55ul;
-            *((uint32_t *)(0xE0058000ul)) = 0x00000000ul;
-            *((uint32_t *)(0xE0058004ul)) = 0x00000000ul;
-            *((uint32_t *)(0xE0058FB0ul)) = 0x00000000ul;
+            *((volatile uint32_t *)(0xE0058FB0ul)) = 0xC5ACCE55ul;
+            *((volatile uint32_t *)(0xE0058000ul)) = 0x00000000ul;
+            *((volatile uint32_t *)(0xE0058004ul)) = 0x00000000ul;
+            *((volatile uint32_t *)(0xE0058FB0ul)) = 0x00000000ul;
 
             /* Rom table does not list ETB, or TPIU base addresses.
              * Some debug probes may require manual configuration of these peripherals to enable tracing.
@@ -255,5 +261,51 @@ void SystemInit(void)
         return false;
     }
 #endif
+
+
+/* Workaround to allow NS code to access FICR. Override NRF_FICR_NS to move FICR_NS buffer. */
+#define FICR_SIZE 0x1000ul
+#define RAM_BASE 0x20000000ul
+#define RAM_END  0x2FFFFFFFul
+
+/* Copy FICR_S to FICR_NS RAM region */
+void SystemStoreFICRNS()
+{
+    if ((uint32_t)NRF_FICR_NS < RAM_BASE || (uint32_t)NRF_FICR_NS + FICR_SIZE > RAM_END)
+    {
+        /* FICR_NS is not in RAM. */
+        return;
+    }
+    /* Copy FICR to NS-accessible RAM block. */
+    volatile uint32_t * from            = (volatile uint32_t *)((uint32_t)NRF_FICR_S + (FICR_SIZE - sizeof(uint32_t)));
+    volatile uint32_t * to              = (volatile uint32_t *)((uint32_t)NRF_FICR_NS + (FICR_SIZE - sizeof(uint32_t)));
+    volatile uint32_t * copy_from_end   = (volatile uint32_t *)NRF_FICR_S;
+    while (from >= copy_from_end)
+    {
+        *(to--) = *(from--);
+    }
+
+    /* Make RAM region NS. */
+    uint32_t ram_region = ((uint32_t)NRF_FICR_NS - (uint32_t)RAM_BASE) / SPU_RAMREGION_SIZE;
+    NRF_SPU_S->RAMREGION[ram_region].PERM &= ~(1 << SPU_RAMREGION_PERM_SECATTR_Pos);
+}
+
+/* Block write and execute access to FICR RAM region */
+void SystemLockFICRNS()
+{
+    if ((uint32_t)NRF_FICR_NS < RAM_BASE || (uint32_t)NRF_FICR_NS + FICR_SIZE > RAM_END)
+    {
+        /* FICR_NS is not in RAM. */
+        return;
+    }
+
+    uint32_t ram_region = ((uint32_t)NRF_FICR_NS - (uint32_t)RAM_BASE) / SPU_RAMREGION_SIZE;
+    NRF_SPU_S->RAMREGION[ram_region].PERM &=
+        ~(
+            (1 << SPU_RAMREGION_PERM_WRITE_Pos) |
+            (1 << SPU_RAMREGION_PERM_EXECUTE_Pos)
+        );
+    NRF_SPU_S->RAMREGION[ram_region].PERM |= 1 << SPU_RAMREGION_PERM_LOCK_Pos;
+}
 
 /*lint --flb "Leave library region" */
