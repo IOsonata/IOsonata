@@ -45,6 +45,7 @@ FlashDiskIO::FlashDiskIO() : DiskIO()
 {
 	vpWaitCB = NULL;
 	vpInterf = NULL;
+	DiskIO::vType = DISKIO_TYPE_ERASEWR;
 }
 
 bool FlashDiskIO::Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,

@@ -44,6 +44,10 @@ SOFTWARE.
 #define DISKIO_CACHE_SECT_MAX	    1       //!< Max number of cache sector
 #define DISKIO_CACHE_DIRTY_BIT      (1<<31) //!< This bit is set in the UseCnt if there was
                                             //!< write to the cache
+typedef enum __DiskIOType {
+	DISKIO_TYPE_STANDARD,	//!< Standard direct R/W
+	DISKIO_TYPE_ERASEWR,	//!< Requires erase before write such as NOR Flash
+} DISKIO_TYPE;
 
 #pragma pack(push, 1)
 typedef struct __DiskPartition {
@@ -103,11 +107,19 @@ public:
 	virtual uint32_t GetNbSect(void) { return ((uint64_t)GetSize() * 1024ULL) / GetSectSize(); }
 
 	/**
-	 * @brief	Get to=tal disk size in bytes.
+	 * @brief	Get total disk size in KBytes.
 	 *
 	 * @return	Total disk size in KBytes.
 	 */
 	virtual uint32_t GetSize(void) = 0;
+
+	/**
+	 * @brief	Get minimum erase size in bytes
+	 *
+	 * @return	Minimum erase size in bytes.
+	 * 			0 for direct R/W device
+	 */
+	virtual uint32_t GetMinEraseSize(void) { return 0; }
 
 	/**
 	 * @brief	Read one sector from physical device.
@@ -161,6 +173,7 @@ public:
 	void Flush();
 
 protected:
+	DISKIO_TYPE vType;
 
 private:
 	int vLastIdx;	    //!< Last cache sector accessed

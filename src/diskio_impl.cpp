@@ -42,7 +42,7 @@ Modified by          Date              Description
 
 using namespace std;
 
-DiskIO::DiskIO() : vLastIdx(1), vNbCache(0), vpCacheSect(NULL)
+DiskIO::DiskIO() : vLastIdx(-1), vNbCache(0), vpCacheSect(NULL)
 {
 }
 
