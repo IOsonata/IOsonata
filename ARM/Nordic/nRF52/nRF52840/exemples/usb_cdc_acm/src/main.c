@@ -135,6 +135,12 @@ static char m_rx_buffer[READ_SIZE];
 static char m_tx_buffer[NRF_DRV_USBD_EPSIZE];
 static bool m_send_flag = 0;
 
+uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
+uint8_t g_extern_usbd_product_string[12 + 1] = { "Test" };
+
+
+//static uint8_t g_extern_usbd_product_string[] = APP_USBD_STRING_DESC("Test");
+//static uint8_t g_extern_usbd_serial_number[] = { "12345" };
 /**
  * @brief User event handler @ref app_usbd_cdc_acm_user_ev_handler_t (headphones)
  * */
