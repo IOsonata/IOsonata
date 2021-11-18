@@ -477,7 +477,7 @@
 
 /** GATT proxy feature. To be enabled only in combination with linking GATT proxy files. */
 #ifndef MESH_FEATURE_GATT_PROXY_ENABLED
-#define MESH_FEATURE_GATT_PROXY_ENABLED 0
+#define MESH_FEATURE_GATT_PROXY_ENABLED 1
 #endif
 
 /** Maximum number of addresses in the GATT proxy address filter, per connection. */
@@ -558,7 +558,7 @@
 
 /** LPN feature */
 #ifndef MESH_FEATURE_LPN_ENABLED
-#define MESH_FEATURE_LPN_ENABLED 0
+#define MESH_FEATURE_LPN_ENABLED 1
 #endif
 
 /**
@@ -575,7 +575,7 @@
 
 /** Friend feature. */
 #ifndef MESH_FEATURE_FRIEND_ENABLED
-#define MESH_FEATURE_FRIEND_ENABLED 0
+#define MESH_FEATURE_FRIEND_ENABLED 1
 #endif
 
 /** Number of friendships supported simultaneously. */

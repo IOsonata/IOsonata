@@ -1,4 +1,4 @@
-/* Copyright (c) 2010 - 2019, Nordic Semiconductor ASA
+/* Copyright (c) 2010 - 2020, Nordic Semiconductor ASA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -41,21 +41,6 @@
 #include <stdbool.h>
 
 /**
- * @defgroup APP_SPECIFIC_DEFINES Application-specific macro definitions
- *
- * @{
- */
-
-/** Controls if the model instance should force all mesh messages to be segmented messages. */
-#define APP_CONFIG_FORCE_SEGMENTATION  (false)
-
-/** Controls the MIC size used by the model instance for sending the mesh messages. */
-#define APP_CONFIG_MIC_SIZE            (NRF_MESH_TRANSMIC_SIZE_SMALL)
-
-/** @} end of APP_SPECIFIC_DEFINES */
-
-
-/**
  * @defgroup APP_SDK_CONFIG SDK configuration
  *
  * Application-specific SDK configuration settings are provided here.
@@ -76,6 +61,10 @@
 
 #define APP_TIMER_ENABLED 1
 #define APP_TIMER_KEEPS_RTC_ACTIVE 1
+#define APP_TIMER_CONFIG_RTC_FREQUENCY  0
+
+#define GPIOTE_ENABLED 1
+#define GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS 4
 
 /** @} end of APP_SDK_CONFIG */
 

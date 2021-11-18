@@ -80,6 +80,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/examples/common/src/app_dtt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_dtt.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/examples/common/src/app_error_weak.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_error_weak.c</locationURI>
@@ -90,9 +95,39 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_level.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/examples/common/src/app_light_ctl.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_light_ctl.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/src/app_light_lc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_light_lc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/src/app_light_lightness.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_light_lightness.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/examples/common/src/app_onoff.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_onoff.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/src/app_scene.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_scene.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/src/app_sensor.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_sensor.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/src/app_sensor_utils.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_sensor_utils.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/app_transition.c</name>
@@ -128,6 +163,16 @@
 			<name>src/nRF5_SDK/examples/common/src/mesh_provisionee.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/mesh_provisionee.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/src/nrf_mesh_weak.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/nrf_mesh_weak.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/src/pwm_utils.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/pwm_utils.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/rtt_input.c</name>
