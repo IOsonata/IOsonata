@@ -160,11 +160,15 @@ uint32_t FindPllCfg(uint32_t SrcFreq)
 	uint32_t pllr = 0;
 	uint32_t pllcfgr = 0;
 
-	for (int m = 1; m <= PLLM_DIV_MAX; m++)
+	for (int m = SrcFreq / 8000000; m <= PLLM_DIV_MAX; m++)
 	{
+		if (m == 0)
+		{
+			continue;
+		}
 		uint32_t clk = SrcFreq / m;
 
-		for (int n = PLLN_MUL_MIN; n <= PLLN_MUL_MAX && clk >= 4000000 && clk <= 48000000; n++)
+		for (int n = PLLN_MUL_MIN; n <= PLLN_MUL_MAX && clk >= 2660000 && clk <= 8000000; n++)
 		{
 			uint32_t vco = clk * n;
 
