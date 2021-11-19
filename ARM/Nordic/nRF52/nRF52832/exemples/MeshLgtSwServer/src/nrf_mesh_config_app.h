@@ -1,4 +1,4 @@
-/* Copyright (c) 2010 - 2019, Nordic Semiconductor ASA
+/* Copyright (c) 2010 - 2020, Nordic Semiconductor ASA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -79,7 +79,13 @@
  * @note To fit the configuration and health models, this value must equal at least
  * the number of models needed by the application plus two.
  */
-#define ACCESS_MODEL_COUNT (3)
+#define ACCESS_MODEL_COUNT (/* Element 0:                                       */ \
+                            1 + /* Config Server                                */ \
+                            1 + /* Health Server                                */ \
+                            1 + /* Generic OnOff Server                         */ \
+                            1 + /* Default Transition Time Server               */ \
+                            1 + /* Scene Server                                 */ \
+                            1   /* Scene Setup Server (extends Scene Server)    */)
 
 /**
  * The number of elements in the application.
@@ -90,17 +96,29 @@
 #define ACCESS_ELEMENT_COUNT (1)
 
 /**
+ * The number of (root only) default transition time instances used by the application.
+ */
+#define GENERIC_DTT_SERVER_INSTANCES_MAX (1)
+
+/**
+ * The number of (root only) generic onoff instances used by the application.
+ */
+#define GENERIC_ONOFF_SERVER_INSTANCES_MAX (1)
+
+/**
+ * The number of scene setup server instances used by the application.
+ */
+#ifndef SCENE_SETUP_SERVER_INSTANCES_MAX
+#define SCENE_SETUP_SERVER_INSTANCES_MAX (1)
+#endif
+
+/**
  * The number of allocated subscription lists for the application.
  *
  * @note This value must equal @ref ACCESS_MODEL_COUNT minus the number of
  * models operating on shared states.
  */
 #define ACCESS_SUBSCRIPTION_LIST_COUNT (ACCESS_MODEL_COUNT)
-
-/**
- * The number of pages of flash storage reserved for the access layer for persistent data storage.
- */
-#define ACCESS_FLASH_PAGE_COUNT (1)
 
 /**
  * @defgroup ACCESS_RELIABLE_CONFIG Configuration of access layer reliable transfer
@@ -114,6 +132,17 @@
 
 
 /** @} end of ACCESS_CONFIG */
+
+
+/**
+ * @ingroup HEALTH_MODEL
+ * @{
+ */
+
+/** The number of instances of the health server model. */
+#define HEALTH_SERVER_ELEMENT_COUNT (1)
+
+/** @} end of HEALTH_MODEL */
 
 
 /**
@@ -135,8 +164,6 @@
  * - Subscription address
  */
 #define DSM_NONVIRTUAL_ADDR_MAX                         (3)
-/** Number of flash pages reserved for the DSM storage. */
-#define DSM_FLASH_PAGE_COUNT                            (1)
 /** @} end of DSM_CONFIG */
 
 /** @} */
