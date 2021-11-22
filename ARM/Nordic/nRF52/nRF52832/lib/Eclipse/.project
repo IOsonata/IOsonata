@@ -506,11 +506,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/nrf_log_backend_uart.c</locationURI>
 		</link>
 		<link>
-			<name>src/nrf_mesh_config_app.h</name>
-			<type>1</type>
-			<locationURI>copy_PARENT/src/nrf_mesh_config_app.h</locationURI>
-		</link>
-		<link>
 			<name>src/nrfthingy_conf_service.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/nrfthingy_conf_service.cpp</locationURI>
@@ -3279,11 +3274,6 @@
 			<name>src/nrf5_SDK_Mesh/core/api/nrf_mesh_assert_lint.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrf5_SDK_Mesh/mesh/core/api/nrf_mesh_assert_lint.h</locationURI>
-		</link>
-		<link>
-			<name>src/nrf5_SDK_Mesh/core/api/nrf_mesh_config_core.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nrf5_SDK_Mesh/mesh/core/api/nrf_mesh_config_core.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrf5_SDK_Mesh/core/api/nrf_mesh_configure.h</name>
