@@ -40,7 +40,9 @@ SOFTWARE.
 #include "app_scheduler.h"
 
 #include "istddef.h"
+#include "convutil.h"
 #include "ble_app.h"
+#include "ble_intrf.h"
 #include "ble_service.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
@@ -49,7 +51,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "coredev/pdm.h"
-
+#include "audio/audiodev.h"
 #include "board.h"
 
 void MicCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
@@ -91,9 +93,9 @@ void CfgSrvcCallback(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len);
 #define BLE_PDM_DATA_UUID_CHAR		3
 
 typedef struct {
-	AUDIO_MODE AudioMode;
+	AUDIO_CHAN Chan;
 	bool bDownsample;
-} PdmConfig_t;
+} MicConfig_t;
 
 #define PDM_BUFF_MAXLEN				128
 
@@ -208,6 +210,30 @@ const BleAppCfg_t s_BleAppCfg = {
 	.SDEvtHandler = NULL				// RTOS Softdevice handler
 };
 
+int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+
+#define BLEINTRF_FIFOSIZE			BLEINTRF_CFIFO_TOTAL_MEMSIZE(10, sizeof(PdmPacket_t))
+
+alignas(4) static uint8_t s_BleIntrfRxFifo[BLEINTRF_FIFOSIZE];
+alignas(4) static uint8_t s_BleIntrfTxFifo[BLEINTRF_FIFOSIZE];
+
+
+static const BleIntrfCfg_t s_BleInrfCfg = {
+	&g_BlePdmSrvc,
+	0,
+	1,
+	sizeof(PdmPacket_t),			// Packet size : use default
+	false,
+	BLEINTRF_FIFOSIZE,			// Rx Fifo mem size
+	s_BleIntrfRxFifo,		// Rx Fifo mem pointer
+	BLEINTRF_FIFOSIZE,			// Tx Fifo mem size
+	s_BleIntrfTxFifo,		// Tx Fifo mem pointer
+	nullptr,//BleIntrfEvtCallback,
+};
+
+BleIntrf g_BleIntrf;
+
+
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
@@ -293,9 +319,28 @@ PdmDev_t g_PdmDev;
 
 PdmPacket_t g_PdmPacket;
 
+MicConfig_t g_MicConfig;
+
 int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
 volatile bool g_bEnable = false;
+
+int BleIntrfEvtCallback(DEVINTRF *pDev, DEVINTRF_EVT EvtId, uint8_t *pData, int Len)
+{
+//	g_InactCntdwn = g_InactTimeOut;
+
+	if (EvtId == DEVINTRF_EVT_RX_DATA)
+	{
+//		app_sched_event_put(NULL, 0, DisplayUpdateHandler);
+	}
+
+	return 0;
+}
+
+void CfgSrvcCallback(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len)
+{
+
+}
 
 void MicCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
 {
@@ -374,7 +419,7 @@ void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 			//audio_pkt.PktCnt = pkcnt;
 			if (g_MicConfig.bDownsample)
 			{
-				if (g_MicConfig.AudioMode == AUDIO_MODE_MONO)
+				if (g_MicConfig.Chan != AUDIO_CHAN_STEREO)
 				{
 					//Downsample MONO-------------------------------------------------------
 					for (int i = 0; i < (PDM_BUFF_MAXLEN / 2); i++)
