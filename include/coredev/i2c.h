@@ -208,6 +208,7 @@ static inline int I2CSetRate(I2CDev_t * const pDev, int Rate) {
 }
 static inline void I2CEnable(I2CDev_t * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
 static inline void I2CDisable(I2CDev_t * const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
+static inline void I2CPowerOff(I2CDev_t * const pDev) { DeviceIntrfPowerOff(&pDev->DevIntrf); }
 static inline int I2CRx(I2CDev_t * const pDev, int DevAddr, uint8_t *pBuff, int Bufflen) {
 	return DeviceIntrfRx(&pDev->DevIntrf, DevAddr, pBuff, Bufflen);
 }

@@ -212,6 +212,7 @@ static inline int SPISetRate(SPIDev_t * const pDev, int Rate) {
 }
 static inline void SPIEnable(SPIDev_t * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
 static inline void SPIDisable(SPIDev_t * const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
+static inline void SPIPowerOff(SPIDev_t * const pDev) { DeviceIntrfPowerOff(&pDev->DevIntrf); }
 static inline int SPIRx(SPIDev_t * const pDev, int DevCs, uint8_t *pBuff, int Bufflen) {
 	return DeviceIntrfRx(&pDev->DevIntrf, DevCs, pBuff, Bufflen);
 }
