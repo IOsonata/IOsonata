@@ -213,6 +213,7 @@ static inline int UARTGetRate(UARTDev_t * const pDev) { return DeviceIntrfGetRat
 static inline int UARTSetRate(UARTDev_t * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }
 static inline void UARTEnable(UARTDev_t * const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
 static inline void UARTDisable(UARTDev_t * const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
+static inline void UARTPowerOff(UARTDev_t * const pDev) { DeviceIntrfPowerOff(&pDev->DevIntrf); }
 static inline int UARTRx(UARTDev_t * const pDev, uint8_t *pBuff, int Bufflen) {
 	return DeviceIntrfRx(&pDev->DevIntrf, 0, pBuff, Bufflen);
 }
