@@ -711,16 +711,16 @@
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="BVy-30-ieI">
-                                <rect key="frame" x="30" y="443" width="205" height="16"/>
+                                <rect key="frame" x="30" y="456" width="205" height="16"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
-                                <textFieldCell key="cell" lineBreakMode="clipping" title="Status:" id="esc-Xj-2pA">
+                                <textFieldCell key="cell" lineBreakMode="clipping" title="Device Status:" id="esc-Xj-2pA">
                                     <font key="font" usesAppearanceFont="YES"/>
                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                     <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>
                             </textField>
                             <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="mgk-3d-E5v">
-                                <rect key="frame" x="345" y="436" width="69" height="32"/>
+                                <rect key="frame" x="386" y="449" width="69" height="32"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <buttonCell key="cell" type="push" title="STOP" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="Bs4-ht-fzP">
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
@@ -731,7 +731,7 @@
                                 </buttonCell>
                             </button>
                             <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="w6X-Nd-ojP">
-                                <rect key="frame" x="255" y="436" width="75" height="32"/>
+                                <rect key="frame" x="296" y="449" width="75" height="32"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <buttonCell key="cell" type="push" title="START" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="D9k-0V-3jE">
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
@@ -742,7 +742,7 @@
                                 </connections>
                             </button>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="ng2-59-RlC">
-                                <rect key="frame" x="479" y="443" width="89" height="16"/>
+                                <rect key="frame" x="479" y="456" width="89" height="16"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" lineBreakMode="clipping" title="Packet drop:" id="JNC-8c-xTg">
                                     <font key="font" metaFont="system"/>
@@ -751,7 +751,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="GUO-uZ-inV">
-                                <rect key="frame" x="606" y="443" width="119" height="16"/>
+                                <rect key="frame" x="606" y="456" width="119" height="16"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" lineBreakMode="clipping" title="pkt_drop_counter" id="it5-Om-PsS">
                                     <font key="font" metaFont="system"/>
@@ -760,7 +760,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="AhU-u1-xAJ">
-                                <rect key="frame" x="479" y="407" width="113" height="16"/>
+                                <rect key="frame" x="479" y="430" width="113" height="16"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" lineBreakMode="clipping" title="Packet counter:" id="BKY-g6-fs1">
                                     <font key="font" metaFont="system"/>
@@ -769,7 +769,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="Fxn-Gi-MPm">
-                                <rect key="frame" x="606" y="407" width="110" height="16"/>
+                                <rect key="frame" x="606" y="430" width="110" height="16"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" lineBreakMode="clipping" title="pkt_counter" id="wAz-CF-jab">
                                     <font key="font" metaFont="system"/>
@@ -778,7 +778,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="0xd-SE-zIu">
-                                <rect key="frame" x="32" y="407" width="95" height="16"/>
+                                <rect key="frame" x="30" y="430" width="95" height="16"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" lineBreakMode="clipping" title="Audio mode:" id="3z2-P6-2Mf">
                                     <font key="font" metaFont="system"/>
@@ -787,7 +787,7 @@
                                 </textFieldCell>
                             </textField>
                             <comboBox verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="dtx-2R-TF9">
-                                <rect key="frame" x="124" y="401" width="123" height="25"/>
+                                <rect key="frame" x="124" y="424" width="123" height="25"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <comboBoxCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" sendsActionOnEndEditing="YES" borderStyle="bezel" drawsBackground="YES" completes="NO" numberOfVisibleItems="2" id="iWN-96-tkk">
                                     <font key="font" metaFont="system"/>
@@ -817,7 +817,7 @@
                                 </subviews>
                             </customView>
                             <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="PYA-7S-YNk">
-                                <rect key="frame" x="260" y="404" width="102" height="18"/>
+                                <rect key="frame" x="260" y="427" width="102" height="18"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <buttonCell key="cell" type="check" title="Downsample" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="Mef-h9-HT3">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -825,23 +825,37 @@
                                 </buttonCell>
                             </button>
                             <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="6lO-Sa-ftt">
-                                <rect key="frame" x="370" y="396" width="85" height="32"/>
+                                <rect key="frame" x="370" y="419" width="85" height="32"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <buttonCell key="cell" type="push" title="UPDATE" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="Dtu-AQ-87T">
                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                                     <font key="font" metaFont="system"/>
                                 </buttonCell>
+                                <connections>
+                                    <action selector="UpdateButtonClick:" target="XfG-lQ-9wD" id="jAl-nt-swD"/>
+                                </connections>
                             </button>
+                            <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="ytX-mX-Xlo">
+                                <rect key="frame" x="30" y="397" width="343" height="16"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                <textFieldCell key="cell" lineBreakMode="clipping" title="Update status:" id="mza-RC-huN">
+                                    <font key="font" usesAppearanceFont="YES"/>
+                                    <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                                    <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                </textFieldCell>
+                            </textField>
                         </subviews>
                     </view>
                     <connections>
                         <outlet property="AudioModeComboBox" destination="dtx-2R-TF9" id="U4s-AL-BPL"/>
+                        <outlet property="DownsampleCheckbox" destination="PYA-7S-YNk" id="Nuz-Rn-nWY"/>
                         <outlet property="PktCounterLabel" destination="Fxn-Gi-MPm" id="EYv-lg-Wze"/>
                         <outlet property="PktDropCounterLabel" destination="GUO-uZ-inV" id="ks0-iR-Jdd"/>
                         <outlet property="StartButton" destination="w6X-Nd-ojP" id="q5V-Oh-3wT"/>
                         <outlet property="StatusLabel" destination="BVy-30-ieI" id="vMK-0S-ppI"/>
                         <outlet property="StopButton" destination="mgk-3d-E5v" id="ev2-LI-f4V"/>
                         <outlet property="UpdateButton" destination="6lO-Sa-ftt" id="5Re-Re-M7v"/>
+                        <outlet property="UpdateStatusLabel" destination="ytX-mX-Xlo" id="ulQ-T6-64S"/>
                         <outlet property="waveformView" destination="Gsv-Dn-neP" id="nJV-N5-XNX"/>
                     </connections>
                 </viewController>

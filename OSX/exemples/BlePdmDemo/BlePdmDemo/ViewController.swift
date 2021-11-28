@@ -60,6 +60,7 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
     var mBlePdmDevice: CBPeripheral!
     
     @IBOutlet weak var StatusLabel: NSTextField!
+    @IBOutlet weak var UpdateStatusLabel: NSTextField!
     
     @IBOutlet weak var StartButton: NSButton!
     @IBOutlet weak var StopButton: NSButton!
@@ -69,6 +70,9 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
     @IBOutlet weak var PktDropCounterLabel: NSTextField!
     @IBOutlet weak var PktCounterLabel: NSTextField!
     @IBOutlet weak var AudioModeComboBox: NSComboBox!
+    
+    @IBOutlet weak var DownsampleCheckbox: NSButton!
+    
     @IBOutlet weak var UpdateButton: NSButton!
     
     
@@ -84,6 +88,8 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
     var current_pkt = UInt32(0)
     var previous_pkt = UInt32(0)
     var myStream = MyStreamer()
+    var mWriteData = false
+    var mSetting = false
     
     func writeWave( _ input : Float, _ bool : Bool){
         if !bool {
@@ -177,7 +183,7 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
                 print(self.mBlePdmDevice.identifier)
                 print(self.mBlePdmDevice.name as Any)
                 //self.bleCentral.connect(self.mBlePdmDevice, options: nil)
-                self.StatusLabel.stringValue = "Status: CONNECTED"
+                self.StatusLabel.stringValue = "Device Status: CONNECTED"
                 if advertisementData[CBAdvertisementDataManufacturerDataKey] == nil {
                     return
                 }
@@ -247,17 +253,46 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
                 if characteristic.uuid == BlePdmPeripheral.BLEPDM_READCHAR_UUID{
                     print("Read characteristic found")
                     mReadChar = characteristic
-                    peripheral.setNotifyValue(true, for: mReadChar)
+                    if self.mWriteData == true{
+                        peripheral.setNotifyValue(true, for: mReadChar)
+                    }
+                    
                     
                 } else if characteristic.uuid == BlePdmPeripheral.BLEPDM_WRITECHAR_UUID{
                     print("Write characteristic found");
                     mWriteChar = characteristic
+                    if self.mSetting == true{
+                        var audio_mode = UInt8(0)
+                        var downsample = UInt8(0)
+                        if AudioModeComboBox.indexOfSelectedItem == 0{
+                            //"MONO"
+                            audio_mode = 1
+                        }
+                        if self.DownsampleCheckbox.state == .on{
+                            // Downsample
+                            downsample = 1
+                        }
+                        let bytes: [UInt8] = [0,3,5,audio_mode,downsample,0,0,0]
+                        let appData = Data(bytes)
+                        if mWriteChar.properties.contains(.writeWithoutResponse) && self.mBlePdmDevice != nil {
+                            
+                            self.mBlePdmDevice.writeValue(appData, for: mWriteChar, type: .withoutResponse)
+                        }
+                    }
                     
                 }
                 
             }
                        
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: {
+            if self.mSetting == true{
+                self.UpdateStatusLabel.stringValue = "Update status: UPDATE_SUCCESS"
+                self.bleCentral.cancelPeripheralConnection(peripheral)
+                self.mSetting = false
+            }
+            
+        })
     }
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         guard let data = characteristic.value else { return }
@@ -336,24 +371,40 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
     
     @IBAction func StopButtonClick(_ sender: Any) {
         if self.mBlePdmDevice != nil {
+            self.mWriteData = false
             self.bleCentral.cancelPeripheralConnection(self.mBlePdmDevice)
-            self.StatusLabel.stringValue = "Status: DISCONNECTED"
+            self.StatusLabel.stringValue = "Device Status: DISCONNECTED"
             self.counter = UInt32(0)
             self.pkt_drop_counter = Int32(0)
             self.current_pkt = UInt32(0)
             self.previous_pkt = UInt32(0)
         } else {
-            self.StatusLabel.stringValue = "Status: NO_DEVICE"
+            self.StatusLabel.stringValue = "Device Status: NO_DEVICE"
         }
     }
     
     @IBAction func StartButtonClick(_ sender: Any) {
         if self.mBlePdmDevice != nil {
+            self.mWriteData = true
             self.bleCentral.connect(self.mBlePdmDevice, options: nil)
-            self.StatusLabel.stringValue = "Status: CONNECTED"
+            self.StatusLabel.stringValue = "Device Status: CONNECTED"
             self.myStream = MyStreamer()
         } else {
-            self.StatusLabel.stringValue = "Status: NO_DEVICE"
+            self.StatusLabel.stringValue = "Device Status: NO_DEVICE"
+        }
+        
+    }
+    
+    
+    @IBAction func UpdateButtonClick(_ sender: NSButton) {
+        if (self.mBlePdmDevice != nil) && (self.mWriteData != true) {
+            self.mSetting = true
+            self.UpdateStatusLabel.stringValue = "Update status: UPDATING"
+            self.bleCentral.connect(self.mBlePdmDevice, options: nil)
+            
+        
+        } else {
+            self.UpdateStatusLabel.stringValue = "Update status: NO_DEVICE"
         }
         
     }
