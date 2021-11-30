@@ -51,7 +51,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "coredev/pdm.h"
-#include "audio/audiodev.h"
+//#include "audio/audiodev.h"
 #include "board.h"
 
 void MicCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
@@ -93,7 +93,7 @@ void CfgSrvcCallback(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len);
 #define BLE_PDM_DATA_UUID_CHAR		3
 
 typedef struct {
-	AUDIO_CHAN Chan;
+	PDM_OPMODE Mode;
 	bool bDownsample;
 } MicConfig_t;
 
@@ -223,7 +223,7 @@ static const BleIntrfCfg_t s_BleInrfCfg = {
 	0,
 	1,
 	sizeof(PdmPacket_t),			// Packet size : use default
-	false,
+	true,
 	BLEINTRF_FIFOSIZE,			// Rx Fifo mem size
 	s_BleIntrfRxFifo,		// Rx Fifo mem pointer
 	BLEINTRF_FIFOSIZE,			// Tx Fifo mem size
@@ -232,60 +232,6 @@ static const BleIntrfCfg_t s_BleInrfCfg = {
 };
 
 BleIntrf g_BleIntrf;
-
-
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-
-#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
-
-static uint8_t s_UartRxFifo[UARTFIFOSIZE];
-static uint8_t s_UartTxFifo[UARTFIFOSIZE];
-
-/// UART pins definitions
-static IOPinCfg_t s_UartPins[] = {
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RTS
-};
-
-/// UART configuration
-const UARTCfg_t g_UartCfg = {
-	.DevNo = 0,							// Device number zero based
-	.pIOPinMap = s_UartPins,				// UART assigned pins
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
-	.Rate = 115200,						// Baudrate
-	.DataBits = 8,						// Data bits
-	.Parity = UART_PARITY_NONE,			// Parity
-	.StopBits = 1,						// Stop bit
-	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
-	.bIntMode = true,					// Interrupt mode
-	.IntPrio = APP_IRQ_PRIORITY_LOW,	// Interrupt priority
-	.EvtCallback = nRFUartEvthandler,	// UART event handler
-	.bFifoBlocking = true,				// Blocking FIFO
-	.RxMemSize = UARTFIFOSIZE,
-	.pRxMem = s_UartRxFifo,
-	.TxMemSize = UARTFIFOSIZE,
-	.pTxMem = s_UartTxFifo,
-};
-
-/// UART object instance
-UART g_Uart;
-
-static const IOPinCfg_t s_LedPins[] = {
-	{BLUEIO_LED_BLUE_PORT, BLUEIO_LED_BLUE_PIN, BLUEIO_LED_BLUE_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// LED1 (Blue)
-	{BLUEIO_LED_GREEN_PORT, BLUEIO_LED_GREEN_PIN, BLUEIO_LED_GREEN_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// LED2 (Green)
-	{BLUEIO_LED_RED_PORT, BLUEIO_LED_RED_PIN, BLUEIO_LED_RED_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// LED3 (Red)
-};
-
-static int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPinCfg_t);
-
-static const IOPinCfg_t s_ButPins[] = {
-	{BUTTON1_PORT, BUTTON1_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 1
-	{BUTTON2_PORT, BUTTON2_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 2
-};
-
-static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
 
 static const IOPinCfg_t s_PdmPins[] = {
 	{ICS_41352_CLK_PORT, ICS_41352_CLK_PIN, ICS_41352_CLK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -358,11 +304,6 @@ void MicCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
 	}
 }
 
-void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len)
-{
-	g_Uart.Tx(pData, Len);
-}
-
 void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
 {
     switch (p_ble_evt->header.evt_id)
@@ -380,23 +321,6 @@ void BleAppInitUserServices()
 
     err_code = BleSrvcInit(&g_BlePdmSrvc, &s_PdmSrvcCfg);
     APP_ERROR_CHECK(err_code);
-}
-
-void ButEvent(int IntNo, void *pCtx)
-{
-	if (IntNo == 0)
-	{
-		if (g_bUartState == false)
-		{
-			g_Uart.Enable();
-			g_bUartState = true;
-		}
-		else
-		{
-			g_Uart.Disable();
-			g_bUartState = false;
-		}
-	}
 }
 
 void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
@@ -419,7 +343,7 @@ void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 			//audio_pkt.PktCnt = pkcnt;
 			if (g_MicConfig.bDownsample)
 			{
-				if (g_MicConfig.Chan != AUDIO_CHAN_STEREO)
+				if (g_MicConfig.Mode != PDM_OPMODE_STEREO)
 				{
 					//Downsample MONO-------------------------------------------------------
 					for (int i = 0; i < (PDM_BUFF_MAXLEN / 2); i++)
@@ -486,21 +410,10 @@ void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 
 void HardwareInit()
 {
-	g_Uart.Init(g_UartCfg);
-
-	IOPinCfg(s_LedPins, s_NbLedPins);
-	IOPinSet(BLUEIO_LED_BLUE_PORT, BLUEIO_LED_BLUE_PIN);
-	IOPinSet(BLUEIO_LED_GREEN_PORT, BLUEIO_LED_GREEN_PIN);
-	IOPinSet(BLUEIO_LED_RED_PORT, BLUEIO_LED_RED_PIN);
-
-	IOPinCfg(s_ButPins, s_NbButPins);
-
 	IOPinConfig(ICS_41352_VDD_PORT, ICS_41352_VDD_PIN, ICS_41352_VDD_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 	IOPinSet(ICS_41352_VDD_PORT, ICS_41352_VDD_PIN);
 
 	PdmInit(&g_PdmDev, &s_PdmCfg);
-
-	IOPinEnableInterrupt(0, APP_IRQ_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
 void BleAppInitUserData()
@@ -512,59 +425,6 @@ void BleAppInitUserData()
 	APP_ERROR_CHECK(err_code);
 
 }
-
-void UartRxChedHandler(void * p_event_data, uint16_t event_size)
-{
-	static uint8_t buff[PACKET_SIZE];
-	static int bufflen = 0;
-	bool flush = false;
-
-	int l = g_Uart.Rx(&buff[bufflen], PACKET_SIZE - bufflen);
-	if (l > 0)
-	{
-		bufflen += l;
-		if (bufflen >= PACKET_SIZE)
-		{
-			flush = true;
-		}
-	}
-	else
-	{
-		if (bufflen > 0)
-		{
-			flush = true;
-		}
-	}
-	if (flush)
-	{
-		if (BleSrvcCharNotify(&g_BlePdmSrvc, 0, buff, bufflen) == 0)
-		{
-			bufflen = 0;
-		}
-		app_sched_event_put(NULL, 0, UartRxChedHandler);
-	}
-}
-
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
-{
-	int cnt = 0;
-	uint8_t buff[20];
-
-	switch (EvtId)
-	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
-			app_sched_event_put(NULL, 0, UartRxChedHandler);
-			break;
-		case UART_EVT_TXREADY:
-			break;
-		case UART_EVT_LINESTATE:
-			break;
-	}
-
-	return cnt;
-}
-
 
 //
 // Print a greeting message on standard output and exit.
@@ -583,11 +443,9 @@ int main()
 {
     HardwareInit();
 
-    g_Uart.printf("UART over BLE Demo\r\n");
-
-    //g_Uart.Disable();
-
     BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
+
+    g_BleIntrf.Init(s_BleInrfCfg);
 
     BleAppRun();
 
