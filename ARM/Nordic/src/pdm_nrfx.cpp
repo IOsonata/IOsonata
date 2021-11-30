@@ -84,15 +84,17 @@ void PdmSetMode(PdmDev_t *pDev, PDM_OPMODE Mode)
 {
 	uint32_t d = NRF_PDM->MODE & ~PDM_MODE_OPERATION_Msk;
 
+	pDev->NbSamples = pDev->hFifo->BlkSize >> 1;
+
 	if (Mode == PDM_OPMODE_MONO)
 	{
-		pDev->NbSamples = pDev->hFifo->BlkSize / 2;
+//		pDev->NbSamples = pDev->hFifo->BlkSize / 2;
 		d |= PDM_MODE_OPERATION_Msk;
 	}
-	else
-	{
-		pDev->NbSamples = pDev->hFifo->BlkSize / 4;
-	}
+//	else
+//	{
+//		pDev->NbSamples = pDev->hFifo->BlkSize / 4;
+//	}
 
 	NRF_PDM->MODE = d;
 }
@@ -168,15 +170,17 @@ bool PdmInit(PdmDev_t * const pDev, const PdmCfg_t * const pCfg)
 		mode |= PDM_MODE_EDGE_Msk;
 	}
 
+	pDev->NbSamples = pCfg->FifoBlkSize >> 1;
+
 	if (pCfg->OpMode == PDM_OPMODE_MONO)
 	{
-		pDev->NbSamples = pCfg->FifoBlkSize / 2;
+//		pDev->NbSamples = pCfg->FifoBlkSize / 2;
 		mode |= PDM_MODE_OPERATION_Msk;
 	}
-	else
-	{
-		pDev->NbSamples = pCfg->FifoBlkSize / 4;
-	}
+//	else
+//	{
+//		pDev->NbSamples = pCfg->FifoBlkSize / 4;
+//	}
 
 	NRF_PDM->MODE = mode;
 
