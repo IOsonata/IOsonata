@@ -59,7 +59,9 @@ void CfgSrvcCallback(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len);
 
 #define DEVICE_NAME                     "BlePdmDemo"                          /**< Name of device. Will be included in the advertising data. */
 
-#define PACKET_SIZE						256
+#define PACKET_SIZE						400
+
+#define MAX_MTU							NRF_SDH_BLE_GATT_MAX_MTU_SIZE
 
 #define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
 
@@ -97,7 +99,7 @@ typedef struct {
 	bool bDownsample;
 } MicConfig_t;
 
-#define PDM_BUFF_MAXLEN				128
+#define PDM_BUFF_MAXLEN				400
 
 typedef struct __Pdm_Packet {
 	uint32_t Cnt;
@@ -207,12 +209,13 @@ const BleAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
-	.SDEvtHandler = NULL				// RTOS Softdevice handler
+	.SDEvtHandler = NULL,				// RTOS Softdevice handler
+	.MaxMtu = MAX_MTU,
 };
 
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-#define BLEINTRF_FIFOSIZE			BLEINTRF_CFIFO_TOTAL_MEMSIZE(10, sizeof(PdmPacket_t))
+#define BLEINTRF_FIFOSIZE			BLEINTRF_CFIFO_TOTAL_MEMSIZE(20, sizeof(PdmPacket_t))
 
 alignas(4) static uint8_t s_BleIntrfRxFifo[BLEINTRF_FIFOSIZE];
 alignas(4) static uint8_t s_BleIntrfTxFifo[BLEINTRF_FIFOSIZE];
@@ -240,7 +243,7 @@ static const IOPinCfg_t s_PdmPins[] = {
 
 void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt);
 
-#define PDM_FIFO_BLKSIZE		128
+#define PDM_FIFO_BLKSIZE		400
 #define PDM_FIFO_MEMSIZE		CFIFO_TOTAL_MEMSIZE(4, PDM_FIFO_BLKSIZE)
 
 alignas(4) static uint8_t s_PdmFifoMem[PDM_FIFO_MEMSIZE];
@@ -249,8 +252,8 @@ static const PdmCfg_t s_PdmCfg = {
 	.pPins = s_PdmPins,
 	.NbPins = sizeof(s_PdmPins) / sizeof(IOPinCfg_t),
 	.Freq = 1032000,
-	.SmplMode = PDM_SMPLMODE_RISING,
-	.OpMode = PDM_OPMODE_MONO,
+	.SmplMode = PDM_SMPLMODE_FALLING,
+	.OpMode = PDM_OPMODE_STEREO,
 	.GainLeft = 0,
 	.GainRight = 0,
 	.bIntEn = true,
@@ -263,9 +266,9 @@ static const PdmCfg_t s_PdmCfg = {
 
 PdmDev_t g_PdmDev;
 
-PdmPacket_t g_PdmPacket;
+PdmPacket_t g_PdmPacket = {0,};
 
-MicConfig_t g_MicConfig;
+MicConfig_t g_MicConfig = {PDM_OPMODE_STEREO,true};;
 
 int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
@@ -296,6 +299,7 @@ void MicCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
 		//nrfx_pdm_start();
 		//g_AudioPkt.PktCnt = 0;
 		PdmStart(&g_PdmDev);
+
 	}
 	else
 	{
@@ -337,13 +341,26 @@ void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 		static int16_t *pl = g_PdmPacket.Data;
 		static int16_t *pr = &g_PdmPacket.Data[1];
 
+		/*
+		int16_t Data1[PDM_BUFF_MAXLEN / 2];
+		for (int i=0;i<PDM_BUFF_MAXLEN / 2;i++){
+			Data1[i]=i;
+		}
+		memcpy(g_PdmPacket.Data, Data1, PDM_BUFF_MAXLEN);
+
+		g_BleIntrf.Tx(0, (uint8_t*)&g_PdmPacket, sizeof(PdmPacket_t));
+
+		g_PdmPacket.Cnt++; */
+
+
 		int16_t *sl = (int16_t*)PdmGetSamples(pDev);
 		if (sl)
 		{
 			//audio_pkt.PktCnt = pkcnt;
 			if (g_MicConfig.bDownsample)
 			{
-				if (g_MicConfig.Mode != PDM_OPMODE_STEREO)
+				//if (g_MicConfig.Mode != PDM_OPMODE_STEREO)
+				if (g_MicConfig.Mode == PDM_OPMODE_MONO)
 				{
 					//Downsample MONO-------------------------------------------------------
 					for (int i = 0; i < (PDM_BUFF_MAXLEN / 2); i++)
@@ -441,7 +458,7 @@ void BleAppInitUserData()
 
 int main()
 {
-    HardwareInit();
+   HardwareInit();
 
     BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
 
