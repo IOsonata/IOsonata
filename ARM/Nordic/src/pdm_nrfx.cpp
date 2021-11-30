@@ -82,6 +82,10 @@ uint16_t *PdmGetSamples(PdmDev_t *pDev)
 
 void PdmSetMode(PdmDev_t *pDev, PDM_OPMODE Mode)
 {
+	NRF_PDM->TASKS_STOP = 1;
+	msDelay(1);
+	NRF_PDM->ENABLE = 0;
+
 	uint32_t d = NRF_PDM->MODE & ~PDM_MODE_OPERATION_Msk;
 
 	pDev->NbSamples = pDev->hFifo->BlkSize >> 1;
@@ -97,6 +101,8 @@ void PdmSetMode(PdmDev_t *pDev, PDM_OPMODE Mode)
 //	}
 
 	NRF_PDM->MODE = d;
+
+	NRF_PDM->ENABLE = 1;
 }
 
 uint32_t PdmSetClockFrequency(uint32_t Freq)
