@@ -429,6 +429,12 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	reg->INTENSET = RTC_INTENSET_OVRFLW_Msk;
     reg->EVTENSET = RTC_EVTEN_OVRFLW_Msk;
 
+    if (pCfg->EvtHandler)
+    {
+    	reg->INTENSET = RTC_INTENSET_TICK_Msk;
+        reg->EVTENSET = RTC_EVTEN_TICK_Msk;
+    }
+
     nRFxRtcSetFrequency(pTimer, pCfg->Freq);
 
     return true;
