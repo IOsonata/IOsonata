@@ -38,7 +38,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "device_intrf.h"
 #include "coredev/iopincfg.h"
 #include "cfifo.h"
+//#include "audio/audiodev_pdm.h"
 
+#if 1
 #pragma pack(push, 1)
 
 typedef enum __PDM_OpMode {
@@ -81,6 +83,7 @@ struct __PDM_DevInterf {
 };
 
 #pragma pack(pop)
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -93,6 +96,7 @@ void PdmDisable(PdmDev_t *pDev);
 bool PdmStart(PdmDev_t *pDev);
 void PdmStop(PdmDev_t *pDev);
 void PdmSetMode(PdmDev_t *pDev, PDM_OPMODE Mode);
+void PdmPowerOff(PdmDev_t * const pDev);
 
 #ifdef __cplusplus
 }

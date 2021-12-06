@@ -154,12 +154,23 @@ uint32_t PdmSetClockFrequency(uint32_t Freq)
 	return Freq;
 }
 
+void PdmPowerOff(PdmDev_t * const pDev)
+{
+	*(volatile uint32_t *)((uint32_t)NRF_PDM + 0xFFC);
+	*(volatile uint32_t *)((uint32_t)NRF_PDM + 0xFFC) = 1;
+	*(volatile uint32_t *)((uint32_t)NRF_PDM + 0xFFC) = 0;
+}
+
 bool PdmInit(PdmDev_t * const pDev, const PdmCfg_t * const pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr || pCfg->pPins == nullptr || pCfg->NbPins < 2 || pCfg->pFifoMem == nullptr || pCfg->FifoMemSize == 0)
 	{
 		return false;
 	}
+
+	// Force power on in case it was powered off previously
+	*(volatile uint32_t *)((uint32_t)NRF_PDM + 0xFFC);
+	*(volatile uint32_t *)((uint32_t)NRF_PDM + 0xFFC) = 1;
 
 	pDev->CfgData = *pCfg;
 	s_pnRFPdmDev = pDev;
