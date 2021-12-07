@@ -138,6 +138,7 @@ typedef struct __Timer_Config {
     int             IntPrio;    //!< Interrupt priority. recommended to use highest
     							//!< priority if precision timing is required
     TimerEvtHandler_t EvtHandler; //!< Interrupt handler
+    bool			bTickInt;	//!< Enable tick interrupt. Use with caution, could cause crashes due to excessive interrupts
 } TimerCfg_t;
 
 typedef TimerCfg_t	TIMER_CFG;
@@ -406,7 +407,7 @@ public:
 
 	Timer() { vTimer.pObj = this; }
 
-	virtual operator TimerDev_t * const () { return &vTimer; }
+	virtual operator TimerDev_t const * () { return &vTimer; }
 
     /**
      * @brief   Timer initialization.
