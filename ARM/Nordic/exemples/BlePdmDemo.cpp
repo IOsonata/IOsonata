@@ -360,24 +360,7 @@ void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 			if (g_MicConfig.bDownsample)
 			{
 				//if (g_MicConfig.Mode != PDM_OPMODE_STEREO)
-				if (g_MicConfig.Mode == PDM_OPMODE_MONO)
-				{
-					//Downsample MONO-------------------------------------------------------
-					for (int i = 0; i < (PDM_BUFF_MAXLEN / 2); i++)
-					{
-						sample_sum += EndianCvt16(*sl);
-						sample_counter +=1;
-						if (sample_counter==3)
-						{
-							*pl = EndianCvt16(sample_sum/3);
-							pl++;
-							sample_sum = EndianCvt16(*sl);
-							sample_counter = 1;
-						}
-						sl++;
-					}
-				}
-				else
+				if (g_MicConfig.Mode == PDM_OPMODE_STEREO)
 				{
 					//Downsample STEREO-------------------------------------------------------
 					int16_t *sr = sl + 1;
@@ -401,6 +384,24 @@ void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 						sr += 2;
 					}
 				}
+				else
+				{
+					//Downsample MONO-------------------------------------------------------
+					for (int i = 0; i < (PDM_BUFF_MAXLEN / 2); i++)
+					{
+						sample_sum += EndianCvt16(*sl);
+						sample_counter +=1;
+						if (sample_counter==3)
+						{
+							*pl = EndianCvt16(sample_sum/3);
+							pl++;
+							sample_sum = EndianCvt16(*sl);
+							sample_counter = 1;
+						}
+						sl++;
+					}
+				}
+
 				if(bidx & 1)//== 0)
 				{
 					g_BleIntrf.Tx(0, (uint8_t*)&g_PdmPacket, sizeof(PdmPacket_t));
