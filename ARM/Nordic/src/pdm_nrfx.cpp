@@ -85,25 +85,26 @@ void PdmSetMode(PdmDev_t *pDev, PDM_OPMODE Mode)
 {
 	NRF_PDM->TASKS_STOP = 1;
 	msDelay(1);
-	NRF_PDM->ENABLE = 0;
+	//NRF_PDM->ENABLE = 0;
 
-	uint32_t d = NRF_PDM->MODE & ~PDM_MODE_OPERATION_Msk;
+	uint32_t d = NRF_PDM->MODE & ~(PDM_MODE_OPERATION_Msk | PDM_MODE_EDGE_Msk);
 
 	pDev->NbSamples = pDev->hFifo->BlkSize >> 1;
 
-	if (Mode == PDM_OPMODE_MONO)
+	switch (Mode)
 	{
-//		pDev->NbSamples = pDev->hFifo->BlkSize / 2;
-		d |= PDM_MODE_OPERATION_Msk;
+		case PDM_OPMODE_MONO_LEFT:
+			d |= PDM_MODE_OPERATION_Msk;
+			break;
+		case PDM_OPMODE_MONO_RIGHT:
+			d |= PDM_MODE_OPERATION_Msk | PDM_MODE_EDGE_Msk;
+			break;
+		case PDM_OPMODE_STEREO:
+			break;
 	}
-//	else
-//	{
-//		pDev->NbSamples = pDev->hFifo->BlkSize / 4;
-//	}
-
 	NRF_PDM->MODE = d;
 
-	NRF_PDM->ENABLE = 1;
+	//NRF_PDM->ENABLE = 1;
 }
 
 uint32_t PdmSetClockFrequency(uint32_t Freq)
@@ -189,7 +190,7 @@ bool PdmInit(PdmDev_t * const pDev, const PdmCfg_t * const pCfg)
 	}
 
 	pDev->NbSamples = pCfg->FifoBlkSize >> 1;
-
+/*
 	if (pCfg->OpMode == PDM_OPMODE_MONO)
 	{
 //		pDev->NbSamples = pCfg->FifoBlkSize / 2;
@@ -201,6 +202,8 @@ bool PdmInit(PdmDev_t * const pDev, const PdmCfg_t * const pCfg)
 //	}
 
 	NRF_PDM->MODE = mode;
+*/
+	PdmSetMode(pDev, pCfg->OpMode);
 
 	NRF_PDM->GAINL = pCfg->GainLeft & 0x7F;
 	NRF_PDM->GAINR = pCfg->GainRight & 0x7F;
