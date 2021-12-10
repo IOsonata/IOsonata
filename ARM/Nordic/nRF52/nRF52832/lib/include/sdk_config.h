@@ -1234,6 +1234,10 @@
 
 // </e>
 
+#ifndef NRF_BLE_GATT_MTU_EXCHANGE_INITIATION_ENABLED
+#define NRF_BLE_GATT_MTU_EXCHANGE_INITIATION_ENABLED	1
+#endif
+
 // <q> BLE_RACP_ENABLED  - ble_racp - Record Access Control Point library
  
 

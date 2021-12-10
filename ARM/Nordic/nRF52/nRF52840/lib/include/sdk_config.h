@@ -48,6 +48,10 @@
 #endif
 // <h> nRF_BLE 
 
+#ifndef NRF_BLE_GATT_MTU_EXCHANGE_INITIATION_ENABLED
+#define NRF_BLE_GATT_MTU_EXCHANGE_INITIATION_ENABLED	1
+#endif
+
 //==========================================================
 // <q> BLE_ADVERTISING_ENABLED  - ble_advertising - Advertising module
  
