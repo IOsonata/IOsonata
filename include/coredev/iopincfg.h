@@ -158,8 +158,6 @@ typedef IOPinCfg_t		IOPINCFG;
  */
 typedef void (*IOPinEvtHandler_t)(int IntNo, void *pCtx);
 
-typedef IOPinEvtHandler_t	IOPINEVT_CB;
-
 #ifdef 	__cplusplus
 extern "C" {
 #endif

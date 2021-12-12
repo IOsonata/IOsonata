@@ -58,9 +58,9 @@ typedef struct {
     uint32_t CC[TIMER_NRFX_RTC_MAX_TRIGGER_EVT];
     TimerTrig_t Trigger[TIMER_NRFX_RTC_MAX_TRIGGER_EVT];
     TimerDev_t *pTimer;
-} NRFX_RTC_DATA;
+} nRFRtcData_t;
 
-static NRFX_RTC_DATA s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
+static nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 	// RTC LF timer first
 	{
 		.DevNo = 0,
@@ -258,7 +258,7 @@ static int nRFxRtcGetMaxTrigger(TimerDev_t * const pTimer)
 static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                               	  	 TimerTrigEvtHandler_t Handler, void *pContext)
 {
-	NRFX_RTC_DATA &rtc = s_nRfxRtcData[pTimer->DevNo];
+	nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 
     if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
         return 0;
@@ -287,7 +287,7 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 
 static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
-	NRFX_RTC_DATA &rtc = s_nRfxRtcData[pTimer->DevNo];
+	nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 
 	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
         return;
@@ -346,7 +346,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
     pTimer->DevNo = pCfg->DevNo;
     pTimer->EvtHandler = pCfg->EvtHandler;
-	NRFX_RTC_DATA &rtc = s_nRfxRtcData[pTimer->DevNo];
+	nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 	NRF_RTC_Type *reg = s_nRfxRtcData[pTimer->DevNo].pReg;
 
     rtc.pTimer = pTimer;

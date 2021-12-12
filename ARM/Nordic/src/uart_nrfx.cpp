@@ -78,16 +78,16 @@ typedef struct __nRF_UART_Dev {
 	uint8_t TxFifoMem[NRFX_UART_CFIFO_SIZE];
 	uint8_t TxDmaCache[NRFX_UART_BUFF_SIZE];
 	uint8_t RxDmaCache;
-} NRFX_UARTDEV;
+} nRFUartDev_t;
 
 typedef struct {
 	int Baud;
 	int RegVal;
-} NRFX_UARTRATE;
+} nRFUartBaud_t;
 
 #pragma pack(pop)
 
-static const NRFX_UARTRATE s_nRFxBaudrate[] = {
+static const nRFUartBaud_t s_nRFxBaudrate[] = {
 #ifdef UART_PRESENT
 	{1200, UART_BAUDRATE_BAUDRATE_Baud1200},
 	{2400, UART_BAUDRATE_BAUDRATE_Baud2400},
@@ -125,9 +125,9 @@ static const NRFX_UARTRATE s_nRFxBaudrate[] = {
 #endif
 };
 
-static const int s_NbBaudrate = sizeof(s_nRFxBaudrate) / sizeof(NRFX_UARTRATE);
+static const int s_NbBaudrate = sizeof(s_nRFxBaudrate) / sizeof(nRFUartBaud_t);
 
-static NRFX_UARTDEV s_nRFxUARTDev[] = {
+static nRFUartDev_t s_nRFxUARTDev[] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{
@@ -232,9 +232,9 @@ static NRFX_UARTDEV s_nRFxUARTDev[] = {
 #endif
 };
 
-static const int s_NbUartDev = sizeof(s_nRFxUARTDev) / sizeof(NRFX_UARTDEV);
+static const int s_NbUartDev = sizeof(s_nRFxUARTDev) / sizeof(nRFUartDev_t);
 
-bool nRFUARTWaitForRxReady(NRFX_UARTDEV * const pDev, uint32_t Timeout)
+bool nRFUARTWaitForRxReady(nRFUartDev_t * const pDev, uint32_t Timeout)
 {
 #ifdef UART_PRESENT
 	NRF_UART_Type *reg = pDev->pReg;
@@ -252,7 +252,7 @@ bool nRFUARTWaitForRxReady(NRFX_UARTDEV * const pDev, uint32_t Timeout)
 	return false;
 }
 
-bool nRFUARTWaitForTxReady(NRFX_UARTDEV * const pDev, uint32_t Timeout)
+bool nRFUARTWaitForTxReady(nRFUartDev_t * const pDev, uint32_t Timeout)
 {
 #ifdef UART_PRESENT
 	NRF_UART_Type *reg = pDev->pReg;
@@ -270,10 +270,10 @@ bool nRFUARTWaitForTxReady(NRFX_UARTDEV * const pDev, uint32_t Timeout)
 	return false;
 }
 
-//static void UartIrqHandler(NRFX_UARTDEV * const pDev)
+//static void UartIrqHandler(nRFUartDev_t * const pDev)
 static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
-	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev-> pDevData;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev-> pDevData;
 	int len = 0;
 	int cnt = 0;
 
@@ -525,12 +525,12 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 
 static uint32_t nRFUARTGetRate(DevIntrf_t * const pDev)
 {
-	return ((NRFX_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
+	return ((nRFUartDev_t*)pDev->pDevData)->pUartDev->Rate;
 }
 
 static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
-	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 
 	int rate = 0;
 
@@ -558,7 +558,7 @@ static bool nRFUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
 
 static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
-	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 	int cnt = 0;
 
 	uint32_t state = DisableInterrupt();
@@ -607,7 +607,7 @@ static bool nRFUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 
 static int nRFUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 {
-	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
     int cnt = 0;
     int rtry = pDev->MaxRetry;
 
@@ -684,7 +684,7 @@ static void nRFUARTStopTx(DevIntrf_t * const pDev)
 
 static void nRFUARTDisable(DevIntrf_t * const pDev)
 {
-	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 #ifdef UART_PRESENT
 	NRF_UART_Type *reg = dev->pReg;
 	reg->TASKS_STOPRX = 1;
@@ -707,7 +707,7 @@ static void nRFUARTDisable(DevIntrf_t * const pDev)
 
 static void nRFUARTEnable(DevIntrf_t * const pDev)
 {
-	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 
 	dev->pUartDev->RxOvrErrCnt = 0;
 	dev->pUartDev->ParErrCnt = 0;
@@ -753,7 +753,7 @@ static void nRFUARTEnable(DevIntrf_t * const pDev)
 
 void nRFUARTPowerOff(DevIntrf_t * const pDev)
 {
-	NRFX_UARTDEV *dev = (NRFX_UARTDEV *)pDev->pDevData;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 #ifdef UART_PRESENT
 	NRF_UART_Type *reg = dev->pReg;
 #else
@@ -783,7 +783,7 @@ void nRFUARTPowerOff(DevIntrf_t * const pDev)
 	}
 }
 
-static void apply_workaround_for_enable_anomaly(NRFX_UARTDEV * const pDev)
+static void apply_workaround_for_enable_anomaly(nRFUartDev_t * const pDev)
 {
 #if defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || defined(NRF9160_XXAA)
     // Apply workaround for anomalies:

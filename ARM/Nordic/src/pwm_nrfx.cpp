@@ -56,15 +56,15 @@ typedef struct {
 	uint16_t Seq0[PWM_NRF5_MAX_CHAN];
 	uint16_t Seq1[PWM_NRF5_MAX_CHAN];
 	volatile bool bStarted;
-} PWM_NRF_DEV;
+} nRFPwmDev_t;
 
-static PWM_NRF_DEV s_PwmnRFDev[PWM_NRF5_MAX_DEV] = {
+static nRFPwmDev_t s_PwmnRFDev[PWM_NRF5_MAX_DEV] = {
 	{NRF_PWM0, },
 	{NRF_PWM1, },
 	{NRF_PWM2, },
 };
 
-bool nRF52PWMWWaitForSTop(PWM_NRF_DEV *pDev, int Timeout)
+bool nRF52PWMWWaitForSTop(nRFPwmDev_t *pDev, int Timeout)
 {
 	while (Timeout-- > 0)
 	{
@@ -82,7 +82,7 @@ bool nRF52PWMWWaitForSTop(PWM_NRF_DEV *pDev, int Timeout)
 
 bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 {
-	PWM_NRF_DEV *dev = NULL;
+	nRFPwmDev_t *dev = NULL;
 
 	if (pDev == NULL || pCfg == NULL)
 	{
@@ -164,7 +164,7 @@ bool PWMSetFrequency(PwmDev_t *pDev, uint32_t Freq)
 	if (pDev == NULL)
 		return false;
 
-	PWM_NRF_DEV *dev = (PWM_NRF_DEV*)pDev->pDevData;
+	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
 
 	if (dev == NULL)
 		return false;
@@ -251,7 +251,7 @@ bool PWMEnable(PwmDev_t *pDev)
 	if (pDev == NULL)
 		return false;
 
-	PWM_NRF_DEV *dev = (PWM_NRF_DEV*)pDev->pDevData;
+	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
 
 	if (dev == NULL)
 		return false;
@@ -265,7 +265,7 @@ void PWMDisable(PwmDev_t *pDev)
 {
 	if (pDev != NULL)
 	{
-		PWM_NRF_DEV *dev = (PWM_NRF_DEV*)pDev->pDevData;
+		nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
 
 		dev->pReg->ENABLE = PWM_ENABLE_ENABLE_Disabled;
 	}
@@ -276,7 +276,7 @@ bool PWMOpenChannel(PwmDev_t *pDev, const PwmChanCfg_t *pChanCfg, int NbChan)
 	if (pDev == NULL || pChanCfg == NULL)
 		return false;
 
-	PWM_NRF_DEV *dev = (PWM_NRF_DEV*)pDev->pDevData;
+	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
 
 	for (int i = 0; i < NbChan; i++)
 	{
@@ -295,7 +295,7 @@ void PWMCloseChannel(PwmDev_t *pDev, int Chan)
 	if (pDev == NULL)
 		return;
 
-	PWM_NRF_DEV *dev = (PWM_NRF_DEV*)pDev->pDevData;
+	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
 
 	if (Chan >= 0 && Chan < PWM_NRF5_MAX_CHAN)
 	{
@@ -308,7 +308,7 @@ bool PWMStart(PwmDev_t *pDev, uint32_t msDur)
 	if (pDev == NULL)
 		return false;
 
-	PWM_NRF_DEV *dev = (PWM_NRF_DEV*)pDev->pDevData;
+	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
 
 	if (dev == NULL)
 		return false;
@@ -338,7 +338,7 @@ void PWMStop(PwmDev_t *pDev)
 {
 	if (pDev != NULL)
 	{
-		PWM_NRF_DEV *dev = (PWM_NRF_DEV*)pDev->pDevData;
+		nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
 
 		dev->pReg->TASKS_STOP = 1;
 		dev->bStarted = false;
@@ -355,7 +355,7 @@ bool PWMSetDutyCycle(PwmDev_t *pDev, int Chan, int DutyCycle)
 	if (Chan < 0 || Chan >= PWM_NRF5_MAX_CHAN)
 		return false;
 
-	PWM_NRF_DEV *dev = (PWM_NRF_DEV*)pDev->pDevData;
+	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
 
 	uint32_t x = dev->TopCount * DutyCycle / 100;
 
@@ -389,7 +389,7 @@ bool PWMPlay(PwmDev_t *pDev, int Chan, uint32_t Freq, uint32_t Dur)
 	if (Chan < 0 || Chan >= PWM_NRF5_MAX_CHAN)
 		return false;
 
-	PWM_NRF_DEV *dev = (PWM_NRF_DEV*)pDev->pDevData;
+	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
 
 	if (dev == NULL)
 		return false;
@@ -416,7 +416,7 @@ bool PWMPlay(PwmDev_t *pDev, int Chan, uint32_t Freq, uint32_t Dur)
 
 void nRF52PWMIrqHandler(int PwmNo)
 {
-	PWM_NRF_DEV *dev = &s_PwmnRFDev[PwmNo];
+	nRFPwmDev_t *dev = &s_PwmnRFDev[PwmNo];
 	PWM_EVT evt = (PWM_EVT)-1;
 
 	if (dev->pReg->EVENTS_LOOPSDONE == 1)

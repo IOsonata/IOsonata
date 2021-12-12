@@ -73,16 +73,16 @@ typedef struct {
 #endif
 	};
 	uint8_t TRData[NRFX_I2CSLAVE_MAXDEV][NRFX_I2C_TRBUFF_SIZE];
-} NRFX_I2CDEV;
+} nRFTwiDev_t;
 
 typedef struct {
 	uint32_t Freq;
 	uint32_t RegVal;
-} NRFX_I2CFREQ;
+} nRFTwiFreq_t;
 
 #pragma pack(pop)
 
-static const NRFX_I2CFREQ s_nRFxI2CFreq[] = {
+static const nRFTwiFreq_t s_nRFxI2CFreq[] = {
 #ifdef TWIM_PRESENT
 	{100000, TWIM_FREQUENCY_FREQUENCY_K100},
 	{250000, TWIM_FREQUENCY_FREQUENCY_K250},
@@ -94,9 +94,9 @@ static const NRFX_I2CFREQ s_nRFxI2CFreq[] = {
 #endif
 };
 
-static const int s_NbI2CFreq = sizeof(s_nRFxI2CFreq) / sizeof(NRFX_I2CFREQ);
+static const int s_NbI2CFreq = sizeof(s_nRFxI2CFreq) / sizeof(nRFTwiFreq_t);
 
-static NRFX_I2CDEV s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
+static nRFTwiDev_t s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{
@@ -126,7 +126,7 @@ static NRFX_I2CDEV s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
 #endif
 };
 
-bool nRFxI2CWaitStop(NRFX_I2CDEV * const pDev, int Timeout)
+bool nRFxI2CWaitStop(nRFTwiDev_t * const pDev, int Timeout)
 {
 #ifdef TWIM_PRESENT
 	NRF_TWIM_Type *reg = pDev->pDmaReg;
@@ -163,7 +163,7 @@ bool nRFxI2CWaitStop(NRFX_I2CDEV * const pDev, int Timeout)
     return false;
 }
 
-bool nRFxI2CWaitRxComplete(NRFX_I2CDEV * const pDev, int Timeout)
+bool nRFxI2CWaitRxComplete(nRFTwiDev_t * const pDev, int Timeout)
 {
 #ifdef TWIM_PRESENT
 	NRF_TWIM_Type *reg = pDev->pDmaReg;
@@ -206,7 +206,7 @@ bool nRFxI2CWaitRxComplete(NRFX_I2CDEV * const pDev, int Timeout)
     return false;
 }
 
-bool nRFxI2CWaitTxComplete(NRFX_I2CDEV * const pDev, int Timeout)
+bool nRFxI2CWaitTxComplete(nRFTwiDev_t * const pDev, int Timeout)
 {
 #ifdef TWIM_PRESENT
 	NRF_TWIM_Type *reg = pDev->pDmaReg;
@@ -252,7 +252,7 @@ bool nRFxI2CWaitTxComplete(NRFX_I2CDEV * const pDev, int Timeout)
 
 void nRFxI2CDisable(DevIntrf_t * const pDev)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
 #ifdef TWIM_PRESENT
 	dev->pDmaReg->ENABLE = (TWIM_ENABLE_ENABLE_Disabled << TWIM_ENABLE_ENABLE_Pos);
@@ -263,7 +263,7 @@ void nRFxI2CDisable(DevIntrf_t * const pDev)
 
 void nRFxI2CEnable(DevIntrf_t * const pDev)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
 #ifdef TWIM_PRESENT
     if (dev->pI2cDev->DevIntrf.bDma)
@@ -288,7 +288,7 @@ void nRFxI2CEnable(DevIntrf_t * const pDev)
 
 void nRFxI2CPowerOff(DevIntrf_t * const pDev)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
 	// Undocumented Power down I2C.  Nordic Bug with DMA causing high current consumption
 #ifdef TWIM_PRESENT
@@ -304,14 +304,14 @@ void nRFxI2CPowerOff(DevIntrf_t * const pDev)
 
 uint32_t nRFxI2CGetRate(DevIntrf_t * const pDev)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
 	return dev->pI2cDev->Cfg.Rate;
 }
 
 uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t regval = 0;
 
 	for (int i = 0; i < s_NbI2CFreq; i++)
@@ -334,7 +334,7 @@ uint32_t nRFxI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 
 bool nRFxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
 #ifdef TWI_PRESENT
 	dev->pReg->ADDRESS = DevAddr;
@@ -350,7 +350,7 @@ bool nRFxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 // Receive Data only, no Start/Stop condition
 int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
 #ifdef TWIM_PRESENT
@@ -381,7 +381,7 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 // Receive Data only, no Start/Stop condition
 int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
 
 	if (pBuff == NULL || BuffLen <= 0)
@@ -414,7 +414,7 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
 
 void nRFxI2CStopRx(DevIntrf_t * const pDev)
 {
-    NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+    nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 #ifdef TWIM_PRESENT
 	NRF_TWIM_Type *reg = dev->pDmaReg;
 #else
@@ -437,7 +437,7 @@ void nRFxI2CStopRx(DevIntrf_t * const pDev)
 
 bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
 #ifdef TWI_PRESENT
 	dev->pReg->ADDRESS = DevAddr;
@@ -459,7 +459,7 @@ bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 // Send Data only, no Start/Stop condition
 int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
 
@@ -494,7 +494,7 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 
 int nRFxI2CTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
-	NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
 
@@ -520,7 +520,7 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 
 void nRFxI2CStopTx(DevIntrf_t * const pDev)
 {
-    NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+    nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 #ifdef TWIM_PRESENT
 	NRF_TWIM_Type *reg = dev->pDmaReg;
 
@@ -544,7 +544,7 @@ void nRFxI2CStopTx(DevIntrf_t * const pDev)
 
 void nRFxI2CReset(DevIntrf_t * const pDev)
 {
-	I2CDev_t *dev = (I2CDev_t*)((NRFX_I2CDEV*)pDev->pDevData)->pI2cDev;
+	I2CDev_t *dev = (I2CDev_t*)((nRFTwiDev_t*)pDev->pDevData)->pI2cDev;
 
     I2CBusReset(dev);
 
@@ -576,7 +576,7 @@ void nRFxI2CReset(DevIntrf_t * const pDev)
 
 void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
-    NRFX_I2CDEV *dev = (NRFX_I2CDEV*)pDev->pDevData;
+    nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
     if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
     {
@@ -779,8 +779,17 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		sreg->SHORTS = TWIS_SHORTS_READ_SUSPEND_Msk | TWIS_SHORTS_WRITE_SUSPEND_Msk;
         sreg->EVENTS_READ = 0;
         sreg->EVENTS_WRITE = 0;
+        sreg->EVENTS_ERROR = 0;
+        sreg->EVENTS_RXSTARTED = 0;
+        sreg->EVENTS_TXSTARTED = 0;
+        sreg->EVENTS_STOPPED = 0;
+
         enval = TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos;
-        inten = (TWIS_INTEN_READ_Enabled << TWIS_INTEN_READ_Pos) | (TWIS_INTEN_WRITE_Enabled << TWIS_INTEN_WRITE_Pos) |
+        inten = (TWIS_INTEN_READ_Enabled << TWIS_INTEN_READ_Pos) |
+        		(TWIS_INTEN_WRITE_Enabled << TWIS_INTEN_WRITE_Pos) |
+				(TWIS_INTEN_RXSTARTED_Enabled << TWIS_INTEN_RXSTARTED_Pos) |
+				(TWIS_INTEN_TXSTARTED_Enabled << TWIS_INTEN_TXSTARTED_Pos) |
+				(TWIS_INTEN_ERROR_Enabled << TWIS_INTEN_ERROR_Pos) |
         		(TWIS_INTEN_STOPPED_Enabled << TWIS_INTEN_STOPPED_Pos);
 	    reg->ENABLE = enval;
     }

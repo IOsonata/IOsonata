@@ -50,13 +50,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma pack(push, 4)
 typedef struct {
 	IOPINSENSE Sense;
-	IOPINEVT_CB SensEvtCB;
+	IOPinEvtHandler_t SensEvtCB;
     uint16_t PortPinNo;
     void *pCtx;
-} IOPINSENS_EVTHOOK;
+} PinSenseEvtHook_t;
 #pragma pack(pop)
 
-static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
+static PinSenseEvtHook_t s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
 
 /**
  * @brief Configure individual I/O pin. nRF51 only have 1 port so PortNo is not used
@@ -288,7 +288,7 @@ void IOPinDisableInterrupt(int IntNo)
  * 			pEvtCB	: Pointer to callback function when event occurs
  * 			pCtx	: Pointer to context data to be pass to the handler function
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
     if (IntNo >= IOPIN_MAX_INT)
 		return false;
@@ -431,7 +431,7 @@ int IOPinFindAvailInterrupt()
  * @return	Interrupt number on success
  * 			-1 on failure.
  */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
 	int intno = IOPinFindAvailInterrupt();
 
