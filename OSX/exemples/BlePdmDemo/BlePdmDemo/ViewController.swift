@@ -10,11 +10,14 @@ import CoreBluetooth
 
 
 class BlePdmPeripheral: NSObject {
-    // 00000000-2a76-4901-a32a-db0eea85d0e5
 
-        public static let BLEPDM_SERVICE_UUID   = CBUUID.init(string: "00000001-2a76-4901-a32a-db0eea85d0e5")
-        public static let BLEPDM_WRITECHAR_UUID   = CBUUID.init(string: "00000002-2a76-4901-a32a-db0eea85d0e5")
-        public static let BLEPDM_READCHAR_UUID   = CBUUID.init(string: "00000003-2a76-4901-a32a-db0eea85d0e5")
+        //public static let BLE_PDM_UUID_SERVICE   = CBUUID.init(string: "00000100-3462-475C-96E9-58C72CFF09AA")
+        //public static let BLE_PDM_CFG_UUID_CHAR   = CBUUID.init(string: "00000200-3462-475C-96E9-58C72CFF09AA")
+        //public static let BLE_PDM_DATA_UUID_CHAR   = CBUUID.init(string: "00000101-3462-475C-96E9-58C72CFF09AA")
+    
+        public static let BLE_PDM_UUID_SERVICE   = CBUUID.init(string: "00000001-2a76-4901-a32a-db0eea85d0e5")
+        public static let BLE_PDM_CFG_UUID_CHAR   = CBUUID.init(string: "00000002-2a76-4901-a32a-db0eea85d0e5")
+        public static let BLE_PDM_DATA_UUID_CHAR   = CBUUID.init(string: "00000003-2a76-4901-a32a-db0eea85d0e5")
         
     }
 
@@ -128,7 +131,9 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
         waveLayer.removeFromSuperlayer()
         writeWave(0, false)
         
-        AudioModeComboBox.selectItem(withObjectValue: "MONO")
+        AudioModeComboBox.selectItem(withObjectValue: "MONO_LEFT")
+        mWriteData = false
+        mSetting = false
         
         
     }
@@ -173,6 +178,7 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
     }
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
         if let pname = peripheral.name {
+            print(peripheral.name)
             if pname == "BlePdmDemo" {
                 //self.bleCentral.stopScan()
                 //mDeviceNameLabel.text = peripheral.name
@@ -181,10 +187,10 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
                 //print(peripheral.identifier)
                 
                 
-                print(self.mBlePdmDevice.identifier)
-                print(self.mBlePdmDevice.name as Any)
+                //print(self.mBlePdmDevice.identifier)
+                //print(self.mBlePdmDevice.name as Any)
                 //self.bleCentral.connect(self.mBlePdmDevice, options: nil)
-                self.StatusLabel.stringValue = "Device Status: CONNECTED"
+                self.StatusLabel.stringValue = "Device Status: FOUND_DEVICE"
                 if advertisementData[CBAdvertisementDataManufacturerDataKey] == nil {
                     return
                 }
@@ -210,19 +216,21 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
     }
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
       
-        peripheral.discoverServices([BlePdmPeripheral.BLEPDM_SERVICE_UUID])
+        peripheral.discoverServices([BlePdmPeripheral.BLE_PDM_UUID_SERVICE])
         print("Connected to BlePdm peripheral")
+        self.StatusLabel.stringValue = "Device Status: CONNECTED"
         
     }
     func centralManager(_ central: CBCentralManager,
                         didDisconnectPeripheral peripheral: CBPeripheral,
                         error: Error?) {
         print("Disconnected from BlePdm peripheral")
-        
+        self.StatusLabel.stringValue = "Device Status: DISCONNECTED"
         
     }
     
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        self.StatusLabel.stringValue = "Device Status: CONNECT_FAIL"
     }
     
     func scanPeripheral(_ sender: CBCentralManager)
@@ -235,10 +243,10 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let services = peripheral.services {
             for service in services {
-                if service.uuid == BlePdmPeripheral.BLEPDM_SERVICE_UUID {
+                if service.uuid == BlePdmPeripheral.BLE_PDM_UUID_SERVICE {
                     print("BlePdm service found")
                     //Now kick off discovery of characteristics
-                    peripheral.discoverCharacteristics([BlePdmPeripheral.BLEPDM_READCHAR_UUID,BlePdmPeripheral.BLEPDM_WRITECHAR_UUID], for: service)
+                    peripheral.discoverCharacteristics([BlePdmPeripheral.BLE_PDM_DATA_UUID_CHAR,BlePdmPeripheral.BLE_PDM_CFG_UUID_CHAR], for: service)
                     return
                 }
             }
@@ -251,7 +259,7 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
         
         if let characteristics = service.characteristics {
             for characteristic in characteristics {
-                if characteristic.uuid == BlePdmPeripheral.BLEPDM_READCHAR_UUID{
+                if characteristic.uuid == BlePdmPeripheral.BLE_PDM_DATA_UUID_CHAR{
                     print("Read characteristic found")
                     mReadChar = characteristic
                     if self.mWriteData == true{
@@ -259,15 +267,21 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
                     }
                     
                     
-                } else if characteristic.uuid == BlePdmPeripheral.BLEPDM_WRITECHAR_UUID{
+                } else if characteristic.uuid == BlePdmPeripheral.BLE_PDM_CFG_UUID_CHAR{
                     print("Write characteristic found");
                     mWriteChar = characteristic
                     if self.mSetting == true{
                         var audio_mode = UInt8(0)
                         var downsample = UInt8(0)
                         if AudioModeComboBox.indexOfSelectedItem == 0{
-                            //"MONO"
+                            //"MONO_LEFT"
+                            audio_mode = 0
+                        } else if AudioModeComboBox.indexOfSelectedItem == 1{
+                            //"MONO_RIGHT"
                             audio_mode = 1
+                        } else if AudioModeComboBox.indexOfSelectedItem == 2{
+                            //"STEREO"
+                            audio_mode = 2
                         }
                         if self.DownsampleCheckbox.state == .on{
                             // Downsample
@@ -323,13 +337,25 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
         //print("characteristic description:", characteristic.description)
         
         let data = characteristic.value
+        print(data)
         let counter_data = data![0...4]
         
         let counter_array = UInt32(bigEndian: counter_data.withUnsafeBytes { $0.pointee })
         //print(counter_array)
         let pkt_counter = UInt32(bigEndian: counter_array)
         PktCounterLabel.stringValue = String(pkt_counter)
-        current_pkt = pkt_counter
+        
+        //current_pkt = pkt_counter
+        
+        
+        if (counter == 0){
+            previous_pkt = pkt_counter
+            current_pkt = pkt_counter
+        }else{
+            current_pkt = pkt_counter
+        }
+        
+        print(current_pkt)
         if (current_pkt >= previous_pkt) {
             let drop_pkt = Int32(current_pkt - previous_pkt)
             if ( drop_pkt > 1) {
@@ -338,8 +364,12 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
             PktDropCounterLabel.stringValue = String(pkt_drop_counter)
             previous_pkt = pkt_counter
         }
+            
+        
+        
         let audio_data = data![4...data!.count-1]
-        if (previous_pkt > 20) {
+        //print(audio_data)
+        if (previous_pkt > 50) {
             myStream.write(data: audio_data)
         }
         var max_audio_value = UInt8(0)
@@ -350,7 +380,7 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
             
         }
         max_audio_value += 1
-        print(max_audio_value)
+        //print(max_audio_value)
         //print(pkt_counter)
         
         //let randomFloat = Float.random(in: 1..<255)
@@ -377,8 +407,8 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
             self.StatusLabel.stringValue = "Device Status: DISCONNECTED"
             self.counter = UInt32(0)
             self.pkt_drop_counter = Int32(0)
-            self.current_pkt = UInt32(0)
-            self.previous_pkt = UInt32(0)
+            //self.current_pkt = UInt32(0)
+            //self.previous_pkt = UInt32(0)
         } else {
             self.StatusLabel.stringValue = "Device Status: NO_DEVICE"
         }
@@ -390,6 +420,7 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
             self.bleCentral.connect(self.mBlePdmDevice, options: nil)
             self.StatusLabel.stringValue = "Device Status: CONNECTED"
             self.myStream = MyStreamer()
+            
         } else {
             self.StatusLabel.stringValue = "Device Status: NO_DEVICE"
         }
