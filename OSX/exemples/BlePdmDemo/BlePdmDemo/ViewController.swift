@@ -10,10 +10,11 @@ import CoreBluetooth
 
 
 class BlePdmPeripheral: NSObject {
+    // 00000000-2a76-4901-a32a-db0eea85d0e5
 
-        public static let BLEPDM_SERVICE_UUID   = CBUUID.init(string: "00000100-3462-475C-96E9-58C72CFF09AA")
-        public static let BLEPDM_WRITECHAR_UUID   = CBUUID.init(string: "00000200-3462-475C-96E9-58C72CFF09AA")
-        public static let BLEPDM_READCHAR_UUID   = CBUUID.init(string: "00000101-3462-475C-96E9-58C72CFF09AA")
+        public static let BLEPDM_SERVICE_UUID   = CBUUID.init(string: "00000001-2a76-4901-a32a-db0eea85d0e5")
+        public static let BLEPDM_WRITECHAR_UUID   = CBUUID.init(string: "00000002-2a76-4901-a32a-db0eea85d0e5")
+        public static let BLEPDM_READCHAR_UUID   = CBUUID.init(string: "00000003-2a76-4901-a32a-db0eea85d0e5")
         
     }
 
@@ -172,7 +173,7 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
     }
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
         if let pname = peripheral.name {
-            if pname == "Badger" {
+            if pname == "BlePdmDemo" {
                 //self.bleCentral.stopScan()
                 //mDeviceNameLabel.text = peripheral.name
                 self.mBlePdmDevice = peripheral

@@ -437,10 +437,10 @@ void HardwareInit()
 void BleAppInitUserData()
 {
 	// Add passkey pairing
-    ble_opt_t opt;
-    opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
-	uint32_t err_code =  sd_ble_opt_set(BLE_GAP_OPT_PASSKEY, &opt);
-	APP_ERROR_CHECK(err_code);
+//    ble_opt_t opt;
+//    opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
+//	uint32_t err_code =  sd_ble_opt_set(BLE_GAP_OPT_PASSKEY, &opt);
+//	APP_ERROR_CHECK(err_code);
 
 }
 
