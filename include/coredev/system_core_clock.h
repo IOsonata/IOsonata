@@ -74,7 +74,9 @@ typedef struct __Mcu_Osc {
 	uint32_t HFFreq;		//!< Core, high frequency oscillator frequency in Hz
 	OSC_TYPE LFType;		//!< Low frequency oscillator type
 	uint32_t LFFreq;		//!< Low frequency oscillator frequency in Hz (usually 32768)
-} MCU_OSC;
+} McuOsc_t;
+
+typedef McuOsc_t	MCU_OSC;
 
 #pragma pack(pop)
 
