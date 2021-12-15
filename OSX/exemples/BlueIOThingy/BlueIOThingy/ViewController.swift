@@ -61,20 +61,23 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
     func SetupChart(){
         self.tempDS = LineChartDataSet(entries: self.tempDataEntries, label: "Temperature")
         self.tempDS.colors = [NSUIColor.red]
+        self.tempDS.drawCirclesEnabled = false
         self.tempData.append(self.tempDS)
         self.tempChart.data = self.tempData
         
         self.humiDS = LineChartDataSet(entries: self.humiDataEntries, label: "Humidity")
         self.humiDS.colors = [NSUIColor.red]
+        self.humiDS.drawCirclesEnabled = false
         self.humiData.append(self.humiDS)
         self.humiChart.data = self.humiData
-        self.humiChart.data = self.humiData
+    
         
         self.pressDS = LineChartDataSet(entries: self.pressDataEntries, label: "Pressure")
         self.pressDS.colors = [NSUIColor.red]
+        self.pressDS.drawCirclesEnabled = false
         self.pressData.append(self.pressDS)
         self.pressChart.data = self.pressData
-        self.pressChart.data = self.pressData
+        
         
 
     }
@@ -83,34 +86,59 @@ class ViewController: NSViewController, CBCentralManagerDelegate, CBPeripheralDe
         self.tempDS.removeAll()
         self.tempData.removeAll(keepingCapacity: false)
         self.tempDS = LineChartDataSet(entries: self.tempDataEntries, label: "Temperature")
+        self.tempDS.drawCirclesEnabled = false
+        self.tempDS.drawValuesEnabled = false
+        self.tempDS.colors = [NSUIColor.red]
         self.tempData.append(self.tempDS)
         self.tempChart.data = self.tempData
-        
         self.tempDS.notifyDataSetChanged()
         self.tempData.notifyDataChanged()
         self.tempChart.notifyDataSetChanged()
+        self.tempChart.backgroundColor = NSUIColor.black
+        self.tempChart.legend.textColor = NSUIColor.white
+        self.tempChart.xAxis.labelTextColor = NSUIColor.white
+        self.tempChart.leftAxis.labelTextColor = NSUIColor.white
+        self.tempChart.rightAxis.labelTextColor = NSUIColor.white
+        self.tempDS.mode = .cubicBezier
         
         self.humiDataEntries.append(newHumiDataEntry)
         self.humiDS.removeAll()
         self.humiData.removeAll(keepingCapacity: false)
         self.humiDS = LineChartDataSet(entries: self.humiDataEntries, label: "Humidity")
+        self.humiDS.drawCirclesEnabled = false
+        self.humiDS.drawValuesEnabled = false
+        self.humiDS.colors = [NSUIColor.green]
         self.humiData.append(self.humiDS)
         self.humiChart.data = self.humiData
-        
+        self.humiChart.backgroundColor = NSUIColor.black
+        self.humiChart.legend.textColor = NSUIColor.white
+        self.humiChart.xAxis.labelTextColor = NSUIColor.white
+        self.humiChart.leftAxis.labelTextColor = NSUIColor.white
+        self.humiChart.rightAxis.labelTextColor = NSUIColor.white
+        self.humiDS.mode = .cubicBezier
         self.humiDS.notifyDataSetChanged()
         self.humiData.notifyDataChanged()
         self.humiChart.notifyDataSetChanged()
+        
         
         self.pressDataEntries.append(newPressDataEntry)
         self.pressDS.removeAll()
         self.pressData.removeAll(keepingCapacity: false)
         self.pressDS = LineChartDataSet(entries: self.pressDataEntries, label: "Pressure")
+        self.pressDS.drawCirclesEnabled = false
+        self.pressDS.drawValuesEnabled = false
+        self.pressDS.colors = [NSUIColor.blue]
         self.pressData.append(self.pressDS)
         self.pressChart.data = self.pressData
-        
+        self.pressChart.legend.textColor = NSUIColor.white
+        self.pressChart.xAxis.labelTextColor = NSUIColor.white
+        self.pressChart.leftAxis.labelTextColor = NSUIColor.white
+        self.pressChart.rightAxis.labelTextColor = NSUIColor.white
+        self.pressDS.mode = .cubicBezier
         self.pressDS.notifyDataSetChanged()
         self.pressData.notifyDataChanged()
         self.pressChart.notifyDataSetChanged()
+        self.pressChart.backgroundColor = NSUIColor.black
         
         
     }
