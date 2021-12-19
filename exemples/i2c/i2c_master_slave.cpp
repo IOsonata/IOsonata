@@ -4,7 +4,19 @@
 @brief	This example demonstrate the use of I2C in both master and slave mode
 
 Two I2C devices are created, one in master mode and the other in slave mode.
-User is require to connected the wire to the appropriate pins.
+User is required to connect the wire to the appropriate pins.
+
+This example demonstrate the read/write to the slave device memory. The
+read/write command starts with a 1 byte offset location of the device memory.
+
+For example :
+
+- Reading 10 bytes at offset 3 is done by issuing a write of 1 byte value 3 then
+  follow by a read of 10 byte.
+
+    uint8_t offset = 3;
+    uint8_t buff[10];
+    g_I2C.Read(SLAVE_I2C_DEV_ADDR, &offset, 1, buff, 10);
 
 
 @author	Hoang Nguyen Hoan
@@ -50,8 +62,6 @@ uint8_t g_TxBuff[FIFOSIZE];
 static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RTS
 };
 
 // UART configuration data
@@ -109,21 +119,21 @@ I2C g_I2CMaster;
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 static const IOPinCfg_t s_I2cSlavePins[] = {
-	{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},		// SDA
-	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
+	{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN},		// SDA
+	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_OPENDRAIN},	// SCL
 };
 
 static const I2CCfg_t s_I2cCfgSlave = {
 	.DevNo = I2C_SLAVE_DEVNO,			// I2C device number
 	.Type = I2CTYPE_STANDARD,
 	.Mode = I2CMODE_SLAVE,
-	.pIOPinMap = s_I2cMasterPins,
-	.NbIOPins = sizeof(s_I2cMasterPins) / sizeof(IOPinCfg_t),
+	.pIOPinMap = s_I2cSlavePins,
+	.NbIOPins = sizeof(s_I2cSlavePins) / sizeof(IOPinCfg_t),
 	.Rate = 100000,		// Rate in Hz
 	.MaxRetry = 5,			// Retry
 	.AddrType = I2CADDR_TYPE_NORMAL,
-	.NbSlaveAddr = 0,			// Number of slave addresses
-	.SlaveAddr = {I2C_SLAVE_ADDR,},		// Slave addresses
+	.NbSlaveAddr = 1,			// Number of slave addresses
+	.SlaveAddr = {I2C_SLAVE_ADDR,},// + 1,I2C_SLAVE_ADDR},		// Slave addresses
 	.bDmaEn = true,
 	.bIntEn = true,
 	.IntPrio = 7,			// Interrupt prio
@@ -133,7 +143,7 @@ static const I2CCfg_t s_I2cCfgSlave = {
 I2C g_I2CSlave;
 
 uint8_t s_ReadRqstData[100];
-uint8_t s_WriteRqstData[10];
+uint8_t s_WriteRqstData[16];
 bool s_bWriteRqst = false;
 int s_Offset = 0;
 
@@ -159,6 +169,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 
 		case DEVINTRF_EVT_WRITE_RQST:
 			s_bWriteRqst = true;
+			g_I2CSlave.SetWriteRqstBuffer(0, s_WriteRqstData, 10);
 			break;
 
 		case DEVINTRF_EVT_COMPLETED:
@@ -173,6 +184,12 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 					// Reset offset if we moved beyond max buffer
 					s_Offset = 0;
 				}
+			}
+			else
+			{
+				// Write data completed
+				// TODO : Validate data before copying.
+				memcpy(&s_ReadRqstData[s_WriteRqstData[0]], &s_WriteRqstData[1], Len - 1);
 			}
 			s_bWriteRqst = false;
 			break;
@@ -222,20 +239,27 @@ int main()
 		s_ReadRqstData[i] = i;
 	}
 
-	memset(s_WriteRqstData, 0xff, 10);
-
-	// Set pointer to data to be send upon receive of a read request
-	g_I2CSlave.SetReadRqstData(0, s_ReadRqstData, 10);
-
-	// Set pointer to buffer to receive from write request
-	g_I2CSlave.SetWriteRqstBuffer(0, s_WriteRqstData, 2);
-
+	memset(s_WriteRqstData, 0, 10);
 	memset(buff, 0xFF, 10);
 
 	reg = 3; // want to read from offset 15
 
+	buff[0] = 0xa0;
+	buff[1] = 0xa1;
+	buff[2] = 0xa2;
+	buff[3] = 0xa3;
+	buff[4] = 0xa4;
+	buff[5] = 0xa5;
+	buff[6] = 0xa6;
+	buff[7] = 0xa7;
+
+//	int c = g_I2CMaster.Tx(I2C_SLAVE_ADDR, buff, 8);
+	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &reg, 1, buff, 8);
+
+	reg = 0;
+
 	// Master send read command to read 10 bytes from offset defined in data[0]
-	int c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &reg, 1, buff, 10);
+	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &reg, 1, buff, 10);
 
 	printf("Count %d\r\n",c );
 

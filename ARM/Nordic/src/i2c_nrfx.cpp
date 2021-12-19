@@ -785,13 +785,15 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
         sreg->EVENTS_STOPPED = 0;
 
         enval = TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos;
+
+        // NOTE: Do not enable RXSTARTED interrupt
         inten = (TWIS_INTEN_READ_Enabled << TWIS_INTEN_READ_Pos) |
         		(TWIS_INTEN_WRITE_Enabled << TWIS_INTEN_WRITE_Pos) |
-				(TWIS_INTEN_RXSTARTED_Enabled << TWIS_INTEN_RXSTARTED_Pos) |
-				(TWIS_INTEN_TXSTARTED_Enabled << TWIS_INTEN_TXSTARTED_Pos) |
+//				(TWIS_INTEN_RXSTARTED_Enabled << TWIS_INTEN_RXSTARTED_Pos) |
+//				(TWIS_INTEN_TXSTARTED_Enabled << TWIS_INTEN_TXSTARTED_Pos) |
 				(TWIS_INTEN_ERROR_Enabled << TWIS_INTEN_ERROR_Pos) |
         		(TWIS_INTEN_STOPPED_Enabled << TWIS_INTEN_STOPPED_Pos);
-	    reg->ENABLE = enval;
+	    sreg->ENABLE = enval;
     }
     else
 #endif
