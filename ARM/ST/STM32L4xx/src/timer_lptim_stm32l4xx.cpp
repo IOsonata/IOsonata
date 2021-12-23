@@ -96,10 +96,14 @@ static void Stm32l4LptDisable(TimerDev_t * const pTimer)
 	if (dev->pTimer->DevNo == 0)
 	{
 		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_LPTIM1EN | RCC_APB1SMENR1_LPTIM1SMEN);
+		NVIC_ClearPendingIRQ(LPTIM1_IRQn);
+//		NVIC_DisableIRQ(LPTIM1_IRQn);
 	}
 	else
 	{
 		RCC->APB1ENR2 &= ~(RCC_APB1ENR2_LPTIM2EN | RCC_APB1SMENR2_LPTIM2SMEN);
+		NVIC_ClearPendingIRQ(LPTIM2_IRQn);
+//		NVIC_DisableIRQ(LPTIM2_IRQn);
 	}
 }
 
