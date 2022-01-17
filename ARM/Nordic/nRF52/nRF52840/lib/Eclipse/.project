@@ -486,6 +486,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
 		</link>
 		<link>
+			<name>src/system_nrf52.c</name>
+			<type>1</type>
+			<locationURI>$%7BPARENT-3-PROJECT_LOC%7D/src/system_nrf52.c</locationURI>
+		</link>
+		<link>
 			<name>src/system_nrf52840.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/system_nrf52840.c</locationURI>
@@ -969,6 +974,11 @@
 			<name>src/coredev/pwm_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/qspi_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>$%7BPARENT-4-PROJECT_LOC%7D/src/qspi_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>

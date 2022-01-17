@@ -50,7 +50,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.2104794523" name="Float ABI" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.248117598" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv4spd16" valueType="enumerated"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.45058811" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
-							<builder buildPath="${workspace_loc:/IOsonata_nRF52840}/Debug" id="ilg.gnuarmeclipse.managedbuild.cross.builder.1969557808" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
+							<builder buildPath="${workspace_loc:/IOsonata_nRF52840}/Debug" id="ilg.gnuarmeclipse.managedbuild.cross.builder.1969557808" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.1337389669" name="GNU ARM Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor.96633794" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input.323574173" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
@@ -162,6 +162,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -184,6 +185,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1933972880" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -294,6 +311,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -316,6 +334,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1243006435" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1357717359" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -342,7 +376,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -508,6 +542,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -517,7 +552,6 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1766650961" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NDEBUG"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -531,6 +565,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.2039389005" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -641,6 +691,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -650,13 +701,12 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.384332120" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NDEBUG"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
@@ -664,6 +714,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1732189045" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.819426916" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -690,7 +756,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -857,6 +923,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -879,6 +946,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1266878459" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -989,6 +1072,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -1003,7 +1087,7 @@
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
@@ -1011,6 +1095,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1653380102" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.782344635" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -1037,7 +1137,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1203,6 +1303,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -1212,7 +1313,6 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1491985591" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NDEBUG"/>
 									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -1226,6 +1326,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1254016893" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -1336,6 +1452,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -1345,13 +1462,12 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.27824883" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NDEBUG"/>
 									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
@@ -1359,6 +1475,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1509336420" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.45016605" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -1385,14 +1517,14 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
 		<cconfiguration id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1502496384.1958532650.199657">
-			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1502496384.1958532650.199657" moduleId="org.eclipse.cdt.core.settings" name="Debug_NoReset">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1502496384.1958532650.199657" moduleId="org.eclipse.cdt.core.settings" name="Debug_NoNFC">
 				<externalSettings>
 					<externalSetting>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_nRF52840"/>
@@ -1410,7 +1542,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactExtension="a" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.staticLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.staticLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" description="Debug Reset pin as GPIO" id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1502496384.1958532650.199657" name="Debug_NoReset" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug">
+				<configuration artifactExtension="a" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.staticLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.staticLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" description="Debug NFC pin as GPIO" id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1502496384.1958532650.199657" name="Debug_NoNFC" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug">
 					<folderInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1502496384.1958532650.199657." name="/" resourcePath="">
 						<toolChain id="ilg.gnuarmeclipse.managedbuild.cross.toolchain.lib.debug.1776474083" name="ARM Cross GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.lib.debug">
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.904968720" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.none" valueType="enumerated"/>
@@ -1551,6 +1683,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -1560,6 +1693,8 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.286247667" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
+									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
@@ -1572,6 +1707,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.775039926" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -1682,6 +1833,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -1691,11 +1843,13 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.358439290" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
+									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
+									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
@@ -1703,6 +1857,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1567985245" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1551643836" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -1729,14 +1899,14 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
 		<cconfiguration id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release.1490018546.2044324906.157497618">
-			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release.1490018546.2044324906.157497618" moduleId="org.eclipse.cdt.core.settings" name="Release_NoReset">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release.1490018546.2044324906.157497618" moduleId="org.eclipse.cdt.core.settings" name="Release_NoNFC">
 				<externalSettings>
 					<externalSetting>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_nRF52840"/>
@@ -1754,7 +1924,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactExtension="a" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.staticLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.staticLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="Release Reset pin as GPIO" id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release.1490018546.2044324906.157497618" name="Release_NoReset" optionalBuildProperties="" parent="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release">
+				<configuration artifactExtension="a" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.staticLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.staticLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="Release NFC pin as GPIO" id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release.1490018546.2044324906.157497618" name="Release_NoNFC" optionalBuildProperties="" parent="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release">
 					<folderInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release.1490018546.2044324906.157497618." name="/" resourcePath="">
 						<toolChain id="ilg.gnuarmeclipse.managedbuild.cross.toolchain.lib.release.673345301" name="ARM Cross GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.lib.release">
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.1610757008" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.size" valueType="enumerated"/>
@@ -1894,6 +2064,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -1903,7 +2074,8 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1980343057" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NDEBUG"/>
+									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
+									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
@@ -1916,6 +2088,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1683448729" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -2026,6 +2214,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -2035,12 +2224,13 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.776142675" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NDEBUG"/>
+									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
+									<listOptionValue builtIn="false" value="CONFIG_NFCT_PINS_AS_GPIOS"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
@@ -2048,6 +2238,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1472178843" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1783080540" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -2074,7 +2280,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2240,6 +2446,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -2249,7 +2456,6 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.363549654" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NRF_LOG_ENABLED=1"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -2263,6 +2469,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1591108850" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -2373,6 +2595,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -2382,7 +2605,6 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.2031082816" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NRF_LOG_ENABLED=1"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -2396,6 +2618,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.628965480" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.240637866" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -2422,7 +2660,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2587,6 +2825,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -2596,8 +2835,6 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1715966354" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NRF_LOG_ENABLED=1"/>
-									<listOptionValue builtIn="false" value="NDEBUG"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
@@ -2611,6 +2848,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1579139557" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -2721,6 +2974,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
@@ -2730,14 +2984,12 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.854729434" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
-									<listOptionValue builtIn="false" value="NRF_LOG_ENABLED=1"/>
-									<listOptionValue builtIn="false" value="NDEBUG"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="GATT_PROXY"/>
 									<listOptionValue builtIn="false" value="SVC_INTERFACE_CALL_AS_NORMAL_FUNCTION"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_TRANSPORT_BLE"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
@@ -2745,6 +2997,22 @@
 									<listOptionValue builtIn="false" value="NRF52840"/>
 									<listOptionValue builtIn="false" value="NRF52_SERIES"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_12_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_16_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_31_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_32_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_36_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_37_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_57_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_66_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_98_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_103_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_108_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_115_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_120_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_136_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_182_ENABLE_WORKAROUND=1"/>
+									<listOptionValue builtIn="false" value="NRF52_ERRATA_217_ENABLE_WORKAROUND=1"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1167689193" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1802253510" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -2771,7 +3039,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2799,24 +3067,30 @@
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
 	<storageModule moduleId="refreshScope" versionNumber="2">
+		<configuration configurationName="Release_AllGpio"/>
 		<configuration configurationName="Release_FPU">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
+		<configuration configurationName="Debug_AllGpio"/>
+		<configuration configurationName="Release_Log"/>
 		<configuration configurationName="Debug_FPU">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
+		<configuration configurationName="Release_NoReset"/>
 		<configuration configurationName="Release_NoNFC">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
 		<configuration configurationName="Debug_NoNFC">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
+		<configuration configurationName="Debug_Log"/>
 		<configuration configurationName="Debug">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
 		<configuration configurationName="Release">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
+		<configuration configurationName="Debug_NoReset"/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 </cproject>
