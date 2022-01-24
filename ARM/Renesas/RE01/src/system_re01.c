@@ -321,22 +321,26 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
 	uint32_t clk = 0;
 
-	if (Idx < 0 || Idx > 1 || Freq > SYSTEM_CORE_CLOCK_MAX)
-	{
-		return 0;
-	}
-
 	if (Idx == 0)
 	{
 		clk =  SystemCoreClock;
 	}
-	else if (Idx == 1)
+	else if (Idx == 1 && Freq > 0)
 	{
 		uint32_t div = s_PeriphSrcFreq / Freq;
-		SYSTEM->SCKDIVCR_b.PCKB = div - 1;
-		clk = s_PeriphSrcFreq / div;
+
+		if (div > 0)
+		{
+			SYSTEM->SCKDIVCR_b.PCKB = div - 1;
+			clk = s_PeriphSrcFreq / div;
+		}
+		else
+		{
+			clk = s_PeriphSrcFreq;
+		}
 	}
-	return 0;
+
+	return clk;
 }
 
 uint32_t SystemCoreClockGet()
