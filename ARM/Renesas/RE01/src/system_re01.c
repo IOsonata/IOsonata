@@ -3,6 +3,10 @@
 
 @brief	Implementation of CMSIS SystemInit for Renesas RE01 Device Series
 
+Note: 	USB operation requires PLL as clock source running at 48MHz
+		PLL operation requires boost mode and main clock (crystal or ext osc)
+		Therefore main clock source (8-32MHz) must be chosen to allows PLL to
+		generate 48MHz
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 11, 2021
@@ -35,6 +39,7 @@ SOFTWARE.
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "RE01xxx.h"
 #include "coredev/system_core_clock.h"
@@ -47,16 +52,25 @@ SOFTWARE.
 #define SYSTEM_CORE_CLOCK_MAX			64000000UL	// TODO: Adjust value for CPU with fixed core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(34UL)	// TODO: Adjustment value for nanosec delay
 
+#define SYSTEM_SCKSCR_CKSEL_HOCO	(0)		// High speed RC
+#define SYSTEM_SCKSCR_CKSEL_MOCO	(1)		// Mid speed RC
+#define SYSTEM_SCKSCR_CKSEL_LOCO	(2)		// Low speed RC
+#define SYSTEM_SCKSCR_CKSEL_MCO		(3)		// Main Clock osc
+#define SYSTEM_SCKSCR_CKSEL_SCO		(4)		// Sub-clock osc
+#define SYSTEM_SCKSCR_CKSEL_PLL		(5)		// PLL
+
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
 // Overload this variable in application firmware to change oscillator
-__WEAK MCU_OSC g_McuOsc = {
+__WEAK McuOsc_t g_McuOsc = {
 	OSC_TYPE_RC,
 	64000000,
-	OSC_TYPE_XTAL,
+	OSC_TYPE_RC,
 	32768
 };
+
+static uint32_t s_PeriphSrcFreq = 0;
 
 /**
  * @brief	Get system low frequency oscillator type
@@ -80,47 +94,95 @@ OSC_TYPE GetHighFreqOscType()
 
 void SetFlashWaitState(uint32_t CoreFreq)
 {
+	if (CoreFreq > 32000000U)
+	{
+		FLASH->FLWT = 1;
+	}
+	else
+	{
+		FLASH->FLWT = 0;
+	}
 }
 
-uint32_t FindPllCfg(uint32_t SrcFreq)
+// USB operation requires PLL clock source
+// Target PLL for 48MHz operating for compatibility with USB
+// PLL operation can only work in Boost mode
+uint32_t ConfigPLL(uint32_t SrcFreq)
 {
+	// Make sure PLL is stopped
+	SYSTEM->PLLCR = SYSTEM_PLLCR_PLLSTP_Msk;
+
+	// TODO: Enter Boost mode
+
+	for (int div = 1; div < 5; div++)
+	{
+		uint32_t divfreq = SrcFreq / div;
+		for (int mul = 2; mul < 9; mul++)
+		{
+			// PLL Freq = (SrcFreq / div) * mul;
+			uint32_t f = divfreq * mul;
+
+			if (f == 48000000UL)
+			{
+				SYSTEM->PLLCCR = ((div - 1) << SYSTEM_PLLCCR_PLIDIV_Pos) |
+								 ((mul - 1) << SYSTEM_PLLCCR_PLLMUL_Pos);
+				SYSTEM->PLLCR = 0;	// Start PLL
+
+				while ((SYSTEM->OSCSF & SYSTEM_OSCSF_PLLSF_Msk) == 0);
+
+				return 48000000UL;
+			}
+		}
+	}
+
 	return 0;
 }
 
 void SystemCoreClockUpdate(void)
 {
-#if 0
-	uint32_t cfgr = RCC->CFGR;
-	uint32_t pllcfgr = RCC->PLLCFGR;
-	uint32_t clk = DEFAULT_RC_FREQ;
+	uint8_t clksrc = SYSTEM->SCKSCR;
+	uint32_t div = 1 << ((SYSTEM->SCKDIVCR & SYSTEM_SCKDIVCR_ICK_Msk) >> SYSTEM_SCKDIVCR_ICK_Pos);
 
-	if (pllcfgr & RCC_PLLCFGR_PLLSRC_MSI)
+	switch (clksrc)
 	{
-		int ridx = (RCC->CR & RCC_CR_MSIRANGE_Msk) >> RCC_CR_MSIRANGE_Pos;
-		SystemCoreClock = MSIRangeTable[ridx];
-	}
-	else if (pllcfgr & RCC_PLLCFGR_PLLSRC_HSE)
-	{
-		SystemCoreClock = g_McuOsc.HFFreq;//s_ClkSrcFreq;
-	}
-	else if (pllcfgr & RCC_PLLCFGR_PLLSRC_HSI)
-	{
-		SystemCoreClock = 16000000;
+		case SYSTEM_SCKSCR_CKSEL_HOCO:
+			switch (SYSTEM->HOCOMCR & SYSTEM_HOCOMCR_HCFRQ_Msk)
+			{
+				case 0:
+					SystemCoreClock = 24000000UL;
+					break;
+				case 1:
+					SystemCoreClock = 32000000UL;
+					break;
+				case 2:
+					SystemCoreClock = 48000000UL;
+					break;
+				case 3:
+					SystemCoreClock = 64000000UL;
+					break;
+			}
+			break;
+		case SYSTEM_SCKSCR_CKSEL_MOCO:
+			SystemCoreClock = 2000000UL;
+			break;
+		case SYSTEM_SCKSCR_CKSEL_LOCO:
+		case SYSTEM_SCKSCR_CKSEL_SCO:
+			SystemCoreClock = 32768UL;
+			break;
+		case SYSTEM_SCKSCR_CKSEL_MCO:
+			SystemCoreClock = g_McuOsc.HFFreq;
+			break;
+		case SYSTEM_SCKSCR_CKSEL_PLL:
+			SystemCoreClock = (g_McuOsc.HFFreq / (SYSTEM->PLLCCR_b.PLIDIV + 1)) * (SYSTEM->PLLCCR_b.PLLMUL + 1);
+			break;
+		default:
+			assert(0);
 	}
 
-	if (cfgr & RCC_CFGR_SWS_PLL)
-	{
-		uint32_t m = ((pllcfgr & RCC_PLLCFGR_PLLM_Msk) >> RCC_PLLCFGR_PLLM_Pos) + 1;
-		uint32_t n = (pllcfgr & RCC_PLLCFGR_PLLN_Msk) >> RCC_PLLCFGR_PLLN_Pos;
-		uint32_t r = (((pllcfgr & RCC_PLLCFGR_PLLR_Msk) >> RCC_PLLCFGR_PLLR_Pos) + 1) << 1;
-		SystemCoreClock = (SystemCoreClock * n / (m * r));
-	}
+	s_PeriphSrcFreq = SystemCoreClock;
 
-	if (SystemCoreClock > 80000000)
-	{
-		PWR->CR5 &= ~PWR_CR5_R1MODE;
-	}
-#endif
+	SystemCoreClock /= div;
+
 	// Update Flash wait state to current core freq.
 	SetFlashWaitState(SystemCoreClock);
 	SystemPeriphClockSet(0, SystemCoreClock >> 1);
@@ -130,27 +192,76 @@ void SystemCoreClockUpdate(void)
 
 void SystemInit(void)
 {
-	if (g_McuOsc.HFType == OSC_TYPE_RC)
+    SYSTEM->PRCR = 0xA503U;
+
+    if (g_McuOsc.HFType == OSC_TYPE_RC)
 	{
-		switch (g_McuOsc.HFFreq)
-		{
-			case 2000000:	// 2MHz
-				break;
-			case 24000000:	// 24MHz
-				break;
-			case 32000000:	// 32MHz
-				break;
-			case 48000000:	// 48MHz
-				break;
-			case 64000000:	// 64MHz
-			default :
-				break;
-		}
+    	if (g_McuOsc.HFFreq <= 2000000UL)
+    	{
+			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MOCO;
+    	}
+    	else
+    	{
+    		uint8_t hcfrq = 0;
+    		if (g_McuOsc.HFFreq <= 24000000UL)
+    		{
+
+    		}
+    		else if (g_McuOsc.HFFreq <= 32000000UL)
+    		{
+    			hcfrq = 1;
+    		}
+    		else if (g_McuOsc.HFFreq <= 48000000UL)
+    		{
+    			hcfrq = 2;
+    		}
+    		else
+    		{
+    			hcfrq = 3;
+    		}
+
+    		SYSTEM->HOCOMCR = hcfrq;
+    		SYSTEM->HOCOCR = 0;	// Start HOCO
+			while ((SYSTEM->OSCSF & SYSTEM_OSCSF_HOCOSF_Msk) == 0);
+
+			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_HOCO;
+    	}
 	}
 	else
 	{
+		// Main clock range 8-32MHz
 
+		if (g_McuOsc.HFType == OSC_TYPE_TCXO)
+		{
+			// External input clock
+		    SYSTEM->MOMCR = SYSTEM_MOMCR_OSCLPEN_Msk | (4 << SYSTEM_MOMCR_MODRV_Pos) | SYSTEM_MOMCR_MOSEL_Msk;
+		}
+		else
+		{
+			// Crystal
+		    SYSTEM->MOMCR = SYSTEM_MOMCR_OSCLPEN_Msk | (4 << SYSTEM_MOMCR_MODRV_Pos);
+		}
+
+		SYSTEM->MOSCCR = 0;	// Start main clock oscillator
+
+		while ((SYSTEM->OSCSF & SYSTEM_OSCSF_MOSCSF_Msk) == 0);
+
+		uint32_t pllfreq = ConfigPLL(g_McuOsc.HFFreq);
+		assert(pllfreq==48000000UL);
+
+		// Select source clock PLL 48MHz
+		SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_PLL;
 	}
+
+    if (g_McuOsc.LFType == OSC_TYPE_RC)
+    {
+    	SYSTEM->LOCOCR = 0;
+    }
+    else
+    {
+    	SYSTEM->SOSCCR = 0;	// Enable 32KHz crystal
+    }
+
 	SystemCoreClockUpdate();
 }
 
@@ -161,10 +272,7 @@ void SystemInit(void)
  */
 uint32_t SystemHFClockGet()
 {
-	//uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
-
-	//return tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
-	return SystemCoreClock;
+	return s_PeriphSrcFreq;
 }
 
 /**
@@ -181,12 +289,19 @@ uint32_t SystemHFClockGet()
  */
 uint32_t SystemPeriphClockGet(int Idx)
 {
-	if (Idx < 0 || Idx > 1)
+	uint32_t clk = 0;
+
+	if (Idx == 0)
 	{
-		return 0;
+		clk = SystemCoreClock;
+	}
+	else if (Idx == 1)
+	{
+		uint32_t div = 1 << ((SYSTEM->SCKDIVCR & SYSTEM_SCKDIVCR_PCKB_Msk) >> SYSTEM_SCKDIVCR_PCKB_Pos);
+		clk = s_PeriphSrcFreq / div;
 	}
 
-	return SystemCoreClock;
+	return clk;
 }
 
 /**
@@ -204,56 +319,23 @@ uint32_t SystemPeriphClockGet(int Idx)
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
+	uint32_t clk = 0;
+
 	if (Idx < 0 || Idx > 1 || Freq > SYSTEM_CORE_CLOCK_MAX)
 	{
 		return 0;
 	}
-#if 0
-	uint32_t div = (SystemCoreClock + (Freq >> 1))/ Freq;
-	uint32_t f = 0;
-	uint32_t ppreval = 0;
 
-	if (div < 2)
+	if (Idx == 0)
 	{
-		// Div 1
-		f = SystemCoreClock;
+		clk =  SystemCoreClock;
 	}
-	else if (div < 4)
+	else if (Idx == 1)
 	{
-		// Div 2
-		ppreval = 4;
-		f = SystemCoreClock >> 1;
+		uint32_t div = s_PeriphSrcFreq / Freq;
+		SYSTEM->SCKDIVCR_b.PCKB = div - 1;
+		clk = s_PeriphSrcFreq / div;
 	}
-	else if (div < 8)
-	{
-		// Div 4
-		ppreval = 5;
-		f = SystemCoreClock >> 2;
-	}
-	else if (div < 16)
-	{
-		// Div 8
-		ppreval = 6;
-		f = SystemCoreClock >> 3;
-	}
-	else
-	{
-		// Div 16
-		ppreval = 7;
-		f = SystemCoreClock >> 4;
-	}
-
-	if (Idx == 1)
-	{
-		RCC->CFGR &= ~RCC_CFGR_PPRE2_Msk;
-		RCC->CFGR |= ppreval << RCC_CFGR_PPRE2_Pos;
-	}
-	else
-	{
-		RCC->CFGR &= ~RCC_CFGR_PPRE1_Msk;
-		RCC->CFGR |= ppreval << RCC_CFGR_PPRE1_Pos;
-	}
-#endif
 	return 0;
 }
 
