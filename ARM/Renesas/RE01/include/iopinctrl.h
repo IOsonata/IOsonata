@@ -56,6 +56,8 @@ SOFTWARE.
  * @Param	Dir     : I/O direction
  */
 static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir) {
+	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
+	reg->PDR = Dir == IOPINDIR_OUTPUT ? reg->PDR | (1 << PinNo) : reg->PDR & ~(1 << PinNo);
 }
 
 /**
@@ -67,7 +69,8 @@ static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int Pi
  * @return	Pin state 1 or 0
  */
 static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo) {
-	return 1;
+	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
+	return (reg->PIDR >> PinNo) & 1;
 }
 
 /**
@@ -77,6 +80,8 @@ static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo) {
+	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
+	reg->POSR = (1 << PinNo);
 }
 
 /**
@@ -86,6 +91,8 @@ static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int PinNo) {
+	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
+	reg->PORR = (1 << PinNo);
 }
 
 /**
@@ -95,6 +102,11 @@ static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int Pin
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int PinNo) {
+	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
+	if ((reg->PIDR >> PinNo) == 0)
+		reg->POSR = (1 << PinNo);
+	else
+		reg->PORR = (1 << PinNo);
 }
 
 /**
@@ -105,7 +117,8 @@ static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int Pi
  * @return	Bit field pin states
  */
 static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) {
-	return 0xFFFF;
+	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
+	return reg->PIDR;
 }
 
 /**
@@ -115,6 +128,8 @@ static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) 
  * @Param	Data	: Bit field state of all pins on port
  */
 static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uint32_t Data) {
+	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
+	reg->PODR = (uint16_t)(Data & 0xFFFFUL);
 }
 
 
