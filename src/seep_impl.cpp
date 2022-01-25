@@ -126,7 +126,7 @@ int SeepWrite(SeepDev_t * const pDev, uint32_t Addr, uint8_t *pData, int Len)
     while (Len > 0 && Addr < pDev->Size)
     {
         uint8_t devaddr = pDev->DevAddr;
-        int l = min(Len, pDev->PageSize - (Addr % pDev->PageSize));
+        int l = min(Len, (int)(pDev->PageSize - (Addr % pDev->PageSize)));
 
         // MSB first
         for (int i = 0; i < pDev->AddrLen; i++)

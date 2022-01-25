@@ -390,7 +390,7 @@ bool FlashDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
     {
 		while (cnt > 0)
 		{
-			int l = min(cnt, vWriteSize);
+			int l = min(cnt, (int)vWriteSize);
 
 			WriteEnable();
 			vpInterf->StartTx(vDevNo);
@@ -413,7 +413,7 @@ bool FlashDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 			for (int i = 1; i <= vAddrSize; i++)
 				d[i] = p[vAddrSize - i];
 
-			int l = min(cnt, vWriteSize);
+			int l = min(cnt, (int)vWriteSize);
 
 			WaitReady();
 

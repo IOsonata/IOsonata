@@ -141,7 +141,7 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd,
     memcpy(d, pAdCmd, AdCmdLen);
     if (pData != NULL && DataLen > 0)
     {
-    	int l = min(DataLen, sizeof(d) - AdCmdLen);
+    	int l = min(DataLen, (int)(sizeof(d) - AdCmdLen));
     	memcpy(&d[AdCmdLen], pData, l);
     	txlen += l;
     }

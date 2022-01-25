@@ -124,7 +124,7 @@ int DiskIO::Read(uint32_t SectNo, uint32_t SectOffset, uint8_t *pBuff, uint32_t 
 	if (pBuff == NULL)
 		return -1;
 
-	int l = min(Len, DISKIO_SECT_SIZE - SectOffset);
+	int l = min(Len, ((uint32_t)DISKIO_SECT_SIZE - SectOffset));
 
 	int idx = GetCacheSect(SectNo);
 	if (idx < 0)

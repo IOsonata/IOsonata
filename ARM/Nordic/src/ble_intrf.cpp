@@ -325,7 +325,7 @@ void BleIntrfRxWrCB(BleSrvc_t *pBleSvc, uint8_t *pData, int Offset, int Len)
 			intrf->RxDropCnt++;
 			break;
 		}
-		int l = min(intrf->PacketSize - BLEINTRF_PKHDR_LEN, Len);
+		int l = min(intrf->PacketSize - (int)BLEINTRF_PKHDR_LEN, Len);
 		memcpy(pkt->Data, pData, l);
 		pkt->Len = l;
 		Len -= l;
