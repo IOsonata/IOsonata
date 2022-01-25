@@ -55,7 +55,7 @@ bool PmAs3701::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 
 	if (Cfg.pVout != NULL && Cfg.NbVout > 0)
 	{
-		int l = min(Cfg.NbVout, AS3701_VOUT_MAXCNT);
+		int l = min(Cfg.NbVout, (size_t)AS3701_VOUT_MAXCNT);
 
 		for (int i = 0; i < l; i ++)
 		{
