@@ -38,14 +38,46 @@ SOFTWARE.
 #include "re01xxx.h"
 #include "coredev/iopincfg.h"
 
-#if 0
-#define IOPIN_MAX_INT			(16)
+#define PFS_PSEL_Pos              (24UL)                    /*!< PSEL (Bit 24)                                         */
+#define PFS_PSEL_Msk              (0x1f000000UL)            /*!< PSEL (Bitfield-Mask: 0x1f)                            */
+#define PFS_PMR_Pos               (16UL)                    /*!< PMR (Bit 16)                                          */
+#define PFS_PMR_Msk               (0x10000UL)               /*!< PMR (Bitfield-Mask: 0x01)                             */
+#define PFS_ASEL_Pos              (15UL)                    /*!< ASEL (Bit 15)                                         */
+#define PFS_ASEL_Msk              (0x8000UL)                /*!< ASEL (Bitfield-Mask: 0x01)                            */
+#define PFS_ISEL_Pos              (14UL)                    /*!< ISEL (Bit 14)                                         */
+#define PFS_ISEL_Msk              (0x4000UL)                /*!< ISEL (Bitfield-Mask: 0x01)                            */
+#define PFS_EOFR_Pos              (12UL)                    /*!< EOFR (Bit 12)                                         */
+#define PFS_EOFR_Msk              (0x3000UL)                /*!< EOFR (Bitfield-Mask: 0x03)                            */
+#define PFS_DSCR_Pos              (10UL)                    /*!< DSCR (Bit 10)                                         */
+#define PFS_DSCR_Msk              (0xc00UL)                 /*!< DSCR (Bitfield-Mask: 0x03)                            */
+#define PFS_PCODR_Pos             (7UL)                     /*!< PCODR (Bit 7)                                         */
+#define PFS_PCODR_Msk             (0x80UL)                  /*!< PCODR (Bitfield-Mask: 0x01)                           */
+#define PFS_NCODR_Pos             (6UL)                     /*!< NCODR (Bit 6)                                         */
+#define PFS_NCODR_Msk             (0x40UL)                  /*!< NCODR (Bitfield-Mask: 0x01)                           */
+#define PFS_PDCR_Pos              (5UL)                     /*!< PDCR (Bit 5)                                          */
+#define PFS_PDCR_Msk              (0x20UL)                  /*!< PDCR (Bitfield-Mask: 0x01)                            */
+#define PFS_PUCR_Pos              (4UL)                     /*!< PUCR (Bit 4)                                          */
+#define PFS_PUCR_Msk              (0x10UL)                  /*!< PUCR (Bitfield-Mask: 0x01)                            */
+#define PFS_PDR_Pos               (2UL)                     /*!< PDR (Bit 2)                                           */
+#define PFS_PDR_Msk               (0x4UL)                   /*!< PDR (Bitfield-Mask: 0x01)                             */
+#define PFS_PIDR_Pos              (1UL)                     /*!< PIDR (Bit 1)                                          */
+#define PFS_PIDR_Msk              (0x2UL)                   /*!< PIDR (Bitfield-Mask: 0x01)                            */
+#define PFS_PODR_Pos              (0UL)                     /*!< PODR (Bit 0)                                          */
+#define PFS_PODR_Msk              (0x1UL)                   /*!< PODR (Bitfield-Mask: 0x01)                            */
 
-#if defined(STM32L476xx) || defined(STM32L475xx) || defined(STM32L485xx) || defined(STM32L486xx) || defined(STM32L4R5xx) || defined(STM32L4S5xx)
-#define IOPIN_MAX_PORT			(7)
-#elif defined(STM32L496xx) || defined(STM32L4A6xx) || defined(STM32L4S9xx)
-#define IOPIN_MAX_PORT			(9)
+
+#define RE01_1500KB_PIN_MAX_INT		(9)
+#define RE01_1500KB_MAX_PORT		(9)
+
+static int s_MaxNbIOPins[RE01_1500KB_MAX_PORT] = {
+#ifdef RE01_1500KB_DBN
+	16, 15, 7, 8, 10, 15, 11, 5, 16
+#elif defined(RE01_1500KB_CFB)
+	16, 14, 7, 16, 10, 15, 11, 5, 16
+#elif defined(RE01_1500KB_CFP)
+	16, 14, 7, 5, 5, 5, 5, 5, 5
 #endif
+};
 
 #pragma pack(push, 4)
 typedef struct {
@@ -56,7 +88,7 @@ typedef struct {
 } IOPINSENS_EVTHOOK;
 #pragma pack(pop)
 
-static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
+static IOPINSENS_EVTHOOK s_GpIOSenseEvt[RE01_1500KB_PIN_MAX_INT + 1] = { {0, NULL}, };
 
 /**
  * @brief Configure individual I/O pin.
@@ -75,44 +107,26 @@ static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
  */
 void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
+	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
 
-	if (PortNo == -1 || PinNo == -1 || PortNo > IOPIN_MAX_PORT)
+	if (PortNo == -1 || PinNo == -1 || PortNo > RE01_1500KB_MAX_PORT)
 		return;
 
 	uint32_t tmp;
 
-	if (PortNo == 6 && PinNo > 0 && Dir != IOPINDIR_INPUT && PinOp == IOPINOP_GPIO )
-	{
-		// Port G requires VDDIO2
-		RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
-		PWR->CR2 |= PWR_CR2_IOSV;
-		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
-	}
-
-	RCC->AHB2ENR |= 1 << PortNo;
-
-	uint32_t pos = PinNo << 1;
-	tmp = reg->MODER & ~(GPIO_MODER_MODE0_Msk << pos);
+	uint32_t pos = 1 << PinNo;
+	tmp = reg->PDR & ~pos;
 
 	if (PinOp == IOPINOP_GPIO)
 	{
 		if (Dir == IOPINDIR_OUTPUT)
 		{
-			tmp |= 1 << pos;
+			tmp |= pos;
 		}
 	}
 	else if (PinOp < IOPINOP_FUNC16)
 	{
 		// Alternate function
-
-		tmp |= 2 << pos;
-
-		pos = (PinNo & 0x7) << 2;
-		int idx = PinNo >> 3;
-
-		reg->AFR[idx] &= ~(0xf << pos);
-		reg->AFR[idx] |= ((PinOp - 1) & 0xf) << pos;
 	}
 	else
 	{
@@ -120,36 +134,42 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 		tmp |= 3 << pos;
 	}
 
-	reg->MODER = tmp;
+	reg->PDR = tmp;
 
-	pos = PinNo << 1;
+	//pos = PinNo << 1;
 
-	uint32_t pull = reg->PUPDR & ~(3 << pos);
+	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
+
+	int idx = PinNo + (PortNo * 16);
+	__IOM uint32_t *psf = (__IOM uint32_t*)PFS_BASE;
+
+	uint32_t pull = psf[idx] & (0xFFFFFF0F);
 
 	switch (Resistor)
 	{
 		case IOPINRES_FOLLOW:
 		case IOPINRES_PULLUP:
-			pull |= GPIO_PUPDR_PUPDR0_0 << pos;
+			pull |= 0x10;	// PUCR
+			if (Type == IOPINTYPE_OPENDRAIN)
+			{
+				pull |= 0x40;	// NCODR
+			}
 			break;
 		case IOPINRES_PULLDOWN:
-			pull |=  GPIO_PUPDR_PUPDR0_1 << pos;
+			pull |=  0x20;	// PDCR
+			if (Type == IOPINTYPE_OPENDRAIN)
+			{
+				pull |= 0x80;	// PCODR
+			}
 			break;
 		case IOPINRES_NONE:
 			break;
 	}
-	reg->PUPDR = pull;
 
-	tmp = reg->OTYPER & ~(1 << PinNo);
-	if (Type == IOPINTYPE_OPENDRAIN)
-	{
-		tmp |= (1 << PinNo);
-	}
-	reg->OTYPER = tmp;
+	psf[idx] = pull;
 
 	// Default high speed
 	IOPinSetSpeed(PortNo, PinNo, IOPINSPEED_HIGH);
-
 }
 
 /**
@@ -166,7 +186,7 @@ void IOPinDisable(int PortNo, int PinNo)
 {
 	if (PortNo == -1 || PinNo == -1)
 		return;
-
+#if 0
 	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
 	uint32_t pos = PinNo << 1;
 
@@ -192,7 +212,7 @@ void IOPinDisable(int PortNo, int PinNo)
 		PWR->CR2 &= ~PWR_CR2_IOSV;
 		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
 	}
-
+#endif
 }
 
 /**
@@ -202,11 +222,11 @@ void IOPinDisable(int PortNo, int PinNo)
  */
 void IOPinDisableInterrupt(int IntNo)
 {
-	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT)
+	if (IntNo < 0 || IntNo >= RE01_1500KB_PIN_MAX_INT)
 	{
 		return;
 	}
-
+/*
 	int idx = (s_GpIOSenseEvt[IntNo].PortPinNo & 0xFF) >> 2;
 	uint32_t pos = (s_GpIOSenseEvt[IntNo].PortPinNo & 0xF) << 2;
 	uint32_t mask = 0xF << pos;
@@ -273,7 +293,7 @@ void IOPinDisableInterrupt(int IntNo)
         		NVIC_DisableIRQ(EXTI15_10_IRQn);
         		NVIC_ClearPendingIRQ(EXTI15_10_IRQn);
     		}
-    }
+    }*/
 }
 
 /**
@@ -295,11 +315,11 @@ void IOPinDisableInterrupt(int IntNo)
  */
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || IntNo != PinNo)
+	if (IntNo < 0 || IntNo >= RE01_1500KB_PIN_MAX_INT || IntNo != PinNo)
 	{
 		return false;
 	}
-
+/*
 	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 
 	int idx = IntNo >> 2;
@@ -378,13 +398,13 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 				NVIC_EnableIRQ(EXTI15_10_IRQn);
 			}
     }
-
+*/
     return true;
 }
 
 int IOPinFindAvailInterrupt()
 {
-	for (int i = 0; i < IOPIN_MAX_INT; i++)
+	for (int i = 0; i < RE01_1500KB_PIN_MAX_INT; i++)
 	{
 		if (s_GpIOSenseEvt[i].SensEvtCB == NULL)
 		{
@@ -440,7 +460,7 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
  */
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
-	// Pin sense is not avail on this STM32.  It only sets in interrupt
+	// Pin sense is not avail on this Renesas
 }
 
 /**
@@ -454,7 +474,7 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
  */
 void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 {
-	// Not available on this STM32
+	// Not available on this Renesas
 }
 
 /**
@@ -468,16 +488,9 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
  */
 void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 {
-	if (PortNo == -1 || PinNo == -1)
-		return;
-
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
-	uint32_t pos = PinNo << 1;
-	uint32_t tmp = reg->OSPEEDR & ~(GPIO_OSPEEDR_OSPEED0_Msk << pos);
-	tmp |= (uint32_t)Speed << pos;
-	reg->OSPEEDR = tmp;
+	// Not available on this Renesas
 }
-
+#if 0
 void EXTI0_IRQHandler(void)
 {
 	if (EXTI->PR1 & 1)
@@ -586,4 +599,3 @@ void EXTI15_10_IRQHandler(void)
 	NVIC_ClearPendingIRQ(EXTI15_10_IRQn);
 }
 #endif
-

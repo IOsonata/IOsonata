@@ -36,219 +36,99 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>Release/atomic.h</name>
+			<name>include/RE01_1500KB.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/atomic.h</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/include/RE01_1500KB.h</locationURI>
 		</link>
 		<link>
-			<name>Release/audio</name>
+			<name>include/audio</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>Release/base64.h</name>
+			<name>include/base64.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/base64.h</locationURI>
 		</link>
 		<link>
-			<name>Release/blueio_types.h</name>
+			<name>include/blueio_types.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/blueio_types.h</locationURI>
 		</link>
 		<link>
-			<name>Release/bluetooth</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>Release/cfifo.h</name>
+			<name>include/cfifo.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/cfifo.h</locationURI>
 		</link>
 		<link>
-			<name>Release/converters</name>
+			<name>include/converters</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>Release/convutil.h</name>
+			<name>include/convutil.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/convutil.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev</name>
+			<name>include/coredev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>Release/crc.h</name>
+			<name>include/crc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crc.h</locationURI>
 		</link>
 		<link>
-			<name>Release/device bridge.h</name>
+			<name>include/device bridge.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/device%20bridge.h</locationURI>
 		</link>
 		<link>
-			<name>Release/device.h</name>
+			<name>include/device.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/device.h</locationURI>
 		</link>
 		<link>
-			<name>Release/device_intrf.h</name>
+			<name>include/device_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>Release/diskio.h</name>
+			<name>include/diskio.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/diskio.h</locationURI>
 		</link>
 		<link>
-			<name>Release/diskio_flash.h</name>
+			<name>include/diskio_flash.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/diskio_flash.h</locationURI>
 		</link>
 		<link>
-			<name>Release/display</name>
+			<name>include/display</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>Release/excelitas_serlink.h</name>
+			<name>include/excelitas_serlink.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/excelitas_serlink.h</locationURI>
 		</link>
 		<link>
-			<name>Release/fatfs.h</name>
+			<name>include/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
 		</link>
 		<link>
-			<name>Release/iatomic.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
-		</link>
-		<link>
-			<name>Release/imu</name>
+			<name>include/imu</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>Release/intelhex.h</name>
+			<name>include/intelhex.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
-		</link>
-		<link>
-			<name>Release/isha1.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/isha1.h</locationURI>
-		</link>
-		<link>
-			<name>Release/isha256.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/isha256.h</locationURI>
-		</link>
-		<link>
-			<name>Release/istddef.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/istddef.h</locationURI>
-		</link>
-		<link>
-			<name>Release/md5.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/md5.h</locationURI>
-		</link>
-		<link>
-			<name>Release/miscdev</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>Release/net</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>Release/prbs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
-		</link>
-		<link>
-			<name>Release/pulse_train.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
-		</link>
-		<link>
-			<name>Release/pwm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pwm.h</locationURI>
-		</link>
-		<link>
-			<name>Release/pwrmgnt</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>Release/sdcard.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sdcard.h</locationURI>
-		</link>
-		<link>
-			<name>Release/seep.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/seep.h</locationURI>
-		</link>
-		<link>
-			<name>Release/sensors</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>Release/slip_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/slip_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>Release/stddev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
-		</link>
-		<link>
-			<name>Release/sys</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>Release/sysstatus.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatus.h</locationURI>
-		</link>
-		<link>
-			<name>Release/sysstatusdef.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatusdef.h</locationURI>
-		</link>
-		<link>
-			<name>Release/usb</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>Release/utf8.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/utf8.h</locationURI>
-		</link>
-		<link>
-			<name>Release/utf8cvt.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/utf8cvt.h</locationURI>
-		</link>
-		<link>
-			<name>include/RE01_1500KB.h</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/RE01_1500KB.h</locationURI>
 		</link>
 		<link>
 			<name>include/iopinctrl.h</name>
@@ -256,9 +136,94 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/iopinctrl.h</locationURI>
 		</link>
 		<link>
+			<name>include/isha1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/isha1.h</locationURI>
+		</link>
+		<link>
+			<name>include/isha256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/isha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/istddef.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/istddef.h</locationURI>
+		</link>
+		<link>
+			<name>include/md5.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/md5.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/prbs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
+		</link>
+		<link>
+			<name>include/pulse_train.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwm.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwrmgnt</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/re01xxx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/re01xxx.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdcard.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sdcard.h</locationURI>
+		</link>
+		<link>
+			<name>include/seep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/seep.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/slip_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/slip_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/stddev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
+		</link>
+		<link>
+			<name>include/sys</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/sysstatus.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatus.h</locationURI>
+		</link>
+		<link>
+			<name>include/sysstatusdef.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatusdef.h</locationURI>
 		</link>
 		<link>
 			<name>include/system_RE01_1500KB.h</name>
@@ -266,9 +231,34 @@
 			<locationURI>PARENT-1-PROJECT_LOC/include/system_RE01_1500KB.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/utf8.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/utf8.h</locationURI>
+		</link>
+		<link>
+			<name>include/utf8cvt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/utf8cvt.h</locationURI>
+		</link>
+		<link>
 			<name>src/CppRuntimeOverload.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/ResetEntry.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
+		</link>
+		<link>
+			<name>src/atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/atomic.c</locationURI>
 		</link>
 		<link>
 			<name>src/audio</name>
@@ -371,11 +361,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/isha256.c</locationURI>
 		</link>
 		<link>
-			<name>src/logo.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/logo.c</locationURI>
-		</link>
-		<link>
 			<name>src/md5.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/md5.c</locationURI>
@@ -471,402 +456,357 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/vectors_re01.c</locationURI>
 		</link>
 		<link>
-			<name>Release/audio/audiodev.h</name>
+			<name>include/audio/audiodev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev.h</locationURI>
 		</link>
 		<link>
-			<name>Release/audio/audiodev_i2s.h</name>
+			<name>include/audio/audiodev_i2s.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_i2s.h</locationURI>
 		</link>
 		<link>
-			<name>Release/audio/audiodev_pdm.h</name>
+			<name>include/audio/audiodev_pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
 		<link>
-			<name>Release/bluetooth/bleadv_mandata.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bleadv_mandata.h</locationURI>
-		</link>
-		<link>
-			<name>Release/bluetooth/blueio_blesrvc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
-		</link>
-		<link>
-			<name>Release/converters/adc_device.h</name>
+			<name>include/converters/adc_device.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_device.h</locationURI>
 		</link>
 		<link>
-			<name>Release/converters/adc_hx711.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_hx711.h</locationURI>
-		</link>
-		<link>
-			<name>Release/converters/adc_ltc2495.h</name>
+			<name>include/converters/adc_ltc2495.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_ltc2495.h</locationURI>
 		</link>
 		<link>
-			<name>Release/converters/adc_nau7802.h</name>
+			<name>include/converters/adc_nau7802.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_nau7802.h</locationURI>
 		</link>
 		<link>
-			<name>Release/converters/analog_comp.h</name>
+			<name>include/converters/analog_comp.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/analog_comp.h</locationURI>
 		</link>
 		<link>
-			<name>Release/converters/dac_device.h</name>
+			<name>include/converters/dac_device.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/dac_device.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev/i2c.h</name>
+			<name>include/coredev/i2c.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2c.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev/i2s.h</name>
+			<name>include/coredev/i2s.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2s.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev/iopincfg.h</name>
+			<name>include/coredev/iopincfg.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/iopincfg.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev/pdm.h</name>
+			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev/shared_irq.h</name>
+			<name>include/coredev/shared_irq.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_irq.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev/spi.h</name>
+			<name>include/coredev/spi.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev/system_core_clock.h</name>
+			<name>include/coredev/system_core_clock.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev/timer copy.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer%20copy.h</locationURI>
-		</link>
-		<link>
-			<name>Release/coredev/timer.h</name>
+			<name>include/coredev/timer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
 		</link>
 		<link>
-			<name>Release/coredev/timer.h.xx</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h.xx</locationURI>
-		</link>
-		<link>
-			<name>Release/coredev/uart.h</name>
+			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
 		</link>
 		<link>
-			<name>Release/display/eink_intrf.h</name>
+			<name>include/display/eink_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>Release/display/eink_intrf.h.new</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h.new</locationURI>
-		</link>
-		<link>
-			<name>Release/display/eink_vb3300.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_vb3300.h</locationURI>
-		</link>
-		<link>
-			<name>Release/imu/icm20948_img_dmp3a.h</name>
+			<name>include/imu/icm20948_img_dmp3a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/icm20948_img_dmp3a.h</locationURI>
 		</link>
 		<link>
-			<name>Release/imu/imu.h</name>
+			<name>include/imu/imu.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu.h</locationURI>
 		</link>
 		<link>
-			<name>Release/imu/imu_icm20948.h</name>
+			<name>include/imu/imu_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>Release/imu/imu_invn_icm20948.h</name>
+			<name>include/imu/imu_invn_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_invn_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>Release/imu/imu_mpu9250.h</name>
+			<name>include/imu/imu_mpu9250.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_mpu9250.h</locationURI>
 		</link>
 		<link>
-			<name>Release/imu/mpu9250_dmpkey.h</name>
+			<name>include/imu/mpu9250_dmpkey.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/mpu9250_dmpkey.h</locationURI>
 		</link>
 		<link>
-			<name>Release/imu/mpu9250_dmpmap.h</name>
+			<name>include/imu/mpu9250_dmpmap.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/mpu9250_dmpmap.h</locationURI>
 		</link>
 		<link>
-			<name>Release/miscdev/buzzer.h</name>
+			<name>include/miscdev/buzzer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/buzzer.h</locationURI>
 		</link>
 		<link>
-			<name>Release/miscdev/led.h</name>
+			<name>include/miscdev/led.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/led.h</locationURI>
 		</link>
 		<link>
-			<name>Release/miscdev/led_apa102.h</name>
+			<name>include/miscdev/led_apa102.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/led_apa102.h</locationURI>
 		</link>
 		<link>
-			<name>Release/miscdev/led_ncp5623b.h</name>
+			<name>include/miscdev/led_ncp5623b.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/led_ncp5623b.h</locationURI>
 		</link>
 		<link>
-			<name>Release/miscdev/ledmx.h</name>
+			<name>include/miscdev/ledmx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/ledmx.h</locationURI>
 		</link>
 		<link>
-			<name>Release/miscdev/ledmxfont.h</name>
+			<name>include/miscdev/ledmxfont.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/ledmxfont.h</locationURI>
 		</link>
 		<link>
-			<name>Release/miscdev/modem.h</name>
+			<name>include/miscdev/modem.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/modem.h</locationURI>
 		</link>
 		<link>
-			<name>Release/miscdev/tca6424a.h</name>
+			<name>include/miscdev/tca6424a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
 		</link>
 		<link>
-			<name>Release/net/.DS_Store</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/net/.DS_Store</locationURI>
-		</link>
-		<link>
-			<name>Release/pwrmgnt/fg_lc709203f.h</name>
+			<name>include/pwrmgnt/fg_lc709203f.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/fg_lc709203f.h</locationURI>
 		</link>
 		<link>
-			<name>Release/pwrmgnt/pm_as3701.h</name>
+			<name>include/pwrmgnt/pm_as3701.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_as3701.h</locationURI>
 		</link>
 		<link>
-			<name>Release/pwrmgnt/pm_mp2696a.h</name>
+			<name>include/pwrmgnt/pm_mp2696a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_mp2696a.h</locationURI>
 		</link>
 		<link>
-			<name>Release/pwrmgnt/pwrmgnt.h</name>
+			<name>include/pwrmgnt/pwrmgnt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/accel_adxl362.h</name>
+			<name>include/sensors/accel_adxl362.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_adxl362.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/accel_h3lis331dl.h</name>
+			<name>include/sensors/accel_h3lis331dl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/accel_lis2dh12.h</name>
+			<name>include/sensors/accel_lis2dh12.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/accel_sensor.h</name>
+			<name>include/sensors/accel_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_sensor.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/ag_bmi160.h</name>
+			<name>include/sensors/ag_bmi160.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ag_bmi160.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/agm_icm20948.h</name>
+			<name>include/sensors/agm_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/agm_invn_icm20948.h</name>
+			<name>include/sensors/agm_invn_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_invn_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/agm_lsm9ds1.h</name>
+			<name>include/sensors/agm_lsm9ds1.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_lsm9ds1.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/agm_mpu9250.h</name>
+			<name>include/sensors/agm_mpu9250.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_mpu9250.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/am_fxos8700cq.h</name>
+			<name>include/sensors/am_fxos8700cq.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_fxos8700cq.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/am_lsm303agr.h</name>
+			<name>include/sensors/am_lsm303agr.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303agr.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/am_lsm303c.h</name>
+			<name>include/sensors/am_lsm303c.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/am_lsm303c.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/bsec_datatypes.h</name>
+			<name>include/sensors/bsec_datatypes.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/bsec_datatypes.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/bsec_interface.h</name>
+			<name>include/sensors/bsec_interface.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/bsec_interface.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/gas_sensor.h</name>
+			<name>include/sensors/gas_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gas_sensor.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/gyro_l3gd20h.h</name>
+			<name>include/sensors/gyro_l3gd20h.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gyro_l3gd20h.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/gyro_sensor.h</name>
+			<name>include/sensors/gyro_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gyro_sensor.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/humi_sensor.h</name>
+			<name>include/sensors/humi_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/humi_sensor.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/mag_ak09916.h</name>
+			<name>include/sensors/mag_ak09916.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_ak09916.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/mag_bmm150.h</name>
+			<name>include/sensors/mag_bmm150.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_bmm150.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/mag_sensor.h</name>
+			<name>include/sensors/mag_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_sensor.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/press_sensor.h</name>
+			<name>include/sensors/press_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/press_sensor.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/sensor.h</name>
+			<name>include/sensors/sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/sensor.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/temp_sensor.h</name>
+			<name>include/sensors/temp_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/temp_sensor.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/tph_bme280.h</name>
+			<name>include/sensors/tph_bme280.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tph_bme280.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/tph_ms8607.h</name>
+			<name>include/sensors/tph_ms8607.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tph_ms8607.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/tph_sensor.h</name>
+			<name>include/sensors/tph_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tph_sensor.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sensors/tphg_bme680.h</name>
+			<name>include/sensors/tphg_bme680.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tphg_bme680.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sys/dirent.h</name>
+			<name>include/sys/dirent.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
 		</link>
 		<link>
-			<name>Release/sys/socketx.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sys/socketx.h</locationURI>
-		</link>
-		<link>
-			<name>Release/usb/usb_cdcdef.h</name>
+			<name>include/usb/usb_cdcdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_cdcdef.h</locationURI>
 		</link>
 		<link>
-			<name>Release/usb/usb_def.h</name>
+			<name>include/usb/usb_def.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_def.h</locationURI>
 		</link>
 		<link>
-			<name>Release/usb/usb_hiddef.h</name>
+			<name>include/usb/usb_hiddef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_hiddef.h</locationURI>
 		</link>
 		<link>
-			<name>Release/usb/usb_hidhost.h</name>
+			<name>include/usb/usb_hidhost.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_hidhost.h</locationURI>
 		</link>
 		<link>
-			<name>Release/usb/usb_mscdef.h</name>
+			<name>include/usb/usb_mscdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
 		</link>
@@ -914,16 +854,6 @@
 			<name>src/display/eink_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/display/eink_intrf.cpp.new</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp.new</locationURI>
-		</link>
-		<link>
-			<name>src/display/eink_vb3300.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>
