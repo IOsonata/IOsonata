@@ -47,6 +47,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /** @addtogroup Utilities
   * @{
   */
+#ifndef IOSONATA
+#define IOSONATA
+#endif
 
 #ifdef _MSC_VER
 // Microsoft does not support C99 inline
@@ -119,16 +122,32 @@ typedef AppInfo_t	APP_INFO;
 extern "C" {
 #endif
 
-// min function
+/// Inline min functions when there isn't one available.
 #ifndef min
-/// An inline min function when there isn't one available.
 static inline int min(int x, int y) { return x > y ? y : x; }
 #endif
+#ifndef umin
+static inline unsigned umin(unsigned x, unsigned y) { return x > y ? y : x; }
+#endif
+#ifndef llmin
+static inline int64_t llmin(int64_t x, int64_t y) { return x > y ? y : x; }
+#endif
+#ifndef ullmin
+static inline uint64_t ullmin(uint64_t x, uint64_t y) { return x > y ? y : x; }
+#endif
 
-// max function
-#ifndef max
 /// An inline max function when there isn't one available.
+#ifndef max
 static inline int max(int x, int y) { return x > y ? x : y; }
+#endif
+#ifndef umax
+static inline unsigned umax(unsigned x, unsigned y) { return x > y ? x : y; }
+#endif
+#ifndef llmax
+static inline int64_t llmax(int64_t x, int64_t y) { return x > y ? x : y; }
+#endif
+#ifndef ullmax
+static inline uint64_t ullmax(uint64_t x, uint64_t y) { return x > y ? x : y; }
 #endif
 
 #ifdef __cplusplus
