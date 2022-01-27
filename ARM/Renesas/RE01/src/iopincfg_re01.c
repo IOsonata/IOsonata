@@ -90,6 +90,37 @@ typedef struct {
 
 static IOPINSENS_EVTHOOK s_GpIOSenseEvt[RE01_1500KB_PIN_MAX_INT + 1] = { {0, NULL}, };
 
+void RE01IOPinSupplyEnable(int PortNo, int PinNo)
+{
+	switch (PortNo)
+	{
+		case 0:
+			if (PinNo < 10 || PinNo > 15)
+			{
+				break;
+			}
+		case 5:
+			SYSTEM->VOCR_b.IV3CTL = 0;
+			break;
+		case 1:
+			SYSTEM->VOCR_b.IV2CTL = 0;
+			break;
+		case 2:
+			if (PinNo < 2 || PinNo > 4)
+			{
+				break;
+			}
+		case 3:
+		case 6:
+		case 7:
+			SYSTEM->VOCR_b.IV1CTL = 0;
+			break;
+		case 8:
+			SYSTEM->VOCR_b.IV0CTL = 0;
+			break;
+	}
+}
+
 /**
  * @brief Configure individual I/O pin.
  *
@@ -117,6 +148,8 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	uint32_t pos = 1 << PinNo;
 	tmp = reg->PDR & ~pos;
 
+	RE01IOPinSupplyEnable(PortNo, PinNo);
+
 	if (PinOp == IOPINOP_GPIO)
 	{
 		if (Dir == IOPINDIR_OUTPUT)
@@ -131,35 +164,36 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	else
 	{
 		// Analog
-		tmp |= 3 << pos;
+		//tmp |= 3 << pos;
 	}
 
 	reg->PDR = tmp;
 
 	//pos = PinNo << 1;
 
+	PMISC->PWPR = 0;
 	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
 
-	int idx = PinNo + (PortNo * 16);
+	int idx = PinNo + (PortNo << 4);
 	__IOM uint32_t *psf = (__IOM uint32_t*)PFS_BASE;
 
-	uint32_t pull = psf[idx] & (0xFFFFFF0F);
+	uint32_t pull = psf[idx] & ~(PFS_PUCR_Msk | PFS_PDCR_Msk | PFS_NCODR_Msk | PFS_PCODR_Msk);
 
 	switch (Resistor)
 	{
 		case IOPINRES_FOLLOW:
 		case IOPINRES_PULLUP:
-			pull |= 0x10;	// PUCR
-			if (Type == IOPINTYPE_OPENDRAIN)
+			pull |= PFS_PUCR_Msk;	// PUCR
+			if (Type == IOPINTYPE_OPENDRAIN && Dir == IOPINDIR_OUTPUT)
 			{
-				pull |= 0x40;	// NCODR
+				pull |= PFS_NCODR_Msk;	// NCODR
 			}
 			break;
 		case IOPINRES_PULLDOWN:
-			pull |=  0x20;	// PDCR
-			if (Type == IOPINTYPE_OPENDRAIN)
+			pull |=  PFS_PDCR_Msk;	// PDCR
+			if (Type == IOPINTYPE_OPENDRAIN && Dir == IOPINDIR_OUTPUT)
 			{
-				pull |= 0x80;	// PCODR
+				pull |= PFS_PCODR_Msk;	// PCODR
 			}
 			break;
 		case IOPINRES_NONE:
@@ -167,6 +201,9 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	}
 
 	psf[idx] = pull;
+
+	PMISC->PWPR = 0;	// Write disable
+	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
 	// Default high speed
 	IOPinSetSpeed(PortNo, PinNo, IOPINSPEED_HIGH);
