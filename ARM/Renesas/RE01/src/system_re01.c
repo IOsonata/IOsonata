@@ -44,13 +44,8 @@ SOFTWARE.
 #include "RE01xxx.h"
 #include "coredev/system_core_clock.h"
 
-#define DEFAULT_RC_FREQ		32000000UL
-#define XTAL_FREQ			32000000UL
-
-#define OSC_FREQ_MAX		32000000UL		// Max oscillator freq internal or external
-
 #define SYSTEM_CORE_CLOCK_MAX			64000000UL	// TODO: Adjust value for CPU with fixed core frequency
-#define SYSTEM_NSDELAY_CORE_FACTOR		(34UL)	// TODO: Adjustment value for nanosec delay
+#define SYSTEM_NSDELAY_CORE_FACTOR		(34UL)		// TODO: Adjustment value for nanosec delay
 
 #define SYSTEM_SCKSCR_CKSEL_HOCO	(0)		// High speed RC
 #define SYSTEM_SCKSCR_CKSEL_MOCO	(1)		// Mid speed RC
@@ -185,8 +180,8 @@ void SystemCoreClockUpdate(void)
 
 	// Update Flash wait state to current core freq.
 	SetFlashWaitState(SystemCoreClock);
-	SystemPeriphClockSet(0, SystemCoreClock >> 1);
-	SystemPeriphClockSet(1, SystemCoreClock >> 1);
+	SystemPeriphClockSet(0, SystemCoreClock);
+	SystemPeriphClockSet(1, s_PeriphSrcFreq);
 }
 
 

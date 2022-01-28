@@ -103,10 +103,7 @@ static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int Pin
  */
 static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int PinNo) {
 	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
-	if ((reg->PIDR >> PinNo) == 0)
-		reg->POSR = (1 << PinNo);
-	else
-		reg->PORR = (1 << PinNo);
+	reg->PODR ^= (1 << PinNo);
 }
 
 /**

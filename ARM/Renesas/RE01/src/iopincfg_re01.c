@@ -89,15 +89,16 @@ typedef struct {
 #pragma pack(pop)
 
 static IOPINSENS_EVTHOOK s_GpIOSenseEvt[RE01_1500KB_PIN_MAX_INT + 1] = { {0, NULL}, };
+static uint16_t s_GpIOPowerSupply[RE01_1500KB_MAX_PORT] = {0,};
 
-void RE01IOPinSupplyEnable(int PortNo, int PinNo)
+static void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 {
 	switch (PortNo)
 	{
 		case 0:
 			if (PinNo < 10 || PinNo > 15)
 			{
-				break;
+				return;
 			}
 		case 5:
 			SYSTEM->VOCR_b.IV3CTL = 0;
@@ -108,7 +109,7 @@ void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 		case 2:
 			if (PinNo < 2 || PinNo > 4)
 			{
-				break;
+				return;
 			}
 		case 3:
 		case 6:
@@ -118,6 +119,38 @@ void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 		case 8:
 			SYSTEM->VOCR_b.IV0CTL = 0;
 			break;
+	}
+
+	// Keep track of IO that needs power supply enabled
+	s_GpIOPowerSupply[PortNo] |= 1 << PinNo;
+}
+
+static void RE01IOPinSupplyDisable(int PortNo, int PinNo)
+{
+	s_GpIOPowerSupply[PortNo] &= ~(1 << PinNo);
+
+	if (s_GpIOPowerSupply[8] == 0)
+	{
+		SYSTEM->VOCR_b.IV0CTL = 1;
+	}
+
+	uint16_t d = s_GpIOPowerSupply[2] | s_GpIOPowerSupply[3] | s_GpIOPowerSupply[6] | s_GpIOPowerSupply[7];
+
+	if (d == 0)
+	{
+		SYSTEM->VOCR_b.IV1CTL = 1;
+	}
+
+	if (s_GpIOPowerSupply[1] == 0)
+	{
+		SYSTEM->VOCR_b.IV2CTL = 1;
+	}
+
+	d = s_GpIOPowerSupply[0] | s_GpIOPowerSupply[5];
+
+	if (d == 0)
+	{
+		SYSTEM->VOCR_b.IV3CTL = 1;
 	}
 }
 
@@ -143,64 +176,56 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	if (PortNo == -1 || PinNo == -1 || PortNo > RE01_1500KB_MAX_PORT)
 		return;
 
-	uint32_t tmp;
-
-	uint32_t pos = 1 << PinNo;
-	tmp = reg->PDR & ~pos;
-
 	RE01IOPinSupplyEnable(PortNo, PinNo);
+
+	uint32_t psfval = PFS_DSCR_Msk;	// Default high drive
 
 	if (PinOp == IOPINOP_GPIO)
 	{
 		if (Dir == IOPINDIR_OUTPUT)
 		{
-			tmp |= pos;
+			psfval |= PFS_PDR_Msk;
 		}
 	}
 	else if (PinOp < IOPINOP_FUNC16)
 	{
 		// Alternate function
+		psfval |= (PinOp << PFS_PSEL_Pos) | PFS_PMR_Msk;
 	}
 	else
 	{
 		// Analog
-		//tmp |= 3 << pos;
+		psfval |= PFS_ASEL_Msk;
 	}
-
-	reg->PDR = tmp;
-
-	//pos = PinNo << 1;
-
-	PMISC->PWPR = 0;
-	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
-
-	int idx = PinNo + (PortNo << 4);
-	__IOM uint32_t *psf = (__IOM uint32_t*)PFS_BASE;
-
-	uint32_t pull = psf[idx] & ~(PFS_PUCR_Msk | PFS_PDCR_Msk | PFS_NCODR_Msk | PFS_PCODR_Msk);
 
 	switch (Resistor)
 	{
 		case IOPINRES_FOLLOW:
 		case IOPINRES_PULLUP:
-			pull |= PFS_PUCR_Msk;	// PUCR
-			if (Type == IOPINTYPE_OPENDRAIN && Dir == IOPINDIR_OUTPUT)
+			psfval |= PFS_PUCR_Msk;	// PUCR
+			if (Type == IOPINTYPE_OPENDRAIN)
 			{
-				pull |= PFS_NCODR_Msk;	// NCODR
+				// N-Channel
+				psfval |= PFS_NCODR_Msk;	// NCODR
 			}
 			break;
 		case IOPINRES_PULLDOWN:
-			pull |=  PFS_PDCR_Msk;	// PDCR
-			if (Type == IOPINTYPE_OPENDRAIN && Dir == IOPINDIR_OUTPUT)
+			psfval |=  PFS_PDCR_Msk;	// PDCR
+			if (Type == IOPINTYPE_OPENDRAIN)
 			{
-				pull |= PFS_PCODR_Msk;	// PCODR
+				// P-Channel
+				psfval |= PFS_PCODR_Msk;	// PCODR
 			}
 			break;
 		case IOPINRES_NONE:
 			break;
 	}
 
-	psf[idx] = pull;
+	PMISC->PWPR = 0;
+	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
+
+	int offset = (PinNo + (PortNo << 4)) << 2;
+	*(__IOM uint32_t*)(PFS_BASE + offset) = psfval;
 
 	PMISC->PWPR = 0;	// Write disable
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
@@ -223,33 +248,17 @@ void IOPinDisable(int PortNo, int PinNo)
 {
 	if (PortNo == -1 || PinNo == -1)
 		return;
-#if 0
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
-	uint32_t pos = PinNo << 1;
 
-	reg->MODER |=  (GPIO_MODER_MODE0 << pos);
-	reg->OSPEEDR &= ~(GPIO_OSPEEDR_OSPEED0 << pos);
-	reg->PUPDR &= ~(GPIO_PUPDR_PUPD0 << pos);
+	PMISC->PWPR = 0;
+	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
 
-	pos = (PinNo & 0x7) << 2;
-	int idx = PinNo >> 3;
+	int offset = (PinNo + (PortNo << 4)) << 2;
+	*(__IOM uint32_t*)(PFS_BASE + offset) = 0;
 
-	reg->AFR[idx] &= ~(0xf << pos);
-	reg->OTYPER &= ~(GPIO_OTYPER_OT0 << PinNo);
+	PMISC->PWPR = 0;	// Write disable
+	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
-#if defined(STM32L471xx) || defined(STM32L475xx) || defined(STM32L476xx) || defined(STM32L485xx) || defined(STM32L486xx)
-      /* Deactivate the Control bit of Analog mode for the current IO */
-	reg->ASCR &= ~(GPIO_ASCR_ASC0<< PinNo);
-#endif /* STM32L471xx || STM32L475xx || STM32L476xx || STM32L485xx || STM32L486xx */
-
- 	if (PortNo == 6 && PinNo > 0 && (reg->MODER & 0x55555554) == 0 )
-	{
-		// Port G requires VDDIO2
-		RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
-		PWR->CR2 &= ~PWR_CR2_IOSV;
-		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
-	}
-#endif
+	RE01IOPinSupplyDisable(PortNo, PinNo);
 }
 
 /**
@@ -497,7 +506,30 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
  */
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
-	// Pin sense is not avail on this Renesas
+	int offset = (PinNo + (PortNo << 4)) << 2;
+	__IOM uint32_t *psf = (__IOM uint32_t*)(PFS_BASE + offset);
+	uint32_t psfval = *psf & ~PFS_EOFR_Msk;
+
+	switch (Sense)
+	{
+		case IOPINSENSE_LOW_TRANSITION:
+			psfval |= (2<<PFS_EOFR_Pos);
+			break;
+		case IOPINSENSE_HIGH_TRANSITION:
+			psfval |= (1<<PFS_EOFR_Pos);
+			break;
+		case IOPINSENSE_TOGGLE:
+			psfval |= (3<<PFS_EOFR_Pos);
+			break;
+	}
+
+	PMISC->PWPR = 0;
+	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
+
+	*psf = psfval;
+
+	PMISC->PWPR = 0;	// Write disable
+	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 }
 
 /**
@@ -511,7 +543,19 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
  */
 void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 {
-	// Not available on this Renesas
+	int offset = (PinNo + (PortNo << 4)) << 2;
+	__IOM uint32_t *psf = (__IOM uint32_t*)(PFS_BASE + offset);
+	uint32_t psfval = *psf & ~PFS_DSCR_Msk;
+
+	psfval |= Strength == IOPINSTRENGTH_STRONG ? PFS_DSCR_Msk : (2<<PFS_DSCR_Pos);
+
+	PMISC->PWPR = 0;
+	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
+
+	*psf = psfval;
+
+	PMISC->PWPR = 0;	// Write disable
+	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 }
 
 /**
