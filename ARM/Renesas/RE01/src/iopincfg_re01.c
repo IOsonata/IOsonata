@@ -3,6 +3,8 @@
 
 @brief	I/O pin configuration implementation on Renesas RE01 series
 
+NOTE: Renesas has preassign interrupt pins for each specific gpio.
+
 @author	Hoang Nguyen Hoan
 @date	Nov. 11, 2021
 
@@ -65,8 +67,15 @@ SOFTWARE.
 #define PFS_PODR_Pos              (0UL)                     /*!< PODR (Bit 0)                                          */
 #define PFS_PODR_Msk              (0x1UL)                   /*!< PODR (Bitfield-Mask: 0x01)                            */
 
+#define ICU_IRQCR_IRQMD_Pos					(0UL)
+#define ICU_IRQCR_IRQMD_Mask				(3UL)
+#define ICU_IRQCR_IRQMD_FALLING_EDGE		(0UL)
+#define ICU_IRQCR_IRQMD_RISING_EDGE			(1UL)
+#define ICU_IRQCR_IRQMD_FALLING_RISING_EDGE	(2UL)
+#define ICU_IRQCR_IRQMD_LOW_LEVEL			(3UL)
 
-#define RE01_1500KB_PIN_MAX_INT		(9)
+
+#define RE01_1500KB_PIN_MAX_INT		(10)
 #define RE01_1500KB_MAX_PORT		(9)
 
 static int s_MaxNbIOPins[RE01_1500KB_MAX_PORT] = {
@@ -90,6 +99,29 @@ typedef struct {
 
 static IOPINSENS_EVTHOOK s_GpIOSenseEvt[RE01_1500KB_PIN_MAX_INT + 1] = { {0, NULL}, };
 static uint16_t s_GpIOPowerSupply[RE01_1500KB_MAX_PORT] = {0,};
+static const uint32_t s_Re01IntPins[] = {
+	0x288, 0x387, 0x04b, 0x24a, 0x349, 0x127, 0x825, 0x924, 0x422, 0x564,
+	0x51d, 0x61c, 0x717, 0x016, 0x815, 0x914, 0x458, 0x056, 0x155, 0x151,
+	0x70f, 0x60e,
+};
+
+
+static bool IsValidIOInterrupt(int IntNo, int PortNo, int PinNo)
+{
+	bool retval = false;
+	int pinval = ((IntNo & 0xf) << 8) | ((PortNo & 0xf) << 4) | (PinNo & 0xf);
+
+	for (int i = 0; i < sizeof(s_Re01IntPins) / sizeof(uint32_t); i++)
+	{
+		if (s_Re01IntPins[i] == pinval)
+		{
+			retval = true;
+			break;
+		}
+	}
+
+	return retval;
+}
 
 static void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 {
@@ -272,18 +304,20 @@ void IOPinDisableInterrupt(int IntNo)
 	{
 		return;
 	}
-/*
-	int idx = (s_GpIOSenseEvt[IntNo].PortPinNo & 0xFF) >> 2;
-	uint32_t pos = (s_GpIOSenseEvt[IntNo].PortPinNo & 0xF) << 2;
-	uint32_t mask = 0xF << pos;
 
-	SYSCFG->EXTICR[idx] &= ~mask;
+	int pinno = s_GpIOSenseEvt[IntNo].PortPinNo & 0xFF;
+	int portno = (s_GpIOSenseEvt[IntNo].PortPinNo >> 8) & 0xf;
+	int offset = (pinno + (portno << 4)) << 2;
+	__IOM uint32_t *psf = (__IOM uint32_t*)(PFS_BASE + offset);
+	uint32_t psfval = *psf & ~(PFS_ISEL_Msk | PFS_EOFR_Msk);
 
-	mask = ~(1 << (s_GpIOSenseEvt[IntNo].PortPinNo & 0xFF));
+	PMISC->PWPR = 0;
+	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
 
-	EXTI->RTSR1 &= mask;
-	EXTI->FTSR1 &= mask;
-	EXTI->IMR1 &= mask;
+	*psf = psfval;
+
+	PMISC->PWPR = 0;	// Write disable
+	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
     s_GpIOSenseEvt[IntNo].PortPinNo = -1;
     s_GpIOSenseEvt[IntNo].Sense = IOPINSENSE_DISABLE;
@@ -293,53 +327,48 @@ void IOPinDisableInterrupt(int IntNo)
     switch (IntNo)
     {
     	case 0:
-    		NVIC_DisableIRQ(EXTI0_IRQn);
-    		NVIC_ClearPendingIRQ(EXTI0_IRQn);
+    		NVIC_DisableIRQ(IEL0_IRQn);
+    		NVIC_ClearPendingIRQ(IEL0_IRQn);
     		break;
     	case 1:
-    		NVIC_DisableIRQ(EXTI1_IRQn);
-    		NVIC_ClearPendingIRQ(EXTI1_IRQn);
+    		NVIC_DisableIRQ(IEL1_IRQn);
+    		NVIC_ClearPendingIRQ(IEL1_IRQn);
     		break;
     	case 2:
-    		NVIC_DisableIRQ(EXTI2_IRQn);
-    		NVIC_ClearPendingIRQ(EXTI2_IRQn);
+    		NVIC_DisableIRQ(IEL2_IRQn);
+    		NVIC_ClearPendingIRQ(IEL2_IRQn);
     		break;
     	case 3:
-    		NVIC_DisableIRQ(EXTI3_IRQn);
-    		NVIC_ClearPendingIRQ(EXTI3_IRQn);
+    		NVIC_DisableIRQ(IEL3_IRQn);
+    		NVIC_ClearPendingIRQ(IEL3_IRQn);
     		break;
     	case 4:
-    		NVIC_DisableIRQ(EXTI4_IRQn);
-    		NVIC_ClearPendingIRQ(EXTI4_IRQn);
+    		NVIC_DisableIRQ(IEL4_IRQn);
+    		NVIC_ClearPendingIRQ(IEL4_IRQn);
     		break;
+		case 5:
+			NVIC_DisableIRQ(IEL5_IRQn);
+			NVIC_ClearPendingIRQ(IEL5_IRQn);
+			break;
+		case 6:
+			NVIC_DisableIRQ(IEL6_IRQn);
+			NVIC_ClearPendingIRQ(IEL6_IRQn);
+			break;
+		case 7:
+			NVIC_DisableIRQ(IEL7_IRQn);
+			NVIC_ClearPendingIRQ(IEL7_IRQn);
+			break;
+		case 8:
+			NVIC_DisableIRQ(IEL8_IRQn);
+			NVIC_ClearPendingIRQ(IEL8_IRQn);
+			break;
+		case 9:
+			NVIC_DisableIRQ(IEL9_IRQn);
+			NVIC_ClearPendingIRQ(IEL9_IRQn);
+			break;
     	default:
-    		if (IntNo > 4 && IntNo < 10)
-    		{
-				// Shared interrupt, make sure no one still using it
-    			for (int i = 5; i < 10; i++)
-    			{
-    				if (s_GpIOSenseEvt[i].SensEvtCB != NULL)
-    				{
-    					return;
-    				}
-    			}
-        		NVIC_DisableIRQ(EXTI9_5_IRQn);
-        		NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
-    		}
-    		else
-    		{
-				// Shared interrupt, make sure no one still using it
-    			for (int i = 10; i < IOPIN_MAX_INT; i++)
-    			{
-    				if (s_GpIOSenseEvt[i].SensEvtCB != NULL)
-    				{
-    					return;
-    				}
-    			}
-        		NVIC_DisableIRQ(EXTI15_10_IRQn);
-        		NVIC_ClearPendingIRQ(EXTI15_10_IRQn);
-    		}
-    }*/
+    		;
+    }
 }
 
 /**
@@ -361,39 +390,57 @@ void IOPinDisableInterrupt(int IntNo)
  */
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	if (IntNo < 0 || IntNo >= RE01_1500KB_PIN_MAX_INT || IntNo != PinNo)
+	if (IntNo < 0 || IntNo >= RE01_1500KB_PIN_MAX_INT ||
+		IsValidIOInterrupt(IntNo, PortNo, PinNo) == false)
 	{
 		return false;
 	}
-/*
-	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 
-	int idx = IntNo >> 2;
-	uint32_t pos = (IntNo & 0x3) << 2;
-	uint32_t mask = 0xF << pos;
-
-	SYSCFG->EXTICR[idx] &= ~mask;
-	SYSCFG->EXTICR[idx] |= PortNo << pos;
-
-	mask = (1 << (PinNo & 0xFF));
-
-	EXTI->IMR1 |= mask;
-
-	mask &= 0x7DFFFF;
+	int offset = (PinNo + (PortNo << 4)) << 2;
+	__IOM uint32_t *psf = (__IOM uint32_t*)(PFS_BASE + offset);
+	uint32_t psfval = *psf & ~(PFS_EOFR_Msk);
+	__IOM uint8_t *irqcr = (__IOM uint8_t*)&ICU->IRQCR0;
+	__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR0;
 
 	switch (Sense)
 	{
 		case IOPINSENSE_LOW_TRANSITION:
-			EXTI->RTSR1 &= ~mask;
-			EXTI->FTSR1 |= mask;
+			psfval |= (2<<PFS_EOFR_Pos);
+			irqcr[IntNo] = ICU_IRQCR_IRQMD_FALLING_EDGE;
 			break;
 		case IOPINSENSE_HIGH_TRANSITION:
-			EXTI->RTSR1 |= mask;
-			EXTI->FTSR1 &= ~mask;
+			psfval |= (1<<PFS_EOFR_Pos);
+			irqcr[IntNo] = ICU_IRQCR_IRQMD_RISING_EDGE;
 			break;
 		case IOPINSENSE_TOGGLE:
-			EXTI->RTSR1 |= mask;
-			EXTI->FTSR1 |= mask;
+			psfval |= (3<<PFS_EOFR_Pos);
+			irqcr[IntNo] = ICU_IRQCR_IRQMD_FALLING_RISING_EDGE;
+			break;
+	}
+
+	psfval |= PFS_ISEL_Msk;
+
+	switch (IntNo)
+	{
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+			ielsr[IntNo] = 1;
+			break;
+		case 4:
+		case 7:
+			ielsr[IntNo] = 0x13;
+			break;
+		case 5:
+		case 6:
+			ielsr[IntNo] = 0x12;
+			break;
+		case 8:
+			ielsr[IntNo] = 0x1E;
+			break;
+		case 9:
+			ielsr[IntNo] = 0x1F;
 			break;
 	}
 
@@ -402,49 +449,72 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 	s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
 	s_GpIOSenseEvt[IntNo].pCtx = pCtx;
 
+	PMISC->PWPR = 0;
+	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
+
+	*psf = psfval;
+
+	ICU->WUPEN |= (1 << IntNo);
+
+	PMISC->PWPR = 0;	// Write disable
+	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
 	switch (IntNo)
 	{
 		case 0:
-			NVIC_ClearPendingIRQ(EXTI0_IRQn);
-			NVIC_SetPriority(EXTI0_IRQn, IntPrio);
-			NVIC_EnableIRQ(EXTI0_IRQn);
+			NVIC_ClearPendingIRQ(IEL0_IRQn);
+			NVIC_SetPriority(IEL0_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL0_IRQn);
 			break;
 		case 1:
-			NVIC_ClearPendingIRQ(EXTI1_IRQn);
-			NVIC_SetPriority(EXTI1_IRQn, IntPrio);
-			NVIC_EnableIRQ(EXTI1_IRQn);
+			NVIC_ClearPendingIRQ(IEL1_IRQn);
+			NVIC_SetPriority(IEL1_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL1_IRQn);
 			break;
 		case 2:
-			NVIC_ClearPendingIRQ(EXTI2_IRQn);
-			NVIC_SetPriority(EXTI2_IRQn, IntPrio);
-			NVIC_EnableIRQ(EXTI2_IRQn);
+			NVIC_ClearPendingIRQ(IEL2_IRQn);
+			NVIC_SetPriority(IEL2_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL2_IRQn);
 			break;
 		case 3:
-			NVIC_ClearPendingIRQ(EXTI3_IRQn);
-			NVIC_SetPriority(EXTI3_IRQn, IntPrio);
-			NVIC_EnableIRQ(EXTI3_IRQn);
+			NVIC_ClearPendingIRQ(IEL3_IRQn);
+			NVIC_SetPriority(IEL3_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL3_IRQn);
 			break;
 		case 4:
-			NVIC_ClearPendingIRQ(EXTI4_IRQn);
-			NVIC_SetPriority(EXTI4_IRQn, IntPrio);
-			NVIC_EnableIRQ(EXTI4_IRQn);
+			NVIC_ClearPendingIRQ(IEL4_IRQn);
+			NVIC_SetPriority(IEL4_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL4_IRQn);
+			break;
+		case 5:
+			NVIC_ClearPendingIRQ(IEL5_IRQn);
+			NVIC_SetPriority(IEL5_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL5_IRQn);
+			break;
+		case 6:
+			NVIC_ClearPendingIRQ(IEL6_IRQn);
+			NVIC_SetPriority(IEL6_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL6_IRQn);
+			break;
+		case 7:
+			NVIC_ClearPendingIRQ(IEL7_IRQn);
+			NVIC_SetPriority(IEL7_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL7_IRQn);
+			break;
+		case 8:
+			NVIC_ClearPendingIRQ(IEL8_IRQn);
+			NVIC_SetPriority(IEL8_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL8_IRQn);
+			break;
+		case 9:
+			NVIC_ClearPendingIRQ(IEL9_IRQn);
+			NVIC_SetPriority(IEL9_IRQn, IntPrio);
+			NVIC_EnableIRQ(IEL9_IRQn);
 			break;
 		default:
-			if (IntNo > 4 && IntNo < 10)
-			{
-				NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
-				NVIC_SetPriority(EXTI9_5_IRQn, IntPrio);
-				NVIC_EnableIRQ(EXTI9_5_IRQn);
-			}
-			else
-			{
-				NVIC_ClearPendingIRQ(EXTI15_10_IRQn);
-				NVIC_SetPriority(EXTI15_10_IRQn, IntPrio);
-				NVIC_EnableIRQ(EXTI15_10_IRQn);
-			}
+			;
     }
-*/
+
     return true;
 }
 
@@ -571,112 +641,73 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 {
 	// Not available on this Renesas
 }
-#if 0
-void EXTI0_IRQHandler(void)
+
+void IEL0_IRQHandler(void)
 {
-	if (EXTI->PR1 & 1)
-	{
-		EXTI->PR1 = 1;
-
-		if (s_GpIOSenseEvt[0].SensEvtCB)
-			s_GpIOSenseEvt[0].SensEvtCB(0, s_GpIOSenseEvt[0].pCtx);
-
-	}
-
-	NVIC_ClearPendingIRQ(EXTI0_IRQn);
+	if (s_GpIOSenseEvt[0].SensEvtCB)
+		s_GpIOSenseEvt[0].SensEvtCB(0, s_GpIOSenseEvt[0].pCtx);
+	NVIC_ClearPendingIRQ(IEL0_IRQn);
 }
 
-void EXTI1_IRQHandler(void)
+void IEL1_IRQHandler(void)
 {
-	if (EXTI->PR1 & 2)
-	{
-		EXTI->PR1 = 2;
-
-		if (s_GpIOSenseEvt[1].SensEvtCB)
-			s_GpIOSenseEvt[1].SensEvtCB(1, s_GpIOSenseEvt[1].pCtx);
-
-	}
-
-	NVIC_ClearPendingIRQ(EXTI1_IRQn);
+	if (s_GpIOSenseEvt[1].SensEvtCB)
+		s_GpIOSenseEvt[1].SensEvtCB(1, s_GpIOSenseEvt[1].pCtx);
+	NVIC_ClearPendingIRQ(IEL1_IRQn);
 }
 
-void EXTI2_IRQHandler(void)
+void IEL2_IRQHandler(void)
 {
-	if (EXTI->PR1 & 4)
-	{
-		EXTI->PR1 = 4;
-
-		if (s_GpIOSenseEvt[2].SensEvtCB)
-			s_GpIOSenseEvt[2].SensEvtCB(2, s_GpIOSenseEvt[2].pCtx);
-
-	}
-
-	NVIC_ClearPendingIRQ(EXTI2_IRQn);
+	if (s_GpIOSenseEvt[2].SensEvtCB)
+		s_GpIOSenseEvt[2].SensEvtCB(2, s_GpIOSenseEvt[2].pCtx);
+	NVIC_ClearPendingIRQ(IEL2_IRQn);
 }
 
-void EXTI3_IRQHandler(void)
+void IEL3_IRQHandler(void)
 {
-	if (EXTI->PR1 & 8)
-	{
-		EXTI->PR1 = 8;
-
-		if (s_GpIOSenseEvt[3].SensEvtCB)
-			s_GpIOSenseEvt[3].SensEvtCB(3, s_GpIOSenseEvt[3].pCtx);
-
-	}
-
-	NVIC_ClearPendingIRQ(EXTI3_IRQn);
+	if (s_GpIOSenseEvt[3].SensEvtCB)
+		s_GpIOSenseEvt[3].SensEvtCB(3, s_GpIOSenseEvt[3].pCtx);
+	NVIC_ClearPendingIRQ(IEL3_IRQn);
 }
 
-void EXTI4_IRQHandler(void)
+void IEL4_IRQHandler(void)
 {
-	if (EXTI->PR1 & 0x10)
-	{
-		EXTI->PR1 = 0x10;
-
-		if (s_GpIOSenseEvt[4].SensEvtCB)
-			s_GpIOSenseEvt[4].SensEvtCB(4, s_GpIOSenseEvt[4].pCtx);
-
-	}
-
-	NVIC_ClearPendingIRQ(EXTI4_IRQn);
+	if (s_GpIOSenseEvt[4].SensEvtCB)
+		s_GpIOSenseEvt[4].SensEvtCB(4, s_GpIOSenseEvt[4].pCtx);
+	NVIC_ClearPendingIRQ(IEL3_IRQn);
 }
 
-void EXTI9_5_IRQHandler(void)
+void IEL5_IRQHandler(void)
 {
-	uint32_t mask = 1 << 5;
-
-	for (int i = 5; i < 10; i++)
-	{
-		if (EXTI->PR1 & mask)
-		{
-			EXTI->PR1 = mask;
-			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
-
-		}
-		mask <<= 1;
-	}
-
-	NVIC_ClearPendingIRQ(EXTI9_5_IRQn);
+	if (s_GpIOSenseEvt[5].SensEvtCB)
+		s_GpIOSenseEvt[5].SensEvtCB(5, s_GpIOSenseEvt[5].pCtx);
+	NVIC_ClearPendingIRQ(IEL5_IRQn);
 }
 
-void EXTI15_10_IRQHandler(void)
+void IEL6_IRQHandler(void)
 {
-	uint32_t mask = 1 << 10;
-
-	for (int i = 10; i < IOPIN_MAX_INT; i++)
-	{
-		if (EXTI->PR1 & mask)
-		{
-			EXTI->PR1 = mask;
-			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
-
-		}
-		mask <<= 1;
-	}
-
-	NVIC_ClearPendingIRQ(EXTI15_10_IRQn);
+	if (s_GpIOSenseEvt[6].SensEvtCB)
+		s_GpIOSenseEvt[6].SensEvtCB(6, s_GpIOSenseEvt[6].pCtx);
+	NVIC_ClearPendingIRQ(IEL6_IRQn);
 }
-#endif
+
+void IEL7_IRQHandler(void)
+{
+	if (s_GpIOSenseEvt[7].SensEvtCB)
+		s_GpIOSenseEvt[7].SensEvtCB(7, s_GpIOSenseEvt[7].pCtx);
+	NVIC_ClearPendingIRQ(IEL7_IRQn);
+}
+
+void IEL8_IRQHandler(void)
+{
+	if (s_GpIOSenseEvt[8].SensEvtCB)
+		s_GpIOSenseEvt[8].SensEvtCB(8, s_GpIOSenseEvt[8].pCtx);
+	NVIC_ClearPendingIRQ(IEL8_IRQn);
+}
+
+void IEL9_IRQHandler(void)
+{
+	if (s_GpIOSenseEvt[9].SensEvtCB)
+		s_GpIOSenseEvt[9].SensEvtCB(9, s_GpIOSenseEvt[9].pCtx);
+	NVIC_ClearPendingIRQ(IEL9_IRQn);
+}
