@@ -133,6 +133,7 @@ static bool IsValidIOInterrupt(int IntNo, int PortNo, int PinNo)
 
 static void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 {
+    SYSTEM->PRCR = 0xA502U;
 	switch (PortNo)
 	{
 		case 0:
@@ -163,10 +164,13 @@ static void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 
 	// Keep track of IO that needs power supply enabled
 	s_GpIOPowerSupply[PortNo] |= 1 << PinNo;
+    SYSTEM->PRCR = 0xA500U;
 }
 
 static void RE01IOPinSupplyDisable(int PortNo, int PinNo)
 {
+    SYSTEM->PRCR = 0xA502U;
+
 	s_GpIOPowerSupply[PortNo] &= ~(1 << PinNo);
 
 	if (s_GpIOPowerSupply[8] == 0)
@@ -192,6 +196,7 @@ static void RE01IOPinSupplyDisable(int PortNo, int PinNo)
 	{
 		SYSTEM->VOCR_b.IV3CTL = 1;
 	}
+    SYSTEM->PRCR = 0xA500U;
 }
 
 /**

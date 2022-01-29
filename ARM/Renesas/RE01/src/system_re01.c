@@ -100,6 +100,41 @@ void SetFlashWaitState(uint32_t CoreFreq)
 	}
 }
 
+bool EnterBoostMode()
+{
+    /* Set the software standby mode. (step1) */
+    SYSTEM->SBYCR_b.SSBYMP  = 0U;
+
+    /* Set the software standby mode. (step2) */
+    SYSTEM->SBYCR_b.SSBY    = 1U;
+
+    /* Set the software standby mode. (step3) */
+    SYSTEM->DPSBYCR_b.DPSBY = 0U;
+
+    /* Disable the snooze mode. */
+    SYSTEM->SNZCR_b.SNZE    = 0U;
+
+    /* Transition from normal mode to Boost mode. */
+    SYSTEM->PWSTCR = 0x05U;
+
+    /* Returns an error because the PWSTCR.PWST[2:0] bits could not be modified. */
+    if(0x05U != SYSTEM->PWSTCR)
+    {
+        return false;
+    }
+
+    /* Execute WFE instruction */
+    __WFE();
+
+    /* Wait the transition from normal mode to Boost mode. */
+    while(1U != SYSTEM->PWSTF_b.BOOSTM)
+    {
+        __WFE();
+    }
+
+    return true;
+}
+
 // USB operation requires PLL clock source
 // Target PLL for 48MHz operating for compatibility with USB
 // PLL operation can only work in Boost mode
@@ -113,8 +148,9 @@ uint32_t ConfigPLL(uint32_t SrcFreq)
 	}
 	// Make sure PLL is stopped
 	SYSTEM->PLLCR = SYSTEM_PLLCR_PLLSTP_Msk;
+	while ((SYSTEM->OSCSF & SYSTEM_OSCSF_PLLSF_Msk) == 1);
 
-	// TODO: Enter Boost mode
+	EnterBoostMode();
 
 	for (int div = 1; div < 5; div++)
 	{
@@ -196,6 +232,8 @@ void SystemInit(void)
 {
     SYSTEM->PRCR = 0xA503U;
 
+	FLASH->FLWT = 1;
+
     if (g_McuOsc.HFType == OSC_TYPE_RC)
 	{
     	if (g_McuOsc.bUSBClk)
@@ -229,7 +267,15 @@ void SystemInit(void)
     			hcfrq = 3;
     		}
 
-    		SYSTEM->HOCOMCR = hcfrq;
+    		// Freq higher than 32MHz requires boost mode
+			if (g_McuOsc.HFFreq > 32000000)
+			{
+				EnterBoostMode();
+			}
+
+    		SYSTEM->HOCOCR = 1;	// Stop HOCO
+			while ((SYSTEM->OSCSF & SYSTEM_OSCSF_HOCOSF_Msk) == 1);
+			SYSTEM->HOCOMCR = hcfrq;
     		SYSTEM->HOCOCR = 0;	// Start HOCO
 			while ((SYSTEM->OSCSF & SYSTEM_OSCSF_HOCOSF_Msk) == 0);
 
@@ -256,7 +302,7 @@ void SystemInit(void)
 		while ((SYSTEM->OSCSF & SYSTEM_OSCSF_MOSCSF_Msk) == 0);
 
 		uint32_t pllfreq = ConfigPLL(g_McuOsc.HFFreq);
-		assert(pllfreq==48000000UL);
+		assert(pllfreq!=0UL);
 
 		// Select source clock PLL 48MHz
 		SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_PLL;
@@ -271,7 +317,9 @@ void SystemInit(void)
     	SYSTEM->SOSCCR = 0;	// Enable 32KHz crystal
     }
 
-	SystemCoreClockUpdate();
+    SYSTEM->PRCR = 0xA500U;
+
+    SystemCoreClockUpdate();
 }
 
 /**
