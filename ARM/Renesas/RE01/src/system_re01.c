@@ -62,7 +62,8 @@ __WEAK McuOsc_t g_McuOsc = {
 	OSC_TYPE_RC,
 	64000000,
 	OSC_TYPE_RC,
-	32768
+	32768,
+	false
 };
 
 static uint32_t s_PeriphSrcFreq = 0;
@@ -104,6 +105,12 @@ void SetFlashWaitState(uint32_t CoreFreq)
 // PLL operation can only work in Boost mode
 uint32_t ConfigPLL(uint32_t SrcFreq)
 {
+	uint32_t tf = 64000000;
+
+	if (g_McuOsc.bUSBClk)
+	{
+		tf = 48000000;
+	}
 	// Make sure PLL is stopped
 	SYSTEM->PLLCR = SYSTEM_PLLCR_PLLSTP_Msk;
 
@@ -191,6 +198,13 @@ void SystemInit(void)
 
     if (g_McuOsc.HFType == OSC_TYPE_RC)
 	{
+    	if (g_McuOsc.bUSBClk)
+    	{
+    		// USB requires external crystal.
+    		// Disable USB support when using RC
+    		g_McuOsc.bUSBClk = false;
+    	}
+
     	if (g_McuOsc.HFFreq <= 2000000UL)
     	{
 			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MOCO;

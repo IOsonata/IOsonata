@@ -67,8 +67,9 @@ typedef enum __Osc_Type {
 /// that can be overloaded.  In the library system startup code contains a weak global
 /// variable '__WEAK MCU_OSC g_McuOsc' that define a default oscillator.  Firmware can
 /// overload this variable in the main firmware with the oscillator selection for the
-/// intended board.
+/// target board.
 ///
+/// A generic default value is set in system_xxx.c for the target MCU family
 typedef struct __Mcu_Osc {
 	OSC_TYPE HFType;		//!< Core, high frequency oscillator type
 	uint32_t HFFreq;		//!< Core, high frequency oscillator frequency in Hz

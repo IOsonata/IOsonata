@@ -81,7 +81,8 @@ __WEAK MCU_OSC g_McuOsc = {
 	OSC_TYPE_RC,
 	48000000,
 	OSC_TYPE_XTAL,
-	32768
+	32768,
+	true
 };
 
 /**
