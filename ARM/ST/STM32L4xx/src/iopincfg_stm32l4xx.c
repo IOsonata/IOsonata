@@ -116,7 +116,15 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	else
 	{
 		// Analog
+#if defined(STM32L471xx) || defined(STM32L475xx) || defined(STM32L476xx) || defined(STM32L485xx) || defined(STM32L486xx)
+
+		/* Configure the IO Output Type */
+
+		reg->ASCR |= GPIO_ASCR_ASC0 << PinNo;
+
+#else /* STM32L471xx || STM32L475xx || STM32L476xx || STM32L485xx || STM32L486xx */
 		tmp |= 3 << pos;
+#endif
 	}
 
 	reg->MODER = tmp;

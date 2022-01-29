@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stm32l4xx.h"
 
 // *** STM32L476G-DISCO
-#define UART_NO				1
+#define UART_DEVNO			1
 #define UART_RX_PORT		3
 #define UART_RX_PIN			6
 #define UART_RX_PINOP		(0x72)
