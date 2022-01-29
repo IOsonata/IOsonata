@@ -39,6 +39,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
+#define MCUOSC		{ OSC_TYPE_XTAL, 32000000, OSC_TYPE_XTAL, 32768, true }
+
 // Button 1
 #define BUT1_PORT		1
 #define BUT1_PIN		0
@@ -51,8 +53,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BUT2_PORT		5
 #define BUT2_PIN		8
 #define BUT2_PINOP		0
-#define BUT2_SENSE		IOPINSENSE_LOW_TRANSITION
-#define BUT2_SENSE_INT	1
+#define BUT2_SENSE		IOPINSENSE_TOGGLE
+#define BUT2_SENSE_INT	4
 #define BUT2_INT_PRIO	6
 
 #define BUT3_PORT		4
@@ -88,11 +90,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 }
 
 #define PULSE_TRAIN_PINS_MAP	{ \
-	{0, 0, 0}, {0, 1, 0}, {0, 2, 0}, {0, 3, 0}, {0, 4, 0}, {0, 6, 0}, {0, 7, 0}, \
-	{0, 8, 0}, {0, 9, 0}, {0, 10, 0}, {0, 11, 0}, {0, 12, 0}, {0, 13, 0}, {0, 14, 0}, {0, 15, 0}, \
-	{0, 16, 0}, {0, 17, 0}, {0, 18, 0}, {0, 19, 0}, {0, 20, 0}, {0, 21, 0}, {0, 22, 0}, {0, 23, 0}, \
-	{0, 24, 0}, {0, 25, 0}, {0, 26, 0}, {0, 27, 0}, {0, 28, 0}, {0, 29, 0}, {0, 30, 0} \
-}
+	{LED0_PORT, LED0_PIN, LED0_PINOP}, {LED1_PORT, LED1_PIN, LED1_PINOP}, {LED2_PORT, LED2_PIN, LED2_PINOP}, }
 
 #endif // __BOARD_H__
 
