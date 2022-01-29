@@ -99,12 +99,20 @@ typedef struct {
 
 static IOPINSENS_EVTHOOK s_GpIOSenseEvt[RE01_1500KB_PIN_MAX_INT + 1] = { {0, NULL}, };
 static uint16_t s_GpIOPowerSupply[RE01_1500KB_MAX_PORT] = {0,};
-static const uint32_t s_Re01IntPins[] = {
-	0x288, 0x387, 0x04b, 0x24a, 0x349, 0x127, 0x825, 0x924, 0x422, 0x564,
-	0x51d, 0x61c, 0x717, 0x016, 0x815, 0x914, 0x458, 0x056, 0x155, 0x151,
-	0x70f, 0x60e,
-};
 
+// IRQ pins map are fixed
+static const uint32_t s_Re01IntPins[] = {
+	0x016, 0x04b, 0x056,	// IRQ0
+	0x127, 0x151, 0x155,	// IRQ1
+	0x24a, 0x288,			// IRQ2
+	0x349, 0x387,			// IRQ3
+	0x422, 0x458,			// IRQ4
+	0x51d, 0x564,			// IRQ5
+	0x60e, 0x61c,			// IRQ6
+	0x70f, 0x717,			// IRQ7
+	0x815, 0x825,			// IRQ8
+	0x914, 0x924,			// IRQ9
+};
 
 static bool IsValidIOInterrupt(int IntNo, int PortNo, int PinNo)
 {
@@ -190,13 +198,11 @@ static void RE01IOPinSupplyDisable(int PortNo, int PinNo)
  * @brief Configure individual I/O pin.
  *
  * @Param 	PortNo	: Port number
- * 						STM32 ports are named A, B, C,...
- * 							0 = A, 1 = B, ...
  * 			PinNo  	: Pin number
  * 			PinOp	: Pin function index from 0. MCU dependent
- * 						for STM32
- * 						IOPINOP_FUNC_0 - IOPINOP_FUNC_15 -> AF0 - AF15
- * 						IOPINOP_FUNC_16 -> Analog
+ * 						for RE01
+ * 						IOPINOP_FUNC_0 - IOPINOP_FUNC_30 -> PSEL1-31
+ * 						IOPINOP_FUNC_31 -> Analog
  * 			Dir     : I/O direction
  *			Resistor: Resistor configuration
  *			Type	: I/O type
@@ -219,7 +225,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 			psfval |= PFS_PDR_Msk;
 		}
 	}
-	else if (PinOp < IOPINOP_FUNC16)
+	else if (PinOp < IOPINOP_FUNC31)
 	{
 		// Alternate function
 		psfval |= (PinOp << PFS_PSEL_Pos) | PFS_PMR_Msk;
@@ -644,48 +650,86 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 
 void IEL0_IRQHandler(void)
 {
-	if (s_GpIOSenseEvt[0].SensEvtCB)
-		s_GpIOSenseEvt[0].SensEvtCB(0, s_GpIOSenseEvt[0].pCtx);
+	if (ICU->IELSR0 & ICU_IELSR0_IR_Msk)
+	{
+		ICU->IELSR0 &= ~ICU_IELSR0_IR_Msk;
+
+		if (s_GpIOSenseEvt[0].SensEvtCB)
+			s_GpIOSenseEvt[0].SensEvtCB(0, s_GpIOSenseEvt[0].pCtx);
+	}
+
 	NVIC_ClearPendingIRQ(IEL0_IRQn);
 }
 
 void IEL1_IRQHandler(void)
 {
-	if (s_GpIOSenseEvt[1].SensEvtCB)
-		s_GpIOSenseEvt[1].SensEvtCB(1, s_GpIOSenseEvt[1].pCtx);
+	if (ICU->IELSR1 & ICU_IELSR1_IR_Msk)
+	{
+		ICU->IELSR1 &= ~ICU_IELSR1_IR_Msk;
+
+		if (s_GpIOSenseEvt[1].SensEvtCB)
+			s_GpIOSenseEvt[1].SensEvtCB(1, s_GpIOSenseEvt[1].pCtx);
+	}
+
 	NVIC_ClearPendingIRQ(IEL1_IRQn);
 }
 
 void IEL2_IRQHandler(void)
 {
-	if (s_GpIOSenseEvt[2].SensEvtCB)
-		s_GpIOSenseEvt[2].SensEvtCB(2, s_GpIOSenseEvt[2].pCtx);
+	if (ICU->IELSR2 & ICU_IELSR2_IR_Msk)
+	{
+		ICU->IELSR2 &= ~ICU_IELSR2_IR_Msk;
+
+		if (s_GpIOSenseEvt[2].SensEvtCB)
+			s_GpIOSenseEvt[2].SensEvtCB(2, s_GpIOSenseEvt[2].pCtx);
+	}
+
 	NVIC_ClearPendingIRQ(IEL2_IRQn);
 }
 
 void IEL3_IRQHandler(void)
 {
-	if (s_GpIOSenseEvt[3].SensEvtCB)
-		s_GpIOSenseEvt[3].SensEvtCB(3, s_GpIOSenseEvt[3].pCtx);
+	if (ICU->IELSR3 & ICU_IELSR3_IR_Msk)
+	{
+		ICU->IELSR3 &= ~ICU_IELSR3_IR_Msk;
+
+		if (s_GpIOSenseEvt[3].SensEvtCB)
+			s_GpIOSenseEvt[3].SensEvtCB(3, s_GpIOSenseEvt[3].pCtx);
+	}
+
 	NVIC_ClearPendingIRQ(IEL3_IRQn);
 }
 
 void IEL4_IRQHandler(void)
 {
-	if (s_GpIOSenseEvt[4].SensEvtCB)
-		s_GpIOSenseEvt[4].SensEvtCB(4, s_GpIOSenseEvt[4].pCtx);
+	if (ICU->IELSR4 & ICU_IELSR4_IR_Msk)
+	{
+		ICU->IELSR4 &= ~ICU_IELSR4_IR_Msk;
+
+		if (s_GpIOSenseEvt[4].SensEvtCB)
+			s_GpIOSenseEvt[4].SensEvtCB(4, s_GpIOSenseEvt[4].pCtx);
+	}
+
 	NVIC_ClearPendingIRQ(IEL3_IRQn);
 }
 
 void IEL5_IRQHandler(void)
 {
-	if (s_GpIOSenseEvt[5].SensEvtCB)
-		s_GpIOSenseEvt[5].SensEvtCB(5, s_GpIOSenseEvt[5].pCtx);
+	if (ICU->IELSR5 & ICU_IELSR5_IR_Msk)
+	{
+		ICU->IELSR5 &= ~ICU_IELSR5_IR_Msk;
+
+		if (s_GpIOSenseEvt[5].SensEvtCB)
+			s_GpIOSenseEvt[5].SensEvtCB(5, s_GpIOSenseEvt[5].pCtx);
+	}
+
 	NVIC_ClearPendingIRQ(IEL5_IRQn);
 }
 
 void IEL6_IRQHandler(void)
 {
+	ICU->IELSR6 &= ~ICU_IELSR6_IR_Msk;
+
 	if (s_GpIOSenseEvt[6].SensEvtCB)
 		s_GpIOSenseEvt[6].SensEvtCB(6, s_GpIOSenseEvt[6].pCtx);
 	NVIC_ClearPendingIRQ(IEL6_IRQn);
@@ -693,6 +737,8 @@ void IEL6_IRQHandler(void)
 
 void IEL7_IRQHandler(void)
 {
+	ICU->IELSR7 &= ~ICU_IELSR7_IR_Msk;
+
 	if (s_GpIOSenseEvt[7].SensEvtCB)
 		s_GpIOSenseEvt[7].SensEvtCB(7, s_GpIOSenseEvt[7].pCtx);
 	NVIC_ClearPendingIRQ(IEL7_IRQn);
@@ -700,6 +746,8 @@ void IEL7_IRQHandler(void)
 
 void IEL8_IRQHandler(void)
 {
+	ICU->IELSR8 &= ~ICU_IELSR8_IR_Msk;
+
 	if (s_GpIOSenseEvt[8].SensEvtCB)
 		s_GpIOSenseEvt[8].SensEvtCB(8, s_GpIOSenseEvt[8].pCtx);
 	NVIC_ClearPendingIRQ(IEL8_IRQn);
@@ -707,6 +755,8 @@ void IEL8_IRQHandler(void)
 
 void IEL9_IRQHandler(void)
 {
+	ICU->IELSR9 &= ~ICU_IELSR9_IR_Msk;
+
 	if (s_GpIOSenseEvt[9].SensEvtCB)
 		s_GpIOSenseEvt[9].SensEvtCB(9, s_GpIOSenseEvt[9].pCtx);
 	NVIC_ClearPendingIRQ(IEL9_IRQn);
