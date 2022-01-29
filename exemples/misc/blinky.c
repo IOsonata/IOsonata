@@ -13,27 +13,27 @@ This example shows how to use GPIO to
 
 @license
 
-Copyright (c) 2014, I-SYST inc., all rights reserved
+MIT License
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Copyright (c) 2014 I-SYST inc. All rights reserved.
 
-For info or contributing contact : hnhoan at i-syst dot com
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
@@ -45,6 +45,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "pulse_train.h"
 
 #include "board.h"
+
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
 
 static const IOPinCfg_t s_Buttons[] = BUTTON_PINS_MAP;
 static const int s_NbButtons = sizeof(s_Buttons) / sizeof(IOPinCfg_t);
@@ -64,6 +68,7 @@ PulseTrainCfg_t g_PulseTrainCfg = {
 
 volatile bool g_bBut1Pressed = false;
 volatile bool g_bBut2Pressed = false;
+volatile bool g_bBut3Pressed = false;
 
 void But1Handler(int IntNo, void *pCtx)
 {
@@ -81,6 +86,17 @@ void But2Handler(int IntNo, void *pCtx)
 	{
 		g_bBut2Pressed = true;
 		printf("But 2 Int\r\n");
+	}
+}
+#endif
+
+#ifdef BUT3_SENSE_INT
+void But3Handler(int IntNo, void *pCtx)
+{
+	if (IntNo == BUT3_SENSE_INT)
+	{
+		g_bBut3Pressed = true;
+		printf("But 3 Int\r\n");
 	}
 }
 #endif
@@ -111,8 +127,9 @@ int main()
 
 	// Configure buttons
 	IOPinCfg(s_Buttons, s_NbButtons);
-	IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler, NULL);
-	//IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler);
+	//IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler, NULL);
+	//IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler, NULL);
+	//IOPinEnableInterrupt(BUT3_SENSE_INT, BUT3_INT_PRIO, BUT3_PORT, BUT3_PIN, BUT3_SENSE, But3Handler, NULL);
 
 
 	int i = 0;
@@ -120,10 +137,16 @@ int main()
 	// Loop until button pressed
 	while (g_bBut1Pressed == false)
 	{
-		IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
+		if (IOPinRead(s_Buttons[0].PortNo, s_Buttons[0].PinNo) == 0)
+		{
+			//printf("%d: %x\r\n", i, x);
+			g_bBut1Pressed = true;
+		}
+		IOPinToggle(s_Leds[i].PortNo, s_Leds[i].PinNo);
 		msDelay(250);
-		IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
-		msDelay(250);
+	//	IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
+	//	msDelay(5000);
+		i = (i + 1) % 3;
 	}
 
 	PulseTrain(&g_PulseTrainCfg, 0);
