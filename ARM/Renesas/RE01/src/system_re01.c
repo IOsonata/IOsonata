@@ -160,7 +160,7 @@ uint32_t ConfigPLL(uint32_t SrcFreq)
 			// PLL Freq = (SrcFreq / div) * mul;
 			uint32_t f = divfreq * mul;
 
-			if (f == 48000000UL)
+			if (f == tf)
 			{
 				SYSTEM->PLLCCR = ((div - 1) << SYSTEM_PLLCCR_PLIDIV_Pos) |
 								 ((mul - 1) << SYSTEM_PLLCCR_PLLMUL_Pos);
