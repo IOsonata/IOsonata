@@ -110,20 +110,7 @@ void Re01UartIntHandlerFifo(Re01UartDev_t *pDev)
 	bool err = false;
 	int cnt = 10;
 
-#if 0
-	if (pDev->DevNo < 2)
-	{
-		status = pDev->pUartReg0->SSR_FIFO;
-		pDev->pUartReg2->SSR_b.TDRE = 0;
-		pDev->pUartReg0->SSR_FIFO_b.TEND = 0;
-	}
-	else
-	{
-		status = pDev->pUartReg2->SSR;
-		pDev->pUartReg2->SSR_b.TDRE = 0;
-	}
-
-	if (status & UART_SR_RXRDY)
+	if (status & SCI0_SSR_FIFO_DR_Msk)
 	{
 		do
 		{
@@ -133,21 +120,23 @@ void Re01UartIntHandlerFifo(Re01UartDev_t *pDev)
 				break;
 			}
 
-			*p = pDev->pUartReg->UART_RHR;
-			status = pDev->pUartReg->UART_SR;
+			*p = pDev->pUartReg0->FRDRL;
+			status = pDev->pUartReg0->SSR_FIFO;
 
-		} while ((status & UART_SR_RXRDY) && (cnt-- > 0));
+		} while ((status & SCI0_SSR_FIFO_DR_Msk) && (cnt-- > 0));
+
+		pDev->pUartReg0->SSR_FIFO_b.DR = 0;
 
 		if (pDev->pUartDev->EvtCallback)
 		{
 			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_RXDATA, NULL, 0);
 		}
 	}
-	cnt = 10;
+	cnt = 16;
 
 	if (pDev->pUartDev->DevIntrf.bDma == true)
 	{
-		if (status & UART_IER_ENDTX)
+/*		if (status & UART_IER_ENDTX)
 		{
 			int l = SAM4_UART_CFIFO_SIZE;
 			uint8_t *p = CFifoGetMultiple(pDev->pUartDev->hTxFifo, &l);
@@ -169,22 +158,23 @@ void Re01UartIntHandlerFifo(Re01UartDev_t *pDev)
 			{
 				pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
 			}
-		}
+		}*/
 	}
-	else if (status & UART_SR_TXRDY)
+	else if (status & SCI0_SSR_FIFO_TEND_Msk)
 	{
 		do
 		{
+			pDev->pUartReg0->SSR_FIFO_b.TEND = 0;
 			uint8_t *p = CFifoGet(pDev->pUartDev->hTxFifo);
 			if (p == NULL)
 			{
 				pDev->pUartDev->bTxReady = true;
-				pDev->pUartReg->UART_IDR = UART_IER_TXEMPTY;//UART_IER_TXRDY;
+				pDev->pUartReg0->SSR_FIFO_b.TEND = 0;
 				break;
 			}
-			pDev->pUartReg->UART_THR = *p;
-			status = pDev->pUartReg->UART_SR;
-		} while ((status & UART_SR_TXRDY) && (cnt-- > 0));
+			pDev->pUartReg0->FTDRL = *p;
+			status = pDev->pUartReg0->SSR_FIFO;
+		} while ((status & SCI0_SSR_FIFO_TDFE_Msk) && (cnt-- > 0));
 
 		if (pDev->pUartDev->EvtCallback)
 		{
@@ -192,29 +182,21 @@ void Re01UartIntHandlerFifo(Re01UartDev_t *pDev)
 		}
 	}
 
-	if (status & UART_SR_OVRE)
+	if (status & SCI2_SSR_ORER_Msk)
 	{
 		// Overrun
 		pDev->pUartDev->RxOvrErrCnt++;
-		//uart_reset_status(pDev->pUartReg);
-		err = true;
 	}
-	if (status & UART_SR_FRAME)
+
+	if (status & SCI2_SSR_FER_Msk)
 	{
-		// Framing error
-		err = true;
+		pDev->pUartDev->FramErrCnt++;
 	}
-	if ( status & UART_SR_RXBUFF )
+
+	if (status & SCI2_SSR_PER_Msk)
 	{
-		//pdc_rx_init( g_p_uart_pdc, &g_pdc_uart_packet, NULL );
-		//pdc_tx_init( g_p_uart_pdc, &g_pdc_uart_packet, NULL );
+		pDev->pUartDev->ParErrCnt++;
 	}
-	if (err)
-	{
-		// Reset status
-		pDev->pUartReg->UART_CR = UART_CR_RSTSTA;
-	}
-#endif
 }
 
 void Re01UartIntHandler(Re01UartDev_t *pDev)
@@ -482,11 +464,11 @@ static int Re01UARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
 		bool rdy = false;
 		if (dev->DevNo < 2)
 		{
-			//rdy = dev->pUartReg->UART_SR & UART_SR_RXRDY;
+			rdy = dev->pUartReg0->SSR & SCI0_SSR_FIFO_RDF_Msk;
 		}
 		else
 		{
-			//rdy = dev->pUSartReg->US_CSR & US_CSR_RXRDY;
+			rdy = dev->pUartReg2->SSR & SCI2_SSR_RDRF_Msk;
 		}
 		
 		if (rdy == true)
@@ -496,11 +478,11 @@ static int Re01UARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
 			{
 				if (dev->DevNo < 2)
 				{
-					//*p = dev->pUartReg->UART_RHR;
+					*p = dev->pUartReg0->FRDRHL & 0xFF;
 				}
 				else
 				{
-					//*p = dev->pUSartReg->US_RHR & US_RHR_RXCHR_Msk;
+					*p = dev->pUartReg2->RDR;
 				}
 				dev->pUartDev->bRxReady = false;
 			}
@@ -549,16 +531,10 @@ static int Re01UARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
 			if (dev->DevNo < 2)
 			{
 				rdy = dev->pUartReg0->SSR_FIFO & SCI0_SSR_FIFO_TDFE_Msk;
-				//rdy = dev->pUartDev->DevIntrf.bDma == true ?
-				//	  dev->pUartReg->UART_SR & UART_SR_ENDTX :
-				//	  dev->pUartReg->UART_SR & UART_SR_TXRDY;
 			}
 			else
 			{
 				rdy = dev->pUartReg2->SSR & SCI2_SSR_TDRE_Msk;
-				//rdy = dev->pUartDev->DevIntrf.bDma == true ?
-				//	  dev->pUSartReg->US_CSR & US_CSR_ENDTX :
-				//	  dev->pUSartReg->US_CSR & US_CSR_TXRDY;
 			}
 			if (rdy == true)
 			{
@@ -591,14 +567,11 @@ static int Re01UARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
 
 						if (dev->DevNo < 2)
 						{
-							dev->pUartReg0->TDR = *p;
-							//dev->pUartReg->UART_IER = UART_IER_TXEMPTY;//UART_IER_TXRDY;
+							dev->pUartReg0->FTDRHL_b.TDAT = *p;
 						}
 						else
 						{
 							dev->pUartReg2->TDR = *p;
-							//dev->pUSartReg->US_THR = US_THR_TXCHR(*p);
-							//dev->pUSartReg->US_IER = US_IER_TXRDY;
 						}
 					}
 				}
@@ -747,7 +720,9 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		s_Re01UartDev[devno].pUartReg0->SCMR_b.CHR1 = chr1;
 
 		// Enable fifo. Avail only on SCI0 & SCI1
-		s_Re01UartDev[devno].pUartReg0->FCR_b.FM = 1;
+		s_Re01UartDev[devno].pUartReg0->FCR = SCI0_FCR_FM_Msk | SCI0_FCR_RFRST_Msk | SCI0_FCR_TFRST_Msk |
+											  (15 << SCI0_FCR_TTRG_Pos) | (8 << SCI0_FCR_RTRG_Pos) |
+											  (15 << SCI0_FCR_RSTRG_Pos);
 		s_Re01UartDev[devno].pUartReg0->SPMR_b.CTSE = ctse;
 	}
 	else
@@ -806,7 +781,21 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
+	// Enable UART must be done before enabling interrupt as per specs
 	Re01UARTEnable(&s_Re01UartDev[devno].pUartDev->DevIntrf);
+
+	if (devno < 2)
+	{
+		s_Re01UartDev[devno].pUartReg0->SCR_b.RIE = 1;
+		s_Re01UartDev[devno].pUartReg0->SCR_b.TEIE = 1;
+		s_Re01UartDev[devno].pUartReg0->SCR_b.TIE = 1;
+	}
+	else
+	{
+		s_Re01UartDev[devno].pUartReg2->SCR_b.RIE = 1;
+		s_Re01UartDev[devno].pUartReg2->SCR_b.TEIE = 1;
+		s_Re01UartDev[devno].pUartReg2->SCR_b.TIE = 1;
+	}
 
 	__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR10;
 
@@ -855,20 +844,6 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 			ielsr[devno] = 0x1C;
 			break;
 	}
-
-	if (devno < 2)
-	{
-		s_Re01UartDev[devno].pUartReg0->SCR_b.RIE = 1;
-		s_Re01UartDev[devno].pUartReg0->SCR_b.TEIE = 1;
-		s_Re01UartDev[devno].pUartReg0->SCR_b.TIE = 1;
-	}
-	else
-	{
-		s_Re01UartDev[devno].pUartReg2->SCR_b.RIE = 1;
-		s_Re01UartDev[devno].pUartReg2->SCR_b.TEIE = 1;
-		s_Re01UartDev[devno].pUartReg2->SCR_b.TIE = 1;
-	}
-
 
 	return true;
 }
