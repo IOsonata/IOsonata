@@ -851,6 +851,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/uart_re01.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_re01.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/display/eink_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
