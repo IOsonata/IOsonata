@@ -62,7 +62,8 @@ typedef enum __Timer_Clock_Src {
 	TIMER_CLKSRC_LFRC,		//!< Low frequency internal RC oscillator
     TIMER_CLKSRC_HFRC,		//!< High frequency internal RC oscillator
     TIMER_CLKSRC_LFXTAL,	//!< Low frequency crystal
-    TIMER_CLKSRC_HFXTAL		//!< High frequency crystal
+    TIMER_CLKSRC_HFXTAL,	//!< High frequency crystal
+	TIMER_CLKSRC_EXT		//!< External clock signal
 } TIMER_CLKSRC;
 
 /// Timer interrupt enable type
