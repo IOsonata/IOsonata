@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	uart_sam4e.cpp
+@file	uart_re01.cpp
 
 @brief	Renesas RE01 UART implementation
 
@@ -39,7 +39,8 @@ SOFTWARE.
 #include "re01xxx.h"
 
 #include "interrupt.h"
-#include "coredev/iopincfg.h"		
+#include "interrupt_re01.h"
+#include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 #include "cfifo.h"
 
@@ -57,6 +58,11 @@ typedef struct __Re01_Uart_Dev {
 	UARTDEV	*pUartDev;		// Pointer to generic UART dev. data
 	uint8_t RxFifoMem[RE01_UART_CFIFO_MEMSIZE];
 	uint8_t TxFifoMem[RE01_UART_CFIFO_MEMSIZE];
+	IRQn_Type IrqRxi;
+	IRQn_Type IrqTxi;
+	IRQn_Type IrqTei;
+	IRQn_Type IrqEri;
+	IRQn_Type IrqAm;
 } Re01UartDev_t;
 
 #pragma pack(pop)
@@ -104,9 +110,10 @@ UARTDEV * const UARTGetInstance(int DevNo)
 	return s_Re01UartDev[DevNo].pUartDev;
 }
 
-void Re01UartIntHandlerFifo(Re01UartDev_t *pDev)
+void Re01UartIRQHandlerFifo(int IntNo, void *pCtx)
 {
-	uint8_t status = pDev->pUartReg0->SSR_FIFO;
+	Re01UartDev_t *dev = (Re01UartDev_t*)pCtx;
+	uint8_t status = dev->pUartReg0->SSR_FIFO;
 	bool err = false;
 	int cnt = 10;
 
@@ -114,27 +121,27 @@ void Re01UartIntHandlerFifo(Re01UartDev_t *pDev)
 	{
 		do
 		{
-			uint8_t *p = CFifoPut(pDev->pUartDev->hRxFifo);
+			uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
 			if (p == NULL)
 			{
 				break;
 			}
 
-			*p = pDev->pUartReg0->FRDRL;
-			status = pDev->pUartReg0->SSR_FIFO;
+			*p = dev->pUartReg0->FRDRL;
+			status = dev->pUartReg0->SSR_FIFO;
 
 		} while ((status & SCI0_SSR_FIFO_DR_Msk) && (cnt-- > 0));
 
-		pDev->pUartReg0->SSR_FIFO_b.DR = 0;
+		dev->pUartReg0->SSR_FIFO_b.DR = 0;
 
-		if (pDev->pUartDev->EvtCallback)
+		if (dev->pUartDev->EvtCallback)
 		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_RXDATA, NULL, 0);
+			dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, 0);
 		}
 	}
 	cnt = 16;
 
-	if (pDev->pUartDev->DevIntrf.bDma == true)
+	if (dev->pUartDev->DevIntrf.bDma == true)
 	{
 /*		if (status & UART_IER_ENDTX)
 		{
@@ -164,173 +171,102 @@ void Re01UartIntHandlerFifo(Re01UartDev_t *pDev)
 	{
 		do
 		{
-			pDev->pUartReg0->SSR_FIFO_b.TEND = 0;
-			uint8_t *p = CFifoGet(pDev->pUartDev->hTxFifo);
+			dev->pUartReg0->SSR_FIFO_b.TEND = 0;
+			uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
 			if (p == NULL)
 			{
-				pDev->pUartDev->bTxReady = true;
-				pDev->pUartReg0->SSR_FIFO_b.TEND = 0;
+				dev->pUartDev->bTxReady = true;
+				dev->pUartReg0->SSR_FIFO_b.TEND = 0;
 				break;
 			}
-			pDev->pUartReg0->FTDRL = *p;
-			status = pDev->pUartReg0->SSR_FIFO;
+			dev->pUartReg0->FTDRL = *p;
+			status = dev->pUartReg0->SSR_FIFO;
 		} while ((status & SCI0_SSR_FIFO_TDFE_Msk) && (cnt-- > 0));
 
-		if (pDev->pUartDev->EvtCallback)
+		if (dev->pUartDev->EvtCallback)
 		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+			dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, 0);
 		}
 	}
 
 	if (status & SCI2_SSR_ORER_Msk)
 	{
 		// Overrun
-		pDev->pUartDev->RxOvrErrCnt++;
+		dev->pUartDev->RxOvrErrCnt++;
 	}
 
 	if (status & SCI2_SSR_FER_Msk)
 	{
-		pDev->pUartDev->FramErrCnt++;
+		dev->pUartDev->FramErrCnt++;
 	}
 
 	if (status & SCI2_SSR_PER_Msk)
 	{
-		pDev->pUartDev->ParErrCnt++;
+		dev->pUartDev->ParErrCnt++;
 	}
 }
 
-void Re01UartIntHandler(Re01UartDev_t *pDev)
+void Re01UartIRQHandler(int IntNo, void *pCtx)
 {
-	uint8_t status = pDev->pUartReg2->SSR;
+	Re01UartDev_t *dev = (Re01UartDev_t*)pCtx;
+	uint8_t status = dev->pUartReg2->SSR;
 	int cnt = 10;
 
 	if (status & SCI2_SSR_RDRF_Msk)
 	{
-		uint8_t *p = CFifoPut(pDev->pUartDev->hRxFifo);
+		uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
 		if (p != NULL)
 		{
-			*p = pDev->pUartReg2->RDR;
+			*p = dev->pUartReg2->RDR;
 		}
 		else
 		{
-			pDev->pUartDev->RxDropCnt++;
+			dev->pUartDev->RxDropCnt++;
 		}
-		pDev->pUartReg2->SSR_b.RDRF = 0;
+		dev->pUartReg2->SSR_b.RDRF = 0;
 
-		if (pDev->pUartDev->EvtCallback)
+		if (dev->pUartDev->EvtCallback)
 		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_RXDATA, NULL, 0);
+			dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, 0);
 		}
 
 	}
 
 	if (status & SCI2_SSR_TDRE_Msk)
 	{
-		uint8_t *p = CFifoGet(pDev->pUartDev->hTxFifo);
+		uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
 		if (p == NULL)
 		{
-			pDev->pUartDev->bTxReady = true;
-			pDev->pUartReg2->SSR_b.TDRE = 0;
-			if (pDev->pUartDev->EvtCallback)
+			dev->pUartDev->bTxReady = true;
+			dev->pUartReg2->SSR_b.TDRE = 0;
+			if (dev->pUartDev->EvtCallback)
 			{
-				pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+				dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, 0);
 			}
 		}
 		else
 		{
-			pDev->pUartReg2->TDR = *p;
+			dev->pUartReg2->TDR = *p;
 		}
 	}
 
 	if (status & SCI2_SSR_ORER_Msk)
 	{
 		// Overrun
-		pDev->pUartDev->RxOvrErrCnt++;
+		dev->pUartDev->RxOvrErrCnt++;
 	}
 
 	if (status & SCI2_SSR_FER_Msk)
 	{
-		pDev->pUartDev->FramErrCnt++;
+		dev->pUartDev->FramErrCnt++;
 	}
 
 	if (status & SCI2_SSR_PER_Msk)
 	{
-		pDev->pUartDev->ParErrCnt++;
+		dev->pUartDev->ParErrCnt++;
 	}
 }
 
-extern "C" {
-
-// SCI0 & SCI1 use FIFO mode
-void IEL10_IRQHandler(void)
-{
-	if (ICU->IELSR10 & ICU_IELSR10_IR_Msk)
-	{
-		Re01UartIntHandlerFifo(&s_Re01UartDev[0]);
-		NVIC_ClearPendingIRQ(IEL10_IRQn);
-	}
-}
-
-void IEL11_IRQHandler(void)
-{
-	if (ICU->IELSR11 & ICU_IELSR11_IR_Msk)
-	{
-		Re01UartIntHandlerFifo(&s_Re01UartDev[1]);
-		NVIC_ClearPendingIRQ(IEL11_IRQn);
-	}
-}
-
-// SCI2-SCI5, SCI9 don't have FIFO
-void IEL12_IRQHandler(void)
-{
-	if (ICU->IELSR12 & ICU_IELSR12_IR_Msk)
-	{
-		ICU->IELSR12 &= ~ICU_IELSR12_IR_Msk;
-		Re01UartIntHandler(&s_Re01UartDev[2]);
-		NVIC_ClearPendingIRQ(IEL12_IRQn);
-	}
-}
-
-void IEL13_IRQHandler(void)
-{
-	if (ICU->IELSR13 & ICU_IELSR13_IR_Msk)
-	{
-		ICU->IELSR13 &= ~ICU_IELSR13_IR_Msk;
-		Re01UartIntHandler(&s_Re01UartDev[3]);
-		NVIC_ClearPendingIRQ(IEL13_IRQn);
-	}
-}
-
-void IEL14_IRQHandler(void)
-{
-	if (ICU->IELSR14 & ICU_IELSR14_IR_Msk)
-	{
-		ICU->IELSR14 &= ~ICU_IELSR14_IR_Msk;
-		Re01UartIntHandler(&s_Re01UartDev[4]);
-		NVIC_ClearPendingIRQ(IEL14_IRQn);
-	}
-}
-
-void IEL15_IRQHandler(void)
-{
-	if (ICU->IELSR15 & ICU_IELSR15_IR_Msk)
-	{
-		ICU->IELSR14 &= ~ICU_IELSR14_IR_Msk;
-		Re01UartIntHandler(&s_Re01UartDev[5]);
-		NVIC_ClearPendingIRQ(IEL15_IRQn);
-	}
-}
-
-void IEL16_IRQHandler(void)
-{
-	if (ICU->IELSR16 & ICU_IELSR16_IR_Msk)
-	{
-		ICU->IELSR16 &= ~ICU_IELSR16_IR_Msk;
-		Re01UartIntHandler(&s_Re01UartDev[6]);
-		NVIC_ClearPendingIRQ(IEL16_IRQn);
-	}
-}
-} // extern "C"
 
 static inline uint32_t Re01UARTGetRate(DEVINTRF * const pDev) {
 	return ((Re01UartDev_t*)pDev->pDevData)->pUartDev->Rate;
@@ -797,51 +733,63 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		s_Re01UartDev[devno].pUartReg2->SCR_b.TIE = 1;
 	}
 
-	__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR10;
-
 	switch (devno)
 	{
 		case 0:
-			NVIC_ClearPendingIRQ(IEL10_IRQn);
-			NVIC_SetPriority(IEL10_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(IEL10_IRQn);
-			ielsr[devno] = 0x10;
+			s_Re01UartDev[devno].IrqRxi = Re01RegisterIntHandler(RE01_EVTID_SCI0_SCI0_RXI,
+																 pCfg->IntPrio, Re01UartIRQHandlerFifo,
+																 &s_Re01UartDev[devno]);
+			s_Re01UartDev[devno].IrqTxi = Re01RegisterIntHandler(RE01_EVTID_SCI0_SCI0_TXI,
+																 pCfg->IntPrio, Re01UartIRQHandlerFifo,
+																 &s_Re01UartDev[devno]);
 			break;
 		case 1:
-			NVIC_ClearPendingIRQ(IEL11_IRQn);
-			NVIC_SetPriority(IEL11_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(IEL11_IRQn);
-			ielsr[devno] = 0x1B;
+			s_Re01UartDev[devno].IrqRxi = Re01RegisterIntHandler(RE01_EVTID_SCI1_SCI1_RXI,
+																 pCfg->IntPrio, Re01UartIRQHandlerFifo,
+																 &s_Re01UartDev[devno]);
+			s_Re01UartDev[devno].IrqTxi = Re01RegisterIntHandler(RE01_EVTID_SCI1_SCI1_TXI,
+																 pCfg->IntPrio, Re01UartIRQHandlerFifo,
+																 &s_Re01UartDev[devno]);
 			break;
 		case 2:
-			NVIC_ClearPendingIRQ(IEL12_IRQn);
-			NVIC_SetPriority(IEL12_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(IEL12_IRQn);
-			ielsr[devno] = 0x1A;
+			s_Re01UartDev[devno].IrqRxi = Re01RegisterIntHandler(RE01_EVTID_SCI2_SCI2_RXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
+			s_Re01UartDev[devno].IrqTxi = Re01RegisterIntHandler(RE01_EVTID_SCI2_SCI2_TXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
 			break;
 		case 3:
-			NVIC_ClearPendingIRQ(IEL13_IRQn);
-			NVIC_SetPriority(IEL13_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(IEL13_IRQn);
-			ielsr[devno] = 0x1C;
+			s_Re01UartDev[devno].IrqRxi = Re01RegisterIntHandler(RE01_EVTID_SCI3_SCI3_RXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
+			s_Re01UartDev[devno].IrqTxi = Re01RegisterIntHandler(RE01_EVTID_SCI3_SCI3_TXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
 			break;
 		case 4:
-			NVIC_ClearPendingIRQ(IEL14_IRQn);
-			NVIC_SetPriority(IEL14_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(IEL14_IRQn);
-			ielsr[devno] = 0x1B;
+			s_Re01UartDev[devno].IrqRxi = Re01RegisterIntHandler(RE01_EVTID_SCI4_SCI4_RXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
+			s_Re01UartDev[devno].IrqTxi = Re01RegisterIntHandler(RE01_EVTID_SCI4_SCI4_TXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
 			break;
 		case 5:
-			NVIC_ClearPendingIRQ(IEL15_IRQn);
-			NVIC_SetPriority(IEL15_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(IEL15_IRQn);
-			ielsr[devno] = 0x1D;
+			s_Re01UartDev[devno].IrqRxi = Re01RegisterIntHandler(RE01_EVTID_SCI5_SCI5_RXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
+			s_Re01UartDev[devno].IrqTxi = Re01RegisterIntHandler(RE01_EVTID_SCI5_SCI5_TXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
 			break;
 		case 6:
-			NVIC_ClearPendingIRQ(IEL19_IRQn);
-			NVIC_SetPriority(IEL19_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(IEL13_IRQn);
-			ielsr[devno] = 0x1C;
+			s_Re01UartDev[devno].IrqRxi = Re01RegisterIntHandler(RE01_EVTID_SCI9_SCI9_RXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
+			s_Re01UartDev[devno].IrqTxi = Re01RegisterIntHandler(RE01_EVTID_SCI9_SCI9_TXI,
+																 pCfg->IntPrio, Re01UartIRQHandler,
+																 &s_Re01UartDev[devno]);
 			break;
 	}
 
