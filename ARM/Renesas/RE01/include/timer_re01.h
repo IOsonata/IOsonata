@@ -61,6 +61,8 @@ typedef struct {
     TimerTrig_t Trigger[RE01_TIMER_TRIG_MAXCNT];
     TimerDev_t *pTimer;
     int IntPrio;
+    IRQn_Type IrqOvr;
+    IRQn_Type IrqMatch[RE01_TIMER_CC_MAXCNT];
 } RE01_TimerData_t;
 
 #pragma pack(pop)
