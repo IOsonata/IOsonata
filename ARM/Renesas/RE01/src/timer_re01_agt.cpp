@@ -34,8 +34,99 @@ SOFTWARE.
 #include "re01xxx.h"
 
 #include "timer_re01.h"
+#include "interrupt_re01.h"
 
 extern RE01_TimerData_t g_Re01TimerData[RE01_TIMER_MAXCNT];
+
+static void Re01AgtUnfIRQHandler(int IntNo, void *pCtx)
+{
+	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
+
+	if (dev->pAgtReg->AGTCR & AGT0_AGTCR_TUNDF_Msk)
+	{
+		dev->pAgtReg->AGTCR_b.TUNDF = 0;
+		dev->pTimer->Rollover += 0x10000;
+		if (dev->pTimer->EvtHandler)
+		{
+			dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_COUNTER_OVR);
+		}
+	}
+}
+
+static void Re01AgtTcmAIRQHandler(int IntNo, void *pCtx)
+{
+	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
+	uint16_t cnt = dev->pAgtReg->AGT;
+
+	if (dev->pAgtReg->AGTCR & AGT0_AGTCR_TCMAF_Msk)
+	{
+		// AGT requires stop timer to update counter
+		dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TSTART_Msk);
+		while (dev->pAgtReg->AGTCR & AGT0_AGTCR_TCSTF_Msk);
+
+		// AGT does not support periodic compare
+		// Do it manually
+		if (dev->Trigger[1].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+		{
+			dev->pAgtReg->AGTCMA = cnt - dev->CC[0];
+			__DMB();
+		}
+		else
+		{
+		    dev->pAgtReg->AGTCMSR &= ~AGT0_AGTCMSR_TCMEA_Msk;
+			dev->pAgtReg->AGTCMA = 0xFFFF;
+		}
+
+		dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
+
+		if (dev->Trigger->Handler)
+		{
+			dev->Trigger->Handler(dev->pTimer, TIMER_EVT_TRIGGER(0), dev->Trigger->pContext);
+		}
+		else if (dev->pTimer->EvtHandler)
+		{
+			dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(0));
+		}
+	}
+}
+
+static void Re01AgtTcmBIRQHandler(int IntNo, void *pCtx)
+{
+	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
+	uint16_t cnt = dev->pAgtReg->AGT;
+
+	if (dev->pAgtReg->AGTCR & AGT0_AGTCR_TCMBF_Msk)
+	{
+		// AGT requires stop timer to update counter
+		dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TCMBF_Msk | AGT0_AGTCR_TSTART_Msk);
+		while (dev->pAgtReg->AGTCR & AGT0_AGTCR_TCSTF_Msk);
+
+		// AGT does not support periodic compare
+		// Do it manually
+		if (dev->Trigger[1].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+		{
+			dev->pAgtReg->AGTCMB = dev->pAgtReg->AGT - dev->CC[1];
+			__DMB();
+
+		}
+		else
+		{
+		    dev->pAgtReg->AGTCMSR &= ~AGT0_AGTCMSR_TCMEB_Msk;
+			dev->pAgtReg->AGTCMB = 0xFFFF;
+		}
+
+		dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
+
+		if (dev->Trigger->Handler)
+		{
+			dev->Trigger->Handler(dev->pTimer, TIMER_EVT_TRIGGER(1), dev->Trigger->pContext);
+		}
+		else if (dev->pTimer->EvtHandler)
+		{
+			dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(1));
+		}
+	}
+}
 
 /**
  * @brief   Turn on timer.
@@ -70,8 +161,8 @@ static void Re01AgtDisable(TimerDev_t * const pTimer)
  */
 static void Re01AgtReset(TimerDev_t * const pTimer)
 {
-//	g_Re01TimerData[pTimer->DevNo].pLPTimReg->ICR = g_Re01TimerData[pTimer->DevNo].pLPTimReg->ISR;
-//	g_Re01TimerData[pTimer->DevNo].pLPTimReg->CNT = 0;
+	pTimer->LastCount = 0;
+	pTimer->Rollover = 0;
 }
 
 /**
@@ -138,8 +229,16 @@ int Re01AgtGetMaxTrigger(TimerDev_t * const pTimer)
 uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
 								 TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
-    if (TrigNo < 0 || TrigNo >= RE01_TIMER_TRIG_MAXCNT)
-        return 0;
+    if (pTimer == NULL || TrigNo < 0 || TrigNo >= RE01_TIMER_TRIG_MAXCNT)
+    {
+    	return 0;
+    }
+
+    if (pTimer->DevNo == 1 && TrigNo > 0)
+    {
+    	// AGT1 does not support compare B event
+    	return 0;
+    }
 
     RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
     uint64_t cc = (nsPeriod + (pTimer->nsPeriod >> 1ULL)) / pTimer->nsPeriod;
@@ -158,20 +257,38 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
     dev->Trigger[TrigNo].Handler = Handler;
     dev->Trigger[TrigNo].pContext = pContext;
 
-//    uint32_t count = dev->DevNo > 0 ? dev->pAgtReg0->AGT : dev->pAgtReg0->AGT;
-//    while (count != dev->DevNo > 0 ? dev->pAgtReg0->AGT : dev->pAgtReg0->AGT) {
-//    	count = dev->DevNo > 0 ? dev->pAgtReg0->AGT : dev->pAgtReg0->AGT;
-//    }
+    volatile uint16_t *cntreg = 0;
+    uint8_t evtid = 0;
+    Re01IRQHandler_t hndlr = 0;
 
-    dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TSTART_Msk);
+
+    if (TrigNo > 0)
+    {
+    	evtid = RE01_EVTID_AGT0_AGTCMBI;
+    	hndlr = Re01AgtTcmBIRQHandler;
+    	cntreg = &dev->pAgtReg->AGTCMB;
+    }
+    else
+    {
+    	evtid = pTimer->DevNo > 0? RE01_EVTID_AGT1_AGTCMAI : RE01_EVTID_AGT0_AGTCMAI;
+    	hndlr = Re01AgtTcmAIRQHandler;
+    	cntreg = &dev->pAgtReg->AGTCMA;
+    }
+
+    dev->IrqMatch[TrigNo] = Re01RegisterIntHandler(evtid, dev->IntPrio, hndlr, dev);
+    if (dev->IrqMatch[TrigNo] == -1)
+    {
+    	return false;
+    }
+
+	dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TSTART_Msk);
     while (dev->pAgtReg->AGTCR & AGT0_AGTCR_TCSTF_Msk);
 
-    dev->pAgtReg->AGT = cc;
-    //dev->pAgtReg->AGTCMA = cc;
-    //dev->pAgtReg->AGTCMSR_b.TCMEA = 1;
+    *cntreg = dev->pAgtReg->AGT - cc;
+
+    dev->pAgtReg->AGTCMSR |= (1 << (TrigNo << 2));
 
     dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
-    while ((dev->pAgtReg->AGTCR & AGT0_AGTCR_TCSTF_Msk) == 0);
 
     return pTimer->nsPeriod * cc; // Return real period in nsec
 }
@@ -183,9 +300,29 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
  */
 void Re01AgtDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
-	//g_Re01TimerData[pTimer->DevNo].pLPTimReg->IER &= ~LPTIM_IER_CMPMIE;
-	//g_Re01TimerData[pTimer->DevNo].pLPTimReg->CMP = 0;
-	//while ((g_Stm32l4TimerData[pTimer->DevNo].pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
+    if (pTimer == NULL || TrigNo < 0 || TrigNo >= RE01_TIMER_TRIG_MAXCNT)
+    {
+    	return;
+    }
+
+    RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
+
+    dev->pAgtReg->AGTCMSR &= ~(1 << (TrigNo << 2));
+
+    if (dev->IrqMatch[TrigNo] != -1)
+    {
+    	Re01UnregisterIntHandler(dev->IrqMatch[TrigNo]);
+    	dev->IrqMatch[TrigNo] = (IRQn_Type)-1;
+    }
+
+    if (TrigNo > 0)
+    {
+    	dev->pAgtReg->AGTCMB = 0xFFFF;
+    }
+    else
+    {
+    	dev->pAgtReg->AGTCMA = 0xFFFF;
+    }
 }
 
 /**
@@ -211,85 +348,10 @@ void Re01AgtDisableExtTrigger(TimerDev_t * const pTimer)
 bool Re01AgtEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense)
 {
 	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
-/*
-	LPTIM_TypeDef *reg = g_Re01TimerData[pTimer->DevNo].pLPTimReg;
-	uint32_t tmp = reg->CFGR & ~(LPTIM_CFGR_TRIGEN_Msk | LPTIM_CFGR_TRIGSEL_Msk);
 
-	switch (Sense)
-	{
-		case TIMER_EXTTRIG_SENSE_LOW_TRANSITION:
-			tmp |= LPTIM_CFGR_TRIGEN_1;
-			break;
-		case TIMER_EXTTRIG_SENSE_HIGH_TRANSITION:
-			tmp |= LPTIM_CFGR_TRIGEN_0;
-			break;
-		case TIMER_EXTTRIG_SENSE_TOGGLE:
-			tmp |= LPTIM_CFGR_TRIGEN_Msk;
-			break;
-		case TIMER_EXTTRIG_SENSE_DISABLE:
-		default:
-			break;
-	}
-	reg->CFGR = tmp | LPTIM_CFGR_TIMOUT | ((TrigDevNo & 7) << LPTIM_CFGR_TRIGSEL_Pos);// | (LPTIM_CFGR_TRIGEN_Msk);
-	reg->OR = 0;
-	reg->IER |= LPTIM_IER_EXTTRIGIE;
-*/
-	return true;
+	return false;
 }
 
-void Re01AgtIRQHandler(TimerDev_t * const pTimer)
-{
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
-	/*
-	uint32_t flag = dev->pLPTimReg->ISR;
-	uint32_t evt = 0;
-    uint32_t count = dev->pLPTimReg->CNT;
-    while (count != dev->pLPTimReg->CNT) {
-    	count = dev->pLPTimReg->CNT;
-    }
-
-	if (flag & LPTIM_ISR_ARRM)
-	{
-        pTimer->Rollover += 0x10000ULL;
-        evt |= TIMER_EVT_COUNTER_OVR;
-	}
-
-	if ((flag & LPTIM_ISR_EXTTRIG) && (dev->pLPTimReg->IER & LPTIM_IER_EXTTRIGIE))
-	{
-		evt |= TIMER_EVT_EXTTRIG;
-	}
-
-	if ((flag & LPTIM_ISR_CMPM) && (dev->pLPTimReg->IER & LPTIM_IER_CMPMIE))
-	{
-		// NOTE : Single mode cause the counter to stop
-		// Reset compare and disable interrupt for single mode
-		if (dev->Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
-		{
-			dev->pLPTimReg->CMP = (count + dev->CC[0]) & 0xFFFF;
-			while ((dev->pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
-		}
-		else
-		{
-			dev->pLPTimReg->IER &= ~LPTIM_IER_CMPMIE;
-	    	dev->pLPTimReg->CMP = 0;
-		    while ((dev->pLPTimReg->ISR & LPTIM_ISR_CMPOK) == 0);
-		}
-		evt |= TIMER_EVT_TRIGGER(0);
-        if (dev->Trigger[0].Handler)
-        {
-        	dev->Trigger[0].Handler(pTimer, 0, dev->Trigger[0].pContext);
-        }
-	}
-
-	pTimer->LastCount = count;
-
-    if (pTimer->EvtHandler)
-	{
-    	pTimer->EvtHandler(pTimer, evt);
-	}
-
-	dev->pLPTimReg->ICR = flag;*/
-}
 
 /**
  * @brief	Get first available timer trigger index.
@@ -300,123 +362,9 @@ void Re01AgtIRQHandler(TimerDev_t * const pTimer)
  * @return	success : Timer trigger index
  * 			fail : -1
  */
-int Re01AgtFindAvailTrigger(TimerDev_t * const pTimer)
+static int Re01AgtFindAvailTrigger(TimerDev_t * const pTimer)
 {
 	return 0;
-}
-
-extern "C" void IEL16_IRQHandler(void)
-{
-	if (ICU->IELSR16 & ICU_IELSR16_IR_Msk)
-	{
-		ICU->IELSR16 &= ~ICU_IELSR16_IR_Msk;
-		Re01AgtIRQHandler(g_Re01TimerData[1].pTimer);
-
-		if (g_Re01TimerData[1].pAgtReg1->AGTCR_b.TUNDF)
-		{
-			g_Re01TimerData[1].pAgtReg1->AGTCR_b.TUNDF = 0;
-			g_Re01TimerData[1].pTimer->Rollover++;
-			if (g_Re01TimerData[1].pTimer->EvtHandler)
-			{
-				g_Re01TimerData[1].pTimer->EvtHandler(g_Re01TimerData[1].pTimer, TIMER_EVT_COUNTER_OVR);
-			}
-		}
-
-		if (g_Re01TimerData[1].pAgtReg1->AGTCR_b.TCMAF)
-		{
-			g_Re01TimerData[1].pAgtReg1->AGTCR_b.TCMAF = 0;
-			if (g_Re01TimerData[1].Trigger->Handler)
-			{
-				g_Re01TimerData[1].Trigger->Handler(g_Re01TimerData[1].pTimer, TIMER_EVT_TRIGGER(0), g_Re01TimerData[1].Trigger->pContext);
-			}
-			else if (g_Re01TimerData[1].pTimer->EvtHandler)
-			{
-					g_Re01TimerData[1].pTimer->EvtHandler(g_Re01TimerData[1].pTimer, TIMER_EVT_TRIGGER(0));
-			}
-		}
-
-		if (g_Re01TimerData[1].pAgtReg1->AGTCR_b.TCMBF)
-		{
-			g_Re01TimerData[1].pAgtReg1->AGTCR_b.TCMBF = 0;
-			if (g_Re01TimerData[1].Trigger->Handler)
-			{
-				g_Re01TimerData[1].Trigger->Handler(g_Re01TimerData[1].pTimer, TIMER_EVT_TRIGGER(1), g_Re01TimerData[1].Trigger->pContext);
-			}
-			else if (g_Re01TimerData[1].pTimer->EvtHandler)
-			{
-					g_Re01TimerData[1].pTimer->EvtHandler(g_Re01TimerData[1].pTimer, TIMER_EVT_TRIGGER(1));
-			}
-		}
-	}
-	NVIC_ClearPendingIRQ(IEL16_IRQn);
-}
-
-extern "C" void IEL26_IRQHandler(void)
-{
-	if (ICU->IELSR26 & ICU_IELSR26_IR_Msk)
-	{
-		ICU->IELSR26 &= ~ICU_IELSR26_IR_Msk;
-		Re01AgtIRQHandler(g_Re01TimerData[0].pTimer);
-
-		if (g_Re01TimerData[0].pAgtReg->AGTCR_b.TCMAF)
-		{
-			g_Re01TimerData[0].pAgtReg->AGTCR_b.TCMAF = 0;
-			g_Re01TimerData[0].pAgtReg->AGTCMA += g_Re01TimerData[0].CC[0];
-			if (g_Re01TimerData[0].Trigger->Handler)
-			{
-				g_Re01TimerData[0].Trigger->Handler(g_Re01TimerData[0].pTimer, TIMER_EVT_TRIGGER(0), g_Re01TimerData[0].Trigger->pContext);
-			}
-			else if (g_Re01TimerData[0].pTimer->EvtHandler)
-			{
-				g_Re01TimerData[0].pTimer->EvtHandler(g_Re01TimerData[0].pTimer, TIMER_EVT_TRIGGER(0));
-			}
-		}
-	}
-	NVIC_ClearPendingIRQ(IEL26_IRQn);
-}
-
-extern "C" void IEL27_IRQHandler(void)
-{
-	if (ICU->IELSR27 & ICU_IELSR27_IR_Msk)
-	{
-		ICU->IELSR27 &= ~ICU_IELSR27_IR_Msk;
-		Re01AgtIRQHandler(g_Re01TimerData[0].pTimer);
-		if (g_Re01TimerData[0].pAgtReg->AGTCR_b.TUNDF)
-		{
-			g_Re01TimerData[0].pAgtReg->AGTCR_b.TUNDF = 0;
-			g_Re01TimerData[0].pTimer->Rollover++;
-			if (g_Re01TimerData[0].pTimer->EvtHandler)
-			{
-				g_Re01TimerData[0].pTimer->EvtHandler(g_Re01TimerData[0].pTimer, TIMER_EVT_COUNTER_OVR);
-			}
-		}
-/*		if (g_Re01TimerData[0].pAgtReg0->AGTCR_b.TCMAF)
-		{
-			g_Re01TimerData[0].pAgtReg0->AGTCR_b.TCMAF = 0;
-			if (g_Re01TimerData[0].Trigger->Handler)
-			{
-				g_Re01TimerData[0].Trigger->Handler(g_Re01TimerData[0].pTimer, TIMER_EVT_TRIGGER(0), g_Re01TimerData[0].Trigger->pContext);
-			}
-			else if (g_Re01TimerData[0].pTimer->EvtHandler)
-			{
-					g_Re01TimerData[0].pTimer->EvtHandler(g_Re01TimerData[0].pTimer, TIMER_EVT_TRIGGER(0));
-			}
-
-		}
-		if (g_Re01TimerData[0].pAgtReg0->AGTCR_b.TCMBF)
-		{
-			g_Re01TimerData[0].pAgtReg0->AGTCR_b.TCMBF = 0;
-			if (g_Re01TimerData[0].Trigger->Handler)
-			{
-				g_Re01TimerData[0].Trigger->Handler(g_Re01TimerData[0].pTimer, TIMER_EVT_TRIGGER(1), g_Re01TimerData[0].Trigger->pContext);
-			}
-			else if (g_Re01TimerData[0].pTimer->EvtHandler)
-			{
-					g_Re01TimerData[0].pTimer->EvtHandler(g_Re01TimerData[0].pTimer, TIMER_EVT_TRIGGER(1));
-			}
-		}*/
-	}
-	NVIC_ClearPendingIRQ(IEL27_IRQn);
 }
 
 /**
@@ -436,8 +384,6 @@ bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	{
 		return false;
 	}
-
-	//AGT0_Type *reg = pTimerData->pAgtReg0;
 
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
 	pTimerData->pTimer->EvtHandler = pCfg->EvtHandler;
@@ -472,10 +418,6 @@ bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 
 	pTimerData->pAgtReg->AGTMR2 = 0;
 
-	if (pCfg->Freq > 0)
-	{
-		// Prescale
-	}
 	switch (clksrc)
 	{
 		case TIMER_CLKSRC_LFRC:
@@ -493,38 +435,38 @@ bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 			pTimerData->BaseFreq = SystemPeriphClockGet(1);
 	}
 
-	Re01AgtSetFrequency(pTimerData->pTimer, pCfg->Freq);
-
-	__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR0;
-
-	if (pTimerData->pTimer->DevNo == 0)
+	uint32_t f = Re01AgtSetFrequency(pTimerData->pTimer, pCfg->Freq);
+	if (f <= 0)
 	{
-		NVIC_ClearPendingIRQ(IEL26_IRQn);
-		NVIC_SetPriority(IEL26_IRQn, pCfg->IntPrio);
-		NVIC_EnableIRQ(IEL26_IRQn);
-		ielsr[26] = 0x4;
+		return false;
+	}
 
-		NVIC_ClearPendingIRQ(IEL27_IRQn);
-		NVIC_SetPriority(IEL27_IRQn, pCfg->IntPrio);
-		NVIC_EnableIRQ(IEL27_IRQn);
-		ielsr[27] = 0x13;
-		ICU->WUPEN_b.AGT0CAWUPEN = 1;
+	uint8_t evtid = 0;
+
+	if (pTimerData->pTimer->DevNo > 0)
+	{
+		evtid = RE01_EVTID_AGT1_AGTI;
+		ICU->WUPEN_b.AGT1CAWUPEN = 1;
 	}
 	else
 	{
-		NVIC_ClearPendingIRQ(IEL16_IRQn);
-		NVIC_SetPriority(IEL16_IRQn, pCfg->IntPrio);
-		NVIC_EnableIRQ(IEL16_IRQn);
-		ielsr[16] = 0x6;
+		evtid = RE01_EVTID_AGT0_AGTI;
+		ICU->WUPEN_b.AGT0CAWUPEN = 1;
 	}
 
-//	pTimerData->pAgtReg->AGTIOC_b.TOE = 1;
+	pTimerData->IrqOvr = Re01RegisterIntHandler(evtid, pCfg->IntPrio, Re01AgtUnfIRQHandler, pTimerData);
+	if (pTimerData->IrqOvr == -1)
+	{
+		return false;
+	}
+
 	pTimerData->pAgtReg->AGTCMA = 0xFFFF;
 	pTimerData->pAgtReg->AGTCMB = 0xFFFF;
 	pTimerData->pAgtReg->AGT = 0xFFFF;
 	pTimerData->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TUNDF_Msk | AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk);
 	pTimerData->pAgtReg->AGTCR_b.TSTART = 1;
-	while (0 == pTimerData->pAgtReg->AGTCR_b.TCSTF);
+	while (pTimerData->pAgtReg->AGTCR_b.TCSTF == 0);
+
 	return true;
 }
 

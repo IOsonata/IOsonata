@@ -274,20 +274,28 @@ static uint64_t Re01TmrEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 
 	// TMR does not support periodic trigger.
 	// Do it manually within interrupt handler
+    uint8_t evtid = 0;
    	if (TrigNo > 0)
    	{
-   	    dev->IrqMatch[TrigNo] = Re01RegisterIntHandler(RE01_EVTID_TMR_CMIB0, dev->IntPrio, Re01TmrTcmBIRQHandler, dev);
+   		evtid = RE01_EVTID_TMR_CMIB0;
+   		dev->IrqMatch[TrigNo] = Re01RegisterIntHandler(evtid, dev->IntPrio, Re01TmrTcmBIRQHandler, dev);
 
    		TMR01->TCORB = (cc + TMR01->TCNT);
    	}
     else
     {
-        dev->IrqMatch[TrigNo] = Re01RegisterIntHandler(RE01_EVTID_TMR_CMIA0, dev->IntPrio, Re01TmrTcmAIRQHandler, dev);
+   		evtid = RE01_EVTID_TMR_CMIA0;
+   		dev->IrqMatch[TrigNo] = Re01RegisterIntHandler(evtid, dev->IntPrio, Re01TmrTcmAIRQHandler, dev);
 
    		TMR01->TCORA = (cc + TMR01->TCNT);
     }
 
-    TMR0->TCR |= (TrigNo + 1) << TMR0_TCR_CMIEA_Pos;
+	if (dev->IrqMatch[TrigNo] == -1)
+	{
+		return false;
+	}
+
+	TMR0->TCR |= (TrigNo + 1) << TMR0_TCR_CMIEA_Pos;
 
     return pTimer->nsPeriod * cc; // Return real period in nsec
 }
@@ -306,8 +314,11 @@ static void Re01TmrDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 
     TMR0->TCR &= ~((TrigNo + 1) << TMR0_TCR_CMIEA_Pos);
 
-    Re01UnregisterIntHandler(dev->IrqMatch[TrigNo]);
-
+    if (dev->IrqMatch[TrigNo] != -1)
+    {
+    	Re01UnregisterIntHandler(dev->IrqMatch[TrigNo]);
+    	dev->IrqMatch[TrigNo] = (IRQn_Type)-1;
+    }
     if (TrigNo > 0)
     {
 		TMR01->TCORB = 0;
@@ -381,12 +392,10 @@ static int Re01TmrFindAvailTrigger(TimerDev_t * const pTimer)
  */
 bool Re01TmrInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const pCfg)
 {
-	if (pCfg->Freq > 16000000)
+	if (pCfg->Freq > 64000000)
 	{
 		return false;
 	}
-
-	TMR01_Type *reg = pTimerData->pTmrReg;
 
 	pTimerData->IntPrio = pCfg->IntPrio;
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
@@ -418,7 +427,11 @@ bool Re01TmrInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 		pTimerData->BaseFreq = SystemPeriphClockGet(0);
 	}
 
-	Re01TmrSetFrequency(pTimerData->pTimer, pCfg->Freq);
+	uint32_t f = Re01TmrSetFrequency(pTimerData->pTimer, pCfg->Freq);
+	if (f <= 0)
+	{
+		return false;
+	}
 
 	TMR0->TCR |= TMR0_TCR_OVIE_Msk;
 

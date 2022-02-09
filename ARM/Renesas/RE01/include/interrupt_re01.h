@@ -74,7 +74,7 @@ SOFTWARE.
 #define RE01_EVTID_AGT0_AGTCMBI			0x1A
 #define RE01_EVTID_AGT1_AGTI			0x1B
 #define RE01_EVTID_AGT1_AGTCMAI			0x1C
-//#define RE01_EVTID_AGT1_AGTCMBI			// Not avail
+//#define RE01_EVTID_AGT1_AGTCMBI			0x1A// Not avail in datasheet
 #define RE01_EVTID_IWDT_NMIUNDF			0x1E
 #define RE01_EVTID_WDT_NMIUNDF			0x1F
 #define RE01_EVTID_RTC_ALM				0x20
