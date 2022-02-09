@@ -300,7 +300,7 @@ static inline void __Re01IntHandler(int IntNo)
 	}
 }
 
-void IEL0_IRQHandler()
+__WEAK void IEL0_IRQHandler()
 {
 	if (ICU->IELSR0 & ICU_IELSR0_IR_Msk)
 	{
@@ -311,7 +311,7 @@ void IEL0_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL0_IRQn);
 }
 
-void IEL1_IRQHandler()
+__WEAK void IEL1_IRQHandler()
 {
 	if (ICU->IELSR1 & ICU_IELSR1_IR_Msk)
 	{
@@ -333,7 +333,7 @@ void IEL2_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL2_IRQn);
 }
 
-void IEL3_IRQHandler()
+__WEAK void IEL3_IRQHandler()
 {
 	if (ICU->IELSR3 & ICU_IELSR3_IR_Msk)
 	{
@@ -344,7 +344,7 @@ void IEL3_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL3_IRQn);
 }
 
-void IEL4_IRQHandler()
+__WEAK void IEL4_IRQHandler()
 {
 	if (ICU->IELSR4 & ICU_IELSR4_IR_Msk)
 	{
@@ -355,7 +355,7 @@ void IEL4_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL4_IRQn);
 }
 
-void IEL5_IRQHandler()
+__WEAK void IEL5_IRQHandler()
 {
 	if (ICU->IELSR5 & ICU_IELSR5_IR_Msk)
 	{
@@ -366,7 +366,7 @@ void IEL5_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL5_IRQn);
 }
 
-void IEL6_IRQHandler()
+__WEAK void IEL6_IRQHandler()
 {
 	if (ICU->IELSR6 & ICU_IELSR6_IR_Msk)
 	{
@@ -377,7 +377,7 @@ void IEL6_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL6_IRQn);
 }
 
-void IEL7_IRQHandler()
+__WEAK void IEL7_IRQHandler()
 {
 	if (ICU->IELSR7 & ICU_IELSR7_IR_Msk)
 	{
@@ -388,7 +388,7 @@ void IEL7_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL7_IRQn);
 }
 
-void IEL8_IRQHandler()
+__WEAK void IEL8_IRQHandler()
 {
 	if (ICU->IELSR8 & ICU_IELSR8_IR_Msk)
 	{
@@ -399,7 +399,7 @@ void IEL8_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL8_IRQn);
 }
 
-void IEL9_IRQHandler()
+__WEAK void IEL9_IRQHandler()
 {
 	if (ICU->IELSR9 & ICU_IELSR9_IR_Msk)
 	{
@@ -410,7 +410,7 @@ void IEL9_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL9_IRQn);
 }
 
-void IEL10_IRQHandler()
+__WEAK void IEL10_IRQHandler()
 {
 	if (ICU->IELSR10 & ICU_IELSR10_IR_Msk)
 	{
@@ -421,7 +421,7 @@ void IEL10_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL10_IRQn);
 }
 
-void IEL11_IRQHandler()
+__WEAK void IEL11_IRQHandler()
 {
 	if (ICU->IELSR11 & ICU_IELSR11_IR_Msk)
 	{
@@ -432,7 +432,7 @@ void IEL11_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL11_IRQn);
 }
 
-void IEL12_IRQHandler()
+__WEAK void IEL12_IRQHandler()
 {
 	if (ICU->IELSR12 & ICU_IELSR12_IR_Msk)
 	{
@@ -443,7 +443,7 @@ void IEL12_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL12_IRQn);
 }
 
-void IEL13_IRQHandler()
+__WEAK void IEL13_IRQHandler()
 {
 	if (ICU->IELSR13 & ICU_IELSR13_IR_Msk)
 	{
@@ -454,7 +454,7 @@ void IEL13_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL13_IRQn);
 }
 
-void IEL14_IRQHandler()
+__WEAK void IEL14_IRQHandler()
 {
 	if (ICU->IELSR14 & ICU_IELSR14_IR_Msk)
 	{
@@ -465,7 +465,7 @@ void IEL14_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL14_IRQn);
 }
 
-void IEL15_IRQHandler()
+__WEAK void IEL15_IRQHandler()
 {
 	if (ICU->IELSR15 & ICU_IELSR15_IR_Msk)
 	{
@@ -476,7 +476,7 @@ void IEL15_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL15_IRQn);
 }
 
-void IEL16_IRQHandler()
+__WEAK void IEL16_IRQHandler()
 {
 	if (ICU->IELSR16 & ICU_IELSR16_IR_Msk)
 	{
@@ -487,7 +487,7 @@ void IEL16_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL16_IRQn);
 }
 
-void IEL17_IRQHandler()
+__WEAK void IEL17_IRQHandler()
 {
 	if (ICU->IELSR17 & ICU_IELSR17_IR_Msk)
 	{
@@ -498,7 +498,7 @@ void IEL17_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL17_IRQn);
 }
 
-void IEL18_IRQHandler()
+__WEAK void IEL18_IRQHandler()
 {
 	if (ICU->IELSR18 & ICU_IELSR18_IR_Msk)
 	{
@@ -509,7 +509,7 @@ void IEL18_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL18_IRQn);
 }
 
-void IEL19_IRQHandler()
+__WEAK void IEL19_IRQHandler()
 {
 	if (ICU->IELSR19 & ICU_IELSR19_IR_Msk)
 	{
@@ -520,7 +520,7 @@ void IEL19_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL19_IRQn);
 }
 
-void IEL20_IRQHandler()
+__WEAK void IEL20_IRQHandler()
 {
 	if (ICU->IELSR20 & ICU_IELSR20_IR_Msk)
 	{
@@ -531,7 +531,7 @@ void IEL20_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL20_IRQn);
 }
 
-void IEL21_IRQHandler()
+__WEAK void IEL21_IRQHandler()
 {
 	if (ICU->IELSR21 & ICU_IELSR21_IR_Msk)
 	{
@@ -542,7 +542,7 @@ void IEL21_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL21_IRQn);
 }
 
-void IEL22_IRQHandler()
+__WEAK void IEL22_IRQHandler()
 {
 	if (ICU->IELSR22 & ICU_IELSR22_IR_Msk)
 	{
@@ -553,7 +553,7 @@ void IEL22_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL22_IRQn);
 }
 
-void IEL23_IRQHandler()
+__WEAK void IEL23_IRQHandler()
 {
 	if (ICU->IELSR23 & ICU_IELSR23_IR_Msk)
 	{
@@ -564,7 +564,7 @@ void IEL23_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL23_IRQn);
 }
 
-void IEL24_IRQHandler()
+__WEAK void IEL24_IRQHandler()
 {
 	if (ICU->IELSR24 & ICU_IELSR24_IR_Msk)
 	{
@@ -575,7 +575,7 @@ void IEL24_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL24_IRQn);
 }
 
-void IEL25_IRQHandler()
+__WEAK void IEL25_IRQHandler()
 {
 	if (ICU->IELSR25 & ICU_IELSR25_IR_Msk)
 	{
@@ -586,7 +586,7 @@ void IEL25_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL25_IRQn);
 }
 
-void IEL26_IRQHandler()
+__WEAK void IEL26_IRQHandler()
 {
 	if (ICU->IELSR26 & ICU_IELSR26_IR_Msk)
 	{
@@ -597,7 +597,7 @@ void IEL26_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL26_IRQn);
 }
 
-void IEL27_IRQHandler()
+__WEAK void IEL27_IRQHandler()
 {
 	if (ICU->IELSR27 & ICU_IELSR27_IR_Msk)
 	{
@@ -608,7 +608,7 @@ void IEL27_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL27_IRQn);
 }
 
-void IEL28_IRQHandler()
+__WEAK void IEL28_IRQHandler()
 {
 	if (ICU->IELSR28 & ICU_IELSR28_IR_Msk)
 	{
@@ -619,7 +619,7 @@ void IEL28_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL28_IRQn);
 }
 
-void IEL29_IRQHandler()
+__WEAK void IEL29_IRQHandler()
 {
 	if (ICU->IELSR29 & ICU_IELSR29_IR_Msk)
 	{
@@ -630,7 +630,7 @@ void IEL29_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL29_IRQn);
 }
 
-void IEL30_IRQHandler()
+__WEAK void IEL30_IRQHandler()
 {
 	if (ICU->IELSR30 & ICU_IELSR30_IR_Msk)
 	{
@@ -641,7 +641,7 @@ void IEL30_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL30_IRQn);
 }
 
-void IEL31_IRQHandler()
+__WEAK void IEL31_IRQHandler()
 {
 	if (ICU->IELSR31 & ICU_IELSR31_IR_Msk)
 	{

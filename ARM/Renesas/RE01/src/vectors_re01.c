@@ -54,38 +54,41 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
 
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL1_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL2_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL3_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL4_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL5_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL6_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL7_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL8_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL9_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL10_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL11_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL12_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL13_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL14_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL15_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL16_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL17_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL18_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL19_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL20_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL21_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL22_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL23_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL24_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL25_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL26_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL27_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL28_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL29_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL30_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL31_IRQHandler(void);
+// These handlers are implemented with new interrupt registration scheme in
+// interrupt_re01.cpp
+//
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL0_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL1_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL2_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL3_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL4_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL5_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL6_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL7_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL8_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL9_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL10_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL11_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL12_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL13_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL14_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL15_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL16_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL17_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL18_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL19_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL20_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL21_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL22_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL23_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL24_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL25_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL26_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL27_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL28_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL29_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL30_IRQHandler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler"))) */void IEL31_IRQHandler(void);
 
 
 /**
