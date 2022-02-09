@@ -228,14 +228,43 @@ SOFTWARE.
 
 #define RE01_IELS_CNT		32
 
+/**
+ * @brief	User's IRQ handler callback function type
+ *
+ * @param 	IntNo	: IRQn number
+ * @param 	pCtx	: Pointer to user's private data
+ */
 typedef void (*Re01IRQHandler_t)(int IntNo, void *pCtx);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// C function prototypes
+/**
+ * @brief	Register Interrupt hnadler
+ *
+ * Call this function to allocate IRQ and register handler callback.
+ * All NVIC interrupt calls are handled internally. User Handler function
+ * does not need to call NVIC_...
+ *
+ * @param 	EvtId 	: Peripheral Event ID listed above RE01_EVTID_...
+ * @param 	Prio	: Interrupt priority number
+ * @param 	pHandler: Pointer to user's handler function
+ * @param 	pCtx	: Pointer to user private data to be passed to the handler callback
+ *
+ * @return	IRQn number allocated if success
+ * 			-1 failed
+ */
 IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHandler, void *pCtx);
+
+/**
+ * @brief	Release interrupt reserved by Re01RegisterIntHandler
+ *
+ * Call this to de-allocate the interrupt
+ *
+ * @param 	IrqNo : IRQn number returned by preivous call to Re01RegisterIntHandler
+ *
+ */
 void Re01UnregisterIntHandler(IRQn_Type IrqNo);
 
 #ifdef __cplusplus

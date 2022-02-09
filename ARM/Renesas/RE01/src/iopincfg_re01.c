@@ -339,54 +339,6 @@ void IOPinDisableInterrupt(int IntNo)
     s_GpIOSenseEvt[IntNo].SensEvtCB = NULL;
     s_GpIOSenseEvt[IntNo].pCtx = NULL;
     s_GpIOSenseEvt[IntNo].IrqNo = - 1;
-
-#if 0
-    switch (IntNo)
-    {
-    	case 0:
-    		NVIC_DisableIRQ(IEL0_IRQn);
-    		NVIC_ClearPendingIRQ(IEL0_IRQn);
-    		break;
-    	case 1:
-    		NVIC_DisableIRQ(IEL1_IRQn);
-    		NVIC_ClearPendingIRQ(IEL1_IRQn);
-    		break;
-    	case 2:
-    		NVIC_DisableIRQ(IEL2_IRQn);
-    		NVIC_ClearPendingIRQ(IEL2_IRQn);
-    		break;
-    	case 3:
-    		NVIC_DisableIRQ(IEL3_IRQn);
-    		NVIC_ClearPendingIRQ(IEL3_IRQn);
-    		break;
-    	case 4:
-    		NVIC_DisableIRQ(IEL4_IRQn);
-    		NVIC_ClearPendingIRQ(IEL4_IRQn);
-    		break;
-		case 5:
-			NVIC_DisableIRQ(IEL5_IRQn);
-			NVIC_ClearPendingIRQ(IEL5_IRQn);
-			break;
-		case 6:
-			NVIC_DisableIRQ(IEL6_IRQn);
-			NVIC_ClearPendingIRQ(IEL6_IRQn);
-			break;
-		case 7:
-			NVIC_DisableIRQ(IEL7_IRQn);
-			NVIC_ClearPendingIRQ(IEL7_IRQn);
-			break;
-		case 8:
-			NVIC_DisableIRQ(IEL8_IRQn);
-			NVIC_ClearPendingIRQ(IEL8_IRQn);
-			break;
-		case 9:
-			NVIC_DisableIRQ(IEL9_IRQn);
-			NVIC_ClearPendingIRQ(IEL9_IRQn);
-			break;
-    	default:
-    		;
-    }
-#endif
 }
 
 /**
@@ -418,7 +370,6 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 	__IOM uint32_t *psf = (__IOM uint32_t*)(PFS_BASE + offset);
 	uint32_t psfval = *psf & ~(PFS_EOFR_Msk);
 	__IOM uint8_t *irqcr = (__IOM uint8_t*)&ICU->IRQCR0;
-	__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR0;
 
 	switch (Sense)
 	{
@@ -438,41 +389,19 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 
 	psfval |= PFS_ISEL_Msk;
 
-#if 0
-	switch (IntNo)
-	{
-		case 0:
-		case 1:
-		case 2:
-		case 3:
-			ielsr[IntNo] = 1;
-			break;
-		case 4:
-		case 7:
-			ielsr[IntNo] = 0x13;
-			break;
-		case 5:
-		case 6:
-			ielsr[IntNo] = 0x12;
-			break;
-		case 8:
-			ielsr[IntNo] = 0x1E;
-			break;
-		case 9:
-			ielsr[IntNo] = 0x1F;
-			break;
-	}
-#endif
 	IRQn_Type irq = Re01RegisterIntHandler(IntNo + RE01_EVTID_PORT_IRQ0, IntPrio, pEvtCB, pCtx);
 
-	if (irq != -1)
+	if (irq == -1)
 	{
-		s_GpIOSenseEvt[IntNo].Sense = Sense;
-		s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
-		s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
-		s_GpIOSenseEvt[IntNo].pCtx = pCtx;
-		s_GpIOSenseEvt[IntNo].IrqNo = irq;
+		// Can't allocate interrupt
+		return false;
 	}
+	s_GpIOSenseEvt[IntNo].Sense = Sense;
+	s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
+	s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
+	s_GpIOSenseEvt[IntNo].pCtx = pCtx;
+	s_GpIOSenseEvt[IntNo].IrqNo = irq;
+
 	PMISC->PWPR = 0;
 	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
 
@@ -482,64 +411,6 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 
 	PMISC->PWPR = 0;	// Write disable
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
-
-#if 0
-	switch (IntNo)
-	{
-		case 0:
-			NVIC_ClearPendingIRQ(IEL0_IRQn);
-			NVIC_SetPriority(IEL0_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL0_IRQn);
-			break;
-		case 1:
-			NVIC_ClearPendingIRQ(IEL1_IRQn);
-			NVIC_SetPriority(IEL1_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL1_IRQn);
-			break;
-		case 2:
-			NVIC_ClearPendingIRQ(IEL2_IRQn);
-			NVIC_SetPriority(IEL2_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL2_IRQn);
-			break;
-		case 3:
-			NVIC_ClearPendingIRQ(IEL3_IRQn);
-			NVIC_SetPriority(IEL3_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL3_IRQn);
-			break;
-		case 4:
-			NVIC_ClearPendingIRQ(IEL4_IRQn);
-			NVIC_SetPriority(IEL4_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL4_IRQn);
-			break;
-		case 5:
-			NVIC_ClearPendingIRQ(IEL5_IRQn);
-			NVIC_SetPriority(IEL5_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL5_IRQn);
-			break;
-		case 6:
-			NVIC_ClearPendingIRQ(IEL6_IRQn);
-			NVIC_SetPriority(IEL6_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL6_IRQn);
-			break;
-		case 7:
-			NVIC_ClearPendingIRQ(IEL7_IRQn);
-			NVIC_SetPriority(IEL7_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL7_IRQn);
-			break;
-		case 8:
-			NVIC_ClearPendingIRQ(IEL8_IRQn);
-			NVIC_SetPriority(IEL8_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL8_IRQn);
-			break;
-		case 9:
-			NVIC_ClearPendingIRQ(IEL9_IRQn);
-			NVIC_SetPriority(IEL9_IRQn, IntPrio);
-			NVIC_EnableIRQ(IEL9_IRQn);
-			break;
-		default:
-			;
-    }
-#endif
 
     return true;
 }
