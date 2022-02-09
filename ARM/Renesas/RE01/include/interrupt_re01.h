@@ -228,13 +228,15 @@ SOFTWARE.
 
 #define RE01_IELS_CNT		32
 
-typedef void (*Re01IRQHandler_t)();
+typedef void (*Re01IRQHandler_t)(int IntNo, void *pCtx);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // C function prototypes
+IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHandler, void *pCtx);
+void Re01UnregisterIntHandler(IRQn_Type IrqNo);
 
 #ifdef __cplusplus
 }

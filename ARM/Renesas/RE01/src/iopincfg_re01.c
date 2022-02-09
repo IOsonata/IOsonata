@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "re01xxx.h"
 #include "coredev/iopincfg.h"
+#include "interrupt_re01.h"
 
 #define PFS_PSEL_Pos              (24UL)                    /*!< PSEL (Bit 24)                                         */
 #define PFS_PSEL_Msk              (0x1f000000UL)            /*!< PSEL (Bitfield-Mask: 0x1f)                            */
@@ -94,6 +95,7 @@ typedef struct {
 	IOPinEvtHandler_t SensEvtCB;
     uint16_t PortPinNo;
     void *pCtx;
+    IRQn_Type IrqNo;
 } IOPINSENS_EVTHOOK;
 #pragma pack(pop)
 
@@ -330,11 +332,15 @@ void IOPinDisableInterrupt(int IntNo)
 	PMISC->PWPR = 0;	// Write disable
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
+	Re01UnregisterIntHandler(s_GpIOSenseEvt[IntNo].IrqNo);
+
     s_GpIOSenseEvt[IntNo].PortPinNo = -1;
     s_GpIOSenseEvt[IntNo].Sense = IOPINSENSE_DISABLE;
     s_GpIOSenseEvt[IntNo].SensEvtCB = NULL;
     s_GpIOSenseEvt[IntNo].pCtx = NULL;
+    s_GpIOSenseEvt[IntNo].IrqNo = - 1;
 
+#if 0
     switch (IntNo)
     {
     	case 0:
@@ -380,6 +386,7 @@ void IOPinDisableInterrupt(int IntNo)
     	default:
     		;
     }
+#endif
 }
 
 /**
@@ -431,6 +438,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 
 	psfval |= PFS_ISEL_Msk;
 
+#if 0
 	switch (IntNo)
 	{
 		case 0:
@@ -454,12 +462,17 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 			ielsr[IntNo] = 0x1F;
 			break;
 	}
+#endif
+	IRQn_Type irq = Re01RegisterIntHandler(IntNo + RE01_EVTID_PORT_IRQ0, IntPrio, pEvtCB, pCtx);
 
-    s_GpIOSenseEvt[IntNo].Sense = Sense;
-	s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
-	s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
-	s_GpIOSenseEvt[IntNo].pCtx = pCtx;
-
+	if (irq != -1)
+	{
+		s_GpIOSenseEvt[IntNo].Sense = Sense;
+		s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
+		s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
+		s_GpIOSenseEvt[IntNo].pCtx = pCtx;
+		s_GpIOSenseEvt[IntNo].IrqNo = irq;
+	}
 	PMISC->PWPR = 0;
 	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
 
@@ -470,6 +483,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 	PMISC->PWPR = 0;	// Write disable
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
+#if 0
 	switch (IntNo)
 	{
 		case 0:
@@ -525,6 +539,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 		default:
 			;
     }
+#endif
 
     return true;
 }
@@ -653,6 +668,7 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 	// Not available on this Renesas
 }
 
+#if 0
 void IEL0_IRQHandler(void)
 {
 	if (ICU->IELSR0 & ICU_IELSR0_IR_Msk)
@@ -766,3 +782,10 @@ void IEL9_IRQHandler(void)
 		s_GpIOSenseEvt[9].SensEvtCB(9, s_GpIOSenseEvt[9].pCtx);
 	NVIC_ClearPendingIRQ(IEL9_IRQn);
 }
+void Re01IOPinIRQHandler(int IntNo, void *pCtx)
+{
+	if (s_GpIOSenseEvt[IntNo].SensEvtCB)
+		s_GpIOSenseEvt[IntNo].SensEvtCB(IntNo, s_GpIOSenseEvt[IntNo].pCtx);
+}
+#endif
+

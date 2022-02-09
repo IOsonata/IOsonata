@@ -506,9 +506,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2s.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/interrupt_re01.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/interrupt_re01.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/iopincfg.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/iopincfg.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/iopinctrl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/iopinctrl.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/pdm.h</name>
@@ -534,6 +544,11 @@
 			<name>include/coredev/timer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/timer_re01.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/timer_re01.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/uart.h</name>
@@ -831,6 +846,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/interrupt_re01.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/interrupt_re01.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/iopincfg_re01.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/iopincfg_re01.c</locationURI>
@@ -844,6 +864,21 @@
 			<name>src/coredev/timer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_re01.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_re01.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_re01_agt.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_re01_agt.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_re01_tmr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_re01_tmr.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/uart.c</name>
