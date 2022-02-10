@@ -66,7 +66,7 @@ static void Re01AgtTcmAIRQHandler(int IntNo, void *pCtx)
 
 		// AGT does not support periodic compare
 		// Do it manually
-		if (dev->Trigger[1].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+		if (dev->Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
 			dev->pAgtReg->AGTCMA = cnt - dev->CC[0];
 			__DMB();
