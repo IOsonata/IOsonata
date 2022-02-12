@@ -53,6 +53,80 @@ static void Re01AgtUnfIRQHandler(int IntNo, void *pCtx)
 	}
 }
 
+#if 1
+// NOTE: Handle both comparator at the same time work better.
+// When the comparator interrupt are handle separately seems cause
+// pause of the TMCB
+static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
+{
+	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
+	uint16_t cnt = dev->pAgtReg->AGT;
+	uint16_t agtcma = cnt - dev->CC[0];
+	uint16_t agtcmb = cnt - dev->CC[1];
+	uint8_t cr = dev->pAgtReg->AGTCR & (AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk);
+
+	if (cr)
+	{
+		// AGT requires stop timer to update counter
+		dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TSTART_Msk);
+		while (dev->pAgtReg->AGTCR & AGT0_AGTCR_TCSTF_Msk);
+
+		// AGT does not support periodic compare
+		// Do it manually
+		if (cr & AGT0_AGTCR_TCMAF_Msk)
+		{
+			if (dev->Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+			{
+				dev->pAgtReg->AGTCMA = agtcma;
+			}
+			else
+			{
+				dev->pAgtReg->AGTCMSR &= ~AGT0_AGTCMSR_TCMEA_Msk;
+				dev->pAgtReg->AGTCMA = 0xFFFF;
+			}
+		}
+		if (cr & AGT0_AGTCR_TCMBF_Msk)
+		{
+			if (dev->Trigger[1].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+			{
+				dev->pAgtReg->AGTCMB = agtcmb;
+			}
+			else
+			{
+				dev->pAgtReg->AGTCMSR &= ~AGT0_AGTCMSR_TCMEB_Msk;
+				dev->pAgtReg->AGTCMB = 0xFFFF;
+			}
+		}
+		dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
+
+		// Call the user handle after re-starting the timer to minimize counter delays
+		// which lead to bigger drift
+		if (dev->Trigger->Handler)
+		{
+			if (cr & AGT0_AGTCR_TCMAF_Msk)
+			{
+				dev->Trigger->Handler(dev->pTimer, TIMER_EVT_TRIGGER(0), dev->Trigger->pContext);
+			}
+			if (cr & AGT0_AGTCR_TCMBF_Msk)
+			{
+				dev->Trigger->Handler(dev->pTimer, TIMER_EVT_TRIGGER(1), dev->Trigger->pContext);
+			}
+		}
+		else if (dev->pTimer->EvtHandler)
+		{
+			if (cr & AGT0_AGTCR_TCMAF_Msk)
+			{
+				dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(0));
+			}
+			if (cr & AGT0_AGTCR_TCMBF_Msk)
+			{
+				dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(1));
+			}
+		}
+	}
+}
+
+#else
 static void Re01AgtTcmAIRQHandler(int IntNo, void *pCtx)
 {
 	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
@@ -69,7 +143,7 @@ static void Re01AgtTcmAIRQHandler(int IntNo, void *pCtx)
 		if (dev->Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
 			dev->pAgtReg->AGTCMA = cnt - dev->CC[0];
-			__DMB();
+			//__DMB();
 		}
 		else
 		{
@@ -106,7 +180,7 @@ static void Re01AgtTcmBIRQHandler(int IntNo, void *pCtx)
 		if (dev->Trigger[1].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
 			dev->pAgtReg->AGTCMB = dev->pAgtReg->AGT - dev->CC[1];
-			__DMB();
+			//__DMB();
 
 		}
 		else
@@ -127,6 +201,7 @@ static void Re01AgtTcmBIRQHandler(int IntNo, void *pCtx)
 		}
 	}
 }
+#endif
 
 /**
  * @brief   Turn on timer.
@@ -265,13 +340,13 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
     if (TrigNo > 0)
     {
     	evtid = RE01_EVTID_AGT0_AGTCMBI;
-    	hndlr = Re01AgtTcmBIRQHandler;
+    	hndlr = Re01AgtTcmIRQHandler;
     	cntreg = &dev->pAgtReg->AGTCMB;
     }
     else
     {
     	evtid = pTimer->DevNo > 0? RE01_EVTID_AGT1_AGTCMAI : RE01_EVTID_AGT0_AGTCMAI;
-    	hndlr = Re01AgtTcmAIRQHandler;
+    	hndlr = Re01AgtTcmIRQHandler;
     	cntreg = &dev->pAgtReg->AGTCMA;
     }
 
