@@ -3,6 +3,13 @@
 
 @brief	Renesas RE01 AGT timer class implementation
 
+NOTE: AGT timer seems to have a hardware bug when 2 comparator are used at the
+same time. The TMCB got lockup when both comparator trigger at the same time.
+This bug appears when TCMA is slower the TCMB. For more stability, TCMB must be
+at lower or equal to the TCMA frequency.
+
+NOTE: AGT1 does not support TCMB, only 1 comparator is avail.
+
 @author	Hoang Nguyen Hoan
 @date	Feb. 3, 2022
 
