@@ -60,16 +60,16 @@ static void Re01AgtUnfIRQHandler(int IntNo, void *pCtx)
 static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
 {
 	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
-	uint16_t cnt = dev->pAgtReg->AGT;
-	uint16_t agtcma = cnt - dev->CC[0];
-	uint16_t agtcmb = cnt - dev->CC[1];
 	uint8_t cr = dev->pAgtReg->AGTCR & (AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk);
+//	volatile uint16_t cnt = dev->pAgtReg->AGT;
 
 	if (cr)
 	{
 		// AGT requires stop timer to update counter
-		dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TSTART_Msk);
+		dev->pAgtReg->AGTCR &= ~(cr | AGT0_AGTCR_TSTART_Msk);
 		while (dev->pAgtReg->AGTCR & AGT0_AGTCR_TCSTF_Msk);
+
+		uint16_t cnt = dev->pAgtReg->AGT;
 
 		// AGT does not support periodic compare
 		// Do it manually
@@ -77,7 +77,7 @@ static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
 		{
 			if (dev->Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 			{
-				dev->pAgtReg->AGTCMA = agtcma;
+				dev->pAgtReg->AGTCMA = cnt - dev->CC[0];
 			}
 			else
 			{
@@ -89,7 +89,7 @@ static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
 		{
 			if (dev->Trigger[1].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 			{
-				dev->pAgtReg->AGTCMB = agtcmb;
+				dev->pAgtReg->AGTCMB = cnt - dev->CC[1];
 			}
 			else
 			{
@@ -101,24 +101,24 @@ static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
 
 		// Call the user handle after re-starting the timer to minimize counter delays
 		// which lead to bigger drift
-		if (dev->Trigger->Handler)
+		if (cr & AGT0_AGTCR_TCMAF_Msk)
 		{
-			if (cr & AGT0_AGTCR_TCMAF_Msk)
+			if (dev->Trigger[0].Handler)
 			{
-				dev->Trigger->Handler(dev->pTimer, TIMER_EVT_TRIGGER(0), dev->Trigger->pContext);
+				dev->Trigger[0].Handler(dev->pTimer, TIMER_EVT_TRIGGER(0), dev->Trigger[0].pContext);
 			}
-			if (cr & AGT0_AGTCR_TCMBF_Msk)
-			{
-				dev->Trigger->Handler(dev->pTimer, TIMER_EVT_TRIGGER(1), dev->Trigger->pContext);
-			}
-		}
-		else if (dev->pTimer->EvtHandler)
-		{
-			if (cr & AGT0_AGTCR_TCMAF_Msk)
+			else if (dev->pTimer->EvtHandler)
 			{
 				dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(0));
 			}
-			if (cr & AGT0_AGTCR_TCMBF_Msk)
+		}
+		if (cr & AGT0_AGTCR_TCMBF_Msk)
+		{
+			if (dev->Trigger[1].Handler)
+			{
+				dev->Trigger[1].Handler(dev->pTimer, TIMER_EVT_TRIGGER(1), dev->Trigger[1].pContext);
+			}
+			else if (dev->pTimer->EvtHandler)
 			{
 				dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(1));
 			}
@@ -126,11 +126,13 @@ static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
 	}
 }
 
+#define Re01AgtTcmAIRQHandler	Re01AgtTcmIRQHandler
+#define Re01AgtTcmBIRQHandler	Re01AgtTcmIRQHandler
 #else
 static void Re01AgtTcmAIRQHandler(int IntNo, void *pCtx)
 {
 	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
-	uint16_t cnt = dev->pAgtReg->AGT;
+	//uint16_t cnt = dev->pAgtReg->AGT;
 
 	if (dev->pAgtReg->AGTCR & AGT0_AGTCR_TCMAF_Msk)
 	{
@@ -142,8 +144,8 @@ static void Re01AgtTcmAIRQHandler(int IntNo, void *pCtx)
 		// Do it manually
 		if (dev->Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
-			dev->pAgtReg->AGTCMA = cnt - dev->CC[0];
-			//__DMB();
+			dev->pAgtReg->AGTCMA = dev->pAgtReg->AGT - dev->CC[0];
+//			__DMB();
 		}
 		else
 		{
@@ -153,9 +155,9 @@ static void Re01AgtTcmAIRQHandler(int IntNo, void *pCtx)
 
 		dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
 
-		if (dev->Trigger->Handler)
+		if (dev->Trigger[0].Handler)
 		{
-			dev->Trigger->Handler(dev->pTimer, TIMER_EVT_TRIGGER(0), dev->Trigger->pContext);
+			dev->Trigger[0].Handler(dev->pTimer, TIMER_EVT_TRIGGER(0), dev->Trigger[0].pContext);
 		}
 		else if (dev->pTimer->EvtHandler)
 		{
@@ -167,7 +169,7 @@ static void Re01AgtTcmAIRQHandler(int IntNo, void *pCtx)
 static void Re01AgtTcmBIRQHandler(int IntNo, void *pCtx)
 {
 	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
-	uint16_t cnt = dev->pAgtReg->AGT;
+	//uint16_t cnt = dev->pAgtReg->AGT;
 
 	if (dev->pAgtReg->AGTCR & AGT0_AGTCR_TCMBF_Msk)
 	{
@@ -180,7 +182,7 @@ static void Re01AgtTcmBIRQHandler(int IntNo, void *pCtx)
 		if (dev->Trigger[1].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
 			dev->pAgtReg->AGTCMB = dev->pAgtReg->AGT - dev->CC[1];
-			//__DMB();
+//			__DMB();
 
 		}
 		else
@@ -191,9 +193,9 @@ static void Re01AgtTcmBIRQHandler(int IntNo, void *pCtx)
 
 		dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
 
-		if (dev->Trigger->Handler)
+		if (dev->Trigger[1].Handler)
 		{
-			dev->Trigger->Handler(dev->pTimer, TIMER_EVT_TRIGGER(1), dev->Trigger->pContext);
+			dev->Trigger[1].Handler(dev->pTimer, TIMER_EVT_TRIGGER(1), dev->Trigger[1].pContext);
 		}
 		else if (dev->pTimer->EvtHandler)
 		{
@@ -340,13 +342,13 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
     if (TrigNo > 0)
     {
     	evtid = RE01_EVTID_AGT0_AGTCMBI;
-    	hndlr = Re01AgtTcmIRQHandler;
+    	hndlr = Re01AgtTcmBIRQHandler;
     	cntreg = &dev->pAgtReg->AGTCMB;
     }
     else
     {
     	evtid = pTimer->DevNo > 0? RE01_EVTID_AGT1_AGTCMAI : RE01_EVTID_AGT0_AGTCMAI;
-    	hndlr = Re01AgtTcmIRQHandler;
+    	hndlr = Re01AgtTcmAIRQHandler;
     	cntreg = &dev->pAgtReg->AGTCMA;
     }
 
