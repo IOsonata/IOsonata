@@ -18,6 +18,11 @@ There are 2 ways to determine the start DevNo for high frequency timer
 int HFreqDevNoStart = TimerGetLowFreqDevCount();
 int HFreqDevNoStart = TimerGetHighFreqDevNo();
 
+NOTE: In this Renesas RE01 implementation :
+
+DevNo : 0..1 are AGTs
+DevNo : 2 is TMR01 (16 bits linked)
+
 @author	Hoang Nguyen Hoan
 @date	Feb. 3, 2022
 
