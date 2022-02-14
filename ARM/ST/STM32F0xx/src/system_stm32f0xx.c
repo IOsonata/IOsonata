@@ -42,6 +42,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define STM32F0XX_HSE_XTAL_EN			false
 #define STM32F0XX_HSE_XTAL_FREQ			0
 
+// Overload this variable in application firmware to change oscillator
+__WEAK McuOsc_t g_McuOsc = {
+	OSC_TYPE_RC,
+	48000000,
+	OSC_TYPE_RC,
+	32768,
+	false
+};
+
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 
 static uint32_t s_XtlFreq = 0;
