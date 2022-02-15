@@ -238,7 +238,7 @@ void Re01UartIRQHandler(int IntNo, void *pCtx)
 		if (p == NULL)
 		{
 			dev->pUartDev->bTxReady = true;
-			dev->pUartReg2->SSR_b.TDRE = 0;
+			//dev->pUartReg2->SSR_b.TDRE = 0;
 			if (dev->pUartDev->EvtCallback)
 			{
 				dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, 0);
