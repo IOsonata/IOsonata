@@ -279,15 +279,20 @@ IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHand
 
 void Re01UnregisterIntHandler(IRQn_Type IrqNo)
 {
-	__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR0;
+	if (IrqNo >= IEL0_IRQn && IrqNo <= IEL31_IRQn)
+	{
+		int idx = IrqNo - IEL0_IRQn;
 
-	ielsr[IrqNo] = 0;
+		__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR0;
 
-	NVIC_DisableIRQ(IrqNo);
-	NVIC_ClearPendingIRQ(IrqNo);
+		ielsr[idx] = 0;
 
-	s_IrqHandlerTbl[IrqNo].Handler = nullptr;
-	s_IrqHandlerTbl[IrqNo].pCtx = nullptr;
+		NVIC_DisableIRQ(IrqNo);
+		NVIC_ClearPendingIRQ(IrqNo);
+
+		s_IrqHandlerTbl[idx].Handler = nullptr;
+		s_IrqHandlerTbl[idx].pCtx = nullptr;
+	}
 }
 
 extern "C" {
