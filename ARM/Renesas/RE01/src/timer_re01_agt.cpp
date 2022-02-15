@@ -7,6 +7,9 @@ NOTE: AGT timer seems to have a hardware bug when 2 comparator are used at the
 same time. The TMCB got lockup when both comparator trigger at the same time.
 This bug appears when TCMA is slower the TCMB. For more stability, TCMB must be
 at lower or equal to the TCMA frequency.
+There might be other issue with the TMCB interrupt.  It seems like it does not
+wake the MCU from sleep.  Probably that is the reason off the instability when TCMB
+is running faster than TMCA
 
 NOTE: AGT1 does not support TCMB, only 1 comparator is avail.
 
@@ -112,7 +115,7 @@ static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
 		{
 			if (dev->Trigger[0].Handler)
 			{
-				dev->Trigger[0].Handler(dev->pTimer, TIMER_EVT_TRIGGER(0), dev->Trigger[0].pContext);
+				dev->Trigger[0].Handler(dev->pTimer, 0, dev->Trigger[0].pContext);
 			}
 			else if (dev->pTimer->EvtHandler)
 			{
@@ -123,7 +126,7 @@ static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
 		{
 			if (dev->Trigger[1].Handler)
 			{
-				dev->Trigger[1].Handler(dev->pTimer, TIMER_EVT_TRIGGER(1), dev->Trigger[1].pContext);
+				dev->Trigger[1].Handler(dev->pTimer, 1, dev->Trigger[1].pContext);
 			}
 			else if (dev->pTimer->EvtHandler)
 			{
@@ -164,7 +167,7 @@ static void Re01AgtTcmAIRQHandler(int IntNo, void *pCtx)
 
 		if (dev->Trigger[0].Handler)
 		{
-			dev->Trigger[0].Handler(dev->pTimer, TIMER_EVT_TRIGGER(0), dev->Trigger[0].pContext);
+			dev->Trigger[0].Handler(dev->pTimer, 0, dev->Trigger[0].pContext);
 		}
 		else if (dev->pTimer->EvtHandler)
 		{
@@ -202,7 +205,7 @@ static void Re01AgtTcmBIRQHandler(int IntNo, void *pCtx)
 
 		if (dev->Trigger[1].Handler)
 		{
-			dev->Trigger[1].Handler(dev->pTimer, TIMER_EVT_TRIGGER(1), dev->Trigger[1].pContext);
+			dev->Trigger[1].Handler(dev->pTimer, 1, dev->Trigger[1].pContext);
 		}
 		else if (dev->pTimer->EvtHandler)
 		{
