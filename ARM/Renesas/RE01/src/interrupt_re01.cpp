@@ -322,7 +322,7 @@ __WEAK void IEL1_IRQHandler()
 	NVIC_ClearPendingIRQ(IEL1_IRQn);
 }
 
-void IEL2_IRQHandler()
+__WEAK void IEL2_IRQHandler()
 {
 	if (ICU->IELSR2 & ICU_IELSR2_IR_Msk)
 	{
