@@ -69,9 +69,9 @@ static void Re01TmrTcmAIRQHandler(int IntNo, void *pCtx)
 		TMR01->TCORA = 0;
 	}
 
-	if (g_Re01TimerData[2].Trigger->Handler)
+	if (g_Re01TimerData[2].Trigger[0].Handler)
 	{
-		g_Re01TimerData[2].Trigger->Handler(g_Re01TimerData[2].pTimer, TIMER_EVT_TRIGGER(0), g_Re01TimerData[2].Trigger->pContext);
+		g_Re01TimerData[2].Trigger[0].Handler(g_Re01TimerData[2].pTimer, 0, g_Re01TimerData[2].Trigger[0].pContext);
 	}
 	else if (g_Re01TimerData[2].pTimer->EvtHandler)
 	{
@@ -96,9 +96,9 @@ static void Re01TmrTcmBIRQHandler(int IntNo, void *pCtx)
 		TMR01->TCORB = 0;
 	}
 
-	if (g_Re01TimerData[2].Trigger->Handler)
+	if (g_Re01TimerData[2].Trigger[1].Handler)
 	{
-		g_Re01TimerData[2].Trigger->Handler(g_Re01TimerData[2].pTimer, TIMER_EVT_TRIGGER(1), g_Re01TimerData[2].Trigger->pContext);
+		g_Re01TimerData[2].Trigger[1].Handler(g_Re01TimerData[2].pTimer, 1, g_Re01TimerData[2].Trigger[1].pContext);
 	}
 	else if (g_Re01TimerData[2].pTimer->EvtHandler)
 	{
