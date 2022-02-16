@@ -133,6 +133,23 @@ static bool IsValidIOInterrupt(int IntNo, int PortNo, int PinNo)
 	return retval;
 }
 
+static int IOPinFindAvailInterrupt(int PortNo, int PinNo)
+{
+	int retval = -1;
+
+	for (int i = 0; i < sizeof(s_Re01IntPins) / sizeof(uint32_t); i++)
+	{
+		int pinval = ((PortNo & 0xf) << 4) | (PinNo & 0xf);
+		if ((s_Re01IntPins[i] & 0xff) == pinval)
+		{
+			retval = s_Re01IntPins[i] >> 8;
+			break;
+		}
+	}
+
+	return retval;
+}
+
 static void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 {
     SYSTEM->PRCR = 0xA502U;
@@ -360,34 +377,21 @@ void IOPinDisableInterrupt(int IntNo)
  */
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	if (IntNo < 0 || IntNo >= RE01_1500KB_PIN_MAX_INT ||
-		IsValidIOInterrupt(IntNo, PortNo, PinNo) == false)
+	if (IntNo < 0 || IntNo >= RE01_1500KB_PIN_MAX_INT)// ||
+//		IsValidIOInterrupt(IntNo, PortNo, PinNo) == false)
 	{
 		return false;
+	}
+
+	if (IsValidIOInterrupt(IntNo, PortNo, PinNo) == false)
+	{
+		IntNo = IOPinFindAvailInterrupt(PortNo, PinNo);
 	}
 
 	int offset = (PinNo + (PortNo << 4)) << 2;
 	__IOM uint32_t *psf = (__IOM uint32_t*)(PFS_BASE + offset);
 	uint32_t psfval = *psf & ~(PFS_EOFR_Msk);
 	__IOM uint8_t *irqcr = (__IOM uint8_t*)&ICU->IRQCR0;
-
-	switch (Sense)
-	{
-		case IOPINSENSE_LOW_TRANSITION:
-			psfval |= (2<<PFS_EOFR_Pos);
-			irqcr[IntNo] = ICU_IRQCR_IRQMD_FALLING_EDGE;
-			break;
-		case IOPINSENSE_HIGH_TRANSITION:
-			psfval |= (1<<PFS_EOFR_Pos);
-			irqcr[IntNo] = ICU_IRQCR_IRQMD_RISING_EDGE;
-			break;
-		case IOPINSENSE_TOGGLE:
-			psfval |= (3<<PFS_EOFR_Pos);
-			irqcr[IntNo] = ICU_IRQCR_IRQMD_FALLING_RISING_EDGE;
-			break;
-	}
-
-	psfval |= PFS_ISEL_Msk;
 
 	IRQn_Type irq = Re01RegisterIntHandler(IntNo + RE01_EVTID_PORT_IRQ0, IntPrio, pEvtCB, pCtx);
 
@@ -396,36 +400,44 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 		// Can't allocate interrupt
 		return false;
 	}
-	s_GpIOSenseEvt[IntNo].Sense = Sense;
-	s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
-	s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
-	s_GpIOSenseEvt[IntNo].pCtx = pCtx;
-	s_GpIOSenseEvt[IntNo].IrqNo = irq;
+
+	int idx = irq - IEL0_IRQn;
+
+	switch (Sense)
+	{
+		case IOPINSENSE_LOW_TRANSITION:
+			psfval |= (2<<PFS_EOFR_Pos);
+			irqcr[idx] = ICU_IRQCR_IRQMD_FALLING_EDGE;
+			break;
+		case IOPINSENSE_HIGH_TRANSITION:
+			psfval |= (1<<PFS_EOFR_Pos);
+			irqcr[idx] = ICU_IRQCR_IRQMD_RISING_EDGE;
+			break;
+		case IOPINSENSE_TOGGLE:
+			psfval |= (3<<PFS_EOFR_Pos);
+			irqcr[idx] = ICU_IRQCR_IRQMD_FALLING_RISING_EDGE;
+			break;
+	}
+
+	psfval |= PFS_ISEL_Msk;
+
+	s_GpIOSenseEvt[idx].Sense = Sense;
+	s_GpIOSenseEvt[idx].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
+	s_GpIOSenseEvt[idx].SensEvtCB = pEvtCB;
+	s_GpIOSenseEvt[idx].pCtx = pCtx;
+	s_GpIOSenseEvt[idx].IrqNo = irq;
 
 	PMISC->PWPR = 0;
 	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
 
 	*psf = psfval;
 
-	ICU->WUPEN |= (1 << IntNo);
+	ICU->WUPEN |= (1 << idx);
 
 	PMISC->PWPR = 0;	// Write disable
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
     return true;
-}
-
-int IOPinFindAvailInterrupt()
-{
-	for (int i = 0; i < RE01_1500KB_PIN_MAX_INT; i++)
-	{
-		if (s_GpIOSenseEvt[i].SensEvtCB == NULL)
-		{
-			return i;
-		}
-	}
-
-	return -1;
 }
 
 /**
@@ -449,7 +461,7 @@ int IOPinFindAvailInterrupt()
  */
 int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	int intno = IOPinFindAvailInterrupt();
+	int intno = IOPinFindAvailInterrupt(PortNo, PinNo);
 
 	if (intno >= 0)
 	{
