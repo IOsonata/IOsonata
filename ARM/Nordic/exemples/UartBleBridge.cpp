@@ -197,16 +197,17 @@ const BLEAPP_CFG s_BleAppCfg = {
 alignas(4) static uint8_t s_BleIntrfRxFifo[BLEINTRF_FIFOSIZE];
 alignas(4) static uint8_t s_BleIntrfTxFifo[BLEINTRF_FIFOSIZE];
 
-static const BLEINTRF_CFG s_BleInrfCfg = {
-	&g_UartBleSrvc,
-	BLESRV_WRITE_CHAR_IDX,
-	BLESRV_READ_CHAR_IDX,
-	20,			// Packet size : use default
-	BLEINTRF_FIFOSIZE,			// Rx Fifo mem size
-	s_BleIntrfRxFifo,		// Rx Fifo mem pointer
-	BLEINTRF_FIFOSIZE,			// Tx Fifo mem size
-	s_BleIntrfTxFifo,		// Tx Fifo mem pointer
-	BleIntrfEvtCallback
+static const BleIntrfCfg_t s_BleInrfCfg = {
+	.pBleSrv = &g_UartBleSrvc,
+	.RxCharIdx = BLESRV_WRITE_CHAR_IDX,
+	.TxCharIdx = BLESRV_READ_CHAR_IDX,
+	.PacketSize = 20,			// Packet size : use default
+	.bBlocking = false,
+	.RxFifoMemSize = BLEINTRF_FIFOSIZE,			// Rx Fifo mem size
+	.pRxFifoMem = s_BleIntrfRxFifo,		// Rx Fifo mem pointer
+	.TxFifoMemSize = BLEINTRF_FIFOSIZE,			// Tx Fifo mem size
+	.pTxFifoMem = s_BleIntrfTxFifo,		// Tx Fifo mem pointer
+	.EvtCB = BleIntrfEvtCallback
 };
 
 BleIntrf g_BleIntrf;
