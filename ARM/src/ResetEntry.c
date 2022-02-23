@@ -96,10 +96,22 @@ void ResetEntry (void)
 	 * Copy the initialized data of the ".data" segment
 	 * from the flash to ram.
 	 */
+
+#if 1
+	uint8_t *dstart = (uint8_t*)&__data_start__;
+	uint8_t *dloc = (uint8_t*)&__data_loc__;
+	size_t dsize = (size_t)&__data_size__;
+
+	if (dstart != dloc)
+	{
+		memcpy(dstart, dloc, dsize);
+	}
+#else
 	if (&__data_start__ != &__data_loc__)
 	{
 		memcpy((void *)&__data_start__, (void *)&__data_loc__, (size_t)&__data_size__);
 	}
+#endif
 
 	/*
 	 * Clear the ".bss" segment.
