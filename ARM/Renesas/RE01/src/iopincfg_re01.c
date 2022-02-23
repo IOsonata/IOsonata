@@ -335,6 +335,8 @@ void IOPinDisableInterrupt(int IntNo)
 		return;
 	}
 
+	Re01UnregisterIntHandler(s_GpIOSenseEvt[IntNo].IrqNo);
+
 	int pinno = s_GpIOSenseEvt[IntNo].PortPinNo & 0xFF;
 	int portno = (s_GpIOSenseEvt[IntNo].PortPinNo >> 8) & 0xf;
 	int offset = (pinno + (portno << 4)) << 2;
@@ -349,13 +351,12 @@ void IOPinDisableInterrupt(int IntNo)
 	PMISC->PWPR = 0;	// Write disable
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
-	Re01UnregisterIntHandler(s_GpIOSenseEvt[IntNo].IrqNo);
 
     s_GpIOSenseEvt[IntNo].PortPinNo = -1;
     s_GpIOSenseEvt[IntNo].Sense = IOPINSENSE_DISABLE;
     s_GpIOSenseEvt[IntNo].SensEvtCB = NULL;
     s_GpIOSenseEvt[IntNo].pCtx = NULL;
-    s_GpIOSenseEvt[IntNo].IrqNo = - 1;
+    s_GpIOSenseEvt[IntNo].IrqNo = -1;
 }
 
 /**
@@ -393,15 +394,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 	uint32_t psfval = *psf & ~(PFS_EOFR_Msk);
 	__IOM uint8_t *irqcr = (__IOM uint8_t*)&ICU->IRQCR0;
 
-	IRQn_Type irq = Re01RegisterIntHandler(IntNo + RE01_EVTID_PORT_IRQ0, IntPrio, pEvtCB, pCtx);
 
-	if (irq == -1)
-	{
-		// Can't allocate interrupt
-		return false;
-	}
-
-	int idx = irq - IEL0_IRQn;
+	int idx = IntNo;//irq - IEL0_IRQn;
 
 	switch (Sense)
 	{
@@ -425,7 +419,6 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 	s_GpIOSenseEvt[idx].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
 	s_GpIOSenseEvt[idx].SensEvtCB = pEvtCB;
 	s_GpIOSenseEvt[idx].pCtx = pCtx;
-	s_GpIOSenseEvt[idx].IrqNo = irq;
 
 	PMISC->PWPR = 0;
 	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
@@ -437,7 +430,17 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 	PMISC->PWPR = 0;	// Write disable
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
-    return true;
+	IRQn_Type irq = Re01RegisterIntHandler(IntNo + RE01_EVTID_PORT_IRQ0, IntPrio, pEvtCB, pCtx);
+
+	if (irq == -1)
+	{
+		// Can't allocate interrupt
+		return false;
+	}
+
+	s_GpIOSenseEvt[idx].IrqNo = irq;
+
+	return true;
 }
 
 /**
@@ -551,124 +554,4 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 	// Not available on this Renesas
 }
 
-#if 0
-void IEL0_IRQHandler(void)
-{
-	if (ICU->IELSR0 & ICU_IELSR0_IR_Msk)
-	{
-		ICU->IELSR0 &= ~ICU_IELSR0_IR_Msk;
-
-		if (s_GpIOSenseEvt[0].SensEvtCB)
-			s_GpIOSenseEvt[0].SensEvtCB(0, s_GpIOSenseEvt[0].pCtx);
-	}
-
-	NVIC_ClearPendingIRQ(IEL0_IRQn);
-}
-
-void IEL1_IRQHandler(void)
-{
-	if (ICU->IELSR1 & ICU_IELSR1_IR_Msk)
-	{
-		ICU->IELSR1 &= ~ICU_IELSR1_IR_Msk;
-
-		if (s_GpIOSenseEvt[1].SensEvtCB)
-			s_GpIOSenseEvt[1].SensEvtCB(1, s_GpIOSenseEvt[1].pCtx);
-	}
-
-	NVIC_ClearPendingIRQ(IEL1_IRQn);
-}
-
-void IEL2_IRQHandler(void)
-{
-	if (ICU->IELSR2 & ICU_IELSR2_IR_Msk)
-	{
-		ICU->IELSR2 &= ~ICU_IELSR2_IR_Msk;
-
-		if (s_GpIOSenseEvt[2].SensEvtCB)
-			s_GpIOSenseEvt[2].SensEvtCB(2, s_GpIOSenseEvt[2].pCtx);
-	}
-
-	NVIC_ClearPendingIRQ(IEL2_IRQn);
-}
-
-void IEL3_IRQHandler(void)
-{
-	if (ICU->IELSR3 & ICU_IELSR3_IR_Msk)
-	{
-		ICU->IELSR3 &= ~ICU_IELSR3_IR_Msk;
-
-		if (s_GpIOSenseEvt[3].SensEvtCB)
-			s_GpIOSenseEvt[3].SensEvtCB(3, s_GpIOSenseEvt[3].pCtx);
-	}
-
-	NVIC_ClearPendingIRQ(IEL3_IRQn);
-}
-
-void IEL4_IRQHandler(void)
-{
-	if (ICU->IELSR4 & ICU_IELSR4_IR_Msk)
-	{
-		ICU->IELSR4 &= ~ICU_IELSR4_IR_Msk;
-
-		if (s_GpIOSenseEvt[4].SensEvtCB)
-			s_GpIOSenseEvt[4].SensEvtCB(4, s_GpIOSenseEvt[4].pCtx);
-	}
-
-	NVIC_ClearPendingIRQ(IEL3_IRQn);
-}
-
-void IEL5_IRQHandler(void)
-{
-	if (ICU->IELSR5 & ICU_IELSR5_IR_Msk)
-	{
-		ICU->IELSR5 &= ~ICU_IELSR5_IR_Msk;
-
-		if (s_GpIOSenseEvt[5].SensEvtCB)
-			s_GpIOSenseEvt[5].SensEvtCB(5, s_GpIOSenseEvt[5].pCtx);
-	}
-
-	NVIC_ClearPendingIRQ(IEL5_IRQn);
-}
-
-void IEL6_IRQHandler(void)
-{
-	ICU->IELSR6 &= ~ICU_IELSR6_IR_Msk;
-
-	if (s_GpIOSenseEvt[6].SensEvtCB)
-		s_GpIOSenseEvt[6].SensEvtCB(6, s_GpIOSenseEvt[6].pCtx);
-	NVIC_ClearPendingIRQ(IEL6_IRQn);
-}
-
-void IEL7_IRQHandler(void)
-{
-	ICU->IELSR7 &= ~ICU_IELSR7_IR_Msk;
-
-	if (s_GpIOSenseEvt[7].SensEvtCB)
-		s_GpIOSenseEvt[7].SensEvtCB(7, s_GpIOSenseEvt[7].pCtx);
-	NVIC_ClearPendingIRQ(IEL7_IRQn);
-}
-
-void IEL8_IRQHandler(void)
-{
-	ICU->IELSR8 &= ~ICU_IELSR8_IR_Msk;
-
-	if (s_GpIOSenseEvt[8].SensEvtCB)
-		s_GpIOSenseEvt[8].SensEvtCB(8, s_GpIOSenseEvt[8].pCtx);
-	NVIC_ClearPendingIRQ(IEL8_IRQn);
-}
-
-void IEL9_IRQHandler(void)
-{
-	ICU->IELSR9 &= ~ICU_IELSR9_IR_Msk;
-
-	if (s_GpIOSenseEvt[9].SensEvtCB)
-		s_GpIOSenseEvt[9].SensEvtCB(9, s_GpIOSenseEvt[9].pCtx);
-	NVIC_ClearPendingIRQ(IEL9_IRQn);
-}
-void Re01IOPinIRQHandler(int IntNo, void *pCtx)
-{
-	if (s_GpIOSenseEvt[IntNo].SensEvtCB)
-		s_GpIOSenseEvt[IntNo].SensEvtCB(IntNo, s_GpIOSenseEvt[IntNo].pCtx);
-}
-#endif
 

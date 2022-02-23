@@ -40,13 +40,16 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "re01xxx.h"
 
+#include "interrupt.h"
 #include "interrupt_re01.h"
 
 #define IELS_GROUP_CNT		8
 
+#pragma pack(push, 1)
 typedef struct {
 	uint8_t iels[IELS_GROUP_CNT];
 } Re01EvtIdMap_t;
+#pragma pack(pop)
 
 // Table 16.7
 static const Re01EvtIdMap_t s_Re01EvtIdMap[] = {
@@ -235,12 +238,14 @@ static const Re01EvtIdMap_t s_Re01EvtIdMap[] = {
 
 static const int  s_NbRe01EvtIdMap = sizeof(s_Re01EvtIdMap) / sizeof(Re01EvtIdMap_t);
 
+#pragma pack(push,4)
 typedef struct {
 	Re01IRQHandler_t Handler;
 	void *pCtx;
 } Re01IrqTbl_t;
+#pragma pack(pop)
 
-static Re01IrqTbl_t s_IrqHandlerTbl[RE01_IELS_CNT] = {
+alignas(4) static Re01IrqTbl_t s_IrqHandlerTbl[RE01_IELS_CNT] = {
 	{0,},
 };
 
@@ -253,8 +258,17 @@ IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHand
 			for (int i = 0; i < 4; i++)
 			{
 				uint8_t idx = (i << 3) + grp;
-				if (s_IrqHandlerTbl[idx].Handler == 0)
+				__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR0;
+
+				uint32_t ielsrval = s_Re01EvtIdMap[EvtId].iels[grp];
+
+				if (ielsrval == ielsr[idx])
 				{
+					return (IRQn_Type)((int)IEL0_IRQn + idx);
+				}
+				else if (s_IrqHandlerTbl[idx].Handler == 0)
+				{
+					uint32_t state = DisableInterrupt();
 					s_IrqHandlerTbl[idx].Handler = pHandler;
 					s_IrqHandlerTbl[idx].pCtx = pCtx;
 
@@ -267,6 +281,7 @@ IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHand
 					NVIC_ClearPendingIRQ(irq);
 					NVIC_SetPriority(irq, Prio);
 					NVIC_EnableIRQ(irq);
+					EnableInterrupt(state);
 
 					return irq;
 				}
@@ -279,6 +294,7 @@ IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHand
 
 void Re01UnregisterIntHandler(IRQn_Type IrqNo)
 {
+	uint32_t state = DisableInterrupt();
 	if (IrqNo >= IEL0_IRQn && IrqNo <= IEL31_IRQn)
 	{
 		int idx = IrqNo - IEL0_IRQn;
@@ -293,6 +309,7 @@ void Re01UnregisterIntHandler(IRQn_Type IrqNo)
 		s_IrqHandlerTbl[idx].Handler = nullptr;
 		s_IrqHandlerTbl[idx].pCtx = nullptr;
 	}
+	EnableInterrupt(state);
 }
 
 extern "C" {
