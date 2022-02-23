@@ -224,7 +224,7 @@ void SystemCoreClockUpdate(void)
 	// Update Flash wait state to current core freq.
 	SetFlashWaitState(SystemCoreClock);
 	SystemPeriphClockSet(0, SystemCoreClock);
-	SystemPeriphClockSet(1, s_PeriphSrcFreq);
+	SystemPeriphClockSet(1, SystemCoreClock >> 1);
 }
 
 
