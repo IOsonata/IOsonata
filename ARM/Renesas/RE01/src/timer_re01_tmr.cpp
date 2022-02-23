@@ -292,7 +292,7 @@ static uint64_t Re01TmrEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 
 	if (dev->IrqMatch[TrigNo] == -1)
 	{
-		return false;
+		return 0;
 	}
 
 	TMR0->TCR |= (TrigNo + 1) << TMR0_TCR_CMIEA_Pos;
