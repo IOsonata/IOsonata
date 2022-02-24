@@ -97,26 +97,16 @@ void ResetEntry (void)
 	 * from the flash to ram.
 	 */
 
-#if 1
-	uint8_t *dstart = (uint8_t*)&__data_start__;
-	uint8_t *dloc = (uint8_t*)&__data_loc__;
-	size_t dsize = (size_t)&__data_size__;
-
-	if (dstart != dloc)
-	{
-		memcpy(dstart, dloc, dsize);
-	}
-#else
 	if (&__data_start__ != &__data_loc__)
 	{
-		memcpy((void *)&__data_start__, (void *)&__data_loc__, (size_t)&__data_size__);
+		size_t dsize = (size_t)&__data_size__;	// this is a workaround for m0+ compiler in debug build
+		memcpy((void *)&__data_start__, (void *)&__data_loc__, dsize);
 	}
-#endif
 
 	/*
 	 * Clear the ".bss" segment.
 	 */
-	uint32_t sz = (uint32_t)&__bss_size__; // this is a workaround some optimization issue
+	size_t sz = (uint32_t)&__bss_size__; // this is a workaround for m0+ compiler in debug build
 	memset((void *)&__bss_start__, 0, sz);
 #endif
 #endif
