@@ -264,6 +264,7 @@ IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHand
 
 				if (ielsrval == ielsr[idx])
 				{
+					// Already allocated.
 					return (IRQn_Type)((int)IEL0_IRQn + idx);
 				}
 				else if (s_IrqHandlerTbl[idx].Handler == 0)
@@ -273,8 +274,6 @@ IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHand
 					s_IrqHandlerTbl[idx].pCtx = pCtx;
 
 					IRQn_Type irq = (IRQn_Type)((int)IEL0_IRQn + idx);
-
-					__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR0;
 
 					ielsr[idx] = s_Re01EvtIdMap[EvtId].iels[grp];
 
