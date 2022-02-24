@@ -315,6 +315,7 @@ static uint32_t Re01UARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 	uint32_t semr = 0;
 	uint32_t diff = -1;
 	uint32_t baud = 0;
+	int idx = 0;
 
 	// Try to find most suitable registers values
 	for (int i = Rate > 250000 ? 1 : 0; i < sizeof(s_Re01SemrDivTbl) / sizeof(struct __SemrDiv) - 1; i++)
@@ -336,32 +337,16 @@ static uint32_t Re01UARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 					semr = s_Re01SemrDivTbl[i].regval;
 					diff = d;
 					baud = r;
+					idx = i;
 				}
 			}
-		}
-	}
-	for (uint32_t m = 128; m < 256; m++) // MDDR
-	{
-		uint32_t t = s_Re01SemrDivTbl[3].div * (1<<(0<<1)) * (256 / m);
-		uint32_t div = 1;//pclk / (t * Rate);
-		uint32_t r = pclk / (t * div);
-		uint32_t d = abs((int)r - (int)Rate);
-
-		if (d < diff && div > 0 && div < 256)
-		{
-			brr = div - 1;
-			mddr = m;
-			cks = 0;
-			semr = s_Re01SemrDivTbl[3].regval;
-			diff = d;
-			baud = r;
 		}
 	}
 
 	if (mddr > 0)
 	{
 		dev->pUartReg0->SEMR &= ~(SCI0_SEMR_BGDM_Msk | SCI0_SEMR_ABCS_Msk | SCI0_SEMR_ABCSE_Msk);
-		dev->pUartReg0->SEMR |= semr | SCI0_SEMR_BRME_Msk;
+		dev->pUartReg0->SEMR |= semr | mddr > 128 ? 0 : SCI0_SEMR_BRME_Msk;
 		dev->pUartReg0->BRR = brr;
 		dev->pUartReg0->MDDR = mddr;
 		dev->pUartReg0->SMR_b.CKS = cks;

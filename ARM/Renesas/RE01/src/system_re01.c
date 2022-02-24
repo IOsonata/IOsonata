@@ -8,6 +8,9 @@ Note: 	USB operation requires PLL as clock source running at 48MHz
 		Therefore main clock source (8-32MHz) must be chosen to allows PLL to
 		generate 48MHz
 
+Note:	Running at max freq 64MHz cause limitation on UART timing.  Many standard
+		Baudrate would not work.
+
 @author	Hoang Nguyen Hoan
 @date	Nov. 11, 2021
 
@@ -60,10 +63,10 @@ uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 // Overload this variable in application firmware to change oscillator
 __WEAK McuOsc_t g_McuOsc = {
 	OSC_TYPE_RC,
-	64000000,
+	48000000,		// Default to 48MHz because at 64MHz many UART baudrate could not be matched
 	OSC_TYPE_RC,
 	32768,
-	false
+	true
 };
 
 static uint32_t s_PeriphSrcFreq = 0;
