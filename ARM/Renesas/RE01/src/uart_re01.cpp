@@ -3,6 +3,10 @@
 
 @brief	Renesas RE01 UART implementation
 
+NOTE:	This chip does not have a precision baudrate clock divider some rate work
+		with some PCLK freq some don't.  Make sure the actual calculated baudreate
+		is within 0.2% tolerance.  Try a different baudrate otherwise
+
 
 @author Hoang Nguyen Hoan
 @date	Jan. 29, 2022
