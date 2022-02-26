@@ -89,6 +89,6 @@ int TimerGetHighFreqDevCount()
 
 int TimerGetHighFreqDevNo()
 {
-	return STM32L4XX_TIMER_MAXCNT;
+	return STM32L4XX_LPTIM_CNT;
 }
 
