@@ -389,19 +389,6 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
     return true;
 }
 
-int IOPinFindAvailInterrupt()
-{
-	for (int i = 0; i < IOPIN_MAX_INT; i++)
-	{
-		if (s_GpIOSenseEvt[i].SensEvtCB == NULL)
-		{
-			return i;
-		}
-	}
-
-	return -1;
-}
-
 /**
  * @brief	Allocate I/O pin sensing interrupt event
  *
@@ -423,14 +410,19 @@ int IOPinFindAvailInterrupt()
  */
 int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	int intno = IOPinFindAvailInterrupt();
-
-	if (intno >= 0)
+	if (PinNo < 0 || PinNo > 15)
 	{
-		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB, pCtx);
-		if (res == true)
-			return intno;
+		return -1;
 	}
+
+	if (s_GpIOSenseEvt[PinNo].SensEvtCB != NULL)
+	{
+		return -1;
+	}
+
+	bool res = IOPinEnableInterrupt(PinNo, IntPrio, PortNo, PinNo, Sense, pEvtCB, pCtx);
+	if (res == true)
+		return PinNo;
 
 	return -1;
 }
