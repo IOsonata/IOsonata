@@ -365,7 +365,7 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
     dev->IrqMatch[TrigNo] = Re01RegisterIntHandler(evtid, dev->IntPrio, hndlr, dev);
     if (dev->IrqMatch[TrigNo] == -1)
     {
-    	return false;
+    	return 0;
     }
 
 	dev->pAgtReg->AGTCR &= ~(AGT0_AGTCR_TSTART_Msk);
