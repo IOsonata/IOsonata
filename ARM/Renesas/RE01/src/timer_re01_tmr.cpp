@@ -220,7 +220,8 @@ static uint64_t Re01TmrGetTickCount(TimerDev_t * const pTimer)
 {
 	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
 
-    uint16_t cnt = TMR01->TCNT;
+	uint16_t cnt = 0;
+	while ((cnt = TMR01->TCNT) != TMR01->TCNT);
 
     pTimer->LastCount = cnt;
 

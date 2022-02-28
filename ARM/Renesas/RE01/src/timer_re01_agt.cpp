@@ -286,7 +286,7 @@ static uint64_t Re01AgtGetTickCount(TimerDev_t * const pTimer)
 
     uint32_t cnt = 0;
 
-    cnt = dev->pAgtReg->AGT;
+    while ((cnt = dev->pAgtReg->AGT) != dev->pAgtReg->AGT);
 
     return 0xFFFFULL - (uint64_t)cnt + pTimer->Rollover;
 }
