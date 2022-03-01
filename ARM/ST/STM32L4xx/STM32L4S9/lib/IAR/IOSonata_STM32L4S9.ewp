@@ -121,7 +121,7 @@
                 </option>
                 <option>
                     <name>OGUseCmsis</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>OGUseCmsisDspLib</name>
@@ -355,7 +355,6 @@
                     <state>$PROJ_DIR$\..\..\..\include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\CMSIS\Core\Include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\BSEC\algo\lite_version\inc</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\invn</state>
                 </option>
@@ -1050,7 +1049,7 @@
                 </option>
                 <option>
                     <name>IarchiveOutput</name>
-                    <state>Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\Debug\IOSonata_STM32L4S9.a</state>
+                    <state>C:\dev\IOSonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\Debug\IOSonata_STM32L4S9.a</state>
                 </option>
             </data>
         </settings>
@@ -1185,7 +1184,7 @@
                 </option>
                 <option>
                     <name>OGUseCmsis</name>
-                    <state>0</state>
+                    <state>1</state>
                 </option>
                 <option>
                     <name>OGUseCmsisDspLib</name>
@@ -1420,7 +1419,6 @@
                     <state>$PROJ_DIR$\..\..\..\include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\include</state>
-                    <state>$PROJ_DIR$\..\..\..\..\..\CMSIS\Core\Include</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\BSEC\algo\lite_version\inc</state>
                     <state>$PROJ_DIR$\..\..\..\..\..\..\..\external\invn</state>
                 </option>
@@ -2115,7 +2113,7 @@
                 </option>
                 <option>
                     <name>IarchiveOutput</name>
-                    <state>Z:\swdev\IOsonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\Release\IOSonata_STM32L4S9.a</state>
+                    <state>C:\dev\IOSonata\ARM\ST\STM32L4xx\STM32L4S9\lib\IAR\Release\IOSonata_STM32L4S9.a</state>
                 </option>
             </data>
         </settings>
