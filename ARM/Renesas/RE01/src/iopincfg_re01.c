@@ -91,6 +91,7 @@ static int s_MaxNbIOPins[RE01_1500KB_MAX_PORT] = {
 
 #pragma pack(push, 4)
 typedef struct {
+	int Idx;
 	IOPINSENSE Sense;
 	IOPinEvtHandler_t SensEvtCB;
     uint16_t PortPinNo;
@@ -99,7 +100,11 @@ typedef struct {
 } IOPINSENS_EVTHOOK;
 #pragma pack(pop)
 
-static IOPINSENS_EVTHOOK s_GpIOSenseEvt[RE01_1500KB_PIN_MAX_INT + 1] = { {0, NULL}, };
+static IOPINSENS_EVTHOOK s_GpIOSenseEvt[RE01_1500KB_PIN_MAX_INT + 1] = {
+	{0, 0, NULL}, {1, 0, NULL}, {2, 0, NULL}, {3, 0, NULL}, {4, 0, NULL},
+	{5, 0, NULL}, {6, 0, NULL}, {7, 0, NULL}, {8, 0, NULL}, {9, 0, NULL}
+};
+
 static uint16_t s_GpIOPowerSupply[RE01_1500KB_MAX_PORT] = {0,};
 
 // IRQ pins map are fixed
@@ -148,6 +153,16 @@ static int IOPinFindAvailInterrupt(int PortNo, int PinNo)
 	}
 
 	return retval;
+}
+
+static void RE01IOPinIRQHandler(int IntNo, void *pCtx)
+{
+	IOPINSENS_EVTHOOK *evthook = (IOPINSENS_EVTHOOK*)pCtx;
+
+	if (evthook->SensEvtCB)
+	{
+		evthook->SensEvtCB(evthook->Idx, evthook->pCtx);
+	}
 }
 
 static void RE01IOPinSupplyEnable(int PortNo, int PinNo)
@@ -430,7 +445,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSE
 	PMISC->PWPR = 0;	// Write disable
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
-	IRQn_Type irq = Re01RegisterIntHandler(IntNo + RE01_EVTID_PORT_IRQ0, IntPrio, pEvtCB, pCtx);
+	IRQn_Type irq = Re01RegisterIntHandler(IntNo + RE01_EVTID_PORT_IRQ0, IntPrio, RE01IOPinIRQHandler, &s_GpIOSenseEvt[idx]);
 
 	if (irq == -1)
 	{
