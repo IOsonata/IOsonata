@@ -106,6 +106,8 @@ static void RtcIRQHandler(int DevNo)
         reg->EVENTS_OVRFLW = 0;
     }
 
+    timer->LastCount = count;
+
     for (int i = 0; i < s_nRfxRtcData[DevNo].MaxNbTrigEvt; i++)
     {
         if (reg->EVENTS_COMPARE[i])
@@ -122,8 +124,6 @@ static void RtcIRQHandler(int DevNo)
             }
         }
     }
-
-    timer->LastCount = count;
 
     if (timer->EvtHandler)
     {
