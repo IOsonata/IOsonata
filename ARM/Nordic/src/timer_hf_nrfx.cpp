@@ -53,8 +53,6 @@ SOFTWARE.
 #define NRF_CLOCK			NRF_CLOCK_NS
 #endif
 
-#define	INTERRUPT_LATENCY		11
-
 typedef struct {
 	int DevNo;
 	uint32_t MaxFreq;
@@ -108,10 +106,23 @@ static void TimerIRQHandler(int DevNo)
 	nRFTimerData_t &tdata = s_nRFxTimerData[DevNo];
 	TimerDev_t *timer = s_nRFxTimerData[DevNo].pTimer;
     uint32_t evt = 0;
-    uint32_t count;
+	uint32_t t = reg->CC[0];	// Preserve comparator
 
-    reg->TASKS_CAPTURE[0] = 1;
-    count = reg->CC[0];
+	// Read counter value
+    uint32_t count;
+	reg->TASKS_CAPTURE[0] = 1;
+	while ((count = reg->CC[0]) != reg->CC[0]);
+
+	reg->CC[0] = t;	// Restore comparator
+
+    if (count < timer->LastCount)
+    {
+        // Counter wrap arround
+        evt |= TIMER_EVT_COUNTER_OVR;
+        timer->Rollover += 100000000ULL;
+    }
+
+    timer->LastCount = count;
 
     for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
     {
@@ -121,7 +132,7 @@ static void TimerIRQHandler(int DevNo)
             reg->EVENTS_COMPARE[i] = 0;
             if (tdata.Trigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
             {
-            	reg->CC[i] = count + tdata.CC[i] - INTERRUPT_LATENCY;
+            	reg->CC[i] = count + tdata.CC[i];;
             }
             if (tdata.Trigger[i].Handler)
             {
@@ -130,15 +141,6 @@ static void TimerIRQHandler(int DevNo)
         }
 
     }
-
-    if (count < timer->LastCount)
-    {
-        // Counter wrap arround
-        evt |= TIMER_EVT_COUNTER_OVR;
-        timer->Rollover += timer->Freq;
-    }
-
-    timer->LastCount = count;
 
     if (timer->EvtHandler)
     {
@@ -298,11 +300,8 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
     if (Freq > 0)
     {
         uint32_t divisor = TIMER_NRFX_HF_BASE_FREQ / Freq;
-#ifdef __ICCARM__
         prescaler = 31 - __CLZ(divisor);
-#else
-        prescaler = 31 - __builtin_clzl(divisor);
-#endif
+
         if (prescaler > 9)
         {
             prescaler = 9;
@@ -315,7 +314,7 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
     // Pre-calculate periods for faster timer counter to time conversion use later
     // for precision this value is x10 (in 100 psec)
-    pTimer->nsPeriod = 10000000000ULL / pTimer->Freq;     // Period in x10 nsec
+    pTimer->nsPeriod = 1000000000ULL / pTimer->Freq;     // Period in x10 nsec
 
     reg->TASKS_START = 1;
 
@@ -327,20 +326,22 @@ static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 
-	if (reg->INTENSET == 0)
-    {
-		reg->TASKS_CAPTURE[pTimer->DevNo] = 1;
+	uint32_t t = reg->CC[0];	// Preserve comparator
 
-		uint32_t count = reg->CC[pTimer->DevNo];
+	// Read counter value
+	uint32_t count;
+	reg->TASKS_CAPTURE[0] = 1;
+	while ((count = reg->CC[0]) != reg->CC[0]);
 
-		if (count < pTimer->LastCount)
-	    {
-	        // Counter wrap arround
-	        pTimer->Rollover += 0x100000000ULL;//vFreq;
-	    }
+	reg->CC[0] = t;	// Restore comparator
 
-		pTimer->LastCount = count;
-    }
+	if (count < pTimer->LastCount)
+	{
+		// Counter wrap arround
+		pTimer->Rollover += 0x100000000ULL;
+	}
+
+	pTimer->LastCount = count;
 
 	return (uint64_t)pTimer->LastCount + pTimer->Rollover;
 }
@@ -358,7 +359,7 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 	}
 
     // vnsPerios is x10 nsec (100 psec) => nsPeriod * 10ULL
-    uint32_t cc = (nsPeriod * 10ULL + (pTimer->nsPeriod >> 1)) / pTimer->nsPeriod;
+    uint32_t cc = (nsPeriod + (pTimer->nsPeriod >> 1)) / pTimer->nsPeriod;
 
     if (cc <= 0)
     {
@@ -373,21 +374,21 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 
 	reg->INTENSET = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
 
-    reg->CC[TrigNo] = count + cc - INTERRUPT_LATENCY;
+    reg->CC[TrigNo] = count + cc;;
 
     if (count < pTimer->LastCount)
     {
         // Counter wrap around
-        pTimer->Rollover += 0x100000000ULL;//vFreq;
+        pTimer->Rollover += 0x100000000ULL;;
     }
 
     pTimer->LastCount = count;
 
-    tdata.Trigger[TrigNo].nsPeriod = pTimer->nsPeriod * (uint64_t)cc / 10ULL;
+    tdata.Trigger[TrigNo].nsPeriod = pTimer->nsPeriod * (uint64_t)cc;
     tdata.Trigger[TrigNo].Handler = Handler;
     tdata.Trigger[TrigNo].pContext = pContext;
 
-    return pTimer->nsPeriod * (uint64_t)cc / 10ULL; // Return real period in nsec
+    return pTimer->nsPeriod * (uint64_t)cc; // Return real period in nsec
 }
 
 static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
