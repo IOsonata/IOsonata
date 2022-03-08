@@ -102,6 +102,7 @@ SPI g_Spi;
 
 bool MT25QL512_Init(int DevNo, DeviceIntrf* pInterface);
 bool MX25U1635E_init(int pDevNo, DeviceIntrf* ppInterface);
+bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface);
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
 static FlashDiskIOCfg_t s_FlashDiskCfg = {
@@ -160,6 +161,20 @@ static FlashDiskIOCfg_t s_MX25R3235F_QFlashCfg = {
 	.WrCmd = { FLASH_CMD_4WRITE, 0 },
 };
 
+// IS25LP512M
+static FlashDiskIOCfg_t s_IS25LP512_FlashCfg = {
+		.DevNo = 0,
+		.TotalSize = 512 * 1024 / 8,      	// 512 Mbits
+		.SectSize = 4,
+		.BlkSize = 32,						// minimum erase block size
+		.WriteSize = 256,					// Write page size
+		.AddrSize = 4,                      // 3 bytes addressing
+		.DevId = 0,
+		.DevIdSize = 0,
+		.pInitCB = IS25LP512M_Init,			// no special init require.
+		.pWaitCB = FlashWriteDelayCallback,					// blocking, no wait callback
+};
+
 FlashDiskIO g_FlashDiskIO;
 
 static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
@@ -171,6 +186,37 @@ bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
 {
 	msDelay(3);
 	return true;
+}
+
+bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface)
+{
+    if (pInterface == NULL)
+        return false;
+
+    int cnt = 0;
+
+    uint32_t d;
+    uint32_t r = 0;
+
+    d = FLASH_CMD_RESET_ENABLE;
+    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+
+    d = FLASH_CMD_RESET_DEVICE;
+    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+
+    d = FLASH_CMD_READID;
+    cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 3 );
+
+    if (r != 0x1a609d && r != 0x1a709d)
+    	return false;
+
+    printf("Flash found!\r\n");
+
+    // Enable write
+    d = FLASH_CMD_EN4B;
+    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+
+    return true;
 }
 
 bool MT25QL512_Init(int DevNo, DeviceIntrf* pInterface)
@@ -254,7 +300,7 @@ int main()
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 
 	//if (g_FlashDiskIO.Init(s_MX25R3235F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
-	if (g_FlashDiskIO.Init(s_MT25QL512Cfg, &g_Spi, &g_FlashCache, 1) == false)
+	if (g_FlashDiskIO.Init(s_IS25LP512_FlashCfg, &g_Spi, &g_FlashCache, 1) == false)
 	{
 		printf("Init Flash failed\r\n");
 	}
