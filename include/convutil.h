@@ -61,8 +61,8 @@ extern "C" {
  *
  * @return	converted data.
  */
-static inline int16_t EndianCvt16(int16_t x) {
-	return ((x >> 8) & 0xff) | ((x << 8) & 0xff00);
+static inline uint16_t EndianCvt16(uint16_t x) {
+	return ((x >> 8U) & 0xffU) | ((x << 8U) & 0xff00U);
 }
 
 /**
@@ -73,8 +73,8 @@ static inline int16_t EndianCvt16(int16_t x) {
  * @return	converted data.
  */
 static inline uint32_t EndianCvt32(uint32_t x) {
-	return (((x >> 24UL) & 0xff) | ((x << 24UL) & 0xff000000) |
-			((x >> 8UL) & 0xff00) | ((x << 8UL) & 0xff0000));
+	return (((x >> 24UL) & 0xffUL) | ((x << 24UL) & 0xff000000UL) |
+			((x >> 8UL) & 0xff00UL) | ((x << 8UL) & 0xff0000UL));
 }
 
 /**
