@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	lcd_display.h
+@file	display.h
 
-@brief	Generic LCD display controller definitions
+@brief	Generic display controller definitions
 
 
 @author	Hoang Nguyen Hoan
@@ -37,16 +37,17 @@ SOFTWARE.
 
 #include "device.h"
 
-#define LCD_CTRL_DCX_PINIDX			0		// Cmd/Data mode pin index
-#define LCD_CTRL_RST_PINIDX			1		// Reset pin index
+#define DISPL_CTRL_DCX_PINIDX			0		// Cmd/Data mode pin index
+#define DISPL_CTRL_RST_PINIDX			1		// Reset pin index
+#define DISPL_CTRL_BKLIGHT_PINIDX		2		// External back light pin index
 
 typedef enum __Display_Orientation {
 	DISPL_ORIENT_PORTRAIT,
 	DISPL_ORIENT_LANDSCAPE
 } DISPL_ORIENT;
 
-typedef struct __Lcd_Display_Cfg {
-	uint32_t DevAddr;
+typedef struct __Display_Cfg {
+	uint32_t DevAddr;		//!< Device address (or SPI device CS index)
 	IOPinCfg_t const *pPins;
 	int NbPins;
 	uint16_t Stride;		//!< Memory stride in bytes for one line
@@ -54,15 +55,19 @@ typedef struct __Lcd_Display_Cfg {
 	uint16_t VLen;			//!< Vertical length in pixels
 	uint8_t PixelSize;		//!< Pixel size in bits/pixel
 	DISPL_ORIENT Orient;	//!< Display orientation
-} LcdDisplayCfg_t;
+} DisplayCfg_t;
 
-class LcdDisplay : public Device {
+class Display : public Device {
 public:
-	virtual bool Init(LcdDisplayCfg_t &, DeviceIntrf *pIntrf) = 0;
+	virtual bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf) = 0;
 	virtual void Backlight(bool bOn) = 0;
+	virtual void Clear() = 0;
+	virtual void Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint32_t Color) = 0;
+	virtual void SetPixel(uint16_t X, uint16_t Y, uint32_t Color) = 0;
+	virtual void BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint8_t *pBuffer) = 0;
 
 protected:
-	LcdDisplayCfg_t vCfg;
+	DisplayCfg_t vCfg;	//!< Internal copy of config data
 };
 
 

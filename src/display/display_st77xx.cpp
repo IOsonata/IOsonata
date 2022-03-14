@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	lcd_st7789.h
+@file	display_st7789.cpp
 
-@brief	ST7789 LCD display controller definitions
+@brief	ST77xx LCD display controller implementation
 
 
 @author	Hoang Nguyen Hoan
@@ -35,9 +35,9 @@ SOFTWARE.
 #include "idelay.h"
 #include "convutil.h"
 #include "iopinctrl.h"
-#include "display/lcd_st7789.h"
+#include "display/display_st77xx.h"
 
-bool LcdST77xx::Init(LcdDisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
+bool DisplST77xx::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 {
 	Interface(pIntrf);
 
@@ -47,33 +47,40 @@ bool LcdST77xx::Init(LcdDisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 
 	IOPinCfg(vCfg.pPins, vCfg.NbPins);
 
-	uint8_t cmd = ST7789_CMD_SWRESET;
+	uint8_t cmd = ST77XX_CMD_SWRESET;
 	uint32_t d = 6;
 	Write(&cmd, 1, NULL, 0);
 
 	msDelay(200);
 
-	cmd = ST7789_CMD_SLPOUT;
+	cmd = ST77XX_CMD_SLPOUT;
 	Write(&cmd, 1, NULL, 0);
 
 	uint16_t ramctrl = 0x0d000;// | ST77XX_CMD_RAMCTRL_ENDIAN_LITTLE;
 	uint8_t madctl = 0;
 
-	cmd = ST7789_CMD_COLMOD;
+	cmd = ST77XX_CMD_COLMOD;
 	switch (vCfg.PixelSize)
 	{
 		case 12:
-			d = ST7789_CMD_COLMOD_COLOR_FMT_12 | ST7789_CMD_COLMOD_RGB_INTRF_4K;
+#if 0
+			d = ST77XX_CMD_COLMOD_COLOR_FMT_12 | ST77XX_CMD_COLMOD_RGB_INTRF_65K;
 			vPixelLen = 2;
+			ramctrl |= ST77XX_CMD_RAMCTRL_ENDIAN_LITTLE;
+			madctl |= ST77XX_CMD_MADCTL_BGR;
 			break;
+#endif
+			// 12 bit format of this chip is inefficient
+			// Default it to 16bits instead.
+			vCfg.PixelSize = 16;
 		case 16:
 			ramctrl |= ST77XX_CMD_RAMCTRL_ENDIAN_LITTLE;
-			madctl |= ST7789_CMD_MADCTL_BGR;
-			d = ST7789_CMD_COLMOD_COLOR_FMT_16 | ST7789_CMD_COLMOD_RGB_INTRF_65K;
+			madctl |= ST77XX_CMD_MADCTL_BGR;
+			d = ST77XX_CMD_COLMOD_COLOR_FMT_16 | ST77XX_CMD_COLMOD_RGB_INTRF_65K;
 			vPixelLen = 2;
 			break;
 		case 18:
-			d = ST7789_CMD_COLMOD_COLOR_FMT_18 | ST7789_CMD_COLMOD_RGB_INTRF_262K;
+			d = ST77XX_CMD_COLMOD_COLOR_FMT_18 | ST77XX_CMD_COLMOD_RGB_INTRF_262K;
 			vPixelLen = 3;
 			break;
 	}
@@ -81,13 +88,13 @@ bool LcdST77xx::Init(LcdDisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 
 	if (vCfg.Orient == DISPL_ORIENT_LANDSCAPE)
 	{
-		madctl |= ST7789_CMD_MADCTL_MV;// | ST7789_CMD_MADCTL_MY;
+		madctl |= ST77XX_CMD_MADCTL_MV;// | ST7789_CMD_MADCTL_MY;
 	}
 	else
 	{
-		madctl |= 	ST7789_CMD_MADCTL_MX;
+		madctl |= ST77XX_CMD_MADCTL_MX;
 	}
-	cmd = ST7789_CMD_MADCTL;
+	cmd = ST77XX_CMD_MADCTL;
 	Write(&cmd, 1, (uint8_t*)&madctl, 1);
 
 #if 1
@@ -114,13 +121,13 @@ bool LcdST77xx::Init(LcdDisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 */
 //	SetRamWrRegion(0, 0, vCfg.HLen, vCfg.VLen);
 
-	cmd = ST7789_CMD_INVON;
+	cmd = ST77XX_CMD_INVON;
 	Write(&cmd, 1, NULL, 0);
 
-	cmd = ST7789_CMD_NORON;
+	cmd = ST77XX_CMD_NORON;
 	Write(&cmd, 1, NULL, 0);
 
-	cmd = ST7789_CMD_DISPON;
+	cmd = ST77XX_CMD_DISPON;
 	Write(&cmd, 1, NULL, 0);
 
 	return true;
@@ -131,7 +138,7 @@ bool LcdST77xx::Init(LcdDisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
  *
  * @return	true - If success
  */
-bool LcdST77xx::Enable()
+bool DisplST77xx::Enable()
 {
 	return true;
 }
@@ -143,7 +150,7 @@ bool LcdST77xx::Enable()
  * possible so that the Enable function can wake up without full
  * initialization.
  */
-void LcdST77xx::Disable()
+void DisplST77xx::Disable()
 {
 
 }
@@ -151,12 +158,12 @@ void LcdST77xx::Disable()
 /**
  * @brief	Reset device to it initial default state
  */
-void LcdST77xx::Reset()
+void DisplST77xx::Reset()
 {
 
 }
 
-void LcdST77xx::Clear()
+void DisplST77xx::Clear()
 {
 	int line = vCfg.HLen * vPixelLen;
 
@@ -173,7 +180,7 @@ void LcdST77xx::Clear()
 	SetRamWrRegion(0, 0, vCfg.HLen, vCfg.VLen);
 
 //	uint32_t d = EndianCvt16(0xf800);
-	uint8_t cmd = ST7789_CMD_RAMWR;
+	uint8_t cmd = ST77XX_CMD_RAMWR;
 	Write(&cmd, 1, vLineBuff, line);
 
 	//cmd = ST7789_CMD_RAMWRC;
@@ -183,7 +190,7 @@ void LcdST77xx::Clear()
 	}
 #else
 	uint32_t d = (0xf800);//EndianCvt16(0xf800) | 0xf80000;
-	uint8_t cmd = ST7789_CMD_RAMWR;
+	uint8_t cmd = ST77XX_CMD_RAMWR;
 
 	//cmd = ST7789_CMD_RAMWRC;
 	for (int j = 0; j < vCfg.VLen; j++)
@@ -198,39 +205,85 @@ void LcdST77xx::Clear()
 #endif
 }
 
-void LcdST77xx::SetPixel(uint16_t X, uint16_t Y, uint32_t Color)
+void DisplST77xx::Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint32_t Color)
+{
+	SetRamWrRegion(X, Y, Width, Height);
+	uint8_t cmd = ST77XX_CMD_RAMWR;
+	uint32_t l = Width * vPixelLen;
+
+	switch (vPixelLen)
+	{
+		case 1:
+			memset(vLineBuff, Color, Width);
+			break;
+		case 2:
+			{
+				uint16_t *p = (uint16_t*)vLineBuff;
+				for (int i = 0; i < Width; i++)
+				{
+					p[i] = (uint16_t)(Color & 0xFFFFU);
+				}
+			}
+			break;
+		case 3:
+			for (int i = 0; i < Width * 3; i+=3)
+			{
+				vLineBuff[i] = (uint8_t)(Color & 0xFFU);
+				vLineBuff[i + 1] = (uint8_t)((Color >> 8) & 0xFFU);
+				vLineBuff[i + 2] = (uint8_t)((Color >> 16) & 0xFFU);
+			}
+			break;
+		case 4:
+			{
+				uint32_t *p = (uint32_t*)vLineBuff;
+				for (int i = 0; i < Width; i++)
+				{
+					p[i] = Color;
+				}
+			}
+			break;
+	}
+
+	Write(&cmd, 1, vLineBuff, Width * vPixelLen);
+	for (int i = 1; i < Height; i++)
+	{
+		Write(0, 0, vLineBuff, Width * vPixelLen);
+	}
+}
+
+void DisplST77xx::SetPixel(uint16_t X, uint16_t Y, uint32_t Color)
 {
 	SetRamWrRegion(X, Y, 1, 1);
-	uint8_t cmd = ST7789_CMD_RAMWR;
+	uint8_t cmd = ST77XX_CMD_RAMWR;
 	Write(&cmd, 1, (uint8_t*)&Color, vPixelLen);
 }
 
-void LcdST77xx::BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint8_t *pBuffer)
+void DisplST77xx::BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint8_t *pBuffer)
 {
 	SetRamWrRegion(X, Y, Width, Height);
-	uint8_t cmd = ST7789_CMD_RAMWR;
+	uint8_t cmd = ST77XX_CMD_RAMWR;
 	uint32_t l = Width * Height * vPixelLen;
 	Write(&cmd, 1, pBuffer, Width * Height * vPixelLen);
 }
 
-void LcdST77xx::Backlight(bool bOn)
+void DisplST77xx::Backlight(bool bOn)
 {
-	uint8_t cmd = ST7789_CMD_WRCTRLD;
-	uint8_t d = ST7789_CMD_WRCTRLD_BCTRL_ON;
+	uint8_t cmd = ST77XX_CMD_WRCTRLD;
+	uint8_t d = ST77XX_CMD_WRCTRLD_BCTRL_ON;
 	if (bOn == true)
 	{
-		d |= ST7789_CMD_WRCTRLD_BL_ON | ST7789_CMD_WRCTRLD_DD_ON;
+		d |= ST77XX_CMD_WRCTRLD_BL_ON | ST77XX_CMD_WRCTRLD_DD_ON;
 	}
 	Write(&cmd, 1, &d, 1);
 }
 
-void LcdST77xx::SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height)
+void DisplST77xx::SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height)
 {
-	uint8_t cmd = ST7789_CMD_CASET;
+	uint8_t cmd = ST77XX_CMD_CASET;
 	uint32_t d = (EndianCvt16(X) & 0xFFFF) | (EndianCvt16(X + Width - 1) << 16);
 	Write(&cmd, 1, (uint8_t*)&d, 4);
 
-	cmd = ST7789_CMD_RASET;
+	cmd = ST77XX_CMD_RASET;
 	d = (EndianCvt16(Y) & 0xFFFF) | (EndianCvt16(Y + Height - 1) << 16);
 	Write(&cmd, 1, (uint8_t*)&d, 4);
 }
@@ -249,20 +302,20 @@ void LcdST77xx::SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t Width, uint16_t 
  *
  * @return	Actual number of bytes written
  */
-int LcdST77xx::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int DisplST77xx::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
 {
 	int cnt = 0;
 	vpIntrf->StartTx(DeviceAddress());
 
 	if (pCmdAddr && CmdAddrLen > 0)
 	{
-		IOPinClear(vCfg.pPins[LCD_CTRL_DCX_PINIDX].PortNo, vCfg.pPins[LCD_CTRL_DCX_PINIDX].PinNo);
+		IOPinClear(vCfg.pPins[DISPL_CTRL_DCX_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_DCX_PINIDX].PinNo);
 
 		cnt += vpIntrf->TxData(pCmdAddr, CmdAddrLen);
 	}
 	if (pData != NULL && DataLen > 0)
 	{
-		IOPinSet(vCfg.pPins[LCD_CTRL_DCX_PINIDX].PortNo, vCfg.pPins[LCD_CTRL_DCX_PINIDX].PinNo);
+		IOPinSet(vCfg.pPins[DISPL_CTRL_DCX_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_DCX_PINIDX].PinNo);
 		cnt += vpIntrf->TxData(pData, DataLen);
 	}
 	vpIntrf->StopTx();
