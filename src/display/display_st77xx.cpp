@@ -99,27 +99,12 @@ bool DisplST77xx::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 
 #if 1
 	cmd = ST77XX_CMD_RAMCTRL;
-//	d = ST77XX_CMD_RAMCTRL_ENDIAN_LITTLE | ;
 	Write(&cmd, 1, (uint8_t*)&ramctrl, 2);
 
-//	cmd = ST77XX_CMD_RGBCTRL;
-//	d = 0x140200;
-//	Write(&cmd, 1, (uint8_t*)&d, 3);
 	cmd = ST77XX_CMD_LCMCTRL;
 	d = 0;
 	Write(&cmd, 1, (uint8_t*)&d, 1);
 #endif
-/*
-	cmd = ST7789_CMD_CASET;
-	d = (EndianCvt16(vCfg.HLen - 1) << 16);
-
-	Write(&cmd, 1, (uint8_t*)&d, 4);
-
-	cmd = ST7789_CMD_RASET;
-	d = (EndianCvt16(vCfg.VLen - 1) << 16);
-	Write(&cmd, 1, (uint8_t*)&d, 4);
-*/
-//	SetRamWrRegion(0, 0, vCfg.HLen, vCfg.VLen);
 
 	cmd = ST77XX_CMD_INVON;
 	Write(&cmd, 1, NULL, 0);
@@ -179,23 +164,20 @@ void DisplST77xx::Clear()
 #if 1
 	SetRamWrRegion(0, 0, vCfg.HLen, vCfg.VLen);
 
-//	uint32_t d = EndianCvt16(0xf800);
 	uint8_t cmd = ST77XX_CMD_RAMWR;
 	Write(&cmd, 1, vLineBuff, line);
 
-	//cmd = ST7789_CMD_RAMWRC;
 	for (int i = 1; i < vCfg.VLen; i++)
 	{
 		Write(0, 0, vLineBuff, line);
 	}
 #else
-	uint32_t d = (0xf800);//EndianCvt16(0xf800) | 0xf80000;
+	// test pixel/pixel write
+	uint32_t d = (0xf800);
 	uint8_t cmd = ST77XX_CMD_RAMWR;
 
-	//cmd = ST7789_CMD_RAMWRC;
 	for (int j = 0; j < vCfg.VLen; j++)
 	{
-		//Write(&cmd, 1, 0, 0);//(uint8_t*)&d, 2);
 		for (int i = 0; i <vCfg.HLen; i++)
 		{
 			SetRamWrRegion(i, j, 1, 1);
@@ -213,9 +195,6 @@ void DisplST77xx::Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, 
 
 	switch (vPixelLen)
 	{
-		case 1:
-			memset(vLineBuff, Color, Width);
-			break;
 		case 2:
 			{
 				uint16_t *p = (uint16_t*)vLineBuff;
@@ -233,15 +212,8 @@ void DisplST77xx::Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, 
 				vLineBuff[i + 2] = (uint8_t)((Color >> 16) & 0xFFU);
 			}
 			break;
-		case 4:
-			{
-				uint32_t *p = (uint32_t*)vLineBuff;
-				for (int i = 0; i < Width; i++)
-				{
-					p[i] = Color;
-				}
-			}
-			break;
+		default:
+			return;
 	}
 
 	Write(&cmd, 1, vLineBuff, Width * vPixelLen);
@@ -265,19 +237,6 @@ void DisplST77xx::BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height
 	uint32_t l = Width * Height * vPixelLen;
 	Write(&cmd, 1, pBuffer, Width * Height * vPixelLen);
 }
-
-#if 0
-void DisplST77xx::Backlight(bool bOn)
-{
-	uint8_t cmd = ST77XX_CMD_WRCTRLD;
-	uint8_t d = ST77XX_CMD_WRCTRLD_BCTRL_ON;
-	if (bOn == true)
-	{
-		d |= ST77XX_CMD_WRCTRLD_BL_ON | ST77XX_CMD_WRCTRLD_DD_ON;
-	}
-	Write(&cmd, 1, &d, 1);
-}
-#endif
 
 void DisplST77xx::SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height)
 {
