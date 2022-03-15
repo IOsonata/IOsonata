@@ -266,6 +266,7 @@ void DisplST77xx::BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height
 	Write(&cmd, 1, pBuffer, Width * Height * vPixelLen);
 }
 
+#if 0
 void DisplST77xx::Backlight(bool bOn)
 {
 	uint8_t cmd = ST77XX_CMD_WRCTRLD;
@@ -276,6 +277,7 @@ void DisplST77xx::Backlight(bool bOn)
 	}
 	Write(&cmd, 1, &d, 1);
 }
+#endif
 
 void DisplST77xx::SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height)
 {

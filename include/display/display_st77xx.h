@@ -192,7 +192,7 @@ public:
 	virtual void Clear();
 	virtual void Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint32_t Color);
 
-	virtual void Backlight(bool bOn);
+	//virtual void Backlight(bool bOn);
 
 	virtual void SetPixel(uint16_t X, uint16_t Y, uint32_t Color);
 	virtual void BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint8_t *pBuffer);

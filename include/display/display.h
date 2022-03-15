@@ -36,10 +36,11 @@ SOFTWARE.
 #define __DISPLAY_H__
 
 #include "device.h"
+#include "iopinctrl.h"
 
 #define DISPL_CTRL_DCX_PINIDX			0		// Cmd/Data mode pin index
-#define DISPL_CTRL_RST_PINIDX			1		// Reset pin index
-#define DISPL_CTRL_BKLIGHT_PINIDX		2		// External back light pin index
+#define DISPL_CTRL_BKLIGHT_PINIDX		1		// External back light pin index
+#define DISPL_CTRL_RST_PINIDX			2		// Reset pin index
 
 typedef enum __Display_Orientation {
 	DISPL_ORIENT_PORTRAIT,
@@ -60,11 +61,11 @@ typedef struct __Display_Cfg {
 class Display : public Device {
 public:
 	virtual bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf) = 0;
-	virtual void Backlight(bool bOn) = 0;
 	virtual void Clear() = 0;
 	virtual void Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint32_t Color) = 0;
 	virtual void SetPixel(uint16_t X, uint16_t Y, uint32_t Color) = 0;
 	virtual void BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint8_t *pBuffer) = 0;
+	virtual void Backlight(bool bOn);
 
 protected:
 	DisplayCfg_t vCfg;	//!< Internal copy of config data
