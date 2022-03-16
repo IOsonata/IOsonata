@@ -58,32 +58,32 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define SPI_DEVNO      					0
 #define SPI_PHY							SPIPHY_NORMAL
-#define SPI_RATE						8000000
+#define SPI_RATE						14000000
 
-#define SPI_MISO_PORT       			0
-#define SPI_MISO_PIN        			19
+#define SPI_MISO_PORT       			1
+#define SPI_MISO_PIN        			3
 #define SPI_MISO_PINOP      			1
-#define SPI_MOSI_PORT       			0
-#define SPI_MOSI_PIN        			20
+#define SPI_MOSI_PORT       			1
+#define SPI_MOSI_PIN        			7
 #define SPI_MOSI_PINOP      			1
-#define SPI_SCK_PORT        			0
-#define SPI_SCK_PIN         			18
+#define SPI_SCK_PORT        			1
+#define SPI_SCK_PIN         			2
 #define SPI_SCK_PINOP       			1
 
-#define TFT_CS_PORT          			0
-#define TFT_CS_PIN           			24
+#define TFT_CS_PORT          			1
+#define TFT_CS_PIN           			10
 #define TFT_CS_PINOP         			0
 
-#define TFT_DC_PORT            			0
-#define TFT_DC_PIN             			23
+#define TFT_DC_PORT            			1
+#define TFT_DC_PIN             			6
 #define TFT_DC_PINOP           			0
 
 #define TFT_RST_PORT            		0
 #define TFT_RST_PIN             		22
 #define TFT_RST_PINOP           		0
 
-#define TFT_BKLIGHT_PORT            	0
-#define TFT_BKLIGHT_PIN             	25
+#define TFT_BKLIGHT_PORT            	1
+#define TFT_BKLIGHT_PIN             	11
 #define TFT_BKLIGHT_PINOP           	0
 
 #define SPI_PINS	{ \
@@ -93,7 +93,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{TFT_CS_PORT, TFT_CS_PIN, TFT_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
 }
 
-// Must follow pins order defined in display.h
 #define TFT_PINS { \
 	{TFT_DC_PORT, TFT_DC_PIN, TFT_DC_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 	{TFT_BKLIGHT_PORT, TFT_BKLIGHT_PIN, TFT_BKLIGHT_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \

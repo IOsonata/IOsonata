@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@example	lcd_display_demo.cpp
+@example	lvgl_demo.cpp
 
-@brief	LCD display example
+@brief	lvgl.io graphics library integration demo
 
 
 @author	Hoang Nguyen Hoan
@@ -35,16 +35,30 @@ SOFTWARE.
 
 #include <stdio.h>
 
+#include "lv_conf.h"
+#include "lvgl.h"
 #include "idelay.h"
 #include "convutil.h"
 #include "coredev/spi.h"
+#include "coredev/timer.h"
 #include "display/display_st77xx.h"
 #include "iopinctrl.h"
+#include "lv_demos.h"
+#include "lv_examples.h"
 
 #include "board.h"
 
-extern "C" const uint8_t g_ISYST_Logo_16bits[];
-extern "C" const uint32_t g_ISYST_Logo_18bits[];
+void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
+
+const static TimerCfg_t s_TimerCfg = {
+    .DevNo = 2,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,			// 0 => Default frequency
+	.IntPrio = 7,
+	.EvtHandler = TimerHandler
+};
+
+Timer g_Timer;
 
 static const IOPinCfg_t s_TFTCtrlPins[] = TFT_PINS;
 const int s_NbTFTCtrlPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t);
@@ -85,7 +99,29 @@ DisplayCfg_t s_LcdCfg = {
 
 DisplST77xx g_Lcd;
 
-uint8_t g_LineBuff[480 * 4];
+static lv_disp_drv_t s_LvglDriver;
+static lv_disp_draw_buf_t draw_buf;
+static lv_color_t buf[ 320 * 10 ];
+//LV_IMG_DECLARE(my_image_name);
+
+uint8_t b[100*100 * 3];
+
+void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
+{
+    if (Evt & TIMER_EVT_TRIGGER(0))
+    {
+    	lv_tick_inc(1);
+    }
+}
+
+void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p )
+{
+    uint32_t w = ( area->x2 - area->x1 + 1 );
+    uint32_t h = ( area->y2 - area->y1 + 1 );
+
+    g_Lcd.BitBlt(area->x1, area->y1, w, h, ( uint8_t * )&color_p->full );
+    lv_disp_flush_ready( disp );
+}
 
 void HardwareInit()
 {
@@ -94,11 +130,23 @@ void HardwareInit()
 	g_Spi.Init(s_SpiCfg);
 
 	g_Lcd.Init(s_LcdCfg, &g_Spi);
+	g_Lcd.Backlight(true);
 
 	g_Lcd.Clear();
-	g_Lcd.Backlight(false);
-	msDelay(2000);
-	g_Lcd.Backlight(true);
+
+	lv_init();
+	lv_disp_draw_buf_init( &draw_buf, buf, NULL, 320 * 10 );
+
+	lv_disp_drv_init( &s_LvglDriver );
+	/*Change the following line to your display resolution*/
+	s_LvglDriver.hor_res = s_LcdCfg.HLen;
+	s_LvglDriver.ver_res = s_LcdCfg.VLen;
+	s_LvglDriver.flush_cb = my_disp_flush;
+	s_LvglDriver.draw_buf = &draw_buf;
+	lv_disp_drv_register( &s_LvglDriver );
+
+    g_Timer.Init(s_TimerCfg);
+
 }
 
 //
@@ -116,84 +164,27 @@ void HardwareInit()
 // If functionality is not required, to only pass the build, use
 // `--specs=nosys.specs`.
 //
+lv_obj_t img;
 
 int main()
 {
-	uint32_t colorr = 0;
-	uint32_t colorg = 0;
-	uint32_t colorb = 0;
-	uint8_t *img = (uint8_t *)g_ISYST_Logo_16bits;
-	int pixelbyte = 1;
-
 	HardwareInit();
+	//lv_demo_widgets();
+	//lv_example_get_started_1();
+	//DisplayInit();
+	//lv_img_set_src(&img, &logo);
+	lv_demo_stress();
+	//lv_demo_benchmark();
+	//lv_example_anim_1();
 
-	switch (s_LcdCfg.PixelSize)
-	{
-		case 12:	// not supported
-		case 16:
-			colorr = 0xf800;
-			colorg = 0x7e0;
-			colorb = 0x1f;
-			img = (uint8_t *)g_ISYST_Logo_16bits;
-			pixelbyte = 2;
+	uint64_t period = g_Timer.EnableTimerTrigger(0, 1UL, TIMER_TRIG_TYPE_CONTINUOUS);
 
-			// Display gradient
-			for (uint16_t i = 0, c = 0; c < 0x20; i+=2, c++)
-			{
-				for (int j = 80; j < 120; j++)
-				{
-					g_Lcd.SetPixel(i, j, c);
-					g_Lcd.SetPixel(i + 1, j, c);
-					g_Lcd.SetPixel(i + 0x40, j, c << 5);
-					g_Lcd.SetPixel(i + 0x41, j, c << 5);
-					g_Lcd.SetPixel(i + 0x80, j, c << 11);
-					g_Lcd.SetPixel(i + 0x81, j, c << 11);
-				}
-			}
-			break;
-		case 18:
-			colorr = 0xfc0000;
-			colorg = 0xfc00;
-			colorb = 0xfc;
-			img = (uint8_t *)g_ISYST_Logo_18bits;
-			pixelbyte = 3;
-
-			// Display gradient
-			for (uint16_t i = 0, c = 0; c < 0x30; i+=2, c++)
-			{
-				for (int j = 80; j < 120; j++)
-				{
-					g_Lcd.SetPixel(i, j, c);
-					g_Lcd.SetPixel(i + 1, j, c);
-					g_Lcd.SetPixel(i + 0x60, j, c << 10);
-					g_Lcd.SetPixel(i + 0x61, j, c << 10);
-					g_Lcd.SetPixel(i + 0xC0, j, c << 18);
-					g_Lcd.SetPixel(i + 0xC1, j, c << 18);
-				}
-			}
-			break;
+	while (1) {
+		lv_task_handler();
+		//__WFE();
 	}
-
-	msDelay(3000);
-
-	// Display RGB bars
-	g_Lcd.Fill(0, 0, s_LcdCfg.HLen, 80, colorr);
-	g_Lcd.Fill(0, 80, s_LcdCfg.HLen, 80, colorg);
-	g_Lcd.Fill(0, 160, s_LcdCfg.HLen, 80, colorb);
-
-	msDelay(3000);
-
-	// Display logo
-	uint8_t *p = img;
-
-	for (int i = 0; i < 153; i++)
-	{
-		memcpy(g_LineBuff, p, 320 * pixelbyte);
-		g_Lcd.BitBlt(0, 43 + i, s_LcdCfg.HLen, 1, g_LineBuff);
-		p += 320 * pixelbyte;
-	}
-
-	while(1) __WFE();
 
 	return 0;
 }
+
+uint8_t g_LvglMem[LV_MEM_SIZE];
