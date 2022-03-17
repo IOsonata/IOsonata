@@ -58,7 +58,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define SPI_DEVNO      					0
 #define SPI_PHY							SPIPHY_NORMAL
-#define SPI_RATE						14000000
+#define SPI_RATE						8000000
 
 #define SPI_MISO_PORT       			1
 #define SPI_MISO_PIN        			3

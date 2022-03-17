@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include "lv_conf.h"
 #include "lvgl.h"
+#include "istddef.h"
 #include "idelay.h"
 #include "convutil.h"
 #include "coredev/spi.h"
@@ -65,6 +66,9 @@ Timer g_Timer;
 static const IOPinCfg_t s_TFTCtrlPins[] = TFT_PINS;
 const int s_NbTFTCtrlPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t);
 
+static const IOPinCfg_t s_TFT2CtrlPins[] = TFT2_PINS;
+const int s_NbTFT2CtrlPins = sizeof(s_TFT2CtrlPins) / sizeof(IOPinCfg_t);
+
 static const IOPinCfg_t s_SpiPins[] = SPI_PINS;
 
 static const SPICfg_t s_SpiCfg = {
@@ -88,31 +92,58 @@ static const SPICfg_t s_SpiCfg = {
 
 SPI g_Spi;
 
-DisplayCfg_t s_LcdCfg = {
-	.DevAddr = 0,
-	.pPins = s_TFTCtrlPins,
-	.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
-	.Stride = 320 * 3,
+DisplayCfg_t s_LcdCfg[2] = {
 #ifdef LANDSCAPE
-	.HLen = 320,
-	.VLen = 240,
-	.PixelSize = 16,
-	.Orient = DISPL_ORIENT_LANDSCAPE,
+	{
+		.DevAddr = 1,
+		.pPins = s_TFT2CtrlPins,
+		.NbPins = sizeof(s_TFT2CtrlPins) / sizeof(IOPinCfg_t),
+		.Stride = 320 * 3,
+		.HLen = 320,
+		.VLen = 240,
+		.PixelSize = 16,
+		.Orient = DISPL_ORIENT_LANDSCAPE,
+	},
+	{
+		.DevAddr = 0,
+		.pPins = s_TFTCtrlPins,
+		.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
+		.Stride = 320 * 3,
+		.HLen = 320,
+		.VLen = 240,
+		.PixelSize = 16,
+		.Orient = DISPL_ORIENT_LANDSCAPE,
+	},
 #else
-	.HLen = 240,
-	.VLen = 320,
-	.PixelSize = 16,
-	.Orient = DISPL_ORIENT_PORTRAIT,
+	{
+		.DevAddr = 0,
+		.pPins = s_TFTCtrlPins,
+		.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
+		.Stride = 240 * 3,
+		.HLen = 240,
+		.VLen = 320,
+		.PixelSize = 16,
+		.Orient = DISPL_ORIENT_PORTRAIT,
+	},
+	{
+		.DevAddr = 1,
+		.pPins = s_TFT2CtrlPins,
+		.NbPins = sizeof(s_TFT2CtrlPins) / sizeof(IOPinCfg_t),
+		.Stride = 240 * 3,
+		.HLen = 240,
+		.VLen = 320,
+		.PixelSize = 16,
+		.Orient = DISPL_ORIENT_PORTRAIT,
+	}
 #endif
 };
 
-DisplST77xx g_Lcd;
+DisplST77xx g_Lcd[2];
 
-#define LVBUFF_SIZE		(1024)
-
+#define LVBUFF_SIZE		(10*1024)
 static lv_disp_drv_t s_LvglDriver;
 static lv_disp_draw_buf_t draw_buf;
-static lv_color_t buf[LVBUFF_SIZE];
+static lv_color_t buf[ LVBUFF_SIZE ];
 uint8_t g_LvglMem[LV_MEM_SIZE];
 
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
@@ -125,10 +156,66 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 
 void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p )
 {
-    uint32_t w = ( area->x2 - area->x1 + 1 );
-    uint32_t h = ( area->y2 - area->y1 + 1 );
+#ifdef LANDSCAPE
+    uint16_t w = ( area->x2 - area->x1 + 1 );
 
-    g_Lcd.BitBlt(area->x1, area->y1, w, h, ( uint8_t * )color_p );
+    if (area->y1 < s_LcdCfg[0].VLen)
+    {
+        if (area->y2 < s_LcdCfg[0].VLen)
+        {
+        	// Top screen only
+        	uint16_t h = area->y2 - area->y1 + 1;
+            g_Lcd[0].BitBlt(area->x1, area->y1, w, h, (uint8_t *)color_p);
+        }
+        else
+        {
+        	// Render both screens
+        	uint16_t h = s_LcdCfg[0].VLen - area->y1;
+            g_Lcd[0].BitBlt(area->x1, area->y1, w, h, (uint8_t *)color_p);
+            color_p += h*w;
+            h = area->y2 - s_LcdCfg[0].VLen + 1;
+            g_Lcd[1].BitBlt(area->x1, 0, w, h, (uint8_t *)color_p);
+        }
+    }
+    else
+    {
+    	// Bottom screen only
+    	uint16_t h = area->y2 - area->y1 + 1;
+        g_Lcd[1].BitBlt(area->x1, area->y1 - s_LcdCfg[0].VLen, w, h, (uint8_t *)color_p);
+    }
+#else
+    uint16_t h = ( area->y2 - area->y1 + 1 );
+
+    if (area->x1 < s_LcdCfg[0].HLen)
+    {
+    	if (area->x2 < s_LcdCfg[0].HLen)
+    	{
+    		// Left screen only
+    		uint16_t w = ( area->x2 - area->x1 + 1 );
+            g_Lcd[0].BitBlt(area->x1, area->y1, w, h, (uint8_t *)color_p);
+    	}
+    	else
+    	{
+    		// Render both screens
+    		lv_color_t *p = color_p;
+    		uint16_t w1 = s_LcdCfg[0].HLen - area->x1;
+    		uint16_t w2 = area->x2 - s_LcdCfg[0].HLen + 1;
+    		for (int i = area->y1; i <= area->y2; i++)
+    		{
+				g_Lcd[0].BitBlt(area->x1, i, w1, 1, (uint8_t*)p);
+				p += w1;
+				g_Lcd[1].BitBlt(0, i, w2, 1, (uint8_t*)p);
+				p += w2;
+    		}
+    	}
+    }
+    else
+    {
+    	// Right screen only
+    	uint16_t w = ( area->x2 - area->x1 + 1 );
+        g_Lcd[1].BitBlt(area->x1 - s_LcdCfg[0].HLen, area->y1, w, h, (uint8_t *)color_p);
+    }
+#endif
     lv_disp_flush_ready( disp );
 }
 
@@ -136,18 +223,27 @@ void HardwareInit()
 {
 	g_Spi.Init(s_SpiCfg);
 
-	g_Lcd.Init(s_LcdCfg, &g_Spi);
-	g_Lcd.Backlight(true);
+	g_Lcd[0].Init(s_LcdCfg[0], &g_Spi);
+	g_Lcd[0].Backlight(true);
+	g_Lcd[0].Clear();
 
-	g_Lcd.Clear();
+	g_Lcd[1].Backlight(false);
+	g_Lcd[1].Init(s_LcdCfg[1], &g_Spi);
+	g_Lcd[1].Backlight(true);
+	g_Lcd[1].Clear();
 
 	lv_init();
 	lv_disp_draw_buf_init( &draw_buf, buf, NULL, LVBUFF_SIZE );
 
 	lv_disp_drv_init( &s_LvglDriver );
 	/*Change the following line to your display resolution*/
-	s_LvglDriver.hor_res = s_LcdCfg.HLen;
-	s_LvglDriver.ver_res = s_LcdCfg.VLen;
+#ifdef LANDSCAPE
+	s_LvglDriver.hor_res = s_LcdCfg[0].HLen;
+	s_LvglDriver.ver_res = s_LcdCfg[0].VLen + s_LcdCfg[1].VLen;
+#else
+	s_LvglDriver.hor_res = s_LcdCfg[0].HLen + s_LcdCfg[1].HLen;
+	s_LvglDriver.ver_res = s_LcdCfg[0].VLen;
+#endif
 	s_LvglDriver.flush_cb = my_disp_flush;
 	s_LvglDriver.draw_buf = &draw_buf;
 	lv_disp_drv_register( &s_LvglDriver );
