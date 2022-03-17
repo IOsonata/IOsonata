@@ -66,6 +66,7 @@ public:
 	virtual void SetPixel(uint16_t X, uint16_t Y, uint32_t Color) = 0;
 	virtual void BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint8_t *pBuffer) = 0;
 	virtual void Backlight(bool bOn);
+	virtual void Reset();
 
 protected:
 	DisplayCfg_t vCfg;	//!< Internal copy of config data

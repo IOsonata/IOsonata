@@ -32,12 +32,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include "idelay.h"
 #include "display/display.h"
 #include "iopinctrl.h"
 
 void Display::Backlight(bool bOn)
 {
-	if (vCfg.NbPins > 1)
+	if (vCfg.NbPins > DISPL_CTRL_DCX_PINIDX)
 	{
 		if (bOn)
 		{
@@ -47,5 +48,15 @@ void Display::Backlight(bool bOn)
 		{
 			IOPinClear(vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PinNo);
 		}
+	}
+}
+
+void Display::Reset()
+{
+	if (vCfg.NbPins > DISPL_CTRL_BKLIGHT_PINIDX)
+	{
+		IOPinClear(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
+		usDelay(100);
+		IOPinSet(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
 	}
 }

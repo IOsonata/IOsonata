@@ -47,13 +47,10 @@ bool DisplST77xx::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 
 	IOPinCfg(vCfg.pPins, vCfg.NbPins);
 
-	uint8_t cmd = ST77XX_CMD_SWRESET;
-	uint32_t d = 6;
-	Write(&cmd, 1, NULL, 0);
+	Reset();
 
-	msDelay(200);
-
-	cmd = ST77XX_CMD_SLPOUT;
+	uint32_t d;
+	uint8_t cmd = ST77XX_CMD_SLPOUT;
 	Write(&cmd, 1, NULL, 0);
 
 	uint16_t ramctrl = 0x0d000;// | ST77XX_CMD_RAMCTRL_ENDIAN_LITTLE;
@@ -97,14 +94,14 @@ bool DisplST77xx::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 	cmd = ST77XX_CMD_MADCTL;
 	Write(&cmd, 1, (uint8_t*)&madctl, 1);
 
-#if 1
+	// These setting are required for ram transfer to function properly
+	// Do not remove
 	cmd = ST77XX_CMD_RAMCTRL;
 	Write(&cmd, 1, (uint8_t*)&ramctrl, 2);
 
 	cmd = ST77XX_CMD_LCMCTRL;
 	d = 0;
 	Write(&cmd, 1, (uint8_t*)&d, 1);
-#endif
 
 	cmd = ST77XX_CMD_INVON;
 	Write(&cmd, 1, NULL, 0);
@@ -145,7 +142,18 @@ void DisplST77xx::Disable()
  */
 void DisplST77xx::Reset()
 {
-
+	if (vCfg.NbPins > DISPL_CTRL_BKLIGHT_PINIDX)
+	{
+		// Reset controllable, try hard reset
+		Display::Reset();
+	}
+	else
+	{
+		// Soft reset
+		uint8_t cmd = ST77XX_CMD_SWRESET;
+		Write(&cmd, 1, NULL, 0);
+	}
+	msDelay(200);
 }
 
 void DisplST77xx::Clear()
