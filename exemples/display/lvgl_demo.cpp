@@ -48,7 +48,8 @@ SOFTWARE.
 
 #include "board.h"
 
-//#define LANDSCAPE
+static const IOPinCfg_t s_But[] = BUT_PINS;
+static const int s_NbBut = sizeof(s_But) / sizeof(IOPinCfg_t);
 
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
@@ -93,27 +94,22 @@ DisplayCfg_t s_LcdCfg = {
 	.pPins = s_TFTCtrlPins,
 	.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
 	.Stride = 320 * 3,
-#ifdef LANDSCAPE
-	.HLen = 320,
-	.VLen = 240,
-	.PixelSize = 16,
-	.Orient = DISPL_ORIENT_LANDSCAPE,
-#else
 	.HLen = 240,
 	.VLen = 320,
 	.PixelSize = 16,
 	.Orient = DISPL_ORIENT_PORTRAIT,
-#endif
 };
 
 DisplST77xx g_Lcd;
 
-#define LVBUFF_SIZE		(1024)
+#define LVBUFF_SIZE		(4096)
 
 static lv_disp_drv_t s_LvglDriver;
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t buf[LVBUFF_SIZE];
 uint8_t g_LvglMem[LV_MEM_SIZE];
+lv_disp_t *g_pDispl = NULL;
+bool g_bLandscape = false;
 
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
@@ -134,6 +130,8 @@ void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colo
 
 void HardwareInit()
 {
+	IOPinCfg(s_But, s_NbBut);
+
 	g_Spi.Init(s_SpiCfg);
 
 	g_Lcd.Init(s_LcdCfg, &g_Spi);
@@ -145,12 +143,12 @@ void HardwareInit()
 	lv_disp_draw_buf_init( &draw_buf, buf, NULL, LVBUFF_SIZE );
 
 	lv_disp_drv_init( &s_LvglDriver );
-	/*Change the following line to your display resolution*/
+
 	s_LvglDriver.hor_res = s_LcdCfg.HLen;
 	s_LvglDriver.ver_res = s_LcdCfg.VLen;
 	s_LvglDriver.flush_cb = my_disp_flush;
 	s_LvglDriver.draw_buf = &draw_buf;
-	lv_disp_drv_register( &s_LvglDriver );
+	g_pDispl = lv_disp_drv_register( &s_LvglDriver );
 
     g_Timer.Init(s_TimerCfg);
 
@@ -171,7 +169,6 @@ void HardwareInit()
 // If functionality is not required, to only pass the build, use
 // `--specs=nosys.specs`.
 //
-lv_obj_t img;
 
 int main()
 {
@@ -187,8 +184,41 @@ int main()
 	uint64_t period = g_Timer.EnableTimerTrigger(0, LV_DISP_DEF_REFR_PERIOD, TIMER_TRIG_TYPE_CONTINUOUS);
 
 	while (1) {
-		lv_task_handler();
-		//__WFE();
+		__WFE();
+		if (IOPinRead(BUT1_PORT, BUT1_PIN) == 0 || IOPinRead(BUT2_PORT, BUT2_PIN) == 0)
+		{
+			// Switch display mode portrait/landscape
+			g_bLandscape = !g_bLandscape;
+
+			g_Timer.DisableTimerTrigger(0);
+
+			if (g_bLandscape == true)
+			{
+				s_LcdCfg.HLen = 320;
+				s_LcdCfg.VLen = 240;
+				s_LcdCfg.Orient = DISPL_ORIENT_LANDSCAPE;
+			}
+			else
+			{
+				s_LcdCfg.HLen = 240;
+				s_LcdCfg.VLen = 320;
+				s_LcdCfg.Orient = DISPL_ORIENT_PORTRAIT;
+			}
+			g_Lcd.Init(s_LcdCfg, &g_Spi);
+			g_Lcd.Backlight(true);
+			g_Lcd.Clear();
+
+			s_LvglDriver.hor_res = s_LcdCfg.HLen;
+			s_LvglDriver.ver_res = s_LcdCfg.VLen;
+
+			lv_disp_drv_update(g_pDispl, &s_LvglDriver);
+
+			g_Timer.EnableTimerTrigger(0, LV_DISP_DEF_REFR_PERIOD, TIMER_TRIG_TYPE_CONTINUOUS);
+		}
+		else
+		{
+			lv_task_handler();
+		}
 	}
 
 	return 0;
