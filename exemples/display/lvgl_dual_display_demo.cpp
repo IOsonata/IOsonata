@@ -49,8 +49,6 @@ SOFTWARE.
 
 #include "board.h"
 
-//#define LANDSCAPE
-
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 const static TimerCfg_t s_TimerCfg = {
@@ -95,27 +93,6 @@ SPI g_Spi;
 DisplayCfg_t s_LcdCfg[2] = {
 #ifdef LANDSCAPE
 	{
-		.DevAddr = 1,
-		.pPins = s_TFT2CtrlPins,
-		.NbPins = sizeof(s_TFT2CtrlPins) / sizeof(IOPinCfg_t),
-		.Stride = 320 * 3,
-		.HLen = 320,
-		.VLen = 240,
-		.PixelSize = 16,
-		.Orient = DISPL_ORIENT_LANDSCAPE,
-	},
-	{
-		.DevAddr = 0,
-		.pPins = s_TFTCtrlPins,
-		.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
-		.Stride = 320 * 3,
-		.HLen = 320,
-		.VLen = 240,
-		.PixelSize = 16,
-		.Orient = DISPL_ORIENT_LANDSCAPE,
-	},
-#else
-	{
 		.DevAddr = 0,
 		.pPins = s_TFTCtrlPins,
 		.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
@@ -135,6 +112,27 @@ DisplayCfg_t s_LcdCfg[2] = {
 		.PixelSize = 16,
 		.Orient = DISPL_ORIENT_PORTRAIT,
 	}
+#else
+	{
+		.DevAddr = 1,
+		.pPins = s_TFT2CtrlPins,
+		.NbPins = sizeof(s_TFT2CtrlPins) / sizeof(IOPinCfg_t),
+		.Stride = 320 * 3,
+		.HLen = 320,
+		.VLen = 240,
+		.PixelSize = 16,
+		.Orient = DISPL_ORIENT_LANDSCAPE,
+	},
+	{
+		.DevAddr = 0,
+		.pPins = s_TFTCtrlPins,
+		.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
+		.Stride = 320 * 3,
+		.HLen = 320,
+		.VLen = 240,
+		.PixelSize = 16,
+		.Orient = DISPL_ORIENT_LANDSCAPE,
+	},
 #endif
 };
 
@@ -157,33 +155,6 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p )
 {
 #ifdef LANDSCAPE
-    uint16_t w = ( area->x2 - area->x1 + 1 );
-
-    if (area->y1 < s_LcdCfg[0].VLen)
-    {
-        if (area->y2 < s_LcdCfg[0].VLen)
-        {
-        	// Top screen only
-        	uint16_t h = area->y2 - area->y1 + 1;
-            g_Lcd[0].BitBlt(area->x1, area->y1, w, h, (uint8_t *)color_p);
-        }
-        else
-        {
-        	// Render both screens
-        	uint16_t h = s_LcdCfg[0].VLen - area->y1;
-            g_Lcd[0].BitBlt(area->x1, area->y1, w, h, (uint8_t *)color_p);
-            color_p += h*w;
-            h = area->y2 - s_LcdCfg[0].VLen + 1;
-            g_Lcd[1].BitBlt(area->x1, 0, w, h, (uint8_t *)color_p);
-        }
-    }
-    else
-    {
-    	// Bottom screen only
-    	uint16_t h = area->y2 - area->y1 + 1;
-        g_Lcd[1].BitBlt(area->x1, area->y1 - s_LcdCfg[0].VLen, w, h, (uint8_t *)color_p);
-    }
-#else
     uint16_t h = ( area->y2 - area->y1 + 1 );
 
     if (area->x1 < s_LcdCfg[0].HLen)
@@ -215,6 +186,33 @@ void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colo
     	uint16_t w = ( area->x2 - area->x1 + 1 );
         g_Lcd[1].BitBlt(area->x1 - s_LcdCfg[0].HLen, area->y1, w, h, (uint8_t *)color_p);
     }
+#else
+    uint16_t w = ( area->x2 - area->x1 + 1 );
+
+    if (area->y1 < s_LcdCfg[0].VLen)
+    {
+        if (area->y2 < s_LcdCfg[0].VLen)
+        {
+        	// Top screen only
+        	uint16_t h = area->y2 - area->y1 + 1;
+            g_Lcd[0].BitBlt(area->x1, area->y1, w, h, (uint8_t *)color_p);
+        }
+        else
+        {
+        	// Render both screens
+        	uint16_t h = s_LcdCfg[0].VLen - area->y1;
+            g_Lcd[0].BitBlt(area->x1, area->y1, w, h, (uint8_t *)color_p);
+            color_p += h*w;
+            h = area->y2 - s_LcdCfg[0].VLen + 1;
+            g_Lcd[1].BitBlt(area->x1, 0, w, h, (uint8_t *)color_p);
+        }
+    }
+    else
+    {
+    	// Bottom screen only
+    	uint16_t h = area->y2 - area->y1 + 1;
+        g_Lcd[1].BitBlt(area->x1, area->y1 - s_LcdCfg[0].VLen, w, h, (uint8_t *)color_p);
+    }
 #endif
     lv_disp_flush_ready( disp );
 }
@@ -238,11 +236,11 @@ void HardwareInit()
 	lv_disp_drv_init( &s_LvglDriver );
 	/*Change the following line to your display resolution*/
 #ifdef LANDSCAPE
-	s_LvglDriver.hor_res = s_LcdCfg[0].HLen;
-	s_LvglDriver.ver_res = s_LcdCfg[0].VLen + s_LcdCfg[1].VLen;
-#else
 	s_LvglDriver.hor_res = s_LcdCfg[0].HLen + s_LcdCfg[1].HLen;
 	s_LvglDriver.ver_res = s_LcdCfg[0].VLen;
+#else
+	s_LvglDriver.hor_res = s_LcdCfg[0].HLen;
+	s_LvglDriver.ver_res = s_LcdCfg[0].VLen + s_LcdCfg[1].VLen;
 #endif
 	s_LvglDriver.flush_cb = my_disp_flush;
 	s_LvglDriver.draw_buf = &draw_buf;
