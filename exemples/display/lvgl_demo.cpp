@@ -102,8 +102,6 @@ DisplayCfg_t s_LcdCfg = {
 
 DisplST77xx g_Lcd;
 
-#define LVBUFF_SIZE		(4096)
-
 static lv_disp_drv_t s_LvglDriver;
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t buf[LVBUFF_SIZE];
