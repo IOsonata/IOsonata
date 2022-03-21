@@ -50,9 +50,9 @@ bool LcdST77xx::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 	uint8_t cmd = LCDMTRX_CMD_INVON;
 	Write(&cmd, 1, NULL, 0);
 
-	//cmd = ST77XX_CMD_LCMCTRL;
-	//uint32_t d = 0;
-	//Write(&cmd, 1, (uint8_t*)&d, 1);
+	cmd = ST77XX_CMD_LCMCTRL;
+	uint32_t d = 0;
+	Write(&cmd, 1, (uint8_t*)&d, 1);
 
 	return true;
 }

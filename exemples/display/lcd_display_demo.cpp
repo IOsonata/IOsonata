@@ -84,12 +84,12 @@ DisplayCfg_t s_LcdCfg = {
 	.Width = 240,
 	.Height = 320,
 	.PixelSize = 16,
-	.Orient = DISPL_ORIENT_PORTRAIT_INV,
+	.Orient = DISPL_ORIENT_PORTRAIT,
 };
 
-//DisplST77xx g_Lcd;
+LcdST77xx g_Lcd;
 //LcdILI9341 g_Lcd;
-LcdHX8357 g_Lcd;
+//LcdHX8357 g_Lcd;
 
 uint8_t g_LineBuff[480 * 4];
 
