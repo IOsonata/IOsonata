@@ -731,6 +731,21 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display.h</locationURI>
 		</link>
 		<link>
+			<name>include/display/display_hx8357.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_hx8357.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_ili9341.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_ili9341.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_lcdmtrx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_lcdmtrx.h</locationURI>
+		</link>
+		<link>
 			<name>include/display/display_st77xx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_st77xx.h</locationURI>
@@ -1159,6 +1174,21 @@
 			<name>src/display/display.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_hx8357.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_hx8357.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_ili9341.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_ili9341.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_lcdmtrx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_lcdmtrx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display_st77xx.cpp</name>

@@ -41,6 +41,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/display</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/examples</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -74,6 +79,16 @@
 			<name>src/demos/widgets</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_ili9341.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/display/display_ili9341.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_lcdmtrx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/display/display_lcdmtrx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/examples/anim</name>
