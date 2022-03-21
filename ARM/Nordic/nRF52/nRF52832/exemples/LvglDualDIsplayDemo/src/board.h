@@ -47,7 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BUT1_PINOP						0
 
 #define BUT2_PORT						0
-#define BUT2_PIN						4
+#define BUT2_PIN						2
 #define BUT2_PINOP						0
 
 #define BUT_PINS	{ \
