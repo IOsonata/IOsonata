@@ -201,7 +201,8 @@ int main()
 			{
 				orient = DISPL_ORIENT_PORTRAIT;
 			}
-			g_Lcd.Orientation((DISPL_ORIENT)orient);
+			//g_Lcd.Orientation((DISPL_ORIENT)orient);
+			g_Lcd.Rotate90();
 #if 0
 			if (g_bLandscape == true)
 			{
@@ -226,6 +227,7 @@ int main()
 			lv_disp_drv_update(g_pDispl, &s_LvglDriver);
 
 			g_Timer.EnableTimerTrigger(0, LV_DISP_DEF_REFR_PERIOD, TIMER_TRIG_TYPE_CONTINUOUS);
+			while(IOPinRead(BUT1_PORT, BUT1_PIN) == 0 ||  IOPinRead(BUT2_PORT, BUT2_PIN) == 0);
 		}
 		else
 		{
