@@ -70,7 +70,6 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 			// Default it to 16bits instead.
 			vCfg.PixelSize = 16;
 		case 16:
-			//ramctrl |= (1<<11);//ST77XX_CMD_RAMCTRL_ENDIAN_LITTLE;
 			vMadCtl |= LCDMTRX_CMD_MADCTL_BGR;
 			d = LCDMTRX_CMD_COLMOD_COLOR_FMT_16 | LCDMTRX_CMD_COLMOD_RGB_INTRF_65K;
 			vPixelLen = 2;
@@ -87,9 +86,6 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 	Write(&cmd, 1, (uint8_t*)&d, 1);
 
 	Orientation(vCfg.Orient);
-
-	cmd = LCDMTRX_CMD_MADCTL;
-	Write(&cmd, 1, (uint8_t*)&vMadCtl, 1);
 
 	cmd = LCDMTRX_CMD_NORMALON;
 	Write(&cmd, 1, NULL, 0);
