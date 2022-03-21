@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>LvglDemo</name>
+	<name>LvglDualDisplayDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -56,9 +56,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/lvgl_demo.cpp</name>
+			<name>src/lvgl_dual_display_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/display/lvgl_demo.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/display/lvgl_dual_display_demo.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/demos/benchmark</name>
@@ -2069,7 +2069,7 @@
 	<variableList>
 		<variable>
 			<name>copy_PARENT</name>
-			<value>$%7BPARENT-2-PROJECT_LOC%7D/exemples/LvglDemo</value>
+			<value>$%7BPARENT-2-PROJECT_LOC%7D/exemples/LvglDualDisplayDemo</value>
 		</variable>
 		<variable>
 			<name>copy_PARENT1</name>

@@ -99,8 +99,8 @@ DisplayCfg_t s_LcdCfg[2] = {
 		.pPins = s_TFTCtrlPins,
 		.NbPins = sizeof(s_TFT2CtrlPins) / sizeof(IOPinCfg_t),
 		.Stride = 320 * 3,
-		.HLen = 320,
-		.VLen = 240,
+		.Width = 320,
+		.Height = 240,
 		.PixelSize = 16,
 		.Orient = DISPL_ORIENT_LANDSCAPE,
 	},
@@ -109,14 +109,14 @@ DisplayCfg_t s_LcdCfg[2] = {
 		.pPins = s_TFT2CtrlPins,
 		.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
 		.Stride = 320 * 3,
-		.HLen = 320,
-		.VLen = 240,
+		.Width = 320,
+		.Height = 240,
 		.PixelSize = 16,
 		.Orient = DISPL_ORIENT_LANDSCAPE,
 	},
 };
 
-DisplST77xx g_Lcd[2];
+LcdST77xx g_Lcd[2];
 
 static lv_disp_drv_t s_LvglDriver;
 static lv_disp_draw_buf_t draw_buf;
@@ -139,9 +139,9 @@ void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colo
 	{
 		uint16_t h = ( area->y2 - area->y1 + 1 );
 
-		if (area->x1 < s_LcdCfg[0].HLen)
+		if (area->x1 < s_LcdCfg[0].Width)
 		{
-			if (area->x2 < s_LcdCfg[0].HLen)
+			if (area->x2 < s_LcdCfg[0].Width)
 			{
 				// Left screen only
 				uint16_t w = ( area->x2 - area->x1 + 1 );
@@ -151,8 +151,8 @@ void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colo
 			{
 				// Render both screens
 				lv_color_t *p = color_p;
-				uint16_t w1 = s_LcdCfg[0].HLen - area->x1;
-				uint16_t w2 = area->x2 - s_LcdCfg[0].HLen + 1;
+				uint16_t w1 = s_LcdCfg[0].Width - area->x1;
+				uint16_t w2 = area->x2 - s_LcdCfg[0].Width + 1;
 				for (int i = area->y1; i <= area->y2; i++)
 				{
 					g_Lcd[0].BitBlt(area->x1, i, w1, 1, (uint8_t*)p);
@@ -166,16 +166,16 @@ void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colo
 		{
 			// Right screen only
 			uint16_t w = ( area->x2 - area->x1 + 1 );
-			g_Lcd[1].BitBlt(area->x1 - s_LcdCfg[0].HLen, area->y1, w, h, (uint8_t *)color_p);
+			g_Lcd[1].BitBlt(area->x1 - s_LcdCfg[0].Width, area->y1, w, h, (uint8_t *)color_p);
 		}
 	}
 	else
 	{
 		uint16_t w = ( area->x2 - area->x1 + 1 );
 
-		if (area->y1 < s_LcdCfg[1].VLen)
+		if (area->y1 < s_LcdCfg[1].Height)
 		{
-			if (area->y2 < s_LcdCfg[1].VLen)
+			if (area->y2 < s_LcdCfg[1].Height)
 			{
 				// Top screen only
 				uint16_t h = area->y2 - area->y1 + 1;
@@ -184,10 +184,10 @@ void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colo
 			else
 			{
 				// Render both screens
-				uint16_t h = s_LcdCfg[1].VLen - area->y1;
+				uint16_t h = s_LcdCfg[1].Height - area->y1;
 				g_Lcd[1].BitBlt(area->x1, area->y1, w, h, (uint8_t *)color_p);
 				color_p += h*w;
-				h = area->y2 - s_LcdCfg[1].VLen + 1;
+				h = area->y2 - s_LcdCfg[1].Height + 1;
 				g_Lcd[0].BitBlt(area->x1, 0, w, h, (uint8_t *)color_p);
 			}
 		}
@@ -195,7 +195,7 @@ void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *colo
 		{
 			// Bottom screen only
 			uint16_t h = area->y2 - area->y1 + 1;
-			g_Lcd[0].BitBlt(area->x1, area->y1 - s_LcdCfg[0].VLen, w, h, (uint8_t *)color_p);
+			g_Lcd[0].BitBlt(area->x1, area->y1 - s_LcdCfg[0].Height, w, h, (uint8_t *)color_p);
 		}
 	}
 	lv_disp_flush_ready( disp );
@@ -219,8 +219,8 @@ void HardwareInit()
 	lv_disp_draw_buf_init( &draw_buf, buf, NULL, LVBUFF_SIZE );
 
 	lv_disp_drv_init( &s_LvglDriver );
-	s_LvglDriver.hor_res = s_LcdCfg[0].HLen;
-	s_LvglDriver.ver_res = s_LcdCfg[0].VLen + s_LcdCfg[1].VLen;
+	s_LvglDriver.hor_res = s_LcdCfg[0].Width;
+	s_LvglDriver.ver_res = s_LcdCfg[0].Height + s_LcdCfg[1].Height;
 	s_LvglDriver.flush_cb = my_disp_flush;
 	s_LvglDriver.draw_buf = &draw_buf;
 	g_pDispl = lv_disp_drv_register( &s_LvglDriver );
@@ -270,25 +270,25 @@ int main()
 
 			if (g_bLandscape == true)
 			{
-				s_LcdCfg[0].HLen = 240;
-				s_LcdCfg[0].VLen = 320;
+				s_LcdCfg[0].Width = 240;
+				s_LcdCfg[0].Height = 320;
 				s_LcdCfg[0].Orient = DISPL_ORIENT_PORTRAIT;
-				s_LcdCfg[1].HLen = 240;
-				s_LcdCfg[1].VLen = 320;
+				s_LcdCfg[1].Width = 240;
+				s_LcdCfg[1].Height = 320;
 				s_LcdCfg[1].Orient = DISPL_ORIENT_PORTRAIT;
-				s_LvglDriver.hor_res = s_LcdCfg[0].HLen + s_LcdCfg[1].HLen;
-				s_LvglDriver.ver_res = s_LcdCfg[0].VLen;
+				s_LvglDriver.hor_res = s_LcdCfg[0].Width + s_LcdCfg[1].Width;
+				s_LvglDriver.ver_res = s_LcdCfg[0].Height;
 			}
 			else
 			{
-				s_LcdCfg[0].HLen = 320;
-				s_LcdCfg[0].VLen = 240;
+				s_LcdCfg[0].Width = 320;
+				s_LcdCfg[0].Height = 240;
 				s_LcdCfg[0].Orient = DISPL_ORIENT_LANDSCAPE;
-				s_LcdCfg[1].HLen = 320;
-				s_LcdCfg[1].VLen = 240;
+				s_LcdCfg[1].Width = 320;
+				s_LcdCfg[1].Height = 240;
 				s_LcdCfg[1].Orient = DISPL_ORIENT_LANDSCAPE;
-				s_LvglDriver.hor_res = s_LcdCfg[0].HLen;
-				s_LvglDriver.ver_res = s_LcdCfg[0].VLen + s_LcdCfg[1].VLen;
+				s_LvglDriver.hor_res = s_LcdCfg[0].Width;
+				s_LvglDriver.ver_res = s_LcdCfg[0].Height + s_LcdCfg[1].Height;
 			}
 			g_Lcd[0].Init(s_LcdCfg[0], &g_Spi);
 			g_Lcd[0].Backlight(true);

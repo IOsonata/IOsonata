@@ -386,6 +386,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/i-syst_logo_color_320x153.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153.c</locationURI>
+		</link>
+		<link>
 			<name>src/imu</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -634,6 +639,31 @@
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_hx8357.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_hx8357.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_ili9341.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_ili9341.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_lcdmtrx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_lcdmtrx.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/display_st77xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_st77xx.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/eink_intrf.h</name>
@@ -1014,6 +1044,31 @@
 			<name>src/coredev/uart_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_hx8357.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_hx8357.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_ili9341.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_ili9341.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_lcdmtrx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_lcdmtrx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_st77xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_st77xx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/eink_intrf.cpp</name>
