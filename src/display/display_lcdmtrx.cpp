@@ -176,6 +176,8 @@ void LCDMatrix::Orientation(DISPL_ORIENT Orient)
 			vMadCtl |= LCDMTRX_CMD_MADCTL_MV | LCDMTRX_CMD_MADCTL_MY | LCDMTRX_CMD_MADCTL_MX;
 			break;
 	}
+	vOrient = Orient;
+
 	uint8_t cmd = LCDMTRX_CMD_MADCTL;
 	Write(&cmd, 1, (uint8_t*)&vMadCtl, 1);
 }
