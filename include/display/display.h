@@ -43,8 +43,10 @@ SOFTWARE.
 #define DISPL_CTRL_RST_PINIDX			2		// Reset pin index
 
 typedef enum __Display_Orientation {
-	DISPL_ORIENT_PORTRAIT,
-	DISPL_ORIENT_LANDSCAPE
+	DISPL_ORIENT_PORTRAIT,			//!< Portrait normal
+	DISPL_ORIENT_LANDSCAPE,			//!< Landscape normal
+	DISPL_ORIENT_PORTRAIT_INV,		//!< Portrait inverted
+	DISPL_ORIENT_LANDSCAPE_INV		//!< Landscape inverted
 } DISPL_ORIENT;
 
 typedef struct __Display_Cfg {
@@ -52,8 +54,8 @@ typedef struct __Display_Cfg {
 	IOPinCfg_t const *pPins;
 	int NbPins;
 	uint16_t Stride;		//!< Memory stride in bytes for one line
-	uint16_t HLen;			//!< Horizontal length in pixels
-	uint16_t VLen;			//!< Vertical length in pixels
+	uint16_t Width;			//!< Horizontal length in pixels
+	uint16_t Height;		//!< Vertical length in pixels
 	uint8_t PixelSize;		//!< Pixel size in bits/pixel
 	DISPL_ORIENT Orient;	//!< Display orientation
 } DisplayCfg_t;
@@ -61,15 +63,121 @@ typedef struct __Display_Cfg {
 class Display : public Device {
 public:
 	virtual bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf) = 0;
+
+	/**
+	 * @brief	Clear screen
+	 *
+	 * @return	None
+	 */
 	virtual void Clear() = 0;
-	virtual void Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint32_t Color) = 0;
+
+	/**
+	 * @brief	Set display orientation
+	 *
+	 * @param	Orient	: Orientation to set
+	 *
+	 * @return	None
+	 */
+	virtual void Orientation(DISPL_ORIENT Orient) = 0;
+
+	/**
+	 * @brief	Get current orientation
+	 *
+	 * @return	Current orientation
+	 */
+	virtual DISPL_ORIENT Orientation() { return vOrient; }
+
+	/**
+	 * @brief	Fill region with color
+	 *
+	 * @param	StartX 	: Region start X coordinate in pixel
+	 * @param 	StartY 	: Region start Y coordinate in pixel
+	 * @param 	Width	: Region width in pixel
+	 * @param 	Height	: Region height in pixel
+	 * @param 	Color	: Color to fill
+	 *
+	 * @return	None
+	 */
+	virtual void Fill(uint16_t StartX, uint16_t StartY, uint16_t Width, uint16_t Height, uint32_t Color) = 0;
+
+	/**
+	 * @brief	Set pixel color
+	 *
+	 * @param 	X		: Pixel X coordinate
+	 * @param 	Y		: Pixel Y coordinate
+	 * @param 	Color	: Color to set
+	 *
+	 * @return	None
+	 */
 	virtual void SetPixel(uint16_t X, uint16_t Y, uint32_t Color) = 0;
-	virtual void BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint8_t *pBuffer) = 0;
-	virtual void Backlight(bool bOn);
+
+	/**
+	 * @brief	Transfer local graphic memory to display region
+	 *
+	 * @param 	StartX	: Region start X in pixel
+	 * @param 	StartY	: Region start Y in pixel
+	 * @param 	Width	: Region width in pixel
+	 * @param 	Height	: Region height in pixel
+	 * @param 	pMem	: Pointer to local graphics memory
+	 *
+	 * @return	None
+	 */
+	virtual void BitBlt(uint16_t StartX, uint16_t StartY, uint16_t Width, uint16_t Height, uint8_t *pMem) = 0;
+
+	/**
+	 * @brief	Get physical width in pixel
+	 *
+	 * @return	Screen with in pixel
+	 */
+	virtual uint16_t Width() { return vWidth; }
+
+	/**
+	 * @brief	Get physical height in pixel
+	 *
+	 * @return	Screen height in pixel
+	 */
+	virtual uint16_t Height() { return vHeight; }
+
+	/**
+	 * @brief	Turn back light on or off
+	 *
+	 * @param 	bState : True - Turn back light on
+	 * 					 False - Turn back light off
+	 *
+	 * @return	None
+	 */
+	virtual void Backlight(bool bState);
+
+	/**
+	 * @brief	Reset display
+	 *
+	 */
 	virtual void Reset();
 
+	/**
+	 * @brief	Rotate display by 90 degree clockwise
+	 */
+	void Rotate90();
+
 protected:
-	DisplayCfg_t vCfg;	//!< Internal copy of config data
+
+	/**
+	 * @brief	Set device physical size
+	 *
+	 * This function sets the max resolutions supported by the controller. It
+	 * may be bigger than the display panel resolutions
+	 *
+	 * @param 	Width 	: Screen width in pixels
+	 * @param 	Height	: Screen height in pixels
+	 *
+	 * @return	None
+	 */
+	void SetDevRes(uint16_t Width, uint16_t Height) { vWidth = Width; vHeight = Height; }
+
+	DisplayCfg_t vCfg;		//!< Internal copy of config data
+	uint16_t vWidth;		//!< Display physical width in pixels
+	uint16_t vHeight;		//!< Display physical height in pixels
+	DISPL_ORIENT vOrient;	//!< Current orientation
 };
 
 

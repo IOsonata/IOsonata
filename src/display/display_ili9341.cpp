@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	display.cpp
+@file	display_ili9341.cpp
 
-@brief	Generic display controller
+@brief	ILI9341 LCD display controller implementation
 
 
 @author	Hoang Nguyen Hoan
@@ -33,37 +33,25 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "idelay.h"
-#include "display/display.h"
+#include "convutil.h"
 #include "iopinctrl.h"
+#include "display/display_ili9341.h"
 
-void Display::Backlight(bool bOn)
+bool LcdILI9341::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 {
-	if (vCfg.NbPins > DISPL_CTRL_DCX_PINIDX)
+	LCDMatrix::vpLineBuff = vLineBuff;
+	SetDevRes(ILI9341_WIDTH_MAX, ILI9341_HEIGHT_MAX);
+
+	if (LCDMatrix::Init(Cfg, pIntrf) == false)
 	{
-		if (bOn)
-		{
-			IOPinSet(vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PinNo);
-		}
-		else
-		{
-			IOPinClear(vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PinNo);
-		}
+		return false;
 	}
+
+	uint8_t cmd = ILI9341_CMD_INTRF_CTRL;
+	uint32_t d = ILI9341_CMD_INTRF_CTRL_LITTLE_ENDIAN;//ILI9341_CMD_INTRF_CTRL_WEMODE | (2<<ILI9341_CMD_INTRF_CTRL_EPF_POS);
+	Write(&cmd, 1, (uint8_t*)&d, 3);
+
+	return true;
 }
 
-void Display::Reset()
-{
-	if (vCfg.NbPins > DISPL_CTRL_BKLIGHT_PINIDX)
-	{
-		IOPinClear(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
-		usDelay(100);
-		IOPinSet(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
-	}
-}
 
-void Display::Rotate90()
-{
-	int orient = vOrient == DISPL_ORIENT_LANDSCAPE_INV ? DISPL_ORIENT_PORTRAIT : vOrient + 1;
-
-	Orientation((DISPL_ORIENT)orient);
-}

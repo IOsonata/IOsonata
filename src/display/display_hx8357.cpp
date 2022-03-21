@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	display.cpp
+@file	display_st7789.cpp
 
-@brief	Generic display controller
+@brief	ST77xx LCD display controller implementation
 
 
 @author	Hoang Nguyen Hoan
@@ -33,37 +33,20 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "idelay.h"
-#include "display/display.h"
+#include "convutil.h"
 #include "iopinctrl.h"
+#include "display/display_hx8357.h"
 
-void Display::Backlight(bool bOn)
+bool LcdHX8357::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 {
-	if (vCfg.NbPins > DISPL_CTRL_DCX_PINIDX)
+	LCDMatrix::vpLineBuff = vLineBuff;
+	SetDevRes(HX8357_WIDTH_MAX, HX8357_HEIGHT_MAX);
+
+	if (LCDMatrix::Init(Cfg, pIntrf) == false)
 	{
-		if (bOn)
-		{
-			IOPinSet(vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PinNo);
-		}
-		else
-		{
-			IOPinClear(vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PinNo);
-		}
+		return false;
 	}
+
+	return true;
 }
 
-void Display::Reset()
-{
-	if (vCfg.NbPins > DISPL_CTRL_BKLIGHT_PINIDX)
-	{
-		IOPinClear(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
-		usDelay(100);
-		IOPinSet(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
-	}
-}
-
-void Display::Rotate90()
-{
-	int orient = vOrient == DISPL_ORIENT_LANDSCAPE_INV ? DISPL_ORIENT_PORTRAIT : vOrient + 1;
-
-	Orientation((DISPL_ORIENT)orient);
-}

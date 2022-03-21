@@ -42,6 +42,8 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "coredev/timer.h"
 #include "display/display_st77xx.h"
+#include "display/display_hx8357.h"
+#include "display/display_ili9341.h"
 #include "iopinctrl.h"
 #include "lv_demos.h"
 #include "lv_examples.h"
@@ -94,13 +96,15 @@ DisplayCfg_t s_LcdCfg = {
 	.pPins = s_TFTCtrlPins,
 	.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
 	.Stride = 320 * 3,
-	.HLen = 240,
-	.VLen = 320,
+	.Width = 240,
+	.Height = 320,
 	.PixelSize = 16,
 	.Orient = DISPL_ORIENT_PORTRAIT,
 };
 
-DisplST77xx g_Lcd;
+//DisplST77xx g_Lcd;
+LcdHX8357 g_Lcd;
+//LcdILI9341 g_Lcd;
 
 static lv_disp_drv_t s_LvglDriver;
 static lv_disp_draw_buf_t draw_buf;
@@ -142,8 +146,8 @@ void HardwareInit()
 
 	lv_disp_drv_init( &s_LvglDriver );
 
-	s_LvglDriver.hor_res = s_LcdCfg.HLen;
-	s_LvglDriver.ver_res = s_LcdCfg.VLen;
+	s_LvglDriver.hor_res = g_Lcd.Width();
+	s_LvglDriver.ver_res = g_Lcd.Height();
 	s_LvglDriver.flush_cb = my_disp_flush;
 	s_LvglDriver.draw_buf = &draw_buf;
 	g_pDispl = lv_disp_drv_register( &s_LvglDriver );
@@ -181,6 +185,8 @@ int main()
 
 	uint64_t period = g_Timer.EnableTimerTrigger(0, LV_DISP_DEF_REFR_PERIOD, TIMER_TRIG_TYPE_CONTINUOUS);
 
+	int orient = (int)g_Lcd.Orientation();
+
 	while (1) {
 		__WFE();
 		if (IOPinRead(BUT1_PORT, BUT1_PIN) == 0 || IOPinRead(BUT2_PORT, BUT2_PIN) == 0)
@@ -190,24 +196,32 @@ int main()
 
 			g_Timer.DisableTimerTrigger(0);
 
+			orient++;
+			if (orient > DISPL_ORIENT_LANDSCAPE_INV)
+			{
+				orient = DISPL_ORIENT_PORTRAIT;
+			}
+			g_Lcd.Orientation((DISPL_ORIENT)orient);
+#if 0
 			if (g_bLandscape == true)
 			{
-				s_LcdCfg.HLen = 320;
-				s_LcdCfg.VLen = 240;
+				s_LcdCfg.Width = 320;
+				s_LcdCfg.Height = 240;
 				s_LcdCfg.Orient = DISPL_ORIENT_LANDSCAPE;
 			}
 			else
 			{
-				s_LcdCfg.HLen = 240;
-				s_LcdCfg.VLen = 320;
+				s_LcdCfg.Width = 240;
+				s_LcdCfg.Height = 320;
 				s_LcdCfg.Orient = DISPL_ORIENT_PORTRAIT;
 			}
 			g_Lcd.Init(s_LcdCfg, &g_Spi);
 			g_Lcd.Backlight(true);
 			g_Lcd.Clear();
+#endif
 
-			s_LvglDriver.hor_res = s_LcdCfg.HLen;
-			s_LvglDriver.ver_res = s_LcdCfg.VLen;
+			s_LvglDriver.hor_res = g_Lcd.Width();
+			s_LvglDriver.ver_res = g_Lcd.Height();
 
 			lv_disp_drv_update(g_pDispl, &s_LvglDriver);
 

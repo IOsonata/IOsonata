@@ -39,12 +39,16 @@ SOFTWARE.
 #include "convutil.h"
 #include "coredev/spi.h"
 #include "display/display_st77xx.h"
+#include "display/display_ili9341.h"
+#include "display/display_hx8357.h"
 #include "iopinctrl.h"
 
 #include "board.h"
 
-extern "C" const uint8_t g_ISYST_Logo_16bits[];
+//extern "C" const uint8_t g_ISYST_Logo_16bits[];
 extern "C" const uint32_t g_ISYST_Logo_18bits[];
+extern "C" const uint16_t g_ISYST_Logo_16bits_bige[];
+extern "C" const uint16_t g_ISYST_Logo_32bits[];
 
 static const IOPinCfg_t s_TFTCtrlPins[] = TFT_PINS;
 const int s_NbTFTCtrlPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t);
@@ -64,7 +68,7 @@ static const SPICfg_t s_SpiCfg = {
     .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
     .ClkPol = SPICLKPOL_HIGH,         // clock polarity
     .ChipSel = SPICSEL_AUTO,
-	.bDmaEn = true,	// DMA
+	.bDmaEn = false,	// DMA
 	.bIntEn = false,
     .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
     .EvtCB = NULL
@@ -77,28 +81,26 @@ DisplayCfg_t s_LcdCfg = {
 	.pPins = s_TFTCtrlPins,
 	.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
 	.Stride = 320 * 3,
-	.HLen = 320,
-	.VLen = 240,
+	.Width = 240,
+	.Height = 320,
 	.PixelSize = 16,
-	.Orient = DISPL_ORIENT_LANDSCAPE,
+	.Orient = DISPL_ORIENT_PORTRAIT_INV,
 };
 
-DisplST77xx g_Lcd;
+//DisplST77xx g_Lcd;
+//LcdILI9341 g_Lcd;
+LcdHX8357 g_Lcd;
 
 uint8_t g_LineBuff[480 * 4];
 
 void HardwareInit()
 {
-	IOPinCfg(s_TFTCtrlPins, s_NbTFTCtrlPins);
-
 	g_Spi.Init(s_SpiCfg);
 
 	g_Lcd.Init(s_LcdCfg, &g_Spi);
+	g_Lcd.Backlight(true);
 
 	g_Lcd.Clear();
-	g_Lcd.Backlight(false);
-	msDelay(2000);
-	g_Lcd.Backlight(true);
 }
 
 //
@@ -122,75 +124,116 @@ int main()
 	uint32_t colorr = 0;
 	uint32_t colorg = 0;
 	uint32_t colorb = 0;
-	uint8_t *img = (uint8_t *)g_ISYST_Logo_16bits;
+	uint8_t const *img = (uint8_t*)g_ISYST_Logo_16bits_bige;//g_ISYST_Logo_16bits;
 	int pixelbyte = 1;
 
 	HardwareInit();
 
-	switch (s_LcdCfg.PixelSize)
+	int orient = s_LcdCfg.Orient;
+
+	while (1)
 	{
-		case 12:	// not supported
-		case 16:
-			colorr = 0xf800;
-			colorg = 0x7e0;
-			colorb = 0x1f;
-			img = (uint8_t *)g_ISYST_Logo_16bits;
-			pixelbyte = 2;
+		switch (s_LcdCfg.PixelSize)
+		{
+			case 12:	// not supported
+			case 16:
+				colorr = EndianCvt16(0xf800);
+				colorg = EndianCvt16(0x7e0);
+				colorb = EndianCvt16(0x1f);
+				img = (uint8_t *)g_ISYST_Logo_16bits_bige;
+				pixelbyte = 2;
 
-			// Display gradient
-			for (uint16_t i = 0, c = 0; c < 0x20; i+=2, c++)
-			{
-				for (int j = 80; j < 120; j++)
+				// Display gradient
+				for (uint16_t i = 0, c = 0; c < 0x20; i+=2, c++)
 				{
-					g_Lcd.SetPixel(i, j, c);
-					g_Lcd.SetPixel(i + 1, j, c);
-					g_Lcd.SetPixel(i + 0x40, j, c << 5);
-					g_Lcd.SetPixel(i + 0x41, j, c << 5);
-					g_Lcd.SetPixel(i + 0x80, j, c << 11);
-					g_Lcd.SetPixel(i + 0x81, j, c << 11);
+					uint16_t r = EndianCvt16(c);
+					uint16_t g = EndianCvt16(c << 5);
+					uint16_t b = EndianCvt16(c << 11);
+					for (int j = 80; j < 120; j++)
+					{
+						g_Lcd.SetPixel(i, j, r);
+						g_Lcd.SetPixel(i + 1, j, r);
+						g_Lcd.SetPixel(i + 0x40, j, g);
+						g_Lcd.SetPixel(i + 0x41, j, g);
+						g_Lcd.SetPixel(i + 0x80, j, b);
+						g_Lcd.SetPixel(i + 0x81, j, b);
+					}
 				}
-			}
-			break;
-		case 18:
-			colorr = 0xfc0000;
-			colorg = 0xfc00;
-			colorb = 0xfc;
-			img = (uint8_t *)g_ISYST_Logo_18bits;
-			pixelbyte = 3;
+				break;
+			case 18:
+				colorr = 0xfc0000;
+				colorg = 0xfc00;
+				colorb = 0xfc;
+				img = (uint8_t *)g_ISYST_Logo_18bits;
+				pixelbyte = 3;
 
-			// Display gradient
-			for (uint16_t i = 0, c = 0; c < 0x30; i+=2, c++)
-			{
-				for (int j = 80; j < 120; j++)
+				// Display gradient
+				for (uint16_t i = 0, c = 0; c < 0x30; i+=2, c++)
 				{
-					g_Lcd.SetPixel(i, j, c);
-					g_Lcd.SetPixel(i + 1, j, c);
-					g_Lcd.SetPixel(i + 0x60, j, c << 10);
-					g_Lcd.SetPixel(i + 0x61, j, c << 10);
-					g_Lcd.SetPixel(i + 0xC0, j, c << 18);
-					g_Lcd.SetPixel(i + 0xC1, j, c << 18);
+					for (int j = 80; j < 120; j++)
+					{
+						g_Lcd.SetPixel(i, j, c);
+						g_Lcd.SetPixel(i + 1, j, c);
+						g_Lcd.SetPixel(i + 0x60, j, c << 10);
+						g_Lcd.SetPixel(i + 0x61, j, c << 10);
+						g_Lcd.SetPixel(i + 0xC0, j, c << 18);
+						g_Lcd.SetPixel(i + 0xC1, j, c << 18);
+					}
 				}
-			}
-			break;
-	}
+				break;
+			case 24:
+				colorr = 0xfc0000;
+				colorg = 0xfc00;
+				colorb = 0xfc;
+				img = (uint8_t *)g_ISYST_Logo_32bits;
+				pixelbyte = 3;
 
-	msDelay(3000);
+				// Display gradient
+				for (uint16_t i = 0, c = 0; c < 0x30; i+=2, c++)
+				{
+					for (int j = 80; j < 120; j++)
+					{
+						g_Lcd.SetPixel(i, j, c);
+						g_Lcd.SetPixel(i + 1, j, c);
+						g_Lcd.SetPixel(i + 0x60, j, c << 10);
+						g_Lcd.SetPixel(i + 0x61, j, c << 10);
+						g_Lcd.SetPixel(i + 0xC0, j, c << 18);
+						g_Lcd.SetPixel(i + 0xC1, j, c << 18);
+					}
+				}
+				break;
+		}
 
-	// Display RGB bars
-	g_Lcd.Fill(0, 0, s_LcdCfg.HLen, 80, colorr);
-	g_Lcd.Fill(0, 80, s_LcdCfg.HLen, 80, colorg);
-	g_Lcd.Fill(0, 160, s_LcdCfg.HLen, 80, colorb);
+		msDelay(1000);
 
-	msDelay(3000);
+		uint16_t h = g_Lcd.Height() / 3;
 
-	// Display logo
-	uint8_t *p = img;
+		// Display RGB bars
+		g_Lcd.Fill(0, 0, g_Lcd.Width(), h, colorr);
+		g_Lcd.Fill(0, h, g_Lcd.Width(), h, colorg);
+		g_Lcd.Fill(0, h << 1, g_Lcd.Width(), h, colorb);
 
-	for (int i = 0; i < 153; i++)
-	{
-		memcpy(g_LineBuff, p, 320 * pixelbyte);
-		g_Lcd.BitBlt(0, 43 + i, s_LcdCfg.HLen, 1, g_LineBuff);
-		p += 320 * pixelbyte;
+		msDelay(1000);
+
+		// Display logo
+		uint8_t const *p = img;
+
+		for (int i = 0; i < 153; i++)
+		{
+			memcpy(g_LineBuff, p, 320 * pixelbyte);
+			g_Lcd.BitBlt(g_Lcd.Width() / 2 - 160, g_Lcd.Height() / 2 + i - 153/ 2, 320, 1, g_LineBuff);
+			p += 320 * pixelbyte;
+		}
+		msDelay(2000);
+
+		orient++;
+
+		if (orient > DISPL_ORIENT_LANDSCAPE_INV)
+		{
+			orient = DISPL_ORIENT_PORTRAIT;
+		}
+		g_Lcd.Orientation((DISPL_ORIENT)orient);
+		g_Lcd.Clear();
 	}
 
 	while(1) __WFE();
