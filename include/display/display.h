@@ -37,10 +37,16 @@ SOFTWARE.
 
 #include "device.h"
 #include "iopinctrl.h"
+#include "display/font.h"
 
 #define DISPL_CTRL_DCX_PINIDX			0		// Cmd/Data mode pin index
 #define DISPL_CTRL_BKLIGHT_PINIDX		1		// External back light pin index
 #define DISPL_CTRL_RST_PINIDX			2		// Reset pin index
+
+typedef enum __Display_Type {
+	DISPL_TYPE_CHAR,				//!< Character based display type (non graphics)
+	DISPL_TYPE_MATRIX,				//!< Dot matrix display (graphics)
+} DISPL_TYPE;
 
 typedef enum __Display_Orientation {
 	DISPL_ORIENT_PORTRAIT,			//!< Portrait normal
@@ -49,6 +55,20 @@ typedef enum __Display_Orientation {
 	DISPL_ORIENT_LANDSCAPE_INV		//!< Landscape inverted
 } DISPL_ORIENT;
 
+typedef enum __Display_Scroll_Direction {
+	DISPL_SCROLL_DIR_UP,
+	DISPL_SCROLL_DIR_DOWN,
+	DISPL_SCROLL_DIR_LEFT,
+	DISPL_SCROLL_DIR_RIGHT
+} DISPL_SCROLL_DIR;
+
+#define DISPL_FONT_ENCOD_VERTICAL		1	//!< Font encoding vertical
+#define DISPL_FONT_ENCOD_FIXED			2	//!< Font type fixed
+
+// NOTE: variable length font, first byte of character encoding is indicate the
+// width in pixel of that character
+
+#pragma pack(push,4)
 typedef struct __Display_Cfg {
 	uint32_t DevAddr;		//!< Device address (or SPI device CS index)
 	IOPinCfg_t const *pPins;
@@ -59,6 +79,7 @@ typedef struct __Display_Cfg {
 	uint8_t PixelSize;		//!< Pixel size in bits/pixel
 	DISPL_ORIENT Orient;	//!< Display orientation
 } DisplayCfg_t;
+#pragma pack(pop)
 
 class Display : public Device {
 public:
@@ -86,6 +107,14 @@ public:
 	 * @return	Current orientation
 	 */
 	virtual DISPL_ORIENT Orientation() { return vOrient; }
+
+	/**
+	 * @brief	Set current rendering location
+	 *
+	 * @param 	Col	:
+	 * @param 	Row	:
+	 */
+	virtual void SetCurrent(uint16_t Col, uint16_t Row) { vCurCol = Col; vCurLine = Row; }
 
 	/**
 	 * @brief	Fill region with color
@@ -124,6 +153,45 @@ public:
 	 */
 	virtual void BitBlt(uint16_t StartX, uint16_t StartY, uint16_t Width, uint16_t Height, uint8_t *pMem) = 0;
 
+	/**
+	 * @brief	Draw line on the screen
+	 *
+	 * Option function to draw a line on matrix display
+	 *
+	 * @param 	StartX	: Start X coordinate
+	 * @param 	StartY	: Start Y coordinate
+	 * @param 	EndX	: End X coordinate
+	 * @param 	EndY	: End Y coordinate
+	 * @param	Color	: Pixel color
+	 */
+	virtual void Line(uint16_t StartX, uint16_t StartY, uint16_t EndX, uint16_t EndY, uint32_t Color) {}
+
+	/**
+	 * @brief	Display text string at location
+	 *
+	 * Print a zero terminated string to the screen using the current font
+	 *
+	 * @param 	Col		: X coordinate
+	 * @param 	Row		: Y coordinate
+	 * @param 	pStr	: Zero terminated string
+	 */
+	virtual void Text(uint16_t Col, uint16_t Row, char *pStr) = 0;
+
+	/**
+	 * @brief	Scroll display (optional)
+	 *
+	 * Scroll the screen in the specified direction by n steps.
+	 * Step	:	1 char/line for character based display
+	 * 		   	1 pixel for graphics based display
+	 *
+	 * @param 	Dir		: Direction of scroll
+	 * @param 	Count	: Number of step to scroll
+	 *
+	 * @return	None
+	 */
+	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count) {}
+
+	virtual void SetFont(FontDesc_t const *pFont) { vpFont = pFont;}
 	/**
 	 * @brief	Get physical width in pixel
 	 *
@@ -173,11 +241,17 @@ protected:
 	 * @return	None
 	 */
 	void SetDevRes(uint16_t Width, uint16_t Height) { vWidth = Width; vHeight = Height; }
+	void SetDisplayType(DISPL_TYPE Type) { vType = Type; }
 
 	DisplayCfg_t vCfg;		//!< Internal copy of config data
 	uint16_t vWidth;		//!< Display physical width in pixels
 	uint16_t vHeight;		//!< Display physical height in pixels
 	DISPL_ORIENT vOrient;	//!< Current orientation
+	DISPL_TYPE vType;		//!< Display type
+	uint32_t vColor;		//!< Current color
+	FontDesc_t const *vpFont;	//!< Current font
+	uint16_t vCurLine;
+	uint16_t vCurCol;
 };
 
 

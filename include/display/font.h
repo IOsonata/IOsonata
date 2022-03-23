@@ -1,11 +1,11 @@
 /**-------------------------------------------------------------------------
-@file	display.cpp
+@file	font.h
 
-@brief	Generic display controller
+@brief	Generic display font definitions
 
 
 @author	Hoang Nguyen Hoan
-@date	Mar. 9, 2022
+@date	Mar. 22, 2022
 
 @license
 
@@ -32,42 +32,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include "idelay.h"
-#include "display/display.h"
-#include "iopinctrl.h"
+#ifndef __FONT_H__
+#define __FONT_H__
 
-extern "C" const uint8_t g_System5x7[];
+#include <stdint.h>
 
-void Display::Backlight(bool bOn)
-{
-	if (vCfg.NbPins > DISPL_CTRL_DCX_PINIDX)
-	{
-		if (bOn)
-		{
-			IOPinSet(vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PinNo);
-		}
-		else
-		{
-			IOPinClear(vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_BKLIGHT_PINIDX].PinNo);
-		}
-	}
-}
+#define DISPL_FONT_ENCOD_VERTICAL		1	//!< Font encoding vertical
+#define DISPL_FONT_ENCOD_FIXED			2	//!< Font type fixed
 
-void Display::Reset()
-{
-	vpFont = (FontDesc_t const *)g_System5x7;
+// NOTE: variable length font, first byte of character encoding is indicate the
+// width in pixel of that character
 
-	if (vCfg.NbPins > DISPL_CTRL_BKLIGHT_PINIDX)
-	{
-		IOPinClear(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
-		usDelay(100);
-		IOPinSet(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
-	}
-}
+#pragma pack(push,1)
 
-void Display::Rotate90()
-{
-	int orient = vOrient == DISPL_ORIENT_LANDSCAPE_INV ? DISPL_ORIENT_PORTRAIT : vOrient + 1;
+typedef struct __Char_Desc {
+	uint8_t Width;			//!< Char width in pixels
+	uint8_t const *pBits;		//!< Offset in the font bitmap array
+} CharDesc_t;
 
-	Orientation((DISPL_ORIENT)orient);
-}
+typedef struct __Display_Font {
+	uint8_t Flag;			//!< Font map encoding horiz/vert, fix/var
+	uint8_t Width;			//!< Width of biggest character in pixels
+	uint8_t Height;			//!< Font height in pixels
+	//uint8_t const *pBits; 	//!< Pointer to font bitmap of the variable length font, null for fixed font
+	union {
+		uint8_t Bits[1];	//!< Fixed font bitmap data
+		CharDesc_t const *pCharDesc;	//!< Lockup table for variable length font bitmap
+	};
+} FontDesc_t;
+#pragma pack(pop)
+
+
+
+#endif // __FONT_H__

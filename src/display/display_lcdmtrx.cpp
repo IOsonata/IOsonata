@@ -32,6 +32,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <math.h>
+
 #include "idelay.h"
 #include "convutil.h"
 #include "iopinctrl.h"
@@ -92,6 +94,15 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 
 	cmd = LCDMTRX_CMD_DISPON;
 	Write(&cmd, 1, NULL, 0);
+
+	cmd = LCDMTRX_CMD_VSCROLLDEF;
+	uint16_t dat[3] = {
+		0, EndianCvt16(vHeight), 0
+	};
+	Write(&cmd, 1, (uint8_t*)dat, 6);
+
+	vCurScrollLine = vHeight - 1;
+	vCurLine = vpFont->Height;
 
 	return true;
 }
@@ -272,6 +283,205 @@ void LCDMatrix::BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, 
 	uint8_t cmd = LCDMTRX_CMD_RAMWR;
 	//uint32_t l = Width * Height * vPixelLen;
 	Write(&cmd, 1, pBuffer, Width * Height * vPixelLen);
+}
+
+/**
+ * @brief	Draw line on the screen
+ *
+ * Function to draw a line on matrix display
+ *
+ * @param 	StartX	: Start X coordinate
+ * @param 	StartY	: Start Y coordinate
+ * @param 	EndX	: End X coordinate
+ * @param 	EndY	: End Y coordinate
+ * @param	Color	: Pixel color
+ */
+void LCDMatrix::Line(uint16_t StartX, uint16_t StartY, uint16_t EndX, uint16_t EndY, uint32_t Color)
+{
+	int dx = abs(EndX - StartX);
+	int sx = StartX < EndX ? 1 : -1;
+	int dy = -abs(EndY - StartY);
+	int sy = StartY < EndY ? 1 : -1;
+	int error = dx + dy;
+
+	if (StartY == EndY)
+	{
+		Fill(StartX < EndX ? StartX : EndX, StartY, dx + 1, 1, Color);
+		return;
+	}
+
+	SetPixel(StartX, StartY, Color);
+
+	while (StartX != EndX || StartY != EndY)
+	{
+		int e2 = error << 1;
+		if (e2 >= dy)
+		{
+			if (StartX == EndX)
+				break;
+			error = error + dy;
+			StartX += sx;
+		}
+		if (e2 <= dx)
+		{
+			if (StartY == EndY)
+				break;
+			error = error + dx;
+			StartY += sy;
+		}
+
+		SetPixel(StartX, StartY, Color);
+	}
+}
+
+
+/**
+ * @brief	Display text string at location
+ *
+ * Print a zero terminated string to the screen using the current font
+ *
+ * @param 	Col		: X coordinate
+ * @param 	Row		: Y coordinate
+ * @param 	pStr	: Zero terminated string
+ */
+void LCDMatrix::Text(uint16_t Col, uint16_t Row, char *pStr)
+{
+
+}
+
+/**
+ * @brief	Scroll display (optional)
+ *
+ * Scroll the screen in the specified direction by n steps.
+ * Step	:	1 char/line for character based display
+ * 		   	1 pixel for graphics based display
+ *
+ * @param 	Dir		: Direction of scroll
+ * @param 	Count	: Number of step to scroll
+ *
+ * @return	None
+ */
+void LCDMatrix::Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count)
+{
+	switch (Dir)
+	{
+		case DISPL_SCROLL_DIR_UP:
+			vCurScrollLine += Count;
+			if (vCurScrollLine >= vHeight)
+			{
+				vCurScrollLine = Count;
+			}
+			break;
+		case DISPL_SCROLL_DIR_DOWN:
+			vCurScrollLine -= Count;
+			if (vCurScrollLine >= vHeight)
+			{
+				vCurScrollLine = vHeight - Count - 1;
+			}
+			break;
+	}
+
+	uint8_t cmd = LCDMTRX_CMD_VSCROLL_START_ADDR;
+	uint16_t d = EndianCvt16(vCurScrollLine);
+	Write(&cmd, 1, (uint8_t*)&d, 2);
+
+}
+
+void LCDMatrix::Print(char *pStr, uint32_t Color)
+{
+	uint8_t buff[vpFont->Height * vPixelLen * vpFont->Width];
+	//uint8_t const *fp = vpFont->Bits;
+
+	//uint16_t x = 0;
+	//uint16_t y = vCurScrollLine + vpFont->Height + 10;
+
+	while (*pStr != 0)
+	{
+		switch (*pStr)
+		{
+			case '\n':
+				vCurLine += vpFont->Height + 1;
+				break;
+			case '\r':
+				vCurCol = 0;
+				break;
+			default:
+				if (vpFont->Flag & DISPL_FONT_ENCOD_FIXED)
+				{
+					// Fixed font
+					if (vpFont->Flag & DISPL_FONT_ENCOD_VERTICAL)
+					{
+						// Vertical encoded
+						uint16_t *p = (uint16_t*)buff;
+						int l = vpFont->Width * ((vpFont->Height>>3) + 1) * (*pStr - '!');
+						uint8_t const *fp = &vpFont->Bits[l];
+						uint32_t mask = 1;
+						while (mask <= (1UL<<(vpFont->Height - 1UL)))
+						{
+							for (int i = 0; i < vpFont->Width; i++, p++)
+							{
+								*p = fp[i] & mask ? Color : 0;
+							}
+							mask <<= 1;
+						}
+						BitBlt(vCurCol, vCurLine - vpFont->Height, vpFont->Width, vpFont->Height, buff);
+						vCurCol += vpFont->Width + 1;
+					}
+					else
+					{
+						// Horizontal encode
+					}
+				}
+				else
+				{
+					// Variable length font
+					uint16_t *p = (uint16_t*)buff;
+					int l = *pStr - '!';
+					uint8_t const *fp = vpFont->pCharDesc[l].pBits;
+
+					for (int i = 0; i < vpFont->Height; i++)
+					{
+						int w = vpFont->pCharDesc[l].Width / 8 + 1;
+						while (w > 0)
+						{
+							if (*fp == 0)
+							{
+								memset(p, 0, 8 * vPixelLen);
+								p += 8;
+							}
+							else
+							{
+								uint32_t mask = 0x80UL;
+
+								while (mask != 0)
+								{
+									*p = *fp & mask ? Color : 0;
+									p++;
+									mask >>= 1UL;
+								}
+
+							}
+							fp++;
+							w--;
+						}
+					}
+					BitBlt(vCurCol, vCurLine - vpFont->Height, vpFont->pCharDesc[l].Width, vpFont->Height, buff);
+					vCurCol += vpFont->Width + 2;
+				}
+		}
+		pStr++;
+		if (vCurCol > vWidth)
+		{
+			vCurCol = 0;
+			vCurLine += vpFont->Height + 1;
+		}
+		if (vCurLine > vCurScrollLine)
+		{
+			Scroll(DISPL_SCROLL_DIR_UP, vpFont->Height + 1);
+			Fill(0, vCurScrollLine - vpFont->Height - 1, vWidth, vpFont->Height + 1, 0);
+			vCurLine = vCurScrollLine;
+		}
+	}
 }
 
 void LCDMatrix::SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height)

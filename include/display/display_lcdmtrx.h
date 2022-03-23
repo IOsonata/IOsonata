@@ -184,11 +184,100 @@ public:
 	 * @brief	Reset device to it initial default state
 	 */
 	virtual void Reset();
+
+	/**
+	 * @brief	Clear screen
+	 *
+	 * @return	None
+	 */
 	virtual void Clear();
+
+	/**
+	 * @brief	Set current rendering location
+	 *
+	 * @param 	Col	:
+	 * @param 	Row	:
+	 */
+	virtual void SetCurrent(uint16_t Col, uint16_t Row) {
+		SetRamWrRegion(Col, Row, vWidth - Col + 1, vHeight - Row + 1);
+	}
+
+	/**
+	 * @brief	Fill region with color
+	 *
+	 * @param	StartX 	: Region start X coordinate in pixel
+	 * @param 	StartY 	: Region start Y coordinate in pixel
+	 * @param 	Width	: Region width in pixel
+	 * @param 	Height	: Region height in pixel
+	 * @param 	Color	: Color to fill
+	 *
+	 * @return	None
+	 */
 	virtual void Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint32_t Color);
 
+	/**
+	 * @brief	Set pixel color
+	 *
+	 * @param 	X		: Pixel X coordinate
+	 * @param 	Y		: Pixel Y coordinate
+	 * @param 	Color	: Color to set
+	 *
+	 * @return	None
+	 */
 	virtual void SetPixel(uint16_t X, uint16_t Y, uint32_t Color);
+
+	/**
+	 * @brief	Transfer local graphic memory to display region
+	 *
+	 * @param 	StartX	: Region start X in pixel
+	 * @param 	StartY	: Region start Y in pixel
+	 * @param 	Width	: Region width in pixel
+	 * @param 	Height	: Region height in pixel
+	 * @param 	pMem	: Pointer to local graphics memory
+	 *
+	 * @return	None
+	 */
 	virtual void BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint8_t *pBuffer);
+
+	/**
+	 * @brief	Draw line on the screen
+	 *
+	 * Option function to draw a line on matrix display
+	 *
+	 * @param 	StartX	: Start X coordinate
+	 * @param 	StartY	: Start Y coordinate
+	 * @param 	EndX	: End X coordinate
+	 * @param 	EndY	: End Y coordinate
+	 * @param	Color	: Pixel color
+	 */
+	virtual void Line(uint16_t StartX, uint16_t StartY, uint16_t EndX, uint16_t EndY, uint32_t Color);
+
+	/**
+	 * @brief	Display text string at location
+	 *
+	 * Print a zero terminated string to the screen using the current font
+	 *
+	 * @param 	Col		: X coordinate
+	 * @param 	Row		: Y coordinate
+	 * @param 	pStr	: Zero terminated string
+	 */
+	virtual void Text(uint16_t Col, uint16_t Row, char *pStr);
+
+	/**
+	 * @brief	Scroll display (optional)
+	 *
+	 * Scroll the screen in the specified direction by n steps.
+	 * Step	:	1 char/line for character based display
+	 * 		   	1 pixel for graphics based display
+	 *
+	 * @param 	Dir		: Direction of scroll
+	 * @param 	Count	: Number of step to scroll
+	 *
+	 * @return	None
+	 */
+	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count);
+
+	virtual void Print(char *pStr, uint32_t Color);
 
 	/**
 	 * @brief	Read device's register/memory block.
@@ -230,6 +319,7 @@ protected:
 private:
 	int vPixelLen;
 	uint8_t vMadCtl;
+	uint16_t vCurScrollLine;	//!< Keep track of scrolling (rotation)
 };
 
 
