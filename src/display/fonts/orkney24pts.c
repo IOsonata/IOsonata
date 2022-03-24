@@ -16,7 +16,7 @@
 #include "display/font.h"
 
 // Character bitmaps for Orkney 24pt
-const uint8_t orkney_24ptBitmaps[] =
+static const uint8_t orkney_24ptBitmaps[] =
 {
     // @0 '!' (4 pixels wide)
     0x00, //

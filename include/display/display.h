@@ -191,7 +191,7 @@ public:
 	 */
 	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count) {}
 
-	virtual void SetFont(FontDesc_t const *pFont) { vpFont = pFont;}
+	virtual void SetFont(FontDesc_t const *pFont);
 	/**
 	 * @brief	Get physical width in pixel
 	 *
@@ -252,6 +252,7 @@ protected:
 	FontDesc_t const *vpFont;	//!< Current font
 	uint16_t vCurLine;
 	uint16_t vCurCol;
+	uint16_t vLineHeight;
 };
 
 

@@ -55,7 +55,7 @@ void Display::Backlight(bool bOn)
 
 void Display::Reset()
 {
-	vpFont = (FontDesc_t const *)g_System5x7;
+	SetFont((FontDesc_t const *)g_System5x7);
 
 	if (vCfg.NbPins > DISPL_CTRL_BKLIGHT_PINIDX)
 	{
@@ -71,3 +71,12 @@ void Display::Rotate90()
 
 	Orientation((DISPL_ORIENT)orient);
 }
+
+void Display::SetFont(FontDesc_t const *pFont)
+{
+	vpFont = pFont;
+	uint32_t t = (uint32_t)vHeight / (uint32_t)(vpFont->Height + 1);
+	vLineHeight = (vHeight + (t>>1)) / t;
+	vCurLine = (vCurLine / vLineHeight) * vLineHeight + vLineHeight;
+}
+

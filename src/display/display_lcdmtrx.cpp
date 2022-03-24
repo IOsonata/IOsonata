@@ -34,6 +34,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <math.h>
 
+#include "istddef.h"
 #include "idelay.h"
 #include "convutil.h"
 #include "iopinctrl.h"
@@ -400,10 +401,13 @@ void LCDMatrix::Print(char *pStr, uint32_t Color)
 		switch (*pStr)
 		{
 			case '\n':
-				vCurLine += vpFont->Height + 1;
+				vCurLine += vLineHeight;
 				break;
 			case '\r':
 				vCurCol = 0;
+				break;
+			case ' ':
+				vCurCol += vpFont->Flag & DISPL_FONT_ENCOD_FIXED ? vpFont->Width + 1 : vpFont->Width >> 1;
 				break;
 			default:
 				if (vpFont->Flag & DISPL_FONT_ENCOD_FIXED)
@@ -438,47 +442,50 @@ void LCDMatrix::Print(char *pStr, uint32_t Color)
 					uint16_t *p = (uint16_t*)buff;
 					int l = *pStr - '!';
 					uint8_t const *fp = vpFont->pCharDesc[l].pBits;
+					int cw = vpFont->pCharDesc[l].Width;
 
 					for (int i = 0; i < vpFont->Height; i++)
 					{
-						int w = vpFont->pCharDesc[l].Width / 8 + 1;
+						int w = cw;
 						while (w > 0)
 						{
 							if (*fp == 0)
 							{
-								memset(p, 0, 8 * vPixelLen);
-								p += 8;
+								int n = min(w, 8);
+								memset(p, 0, n * vPixelLen);
+								p += n;
+								w -= n;
 							}
 							else
 							{
 								uint32_t mask = 0x80UL;
 
-								while (mask != 0)
+								while (mask != 0 && w > 0)
 								{
 									*p = *fp & mask ? Color : 0;
 									p++;
+									w--;
 									mask >>= 1UL;
 								}
 
 							}
 							fp++;
-							w--;
 						}
 					}
-					BitBlt(vCurCol, vCurLine - vpFont->Height, vpFont->pCharDesc[l].Width, vpFont->Height, buff);
-					vCurCol += vpFont->Width + 2;
+					BitBlt(vCurCol, vCurLine - vpFont->Height, cw, vpFont->Height, buff);
+					vCurCol += cw + 2;
 				}
 		}
 		pStr++;
-		if (vCurCol > vWidth)
+		if (vCurCol >= vWidth)
 		{
 			vCurCol = 0;
-			vCurLine += vpFont->Height + 1;
+			vCurLine += vLineHeight;
 		}
 		if (vCurLine > vCurScrollLine)
 		{
-			Scroll(DISPL_SCROLL_DIR_UP, vpFont->Height + 1);
-			Fill(0, vCurScrollLine - vpFont->Height - 1, vWidth, vpFont->Height + 1, 0);
+			Scroll(DISPL_SCROLL_DIR_UP, vLineHeight);
+			Fill(0, vCurScrollLine - vpFont->Height - 1, vWidth, vLineHeight, 0);
 			vCurLine = vCurScrollLine;
 		}
 	}
