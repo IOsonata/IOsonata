@@ -102,7 +102,7 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 	};
 	Write(&cmd, 1, (uint8_t*)dat, 6);
 
-	vCurScrollLine = vHeight - 1;
+	vCurScrollLine = vHeight;
 	vCurLine = vpFont->Height;
 
 	return true;
@@ -368,7 +368,7 @@ void LCDMatrix::Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count)
 	{
 		case DISPL_SCROLL_DIR_UP:
 			vCurScrollLine += Count;
-			if (vCurScrollLine >= vHeight)
+			if (vCurScrollLine > vHeight)
 			{
 				vCurScrollLine = Count;
 			}
@@ -476,12 +476,15 @@ void LCDMatrix::Print(char *pStr, uint32_t Color)
 					vCurCol += cw + 2;
 				}
 		}
+
 		pStr++;
+
 		if (vCurCol >= vWidth)
 		{
 			vCurCol = 0;
 			vCurLine += vLineHeight;
 		}
+
 		if (vCurLine > vCurScrollLine)
 		{
 			Scroll(DISPL_SCROLL_DIR_UP, vLineHeight);

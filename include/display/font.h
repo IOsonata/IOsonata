@@ -62,6 +62,7 @@ typedef struct __Display_Font {
 } FontDesc_t;
 #pragma pack(pop)
 
-
+extern const FontDesc_t g_Orkney8ptDesc;
+extern const FontDesc_t g_Orkney24ptDesc;
 
 #endif // __FONT_H__

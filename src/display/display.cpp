@@ -77,6 +77,10 @@ void Display::SetFont(FontDesc_t const *pFont)
 	vpFont = pFont;
 	uint32_t t = (uint32_t)vHeight / (uint32_t)(vpFont->Height + 1);
 	vLineHeight = (vHeight + (t>>1)) / t;
-	vCurLine = (vCurLine / vLineHeight) * vLineHeight + vLineHeight;
+	vCurLine = (vCurLine / vLineHeight) * vLineHeight;// + vLineHeight;
+	if (vCurLine < vLineHeight)
+	{
+		vCurLine = vLineHeight;
+	}
 }
 
