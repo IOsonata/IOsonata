@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	blueio_types.h
+@file	iosonata_types.h
 
 @brief	Contains definitions for blueio standard data types
 
@@ -10,6 +10,7 @@ For example :
 	- Serial communications
 	- and so on
 
+Originaly blueio_types.h
 
 @author	Hoang Nguyen Hoan
 @date	Jan 20, 2018
@@ -40,8 +41,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
-#ifndef __BLUEIO_TYPES_H__
-#define __BLUEIO_TYPES_H__
+#ifndef __IOSONATA_TYPES_H__
+#define __IOSONATA_TYPES_H__
 
 #define BLUEIO_DATA_TYPE_APP			0		//!< Application custom data
 #define BLUEIO_DATA_TYPE_TPH			1		//!< Environmental sensor data (Temperature, Pressure, Humidity)
@@ -60,29 +61,31 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLUEIO_DATA_TYPE_PPI			14		//!< PPI interface data
 #define BLUEIO_DATA_TYPE_AUDIO			15		//!< Audio data
 #define BLUEIO_DATA_TYPE_BAT			16		//!< Battery level
+#define BLUEIO_DATA_TYPE_CORETEMP		17		//!< MCU temperature
+
 
 #pragma pack(push, 1)
 
 /// Temperature, Pressure, Humidity sensor data
-typedef struct __BlueIO_Data_TPH {
+typedef struct __TempPresHumi_Sensor {
 	uint32_t Pressure;			//!< Barometric pressure in Pa no decimal
 	int16_t  Temperature;		//!< Temperature in degree C, 2 decimals fixed point
 	uint16_t Humidity;			//!< Relative humidity in %, 2 decimals fixed point
-} BLUEIO_DATA_TPH;
+} TphSensor_t;
 
-/// Gas sensor data
-typedef struct __BlueIO_Data_Gas {
-	uint32_t GasRes;				//!< Gas resistance
+/// Air quality gas sensor data
+typedef struct __AirQual_Sensor {
+	uint32_t GasRes;			//!< Gas resistance
 	uint16_t AirQIdx;			//!< Air quality index
 	uint8_t	AirQuality;			//!< Indicate air quality
-} BLUEIO_DATA_GAS;
+} AQSensor_t;
 
 /// Accelerometer data
-typedef struct __BlueIO_Data_Accel {
+typedef struct __Accel_Sensor {
 	uint16_t AccelX;
 	uint16_t AccelY;
 	uint16_t AccelZ;
-} BLUEIO_DATA_ACCEL;
+} AccelSensor_t;
 
 /// Gyroscope data
 typedef struct __BlueIO_Data_Gyro {
@@ -184,7 +187,11 @@ typedef struct __BlueIO_Data_Bat {
 	int32_t	Voltage;			//!< Battery voltage in mV (miliVolt)
 } BLUEIO_DATA_BAT;
 
+/// Core temperature
+typedef struct __BlueIO_Core_Temp {
+	int16_t Temp;
+} BLUEIO_CORE_TEMP;
 #pragma pack(pop)
 
 
-#endif // __BLUEIO_TYPES_H__
+#endif // __IOSONATA_TYPES_H__
