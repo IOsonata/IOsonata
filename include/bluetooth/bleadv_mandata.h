@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BLEADV_MANDATA_H__
 #define	__BLEADV_MANDATA_H__
 
-#include "blueio_types.h"
+#include "iosonata_types.h"
 
 /** @addtogroup Bluetooth
   * @{
@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /// Manufacture specific advertisement data type
 #define BLEADV_MANDATA_TYPE_SN			0xFF						//!< Device Serial Number or UID (8 bytes)
-#define BLEADV_MANDATA_TYPE_APP			BLUEIO_DATA_TYPE_APP		//!< Battery level data
+#define BLEADV_MANDATA_TYPE_APP			BLUEIO_DATA_TYPE_APP		//!< Application private data
 #define BLEADV_MANDATA_TYPE_TPH			BLUEIO_DATA_TYPE_TPH		//!< Environmental sensor data (Temperature, Pressure, Humidity)
 #define BLEADV_MANDATA_TYPE_GAS			BLUEIO_DATA_TYPE_GAS		//!< Gas sensor data
 #define BLEADV_MANDATA_TYPE_ACCEL		BLUEIO_DATA_TYPE_ACCEL		//!< Accelerometer sensor data
