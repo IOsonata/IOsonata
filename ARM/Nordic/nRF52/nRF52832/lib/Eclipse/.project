@@ -756,6 +756,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
 		</link>
 		<link>
+			<name>include/display/font.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/font.h</locationURI>
+		</link>
+		<link>
 			<name>include/imu/icm20948_img_dmp3a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/icm20948_img_dmp3a.h</locationURI>
@@ -1201,6 +1206,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/display/fonts</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/imu/imu.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu.cpp</locationURI>
@@ -1484,6 +1494,36 @@
 			<name>src/Invn/Devices/Drivers</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/arail12pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/arail12pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/couriernew14pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/couriernew14pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/font_syst5x7.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/font_syst5x7.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/orkney24pts.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/orkney24pts.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/orkney8pts.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/orkney8pts.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/sansserif14pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/sansserif14pt.c</locationURI>
 		</link>
 		<link>
 			<name>src/mbedtls/library/aes.c</name>

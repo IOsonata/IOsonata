@@ -64,5 +64,8 @@ typedef struct __Display_Font {
 
 extern const FontDesc_t g_Orkney8ptDesc;
 extern const FontDesc_t g_Orkney24ptDesc;
+extern const FontDesc_t g_SansSerif_14ptDesc;
+extern const FontDesc_t g_Arial12ptDesc;
+extern const FontDesc_t g_CourierNew_14ptDesc;
 
 #endif // __FONT_H__
