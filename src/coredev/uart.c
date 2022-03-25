@@ -39,8 +39,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "coredev/uart.h"
 
-extern char s_Buffer[];	// defined in sbuffer.c
-extern int s_BufferSize;
+#ifndef SPRT_BUFFER_SIZE
+#define SPRT_BUFFER_SIZE	80
+#endif
+
+//extern char s_Buffer[];	// defined in sbuffer.c
+//extern int s_BufferSize;
 
 void UARTprintf(UARTDev_t * const pDev, const char *pFormat, ...)
 {
@@ -52,10 +56,13 @@ void UARTprintf(UARTDev_t * const pDev, const char *pFormat, ...)
 
 void UARTvprintf(UARTDev_t * const pDev, const char *pFormat, va_list vl)
 {
-    vsnprintf(s_Buffer, s_BufferSize, pFormat, vl);
-    int len = strlen(s_Buffer);
-    uint8_t *p = (uint8_t*)s_Buffer;
-    int to = 10;
+	char buff[SPRT_BUFFER_SIZE];
+
+    vsnprintf(buff, sizeof(buff), pFormat, vl);
+    buff[SPRT_BUFFER_SIZE - 1] = '\0';
+    int len = strlen(buff);
+    uint8_t *p = (uint8_t*)buff;
+    int to = 5;
 
     while (len > 0 && to > 0)
     {
@@ -63,7 +70,10 @@ void UARTvprintf(UARTDev_t * const pDev, const char *pFormat, va_list vl)
     	l = UARTTx(pDev, p, len);
     	len -= l;
     	p += l;
-    	to--;
+    	if (l == 0 && len > 0)
+    	{
+    		to--;
+    	}
     }
 }
 

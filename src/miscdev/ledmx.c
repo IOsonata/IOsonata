@@ -39,8 +39,8 @@ Modified by          Date              Description
 #include "miscdev/ledmx.h"
 #include "miscdev/ledmxfont.h"
 
-extern char s_Buffer[];	// defined in sbuffer.c
-extern int s_BufferSize;
+//extern char s_Buffer[];	// defined in sbuffer.c
+//extern int s_BufferSize;
 
 void LedMxPrintAt(LEDMXDEV *pDev, int col, const char *pStr)
 {
@@ -182,10 +182,13 @@ void LedMxPrintScrollRight(LEDMXDEV *pDev, const char *pStr)
 
 void LedMxvPrintf(LEDMXDEV *pDev, LEDMXPRTMODE Mode, const char *pFormat, va_list vl)
 {
-	char buff[80];
+#ifndef SPRT_BUFFER_SIZE
+#define SPRT_BUFFER_SIZE	80
+#endif
+	char buff[SPRT_BUFFER_SIZE];
 
-    vsnprintf(buff, 80, pFormat, vl);
-    s_Buffer[80 - 1] = '\0';
+    vsnprintf(buff, SPRT_BUFFER_SIZE, pFormat, vl);
+    buff[SPRT_BUFFER_SIZE - 1] = '\0';
 
     switch (Mode)
     {
