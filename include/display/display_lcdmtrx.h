@@ -278,6 +278,7 @@ public:
 	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count);
 
 	virtual void Print(char *pStr, uint32_t Color);
+	virtual void printf(const char *pFormat, ...);
 
 	/**
 	 * @brief	Read device's register/memory block.

@@ -190,6 +190,7 @@ public:
 	 * @return	None
 	 */
 	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count) {}
+	virtual void printf(const char *pFormat, ...) = 0;
 
 	virtual void SetFont(FontDesc_t const *pFont);
 	/**

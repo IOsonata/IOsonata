@@ -33,6 +33,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <math.h>
+#include <stdarg.h>
 
 #include "istddef.h"
 #include "idelay.h"
@@ -492,6 +493,23 @@ void LCDMatrix::Print(char *pStr, uint32_t Color)
 			vCurLine = vCurScrollLine;
 		}
 	}
+}
+
+void LCDMatrix::printf(const char *pFormat, ...)
+{
+#ifndef SPRT_BUFFER_SIZE
+#define SPRT_BUFFER_SIZE	80
+#endif
+
+	char buff[SPRT_BUFFER_SIZE];
+
+	va_list vl;
+    va_start(vl, pFormat);
+    vsnprintf(buff, sizeof(buff), pFormat, vl);
+    buff[SPRT_BUFFER_SIZE - 1] = '\0';
+    va_end(vl);
+
+    Print(buff, -1);
 }
 
 void LCDMatrix::SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height)
