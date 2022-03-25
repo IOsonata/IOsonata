@@ -86,11 +86,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/blueio_board.h</locationURI>
 		</link>
 		<link>
-			<name>include/blueio_types.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/blueio_types.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -194,6 +189,11 @@
 			<name>include/iopinctrl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
+		</link>
+		<link>
+			<name>include/iosonata_types.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/iosonata_types.h</locationURI>
 		</link>
 		<link>
 			<name>include/isha1.h</name>
