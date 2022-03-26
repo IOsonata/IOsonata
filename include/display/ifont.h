@@ -88,11 +88,43 @@ extern const FontDesc_t iFontFreeSans10pt;
 extern const FontDesc_t iFontFreeSans12pt;
 extern const FontDesc_t iFontFreeSans16pt;
 extern const FontDesc_t iFontFreeSans24pt;
+extern const FontDesc_t iFontFreeSansIta8pt;
+extern const FontDesc_t iFontFreeSansIta10pt;
+extern const FontDesc_t iFontFreeSansIta12pt;
+extern const FontDesc_t iFontFreeSansIta16pt;
+extern const FontDesc_t iFontFreeSansIta24pt;
+extern const FontDesc_t iFontFreeSansBold8pt;
+extern const FontDesc_t iFontFreeSansBold10pt;
+extern const FontDesc_t iFontFreeSansBold12pt;
+extern const FontDesc_t iFontFreeSansBold16pt;
+extern const FontDesc_t iFontFreeSansBold24pt;
+extern const FontDesc_t iFontFreeSansBoldIta8pt;
+extern const FontDesc_t iFontFreeSansBoldIta10pt;
+extern const FontDesc_t iFontFreeSansBoldIta12pt;
+extern const FontDesc_t iFontFreeSansBoldIta16pt;
+extern const FontDesc_t iFontFreeSansBoldIta24pt;
+
 extern const FontDesc_t iFontFreeSerif8pt;
 extern const FontDesc_t iFontFreeSerif10pt;
 extern const FontDesc_t iFontFreeSerif12pt;
 extern const FontDesc_t iFontFreeSerif16pt;
 extern const FontDesc_t iFontFreeSerif24pt;
+extern const FontDesc_t iFontFreeSerifIta8pt;
+extern const FontDesc_t iFontFreeSerifIta10pt;
+extern const FontDesc_t iFontFreeSerifIta12pt;
+extern const FontDesc_t iFontFreeSerifIta16pt;
+extern const FontDesc_t iFontFreeSerifIta24pt;
+extern const FontDesc_t iFontFreeSerifBold8pt;
+extern const FontDesc_t iFontFreeSerifBold10pt;
+extern const FontDesc_t iFontFreeSerifBold12pt;
+extern const FontDesc_t iFontFreeSerifBold16pt;
+extern const FontDesc_t iFontFreeSerifBold24pt;
+extern const FontDesc_t iFontFreeSerifBoldIta8pt;
+extern const FontDesc_t iFontFreeSerifBoldIta10pt;
+extern const FontDesc_t iFontFreeSerifBoldIta12pt;
+extern const FontDesc_t iFontFreeSerifBoldIta16pt;
+extern const FontDesc_t iFontFreeSerifBoldIta24pt;
+
 extern const FontDesc_t iFontSystem5x7;
 
 #endif // __IFONT_H__
