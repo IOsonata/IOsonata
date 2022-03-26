@@ -144,7 +144,7 @@ SOFTWARE.
 #define LCDMTRX_CMD_RD_ID3						0xDC	// Read ID3
 
 
-class LCDMatrix : public Display {
+class LCDMatrix : public DisplayDotMatrix {
 public:
 	virtual bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf);
 

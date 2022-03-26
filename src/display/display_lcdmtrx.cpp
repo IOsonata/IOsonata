@@ -419,7 +419,7 @@ void LCDMatrix::Print(char *pStr, uint32_t Color)
 						// Vertical encoded
 						uint16_t *p = (uint16_t*)buff;
 						int l = vpFont->Width * ((vpFont->Height>>3) + 1) * (*pStr - '!');
-						uint8_t const *fp = &vpFont->Bits[l];
+						uint8_t const *fp = &vpFont->pBits[l];
 						uint32_t mask = 1;
 						while (mask <= (1UL<<(vpFont->Height - 1UL)))
 						{

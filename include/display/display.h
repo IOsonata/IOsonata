@@ -37,7 +37,7 @@ SOFTWARE.
 
 #include "device.h"
 #include "iopinctrl.h"
-#include "display/font.h"
+#include "display/ifont.h"
 
 #define DISPL_CTRL_DCX_PINIDX			0		// Cmd/Data mode pin index
 #define DISPL_CTRL_BKLIGHT_PINIDX		1		// External back light pin index
@@ -62,9 +62,6 @@ typedef enum __Display_Scroll_Direction {
 	DISPL_SCROLL_DIR_RIGHT
 } DISPL_SCROLL_DIR;
 
-#define DISPL_FONT_ENCOD_VERTICAL		1	//!< Font encoding vertical
-#define DISPL_FONT_ENCOD_FIXED			2	//!< Font type fixed
-
 // NOTE: variable length font, first byte of character encoding is indicate the
 // width in pixel of that character
 
@@ -81,6 +78,7 @@ typedef struct __Display_Cfg {
 } DisplayCfg_t;
 #pragma pack(pop)
 
+/// Generic display base objec
 class Display : public Device {
 public:
 	virtual bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf) = 0;
@@ -256,5 +254,18 @@ protected:
 	uint16_t vLineHeight;
 };
 
+/// Dot matrix display object definition
+class DisplayDotMatrix : public Display {
+public:
+protected:
+private:
+};
+
+/// Alpha numeric display object definition
+class DisplayAlphNum : public Display {
+public:
+protected:
+private:
+};
 
 #endif // __DISPLAY_H__

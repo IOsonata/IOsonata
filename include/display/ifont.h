@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	font.h
+@file	ifont.h
 
 @brief	Generic display font definitions
 
@@ -32,13 +32,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __FONT_H__
-#define __FONT_H__
+#ifndef __IFONT_H__
+#define __IFONT_H__
 
 #include <stdint.h>
 
-#define DISPL_FONT_ENCOD_VERTICAL		1	//!< Font encoding vertical
-#define DISPL_FONT_ENCOD_FIXED			2	//!< Font type fixed
+#define DISPL_FONT_ENCOD_VERTICAL		(1<<0)	//!< Font encoding vertical
+#define DISPL_FONT_ENCOD_FIXED			(1<<1)	//!< Font type fixed
+#define DISPL_FONT_EXTRN				(1<<2)	//!< Font stored in external storage such as SPI Flash
 
 // NOTE: variable length font, first byte of character encoding is indicate the
 // width in pixel of that character
@@ -54,18 +55,44 @@ typedef struct __Display_Font {
 	uint8_t Flag;			//!< Font map encoding horiz/vert, fix/var
 	uint8_t Width;			//!< Width of biggest character in pixels
 	uint8_t Height;			//!< Font height in pixels
-	//uint8_t const *pBits; 	//!< Pointer to font bitmap of the variable length font, null for fixed font
 	union {
-		uint8_t Bits[1];	//!< Fixed font bitmap data
-		CharDesc_t const *pCharDesc;	//!< Lockup table for variable length font bitmap
+		uint8_t const *pBits;		//!< Fixed font bitmap data
+		CharDesc_t const *pCharDesc;//!< Lockup table for variable length font bitmap
 	};
 } FontDesc_t;
 #pragma pack(pop)
 
-extern const FontDesc_t g_Orkney8ptDesc;
-extern const FontDesc_t g_Orkney24ptDesc;
-extern const FontDesc_t g_SansSerif_14ptDesc;
-extern const FontDesc_t g_Arial12ptDesc;
-extern const FontDesc_t g_CourierNew_14ptDesc;
+extern const FontDesc_t iFontFreeMono8pt;
+extern const FontDesc_t iFontFreeMono10pt;
+extern const FontDesc_t iFontFreeMono12pt;
+extern const FontDesc_t iFontFreeMono16pt;
+extern const FontDesc_t iFontFreeMono24pt;
+extern const FontDesc_t iFontFreeMonoBold8pt;
+extern const FontDesc_t iFontFreeMonoBold10pt;
+extern const FontDesc_t iFontFreeMonoBold12pt;
+extern const FontDesc_t iFontFreeMonoBold16pt;
+extern const FontDesc_t iFontFreeMonoBold24pt;
+extern const FontDesc_t iFontFreeMonoIta8pt;
+extern const FontDesc_t iFontFreeMonoIta10pt;
+extern const FontDesc_t iFontFreeMonoIta12pt;
+extern const FontDesc_t iFontFreeMonoIta16pt;
+extern const FontDesc_t iFontFreeMonoIta24pt;
+extern const FontDesc_t iFontFreeMonoBoldIta8pt;
+extern const FontDesc_t iFontFreeMonoBoldIta10pt;
+extern const FontDesc_t iFontFreeMonoBoldIta12pt;
+extern const FontDesc_t iFontFreeMonoBoldIta16pt;
+extern const FontDesc_t iFontFreeMonoBoldIta24pt;
 
-#endif // __FONT_H__
+extern const FontDesc_t iFontFreeSans8pt;
+extern const FontDesc_t iFontFreeSans10pt;
+extern const FontDesc_t iFontFreeSans12pt;
+extern const FontDesc_t iFontFreeSans16pt;
+extern const FontDesc_t iFontFreeSans24pt;
+extern const FontDesc_t iFontFreeSerif8pt;
+extern const FontDesc_t iFontFreeSerif10pt;
+extern const FontDesc_t iFontFreeSerif12pt;
+extern const FontDesc_t iFontFreeSerif16pt;
+extern const FontDesc_t iFontFreeSerif24pt;
+extern const FontDesc_t iFontSystem5x7;
+
+#endif // __IFONT_H__

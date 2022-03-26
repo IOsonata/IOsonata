@@ -756,9 +756,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/display/font.h</name>
+			<name>include/display/ifont.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/display/font.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/ifont.h</locationURI>
+		</link>
+		<link>
+			<name>include/display/igfx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/igfx.h</locationURI>
 		</link>
 		<link>
 			<name>include/imu/icm20948_img_dmp3a.h</name>
@@ -1496,34 +1501,159 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/arail12pt.c</name>
+			<name>src/display/fonts/feemonoboldita10pt.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/arail12pt.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/feemonoboldita10pt.c</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/couriernew14pt.c</name>
+			<name>src/display/fonts/feemonoboldita12pt.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/couriernew14pt.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/feemonoboldita12pt.c</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/font_syst5x7.c</name>
+			<name>src/display/fonts/feemonoboldita16pt.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/font_syst5x7.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/feemonoboldita16pt.c</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/orkney24pts.c</name>
+			<name>src/display/fonts/freemono10pt.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/orkney24pts.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemono10pt.c</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/orkney8pts.c</name>
+			<name>src/display/fonts/freemono12pt.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/orkney8pts.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemono12pt.c</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/sansserif14pt.c</name>
+			<name>src/display/fonts/freemono16pt.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/sansserif14pt.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemono16pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemono24pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemono24pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemono8pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemono8pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonobold10pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonobold10pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonobold12pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonobold12pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonobold16pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonobold16pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonobold24pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonobold24pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonobold8pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonobold8pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonoboldita24pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonoboldita24pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonoboldita8pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonoboldita8pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonoita10pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonoita10pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonoita12pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonoita12pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonoita16pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonoita16pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonoita24pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonoita24pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freemonoita8pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freemonoita8pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freesans10pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freesans10pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freesans12pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freesans12pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freesans16pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freesans16pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freesans24pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freesans24pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freesans8pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freesans8pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freeserif10pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freeserif10pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freeserif12pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freeserif12pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freeserif16pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freeserif16pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freeserif24pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freeserif24pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/freeserif8pt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/freeserif8pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/display/fonts/syst5x7.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/syst5x7.c</locationURI>
 		</link>
 		<link>
 			<name>src/mbedtls/library/aes.c</name>

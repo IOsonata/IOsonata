@@ -2,12 +2,9 @@
 // Font data for 5x7 font
 //
 
-#include "display/font.h"
+#include "display/ifont.h"
 
-const uint8_t g_System5x7[] = {
-	DISPL_FONT_ENCOD_VERTICAL | DISPL_FONT_ENCOD_FIXED,
-	5,
-	7,
+static const uint8_t s_System5x7Bitmap[] = {
 		0b00000000, //
 		0b00000000, //
 		0b01011111, //  # #####
@@ -565,4 +562,11 @@ const uint8_t g_System5x7[] = {
 		0b00110110, //   ## ##
 		0b00001000, //     #
 		0b00000000, //
+};
+
+const FontDesc_t iFontSystem5x7 = {
+	DISPL_FONT_ENCOD_VERTICAL | DISPL_FONT_ENCOD_FIXED,
+	5,
+	7,
+	s_System5x7Bitmap
 };

@@ -35,8 +35,7 @@ SOFTWARE.
 #include "idelay.h"
 #include "display/display.h"
 #include "iopinctrl.h"
-
-extern "C" const uint8_t g_System5x7[];
+#include "display/ifont.h"
 
 void Display::Backlight(bool bOn)
 {
@@ -55,7 +54,7 @@ void Display::Backlight(bool bOn)
 
 void Display::Reset()
 {
-	SetFont((FontDesc_t const *)g_System5x7);
+	SetFont(&iFontSystem5x7);
 
 	if (vCfg.NbPins > DISPL_CTRL_BKLIGHT_PINIDX)
 	{
@@ -77,7 +76,7 @@ void Display::SetFont(FontDesc_t const *pFont)
 	vpFont = pFont;
 	uint32_t t = (uint32_t)vHeight / (uint32_t)(vpFont->Height + 1);
 	vLineHeight = (vHeight + (t>>1)) / t;
-	vCurLine = (vCurLine / vLineHeight) * vLineHeight;// + vLineHeight;
+	vCurLine = ((vCurLine + (vLineHeight >> 1))/ vLineHeight) * vLineHeight;// + vLineHeight;
 	if (vCurLine < vLineHeight)
 	{
 		vCurLine = vLineHeight;
