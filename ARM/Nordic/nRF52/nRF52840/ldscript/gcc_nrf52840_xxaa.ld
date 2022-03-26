@@ -88,5 +88,22 @@ SECTIONS
 
 } INSERT AFTER .text
 
+SECTIONS
+{
+	. = ALIGN(4);
+		.fs_data :
+	{
+		PROVIDE(__start_fs_data = .);
+		KEEP(*(.fs_data))
+		PROVIDE(__stop_fs_data = .);
+	} > RAM AT > FLASH
+	.cli_sorted_cmd_ptrs :
+	{
+		PROVIDE(__start_cli_sorted_cmd_ptrs = .);
+		KEEP(*(.cli_sorted_cmd_ptrs))
+		PROVIDE(__stop_cli_sorted_cmd_ptrs = .);
+	} > RAM AT > FLASH
+	
+} INSERT AFTER .data;
 
 INCLUDE "gcc_arm_flash.ld"
