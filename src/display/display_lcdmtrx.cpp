@@ -104,7 +104,7 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 	Write(&cmd, 1, (uint8_t*)dat, 6);
 
 	vCurScrollLine = vHeight;
-	vCurLine = vpFont->Height;
+	vCurLine = vLineHeight;
 
 	return true;
 }
@@ -234,6 +234,13 @@ void LCDMatrix::Clear()
 		}
 	}
 #endif
+
+	vCurScrollLine = vHeight;
+	vCurLine = vLineHeight;
+
+	cmd = LCDMTRX_CMD_VSCROLL_START_ADDR;
+	uint16_t d = EndianCvt16(0);
+	Write(&cmd, 1, (uint8_t*)&d, 2);
 }
 
 void LCDMatrix::Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint32_t Color)
@@ -386,7 +393,6 @@ void LCDMatrix::Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count)
 	uint8_t cmd = LCDMTRX_CMD_VSCROLL_START_ADDR;
 	uint16_t d = EndianCvt16(vCurScrollLine);
 	Write(&cmd, 1, (uint8_t*)&d, 2);
-
 }
 
 void LCDMatrix::Print(char *pStr, uint32_t Color)
