@@ -2837,7 +2837,7 @@ static const CharDesc_t s_FreeMonoIta24ptCharDesc[] = {
 
 // Font information for FreeMono 24pt
 const FontDesc_t iFontFreeMonoIta24pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	22,
 	27,
 	{ .pCharDesc = s_FreeMonoIta24ptCharDesc }

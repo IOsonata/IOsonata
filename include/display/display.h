@@ -44,7 +44,7 @@ SOFTWARE.
 #define DISPL_CTRL_RST_PINIDX			2		// Reset pin index
 
 typedef enum __Display_Type {
-	DISPL_TYPE_CHAR,				//!< Character based display type (non graphics)
+	DISPL_TYPE_ALPHA,				//!< Character based display type (non graphics)
 	DISPL_TYPE_MATRIX,				//!< Dot matrix display (graphics)
 } DISPL_TYPE;
 
@@ -91,13 +91,136 @@ public:
 	virtual void Clear() = 0;
 
 	/**
+	 * @brief	Set current rendering location
+	 *
+	 * @param 	Col	:
+	 * @param 	Row	:
+	 */
+	virtual void SetCursor(uint16_t Col, uint16_t Row) { vCurCol = Col; vCurLine = Row; }
+
+
+	/**
+	 * @brief	Scroll display (optional)
+	 *
+	 * Scroll the screen in the specified direction by n steps.
+	 * Step	:	1 char/line for character based display
+	 * 		   	1 pixel for graphics based display
+	 *
+	 * @param 	Dir		: Direction of scroll
+	 * @param 	Count	: Number of step to scroll
+	 *
+	 * @return	None
+	 */
+	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count) {}
+
+	/**
+	 * @brief	print to console
+	 *
+	 * printf formated console style line display. This function will call
+	 * Print function to render to the screen.  Display driver must implement Print
+	 * function. Graphic display shall implement a way to emulate console print
+	 *
+	 * @param 	pFormat	: Use standard printf format
+	 */
+	virtual void printf(const char *pFormat, ...);
+
+	/**
+	 * @brief	Get display type
+	 *
+	 * @return	Display type :
+	 * 				- DISPL_TYPE_ALPHA : Character based display
+	 * 				- DISPL_TYPE_MAXTRIX : Graphic display
+	 */
+	DISPL_TYPE Type() { return vType; }
+
+	/**
+	 * @brief	Get physical width in display units
+	 *
+	 * Get the display width in display unit. Number characters per line for
+	 * alphanumeric display.  Number of pixels for graphics display
+	 *
+	 * @return	Screen with
+	 */
+	virtual uint16_t Width() { return vWidth; }
+
+	/**
+	 * @brief	Get physical height in display units
+	 *
+	 * Get the display height in display unit. Number of line for
+	 * alphanumeric display.  Number of pixels for graphics display
+	 *
+	 * @return	Screen height
+	 */
+	virtual uint16_t Height() { return vHeight; }
+
+	/**
+	 * @brief	Turn back light on or off
+	 *
+	 * @param 	bState : True - Turn back light on
+	 * 					 False - Turn back light off
+	 *
+	 * @return	None
+	 */
+	virtual void Backlight(bool bState);
+
+	/**
+	 * @brief	Reset display
+	 *
+	 */
+	virtual void Reset() = 0;
+
+protected:
+
+	/**
+	 * @brief	Render a null terminated string to the screen.
+	 *
+	 * Display driver must implement this to emulate a console line print
+	 *
+	 * @param 	pStr	: Null terminated string to print
+	 * @param 	Color	: Color to render
+	 */
+	virtual void Print(char const *pStr, uint32_t Color) = 0;
+
+	/**
+	 * @brief	Set device physical size
+	 *
+	 * This function sets the max resolutions supported by the controller. It
+	 * may be bigger than the display panel resolutions
+	 *
+	 * @param 	Width 	: Screen width in pixels
+	 * @param 	Height	: Screen height in pixels
+	 *
+	 * @return	None
+	 */
+	void SetDevRes(uint16_t Width, uint16_t Height) { vWidth = Width; vHeight = Height; }
+	void Type(DISPL_TYPE Type) { vType = Type; }
+
+	DisplayCfg_t vCfg;		//!< Internal copy of config data
+	uint16_t vWidth;		//!< Display physical width in pixels
+	uint16_t vHeight;		//!< Display physical height in pixels
+	DISPL_TYPE vType;		//!< Display type
+	uint32_t vColor;		//!< Current color
+	uint16_t vCurLine;
+	uint16_t vCurCol;
+};
+
+/// Dot matrix display object definition
+class DisplayDotMatrix : public Display {
+public:
+	/**
+	 * @brief	Reset display
+	 *
+	 */
+	virtual void Reset();
+
+	/**
 	 * @brief	Set display orientation
 	 *
 	 * @param	Orient	: Orientation to set
 	 *
 	 * @return	None
 	 */
-	virtual void Orientation(DISPL_ORIENT Orient) = 0;
+	virtual void Orientation(DISPL_ORIENT Orient) { vOrient = Orient; }
 
 	/**
 	 * @brief	Get current orientation
@@ -105,14 +228,6 @@ public:
 	 * @return	Current orientation
 	 */
 	virtual DISPL_ORIENT Orientation() { return vOrient; }
-
-	/**
-	 * @brief	Set current rendering location
-	 *
-	 * @param 	Col	:
-	 * @param 	Row	:
-	 */
-	virtual void SetCurrent(uint16_t Col, uint16_t Row) { vCurCol = Col; vCurLine = Row; }
 
 	/**
 	 * @brief	Fill region with color
@@ -151,119 +266,34 @@ public:
 	 */
 	virtual void BitBlt(uint16_t StartX, uint16_t StartY, uint16_t Width, uint16_t Height, uint8_t *pMem) = 0;
 
-	/**
-	 * @brief	Draw line on the screen
-	 *
-	 * Option function to draw a line on matrix display
-	 *
-	 * @param 	StartX	: Start X coordinate
-	 * @param 	StartY	: Start Y coordinate
-	 * @param 	EndX	: End X coordinate
-	 * @param 	EndY	: End Y coordinate
-	 * @param	Color	: Pixel color
-	 */
-	virtual void Line(uint16_t StartX, uint16_t StartY, uint16_t EndX, uint16_t EndY, uint32_t Color) {}
-
-	/**
-	 * @brief	Display text string at location
-	 *
-	 * Print a zero terminated string to the screen using the current font
-	 *
-	 * @param 	Col		: X coordinate
-	 * @param 	Row		: Y coordinate
-	 * @param 	pStr	: Zero terminated string
-	 */
-	virtual void Text(uint16_t Col, uint16_t Row, char *pStr) = 0;
-
-	/**
-	 * @brief	Scroll display (optional)
-	 *
-	 * Scroll the screen in the specified direction by n steps.
-	 * Step	:	1 char/line for character based display
-	 * 		   	1 pixel for graphics based display
-	 *
-	 * @param 	Dir		: Direction of scroll
-	 * @param 	Count	: Number of step to scroll
-	 *
-	 * @return	None
-	 */
-	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count) {}
-	virtual void printf(const char *pFormat, ...) = 0;
-
-	virtual void SetFont(FontDesc_t const *pFont);
-	/**
-	 * @brief	Get physical width in pixel
-	 *
-	 * @return	Screen with in pixel
-	 */
-	virtual uint16_t Width() { return vWidth; }
-
-	/**
-	 * @brief	Get physical height in pixel
-	 *
-	 * @return	Screen height in pixel
-	 */
-	virtual uint16_t Height() { return vHeight; }
-
-	/**
-	 * @brief	Turn back light on or off
-	 *
-	 * @param 	bState : True - Turn back light on
-	 * 					 False - Turn back light off
-	 *
-	 * @return	None
-	 */
-	virtual void Backlight(bool bState);
-
-	/**
-	 * @brief	Reset display
-	 *
-	 */
-	virtual void Reset();
+	//virtual void Print(char *pStr, uint32_t Color);
+	//virtual void printf(const char *pFormat, ...);
 
 	/**
 	 * @brief	Rotate display by 90 degree clockwise
 	 */
 	void Rotate90();
 
+	virtual bool SetFont(FontDesc_t const *pFont);
+
+	int PixelLength() { return vPixelLen; }
+
 protected:
-
-	/**
-	 * @brief	Set device physical size
-	 *
-	 * This function sets the max resolutions supported by the controller. It
-	 * may be bigger than the display panel resolutions
-	 *
-	 * @param 	Width 	: Screen width in pixels
-	 * @param 	Height	: Screen height in pixels
-	 *
-	 * @return	None
-	 */
-	void SetDevRes(uint16_t Width, uint16_t Height) { vWidth = Width; vHeight = Height; }
-	void SetDisplayType(DISPL_TYPE Type) { vType = Type; }
-
-	DisplayCfg_t vCfg;		//!< Internal copy of config data
-	uint16_t vWidth;		//!< Display physical width in pixels
-	uint16_t vHeight;		//!< Display physical height in pixels
-	DISPL_ORIENT vOrient;	//!< Current orientation
-	DISPL_TYPE vType;		//!< Display type
-	uint32_t vColor;		//!< Current color
-	FontDesc_t const *vpFont;	//!< Current font
-	uint16_t vCurLine;
-	uint16_t vCurCol;
+	uint8_t *vpLineBuff;
+	int vPixelLen;
+	uint16_t vCurScrollLine;	//!< Keep track of scrolling (rotation)
 	uint16_t vLineHeight;
-};
+	FontDesc_t const *vpFont;	//!< Current font
 
-/// Dot matrix display object definition
-class DisplayDotMatrix : public Display {
-public:
-protected:
 private:
+	DISPL_ORIENT vOrient;	//!< Current orientation
 };
 
 /// Alpha numeric display object definition
 class DisplayAlphNum : public Display {
 public:
+	virtual void Print(char *pStr, uint32_t Color) {}
+
 protected:
 private:
 };

@@ -1521,7 +1521,7 @@ static const CharDesc_t s_FreeSerifBoldIta10ptCharDesc[] = {
 
 // Font information for FreeSerif 10pt
 const FontDesc_t iFontFreeSerifBoldIta10pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	12,
 	13,
 	{ .pCharDesc = s_FreeSerifBoldIta10ptCharDesc }

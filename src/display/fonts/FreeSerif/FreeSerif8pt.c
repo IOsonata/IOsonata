@@ -1427,7 +1427,7 @@ static const CharDesc_t s_FreeSerif8ptCharDesc[] = {
 
 // Font information for FreeSerif 8pt
 const FontDesc_t iFontFreeSerif8pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	10,
 	12,
 	{ .pCharDesc = s_FreeSerif8ptCharDesc }

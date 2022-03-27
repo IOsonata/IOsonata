@@ -1991,7 +1991,7 @@ static const CharDesc_t s_FreeMonoIta16ptCharDesc[] = {
 
 // Font information for FreeMono 16pt
 const FontDesc_t iFontFreeMonoIta16pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	15,
 	18,
 	{.pCharDesc = s_FreeMonoIta16ptCharDesc }

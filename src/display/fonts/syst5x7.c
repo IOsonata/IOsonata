@@ -565,7 +565,7 @@ static const uint8_t s_System5x7Bitmap[] = {
 };
 
 const FontDesc_t iFontSystem5x7 = {
-	DISPL_FONT_ENCOD_VERTICAL | DISPL_FONT_ENCOD_FIXED,
+	FONT_TYPE_FIXED_VERT,
 	5,
 	7,
 	s_System5x7Bitmap

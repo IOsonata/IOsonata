@@ -1803,7 +1803,7 @@ static const CharDesc_t s_FreeSerif12ptCharDesc[] = {
 
 // Font information for FreeSerif 12pt
 const FontDesc_t iFontFreeSerif12pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	15,
 	16,
 	{ .pCharDesc = s_FreeSerif12ptCharDesc }

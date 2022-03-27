@@ -3119,7 +3119,7 @@ static const CharDesc_t s_FreeSerifBoldIta24ptCharDesc[] = {
 
 // Font information for FreeSerif 24pt
 const FontDesc_t iFontFreeSerifBoldIta24pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	30,
 	30,
 	{ .pCharDesc = s_FreeSerifBoldIta24ptCharDesc }

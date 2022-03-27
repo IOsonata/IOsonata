@@ -1239,7 +1239,7 @@ static const CharDesc_t s_FreeMonoBold8ptCharDesc[] = {
 
 // Font information for FreeMono 8pt
 const FontDesc_t iFontFreeMonoBold8pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	8,
 	10,
 	{.pCharDesc = s_FreeMonoBold8ptCharDesc }

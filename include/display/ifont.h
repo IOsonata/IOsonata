@@ -37,22 +37,23 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#define DISPL_FONT_ENCOD_VERTICAL		(1<<0)	//!< Font encoding vertical
-#define DISPL_FONT_ENCOD_FIXED			(1<<1)	//!< Font type fixed
-#define DISPL_FONT_EXTRN				(1<<2)	//!< Font stored in external storage such as SPI Flash
-
-// NOTE: variable length font, first byte of character encoding is indicate the
-// width in pixel of that character
+// Definition of font property
+#define FONT_TYPE_MASK				(3<<0)
+#define FONT_TYPE_VAR_WIDTH			(0<<0)	//!< Variable width bitmap
+#define FONT_TYPE_FIXED_HOR			(1<<0)	//!< Fixed size bitmap horizontal coding
+#define FONT_TYPE_FIXED_VERT		(2<<0)	//!< Fixed size bitmap vertical coding
+#define FONT_TYPE_GLYTH				(3<<0)	//!< Glyth font
+#define FONT_LOC_EXTERN				(1<<7)	//!< Font stored in external storage such as SPI Flash
 
 #pragma pack(push,1)
 
 typedef struct __Char_Desc {
 	uint8_t Width;			//!< Char width in pixels
-	uint8_t const *pBits;		//!< Offset in the font bitmap array
+	uint8_t const *pBits;	//!< Offset in the font bitmap array
 } CharDesc_t;
 
-typedef struct __Display_Font {
-	uint8_t Flag;			//!< Font map encoding horiz/vert, fix/var
+typedef struct __Font_Descriptor {
+	uint8_t Prop;			//!< Font property see defines abouve
 	uint8_t Width;			//!< Width of biggest character in pixels
 	uint8_t Height;			//!< Font height in pixels
 	union {

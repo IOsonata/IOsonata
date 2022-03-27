@@ -2273,7 +2273,7 @@ static const CharDesc_t s_FreeSansBold16ptCharDesc[] = {
 
 // Font information for FreeSans 16pt
 const FontDesc_t iFontFreeSansBold16pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	20,
 	21,
 	{.pCharDesc = s_FreeSansBold16ptCharDesc }

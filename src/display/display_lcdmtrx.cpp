@@ -48,6 +48,7 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 	vCfg = Cfg;
 
 	DeviceAddress(vCfg.DevAddr);
+	Type(DISPL_TYPE_MATRIX);
 
 	IOPinCfg(vCfg.pPins, vCfg.NbPins);
 
@@ -103,7 +104,7 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 	};
 	Write(&cmd, 1, (uint8_t*)dat, 6);
 
-	vCurScrollLine = vHeight;
+	vCurScrollLine = Height();
 	vCurLine = vLineHeight;
 
 	return true;
@@ -139,7 +140,7 @@ void LCDMatrix::Reset()
 	if (vCfg.NbPins > DISPL_CTRL_BKLIGHT_PINIDX)
 	{
 		// Reset controllable, try hard reset
-		Display::Reset();
+		DisplayDotMatrix::Reset();
 	}
 	else
 	{
@@ -189,7 +190,7 @@ void LCDMatrix::Orientation(DISPL_ORIENT Orient)
 			vMadCtl |= LCDMTRX_CMD_MADCTL_MV | LCDMTRX_CMD_MADCTL_MY | LCDMTRX_CMD_MADCTL_MX;
 			break;
 	}
-	vOrient = Orient;
+	DisplayDotMatrix::Orientation(Orient);
 
 	uint8_t cmd = LCDMTRX_CMD_MADCTL;
 	Write(&cmd, 1, (uint8_t*)&vMadCtl, 1);
@@ -235,7 +236,7 @@ void LCDMatrix::Clear()
 	}
 #endif
 
-	vCurScrollLine = vHeight;
+	vCurScrollLine = h;
 	vCurLine = vLineHeight;
 
 	cmd = LCDMTRX_CMD_VSCROLL_START_ADDR;
@@ -294,6 +295,7 @@ void LCDMatrix::BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, 
 	Write(&cmd, 1, pBuffer, Width * Height * vPixelLen);
 }
 
+#if 0
 /**
  * @brief	Draw line on the screen
  *
@@ -357,6 +359,7 @@ void LCDMatrix::Text(uint16_t Col, uint16_t Row, char *pStr)
 {
 
 }
+#endif
 
 /**
  * @brief	Scroll display (optional)
@@ -395,7 +398,7 @@ void LCDMatrix::Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count)
 	Write(&cmd, 1, (uint8_t*)&d, 2);
 }
 
-void LCDMatrix::Print(char *pStr, uint32_t Color)
+void LCDMatrix::Print(char const *pStr, uint32_t Color)
 {
 	uint8_t buff[vpFont->Height * vPixelLen * vpFont->Width];
 	//uint8_t const *fp = vpFont->Bits;
@@ -414,13 +417,54 @@ void LCDMatrix::Print(char *pStr, uint32_t Color)
 				vCurCol = 0;
 				break;
 			case ' ':
-				vCurCol += vpFont->Flag & DISPL_FONT_ENCOD_FIXED ? vpFont->Width + 1 : vpFont->Width >> 1;
+				vCurCol += vpFont->Prop & FONT_TYPE_MASK ? vpFont->Width + 1 : vpFont->Width >> 1;
 				break;
 			default:
-				if (vpFont->Flag & DISPL_FONT_ENCOD_FIXED)
+				switch (vpFont->Prop)
 				{
-					// Fixed font
-					if (vpFont->Flag & DISPL_FONT_ENCOD_VERTICAL)
+					case FONT_TYPE_VAR_WIDTH:
+						{
+							// Variable length font
+							uint16_t *p = (uint16_t*)buff;
+							int l = *pStr - '!';
+							uint8_t const *fp = vpFont->pCharDesc[l].pBits;
+							int cw = vpFont->pCharDesc[l].Width;
+
+							for (int i = 0; i < vpFont->Height; i++)
+							{
+								int w = cw;
+								while (w > 0)
+								{
+									if (*fp == 0)
+									{
+										int n = min(w, 8);
+										memset(p, 0, n * vPixelLen);
+										p += n;
+										w -= n;
+									}
+									else
+									{
+										uint32_t mask = 0x80UL;
+
+										while (mask != 0 && w > 0)
+										{
+											*p = *fp & mask ? Color : 0;
+											p++;
+											w--;
+											mask >>= 1UL;
+										}
+
+									}
+									fp++;
+								}
+							}
+							BitBlt(vCurCol, vCurLine - vpFont->Height, cw, vpFont->Height, buff);
+							vCurCol += cw + 2;
+						}
+						break;
+					case FONT_TYPE_FIXED_HOR:
+						break;
+					case FONT_TYPE_FIXED_VERT:
 					{
 						// Vertical encoded
 						uint16_t *p = (uint16_t*)buff;
@@ -438,49 +482,6 @@ void LCDMatrix::Print(char *pStr, uint32_t Color)
 						BitBlt(vCurCol, vCurLine - vpFont->Height, vpFont->Width, vpFont->Height, buff);
 						vCurCol += vpFont->Width + 1;
 					}
-					else
-					{
-						// Horizontal encode
-					}
-				}
-				else
-				{
-					// Variable length font
-					uint16_t *p = (uint16_t*)buff;
-					int l = *pStr - '!';
-					uint8_t const *fp = vpFont->pCharDesc[l].pBits;
-					int cw = vpFont->pCharDesc[l].Width;
-
-					for (int i = 0; i < vpFont->Height; i++)
-					{
-						int w = cw;
-						while (w > 0)
-						{
-							if (*fp == 0)
-							{
-								int n = min(w, 8);
-								memset(p, 0, n * vPixelLen);
-								p += n;
-								w -= n;
-							}
-							else
-							{
-								uint32_t mask = 0x80UL;
-
-								while (mask != 0 && w > 0)
-								{
-									*p = *fp & mask ? Color : 0;
-									p++;
-									w--;
-									mask >>= 1UL;
-								}
-
-							}
-							fp++;
-						}
-					}
-					BitBlt(vCurCol, vCurLine - vpFont->Height, cw, vpFont->Height, buff);
-					vCurCol += cw + 2;
 				}
 		}
 
@@ -499,23 +500,6 @@ void LCDMatrix::Print(char *pStr, uint32_t Color)
 			vCurLine = vCurScrollLine;
 		}
 	}
-}
-
-void LCDMatrix::printf(const char *pFormat, ...)
-{
-#ifndef SPRT_BUFFER_SIZE
-#define SPRT_BUFFER_SIZE	80
-#endif
-
-	char buff[SPRT_BUFFER_SIZE];
-
-	va_list vl;
-    va_start(vl, pFormat);
-    vsnprintf(buff, sizeof(buff), pFormat, vl);
-    buff[SPRT_BUFFER_SIZE - 1] = '\0';
-    va_end(vl);
-
-    Print(buff, -1);
 }
 
 void LCDMatrix::SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height)

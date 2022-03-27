@@ -1239,7 +1239,7 @@ static const CharDesc_t s_FreeSerifIta8ptCharDesc[] = {
 
 // Font information for FreeSerif 8pt
 const FontDesc_t iFontFreeSerifIta8pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	10,
 	10,
 	{ .pCharDesc = s_FreeSerifIta8ptCharDesc }

@@ -178,7 +178,7 @@ public:
 	 *
 	 * @return	Current orientation
 	 */
-	virtual DISPL_ORIENT Orientation() { return Display::Orientation(); }
+	virtual DISPL_ORIENT Orientation() { return DisplayDotMatrix::Orientation(); }
 
 	/**
 	 * @brief	Reset device to it initial default state
@@ -198,9 +198,9 @@ public:
 	 * @param 	Col	:
 	 * @param 	Row	:
 	 */
-	virtual void SetCurrent(uint16_t Col, uint16_t Row) {
-		SetRamWrRegion(Col, Row, vWidth - Col + 1, vHeight - Row + 1);
-	}
+	//virtual void SetCurrent(uint16_t Col, uint16_t Row) {
+	//	SetRamWrRegion(Col, Row, vWidth - Col + 1, vHeight - Row + 1);
+	//}
 
 	/**
 	 * @brief	Fill region with color
@@ -240,19 +240,6 @@ public:
 	virtual void BitBlt(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint8_t *pBuffer);
 
 	/**
-	 * @brief	Draw line on the screen
-	 *
-	 * Option function to draw a line on matrix display
-	 *
-	 * @param 	StartX	: Start X coordinate
-	 * @param 	StartY	: Start Y coordinate
-	 * @param 	EndX	: End X coordinate
-	 * @param 	EndY	: End Y coordinate
-	 * @param	Color	: Pixel color
-	 */
-	virtual void Line(uint16_t StartX, uint16_t StartY, uint16_t EndX, uint16_t EndY, uint32_t Color);
-
-	/**
 	 * @brief	Display text string at location
 	 *
 	 * Print a zero terminated string to the screen using the current font
@@ -261,7 +248,7 @@ public:
 	 * @param 	Row		: Y coordinate
 	 * @param 	pStr	: Zero terminated string
 	 */
-	virtual void Text(uint16_t Col, uint16_t Row, char *pStr);
+	//virtual void Text(uint16_t Col, uint16_t Row, char *pStr);
 
 	/**
 	 * @brief	Scroll display (optional)
@@ -277,8 +264,7 @@ public:
 	 */
 	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count);
 
-	virtual void Print(char *pStr, uint32_t Color);
-	virtual void printf(const char *pFormat, ...);
+	virtual void Print(char const *pStr, uint32_t Color);
 
 	/**
 	 * @brief	Read device's register/memory block.
@@ -315,12 +301,9 @@ public:
 protected:
 	void SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t With, uint16_t Height);
 
-	uint8_t *vpLineBuff;
 
 private:
-	int vPixelLen;
 	uint8_t vMadCtl;
-	uint16_t vCurScrollLine;	//!< Keep track of scrolling (rotation)
 };
 
 

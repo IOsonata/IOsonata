@@ -3213,7 +3213,7 @@ static const CharDesc_t s_FreeSansBold24ptCharDesc[] = {
 
 // Font information for FreeSans 24pt
 const FontDesc_t iFontFreeSansBold24pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	29,
 	31,
 	{.pCharDesc = s_FreeSansBold24ptCharDesc }

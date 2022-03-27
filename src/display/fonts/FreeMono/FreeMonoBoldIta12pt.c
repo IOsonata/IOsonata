@@ -1615,7 +1615,7 @@ static const CharDesc_t s_FreeMonoBoldIta12ptCharDesc[] = {
 
 // Font information for FreeMono 12pt
 const FontDesc_t iFontFreeMonoBoldIta12pt = {
-	0,
+	FONT_TYPE_VAR_WIDTH,
 	12,
 	14,
 	{.pCharDesc = s_FreeMonoBoldIta12ptCharDesc }
