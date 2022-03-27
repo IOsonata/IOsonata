@@ -90,8 +90,6 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 	}
 	Write(&cmd, 1, (uint8_t*)&d, 1);
 
-	Orientation(vCfg.Orient);
-
 	cmd = LCDMTRX_CMD_NORMALON;
 	Write(&cmd, 1, NULL, 0);
 
@@ -106,6 +104,8 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 
 	vCurScrollLine = Height();
 	vCurLine = vLineHeight;
+
+	Orientation(vCfg.Orient);
 
 	return true;
 }

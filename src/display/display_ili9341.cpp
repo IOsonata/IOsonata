@@ -47,9 +47,9 @@ bool LcdILI9341::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 		return false;
 	}
 
-	uint8_t cmd = ILI9341_CMD_INTRF_CTRL;
-	uint32_t d = ILI9341_CMD_INTRF_CTRL_LITTLE_ENDIAN;//ILI9341_CMD_INTRF_CTRL_WEMODE | (2<<ILI9341_CMD_INTRF_CTRL_EPF_POS);
-	Write(&cmd, 1, (uint8_t*)&d, 3);
+//	uint8_t cmd = ILI9341_CMD_INTRF_CTRL;
+//	uint32_t d = ILI9341_CMD_INTRF_CTRL_LITTLE_ENDIAN;//ILI9341_CMD_INTRF_CTRL_WEMODE | (2<<ILI9341_CMD_INTRF_CTRL_EPF_POS);
+//	Write(&cmd, 1, (uint8_t*)&d, 3);
 
 	return true;
 }
