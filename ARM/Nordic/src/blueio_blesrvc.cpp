@@ -240,9 +240,9 @@ BleSrvcChar_t g_BlueIOIoChars[] = {
 	},
 	{
 		// Write characteristic
-		.Uuid = BLUEIO_UUID_I2C_CHAR,		// char UUID
+		.Uuid = BLUEIO_UUID_I2C_TX_CHAR,		// char UUID
 		.MaxDataLen = 20,					// char max data length
-		.Property = BLUEIO_UUID_I2C_CHAR_PROP,// char properties define by BLUEIOSVC_CHAR_PROP_...
+		.Property = BLUEIO_UUID_I2C_TX_CHAR_PROP,// char properties define by BLUEIOSVC_CHAR_PROP_...
 		.pDesc = s_BlueIOIoButCharDescString,	// char UTF-8 description string
 		.WrCB = UartTxSrvcCallback,			// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
