@@ -104,6 +104,7 @@ bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
 
 	vCurScrollLine = Height();
 	vCurLine = vLineHeight;
+	vCurCol = 0;
 
 	Orientation(vCfg.Orient);
 
@@ -238,6 +239,7 @@ void LCDMatrix::Clear()
 
 	vCurScrollLine = h;
 	vCurLine = vLineHeight;
+	vCurCol = 0;
 
 	cmd = LCDMTRX_CMD_VSCROLL_START_ADDR;
 	uint16_t d = EndianCvt16(0);
@@ -495,9 +497,16 @@ void LCDMatrix::Print(char const *pStr, uint32_t Color)
 
 		if (vCurLine > vCurScrollLine)
 		{
-			Scroll(DISPL_SCROLL_DIR_UP, vLineHeight);
-			Fill(0, vCurScrollLine - vpFont->Height - 1, vWidth, vLineHeight, 0);
-			vCurLine = vCurScrollLine;
+			if (Orientation() == DISPL_ORIENT_PORTRAIT)
+			{
+				Scroll(DISPL_SCROLL_DIR_UP, vLineHeight);
+				Fill(0, vCurScrollLine - vpFont->Height - 1, vWidth, vLineHeight, 0);
+				vCurLine = vCurScrollLine;
+			}
+			else
+			{
+				Clear();
+			}
 		}
 	}
 }
