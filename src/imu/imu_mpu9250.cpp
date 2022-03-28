@@ -522,11 +522,11 @@ bool ImuMpu9250::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSenso
 
     if (vpAccel)
     {
-    	f = max(vpAccel->SamplingFrequency(), f);
+    	f = max((uint32_t)vpAccel->SamplingFrequency(), f);
     }
     if (vpGyro)
     {
-    	f = max(vpGyro->SamplingFrequency(), f);
+    	f = max((uint32_t)vpGyro->SamplingFrequency(), f);
     }
 
     Rate(f);
