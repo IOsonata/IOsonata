@@ -77,11 +77,12 @@ const uint8_t APBPrescTable[8] = {
 };
 
 // Overload this variable in application firmware to change oscillator
-__WEAK MCU_OSC g_McuOsc = {
+__WEAK McuOsc_t g_McuOsc = {
 	OSC_TYPE_RC,
 	48000000,
 	OSC_TYPE_XTAL,
-	32768
+	32768,
+	true
 };
 
 /**
