@@ -85,11 +85,11 @@ typedef enum __BleApp_Mode {
 // Service connection security types
 typedef enum __BleApp_SecurityType {
 	BLEAPP_SECTYPE_NONE,					//!< open, no security
-	BLEAPP_SECTYPE_STATICKEY_NO_MITM,	//!< Bonding static pass key without Man In The Middle
-	BLEAPP_SECTYPE_STATICKEY_MITM,		//!< Bonding static pass key with MITM
-	BLEAPP_SECTYPE_LESC_MITM,			//!< LE secure encryption
-	BLEAPP_SECTYPE_SIGNED_NO_MITM,		//!< AES signed encryption without MITM
-	BLEAPP_SECTYPE_SIGNED_MITM,			//!< AES signed encryption with MITM
+	BLEAPP_SECTYPE_STATICKEY_NO_MITM,		//!< Bonding static pass key without Man In The Middle
+	BLEAPP_SECTYPE_STATICKEY_MITM,			//!< Bonding static pass key with MITM
+	BLEAPP_SECTYPE_LESC_MITM,				//!< LE secure encryption
+	BLEAPP_SECTYPE_SIGNED_NO_MITM,			//!< AES signed encryption without MITM
+	BLEAPP_SECTYPE_SIGNED_MITM,				//!< AES signed encryption with MITM
 } BLEAPP_SECTYPE;
 
 #define BLEAPP_SECEXCHG_NONE			0
@@ -144,7 +144,7 @@ typedef struct __BleApp_Config {
 	int8_t ConnLedPort;			//!< Connection LED port number
 	int8_t ConnLedPin;				//!< Connection LED pin number
 	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
-	int TxPower;					//!< Tx power in dBm
+	int TxPower;					//!< Tx power in dBm, -20 to +4 dBm TX power, configurable in 4 dB steps
 	uint32_t (*SDEvtHandler)(void); //!< Require for BLEAPP_MODE_RTOS
 	int	MaxMtu;						//!< Max MTU size or 0 for default
 	int PeriphDevCnt;				//!< Max number of peripheral connection
