@@ -1216,6 +1216,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/display/igfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/igfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/imu/imu.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu.cpp</locationURI>

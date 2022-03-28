@@ -681,6 +681,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/ifont.h</locationURI>
 		</link>
 		<link>
+			<name>include/display/igfx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/igfx.h</locationURI>
+		</link>
+		<link>
 			<name>include/imu/icm20948_img_dmp3a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/icm20948_img_dmp3a.h</locationURI>
@@ -1089,6 +1094,11 @@
 			<name>src/display/fonts</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/display/igfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/igfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>
