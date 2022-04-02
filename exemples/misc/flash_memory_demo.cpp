@@ -83,14 +83,14 @@ static const SPICfg_t s_SpiCfg = {
     .Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    .Rate = 4000000,   // Speed in Hz
+    .Rate = 32000000,   // Speed in Hz
     .DataSize = 8,      // Data Size
     .MaxRetry = 5,      // Max retries
     .BitOrder = SPIDATABIT_MSB,
     .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
     .ClkPol = SPICLKPOL_HIGH,         // clock polarity
     .ChipSel = SPICSEL_AUTO,
-	.bDmaEn = false,	// DMA
+	.bDmaEn = true,	// DMA
 	.bIntEn = false,
     .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
     .EvtCB = NULL
@@ -103,6 +103,7 @@ SPI g_Spi;
 bool MT25QL512_Init(int DevNo, DeviceIntrf* pInterface);
 bool MX25U1635E_init(int pDevNo, DeviceIntrf* ppInterface);
 bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface);
+bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface);
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
 static FlashDiskIOCfg_t s_FlashDiskCfg = {
@@ -161,18 +162,34 @@ static FlashDiskIOCfg_t s_MX25R3235F_QFlashCfg = {
 	.WrCmd = { FLASH_CMD_4WRITE, 0 },
 };
 
+// Macronix MX25R6435F
+static FlashDiskIOCfg_t s_MX25R6435F_QFlashCfg = {
+    .DevNo = 0,
+    .TotalSize = 64 * 1024 / 8,      // 32 Mbits
+	.SectSize = 4,		// 4K
+    .BlkSize = 64,		// 64K
+    .WriteSize = 256,
+    .AddrSize = 3,      // 3 bytes addressing
+	.DevId = 0x1728c2,
+	.DevIdSize = 3,
+    .pInitCB = NULL,//MX25U6435F_init,
+    .pWaitCB = NULL,
+	.RdCmd = { FLASH_CMD_4READ, 6},
+	.WrCmd = { FLASH_CMD_4WRITE, 0 },
+};
+
 // IS25LP512M
 static FlashDiskIOCfg_t s_IS25LP512_FlashCfg = {
-		.DevNo = 0,
-		.TotalSize = 512 * 1024 / 8,      	// 512 Mbits
-		.SectSize = 4,
-		.BlkSize = 32,						// minimum erase block size
-		.WriteSize = 256,					// Write page size
-		.AddrSize = 4,                      // 3 bytes addressing
-		.DevId = 0,
-		.DevIdSize = 0,
-		.pInitCB = IS25LP512M_Init,			// no special init require.
-		.pWaitCB = FlashWriteDelayCallback,					// blocking, no wait callback
+	.DevNo = 0,
+	.TotalSize = 512 * 1024 / 8,      	// 512 Mbits
+	.SectSize = 4,
+	.BlkSize = 32,						// minimum erase block size
+	.WriteSize = 256,					// Write page size
+	.AddrSize = 4,                      // 3 bytes addressing
+	.DevId = 0,
+	.DevIdSize = 0,
+	.pInitCB = IS25LP512M_Init,			// no special init require.
+	.pWaitCB = FlashWriteDelayCallback,					// blocking, no wait callback
 };
 
 FlashDiskIO g_FlashDiskIO;
@@ -266,6 +283,37 @@ bool MX25U1635E_init(int DevNo, DeviceIntrf* pInterface)
     return true;
 }
 
+bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface)
+{
+    if (pInterface == NULL)
+        return false;
+
+    int cnt = 0;
+
+    uint32_t d;
+    uint32_t r = 0;
+
+    d = FLASH_CMD_RESET_ENABLE;
+    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+
+    d = FLASH_CMD_RESET_DEVICE;
+    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+
+    d = FLASH_CMD_READID;
+    cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 3 );
+
+    if (r != 0x1728C2)
+    	return false;
+
+    printf("Flash found!\r\n");
+
+    // Enable write
+    d = FLASH_CMD_EN4B;
+    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+
+    return true;
+}
+
 //
 // Print a greeting message on standard output and exit.
 //
@@ -299,8 +347,8 @@ int main()
 	// QSPI flash
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 
-	//if (g_FlashDiskIO.Init(s_MX25R3235F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
-	if (g_FlashDiskIO.Init(s_IS25LP512_FlashCfg, &g_Spi, &g_FlashCache, 1) == false)
+	if (g_FlashDiskIO.Init(s_MX25R6435F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
+	//if (g_FlashDiskIO.Init(s_IS25LP512_FlashCfg, &g_Spi, &g_FlashCache, 1) == false)
 	{
 		printf("Init Flash failed\r\n");
 	}
