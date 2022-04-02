@@ -186,10 +186,12 @@ static FlashDiskIOCfg_t s_IS25LP512_FlashCfg = {
 	.BlkSize = 32,						// minimum erase block size
 	.WriteSize = 256,					// Write page size
 	.AddrSize = 4,                      // 3 bytes addressing
-	.DevId = 0,
-	.DevIdSize = 0,
-	.pInitCB = IS25LP512M_Init,			// no special init require.
+	.DevId = 0x1a609d,
+	.DevIdSize = 3,
+	.pInitCB = NULL,//IS25LP512M_Init,			// no special init require.
 	.pWaitCB = FlashWriteDelayCallback,					// blocking, no wait callback
+	.RdCmd = { FLASH_CMD_4READ, 6},
+	.WrCmd = { FLASH_CMD_4WRITE, 0 },
 };
 
 FlashDiskIO g_FlashDiskIO;
@@ -347,8 +349,8 @@ int main()
 	// QSPI flash
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 
-	if (g_FlashDiskIO.Init(s_MX25R6435F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
-	//if (g_FlashDiskIO.Init(s_IS25LP512_FlashCfg, &g_Spi, &g_FlashCache, 1) == false)
+	//if (g_FlashDiskIO.Init(s_MX25R6435F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
+	if (g_FlashDiskIO.Init(s_IS25LP512_FlashCfg, &g_Spi, &g_FlashCache, 1) == false)
 	{
 		printf("Init Flash failed\r\n");
 	}
