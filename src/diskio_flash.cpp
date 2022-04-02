@@ -102,6 +102,23 @@ bool FlashDiskIO::Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,
     	}
     }
 
+    if (vAddrSize > 3)
+    {
+    	// Enable 4 bytes address
+        uint8_t cmd = FLASH_CMD_EN4B;
+
+        if (pInterf->Type() == DEVINTRF_TYPE_QSPI)
+        {
+			vpInterf->StartRx(vDevNo);
+			QuadSPISendCmd(*(SPI*)vpInterf, cmd, -1, 0, 0, 0);
+			vpInterf->StopRx();
+        }
+        else
+        {
+            cnt = pInterface->Tx(DevNo, (uint8_t*)&cmd, 1);
+        }
+    }
+
     if (pCacheBlk && NbCacheBlk > 0)
     {
         SetCache(pCacheBlk, NbCacheBlk);
