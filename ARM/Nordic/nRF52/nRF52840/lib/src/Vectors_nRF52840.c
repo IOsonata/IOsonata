@@ -43,7 +43,7 @@ extern char Image$$ARM_LIB_STACK$$ZI$$Base[];
 
 void DEF_IRQHandler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void HardFault_Handler(void);
+/*__attribute__((weak, alias("DEF_IRQHandler")))*/ __WEAK void HardFault_Handler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void MemoryManagement_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void BusFault_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UsageFault_Handler(void);
@@ -175,9 +175,13 @@ void (* const __Vectors[100])(void) = {
     UARTE1_IRQHandler,
     QSPI_IRQHandler,
     CRYPTOCELL_IRQHandler,
-    SPIM3_IRQHandler,
-    0,
+	0,
+	0,
     PWM3_IRQHandler,
+    0,
+    SPIM3_IRQHandler,
+	0,
+	0,
 	0,
 };
 
