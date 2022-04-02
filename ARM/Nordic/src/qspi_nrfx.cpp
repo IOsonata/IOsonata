@@ -180,8 +180,7 @@ int nRFxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	{
 		uint32_t cinstrconf = ((uint32_t)dev->Cmd << QSPI_CINSTRCONF_OPCODE_Pos) |
 							  ((dev->ParamLen + BuffLen + 1) << QSPI_CINSTRCONF_LENGTH_Pos) |
-							  QSPI_CINSTRCONF_LIO2_Msk | QSPI_CINSTRCONF_LIO3_Msk |
-							  QSPI_CINSTRCONF_WIPWAIT_Msk | QSPI_CINSTRCONF_WREN_Msk;
+							  QSPI_CINSTRCONF_LIO2_Msk | QSPI_CINSTRCONF_LIO3_Msk;
 
 		dev->pQSpiReg->CINSTRCONF = cinstrconf;
 
@@ -210,21 +209,7 @@ int nRFxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 
 		cnt = BuffLen;
 	}
-/*
-    while (BuffLen > 0)
-    {
-       // dev->pQSpiReg->TXD = 0xFF;
 
-        if (nRFxQSPIWaitReady(dev, 100000) == false)
-            break;
-
-        //*pBuff = dev->pQSpiReg->RXD;
-
-        BuffLen--;
-        pBuff++;
-        cnt++;
-    }
-*/
     return cnt;
 }
 
@@ -294,8 +279,7 @@ int nRFxQSPITxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 
 			uint32_t cinstrconf = ((uint32_t)dev->Cmd << QSPI_CINSTRCONF_OPCODE_Pos) |
 								  ((dev->ParamLen + 1) << QSPI_CINSTRCONF_LENGTH_Pos) |
-								  QSPI_CINSTRCONF_LIO2_Msk | QSPI_CINSTRCONF_LIO3_Msk |
-								  QSPI_CINSTRCONF_WIPWAIT_Msk | QSPI_CINSTRCONF_WREN_Msk;
+								  QSPI_CINSTRCONF_LIO2_Msk | QSPI_CINSTRCONF_LIO3_Msk;
 
 			dev->pQSpiReg->CINSTRCONF = cinstrconf;
 			dev->Cmd = 0;
@@ -340,6 +324,7 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 
 	if (AddrLen > 3)
 	{
+		// Set 4 byte address mode
 		ifcfg0 = (ifcfg0 & ~QSPI_IFCONFIG0_ADDRMODE_Msk) | (1 << QSPI_IFCONFIG0_ADDRMODE_Pos);
 	}
 
@@ -371,6 +356,8 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 			break;
 		default: // Custom cmd
 		{
+			// Reset ADDRMODE to 3 byte for other commands
+			ifcfg0 &= ~QSPI_IFCONFIG0_ADDRMODE_Msk;
 			dev->Cmd = Cmd;
 			dev->ParamLen = 0;
 
@@ -389,8 +376,7 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 				dev->pQSpiReg->CINSTRDAT0 = dev->Param[0];
 				uint32_t cinstrconf = ((uint32_t)Cmd << QSPI_CINSTRCONF_OPCODE_Pos) |
 									  ((AddrLen + 1) << QSPI_CINSTRCONF_LENGTH_Pos) |
-									  QSPI_CINSTRCONF_LIO2_Msk | QSPI_CINSTRCONF_LIO3_Msk |
-									  QSPI_CINSTRCONF_WIPWAIT_Msk | QSPI_CINSTRCONF_WREN_Msk;
+									  QSPI_CINSTRCONF_LIO2_Msk | QSPI_CINSTRCONF_LIO3_Msk;
 
 				dev->pQSpiReg->CINSTRCONF = cinstrconf;
 				dev->ParamLen = 0;
@@ -454,20 +440,17 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 
 	reg->IFCONFIG0 &= ~QSPI_IFCONFIG0_ADDRMODE_Msk;
 
-	if (pDev->Cfg.DataSize > 3)
-	{
-		reg->IFCONFIG0 |= QSPI_IFCONFIG0_ADDRMODE_Msk;
-	}
-
 	nRFxQSPISetRate(&pDev->DevIntrf, pDev->Cfg.Rate);
 
 	switch (pDev->Cfg.Phy)
 	{
 		case SPIPHY_DUAL:
 			break;
-		case SPIPHY_QUAD_SDR:
-			break;
 		case SPIPHY_QUAD_DDR:
+			// nRF does not support dual data rate
+			// revert to SDR only
+			pDev->Cfg.Phy = SPIPHY_QUAD_SDR;
+		case SPIPHY_QUAD_SDR:
 			break;
 	}
 
@@ -491,10 +474,13 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
+#if 0
 	reg->EVENTS_READY = 0;
 	reg->ENABLE = 1;
 	reg->TASKS_ACTIVATE = 1;
-
+#else
+	nRFxQSPIEnable(&pDev->DevIntrf);
+#endif
 	return true;
 }
 

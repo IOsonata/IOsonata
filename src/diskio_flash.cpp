@@ -82,6 +82,8 @@ bool FlashDiskIO::Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,
     	QuadSPISetMemSize(dev, vTotalSize);
     }
 
+    Reset();
+
     if (Cfg.DevIdSize > 0 && Cfg.DevId != 0)
     {
     	int rtry = 5;
@@ -143,7 +145,7 @@ uint32_t FlashDiskIO::ReadId(int Len)
 
 uint8_t FlashDiskIO::ReadStatus()
 {
-    uint8_t d;
+    uint8_t d = 0;
 
 	if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
     {
@@ -444,12 +446,24 @@ bool FlashDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
  */
 void FlashDiskIO::Reset()
 {
-	uint8_t d = FLASH_CMD_RESET_ENABLE;
+    if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+    {
+    	vpInterf->StartTx(vDevNo);
+		QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_RESET_ENABLE, -1, 0, 0, 0);
+		vpInterf->StopTx();
+    	vpInterf->StartTx(vDevNo);
+		QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_RESET_DEVICE, -1, 0, 0, 0);
+		vpInterf->StopTx();
+    }
+    else
+    {
+    	uint8_t d = FLASH_CMD_RESET_ENABLE;
 
-	vpInterf->Tx(vDevNo, &d, 1);
+    	vpInterf->Tx(vDevNo, &d, 1);
 
-	d = FLASH_CMD_RESET_DEVICE;
-	vpInterf->Tx(vDevNo, &d, 1);
+    	d = FLASH_CMD_RESET_DEVICE;
+    	vpInterf->Tx(vDevNo, &d, 1);
+    }
 
 	DiskIO::Reset();
 }

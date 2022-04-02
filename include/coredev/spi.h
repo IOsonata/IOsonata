@@ -93,9 +93,9 @@ typedef enum __SPI_Phy {
 	SPIPHY_3WIRE,				//!< 3 wires MISO/MOSI mux
 	SPIPHY_DUAL,				//!< Dual SPI D0, D1 or used
 	SPIPHY_QUAD_SDR,			//!< QuadSPI, single data rate
-	SPIPHY_QUAD_DDR,			//!< QuadSPI, dual data rate
+	SPIPHY_QUAD_DDR,			//!< QuadSPI, dual data rate, data transfer on both edges of the clk
 	SPIPHY_OCTO_SDR,			//!< OctoSPI, single data rate
-	SPIPHY_OCTO_DDR,			//!< OctoSPI, dual data rate
+	SPIPHY_OCTO_DDR,			//!< OctoSPI, dual data rate, data transfer on both edges of the clk
 	SPIPHY_OCTO_HYPER,			//!< OctoSPI, HyperBus
 } SPIPHY;
 
