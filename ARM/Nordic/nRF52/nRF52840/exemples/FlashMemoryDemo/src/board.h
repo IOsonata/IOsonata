@@ -44,6 +44,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //#define NORDIC_DK			// For Nordic DevKit
 //#define NEBLINA			// Neblina board
 
+#define QSPI
+
 #ifdef NORDIC_DK
 
 #define UART_TX_PIN					9//7
@@ -165,24 +167,46 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define FLASH_HOLD_PIN             	26
 #define FLASH_HOLD_PINOP           	0
 #else
+#ifdef QSPI
+#define SPI_DEVNO     					4
+#define SPI_PHY						SPIPHY_QUAD_SDR
+#define QSPI_SCK_PORT        			0
+#define QSPI_SCK_PIN         			19
+#define QSPI_SCK_PINOP       			1
+#define QSPI_D0_PORT       				0
+#define QSPI_D0_PIN        				21
+#define QSPI_D0_PINOP      				1
+#define QSPI_D1_PORT       				1
+#define QSPI_D1_PIN        				0
+#define QSPI_D1_PINOP      				1
+#define QSPI_D2_PORT       				0
+#define QSPI_D2_PIN        				22
+#define QSPI_D2_PINOP      				1
+#define QSPI_D3_PORT       				0
+#define QSPI_D3_PIN        				23
+#define QSPI_D3_PINOP      				1
+#define SPI_CS_MODE					SPICSEL_AUTO
+#else
 #define SPI_DEVNO      					1
 #define SPI_PHY							SPIPHY_NORMAL
-#define SPI_MISO_PORT       			0
-#define SPI_MISO_PIN        			5//13
+#define SPI_MISO_PORT       			1
+#define SPI_MISO_PIN        			0
 #define SPI_MISO_PINOP      			1
 #define SPI_MOSI_PORT       			0
-#define SPI_MOSI_PIN        			7//12
+#define SPI_MOSI_PIN        			21
 #define SPI_MOSI_PINOP      			1
 #define SPI_SCK_PORT        			0
-#define SPI_SCK_PIN         			4
+#define SPI_SCK_PIN         			19
 #define SPI_SCK_PINOP       			1
+#define SPI_CS_MODE						SPICSEL_AUTO
+#endif
 
-#define SPI_FLASH_CS_PORT          	0
-#define SPI_FLASH_CS_PIN           	18
-#define SPI_FLASH_CS_PINOP         	0
+#define FLASH_CS_PORT          		0
+#define FLASH_CS_PIN           		24
+#define FLASH_CS_PINOP         		0
 
 #define FLASH_HOLD_PORT            	0
-#define FLASH_HOLD_PIN             	26
+#define FLASH_HOLD_PIN             	23
 #define FLASH_HOLD_PINOP           	0
 #endif
 
@@ -194,13 +218,23 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BLUEIO_TAG_EVIM_IMU_INT_NO		0
 
+#ifdef QSPI
+#define SPI_PINS_CFG	{ \
+	{QSPI_SCK_PORT, QSPI_SCK_PIN, QSPI_SCK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{QSPI_D0_PORT, QSPI_D0_PIN, QSPI_D0_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{QSPI_D1_PORT, QSPI_D1_PIN, QSPI_D1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{QSPI_D2_PORT, QSPI_D2_PIN, QSPI_D2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{QSPI_D3_PORT, QSPI_D3_PIN, QSPI_D3_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{FLASH_CS_PORT, FLASH_CS_PIN, FLASH_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+}
+#else
 #define SPI_PINS_CFG	{ \
 	{SPI_SCK_PORT, SPI_SCK_PIN, SPI_SCK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
     {SPI_MISO_PORT, SPI_MISO_PIN, SPI_MISO_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
     {SPI_MOSI_PORT, SPI_MOSI_PIN, SPI_MOSI_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-	{SPI_FLASH_CS_PORT, SPI_FLASH_CS_PIN, SPI_FLASH_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{FLASH_CS_PORT, FLASH_CS_PIN, FLASH_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
 }
-
+#endif
 
 #endif
 
