@@ -115,7 +115,7 @@ bool FlashDiskIO::Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,
         }
         else
         {
-            cnt = pInterface->Tx(DevNo, (uint8_t*)&cmd, 1);
+            vpInterf->Tx(vDevNo, (uint8_t*)&cmd, 1);
         }
     }
 
