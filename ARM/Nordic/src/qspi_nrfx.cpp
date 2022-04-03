@@ -354,6 +354,11 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 		case FLASH_CMD_DWRITE:
 			ifcfg0 = (ifcfg0 & ~QSPI_IFCONFIG0_WRITEOC_Msk) | (1 << QSPI_IFCONFIG0_WRITEOC_Pos);
 			break;
+		case FLASH_CMD_EN4B:
+			// Nordic handles 4 bytes address internally
+			// ignore it
+			return true;
+			break;
 		default: // Custom cmd
 		{
 			// Reset ADDRMODE to 3 byte for other commands
