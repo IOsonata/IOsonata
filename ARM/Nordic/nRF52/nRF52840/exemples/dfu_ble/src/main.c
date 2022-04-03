@@ -47,7 +47,7 @@
  */
 
 #include <stdint.h>
-#include "boards.h"
+//#include "boards.h"
 #include "nrf_mbr.h"
 #include "nrf_bootloader.h"
 #include "nrf_bootloader_app_start.h"
@@ -60,6 +60,10 @@
 #include "app_error_weak.h"
 #include "nrf_bootloader_info.h"
 #include "nrf_delay.h"
+
+#include "idelay.h"
+#include "iopinctrl.h"
+#include "board.h"
 
 static void on_error(void)
 {
@@ -110,6 +114,8 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
             //bsp_board_led_on(BSP_BOARD_LED_0);
             //bsp_board_led_on(BSP_BOARD_LED_1);
             //bsp_board_led_off(BSP_BOARD_LED_2);
+        	IOPinClear(LED1_PORT, LED1_PIN);
+
             break;
         case NRF_DFU_EVT_TRANSPORT_ACTIVATED:
             //bsp_board_led_off(BSP_BOARD_LED_1);
@@ -117,16 +123,26 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
             break;
         case NRF_DFU_EVT_DFU_STARTED:
             break;
+        case NRF_DFU_EVT_DFU_COMPLETED:
+        	IOPinSet(LED1_PORT, LED1_PIN);
+        	break;
         default:
             break;
     }
 }
+
+extern uint8_t m_dfu_settings_buffer[BOOTLOADER_SETTINGS_PAGE_SIZE];
 
 
 /**@brief Function for application main entry. */
 int main(void)
 {
     uint32_t ret_val;
+
+    IOPinConfig(LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+    IOPinSet(LED1_PORT, LED1_PIN);
+
+    msDelay(50);
 
     // Must happen before flash protection is applied, since it edits a protected page.
     nrf_bootloader_mbr_addrs_populate();

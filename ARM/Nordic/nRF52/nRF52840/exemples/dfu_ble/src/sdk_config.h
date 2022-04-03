@@ -153,7 +153,7 @@
 // <47=> 47 (P1.15) 
 
 #ifndef NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN
-#define NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN 25
+#define NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN 13
 #endif
 
 // </e>
@@ -203,7 +203,7 @@
 // <i> If 0, no inactivity timer will be used. Values 1-99 are invalid.
 
 #ifndef NRF_BL_DFU_INACTIVITY_TIMEOUT_MS
-#define NRF_BL_DFU_INACTIVITY_TIMEOUT_MS 60000
+#define NRF_BL_DFU_INACTIVITY_TIMEOUT_MS 30000
 #endif
 
 // </h> 
