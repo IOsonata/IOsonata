@@ -37,7 +37,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "display/display_hx8357.h"
 
-bool LcdHX8357::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
+bool LcdHX8357::Init(const DisplayCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	LCDMatrix::vpLineBuff = vLineBuff;
 	SetDevRes(HX8357_WIDTH_MAX, HX8357_HEIGHT_MAX);

@@ -41,7 +41,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "display/display_lcdmtrx.h"
 
-bool LCDMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
+bool LCDMatrix::Init(const DisplayCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	Interface(pIntrf);
 

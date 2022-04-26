@@ -35,7 +35,7 @@ SOFTWARE.
 #ifndef __DISPLAY_LCD_H__
 #define __DISPLAY_LCD_H__
 
-#include "display.h"
+#include "display/display.h"
 
 // Standard LCD commands 
 #define LCDMTRX_CMD_NOP							0		// NOP
@@ -146,7 +146,7 @@ SOFTWARE.
 
 class LCDMatrix : public DisplayDotMatrix {
 public:
-	virtual bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf);
+	virtual bool Init(const DisplayCfg_t &, DeviceIntrf * const pIntrf);
 
 	/**
 	 * @brief	Power on or wake up device

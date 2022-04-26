@@ -37,7 +37,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "display/display_ili9341.h"
 
-bool LcdILI9341::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
+bool LcdILI9341::Init(const DisplayCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	LCDMatrix::vpLineBuff = vLineBuff;
 	SetDevRes(ILI9341_WIDTH_MAX, ILI9341_HEIGHT_MAX);

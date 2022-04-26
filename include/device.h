@@ -310,14 +310,14 @@ protected:
 	 *
 	 * @param 	pIntrf : Pointer to preinitialized static interface.
 	 */
-	void Interface(DeviceIntrf *pIntrf) { vpIntrf = pIntrf; }
+	void Interface(DeviceIntrf * const pIntrf) { vpIntrf = pIntrf; }
 
 	/**
 	 * @brief	Get device's communication interface
 	 *
 	 * @return	return pointer to interface in use or NULL
 	 */
-	DeviceIntrf *Interface() { return vpIntrf; }
+	DeviceIntrf * const Interface() { return vpIntrf; }
 
 	void InterruptEnabled(bool En) { vbIntEn = En; }
 	bool InterruptEnabled() { return vbIntEn; }

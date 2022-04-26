@@ -79,7 +79,7 @@ SOFTWARE.
 
 class LcdILI9341 : public LCDMatrix {
 public:
-	bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf);
+	bool Init(const DisplayCfg_t &, DeviceIntrf * const pIntrf);
 
 private:
 	uint8_t vLineBuff[ILI9341_LINE_BUFFLEN];

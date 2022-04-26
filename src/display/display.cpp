@@ -82,6 +82,7 @@ void DisplayDotMatrix::Reset()
 		IOPinClear(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
 		usDelay(100);
 		IOPinSet(vCfg.pPins[DISPL_CTRL_RST_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_RST_PINIDX].PinNo);
+		msDelay(2);
 	}
 }
 

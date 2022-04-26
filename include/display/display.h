@@ -81,7 +81,7 @@ typedef struct __Display_Cfg {
 /// Generic display base objec
 class Display : public Device {
 public:
-	virtual bool Init(DisplayCfg_t &, DeviceIntrf *pIntrf) = 0;
+	virtual bool Init(const DisplayCfg_t &, DeviceIntrf * const pIntrf) = 0;
 
 	/**
 	 * @brief	Clear screen
