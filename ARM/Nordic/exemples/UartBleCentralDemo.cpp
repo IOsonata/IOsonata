@@ -51,6 +51,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/iopincfg.h"
 #include "stddev.h"
 #include "board.h"
+#include "idelay.h"
+//#include "ble_db_discovery.h"
+//#include "ble_nus_c.h"
+//#include "nrf_sdh_ble.h"
 
 #define DEVICE_NAME                     "UARTCentral"                            /**< Name of device. Will be included in the advertising data. */
 
@@ -65,6 +69,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SCAN_INTERVAL           MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
 #define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)                                  /**< Determines scan window in units of 0.625 millisecond. */
 #define SCAN_TIMEOUT            0                                 /**< Timout when scanning. 0x0000 disables timeout. */
+
+
+
+
 
 const BLEAPP_CFG s_BleAppCfg = {
 	{ // Clock config nrf_clock_lf_cfg_t
@@ -122,11 +130,11 @@ const UARTCfg_t g_UartCfg = {
 	0,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	1000000,
+	115200,
 	8,
 	UART_PARITY_NONE,
 	1,	// Stop bit
-	UART_FLWCTRL_HW,
+	UART_FLWCTRL_NONE,
 	true,
 	APP_IRQ_PRIORITY_LOW,
 	nRFUartEvthandler,
@@ -173,39 +181,54 @@ static ble_gap_conn_params_t s_ConnParams = {
 	.conn_sup_timeout = (uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_SUPERVISION_TIMEOUT, UNIT_10_MS),
 };
 
+
 BLEPERIPH_DEV g_ConnectedDev = {
 	.ConnHdl = BLE_CONN_HANDLE_INVALID,
 };
+
 
 uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
 
 void BleDevDiscovered(BLEPERIPH_DEV *pDev)
 {
-	printf("%p Nb service disco %d\r\n", &g_ConnectedDev, g_ConnectedDev.NbSrvc);
+	g_Uart.printf("%p Number service discovered %d\r\n", &g_ConnectedDev, g_ConnectedDev.NbSrvc);
     for (int i = 0; i < pDev->NbSrvc; i++)
     {
-    	printf("Service : %x,  Char : %d\r\n", g_ConnectedDev.Services[i].srv_uuid.uuid, g_ConnectedDev.Services[i].char_count);
+    	g_Uart.printf("Service_ID : 0x%x,  Num_Characteristic : %d\r\n", g_ConnectedDev.Services[i].srv_uuid.uuid, g_ConnectedDev.Services[i].char_count);
     	for (int j = 0; j < g_ConnectedDev.Services[i].char_count; j++)
     	{
-    		printf("Char : %x\r\n", g_ConnectedDev.Services[i].charateristics[j].characteristic.uuid.uuid);
+    		g_Uart.printf("Char_ID : 0x%x\r\n", g_ConnectedDev.Services[i].charateristics[j].characteristic.uuid.uuid);
     	}
     }
+
+    // Find the required Service
+    g_Uart.printf("Looking for BLUEIO_UUID_UART_SERVICE with UUID = 0x%x\r\n", BLUEIO_UUID_UART_SERVICE);
     int idx = BleDevFindService(pDev, BLUEIO_UUID_UART_SERVICE);
+    g_Uart.printf("Find UUID_UART_SERVICE idx = 0x%x (%d)\r\n", idx, idx);
 
     if (idx != -1)
     {
+    	// Rx characteristic
     	int dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
+    	g_Uart.printf("Find UART_RX_CHAR idx = 0x%x (%d)\r\n", idx, idx);
     	if (dcharidx >= 0 && pDev->Services[idx].charateristics[dcharidx].characteristic.char_props.notify)
     	{
     		// Enable Notify
-        	printf("Enable notify\r\n");
+        	g_Uart.printf("Enable notify\r\n");
         	BleAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].charateristics[dcharidx].cccd_handle);
     	}
+
+    	// Tx characteristic
     	dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
+    	g_Uart.printf("Find UART_TX_CHAR idx = 0x%x\r\n", idx);
     	if (dcharidx >= 0)
     	{
     		g_BleTxCharHdl = pDev->Services[idx].charateristics[dcharidx].characteristic.handle_value;
     	}
+    }
+    else
+    {
+    	g_Uart.printf("UUID_UART_SERVICE is not found!\r\n");
     }
 
 }
@@ -214,14 +237,38 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 {
     ret_code_t err_code;
     const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
+//    const ble_gap_evt_adv_report_t * p_adv_report = &p_gap_evt->params.adv_report;
     uint8_t addr[6] = { 0xda, 0x02, 0xe8, 0xfe, 0xac, 0xd1};
+    bool ec;
 
     switch (p_ble_evt->header.evt_id)
     {
     	case BLE_GAP_EVT_CONNECTED:
-    		//g_Uart.printf("Connecte\r\n");
-    		g_ConnectedDev.ConnHdl = p_ble_evt->evt.gap_evt.conn_handle;
-    		BleAppDiscoverDevice(&g_ConnectedDev);
+    		{
+    			g_Uart.printf("2. BLE_GAP_EVT_CONNECTED\r\n");
+//    			g_Uart.printf("g_Connected.Name = %s | Len = %d\r\n", g_ConnectedDev.Name, sizeof(g_ConnectedDev.Name));
+
+				g_ConnectedDev.ConnHdl = p_gap_evt->conn_handle;
+				g_Uart.printf("g_Connected.ConnHdl: %d\r\n", g_ConnectedDev.ConnHdl);
+//				g_Uart.printf("p_ble_evt->evt.gap_evt.conn_handle: %d\r\n", p_ble_evt->evt.gap_evt.conn_handle);
+
+//				g_Uart.printf("addr_id_peer: 0x%x | addr_type: 0x%x\r\n",
+//						g_ConnectedDev.Addr.addr_id_peer, g_ConnectedDev.Addr.addr_type);
+
+//				g_ConnectedDev.Addr = p_ble_evt->evt.gap_evt.params.adv_report.peer_addr;
+//				g_Uart.printf("g_ConnectedDev.Addr = %02x:%02x:%02x:%02x:%02x:%02x,  Nb_services %d\r\n",
+//						g_ConnectedDev.Addr.addr[0],
+//						g_ConnectedDev.Addr.addr[1],
+//						g_ConnectedDev.Addr.addr[2],
+//						g_ConnectedDev.Addr.addr[3],
+//						g_ConnectedDev.Addr.addr[4],
+//						g_ConnectedDev.Addr.addr[5],
+//						g_ConnectedDev.NbSrvc);
+
+				err_code = BleAppDiscoverDevice(&g_ConnectedDev);
+    			//err_code = ble_db_discovery_start(&m_db_disc, p_ble_evt->evt.gap_evt.conn_handle);
+				g_Uart.printf("BleAppDiscoverDevice: (%d) %s\r\n", err_code,  (err_code != NRF_SUCCESS) ? "FAILED!!!": "SUCCESS!");
+    		}
     		break;
         case BLE_GAP_EVT_ADV_REPORT:
 			{
@@ -229,25 +276,40 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 				const ble_gap_evt_adv_report_t * p_adv_report = &p_gap_evt->params.adv_report;
 
 				// Find device by name
-				if (ble_advdata_name_find(p_adv_report->data.p_data,
-								  p_adv_report->data.len,
-								  "UARTDemo"))
+				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, "UARTDemo"))//"UartBleBridge"))
 	//            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
 				{
-					g_Uart.printf("Addr: %02x:%02x:%02x:%02x:%02x:%02x,  RSSI %d\r\n",
-						p_adv_report->peer_addr.addr[0], p_adv_report->peer_addr.addr[1],
-						p_adv_report->peer_addr.addr[2],
-						p_adv_report->peer_addr.addr[3],
-						p_adv_report->peer_addr.addr[4],
-						p_adv_report->peer_addr.addr[5],
-						p_adv_report->rssi
-					 );
-					BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
+					g_Uart.printf("1. BLE_GAP_EVT_ADV_REPORT.\r\n");
+					g_Uart.printf("Device name matched!\r\n");
+					g_Uart.printf("addr_id_peer: 0x%x | addr_type: 0x%x\r\n",
+							p_adv_report->peer_addr.addr_id_peer, p_adv_report->peer_addr.addr_type);
+
+					g_Uart.printf("Device MAC_addr: %02x:%02x:%02x:%02x:%02x:%02x \r\n",
+							p_adv_report->peer_addr.addr[0],
+							p_adv_report->peer_addr.addr[1],
+							p_adv_report->peer_addr.addr[2],
+							p_adv_report->peer_addr.addr[3],
+							p_adv_report->peer_addr.addr[4],
+							p_adv_report->peer_addr.addr[5]);
+
+					err_code = BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
+					g_Uart.printf("Device connected: (%d) %s\r\n", err_code, (err_code != NRF_SUCCESS) ? "FAILED!": "SUCCESS!");
+//					memcpy(g_ConnectedDev.Name, p_adv_report->data.p_data, p_adv_report->data.len);
+//					g_Uart.printf("g_Connected.Name = %s | Len = %d\r\n", g_ConnectedDev.Name, p_adv_report->data.len);
+//					g_ConnectedDev.Addr = p_ble_evt->evt.gap_evt.params.adv_report.peer_addr;
+//					g_ConnectedDev.ConnHdl = p_gap_evt->conn_handle;
+//					g_Uart.printf("g_ConnectedDev.ConnHdl = %d\r\n", g_ConnectedDev.ConnHdl);
+					msDelay(100);
+				}
+				else
+				{
+					BleAppScan();
 				}
 			}
 			break;
         case BLE_GAP_EVT_TIMEOUT:
         	{
+        		g_Uart.printf("BLE_GAP_EVT_TIMEOUT");
         	    ble_gap_evt_timeout_t const * p_timeout = &p_gap_evt->params.timeout;
         	    if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
         	    {
@@ -257,12 +319,14 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
         	break;
         case BLE_GAP_EVT_SCAN_REQ_REPORT:
         	{
+        		g_Uart.printf("BLE_GAP_EVT_SCAN_REQ_REPORT");
         	    ble_gap_evt_scan_req_report_t const * p_req_report = &p_gap_evt->params.scan_req_report;
 
         	}
         	break;
         case BLE_GATTC_EVT_HVX:
         	//printf("Received data\r\n");
+        	g_Uart.printf("BLE_GATTC_EVT_HVX\r\n");
         	if (p_ble_evt->evt.gattc_evt.params.hvx.handle == g_ConnectedDev.ConnHdl)
         	{
         		g_Uart.Tx(p_ble_evt->evt.gattc_evt.params.hvx.data, p_ble_evt->evt.gattc_evt.params.hvx.len);
@@ -278,19 +342,23 @@ void HardwareInit()
 	// Retarget printf to uart if semihosting is not used
 	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
-	printf("UART BLE Central Demo\r\n");
+	g_Uart.printf("UART BLE Central Demo\r\n");
 }
 
 void BleAppInitUserData()
 {
-
+//	// Add passkey pairing
+//	ble_opt_t opt;
+//	opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
+//	uint32_t err_code =  sd_ble_opt_set(BLE_GAP_OPT_PASSKEY, &opt);
+//	APP_ERROR_CHECK(err_code);
 }
 
 void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 {
-	uint8_t buff[128];
+	uint8_t buff[256];
 
-	int l = g_Uart.Rx(buff, 128);
+	int l = g_Uart.Rx(buff, 256);
 	if (l > 0)
 	{
 		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
@@ -339,8 +407,10 @@ int main()
 
     BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
 
-    uint32_t ret = sd_ble_gap_scan_start(&g_ScanParams, &g_AdvScanReportData);
-    APP_ERROR_CHECK(ret);
+    //uint32_t ret = sd_ble_gap_scan_start(&g_ScanParams, &g_AdvScanReportData);
+   // APP_ERROR_CHECK(ret);
+
+    BleAppScan();
 
     BleAppRun();
 

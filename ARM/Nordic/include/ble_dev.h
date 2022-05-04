@@ -56,7 +56,7 @@ typedef struct __Ble_Dev_Cfg {
 typedef BleDevCfg_t	BLEDEV_CFG;
 
 #define BLEPERIPH_DEV_SERVICE_MAXCNT	10
-#define BLEPERIPH_DEV_NAME_MAXLEN		20
+#define BLEPERIPH_DEV_NAME_MAXLEN		30
 
 typedef struct __BleDevData {
 	char Name[BLEPERIPH_DEV_NAME_MAXLEN];
@@ -86,7 +86,8 @@ private:
 extern "C" {
 #endif
 
-bool BleAppDiscoverDevice(BleDev_t * const pDev);
+//bool BleAppDiscoverDevice(BleDev_t * const pDev);
+uint32_t BleAppDiscoverDevice(BleDev_t * const pDev);
 /**
  * @brief	Peripheral discovered callback.
  *

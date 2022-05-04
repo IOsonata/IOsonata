@@ -42,6 +42,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "board.h"
 #include "nrf.h"
 #include "nrf_drv_usbd.h"
 #include "nrf_drv_clock.h"
@@ -131,12 +132,15 @@ APP_USBD_CDC_ACM_GLOBAL_DEF(m_app_cdc_acm,
 
 #define READ_SIZE 1
 
-static char m_rx_buffer[READ_SIZE];
-static char m_tx_buffer[NRF_DRV_USBD_EPSIZE];
+//static char m_rx_buffer[READ_SIZE];
+//static char m_tx_buffer[NRF_DRV_USBD_EPSIZE];
+static char m_rx_buffer[USB_PKT_SIZE];
+static char m_tx_buffer[USB_PKT_SIZE];
 static bool m_send_flag = 0;
 
 uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
-uint8_t g_extern_usbd_product_string[12 + 1] = { "Test" };
+//uint8_t g_extern_usbd_product_string[12 + 1] = { "BlueIO832Mini" };
+uint8_t g_extern_usbd_product_string[16] = DEVICE_NAME;
 
 
 //static uint8_t g_extern_usbd_product_string[] = APP_USBD_STRING_DESC("Test");
@@ -349,7 +353,7 @@ int main(void)
         {
             static int  frame_counter;
 
-            size_t size = sprintf(m_tx_buffer, "Hello USB CDC FA demo: %u\r\n", frame_counter);
+            size_t size = sprintf(m_tx_buffer, "USB CDC FA demo: %u\r\n", frame_counter);
 
             ret = app_usbd_cdc_acm_write(&m_app_cdc_acm, m_tx_buffer, size);
             if (ret == NRF_SUCCESS)

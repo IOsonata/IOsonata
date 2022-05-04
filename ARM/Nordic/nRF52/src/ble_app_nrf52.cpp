@@ -1392,6 +1392,13 @@ bool BleAppConnectable(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 	return true;
 }
 
+
+/**@brief Function for Initializing the Nordic SoftDevice firmware stack
+ *
+ * @param[in] CentLinkCount
+ * @param[in] PeriLinkCount
+ * @param[in] bConnectable
+ */
 bool BleAppStackInit(int CentLinkCount, int PeriLinkCount, bool bConnectable)
 {
     // Configure the BLE stack using the default settings.
@@ -1630,21 +1637,7 @@ void BleAppRun()
 	{
 		BleAppAdvStart(BLEAPP_ADVMODE_FAST);
 	}
-/*	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
-	{
-		uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, BLEAPP_CONN_CFG_TAG);
-		//uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-		APP_ERROR_CHECK(err_code);
-	}
-	else
-	{
-		if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
-		{
-			uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-			APP_ERROR_CHECK(err_code);
-		}
-	}
-*/
+
     while (1)
     {
 		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
@@ -1661,7 +1654,68 @@ void BleAppRun()
 			sd_app_evt_wait();
 		}
     }
+
+	/*	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
+		{
+			uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, BLEAPP_CONN_CFG_TAG);
+			//uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
+			APP_ERROR_CHECK(err_code);
+		}
+		else
+		{
+			if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
+			{
+				uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
+				APP_ERROR_CHECK(err_code);
+			}
+		}
+	*/
 }
+
+
+void BleTimerAppRun()
+{
+	g_BleAppData.bAdvertising = false;
+
+	if ((g_BleAppData.AppRole & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_CENTRAL)) != BLEAPP_ROLE_CENTRAL)
+	{
+		BleAppAdvStart(BLEAPP_ADVMODE_FAST);
+	}
+
+    while (1)
+    {
+		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
+		{
+			BleAppRtosWaitEvt();
+		}
+		else
+		{
+			if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
+			{
+				app_sched_execute();
+			}
+			nrf_ble_lesc_request_handler();
+			sd_app_evt_wait();
+		}
+    }
+
+	/*	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
+		{
+			uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, BLEAPP_CONN_CFG_TAG);
+			//uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
+			APP_ERROR_CHECK(err_code);
+		}
+		else
+		{
+			if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
+			{
+				uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
+				APP_ERROR_CHECK(err_code);
+			}
+		}
+	*/
+}
+
 
 void BleAppScan()
 {
@@ -1731,16 +1785,18 @@ bool BleAppScanInit(ble_uuid128_t * const pBaseUid, ble_uuid_t * const pServUid)
 	return err_code == NRF_SUCCESS;
 }
 
-bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam)
+//bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam)
+uint32_t BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam)
 {
 	ret_code_t err_code = sd_ble_gap_connect(pDevAddr, &s_BleScanParams,
                                   	  	  	 pConnParam,
 											 BLEAPP_CONN_CFG_TAG);
-    APP_ERROR_CHECK(err_code);
+    //APP_ERROR_CHECK(err_code);
 
     g_BleAppData.bScan = false;
 
-    return err_code == NRF_SUCCESS;
+    //return err_code == NRF_SUCCESS;
+    return err_code;
 }
 
 bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * const pCharUid)

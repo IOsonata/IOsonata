@@ -64,7 +64,8 @@ __WEAK void BleDevDiscovered(BleDev_t *pDev)
 
 }
 
-bool BleAppDiscoverDevice(BleDev_t * const pDev)
+//bool BleAppDiscoverDevice(BleDev_t * const pDev)
+uint32_t BleAppDiscoverDevice(BleDev_t * const pDev)
 {
 	s_pBlePeriphData = pDev;
 	s_CurSrvcIdx = 0;
@@ -72,7 +73,8 @@ bool BleAppDiscoverDevice(BleDev_t * const pDev)
 
     uint32_t err_code = sd_ble_gattc_primary_services_discover(pDev->ConnHdl, 1, NULL);
 
-    return err_code == NRF_SUCCESS;
+    //return err_code == NRF_SUCCESS;
+    return err_code;
 }
 
 int BleDevFindService(BleDev_t * const pDev, uint16_t Uuid)

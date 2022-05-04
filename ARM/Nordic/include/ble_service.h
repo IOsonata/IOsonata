@@ -57,7 +57,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLESVC_UUID_BASE_MAXCNT			4
 
 typedef struct __BLE_Service_Data	BleSrvc_t;
-typedef BleSrvc_t					BLESRVC;
+typedef BleSrvc_t	BLESRVC;
 
 /**
  * @brief	Callback on write
@@ -112,7 +112,7 @@ typedef struct __BLE_Service_Char_Data {
     uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
 } BleSrvcChar_t;
 
-typedef BleSrvcChar_t		BLESRVC_CHAR;
+typedef BleSrvcChar_t	BLESRVC_CHAR;
 
 /*
  * User configuration for the service to be created

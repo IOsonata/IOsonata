@@ -3078,10 +3078,10 @@
 		<configuration configurationName="Debug_FPU">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
-		<configuration configurationName="Release_NoReset"/>
 		<configuration configurationName="Release_NoNFC">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
+		<configuration configurationName="Release_NoReset"/>
 		<configuration configurationName="Debug_NoNFC">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
