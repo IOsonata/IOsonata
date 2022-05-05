@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>UartBleCentralDemo</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+	</buildSpec>
+	<natures>
+	</natures>
+	<linkedResources>
+		<link>
+			<name>src/UartBleCentralDemo.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/exemples/UartBleCentralDemo.cpp</locationURI>
+		</link>
+	</linkedResources>
+</projectDescription>

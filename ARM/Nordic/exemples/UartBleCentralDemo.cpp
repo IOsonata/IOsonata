@@ -52,9 +52,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "board.h"
 #include "idelay.h"
+#include "ble_gattc.h"
 //#include "ble_db_discovery.h"
 //#include "ble_nus_c.h"
 //#include "nrf_sdh_ble.h"
+
 
 #define DEVICE_NAME                     "UARTCentral"                            /**< Name of device. Will be included in the advertising data. */
 
@@ -72,6 +74,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
+//BLE_UUID_TYPE_BLE
+const ble_uuid_t s_UartBleSrvAdvUuid = {
+	.uuid = BLUEIO_UUID_UART_SERVICE,
+	.type = BLE_UUID_TYPE_BLE,
+};
 
 
 const BLEAPP_CFG s_BleAppCfg = {
@@ -85,7 +92,7 @@ const BLEAPP_CFG s_BleAppCfg = {
 #endif
 
 	},
-	1, 						// Number of central link
+	2,//1, 						// Number of central link
 	0, 						// Number of peripheral link
 	BLEAPP_MODE_APPSCHED,   // Use scheduler
 	DEVICE_NAME,                 // Device name
@@ -204,12 +211,14 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
     // Find the required Service
     g_Uart.printf("Looking for BLUEIO_UUID_UART_SERVICE with UUID = 0x%x\r\n", BLUEIO_UUID_UART_SERVICE);
     int idx = BleDevFindService(pDev, BLUEIO_UUID_UART_SERVICE);
+//    int idx = BleDevFindService(pDev, 0x2800);
     g_Uart.printf("Find UUID_UART_SERVICE idx = 0x%x (%d)\r\n", idx, idx);
 
     if (idx != -1)
     {
     	// Rx characteristic
     	int dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
+    	//int dcharidx = BleDevFindCharacteristic(pDev, idx, 0x2a00);
     	g_Uart.printf("Find UART_RX_CHAR idx = 0x%x (%d)\r\n", idx, idx);
     	if (dcharidx >= 0 && pDev->Services[idx].charateristics[dcharidx].characteristic.char_props.notify)
     	{
@@ -220,7 +229,8 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
 
     	// Tx characteristic
     	dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
-    	g_Uart.printf("Find UART_TX_CHAR idx = 0x%x\r\n", idx);
+//    	dcharidx = BleDevFindCharacteristic(pDev, idx, 0x2a01);
+    	g_Uart.printf("Find UART_TX_CHAR idx = 0x%x (%d)\r\n", idx, idx);
     	if (dcharidx >= 0)
     	{
     		g_BleTxCharHdl = pDev->Services[idx].charateristics[dcharidx].characteristic.handle_value;
@@ -237,9 +247,14 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 {
     ret_code_t err_code;
     const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
+    const ble_common_evt_t *p_common_evt = &p_ble_evt->evt.common_evt;
+    const ble_gattc_evt_t *p_gattc_evt = &p_ble_evt->evt.gattc_evt;
+
 //    const ble_gap_evt_adv_report_t * p_adv_report = &p_gap_evt->params.adv_report;
     uint8_t addr[6] = { 0xda, 0x02, 0xe8, 0xfe, 0xac, 0xd1};
     bool ec;
+    g_Uart.printf("p_ble_evt->header.evt_id = 0x%x (decimal %d)\r\n", p_ble_evt->header.evt_id, p_ble_evt->header.evt_id);
+//    g_Uart.printf("p_ble_evt->evt.gap_evt = 0x%x (0d%d)\r\n", p_ble_evt->evt.gap_evt, p_ble_evt->evt.gap_evt);
 
     switch (p_ble_evt->header.evt_id)
     {
@@ -249,6 +264,8 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 //    			g_Uart.printf("g_Connected.Name = %s | Len = %d\r\n", g_ConnectedDev.Name, sizeof(g_ConnectedDev.Name));
 
 				g_ConnectedDev.ConnHdl = p_gap_evt->conn_handle;
+//    			g_ConnectedDev.ConnHdl = p_gattc_evt->conn_handle;
+//    			g_ConnectedDev.ConnHdl = p_common_evt->conn_handle;
 				g_Uart.printf("g_Connected.ConnHdl: %d\r\n", g_ConnectedDev.ConnHdl);
 //				g_Uart.printf("p_ble_evt->evt.gap_evt.conn_handle: %d\r\n", p_ble_evt->evt.gap_evt.conn_handle);
 
@@ -267,6 +284,7 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 
 				err_code = BleAppDiscoverDevice(&g_ConnectedDev);
     			//err_code = ble_db_discovery_start(&m_db_disc, p_ble_evt->evt.gap_evt.conn_handle);
+//				err_code = sd_ble_gattc_primary_services_discover(p_common_evt->conn_handle, 1, NULL);
 				g_Uart.printf("BleAppDiscoverDevice: (%d) %s\r\n", err_code,  (err_code != NRF_SUCCESS) ? "FAILED!!!": "SUCCESS!");
     		}
     		break;
@@ -276,7 +294,7 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 				const ble_gap_evt_adv_report_t * p_adv_report = &p_gap_evt->params.adv_report;
 
 				// Find device by name
-				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, "UARTDemo"))//"UartBleBridge"))
+				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, "UartBleBridge"))
 	//            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
 				{
 					g_Uart.printf("1. BLE_GAP_EVT_ADV_REPORT.\r\n");
