@@ -376,6 +376,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/cfifo.c</locationURI>
 		</link>
 		<link>
+			<name>src/cli</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/converters</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
