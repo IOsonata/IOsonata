@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>UsbCdcBleDemo</name>
+	<name>UsbCdcAcmDemoCpp</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -20,6 +20,7 @@
 	</buildSpec>
 	<natures>
 		<nature>org.eclipse.cdt.core.cnature</nature>
+		<nature>org.eclipse.cdt.core.ccnature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
@@ -35,19 +36,14 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/main.c</name>
+			<name>src/main.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/main.c</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sdk_config.h</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/sdk_config.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/boards</name>
