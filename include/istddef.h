@@ -155,7 +155,7 @@ static inline uint64_t ullmax(uint64_t x, uint64_t y) { return x > y ? x : y; }
 
 /// Overloading min/max for C++ only
 static inline unsigned min(unsigned x, unsigned y) { return x > y ? y : x; }
-#ifndef __ICCARM__
+#if !defined(__ICCARM__) && !defined(__clang__)
 static inline int32_t min(int32_t x, int32_t y) { return x > y ? y : x; }
 static inline uint32_t min(uint32_t x, uint32_t y) { return x > y ? y : x; }
 #endif
@@ -163,7 +163,7 @@ static inline int64_t min(int64_t x, int64_t y) { return x > y ? y : x; }
 static inline uint64_t min(uint64_t x, uint64_t y) { return x > y ? y : x; }
 
 static inline unsigned max(unsigned x, unsigned y) { return x > y ? x : y; }
-#ifndef __ICCARM__
+#if !defined(__ICCARM__) && !defined(__clang__)
 static inline int32_t max(int32_t x, int32_t y) { return x > y ? x : y; }
 static inline uint32_t max(uint32_t x, uint32_t y) { return x > y ? x : y; }
 #endif
