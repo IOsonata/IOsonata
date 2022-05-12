@@ -276,17 +276,17 @@ static void init_bsp(void)
 
 static void init_cli(void)
 {/*
-    ret_code_t ret;
-    ret = bsp_cli_init(bsp_event_callback);
-    APP_ERROR_CHECK(ret);
-    nrf_drv_uart_config_t uart_config = NRF_DRV_UART_DEFAULT_CONFIG;
-    uart_config.pseltxd = TX_PIN_NUMBER;
-    uart_config.pselrxd = RX_PIN_NUMBER;
-    uart_config.hwfc    = NRF_UART_HWFC_DISABLED;
-    ret = nrf_cli_init(&m_cli_uart, &uart_config, true, true, NRF_LOG_SEVERITY_INFO);
-    APP_ERROR_CHECK(ret);
-    ret = nrf_cli_start(&m_cli_uart);
-    APP_ERROR_CHECK(ret);*/
+//    ret_code_t ret;
+//    ret = bsp_cli_init(bsp_event_callback);
+//    APP_ERROR_CHECK(ret);
+//    nrf_drv_uart_config_t uart_config = NRF_DRV_UART_DEFAULT_CONFIG;
+//    uart_config.pseltxd = TX_PIN_NUMBER;
+//    uart_config.pselrxd = RX_PIN_NUMBER;
+//    uart_config.hwfc    = NRF_UART_HWFC_DISABLED;
+//    ret = nrf_cli_init(&m_cli_uart, &uart_config, true, true, NRF_LOG_SEVERITY_INFO);
+//    APP_ERROR_CHECK(ret);
+//    ret = nrf_cli_start(&m_cli_uart);
+//    APP_ERROR_CHECK(ret);*/
 }
 
 int main(void)
@@ -309,10 +309,10 @@ int main(void)
         /* Just waiting */
     }
 
-    ret = app_timer_init();
-    APP_ERROR_CHECK(ret);
+//    ret = app_timer_init();
+//    APP_ERROR_CHECK(ret);
 
-    init_bsp();
+    //init_bsp();
     //init_cli();
 
     app_usbd_serial_num_generate();
