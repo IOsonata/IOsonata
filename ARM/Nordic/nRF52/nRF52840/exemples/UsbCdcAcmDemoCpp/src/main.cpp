@@ -220,7 +220,7 @@ static uint8_t m_app_cdc_acm_ep = { (APP_USBD_EXTRACT_INTERVAL_FLAG(CDC_ACM_COMM
 							&m_app_cdc_acm_ep))
 
 //static APP_USBD_CLASS_DATA_TYPE(app_usbd_cdc_acm) CONCAT_2(m_app_cdc_acm, _data);
-static app_usbd_cdc_acm_data_t	m_app_cdc_acm_data;app_usbd_cdc_acm
+static app_usbd_cdc_acm_data_t	m_app_cdc_acm_data;
 
 extern const app_usbd_class_methods_t app_usbd_cdc_acm_class_methods;
 
@@ -230,6 +230,63 @@ extern const app_usbd_class_methods_t app_usbd_cdc_acm_class_methods;
 //				&app_usbd_cdc_acm_class_methods, \
 //				APP_USBD_CDC_ACM_CONFIG(CDC_ACM_COMM_INTERFACE, CDC_ACM_COMM_EPIN, CDC_ACM_DATA_INTERFACE, CDC_ACM_DATA_EPIN, CDC_ACM_DATA_EPOUT), \
 //				CLASS_CONFIG_PART);
+
+//const app_usbd_cdc_acm_t	m_app_cdc_acm =
+//{
+//		APP_USBD_CLASS_INSTANCE_INITVAL(
+//				&m_app_cdc_acm_data,
+//				&app_usbd_cdc_acm_class_methods,
+//				APP_USBD_CDC_ACM_CONFIG(CDC_ACM_COMM_INTERFACE, CDC_ACM_COMM_EPIN, CDC_ACM_DATA_INTERFACE, CDC_ACM_DATA_EPIN, CDC_ACM_DATA_EPOUT), \
+//				CLASS_CONFIG_PART
+//		),
+//};
+
+
+//APP_USBD_CLASS_DATA_TYPEDEF(type_name, class_data_dec);
+typedef struct
+{
+	app_usbd_class_data_t base;
+	app_usbd_cdc_acm_ctx_t ctx; //class_data_dec
+}m_app_cdc_acm_data_t;
+
+//APP_USBD_CLASS_INSTANCE_TYPEDEF(type_name, interface_configs, class_config_dec)
+
+//#define APP_USBD_CLASS_INSTANCE_TYPEDEF(type_name, interfaces_configs, class_config_dec)     \
+//    typedef union CONCAT_2(type_name, _u)                                                    \
+//    {                                                                                        \
+//        app_usbd_class_inst_t base;                                                          \
+//        struct                                                                               \
+//        {                                                                                    \
+//            APP_USBD_CLASS_DATA_TYPE(type_name) * p_data;                                    \
+//            app_usbd_class_methods_t const * p_class_methods;                                \
+//            struct                                                                           \
+//            {                                                                                \
+//                uint8_t cnt;                                                                 \
+//                app_usbd_class_iface_conf_t                                                  \
+//                                config[NUM_VA_ARGS(BRACKET_EXTRACT(interfaces_configs))];    \
+//                app_usbd_class_ep_conf_t                                                     \
+//                                ep[APP_USBD_CLASS_CONF_TOTAL_EP_COUNT(interfaces_configs)];  \
+//            } iface;                                                                         \
+//            class_config_dec                                                                 \
+//        } specific;                                                                          \
+//    } APP_USBD_CLASS_INSTANCE_TYPE(type_name)
+
+//typedef union m_app_cdc_acm_u
+//{
+//	app_usbd_class_inst_t base;
+//	struct
+//	{
+//		m_app_cdc_acm_data_t *p_data;
+//		app_usbd_class_methods_t const *p_class_method;
+//		struct
+//		{
+//			uint8_t cnt;
+//			app_usbd_class_iface_conf_t \
+//				config[NUM_VA_ARGS(BRACKET_EXTRACT(interfaces_configs))];
+//		} iface;
+//	} specific;
+//};
+
 
 //const app_usbd_cdc_acm_t m_app_cdc_acm =  \
 //		APP_USBD_CLASS_INSTANCE_INITVAL(
@@ -248,22 +305,33 @@ extern const app_usbd_class_methods_t app_usbd_cdc_acm_class_methods;
 
 #define INTERFACE_CONFIGS APP_USBD_CDC_ACM_CONFIG(CDC_ACM_COMM_INTERFACE, CDC_ACM_COMM_EPIN, CDC_ACM_DATA_INTERFACE, CDC_ACM_DATA_EPIN, CDC_ACM_DATA_EPOUT)
 
-static app_usbd_cdc_acm_inst_t inst;
+typedef struct                                             			\
+{                                                          			\
+	app_usbd_class_data_t base;                            			\
+	app_usbd_cdc_acm_ctx_t ctx;                                     \
+} app_usbd_cdc_acm_data_t;
 
-const app_usbd_cdc_acm_t m_app_cdc_acm =
-{
-		.base = app_usbd_class_inst_t
-		.specific = {
-				.p_data = &m_app_cdc_acm_data,
-				.p_class_methods = &app_usbd_cdc_acm_class_methods,
-				.iface = {
-						.cnt = NUM_VA_ARGS(BRACKET_EXTRACT(INTERFACE_CONFIGS)),
-						.config = { APP_USBD_CLASS_IFACES_CONFIG_EXTRACT(INTERFACE_CONFIGS) },
-						.ep = { APP_USBD_CLASS_IFACES_EP_EXTRACT(INTERFACE_CONFIGS) },
-				},
-				BRACKET_EXTRACT(CLASS_CONFIG_PART),
-		},
-};
+
+typedef union app_usbd_cdc_acm_u                                    \
+{                                                                   \
+	app_usbd_class_inst_t base;                                     \
+	struct                                                          \
+	{                                                               \
+		app_usbd_cdc_acm_data_t * p_data;                           \
+		app_usbd_class_methods_t const * p_class_methods;           \
+		struct                                                      \
+		{                                                           \
+			uint8_t cnt;                                            \
+			app_usbd_class_iface_conf_t								\
+				config[NUM_VA_ARGS(BRACKET_EXTRACT(INTERFACE_CONFIGS))];    				\
+			app_usbd_class_ep_conf_t								\
+				ep[APP_USBD_CLASS_CONF_TOTAL_EP_COUNT(INTERFACE_CONFIGS)];  	\
+		} iface;                                                    \
+		app_usbd_cdc_acm_inst_t inst;                               \
+	} specific;                                                                          \
+} app_usbd_cdc_acm_t;
+
+
 
 #define READ_SIZE 1
 
