@@ -100,11 +100,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/cli</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/log</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -153,26 +148,6 @@
 			<name>src/nRF5_SDK/libraries/button/app_button.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/button/app_button.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/cdc_acm</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/cli_utils_cmds.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cli_utils_cmds.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/nrf_cli.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/nrf_cli.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/uart</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/log/src</name>
@@ -238,16 +213,6 @@
 			<name>src/nRF5_SDK/nrfx/soc/nrfx_atomic.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/soc/nrfx_atomic.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/uart/nrf_cli_uart.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/uart/nrf_cli_uart.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/log/src/nrf_log_backend_serial.c</name>
