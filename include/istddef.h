@@ -153,7 +153,7 @@ static inline uint64_t ullmax(uint64_t x, uint64_t y) { return x > y ? x : y; }
 #ifdef __cplusplus
 }
 
-#ifndef WIN32
+#if !defined(WIN32) && !defined(__linux)
 /// Overloading min/max for C++ only
 static inline unsigned min(unsigned x, unsigned y) { return x > y ? y : x; }
 #if !defined(__ICCARM__) && !defined(__clang__) && !defined(WIN32)
