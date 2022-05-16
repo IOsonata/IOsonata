@@ -167,7 +167,7 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event);
 
 void HardwareInit();
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-void UartRxChedHandler(void * p_event_data, uint16_t event_size);
+void UartRxSchedHandler(void * p_event_data, uint16_t event_size);
 
 void BleAppInitUserData();
 void BleDevDiscovered(BLEPERIPH_DEV *pDev);
@@ -588,26 +588,27 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
         case APP_USBD_CDC_ACM_USER_EVT_PORT_OPEN:
         {
             //bsp_board_led_on(LED_CDC_ACM_OPEN);
-        	IOPinClear(LED_RED_PORT, LED_RED_PIN);
+        	IOPinSet(LED_RED_PORT, LED_RED_PIN);
 
             /*Setup first transfer*/
             ret_code_t ret = app_usbd_cdc_acm_read_any(&m_app_cdc_acm,
                                                    m_rx_buffer,
                                                    READ_SIZE);
-            UNUSED_VARIABLE(ret);
+            //UNUSED_VARIABLE(ret);
             break;
         }
         case APP_USBD_CDC_ACM_USER_EVT_PORT_CLOSE:
             //bsp_board_led_off(LED_CDC_ACM_OPEN);
-        	IOPinSet(LED_RED_PORT, LED_RED_PIN);
+        	IOPinClear(LED_RED_PORT, LED_RED_PIN);
             break;
         case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
             //bsp_board_led_invert(LED_CDC_ACM_TX);
-        	IOPinToggle(LED_BLUE_PORT, LED_BLUE_PIN);
+        	//IOPinToggle(LED_BLUE_PORT, LED_BLUE_PIN);
+        	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
             break;
         case APP_USBD_CDC_ACM_USER_EVT_RX_DONE:
         {
-        	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
+        	IOPinToggle(LED_BLUE_PORT, LED_BLUE_PIN);
             ret_code_t ret;
 //            NRF_LOG_INFO("Bytes waiting: %d", app_usbd_cdc_acm_bytes_stored(p_cdc_acm));
             do
@@ -622,8 +623,7 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                             READ_SIZE);
             } while (ret == NRF_SUCCESS);
 
-            //bsp_board_led_invert(LED_CDC_ACM_RX);
-            IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
+            IOPinToggle(LED_BLUE_PORT, LED_BLUE_PIN);
             break;
         }
         default:
@@ -747,7 +747,7 @@ void BleAppInitUserData()
 	APP_ERROR_CHECK(err_code);*/
 }
 
-void UartRxChedHandler(void * p_event_data, uint16_t event_size)
+void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
 {
 	uint8_t buff[PACKET_SIZE];
 
@@ -770,7 +770,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			app_sched_event_put(NULL, 0, UartRxChedHandler);
+			app_sched_event_put(NULL, 0, UartRxSchedHandler);
 			break;
 		case UART_EVT_TXREADY:
 			break;
@@ -792,7 +792,18 @@ int main(void)
     
     HardwareInit();
 
-    //UsbInit();
+    UsbInit();
+
+    static int frame_counter = 0;
+    while (frame_counter <= 200)
+    {
+    	size_t size = sprintf(m_tx_buffer, "Hello USB CDC FA demo: %u\r\n", frame_counter++);
+		ret = app_usbd_cdc_acm_write(&m_app_cdc_acm, m_tx_buffer, size);
+		g_Uart.printf("%s", m_tx_buffer);
+		msDelay(100);
+    }
+
+
 
     g_Uart.printf("Int BLE...");
     BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
@@ -808,7 +819,7 @@ int main(void)
 //    NRF_LOG_INFO("USBD CDC ACM example started.");
 
     msDelay(100);
-    g_Uart.printf("Continue in main() here\r\n");
+    g_Uart.printf("All initialization is done. Start the main tasks!\r\n");
 
     /*while (true)
 	{
