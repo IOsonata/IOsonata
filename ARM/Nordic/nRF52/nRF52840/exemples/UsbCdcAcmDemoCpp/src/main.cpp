@@ -133,18 +133,18 @@
 #define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
 
 // UART
-#define PACKET_SIZE				512 //bytes
-#define UART_MAX_DATA_LEN  		(PACKET_SIZE*2)
+#define PACKET_SIZE				128 //bytes
+#define UART_MAX_DATA_LEN  		(PACKET_SIZE*8)
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
 
 // BLE
 #define BLE_MTU_SIZE			(PACKET_SIZE)
 
 // Original Nordic
-#define LED_USB_RESUME      LED_RED_PIN//(BSP_BOARD_LED_0)
-#define LED_CDC_ACM_OPEN    LED_RED_PIN//(BSP_BOARD_LED_1)
-#define LED_CDC_ACM_RX      LED_GREEN_PIN//(BSP_BOARD_LED_2)
-#define LED_CDC_ACM_TX      LED_BLUE_PIN//(BSP_BOARD_LED_3)
+#define LED_USB_RESUME      0//(BSP_BOARD_LED_0)
+#define LED_CDC_ACM_OPEN    1//(BSP_BOARD_LED_1)
+#define LED_CDC_ACM_RX      2//(BSP_BOARD_LED_2)
+#define LED_CDC_ACM_TX      3//(BSP_BOARD_LED_3)
 
 #define BTN_CDC_DATA_SEND       0
 #define BTN_CDC_NOTIFY_SEND     1
@@ -534,7 +534,7 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 				const ble_gap_evt_adv_report_t * p_adv_report = &p_gap_evt->params.adv_report;
 
 				// Find device by name
-				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, "UartBleBridge"))
+				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, "BlueIO832Mini"))
 	//            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
 				{
 					err_code = BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
@@ -561,10 +561,12 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
         	}
         	break;
         case BLE_GATTC_EVT_HVX:
+        	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
         	if (p_ble_evt->evt.gattc_evt.params.hvx.handle == g_BleRxCharHdl)
         	{
         		g_Uart.Tx(p_ble_evt->evt.gattc_evt.params.hvx.data, p_ble_evt->evt.gattc_evt.params.hvx.len);
         	}
+        	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
         	break;
   }
 }
@@ -681,18 +683,19 @@ void HardwareInit()
      * UART
      * Timer
      */
-	IOPinCfg(s_Leds, s_NbLeds);//Leds
-	IOPinCfg(s_ButPins, s_NbButPins);//Buttons
 
-	IOPinSet(LED_BLUE_PORT, LED_BLUE_PIN);
-	IOPinSet(LED_RED_PORT, LED_RED_PIN);
-	IOPinSet(LED_GREEN_PORT, LED_GREEN_PIN);
+	//IOPinCfg(s_ButPins, s_NbButPins);//Buttons
 
 	g_Uart.Init(g_UartCfg);
-	g_Uart.printf("UART Configuration: %d, %d, %d\r\n", g_UartCfg.Rate,
-			g_UartCfg.FlowControl, g_UartCfg.Parity);
-
+	g_Uart.printf("UART Configuration: %d, %d, %d\r\n",
+			g_UartCfg.Rate, g_UartCfg.FlowControl, g_UartCfg.Parity);
 	msDelay(100);
+
+	IOPinCfg(s_Leds, s_NbLeds);
+	IOPinSet(LED_BLUE_PORT, LED_BLUE_PIN);
+	IOPinClear(LED_RED_PORT, LED_RED_PIN);
+	IOPinClear(LED_GREEN_PORT, LED_GREEN_PIN);
+
 }
 
 void UsbInit()
@@ -703,12 +706,12 @@ void UsbInit()
 	g_Uart.printf("Init USB...");
 	ret = app_usbd_init(&usbd_config);
 	g_Uart.printf("%s\r\n", (ret ? "Failed" : "Done!"));
-	g_Uart.printf("USBD class append...");
 
 	//USBD serial number generator
 	app_usbd_serial_num_generate();
 
 	// Append USB class instance
+	g_Uart.printf("USBD class append...");
 	const app_usbd_class_inst_t *class_cdc_acm = app_usbd_cdc_acm_class_inst_get(&m_app_cdc_acm);
 	ret = app_usbd_class_append(class_cdc_acm);
 	g_Uart.printf("%s\r\n", (ret ? "Failed" : "Done!"));
@@ -735,7 +738,7 @@ void BleAppInitUserData()
 	msDelay(100);
 
 	// Init USB module
-	//UsbInit();
+//	UsbInit();
 
 	// TODO: Add passkey pairing
 /*	ble_opt_t opt;
@@ -781,29 +784,20 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 
 int main(void)
 {
-    ret_code_t ret;
 
-//    ret = NRF_LOG_INIT(NULL);
-//    APP_ERROR_CHECK(ret);
-
-    /* TODO: Change to use IOsonata's SystemInit() */
+    /* TODO: Revise IOsonata's SystemClockInit() to support USBD module */
+	ret_code_t ret;
     ret = nrf_drv_clock_init();
     APP_ERROR_CHECK(ret);
     
-    /*nrf_drv_clock_lfclk_request(NULL);
-
-    while(!nrf_drv_clock_lfclk_is_running())
-    {
-         Just waiting
-    }*/
-
     HardwareInit();
 
-    UsbInit();
+    //UsbInit();
 
-//    g_Uart.printf("Int BLE...");
-//    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
-//    g_Uart.printf("Done\r\n");
+    g_Uart.printf("Int BLE...");
+    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
+    g_Uart.printf("Done!\r\n");
+
 
     // TODO: Move this block into BleAppInitUserData()
     /*app_usbd_serial_num_generate();//USBD serial number generator
@@ -816,7 +810,7 @@ int main(void)
     msDelay(100);
     g_Uart.printf("Continue in main() here\r\n");
 
-    while (true)
+    /*while (true)
 	{
 		// while (app_usbd_event_queue_process())
 		{
@@ -836,13 +830,13 @@ int main(void)
 			msDelay(1000);
 		}
 //        __WFE();
-	}
+	}*/
 
     // Register the non-GATT service and its characteristics
-//	BleAppScanInit((BleAppScanCfg_t *)&s_bleScanInitCfg);
-//	BleAppScan();
-//	BleAppRun();
-//	return 0;
+	BleAppScanInit((BleAppScanCfg_t *)&s_bleScanInitCfg);
+	BleAppScan();
+	BleAppRun();
+	return 0;
 
 }
 
