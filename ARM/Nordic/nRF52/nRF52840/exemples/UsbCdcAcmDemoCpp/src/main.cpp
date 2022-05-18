@@ -64,17 +64,6 @@
 //#include "app_usbd_cdc_acm_internal.h"
 //#include "app_usbd_class_base.h"
 
-//#include "boards.h"
-//#include "bsp.h"
-//#include "bsp_cli.h"
-//#include "nrf_cli.h"
-//#include "nrf_cli_uart.h"
-
-//#include "nrf_log.h"
-//#include "nrf_log_ctrl.h"
-//#include "nrf_log_default_backends.h"
-//#include "app_timer.h"
-
 // IOsonata's UART, PinCfg
 #include "board.h"
 #include "blueio_board.h"
@@ -118,38 +107,27 @@
  *
  */
 
-#define DEVICE_NAME                     "UARTCentral"                    /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME             "BleCentral"                    /**< Name of device. Will be included in the advertising data. */
 
-#define MANUFACTURER_NAME               "I-SYST inc."                    /**< Manufacturer. Will be passed to Device Information Service. */
-#define MODEL_NAME                      "IMM-NRF5x"                      /**< Model number. Will be passed to Device Information Service. */
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID               /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID               /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
-
-#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(10, UNIT_1_25_MS)  /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
-#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(40, UNIT_1_25_MS)  /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
-
+//#define MANUFACTURER_NAME       "I-SYST inc."                    /**< Manufacturer. Will be passed to Device Information Service. */
+//#define MODEL_NAME              "IMM-NRF5x"                      /**< Model number. Will be passed to Device Information Service. */
+//#define MANUFACTURER_ID         ISYST_BLUETOOTH_ID               /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
+//#define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID               /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+//
+//#define MIN_CONN_INTERVAL       MSEC_TO_UNITS(10, UNIT_1_25_MS)  /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
+//#define MAX_CONN_INTERVAL       MSEC_TO_UNITS(40, UNIT_1_25_MS)  /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
+//
 #define SCAN_INTERVAL           MSEC_TO_UNITS(1000, UNIT_0_625_MS)		/**< Determines scan interval in units of 0.625 millisecond. */
 #define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
 #define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
-
-// UART
-#define PACKET_SIZE				128 //bytes
-#define UART_MAX_DATA_LEN  		(PACKET_SIZE*8)
-#define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
-
-// BLE
-#define BLE_MTU_SIZE			(PACKET_SIZE)
-
-// Original Nordic
-#define LED_USB_RESUME      0//(BSP_BOARD_LED_0)
-#define LED_CDC_ACM_OPEN    1//(BSP_BOARD_LED_1)
-#define LED_CDC_ACM_RX      2//(BSP_BOARD_LED_2)
-#define LED_CDC_ACM_TX      3//(BSP_BOARD_LED_3)
-
-#define BTN_CDC_DATA_SEND       0
-#define BTN_CDC_NOTIFY_SEND     1
-
-#define BTN_CDC_DATA_KEY_RELEASE        (bsp_event_t)(BSP_EVENT_KEY_LAST + 1)
+//
+//// UART
+//#define PACKET_SIZE				128 //bytes
+//#define UART_MAX_DATA_LEN  		(PACKET_SIZE*8)
+//#define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
+//
+//// BLE
+//#define BLE_MTU_SIZE			(PACKET_SIZE)
 
 /**
  * @brief Enable power USB detection
@@ -159,6 +137,8 @@
 #ifndef USBD_POWER_DETECTION
 #define USBD_POWER_DETECTION true
 #endif
+
+#define READ_SIZE (PACKET_SIZE / 2)//1
 
 ///////////////////////////////////////////////////
 
@@ -174,16 +154,12 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev);
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
 
 void UsbInit();
+void UsbRxSchedHandler(void * p_event_data, uint16_t event_size);
 
-/**** To be deleted ********/
-//static void init_bsp(void);
-//static void init_cli(void);
 
-//#define instance_name 	m_app_cdc_acm
-//#define type_name 		app_usbd_cdc_acm
-//#define class_methods	app_usbd_cdc_acm_class_methods
-/***************************/
-
+/************************************************************
+ * USBD CDC ACM section
+ ************************************************************/
 #define CDC_ACM_COMM_INTERFACE  0
 #define CDC_ACM_COMM_EPIN       NRF_DRV_USBD_EPIN2
 
@@ -201,6 +177,18 @@ void UsbInit();
 							CDC_ACM_DATA_EPOUT,                           \
 							APP_USBD_CDC_COMM_PROTOCOL_AT_V250,           \
 							&m_app_cdc_acm_ep))
+
+
+alignas(4) uint8_t g_UsbRxBuff[UARTFIFOSIZE];
+alignas(4) uint8_t g_UsbTxBuff[UARTFIFOSIZE];//NRF_DRV_USBD_EPSIZE
+
+uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
+uint8_t g_extern_usbd_product_string[12 + 1] = { "Test" };
+
+volatile int g_frameCnt = 0;
+
+std::atomic<int> g_UsbRxBuffLen(0);
+
 
 /*
  * app_usbd_cdc_acm_data_t
@@ -289,16 +277,7 @@ const app_usbd_cdc_acm_t m_app_cdc_acm =
 		},
 };
 
-
-#define READ_SIZE 1
-
-static char m_rx_buffer[READ_SIZE];
-static char m_tx_buffer[NRF_DRV_USBD_EPSIZE];
-static bool m_send_flag = 0;
-
-uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
-uint8_t g_extern_usbd_product_string[12 + 1] = { "Test" };
-
+// USBD config
 static const app_usbd_config_t usbd_config =
 {
 	.ev_state_proc = usbd_user_ev_handler
@@ -445,11 +424,9 @@ BleAppScanCfg_t s_bleScanInitCfg = {
 		.ServUid = s_UartBleSrvAdvUuid,
 };
 
-
 BLEPERIPH_DEV g_ConnectedDev = {
 	.ConnHdl = BLE_CONN_HANDLE_INVALID,
 };
-
 
 uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
 uint16_t g_BleRxCharHdl = BLE_CONN_HANDLE_INVALID;
@@ -511,7 +488,6 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
 
 }
 
-
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 {
     ret_code_t err_code;
@@ -534,7 +510,7 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 				const ble_gap_evt_adv_report_t * p_adv_report = &p_gap_evt->params.adv_report;
 
 				// Find device by name
-				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, "BlueIO832Mini"))
+				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, "UartBleBridge"))
 	//            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
 				{
 					err_code = BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
@@ -564,7 +540,15 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
         	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
         	if (p_ble_evt->evt.gattc_evt.params.hvx.handle == g_BleRxCharHdl)
         	{
-        		g_Uart.Tx(p_ble_evt->evt.gattc_evt.params.hvx.data, p_ble_evt->evt.gattc_evt.params.hvx.len);
+        		//uint16_t lenTx = p_ble_evt->evt.gattc_evt.params.hvx.len;
+        		//memcpy(&g_UsbTxBuff, &p_ble_evt->evt.gattc_evt.params.hvx.data, lenTx);
+        		//app_usbd_cdc_acm_write(&m_app_cdc_acm, g_UsbTxBuff, lenTx);
+        		g_Uart.Tx(p_ble_evt->evt.gattc_evt.params.hvx.data,
+        				p_ble_evt->evt.gattc_evt.params.hvx.len);
+
+        		app_usbd_cdc_acm_write(&m_app_cdc_acm,
+        				&p_ble_evt->evt.gattc_evt.params.hvx.data,
+						p_ble_evt->evt.gattc_evt.params.hvx.len);
         	}
         	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
         	break;
@@ -582,48 +566,37 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                     app_usbd_cdc_acm_user_event_t event)
 {
     app_usbd_cdc_acm_t const * p_cdc_acm = app_usbd_cdc_acm_class_get(p_inst);
+    //static uint16_t dataLen;
 
     switch (event)
     {
         case APP_USBD_CDC_ACM_USER_EVT_PORT_OPEN:
         {
-            //bsp_board_led_on(LED_CDC_ACM_OPEN);
-        	IOPinSet(LED_RED_PORT, LED_RED_PIN);
-
+        	IOPinSet(LED_GREEN_PORT, LED_GREEN_PIN);
             /*Setup first transfer*/
             ret_code_t ret = app_usbd_cdc_acm_read_any(&m_app_cdc_acm,
-                                                   m_rx_buffer,
+                                                   g_UsbRxBuff,
                                                    READ_SIZE);
-            //UNUSED_VARIABLE(ret);
             break;
         }
         case APP_USBD_CDC_ACM_USER_EVT_PORT_CLOSE:
-            //bsp_board_led_off(LED_CDC_ACM_OPEN);
-        	IOPinClear(LED_RED_PORT, LED_RED_PIN);
+        	IOPinClear(LED_GREEN_PORT, LED_GREEN_PIN);
             break;
         case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
-            //bsp_board_led_invert(LED_CDC_ACM_TX);
-        	//IOPinToggle(LED_BLUE_PORT, LED_BLUE_PIN);
+        {
         	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
             break;
+        }
         case APP_USBD_CDC_ACM_USER_EVT_RX_DONE:
         {
-        	IOPinToggle(LED_BLUE_PORT, LED_BLUE_PIN);
-            ret_code_t ret;
-//            NRF_LOG_INFO("Bytes waiting: %d", app_usbd_cdc_acm_bytes_stored(p_cdc_acm));
-            do
-            {
-                /* Get amount of data transfered */
-                size_t size = app_usbd_cdc_acm_rx_size(p_cdc_acm);
-//                NRF_LOG_INFO("RX: size: %lu char: %c", size, m_rx_buffer[0]);
+        	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
+//        	// Retrieve USB Rx buffer
+//			g_UsbRxBuffLen = app_usbd_cdc_acm_rx_size(p_cdc_acm);
+//			app_usbd_cdc_acm_read_any(p_cdc_acm, g_UsbRxBuff, PACKET_SIZE);
 
-                /* Fetch data until internal buffer is empty */
-                ret = app_usbd_cdc_acm_read(&m_app_cdc_acm,
-                                            m_rx_buffer,
-                                            READ_SIZE);
-            } while (ret == NRF_SUCCESS);
-
-            IOPinToggle(LED_BLUE_PORT, LED_BLUE_PIN);
+			// Schedule the handler for this event
+        	app_sched_event_put(NULL, 0, UsbRxSchedHandler);
+            IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
             break;
         }
         default:
@@ -631,44 +604,76 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
     }
 }
 
+
+void UsbRxSchedHandler(void * p_event_data, uint16_t event_size)
+{
+
+	// Retrieve USB Rx buffer
+	g_UsbRxBuffLen = app_usbd_cdc_acm_rx_size(&m_app_cdc_acm);
+	app_usbd_cdc_acm_read_any(&m_app_cdc_acm, g_UsbRxBuff, PACKET_SIZE);
+
+	uint8_t buff[PACKET_SIZE];
+	memcpy(buff, g_UsbRxBuff, g_UsbRxBuffLen);
+
+	// Send to Uart
+	if (g_UsbRxBuffLen > 0)
+	{
+		g_Uart.Tx(buff, g_UsbRxBuffLen);
+	}
+
+	// Send to BLE
+	if (g_UsbRxBuffLen > 0)
+	{
+		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
+		{
+			BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, g_UsbRxBuffLen);
+		}
+	}
+}
+
+
 static void usbd_user_ev_handler(app_usbd_event_type_t event)
 {
     switch (event)
     {
         case APP_USBD_EVT_DRV_SUSPEND:
-            //bsp_board_led_off(LED_USB_RESUME);
-        	IOPinSet(LED_RED_PORT, LED_RED_PIN);
-            break;
-        case APP_USBD_EVT_DRV_RESUME:
-//            bsp_board_led_on(LED_USB_RESUME);
+//        	g_Uart.printf("APP_USBD_EVT_DRV_SUSPEND\r\n");
         	IOPinClear(LED_RED_PORT, LED_RED_PIN);
             break;
+        case APP_USBD_EVT_DRV_RESUME:
+//        	g_Uart.printf("APP_USBD_EVT_DRV_RESUME\r\n");
+        	IOPinSet(LED_RED_PORT, LED_RED_PIN);
+            break;
         case APP_USBD_EVT_STARTED:
+//        	g_Uart.printf("APP_USBD_EVT_STARTED\r\n");
+        	IOPinSet(LED_RED_PORT, LED_RED_PIN);
             break;
         case APP_USBD_EVT_STOPPED:
+//        	g_Uart.printf("APP_USBD_EVT_STOPPED\r\n");
             app_usbd_disable();
-            //bsp_board_leds_off();
             IOPinSet(LED_RED_PORT, LED_RED_PIN);
             IOPinSet(LED_GREEN_PORT, LED_GREEN_PIN);
             IOPinSet(LED_BLUE_PORT, LED_BLUE_PIN);
             break;
         case APP_USBD_EVT_POWER_DETECTED:
-//            NRF_LOG_INFO("USB power detected");
-        	g_Uart.printf("USB power detected\r\n");
+//        	g_Uart.printf("APP_USBD_EVT_POWER_DETECTED\r\n");
             if (!nrf_drv_usbd_is_enabled())
             {
                 app_usbd_enable();
             }
+            IOPinToggle(LED_RED_PORT, LED_RED_PIN);
+            msDelay(250);
+            IOPinToggle(LED_RED_PORT, LED_RED_PIN);
             break;
         case APP_USBD_EVT_POWER_REMOVED:
-//            NRF_LOG_INFO("USB power removed");
-        	g_Uart.printf("USB power removed\r\n");
+//        	g_Uart.printf("APP_USBD_EVT_POWER_REMOVED\r\n");
             app_usbd_stop();
+            IOPinClear(LED_RED_PORT, LED_RED_PIN);
             break;
         case APP_USBD_EVT_POWER_READY:
-//            NRF_LOG_INFO("USB ready");
-        	g_Uart.printf("USB ready\r\n");
+//        	g_Uart.printf("APP_USBD_EVT_POWER_READY\r\n");
             app_usbd_start();
+            IOPinSet(LED_RED_PORT, LED_RED_PIN);
             break;
         default:
             break;
@@ -684,13 +689,18 @@ void HardwareInit()
      * Timer
      */
 
-	//IOPinCfg(s_ButPins, s_NbButPins);//Buttons
+	// Clock
+	ret_code_t ret;
+	ret = nrf_drv_clock_init();
 
+	// Uart
 	g_Uart.Init(g_UartCfg);
+	g_Uart.printf("Clock init...%s\r\n", (ret ? "Failed!" : "Done!"));
 	g_Uart.printf("UART Configuration: %d, %d, %d\r\n",
 			g_UartCfg.Rate, g_UartCfg.FlowControl, g_UartCfg.Parity);
 	msDelay(100);
 
+	// LEDs
 	IOPinCfg(s_Leds, s_NbLeds);
 	IOPinSet(LED_BLUE_PORT, LED_BLUE_PIN);
 	IOPinClear(LED_RED_PORT, LED_RED_PIN);
@@ -735,11 +745,6 @@ void UsbInit()
 
 void BleAppInitUserData()
 {
-	msDelay(100);
-
-	// Init USB module
-//	UsbInit();
-
 	// TODO: Add passkey pairing
 /*	ble_opt_t opt;
 	opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
@@ -784,103 +789,25 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 
 int main(void)
 {
-
-    /* TODO: Revise IOsonata's SystemClockInit() to support USBD module */
 	ret_code_t ret;
-    ret = nrf_drv_clock_init();
-    APP_ERROR_CHECK(ret);
-    
-    HardwareInit();
 
-    UsbInit();
+	HardwareInit();
 
-    static int frame_counter = 0;
-    while (frame_counter <= 200)
-    {
-    	size_t size = sprintf(m_tx_buffer, "Hello USB CDC FA demo: %u\r\n", frame_counter++);
-		ret = app_usbd_cdc_acm_write(&m_app_cdc_acm, m_tx_buffer, size);
-		g_Uart.printf("%s", m_tx_buffer);
-		msDelay(100);
-    }
+    UsbInit();// Should be called before BLE initialization
+    g_Uart.printf("USB CDC ACM is on\r\n");
+    msDelay(500);
 
-
-
-    g_Uart.printf("Int BLE...");
+    // BLE
+    g_Uart.printf("Init BLE...");
     BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
     g_Uart.printf("Done!\r\n");
+    msDelay(250);
 
-
-    // TODO: Move this block into BleAppInitUserData()
-    /*app_usbd_serial_num_generate();//USBD serial number generator
-    ret = app_usbd_init(&usbd_config);
-	APP_ERROR_CHECK(ret);*/
-
-
-//    NRF_LOG_INFO("USBD CDC ACM example started.");
-
-    msDelay(100);
-    g_Uart.printf("All initialization is done. Start the main tasks!\r\n");
-
-    /*while (true)
-	{
-		// while (app_usbd_event_queue_process())
-		{
-			 //Nothing to do
-		}
-
-		// if(m_send_flag)
-		{
-			static int frame_counter;
-			size_t size = sprintf(m_tx_buffer, "Hello USB CDC FA demo: %u\r\n", frame_counter);
-			ret = app_usbd_cdc_acm_write(&m_app_cdc_acm, m_tx_buffer, size);
-			g_Uart.printf("frame_counter = %d\r\n", frame_counter);
-			if (ret == NRF_SUCCESS)
-			{
-				++frame_counter;
-			}
-			msDelay(1000);
-		}
-//        __WFE();
-	}*/
-
-    // Register the non-GATT service and its characteristics
+    g_Uart.printf("All initializations are done. Start the main tasks!\r\n");
+    // Register the non-GATT BLE services and their characteristics
 	BleAppScanInit((BleAppScanCfg_t *)&s_bleScanInitCfg);
 	BleAppScan();
 	BleAppRun();
+
 	return 0;
-
 }
-
-
-//static void bsp_event_callback(bsp_event_t ev)
-//{
-//    ret_code_t ret;
-//    switch ((unsigned int)ev)
-//    {
-//        case CONCAT_2(BSP_EVENT_KEY_, BTN_CDC_DATA_SEND):
-//        {
-//            m_send_flag = 1;
-//            break;
-//        }
-//
-//        case BTN_CDC_DATA_KEY_RELEASE :
-//        {
-//            m_send_flag = 0;
-//            break;
-//        }
-//
-//        case CONCAT_2(BSP_EVENT_KEY_, BTN_CDC_NOTIFY_SEND):
-//        {
-//            ret = app_usbd_cdc_acm_serial_state_notify(&m_app_cdc_acm,
-//                                                       APP_USBD_CDC_ACM_SERIAL_STATE_BREAK,
-//                                                       false);
-//            UNUSED_VARIABLE(ret);
-//            break;
-//        }
-//
-//        default:
-//            return; // no implementation needed
-//    }
-//}
-
-/** @} */
