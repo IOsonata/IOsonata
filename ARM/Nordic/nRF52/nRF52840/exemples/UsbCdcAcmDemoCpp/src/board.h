@@ -255,6 +255,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLESRV_WRITE_CHAR_IDX		1
 #define BLESRV_CONFIG_CHAR_IDX		2
 
+// USB
+#define USBFIFOSIZE				CFIFO_MEMSIZE(PACKET_SIZE)
+
 
 //// BLE Interface event handler
 //int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
