@@ -221,11 +221,11 @@
 
 /** The default callback function to use. */
 #ifndef LOG_CALLBACK_DEFAULT
-#if defined(NRF51) || defined(NRF52_SERIES)
-    #define LOG_CALLBACK_DEFAULT log_callback_rtt
-#else
+//#if defined(NRF51) || defined(NRF52_SERIES)
+//    #define LOG_CALLBACK_DEFAULT log_callback_rtt
+//#else
     #define LOG_CALLBACK_DEFAULT log_callback_stdout
-#endif
+//#endif
 #endif
 
 /** @} end of MESH_CONFIG_LOG */
