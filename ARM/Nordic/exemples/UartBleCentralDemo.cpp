@@ -8,10 +8,12 @@ This application demo shows UART Rx/Tx over BLE central using EHAL library.
 
 @author	Hoang Nguyen Hoan
 @date	Feb. 4, 2017
+@author Thinh Tran
+@date 	May 9, 2022
 
 @license
 
-Copyright (c) 2017, I-SYST inc., all rights reserved
+Copyright (c) 2017-2022, I-SYST inc., all rights reserved
 
 Permission to use, copy, modify, and distribute this software for any purpose
 with or without fee is hereby granted, provided that the above copyright
@@ -47,7 +49,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble_dev.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
-#include "custom_board.h"
+#include "custom_board.h"//Does this make the LED_2 & LED_3 do not work?
 #include "coredev/iopincfg.h"
 #include "stddev.h"
 #include "board.h"
@@ -57,24 +59,26 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //#include "ble_nus_c.h"
 //#include "nrf_sdh_ble.h"
 
+// BLE
+#define DEVICE_NAME             "UARTCentral"                   		/**< Name of device. Will be included in the advertising data. */
 
-#define DEVICE_NAME                     "UARTCentral"                            /**< Name of device. Will be included in the advertising data. */
+#define MANUFACTURER_NAME       "I-SYST inc."                   		/**< Manufacturer. Will be passed to Device Information Service. */
+#define MODEL_NAME              "IMM-NRF5x"                     		/**< Model number. Will be passed to Device Information Service. */
+#define MANUFACTURER_ID         ISYST_BLUETOOTH_ID              		/**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
+#define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID              		/**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
 
-#define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
-#define MODEL_NAME                      "IMM-NRF5x"                            /**< Model number. Will be passed to Device Information Service. */
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                               /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                               /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
-
-#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(10, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
-#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(40, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
+#define MIN_CONN_INTERVAL       MSEC_TO_UNITS(10, UNIT_1_25_MS) 		/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
+#define MAX_CONN_INTERVAL       MSEC_TO_UNITS(40, UNIT_1_25_MS) 		/**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
 #define SCAN_INTERVAL           MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
-#define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)                                  /**< Determines scan window in units of 0.625 millisecond. */
-#define SCAN_TIMEOUT            0                                 /**< Timout when scanning. 0x0000 disables timeout. */
+#define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
+#define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
+
+#define TARGET_BRIDGE_DEV_NAME	"BlueIO832Mini"							/**< Name of BLE bridge/client device to be scanned */
 
 // UART
-#define BLE_MTU_SIZE			512//byte
-#define PACKET_SIZE				512
+#define BLE_MTU_SIZE			256//byte
+#define PACKET_SIZE				128
 #define UART_MAX_DATA_LEN  		(PACKET_SIZE*4)
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
 
@@ -92,25 +96,25 @@ const BLEAPP_CFG s_BleAppCfg = {
 #endif
 
 	},
-	1,//1, 						// Number of central link
-	0, 						// Number of peripheral link
-	BLEAPP_MODE_APPSCHED,   // Use scheduler
-	DEVICE_NAME,                 // Device name
-	ISYST_BLUETOOTH_ID,     // PnP Bluetooth/USB vendor id
-	1,                      // PnP Product ID
-	0,						// Pnp prod version
-	false,					// Enable device information service (DIS)
+	1, 							// Number of central link
+	0, 							// Number of peripheral link
+	BLEAPP_MODE_APPSCHED,   	// Use scheduler
+	DEVICE_NAME,                // Device name
+	ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
+	1,                      	// PnP Product ID
+	0,							// Pnp prod version
+	false,						// Enable device information service (DIS)
 	NULL,//&s_UartBleDevDesc,
 	NULL,//g_ManData,              // Manufacture specific data to advertise
 	0,//sizeof(g_ManData),      // Length of manufacture specific data
 	NULL,
 	0,
-	BLEAPP_SECTYPE_NONE,    // Secure connection type
-	BLEAPP_SECEXCHG_NONE,   // Security key exchange
-	NULL,      				// Service uuids to advertise
-	0, 						// Total number of uuids
-	0,       // Advertising interval in msec
-	0,	// Advertising timeout in sec
+	BLEAPP_SECTYPE_NONE,    	// Secure connection type
+	BLEAPP_SECEXCHG_NONE,   	// Security key exchange
+	NULL,      					// Service uuids to advertise
+	0, 							// Total number of uuids
+	0,       					// Advertising interval in msec
+	0,							// Advertising timeout in sec
 	0,                          // Slow advertising interval, if > 0, fallback to
 								// slow interval on adv timeout and advertise until connected
 	MIN_CONN_INTERVAL,
@@ -118,12 +122,11 @@ const BLEAPP_CFG s_BleAppCfg = {
 	BLUEIO_CONNECT_LED_PORT,    // Led port nuber
 	BLUEIO_CONNECT_LED_PIN,     // Led pin number
 	0,
-	0,						// Tx power
+	0,							// Tx power
 	NULL,						// RTOS Softdevice handler
 	.MaxMtu = BLE_MTU_SIZE,
+	.PeriphDevCnt = 1,			//Max number of peripheral connection
 };
-
-
 
 static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
@@ -131,7 +134,6 @@ static IOPinCfg_t s_UartPins[] = {
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
-
 
 /// UART operation mode config
 alignas(4) uint8_t s_UartRxFifo[UARTFIFOSIZE];
@@ -212,11 +214,9 @@ BleAppScanCfg_t s_bleScanInitCfg = {
 		.ServUid = s_UartBleSrvAdvUuid,
 };
 
-
 BLEPERIPH_DEV g_ConnectedDev = {
 	.ConnHdl = BLE_CONN_HANDLE_INVALID,
 };
-
 
 uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
 uint16_t g_BleRxCharHdl = BLE_CONN_HANDLE_INVALID;
@@ -276,6 +276,12 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
     	g_Uart.printf("Not Found!\r\n");
     }
 
+//    // Disconnect and Scan BLE again
+//    g_Uart.printf("Disconnect and Scan BLE again\r\n");
+//    msDelay(100);
+//    BleAppDisconnect();
+//    msDelay(200);
+//    BleAppScan();
 }
 
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
@@ -300,16 +306,42 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 				const ble_gap_evt_adv_report_t * p_adv_report = &p_gap_evt->params.adv_report;
 
 				// Find device by name
-				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, "UartBleBridge"))
+				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, TARGET_BRIDGE_DEV_NAME))
 	//            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
 				{
-					err_code = BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
-					msDelay(100);
+					/* Uncomment this code if the user wants to connect to the chosen BLE bridge device
+						err_code = BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
+						msDelay(100);
+					 */
+
+					/* Read device's Adv data
+					 * Check ble_gap_evt_adv_report_t struct
+					 * for more detail about data fields
+					*/
+					g_Uart.printf("MAC addr: %x:%x:%x:%x:%x:%x | TxPower: %d | RSSI: %d\r\n",
+							p_adv_report->peer_addr.addr[5],
+							p_adv_report->peer_addr.addr[4],
+							p_adv_report->peer_addr.addr[3],
+							p_adv_report->peer_addr.addr[2],
+							p_adv_report->peer_addr.addr[1],
+							p_adv_report->peer_addr.addr[0],
+							p_adv_report->tx_power,
+							p_adv_report->rssi);
+
+					g_Uart.printf("Advertised data [%d bytes]: ", p_adv_report->data.len);
+					for (int i = 0; i < p_adv_report->data.len; i++)
+					{
+						g_Uart.printf("0x%x ", i, p_adv_report->data.p_data[i]);
+					}
+					g_Uart.printf("\r\n\r\n");
 				}
-				else
-				{
-					BleAppScan();
-				}
+
+				//Scan BLE bridge device again
+				BleAppScan();
+//				else
+//				{
+//					BleAppScan();
+//				}
 			}
 			break;
         case BLE_GAP_EVT_TIMEOUT:
@@ -317,7 +349,7 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
         	    ble_gap_evt_timeout_t const * p_timeout = &p_gap_evt->params.timeout;
         	    if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
         	    {
-        	    	// Scan timeout
+        	    	g_Uart.printf("Scan timeout\r\n");
         	    }
         	}
         	break;
@@ -343,8 +375,11 @@ void HardwareInit()
 	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
 	g_Uart.printf("UART BLE Central Demo\r\n");
-	g_Uart.printf("UART Configuration: %d, %d, %d\r\n",
-			g_UartCfg.Rate, g_UartCfg.FlowControl, g_UartCfg.Parity);
+	g_Uart.printf("UART Configuration: %d, %s, %s\r\n",
+			g_UartCfg.Rate,
+			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "Flow Control (NO)" : "No Flow Control (YES)",
+			(g_UartCfg.Parity == UART_PARITY_NONE)? "Parity (NO)" : "Parity (YES)");
+
 }
 
 void BleAppInitUserData()
