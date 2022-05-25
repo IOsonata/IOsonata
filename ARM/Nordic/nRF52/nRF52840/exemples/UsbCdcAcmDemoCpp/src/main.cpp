@@ -124,7 +124,7 @@
 #define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
 
 // BLE
-#define BLE_BRIDGE_NAME			"UartBleBridge"
+#define BLE_BRIDGE_NAME			"BlueWizard840"//"UartBleBridge"
 
 /**
  * @brief Enable power USB detection

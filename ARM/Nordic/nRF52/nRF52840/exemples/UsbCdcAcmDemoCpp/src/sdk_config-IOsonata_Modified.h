@@ -4000,7 +4000,7 @@
 // <e> NRFX_TIMER_ENABLED - nrfx_timer - TIMER periperal driver
 //==========================================================
 #ifndef NRFX_TIMER_ENABLED
-#define NRFX_TIMER_ENABLED 0
+#define NRFX_TIMER_ENABLED 1//IOsonata default = 0
 #endif
 // <q> NRFX_TIMER0_ENABLED  - Enable TIMER0 instance
  
@@ -4013,7 +4013,7 @@
  
 
 #ifndef NRFX_TIMER1_ENABLED
-#define NRFX_TIMER1_ENABLED 0
+#define NRFX_TIMER1_ENABLED 1//IOsonata default = 0
 #endif
 
 // <q> NRFX_TIMER2_ENABLED  - Enable TIMER2 instance
@@ -4034,7 +4034,7 @@
  
 
 #ifndef NRFX_TIMER4_ENABLED
-#define NRFX_TIMER4_ENABLED 0
+#define NRFX_TIMER4_ENABLED 1//IOsonata default = 0
 #endif
 
 // <o> NRFX_TIMER_DEFAULT_CONFIG_FREQUENCY  - Timer frequency if in Timer mode
@@ -4492,12 +4492,12 @@
 #endif
 // <o> NRFX_UARTE0_ENABLED - Enable UARTE0 instance 
 #ifndef NRFX_UARTE0_ENABLED
-#define NRFX_UARTE0_ENABLED 0
+#define NRFX_UARTE0_ENABLED 1
 #endif
 
 // <o> NRFX_UARTE1_ENABLED - Enable UARTE1 instance 
 #ifndef NRFX_UARTE1_ENABLED
-#define NRFX_UARTE1_ENABLED 0
+#define NRFX_UARTE1_ENABLED 1
 #endif
 
 // <o> NRFX_UARTE_DEFAULT_CONFIG_HWFC  - Hardware Flow Control
@@ -4618,7 +4618,7 @@
 #endif
 // <o> NRFX_UART0_ENABLED - Enable UART0 instance 
 #ifndef NRFX_UART0_ENABLED
-#define NRFX_UART0_ENABLED 0
+#define NRFX_UART0_ENABLED 1
 #endif
 
 // <o> NRFX_UART_DEFAULT_CONFIG_HWFC  - Hardware Flow Control
@@ -5708,7 +5708,7 @@
 // <e> TIMER_ENABLED - nrf_drv_timer - TIMER periperal driver - legacy layer
 //==========================================================
 #ifndef TIMER_ENABLED
-#define TIMER_ENABLED 0
+#define TIMER_ENABLED 1//IOsonata default = 0
 #endif
 // <o> TIMER_DEFAULT_CONFIG_FREQUENCY  - Timer frequency if in Timer mode
  
@@ -5775,7 +5775,7 @@
  
 
 #ifndef TIMER1_ENABLED
-#define TIMER1_ENABLED 0
+#define TIMER1_ENABLED 0//IOsonata default = 0
 #endif
 
 // <q> TIMER2_ENABLED  - Enable TIMER2 instance
@@ -5796,7 +5796,7 @@
  
 
 #ifndef TIMER4_ENABLED
-#define TIMER4_ENABLED 0
+#define TIMER4_ENABLED 1//IOsonata default = 0
 #endif
 
 // </e>
@@ -6043,7 +6043,7 @@
 // <e> UART0_ENABLED - Enable UART0 instance
 //==========================================================
 #ifndef UART0_ENABLED
-#define UART0_ENABLED 1
+#define UART0_ENABLED 0
 #endif
 // <q> UART0_CONFIG_USE_EASY_DMA  - Default setting for using EasyDMA
  
@@ -6310,7 +6310,7 @@
  
 
 #ifndef APP_TIMER_CONFIG_USE_SCHEDULER
-#define APP_TIMER_CONFIG_USE_SCHEDULER 1
+#define APP_TIMER_CONFIG_USE_SCHEDULER 0
 #endif
 
 // <q> APP_TIMER_KEEPS_RTC_ACTIVE  - Enable RTC always on
@@ -6446,7 +6446,7 @@
 // <i> Functions that modify USBD state are functions for sleep, wakeup, start, stop, enable, and disable.
 //==========================================================
 #ifndef APP_USBD_CONFIG_EVENT_QUEUE_ENABLE
-#define APP_USBD_CONFIG_EVENT_QUEUE_ENABLE 1
+#define APP_USBD_CONFIG_EVENT_QUEUE_ENABLE 0 //1 for Nordic
 #endif
 // <o> APP_USBD_CONFIG_EVENT_QUEUE_SIZE - The size of the event queue.  <16-64> 
 
@@ -7182,8 +7182,6 @@
 #ifndef NRF_CSENSE_MIN_PAD_VALUE
 #define NRF_CSENSE_MIN_PAD_VALUE 20
 #endif
-																
-											  
 
 // <o> NRF_CSENSE_MAX_PADS_NUMBER - Maximum number of pads used for one instance. 
 #ifndef NRF_CSENSE_MAX_PADS_NUMBER
@@ -7677,44 +7675,6 @@
 // </h> 
 //==========================================================
 
-																 
-
-															
-																		
- 
-
-							   
-								 
-	  
-
-															   
-									  
-										
-	  
-
-														   
-								 
-													
-	  
-
-															   
-									  
-										
-	  
-
-														   
-								 
-													
-	  
-
-															 
-								  
-													  
-	  
-
-		
-															
-
 // <h> nrf_fprintf - fprintf function.
 
 //==========================================================
@@ -7732,166 +7692,22 @@
 #define NRF_FPRINTF_FLAG_AUTOMATIC_CR_ON_LF_ENABLED 1
 #endif
 
-		
-															
-
-		
-															
-
-			   
-
 // <q> NRF_FPRINTF_DOUBLE_ENABLED  - Enable IEEE-754 double precision formatting.
-																				
-															
-									 
-									   
-	  
-																			 
  
 
 #ifndef NRF_FPRINTF_DOUBLE_ENABLED
-										
-	  
-
-																  
-															
-										
 #define NRF_FPRINTF_DOUBLE_ENABLED 0
-	  
-																		 
-															   
-																				   
-																				   
-
-										   
-											 
-	  
-
-	   
-
-																  
-															
-										
-										  
-	  
-																								
-															  
-													  
-																				 
-																				   
-
-										  
-											
-	  
-
-	   
-
-																								  
-																	
-														  
-
-											 
-												
-	  
-
-																				  
-
-															
-														  
-																
-
-										
-										  
-	  
-
-												
-							 
-							   
 #endif
 
 // </h> 
 //==========================================================
 
 // </h> 
-
-																		  
 //==========================================================
-								   
-									 
-	  
-																							  
-																		  
-																  
-																			
-									 
 
 // <h> nRF_Log 
-											   
-	  
 
-																					 
-											 
-											   
-	  
-
-																  
-														
-														 
-													  
-																
-											  
-
-										
-										  
-	  
-
-	   
-
-																			 
 //==========================================================
-									
-									  
-	  
-												 
-								   
-									 
-	  
-
-														
- 
-					   
-					   
-						
-						
-						 
-						 
-						 
-						  
-						  
-						  
-						   
-						   
-						   
-							
-							
-							 
-
-									 
-											  
-	  
-
-																							   
-																		  
-																  
-																			
-									 
-
-											 
-												
-	  
-
-	   
-
 // <e> NRF_LOG_ENABLED - nrf_log - Logger
 //==========================================================
 #ifndef NRF_LOG_ENABLED
@@ -10910,7 +10726,6 @@
 // <3=> Info 
 // <4=> Debug 
 
-																					  
 #ifndef NFC_BLE_PAIR_LIB_LOG_LEVEL
 #define NFC_BLE_PAIR_LIB_LOG_LEVEL 3
 #endif
@@ -10930,10 +10745,6 @@
 #ifndef NFC_BLE_PAIR_LIB_INFO_COLOR
 #define NFC_BLE_PAIR_LIB_INFO_COLOR 0
 #endif
-														 
-			 
-			 
-						   
 
 // <o> NFC_BLE_PAIR_LIB_DEBUG_COLOR  - ANSI escape code prefix.
  
@@ -11199,7 +11010,7 @@
  
 
 #ifndef NFC_NDEF_TEXT_RECORD_ENABLED
-#define NFC_NDEF_TEXT_RECORD_ENABLED 0
+#define NFC_NDEF_TEXT_RECORD_ENABLED 1//IOsonata default = 0
 #endif
 
 // <q> NFC_NDEF_URI_MSG_ENABLED  - nfc_uri_msg - Encoding data for NDEF message with URI record for NFC Tag
