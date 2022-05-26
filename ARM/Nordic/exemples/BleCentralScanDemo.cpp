@@ -276,12 +276,6 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
     	g_Uart.printf("Not Found!\r\n");
     }
 
-//    // Disconnect and Scan BLE again
-//    g_Uart.printf("Disconnect and Scan BLE again\r\n");
-//    msDelay(100);
-//    BleAppDisconnect();
-//    msDelay(200);
-//    BleAppScan();
 }
 
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
@@ -328,20 +322,31 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 							p_adv_report->tx_power,
 							p_adv_report->rssi);
 
-					g_Uart.printf("Advertised data [%d bytes]: ", p_adv_report->data.len);
-					for (int i = 0; i < p_adv_report->data.len; i++)
+					// Parse Manufacturer Specific data
+					uint16_t mfgDataOffset = 0;
+					uint16_t mfgDataLen = ble_advdata_search(p_adv_report->data.p_data,
+															p_adv_report->data.len,
+															&mfgDataOffset,
+															BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA);
+					if (mfgDataLen == 0)
 					{
-						g_Uart.printf("0x%x ", i, p_adv_report->data.p_data[i]);
+						g_Uart.printf("Failed to parse Mfg Specific data\r\n");
 					}
-					g_Uart.printf("\r\n\r\n");
+					else
+					{
+						uint8_t *p_MfgSpecData = &p_adv_report->data.p_data[mfgDataOffset];
+						g_Uart.printf("Manufacturer Specific Data [%d bytes]: ", mfgDataLen);
+						for (int i = 0; i < mfgDataLen; i++)
+						{
+							g_Uart.printf("0x%x ", p_MfgSpecData[i]);
+						}
+						g_Uart.printf("\r\n\r\n");
+					}
+
 				}
 
 				//Scan BLE bridge device again
 				BleAppScan();
-//				else
-//				{
-//					BleAppScan();
-//				}
 			}
 			break;
         case BLE_GAP_EVT_TIMEOUT:
@@ -371,14 +376,11 @@ void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
 
-	// Retarget printf to uart if semihosting is not used
-	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
-
-	g_Uart.printf("UART BLE Central Demo\r\n");
+	g_Uart.printf("BLE Central Scan Demo\r\n");
 	g_Uart.printf("UART Configuration: %d, Flow Control (%s), Parity (%s)\r\n",
 			g_UartCfg.Rate,
-			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "NO" : "YES",
-			(g_UartCfg.Parity == UART_PARITY_NONE)? "NO" : "YES");
+			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "No" : "Yes",
+			(g_UartCfg.Parity == UART_PARITY_NONE) ? "No" : "Yes");
 
 }
 

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>UartBleCentralScanDemo</name>
+	<name>BleCentralScanDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -31,9 +31,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/UartBleCentralScanDemo.cpp</name>
+			<name>src/BleCentralScanDemo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/exemples/UartBleCentralScanDemo.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/exemples/BleCentralScanDemo.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>
