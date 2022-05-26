@@ -77,8 +77,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define TARGET_BRIDGE_DEV_NAME	"BlueIO832Mini"							/**< Name of BLE bridge/client device to be scanned */
 
 // UART
-#define BLE_MTU_SIZE			256//byte
-#define PACKET_SIZE				128
+#define BLE_MTU_SIZE			512//byte
+#define PACKET_SIZE				256
 #define UART_MAX_DATA_LEN  		(PACKET_SIZE*4)
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
 
@@ -125,7 +125,7 @@ const BLEAPP_CFG s_BleAppCfg = {
 	0,							// Tx power
 	NULL,						// RTOS Softdevice handler
 	.MaxMtu = BLE_MTU_SIZE,
-	.PeriphDevCnt = 1,			//Max number of peripheral connection
+	//.PeriphDevCnt = 1,			//Max number of peripheral connection
 };
 
 static IOPinCfg_t s_UartPins[] = {
@@ -145,9 +145,9 @@ UARTCfg_t g_UartCfg = {
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),					// Total number of UART pins used
 	.Rate = 115200,								// Baudrate
 	.DataBits = 8,								// Data bits
-	.Parity = UART_PARITY_NONE,			// Parity
+	.Parity = UART_PARITY_NONE,					// Parity
 	.StopBits = 1,								// Stop bit
-	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
+	.FlowControl = UART_FLWCTRL_NONE,			// Flow control
 	.bIntMode = true,							// Interrupt mode
 	.IntPrio = APP_IRQ_PRIORITY_LOW,			// Interrupt priority
 	.EvtCallback = nRFUartEvthandler,			// UART event handler
@@ -162,7 +162,6 @@ UARTCfg_t g_UartCfg = {
 // UART object instance
 UART g_Uart;
 
-int g_DelayCnt = 0;
 
 /** @brief Parameters used when scanning. */
 static ble_gap_scan_params_t const g_ScanParams =
@@ -276,12 +275,6 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
     	g_Uart.printf("Not Found!\r\n");
     }
 
-//    // Disconnect and Scan BLE again
-//    g_Uart.printf("Disconnect and Scan BLE again\r\n");
-//    msDelay(100);
-//    BleAppDisconnect();
-//    msDelay(200);
-//    BleAppScan();
 }
 
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
@@ -307,41 +300,16 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 
 				// Find device by name
 				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, TARGET_BRIDGE_DEV_NAME))
-	//            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
+//	            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
 				{
-					/* Uncomment this code if the user wants to connect to the chosen BLE bridge device
-						err_code = BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
-						msDelay(100);
-					 */
-
-					/* Read device's Adv data
-					 * Check ble_gap_evt_adv_report_t struct
-					 * for more detail about data fields
-					*/
-					g_Uart.printf("MAC addr: %x:%x:%x:%x:%x:%x | TxPower: %d | RSSI: %d\r\n",
-							p_adv_report->peer_addr.addr[5],
-							p_adv_report->peer_addr.addr[4],
-							p_adv_report->peer_addr.addr[3],
-							p_adv_report->peer_addr.addr[2],
-							p_adv_report->peer_addr.addr[1],
-							p_adv_report->peer_addr.addr[0],
-							p_adv_report->tx_power,
-							p_adv_report->rssi);
-
-					g_Uart.printf("Advertised data [%d bytes]: ", p_adv_report->data.len);
-					for (int i = 0; i < p_adv_report->data.len; i++)
-					{
-						g_Uart.printf("0x%x ", i, p_adv_report->data.p_data[i]);
-					}
-					g_Uart.printf("\r\n\r\n");
+					// Connect to the found BLE bridge device
+					err_code = BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
+					msDelay(100);
 				}
-
-				//Scan BLE bridge device again
-				BleAppScan();
-//				else
-//				{
-//					BleAppScan();
-//				}
+				else
+				{
+					BleAppScan();
+				}
 			}
 			break;
         case BLE_GAP_EVT_TIMEOUT:
@@ -375,10 +343,11 @@ void HardwareInit()
 	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
 	g_Uart.printf("UART BLE Central Demo\r\n");
-	g_Uart.printf("UART Configuration: %d, %s, %s\r\n",
+	msDelay(100);
+	g_Uart.printf("UART Configuration: %d, FLow Control (%s), Parity (%s)\r\n",
 			g_UartCfg.Rate,
-			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "Flow Control (NO)" : "No Flow Control (YES)",
-			(g_UartCfg.Parity == UART_PARITY_NONE)? "Parity (NO)" : "Parity (YES)");
+			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "NO" : "YES",
+			(g_UartCfg.Parity == UART_PARITY_NONE)? "NO" : "YES");
 
 }
 
@@ -393,6 +362,7 @@ void BleAppInitUserData()
 
 void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 {
+	// TODO: Use CFIFO for this function for avoiding dropped data packets
 	uint8_t buff[PACKET_SIZE];
 
 	int l = g_Uart.Rx(buff, PACKET_SIZE);
