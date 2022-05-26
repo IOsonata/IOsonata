@@ -59,6 +59,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //#include "ble_nus_c.h"
 //#include "nrf_sdh_ble.h"
 
+#include "cfifo.h"
+#include "iopinctrl.h"
+
 // BLE
 #define DEVICE_NAME             "UARTCentral"                   		/**< Name of device. Will be included in the advertising data. */
 
@@ -77,13 +80,34 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define TARGET_BRIDGE_DEV_NAME	"BlueIO832Mini"							/**< Name of BLE bridge/client device to be scanned */
 
 // UART
-#define BLE_MTU_SIZE			512//byte
-#define PACKET_SIZE				256
-#define UART_MAX_DATA_LEN  		(PACKET_SIZE*4)
+#define BLE_MTU_SIZE			256//byte
+#define PACKET_SIZE				128
+#define UART_MAX_DATA_LEN  		(PACKET_SIZE)
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
+
+// BLE
+#define BLEFIFOSIZE				CFIFO_MEMSIZE(PACKET_SIZE)
+
+// CFIFO for BleAppWrite
+alignas(4) uint8_t g_UartRx2BleBuff[BLEFIFOSIZE];//FIFO buffer for UART-to-BLE
+std::atomic<int> g_UartRx2BleBuffLen(0);//buffer counter for g_UartRx2BleBuff
+HCFIFO g_UartRx2BleFifo;
+
+alignas(4) uint8_t g_UartRxExtBuff[PACKET_SIZE*2];//external buffer for Uart Rx data
+volatile int g_UartRxExtBuffLen = 0;
+
+volatile uint32_t g_DropCnt = 0;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
+void BleTxSchedHandler(void * p_event_data, uint16_t event_size);
+
+
+#if !defined(UDG_NRF52840) && !defined(NORDIC_DK)
+IOPinCfg_t s_Leds[] = LED_PIN_MAP;
+static int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
+#endif
+
 
 const BLEAPP_CFG s_BleAppCfg = {
 	{ // Clock config nrf_clock_lf_cfg_t
@@ -135,9 +159,9 @@ static IOPinCfg_t s_UartPins[] = {
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
 
-/// UART operation mode config
-alignas(4) uint8_t s_UartRxFifo[UARTFIFOSIZE];
-alignas(4) uint8_t s_UartTxFifo[UARTFIFOSIZE];
+// UART configuration
+alignas(4) uint8_t s_UartRxFifo[UARTFIFOSIZE];//internal Uart_Rx buffer
+alignas(4) uint8_t s_UartTxFifo[UARTFIFOSIZE];//internal Uart_Tx buffer
 
 UARTCfg_t g_UartCfg = {
 	.DevNo = 0,									// Device number zero based
@@ -339,16 +363,23 @@ void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
 
+	IOPinCfg(s_Leds, s_NbLeds);
+	IOPinSet(LED_BLUE_PORT, LED_BLUE_PIN);
+	IOPinClear(LED_GREEN_PORT, LED_GREEN_PIN);
+	IOPinClear(LED_RED_PORT, LED_RED_PIN);
+
 	// Retarget printf to uart if semihosting is not used
 	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
 	g_Uart.printf("UART BLE Central Demo\r\n");
 	msDelay(100);
-	g_Uart.printf("UART Configuration: %d, FLow Control (%s), Parity (%s)\r\n",
+	g_Uart.printf("UART Configuration: Baudrate %d, FLow Control (%s), Parity (%s)\r\n",
 			g_UartCfg.Rate,
 			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "NO" : "YES",
-			(g_UartCfg.Parity == UART_PARITY_NONE)? "NO" : "YES");
+			(g_UartCfg.Parity == UART_PARITY_NONE) ? "NO" : "YES");
 
+	// Init CFIFO instance
+	g_UartRx2BleFifo = CFifoInit(g_UartRx2BleBuff, BLEFIFOSIZE, 1, true);
 }
 
 void BleAppInitUserData()
@@ -360,31 +391,119 @@ void BleAppInitUserData()
 //	APP_ERROR_CHECK(err_code);
 }
 
-void UartRxChedHandler(void * p_event_data, uint16_t event_size)
-{
-	// TODO: Use CFIFO for this function for avoiding dropped data packets
-	uint8_t buff[PACKET_SIZE];
 
-	int l = g_Uart.Rx(buff, PACKET_SIZE);
-	if (l > 0)
+//void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
+//{
+//	// TODO: Use CFIFO for this function for avoiding dropped data packets
+//	uint8_t buff[PACKET_SIZE];
+//
+//	int l = g_Uart.Rx(buff, PACKET_SIZE);
+//	if (l > 0)
+//	{
+//		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
+//		{
+//			BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, l);
+//			g_Uart.Tx(buff, l);
+//		}
+//	}
+//}
+
+void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
+{
+	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
+
+	int len = PACKET_SIZE;
+	uint8_t *p = CFifoGetMultiple(g_UartRx2BleFifo, &len);
+
+	if (p !=NULL)
 	{
 		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
-			BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, l);
+			BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, p, len);
+		}
+
+		// Schedule this func again if g_UartRx2BleFifo is not empty
+		app_sched_event_put(NULL, 0, BleTxSchedHandler);
+	}
+
+	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
+}
+
+
+void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
+{
+	bool flush = false;
+	uint8_t *p = NULL;
+
+	// Internal UartRxBuffer -> External Uart Rx Buffer
+	int l1 = g_Uart.Rx(&g_UartRxExtBuff[g_UartRxExtBuffLen], PACKET_SIZE - g_UartRxExtBuffLen);
+	g_Uart.Tx(&g_UartRxExtBuff[g_UartRxExtBuffLen], l1);
+	//g_Uart.printf("here_1\r\n");
+
+	int cnt = 0;
+	if (l1 > 0)
+	{
+		g_UartRxExtBuffLen += l1;
+		if(g_UartRxExtBuffLen >= PACKET_SIZE)
+		{
+			flush = true;
 		}
 	}
+	else
+	{
+		if(g_UartRxExtBuffLen > 0)
+		{
+			flush = true;
+		}
+	}
+
+	// Flush data ExternalUartRxBuffer -> g_UartRx2BleFifo
+	if (flush)
+	{
+		int l2 = g_UartRxExtBuffLen;
+		p = CFifoPutMultiple(g_UartRx2BleFifo, &l2);
+		if (p == NULL)
+		{
+			g_DropCnt++;
+		}
+		else
+		{
+			memcpy(p, g_UartRxExtBuff, l2);
+			if (l2 < g_UartRxExtBuffLen)
+			{
+				memcpy(&g_UartRxExtBuff[0], &g_UartRxExtBuff[l2], g_UartRxExtBuffLen - l2);
+			}
+			else
+			{
+				g_UartRxExtBuffLen = 0;
+			}
+		}
+
+		// Schedule the BleTxSchedHandler for sending data via BLE
+		app_sched_event_put(NULL, 0, BleTxSchedHandler);
+	}
+
+	// Schedule the UartRxSchedHandler if ExternalUartRxBuffer still has data
+	if (g_UartRxExtBuffLen > 0)
+	{
+		app_sched_event_put(NULL,  0,  UartRxSchedHandler);
+	}
+
 }
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
-//	uint8_t buff[20];
 
 	switch (EvtId)
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			app_sched_event_put(NULL, 0, UartRxChedHandler);
+			if (g_UartRxExtBuffLen <= 0)
+			{
+				app_sched_event_put(NULL, 0, UartRxSchedHandler);
+			}
+
 			break;
 		case UART_EVT_TXREADY:
 			break;
