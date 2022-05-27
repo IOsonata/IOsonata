@@ -55,10 +55,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 #include "idelay.h"
 #include "ble_gattc.h"
-//#include "ble_db_discovery.h"
-//#include "ble_nus_c.h"
-//#include "nrf_sdh_ble.h"
-
 #include "cfifo.h"
 #include "iopinctrl.h"
 
@@ -375,8 +371,8 @@ void HardwareInit()
 	msDelay(100);
 	g_Uart.printf("UART Configuration: Baudrate %d, FLow Control (%s), Parity (%s)\r\n",
 			g_UartCfg.Rate,
-			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "NO" : "YES",
-			(g_UartCfg.Parity == UART_PARITY_NONE) ? "NO" : "YES");
+			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "No" : "Yes",
+			(g_UartCfg.Parity == UART_PARITY_NONE) ? "No" : "Yes");
 
 	// Init CFIFO instance
 	g_UartRx2BleFifo = CFifoInit(g_UartRx2BleBuff, BLEFIFOSIZE, 1, true);
@@ -394,7 +390,6 @@ void BleAppInitUserData()
 
 //void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
 //{
-//	// TODO: Use CFIFO for this function for avoiding dropped data packets
 //	uint8_t buff[PACKET_SIZE];
 //
 //	int l = g_Uart.Rx(buff, PACKET_SIZE);
