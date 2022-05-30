@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	convutil.h
+@file convutil.h
 
-@brief	Conversion utilities
+@brief  Conversion utilities
 
 @author Hoang Nguyen Hoan
-@date	Feb. 8, 2015
+@date Feb. 8, 2015
 
 @license
 
@@ -55,58 +55,58 @@ extern "C" {
 #endif
 
 /**
- * @brief	16 bits endianess conversion.
+ * @brief 16 bits endianess conversion.
  *
- * @param	x : 16 bits number to covert.
+ * @param x : 16 bits number to covert.
  *
- * @return	converted data.
+ * @return  converted data.
  */
-static inline uint16_t EndianCvt16(uint16_t x) {
-	return ((x >> 8U) & 0xffU) | ((x << 8U) & 0xff00U);
+static inline int16_t EndianCvt16(int16_t x) {
+  return ((x >> 8) & 0xff) | ((x << 8) & 0xff00);
 }
 
 /**
- * @brief	32 bits endianess conversion.
+ * @brief 32 bits endianess conversion.
  *
- * @param	x : 32 bits number to covert.
+ * @param x : 32 bits number to covert.
  *
- * @return	converted data.
+ * @return  converted data.
  */
 static inline uint32_t EndianCvt32(uint32_t x) {
-	return (((x >> 24UL) & 0xffUL) | ((x << 24UL) & 0xff000000UL) |
-			((x >> 8UL) & 0xff00UL) | ((x << 8UL) & 0xff0000UL));
+  return (((x >> 24UL) & 0xff) | ((x << 24UL) & 0xff000000) |
+      ((x >> 8UL) & 0xff00) | ((x << 8UL) & 0xff0000));
 }
 
 /**
- * @brief	64 bits endianess conversion.
+ * @brief 64 bits endianess conversion.
  *
- * @param	x : 64 bits number to covert.
+ * @param x : 64 bits number to covert.
  *
- * @return	converted data.
+ * @return  converted data.
  */
 static inline uint64_t EndianCvt64(uint64_t x) {
-	return (((x >> 56ULL) & 0xffULL) | ((x << 56ULL) & 0xff00000000000000ULL) |
-			((x >> 40ULL) & 0xff00ULL) | ((x << 40ULL) & 0xff000000000000ULL) |
-			((x >> 24ULL) & 0xff0000ULL) | ((x << 24ULL) & 0xff0000000000ULL) |
-			((x >> 8ULL) & 0xff000000ULL) | ((x << 8ULL) & 0xff00000000ULL));
+  return (((x >> 56ULL) & 0xffULL) | ((x << 56ULL) & 0xff00000000000000ULL) |
+      ((x >> 40ULL) & 0xff00ULL) | ((x << 40ULL) & 0xff000000000000ULL) |
+      ((x >> 24ULL) & 0xff0000ULL) | ((x << 24ULL) & 0xff0000000000ULL) |
+      ((x >> 8ULL) & 0xff000000ULL) | ((x << 8ULL) & 0xff00000000ULL));
 }
 
 /**
- * @brief	Convert ASCII hex character to integer.
+ * @brief Convert ASCII hex character to integer.
  *
- * @param	c : Hex character to convert
+ * @param c : Hex character to convert
  *
- * @return 	converted value.  -1 if wrong character
+ * @return  converted value.  -1 if wrong character
  */
 static inline int chex2i(char c) {
-	if (c >= 'a')
-		return (c - 'a' + 10);
-	else if (c >= 'A')
-		return (c - 'A' + 10);
+  if (c >= 'a')
+    return (c - 'a' + 10);
+  else if (c >= 'A')
+    return (c - 'A' + 10);
 
-	return (c - '0');
+  return (c - '0');
 }
-	
+  
 #ifdef __cplusplus
 }
 #endif
