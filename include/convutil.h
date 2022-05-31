@@ -61,8 +61,8 @@ extern "C" {
  *
  * @return  converted data.
  */
-static inline int16_t EndianCvt16(int16_t x) {
-  return ((x >> 8) & 0xff) | ((x << 8) & 0xff00);
+static inline uint16_t EndianCvt16(uint16_t x) {
+  return ((x >> 8) & 0xffUL) | ((x << 8) & 0xff00UL);
 }
 
 /**
