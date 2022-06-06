@@ -55,7 +55,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-#define FIFOSIZE			CFIFO_MEMSIZE(512)
+#define FIFOSIZE		CFIFO_MEMSIZE(512)
 
 uint8_t g_TxBuff[FIFOSIZE];
 
@@ -87,6 +87,7 @@ static const UARTCfg_t s_UartCfg = {
 UART g_Uart;
 
 //********** I2C Master **********
+#define I2C_SCL_RATE	100000 // Rate in Hz, supported 100k, 250k, and 400k
 
 static const IOPinCfg_t s_I2cMasterPins[] = {
 	{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
@@ -99,7 +100,7 @@ static const I2CCfg_t s_I2cCfgMaster = {
 	.Mode = I2CMODE_MASTER,
 	.pIOPinMap = s_I2cMasterPins,
 	.NbIOPins = sizeof(s_I2cMasterPins) / sizeof(IOPinCfg_t),
-	.Rate = 100000,		// Rate in Hz
+	.Rate = I2C_SCL_RATE,		// Rate in Hz
 	.MaxRetry = 5,			// Retry
 	.AddrType = I2CADDR_TYPE_NORMAL,
 	.NbSlaveAddr = 0,			// Number of slave addresses
@@ -125,25 +126,27 @@ static const IOPinCfg_t s_I2cSlavePins[] = {
 
 static const I2CCfg_t s_I2cCfgSlave = {
 	.DevNo = I2C_SLAVE_DEVNO,			// I2C device number
-	.Type = I2CTYPE_STANDARD,
-	.Mode = I2CMODE_SLAVE,
-	.pIOPinMap = s_I2cSlavePins,
-	.NbIOPins = sizeof(s_I2cSlavePins) / sizeof(IOPinCfg_t),
-	.Rate = 100000,		// Rate in Hz
-	.MaxRetry = 5,			// Retry
-	.AddrType = I2CADDR_TYPE_NORMAL,
-	.NbSlaveAddr = 1,			// Number of slave addresses
+	.Type = I2CTYPE_STANDARD,			// I2C type standard or SMBus
+	.Mode = I2CMODE_SLAVE,				// Master/Slave mode
+	.pIOPinMap = s_I2cSlavePins,		// I/O pins used by I2C
+	.NbIOPins = sizeof(s_I2cSlavePins) / sizeof(IOPinCfg_t), // Number of IO pins mapped
+	.Rate = I2C_SCL_RATE,				// Rate in Hz
+	.MaxRetry = 5,						// Max number of retry
+	.AddrType = I2CADDR_TYPE_NORMAL,	// I2C address type normal 7bits or extended 10bits
+	.NbSlaveAddr = 1,					// Number of slave addresses
 	.SlaveAddr = {I2C_SLAVE_ADDR,},// + 1,I2C_SLAVE_ADDR},		// Slave addresses
-	.bDmaEn = true,
-	.bIntEn = true,
-	.IntPrio = 7,			// Interrupt prio
+	.bDmaEn = true,						// DMA mode enable
+	.bIntEn = true,						// Interrupt enable
+	.IntPrio = 7,						// Interrupt priority
 	.EvtCB = I2CSlaveIntrfHandler		// Event callback
 };
 
 I2C g_I2CSlave;
 
-uint8_t s_ReadRqstData[100];
-uint8_t s_WriteRqstData[16];
+#define I2C_BUFF_SIZE	20
+#define I2C_BUFF_SIZE	20
+uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
+uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
 bool s_bWriteRqst = false;
 int s_Offset = 0;
 
@@ -163,13 +166,13 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 				}
 				s_bWriteRqst = false;
 			}
-			g_I2CSlave.SetReadRqstData(0, &s_ReadRqstData[s_Offset], 10);
+			g_I2CSlave.SetReadRqstData(0, &s_ReadRqstData[s_Offset], I2C_BUFF_SIZE);
 
 			break;
 
 		case DEVINTRF_EVT_WRITE_RQST:
 			s_bWriteRqst = true;
-			g_I2CSlave.SetWriteRqstBuffer(0, s_WriteRqstData, 10);
+			g_I2CSlave.SetWriteRqstBuffer(0, s_WriteRqstData, I2C_BUFF_SIZE);
 			break;
 
 		case DEVINTRF_EVT_COMPLETED:
@@ -179,7 +182,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 				// No previous write command. This means a continuous read
 				// move to last read
 				s_Offset += Len;
-				if (s_Offset >= 100)
+				if (s_Offset >= I2C_BUFF_SIZE)
 				{
 					// Reset offset if we moved beyond max buffer
 					s_Offset = 0;
@@ -224,8 +227,8 @@ void HardwareInit()
 
 int main()
 {
-	uint8_t reg;
-	uint8_t buff[10];
+	uint8_t offset;
+	uint8_t buff[I2C_BUFF_SIZE];
 
 	HardwareInit();
 
@@ -234,16 +237,15 @@ int main()
 	g_I2CSlave.Init(s_I2cCfgSlave);
 
 	// Fill dummy data for debugging and validation
-	for (int i = 0; i < 100; i++)
+	for (int i = 0; i < I2C_BUFF_SIZE; i++)
 	{
 		s_ReadRqstData[i] = i;
 	}
 
-	memset(s_WriteRqstData, 0, 10);
-	memset(buff, 0xFF, 10);
+	memset(s_WriteRqstData, 0, I2C_BUFF_SIZE);
+	memset(buff, 0xFF, I2C_BUFF_SIZE);
 
-	reg = 3; // want to read from offset 15
-
+	// Fill buff with data
 	buff[0] = 0xa0;
 	buff[1] = 0xa1;
 	buff[2] = 0xa2;
@@ -253,16 +255,38 @@ int main()
 	buff[6] = 0xa6;
 	buff[7] = 0xa7;
 
-//	int c = g_I2CMaster.Tx(I2C_SLAVE_ADDR, buff, 8);
-	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &reg, 1, buff, 8);
+	buff[8] = 0xb0;
+	buff[9] = 0xb1;
+	buff[10] = 0xb2;
+	buff[11] = 0xb3;
+	buff[12] = 0xb4;
+	buff[13] = 0xb5;
+	buff[14] = 0xb6;
+	buff[15] = 0xb7;
 
-	reg = 0;
+
+	offset = 2; // want to read/write from offset position
+	uint8_t nBytes = 11;
+	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
+	//int c = g_I2CMaster.Tx(I2C_SLAVE_ADDR, buff, nBytes);
+	printf("Write %d bytes at offset %d\r\n", c, offset);
+	printf("s_WriteRqstData: ");
+	for (int i = 0; i <= nBytes; i++)
+	{
+		printf("%x ", s_WriteRqstData[i]);
+	}
+	printf("\r\n");
+
+
 
 	// Master send read command to read 10 bytes from offset defined in data[0]
-	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &reg, 1, buff, 10);
+	//offset = 3;
+	//nBytes = 9;
+	memset(buff, 0xFF, I2C_BUFF_SIZE);
+	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
+//	c = g_I2CMaster.Rx(I2C_SLAVE_ADDR, buff, nBytes);
 
-	printf("Count %d\r\n",c );
-
+	printf("Read %d bytes from offset %d: ", c, offset);
 	for (int i = 0; i < c; i++)
 	{
 		printf("%x ", buff[i]);
@@ -270,9 +294,9 @@ int main()
 	printf("\r\n");
 
 	// Master send read command without setting anything
-	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, NULL, 0, buff, 5);
-	printf("Count %d\r\n",c );
-
+	nBytes = 5;
+	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, NULL, 0, buff, nBytes);
+	printf("Master send read command without setting anything %d bytes: \r\n", c);
 	for (int i = 0; i < c; i++)
 	{
 		printf("%x ", buff[i]);
