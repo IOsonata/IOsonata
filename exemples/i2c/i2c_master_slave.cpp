@@ -265,13 +265,17 @@ int main()
 	buff[15] = 0xb7;
 
 
-	offset = 2; // want to read/write from offset position
+	uint16_t i2cDevAddr = (buff[1] << 8) | buff[0];
+	uint8_t x = i2cDevAddr;
+
+	offset = 0; // want to read/write from offset position
 	uint8_t nBytes = 11;
-	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
-	//int c = g_I2CMaster.Tx(I2C_SLAVE_ADDR, buff, nBytes);
-	printf("Write %d bytes at offset %d\r\n", c, offset);
+//	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
+	//printf("Write %d bytes at offset %d\r\n", c, offset);
+	int c = g_I2CMaster.Tx(I2C_SLAVE_ADDR, buff, nBytes);
+	printf("Write %d bytes\r\n", c);
 	printf("s_WriteRqstData: ");
-	for (int i = 0; i <= nBytes; i++)
+	for (int i = offset; i < offset + nBytes; i++)
 	{
 		printf("%x ", s_WriteRqstData[i]);
 	}
@@ -281,12 +285,12 @@ int main()
 
 	// Master send read command to read 10 bytes from offset defined in data[0]
 	//offset = 3;
-	//nBytes = 9;
+	nBytes = 9;
 	memset(buff, 0xFF, I2C_BUFF_SIZE);
-	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
-//	c = g_I2CMaster.Rx(I2C_SLAVE_ADDR, buff, nBytes);
-
-	printf("Read %d bytes from offset %d: ", c, offset);
+//	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
+	//printf("Read %d bytes from offset %d: ", c, offset);
+	c = g_I2CMaster.Rx(I2C_SLAVE_ADDR, buff, nBytes);
+	printf("Read %d bytes: ", c);
 	for (int i = 0; i < c; i++)
 	{
 		printf("%x ", buff[i]);
