@@ -381,6 +381,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/esb_intrf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/excelitas_serlink.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/excelitas_serlink.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/fatfs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/fatfs.cpp</locationURI>
