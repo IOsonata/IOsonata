@@ -37,14 +37,52 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/uart.h"
 #include "stddev.h"
 #include "iopinctrl.h"
+#include "idelay.h"
 
 // This include contain i/o definition the board in use
 #include "board.h"
 
 //#define ADC_DEMO_INTERRUPT_ENABLE
 
+#define AIN0_PORT	0
+#define AIN0_PIN	2
+
+#define AIN1_PORT	0
+#define AIN1_PIN	3
+
+#define AIN2_PORT	0
+#define AIN2_PIN	4
+
+#define AIN3_PORT	0
+#define AIN3_PIN	5
+
+#define AIN4_PORT	0
+#define AIN4_PIN	28
+
+#define AIN5_PORT	0
+#define AIN5_PIN	29
+
+#define AIN6_PORT	0
+#define AIN6_PIN	30
+
+#define AIN7_PORT	0
+#define AIN7_PIN	31
+
+
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void ADVEventHandler(Device *pDevObj, DEV_EVT Evt);
+
+typedef enum __ADC_Pins {
+	AIN0,
+	AIN1,
+	AIN2,
+	AIN3,
+	AIN4,
+	AIN5,
+	AIN6,
+	AIN7,
+	AVdd,
+}ADC_PINS;
 
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
 
@@ -53,7 +91,7 @@ uint8_t g_TxBuff[FIFOSIZE];
 static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
+	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// CTS
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RTS
 };
 
@@ -62,7 +100,7 @@ static const UARTCfg_t s_UartCfg = {
 	0,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	1000000,			// Rate
+	115200,			// Baud Rate
 	8,
 	UART_PARITY_NONE,
 	1,					// Stop bit
@@ -101,8 +139,8 @@ static const AdcCfg_t s_AdcCfg = {
 	.pRefVolt = s_RefVolt,
 	.NbRefVolt = s_NbRefVolt,
 	.DevAddr = 0,
-	.Resolution = 10,
-	.Rate = 1000,
+	.Resolution = 12,
+	.Rate = 200000,
 	.OvrSample = 0,
 #ifdef ADC_DEMO_INTERRUPT_ENABLE
 	.bInterrupt = true,
@@ -124,28 +162,32 @@ static const AdcChanCfg_t s_ChanCfg[] = {
 		.Gain = 6,//1 << 8,
 		.AcqTime = 10,
 		.BurstMode = false,
-		.PinP = { .PinNo = 8, .Conn = ADC_PIN_CONN_NONE },
-		.PinN = { .PinNo = 5, .Conn = ADC_PIN_CONN_PULLDOWN },
-		.FifoMemSize = ADC_CFIFO_SIZE,
-		.pFifoMem = s_AdcFifoMem,
+		.PinP = { .PinNo = AVdd, .Conn = ADC_PIN_CONN_NONE },
+		.PinN = { .PinNo = AIN5, .Conn = ADC_PIN_CONN_PULLDOWN },
+//		.FifoMemSize = ADC_CFIFO_SIZE,
+//		.pFifoMem = s_AdcFifoMem,
 	},
 	{
 		.Chan = 1,
 		.RefVoltIdx = 0,
 		.Type = ADC_CHAN_TYPE_SINGLE_ENDED,
 		.Gain = 6,//1 << 8,
-		.AcqTime = 0,
+		.AcqTime = 3,
 		.BurstMode = false,
-		.PinP = { .PinNo = 1, .Conn = ADC_PIN_CONN_NONE },
+		.PinP = { .PinNo = AIN0, .Conn = ADC_PIN_CONN_NONE },
+		.FifoMemSize = ADC_CFIFO_SIZE,
+		.pFifoMem = s_AdcFifoMem,
 	},
 	{
 		.Chan = 2,
-		.RefVoltIdx = 0,
+		.RefVoltIdx =0,
 		.Type = ADC_CHAN_TYPE_SINGLE_ENDED,
 		.Gain = 6,//1 << 8,
-		.AcqTime = 0,
+		.AcqTime = 3,
 		.BurstMode = false,
-		.PinP = { .PinNo = 0, .Conn = ADC_PIN_CONN_NONE },
+		.PinP = { .PinNo = AIN1, .Conn = ADC_PIN_CONN_NONE },
+//		.FifoMemSize = ADC_CFIFO_SIZE,
+//		.pFifoMem = s_AdcFifoMem,
 	},
 	{
 		.Chan = 3,
@@ -154,7 +196,7 @@ static const AdcChanCfg_t s_ChanCfg[] = {
 		.Gain = 6,//1 << 8,
 		.AcqTime = 0,
 		.BurstMode = false,
-		.PinP = { .PinNo = 8, .Conn = ADC_PIN_CONN_NONE },
+		.PinP = { .PinNo = AVdd, .Conn = ADC_PIN_CONN_NONE },
 	}
 };
 
@@ -174,8 +216,8 @@ void ADVEventHandler(Device *pAdcDev, DEV_EVT Evt)
 		cnt = g_Adc.Read(df, s_NbChan);
 		if (cnt > 0)
 		{
-//			/*g_Uart.*/printf("%d ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
-//					df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
+			g_Uart.printf("%d ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
+					df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
 		}
 
 		if (g_Adc.Mode() == ADC_CONV_MODE_SINGLE)
@@ -212,9 +254,9 @@ void HardwareInit()
 //	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 //	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
-	printf("Init ADC\r\n");
-	IOPinDisable(0, 2);
-	IOPinDisable(0, 3);
+	g_Uart.printf("Init ADC\r\n");
+	IOPinDisable(AIN0_PORT, AIN0_PIN);//AIN0
+	IOPinDisable(AIN1_PORT, AIN1_PIN);//AIN1
 
 	//IOPinSet(0, 2);
 	//IOPinConfig(0, 2, 0, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
@@ -256,10 +298,16 @@ int main()
 		cnt = g_Adc.Read(df, s_NbChan);
 		if (cnt > 0)
 		{
-			/*g_Uart.*/printf("%d ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
-					df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
+			for (int i=0; i<cnt; i++)
+			{
+				g_Uart.printf("#%d ADC[%d] = %.2fV | ", df[i].Timestamp, i, df[i].Data);
+			}
+			g_Uart.printf("\r\n");
+//			g_Uart.printf("#%d | ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
+//					df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
 		}
 		g_Adc.StartConversion();
+		msDelay(1000);
 #endif
 	}
 
