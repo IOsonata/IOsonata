@@ -191,7 +191,42 @@ typedef struct __BlueIO_Data_Bat {
 typedef struct __BlueIO_Core_Temp {
 	int16_t Temp;
 } BLUEIO_CORE_TEMP;
-#pragma pack(pop)
 
+/// SigCap frame header
+typedef struct __BlueIO_SigCap_Header {
+	uint8_t ChanNum:7;		// 7-bit [6...0] channel/port number
+	uint8_t ChanType:1; 		// 1-bit (MSB) channel type (Analog-0) / (Digital-1)
+}SigCapHdr_t;
+
+/// SigCap_Data frame format
+typedef struct __BlueIO_SigCap_Data {
+	union {
+		SigCapHdr_t	HdrField;				// Header SignalType (bit-7) | Channel/Port number (bits 6-0)
+		uint8_t Hdr;
+	};
+	uint8_t Payload[8];			// Analog / Digital captured data packet
+}BLUEIO_SIGCAP_DATA;
+
+/// SigCap_Data frame for Analog signal
+typedef struct __BlueIO_Analog_Data {
+	union {
+		SigCapHdr_t HdrField;
+		uint8_t Hdr;
+	};					// Signal header
+	uint32_t Timestamp; // Timestamp
+	float AdcData;
+} SigCapAnalogData_t;
+
+/// SigCap_Data frame for Digital signal
+typedef struct __BlueIO_Digital_Data {
+	union {
+		SigCapHdr_t HdrField;
+		uint8_t Hdr;
+	};					// Signal header
+	uint32_t Timestamp; // Timestamp
+	uint32_t DigData;
+} SigCapDigitalData_t;
+
+#pragma pack(pop)
 
 #endif // __IOSONATA_TYPES_H__
