@@ -200,8 +200,9 @@ typedef struct __BlueIO_SigCap_Header {
 
 /// SigCap_Data frame format
 typedef struct __BlueIO_SigCap_Data {
+	uint16_t Preamble; // 0xA55A
 	union {
-		SigCapHdr_t	HdrField;				// Header SignalType (bit-7) | Channel/Port number (bits 6-0)
+		SigCapHdr_t	HdrField;	// Header SignalType (bit-7) | Channel/Port number (bits 6-0)
 		uint8_t Hdr;
 	};
 	uint8_t Payload[8];			// Analog / Digital captured data packet
@@ -209,6 +210,7 @@ typedef struct __BlueIO_SigCap_Data {
 
 /// SigCap_Data frame for Analog signal
 typedef struct __BlueIO_Analog_Data {
+	uint16_t Preamble; // 0xA55A
 	union {
 		SigCapHdr_t HdrField;
 		uint8_t Hdr;
@@ -219,6 +221,7 @@ typedef struct __BlueIO_Analog_Data {
 
 /// SigCap_Data frame for Digital signal
 typedef struct __BlueIO_Digital_Data {
+	uint16_t Preamble; // 0xA55A
 	union {
 		SigCapHdr_t HdrField;
 		uint8_t Hdr;
