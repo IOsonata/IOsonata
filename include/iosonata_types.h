@@ -200,7 +200,7 @@ typedef struct __BlueIO_SigCap_Header {
 
 /// SigCap_Data frame format
 typedef struct __BlueIO_SigCap_Data {
-	uint16_t Preamble; // 0xA55A
+	uint8_t Preamble[2]; 		// {0xA5, 0x5A}
 	union {
 		SigCapHdr_t	HdrField;	// Header SignalType (bit-7) | Channel/Port number (bits 6-0)
 		uint8_t Hdr;
