@@ -6,6 +6,12 @@
 This firmware scans for BLE-clients (via their names or MAC address), 
 communicates with them, and bridges them with the host computer via USB interface.
 
+NOTE: For compatible with C++ compiler, this C++ project must include 2 header files:
+	"app_usbd_cdc_acm_internal.h"
+	"app_usbd_cdc_acm.h"
+	These 2 files are modified versions of the ones in:
+	..\nRF5_SDK\components\libraries\usbd\class\cdc\acm
+
 
 @author: Thinh Tran
 @date: June 30, 2022
