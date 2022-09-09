@@ -59,7 +59,7 @@ typedef struct __ADC_nRF52_Data {
 	uint32_t Period;
     int16_t ResData[SAADC_NRF52_MAX_CHAN];
     HCFIFO	hFifo[SAADC_NRF52_MAX_CHAN];
-
+    Timer *pTimer;//using a timer instance for time-stamping ADC samples
 } ADCNRF52_DATA;
 
 static ADCNRF52_DATA s_AdcnRF52DevData = {
@@ -114,7 +114,10 @@ extern "C" void SAADC_IRQHandler()
 						// => GainFactor = Reference / (Resolution * Gain)
 						// => Vin = ADCresult * GainFactor
 						p->Data = (float)s_AdcnRF52DevData.ResData[i] * s_AdcnRF52DevData.GainFactor[i];
-						p->Timestamp = s_AdcnRF52DevData.SampleCnt;
+						p->Timestamp =
+								(s_AdcnRF52DevData.pTimer == NULL) ?
+										s_AdcnRF52DevData.SampleCnt :
+										s_AdcnRF52DevData.pTimer->uSecond();
 						cnt++;
 					}
 				}
@@ -291,6 +294,8 @@ bool AdcnRF52::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 	vbInterrupt = Cfg.bInterrupt;
 
 	s_AdcnRF52DevData.pDevObj = this;
+
+	s_AdcnRF52DevData.pTimer = pTimer;
 
 	SetRefVoltage(Cfg.pRefVolt, Cfg.NbRefVolt);
 	SetEvtHandler(Cfg.EvtHandler);
