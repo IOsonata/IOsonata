@@ -56,31 +56,35 @@ SOFTWARE.
 typedef struct {
 	int DevNo;
 	uint32_t MaxFreq;
-    NRF_TIMER_Type *pReg;
-    int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
-    uint32_t CC[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
-    TimerTrig_t Trigger[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
-    TimerDev_t *pTimer;
+	NRF_TIMER_Type *pReg;
+	int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
+	int CountCC;			//!< Index of last CC register to use for counter reading
+	uint32_t CC[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
+	TimerTrig_t Trigger[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
+	TimerDev_t *pTimer;
 } nRFTimerData_t;
 
-static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
+alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER0,
 		.MaxNbTrigEvt = TIMER0_CC_NUM,
+		.CountCC = TIMER0_CC_NUM - 1,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 1,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER1,
 		.MaxNbTrigEvt = TIMER1_CC_NUM,
+		.CountCC = TIMER1_CC_NUM - 1,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 2,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER2,
 		.MaxNbTrigEvt = TIMER2_CC_NUM,
+		.CountCC = TIMER2_CC_NUM - 1,
 	},
 #if TIMER_NRFX_HF_MAX > 3
 	{
@@ -88,12 +92,14 @@ static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER3,
 		.MaxNbTrigEvt = TIMER3_CC_NUM,
+		.CountCC = TIMER3_CC_NUM - 1,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 4,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER4,
 		.MaxNbTrigEvt = TIMER4_CC_NUM,
+		.CountCC = TIMER4_CC_NUM - 1,
 	},
 #endif
 };
@@ -106,14 +112,14 @@ static void TimerIRQHandler(int DevNo)
 	nRFTimerData_t &tdata = s_nRFxTimerData[DevNo];
 	TimerDev_t *timer = s_nRFxTimerData[DevNo].pTimer;
     uint32_t evt = 0;
-	uint32_t t = reg->CC[0];	// Preserve comparator
+	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
 
 	// Read counter value
     uint32_t count;
-	reg->TASKS_CAPTURE[0] = 1;
-	while ((count = reg->CC[0]) != reg->CC[0]);
+	reg->TASKS_CAPTURE[tdata.CountCC] = 1;
+	while ((count = reg->CC[tdata.CountCC]) != reg->CC[tdata.CountCC]);
 
-	reg->CC[0] = t;	// Restore comparator
+	reg->CC[tdata.CountCC] = t;	// Restore comparator
 
     if (count < timer->LastCount)
     {
@@ -325,15 +331,16 @@ static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
 {
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
+	nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 
-	uint32_t t = reg->CC[0];	// Preserve comparator
+	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
 
 	// Read counter value
 	uint32_t count;
-	reg->TASKS_CAPTURE[0] = 1;
-	while ((count = reg->CC[0]) != reg->CC[0]);
+	reg->TASKS_CAPTURE[tdata.CountCC] = 1;
+	while ((count = reg->CC[tdata.CountCC]) != reg->CC[tdata.CountCC]);
 
-	reg->CC[0] = t;	// Restore comparator
+	reg->CC[tdata.CountCC] = t;	// Restore comparator
 
 	if (count < pTimer->LastCount)
 	{
