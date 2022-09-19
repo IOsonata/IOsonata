@@ -49,7 +49,6 @@ SOFTWARE.
 #define BLE_HCI_CMD_LINKCTRL_PERIODIC_INQUIRY_MODE_EXIT		((1<<10) | 4)		//!< Exit Periodic Inquiry Mode command
 #define BLE_HCI_CMD_LINKCTRL_CREATE_CONN					((1<<10) | 5)		//!< Create Connection command
 #define BLE_HCI_CMD_LINKCTRL_DISCONNECT						((1<<10) | 6)		//!< Disconnect command
-#define BLE_HCI_CMD_LINKCTRL_ADD_SCO_CONNECTION				((1<<10) | 7)		//!< Create an SCO connection defined by the connection handle parameters
 #define BLE_HCI_CMD_LINKCTRL_CREATE_CONN_CANCEL				((1<<10) | 8)		//!< Create Connection Cancel command
 #define BLE_HCI_CMD_LINKCTRL_ACCEPT_CONN_RQST				((1<<10) | 9)		//!< Accept Connection Request command
 #define BLE_HCI_CMD_LINKCTRL_REJECT_CONN_RQST				((1<<10) | 0xA)		//!< Reject Connection Request command
@@ -119,7 +118,6 @@ SOFTWARE.
 #define BLE_HCI_CMD_BASEBAND_FLUSH							((3<<10) | 8)		//!< Flush command
 #define BLE_HCI_CMD_BASEBAND_READ_PIN_TYPE					((3<<10) | 9)		//!< Read PIN Type command
 #define BLE_HCI_CMD_BASEBAND_WRITE_PIN_TYPE					((3<<10) | 0xA)		//!< Write PIN Type command
-//#define BLE_HCI_CMD_BASEBAND_CREATE_NEW_UNIT_KEY			((3<<10) | 0xB)		//!< Create a new unit key.
 #define BLE_HCI_CMD_BASEBAND_READ_STORED_LINK_KEY			((3<<10) | 0xD)		//!< Read Stored Link Key command
 #define BLE_HCI_CMD_BASEBAND_WRITE_STORED_LINK_KEY			((3<<10) | 0x11)	//!< Write Stored Link Key command
 #define BLE_HCI_CMD_BASEBAND_DELETE_STORED_LINK_KEY			((3<<10) | 0x12)	//!< Delete Stored Link Key command
@@ -137,8 +135,6 @@ SOFTWARE.
 #define BLE_HCI_CMD_BASEBAND_WRITE_INQUIRY_SCAN_ACTIVITY	((3<<10) | 0x1E)	//!< Write Inquiry Scan Activity command
 #define BLE_HCI_CMD_BASEBAND_READ_AUTHEN_ENABLE				((3<<10) | 0x1F)	//!< Read Authentication Enable command
 #define BLE_HCI_CMD_BASEBAND_WRITE_AUTHEN_ENABLE			((3<<10) | 0x20)	//!< Write Authentication Enable command
-#define BLE_HCI_CMD_BASEBAND_READ_ENCRYPTION_MODE			((3<<10) | 0x21)	//!<
-#define BLE_HCI_CMD_BASEBAND_WRITE_ENCRYPTION_MODE			((3<<10) | 0x22)	//!<
 #define BLE_HCI_CMD_BASEBAND_READ_CLASS_OF_DEVICE			((3<<10) | 0x23)	//!< Read Class of Device command
 #define BLE_HCI_CMD_BASEBAND_WRITE_CLASS_OF_DEVICE			((3<<10) | 0x24)	//!< Write Class of Device command
 #define BLE_HCI_CMD_BASEBAND_READ_VOICE_SETTING				((3<<10) | 0x25)	//!< Read Voice Setting command
@@ -160,10 +156,6 @@ SOFTWARE.
 #define BLE_HCI_CMD_BASEBAND_READ_NB_SUPPORTED_IAC			((3<<10) | 0x38)	//!< Read Number Of Supported IAC command
 #define BLE_HCI_CMD_BASEBAND_READ_CURRENT_IAC_LAP			((3<<10) | 0x39)	//!< Read Current IAC LAP command
 #define BLE_HCI_CMD_BASEBAND_WRITE_CURRENT_IAC_LAP			((3<<10) | 0x3A)	//!< Write Current IAC LAP command
-#define BLE_HCI_CMD_BASEBAND_READ_PAGE_SCAN_PERIOD_MODE		((3<<10) | 0x3B)	//!<
-#define BLE_HCI_CMD_BASEBAND_WRITE_PAGE_SCAN_PERIOD_MODE	((3<<10) | 0x3C)	//!< Set the timeout session of a page scan.
-#define BLE_HCI_CMD_BASEBAND_READ_PAGE_SCAN_MODE			((3<<10) | 0x3D)	//!< Read the default Page scan mode.
-#define BLE_HCI_CMD_BASEBAND_WRITE_PAGE_SCAN_MODE			((3<<10) | 0x3E)	//!< Set the default page scan mode.
 #define BLE_HCI_CMD_BASEBAND_SET_AFH_CHAN_CLASS				((3<<10) | 0x3F)	//!< Set AFH Host Channel Classification command
 #define BLE_HCI_CMD_BASEBAND_READ_INQUIRY_SCAN_TYPE			((3<<10) | 0x42)	//!< Read Inquiry Scan Type command
 #define BLE_HCI_CMD_BASEBAND_WRITE_INQUIRY_SCAN_TYPE		((3<<10) | 0x43)	//!< Write Inquiry Scan Type command
@@ -392,38 +384,106 @@ SOFTWARE.
 
 
 // HCI events
-#define BLE_HCI_EVT_INQUERY_COMPLETE						1	//!< Indicates the Inquiry has finished
-#define BLE_HCI_EVT_INQUERY_RESULT							2	//!< Indicates that Bluetooth device(s) have responded for the inquiry.
-#define BLE_HCI_EVT_CONN_COMPLETE							3	//!< Indicates to both hosts that the new connection has been formed.
-#define BLE_HCI_EVT_CONN_REQUEST							4	//!< Indicates that a new connection is trying to be established
-#define BLE_HCI_EVT_DISCONN_COMPLETE						5	//!< Occurs when a connection has been disconnected.
-#define BLE_HCI_EVT_AUTHEN_COMPLETE							6	//!< Occurs when an authentication has been completed.
-#define BLE_HCI_EVT_REMOTE_NAME_REQUEST_COMPLETE			7	//!< Indicates that the request for the remote name has been completed.
-#define BLE_HCI_EVT_ENCRYPTION_CHANGE						8	//!< Indicates that a change in the encryption has been completed.
-#define BLE_HCI_EVT_CHANGE_CONN_LINK_KEY_COMPLETE			9	//!< Indicates that the change in the link key has been completed.
-#define BLE_HCI_EVT_MASTER_LINK_KEY_COMPLETE				0xA	//!< Indicates that the change in the temporary link key or semi permanent link key on the master device is complete.
-#define BLE_HCI_EVT_READ_REMOTE_SUPP_FEATURES_COMPLETE		0xB	//!< Indicates that the reading of the supported features on the remote device is complete.
-#define BLE_HCI_EVT_READ_REMOTE_VERS_COMPLETE				0xC	//!< Indicates that the version number on the remote device has been read and completed.
-#define BLE_HCI_EVT_QOS_SETTUP_COMPLETE						0xD	//!< Indicates that the Quality of Service setup has been complete.
-#define BLE_HCI_EVT_COMMAND_COMPLETE						0xE	//!< Used by controller to send status and event parameters to the host for the particular command.
-#define BLE_HCI_EVT_COMMAND_STATUS							0xF	//!< Indicates that the command has been received and is being processed in the host controller.
-#define BLE_HCI_EVT_HARDWARE_ERROR							0x10	//!< Indicates a hardware failure of the Bluetooth device.
-#define BLE_HCI_EVT_FLUSH_OCCURED							0x11	//!< Indicates that the data has been flushed for a particular connection.
-#define BLE_HCI_EVT_ROLE_CHANGED							0x12	//!< Indicates that the current bluetooth role for a connection has been changed.
-#define BLE_HCI_EVT_NB_COMPLETED_PACKET						0x13	//!< Indicates to the host the number of data packets sent compared to the last time the same event was sent.
-#define BLE_HCI_EVT_MODE_CHANGED							0x14	//!< Indicates the change in mode from hold, sniff, park or active to another mode.
-#define BLE_HCI_EVT_RETURN_LINK_KEYS						0x15	//!< Used to return stored link keys after a Read_Stored_Link_Key command was issued.
-#define BLE_HCI_EVT_PIN_CODE_REQUEST						0x16	//!< Indicates the a PIN code is required for a new connection.
-#define BLE_HCI_EVT_LINK_KEY_REQUEST						0x17	//!< Indicates that a link key is required for the connection.
-#define BLE_HCI_EVT_LINK_KEY_NOTIFICATION					0x18	//!< Indicates to the host that a new link key has been created.
-#define BLE_HCI_EVT_LOOPBACK_COMMAND						0x19	//!< Indicates that command sent from the host will be looped back.
-#define BLE_HCI_EVT_DATA_BUFFER_OVERFLOW					0x1A	//!< Indicates that the data buffers on the host has overflowed.
-#define BLE_HCI_EVT_MAX_SLOT_CHANGED						0x1B	//!< Informs the host when the LMP_Max_Slots parameter changes.
-#define BLE_HCI_EVT_READ_CLOCK_OFFSET_COMPLETE				0x1C	//!< Indicates the completion of reading the clock offset information.
-#define BLE_HCI_EVT_CONN_PACKET_TYPE_CHANGED				0x1D	//!< Indicate the completion of the packet type change for a connection.
-#define BLE_HCI_EVT_QOS_VIOLATION							0x1E	//!< Indicates that the link manager is unable to provide the required Quality of Service.
-#define BLE_HCI_EVT_PAGE_SCAN_MODE_CHANGED					0x1F	//!< Indicates that the remote device has successfully changed the Page Scan mode.
-#define BLE_HCI_EVT_PAGE_SCAN_REPETITION_MODE_CHANGED		0x20	//!< Indicates that the remote device has successfully changed the Page Scan Repetition mode.
+#define BLE_HCI_EVT_INQUERY_COMPLETE						1		//!< Inquiry Complete event
+#define BLE_HCI_EVT_INQUERY_RESULT							2		//!< Inquiry Result event
+#define BLE_HCI_EVT_CONN_COMPLETE							3		//!< Connection Complete event
+#define BLE_HCI_EVT_CONN_REQUEST							4		//!< Connection Request event
+#define BLE_HCI_EVT_DISCONN_COMPLETE						5		//!< Disconnection Complete event
+#define BLE_HCI_EVT_AUTHEN_COMPLETE							6		//!< Authentication Complete event
+#define BLE_HCI_EVT_REMOTE_NAME_RQST_COMPLETE				7		//!< Remote Name Request Complete event
+#define BLE_HCI_EVT_ENCRYPTION_CHANGE						8		//!< Encryption Change event V1
+#define BLE_HCI_EVT_ENCRYPTION_CHANGE_V2					0x59	//!< Encryption Change event V2
+#define BLE_HCI_EVT_CHANGE_CONN_LINK_KEY_COMPLETE			9		//!< Change Connection Link Key Complete event
+#define BLE_HCI_EVT_LINK_KEY_TYPE_CHANGED					0xA		//!< Link Key Type Changed event
+#define BLE_HCI_EVT_READ_REMOTE_SUPPORTED_FEATURES_COMPLETE	0xB		//!< Read Remote Supported Features Complete event
+#define BLE_HCI_EVT_READ_REMOTE_VERS_INFO_COMPLETE			0xC		//!< Read Remote Version Information Complete event
+#define BLE_HCI_EVT_QOS_SETTUP_COMPLETE						0xD		//!< QoS Setup Complete event
+#define BLE_HCI_EVT_COMMAND_COMPLETE						0xE		//!< Command Complete event
+#define BLE_HCI_EVT_COMMAND_STATUS							0xF		//!< Command Status event
+#define BLE_HCI_EVT_HARDWARE_ERROR							0x10	//!< Hardware Error event
+#define BLE_HCI_EVT_FLUSH_OCCURED							0x11	//!< Flush Occurred event
+#define BLE_HCI_EVT_ROLE_CHANGE								0x12	//!< Role Change event
+#define BLE_HCI_EVT_NB_COMPLETED_PACKET						0x13	//!< Number Of Completed Packets event
+#define BLE_HCI_EVT_MODE_CHANGE								0x14	//!< Mode Change event
+#define BLE_HCI_EVT_RETURN_LINK_KEYS						0x15	//!< Return Link Keys event
+#define BLE_HCI_EVT_PIN_CODE_RQST							0x16	//!< PIN Code Request event
+#define BLE_HCI_EVT_LINK_KEY_RQST							0x17	//!< Link Key Request event
+#define BLE_HCI_EVT_LINK_KEY_NOTIF							0x18	//!< Link Key Notification event
+#define BLE_HCI_EVT_LOOPBACK_COMMAND						0x19	//!< Loopback Command event
+#define BLE_HCI_EVT_DATA_BUFFER_OVERFLOW					0x1A	//!< Data Buffer Overflow event
+#define BLE_HCI_EVT_MAX_SLOT_CHANGE							0x1B	//!< Max Slots Change event
+#define BLE_HCI_EVT_READ_CLOCK_OFFSET_COMPLETE				0x1C	//!< Read Clock Offset Complete event
+#define BLE_HCI_EVT_CONN_PACKET_TYPE_CHANGED				0x1D	//!< Connection Packet Type Changed event
+#define BLE_HCI_EVT_QOS_VIOLATION							0x1E	//!< QoS Violation event
+#define BLE_HCI_EVT_PAGE_SCAN_REPETITION_MODE_CHANGE		0x20	//!< Page Scan Repetition Mode Change event
+#define BLE_HCI_EVT_FLOW_SPECS_COMPLETE						0x21	//!< Flow Specification Complete event
+#define BLE_HCI_EVT_INQUIRY_RESULT_WITH_RSSI				0x22	//!< Inquiry Result with RSSI event
+#define BLE_HCI_EVT_READ_REMOTE_EXT_FEATURES_COMPLETE		0x23	//!< Read Remote Extended Features Complete event
+#define BLE_HCI_EVT_SYNCHRONOUS_CONN_COMPLETE				0x2C	//!< Synchronous Connection Complete event
+#define BLE_HCI_EVT_SYNCHRONOUS_CONN_CHANGED				0x2D	//!< Synchronous Connection Changed event
+#define BLE_HCI_EVT_SNIFF_SUBRATING							0x2E	//!< Sniff Subrating event
+#define BLE_HCI_EVT_EXT_INQUIRY_RESULT						0x2F	//!< Extended Inquiry Result event
+#define BLE_HCI_EVT_ENCRYPTION_KEY_REFRESH_COMPLETE			0x30	//!< Encryption Key Refresh Complete event
+#define BLE_HCI_EVT_IO_CAPABILITY_RQST						0x31	//!< IO Capability Request event
+#define BLE_HCI_EVT_IO_CAPABILITY_RESPONSE					0x32	//!< IO Capability Response event
+#define BLE_HCI_EVT_USER_CONFIRM_RQST						0x33	//!< User Confirmation Request event
+#define BLE_HCI_EVT_USER_PASSKEY_RQST						0x34	//!< User Passkey Request event
+#define BLE_HCI_EVT_REMOTE_OOB_DATA_RQST					0x35	//!< Remote OOB Data Request event
+#define BLE_HCI_EVT_SIMPLE_PAIRING_COMPLETE					0x36	//!< Simple Pairing Complete event
+#define BLE_HCI_EVT_LINK_SUPERVISION_TIMEOUT_CHANGED		0x38	//!< Link Supervision Timeout Changed event
+#define BLE_HCI_EVT_ENHANCED_FLUSH_COMPLETE					0x39	//!< Enhanced Flush Complete event
+#define BLE_HCI_EVT_USER_PASSKEY_NOTIF						0x3B	//!< User Passkey Notification event
+#define BLE_HCI_EVT_KEYPRESS_NOTIF							0x3C	//!< Keypress Notification event
+#define BLE_HCI_EVT_REMOTE_HOST_SUPPORTED_FEATURES_NOTIF	0x3D	//!< Remote Host Supported Features Notification event
+#define BLE_HCI_EVT_NB_COMPLETED_DATA_BLOCKS				0x48	//!< Number Of Completed Data Blocks event
+#define BLE_HCI_EVT_TRIGGERED_CLOCK_CAPTURE					0x4E	//!< Triggered Clock Capture event
+#define BLE_HCI_EVT_SYNC_TRAIN_COMPLETE						0x4F	//!< Synchronization Train Complete event
+#define BLE_HCI_EVT_SYNC_TRAIN_RECEIVED						0x50	//!< Synchronization Train Received event
+#define BLE_HCI_EVT_CONNLESS_PERIPH_BROADCAST_RECEIVE		0x51	//!< Connectionless Peripheral Broadcast Receive event
+#define BLE_HCI_EVT_CONNLESS_PERIPH_BROADCAST_TIMEOUT		0x52	//!< Connectionless Peripheral Broadcast Timeout event
+#define BLE_HCI_EVT_TRUNCATED_PAGE_COMPLETE					0x53	//!< Truncated Page Complete event
+#define BLE_HCI_EVT_PERIPH_PAGE_RESPONSE_TIMNEOUT			0x54	//!< Peripheral Page Response Timeout event
+#define BLE_HCI_EVT_CONNLESS_PERIPH_BROADCAST_CHAN_MAP_CHANGE	0x55	//!< Connectionless Peripheral Broadcast Channel Map Change event
+#define BLE_HCI_EVT_INQUIRY_RESPONSE_NOTIF					0x56	//!< Inquiry Response Notification event
+#define BLE_HCI_EVT_AUTHEN_PAYLOAD_TIMEOUT_EXPIRED			0x57	//!< Authenticated Payload Timeout Expired event
+#define BLE_HCI_EVT_SAM_STATUS_CHANGE						0x58	//!< SAM Status Change event
+#define BLE_HCI_EVT_LE_META									0x3E	//!< LE Meta event
+#define BLE_HCI_EVT_LE_META_CONN_COMPLETE							1		//!< LE Connection Complete event
+#define BLE_HCI_EVT_LE_META_ADV_REPORT								2		//!< LE Advertising Report event
+#define BLE_HCI_EVT_LE_META_CONN_UPDATE_COMPLETE					3		//!< LE Connection Update Complete event
+#define BLE_HCI_EVT_LE_META_READ_REMOTE_FEATURES_COMPLETE			4		//!< LE Read Remote Features Complete event
+#define BLE_HCI_EVT_LE_META_LONGTERM_KEY_RQST						5		//!< LE Long Term Key Request event
+#define BLE_HCI_EVT_LE_META_REMOTE_CONN_PARAM_RQST					6		//!< LE Remote Connection Parameter Request event
+#define BLE_HCI_EVT_LE_META_DATA_LEN_CHANGE							7		//!< LE Data Length Change event
+#define BLE_HCI_EVT_LE_META_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE		8		//!< LE Read Local P-256 Public Key Complete event
+#define BLE_HCI_EVT_LE_META_GENERATE_DHKEY_COMPLETE					9		//!< LE Generate DHKey Complete event
+#define BLE_HCI_EVT_LE_META_ENHANCED_CONN_COMPLETE					0xA		//!< LE Enhanced Connection Complete event
+#define BLE_HCI_EVT_LE_META_DIRECTED_ADV_REPORT						0xB		//!< LE Directed Advertising Report event
+#define BLE_HCI_EVT_LE_META_PHY_UPDATE_COMPLETE						0xC		//!< LE PHY Update Complete event
+#define BLE_HCI_EVT_LE_META_EXT_ADV_REPORT							0xD		//!< LE Extended Advertising Report event
+#define BLE_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_ESTABLISHED			0xE		//!< LE Periodic Advertising Sync Established event
+#define BLE_HCI_EVT_LE_META_PERIODIC_ADV_REPORT						0xF		//!< LE Periodic Advertising Report event
+#define BLE_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_LOST					0x10	//!< LE Periodic Advertising Sync Lost event
+#define BLE_HCI_EVT_LE_META_SCAN_TIMEOUT							0x11	//!< LE Scan Timeout event
+#define BLE_HCI_EVT_LE_META_ADV_SET_TERMINATED						0x12	//!< LE Advertising Set Terminated event
+#define BLE_HCI_EVT_LE_META_SCAN_RQST_RECEIVED						0x13	//!< LE Scan Request Received event
+#define BLE_HCI_EVT_LE_META_CHAN_SELECTION_ALGO						0x14	//!< LE Channel Selection Algorithm event
+#define BLE_HCI_EVT_LE_META_CONNLESS_IQ_REPORT						0x15	//!< LE Connectionless IQ Report event
+#define BLE_HCI_EVT_LE_META_CONN_IQ_REPORT							0x16	//!< LE Connection IQ Report event
+#define BLE_HCI_EVT_LE_META_CTE_RQST_FAILED							0x17	//!< LE CTE Request Failed event
+#define BLE_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED		0x18	//!< LE Periodic Advertising Sync Transfer Received event
+#define BLE_HCI_EVT_LE_META_CIS_ESTABLISHED							0x19	//!< LE CIS Established event
+#define BLE_HCI_EVT_LE_META_CIS_RQST								0x1A	//!< LE CIS Request event
+#define BLE_HCI_EVT_LE_META_CREATE_BIG_COMPLETE						0x1B	//!< LE Create BIG Complete event
+#define BLE_HCI_EVT_LE_META_TERMINATE_BIG_COMPLETE					0x1C	//!< LE Terminate BIG Complete event
+#define BLE_HCI_EVT_LE_META_BIG_SYNC_ESTABLISHED					0x1D	//!< LE BIG Sync Established event
+#define BLE_HCI_EVT_LE_META_BIG_SYNC_LOST							0x1E	//!< LE BIG Sync Lost event
+#define BLE_HCI_EVT_LE_META_RQST_PEER_SCA_COMPLETE					0x1F	//!< LE Request Peer SCA Complete event
+#define BLE_HCI_EVT_LE_META_PATH_LOSS_THREESHOLD					0x20	//!< LE Path Loss Threshold event
+#define BLE_HCI_EVT_LE_META_TRANSMIT_PWR_REPORTING					0x21	//!< LE Transmit Power Reporting event
+#define BLE_HCI_EVT_LE_META_BIGINFO_ADV_REPORT						0x22	//!< LE BIGInfo Advertising Report event
+#define BLE_HCI_EVT_LE_META_SUBRATE_CHANGE							0x23	//!< LE Subrate Change event
+
 
 // HCI error codes
 #define BLE_HCI_ERR_UNKNOWN_COMMAND							1
