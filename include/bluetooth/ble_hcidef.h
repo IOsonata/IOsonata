@@ -486,51 +486,88 @@ SOFTWARE.
 
 
 // HCI error codes
-#define BLE_HCI_ERR_UNKNOWN_COMMAND							1
-#define BLE_HCI_ERR_NO_CONNECTION							2
-#define BLE_HCI_ERR_HARDWARE_FAILURE						3
-#define BLE_HCI_ERR_PAGE_TIMEOUT							4
-#define BLE_HCI_ERR_AUTHEN_FAILURE							5
-#define BLE_HCI_ERR_KEY_MISSING								6
-#define BLE_HCI_ERR_MEMORY_FULL								7
-#define BLE_HCI_ERR_CONN_TIMEOUT							8
-#define BLE_HCI_ERR_MAX_NB_CONN								9
-#define BLE_HCI_ERR_MAX_NB_SCO_CONN							0xA
-#define BLE_HCI_ERR_ACL_CONN_EXISTS							0xB
-#define BLE_HCI_ERR_COMMAND_DISALLOWED						0xC
-#define BLE_HCI_ERR_HOST_REJECT_RESOURCE_LIMIT				0xD
-#define BLE_HCI_ERR_HOST_REJECT_SECURITY					0xE
-#define BLE_HCI_ERR_HOST_REJECT_PERSONAL_DEVICE				0xF
-#define BLE_HCI_ERR_HOST_TIMEOUT							0x10
-#define BLE_HCI_ERR_UNSUPPORTED_FEATURE_PARAM				0x11
-#define BLE_HCI_ERR_INVALID_COMMAND_PARAM					0x12
-#define BLE_HCI_ERR_CONN_TERMINATED_USER					0x13
-#define BLE_HCI_ERR_CONN_TERMINATED_LOW_RESOURCE			0x14
-#define BLE_HCI_ERR_CONN_TERMINATED_POWER_OFF				0x15
-#define BLE_HCI_ERR_CONN_TERMINATED_LOCAL_HOST				0x16
-#define BLE_HCI_ERR_REPEATED_ATTEMPTS						0x17
-#define BLE_HCI_ERR_PAIRING_NOT_ALLOWED						0x18
-#define BLE_HCI_ERR_UNKNOWN_LMP_PDU							0x19
-#define BLE_HCI_ERR_UNSUPPORTED_REMOTE_FEATURE				0x1A
-#define BLE_HCI_ERR_SCO_OFFSET_REJECTED						0x1B
-#define BLE_HCI_ERR_SCO_INTERVAL_REJECTED					0x1C
-#define BLE_HCI_ERR_SCO_AIR_MODE_REJECTED					0x1D
-#define BLE_HCI_ERR_INVALID_LMP_PARAM						0x1E
-#define BLE_HCI_ERR_UNSPECIFIED								0x1F
-#define BLE_HCI_ERR_UNSUPPORTED_LMP_PARAM					0x20
-#define BLE_HCI_ERR_ROLE_CHANGE_NOT_ALLOWED					0x21
-#define BLE_HCI_ERR_LMP_RESPONSE_TIMEOUT					0x22
-#define BLE_HCI_ERR_LMP_TRANSACTION_COLLISION				0x23
-#define BLE_HCI_ERR_LMP_PDU_NOT_ALLOWED						0x24
-#define BLE_HCI_ERR_ENCRYPTION_MODE_NOT_ACCEPTABLE			0x25
-#define BLE_HCI_ERR_UNIT_KEY_USED							0x26
-#define BLE_HCI_ERR_QOS_NOT_SUPPORTED						0x27
-#define BLE_HCI_ERR_INSTANT_PASSED							0x28
-#define BLE_HCI_ERR_PAIRING_WITH_UNIT_KEY_NOT_SUPPORTED		0x29
+#define BLE_HCI_SUCCESS										0
+#define BLE_HCI_ERR_NONE									BLE_HCI_SUCCESS
+#define BLE_HCI_ERR_UNKNOWN_COMMAND							1			//!< Unknown HCI Command
+#define BLE_HCI_ERR_UNKNOWN_CONN_ID							2			//!< Unknown Connection Identifier
+#define BLE_HCI_ERR_HARDWARE_FAILURE						3			//!< Hardware Failure
+#define BLE_HCI_ERR_PAGE_TIMEOUT							4			//!< Page Timeout
+#define BLE_HCI_ERR_AUTHEN_FAILURE							5			//!< Authentication Failure
+#define BLE_HCI_ERR_KEY_MISSING								6			//!< PIN or Key Missing
+#define BLE_HCI_ERR_MEMORY_FULL								7			//!< Memory Capacity Exceeded
+#define BLE_HCI_ERR_CONN_TIMEOUT							8			//!< Connection Timeout
+#define BLE_HCI_ERR_CONN_LIMIT_EXCEEDED						9			//!< Connection Limit Exceeded
+#define BLE_HCI_ERR_SYNCHRONOUS_CONN_LIMIT_EXCEEDED			0xA			//!< Synchronous Connection Limit To A Device Exceeded
+#define BLE_HCI_ERR_CONN_EXISTS								0xB			//!< Connection Already Exists
+#define BLE_HCI_ERR_COMMAND_DISALLOWED						0xC			//!< Command Disallowed
+#define BLE_HCI_ERR_CONN_REJECT_RESOURCE_LIMIT				0xD			//!< Connection Rejected due to Limited Resources
+#define BLE_HCI_ERR_CONN_REJECT_SECURITY					0xE			//!< Connection Rejected Due To Security Reasons
+#define BLE_HCI_ERR_CONN_REJECT_BD_ADDR						0xF			//!< Connection Rejected due to Unacceptable BD_ADDR
+#define BLE_HCI_ERR_CONN_ACCEPT_TIMEOUT						0x10		//!< Connection Accept Timeout Exceeded
+#define BLE_HCI_ERR_UNSUPPORTED_FEATURE_PARAM				0x11		//!< Unsupported Feature or Parameter Value
+#define BLE_HCI_ERR_INVALID_COMMAND_PARAM					0x12		//!< Invalid HCI Command Parameters
+#define BLE_HCI_ERR_CONN_TERMINATED_USER					0x13		//!< Remote User Terminated Connection
+#define BLE_HCI_ERR_CONN_TERMINATED_LOW_RESOURCE			0x14		//!< Remote Device Terminated Connection due to Low Resources
+#define BLE_HCI_ERR_CONN_TERMINATED_POWER_OFF				0x15		//!< Remote Device Terminated Connection due to Power Off
+#define BLE_HCI_ERR_CONN_TERMINATED_LOCAL_HOST				0x16		//!< Connection Terminated By Local Host
+#define BLE_HCI_ERR_REPEATED_ATTEMPTS						0x17		//!< Repeated Attempts
+#define BLE_HCI_ERR_PAIRING_NOT_ALLOWED						0x18		//!< Pairing Not Allowed
+#define BLE_HCI_ERR_UNKNOWN_LMP_PDU							0x19		//!< Unknown LMP PDU
+#define BLE_HCI_ERR_UNSUPPORTED_REMOTE_FEATURE				0x1A		//!< Unsupported Remote Feature
+#define BLE_HCI_ERR_SCO_OFFSET_REJECTED						0x1B		//!< SCO Offset Rejected
+#define BLE_HCI_ERR_SCO_INTERVAL_REJECTED					0x1C		//!< SCO Interval Rejected
+#define BLE_HCI_ERR_SCO_AIR_MODE_REJECTED					0x1D		//!< SCO Air Mode Rejected
+#define BLE_HCI_ERR_INVALID_LMP_LL_PARAM					0x1E		//!< Invalid LMP Parameters / Invalid LL Parameters
+#define BLE_HCI_ERR_UNSPECIFIED								0x1F		//!< Unspecified Error
+#define BLE_HCI_ERR_UNSUPPORTED_LMP_LL_PARAM				0x20		//!< Unsupported LMP Parameter Value / Unsupported LL Parameter Value
+#define BLE_HCI_ERR_ROLE_CHANGE_NOT_ALLOWED					0x21		//!< Role Change Not Allowed
+#define BLE_HCI_ERR_LMP_LL_RESPONSE_TIMEOUT					0x22		//!< LMP Response Timeout / LL Response Timeout
+#define BLE_HCI_ERR_LMP_LL_TRANSACTION_COLLISION			0x23		//!< LMP Error Transaction Collision / LL Procedure Collision
+#define BLE_HCI_ERR_LMP_PDU_NOT_ALLOWED						0x24		//!< LMP PDU Not Allowed
+#define BLE_HCI_ERR_ENCRYPTION_MODE_NOT_ACCEPTABLE			0x25		//!< Encryption Mode Not Acceptable
+#define BLE_HCI_ERR_LINK_KEY_NO_CHANGE						0x26		//!< Link Key cannot be Changed
+#define BLE_HCI_ERR_QOS_NOT_SUPPORTED						0x27		//!< Requested QoS Not Supported
+#define BLE_HCI_ERR_INSTANT_PASSED							0x28		//!< Instant Passed
+#define BLE_HCI_ERR_PAIRING_WITH_UNIT_KEY_NOT_SUPPORTED		0x29		//!< Pairing With Unit Key Not Supported
+#define BLE_HCI_ERR_DIFF_TRANSACTION_COLLISION				0x2A		//!< Different Transaction Collision
+#define BLE_HCI_ERR_RESERVED_2B								0x2B		//!< Reserved for future use
+#define BLE_HCI_ERR_QOS_UNACCEPTABLE_PARAM					0x2C		//!< QoS Unacceptable Parameter
+#define BLE_HCI_ERR_QOS_REJECTED							0x2D		//!< QoS Rejected
+#define BLE_HCI_ERR_CHAN_CLASS_NOT_SUPPORTED				0x2E		//!< Channel Classification Not Supported
+#define BLE_HCI_ERR_INSUFFICIENT_SECURITY					0x2F		//!< Insufficient Security
+#define BLE_HCI_ERR_PARAM_RANGE								0x30		//!< Parameter Out Of Mandatory Range
+#define BLE_HCI_ERR_RESERVED_31								0x31		//!< Reserved for future use
+#define BLE_HCI_ERR_ROLE_SWITCH_PENDING						0x32		//!< Role Switch Pending
+#define BLE_HCI_ERR_RESERVED_33								0x33		//!< Reserved for future use
+#define BLE_HCI_ERR_RESERVED_SLOT_VIOLATION					0x34		//!< Reserved Slot Violation
+#define BLE_HCI_ERR_ROLE_SWITCH_FAILED						0x35		//!< Role Switch Failed
+#define BLE_HCI_ERR_EXT_INQUIRY_RESPONSE_TOO_LARGE			0x36		//!< Extended Inquiry Response Too Large
+#define BLE_HCI_ERR_SECURE_SIMPLE_PAIRING_NOT_SUPPORTED		0x37		//!< Secure Simple Pairing Not Supported By Host
+#define BLE_HCI_ERR_HOST_BUSY_PAIRING						0x38		//!< Host Busy - Pairing
+#define BLE_HCI_ERR_CONN_REJECT_NO_CHAN						0x39		//!< Connection Rejected due to No Suitable Channel Found
+#define BLE_HCI_ERR_CONTROLER_BUSY							0x3A		//!< Controller Busy
+#define BLE_HCI_ERR_UNACCEPTABLE_CONN_PARAM					0x3B		//!< Unacceptable Connection Parameters
+#define BLE_HCI_ERR_ADV_TIMEOUT								0x3C		//!< Advertising Timeout
+#define BLE_HCI_ERR_CONN_TERMINATED_MIC_FAILURE				0x3D		//!< Connection Terminated due to MIC Failure
+#define BLE_HCI_ERR_CONN_FAILED_SYNC_TIMEOUT				0x3E		//!< Connection Failed to be Established / Synchronization Timeout
+//#define BLE_HCI_ERR_	0x3F		//!<
+#define BLE_HCI_ERR_COARSE_CLOCK_REJECTED					0x40		//!< Coarse Clock Adjustment Rejected but Will Try to Adjust Using Clock Dragging
+#define BLE_HCI_ERR_TYPE0_SUBMAP_NOT_DEFINED				0x41		//!< Type0 Submap Not Defined
+#define BLE_HCI_ERR_UNKNOWN_ADV_ID							0x42		//!< Unknown Advertising Identifier
+#define BLE_HCI_ERR_LIMIT_REACHED							0x43		//!< Limit Reached
+#define BLE_HCI_ERR_OPERATION_CANCELED_HOST					0x44		//!< Operation Cancelled by Host
+#define BLE_HCI_ERR_PACKET_TOO_LONG							0x45		//!< Packet Too Long
 
-
+typedef uint8_t	BleHciErr_t;
 
 #pragma pack(push, 1)
+
+typedef enum __Ble_Addr_Type {
+	BLE_ADDR_TYPE_PUBLIC = 0,		//!< Public device address
+	BLE_ADDR_TYPE_RAND = 1,			//!< Random device address
+	BLE_ADDR_TYPE_RESOLV = 2,		//!< Resolvable private
+	BLE_ADDR_TYPE_RESOLV_RAND = 3	//!< Resolvable private, if not exist use random
+} BLE_ADDR_TYPE;
 
 /// HCI Command packet header
 typedef struct __Ble_Hci_Cmd_Packet_Header {
@@ -552,13 +589,14 @@ typedef struct __Ble_Hci_Cmd_Packet {
 	uint8_t Param[1];
 } BleHciCmd_Packet_t;
 
-#define BLE_STDHCI_PBFLAG_START_NONFLUSHABLE		0
-#define BLE_STDHCI_PBFLAG_CONTINUING_FRAGMENT		1
-#define BLE_STDHCI_PBFLAG_START_FLUSHABLE			2
-#define BLE_STDHCI_PBFLAG_COMPLETE_L2CAP_PDU		3
+#define BLE_HCI_PBFLAG_START_NONFLUSHABLE		0
+#define BLE_HCI_PBFLAG_CONTINUING_FRAGMENT		1
+#define BLE_HCI_PBFLAG_START_FLUSHABLE			2
+#define BLE_HCI_PBFLAG_COMPLETE_L2CAP_PDU		3
 
-#define BLE_STDHCI_BCFLAG_POINT_TO_POINT			0
-#define BLE_STDHCI_BCFLAG_BR_EDR_BROADCAST			1
+#define BLE_HCI_BCFLAG_POINT_TO_POINT			0
+#define BLE_HCI_BCFLAG_BR_EDR_BROADCAST			1
+
 
 /// HCI ACL data packet header
 typedef struct __Ble_Hci_Data_Packet_Header {
@@ -575,6 +613,33 @@ typedef struct __Ble_Hci_Data_Packet {
 	uint8_t Data[1];
 } BleHciDataPacke_t;
 
+/// BLE Advertising type
+typedef enum __Ble_Adv_Type {
+	BLEADV_TYPE_ADV_IND = 0,			//!< Connectable and scannable undirected advertising
+	BLEADV_TYPE_ADV_DIRECT_HIGH_IND = 1,//!< Connectable high duty cycle directed advertising
+	BLEADV_TYPE_ADV_SCAN_IND = 2,		//!< Scannable undirected advertising
+	BLEADV_TYPE_ADV_NONCONN_IND = 3,	//!< Non connectable undirected advertising
+	BLEADV_TYPE_ADV_DIRECT_LOW_IND = 4	//!< Connectable low duty cycle directed advertising
+} BLEADV_TYPE;
+
+#define	BLEADV_CHAN_37		0
+#define	BLEADV_CHAN_38 		1
+#define	BLEADV_CHAN_39 		2
+
+/// Convert msec time to BLE interval value of 0.625ms units
+#define BLEADV_MS_TO_INTERVAL(Val)		(((Val) * 1000UL + 500UL)/ 625UL)
+
+/// BLE Advertising parameters
+typedef struct __Ble_Adv_Param {
+	uint16_t IntervalMin;	//!< Advertising interval min. t = minval * 0.625ms
+	uint16_t IntervalMax;	//!< Advertising interval max. t = maxval * 0.625ms
+	BLEADV_TYPE Type:8;
+	BLE_ADDR_TYPE OwnAddrType:8;
+	BLE_ADDR_TYPE PeerAddrType:8;	//!< only BLEADV_ADDR_TYPE_PUBLIC or BLEADV_ADDR_TYPE_RAND
+	uint8_t PeerAddr[6];	//!< Peer address
+	uint8_t ChanMap;	//!< Advertising channel map
+	uint8_t FilterPolicy;	//!< Advertising filter policy
+} BleAdvParam_t;
 
 #pragma pack(pop)
 
@@ -582,6 +647,9 @@ typedef struct __Ble_Hci_Data_Packet {
 extern "C" {
 #endif
 
+static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
+	return (uint16_t)((Val * 1000UL + 500UL)/ 625UL);
+};
 
 #ifdef __cplusplus
 }
