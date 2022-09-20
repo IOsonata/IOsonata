@@ -198,15 +198,19 @@ typedef struct __BlueIO_SigCap_Header {
 	uint8_t ChanType:1; 		// 1-bit (MSB) channel type (Analog-0) / (Digital-1)
 }SigCapHdr_t;
 
-/// SigCap_Data frame format
+/// SigCap_Data frame format for both Analog and Digital captured data
 typedef struct __BlueIO_SigCap_Data {
 	uint8_t Preamble[2]; 		// {0xA5, 0x5A}
 	union {
 		SigCapHdr_t	HdrField;	// Header SignalType (bit-7) | Channel/Port number (bits 6-0)
 		uint8_t Hdr;
 	};
-	uint8_t Payload[8];			// Analog / Digital captured data packet
-	uint8_t EndOfPkt;			// {0xFF}
+	uint8_t Reserved;			// {0xFF}
+	uint32_t Timestamp;			// Timestamp
+	union {
+		float	AnaVal;			// Analog voltage
+		uint32_t DigVal;		// Digital value
+	};
 }BLUEIO_SIGCAP_DATA;
 
 /// SigCap_Data frame for Analog signal
