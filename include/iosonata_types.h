@@ -206,6 +206,7 @@ typedef struct __BlueIO_SigCap_Data {
 		uint8_t Hdr;
 	};
 	uint8_t Payload[8];			// Analog / Digital captured data packet
+	uint8_t EndOfPkt;			// {0xFF}
 }BLUEIO_SIGCAP_DATA;
 
 /// SigCap_Data frame for Analog signal
