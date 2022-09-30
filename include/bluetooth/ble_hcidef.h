@@ -569,6 +569,12 @@ typedef enum __Ble_Addr_Type {
 	BLE_ADDR_TYPE_RESOLV_RAND = 3	//!< Resolvable private, if not exist use random
 } BLE_ADDR_TYPE;
 
+/// HCI Event packet header
+typedef struct __Ble_Hci_Evt_Packet_Header {
+	uint8_t Evt;
+	uint8_t Len;
+} BleHciEvtPacketHdr_t;
+
 /// HCI Command packet header
 typedef struct __Ble_Hci_Cmd_Packet_Header {
 	union {
@@ -622,9 +628,10 @@ typedef enum __Ble_Adv_Type {
 	BLEADV_TYPE_ADV_DIRECT_LOW_IND = 4	//!< Connectable low duty cycle directed advertising
 } BLEADV_TYPE;
 
-#define	BLEADV_CHAN_37		0
-#define	BLEADV_CHAN_38 		1
-#define	BLEADV_CHAN_39 		2
+// Orable advertisement channels
+#define	BLEADV_CHAN_37		1
+#define	BLEADV_CHAN_38 		2
+#define	BLEADV_CHAN_39 		4
 
 /// Convert msec time to BLE interval value of 0.625ms units
 #define BLEADV_MS_TO_INTERVAL(Val)		(((Val) * 1000UL + 500UL)/ 625UL)
@@ -641,6 +648,16 @@ typedef struct __Ble_Adv_Param {
 	uint8_t FilterPolicy;	//!< Advertising filter policy
 } BleAdvParam_t;
 
+typedef struct __Ble_Adv_Data_Header {
+	uint8_t Len;			//!< Length of data
+	uint8_t Type;			//!< Data type
+} BleAdvDataHdr_t;
+
+typedef struct __Ble_Adv_Data {
+	BleAdvDataHdr_t Hdr;	//!< Advertisement data header
+	uint8_t Data[1];		//!< Variable data field
+} BleAdvData_t;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -648,8 +665,14 @@ extern "C" {
 #endif
 
 static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
-	return (uint16_t)((Val * 1000UL + 500UL)/ 625UL);
+	return (uint16_t)((Val * 1000UL + 500UL) / 625UL);
 };
+
+static inline uint16_t BleConnMsToInterval(float Val) {
+	return (uint16_t)(((uint32_t)(Val * 1000.0) + 500UL) / 625UL);
+};
+
+bool BleHciInit();
 
 #ifdef __cplusplus
 }
