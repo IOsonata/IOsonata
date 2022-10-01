@@ -68,8 +68,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MANUFACTURER_ID         ISYST_BLUETOOTH_ID              		/**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
 #define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID              		/**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
 
-#define MIN_CONN_INTERVAL       MSEC_TO_UNITS(10, UNIT_1_25_MS) 		/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
-#define MAX_CONN_INTERVAL       MSEC_TO_UNITS(40, UNIT_1_25_MS) 		/**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
+#define MIN_CONN_INTERVAL       10//MSEC_TO_UNITS(10, UNIT_1_25_MS) 		/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
+#define MAX_CONN_INTERVAL       40//MSEC_TO_UNITS(40, UNIT_1_25_MS) 		/**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
 #define SCAN_INTERVAL           MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
 #define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
@@ -121,6 +121,7 @@ IOPinCfg_t s_Leds[] = LED_PIN_MAP;
 static int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
 const BLEAPP_CFG s_BleAppCfg = {
+#if 0
 	{ // Clock config nrf_clock_lf_cfg_t
 #ifdef IMM_NRF51822
 		NRF_CLOCK_LF_SRC_RC,	// Source RC
@@ -131,15 +132,18 @@ const BLEAPP_CFG s_BleAppCfg = {
 #endif
 
 	},
+#endif
+	.Role = BLEAPP_ROLE_PERIPHERAL,
 	1, 							// Number of central link
 	0, 							// Number of peripheral link
-	BLEAPP_MODE_APPSCHED,   	// Use scheduler
+//	BLEAPP_MODE_APPSCHED,   	// Use scheduler
 	DEVICE_NAME,                // Device name
 	ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
 	1,                      	// PnP Product ID
 	0,							// Pnp prod version
 	false,						// Enable device information service (DIS)
 	NULL,//&s_UartBleDevDesc,
+	.AdvType = BLEADV_TYPE_ADV_IND,
 	NULL,//g_ManData,              // Manufacture specific data to advertise
 	0,//sizeof(g_ManData),      // Length of manufacture specific data
 	NULL,

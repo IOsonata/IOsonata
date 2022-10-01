@@ -69,6 +69,7 @@ SOFTWARE.
 #include "sensors/tph_bme280.h"
 #include "sensors/tph_ms8607.h"
 #include "sensors/tphg_bme680.h"
+#include "bluetooth/ble_hcidef.h"
 #include "timer_nrfx.h"
 #ifdef NRF51
 //#include "timer_nrf_app_timer.h"
@@ -96,13 +97,13 @@ SOFTWARE.
 //#define USE_TIMER_UPDATE
 //#endif
 
-#define APP_ADV_INTERVAL                MSEC_TO_UNITS(1000, UNIT_0_625_MS)             /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
+#define APP_ADV_INTERVAL_MSEC		1000 //                MSEC_TO_UNITS(1000, UNIT_0_625_MS)             /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 #ifdef USE_TIMER_UPDATE
 // Use timer to update date
 #define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 #else
 // Use advertisement timeout to update data
-#define APP_ADV_TIMEOUT_IN_SECONDS      MSEC_TO_UNITS(120000, UNIT_10_MS)           /**< The advertising timeout (in units of seconds). */
+#define APP_ADV_TIMEOUT_MSEC      	120000 //MSEC_TO_UNITS(120000, UNIT_10_MS)           /**< The advertising timeout (in units of seconds). */
 #endif
 
 void TimerHandler(TIMER * const pTimer, uint32_t Evt);
@@ -129,6 +130,7 @@ const static TIMER_CFG s_TimerCfg = {
 Timer g_Timer;
 
 const BLEAPP_CFG s_BleAppCfg = {
+#if 0
 	{ // Clock config nrf_clock_lf_cfg_t
 #ifdef IMM_NRF51822
 		NRF_CLOCK_LF_SRC_RC,	// Source RC
@@ -139,15 +141,18 @@ const BLEAPP_CFG s_BleAppCfg = {
 #endif
 
 	},
+#endif
+	BLEAPP_ROLE_PERIPHERAL,
 	0, 						// Number of central link
 	1, 						// Number of peripheral link
-	BLEAPP_MODE_NOCONNECT,   // Connectionless beacon type
+//	BLEAPP_MODE_NOCONNECT,   // Connectionless beacon type
 	DEVICE_NAME,                 // Device name
 	ISYST_BLUETOOTH_ID,     // PnP Bluetooth/USB vendor id
 	1,                      // PnP Product ID
 	0,						// Pnp prod version
 	false,					// Enable device information service (DIS)
 	NULL,
+	BLEADV_TYPE_ADV_NONCONN_IND,
 	(uint8_t*)&g_AdvDataBuff,   // Manufacture specific data to advertise
 	sizeof(g_AdvDataBuff),      // Length of manufacture specific data
 	NULL,
@@ -156,8 +161,8 @@ const BLEAPP_CFG s_BleAppCfg = {
 	BLEAPP_SECEXCHG_NONE,   // Security key exchange
 	NULL,      				// Service uuids to advertise
 	0, 						// Total number of uuids
-	APP_ADV_INTERVAL,       // Advertising interval in msec
-	APP_ADV_TIMEOUT_IN_SECONDS,	// Advertising timeout in sec
+	APP_ADV_INTERVAL_MSEC,       // Advertising interval in msec
+	APP_ADV_TIMEOUT_MSEC,	// Advertising timeout in sec
 	0,//MSEC_TO_UNITS(1000, UNIT_0_625_MS) ,   // Slow advertising interval, if > 0, fallback to
 								// slow interval on adv timeout and advertise until connected
 	0,

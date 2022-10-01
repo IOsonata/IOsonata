@@ -72,6 +72,7 @@ Modified by          Date              Description
 #include "nrf_drv_rng.h"
 
 #include "istddef.h"
+#include "coredev/system_core_clock.h"
 #include "coredev/uart.h"
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
@@ -122,7 +123,8 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 #pragma pack(push, 4)
 
 typedef struct _BleAppData {
-	BLEAPP_MODE AppMode;
+	BLEADV_TYPE AdvType;
+//	BLEAPP_MODE AppMode;
 	int AppRole;
 	uint16_t ConnHdl;	// BLE connection handle
 	int ConnLedPort;
@@ -161,7 +163,7 @@ BLE_ADVERTISING_DEF(g_AdvInstance);             /**< Advertising module instance
 NRF_BLE_GATT_DEF(s_Gatt);
 
 BLEAPP_DATA g_BleAppData = {
-	BLEAPP_MODE_LOOP, 0, BLE_CONN_HANDLE_INVALID, -1, -1,
+	BLEADV_TYPE_ADV_IND, 0, BLE_CONN_HANDLE_INVALID, -1, -1,
 };
 
 pm_peer_id_t g_PeerMngrIdToDelete = PM_PEER_ID_INVALID;
@@ -367,10 +369,11 @@ static void BleAppGapParamInit(const BleAppCfg_t *pBleAppCfg)
 
     memset(&gap_conn_params, 0, sizeof(gap_conn_params));
 
-    if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
+   // if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
+    if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
     {
-		gap_conn_params.min_conn_interval = pBleAppCfg->ConnIntervalMin;// MIN_CONN_INTERVAL;
-		gap_conn_params.max_conn_interval = pBleAppCfg->ConnIntervalMax;//MAX_CONN_INTERVAL;
+		gap_conn_params.min_conn_interval = MSEC_TO_UNITS(pBleAppCfg->ConnIntervalMin, UNIT_1_25_MS);// MIN_CONN_INTERVAL;
+		gap_conn_params.max_conn_interval = MSEC_TO_UNITS(pBleAppCfg->ConnIntervalMax, UNIT_1_25_MS);//MAX_CONN_INTERVAL;
 		gap_conn_params.slave_latency     = SLAVE_LATENCY;
 		gap_conn_params.conn_sup_timeout  = CONN_SUP_TIMEOUT;
 
@@ -1056,7 +1059,8 @@ void BleAppAdvStart(BLEAPP_ADVMODE AdvMode)
 
 	g_BleAppData.bAdvertising = true;
 
-	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
+//	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
+	if (g_BleAppData.AdvType == BLEADV_TYPE_ADV_NONCONN_IND)
 	{
 		uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, BLEAPP_CONN_CFG_TAG);
         APP_ERROR_CHECK(err_code);
@@ -1187,7 +1191,8 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
         }
     }
 
-    if (pCfg->AppMode == BLEAPP_MODE_NOCONNECT || pCfg->AppMode == BLEAPP_MODE_IBEACON)
+//    if (pCfg->AppMode == BLEAPP_MODE_NOCONNECT || pCfg->AppMode == BLEAPP_MODE_IBEACON)
+    if (pCfg->AdvType == BLEADV_TYPE_ADV_NONCONN_IND)
     {
 //        err_code = ble_advdata_encode(&initdata.advdata, g_AdvData.adv_data.p_data, &g_AdvData.adv_data.len);
         g_AdvInstance.adv_data.adv_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
@@ -1206,8 +1211,8 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
         g_AdvInstance.adv_params.properties.type	= BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;//BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
         g_AdvInstance.adv_params.p_peer_addr 		= NULL;                             // Undirected advertisement.
         g_AdvInstance.adv_params.filter_policy		= BLE_GAP_ADV_FP_ANY;
-        g_AdvInstance.adv_params.interval    		= pCfg->AdvInterval;
-        g_AdvInstance.adv_params.duration     		= pCfg->AdvTimeout;
+        g_AdvInstance.adv_params.interval    		= MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
+        g_AdvInstance.adv_params.duration     		= MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
 #if 0
         s_AdvParams.properties.type  = BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;//BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
         s_AdvParams.p_peer_addr = NULL;                             // Undirected advertisement.
@@ -1223,13 +1228,13 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     {
 		//memset(&options, 0, sizeof(options));
 		initdata.config.ble_adv_fast_enabled  = true;
-		initdata.config.ble_adv_fast_interval = pCfg->AdvInterval;
-		initdata.config.ble_adv_fast_timeout  = pCfg->AdvTimeout;
+		initdata.config.ble_adv_fast_interval = MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
+		initdata.config.ble_adv_fast_timeout  = MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
 
 		if (pCfg->AdvSlowInterval > 0)
 		{
 			initdata.config.ble_adv_slow_enabled  = true;
-			initdata.config.ble_adv_slow_interval = pCfg->AdvSlowInterval;
+			initdata.config.ble_adv_slow_interval = MSEC_TO_UNITS(pCfg->AdvSlowInterval, UNIT_0_625_MS);
 			initdata.config.ble_adv_slow_timeout  = BLE_GAP_ADV_TIMEOUT_GENERAL_UNLIMITED;
 		}
 	    memcpy(&g_BleAppData.SrData, &initdata.srdata, sizeof(ble_advdata_t));
@@ -1381,7 +1386,8 @@ bool BleAppConnectable(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 
 	//gatt_init();
 
-	if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
+//	if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
+    if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
 		conn_params_init();
 
 	BleAppInitUserServices();
@@ -1491,6 +1497,62 @@ int8_t GetValidTxPower(int TxPwr)
 	return retval;
 }
 
+uint32_t GetLFAccuracy(uint32_t AccPpm)
+{
+	uint32_t retval = 0;
+
+	if (AccPpm < 2)
+	{
+		retval = 11;
+	}
+	else if (AccPpm < 5)
+	{
+		retval = 10;
+	}
+	else if (AccPpm < 10)
+	{
+		retval = 9;
+	}
+	else if (AccPpm < 20)
+	{
+		retval = 8;
+	}
+	else if (AccPpm < 30)
+	{
+		retval = 7;
+	}
+	else if (AccPpm < 50)
+	{
+		retval = 6;
+	}
+	else if (AccPpm < 75)
+	{
+		retval = 5;
+	}
+	else if (AccPpm < 100)
+	{
+		retval = 4;
+	}
+	else if (AccPpm < 150)
+	{
+		retval = 3;
+	}
+	else if (AccPpm < 250)
+	{
+		retval = 2;
+	}
+	else if (AccPpm < 500)
+	{
+		retval = 0;
+	}
+	else
+	{
+		retval = 1;
+	}
+
+	return retval;
+}
+
 /**
  * @brief Function for the SoftDevice initialization.
  *
@@ -1515,7 +1577,8 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 		BleConnLedOff();
     }
 
-    g_BleAppData.AppMode = pBleAppCfg->AppMode;
+    //g_BleAppData.AppMode = pBleAppCfg->AppMode;
+	g_BleAppData.AdvType = pBleAppCfg->AdvType;
     g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
 
     if (pBleAppCfg->MaxMtu > NRF_BLE_MAX_MTU_SIZE)
@@ -1524,7 +1587,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
     	g_BleAppData.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
 
     app_timer_init();
-
+#if 0
     switch (g_BleAppData.AppMode)
     {
 		case BLEAPP_MODE_LOOP:
@@ -1545,15 +1608,39 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 			default:
 				;
     }
+#endif
+	g_BleAppData.SDEvtHandler = pBleAppCfg->SDEvtHandler;
+    if (pBleAppCfg->SDEvtHandler == NULL)
+    {
+		APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
+    }
 
 //    nrf_ble_lesc_init();
 
-	err_code = nrf_sdh_enable((nrf_clock_lf_cfg_t *)&pBleAppCfg->ClkCfg);
+    nrf_clock_lf_cfg_t lfclk = {
+    	0
+    };
+
+	OscDesc_t const *lfosc = GetLowFreqOscDesc();
+	if (lfosc->Type == OSC_TYPE_RC)
+	{
+		lfclk.source = NRF_CLOCK_LF_SRC_RC;
+		lfclk.rc_ctiv = 16;
+		lfclk.rc_temp_ctiv = 2;
+	}
+	else
+	{
+		lfclk.accuracy = GetLFAccuracy(lfosc->Accuracy);
+		lfclk.source = NRF_CLOCK_LF_SRC_XTAL;
+	}
+
+	err_code = nrf_sdh_enable(&lfclk);//(nrf_clock_lf_cfg_t *)&pBleAppCfg->ClkCfg);
     APP_ERROR_CHECK(err_code);
 
     // Initialize SoftDevice.
     BleAppStackInit(pBleAppCfg->CentLinkCount, pBleAppCfg->PeriLinkCount,
-    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
+    				pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND);
+//    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
 
     //err_code = ble_lesc_init();
     //APP_ERROR_CHECK(err_code);
@@ -1571,7 +1658,8 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 	    }
 	}
 
-    if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
+//    if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
+	if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
     {
     	BleAppConnectable(pBleAppCfg, bEraseBond);
     }
@@ -1640,13 +1728,14 @@ void BleAppRun()
 
     while (1)
     {
-		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
+//		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
+    	if (g_BleAppData.SDEvtHandler != NULL)
 		{
 			BleAppRtosWaitEvt();
 		}
 		else
 		{
-			if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
+//			if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
 			{
 				app_sched_execute();
 			}
@@ -1684,13 +1773,14 @@ void BleTimerAppRun()
 
     while (1)
     {
-		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
+//		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
+    	if (g_BleAppData.SDEvtHandler != NULL)
 		{
 			BleAppRtosWaitEvt();
 		}
 		else
 		{
-			if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
+			//if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
 			{
 				app_sched_execute();
 			}
@@ -1857,28 +1947,40 @@ static void appsh_events_poll(void * p_event_data, uint16_t event_size)
 
 extern "C" void SD_EVT_IRQHandler(void)
 {
-    switch (g_BleAppData.AppMode)
-     {
-         case BLEAPP_MODE_LOOP:
-         case BLEAPP_MODE_NOCONNECT:
-             nrf_sdh_evts_poll();
-             break;
-         case BLEAPP_MODE_APPSCHED:
-             {
-                 ret_code_t ret_code = app_sched_event_put(NULL, 0, appsh_events_poll);
+#if 0
+	switch (g_BleAppData.AppMode)
+	{
+		case BLEAPP_MODE_LOOP:
+		case BLEAPP_MODE_NOCONNECT:
+			nrf_sdh_evts_poll();
+			break;
+		case BLEAPP_MODE_APPSCHED:
+			{
+				ret_code_t ret_code = app_sched_event_put(NULL, 0, appsh_events_poll);
 
-                 APP_ERROR_CHECK(ret_code);
-             }
-             break;
-         case BLEAPP_MODE_RTOS:
-             if (g_BleAppData.SDEvtHandler)
-             {
-                 g_BleAppData.SDEvtHandler();
-             }
-             break;
-				 default:
-					 ;
-     }
+				APP_ERROR_CHECK(ret_code);
+			}
+			break;
+		case BLEAPP_MODE_RTOS:
+			if (g_BleAppData.SDEvtHandler)
+			{
+				g_BleAppData.SDEvtHandler();
+			}
+			break;
+		default:
+			;
+	}
+#endif
+	if (g_BleAppData.SDEvtHandler != NULL)
+	{
+		g_BleAppData.SDEvtHandler();
+	}
+	else
+	{
+		ret_code_t ret_code = app_sched_event_put(NULL, 0, appsh_events_poll);
+
+		APP_ERROR_CHECK(ret_code);
+	}
 }
 
 // We need this here in order for the Linker to keep the nrf_sdh_soc.c

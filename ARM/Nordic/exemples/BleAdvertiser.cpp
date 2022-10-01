@@ -41,16 +41,25 @@ SOFTWARE.
 #include "istddef.h"
 #include "ble_app.h"
 #include "iopinctrl.h"
+#include "coredev/system_core_clock.h"
+
+//#define MCUOSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_RC, }, false}
+
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
 
 #define DEVICE_NAME                     "Advertiser"
 
-#define APP_ADV_INTERVAL                MSEC_TO_UNITS(100, UNIT_0_625_MS)
-#define APP_ADV_TIMEOUT_IN_SECONDS      MSEC_TO_UNITS(1000, UNIT_10_MS)
+#define APP_ADV_INTERVAL_MSEC       100//MSEC_TO_UNITS(100, UNIT_0_625_MS)
+#define APP_ADV_TIMEOUT_MSEC      	1000//MSEC_TO_UNITS(1000, UNIT_10_MS)
 
 uint32_t g_AdvCnt = 0;
 
 const BLEAPP_CFG s_BleAppCfg = {
-	{ // Clock config nrf_clock_lf_cfg_t
+#if 0
+	{
+		// Clock config nrf_clock_lf_cfg_t
 #ifdef IMM_NRF51822
 		NRF_CLOCK_LF_SRC_RC,	// Source RC
 		1, 1, 0
@@ -64,15 +73,18 @@ const BLEAPP_CFG s_BleAppCfg = {
 #endif
 #endif
 	},
-	0,						// Number of central link
-	1,						// Number of peripheral link
-	BLEAPP_MODE_NOCONNECT,	// Connectionless beacon type
+#endif
+	.Role = BLEAPP_ROLE_PERIPHERAL,
+	.CentLinkCount = 0,		// Number of central link
+	.PeriLinkCount = 1,		// Number of peripheral link
+	//BLEAPP_MODE_NOCONNECT,	// Connectionless beacon type
 	DEVICE_NAME,			// Device name
 	ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	1,                      // PnP Product ID
 	0,						// Pnp prod version
 	false,					// Enable device information service (DIS)
 	NULL,					// Pointer device info descriptor
+	BLEADV_TYPE_ADV_NONCONN_IND,
 	(uint8_t*)&g_AdvCnt,   	// Manufacture specific data to advertise
 	sizeof(g_AdvCnt),      	// Length of manufacture specific data
 	NULL,
@@ -81,8 +93,8 @@ const BLEAPP_CFG s_BleAppCfg = {
 	BLEAPP_SECEXCHG_NONE,   // Security key exchange
 	NULL,      				// Service uuids to advertise
 	0, 						// Total number of uuids
-	APP_ADV_INTERVAL,       	// Advertising interval in msec
-	APP_ADV_TIMEOUT_IN_SECONDS,	// Advertising timeout in sec
+	APP_ADV_INTERVAL_MSEC,       	// Advertising interval in msec
+	APP_ADV_TIMEOUT_MSEC,	// Advertising timeout in sec
 	0,							// Slow advertising interval, if > 0, fallback to
 								// slow interval on adv timeout and advertise until connected
 	0,		// Min. connection interval
@@ -108,6 +120,12 @@ void BleAppAdvTimeoutHandler()
 
 int main()
 {
+	unsigned x, y, z;
+	int8_t a, b, c;
+
+	z = min(x, y);
+	c = min(a, b);
+
     BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
 
     BleAppRun();

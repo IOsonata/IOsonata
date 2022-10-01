@@ -40,6 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble.h"
 #include "nrf_sdm.h"
 
+#include "bluetooth/ble_hcidef.h"
 #include "bluetooth/bleadv_mandata.h"
 
 /** @addtogroup Bluetooth
@@ -64,6 +65,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 #define BLE_MAX_DATA_LEN				251
+
+typedef enum __BleApp_Role {
+	BLEAPP_ROLE_PERIPHERAL,			//!< BLE peripheral device
+	BLEAPP_ROLE_CENTRAL,			//!< BLE Central device
+	BLEAPP_ROLE_MIXED				//!< Mixed central/peripheral
+} BLEAPP_ROLE;
 
 typedef enum __BleApp_AdvMode {
 	BLEAPP_ADVMODE_IDLE,				//!< no connectable advertising is ongoing.
@@ -117,16 +124,20 @@ typedef BleAppDevInfo_t	BLEAPP_DEVDESC;
 
 /// BLE App configuration
 typedef struct __BleApp_Config {
+#if 0
 	nrf_clock_lf_cfg_t ClkCfg;		//!< Clock config
+#endif
+	BLEAPP_ROLE	Role;				//!< Application mode peripheral/central/mix
 	int CentLinkCount;				//!< Number of central link
 	int	PeriLinkCount;				//!< Number of peripheral link
-	BLEAPP_MODE AppMode;			//!< App use scheduler, rtos
+	//BLEAPP_MODE AppMode;			//!< App use scheduler, rtos
 	const char *pDevName;			//!< Device name
 	uint16_t VendorID;				//!< PnP Bluetooth/USB vendor id. iBeacon mode, this is Major value
 	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
 	uint16_t ProductVer;			//!< PnP product version
 	bool bEnDevInfoService;			//!< Enable device information service (DIS)
 	const BleAppDevInfo_t *pDevDesc;//!< Pointer device info descriptor
+	BLEADV_TYPE AdvType;			//!< Advertisement type
 	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise
 	int AdvManDataLen;				//!< Length of manufacture specific data
 	const uint8_t *pSrManData;		//!< Addition Manufacture specific data to advertise in scan response
@@ -136,11 +147,11 @@ typedef struct __BleApp_Config {
 	const ble_uuid_t *pAdvUuids;	//!< Service uuids to advertise
 	int NbAdvUuid;					//!< Total number of uuids
 	uint32_t AdvInterval;			//!< In msec
-	uint32_t AdvTimeout;			//!< In sec
+	uint32_t AdvTimeout;			//!< In msec
 	uint32_t AdvSlowInterval;		//!< Slow advertising interval, if > 0, fallback to
 									//!< slow interval on adv timeout and advertise until connected
-	uint32_t ConnIntervalMin;   	//!< Min. connection interval
-	uint32_t ConnIntervalMax;   	//!< Max connection interval
+	uint32_t ConnIntervalMin;   	//!< Min. connection interval in msec
+	uint32_t ConnIntervalMax;   	//!< Max connection interval in msec
 	int8_t ConnLedPort;			//!< Connection LED port number
 	int8_t ConnLedPin;				//!< Connection LED pin number
 	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
