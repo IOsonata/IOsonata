@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __BOARD_H__
 
 /* SAM4LCxC High-freq and Low-freq clock sources */
-#define MCUOSC 			{OSC_TYPE_XTAL, 12000000, OSC_TYPE_RC, 32000} //External Crystal 12 MHz
+#define MCUOSC 			{{OSC_TYPE_XTAL, 12000000, 20}, {OSC_TYPE_RC, 32000, 20}, false} //External Crystal 12 MHz
 //#define MCUOSC		{OSC_TYPE_RC, 1000000, OSC_TYPE_RC, 32000} // Internal RC1M 1MHz
 //#define MCUOSC		{OSC_TYPE_RC, 4000000, OSC_TYPE_RC, 32000} // Internal RCFAST 4/8/12 MHz
 //#define MCUOSC 			{OSC_TYPE_RC, 80000000, OSC_TYPE_RC, 32000}// Internal RC80M --> max 40MHz CPU clock

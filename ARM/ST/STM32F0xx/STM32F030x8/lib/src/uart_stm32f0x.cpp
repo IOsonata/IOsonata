@@ -73,7 +73,7 @@ typedef struct _STM32F0X_UART_Dev {
 
 #pragma pack(pop)
 
-static uint32_t s_FclkFreq = SYSTEM_CORE_CLOCK;		// FCLK frequency in Hz
+//static uint32_t s_FclkFreq = SYSTEM_CORE_CLOCK;		// FCLK frequency in Hz
 
 static STM32F0X_UARTDEV s_Stm32f03xUartDev[] = {
 	{

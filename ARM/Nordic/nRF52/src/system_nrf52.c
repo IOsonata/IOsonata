@@ -30,6 +30,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "nrf52_erratas.h"
 #include "system_nrf52.h"
 #include "system_nrf52_approtect.h"
+#include "coredev/system_core_clock.h"
 
 #define __SYSTEM_CLOCK_64M      (64000000UL)
 
@@ -66,6 +67,13 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #else
     #error "A supported device macro must be defined."
 #endif
+
+// Overload this variable in application firmware to change oscillator
+__WEAK McuOsc_t g_McuOsc = {
+	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20 },
+	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20 },
+	.bUSBClk = false
+};
 
 /* -- NVMC utility functions -- */
 /* Waits until NVMC is done with the current pending action */

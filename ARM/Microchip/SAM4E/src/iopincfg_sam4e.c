@@ -57,7 +57,7 @@ SOFTWARE.
 #pragma pack(push, 4)
 typedef struct {
 	IOPINSENSE Sense;
-	IOPINEVT_CB SensEvtCB;
+	IOPinEvtHandler_t SensEvtCB;
     uint16_t PortPinNo;
     void *pCtx;		//!< Event context parameter to pass to the callback function
 } IOPINSENS_EVTHOOK;
@@ -243,7 +243,7 @@ void IOPinDisableInterrupt(int IntNo)
  * 			pCtx	: Pointer to context parameter to passe to callback function
  * 					  This context pointer is a private data from application firmware
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
 	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || IntNo != PortNo)
 	{
@@ -326,7 +326,7 @@ int IOPinFindAvailInterrupt()
  * @return	Interrupt number on success
  * 			-1 on failure.
  */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPINEVT_CB pEvtCB, void *pCtx)
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
 	int intno = IOPinFindAvailInterrupt();
 

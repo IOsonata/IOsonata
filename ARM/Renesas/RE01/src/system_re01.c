@@ -62,15 +62,21 @@ uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
 // Overload this variable in application firmware to change oscillator
 __WEAK McuOsc_t g_McuOsc = {
-	OSC_TYPE_RC,
-	48000000,		// Default to 48MHz because at 64MHz many UART baudrate could not be matched
-	OSC_TYPE_RC,
-	32768,
+	{
+		OSC_TYPE_RC,
+		48000000,		// Default to 48MHz because at 64MHz many UART baudrate could not be matched
+		20
+	},
+	{
+		OSC_TYPE_RC,
+		32768, 20
+	},
 	true
 };
 
 static uint32_t s_PeriphSrcFreq = 0;
 
+#if 0
 /**
  * @brief	Get system low frequency oscillator type
  *
@@ -90,6 +96,7 @@ OSC_TYPE GetHighFreqOscType()
 {
 	return g_McuOsc.HFType;
 }
+#endif
 
 void SetFlashWaitState(uint32_t CoreFreq)
 {
@@ -211,10 +218,10 @@ void SystemCoreClockUpdate(void)
 			SystemCoreClock = 32768UL;
 			break;
 		case SYSTEM_SCKSCR_CKSEL_MCO:
-			SystemCoreClock = g_McuOsc.HFFreq;
+			SystemCoreClock = g_McuOsc.CoreOsc.Freq;
 			break;
 		case SYSTEM_SCKSCR_CKSEL_PLL:
-			SystemCoreClock = (g_McuOsc.HFFreq / (SYSTEM->PLLCCR_b.PLIDIV + 1)) * (SYSTEM->PLLCCR_b.PLLMUL + 1);
+			SystemCoreClock = (g_McuOsc.CoreOsc.Freq / (SYSTEM->PLLCCR_b.PLIDIV + 1)) * (SYSTEM->PLLCCR_b.PLLMUL + 1);
 			break;
 		default:
 			assert(0);
@@ -237,7 +244,7 @@ void SystemInit(void)
 
 	FLASH->FLWT = 1;
 
-    if (g_McuOsc.HFType == OSC_TYPE_RC)
+    if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
 	{
     	if (g_McuOsc.bUSBClk)
     	{
@@ -246,22 +253,22 @@ void SystemInit(void)
     		g_McuOsc.bUSBClk = false;
     	}
 
-    	if (g_McuOsc.HFFreq <= 2000000UL)
+    	if (g_McuOsc.CoreOsc.Freq <= 2000000UL)
     	{
 			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MOCO;
     	}
     	else
     	{
     		uint8_t hcfrq = 0;
-    		if (g_McuOsc.HFFreq <= 24000000UL)
+    		if (g_McuOsc.CoreOsc.Freq <= 24000000UL)
     		{
 
     		}
-    		else if (g_McuOsc.HFFreq <= 32000000UL)
+    		else if (g_McuOsc.CoreOsc.Freq <= 32000000UL)
     		{
     			hcfrq = 1;
     		}
-    		else if (g_McuOsc.HFFreq <= 48000000UL)
+    		else if (g_McuOsc.CoreOsc.Freq <= 48000000UL)
     		{
     			hcfrq = 2;
     		}
@@ -271,7 +278,7 @@ void SystemInit(void)
     		}
 
     		// Freq higher than 32MHz requires boost mode
-			if (g_McuOsc.HFFreq > 32000000)
+			if (g_McuOsc.CoreOsc.Freq > 32000000)
 			{
 				EnterBoostMode();
 			}
@@ -289,7 +296,7 @@ void SystemInit(void)
 	{
 		// Main clock range 8-32MHz
 
-		if (g_McuOsc.HFType == OSC_TYPE_TCXO)
+		if (g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO)
 		{
 			// External input clock
 		    SYSTEM->MOMCR = SYSTEM_MOMCR_OSCLPEN_Msk | (4 << SYSTEM_MOMCR_MODRV_Pos) | SYSTEM_MOMCR_MOSEL_Msk;
@@ -304,14 +311,14 @@ void SystemInit(void)
 
 		while ((SYSTEM->OSCSF & SYSTEM_OSCSF_MOSCSF_Msk) == 0);
 
-		uint32_t pllfreq = ConfigPLL(g_McuOsc.HFFreq);
+		uint32_t pllfreq = ConfigPLL(g_McuOsc.CoreOsc.Freq);
 		assert(pllfreq!=0UL);
 
 		// Select source clock PLL 48MHz
 		SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_PLL;
 	}
 
-    if (g_McuOsc.LFType == OSC_TYPE_RC)
+    if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC)
     {
     	SYSTEM->LOCOCR = 0;
     }

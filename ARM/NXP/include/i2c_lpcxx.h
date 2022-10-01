@@ -111,7 +111,7 @@ typedef struct {
 typedef struct {
 	int I2CNo;					// I2C interface number
 	uint32_t Rate;				// Data rate
-	I2CDEV	*pI2cDev;			// Pointer to generic I2C dev data
+	I2CDev_t	*pI2cDev;			// Pointer to generic I2C dev data
 	LPCI2CREG *pI2CReg;	// pointer to I2C registers map
 } LPCI2CDEV;
 

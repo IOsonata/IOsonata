@@ -816,9 +816,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/timer_sam4l.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_sam4l.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_sam4l_ast.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_sam4l_ast.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_sam4l_tc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_sam4l_tc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_sam4l.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_sam4l.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/eink_intrf.cpp</name>

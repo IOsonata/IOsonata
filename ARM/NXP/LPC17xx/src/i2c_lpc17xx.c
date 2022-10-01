@@ -120,7 +120,7 @@ uint32_t LpcI2CGetRate(DEVINTRF *pDev)
 	int rate = 0;
 
 	if (pDev && pDev->pDevData)
-		rate = ((LPCI2CDEV*)pDev->pDevData)->pI2cDev->Rate;
+		rate = ((LPCI2CDEV*)pDev->pDevData)->pI2cDev->Cfg.Rate;
 
 	return rate;
 }
@@ -137,7 +137,7 @@ uint32_t LpcI2CSetRate(DEVINTRF *pDev, uint32_t RateHz)
 
 	dev->pI2CReg->I2SCLH = clk >> 1;
 	dev->pI2CReg->I2SCLL = clk - dev->pI2CReg->I2SCLH;
-	dev->pI2cDev->Rate = RateHz;
+	dev->pI2cDev->Cfg.Rate = RateHz;
 
 	return RateHz;
 }
@@ -248,7 +248,7 @@ void LpcI2CStopTx(DEVINTRF *pDev)
 	LpcI2CStopCond((LPCI2CDEV *)pDev->pDevData);
 }
 
-bool I2CInit(I2CDEV *pDev, const I2CCFG *pCfgData)
+bool I2CInit(I2CDev_t *pDev, const I2CCfg_t *pCfgData)
 {
 	if (pDev == NULL || pCfgData == NULL)
 	{
@@ -267,12 +267,12 @@ bool I2CInit(I2CDEV *pDev, const I2CCFG *pCfgData)
 //	IOPinConfig(pCfgData->SdaPortNo, pCfgData->SdaPinNo, pCfgData->SdaPinOp, IOPINDIR_BI,
 //				IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN);
 
-	memcpy(pDev->Pins, pCfgData->Pins, sizeof(IOPINCFG) * I2C_MAX_NB_IOPIN);
+	memcpy(pDev->Cfg.pIOPinMap, pCfgData->pIOPinMap, sizeof(IOPinCfg_t) * pCfgData->NbIOPins);
 
 	// Configure I/O pins
-	IOPinCfg(pCfgData->Pins, I2C_MAX_NB_IOPIN);
-    IOPinSet(pCfgData->Pins[I2C_SCL_IOPIN_IDX].PortNo, pCfgData->Pins[I2C_SCL_IOPIN_IDX].PinNo);
-    IOPinSet(pCfgData->Pins[I2C_SDA_IOPIN_IDX].PortNo, pCfgData->Pins[I2C_SDA_IOPIN_IDX].PinNo);
+	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
+    IOPinSet(pCfgData->pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo, pCfgData->pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo);
+    IOPinSet(pCfgData->pIOPinMap[I2C_SDA_IOPIN_IDX].PortNo, pCfgData->pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo);
 
 	switch (pCfgData->DevNo)
 	{
@@ -303,10 +303,10 @@ bool I2CInit(I2CDEV *pDev, const I2CCFG *pCfgData)
 						 	 	 	 	 	 	 	 LPCI2C_I2CONCLR_STOC | LPCI2C_I2CONCLR_I2ENC;
 	g_LpcI2CDev[pCfgData->DevNo].pI2cDev = pDev;
 
-	pDev->Mode = pCfgData->Mode;
-	pDev->Rate = pCfgData->Rate;
-	pDev->NbSlaveAddr = pCfgData->NbSlaveAddr;
-	memcpy(pDev->SlaveAddr, pCfgData->SlaveAddr, pDev->NbSlaveAddr * sizeof(uint8_t));
+	pDev->Cfg.Mode = pCfgData->Mode;
+	pDev->Cfg.Rate = pCfgData->Rate;
+	pDev->Cfg.NbSlaveAddr = pCfgData->NbSlaveAddr;
+	memcpy(pDev->Cfg.SlaveAddr, pCfgData->SlaveAddr, pDev->Cfg.NbSlaveAddr * sizeof(uint8_t));
 //	pDev->MaxRetry = pCfgData->MaxRetry;
 
 	pDev->DevIntrf.pDevData = (void*)&g_LpcI2CDev[pCfgData->DevNo];

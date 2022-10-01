@@ -49,6 +49,12 @@ Modified by          Date              Description
 // Select system clock oscillator source
 #define DEF_CLK_SRC				IRC_FREQ
 
+__WEAK McuOsc_t s_McuOsc = {
+	{OSC_TYPE_XTAL, 12000000, 20},
+	{OSC_TYPE_RC, 4000000, 20},
+	true
+};
+
 uint32_t SystemCoreClock = 48000000UL;	// System Clock Frequency (Core Clock)
 uint32_t SystemMainClkFreq = IRC_FREQ;		// System clock frequency, reset default IRC
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
@@ -192,3 +198,44 @@ void SystemInit (void)
 	SystemCoreClockSet(true, OSC_FREQ);
 	SystemCoreClockUpdate();
 }
+
+/**
+ * @brief	Get peripheral clock frequency (PCLK)
+ *
+ * Most often the PCLK numbering starts from 1 (PCLK1, PCLK2,...).
+ * Therefore the clock Idx parameter = 0 indicate PCK1, 1 indicate PCLK2
+ *
+ * @param	Idx : Zero based peripheral clock number. Many processors can
+ * 				  have more than 1 peripheral clock settings.
+ *
+ * @return	Peripheral clock frequency in Hz.
+ * 			0 - Bad clock number
+ */
+uint32_t SystemPeriphClockGet(int Idx)
+{
+	return 0;
+}
+
+/**
+ * @brief	Set peripheral clock (PCLK) frequency
+ *
+ * Most often the PCLK numbering starts from 1 (PCLK1, PCLK2,...).
+ * Therefore the clock Idx parameter = 0 indicate PCK1, 1 indicate PCLK2
+ *
+ * @param	Idx  : Zero based peripheral clock number. Many processors can
+ * 				   have more than 1 peripheral clock settings.
+ * @param	Freq : Clock frequency in Hz.
+ *
+ * @return	Actual frequency set in Hz.
+ * 			0 - Failed
+ */
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+{
+	return 0;
+}
+
+uint32_t SystemCoreClockGet()
+{
+	return SystemCoreClock;
+}
+

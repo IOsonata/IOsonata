@@ -145,8 +145,11 @@
 //};
 
 // Flash waitstate
-__WEAK MCU_OSC g_McuOsc =
-{ OSC_TYPE_RC, 1000000, OSC_TYPE_RC, 32000 };
+__WEAK McuOsc_t g_McuOsc = {
+	{OSC_TYPE_RC, 1000000, 20},
+	{OSC_TYPE_RC, 32000, 20},
+	false
+};
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
@@ -155,26 +158,6 @@ static uint32_t s_PllFreq = SYSTEM_CORE_CLOCK;
 static const uint32_t s_Fvco[] =
 { 192000000UL, 96000000UL, 48000000UL };
 static const int s_FvcoCnt = sizeof(s_Fvco) / sizeof(uint32_t);
-
-/**
- * @brief	Get system low frequency oscillator type
- *
- * @return	Return oscillator type either internal RC or external crystal/osc
- */
-OSC_TYPE GetLowFreqOscType()
-{
-	return g_McuOsc.LFType;
-}
-
-/**
- * @brief	Get system high frequency oscillator type
- *
- * @return	Return oscillator type either internal RC or external crystal/osc
- */
-OSC_TYPE GetHighFreqOscType()
-{
-	return g_McuOsc.HFType;
-}
 
 bool FlashWaitReady(uint32_t Timeout)
 {
@@ -251,26 +234,26 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 		return false;
 	}
 
-	g_McuOsc.HFType = ClkSrc;
+	g_McuOsc.CoreOsc.Type = ClkSrc;
 
 	if (ClkSrc == OSC_TYPE_RC)
 	{
 		if (Freq < 8000000)
 		{
-			g_McuOsc.HFFreq = 4000000;
+			g_McuOsc.CoreOsc.Freq = 4000000;
 		}
 		else if (Freq < 16000000)
 		{
-			g_McuOsc.HFFreq = 8000000;
+			g_McuOsc.CoreOsc.Freq = 8000000;
 		}
 		else
 		{
-			g_McuOsc.HFFreq = 12000000;
+			g_McuOsc.CoreOsc.Freq = 12000000;
 		}
 	}
 	else
 	{
-		g_McuOsc.HFFreq = Freq;
+		g_McuOsc.CoreOsc.Freq = Freq;
 	}
 
 	SystemInit();
@@ -282,13 +265,13 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	if (ClkSrc == OSC_TYPE_RC)
 	{
-		g_McuOsc.LFType = OSC_TYPE_RC;
-		g_McuOsc.LFFreq = 32000;
+		g_McuOsc.LowPwrOsc.Type = OSC_TYPE_RC;
+		g_McuOsc.LowPwrOsc.Freq = 32000;
 	}
 	else
 	{
-		g_McuOsc.LFType = OSC_TYPE_XTAL;
-		g_McuOsc.LFFreq = 32768;
+		g_McuOsc.LowPwrOsc.Type = OSC_TYPE_XTAL;
+		g_McuOsc.LowPwrOsc.Freq = 32768;
 	}
 
 	return true;
@@ -354,7 +337,7 @@ void SystemSetPLL()
 	{
 		for (int j = 1; j < 16; j++)
 		{
-			uint32_t f = g_McuOsc.HFFreq * (i + 1) / j;
+			uint32_t f = g_McuOsc.CoreOsc.Freq * (i + 1) / j;
 			for (int x = 0; x < s_FvcoCnt; x++)
 			{
 				if (f == s_Fvco[x] && (f > fvco))
@@ -367,7 +350,7 @@ void SystemSetPLL()
 		}
 	}
 
-	s_PllFreq = (mul + 1) * g_McuOsc.HFFreq / div;
+	s_PllFreq = (mul + 1) * g_McuOsc.CoreOsc.Freq / div;
 
 	if (s_PllFreq > 160000000)
 	{
@@ -445,10 +428,10 @@ void SystemInit()
 	FLASHCALW_FCR_FWS_1 | FLASHCALW_FCR_WS1OPT;
 
 	/*** High freq clock ***/
-	if (g_McuOsc.HFType == OSC_TYPE_RC)
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
 	{
 		/** Internal RC **/
-		switch (g_McuOsc.HFFreq)
+		switch (g_McuOsc.CoreOsc.Freq)
 		{
 		/** RC1M RC Osc as source clk **/
 		case 1000000:
@@ -514,7 +497,7 @@ void SystemInit()
 
 			temp = SAM4L_SCIF->SCIF_RCFASTCFG & SCIF_RCFASTCFG_FRANGE_Msk;//FRANGE = 0b00
 			SAM4L_SCIF->SCIF_RCFASTCFG = temp | SCIF_RCFASTCFG_EN
-					| SCIF_RCFASTCFG_FRANGE(g_McuOsc.HFFreq / 4000000 - 1);
+					| SCIF_RCFASTCFG_FRANGE(g_McuOsc.CoreOsc.Freq / 4000000 - 1);
 			while ((SAM4L_SCIF->SCIF_RCFASTCFG & SCIF_RCFASTCFG_EN) == 0)
 				{};// wait until fully enabled
 
@@ -527,7 +510,7 @@ void SystemInit()
 					| SCIF_GCCTRL_OSCSEL(RCFAST_GEN_CLK_SRC) | SCIF_GCCTRL_DIVEN;
 
 			// Configure divider of GenClk0 to output 1 MHz
-			switch (g_McuOsc.HFFreq)
+			switch (g_McuOsc.CoreOsc.Freq)
 			{
 			case 4000000:
 				SAM4L_SCIF->SCIF_GCCTRL[0].SCIF_GCCTRL |= SCIF_GCCTRL_DIV(1);
@@ -566,7 +549,7 @@ void SystemInit()
 		/** RC80M RC Osc as main source clk **/
 		case 80000000:
 		default:
-			g_McuOsc.HFFreq = 80000000;
+			g_McuOsc.CoreOsc.Freq = 80000000;
 
 			// Unlock the RC80MCR register
 			SAM4L_SCIF->SCIF_UNLOCK =SCIF_UNLOCK_KEY(0xAAu)
@@ -594,10 +577,10 @@ void SystemInit()
 	else
 	{
 		/** External Crystal or TCXO **/
-		uint32_t gain = g_McuOsc.HFFreq / 4000000;
+		uint32_t gain = g_McuOsc.CoreOsc.Freq / 4000000;
 		uint32_t mode = 0;	// if g_McuOsc.HFType == OSC_TYPE_TCXO external clock
 
-		if (g_McuOsc.HFType == OSC_TYPE_XTAL)
+		if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL)
 		{
 			// external crystal
 			mode = (0x1u << SCIF_OSCCTRL0_MODE_Pos);
@@ -642,7 +625,7 @@ void SystemInit()
 	SetFlashWaitState(SystemCoreClock);
 
 	/** Low-freq clock configuration **/
-	if (g_McuOsc.LFType == OSC_TYPE_RC)
+	if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC)
 	{
 		uint32_t rc32ctrl = SAM4L_BSCIF->BSCIF_RC32KCR;
 		rc32ctrl &= BSCIF_RC32KCR_FCD;
@@ -662,7 +645,7 @@ void SystemInit()
 				2) | BSCIF_OSCCTRL32_SELCURR(10) |
 				BSCIF_OSCCTRL32_EN32K | BSCIF_OSCCTRL32_OSC32EN;
 
-		if (g_McuOsc.LFType == OSC_TYPE_XTAL)
+		if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL)
 		{
 			oscctrl |= BSCIF_OSCCTRL32_MODE(1);
 		}
@@ -681,12 +664,12 @@ void SystemInit()
 void SystemCoreClockUpdate(void)
 {
 
-	if (g_McuOsc.HFType == OSC_TYPE_RC)
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
 	{
 		// TODO: Read back the SystemCoreClock
 		printf("SystemCoreClock = %d\n", SystemCoreClock);
 	}
-	else if (g_McuOsc.HFType == OSC_TYPE_XTAL)
+	else if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL)
 	{
 		// XTAL
 		uint32_t pll = SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL;
@@ -694,8 +677,8 @@ void SystemCoreClockUpdate(void)
 		uint32_t div = (pll & SCIF_PLL_PLLDIV_Msk) >> SCIF_PLL_PLLDIV_Pos;
 		uint32_t fvco =
 				div > 0 ?
-						(mul + 1) * g_McuOsc.HFFreq / div :
-						((mul + 1) << 1) * g_McuOsc.HFFreq;
+						(mul + 1) * g_McuOsc.CoreOsc.Freq / div :
+						((mul + 1) << 1) * g_McuOsc.CoreOsc.Freq;
 		uint32_t cpusel = SAM4L_PM->PM_CPUSEL;
 
 		if (pll & SCIF_PLL_PLLOPT(2))
@@ -713,7 +696,7 @@ void SystemCoreClockUpdate(void)
 			SystemCoreClock = fvco;
 		}
 	}
-	else if (g_McuOsc.HFType == OSC_TYPE_TCXO)
+	else if (g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO)
 	{
 		printf("TCXO: external oscillator\n");
 	}

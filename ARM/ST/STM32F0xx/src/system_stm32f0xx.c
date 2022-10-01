@@ -37,17 +37,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 
 #include "stm32f0xx.h"
-#include "system_core_clock.h"
+#include "coredev/system_core_clock.h"
+
+#define SYSTEM_CORE_CLOCK				48000000UL		// nRF52 has fixed core frequency
+#define SYSTEM_NSDELAY_CORE_FACTOR		(93UL)
 
 #define STM32F0XX_HSE_XTAL_EN			false
 #define STM32F0XX_HSE_XTAL_FREQ			0
 
 // Overload this variable in application firmware to change oscillator
 __WEAK McuOsc_t g_McuOsc = {
-	OSC_TYPE_RC,
-	48000000,
-	OSC_TYPE_RC,
-	32768,
+	{OSC_TYPE_RC, 48000000, 20},
+	{OSC_TYPE_RC, 32768, 20},
 	false
 };
 

@@ -57,6 +57,14 @@ typedef enum __Osc_Type {
 } OSC_TYPE;
 
 ///
+/// Oscillator descriptor
+typedef struct __Oscillator_Desc {
+	OSC_TYPE Type;		//!< Oscillator type RC, crystal, oscillator
+	uint32_t Freq;		//!< Frequency in Hz
+	uint32_t Accuracy;	//!< Accuracy in PPM
+} OscDesc_t;
+
+///
 /// This structure defines the the MCU oscillators
 ///
 /// Most MCU has 2 oscillator.
@@ -71,16 +79,16 @@ typedef enum __Osc_Type {
 ///
 /// A generic default value is set in system_xxx.c for the target MCU family
 typedef struct __Mcu_Osc {
-	OSC_TYPE HFType;		//!< Core, high frequency oscillator type
-	uint32_t HFFreq;		//!< Core, high frequency oscillator frequency in Hz
-	OSC_TYPE LFType;		//!< Low frequency oscillator type
-	uint32_t LFFreq;		//!< Low frequency oscillator frequency in Hz (usually 32768)
+	OscDesc_t CoreOsc;		//!< Core high frequency oscillator descriptor
+	OscDesc_t LowPwrOsc;	//!< Low power, low frequency oscillator descriptor
 	bool bUSBClk;			//!< Enable USB clock support
 } McuOsc_t;
 
-typedef McuOsc_t	MCU_OSC;
+//typedef McuOsc_t	MCU_OSC;
 
 #pragma pack(pop)
+
+extern McuOsc_t g_McuOsc;
 
 #ifdef __cplusplus
 extern "C" {
@@ -91,14 +99,56 @@ extern "C" {
  *
  * @return	Return oscillator type either internal RC or external crystal/osc
  */
-OSC_TYPE GetLowFreqOscType();
+static inline OSC_TYPE GetLowFreqOscType() { return g_McuOsc.LowPwrOsc.Type; }
 
 /**
- * @brief	Get system high frequency oscillator type
+ * @brief	Get system low frequency oscillator frequency in Hz
+ *
+ * @return	Return oscillator frequency in Hz
+ */
+static inline uint32_t GetLowFreqOscFreq() { return g_McuOsc.LowPwrOsc.Freq; }
+
+/**
+ * @brief	Get system low frequency oscillator accuracy in PPM
+ *
+ * @return	Return oscillator accuracy in PPM
+ */
+static inline uint32_t GetLowFreqOscAcc() { return g_McuOsc.LowPwrOsc.Accuracy; }
+
+/**
+ * @brief	Get system low frequency oscillator descriptor
+ *
+ * @return	Return pointer to oscillator descriptor
+ */
+static inline const OscDesc_t *GetLowFreqOscDesc() { return &g_McuOsc.LowPwrOsc; }
+
+/**
+ * @brief	Get system core high frequency oscillator type
  *
  * @return	Return oscillator type either internal RC or external crystal/osc
  */
-OSC_TYPE GetHighFreqOscType();
+static inline OSC_TYPE GetHighFreqOscType() { return g_McuOsc.CoreOsc.Type; }
+
+/**
+ * @brief	Get system core high frequency oscillator frequency in Hz
+ *
+ * @return	Return oscillator frequency in Hz
+ */
+static inline uint32_t GetHighFreqOscFreq() { return g_McuOsc.CoreOsc.Freq; }
+
+/**
+ * @brief	Get system core high frequency oscillator accuracy in PPM
+ *
+ * @return	Return oscillator accuracy in PPM
+ */
+static inline uint32_t GetHighFreqOscAcc() { return g_McuOsc.CoreOsc.Accuracy; }
+
+/**
+ * @brief	Get system core high frequency oscillator descriptor
+ *
+ * @return	Return pointer to oscillator descriptor
+ */
+static inline const OscDesc_t *GetHighFreqOscDesc() { return &g_McuOsc.CoreOsc; }
 
 /**
  * @brief	Select core clock oscillator type

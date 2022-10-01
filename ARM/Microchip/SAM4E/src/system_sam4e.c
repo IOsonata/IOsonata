@@ -56,11 +56,10 @@ typedef struct {
 } OSC;
 #pragma pack(pop)
 
-__WEAK MCU_OSC g_McuOsc = {
-	OSC_TYPE_XTAL,
-	12000000,
-	OSC_TYPE_RC,
-	32000
+__WEAK McuOsc_t g_McuOsc = {
+	{ OSC_TYPE_XTAL, 12000000, 20},
+	{ OSC_TYPE_RC, 32000, 20 },
+	false
 };
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
@@ -74,26 +73,26 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 		return false;
 	}
 
-	g_McuOsc.HFType = ClkSrc;
+	g_McuOsc.CoreOsc.Type = ClkSrc;
 
 	if (ClkSrc == OSC_TYPE_RC)
 	{
 		if (Freq < 8000000)
 		{
-			g_McuOsc.HFFreq = 4000000;
+			g_McuOsc.CoreOsc.Freq = 4000000;
 		}
 		else if (Freq < 16000000)
 		{
-			g_McuOsc.HFFreq = 8000000;
+			g_McuOsc.CoreOsc.Freq = 8000000;
 		}
 		else
 		{
-			g_McuOsc.HFFreq = 12000000;
+			g_McuOsc.CoreOsc.Freq = 12000000;
 		}
 	}
 	else
 	{
-		g_McuOsc.HFFreq = Freq;
+		g_McuOsc.CoreOsc.Freq = Freq;
 	}
 
 	SystemInit();
@@ -105,13 +104,13 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	if (ClkSrc == OSC_TYPE_RC)
 	{
-		g_McuOsc.LFType = OSC_TYPE_RC;
-		g_McuOsc.LFFreq = 32000;
+		g_McuOsc.LowPwrOsc.Type = OSC_TYPE_RC;
+		g_McuOsc.LowPwrOsc.Freq = 32000;
 	}
 	else
 	{
-		g_McuOsc.LFType = OSC_TYPE_XTAL;
-		g_McuOsc.LFFreq = 32768;
+		g_McuOsc.LowPwrOsc.Type = OSC_TYPE_XTAL;
+		g_McuOsc.LowPwrOsc.Freq = 32768;
 	}
 
 	return true;
@@ -124,7 +123,7 @@ void SystemSetPLLA()
 
 	for (int i = 1; i < 256; i++)
 	{
-		uint32_t freq =  g_McuOsc.HFFreq / i;
+		uint32_t freq =  g_McuOsc.CoreOsc.Freq / i;
 		if ((PLLA_FREQ % freq) == 0)
 		{
 			div = i;
@@ -137,7 +136,7 @@ void SystemSetPLLA()
 							CKGR_PLLAR_DIVA(div) | CKGR_PLLAR_MULA(mul);
 	while ((SAM4E_PMC->PMC_SR & PMC_SR_LOCKA) == 0);
 
-	g_PllAFreq = (mul + 1) * g_McuOsc.HFFreq / div;
+	g_PllAFreq = (mul + 1) * g_McuOsc.CoreOsc.Freq / div;
 }
 
 void SystemInit()
@@ -149,11 +148,11 @@ void SystemInit()
 
 	SAM4E_EFC->EEFC_FMR = EEFC_FMR_FWS(5)|EEFC_FMR_CLOE;
 
-	if (g_McuOsc.HFType == OSC_TYPE_RC)
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
 	{
 		// Internal RC
 		mor = CKGR_MOR_KEY_PASSWD | CKGR_MOR_MOSCRCEN;
-		switch (g_McuOsc.HFFreq)
+		switch (g_McuOsc.CoreOsc.Freq)
 		{
 			case 8000000:
 				mor |= CKGR_MOR_MOSCRCF_8_MHz;
@@ -162,7 +161,7 @@ void SystemInit()
 				mor |= CKGR_MOR_MOSCRCF_12_MHz;
 				break;
 			default:
-				g_McuOsc.HFFreq = 4000000;
+				g_McuOsc.CoreOsc.Freq = 4000000;
 				break;
 		}
 	}
@@ -226,7 +225,7 @@ void SystemCoreClockUpdate( void )
 		case PMC_MCKR_CSS_MAIN_CLK:	// MAINCK
 			if (SAM4E_PMC->CKGR_MOR & CKGR_MOR_MOSCSEL)
 			{
-				clk = g_McuOsc.HFFreq;
+				clk = g_McuOsc.CoreOsc.Freq;
 			}
 			else
 			{
@@ -251,7 +250,7 @@ void SystemCoreClockUpdate( void )
 			break;
 
 		case PMC_MCKR_CSS_PLLA_CLK:	// PLLACK
-			clk = g_McuOsc.HFFreq;
+			clk = g_McuOsc.CoreOsc.Freq;
 			tmp = SAM4E_PMC->CKGR_PLLAR;
 			clk *= ((tmp & CKGR_PLLAR_MULA_Msk) >> CKGR_PLLAR_MULA_Pos) + 1U;
 			clk /= ((tmp & CKGR_PLLAR_DIVA_Msk) >> CKGR_PLLAR_DIVA_Pos);
