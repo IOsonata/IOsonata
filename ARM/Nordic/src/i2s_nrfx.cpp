@@ -198,7 +198,7 @@ static uint32_t nRFxI2SSetRate(DEVINTRF * const pDev, uint32_t Rate)
 		// Recalc real frequency
 		uint32_t f = s_MClkFreqTable[i].Freq / r;
 
-		uint d = (f > Rate) ? f - Rate : Rate - f;
+		uint32_t d = (f > Rate) ? f - Rate : Rate - f;
 		if (d < diff)
 		{
 			idx = i;

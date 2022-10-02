@@ -473,7 +473,7 @@
 		<link>
 			<name>include/coredev/system_core_clock.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/system_core_clock.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/system_stm32f0xx.h</name>

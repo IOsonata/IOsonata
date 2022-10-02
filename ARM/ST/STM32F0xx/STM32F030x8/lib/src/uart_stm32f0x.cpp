@@ -235,9 +235,10 @@ static uint32_t STM32F03xUARTGetRate(DEVINTRF * const pDev)
 static uint32_t STM32F03xUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
-	uint32_t fclk2 = s_FclkFreq << 1;
+	uint32_t fclkfreq = SystemCoreClockGet();
+	uint32_t fclk2 = fclkfreq << 1;
 	uint32_t rem8 = fclk2 % Rate;
-	uint32_t rem16 = s_FclkFreq % Rate;
+	uint32_t rem16 = fclkfreq % Rate;
 
 	if (rem8 < rem16)
 	{
@@ -253,8 +254,8 @@ static uint32_t STM32F03xUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 		// /16 better
 		s_Stm32f03xUartDev[dev->DevNo].pReg->CR1 &= ~USART_CR1_OVER8;
 
-		uint32_t div = (s_FclkFreq + (Rate >> 1)) / Rate;
-		dev->pUartDev->Rate = (s_FclkFreq + (div >> 1))/ div;
+		uint32_t div = (fclkfreq + (Rate >> 1)) / Rate;
+		dev->pUartDev->Rate = (fclkfreq + (div >> 1))/ div;
 		s_Stm32f03xUartDev[dev->DevNo].pReg->BRR = div;
 	}
 
@@ -522,7 +523,8 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	RCC->CFGR3 &= ~RCC_CFGR3_USART1SW_Msk;
 	RCC->CFGR3 |= RCC_CFGR3_USART1SW_SYSCLK;
 
-	s_FclkFreq = SYSTEM_CORE_CLOCK;
+	//s_FclkFreq = SYSTEM_CORE_CLOCK;
+	uint32_t fclkfreq = SystemCoreClockGet();
 
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
 	{

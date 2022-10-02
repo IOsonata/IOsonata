@@ -120,12 +120,6 @@ void BleAppAdvTimeoutHandler()
 
 int main()
 {
-	unsigned x, y, z;
-	int8_t a, b, c;
-
-	z = min(x, y);
-	c = min(a, b);
-
     BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
 
     BleAppRun();

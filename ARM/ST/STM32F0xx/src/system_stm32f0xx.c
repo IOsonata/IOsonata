@@ -56,6 +56,11 @@ uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 
 static uint32_t s_XtlFreq = 0;
 
+uint32_t SystemCoreClockGet()
+{
+	return SystemCoreClock;
+}
+
 void SystemCoreClockUpdate (void)
 {
 	uint32_t cfgr = RCC->CFGR;
