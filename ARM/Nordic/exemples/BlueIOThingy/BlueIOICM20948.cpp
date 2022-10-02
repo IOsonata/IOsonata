@@ -17,7 +17,8 @@
 #include "Devices/Drivers/Icm20948/Icm20948Setup.h"
 #include "Devices/SensorTypes.h"
 
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 #include "idelay.h"
 #include "imu/imu_invn_icm20948.h"

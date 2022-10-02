@@ -56,11 +56,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/base64.h</locationURI>
 		</link>
 		<link>
-			<name>include/ble_app.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app.h</locationURI>
-		</link>
-		<link>
 			<name>include/ble_app_central.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app_central.h</locationURI>
@@ -624,6 +619,11 @@
 			<name>include/bluetooth/ble_app.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_app.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/ble_app_nrf5.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app_nrf5.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/ble_appearance.h</name>

@@ -39,10 +39,9 @@ SOFTWARE.
 
 #include "istddef.h"
 
-#ifndef NRFXLIB_SDC
-#include "ble_app.h"
-#else
 #include "bluetooth/ble_app.h"
+#ifndef NRFXLIB_SDC
+#include "ble_app_nrf5.h"
 #endif
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"

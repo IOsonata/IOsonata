@@ -41,7 +41,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "app_scheduler.h"
 
 #include "istddef.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
@@ -173,7 +174,7 @@ const BLESRVC_CFG s_UartSrvcCfg = {
 
 BLESRVC g_UartBleSrvc;
 
-const BLEAPP_DEVDESC s_UartBleDevDesc = {
+const BleAppDevInfo_t s_UartBleDevDesc = {
 	MODEL_NAME,       		// Model name
 	MANUFACTURER_NAME,		// Manufacturer name
 	"123",					// Serial number string
@@ -181,7 +182,7 @@ const BLEAPP_DEVDESC s_UartBleDevDesc = {
 	"0.0",					// Hardware version string
 };
 
-const BLEAPP_CFG s_BleAppCfg = {
+const BleAppCfg_t s_BleAppCfg = {
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
@@ -401,7 +402,7 @@ int main()
 
     //g_Uart.Disable();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
 
     BleAppRun();
 

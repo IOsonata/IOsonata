@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ble_app.h
+@file	ble_app_nrf5.h
 
 @brief	Nordic SDK based BLE peripheral application creation helper
 
@@ -32,8 +32,8 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __BLE_APP_H__
-#define __BLE_APP_H__
+#ifndef __BLE_APP_NRF5_H__
+#define __BLE_APP_NRF5_H__
 
 #include <stdint.h>
 
@@ -64,14 +64,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #endif
 
-#define BLE_MAX_DATA_LEN				251
-
-typedef enum __BleApp_Role {
-	BLEAPP_ROLE_PERIPHERAL,			//!< BLE peripheral device
-	BLEAPP_ROLE_CENTRAL,			//!< BLE Central device
-	BLEAPP_ROLE_MIXED				//!< Mixed central/peripheral
-} BLEAPP_ROLE;
-
 typedef enum __BleApp_AdvMode {
 	BLEAPP_ADVMODE_IDLE,				//!< no connectable advertising is ongoing.
 	BLEAPP_ADVMODE_DIRECTED,			//!< Directed advertising attempts to connect to the most recently disconnected peer.
@@ -80,6 +72,15 @@ typedef enum __BleApp_AdvMode {
 	BLEAPP_ADVMODE_SLOW				//!< Slow advertising is similar to fast advertising. By default, it uses a longer
 									//!< advertising interval and time-out than fast advertising. However, these options are defined by the user.
 } BLEAPP_ADVMODE;
+
+#if 0
+#define BLE_MAX_DATA_LEN				251
+
+typedef enum __BleApp_Role {
+	BLEAPP_ROLE_PERIPHERAL,			//!< BLE peripheral device
+	BLEAPP_ROLE_CENTRAL,			//!< BLE Central device
+	BLEAPP_ROLE_MIXED				//!< Mixed central/peripheral
+} BLEAPP_ROLE;
 
 typedef enum __BleApp_Mode {
 	BLEAPP_MODE_LOOP,				//!< just main loop (event mode), No scheduler, no RTOS
@@ -172,9 +173,10 @@ typedef struct __BleApp_Scan_Cfg {
 typedef BleAppScanCfg_t	BLEAPP_SCAN_CFG;
 
 #pragma pack(pop)
+#endif
 
 #ifdef __cplusplus
-
+#if 0
 class BleApp {
 public:
 	virtual bool Init(BleAppCfg_t &CfgData);
@@ -189,11 +191,11 @@ public:
 
 private:
 };
-
+#endif
 extern "C" {
 #endif
 
-
+#if 0
 // ***
 // Require implementations per app
 //
@@ -209,7 +211,7 @@ void BleAppInitUserData();
  * 	This is called before initializing advertisement
  */
 void BleAppInitUserServices();
-
+#endif
 /**
  * @Brief	User peripheral app event handler
  */
@@ -222,7 +224,7 @@ void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt);
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
 
 //void BleDevServiceDiscovered(uint16_t ConnHdl, uint16_t Count, ble_gattc_service_t * const pServices);
-
+#if 0
 //*** Require implementation if app operating mode is BLEAPP_MODE_RTOS
 // This function should normal wait for RTOS to signal an event on sent by
 // Softdevice
@@ -249,19 +251,20 @@ void BleAppGapDeviceNameSet(const char* ppDeviceName);
  */
 bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen);
 void BleAppAdvTimeoutHandler();
-void BleAppAdvStart(BLEAPP_ADVMODE AdvMode);
 void BleAppAdvStop();
 void BleAppDisconnect();
 
 bool BleAppScanInit(BleAppScanCfg_t *pCfg);
 void BleAppScan();
 void BleAppScanStop();
+#endif
+void BleAppAdvStart(BLEAPP_ADVMODE AdvMode);
 //bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 uint32_t BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
-bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);
-bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DatLen);
-int8_t GetValidTxPower(int TxPwr);
-bool isConnected();
+//bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);
+//bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DatLen);
+//int8_t GetValidTxPower(int TxPwr);
+//bool isConnected();
 
 #ifdef __cplusplus
 }
@@ -269,5 +272,5 @@ bool isConnected();
 
 /** @} end group Bluetooth */
 
-#endif // __BLE_APP_H__
+#endif // __BLE_APP_NRF5_H__
 

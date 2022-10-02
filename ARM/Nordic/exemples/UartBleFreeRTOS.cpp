@@ -47,7 +47,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "timers.h"
 
 #include "istddef.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
@@ -140,7 +141,7 @@ const BLESRVC_CFG s_UartSrvcCfg = {
 
 BLESRVC g_UartBleSrvc;
 
-const BLEAPP_DEVDESC s_UartBleDevDesc {
+const BleAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           // Model name
 	MANUFACTURER_NAME,          // Manufacturer name
 	"",                     // Serial number string
@@ -150,7 +151,7 @@ const BLEAPP_DEVDESC s_UartBleDevDesc {
 
 uint32_t SD_FreeRTOS_Handler(void);
 
-const BLEAPP_CFG s_BleAppCfg = {
+const BleAppCfg_t s_BleAppCfg = {
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
@@ -329,6 +330,8 @@ uint32_t SD_FreeRTOS_Handler(void)
     	//taskYIELD();
         portYIELD_FROM_ISR(yield_req);
     }
+
+    return 0;
 }
 
 
@@ -414,7 +417,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
 
     FreeRTOSInit();
 

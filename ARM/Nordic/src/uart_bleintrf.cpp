@@ -36,7 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "app_util_platform.h"
 
 #include "coredev/uart.h"
-#include "bluetooth/blueio_blesrvc.h"
+//#include "bluetooth/blueio_blesrvc.h"
 #include "ble_intrf.h"
 #include "blueio_board.h"
 

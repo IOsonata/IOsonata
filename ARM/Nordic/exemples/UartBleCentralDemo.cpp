@@ -43,7 +43,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "nrf_ble_scan.h"
 
 #include "istddef.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "ble_dev.h"
@@ -120,7 +121,7 @@ void BleTxSchedHandler(void * p_event_data, uint16_t event_size);
 IOPinCfg_t s_Leds[] = LED_PIN_MAP;
 static int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
-const BLEAPP_CFG s_BleAppCfg = {
+const BleAppCfg_t s_BleAppCfg = {
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	1, 							// Number of central link
 	0, 							// Number of peripheral link
@@ -236,7 +237,7 @@ BleAppScanCfg_t s_bleScanInitCfg = {
 		.Duration = SCAN_WINDOW,
 		.Timeout = SCAN_TIMEOUT,
 		.BaseUid = BLUEIO_UUID_BASE,
-		.ServUid = s_UartBleSrvAdvUuid,
+		.ServUid = s_UartBleSrvAdvUuid.uuid,
 };
 
 BLEPERIPH_DEV g_ConnectedDev = {
@@ -560,7 +561,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
 
     //uint32_t ret = sd_ble_gap_scan_start(&g_ScanParams, &g_AdvScanReportData);
    // APP_ERROR_CHECK(ret);

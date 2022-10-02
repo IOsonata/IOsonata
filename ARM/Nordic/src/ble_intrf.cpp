@@ -40,7 +40,7 @@ Modified by          Date              Description
 #include "istddef.h"
 #include "cfifo.h"
 #include "ble_intrf.h"
-#include "ble_app.h"
+#include "ble_app_nrf5.h"
 #include "interrupt.h"
 
 #define NRFBLEINTRF_PACKET_SIZE		(NRF_BLE_MAX_MTU_SIZE - 3)// + sizeof(BLEINTRF_PKT) - 1)

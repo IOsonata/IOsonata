@@ -55,7 +55,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bsec_interface.h"
 
 #include "istddef.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
@@ -143,11 +144,14 @@ const static TimerCfg_t s_TimerCfg = {
 
 Timer g_Timer;
 
-static const ble_uuid_t  s_AdvUuids[] = {
-    {BLE_UUID_TCS_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
+//static const ble_uuid_t  s_AdvUuids[] = {
+//    {BLE_UUID_TCS_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
+//};
+uint16_t s_AdvUuids[] = {
+	BLE_UUID_TCS_SERVICE
 };
 
-const BLEAPP_CFG s_BleAppCfg = {
+const BleAppCfg_t s_BleAppCfg = {
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
@@ -678,7 +682,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
 
 	uint32_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 

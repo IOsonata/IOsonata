@@ -39,7 +39,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "app_scheduler.h"
 
 #include "istddef.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 #include "ble_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
@@ -136,7 +137,7 @@ static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BLESRVC_CHAR);
 
 uint8_t g_LWrBuffer[512];
 
-const BLESRVC_CFG s_UartSrvcCfg = {
+const BleSrvcCfg_t s_UartSrvcCfg = {
 	BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	{BLE_UART_UUID_BASE,},		// Base UUID
 	1,
@@ -149,7 +150,7 @@ const BLESRVC_CFG s_UartSrvcCfg = {
 
 BLESRVC g_UartBleSrvc;
 
-const BLEAPP_DEVDESC s_UartBleDevDesc {
+const BleAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           	// Model name
 	MANUFACTURER_NAME,      // Manufacturer name
 	"",                     // Serial number string
@@ -157,7 +158,7 @@ const BLEAPP_DEVDESC s_UartBleDevDesc {
 	"0.0",                  // Hardware version string
 };
 
-const BLEAPP_CFG s_BleAppCfg = {
+const BleAppCfg_t s_BleAppCfg = {
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
@@ -360,7 +361,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
 
     g_BleIntrf.Init(s_BleInrfCfg);
 

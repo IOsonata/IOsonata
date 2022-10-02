@@ -77,7 +77,8 @@ Modified by          Date              Description
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_dev.h"
 #include "ble_service.h"
 
@@ -1139,11 +1140,18 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     {
         if (pCfg->NbAdvUuid > 0 && pCfg->pAdvUuids != NULL)
         {
+        	ble_uuid_t uid[pCfg->NbAdvUuid];
+        	for (int i = 0; i < pCfg->NbAdvUuid; i++)
+        	{
+        		uid[i].uuid = pCfg->pAdvUuids[i];
+        		uid[i].type = BLE_UUID_TYPE_VENDOR_BEGIN;
+        	}
+
 			if (pCfg->pAdvManData != NULL)
 			{
 				initdata.advdata.p_manuf_specific_data = &g_BleAppData.ManufData;
 	        	initdata.srdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
-	        	initdata.srdata.uuids_complete.p_uuids  = (ble_uuid_t*)pCfg->pAdvUuids;
+	        	initdata.srdata.uuids_complete.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
 			}
 			else
 			{
@@ -1850,7 +1858,11 @@ bool BleAppScanInit(BleAppScanCfg_t *pCfg)
 
     uint8_t uidtype = BLE_UUID_TYPE_VENDOR_BEGIN;
 
-    ret_code_t err_code = sd_ble_uuid_vs_add(&pCfg->BaseUid, &uidtype);
+    ble_uuid128_t uid;
+
+    memcpy(uid.uuid128, pCfg->BaseUid, 16);
+
+    ret_code_t err_code = sd_ble_uuid_vs_add(&uid, &uidtype);
     APP_ERROR_CHECK(err_code);
 
     g_BleAppData.bScan = true;

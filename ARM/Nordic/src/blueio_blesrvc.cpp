@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble.h"
 #include "app_util_platform.h"
 
-#include "ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 #include "ble_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"

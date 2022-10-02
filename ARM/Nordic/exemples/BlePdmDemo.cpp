@@ -41,7 +41,8 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "convutil.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_intrf.h"
 #include "ble_service.h"
 #include "bluetooth/blueio_blesrvc.h"
@@ -459,7 +460,7 @@ int main()
 {
    HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
 
     g_BleIntrf.Init(s_BleInrfCfg);
 

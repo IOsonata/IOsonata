@@ -54,7 +54,8 @@ SOFTWARE.
 #include "app_scheduler.h"
 
 #include "istddef.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 
 #include "sensors/bsec_interface.h"
@@ -129,11 +130,10 @@ const static TIMER_CFG s_TimerCfg = {
 
 Timer g_Timer;
 
-const BLEAPP_CFG s_BleAppCfg = {
+const BleAppCfg_t s_BleAppCfg = {
 	BLEAPP_ROLE_PERIPHERAL,
 	0, 						// Number of central link
 	1, 						// Number of peripheral link
-//	BLEAPP_MODE_NOCONNECT,   // Connectionless beacon type
 	DEVICE_NAME,                 // Device name
 	ISYST_BLUETOOTH_ID,     // PnP Bluetooth/USB vendor id
 	1,                      // PnP Product ID
@@ -576,7 +576,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
 
 	//uint64_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 

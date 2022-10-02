@@ -8,7 +8,8 @@
 #include "app_scheduler.h"
 
 #include "istddef.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 #include "device_intrf.h"
 #include "coredev/spi.h"

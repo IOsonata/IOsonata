@@ -35,7 +35,8 @@ Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 #include "ble_advertising.h"
 
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 
 __WEAK void BleAppInitUserData()
 {
