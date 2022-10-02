@@ -38,6 +38,7 @@ SOFTWARE.
 #include <stdlib.h>
 
 #include "mpsl.h"
+#include "mpsl_coex.h"
 #include "sdc.h"
 #include "sdc_soc.h"
 #include "sdc_hci_cmd_le.h"
@@ -74,6 +75,7 @@ typedef struct _BleAppData {
 	bool bSecure;
 	bool bAdvertising;
 	bool bScan;
+	BLEAPP_COEXMODE CoexMode;
 } BleAppData_t;
 
 #pragma pack(pop)
@@ -700,6 +702,10 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 		sdc_support_le_conn_cte_rsp_central();
 	}
 
+	if (pBleAppCfg->CoexMode != BLEAPP_COEXMODE_NONE)
+	{
+
+	}
 	sdc_default_tx_power_set(pBleAppCfg->TxPower);
 
     uint32_t ram = 0;
@@ -833,6 +839,10 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 
     // Enable BLE stack.
 	res = sdc_enable(BleStackSdcCB, s_BleStackSdcMemPool);
+	if (res != 0)
+	{
+		return false;
+	}
 
     return true;
 }
@@ -888,6 +898,17 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 	NVIC_SetPriority(PendSV_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
 	NVIC_EnableIRQ(PendSV_IRQn);
 
+	g_BleAppData.CoexMode = pBleAppCfg->CoexMode;
+
+	if (pBleAppCfg->CoexMode == BLEAPP_COEXMODE_1W)
+	{
+		mpsl_coex_support_1wire_gpiote_if();
+	}
+	else if (pBleAppCfg->CoexMode == BLEAPP_COEXMODE_3W)
+	{
+		mpsl_coex_support_802152_3wire_gpiote_if();
+	}
+
 	g_BleAppData.bScan = false;
 	g_BleAppData.bAdvertising = false;
 
@@ -905,7 +926,38 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 
     g_BleAppData.Role = pBleAppCfg->Role;
 
-    BleAppStackInit(pBleAppCfg);
+    if (BleAppStackInit(pBleAppCfg) == false)
+    {
+    	return false;
+    }
+
+	uint8_t abuf[100];
+
+	memset(abuf, 0, 100);
+
+	sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *addr = (sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *)abuf;
+
+	res = sdc_hci_cmd_vs_zephyr_read_static_addresses(addr);
+	if (res == 0)
+	{
+		sdc_hci_cmd_vs_zephyr_write_bd_addr_t bdaddr;
+
+		memcpy(bdaddr.bd_addr, addr->addresses->address, 6);
+		sdc_hci_cmd_vs_zephyr_write_bd_addr(&bdaddr);
+	}
+
+	sdc_hci_cmd_le_read_max_data_length_return_t maxlen;
+
+	res = sdc_hci_cmd_le_read_max_data_length(&maxlen);
+
+	sdc_hci_cmd_le_write_suggested_default_data_length_t datalen = {
+		max(maxlen.supported_max_tx_octets, pBleAppCfg->MaxMtu),
+		maxlen.supported_max_tx_time
+	};
+
+	res = sdc_hci_cmd_le_write_suggested_default_data_length(&datalen);
+
+    BleAppInitUserData();
 
 #if 0
     g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
@@ -1022,6 +1074,10 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 
 void BleAppRun()
 {
+	while (1)
+	{
+		__WFE();
+	}
 #if 0
 	g_BleAppData.bAdvertising = false;
 
@@ -1060,6 +1116,7 @@ void BleAppRun()
 			sd_app_evt_wait();
 		}
     }
+
 #endif
 }
 
@@ -1194,6 +1251,16 @@ bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint1
 
     return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
 #endif
+}
+
+__WEAK void BleAppInitUserData()
+{
+
+}
+
+__WEAK void BleAppInitUserServices()
+{
+
 }
 
 

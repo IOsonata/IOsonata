@@ -562,13 +562,6 @@ typedef uint8_t	BleHciErr_t;
 
 #pragma pack(push, 1)
 
-typedef enum __Ble_Addr_Type {
-	BLE_ADDR_TYPE_PUBLIC = 0,		//!< Public device address
-	BLE_ADDR_TYPE_RAND = 1,			//!< Random device address
-	BLE_ADDR_TYPE_RESOLV = 2,		//!< Resolvable private
-	BLE_ADDR_TYPE_RESOLV_RAND = 3	//!< Resolvable private, if not exist use random
-} BLE_ADDR_TYPE;
-
 /// HCI Event packet header
 typedef struct __Ble_Hci_Evt_Packet_Header {
 	uint8_t Evt;
@@ -619,54 +612,11 @@ typedef struct __Ble_Hci_Data_Packet {
 	uint8_t Data[1];
 } BleHciDataPacke_t;
 
-/// BLE Advertising type
-typedef enum __Ble_Adv_Type {
-	BLEADV_TYPE_ADV_IND = 0,			//!< Connectable and scannable undirected advertising
-	BLEADV_TYPE_ADV_DIRECT_HIGH_IND = 1,//!< Connectable high duty cycle directed advertising
-	BLEADV_TYPE_ADV_SCAN_IND = 2,		//!< Scannable undirected advertising
-	BLEADV_TYPE_ADV_NONCONN_IND = 3,	//!< Non connectable undirected advertising
-	BLEADV_TYPE_ADV_DIRECT_LOW_IND = 4	//!< Connectable low duty cycle directed advertising
-} BLEADV_TYPE;
-
-// Orable advertisement channels
-#define	BLEADV_CHAN_37		1
-#define	BLEADV_CHAN_38 		2
-#define	BLEADV_CHAN_39 		4
-
-/// Convert msec time to BLE interval value of 0.625ms units
-#define BLEADV_MS_TO_INTERVAL(Val)		(((Val) * 1000UL + 500UL)/ 625UL)
-
-/// BLE Advertising parameters
-typedef struct __Ble_Adv_Param {
-	uint16_t IntervalMin;	//!< Advertising interval min. t = minval * 0.625ms
-	uint16_t IntervalMax;	//!< Advertising interval max. t = maxval * 0.625ms
-	BLEADV_TYPE Type:8;
-	BLE_ADDR_TYPE OwnAddrType:8;
-	BLE_ADDR_TYPE PeerAddrType:8;	//!< only BLEADV_ADDR_TYPE_PUBLIC or BLEADV_ADDR_TYPE_RAND
-	uint8_t PeerAddr[6];	//!< Peer address
-	uint8_t ChanMap;	//!< Advertising channel map
-	uint8_t FilterPolicy;	//!< Advertising filter policy
-} BleAdvParam_t;
-
-typedef struct __Ble_Adv_Data_Header {
-	uint8_t Len;			//!< Length of data
-	uint8_t Type;			//!< Data type
-} BleAdvDataHdr_t;
-
-typedef struct __Ble_Adv_Data {
-	BleAdvDataHdr_t Hdr;	//!< Advertisement data header
-	uint8_t Data[1];		//!< Variable data field
-} BleAdvData_t;
-
 #pragma pack(pop)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
-	return (uint16_t)((Val * 1000UL + 500UL) / 625UL);
-};
 
 static inline uint16_t BleConnMsToInterval(float Val) {
 	return (uint16_t)(((uint32_t)(Val * 1000.0) + 500UL) / 625UL);

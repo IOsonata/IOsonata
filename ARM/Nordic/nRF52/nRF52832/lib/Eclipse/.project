@@ -616,6 +616,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/ble_adv.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_adv.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/ble_app.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_app.h</locationURI>
@@ -1074,11 +1079,6 @@
 			<name>src/bluetooth/ble_dev.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/ble_dev.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/ble_hcisdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_hcisdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/ble_intrf.cpp</name>

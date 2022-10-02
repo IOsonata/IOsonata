@@ -37,7 +37,7 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#include "bluetooth/ble_hcidef.h"
+#include "bluetooth/ble_adv.h"
 #include "bluetooth/bleadv_mandata.h"
 
 /** @addtogroup Bluetooth
@@ -49,8 +49,14 @@ SOFTWARE.
 typedef enum __BleApp_Role {
 	BLEAPP_ROLE_PERIPHERAL,			//!< BLE peripheral device
 	BLEAPP_ROLE_CENTRAL,			//!< BLE Central device
-	BLEAPP_ROLE_MIXED					//!< Mixed central/peripheral
+	BLEAPP_ROLE_MIXED				//!< Mixed central/peripheral
 } BLEAPP_ROLE;
+
+typedef enum __BleApp_Coex_Mode {
+	BLEAPP_COEXMODE_NONE,			//!< No Co-existance support
+	BLEAPP_COEXMODE_1W,				//!< 1 wire Co-existance mode
+	BLEAPP_COEXMODE_3W				//!< 3 wire Co-existance mode
+} BLEAPP_COEXMODE;
 
 // Service connection security types
 typedef enum __BleApp_SecurityType {
@@ -90,7 +96,6 @@ typedef struct __BleApp_Config {
 	uint16_t VendorID;				//!< PnP Bluetooth/USB vendor id. iBeacon mode, this is Major value
 	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
 	uint16_t ProductVer;			//!< PnP product version
-//	bool bEnDevInfoService;			//!< Enable device information service (DIS)
 	const BleAppDevInfo_t *pDevDesc;//!< Pointer device info descriptor
 	BLEADV_TYPE AdvType;			//!< Advertisement type
 	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise
@@ -112,7 +117,8 @@ typedef struct __BleApp_Config {
 	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
 	int TxPower;					//!< Tx power in dBm, -20 to +4 dBm TX power, configurable in 4 dB steps
 	uint32_t (*SDEvtHandler)(void); //!< Require for BLEAPP_MODE_RTOS
-	int	MaxMtu;						//!< Max MTU size or 0 for default
+	uint16_t MaxMtu;						//!< Max MTU size or 0 for default
+	BLEAPP_COEXMODE CoexMode;		//!< Enable support for CoEx
 	int PeriphDevCnt;				//!< Max number of peripheral connection
 //	BLEPERIPH_DEV *pPeriphDev;		//!< Connected peripheral data table
 } BleAppCfg_t;
@@ -203,7 +209,7 @@ void BleAppGapDeviceNameSet(const char* ppDeviceName);
  */
 bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen);
 void BleAppAdvTimeoutHandler();
-//void BleAppAdvStart(BLEAPP_ADVMODE AdvMode);
+void BleAppAdvStart();
 void BleAppAdvStop();
 void BleAppDisconnect();
 

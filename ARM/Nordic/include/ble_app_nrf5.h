@@ -258,7 +258,7 @@ bool BleAppScanInit(BleAppScanCfg_t *pCfg);
 void BleAppScan();
 void BleAppScanStop();
 #endif
-void BleAppAdvStart(BLEAPP_ADVMODE AdvMode);
+//void BleAppAdvStart(BLEAPP_ADVMODE AdvMode);
 //bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 uint32_t BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 //bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);

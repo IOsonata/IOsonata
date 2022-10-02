@@ -90,6 +90,7 @@ const BleAppCfg_t s_BleAppCfg = {
 	.TxPower = 0,		// Tx power
 	.SDEvtHandler = NULL,	// RTOS Softdevice handler
 	.MaxMtu = 0,						//!< Max MTU size or 0 for default
+
 };
 
 
@@ -98,7 +99,7 @@ void BleAppAdvTimeoutHandler()
 	g_AdvCnt++;
 
 	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
-	BleAppAdvStart(BLEAPP_ADVMODE_FAST);
+	BleAppAdvStart();
 }
 
 int main()

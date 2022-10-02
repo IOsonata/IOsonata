@@ -1042,7 +1042,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 	if (g_BleAppData.bAdvertising == true)
 	{
 		g_BleAppData.bAdvertising = false;
-		BleAppAdvStart(BLEAPP_ADVMODE_FAST);
+		BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
 	}
 
 #if 0
@@ -1055,7 +1055,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
     return g_BleAppData.bAdvertising;
 }
 
-void BleAppAdvStart(BLEAPP_ADVMODE AdvMode)
+void BleAppAdvStart()//BLEAPP_ADVMODE AdvMode)
 {
 	if (g_BleAppData.bAdvertising == true || g_BleAppData.ConnHdl != BLE_CONN_HANDLE_INVALID)
 		return;
@@ -1070,7 +1070,7 @@ void BleAppAdvStart(BLEAPP_ADVMODE AdvMode)
 	}
 	else
 	{
-		uint32_t err_code = ble_advertising_start(&g_AdvInstance, (ble_adv_mode_t)AdvMode);
+		uint32_t err_code = ble_advertising_start(&g_AdvInstance, (ble_adv_mode_t)BLEAPP_ADVMODE_FAST);//AdvMode);
 		if (err_code != NRF_SUCCESS)
 		{
 			 APP_ERROR_CHECK(err_code);
@@ -1734,7 +1734,7 @@ void BleAppRun()
 
 	if ((g_BleAppData.AppRole & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_CENTRAL)) != BLEAPP_ROLE_CENTRAL)
 	{
-		BleAppAdvStart(BLEAPP_ADVMODE_FAST);
+		BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
 	}
 
     while (1)
@@ -1779,7 +1779,7 @@ void BleTimerAppRun()
 
 	if ((g_BleAppData.AppRole & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_CENTRAL)) != BLEAPP_ROLE_CENTRAL)
 	{
-		BleAppAdvStart(BLEAPP_ADVMODE_FAST);
+		BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
 	}
 
     while (1)
