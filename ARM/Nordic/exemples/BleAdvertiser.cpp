@@ -98,7 +98,7 @@ void BleAppAdvTimeoutHandler()
 	g_AdvCnt++;
 
 	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
-	//BleAppAdvStart(BLEAPP_ADVMODE_FAST);
+	BleAppAdvStart(BLEAPP_ADVMODE_FAST);
 }
 
 int main()
