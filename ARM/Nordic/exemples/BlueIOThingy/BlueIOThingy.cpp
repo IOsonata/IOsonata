@@ -148,22 +148,14 @@ static const ble_uuid_t  s_AdvUuids[] = {
 };
 
 const BLEAPP_CFG s_BleAppCfg = {
-#if 0
-#ifdef IMM_NRF51822
-		.ClkCfg = { NRF_CLOCK_LF_SRC_RC, 1, 1, 0},
-#else
-		.ClkCfg = { NRF_CLOCK_LF_SRC_XTAL, 0, 0, NRF_CLOCK_LF_ACCURACY_20_PPM},
-#endif
-#endif
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
-	//.AppMode = BLEAPP_MODE_APPSCHED,	// Use scheduler
 	.pDevName = DEVICE_NAME,			// Device name
 	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
-	.bEnDevInfoService = false,			// Enable device information service (DIS)
+//	.bEnDevInfoService = false,			// Enable device information service (DIS)
 	.pDevDesc = NULL,
 	.AdvType = BLEADV_TYPE_ADV_IND,
 	.pAdvManData = g_AdvDataBuff,			// Manufacture specific data to advertise
@@ -686,7 +678,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
+    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
 
 	uint32_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 

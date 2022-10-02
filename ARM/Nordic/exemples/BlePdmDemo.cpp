@@ -179,13 +179,6 @@ const BleAppDevInfo_t s_BlePdmDevDesc = {
 };
 
 const BleAppCfg_t s_BleAppCfg = {
-#if 0
-#ifdef IMM_NRF51822
-		.ClkCfg = { NRF_CLOCK_LF_SRC_RC, 1, 1, 0},
-#else
-		.ClkCfg = { NRF_CLOCK_LF_SRC_XTAL, 0, 0, NRF_CLOCK_LF_ACCURACY_20_PPM},
-#endif
-#endif
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
@@ -194,7 +187,7 @@ const BleAppCfg_t s_BleAppCfg = {
 	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
-	.bEnDevInfoService = true,			// Enable device information service (DIS)
+//	.bEnDevInfoService = true,			// Enable device information service (DIS)
 	.pDevDesc = &s_BlePdmDevDesc,
 	.AdvType = BLEADV_TYPE_ADV_IND,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
@@ -466,7 +459,7 @@ int main()
 {
    HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
+    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
 
     g_BleIntrf.Init(s_BleInrfCfg);
 

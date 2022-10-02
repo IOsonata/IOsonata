@@ -84,6 +84,8 @@ Modified by          Date              Description
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 
+#define BLEAPP_CONN_CFG_TAG            1     /**< A tag identifying the SoftDevice BLE configuration. */
+
 #define APP_FEATURE_NOT_SUPPORTED       BLE_GATT_STATUS_ATTERR_APP_BEGIN + 2        /**< Reply when unsupported features are requested. */
 
 #define BLEAPP_OBSERVER_PRIO           1                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
@@ -1392,7 +1394,8 @@ bool BleAppConnectable(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 
 	BleAppInitUserServices();
 
-	if (pBleAppCfg->bEnDevInfoService)
+	//if (pBleAppCfg->bEnDevInfoService)
+	if (pBleAppCfg->pDevDesc != NULL)
 		BleAppDisInit(pBleAppCfg);
 
 	return true;
@@ -1558,7 +1561,7 @@ uint32_t GetLFAccuracy(uint32_t AccPpm)
  *
  * @details This function initializes the SoftDevice and the BLE event interrupt.
  */
-bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
+bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
 
@@ -1661,7 +1664,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 //    if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
 	if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
     {
-    	BleAppConnectable(pBleAppCfg, bEraseBond);
+    	BleAppConnectable(pBleAppCfg, false);//bEraseBond);
     }
 
     if (pBleAppCfg->CentLinkCount > 0)
@@ -1675,7 +1678,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 
     BleAppInitUserData();
 
-    BleAppPeerMngrInit(pBleAppCfg->SecType, pBleAppCfg->SecExchg, bEraseBond);
+    BleAppPeerMngrInit(pBleAppCfg->SecType, pBleAppCfg->SecExchg, false);//bEraseBond);
 
 	if (pBleAppCfg->SecType != BLEAPP_SECTYPE_NONE)
 	{

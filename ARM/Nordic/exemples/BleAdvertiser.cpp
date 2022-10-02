@@ -36,10 +36,14 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "app_util.h"
 
 #include "istddef.h"
+
+#ifndef NRFXLIB_SDC
 #include "ble_app.h"
+#else
+#include "bluetooth/ble_app.h"
+#endif
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 
@@ -56,71 +60,51 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 uint32_t g_AdvCnt = 0;
 
-const BLEAPP_CFG s_BleAppCfg = {
-#if 0
-	{
-		// Clock config nrf_clock_lf_cfg_t
-#ifdef IMM_NRF51822
-		NRF_CLOCK_LF_SRC_RC,	// Source RC
-		1, 1, 0
-#else
-		NRF_CLOCK_LF_SRC_XTAL,	// Source 32KHz XTAL
-		//NRF_CLOCK_LF_SRC_RC,
-#ifdef NRF51
-		0, 0, NRF_CLOCK_LF_XTAL_ACCURACY_20_PPM
-#else
-		0, 0, NRF_CLOCK_LF_ACCURACY_20_PPM
-#endif
-#endif
-	},
-#endif
+const BleAppCfg_t s_BleAppCfg = {
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0,		// Number of central link
 	.PeriLinkCount = 1,		// Number of peripheral link
-	//BLEAPP_MODE_NOCONNECT,	// Connectionless beacon type
-	DEVICE_NAME,			// Device name
-	ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
-	1,                      // PnP Product ID
-	0,						// Pnp prod version
-	false,					// Enable device information service (DIS)
-	NULL,					// Pointer device info descriptor
-	BLEADV_TYPE_ADV_NONCONN_IND,
-	(uint8_t*)&g_AdvCnt,   	// Manufacture specific data to advertise
-	sizeof(g_AdvCnt),      	// Length of manufacture specific data
-	NULL,
-	0,
-	BLEAPP_SECTYPE_NONE,    // Secure connection type
-	BLEAPP_SECEXCHG_NONE,   // Security key exchange
-	NULL,      				// Service uuids to advertise
-	0, 						// Total number of uuids
-	APP_ADV_INTERVAL_MSEC,       	// Advertising interval in msec
-	APP_ADV_TIMEOUT_MSEC,	// Advertising timeout in sec
-	0,							// Slow advertising interval, if > 0, fallback to
+	.pDevName = DEVICE_NAME,			// Device name
+	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
+	.ProductId = 1,                      // PnP Product ID
+	.ProductVer = 0,						// Pnp prod version
+//	.bEnDevInfoService = false,					// Enable device information service (DIS)
+	.pDevDesc = NULL,					// Pointer device info descriptor
+	.AdvType = BLEADV_TYPE_ADV_NONCONN_IND,
+	.pAdvManData  = (uint8_t*)&g_AdvCnt,   	// Manufacture specific data to advertise
+	.AdvManDataLen = sizeof(g_AdvCnt),      	// Length of manufacture specific data
+	.pSrManData = NULL,
+	.SrManDataLen = 0,
+	.SecType = BLEAPP_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BLEAPP_SECEXCHG_NONE,   // Security key exchange
+	.pAdvUuids = NULL,      				// Service uuids to advertise
+	.NbAdvUuid = 0, 						// Total number of uuids
+	.AdvInterval = APP_ADV_INTERVAL_MSEC,       	// Advertising interval in msec
+	.AdvTimeout = APP_ADV_TIMEOUT_MSEC,	// Advertising timeout in sec
+	.AdvSlowInterval = 0,							// Slow advertising interval, if > 0, fallback to
 								// slow interval on adv timeout and advertise until connected
-	0,		// Min. connection interval
-	0,		// Max. connection interval
-	-1,		// Led port nuber
-	-1,		// Led pin number
-	0,
-	0,		// Tx power
-	NULL	// RTOS Softdevice handler
+	.ConnIntervalMin = 0,		// Min. connection interval
+	.ConnIntervalMax = 0,		// Max. connection interval
+	.ConnLedPort = -1,		// Led port nuber
+	.ConnLedPin = -1,		// Led pin number
+	.ConnLedActLevel = 0,
+	.TxPower = 0,		// Tx power
+	.SDEvtHandler = NULL,	// RTOS Softdevice handler
+	.MaxMtu = 0,						//!< Max MTU size or 0 for default
 };
 
-void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
-{
-}
 
 void BleAppAdvTimeoutHandler()
 {
 	g_AdvCnt++;
 
 	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
-	BleAppAdvStart(BLEAPP_ADVMODE_FAST);
+	//BleAppAdvStart(BLEAPP_ADVMODE_FAST);
 }
 
 int main()
 {
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
 
     BleAppRun();
 

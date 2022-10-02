@@ -130,18 +130,6 @@ const static TIMER_CFG s_TimerCfg = {
 Timer g_Timer;
 
 const BLEAPP_CFG s_BleAppCfg = {
-#if 0
-	{ // Clock config nrf_clock_lf_cfg_t
-#ifdef IMM_NRF51822
-		NRF_CLOCK_LF_SRC_RC,	// Source RC
-		1, 1, 0
-#else
-		NRF_CLOCK_LF_SRC_XTAL,	// Source 32KHz XTAL
-		0, 0, NRF_CLOCK_LF_ACCURACY_20_PPM
-#endif
-
-	},
-#endif
 	BLEAPP_ROLE_PERIPHERAL,
 	0, 						// Number of central link
 	1, 						// Number of peripheral link
@@ -150,7 +138,7 @@ const BLEAPP_CFG s_BleAppCfg = {
 	ISYST_BLUETOOTH_ID,     // PnP Bluetooth/USB vendor id
 	1,                      // PnP Product ID
 	0,						// Pnp prod version
-	false,					// Enable device information service (DIS)
+//	false,					// Enable device information service (DIS)
 	NULL,
 	BLEADV_TYPE_ADV_NONCONN_IND,
 	(uint8_t*)&g_AdvDataBuff,   // Manufacture specific data to advertise
@@ -588,7 +576,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
+    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
 
 	//uint64_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 

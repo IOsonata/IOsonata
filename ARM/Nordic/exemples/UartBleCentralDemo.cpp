@@ -121,27 +121,14 @@ IOPinCfg_t s_Leds[] = LED_PIN_MAP;
 static int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
 const BLEAPP_CFG s_BleAppCfg = {
-#if 0
-	{ // Clock config nrf_clock_lf_cfg_t
-#ifdef IMM_NRF51822
-		NRF_CLOCK_LF_SRC_RC,	// Source RC
-		1, 1, 0
-#else
-		NRF_CLOCK_LF_SRC_XTAL,	// Source 32KHz XTAL
-		0, 0, NRF_CLOCK_LF_ACCURACY_20_PPM
-#endif
-
-	},
-#endif
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	1, 							// Number of central link
 	0, 							// Number of peripheral link
-//	BLEAPP_MODE_APPSCHED,   	// Use scheduler
 	DEVICE_NAME,                // Device name
 	ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
 	1,                      	// PnP Product ID
 	0,							// Pnp prod version
-	false,						// Enable device information service (DIS)
+//	false,						// Enable device information service (DIS)
 	NULL,//&s_UartBleDevDesc,
 	.AdvType = BLEADV_TYPE_ADV_IND,
 	NULL,//g_ManData,              // Manufacture specific data to advertise
@@ -573,7 +560,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
+    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg);//, true);
 
     //uint32_t ret = sd_ble_gap_scan_start(&g_ScanParams, &g_AdvScanReportData);
    // APP_ERROR_CHECK(ret);
