@@ -105,7 +105,7 @@ void BleAppAdvTimeoutHandler()
 int main()
 {
     BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
-    BleAppAdvStart();
+    //BleAppAdvStart();
     BleAppRun();
 
 	return 0;
