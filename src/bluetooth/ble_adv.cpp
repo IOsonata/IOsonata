@@ -37,22 +37,8 @@ SOFTWARE.
 #include "istddef.h"
 #include "bluetooth/ble_adv.h"
 
-typedef struct __Adv_Data {
-	int Len;
-	uint8_t *pData;
-} AdvData_t;
 
-alignas(4) static uint8_t s_BleAdvBuff[32];
-alignas(4) static uint8_t s_BleScanRespBuff[32];
-alignas(4) static uint8_t s_BleExtAdvBuff[256];
-
-static AdvData_t s_BleAdvData[] = {
-	{ 0, s_BleAdvBuff},
-	{ 0, s_BleScanRespBuff},
-	{ 0, s_BleExtAdvBuff},
-};
-
-static int FindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
+static int BleAdvFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 {
 	int retval = -1;
 	BleAdvDataHdr_t *hdr = (BleAdvDataHdr_t*)pData;
@@ -74,57 +60,69 @@ static int FindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 }
 
 /**
- * @brief
+ * @brief	Add advertisement data into the adv packet
  *
- * @param Type
- * @param pData
- * @param Len
- * @return
+ * @param 	BleAdvPacket_t 	: Pointer to Adv packet to add data into
+ * @param 	Type 				: GAP data type of the data
+ * @param	pData				: Pointer to data to add
+ * @param	Len				: Length in bytes of the data
+ *
+ * @return	true - success
  */
-int BleAdvSetAdvData(uint8_t Type, uint8_t *pData, int Len)
+bool BleAdvAddData(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
 {
-	int retval = 0;
-
-	int idx = FindAdvTag(Type, s_BleAdvData[0].pData, s_BleAdvData[0].Len);
+	int idx = BleAdvFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
 
 	if (idx >= 0)
 	{
-		BleAdvData_t *p = (BleAdvData_t*)&s_BleAdvData[0].pData[idx];
-		int l = Len;
+		// Tag already exists, remove it first
+		BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[idx];
+		int l = pAdvPkt->Len - p->Hdr.Len - 1;
 
-		if (p->Hdr.Len > (Len + 1))
+		if (Len > (pAdvPkt->MaxLen - l))
 		{
-			memmove(&s_BleAdvData[0].pData[idx + 2 + Len], &s_BleAdvData[0].pData[idx + 1 + p->Hdr.Len], 30 - p->Hdr.Len);
+			return false;
 		}
-		else if (p->Hdr.Len < (Len + 1))
-		{
-			l = min(31 - idx - 2 - Len, Len + 2);
-			memmove(&s_BleAdvData[0].pData[idx + 2 + l], &s_BleAdvData[0].pData[idx + 1 + p->Hdr.Len], 30 - p->Hdr.Len);
 
-		}
-		memcpy(p->Data, pData, l);
+		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + p->Hdr.Len + 1], l - idx);
+		pAdvPkt->Len = l;
 	}
-	else
+
+	if (Len > (pAdvPkt->MaxLen - pAdvPkt->Len))
 	{
-		int l = min(31 - s_BleAdvData[0].Len, Len + 2);
-		BleAdvData_t *p = (BleAdvData_t*)&s_BleAdvData[0].pData[s_BleAdvData[0].Len];
-		p->Hdr.Len = Len + 1;
-		p->Hdr.Type = Type;
-		memcpy(p->Data, pData, l);
-		s_BleAdvData[0].Len += l;
+		return false;
 	}
 
-	return retval;
+	int l = min(pAdvPkt->MaxLen - pAdvPkt->Len, Len + 2);
+	BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[pAdvPkt->Len];
+	p->Hdr.Len = Len + 1;
+	p->Hdr.Type = Type;
+	memcpy(p->Data, pData, l);
+	pAdvPkt->Len += l;
+
+	return true;
 }
 
-int BleAdvGetAdvData(uint8_t *pBuff, int Len)
+/**
+ * @brief	Remove advertisement data from the adv packet
+ *
+ * @param 	pAdvPkt	: Pointer to Adv packet to add data into
+ * @param 	Type 	: GAP data type of the data
+ *
+ * @return	none
+ */
+void BleAdvRemoveData(BleAdvPacket_t *pAdvPkt, uint8_t Type)
 {
-	int l = min(Len, s_BleAdvData[0].Len);
+	if (pAdvPkt->Len <= 0)
+		return;
 
-	if (l > 0)
+	int idx = BleAdvFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
+
+	if (idx >= 0)
 	{
-		memcpy(pBuff, s_BleAdvData[0].pData, l);
-	}
+		BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[idx];
+		int l = p->Hdr.Len + 1;
 
-	return l;
+		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + l], pAdvPkt->Len - l);
+	}
 }

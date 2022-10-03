@@ -111,6 +111,9 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 
 alignas(4) static uint8_t s_BleStackSdcMemPool[6000];
 
+alignas(4) static uint8_t s_BleAppAdvBuff[32];
+static BleAdvPacket_t s_BleAppAdvPkt = { sizeof(s_BleAppAdvBuff), 0, s_BleAppAdvBuff};
+
 static void BleStackMpslAssert(const char * const file, const uint32_t line)
 {
 	printf("MPSL Fault: %s, %d\n", file, line);
@@ -334,7 +337,7 @@ void BleAppAdvStop()
 
 /**@brief Overloadable function for initializing the Advertising functionality.
  */
-__WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
+__WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
 	uint8_t flags = 0;
 
@@ -350,7 +353,10 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 		}
 	}
 
-	BleAdvSetAdvData(GAP_DATA_TYPE_FLAGS, &flags, 1);
+	if (BleAdvAddData(&s_BleAppAdvPkt, GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
+	{
+		return false;
+	}
 
     if (pCfg->pDevName != NULL)
     {
@@ -362,7 +368,11 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     		// Short name
     		type = GAP_DATA_TYPE_SHORT_LOCAL_NAME;
     	}
-		BleAdvSetAdvData(type, (uint8_t*)pCfg->pDevName, l);
+
+    	if (BleAdvAddData(&s_BleAppAdvPkt, type, (uint8_t*)pCfg->pDevName, l) == false)
+    	{
+    		return false;
+    	}
     }
 
 	if (pCfg->pAdvManData != NULL)
@@ -381,15 +391,23 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 		.adv_filter_policy = 0
 	};
 
-	int res = sdc_hci_cmd_le_set_adv_params(&advparam);
+	int sdc_res = sdc_hci_cmd_le_set_adv_params(&advparam);
 
-	printf("sdc_hci_cmd_le_set_adv_params res %x\n", res);
+	if (sdc_res != 0)
+	{
+		return false;
+	}
 
 	sdc_hci_cmd_le_set_adv_data_t advdata;
-	advdata.adv_data_length = BleAdvGetAdvData(advdata.adv_data, 31);
+	advdata.adv_data_length = s_BleAppAdvPkt.Len;
 
-	res = sdc_hci_cmd_le_set_adv_data(&advdata);
-	printf("sdc_hci_cmd_le_set_adv_data res %x\n", res);
+	memcpy(advdata.adv_data, s_BleAppAdvPkt.pData, s_BleAppAdvPkt.Len);
+
+	sdc_res = sdc_hci_cmd_le_set_adv_data(&advdata);
+	if (sdc_res != 0)
+	{
+		return false;
+	}
 
 #if 0
     uint32_t               err_code;

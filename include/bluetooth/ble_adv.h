@@ -76,8 +76,8 @@ typedef struct __Ble_Adv_Param {
 } BleAdvParam_t;
 
 typedef struct __Ble_Adv_Data_Header {
-	uint8_t Len;					//!< Length of data
-	uint8_t Type;					//!< Data type
+	uint8_t Len;					//!< Length of data including the Type byte
+	uint8_t Type;					//!< GAP Data type
 } BleAdvDataHdr_t;
 
 typedef struct __Ble_Adv_Data {
@@ -89,6 +89,12 @@ typedef struct __Ble_Adv_Data_Flags {
 	BleAdvDataHdr_t Hdr;			//!< Advertisement data header
 	uint8_t Flags;					//!< GAP Flags
 } BleAdvDataFlags_t;
+
+typedef struct __Ble_Adv_Packet {
+	int MaxLen;						//!< Max adv data length
+	int Len;						//!< Advertisement data length
+	uint8_t * const pData;			//!< Pointer to advertisement data
+} BleAdvPacket_t;
 
 #pragma pack(pop)
 
@@ -102,15 +108,27 @@ static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
 };
 
 /**
- * @brief
+ * @brief	Add advertisement data into the adv packet
  *
- * @param Type
- * @param pData
- * @param Len
- * @return
+ * @param 	pAdvPkt	: Pointer to Adv packet to add data into
+ * @param 	Type 	: GAP data type of the data
+ * @param	pData	: Pointer to data to add
+ * @param	Len		: Length in bytes of the data
+ *
+ * @return	true - success
  */
-int BleAdvSetAdvData(uint8_t Type, uint8_t *pData, int Len);
-int BleAdvGetAdvData(uint8_t *pBuff, int Len);
+bool BleAdvAddData(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Len);
+
+/**
+ * @brief	Remove advertisement data from the adv packet
+ *
+ * @param 	pAdvPkt	: Pointer to Adv packet to add data into
+ * @param 	Type 	: GAP data type of the data
+ *
+ * @return	none
+ */
+void BleAdvRemoveData(BleAdvPacket_t *pAdvPkt, uint8_t Type);
+
 
 #ifdef __cplusplus
 }
