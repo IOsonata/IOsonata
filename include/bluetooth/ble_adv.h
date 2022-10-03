@@ -85,6 +85,11 @@ typedef struct __Ble_Adv_Data {
 	uint8_t Data[1];				//!< Variable data field
 } BleAdvData_t;
 
+typedef struct __Ble_Adv_Data_Flags {
+	BleAdvDataHdr_t Hdr;			//!< Advertisement data header
+	uint8_t Flags;					//!< GAP Flags
+} BleAdvDataFlags_t;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -95,6 +100,17 @@ extern "C" {
 static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
 	return (uint16_t)((Val * 1000UL + 500UL) / 625UL);
 };
+
+/**
+ * @brief
+ *
+ * @param Type
+ * @param pData
+ * @param Len
+ * @return
+ */
+int BleAdvSetAdvData(uint8_t Type, uint8_t *pData, int Len);
+int BleAdvGetAdvData(uint8_t *pBuff, int Len);
 
 #ifdef __cplusplus
 }

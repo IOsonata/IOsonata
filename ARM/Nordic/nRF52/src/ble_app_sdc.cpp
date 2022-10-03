@@ -313,10 +313,14 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
     return g_BleAppData.bAdvertising;*/
 }
 
-void BleAppAdvStart(BLEADV_TYPE AdvType)
+void BleAppAdvStart()
 {
 	if (g_BleAppData.bAdvertising == true)// || g_BleAppData.ConnHdl != BLE_CONN_HANDLE_INVALID)
 		return;
+
+	sdc_hci_cmd_le_set_adv_enable_t x = { 1 };
+
+	int res = sdc_hci_cmd_le_set_adv_enable(&x);
 
 	g_BleAppData.bAdvertising = true;
 
@@ -332,6 +336,61 @@ void BleAppAdvStop()
  */
 __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
+	uint8_t flags = 0;
+
+	if (pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
+	{
+		if (pCfg->AdvTimeout != 0)
+		{
+			flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
+		}
+		else
+		{
+			flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
+		}
+	}
+
+	BleAdvSetAdvData(GAP_DATA_TYPE_FLAGS, &flags, 1);
+
+    if (pCfg->pDevName != NULL)
+    {
+    	size_t l = strlen(pCfg->pDevName);
+    	uint8_t type = GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
+
+    	if (l < 14)
+    	{
+    		// Short name
+    		type = GAP_DATA_TYPE_SHORT_LOCAL_NAME;
+    	}
+		BleAdvSetAdvData(type, (uint8_t*)pCfg->pDevName, l);
+    }
+
+	if (pCfg->pAdvManData != NULL)
+	{
+
+	}
+
+	sdc_hci_cmd_le_set_adv_params_t advparam = {
+		.adv_interval_min = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval),
+		.adv_interval_max = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval + 10),
+		.adv_type = BLEADV_TYPE_ADV_NONCONN_IND,//ADV_DIRECT_IND,
+		.own_address_type = BLE_ADDR_TYPE_PUBLIC,
+		.peer_address_type = 0,
+		.peer_address = {0,},
+		.adv_channel_map = 7,
+		.adv_filter_policy = 0
+	};
+
+	int res = sdc_hci_cmd_le_set_adv_params(&advparam);
+
+	printf("sdc_hci_cmd_le_set_adv_params res %x\n", res);
+
+	sdc_hci_cmd_le_set_adv_data_t advdata;
+	advdata.adv_data_length = BleAdvGetAdvData(advdata.adv_data, 31);
+
+	res = sdc_hci_cmd_le_set_adv_data(&advdata);
+	printf("sdc_hci_cmd_le_set_adv_data res %x\n", res);
+
 #if 0
     uint32_t               err_code;
 //    ble_advdata_manuf_data_t mdata;
@@ -662,6 +721,8 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 	// Initialize Nordic Softdevice controller
 	int32_t res = sdc_init(BleStackSdcAssert);
 
+	sdc_hci_cmd_cb_reset();
+
 	sdc_rand_source_t rand_functions = {
 		.rand_prio_low_get = BleStackRandPrioLowGet,
 		.rand_prio_high_get = BleStackRandPrioHighGet,
@@ -675,7 +736,7 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 	sdc_support_le_coded_phy();
 	sdc_support_le_power_control();
 
-	if (pBleAppCfg->Role != BLEAPP_ROLE_CENTRAL)
+	if (pBleAppCfg->Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
 		res = sdc_support_adv();
@@ -689,7 +750,7 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 		sdc_support_le_conn_cte_rsp_peripheral();
 //		sdc_coex_adv_mode_configure(true);
 	}
-	if (pBleAppCfg->Role != BLEAPP_ROLE_PERIPHERAL)
+	if (pBleAppCfg->Role & (BLEAPP_ROLE_CENTRAL | BLEAPP_ROLE_OBSERVER))
 	{
 		// Config for central role
 		sdc_support_scan();
@@ -730,8 +791,9 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 		return false;
 	}
 
-	cfg.buffer_cfg.rx_packet_size = pBleAppCfg->MaxMtu;//MAX_RX_PACKET_SIZE;
-	cfg.buffer_cfg.tx_packet_size = pBleAppCfg->MaxMtu;//MAX_TX_PACKET_SIZE;
+	int l = pBleAppCfg->MaxMtu == 0 ? BLEAPP_DEFAULT_MAX_DATA_LEN : pBleAppCfg->MaxMtu;
+	cfg.buffer_cfg.rx_packet_size = l;//MAX_RX_PACKET_SIZE;
+	cfg.buffer_cfg.tx_packet_size = l;//MAX_TX_PACKET_SIZE;
 	cfg.buffer_cfg.rx_packet_count = 4;//CONFIG_BT_CTLR_SDC_RX_PACKET_COUNT;
 	cfg.buffer_cfg.tx_packet_count = 4;//CONFIG_BT_CTLR_SDC_TX_PACKET_COUNT;
 
@@ -958,6 +1020,11 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 	res = sdc_hci_cmd_le_write_suggested_default_data_length(&datalen);
 
     BleAppInitUserData();
+
+    if (pBleAppCfg->Role & (BLEAPP_ROLE_BROADCASTER | BLEAPP_ROLE_PERIPHERAL))
+    {
+    	BleAppAdvInit(pBleAppCfg);
+    }
 
 #if 0
     g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
@@ -1261,6 +1328,33 @@ __WEAK void BleAppInitUserData()
 __WEAK void BleAppInitUserServices()
 {
 
+}
+
+extern "C" {
+void PendSV_Handler(void)
+{
+	mpsl_low_priority_process();
+}
+
+void RADIO_IRQHandler(void)
+{
+	MPSL_IRQ_RADIO_Handler();
+}
+
+void POWER_CLOCK_IRQHandler()
+{
+	MPSL_IRQ_CLOCK_Handler();
+}
+
+void RTC0_IRQHandler(void)
+{
+	MPSL_IRQ_RTC0_Handler();
+}
+
+void TIMER0_IRQHandler(void)
+{
+	MPSL_IRQ_TIMER0_Handler();
+}
 }
 
 

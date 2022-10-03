@@ -859,7 +859,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
     on_ble_evt(p_ble_evt);
-    if ((role == BLE_GAP_ROLE_CENTRAL) || g_BleAppData.AppRole & BLEAPP_ROLE_CENTRAL)
+    if ((role == BLE_GAP_ROLE_CENTRAL) || g_BleAppData.AppRole & (BLEAPP_ROLE_CENTRAL | BLEAPP_ROLE_OBSERVER))
     {
 #if 0
     	switch (p_ble_evt->header.evt_id)
@@ -1777,7 +1777,7 @@ void BleTimerAppRun()
 {
 	g_BleAppData.bAdvertising = false;
 
-	if ((g_BleAppData.AppRole & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_CENTRAL)) != BLEAPP_ROLE_CENTRAL)
+	if (g_BleAppData.AppRole & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
 	{
 		BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
 	}

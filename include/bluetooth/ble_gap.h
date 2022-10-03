@@ -3,6 +3,12 @@
 
 @brief	Bluetooth Generic Access Profile (GAP) definitions
 
+Core_v5.3 - 2.1.1.7
+The Generic Access Profile (GAP) block represents the base functionality common
+to all Bluetooth devices such as modes and access procedures used by the
+transports, protocols and application profiles. GAP services include device
+discovery, connection modes, security, authentication, association models and
+service discovery.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 29, 2022
@@ -92,6 +98,17 @@ SOFTWARE.
 #define GAP_DATA_TYPE_3D_INFO_DATA					0x3D	//!< 3D synchronization profile
 #define GAP_DATA_TYPE_MANUF_SPECIFIC_DATA			0xFF	//!< Manufacture specific data
 
+/// Flags
+#define GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE	(1<<0)	//!< Flag LE limited discoverable
+#define GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE	(1<<1)	//!< Flag LE general discoverable
+#define GAP_DATA_TYPE_FLAGS_NO_BREDR				(1<<2)	//!< Flag BR/EDR not supported
+#define GAP_DATA_TYPE_FLAGS_LE_BREDR_SUPPORT		(1<<3)	//!< Flag simultaneous support LE & BR/EDR
+
+/// Orable GAP roles
+#define	GAP_ROLE_BROADCASTER				(1<<0)	//!< Optimize for transmitter, no connection support. Use advertising to broadcast data
+#define	GAP_ROLE_OBSERVER					(1<<1)	//!< Optimized for receiver, no connection support.
+#define	GAP_ROLE_PERIPHERAL					(1<<2)	//!< Optimized for device that supports a single connection
+#define	GAP_ROLE_CENTRAL					(1<<3)	//!< The initiator for all connection with devices. Support multiple connections.
 
 /** @} */
 

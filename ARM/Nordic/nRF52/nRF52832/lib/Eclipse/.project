@@ -1061,6 +1061,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/ble_adv.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/ble_adv.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/ble_app_handler.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/ble_app_handler.c</locationURI>

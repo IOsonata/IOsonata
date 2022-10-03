@@ -60,7 +60,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 uint32_t g_AdvCnt = 0;
 
 const BleAppCfg_t s_BleAppCfg = {
-	.Role = BLEAPP_ROLE_PERIPHERAL,
+	.Role = BLEAPP_ROLE_BROADCASTER,
 	.CentLinkCount = 0,		// Number of central link
 	.PeriLinkCount = 1,		// Number of peripheral link
 	.pDevName = DEVICE_NAME,			// Device name
@@ -105,7 +105,7 @@ void BleAppAdvTimeoutHandler()
 int main()
 {
     BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
-
+    BleAppAdvStart();
     BleAppRun();
 
 	return 0;

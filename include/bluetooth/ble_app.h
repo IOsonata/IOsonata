@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include <stdint.h>
 
+#include "bluetooth/ble_gap.h"
 #include "bluetooth/ble_adv.h"
 #include "bluetooth/bleadv_mandata.h"
 
@@ -44,12 +45,14 @@ SOFTWARE.
   * @{
   */
 
-#define BLE_MAX_DATA_LEN				251
+#define BLEAPP_DEFAULT_MAX_DATA_LEN				251
 
 typedef enum __BleApp_Role {
-	BLEAPP_ROLE_PERIPHERAL,			//!< BLE peripheral device
-	BLEAPP_ROLE_CENTRAL,			//!< BLE Central device
-	BLEAPP_ROLE_MIXED				//!< Mixed central/peripheral
+	BLEAPP_ROLE_BROADCASTER	= GAP_ROLE_BROADCASTER,		//!< non connectable Advertising only
+	BLEAPP_ROLE_OBSERVER	= GAP_ROLE_OBSERVER,		//!< non connectable central
+	BLEAPP_ROLE_PERIPHERAL	= GAP_ROLE_PERIPHERAL,		//!< BLE connectable peripheral device
+	BLEAPP_ROLE_CENTRAL		= GAP_ROLE_CENTRAL,			//!< BLE Central device
+	BLEAPP_ROLE_MIXED		= GAP_ROLE_PERIPHERAL | GAP_ROLE_CENTRAL	//!< Mixed central/peripheral
 } BLEAPP_ROLE;
 
 typedef enum __BleApp_Coex_Mode {
