@@ -197,21 +197,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="CONFIG_APP_IN_CORE"/>
 								</option>
@@ -239,21 +224,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.873910935" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
@@ -593,21 +563,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.939129152" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -635,21 +590,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1669041115" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
@@ -991,21 +931,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1297780892" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -1032,21 +957,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1234665393" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../src&quot;"/>
@@ -1387,21 +1297,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.323743927" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -1429,21 +1324,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.490227085" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../src&quot;"/>
@@ -1785,21 +1665,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1463974527" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -1827,21 +1692,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1442755199" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../src&quot;"/>
@@ -2183,21 +2033,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.531129352" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -2226,21 +2061,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1970778211" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;../src&quot;"/>
@@ -2580,21 +2400,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1317707550" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -2622,21 +2427,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1722536341" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
@@ -2977,21 +2767,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.584574059" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -3020,21 +2795,6 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1606596560" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
@@ -3265,21 +3025,6 @@
 									<listOptionValue builtIn="false" value="NRF52832_XXAA"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
 									<listOptionValue builtIn="false" value="MBEDTLS_NO_PLATFORM_ENTROPY"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 									<listOptionValue builtIn="false" value="CONFIG_APP_IN_CORE"/>
 								</option>
@@ -3301,21 +3046,6 @@
 									<listOptionValue builtIn="false" value="NRF52832_XXAA"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
 									<listOptionValue builtIn="false" value="MBEDTLS_NO_PLATFORM_ENTROPY"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1277008086" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
@@ -3451,21 +3181,6 @@
 									<listOptionValue builtIn="false" value="NRF52832_XXAA"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
 									<listOptionValue builtIn="false" value="MBEDTLS_NO_PLATFORM_ENTROPY"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1691716798" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -3487,21 +3202,6 @@
 									<listOptionValue builtIn="false" value="NRF52832_XXAA"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=256"/>
 									<listOptionValue builtIn="false" value="MBEDTLS_NO_PLATFORM_ENTROPY"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_12"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_15"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_58"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_55"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_54"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_31"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_30"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_51"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_36"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_53"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_20"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_64"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_62"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_63"/>
-									<listOptionValue builtIn="false" value="NRF52_PAN_74"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.768794009" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">

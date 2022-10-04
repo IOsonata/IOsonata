@@ -129,7 +129,7 @@ static void BleStackMpslAssert(const char * const file, const uint32_t line)
 
 static void BleStackSdcAssert(const char * file, const uint32_t line)
 {
-	printf("Softdevice Controller Fault: %s, %d\n", file, line);
+	printf("SDC Fault: %s, %d\n", file, line);
 	while(1);
 }
 
@@ -433,7 +433,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		.adv_handle = 0,
 		.adv_event_properties = 0,
 		.primary_adv_interval_min[3] = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval),
-		.primary_adv_interval_max[3] = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval + 10),
+		.primary_adv_interval_max[3] = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval + 50),
 		.primary_adv_channel_map = 7,
 		.own_address_type = BLE_ADDR_TYPE_PUBLIC,
 		.peer_address_type = 0,
@@ -453,7 +453,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 	sdc_hci_cmd_le_set_adv_params_t advparam = {
 		.adv_interval_min = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval),
-		.adv_interval_max = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval + 10),
+		.adv_interval_max = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval + 50),
 		.adv_type = BLEADV_TYPE_ADV_NONCONN_IND,//ADV_DIRECT_IND,
 		.own_address_type = BLE_ADDR_TYPE_PUBLIC,
 		.peer_address_type = 0,
