@@ -38,6 +38,7 @@ SOFTWARE.
 
 
 #include "istddef.h"
+#include "coredev/timer.h"
 
 #include "bluetooth/ble_app.h"
 #ifndef NRFXLIB_SDC
@@ -46,6 +47,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 
+// Uncomment this to set custom board oscillator
 //#define MCUOSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_RC, }, false}
 
 #ifdef MCUOSC
@@ -54,7 +56,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 #define DEVICE_NAME                     "Advertiser"
 
-#define APP_ADV_INTERVAL_MSEC       100//MSEC_TO_UNITS(100, UNIT_0_625_MS)
+#define APP_ADV_INTERVAL_MSEC       50//MSEC_TO_UNITS(100, UNIT_0_625_MS)
 #define APP_ADV_TIMEOUT_MSEC      	1000//MSEC_TO_UNITS(1000, UNIT_10_MS)
 
 uint32_t g_AdvCnt = 0;
@@ -93,7 +95,31 @@ const BleAppCfg_t s_BleAppCfg = {
 
 };
 
+static const TimerCfg_t s_TimerCfg = {
+	.DevNo = 2,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,
+	.IntPrio = 6,
+};
 
+#ifdef NRFXLIB_SDC
+
+Timer g_Timer;
+
+void TimerTrigEvtHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext)
+{
+	g_AdvCnt++;
+
+	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
+}
+
+void BleAppInitUserData()
+{
+	g_Timer.Init(s_TimerCfg);
+	g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, TimerTrigEvtHandler);
+}
+
+#else
 void BleAppAdvTimeoutHandler()
 {
 	g_AdvCnt++;
@@ -101,6 +127,7 @@ void BleAppAdvTimeoutHandler()
 	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
 	BleAppAdvStart();
 }
+#endif
 
 int main()
 {
