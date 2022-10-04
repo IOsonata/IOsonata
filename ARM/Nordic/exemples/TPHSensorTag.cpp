@@ -50,13 +50,13 @@ SOFTWARE.
 
 #include <string.h>
 
-#include "app_util_platform.h"
-#include "app_scheduler.h"
-
 #include "istddef.h"
 #include "bluetooth/ble_app.h"
+#ifndef NRFXLIB_SDC
+#include "app_util_platform.h"
+#include "app_scheduler.h"
 #include "ble_app_nrf5.h"
-#include "ble_service.h"
+#endif
 
 #include "sensors/bsec_interface.h"
 
@@ -64,7 +64,6 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
-#include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "sensors/tph_bme280.h"
@@ -95,13 +94,13 @@ SOFTWARE.
 // NOTE :	RTC timer 0 used by radio, RTC Timer 1 used by SDK
 //			Only RTC timer 2 is usable with Softdevice for nRF52, not avail on nRF51
 //
-//#define USE_TIMER_UPDATE
+#define USE_TIMER_UPDATE
 //#endif
 
 #define APP_ADV_INTERVAL_MSEC		1000 //                MSEC_TO_UNITS(1000, UNIT_0_625_MS)             /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 #ifdef USE_TIMER_UPDATE
 // Use timer to update date
-#define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
+#define APP_ADV_TIMEOUT_MSEC      0                                         /**< The advertising timeout (in units of seconds). */
 #else
 // Use advertisement timeout to update data
 #define APP_ADV_TIMEOUT_MSEC      	120000 //MSEC_TO_UNITS(120000, UNIT_10_MS)           /**< The advertising timeout (in units of seconds). */
@@ -124,7 +123,7 @@ const static TIMER_CFG s_TimerCfg = {
     .DevNo = 2,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
-	.IntPrio = APP_IRQ_PRIORITY_LOW,
+	.IntPrio = 6,
 	.EvtHandler = TimerHandler
 };
 
@@ -222,7 +221,7 @@ static const I2CCfg_t s_I2cCfg = {
 	{0,},		// Slave addresses
 	true,
 	false,		// Use interrupt
-	APP_IRQ_PRIORITY_LOW,			// Interrupt prio
+	6,			// Interrupt prio
 	NULL		// Event callback
 };
 
@@ -466,6 +465,7 @@ void AppTimerHandler(Timer *pTimer, int TrigNo, void *pContext)
 	}
 }
 
+/*
 void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
 {
 #ifndef USE_TIMER_UPDATE
@@ -477,7 +477,7 @@ void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
     }
 #endif
 }
-
+*/
 void BleAppAdvTimeoutHandler()
 {
 	ReadPTHData();
