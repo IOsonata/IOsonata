@@ -131,7 +131,7 @@ const static TIMER_CFG s_TimerCfg = {
 Timer g_Timer;
 
 const BleAppCfg_t s_BleAppCfg = {
-	BLEAPP_ROLE_PERIPHERAL,
+	BLEAPP_ROLE_BROADCASTER,
 	0, 						// Number of central link
 	1, 						// Number of peripheral link
 	DEVICE_NAME,                 // Device name
