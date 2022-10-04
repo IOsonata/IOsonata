@@ -156,28 +156,28 @@ static void TimerIRQHandler(int DevNo)
 
 extern "C" {
 
-void TIMER0_IRQHandler()
+__WEAK void TIMER0_IRQHandler()
 {
 	TimerIRQHandler(0);
 }
 
-void TIMER1_IRQHandler()
+__WEAK void TIMER1_IRQHandler()
 {
 	TimerIRQHandler(1);
 }
 
-void TIMER2_IRQHandler()
+__WEAK void TIMER2_IRQHandler()
 {
 	TimerIRQHandler(2);
 }
 
 #if TIMER_NRFX_HF_MAX > 3
-void TIMER3_IRQHandler()
+__WEAK void TIMER3_IRQHandler()
 {
 	TimerIRQHandler(3);
 }
 
-void TIMER4_IRQHandler()
+__WEAK void TIMER4_IRQHandler()
 {
 	TimerIRQHandler(4);
 }
