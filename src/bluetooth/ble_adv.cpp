@@ -51,7 +51,7 @@ static int BleAdvFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 			retval = idx;
 			break;
 		}
-		idx += hdr->Len;
+		idx += hdr->Len + 1;
 		Len -= hdr->Len + 1;
 		hdr = (BleAdvDataHdr_t*)&pData[idx];
 	}

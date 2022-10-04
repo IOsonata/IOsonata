@@ -63,12 +63,13 @@ typedef struct _BleAppData {
 	int ConnLedPort;
 	int ConnLedPin;
 	uint8_t ConnLedActLevel;
+	uint16_t VendorId;
 	int PeriphDevCnt;
 //	BLEAPP_PERIPH *pPeriphDev;
 	uint32_t (*SDEvtHandler)(void) ;
-	uint8_t AdvData[31];
-	uint8_t SrData[31];
-	uint8_t ExtAdvData[255];
+	//uint8_t AdvData[31];
+	//uint8_t SrData[31];
+	//uint8_t ExtAdvData[255];
     //ble_advdata_manuf_data_t ManufData;
     //ble_advdata_manuf_data_t SRManufData;
 	int MaxMtu;
@@ -266,7 +267,26 @@ static void BleAppGapParamInit(const BleAppCfg_t *pBleAppCfg)
 }
 
 bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
-{/*
+{
+	if (pAdvData)
+	{
+		int l = AdvLen + 2;
+		uint8_t buff[l];
+		*(uint16_t *)buff = g_BleAppData.VendorId;
+		memcpy(&buff[2], pAdvData, AdvLen);
+
+    	if (BleAdvAddData(&s_BleAppAdvAdvPkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
+    	{
+
+    	}
+    	sdc_hci_cmd_le_set_adv_data_t advdata;
+    	advdata.adv_data_length = s_BleAppAdvAdvPkt.Len;
+
+    	memcpy(advdata.adv_data, s_BleAppAdvAdvPkt.pData, s_BleAppAdvAdvPkt.Len);
+
+    	int res = sdc_hci_cmd_le_set_adv_data(&advdata);
+	}
+	/*
 	uint32_t err;
 
 	if (pAdvData && AdvLen > 0)
@@ -408,6 +428,28 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     	}
 
 	}
+#if 0
+	sdc_hci_cmd_le_set_ext_adv_params_t exadvparm = {
+		.adv_handle = 0,
+		.adv_event_properties = 0,
+		.primary_adv_interval_min[3] = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval),
+		.primary_adv_interval_max[3] = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval + 10),
+		.primary_adv_channel_map = 7,
+		.own_address_type = BLE_ADDR_TYPE_PUBLIC,
+		.peer_address_type = 0,
+		.peer_address[6] = {0,},
+		.adv_filter_policy = 0,
+		.adv_tx_power = 0,
+		.primary_adv_phy = 0,
+		.secondary_adv_max_skip = 0,
+		.secondary_adv_phy = 0,
+		.adv_sid = 0,
+		.scan_request_notification_enable = 0,
+	};
+
+	sdc_hci_cmd_le_set_ext_adv_params_return_t rexadvparm;
+	sdc_hci_cmd_le_set_ext_adv_params(&exadvparm, &rexadvparm);
+#endif
 
 	sdc_hci_cmd_le_set_adv_params_t advparam = {
 		.adv_interval_min = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval),
@@ -870,7 +912,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 
 	g_BleAppData.bScan = false;
 	g_BleAppData.bAdvertising = false;
-
+	g_BleAppData.VendorId = pBleAppCfg->VendorID;
 	g_BleAppData.ConnLedPort = pBleAppCfg->ConnLedPort;
 	g_BleAppData.ConnLedPin = pBleAppCfg->ConnLedPin;
 	g_BleAppData.ConnLedActLevel = pBleAppCfg->ConnLedActLevel;
