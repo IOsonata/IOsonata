@@ -93,12 +93,12 @@ bool BleAdvAddData(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Le
 		return false;
 	}
 
-	int l = min(pAdvPkt->MaxLen - pAdvPkt->Len, Len + 2);
+	//int l = min(pAdvPkt->MaxLen - pAdvPkt->Len, Len + 2);
 	BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[pAdvPkt->Len];
 	p->Hdr.Len = Len + 1;
 	p->Hdr.Type = Type;
-	memcpy(p->Data, pData, l);
-	pAdvPkt->Len += l;
+	memcpy(p->Data, pData, Len);
+	pAdvPkt->Len += Len + 2;
 
 	return true;
 }
@@ -123,6 +123,7 @@ void BleAdvRemoveData(BleAdvPacket_t *pAdvPkt, uint8_t Type)
 		BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[idx];
 		int l = p->Hdr.Len + 1;
 
-		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + l], pAdvPkt->Len - l);
+		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + l], l);
+		pAdvPkt->Len -= l;
 	}
 }
