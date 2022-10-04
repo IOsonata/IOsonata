@@ -122,7 +122,7 @@ IOPinCfg_t s_Leds[] = LED_PIN_MAP;
 static int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
 const BleAppCfg_t s_BleAppCfg = {
-	.Role = BLEAPP_ROLE_PERIPHERAL,
+	.Role = BLEAPP_ROLE_CENTRAL,
 	1, 							// Number of central link
 	0, 							// Number of peripheral link
 	DEVICE_NAME,                // Device name
@@ -131,7 +131,7 @@ const BleAppCfg_t s_BleAppCfg = {
 	0,							// Pnp prod version
 //	false,						// Enable device information service (DIS)
 	NULL,//&s_UartBleDevDesc,
-	.AdvType = BLEADV_TYPE_ADV_IND,
+	//.AdvType = BLEADV_TYPE_ADV_IND,
 	NULL,//g_ManData,              // Manufacture specific data to advertise
 	0,//sizeof(g_ManData),      // Length of manufacture specific data
 	NULL,

@@ -100,7 +100,7 @@ typedef struct __BleApp_Config {
 	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
 	uint16_t ProductVer;			//!< PnP product version
 	const BleAppDevInfo_t *pDevDesc;//!< Pointer device info descriptor
-	BLEADV_TYPE AdvType;			//!< Advertisement type
+	//BLEADV_TYPE AdvType;			//!< Advertisement type
 	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise
 	int AdvManDataLen;				//!< Length of manufacture specific data
 	const uint8_t *pSrManData;		//!< Addition Manufacture specific data to advertise in scan response

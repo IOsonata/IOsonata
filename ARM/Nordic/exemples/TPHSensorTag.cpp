@@ -140,7 +140,7 @@ const BleAppCfg_t s_BleAppCfg = {
 	0,						// Pnp prod version
 //	false,					// Enable device information service (DIS)
 	NULL,
-	BLEADV_TYPE_ADV_NONCONN_IND,
+	//BLEADV_TYPE_ADV_NONCONN_IND,
 	(uint8_t*)&g_AdvDataBuff,   // Manufacture specific data to advertise
 	sizeof(g_AdvDataBuff),      // Length of manufacture specific data
 	NULL,
@@ -481,7 +481,7 @@ void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
 void BleAppAdvTimeoutHandler()
 {
 	ReadPTHData();
-	BleAppAdvStart(BLEAPP_ADVMODE_FAST);
+	BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
 }
 
 void HardwareInit()

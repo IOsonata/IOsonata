@@ -43,7 +43,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "nrf_ble_scan.h"
 
 #include "istddef.h"
-#include "ble_app.h"
+#include "bluetooth/ble_app.h"
+#include "ble_app_nrf5.h"
 #include "ble_service.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "ble_dev.h"
@@ -85,25 +86,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
 
-const BLEAPP_CFG s_BleAppCfg = {
-	{ // Clock config nrf_clock_lf_cfg_t
-#ifdef IMM_NRF51822
-		NRF_CLOCK_LF_SRC_RC,	// Source RC
-		1, 1, 0
-#else
-		NRF_CLOCK_LF_SRC_XTAL,	// Source 32KHz XTAL
-		0, 0, NRF_CLOCK_LF_ACCURACY_20_PPM
-#endif
-
-	},
+const BleAppCfg_t s_BleAppCfg = {
+	BLEAPP_ROLE_CENTRAL,
 	1, 							// Number of central link
 	0, 							// Number of peripheral link
-	BLEAPP_MODE_APPSCHED,   	// Use scheduler
+//	BLEAPP_MODE_APPSCHED,   	// Use scheduler
 	DEVICE_NAME,                // Device name
 	ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
 	1,                      	// PnP Product ID
 	0,							// Pnp prod version
-	false,						// Enable device information service (DIS)
+//	false,						// Enable device information service (DIS)
 	NULL,//&s_UartBleDevDesc,
 	NULL,//g_ManData,              // Manufacture specific data to advertise
 	0,//sizeof(g_ManData),      // Length of manufacture specific data
@@ -211,7 +203,7 @@ BleAppScanCfg_t s_bleScanInitCfg = {
 		.Duration = SCAN_WINDOW,
 		.Timeout = SCAN_TIMEOUT,
 		.BaseUid = BLUEIO_UUID_BASE,
-		.ServUid = s_UartBleSrvAdvUuid,
+		.ServUid = BLUEIO_UUID_UART_SERVICE,//s_UartBleSrvAdvUuid,
 };
 
 BLEPERIPH_DEV g_ConnectedDev = {
@@ -445,7 +437,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
 
     //uint32_t ret = sd_ble_gap_scan_start(&g_ScanParams, &g_AdvScanReportData);
    // APP_ERROR_CHECK(ret);

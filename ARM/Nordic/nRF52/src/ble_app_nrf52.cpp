@@ -115,8 +115,8 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
 // ORable application role
-#define BLEAPP_ROLE_PERIPHERAL			1
-#define BLEAPP_ROLE_CENTRAL				2
+//#define BLEAPP_ROLE_PERIPHERAL			1
+//#define BLEAPP_ROLE_CENTRAL				2
 
 // These are to be passed as parameters
 #define SCAN_INTERVAL           MSEC_TO_UNITS(100, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
@@ -126,9 +126,9 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 #pragma pack(push, 4)
 
 typedef struct _BleAppData {
-	BLEADV_TYPE AdvType;
+	BLEAPP_ROLE Role;
 //	BLEAPP_MODE AppMode;
-	int AppRole;
+	//int AppRole;
 	uint16_t ConnHdl;	// BLE connection handle
 	int ConnLedPort;
 	int ConnLedPin;
@@ -166,7 +166,7 @@ BLE_ADVERTISING_DEF(g_AdvInstance);             /**< Advertising module instance
 NRF_BLE_GATT_DEF(s_Gatt);
 
 BLEAPP_DATA g_BleAppData = {
-	BLEADV_TYPE_ADV_IND, 0, BLE_CONN_HANDLE_INVALID, -1, -1,
+	BLEAPP_ROLE_PERIPHERAL, BLE_CONN_HANDLE_INVALID, -1, -1,
 };
 
 pm_peer_id_t g_PeerMngrIdToDelete = PM_PEER_ID_INVALID;
@@ -372,8 +372,9 @@ static void BleAppGapParamInit(const BleAppCfg_t *pBleAppCfg)
 
     memset(&gap_conn_params, 0, sizeof(gap_conn_params));
 
-   // if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
-    if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
+//    if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
+//    if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
+    if (pBleAppCfg->Role & BLEAPP_ROLE_PERIPHERAL)
     {
 		gap_conn_params.min_conn_interval = MSEC_TO_UNITS(pBleAppCfg->ConnIntervalMin, UNIT_1_25_MS);// MIN_CONN_INTERVAL;
 		gap_conn_params.max_conn_interval = MSEC_TO_UNITS(pBleAppCfg->ConnIntervalMax, UNIT_1_25_MS);//MAX_CONN_INTERVAL;
@@ -859,7 +860,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
     on_ble_evt(p_ble_evt);
-    if ((role == BLE_GAP_ROLE_CENTRAL) || g_BleAppData.AppRole & (BLEAPP_ROLE_CENTRAL | BLEAPP_ROLE_OBSERVER))
+    if ((role == BLE_GAP_ROLE_CENTRAL) || g_BleAppData.Role & (BLEAPP_ROLE_CENTRAL | BLEAPP_ROLE_OBSERVER))
     {
 #if 0
     	switch (p_ble_evt->header.evt_id)
@@ -880,7 +881,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 #endif
         BleCentralEvtUserHandler((ble_evt_t *)p_ble_evt);
     }
-    if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
+    if (g_BleAppData.Role & BLEAPP_ROLE_PERIPHERAL)
     {
         BlePeriphEvtUserHandler((ble_evt_t *)p_ble_evt);
     }
@@ -1063,7 +1064,8 @@ void BleAppAdvStart()//BLEAPP_ADVMODE AdvMode)
 	g_BleAppData.bAdvertising = true;
 
 //	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
-	if (g_BleAppData.AdvType == BLEADV_TYPE_ADV_NONCONN_IND)
+	//if (g_BleAppData.AdvType == BLEADV_TYPE_ADV_NONCONN_IND)
+	if (g_BleAppData.Role & BLEAPP_ROLE_BROADCASTER)
 	{
 		uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, BLEAPP_CONN_CFG_TAG);
         APP_ERROR_CHECK(err_code);
@@ -1202,7 +1204,8 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     }
 
 //    if (pCfg->AppMode == BLEAPP_MODE_NOCONNECT || pCfg->AppMode == BLEAPP_MODE_IBEACON)
-    if (pCfg->AdvType == BLEADV_TYPE_ADV_NONCONN_IND)
+   // if (pCfg->AdvType == BLEADV_TYPE_ADV_NONCONN_IND)
+    if (pCfg->Role & BLEAPP_ROLE_BROADCASTER)
     {
 //        err_code = ble_advdata_encode(&initdata.advdata, g_AdvData.adv_data.p_data, &g_AdvData.adv_data.len);
         g_AdvInstance.adv_data.adv_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
@@ -1344,7 +1347,7 @@ void BleAppGattInit(void)
     err_code = nrf_ble_gatt_init(&s_Gatt, BleGattEvtHandler);
     APP_ERROR_CHECK(err_code);
 
-    if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
+    if (g_BleAppData.Role & BLEAPP_ROLE_PERIPHERAL)
     {
     	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, g_BleAppData.MaxMtu);
     	APP_ERROR_CHECK(err_code);
@@ -1366,7 +1369,7 @@ void BleAppGattInit(void)
       	APP_ERROR_CHECK(err_code);
     }
 
-    if (g_BleAppData.AppRole & BLEAPP_ROLE_CENTRAL)
+    if (g_BleAppData.Role & BLEAPP_ROLE_CENTRAL)
     {
     	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, g_BleAppData.MaxMtu);
     	APP_ERROR_CHECK(err_code);
@@ -1397,7 +1400,8 @@ bool BleAppConnectable(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 	//gatt_init();
 
 //	if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
-    if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
+   // if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
+	if (pBleAppCfg->Role & BLEAPP_ROLE_PERIPHERAL)
 		conn_params_init();
 
 	BleAppInitUserServices();
@@ -1589,7 +1593,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
     }
 
     //g_BleAppData.AppMode = pBleAppCfg->AppMode;
-	g_BleAppData.AdvType = pBleAppCfg->AdvType;
+	//g_BleAppData.AdvType = pBleAppCfg->AdvType;
     g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
 
     if (pBleAppCfg->MaxMtu > NRF_BLE_MAX_MTU_SIZE)
@@ -1650,7 +1654,8 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 
     // Initialize SoftDevice.
     BleAppStackInit(pBleAppCfg->CentLinkCount, pBleAppCfg->PeriLinkCount,
-    				pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND);
+    				pBleAppCfg->Role & BLEAPP_ROLE_PERIPHERAL);
+    				//pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND);
 //    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
 
     //err_code = ble_lesc_init();
@@ -1658,7 +1663,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 
 	if (pBleAppCfg->PeriLinkCount > 0 && pBleAppCfg->AdvInterval > 0)
 	{
-		g_BleAppData.AppRole |= BLEAPP_ROLE_PERIPHERAL;
+		//g_BleAppData.AppRole |= BLEAPP_ROLE_PERIPHERAL;
 
 		if (pBleAppCfg->pDevName != NULL)
 	    {
@@ -1669,15 +1674,15 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 	    }
 	}
 
-//    if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
-	if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
+    if (pBleAppCfg->Role & BLEAPP_ROLE_PERIPHERAL)
+	//if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
     {
     	BleAppConnectable(pBleAppCfg, false);//bEraseBond);
     }
 
     if (pBleAppCfg->CentLinkCount > 0)
 	{
-		g_BleAppData.AppRole |= BLEAPP_ROLE_CENTRAL;
+//		g_BleAppData.AppRole |= BLEAPP_ROLE_CENTRAL;
 //		ret_code_t err_code = ble_db_discovery_init(BleAppDBDiscoveryHandler);
 //		APP_ERROR_CHECK(err_code);
     }
@@ -1704,7 +1709,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
     //err_code = ble_lesc_ecc_keypair_generate_and_set();
     //APP_ERROR_CHECK(err_code);
 
-    if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
+    if (g_BleAppData.Role & BLEAPP_ROLE_PERIPHERAL)
     {
         BleAppAdvInit(pBleAppCfg);
 
@@ -1732,7 +1737,7 @@ void BleAppRun()
 {
 	g_BleAppData.bAdvertising = false;
 
-	if ((g_BleAppData.AppRole & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_CENTRAL)) != BLEAPP_ROLE_CENTRAL)
+	if (g_BleAppData.Role & BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER)// != BLEAPP_ROLE_CENTRAL)
 	{
 		BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
 	}
@@ -1777,7 +1782,7 @@ void BleTimerAppRun()
 {
 	g_BleAppData.bAdvertising = false;
 
-	if (g_BleAppData.AppRole & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
+	if (g_BleAppData.Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
 	{
 		BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
 	}
