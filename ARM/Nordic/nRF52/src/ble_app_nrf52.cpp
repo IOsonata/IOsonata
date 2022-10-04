@@ -1592,6 +1592,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 		BleConnLedOff();
     }
 
+	g_BleAppData.Role = pBleAppCfg->Role;
     //g_BleAppData.AppMode = pBleAppCfg->AppMode;
 	//g_BleAppData.AdvType = pBleAppCfg->AdvType;
     g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
@@ -1709,7 +1710,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
     //err_code = ble_lesc_ecc_keypair_generate_and_set();
     //APP_ERROR_CHECK(err_code);
 
-    if (g_BleAppData.Role & BLEAPP_ROLE_PERIPHERAL)
+    if (g_BleAppData.Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
     {
         BleAppAdvInit(pBleAppCfg);
 
@@ -1737,7 +1738,7 @@ void BleAppRun()
 {
 	g_BleAppData.bAdvertising = false;
 
-	if (g_BleAppData.Role & BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER)// != BLEAPP_ROLE_CENTRAL)
+	if (g_BleAppData.Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))// != BLEAPP_ROLE_CENTRAL)
 	{
 		BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
 	}
