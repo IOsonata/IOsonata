@@ -50,6 +50,7 @@ SOFTWARE.
 #define CLOCK_LFCLKSRC_SRC_Xtal		CLOCK_LFCLKSRC_SRC_LFXO
 #endif
 
+#pragma pack(push, 4)
 typedef struct {
 	int DevNo;
 	uint32_t MaxFreq;
@@ -59,8 +60,9 @@ typedef struct {
     TimerTrig_t Trigger[TIMER_NRFX_RTC_MAX_TRIGGER_EVT];
     TimerDev_t *pTimer;
 } nRFRtcData_t;
+#pragma pack(pop)
 
-static nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
+alignas(4) static nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 	// RTC LF timer first
 	{
 		.DevNo = 0,

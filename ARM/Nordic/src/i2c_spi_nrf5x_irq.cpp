@@ -38,10 +38,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "device_intrf.h"
 #include "coredev/shared_irq.h"
 
+#pragma pack(push,4)
 typedef struct {
 	DevIntrf_t *pDev;				// Device interface data
 	IRQHANDLER Handler ;		// Device interface interrupt handler
 } IrqData_t;
+#pragma pack(pop)
 
 #ifdef NRF52840_XXAA
 #define MAX_NB_DEV		4
@@ -49,7 +51,7 @@ typedef struct {
 #define MAX_NB_DEV		3
 #endif
 
-static IrqData_t s_DevIrq[MAX_NB_DEV] = { {NULL, }, };
+alignas(4) static IrqData_t s_DevIrq[MAX_NB_DEV] = { {NULL, }, };
 
 //void SetI2cSpiIntHandler(int DevNo, DEVINTRF *pDev, IRQHANDLER Handler)
 void SetSharedIntHandler(int DevNo, DevIntrf_t * const pDev, IRQHANDLER Handler)

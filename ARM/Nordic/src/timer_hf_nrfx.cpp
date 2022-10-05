@@ -53,6 +53,7 @@ SOFTWARE.
 #define NRF_CLOCK			NRF_CLOCK_NS
 #endif
 
+#pragma pack(push, 4)
 typedef struct {
 	int DevNo;
 	uint32_t MaxFreq;
@@ -63,6 +64,7 @@ typedef struct {
 	TimerTrig_t Trigger[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
 	TimerDev_t *pTimer;
 } nRFTimerData_t;
+#pragma pack(pop)
 
 alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 	{

@@ -87,7 +87,7 @@ typedef struct {
 
 #pragma pack(pop)
 
-static const nRFUartBaud_t s_nRFxBaudrate[] = {
+alignas(4) static const nRFUartBaud_t s_nRFxBaudrate[] = {
 #ifdef UART_PRESENT
 	{1200, UART_BAUDRATE_BAUDRATE_Baud1200},
 	{2400, UART_BAUDRATE_BAUDRATE_Baud2400},
@@ -127,7 +127,7 @@ static const nRFUartBaud_t s_nRFxBaudrate[] = {
 
 static const int s_NbBaudrate = sizeof(s_nRFxBaudrate) / sizeof(nRFUartBaud_t);
 
-static nRFUartDev_t s_nRFxUARTDev[] = {
+alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{

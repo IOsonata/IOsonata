@@ -56,7 +56,7 @@ typedef struct {
 } PinSenseEvtHook_t;
 #pragma pack(pop)
 
-static PinSenseEvtHook_t s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
+__ALIGN(4) static PinSenseEvtHook_t s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
 
 /**
  * @brief Configure individual I/O pin. nRF51 only have 1 port so PortNo is not used

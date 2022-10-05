@@ -48,6 +48,7 @@ Modified by          Date              Description
 
 #include "adc_nrf52_saadc.h"
 
+#pragma pack(push, 4)
 typedef struct __ADC_nRF52_Data {
 	AdcnRF52 *pDevObj;
 	//DEVEVTCB EvtHandler;
@@ -62,7 +63,9 @@ typedef struct __ADC_nRF52_Data {
     Timer *pTimer;//using a timer instance for time-stamping ADC samples
 } ADCNRF52_DATA;
 
-static ADCNRF52_DATA s_AdcnRF52DevData = {
+#pragma pack(pop)
+
+alignas(4) static ADCNRF52_DATA s_AdcnRF52DevData = {
 	NULL
 };
 

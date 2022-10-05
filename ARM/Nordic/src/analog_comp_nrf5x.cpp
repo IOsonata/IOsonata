@@ -40,7 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 #include "converters/analog_comp.h"
 
-static AnalogCompDev_t *s_pnRF5xLPCompDev = NULL;
+alignas(4) static AnalogCompDev_t *s_pnRF5xLPCompDev = NULL;
 
 bool nRF52LPCompEnable(AnalogCompDev_t * const pDev)
 {

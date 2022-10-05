@@ -96,7 +96,7 @@ static const nRFTwiFreq_t s_nRFxI2CFreq[] = {
 
 static const int s_NbI2CFreq = sizeof(s_nRFxI2CFreq) / sizeof(nRFTwiFreq_t);
 
-static nRFTwiDev_t s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
+alignas(4) static nRFTwiDev_t s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{

@@ -47,6 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define PWM_NRF5_MAX_DEV		3
 #define PWM_NRF5_MAX_CHAN		4
 
+#pragma pack(push,4)
 typedef struct {
 	NRF_PWM_Type *pReg;					//!< PWM device register pointer
 	PwmDev_t	*pDev;						//!< PWM device handle
@@ -57,8 +58,9 @@ typedef struct {
 	uint16_t Seq1[PWM_NRF5_MAX_CHAN];
 	volatile bool bStarted;
 } nRFPwmDev_t;
+#pragma pack(pop)
 
-static nRFPwmDev_t s_PwmnRFDev[PWM_NRF5_MAX_DEV] = {
+alignas(4) static nRFPwmDev_t s_PwmnRFDev[PWM_NRF5_MAX_DEV] = {
 	{NRF_PWM0, },
 	{NRF_PWM1, },
 	{NRF_PWM2, },

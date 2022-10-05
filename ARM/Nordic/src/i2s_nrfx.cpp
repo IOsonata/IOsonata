@@ -82,9 +82,9 @@ static const uint32_t s_Ratio[] = {
 	32, 48, 64, 96, 128, 192, 256, 384, 512
 };
 
-static const int s_NbRatio = sizeof(s_Ratio) / sizeof(uint32_t);
+alignas(4) static const int s_NbRatio = sizeof(s_Ratio) / sizeof(uint32_t);
 
-static I2SDev_t *s_pI2SDev = NULL;
+alignas(4) static I2SDev_t *s_pI2SDev = NULL;
 
 #define I2S_BUFF_MAX		4
 

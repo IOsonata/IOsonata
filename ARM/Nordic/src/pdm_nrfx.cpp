@@ -38,7 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/pdm.h"
 
 // Only one DPM device on chip
-static PdmDev_t *s_pnRFPdmDev = nullptr;
+alignas(4) static PdmDev_t *s_pnRFPdmDev = nullptr;
 
 bool PdmEnable(PdmDev_t *pDev)
 {

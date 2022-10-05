@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 bool nRFxQSPIInit(SPIDev_t * const pDev);
 
-static const NrfSpiFreq_t s_nRFxSPIFreq[] = {
+alignas(4) static const NrfSpiFreq_t s_nRFxSPIFreq[] = {
 #ifdef SPIM_PRESENT
 		{125000, SPIM_FREQUENCY_FREQUENCY_K125},
 		{250000, SPIM_FREQUENCY_FREQUENCY_K250},
@@ -74,7 +74,7 @@ static const NrfSpiFreq_t s_nRFxSPIFreq[] = {
 
 static const int g_NbnRFxSPIFreq = sizeof(s_nRFxSPIFreq) / sizeof(NrfSpiFreq_t);
 
-NrfSpiDev_t s_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
+alignas(4) static NrfSpiDev_t s_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{
@@ -124,7 +124,7 @@ NrfSpiDev_t s_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 #endif
 };
 
-const int g_NbnRFxSPIDev = sizeof(s_nRFxSPIDev) / sizeof(NrfSpiDev_t);
+static const int g_NbnRFxSPIDev = sizeof(s_nRFxSPIDev) / sizeof(NrfSpiDev_t);
 
 #ifdef SPIM_PRESENT
 bool nRFxSPIWaitDMA(NrfSpiDev_t * const pDev, uint32_t Timeout)
