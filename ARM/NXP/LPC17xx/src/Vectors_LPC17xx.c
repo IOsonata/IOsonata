@@ -41,14 +41,14 @@ extern void ResetEntry(void);
 void DEF_IRQHandler(void) { while(1); }
 
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void HardFault_Handler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void HardFault_Handler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void MemManage_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void BusFault_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UsageFault_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DebugMon_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
-__attribute__((weak)) void SysTick_Handler(void) {}
+__attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
 
 __attribute__((weak, alias("DEF_IRQHandler"))) void WDT_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void TIMER0_IRQHandler(void);

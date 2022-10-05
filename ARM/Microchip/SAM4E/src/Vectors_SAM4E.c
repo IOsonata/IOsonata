@@ -47,7 +47,7 @@ extern char Image$$ARM_LIB_STACK$$ZI$$Base[];
 
 void DEF_IRQHandler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void HardFault_Handler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void HardFault_Handler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void MemManage_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void BusFault_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UsageFault_Handler(void);
