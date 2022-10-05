@@ -68,8 +68,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MANUFACTURER_ID         ISYST_BLUETOOTH_ID              		/**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
 #define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID              		/**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
 
-#define MIN_CONN_INTERVAL       MSEC_TO_UNITS(10, UNIT_1_25_MS) 		/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
-#define MAX_CONN_INTERVAL       MSEC_TO_UNITS(40, UNIT_1_25_MS) 		/**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
+#define MIN_CONN_INTERVAL       10 //MSEC_TO_UNITS(10, UNIT_1_25_MS) 		/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
+#define MAX_CONN_INTERVAL       40 //MSEC_TO_UNITS(40, UNIT_1_25_MS) 		/**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
 #define SCAN_INTERVAL           MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
 #define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
