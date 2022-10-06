@@ -87,15 +87,15 @@ typedef struct _BleAppData {
 static const int8_t s_TxPowerdBm[] = {
 	-40, -20, -16, -12, -8, -4, 0,
 #if defined(S132) || defined(NRF52832_XXAA)
-	3, 4
+	3, 4, 4
 #else
 	2, 3, 4, 5, 6, 7, 8
 #endif
 };
 
-static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
+alignas(4) static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 
-BleAppData_t g_BleAppData = {
+alignas(4) BleAppData_t g_BleAppData = {
 	BLEAPP_ROLE_PERIPHERAL, 0, -1, -1, 0,
 };
 
@@ -133,15 +133,222 @@ static void BleStackSdcAssert(const char * file, const uint32_t line)
 	while(1);
 }
 
-static void BleStackProcessEvent(uint8_t *pEvtBuf)
+void BleHciProcessMetaEvent(BleHciMetaEvtPacket_t *pMetaEvtPkt)
 {
-	BleHciEvtPacketHdr_t *hdr = (BleHciEvtPacketHdr_t *)pEvtBuf;
-
-	switch (hdr->Evt)
+	switch (pMetaEvtPkt->Evt)
 	{
-		case BLE_HCI_EVT_LE_META:
+		case BLE_HCI_EVT_LE_META_CONN_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_ADV_REPORT:
+			break;
+		case BLE_HCI_EVT_LE_META_CONN_UPDATE_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_READ_REMOTE_FEATURES_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_LONGTERM_KEY_RQST:
+			break;
+		case BLE_HCI_EVT_LE_META_REMOTE_CONN_PARAM_RQST:
+			break;
+		case BLE_HCI_EVT_LE_META_DATA_LEN_CHANGE:
+			break;
+		case BLE_HCI_EVT_LE_META_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_GENERATE_DHKEY_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_ENHANCED_CONN_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_DIRECTED_ADV_REPORT:
+			break;
+		case BLE_HCI_EVT_LE_META_PHY_UPDATE_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_EXT_ADV_REPORT:
+			break;
+		case BLE_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_ESTABLISHED:
+			break;
+		case BLE_HCI_EVT_LE_META_PERIODIC_ADV_REPORT:
+			break;
+		case BLE_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_LOST:
+			break;
+		case BLE_HCI_EVT_LE_META_SCAN_TIMEOUT:
+			break;
+		case BLE_HCI_EVT_LE_META_ADV_SET_TERMINATED:
+			break;
+		case BLE_HCI_EVT_LE_META_SCAN_RQST_RECEIVED:
+			break;
+		case BLE_HCI_EVT_LE_META_CHAN_SELECTION_ALGO:
+			break;
+		case BLE_HCI_EVT_LE_META_CONNLESS_IQ_REPORT:
+			break;
+		case BLE_HCI_EVT_LE_META_CONN_IQ_REPORT:
+			break;
+		case BLE_HCI_EVT_LE_META_CTE_RQST_FAILED:
+			break;
+		case BLE_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED:
+			break;
+		case BLE_HCI_EVT_LE_META_CIS_ESTABLISHED:
+			break;
+		case BLE_HCI_EVT_LE_META_CIS_RQST:
+			break;
+		case BLE_HCI_EVT_LE_META_CREATE_BIG_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_TERMINATE_BIG_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_BIG_SYNC_ESTABLISHED:
+			break;
+		case BLE_HCI_EVT_LE_META_BIG_SYNC_LOST:
+			break;
+		case BLE_HCI_EVT_LE_META_RQST_PEER_SCA_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LE_META_PATH_LOSS_THREESHOLD:
+			break;
+		case BLE_HCI_EVT_LE_META_TRANSMIT_PWR_REPORTING:
+			break;
+		case BLE_HCI_EVT_LE_META_BIGINFO_ADV_REPORT:
+			break;
+		case BLE_HCI_EVT_LE_META_SUBRATE_CHANGE:
 			break;
 	}
+}
+
+void BleHciProcessEvent(BleHciEvtPacket_t *pEvtPkt)
+{
+	switch (pEvtPkt->Hdr.Evt)
+	{
+		case BLE_HCI_EVT_INQUERY_COMPLETE:
+			break;
+		case BLE_HCI_EVT_INQUERY_RESULT:
+			break;
+		case BLE_HCI_EVT_CONN_COMPLETE:
+			break;
+		case BLE_HCI_EVT_CONN_REQUEST:
+			break;
+		case BLE_HCI_EVT_DISCONN_COMPLETE:
+			break;
+		case BLE_HCI_EVT_AUTHEN_COMPLETE:
+			break;
+		case BLE_HCI_EVT_REMOTE_NAME_RQST_COMPLETE:
+			break;
+		case BLE_HCI_EVT_ENCRYPTION_CHANGE:
+			break;
+		case BLE_HCI_EVT_ENCRYPTION_CHANGE_V2:
+			break;
+		case BLE_HCI_EVT_CHANGE_CONN_LINK_KEY_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LINK_KEY_TYPE_CHANGED:
+			break;
+		case BLE_HCI_EVT_READ_REMOTE_SUPPORTED_FEATURES_COMPLETE:
+			break;
+		case BLE_HCI_EVT_READ_REMOTE_VERS_INFO_COMPLETE:
+			break;
+		case BLE_HCI_EVT_QOS_SETTUP_COMPLETE:
+			break;
+		case BLE_HCI_EVT_COMMAND_COMPLETE:
+			break;
+		case BLE_HCI_EVT_COMMAND_STATUS:
+			break;
+		case BLE_HCI_EVT_HARDWARE_ERROR:
+			break;
+		case BLE_HCI_EVT_FLUSH_OCCURED:
+			break;
+		case BLE_HCI_EVT_ROLE_CHANGE:
+			break;
+		case BLE_HCI_EVT_NB_COMPLETED_PACKET:
+			break;
+		case BLE_HCI_EVT_MODE_CHANGE:
+			break;
+		case BLE_HCI_EVT_RETURN_LINK_KEYS:
+			break;
+		case BLE_HCI_EVT_PIN_CODE_RQST:
+			break;
+		case BLE_HCI_EVT_LINK_KEY_RQST:
+			break;
+		case BLE_HCI_EVT_LINK_KEY_NOTIF:
+			break;
+		case BLE_HCI_EVT_LOOPBACK_COMMAND:
+			break;
+		case BLE_HCI_EVT_DATA_BUFFER_OVERFLOW:
+			break;
+		case BLE_HCI_EVT_MAX_SLOT_CHANGE:
+			break;
+		case BLE_HCI_EVT_READ_CLOCK_OFFSET_COMPLETE:
+			break;
+		case BLE_HCI_EVT_CONN_PACKET_TYPE_CHANGED:
+			break;
+		case BLE_HCI_EVT_QOS_VIOLATION:
+			break;
+		case BLE_HCI_EVT_PAGE_SCAN_REPETITION_MODE_CHANGE:
+			break;
+		case BLE_HCI_EVT_FLOW_SPECS_COMPLETE:
+			break;
+		case BLE_HCI_EVT_INQUIRY_RESULT_WITH_RSSI:
+			break;
+		case BLE_HCI_EVT_READ_REMOTE_EXT_FEATURES_COMPLETE:
+			break;
+		case BLE_HCI_EVT_SYNCHRONOUS_CONN_COMPLETE:
+			break;
+		case BLE_HCI_EVT_SYNCHRONOUS_CONN_CHANGED:
+			break;
+		case BLE_HCI_EVT_SNIFF_SUBRATING:
+			break;
+		case BLE_HCI_EVT_EXT_INQUIRY_RESULT:
+			break;
+		case BLE_HCI_EVT_ENCRYPTION_KEY_REFRESH_COMPLETE:
+			break;
+		case BLE_HCI_EVT_IO_CAPABILITY_RQST:
+			break;
+		case BLE_HCI_EVT_IO_CAPABILITY_RESPONSE:
+			break;
+		case BLE_HCI_EVT_USER_CONFIRM_RQST:
+			break;
+		case BLE_HCI_EVT_USER_PASSKEY_RQST:
+			break;
+		case BLE_HCI_EVT_REMOTE_OOB_DATA_RQST:
+			break;
+		case BLE_HCI_EVT_SIMPLE_PAIRING_COMPLETE:
+			break;
+		case BLE_HCI_EVT_LINK_SUPERVISION_TIMEOUT_CHANGED:
+			break;
+		case BLE_HCI_EVT_ENHANCED_FLUSH_COMPLETE:
+			break;
+		case BLE_HCI_EVT_USER_PASSKEY_NOTIF:
+			break;
+		case BLE_HCI_EVT_KEYPRESS_NOTIF:
+			break;
+		case BLE_HCI_EVT_REMOTE_HOST_SUPPORTED_FEATURES_NOTIF:
+			break;
+		case BLE_HCI_EVT_NB_COMPLETED_DATA_BLOCKS:
+			break;
+		case BLE_HCI_EVT_TRIGGERED_CLOCK_CAPTURE:
+			break;
+		case BLE_HCI_EVT_SYNC_TRAIN_COMPLETE:
+			break;
+		case BLE_HCI_EVT_SYNC_TRAIN_RECEIVED:
+			break;
+		case BLE_HCI_EVT_CONNLESS_PERIPH_BROADCAST_RECEIVE:
+			break;
+		case BLE_HCI_EVT_CONNLESS_PERIPH_BROADCAST_TIMEOUT:
+			break;
+		case BLE_HCI_EVT_TRUNCATED_PAGE_COMPLETE:
+			break;
+		case BLE_HCI_EVT_PERIPH_PAGE_RESPONSE_TIMNEOUT:
+			break;
+		case BLE_HCI_EVT_CONNLESS_PERIPH_BROADCAST_CHAN_MAP_CHANGE:
+			break;
+		case BLE_HCI_EVT_INQUIRY_RESPONSE_NOTIF:
+			break;
+		case BLE_HCI_EVT_AUTHEN_PAYLOAD_TIMEOUT_EXPIRED:
+			break;
+		case BLE_HCI_EVT_SAM_STATUS_CHANGE:
+			break;
+		case BLE_HCI_EVT_LE_META:
+			BleHciProcessMetaEvent((BleHciMetaEvtPacket_t *)pEvtPkt->Data);
+			break;
+	}
+}
+
+void BleHciProcessData(BleHciDataPacketHdr_t *pPkt)
+{
+
 }
 
 static void BleStackSdcCB()
@@ -155,13 +362,13 @@ static void BleStackSdcCB()
 	if (res == 0)
 	{
 		// Event available
-		BleStackProcessEvent(buf);
+		BleHciProcessEvent((BleHciEvtPacket_t*)buf);
 	}
 
 	res = sdc_hci_data_get(buf);
 	if (res == 0)
 	{
-
+		BleHciProcessData((BleHciDataPacketHdr_t*)buf);
 	}
 }
 
