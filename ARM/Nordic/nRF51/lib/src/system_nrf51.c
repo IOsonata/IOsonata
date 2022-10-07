@@ -28,6 +28,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "nrf.h"
 #include "nrf51_erratas.h"
 #include "system_nrf51.h"
+#include "coredev/system_core_clock.h"
 
 /*lint ++flb "Enter library region" */
 
@@ -41,6 +42,13 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #elif defined   ( __GNUC__ )
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK;
 #endif
+
+// Overload this variable in application firmware to change oscillator
+__WEAK McuOsc_t g_McuOsc = {
+	.CoreOsc = { OSC_TYPE_XTAL,	16000000, 20 },
+	.LowPwrOsc = { OSC_TYPE_RC, 32768, 20 },
+	.bUSBClk = false
+};
 
 void SystemCoreClockUpdate(void)
 {
