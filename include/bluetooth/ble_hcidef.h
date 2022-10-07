@@ -562,37 +562,6 @@ typedef uint8_t	BleHciErr_t;
 
 #pragma pack(push, 1)
 
-/// HCI Event packet header
-typedef struct __Ble_Hci_Evt_Packet_Header {
-	uint8_t Evt;
-	uint8_t Len;
-} BleHciEvtPacketHdr_t;
-
-/// HCI event packet
-/// NOTE: This structure is variable length
-typedef struct __Ble_Hci_Evt_Packet {
-	BleHciEvtPacketHdr_t Hdr;
-	uint8_t Data[1];
-} BleHciEvtPacket_t;
-
-/// HCI LE Meta event packet
-/// NOTE: This structure is variable length
-typedef struct __Ble_Hci_MetaEvt_Packet {
-	uint8_t Evt;				//!< Meta event code
-	uint8_t Data[1];
-} BleHciMetaEvtPacket_t;
-
-typedef struct __Ble_Hci_MetaEvt_ConnComplete {
-	uint8_t Status;				//!< Status
-	uint16_t ConnHdl;			//!< Connection handle
-	uint8_t Role;				//!< Role central/peripheral
-	uint8_t PeerAddrType;		//!< Peer address type
-	uint8_t PeerAddr[6];		//!< Peer address
-	uint16_t ConnInterval;		//!< Connection interval in 1.25ms, time = ConnInterval * 1.25
-	uint16_t PeriphLatency;		//!< Peripheral latency in number of connection events
-	uint16_t SupervTimeout;		//!< Supervision timeout in 1.25ms
-	uint8_t CentralClkAccu;		//!< Central clock accuracy PPM table
-} BleHciMetaEvtConnComplete_t;
 
 /// HCI Command packet header
 typedef struct __Ble_Hci_Cmd_Packet_Header {
@@ -649,8 +618,6 @@ static inline uint16_t BleConnMsToInterval(float Val) {
 };
 
 bool BleHciInit();
-void BleHciProcessEvent(BleHciEvtPacket_t *pEvtPkt);
-void BleHciProcessMetaEvent(BleHciMetaEvtPacket_t *pMetaEvtPkt);
 void BleHciProcessData(BleHciDataPacketHdr_t *pPkt);
 
 #ifdef __cplusplus
