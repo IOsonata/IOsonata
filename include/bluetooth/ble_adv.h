@@ -85,7 +85,7 @@ typedef struct __Ble_Adv_Param {
 #define BLE_EXT_ADV_EVT_PROP_CONNECTABLE				(1<<0)	//!< Connectable advertising
 #define BLE_EXT_ADV_EVT_PROP_SCANNABLE					(1<<1)	//!< Scannable advertising
 #define BLE_EXT_ADV_EVT_PROP_DIRECT						(1<<2)	//!< Direct advertising
-#define BLE_EXT_ADV_EVT_PROP_HIGH_DUTY					(1<<3)	//!< High duty cycle direct connactable <= 3.75ms interval
+#define BLE_EXT_ADV_EVT_PROP_HIGH_DUTY					(1<<3)	//!< High duty cycle direct connectable <= 3.75ms interval
 #define BLE_EXT_ADV_EVT_PROP_LEGACY						(1<<4)	//!< Legacy advertising using PDU
 #define BLE_EXT_ADV_EVT_PROP_OMIT_ADDR					(1<<5)	//!< Omit advertise's address from all PDU (anonymous)
 #define BLE_EXT_ADV_EVT_PROP_TXPWR						(1<<6)	//!< Include Tx power in the extended header

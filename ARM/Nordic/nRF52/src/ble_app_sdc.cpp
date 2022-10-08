@@ -53,6 +53,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "bluetooth/ble_app.h"
 #include "bluetooth/ble_hcidef.h"
+#include "bluetooth/ble_hcievt.h"
 #include "iopinctrl.h"
 
 #pragma pack(push, 4)
@@ -346,7 +347,7 @@ void BleHciProcessEvent(BleHciEvtPacket_t *pEvtPkt)
 	}
 }
 
-void BleHciProcessData(BleHciDataPacketHdr_t *pPkt)
+void BleHciProcessData(BleHciACLDataPacketHdr_t *pPkt)
 {
 
 }
@@ -368,7 +369,7 @@ static void BleStackSdcCB()
 	res = sdc_hci_data_get(buf);
 	if (res == 0)
 	{
-		BleHciProcessData((BleHciDataPacketHdr_t*)buf);
+		BleHciProcessData((BleHciACLDataPacketHdr_t*)buf);
 	}
 }
 
