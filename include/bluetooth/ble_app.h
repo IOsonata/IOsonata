@@ -99,8 +99,8 @@ typedef struct __BleApp_Config {
 	uint16_t VendorID;				//!< PnP Bluetooth/USB vendor id. iBeacon mode, this is Major value
 	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
 	uint16_t ProductVer;			//!< PnP product version
-	const BleAppDevInfo_t *pDevDesc;//!< Pointer device info descriptor
-	//BLEADV_TYPE AdvType;			//!< Advertisement type
+	const BleAppDevInfo_t *pDevDesc;//!< Pointer device info descriptor DIS
+	bool bExtAdv;					//!< Extended advertisement true : enable
 	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise
 	int AdvManDataLen;				//!< Length of manufacture specific data
 	const uint8_t *pSrManData;		//!< Addition Manufacture specific data to advertise in scan response
@@ -120,7 +120,7 @@ typedef struct __BleApp_Config {
 	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
 	int TxPower;					//!< Tx power in dBm, -20 to +4 dBm TX power, configurable in 4 dB steps
 	uint32_t (*SDEvtHandler)(void); //!< Require for BLEAPP_MODE_RTOS
-	uint16_t MaxMtu;						//!< Max MTU size or 0 for default
+	uint16_t MaxMtu;				//!< Max MTU size or 0 for default
 	BLEAPP_COEXMODE CoexMode;		//!< Enable support for CoEx
 	int PeriphDevCnt;				//!< Max number of peripheral connection
 //	BLEPERIPH_DEV *pPeriphDev;		//!< Connected peripheral data table
