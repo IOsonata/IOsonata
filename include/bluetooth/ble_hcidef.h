@@ -593,19 +593,62 @@ typedef struct __Ble_Hci_Cmd_Packet {
 
 
 /// HCI ACL data packet header
-typedef struct __Ble_Hci_Data_Packet_Header {
-	uint32_t Handle:12;			//!< Connection Handle
+typedef struct __Ble_Hci_ACL_Data_Packet_Header {
+	uint32_t ConnHdl:12;		//!< Connection Handle
 	uint32_t PBFlag:2;			//!< Packet boundary flag
 	uint32_t BCFlag:2;			//!< Broadcast flag
 	uint32_t Len:16;			//!< Data length in bytes
-} BleHciDataPacketHdr_t;
+} BleHciACLDataPacketHdr_t;
 
 /// HCI ACL data packet
 /// NOTE: This structure is variable length
-typedef struct __Ble_Hci_Data_Packet {
-	BleHciDataPacketHdr_t Hdr;	//!< Data packet header
+typedef struct __Ble_Hci_ACL_Data_Packet {
+	BleHciACLDataPacketHdr_t Hdr;	//!< Data packet header
 	uint8_t Data[1];
-} BleHciDataPacket_t;
+} BleHciACLDataPacket_t;
+
+/// HCI Synchronous data packet header
+typedef struct __Ble_Hci_Sync_Data_Packet_Header {
+	uint32_t ConnHdl:12;		//!< Connection Handle
+	uint32_t Status:2;			//!< Status flag
+	uint32_t Reserved:2;		//!<
+	uint32_t Len:8;				//!< Data length in bytes
+} BleHciSyncDataPacketHdr_t;
+
+/// HCI Synchronous data packet
+/// NOTE: This structure is variable length
+typedef struct __Ble_Hci_Sync_Data_Packet {
+	BleHciSyncDataPacketHdr_t Hdr;
+	uint8_t Data[1];
+} BleHciSyncDataPacket_t;
+
+/// HCI ISO data packet header
+typedef struct __Ble_Hci_ISO_Data_Packet_Header {
+	uint32_t ConnHdl:12;		//!< Connection handle
+	uint32_t PBFlag:2;			//!< Packet boundary flag
+	uint32_t TSFlag:1;			//!< Broadcast flag
+	uint32_t Reserved:1;		//!<
+	uint32_t Len:14;			//!< Data length in bytes
+	uint32_t Reserved1:2;
+} BleHciISODataPacketHdr_t;
+
+/// HCI ISO data packet
+/// NOTE: This structure is variable length
+typedef struct __Ble_Hci_ISO_Data_Packet {
+	BleHciISODataPacketHdr_t Hdr;
+	uint8_t Data[1];
+} BleHciISODataPacket_t;
+
+/// HCI ISO data load
+/// NOTE: This structure is variable length
+typedef struct __Ble_hci_ISO_Data_Load {
+	uint32_t Timestamp;			//!< Timestamp in usec
+	uint16_t SeqNo;				//!< Sequence number
+	uint32_t Len:12;			//!< SDU length
+	uint32_t Reserved:2;
+	uint32_t Status:2;
+	uint8_t SduFrag[1];			//!< ISO SDU fragment
+} BleHciISODataLoad_t;
 
 #pragma pack(pop)
 
@@ -618,7 +661,7 @@ static inline uint16_t BleConnMsToInterval(float Val) {
 };
 
 bool BleHciInit();
-void BleHciProcessData(BleHciDataPacketHdr_t *pPkt);
+void BleHciProcessACLData(BleHciACLDataPacketHdr_t *pPkt);
 
 #ifdef __cplusplus
 }

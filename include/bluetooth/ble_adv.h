@@ -55,6 +55,13 @@ typedef enum __Ble_Adv_Type {
 	BLEADV_TYPE_ADV_DIRECT_LOW_IND = 4	//!< Connectable low duty cycle directed advertising
 } BLEADV_TYPE;
 
+typedef enum __Ble_Adv_Filter_Policy {
+	BLE_ADV_FILTER_POLICY_NONE = 0,		//!< Accept request from all conn & scan
+	BLE_ADV_FILTER_POLICY_SCAN = 1,		//!< Accept request from all conn, scan list
+	BLE_ADV_FILTER_POLICY_CONN = 2,		//!< Accept request from all scan, conn list
+	BLE_ADV_FILTER_POLICY_ALL = 3		//!< Accept request only from list
+} BLE_ADV_FILTER_POLICY;
+
 // Orable advertisement channels
 #define	BLEADV_CHAN_37		1
 #define	BLEADV_CHAN_38 		2
@@ -72,8 +79,40 @@ typedef struct __Ble_Adv_Param {
 	BLE_ADDR_TYPE PeerAddrType:8;	//!< only BLEADV_ADDR_TYPE_PUBLIC or BLEADV_ADDR_TYPE_RAND
 	uint8_t PeerAddr[6];			//!< Peer address
 	uint8_t ChanMap;				//!< Advertising channel map
-	uint8_t FilterPolicy;			//!< Advertising filter policy
+	BLE_ADV_FILTER_POLICY FilterPolicy;			//!< Advertising filter policy
 } BleAdvParam_t;
+
+#define BLE_EXT_ADV_EVT_PROP_CONNECTABLE				(1<<0)	//!< Connectable advertising
+#define BLE_EXT_ADV_EVT_PROP_SCANNABLE					(1<<1)	//!< Scannable advertising
+#define BLE_EXT_ADV_EVT_PROP_DIRECT						(1<<2)	//!< Direct advertising
+#define BLE_EXT_ADV_EVT_PROP_HIGH_DUTY					(1<<3)	//!< High duty cycle direct connactable <= 3.75ms interval
+#define BLE_EXT_ADV_EVT_PROP_LEGACY						(1<<4)	//!< Legacy advertising using PDU
+#define BLE_EXT_ADV_EVT_PROP_OMIT_ADDR					(1<<5)	//!< Omit advertise's address from all PDU (anonymous)
+#define BLE_EXT_ADV_EVT_PROP_TXPWR						(1<<6)	//!< Include Tx power in the extended header
+
+#define BLE_EXT_ADV_PHY_1M								1
+#define BLE_EXT_ADV_PHY_2M								2
+#define BLE_EXT_ADV_PHY_CODED							3
+
+
+/// BLE extended advertising parameters
+typedef struct _Ble_Ext_Adv_Param {
+	uint32_t AdvHdl:8;					//!< Advertising handle
+	uint32_t EvtProp:16;				//!< Advertising event property
+	uint32_t PrimIntervalMin:24;	//!< Primary advertising interval min. in 625 usec unit
+	uint32_t PrimIntervalMax:24;	//!< Primary advertising interval max. in 625 usec unit
+	uint32_t PrimChanMap:8;			//!< Primary channel map
+	BLE_ADDR_TYPE OwnAddrType:8;
+	BLE_ADDR_TYPE PeerAddrType:8;	//!< only BLEADV_ADDR_TYPE_PUBLIC or BLEADV_ADDR_TYPE_RAND
+	uint8_t PeerAddr[6];			//!< Peer address
+	BLE_ADV_FILTER_POLICY FilterPolicy;			//!< Advertising filter policy
+	uint8_t TxPwr;					//!< Advertising TX power in dBm
+	uint8_t PrimPhy;				//!< Primary advertising PHY
+	uint8_t SecondMaxSkip;			//!< Secondary advertising max skip
+	uint8_t SecondPhy;				//!< Secondary advertising PHY
+	uint8_t Sid;					//!< Advertising SID
+	uint8_t ScanNotifEnable;		//!< Scan request notification enable
+} BleExtAdvParam_t;
 
 typedef struct __Ble_Adv_Data_Header {
 	uint8_t Len;					//!< Length of data including the Type byte
