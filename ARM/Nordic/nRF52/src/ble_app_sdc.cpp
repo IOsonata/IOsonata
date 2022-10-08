@@ -508,13 +508,26 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 
     	if (g_BleAppData.bExtAdv == true)
     	{
+    		s_BleAppAdvExtAdvData.adv_handle = 0;
+    		s_BleAppAdvExtAdvData.operation = 3;
+    		s_BleAppAdvExtAdvData.fragment_preference = 1;
+    		s_BleAppAdvExtAdvData.adv_data_length = advpkt->Len;
 
+    		int res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppAdvExtAdvData);
+    		if (res != 0)
+    		{
+    			return false;
+    		}
     	}
     	else
     	{
 			s_BleAppAdvAdvData.adv_data_length = s_BleAppAdvAdvPkt.Len;
 
 			int res = sdc_hci_cmd_le_set_adv_data(&s_BleAppAdvAdvData);
+    		if (res != 0)
+    		{
+    			return false;
+    		}
     	}
 	}
 	if (pSrData)
@@ -538,62 +551,14 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 			s_BleAppAdvSRData.scan_response_data_length = s_BleAppAdvSRPkt.Len;
 
 			int res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppAdvSRData);
+    		if (res != 0)
+    		{
+    			return false;
+    		}
     	}
 	}
-	/*
-	uint32_t err;
 
-	if (pAdvData && AdvLen > 0)
-	{
-		int l = min(AdvLen, BLE_GAP_ADV_SET_DATA_SIZE_MAX);
-
-		memcpy(g_BleAppData.ManufData.data.p_data, pAdvData, l);
-
-		g_BleAppData.ManufData.data.size = l;
-        g_AdvInstance.adv_data.adv_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
-
-        err = ble_advdata_encode(&g_BleAppData.AdvData, g_AdvInstance.adv_data.adv_data.p_data, &g_AdvInstance.adv_data.adv_data.len);
-		APP_ERROR_CHECK(err);
-
-	}
-
-	if (pSrData && SrLen > 0)
-	{
-		int l = min(SrLen, BLE_GAP_ADV_SET_DATA_SIZE_MAX);
-
-		memcpy(g_BleAppData.SRManufData.data.p_data, pSrData, l);
-
-		g_BleAppData.SRManufData.data.size = l;
-		g_AdvInstance.adv_data.scan_rsp_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
-
-		uint32_t err = ble_advdata_encode(&g_BleAppData.SrData, g_AdvInstance.adv_data.scan_rsp_data.p_data,
-										 &g_AdvInstance.adv_data.scan_rsp_data.len);
-		APP_ERROR_CHECK(err);
-	}
-
-	// SDK15 doesn't allow dynamically updating adv data.  Have to stop and re-start advertising
-	if (g_BleAppData.bAdvertising == true)
-	{
-		sd_ble_gap_adv_stop(g_AdvInstance.adv_handle);
-	}
-
-	err = sd_ble_gap_adv_set_configure(&g_AdvInstance.adv_handle, &g_AdvInstance.adv_data, NULL);
-//	APP_ERROR_CHECK(err);
-
-	if (g_BleAppData.bAdvertising == true)
-	{
-		g_BleAppData.bAdvertising = false;
-		BleAppAdvStart(BLEAPP_ADVMODE_FAST);
-	}
-
-#if 0
-    int l = min(Len, BLE_GAP_ADV_MAX_SIZE);
-
-    memcpy(g_AdvInstance.manuf_data_array, pData, l);
-    uint32_t ret = ble_advdata_set(&(g_AdvInstance.advdata), &g_BleAppData.SRData);
-#endif
-
-    return g_BleAppData.bAdvertising;*/
+	return true;
 }
 
 void BleAppAdvStart()
@@ -601,9 +566,27 @@ void BleAppAdvStart()
 	if (g_BleAppData.bAdvertising == true)// || g_BleAppData.ConnHdl != BLE_CONN_HANDLE_INVALID)
 		return;
 
-	sdc_hci_cmd_le_set_adv_enable_t x = { 1 };
+	if (g_BleAppData.bExtAdv == true)
+	{
+		uint8_t buff[100];
 
-	int res = sdc_hci_cmd_le_set_adv_enable(&x);
+		sdc_hci_cmd_le_set_ext_adv_enable_t *x = (sdc_hci_cmd_le_set_ext_adv_enable_t*)buff;
+
+		x->enable = 1;
+		x->num_sets = 1;
+		x->array_params[0].adv_handle = 0;
+		x->array_params[0].duration = 0;
+		x->array_params[0].max_ext_adv_events = 1;
+
+		int res = sdc_hci_cmd_le_set_ext_adv_enable(x);
+		//printf("res %x\n", res);
+	}
+	else
+	{
+		sdc_hci_cmd_le_set_adv_enable_t x = { 1 };
+
+		int res = sdc_hci_cmd_le_set_adv_enable(&x);
+	}
 
 	g_BleAppData.bAdvertising = true;
 
@@ -701,28 +684,6 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     	}
 
 	}
-#if 0
-	sdc_hci_cmd_le_set_ext_adv_params_t exadvparm = {
-		.adv_handle = 0,
-		.adv_event_properties = 0,
-		.primary_adv_interval_min[3] = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval),
-		.primary_adv_interval_max[3] = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval + 50),
-		.primary_adv_channel_map = 7,
-		.own_address_type = BLE_ADDR_TYPE_PUBLIC,
-		.peer_address_type = 0,
-		.peer_address[6] = {0,},
-		.adv_filter_policy = 0,
-		.adv_tx_power = 0,
-		.primary_adv_phy = 0,
-		.secondary_adv_max_skip = 0,
-		.secondary_adv_phy = 0,
-		.adv_sid = 0,
-		.scan_request_notification_enable = 0,
-	};
-
-	sdc_hci_cmd_le_set_ext_adv_params_return_t rexadvparm;
-	sdc_hci_cmd_le_set_ext_adv_params(&exadvparm, &rexadvparm);
-#endif
 
 	if (g_BleAppData.bExtAdv == false)
 	{
@@ -774,21 +735,21 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 		BleExtAdvParam_t extparam = {
 			.AdvHdl = 0,
-			.EvtProp = BLE_EXT_ADV_EVT_PROP_OMIT_ADDR,// | BLE_EXT_ADV_EVT_PROP_SCANNABLE,
+			.EvtProp = extprop,//BLE_EXT_ADV_EVT_PROP_CONNECTABLE,// | BLE_EXT_ADV_EVT_PROP_SCANNABLE,
 			.PrimIntervalMin = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval),
 			.PrimIntervalMax = (uint16_t)BLEADV_MS_TO_INTERVAL(pCfg->AdvInterval + 50),
 			.PrimChanMap = 7,
 			.OwnAddrType = BLE_ADDR_TYPE_PUBLIC,
 			.PrimPhy = BLE_EXT_ADV_PHY_1M,
 			.SecondPhy = BLE_EXT_ADV_PHY_1M,
-			.ScanNotifEnable = 1,
+			.ScanNotifEnable = 0,
 		};
 
 		sdc_hci_cmd_le_set_ext_adv_params_t &exadvparm = *(sdc_hci_cmd_le_set_ext_adv_params_t*)&extparam;
 		sdc_hci_cmd_le_set_ext_adv_params_return_t rexadvparm;
 		int r = sdc_hci_cmd_le_set_ext_adv_params(&exadvparm, &rexadvparm);
 
-		uint8_t b[512];
+		//uint8_t b[512];
 
 		//sdc_hci_cmd_le_set_ext_adv_data_t &exdata = *(sdc_hci_cmd_le_set_ext_adv_data_t*)b;
 
@@ -799,7 +760,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 		//memcpy(exdata.adv_data, s_BleAppAdvAdvPkt.pData, advpkt->Len);
 		int sdc_res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppAdvExtAdvData);
-		printf("er %x\n", sdc_res);
+		//printf("er %x %x\n", r, sdc_res);
 	}
 }
 
