@@ -603,7 +603,7 @@ void BleAppAdvStop()
 __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
 	uint8_t flags = 0;
-	uint16_t extprop = 0;
+	uint16_t extprop = BLE_EXT_ADV_EVT_PROP_LEGACY;
 	BleAdvPacket_t *advpkt;
 	BleAdvPacket_t *srpkt;
 
@@ -632,7 +632,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	}
 	else if (pCfg->Role & BLEAPP_ROLE_BROADCASTER)
 	{
-		extprop |= BLE_EXT_ADV_EVT_PROP_OMIT_ADDR;
+		//extprop |= BLE_EXT_ADV_EVT_PROP_OMIT_ADDR;
 	}
 
 	if (BleAdvAddData(advpkt, GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
@@ -952,7 +952,11 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 		sdc_support_phy_update_peripheral();
 		sdc_support_le_power_control_peripheral();
 		sdc_support_le_conn_cte_rsp_peripheral();
-//		sdc_coex_adv_mode_configure(true);
+
+		if (pBleAppCfg->CoexMode != BLEAPP_COEXMODE_NONE)
+		{
+			sdc_coex_adv_mode_configure(true);
+		}
 	}
 	if (pBleAppCfg->Role & (BLEAPP_ROLE_CENTRAL | BLEAPP_ROLE_OBSERVER))
 	{
@@ -967,39 +971,23 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 		sdc_support_le_conn_cte_rsp_central();
 	}
 
-	if (pBleAppCfg->CoexMode != BLEAPP_COEXMODE_NONE)
-	{
-
-	}
 	sdc_default_tx_power_set(pBleAppCfg->TxPower);
+
+	sdc_hci_cmd_le_set_event_mask_t evmask = { };
+	memset(evmask.raw, 0xff, sizeof(evmask.raw));
+	if (sdc_hci_cmd_le_set_event_mask(&evmask))
+	{
+		return false;
+	}
 
     uint32_t ram = 0;
 	sdc_cfg_t cfg;
 
-	cfg.central_count.count = pBleAppCfg->CentLinkCount;
-	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-				       	  SDC_CFG_TYPE_CENTRAL_COUNT,
-						  &cfg);
-	if (ram < 0)
-	{
-		return false;
-	}
-
-	cfg.peripheral_count.count = pBleAppCfg->PeriLinkCount;
-
-	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-				       	  SDC_CFG_TYPE_PERIPHERAL_COUNT,
-						  &cfg);
-	if (ram < 0)
-	{
-		return false;
-	}
-
 	int l = pBleAppCfg->MaxMtu == 0 ? BLEAPP_DEFAULT_MAX_DATA_LEN : pBleAppCfg->MaxMtu;
-	cfg.buffer_cfg.rx_packet_size = l;//MAX_RX_PACKET_SIZE;
-	cfg.buffer_cfg.tx_packet_size = l;//MAX_TX_PACKET_SIZE;
-	cfg.buffer_cfg.rx_packet_count = 4;//CONFIG_BT_CTLR_SDC_RX_PACKET_COUNT;
-	cfg.buffer_cfg.tx_packet_count = 4;//CONFIG_BT_CTLR_SDC_TX_PACKET_COUNT;
+	cfg.buffer_cfg.rx_packet_size = l;
+	cfg.buffer_cfg.tx_packet_size = l;
+	cfg.buffer_cfg.rx_packet_count = 4;
+	cfg.buffer_cfg.tx_packet_count = 4;
 
 	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 				       	  SDC_CFG_TYPE_BUFFER_CFG,
@@ -1009,8 +997,7 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 		return false;
 	}
 
-	cfg.event_length.event_length_us = 7426;
-//		CONFIG_BT_CTLR_SDC_MAX_CONN_EVENT_LEN_DEFAULT;
+	cfg.event_length.event_length_us = 7500;
 	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 				       	  SDC_CFG_TYPE_EVENT_LENGTH,
 						  &cfg);
@@ -1022,6 +1009,16 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 	if (pBleAppCfg->Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
+		cfg.peripheral_count.count = pBleAppCfg->PeriLinkCount;
+
+		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
+					       	  SDC_CFG_TYPE_PERIPHERAL_COUNT,
+							  &cfg);
+		if (ram < 0)
+		{
+			return false;
+		}
+
 		cfg.adv_count.count = 1;//SDC_ADV_SET_COUNT;
 
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
@@ -1046,6 +1043,16 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 	if (pBleAppCfg->Role & (BLEAPP_ROLE_CENTRAL | BLEAPP_ROLE_OBSERVER))
 	{
 		// Config for central role
+		cfg.central_count.count = pBleAppCfg->CentLinkCount;
+		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
+					       	  SDC_CFG_TYPE_CENTRAL_COUNT,
+							  &cfg);
+		if (ram < 0)
+		{
+			return false;
+		}
+
+
 		cfg.scan_buffer_cfg.count = 10;
 
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
@@ -1056,52 +1063,6 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 			return false;
 		}
 	}
-#if 0
-    // Overwrite some of the default configurations for the BLE stack.
-    ble_cfg_t ble_cfg;
-
-    // Configure the number of custom UUIDS.
-    memset(&ble_cfg, 0, sizeof(ble_cfg));
-    //if (CentLinkCount > 0)
-        ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = BLESVC_UUID_BASE_MAXCNT;
-    //else
-    //	ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 2;
-    err_code = sd_ble_cfg_set(BLE_COMMON_CFG_VS_UUID, &ble_cfg, ram_start);
-    APP_ERROR_CHECK(err_code);
-
-
-	// Configure the maximum ATT MTU.
-	memset(&ble_cfg, 0x00, sizeof(ble_cfg));
-	ble_cfg.conn_cfg.conn_cfg_tag                 = BLEAPP_CONN_CFG_TAG;
-	ble_cfg.conn_cfg.params.gatt_conn_cfg.att_mtu = g_BleAppData.MaxMtu;
-	err_code = sd_ble_cfg_set(BLE_CONN_CFG_GATT, &ble_cfg, ram_start);
-	APP_ERROR_CHECK(err_code);
-
-	// Configure the maximum event length.
-	memset(&ble_cfg, 0x00, sizeof(ble_cfg));
-	ble_cfg.conn_cfg.conn_cfg_tag                     = BLEAPP_CONN_CFG_TAG;
-	ble_cfg.conn_cfg.params.gap_conn_cfg.event_length = 320;
-	ble_cfg.conn_cfg.params.gap_conn_cfg.conn_count   = PeriLinkCount + CentLinkCount;//BLE_GAP_CONN_COUNT_DEFAULT;
-	err_code = sd_ble_cfg_set(BLE_CONN_CFG_GAP, &ble_cfg, ram_start);
-	APP_ERROR_CHECK(err_code);
-
-    memset(&ble_cfg, 0, sizeof(ble_cfg));
-    ble_cfg.gatts_cfg.attr_tab_size.attr_tab_size = 3000;
-    err_code = sd_ble_cfg_set(BLE_GATTS_CFG_ATTR_TAB_SIZE, &ble_cfg, ram_start);
-    APP_ERROR_CHECK(err_code);
-
-    memset(&ble_cfg, 0, sizeof(ble_cfg));
-    ble_cfg.gatts_cfg.service_changed.service_changed = 1;
-    err_code = sd_ble_cfg_set(BLE_GATTS_CFG_SERVICE_CHANGED, &ble_cfg, ram_start);
-    APP_ERROR_CHECK(err_code);
-#if 0
-    memset(&ble_cfg, 0, sizeof ble_cfg);
-    ble_cfg.conn_cfg.conn_cfg_tag 					= BLEAPP_CONN_CFG_TAG;
-    ble_cfg.conn_cfg.params.gatts_conn_cfg.hvn_tx_queue_size = 10;
-    err_code = sd_ble_cfg_set(BLE_CONN_CFG_GATTS, &ble_cfg, ram_start);
-    APP_ERROR_CHECK(err_code);
-#endif
-#endif
 
     // Enable BLE stack.
 	res = sdc_enable(BleStackSdcCB, s_BleStackSdcMemPool);
@@ -1231,114 +1192,12 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     	BleAppAdvInit(pBleAppCfg);
     }
 
-#if 0
-    g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
-
-    if (pBleAppCfg->MaxMtu > NRF_BLE_MAX_MTU_SIZE)
-		g_BleAppData.MaxMtu = pBleAppCfg->MaxMtu;
-    else
-    	g_BleAppData.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
-
-
-    switch (g_BleAppData.AppMode)
-    {
-		case BLEAPP_MODE_LOOP:
-		case BLEAPP_MODE_NOCONNECT:
-			// app_timer_init();
-			break;
-		case BLEAPP_MODE_APPSCHED:
-			// app_timer_init();
-			APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
-			break;
-		case BLEAPP_MODE_RTOS:
-			if (pBleAppCfg->SDEvtHandler == NULL)
-				return false;
-
-			g_BleAppData.SDEvtHandler = pBleAppCfg->SDEvtHandler;
-
-			break;
-		default:
-				;
-    }
-
-//    nrf_ble_lesc_init();
-
-	err_code = nrf_sdh_enable((nrf_clock_lf_cfg_t *)&pBleAppCfg->ClkCfg);
-    APP_ERROR_CHECK(err_code);
-
-    // Initialize SoftDevice.
-    BleAppStackInit(pBleAppCfg->CentLinkCount, pBleAppCfg->PeriLinkCount,
-    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
-
-    //err_code = ble_lesc_init();
-    //APP_ERROR_CHECK(err_code);
-
-	if (pBleAppCfg->PeriLinkCount > 0 && pBleAppCfg->AdvInterval > 0)
-	{
-		g_BleAppData.AppRole |= BLEAPP_ROLE_PERIPHERAL;
-
-		if (pBleAppCfg->pDevName != NULL)
-	    {
-	        err_code = sd_ble_gap_device_name_set(&s_gap_conn_mode,
-	                                          (const uint8_t *) pBleAppCfg->pDevName,
-	                                          strlen(pBleAppCfg->pDevName));
-	        APP_ERROR_CHECK(err_code);
-	    }
-	}
-
-    if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
-    {
-    	BleAppConnectable(pBleAppCfg, bEraseBond);
-    }
-
-    if (pBleAppCfg->CentLinkCount > 0)
-	{
-		g_BleAppData.AppRole |= BLEAPP_ROLE_CENTRAL;
-//		ret_code_t err_code = ble_db_discovery_init(BleAppDBDiscoveryHandler);
-//		APP_ERROR_CHECK(err_code);
-    }
-
-    BleAppGattInit();
-
-    BleAppInitUserData();
-
-    BleAppPeerMngrInit(pBleAppCfg->SecType, pBleAppCfg->SecExchg, bEraseBond);
-
-	if (pBleAppCfg->SecType != BLEAPP_SECTYPE_NONE)
-	{
-	    g_BleAppData.bSecure = true;
-	}
-	else
-	{
-	    g_BleAppData.bSecure = false;
-	}
-
-   // err_code = fds_register(fds_evt_handler);
-   // APP_ERROR_CHECK(err_code);
-
-    // Generate the ECDH key pair and set public key in the peer-manager.
-    //err_code = ble_lesc_ecc_keypair_generate_and_set();
-    //APP_ERROR_CHECK(err_code);
-
-    if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
-    {
-        BleAppAdvInit(pBleAppCfg);
-
-        err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, g_AdvInstance.adv_handle, GetValidTxPower(pBleAppCfg->TxPower));
-        APP_ERROR_CHECK(err_code);
-    }
-    else
-    {
-        err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_SCAN_INIT, g_AdvInstance.adv_handle, GetValidTxPower(pBleAppCfg->TxPower));
-        APP_ERROR_CHECK(err_code);
-    }
 
 #if (__FPU_USED == 1)
     // Patch for softdevice & FreeRTOS to sleep properly when FPU is in used
-    NVIC_SetPriority(FPU_IRQn, APP_IRQ_PRIORITY_LOW);
+    NVIC_SetPriority(FPU_IRQn, 6);
     NVIC_ClearPendingIRQ(FPU_IRQn);
     NVIC_EnableIRQ(FPU_IRQn);
-#endif
 #endif
 
     return true;
@@ -1354,46 +1213,6 @@ void BleAppRun()
 	{
 		__WFE();
 	}
-#if 0
-	g_BleAppData.bAdvertising = false;
-
-	if ((g_BleAppData.AppRole & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_CENTRAL)) != BLEAPP_ROLE_CENTRAL)
-	{
-		BleAppAdvStart(BLEAPP_ADVMODE_FAST);
-	}
-/*	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
-	{
-		uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, BLEAPP_CONN_CFG_TAG);
-		//uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-		APP_ERROR_CHECK(err_code);
-	}
-	else
-	{
-		if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
-		{
-			uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-			APP_ERROR_CHECK(err_code);
-		}
-	}
-*/
-    while (1)
-    {
-		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
-		{
-			BleAppRtosWaitEvt();
-		}
-		else
-		{
-			if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
-			{
-				app_sched_execute();
-			}
-			nrf_ble_lesc_request_handler();
-			sd_app_evt_wait();
-		}
-    }
-
-#endif
 }
 
 void BleAppScan()
