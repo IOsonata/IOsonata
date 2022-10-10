@@ -133,6 +133,7 @@ int main()
 {
     BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
     //BleAppAdvStart();
+//	g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, TimerTrigEvtHandler);
     BleAppRun();
 
 	return 0;

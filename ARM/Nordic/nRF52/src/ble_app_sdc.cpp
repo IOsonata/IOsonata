@@ -576,7 +576,10 @@ void BleAppAdvStart()
 		x->num_sets = 1;
 		x->array_params[0].adv_handle = 0;
 		x->array_params[0].duration = 0;
-		x->array_params[0].max_ext_adv_events = 1;
+		x->array_params[0].max_ext_adv_events = 0;
+		x->array_params[1].adv_handle = 0;
+		x->array_params[1].duration = 0;
+		x->array_params[1].max_ext_adv_events = 0;
 
 		int res = sdc_hci_cmd_le_set_ext_adv_enable(x);
 		//printf("res %x\n", res);
@@ -600,7 +603,7 @@ void BleAppAdvStop()
 
 /**@brief Overloadable function for initializing the Advertising functionality.
  */
-__WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
+bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
 	uint8_t flags = 0;
 	uint16_t extprop = BLE_EXT_ADV_EVT_PROP_LEGACY;
@@ -1019,7 +1022,7 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 			return false;
 		}
 
-		cfg.adv_count.count = 1;//SDC_ADV_SET_COUNT;
+		cfg.adv_count.count = 2;//SDC_ADV_SET_COUNT;
 
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 							  SDC_CFG_TYPE_ADV_COUNT,
@@ -1173,6 +1176,11 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 		memcpy(bdaddr.bd_addr, addr->addresses->address, 6);
 		sdc_hci_cmd_vs_zephyr_write_bd_addr(&bdaddr);
 	}
+
+	sdc_hci_cmd_le_set_random_address_t ranaddr;
+	memcpy(ranaddr.random_address, addr->addresses->address, 6);
+	if (sdc_hci_cmd_le_set_random_address(&ranaddr))
+		return false;
 
 	sdc_hci_cmd_le_read_max_data_length_return_t maxlen;
 
