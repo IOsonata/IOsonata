@@ -137,7 +137,7 @@ const BleAppCfg_t s_BleAppCfg = {
 	ISYST_BLUETOOTH_ID,     // PnP Bluetooth/USB vendor id
 	1,                      // PnP Product ID
 	0,						// Pnp prod version
-//	false,
+	0,						// Appearance
 	NULL,					// Enable device information service (DIS)
 	false,
 	(uint8_t*)&g_AdvDataBuff,   // Manufacture specific data to advertise

@@ -188,6 +188,7 @@ const BleAppCfg_t s_BleAppCfg = {
 	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
+	.Appearance = 0,
 	.pDevDesc = &s_BlePdmDevDesc,
 	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise

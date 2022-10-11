@@ -99,6 +99,7 @@ typedef struct __BleApp_Config {
 	uint16_t VendorID;				//!< PnP Bluetooth/USB vendor id. iBeacon mode, this is Major value
 	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
 	uint16_t ProductVer;			//!< PnP product version
+	uint16_t Appearance;			//!< 16 bits Bluetooth appearance value
 	const BleAppDevInfo_t *pDevDesc;//!< Pointer device info descriptor DIS
 	bool bExtAdv;					//!< Extended advertisement true : enable
 	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise

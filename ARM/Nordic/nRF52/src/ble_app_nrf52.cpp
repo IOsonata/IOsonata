@@ -366,10 +366,10 @@ static void BleAppGapParamInit(const BleAppCfg_t *pBleAppCfg)
                                           strlen(pBleAppCfg->pDevName));
     	APP_ERROR_CHECK(err_code);
     }
-*/
-    err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_UNKNOWN);
-    APP_ERROR_CHECK(err_code);
 
+    err_code = sd_ble_gap_appearance_set(pBleAppCfg->Appearance);
+    APP_ERROR_CHECK(err_code);
+*/
     memset(&gap_conn_params, 0, sizeof(gap_conn_params));
 
 //    if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
@@ -1110,7 +1110,10 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     }
     // Build advertising data struct to pass into @ref ble_advertising_init.
 
-    initdata.advdata.include_appearance = false;
+    if (pCfg->Appearance != BLE_APPEARANCE_UNKNOWN)
+    {
+    	initdata.advdata.include_appearance = true;
+    }
 
     if (pCfg->AdvTimeout != 0)
     {
@@ -1673,6 +1676,8 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 	                                          strlen(pBleAppCfg->pDevName));
 	        APP_ERROR_CHECK(err_code);
 	    }
+	    err_code = sd_ble_gap_appearance_set(pBleAppCfg->Appearance);
+	    APP_ERROR_CHECK(err_code);
 	}
 
     if (pBleAppCfg->Role & BLEAPP_ROLE_PERIPHERAL)

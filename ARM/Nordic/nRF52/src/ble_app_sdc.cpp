@@ -54,6 +54,7 @@ SOFTWARE.
 #include "bluetooth/ble_app.h"
 #include "bluetooth/ble_hcidef.h"
 #include "bluetooth/ble_hcievt.h"
+#include "bluetooth/ble_appearance.h"
 #include "iopinctrl.h"
 
 #pragma pack(push, 4)
@@ -659,6 +660,14 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     	}
 
     	if (BleAdvAddData(advpkt, type, (uint8_t*)pCfg->pDevName, l) == false)
+    	{
+    		return false;
+    	}
+    }
+
+    if (pCfg->Appearance != BLE_APPEARANCE_UNKNOWN_GENERIC)
+    {
+    	if (BleAdvAddData(advpkt, GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{
     		return false;
     	}
