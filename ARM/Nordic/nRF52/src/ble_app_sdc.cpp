@@ -648,27 +648,28 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		return false;
 	}
 
+    if (pCfg->Appearance != BLE_APPEARANCE_UNKNOWN_GENERIC)
+    {
+    	if (BleAdvAddData(advpkt, GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
+    	{
+//    		return false;
+    	}
+    }
+
     if (pCfg->pDevName != NULL)
     {
     	size_t l = strlen(pCfg->pDevName);
     	uint8_t type = GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
+    	size_t mxl = advpkt->MaxLen - advpkt->Len - 2;
 
-    	if (l > 30)
+    	if (l > 30 || l > mxl)
     	{
     		// Short name
     		type = GAP_DATA_TYPE_SHORT_LOCAL_NAME;
-    		l = 30;
+    		l = min((size_t)30, mxl);
     	}
 
     	if (BleAdvAddData(advpkt, type, (uint8_t*)pCfg->pDevName, l) == false)
-    	{
-    		return false;
-    	}
-    }
-
-    if (pCfg->Appearance != BLE_APPEARANCE_UNKNOWN_GENERIC)
-    {
-    	if (BleAdvAddData(advpkt, GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{
     		return false;
     	}
@@ -1222,7 +1223,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 	res = sdc_hci_cmd_le_read_max_data_length(&maxlen);
 
 	sdc_hci_cmd_le_write_suggested_default_data_length_t datalen = {
-		max(maxlen.supported_max_tx_octets, pBleAppCfg->MaxMtu),
+		(uint16_t)max(maxlen.supported_max_tx_octets, pBleAppCfg->MaxMtu),
 		maxlen.supported_max_tx_time
 	};
 
