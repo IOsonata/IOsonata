@@ -473,6 +473,11 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
     }
 }
 
+static void on_adv_error(uint32_t)
+{
+
+}
+
 /**@brief Function for the application's SoftDevice event handler.
  *
  * @param[in] p_ble_evt SoftDevice event.
@@ -1096,6 +1101,64 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 
     memset(&initdata, 0, sizeof(ble_advertising_init_t));
 
+    memset(&g_AdvInstance.adv_params, 0, sizeof(g_AdvInstance.adv_params));
+    g_AdvInstance.conn_cfg_tag = BLEAPP_CONN_CFG_TAG;//BLE_CONN_CFG_TAG_DEFAULT;//BLEAPP_CONN_CFG_TAG;
+    g_AdvInstance.adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
+    g_AdvInstance.adv_mode_current = BLE_ADV_MODE_IDLE;
+    g_AdvInstance.adv_params.primary_phy = BLE_GAP_PHY_1MBPS;
+    g_AdvInstance.adv_params.secondary_phy = BLE_GAP_PHY_2MBPS;
+    g_AdvInstance.evt_handler = on_adv_evt;
+    //g_AdvInstance.error_handler = on_adv_error;
+    g_AdvInstance.adv_params.p_peer_addr 		= NULL;                             // Undirected advertisement.
+    g_AdvInstance.adv_params.filter_policy		= BLE_GAP_ADV_FP_ANY;
+    g_AdvInstance.adv_params.interval    		= MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
+    g_AdvInstance.adv_params.duration     		= MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
+    g_AdvInstance.p_adv_data = &g_AdvInstance.adv_data;
+    g_AdvInstance.adv_data.adv_data.p_data = g_AdvInstance.enc_advdata[0];
+    g_AdvInstance.adv_data.scan_rsp_data.p_data = g_AdvInstance.enc_scan_rsp_data[0];
+
+	g_AdvInstance.adv_modes_config.ble_adv_fast_enabled  = true;
+	g_AdvInstance.adv_modes_config.ble_adv_extended_enabled = pCfg->bExtAdv;
+	g_AdvInstance.adv_modes_config.ble_adv_fast_interval = MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
+	g_AdvInstance.adv_modes_config.ble_adv_fast_timeout  = MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
+
+	if (pCfg->AdvSlowInterval > 0)
+	{
+		g_AdvInstance.adv_modes_config.ble_adv_slow_enabled  = true;
+		g_AdvInstance.adv_modes_config.ble_adv_slow_interval = MSEC_TO_UNITS(pCfg->AdvSlowInterval, UNIT_0_625_MS);
+		g_AdvInstance.adv_modes_config.ble_adv_slow_timeout  = BLE_GAP_ADV_TIMEOUT_GENERAL_UNLIMITED;
+	}
+
+	g_AdvInstance.adv_modes_config.ble_adv_extended_enabled = pCfg->bExtAdv;
+
+	if (pCfg->bExtAdv == true)
+    {
+    	if (pCfg->Role & BLEAPP_ROLE_BROADCASTER)
+    	{
+    		g_AdvInstance.adv_params.properties.type = BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
+    	}
+    	if (pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
+    	{
+    		g_AdvInstance.adv_params.properties.type = BLE_GAP_ADV_TYPE_EXTENDED_CONNECTABLE_NONSCANNABLE_UNDIRECTED;
+    	}
+
+    	g_AdvInstance.adv_data.adv_data.len = BLE_GAP_ADV_SET_DATA_SIZE_EXTENDED_MAX_SUPPORTED;
+    	g_AdvInstance.adv_data.scan_rsp_data.len = BLE_GAP_ADV_SET_DATA_SIZE_EXTENDED_MAX_SUPPORTED;
+    }
+    else
+    {
+    	if (pCfg->Role & BLEAPP_ROLE_BROADCASTER)
+    	{
+    		g_AdvInstance.adv_params.properties.type = BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED;//BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
+    	}
+    	if (pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
+    	{
+    		g_AdvInstance.adv_params.properties.type = BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;//BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
+    	}
+    	g_AdvInstance.adv_data.adv_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
+    	g_AdvInstance.adv_data.scan_rsp_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
+   }
+
     if (pCfg->pAdvManData != NULL)
     {
 		g_BleAppData.ManufData.company_identifier = pCfg->VendorID;
@@ -1206,13 +1269,30 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
         }
     }
 
+    memcpy(&g_BleAppData.AdvData, &initdata.advdata, sizeof(ble_advdata_t));
+    memcpy(&g_BleAppData.SrData, &initdata.srdata, sizeof(ble_advdata_t));
+
+    err_code = ble_advdata_encode(&initdata.advdata, g_AdvInstance.adv_data.adv_data.p_data, &g_AdvInstance.adv_data.adv_data.len);
+    APP_ERROR_CHECK(err_code);
+
+    //if (pCfg->pSrManData)
+    {
+    	err_code = ble_advdata_encode(&initdata.srdata, g_AdvInstance.adv_data.scan_rsp_data.p_data, &g_AdvInstance.adv_data.scan_rsp_data.len);
+    	APP_ERROR_CHECK(err_code);
+    }
+
+    err_code = sd_ble_gap_adv_set_configure(&g_AdvInstance.adv_handle, &g_AdvInstance.adv_data, &g_AdvInstance.adv_params);
+    APP_ERROR_CHECK(err_code);
+
+    g_AdvInstance.initialized = true;
+#if 0
 //    if (pCfg->AppMode == BLEAPP_MODE_NOCONNECT || pCfg->AppMode == BLEAPP_MODE_IBEACON)
    // if (pCfg->AdvType == BLEADV_TYPE_ADV_NONCONN_IND)
     if (pCfg->Role & BLEAPP_ROLE_BROADCASTER)
     {
 //        err_code = ble_advdata_encode(&initdata.advdata, g_AdvData.adv_data.p_data, &g_AdvData.adv_data.len);
-        g_AdvInstance.adv_data.adv_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
-        g_AdvInstance.adv_data.adv_data.p_data = g_AdvInstance.enc_advdata[0];
+ //       g_AdvInstance.adv_data.adv_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
+ //       g_AdvInstance.adv_data.adv_data.p_data = g_AdvInstance.enc_advdata[0];
 
         err_code = ble_advdata_encode(&initdata.advdata, g_AdvInstance.adv_data.adv_data.p_data, &g_AdvInstance.adv_data.adv_data.len);
         APP_ERROR_CHECK(err_code);
@@ -1223,12 +1303,16 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
         // Initialize advertising parameters (used when starting advertising).
         memset(&g_AdvInstance.adv_params, 0, sizeof(g_AdvInstance.adv_params));
 
+        if (pCfg->bExtAdv == true)
+        {
+        	g_AdvInstance.adv_modes_config.ble_adv_extended_enabled = true;
+        	g_AdvInstance.adv_params.properties.type	= BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_SCANNABLE_UNDIRECTED;//BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
+        }
+        else
+        {
+        	g_AdvInstance.adv_params.properties.type	= BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;//BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
+        }
 
-        g_AdvInstance.adv_params.properties.type	= BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;//BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
-        g_AdvInstance.adv_params.p_peer_addr 		= NULL;                             // Undirected advertisement.
-        g_AdvInstance.adv_params.filter_policy		= BLE_GAP_ADV_FP_ANY;
-        g_AdvInstance.adv_params.interval    		= MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
-        g_AdvInstance.adv_params.duration     		= MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
 #if 0
         s_AdvParams.properties.type  = BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;//BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
         s_AdvParams.p_peer_addr = NULL;                             // Undirected advertisement.
@@ -1243,30 +1327,29 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     else
     {
 		//memset(&options, 0, sizeof(options));
-		initdata.config.ble_adv_fast_enabled  = true;
-		initdata.config.ble_adv_fast_interval = MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
-		initdata.config.ble_adv_fast_timeout  = MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
+    	g_AdvInstance.adv_modes_config.ble_adv_fast_enabled  = true;
+    	g_AdvInstance.adv_modes_config.ble_adv_extended_enabled = pCfg->bExtAdv;
+    	g_AdvInstance.adv_modes_config.ble_adv_fast_interval = MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
+    	g_AdvInstance.adv_modes_config.ble_adv_fast_timeout  = MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
 
 		if (pCfg->AdvSlowInterval > 0)
 		{
-			initdata.config.ble_adv_slow_enabled  = true;
-			initdata.config.ble_adv_slow_interval = MSEC_TO_UNITS(pCfg->AdvSlowInterval, UNIT_0_625_MS);
-			initdata.config.ble_adv_slow_timeout  = BLE_GAP_ADV_TIMEOUT_GENERAL_UNLIMITED;
+			g_AdvInstance.adv_modes_config.ble_adv_slow_enabled  = true;
+			g_AdvInstance.adv_modes_config.ble_adv_slow_interval = MSEC_TO_UNITS(pCfg->AdvSlowInterval, UNIT_0_625_MS);
+			g_AdvInstance.adv_modes_config.ble_adv_slow_timeout  = BLE_GAP_ADV_TIMEOUT_GENERAL_UNLIMITED;
 		}
 	    memcpy(&g_BleAppData.SrData, &initdata.srdata, sizeof(ble_advdata_t));
 
-	    initdata.evt_handler = on_adv_evt;
-	    err_code = ble_advertising_init(&g_AdvInstance, &initdata);
-	    APP_ERROR_CHECK(err_code);
+	    //err_code = ble_advertising_init(&g_AdvInstance, &initdata);
+	    //APP_ERROR_CHECK(err_code);
     }
-
-    memcpy(&g_BleAppData.AdvData, &initdata.advdata, sizeof(ble_advdata_t));
+#endif
 
 	// Bypass local copy of manufacturer data of the SDK
 	//g_AdvInstance.manuf_specific_data.data.p_data = initdata.advdata.p_manuf_specific_data->data.p_data;
 	//g_AdvInstance.advdata.p_manuf_specific_data->data.size = initdata.advdata.p_manuf_specific_data->data.size;
 
-	ble_advertising_conn_cfg_tag_set(&g_AdvInstance, BLEAPP_CONN_CFG_TAG);
+	//ble_advertising_conn_cfg_tag_set(&g_AdvInstance, BLEAPP_CONN_CFG_TAG);
 }
 
 void BleAppDisInit(const BleAppCfg_t *pBleAppCfg)

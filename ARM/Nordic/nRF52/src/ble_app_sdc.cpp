@@ -610,7 +610,7 @@ void BleAppAdvStop()
  */
 bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
-	uint8_t flags = 0;
+	uint8_t flags = GAP_DATA_TYPE_FLAGS_NO_BREDR;
 	uint16_t extprop = BLE_EXT_ADV_EVT_PROP_LEGACY;
 	BleAdvPacket_t *advpkt;
 	BleAdvPacket_t *srpkt;
@@ -641,6 +641,9 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	else if (pCfg->Role & BLEAPP_ROLE_BROADCASTER)
 	{
 		//extprop |= BLE_EXT_ADV_EVT_PROP_OMIT_ADDR;
+		extprop |= BLE_EXT_ADV_EVT_PROP_SCANNABLE;
+		//extprop = 0;
+		//flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
 	}
 
 	if (BleAdvAddData(advpkt, GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
