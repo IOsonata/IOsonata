@@ -122,8 +122,8 @@ alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BleAppAdvExtAdvData = *(s
 alignas(4) static BleAdvPacket_t s_BleAppAdvExtAdvPkt = { 255, 0, s_BleAppAdvExtAdvData.adv_data};
 
 alignas(4) static uint8_t s_BleAppAdvExtSRBuff[260];
-alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BleAppAdvExtSRData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BleAppAdvExtSRBuff;
-alignas(4) static BleAdvPacket_t s_BleAppAdvExtSRPkt = { 255, 0, s_BleAppAdvExtSRData.adv_data};
+alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppAdvExtSRData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BleAppAdvExtSRBuff;
+alignas(4) static BleAdvPacket_t s_BleAppAdvExtSRPkt = { 255, 0, s_BleAppAdvExtSRData.scan_response_data};
 
 static void BleStackMpslAssert(const char * const file, const uint32_t line)
 {
@@ -484,10 +484,6 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
     	{
     		return false;
     	}
-    	//sdc_hci_cmd_le_set_adv_data_t advdata;
-    	//advdata.adv_data_length = s_BleAppAdvAdvPkt.Len;
-
-    	//memcpy(advdata.adv_data, s_BleAppAdvAdvPkt.pData, s_BleAppAdvAdvPkt.Len);
 
     	if (g_BleAppData.bExtAdv == true)
     	{
@@ -564,10 +560,6 @@ void BleAppAdvStart()
 		x->array_params[0].max_ext_adv_events = 0;
 
 		res = sdc_hci_cmd_le_set_ext_adv_enable(x);
-		if (res != 0)
-		{
-			printf("sdc_hci_cmd_le_set_ext_adv_enable : %x\n", res);
-		}
 	}
 	else
 	{
@@ -618,6 +610,7 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	uint16_t extprop = 0;//BLE_EXT_ADV_EVT_PROP_LEGACY;
 	BleAdvPacket_t *advpkt;
 	BleAdvPacket_t *srpkt;
+	uint8_t buff[260];
 
 	if (g_BleAppData.bExtAdv == true)
 	{
@@ -660,10 +653,11 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     	size_t l = strlen(pCfg->pDevName);
     	uint8_t type = GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
 
-    	if (l < 14)
+    	if (l > 30)
     	{
     		// Short name
     		type = GAP_DATA_TYPE_SHORT_LOCAL_NAME;
+    		l = 30;
     	}
 
     	if (BleAdvAddData(advpkt, type, (uint8_t*)pCfg->pDevName, l) == false)
@@ -683,7 +677,7 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	if (pCfg->pAdvManData != NULL)
 	{
 		int l = pCfg->AdvManDataLen + 2;
-		uint8_t buff[l];
+		//uint8_t buff[l];
 		*(uint16_t *)buff = pCfg->VendorID;
 		memcpy(&buff[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
 
@@ -697,7 +691,7 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	if (pCfg->pSrManData != NULL)
 	{
 		int l = pCfg->SrManDataLen + 2;
-		uint8_t buff[l];
+		//uint8_t buff[l];
 		*(uint16_t *)buff = pCfg->VendorID;
 		memcpy(&buff[2], pCfg->pSrManData, pCfg->SrManDataLen);
 
@@ -776,22 +770,31 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		{
 			printf("sdc_hci_cmd_le_set_ext_adv_params : %x\n", res);
 		}
-		//uint8_t b[512];
-
-		//sdc_hci_cmd_le_set_ext_adv_data_t &exdata = *(sdc_hci_cmd_le_set_ext_adv_data_t*)b;
 
 		s_BleAppAdvExtAdvData.adv_handle = 0;
 		s_BleAppAdvExtAdvData.operation = 3;
 		s_BleAppAdvExtAdvData.fragment_preference = 1;
 		s_BleAppAdvExtAdvData.adv_data_length = advpkt->Len;
 
-		//memcpy(exdata.adv_data, s_BleAppAdvAdvPkt.pData, advpkt->Len);
 		res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppAdvExtAdvData);
 		if (res != 0)
 		{
 			printf("sdc_hci_cmd_le_set_ext_adv_data : %x\n", res);
 		}
-		//printf("er %x %x\n", r, sdc_res);
+
+		if (srpkt->Len > 0)
+		{
+			s_BleAppAdvExtSRData.adv_handle = 0;
+			s_BleAppAdvExtSRData.operation = 3;
+			s_BleAppAdvExtSRData.fragment_preference = 1;
+			s_BleAppAdvExtSRData.scan_response_data_length = advpkt->Len;
+
+			res = sdc_hci_cmd_le_set_ext_scan_response_data(&s_BleAppAdvExtSRData);
+			if (res != 0)
+			{
+				printf("sdc_hci_cmd_le_set_ext_adv_data : %x\n", res);
+			}
+		}
 	}
 }
 

@@ -1191,13 +1191,16 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 
     if (pCfg->pDevName != NULL)
     {
-    	if (strlen(pCfg->pDevName) < 14)
+    	if (strlen(pCfg->pDevName) > 30)
     	{
     		initdata.advdata.name_type      = BLE_ADVDATA_SHORT_NAME;
-    		initdata.advdata.short_name_len = strlen(pCfg->pDevName);
+    		initdata.advdata.short_name_len = 30;//strlen(pCfg->pDevName);
     	}
     	else
+    	{
     		initdata.advdata.name_type = BLE_ADVDATA_FULL_NAME;
+    		initdata.advdata.short_name_len = strlen(pCfg->pDevName);
+    	}
     }
     else
     {

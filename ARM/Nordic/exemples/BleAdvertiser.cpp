@@ -44,6 +44,7 @@ SOFTWARE.
 #ifndef NRFXLIB_SDC
 #include "ble_app_nrf5.h"
 #endif
+#include "bluetooth/ble_appearance.h"
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 
@@ -54,26 +55,27 @@ SOFTWARE.
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
-#define DEVICE_NAME                     "Advertiser"
+#define DEVICE_NAME                     "Advertising extra xzabcd1234567890"
 
 #define APP_ADV_INTERVAL_MSEC       50//MSEC_TO_UNITS(100, UNIT_0_625_MS)
 #define APP_ADV_TIMEOUT_MSEC      	1000//MSEC_TO_UNITS(1000, UNIT_10_MS)
 
 uint32_t g_AdvCnt = 0;
+uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
 
 const BleAppCfg_t s_BleAppCfg = {
 	.Role = BLEAPP_ROLE_BROADCASTER,
 	.CentLinkCount = 0,		// Number of central link
 	.PeriLinkCount = 1,		// Number of peripheral link
-	.pDevName = DEVICE_NAME,			// Device name
+	.pDevName = (char*)DEVICE_NAME,			// Device name
 	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,                      // PnP Product ID
 	.ProductVer = 0,						// Pnp prod version
-//	.bEnDevInfoService = false,					// Enable device information service (DIS)
+	.Appearance = BLE_APPEARANCE_COMPUTER_WEARABLE,					// Enable device information service (DIS)
 	.pDevDesc = NULL,					// Pointer device info descriptor
 	.bExtAdv = true,
-	.pAdvManData  = (uint8_t*)&g_AdvCnt,   	// Manufacture specific data to advertise
-	.AdvManDataLen = sizeof(g_AdvCnt),      	// Length of manufacture specific data
+	.pAdvManData  = (uint8_t*)g_AdvLong,//&g_AdvCnt,   	// Manufacture specific data to advertise
+	.AdvManDataLen = sizeof(g_AdvLong),//g_AdvCnt),      	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
 	.SecType = BLEAPP_SECTYPE_NONE,    // Secure connection type
@@ -124,7 +126,7 @@ void BleAppAdvTimeoutHandler()
 {
 	g_AdvCnt++;
 
-	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
+	//BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
 	BleAppAdvStart();
 }
 #endif
