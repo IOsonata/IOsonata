@@ -564,6 +564,10 @@ void BleAppAdvStart()
 		x->array_params[0].max_ext_adv_events = 0;
 
 		res = sdc_hci_cmd_le_set_ext_adv_enable(x);
+		if (res != 0)
+		{
+			printf("sdc_hci_cmd_le_set_ext_adv_enable : %x\n", res);
+		}
 	}
 	else
 	{
@@ -611,7 +615,7 @@ void BleAppAdvStop()
 bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
 	uint8_t flags = GAP_DATA_TYPE_FLAGS_NO_BREDR;
-	uint16_t extprop = BLE_EXT_ADV_EVT_PROP_LEGACY;
+	uint16_t extprop = 0;//BLE_EXT_ADV_EVT_PROP_LEGACY;
 	BleAdvPacket_t *advpkt;
 	BleAdvPacket_t *srpkt;
 
@@ -636,12 +640,12 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		{
 			flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
 		}
-		extprop |= BLE_EXT_ADV_EVT_PROP_CONNECTABLE | BLE_EXT_ADV_EVT_PROP_SCANNABLE;
+		extprop |= BLE_EXT_ADV_EVT_PROP_CONNECTABLE;// | BLE_EXT_ADV_EVT_PROP_SCANNABLE;
 	}
 	else if (pCfg->Role & BLEAPP_ROLE_BROADCASTER)
 	{
 		//extprop |= BLE_EXT_ADV_EVT_PROP_OMIT_ADDR;
-		extprop |= BLE_EXT_ADV_EVT_PROP_SCANNABLE;
+		//extprop |= BLE_EXT_ADV_EVT_PROP_SCANNABLE;
 		//extprop = 0;
 		//flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
 	}
@@ -760,14 +764,18 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 			.PrimChanMap = 7,
 			.OwnAddrType = BLE_ADDR_TYPE_PUBLIC,
 			.PrimPhy = BLE_EXT_ADV_PHY_1M,
-			.SecondPhy = BLE_EXT_ADV_PHY_1M,
+			.SecondPhy = BLE_EXT_ADV_PHY_2M,
 			.ScanNotifEnable = 0,
 		};
 
 		sdc_hci_cmd_le_set_ext_adv_params_t &exadvparm = *(sdc_hci_cmd_le_set_ext_adv_params_t*)&extparam;
 		sdc_hci_cmd_le_set_ext_adv_params_return_t rexadvparm;
-		int r = sdc_hci_cmd_le_set_ext_adv_params(&exadvparm, &rexadvparm);
+		int res = sdc_hci_cmd_le_set_ext_adv_params(&exadvparm, &rexadvparm);
 
+		if (res != 0)
+		{
+			printf("sdc_hci_cmd_le_set_ext_adv_params : %x\n", res);
+		}
 		//uint8_t b[512];
 
 		//sdc_hci_cmd_le_set_ext_adv_data_t &exdata = *(sdc_hci_cmd_le_set_ext_adv_data_t*)b;
@@ -778,7 +786,11 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		s_BleAppAdvExtAdvData.adv_data_length = advpkt->Len;
 
 		//memcpy(exdata.adv_data, s_BleAppAdvAdvPkt.pData, advpkt->Len);
-		int sdc_res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppAdvExtAdvData);
+		res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppAdvExtAdvData);
+		if (res != 0)
+		{
+			printf("sdc_hci_cmd_le_set_ext_adv_data : %x\n", res);
+		}
 		//printf("er %x %x\n", r, sdc_res);
 	}
 }
