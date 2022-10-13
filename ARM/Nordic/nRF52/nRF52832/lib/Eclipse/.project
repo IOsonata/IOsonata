@@ -486,11 +486,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/md5.c</locationURI>
 		</link>
 		<link>
-			<name>src/micro-ecc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/miscdev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1279,26 +1274,6 @@
 			<name>src/mbedtls/library</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/types.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/types.h</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/uECC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/uECC.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.h</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/uECC_vli.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC_vli.h</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/buzzer.cpp</name>
