@@ -298,7 +298,7 @@ SOFTWARE.
 #define BLE_STDUUID_GATT_VOLTAGE_SPECIFICATION                          				0x2B19
 #define BLE_STDUUID_GATT_VOLTAGE_STATISTICS                             				0x2B1A
 #define BLE_STDUUID_GATT_VOLUME_FLOW                                    				0x2B1B
-#define BLE_STDUUID_GATT_CHROMATICITY_COORDINATES                       				0x2B1C
+#define BLE_STDUUID_GATT_CHROMATICITY_COORDINATES1                       				0x2B1C
 #define BLE_STDUUID_GATT_RC_FEATURE                                     				0x2B1D
 #define BLE_STDUUID_GATT_RC_SETTINGS                                    				0x2B1E
 #define BLE_STDUUID_GATT_RECONNECTION_CONFIG_CONTROL_POINT              				0x2B1F
@@ -763,7 +763,26 @@ SOFTWARE.
 #define BLE_STDUUID_SERVICE_CLASS_HDP                                   				0x1400
 #define BLE_STDUUID_SERVICE_CLASS_HDP_SOURCE                            				0x1401
 #define BLE_STDUUID_SERVICE_CLASS_HDP_SINK                              				0x1402
- 
+
+#pragma pack(push, 1)
+
+typedef enum __Ble_Uuid_Type {
+	BLE_UUID_TYPE_16,			//!< 16 bits UUID, require base UUID
+	BLE_UUID_TYPE_32,			//!< 32 bits UUID, require base UUID
+	BLE_UUID_TYPE_128			//!< Full 128 UUID
+} BLE_UUID_TYPE;
+
+typedef struct __Ble_Uuid {
+	BLE_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
+	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	union {
+		uint16_t Uuid16;		//!< 16 bits UUID to use with base UUID defined by BaseIdx
+		uint32_t Uuid32;		//!< 32 bits UUID to use with base UUID defined by BaseIdx
+		uint8_t Uuid128[16];	//!< Full 128 bits UUID
+	};
+} BleUuid_t;
+
+#pragma pack(pop)
 
 #ifdef __cplusplus
 extern "C" {
