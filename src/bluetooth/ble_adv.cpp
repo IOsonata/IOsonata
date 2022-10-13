@@ -97,7 +97,11 @@ bool BleAdvAddData(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Le
 	BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[pAdvPkt->Len];
 	p->Hdr.Len = Len + 1;
 	p->Hdr.Type = Type;
-	memcpy(p->Data, pData, Len);
+
+	if (pData != NULL && Len > 0)
+	{
+		memcpy(p->Data, pData, Len);
+	}
 	pAdvPkt->Len += Len + 2;
 
 	return true;
