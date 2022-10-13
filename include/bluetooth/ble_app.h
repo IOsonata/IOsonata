@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "bluetooth/ble_gap.h"
 #include "bluetooth/ble_adv.h"
+#include "bluetooth/ble_uuid.h"
 #include "bluetooth/bleadv_mandata.h"
 
 /** @addtogroup Bluetooth
@@ -108,8 +109,9 @@ typedef struct __BleApp_Config {
 	int SrManDataLen;				//!< Length of manufacture specific data in scan response
 	BLEAPP_SECTYPE SecType;			//!< Secure connection type
 	uint8_t SecExchg;				//!< Sec key exchange
-	const uint16_t *pAdvUuids;		//!< Service uuids to advertise
-	int NbAdvUuid;					//!< Total number of uuids
+	bool bCompleteUidList;			//!< true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
+	BleUuid_t *pAdvUuids;			//!< Service uuids to advertise, must be an array of the same uuid type
+	int NbAdvUuid;					//!< Total number of uuids of the same type
 	uint32_t AdvInterval;			//!< In msec
 	uint32_t AdvTimeout;			//!< In sec
 	uint32_t AdvSlowInterval;		//!< Slow advertising interval, if > 0, fallback to

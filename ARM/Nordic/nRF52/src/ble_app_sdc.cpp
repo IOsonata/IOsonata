@@ -657,6 +657,8 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     	}
     }
 
+    BleAdvPacket_t *uidadvpkt;
+
     if (pCfg->pDevName != NULL)
     {
     	size_t l = strlen(pCfg->pDevName);
@@ -674,10 +676,68 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     	{
     		return false;
     	}
+
+    	uidadvpkt = srpkt;
     }
     else
     {
+    	uidadvpkt = advpkt;
+    }
 
+    if (pCfg->NbAdvUuid > 0 && pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
+    {
+    	uint8_t type = 0;
+
+    	switch (pCfg->pAdvUuids[0].Type)
+    	{
+    		case BLE_UUID_TYPE_16:
+    			type = pCfg->bCompleteUidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
+    			{
+    				uint16_t uuid[pCfg->NbAdvUuid];
+
+    				for (int i = 0; i < pCfg->NbAdvUuid; i++)
+    				{
+    					uuid[i] = pCfg->pAdvUuids[i].Uuid16;
+    				}
+    		    	if (BleAdvAddData(uidadvpkt, type, (uint8_t*)uuid, pCfg->NbAdvUuid * 2) == false)
+    		    	{
+    		    		return false;
+    		    	}
+    			}
+    			break;
+    		case BLE_UUID_TYPE_32:
+    			type = pCfg->bCompleteUidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
+    			{
+    				uint32_t uuid[pCfg->NbAdvUuid];
+
+    				for (int i = 0; i < pCfg->NbAdvUuid; i++)
+    				{
+    					uuid[i] = pCfg->pAdvUuids[i].Uuid32;
+    				}
+    		    	if (BleAdvAddData(uidadvpkt, type, (uint8_t*)uuid, pCfg->NbAdvUuid * 4) == false)
+    		    	{
+    		    		return false;
+    		    	}
+    			}
+    			break;
+    		case BLE_UUID_TYPE_128:
+    			type = pCfg->bCompleteUidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
+    			{
+    				uint8_t uuid[16 * pCfg->NbAdvUuid];
+    				uint8_t *p = uuid;
+
+    				for (int i = 0; i < pCfg->NbAdvUuid; i++)
+    				{
+    					memcpy(p, pCfg->pAdvUuids[i].Uuid128, 16);
+    					p += 16;
+    				}
+    		    	if (BleAdvAddData(uidadvpkt, type, (uint8_t*)uuid, pCfg->NbAdvUuid * 16) == false)
+    		    	{
+    		    		return false;
+    		    	}
+    			}
+    			break;
+    	}
     }
 
 	if (pCfg->pAdvManData != NULL)

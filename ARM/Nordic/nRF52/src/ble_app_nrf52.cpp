@@ -143,6 +143,7 @@ typedef struct _BleAppData {
 	int MaxMtu;
 	bool bSecure;
 	bool bAdvertising;
+	bool bExtAdv;
 	bool bScan;
 } BLEAPP_DATA;
 
@@ -1010,12 +1011,12 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 
 	if (pAdvData && AdvLen > 0)
 	{
-		int l = min(AdvLen, BLE_GAP_ADV_SET_DATA_SIZE_MAX);
+		int l = min(AdvLen, g_BleAppData.bExtAdv ? BLE_GAP_ADV_SET_DATA_SIZE_EXTENDED_MAX_SUPPORTED : BLE_GAP_ADV_SET_DATA_SIZE_MAX);
 
 		memcpy(g_BleAppData.ManufData.data.p_data, pAdvData, l);
 
 		g_BleAppData.ManufData.data.size = l;
-        g_AdvInstance.adv_data.adv_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
+        g_AdvInstance.adv_data.adv_data.len = g_BleAppData.bExtAdv ? BLE_GAP_ADV_SET_DATA_SIZE_EXTENDED_MAX_SUPPORTED : BLE_GAP_ADV_SET_DATA_SIZE_MAX;
 
         err = ble_advdata_encode(&g_BleAppData.AdvData, g_AdvInstance.adv_data.adv_data.p_data, &g_AdvInstance.adv_data.adv_data.len);
 		APP_ERROR_CHECK(err);
@@ -1024,12 +1025,12 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 
 	if (pSrData && SrLen > 0)
 	{
-		int l = min(SrLen, BLE_GAP_ADV_SET_DATA_SIZE_MAX);
+		int l = min(SrLen, g_BleAppData.bExtAdv ? BLE_GAP_ADV_SET_DATA_SIZE_EXTENDED_MAX_SUPPORTED : BLE_GAP_ADV_SET_DATA_SIZE_MAX);
 
 		memcpy(g_BleAppData.SRManufData.data.p_data, pSrData, l);
 
 		g_BleAppData.SRManufData.data.size = l;
-		g_AdvInstance.adv_data.scan_rsp_data.len = BLE_GAP_ADV_SET_DATA_SIZE_MAX;
+		g_AdvInstance.adv_data.scan_rsp_data.len = g_BleAppData.bExtAdv ? BLE_GAP_ADV_SET_DATA_SIZE_EXTENDED_MAX_SUPPORTED : BLE_GAP_ADV_SET_DATA_SIZE_MAX;
 
 		uint32_t err = ble_advdata_encode(&g_BleAppData.SrData, g_AdvInstance.adv_data.scan_rsp_data.p_data,
 										 &g_AdvInstance.adv_data.scan_rsp_data.len);
@@ -1072,7 +1073,7 @@ void BleAppAdvStart()//BLEAPP_ADVMODE AdvMode)
 	//if (g_BleAppData.AdvType == BLEADV_TYPE_ADV_NONCONN_IND)
 	if (g_BleAppData.Role & BLEAPP_ROLE_BROADCASTER)
 	{
-		uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, BLEAPP_CONN_CFG_TAG);
+		uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, g_AdvInstance.conn_cfg_tag);
         APP_ERROR_CHECK(err_code);
 	}
 	else
@@ -1214,8 +1215,12 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
         	ble_uuid_t uid[pCfg->NbAdvUuid];
         	for (int i = 0; i < pCfg->NbAdvUuid; i++)
         	{
-        		uid[i].uuid = pCfg->pAdvUuids[i];
-        		uid[i].type = BLE_UUID_TYPE_VENDOR_BEGIN;
+        		if (pCfg->pAdvUuids[i].Type == BLE_UUID_TYPE_16)
+        		{
+        			uid[i].uuid = pCfg->pAdvUuids[i].Uuid16;
+        			uid[i].type = pCfg->pAdvUuids[i].BaseIdx == 0 ?
+        						  BLE_UUID_TYPE_BLE : BLE_UUID_TYPE_VENDOR_BEGIN;
+        		}
         	}
 
 			if (pCfg->pAdvManData != NULL)
@@ -1682,6 +1687,8 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
     }
 
 	g_BleAppData.Role = pBleAppCfg->Role;
+	g_BleAppData.bExtAdv = pBleAppCfg->bExtAdv;
+
     //g_BleAppData.AppMode = pBleAppCfg->AppMode;
 	//g_BleAppData.AdvType = pBleAppCfg->AdvType;
     g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
