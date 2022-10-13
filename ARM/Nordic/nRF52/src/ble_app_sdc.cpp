@@ -109,31 +109,32 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 //__ALIGN(4) static ble_gap_lesc_p256_pk_t    s_lesc_public_key;      /**< LESC ECC Public Key */
 //__ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC ECC DH Key*/
 
-alignas(4) static uint8_t s_BleStackSdcMemPool[10000];
-
-alignas(4) static sdc_hci_cmd_le_set_adv_data_t s_BleAppAdvAdvData;
+alignas(4) static uint8_t s_BleAppAdvBuff[260];
+alignas(4) static sdc_hci_cmd_le_set_adv_data_t &s_BleAppAdvAdvData = *(sdc_hci_cmd_le_set_adv_data_t*)s_BleAppAdvBuff;
 alignas(4) static BleAdvPacket_t s_BleAppAdvAdvPkt = { sizeof(s_BleAppAdvAdvData.adv_data), 0, s_BleAppAdvAdvData.adv_data};
 
-alignas(4) static sdc_hci_cmd_le_set_scan_response_data_t s_BleAppAdvSRData;
-alignas(4) static BleAdvPacket_t s_BleAppAdvSRPkt = { sizeof(s_BleAppAdvSRData.scan_response_data), 0, s_BleAppAdvSRData.scan_response_data};
-
-alignas(4) static uint8_t s_BleAppAdvExtAdvBuff[260];
-alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BleAppAdvExtAdvData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BleAppAdvExtAdvBuff;
+alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BleAppAdvExtAdvData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BleAppAdvBuff;
 alignas(4) static BleAdvPacket_t s_BleAppAdvExtAdvPkt = { 255, 0, s_BleAppAdvExtAdvData.adv_data};
 
-alignas(4) static uint8_t s_BleAppAdvExtSRBuff[260];
-alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppAdvExtSRData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BleAppAdvExtSRBuff;
-alignas(4) static BleAdvPacket_t s_BleAppAdvExtSRPkt = { 255, 0, s_BleAppAdvExtSRData.scan_response_data};
+alignas(4) static uint8_t s_BleAppSrBuff[260];
+
+alignas(4) static sdc_hci_cmd_le_set_scan_response_data_t &s_BleAppAdvSrData = *(sdc_hci_cmd_le_set_scan_response_data_t*)s_BleAppSrBuff;
+alignas(4) static BleAdvPacket_t s_BleAppAdvSrPkt = { sizeof(s_BleAppAdvSrData.scan_response_data), 0, s_BleAppAdvSrData.scan_response_data};
+
+alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppAdvExtSrData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BleAppSrBuff;
+alignas(4) static BleAdvPacket_t s_BleAppAdvExtSrPkt = { 255, 0, s_BleAppAdvExtSrData.scan_response_data};
+
+alignas(4) static uint8_t s_BleStackSdcMemPool[10000];
 
 static void BleStackMpslAssert(const char * const file, const uint32_t line)
 {
-	printf("MPSL Fault: %s, %d\n", file, line);
+//	printf("MPSL Fault: %s, %d\n", file, line);
 	while(1);
 }
 
 static void BleStackSdcAssert(const char * file, const uint32_t line)
 {
-	printf("SDC Fault: %s, %d\n", file, line);
+//	printf("SDC Fault: %s, %d\n", file, line);
 	while(1);
 }
 
@@ -465,12 +466,12 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 	if (g_BleAppData.bExtAdv == true)
 	{
 		advpkt = &s_BleAppAdvExtAdvPkt;
-		srpkt = &s_BleAppAdvExtSRPkt;
+		srpkt = &s_BleAppAdvExtSrPkt;
 	}
 	else
 	{
 		advpkt = &s_BleAppAdvAdvPkt;
-		srpkt = &s_BleAppAdvSRPkt;
+		srpkt = &s_BleAppAdvSrPkt;
 	}
 
 	if (pAdvData)
@@ -527,9 +528,9 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
     	}
     	else
     	{
-			s_BleAppAdvSRData.scan_response_data_length = s_BleAppAdvSRPkt.Len;
+			s_BleAppAdvSrData.scan_response_data_length = s_BleAppAdvSrPkt.Len;
 
-			int res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppAdvSRData);
+			int res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppAdvSrData);
     		if (res != 0)
     		{
     			return false;
@@ -615,12 +616,12 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	if (g_BleAppData.bExtAdv == true)
 	{
 		advpkt = &s_BleAppAdvExtAdvPkt;
-		srpkt = &s_BleAppAdvExtSRPkt;
+		srpkt = &s_BleAppAdvExtSrPkt;
 	}
 	else
 	{
 		advpkt = &s_BleAppAdvAdvPkt;
-		srpkt = &s_BleAppAdvSRPkt;
+		srpkt = &s_BleAppAdvSrPkt;
 	}
 
 	if (pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
@@ -673,6 +674,10 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     	{
     		return false;
     	}
+    }
+    else
+    {
+
     }
 
 	if (pCfg->pAdvManData != NULL)
@@ -738,9 +743,9 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 		if (srpkt->Len > 0)
 		{
-			s_BleAppAdvSRData.scan_response_data_length = srpkt->Len;
+			s_BleAppAdvSrData.scan_response_data_length = srpkt->Len;
 
-			sdc_res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppAdvSRData);
+			sdc_res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppAdvSrData);
 			if (sdc_res != 0)
 			{
 				return false;
@@ -769,7 +774,8 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 		if (res != 0)
 		{
-			printf("sdc_hci_cmd_le_set_ext_adv_params : %x\n", res);
+			return false;
+//			printf("sdc_hci_cmd_le_set_ext_adv_params : %x\n", res);
 		}
 
 		s_BleAppAdvExtAdvData.adv_handle = 0;
@@ -780,23 +786,27 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppAdvExtAdvData);
 		if (res != 0)
 		{
-			printf("sdc_hci_cmd_le_set_ext_adv_data : %x\n", res);
+			return false;
+//			printf("sdc_hci_cmd_le_set_ext_adv_data : %x\n", res);
 		}
 
 		if (srpkt->Len > 0)
 		{
-			s_BleAppAdvExtSRData.adv_handle = 0;
-			s_BleAppAdvExtSRData.operation = 3;
-			s_BleAppAdvExtSRData.fragment_preference = 1;
-			s_BleAppAdvExtSRData.scan_response_data_length = advpkt->Len;
+			s_BleAppAdvExtSrData.adv_handle = 0;
+			s_BleAppAdvExtSrData.operation = 3;
+			s_BleAppAdvExtSrData.fragment_preference = 1;
+			s_BleAppAdvExtSrData.scan_response_data_length = advpkt->Len;
 
-			res = sdc_hci_cmd_le_set_ext_scan_response_data(&s_BleAppAdvExtSRData);
+			res = sdc_hci_cmd_le_set_ext_scan_response_data(&s_BleAppAdvExtSrData);
 			if (res != 0)
 			{
-				printf("sdc_hci_cmd_le_set_ext_adv_data : %x\n", res);
+				return false;
+//				printf("sdc_hci_cmd_le_set_ext_adv_data : %x\n", res);
 			}
 		}
 	}
+
+	return true;
 }
 
 void BleAppDisInit(const BleAppCfg_t *pBleAppCfg)
@@ -1293,6 +1303,7 @@ void BleAppScanStop()
 
 bool BleAppScanInit(BleAppScanCfg_t *pCfg)
 {
+	return false;
 #if 0
 	if (pCfg == NULL)
 	{
@@ -1352,6 +1363,7 @@ bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * cons
 
 bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * const pCharUid)
 {
+	return false;
 #if 0
     uint32_t                 err_code;
     ble_gattc_write_params_t write_params;
@@ -1375,6 +1387,7 @@ bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * 
 
 bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
 {
+	return false;
 #if 0
 	if (ConnHandle == BLE_CONN_HANDLE_INVALID || CharHandle == BLE_CONN_HANDLE_INVALID)
 	{
