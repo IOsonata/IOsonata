@@ -1757,9 +1757,10 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 
 		if (pBleAppCfg->pDevName != NULL)
 	    {
+			int l = strlen(pBleAppCfg->pDevName);
 	        err_code = sd_ble_gap_device_name_set(&s_gap_conn_mode,
 	                                          (const uint8_t *) pBleAppCfg->pDevName,
-	                                          strlen(pBleAppCfg->pDevName));
+	                                          min(l, 30));
 	        APP_ERROR_CHECK(err_code);
 	    }
 	    err_code = sd_ble_gap_appearance_set(pBleAppCfg->Appearance);
