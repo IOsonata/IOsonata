@@ -1208,31 +1208,52 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     		initdata.advdata.name_type = BLE_ADVDATA_NO_NAME;
     }
 
+	ble_uuid_t uid[10];
+
+	if (pCfg->NbAdvUuid > 0 && pCfg->pAdvUuids != NULL)
+    {
+    	for (int i = 0; i < pCfg->NbAdvUuid; i++)
+    	{
+    		if (pCfg->pAdvUuids[i].Type == BLE_UUID_TYPE_16)
+    		{
+    			uid[i].uuid = pCfg->pAdvUuids[i].Uuid16;
+    			uid[i].type = pCfg->pAdvUuids[i].BaseIdx == 0 ?
+    						  BLE_UUID_TYPE_BLE : BLE_UUID_TYPE_VENDOR_BEGIN;
+    		}
+    	}
+    }
+
     if (initdata.advdata.name_type == BLE_ADVDATA_NO_NAME)
     {
         if (pCfg->NbAdvUuid > 0 && pCfg->pAdvUuids != NULL)
         {
-        	ble_uuid_t uid[pCfg->NbAdvUuid];
-        	for (int i = 0; i < pCfg->NbAdvUuid; i++)
-        	{
-        		if (pCfg->pAdvUuids[i].Type == BLE_UUID_TYPE_16)
-        		{
-        			uid[i].uuid = pCfg->pAdvUuids[i].Uuid16;
-        			uid[i].type = pCfg->pAdvUuids[i].BaseIdx == 0 ?
-        						  BLE_UUID_TYPE_BLE : BLE_UUID_TYPE_VENDOR_BEGIN;
-        		}
-        	}
-
 			if (pCfg->pAdvManData != NULL)
 			{
 				initdata.advdata.p_manuf_specific_data = &g_BleAppData.ManufData;
-	        	initdata.srdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
-	        	initdata.srdata.uuids_complete.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
+
+				if (pCfg->bCompleteUuidList)
+				{
+					initdata.srdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
+					initdata.srdata.uuids_complete.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
+				}
+				else
+				{
+					initdata.srdata.uuids_more_available.uuid_cnt = pCfg->NbAdvUuid;
+					initdata.srdata.uuids_more_available.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
+				}
 			}
 			else
 			{
-	        	initdata.advdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
-	        	initdata.advdata.uuids_complete.p_uuids  = (ble_uuid_t*)pCfg->pAdvUuids;
+				if (pCfg->bCompleteUuidList)
+				{
+					initdata.advdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
+					initdata.advdata.uuids_complete.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
+				}
+				else
+				{
+					initdata.advdata.uuids_more_available.uuid_cnt = pCfg->NbAdvUuid;
+					initdata.advdata.uuids_more_available.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
+				}
 				if (pCfg->pSrManData != NULL)
 				{
 		        	initdata.srdata.p_manuf_specific_data = &g_BleAppData.SRManufData;
@@ -1255,8 +1276,16 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     {
         if (pCfg->NbAdvUuid > 0 && pCfg->pAdvUuids != NULL)
         {
-			initdata.srdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
-			initdata.srdata.uuids_complete.p_uuids  = (ble_uuid_t*)pCfg->pAdvUuids;
+        	if (pCfg->bCompleteUuidList)
+			{
+				initdata.srdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
+				initdata.srdata.uuids_complete.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
+			}
+			else
+			{
+				initdata.srdata.uuids_more_available.uuid_cnt = pCfg->NbAdvUuid;
+				initdata.srdata.uuids_more_available.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
+			}
 
 			if (pCfg->pAdvManData != NULL)
 			{

@@ -691,7 +691,7 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     	switch (pCfg->pAdvUuids[0].Type)
     	{
     		case BLE_UUID_TYPE_16:
-    			type = pCfg->bCompleteUidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
+    			type = pCfg->bCompleteUuidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
     			{
     				uint16_t uuid[pCfg->NbAdvUuid];
 
@@ -706,7 +706,7 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     			}
     			break;
     		case BLE_UUID_TYPE_32:
-    			type = pCfg->bCompleteUidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
+    			type = pCfg->bCompleteUuidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
     			{
     				uint32_t uuid[pCfg->NbAdvUuid];
 
@@ -721,7 +721,7 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     			}
     			break;
     		case BLE_UUID_TYPE_128:
-    			type = pCfg->bCompleteUidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
+    			type = pCfg->bCompleteUuidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
     			{
     				uint8_t uuid[16 * pCfg->NbAdvUuid];
     				uint8_t *p = uuid;

@@ -109,8 +109,8 @@ typedef struct __BleApp_Config {
 	int SrManDataLen;				//!< Length of manufacture specific data in scan response
 	BLEAPP_SECTYPE SecType;			//!< Secure connection type
 	uint8_t SecExchg;				//!< Sec key exchange
-	bool bCompleteUidList;			//!< true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
-	BleUuid_t *pAdvUuids;			//!< Service uuids to advertise, must be an array of the same uuid type
+	bool bCompleteUuidList;			//!< true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
+	const BleUuid_t *pAdvUuids;			//!< Service uuids to advertise, must be an array of the same uuid type
 	int NbAdvUuid;					//!< Total number of uuids of the same type
 	uint32_t AdvInterval;			//!< In msec
 	uint32_t AdvTimeout;			//!< In sec
