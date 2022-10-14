@@ -1101,6 +1101,7 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     ble_advertising_init_t	initdata;
 
     memset(&initdata, 0, sizeof(ble_advertising_init_t));
+    memset(&g_AdvInstance, 0, sizeof(ble_advertising_t));
 
     memset(&g_AdvInstance.adv_params, 0, sizeof(g_AdvInstance.adv_params));
     g_AdvInstance.conn_cfg_tag = BLEAPP_CONN_CFG_TAG;//BLE_CONN_CFG_TAG_DEFAULT;//BLEAPP_CONN_CFG_TAG;
