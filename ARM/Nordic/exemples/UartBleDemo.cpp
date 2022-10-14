@@ -55,7 +55,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //#define HM_10
 
-#define DEVICE_NAME                     "UARTDemo"                          /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "UARTDemo long long 1234567890"                          /**< Name of device. Will be included in the advertising data. */
 
 #define PACKET_SIZE						20
 
@@ -104,8 +104,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
 
-static const ble_uuid_t  s_AdvUuids[] = {
-	{BLE_UART_UUID_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
+//static const ble_uuid_t  s_AdvUuids[] = {
+//	{BLE_UART_UUID_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
+//};
+static const BleUuid_t s_AdvUuids[] = {
+	{.Type = BLE_UUID_TYPE_16, .BaseIdx = 1, .Uuid16 = BLE_UART_UUID_SERVICE,}
 };
 
 static const char s_RxCharDescString[] = {
@@ -182,6 +185,8 @@ const BleAppDevInfo_t s_UartBleDevDesc = {
 	"0.0",					// Hardware version string
 };
 
+uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+\0";
+
 const BleAppCfg_t s_BleAppCfg = {
 	.Role = BLEAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
@@ -190,16 +195,18 @@ const BleAppCfg_t s_BleAppCfg = {
 	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
+	.Appearance = 0,
 	.pDevDesc = &s_UartBleDevDesc,
-	.bExtAdv = false,
-	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
-	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
+	.bExtAdv = true,
+	.pAdvManData = g_AdvLong,//g_ManData,			// Manufacture specific data to advertise
+	.AdvManDataLen = sizeof(g_AdvLong),//g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
 	.SecType = BLEAPP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
 	.SecExchg = BLEAPP_SECEXCHG_NONE,	// Security key exchange
-	.pAdvUuids = NULL,      			// Service uuids to advertise
-	.NbAdvUuid = 0, 					// Total number of uuids
+	.bCompleteUuidList = true,
+	.pAdvUuids = s_AdvUuids,      			// Service uuids to advertise
+	.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(BleUuid_t), 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
 	.AdvTimeout = APP_ADV_TIMEOUT,		// Advertising timeout in sec
 	.AdvSlowInterval = 0,				// Slow advertising interval, if > 0, fallback to
