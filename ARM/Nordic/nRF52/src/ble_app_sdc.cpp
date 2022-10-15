@@ -477,14 +477,14 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 	if (pAdvData)
 	{
 		int l = AdvLen + 2;
-		uint8_t buff[l];
-		*(uint16_t *)buff = g_BleAppData.VendorId;
-		memcpy(&buff[2], pAdvData, AdvLen);
+		BleAdvData_t *p = BleAdvDataAllocate(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
-    	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
-    	{
-    		return false;
-    	}
+		if (p == NULL)
+		{
+			return false;
+		}
+		*(uint16_t *)p->Data = g_BleAppData.VendorId;
+		memcpy(&p->Data[2], pAdvData, AdvLen);
 
     	if (g_BleAppData.bExtAdv == true)
     	{
@@ -510,23 +510,20 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
     		}
     	}
 	}
+
 	if (pSrData)
 	{
 		int l = SrLen + 2;
-		uint8_t buff[l];
-		*(uint16_t *)buff = g_BleAppData.VendorId;
-		memcpy(&buff[2], pSrData, AdvLen);
+		BleAdvData_t *p = BleAdvDataAllocate(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
-    	if (BleAdvDataAdd(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
-    	{
-    		return false;
-    	}
+		if (p == NULL)
+		{
+			return false;
+		}
+		*(uint16_t *)p->Data = g_BleAppData.VendorId;
+		memcpy(&p->Data[2], pAdvData, AdvLen);
 
-    	if (g_BleAppData.bExtAdv == true)
-    	{
-
-    	}
-    	else
+    	if (g_BleAppData.bExtAdv == false)
     	{
 			s_BleAppAdvSrData.scan_response_data_length = s_BleAppAdvSrPkt.Len;
 
@@ -605,7 +602,7 @@ void BleAppAdvStop()
 
 /**@brief Overloadable function for initializing the Advertising functionality.
  */
-bool BleAppAdvInit(const BleAppCfg_t *pCfg)
+__WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
 	uint8_t flags = GAP_DATA_TYPE_FLAGS_NO_BREDR;
 	uint16_t extprop = 0;//BLE_EXT_ADV_EVT_PROP_LEGACY;
@@ -696,29 +693,27 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	if (pCfg->pAdvManData != NULL)
 	{
 		int l = pCfg->AdvManDataLen + 2;
-		//uint8_t buff[l];
-		*(uint16_t *)buff = pCfg->VendorID;
-		memcpy(&buff[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
+		BleAdvData_t *p = BleAdvDataAllocate(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
-    	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
-    	{
-
-    	}
-
+		if (p == NULL)
+		{
+			return false;
+		}
+		*(uint16_t *)p->Data = pCfg->VendorID;
+		memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
 	}
 
 	if (pCfg->pSrManData != NULL)
 	{
 		int l = pCfg->SrManDataLen + 2;
-		//uint8_t buff[l];
-		*(uint16_t *)buff = pCfg->VendorID;
-		memcpy(&buff[2], pCfg->pSrManData, pCfg->SrManDataLen);
+		BleAdvData_t *p = BleAdvDataAllocate(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
-    	if (BleAdvDataAdd(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
-    	{
-
-    	}
-
+		if (p == NULL)
+		{
+			return false;
+		}
+		*(uint16_t *)p->Data = pCfg->VendorID;
+		memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
 	}
 
 	if (g_BleAppData.bExtAdv == false)
@@ -975,7 +970,20 @@ static uint8_t BleStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
 
 static void BleStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 {
-	BleStackRandPrioLowGet(pBuff, Len);
+	NRF_RNG->CONFIG = RNG_CONFIG_DERCEN_Enabled;
+
+	NRF_RNG->TASKS_START = 1;
+
+	for (int i = 0; i < Len; i++)
+	{
+		while (NRF_RNG->EVENTS_VALRDY == 0);
+
+		pBuff[i] = NRF_RNG->VALUE;
+	}
+
+	NRF_RNG->TASKS_STOP = 1;
+
+	NRF_RNG->CONFIG = RNG_CONFIG_DERCEN_Disabled;
 }
 
 bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
@@ -1256,7 +1264,10 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 
     if (pBleAppCfg->Role & (BLEAPP_ROLE_BROADCASTER | BLEAPP_ROLE_PERIPHERAL))
     {
-    	BleAppAdvInit(pBleAppCfg);
+    	if (BleAppAdvInit(pBleAppCfg) == false)
+    	{
+    		return false;
+    	}
     }
 
 

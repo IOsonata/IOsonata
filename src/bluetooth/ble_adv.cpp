@@ -60,17 +60,64 @@ static int BleAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 }
 
 /**
+ * @brief	Allocate space to add new advertisement data
+ *
+ * This function allocate space in the advertisement packet to add new data.
+ * If enough space available, it will prefill the data header. Caller needs only
+ * to copy new data into it.
+ * If type already exists, it will be removed if enough space to store new data
+ *
+ * @param 	pAdvPkt : Pointer to Adv packet to add data into
+ * @param 	Type 	: GAP data type of the data
+ * @param	Len		: Length in bytes of the data
+ *
+ * @return	Pointer to location to store new data.
+ * 			NULL if not enough space. Old data will not be removed
+ */
+BleAdvData_t *BleAdvDataAllocate(BleAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
+{
+	int idx = BleAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
+
+	if (idx >= 0)
+	{
+		// Tag already exists, remove it first
+		BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[idx];
+		int l = pAdvPkt->Len - p->Hdr.Len - 1;
+
+		if (Len > (pAdvPkt->MaxLen - l))
+		{
+			return nullptr;
+		}
+
+		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + p->Hdr.Len + 1], l - idx);
+		pAdvPkt->Len = l;
+	}
+	else if (Len > (pAdvPkt->MaxLen - pAdvPkt->Len))
+	{
+		return nullptr;
+	}
+
+	BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[pAdvPkt->Len];
+	p->Hdr.Len = Len + 1;
+	p->Hdr.Type = Type;
+	pAdvPkt->Len += Len + 2;
+
+	return p;
+}
+
+/**
  * @brief	Add advertisement data into the adv packet
  *
- * @param 	BleAdvPacket_t 	: Pointer to Adv packet to add data into
- * @param 	Type 				: GAP data type of the data
- * @param	pData				: Pointer to data to add
- * @param	Len				: Length in bytes of the data
+ * @param 	pAdvPkt : Pointer to Adv packet to add data into
+ * @param 	Type 	: GAP data type of the data
+ * @param	pData	: Pointer to data to add
+ * @param	Len		: Length in bytes of the data
  *
  * @return	true - success
  */
 bool BleAdvDataAdd(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
 {
+#if 0
 	int idx = BleAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
 
 	if (idx >= 0)
@@ -87,8 +134,7 @@ bool BleAdvDataAdd(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Le
 		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + p->Hdr.Len + 1], l - idx);
 		pAdvPkt->Len = l;
 	}
-
-	if (Len > (pAdvPkt->MaxLen - pAdvPkt->Len))
+	else if (Len > (pAdvPkt->MaxLen - pAdvPkt->Len))
 	{
 		return false;
 	}
@@ -97,12 +143,19 @@ bool BleAdvDataAdd(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Le
 	BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[pAdvPkt->Len];
 	p->Hdr.Len = Len + 1;
 	p->Hdr.Type = Type;
+#else
+	BleAdvData_t *p = BleAdvDataAllocate(pAdvPkt, Type, Len);
+
+	if (p == nullptr)
+	{
+		return false;
+	}
+#endif
 
 	if (pData != NULL && Len > 0)
 	{
 		memcpy(p->Data, pData, Len);
 	}
-	pAdvPkt->Len += Len + 2;
 
 	return true;
 }
@@ -138,7 +191,8 @@ void BleAdvDataRemove(BleAdvPacket_t *pAdvPkt, uint8_t Type)
  * @param 	pAdvPkt	: Pointer to Adv packet to add data into
  * @param 	pUid	: Pointer to UUID array list
  * @param 	bComplete : true - UUID list is complete, false - partial
- * @return
+ *
+ * @return	true - success
  */
 bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BleUuidArr_t *pUid, bool bComplete)
 {

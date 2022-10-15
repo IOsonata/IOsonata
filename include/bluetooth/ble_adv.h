@@ -149,6 +149,23 @@ static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
 };
 
 /**
+ * @brief	Allocate space to add new advertisement data
+ *
+ * This function allocate space in the advertisement packet to add new data.
+ * If enough space available, it will prefill the data header. Caller needs only
+ * to copy new data into it.
+ * If type already exists, it will be removed if enough space to store new data
+ *
+ * @param 	pAdvPkt : Pointer to Adv packet to add data into
+ * @param 	Type 	: GAP data type of the data
+ * @param	Len		: Length in bytes of the data
+ *
+ * @return	Pointer to location to store new data.
+ * 			NULL if not enough space. Old data will not be removed
+ */
+BleAdvData_t *BleAdvDataAllocate(BleAdvPacket_t *pAdvPkt, uint8_t Type, int Len);
+
+/**
  * @brief	Add advertisement data into the adv packet
  *
  * @param 	pAdvPkt	: Pointer to Adv packet to add data into
