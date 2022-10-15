@@ -35,10 +35,5 @@
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/exemples/BleAdvertiser.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/ble_app_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_app_sdc.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>
