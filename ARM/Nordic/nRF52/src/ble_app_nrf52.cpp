@@ -114,6 +114,8 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
+#define MAX_ADV_UUID					10
+
 // ORable application role
 //#define BLEAPP_ROLE_PERIPHERAL			1
 //#define BLEAPP_ROLE_CENTRAL				2
@@ -1213,46 +1215,47 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     		initdata.advdata.name_type = BLE_ADVDATA_NO_NAME;
     }
 
-	ble_uuid_t uid[10];
+	ble_uuid_t uid[MAX_ADV_UUID];
 
-	if (pCfg->NbAdvUuid > 0 && pCfg->pAdvUuids != NULL)
+	if (pCfg->pAdvUuid != NULL)
     {
-    	for (int i = 0; i < pCfg->NbAdvUuid; i++)
-    	{
-    		if (pCfg->pAdvUuids[i].Type == BLE_UUID_TYPE_16)
-    		{
-    			uid[i].uuid = pCfg->pAdvUuids[i].Uuid16;
-    			uid[i].type = pCfg->pAdvUuids[i].BaseIdx == 0 ?
-    						  BLE_UUID_TYPE_BLE : BLE_UUID_TYPE_VENDOR_BEGIN;
-    		}
-    	}
+		if (pCfg->pAdvUuid->Type == BLE_UUID_TYPE_16)
+		{
+			uint8_t utype = pCfg->pAdvUuid->BaseIdx == 0 ?
+							BLE_UUID_TYPE_BLE : BLE_UUID_TYPE_VENDOR_BEGIN;
+			for (int i = 0; i < min(pCfg->pAdvUuid->Count, MAX_ADV_UUID); i++)
+			{
+				uid[i].uuid = pCfg->pAdvUuid->Val[i].Uuid16;
+				uid[i].type = utype;
+			}
+		}
     }
 
 	if (pCfg->bExtAdv)
 	{
-		if (pCfg->pAdvManData != NULL)
-		{
-			initdata.advdata.p_manuf_specific_data = &g_BleAppData.ManufData;
-		}
-        if (pCfg->NbAdvUuid > 0 && pCfg->pAdvUuids != NULL)
+        if (pCfg->pAdvUuid != NULL)
         {
 			if (pCfg->bCompleteUuidList)
 			{
-				initdata.advdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
+				initdata.advdata.uuids_complete.uuid_cnt = pCfg->pAdvUuid->Count;
 				initdata.advdata.uuids_complete.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
 			}
 			else
 			{
-				initdata.advdata.uuids_more_available.uuid_cnt = pCfg->NbAdvUuid;
+				initdata.advdata.uuids_more_available.uuid_cnt = pCfg->pAdvUuid->Count;
 				initdata.advdata.uuids_more_available.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
 			}
         }
+		if (pCfg->pAdvManData != NULL)
+		{
+			initdata.advdata.p_manuf_specific_data = &g_BleAppData.ManufData;
+		}
 	}
 	else
 	{
 		if (initdata.advdata.name_type == BLE_ADVDATA_NO_NAME)
 		{
-			if (pCfg->NbAdvUuid > 0 && pCfg->pAdvUuids != NULL)
+			if (pCfg->pAdvUuid != NULL)
 			{
 				if (pCfg->pAdvManData != NULL)
 				{
@@ -1260,12 +1263,12 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 					if (pCfg->bCompleteUuidList)
 					{
-						initdata.srdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
+						initdata.srdata.uuids_complete.uuid_cnt = pCfg->pAdvUuid->Count;
 						initdata.srdata.uuids_complete.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
 					}
 					else
 					{
-						initdata.srdata.uuids_more_available.uuid_cnt = pCfg->NbAdvUuid;
+						initdata.srdata.uuids_more_available.uuid_cnt = pCfg->pAdvUuid->Count;
 						initdata.srdata.uuids_more_available.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
 					}
 				}
@@ -1273,12 +1276,12 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 				{
 					if (pCfg->bCompleteUuidList)
 					{
-						initdata.advdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
+						initdata.advdata.uuids_complete.uuid_cnt = pCfg->pAdvUuid->Count;
 						initdata.advdata.uuids_complete.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
 					}
 					else
 					{
-						initdata.advdata.uuids_more_available.uuid_cnt = pCfg->NbAdvUuid;
+						initdata.advdata.uuids_more_available.uuid_cnt = pCfg->pAdvUuid->Count;
 						initdata.advdata.uuids_more_available.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
 					}
 					if (pCfg->pSrManData != NULL)
@@ -1301,16 +1304,16 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 		}
 		else
 		{
-			if (pCfg->NbAdvUuid > 0 && pCfg->pAdvUuids != NULL)
+			if (pCfg->pAdvUuid != NULL)
 			{
 				if (pCfg->bCompleteUuidList)
 				{
-					initdata.srdata.uuids_complete.uuid_cnt = pCfg->NbAdvUuid;
+					initdata.srdata.uuids_complete.uuid_cnt = pCfg->pAdvUuid->Count;
 					initdata.srdata.uuids_complete.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
 				}
 				else
 				{
-					initdata.srdata.uuids_more_available.uuid_cnt = pCfg->NbAdvUuid;
+					initdata.srdata.uuids_more_available.uuid_cnt = pCfg->pAdvUuid->Count;
 					initdata.srdata.uuids_more_available.p_uuids  = uid;//(ble_uuid_t*)pCfg->pAdvUuids;
 				}
 

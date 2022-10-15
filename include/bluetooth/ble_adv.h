@@ -37,6 +37,8 @@ SOFTWARE.
 
 #include <stdint.h>
 
+#include "bluetooth/ble_uuid.h"
+
 #pragma pack(push, 1)
 
 typedef enum __Ble_Addr_Type {
@@ -156,7 +158,7 @@ static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
  *
  * @return	true - success
  */
-bool BleAdvAddData(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Len);
+bool BleAdvDataAdd(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Len);
 
 /**
  * @brief	Remove advertisement data from the adv packet
@@ -166,8 +168,17 @@ bool BleAdvAddData(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Le
  *
  * @return	none
  */
-void BleAdvRemoveData(BleAdvPacket_t *pAdvPkt, uint8_t Type);
+void BleAdvDataRemove(BleAdvPacket_t *pAdvPkt, uint8_t Type);
 
+/**
+ * @brief	Add UUID list to the advertising data
+ *
+ * @param 	pAdvPkt	: Pointer to Adv packet to add data into
+ * @param 	pUid	: Pointer to UUID array list
+ * @param 	bComplete : true - UUID list is complete, false - partial
+ * @return
+ */
+bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BleUuidArr_t *pUid, bool bComplete);
 
 #ifdef __cplusplus
 }

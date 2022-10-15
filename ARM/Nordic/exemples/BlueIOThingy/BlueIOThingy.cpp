@@ -147,8 +147,11 @@ Timer g_Timer;
 //static const ble_uuid_t  s_AdvUuids[] = {
 //    {BLE_UUID_TCS_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
 //};
-uint16_t s_AdvUuids[] = {
-	BLE_UUID_TCS_SERVICE
+BleUuidArr_t s_AdvUuids = {
+	.Type = BLE_UUID_TYPE_16,
+	.BaseIdx = 1,
+	.Count = 1,
+	.Val = {{.Uuid16 = BLE_UUID_TCS_SERVICE},}
 };
 
 const BleAppCfg_t s_BleAppCfg = {
@@ -167,8 +170,8 @@ const BleAppCfg_t s_BleAppCfg = {
 	.SrManDataLen = 0,
 	.SecType = BLEAPP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
 	.SecExchg = BLEAPP_SECEXCHG_NONE,	// Security key exchange
-	.pAdvUuids = s_AdvUuids,      			// Service uuids to advertise
-	.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(ble_uuid_t), 					// Total number of uuids
+	.pAdvUuid = &s_AdvUuids,      			// Service uuids to advertise
+	//.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(ble_uuid_t), 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
 	.AdvTimeout = 0,		// Advertising timeout in sec
 	.AdvSlowInterval = 0,				// Slow advertising interval, if > 0, fallback to

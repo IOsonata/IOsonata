@@ -36,9 +36,9 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/ble_adv.h"
+#include "bluetooth/ble_gap.h"
 
-
-static int BleAdvFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
+static int BleAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 {
 	int retval = -1;
 	BleAdvDataHdr_t *hdr = (BleAdvDataHdr_t*)pData;
@@ -69,9 +69,9 @@ static int BleAdvFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
  *
  * @return	true - success
  */
-bool BleAdvAddData(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
+bool BleAdvDataAdd(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
 {
-	int idx = BleAdvFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
+	int idx = BleAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
 
 	if (idx >= 0)
 	{
@@ -115,12 +115,12 @@ bool BleAdvAddData(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Le
  *
  * @return	none
  */
-void BleAdvRemoveData(BleAdvPacket_t *pAdvPkt, uint8_t Type)
+void BleAdvDataRemove(BleAdvPacket_t *pAdvPkt, uint8_t Type)
 {
 	if (pAdvPkt->Len <= 0)
 		return;
 
-	int idx = BleAdvFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
+	int idx = BleAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
 
 	if (idx >= 0)
 	{
@@ -130,4 +130,40 @@ void BleAdvRemoveData(BleAdvPacket_t *pAdvPkt, uint8_t Type)
 		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + l], l);
 		pAdvPkt->Len -= l;
 	}
+}
+
+/**
+ * @brief	Add UUID list to the advertising data
+ *
+ * @param 	pAdvPkt	: Pointer to Adv packet to add data into
+ * @param 	pUid	: Pointer to UUID array list
+ * @param 	bComplete : true - UUID list is complete, false - partial
+ * @return
+ */
+bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BleUuidArr_t *pUid, bool bComplete)
+{
+	int l = 0;
+	uint8_t gaptype = 0;
+	bool retval;
+
+	switch (pUid->Type)
+	{
+		case BLE_UUID_TYPE_16:
+			gaptype = bComplete ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
+			l = pUid->Count * 2;
+			break;
+		case BLE_UUID_TYPE_32:
+			gaptype = bComplete ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
+			l = pUid->Count * 4;
+			break;
+		case BLE_UUID_TYPE_128:
+			gaptype = bComplete ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
+			l = pUid->Count * 16;
+			break;
+		default:
+			retval = false;
+	}
+
+	return BleAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)pUid->Val, l);
+;
 }

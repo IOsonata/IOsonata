@@ -440,7 +440,7 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 		type = GAP_DATA_TYPE_SHORT_LOCAL_NAME;
 	}
 
-	BleAdvAddData(advpkt, type, (uint8_t*)pDeviceName, l);
+	BleAdvDataAdd(advpkt, type, (uint8_t*)pDeviceName, l);
 }
 
 /**@brief Function for the GAP initialization.
@@ -481,7 +481,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 		*(uint16_t *)buff = g_BleAppData.VendorId;
 		memcpy(&buff[2], pAdvData, AdvLen);
 
-    	if (BleAdvAddData(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
+    	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
     	{
     		return false;
     	}
@@ -517,7 +517,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 		*(uint16_t *)buff = g_BleAppData.VendorId;
 		memcpy(&buff[2], pSrData, AdvLen);
 
-    	if (BleAdvAddData(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
+    	if (BleAdvDataAdd(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
     	{
     		return false;
     	}
@@ -644,14 +644,14 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		//flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
 	}
 
-	if (BleAdvAddData(advpkt, GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
+	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
 	{
 		return false;
 	}
 
     if (pCfg->Appearance != BLE_APPEARANCE_UNKNOWN_GENERIC)
     {
-    	if (BleAdvAddData(advpkt, GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
+    	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{
 //    		return false;
     	}
@@ -672,7 +672,7 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     		l = min((size_t)30, mxl);
     	}
 
-    	if (BleAdvAddData(advpkt, type, (uint8_t*)pCfg->pDevName, l) == false)
+    	if (BleAdvDataAdd(advpkt, type, (uint8_t*)pCfg->pDevName, l) == false)
     	{
     		return false;
     	}
@@ -684,60 +684,13 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     	uidadvpkt = advpkt;
     }
 
-    if (pCfg->NbAdvUuid > 0 && pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
+    if (pCfg->pAdvUuid != NULL && pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
     {
-    	uint8_t type = 0;
-
-    	switch (pCfg->pAdvUuids[0].Type)
+    	if (BleAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
     	{
-    		case BLE_UUID_TYPE_16:
-    			type = pCfg->bCompleteUuidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
-    			{
-    				uint16_t uuid[pCfg->NbAdvUuid];
 
-    				for (int i = 0; i < pCfg->NbAdvUuid; i++)
-    				{
-    					uuid[i] = pCfg->pAdvUuids[i].Uuid16;
-    				}
-    		    	if (BleAdvAddData(uidadvpkt, type, (uint8_t*)uuid, pCfg->NbAdvUuid * 2) == false)
-    		    	{
-    		    		return false;
-    		    	}
-    			}
-    			break;
-    		case BLE_UUID_TYPE_32:
-    			type = pCfg->bCompleteUuidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
-    			{
-    				uint32_t uuid[pCfg->NbAdvUuid];
-
-    				for (int i = 0; i < pCfg->NbAdvUuid; i++)
-    				{
-    					uuid[i] = pCfg->pAdvUuids[i].Uuid32;
-    				}
-    		    	if (BleAdvAddData(uidadvpkt, type, (uint8_t*)uuid, pCfg->NbAdvUuid * 4) == false)
-    		    	{
-    		    		return false;
-    		    	}
-    			}
-    			break;
-    		case BLE_UUID_TYPE_128:
-    			type = pCfg->bCompleteUuidList ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
-    			{
-    				uint8_t uuid[16 * pCfg->NbAdvUuid];
-    				uint8_t *p = uuid;
-
-    				for (int i = 0; i < pCfg->NbAdvUuid; i++)
-    				{
-    					memcpy(p, pCfg->pAdvUuids[i].Uuid128, 16);
-    					p += 16;
-    				}
-    		    	if (BleAdvAddData(uidadvpkt, type, (uint8_t*)uuid, pCfg->NbAdvUuid * 16) == false)
-    		    	{
-    		    		return false;
-    		    	}
-    			}
-    			break;
     	}
+
     }
 
 	if (pCfg->pAdvManData != NULL)
@@ -747,7 +700,7 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		*(uint16_t *)buff = pCfg->VendorID;
 		memcpy(&buff[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
 
-    	if (BleAdvAddData(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
+    	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
     	{
 
     	}
@@ -761,7 +714,7 @@ bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		*(uint16_t *)buff = pCfg->VendorID;
 		memcpy(&buff[2], pCfg->pSrManData, pCfg->SrManDataLen);
 
-    	if (BleAdvAddData(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
+    	if (BleAdvDataAdd(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, buff, l) == false)
     	{
 
     	}

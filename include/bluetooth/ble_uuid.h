@@ -772,15 +772,25 @@ typedef enum __Ble_Uuid_Type {
 	BLE_UUID_TYPE_128			//!< Full 128 UUID
 } BLE_UUID_TYPE;
 
+typedef union __Ble_Uuid_Val {
+	uint16_t Uuid16;		//!< 16 bits UUID to use with base UUID defined by BaseIdx
+	uint32_t Uuid32;		//!< 32 bits UUID to use with base UUID defined by BaseIdx
+	uint8_t Uuid128[16];	//!< Full 128 bits UUID
+} BleUuidVal_t;
+
 typedef struct __Ble_Uuid {
 	BLE_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
 	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
-	union {
-		uint16_t Uuid16;		//!< 16 bits UUID to use with base UUID defined by BaseIdx
-		uint32_t Uuid32;		//!< 32 bits UUID to use with base UUID defined by BaseIdx
-		uint8_t Uuid128[16];	//!< Full 128 bits UUID
-	};
+	BleUuidVal_t Val;
 } BleUuid_t;
+
+/// NOTE: Variable length structure
+typedef struct __Ble_Uuid_Array {
+	BLE_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
+	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	int Count;					//!< Number of elements in array
+	BleUuidVal_t Val[1];		//!< Array of UUID values
+} BleUuidArr_t;
 
 #pragma pack(pop)
 

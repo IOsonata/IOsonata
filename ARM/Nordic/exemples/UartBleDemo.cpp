@@ -55,7 +55,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //#define HM_10
 
-#define DEVICE_NAME                     "UARTDemo long long 1234567890"                          /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "UARTDemo2 long long 1234567890"                          /**< Name of device. Will be included in the advertising data. */
 
 #define PACKET_SIZE						20
 
@@ -107,8 +107,11 @@ void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len
 //static const ble_uuid_t  s_AdvUuids[] = {
 //	{BLE_UART_UUID_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
 //};
-static const BleUuid_t s_AdvUuids[] = {
-	{.Type = BLE_UUID_TYPE_16, .BaseIdx = 1, .Uuid16 = BLE_UART_UUID_SERVICE,}
+static const BleUuidArr_t s_AdvUuid = {
+	.Type = BLE_UUID_TYPE_16,
+	.BaseIdx = 1,
+	.Count = 1,
+	.Val = {{.Uuid16 = BLE_UART_UUID_SERVICE},}
 };
 
 static const char s_RxCharDescString[] = {
@@ -205,8 +208,8 @@ const BleAppCfg_t s_BleAppCfg = {
 	.SecType = BLEAPP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
 	.SecExchg = BLEAPP_SECEXCHG_NONE,	// Security key exchange
 	.bCompleteUuidList = true,
-	.pAdvUuids = s_AdvUuids,      			// Service uuids to advertise
-	.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(BleUuid_t), 					// Total number of uuids
+	.pAdvUuid = &s_AdvUuid,      			// Service uuids to advertise
+	//.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(BleUuid_t), 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
 	.AdvTimeout = APP_ADV_TIMEOUT,		// Advertising timeout in sec
 	.AdvSlowInterval = 0,				// Slow advertising interval, if > 0, fallback to
