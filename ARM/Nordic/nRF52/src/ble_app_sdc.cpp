@@ -673,7 +673,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     		return false;
     	}
 
-    	uidadvpkt = srpkt;
+    	uidadvpkt = pCfg->bExtAdv ? advpkt : srpkt;
     }
     else
     {
