@@ -645,7 +645,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		return false;
 	}
 
-    if (pCfg->Appearance != BLE_APPEARANCE_UNKNOWN_GENERIC)
+    if (pCfg->Appearance != BLE_APPEAR_UNKNOWN_GENERIC)
     {
     	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{
