@@ -1120,7 +1120,7 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
     g_AdvInstance.adv_params.p_peer_addr 		= NULL;                             // Undirected advertisement.
     g_AdvInstance.adv_params.filter_policy		= BLE_GAP_ADV_FP_ANY;
     g_AdvInstance.adv_params.interval    		= MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
-    g_AdvInstance.adv_params.duration     		= MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
+    g_AdvInstance.adv_params.duration     		= MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_0_625_MS);
     g_AdvInstance.p_adv_data = &g_AdvInstance.adv_data;
     g_AdvInstance.adv_data.adv_data.p_data = g_AdvInstance.enc_advdata[0];
     g_AdvInstance.adv_data.scan_rsp_data.p_data = g_AdvInstance.enc_scan_rsp_data[0];
@@ -1128,7 +1128,7 @@ __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 	g_AdvInstance.adv_modes_config.ble_adv_fast_enabled  = true;
 	g_AdvInstance.adv_modes_config.ble_adv_extended_enabled = pCfg->bExtAdv;
 	g_AdvInstance.adv_modes_config.ble_adv_fast_interval = MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
-	g_AdvInstance.adv_modes_config.ble_adv_fast_timeout  = MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
+	g_AdvInstance.adv_modes_config.ble_adv_fast_timeout  = MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_0_625_MS);
 
 	if (pCfg->AdvSlowInterval > 0)
 	{
