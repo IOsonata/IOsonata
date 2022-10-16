@@ -628,7 +628,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		}
 		else
 		{
-			flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
+			flags |= GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
 		}
 		extprop |= BLE_EXT_ADV_EVT_PROP_CONNECTABLE;// | BLE_EXT_ADV_EVT_PROP_SCANNABLE;
 	}
