@@ -70,6 +70,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/pb_common.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/nano-pb/pb_common.c</locationURI>
@@ -108,6 +113,26 @@
 			<name>src/nRF5_SDK/libraries/fstorage</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/micro-ecc/types.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/types.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/micro-ecc/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/micro-ecc/uECC.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/micro-ecc/uECC_vli.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC_vli.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/softdevice/common</name>
