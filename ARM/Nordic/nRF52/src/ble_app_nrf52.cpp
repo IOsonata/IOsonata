@@ -77,6 +77,7 @@ Modified by          Date              Description
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
+#include "bluetooth/ble_uuid.h"
 #include "bluetooth/ble_app.h"
 #include "ble_app_nrf5.h"
 #include "ble_dev.h"
@@ -129,12 +130,13 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 
 typedef struct _BleAppData {
 	BLEAPP_ROLE Role;
-//	BLEAPP_MODE AppMode;
-	//int AppRole;
 	uint16_t ConnHdl;	// BLE connection handle
 	int ConnLedPort;
 	int ConnLedPin;
 	uint8_t ConnLedActLevel;
+	uint16_t VendorId;
+	ble_gap_adv_params_t AdvParam;
+	//ble_gap_adv_data_t AdvData;
 	int PeriphDevCnt;
 //	BLEAPP_PERIPH *pPeriphDev;
 	uint32_t (*SDEvtHandler)(void) ;
@@ -171,6 +173,21 @@ NRF_BLE_GATT_DEF(s_Gatt);
 BLEAPP_DATA g_BleAppData = {
 	BLEAPP_ROLE_PERIPHERAL, BLE_CONN_HANDLE_INVALID, -1, -1,
 };
+
+alignas(4) static uint8_t s_BleAppAdvBuff[256];
+alignas(4) static BleAdvPacket_t s_BleAppAdvPkt = { 31, 0, s_BleAppAdvBuff};
+alignas(4) static BleAdvPacket_t s_BleAppExtAdvPkt = { 255, 0, s_BleAppAdvBuff};
+
+alignas(4) static uint8_t s_BleAppSrBuff[256];
+alignas(4) static BleAdvPacket_t s_BleAppSrPkt = { 31, 0, s_BleAppSrBuff};
+alignas(4) static BleAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppSrBuff};
+
+static ble_gap_adv_data_t s_AdvData = {
+	.adv_data = {s_BleAppAdvBuff, 31},
+	.scan_rsp_data = {s_BleAppSrBuff, 31}
+};
+
+
 
 pm_peer_id_t g_PeerMngrIdToDelete = PM_PEER_ID_INVALID;
 //static nrf_ble_gatt_t s_Gatt;                                     /**< GATT module instance. */
@@ -1099,7 +1116,6 @@ void BleAppAdvStop()
 __WEAK void BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
     uint32_t               err_code;
-//    ble_advdata_manuf_data_t mdata;
     ble_advertising_init_t	initdata;
 
     memset(&initdata, 0, sizeof(ble_advertising_init_t));

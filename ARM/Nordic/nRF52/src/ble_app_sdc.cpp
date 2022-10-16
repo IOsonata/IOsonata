@@ -110,19 +110,19 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 //__ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC ECC DH Key*/
 
 alignas(4) static uint8_t s_BleAppAdvBuff[260];
-alignas(4) static sdc_hci_cmd_le_set_adv_data_t &s_BleAppAdvAdvData = *(sdc_hci_cmd_le_set_adv_data_t*)s_BleAppAdvBuff;
-alignas(4) static BleAdvPacket_t s_BleAppAdvAdvPkt = { sizeof(s_BleAppAdvAdvData.adv_data), 0, s_BleAppAdvAdvData.adv_data};
+alignas(4) static sdc_hci_cmd_le_set_adv_data_t &s_BleAppAdvData = *(sdc_hci_cmd_le_set_adv_data_t*)s_BleAppAdvBuff;
+alignas(4) static BleAdvPacket_t s_BleAppAdvPkt = { sizeof(s_BleAppAdvData.adv_data), 0, s_BleAppAdvData.adv_data};
 
-alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BleAppAdvExtAdvData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BleAppAdvBuff;
-alignas(4) static BleAdvPacket_t s_BleAppAdvExtAdvPkt = { 255, 0, s_BleAppAdvExtAdvData.adv_data};
+alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BleAppExtAdvData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BleAppAdvBuff;
+alignas(4) static BleAdvPacket_t s_BleAppExtAdvPkt = { 255, 0, s_BleAppExtAdvData.adv_data};
 
 alignas(4) static uint8_t s_BleAppSrBuff[260];
 
-alignas(4) static sdc_hci_cmd_le_set_scan_response_data_t &s_BleAppAdvSrData = *(sdc_hci_cmd_le_set_scan_response_data_t*)s_BleAppSrBuff;
-alignas(4) static BleAdvPacket_t s_BleAppAdvSrPkt = { sizeof(s_BleAppAdvSrData.scan_response_data), 0, s_BleAppAdvSrData.scan_response_data};
+alignas(4) static sdc_hci_cmd_le_set_scan_response_data_t &s_BleAppSrData = *(sdc_hci_cmd_le_set_scan_response_data_t*)s_BleAppSrBuff;
+alignas(4) static BleAdvPacket_t s_BleAppSrPkt = { sizeof(s_BleAppSrData.scan_response_data), 0, s_BleAppSrData.scan_response_data};
 
-alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppAdvExtSrData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BleAppSrBuff;
-alignas(4) static BleAdvPacket_t s_BleAppAdvExtSrPkt = { 255, 0, s_BleAppAdvExtSrData.scan_response_data};
+alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppExtSrData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BleAppSrBuff;
+alignas(4) static BleAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppExtSrData.scan_response_data};
 
 alignas(4) static uint8_t s_BleStackSdcMemPool[10000];
 
@@ -424,11 +424,11 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 	if (g_BleAppData.bExtAdv == true)
 	{
-		advpkt = &s_BleAppAdvExtAdvPkt;
+		advpkt = &s_BleAppExtAdvPkt;
 	}
 	else
 	{
-		advpkt = &s_BleAppAdvAdvPkt;
+		advpkt = &s_BleAppAdvPkt;
 	}
 
 	size_t l = strlen(pDeviceName);
@@ -465,13 +465,13 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 
 	if (g_BleAppData.bExtAdv == true)
 	{
-		advpkt = &s_BleAppAdvExtAdvPkt;
-		srpkt = &s_BleAppAdvExtSrPkt;
+		advpkt = &s_BleAppExtAdvPkt;
+		srpkt = &s_BleAppExtSrPkt;
 	}
 	else
 	{
-		advpkt = &s_BleAppAdvAdvPkt;
-		srpkt = &s_BleAppAdvSrPkt;
+		advpkt = &s_BleAppAdvPkt;
+		srpkt = &s_BleAppSrPkt;
 	}
 
 	if (pAdvData)
@@ -488,12 +488,12 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 
     	if (g_BleAppData.bExtAdv == true)
     	{
-    		s_BleAppAdvExtAdvData.adv_handle = 0;
-    		s_BleAppAdvExtAdvData.operation = 3;
-    		s_BleAppAdvExtAdvData.fragment_preference = 1;
-    		s_BleAppAdvExtAdvData.adv_data_length = advpkt->Len;
+    		s_BleAppExtAdvData.adv_handle = 0;
+    		s_BleAppExtAdvData.operation = 3;
+    		s_BleAppExtAdvData.fragment_preference = 1;
+    		s_BleAppExtAdvData.adv_data_length = advpkt->Len;
 
-    		int res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppAdvExtAdvData);
+    		int res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppExtAdvData);
     		if (res != 0)
     		{
     			return false;
@@ -501,9 +501,9 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
     	}
     	else
     	{
-			s_BleAppAdvAdvData.adv_data_length = s_BleAppAdvAdvPkt.Len;
+			s_BleAppAdvData.adv_data_length = s_BleAppAdvPkt.Len;
 
-			int res = sdc_hci_cmd_le_set_adv_data(&s_BleAppAdvAdvData);
+			int res = sdc_hci_cmd_le_set_adv_data(&s_BleAppAdvData);
     		if (res != 0)
     		{
     			return false;
@@ -525,9 +525,9 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 
     	if (g_BleAppData.bExtAdv == false)
     	{
-			s_BleAppAdvSrData.scan_response_data_length = s_BleAppAdvSrPkt.Len;
+			s_BleAppSrData.scan_response_data_length = s_BleAppSrPkt.Len;
 
-			int res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppAdvSrData);
+			int res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppSrData);
     		if (res != 0)
     		{
     			return false;
@@ -611,13 +611,13 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 	if (g_BleAppData.bExtAdv == true)
 	{
-		advpkt = &s_BleAppAdvExtAdvPkt;
-		srpkt = &s_BleAppAdvExtSrPkt;
+		advpkt = &s_BleAppExtAdvPkt;
+		srpkt = &s_BleAppExtSrPkt;
 	}
 	else
 	{
-		advpkt = &s_BleAppAdvAdvPkt;
-		srpkt = &s_BleAppAdvSrPkt;
+		advpkt = &s_BleAppAdvPkt;
+		srpkt = &s_BleAppSrPkt;
 	}
 
 	if (pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
@@ -740,9 +740,9 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 			return false;
 		}
 
-		s_BleAppAdvAdvData.adv_data_length = advpkt->Len;
+		s_BleAppAdvData.adv_data_length = advpkt->Len;
 
-		sdc_res = sdc_hci_cmd_le_set_adv_data(&s_BleAppAdvAdvData);
+		sdc_res = sdc_hci_cmd_le_set_adv_data(&s_BleAppAdvData);
 		if (sdc_res != 0)
 		{
 			return false;
@@ -750,9 +750,9 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 		if (srpkt->Len > 0)
 		{
-			s_BleAppAdvSrData.scan_response_data_length = srpkt->Len;
+			s_BleAppSrData.scan_response_data_length = srpkt->Len;
 
-			sdc_res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppAdvSrData);
+			sdc_res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppSrData);
 			if (sdc_res != 0)
 			{
 				return false;
@@ -785,12 +785,12 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 //			printf("sdc_hci_cmd_le_set_ext_adv_params : %x\n", res);
 		}
 
-		s_BleAppAdvExtAdvData.adv_handle = 0;
-		s_BleAppAdvExtAdvData.operation = 3;
-		s_BleAppAdvExtAdvData.fragment_preference = 1;
-		s_BleAppAdvExtAdvData.adv_data_length = advpkt->Len;
+		s_BleAppExtAdvData.adv_handle = 0;
+		s_BleAppExtAdvData.operation = 3;
+		s_BleAppExtAdvData.fragment_preference = 1;
+		s_BleAppExtAdvData.adv_data_length = advpkt->Len;
 
-		res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppAdvExtAdvData);
+		res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppExtAdvData);
 		if (res != 0)
 		{
 			return false;
@@ -799,12 +799,12 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 		if (srpkt->Len > 0)
 		{
-			s_BleAppAdvExtSrData.adv_handle = 0;
-			s_BleAppAdvExtSrData.operation = 3;
-			s_BleAppAdvExtSrData.fragment_preference = 1;
-			s_BleAppAdvExtSrData.scan_response_data_length = advpkt->Len;
+			s_BleAppExtSrData.adv_handle = 0;
+			s_BleAppExtSrData.operation = 3;
+			s_BleAppExtSrData.fragment_preference = 1;
+			s_BleAppExtSrData.scan_response_data_length = advpkt->Len;
 
-			res = sdc_hci_cmd_le_set_ext_scan_response_data(&s_BleAppAdvExtSrData);
+			res = sdc_hci_cmd_le_set_ext_scan_response_data(&s_BleAppExtSrData);
 			if (res != 0)
 			{
 				return false;
