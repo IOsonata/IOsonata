@@ -1261,11 +1261,40 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
     if (pCfg->pAdvUuid != NULL && pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
     {
-    	if (BleAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
+    	if (pCfg->pAdvUuid->BaseIdx > 0 && pCfg->pAdvUuid->Type == BLE_UUID_TYPE_16)
     	{
+    		// Convert custom uuid to 128 bits
+			int l = (pCfg->pAdvUuid->Count - 1) * sizeof(BleUuid_t) + sizeof(BleUuidArr_t);
+			uint8_t x[l];
 
+			memcpy(x, pCfg->pAdvUuid, l);
+			BleUuidArr_t *ua = (BleUuidArr_t*)x;
+
+			ua->Type = BLE_UUID_TYPE_128;
+
+			for (int i = 0; i < pCfg->pAdvUuid->Count; i++)
+			{
+				ble_uuid_t uid = { pCfg->pAdvUuid->Val[i].Uuid16, (uint8_t)(pCfg->pAdvUuid->BaseIdx == 0 ? BLE_UUID_TYPE_BLE : BLE_UUID_TYPE_VENDOR_BEGIN)};
+
+				uint8_t len = 0;
+				uint32_t res = sd_ble_uuid_encode(&uid, &len, ua->Val[i].Uuid128);
+				if (res != 0)
+				{
+					printf("err %x\n", res);
+				}
+			}
+			if (BleAdvDataAddUuid(uidadvpkt, ua, pCfg->bCompleteUuidList) == false)
+			{
+
+			}
     	}
+    	else
+    	{
+			if (BleAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
+			{
 
+			}
+    	}
     }
 
 	if (pCfg->pAdvManData != NULL)
