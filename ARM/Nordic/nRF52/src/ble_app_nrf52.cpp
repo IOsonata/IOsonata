@@ -151,6 +151,8 @@ typedef struct _BleAppData {
 	bool bAdvertising;
 	bool bExtAdv;
 	bool bScan;
+    bool BleInitialized;
+
 } BLEAPP_DATA;
 
 #pragma pack(pop)
@@ -1228,7 +1230,8 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     {
     	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{
-//    		return false;
+    		// Don't care whether we are able to add appearance or not. Appearance is optional.
+    		//return false;
     	}
     }
 
@@ -1901,6 +1904,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
 
+	g_BleAppData.BleInitialized = false;
 	g_BleAppData.bExtAdv = pBleAppCfg->bExtAdv;
 	g_BleAppData.bScan = false;
 	g_BleAppData.bAdvertising = false;
@@ -2039,7 +2043,10 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 
     if (g_BleAppData.Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
     {
-        BleAppAdvInit(pBleAppCfg);
+        if (BleAppAdvInit(pBleAppCfg) == false)
+        {
+        	return false;
+        }
 
         err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, g_BleAppData.AdvHdl, GetValidTxPower(pBleAppCfg->TxPower));
         APP_ERROR_CHECK(err_code);
@@ -2057,12 +2064,18 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
     NVIC_EnableIRQ(FPU_IRQn);
 #endif
 
+    g_BleAppData.BleInitialized = true;
 
     return true;
 }
 
 void BleAppRun()
 {
+	if (g_BleAppData.BleInitialized == false)
+	{
+		return;
+	}
+
 	g_BleAppData.bAdvertising = false;
 
 	if (g_BleAppData.Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))// != BLEAPP_ROLE_CENTRAL)
