@@ -461,109 +461,104 @@ bool nRFxTimerEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_E
 	return false;
 }
 
-bool nRFxTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 {
-    if (pCfg->DevNo < TIMER_NRFX_RTC_MAX || pCfg->DevNo >= (TIMER_NRFX_HF_MAX+TIMER_NRFX_RTC_MAX) || pCfg->Freq > TIMER_NRFX_HF_BASE_FREQ)
-    {
-        return false;
-    }
+	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX
+			|| pCfg->DevNo
+					>= (TIMER_NRFX_HF_MAX + TIMER_NRFX_RTC_MAX)|| pCfg->Freq > TIMER_NRFX_HF_BASE_FREQ)
+	{
+		return false;
+	}
 
 	int devno = pCfg->DevNo - TIMER_NRFX_RTC_MAX;
-    pTimer->DevNo = pCfg->DevNo;
-    pTimer->EvtHandler = pCfg->EvtHandler;
+	pTimer->DevNo = pCfg->DevNo;
+	pTimer->EvtHandler = pCfg->EvtHandler;
 	nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 
 	tdata.pTimer = pTimer;
 
-    memset(tdata.Trigger, 0, sizeof(tdata.Trigger));
+	memset(tdata.Trigger, 0, sizeof(tdata.Trigger));
 
-    pTimer->Disable = nRFxTimerDisable;
-    pTimer->Enable = nRFxTimerEnable;
-    pTimer->Reset = nRFxTimerReset;
-    pTimer->GetTickCount = nRFxTimerGetTickCount;
-    pTimer->SetFrequency = nRFxTimerSetFrequency;
-    pTimer->GetMaxTrigger = nRFxTimerGetMaxTrigger;
-    pTimer->FindAvailTrigger = nRFxTimerFindAvailTrigger;
-    pTimer->DisableTrigger = nRFxTimerDisableTrigger;
-    pTimer->EnableTrigger = nRFxTimerEnableTrigger;
-    pTimer->DisableExtTrigger = nRFxTimerDisableExtTrigger;
-    pTimer->EnableExtTrigger = nRFxTimerEnableExtTrigger;
+	pTimer->Disable = nRFxTimerDisable;
+	pTimer->Enable = nRFxTimerEnable;
+	pTimer->Reset = nRFxTimerReset;
+	pTimer->GetTickCount = nRFxTimerGetTickCount;
+	pTimer->SetFrequency = nRFxTimerSetFrequency;
+	pTimer->GetMaxTrigger = nRFxTimerGetMaxTrigger;
+	pTimer->FindAvailTrigger = nRFxTimerFindAvailTrigger;
+	pTimer->DisableTrigger = nRFxTimerDisableTrigger;
+	pTimer->EnableTrigger = nRFxTimerEnableTrigger;
+	pTimer->DisableExtTrigger = nRFxTimerDisableExtTrigger;
+	pTimer->EnableExtTrigger = nRFxTimerEnableExtTrigger;
 
-    reg->TASKS_STOP = 1;
-    reg->TASKS_CLEAR = 1;
+	reg->TASKS_STOP = 1;
+	reg->TASKS_CLEAR = 1;
 
-    NRF_CLOCK->TASKS_HFCLKSTOP = 1;
+	// Init clock source for TIMERs
+	if (!(NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk))
+	{
+		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
 
-    // Only support timer mode, 32bits counter
-    reg->MODE = TIMER_MODE_MODE_Timer;
-    reg->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
+		// Only support timer mode, 32bits counter
+		reg->MODE = TIMER_MODE_MODE_Timer;
+		reg->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
 
+		// Clock source not available.  Only 64MHz XTAL
+		s_nRfxHFClockSem++;
+		NRF_CLOCK->TASKS_HFCLKSTART = 1;
+
+		// Check if HFCLK is running or not
+		int timout = 1000000;
+		do
+		{
+			if ((NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk)
+					&& NRF_CLOCK->EVENTS_HFCLKSTARTED)
+				break;
+
+		} while (timout-- > 0);
+
+		if (timout <= 0)
+			return false;
+
+		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+	}
+
+	// Init interrupt for TIMERs
 	switch (devno)
 	{
-		case 0:
-			NVIC_ClearPendingIRQ(TIMER0_IRQn);
-			NVIC_SetPriority(TIMER0_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(TIMER0_IRQn);
-			break;
-		case 1:
-			NVIC_ClearPendingIRQ(TIMER1_IRQn);
-			NVIC_SetPriority(TIMER1_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(TIMER1_IRQn);
-			break;
-		case 2:
-			NVIC_ClearPendingIRQ(TIMER2_IRQn);
-			NVIC_SetPriority(TIMER2_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(TIMER2_IRQn);
-			break;
+	case 0:
+		NVIC_ClearPendingIRQ(TIMER0_IRQn);
+		NVIC_SetPriority(TIMER0_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER0_IRQn);
+		break;
+	case 1:
+		NVIC_ClearPendingIRQ(TIMER1_IRQn);
+		NVIC_SetPriority(TIMER1_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER1_IRQn);
+		break;
+	case 2:
+		NVIC_ClearPendingIRQ(TIMER2_IRQn);
+		NVIC_SetPriority(TIMER2_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER2_IRQn);
+		break;
 #if TIMER_NRFX_HF_MAX > 3
-		case 3:
-			NVIC_ClearPendingIRQ(TIMER3_IRQn);
-			NVIC_SetPriority(TIMER3_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(TIMER3_IRQn);
-			break;
-		case 4:
-			NVIC_ClearPendingIRQ(TIMER4_IRQn);
-			NVIC_SetPriority(TIMER4_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(TIMER4_IRQn);
-			break;
+	case 3:
+		NVIC_ClearPendingIRQ(TIMER3_IRQn);
+		NVIC_SetPriority(TIMER3_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER3_IRQn);
+		break;
+	case 4:
+		NVIC_ClearPendingIRQ(TIMER4_IRQn);
+		NVIC_SetPriority(TIMER4_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER4_IRQn);
+		break;
 #endif
 	}
 
-    // Clock source not available.  Only 64MHz XTAL
-    s_nRfxHFClockSem++;
-    NRF_CLOCK->TASKS_HFCLKSTART = 1;
 
-    // Check if HFCLK is running or not
-    int timout = 1000000;
-    do
-    {
-        if ((NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk) && NRF_CLOCK->EVENTS_HFCLKSTARTED)
-            break;
+	nRFxTimerSetFrequency(pTimer, pCfg->Freq);
 
-    } while (timout-- > 0);
-
-    if (timout <= 0)
-    	return false;
-
-//    // Check if HFCLK osc started
-//    timout = 1000000;
-//    do
-//	{
-//		if (NRF_CLOCK->EVENTS_HFCLKSTARTED)
-//			break;
-//
-//	} while (timout-- > 0);
-//
-//    if (timout <= 0)
-//        return false;
-
-    NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-
-
-
-    nRFxTimerSetFrequency(pTimer, pCfg->Freq);
-
-    return true;
+	return true;
 }
 

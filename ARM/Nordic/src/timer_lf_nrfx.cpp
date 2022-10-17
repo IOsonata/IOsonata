@@ -370,42 +370,47 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
     reg->TASKS_STOP = 1;
     reg->TASKS_CLEAR = 1;
-    NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-
-    switch (pCfg->ClkSrc)
+    if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
     {
-    	case TIMER_CLKSRC_DEFAULT:
-        case TIMER_CLKSRC_LFRC:
-            NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos;
-            break;
-        case TIMER_CLKSRC_LFXTAL:
-            NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos;
-            break;
-#if defined(NRF52_SERIES) || (NRF51)
-        case TIMER_CLKSRC_HFRC:
-        case TIMER_CLKSRC_HFXTAL:
-            NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Synth << CLOCK_LFCLKSRC_SRC_Pos;
-            break;
-#endif
+    	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+
+    	// Init oscillator
+		switch (pCfg->ClkSrc)
+		{
+			case TIMER_CLKSRC_DEFAULT:
+			case TIMER_CLKSRC_LFRC:
+				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos;
+				break;
+			case TIMER_CLKSRC_LFXTAL:
+				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos;
+				break;
+	#if defined(NRF52_SERIES) || (NRF51)
+			case TIMER_CLKSRC_HFRC:
+			case TIMER_CLKSRC_HFXTAL:
+				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Synth << CLOCK_LFCLKSRC_SRC_Pos;
+				break;
+	#endif
+		}
+
+		s_nRfxLFClockSem++;
+		NRF_CLOCK->TASKS_LFCLKSTART = 1;
+
+		int timout = 1000000;
+
+		do
+		{
+			if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) && NRF_CLOCK->EVENTS_LFCLKSTARTED)
+				break;
+
+		} while (timout-- > 0);
+
+		if (timout <= 0)
+			return false;
+
+		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
     }
 
-    s_nRfxLFClockSem++;
-    NRF_CLOCK->TASKS_LFCLKSTART = 1;
-
-    int timout = 1000000;
-
-    do
-    {
-        if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) && NRF_CLOCK->EVENTS_LFCLKSTARTED)
-            break;
-
-    } while (timout-- > 0);
-
-    if (timout <= 0)
-        return false;
-
-    NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-
+    // Init interrupt for RTC
 	switch (pCfg->DevNo)
 	{
 		case 0:
