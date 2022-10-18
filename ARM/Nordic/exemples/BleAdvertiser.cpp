@@ -55,10 +55,14 @@ SOFTWARE.
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
-#define DEVICE_NAME                     "Advertising extra xzabcd1234567890"
+#ifdef EXTADV
+#define DEVICE_NAME                     "Advertising extra long long name"
+#else
+#define DEVICE_NAME                     "Advertising"// extra xzabcd1234567890"
+#endif
 
 #define APP_ADV_INTERVAL_MSEC       50//MSEC_TO_UNITS(100, UNIT_0_625_MS)
-#define APP_ADV_TIMEOUT_MSEC      	1000//MSEC_TO_UNITS(1000, UNIT_10_MS)
+#define APP_ADV_TIMEOUT_MSEC      	0//1000//MSEC_TO_UNITS(1000, UNIT_10_MS)
 
 uint32_t g_AdvCnt = 0;
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
@@ -71,11 +75,17 @@ const BleAppCfg_t s_BleAppCfg = {
 	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,                      // PnP Product ID
 	.ProductVer = 0,						// Pnp prod version
-	.Appearance = BLE_APPEARANCE_COMPUTER_WEARABLE,					// Enable device information service (DIS)
+	.Appearance = BLE_APPEAR_COMPUTER_WEARABLE,					// Enable device information service (DIS)
 	.pDevDesc = NULL,					// Pointer device info descriptor
+#ifdef EXTADV
 	.bExtAdv = true,
-	.pAdvManData  = (uint8_t*)g_AdvLong,//&g_AdvCnt,   	// Manufacture specific data to advertise
-	.AdvManDataLen = sizeof(g_AdvLong),//g_AdvCnt),      	// Length of manufacture specific data
+	.pAdvManData  = (uint8_t*)&g_AdvLong,   	// Manufacture specific data to advertise
+	.AdvManDataLen = sizeof(g_AdvLong),      	// Length of manufacture specific data
+#else
+	.bExtAdv = false,
+	.pAdvManData  = (uint8_t*)&g_AdvCnt,   	// Manufacture specific data to advertise
+	.AdvManDataLen = sizeof(g_AdvCnt),      	// Length of manufacture specific data
+#endif
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
 	.SecType = BLEAPP_SECTYPE_NONE,    // Secure connection type
@@ -102,8 +112,7 @@ static const TimerCfg_t s_TimerCfg = {
 	.IntPrio = 6,
 };
 
-#ifdef NRFXLIB_SDC
-
+#if 1
 Timer g_Timer;
 
 void TimerTrigEvtHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext)
@@ -116,6 +125,7 @@ void TimerTrigEvtHandler(TimerDev_t * const pTimer, int TrigNo, void * const pCo
 void BleAppInitUserData()
 {
 	g_Timer.Init(s_TimerCfg);
+
 	g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, TimerTrigEvtHandler);
 }
 
@@ -124,7 +134,7 @@ void BleAppAdvTimeoutHandler()
 {
 	g_AdvCnt++;
 
-	//BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
+	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
 	BleAppAdvStart();
 }
 #endif
@@ -132,8 +142,7 @@ void BleAppAdvTimeoutHandler()
 int main()
 {
     BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
-    //BleAppAdvStart();
-//	g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, TimerTrigEvtHandler);
+
     BleAppRun();
 
 	return 0;
