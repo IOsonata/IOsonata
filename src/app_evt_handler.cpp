@@ -42,17 +42,6 @@ SOFTWARE.
 #include "cfifo.h"
 #include "app_evt_handler.h"
 
-#pragma pack(push,4)
-
-typedef struct __App_Event_Handler_Que {
-	uint32_t EvtId;
-	AppEvtHandler_t Handler;
-	void *pCtx;
-} AppEvtHandlerQue_t;
-
-#pragma pack(pop)
-
-
 #define APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE	CFIFO_TOTAL_MEMSIZE(APPEVT_HANDLER_QUE_DEFAULT_SIZE, sizeof(AppEvtHandlerQue_t))
 
 alignas(4) static uint8_t s_AppEvtHandlerFifoMem[APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE];

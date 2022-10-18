@@ -48,6 +48,17 @@ SOFTWARE.
 
 typedef void (*AppEvtHandler_t)(uint32_t Evt, void *pCtx);
 
+#pragma pack(push,4)
+
+typedef struct __App_Event_Handler_Que {
+	uint32_t EvtId;
+	AppEvtHandler_t Handler;
+	void *pCtx;
+} AppEvtHandlerQue_t;
+
+#pragma pack(pop)
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
