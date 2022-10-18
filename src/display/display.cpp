@@ -113,8 +113,8 @@ void DisplayDotMatrix::Rotate90()
 
 	Orientation((DISPL_ORIENT)orient);
 }
-#if 0
-void DisplayDotMatrix::Print(char *pStr, uint32_t Color)
+#if 1
+void DisplayDotMatrix::Print(char const *pStr, uint32_t Color)
 {
 	uint8_t buff[vpFont->Height * vPixelLen * vpFont->Width];
 	//uint8_t const *fp = vpFont->Bits;
@@ -286,7 +286,8 @@ void DisplayDotMatrix::Print(char *pStr, uint32_t Color)
 		}
 	}
 }
-
+#endif
+#if 0
 void DisplayDotMatrix::printf(const char *pFormat, ...)
 {
 #ifndef SPRT_BUFFER_SIZE
