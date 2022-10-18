@@ -287,6 +287,16 @@ protected:
 
 private:
 	DISPL_ORIENT vOrient;	//!< Current orientation
+
+	/**
+	 * @brief	Render a null terminated string to the screen.
+	 *
+	 * Display driver must implement this to emulate a console line print
+	 *
+	 * @param 	pStr	: Null terminated string to print
+	 * @param 	Color	: Color to render
+	 */
+	virtual void Print(char const *pStr, uint32_t Color);
 };
 
 /// Alpha numeric display object definition
