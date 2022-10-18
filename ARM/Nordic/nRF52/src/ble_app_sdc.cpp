@@ -56,7 +56,7 @@ SOFTWARE.
 #include "bluetooth/ble_hcievt.h"
 #include "bluetooth/ble_appearance.h"
 #include "iopinctrl.h"
-#include "evt_handler_que.h"
+#include "app_evt_handler.h"
 
 #pragma pack(push, 4)
 
@@ -1285,9 +1285,10 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     NVIC_EnableIRQ(FPU_IRQn);
 #endif
 
-    AppEvtHandlerCfg_t qcfg = { 0, };
-
-    EvtHandlerQueInit(&qcfg);
+    if (AppEvtHandlerInit(pBleAppCfg->pEvtHandlerQueMem, pBleAppCfg->pEvtHandlerQueMemSize) == false)
+    {
+    	return false;
+    }
 
 	g_BleAppData.State = BLEAPP_STATE_INITIALIZED;
 
@@ -1312,7 +1313,7 @@ void BleAppRun()
 	while (1)
 	{
 		__WFE();
-		EvtHandlerQueExec();
+		AppEvtHandlerExec();
 	}
 }
 

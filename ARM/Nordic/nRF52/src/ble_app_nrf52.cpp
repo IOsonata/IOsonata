@@ -83,6 +83,7 @@ Modified by          Date              Description
 #include "ble_app_nrf5.h"
 #include "ble_dev.h"
 #include "ble_service.h"
+#include "app_evt_handler.h"
 
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
@@ -2069,6 +2070,11 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
     NVIC_EnableIRQ(FPU_IRQn);
 #endif
 
+    if (AppEvtHandlerInit(pBleAppCfg->pEvtHandlerQueMem, pBleAppCfg->pEvtHandlerQueMemSize) == false)
+    {
+    	return false;
+    }
+
     g_BleAppData.State = BLEAPP_STATE_INITIALIZED;
 
     return true;
@@ -2101,6 +2107,7 @@ void BleAppRun()
 //			if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
 			{
 				app_sched_execute();
+				AppEvtHandlerExec();
 			}
 			nrf_ble_lesc_request_handler();
 			sd_app_evt_wait();

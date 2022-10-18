@@ -114,8 +114,6 @@ typedef struct __App_Info {
 	uint8_t Private[APPINFO_PRIVATESIZE_MAX];//!< APPINFO_PRIVATESIZE_MAX bytes private data
 } AppInfo_t;
 
-typedef AppInfo_t	APP_INFO;
-
 #pragma pack(pop)
 
 #ifdef __cplusplus
