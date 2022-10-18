@@ -49,7 +49,8 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 
 // Uncomment this to set custom board oscillator
-//#define MCUOSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_RC, }, false}
+// Default library setting is :
+// #define MCUOSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
@@ -58,51 +59,36 @@ McuOsc_t g_McuOsc = MCUOSC;
 #ifdef EXTADV
 #define DEVICE_NAME                     "Advertising extra long long name"
 #else
-#define DEVICE_NAME                     "Advertising"// extra xzabcd1234567890"
+#define DEVICE_NAME                     "Advertising"
 #endif
 
-#define APP_ADV_INTERVAL_MSEC       50//MSEC_TO_UNITS(100, UNIT_0_625_MS)
-#define APP_ADV_TIMEOUT_MSEC      	0//1000//MSEC_TO_UNITS(1000, UNIT_10_MS)
+#define APP_ADV_INTERVAL_MSEC       50
+#define APP_ADV_TIMEOUT_MSEC      	0
 
 uint32_t g_AdvCnt = 0;
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
 
 const BleAppCfg_t s_BleAppCfg = {
 	.Role = BLEAPP_ROLE_BROADCASTER,
-	.CentLinkCount = 0,		// Number of central link
-	.PeriLinkCount = 1,		// Number of peripheral link
+	.CentLinkCount = 0,						// Number of central link
+	.PeriLinkCount = 1,						// Number of peripheral link
 	.pDevName = (char*)DEVICE_NAME,			// Device name
-	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
-	.ProductId = 1,                      // PnP Product ID
-	.ProductVer = 0,						// Pnp prod version
-	.Appearance = BLE_APPEAR_COMPUTER_WEARABLE,					// Enable device information service (DIS)
-	.pDevDesc = NULL,					// Pointer device info descriptor
+	.VendorID = ISYST_BLUETOOTH_ID,			// PnP Bluetooth/USB vendor id
+	.Appearance = BLE_APPEAR_COMPUTER_WEARABLE,
 #ifdef EXTADV
-	.bExtAdv = true,
-	.pAdvManData  = (uint8_t*)&g_AdvLong,   	// Manufacture specific data to advertise
-	.AdvManDataLen = sizeof(g_AdvLong),      	// Length of manufacture specific data
+	.bExtAdv = true,						// Enable extended advertising
+	.pAdvManData  = (uint8_t*)&g_AdvLong,   // Manufacture specific data to advertise
+	.AdvManDataLen = sizeof(g_AdvLong),     // Length of manufacture specific data
 #else
-	.bExtAdv = false,
+	.bExtAdv = false,						// Legacy advertising
 	.pAdvManData  = (uint8_t*)&g_AdvCnt,   	// Manufacture specific data to advertise
-	.AdvManDataLen = sizeof(g_AdvCnt),      	// Length of manufacture specific data
+	.AdvManDataLen = sizeof(g_AdvCnt),      // Length of manufacture specific data
 #endif
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BLEAPP_SECEXCHG_NONE,   // Security key exchange
-	.AdvInterval = APP_ADV_INTERVAL_MSEC,       	// Advertising interval in msec
-	.AdvTimeout = APP_ADV_TIMEOUT_MSEC,	// Advertising timeout in sec
-	.AdvSlowInterval = 0,							// Slow advertising interval, if > 0, fallback to
-								// slow interval on adv timeout and advertise until connected
-	.ConnIntervalMin = 0,		// Min. connection interval
-	.ConnIntervalMax = 0,		// Max. connection interval
-	.ConnLedPort = -1,		// Led port nuber
-	.ConnLedPin = -1,		// Led pin number
-	.ConnLedActLevel = 0,
-	.TxPower = 0,		// Tx power
-	.SDEvtHandler = NULL,	// RTOS Softdevice handler
-	.MaxMtu = 0,						//!< Max MTU size or 0 for default
-
+	.AdvInterval = APP_ADV_INTERVAL_MSEC,   // Advertising interval in msec
+	.AdvTimeout = APP_ADV_TIMEOUT_MSEC,		// Advertising timeout in msec (not available yet with SDC implementation
+	.TxPower = 0,							// Tx power in dbm
 };
 
 static const TimerCfg_t s_TimerCfg = {
@@ -141,7 +127,7 @@ void BleAppAdvTimeoutHandler()
 
 int main()
 {
-    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
+    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);
 
     BleAppRun();
 
