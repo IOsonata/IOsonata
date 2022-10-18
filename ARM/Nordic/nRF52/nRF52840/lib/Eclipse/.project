@@ -36,6 +36,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/app_evt_handler.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
+		</link>
+		<link>
 			<name>include/audio</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -319,6 +324,11 @@
 			<name>src/analog_comp_nrf5x.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/analog_comp_nrf5x.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_evt_handler.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/base64.c</name>
