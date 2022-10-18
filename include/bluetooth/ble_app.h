@@ -36,6 +36,7 @@ SOFTWARE.
 #define __BLE_APP_H__
 
 #include <stdint.h>
+#include <inttypes.h>
 
 #include "bluetooth/ble_gap.h"
 #include "bluetooth/ble_adv.h"
