@@ -130,6 +130,7 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 #pragma pack(push, 4)
 
 typedef struct _BleAppData {
+	BLEAPP_STATE State;
 	BLEAPP_ROLE Role;
 	uint8_t AdvHdl;		// Advertisement handle
 	uint16_t ConnHdl;	// BLE connection handle
@@ -151,9 +152,8 @@ typedef struct _BleAppData {
 	bool bAdvertising;
 	bool bExtAdv;
 	bool bScan;
-    bool BleInitialized;
-
-} BLEAPP_DATA;
+   // bool BleInitialized;
+} BleAppData_t;
 
 #pragma pack(pop)
 
@@ -174,9 +174,11 @@ static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 //BLE_ADVERTISING_DEF(g_AdvInstance);             /**< Advertising module instance. */
 NRF_BLE_GATT_DEF(s_Gatt);
 
-BLEAPP_DATA g_BleAppData = {
-	BLEAPP_ROLE_PERIPHERAL, BLE_GAP_ADV_SET_HANDLE_NOT_SET, BLE_CONN_HANDLE_INVALID, -1, -1,
+BleAppData_t g_BleAppData = {
+		BLEAPP_STATE_UNKNOWN, BLEAPP_ROLE_PERIPHERAL, BLE_GAP_ADV_SET_HANDLE_NOT_SET, BLE_CONN_HANDLE_INVALID, -1, -1,
 };
+
+//static volatile bool s_BleStarted = false;
 
 alignas(4) static uint8_t s_BleAppAdvBuff[256];
 alignas(4) static BleAdvPacket_t s_BleAppAdvPkt = { 31, 0, s_BleAppAdvBuff};
@@ -517,12 +519,13 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
         	BleConnLedOn();
         	g_BleAppData.ConnHdl = p_ble_evt->evt.gap_evt.conn_handle;
         	g_BleAppData.bScan = false;
-
+        	g_BleAppData.State = BLEAPP_STATE_CONNECTED;
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
         	BleConnLedOff();
         	g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
+        	g_BleAppData.State = BLEAPP_STATE_IDLE;
         	BleAppAdvStart();
 
         	break;
@@ -1061,10 +1064,10 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 		APP_ERROR_CHECK(err);
 	}
 #else
-//	if (s_BleStarted == false)
-//	{
-//		return false;
-//	}
+	if (g_BleAppData.State != BLEAPP_STATE_ADVERTISING)
+	{
+		return false;
+	}
 
 	BleAdvPacket_t *advpkt;
 	BleAdvPacket_t *srpkt;
@@ -1163,6 +1166,8 @@ void BleAppAdvStart()//BLEAPP_ADVMODE AdvMode)
 		}
 	}
 #endif
+
+	g_BleAppData.State = BLEAPP_STATE_ADVERTISING;
 }
 
 void BleAppAdvStop()
@@ -1904,7 +1909,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
 
-	g_BleAppData.BleInitialized = false;
+	g_BleAppData.State = BLEAPP_STATE_UNKNOWN;
 	g_BleAppData.bExtAdv = pBleAppCfg->bExtAdv;
 	g_BleAppData.bScan = false;
 	g_BleAppData.bAdvertising = false;
@@ -2064,26 +2069,27 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
     NVIC_EnableIRQ(FPU_IRQn);
 #endif
 
-    g_BleAppData.BleInitialized = true;
+    g_BleAppData.State = BLEAPP_STATE_INITIALIZED;
 
     return true;
 }
 
 void BleAppRun()
 {
-	if (g_BleAppData.BleInitialized == false)
+	if (g_BleAppData.State != BLEAPP_STATE_INITIALIZED)
 	{
 		return;
 	}
 
 	g_BleAppData.bAdvertising = false;
+	g_BleAppData.State = BLEAPP_STATE_IDLE;
 
 	if (g_BleAppData.Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))// != BLEAPP_ROLE_CENTRAL)
 	{
 		BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
 	}
 
-    while (1)
+	while (1)
     {
 //		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
     	if (g_BleAppData.SDEvtHandler != NULL)
@@ -2121,7 +2127,13 @@ void BleAppRun()
 
 void BleTimerAppRun()
 {
+	if (g_BleAppData.State != BLEAPP_STATE_INITIALIZED)
+	{
+		return;
+	}
+
 	g_BleAppData.bAdvertising = false;
+	g_BleAppData.State = BLEAPP_STATE_IDLE;
 
 	if (g_BleAppData.Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
 	{

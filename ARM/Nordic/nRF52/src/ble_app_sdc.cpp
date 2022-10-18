@@ -61,7 +61,9 @@ SOFTWARE.
 #pragma pack(push, 4)
 
 typedef struct _BleAppData {
+	BLEAPP_STATE State;
 	BLEAPP_ROLE Role;
+	uint8_t AdvHdl;		// Advertisement handle
 	uint16_t ConnHdl;	// BLE connection handle
 	int ConnLedPort;
 	int ConnLedPin;
@@ -74,6 +76,7 @@ typedef struct _BleAppData {
 	bool bAdvertising;
 	bool bExtAdv;
 	bool bScan;
+//    bool BleInitialized;
 	BLEAPP_COEXMODE CoexMode;
 } BleAppData_t;
 
@@ -94,10 +97,10 @@ static const int8_t s_TxPowerdBm[] = {
 alignas(4) static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 
 alignas(4) BleAppData_t g_BleAppData = {
-	BLEAPP_ROLE_PERIPHERAL, 0, -1, -1, 0,
+	BLEAPP_STATE_UNKNOWN, BLEAPP_ROLE_PERIPHERAL, 0, 0, -1, -1, 0,
 };
 
-static volatile bool s_BleStarted = false;
+//static volatile bool s_BleStarted = false;
 
 //#endif
 
@@ -456,7 +459,7 @@ static void BleAppGapParamInit(const BleAppCfg_t *pBleAppCfg)
 
 bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
-	if (s_BleStarted == false)
+	if (g_BleAppData.State != BLEAPP_STATE_ADVERTISING)
 	{
 		return false;
 	}
@@ -570,6 +573,7 @@ void BleAppAdvStart()
 	if (res == 0)
 	{
 		g_BleAppData.bAdvertising = true;
+		g_BleAppData.State = BLEAPP_STATE_ADVERTISING;
 	}
 }
 
@@ -1170,6 +1174,9 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 	mpsl_clock_lfclk_cfg_t lfclk = {MPSL_CLOCK_LF_SRC_RC, 0,};
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
 
+	//s_BleStarted = false;
+	g_BleAppData.State = BLEAPP_STATE_UNKNOWN;
+
 	// Set default clock based on system oscillator settings
 	if (lfosc->Type == OSC_TYPE_RC)
 	{
@@ -1282,17 +1289,25 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 
     EvtHandlerQueInit(&qcfg);
 
-    return true;
+	g_BleAppData.State = BLEAPP_STATE_INITIALIZED;
+
+	return true;
 }
 
 void BleAppRun()
 {
+	if (g_BleAppData.State != BLEAPP_STATE_INITIALIZED)
+	{
+		return;
+	}
+
+	g_BleAppData.State = BLEAPP_STATE_IDLE;
+
 	if (g_BleAppData.Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
 	{
 		BleAppAdvStart();
 	}
 
-	s_BleStarted = true;
 
 	while (1)
 	{
