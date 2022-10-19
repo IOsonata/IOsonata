@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "spi_nrfx.h"
 
-extern NrfSpiDev_t s_nRFxSPIDev[NRFX_SPI_MAXDEV];
+extern NrfSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV];
 
 #if defined(NRF52840_XXAA) || defined(NRF5340_XXAA_APPLICATION)
 
@@ -400,7 +400,7 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 
 bool nRFxQSPIInit(SPIDev_t * const pDev)
 {
-	NRF_QSPI_Type *reg = reg = s_nRFxSPIDev[pDev->Cfg.DevNo].pQSpiReg;
+	NRF_QSPI_Type *reg = g_nRFxSPIDev[pDev->Cfg.DevNo].pQSpiReg;
 
 	// Force power on in case it was powered off previously
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);

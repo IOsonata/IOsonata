@@ -37,6 +37,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 #include "coredev/pdm.h"
 
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#define NRF_PDM			NRF_PDM0_S
+#define PDM_IRQn		PDM0_IRQn
+#endif
+
 // Only one DPM device on chip
 alignas(4) static PdmDev_t *s_pnRFPdmDev = nullptr;
 

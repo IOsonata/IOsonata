@@ -72,9 +72,9 @@ alignas(4) static const NrfSpiFreq_t s_nRFxSPIFreq[] = {
 #endif
 };
 
-static const int g_NbnRFxSPIFreq = sizeof(s_nRFxSPIFreq) / sizeof(NrfSpiFreq_t);
+static const int s_NbnRFxSPIFreq = sizeof(s_nRFxSPIFreq) / sizeof(NrfSpiFreq_t);
 
-alignas(4) static NrfSpiDev_t s_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
+alignas(4) NrfSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{
@@ -124,7 +124,7 @@ alignas(4) static NrfSpiDev_t s_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 #endif
 };
 
-static const int g_NbnRFxSPIDev = sizeof(s_nRFxSPIDev) / sizeof(NrfSpiDev_t);
+static const int s_NbnRFxSPIDev = sizeof(g_nRFxSPIDev) / sizeof(NrfSpiDev_t);
 
 #ifdef SPIM_PRESENT
 bool nRFxSPIWaitDMA(NrfSpiDev_t * const pDev, uint32_t Timeout)
@@ -193,7 +193,7 @@ uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	uint32_t regval = 0;
 
 
-	for (int i = 0; i < g_NbnRFxSPIFreq; i++)
+	for (int i = 0; i < s_NbnRFxSPIFreq; i++)
 	{
 		if (s_nRFxSPIFreq[i].Freq <= Rate)
 		{
@@ -608,9 +608,9 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 
 	// Get the correct register map
 #ifdef SPIM_PRESENT
-	NRF_SPIM_Type *reg = reg = s_nRFxSPIDev[pDev->Cfg.DevNo].pDmaReg;
+	NRF_SPIM_Type *reg = reg = g_nRFxSPIDev[pDev->Cfg.DevNo].pDmaReg;
 #else
-	NRF_SPI_Type *reg = reg = s_nRFxSPIDev[pDev->Cfg.DevNo].pReg;
+	NRF_SPI_Type *reg = reg = g_nRFxSPIDev[pDev->Cfg.DevNo].pReg;
 #endif
 
 	// Force power on in case it was powered off previously
@@ -724,7 +724,7 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 
     if (pDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
-		NRF_SPIS_Type *sreg = s_nRFxSPIDev[pDev->Cfg.DevNo].pDmaSReg;
+		NRF_SPIS_Type *sreg = g_nRFxSPIDev[pDev->Cfg.DevNo].pDmaSReg;
 
 #ifdef SPIM_PRESENT
         sreg->PSEL.SCK = (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo << 5);
@@ -766,8 +766,8 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 		else
 		{
 #ifdef SPI_PRESENT
-			s_nRFxSPIDev[pDev->Cfg.DevNo].pReg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
-			s_nRFxSPIDev[pDev->Cfg.DevNo].pReg->EVENTS_READY = 0;
+			g_nRFxSPIDev[pDev->Cfg.DevNo].pReg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
+			g_nRFxSPIDev[pDev->Cfg.DevNo].pReg->EVENTS_READY = 0;
 #endif
 		}
 #else
@@ -805,8 +805,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	}
 
 	pDev->Cfg = *pCfgData;
-	s_nRFxSPIDev[pCfgData->DevNo].pSpiDev  = pDev;
-	pDev->DevIntrf.pDevData = (void*)&s_nRFxSPIDev[pCfgData->DevNo];
+	g_nRFxSPIDev[pCfgData->DevNo].pSpiDev  = pDev;
+	pDev->DevIntrf.pDevData = (void*)&g_nRFxSPIDev[pCfgData->DevNo];
 
 #if defined(NRF52840) || defined(NRF5340_XXAA_APPLICATION)
 	if (pCfgData->DevNo < NRFX_SPI_MAXDEV - 1)
