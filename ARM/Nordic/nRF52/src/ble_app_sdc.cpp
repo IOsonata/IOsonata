@@ -144,11 +144,31 @@ static void BleStackSdcAssert(const char * file, const uint32_t line)
 
 void BleHciProcessMetaEvent(BleHciMetaEvtPacket_t *pMetaEvtPkt)
 {
+	//printf("BleHciProcessMetaEvent : Evt %x\r\n", pMetaEvtPkt->Evt);
+
 	switch (pMetaEvtPkt->Evt)
 	{
 		case BLE_HCI_EVT_LE_META_CONN_COMPLETE:
+			{
+				BleHciMetaEvtConnComplete_t *p = (BleHciMetaEvtConnComplete_t*)pMetaEvtPkt->Data;
+				if (p->Status == 0)
+				{
+					uint16_t conhdl = p->ConnHdl;
+					BLEAPP_ROLE role = p->Role == 1 ? BLEAPP_ROLE_PERIPHERAL : BLEAPP_ROLE_CENTRAL;
+
+	//					printf("hdl %x, %d\n", conhdl, role);
+				}
+			}
 			break;
 		case BLE_HCI_EVT_LE_META_ADV_REPORT:
+			{
+				BleHciMetaEvtAdvReport_t *p = (BleHciMetaEvtAdvReport_t*)pMetaEvtPkt->Data;
+
+				for (int i = 0; i < p->NbReport; i++)
+				{
+
+				}
+			}
 			break;
 		case BLE_HCI_EVT_LE_META_CONN_UPDATE_COMPLETE:
 			break;
@@ -159,12 +179,29 @@ void BleHciProcessMetaEvent(BleHciMetaEvtPacket_t *pMetaEvtPkt)
 		case BLE_HCI_EVT_LE_META_REMOTE_CONN_PARAM_RQST:
 			break;
 		case BLE_HCI_EVT_LE_META_DATA_LEN_CHANGE:
+			{
+				BleHciMetaEvtDataLenChange_t *p = (BleHciMetaEvtDataLenChange_t*)pMetaEvtPkt->Data;
+
+				//printf("Data length:%d\r\n", p->MaxRxLen);
+
+			}
 			break;
 		case BLE_HCI_EVT_LE_META_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE:
 			break;
 		case BLE_HCI_EVT_LE_META_GENERATE_DHKEY_COMPLETE:
 			break;
 		case BLE_HCI_EVT_LE_META_ENHANCED_CONN_COMPLETE:
+			{
+				BleHciMetaEvtEnhConnComplete_t *p = (BleHciMetaEvtEnhConnComplete_t*)pMetaEvtPkt->Data;
+				if (p->Status == 0)
+				{
+					uint16_t conhdl = p->ConnHdl;
+					BLEAPP_ROLE role = p->Role == 1 ? BLEAPP_ROLE_PERIPHERAL : BLEAPP_ROLE_CENTRAL;
+
+
+//					printf("hdl %x, %d\n", conhdl, role);
+				}
+			}
 			break;
 		case BLE_HCI_EVT_LE_META_DIRECTED_ADV_REPORT:
 			break;
@@ -185,6 +222,10 @@ void BleHciProcessMetaEvent(BleHciMetaEvtPacket_t *pMetaEvtPkt)
 		case BLE_HCI_EVT_LE_META_SCAN_RQST_RECEIVED:
 			break;
 		case BLE_HCI_EVT_LE_META_CHAN_SELECTION_ALGO:
+			{
+				BleHciMetaEvtChanSelAlgo_t *p = (BleHciMetaEvtChanSelAlgo_t *)pMetaEvtPkt->Data;
+
+			}
 			break;
 		case BLE_HCI_EVT_LE_META_CONNLESS_IQ_REPORT:
 			break;
@@ -221,6 +262,8 @@ void BleHciProcessMetaEvent(BleHciMetaEvtPacket_t *pMetaEvtPkt)
 
 void BleHciProcessEvent(BleHciEvtPacket_t *pEvtPkt)
 {
+	//printf("BleHciProcessEvent %x\r\n", pEvtPkt->Hdr.Evt);
+
 	switch (pEvtPkt->Hdr.Evt)
 	{
 		case BLE_HCI_EVT_INQUERY_COMPLETE:
@@ -355,29 +398,29 @@ void BleHciProcessEvent(BleHciEvtPacket_t *pEvtPkt)
 	}
 }
 
-void BleHciProcessData(BleHciACLDataPacketHdr_t *pPkt)
+void BleHciProcessData(BleHciACLDataPacket_t *pPkt)
 {
-
+	//printf("BleHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
 }
 
 static void BleStackSdcCB()
 {
-	//printf("BleHciSdcCB\n");
-
-	uint8_t buf[512];
+	uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
 	int32_t res = 0;
-
-	res = sdc_hci_evt_get(buf);
+	sdc_hci_msg_type_t mtype;
+	res = sdc_hci_get(buf, &mtype);
 	if (res == 0)
 	{
-		// Event available
-		BleHciProcessEvent((BleHciEvtPacket_t*)buf);
-	}
-
-	res = sdc_hci_data_get(buf);
-	if (res == 0)
-	{
-		BleHciProcessData((BleHciACLDataPacketHdr_t*)buf);
+		switch (mtype)
+		{
+			case SDC_HCI_MSG_TYPE_EVT:
+				// Event available
+				BleHciProcessEvent((BleHciEvtPacket_t*)buf);
+				break;
+			case SDC_HCI_MSG_TYPE_DATA:
+				BleHciProcessData((BleHciACLDataPacket_t*)buf);
+				break;
+		}
 	}
 }
 
@@ -1005,7 +1048,7 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 
 	res = sdc_rand_source_register(&rand_functions);
 
-	sdc_support_dle();
+//	sdc_support_dle();
 	sdc_support_le_2m_phy();
 	sdc_support_le_coded_phy();
 	sdc_support_le_power_control();
@@ -1039,15 +1082,6 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 		sdc_support_phy_update_central();
 		sdc_support_le_power_control_central();
 		sdc_support_le_conn_cte_rsp_central();
-	}
-
-	sdc_default_tx_power_set(pBleAppCfg->TxPower);
-
-	sdc_hci_cmd_le_set_event_mask_t evmask = { };
-	memset(evmask.raw, 0xff, sizeof(evmask.raw));
-	if (sdc_hci_cmd_le_set_event_mask(&evmask))
-	{
-		return false;
 	}
 
     uint32_t ram = 0;
@@ -1089,7 +1123,7 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 			return false;
 		}
 
-		cfg.adv_count.count = 2;//SDC_ADV_SET_COUNT;
+		cfg.adv_count.count = 1;
 
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 							  SDC_CFG_TYPE_ADV_COUNT,
@@ -1099,7 +1133,7 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 			return false;
 		}
 
-		cfg.adv_buffer_cfg.max_adv_data = 255;//SDC_DEFAULT_ADV_BUF_SIZE;
+		cfg.adv_buffer_cfg.max_adv_data = 255;
 
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 							  SDC_CFG_TYPE_ADV_BUFFER_CFG,
@@ -1251,10 +1285,16 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 		sdc_hci_cmd_vs_zephyr_write_bd_addr(&bdaddr);
 	}
 
-	sdc_hci_cmd_le_set_random_address_t ranaddr;
-	memcpy(ranaddr.random_address, addr->addresses->address, 6);
-	if (sdc_hci_cmd_le_set_random_address(&ranaddr))
-		return false;
+	sdc_hci_cmd_le_rand_return_t rr;
+
+	res = sdc_hci_cmd_le_rand(&rr);
+	if (res == 0)
+	{
+		sdc_hci_cmd_le_set_random_address_t ranaddr;
+		memcpy(ranaddr.random_address, &rr.random_number, 6);
+		if (sdc_hci_cmd_le_set_random_address(&ranaddr))
+			return false;
+	}
 
 	sdc_hci_cmd_le_read_max_data_length_return_t maxlen;
 
@@ -1266,6 +1306,38 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 	};
 
 	res = sdc_hci_cmd_le_write_suggested_default_data_length(&datalen);
+
+	sdc_hci_cmd_le_read_buffer_size_return_t rbr;
+
+	res = sdc_hci_cmd_le_read_buffer_size(&rbr);
+
+	sdc_default_tx_power_set(pBleAppCfg->TxPower);
+
+	sdc_hci_cmd_le_set_event_mask_t evmask = {0, };
+
+	//evmask.params.le_remote_connection_parameter_request_event = 1;
+
+	memset(evmask.raw, 0xff, sizeof(evmask.raw));
+	if (sdc_hci_cmd_le_set_event_mask(&evmask))
+	{
+		return false;
+	}
+
+	sdc_hci_cmd_cb_set_event_mask_t cbevmask;
+
+	memset(cbevmask.raw, 0xff, sizeof(cbevmask.raw));
+	if (sdc_hci_cmd_cb_set_event_mask(&cbevmask))
+	{
+		return false;
+	}
+
+	sdc_hci_cmd_cb_set_event_mask_page_2_t cbevmask2;
+	memset(cbevmask2.raw, 0xff, sizeof(cbevmask2.raw));
+	if (sdc_hci_cmd_cb_set_event_mask_page_2(&cbevmask2))
+	{
+		return false;
+	}
+
 
     BleAppInitUserData();
 
@@ -1314,6 +1386,26 @@ void BleAppRun()
 	{
 		__WFE();
 		AppEvtHandlerExec();
+
+#if 1
+		uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
+		int32_t res = 0;
+		sdc_hci_msg_type_t mtype;
+		res = sdc_hci_get(buf, &mtype);
+		if (res == 0)
+		{
+			switch (mtype)
+			{
+				case SDC_HCI_MSG_TYPE_EVT:
+					// Event available
+					BleHciProcessEvent((BleHciEvtPacket_t*)buf);
+					break;
+				case SDC_HCI_MSG_TYPE_DATA:
+					BleHciProcessData((BleHciACLDataPacket_t*)buf);
+					break;
+			}
+		}
+#endif
 	}
 }
 

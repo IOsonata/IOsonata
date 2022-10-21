@@ -173,6 +173,43 @@ typedef struct __Ble_Hci_MetaEvt_ConnComplete {
 	uint8_t CentralClkAccu;		//!< Central clock accuracy PPM table
 } BleHciMetaEvtConnComplete_t;
 
+typedef struct __Ble_Hci_MetaEvt_Adv_Report {
+	uint8_t NbReport;			//!< Number of responses in event
+	struct Report {
+		uint8_t EvtType;
+		uint8_t AddrType;
+		uint8_t Addr[6];
+		uint8_t DataLen;
+	};
+} BleHciMetaEvtAdvReport_t;
+
+typedef struct __Ble_Hci_MetaEvt_Data_Len_Change {
+	uint16_t ConnHdl;			//!< Connection handle
+	uint16_t MaxTxLen;			//!< Max number length of transmit payload in bytes
+	uint16_t MaxTxTime; 		//!< Max transmit time
+	uint16_t MaxRxLen;			//!< Max number length of receive payload in bytes
+	uint16_t MaxRxTime;			//!< Max receive time
+} BleHciMetaEvtDataLenChange_t;
+
+typedef struct __Ble_Hci_MetaEvt_Enhence_ConnComplete {
+	uint8_t Status;				//!< Status
+	uint16_t ConnHdl;			//!< Connection handle
+	uint8_t Role;				//!< Role central/peripheral
+	uint8_t PeerAddrType;		//!< Peer address type
+	uint8_t PeerAddr[6];		//!< Peer address
+	uint8_t LocalResolPriAddr[6];	//!< Local resolvable private address
+	uint8_t PeerResolPriAddr[6];	//!< Peer resolvable private address
+	uint16_t ConnInterval;		//!< Connection interval in 1.25ms, time = ConnInterval * 1.25
+	uint16_t PeriphLatency;		//!< Peripheral latency in number of connection events
+	uint16_t SupervTimeout;		//!< Supervision timeout in 1.25ms
+	uint8_t CentralClkAccu;		//!< Central clock accuracy PPM table
+} BleHciMetaEvtEnhConnComplete_t;
+
+typedef struct __Ble_Hci_MetaEvt_Chan_Sel_Algo {
+	uint16_t ConnHdl;			//!< Connection handle
+	uint8_t ChanSelAlgo;		//!< Channel selection algorithm
+} BleHciMetaEvtChanSelAlgo_t;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
