@@ -36,7 +36,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/ble_adv.h"
-#include "bluetooth/ble_gap.h"
+#include "bluetooth/bt_gap.h"
 
 static int BleAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 {
@@ -194,7 +194,7 @@ void BleAdvDataRemove(BleAdvPacket_t *pAdvPkt, uint8_t Type)
  *
  * @return	true - success
  */
-bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BleUuidArr_t *pUid, bool bComplete)
+bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BtUuidArr_t *pUid, bool bComplete)
 {
 	int l = 0;
 	uint8_t gaptype = 0;
@@ -202,16 +202,16 @@ bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BleUuidArr_t *pUid, bool b
 
 	switch (pUid->Type)
 	{
-		case BLE_UUID_TYPE_16:
-			gaptype = bComplete ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
+		case BT_UUID_TYPE_16:
+			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
 			l = pUid->Count * 2;
 			break;
-		case BLE_UUID_TYPE_32:
-			gaptype = bComplete ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
+		case BT_UUID_TYPE_32:
+			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
 			l = pUid->Count * 4;
 			break;
-		case BLE_UUID_TYPE_128:
-			gaptype = bComplete ? GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
+		case BT_UUID_TYPE_128:
+			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
 			l = pUid->Count * 16;
 			break;
 		default:

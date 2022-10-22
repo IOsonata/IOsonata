@@ -38,9 +38,9 @@ SOFTWARE.
 #include <stdint.h>
 #include <inttypes.h>
 
-#include "bluetooth/ble_gap.h"
+#include "bluetooth/bt_gap.h"
 #include "bluetooth/ble_adv.h"
-#include "bluetooth/ble_uuid.h"
+#include "bluetooth/bt_uuid.h"
 #include "bluetooth/bleadv_mandata.h"
 
 /** @addtogroup Bluetooth
@@ -58,11 +58,11 @@ typedef enum __Ble_App_State {
 #define BLEAPP_DEFAULT_MAX_DATA_LEN				251
 
 typedef enum __BleApp_Role {
-	BLEAPP_ROLE_BROADCASTER	= GAP_ROLE_BROADCASTER,		//!< non connectable Advertising only
-	BLEAPP_ROLE_OBSERVER	= GAP_ROLE_OBSERVER,		//!< non connectable central
-	BLEAPP_ROLE_PERIPHERAL	= GAP_ROLE_PERIPHERAL,		//!< BLE connectable peripheral device
-	BLEAPP_ROLE_CENTRAL		= GAP_ROLE_CENTRAL,			//!< BLE Central device
-	BLEAPP_ROLE_MIXED		= GAP_ROLE_PERIPHERAL | GAP_ROLE_CENTRAL	//!< Mixed central/peripheral
+	BLEAPP_ROLE_BROADCASTER	= BT_GAP_ROLE_BROADCASTER,		//!< non connectable Advertising only
+	BLEAPP_ROLE_OBSERVER	= BT_GAP_ROLE_OBSERVER,			//!< non connectable central
+	BLEAPP_ROLE_PERIPHERAL	= BT_GAP_ROLE_PERIPHERAL,		//!< BLE connectable peripheral device
+	BLEAPP_ROLE_CENTRAL		= BT_GAP_ROLE_CENTRAL,			//!< BLE Central device
+	BLEAPP_ROLE_MIXED		= BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL	//!< Mixed central/peripheral
 } BLEAPP_ROLE;
 
 typedef enum __BleApp_Coex_Mode {
@@ -121,7 +121,7 @@ typedef struct __BleApp_Config {
 	bool bCompleteUuidList;			//!< true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
 //	const BleUuid_t *pAdvUuids;			//!< Service uuids to advertise, must be an array of the same uuid type
 //	int NbAdvUuid;					//!< Total number of uuids of the same type
-	const BleUuidArr_t *pAdvUuid;
+	const BtUuidArr_t *pAdvUuid;
 	uint32_t AdvInterval;			//!< In msec
 	uint32_t AdvTimeout;			//!< In sec
 	uint32_t AdvSlowInterval;		//!< Slow advertising interval, if > 0, fallback to

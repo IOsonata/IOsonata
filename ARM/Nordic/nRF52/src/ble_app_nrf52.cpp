@@ -77,7 +77,7 @@ Modified by          Date              Description
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
-#include "bluetooth/ble_uuid.h"
+#include "bluetooth/bt_uuid.h"
 #include "bluetooth/ble_app.h"
 #include "bluetooth/ble_appearance.h"
 #include "ble_app_nrf5.h"
@@ -1087,7 +1087,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 	if (pAdvData)
 	{
 		int l = AdvLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BleAdvData_t *p = BleAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -1102,7 +1102,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 	if (pSrData)
 	{
 		int l = SrLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BleAdvData_t *p = BleAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -1183,7 +1183,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
     uint32_t               err_code;
     ble_advertising_init_t	initdata;
-    uint8_t flags = GAP_DATA_TYPE_FLAGS_NO_BREDR;
+    uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
 	BleAdvPacket_t *advpkt;
 	BleAdvPacket_t *srpkt;
 	uint8_t proptype = 0;
@@ -1210,11 +1210,11 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	{
 		if (pCfg->AdvTimeout != 0)
 		{
-			flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
+			flags |= BT_GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
 		}
 		else
 		{
-			flags |= GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
+			flags |= BT_GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
 		}
 		g_BleAppData.AdvParam.properties.type = pCfg->bExtAdv ?
 												BLE_GAP_ADV_TYPE_EXTENDED_CONNECTABLE_NONSCANNABLE_UNDIRECTED :
@@ -1227,14 +1227,14 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 												BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED;
 	}
 
-	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
+	if (BleAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
 	{
 		return false;
 	}
 
     if (pCfg->Appearance != BLE_APPEAR_UNKNOWN_GENERIC)
     {
-    	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
+    	if (BleAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{
     		// Don't care whether we are able to add appearance or not. Appearance is optional.
     		//return false;
@@ -1246,13 +1246,13 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     if (pCfg->pDevName != NULL)
     {
     	size_t l = strlen(pCfg->pDevName);
-    	uint8_t type = GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
+    	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
     	size_t mxl = advpkt->MaxLen - advpkt->Len - 2;
 
     	if (l > 30 || l > mxl)
     	{
     		// Short name
-    		type = GAP_DATA_TYPE_SHORT_LOCAL_NAME;
+    		type = BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME;
     		l = min((size_t)30, mxl);
     	}
 
@@ -1270,16 +1270,16 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
     if (pCfg->pAdvUuid != NULL && pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
     {
-    	if (pCfg->pAdvUuid->BaseIdx > 0 && pCfg->pAdvUuid->Type == BLE_UUID_TYPE_16)
+    	if (pCfg->pAdvUuid->BaseIdx > 0 && pCfg->pAdvUuid->Type == BT_UUID_TYPE_16)
     	{
     		// Convert custom uuid to 128 bits
-			int l = (pCfg->pAdvUuid->Count - 1) * sizeof(BleUuid_t) + sizeof(BleUuidArr_t);
+			int l = (pCfg->pAdvUuid->Count - 1) * sizeof(BtUuid_t) + sizeof(BtUuidArr_t);
 			uint8_t x[l];
 
 			memcpy(x, pCfg->pAdvUuid, l);
-			BleUuidArr_t *ua = (BleUuidArr_t*)x;
+			BtUuidArr_t *ua = (BtUuidArr_t*)x;
 
-			ua->Type = BLE_UUID_TYPE_128;
+			ua->Type = BT_UUID_TYPE_128;
 
 			for (int i = 0; i < pCfg->pAdvUuid->Count; i++)
 			{
@@ -1309,7 +1309,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	if (pCfg->pAdvManData != NULL)
 	{
 		int l = pCfg->AdvManDataLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BleAdvData_t *p = BleAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -1322,7 +1322,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	if (pCfg->pSrManData != NULL)
 	{
 		int l = pCfg->SrManDataLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BleAdvData_t *p = BleAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{

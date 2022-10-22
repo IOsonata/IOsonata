@@ -37,7 +37,7 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#include "bluetooth/ble_uuid.h"
+#include "bluetooth/bt_uuid.h"
 
 #pragma pack(push, 1)
 
@@ -195,7 +195,7 @@ void BleAdvDataRemove(BleAdvPacket_t *pAdvPkt, uint8_t Type);
  * @param 	bComplete : true - UUID list is complete, false - partial
  * @return
  */
-bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BleUuidArr_t *pUid, bool bComplete);
+bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BtUuidArr_t *pUid, bool bComplete);
 
 #ifdef __cplusplus
 }
