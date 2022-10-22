@@ -564,7 +564,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
         case BLE_GAP_EVT_PHY_UPDATE:
         	if (p_ble_evt->evt.gap_evt.params.phy_update.status == 0)
         	{
-        		printf("%x %x\n", p_ble_evt->evt.gap_evt.params.phy_update.rx_phy, p_ble_evt->evt.gap_evt.params.phy_update.tx_phy);
+        		//printf("%x %x\n", p_ble_evt->evt.gap_evt.params.phy_update.rx_phy, p_ble_evt->evt.gap_evt.params.phy_update.tx_phy);
         	}
         	break;
 
@@ -717,12 +717,12 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
          case BLE_GAP_EVT_AUTH_STATUS:
              if (p_ble_evt->evt.gap_evt.params.auth_status.auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
              {
-                 printf("Authorization succeeded!");
+                 //printf("Authorization succeeded!");
              }
              else
              {
-                 printf("Authorization failed with code: %u!",
-                              p_ble_evt->evt.gap_evt.params.auth_status.auth_status);
+                 //printf("Authorization failed with code: %u!",
+                   //           p_ble_evt->evt.gap_evt.params.auth_status.auth_status);
              }
 /*             printf("%x : BLE_GAP_EVT_AUTH_STATUS: status=0x%x bond=0x%x lv4: %d kdist_own:0x%x kdist_peer:0x%x\r\n",
                           role,

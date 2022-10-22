@@ -1,8 +1,9 @@
 /**-------------------------------------------------------------------------
-@file	ble_hcievt.h
+@file	bt_hcievt.h
 
 @brief	Bluetooth Generic HCI event handlers
 
+Generic implementation of Bluetooth HCI event handling
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2022
@@ -32,91 +33,91 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __BLE_HCIEVT_H__
-#define __BLE_HCIEVT_H__
+#ifndef __BT_HCIEVT_H__
+#define __BT_HCIEVT_H__
 
 #include <stdint.h>
 
 #pragma pack(push, 1)
 
 /// HCI Event packet header
-typedef struct __Ble_Hci_Evt_Packet_Header {
+typedef struct __Bt_Hci_Evt_Packet_Header {
 	uint8_t Evt;
 	uint8_t Len;
-} BleHciEvtPacketHdr_t;
+} BtHciEvtPacketHdr_t;
 
 /// HCI event packet
 /// NOTE: This structure is variable length
-typedef struct __Ble_Hci_Evt_Packet {
-	BleHciEvtPacketHdr_t Hdr;
+typedef struct __Bt_Hci_Evt_Packet {
+	BtHciEvtPacketHdr_t Hdr;
 	uint8_t Data[1];
-} BleHciEvtPacket_t;
+} BtHciEvtPacket_t;
 
 /// HCI Event Connection Complete
-typedef struct __Ble_Hci_Evt_Conn_Complete {
+typedef struct __Bt_Hci_Evt_Conn_Complete {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Addr[6];			//!< BD address of the other connected device
 	uint8_t LinkType;			//!< Link type SCO or ACL
 	uint8_t Encrypt;			//!< Encryption : 1 - enable, 0 - disable
-} BleHciEvtConnCompete_t;
+} BtHciEvtConnCompete_t;
 
-typedef struct __Ble_Hci_Evt_Conn_Rqst {
+typedef struct __Bt_Hci_Evt_Conn_Rqst {
 	uint8_t Addr[6];			//!< BD address of the device requesting connection
 	uint8_t DevClass[3];		//!< Class of Device
 	uint8_t LinkType;			//!< Link type
-} BleHciEvtConnRqst_t;
+} BtHciEvtConnRqst_t;
 
-typedef struct __Ble_Hci_Evt_Discon_Complete {
+typedef struct __Bt_Hci_Evt_Discon_Complete {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Reason;				//!< Reason for disconnection
-} BleHciEvtDisconComplete_t;
+} BtHciEvtDisconComplete_t;
 
-typedef struct __Ble_Hci_Evt_Auth_Complete {
+typedef struct __Bt_Hci_Evt_Auth_Complete {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
-} BleHciEvtAuthComplete_t;
+} BtHciEvtAuthComplete_t;
 
-typedef struct __Ble_Hci_Evt_Remote_Name_Rqst_Complete {
+typedef struct __Bt_Hci_Evt_Remote_Name_Rqst_Complete {
 	uint8_t Status;				//!< Status
 	uint8_t Addr[6];			//!< BD Address
 	uint8_t Name[248];			//!< Name in UTF-8
-} BleHciEvtRemoteNameRqstComplete_t;
+} BtHciEvtRemoteNameRqstComplete_t;
 
-typedef struct __Ble_Hci_Evt_Encrypt_Change {
+typedef struct __Bt_Hci_Evt_Encrypt_Change {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Encrypt;			//!< Encryption : 1 - Enable, 0 - Disable, 2 - Enable with AES-CCM for BR/EDR
 	uint8_t KeySize;			//!< Encryption key size in bytes
-} BleHciEvtEncryptChange_t;
+} BtHciEvtEncryptChange_t;
 
-typedef struct __Ble_Hci_Evt_Change_Conn_Key_Complete {
+typedef struct __Bt_Hci_Evt_Change_Conn_Key_Complete {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
-} BleHciEvtChangeConnKeyComplete_t;
+} BtHciEvtChangeConnKeyComplete_t;
 
-typedef struct __Ble_Hci_Evt_Key_Type_Change {
+typedef struct __Bt_Hci_Evt_Key_Type_Change {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Flag;				//!< Key flag
-} BleHciEvtKeyTypeChange_t;
+} BtHciEvtKeyTypeChange_t;
 
-typedef struct __Ble_Hci_Evt_Read_Remote_Feature_Complete {
+typedef struct __Bt_Hci_Evt_Read_Remote_Feature_Complete {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Features[8];		//!< Bit mask LMP features
-} BleHciEvtReadRemoteFeatureComplete_t;
+} BtHciEvtReadRemoteFeatureComplete_t;
 
-typedef struct __Ble_Hci_Evt_Read_Remote_Info_Complete {
+typedef struct __Bt_Hci_Evt_Read_Remote_Info_Complete {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Version;			//!< Version number
 	uint16_t CompanyId;			//!< Company identifier
 	uint16_t SubVers;			//!< Subversion number
-} BleHciEvtReadRemoteInfoComplete_t;
+} BtHciEvtReadRemoteInfoComplete_t;
 
-typedef struct __Ble_Hci_Evt_QoS_Setup_Complete {
+typedef struct __Bt_Hci_Evt_QoS_Setup_Complete {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Unsused;
@@ -125,43 +126,43 @@ typedef struct __Ble_Hci_Evt_QoS_Setup_Complete {
 	uint32_t PeakBandwidth;		//!< Peak bandwidth byte/sec
 	uint32_t Latency;			//!< Available latency in usec
 	uint32_t DelayVar;			//!< Available delay variation in usec
-} BleHciEvtQoSSetupComplete_t;
+} BtHciEvtQoSSetupComplete_t;
 
 /// NOTE: This structure is variable length
-typedef struct __Ble_Hci_Evt_Cmd_Complete {
+typedef struct __Bt_Hci_Evt_Cmd_Complete {
 	uint8_t NbCmdPacket;		//!< Number of HCI command packet allowed to be sent
 	uint16_t CmdCode;			//!< Command opcode
 	uint8_t RetParam[1];		//!< Variable length of return parameters depending on the command
-} BleHciEvtCmdComplete_t;
+} BtHciEvtCmdComplete_t;
 
-typedef struct __Ble_Hci_Evt_Cmd_Status {
+typedef struct __Bt_Hci_Evt_Cmd_Status {
 	uint8_t Status;				//!< Status
 	uint8_t NbCmdPacket;		//!< Number of HCI command packet allowed to be sent
 	uint16_t CmdCode;			//!< Command opcode
-} BleHciEvtCmdStatus_t;
+} BtHciEvtCmdStatus_t;
 
-typedef struct __Ble_Hci_Evt_Role_Change {
+typedef struct __Bt_Hci_Evt_Role_Change {
 	uint8_t Status;				//!< Status
 	uint8_t Addr[6];			//!< BD address of the device
 	uint8_t Role;				//!< New role
-} BleHciEvtRoleChange_t;
+} BtHciEvtRoleChange_t;
 
-typedef struct __Ble_Hci_Evt_Mode_Change {
+typedef struct __Bt_Hci_Evt_Mode_Change {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Mode;				//!< Current mode
 	uint16_t Interval;			//!< Hold interval in 625usec
-} BleHciEvtModeChange_t;
+} BtHciEvtModeChange_t;
 
 
 /// HCI LE Meta event packet
 /// NOTE: This structure is variable length
-typedef struct __Ble_Hci_MetaEvt_Packet {
+typedef struct __Bt_Hci_MetaEvt_Packet {
 	uint8_t Evt;				//!< Meta event code
 	uint8_t Data[1];
-} BleHciMetaEvtPacket_t;
+} BtHciMetaEvtPacket_t;
 
-typedef struct __Ble_Hci_MetaEvt_ConnComplete {
+typedef struct __Bt_Hci_MetaEvt_ConnComplete {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Role;				//!< Role central/peripheral
@@ -171,9 +172,9 @@ typedef struct __Ble_Hci_MetaEvt_ConnComplete {
 	uint16_t PeriphLatency;		//!< Peripheral latency in number of connection events
 	uint16_t SupervTimeout;		//!< Supervision timeout in 1.25ms
 	uint8_t CentralClkAccu;		//!< Central clock accuracy PPM table
-} BleHciMetaEvtConnComplete_t;
+} BtHciMetaEvtConnComplete_t;
 
-typedef struct __Ble_Hci_MetaEvt_Adv_Report {
+typedef struct __Bt_Hci_MetaEvt_Adv_Report {
 	uint8_t NbReport;			//!< Number of responses in event
 	struct Report {
 		uint8_t EvtType;
@@ -181,17 +182,17 @@ typedef struct __Ble_Hci_MetaEvt_Adv_Report {
 		uint8_t Addr[6];
 		uint8_t DataLen;
 	};
-} BleHciMetaEvtAdvReport_t;
+} BtHciMetaEvtAdvReport_t;
 
-typedef struct __Ble_Hci_MetaEvt_Data_Len_Change {
+typedef struct __Bt_Hci_MetaEvt_Data_Len_Change {
 	uint16_t ConnHdl;			//!< Connection handle
 	uint16_t MaxTxLen;			//!< Max number length of transmit payload in bytes
 	uint16_t MaxTxTime; 		//!< Max transmit time
 	uint16_t MaxRxLen;			//!< Max number length of receive payload in bytes
 	uint16_t MaxRxTime;			//!< Max receive time
-} BleHciMetaEvtDataLenChange_t;
+} BtHciMetaEvtDataLenChange_t;
 
-typedef struct __Ble_Hci_MetaEvt_Enhence_ConnComplete {
+typedef struct __Bt_Hci_MetaEvt_Enhence_ConnComplete {
 	uint8_t Status;				//!< Status
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t Role;				//!< Role central/peripheral
@@ -203,12 +204,12 @@ typedef struct __Ble_Hci_MetaEvt_Enhence_ConnComplete {
 	uint16_t PeriphLatency;		//!< Peripheral latency in number of connection events
 	uint16_t SupervTimeout;		//!< Supervision timeout in 1.25ms
 	uint8_t CentralClkAccu;		//!< Central clock accuracy PPM table
-} BleHciMetaEvtEnhConnComplete_t;
+} BtHciMetaEvtEnhConnComplete_t;
 
-typedef struct __Ble_Hci_MetaEvt_Chan_Sel_Algo {
+typedef struct __Bt_Hci_MetaEvt_Chan_Sel_Algo {
 	uint16_t ConnHdl;			//!< Connection handle
 	uint8_t ChanSelAlgo;		//!< Channel selection algorithm
-} BleHciMetaEvtChanSelAlgo_t;
+} BtHciMetaEvtChanSelAlgo_t;
 
 #pragma pack(pop)
 
@@ -216,11 +217,11 @@ typedef struct __Ble_Hci_MetaEvt_Chan_Sel_Algo {
 extern "C" {
 #endif
 
-void BleHciProcessEvent(BleHciEvtPacket_t *pEvtPkt);
-void BleHciProcessMetaEvent(BleHciMetaEvtPacket_t *pMetaEvtPkt);
+void BtHciProcessEvent(BtHciEvtPacket_t *pEvtPkt);
+void BtHciProcessMetaEvent(BtHciMetaEvtPacket_t *pMetaEvtPkt);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // __BLE_HCIEVT_H__
+#endif // __BT_HCIEVT_H__

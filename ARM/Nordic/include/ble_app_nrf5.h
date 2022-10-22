@@ -40,7 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble.h"
 #include "nrf_sdm.h"
 
-#include "bluetooth/ble_hcidef.h"
+#include "bluetooth/bt_hci.h"
 #include "bluetooth/bleadv_mandata.h"
 
 /** @addtogroup Bluetooth
