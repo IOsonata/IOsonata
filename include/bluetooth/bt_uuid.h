@@ -441,6 +441,7 @@ SOFTWARE.
 #define BT_UUID_GATT_HEARING_AID_FEATURES                           				0x2BDA // could be changed
 #define BT_UUID_GATT_HEARING_AID_PRESET_CONTROL_POINT               				0x2BDB // could be changed
 #define BT_UUID_GATT_ACTIVE_PRESET_INDEX                            				0x2BDC // could be changed
+
 #define BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE                   				0x2800
 #define BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE                 				0x2801
 #define BT_UUID_GATT_DECLARATIONS_INCLUDE                           				0x2802
@@ -779,17 +780,27 @@ typedef union __Bt_Uuid_Val {
 } BtUuidVal_t;
 
 typedef struct __Bt_Uuid {
-	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
 	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
 	BtUuidVal_t Val;
 } BtUuid_t;
+
+typedef struct __Bt_Uuid16 {
+	uint8_t BaseIdx;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	uint16_t Uuid;
+} BtUuid16_t;
+
+typedef struct __Bt_Uuid32 {
+	uint8_t BaseIdx;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	uint32_t Uuid;
+} BtUuid32_t;
 
 /// NOTE: Variable length structure
 typedef struct __Bt_Uuid_Array {
 	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
 	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
 	int Count;					//!< Number of elements in array
-	BtUuidVal_t Val[1];		//!< Array of UUID values
+	BtUuidVal_t Val[1];			//!< Array of UUID values
 } BtUuidArr_t;
 
 #pragma pack(pop)
@@ -798,6 +809,8 @@ typedef struct __Bt_Uuid_Array {
 extern "C" {
 #endif
 
+int8_t BtUuidAddBase(uint8_t const Uuid[16]);
+bool BtUuidGetBase(int8_t idx, uint8_t Uuid[16]);
 
 #ifdef __cplusplus
 }

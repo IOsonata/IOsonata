@@ -37,6 +37,7 @@ SOFTWARE.
 #define __BT_HCIEVT_H__
 
 #include <stdint.h>
+#include "bluetooth/bt_hci.h"
 
 #pragma pack(push, 1)
 
@@ -218,7 +219,7 @@ extern "C" {
 #endif
 
 void BtHciProcessEvent(BtHciEvtPacket_t *pEvtPkt);
-void BtHciProcessMetaEvent(BtHciMetaEvtPacket_t *pMetaEvtPkt);
+void BtHciProcessData(BtHciACLDataPacket_t *pPkt);
 
 #ifdef __cplusplus
 }

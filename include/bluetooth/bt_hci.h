@@ -560,6 +560,10 @@ SOFTWARE.
 #define BT_HCI_ERR_OPERATION_CANCELED_HOST					0x44		//!< Operation Cancelled by Host
 #define BT_HCI_ERR_PACKET_TOO_LONG							0x45		//!< Packet Too Long
 
+#ifndef BT_HCI_BUFFER_MAX_SIZE
+#define BT_HCI_BUFFER_MAX_SIZE				260
+#endif
+
 typedef uint8_t	BtHciErr_t;
 
 #pragma pack(push, 1)
@@ -575,7 +579,6 @@ typedef struct __Bt_Hci_Cmd_Packet_Header {
 		};
 	};
 	uint8_t ParamLen;			//!< HCI parameter length in bytes
-	//uint8_t ParamStart;			//!< HCI parameter
 } BtHciCmdPacketHdr_t;
 
 /// HCI Command packet
@@ -643,7 +646,7 @@ typedef struct __Bt_Hci_ISO_Data_Packet {
 
 /// HCI ISO data load
 /// NOTE: This structure is variable length
-typedef struct __Bt_hci_ISO_Data_Load {
+typedef struct __Bt_Hci_ISO_Data_Load {
 	uint32_t Timestamp;			//!< Timestamp in usec
 	uint16_t SeqNo;				//!< Sequence number
 	uint32_t Len:12;			//!< SDU length
@@ -654,6 +657,23 @@ typedef struct __Bt_hci_ISO_Data_Load {
 
 #pragma pack(pop)
 
+typedef struct __Bt_Hci_Device		BtHciDevice_t;
+
+typedef uint32_t (*BtHciSendDataFct_t)(void *pData, uint32_t Len);
+typedef void (*BtEvtHandler_t)(BtHciDevice_t * const pDev, uint32_t Evt);
+
+typedef struct __Bt_Hci_Dev_Config {
+	BtHciSendDataFct_t SendData;
+	BtEvtHandler_t EvtHandler;
+} BtHciDevCfg_t;
+
+struct __Bt_Hci_Device {
+	uint32_t RxDataLen;
+	uint32_t TxDataLen;
+	BtHciSendDataFct_t SendData;
+	BtEvtHandler_t EvtHandler;
+};
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -662,8 +682,13 @@ static inline uint16_t BtMsecTo0125(float Val) {
 	return (uint16_t)(((uint32_t)(Val * 1000.0) + 500UL) / 125UL);
 };
 
-bool BtHciInit();
+bool BtHciInit(BtHciDevCfg_t const *pCfg);
 void BtHciProcessACLData(BtHciACLDataPacketHdr_t *pPkt);
+
+static inline int BtHciSendData(BtHciDevice_t *pDev, void *pData, int Len) {
+	return pDev->SendData(pData, Len);
+}
+
 
 #ifdef __cplusplus
 }

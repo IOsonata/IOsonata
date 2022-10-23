@@ -223,6 +223,19 @@ typedef struct __Bt_Att_Read_By_Group_Type_Req {
 } BtAttReadByGroupTypeReq_t;
 
 /// Read by group type response : ATT_READ_BY_GROUP_TYPE_RSP
+
+typedef struct __Bt_Att_Read_By_Group_Type_Rsp_Uuid16 {
+	uint16_t HdlStart;
+	uint16_t HdlEnd;
+	uint16_t Uuid;
+} BtAttReadByGroupTypeRspUuid16_t;
+
+typedef struct __Bt_Att_Read_By_Group_Type_Rsp_Uuid128 {
+	uint16_t HdlStart;
+	uint16_t HdlEnd;
+	uint8_t Uuid[16];
+} BtAttReadByGroupTypeRspUuid128_t;
+
 /// NOTE: Variable length
 typedef struct __Bt_Att_Read_By_Group_Type_Rsp {
 	uint8_t OpCode;			//!< Attribute opcode

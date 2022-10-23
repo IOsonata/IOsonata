@@ -89,6 +89,13 @@ typedef enum __BleApp_SecurityType {
 #define BLEAPP_DEVNAME_MAX_SIZE			BLE_GAP_DEVNAME_DEFAULT_LEN
 #define BLEAPP_INFOSTR_MAX_SIZE			20
 
+// App events
+typedef enum __BleApp_Event {
+	BLEAPP_CONNECTED,
+	BLEAPP_DISCONNECTED,
+	BLEAPP_EVENT_EXCHANGE_MTU,
+} BLEAPP_EVT;
+
 #pragma pack(push, 4)
 
 /// BLE App Device Info
