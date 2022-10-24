@@ -351,6 +351,11 @@
 			<locationURI>copy_PARENT/src/Vectors_nRF52832.c</locationURI>
 		</link>
 		<link>
+			<name>src/app_evt_handler.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/audio</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
