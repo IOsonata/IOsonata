@@ -38,6 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __BLE_SERVICE_H__
 
 //#include "ble_srv_common.h"
+#include "ble.h"
 
 /** @addtogroup Bluetooth
   * @{
