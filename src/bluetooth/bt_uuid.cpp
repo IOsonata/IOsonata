@@ -53,7 +53,7 @@ typedef struct __Bt_Base_Uuid_Tbl_Entry {
 #define BT_BASE_UUID_ENTRY_MAX_COUNT		4
 #endif
 
-alignas(4) static BtBaseUuidTblEntry_t s_BtBaseUuidTbl[BT_BASE_UUID_ENTRY_MAX_COUNT] = {{BLUETOOTH_SIG_BASE_UUID, false,},};
+alignas(4) static BtBaseUuidTblEntry_t s_BtBaseUuidTbl[BT_BASE_UUID_ENTRY_MAX_COUNT] = {{BLUETOOTH_SIG_BASE_UUID, true}, {0, false},};
 static uint32_t s_NbUuidEntry = 1;
 
 int BtUuidFindBase(uint8_t const Uuid[16])
