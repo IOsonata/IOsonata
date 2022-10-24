@@ -36,6 +36,7 @@ Modified by          Date              Description
 #include <string.h>
 
 #include "app_util_platform.h"
+#include "ble_srv_common.h"
 
 #include "istddef.h"
 #include "cfifo.h"

@@ -37,7 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BLE_SERVICE_H__
 #define __BLE_SERVICE_H__
 
-#include "ble_srv_common.h"
+//#include "ble_srv_common.h"
 
 /** @addtogroup Bluetooth
   * @{
@@ -119,7 +119,8 @@ typedef BleSrvcChar_t	BLESRVC_CHAR;
  */
 typedef struct __BLE_Service_Config {
 	BLESRVC_SECTYPE SecType;			//!< Secure or Open service/char
-	ble_uuid128_t	UuidBase[BLESVC_UUID_BASE_MAXCNT];//!< Base UUIDs
+	//ble_uuid128_t	UuidBase[BLESVC_UUID_BASE_MAXCNT];//!< Base UUIDs
+	uint8_t			UuidBase[BLESVC_UUID_BASE_MAXCNT][16];//!< Base UUIDs
 	int				NbUuidBase;			//!< Number of UUID defined in the UuidBase array
 	uint16_t		UuidSvc;			//!< Service UUID
 	int             NbChar;				//!< Total number of characteristics for the service
@@ -201,7 +202,7 @@ uint32_t BleSrvcCharSetValue(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t
  * @return	true - Connected
  * 			false - Not connected
  */
-static inline bool IsBleSrvcConnected(BleSrvc_t *pSrvc) { return pSrvc->ConnHdl != BLE_CONN_HANDLE_INVALID; }
+static inline bool IsBleSrvcConnected(BleSrvc_t *pSrvc) { return pSrvc->ConnHdl != -1;}//BLE_CONN_HANDLE_INVALID; }
 
 /**
  * @brief	Check for notification state of a characteristic

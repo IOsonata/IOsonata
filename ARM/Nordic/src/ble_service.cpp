@@ -40,6 +40,8 @@ SOFTWARE.
 #include <string.h>
 #include "nordic_common.h"
 #include "app_error.h"
+#include "ble_srv_common.h"
+
 #include "ble_service.h"
 
 #pragma pack(push, 1)
@@ -393,7 +395,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
     // Add base UUID to softdevice's internal list.
     for (int i = 0; i < pCfg->NbUuidBase; i++)
     {
-		err = sd_ble_uuid_vs_add(&pCfg->UuidBase[i], &pSrvc->UuidType[i]);
+		err = sd_ble_uuid_vs_add((ble_uuid128_t*)pCfg->UuidBase[i], &pSrvc->UuidType[i]);
 		if (err != NRF_SUCCESS)
 		{
 			return err;
