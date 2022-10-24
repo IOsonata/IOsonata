@@ -397,6 +397,10 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 		case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ:
 			break;
 		case BT_ATT_OPCODE_ATT_READ_REQ:
+			{
+				BtAttReadReq_t *req = (BtAttReadReq_t*)&pRcvPdu->Att;
+				g_Uart.printf("BT_ATT_OPCODE_ATT_READ_REQ : %d\r\n", req->Hdl);
+			}
 			break;
 		case BT_ATT_OPCODE_ATT_READ_REQ_BLOB_REQ:
 			break;
@@ -435,7 +439,7 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 						{
 							rsp->Len += 14;
 							uid.Type = BT_UUID_TYPE_128;
-							BtUuidGetBase(baseidx - 1, uid.Val.Uuid128);
+							BtUuidGetBase(baseidx, uid.Val.Uuid128);
 						}
 
 						for (int i = 0; i < c; i++)
@@ -456,8 +460,8 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 								p += sizeof(BtAttHdlRange_t);
 								if (baseidx > 0)
 								{
-									uid.Val.Uuid128[11] = list[i].Uuid.Uuid & 0xFF;
-									uid.Val.Uuid128[12] = list[i].Uuid.Uuid >> 8;
+									uid.Val.Uuid128[12] = list[i].Uuid.Uuid & 0xFF;
+									uid.Val.Uuid128[13] = list[i].Uuid.Uuid >> 8;
 
 									memcpy(p, &uid.Val, 16);
 									p += 16;
@@ -478,8 +482,12 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 							}
 						}
 
+						g_Uart.printf("rsp->Len : %d, %d\r\n", rsp->Len, l);
+
 						l2pdu->Hdr.Len = sizeof(BtAttReadByGroupTypeRsp_t) - 1 + l;
-						acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t) + l;
+						acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+						g_Uart.printf("rsp->Len : %d, %d, %d, %d\r\n", rsp->Len, l, l2pdu->Hdr.Len, acl->Hdr.Len);
 
 					}
 					else

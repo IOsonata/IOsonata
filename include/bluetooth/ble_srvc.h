@@ -108,7 +108,7 @@ typedef struct __Ble_Srvc_Char_Data {
  */
 typedef struct __Ble_Srvc_Config {
 	BLESRVC_SECTYPE SecType;			//!< Secure or Open service/char
-	BtUuid_t UuidBase[BLESVC_UUID_BASE_MAXCNT];//!< Base UUIDs
+	uint8_t UuidBase[BLESVC_UUID_BASE_MAXCNT][16];//!< Base UUIDs
 	int				NbUuidBase;			//!< Number of UUID defined in the UuidBase array
 	uint16_t		UuidSvc;			//!< Service UUID
 	int             NbChar;				//!< Total number of characteristics for the service
@@ -144,6 +144,17 @@ struct __Ble_Srvc {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief	Create BLE custom service
+ *
+ * @param	pSrvc	: Pointer to Blue IO service data to be filled when service
+ * 					  is created
+ * @param	pCfg	: Pointer to configuration data for the service creation
+ *
+ * @return	0 - Success
+ */
+uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg);
 
 uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
 

@@ -54,7 +54,10 @@ SOFTWARE.
 #include "bluetooth/ble_app.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
+#include "bluetooth/bt_l2cap.h"
+#include "bluetooth/bt_att.h"
 #include "bluetooth/ble_appearance.h"
+//#include "bluetooth/ble_conn.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
 
@@ -130,6 +133,23 @@ alignas(4) static BleAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppExtSrData.
 
 alignas(4) static uint8_t s_BleStackSdcMemPool[10000];
 
+//BleConn_t g_BleConn = {0,};
+extern UART g_Uart;
+
+static inline uint32_t HciSdcSendData(void *pData, uint32_t Len) {
+	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
+}
+
+void BleAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
+{
+
+}
+
+static const BtHciDevCfg_t s_BtDevCfg = {
+	.SendData = HciSdcSendData,
+	.EvtHandler = BleAppEvtHandler,
+};
+
 static void BleStackMpslAssert(const char * const file, const uint32_t line)
 {
 //	printf("MPSL Fault: %s, %d\n", file, line);
@@ -142,272 +162,15 @@ static void BleStackSdcAssert(const char * file, const uint32_t line)
 	while(1);
 }
 
-void BtHciProcessMetaEvent(BtHciMetaEvtPacket_t *pMetaEvtPkt)
-{
-	//printf("BtHciProcessMetaEvent : Evt %x\r\n", pMetaEvtPkt->Evt);
-
-	switch (pMetaEvtPkt->Evt)
-	{
-		case BT_HCI_EVT_LE_META_CONN_COMPLETE:
-			{
-				BtHciMetaEvtConnComplete_t *p = (BtHciMetaEvtConnComplete_t*)pMetaEvtPkt->Data;
-				if (p->Status == 0)
-				{
-					uint16_t conhdl = p->ConnHdl;
-					BLEAPP_ROLE role = p->Role == 1 ? BLEAPP_ROLE_PERIPHERAL : BLEAPP_ROLE_CENTRAL;
-
-	//					printf("hdl %x, %d\n", conhdl, role);
-				}
-			}
-			break;
-		case BT_HCI_EVT_LE_META_ADV_REPORT:
-			{
-				BtHciMetaEvtAdvReport_t *p = (BtHciMetaEvtAdvReport_t*)pMetaEvtPkt->Data;
-
-				for (int i = 0; i < p->NbReport; i++)
-				{
-
-				}
-			}
-			break;
-		case BT_HCI_EVT_LE_META_CONN_UPDATE_COMPLETE:
-			break;
-		case BT_HCI_EVT_LE_META_READ_REMOTE_FEATURES_COMPLETE:
-			break;
-		case BT_HCI_EVT_LE_META_LONGTERM_KEY_RQST:
-			break;
-		case BT_HCI_EVT_LE_META_REMOTE_CONN_PARAM_RQST:
-			break;
-		case BT_HCI_EVT_LE_META_DATA_LEN_CHANGE:
-			{
-				BtHciMetaEvtDataLenChange_t *p = (BtHciMetaEvtDataLenChange_t*)pMetaEvtPkt->Data;
-
-				//printf("Data length:%d\r\n", p->MaxRxLen);
-
-			}
-			break;
-		case BT_HCI_EVT_LE_META_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE:
-			break;
-		case BT_HCI_EVT_LE_META_GENERATE_DHKEY_COMPLETE:
-			break;
-		case BT_HCI_EVT_LE_META_ENHANCED_CONN_COMPLETE:
-			{
-				BtHciMetaEvtEnhConnComplete_t *p = (BtHciMetaEvtEnhConnComplete_t*)pMetaEvtPkt->Data;
-				if (p->Status == 0)
-				{
-					uint16_t conhdl = p->ConnHdl;
-					BLEAPP_ROLE role = p->Role == 1 ? BLEAPP_ROLE_PERIPHERAL : BLEAPP_ROLE_CENTRAL;
-
-
-//					printf("hdl %x, %d\n", conhdl, role);
-				}
-			}
-			break;
-		case BT_HCI_EVT_LE_META_DIRECTED_ADV_REPORT:
-			break;
-		case BT_HCI_EVT_LE_META_PHY_UPDATE_COMPLETE:
-			break;
-		case BT_HCI_EVT_LE_META_EXT_ADV_REPORT:
-			break;
-		case BT_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_ESTABLISHED:
-			break;
-		case BT_HCI_EVT_LE_META_PERIODIC_ADV_REPORT:
-			break;
-		case BT_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_LOST:
-			break;
-		case BT_HCI_EVT_LE_META_SCAN_TIMEOUT:
-			break;
-		case BT_HCI_EVT_LE_META_ADV_SET_TERMINATED:
-			break;
-		case BT_HCI_EVT_LE_META_SCAN_RQST_RECEIVED:
-			break;
-		case BT_HCI_EVT_LE_META_CHAN_SELECTION_ALGO:
-			{
-				BtHciMetaEvtChanSelAlgo_t *p = (BtHciMetaEvtChanSelAlgo_t *)pMetaEvtPkt->Data;
-
-			}
-			break;
-		case BT_HCI_EVT_LE_META_CONNLESS_IQ_REPORT:
-			break;
-		case BT_HCI_EVT_LE_META_CONN_IQ_REPORT:
-			break;
-		case BT_HCI_EVT_LE_META_CTE_RQST_FAILED:
-			break;
-		case BT_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED:
-			break;
-		case BT_HCI_EVT_LE_META_CIS_ESTABLISHED:
-			break;
-		case BT_HCI_EVT_LE_META_CIS_RQST:
-			break;
-		case BT_HCI_EVT_LE_META_CREATE_BIG_COMPLETE:
-			break;
-		case BT_HCI_EVT_LE_META_TERMINATE_BIG_COMPLETE:
-			break;
-		case BT_HCI_EVT_LE_META_BIG_SYNC_ESTABLISHED:
-			break;
-		case BT_HCI_EVT_LE_META_BIG_SYNC_LOST:
-			break;
-		case BT_HCI_EVT_LE_META_RQST_PEER_SCA_COMPLETE:
-			break;
-		case BT_HCI_EVT_LE_META_PATH_LOSS_THREESHOLD:
-			break;
-		case BT_HCI_EVT_LE_META_TRANSMIT_PWR_REPORTING:
-			break;
-		case BT_HCI_EVT_LE_META_BIGINFO_ADV_REPORT:
-			break;
-		case BT_HCI_EVT_LE_META_SUBRATE_CHANGE:
-			break;
-	}
-}
-
-void BtHciProcessEvent(BtHciEvtPacket_t *pEvtPkt)
-{
-	//printf("BtHciProcessEvent %x\r\n", pEvtPkt->Hdr.Evt);
-
-	switch (pEvtPkt->Hdr.Evt)
-	{
-		case BT_HCI_EVT_INQUERY_COMPLETE:
-			break;
-		case BT_HCI_EVT_INQUERY_RESULT:
-			break;
-		case BT_HCI_EVT_CONN_COMPLETE:
-			break;
-		case BT_HCI_EVT_CONN_REQUEST:
-			break;
-		case BT_HCI_EVT_DISCONN_COMPLETE:
-			break;
-		case BT_HCI_EVT_AUTHEN_COMPLETE:
-			break;
-		case BT_HCI_EVT_REMOTE_NAME_RQST_COMPLETE:
-			break;
-		case BT_HCI_EVT_ENCRYPTION_CHANGE:
-			break;
-		case BT_HCI_EVT_ENCRYPTION_CHANGE_V2:
-			break;
-		case BT_HCI_EVT_CHANGE_CONN_LINK_KEY_COMPLETE:
-			break;
-		case BT_HCI_EVT_LINK_KEY_TYPE_CHANGED:
-			break;
-		case BT_HCI_EVT_READ_REMOTE_SUPPORTED_FEATURES_COMPLETE:
-			break;
-		case BT_HCI_EVT_READ_REMOTE_VERS_INFO_COMPLETE:
-			break;
-		case BT_HCI_EVT_QOS_SETTUP_COMPLETE:
-			break;
-		case BT_HCI_EVT_COMMAND_COMPLETE:
-			break;
-		case BT_HCI_EVT_COMMAND_STATUS:
-			break;
-		case BT_HCI_EVT_HARDWARE_ERROR:
-			break;
-		case BT_HCI_EVT_FLUSH_OCCURED:
-			break;
-		case BT_HCI_EVT_ROLE_CHANGE:
-			break;
-		case BT_HCI_EVT_NB_COMPLETED_PACKET:
-			break;
-		case BT_HCI_EVT_MODE_CHANGE:
-			break;
-		case BT_HCI_EVT_RETURN_LINK_KEYS:
-			break;
-		case BT_HCI_EVT_PIN_CODE_RQST:
-			break;
-		case BT_HCI_EVT_LINK_KEY_RQST:
-			break;
-		case BT_HCI_EVT_LINK_KEY_NOTIF:
-			break;
-		case BT_HCI_EVT_LOOPBACK_COMMAND:
-			break;
-		case BT_HCI_EVT_DATA_BUFFER_OVERFLOW:
-			break;
-		case BT_HCI_EVT_MAX_SLOT_CHANGE:
-			break;
-		case BT_HCI_EVT_READ_CLOCK_OFFSET_COMPLETE:
-			break;
-		case BT_HCI_EVT_CONN_PACKET_TYPE_CHANGED:
-			break;
-		case BT_HCI_EVT_QOS_VIOLATION:
-			break;
-		case BT_HCI_EVT_PAGE_SCAN_REPETITION_MODE_CHANGE:
-			break;
-		case BT_HCI_EVT_FLOW_SPECS_COMPLETE:
-			break;
-		case BT_HCI_EVT_INQUIRY_RESULT_WITH_RSSI:
-			break;
-		case BT_HCI_EVT_READ_REMOTE_EXT_FEATURES_COMPLETE:
-			break;
-		case BT_HCI_EVT_SYNCHRONOUS_CONN_COMPLETE:
-			break;
-		case BT_HCI_EVT_SYNCHRONOUS_CONN_CHANGED:
-			break;
-		case BT_HCI_EVT_SNIFF_SUBRATING:
-			break;
-		case BT_HCI_EVT_EXT_INQUIRY_RESULT:
-			break;
-		case BT_HCI_EVT_ENCRYPTION_KEY_REFRESH_COMPLETE:
-			break;
-		case BT_HCI_EVT_IO_CAPABILITY_RQST:
-			break;
-		case BT_HCI_EVT_IO_CAPABILITY_RESPONSE:
-			break;
-		case BT_HCI_EVT_USER_CONFIRM_RQST:
-			break;
-		case BT_HCI_EVT_USER_PASSKEY_RQST:
-			break;
-		case BT_HCI_EVT_REMOTE_OOB_DATA_RQST:
-			break;
-		case BT_HCI_EVT_SIMPLE_PAIRING_COMPLETE:
-			break;
-		case BT_HCI_EVT_LINK_SUPERVISION_TIMEOUT_CHANGED:
-			break;
-		case BT_HCI_EVT_ENHANCED_FLUSH_COMPLETE:
-			break;
-		case BT_HCI_EVT_USER_PASSKEY_NOTIF:
-			break;
-		case BT_HCI_EVT_KEYPRESS_NOTIF:
-			break;
-		case BT_HCI_EVT_REMOTE_HOST_SUPPORTED_FEATURES_NOTIF:
-			break;
-		case BT_HCI_EVT_NB_COMPLETED_DATA_BLOCKS:
-			break;
-		case BT_HCI_EVT_TRIGGERED_CLOCK_CAPTURE:
-			break;
-		case BT_HCI_EVT_SYNC_TRAIN_COMPLETE:
-			break;
-		case BT_HCI_EVT_SYNC_TRAIN_RECEIVED:
-			break;
-		case BT_HCI_EVT_CONNLESS_PERIPH_BROADCAST_RECEIVE:
-			break;
-		case BT_HCI_EVT_CONNLESS_PERIPH_BROADCAST_TIMEOUT:
-			break;
-		case BT_HCI_EVT_TRUNCATED_PAGE_COMPLETE:
-			break;
-		case BT_HCI_EVT_PERIPH_PAGE_RESPONSE_TIMNEOUT:
-			break;
-		case BT_HCI_EVT_CONNLESS_PERIPH_BROADCAST_CHAN_MAP_CHANGE:
-			break;
-		case BT_HCI_EVT_INQUIRY_RESPONSE_NOTIF:
-			break;
-		case BT_HCI_EVT_AUTHEN_PAYLOAD_TIMEOUT_EXPIRED:
-			break;
-		case BT_HCI_EVT_SAM_STATUS_CHANGE:
-			break;
-		case BT_HCI_EVT_LE_META:
-			BtHciProcessMetaEvent((BtHciMetaEvtPacket_t *)pEvtPkt->Data);
-			break;
-	}
-}
-
-void BtHciProcessData(BtHciACLDataPacket_t *pPkt)
-{
-	//printf("BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
-}
 
 static void BleStackSdcCB()
 {
+	//printf("BtHciSdcCB\n");
+
 	uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
 	int32_t res = 0;
 	sdc_hci_msg_type_t mtype;
+
 	res = sdc_hci_get(buf, &mtype);
 	if (res == 0)
 	{
@@ -479,12 +242,12 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 	}
 
 	size_t l = strlen(pDeviceName);
-	uint8_t type = GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
+	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
 
 	if (l < 14)
 	{
 		// Short name
-		type = GAP_DATA_TYPE_SHORT_LOCAL_NAME;
+		type = BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME;
 	}
 
 	BleAdvDataAdd(advpkt, type, (uint8_t*)pDeviceName, l);
@@ -524,7 +287,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 	if (pAdvData)
 	{
 		int l = AdvLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BleAdvData_t *p = BleAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -561,7 +324,7 @@ bool BleAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int Sr
 	if (pSrData)
 	{
 		int l = SrLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BleAdvData_t *p = BleAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -652,7 +415,7 @@ void BleAppAdvStop()
  */
 __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 {
-	uint8_t flags = GAP_DATA_TYPE_FLAGS_NO_BREDR;
+	uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
 	uint16_t extprop = 0;//BLE_EXT_ADV_EVT_PROP_LEGACY;
 	BleAdvPacket_t *advpkt;
 	BleAdvPacket_t *srpkt;
@@ -672,11 +435,11 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	{
 		if (pCfg->AdvTimeout != 0)
 		{
-			flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
+			flags |= BT_GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
 		}
 		else
 		{
-			flags |= GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
+			flags |= BT_GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
 		}
 		extprop |= BLE_EXT_ADV_EVT_PROP_CONNECTABLE;// | BLE_EXT_ADV_EVT_PROP_SCANNABLE;
 	}
@@ -688,14 +451,14 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		//flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
 	}
 
-	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
+	if (BleAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
 	{
 		return false;
 	}
 
     if (pCfg->Appearance != BLE_APPEAR_UNKNOWN_GENERIC)
     {
-    	if (BleAdvDataAdd(advpkt, GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
+    	if (BleAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{
 //    		return false;
     	}
@@ -706,13 +469,13 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
     if (pCfg->pDevName != NULL)
     {
     	size_t l = strlen(pCfg->pDevName);
-    	uint8_t type = GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
+    	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
     	size_t mxl = advpkt->MaxLen - advpkt->Len - 2;
 
     	if (l > 30 || l > mxl)
     	{
     		// Short name
-    		type = GAP_DATA_TYPE_SHORT_LOCAL_NAME;
+    		type = BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME;
     		l = min((size_t)30, mxl);
     	}
 
@@ -740,7 +503,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	if (pCfg->pAdvManData != NULL)
 	{
 		int l = pCfg->AdvManDataLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(advpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BleAdvData_t *p = BleAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -753,7 +516,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	if (pCfg->pSrManData != NULL)
 	{
 		int l = pCfg->SrManDataLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(srpkt, GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BleAdvData_t *p = BleAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -980,6 +743,7 @@ void BleAppGattInit(void)
 
 bool BleAppConnectable(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 {
+
 #if 0
 	uint32_t err_code;
 
@@ -1048,10 +812,9 @@ bool BleAppStackInit(const BleAppCfg_t *pBleAppCfg)
 
 	res = sdc_rand_source_register(&rand_functions);
 
-//	sdc_support_dle();
 	sdc_support_le_2m_phy();
 	sdc_support_le_coded_phy();
-	sdc_support_le_power_control();
+	//sdc_support_le_power_control();
 
 	if (pBleAppCfg->Role & (BLEAPP_ROLE_PERIPHERAL | BLEAPP_ROLE_BROADCASTER))
 	{
@@ -1343,10 +1106,16 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 
     if (pBleAppCfg->Role & (BLEAPP_ROLE_BROADCASTER | BLEAPP_ROLE_PERIPHERAL))
     {
+    	if (pBleAppCfg->Role & BLEAPP_ROLE_PERIPHERAL)
+    	{
+    		BleAppInitUserServices();
+    	}
+
     	if (BleAppAdvInit(pBleAppCfg) == false)
     	{
     		return false;
     	}
+
     }
 
 
@@ -1362,7 +1131,10 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     	return false;
     }
 
+	BtHciInit(&s_BtDevCfg);
+
 	g_BleAppData.State = BLEAPP_STATE_INITIALIZED;
+
 
 	return true;
 }

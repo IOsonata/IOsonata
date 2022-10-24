@@ -199,25 +199,44 @@ bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BtUuidArr_t *pUid, bool bC
 	int l = 0;
 	uint8_t gaptype = 0;
 	bool retval;
+	uint8_t uid[pUid->Count][16];
 
-	switch (pUid->Type)
+	if (pUid->BaseIdx > 0)
 	{
-		case BT_UUID_TYPE_16:
-			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
-			l = pUid->Count * 2;
-			break;
-		case BT_UUID_TYPE_32:
-			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
-			l = pUid->Count * 4;
-			break;
-		case BT_UUID_TYPE_128:
-			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
-			l = pUid->Count * 16;
-			break;
-		default:
-			retval = false;
-	}
+		uint8_t id[16];
 
+		BtUuidGetBase(pUid->BaseIdx, id);
+
+		for (int i = 0; i < pUid->Count; i++)
+		{
+			id[12] = pUid->Uuid16[i] & 0xFF;
+			id[13] = pUid->Uuid16[i] >> 8;
+			memcpy(uid[i], id, 16);
+
+		}
+
+		gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
+		return BleAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)uid, l);
+	}
+	else
+	{
+		switch (pUid->Type)
+		{
+			case BT_UUID_TYPE_16:
+				gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
+				l = pUid->Count * 2;
+				break;
+			case BT_UUID_TYPE_32:
+				gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
+				l = pUid->Count * 4;
+				break;
+			case BT_UUID_TYPE_128:
+				gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
+				l = pUid->Count * 16;
+				break;
+			default:
+				retval = false;
+		}
+	}
 	return BleAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)pUid->Uuid16, l);
-;
 }
