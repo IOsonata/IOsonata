@@ -786,21 +786,33 @@ typedef struct __Bt_Uuid {
 } BtUuid_t;
 
 typedef struct __Bt_Uuid16 {
-	uint8_t BaseIdx;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
 	uint16_t Uuid;
 } BtUuid16_t;
 
 typedef struct __Bt_Uuid32 {
-	uint8_t BaseIdx;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
 	uint32_t Uuid;
 } BtUuid32_t;
 
+typedef struct __Bt_Uuid128 {
+	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
+	uint8_t Uuid[16];
+} BtUuid128_t;
+
 /// NOTE: Variable length structure
 typedef struct __Bt_Uuid_Array {
-	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
 	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
 	int Count;					//!< Number of elements in array
-	BtUuidVal_t Val[1];			//!< Array of UUID values
+	union {
+		uint16_t Uuid16[1];
+		uint32_t Uuid32[1];
+		uint8_t Uuid128[1][16];
+	};
 } BtUuidArr_t;
 
 #pragma pack(pop)
@@ -809,8 +821,9 @@ typedef struct __Bt_Uuid_Array {
 extern "C" {
 #endif
 
-int8_t BtUuidAddBase(uint8_t const Uuid[16]);
-bool BtUuidGetBase(int8_t idx, uint8_t Uuid[16]);
+int BtUuidFindBase(uint8_t const Uuid[16]);
+int BtUuidAddBase(uint8_t const Uuid[16]);
+bool BtUuidGetBase(int Idx, uint8_t Uuid[16]);
 
 #ifdef __cplusplus
 }

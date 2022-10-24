@@ -37,6 +37,13 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 
+// Bluetooth SIG base uuid
+// 0000FF00-0000-1000-8000-00805F9B34FB
+//
+#define BLUETOOTH_SIG_BASE_UUID		{ 0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, \
+									  0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+
+
 typedef struct __Bt_Base_Uuid_Tbl_Entry {
 	uint8_t Uuid[16];
 	bool bValid;
@@ -46,10 +53,10 @@ typedef struct __Bt_Base_Uuid_Tbl_Entry {
 #define BT_BASE_UUID_ENTRY_MAX_COUNT		4
 #endif
 
-alignas(4) static BtBaseUuidTblEntry_t s_BtBaseUuidTbl[BT_BASE_UUID_ENTRY_MAX_COUNT] = {{false,},};
-static uint32_t s_NbUuidEntry = 0;
+alignas(4) static BtBaseUuidTblEntry_t s_BtBaseUuidTbl[BT_BASE_UUID_ENTRY_MAX_COUNT] = {{BLUETOOTH_SIG_BASE_UUID, false,},};
+static uint32_t s_NbUuidEntry = 1;
 
-int8_t BtUuidFindBase(uint8_t const Uuid[16])
+int BtUuidFindBase(uint8_t const Uuid[16])
 {
 	for (int i = 0; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
 	{
@@ -65,7 +72,7 @@ int8_t BtUuidFindBase(uint8_t const Uuid[16])
 	return -1;
 }
 
-int8_t BtUuidAddBase(uint8_t const Uuid[16])
+int BtUuidAddBase(uint8_t const Uuid[16])
 {
 	int8_t idx = BtUuidFindBase(Uuid);
 
@@ -88,16 +95,16 @@ int8_t BtUuidAddBase(uint8_t const Uuid[16])
 	return -1;
 }
 
-bool BtUuidGetBase(int8_t idx, uint8_t Uuid[16])
+bool BtUuidGetBase(int Idx, uint8_t Uuid[16])
 {
-	if (idx < 0 || idx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
+	if (Idx < 0 || Idx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
 	{
 		return false;
 	}
 
-	if (s_BtBaseUuidTbl[idx].bValid)
+	if (s_BtBaseUuidTbl[Idx].bValid)
 	{
-		memcpy(Uuid, s_BtBaseUuidTbl[idx].Uuid, 16);
+		memcpy(Uuid, s_BtBaseUuidTbl[Idx].Uuid, 16);
 
 		return true;
 	}

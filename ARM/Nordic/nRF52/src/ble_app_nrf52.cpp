@@ -1283,13 +1283,13 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 			for (int i = 0; i < pCfg->pAdvUuid->Count; i++)
 			{
-				ble_uuid_t uid = { pCfg->pAdvUuid->Val[i].Uuid16, (uint8_t)(pCfg->pAdvUuid->BaseIdx == 0 ? BLE_UUID_TYPE_BLE : BLE_UUID_TYPE_VENDOR_BEGIN)};
+				ble_uuid_t uid = { pCfg->pAdvUuid->Uuid16[i], (uint8_t)(pCfg->pAdvUuid->BaseIdx == 0 ? BLE_UUID_TYPE_BLE : BLE_UUID_TYPE_VENDOR_BEGIN)};
 
 				uint8_t len = 0;
-				uint32_t res = sd_ble_uuid_encode(&uid, &len, ua->Val[i].Uuid128);
+				uint32_t res = sd_ble_uuid_encode(&uid, &len, ua->Uuid128[i]);
 				if (res != 0)
 				{
-					printf("err %x\n", res);
+					//printf("err %x\n", res);
 				}
 			}
 			if (BleAdvDataAddUuid(uidadvpkt, ua, pCfg->bCompleteUuidList) == false)

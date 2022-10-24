@@ -218,6 +218,6 @@ bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BtUuidArr_t *pUid, bool bC
 			retval = false;
 	}
 
-	return BleAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)pUid->Val, l);
+	return BleAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)pUid->Uuid16, l);
 ;
 }
