@@ -42,7 +42,8 @@ SOFTWARE.
 #include "app_error.h"
 #include "ble_srv_common.h"
 
-#include "ble_service.h"
+//#include "ble_service.h"
+#include "bluetooth/ble_srvc.h"
 
 #pragma pack(push, 1)
 typedef struct {
@@ -70,7 +71,7 @@ uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t D
 
     memset(&params, 0, sizeof(params));
     params.type = BLE_GATT_HVX_NOTIFICATION;
-    params.handle = pSrvc->pCharArray[Idx].Hdl.value_handle;
+    params.handle = pSrvc->pCharArray[Idx].Hdl;//.value_handle;
     params.p_data = pData;
     params.p_len = &DataLen;
 
@@ -90,7 +91,7 @@ uint32_t BleSrvcCharSetValue(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t
     value.p_value = pData;
 
     uint32_t err_code = sd_ble_gatts_value_set(pSrvc->ConnHdl,
-    										   pSrvc->pCharArray[Idx].Hdl.value_handle,
+    										   pSrvc->pCharArray[Idx].Hdl,//.value_handle,
 											   &value);
     return err_code;
 }
@@ -135,7 +136,7 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
 						//printf("Long Write\r\n");
 						GATLWRHDR *hdr = (GATLWRHDR *)pSrvc->pLongWrBuff;
 					    uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
-						if (hdr->Handle == pSrvc->pCharArray[i].Hdl.value_handle)
+						if (hdr->Handle == pSrvc->pCharArray[i].Hdl)//.value_handle)
 					    {
 #if 1
 							GatherLongWrBuff(hdr);
@@ -160,7 +161,7 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
 					}
 					else
 					{
-						if ((p_evt_write->handle == pSrvc->pCharArray[i].Hdl.cccd_handle) &&
+						if ((p_evt_write->handle == pSrvc->pCharArray[i].CccdHdl) && //cccd_handle) &&
 							(p_evt_write->len == 2))
 						{
 							if (ble_srv_is_notification_enabled(p_evt_write->data))
@@ -177,7 +178,7 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
 								pSrvc->pCharArray[i].SetNotifCB(pSrvc, pSrvc->pCharArray[i].bNotify);
 							}
 						}
-						else if ((p_evt_write->handle == pSrvc->pCharArray[i].Hdl.value_handle) &&
+						else if ((p_evt_write->handle == pSrvc->pCharArray[i].Hdl) &&//.value_handle) &&
 								 (pSrvc->pCharArray[i].WrCB != NULL))
 						{
 							//printf("Write value handle\r\n");
@@ -210,7 +211,7 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
         case BLE_GATTS_EVT_RW_AUTHORIZE_REQUEST:
         	if (pSrvc->AuthReqCB)
         	{
-        		pSrvc->AuthReqCB(pSrvc, pBleEvt);
+//        		pSrvc->AuthReqCB(pSrvc, pBleEvt);
         	}
         	break;
 
@@ -375,7 +376,14 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
     attr_char_value.init_len     = pChar->ValueLen;
     attr_char_value.p_value      = pChar->pDefValue;
 
-    return sd_ble_gatts_characteristic_add(pSrvc->SrvcHdl, &char_md, &attr_char_value, &pChar->Hdl);
+    ble_gatts_char_handles_t hdl;
+    uint32_t res = sd_ble_gatts_characteristic_add(pSrvc->SrvcHdl, &char_md, &attr_char_value, &hdl);//&pChar->Hdl);
+    pChar->Hdl = hdl.value_handle;
+    pChar->DescHdl = hdl.user_desc_handle;
+    pChar->CccdHdl = hdl.cccd_handle;
+    pChar->SccdHdl = hdl.sccd_handle;
+
+    return res;
 }
 
 /**

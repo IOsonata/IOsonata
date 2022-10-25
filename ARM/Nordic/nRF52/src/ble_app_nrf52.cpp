@@ -82,7 +82,7 @@ Modified by          Date              Description
 #include "bluetooth/ble_appearance.h"
 #include "ble_app_nrf5.h"
 #include "ble_dev.h"
-#include "ble_service.h"
+#include "bluetooth/ble_srvc.h"
 #include "app_evt_handler.h"
 
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);

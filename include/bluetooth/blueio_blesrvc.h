@@ -38,7 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
 
-#include "ble_service.h"
+//#include "ble_service.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 
@@ -274,10 +274,10 @@ typedef struct __I2C_Cmd_Data {
 #pragma pack(push, 4)
 
 typedef struct __BlueIO_Srvc_Cfg {
-	BLESRVC_WRCB BlueIOCharWrhandler;
-	BLESRVC_SETNOTCB BlueIOCharSetNotifEvt;
-	BLESRVC_WRCB UartCharWrHandler;
-	BLESRVC_SETNOTCB UartCharSetNotifevt;
+	BleSrvcWrCb_t BlueIOCharWrhandler;
+	BleSrvcSetNotifCb_t BlueIOCharSetNotifEvt;
+	BleSrvcWrCb_t UartCharWrHandler;
+	BleSrvcSetNotifCb_t UartCharSetNotifevt;
 } BLUEIOSRVC_CFG;
 
 #pragma pack(pop)

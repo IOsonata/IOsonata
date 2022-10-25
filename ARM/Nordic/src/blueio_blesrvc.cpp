@@ -36,7 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "app_util_platform.h"
 
 #include "ble_app_nrf5.h"
-#include "ble_service.h"
+#include "bluetooth/ble_srvc.h"
 #include "ble_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
 
@@ -309,7 +309,7 @@ BleSrvc_t *GetNUSSrvcInstance()
 	return &g_NUSBleSrvc;
 }
 
-bool BleNUSInit(BLESRVC_WRCB WrCB, BLESRVC_SETNOTCB SetNotCB)
+bool BleNUSInit(BleSrvcWrCb_t WrCB, BleSrvcSetNotifCb_t SetNotCB)
 {
     uint32_t err_code;
 
@@ -322,7 +322,7 @@ bool BleNUSInit(BLESRVC_WRCB WrCB, BLESRVC_SETNOTCB SetNotCB)
     return err_code;
 }
 
-bool BlueIOUartSrvcInit(BLESRVC_WRCB WrCB, BLESRVC_SETNOTCB SetNotCB)
+bool BlueIOUartSrvcInit(BleSrvcWrCb_t WrCB, BleSrvcSetNotifCb_t SetNotCB)
 {
     uint32_t err_code;
 
@@ -335,7 +335,7 @@ bool BlueIOUartSrvcInit(BLESRVC_WRCB WrCB, BLESRVC_SETNOTCB SetNotCB)
     return err_code;
 }
 
-bool BlueIOCtrlSrvcInit(BLESRVC_WRCB WrCB, BLESRVC_SETNOTCB SetNotCB)
+bool BlueIOCtrlSrvcInit(BleSrvcWrCb_t WrCB, BleSrvcSetNotifCb_t SetNotCB)
 {
     uint32_t err_code;
 
@@ -348,7 +348,7 @@ bool BlueIOCtrlSrvcInit(BLESRVC_WRCB WrCB, BLESRVC_SETNOTCB SetNotCB)
     return err_code;
 }
 
-bool BlueIOIoSrvcInit(BLESRVC_WRCB WrCB, BLESRVC_SETNOTCB SetNotCB)
+bool BlueIOIoSrvcInit(BleSrvcWrCb_t WrCB, BleSrvcSetNotifCb_t SetNotCB)
 {
     uint32_t err_code;
 
@@ -386,9 +386,9 @@ void BlueIOSrvcEvtHandler(ble_evt_t * p_ble_evt)
 {
 	if (g_BlueIOSrvcInitialized == true)
 	{
-		BleSrvcEvtHandler(&g_NUSBleSrvc, p_ble_evt);
-		BleSrvcEvtHandler(&g_UartBleSrvc, p_ble_evt);
-		BleSrvcEvtHandler(&g_BlueIOCtrlSrvc, p_ble_evt);
-		BleSrvcEvtHandler(&g_BlueIOIoSrvc, p_ble_evt);
+		//BleSrvcEvtHandler(&g_NUSBleSrvc, p_ble_evt);
+		//BleSrvcEvtHandler(&g_UartBleSrvc, p_ble_evt);
+		//BleSrvcEvtHandler(&g_BlueIOCtrlSrvc, p_ble_evt);
+		//BleSrvcEvtHandler(&g_BlueIOIoSrvc, p_ble_evt);
 	}
 }

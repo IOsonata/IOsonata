@@ -37,7 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BLE_INTRF_H__
 #define __BLE_INTRF_H__
 
-#include "ble_service.h"
+#include "bluetooth/ble_srvc.h"
 #include "device_intrf.h"
 #include "cfifo.h"
 

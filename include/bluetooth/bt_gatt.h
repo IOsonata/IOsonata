@@ -46,7 +46,7 @@ typedef struct __Bt_Gatt_Srvc {
 } BtGattSrvc_t;
 
 typedef struct __Bt_Gatt_List_Entry {
-	uint16_t Hdl;					//!< Handle
+	uint16_t Hdl;				//!< Handle
 	uint16_t GattUuid;				//!< Gatt UUID
 	BtUuid16_t Uuid;				//!< Entry UUID
 } BtGattListEntry_t;
@@ -60,7 +60,7 @@ uint16_t BtGattRegister(uint16_t GatUuid, BtUuid16_t *pUuid);
 //uint16_t BtGattDeclarSecondSrvc(BtUuid16_t *pUuid);
 //uint16_t BtGattDeclarChar(BtUuid16_t *pUuid);
 
-int BtGattGetList(uint16_t GattUuid, BtGattListEntry_t *pArr, int MaxEntry);
+int BtGattGetList(uint16_t GattUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pArr);
 
 #ifdef __cplusplus

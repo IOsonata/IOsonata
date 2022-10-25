@@ -87,7 +87,7 @@ uint16_t BtGattRegister(uint16_t GatUuid, BtUuid16_t *pUuid)
 
 	s_BtGatEntryTbl[s_NbGattListEntry].GattUuid = GatUuid;
 	memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].Uuid, pUuid, sizeof(BtUuid16_t));
-	s_BtGatEntryTbl[s_NbGattListEntry++].Hdl = s_NbGattListEntry + 1;
+	s_BtGatEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
 
 	s_NbGattListEntry++;
 
@@ -95,17 +95,22 @@ uint16_t BtGattRegister(uint16_t GatUuid, BtUuid16_t *pUuid)
 }
 
 
-int BtGattGetList(uint16_t GattUuid, BtGattListEntry_t *pArr, int MaxEntry)
+int BtGattGetList(uint16_t GattUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl)
 {
 	int idx = 0;
 
-	for (int i = 0; i < BT_GATT_ENTRY_MAX_COUNT && idx < MaxEntry; i++)
+	for (int i = 0; i < s_NbGattListEntry && idx < MaxEntry; i++)
 	{
 		if (s_BtGatEntryTbl[i].GattUuid == GattUuid)
 		{
 			pArr[idx] = s_BtGatEntryTbl[i];
 			idx++;
 		}
+	}
+
+	if (pLastHdl && s_NbGattListEntry > 0)
+	{
+		*pLastHdl = s_BtGatEntryTbl[s_NbGattListEntry - 1].Hdl;
 	}
 
 	return idx;

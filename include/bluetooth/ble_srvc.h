@@ -41,6 +41,14 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 
+#define BLESVC_CHAR_PROP_READ			(1<<0)
+#define BLESVC_CHAR_PROP_NOTIFY			(1<<1)
+#define BLESVC_CHAR_PROP_WRITEWORESP	(1<<2)
+#define BLESVC_CHAR_PROP_WRITE			(1<<3)
+#define BLESVC_CHAR_PROP_VARLEN			(1<<4)
+#define BLESVC_CHAR_PROP_RDAUTH			(1<<5)
+#define BLESVC_CHAR_PROP_WRAUTH			(1<<6)
+
 /// Max supported 128bits custom UUID.
 /// Beware this value must be less or equal the softdevice NRF_SDH_BLE_VS_UUID_COUNT
 /// First UUID base is always used for the service.
@@ -74,7 +82,7 @@ typedef void (*BleSrvcTxComplete_t) (BleSrvc_t *pBleSvc, int CharIdx);
  * @param	pBlueIOSvc
  * @param	p_ble_evt
  */
-//typedef void (*BleSrvcAuthRqst_t)(BleSrvc_t *pBleSvc, ble_evt_t * p_ble_evt);
+typedef void (*BleSrvcAuthRqst_t)(BleSrvc_t *pBleSvc, uint32_t evt);//ble_evt_t * p_ble_evt);
 
 // Service connection security types
 typedef enum {
@@ -98,7 +106,10 @@ typedef struct __Ble_Srvc_Char_Data {
     BleSrvcTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
     uint8_t *pDefValue;					//!< pointer to char default values
     uint16_t ValueLen;					//!< Default value length in bytes
-    uint16_t Hdl;       //!< char handle
+    uint16_t Hdl;       				//!< char handle
+    uint16_t DescHdl;					//!< desciptor handle
+    uint16_t CccdHdl;
+    uint16_t SccdHdl;
     bool bNotify;                       //!< Notify flag for read characteristic
     uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
 } BleSrvcChar_t;
@@ -115,10 +126,10 @@ typedef struct __Ble_Srvc_Config {
 	BleSrvcChar_t	*pCharArray;           //!< Pointer a an array of characteristic
     uint8_t			*pLongWrBuff;		//!< pointer to user long write buffer
     int				LongWrBuffSize;		//!< long write buffer size
-    //BLESRVC_AUTHREQ	AuthReqCB;			//!< Authorization request callback
+    BleSrvcAuthRqst_t	AuthReqCB;			//!< Authorization request callback
 } BleSrvcCfg_t;
 
-typedef BleSrvcCfg_t	BLESRVC_CFG;
+//typedef BleSrvcCfg_t	BLESRVC_CFG;
 
 /*
  * Blue IO Service private data to be passed when calling service related functions.
@@ -136,7 +147,7 @@ struct __Ble_Srvc {
     uint8_t			*pLongWrBuff;		//!< pointer to user long write buffer
     int				LongWrBuffSize;		//!< long write buffer size
     void			*pContext;
-    //BLESRVC_AUTHREQ	AuthReqCB;			//!< Authorization request callback
+    BleSrvcAuthRqst_t	AuthReqCB;			//!< Authorization request callback
 };
 
 #pragma pack(pop)
@@ -144,6 +155,11 @@ struct __Ble_Srvc {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * #brief	Service event handler.  Call this within BLE dispatch event callback
+ */
+void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t pBleEvt);
 
 /**
  * @brief	Create BLE custom service

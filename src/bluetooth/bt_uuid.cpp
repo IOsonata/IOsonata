@@ -81,7 +81,7 @@ int BtUuidAddBase(uint8_t const Uuid[16])
 		return idx;
 	}
 
-	for (int i = 0; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
+	for (int i = 1; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
 	{
 		if (s_BtBaseUuidTbl[i].bValid == false)
 		{
