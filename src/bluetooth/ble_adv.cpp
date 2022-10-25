@@ -215,6 +215,7 @@ bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BtUuidArr_t *pUid, bool bC
 
 		}
 
+		l = 16 * pUid->Count;
 		gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
 		return BleAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)uid, l);
 	}
