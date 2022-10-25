@@ -98,7 +98,7 @@ typedef struct __Ble_Srvc_Char_Data {
     BleSrvcTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
     uint8_t *pDefValue;					//!< pointer to char default values
     uint16_t ValueLen;					//!< Default value length in bytes
-    //ble_gatts_char_handles_t Hdl;       //!< char handle
+    uint16_t Hdl;       //!< char handle
     bool bNotify;                       //!< Notify flag for read characteristic
     uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
 } BleSrvcChar_t;

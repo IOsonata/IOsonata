@@ -33,6 +33,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <memory.h>
+
 #include "bluetooth/bt_gatt.h"
 
 #ifndef BT_GATT_ENTRY_MAX_COUNT
@@ -41,23 +43,57 @@ SOFTWARE.
 
 alignas(4) static BtGattListEntry_t s_BtGatEntryTbl[BT_GATT_ENTRY_MAX_COUNT] = {0,};
 static uint32_t s_NbGattListEntry = 0;
-static uint16_t s_LastHdl = 0;
 
-uint32_t BtGattAddPrimarySrvc(BtGattSrvc_t *pSrvc)
+#if 0
+uint32_t BtGattDeclarPrimSrvc(BtUuid16_t *pUuid)
 {
-	if (pSrvc == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
+	if (pUuid == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
 	{
 		return -1;
 	}
 
 	s_BtGatEntryTbl[s_NbGattListEntry].GattUuid = BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE;
-	s_BtGatEntryTbl[s_NbGattListEntry].Hdl = ++s_LastHdl;
-	s_BtGatEntryTbl[s_NbGattListEntry].Uuid = pSrvc->Uuid;
+	memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].Uuid, pUuid, sizeof(BtUuid16_t));
+	s_BtGatEntryTbl[s_NbGattListEntry++].Hdl = s_NbGattListEntry + 1;
 
 	s_NbGattListEntry++;
 
-	return 0;
+	return s_NbGattListEntry;
 }
+
+uint32_t BtGattDeclarChar(BtUuid16_t *pUuid)
+{
+	if (pUuid == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
+	{
+		return -1;
+	}
+
+	s_BtGatEntryTbl[s_NbGattListEntry].GattUuid = BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC;
+	memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].Uuid, pUuid, sizeof(BtUuid16_t));
+	s_BtGatEntryTbl[s_NbGattListEntry++].Hdl = s_NbGattListEntry + 1;
+
+	s_NbGattListEntry++;
+
+	return s_NbGattListEntry;
+}
+#endif
+
+uint16_t BtGattRegister(uint16_t GatUuid, BtUuid16_t *pUuid)
+{
+	if (pUuid == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
+	{
+		return -1;
+	}
+
+	s_BtGatEntryTbl[s_NbGattListEntry].GattUuid = GatUuid;
+	memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].Uuid, pUuid, sizeof(BtUuid16_t));
+	s_BtGatEntryTbl[s_NbGattListEntry++].Hdl = s_NbGattListEntry + 1;
+
+	s_NbGattListEntry++;
+
+	return s_NbGattListEntry;
+}
+
 
 int BtGattGetList(uint16_t GattUuid, BtGattListEntry_t *pArr, int MaxEntry)
 {
@@ -73,6 +109,18 @@ int BtGattGetList(uint16_t GattUuid, BtGattListEntry_t *pArr, int MaxEntry)
 	}
 
 	return idx;
+}
+
+bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pArr)
+{
+	if (Hdl <= 0 || Hdl > s_NbGattListEntry)
+	{
+		return false;
+	}
+
+	*pArr = s_BtGatEntryTbl[Hdl - 1];
+
+	return true;
 }
 
 typedef struct __Bt_Att_xx {

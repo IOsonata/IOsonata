@@ -161,7 +161,7 @@ typedef struct __Bt_Att_Read_By_Type_Req {
 	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t StartHdl;		//!< Start handle
 	uint16_t EndHdl;		//!< End handle
-	BtUuidVal_t Uid;		//!< UUID
+	BtUuidVal_t Uuid;		//!< UUID
 } BtAttReadByTypeReq_t;
 
 /// Read by type response : ATT_READ_BY_TYPE_RSP

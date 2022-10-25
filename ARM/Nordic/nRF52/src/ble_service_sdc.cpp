@@ -166,7 +166,20 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 		0xFFFF
 	};
 
-	BtGattAddPrimarySrvc(&sv);
+	BtUuid16_t uid16 = { 1, BT_UUID_TYPE_16, pCfg->UuidSvc};
+
+	pSrvc->SrvcHdl = BtGattRegister(BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE, &uid16);
+
+	pSrvc->NbChar = pCfg->NbChar;
+    pSrvc->pCharArray = pCfg->pCharArray;
+
+    for (int i = 0; i < pCfg->NbChar; i++)
+    {
+    	uid16.Uuid = pSrvc->pCharArray[i].Uuid;
+    	pSrvc->pCharArray[i].Hdl = BtGattRegister(BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC, &uid16);
+        pSrvc->pCharArray[i].bNotify = false;
+    }
+
 /*
 	    ble_uuid.type = pSrvc->UuidType[0];
 	    ble_uuid.uuid = pCfg->UuidSvc;
