@@ -1011,6 +1011,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/blueio_blesrvc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_uuid.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/nrf_sdh.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh.c</locationURI>
