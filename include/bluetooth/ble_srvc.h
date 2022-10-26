@@ -140,7 +140,7 @@ typedef struct __Ble_Srvc_Config {
 struct __Ble_Srvc {
     int             NbChar;				//!< Number of characteristic defined for this service
     BleSrvcChar_t 	*pCharArray;        //!< Pointer to array of characteristics
-    uint16_t        SrvcHdl;            //!< Service handle
+    uint16_t        Hdl;            	//!< Service handle
     uint16_t        ConnHdl;			//!< Connection handle
     uint16_t        UuidSvc;            //!< Service UUID
     uint8_t         UuidType[BLESVC_UUID_BASE_MAXCNT];

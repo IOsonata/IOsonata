@@ -161,14 +161,16 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 		BtUuidAddBase(pCfg->UuidBase[i]);
 	}
 
-	BtGattSrvc_t sv = {
-		{ 1, BT_UUID_TYPE_16, pCfg->UuidSvc},
-		0xFFFF
-	};
+//	BtGattSrvc_t sv = {
+//		0xFFFF,
+//		{ 1, BT_UUID_TYPE_16, pCfg->UuidSvc},
+//	};
 
 	BtUuid16_t uid16 = { 1, BT_UUID_TYPE_16, pCfg->UuidSvc};
 
-	pSrvc->SrvcHdl = BtGattRegister(BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE, &uid16);
+	BtUuid16_t TypeUuid = { 0, BT_UUID_TYPE_16, BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE };
+
+	pSrvc->Hdl = BtGattRegister(TypeUuid, &uid16);
 
 	pSrvc->NbChar = pCfg->NbChar;
     pSrvc->pCharArray = pCfg->pCharArray;
@@ -176,8 +178,16 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
     for (int i = 0; i < pCfg->NbChar; i++)
     {
     	uid16.Uuid = pSrvc->pCharArray[i].Uuid;
-    	pSrvc->pCharArray[i].Hdl = BtGattRegister(BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC, &uid16);
+    	BtGattCharDeclar_t gatt = {(uint8_t)pSrvc->pCharArray[i].Property, 0, {pSrvc->pCharArray[i].BaseUuidIdx, BT_UUID_TYPE_16, pSrvc->pCharArray[i].Uuid}};
+
+    	TypeUuid.Uuid = BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC;
+    	pSrvc->pCharArray[i].Hdl = BtGattRegister(TypeUuid, &gatt);
         pSrvc->pCharArray[i].bNotify = false;
+        if (pSrvc->pCharArray[i].Property & BLESVC_CHAR_PROP_NOTIFY)
+        {
+        	TypeUuid.Uuid = BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
+			pSrvc->pCharArray[i].CccdHdl = BtGattRegister(TypeUuid, &uid16);
+        }
     }
 
 /*

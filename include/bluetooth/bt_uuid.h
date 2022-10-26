@@ -824,6 +824,7 @@ extern "C" {
 int BtUuidFindBase(uint8_t const Uuid[16]);
 int BtUuidAddBase(uint8_t const Uuid[16]);
 bool BtUuidGetBase(int Idx, uint8_t Uuid[16]);
+size_t BtUuidGetSize(BtUuid_t &Uuid);
 
 #ifdef __cplusplus
 }

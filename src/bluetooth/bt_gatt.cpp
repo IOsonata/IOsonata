@@ -78,15 +78,68 @@ uint32_t BtGattDeclarChar(BtUuid16_t *pUuid)
 }
 #endif
 
-uint16_t BtGattRegister(uint16_t GatUuid, BtUuid16_t *pUuid)
+uint16_t BtGattRegister(BtUuid16_t &TypeUuid, void *pAttVal)
 {
-	if (pUuid == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
+	if (pAttVal == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
 	{
 		return -1;
 	}
+#if 0
+	uint8_t uidbase[16];
 
-	s_BtGatEntryTbl[s_NbGattListEntry].GattUuid = GatUuid;
-	memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].Uuid, pUuid, sizeof(BtUuid16_t));
+	if (TypeUuid.BaseIdx > 0)
+	{
+		BtUuidGetBase(TypeUuid.BaseIdx, uidbase);
+
+		uidbase[12] = TypeUuid.Uuid & 0xFF;
+		uidbase[13] = (TypeUuid.Uuid >> 8) & 0xFF;
+
+		if (TypeUuid.Type == BT_UUID_TYPE_32)
+		{
+			uidbase[14] = (TypeUuid.Uuid >> 16) & 0xFF;
+			uidbase[15] = (TypeUuid.Uuid >> 24) & 0xFF;
+		}
+
+		memcpy(s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid.Uuid128, uidbase, 16);
+	}
+	else
+	{
+		s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = TypeUuid;
+	}
+#endif
+	s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = TypeUuid;
+
+	if (TypeUuid.BaseIdx == 0)
+	{
+		switch (TypeUuid.Uuid)
+		{
+			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
+			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
+				s_BtGatEntryTbl[s_NbGattListEntry].SrvcDeclar = *(BtGattSrvcDeclar_t *)pAttVal;
+				break;
+			case BT_UUID_GATT_DECLARATIONS_INCLUDE:
+				memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].SrvcInc, pAttVal, sizeof(BtGattSrvcInclude_t));
+				break;
+			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
+				memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].CharDeclar, pAttVal, sizeof(BtGattCharDeclar_t));
+				s_BtGatEntryTbl[s_NbGattListEntry].CharDeclar.ValHdl = s_NbGattListEntry + 2;
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+				break;
+			default:
+				;
+		}
+	}
+	else
+	{
+
+	}
 	s_BtGatEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
 
 	s_NbGattListEntry++;
@@ -95,13 +148,13 @@ uint16_t BtGattRegister(uint16_t GatUuid, BtUuid16_t *pUuid)
 }
 
 
-int BtGattGetList(uint16_t GattUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl)
+int BtGattGetList(BtUuid16_t &TypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl)
 {
 	int idx = 0;
 
 	for (int i = 0; i < s_NbGattListEntry && idx < MaxEntry; i++)
 	{
-		if (s_BtGatEntryTbl[i].GattUuid == GattUuid)
+		if (memcmp(&s_BtGatEntryTbl[i].TypeUuid, &TypeUuid, sizeof(BtUuid16_t)) == 0)
 		{
 			pArr[idx] = s_BtGatEntryTbl[i];
 			idx++;
@@ -116,18 +169,97 @@ int BtGattGetList(uint16_t GattUuid, BtGattListEntry_t *pArr, int MaxEntry, uint
 	return idx;
 }
 
-bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pArr)
+bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pEntry)
 {
 	if (Hdl <= 0 || Hdl > s_NbGattListEntry)
 	{
 		return false;
 	}
 
-	*pArr = s_BtGatEntryTbl[Hdl - 1];
+	*pEntry = s_BtGatEntryTbl[Hdl - 1];
 
 	return true;
 }
 
+size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
+{
+	if (pBuff == nullptr)
+	{
+		return 0;
+	}
+
+	size_t len = 0;
+	uint8_t uuid128[16];
+
+	if (pEntry->TypeUuid.BaseIdx == 0)
+	{
+		switch (pEntry->TypeUuid.Uuid)
+		{
+			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
+			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
+				if (pEntry->SrvcDeclar.Uuid.BaseIdx > 0)
+				{
+					BtUuidGetBase(pEntry->SrvcDeclar.Uuid.BaseIdx, pBuff);
+
+					pBuff[12] = pEntry->SrvcDeclar.Uuid.Uuid & 0xFF;
+					pBuff[13] = pEntry->SrvcDeclar.Uuid.Uuid >> 8;
+
+					len = 16;
+				}
+				else
+				{
+					pBuff[0] = pEntry->SrvcDeclar.Uuid.Uuid & 0xFF;
+					pBuff[1] = pEntry->SrvcDeclar.Uuid.Uuid >> 8;
+
+					len = 2;
+				}
+				break;
+			case BT_UUID_GATT_DECLARATIONS_INCLUDE:
+				len = pEntry->SrvcInc.SrvcUuid.BaseIdx > 0 ? 20 : 6;
+				break;
+			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
+				pBuff[0] = pEntry->Hdl & 0xFF;
+				pBuff[1] = pEntry->Hdl >> 8;
+				pBuff += 2;
+				*pBuff++ = pEntry->CharDeclar.Prop;
+				pBuff[0] = pEntry->CharDeclar.ValHdl & 0xFF;
+				pBuff[1] = pEntry->CharDeclar.ValHdl >> 8;
+				pBuff += 2;
+				if (pEntry->CharDeclar.Uuid.BaseIdx > 0)
+				{
+					BtUuidGetBase(pEntry->CharDeclar.Uuid.BaseIdx, pBuff);
+
+					pBuff[12] = pEntry->CharDeclar.Uuid.Uuid & 0xFF;
+					pBuff[13] = pEntry->CharDeclar.Uuid.Uuid >> 8;
+
+					len = 21;
+				}
+				else
+				{
+					pBuff[0] = pEntry->CharDeclar.Uuid.Uuid & 0xFF;
+					pBuff[1] = pEntry->CharDeclar.Uuid.Uuid >> 8;
+
+					len = 7;
+				}
+
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+				break;
+			default:
+				;
+		}
+	}
+
+	return len;
+}
+
+#if 0
 typedef struct __Bt_Att_xx {
 	uint16_t StartHdl;
 	uint16_t EndHdl;
@@ -171,3 +303,5 @@ uint32_t BtGattGetEntry(uint16_t GattUuid, uint8_t *pBuff)
 
 	return 0;
 }
+#endif
+
