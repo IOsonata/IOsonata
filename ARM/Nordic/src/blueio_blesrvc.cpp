@@ -85,8 +85,9 @@ static const int s_NbNUSChar = sizeof(g_NUSChars) / sizeof(BleSrvcChar_t);
 /// Service definition
 const BleSrvcCfg_t s_NUSSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
+	.bCustom = true,
 	.UuidBase = NUS_BASE_UUID,				// Base UUID
-	.NbUuidBase = 1,
+//	.NbUuidBase = 1,
 	.UuidSvc = BLE_UUID_NUS_SERVICE,		// Service UUID
 	.NbChar = s_NbNUSChar,					// Total number of characteristics for the service
 	.pCharArray = g_NUSChars,				// Pointer a an array of characteristic

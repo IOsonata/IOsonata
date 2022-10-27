@@ -133,6 +133,7 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+				s_BtGatEntryTbl[s_NbGattListEntry].pVal = 0;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
@@ -151,6 +152,46 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 	return s_NbGattListEntry;
 }
 
+bool BtGattUpdate(uint16_t Hdl, void *pAttVal)
+{
+	if (Hdl <= 0 || Hdl > s_NbGattListEntry)
+	{
+		return false;
+	}
+
+	Hdl--;
+
+	if (s_BtGatEntryTbl[Hdl].TypeUuid.BaseIdx == 0)
+	{
+		switch (s_BtGatEntryTbl[Hdl].TypeUuid.Uuid)
+		{
+			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
+			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
+				s_BtGatEntryTbl[Hdl].SrvcDeclar = *(BtGattSrvcDeclar_t *)pAttVal;
+				break;
+			case BT_UUID_GATT_DECLARATIONS_INCLUDE:
+				memcpy(&s_BtGatEntryTbl[Hdl].SrvcInc, pAttVal, sizeof(BtGattSrvcInclude_t));
+				break;
+			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
+				memcpy(&s_BtGatEntryTbl[Hdl].CharDeclar, pAttVal, sizeof(BtGattCharDeclar_t));
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+				break;
+			default:
+				;
+		}
+	}
+	else
+	{
+		s_BtGatEntryTbl[s_NbGattListEntry].pVal = pAttVal;
+	}
+}
 
 int BtGattGetList(BtUuid16_t *pTypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl)
 {
@@ -258,6 +299,9 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 			default:
 				;
 		}
+	}
+	else
+	{
 	}
 
 	return len;

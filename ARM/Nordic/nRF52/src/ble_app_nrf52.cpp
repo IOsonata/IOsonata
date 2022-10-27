@@ -1270,8 +1270,10 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
     if (pCfg->pAdvUuid != NULL && pCfg->Role & BLEAPP_ROLE_PERIPHERAL)
     {
+    	/*
     	if (pCfg->pAdvUuid->BaseIdx > 0 && pCfg->pAdvUuid->Type == BT_UUID_TYPE_16)
     	{
+
     		// Convert custom uuid to 128 bits
 			int l = (pCfg->pAdvUuid->Count - 1) * sizeof(BtUuid_t) + sizeof(BtUuidArr_t);
 			uint8_t x[l];
@@ -1280,6 +1282,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 			BtUuidArr_t *ua = (BtUuidArr_t*)x;
 
 			ua->Type = BT_UUID_TYPE_128;
+
 
 			for (int i = 0; i < pCfg->pAdvUuid->Count; i++)
 			{
@@ -1297,7 +1300,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 
 			}
     	}
-    	else
+    	else*/
     	{
 			if (BleAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
 			{

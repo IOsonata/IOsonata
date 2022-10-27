@@ -492,7 +492,7 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 
 				rsp->OpCode = BT_ATT_OPCODE_ATT_READ_RSP;
 
-				g_Uart.printf("ATT_READ_REQ : %d\r\n", req->Hdl);
+				g_Uart.printf("ATT_READ_REQ : Hdl = %d\r\n", req->Hdl);
 
 				BtGattListEntry_t eg;
 
@@ -688,7 +688,7 @@ void BtHciProcessData(BtHciACLDataPacket_t *pPkt)
 	{
 		g_Uart.printf("%x ", pPkt->Data[i]);
 	}
-	g_Uart.printf("\r\n");
+	g_Uart.printf("\r\nCID: %x\r\n", l2frame->Hdr.Cid);
 
 	switch (l2frame->Hdr.Cid)
 	{

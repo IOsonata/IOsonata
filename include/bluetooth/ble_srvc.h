@@ -40,15 +40,17 @@ SOFTWARE.
 #include <string.h>
 
 #include "bluetooth/bt_uuid.h"
+#include "bluetooth/bt_gatt.h"
 
-#define BLESRVC_CHAR_PROP_BROADCAST			(1<<0)
-#define BLESRVC_CHAR_PROP_READ				(1<<1)
-#define BLESRVC_CHAR_PROP_NOTIFY			(1<<2)
-#define BLESRVC_CHAR_PROP_WRITEWORESP		(1<<3)
-#define BLESRVC_CHAR_PROP_WRITE				(1<<4)
-#define BLESRVC_CHAR_PROP_VARLEN			(1<<5)
-#define BLESRVC_CHAR_PROP_RDAUTH			(1<<6)
-#define BLESRVC_CHAR_PROP_WRAUTH			(1<<7)
+#define BLESRVC_CHAR_PROP_BROADCAST			BT_GATT_CHAR_PROP_BROADCAST
+#define BLESRVC_CHAR_PROP_READ				BT_GATT_CHAR_PROP_READ
+#define BLESRVC_CHAR_PROP_WRITEWORESP		BT_GATT_CHAR_PROP_WRITE_WORESP
+#define BLESRVC_CHAR_PROP_WRITE				BT_GATT_CHAR_PROP_WRITE
+#define BLESRVC_CHAR_PROP_NOTIFY			BT_GATT_CHAR_PROP_NOTIFY
+#define BLESRVC_CHAR_PROP_INDICATE			BT_GATT_CHAR_PROP_INDICATE
+#define BLESRVC_CHAR_PROP_WRAUTH			BT_GATT_CHAR_PROP_AUTH_SIGNED_WR
+#define BLESRVC_CHAR_PROP_RDAUTH			(BLESRVC_CHAR_PROP_WRAUTH<<1)
+#define BLESRVC_CHAR_PROP_VARLEN			(BLESRVC_CHAR_PROP_WRAUTH<<2)
 
 /// Max supported 128bits custom UUID.
 /// Beware this value must be less or equal the softdevice NRF_SDH_BLE_VS_UUID_COUNT
@@ -99,6 +101,7 @@ typedef enum {
 
 typedef struct __Ble_Srvc_Char_Data {
     uint16_t Uuid;                      //!< char UUID
+    uint16_t Hdl;       				//!< char handle
     int MaxDataLen;                     //!< char max data length
     uint32_t Property;                  //!< char properties define by BLUEIOSVC_CHAR_PROP_...
     const char *pDesc;                  //!< char UTF-8 description string
@@ -107,7 +110,7 @@ typedef struct __Ble_Srvc_Char_Data {
     BleSrvcTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
     uint8_t *pDefValue;					//!< pointer to char default values
     uint16_t ValueLen;					//!< Default value length in bytes
-    uint16_t Hdl;       				//!< char handle
+    uint16_t ValHdl;
     uint16_t DescHdl;					//!< desciptor handle
     uint16_t CccdHdl;
     uint16_t SccdHdl;
@@ -120,8 +123,10 @@ typedef struct __Ble_Srvc_Char_Data {
  */
 typedef struct __Ble_Srvc_Config {
 	BLESRVC_SECTYPE SecType;			//!< Secure or Open service/char
-	uint8_t UuidBase[BLESRVC_UUID_BASE_MAXCNT][16];//!< Base UUIDs
-	int				NbUuidBase;			//!< Number of UUID defined in the UuidBase array
+	bool bCustom;						//!< True - for custom service Base UUID, false - Bluetooth SIG standard
+	uint8_t UuidBase[16];				//!< 128 bits custom base UUID
+	//uint8_t UuidBase[BLESRVC_UUID_BASE_MAXCNT][16];//!< Base UUIDs
+	//int				NbUuidBase;			//!< Number of UUID defined in the UuidBase array
 	uint16_t		UuidSvc;			//!< Service UUID
 	int             NbChar;				//!< Total number of characteristics for the service
 	BleSrvcChar_t	*pCharArray;           //!< Pointer a an array of characteristic
@@ -144,7 +149,7 @@ struct __Ble_Srvc {
     uint16_t        Hdl;            	//!< Service handle
     uint16_t        ConnHdl;			//!< Connection handle
     uint16_t        UuidSvc;            //!< Service UUID
-    uint8_t         UuidType[BLESRVC_UUID_BASE_MAXCNT];
+    uint8_t         UuidType;//[BLESRVC_UUID_BASE_MAXCNT];
     uint8_t			*pLongWrBuff;		//!< pointer to user long write buffer
     int				LongWrBuffSize;		//!< long write buffer size
     void			*pContext;

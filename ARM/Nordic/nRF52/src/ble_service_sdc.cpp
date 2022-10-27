@@ -148,12 +148,13 @@ uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t D
 
 uint32_t BleSrvcAddChar(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar, uint32_t SecType)
 {
-
+	return 0;
 }
 
 uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 {
 	uint32_t   err;
+	uint8_t baseidx = 0;
 	//ble_uuid_t ble_uuid;
 
 	// Initialize service structure
@@ -161,17 +162,20 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 	pSrvc->UuidSvc = pCfg->UuidSvc;
 
 	// Add base UUID to softdevice's internal list.
-	for (int i = 0; i < pCfg->NbUuidBase; i++)
+	//for (int i = 0; i < pCfg->NbUuidBase; i++)
+	//{
+	if (pCfg->bCustom)
 	{
-		BtUuidAddBase(pCfg->UuidBase[i]);
+		baseidx = BtUuidAddBase(pCfg->UuidBase);
 	}
+	//}
 
 //	BtGattSrvc_t sv = {
 //		0xFFFF,
 //		{ 1, BT_UUID_TYPE_16, pCfg->UuidSvc},
 //	};
 
-	BtUuid16_t uid16 = { 1, BT_UUID_TYPE_16, pCfg->UuidSvc};
+	BtUuid16_t uid16 = { baseidx, BT_UUID_TYPE_16, pCfg->UuidSvc};
 
 	BtUuid16_t TypeUuid = { 0, BT_UUID_TYPE_16, BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE };
 
@@ -183,12 +187,14 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
     for (int i = 0; i < pCfg->NbChar; i++)
     {
     	uid16.Uuid = pSrvc->pCharArray[i].Uuid;
-    	pSrvc->pCharArray[i].BaseUuidIdx = 1;
+    	pSrvc->pCharArray[i].BaseUuidIdx = 0;//baseidx;
 
     	BtGattCharDeclar_t gatt = {(uint8_t)pSrvc->pCharArray[i].Property, 0, {pSrvc->pCharArray[i].BaseUuidIdx, BT_UUID_TYPE_16, pSrvc->pCharArray[i].Uuid}};
 
     	TypeUuid.Uuid = BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC;
     	pSrvc->pCharArray[i].Hdl = BtGattRegister(&TypeUuid, &gatt);
+    	pSrvc->pCharArray[i].ValHdl = gatt.ValHdl;
+
         pSrvc->pCharArray[i].bNotify = false;
         if (pSrvc->pCharArray[i].Property & BLESRVC_CHAR_PROP_NOTIFY)
         {

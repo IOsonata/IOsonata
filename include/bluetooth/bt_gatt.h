@@ -75,6 +75,8 @@ typedef struct __Bt_Gatt_Char_Declar {
 	BtUuid16_t Uuid;			//!< Characteristic UUID
 } BtGattCharDeclar_t;
 
+#pragma pack(pop)
+
 #define BT_GATT_CHAR_EXT_PROP_RELIABLE_WRITE	1	//!< Reliable write using procedure Section 4.9.5
 #define BT_GATT_CHAR_EXT_PROP_WRITABLE_AUX		2	//!< Write to descriptor defined in Section 3.3.3.2
 
@@ -97,12 +99,14 @@ typedef uint8_t BtGatClientCharConfig_t;
 typedef uint8_t		BtGattServerCharConfig_t;
 
 
+#pragma pack(push,4)
 typedef struct __Bt_Gatt_List_Entry {
 	uint16_t Hdl;				//!< Attribute handle
 	BtUuid16_t TypeUuid;		//!< Attribute type UUID
 	uint32_t Permission;		//!< Attribute Permission
 	union {						//!< Attribute value
 		void *pVal;
+		uint32_t Val32;
 		BtUuid_t Uuid;
 		BtGattSrvcDeclar_t SrvcDeclar;	//!< Service declaration value
 		BtGattSrvcInclude_t SrvcInc;	//!< Service definition value
@@ -117,10 +121,7 @@ extern "C" {
 #endif
 
 uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal);
-//uint16_t BtGattDeclarPrimSrvc(BtUuid16_t *pUuid);
-//uint16_t BtGattDeclarSecondSrvc(BtUuid16_t *pUuid);
-//uint16_t BtGattDeclarChar(BtUuid16_t *pUuid);
-
+bool BtGattUpdate(uint16_t Hdl, void *pAttVal);
 int BtGattGetList(BtUuid16_t *pTypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pArr);
 size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff);
