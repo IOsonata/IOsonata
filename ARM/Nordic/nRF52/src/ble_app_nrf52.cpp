@@ -1769,7 +1769,7 @@ bool BleAppStackInit(int CentLinkCount, int PeriLinkCount, bool bConnectable)
     // Configure the number of custom UUIDS.
     memset(&ble_cfg, 0, sizeof(ble_cfg));
     //if (CentLinkCount > 0)
-        ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = BLESVC_UUID_BASE_MAXCNT;
+        ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = BLESRVC_UUID_BASE_MAXCNT;
     //else
     //	ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 2;
     err_code = sd_ble_cfg_set(BLE_COMMON_CFG_VS_UUID, &ble_cfg, ram_start);

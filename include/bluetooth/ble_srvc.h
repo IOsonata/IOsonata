@@ -41,18 +41,19 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 
-#define BLESVC_CHAR_PROP_READ			(1<<0)
-#define BLESVC_CHAR_PROP_NOTIFY			(1<<1)
-#define BLESVC_CHAR_PROP_WRITEWORESP	(1<<2)
-#define BLESVC_CHAR_PROP_WRITE			(1<<3)
-#define BLESVC_CHAR_PROP_VARLEN			(1<<4)
-#define BLESVC_CHAR_PROP_RDAUTH			(1<<5)
-#define BLESVC_CHAR_PROP_WRAUTH			(1<<6)
+#define BLESRVC_CHAR_PROP_BROADCAST			(1<<0)
+#define BLESRVC_CHAR_PROP_READ				(1<<1)
+#define BLESRVC_CHAR_PROP_NOTIFY			(1<<2)
+#define BLESRVC_CHAR_PROP_WRITEWORESP		(1<<3)
+#define BLESRVC_CHAR_PROP_WRITE				(1<<4)
+#define BLESRVC_CHAR_PROP_VARLEN			(1<<5)
+#define BLESRVC_CHAR_PROP_RDAUTH			(1<<6)
+#define BLESRVC_CHAR_PROP_WRAUTH			(1<<7)
 
 /// Max supported 128bits custom UUID.
 /// Beware this value must be less or equal the softdevice NRF_SDH_BLE_VS_UUID_COUNT
 /// First UUID base is always used for the service.
-#define BLESVC_UUID_BASE_MAXCNT			4
+#define BLESRVC_UUID_BASE_MAXCNT			4
 
 typedef struct __Ble_Srvc	BleSrvc_t;
 
@@ -119,7 +120,7 @@ typedef struct __Ble_Srvc_Char_Data {
  */
 typedef struct __Ble_Srvc_Config {
 	BLESRVC_SECTYPE SecType;			//!< Secure or Open service/char
-	uint8_t UuidBase[BLESVC_UUID_BASE_MAXCNT][16];//!< Base UUIDs
+	uint8_t UuidBase[BLESRVC_UUID_BASE_MAXCNT][16];//!< Base UUIDs
 	int				NbUuidBase;			//!< Number of UUID defined in the UuidBase array
 	uint16_t		UuidSvc;			//!< Service UUID
 	int             NbChar;				//!< Total number of characteristics for the service
@@ -143,7 +144,7 @@ struct __Ble_Srvc {
     uint16_t        Hdl;            	//!< Service handle
     uint16_t        ConnHdl;			//!< Connection handle
     uint16_t        UuidSvc;            //!< Service UUID
-    uint8_t         UuidType[BLESVC_UUID_BASE_MAXCNT];
+    uint8_t         UuidType[BLESRVC_UUID_BASE_MAXCNT];
     uint8_t			*pLongWrBuff;		//!< pointer to user long write buffer
     int				LongWrBuffSize;		//!< long write buffer size
     void			*pContext;

@@ -123,6 +123,10 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
 				memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].CharDeclar, pAttVal, sizeof(BtGattCharDeclar_t));
 				s_BtGatEntryTbl[s_NbGattListEntry].CharDeclar.ValHdl = s_NbGattListEntry + 2;
+				s_BtGatEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
+				s_NbGattListEntry++;
+				s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = ((BtGattCharDeclar_t*)pAttVal)->Uuid;
+				((BtGattCharDeclar_t*)pAttVal)->ValHdl = s_NbGattListEntry + 1;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
 				break;
@@ -138,7 +142,7 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 	}
 	else
 	{
-
+		s_BtGatEntryTbl[s_NbGattListEntry].pVal = pAttVal;
 	}
 	s_BtGatEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
 

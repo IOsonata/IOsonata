@@ -146,6 +146,11 @@ uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t D
 	return 0;
 }
 
+uint32_t BleSrvcAddChar(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar, uint32_t SecType)
+{
+
+}
+
 uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 {
 	uint32_t   err;
@@ -185,7 +190,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
     	TypeUuid.Uuid = BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC;
     	pSrvc->pCharArray[i].Hdl = BtGattRegister(&TypeUuid, &gatt);
         pSrvc->pCharArray[i].bNotify = false;
-        if (pSrvc->pCharArray[i].Property & BLESVC_CHAR_PROP_NOTIFY)
+        if (pSrvc->pCharArray[i].Property & BLESRVC_CHAR_PROP_NOTIFY)
         {
         	TypeUuid.Uuid = BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
 			pSrvc->pCharArray[i].CccdHdl = BtGattRegister(&TypeUuid, &uid16);

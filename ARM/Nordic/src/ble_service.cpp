@@ -303,7 +303,7 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
     char_md.p_cccd_md = NULL;
     char_md.p_sccd_md = NULL;
 
-    if (pChar->Property & BLESVC_CHAR_PROP_NOTIFY)
+    if (pChar->Property & BLESRVC_CHAR_PROP_NOTIFY)
     {
     	char_md.char_props.notify = 1;
     	BLE_GAP_CONN_SEC_MODE_SET_OPEN(&cccd_md.read_perm);
@@ -312,7 +312,11 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
         char_md.p_cccd_md         = &cccd_md;
     }
 
-    if (pChar->Property & BLESVC_CHAR_PROP_READ)
+    if (pChar->Property & BLESRVC_CHAR_PROP_BROADCAST)
+    {
+    	char_md.char_props.broadcast   = 1;
+    }
+    if (pChar->Property & BLESRVC_CHAR_PROP_READ)
     {
     	char_md.char_props.read   = 1;
     	BleSrvcEncSec(&attr_md.read_perm, SecType);
@@ -323,11 +327,11 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
         BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&attr_md.read_perm);
     }
 
-    if (pChar->Property & (BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_WRITEWORESP))
+    if (pChar->Property & (BLESRVC_CHAR_PROP_WRITE | BLESRVC_CHAR_PROP_WRITEWORESP))
     {
-        if (pChar->Property & BLESVC_CHAR_PROP_WRITE)
+        if (pChar->Property & BLESRVC_CHAR_PROP_WRITE)
             char_md.char_props.write  = 1;
-    	if (pChar->Property & BLESVC_CHAR_PROP_WRITEWORESP)
+    	if (pChar->Property & BLESRVC_CHAR_PROP_WRITEWORESP)
             char_md.char_props.write_wo_resp = 1;
 
     	BleSrvcEncSec(&attr_md.write_perm, SecType);
@@ -343,7 +347,7 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
 
     attr_md.vloc       = BLE_GATTS_VLOC_STACK;
 
-    if (pChar->Property & BLESVC_CHAR_PROP_RDAUTH)
+    if (pChar->Property & BLESRVC_CHAR_PROP_RDAUTH)
     {
     	attr_md.rd_auth    = 1;
     }
@@ -352,7 +356,7 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
     	attr_md.rd_auth    = 0;
     }
 
-    if (pChar->Property & BLESVC_CHAR_PROP_WRAUTH)
+    if (pChar->Property & BLESRVC_CHAR_PROP_WRAUTH)
     {
     	attr_md.wr_auth    = 1;
     }
@@ -361,7 +365,7 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
     	attr_md.wr_auth    = 0;
     }
 
-    if (pChar->Property & BLESVC_CHAR_PROP_VARLEN)
+    if (pChar->Property & BLESRVC_CHAR_PROP_VARLEN)
     {
     	attr_md.vlen       = 1;	// Variable length
     }
