@@ -116,12 +116,12 @@ typedef struct __Bt_Gatt_List_Entry {
 extern "C" {
 #endif
 
-uint16_t BtGattRegister(BtUuid16_t &TypeUuid, void *pAttVal);
+uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal);
 //uint16_t BtGattDeclarPrimSrvc(BtUuid16_t *pUuid);
 //uint16_t BtGattDeclarSecondSrvc(BtUuid16_t *pUuid);
 //uint16_t BtGattDeclarChar(BtUuid16_t *pUuid);
 
-int BtGattGetList(BtUuid16_t &TypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
+int BtGattGetList(BtUuid16_t *pTypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pArr);
 size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff);
 

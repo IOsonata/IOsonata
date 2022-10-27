@@ -133,10 +133,7 @@ typedef struct __Bt_Att_Find_Info_Req {
 typedef struct __Bt_Att_Find_Info_Rsp {
 	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Fmt;			//!< Format
-	union {					//!< Array of Handle/UUID pair
-		BtAttHdlUuid16_t Val16[1];
-		BtAttHdlUuid128_t Val128[1];
-	};
+	uint8_t Data[1];
 } BtAttFindInfoRsp_t;
 
 /// Find by type value request : ATT_FIND_BY_TYPE_VALUE_REQ
@@ -165,13 +162,11 @@ typedef struct __Bt_Att_Read_By_Type_Req {
 } BtAttReadByTypeReq_t;
 
 /// Read by type response : ATT_READ_BY_TYPE_RSP
+/// NOTE: variable length
 typedef struct __Bt_Att_Read_By_Type_Rsp {
 	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Len;			//!< The size of each attribute handle- value pair
-	union {					//!< Array of Handle/UUID pair
-		BtAttHdlUuid16_t Val16[1];
-		BtAttHdlUuid128_t Val128[1];
-	};
+	uint8_t Data[1];
 } BtAttReadByTypeRsp_t;
 
 /// Read request : ATT_READ_REQ

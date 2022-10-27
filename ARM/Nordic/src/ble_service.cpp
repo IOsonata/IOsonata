@@ -108,8 +108,11 @@ void GatherLongWrBuff(GATLWRHDR *pHdr)
 	}
 }
 
-void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
+//void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
+void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t Evt)
 {
+	ble_evt_t *pBleEvt = (ble_evt_t *)Evt;
+
     switch (pBleEvt->header.evt_id)
     {
         case BLE_GAP_EVT_CONNECTED:
@@ -377,7 +380,7 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
     attr_char_value.p_value      = pChar->pDefValue;
 
     ble_gatts_char_handles_t hdl;
-    uint32_t res = sd_ble_gatts_characteristic_add(pSrvc->SrvcHdl, &char_md, &attr_char_value, &hdl);//&pChar->Hdl);
+    uint32_t res = sd_ble_gatts_characteristic_add(pSrvc->Hdl, &char_md, &attr_char_value, &hdl);//&pChar->Hdl);
     pChar->Hdl = hdl.value_handle;
     pChar->DescHdl = hdl.user_desc_handle;
     pChar->CccdHdl = hdl.cccd_handle;
@@ -413,7 +416,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
     ble_uuid.type = pSrvc->UuidType[0];
     ble_uuid.uuid = pCfg->UuidSvc;
 
-    err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->SrvcHdl);
+    err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->Hdl);
     if (err != NRF_SUCCESS)
     {
         return err;

@@ -78,7 +78,7 @@ uint32_t BtGattDeclarChar(BtUuid16_t *pUuid)
 }
 #endif
 
-uint16_t BtGattRegister(BtUuid16_t &TypeUuid, void *pAttVal)
+uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 {
 	if (pAttVal == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
 	{
@@ -107,11 +107,11 @@ uint16_t BtGattRegister(BtUuid16_t &TypeUuid, void *pAttVal)
 		s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = TypeUuid;
 	}
 #endif
-	s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = TypeUuid;
+	s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = *pTypeUuid;
 
-	if (TypeUuid.BaseIdx == 0)
+	if (pTypeUuid->BaseIdx == 0)
 	{
-		switch (TypeUuid.Uuid)
+		switch (pTypeUuid->Uuid)
 		{
 			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
 			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
@@ -148,13 +148,13 @@ uint16_t BtGattRegister(BtUuid16_t &TypeUuid, void *pAttVal)
 }
 
 
-int BtGattGetList(BtUuid16_t &TypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl)
+int BtGattGetList(BtUuid16_t *pTypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl)
 {
 	int idx = 0;
 
 	for (int i = 0; i < s_NbGattListEntry && idx < MaxEntry; i++)
 	{
-		if (memcmp(&s_BtGatEntryTbl[i].TypeUuid, &TypeUuid, sizeof(BtUuid16_t)) == 0)
+		if (memcmp(&s_BtGatEntryTbl[i].TypeUuid, pTypeUuid, sizeof(BtUuid16_t)) == 0)
 		{
 			pArr[idx] = s_BtGatEntryTbl[i];
 			idx++;
@@ -189,7 +189,7 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 	}
 
 	size_t len = 0;
-	uint8_t uuid128[16];
+	//uint8_t uuid128[16];
 
 	if (pEntry->TypeUuid.BaseIdx == 0)
 	{
