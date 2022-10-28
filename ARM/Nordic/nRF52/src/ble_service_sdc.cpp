@@ -199,7 +199,9 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
         if (pSrvc->pCharArray[i].Property & BLESRVC_CHAR_PROP_NOTIFY)
         {
         	TypeUuid.Uuid = BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
-			pSrvc->pCharArray[i].CccdHdl = BtGattRegister(&TypeUuid, &uid16);
+
+        	uint8_t x = 0;
+			pSrvc->pCharArray[i].CccdHdl = BtGattRegister(&TypeUuid, &x);
         }
     }
 

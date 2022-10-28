@@ -129,7 +129,8 @@ extern "C" {
 
 uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal);
 bool BtGattUpdate(uint16_t Hdl, void *pAttVal);
-int BtGattGetList(BtUuid16_t *pTypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
+int BtGattGetListHandle(uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
+int BtGattGetListUuid(BtUuid16_t *pTypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pArr);
 size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff);
 

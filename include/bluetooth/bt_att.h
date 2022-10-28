@@ -40,11 +40,15 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 
+#define BT_ATT_OPCODE_FLAG_COMMAND						(1<<6)
+#define BT_ATT_OPCODE_FLAG_AUTH_SIGNATURE				(1<<7)
+
+
 #define BT_ATT_OPCODE_ATT_ERROR_RSP						1		//!< Error
 #define BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ				2		//!< Client Rx MTU
 #define BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP				3		//!< Server Rx MTU
-#define BT_ATT_OPCODE_ATT_FIND_INFO_REQ					4		//!<
-#define BT_ATT_OPCODE_ATT_FIND_INFO_RSP					5		//!< Format information data
+#define BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ			4		//!<
+#define BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP			5		//!< Format information data
 #define BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ		6		//!< Starting handle
 #define BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_RSP		7		//!< Handle information list
 #define BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ				8		//!< Handle information list
@@ -129,11 +133,17 @@ typedef struct __Bt_Att_Find_Info_Req {
 } BtAttFindInfoReq_t;
 
 /// Find information response : ATT_FIND_INFO_RSP
+#define BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16			1
+#define BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128			2
+
 /// NOTE: Variable length
 typedef struct __Bt_Att_Find_Info_Rsp {
 	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Fmt;			//!< Format
-	uint8_t Data[1];
+	union {
+		BtAttHdlUuid16_t HdlUuid16[1];
+		BtAttHdlUuid128_t HdlUuid128[1];
+	};
 } BtAttFindInfoRsp_t;
 
 /// Find by type value request : ATT_FIND_BY_TYPE_VALUE_REQ

@@ -178,7 +178,55 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t pBleEvt);
  */
 uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg);
 
+/**
+ * @brief	Notify characteristic data
+ *
+ * @param	pSrvc : Pointer to Blue IO service data (Service Handle)
+ * @param	Idx   : Characteristic index to notify
+ * @param	pData : Pointer to data to be sent
+ * @param	DataLen : Length of data to send in bytes
+ *
+ * @return	0 - Success
+ */
 uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
+
+/**
+ * @brief	Update characteristic data
+ *
+ * @param	pSrvc : Pointer to Blue IO service data (Service Handle)
+ * @param	Idx   : Characteristic index to update
+ * @param	pData : Pointer to data to be sent
+ * @param	DataLen : Length of data to send in bytes
+ *
+ * @return	0 - Success
+ */
+uint32_t BleSrvcCharSetValue(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
+
+/**
+ * @brief	Check connection state of the service
+ *
+ * NOTE : for performance, there is no check for valid service instance assuming it is valid
+ *
+ * @param	pSrvc : Pointer to the service instance for query
+ *
+ * @return	true - Connected
+ * 			false - Not connected
+ */
+static inline bool IsBleSrvcConnected(BleSrvc_t *pSrvc) { return pSrvc->ConnHdl != -1;}//BLE_CONN_HANDLE_INVALID; }
+
+/**
+ * @brief	Check for notification state of a characteristic
+ *
+ * NOTE : for performance, there is no check for valid service instance and indexes
+ * 		  assuming they are valid
+ *
+ * @param	pSrvc 	: Pointer to the service instance for query
+ * @param	CharIdx : Characteristic index to query. index based from 0.
+ *
+ * @return	true - Notification is enabled
+ * 			false - Otherwise
+ */
+static inline bool IsBleSrvcCharNotifyEnabled(BleSrvc_t *pSrvc, int CharIdx) { return pSrvc->pCharArray[CharIdx].bNotify; }
 
 #ifdef __cplusplus
 }
