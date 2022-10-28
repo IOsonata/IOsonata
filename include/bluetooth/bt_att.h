@@ -264,7 +264,7 @@ typedef struct __Bt_Att_Read_Multiple_Variable_Rsp {
 /// NOTE: Variable length
 typedef struct __Bt_Att_Write_Req {
 	uint8_t OpCode;			//!< Attribute opcode
-	uint16_t Hdl[1];		//!< Attribute handle to write
+	uint16_t Hdl;			//!< Attribute handle to write
 	uint8_t Data[1];		//!< Variable length data to write
 } BtAttWriteReq_t;
 
