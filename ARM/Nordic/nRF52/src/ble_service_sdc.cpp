@@ -187,7 +187,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
     for (int i = 0; i < pCfg->NbChar; i++)
     {
     	uid16.Uuid = pSrvc->pCharArray[i].Uuid;
-    	pSrvc->pCharArray[i].BaseUuidIdx = 0;//baseidx;
+    	pSrvc->pCharArray[i].BaseUuidIdx = baseidx;
 
     	BtGattCharDeclar_t gatt = {(uint8_t)pSrvc->pCharArray[i].Property, 0, {pSrvc->pCharArray[i].BaseUuidIdx, BT_UUID_TYPE_16, pSrvc->pCharArray[i].Uuid}};
 
