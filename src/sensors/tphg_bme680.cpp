@@ -375,7 +375,7 @@ bool TphgBme680::Init(const TPHSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer 
 }
 
 // Gas sensor init
-bool TphgBme680::Init(const GasSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool TphgBme680::Init(const GasSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (pIntrf != NULL && pIntrf != Interface())
 	{

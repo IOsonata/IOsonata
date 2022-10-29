@@ -146,46 +146,76 @@ uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t D
 	return 0;
 }
 
-uint32_t BleSrvcAddChar(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar, uint32_t SecType)
+bool BleSrvcAddChar(BtUuid16_t *pSrvcUuid, BleSrvc_t *pSrvc, BleSrvcChar_t *pChar, uint32_t SecType)
 {
-	return 0;
+	if (pChar == NULL)
+	{
+		return false;
+	}
+
+	if (pChar->CharVal.pData == NULL)
+	{
+		return false;
+	}
+
+	//BtGattCharValue_t charval = pChar->pCharVal;//{pChar->MaxDataLen, pChar->ValueLen, pChar->pValue };
+
+	pChar->BaseUuidIdx = pSrvcUuid->BaseIdx;
+
+	BtGattCharDeclar_t gatt = {(uint8_t)pChar->Property, 0, {pChar->BaseUuidIdx, BT_UUID_TYPE_16, pChar->Uuid}};
+
+	BtUuid16_t TypeUuid = { 0, BT_UUID_TYPE_16, BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC };
+
+	pChar->Hdl = BtGattRegister(&TypeUuid, &gatt);
+	pChar->ValHdl = gatt.ValHdl;
+
+	TypeUuid.Uuid = pChar->Uuid;
+
+	pChar->ValHdl = BtGattRegister(&TypeUuid, &pChar->CharVal);
+
+	pChar->bNotify = false;
+    if (pChar->Property & BLESRVC_CHAR_PROP_NOTIFY)
+    {
+    	TypeUuid.Uuid = BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
+
+    	uint8_t x = 0;
+    	pChar->CccdHdl = BtGattRegister(&TypeUuid, &x);
+    }
+
+    return true;
 }
 
 uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 {
 	uint32_t   err;
 	uint8_t baseidx = 0;
-	//ble_uuid_t ble_uuid;
+//	BtGattCharValue_t charval;
 
 	// Initialize service structure
 	pSrvc->ConnHdl  = -1;
-	pSrvc->UuidSvc = pCfg->UuidSvc;
 
-	// Add base UUID to softdevice's internal list.
-	//for (int i = 0; i < pCfg->NbUuidBase; i++)
-	//{
+	// Add base UUID to internal list.
 	if (pCfg->bCustom)
 	{
-		baseidx = BtUuidAddBase(pCfg->UuidBase);
+		pSrvc->Uuid.BaseIdx = BtUuidAddBase(pCfg->UuidBase);
 	}
-	//}
+	pSrvc->Uuid.Type = BT_UUID_TYPE_16;
+	pSrvc->Uuid.Uuid = pCfg->UuidSrvc;
 
-//	BtGattSrvc_t sv = {
-//		0xFFFF,
-//		{ 1, BT_UUID_TYPE_16, pCfg->UuidSvc},
-//	};
-
-	BtUuid16_t uid16 = { baseidx, BT_UUID_TYPE_16, pCfg->UuidSvc};
+//	BtUuid16_t uid16 = { baseidx, BT_UUID_TYPE_16, pCfg->UuidSvc};
 
 	BtUuid16_t TypeUuid = { 0, BT_UUID_TYPE_16, BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE };
 
-	pSrvc->Hdl = BtGattRegister(&TypeUuid, &uid16);
+	pSrvc->Hdl = BtGattRegister(&TypeUuid, &pSrvc->Uuid);
 
 	pSrvc->NbChar = pCfg->NbChar;
     pSrvc->pCharArray = pCfg->pCharArray;
 
     for (int i = 0; i < pCfg->NbChar; i++)
     {
+    	BleSrvcAddChar(&pSrvc->Uuid, pSrvc, &pSrvc->pCharArray[i], 0);
+
+#if 0
     	uid16.Uuid = pSrvc->pCharArray[i].Uuid;
     	pSrvc->pCharArray[i].BaseUuidIdx = baseidx;
 
@@ -203,38 +233,8 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
         	uint8_t x = 0;
 			pSrvc->pCharArray[i].CccdHdl = BtGattRegister(&TypeUuid, &x);
         }
+#endif
     }
-
-/*
-	    ble_uuid.type = pSrvc->UuidType[0];
-	    ble_uuid.uuid = pCfg->UuidSvc;
-
-	    err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->SrvcHdl);
-	    if (err != NRF_SUCCESS)
-	    {
-	        return err;
-	    }
-
-	    pSrvc->NbChar = pCfg->NbChar;
-
-	    pSrvc->pCharArray = pCfg->pCharArray;
-
-	    for (int i = 0; i < pCfg->NbChar; i++)
-	    {
-	    	err = BlueIOBleSrvcCharAdd(pSrvc, &pSrvc->pCharArray[i],
-									   pCfg->SecType);
-	        if (err != NRF_SUCCESS)
-	        {
-	            return err;
-	        }
-	        pSrvc->pCharArray[i].bNotify = false;
-	    }
-
-	    pSrvc->pLongWrBuff = pCfg->pLongWrBuff;
-	    pSrvc->LongWrBuffSize = pCfg->LongWrBuffSize;
-	    pSrvc->AuthReqCB = pCfg->AuthReqCB;
-
-	    return NRF_SUCCESS;*/
 
 	return 0;
 

@@ -73,7 +73,7 @@ typedef BleIntrfPkt_t	BLEINTRF_PKT;
 #pragma pack(push, 4)
 
 typedef struct __BleDeviceInterfConfig {
-	BleSrvc_t *pBleSrv;		//!< BLE Service
+	BleSrvc_t *pBleSrvc;		//!< BLE Service
     int RxCharIdx;			//!< Write characteristic index (From BLE)
     int TxCharIdx;			//!< Read characteristic index (to BLE)
     int PacketSize;			//!< BLE packet size
@@ -90,7 +90,7 @@ typedef BleIntrfCfg_t	BLEINTRF_CFG;
 // BLE interf instance data
 typedef struct __BleDeviceInterf {
 	DevIntrf_t	DevIntrf;	//!< Base Device Interface
-	BleSrvc_t	*pBleSrv;	//!< BLE Service
+	BleSrvc_t	*pBleSrvc;	//!< BLE Service
     int			RxCharIdx;	//!< Write characteristic index (from BLE)
     int			TxCharIdx;	//!< Read characteristic index (to BLE)
     int			PacketSize;	//!< BLE packet size
@@ -113,7 +113,7 @@ public:
 	bool Init(const BleIntrfCfg_t &Cfg);
 
 	operator DevIntrf_t * const () { return &vBleIntrf.DevIntrf; }	// Get device interface data
-	operator BleSrvc_t * const () { return vBleIntrf.pBleSrv; }
+	operator BleSrvc_t * const () { return vBleIntrf.pBleSrvc; }
 	// Set data rate in bits/sec (Hz)
 	virtual uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vBleIntrf.DevIntrf, DataRate); }
 	// Get current data rate in bits/sec (Hz)

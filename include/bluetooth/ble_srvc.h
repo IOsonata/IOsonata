@@ -97,25 +97,26 @@ typedef enum {
 	BLESRVC_SECTYPE_SIGNED_MITM,		//!< AES signed encryption with MITM
 } BLESRVC_SECTYPE;
 
+
 #pragma pack(push,4)
 
 typedef struct __Ble_Srvc_Char_Data {
     uint16_t Uuid;                      //!< char UUID
-    uint16_t Hdl;       				//!< char handle
-    int MaxDataLen;                     //!< char max data length
+    //uint32_t MaxDataLen;                //!< char max data length
     uint32_t Property;                  //!< char properties define by BLUEIOSVC_CHAR_PROP_...
     const char *pDesc;                  //!< char UTF-8 description string
     BleSrvcWrCb_t WrCB;                  //!< Callback for write char, set to NULL for read char
     BleSrvcSetNotifCb_t SetNotifCB;		//!< Callback on set notification
     BleSrvcTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
-    uint8_t *pDefValue;					//!< pointer to char default values
-    uint16_t ValueLen;					//!< Default value length in bytes
-    uint16_t ValHdl;
-    uint16_t DescHdl;					//!< desciptor handle
-    uint16_t CccdHdl;
-    uint16_t SccdHdl;
+    //uint16_t ValueLen;					//!< Default value length in bytes
+    BtGattCharValue_t CharVal;	//!< pointer to char default values
     bool bNotify;                       //!< Notify flag for read characteristic
     uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
+    uint16_t Hdl;       				//!< char handle
+    uint16_t ValHdl;
+    uint16_t DescHdl;					//!< descriptor handle
+    uint16_t CccdHdl;
+    uint16_t SccdHdl;
 } BleSrvcChar_t;
 
 /*
@@ -127,7 +128,7 @@ typedef struct __Ble_Srvc_Config {
 	uint8_t UuidBase[16];				//!< 128 bits custom base UUID
 	//uint8_t UuidBase[BLESRVC_UUID_BASE_MAXCNT][16];//!< Base UUIDs
 	//int				NbUuidBase;			//!< Number of UUID defined in the UuidBase array
-	uint16_t		UuidSvc;			//!< Service UUID
+	uint16_t		UuidSrvc;			//!< Service UUID
 	int             NbChar;				//!< Total number of characteristics for the service
 	BleSrvcChar_t	*pCharArray;           //!< Pointer a an array of characteristic
     uint8_t			*pLongWrBuff;		//!< pointer to user long write buffer
@@ -148,7 +149,8 @@ struct __Ble_Srvc {
     BleSrvcChar_t 	*pCharArray;        //!< Pointer to array of characteristics
     uint16_t        Hdl;            	//!< Service handle
     uint16_t        ConnHdl;			//!< Connection handle
-    uint16_t        UuidSvc;            //!< Service UUID
+    BtUuid16_t		Uuid;				//!< Service UUID
+//    uint16_t        UuidSvc;            //!< Service UUID
     uint8_t         UuidType;//[BLESRVC_UUID_BASE_MAXCNT];
     uint8_t			*pLongWrBuff;		//!< pointer to user long write buffer
     int				LongWrBuffSize;		//!< long write buffer size

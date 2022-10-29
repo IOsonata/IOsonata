@@ -313,7 +313,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	bool Init(const GasSensorCfg_t &CfgData, DeviceIntrf *pIntrf = NULL, Timer *pTimer = NULL);
+	bool Init(const GasSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
 
 	/**
 	 * @brief	Set current sensor state

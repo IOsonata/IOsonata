@@ -125,9 +125,9 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 				memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].CharDeclar, pAttVal, sizeof(BtGattCharDeclar_t));
 				s_BtGatEntryTbl[s_NbGattListEntry].CharDeclar.ValHdl = s_NbGattListEntry + 2;
 				s_BtGatEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
-				s_NbGattListEntry++;
-				s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = ((BtGattCharDeclar_t*)pAttVal)->Uuid;
-				((BtGattCharDeclar_t*)pAttVal)->ValHdl = s_NbGattListEntry + 1;
+				//s_NbGattListEntry++;
+				//s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = ((BtGattCharDeclar_t*)pAttVal)->Uuid;
+				//((BtGattCharDeclar_t*)pAttVal)->ValHdl = s_NbGattListEntry + 1;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
 				break;
@@ -144,10 +144,7 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 	}
 	else
 	{
-		BtGattCharValue_t *p = (BtGattCharValue_t*)pAttVal;
-		s_BtGatEntryTbl[s_NbGattListEntry].CharVal.MaxLen = p->MaxLen;
-		s_BtGatEntryTbl[s_NbGattListEntry].CharVal.Len = p->Len;
-		s_BtGatEntryTbl[s_NbGattListEntry].CharVal.pData = p->pData;
+		s_BtGatEntryTbl[s_NbGattListEntry].pCharVal = (BtGattCharValue_t*)pAttVal;
 	}
 	s_BtGatEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
 
@@ -156,7 +153,7 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 	return s_NbGattListEntry;
 }
 
-bool BtGattUpdate(uint16_t Hdl, void *pAttVal)
+bool BtGattUpdate(uint16_t Hdl, void *pAttVal, size_t Len)
 {
 	if (Hdl <= 0 || Hdl > s_NbGattListEntry)
 	{
@@ -193,10 +190,9 @@ bool BtGattUpdate(uint16_t Hdl, void *pAttVal)
 	}
 	else
 	{
-		BtGattCharValue_t *p = (BtGattCharValue_t*)pAttVal;
-		s_BtGatEntryTbl[Hdl].CharVal.MaxLen = p->MaxLen;
-		s_BtGatEntryTbl[Hdl].CharVal.Len = p->Len;
-		s_BtGatEntryTbl[Hdl].CharVal.pData = p->pData;
+		size_t l = min(Len, s_BtGatEntryTbl[Hdl].pCharVal->MaxLen);
+		s_BtGatEntryTbl[Hdl].pCharVal->Len = l;
+		memcpy(s_BtGatEntryTbl[Hdl].pCharVal->pData, pAttVal, l);
 	}
 
 	return true;
@@ -330,8 +326,8 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 	}
 	else
 	{
-		len = pEntry->CharVal.Len;
-		memcpy(pBuff, pEntry->CharVal.pData, len);
+		len = pEntry->pCharVal->Len;
+		memcpy(pBuff, pEntry->pCharVal->pData, len);
 	}
 
 	return len;

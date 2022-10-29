@@ -206,7 +206,7 @@ bool BleIntrfNotify(BleIntrf_t *pIntrf)
 
     if (pIntrf->TransBuffLen > 0)
     {
-        res = BleSrvcCharNotify(pIntrf->pBleSrv, pIntrf->TxCharIdx, pIntrf->TransBuff, pIntrf->TransBuffLen);
+        res = BleSrvcCharNotify(pIntrf->pBleSrvc, pIntrf->TxCharIdx, pIntrf->TransBuff, pIntrf->TransBuffLen);
     }
 
     while (res == NRF_SUCCESS)
@@ -219,7 +219,7 @@ bool BleIntrfNotify(BleIntrf_t *pIntrf)
 		{
 			return true;
 		}
-		res = BleSrvcCharNotify(pIntrf->pBleSrv, pIntrf->TxCharIdx, pkt->Data, pkt->Len);
+		res = BleSrvcCharNotify(pIntrf->pBleSrvc, pIntrf->TxCharIdx, pkt->Data, pkt->Len);
 	}
 
 	if (pkt != NULL)
@@ -365,14 +365,14 @@ bool BleIntrfInit(BleIntrf_t *pBleIntrf, const BleIntrfCfg_t *pCfg)
 	}
 
 	pBleIntrf->DevIntrf.pDevData = (void*)pBleIntrf;
-	pBleIntrf->pBleSrv = pCfg->pBleSrv;
-	pBleIntrf->pBleSrv->pContext = pBleIntrf;
+	pBleIntrf->pBleSrvc = pCfg->pBleSrvc;
+	pBleIntrf->pBleSrvc->pContext = pBleIntrf;
 
 	pBleIntrf->RxCharIdx = pCfg->RxCharIdx;
 	pBleIntrf->TxCharIdx = pCfg->TxCharIdx;
 
-	pBleIntrf->pBleSrv->pCharArray[pBleIntrf->RxCharIdx].WrCB = BleIntrfRxWrCB;
-	pBleIntrf->pBleSrv->pCharArray[pBleIntrf->TxCharIdx].TxCompleteCB = BleIntrfTxComplete;
+	pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx].WrCB = BleIntrfRxWrCB;
+	pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->TxCharIdx].TxCompleteCB = BleIntrfTxComplete;
 
 	pBleIntrf->DevIntrf.Type = DEVINTRF_TYPE_BLE;
 	pBleIntrf->DevIntrf.Enable = BleIntrfEnable;

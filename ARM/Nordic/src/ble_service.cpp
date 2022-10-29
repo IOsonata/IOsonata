@@ -379,9 +379,9 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
     attr_char_value.p_uuid       = &ble_uuid;
     attr_char_value.p_attr_md    = &attr_md;
     attr_char_value.init_offs    = 0;
-    attr_char_value.max_len      = pChar->MaxDataLen;
-    attr_char_value.init_len     = pChar->ValueLen;
-    attr_char_value.p_value      = pChar->pDefValue;
+    attr_char_value.max_len      = pChar->CharVal.MaxLen;
+    attr_char_value.init_len     = pChar->CharVal.Len;
+    attr_char_value.p_value      = pChar->CharVal.pData;
 
     ble_gatts_char_handles_t hdl;
     uint32_t res = sd_ble_gatts_characteristic_add(pSrvc->Hdl, &char_md, &attr_char_value, &hdl);//&pChar->Hdl);
@@ -423,7 +423,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
     }
 
     ble_uuid.type = pSrvc->UuidType;
-    ble_uuid.uuid = pCfg->UuidSvc;
+    ble_uuid.uuid = pCfg->UuidSrvc;
 
     err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->Hdl);
     if (err != NRF_SUCCESS)

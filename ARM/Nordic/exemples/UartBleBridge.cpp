@@ -41,7 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "bluetooth/ble_app.h"
 #include "ble_app_nrf5.h"
-#include "ble_service.h"
+#include "bluetooth/ble_srvc.h"
 #include "ble_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
@@ -106,49 +106,53 @@ uint8_t g_ManData[8];
 #define BLESRV_READ_CHAR_IDX		0
 #define BLESRV_WRITE_CHAR_IDX		1
 
-BLESRVC_CHAR g_UartChars[] = {
+static uint8_t s_UartRxCharMem[PACKET_SIZE];
+static uint8_t s_UartTxCharMem[PACKET_SIZE];
+
+BleSrvcChar_t g_UartChars[] = {
 	{
 		// Read characteristic
-		BLE_UART_UUID_READ_CHAR,
-		PACKET_SIZE,
-		BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
-		s_RxCharDescString,         // char UTF-8 description string
-		NULL,                       // Callback for write char, set to NULL for read char
-		NULL,						// Callback on set notification
-		NULL,						// Tx completed callback
-		NULL,						// pointer to char default values
+		.Uuid = BLE_UART_UUID_READ_CHAR,
+		//PACKET_SIZE,
+		.Property = BLESRVC_CHAR_PROP_READ | BLESRVC_CHAR_PROP_NOTIFY | BLESRVC_CHAR_PROP_VARLEN,
+		.pDesc = s_RxCharDescString,         // char UTF-8 description string
+		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
+		.SetNotifCB = NULL,						// Callback on set notification
+		.TxCompleteCB = NULL,						// Tx completed callback
+		.CharVal = {PACKET_SIZE, 0, s_UartRxCharMem},						// char values
 		0,							// Default value length in bytes
 	},
 	{
 		// Write characteristic
-		BLE_UART_UUID_WRITE_CHAR,	// char UUID
-		PACKET_SIZE,                // char max data length
-		BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN,	// char properties define by BLUEIOSVC_CHAR_PROP_...
-		s_TxCharDescString,			// char UTF-8 description string
-		NULL,         				// Callback for write char, set to NULL for read char
-		NULL,						// Callback on set notification
-		NULL,						// Tx completed callback
-		NULL,						// pointer to char default values
+		.Uuid = BLE_UART_UUID_WRITE_CHAR,	// char UUID
+		//PACKET_SIZE,                // char max data length
+		.Property = BLESRVC_CHAR_PROP_WRITE | BLESRVC_CHAR_PROP_WRITEWORESP | BLESRVC_CHAR_PROP_VARLEN,	// char properties define by BLUEIOSVC_CHAR_PROP_...
+		.pDesc = s_TxCharDescString,			// char UTF-8 description string
+		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
+		.SetNotifCB = NULL,						// Callback on set notification
+		.TxCompleteCB = NULL,						// Tx completed callback
+		.CharVal = {PACKET_SIZE, 0, s_UartTxCharMem},						// char values
 		0							// Default value length in bytes
 	},
 };
 
-static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BLESRVC_CHAR);
+static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BleSrvcChar_t);
 
 uint8_t g_LWrBuffer[512];
 
 const BleSrvcCfg_t s_UartSrvcCfg = {
-	BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
-	{BLE_UART_UUID_BASE,},		// Base UUID
-	1,
-	BLE_UART_UUID_SERVICE,   	// Service UUID
-	s_BleUartNbChar,            // Total number of characteristics for the service
-	g_UartChars,                // Pointer a an array of characteristic
-	g_LWrBuffer,                // pointer to user long write buffer
-	sizeof(g_LWrBuffer)         // long write buffer size
+	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
+	.bCustom = true,
+	.UuidBase = BLE_UART_UUID_BASE,		// Base UUID
+	//1,
+	.UuidSrvc = BLE_UART_UUID_SERVICE,   	// Service UUID
+	.NbChar = s_BleUartNbChar,            // Total number of characteristics for the service
+	.pCharArray = g_UartChars,                // Pointer a an array of characteristic
+	.pLongWrBuff = g_LWrBuffer,                // pointer to user long write buffer
+	.LongWrBuffSize = sizeof(g_LWrBuffer)         // long write buffer size
 };
 
-BLESRVC g_UartBleSrvc;
+BleSrvc_t g_UartBleSrvc;
 
 const BleAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           	// Model name
@@ -194,7 +198,7 @@ alignas(4) static uint8_t s_BleIntrfRxFifo[BLEINTRF_FIFOSIZE];
 alignas(4) static uint8_t s_BleIntrfTxFifo[BLEINTRF_FIFOSIZE];
 
 static const BleIntrfCfg_t s_BleInrfCfg = {
-	.pBleSrv = &g_UartBleSrvc,
+	.pBleSrvc = &g_UartBleSrvc,
 	.RxCharIdx = BLESRV_WRITE_CHAR_IDX,
 	.TxCharIdx = BLESRV_READ_CHAR_IDX,
 	.PacketSize = 20,			// Packet size : use default
@@ -271,7 +275,7 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 
 void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
 {
-    BleSrvcEvtHandler(&g_UartBleSrvc, p_ble_evt);
+    BleSrvcEvtHandler(&g_UartBleSrvc, (uint32_t)p_ble_evt);
 }
 
 void BleAppInitUserServices()

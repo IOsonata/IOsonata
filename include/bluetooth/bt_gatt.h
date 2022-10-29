@@ -100,10 +100,12 @@ typedef uint8_t		BtGattServerCharConfig_t;
 
 
 #pragma pack(push,4)
+
+/// NOTE: Variable length
 typedef struct __Bt_Gatt_Char_Value {
-	uint32_t MaxLen;			//!< Max data buffer length
-	uint32_t Len;				//!< Length of actual data
-	uint8_t *pData;				//!< Pointer to static data buffer
+	size_t MaxLen;			//!< Max data buffer length
+	size_t Len;				//!< Length of actual data
+	uint8_t * const pData;			//!< Data buffer
 } BtGattCharValue_t;
 
 typedef struct __Bt_Gatt_List_Entry {
@@ -111,10 +113,9 @@ typedef struct __Bt_Gatt_List_Entry {
 	BtUuid16_t TypeUuid;		//!< Attribute type UUID
 	uint32_t Permission;		//!< Attribute Permission
 	union {						//!< Attribute value
-		void *pVal;
 		uint32_t Val32;
 		BtUuid_t Uuid;
-		BtGattCharValue_t CharVal;
+		BtGattCharValue_t *pCharVal;
 		BtGattSrvcDeclar_t SrvcDeclar;	//!< Service declaration value
 		BtGattSrvcInclude_t SrvcInc;	//!< Service definition value
 		BtGattCharDeclar_t CharDeclar;	//!< Characteristic declaration value
