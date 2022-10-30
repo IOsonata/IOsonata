@@ -780,33 +780,27 @@ typedef union __Bt_Uuid_Val {
 } BtUuidVal_t;
 
 typedef struct __Bt_Uuid {
-	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
-	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
+	uint8_t BaseIdx:6;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	BT_UUID_TYPE Type:2;		//!< UUID type 16, 32 or full 128 bits
 	BtUuidVal_t Val;
 } BtUuid_t;
 
 typedef struct __Bt_Uuid16 {
-	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
-	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
+	uint8_t BaseIdx:6;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	BT_UUID_TYPE Type:2;		//!< UUID type 16, 32 or full 128 bits
 	uint16_t Uuid;
 } BtUuid16_t;
 
 typedef struct __Bt_Uuid32 {
-	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
-	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
+	uint8_t BaseIdx:6;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	BT_UUID_TYPE Type:2;		//!< UUID type 16, 32 or full 128 bits
 	uint32_t Uuid;
 } BtUuid32_t;
 
-typedef struct __Bt_Uuid128 {
-	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
-	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
-	uint8_t Uuid[16];
-} BtUuid128_t;
-
 /// NOTE: Variable length structure
 typedef struct __Bt_Uuid_Array {
-	uint8_t BaseIdx:4;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
-	BT_UUID_TYPE Type:4;		//!< UUID type 16, 32 or full 128 bits
+	uint8_t BaseIdx:6;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
+	BT_UUID_TYPE Type:2;		//!< UUID type 16, 32 or full 128 bits
 	int Count;					//!< Number of elements in array
 	union {
 		uint16_t Uuid16[1];
@@ -824,7 +818,10 @@ extern "C" {
 int BtUuidFindBase(uint8_t const Uuid[16]);
 int BtUuidAddBase(uint8_t const Uuid[16]);
 bool BtUuidGetBase(int Idx, uint8_t Uuid[16]);
-size_t BtUuidGetSize(BtUuid_t *Uuid);
+size_t BtUuidGetSize(BtUuid_t *pUuid);
+bool BtUuidTo128(BtUuid_t * const pUuid, uint8_t Uuid128[16]);
+bool BtUuid16To128(BtUuid16_t * const pUuid, uint8_t Uuid128[16]);
+bool BtUuid32To128(BtUuid16_t * const pUuid, uint8_t Uuid128[16]);
 
 #ifdef __cplusplus
 }
