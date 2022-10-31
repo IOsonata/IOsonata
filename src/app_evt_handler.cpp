@@ -126,10 +126,12 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
  */
 void AppEvtHandlerExec()
 {
-	AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t*)CFifoGet(s_hAppEvtHandlerFifo);
-
-	if (p)
+	while (1)
 	{
+		AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t*)CFifoGet(s_hAppEvtHandlerFifo);
+
+		if (p == nullptr)
+			break;
 		p->Handler(p->EvtId, p->pCtx);
 	}
 }
