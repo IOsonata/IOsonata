@@ -59,15 +59,15 @@ bool BtHciInit(BtHciDevCfg_t const *pCfg)
 	return true;
 }
 
-void BtHciProcessMetaEvent(BtHciMetaEvtPacket_t *pMetaEvtPkt)
+void BtHciProcessLeEvent(BtHciLeEvtPacket_t *pLeEvtPkt)
 {
-	g_Uart.printf("BtHciProcessMetaEvent : Evt %x\r\n", pMetaEvtPkt->Evt);
+	g_Uart.printf("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
 
-	switch (pMetaEvtPkt->Evt)
+	switch (pLeEvtPkt->Evt)
 	{
-		case BT_HCI_EVT_LE_META_CONN_COMPLETE:
+		case BT_HCI_EVT_LE_CONN_COMPLETE:
 			{
-				BtHciMetaEvtConnComplete_t *p = (BtHciMetaEvtConnComplete_t*)pMetaEvtPkt->Data;
+				BtHciLeEvtConnComplete_t *p = (BtHciLeEvtConnComplete_t*)pLeEvtPkt->Data;
 				if (p->Status == 0)
 				{
 					uint16_t conhdl = p->ConnHdl;
@@ -77,11 +77,11 @@ void BtHciProcessMetaEvent(BtHciMetaEvtPacket_t *pMetaEvtPkt)
 				}
 			}
 			break;
-		case BT_HCI_EVT_LE_META_ADV_REPORT:
+		case BT_HCI_EVT_LE_ADV_REPORT:
 			{
-				BtHciMetaEvtAdvReport_t *p = (BtHciMetaEvtAdvReport_t*)pMetaEvtPkt->Data;
+				BtHciLeEvtAdvReport_t *p = (BtHciLeEvtAdvReport_t*)pLeEvtPkt->Data;
 
-				g_Uart.printf("BT_HCI_EVT_LE_META_ADV_REPORT: %d\r\n", p->NbReport);
+				g_Uart.printf("BT_HCI_EVT_LE_ADV_REPORT: %d\r\n", p->NbReport);
 
 				for (int i = 0; i < p->NbReport; i++)
 				{
@@ -89,35 +89,44 @@ void BtHciProcessMetaEvent(BtHciMetaEvtPacket_t *pMetaEvtPkt)
 				}
 			}
 			break;
-		case BT_HCI_EVT_LE_META_CONN_UPDATE_COMPLETE:
-			break;
-		case BT_HCI_EVT_LE_META_READ_REMOTE_FEATURES_COMPLETE:
-			g_Uart.printf("BT_HCI_EVT_LE_META_READ_REMOTE_FEATURES_COMPLETE \r\n");
-			break;
-		case BT_HCI_EVT_LE_META_LONGTERM_KEY_RQST:
-			break;
-		case BT_HCI_EVT_LE_META_REMOTE_CONN_PARAM_RQST:
-			break;
-		case BT_HCI_EVT_LE_META_DATA_LEN_CHANGE:
+		case BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE:
 			{
-				BtHciMetaEvtDataLenChange_t *p = (BtHciMetaEvtDataLenChange_t*)pMetaEvtPkt->Data;
+				BtHciLeEvtConnUpdateComplete_t *p = (BtHciLeEvtConnUpdateComplete_t*)pLeEvtPkt->Data;
+			}
+			break;
+		case BT_HCI_EVT_LE_READ_REMOTE_FEATURES_COMPLETE:
+			{
+				BtHciLeEvtReadRemoteFeatureComplete_t *p = (BtHciLeEvtReadRemoteFeatureComplete_t*)pLeEvtPkt->Data;
+				g_Uart.printf("BT_HCI_EVT_LE_READ_REMOTE_FEATURES_COMPLETE \r\n");
+			}
+			break;
+		case BT_HCI_EVT_LE_LONGTERM_KEY_RQST:
+			break;
+		case BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST:
+			{
+				BtHciLeEvtRemoteConnParamReq_t *p = (BtHciLeEvtRemoteConnParamReq_t*)pLeEvtPkt->Data;
+			}
+			break;
+		case BT_HCI_EVT_LE_DATA_LEN_CHANGE:
+			{
+				BtHciLeEvtDataLenChange_t *p = (BtHciLeEvtDataLenChange_t*)pLeEvtPkt->Data;
 
 				s_HciDevice.RxDataLen = p->MaxRxLen;
 				s_HciDevice.TxDataLen = p->MaxTxLen;
 
-				g_Uart.printf("BT_HCI_EVT_LE_META_DATA_LEN_CHANGE: %x %d\r\n", p->ConnHdl, p->MaxRxLen);
+				g_Uart.printf("BT_HCI_EVT_LE_DATA_LEN_CHANGE: %x %d\r\n", p->ConnHdl, p->MaxRxLen);
 
 			}
 			break;
-		case BT_HCI_EVT_LE_META_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE:
+		case BT_HCI_EVT_LE_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE:
 			break;
-		case BT_HCI_EVT_LE_META_GENERATE_DHKEY_COMPLETE:
+		case BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE:
 			break;
-		case BT_HCI_EVT_LE_META_ENHANCED_CONN_COMPLETE:
+		case BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE:
 			{
-				BtHciMetaEvtEnhConnComplete_t *p = (BtHciMetaEvtEnhConnComplete_t*)pMetaEvtPkt->Data;
+				BtHciLeEvtEnhConnComplete_t *p = (BtHciLeEvtEnhConnComplete_t*)pLeEvtPkt->Data;
 
-				g_Uart.printf("BT_HCI_EVT_LE_META_ENHANCED_CONN_COMPLETE : hdl %x, role:%d\n", p->ConnHdl, p->Role);
+				g_Uart.printf("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE : hdl %x, role:%d\n", p->ConnHdl, p->Role);
 
 				if (p->Status == 0)
 				{
@@ -142,29 +151,29 @@ void BtHciProcessMetaEvent(BtHciMetaEvtPacket_t *pMetaEvtPkt)
 				}
 			}
 			break;
-		case BT_HCI_EVT_LE_META_DIRECTED_ADV_REPORT:
+		case BT_HCI_EVT_LE_DIRECTED_ADV_REPORT:
 			break;
-		case BT_HCI_EVT_LE_META_PHY_UPDATE_COMPLETE:
+		case BT_HCI_EVT_LE_PHY_UPDATE_COMPLETE:
 			break;
-		case BT_HCI_EVT_LE_META_EXT_ADV_REPORT:
+		case BT_HCI_EVT_LE_EXT_ADV_REPORT:
 			break;
-		case BT_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_ESTABLISHED:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED:
 			break;
-		case BT_HCI_EVT_LE_META_PERIODIC_ADV_REPORT:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT:
 			break;
-		case BT_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_LOST:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_LOST:
 			break;
-		case BT_HCI_EVT_LE_META_SCAN_TIMEOUT:
+		case BT_HCI_EVT_LE_SCAN_TIMEOUT:
 			break;
-		case BT_HCI_EVT_LE_META_ADV_SET_TERMINATED:
+		case BT_HCI_EVT_LE_ADV_SET_TERMINATED:
 			break;
-		case BT_HCI_EVT_LE_META_SCAN_RQST_RECEIVED:
+		case BT_HCI_EVT_LE_SCAN_RQST_RECEIVED:
 			break;
-		case BT_HCI_EVT_LE_META_CHAN_SELECTION_ALGO:
+		case BT_HCI_EVT_LE_CHAN_SELECTION_ALGO:
 			{
-				BtHciMetaEvtChanSelAlgo_t *p = (BtHciMetaEvtChanSelAlgo_t *)pMetaEvtPkt->Data;
+				BtHciLeEvtChanSelAlgo_t *p = (BtHciLeEvtChanSelAlgo_t *)pLeEvtPkt->Data;
 
-				g_Uart.printf("BT_HCI_EVT_LE_META_CHAN_SELECTION_ALGO : hdl:%x %d\r\n", p->ConnHdl, p->ChanSelAlgo);
+				g_Uart.printf("BT_HCI_EVT_LE_CHAN_SELECTION_ALGO : hdl:%x %d\r\n", p->ConnHdl, p->ChanSelAlgo);
 
 				//sdc_hci_cmd_le_read_channel_map_t cmc;
 				//sdc_hci_cmd_le_read_channel_map_return_t cmr;
@@ -175,42 +184,42 @@ void BtHciProcessMetaEvent(BtHciMetaEvtPacket_t *pMetaEvtPkt)
 				//g_Uart.printf("  %d %d %d %d %d\r\n", cmr.conn_handle, cmr.channel_map[0], cmr.channel_map[1], cmr.channel_map[2], cmr.channel_map[4]);
 			}
 			break;
-		case BT_HCI_EVT_LE_META_CONNLESS_IQ_REPORT:
+		case BT_HCI_EVT_LE_CONNLESS_IQ_REPORT:
 			break;
-		case BT_HCI_EVT_LE_META_CONN_IQ_REPORT:
+		case BT_HCI_EVT_LE_CONN_IQ_REPORT:
 			break;
-		case BT_HCI_EVT_LE_META_CTE_RQST_FAILED:
+		case BT_HCI_EVT_LE_CTE_RQST_FAILED:
 			break;
-		case BT_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED:
 			break;
-		case BT_HCI_EVT_LE_META_CIS_ESTABLISHED:
+		case BT_HCI_EVT_LE_CIS_ESTABLISHED:
 			break;
-		case BT_HCI_EVT_LE_META_CIS_RQST:
+		case BT_HCI_EVT_LE_CIS_RQST:
 			break;
-		case BT_HCI_EVT_LE_META_CREATE_BIG_COMPLETE:
+		case BT_HCI_EVT_LE_CREATE_BIG_COMPLETE:
 			break;
-		case BT_HCI_EVT_LE_META_TERMINATE_BIG_COMPLETE:
+		case BT_HCI_EVT_LE_TERMINATE_BIG_COMPLETE:
 			break;
-		case BT_HCI_EVT_LE_META_BIG_SYNC_ESTABLISHED:
+		case BT_HCI_EVT_LE_BIG_SYNC_ESTABLISHED:
 			break;
-		case BT_HCI_EVT_LE_META_BIG_SYNC_LOST:
+		case BT_HCI_EVT_LE_BIG_SYNC_LOST:
 			break;
-		case BT_HCI_EVT_LE_META_RQST_PEER_SCA_COMPLETE:
+		case BT_HCI_EVT_LE_RQST_PEER_SCA_COMPLETE:
 			break;
-		case BT_HCI_EVT_LE_META_PATH_LOSS_THREESHOLD:
+		case BT_HCI_EVT_LE_PATH_LOSS_THREESHOLD:
 			break;
-		case BT_HCI_EVT_LE_META_TRANSMIT_PWR_REPORTING:
+		case BT_HCI_EVT_LE_TRANSMIT_PWR_REPORTING:
 			break;
-		case BT_HCI_EVT_LE_META_BIGINFO_ADV_REPORT:
+		case BT_HCI_EVT_LE_BIGINFO_ADV_REPORT:
 			break;
-		case BT_HCI_EVT_LE_META_SUBRATE_CHANGE:
+		case BT_HCI_EVT_LE_SUBRATE_CHANGE:
 			break;
 	}
 }
 
 void BtHciProcessEvent(BtHciEvtPacket_t *pEvtPkt)
 {
-	g_Uart.printf("BtHciProcessEvent %x\r\n", pEvtPkt->Hdr.Evt);
+	g_Uart.printf("### BtHciProcessEvent %x ###\r\n", pEvtPkt->Hdr.Evt);
 
 	switch (pEvtPkt->Hdr.Evt)
 	{
@@ -223,7 +232,10 @@ void BtHciProcessEvent(BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_CONN_REQUEST:
 			break;
 		case BT_HCI_EVT_DISCONN_COMPLETE:
-			g_Uart.printf("Disconnected\r\n");
+			{
+				BtHciEvtDisconComplete_t *p = (BtHciEvtDisconComplete_t*)pEvtPkt->Data;
+				g_Uart.printf("Disconnected\r\n");
+			}
 			break;
 		case BT_HCI_EVT_AUTHEN_COMPLETE:
 			break;
@@ -258,8 +270,14 @@ void BtHciProcessEvent(BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_ROLE_CHANGE:
 			break;
 		case BT_HCI_EVT_NB_COMPLETED_PACKET:
-			g_Uart.printf("BT_HCI_EVT_NB_COMPLETED_PACKET %d, %d\r\n", pEvtPkt->Hdr.Len, pEvtPkt->Data[0]);
-
+			{
+				BtHciEvtNbCompletedPkt_t *p = (BtHciEvtNbCompletedPkt_t*)pEvtPkt->Data;
+				g_Uart.printf("BT_HCI_EVT_NB_COMPLETED_PACKET: %d\r\n", p->NbHdl);
+				for (int i = 0; i < p->NbHdl; i++)
+				{
+					g_Uart.printf("Hdl: %x - NbPkt: %d\r\n", p->Completed[i].Hdl, p->Completed[i].NbPkt);
+				}
+			}
 			break;
 		case BT_HCI_EVT_MODE_CHANGE:
 			break;
@@ -348,10 +366,11 @@ void BtHciProcessEvent(BtHciEvtPacket_t *pEvtPkt)
 			break;
 		case BT_HCI_EVT_SAM_STATUS_CHANGE:
 			break;
-		case BT_HCI_EVT_LE_META:
-			BtHciProcessMetaEvent((BtHciMetaEvtPacket_t *)pEvtPkt->Data);
+		case BT_HCI_EVT_LE:
+			BtHciProcessLeEvent((BtHciLeEvtPacket_t *)pEvtPkt->Data);
 			break;
 	}
+	g_Uart.printf("+++++\r\n");
 }
 
 void BtHciSendError(BtHciACLDataPacket_t *pAcl, uint16_t Hdl, uint8_t OpCode, uint8_t ErrCode)
@@ -367,7 +386,7 @@ void BtHciSendError(BtHciACLDataPacket_t *pAcl, uint16_t Hdl, uint8_t OpCode, ui
 	l2pdu->Hdr.Len = sizeof(BtAttErrorRsp_t);
 	pAcl->Hdr.Len = sizeof(BtAttErrorRsp_t) + sizeof(BtL2CapHdr_t);
 
-//	g_Uart.printf("Error\r\n");
+	g_Uart.printf("Error %x\r\n", ErrCode);
 
 	uint32_t n = s_HciDevice.SendData((uint8_t*)pAcl, pAcl->Hdr.Len + sizeof(pAcl->Hdr));
 //	g_Uart.printf("n=%d\r\n", n);
@@ -412,7 +431,7 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 			break;
 		case BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ:
 			{
-				g_Uart.printf("ATT_FIND_INFO_REQ:\r\n");
+				g_Uart.printf("ATT_FIND_INFORMATION_REQ:\r\n");
 				BtAttFindInfoReq_t *req = (BtAttFindInfoReq_t*)&pRcvPdu->Att;
 
 				g_Uart.printf("sHdl: %x, eHdl: %x\r\n", req->StartHdl, req->EndHdl);
@@ -435,11 +454,11 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 
 				if (c > 0)
 				{
-					if (list[0].Uuid.BaseIdx > 0)
+					if (list[0].TypeUuid.BaseIdx > 0)
 					{
 						uint8_t uuid128[16];
 
-						BtUuidGetBase(list[0].Uuid.BaseIdx, uuid128);
+						BtUuidGetBase(list[0].TypeUuid.BaseIdx, uuid128);
 
 						rsp->Fmt = BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128;
 
@@ -518,7 +537,7 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 				uint16_t lasthdl = 0;
 				BtUuid16_t uid16 = { 0, BT_UUID_TYPE_16, req->Uuid.Uuid16};
 
-				int c = BtGattGetListUuid(&uid16, list, 50, &lasthdl);
+				int c = BtGattGetListUuid(&uid16, req->StartHdl, list, 50, &lasthdl);
 
 				if (c > 0)
 				{
@@ -526,7 +545,7 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 
 					for (int i = 0; i < c; i++)
 					{
-						if (list[i].Hdl >= req->StartHdl && list[i].Hdl <= req->EndHdl)// && baseidx == list[i].Uuid.BaseIdx)
+						if (list[i].Hdl <= req->EndHdl)// && baseidx == list[i].Uuid.BaseIdx)
 						{
 							rsp->Len = BtGattGetValue(&list[i], p);
 
@@ -583,6 +602,13 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 				{
 					int baseidx = eg.Uuid.BaseIdx;
 					int l = BtGattGetValue(&eg, rsp->Data);
+
+					g_Uart.printf("Data : ");
+					for (int j= 0; j < l; j++)
+					{
+						g_Uart.printf("%x ", rsp->Data[j]);
+					}
+					g_Uart.printf("\r\n");
 					/*
 					BtUuid_t uid;
 					uid.Type = BT_UUID_TYPE_16;
@@ -670,7 +696,7 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 					uint16_t lasthdl = 0;
 					BtUuid16_t uid16 = { 0, BT_UUID_TYPE_16, req->Uid.Uuid16};
 
-					int c = BtGattGetListUuid(&uid16, list, 20, &lasthdl);
+					int c = BtGattGetListUuid(&uid16, req->StartHdl, list, 20, &lasthdl);
 
 					uint8_t *p = (uint8_t*)rsp->Data;
 
@@ -690,35 +716,34 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 							BtUuidGetBase(baseidx, uid.Val.Uuid128);
 						}
 
-						for (int i = 0; i < c; i++)
+
+						for (int i = 0; i < c && list[i].Hdl <= req->EndHdl && baseidx == list[i].Uuid.BaseIdx; i++)
 						{
-							if (list[i].Hdl >= req->StartHdl && list[i].Hdl <= req->EndHdl)// && baseidx == list[i].TypeUuid.BaseIdx)
+							BtAttHdlRange_t *hu = (BtAttHdlRange_t*)p;
+							hu->StartHdl = list[i].Hdl;
+							if ((i + 1) < c)
 							{
-								BtAttHdlRange_t *hu = (BtAttHdlRange_t*)p;
-								hu->StartHdl = list[i].Hdl;
-								if ((i + 1) < c)
-								{
-									hu->EndHdl = list[i + 1].Hdl;
-								}
-								else
-								{
-									hu->EndHdl = lasthdl;
-								}
-
-								p += sizeof(BtAttHdlRange_t);
-
-								rsp->Len = BtGattGetValue(&list[i], p);
-
-								g_Uart.printf("UUID: ");
-								for (int j = 0; j < rsp->Len; j++)
-								{
-									g_Uart.printf("%x ", p[j]);
-								}
-								g_Uart.printf("\r\n");
-
-								p += rsp->Len;
-								l += 4 + rsp->Len;
+								hu->EndHdl = list[i+1].Hdl - 1;
 							}
+							else
+							{
+								hu->EndHdl = lasthdl;
+							}
+							g_Uart.printf("sHdl: %d, eHdl: %d\r\n", hu->StartHdl, hu->EndHdl);
+
+							p += sizeof(BtAttHdlRange_t);
+
+							rsp->Len = BtGattGetValue(&list[i], p);
+
+							g_Uart.printf("UUID: ");
+							for (int j = 0; j < rsp->Len; j++)
+							{
+								g_Uart.printf("%x ", p[j]);
+							}
+							g_Uart.printf("\r\n");
+
+							p += rsp->Len;
+							l += 4 + rsp->Len;
 						}
 
 						if (l > 0)
@@ -734,6 +759,8 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 							break;
 						}
 					}
+
+					g_Uart.printf("List not found\r\n");
 
 					BtHciSendError(acl, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
 /*
@@ -776,6 +803,10 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 					break;
 				}
 				BtAttWriteRsp_t *rsp = (BtAttWriteRsp_t*)&l2pdu->Att;
+				size_t l = pRcvPdu->Hdr.Len;
+
+				l = BtGattWriteValue(req->Hdl, req->Data, l);
+
 				rsp->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 
 				l2pdu->Hdr.Len = 1;
@@ -787,6 +818,16 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_CMD:
+			{
+				BtAttSignedWriteCmd_t *req = (BtAttSignedWriteCmd_t*)&pRcvPdu->Att;
+
+				g_Uart.printf("ATT_CMD:\r\n");
+				g_Uart.printf("Hdl: %x, data len: %d\r\n", req->Hdl, pRcvPdu->Hdr.Len -  3);
+
+				size_t l = pRcvPdu->Hdr.Len;
+
+				l = BtGattWriteValue(req->Hdl, req->Data, l - 3);
+			}
 			break;
 		case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:
 			break;

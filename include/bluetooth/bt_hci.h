@@ -449,42 +449,42 @@ SOFTWARE.
 #define BT_HCI_EVT_INQUIRY_RESPONSE_NOTIF					0x56	//!< Inquiry Response Notification event
 #define BT_HCI_EVT_AUTHEN_PAYLOAD_TIMEOUT_EXPIRED			0x57	//!< Authenticated Payload Timeout Expired event
 #define BT_HCI_EVT_SAM_STATUS_CHANGE						0x58	//!< SAM Status Change event
-#define BT_HCI_EVT_LE_META									0x3E	//!< LE Meta event
-#define BT_HCI_EVT_LE_META_CONN_COMPLETE							1		//!< LE Connection Complete event
-#define BT_HCI_EVT_LE_META_ADV_REPORT								2		//!< LE Advertising Report event
-#define BT_HCI_EVT_LE_META_CONN_UPDATE_COMPLETE						3		//!< LE Connection Update Complete event
-#define BT_HCI_EVT_LE_META_READ_REMOTE_FEATURES_COMPLETE			4		//!< LE Read Remote Features Complete event
-#define BT_HCI_EVT_LE_META_LONGTERM_KEY_RQST						5		//!< LE Long Term Key Request event
-#define BT_HCI_EVT_LE_META_REMOTE_CONN_PARAM_RQST					6		//!< LE Remote Connection Parameter Request event
-#define BT_HCI_EVT_LE_META_DATA_LEN_CHANGE							7		//!< LE Data Length Change event
-#define BT_HCI_EVT_LE_META_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE		8		//!< LE Read Local P-256 Public Key Complete event
-#define BT_HCI_EVT_LE_META_GENERATE_DHKEY_COMPLETE					9		//!< LE Generate DHKey Complete event
-#define BT_HCI_EVT_LE_META_ENHANCED_CONN_COMPLETE					0xA		//!< LE Enhanced Connection Complete event
-#define BT_HCI_EVT_LE_META_DIRECTED_ADV_REPORT						0xB		//!< LE Directed Advertising Report event
-#define BT_HCI_EVT_LE_META_PHY_UPDATE_COMPLETE						0xC		//!< LE PHY Update Complete event
-#define BT_HCI_EVT_LE_META_EXT_ADV_REPORT							0xD		//!< LE Extended Advertising Report event
-#define BT_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_ESTABLISHED			0xE		//!< LE Periodic Advertising Sync Established event
-#define BT_HCI_EVT_LE_META_PERIODIC_ADV_REPORT						0xF		//!< LE Periodic Advertising Report event
-#define BT_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_LOST					0x10	//!< LE Periodic Advertising Sync Lost event
-#define BT_HCI_EVT_LE_META_SCAN_TIMEOUT								0x11	//!< LE Scan Timeout event
-#define BT_HCI_EVT_LE_META_ADV_SET_TERMINATED						0x12	//!< LE Advertising Set Terminated event
-#define BT_HCI_EVT_LE_META_SCAN_RQST_RECEIVED						0x13	//!< LE Scan Request Received event
-#define BT_HCI_EVT_LE_META_CHAN_SELECTION_ALGO						0x14	//!< LE Channel Selection Algorithm event
-#define BT_HCI_EVT_LE_META_CONNLESS_IQ_REPORT						0x15	//!< LE Connectionless IQ Report event
-#define BT_HCI_EVT_LE_META_CONN_IQ_REPORT							0x16	//!< LE Connection IQ Report event
-#define BT_HCI_EVT_LE_META_CTE_RQST_FAILED							0x17	//!< LE CTE Request Failed event
-#define BT_HCI_EVT_LE_META_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED		0x18	//!< LE Periodic Advertising Sync Transfer Received event
-#define BT_HCI_EVT_LE_META_CIS_ESTABLISHED							0x19	//!< LE CIS Established event
-#define BT_HCI_EVT_LE_META_CIS_RQST									0x1A	//!< LE CIS Request event
-#define BT_HCI_EVT_LE_META_CREATE_BIG_COMPLETE						0x1B	//!< LE Create BIG Complete event
-#define BT_HCI_EVT_LE_META_TERMINATE_BIG_COMPLETE					0x1C	//!< LE Terminate BIG Complete event
-#define BT_HCI_EVT_LE_META_BIG_SYNC_ESTABLISHED						0x1D	//!< LE BIG Sync Established event
-#define BT_HCI_EVT_LE_META_BIG_SYNC_LOST							0x1E	//!< LE BIG Sync Lost event
-#define BT_HCI_EVT_LE_META_RQST_PEER_SCA_COMPLETE					0x1F	//!< LE Request Peer SCA Complete event
-#define BT_HCI_EVT_LE_META_PATH_LOSS_THREESHOLD						0x20	//!< LE Path Loss Threshold event
-#define BT_HCI_EVT_LE_META_TRANSMIT_PWR_REPORTING					0x21	//!< LE Transmit Power Reporting event
-#define BT_HCI_EVT_LE_META_BIGINFO_ADV_REPORT						0x22	//!< LE BIGInfo Advertising Report event
-#define BT_HCI_EVT_LE_META_SUBRATE_CHANGE							0x23	//!< LE Subrate Change event
+#define BT_HCI_EVT_LE										0x3E	//!< LE Meta event
+#define BT_HCI_EVT_LE_CONN_COMPLETE							1		//!< LE Connection Complete event
+#define BT_HCI_EVT_LE_ADV_REPORT								2		//!< LE Advertising Report event
+#define BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE						3		//!< LE Connection Update Complete event
+#define BT_HCI_EVT_LE_READ_REMOTE_FEATURES_COMPLETE			4		//!< LE Read Remote Features Complete event
+#define BT_HCI_EVT_LE_LONGTERM_KEY_RQST						5		//!< LE Long Term Key Request event
+#define BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST					6		//!< LE Remote Connection Parameter Request event
+#define BT_HCI_EVT_LE_DATA_LEN_CHANGE							7		//!< LE Data Length Change event
+#define BT_HCI_EVT_LE_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE		8		//!< LE Read Local P-256 Public Key Complete event
+#define BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE					9		//!< LE Generate DHKey Complete event
+#define BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE					0xA		//!< LE Enhanced Connection Complete event
+#define BT_HCI_EVT_LE_DIRECTED_ADV_REPORT						0xB		//!< LE Directed Advertising Report event
+#define BT_HCI_EVT_LE_PHY_UPDATE_COMPLETE						0xC		//!< LE PHY Update Complete event
+#define BT_HCI_EVT_LE_EXT_ADV_REPORT							0xD		//!< LE Extended Advertising Report event
+#define BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED			0xE		//!< LE Periodic Advertising Sync Established event
+#define BT_HCI_EVT_LE_PERIODIC_ADV_REPORT						0xF		//!< LE Periodic Advertising Report event
+#define BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_LOST					0x10	//!< LE Periodic Advertising Sync Lost event
+#define BT_HCI_EVT_LE_SCAN_TIMEOUT								0x11	//!< LE Scan Timeout event
+#define BT_HCI_EVT_LE_ADV_SET_TERMINATED						0x12	//!< LE Advertising Set Terminated event
+#define BT_HCI_EVT_LE_SCAN_RQST_RECEIVED						0x13	//!< LE Scan Request Received event
+#define BT_HCI_EVT_LE_CHAN_SELECTION_ALGO						0x14	//!< LE Channel Selection Algorithm event
+#define BT_HCI_EVT_LE_CONNLESS_IQ_REPORT						0x15	//!< LE Connectionless IQ Report event
+#define BT_HCI_EVT_LE_CONN_IQ_REPORT							0x16	//!< LE Connection IQ Report event
+#define BT_HCI_EVT_LE_CTE_RQST_FAILED							0x17	//!< LE CTE Request Failed event
+#define BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED		0x18	//!< LE Periodic Advertising Sync Transfer Received event
+#define BT_HCI_EVT_LE_CIS_ESTABLISHED							0x19	//!< LE CIS Established event
+#define BT_HCI_EVT_LE_CIS_RQST									0x1A	//!< LE CIS Request event
+#define BT_HCI_EVT_LE_CREATE_BIG_COMPLETE						0x1B	//!< LE Create BIG Complete event
+#define BT_HCI_EVT_LE_TERMINATE_BIG_COMPLETE					0x1C	//!< LE Terminate BIG Complete event
+#define BT_HCI_EVT_LE_BIG_SYNC_ESTABLISHED						0x1D	//!< LE BIG Sync Established event
+#define BT_HCI_EVT_LE_BIG_SYNC_LOST							0x1E	//!< LE BIG Sync Lost event
+#define BT_HCI_EVT_LE_RQST_PEER_SCA_COMPLETE					0x1F	//!< LE Request Peer SCA Complete event
+#define BT_HCI_EVT_LE_PATH_LOSS_THREESHOLD						0x20	//!< LE Path Loss Threshold event
+#define BT_HCI_EVT_LE_TRANSMIT_PWR_REPORTING					0x21	//!< LE Transmit Power Reporting event
+#define BT_HCI_EVT_LE_BIGINFO_ADV_REPORT						0x22	//!< LE BIGInfo Advertising Report event
+#define BT_HCI_EVT_LE_SUBRATE_CHANGE							0x23	//!< LE Subrate Change event
 
 
 // HCI error codes
