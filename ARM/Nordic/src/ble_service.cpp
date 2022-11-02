@@ -379,9 +379,9 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
     attr_char_value.p_uuid       = &ble_uuid;
     attr_char_value.p_attr_md    = &attr_md;
     attr_char_value.init_offs    = 0;
-    attr_char_value.max_len      = pChar->CharVal.MaxLen;
-    attr_char_value.init_len     = pChar->CharVal.Len;
-    attr_char_value.p_value      = pChar->CharVal.pData;
+    attr_char_value.max_len      = pChar->MaxDataLen;//CharVal.MaxLen;
+    attr_char_value.init_len     = pChar->ValueLen;
+    attr_char_value.p_value      = pChar->pValue;
 
     ble_gatts_char_handles_t hdl;
     uint32_t res = sd_ble_gatts_characteristic_add(pSrvc->Hdl, &char_md, &attr_char_value, &hdl);//&pChar->Hdl);

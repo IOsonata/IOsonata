@@ -107,24 +107,23 @@ typedef size_t (*BtGattAttWrHandler_t)(uint16_t Hdl, void *pData, size_t Len, vo
 
 /// NOTE: Variable length
 typedef struct __Bt_Gatt_Char_Value {
-	size_t MaxLen;			//!< Max data buffer length
-	size_t Len;				//!< Length of actual data
-	uint8_t *pData;			//!< Data buffer
-	BtGattAttWrHandler_t WrHandler;
+	size_t MaxLen;					//!< Max length of data buffer
+	size_t Len;						//!< Length of actual data
+	uint8_t *pData;					//!< pointer to characteristic static data buffer
+	BtGattAttWrHandler_t WrHandler;	//!< Pointer to characteristic write callback
 	void *pCtx;
 } BtGattCharValue_t;
 
 typedef struct __Bt_Gatt_List_Entry {
-	uint16_t Hdl;				//!< Attribute handle
-	BtUuid16_t TypeUuid;		//!< Attribute type UUID
-	uint32_t Permission;		//!< Attribute Permission
-	union {						//!< Attribute value
+	uint16_t Hdl;					//!< Attribute handle
+	BtUuid16_t TypeUuid;			//!< Attribute type UUID
+	uint32_t Permission;			//!< Attribute Permission
+	union {							//!< Attribute value
 		uint32_t Val32;
 		BtUuid_t Uuid;
-		//BtGattCharValHandler_t ValHandler;
-		BtGattCharValue_t CharVal;
+		BtGattCharValue_t CharVal;		//!< Characteristic value
 		BtGattSrvcDeclar_t SrvcDeclar;	//!< Service declaration value
-		BtGattSrvcInclude_t SrvcInc;	//!< Service definition value
+		BtGattSrvcInclude_t SrvcInc;	//!< Service include definition value
 		BtGattCharDeclar_t CharDeclar;	//!< Characteristic declaration value
 	};
 } BtGattListEntry_t;
@@ -139,9 +138,11 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal);
 bool BtGattUpdate(uint16_t Hdl, void *pAttVal);
 int BtGattGetListHandle(uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 int BtGattGetListUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
+bool BeGattFindEntryUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pEntry);
 bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pArr);
 size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff);
 size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len);
+BtGattListEntry_t *GetEntryTable(size_t *pCount);
 
 #ifdef __cplusplus
 }

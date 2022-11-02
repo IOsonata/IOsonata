@@ -178,7 +178,7 @@ int BtGattGetListUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, BtGattListEntry_
 	{
 		if (memcmp(&s_BtGatEntryTbl[i].TypeUuid, pTypeUuid, sizeof(BtUuid16_t)) == 0)
 		{
-			pArr[idx] = s_BtGatEntryTbl[i];
+			memcpy(&pArr[idx], &s_BtGatEntryTbl[i], sizeof(BtGattListEntry_t));
 			idx++;
 		}
 	}
@@ -191,6 +191,20 @@ int BtGattGetListUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, BtGattListEntry_
 	return idx;
 }
 
+bool BeGattFindEntryUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pEntry)
+{
+	for (int i = StartHdl - 1; i < EndHdl && i < s_NbGattListEntry; i++)
+	{
+		if (memcmp(&s_BtGatEntryTbl[i].TypeUuid, pTypeUuid, sizeof(BtUuid16_t)) == 0)
+		{
+			memcpy(pEntry, &s_BtGatEntryTbl[i], sizeof(BtGattListEntry_t));
+			return true;
+		}
+	}
+
+	return false;
+}
+
 bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pEntry)
 {
 	if (Hdl <= 0 || Hdl > s_NbGattListEntry)
@@ -198,7 +212,7 @@ bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pEntry)
 		return false;
 	}
 
-	*pEntry = s_BtGatEntryTbl[Hdl - 1];
+	memcpy(pEntry, &s_BtGatEntryTbl[Hdl - 1], sizeof(BtGattListEntry_t));
 
 	return true;
 }

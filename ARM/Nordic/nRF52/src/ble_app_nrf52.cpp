@@ -2073,7 +2073,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)//, bool bEraseBond)
     NVIC_EnableIRQ(FPU_IRQn);
 #endif
 
-    if (AppEvtHandlerInit(pBleAppCfg->pEvtHandlerQueMem, pBleAppCfg->pEvtHandlerQueMemSize) == false)
+    if (AppEvtHandlerInit(pBleAppCfg->pEvtHandlerQueMem, pBleAppCfg->EvtHandlerQueMemSize) == false)
     {
     	return false;
     }

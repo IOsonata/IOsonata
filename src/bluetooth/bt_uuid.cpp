@@ -165,22 +165,16 @@ bool BtUuidTo128(BtUuid_t * const pUuid, uint8_t Uuid128[16])
 {
 	BtBaseUuidTblEntry_t *p = &s_BtBaseUuidTbl[pUuid->BaseIdx];
 
-	if (pUuid->Type == BT_UUID_TYPE_128)
-	{
-		memcpy(Uuid128, pUuid->Val.Uuid128, 16);
-		return true;
-	}
-
 	if (p->bValid == true)
 	{
 		memcpy(Uuid128, p->Uuid, 16);
-		Uuid128[12] = pUuid->Val.Uuid16 & 0xFF;
-		Uuid128[13] = pUuid->Val.Uuid16 >> 8;
+		Uuid128[12] = pUuid->Uuid16 & 0xFF;
+		Uuid128[13] = (pUuid->Uuid16 >> 8) & 0xFF;
 
 		if (pUuid->Type == BT_UUID_TYPE_32)
 		{
-			Uuid128[14] = (pUuid->Val.Uuid32 >> 16) & 0xFF;
-			Uuid128[15] = (pUuid->Val.Uuid32 >> 24) & 0xFF;
+			Uuid128[14] = (pUuid->Uuid32 >> 16) & 0xFF;
+			Uuid128[15] = (pUuid->Uuid32 >> 24) & 0xFF;
 		}
 	}
 

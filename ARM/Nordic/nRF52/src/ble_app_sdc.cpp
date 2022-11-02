@@ -56,6 +56,7 @@ SOFTWARE.
 #include "bluetooth/bt_hcievt.h"
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
+#include "bluetooth/bt_gatt.h"
 #include "bluetooth/ble_appearance.h"
 //#include "bluetooth/ble_conn.h"
 #include "iopinctrl.h"
@@ -1120,6 +1121,19 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     		return false;
     	}
 
+    	size_t count = 0;
+    	BtGattListEntry_t *tbl = GetEntryTable(&count);
+
+    	for (int i = 0; i < count; i++)
+    	{
+    		g_Uart.printf("tbl[%d]: Hdl: %d (0x%04x), Uuid: %04x, Data: ", i, tbl[i].Hdl, tbl[i].Hdl, tbl[i].TypeUuid.Uuid);
+    		uint8_t *p = (uint8_t*)&tbl[i].Val32;
+    		for (int j = 0; j < 20; j++)
+    		{
+    			g_Uart.printf("0x%02x ", p[j]);
+    		}
+    		g_Uart.printf("\r\n");
+    	}
     }
 
 
@@ -1130,7 +1144,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     NVIC_EnableIRQ(FPU_IRQn);
 #endif
 
-    if (AppEvtHandlerInit(pBleAppCfg->pEvtHandlerQueMem, pBleAppCfg->pEvtHandlerQueMemSize) == false)
+    if (AppEvtHandlerInit(pBleAppCfg->pEvtHandlerQueMem, pBleAppCfg->EvtHandlerQueMemSize) == false)
     {
     	return false;
     }

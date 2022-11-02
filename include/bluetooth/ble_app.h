@@ -145,7 +145,7 @@ typedef struct __BleApp_Config {
 	int PeriphDevCnt;				//!< Max number of peripheral connection
 //	BLEPERIPH_DEV *pPeriphDev;		//!< Connected peripheral data table
 	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler
-	size_t pEvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
+	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
 } BleAppCfg_t;
 
 typedef struct __BleApp_Scan_Cfg {

@@ -49,9 +49,9 @@ static BleSrvcChar_t s_GenericAccessChar[] = {
 		.TxCompleteCB = NULL,				// Tx completed callback
 		.ValueLen = 10,
 		.pValue = s_GenAccCharDevNameBuffer,
-		.RdHandler = NULL,
-		.WrHandler = NULL,
-		.CharVal = {255, 10, s_GenAccCharDevNameBuffer},					// pointer to char default values
+		//.RdHandler = NULL,
+		//.WrHandler = NULL,
+		//.CharVal = {255, 10, s_GenAccCharDevNameBuffer},					// pointer to char default values
 	},
 	{
 		// Read characteristic
@@ -64,13 +64,13 @@ static BleSrvcChar_t s_GenericAccessChar[] = {
 		.TxCompleteCB = NULL,				// Tx completed callback
 		.ValueLen = 2,
 		.pValue = (uint8_t*)&s_GenAccCharApperance,
-		.RdHandler = NULL,
-		.WrHandler = NULL,
-		.CharVal = {2, 2, (uint8_t*)&s_GenAccCharApperance},					// pointer to char default values
+		//.RdHandler = NULL,
+		//.WrHandler = NULL,
+		//.CharVal = {2, 2, (uint8_t*)&s_GenAccCharApperance},					// pointer to char default values
 	},
 };
 
-static BleSrvcCfg_t s_GenericAccessSrvcCfg = {
+static const BleSrvcCfg_t s_GenericAccessSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = false,
 	.UuidBase = {0,},		// Base UUID
@@ -90,8 +90,8 @@ static BleSrvcChar_t s_GenericAttributeChar[] = {
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		.RdHandler = NULL,
-		.WrHandler = NULL,
+		//.RdHandler = NULL,
+		//.WrHandler = NULL,
 		//.CharVal = {PACKET_SIZE, 0, s_RxCharValMem},					// pointer to char default values
 	},
 };

@@ -791,7 +791,11 @@ typedef union __Bt_Uuid_Val {
 typedef struct __Bt_Uuid {
 	uint8_t BaseIdx:6;			//!< Base UUID index 0 - Bluetooth std, 1.. custom base
 	BT_UUID_TYPE Type:2;		//!< UUID type 16, 32 or full 128 bits
-	BtUuidVal_t Val;
+	union {
+		uint16_t Uuid16;
+		uint32_t Uuid32;
+	};
+	//BtUuidVal_t Val;
 } BtUuid_t;
 
 typedef struct __Bt_Uuid16 {
