@@ -141,26 +141,41 @@ BT_GATT_PRIMARY_SERVICE(BT_UUID_NUS_SERVICE),
 );
 #endif
 
+static size_t BleSrvcCharRdHandler(uint16_t Hdl, void *pBuff, size_t Len, void *pCtx)
+{
+	BleSrvcChar_t *p = (BleSrvcChar_t*)pCtx;
+
+
+	return Len;
+}
+
+static size_t BleSrvcCharWrHandler(uint16_t Hdl, void *pBuff, size_t Len, void *pCtx)
+{
+	BleSrvcChar_t *p = (BleSrvcChar_t*)pCtx;
+
+	if (p->WrCB)
+	{
+		p->WrCB(p->pSrvc, (uint8_t*)pBuff, 0, Len);
+	}
+
+	return Len;
+}
+
 uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 {
 	return 0;
 }
 
-bool BleSrvcAddChar(BtUuid16_t *pSrvcUuid, BleSrvc_t *pSrvc, BleSrvcChar_t *pChar, uint32_t SecType)
+bool BleSrvcAddChar(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar, uint32_t SecType)
 {
 	if (pChar == NULL)
 	{
 		return false;
 	}
 
-	if (pChar->CharVal.pData == NULL)
-	{
-		return false;
-	}
+	pChar->pSrvc = pSrvc;
+	pChar->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
 
-	//BtGattCharValue_t charval = pChar->pCharVal;//{pChar->MaxDataLen, pChar->ValueLen, pChar->pValue };
-
-	pChar->BaseUuidIdx = pSrvcUuid->BaseIdx;
 
 	BtGattCharDeclar_t gatt = {(uint8_t)pChar->Property, 0, {pChar->BaseUuidIdx, BT_UUID_TYPE_16, pChar->Uuid}};
 
@@ -169,17 +184,20 @@ bool BleSrvcAddChar(BtUuid16_t *pSrvcUuid, BleSrvc_t *pSrvc, BleSrvcChar_t *pCha
 	pChar->Hdl = BtGattRegister(&TypeUuid, &gatt);
 	pChar->ValHdl = gatt.ValHdl;
 
+	TypeUuid.BaseIdx = pChar->BaseUuidIdx;
 	TypeUuid.Uuid = pChar->Uuid;
 
-	pChar->ValHdl = BtGattRegister(&TypeUuid, &pChar->CharVal);
+	BtGattCharValue_t handler = { pChar->MaxDataLen, pChar->ValueLen, pChar->pValue, BleSrvcCharWrHandler, pChar };
+
+	pChar->ValHdl = BtGattRegister(&TypeUuid, &handler);
 
 	pChar->bNotify = false;
-    if (pChar->Property & BLESRVC_CHAR_PROP_NOTIFY)
+    if (pChar->Property & (BLESRVC_CHAR_PROP_NOTIFY | BLESRVC_CHAR_PROP_INDICATE))
     {
     	TypeUuid.Uuid = BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
 
     	uint8_t x = 0;
-    	pChar->CccdHdl = BtGattRegister(&TypeUuid, &x);
+    	pChar->CccdHdl = BtGattRegister(&TypeUuid, &pChar->Property);
     }
 
     return true;
@@ -213,7 +231,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 
     for (int i = 0; i < pCfg->NbChar; i++)
     {
-    	BleSrvcAddChar(&pSrvc->Uuid, pSrvc, &pSrvc->pCharArray[i], 0);
+    	BleSrvcAddChar(pSrvc, &pSrvc->pCharArray[i], 0);
 
 #if 0
     	uid16.Uuid = pSrvc->pCharArray[i].Uuid;

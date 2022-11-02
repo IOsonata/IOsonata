@@ -61,6 +61,8 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
 
+extern "C" void BleAppInitGenericServices();
+
 #pragma pack(push, 4)
 
 typedef struct _BleAppData {
@@ -1108,6 +1110,8 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     {
     	if (pBleAppCfg->Role & BLEAPP_ROLE_PERIPHERAL)
     	{
+    		BleAppInitGenericServices();
+
     		BleAppInitUserServices();
     	}
 

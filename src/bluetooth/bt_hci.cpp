@@ -492,7 +492,7 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 
 						l = c * sizeof(BtAttHdlUuid16_t);
 					}
-					rsp->Fmt = list[0].Uuid.BaseIdx > 0 ? BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128 : BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16;
+//					rsp->Fmt = list[0].Uuid.BaseIdx > 0 ? BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128 : BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16;
 
 					l2pdu->Hdr.Len = 2 + l;
 					acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);

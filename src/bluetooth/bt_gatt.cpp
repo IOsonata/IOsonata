@@ -45,74 +45,21 @@ SOFTWARE.
 alignas(4) static BtGattListEntry_t s_BtGatEntryTbl[BT_GATT_ENTRY_MAX_COUNT] = {0,};
 static int s_NbGattListEntry = 0;
 
-#if 0
-uint32_t BtGattDeclarPrimSrvc(BtUuid16_t *pUuid)
-{
-	if (pUuid == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
-	{
-		return -1;
-	}
-
-	s_BtGatEntryTbl[s_NbGattListEntry].GattUuid = BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE;
-	memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].Uuid, pUuid, sizeof(BtUuid16_t));
-	s_BtGatEntryTbl[s_NbGattListEntry++].Hdl = s_NbGattListEntry + 1;
-
-	s_NbGattListEntry++;
-
-	return s_NbGattListEntry;
-}
-
-uint32_t BtGattDeclarChar(BtUuid16_t *pUuid)
-{
-	if (pUuid == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
-	{
-		return -1;
-	}
-
-	s_BtGatEntryTbl[s_NbGattListEntry].GattUuid = BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC;
-	memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].Uuid, pUuid, sizeof(BtUuid16_t));
-	s_BtGatEntryTbl[s_NbGattListEntry++].Hdl = s_NbGattListEntry + 1;
-
-	s_NbGattListEntry++;
-
-	return s_NbGattListEntry;
-}
-#endif
-
 uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 {
 	if (pAttVal == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
 	{
 		return -1;
 	}
-#if 0
-	uint8_t uidbase[16];
 
-	if (TypeUuid.BaseIdx > 0)
+	BtGattListEntry_t *p = (BtGattListEntry_t*)&s_BtGatEntryTbl[s_NbGattListEntry];
+
+	p->TypeUuid = *pTypeUuid;
+
+	if (p->TypeUuid.BaseIdx == 0)
 	{
-		BtUuidGetBase(TypeUuid.BaseIdx, uidbase);
-
-		uidbase[12] = TypeUuid.Uuid & 0xFF;
-		uidbase[13] = (TypeUuid.Uuid >> 8) & 0xFF;
-
-		if (TypeUuid.Type == BT_UUID_TYPE_32)
-		{
-			uidbase[14] = (TypeUuid.Uuid >> 16) & 0xFF;
-			uidbase[15] = (TypeUuid.Uuid >> 24) & 0xFF;
-		}
-
-		memcpy(s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid.Uuid128, uidbase, 16);
-	}
-	else
-	{
-		s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = TypeUuid;
-	}
-#endif
-	s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = *pTypeUuid;
-
-	if (pTypeUuid->BaseIdx == 0)
-	{
-		switch (pTypeUuid->Uuid)
+		// Standard Bluetooth 128 bits based UUID
+		switch (p->TypeUuid.Uuid)
 		{
 			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
 			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
@@ -134,17 +81,25 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
-				s_BtGatEntryTbl[s_NbGattListEntry].Val32 = 0;
+				s_BtGatEntryTbl[s_NbGattListEntry].Val32 = *(uint8_t*)pAttVal;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
+
 			default:
-				;
+				memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
 		}
 	}
 	else
 	{
-		s_BtGatEntryTbl[s_NbGattListEntry].pCharVal = (BtGattCharValue_t*)pAttVal;
+		memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
+/*		BtGattCharValHandler_t *p = (BtGattCharValHandler_t*)pAttVal;
+
+		s_BtGatEntryTbl[s_NbGattListEntry].ValHandler.RdHandler = p->RdHandler;
+		s_BtGatEntryTbl[s_NbGattListEntry].ValHandler.WrHandler = p->WrHandler;
+		s_BtGatEntryTbl[s_NbGattListEntry].ValHandler.pCtx = p->pCtx;*/
+
+//		s_BtGatEntryTbl[s_NbGattListEntry].pCharVal = (BtGattCharValue_t*)pAttVal;
 	}
 	s_BtGatEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
 
@@ -160,39 +115,38 @@ bool BtGattUpdate(uint16_t Hdl, void *pAttVal, size_t Len)
 		return false;
 	}
 
-	Hdl--;
+	BtGattListEntry_t *p = (BtGattListEntry_t*)&s_BtGatEntryTbl[Hdl - 1];
 
-	if (s_BtGatEntryTbl[Hdl].TypeUuid.BaseIdx == 0)
+	if (p->TypeUuid.BaseIdx == 0)
 	{
-		switch (s_BtGatEntryTbl[Hdl].TypeUuid.Uuid)
+		switch (p->TypeUuid.Uuid)
 		{
 			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
 			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
-				s_BtGatEntryTbl[Hdl].SrvcDeclar = *(BtGattSrvcDeclar_t *)pAttVal;
+				memcpy(&p->SrvcDeclar, pAttVal, sizeof(BtGattSrvcDeclar_t));
 				break;
 			case BT_UUID_GATT_DECLARATIONS_INCLUDE:
-				memcpy(&s_BtGatEntryTbl[Hdl].SrvcInc, pAttVal, sizeof(BtGattSrvcInclude_t));
+				memcpy(&p->SrvcInc, pAttVal, sizeof(BtGattSrvcInclude_t));
 				break;
 			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
-				memcpy(&s_BtGatEntryTbl[Hdl].CharDeclar, pAttVal, sizeof(BtGattCharDeclar_t));
+				memcpy(&p->CharDeclar, pAttVal, sizeof(BtGattCharDeclar_t));
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+				p->Val32 = *(uint8_t*)pAttVal;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
 			default:
-				;
+				memcpy(&p->CharVal, pAttVal, sizeof(BtGattCharValue_t));
 		}
 	}
 	else
 	{
-		size_t l = min(Len, s_BtGatEntryTbl[Hdl].pCharVal->MaxLen);
-		s_BtGatEntryTbl[Hdl].pCharVal->Len = l;
-		memcpy(s_BtGatEntryTbl[Hdl].pCharVal->pData, pAttVal, l);
+		memcpy(&p->CharVal, pAttVal, sizeof(BtGattCharValue_t));
 	}
 
 	return true;
@@ -204,7 +158,7 @@ int BtGattGetListHandle(uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *p
 
 	for (int i = StartHdl; i < min(EndHdl + 1, s_NbGattListEntry) && idx < MaxEntry; i++)
 	{
-		pArr[idx] = s_BtGatEntryTbl[i - 1];
+		memcpy(&pArr[idx], &s_BtGatEntryTbl[i - 1], sizeof(BtGattListEntry_t));
 		idx++;
 	}
 
@@ -216,11 +170,11 @@ int BtGattGetListHandle(uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *p
 	return idx;
 }
 
-int BtGattGetListUuid(BtUuid16_t *pTypeUuid, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl)
+int BtGattGetListUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl)
 {
 	int idx = 0;
 
-	for (int i = 0; i < s_NbGattListEntry && idx < MaxEntry; i++)
+	for (int i = StartHdl - 1; i < s_NbGattListEntry && idx < MaxEntry; i++)
 	{
 		if (memcmp(&s_BtGatEntryTbl[i].TypeUuid, pTypeUuid, sizeof(BtUuid16_t)) == 0)
 		{
@@ -316,21 +270,90 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
-
+				pBuff[0] = pEntry->Val32 & 0xFF;
+				len = 1;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
 			default:
-				;
+				if (pEntry->CharVal.pData)
+				{
+					memcpy(pBuff, pEntry->CharVal.pData, pEntry->CharVal.Len);
+					len = pEntry->CharVal.Len;
+				}
+
 		}
 	}
 	else
 	{
-		len = pEntry->pCharVal->Len;
-		memcpy(pBuff, pEntry->pCharVal->pData, len);
+		if (pEntry->CharVal.pData)
+		{
+			memcpy(pBuff, pEntry->CharVal.pData, pEntry->CharVal.Len);
+			len = pEntry->CharVal.Len;
+		}
+		/*
+		if (pEntry->ValHandler.RdHandler)
+		{
+			len = pEntry->ValHandler.RdHandler(pEntry->Hdl, pBuff, 10, pEntry->ValHandler.pCtx);
+		}
+*/
+//		len = pEntry->pCharVal->Len;
+//		memcpy(pBuff, pEntry->pCharVal->pData, len);
 	}
 
 	return len;
+}
+
+size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
+{
+	BtGattListEntry_t *p = &s_BtGatEntryTbl[Hdl - 1];
+
+	size_t len = 0;
+
+	if (p->TypeUuid.BaseIdx == 0)
+	{
+		switch (p->TypeUuid.Uuid)
+		{
+			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
+			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
+				break;
+			case BT_UUID_GATT_DECLARATIONS_INCLUDE:
+				break;
+			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+				p->Val32 = *pBuff;
+				len = 1;
+				break;
+			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+				break;
+			default:
+				if (p->CharVal.WrHandler)
+				{
+					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
+				}
+
+		}
+	}
+	else
+	{
+		if (p->CharVal.WrHandler)
+		{
+			len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
+		}
+	}
+
+	return len;
+}
+
+BtGattListEntry_t *GetEntryTable(size_t *count)
+{
+	*count = s_NbGattListEntry;
+	return s_BtGatEntryTbl;
 }
 
 #if 0

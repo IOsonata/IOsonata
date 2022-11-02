@@ -71,7 +71,7 @@ uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t D
 
     memset(&params, 0, sizeof(params));
     params.type = BLE_GATT_HVX_NOTIFICATION;
-    params.handle = pSrvc->pCharArray[Idx].Hdl;//.value_handle;
+    params.handle = pSrvc->pCharArray[Idx].ValHdl;//.value_handle;
     params.p_data = pData;
     params.p_len = &DataLen;
 
@@ -91,7 +91,7 @@ uint32_t BleSrvcCharSetValue(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t
     value.p_value = pData;
 
     uint32_t err_code = sd_ble_gatts_value_set(pSrvc->ConnHdl,
-    										   pSrvc->pCharArray[Idx].Hdl,//.value_handle,
+    										   pSrvc->pCharArray[Idx].ValHdl,//.value_handle,
 											   &value);
     return err_code;
 }
@@ -139,7 +139,7 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t Evt)
 						//printf("Long Write\r\n");
 						GATLWRHDR *hdr = (GATLWRHDR *)pSrvc->pLongWrBuff;
 					    uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
-						if (hdr->Handle == pSrvc->pCharArray[i].Hdl)//.value_handle)
+						if (hdr->Handle == pSrvc->pCharArray[i].ValHdl)//.value_handle)
 					    {
 #if 1
 							GatherLongWrBuff(hdr);
@@ -181,7 +181,7 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t Evt)
 								pSrvc->pCharArray[i].SetNotifCB(pSrvc, pSrvc->pCharArray[i].bNotify);
 							}
 						}
-						else if ((p_evt_write->handle == pSrvc->pCharArray[i].Hdl) &&//.value_handle) &&
+						else if ((p_evt_write->handle == pSrvc->pCharArray[i].ValHdl) &&//.value_handle) &&
 								 (pSrvc->pCharArray[i].WrCB != NULL))
 						{
 							//printf("Write value handle\r\n");
@@ -386,6 +386,7 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
     ble_gatts_char_handles_t hdl;
     uint32_t res = sd_ble_gatts_characteristic_add(pSrvc->Hdl, &char_md, &attr_char_value, &hdl);//&pChar->Hdl);
     pChar->Hdl = hdl.value_handle;
+    pChar->ValHdl = hdl.value_handle;
     pChar->DescHdl = hdl.user_desc_handle;
     pChar->CccdHdl = hdl.cccd_handle;
     pChar->SccdHdl = hdl.sccd_handle;
@@ -403,7 +404,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 {
     uint32_t   err;
     ble_uuid_t ble_uuid;
-	uint8_t baseidx = 0;
+	//uint8_t baseidx = 0;
 
     // Initialize service structure
     pSrvc->ConnHdl  = BLE_CONN_HANDLE_INVALID;
@@ -418,7 +419,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 			{
 				return err;
 			}
-			baseidx = BtUuidAddBase(pCfg->UuidBase);
+			//baseidx = BtUuidAddBase(pCfg->UuidBase);
     	}
     }
 

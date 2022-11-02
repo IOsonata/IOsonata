@@ -101,22 +101,26 @@ typedef enum {
 #pragma pack(push,4)
 
 typedef struct __Ble_Srvc_Char_Data {
-    uint16_t Uuid;                      //!< char UUID
-    //uint32_t MaxDataLen;                //!< char max data length
-    uint32_t Property;                  //!< char properties define by BLUEIOSVC_CHAR_PROP_...
-    const char *pDesc;                  //!< char UTF-8 description string
-    BleSrvcWrCb_t WrCB;                  //!< Callback for write char, set to NULL for read char
-    BleSrvcSetNotifCb_t SetNotifCB;		//!< Callback on set notification
-    BleSrvcTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
-    //uint16_t ValueLen;					//!< Default value length in bytes
-    BtGattCharValue_t CharVal;	//!< pointer to char default values
-    bool bNotify;                       //!< Notify flag for read characteristic
-    uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
-    uint16_t Hdl;       				//!< char handle
-    uint16_t ValHdl;
-    uint16_t DescHdl;					//!< descriptor handle
-    uint16_t CccdHdl;
-    uint16_t SccdHdl;
+	uint16_t Uuid;                      //!< char UUID
+	uint32_t MaxDataLen;                //!< char max data length
+	uint32_t Property;                  //!< char properties define by BLUEIOSVC_CHAR_PROP_...
+	const char *pDesc;                  //!< char UTF-8 description string
+	BleSrvcWrCb_t WrCB;                  //!< Callback for write char, set to NULL for read char
+	BleSrvcSetNotifCb_t SetNotifCB;		//!< Callback on set notification
+	BleSrvcTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
+	uint16_t ValueLen;					//!< Default value length in bytes
+	uint8_t * const pValue;
+	BtGattAttRdHandler_t RdHandler;
+	BtGattAttWrHandler_t WrHandler;
+	BtGattCharValue_t CharVal;			//!< pointer to char default values
+	bool bNotify;                       //!< Notify flag for read characteristic
+	uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
+	uint16_t Hdl;       				//!< char handle
+	uint16_t ValHdl;
+	uint16_t DescHdl;					//!< descriptor handle
+	uint16_t CccdHdl;
+	uint16_t SccdHdl;
+	BleSrvc_t *pSrvc;					//!< Pointer to the service instance which this char belongs to.
 } BleSrvcChar_t;
 
 /*
