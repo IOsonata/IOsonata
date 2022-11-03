@@ -558,14 +558,11 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 					{
 						if (list[i].Hdl <= req->EndHdl)// && baseidx == list[i].Uuid.BaseIdx)
 						{
-							rsp->Len = BtGattGetValue(&list[i], p);
+							p[0] = list[i].Hdl & 0xFF;
+							p[1] = list[i].Hdl >> 8;
+							p +=2;
 
-							g_Uart.printf("Att Val[%d]: ", i);
-							for (int j = 0; j < rsp->Len; j++)
-							{
-								g_Uart.printf("%x ", p[j]);
-							}
-							g_Uart.printf("\r\n");
+							rsp->Len = BtGattGetValue(&list[i], p) + 2;
 
 							p += rsp->Len;
 							l += rsp->Len;
@@ -574,15 +571,6 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 
 					if (l > 0)
 					{
-/*
-						p = (uint8_t*)rsp->Data;
-						g_Uart.printf("Val: ");
-						for (int j = 0; j < l; j++)
-						{
-							g_Uart.printf("%x ", p[j]);
-						}
-						g_Uart.printf("\r\n");
-*/
 						l2pdu->Hdr.Len = 2 + l;//rsp->Len * c;
 						acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
