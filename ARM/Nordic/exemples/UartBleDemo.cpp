@@ -50,6 +50,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
+#include "app_evt_handler.h"
 
 #include "board.h"
 
@@ -103,6 +104,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 void UartTxSrvcCallback(BleSrvc_t *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
+size_t UartTxCharWrHandler(uint16_t Hdl, void *pBuff, size_t Len, void *pCtx);
 
 //static const ble_uuid_t  s_AdvUuids[] = {
 //	{BLE_UART_UUID_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
@@ -132,12 +134,12 @@ BleSrvcChar_t g_UartChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLE_UART_UUID_RX_CHAR,
-		//.MaxDataLen = PACKET_SIZE,
+		.MaxDataLen = PACKET_SIZE,
 		.Property =
 #ifdef HM_10
 		BLESVC_CHAR_PROP_WRITE |
 #endif
-		BLESRVC_CHAR_PROP_READ | BLESRVC_CHAR_PROP_NOTIFY | BLESRVC_CHAR_PROP_VARLEN,
+		BLESRVC_CHAR_PROP_READ | BLESRVC_CHAR_PROP_VARLEN | BLESRVC_CHAR_PROP_NOTIFY,
 		.pDesc = s_RxCharDescString,		// char UTF-8 description string
 #ifdef HM_10
 		.WrCB = UartTxSrvcCallback,
@@ -146,21 +148,25 @@ BleSrvcChar_t g_UartChars[] = {
 #endif
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		//.ValueLen = 0,						// Default value length in bytes
-		.CharVal = {PACKET_SIZE, 0, s_RxCharValMem},					// pointer to char default values
+		.pValue = s_RxCharValMem,
+		.ValueLen = 0,						// Default value length in bytes
+		//.RdHandler = NULL,
+		//.WrHandler = NULL,
+		//.CharVal = {PACKET_SIZE, 0, s_RxCharValMem},					// pointer to char default values
 	},
 #ifndef HM_10
 	{
 		// Write characteristic
 		.Uuid = BLE_UART_UUID_TX_CHAR,		// char UUID
-		//.MaxDataLen = PACKET_SIZE,			// char max data length
+		.MaxDataLen = PACKET_SIZE,			// char max data length
 		.Property = BLESRVC_CHAR_PROP_WRITEWORESP,// char properties define by BLUEIOSVC_CHAR_PROP_...
 		.pDesc = s_TxCharDescString,		// char UTF-8 description string
 		.WrCB = UartTxSrvcCallback,			// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		//.ValueLen = 0,						// Default value length in bytes
-		.CharVal = {PACKET_SIZE, 0, s_TxCharValMem},					// pointer to char default values
+		//.RdHandler = NULL,
+		//.WrHandler = UartTxCharWrHandler,
+		//.CharVal = {PACKET_SIZE, 0, s_TxCharValMem},					// pointer to char default values
 	},
 #endif
 };
@@ -282,6 +288,13 @@ static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
 int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
 
+size_t UartTxCharWrHandler(uint16_t Hdl, void *pBuff, size_t Len, void *pCtx)
+{
+	g_Uart.printf("UartTxCharWrHandler %x %p %d\r\n", Hdl, pBuff, Len);
+
+	return Len;
+}
+
 
 void UartTxSrvcCallback(BleSrvc_t *pBlueIOSvc, uint8_t *pData, int Offset, int Len)
 {
@@ -342,7 +355,8 @@ void BleAppInitUserData()
 
 }
 
-void UartRxChedHandler(void * p_event_data, uint16_t event_size)
+//void UartRxChedHandler(void * p_event_data, uint16_t event_size)
+void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
 	static uint8_t buff[PACKET_SIZE];
 	static int bufflen = 0;
@@ -370,7 +384,8 @@ void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 		{
 			bufflen = 0;
 		}
-		app_sched_event_put(NULL, 0, UartRxChedHandler);
+		//app_sched_event_put(NULL, 0, UartRxChedHandler);
+		AppEvtHandlerQue(0, 0, UartRxChedHandler);
 	}
 }
 
@@ -391,6 +406,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
 			//app_sched_event_put(NULL, 0, UartRxChedHandler);
+			AppEvtHandlerQue(0, 0, UartRxChedHandler);
 			break;
 		case UART_EVT_TXREADY:
 			break;
