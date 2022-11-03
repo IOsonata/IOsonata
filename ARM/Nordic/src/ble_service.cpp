@@ -342,7 +342,7 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
         BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&attr_md.write_perm);
     }
 
-    ble_uuid.type = pSrvc->UuidType;//[pChar->BaseUuidIdx];
+    ble_uuid.type = pSrvc->Uuid.BaseIdx;//Type;//[pChar->BaseUuidIdx];
     ble_uuid.uuid = pChar->Uuid;
 
     attr_md.vloc       = BLE_GATTS_VLOC_STACK;
@@ -414,16 +414,18 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
     {
     	if (pCfg->bCustom == true)
     	{
-			err = sd_ble_uuid_vs_add((ble_uuid128_t*)pCfg->UuidBase, &pSrvc->UuidType);
+    		uint8_t type;
+			err = sd_ble_uuid_vs_add((ble_uuid128_t*)pCfg->UuidBase, &type);// \>UuidType);
 			if (err != NRF_SUCCESS)
 			{
 				return err;
 			}
+			pSrvc->Uuid.BaseIdx = type;
 			//baseidx = BtUuidAddBase(pCfg->UuidBase);
     	}
     }
 
-    ble_uuid.type = pSrvc->UuidType;
+    ble_uuid.type = pSrvc->Uuid.BaseIdx;
     ble_uuid.uuid = pCfg->UuidSrvc;
 
     err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->Hdl);

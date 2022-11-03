@@ -218,7 +218,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
 		pSrvc->Uuid.BaseIdx = BtUuidAddBase(pCfg->UuidBase);
 	}
 	pSrvc->Uuid.Type = BT_UUID_TYPE_16;
-	pSrvc->Uuid.Uuid = pCfg->UuidSrvc;
+	pSrvc->Uuid.Uuid16 = pCfg->UuidSrvc;
 
 //	BtUuid16_t uid16 = { baseidx, BT_UUID_TYPE_16, pCfg->UuidSvc};
 

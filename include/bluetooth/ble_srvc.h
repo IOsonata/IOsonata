@@ -59,8 +59,6 @@ SOFTWARE.
 
 typedef struct __Ble_Srvc	BleSrvc_t;
 
-#pragma pack(push, 4)
-
 /**
  * @brief	Callback on write
  */
@@ -70,6 +68,11 @@ typedef void (*BleSrvcWrCb_t) (BleSrvc_t *pBleSvc, uint8_t *pData, int Offset, i
  * @brief	Callback on set notification
  */
 typedef void (*BleSrvcSetNotifCb_t) (BleSrvc_t *pBleSvc, bool bEnable);
+
+/**
+ * @brief	Callback on set indication
+ */
+typedef void (*BleSrvcSetIndCb_t) (BleSrvc_t *pBleSvc, bool bEnable);
 
 /**
  * @brief	Callback when transmission is completed
@@ -85,7 +88,7 @@ typedef void (*BleSrvcTxComplete_t) (BleSrvc_t *pBleSvc, int CharIdx);
  * @param	pBlueIOSvc
  * @param	p_ble_evt
  */
-typedef void (*BleSrvcAuthRqst_t)(BleSrvc_t *pBleSvc, uint32_t evt);//ble_evt_t * p_ble_evt);
+typedef void (*BleSrvcAuthRqst_t)(BleSrvc_t *pBleSvc, uint32_t evt);
 
 // Service connection security types
 typedef enum {
@@ -100,37 +103,25 @@ typedef enum {
 
 #pragma pack(push,4)
 
-typedef struct __Ble_Srvc_Char_Cfg {
-	uint16_t Uuid;                      //!< char UUID
-	uint32_t MaxDataLen;                //!< char max data length
-	uint32_t Property;                  //!< char properties define by BLUEIOSVC_CHAR_PROP_...
-	const char *pDesc;                  //!< char UTF-8 description string
-	BleSrvcWrCb_t WrCB;                  //!< Callback for write char, set to NULL for read char
-	BleSrvcSetNotifCb_t SetNotifCB;		//!< Callback on set notification
-	BleSrvcTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
-	uint8_t * const pValue;
-} BleSrvcCharCfg_t;
-
 typedef struct __Ble_Srvc_Char_Data {
 	uint16_t Uuid;                      //!< char UUID
 	uint32_t MaxDataLen;                //!< char max data length
 	uint32_t Property;                  //!< char properties define by BLUEIOSVC_CHAR_PROP_...
 	const char *pDesc;                  //!< char UTF-8 description string
-	BleSrvcWrCb_t WrCB;                  //!< Callback for write char, set to NULL for read char
+	BleSrvcWrCb_t WrCB;                 //!< Callback for write char, set to NULL for read char
 	BleSrvcSetNotifCb_t SetNotifCB;		//!< Callback on set notification
+	BleSrvcSetIndCb_t SetIndCB;			//!< Callback on set indication
 	BleSrvcTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
-	uint16_t ValueLen;					//!< Default value length in bytes
-	void * const pValue;
-	//BtGattAttRdHandler_t RdHandler;
-	//BtGattAttWrHandler_t WrHandler;
-	//BtGattCharValue_t CharVal;			//!< pointer to char default values
+	void * const pValue;				//!< Characteristic data value
+	uint16_t ValueLen;					//!< Current length in bytes of data value
+	// Bellow are private data. Do not modify
 	bool bNotify;                       //!< Notify flag for read characteristic
 	uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
 	uint16_t Hdl;       				//!< char handle
-	uint16_t ValHdl;
+	uint16_t ValHdl;					//!< char value handle
 	uint16_t DescHdl;					//!< descriptor handle
-	uint16_t CccdHdl;
-	uint16_t SccdHdl;
+	uint16_t CccdHdl;					//!< client char configuration value
+	uint16_t SccdHdl;					//!< Server char configuration value
 	BleSrvc_t *pSrvc;					//!< Pointer to the service instance which this char belongs to.
 } BleSrvcChar_t;
 
@@ -141,36 +132,30 @@ typedef struct __Ble_Srvc_Config {
 	BLESRVC_SECTYPE SecType;			//!< Secure or Open service/char
 	bool bCustom;						//!< True - for custom service Base UUID, false - Bluetooth SIG standard
 	uint8_t UuidBase[16];				//!< 128 bits custom base UUID
-	//uint8_t UuidBase[BLESRVC_UUID_BASE_MAXCNT][16];//!< Base UUIDs
-	//int				NbUuidBase;			//!< Number of UUID defined in the UuidBase array
-	uint16_t		UuidSrvc;			//!< Service UUID
-	int             NbChar;				//!< Total number of characteristics for the service
-	BleSrvcChar_t	*pCharArray;           //!< Pointer a an array of characteristic
-    uint8_t			*pLongWrBuff;		//!< pointer to user long write buffer
-    int				LongWrBuffSize;		//!< long write buffer size
-    BleSrvcAuthRqst_t	AuthReqCB;			//!< Authorization request callback
+	uint16_t UuidSrvc;					//!< Service UUID
+	int NbChar;							//!< Total number of characteristics for the service
+	BleSrvcChar_t *pCharArray;          //!< Pointer a an array of characteristic
+    uint8_t *pLongWrBuff;				//!< pointer to user long write buffer
+    int	LongWrBuffSize;					//!< long write buffer size
+    BleSrvcAuthRqst_t AuthReqCB;			//!< Authorization request callback
 } BleSrvcCfg_t;
 
-//typedef BleSrvcCfg_t	BLESRVC_CFG;
-
 /*
- * Blue IO Service private data to be passed when calling service related functions.
- * The data is filled by BlueIOBleSrvcInit function.
+ * Bluetooth service private data to be passed when calling service related functions.
+ * The data is filled by BleSrvcInit function.
  * Pointer to this structure is often referred as Service Handle
  *
  */
 struct __Ble_Srvc {
-    int             NbChar;				//!< Number of characteristic defined for this service
-    BleSrvcChar_t 	*pCharArray;        //!< Pointer to array of characteristics
-    uint16_t        Hdl;            	//!< Service handle
-    uint16_t        ConnHdl;			//!< Connection handle
-    BtUuid16_t		Uuid;				//!< Service UUID
-//    uint16_t        UuidSvc;            //!< Service UUID
-    uint8_t         UuidType;//[BLESRVC_UUID_BASE_MAXCNT];
-    uint8_t			*pLongWrBuff;		//!< pointer to user long write buffer
-    int				LongWrBuffSize;		//!< long write buffer size
-    void			*pContext;
-    BleSrvcAuthRqst_t	AuthReqCB;			//!< Authorization request callback
+    int NbChar;							//!< Number of characteristic defined for this service
+    BleSrvcChar_t *pCharArray;			//!< Pointer to array of characteristics
+    uint16_t Hdl;            			//!< Service handle
+    uint16_t ConnHdl;					//!< Connection handle
+    BtUuid_t Uuid;						//!< Service UUID
+    uint8_t	*pLongWrBuff;				//!< pointer to user long write buffer
+    int	LongWrBuffSize;					//!< long write buffer size
+    void *pContext;
+    BleSrvcAuthRqst_t AuthReqCB;		//!< Authorization request callback
 };
 
 #pragma pack(pop)

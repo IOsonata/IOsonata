@@ -446,9 +446,10 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 
 				rsp->OpCode = BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP;
 
+				int l = 0;
+#if 0
 				BtGattListEntry_t list[50];
 				uint16_t lasthdl = 0;
-				int l = 0;
 
 				int c = BtGattGetListHandle(req->StartHdl, req->EndHdl, list, 50, &lasthdl);
 
@@ -496,6 +497,54 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 						l = c * sizeof(BtAttHdlUuid16_t);
 					}
 //					rsp->Fmt = list[0].Uuid.BaseIdx > 0 ? BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128 : BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16;
+#else
+					BtGattListEntry_t en;
+
+					if (BtGattGetEntryHandle(req->StartHdl, &en))
+					{
+						if (en.TypeUuid.BaseIdx > 0)
+						{
+							uint8_t uuid128[16];
+
+							BtUuidGetBase(en.TypeUuid.BaseIdx, uuid128);
+
+							rsp->Fmt = BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128;
+
+						//	for (int i = 0; i < c; i++)
+							{
+								rsp->HdlUuid128[0].Hdl = en.Hdl;
+								uuid128[12] = en.TypeUuid.Uuid & 0xff;
+								uuid128[13] = en.TypeUuid.Uuid >> 8;
+								memcpy(rsp->HdlUuid128[0].Uuid, uuid128, 16);
+
+								g_Uart.printf("HDL : %d, ", rsp->HdlUuid128[0].Hdl);
+
+								for (int j = 0; j < 16; j++)
+								{
+									g_Uart.printf("%02x ", rsp->HdlUuid128[0].Uuid[j]);
+								}
+								g_Uart.printf("\r\n");
+							}
+
+							l = sizeof(BtAttHdlUuid128_t);
+						}
+						else
+						{
+							rsp->Fmt = BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16;
+
+							//for (int i = 0; i < c; i++)
+							{
+								rsp->HdlUuid16[0].Hdl = en.Hdl;
+								rsp->HdlUuid16[0].Uuid = en.TypeUuid.Uuid;
+
+								g_Uart.printf("HDL : %d, Uuid16 : 0x%04x\r\n", rsp->HdlUuid16[0].Hdl, rsp->HdlUuid16[0].Uuid);
+
+							}
+
+							l = sizeof(BtAttHdlUuid16_t);
+						}
+
+#endif
 
 					l2pdu->Hdr.Len = 2 + l;
 					acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
