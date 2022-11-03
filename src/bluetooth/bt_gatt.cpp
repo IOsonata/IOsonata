@@ -81,7 +81,7 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
-				s_BtGatEntryTbl[s_NbGattListEntry].Val32 = *(uint8_t*)pAttVal;
+				s_BtGatEntryTbl[s_NbGattListEntry].Val32 = *(uint16_t*)pAttVal;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
@@ -254,6 +254,28 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 				len = pEntry->SrvcInc.SrvcUuid.BaseIdx > 0 ? 20 : 6;
 				break;
 			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
+				{
+#if 1
+					BtGattCharDeclarVal_t *p = (BtGattCharDeclarVal_t*)pBuff;
+
+					p->Prop = pEntry->CharDeclar.Prop;
+					p->ValHdl = pEntry->CharDeclar.ValHdl;
+					if (pEntry->CharDeclar.Uuid.BaseIdx > 0)
+					{
+						BtUuidGetBase(pEntry->CharDeclar.Uuid.BaseIdx, p->Uuid.Uuid128);
+
+						p->Uuid.Uuid128[12] = pEntry->CharDeclar.Uuid.Uuid & 0xFF;
+						p->Uuid.Uuid128[13] = pEntry->CharDeclar.Uuid.Uuid >> 8;
+
+						len = 19;
+					}
+					else
+					{
+						p->Uuid.Uuid16 = pEntry->CharDeclar.Uuid.Uuid;
+						len = 5;
+					}
+
+#else
 				pBuff[0] = pEntry->Hdl & 0xFF;
 				pBuff[1] = pEntry->Hdl >> 8;
 				pBuff += 2;
@@ -277,18 +299,23 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 
 					len = 7;
 				}
-
+#endif
+				}
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
-				pBuff[0] = pEntry->Val32 & 0xFF;
-				len = 1;
+				pBuff[0] = pEntry->Val32 & 0xFFFF;
+				len = 2;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
+//			case BT_UUID_GATT_CHAR_SERVICE_CHANGED:
+//				pBuff[0] = pEntry->Val32 & 0xFF;
+//				pBuff[1] = (pEntry->Val32 >> 8) & 0xFF;
+//				len = 2;
 			default:
 				if (pEntry->CharVal.pData)
 				{

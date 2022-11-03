@@ -120,7 +120,7 @@ typedef struct __Ble_Srvc_Char_Data {
 	BleSrvcSetNotifCb_t SetNotifCB;		//!< Callback on set notification
 	BleSrvcTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
 	uint16_t ValueLen;					//!< Default value length in bytes
-	uint8_t * const pValue;
+	void * const pValue;
 	//BtGattAttRdHandler_t RdHandler;
 	//BtGattAttWrHandler_t WrHandler;
 	//BtGattCharValue_t CharVal;			//!< pointer to char default values

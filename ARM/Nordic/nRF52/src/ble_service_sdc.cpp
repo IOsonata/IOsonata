@@ -196,8 +196,8 @@ bool BleSrvcAddChar(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar, uint32_t SecType)
     {
     	TypeUuid.Uuid = BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
 
-    	uint8_t x = 0;
-    	pChar->CccdHdl = BtGattRegister(&TypeUuid, &pChar->Property);
+    	uint16_t x = pChar->Property >> 4;
+    	pChar->CccdHdl = BtGattRegister(&TypeUuid, &x);
     }
 
     return true;

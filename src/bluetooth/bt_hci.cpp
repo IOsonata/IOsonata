@@ -599,7 +599,18 @@ void BtProcessAttData(uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu)
 
 				if (BeGattFindEntryUuid(&uid16, req->StartHdl, req->EndHdl, &entry))
 				{
-					rsp->Len = BtGattGetValue(&entry, p);
+					p[0] = entry.Hdl & 0xFF;
+					p[1] = entry.Hdl >> 8;
+					p +=2;
+					rsp->Len = BtGattGetValue(&entry, p) + 2;
+					g_Uart.printf("Att Val: ");
+
+					for (int j = 0; j < rsp->Len; j++)
+					{
+						g_Uart.printf("%x ", rsp->Data[j]);
+					}
+					g_Uart.printf("\r\n");
+
 					l2pdu->Hdr.Len = 2 + rsp->Len;//rsp->Len * c;
 					acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 

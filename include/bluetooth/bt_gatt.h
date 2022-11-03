@@ -77,6 +77,18 @@ typedef struct __Bt_Gatt_Char_Declar {
 	BtUuid16_t Uuid;			//!< Characteristic UUID
 } BtGattCharDeclar_t;
 
+// Characteristic declaration attribute value : type UUID 0x2803
+typedef struct __Bt_Gatt_Char_Declar_Val {
+	uint8_t Prop;				//!< Orable properties
+	uint16_t ValHdl;			//!< Value handle
+	BtUuidVal_t Uuid;			//!< Characteristic UUID
+} BtGattCharDeclarVal_t;
+
+typedef struct __Bt_Gatt_Char_Srvc_Changed {
+	uint16_t StartHdl;			//!< Start service handle
+	uint16_t EndHdl;			//!< End service handle
+} BtGattCharSrvcChanged_t;
+
 #pragma pack(pop)
 
 #define BT_GATT_CHAR_EXT_PROP_RELIABLE_WRITE	1	//!< Reliable write using procedure Section 4.9.5
@@ -109,7 +121,7 @@ typedef size_t (*BtGattAttWrHandler_t)(uint16_t Hdl, void *pData, size_t Len, vo
 typedef struct __Bt_Gatt_Char_Value {
 	size_t MaxLen;					//!< Max length of data buffer
 	size_t Len;						//!< Length of actual data
-	uint8_t *pData;					//!< pointer to characteristic static data buffer
+	void *pData;					//!< pointer to characteristic static data buffer
 	BtGattAttWrHandler_t WrHandler;	//!< Pointer to characteristic write callback
 	void *pCtx;
 } BtGattCharValue_t;

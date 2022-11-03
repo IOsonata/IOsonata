@@ -34,7 +34,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "bluetooth/ble_srvc.h"
 
-static uint16_t s_GenAccCharApperance;
+static uint16_t s_GenAccCharApperance = 0;
 static uint8_t s_GenAccCharDevNameBuffer[255] = "TestName";
 
 static BleSrvcChar_t s_GenericAccessChar[] = {
@@ -81,15 +81,20 @@ static const BleSrvcCfg_t s_GenericAccessSrvcCfg = {
 
 static BleSrvc_t s_GenericAccessSrvc;
 
+static BtGattCharSrvcChanged_t s_GenAttCharSrvcChanged = {0,};
+
 static BleSrvcChar_t s_GenericAttributeChar[] = {
 	{
 		// Read characteristic
 		.Uuid = BT_UUID_GATT_CHAR_SERVICE_CHANGED,
+		.MaxDataLen = sizeof(BtGattCharSrvcChanged_t),
 		.Property =	BLESRVC_CHAR_PROP_INDICATE,
 		.pDesc = NULL,						// char UTF-8 description string
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
+		.ValueLen = 0,
+		.pValue = (uint8_t*)&s_GenAttCharSrvcChanged,
 		//.RdHandler = NULL,
 		//.WrHandler = NULL,
 		//.CharVal = {PACKET_SIZE, 0, s_RxCharValMem},					// pointer to char default values
