@@ -39,6 +39,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <inttypes.h>
 
 //#include "ble_service.h"
+#include "bluetooth/ble_srvc.h"
+#include "ble.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 
