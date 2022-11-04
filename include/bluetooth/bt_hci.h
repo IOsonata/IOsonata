@@ -678,8 +678,10 @@ struct __Bt_Hci_Device {
 extern "C" {
 #endif
 
-static inline uint16_t BtMsecTo0125(float Val) {
-	return (uint16_t)(((uint32_t)(Val * 1000.0) + 500UL) / 125UL);
+#define BT_MSEC_TO_125(Val)		(((Val) * 1000UL + 500UL)/ 1250UL)
+
+static inline uint16_t BtMsecTo125(float Val) {
+	return (uint16_t)(((uint32_t)(Val * 1000.0) + 500UL) / 1250UL);
 };
 
 bool BtHciInit(BtHciDevCfg_t const *pCfg);

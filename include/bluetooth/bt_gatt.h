@@ -89,6 +89,13 @@ typedef struct __Bt_Gatt_Char_Srvc_Changed {
 	uint16_t EndHdl;			//!< End service handle
 } BtGattCharSrvcChanged_t;
 
+typedef struct __Bt_Gatt_Char_Prefered_Conn_Params {
+	uint16_t IntervalMin;		//!< Min connection interval in 1.25ms counts
+	uint16_t IntervalMax;		//!< Max connection interval in 1.25ms counts
+	uint16_t Latency;			//!< Peripheral latency
+	uint16_t Timeout;			//!< Supervision timeout in 10ms count
+} BtGattPreferedConnParams_t;
+
 #pragma pack(pop)
 
 #define BT_GATT_CHAR_EXT_PROP_RELIABLE_WRITE	1	//!< Reliable write using procedure Section 4.9.5
