@@ -661,7 +661,7 @@ typedef struct __Bt_Hci_Device		BtHciDevice_t;
 
 typedef uint32_t (*BtHciSendDataFct_t)(void *pData, uint32_t Len);
 typedef void (*BtEvtHandler_t)(BtHciDevice_t * const pDev, uint32_t Evt);
-typedef void (*BtEvtConnected_t)(uint16_t ConnHdl, uint8_t PerrAddr[6]);
+typedef void (*BtEvtConnected_t)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
 
 typedef struct __Bt_Hci_Dev_Config {
 	BtHciSendDataFct_t SendData;
@@ -672,9 +672,10 @@ typedef struct __Bt_Hci_Dev_Config {
 struct __Bt_Hci_Device {
 	uint32_t RxDataLen;
 	uint32_t TxDataLen;
-	BtHciSendDataFct_t SendData;
-	BtEvtHandler_t EvtHandler;
-	BtEvtConnected_t ConnectedHandler;
+	uint32_t (*SendData)(void *pData, uint32_t Len);
+	void (*EvtHandler)(BtHciDevice_t * const pDev, uint32_t Evt);
+	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
+	void (*Disconnected)(uint16_t ConnHdl);
 };
 
 #ifdef __cplusplus
@@ -687,13 +688,13 @@ static inline uint16_t BtMsecTo125(float Val) {
 	return (uint16_t)(((uint32_t)(Val * 1000.0) + 500UL) / 1250UL);
 };
 
-bool BtHciInit(BtHciDevCfg_t const *pCfg);
+//bool BtHciInit(BtHciDevCfg_t const *pCfg);
 void BtHciProcessACLData(BtHciACLDataPacketHdr_t *pPkt);
 
 static inline int BtHciSendData(BtHciDevice_t *pDev, void *pData, int Len) {
 	return pDev->SendData(pData, Len);
 }
-void BtHciMotify(uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
+void BtHciMotify(BtHciDevice_t *pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
 
 
 #ifdef __cplusplus

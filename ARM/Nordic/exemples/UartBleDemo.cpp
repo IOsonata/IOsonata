@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "bluetooth/ble_app.h"
 #include "ble_app_nrf5.h"
-#include "bluetooth/ble_srvc.h"
+#include "bluetooth/bt_gatt.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
@@ -103,7 +103,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLE_UART_UUID_RX_CHAR		BLUEIO_UUID_UART_RX_CHAR		//!< Command control characteristic
 #endif
 
-void UartTxSrvcCallback(BleSrvc_t *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
+void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
 size_t UartTxCharWrHandler(uint16_t Hdl, void *pBuff, size_t Len, void *pCtx);
 
 //static const ble_uuid_t  s_AdvUuids[] = {
@@ -130,22 +130,14 @@ static uint8_t s_RxCharValMem[PACKET_SIZE];
 static uint8_t s_TxCharValMem[PACKET_SIZE];
 
 /// Characteristic definitions
-BleSrvcChar_t g_UartChars[] = {
+BtGattChar_t g_UartChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLE_UART_UUID_RX_CHAR,
 		.MaxDataLen = PACKET_SIZE,
-		.Property =
-#ifdef HM_10
-		BLESVC_CHAR_PROP_WRITE |
-#endif
-		BLESRVC_CHAR_PROP_READ | BLESRVC_CHAR_PROP_VARLEN | BLESRVC_CHAR_PROP_NOTIFY,
+		.Property =	BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN | BT_GATT_CHAR_PROP_NOTIFY,
 		.pDesc = s_RxCharDescString,		// char UTF-8 description string
-#ifdef HM_10
-		.WrCB = UartTxSrvcCallback,
-#else
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-#endif
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
 		.pValue = s_RxCharValMem,
@@ -154,12 +146,11 @@ BleSrvcChar_t g_UartChars[] = {
 		//.WrHandler = NULL,
 		//.CharVal = {PACKET_SIZE, 0, s_RxCharValMem},					// pointer to char default values
 	},
-#ifndef HM_10
 	{
 		// Write characteristic
 		.Uuid = BLE_UART_UUID_TX_CHAR,		// char UUID
 		.MaxDataLen = PACKET_SIZE,			// char max data length
-		.Property = BLESRVC_CHAR_PROP_WRITEWORESP,// char properties define by BLUEIOSVC_CHAR_PROP_...
+		.Property = BT_GATT_CHAR_PROP_WRITE_WORESP,// char properties define by BLUEIOSVC_CHAR_PROP_...
 		.pDesc = s_TxCharDescString,		// char UTF-8 description string
 		.WrCB = UartTxSrvcCallback,			// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
@@ -168,16 +159,15 @@ BleSrvcChar_t g_UartChars[] = {
 		//.WrHandler = UartTxCharWrHandler,
 		//.CharVal = {PACKET_SIZE, 0, s_TxCharValMem},					// pointer to char default values
 	},
-#endif
 };
 
-static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BleSrvcChar_t);
+static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BtGattChar_t);
 
 uint8_t g_LWrBuffer[512];
 
 /// Service definition
-const BleSrvcCfg_t s_UartSrvcCfg = {
-	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
+const BtGattSrvcCfg_t s_UartSrvcCfg = {
+	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = true,
 	.UuidBase = BLE_UART_UUID_BASE,		// Base UUID
 //	1,
@@ -188,7 +178,7 @@ const BleSrvcCfg_t s_UartSrvcCfg = {
 	.LongWrBuffSize = sizeof(g_LWrBuffer),	// long write buffer size
 };
 
-BleSrvc_t g_UartBleSrvc;
+BtGattSrvc_t g_UartBleSrvc;
 
 const BleAppDevInfo_t s_UartBleDevDesc = {
 	MODEL_NAME,       		// Model name
@@ -296,7 +286,7 @@ size_t UartTxCharWrHandler(uint16_t Hdl, void *pBuff, size_t Len, void *pCtx)
 }
 
 
-void UartTxSrvcCallback(BleSrvc_t *pBlueIOSvc, uint8_t *pData, int Offset, int Len)
+void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
 	g_Uart.Tx(pData, Len);
 }
@@ -310,7 +300,7 @@ void BleAppInitUserServices()
 {
     uint32_t       err_code;
 
-    err_code = BleSrvcInit(&g_UartBleSrvc, &s_UartSrvcCfg);
+    err_code = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
     //APP_ERROR_CHECK(err_code);
 }
 
@@ -380,7 +370,8 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	}
 	if (flush)
 	{
-		if (BleSrvcCharNotify(&g_UartBleSrvc, 0, buff, bufflen) == 0)
+//		if (BleSrvcCharNotify(&g_UartBleSrvc, 0, buff, bufflen) == 0)
+		if (BleAppNotify(&g_UartChars[0], buff, bufflen) == true)
 		{
 			bufflen = 0;
 		}
@@ -390,8 +381,10 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 }
 
 #if 0
-uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
+uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 {
+	BtGattCharNotify(&pSrvc->pCharArray[Idx], pData, DataLen);
+
 	return 0;
 }
 #endif

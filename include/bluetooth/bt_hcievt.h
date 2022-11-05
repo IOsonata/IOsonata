@@ -482,8 +482,8 @@ typedef struct __Bt_HciLe_Evt_Request_Peer_SCA_Complete {
 extern "C" {
 #endif
 
-void BtHciProcessEvent(BtHciEvtPacket_t *pEvtPkt);
-void BtHciProcessData(BtHciACLDataPacket_t *pPkt);
+void BtHciProcessEvent(BtHciDevice_t * const pDev, BtHciEvtPacket_t *pEvtPkt);
+void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t *pPkt);
 
 #ifdef __cplusplus
 }

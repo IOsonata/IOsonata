@@ -41,6 +41,7 @@ SOFTWARE.
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/ble_adv.h"
 #include "bluetooth/bt_uuid.h"
+#include "bluetooth/bt_gatt.h"
 #include "bluetooth/bleadv_mandata.h"
 
 /** @addtogroup Bluetooth
@@ -229,6 +230,7 @@ void BleAppGapDeviceNameSet(const char* ppDeviceName);
 
 void BleAppSetDevName(const char *pName);
 char * const BleAppGetDevName();
+bool BleAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**
  *

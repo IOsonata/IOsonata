@@ -434,6 +434,23 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 	return true;
 }
 
+bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
+{
+	if (pChar->CccdHdl == BT_GATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	BtGattListEntry_t *p = &s_BtGatEntryTbl[pChar->CccdHdl - 1];
+
+	if (p->Val32 & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
+	{
+		return true;
+	}
+
+	return false;
+}
+/*
 bool BtGattCharNotify(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (BtGattCharSetValue(pChar, pVal, Len) == false)
@@ -450,7 +467,7 @@ bool BtGattCharNotify(BtGattChar_t *pChar, void * const pVal, size_t Len)
 
 	return true;
 }
-
+*/
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 {
 	bool retval = false;

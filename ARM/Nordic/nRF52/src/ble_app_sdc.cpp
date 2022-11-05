@@ -64,6 +64,13 @@ SOFTWARE.
 
 extern "C" void BleAppInitGenericServices();
 
+static inline uint32_t HciSdcSendData(void *pData, uint32_t Len) {
+	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
+}
+void BleAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt);
+void BleAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
+void BleAppDisconnected(uint16_t ConnHdl);
+
 #pragma pack(push, 4)
 
 typedef struct _BleAppData {
@@ -135,6 +142,14 @@ alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppExtSrData
 alignas(4) static BleAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppExtSrData.scan_response_data};
 
 alignas(4) static uint8_t s_BleStackSdcMemPool[10000];
+
+alignas(4) static BtHciDevice_t s_HciDevice = {
+		251, 251,
+		.SendData = HciSdcSendData,
+		.EvtHandler = BleAppEvtHandler,
+		.Connected = BleAppConnected,
+		.Disconnected = BleAppDisconnected,
+};
 
 //BleConn_t g_BleConn = {0,};
 extern UART g_Uart;
@@ -227,20 +242,32 @@ static BtGattSrvcCfg_t s_BtGattSrvcCfg = {
 
 static BtGattSrvc_t s_BtGattSrvc;
 
-static inline uint32_t HciSdcSendData(void *pData, uint32_t Len) {
-	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
-}
 
 void BleAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
 {
 
 }
 
+void BleAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6])
+{
+	s_BtGapSrvc.ConnHdl = ConnHdl;
+	s_BtGattSrvc.ConnHdl = ConnHdl;
+}
+
+void BleAppDisconnected(uint16_t ConnHdl)
+{
+	s_BtGapSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
+	s_BtGattSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
+}
+
+/*
+ *
 static const BtHciDevCfg_t s_BtDevCfg = {
 	.SendData = HciSdcSendData,
 	.EvtHandler = BleAppEvtHandler,
+	.ConnectedHandler = BleConnected,
 };
-
+*/
 static void BleStackMpslAssert(const char * const file, const uint32_t line)
 {
 //	printf("MPSL Fault: %s, %d\n", file, line);
@@ -269,16 +296,16 @@ static void BleStackSdcCB()
 		{
 			case SDC_HCI_MSG_TYPE_EVT:
 				// Event available
-				BtHciProcessEvent((BtHciEvtPacket_t*)buf);
+				BtHciProcessEvent(&s_HciDevice, (BtHciEvtPacket_t*)buf);
 				break;
 			case SDC_HCI_MSG_TYPE_DATA:
-				BtHciProcessData((BtHciACLDataPacket_t*)buf);
+				BtHciProcessData(&s_HciDevice, (BtHciACLDataPacket_t*)buf);
 				break;
 		}
 	}
 }
 
-void BleAppSetDevName(char *pName)
+void BleAppSetDevName(const char *pName)
 {
 	strncpy(s_BtGapCharDevName, pName, BT_GAP_DEVNAME_MAX_LEN);
 	s_BtGapCharDevName[BT_GAP_DEVNAME_MAX_LEN-1] = 0;
@@ -354,6 +381,8 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 	}
 
 	BleAdvDataAdd(advpkt, type, (uint8_t*)pDeviceName, l);
+
+	BtGattCharSetValue(&s_BtGapChar[0], (void*)pDeviceName, l);
 }
 
 /**@brief Function for the GAP initialization.
@@ -1238,6 +1267,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 #endif
     }
 
+    BleAppGapDeviceNameSet(pBleAppCfg->pDevName);
 
 #if (__FPU_USED == 1)
     // Patch for softdevice & FreeRTOS to sleep properly when FPU is in used
@@ -1251,7 +1281,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     	return false;
     }
 
-	BtHciInit(&s_BtDevCfg);
+	//BtHciInit(&s_BtDevCfg);
 
 	g_BleAppData.State = BLEAPP_STATE_INITIALIZED;
 
@@ -1290,10 +1320,10 @@ void BleAppRun()
 			{
 				case SDC_HCI_MSG_TYPE_EVT:
 					// Event available
-					BtHciProcessEvent((BtHciEvtPacket_t*)buf);
+					BtHciProcessEvent(&s_HciDevice, (BtHciEvtPacket_t*)buf);
 					break;
 				case SDC_HCI_MSG_TYPE_DATA:
-					BtHciProcessData((BtHciACLDataPacket_t*)buf);
+					BtHciProcessData(&s_HciDevice, (BtHciACLDataPacket_t*)buf);
 					break;
 			}
 		}
@@ -1392,6 +1422,8 @@ bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * cons
 
 bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * const pCharUid)
 {
+//	BtGattCharNotify();
+
 	return false;
 #if 0
     uint32_t                 err_code;
@@ -1412,6 +1444,23 @@ bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * 
 
     return err_code == NRF_SUCCESS;
 #endif
+}
+
+bool ghify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
+{
+	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
+	{
+		return false;
+	}
+
+	if (isBtGattCharNotifyEnabled(pChar) == false)
+	{
+		return false;
+	}
+
+	BtHciMotify(&s_HciDevice, pChar->pSrvc->ConnHdl, pChar->ValHdl, pData, DataLen);
+
+	return true;
 }
 
 bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
