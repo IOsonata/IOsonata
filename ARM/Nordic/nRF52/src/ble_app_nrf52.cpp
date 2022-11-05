@@ -82,6 +82,7 @@ Modified by          Date              Description
 #include "bluetooth/ble_appearance.h"
 #include "ble_app_nrf5.h"
 #include "ble_dev.h"
+#include "bluetooth/bt_gatt.h"
 #include "bluetooth/ble_srvc.h"
 #include "app_evt_handler.h"
 

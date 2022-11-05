@@ -42,8 +42,8 @@ SOFTWARE.
 #include "app_error.h"
 #include "ble_srv_common.h"
 
-//#include "ble_service.h"
 #include "bluetooth/ble_srvc.h"
+#include "bluetooth/bt_gatt.h"
 
 #pragma pack(push, 1)
 typedef struct {
@@ -59,7 +59,7 @@ typedef struct {
 
 #pragma pack(pop)
 
-uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
+uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 {
 	if (pSrvc->ConnHdl == BLE_CONN_HANDLE_INVALID)
 		return NRF_ERROR_INVALID_STATE;
@@ -80,7 +80,7 @@ uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t D
     return err_code;
 }
 
-uint32_t BleSrvcCharSetValue(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
+uint32_t BleSrvcCharSetValue(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 {
 	ble_gatts_value_t value;
 
@@ -109,7 +109,7 @@ void GatherLongWrBuff(GATLWRHDR *pHdr)
 }
 
 //void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
-void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t Evt)
+void BleSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
 {
 	ble_evt_t *pBleEvt = (ble_evt_t *)Evt;
 
@@ -143,7 +143,7 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t Evt)
 					    {
 #if 1
 							GatherLongWrBuff(hdr);
-							pSrvc->pCharArray[i].WrCB(pSrvc, p, hdr->Offset, hdr->Len);
+							pSrvc->pCharArray[i].WrCB(&pSrvc->pCharArray[i], p, hdr->Offset, hdr->Len);
 #else
 							bool done = false;
 							GATLWRHDR hdr1;
@@ -178,14 +178,14 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t Evt)
 							// Set notify callback
 							if (pSrvc->pCharArray[i].SetNotifCB)
 							{
-								pSrvc->pCharArray[i].SetNotifCB(pSrvc, pSrvc->pCharArray[i].bNotify);
+								pSrvc->pCharArray[i].SetNotifCB(&pSrvc->pCharArray[i], pSrvc->pCharArray[i].bNotify);
 							}
 						}
 						else if ((p_evt_write->handle == pSrvc->pCharArray[i].ValHdl) &&//.value_handle) &&
 								 (pSrvc->pCharArray[i].WrCB != NULL))
 						{
 							//printf("Write value handle\r\n");
-							pSrvc->pCharArray[i].WrCB(pSrvc, p_evt_write->data, 0, p_evt_write->len);
+							pSrvc->pCharArray[i].WrCB(&pSrvc->pCharArray[i], p_evt_write->data, 0, p_evt_write->len);
 						}
 						else
 						{
@@ -231,7 +231,7 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t Evt)
                     //if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].Hdl.value_handle &&
                     if (pSrvc->pCharArray[i].TxCompleteCB != NULL)
                     {
-                        pSrvc->pCharArray[i].TxCompleteCB(pSrvc, i);
+                        pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
                     }
                 }
             }
@@ -277,7 +277,7 @@ static void BleSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode, BLESRVC_SECTYPE Sec
  *
  * @return      NRF_SUCCESS on success, otherwise an error code.
  */
-static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
+static uint32_t BlueIOBleSrvcCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 									 BLESRVC_SECTYPE SecType)
 {
     ble_gatts_char_md_t char_md;
@@ -400,7 +400,7 @@ static uint32_t BlueIOBleSrvcCharAdd(BleSrvc_t *pSrvc, BleSrvcChar_t *pChar,
  * @param [in/out]	pSrvc : Service handle
  * @param [in]		pCfg  : Service configuration data
  */
-uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
+bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
 {
     uint32_t   err;
     ble_uuid_t ble_uuid;
@@ -441,7 +441,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg)
     for (int i = 0; i < pCfg->NbChar; i++)
     {
     	err = BlueIOBleSrvcCharAdd(pSrvc, &pSrvc->pCharArray[i],
-								   pCfg->SecType);
+    			BLESRVC_SECTYPE_NONE);//pCfg->SecType);
         if (err != NRF_SUCCESS)
         {
             return err;

@@ -227,6 +227,9 @@ void BleAppRun();
 uint16_t BleAppGetConnHandle();
 void BleAppGapDeviceNameSet(const char* ppDeviceName);
 
+void BleAppSetDevName(char *pName);
+char * const BleAppGetDevName();
+
 /**
  *
  * @return	true - advertising

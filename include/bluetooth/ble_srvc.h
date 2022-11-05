@@ -102,7 +102,7 @@ typedef enum {
 
 
 #pragma pack(push,4)
-
+#if 0
 typedef struct __Ble_Srvc_Char_Data {
 	uint16_t Uuid;                      //!< char UUID
 	uint32_t MaxDataLen;                //!< char max data length
@@ -157,7 +157,7 @@ struct __Ble_Srvc {
     void *pContext;
     BleSrvcAuthRqst_t AuthReqCB;		//!< Authorization request callback
 };
-
+#endif
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -167,7 +167,7 @@ extern "C" {
 /**
  * #brief	Service event handler.  Call this within BLE dispatch event callback
  */
-void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t pBleEvt);
+void BleSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t pBleEvt);
 
 /**
  * @brief	Create BLE custom service
@@ -178,7 +178,7 @@ void BleSrvcEvtHandler(BleSrvc_t *pSrvc, uint32_t pBleEvt);
  *
  * @return	0 - Success
  */
-uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg);
+//uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg);
 
 /**
  * @brief	Notify characteristic data
@@ -190,7 +190,7 @@ uint32_t BleSrvcInit(BleSrvc_t *pSrvc, const BleSrvcCfg_t *pCfg);
  *
  * @return	0 - Success
  */
-uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
+uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
 
 /**
  * @brief	Update characteristic data
@@ -202,7 +202,7 @@ uint32_t BleSrvcCharNotify(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t D
  *
  * @return	0 - Success
  */
-uint32_t BleSrvcCharSetValue(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
+uint32_t BleSrvcCharSetValue(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen);
 
 /**
  * @brief	Check connection state of the service
@@ -214,7 +214,7 @@ uint32_t BleSrvcCharSetValue(BleSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t
  * @return	true - Connected
  * 			false - Not connected
  */
-static inline bool IsBleSrvcConnected(BleSrvc_t *pSrvc) { return pSrvc->ConnHdl != -1;}//BLE_CONN_HANDLE_INVALID; }
+static inline bool IsBleSrvcConnected(BtGattSrvc_t *pSrvc) { return pSrvc->ConnHdl != -1;}//BLE_CONN_HANDLE_INVALID; }
 
 /**
  * @brief	Check for notification state of a characteristic
@@ -228,7 +228,7 @@ static inline bool IsBleSrvcConnected(BleSrvc_t *pSrvc) { return pSrvc->ConnHdl 
  * @return	true - Notification is enabled
  * 			false - Otherwise
  */
-static inline bool IsBleSrvcCharNotifyEnabled(BleSrvc_t *pSrvc, int CharIdx) { return pSrvc->pCharArray[CharIdx].bNotify; }
+static inline bool IsBleSrvcCharNotifyEnabled(BtGattSrvc_t *pSrvc, int CharIdx) { return pSrvc->pCharArray[CharIdx].bNotify; }
 
 #ifdef __cplusplus
 }

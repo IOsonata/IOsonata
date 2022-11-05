@@ -43,6 +43,7 @@ Modified by          Date              Description
 #include "ble_intrf.h"
 #include "ble_app_nrf5.h"
 #include "interrupt.h"
+#include "bluetooth/ble_srvc.h"
 
 #define NRFBLEINTRF_PACKET_SIZE		(NRF_BLE_MAX_MTU_SIZE - 3)// + sizeof(BLEINTRF_PKT) - 1)
 #define NRFBLEINTRF_CFIFO_SIZE		BLEINTRF_CFIFO_TOTAL_MEMSIZE(2, NRFBLEINTRF_PACKET_SIZE)
@@ -308,14 +309,14 @@ void BleIntrfReset(DevIntrf_t *pDevIntrf)
  *
  *
  */
-void BleIntrfTxComplete(BleSrvc_t *pBleSvc, int CharIdx)
+void BleIntrfTxComplete(BtGattChar_t *pChar, int CharIdx)
 {
-    BleIntrfNotify((BleIntrf_t*)pBleSvc->pContext);
+    BleIntrfNotify((BleIntrf_t*)pChar->pSrvc->pContext);
 }
 
-void BleIntrfRxWrCB(BleSrvc_t *pBleSvc, uint8_t *pData, int Offset, int Len)
+void BleIntrfRxWrCB(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
-	BleIntrf_t *intrf = (BleIntrf_t*)pBleSvc->pContext;
+	BleIntrf_t *intrf = (BleIntrf_t*)pChar->pSrvc->pContext;
 	BleIntrfPkt_t *pkt;
     //int maxlen = intrf->hTxFifo->BlkSize - sizeof(pkt->Len);
 

@@ -139,6 +139,94 @@ alignas(4) static uint8_t s_BleStackSdcMemPool[10000];
 //BleConn_t g_BleConn = {0,};
 extern UART g_Uart;
 
+#ifndef BT_GAP_DEVNAME_MAX_LEN
+#define BT_GAP_DEVNAME_MAX_LEN			64
+#endif
+
+static uint16_t s_BtGapCharApperance = 0;
+static char s_BtGapCharDevName[BT_GAP_DEVNAME_MAX_LEN];
+static BtGattPreferedConnParams_t s_BtGapCharPerferedConnParams = {
+	BT_MSEC_TO_125(8), BT_MSEC_TO_125(40), 0, 400
+};
+
+static BtGattChar_t s_BtGapChar[] = {
+	{
+		// Read characteristic
+		.Uuid = BT_UUID_GATT_DEVICE_NAME,
+		.MaxDataLen = BT_GAP_DEVNAME_MAX_LEN,
+		.Property =	BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
+		.pDesc = NULL,						// char UTF-8 description string
+		.WrCB = NULL,						// Callback for write char, set to NULL for read char
+		.SetNotifCB = NULL,					// Callback on set notification
+		.TxCompleteCB = NULL,				// Tx completed callback
+		.pValue = s_BtGapCharDevName,
+		.ValueLen = 0,
+	},
+	{
+		// Read characteristic
+		.Uuid = BT_UUID_GATT_APPEARANCE,
+		.MaxDataLen = 2,
+		.Property =	BT_GATT_CHAR_PROP_READ,
+		.pDesc = NULL,						// char UTF-8 description string
+		.WrCB = NULL,						// Callback for write char, set to NULL for read char
+		.SetNotifCB = NULL,					// Callback on set notification
+		.TxCompleteCB = NULL,				// Tx completed callback
+		.pValue = &s_BtGapCharApperance,
+		.ValueLen = 2,
+	},
+	{
+		// Read characteristic
+		.Uuid = BT_UUID_GATT_PERIPHERAL_PREFERRED_CONNECTION_PARAMETERS,
+		.MaxDataLen = sizeof(BtGattPreferedConnParams_t),
+		.Property =	BT_GATT_CHAR_PROP_READ,
+		.pDesc = NULL,						// char UTF-8 description string
+		.WrCB = NULL,						// Callback for write char, set to NULL for read char
+		.SetNotifCB = NULL,					// Callback on set notification
+		.TxCompleteCB = NULL,				// Tx completed callback
+		.pValue = &s_BtGapCharPerferedConnParams,
+		.ValueLen = sizeof(BtGattPreferedConnParams_t),
+	},
+};
+
+static const BtGattSrvcCfg_t s_BtGapSrvcCfg = {
+	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
+	.bCustom = false,
+	.UuidBase = {0,},						// Base UUID
+	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ACCESS,	// Service UUID
+	.NbChar = sizeof(s_BtGapChar) / sizeof(BtGattChar_t),// Total number of characteristics for the service
+	.pCharArray = s_BtGapChar,				// Pointer a an array of characteristic
+};
+
+static BtGattSrvc_t s_BtGapSrvc;
+
+static BtGattCharSrvcChanged_t s_BtGattCharSrvcChanged = {0,};
+
+static BtGattChar_t s_BtGattChar[] = {
+	{
+		// Read characteristic
+		.Uuid = BT_UUID_GATT_CHAR_SERVICE_CHANGED,
+		.MaxDataLen = sizeof(BtGattCharSrvcChanged_t),
+		.Property =	BT_GATT_CHAR_PROP_INDICATE,
+		.pDesc = NULL,						// char UTF-8 description string
+		.WrCB = NULL,						// Callback for write char, set to NULL for read char
+		.SetNotifCB = NULL,					// Callback on set notification
+		.TxCompleteCB = NULL,				// Tx completed callback
+		.pValue = &s_BtGattCharSrvcChanged,
+		.ValueLen = 0,
+	},
+};
+
+static BtGattSrvcCfg_t s_BtGattSrvcCfg = {
+	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
+	.bCustom = false,
+	.UuidBase = {0,},		// Base UUID
+	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE,		// Service UUID
+	.NbChar = sizeof(s_BtGattChar) / sizeof(BtGattChar_t),				// Total number of characteristics for the service
+	.pCharArray = s_BtGattChar,				// Pointer a an array of characteristic
+};
+
+static BtGattSrvc_t s_BtGattSrvc;
+
 static inline uint32_t HciSdcSendData(void *pData, uint32_t Len) {
 	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
 }
@@ -189,6 +277,18 @@ static void BleStackSdcCB()
 		}
 	}
 }
+
+void BleAppSetDevName(char *pName)
+{
+	strncpy(s_BtGapCharDevName, pName, BT_GAP_DEVNAME_MAX_LEN);
+	s_BtGapCharDevName[BT_GAP_DEVNAME_MAX_LEN-1] = 0;
+}
+
+char * const BleAppGetDevName()
+{
+	return s_BtGapCharDevName;
+}
+
 
 bool isConnected()
 {
@@ -1111,7 +1211,8 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     {
     	if (pBleAppCfg->Role & BLEAPP_ROLE_PERIPHERAL)
     	{
-    		BleAppInitGenericServices();
+    		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
+    		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
 
     		BleAppInitUserServices();
     	}
@@ -1123,7 +1224,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 
     	size_t count = 0;
     	BtGattListEntry_t *tbl = GetEntryTable(&count);
-
+#if 0
     	for (int i = 0; i < count; i++)
     	{
     		g_Uart.printf("tbl[%d]: Hdl: %d (0x%04x), Uuid: %04x, Data: ", i, tbl[i].Hdl, tbl[i].Hdl, tbl[i].TypeUuid.Uuid);
@@ -1134,6 +1235,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     		}
     		g_Uart.printf("\r\n");
     	}
+#endif
     }
 
 
