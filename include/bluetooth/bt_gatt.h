@@ -41,7 +41,7 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 
-#define BT_GATT_HANDLE_INVALID				-1
+#define BT_GATT_HANDLE_INVALID				0xFFFFU
 
 #pragma pack(push,1)
 
@@ -96,6 +96,11 @@ typedef struct __Bt_Gatt_Char_Prefered_Conn_Params {
 	uint16_t Latency;			//!< Peripheral latency
 	uint16_t Timeout;			//!< Supervision timeout in 10ms count
 } BtGattPreferedConnParams_t;
+
+typedef struct __Bt_Gatt_Char_Notify {
+	uint16_t ValHdl;			//!< Characteristic value handle
+	uint8_t Data[1];			//!< Characteristic attribute value
+} BtGattCharNotify_t;
 
 #pragma pack(pop)
 
@@ -242,7 +247,7 @@ extern "C" {
 #endif
 
 uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal);
-bool BtGattUpdate(uint16_t Hdl, void *pAttVal);
+bool BtGattUpdate(uint16_t Hdl, void *pAttVal, size_t Len);
 int BtGattGetListHandle(uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 int BtGattGetListUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 bool BeGattFindEntryUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pEntry);
@@ -250,6 +255,8 @@ bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pArr);
 size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff);
 size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len);
 BtGattListEntry_t *GetEntryTable(size_t *pCount);
+bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
+bool BtGattCharNotify(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg);
 
 #ifdef __cplusplus

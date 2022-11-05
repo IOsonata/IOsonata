@@ -36,6 +36,7 @@ SOFTWARE.
 #include <memory.h>
 
 #include "istddef.h"
+#include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gatt.h"
 
 #ifndef BT_GATT_ENTRY_MAX_COUNT
@@ -78,8 +79,9 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
-				break;
+			//case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+			//	s_BtGatEntryTbl[s_NbGattListEntry].pVal = pAttVal;
+			//	break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
 				s_BtGatEntryTbl[s_NbGattListEntry].Val32 = *(uint16_t*)pAttVal;
 				break;
@@ -133,8 +135,8 @@ bool BtGattUpdate(uint16_t Hdl, void *pAttVal, size_t Len)
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
-				break;
+//			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+//				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
 				p->Val32 = *(uint8_t*)pAttVal;
 				break;
@@ -304,8 +306,13 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
-				break;
+//			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+//				if (pEntry->pVal)
+//				{
+//					strcpy((char*)pBuff, (char*)pEntry->pVal);
+//					len = strlen((char*)pEntry->pVal);
+//				}
+//				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
 				pBuff[0] = pEntry->Val32 & 0xFF;
 				pBuff[1] = (pEntry->Val32 >> 8) & 0xFF;
@@ -369,7 +376,7 @@ size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
 				p->Val32 = *(uint16_t*)pBuff;
-				len = 1;
+				len = 2;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
@@ -400,6 +407,50 @@ BtGattListEntry_t *GetEntryTable(size_t *count)
 	return s_BtGatEntryTbl;
 }
 
+bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+{
+	if (pChar->ValHdl == BT_GATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	BtGattListEntry_t *p = &s_BtGatEntryTbl[pChar->ValHdl - 1];
+
+	if (p->CharVal.MaxLen < Len)
+	{
+		return false;
+	}
+
+	if (pVal != pChar->pValue)
+	{
+		memcpy(pChar->pValue, pVal, Len);
+	}
+
+	if (pChar->Property & BT_GATT_CHAR_PROP_VALEN)
+	{
+		p->CharVal.Len = Len;
+	}
+
+	return true;
+}
+
+bool BtGattCharNotify(BtGattChar_t *pChar, void * const pVal, size_t Len)
+{
+	if (BtGattCharSetValue(pChar, pVal, Len) == false)
+	{
+		return false;
+	}
+
+	BtGattListEntry_t *p = &s_BtGatEntryTbl[pChar->CccdHdl - 1];
+
+	if (p->Val32 & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
+	{
+		BtHciMotify(pChar->pSrvc->ConnHdl, pChar->ValHdl, pVal, Len);
+	}
+
+	return true;
+}
+
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 {
 	bool retval = false;
@@ -416,7 +467,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 	pSrvc->Uuid.Type = BT_UUID_TYPE_16;
 	pSrvc->Uuid.Uuid16 = pCfg->UuidSrvc;
 
-	BtGattListEntry_t *p = (BtGattListEntry_t*)&s_BtGatEntryTbl[s_NbGattListEntry];
+	BtGattListEntry_t *p = &s_BtGatEntryTbl[s_NbGattListEntry];
 	s_NbGattListEntry++;
 
     p->TypeUuid = {0, BT_UUID_TYPE_16, BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE };
@@ -483,7 +534,9 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
         	// Characteristic Description
         	p->TypeUuid = {0, BT_UUID_TYPE_16, BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION };
         	p->Hdl = s_NbGattListEntry;
-        	p->pVal = (void*)c->pDesc;
+//        	p->pVal = (void*)c->pDesc;
+        	size_t l = strlen(c->pDesc);
+        	p->CharVal = { l, l, (void*)c->pDesc, c->WrCB, c };
 
         	c->DescHdl = p->Hdl;
         }

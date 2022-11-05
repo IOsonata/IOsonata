@@ -795,7 +795,6 @@ typedef struct __Bt_Uuid {
 		uint16_t Uuid16;
 		uint32_t Uuid32;
 	};
-	//BtUuidVal_t Val;
 } BtUuid_t;
 
 typedef struct __Bt_Uuid16 {

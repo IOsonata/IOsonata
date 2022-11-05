@@ -227,7 +227,7 @@ void BleAppRun();
 uint16_t BleAppGetConnHandle();
 void BleAppGapDeviceNameSet(const char* ppDeviceName);
 
-void BleAppSetDevName(char *pName);
+void BleAppSetDevName(const char *pName);
 char * const BleAppGetDevName();
 
 /**

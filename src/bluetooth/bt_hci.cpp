@@ -56,8 +56,11 @@ bool BtHciInit(BtHciDevCfg_t const *pCfg)
 
 	s_HciDevice.SendData = pCfg->SendData;
 	s_HciDevice.EvtHandler = pCfg->EvtHandler;
+	s_HciDevice.ConnectedHandler = pCfg->ConnectedHandler;
+
 	return true;
 }
+uint16_t s_ConnHdl = -1;
 
 void BtHciProcessLeEvent(BtHciLeEvtPacket_t *pLeEvtPkt)
 {
@@ -70,7 +73,7 @@ void BtHciProcessLeEvent(BtHciLeEvtPacket_t *pLeEvtPkt)
 				BtHciLeEvtConnComplete_t *p = (BtHciLeEvtConnComplete_t*)pLeEvtPkt->Data;
 				if (p->Status == 0)
 				{
-					uint16_t conhdl = p->ConnHdl;
+					s_ConnHdl = p->ConnHdl;
 					//BLEAPP_ROLE role = p->Role == 1 ? BLEAPP_ROLE_PERIPHERAL : BLEAPP_ROLE_CENTRAL;
 
 	//					printf("hdl %x, %d\n", conhdl, role);
@@ -130,6 +133,10 @@ void BtHciProcessLeEvent(BtHciLeEvtPacket_t *pLeEvtPkt)
 
 				if (p->Status == 0)
 				{
+					s_HciDevice.ConnectedHandler(p->ConnHdl, p->PeerAddr);
+
+					s_ConnHdl = p->ConnHdl;
+
 					//g_BleConn.Handle = p->ConnHdl;
 					//g_BleConn.PeerAddrType = p->PeerAddrType;
 					//memcpy(g_BleConn.PeerAddr, p->PeerAddr, 6);
@@ -962,4 +969,32 @@ void BtHciProcessData(BtHciACLDataPacket_t *pPkt)
 		}
 	}
 */
+}
+
+void BtHciMotify(uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len)
+{
+	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+	g_Uart.printf("BtHciMotify : %d %d %d", ConnHdl, s_ConnHdl, ValHdl);
+
+	acl->Hdr.ConnHdl = s_ConnHdl;//ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF;
+
+	BtGattCharNotify_t *p = (BtGattCharNotify_t*)l2pdu->Att.Param;
+
+	p->ValHdl = ValHdl;
+	memcpy(p->Data, pData, Len);
+	l2pdu->Hdr.Len = sizeof(BtGattCharNotify_t) + Len;
+	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+	g_Uart.printf("Len : %d, %d, %d\r\n", Len, l2pdu->Hdr.Len, acl->Hdr.Len);
+	uint32_t n = s_HciDevice.SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	g_Uart.printf("n=%d\r\n", n);
 }

@@ -661,10 +661,12 @@ typedef struct __Bt_Hci_Device		BtHciDevice_t;
 
 typedef uint32_t (*BtHciSendDataFct_t)(void *pData, uint32_t Len);
 typedef void (*BtEvtHandler_t)(BtHciDevice_t * const pDev, uint32_t Evt);
+typedef void (*BtEvtConnected_t)(uint16_t ConnHdl, uint8_t PerrAddr[6]);
 
 typedef struct __Bt_Hci_Dev_Config {
 	BtHciSendDataFct_t SendData;
 	BtEvtHandler_t EvtHandler;
+	BtEvtConnected_t ConnectedHandler;
 } BtHciDevCfg_t;
 
 struct __Bt_Hci_Device {
@@ -672,6 +674,7 @@ struct __Bt_Hci_Device {
 	uint32_t TxDataLen;
 	BtHciSendDataFct_t SendData;
 	BtEvtHandler_t EvtHandler;
+	BtEvtConnected_t ConnectedHandler;
 };
 
 #ifdef __cplusplus
@@ -690,6 +693,7 @@ void BtHciProcessACLData(BtHciACLDataPacketHdr_t *pPkt);
 static inline int BtHciSendData(BtHciDevice_t *pDev, void *pData, int Len) {
 	return pDev->SendData(pData, Len);
 }
+void BtHciMotify(uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
 
 
 #ifdef __cplusplus
