@@ -212,15 +212,15 @@ void BleSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
 
         case BLE_EVT_USER_MEM_REQUEST:
         	{
-        		uint16_t hdl = BtGapGetConnection();
-        		if (pSrvc->pLongWrBuff != NULL && hdl == pBleEvt->evt.gatts_evt.conn_handle)
+        		//uint16_t hdl = BtGapGetConnection();
+        		if (pSrvc->pLongWrBuff != NULL)// && hdl == pBleEvt->evt.gatts_evt.conn_handle)
         		{
 					ble_user_mem_block_t mblk;
 					memset(&mblk, 0, sizeof(ble_user_mem_block_t));
 					mblk.p_mem = pSrvc->pLongWrBuff;
 					mblk.len = pSrvc->LongWrBuffSize;
 					memset(pSrvc->pLongWrBuff, 0, pSrvc->LongWrBuffSize);
-					uint32_t err_code = sd_ble_user_mem_reply(hdl, &mblk);
+					uint32_t err_code = sd_ble_user_mem_reply(pBleEvt->evt.gatts_evt.conn_handle, &mblk);
 					APP_ERROR_CHECK(err_code);
         		}
         	}
@@ -240,14 +240,14 @@ void BleSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
 
 #endif
         	{
-        		uint16_t hdl = BtGapGetConnection();
+//        		uint16_t hdl = BtGapGetConnection();
 
-				if (hdl == pBleEvt->evt.gatts_evt.conn_handle)
+//				if (hdl == pBleEvt->evt.gatts_evt.conn_handle)
 				{
 					for (int i = 0; i < pSrvc->NbChar; i++)
 					{
-						//if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].Hdl.value_handle &&
-						if (pSrvc->pCharArray[i].TxCompleteCB != NULL)
+						if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].ValHdl &&
+							pSrvc->pCharArray[i].TxCompleteCB != NULL)
 						{
 							pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
 						}

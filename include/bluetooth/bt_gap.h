@@ -43,6 +43,8 @@ SOFTWARE.
 
 #include <stddef.h>
 
+#include "bluetooth/ble_adv.h"
+
 /** @addtogroup Bluetooth
  * @{ */
 
@@ -128,8 +130,9 @@ typedef struct __Bt_Gap_Connection {
 extern "C" {
 #endif
 
-void BtGapInit();
+void BtGapInit(uint8_t Role);
 bool isBtGapConnected();
+void BtGapSetDevName(const char *pName);
 uint16_t BtGapGetConnection();
 size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
 bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);

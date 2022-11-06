@@ -163,7 +163,7 @@ static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
  * @return	Pointer to location to store new data.
  * 			NULL if not enough space. Old data will not be removed
  */
-BleAdvData_t *BleAdvDataAllocate(BleAdvPacket_t *pAdvPkt, uint8_t Type, int Len);
+BleAdvData_t *BleAdvDataAllocate(BleAdvPacket_t * const pAdvPkt, uint8_t Type, int Len);
 
 /**
  * @brief	Add advertisement data into the adv packet
@@ -175,7 +175,7 @@ BleAdvData_t *BleAdvDataAllocate(BleAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
  *
  * @return	true - success
  */
-bool BleAdvDataAdd(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Len);
+bool BleAdvDataAdd(BleAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData, int Len);
 
 /**
  * @brief	Remove advertisement data from the adv packet
@@ -185,7 +185,7 @@ bool BleAdvDataAdd(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Le
  *
  * @return	none
  */
-void BleAdvDataRemove(BleAdvPacket_t *pAdvPkt, uint8_t Type);
+void BleAdvDataRemove(BleAdvPacket_t * const pAdvPkt, uint8_t Type);
 
 /**
  * @brief	Add UUID list to the advertising data
@@ -195,7 +195,15 @@ void BleAdvDataRemove(BleAdvPacket_t *pAdvPkt, uint8_t Type);
  * @param 	bComplete : true - UUID list is complete, false - partial
  * @return
  */
-bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BtUuidArr_t *pUid, bool bComplete);
+bool BleAdvDataAddUuid(BleAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bool bComplete);
+
+/**
+ * @brief	Set device name to the advertisement packet
+ *
+ * @param 	pAdvPkt	: Pointer to Adv packet to add data into
+ * @param	pName	: Pointer to device name string
+ */
+void BleAdvDataSetDevName(BleAdvPacket_t * const pAdvPkt, const char *pName);
 
 #ifdef __cplusplus
 }

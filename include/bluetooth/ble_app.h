@@ -199,6 +199,7 @@ void BleAppInitUserServices();
 void BleAppUserEvtConnected(uint16_t ConnHdl);
 
 void BleAppUserEvtDisconnected(uint16_t ConnHdl);
+
 /**
  * @Brief	User peripheral app event handler
  */

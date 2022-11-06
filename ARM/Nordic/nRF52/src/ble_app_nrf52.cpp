@@ -312,9 +312,7 @@ void BleAppEnterDfu()
 
 bool BleAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	uint16_t hdl = BtGapGetConnection();
-
-	if (hdl == BT_GATT_HANDLE_INVALID)
+	if (g_BleAppData.ConnHdl == BT_GATT_HANDLE_INVALID)
 	{
 		return false;
 	}
@@ -330,7 +328,7 @@ bool BleAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
     params.p_data = pData;
     params.p_len = &DataLen;
 
-    uint32_t err_code = sd_ble_gatts_hvx(hdl, &params);
+    uint32_t err_code = sd_ble_gatts_hvx(g_BleAppData.ConnHdl, &params);
 
     return true;
 }
@@ -437,7 +435,7 @@ static void BleAppGapParamInit(const BleAppCfg_t *pBleAppCfg)
 		APP_ERROR_CHECK(err_code);
     }
 
-    BtGapInit();
+   // BtGapInit(pBleAppCfg->Role);
 }
 
 /**@brief Function for handling an event from the Connection Parameters Module.
@@ -547,9 +545,9 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
         case BLE_GAP_EVT_CONNECTED:
         	g_BleAppData.bAdvertising = false;
 
-        	BtGapAddConnection(p_gap_evt->conn_handle, role,
-        					   p_gap_evt->params.connected.peer_addr.addr_type,
-        					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
+        	//BtGapAddConnection(p_gap_evt->conn_handle, role,
+        	//				   p_gap_evt->params.connected.peer_addr.addr_type,
+        	//				   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
 
         	BleConnLedOn();
         	g_BleAppData.ConnHdl = p_ble_evt->evt.gap_evt.conn_handle;
@@ -559,7 +557,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
 
         case BLE_GAP_EVT_DISCONNECTED:
         	BleConnLedOff();
-        	BtGapDeleteConnection(p_gap_evt->conn_handle);
+        	//BtGapDeleteConnection(p_gap_evt->conn_handle);
         	g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
         	g_BleAppData.State = BLEAPP_STATE_IDLE;
         	BleAppAdvStart();

@@ -115,7 +115,7 @@ BleAdvData_t *BleAdvDataAllocate(BleAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
  *
  * @return	true - success
  */
-bool BleAdvDataAdd(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
+bool BleAdvDataAdd(BleAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
 {
 #if 0
 	int idx = BleAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
@@ -168,7 +168,7 @@ bool BleAdvDataAdd(BleAdvPacket_t *pAdvPkt, uint8_t Type, uint8_t *pData, int Le
  *
  * @return	none
  */
-void BleAdvDataRemove(BleAdvPacket_t *pAdvPkt, uint8_t Type)
+void BleAdvDataRemove(BleAdvPacket_t * const pAdvPkt, uint8_t Type)
 {
 	if (pAdvPkt->Len <= 0)
 		return;
@@ -194,7 +194,7 @@ void BleAdvDataRemove(BleAdvPacket_t *pAdvPkt, uint8_t Type)
  *
  * @return	true - success
  */
-bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BtUuidArr_t *pUid, bool bComplete)
+bool BleAdvDataAddUuid(BleAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bool bComplete)
 {
 	int l = 0;
 	uint8_t gaptype = 0;
@@ -240,4 +240,19 @@ bool BleAdvDataAddUuid(BleAdvPacket_t *pAdvPkt, const BtUuidArr_t *pUid, bool bC
 		}
 	}
 	return BleAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)pUid->Uuid16, l);
+}
+
+void BleAdvDataSetDevName(BleAdvPacket_t * const pAdvPkt, const char *pName)
+{
+	size_t l = strlen(pName);
+	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
+
+	if (l < 14)
+	{
+		// Short name
+		type = BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME;
+	}
+
+	// Update name in advertisement packet
+	BleAdvDataAdd(pAdvPkt, type, (uint8_t*)pName, l);
 }

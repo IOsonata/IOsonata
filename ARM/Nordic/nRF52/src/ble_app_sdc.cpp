@@ -51,6 +51,7 @@ SOFTWARE.
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "coredev/system_core_clock.h"
+#include "coredev/timer.h"
 #include "bluetooth/ble_app.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
@@ -62,7 +63,10 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
 
-extern "C" void BleAppInitGenericServices();
+//BleConn_t g_BleConn = {0,};
+extern UART g_Uart;
+
+void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 static inline uint32_t HciSdcSendData(void *pData, uint32_t Len) {
 	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
@@ -125,7 +129,7 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 
 //__ALIGN(4) static ble_gap_lesc_p256_pk_t    s_lesc_public_key;      /**< LESC ECC Public Key */
 //__ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC ECC DH Key*/
-
+#if 1
 alignas(4) static uint8_t s_BleAppAdvBuff[260];
 alignas(4) static sdc_hci_cmd_le_set_adv_data_t &s_BleAppAdvData = *(sdc_hci_cmd_le_set_adv_data_t*)s_BleAppAdvBuff;
 alignas(4) static BleAdvPacket_t s_BleAppAdvPkt = { sizeof(s_BleAppAdvData.adv_data), 0, s_BleAppAdvData.adv_data};
@@ -140,6 +144,7 @@ alignas(4) static BleAdvPacket_t s_BleAppSrPkt = { sizeof(s_BleAppSrData.scan_re
 
 alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppExtSrData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BleAppSrBuff;
 alignas(4) static BleAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppExtSrData.scan_response_data};
+#endif
 
 alignas(4) static uint8_t s_BleStackSdcMemPool[10000];
 
@@ -151,106 +156,16 @@ alignas(4) static BtHciDevice_t s_HciDevice = {
 		.Disconnected = BleAppDisconnected,
 };
 
-//BleConn_t g_BleConn = {0,};
-extern UART g_Uart;
-
-#ifndef BT_GAP_DEVNAME_MAX_LEN
-#define BT_GAP_DEVNAME_MAX_LEN			64
-#endif
-
-static uint16_t s_BtGapCharApperance = 0;
-static char s_BtGapCharDevName[BT_GAP_DEVNAME_MAX_LEN];
-static BtGattPreferedConnParams_t s_BtGapCharPerferedConnParams = {
-	BT_MSEC_TO_125(8), BT_MSEC_TO_125(40), 0, 400
+const static TimerCfg_t s_TimerCfg = {
+    .DevNo = 1,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,			// 0 => Default frequency
+	.IntPrio = 6,
+	.EvtHandler = TimerHandler
 };
 
-static BtGattChar_t s_BtGapChar[] = {
-	{
-		// Read characteristic
-		.Uuid = BT_UUID_GATT_DEVICE_NAME,
-		.MaxDataLen = BT_GAP_DEVNAME_MAX_LEN,
-		.Property =	BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = NULL,						// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = s_BtGapCharDevName,
-		.ValueLen = 0,
-	},
-	{
-		// Read characteristic
-		.Uuid = BT_UUID_GATT_APPEARANCE,
-		.MaxDataLen = 2,
-		.Property =	BT_GATT_CHAR_PROP_READ,
-		.pDesc = NULL,						// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = &s_BtGapCharApperance,
-		.ValueLen = 2,
-	},
-	{
-		// Read characteristic
-		.Uuid = BT_UUID_GATT_PERIPHERAL_PREFERRED_CONNECTION_PARAMETERS,
-		.MaxDataLen = sizeof(BtGattPreferedConnParams_t),
-		.Property =	BT_GATT_CHAR_PROP_READ,
-		.pDesc = NULL,						// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = &s_BtGapCharPerferedConnParams,
-		.ValueLen = sizeof(BtGattPreferedConnParams_t),
-	},
-};
+Timer g_Timer;
 
-static const BtGattSrvcCfg_t s_BtGapSrvcCfg = {
-	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
-	.bCustom = false,
-	.UuidBase = {0,},						// Base UUID
-	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ACCESS,	// Service UUID
-	.NbChar = sizeof(s_BtGapChar) / sizeof(BtGattChar_t),// Total number of characteristics for the service
-	.pCharArray = s_BtGapChar,				// Pointer a an array of characteristic
-};
-
-static BtGattSrvc_t s_BtGapSrvc;
-
-static BtGattCharSrvcChanged_t s_BtGattCharSrvcChanged = {0,};
-
-static BtGattChar_t s_BtGattChar[] = {
-	{
-		// Read characteristic
-		.Uuid = BT_UUID_GATT_CHAR_SERVICE_CHANGED,
-		.MaxDataLen = sizeof(BtGattCharSrvcChanged_t),
-		.Property =	BT_GATT_CHAR_PROP_INDICATE,
-		.pDesc = NULL,						// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = &s_BtGattCharSrvcChanged,
-		.ValueLen = 0,
-	},
-};
-
-static BtGattSrvcCfg_t s_BtGattSrvcCfg = {
-	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
-	.bCustom = false,
-	.UuidBase = {0,},		// Base UUID
-	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE,		// Service UUID
-	.NbChar = sizeof(s_BtGattChar) / sizeof(BtGattChar_t),				// Total number of characteristics for the service
-	.pCharArray = s_BtGattChar,				// Pointer a an array of characteristic
-};
-
-static BtGattSrvc_t s_BtGattSrvc;
-
-
-/*
- *
-static const BtHciDevCfg_t s_BtDevCfg = {
-	.SendData = HciSdcSendData,
-	.EvtHandler = BleAppEvtHandler,
-	.ConnectedHandler = BleConnected,
-};
-*/
 static void BleStackMpslAssert(const char * const file, const uint32_t line)
 {
 //	printf("MPSL Fault: %s, %d\n", file, line);
@@ -288,18 +203,38 @@ static void BleStackSdcCB()
 	}
 }
 
+void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
+{
+    if (Evt & TIMER_EVT_TRIGGER(0))
+    {
+
+    }
+}
+
 void BleAppSetDevName(const char *pName)
 {
-	strncpy(s_BtGapCharDevName, pName, BT_GAP_DEVNAME_MAX_LEN);
-	s_BtGapCharDevName[BT_GAP_DEVNAME_MAX_LEN-1] = 0;
-}
+	BleAdvPacket_t *advpkt;
 
+	if (g_BleAppData.bExtAdv == true)
+	{
+		advpkt = &s_BleAppExtAdvPkt;
+	}
+	else
+	{
+		advpkt = &s_BleAppAdvPkt;
+	}
+
+	BleAdvDataSetDevName(advpkt, pName);
+
+	BtGapSetDevName(pName);
+}
+/*
 char * const BleAppGetDevName()
 {
-	return s_BtGapCharDevName;
+	//return s_BtGapCharDevName;
 }
 
-
+*/
 bool isConnected()
 {
 	return g_BleAppData.ConnHdl != 0;
@@ -358,8 +293,8 @@ void BleAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 
 	if (isBtGapConnected() == false)
 	{
-		BtGattSrvcDisconnected(&s_BtGapSrvc);
-		BtGattSrvcDisconnected(&s_BtGattSrvc);
+//		BtGattSrvcDisconnected(&s_BtGapSrvc);
+//		BtGattSrvcDisconnected(&s_BtGattSrvc);
 
 		BleAppUserEvtDisconnected(ConnHdl);
 	}
@@ -376,7 +311,7 @@ void BleAppEnterDfu()
 void BleAppDisconnect()
 {
 }
-
+/*
 void BleAppGapDeviceNameSet(const char* pDeviceName)
 {
 	BleAdvPacket_t *advpkt;
@@ -403,7 +338,7 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 	BtGattCharSetValue(&s_BtGapChar[0], (void*)pDeviceName, l);
 }
-
+*/
 /**@brief Function for the GAP initialization.
  *
  * @details This function will set up all the necessary GAP (Generic Access Profile) parameters of
@@ -570,6 +505,8 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	uint16_t extprop = 0;//BLE_EXT_ADV_EVT_PROP_LEGACY;
 	BleAdvPacket_t *advpkt;
 	BleAdvPacket_t *srpkt;
+
+    g_Timer.Init(s_TimerCfg);
 
 	if (g_BleAppData.bExtAdv == true)
 	{
@@ -1255,12 +1192,14 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 
     BleAppInitUserData();
 
+    BtGapInit(pBleAppCfg->Role);
+
     if (pBleAppCfg->Role & (BLEAPP_ROLE_BROADCASTER | BLEAPP_ROLE_PERIPHERAL))
     {
     	if (pBleAppCfg->Role & BLEAPP_ROLE_PERIPHERAL)
     	{
-    		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
-    		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
+//    		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
+//    		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
 
     		BleAppInitUserServices();
     	}
@@ -1286,7 +1225,9 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
 #endif
     }
 
-    BleAppGapDeviceNameSet(pBleAppCfg->pDevName);
+	BtGapSetDevName(pBleAppCfg->pDevName);
+
+    //BleAppGapDeviceNameSet(pBleAppCfg->pDevName);
 
 #if (__FPU_USED == 1)
     // Patch for softdevice & FreeRTOS to sleep properly when FPU is in used
@@ -1301,7 +1242,6 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     }
 
 	//BtHciInit(&s_BtDevCfg);
-    BtGapInit();
 
 	g_BleAppData.State = BLEAPP_STATE_INITIALIZED;
 
