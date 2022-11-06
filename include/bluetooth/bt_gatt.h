@@ -259,6 +259,7 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
 //bool BtGattCharNotify(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg);
+void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 
 #ifdef __cplusplus
 }

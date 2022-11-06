@@ -563,3 +563,13 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 	return true;
 }
 
+void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
+{
+	for (int i = 0; i < pSrvc->NbChar; i++)
+	{
+		if (pSrvc->pCharArray[i].CccdHdl != BT_GATT_HANDLE_INVALID)
+		{
+			s_BtGatEntryTbl[s_NbGattListEntry].Val32 = 0;
+		}
+	}
+}

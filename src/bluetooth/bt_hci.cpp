@@ -242,7 +242,7 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				BtHciEvtDisconComplete_t *p = (BtHciEvtDisconComplete_t*)pEvtPkt->Data;
 				g_Uart.printf("Disconnected\r\n");
 
-				pDev->Disconnected(p->ConnHdl);
+				pDev->Disconnected(p->ConnHdl, p->Reason);
 			}
 			break;
 		case BT_HCI_EVT_AUTHEN_COMPLETE:

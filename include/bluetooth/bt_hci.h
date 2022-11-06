@@ -677,7 +677,7 @@ struct __Bt_Hci_Device {
 	uint32_t (*SendData)(void *pData, uint32_t Len);
 	void (*EvtHandler)(BtHciDevice_t * const pDev, uint32_t Evt);
 	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
-	void (*Disconnected)(uint16_t ConnHdl);
+	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
 };
 
 #ifdef __cplusplus

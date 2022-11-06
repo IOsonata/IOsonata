@@ -53,27 +53,27 @@ __attribute__((weak)) void BleAppAdvTimeoutHandler()
 
 }
 
-//__WEAK void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
-//{
+__attribute__((weak))  void BlePeriphEvtUserHandler(uint32_t p_ble_evt)
+{
 
-//}
+}
 
-//__WEAK void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
-//{
+__attribute__((weak))  void BleCentralEvtUserHandler(uint32_t p_ble_evt)
+{
 
-//}
+}
 
 __attribute__((weak)) void BleAppRtosWaitEvt(void)
 {
 
 }
 
-__attribute__((weak)) void BleAppConnectedUserHandler(uint16_t ConnHdl)
+__attribute__((weak)) void BleAppUserEvtConnected(uint16_t ConnHdl)
 {
 
 }
 
-__attribute__((weak)) void BleAppDisconnectedUserHandler(uint16_t ConnHdl)
+__attribute__((weak)) void BleAppUserEvtDisconnected(uint16_t ConnHdl)
 {
 
 }

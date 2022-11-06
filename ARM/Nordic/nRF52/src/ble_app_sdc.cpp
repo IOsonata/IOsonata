@@ -69,7 +69,7 @@ static inline uint32_t HciSdcSendData(void *pData, uint32_t Len) {
 }
 void BleAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt);
 void BleAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
-void BleAppDisconnected(uint16_t ConnHdl);
+void BleAppDisconnected(uint16_t ConnHdl, uint8_t Reason);
 
 #pragma pack(push, 4)
 
@@ -338,24 +338,34 @@ void BleAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
 
 }
 
-void BleAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6])
+void BleAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_t PeerAddr[6])
 {
 	g_BleAppData.ConnHdl = ConnHdl;
 
+	BtGapAddConnection(ConnHdl, Role, PeerAddrType, PeerAddr);
 //	s_BtGapSrvc.ConnHdl = ConnHdl;
 //	s_BtGattSrvc.ConnHdl = ConnHdl;
 
-	BleAppConnectedUserHandler(ConnHdl);
+	BleAppUserEvtConnected(ConnHdl);
 }
 
-void BleAppDisconnected(uint16_t ConnHdl)
+void BleAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 {
 //	s_BtGapSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
 //	s_BtGattSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
 
-	BleAppDisconnectedUserHandler(ConnHdl);
+	BtGapDeleteConnection(ConnHdl);
 
-	g_BleAppData.ConnHdl = BT_GATT_HANDLE_INVALID;
+	if (isBtGapConnected() == false)
+	{
+		BtGattSrvcDisconnected(&s_BtGapSrvc);
+		BtGattSrvcDisconnected(&s_BtGattSrvc);
+
+		BleAppUserEvtDisconnected(ConnHdl);
+	}
+
+	g_BleAppData.ConnHdl = BtGapGetConnection();
+
 }
 
 
@@ -1291,6 +1301,7 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg)
     }
 
 	//BtHciInit(&s_BtDevCfg);
+    BtGapInit();
 
 	g_BleAppData.State = BLEAPP_STATE_INITIALIZED;
 

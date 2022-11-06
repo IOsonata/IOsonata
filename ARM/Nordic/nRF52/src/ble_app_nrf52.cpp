@@ -310,6 +310,31 @@ void BleAppEnterDfu()
 #endif
 }
 
+bool BleAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
+{
+	uint16_t hdl = BtGapGetConnection();
+
+	if (hdl == BT_GATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	if (pChar->bNotify == false)
+		return false;
+
+    ble_gatts_hvx_params_t params;
+
+    memset(&params, 0, sizeof(params));
+    params.type = BLE_GATT_HVX_NOTIFICATION;
+    params.handle = pChar->ValHdl;//.value_handle;
+    params.p_data = pData;
+    params.p_len = &DataLen;
+
+    uint32_t err_code = sd_ble_gatts_hvx(hdl, &params);
+
+    return true;
+}
+
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
