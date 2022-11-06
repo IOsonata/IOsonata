@@ -243,23 +243,6 @@ static BtGattSrvcCfg_t s_BtGattSrvcCfg = {
 static BtGattSrvc_t s_BtGattSrvc;
 
 
-void BleAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
-{
-
-}
-
-void BleAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6])
-{
-	s_BtGapSrvc.ConnHdl = ConnHdl;
-	s_BtGattSrvc.ConnHdl = ConnHdl;
-}
-
-void BleAppDisconnected(uint16_t ConnHdl)
-{
-	s_BtGapSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
-	s_BtGattSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
-}
-
 /*
  *
 static const BtHciDevCfg_t s_BtDevCfg = {
@@ -349,6 +332,32 @@ static void BleConnLedOn() {
         IOPinClear(g_BleAppData.ConnLedPort, g_BleAppData.ConnLedPin);
     }
 }
+
+void BleAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
+{
+
+}
+
+void BleAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6])
+{
+	g_BleAppData.ConnHdl = ConnHdl;
+
+//	s_BtGapSrvc.ConnHdl = ConnHdl;
+//	s_BtGattSrvc.ConnHdl = ConnHdl;
+
+	BleAppConnectedUserHandler(ConnHdl);
+}
+
+void BleAppDisconnected(uint16_t ConnHdl)
+{
+//	s_BtGapSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
+//	s_BtGattSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
+
+	BleAppDisconnectedUserHandler(ConnHdl);
+
+	g_BleAppData.ConnHdl = BT_GATT_HANDLE_INVALID;
+}
+
 
 void BleAppEnterDfu()
 {
@@ -1446,7 +1455,7 @@ bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * 
 #endif
 }
 
-bool ghify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
+bool BleAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
 	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{
@@ -1458,7 +1467,7 @@ bool ghify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	BtHciMotify(&s_HciDevice, pChar->pSrvc->ConnHdl, pChar->ValHdl, pData, DataLen);
+	BtHciMotify(&s_HciDevice, g_BleAppData.ConnHdl, pChar->ValHdl, pData, DataLen);
 
 	return true;
 }

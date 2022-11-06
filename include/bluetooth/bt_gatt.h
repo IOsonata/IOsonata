@@ -232,7 +232,7 @@ struct __Bt_Gatt_Service {
     int NbChar;							//!< Number of characteristic defined for this service
     BtGattChar_t *pCharArray;			//!< Pointer to array of characteristics
     uint16_t Hdl;            			//!< Service handle
-    uint16_t ConnHdl;					//!< Connection handle
+//    uint16_t ConnHdl;					//!< Connection handle
     BtUuid_t Uuid;						//!< Service UUID
     uint8_t	*pLongWrBuff;				//!< pointer to user long write buffer
     int	LongWrBuffSize;					//!< long write buffer size
@@ -257,7 +257,7 @@ size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len);
 BtGattListEntry_t *GetEntryTable(size_t *pCount);
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
-bool BtGattCharNotify(BtGattChar_t *pChar, void * const pVal, size_t Len);
+//bool BtGattCharNotify(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg);
 
 #ifdef __cplusplus

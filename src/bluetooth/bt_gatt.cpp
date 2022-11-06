@@ -474,7 +474,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 	uint8_t baseidx = 0;
 
 	// Initialize service structure
-	pSrvc->ConnHdl  = BT_GATT_HANDLE_INVALID;
+	//pSrvc->ConnHdl  = BT_GATT_HANDLE_INVALID;
 
 	// Add base UUID to internal list.
 	if (pCfg->bCustom)
@@ -538,7 +538,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
             // Characteristic Descriptor CCC
             p->TypeUuid = {0, BT_UUID_TYPE_16, BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
         	p->Hdl = s_NbGattListEntry;
-        	p->Val32 = c->Property >> 4;
+        	p->Val32 = 0;
 
         	c->CccdHdl = s_NbGattListEntry;
         }

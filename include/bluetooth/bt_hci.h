@@ -663,11 +663,13 @@ typedef uint32_t (*BtHciSendDataFct_t)(void *pData, uint32_t Len);
 typedef void (*BtEvtHandler_t)(BtHciDevice_t * const pDev, uint32_t Evt);
 typedef void (*BtEvtConnected_t)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
 
+/*
 typedef struct __Bt_Hci_Dev_Config {
 	BtHciSendDataFct_t SendData;
 	BtEvtHandler_t EvtHandler;
 	BtEvtConnected_t ConnectedHandler;
 } BtHciDevCfg_t;
+*/
 
 struct __Bt_Hci_Device {
 	uint32_t RxDataLen;

@@ -61,9 +61,6 @@ bool BtHciInit(BtHciDevCfg_t const *pCfg)
 	return true;
 }*/
 
-uint16_t s_ConnHdl = -1;
-
-
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 {
 	g_Uart.printf("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
@@ -75,7 +72,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				BtHciLeEvtConnComplete_t *p = (BtHciLeEvtConnComplete_t*)pLeEvtPkt->Data;
 				if (p->Status == 0)
 				{
-					s_ConnHdl = p->ConnHdl;
+					pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
 					//BLEAPP_ROLE role = p->Role == 1 ? BLEAPP_ROLE_PERIPHERAL : BLEAPP_ROLE_CENTRAL;
 
 	//					printf("hdl %x, %d\n", conhdl, role);
@@ -244,6 +241,8 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 			{
 				BtHciEvtDisconComplete_t *p = (BtHciEvtDisconComplete_t*)pEvtPkt->Data;
 				g_Uart.printf("Disconnected\r\n");
+
+				pDev->Disconnected(p->ConnHdl);
 			}
 			break;
 		case BT_HCI_EVT_AUTHEN_COMPLETE:
@@ -841,22 +840,6 @@ void BtProcessAttData(BtHciDevice_t *pDev, uint16_t ConnHdl, BtL2CapPdu_t *pRcvP
 					g_Uart.printf("List not found\r\n");
 
 					BtHciSendError(pDev, acl, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
-/*
-					BtAttErrorRsp_t *errsp = (BtAttErrorRsp_t*)&l2pdu->Att;
-
-					errsp->OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
-					errsp->ReqOpCode = BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ;
-					errsp->Hdl = 1;
-					errsp->Error = BT_ATT_ERROR_ATT_NOT_FOUND;
-
-					l2pdu->Hdr.Len = sizeof(BtAttErrorRsp_t);
-					acl->Hdr.Len = sizeof(BtAttErrorRsp_t) + sizeof(BtL2CapHdr_t);
-
-					g_Uart.printf("Error\r\n");
-
-					uint32_t n = s_HciDevice.SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
-					g_Uart.printf("n=%d\r\n", n);
-*/
 				}
 				else
 				{
@@ -979,7 +962,7 @@ void BtHciMotify(BtHciDevice_t *pDev, uint16_t ConnHdl, uint16_t ValHdl, void * 
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
-	g_Uart.printf("BtHciMotify : %d %d %d", ConnHdl, s_ConnHdl, ValHdl);
+	g_Uart.printf("BtHciMotify : %d %d \r\n", ConnHdl, ValHdl);
 
 	acl->Hdr.ConnHdl = ConnHdl;
 	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;

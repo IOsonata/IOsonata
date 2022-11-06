@@ -33,40 +33,48 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
-#include "ble_advertising.h"
+#include <stdbool.h>
 
 #include "bluetooth/ble_app.h"
-#include "ble_app_nrf5.h"
+#include "bluetooth/ble_app.h"
 
-__WEAK void BleAppInitUserData()
+__attribute__((weak)) void BleAppInitUserData()
 {
 
 }
 
-__WEAK void BleAppInitUserServices()
+__attribute__((weak)) void BleAppInitUserServices()
 {
 
 }
 
-__WEAK void BleAppAdvTimeoutHandler()
+__attribute__((weak)) void BleAppAdvTimeoutHandler()
 {
 
 }
 
-__WEAK void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
+//__WEAK void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
+//{
+
+//}
+
+//__WEAK void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
+//{
+
+//}
+
+__attribute__((weak)) void BleAppRtosWaitEvt(void)
 {
 
 }
 
-__WEAK void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
+__attribute__((weak)) void BleAppConnectedUserHandler(uint16_t ConnHdl)
 {
 
 }
 
-__WEAK void BleAppRtosWaitEvt(void)
+__attribute__((weak)) void BleAppDisconnectedUserHandler(uint16_t ConnHdl)
 {
 
 }
-
-
 

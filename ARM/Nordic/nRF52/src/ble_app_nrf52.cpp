@@ -83,6 +83,7 @@ Modified by          Date              Description
 #include "ble_app_nrf5.h"
 #include "ble_dev.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gap.h"
 #include "bluetooth/ble_srvc.h"
 #include "app_evt_handler.h"
 
@@ -410,6 +411,8 @@ static void BleAppGapParamInit(const BleAppCfg_t *pBleAppCfg)
 		err_code = sd_ble_gap_ppcp_set(&gap_conn_params);
 		APP_ERROR_CHECK(err_code);
     }
+
+    BtGapInit();
 }
 
 /**@brief Function for handling an event from the Connection Parameters Module.
@@ -518,6 +521,11 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
     {
         case BLE_GAP_EVT_CONNECTED:
         	g_BleAppData.bAdvertising = false;
+
+        	BtGapAddConnection(p_gap_evt->conn_handle, role,
+        					   p_gap_evt->params.connected.peer_addr.addr_type,
+        					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
+
         	BleConnLedOn();
         	g_BleAppData.ConnHdl = p_ble_evt->evt.gap_evt.conn_handle;
         	g_BleAppData.bScan = false;
@@ -526,6 +534,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
 
         case BLE_GAP_EVT_DISCONNECTED:
         	BleConnLedOff();
+        	BtGapDeleteConnection(p_gap_evt->conn_handle);
         	g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
         	g_BleAppData.State = BLEAPP_STATE_IDLE;
         	BleAppAdvStart();

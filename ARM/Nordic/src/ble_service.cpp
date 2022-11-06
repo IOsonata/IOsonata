@@ -44,6 +44,7 @@ SOFTWARE.
 
 #include "bluetooth/ble_srvc.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gap.h"
 
 #pragma pack(push, 1)
 typedef struct {
@@ -61,8 +62,14 @@ typedef struct {
 
 uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 {
-	if (pSrvc->ConnHdl == BLE_CONN_HANDLE_INVALID)
+/*	if (pSrvc->ConnHdl == BLE_CONN_HANDLE_INVALID)
+		return NRF_ERROR_INVALID_STATE;*/
+	uint16_t hdl = BtGapGetConnection();
+
+	if (hdl == BT_GATT_HANDLE_INVALID)
+	{
 		return NRF_ERROR_INVALID_STATE;
+	}
 
 	if (pSrvc->pCharArray[Idx].bNotify == false)
 		return NRF_ERROR_INVALID_STATE;
@@ -75,13 +82,20 @@ uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_
     params.p_data = pData;
     params.p_len = &DataLen;
 
-    uint32_t err_code = sd_ble_gatts_hvx(pSrvc->ConnHdl, &params);
+    uint32_t err_code = sd_ble_gatts_hvx(hdl, &params);
 
     return err_code;
 }
 
 uint32_t BleSrvcCharSetValue(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 {
+	uint16_t hdl = BtGapGetConnection();
+
+	if (hdl == BT_GATT_HANDLE_INVALID)
+	{
+		return NRF_ERROR_INVALID_STATE;
+	}
+
 	ble_gatts_value_t value;
 
     memset(&value, 0, sizeof(ble_gatts_value_t));
@@ -90,7 +104,7 @@ uint32_t BleSrvcCharSetValue(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint1
     value.len = DataLen;
     value.p_value = pData;
 
-    uint32_t err_code = sd_ble_gatts_value_set(pSrvc->ConnHdl,
+    uint32_t err_code = sd_ble_gatts_value_set(hdl,
     										   pSrvc->pCharArray[Idx].ValHdl,//.value_handle,
 											   &value);
     return err_code;
@@ -116,11 +130,11 @@ void BleSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
     switch (pBleEvt->header.evt_id)
     {
         case BLE_GAP_EVT_CONNECTED:
-        	pSrvc->ConnHdl = pBleEvt->evt.gap_evt.conn_handle;
+        	//pSrvc->ConnHdl = pBleEvt->evt.gap_evt.conn_handle;
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
-        	pSrvc->ConnHdl = BLE_CONN_HANDLE_INVALID;
+        	//pSrvc->ConnHdl = BLE_CONN_HANDLE_INVALID;
         	for (int i = 0; i < pSrvc->NbChar; i++)
         	{
         		pSrvc->pCharArray[i].bNotify = false;
@@ -198,14 +212,15 @@ void BleSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
 
         case BLE_EVT_USER_MEM_REQUEST:
         	{
-        		if (pSrvc->pLongWrBuff != NULL && pSrvc->ConnHdl == pBleEvt->evt.gatts_evt.conn_handle)
+        		uint16_t hdl = BtGapGetConnection();
+        		if (pSrvc->pLongWrBuff != NULL && hdl == pBleEvt->evt.gatts_evt.conn_handle)
         		{
 					ble_user_mem_block_t mblk;
 					memset(&mblk, 0, sizeof(ble_user_mem_block_t));
 					mblk.p_mem = pSrvc->pLongWrBuff;
 					mblk.len = pSrvc->LongWrBuffSize;
 					memset(pSrvc->pLongWrBuff, 0, pSrvc->LongWrBuffSize);
-					uint32_t err_code = sd_ble_user_mem_reply(pSrvc->ConnHdl, &mblk);
+					uint32_t err_code = sd_ble_user_mem_reply(hdl, &mblk);
 					APP_ERROR_CHECK(err_code);
         		}
         	}
@@ -224,17 +239,21 @@ void BleSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
         case BLE_EVT_TX_COMPLETE:
 
 #endif
-            if (pSrvc->ConnHdl == pBleEvt->evt.gatts_evt.conn_handle)
-            {
-                for (int i = 0; i < pSrvc->NbChar; i++)
-                {
-                    //if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].Hdl.value_handle &&
-                    if (pSrvc->pCharArray[i].TxCompleteCB != NULL)
-                    {
-                        pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
-                    }
-                }
-            }
+        	{
+        		uint16_t hdl = BtGapGetConnection();
+
+				if (hdl == pBleEvt->evt.gatts_evt.conn_handle)
+				{
+					for (int i = 0; i < pSrvc->NbChar; i++)
+					{
+						//if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].Hdl.value_handle &&
+						if (pSrvc->pCharArray[i].TxCompleteCB != NULL)
+						{
+							pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
+						}
+					}
+				}
+        	}
             break;
 
         default:
@@ -407,7 +426,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
 	//uint8_t baseidx = 0;
 
     // Initialize service structure
-    pSrvc->ConnHdl  = BLE_CONN_HANDLE_INVALID;
+   // pSrvc->ConnHdl  = BLE_CONN_HANDLE_INVALID;
 
     // Add base UUID to softdevice's internal list.
    // for (int i = 0; i < pCfg->NbUuidBase; i++)

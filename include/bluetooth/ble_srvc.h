@@ -214,7 +214,7 @@ uint32_t BleSrvcCharSetValue(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint1
  * @return	true - Connected
  * 			false - Not connected
  */
-static inline bool IsBleSrvcConnected(BtGattSrvc_t *pSrvc) { return pSrvc->ConnHdl != -1;}//BLE_CONN_HANDLE_INVALID; }
+//static inline bool IsBleSrvcConnected(BtGattSrvc_t *pSrvc) { return pSrvc->ConnHdl != -1;}//BLE_CONN_HANDLE_INVALID; }
 
 /**
  * @brief	Check for notification state of a characteristic

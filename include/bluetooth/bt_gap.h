@@ -41,6 +41,8 @@ SOFTWARE.
 #ifndef __BT_GAP_H__
 #define __BT_GAP_H__
 
+#include <stddef.h>
+
 /** @addtogroup Bluetooth
  * @{ */
 
@@ -109,6 +111,33 @@ SOFTWARE.
 #define	BT_GAP_ROLE_OBSERVER							(1<<1)	//!< Optimized for receiver, no connection support.
 #define	BT_GAP_ROLE_PERIPHERAL							(1<<2)	//!< Optimized for device that supports a single connection
 #define	BT_GAP_ROLE_CENTRAL								(1<<3)	//!< The initiator for all connection with devices. Support multiple connections.
+
+
+#pragma pack(push, 4)
+
+typedef struct __Bt_Gap_Connection {
+	uint16_t Hdl;				//!< Connection handle
+	uint8_t Role;
+	uint8_t PeerAddrType;
+	uint8_t PeerAddr[6];
+} BtGapConnection_t;
+
+#pragma pack(pop)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void BtGapInit();
+bool isBtGapConnected();
+uint16_t BtGapGetConnection();
+size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
+bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);
+void BtGapDeleteConnection(uint16_t Hdl);
+
+#ifdef __cplusplus
+}
+#endif
 
 /** @} */
 
