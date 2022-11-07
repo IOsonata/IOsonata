@@ -114,6 +114,12 @@ SOFTWARE.
 #define	BT_GAP_ROLE_PERIPHERAL							(1<<2)	//!< Optimized for device that supports a single connection
 #define	BT_GAP_ROLE_CENTRAL								(1<<3)	//!< The initiator for all connection with devices. Support multiple connections.
 
+#define BT_GAP_IO_CAPABILITY_DISPLAY_ONLY				0
+#define BT_GAP_IO_CAPABILITY_DISPLAY_YES_NO				1
+#define BT_GAP_IO_CAPABILITY_KEYBOARD_ONLY				2
+#define BT_GAP_IO_CAPABILITY_NONE						3
+#define BT_GAP_IO_CAPABILITY_KEYBOARD_DISPLAY			4
+
 
 #pragma pack(push, 4)
 
