@@ -164,7 +164,7 @@ const static TimerCfg_t s_TimerCfg = {
 	.EvtHandler = TimerHandler
 };
 
-Timer g_Timer;
+Timer g_BleAppTimer;
 
 static void BleStackMpslAssert(const char * const file, const uint32_t line)
 {
@@ -506,7 +506,7 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	BleAdvPacket_t *advpkt;
 	BleAdvPacket_t *srpkt;
 
-    g_Timer.Init(s_TimerCfg);
+	g_BleAppTimer.Init(s_TimerCfg);
 
 	if (g_BleAppData.bExtAdv == true)
 	{
