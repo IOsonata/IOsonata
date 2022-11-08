@@ -211,7 +211,7 @@ struct __Bt_Gatt_Characteristic {
 };
 
 typedef struct __Bt_Gatt_Service_Config {
-	//BLESRVC_SECTYPE SecType;			//!< Secure or Open service/char
+	uint8_t SecType;			//!< Secure or Open service/char
 	bool bCustom;						//!< True - for custom service Base UUID, false - Bluetooth SIG standard
 	uint8_t UuidBase[16];				//!< 128 bits custom base UUID
 	uint16_t UuidSrvc;					//!< Service UUID

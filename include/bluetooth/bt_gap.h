@@ -120,6 +120,17 @@ SOFTWARE.
 #define BT_GAP_IO_CAPABILITY_NONE						3
 #define BT_GAP_IO_CAPABILITY_KEYBOARD_DISPLAY			4
 
+#define	BT_GAP_SECTYPE_NONE								0	//!< open, no security
+#define	BT_GAP_SECTYPE_STATICKEY_NO_MITM				1	//!< Bonding static pass key without Man In The Middle
+#define	BT_GAP_SECTYPE_STATICKEY_MITM					2	//!< Bonding static pass key with MITM
+#define	BT_GAP_SECTYPE_LESC_MITM						3	//!< LE secure encryption
+#define	BT_GAP_SECTYPE_SIGNED_NO_MITM					4	//!< AES signed encryption without MITM
+#define	BT_GAP_SECTYPE_SIGNED_MITM						5	//!< AES signed encryption with MITM
+
+#define BT_GAP_PHY_1MBITS								(1<<0)
+#define BT_GAP_PHY_2MBITS								(1<<1)
+#define BT_GAP_PHY_CODED								(1<<2)
+
 
 #pragma pack(push, 4)
 

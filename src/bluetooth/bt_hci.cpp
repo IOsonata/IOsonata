@@ -40,6 +40,7 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_smp.h"
 #include "istddef.h"
 #include "coredev/uart.h"
 
@@ -329,6 +330,7 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_ENCRYPTION_KEY_REFRESH_COMPLETE:
 			break;
 		case BT_HCI_EVT_IO_CAPABILITY_RQST:
+			g_Uart.printf("BT_HCI_EVT_IO_CAPABILITY_RQST\r\n");
 			break;
 		case BT_HCI_EVT_IO_CAPABILITY_RESPONSE:
 			break;
@@ -930,6 +932,7 @@ void BtHciProcessData(BtHciDevice_t *pDev, BtHciACLDataPacket_t *pPkt)
 		case BT_L2CAP_CID_SIGNAL:
 			break;
 		case BT_L2CAP_CID_SEC_MNGR:
+			BtProcessSmpData(pDev, l2frame);
 			break;
 	}
 	g_Uart.printf("-----\r\n");

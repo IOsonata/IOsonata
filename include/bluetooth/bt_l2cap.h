@@ -190,6 +190,12 @@ typedef struct __Bt_L2Cap_Att {
 	uint8_t Param[1];				//!< Attribute protocol parameters
 } BtL2CapAtt_t;
 
+typedef struct __Bt_L2Cap_Smp {
+	uint8_t Code;
+	uint8_t Data[1];			//!< Max data size is 65 byte secure or 23 non secure
+} BtL2CapSmp_t;
+
+
 /// NOTE: Variable length structure
 /// FCS not defined in structure due to variable length of data payload. It is to
 /// be processed externally when needed
@@ -201,9 +207,10 @@ typedef struct __Bt_L2Cap_Pdu {
 		BtL2CapCFrame_t CFrame;	//!< Control frame payload, CID 1 & 5
 		uint16_t Control;			//!< L2CAP I-Frame and S-Frame 16 bits control bits
 		uint32_t ExtControl;		//!< L2CAP I-Frame and S-Frame 32 bits ext control bits
-		BtL2CapSFrame_t SFrame;	//!< S-Frame control bit fields and payload
-		BtL2CapIFrame_t IFrame;	//!< I-Frame control bit fields and payload
+		BtL2CapSFrame_t SFrame;		//!< S-Frame control bit fields and payload
+		BtL2CapIFrame_t IFrame;		//!< I-Frame control bit fields and payload
 		BtL2CapAtt_t Att;			//!< Attribute payload, CID 4
+		BtL2CapSmp_t Smp;			//!< SMP payload CID 6
 	};
 } BtL2CapPdu_t;
 
