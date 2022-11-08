@@ -354,6 +354,8 @@ typedef struct __Bt_Att_Multiple_Handle_Value_Ntf {
 extern "C" {
 #endif
 
+void BtProcessAttData(BtHciDevice_t *pDev, uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu);
+
 #ifdef __cplusplus
 }
 #endif
