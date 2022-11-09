@@ -47,6 +47,7 @@ SOFTWARE.
 #include "sdc_hci_cmd_controller_baseband.h"
 
 #include "istddef.h"
+#include "convutil.h"
 #include "coredev/uart.h"
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
@@ -617,8 +618,8 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 	if (g_BleAppData.bExtAdv == false)
 	{
 		sdc_hci_cmd_le_set_adv_params_t advparam = {
-			.adv_interval_min = (uint16_t)BleAdvMsToInterval(pCfg->AdvInterval),
-			.adv_interval_max = (uint16_t)BleAdvMsToInterval(pCfg->AdvInterval + 50),
+			.adv_interval_min = (uint16_t)mSecTo0_625(pCfg->AdvInterval),
+			.adv_interval_max = (uint16_t)mSecTo0_625(pCfg->AdvInterval + 50),
 			.adv_type = BLEADV_TYPE_ADV_NONCONN_IND,//ADV_DIRECT_IND,
 			.own_address_type = BLE_ADDR_TYPE_PUBLIC,
 			.peer_address_type = 0,
@@ -665,8 +666,8 @@ __WEAK bool BleAppAdvInit(const BleAppCfg_t *pCfg)
 		BleExtAdvParam_t extparam = {
 			.AdvHdl = 0,
 			.EvtProp = extprop,//BLE_EXT_ADV_EVT_PROP_CONNECTABLE,// | BLE_EXT_ADV_EVT_PROP_SCANNABLE,
-			.PrimIntervalMin = (uint16_t)BleAdvMsToInterval(pCfg->AdvInterval),
-			.PrimIntervalMax = (uint16_t)BleAdvMsToInterval(pCfg->AdvInterval + 50),
+			.PrimIntervalMin = (uint16_t)mSecTo0_625(pCfg->AdvInterval),
+			.PrimIntervalMax = (uint16_t)mSecTo0_625(pCfg->AdvInterval + 50),
 			.PrimChanMap = 7,
 			.OwnAddrType = BLE_ADDR_TYPE_PUBLIC,
 			.PrimPhy = BLE_EXT_ADV_PHY_1M,

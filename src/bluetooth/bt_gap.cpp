@@ -46,6 +46,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <memory.h>
 
+#include "convutil.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
@@ -67,7 +68,7 @@ alignas(4) static BtGapConnection_t s_BtGapConnection[BT_GAP_CONN_MAX_COUNT] = {
 static uint16_t s_BtGapCharApperance = 0;
 static char s_BtGapCharDevName[BT_GAP_DEVNAME_MAX_LEN];
 static BtGattPreferedConnParams_t s_BtGapCharPerferedConnParams = {
-	BT_MSEC_TO_125(7), BT_MSEC_TO_125(40), 0, 400
+	USEC_TO_1250(7500), MSEC_TO_1_25(40), 0, 400
 };
 
 static BtGattChar_t s_BtGapChar[] = {

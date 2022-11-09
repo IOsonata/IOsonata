@@ -281,11 +281,19 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_NB_COMPLETED_PACKET:
 			{
 				BtHciEvtNbCompletedPkt_t *p = (BtHciEvtNbCompletedPkt_t*)pEvtPkt->Data;
-//				g_Uart.printf("BT_HCI_EVT_NB_COMPLETED_PACKET: %d\r\n", p->NbHdl);
+
+				//				g_Uart.printf("BT_HCI_EVT_NB_COMPLETED_PACKET: %d\r\n", p->NbHdl);
 //				for (int i = 0; i < p->NbHdl; i++)
 //				{
 //					g_Uart.printf("Hdl: %x - NbPkt: %d\r\n", p->Completed[i].Hdl, p->Completed[i].NbPkt);
 //				}
+				if (pDev->SendCompleted)
+				{
+					for (int i = 0; i < p->NbHdl; i++)
+					{
+						pDev->SendCompleted(p->Completed[i].Hdl, p->Completed[i].NbPkt);
+					}
+				}
 			}
 			break;
 		case BT_HCI_EVT_MODE_CHANGE:

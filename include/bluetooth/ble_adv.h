@@ -70,7 +70,7 @@ typedef enum __Ble_Adv_Filter_Policy {
 #define	BLEADV_CHAN_39 		4
 
 /// Convert msec time to BLE interval value of 0.625ms units
-#define BLEADV_MS_TO_INTERVAL(Val)		(((Val) * 1000UL + 500UL)/ 625UL)
+//#define BLEADV_MS_TO_INTERVAL(Val)		(((Val) * 1000UL + 500UL)/ 625UL)
 
 /// BLE Advertising parameters
 typedef struct __Ble_Adv_Param {
@@ -144,9 +144,9 @@ extern "C" {
 #endif
 
 /// Convert msec time to BLE interval value of 0.625ms units
-static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
-	return (uint16_t)((Val * 1000UL + 500UL) / 625UL);
-};
+//static inline uint16_t BleAdvMsToInterval(uint32_t Val) {
+//	return (uint16_t)((Val * 1000UL + 500UL) / 625UL);
+//};
 
 /**
  * @brief	Allocate space to add new advertisement data

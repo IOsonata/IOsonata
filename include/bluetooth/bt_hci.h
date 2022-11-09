@@ -678,17 +678,24 @@ struct __Bt_Hci_Device {
 	void (*EvtHandler)(BtHciDevice_t * const pDev, uint32_t Evt);
 	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
 	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
+	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
 };
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+/*
+#define USEC_TO_1250(Val)	((uint16_t)(((Val) + 500UL) / 1250UL))
+#define MSEC_TO_1_25(Val)	((uint16_t)((Val) / 1.250F))
 
-#define BT_MSEC_TO_125(Val)		(((Val) * 1000UL + 500UL)/ 1250UL)
-
-static inline uint16_t BtMsecTo125(float Val) {
-	return (uint16_t)(((uint32_t)(Val * 1000.0) + 500UL) / 1250UL);
+static inline uint16_t uSecTo1250(uint32_t Val) {
+	return (uint16_t)(Val / 1250UL);
 };
+
+static inline uint16_t mSecTo1_25(float Val) {
+	return (uint16_t)(Val / 1.250F);
+};
+*/
 
 //bool BtHciInit(BtHciDevCfg_t const *pCfg);
 void BtHciProcessACLData(BtHciACLDataPacketHdr_t *pPkt);
