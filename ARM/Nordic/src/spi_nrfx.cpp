@@ -295,8 +295,6 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 
 	dev->pSpiDev->CurDevCs = DevCs;
 
-	dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
-
 	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
 	{
 #ifdef SPIM_PRESENT
