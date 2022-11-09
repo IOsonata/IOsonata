@@ -44,6 +44,7 @@ Modified by          Date              Description
 #include "ble_app_nrf5.h"
 #include "interrupt.h"
 #include "bluetooth/ble_srvc.h"
+#include "bluetooth/bt_gatt.h"
 
 #define NRFBLEINTRF_PACKET_SIZE		(NRF_BLE_MAX_MTU_SIZE - 3)// + sizeof(BLEINTRF_PKT) - 1)
 #define NRFBLEINTRF_CFIFO_SIZE		BLEINTRF_CFIFO_TOTAL_MEMSIZE(2, NRFBLEINTRF_PACKET_SIZE)
@@ -374,6 +375,7 @@ bool BleIntrfInit(BleIntrf_t *pBleIntrf, const BleIntrfCfg_t *pCfg)
 
 	pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx].WrCB = BleIntrfRxWrCB;
 	pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->TxCharIdx].TxCompleteCB = BleIntrfTxComplete;
+	pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->TxCharIdx].pSrvc = pBleIntrf->pBleSrvc;
 
 	pBleIntrf->DevIntrf.Type = DEVINTRF_TYPE_BLE;
 	pBleIntrf->DevIntrf.Enable = BleIntrfEnable;
