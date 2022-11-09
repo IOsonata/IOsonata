@@ -774,6 +774,12 @@ SOFTWARE.
 #define BT_UUID_SERVICE_CLASS_HDP_SOURCE                            				0x1401
 #define BT_UUID_SERVICE_CLASS_HDP_SINK                              				0x1402
 
+// Bluetooth SIG base uuid
+// 00000000-0000-1000-8000-00805F9B34FB
+#define BLUETOOTH_SIG_BASE_UUID		{ 0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, \
+									  0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+
+
 #pragma pack(push, 1)
 
 typedef enum __Bt_Uuid_Type {

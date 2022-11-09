@@ -43,12 +43,6 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 
-// Bluetooth SIG base uuid
-// 0000FF00-0000-1000-8000-00805F9B34FB
-//
-#define BLUETOOTH_SIG_BASE_UUID		{ 0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, \
-									  0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
-
 
 typedef struct __Bt_Base_Uuid_Tbl_Entry {
 	uint8_t Uuid[16];
