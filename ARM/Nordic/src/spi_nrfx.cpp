@@ -295,6 +295,8 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 
 	dev->pSpiDev->CurDevCs = DevCs;
 
+	dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
+
 	if (dev->pSpiDev->Cfg.Phy == SPIPHY_3WIRE)
 	{
 #ifdef SPIM_PRESENT
@@ -323,7 +325,7 @@ int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 
     while (BuffLen > 0)
     {
-        dev->pReg->TXD = 0xFF;
+        dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
 
         if (nRFxSPIWaitReady(dev, 100000) == false)
             break;

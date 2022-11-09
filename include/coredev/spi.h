@@ -165,6 +165,8 @@ typedef struct __SPI_Config {
 	bool bDmaEn;			//!< true - Use DMA mode only on supported devices
 	bool bIntEn;			//!< Interrupt enable
 	int IntPrio;			//!< Interrupt priority
+	uint8_t DummyByte;		//!< Dummy value to Tx shifting. Normally 0xFF is send on read.
+							//!< some device my need a 0 to be shifted on read
 	DevIntrfEvtHandler_t EvtCB;	//!< Event callback
 } SPICfg_t;
 
@@ -186,9 +188,9 @@ typedef QSPICmdSetup_t	QSPI_CMD_SETUP;
 typedef struct __SPI_Device {
 	SPICfg_t Cfg;				//!< Config data
 	DevIntrf_t DevIntrf;		//!< device interface implementation
-	int	FirstRdData;		//!< This is to keep the first dummy read data of SPI
-							//!< there are devices that may return a status code through this
-	int	CurDevCs;			//!< Current active device CS
+	int	FirstRdData;			//!< This is to keep the first dummy read data of SPI
+								//!< there are devices that may return a status code through this
+	int	CurDevCs;				//!< Current active device CS
 	uint8_t *pRxBuff[SPI_SLAVEMODE_MAX_DEV];//!< Pointer to slave mode rx buffer
 	int RxBuffLen[SPI_SLAVEMODE_MAX_DEV];	//!< Rx buffer length in bytes
 	uint8_t *pTxData[SPI_SLAVEMODE_MAX_DEV];//!< Pointer to slave mode tx data
