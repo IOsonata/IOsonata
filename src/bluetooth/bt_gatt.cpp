@@ -43,8 +43,19 @@ SOFTWARE.
 #define BT_GATT_ENTRY_MAX_COUNT		100
 #endif
 
-alignas(4) static BtGattListEntry_t s_BtGatEntryTbl[BT_GATT_ENTRY_MAX_COUNT] = {0,};
+#define BT_GATT_SRVC_MAX_COUNT		((BT_GATT_ENTRY_MAX_COUNT) >> 1)
+
+#pragma pack(push,4)
+typedef struct {
+	bool bValid;
+	BtGattSrvc_t *pSrvc;
+} BtGattSrvcEntry_t;
+#pragma pack(pop)
+
+alignas(4) static BtGattListEntry_t s_BtGattEntryTbl[BT_GATT_ENTRY_MAX_COUNT] = {0,};
 static int s_NbGattListEntry = 0;
+alignas(4) static BtGattSrvcEntry_t s_BtGattSrvcTbl[BT_GATT_SRVC_MAX_COUNT] = {{0,}, };
+static int s_NbGattSrvcEntry = 0;
 
 uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 {
@@ -53,7 +64,7 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 		return -1;
 	}
 
-	BtGattListEntry_t *p = (BtGattListEntry_t*)&s_BtGatEntryTbl[s_NbGattListEntry];
+	BtGattListEntry_t *p = (BtGattListEntry_t*)&s_BtGattEntryTbl[s_NbGattListEntry];
 
 	p->TypeUuid = *pTypeUuid;
 
@@ -64,15 +75,15 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 		{
 			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
 			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
-				s_BtGatEntryTbl[s_NbGattListEntry].SrvcDeclar = *(BtGattSrvcDeclar_t *)pAttVal;
+				s_BtGattEntryTbl[s_NbGattListEntry].SrvcDeclar = *(BtGattSrvcDeclar_t *)pAttVal;
 				break;
 			case BT_UUID_GATT_DECLARATIONS_INCLUDE:
-				memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].SrvcInc, pAttVal, sizeof(BtGattSrvcInclude_t));
+				memcpy(&s_BtGattEntryTbl[s_NbGattListEntry].SrvcInc, pAttVal, sizeof(BtGattSrvcInclude_t));
 				break;
 			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
-				memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].CharDeclar, pAttVal, sizeof(BtGattCharDeclar_t));
-				s_BtGatEntryTbl[s_NbGattListEntry].CharDeclar.ValHdl = s_NbGattListEntry + 2;
-				s_BtGatEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
+				memcpy(&s_BtGattEntryTbl[s_NbGattListEntry].CharDeclar, pAttVal, sizeof(BtGattCharDeclar_t));
+				s_BtGattEntryTbl[s_NbGattListEntry].CharDeclar.ValHdl = s_NbGattListEntry + 2;
+				s_BtGattEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
 				//s_NbGattListEntry++;
 				//s_BtGatEntryTbl[s_NbGattListEntry].TypeUuid = ((BtGattCharDeclar_t*)pAttVal)->Uuid;
 				//((BtGattCharDeclar_t*)pAttVal)->ValHdl = s_NbGattListEntry + 1;
@@ -83,18 +94,18 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 			//	s_BtGatEntryTbl[s_NbGattListEntry].pVal = pAttVal;
 			//	break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
-				s_BtGatEntryTbl[s_NbGattListEntry].Val32 = *(uint16_t*)pAttVal;
+				s_BtGattEntryTbl[s_NbGattListEntry].Val32 = *(uint16_t*)pAttVal;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
 
 			default:
-				memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
+				memcpy(&s_BtGattEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
 		}
 	}
 	else
 	{
-		memcpy(&s_BtGatEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
+		memcpy(&s_BtGattEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
 /*		BtGattCharValHandler_t *p = (BtGattCharValHandler_t*)pAttVal;
 
 		s_BtGatEntryTbl[s_NbGattListEntry].ValHandler.RdHandler = p->RdHandler;
@@ -103,7 +114,7 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 
 //		s_BtGatEntryTbl[s_NbGattListEntry].pCharVal = (BtGattCharValue_t*)pAttVal;
 	}
-	s_BtGatEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
+	s_BtGattEntryTbl[s_NbGattListEntry].Hdl = s_NbGattListEntry + 1;
 
 	s_NbGattListEntry++;
 
@@ -117,7 +128,7 @@ bool BtGattUpdate(uint16_t Hdl, void *pAttVal, size_t Len)
 		return false;
 	}
 
-	BtGattListEntry_t *p = (BtGattListEntry_t*)&s_BtGatEntryTbl[Hdl - 1];
+	BtGattListEntry_t *p = (BtGattListEntry_t*)&s_BtGattEntryTbl[Hdl - 1];
 
 	if (p->TypeUuid.BaseIdx == 0)
 	{
@@ -160,13 +171,13 @@ int BtGattGetListHandle(uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *p
 
 	for (int i = StartHdl; i < min(EndHdl + 1, s_NbGattListEntry) && idx < MaxEntry; i++)
 	{
-		memcpy(&pArr[idx], &s_BtGatEntryTbl[i - 1], sizeof(BtGattListEntry_t));
+		memcpy(&pArr[idx], &s_BtGattEntryTbl[i - 1], sizeof(BtGattListEntry_t));
 		idx++;
 	}
 
 	if (pLastHdl && s_NbGattListEntry > 0)
 	{
-		*pLastHdl = s_BtGatEntryTbl[s_NbGattListEntry - 1].Hdl;
+		*pLastHdl = s_BtGattEntryTbl[s_NbGattListEntry - 1].Hdl;
 	}
 
 	return idx;
@@ -178,16 +189,16 @@ int BtGattGetListUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, BtGattListEntry_
 
 	for (int i = StartHdl - 1; i < s_NbGattListEntry && idx < MaxEntry; i++)
 	{
-		if (memcmp(&s_BtGatEntryTbl[i].TypeUuid, pTypeUuid, sizeof(BtUuid16_t)) == 0)
+		if (memcmp(&s_BtGattEntryTbl[i].TypeUuid, pTypeUuid, sizeof(BtUuid16_t)) == 0)
 		{
-			memcpy(&pArr[idx], &s_BtGatEntryTbl[i], sizeof(BtGattListEntry_t));
+			memcpy(&pArr[idx], &s_BtGattEntryTbl[i], sizeof(BtGattListEntry_t));
 			idx++;
 		}
 	}
 
 	if (pLastHdl && s_NbGattListEntry > 0)
 	{
-		*pLastHdl = s_BtGatEntryTbl[s_NbGattListEntry - 1].Hdl;
+		*pLastHdl = s_BtGattEntryTbl[s_NbGattListEntry - 1].Hdl;
 	}
 
 	return idx;
@@ -197,9 +208,9 @@ bool BeGattFindEntryUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, uint16_t EndH
 {
 	for (int i = StartHdl - 1; i < EndHdl && i < s_NbGattListEntry; i++)
 	{
-		if (memcmp(&s_BtGatEntryTbl[i].TypeUuid, pTypeUuid, sizeof(BtUuid16_t)) == 0)
+		if (memcmp(&s_BtGattEntryTbl[i].TypeUuid, pTypeUuid, sizeof(BtUuid16_t)) == 0)
 		{
-			memcpy(pEntry, &s_BtGatEntryTbl[i], sizeof(BtGattListEntry_t));
+			memcpy(pEntry, &s_BtGattEntryTbl[i], sizeof(BtGattListEntry_t));
 			return true;
 		}
 	}
@@ -214,7 +225,7 @@ bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pEntry)
 		return false;
 	}
 
-	memcpy(pEntry, &s_BtGatEntryTbl[Hdl - 1], sizeof(BtGattListEntry_t));
+	memcpy(pEntry, &s_BtGattEntryTbl[Hdl - 1], sizeof(BtGattListEntry_t));
 
 	return true;
 }
@@ -355,7 +366,7 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 
 size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 {
-	BtGattListEntry_t *p = &s_BtGatEntryTbl[Hdl - 1];
+	BtGattListEntry_t *p = &s_BtGattEntryTbl[Hdl - 1];
 
 	size_t len = 0;
 
@@ -404,7 +415,7 @@ size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 BtGattListEntry_t *GetEntryTable(size_t *count)
 {
 	*count = s_NbGattListEntry;
-	return s_BtGatEntryTbl;
+	return s_BtGattEntryTbl;
 }
 
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
@@ -414,7 +425,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 		return false;
 	}
 
-	BtGattListEntry_t *p = &s_BtGatEntryTbl[pChar->ValHdl - 1];
+	BtGattListEntry_t *p = &s_BtGattEntryTbl[pChar->ValHdl - 1];
 
 	if (p->CharVal.MaxLen < Len)
 	{
@@ -441,7 +452,7 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 		return false;
 	}
 
-	BtGattListEntry_t *p = &s_BtGatEntryTbl[pChar->CccdHdl - 1];
+	BtGattListEntry_t *p = &s_BtGattEntryTbl[pChar->CccdHdl - 1];
 
 	if (p->Val32 & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
 	{
@@ -484,7 +495,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 	pSrvc->Uuid.Type = BT_UUID_TYPE_16;
 	pSrvc->Uuid.Uuid16 = pCfg->UuidSrvc;
 
-	BtGattListEntry_t *p = &s_BtGatEntryTbl[s_NbGattListEntry];
+	BtGattListEntry_t *p = &s_BtGattEntryTbl[s_NbGattListEntry];
 	s_NbGattListEntry++;
 
     p->TypeUuid = {0, BT_UUID_TYPE_16, BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE };
@@ -559,6 +570,15 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
         }
     }
 
+    for (int i = 0; i < BT_GATT_SRVC_MAX_COUNT; i++)
+    {
+    	if (s_BtGattSrvcTbl[i].bValid == false)
+    	{
+    		s_BtGattSrvcTbl[i].bValid = true;
+    		s_BtGattSrvcTbl[i].pSrvc = pSrvc;
+    	}
+    }
+
 
 	return true;
 }
@@ -569,7 +589,7 @@ void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 	{
 		if (pSrvc->pCharArray[i].CccdHdl != BT_GATT_HANDLE_INVALID)
 		{
-			s_BtGatEntryTbl[s_NbGattListEntry].Val32 = 0;
+			s_BtGattEntryTbl[s_NbGattListEntry].Val32 = 0;
 		}
 	}
 }
