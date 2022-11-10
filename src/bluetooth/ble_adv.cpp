@@ -246,11 +246,13 @@ void BleAdvDataSetDevName(BleAdvPacket_t * const pAdvPkt, const char *pName)
 {
 	size_t l = strlen(pName);
 	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
+	size_t mxl = pAdvPkt->MaxLen - pAdvPkt->Len - 2;
 
-	if (l < 14)
+	if (l > 30 || l > mxl)
 	{
 		// Short name
 		type = BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME;
+		l = min((size_t)30, mxl);
 	}
 
 	// Update name in advertisement packet
