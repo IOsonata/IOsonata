@@ -375,6 +375,7 @@ bool BleIntrfInit(BleIntrf_t *pBleIntrf, const BleIntrfCfg_t *pCfg)
 
 	pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx].WrCB = BleIntrfRxWrCB;
 	pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->TxCharIdx].TxCompleteCB = BleIntrfTxComplete;
+	pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx].pSrvc = pBleIntrf->pBleSrvc;
 	pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->TxCharIdx].pSrvc = pBleIntrf->pBleSrvc;
 
 	pBleIntrf->DevIntrf.Type = DEVINTRF_TYPE_BLE;

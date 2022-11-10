@@ -109,38 +109,41 @@ uint8_t g_ManData[8];
 static uint8_t s_UartRxCharMem[PACKET_SIZE];
 static uint8_t s_UartTxCharMem[PACKET_SIZE];
 
-BleSrvcChar_t g_UartChars[] = {
+static uint8_t s_RxCharValMem[PACKET_SIZE];
+
+BtGattChar_t g_UartChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLE_UART_UUID_READ_CHAR,
-		//PACKET_SIZE,
+		.MaxDataLen = PACKET_SIZE,
 		.Property = BLESRVC_CHAR_PROP_READ | BLESRVC_CHAR_PROP_NOTIFY | BLESRVC_CHAR_PROP_VARLEN,
 		.pDesc = s_RxCharDescString,         // char UTF-8 description string
 		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,						// Callback on set notification
 		.TxCompleteCB = NULL,						// Tx completed callback
-		.CharVal = {PACKET_SIZE, 0, s_UartRxCharMem},						// char values
+		.pValue = s_RxCharValMem,
+		//.CharVal = {PACKET_SIZE, 0, s_UartRxCharMem},						// char values
 		0,							// Default value length in bytes
 	},
 	{
 		// Write characteristic
 		.Uuid = BLE_UART_UUID_WRITE_CHAR,	// char UUID
-		//PACKET_SIZE,                // char max data length
+		.MaxDataLen = PACKET_SIZE,
 		.Property = BLESRVC_CHAR_PROP_WRITE | BLESRVC_CHAR_PROP_WRITEWORESP | BLESRVC_CHAR_PROP_VARLEN,	// char properties define by BLUEIOSVC_CHAR_PROP_...
 		.pDesc = s_TxCharDescString,			// char UTF-8 description string
 		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,						// Callback on set notification
 		.TxCompleteCB = NULL,						// Tx completed callback
-		.CharVal = {PACKET_SIZE, 0, s_UartTxCharMem},						// char values
+		//.CharVal = {PACKET_SIZE, 0, s_UartTxCharMem},						// char values
 		0							// Default value length in bytes
 	},
 };
 
-static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BleSrvcChar_t);
+static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BtGattChar_t);
 
 uint8_t g_LWrBuffer[512];
 
-const BleSrvcCfg_t s_UartSrvcCfg = {
+const BtGattSrvcCfg_t s_UartSrvcCfg = {
 	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = true,
 	.UuidBase = BLE_UART_UUID_BASE,		// Base UUID
@@ -152,7 +155,7 @@ const BleSrvcCfg_t s_UartSrvcCfg = {
 	.LongWrBuffSize = sizeof(g_LWrBuffer)         // long write buffer size
 };
 
-BleSrvc_t g_UartBleSrvc;
+BtGattSrvc_t g_UartBleSrvc;
 
 const BleAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           	// Model name
@@ -282,8 +285,8 @@ void BleAppInitUserServices()
 {
     uint32_t       err_code;
 
-    err_code = BleSrvcInit(&g_UartBleSrvc, &s_UartSrvcCfg);
-    APP_ERROR_CHECK(err_code);
+    err_code = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
+    //APP_ERROR_CHECK(err_code);
 }
 
 void HardwareInit()
