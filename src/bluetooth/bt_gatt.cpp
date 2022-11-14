@@ -461,24 +461,24 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 
 	return false;
 }
-/*
-bool BtGattCharNotify(BtGattChar_t *pChar, void * const pVal, size_t Len)
+
+bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (BtGattCharSetValue(pChar, pVal, Len) == false)
 	{
 		return false;
 	}
 
-	BtGattListEntry_t *p = &s_BtGatEntryTbl[pChar->CccdHdl - 1];
+	BtGattListEntry_t *p = &s_BtGattEntryTbl[pChar->CccdHdl - 1];
 
 	if (p->Val32 & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
 	{
-		BtHciMotify(pChar->pSrvc->ConnHdl, pChar->ValHdl, pVal, Len);
+		BtHciMotify(ConnHdl, pChar->ValHdl, pVal, Len);
 	}
 
 	return true;
 }
-*/
+
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 {
 	bool retval = false;

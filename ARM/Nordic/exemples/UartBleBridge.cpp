@@ -42,12 +42,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/ble_app.h"
 #include "ble_app_nrf5.h"
 #include "bluetooth/ble_srvc.h"
-#include "ble_intrf.h"
+#include "bluetooth/ble_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
+#include "app_evt_handler.h"
 
 #include "board.h"
 
@@ -292,6 +293,8 @@ void BleAppInitUserServices()
 void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
+
+	g_Uart.printf("UartBleBridge\r\n");
 }
 
 void BleAppInitUserData()
@@ -299,7 +302,8 @@ void BleAppInitUserData()
 
 }
 
-void UartRxChedHandler(void * p_event_data, uint16_t event_size)
+//void UartRxChedHandler(void * p_event_data, uint16_t event_size)
+void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
 	static uint8_t buff[PACKET_SIZE];
 	static int bufflen = 0;
@@ -326,7 +330,8 @@ void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 	{
 		g_BleIntrf.Tx(0, buff, bufflen);
 		bufflen = 0;
-		app_sched_event_put(NULL, 0, UartRxChedHandler);
+//		app_sched_event_put(NULL, 0, UartRxChedHandler);
+		AppEvtHandlerQue(0, 0, UartRxChedHandler);
 	}
 }
 
@@ -339,7 +344,8 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			app_sched_event_put(NULL, 0, UartRxChedHandler);
+//			app_sched_event_put(NULL, 0, UartRxChedHandler);
+			AppEvtHandlerQue(0, 0, UartRxChedHandler);
 			break;
 		case UART_EVT_TXREADY:
 			break;

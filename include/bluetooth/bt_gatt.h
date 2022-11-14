@@ -257,7 +257,7 @@ size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len);
 BtGattListEntry_t *GetEntryTable(size_t *pCount);
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
-//bool BtGattCharNotify(BtGattChar_t *pChar, void * const pVal, size_t Len);
+bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 

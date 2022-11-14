@@ -631,6 +631,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_conn.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/ble_dev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_dev.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/ble_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/ble_srvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_srvc.h</locationURI>
@@ -1113,7 +1123,7 @@
 		<link>
 			<name>src/bluetooth/ble_intrf.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_intrf.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/ble_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/ble_service.cpp</name>
