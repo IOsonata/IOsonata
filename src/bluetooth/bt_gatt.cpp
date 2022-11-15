@@ -473,7 +473,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 
 	if (p->Val32 & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
 	{
-		BtHciMotify(ConnHdl, pChar->ValHdl, pVal, Len);
+		BtHciNotify(ConnHdl, pChar->ValHdl, pVal, Len);
 	}
 
 	return true;
@@ -576,6 +576,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
     	{
     		s_BtGattSrvcTbl[i].bValid = true;
     		s_BtGattSrvcTbl[i].pSrvc = pSrvc;
+    		break;
     	}
     }
 

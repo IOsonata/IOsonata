@@ -395,6 +395,16 @@ bool BleIntrfInit(BleIntrf_t *pBleIntrf, const BleIntrfCfg_t *pCfg)
 
 	DeviceIntrfEnable(&pBleIntrf->DevIntrf);
 
+	BtGattCharValue_t charval = {
+		pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx].MaxDataLen,
+		pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx].ValueLen,
+		pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx].pValue,
+		pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx].WrCB,
+		&pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx]
+	};
+
+	BtGattUpdate(pBleIntrf->pBleSrvc->pCharArray[pBleIntrf->RxCharIdx].ValHdl, &charval, sizeof(BtGattCharValue_t));
+
 	return true;
 }
 
