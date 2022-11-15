@@ -442,7 +442,7 @@ void BtHciProcessData(BtHciDevice_t *pDev, BtHciACLDataPacket_t *pPkt)
 */
 }
 
-void BtHciMotify(BtHciDevice_t *pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len)
+void BtHciNotify(BtHciDevice_t *pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len)
 {
 	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;

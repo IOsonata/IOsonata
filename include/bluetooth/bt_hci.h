@@ -703,7 +703,7 @@ void BtHciProcessACLData(BtHciACLDataPacketHdr_t *pPkt);
 static inline int BtHciSendData(BtHciDevice_t *pDev, void *pData, int Len) {
 	return pDev->SendData(pData, Len);
 }
-void BtHciMotify(BtHciDevice_t *pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
+void BtHciNotify(BtHciDevice_t *pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
 
 
 #ifdef __cplusplus
