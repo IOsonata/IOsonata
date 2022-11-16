@@ -38,6 +38,8 @@ SOFTWARE.
 
 #include <stdint.h>
 
+#include "bluetooth/bt_dev.h"
+
 /** @addtogroup Bluetooth
  * @{ */
 
@@ -657,6 +659,7 @@ typedef struct __Bt_Hci_ISO_Data_Load {
 
 #pragma pack(pop)
 
+#if 0
 typedef struct __Bt_Hci_Device		BtHciDevice_t;
 
 typedef uint32_t (*BtHciSendDataFct_t)(void *pData, uint32_t Len);
@@ -680,6 +683,7 @@ struct __Bt_Hci_Device {
 	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
 	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
 };
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -698,12 +702,12 @@ static inline uint16_t mSecTo1_25(float Val) {
 */
 
 //bool BtHciInit(BtHciDevCfg_t const *pCfg);
-void BtHciProcessACLData(BtHciACLDataPacketHdr_t *pPkt);
+void BtHciProcessData(BtDev_t * const pDev, BtHciACLDataPacket_t * const pPkt);
 
-static inline int BtHciSendData(BtHciDevice_t *pDev, void *pData, int Len) {
+static inline int BtHciSendData(BtDev_t * const pDev, void * const pData, int Len) {
 	return pDev->SendData(pData, Len);
 }
-void BtHciNotify(BtHciDevice_t *pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
+void BtHciNotify(BtDev_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
 
 
 #ifdef __cplusplus

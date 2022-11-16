@@ -38,6 +38,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_dev.h"
 
 #ifndef BT_GATT_ENTRY_MAX_COUNT
 #define BT_GATT_ENTRY_MAX_COUNT		100
@@ -57,7 +58,7 @@ static int s_NbGattListEntry = 0;
 alignas(4) static BtGattSrvcEntry_t s_BtGattSrvcTbl[BT_GATT_SRVC_MAX_COUNT] = {{0,}, };
 static int s_NbGattSrvcEntry = 0;
 
-uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
+uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void * const pAttVal)
 {
 	if (pAttVal == nullptr || s_NbGattListEntry >= BT_GATT_ENTRY_MAX_COUNT)
 	{
@@ -100,12 +101,14 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 				break;
 
 			default:
-				memcpy(&s_BtGattEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
+				s_BtGattEntryTbl[s_NbGattListEntry].pChar = (BtGattChar_t*)pAttVal;
+//				memcpy(&s_BtGattEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
 		}
 	}
 	else
 	{
-		memcpy(&s_BtGattEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
+		s_BtGattEntryTbl[s_NbGattListEntry].pChar = (BtGattChar_t*)pAttVal;
+//		memcpy(&s_BtGattEntryTbl[s_NbGattListEntry].CharVal, pAttVal, sizeof(BtGattCharValue_t));
 /*		BtGattCharValHandler_t *p = (BtGattCharValHandler_t*)pAttVal;
 
 		s_BtGatEntryTbl[s_NbGattListEntry].ValHandler.RdHandler = p->RdHandler;
@@ -121,7 +124,7 @@ uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal)
 	return s_NbGattListEntry;
 }
 
-bool BtGattUpdate(uint16_t Hdl, void *pAttVal, size_t Len)
+bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len)
 {
 	if (Hdl <= 0 || Hdl > s_NbGattListEntry)
 	{
@@ -154,12 +157,14 @@ bool BtGattUpdate(uint16_t Hdl, void *pAttVal, size_t Len)
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
 			default:
-				memcpy(&p->CharVal, pAttVal, sizeof(BtGattCharValue_t));
+				p->pChar = (BtGattChar_t*)pAttVal;
+//				memcpy(&p->CharVal, pAttVal, sizeof(BtGattCharValue_t));
 		}
 	}
 	else
 	{
-		memcpy(&p->CharVal, pAttVal, sizeof(BtGattCharValue_t));
+		p->pChar = (BtGattChar_t*)pAttVal;
+//		memcpy(&p->CharVal, pAttVal, sizeof(BtGattCharValue_t));
 	}
 
 	return true;
@@ -336,20 +341,20 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 //				pBuff[1] = (pEntry->Val32 >> 8) & 0xFF;
 //				len = 2;
 			default:
-				if (pEntry->CharVal.pData)
+				if (pEntry->pChar->pValue)
 				{
-					memcpy(pBuff, pEntry->CharVal.pData, pEntry->CharVal.Len);
-					len = pEntry->CharVal.Len;
+					memcpy(pBuff, pEntry->pChar->pValue, pEntry->pChar->ValueLen);
+					len = pEntry->pChar->ValueLen;
 				}
 
 		}
 	}
 	else
 	{
-		if (pEntry->CharVal.pData)
+		if (pEntry->pChar->pValue)
 		{
-			memcpy(pBuff, pEntry->CharVal.pData, pEntry->CharVal.Len);
-			len = pEntry->CharVal.Len;
+			memcpy(pBuff, pEntry->pChar->pValue, pEntry->pChar->ValueLen);
+			len = pEntry->pChar->ValueLen;
 		}
 		/*
 		if (pEntry->ValHandler.RdHandler)
@@ -392,20 +397,20 @@ size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
 			default:
-				if (p->CharVal.WrHandler)
+				if (p->pChar->WrCB)
 				{
 //					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-					p->CharVal.WrHandler((BtGattChar_t*)p->CharVal.pChar, pBuff, 0, Len);
+					p->pChar->WrCB((BtGattChar_t*)p->pChar, pBuff, 0, Len);
 				}
 
 		}
 	}
 	else
 	{
-		if (p->CharVal.WrHandler)
+		if (p->pChar->WrCB)
 		{
 //			len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-			p->CharVal.WrHandler((BtGattChar_t*)p->CharVal.pChar, pBuff, 0, Len);
+			p->pChar->WrCB((BtGattChar_t*)p->pChar, pBuff, 0, Len);
 		}
 	}
 
@@ -427,7 +432,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 
 	BtGattListEntry_t *p = &s_BtGattEntryTbl[pChar->ValHdl - 1];
 
-	if (p->CharVal.MaxLen < Len)
+	if (p->pChar->MaxDataLen < Len)
 	{
 		return false;
 	}
@@ -439,7 +444,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 
 	if (pChar->Property & BT_GATT_CHAR_PROP_VALEN)
 	{
-		p->CharVal.Len = Len;
+		p->pChar->ValueLen = Len;
 	}
 
 	return true;
@@ -461,7 +466,7 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 
 	return false;
 }
-
+/*
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (BtGattCharSetValue(pChar, pVal, Len) == false)
@@ -473,12 +478,12 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 
 	if (p->Val32 & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
 	{
-		BtHciNotify(ConnHdl, pChar->ValHdl, pVal, Len);
+		BtDevNotify(ConnHdl, pChar->ValHdl, pVal, Len);
 	}
 
 	return true;
 }
-
+*/
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 {
 	bool retval = false;
@@ -536,8 +541,8 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
     	// Characteristic value
     	p->TypeUuid = {c->BaseUuidIdx, BT_UUID_TYPE_16, c->Uuid };
     	p->Hdl = s_NbGattListEntry;
-    	p->CharVal = { c->MaxDataLen, c->ValueLen, c->pValue, c->WrCB, c };
-
+    	//p->CharVal = { c->MaxDataLen, c->ValueLen, c->pValue, c->WrCB, c };
+    	p->pChar = c;
     	c->ValHdl = s_NbGattListEntry;
 
     	c->bNotify = false;
@@ -564,8 +569,8 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
         	p->Hdl = s_NbGattListEntry;
 //        	p->pVal = (void*)c->pDesc;
         	size_t l = strlen(c->pDesc);
-        	p->CharVal = { l, l, (void*)c->pDesc, c->WrCB, c };
-
+        	//p->CharVal = { l, l, (void*)c->pDesc, c->WrCB, c };
+        	p->pChar = c;
         	c->DescHdl = p->Hdl;
         }
     }

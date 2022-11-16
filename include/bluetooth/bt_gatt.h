@@ -164,30 +164,6 @@ typedef void (*BtGattSrvcAuthRqst_t)(BtGattSrvc_t *pBleSvc, uint32_t evt);
 
 #pragma pack(push,4)
 
-/// NOTE: Variable length
-typedef struct __Bt_Gatt_Char_Value {
-	size_t MaxLen;					//!< Max length of data buffer
-	size_t Len;						//!< Length of actual data
-	void *pData;					//!< pointer to characteristic static data buffer
-	BtGattCharWrCb_t WrHandler;	//!< Pointer to characteristic write callback
-	BtGattChar_t *pChar;
-} BtGattCharValue_t;
-
-typedef struct __Bt_Gatt_List_Entry {
-	uint16_t Hdl;						//!< Attribute handle
-	BtUuid16_t TypeUuid;				//!< Attribute type UUID
-	uint32_t Permission;				//!< Attribute Permission
-	union {								//!< Attribute value
-		void *pVal;
-		uint32_t Val32;
-		BtUuid_t Uuid;
-		BtGattCharValue_t CharVal;		//!< Characteristic value
-		BtGattSrvcDeclar_t SrvcDeclar;	//!< Service declaration value
-		BtGattSrvcInclude_t SrvcInc;	//!< Service include definition value
-		BtGattCharDeclar_t CharDeclar;	//!< Characteristic declaration value
-	};
-} BtGattListEntry_t;
-
 struct __Bt_Gatt_Characteristic {
 	uint16_t Uuid;						//!< Characteristic UUID
 	uint16_t MaxDataLen;				//!< Characteristic max data length in bytes
@@ -240,14 +216,39 @@ struct __Bt_Gatt_Service {
     BtGattSrvcAuthRqst_t AuthReqCB;		//!< Authorization request callback
 };
 
+/*
+typedef struct __Bt_Gatt_Char_Value {
+	size_t MaxLen;					//!< Max length of data buffer
+	size_t Len;						//!< Length of actual data
+	void *pData;					//!< pointer to characteristic static data buffer
+	BtGattCharWrCb_t WrHandler;	//!< Pointer to characteristic write callback
+	BtGattChar_t *pChar;
+} BtGattCharValue_t;
+*/
+typedef struct __Bt_Gatt_List_Entry {
+	uint16_t Hdl;						//!< Attribute handle
+	BtUuid16_t TypeUuid;				//!< Attribute type UUID
+	uint32_t Permission;				//!< Attribute Permission
+	union {								//!< Attribute value
+		void *pVal;
+		uint32_t Val32;
+		BtUuid_t Uuid;
+		BtGattChar_t *pChar;
+//		BtGattCharValue_t CharVal;		//!< Characteristic value
+		BtGattSrvcDeclar_t SrvcDeclar;	//!< Service declaration value
+		BtGattSrvcInclude_t SrvcInc;	//!< Service include definition value
+		BtGattCharDeclar_t CharDeclar;	//!< Characteristic declaration value
+	};
+} BtGattListEntry_t;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void *pAttVal);
-bool BtGattUpdate(uint16_t Hdl, void *pAttVal, size_t Len);
+uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void * const pAttVal);
+bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len);
 int BtGattGetListHandle(uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 int BtGattGetListUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 bool BeGattFindEntryUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pEntry);

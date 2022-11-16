@@ -1,13 +1,14 @@
-/*--------------------------------------------------------------------------
-File   : ble_app_handler.cpp
+/**-------------------------------------------------------------------------
+@file	bt_dev.cpp
 
-Author : Hoang Nguyen Hoan          				Feb. 23, 2017
+@brief	Generic implementation of Bluetooth device.
 
-Desc   : Nordic SDK based BLE peripheral application creation helper
-			Dummy user app handler.
-			All functions can be overloaded
 
-Copyright (c) 2017, I-SYST inc., all rights reserved
+@author	Hoang Nguyen Hoan
+@date	Jan. 15, 2019
+@license
+
+Copyright (c) 2019, I-SYST inc., all rights reserved
 
 Permission to use, copy, modify, and distribute this software for any purpose
 with or without fee is hereby granted, provided that the above copyright
@@ -29,51 +30,10 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-----------------------------------------------------------------------------
-Modified by          Date              Description
-
 ----------------------------------------------------------------------------*/
-#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
 
-#include "bluetooth/ble_app.h"
+#include "bluetooth/bt_dev.h"
 
-__attribute__((weak)) void BleAppInitUserData()
-{
-
-}
-
-__attribute__((weak)) void BleAppInitUserServices()
-{
-
-}
-
-__attribute__((weak)) void BleAppAdvTimeoutHandler()
-{
-
-}
-
-__attribute__((weak))  void BlePeriphEvtUserHandler(uint32_t p_ble_evt)
-{
-
-}
-
-__attribute__((weak))  void BleCentralEvtUserHandler(uint32_t p_ble_evt)
-{
-
-}
-
-__attribute__((weak)) void BleAppRtosWaitEvt(void)
-{
-
-}
-
-__attribute__((weak)) void BleAppUserEvtConnected(uint16_t ConnHdl)
-{
-
-}
-
-__attribute__((weak)) void BleAppUserEvtDisconnected(uint16_t ConnHdl)
-{
-
-}
 

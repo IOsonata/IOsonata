@@ -42,6 +42,7 @@ SOFTWARE.
 #include <stddef.h>
 
 #include "bluetooth/bt_l2cap.h"
+#include "bluetooth/bt_dev.h"
 
 #define BT_SMP_CODE_PAIRING_REQ						1
 #define BT_SMP_CODE_PAIRING_RSP						2
@@ -117,7 +118,7 @@ typedef struct __Bt_Smp_Pairing_Confirm {
 extern "C" {
 #endif
 
-void BtProcessSmpData(BtHciDevice_t *pDev, BtL2CapPdu_t *pRcvPdu);
+void BtProcessSmpData(BtDev_t * const pDev, BtL2CapPdu_t * const pRcvPdu);
 
 #ifdef __cplusplus
 }

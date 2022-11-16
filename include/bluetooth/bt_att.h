@@ -39,6 +39,7 @@ SOFTWARE.
 #include <inttypes.h>
 
 #include "bluetooth/bt_uuid.h"
+#include "bluetooth/bt_dev.h"
 
 #define BT_ATT_OPCODE_FLAG_COMMAND						(1<<6)
 #define BT_ATT_OPCODE_FLAG_AUTH_SIGNATURE				(1<<7)
@@ -354,7 +355,7 @@ typedef struct __Bt_Att_Multiple_Handle_Value_Ntf {
 extern "C" {
 #endif
 
-void BtProcessAttData(BtHciDevice_t *pDev, uint16_t ConnHdl, BtL2CapPdu_t *pRcvPdu);
+void BtProcessAttData(BtDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
 #ifdef __cplusplus
 }
