@@ -49,19 +49,18 @@ SOFTWARE.
 #include "istddef.h"
 #include "convutil.h"
 #include "coredev/uart.h"
-#include "custom_board.h"
-#include "coredev/iopincfg.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/timer.h"
-//#include "bluetooth/ble_app.h"
+#include "iopinctrl.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gap.h"
 #include "bluetooth/ble_appearance.h"
 #include "bluetooth/bt_dev.h"
-#include "iopinctrl.h"
+#include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
 
 //BleConn_t g_BleConn = {0,};
@@ -115,7 +114,7 @@ static const int8_t s_TxPowerdBm[] = {
 
 alignas(4) static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 
-static BtDev_t *s_pBtDevSdc = NULL;
+static BtDev_t *s_pBtDevSdc = nullptr;
 
 //alignas(4) BleAppData_t g_BleAppData = {
 //	BLEAPP_STATE_UNKNOWN, BLEAPP_ROLE_PERIPHERAL, 0, 0, -1, -1, 0,
@@ -134,20 +133,20 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 //__ALIGN(4) static ble_gap_lesc_p256_pk_t    s_lesc_public_key;      /**< LESC ECC Public Key */
 //__ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC ECC DH Key*/
 #if 1
-alignas(4) static uint8_t s_BleAppAdvBuff[260];
-alignas(4) static sdc_hci_cmd_le_set_adv_data_t &s_BleAppAdvData = *(sdc_hci_cmd_le_set_adv_data_t*)s_BleAppAdvBuff;
-alignas(4) static BleAdvPacket_t s_BleAppAdvPkt = { sizeof(s_BleAppAdvData.adv_data), 0, s_BleAppAdvData.adv_data};
+alignas(4) static uint8_t s_BtDevAdvBuff[260];
+alignas(4) static sdc_hci_cmd_le_set_adv_data_t &s_BtDevAdvData = *(sdc_hci_cmd_le_set_adv_data_t*)s_BtDevAdvBuff;
+alignas(4) static BleAdvPacket_t s_BtDevAdvPkt = { sizeof(s_BtDevAdvData.adv_data), 0, s_BtDevAdvData.adv_data};
 
-alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BleAppExtAdvData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BleAppAdvBuff;
-alignas(4) static BleAdvPacket_t s_BleAppExtAdvPkt = { 255, 0, s_BleAppExtAdvData.adv_data};
+alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BtDevExtAdvData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BtDevAdvBuff;
+alignas(4) static BleAdvPacket_t s_BtDevExtAdvPkt = { 255, 0, s_BtDevExtAdvData.adv_data};
 
-alignas(4) static uint8_t s_BleAppSrBuff[260];
+alignas(4) static uint8_t s_BtDevSrBuff[260];
 
-alignas(4) static sdc_hci_cmd_le_set_scan_response_data_t &s_BleAppSrData = *(sdc_hci_cmd_le_set_scan_response_data_t*)s_BleAppSrBuff;
-alignas(4) static BleAdvPacket_t s_BleAppSrPkt = { sizeof(s_BleAppSrData.scan_response_data), 0, s_BleAppSrData.scan_response_data};
+alignas(4) static sdc_hci_cmd_le_set_scan_response_data_t &s_BtDevSrData = *(sdc_hci_cmd_le_set_scan_response_data_t*)s_BtDevSrBuff;
+alignas(4) static BleAdvPacket_t s_BtDevSrPkt = { sizeof(s_BtDevSrData.scan_response_data), 0, s_BtDevSrData.scan_response_data};
 
-alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppExtSrData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BleAppSrBuff;
-alignas(4) static BleAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppExtSrData.scan_response_data};
+alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BtDevExtSrData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BtDevSrBuff;
+alignas(4) static BleAdvPacket_t s_BtDevExtSrPkt = { 255, 0, s_BtDevExtSrData.scan_response_data};
 #endif
 
 alignas(4) static uint8_t s_BtStackSdcMemPool[10000];
@@ -221,11 +220,11 @@ void BtDevSetDevName(BtDev_t * const pDev, const char *pName)
 
 	if (pDev->bExtAdv == true)
 	{
-		advpkt = &s_BleAppExtAdvPkt;
+		advpkt = &s_BtDevExtAdvPkt;
 	}
 	else
 	{
-		advpkt = &s_BleAppAdvPkt;
+		advpkt = &s_BtDevAdvPkt;
 	}
 
 	BleAdvDataSetDevName(advpkt, pName);
@@ -244,7 +243,8 @@ bool isBtDevConnected()
 	return s_pBtDevSdc->ConnHdl != 0;
 }
 
-static void BtDevConnLedOff() {
+static void BtDevConnLedOff()
+{
 	if (s_pBtDevSdc->ConnLedPort < 0 || s_pBtDevSdc->ConnLedPin < 0)
 		return;
 
@@ -258,7 +258,8 @@ static void BtDevConnLedOff() {
 	}
 }
 
-static void BtDevConnLedOn() {
+static void BtDevConnLedOn()
+{
 	if (s_pBtDevSdc->ConnLedPort < 0 || s_pBtDevSdc->ConnLedPin < 0)
 		return;
 
@@ -285,7 +286,7 @@ void BtDevConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 //	s_BtGapSrvc.ConnHdl = ConnHdl;
 //	s_BtGattSrvc.ConnHdl = ConnHdl;
 
-	BleAppUserEvtConnected(ConnHdl);
+	BtAppEvtConnected(ConnHdl);
 }
 
 void BtDevDisconnected(uint16_t ConnHdl, uint8_t Reason)
@@ -300,13 +301,17 @@ void BtDevDisconnected(uint16_t ConnHdl, uint8_t Reason)
 //		BtGattSrvcDisconnected(&s_BtGapSrvc);
 //		BtGattSrvcDisconnected(&s_BtGattSrvc);
 
-		BleAppUserEvtDisconnected(ConnHdl);
+		BtAppEvtDisconnected(ConnHdl);
 	}
 
 	s_pBtDevSdc->ConnHdl = BtGapGetConnection();
 
 }
 
+void BtDevSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
+{
+
+}
 
 void BtDevEnterDfu()
 {
@@ -356,13 +361,13 @@ bool BtDevAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 
 	if (s_pBtDevSdc->bExtAdv == true)
 	{
-		advpkt = &s_BleAppExtAdvPkt;
-		srpkt = &s_BleAppExtSrPkt;
+		advpkt = &s_BtDevExtAdvPkt;
+		srpkt = &s_BtDevExtSrPkt;
 	}
 	else
 	{
-		advpkt = &s_BleAppAdvPkt;
-		srpkt = &s_BleAppSrPkt;
+		advpkt = &s_BtDevAdvPkt;
+		srpkt = &s_BtDevSrPkt;
 	}
 
 	if (pAdvData)
@@ -379,12 +384,12 @@ bool BtDevAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 
     	if (s_pBtDevSdc->bExtAdv == true)
     	{
-    		s_BleAppExtAdvData.adv_handle = 0;
-    		s_BleAppExtAdvData.operation = 3;
-    		s_BleAppExtAdvData.fragment_preference = 1;
-    		s_BleAppExtAdvData.adv_data_length = advpkt->Len;
+    		s_BtDevExtAdvData.adv_handle = 0;
+    		s_BtDevExtAdvData.operation = 3;
+    		s_BtDevExtAdvData.fragment_preference = 1;
+    		s_BtDevExtAdvData.adv_data_length = advpkt->Len;
 
-    		int res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppExtAdvData);
+    		int res = sdc_hci_cmd_le_set_ext_adv_data(&s_BtDevExtAdvData);
     		if (res != 0)
     		{
     			return false;
@@ -392,9 +397,9 @@ bool BtDevAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
     	}
     	else
     	{
-			s_BleAppAdvData.adv_data_length = s_BleAppAdvPkt.Len;
+			s_BtDevAdvData.adv_data_length = s_BtDevAdvPkt.Len;
 
-			int res = sdc_hci_cmd_le_set_adv_data(&s_BleAppAdvData);
+			int res = sdc_hci_cmd_le_set_adv_data(&s_BtDevAdvData);
     		if (res != 0)
     		{
     			return false;
@@ -416,9 +421,9 @@ bool BtDevAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 
     	if (s_pBtDevSdc->bExtAdv == false)
     	{
-			s_BleAppSrData.scan_response_data_length = s_BleAppSrPkt.Len;
+			s_BtDevSrData.scan_response_data_length = s_BtDevSrPkt.Len;
 
-			int res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppSrData);
+			int res = sdc_hci_cmd_le_set_scan_response_data(&s_BtDevSrData);
     		if (res != 0)
     		{
     			return false;
@@ -505,13 +510,13 @@ bool BtDevAdvInit(const BtDevCfg_t *pCfg)
 
 	if (s_pBtDevSdc->bExtAdv == true)
 	{
-		advpkt = &s_BleAppExtAdvPkt;
-		srpkt = &s_BleAppExtSrPkt;
+		advpkt = &s_BtDevExtAdvPkt;
+		srpkt = &s_BtDevExtSrPkt;
 	}
 	else
 	{
-		advpkt = &s_BleAppAdvPkt;
-		srpkt = &s_BleAppSrPkt;
+		advpkt = &s_BtDevAdvPkt;
+		srpkt = &s_BtDevSrPkt;
 	}
 
 	if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
@@ -634,9 +639,9 @@ bool BtDevAdvInit(const BtDevCfg_t *pCfg)
 			return false;
 		}
 
-		s_BleAppAdvData.adv_data_length = advpkt->Len;
+		s_BtDevAdvData.adv_data_length = advpkt->Len;
 
-		sdc_res = sdc_hci_cmd_le_set_adv_data(&s_BleAppAdvData);
+		sdc_res = sdc_hci_cmd_le_set_adv_data(&s_BtDevAdvData);
 		if (sdc_res != 0)
 		{
 			return false;
@@ -644,9 +649,9 @@ bool BtDevAdvInit(const BtDevCfg_t *pCfg)
 
 		if (srpkt->Len > 0)
 		{
-			s_BleAppSrData.scan_response_data_length = srpkt->Len;
+			s_BtDevSrData.scan_response_data_length = srpkt->Len;
 
-			sdc_res = sdc_hci_cmd_le_set_scan_response_data(&s_BleAppSrData);
+			sdc_res = sdc_hci_cmd_le_set_scan_response_data(&s_BtDevSrData);
 			if (sdc_res != 0)
 			{
 				return false;
@@ -679,12 +684,12 @@ bool BtDevAdvInit(const BtDevCfg_t *pCfg)
 //			printf("sdc_hci_cmd_le_set_ext_adv_params : %x\n", res);
 		}
 
-		s_BleAppExtAdvData.adv_handle = 0;
-		s_BleAppExtAdvData.operation = 3;
-		s_BleAppExtAdvData.fragment_preference = 1;
-		s_BleAppExtAdvData.adv_data_length = advpkt->Len;
+		s_BtDevExtAdvData.adv_handle = 0;
+		s_BtDevExtAdvData.operation = 3;
+		s_BtDevExtAdvData.fragment_preference = 1;
+		s_BtDevExtAdvData.adv_data_length = advpkt->Len;
 
-		res = sdc_hci_cmd_le_set_ext_adv_data(&s_BleAppExtAdvData);
+		res = sdc_hci_cmd_le_set_ext_adv_data(&s_BtDevExtAdvData);
 		if (res != 0)
 		{
 			return false;
@@ -693,12 +698,12 @@ bool BtDevAdvInit(const BtDevCfg_t *pCfg)
 
 		if (srpkt->Len > 0)
 		{
-			s_BleAppExtSrData.adv_handle = 0;
-			s_BleAppExtSrData.operation = 3;
-			s_BleAppExtSrData.fragment_preference = 1;
-			s_BleAppExtSrData.scan_response_data_length = advpkt->Len;
+			s_BtDevExtSrData.adv_handle = 0;
+			s_BtDevExtSrData.operation = 3;
+			s_BtDevExtSrData.fragment_preference = 1;
+			s_BtDevExtSrData.scan_response_data_length = advpkt->Len;
 
-			res = sdc_hci_cmd_le_set_ext_scan_response_data(&s_BleAppExtSrData);
+			res = sdc_hci_cmd_le_set_ext_scan_response_data(&s_BtDevExtSrData);
 			if (res != 0)
 			{
 				return false;
@@ -710,7 +715,7 @@ bool BtDevAdvInit(const BtDevCfg_t *pCfg)
 	return true;
 }
 
-void BleAppDisInit(const BleAppCfg_t *pBleAppCfg)
+void BleAppDisInit(const BtDevCfg_t *pCfg)
 {
 #if 0
     ble_dis_init_t   dis_init;
@@ -1198,9 +1203,9 @@ bool BtDevInit(BtDev_t * const pDev, const BtDevCfg_t *pCfg)
 
 //	if (pCfg->)
 //    BleAppInitUserData();
-	BtDevInitCustomData();
+	BtDevInitCustomData(pDev);
 
-    BtGapInit(pCfg->Role);
+    //BtGapInit(pCfg->Role);
 
     if (pCfg->Role & (BTDEV_ROLE_BROADCASTER | BTDEV_ROLE_PERIPHERAL))
     {
@@ -1209,8 +1214,13 @@ bool BtDevInit(BtDev_t * const pDev, const BtDevCfg_t *pCfg)
 //    		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
 //    		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
 
+    		BtGapServiceInit(&pDev->Srvc[pDev->NbSrvc]);
+    		pDev->NbSrvc++;
+    		BtGattServiceInit(&pDev->Srvc[pDev->NbSrvc]);
+    		pDev->NbSrvc++;
+
     //		BleAppInitUserServices();
-    		BtDevInitCustomSrvc();
+    		BtDevInitCustomSrvc(pDev);
     	}
 
     	if (BtDevAdvInit(pCfg) == false)
@@ -1433,7 +1443,7 @@ bool BtDevNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	return true;
 }
 
-bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
+bool BtDevWrite(BtDev_t * const pDev, BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen)
 {
 	return false;
 #if 0
@@ -1456,12 +1466,34 @@ bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint1
 #endif
 }
 
-__WEAK void BleAppInitUserData()
+bool BtDevAddSrvc(BtDev_t * const pDev, BtGattSrvcCfg_t * const pSrvcCfg)
+{
+	if (pDev == nullptr || pSrvcCfg == nullptr)
+	{
+		return false;
+	}
+
+	if (pDev->NbSrvc >= BTDEV_SERVICE_MAXCNT)
+	{
+		return false;
+	}
+
+	bool res = BtGattSrvcAdd(&pDev->Srvc[pDev->NbSrvc], pSrvcCfg);
+
+	if (res == true)
+	{
+		pDev->NbSrvc++;
+	}
+
+	return res;
+}
+
+__WEAK void BtDevInitCustomData(BtDev_t * const pDev)
 {
 
 }
 
-__WEAK void BleAppInitUserServices()
+__WEAK void BtDevInitCustomSrvc(BtDev_t * const pDev)
 {
 
 }

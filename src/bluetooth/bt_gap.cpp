@@ -176,10 +176,10 @@ char * const BtGapGetDevName()
 	return s_BtGapCharDevName;
 }
 
-void BtGapServiceInit()
+void BtGapServiceInit(BtGattSrvc_t * const pSrvc)
 {
-	BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
-	BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
+	//BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
+	BtGattSrvcAdd(pSrvc, &s_BtGapSrvcCfg);
 }
 #endif
 

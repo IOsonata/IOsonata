@@ -44,6 +44,7 @@ SOFTWARE.
 #include <stddef.h>
 
 #include "bluetooth/ble_adv.h"
+#include "bluetooth/bt_gatt.h"
 
 /** @addtogroup Bluetooth
  * @{ */
@@ -141,6 +142,14 @@ typedef struct __Bt_Gap_Connection {
 	uint8_t PeerAddr[6];
 } BtGapConnection_t;
 
+typedef struct __Bt_Gap_Scan_Cfg {
+	uint32_t Interval;			//!< Scan interval in msec
+	uint32_t Duration;			//!< Scan window in msec
+	uint32_t Timeout;			//!< Scan timeout in sec
+	uint8_t BaseUid[16];		//!< Base UUID to look for
+	uint16_t ServUid;			//!< Service Uid to look for
+} BtGapScanCfg_t;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -148,6 +157,7 @@ extern "C" {
 #endif
 
 void BtGapInit(uint8_t Role);
+void BtGapServiceInit(BtGattSrvc_t * const pSrvc);
 bool isBtGapConnected();
 void BtGapSetDevName(const char *pName);
 uint16_t BtGapGetConnection();

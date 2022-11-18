@@ -53,6 +53,32 @@ typedef struct {
 } BtGattSrvcEntry_t;
 #pragma pack(pop)
 
+static BtGattCharSrvcChanged_t s_BtGattCharSrvcChanged = {0,};
+
+static BtGattChar_t s_BtGattChar[] = {
+	{
+		// Read characteristic
+		.Uuid = BT_UUID_GATT_CHAR_SERVICE_CHANGED,
+		.MaxDataLen = sizeof(BtGattCharSrvcChanged_t),
+		.Property =	BT_GATT_CHAR_PROP_INDICATE,
+		.pDesc = NULL,						// char UTF-8 description string
+		.WrCB = NULL,						// Callback for write char, set to NULL for read char
+		.SetNotifCB = NULL,					// Callback on set notification
+		.TxCompleteCB = NULL,				// Tx completed callback
+		.pValue = &s_BtGattCharSrvcChanged,
+		.ValueLen = 0,
+	},
+};
+
+static BtGattSrvcCfg_t s_BtGattSrvcCfg = {
+	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
+	.bCustom = false,
+	.UuidBase = {0,},		// Base UUID
+	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE,		// Service UUID
+	.NbChar = sizeof(s_BtGattChar) / sizeof(BtGattChar_t),				// Total number of characteristics for the service
+	.pCharArray = s_BtGattChar,				// Pointer a an array of characteristic
+};
+
 alignas(4) static BtGattListEntry_t s_BtGattEntryTbl[BT_GATT_ENTRY_MAX_COUNT] = {0,};
 static int s_NbGattListEntry = 0;
 alignas(4) static BtGattSrvcEntry_t s_BtGattSrvcTbl[BT_GATT_SRVC_MAX_COUNT] = {{0,}, };
@@ -598,4 +624,9 @@ void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 			s_BtGattEntryTbl[s_NbGattListEntry].Val32 = 0;
 		}
 	}
+}
+
+void BtGattServiceInit(BtGattSrvc_t * const pSrvc)
+{
+	BtGattSrvcAdd(pSrvc, &s_BtGattSrvcCfg);
 }

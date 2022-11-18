@@ -202,9 +202,15 @@ extern "C" {
 #endif
 
 bool BtDevInit(BtDev_t * const pDev, const BtDevCfg_t *pCfg);
+static inline bool BtDevSetValue(BtDev_t * const pDev, BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen) {
+	return BtGattCharSetValue(pChar, pData, DataLen);
+}
 bool BtDevNotify(BtDev_t * const pDev, BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen);
-void BtDevInitCustomData();
-void BtDevInitCustomSrvc();
+bool BtDevWrite(BtDev_t * const pDev, BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen);
+void BtDevInitCustomData(BtDev_t * const pDev);
+void BtDevInitCustomSrvc(BtDev_t * const pDev);
+bool BtDevAddSrvc(BtDev_t * const pDev, BtGattSrvcCfg_t * const pSrvcCfg);
+
 
 #if 0
 //bool BleAppDiscoverDevice(BleDev_t * const pDev);

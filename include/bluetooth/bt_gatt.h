@@ -261,6 +261,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
+void BtGattServiceInit(BtGattSrvc_t * const pSrvc);
 
 #ifdef __cplusplus
 }
