@@ -288,7 +288,7 @@ void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
     BleSrvcEvtHandler(&g_UartBleSrvc, (uint32_t)p_ble_evt);
 }
 
-void BleAppInitUserServices()
+void BtDevInitCustomSrvc()
 {
     uint32_t       err_code;
 
@@ -303,7 +303,7 @@ void HardwareInit()
 	g_Uart.printf("UartBleBridge\r\n");
 }
 
-void BleAppInitUserData()
+void BtAppInitUserData()
 {
 
 }

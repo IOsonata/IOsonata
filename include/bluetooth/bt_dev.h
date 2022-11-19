@@ -200,22 +200,22 @@ private:
 extern "C" {
 #endif
 
-void BtDevInitCustomSrvc(BtDev_t * const pDev);
+void BtDevInitCustomSrvc();
 
-bool BtDevInit(BtDev_t * const pDev, const BtDevCfg_t *pCfg);
-void BtDevSetDevName(BtDev_t * const pDev, const char *pName);
-static inline bool BtDevSetValue(BtDev_t * const pDev, BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen) {
+bool BtDevInit(const BtDevCfg_t *pCfg);
+void BtDevSetDevName(const char *pName);
+static inline bool BtDevSetValue(BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen) {
 	return BtGattCharSetValue(pChar, pData, DataLen);
 }
-bool BtDevNotify(BtDev_t * const pDev, BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen);
-bool BtDevWrite(BtDev_t * const pDev, BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen);
-void BtDevInitCustomData(BtDev_t * const pDev);
-void BtDevInitCustomSrvc(BtDev_t * const pDev);
-bool BtDevAddSrvc(BtDev_t * const pDev, BtGattSrvcCfg_t * const pSrvcCfg);
-bool BtDevAdvManDataSet(BtDev_t * const pDev, uint8_t * const pAdvData, int AdvLen, uint8_t * const pSrData, int SrLen);
-void BtDevAdvStart(BtDev_t * const pDev);
-void BtDevAdvStop(BtDev_t * const pDev);
-
+bool BtDevNotify(BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen);
+bool BtDevWrite(BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen);
+void BtDevInitCustomData();
+void BtDevInitCustomSrvc();
+bool BtDevAddSrvc(const BtGattSrvcCfg_t *pSrvcCfg);
+bool BtDevAdvManDataSet(uint8_t * const pAdvData, int AdvLen, uint8_t * const pSrData, int SrLen);
+void BtDevAdvStart();
+void BtDevAdvStop();
+BtDev_t * const BtDevGetInstance();
 
 #if 0
 //bool BleAppDiscoverDevice(BleDev_t * const pDev);

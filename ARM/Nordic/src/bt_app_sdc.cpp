@@ -61,7 +61,6 @@ SOFTWARE.
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/ble_appearance.h"
-//#include "bluetooth/ble_conn.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
 
@@ -93,7 +92,7 @@ static BtAppData_t s_BtAppData = {
 	BTDEV_ROLE_PERIPHERAL, 0xFFFF, -1, -1, 0,
 };
 
-BtDev_t g_BtDevSdc;
+//BtDev_t g_BtDevSdc;
 
 /**@brief Bluetooth SIG debug mode Private Key */
 __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
@@ -163,10 +162,10 @@ static void BtStackSdcCB()
 		{
 			case SDC_HCI_MSG_TYPE_EVT:
 				// Event available
-				BtHciProcessEvent(&g_BtDevSdc, (BtHciEvtPacket_t*)buf);
+				BtHciProcessEvent(BtDevGetInstance(), (BtHciEvtPacket_t*)buf);
 				break;
 			case SDC_HCI_MSG_TYPE_DATA:
-				BtHciProcessData(&g_BtDevSdc, (BtHciACLDataPacket_t*)buf);
+				BtHciProcessData(BtDevGetInstance(), (BtHciACLDataPacket_t*)buf);
 				break;
 		}
 	}
@@ -182,7 +181,7 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 
 void BtAppSetDevName(const char *pName)
 {
-	BtDevSetDevName(&g_BtDevSdc, pName);
+	BtDevSetDevName(pName);
 }
 /*
 char * const BleAppGetDevName()
@@ -304,18 +303,18 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
-	return BtDevAdvManDataSet(&g_BtDevSdc, pAdvData, AdvLen, pSrData, SrLen);
+	return BtDevAdvManDataSet(pAdvData, AdvLen, pSrData, SrLen);
 
 }
 
 void BtAppAdvStart()
 {
-	BtDevAdvStart(&g_BtDevSdc);
+	BtDevAdvStart();
 }
 
 void BleAppAdvStop()
 {
-	BtDevAdvStop(&g_BtDevSdc);
+	BtDevAdvStop();
 }
 
 
@@ -716,7 +715,7 @@ bool BtAppInit(const BtDevCfg_t *pCfg)
 
 	BtAppInitUserData();
 
-	BtDevInit(&g_BtDevSdc, pCfg);
+	BtDevInit(pCfg);
 /*
     BtGapInit(pCfg->Role);
 
@@ -784,7 +783,7 @@ void BtAppRun()
 
 	if (s_BtAppData.Role & (BTDEV_ROLE_PERIPHERAL | BTDEV_ROLE_BROADCASTER))
 	{
-		BtDevAdvStart(&g_BtDevSdc);
+		BtDevAdvStart();
 	}
 
 
@@ -804,10 +803,10 @@ void BtAppRun()
 			{
 				case SDC_HCI_MSG_TYPE_EVT:
 					// Event available
-					BtHciProcessEvent(&g_BtDevSdc, (BtHciEvtPacket_t*)buf);
+					BtHciProcessEvent(BtDevGetInstance(), (BtHciEvtPacket_t*)buf);
 					break;
 				case SDC_HCI_MSG_TYPE_DATA:
-					BtHciProcessData(&g_BtDevSdc, (BtHciACLDataPacket_t*)buf);
+					BtHciProcessData(BtDevGetInstance(), (BtHciACLDataPacket_t*)buf);
 					break;
 			}
 		}
@@ -932,7 +931,7 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * c
 
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	return BtDevNotify(&g_BtDevSdc, pChar, pData, DataLen);
+	return BtDevNotify(pChar, pData, DataLen);
 	/*
 	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{

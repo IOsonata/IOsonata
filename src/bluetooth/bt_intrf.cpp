@@ -38,9 +38,9 @@ SOFTWARE.
 #include "istddef.h"
 #include "cfifo.h"
 #include "bluetooth/bt_intrf.h"
-#include "bluetooth/bt_app.h"
+#include "bluetooth/bt_dev.h"
 #include "interrupt.h"
-#include "bluetooth/ble_srvc.h"
+//#include "bluetooth/ble_srvc.h"
 #include "bluetooth/bt_gatt.h"
 
 #define BTINTRF_PACKET_SIZE		(20)// + sizeof(BLEINTRF_PKT) - 1)
@@ -205,7 +205,7 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 
     if (pIntrf->TransBuffLen > 0)
     {
-        res = BleSrvcCharNotify(pIntrf->pSrvc, pIntrf->TxCharIdx, pIntrf->TransBuff, pIntrf->TransBuffLen);
+        res = BtDevNotify(&pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pIntrf->TransBuff, pIntrf->TransBuffLen);
     }
 
     while (res == 0)
@@ -218,7 +218,7 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 		{
 			return true;
 		}
-		res = BleSrvcCharNotify(pIntrf->pSrvc, pIntrf->TxCharIdx, pkt->Data, pkt->Len);
+		res = BtDevNotify(&pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pkt->Data, pkt->Len);
 	}
 
 	if (pkt != NULL)

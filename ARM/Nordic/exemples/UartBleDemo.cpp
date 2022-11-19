@@ -296,11 +296,11 @@ void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
     BleSrvcEvtHandler(&g_UartBleSrvc, (uint32_t)p_ble_evt);
 }
 
-void BleAppInitUserServices()
+void BtDevInitCustomSrvc()
 {
     uint32_t       err_code;
 
-    err_code = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
+    err_code = BtDevAddSrvc(&s_UartSrvcCfg);
     //APP_ERROR_CHECK(err_code);
 }
 
@@ -335,7 +335,7 @@ void HardwareInit()
 	IOPinEnableInterrupt(0, APP_IRQ_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
-void BleAppInitUserData()
+void BtAppInitUserData()
 {
 	// Add passkey pairing
     ble_opt_t opt;
