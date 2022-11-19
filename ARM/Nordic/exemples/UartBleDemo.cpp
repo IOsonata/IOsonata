@@ -41,7 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "app_scheduler.h"
 
 #include "istddef.h"
-#include "bluetooth/ble_app.h"
+#include "bluetooth/bt_app.h"
 #include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/blueio_blesrvc.h"
@@ -180,7 +180,7 @@ const BtGattSrvcCfg_t s_UartSrvcCfg = {
 
 BtGattSrvc_t g_UartBleSrvc;
 
-const BleAppDevInfo_t s_UartBleDevDesc = {
+const BtDevInfo_t s_UartBleDevDesc = {
 	MODEL_NAME,       		// Model name
 	MANUFACTURER_NAME,		// Manufacturer name
 	"123",					// Serial number string
@@ -190,24 +190,24 @@ const BleAppDevInfo_t s_UartBleDevDesc = {
 
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+\0";
 
-const BleAppCfg_t s_BleAppCfg = {
-	.Role = BLEAPP_ROLE_PERIPHERAL,
+const BtDevCfg_t s_BleAppCfg = {
+	.Role = BTDEV_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
 	.pDevName = DEVICE_NAME,			// Device name
-	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
+	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
 	.Appearance = 0,
-	.pDevDesc = &s_UartBleDevDesc,
+	.pDevInfo = &s_UartBleDevDesc,
 	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BLEAPP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BLEAPP_SECEXCHG_NONE,	// Security key exchange
-	.bCompleteUuidList = true,
+	.SecType = BTDEV_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BTDEV_SECEXCHG_NONE,	// Security key exchange
+	.bCompleteUuidList = false,
 	.pAdvUuid = &s_AdvUuid,      			// Service uuids to advertise
 	//.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(BleUuid_t), 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -371,7 +371,7 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	if (flush)
 	{
 //		if (BleSrvcCharNotify(&g_UartBleSrvc, 0, buff, bufflen) == 0)
-		if (BleAppNotify(&g_UartChars[0], buff, bufflen) == true)
+		if (BtAppNotify(&g_UartChars[0], buff, bufflen) == true)
 		{
 			bufflen = 0;
 		}
@@ -432,9 +432,9 @@ int main()
 
     //g_Uart.Disable();
 
-    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
+    BtAppInit(&s_BleAppCfg);//, true);
 
-    BleAppRun();
+    BtAppRun();
 
 	return 0;
 }

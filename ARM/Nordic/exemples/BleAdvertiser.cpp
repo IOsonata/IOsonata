@@ -40,7 +40,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "coredev/timer.h"
 
-#include "bluetooth/ble_app.h"
+#include "bluetooth/bt_app.h"
 #ifndef NRFXLIB_SDC
 #include "ble_app_nrf5.h"
 #endif
@@ -68,12 +68,12 @@ McuOsc_t g_McuOsc = MCUOSC;
 uint32_t g_AdvCnt = 0;
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
 
-const BleAppCfg_t s_BleAppCfg = {
-	.Role = BLEAPP_ROLE_BROADCASTER,
+const BtDevCfg_t s_BtAppCfg = {
+	.Role = BTDEV_ROLE_BROADCASTER,
 	.CentLinkCount = 0,						// Number of central link
 	.PeriLinkCount = 1,						// Number of peripheral link
 	.pDevName = (char*)DEVICE_NAME,			// Device name
-	.VendorID = ISYST_BLUETOOTH_ID,			// PnP Bluetooth/USB vendor id
+	.VendorId = ISYST_BLUETOOTH_ID,			// PnP Bluetooth/USB vendor id
 	.Appearance = BLE_APPEAR_COMPUTER_WEARABLE,
 #ifdef EXTADV
 	.bExtAdv = true,						// Enable extended advertising
@@ -105,7 +105,7 @@ void TimerTrigEvtHandler(TimerDev_t * const pTimer, int TrigNo, void * const pCo
 {
 	g_AdvCnt++;
 
-	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
+	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
 }
 
 void BleAppInitUserData()
@@ -127,9 +127,9 @@ void BleAppAdvTimeoutHandler()
 
 int main()
 {
-    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);
+    BtAppInit(&s_BtAppCfg);
 
-    BleAppRun();
+    BtAppRun();
 
 	return 0;
 }

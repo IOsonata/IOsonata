@@ -125,7 +125,7 @@ typedef struct __Bt_Dev_Cfg {
 	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
 	uint16_t ProductVer;			//!< PnP product version
 	uint16_t Appearance;			//!< 16 bits Bluetooth appearance value
-	const BtDevInfo_t *pDevDesc;//!< Pointer device info descriptor DIS
+	const BtDevInfo_t *pDevInfo;	//!< Pointer device info descriptor DIS
 	bool bExtAdv;					//!< Extended advertisement true : enable
 	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise
 	int AdvManDataLen;				//!< Length of manufacture specific data
@@ -149,7 +149,6 @@ typedef struct __Bt_Dev_Cfg {
 	uint16_t MaxMtu;				//!< Max MTU size or 0 for default
 	BTDEV_COEXMODE CoexMode;		//!< Enable support for CoEx
 	int PeriphDevCnt;				//!< Max number of peripheral connection
-//	BLEPERIPH_DEV *pPeriphDev;		//!< Connected peripheral data table
 	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler
 	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
 } BtDevCfg_t;
@@ -201,7 +200,10 @@ private:
 extern "C" {
 #endif
 
+void BtDevInitCustomSrvc(BtDev_t * const pDev);
+
 bool BtDevInit(BtDev_t * const pDev, const BtDevCfg_t *pCfg);
+void BtDevSetDevName(BtDev_t * const pDev, const char *pName);
 static inline bool BtDevSetValue(BtDev_t * const pDev, BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen) {
 	return BtGattCharSetValue(pChar, pData, DataLen);
 }
@@ -210,6 +212,9 @@ bool BtDevWrite(BtDev_t * const pDev, BtGattChar_t * const pChar, uint8_t * cons
 void BtDevInitCustomData(BtDev_t * const pDev);
 void BtDevInitCustomSrvc(BtDev_t * const pDev);
 bool BtDevAddSrvc(BtDev_t * const pDev, BtGattSrvcCfg_t * const pSrvcCfg);
+bool BtDevAdvManDataSet(BtDev_t * const pDev, uint8_t * const pAdvData, int AdvLen, uint8_t * const pSrData, int SrLen);
+void BtDevAdvStart(BtDev_t * const pDev);
+void BtDevAdvStop(BtDev_t * const pDev);
 
 
 #if 0

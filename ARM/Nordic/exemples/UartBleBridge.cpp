@@ -39,10 +39,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "app_scheduler.h"
 
 #include "istddef.h"
-#include "bluetooth/ble_app.h"
+#include "bluetooth/bt_app.h"
 #include "ble_app_nrf5.h"
 #include "bluetooth/ble_srvc.h"
-#include "bluetooth/ble_intrf.h"
+#include "bluetooth/bt_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
@@ -90,8 +90,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-static const ble_uuid_t  s_AdvUuids[] = {
-	{BLE_UART_UUID_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
+//static const ble_uuid_t  s_AdvUuids[] = {
+//	{BLE_UART_UUID_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
+//};
+static const BtUuidArr_t s_AdvUuid = {
+	.BaseIdx = 1,
+	.Type = BT_UUID_TYPE_16,
+	.Count = 1,
+	.Uuid16 = {BLE_UART_UUID_SERVICE,}
 };
 
 static const char s_RxCharDescString[] = {
@@ -158,7 +164,7 @@ const BtGattSrvcCfg_t s_UartSrvcCfg = {
 
 BtGattSrvc_t g_UartBleSrvc;
 
-const BleAppDevInfo_t s_UartBleDevDesc {
+const BtDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           	// Model name
 	MANUFACTURER_NAME,      // Manufacturer name
 	"",                     // Serial number string
@@ -166,22 +172,22 @@ const BleAppDevInfo_t s_UartBleDevDesc {
 	"0.0",                  // Hardware version string
 };
 
-const BleAppCfg_t s_BleAppCfg = {
-	.Role = BLEAPP_ROLE_PERIPHERAL,
+const BtDevCfg_t s_BleAppCfg = {
+	.Role = BTDEV_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
 	.pDevName = DEVICE_NAME,			// Device name
-	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
+	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
-	.pDevDesc = &s_UartBleDevDesc,
+	.pDevInfo = &s_UartBleDevDesc,
 	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BLEAPP_SECEXCHG_NONE,	// Security key exchange
+	.SecType = BTDEV_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BTDEV_SECEXCHG_NONE,	// Security key exchange
 	.pAdvUuid = NULL,      			// Service uuids to advertise
 	//.NbAdvUuid = 0, 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -201,11 +207,11 @@ const BleAppCfg_t s_BleAppCfg = {
 alignas(4) static uint8_t s_BleIntrfRxFifo[BLEINTRF_FIFOSIZE];
 alignas(4) static uint8_t s_BleIntrfTxFifo[BLEINTRF_FIFOSIZE];
 
-static const BleIntrfCfg_t s_BleInrfCfg = {
-	.pBleSrvc = &g_UartBleSrvc,
+static const BtIntrfCfg_t s_BleInrfCfg = {
+	.pSrvc = &g_UartBleSrvc,
 	.RxCharIdx = BLESRV_WRITE_CHAR_IDX,
 	.TxCharIdx = BLESRV_READ_CHAR_IDX,
-	.PacketSize = 20,			// Packet size : use default
+	.PacketSize = PACKET_SIZE,			// Packet size : use default
 	.bBlocking = false,
 	.RxFifoMemSize = BLEINTRF_FIFOSIZE,			// Rx Fifo mem size
 	.pRxFifoMem = s_BleIntrfRxFifo,		// Rx Fifo mem pointer
@@ -214,7 +220,7 @@ static const BleIntrfCfg_t s_BleInrfCfg = {
 	.EvtCB = BleIntrfEvtCallback
 };
 
-BleIntrf g_BleIntrf;
+BtIntrf g_BtIntrf;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
@@ -266,7 +272,7 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 	{
 		uint8_t buff[128];
 
-		int l = g_BleIntrf.Rx(0, buff, 128);
+		int l = g_BtIntrf.Rx(0, buff, 128);
 		if (l > 0)
 		{
 			g_Uart.Tx(buff, l);
@@ -328,7 +334,7 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 
 	if (flush)
 	{
-		g_BleIntrf.Tx(0, buff, bufflen);
+		g_BtIntrf.Tx(0, buff, bufflen);
 		bufflen = 0;
 //		app_sched_event_put(NULL, 0, UartRxChedHandler);
 		AppEvtHandlerQue(0, 0, UartRxChedHandler);
@@ -374,11 +380,11 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
+    BtAppInit(&s_BleAppCfg);//, true);
 
-    g_BleIntrf.Init(s_BleInrfCfg);
+    g_BtIntrf.Init(s_BleInrfCfg);
 
-    BleAppRun();
+    BtAppRun();
 
 	return 0;
 }

@@ -38,7 +38,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "cfifo.h"
 #include "bluetooth/bt_intrf.h"
-#include "bluetooth/ble_app.h"
+#include "bluetooth/bt_app.h"
 #include "interrupt.h"
 #include "bluetooth/ble_srvc.h"
 #include "bluetooth/bt_gatt.h"

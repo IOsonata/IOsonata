@@ -659,8 +659,9 @@ typedef struct __Bt_Hci_ISO_Data_Load {
 
 #pragma pack(pop)
 
-#if 0
 typedef struct __Bt_Hci_Device		BtHciDevice_t;
+
+#if 0
 
 typedef uint32_t (*BtHciSendDataFct_t)(void *pData, uint32_t Len);
 typedef void (*BtEvtHandler_t)(BtHciDevice_t * const pDev, uint32_t Evt);
@@ -674,7 +675,10 @@ typedef struct __Bt_Hci_Dev_Config {
 } BtHciDevCfg_t;
 */
 
+#endif
+
 struct __Bt_Hci_Device {
+	void *pCtx;
 	uint32_t RxDataLen;
 	uint32_t TxDataLen;
 	uint32_t (*SendData)(void *pData, uint32_t Len);
@@ -683,7 +687,6 @@ struct __Bt_Hci_Device {
 	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
 	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
 };
-#endif
 
 #ifdef __cplusplus
 extern "C" {

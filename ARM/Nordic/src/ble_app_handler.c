@@ -35,19 +35,19 @@ Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 #include <stdbool.h>
 
-#include "bluetooth/ble_app.h"
+#include "bluetooth/bt_app.h"
 
-__attribute__((weak)) void BleAppInitUserData()
+__attribute__((weak)) void BtAppInitUserData()
 {
 
 }
 
-__attribute__((weak)) void BleAppInitUserServices()
+__attribute__((weak)) void BtAppInitUserServices()
 {
 
 }
 
-__attribute__((weak)) void BleAppAdvTimeoutHandler()
+__attribute__((weak)) void BtAppAdvTimeoutHandler()
 {
 
 }
