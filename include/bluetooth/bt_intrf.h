@@ -86,6 +86,7 @@ typedef struct __Bt_Interf_Config {
 
 // BLE interf instance data
 typedef struct __Bt_Dev_Interf {
+//	BtDev_t		pDev;
 	DevIntrf_t	DevIntrf;	//!< Base Device Interface
 	BtGattSrvc_t	*pSrvc;	//!< BLE Service
     int			RxCharIdx;	//!< Write characteristic index (from BLE)

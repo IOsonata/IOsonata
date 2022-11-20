@@ -171,10 +171,6 @@ static const int8_t s_TxPowerdBm[] = {
 
 static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 
-static BtDev_t s_BtDevSdc = {
-	BTDEV_ROLE_PERIPHERAL,
-};
-
 //BLE_ADVERTISING_DEF(g_AdvInstance);             /**< Advertising module instance. */
 NRF_BLE_GATT_DEF(s_Gatt);
 
@@ -1057,7 +1053,7 @@ static void sec_req_timeout_handler(void * p_context)
 
 bool BtDevAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
-	if (s_BtDevSdc.State != BTDEV_STATE_ADVERTISING && s_BtDevSdc.State != BTDEV_STATE_IDLE)
+	if (s_BtDevnRF5.State != BTDEV_STATE_ADVERTISING && s_BtDevnRF5.State != BTDEV_STATE_IDLE)
 	{
 		return false;
 	}
@@ -1912,8 +1908,12 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 	s_BtDevnRF5.bExtAdv = pCfg->bExtAdv;
 	s_BtDevnRF5.bScan = false;
 	//s_BtDevnRF5.bAdvertising = false;
-#if 0
 	s_BtDevnRF5.VendorId = pCfg->VendorId;
+	s_BtDevnRF5.ProductId = pCfg->ProductId;
+	s_BtDevnRF5.ProductVer = pCfg->ProductVer;
+	s_BtDevnRF5.Appearance = pCfg->Appearance;
+
+#if 0
 	s_BtDevnRF5.ConnLedPort = pCfg->ConnLedPort;
 	s_BtDevnRF5.ConnLedPin = pCfg->ConnLedPin;
 	s_BtDevnRF5.ConnLedActLevel = pCfg->ConnLedActLevel;
@@ -2083,12 +2083,14 @@ bool BtDevAddSrvc(const BtGattSrvcCfg_t *pSrvcCfg)
 {
 	BtGattSrvc_t *p = &s_BtDevnRF5.Srvc[s_BtDevnRF5.NbSrvc];
 
-	bool res = BtGattSrvcAdd(&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc], pSrvcCfg);
+	bool res = BtGattSrvcAdd(&s_BtDevnRF5.Srvc[s_BtDevnRF5.NbSrvc], pSrvcCfg);
 
 	if (res == true)
 	{
-		s_BtDevSdc.NbSrvc++;
+		s_BtDevnRF5.NbSrvc++;
 	}
+
+	return true;
 }
 
 #if 0
