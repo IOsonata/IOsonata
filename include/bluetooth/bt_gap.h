@@ -157,7 +157,7 @@ extern "C" {
 #endif
 
 void BtGapInit(uint8_t Role);
-void BtGapServiceInit(BtGattSrvc_t * const pSrvc);
+void BtGapServiceInit();//BtGattSrvc_t * const pSrvc);
 bool isBtGapConnected();
 void BtGapSetDevName(const char *pName);
 uint16_t BtGapGetConnection();

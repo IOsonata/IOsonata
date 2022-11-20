@@ -164,8 +164,9 @@ typedef struct __Bt_Dev_Data {
 	bool bExtAdv;
 	uint16_t ConnHdl;
 	uint8_t AdvHdl;
-	int NbSrvc;
-	BtGattSrvc_t Srvc[BTDEV_SERVICE_MAXCNT];
+	//int NbSrvc;
+	//BtGattSrvc_t Srvc[BTDEV_SERVICE_MAXCNT];
+	//BtGattSrvc_t *pSrvc;
 	uint32_t RxDataLen;
 	uint32_t TxDataLen;
 	BTDEV_COEXMODE CoexMode;

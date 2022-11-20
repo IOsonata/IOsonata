@@ -300,7 +300,8 @@ void BtDevInitCustomSrvc()
 {
     uint32_t       err_code;
 
-    err_code = BtDevAddSrvc(&s_UartSrvcCfg);
+    err_code = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
+//    err_code = BtDevAddSrvc(&s_UartSrvcCfg);
     //APP_ERROR_CHECK(err_code);
 }
 

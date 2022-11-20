@@ -1236,10 +1236,10 @@ bool BtDevInit(const BtDevCfg_t *pCfg)
 //    		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
 //    		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
 
-    		BtGapServiceInit(&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
-    		s_BtDevSdc.NbSrvc++;
-    		BtGattServiceInit(&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
-    		s_BtDevSdc.NbSrvc++;
+    		BtGapServiceInit();//&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
+//    		s_BtDevSdc.NbSrvc++;
+//    		BtGattServiceInit(&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
+//    		s_BtDevSdc.NbSrvc++;
 
     //		BleAppInitUserServices();
     		BtDevInitCustomSrvc();
@@ -1355,7 +1355,7 @@ bool BtDevWrite(BtGattChar_t * const pChar, uint8_t * const pData, uint16_t Data
     return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
 #endif
 }
-
+#if 0
 bool BtDevAddSrvc(const BtGattSrvcCfg_t *pSrvcCfg)
 {
 	if (pSrvcCfg == nullptr)
@@ -1377,5 +1377,5 @@ bool BtDevAddSrvc(const BtGattSrvcCfg_t *pSrvcCfg)
 
 	return res;
 }
-
+#endif
 

@@ -84,6 +84,9 @@ SOFTWARE.
 #include "bluetooth/ble_srvc.h"
 #include "app_evt_handler.h"
 
+#include "coredev/uart.h"
+extern UART g_Uart;
+
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 
@@ -911,6 +914,14 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 {
     uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
+    if (s_BtDevnRF5.Role & BTDEV_ROLE_PERIPHERAL)
+    {
+//    	for (int i = 0; i < s_BtDevnRF5.NbSrvc; i++)
+    	{
+//    		BleSrvcEvtHandler(&s_BtDevnRF5.Srvc[i], (uint32_t)p_ble_evt);
+    	}
+        BlePeriphEvtUserHandler((ble_evt_t *)p_ble_evt);
+    }
     on_ble_evt(p_ble_evt);
     if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtDevnRF5.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
     {
@@ -932,10 +943,6 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         }
 #endif
         BleCentralEvtUserHandler((ble_evt_t *)p_ble_evt);
-    }
-    if (s_BtDevnRF5.Role & BTDEV_ROLE_PERIPHERAL)
-    {
-        BlePeriphEvtUserHandler((ble_evt_t *)p_ble_evt);
     }
 }
 
@@ -2078,21 +2085,21 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 
     return true;
 }
-
+/*
 bool BtDevAddSrvc(const BtGattSrvcCfg_t *pSrvcCfg)
 {
 	BtGattSrvc_t *p = &s_BtDevnRF5.Srvc[s_BtDevnRF5.NbSrvc];
 
-	bool res = BtGattSrvcAdd(&s_BtDevnRF5.Srvc[s_BtDevnRF5.NbSrvc], pSrvcCfg);
+	uint32_t res = BtGattSrvcAdd(&s_BtDevnRF5.Srvc[s_BtDevnRF5.NbSrvc], pSrvcCfg);
 
-	if (res == true)
+	if (res == NRF_SUCCESS)
 	{
 		s_BtDevnRF5.NbSrvc++;
 	}
 
 	return true;
 }
-
+*/
 #if 0
 void BleAppRun()
 {

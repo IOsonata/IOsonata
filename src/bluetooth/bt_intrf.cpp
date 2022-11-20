@@ -395,8 +395,8 @@ bool BtIntrfInit(BtDevIntrf_t *pIntrf, const BtIntrfCfg_t *pCfg)
 
 	DeviceIntrfEnable(&pIntrf->DevIntrf);
 
-	BtGattUpdate(pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].ValHdl,
-				&pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx], sizeof(BtGattChar_t));
+//	BtGattUpdate(pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].ValHdl,
+//				&pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx], sizeof(BtGattChar_t));
 
 	return true;
 }

@@ -46,16 +46,18 @@ SOFTWARE.
 
 #define BT_GATT_SRVC_MAX_COUNT		((BT_GATT_ENTRY_MAX_COUNT) >> 1)
 
+#if 0
 #pragma pack(push,4)
 typedef struct {
 	bool bValid;
 	BtGattSrvc_t *pSrvc;
 } BtGattSrvcEntry_t;
 #pragma pack(pop)
+#endif
 
 static BtGattCharSrvcChanged_t s_BtGattCharSrvcChanged = {0,};
 
-static BtGattChar_t s_BtGattChar[] = {
+static BtGattChar_t s_BtGattDftlChar[] = {
 	{
 		// Read characteristic
 		.Uuid = BT_UUID_GATT_CHAR_SERVICE_CHANGED,
@@ -70,19 +72,21 @@ static BtGattChar_t s_BtGattChar[] = {
 	},
 };
 
-static BtGattSrvcCfg_t s_BtGattSrvcCfg = {
+static BtGattSrvcCfg_t s_BtGattDftlSrvcCfg = {
 	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = false,
 	.UuidBase = {0,},		// Base UUID
 	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE,		// Service UUID
-	.NbChar = sizeof(s_BtGattChar) / sizeof(BtGattChar_t),				// Total number of characteristics for the service
-	.pCharArray = s_BtGattChar,				// Pointer a an array of characteristic
+	.NbChar = sizeof(s_BtGattDftlChar) / sizeof(BtGattChar_t),				// Total number of characteristics for the service
+	.pCharArray = s_BtGattDftlChar,				// Pointer a an array of characteristic
 };
 
 alignas(4) static BtGattListEntry_t s_BtGattEntryTbl[BT_GATT_ENTRY_MAX_COUNT] = {0,};
 static int s_NbGattListEntry = 0;
-alignas(4) static BtGattSrvcEntry_t s_BtGattSrvcTbl[BT_GATT_SRVC_MAX_COUNT] = {{0,}, };
-static int s_NbGattSrvcEntry = 0;
+//alignas(4) static BtGattSrvcEntry_t s_BtGattSrvcTbl[BT_GATT_SRVC_MAX_COUNT] = {{0,}, };
+//static int s_NbGattSrvcEntry = 0;
+static BtGattSrvc_t *s_pBtGattSrvcHead = nullptr;
+static BtGattSrvc_t *s_pBtGattSrvcTail = nullptr;
 
 uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void * const pAttVal)
 {
@@ -449,7 +453,7 @@ BtGattListEntry_t *GetEntryTable(size_t *count)
 	return s_BtGattEntryTbl;
 }
 
-bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+__attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar->ValHdl == BT_GATT_HANDLE_INVALID)
 	{
@@ -514,9 +518,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 {
 	bool retval = false;
 	uint8_t baseidx = 0;
-
-	// Initialize service structure
-	//pSrvc->ConnHdl  = BT_GATT_HANDLE_INVALID;
 
 	// Add base UUID to internal list.
 	if (pCfg->bCustom)
@@ -601,6 +602,19 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
         }
     }
 
+    if (s_pBtGattSrvcHead == nullptr)
+    {
+    	s_pBtGattSrvcHead = s_pBtGattSrvcTail = pSrvc;
+    	pSrvc->pPrev = pSrvc->pNext = nullptr;
+    }
+    else
+    {
+    	s_pBtGattSrvcTail->pNext = pSrvc;
+    	pSrvc->pPrev = s_pBtGattSrvcTail;
+    	pSrvc->pNext = nullptr;
+    	s_pBtGattSrvcTail = pSrvc;
+    }
+/*
     for (int i = 0; i < BT_GATT_SRVC_MAX_COUNT; i++)
     {
     	if (s_BtGattSrvcTbl[i].bValid == false)
@@ -610,7 +624,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
     		break;
     	}
     }
-
+*/
 
 	return true;
 }
@@ -625,8 +639,9 @@ void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 		}
 	}
 }
-
+/*
 void BtGattServiceInit(BtGattSrvc_t * const pSrvc)
 {
-	BtGattSrvcAdd(pSrvc, &s_BtGattSrvcCfg);
+	BtGattSrvcAdd(pSrvc, &s_BtGattDftlSrvcCfg);
 }
+*/

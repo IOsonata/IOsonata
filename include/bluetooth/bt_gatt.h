@@ -183,7 +183,7 @@ struct __Bt_Gatt_Characteristic {
 	uint16_t DescHdl;					//!< descriptor handle
 	uint16_t CccdHdl;					//!< client char configuration descriptor handle
 	uint16_t SccdHdl;					//!< Server char configuration value
-	BtGattSrvc_t *pSrvc;					//!< Pointer to the service instance which this char belongs to.
+	BtGattSrvc_t *pSrvc;				//!< Pointer to the service instance which this char belongs to.
 };
 
 typedef struct __Bt_Gatt_Service_Config {
@@ -214,6 +214,8 @@ struct __Bt_Gatt_Service {
     int	LongWrBuffSize;					//!< long write buffer size
     void *pContext;
     BtGattSrvcAuthRqst_t AuthReqCB;		//!< Authorization request callback
+    BtGattSrvc_t *pPrev;
+    BtGattSrvc_t *pNext;
 };
 
 /*
@@ -261,7 +263,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
-void BtGattServiceInit(BtGattSrvc_t * const pSrvc);
+//void BtGattServiceInit(BtGattSrvc_t * const pSrvc);
 
 #ifdef __cplusplus
 }
