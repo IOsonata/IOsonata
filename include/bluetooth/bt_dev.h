@@ -163,14 +163,15 @@ typedef struct __Bt_Dev_Data {
 	uint16_t Appearance;			//!< 16 bits Bluetooth appearance value
 	bool bExtAdv;
 	uint16_t ConnHdl;
+	uint8_t AdvHdl;
 	int NbSrvc;
 	BtGattSrvc_t Srvc[BTDEV_SERVICE_MAXCNT];
 	uint32_t RxDataLen;
 	uint32_t TxDataLen;
 	BTDEV_COEXMODE CoexMode;
-	int8_t ConnLedPort;				//!< Connection LED port number
-	int8_t ConnLedPin;				//!< Connection LED pin number
-	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
+	//int8_t ConnLedPort;				//!< Connection LED port number
+	//int8_t ConnLedPin;				//!< Connection LED pin number
+	//uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
 
 	void (*EvtHandler)(uint32_t Evt, void * const pCtx);
 	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
@@ -178,6 +179,9 @@ typedef struct __Bt_Dev_Data {
 	uint32_t (*SendData)(void * const pData, uint32_t Len);
 	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
 	BTDEV_STATE State;
+	uint16_t MaxMtu;
+	bool bSecure;
+	bool bScan;
 } BtDev_t;
 
 #pragma pack(pop)
@@ -216,6 +220,7 @@ bool BtDevAdvManDataSet(uint8_t * const pAdvData, int AdvLen, uint8_t * const pS
 void BtDevAdvStart();
 void BtDevAdvStop();
 BtDev_t * const BtDevGetInstance();
+BTDEV_STATE BtDevGetState();
 
 #if 0
 //bool BleAppDiscoverDevice(BleDev_t * const pDev);

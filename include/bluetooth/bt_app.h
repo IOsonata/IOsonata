@@ -188,7 +188,7 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
  * 			false - not advertising
  */
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen);
-void BleAppAdvTimeoutHandler();
+void BtAppAdvTimeoutHandler();
 void BtAppAdvStart();
 void BleAppAdvStop();
 void BleAppDisconnect();

@@ -371,7 +371,7 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 bool BtDevAdvManDataSet(uint8_t * const pAdvData, int AdvLen, uint8_t * const pSrData, int SrLen)
 {
-	if (s_BtDevSdc.State != BTDEV_STATE_ADVERTISING)
+	if (s_BtDevSdc.State != BTDEV_STATE_ADVERTISING && s_BtDevSdc.State != BTDEV_STATE_IDLE)
 	{
 		return false;
 	}
@@ -1130,9 +1130,9 @@ bool BtDevInit(const BtDevCfg_t *pCfg)
 	s_BtDevSdc.ProductId = pCfg->ProductId;
 	s_BtDevSdc.ProductVer = pCfg->ProductVer;
 	s_BtDevSdc.Appearance = pCfg->Appearance;
-	s_BtDevSdc.ConnLedPort = pCfg->ConnLedPort;
-	s_BtDevSdc.ConnLedPin = pCfg->ConnLedPin;
-	s_BtDevSdc.ConnLedActLevel = pCfg->ConnLedActLevel;
+	//s_BtDevSdc.ConnLedPort = pCfg->ConnLedPort;
+	//s_BtDevSdc.ConnLedPin = pCfg->ConnLedPin;
+	//s_BtDevSdc.ConnLedActLevel = pCfg->ConnLedActLevel;
 	s_BtDevSdc.EvtHandler = BtDevEvtHandler;
 	s_BtDevSdc.Connected = BtDevConnected;
 	s_BtDevSdc.Disconnected = BtDevDisconnected;

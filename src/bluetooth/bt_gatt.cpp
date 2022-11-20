@@ -510,7 +510,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 	return true;
 }
 */
-bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
+__attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 {
 	bool retval = false;
 	uint8_t baseidx = 0;
