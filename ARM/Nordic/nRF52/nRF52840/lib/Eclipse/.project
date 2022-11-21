@@ -551,54 +551,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/ble_adv.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_adv.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_app.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/ble_app_central.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app_central.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_appearance.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_appearance.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_dev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_dev.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_gap.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_gap.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_hcidef.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_hcidef.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_service.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_service.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_uuid.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_uuid.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bleadv_mandata.h</name>
@@ -609,6 +564,71 @@
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_adv.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_adv.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_app.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_app.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_appearance.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_appearance.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_att.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_att.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_dev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_gap.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_gatt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gatt.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_hci.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_hcievt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_l2cap.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_l2cap.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_smp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_smp.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_uuid.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_uuid.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_device.h</name>
@@ -971,44 +991,84 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/ble_adv.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/ble_adv.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/ble_app_handler.c</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_app_handler.c</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/ble_app_nrf52.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/ble_app_nrf52.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/ble_app_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/ble_app_sdc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/ble_dev.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/ble_dev.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/ble_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/ble_service.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_service.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/blueio_blesrvc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/blueio_blesrvc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_adv.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_handler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_app_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_app_sdc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_att.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_dev.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_dev_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_dev_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_dev_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_dev_sdc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gap.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gatt.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gatt.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gatt_nrf5.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gatt_nrf5.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>
