@@ -920,7 +920,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     	{
 //    		BleSrvcEvtHandler(&s_BtDevnRF5.Srvc[i], (uint32_t)p_ble_evt);
     	}
-        BlePeriphEvtUserHandler((ble_evt_t *)p_ble_evt);
+    	//BtAppPeriphEvtHandler((ble_evt_t *)p_ble_evt);
     }
     on_ble_evt(p_ble_evt);
     if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtDevnRF5.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
@@ -942,7 +942,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
             break;
         }
 #endif
-        BleCentralEvtUserHandler((ble_evt_t *)p_ble_evt);
+    	//BtAppCentralEvtHandler((ble_evt_t *)p_ble_evt);
     }
 }
 

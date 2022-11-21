@@ -57,9 +57,11 @@ typedef struct {
 	uint8_t Data[1];
 } GETTLWRMEM;
 
-static uint16_t s_ConnHandle = BLE_CONN_HANDLE_INVALID;
-
 #pragma pack(pop)
+
+static uint16_t s_ConnHandle = BLE_CONN_HANDLE_INVALID;
+static BtGattSrvc_t *s_pBtGattSrvcHead = nullptr;
+static BtGattSrvc_t *s_pBtGattSrvcTail = nullptr;
 
 //uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
@@ -489,6 +491,19 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
     pSrvc->pLongWrBuff = pCfg->pLongWrBuff;
     pSrvc->LongWrBuffSize = pCfg->LongWrBuffSize;
     pSrvc->AuthReqCB = pCfg->AuthReqCB;
+
+    if (s_pBtGattSrvcHead == nullptr)
+    {
+    	s_pBtGattSrvcHead = s_pBtGattSrvcTail = pSrvc;
+    	pSrvc->pPrev = pSrvc->pNext = nullptr;
+    }
+    else
+    {
+    	s_pBtGattSrvcTail->pNext = pSrvc;
+    	pSrvc->pPrev = s_pBtGattSrvcTail;
+    	pSrvc->pNext = nullptr;
+    	s_pBtGattSrvcTail = pSrvc;
+    }
 
     return NRF_SUCCESS;
 }

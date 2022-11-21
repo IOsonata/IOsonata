@@ -134,17 +134,17 @@ extern "C" {
  * 	This function is called prio to initializing services
  *
  */
-void BtAppInitUserData();
+void BtAppInitCustomData();
 
 /**
  * @brief	User function to initialize all app services
  * 	This is called before initializing advertisement
  */
-void BleAppInitUserServices();
-
-void BleAppUserEvtConnected(uint16_t ConnHdl);
-
-void BleAppUserEvtDisconnected(uint16_t ConnHdl);
+void BtAppInitCustomServices();
+void BtAppEvtConnected(uint16_t ConnHdl);
+void BtAppEvtDisconnected(uint16_t ConnHdl);
+void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx);
+void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
 
 /**
  * @Brief	User peripheral app event handler
@@ -162,7 +162,7 @@ void BleAppUserEvtDisconnected(uint16_t ConnHdl);
 //*** Require implementation if app operating mode is BLEAPP_MODE_RTOS
 // This function should normal wait for RTOS to signal an event on sent by
 // Softdevice
-void BleAppRtosWaitEvt(void);
+void BtAppRtosWaitEvt(void);
 
 /**
  * @brief	BLE main App initialization

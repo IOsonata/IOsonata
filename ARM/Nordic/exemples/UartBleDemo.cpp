@@ -291,9 +291,9 @@ void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len
 	g_Uart.Tx(pData, Len);
 }
 
-void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
+void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
-    BleSrvcEvtHandler(&g_UartBleSrvc, (uint32_t)p_ble_evt);
+    BleSrvcEvtHandler(&g_UartBleSrvc, Evt);
 }
 
 void BtDevInitCustomSrvc()
@@ -336,7 +336,7 @@ void HardwareInit()
 	IOPinEnableInterrupt(0, APP_IRQ_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
-void BtAppInitUserData()
+void BtAppInitCustomData()
 {
 	// Add passkey pairing
     ble_opt_t opt;
@@ -372,7 +372,7 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	if (flush)
 	{
 //		if (BleSrvcCharNotify(&g_UartBleSrvc, 0, buff, bufflen) == 0)
-		if (BtAppNotify(&g_UartChars[0], buff, bufflen) == true)
+		if (BtDevNotify(&g_UartChars[0], buff, bufflen) == true)
 		{
 			bufflen = 0;
 		}

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	ble_app_sdc.cpp
+@file	bt_dev_sdc.cpp
 
-@brief	Nordic SDK based BLE application creation helper using softdevice controller
+@brief	Bluetooth device creation helper using softdevice controller
 
 
 @author	Hoang Nguyen Hoan

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	ble_app_sdc.cpp
+@file	bt_app_sdc.cpp
 
-@brief	Nordic SDK based BLE application creation helper using softdevice controller
+@brief	Bluetooth application creation helper using softdevice controller
 
 
 @author	Hoang Nguyen Hoan
@@ -129,11 +129,6 @@ const static TimerCfg_t s_TimerCfg = {
 
 Timer g_BleAppTimer;
 
-__WEAK void BtAppInitUserData()
-{
-
-}
-
 static void BtStackMpslAssert(const char * const file, const uint32_t line)
 {
 //	printf("MPSL Fault: %s, %d\n", file, line);
@@ -238,7 +233,7 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 //	s_BtGapSrvc.ConnHdl = ConnHdl;
 //	s_BtGattSrvc.ConnHdl = ConnHdl;
 
-	BleAppUserEvtConnected(ConnHdl);
+	BtAppEvtConnected(ConnHdl);
 }
 
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
@@ -253,7 +248,7 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 //		BtGattSrvcDisconnected(&s_BtGapSrvc);
 //		BtGattSrvcDisconnected(&s_BtGattSrvc);
 
-		BleAppUserEvtDisconnected(ConnHdl);
+		BtAppEvtDisconnected(ConnHdl);
 	}
 
 	s_BtAppData.ConnHdl = BtGapGetConnection();
@@ -322,57 +317,6 @@ void BleAppAdvStop()
 uint16_t BleAppGetConnHandle()
 {
 	return s_BtAppData.ConnHdl;
-}
-#if 0
-/**@brief Function for handling events from the GATT library. */
-void BleGattEvtHandler(nrf_ble_gatt_t * p_gatt, const nrf_ble_gatt_evt_t * p_evt)
-{
-    if ((g_BleAppData.ConnHdl == p_evt->conn_handle) && (p_evt->evt_id == NRF_BLE_GATT_EVT_ATT_MTU_UPDATED))
-    {
-    	//g_BleAppData.MaxMtu = p_evt->params.att_mtu_effective - 3;//OPCODE_LENGTH - HANDLE_LENGTH;
-       // m_ble_nus_max_data_len = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH;
-        //NRF_LOG_INFO("Data len is set to 0x%X(%d)\r\n", m_ble_nus_max_data_len, m_ble_nus_max_data_len);
-    }
- //   printf("ATT MTU exchange completed. central 0x%x peripheral 0x%x\r\n", p_gatt->att_mtu_desired_central, p_gatt->att_mtu_desired_periph);
-}
-#endif
-/**@brief Function for initializing the GATT library. */
-void BleAppGattInit(void)
-{
-#if 0
-    ret_code_t err_code;
-
-    err_code = nrf_ble_gatt_init(&s_Gatt, BleGattEvtHandler);
-    APP_ERROR_CHECK(err_code);
-
-    if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
-    {
-    	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, g_BleAppData.MaxMtu);
-    	APP_ERROR_CHECK(err_code);
-
-    	if (g_BleAppData.MaxMtu >= 27)
-    	{
-    		// 251 bytes is max dat length as per Bluetooth core spec 5, vol 6, part b, section 4.5.10
-    		// 27 - 251 bytes is hardcoded in nrf_ble_gat of the SDK.
-    		uint8_t dlen = g_BleAppData.MaxMtu > 254 ? 251: g_BleAppData.MaxMtu - 3;
-    		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
-    		APP_ERROR_CHECK(err_code);
-    	}
-      	ble_opt_t opt;
-
-      	memset(&opt, 0x00, sizeof(opt));
-      	opt.common_opt.conn_evt_ext.enable = 1;
-
-      	err_code = sd_ble_opt_set(BLE_COMMON_OPT_CONN_EVT_EXT, &opt);
-      	APP_ERROR_CHECK(err_code);
-    }
-
-    if (g_BleAppData.AppRole & BLEAPP_ROLE_CENTRAL)
-    {
-    	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, g_BleAppData.MaxMtu);
-    	APP_ERROR_CHECK(err_code);
-    }
-#endif
 }
 
 static uint8_t BtStackRandPrioLowGet(uint8_t *pBuff, uint8_t Len)
@@ -555,22 +499,7 @@ bool BtAppStackInit(const BtDevCfg_t *pCfg)
 
     return true;
 }
-#if 0
-int8_t GetValidTxPower(int TxPwr)
-{
-	int8_t retval = s_TxPowerdBm[0];
 
-	for (int i = 1; i < s_NbTxPowerdBm; i++)
-	{
-		if (s_TxPowerdBm[i] > TxPwr)
-			break;
-
-		retval = s_TxPowerdBm[i];
-	}
-
-	return retval;
-}
-#endif
 /**
  * @brief Function for the SoftDevice initialization.
  *
@@ -713,7 +642,7 @@ bool BtAppInit(const BtDevCfg_t *pCfg)
 	}
 
 
-	BtAppInitUserData();
+	BtAppInitCustomData();
 
 	BtDevInit(pCfg);
 /*
@@ -970,11 +899,6 @@ bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint1
 
     return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
 #endif
-}
-
-__WEAK void BtAppInitUserServices()
-{
-
 }
 
 extern "C" {

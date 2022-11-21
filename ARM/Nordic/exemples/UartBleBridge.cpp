@@ -283,9 +283,9 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 	return cnt;
 }
 
-void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
+void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
-    BleSrvcEvtHandler(&g_UartBleSrvc, (uint32_t)p_ble_evt);
+    BleSrvcEvtHandler(&g_UartBleSrvc, (uint32_t)Evt);
 }
 
 void BtDevInitCustomSrvc()
@@ -296,14 +296,7 @@ void BtDevInitCustomSrvc()
     //APP_ERROR_CHECK(err_code);
 }
 
-void HardwareInit()
-{
-	g_Uart.Init(g_UartCfg);
-
-	g_Uart.printf("UartBleBridge\r\n");
-}
-
-void BtAppInitUserData()
+void BtAppInitCustomData()
 {
 
 }
@@ -362,6 +355,12 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	return cnt;
 }
 
+void HardwareInit()
+{
+	g_Uart.Init(g_UartCfg);
+
+	g_Uart.printf("UartBleBridge\r\n");
+}
 
 //
 // Print a greeting message on standard output and exit.

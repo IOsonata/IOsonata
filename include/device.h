@@ -69,7 +69,7 @@ typedef enum __Device_Event {
 class Device;
 
 typedef void (*DevEvtHandler_t)(Device * const pDev, DEV_EVT Evt);
-typedef DevEvtHandler_t		DEVEVTCB;
+//typedef DevEvtHandler_t		DEVEVTCB;
 
 /// @brief	Device base class.
 ///

@@ -77,11 +77,10 @@ SOFTWARE.
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/ble_appearance.h"
-#include "ble_app_nrf5.h"
-#include "ble_dev.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
-#include "bluetooth/ble_srvc.h"
+#include "ble_app_nrf5.h"
+#include "ble_dev.h"
 #include "app_evt_handler.h"
 
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
@@ -313,7 +312,7 @@ void BtAppEnterDfu()
     }
 #endif
 }
-
+/*
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
 	if (s_BtAppData.ConnHdl == BT_GATT_HANDLE_INVALID)
@@ -336,7 +335,7 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 
     return true;
 }
-
+*/
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -352,6 +351,7 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
 {
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
+#if 0
 
 void BtAppDisconnect()
 {
@@ -379,7 +379,6 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
     APP_ERROR_CHECK(err_code);
     //ble_advertising_restart_without_whitelist(&g_AdvInstance);
 }
-#if 0
 /**@brief Function for the GAP initialization.
  *
  * @details This function will set up all the necessary GAP (Generic Access Profile) parameters of
@@ -535,7 +534,7 @@ static void on_adv_error(uint32_t)
 {
 
 }
-#endif
+//#endif
 
 /**@brief Function for the application's SoftDevice event handler.
  *
@@ -552,11 +551,13 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
         case BLE_GAP_EVT_CONNECTED:
 //        	g_BleAppData.bAdvertising = false;
 
-///        	BtGapAddConnection(p_gap_evt->conn_handle, role,
+//        	BtGapAddConnection(p_gap_evt->conn_handle, role,
 //        					   p_gap_evt->params.connected.peer_addr.addr_type,
 //        					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
 
         	BtAppConnLedOn();
+        	BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
+
 //        	g_BleAppData.ConnHdl = p_ble_evt->evt.gap_evt.conn_handle;
 //        	g_BleAppData.bScan = false;
 //        	g_BleAppData.State = BLEAPP_STATE_CONNECTED;
@@ -564,6 +565,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
 
         case BLE_GAP_EVT_DISCONNECTED:
         	BtAppConnLedOff();
+        	BleAppEvtDisconnected(p_gap_evt->conn_handle);
 //        	BtGapDeleteConnection(p_gap_evt->conn_handle);
 //        	g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
 //        	g_BleAppData.State = BLEAPP_STATE_IDLE;
@@ -801,7 +803,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
     }
 }
 
-#if 0
+//#if 0
 /**@brief Function for handling Peer Manager events.
  *
  * @param[in] p_evt  Peer Manager event.
@@ -937,17 +939,19 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     {
         case BLE_GAP_EVT_CONNECTED:
         	BtAppConnLedOn();
+        	BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
         	break;
         case BLE_GAP_EVT_DISCONNECTED:
         	BtAppConnLedOff();
+        	BtAppEvtDisconnected(p_ble_evt->evt.gap_evt.conn_handle);
         	break;
         case BLE_GAP_EVT_ADV_SET_TERMINATED:
         	BtAppAdvTimeoutHandler();
         	break;
     }
    // on_ble_evt(p_ble_evt);
-#if 0
-    if ((role == BLE_GAP_ROLE_CENTRAL) || g_BtAppData.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
+#if 1
+    if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtAppData.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
     {
 #if 0
     	switch (p_ble_evt->header.evt_id)
@@ -966,11 +970,11 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
             break;
         }
 #endif
-        BleCentralEvtUserHandler((ble_evt_t *)p_ble_evt);
+    	BtAppCentralEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
     }
-    if (g_BleAppData.Role & BLEAPP_ROLE_PERIPHERAL)
+    if (s_BtAppData.Role & BTDEV_ROLE_PERIPHERAL)
     {
-        BlePeriphEvtUserHandler((ble_evt_t *)p_ble_evt);
+    	BtAppPeriphEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
     }
 #endif
 }
@@ -1833,7 +1837,7 @@ bool BtAppStackInit(int MaxMtu, int CentLinkCount, int PeriLinkCount, bool bConn
     // Configure the number of custom UUIDS.
     memset(&ble_cfg, 0, sizeof(ble_cfg));
     //if (CentLinkCount > 0)
-        ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = BLESRVC_UUID_BASE_MAXCNT;
+        ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 4;//BLESRVC_UUID_BASE_MAXCNT;
     //else
     //	ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 2;
     err_code = sd_ble_cfg_set(BLE_COMMON_CFG_VS_UUID, &ble_cfg, ram_start);
@@ -1980,6 +1984,7 @@ bool BtAppInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 	//g_BleAppData.bScan = false;
 	//g_BleAppData.bAdvertising = false;
 	//g_BleAppData.VendorId = pBleAppCfg->VendorID;
+	s_BtAppData.Role = pCfg->Role;
 	s_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	s_BtAppData.ConnLedPin = pCfg->ConnLedPin;
 	s_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
@@ -2059,7 +2064,7 @@ bool BtAppInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
     				//pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND);
 //    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
 
-    BtAppInitUserData();
+    BtAppInitCustomData();
 
     BtDevInit(pCfg);
 
@@ -2170,7 +2175,7 @@ void BtAppRun()
 //		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
     	if (s_BtAppData.SDEvtHandler != NULL)
 		{
-			BleAppRtosWaitEvt();
+			BtAppRtosWaitEvt();
 		}
 		else
 		{
