@@ -34,7 +34,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
 
-#include "ble_service.h"
+#include "bluetooth/bt_gatt.h"
 #include "board.h"
 #include "BlueIOThingy.h"
 
@@ -51,7 +51,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define THINGY_TCS_FW_VERSIO_CHAR_IDX   	0//5
 
-#define BLE_TCS_MAX_DATA_LEN (BLE_GATT_ATT_MTU_DEFAULT - 3) /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Thingy Configuration service module. */
+#define BLE_TCS_MAX_DATA_LEN 				(20) /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Thingy Configuration service module. */
 
 #pragma pack(push, 1)
 typedef struct {
@@ -65,44 +65,45 @@ const ble_tcs_fw_version_t s_ThingyVersion {
 	 2, 2, 0
 };
 
-BLESRVC_CHAR g_ConfChars[] = {
+BtGattChar_t g_ConfChars[] = {
     {
         // Version characteristic.  This is the minimum required for Thingy App to work
-		BLE_UUID_TCS_FW_VERSION_CHAR,
-        BLE_TCS_MAX_DATA_LEN,
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_VARLEN,
-        NULL,    					// char UTF-8 description string
-        NULL,                       // Callback for write char, set to NULL for read char
-        NULL,                       // Callback on set notification
-        NULL,                       // Tx completed callback
-		(uint8_t*)&s_ThingyVersion,                       // pointer to char default values
+		.Uuid = BLE_UUID_TCS_FW_VERSION_CHAR,
+        .MaxDataLen = BLE_TCS_MAX_DATA_LEN,
+        .Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
+        .pDesc = NULL,    					// char UTF-8 description string
+        .WrCB = NULL,                       // Callback for write char, set to NULL for read char
+        .SetNotifCB = NULL,                       // Callback on set notification
+        .TxCompleteCB = NULL,                       // Tx completed callback
+		.pValue = (void*)&s_ThingyVersion,                       // pointer to char default values
         3,                          // Default value length in bytes
     },
 };
 
 /// Service definition
-const BLESRVC_CFG s_ConfSrvcCfg = {
-    BLESRVC_SECTYPE_NONE,       	// Secure or Open service/char
-    {THINGY_BASE_UUID},           	// Base UUID
-	1,
-    BLE_UUID_TCS_SERVICE,       	// Service UUID
-    sizeof(g_ConfChars) / sizeof(BLESRVC_CHAR),  // Total number of characteristics for the service
-    g_ConfChars,                 	// Pointer a an array of characteristic
+const BtGattSrvcCfg_t s_ConfSrvcCfg = {
+   // BLESRVC_SECTYPE_NONE,       	// Secure or Open service/char
+	.bCustom = true,
+    .UuidBase = THINGY_BASE_UUID,           	// Base UUID
+//	1,
+    .UuidSrvc = BLE_UUID_TCS_SERVICE,       	// Service UUID
+    .NbChar = sizeof(g_ConfChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
+    .pCharArray = g_ConfChars,                 	// Pointer a an array of characteristic
     NULL,                       	// pointer to user long write buffer
     0,                           	// long write buffer size
 	NULL,							// Authentication event callback
 };
 
 /// TCS instance
-BLESRVC g_ConfSrvc;
+BtGattSrvc_t g_ConfSrvc;
 
-BLESRVC *GetConfSrvcInstance()
+BtGattSrvc_t *GetConfSrvcInstance()
 {
 	return &g_ConfSrvc;
 }
 
 uint32_t ConfSrvcInit()
 {
-	return BleSrvcInit(&g_ConfSrvc, &s_ConfSrvcCfg);
+	return BtGattSrvcAdd(&g_ConfSrvc, &s_ConfSrvcCfg);
 }
 

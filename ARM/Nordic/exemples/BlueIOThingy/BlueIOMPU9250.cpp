@@ -8,9 +8,10 @@
 #include "app_scheduler.h"
 
 #include "istddef.h"
-#include "bluetooth/ble_app.h"
-#include "ble_app_nrf5.h"
-#include "ble_service.h"
+#include "bluetooth/bt_app.h"
+#include "bluetooth/bt_dev.h"
+//#include "ble_app_nrf5.h"
+#include "bluetooth/bt_gatt.h"
 #include "device_intrf.h"
 #include "coredev/spi.h"
 #include "coredev/timer.h"
@@ -240,7 +241,8 @@ static void mpulib_tap_cb(unsigned char direction, unsigned char count)
 
 static void mpulib_orient_cb(unsigned char orientation)
 {
-	BleSrvcCharNotify(GetImuSrvcInstance(), 2, &orientation, 1);
+	BtGattSrvc_t *p = GetImuSrvcInstance();
+	BtDevNotify(&p->pCharArray[2], &orientation, 1);
 
 /*    if (m_motion.features & DRV_MOTION_FEATURE_MASK_ORIENTATION)
     {

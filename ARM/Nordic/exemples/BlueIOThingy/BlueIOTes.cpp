@@ -34,7 +34,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
 
-#include "ble_service.h"
+#include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_dev.h"
 #include "board.h"
 #include "BlueIOThingy.h"
 
@@ -52,7 +53,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define THINGY_TES_PRESCHAR_IDX     1
 #define THINGY_TES_HUMICHAR_IDX     2
 
-#define BLE_TES_MAX_DATA_LEN (BLE_GATT_ATT_MTU_DEFAULT - 3)       /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Thingy Environment service module. */
+#define BLE_TES_MAX_DATA_LEN 		(20)       /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Thingy Environment service module. */
 
 #pragma pack(push, 1)
 
@@ -87,12 +88,12 @@ static const char s_EnvHumCharDescString[] = {
 };
 
 /// Characteristic definitions
-BLESRVC_CHAR g_EnvChars[] = {
+BtGattChar_t g_EnvChars[] = {
     {
         // Temperature characteristic
         BLE_UUID_TES_TEMPERATURE_CHAR,
         BLE_TES_MAX_DATA_LEN,
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
         s_EnvTempCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
@@ -104,7 +105,7 @@ BLESRVC_CHAR g_EnvChars[] = {
         // Pressure characteristic
         BLE_UUID_TES_PRESSURE_CHAR, // char UUID
         BLE_TES_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
         s_EnvPresCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
@@ -116,7 +117,7 @@ BLESRVC_CHAR g_EnvChars[] = {
         // Humidity characteristic
         BLE_UUID_TES_HUMIDITY_CHAR, // char UUID
         BLE_TES_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
         s_EnvHumCharDescString,     // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
@@ -127,28 +128,29 @@ BLESRVC_CHAR g_EnvChars[] = {
 };
 
 /// Service definition
-const BLESRVC_CFG s_EnvSrvcCfg = {
-    BLESRVC_SECTYPE_NONE,       // Secure or Open service/char
-    {THINGY_BASE_UUID,},        // Base UUID
-	1,
+const BtGattSrvcCfg_t s_EnvSrvcCfg = {
+    //BLESRVC_SECTYPE_NONE,       // Secure or Open service/char
+	0,
+	true,
+    THINGY_BASE_UUID,        // Base UUID
     BLE_UUID_TES_SERVICE,       // Service UUID
-    sizeof(g_EnvChars) / sizeof(BLESRVC_CHAR),  // Total number of characteristics for the service
+    sizeof(g_EnvChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
     g_EnvChars,                 // Pointer a an array of characteristic
     NULL,                       // pointer to user long write buffer
     0,                          // long write buffer size
 	NULL
 };
 
-BLESRVC g_EnvSrvc;
+BtGattSrvc_t g_EnvSrvc;
 
-BLESRVC *GetEnvSrvcInstance()
+BtGattSrvc_t *GetEnvSrvcInstance()
 {
 	return &g_EnvSrvc;
 }
 
 uint32_t EnvSrvcInit()
 {
-	return BleSrvcInit(&g_EnvSrvc, &s_EnvSrvcCfg);
+	return BtGattSrvcAdd(&g_EnvSrvc, &s_EnvSrvcCfg);
 }
 
 void EnvSrvcNotifTemp(float Temp)
@@ -159,7 +161,7 @@ void EnvSrvcNotifTemp(float Temp)
     t.integer = (int)Temp;
     t.decimal = (uint8_t)((Temp - (float)t.integer) * 100.0);
 
-	BleSrvcCharNotify(&g_EnvSrvc, THINGY_TES_TEMPCHAR_IDX, (uint8_t*)&t, sizeof(t));
+	BtDevNotify(&g_EnvSrvc.pCharArray[THINGY_TES_TEMPCHAR_IDX], (uint8_t*)&t, sizeof(t));
 }
 
 
@@ -170,12 +172,14 @@ void EnvSrvcNotifPressure(float Press)
     b.integer = (int)Press;
     b.decimal = (uint8_t)((Press - (float)b.integer) * 100.0);
 
-	BleSrvcCharNotify(GetEnvSrvcInstance(), THINGY_TES_PRESCHAR_IDX, (uint8_t*)&b, sizeof(b));
+    BtGattSrvc_t *p = GetEnvSrvcInstance();
+    BtDevNotify(&p->pCharArray[THINGY_TES_PRESCHAR_IDX], (uint8_t*)&b, sizeof(b));
 }
 
 void EnvSrvcNotifHumi(uint8_t Humi)
 {
-	BleSrvcCharNotify(GetEnvSrvcInstance(), THINGY_TES_HUMICHAR_IDX, &Humi, sizeof(Humi));
+	BtGattSrvc_t *p = GetEnvSrvcInstance();
+	BtDevNotify(&p->pCharArray[THINGY_TES_HUMICHAR_IDX], &Humi, sizeof(Humi));
 }
 
 

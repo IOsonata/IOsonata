@@ -51,30 +51,31 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __BLUEIOTHINGY_H__
 
 #include "coredev/spi.h"
-#include "timer_nrfx.h"
+#include "coredev/timer.h"
+#include "bluetooth/bt_gatt.h"
 
 #ifdef NRF51
 #define BLE_GATT_ATT_MTU_DEFAULT 23
 #endif
 
 /// Thingy custom service UUID
-#define THINGY_BASE_UUID    {{0x42, 0x00, 0x74, 0xA9, 0xFF, 0x52, 0x10, 0x9B, 0x33, 0x49, 0x35, 0x9B, 0x00, 0x00, 0x68, 0xEF}} //!< Used vendor specific UUID
+#define THINGY_BASE_UUID    {0x42, 0x00, 0x74, 0xA9, 0xFF, 0x52, 0x10, 0x9B, 0x33, 0x49, 0x35, 0x9B, 0x00, 0x00, 0x68, 0xEF} //!< Used vendor specific UUID
 
 #define BLE_UUID_TCS_SERVICE				0x0100                      /**< The UUID of the Thingy Configuration Service. */
 
 
-BLESRVC *GetConfSrvcInstance();
+BtGattSrvc_t *GetConfSrvcInstance();
 uint32_t ConfSrvcInit();
-BLESRVC *GetUISrvcInstance();
+BtGattSrvc_t *GetUISrvcInstance();
 uint32_t UISrvcInit();
-BLESRVC *GetEnvSrvcInstance();
+BtGattSrvc_t *GetEnvSrvcInstance();
 uint32_t EnvSrvcInit();
 
 void EnvSrvcNotifTemp(float Temp);
 void EnvSrvcNotifPressure(float Press);
 void EnvSrvcNotifHumi(uint8_t Humi);
 
-BLESRVC *GetImuSrvcInstance();
+BtGattSrvc_t *GetImuSrvcInstance();
 uint32_t ImuSrvcInit();
 
 bool ICM20948Init(DeviceIntrf * const pIntrf, Timer * const pTimer);

@@ -34,13 +34,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
 
-#include "ble_service.h"
+#include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_app.h"
 #include "iopinctrl.h"
 #include "board.h"
 #include "BlueIOThingy.h"
 
-void LedCharWrhandler(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len);
-void ButtonCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
+void LedCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
+void ButtonCharSetNotify(BtGattChar_t *pChar, bool bEnable);
 
 // TUIS (Thingy User Interface Service characteristics)
 #define BLE_UUID_TUIS_SERVICE          		0x0300
@@ -50,7 +51,7 @@ void ButtonCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
 #define BLE_UUID_TUIS_PIN_CHAR				0x0303                      /**< The UUID of the pin Characteristic. */
 
 
-#define BLE_TUIS_MAX_DATA_LEN (BLE_GATT_ATT_MTU_DEFAULT - 3) /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Thingy Configuration service module. */
+#define BLE_TUIS_MAX_DATA_LEN (20) /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Thingy Configuration service module. */
 
 typedef enum {
 	BLE_TUIS_LED_MODE_OFF,
@@ -88,12 +89,12 @@ typedef struct {
 #define UICHAR_IDX_PIN			2
 
 
-static BLESRVC_CHAR s_UIChars[] = {
+static BtGattChar_t s_UIChars[] = {
     {
         // Version characteristic.  This is the minimum required for Thingy App to work
     	BLE_UUID_TUIS_LED_CHAR,
         sizeof(BLE_TUIS_LED),
-		BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_READ,
+		BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_READ,
         NULL,    					// char UTF-8 description string
 		LedCharWrhandler,           // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
@@ -105,7 +106,7 @@ static BLESRVC_CHAR s_UIChars[] = {
         // Version characteristic.  This is the minimum required for Thingy App to work
     	BLE_UUID_TUIS_BUTTON_CHAR,
         1,							// Max data len
-		BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_READ,
+		BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_READ,
         NULL,    					// char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ButtonCharSetNotify,                       // Callback on set notification
@@ -117,7 +118,7 @@ static BLESRVC_CHAR s_UIChars[] = {
         // Version characteristic.  This is the minimum required for Thingy App to work
     	BLE_UUID_TUIS_PIN_CHAR,
         BLE_TUIS_MAX_DATA_LEN,
-		BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY,
+		BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
         NULL,    					// char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
@@ -128,12 +129,12 @@ static BLESRVC_CHAR s_UIChars[] = {
 };
 
 /// Service definition
-const BLESRVC_CFG s_UISrvcCfg = {
-    BLESRVC_SECTYPE_NONE,       	// Secure or Open service/char
-    {THINGY_BASE_UUID,},           	// Base UUID
-	1,
+const BtGattSrvcCfg_t s_UISrvcCfg = {
+    BTDEV_SECTYPE_NONE,       	// Secure or Open service/char
+	true,
+    THINGY_BASE_UUID,           	// Base UUID
     BLE_UUID_TUIS_SERVICE,       	// Service UUID
-    sizeof(s_UIChars) / sizeof(BLESRVC_CHAR),  // Total number of characteristics for the service
+    sizeof(s_UIChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
     s_UIChars,                 		// Pointer a an array of characteristic
     NULL,                       	// pointer to user long write buffer
     0,                           	// long write buffer size
@@ -141,19 +142,19 @@ const BLESRVC_CFG s_UISrvcCfg = {
 };
 
 /// TUIS instance
-BLESRVC g_UISrvc;
+BtGattSrvc_t g_UISrvc;
 
-BLESRVC *GetUISrvcInstance()
+BtGattSrvc_t *GetUISrvcInstance()
 {
 	return &g_UISrvc;
 }
 
 uint32_t UISrvcInit()
 {
-	return BleSrvcInit(&g_UISrvc, &s_UISrvcCfg);
+	return BtGattSrvcAdd(&g_UISrvc, &s_UISrvcCfg);
 }
 
-void LedCharWrhandler(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len)
+void LedCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
 	BLE_TUIS_LED *leddata = (BLE_TUIS_LED*)pData;
 
@@ -176,7 +177,7 @@ void LedCharWrhandler(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len)
 	}
 }
 
-void ButtonCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ButtonCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	s_UIChars[UICHAR_IDX_BUTTON].bNotify = true;
 }

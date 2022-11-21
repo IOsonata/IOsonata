@@ -33,8 +33,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include <inttypes.h>
 
-#include "ble_service.h"
-#include "ble_intrf.h"
+#include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_intrf.h"
+#include "bluetooth/bt_dev.h"
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
 #include "sensors/mag_sensor.h"
@@ -42,16 +43,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "BlueIOThingy.h"
 #include "BlueIOMPU9250.h"
 
-void ImuConfCharWrhandler(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len);
-void ImuTapCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
-void ImuOrientCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
-void ImuQuaternionCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
-void ImuPedometerCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
-void ImuRawCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
-void ImuEulerCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
-void ImuRotMatCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
-void ImuHeadingCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
-void ImuGravityCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
+void ImuConfCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
+void ImuTapCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ImuOrientCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ImuQuaternionCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ImuPedometerCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ImuRawCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ImuEulerCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ImuRotMatCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ImuHeadingCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ImuGravityCharSetNotify(BtGattChar_t *pChar, bool bEnable);
 
 #define BLE_UUID_TMS_SERVICE 0x0400                      /**< The UUID of the Motion Service. */
 
@@ -66,7 +67,7 @@ void ImuGravityCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
 #define BLE_UUID_TMS_HEADING_CHAR     0x0409                      /**< The UUID of the compass heading Characteristic. */
 #define BLE_UUID_TMS_GRAVITY_CHAR     0x040A                      /**< The UUID of the gravity vector Characteristic. */
 
-#define BLE_TMS_MAX_DATA_LEN (BLE_GATT_ATT_MTU_DEFAULT - 3) /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Motion service module. */
+#define BLE_TMS_MAX_DATA_LEN (20) /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Motion service module. */
 
 #pragma pack(push, 1)
 
@@ -194,12 +195,12 @@ static const char s_ImuGravCharDescString[] = {
 };
 
 /// Characteristic definitions
-BLESRVC_CHAR g_ImuChars[] = {
+BtGattChar_t g_ImuChars[] = {
     {
         // Config characteristic
     	BLE_UUID_TMS_CONFIG_CHAR,
 		BLE_TMS_MAX_DATA_LEN,
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuConfigCharDescString,  // char UTF-8 description string
 		ImuConfCharWrhandler,       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
@@ -211,7 +212,7 @@ BLESRVC_CHAR g_ImuChars[] = {
         // TAP characteristic
 		BLE_UUID_TMS_TAP_CHAR, 		// char UUID
 		BLE_TMS_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuTapCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuTapCharSetNotify,        // Callback on set notification
@@ -223,7 +224,7 @@ BLESRVC_CHAR g_ImuChars[] = {
         // Orientation characteristic
 		BLE_UUID_TMS_ORIENTATION_CHAR, // char UUID
 		BLE_TMS_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuOrientCharDescString,  // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuOrientCharSetNotify,		// Callback on set notification
@@ -235,7 +236,7 @@ BLESRVC_CHAR g_ImuChars[] = {
         // Quaternion characteristic
 		BLE_UUID_TMS_QUATERNION_CHAR, // char UUID
 		BLE_TMS_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuQuatCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuQuaternionCharSetNotify,	// Callback on set notification
@@ -247,7 +248,7 @@ BLESRVC_CHAR g_ImuChars[] = {
         // Pedometer characteristic
 		BLE_UUID_TMS_PEDOMETER_CHAR, // char UUID
 		BLE_TMS_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuPedoCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuPedometerCharSetNotify,	// Callback on set notification
@@ -259,7 +260,7 @@ BLESRVC_CHAR g_ImuChars[] = {
         // Raw characteristic
 		BLE_UUID_TMS_RAW_CHAR, // char UUID
 		BLE_TMS_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuRawCharDescString,    	// char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuRawCharSetNotify,		// Callback on set notification
@@ -271,7 +272,7 @@ BLESRVC_CHAR g_ImuChars[] = {
         // Euler characteristic
 		BLE_UUID_TMS_EULER_CHAR, // char UUID
 		BLE_TMS_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuEulerCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuEulerCharSetNotify,      // Callback on set notification
@@ -283,7 +284,7 @@ BLESRVC_CHAR g_ImuChars[] = {
         // Rot matrix characteristic
 		BLE_UUID_TMS_ROT_MAT_CHAR, // char UUID
 		BLE_TMS_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuRotCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuRotMatCharSetNotify,     // Callback on set notification
@@ -295,7 +296,7 @@ BLESRVC_CHAR g_ImuChars[] = {
         // Heading characteristic
 		BLE_UUID_TMS_HEADING_CHAR, // char UUID
 		BLE_TMS_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuHeadCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuHeadingCharSetNotify,	// Callback on set notification
@@ -307,7 +308,7 @@ BLESRVC_CHAR g_ImuChars[] = {
         // Gravity characteristic
 		BLE_UUID_TMS_GRAVITY_CHAR, // char UUID
 		BLE_TMS_MAX_DATA_LEN,       // char max data length
-        BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_ImuGravCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuGravityCharSetNotify,	// Callback on set notification
@@ -318,52 +319,52 @@ BLESRVC_CHAR g_ImuChars[] = {
 };
 
 /// Service definition
-const BLESRVC_CFG s_ImuSrvcCfg = {
-    BLESRVC_SECTYPE_NONE,       // Secure or Open service/char
-    {THINGY_BASE_UUID,},        // Base UUID
-	1,
+const BtGattSrvcCfg_t s_ImuSrvcCfg = {
+    0,       // Secure or Open service/char
+	true,
+    THINGY_BASE_UUID,        // Base UUID
 	BLE_UUID_TMS_SERVICE,       // Service UUID
-    sizeof(g_ImuChars) / sizeof(BLESRVC_CHAR),  // Total number of characteristics for the service
+    sizeof(g_ImuChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
     g_ImuChars,                 // Pointer a an array of characteristic
     NULL,                       // pointer to user long write buffer
     0,                          // long write buffer size
 	NULL
 };
 
-BLESRVC g_ImuSrvc;
+BtGattSrvc_t g_ImuSrvc;
 
-static const BLEINTRF_CFG s_ImuQuatIntrfCfg = {
+static const BtIntrfCfg_t s_ImuQuatIntrfCfg = {
 	&g_ImuSrvc,
 };
 
-BLESRVC *GetImuSrvcInstance()
+BtGattSrvc_t *GetImuSrvcInstance()
 {
 	return &g_ImuSrvc;
 }
 
 uint32_t ImuSrvcInit()
 {
-	return BleSrvcInit(&g_ImuSrvc, &s_ImuSrvcCfg);
+	return BtGattSrvcAdd(&g_ImuSrvc, &s_ImuSrvcCfg);
 }
 
-void ImuConfCharWrhandler(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len)
+void ImuConfCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
 
 }
 
-void ImuTapCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ImuTapCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_TAP].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_TAP);
 }
 
-void ImuOrientCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ImuOrientCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_ORIENT].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_ORIENTATION);
 }
 
-void ImuQuaternionCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ImuQuaternionCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_QUAT].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_QUAT);
@@ -387,20 +388,20 @@ void ImuQuatDataSend(long Quat[4])
 	q[3] = Quat[3];
 #endif
 
-	uint32_t err = BleSrvcCharNotify(&g_ImuSrvc, IMUCHAR_IDX_QUAT, (uint8_t*)q, sizeof(long) * 4);
+	uint32_t err = BtDevNotify(&g_ImuSrvc.pCharArray[IMUCHAR_IDX_QUAT], (uint8_t*)q, sizeof(long) * 4);
 	if (err != 0)
 	{
 		//printf("quat Error %x\r\n", err);
 	}
 }
 
-void ImuPedometerCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ImuPedometerCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_PEDO].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_PEDOMETER);
 }
 
-void ImuRawCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ImuRawCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_RAW].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_RAW);
@@ -422,31 +423,31 @@ void ImuRawDataSend(ACCELSENSOR_DATA &AccData, GYROSENSOR_DATA GyroData, MAGSENS
 	raw.compass.y = MagData.Y / 256;
 	raw.compass.z = MagData.Z / 256;
 
-	uint32_t err = BleSrvcCharNotify(GetImuSrvcInstance(), 5, (uint8_t*)&raw, sizeof(ble_tms_raw_t));
+	uint32_t err = BtDevNotify(&GetImuSrvcInstance()->pCharArray[5], (uint8_t*)&raw, sizeof(ble_tms_raw_t));
 	if (err != 0)
 	{
 		///printf("raw Error %x\r\n", err);
 	}
 }
 
-void ImuEulerCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ImuEulerCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_EULER].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_EULER);
 }
 
-void ImuRotMatCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ImuRotMatCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_ROTMAT].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_ROT_MAT);
 }
-void ImuHeadingCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ImuHeadingCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_HEADING].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_HEADING);
 }
 
-void ImuGravityCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void ImuGravityCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_GRAVITY].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_GRAVITY_VECTOR);

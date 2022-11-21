@@ -55,9 +55,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bsec_interface.h"
 
 #include "istddef.h"
-#include "bluetooth/ble_app.h"
-#include "ble_app_nrf5.h"
-#include "ble_service.h"
+#include "bluetooth/bt_app.h"
+//#include "ble_app_nrf5.h"
+#include "bluetooth/bt_gatt.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
 #include "coredev/i2c.h"
@@ -79,7 +79,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "BlueIOThingy.h"
 #include "BlueIOMPU9250.h"
 
-#define DEVICE_NAME                     "BlueIOThingy"                            /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "Thingy52"                            /**< Name of device. Will be included in the advertising data. */
 
 #define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
 
@@ -147,29 +147,29 @@ Timer g_Timer;
 //static const ble_uuid_t  s_AdvUuids[] = {
 //    {BLE_UUID_TCS_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
 //};
-BleUuidArr_t s_AdvUuids = {
-	.Type = BLE_UUID_TYPE_16,
+BtUuidArr_t s_AdvUuids = {
 	.BaseIdx = 1,
+	.Type = BT_UUID_TYPE_16,
 	.Count = 1,
-	.Val = {{.Uuid16 = BLE_UUID_TCS_SERVICE},}
+	.Uuid16 = {BLE_UUID_TCS_SERVICE,},
 };
 
-const BleAppCfg_t s_BleAppCfg = {
-	.Role = BLEAPP_ROLE_PERIPHERAL,
+const BtDevCfg_t s_BleAppCfg = {
+	.Role = BTDEV_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
 	.pDevName = DEVICE_NAME,			// Device name
-	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
+	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
-	.pDevDesc = NULL,
+	.pDevInfo = NULL,
 	.bExtAdv = false,
 	.pAdvManData = g_AdvDataBuff,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_AdvDataBuff),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BLEAPP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BLEAPP_SECEXCHG_NONE,	// Security key exchange
+	.SecType = BTDEV_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BTDEV_SECEXCHG_NONE,	// Security key exchange
 	.pAdvUuid = &s_AdvUuids,      			// Service uuids to advertise
 	//.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(ble_uuid_t), 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -425,7 +425,7 @@ void ReadPTHData()
 	g_TphSensor.StartSampling();
 
 	// Update advertisement data
-	BleAppAdvManDataSet(g_AdvDataBuff, sizeof(g_AdvDataBuff), NULL, 0);
+	BtDevAdvManDataSet(g_AdvDataBuff, sizeof(g_AdvDataBuff), NULL, 0);
 
 	EnvSrvcNotifTemp((float)data.Temperature / 100.0);
 
@@ -460,7 +460,7 @@ void TimerHandler(Timer *pTimer, uint32_t Evt)
 }
 
 /// BLE event handler.  Need this to handle events for the services
-void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
+void BtAppPeriphEvtHandler(uint32_t p_ble_evt, void *pCtx)
 {
 #ifndef USE_TIMER_UPDATE
     if (p_ble_evt->header.evt_id == BLE_GAP_EVT_TIMEOUT)
@@ -471,10 +471,10 @@ void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
     }
 #endif
 
-	BleSrvcEvtHandler(GetConfSrvcInstance(), p_ble_evt);
-	BleSrvcEvtHandler(GetUISrvcInstance(), p_ble_evt);
-    BleSrvcEvtHandler(GetEnvSrvcInstance(), p_ble_evt);
-    BleSrvcEvtHandler(GetImuSrvcInstance(), p_ble_evt);
+    BtGattEvtHandler(GetConfSrvcInstance(), p_ble_evt);
+    BtGattEvtHandler(GetUISrvcInstance(), p_ble_evt);
+    BtGattEvtHandler(GetEnvSrvcInstance(), p_ble_evt);
+    BtGattEvtHandler(GetImuSrvcInstance(), p_ble_evt);
 }
 
 /// Initialize all services needed for this firmware
@@ -684,11 +684,11 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
+    BtAppInit(&s_BleAppCfg);//, true);
 
 	uint32_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 
-    BleAppRun();
+    BtAppRun();
 
 	return 0;
 }
