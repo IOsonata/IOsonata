@@ -44,7 +44,7 @@ SOFTWARE.
 #ifndef NRFXLIB_SDC
 #include "ble_app_nrf5.h"
 #endif
-#include "bluetooth/ble_appearance.h"
+#include "bluetooth/bt_appearance.h"
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 
@@ -55,6 +55,8 @@ SOFTWARE.
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
+
+//#define EXTADV		// Uncomment to enable extended advertisement
 
 #ifdef EXTADV
 #define DEVICE_NAME                     "Advertising extra long long name"
@@ -74,7 +76,7 @@ const BtDevCfg_t s_BtAppCfg = {
 	.PeriLinkCount = 1,						// Number of peripheral link
 	.pDevName = (char*)DEVICE_NAME,			// Device name
 	.VendorId = ISYST_BLUETOOTH_ID,			// PnP Bluetooth/USB vendor id
-	.Appearance = BLE_APPEAR_COMPUTER_WEARABLE,
+	.Appearance = BT_APPEAR_COMPUTER_WEARABLE,
 #ifdef EXTADV
 	.bExtAdv = true,						// Enable extended advertising
 	.pAdvManData  = (uint8_t*)&g_AdvLong,   // Manufacture specific data to advertise

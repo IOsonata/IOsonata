@@ -32,14 +32,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __BLE_APP_H__
-#define __BLE_APP_H__
+#ifndef __BT_APP_H__
+#define __BT_APP_H__
 
 #include <stdint.h>
 #include <inttypes.h>
 
 #include "bluetooth/bt_gap.h"
-#include "bluetooth/ble_adv.h"
+#include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bleadv_mandata.h"
@@ -64,50 +64,11 @@ typedef enum __Bt_App_Event {
 
 #pragma pack(push, 4)
 
-#if 0
-/// BLE App configuration
-typedef struct __Bt_App_Config {
-	BTDEV_ROLE	Role;				//!< Application mode peripheral/central/mix
-	int CentLinkCount;				//!< Number of central link
-	int	PeriLinkCount;				//!< Number of peripheral link
-	const char *pDevName;			//!< Device name
-	uint16_t VendorID;				//!< PnP Bluetooth/USB vendor id. iBeacon mode, this is Major value
-	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
-	uint16_t ProductVer;			//!< PnP product version
-	uint16_t Appearance;			//!< 16 bits Bluetooth appearance value
-	const BtDevInfo_t *pDevInfo;	//!< Pointer device info descriptor DIS
-	bool bExtAdv;					//!< Extended advertisement true : enable
-	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise
-	int AdvManDataLen;				//!< Length of manufacture specific data
-	const uint8_t *pSrManData;		//!< Addition Manufacture specific data to advertise in scan response
-	int SrManDataLen;				//!< Length of manufacture specific data in scan response
-	BTDEV_SECTYPE SecType;			//!< Secure connection type
-	uint8_t SecExchg;				//!< Sec key exchange
-	bool bCompleteUuidList;			//!< true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
-	const BtUuidArr_t *pAdvUuid;
-	uint32_t AdvInterval;			//!< In msec
-	uint32_t AdvTimeout;			//!< In sec
-	uint32_t AdvSlowInterval;		//!< Slow advertising interval, if > 0, fallback to
-									//!< slow interval on adv timeout and advertise until connected
-	uint32_t ConnIntervalMin;   	//!< Min. connection interval
-	uint32_t ConnIntervalMax;   	//!< Max connection interval
-	int8_t ConnLedPort;				//!< Connection LED port number
-	int8_t ConnLedPin;				//!< Connection LED pin number
-	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
-	int TxPower;					//!< Tx power in dBm, -20 to +4 dBm TX power, configurable in 4 dB steps
-	uint32_t (*SDEvtHandler)(void); //!< Require for BLEAPP_MODE_RTOS
-	uint16_t MaxMtu;				//!< Max MTU size or 0 for default
-	BTAPP_COEXMODE CoexMode;		//!< Enable support for CoEx
-	int PeriphDevCnt;				//!< Max number of peripheral connection
-	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler
-	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
-} BtAppCfg_t;
-#endif
 #pragma pack(pop)
 
 #ifdef __cplusplus
 
-class BleApp {
+class BtApp {
 public:
 	virtual bool Init(BtDevCfg_t &CfgData);
 
@@ -146,16 +107,6 @@ void BtAppEvtDisconnected(uint16_t ConnHdl);
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx);
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
 
-/**
- * @Brief	User peripheral app event handler
- */
-//void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt);
-
-/**
- * @Brief	User central app event handler
- *
- */
-//void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
 
 //void BleDevServiceDiscovered(uint16_t ConnHdl, uint16_t Count, ble_gattc_service_t * const pServices);
 
@@ -176,7 +127,7 @@ bool BtAppInit(const BtDevCfg_t * const pCfg);
 void BtAppEnterDfu();
 void BtAppRun();
 uint16_t BleAppGetConnHandle();
-void BleAppGapDeviceNameSet(const char* ppDeviceName);
+void BtAppGapDeviceNameSet(const char* ppDeviceName);
 
 void BtAppSetDevName(const char *pName);
 char * const BtAppGetDevName();
@@ -209,5 +160,5 @@ bool isConnected();
 
 /** @} end group Bluetooth */
 
-#endif // __BLE_APP_H__
+#endif // __BT_APP_H__
 

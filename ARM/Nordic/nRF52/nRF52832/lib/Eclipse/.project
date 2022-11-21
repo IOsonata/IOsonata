@@ -606,29 +606,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/ble_adv.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_adv.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_app_nrf5.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/ble_app_nrf5.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_appearance.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_appearance.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/ble_conn.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_conn.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/ble_srvc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/ble_srvc.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bleadv_mandata.h</name>
@@ -641,9 +621,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_adv.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_adv.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_app.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_app.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_appearance.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_appearance.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_att.h</name>
@@ -1096,11 +1086,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/ble_adv.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/ble_adv.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/ble_dev.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/ble_dev.cpp</locationURI>
@@ -1109,6 +1094,11 @@
 			<name>src/bluetooth/blueio_blesrvc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/blueio_blesrvc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_adv.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_app_handler.c</name>

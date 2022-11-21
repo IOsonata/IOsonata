@@ -76,7 +76,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
-#include "bluetooth/ble_appearance.h"
+#include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
 #include "ble_app_nrf5.h"

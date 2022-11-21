@@ -43,7 +43,7 @@ SOFTWARE.
 
 #include <stddef.h>
 
-#include "bluetooth/ble_adv.h"
+#include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gatt.h"
 
 /** @addtogroup Bluetooth

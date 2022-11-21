@@ -293,7 +293,7 @@ void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
-    BleSrvcEvtHandler(&g_UartBleSrvc, Evt);
+	BtGattEvtHandler(&g_UartBleSrvc, Evt);
 }
 
 void BtDevInitCustomSrvc()

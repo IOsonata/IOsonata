@@ -639,6 +639,12 @@ void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 		}
 	}
 }
+
+__attribute__((weak)) void BtGattEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
+{
+
+}
+
 /*
 void BtGattServiceInit(BtGattSrvc_t * const pSrvc)
 {

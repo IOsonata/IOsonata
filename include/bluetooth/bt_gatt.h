@@ -67,7 +67,7 @@ typedef struct __Bt_Gatt_Srvc_Include {
 #define BT_GATT_CHAR_PROP_WRITE				8
 #define BT_GATT_CHAR_PROP_NOTIFY			0x10
 #define BT_GATT_CHAR_PROP_INDICATE			0x20
-#define BT_GATT_CHAR_PROP_AUTH_SIGNED_WR	0x40
+#define BT_GATT_CHAR_PROP_AUTH_SIGNED		0x40
 #define BT_GATT_CHAR_PROP_EXT_PROP			0x80
 #define BT_GATT_CHAR_PROP_VALEN				0x8000
 
@@ -264,6 +264,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 //void BtGattServiceInit(BtGattSrvc_t * const pSrvc);
+void BtGattEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt);
 
 #ifdef __cplusplus
 }

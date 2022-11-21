@@ -58,7 +58,7 @@ SOFTWARE.
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
-#include "bluetooth/ble_appearance.h"
+#include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
@@ -564,7 +564,7 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 		return false;
 	}
 
-    if (pCfg->Appearance != BLE_APPEAR_UNKNOWN_GENERIC)
+    if (pCfg->Appearance != BT_APPEAR_UNKNOWN_GENERIC)
     {
     	if (BleAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{

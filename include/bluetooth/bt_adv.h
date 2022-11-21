@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ble_adv.h
+@file	bt_adv.h
 
 @brief	Bluetooth advertisement definitions
 
@@ -32,8 +32,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __BLE_ADV_H__
-#define __BLE_ADV_H__
+#ifndef __BT_ADV_H__
+#define __BT_ADV_H__
 
 #include <stdint.h>
 
@@ -209,4 +209,4 @@ void BleAdvDataSetDevName(BleAdvPacket_t * const pAdvPkt, const char *pName);
 }
 #endif
 
-#endif // __BLE_ADV_H__
+#endif // __BT_ADV_H__

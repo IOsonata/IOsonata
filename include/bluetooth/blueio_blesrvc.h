@@ -39,8 +39,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <inttypes.h>
 
 //#include "ble_service.h"
-#include "bluetooth/ble_srvc.h"
-#include "ble.h"
+#include "bluetooth/bt_gatt.h"
+//#include "ble.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 
@@ -276,10 +276,10 @@ typedef struct __I2C_Cmd_Data {
 #pragma pack(push, 4)
 
 typedef struct __BlueIO_Srvc_Cfg {
-	BleSrvcWrCb_t BlueIOCharWrhandler;
-	BleSrvcSetNotifCb_t BlueIOCharSetNotifEvt;
-	BleSrvcWrCb_t UartCharWrHandler;
-	BleSrvcSetNotifCb_t UartCharSetNotifevt;
+//	BtSrvcWrCb_t BlueIOCharWrhandler;
+//	BtSrvcSetNotifCb_t BlueIOCharSetNotifEvt;
+//	BtSrvcWrCb_t UartCharWrHandler;
+//	BtSrvcSetNotifCb_t UartCharSetNotifevt;
 } BLUEIOSRVC_CFG;
 
 #pragma pack(pop)
@@ -289,12 +289,12 @@ typedef struct __BlueIO_Srvc_Cfg {
 extern "C" {
 #endif
 
-BleSrvc_t *GetBlueIOCtrlSrvcInstance();
-BleSrvc_t *GetBlueIOIoSrvcInstance();
-BleSrvc_t *GetUartSrvcInstance();
-BleSrvc_t *GetNUSSrvcInstance();
+BtGattSrvc_t *GetBlueIOCtrlSrvcInstance();
+BtGattSrvc_t *GetBlueIOIoSrvcInstance();
+BtGattSrvc_t *GetUartSrvcInstance();
+BtGattSrvc_t *GetNUSSrvcInstance();
 bool BlueIOSrvcInit(BLUEIOSRVC_CFG * const pCfg);
-void BlueIOSrvcEvtHandler(ble_evt_t * p_ble_evt);
+void BlueIOSrvcEvtHandler(uint32_t p_ble_evt);
 
 #ifdef __cplusplus
 }

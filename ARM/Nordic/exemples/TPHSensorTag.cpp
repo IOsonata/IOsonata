@@ -51,7 +51,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "istddef.h"
-#include "bluetooth/ble_app.h"
+#include "bluetooth/bt_app.h"
 #ifndef NRFXLIB_SDC
 #include "app_util_platform.h"
 #include "app_scheduler.h"
@@ -69,7 +69,7 @@ SOFTWARE.
 #include "sensors/tph_bme280.h"
 #include "sensors/tph_ms8607.h"
 #include "sensors/tphg_bme680.h"
-#include "bluetooth/ble_hcidef.h"
+#include "bluetooth/bt_hci.h"
 #include "timer_nrfx.h"
 #ifdef NRF51
 //#include "timer_nrf_app_timer.h"
@@ -129,8 +129,8 @@ const static TIMER_CFG s_TimerCfg = {
 
 Timer g_Timer;
 
-const BleAppCfg_t s_BleAppCfg = {
-	BLEAPP_ROLE_BROADCASTER,
+const BtDevCfg_t s_BtDevCfg = {
+	BTDEV_ROLE_BROADCASTER,
 	0, 						// Number of central link
 	1, 						// Number of peripheral link
 	DEVICE_NAME,                 // Device name
@@ -144,8 +144,8 @@ const BleAppCfg_t s_BleAppCfg = {
 	sizeof(g_AdvDataBuff),      // Length of manufacture specific data
 	NULL,
 	0,
-	BLEAPP_SECTYPE_NONE,    // Secure connection type
-	BLEAPP_SECEXCHG_NONE,   // Security key exchange
+	BTDEV_SECTYPE_NONE,    // Secure connection type
+	BTDEV_SECEXCHG_NONE,   // Security key exchange
 	NULL,      				// Service uuids to advertise
 	0, 						// Total number of uuids
 	APP_ADV_INTERVAL_MSEC,       // Advertising interval in msec
@@ -438,7 +438,7 @@ void ReadPTHData()
 
 #endif
 	// Update advertisement data
-	BleAppAdvManDataSet(g_AdvDataBuff, sizeof(g_AdvDataBuff), NULL, 0);
+	BtAppAdvManDataSet(g_AdvDataBuff, sizeof(g_AdvDataBuff), NULL, 0);
 //	BleAppAdvManDataSet((uint8_t*)&gascnt, sizeof(gascnt), NULL, 0);
 
 	gascnt++;
@@ -478,10 +478,10 @@ void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
 #endif
 }
 */
-void BleAppAdvTimeoutHandler()
+void BtAppAdvTimeoutHandler()
 {
 	ReadPTHData();
-	BleAppAdvStart();//BLEAPP_ADVMODE_FAST);
+	BtDevAdvStart();//BLEAPP_ADVMODE_FAST);
 }
 
 void HardwareInit()
@@ -576,11 +576,11 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
+    BtAppInit(&s_BtDevCfg);//, true);
 
 	//uint64_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 
-    BleAppRun();
+    BtAppRun();
 
 	return 0;
 }

@@ -42,10 +42,20 @@ SOFTWARE.
 #include "app_error.h"
 #include "ble_srv_common.h"
 
-#include "bluetooth/ble_srvc.h"
+//#include "bluetooth/ble_srvc.h"
 #include "bluetooth/bt_gatt.h"
 
 #pragma pack(push, 1)
+// Service connection security types
+typedef enum {
+	BTSRVC_SECTYPE_NONE,				//!< open, no security
+	BTSRVC_SECTYPE_STATICKEY_NO_MITM,	//!< Bonding static pass key without Man In The Middle
+	BTSRVC_SECTYPE_STATICKEY_MITM,		//!< Bonding static pass key with MITM
+	BTSRVC_SECTYPE_LESC_MITM,			//!< LE secure encryption
+	BTSRVC_SECTYPE_SIGNED_NO_MITM,		//!< AES signed encryption without MITM
+	BTSRVC_SECTYPE_SIGNED_MITM,			//!< AES signed encryption with MITM
+} BTSRVC_SECTYPE;
+
 typedef struct {
 	uint16_t Handle;
 	uint16_t Offset;
@@ -139,7 +149,7 @@ void GatherLongWrBuff(GATLWRHDR *pHdr)
 }
 
 //void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
-void BleSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
+void BtGattEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
 {
 	ble_evt_t *pBleEvt = (ble_evt_t *)Evt;
 
@@ -280,26 +290,26 @@ void BleSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
     }
 }
 
-static void BleSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode, BLESRVC_SECTYPE SecType)
+static void BtSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode, BTSRVC_SECTYPE SecType)
 {
 	switch (SecType)
     {
-		case BLESRVC_SECTYPE_STATICKEY_NO_MITM:
+		case BTSRVC_SECTYPE_STATICKEY_NO_MITM:
 			BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(pSecMode);
 			break;
-		case BLESRVC_SECTYPE_STATICKEY_MITM:
+		case BTSRVC_SECTYPE_STATICKEY_MITM:
 	    	BLE_GAP_CONN_SEC_MODE_SET_ENC_WITH_MITM(pSecMode);
 	    	break;
-		case BLESRVC_SECTYPE_LESC_MITM:
+		case BTSRVC_SECTYPE_LESC_MITM:
 			BLE_GAP_CONN_SEC_MODE_SET_LESC_ENC_WITH_MITM(pSecMode);
 			break;
-		case BLESRVC_SECTYPE_SIGNED_NO_MITM:
+		case BTSRVC_SECTYPE_SIGNED_NO_MITM:
 			BLE_GAP_CONN_SEC_MODE_SET_SIGNED_NO_MITM(pSecMode);
 			break;
-		case BLESRVC_SECTYPE_SIGNED_MITM:
+		case BTSRVC_SECTYPE_SIGNED_MITM:
 			BLE_GAP_CONN_SEC_MODE_SET_SIGNED_WITH_MITM(pSecMode);
 			break;
-    	case BLESRVC_SECTYPE_NONE:
+    	case BTSRVC_SECTYPE_NONE:
     	default:
     		BLE_GAP_CONN_SEC_MODE_SET_OPEN(pSecMode);
     		break;
@@ -316,7 +326,7 @@ static void BleSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode, BLESRVC_SECTYPE Sec
  * @return      NRF_SUCCESS on success, otherwise an error code.
  */
 static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
-									 BLESRVC_SECTYPE SecType)
+									 BTSRVC_SECTYPE SecType)
 {
     ble_gatts_char_md_t char_md;
     ble_gatts_attr_md_t cccd_md;
@@ -341,23 +351,23 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
     char_md.p_cccd_md = NULL;
     char_md.p_sccd_md = NULL;
 
-    if (pChar->Property & BLESRVC_CHAR_PROP_NOTIFY)
+    if (pChar->Property & BT_GATT_CHAR_PROP_NOTIFY)
     {
     	char_md.char_props.notify = 1;
     	BLE_GAP_CONN_SEC_MODE_SET_OPEN(&cccd_md.read_perm);
-    	BleSrvcEncSec(&cccd_md.write_perm, SecType);
-    	BleSrvcEncSec(&attr_md.read_perm, SecType);
+    	BtSrvcEncSec(&cccd_md.write_perm, SecType);
+    	BtSrvcEncSec(&attr_md.read_perm, SecType);
         char_md.p_cccd_md         = &cccd_md;
     }
 
-    if (pChar->Property & BLESRVC_CHAR_PROP_BROADCAST)
+    if (pChar->Property & BT_GATT_CHAR_PROP_BROADCAST)
     {
     	char_md.char_props.broadcast   = 1;
     }
-    if (pChar->Property & BLESRVC_CHAR_PROP_READ)
+    if (pChar->Property & BT_GATT_CHAR_PROP_READ)
     {
     	char_md.char_props.read   = 1;
-    	BleSrvcEncSec(&attr_md.read_perm, SecType);
+    	BtSrvcEncSec(&attr_md.read_perm, SecType);
        // BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&attr_md.write_perm);
     }
     else
@@ -365,14 +375,14 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
         BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&attr_md.read_perm);
     }
 
-    if (pChar->Property & (BLESRVC_CHAR_PROP_WRITE | BLESRVC_CHAR_PROP_WRITEWORESP))
+    if (pChar->Property & (BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP))
     {
-        if (pChar->Property & BLESRVC_CHAR_PROP_WRITE)
+        if (pChar->Property & BT_GATT_CHAR_PROP_WRITE)
             char_md.char_props.write  = 1;
-    	if (pChar->Property & BLESRVC_CHAR_PROP_WRITEWORESP)
+    	if (pChar->Property & BT_GATT_CHAR_PROP_WRITE_WORESP)
             char_md.char_props.write_wo_resp = 1;
 
-    	BleSrvcEncSec(&attr_md.write_perm, SecType);
+    	BtSrvcEncSec(&attr_md.write_perm, SecType);
         //BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&attr_md.read_perm);
     }
     else
@@ -385,7 +395,7 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 
     attr_md.vloc       = BLE_GATTS_VLOC_STACK;
 
-    if (pChar->Property & BLESRVC_CHAR_PROP_RDAUTH)
+    if (pChar->Property & BT_GATT_CHAR_PROP_AUTH_SIGNED)
     {
     	attr_md.rd_auth    = 1;
     }
@@ -394,7 +404,7 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
     	attr_md.rd_auth    = 0;
     }
 
-    if (pChar->Property & BLESRVC_CHAR_PROP_WRAUTH)
+    if (pChar->Property & BT_GATT_CHAR_PROP_AUTH_SIGNED)
     {
     	attr_md.wr_auth    = 1;
     }
@@ -403,7 +413,7 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
     	attr_md.wr_auth    = 0;
     }
 
-    if (pChar->Property & BLESRVC_CHAR_PROP_VARLEN)
+    if (pChar->Property & BT_GATT_CHAR_PROP_VALEN)
     {
     	attr_md.vlen       = 1;	// Variable length
     }
@@ -480,7 +490,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
     for (int i = 0; i < pCfg->NbChar; i++)
     {
     	err = BtGattCharAdd(pSrvc, &pSrvc->pCharArray[i],
-    			BLESRVC_SECTYPE_NONE);//pCfg->SecType);
+    			BTSRVC_SECTYPE_NONE);//pCfg->SecType);
         if (err != NRF_SUCCESS)
         {
             return err;

@@ -41,7 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
 #include "ble_app_nrf5.h"
-#include "bluetooth/ble_srvc.h"
+#include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
@@ -123,7 +123,7 @@ BtGattChar_t g_UartChars[] = {
 		// Read characteristic
 		.Uuid = BLE_UART_UUID_READ_CHAR,
 		.MaxDataLen = PACKET_SIZE,
-		.Property = BLESRVC_CHAR_PROP_READ | BLESRVC_CHAR_PROP_NOTIFY | BLESRVC_CHAR_PROP_VARLEN,
+		.Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		.pDesc = s_RxCharDescString,         // char UTF-8 description string
 		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,						// Callback on set notification
@@ -136,7 +136,7 @@ BtGattChar_t g_UartChars[] = {
 		// Write characteristic
 		.Uuid = BLE_UART_UUID_WRITE_CHAR,	// char UUID
 		.MaxDataLen = PACKET_SIZE,
-		.Property = BLESRVC_CHAR_PROP_WRITE | BLESRVC_CHAR_PROP_WRITEWORESP | BLESRVC_CHAR_PROP_VARLEN,	// char properties define by BLUEIOSVC_CHAR_PROP_...
+		.Property = BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP | BT_GATT_CHAR_PROP_VALEN,	// char properties define by BLUEIOSVC_CHAR_PROP_...
 		.pDesc = s_TxCharDescString,			// char UTF-8 description string
 		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,						// Callback on set notification
@@ -151,7 +151,7 @@ static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BtGattChar_t);
 uint8_t g_LWrBuffer[512];
 
 const BtGattSrvcCfg_t s_UartSrvcCfg = {
-	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
+	.SecType = BTDEV_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = true,
 	.UuidBase = BLE_UART_UUID_BASE,		// Base UUID
 	//1,
@@ -285,7 +285,7 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
-    BleSrvcEvtHandler(&g_UartBleSrvc, (uint32_t)Evt);
+	BtGattEvtHandler(&g_UartBleSrvc, (uint32_t)Evt);
 }
 
 void BtDevInitCustomSrvc()

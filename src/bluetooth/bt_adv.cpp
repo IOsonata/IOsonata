@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ble_adv.cpp
+@file	bt_adv.cpp
 
 @brief	Bluetooth advertisement generic implementation
 
@@ -35,7 +35,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "istddef.h"
-#include "bluetooth/ble_adv.h"
+#include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
 
 static int BleAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)

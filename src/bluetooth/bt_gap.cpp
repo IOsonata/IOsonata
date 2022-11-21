@@ -50,7 +50,7 @@ SOFTWARE.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
-#include "bluetooth/ble_adv.h"
+#include "bluetooth/bt_adv.h"
 
 #ifndef BT_GAP_DEVNAME_MAX_LEN
 #define BT_GAP_DEVNAME_MAX_LEN			64

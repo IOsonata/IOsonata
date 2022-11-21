@@ -76,12 +76,12 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_dev.h"
-#include "bluetooth/ble_appearance.h"
+#include "bluetooth/bt_appearance.h"
 #include "ble_app_nrf5.h"
 #include "ble_dev.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
-#include "bluetooth/ble_srvc.h"
+//#include "bluetooth/ble_srvc.h"
 #include "app_evt_handler.h"
 
 #include "coredev/uart.h"
@@ -1226,7 +1226,7 @@ __WEAK bool BtDevAdvInit(const BtDevCfg_t *pCfg)
 		return false;
 	}
 
-    if (pCfg->Appearance != BLE_APPEAR_UNKNOWN_GENERIC)
+    if (pCfg->Appearance != BT_APPEAR_UNKNOWN_GENERIC)
     {
     	if (BleAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{

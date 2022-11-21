@@ -60,14 +60,14 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/ble_appearance.h"
+#include "bluetooth/bt_appearance.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
 
 //BleConn_t g_BleConn = {0,};
 extern UART g_Uart;
 
-void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
+static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 #pragma pack(push, 4)
 
@@ -119,15 +119,15 @@ alignas(4) static BtHciDevice_t s_HciDevice = {
 };
 #endif
 
-const static TimerCfg_t s_TimerCfg = {
+const static TimerCfg_t s_BtAppSdcTimerCfg = {
     .DevNo = 1,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default frequency
 	.IntPrio = 6,
-	.EvtHandler = TimerHandler
+	.EvtHandler = BtAppSdcTimerHandler
 };
 
-Timer g_BleAppTimer;
+static Timer g_BtAppSdcTimer;
 
 static void BtStackMpslAssert(const char * const file, const uint32_t line)
 {
@@ -166,7 +166,7 @@ static void BtStackSdcCB()
 	}
 }
 
-void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
+static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
     {
