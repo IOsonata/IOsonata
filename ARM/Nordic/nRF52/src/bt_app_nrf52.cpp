@@ -974,7 +974,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     }
     if (s_BtAppData.Role & BTDEV_ROLE_PERIPHERAL)
     {
-    	BtAppPeriphEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
+    	//BtAppPeriphEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
     }
 #endif
 }

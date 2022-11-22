@@ -916,11 +916,14 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 
     if (s_BtDevnRF5.Role & BTDEV_ROLE_PERIPHERAL)
     {
-//    	for (int i = 0; i < s_BtDevnRF5.NbSrvc; i++)
+    	BtGattSrvc_t *p = s_BtDevnRF5.pSrvc;
+
+    	while (p)
     	{
-//    		BleSrvcEvtHandler(&s_BtDevnRF5.Srvc[i], (uint32_t)p_ble_evt);
+    		BtGattEvtHandler(p, (uint32_t)p_ble_evt);
+
+    		p = p->pNext;
     	}
-    	//BtAppPeriphEvtHandler((ble_evt_t *)p_ble_evt);
     }
     on_ble_evt(p_ble_evt);
     if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtDevnRF5.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
@@ -2085,21 +2088,31 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 
     return true;
 }
-/*
-bool BtDevAddSrvc(const BtGattSrvcCfg_t *pSrvcCfg)
+
+bool BtDevAddSrvc(BtGattSrvc_t * const pSrvc, const BtGattSrvcCfg_t *pSrvcCfg)
 {
-	BtGattSrvc_t *p = &s_BtDevnRF5.Srvc[s_BtDevnRF5.NbSrvc];
-
-	uint32_t res = BtGattSrvcAdd(&s_BtDevnRF5.Srvc[s_BtDevnRF5.NbSrvc], pSrvcCfg);
-
-	if (res == NRF_SUCCESS)
+	if (pSrvcCfg == nullptr)
 	{
-		s_BtDevnRF5.NbSrvc++;
+		return false;
+	}
+
+	bool res = BtGattSrvcAdd(pSrvc, pSrvcCfg);
+
+	if (res)
+	{
+		pSrvc->pPrev = nullptr;
+		pSrvc->pNext = s_BtDevnRF5.pSrvc;
+
+		if (s_BtDevnRF5.pSrvc)
+		{
+			s_BtDevnRF5.pSrvc->pPrev = pSrvc;
+		}
+		s_BtDevnRF5.pSrvc = pSrvc;
 	}
 
 	return true;
 }
-*/
+
 #if 0
 void BleAppRun()
 {

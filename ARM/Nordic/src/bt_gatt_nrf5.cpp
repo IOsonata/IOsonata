@@ -467,7 +467,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
 			err = sd_ble_uuid_vs_add((ble_uuid128_t*)pCfg->UuidBase, &type);// \>UuidType);
 			if (err != NRF_SUCCESS)
 			{
-				return err;
+				return false;
 			}
 			pSrvc->Uuid.BaseIdx = type;
 			//baseidx = BtUuidAddBase(pCfg->UuidBase);
@@ -480,7 +480,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
     err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->Hdl);
     if (err != NRF_SUCCESS)
     {
-        return err;
+        return false;
     }
 
     pSrvc->NbChar = pCfg->NbChar;
@@ -493,7 +493,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
     			BTSRVC_SECTYPE_NONE);//pCfg->SecType);
         if (err != NRF_SUCCESS)
         {
-            return err;
+            return false;
         }
         pSrvc->pCharArray[i].bNotify = false;
     }
@@ -515,7 +515,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
     	s_pBtGattSrvcTail = pSrvc;
     }
 
-    return NRF_SUCCESS;
+    return true;
 }
 
 

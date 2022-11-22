@@ -1355,27 +1355,27 @@ bool BtDevWrite(BtGattChar_t * const pChar, uint8_t * const pData, uint16_t Data
     return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
 #endif
 }
-#if 0
-bool BtDevAddSrvc(const BtGattSrvcCfg_t *pSrvcCfg)
+
+bool BtDevAddSrvc(BtGattSrvc_t * const pSrvc, const BtGattSrvcCfg_t *pSrvcCfg)
 {
 	if (pSrvcCfg == nullptr)
 	{
 		return false;
 	}
 
-	if (s_BtDevSdc.NbSrvc >= BTDEV_SERVICE_MAXCNT)
-	{
-		return false;
-	}
-
-	bool res = BtGattSrvcAdd(&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc], pSrvcCfg);
+	bool res = BtGattSrvcAdd(pSrvc, pSrvcCfg);
 
 	if (res == true)
 	{
-		s_BtDevSdc.NbSrvc++;
+		pSrvc->pPrev = nullptr;
+		pSrvc->pNext = s_BtDevSdc.pSrvc;
+		if (s_BtDevSdc.pSrvc)
+		{
+			s_BtDevSdc.pSrvc->pPrev = pSrvc;
+		}
+		s_BtDevSdc.pSrvc = pSrvc;
 	}
 
 	return res;
 }
-#endif
 
