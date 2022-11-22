@@ -264,11 +264,6 @@ BTDEV_STATE BtDevGetState()
 	return s_BtDevnRF5.State;
 }
 
-__WEAK void BtDevInitCustomSrvc()
-{
-
-}
-
 #if 0
 static void BtDevConnLedOff()
 {
@@ -2041,7 +2036,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 
     BtDevGattInit();
 
-//    BleAppInitUserData();
+    BtDevInitCustomData();
 
     BtDevPeerMngrInit(pCfg->SecType, pCfg->SecExchg, false);//bEraseBond);
 
@@ -2071,7 +2066,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
         err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_SCAN_INIT, s_BtDevnRF5.AdvHdl, GetValidTxPower(pCfg->TxPower));
         APP_ERROR_CHECK(err_code);
     }
-
+#if 0
 #if (__FPU_USED == 1)
     // Patch for softdevice & FreeRTOS to sleep properly when FPU is in used
     NVIC_SetPriority(FPU_IRQn, APP_IRQ_PRIORITY_LOW);
@@ -2083,7 +2078,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
     {
     	return false;
     }
-
+#endif
     s_BtDevnRF5.State = BTDEV_STATE_INITIALIZED;
 
     return true;

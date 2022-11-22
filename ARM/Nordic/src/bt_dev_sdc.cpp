@@ -169,10 +169,6 @@ BtDev_t * const BtDevGetInstance()
 	return &s_BtDevSdc;
 }
 
-__WEAK void BtDevInitCustomSrvc()
-{
-
-}
 /*
 __WEAK void BtDevConnected(unsigned short, unsigned char, unsigned char, unsigned char*)
 {
@@ -1229,8 +1225,6 @@ bool BtDevInit(const BtDevCfg_t *pCfg)
 
     //BtGapInit(pCfg->Role);
 
-    if (pCfg->Role & (BTDEV_ROLE_BROADCASTER | BTDEV_ROLE_PERIPHERAL))
-    {
     	if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
     	{
 //    		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
@@ -1245,11 +1239,15 @@ bool BtDevInit(const BtDevCfg_t *pCfg)
     		BtDevInitCustomSrvc();
     	}
 
-    	if (BtDevAdvInit(pCfg) == false)
-    	{
-    		return false;
-    	}
+    	BtDevInitCustomData();
 
+        if (pCfg->Role & (BTDEV_ROLE_BROADCASTER | BTDEV_ROLE_PERIPHERAL))
+        {
+			if (BtDevAdvInit(pCfg) == false)
+			{
+				return false;
+			}
+        }
 #if 0
     	size_t count = 0;
     	BtGattListEntry_t *tbl = GetEntryTable(&count);
@@ -1264,7 +1262,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)
     		g_Uart.printf("\r\n");
     	}
 #endif
-    }
+   // }
 
 	BtGapSetDevName(pCfg->pDevName);
 

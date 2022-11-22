@@ -46,6 +46,11 @@ __attribute__((weak)) void BtAppInitCustomData()
 
 }
 
+__attribute__((weak)) void BtDevInitCustomData()
+{
+
+}
+
 __attribute__((weak)) void BtDevInitCustomSrvc()
 {
 
