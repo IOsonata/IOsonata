@@ -463,7 +463,9 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
     {
     	if (pCfg->bCustom == true)
     	{
-    		uint8_t type;
+			pSrvc->Uuid.BaseIdx = BtUuidAddBase(pCfg->UuidBase);
+
+			uint8_t type;
 			err = sd_ble_uuid_vs_add((ble_uuid128_t*)pCfg->UuidBase, &type);// \>UuidType);
 			if (err != NRF_SUCCESS)
 			{
