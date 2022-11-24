@@ -1163,7 +1163,7 @@ void BtDevAdvStart()//BLEAPP_ADVMODE AdvMode)
 	s_BtDevnRF5.State = BTDEV_STATE_ADVERTISING;
 }
 
-void BleAppAdvStop()
+void BtDevAdvStop()
 {
 	sd_ble_gap_adv_stop(s_BtDevnRF5.AdvHdl);
 	s_BtDevnRF5.State = BTDEV_STATE_IDLE;
