@@ -87,6 +87,10 @@ static const char s_EnvHumCharDescString[] = {
         "Humidity characteristic",
 };
 
+static uint8_t s_EnvCharTemp[BLE_TES_MAX_DATA_LEN];
+static uint8_t s_EnvCharPres[BLE_TES_MAX_DATA_LEN];
+static uint8_t s_EnvCharHumi[BLE_TES_MAX_DATA_LEN];
+
 /// Characteristic definitions
 BtGattChar_t g_EnvChars[] = {
     {
@@ -98,7 +102,8 @@ BtGattChar_t g_EnvChars[] = {
         NULL,                       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		NULL,
+		s_EnvCharTemp,                       // pointer to char default values
         0,                          // Default value length in bytes
     },
     {
@@ -110,7 +115,8 @@ BtGattChar_t g_EnvChars[] = {
         NULL,                       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		NULL,
+		s_EnvCharPres,                       // pointer to char default values
         0                           // Default value length in bytes
     },
     {
@@ -122,7 +128,8 @@ BtGattChar_t g_EnvChars[] = {
         NULL,                       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		NULL,
+		s_EnvCharHumi,                       // pointer to char default values
         0                           // Default value length in bytes
     },
 };
@@ -150,7 +157,7 @@ BtGattSrvc_t *GetEnvSrvcInstance()
 
 uint32_t EnvSrvcInit()
 {
-	return BtGattSrvcAdd(&g_EnvSrvc, &s_EnvSrvcCfg);
+	return BtDevAddSrvc(&g_EnvSrvc, &s_EnvSrvcCfg);
 }
 
 void EnvSrvcNotifTemp(float Temp)

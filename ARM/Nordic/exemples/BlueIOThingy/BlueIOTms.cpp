@@ -194,6 +194,17 @@ static const char s_ImuGravCharDescString[] = {
         "Gravity vector characteristic",
 };
 
+static uint8_t s_ImuCharCfgData[BLE_TMS_MAX_DATA_LEN];
+static uint8_t s_ImuCharTapData[BLE_TMS_MAX_DATA_LEN];
+static uint8_t s_ImuCharOriData[BLE_TMS_MAX_DATA_LEN];
+static uint8_t s_ImuCharQuatData[BLE_TMS_MAX_DATA_LEN];
+static uint8_t s_ImuCharPedData[BLE_TMS_MAX_DATA_LEN];
+static uint8_t s_ImuCharRawData[BLE_TMS_MAX_DATA_LEN];
+static uint8_t s_ImuCharEuData[BLE_TMS_MAX_DATA_LEN];
+static uint8_t s_ImuCharRotData[BLE_TMS_MAX_DATA_LEN];
+static uint8_t s_ImuCharHeadData[BLE_TMS_MAX_DATA_LEN];
+static uint8_t s_ImuCharGravData[BLE_TMS_MAX_DATA_LEN];
+
 /// Characteristic definitions
 BtGattChar_t g_ImuChars[] = {
     {
@@ -204,8 +215,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuConfigCharDescString,  // char UTF-8 description string
 		ImuConfCharWrhandler,       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
+		NULL,
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		s_ImuCharCfgData,           // pointer to char default values
         0,                          // Default value length in bytes
     },
     {
@@ -216,8 +228,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuTapCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuTapCharSetNotify,        // Callback on set notification
+		NULL,						// Set indication
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		s_ImuCharTapData,           // pointer to char default values
         0                           // Default value length in bytes
     },
     {
@@ -228,8 +241,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuOrientCharDescString,  // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuOrientCharSetNotify,		// Callback on set notification
+		NULL,						// Set indication
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		s_ImuCharOriData,			// pointer to char default values
         0                           // Default value length in bytes
     },
     {
@@ -240,8 +254,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuQuatCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuQuaternionCharSetNotify,	// Callback on set notification
-        NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		NULL,						// Set indication
+		NULL,                       // Tx completed callback
+		s_ImuCharQuatData,			// pointer to char default values
         0                           // Default value length in bytes
     },
     {
@@ -252,8 +267,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuPedoCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuPedometerCharSetNotify,	// Callback on set notification
+		NULL,						// Set indication
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		s_ImuCharPedData,			// pointer to char default values
         0                           // Default value length in bytes
     },
     {
@@ -264,8 +280,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuRawCharDescString,    	// char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuRawCharSetNotify,		// Callback on set notification
+		NULL,						// Set indication
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		s_ImuCharRawData,			// pointer to char default values
         0                           // Default value length in bytes
     },
     {
@@ -276,8 +293,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuEulerCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuEulerCharSetNotify,      // Callback on set notification
+		NULL,						// Set indication
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		s_ImuCharEuData,            // pointer to char default values
         0                           // Default value length in bytes
     },
     {
@@ -288,8 +306,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuRotCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuRotMatCharSetNotify,     // Callback on set notification
+		NULL,						// Set indication
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		s_ImuCharRotData,           // pointer to char default values
         0                           // Default value length in bytes
     },
     {
@@ -300,8 +319,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuHeadCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuHeadingCharSetNotify,	// Callback on set notification
+		NULL,						// Set indication
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		s_ImuCharHeadData,          // pointer to char default values
         0                           // Default value length in bytes
     },
     {
@@ -312,8 +332,9 @@ BtGattChar_t g_ImuChars[] = {
 		s_ImuGravCharDescString,    // char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ImuGravityCharSetNotify,	// Callback on set notification
+		NULL,						// Set indication
         NULL,                       // Tx completed callback
-        NULL,                       // pointer to char default values
+		s_ImuCharGravData,          // pointer to char default values
         0                           // Default value length in bytes
     },
 };
@@ -344,7 +365,7 @@ BtGattSrvc_t *GetImuSrvcInstance()
 
 uint32_t ImuSrvcInit()
 {
-	return BtGattSrvcAdd(&g_ImuSrvc, &s_ImuSrvcCfg);
+	return BtDevAddSrvc(&g_ImuSrvc, &s_ImuSrvcCfg);
 }
 
 void ImuConfCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)

@@ -88,6 +88,9 @@ typedef struct {
 #define UICHAR_IDX_BUTTON		1
 #define UICHAR_IDX_PIN			2
 
+static uint8_t s_UiCharLedData[sizeof(BLE_TUIS_LED)];
+static uint8_t s_UiCharButData;
+static uint8_t s_UiCharPinData[BLE_TUIS_MAX_DATA_LEN];
 
 static BtGattChar_t s_UIChars[] = {
     {
@@ -98,8 +101,9 @@ static BtGattChar_t s_UIChars[] = {
         NULL,    					// char UTF-8 description string
 		LedCharWrhandler,           // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
+		NULL,
         NULL,                       // Tx completed callback
-		NULL,//(uint8_t*)&s_ThingyVersion,                       // pointer to char default values
+		s_UiCharLedData,                       // pointer to char default values
         0,                          // Default value length in bytes
     },
     {
@@ -110,8 +114,9 @@ static BtGattChar_t s_UIChars[] = {
         NULL,    					// char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
 		ButtonCharSetNotify,                       // Callback on set notification
+		NULL,
         NULL,                       // Tx completed callback
-		NULL,//(uint8_t*)&s_ThingyVersion,                       // pointer to char default values
+		&s_UiCharButData,                       // pointer to char default values
         0,                          // Default value length in bytes
     },
     {
@@ -122,8 +127,9 @@ static BtGattChar_t s_UIChars[] = {
         NULL,    					// char UTF-8 description string
         NULL,                       // Callback for write char, set to NULL for read char
         NULL,                       // Callback on set notification
+		NULL,
         NULL,                       // Tx completed callback
-		NULL,//(uint8_t*)&s_ThingyVersion,                       // pointer to char default values
+		s_UiCharPinData,                       // pointer to char default values
         0,                          // Default value length in bytes
     },
 };
@@ -151,7 +157,7 @@ BtGattSrvc_t *GetUISrvcInstance()
 
 uint32_t UISrvcInit()
 {
-	return BtGattSrvcAdd(&g_UISrvc, &s_UISrvcCfg);
+	return BtDevAddSrvc(&g_UISrvc, &s_UISrvcCfg);
 }
 
 void LedCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)

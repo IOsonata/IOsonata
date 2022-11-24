@@ -152,7 +152,10 @@ bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor, &s_MotSensor, &s_MotSensor);
 	}
 
-	s_Imu.Enable();
+	if (res)
+	{
+		s_Imu.Enable();
+	}
 
 	return res;
 }
