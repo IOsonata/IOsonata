@@ -170,6 +170,7 @@ const BtDevCfg_t s_BleAppCfg = {
 	.SrManDataLen = 0,
 	.SecType = BTDEV_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
 	.SecExchg = BTDEV_SECEXCHG_NONE,	// Security key exchange
+	.bCompleteUuidList = true,
 	.pAdvUuid = &s_AdvUuids,      			// Service uuids to advertise
 	//.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(ble_uuid_t), 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -478,7 +479,7 @@ void BtAppPeriphEvtHandler(uint32_t p_ble_evt, void *pCtx)
 }
 
 /// Initialize all services needed for this firmware
-void BleAppInitUserServices()
+void BtDevInitCustomSrvc()
 {
     uint32_t res = 0;
 

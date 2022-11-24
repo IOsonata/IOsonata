@@ -503,7 +503,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
     pSrvc->pLongWrBuff = pCfg->pLongWrBuff;
     pSrvc->LongWrBuffSize = pCfg->LongWrBuffSize;
     pSrvc->AuthReqCB = pCfg->AuthReqCB;
-
+/*
     if (s_pBtGattSrvcHead == nullptr)
     {
     	s_pBtGattSrvcHead = s_pBtGattSrvcTail = pSrvc;
@@ -516,7 +516,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
     	pSrvc->pNext = nullptr;
     	s_pBtGattSrvcTail = pSrvc;
     }
-
+*/
     return true;
 }
 

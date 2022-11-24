@@ -1838,6 +1838,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 	s_BtDevnRF5.ProductId = pCfg->ProductId;
 	s_BtDevnRF5.ProductVer = pCfg->ProductVer;
 	s_BtDevnRF5.Appearance = pCfg->Appearance;
+	s_BtDevnRF5.pSrvc = nullptr;
 
 #if 0
 	s_BtDevnRF5.ConnLedPort = pCfg->ConnLedPort;
