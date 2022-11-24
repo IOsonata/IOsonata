@@ -72,7 +72,7 @@ typedef union __Pyro_Cfg_Reg {
 		uint32_t Threshold:8;		//!< Detection threshold on BPF value
 	};
 	uint32_t Val;
-} PyroCfg_reg_t;//PYROCFG_REG;
+} PyroCfgReg_t;//PYROCFG_REG;
 
 typedef struct __Direct_Link_Dev {
 	IOPinCfg_t Pin;
@@ -111,7 +111,8 @@ typedef struct __Pyd2592_Data {
 			uint32_t OutRange:1;		//!< 0: PIR was reset 1: Normal operation
 		};
 	};
-} PYD2592_DATA;
+} Pyd2592Data_t;
+//PYD2592_DATA;
 
 #pragma pack(pop)
 
