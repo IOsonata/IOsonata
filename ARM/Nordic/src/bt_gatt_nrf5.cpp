@@ -148,8 +148,7 @@ void GatherLongWrBuff(GATLWRHDR *pHdr)
 	}
 }
 
-//void BleSrvcEvtHandler(BleSrvc_t *pSrvc, ble_evt_t *pBleEvt)
-void BtGattEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
+void BtGattSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
 {
 	ble_evt_t *pBleEvt = (ble_evt_t *)Evt;
 
@@ -288,6 +287,11 @@ void BtGattEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
         default:
             break;
     }
+}
+
+void BtGattEvtHandler(uint32_t Evt)
+{
+
 }
 
 static void BtSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode, BTSRVC_SECTYPE SecType)
