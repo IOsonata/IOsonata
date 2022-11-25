@@ -249,6 +249,8 @@ typedef struct __Bt_Gatt_List_Entry {
 extern "C" {
 #endif
 
+BtGattSrvc_t * const BtGattGetSrvcList();
+void BtGattInsertSrvcList(BtGattSrvc_t * const pSrvc);
 uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void * const pAttVal);
 bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len);
 int BtGattGetListHandle(uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
@@ -264,7 +266,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 //void BtGattServiceInit(BtGattSrvc_t * const pSrvc);
-void BtGattEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt);
+void BtGattEvtHandler(uint32_t Evt);
 
 #ifdef __cplusplus
 }

@@ -85,8 +85,25 @@ alignas(4) static BtGattListEntry_t s_BtGattEntryTbl[BT_GATT_ENTRY_MAX_COUNT] = 
 static int s_NbGattListEntry = 0;
 //alignas(4) static BtGattSrvcEntry_t s_BtGattSrvcTbl[BT_GATT_SRVC_MAX_COUNT] = {{0,}, };
 //static int s_NbGattSrvcEntry = 0;
-static BtGattSrvc_t *s_pBtGattSrvcHead = nullptr;
-static BtGattSrvc_t *s_pBtGattSrvcTail = nullptr;
+static BtGattSrvc_t *s_pBtGattSrvcList = nullptr;
+//static BtGattSrvc_t *s_pBtGattSrvcTail = nullptr;
+
+BtGattSrvc_t * const BtGattGetSrvcList()
+{
+	return s_pBtGattSrvcList;
+}
+
+void BtGattInsertSrvcList(BtGattSrvc_t * const pSrvc)
+{
+	pSrvc->pPrev = nullptr;
+	pSrvc->pNext = s_pBtGattSrvcList;
+
+	if (s_pBtGattSrvcList)
+	{
+		s_pBtGattSrvcList->pPrev = pSrvc;
+	}
+	s_pBtGattSrvcList = pSrvc;
+}
 
 uint16_t BtGattRegister(BtUuid16_t *pTypeUuid, void * const pAttVal)
 {
@@ -602,18 +619,9 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
         }
     }
 
-    if (s_pBtGattSrvcHead == nullptr)
-    {
-    	s_pBtGattSrvcHead = s_pBtGattSrvcTail = pSrvc;
-    	pSrvc->pPrev = pSrvc->pNext = nullptr;
-    }
-    else
-    {
-    	s_pBtGattSrvcTail->pNext = pSrvc;
-    	pSrvc->pPrev = s_pBtGattSrvcTail;
-    	pSrvc->pNext = nullptr;
-    	s_pBtGattSrvcTail = pSrvc;
-    }
+    BtGattInsertSrvcList(pSrvc);
+
+
 /*
     for (int i = 0; i < BT_GATT_SRVC_MAX_COUNT; i++)
     {
