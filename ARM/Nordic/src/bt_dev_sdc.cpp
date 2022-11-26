@@ -1354,6 +1354,7 @@ bool BtDevWrite(BtGattChar_t * const pChar, uint8_t * const pData, uint16_t Data
 #endif
 }
 
+#if 0
 bool BtDevAddSrvc(BtGattSrvc_t * const pSrvc, const BtGattSrvcCfg_t *pSrvcCfg)
 {
 	if (pSrvcCfg == nullptr)
@@ -1376,4 +1377,4 @@ bool BtDevAddSrvc(BtGattSrvc_t * const pSrvc, const BtGattSrvcCfg_t *pSrvcCfg)
 
 	return res;
 }
-
+#endif

@@ -637,7 +637,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 	return true;
 }
 
-void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
+__attribute__((weak)) void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 {
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
@@ -648,9 +648,19 @@ void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 	}
 }
 
-__attribute__((weak)) void BtGattEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
+__attribute__((weak)) void BtGattEvtHandler(uint32_t Evt, void * const pCtx)
 {
+	if (s_pBtGattSrvcList)
+	{
+		BtGattSrvc_t *p = s_pBtGattSrvcList;
 
+		while (p)
+		{
+			BtGattSrvcEvtHandler(p, Evt, pCtx);
+
+			p = p->pNext;
+		}
+	}
 }
 
 /*

@@ -148,7 +148,7 @@ void GatherLongWrBuff(GATLWRHDR *pHdr)
 	}
 }
 
-void BtGattSrvcEvtHandler(BtGattSrvc_t *pSrvc, uint32_t Evt)
+void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const pCtx)
 {
 	ble_evt_t *pBleEvt = (ble_evt_t *)Evt;
 
@@ -507,7 +507,10 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
     pSrvc->pLongWrBuff = pCfg->pLongWrBuff;
     pSrvc->LongWrBuffSize = pCfg->LongWrBuffSize;
     pSrvc->AuthReqCB = pCfg->AuthReqCB;
-/*
+
+    BtGattInsertSrvcList(pSrvc);
+
+    /*
     if (s_pBtGattSrvcHead == nullptr)
     {
     	s_pBtGattSrvcHead = s_pBtGattSrvcTail = pSrvc;

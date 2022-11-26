@@ -911,13 +911,13 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 
     if (s_BtDevnRF5.Role & BTDEV_ROLE_PERIPHERAL)
     {
-    	BtGattSrvc_t *p = s_BtDevnRF5.pSrvc;
+//    	BtGattSrvc_t *p = s_BtDevnRF5.pSrvc;
 
-    	while (p)
+//    	while (p)
     	{
-    		BtGattEvtHandler(p, (uint32_t)p_ble_evt);
+    		BtGattEvtHandler((uint32_t)p_ble_evt, p_context);
 
-    		p = p->pNext;
+//    		p = p->pNext;
     	}
     }
     on_ble_evt(p_ble_evt);
@@ -2006,6 +2006,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
     return true;
 }
 
+#if 0
 bool BtDevAddSrvc(BtGattSrvc_t * const pSrvc, const BtGattSrvcCfg_t *pSrvcCfg)
 {
 	if (pSrvcCfg == nullptr)
@@ -2029,6 +2030,7 @@ bool BtDevAddSrvc(BtGattSrvc_t * const pSrvc, const BtGattSrvcCfg_t *pSrvcCfg)
 
 	return true;
 }
+#endif
 
 #if 0
 void BleAppScan()

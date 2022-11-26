@@ -285,14 +285,14 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
-	BtGattEvtHandler(&g_UartBleSrvc, (uint32_t)Evt);
+	BtGattEvtHandler(Evt, pCtx);
 }
 
 void BtDevInitCustomSrvc()
 {
-    uint32_t       err_code;
+    bool res;
 
-    err_code = BtDevAddSrvc(&g_UartBleSrvc, &s_UartSrvcCfg);
+    res = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
     //APP_ERROR_CHECK(err_code);
 }
 

@@ -216,7 +216,7 @@ bool BtDevNotify(BtGattChar_t * const pChar, uint8_t * const pData, uint16_t Dat
 bool BtDevWrite(BtGattChar_t * const pChar, uint8_t * const pData, uint16_t DataLen);
 void BtDevInitCustomData();
 void BtDevInitCustomSrvc();
-bool BtDevAddSrvc(BtGattSrvc_t * const pSrvc, const BtGattSrvcCfg_t *pSrvcCfg);
+//bool BtDevAddSrvc(BtGattSrvc_t * const pSrvc, const BtGattSrvcCfg_t *pSrvcCfg);
 bool BtDevAdvManDataSet(uint8_t * const pAdvData, int AdvLen, uint8_t * const pSrData, int SrLen);
 void BtDevAdvStart();
 void BtDevAdvStop();
