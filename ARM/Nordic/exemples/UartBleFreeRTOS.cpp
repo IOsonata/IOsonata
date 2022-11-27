@@ -47,9 +47,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "timers.h"
 
 #include "istddef.h"
-#include "bluetooth/ble_app.h"
-#include "ble_app_nrf5.h"
-#include "ble_service.h"
+#include "bluetooth/bt_app.h"
+//#include "ble_app_nrf5.h"
+#include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gap.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
@@ -79,15 +80,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NRF_BLE_FREERTOS_SDH_TASK_STACK 512
 
-void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
+void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
 
 static TaskHandle_t g_BleTask;  //!< Reference to SoftDevice FreeRTOS task.
 static TaskHandle_t g_RxTask;
 QueueHandle_t g_QueHandle = NULL;
 
-static const ble_uuid_t s_AdvUuids[] = {
-	{BLUEIO_UUID_UART_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
-};
+//static const ble_uuid_t s_AdvUuids[] = {
+//	{BLUEIO_UUID_UART_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
+//};
 
 static const char s_RxCharDescString[] = {
 		"UART Rx characteristic",
@@ -99,27 +100,31 @@ static const char s_TxCharDescString[] = {
 
 uint8_t g_ManData[8];
 
-BLESRVC_CHAR g_UartChars[] = {
+static uint8_t s_UartCharRxData[20];
+
+BtGattChar_t g_UartChars[] = {
 	{
 		// Read characteristic
 		BLUEIO_UUID_UART_RX_CHAR,
 		20,
-		BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+		BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		s_RxCharDescString,         // char UTF-8 description string
 		NULL,                       // Callback for write char, set to NULL for read char
 		NULL,						// Callback on set notification
+		NULL,						// Callback on set ind
 		NULL,						// Tx completed callback
-		NULL,						// pointer to char default values
+		s_UartCharRxData,			// pointer to char default values
 		0,							// Default value length in bytes
 	},
 	{
 		// Write characteristic
 		BLUEIO_UUID_UART_TX_CHAR,	// char UUID
 		20,                         // char max data length
-		BLESVC_CHAR_PROP_WRITEWORESP,	// char properties define by BLUEIOSVC_CHAR_PROP_...
+		BT_GATT_CHAR_PROP_WRITE_WORESP,	// char properties define by BLUEIOSVC_CHAR_PROP_...
 		s_TxCharDescString,			// char UTF-8 description string
 		UartTxSrvcCallback,         // Callback for write char, set to NULL for read char
 		NULL,						// Callback on set notification
+		NULL,						// Callback on set ind
 		NULL,						// Tx completed callback
 		NULL,						// pointer to char default values
 		0							// Default value length in bytes
@@ -128,10 +133,10 @@ BLESRVC_CHAR g_UartChars[] = {
 
 uint8_t g_LWrBuffer[512];
 
-const BLESRVC_CFG s_UartSrvcCfg = {
-	BLESRVC_SECTYPE_NONE,	    // Secure or Open service/char
-	{BLUEIO_UUID_BASE,},        // Base UUID
-	1,
+const BtGattSrvcCfg_t s_UartSrvcCfg = {
+	BTDEV_SECTYPE_NONE,	    // Secure or Open service/char
+	true,
+	BLUEIO_UUID_BASE,        // Base UUID
 	BLUEIO_UUID_UART_SERVICE,   // Service UUID
 	2,                          // Total number of characteristics for the service
 	g_UartChars,                // Pointer a an array of characteristic
@@ -139,9 +144,9 @@ const BLESRVC_CFG s_UartSrvcCfg = {
 	sizeof(g_LWrBuffer)         // long write buffer size
 };
 
-BLESRVC g_UartBleSrvc;
+BtGattSrvc_t g_UartBleSrvc;
 
-const BleAppDevInfo_t s_UartBleDevDesc {
+const BtDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           // Model name
 	MANUFACTURER_NAME,          // Manufacturer name
 	"",                     // Serial number string
@@ -151,22 +156,22 @@ const BleAppDevInfo_t s_UartBleDevDesc {
 
 uint32_t SD_FreeRTOS_Handler(void);
 
-const BleAppCfg_t s_BleAppCfg = {
-	.Role = BLEAPP_ROLE_PERIPHERAL,
+const BtDevCfg_t s_BleAppCfg = {
+	.Role = BTDEV_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
 	.pDevName = DEVICE_NAME,			// Device name
-	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
+	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
-	.pDevDesc = &s_UartBleDevDesc,
+	.pDevInfo = &s_UartBleDevDesc,
 	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BLEAPP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BLEAPP_SECEXCHG_NONE,	// Security key exchange
+	.SecType = BTDEV_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BTDEV_SECEXCHG_NONE,	// Security key exchange
 	.pAdvUuid = NULL,      			// Service uuids to advertise
 	//.NbAdvUuid = 0, 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -185,7 +190,7 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 
 // UART configuration data
 
-static IOPINCFG s_UartPins[] = {
+static IOPinCfg_t s_UartPins[] = {
     {UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},    // RX
     {UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},   // TX
     {UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, // CTS
@@ -195,7 +200,7 @@ static IOPINCFG s_UartPins[] = {
 const UARTCFG g_UartCfg = {
 	.DevNo = 0,
 	.pIOPinMap = s_UartPins,
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPINCFG),
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
 	.Rate = 1000000,			// Rate
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
@@ -233,22 +238,22 @@ static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPINCFG);
 int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
 
-void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len)
+void UartTxSrvcCallback(BtGattChar_t *pBlueIOSvc, uint8_t *pData, int Offset, int Len)
 {
 	g_Uart.Tx(pData, Len);
 }
 
-void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
+void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 {
-    BleSrvcEvtHandler(&g_UartBleSrvc, p_ble_evt);
+    BtGattEvtHandler(Evt, pCtx);
 }
 
-void BleAppInitUserServices()
+void BtDevInitCustomSrvc()
 {
-    uint32_t       err_code;
+   // uint32_t       err_code;
 
-    err_code = BleSrvcInit(&g_UartBleSrvc, &s_UartSrvcCfg);
-    APP_ERROR_CHECK(err_code);
+	bool res = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
+//    APP_ERROR_CHECK(err_code);
 }
 
 void ButEvent(int IntNo, void *pCtx)
@@ -272,6 +277,8 @@ void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
 
+	g_Uart.printf("UartBleFreeRTOS demo\r\n");
+
     IOPinCfg(s_ButPins, s_NbButPins);
 
     IOPinCfg(s_LedPins, s_NbLedPins);
@@ -284,12 +291,12 @@ void HardwareInit()
     IOPinEnableInterrupt(0, APP_IRQ_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
-void BleAppInitUserData()
+void BtDevInitCustomData()
 {
-    ble_opt_t opt;
-    opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
-	uint32_t err_code =  sd_ble_opt_set(BLE_GAP_OPT_PASSKEY, &opt);
-	APP_ERROR_CHECK(err_code);
+    //ble_opt_t opt;
+    //opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
+	//uint32_t err_code =  sd_ble_opt_set(BLE_GAP_OPT_PASSKEY, &opt);
+	//APP_ERROR_CHECK(err_code);
 
 }
 
@@ -334,7 +341,7 @@ uint32_t SD_FreeRTOS_Handler(void)
 }
 
 
-void BleAppRtosWaitEvt(void)
+void BtAppRtosWaitEvt(void)
 {
 
     nrf_sdh_evts_poll();                    /* let the handlers run first, incase the EVENT occured before creating this task */
@@ -361,7 +368,7 @@ static void RxTask(void * pvParameter)
         int l = g_Uart.Rx(buff, 128);
         if (l > 0)
         {
-            BleSrvcCharNotify(&g_UartBleSrvc, 0, buff, l);
+            BtDevNotify(&g_UartBleSrvc.pCharArray[0], buff, l);
         }
     }
 }
@@ -371,7 +378,7 @@ static void BleTask(void * pvParameter)
 {
 	//g_Uart.printf("UART over BLE with FreeRTOS\r\n");
 
-    BleAppRun();
+    BtAppRun();
 }
 
 
@@ -416,7 +423,7 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
+    BtAppInit(&s_BleAppCfg);//, true);
 
     FreeRTOSInit();
 
