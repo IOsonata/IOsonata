@@ -750,9 +750,12 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
                           *((uint8_t *)&p_ble_evt->evt.gap_evt.params.auth_status.kdist_peer));*/
             break;
 
-#if (NRF_SD_BLE_API_VERSION >= 3)
+#if 0//(NRF_SD_BLE_API_VERSION >= 3)
         case BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST:
-//           printf("%x:BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST %d\r\n", p_ble_evt->header.evt_id, g_BleAppData.MaxMtu);
+
+        	/// NOTE: This case is handled in nrf_ble_gatt.c: on_exchange_mtu_request_evt
+
+        	//           printf("%x:BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST %d\r\n", p_ble_evt->header.evt_id, g_BleAppData.MaxMtu);
         	if (role == BLE_GAP_ROLE_CENTRAL)
         		break;
             err_code = sd_ble_gatts_exchange_mtu_reply(p_ble_evt->evt.gatts_evt.conn_handle,
