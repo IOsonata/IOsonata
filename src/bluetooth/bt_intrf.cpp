@@ -201,14 +201,14 @@ bool BtIntrfStartTx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
 bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 {
 	BtIntrfPkt_t *pkt = NULL;
-    uint32_t res = 0;
+    bool res = true;
 
     if (pIntrf->TransBuffLen > 0)
     {
         res = BtDevNotify(&pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pIntrf->TransBuff, pIntrf->TransBuffLen);
     }
 
-    while (res == 0)
+    while (res == true)
 	{
 		pIntrf->TransBuffLen = 0;
 		uint32_t state = DisableInterrupt();

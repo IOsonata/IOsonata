@@ -315,7 +315,7 @@ bool BtDevNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 
     uint32_t err_code = sd_ble_gatts_hvx(s_BtDevnRF5.ConnHdl, &params);
 
-    return true;
+    return err_code == NRF_SUCCESS;
 }
 
 /**@brief Function for assert macro callback.
