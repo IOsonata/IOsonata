@@ -72,7 +72,7 @@ typedef enum {
 /// Enumerating interface types
 typedef enum __Dev_Intrf_Type {
     DEVINTRF_TYPE_UNKOWN,       //!< Software or unknown type interface
-    DEVINTRF_TYPE_BLE,          //!< Bluetooth
+    DEVINTRF_TYPE_BT,          //!< Bluetooth
     DEVINTRF_TYPE_ETH,          //!< Ethernet
     DEVINTRF_TYPE_I2C,          //!< I2C (TWI)
     DEVINTRF_TYPE_CEL,          //!< Cellular (GSM, LTE,...)
@@ -90,7 +90,6 @@ typedef enum __Dev_Intrf_Type {
 /// This structure is the base object.  Pointer to an instance of this is passed
 /// to all function calls.  See structure definition bellow for more details
 typedef struct __device_intrf DevIntrf_t;
-//typedef DevIntrf_t	DEVINTRF;
 
 /**
  * @brief	Event handler callback.
@@ -115,7 +114,6 @@ typedef struct __device_intrf DevIntrf_t;
  * 			in case of FIFO_FULL events,  FIFO will be pushed out if return value is zero
  */
 typedef int (*DevIntrfEvtHandler_t)(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
-//typedef DevIntrfEvtHandler_t	DEVINTRF_EVTCB;
 
 #pragma pack(push, 4)
 

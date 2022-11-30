@@ -375,7 +375,7 @@ bool BtIntrfInit(BtDevIntrf_t *pIntrf, const BtIntrfCfg_t *pCfg)
 	//pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].pSrvc = pIntrf->pSrvc;
 	//pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx].pSrvc = pIntrf->pSrvc;
 
-	pIntrf->DevIntrf.Type = DEVINTRF_TYPE_BLE;
+	pIntrf->DevIntrf.Type = DEVINTRF_TYPE_BT;
 	pIntrf->DevIntrf.Enable = BtIntrfEnable;
 	pIntrf->DevIntrf.Disable = BtIntrfDisable;
 	pIntrf->DevIntrf.GetRate = BtIntrfGetRate;
