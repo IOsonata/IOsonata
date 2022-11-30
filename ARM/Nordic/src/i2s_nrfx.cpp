@@ -136,13 +136,13 @@ bool nRFxI2SWaitTx(I2SDev_t * const pDev, int32_t Timeout)
 	return false;
 }
 
-static void nRFxI2SDisable(DEVINTRF * const pDev)
+static void nRFxI2SDisable(DevIntrf_t * const pDev)
 {
 	NRF_I2S->TASKS_STOP = 1;
 	NRF_I2S->ENABLE = 0;
 }
 
-static void nRFxI2SEnable(DEVINTRF * const pDev)
+static void nRFxI2SEnable(DevIntrf_t * const pDev)
 {
 	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
 
@@ -159,21 +159,21 @@ static void nRFxI2SEnable(DEVINTRF * const pDev)
 	NRF_I2S->TASKS_START = 1;
 }
 
-static void nRFxI2SPowerOff(DEVINTRF * const pDev)
+static void nRFxI2SPowerOff(DevIntrf_t * const pDev)
 {
 	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)NRF_I2S_BASE + 0xFFC) = 0;
 }
 
-static uint32_t nRFxI2SGetRate(DEVINTRF * const pDev)
+static uint32_t nRFxI2SGetRate(DevIntrf_t * const pDev)
 {
 	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
 
 	return dev->Freq;
 }
 
-static uint32_t nRFxI2SSetRate(DEVINTRF * const pDev, uint32_t Rate)
+static uint32_t nRFxI2SSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
 	uint32_t diff = -1;
@@ -224,12 +224,12 @@ static uint32_t nRFxI2SSetRate(DEVINTRF * const pDev, uint32_t Rate)
 	return dev->Freq;
 }
 
-bool nRFxI2SStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
+bool nRFxI2SStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	return true;
 }
 
-int nRFxI2SRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+int nRFxI2SRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	I2SDev_t *dev = (I2SDev_t*)pDev->pDevData;
 
@@ -244,26 +244,26 @@ int nRFxI2SRxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
 	return 0;
 }
 
-void nRFxI2SStopRx(DEVINTRF * const pDev)
+void nRFxI2SStopRx(DevIntrf_t * const pDev)
 {
 }
 
-bool nRFxI2SStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
+bool nRFxI2SStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	return true;
 }
 
-int nRFxI2STxData(DEVINTRF * const pDev, uint8_t *pBuff, int BuffLen)
+int nRFxI2STxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 
 	return 0;
 }
 
-void nRFxI2SStopTx(DEVINTRF * const pDev)
+void nRFxI2SStopTx(DevIntrf_t * const pDev)
 {
 }
 
-void nRFxI2SReset(DEVINTRF * const pDev)
+void nRFxI2SReset(DevIntrf_t * const pDev)
 {
 	nRFxI2SDisable(pDev);
 	msDelay(1);

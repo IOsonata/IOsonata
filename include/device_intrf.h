@@ -90,7 +90,7 @@ typedef enum __Dev_Intrf_Type {
 /// This structure is the base object.  Pointer to an instance of this is passed
 /// to all function calls.  See structure definition bellow for more details
 typedef struct __device_intrf DevIntrf_t;
-typedef DevIntrf_t	DEVINTRF;
+//typedef DevIntrf_t	DEVINTRF;
 
 /**
  * @brief	Event handler callback.
@@ -115,7 +115,7 @@ typedef DevIntrf_t	DEVINTRF;
  * 			in case of FIFO_FULL events,  FIFO will be pushed out if return value is zero
  */
 typedef int (*DevIntrfEvtHandler_t)(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
-typedef DevIntrfEvtHandler_t	DEVINTRF_EVTCB;
+//typedef DevIntrfEvtHandler_t	DEVINTRF_EVTCB;
 
 #pragma pack(push, 4)
 
@@ -129,16 +129,16 @@ typedef DevIntrfEvtHandler_t	DEVINTRF_EVTCB;
 /// Application firmware should not access any member of this structure directly.
 ///
 struct __device_intrf {
-	void *pDevData;			//!< Private device interface implementation data
-	int	IntPrio;			//!< Interrupt priority.  Value is implementation specific
+	void *pDevData;				//!< Private device interface implementation data
+	int	IntPrio;				//!< Interrupt priority.  Value is implementation specific
 	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
-	atomic_flag bBusy;		        //!< Busy flag to be set check and set at start and reset at end of transmission
-	int MaxRetry;			//!< Max retry when data could not be transfered (Rx/Tx returns zero count)
-	atomic_int EnCnt;				//!< Count the number of time device is enabled, this used as ref count where multiple
-							//!< devices are using the same interface. It is to avoid it being disabled while another
-							//!< device is still using it
-	DEVINTRF_TYPE Type;     //!< Identify the type of interface
-	bool bDma;				//!< Enable DMA transfer support. Not all hardware interface supports this feature
+	atomic_flag bBusy;			//!< Busy flag to be set check and set at start and reset at end of transmission
+	int MaxRetry;				//!< Max retry when data could not be transfered (Rx/Tx returns zero count)
+	atomic_int EnCnt;			//!< Count the number of time device is enabled, this used as ref count where multiple
+								//!< devices are using the same interface. It is to avoid it being disabled while another
+								//!< device is still using it
+	DEVINTRF_TYPE Type;     	//!< Identify the type of interface
+	bool bDma;					//!< Enable DMA transfer support. Not all hardware interface supports this feature
 
 	// Bellow are all mandatory functions to implement
 	// On init, all implementation must fill these function, no NULL allowed
