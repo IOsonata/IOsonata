@@ -39,6 +39,7 @@ SOFTWARE.
 #include <inttypes.h>
 
 #include "bluetooth/bt_uuid.h"
+#include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_dev.h"
 
 #define BT_ATT_OPCODE_FLAG_COMMAND						(1<<6)
