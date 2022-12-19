@@ -44,6 +44,8 @@ SOFTWARE.
 #include "istddef.h"
 #include "coredev/uart.h"
 
+void BtProcessAttData(BtDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
+
 //extern UART g_Uart;
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};

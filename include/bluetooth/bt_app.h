@@ -43,11 +43,55 @@ SOFTWARE.
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bleadv_mandata.h"
-#include "bluetooth/bt_dev.h"
+//#include "bluetooth/bt_dev.h"
 
 /** @addtogroup Bluetooth
   * @{
   */
+#ifndef BTAPP_NAME_MAXLEN
+#define BTAPP_NAME_MAXLEN				20
+#endif
+
+#ifndef BTAPP_SERVICE_MAXCNT
+#define BTAPP_SERVICE_MAXCNT			20
+#endif
+
+#ifndef BTAPP_DEFAULT_MAX_DATA_LEN
+#define BTAPP_DEFAULT_MAX_DATA_LEN		251
+#endif
+
+typedef enum __Bt_App_Role {
+	BTAPP_ROLE_BROADCASTER	= BT_GAP_ROLE_BROADCASTER,		//!< non connectable Advertising only
+	BTAPP_ROLE_OBSERVER		= BT_GAP_ROLE_OBSERVER,			//!< non connectable central
+	BTAPP_ROLE_PERIPHERAL	= BT_GAP_ROLE_PERIPHERAL,		//!< BLE connectable peripheral device
+	BTAPP_ROLE_CENTRAL		= BT_GAP_ROLE_CENTRAL,			//!< BLE Central device
+	BTAPP_ROLE_MIXED		= BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL	//!< Mixed central/peripheral
+} BTAPP_ROLE;
+
+#if 0
+// Service connection security types
+typedef enum __Bt_App_Security_Type {
+	BTAPP_SECTYPE_NONE = BT_GAP_SECTYPE_NONE,				//!< open, no security
+	BTAPP_SECTYPE_STATICKEY_NO_MITM = BT_GAP_SECTYPE_STATICKEY_NO_MITM,	//!< Bonding static pass key without Man In The Middle
+	BTAPP_SECTYPE_STATICKEY_MITM = BT_GAP_SECTYPE_STATICKEY_MITM,		//!< Bonding static pass key with MITM
+	BTAPP_SECTYPE_LESC_MITM = BT_GAP_SECTYPE_LESC_MITM,					//!< LE secure encryption
+	BTAPP_SECTYPE_SIGNED_NO_MITM = BT_GAP_SECTYPE_SIGNED_NO_MITM,		//!< AES signed encryption without MITM
+	BTAPP_SECTYPE_SIGNED_MITM = BT_GAP_SECTYPE_SIGNED_MITM,				//!< AES signed encryption with MITM
+} BTAPP_SECTYPE;
+#endif
+
+#define BTAPP_SECEXCHG_NONE				0
+#define BTAPP_SECEXCHG_KEYBOARD			(1<<0)
+#define BTAPP_SECEXCHG_DISPLAY			(1<<1)
+#define BTAPP_SECEXCHG_OOB				(1<<2)
+
+typedef enum __Bt_App_State {
+	BTAPP_STATE_UNKNOWN,
+	BTAPP_STATE_INITIALIZED,
+	BTAPP_STATE_IDLE,
+	BTAPP_STATE_ADVERTISING,
+	BTAPP_STATE_CONNECTED
+} BTAPP_STATE;
 
 typedef enum __Bt_App_Coex_Mode {
 	BTAPP_COEXMODE_NONE,			//!< No Co-existance support
@@ -64,13 +108,95 @@ typedef enum __Bt_App_Event {
 
 #pragma pack(push, 4)
 
+#define BTAPP_INFOSTR_MAX_SIZE			20
+
+/// Bt Device Info
+typedef struct __Bt_App_Dev_Info {
+	const char ModelName[BTAPP_INFOSTR_MAX_SIZE];	//!< Model name
+	const char ManufName[BTAPP_INFOSTR_MAX_SIZE];	//!< Manufacturer name
+	const char *pSerialNoStr;	//!< Serial number string
+	const char *pFwVerStr;		//!< Firmware version string
+	const char *pHwVerStr;		//!< Hardware version string
+} BtAppDevInfo_t;
+
+
+typedef struct __Bt_App_Cfg {
+	BTAPP_ROLE	Role;				//!< Application mode peripheral/central/mix
+	int CentLinkCount;				//!< Number of central link
+	int	PeriLinkCount;				//!< Number of peripheral link
+	const char *pDevName;			//!< Device name
+	uint16_t VendorId;				//!< PnP Bluetooth/USB vendor id. iBeacon mode, this is Major value
+	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
+	uint16_t ProductVer;			//!< PnP product version
+	uint16_t Appearance;			//!< 16 bits Bluetooth appearance value
+	const BtAppDevInfo_t *pDevInfo;	//!< Pointer device info descriptor DIS
+	bool bExtAdv;					//!< Extended advertisement true : enable
+	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise
+	int AdvManDataLen;				//!< Length of manufacture specific data
+	const uint8_t *pSrManData;		//!< Addition Manufacture specific data to advertise in scan response
+	int SrManDataLen;				//!< Length of manufacture specific data in scan response
+	BTGAP_SECTYPE SecType;			//!< Secure connection type
+	uint8_t SecExchg;				//!< Sec key exchange
+	bool bCompleteUuidList;			//!< true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
+	const BtUuidArr_t *pAdvUuid;
+	uint32_t AdvInterval;			//!< In msec
+	uint32_t AdvTimeout;			//!< In sec
+	uint32_t AdvSlowInterval;		//!< Slow advertising interval, if > 0, fallback to
+									//!< slow interval on adv timeout and advertise until connected
+	uint32_t ConnIntervalMin;   	//!< Min. connection interval
+	uint32_t ConnIntervalMax;   	//!< Max connection interval
+	int8_t ConnLedPort;				//!< Connection LED port number
+	int8_t ConnLedPin;				//!< Connection LED pin number
+	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
+	int TxPower;					//!< Tx power in dBm, -20 to +4 dBm TX power, configurable in 4 dB steps
+	uint32_t (*SDEvtHandler)(void); //!< Require for BLEAPP_MODE_RTOS
+	uint16_t MaxMtu;				//!< Max MTU size or 0 for default
+	BTAPP_COEXMODE CoexMode;		//!< Enable support for CoEx
+	int PeriphDevCnt;				//!< Max number of peripheral connection
+	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler
+	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
+} BtAppCfg_t;
+
+#if 0
+typedef struct __Bt_Dev_Data {
+	uint8_t Role;							//!< Device role
+	char *pDevName;
+	uint16_t VendorId;				//!< PnP Bluetooth/USB vendor id. iBeacon mode, this is Major value
+	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
+	uint16_t ProductVer;			//!< PnP product version
+	uint16_t Appearance;			//!< 16 bits Bluetooth appearance value
+	bool bExtAdv;
+	uint16_t ConnHdl;
+	uint8_t AdvHdl;
+	//int NbSrvc;
+	//BtGattSrvc_t Srvc[BTDEV_SERVICE_MAXCNT];
+	BtGattSrvc_t *pSrvc;
+	uint32_t RxDataLen;
+	uint32_t TxDataLen;
+	BTDEV_COEXMODE CoexMode;
+	//int8_t ConnLedPort;				//!< Connection LED port number
+	//int8_t ConnLedPin;				//!< Connection LED pin number
+	//uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
+
+	void (*EvtHandler)(uint32_t Evt, void * const pCtx);
+	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
+	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
+	uint32_t (*SendData)(void * const pData, uint32_t Len);
+	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
+	BTDEV_STATE State;
+	uint16_t MaxMtu;
+	bool bSecure;
+	bool bScan;
+} BtDev_t;
+#endif
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
 
 class BtApp {
 public:
-	virtual bool Init(BtDevCfg_t &CfgData);
+	virtual bool Init(BtAppCfg_t &CfgData);
 
 	virtual void InitCustomData() = 0;
 	virtual void InitServices() = 0;
@@ -123,7 +249,7 @@ void BtAppRtosWaitEvt(void);
  *
  * @return	true - success
  */
-bool BtAppInit(const BtDevCfg_t * const pCfg);
+bool BtAppInit(const BtAppCfg_t * const pCfg);
 void BtAppEnterDfu();
 void BtAppRun();
 uint16_t BleAppGetConnHandle();

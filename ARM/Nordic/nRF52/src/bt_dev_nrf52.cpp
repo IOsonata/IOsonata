@@ -1841,7 +1841,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 	s_BtDevnRF5.ProductId = pCfg->ProductId;
 	s_BtDevnRF5.ProductVer = pCfg->ProductVer;
 	s_BtDevnRF5.Appearance = pCfg->Appearance;
-	s_BtDevnRF5.pSrvc = nullptr;
+//	s_BtDevnRF5.pSrvc = nullptr;
 
 #if 0
 	s_BtDevnRF5.ConnLedPort = pCfg->ConnLedPort;
@@ -2006,6 +2006,8 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 #endif
     s_BtDevnRF5.State = BTDEV_STATE_INITIALIZED;
 
+   // NRF_SDH_BLE_OBSERVER(g_BtDevObserver, BLEAPP_OBSERVER_PRIO, ble_evt_dispatch, (void*)pCfg);
+
     return true;
 }
 
@@ -2163,7 +2165,7 @@ bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint1
     return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
 }
 #endif
-NRF_SDH_BLE_OBSERVER(g_BtDevObserver, BLEAPP_OBSERVER_PRIO, ble_evt_dispatch, NULL);
+//NRF_SDH_BLE_OBSERVER(g_BtDevObserver, BLEAPP_OBSERVER_PRIO, ble_evt_dispatch, NULL);
 
 #if 0
 /**@brief   Function for polling SoftDevice events.

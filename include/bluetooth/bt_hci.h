@@ -715,6 +715,12 @@ void BtHciNotify(BtDev_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void *
 
 #ifdef __cplusplus
 }
+
+class HciIntrf : public DeviceIntrf {
+public:
+private:
+};
+
 #endif
 
 /** @} */

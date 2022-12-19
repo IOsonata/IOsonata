@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
-#include "ble_app_nrf5.h"
+//#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
@@ -180,7 +180,7 @@ const BtGattSrvcCfg_t s_UartSrvcCfg = {
 
 BtGattSrvc_t g_UartBleSrvc;
 
-const BtDevInfo_t s_UartBleDevDesc = {
+const BtAppDevInfo_t s_UartBleDevDesc = {
 	MODEL_NAME,       		// Model name
 	MANUFACTURER_NAME,		// Manufacturer name
 	"123",					// Serial number string
@@ -190,8 +190,8 @@ const BtDevInfo_t s_UartBleDevDesc = {
 
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+\0";
 
-const BtDevCfg_t s_BleAppCfg = {
-	.Role = BTDEV_ROLE_PERIPHERAL,
+const BtAppCfg_t s_BleAppCfg = {
+	.Role = BTAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
 	.pDevName = DEVICE_NAME,			// Device name
@@ -205,8 +205,8 @@ const BtDevCfg_t s_BleAppCfg = {
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BTDEV_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BTDEV_SECEXCHG_NONE,	// Security key exchange
+	.SecType = BTGAP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
 	.bCompleteUuidList = false,
 	.pAdvUuid = &s_AdvUuid,      			// Service uuids to advertise
 	//.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(BleUuid_t), 					// Total number of uuids
@@ -296,7 +296,7 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 	BtGattEvtHandler(Evt, pCtx);
 }
 
-void BtDevInitCustomSrvc()
+void BtAppInitCustomServices()
 {
     bool res;
 
@@ -336,11 +336,11 @@ void HardwareInit()
 	IOPinEnableInterrupt(0, APP_IRQ_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
-void BtDevInitCustomData()
+void BtAppInitCustomData()
 {
 	// Add passkey pairing
-    ble_opt_t opt;
-    opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
+    //ble_opt_t opt;
+    //opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
 	//uint32_t err_code =  sd_ble_opt_set(BLE_GAP_OPT_PASSKEY, &opt);
 	//APP_ERROR_CHECK(err_code);
 
@@ -372,7 +372,7 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	if (flush)
 	{
 //		if (BleSrvcCharNotify(&g_UartBleSrvc, 0, buff, bufflen) == 0)
-		if (BtDevNotify(&g_UartChars[0], buff, bufflen) == true)
+		if (BtAppNotify(&g_UartChars[0], buff, (uint16_t)bufflen) == true)
 		{
 			bufflen = 0;
 		}
@@ -427,7 +427,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 
 int main()
 {
-    HardwareInit();
+	HardwareInit();
 
     g_Uart.printf("UART over BLE Demo\r\n");
 

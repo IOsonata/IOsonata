@@ -133,6 +133,15 @@ SOFTWARE.
 #define BT_GAP_PHY_CODED								(1<<2)
 
 
+typedef enum __Bt_Gap_SecType {
+	BTGAP_SECTYPE_NONE = BT_GAP_SECTYPE_NONE,
+	BTGAP_SECTYPE_STATICKEY_NO_MITM = BT_GAP_SECTYPE_STATICKEY_NO_MITM,
+	BTGAP_SECTYPE_STATICKEY_MITM = BT_GAP_SECTYPE_STATICKEY_MITM,
+	BTGAP_SECTYPE_LESC_MITM = BT_GAP_SECTYPE_LESC_MITM,
+	BTGAP_SECTYPE_SIGNED_NO_MITM = BT_GAP_SECTYPE_SIGNED_NO_MITM,
+	BTGAP_SECTYPE_SIGNED_MITM = BT_GAP_SECTYPE_SIGNED_MITM
+} BTGAP_SECTYPE;
+
 #pragma pack(push, 4)
 
 typedef struct __Bt_Gap_Connection {
@@ -150,13 +159,25 @@ typedef struct __Bt_Gap_Scan_Cfg {
 	uint16_t ServUid;			//!< Service Uid to look for
 } BtGapScanCfg_t;
 
+typedef struct __Bt_Gap_Config {
+	uint8_t Role;				//!< Orable GAP role
+	uint32_t SecType;			//!< Security type
+	uint32_t AdvInterval;		//!< Advertisement interval in msec
+	uint32_t AdvTimeout;		//!< Advertisement timeout in msec
+	uint32_t ConnIntervalMin;	//!< Min connection interval in msec
+	uint32_t ConnIntervalMax;	//!< Max connection interval in msec
+	uint16_t SlaveLatency;		//!< Slave latency
+	uint16_t SupTimeout;		//!< Connection supervisory timeout
+} BtGapCfg_t;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void BtGapInit(uint8_t Role);
+void BtGapInit(const BtGapCfg_t *pCfg);
+void BtGapParamInit(const BtGapCfg_t *pCfg);
 void BtGapServiceInit();//BtGattSrvc_t * const pSrvc);
 bool isBtGapConnected();
 void BtGapSetDevName(const char *pName);

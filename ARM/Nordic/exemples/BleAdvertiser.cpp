@@ -41,9 +41,9 @@ SOFTWARE.
 #include "coredev/timer.h"
 
 #include "bluetooth/bt_app.h"
-#ifndef NRFXLIB_SDC
-#include "ble_app_nrf5.h"
-#endif
+//#ifndef NRFXLIB_SDC
+//#include "ble_app_nrf5.h"
+//#endif
 #include "bluetooth/bt_appearance.h"
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
@@ -70,8 +70,8 @@ McuOsc_t g_McuOsc = MCUOSC;
 uint32_t g_AdvCnt = 0;
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
 
-const BtDevCfg_t s_BtAppCfg = {
-	.Role = BTDEV_ROLE_BROADCASTER,
+const BtAppCfg_t s_BtAppCfg = {
+	.Role = BTAPP_ROLE_BROADCASTER,
 	.CentLinkCount = 0,						// Number of central link
 	.PeriLinkCount = 1,						// Number of peripheral link
 	.pDevName = (char*)DEVICE_NAME,			// Device name

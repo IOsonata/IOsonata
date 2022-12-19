@@ -184,14 +184,19 @@ void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
 }
 #endif
 
-void BtGapInit(uint8_t Role)
+void BtGapInit(const BtGapCfg_t *pCfg)
 {
 	memset(s_BtGapConnection, 0xFF, sizeof(s_BtGapConnection));
 
-	if (Role & BT_GAP_ROLE_PERIPHERAL)
+	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
 	{
 		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
 		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
+	}
+
+	if (pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL))
+	{
+		BtGapParamInit(pCfg);
 	}
 }
 

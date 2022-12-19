@@ -38,10 +38,10 @@ SOFTWARE.
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
 
-static int BleAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
+static int BtAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 {
 	int retval = -1;
-	BleAdvDataHdr_t *hdr = (BleAdvDataHdr_t*)pData;
+	BtAdvDataHdr_t *hdr = (BtAdvDataHdr_t*)pData;
 	int idx = 0;
 
 	while (Len > 0)
@@ -53,7 +53,7 @@ static int BleAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 		}
 		idx += hdr->Len + 1;
 		Len -= hdr->Len + 1;
-		hdr = (BleAdvDataHdr_t*)&pData[idx];
+		hdr = (BtAdvDataHdr_t*)&pData[idx];
 	}
 
 	return retval;
@@ -74,14 +74,14 @@ static int BleAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
  * @return	Pointer to location to store new data.
  * 			NULL if not enough space. Old data will not be removed
  */
-BleAdvData_t *BleAdvDataAllocate(BleAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
+BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
 {
-	int idx = BleAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
+	int idx = BtAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
 
 	if (idx >= 0)
 	{
 		// Tag already exists, remove it first
-		BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[idx];
+		BtAdvData_t *p = (BtAdvData_t*)&pAdvPkt->pData[idx];
 		int l = pAdvPkt->Len - p->Hdr.Len - 1;
 
 		if (Len > (pAdvPkt->MaxLen - l))
@@ -97,7 +97,7 @@ BleAdvData_t *BleAdvDataAllocate(BleAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
 		return nullptr;
 	}
 
-	BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[pAdvPkt->Len];
+	BtAdvData_t *p = (BtAdvData_t*)&pAdvPkt->pData[pAdvPkt->Len];
 	p->Hdr.Len = Len + 1;
 	p->Hdr.Type = Type;
 	pAdvPkt->Len += Len + 2;
@@ -115,7 +115,7 @@ BleAdvData_t *BleAdvDataAllocate(BleAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
  *
  * @return	true - success
  */
-bool BleAdvDataAdd(BleAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
+bool BtAdvDataAdd(BtAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
 {
 #if 0
 	int idx = BleAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
@@ -144,7 +144,7 @@ bool BleAdvDataAdd(BleAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData,
 	p->Hdr.Len = Len + 1;
 	p->Hdr.Type = Type;
 #else
-	BleAdvData_t *p = BleAdvDataAllocate(pAdvPkt, Type, Len);
+	BtAdvData_t *p = BtAdvDataAllocate(pAdvPkt, Type, Len);
 
 	if (p == nullptr)
 	{
@@ -168,16 +168,16 @@ bool BleAdvDataAdd(BleAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData,
  *
  * @return	none
  */
-void BleAdvDataRemove(BleAdvPacket_t * const pAdvPkt, uint8_t Type)
+void BtAdvDataRemove(BtAdvPacket_t * const pAdvPkt, uint8_t Type)
 {
 	if (pAdvPkt->Len <= 0)
 		return;
 
-	int idx = BleAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
+	int idx = BtAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
 
 	if (idx >= 0)
 	{
-		BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[idx];
+		BtAdvData_t *p = (BtAdvData_t*)&pAdvPkt->pData[idx];
 		int l = p->Hdr.Len + 1;
 
 		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + l], l);
@@ -194,7 +194,7 @@ void BleAdvDataRemove(BleAdvPacket_t * const pAdvPkt, uint8_t Type)
  *
  * @return	true - success
  */
-bool BleAdvDataAddUuid(BleAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bool bComplete)
+bool BtAdvDataAddUuid(BtAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bool bComplete)
 {
 	int l = 0;
 	uint8_t gaptype = 0;
@@ -217,7 +217,7 @@ bool BleAdvDataAddUuid(BleAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, 
 
 		l = 16 * pUid->Count;
 		gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
-		return BleAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)uid, l);
+		return BtAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)uid, l);
 	}
 	else
 	{
@@ -239,10 +239,10 @@ bool BleAdvDataAddUuid(BleAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, 
 				retval = false;
 		}
 	}
-	return BleAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)pUid->Uuid16, l);
+	return BtAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)pUid->Uuid16, l);
 }
 
-void BleAdvDataSetDevName(BleAdvPacket_t * const pAdvPkt, const char *pName)
+void BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName)
 {
 	size_t l = strlen(pName);
 	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
@@ -256,5 +256,5 @@ void BleAdvDataSetDevName(BleAdvPacket_t * const pAdvPkt, const char *pName)
 	}
 
 	// Update name in advertisement packet
-	BleAdvDataAdd(pAdvPkt, type, (uint8_t*)pName, l);
+	BtAdvDataAdd(pAdvPkt, type, (uint8_t*)pName, l);
 }
