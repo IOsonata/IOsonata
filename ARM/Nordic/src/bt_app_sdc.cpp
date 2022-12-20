@@ -72,7 +72,7 @@ static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 #pragma pack(push, 4)
 
 typedef struct __Bt_App_Data {
-	BTDEV_ROLE Role;
+	BTAPP_ROLE Role;
 	uint16_t ConnHdl;	// BLE connection handle
 	int ConnLedPort;
 	int ConnLedPin;
@@ -83,13 +83,13 @@ typedef struct __Bt_App_Data {
 	bool bSecure;
 	bool bScan;
     bool bInitialized;
-	BTDEV_COEXMODE CoexMode;
+	BTAPP_COEXMODE CoexMode;
 } BtAppData_t;
 
 #pragma pack(pop)
 
 static BtAppData_t s_BtAppData = {
-	BTDEV_ROLE_PERIPHERAL, 0xFFFF, -1, -1, 0,
+	BTAPP_ROLE_PERIPHERAL, 0xFFFF, -1, -1, 0,
 };
 
 //BtDev_t g_BtDevSdc;
@@ -352,7 +352,7 @@ static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 	NRF_RNG->CONFIG = RNG_CONFIG_DERCEN_Disabled;
 }
 
-bool BtAppStackInit(const BtDevCfg_t *pCfg)
+bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {
 	// Initialize Nordic Softdevice controller
 	int32_t res = sdc_init(BtStackSdcAssert);
@@ -371,7 +371,7 @@ bool BtAppStackInit(const BtDevCfg_t *pCfg)
 	sdc_support_le_coded_phy();
 	//sdc_support_le_power_control();
 
-	if (pCfg->Role & (BTDEV_ROLE_PERIPHERAL | BTDEV_ROLE_BROADCASTER))
+	if (pCfg->Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
 		res = sdc_support_adv();
@@ -384,7 +384,7 @@ bool BtAppStackInit(const BtDevCfg_t *pCfg)
 		sdc_support_le_power_control_peripheral();
 		sdc_support_le_conn_cte_rsp_peripheral();
 
-		if (pCfg->CoexMode != BTDEV_COEXMODE_NONE)
+		if (pCfg->CoexMode != BTAPP_COEXMODE_NONE)
 		{
 			sdc_coex_adv_mode_configure(true);
 		}
@@ -505,7 +505,7 @@ bool BtAppStackInit(const BtDevCfg_t *pCfg)
  *
  * @details This function initializes the SoftDevice and the BLE event interrupt.
  */
-bool BtAppInit(const BtDevCfg_t *pCfg)
+bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	int32_t res = 0;
 	mpsl_clock_lfclk_cfg_t lfclk = {MPSL_CLOCK_LF_SRC_RC, 0,};
@@ -538,11 +538,11 @@ bool BtAppInit(const BtDevCfg_t *pCfg)
 
 	s_BtAppData.CoexMode = pCfg->CoexMode;
 
-	if (pCfg->CoexMode == BTDEV_COEXMODE_1W)
+	if (pCfg->CoexMode == BTAPP_COEXMODE_1W)
 	{
 		mpsl_coex_support_1wire_gpiote_if();
 	}
-	else if (pCfg->CoexMode == BTDEV_COEXMODE_3W)
+	else if (pCfg->CoexMode == BTAPP_COEXMODE_3W)
 	{
 		mpsl_coex_support_802152_3wire_gpiote_if();
 	}
@@ -644,7 +644,7 @@ bool BtAppInit(const BtDevCfg_t *pCfg)
 
 	BtAppInitCustomData();
 
-	BtDevInit(pCfg);
+	//BtDevInit(pCfg);
 /*
     BtGapInit(pCfg->Role);
 

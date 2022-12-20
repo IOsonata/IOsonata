@@ -129,18 +129,18 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 #if 1
 alignas(4) static uint8_t s_BtDevAdvBuff[260];
 alignas(4) static sdc_hci_cmd_le_set_adv_data_t &s_BtDevAdvData = *(sdc_hci_cmd_le_set_adv_data_t*)s_BtDevAdvBuff;
-alignas(4) static BleAdvPacket_t s_BtDevAdvPkt = { sizeof(s_BtDevAdvData.adv_data), 0, s_BtDevAdvData.adv_data};
+alignas(4) static BtAdvPacket_t s_BtDevAdvPkt = { sizeof(s_BtDevAdvData.adv_data), 0, s_BtDevAdvData.adv_data};
 
 alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BtDevExtAdvData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BtDevAdvBuff;
-alignas(4) static BleAdvPacket_t s_BtDevExtAdvPkt = { 255, 0, s_BtDevExtAdvData.adv_data};
+alignas(4) static BtAdvPacket_t s_BtDevExtAdvPkt = { 255, 0, s_BtDevExtAdvData.adv_data};
 
 alignas(4) static uint8_t s_BtDevSrBuff[260];
 
 alignas(4) static sdc_hci_cmd_le_set_scan_response_data_t &s_BtDevSrData = *(sdc_hci_cmd_le_set_scan_response_data_t*)s_BtDevSrBuff;
-alignas(4) static BleAdvPacket_t s_BtDevSrPkt = { sizeof(s_BtDevSrData.scan_response_data), 0, s_BtDevSrData.scan_response_data};
+alignas(4) static BtAdvPacket_t s_BtDevSrPkt = { sizeof(s_BtDevSrData.scan_response_data), 0, s_BtDevSrData.scan_response_data};
 
 alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BtDevExtSrData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BtDevSrBuff;
-alignas(4) static BleAdvPacket_t s_BtDevExtSrPkt = { 255, 0, s_BtDevExtSrData.scan_response_data};
+alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 255, 0, s_BtDevExtSrData.scan_response_data};
 #endif
 
 alignas(4) static uint8_t s_BtStackSdcMemPool[10000];
@@ -234,7 +234,7 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 
 void BtDevSetDevName(const char *pName)
 {
-	BleAdvPacket_t *advpkt;
+	BtAdvPacket_t *advpkt;
 
 	if (s_BtDevSdc.bExtAdv == true)
 	{
@@ -245,7 +245,7 @@ void BtDevSetDevName(const char *pName)
 		advpkt = &s_BtDevAdvPkt;
 	}
 
-	BleAdvDataSetDevName(advpkt, pName);
+	BtAdvDataSetDevName(advpkt, pName);
 
 	BtGapSetDevName(pName);
 }
@@ -372,8 +372,8 @@ bool BtDevAdvManDataSet(uint8_t * const pAdvData, int AdvLen, uint8_t * const pS
 		return false;
 	}
 
-	BleAdvPacket_t *advpkt;
-	BleAdvPacket_t *srpkt;
+	BtAdvPacket_t *advpkt;
+	BtAdvPacket_t *srpkt;
 
 	if (s_BtDevSdc.bExtAdv == true)
 	{
@@ -389,7 +389,7 @@ bool BtDevAdvManDataSet(uint8_t * const pAdvData, int AdvLen, uint8_t * const pS
 	if (pAdvData)
 	{
 		int l = AdvLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -426,7 +426,7 @@ bool BtDevAdvManDataSet(uint8_t * const pAdvData, int AdvLen, uint8_t * const pS
 	if (pSrData)
 	{
 		int l = SrLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BtAdvData_t *p = BtAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -519,8 +519,8 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 {
 	uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
 	uint16_t extprop = 0;//BLE_EXT_ADV_EVT_PROP_LEGACY;
-	BleAdvPacket_t *advpkt;
-	BleAdvPacket_t *srpkt;
+	BtAdvPacket_t *advpkt;
+	BtAdvPacket_t *srpkt;
 
 	//g_BleAppTimer.Init(s_TimerCfg);
 
@@ -545,7 +545,7 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 		{
 			flags |= BT_GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
 		}
-		extprop |= BLE_EXT_ADV_EVT_PROP_CONNECTABLE;// | BLE_EXT_ADV_EVT_PROP_SCANNABLE;
+		extprop |= BTADV_EXTADV_EVT_PROP_CONNECTABLE;// | BLE_EXT_ADV_EVT_PROP_SCANNABLE;
 	}
 	else if (pCfg->Role & BTDEV_ROLE_BROADCASTER)
 	{
@@ -555,20 +555,20 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 		//flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
 	}
 
-	if (BleAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
+	if (BtAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
 	{
 		return false;
 	}
 
     if (pCfg->Appearance != BT_APPEAR_UNKNOWN_GENERIC)
     {
-    	if (BleAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
+    	if (BtAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{
 //    		return false;
     	}
     }
 
-    BleAdvPacket_t *uidadvpkt;
+    BtAdvPacket_t *uidadvpkt;
 
     if (pCfg->pDevName != NULL)
     {
@@ -583,7 +583,7 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
     		l = min((size_t)30, mxl);
     	}
 
-    	if (BleAdvDataAdd(advpkt, type, (uint8_t*)pCfg->pDevName, l) == false)
+    	if (BtAdvDataAdd(advpkt, type, (uint8_t*)pCfg->pDevName, l) == false)
     	{
     		return false;
     	}
@@ -597,7 +597,7 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 
     if (pCfg->pAdvUuid != NULL && pCfg->Role & BTDEV_ROLE_PERIPHERAL)
     {
-    	if (BleAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
+    	if (BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
     	{
 
     	}
@@ -607,7 +607,7 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 	if (pCfg->pAdvManData != NULL)
 	{
 		int l = pCfg->AdvManDataLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -620,7 +620,7 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 	if (pCfg->pSrManData != NULL)
 	{
 		int l = pCfg->SrManDataLen + 2;
-		BleAdvData_t *p = BleAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		BtAdvData_t *p = BtAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
 		if (p == NULL)
 		{
@@ -635,8 +635,8 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 		sdc_hci_cmd_le_set_adv_params_t advparam = {
 			.adv_interval_min = (uint16_t)mSecTo0_625(pCfg->AdvInterval),
 			.adv_interval_max = (uint16_t)mSecTo0_625(pCfg->AdvInterval + 50),
-			.adv_type = BLEADV_TYPE_ADV_NONCONN_IND,//ADV_DIRECT_IND,
-			.own_address_type = BLE_ADDR_TYPE_PUBLIC,
+			.adv_type = BTADV_TYPE_ADV_NONCONN_IND,//ADV_DIRECT_IND,
+			.own_address_type = BT_ADDR_TYPE_PUBLIC,
 			.peer_address_type = 0,
 			.peer_address = {0,},
 			.adv_channel_map = 7,
@@ -645,7 +645,7 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 
 		if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
 		{
-			advparam.adv_type = BLEADV_TYPE_ADV_IND;
+			advparam.adv_type = BTADV_TYPE_ADV_IND;
 		}
 
 		int sdc_res = sdc_hci_cmd_le_set_adv_params(&advparam);
@@ -678,15 +678,15 @@ bool BtDevAdvInit(const BtDevCfg_t * const pCfg)
 	{
 		// Use extended advertisement
 
-		BleExtAdvParam_t extparam = {
+		BtExtAdvParam_t extparam = {
 			.AdvHdl = 0,
 			.EvtProp = extprop,//BLE_EXT_ADV_EVT_PROP_CONNECTABLE,// | BLE_EXT_ADV_EVT_PROP_SCANNABLE,
 			.PrimIntervalMin = (uint16_t)mSecTo0_625(pCfg->AdvInterval),
 			.PrimIntervalMax = (uint16_t)mSecTo0_625(pCfg->AdvInterval + 50),
 			.PrimChanMap = 7,
-			.OwnAddrType = BLE_ADDR_TYPE_PUBLIC,
-			.PrimPhy = BLE_EXT_ADV_PHY_1M,
-			.SecondPhy = BLE_EXT_ADV_PHY_2M,
+			.OwnAddrType = BT_ADDR_TYPE_PUBLIC,
+			.PrimPhy = BTADV_EXTADV_PHY_1M,
+			.SecondPhy = BTADV_EXTADV_PHY_2M,
 			.ScanNotifEnable = 0,
 		};
 
