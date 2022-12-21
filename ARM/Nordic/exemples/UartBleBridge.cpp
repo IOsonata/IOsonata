@@ -40,7 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
-#include "ble_app_nrf5.h"
+//#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
@@ -151,7 +151,7 @@ static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BtGattChar_t);
 uint8_t g_LWrBuffer[512];
 
 const BtGattSrvcCfg_t s_UartSrvcCfg = {
-	.SecType = BTDEV_SECTYPE_NONE,		// Secure or Open service/char
+	.SecType = BT_GAP_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = true,
 	.UuidBase = BLE_UART_UUID_BASE,		// Base UUID
 	//1,
@@ -164,7 +164,7 @@ const BtGattSrvcCfg_t s_UartSrvcCfg = {
 
 BtGattSrvc_t g_UartBleSrvc;
 
-const BtDevInfo_t s_UartBleDevDesc {
+const BtAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           	// Model name
 	MANUFACTURER_NAME,      // Manufacturer name
 	"",                     // Serial number string
@@ -172,8 +172,8 @@ const BtDevInfo_t s_UartBleDevDesc {
 	"0.0",                  // Hardware version string
 };
 
-const BtDevCfg_t s_BleAppCfg = {
-	.Role = BTDEV_ROLE_PERIPHERAL,
+const BtAppCfg_t s_BleAppCfg = {
+	.Role = BTAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
 	.pDevName = DEVICE_NAME,			// Device name
@@ -186,8 +186,8 @@ const BtDevCfg_t s_BleAppCfg = {
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BTDEV_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BTDEV_SECEXCHG_NONE,	// Security key exchange
+	.SecType = BTGAP_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
 	.pAdvUuid = NULL,      			// Service uuids to advertise
 	//.NbAdvUuid = 0, 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -288,7 +288,7 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 	BtGattEvtHandler(Evt, pCtx);
 }
 
-void BtDevInitCustomSrvc()
+void BtAppInitCustomServices()
 {
     bool res;
 

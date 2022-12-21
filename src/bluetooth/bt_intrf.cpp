@@ -202,10 +202,12 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 {
 	BtIntrfPkt_t *pkt = NULL;
     bool res = true;
+    uint16_t connhdl = BtGapGetConnection();
 
     if (pIntrf->TransBuffLen > 0)
     {
-        res = BtDevNotify(&pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pIntrf->TransBuff, pIntrf->TransBuffLen);
+    	res = BtGattCharNotify(connhdl, &pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pIntrf->TransBuff, pIntrf->TransBuffLen);
+        //res = BtDevNotify(&pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pIntrf->TransBuff, pIntrf->TransBuffLen);
     }
 
     while (res == true)
@@ -218,7 +220,7 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 		{
 			return true;
 		}
-		res = BtDevNotify(&pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pkt->Data, pkt->Len);
+		res = BtGattCharNotify(connhdl, &pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pkt->Data, pkt->Len);
 	}
 
 	if (pkt != NULL)
