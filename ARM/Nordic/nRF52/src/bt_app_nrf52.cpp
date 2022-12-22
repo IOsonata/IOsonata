@@ -1780,7 +1780,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 		BtDisInit(pCfg);
 	}
 
-    //BtGattInit();
+    BtGattInit();
 
     BtAppInitCustomData();
 
