@@ -644,7 +644,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	BtAppInitCustomData();
 
-	//BtDevInit(pCfg);
+	BtDevInit((BtDevCfg_t*)pCfg);
 /*
     BtGapInit(pCfg->Role);
 

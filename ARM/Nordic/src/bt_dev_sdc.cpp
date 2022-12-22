@@ -1236,10 +1236,10 @@ bool BtDevInit(const BtDevCfg_t *pCfg)
 //    		s_BtDevSdc.NbSrvc++;
 
     //		BleAppInitUserServices();
-    		BtDevInitCustomSrvc();
+    		BtAppInitCustomServices();
     	}
 
-    	BtDevInitCustomData();
+    	BtAppInitCustomData();
 
         if (pCfg->Role & (BTDEV_ROLE_BROADCASTER | BTDEV_ROLE_PERIPHERAL))
         {
