@@ -1267,7 +1267,7 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * c
 
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	return BtDevNotify(pChar, pData, DataLen);
+	return BtGattCharNotify(BtGapGetConnection(), pChar, pData, DataLen);
 	/*
 	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{
