@@ -41,7 +41,7 @@ SOFTWARE.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_smp.h"
 
-void BtProcessSmpData(BtDev_t * const pDev, BtL2CapPdu_t * const pRcvPdu)
+void BtProcessSmpData(BtHciDevice_t * const pDev, BtL2CapPdu_t * const pRcvPdu)
 {
 
 }

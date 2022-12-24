@@ -67,31 +67,52 @@ SOFTWARE.
 //BleConn_t g_BleConn = {0,};
 extern UART g_Uart;
 
+static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
+	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
+}
+void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt);
+void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);
+void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason);
 static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 #pragma pack(push, 4)
 
 typedef struct __Bt_App_Data {
+	BTAPP_STATE State;
 	BTAPP_ROLE Role;
+	uint8_t AdvHdl;		// Advertisement handle
 	uint16_t ConnHdl;	// BLE connection handle
 	int ConnLedPort;
 	int ConnLedPin;
 	uint8_t ConnLedActLevel;
-	int PeriphDevCnt;
+	uint16_t VendorId;
+	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
+	uint16_t ProductVer;			//!< PnP product version
+	uint16_t Appearance;			//!< 16 bits Bluetooth appearance value
+//	int PeriphDevCnt;
 	uint32_t (*SDEvtHandler)(void) ;
 	int MaxMtu;
 	bool bSecure;
+	bool bExtAdv;
 	bool bScan;
-    bool bInitialized;
+//    bool bInitialized;
 	BTAPP_COEXMODE CoexMode;
 } BtAppData_t;
 
 #pragma pack(pop)
 
 static BtAppData_t s_BtAppData = {
-	BTAPP_ROLE_PERIPHERAL, 0xFFFF, -1, -1, 0,
+	BTAPP_STATE_UNKNOWN, BTAPP_ROLE_PERIPHERAL, 0xFF, 0xFFFF,//BLE_GAP_ADV_SET_HANDLE_NOT_SET, BLE_CONN_HANDLE_INVALID, -1, -1,
 };
 
+static BtHciDevice_t s_BtHciDev = {
+	.pCtx = (void*)&s_BtAppData,
+	.SendData = BtAppSendData,
+	.EvtHandler = BtAppEvtHandler,
+	.Connected = BtAppConnected,
+	.Disconnected = BtAppDisconnected,
+	.SendCompleted = nullptr,
+};
 //BtDev_t g_BtDevSdc;
 
 /**@brief Bluetooth SIG debug mode Private Key */
@@ -99,6 +120,23 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
     0xbd,0x1a,0x3c,0xcd,0xa6,0xb8,0x99,0x58,0x99,0xb7,0x40,0xeb,0x7b,0x60,0xff,0x4a,
     0x50,0x3f,0x10,0xd2,0xe3,0xb3,0xc9,0x74,0x38,0x5f,0xc5,0xa3,0xd4,0xf6,0x49,0x3f,
 };
+
+#if 1
+alignas(4) static uint8_t s_BtDevAdvBuff[260];
+alignas(4) static sdc_hci_cmd_le_set_adv_data_t &s_BtDevAdvData = *(sdc_hci_cmd_le_set_adv_data_t*)s_BtDevAdvBuff;
+alignas(4) static BtAdvPacket_t s_BtDevAdvPkt = { sizeof(s_BtDevAdvData.adv_data), 0, s_BtDevAdvData.adv_data};
+
+alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BtDevExtAdvData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BtDevAdvBuff;
+alignas(4) static BtAdvPacket_t s_BtDevExtAdvPkt = { 255, 0, s_BtDevExtAdvData.adv_data};
+
+alignas(4) static uint8_t s_BtDevSrBuff[260];
+
+alignas(4) static sdc_hci_cmd_le_set_scan_response_data_t &s_BtDevSrData = *(sdc_hci_cmd_le_set_scan_response_data_t*)s_BtDevSrBuff;
+alignas(4) static BtAdvPacket_t s_BtDevSrPkt = { sizeof(s_BtDevSrData.scan_response_data), 0, s_BtDevSrData.scan_response_data};
+
+alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BtDevExtSrData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BtDevSrBuff;
+alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 255, 0, s_BtDevExtSrData.scan_response_data};
+#endif
 
 alignas(4) static uint8_t s_BtStackSdcMemPool[10000];
 #if 0
@@ -157,10 +195,10 @@ static void BtStackSdcCB()
 		{
 			case SDC_HCI_MSG_TYPE_EVT:
 				// Event available
-				BtHciProcessEvent(BtDevGetInstance(), (BtHciEvtPacket_t*)buf);
+				BtHciProcessEvent(&s_BtHciDev, (BtHciEvtPacket_t*)buf);
 				break;
 			case SDC_HCI_MSG_TYPE_DATA:
-				BtHciProcessData(BtDevGetInstance(), (BtHciACLDataPacket_t*)buf);
+				BtHciProcessData(&s_BtHciDev, (BtHciACLDataPacket_t*)buf);
 				break;
 		}
 	}
@@ -298,18 +336,150 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
-	return BtDevAdvManDataSet(pAdvData, AdvLen, pSrData, SrLen);
+	if (s_BtAppData.State != BTAPP_STATE_ADVERTISING && s_BtAppData.State != BTAPP_STATE_IDLE)
+	{
+		return false;
+	}
 
+	BtAdvPacket_t *advpkt;
+	BtAdvPacket_t *srpkt;
+
+	if (s_BtAppData.bExtAdv == true)
+	{
+		advpkt = &s_BtDevExtAdvPkt;
+		srpkt = &s_BtDevExtSrPkt;
+	}
+	else
+	{
+		advpkt = &s_BtDevAdvPkt;
+		srpkt = &s_BtDevSrPkt;
+	}
+
+	if (pAdvData)
+	{
+		int l = AdvLen + 2;
+		BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
+		if (p == NULL)
+		{
+			return false;
+		}
+		*(uint16_t *)p->Data = s_BtAppData.VendorId;
+		memcpy(&p->Data[2], pAdvData, AdvLen);
+
+    	if (s_BtAppData.bExtAdv == true)
+    	{
+    		s_BtDevExtAdvData.adv_handle = 0;
+    		s_BtDevExtAdvData.operation = 3;
+    		s_BtDevExtAdvData.fragment_preference = 1;
+    		s_BtDevExtAdvData.adv_data_length = advpkt->Len;
+
+    		int res = sdc_hci_cmd_le_set_ext_adv_data(&s_BtDevExtAdvData);
+    		if (res != 0)
+    		{
+    			return false;
+    		}
+    	}
+    	else
+    	{
+			s_BtDevAdvData.adv_data_length = s_BtDevAdvPkt.Len;
+
+			int res = sdc_hci_cmd_le_set_adv_data(&s_BtDevAdvData);
+    		if (res != 0)
+    		{
+    			return false;
+    		}
+    	}
+	}
+
+	if (pSrData)
+	{
+		int l = SrLen + 2;
+		BtAdvData_t *p = BtAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
+		if (p == NULL)
+		{
+			return false;
+		}
+		*(uint16_t *)p->Data = s_BtAppData.VendorId;
+		memcpy(&p->Data[2], pAdvData, AdvLen);
+
+    	if (s_BtAppData.bExtAdv == false)
+    	{
+			s_BtDevSrData.scan_response_data_length = s_BtDevSrPkt.Len;
+
+			int res = sdc_hci_cmd_le_set_scan_response_data(&s_BtDevSrData);
+    		if (res != 0)
+    		{
+    			return false;
+    		}
+    	}
+	}
+
+	return true;
 }
 
 void BtAppAdvStart()
 {
-	BtDevAdvStart();
+	if (s_BtAppData.State == BTAPP_STATE_ADVERTISING)// || g_BleAppData.ConnHdl != BLE_CONN_HANDLE_INVALID)
+		return;
+
+	int res = 0;
+
+	if (s_BtAppData.bExtAdv == true)
+	{
+		uint8_t buff[100];
+
+		sdc_hci_cmd_le_set_ext_adv_enable_t *x = (sdc_hci_cmd_le_set_ext_adv_enable_t*)buff;
+
+		x->enable = 1;
+		x->num_sets = 1;
+		x->array_params[0].adv_handle = 0;
+		x->array_params[0].duration = 0;
+		x->array_params[0].max_ext_adv_events = 0;
+
+		res = sdc_hci_cmd_le_set_ext_adv_enable(x);
+	}
+	else
+	{
+		sdc_hci_cmd_le_set_adv_enable_t x = { 1 };
+
+		res = sdc_hci_cmd_le_set_adv_enable(&x);
+	}
+
+	if (res == 0)
+	{
+		//g_BleAppData.bAdvertising = true;
+		s_BtAppData.State = BTAPP_STATE_ADVERTISING;
+	}
 }
 
 void BleAppAdvStop()
 {
-	BtDevAdvStop();
+	int res = 0;
+
+	if (s_BtAppData.bExtAdv == true)
+	{
+		uint8_t buff[100];
+
+		sdc_hci_cmd_le_set_ext_adv_enable_t *x = (sdc_hci_cmd_le_set_ext_adv_enable_t*)buff;
+
+		x->enable = 0;
+		x->num_sets = 1;
+		x->array_params[0].adv_handle = 0;
+		x->array_params[0].duration = 0;
+		x->array_params[0].max_ext_adv_events = 0;
+
+		res = sdc_hci_cmd_le_set_ext_adv_enable(x);
+	}
+	else
+	{
+		sdc_hci_cmd_le_set_adv_enable_t x = { 0 };
+
+		res = sdc_hci_cmd_le_set_adv_enable(&x);
+	}
+
+	s_BtAppData.State = BTAPP_STATE_IDLE;
 }
 
 
@@ -350,6 +520,222 @@ static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 	NRF_RNG->TASKS_STOP = 1;
 
 	NRF_RNG->CONFIG = RNG_CONFIG_DERCEN_Disabled;
+}
+
+bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
+{
+	uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
+	uint16_t extprop = 0;//BLE_EXT_ADV_EVT_PROP_LEGACY;
+	BtAdvPacket_t *advpkt;
+	BtAdvPacket_t *srpkt;
+
+	//g_BleAppTimer.Init(s_TimerCfg);
+
+	if (s_BtAppData.bExtAdv == true)
+	{
+		advpkt = &s_BtDevExtAdvPkt;
+		srpkt = &s_BtDevExtSrPkt;
+	}
+	else
+	{
+		advpkt = &s_BtDevAdvPkt;
+		srpkt = &s_BtDevSrPkt;
+	}
+
+	if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+	{
+		if (pCfg->AdvTimeout != 0)
+		{
+			flags |= BT_GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
+		}
+		else
+		{
+			flags |= BT_GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
+		}
+		extprop |= BTADV_EXTADV_EVT_PROP_CONNECTABLE;// | BLE_EXT_ADV_EVT_PROP_SCANNABLE;
+	}
+	else if (pCfg->Role & BTDEV_ROLE_BROADCASTER)
+	{
+		//extprop |= BLE_EXT_ADV_EVT_PROP_OMIT_ADDR;
+		//extprop |= BLE_EXT_ADV_EVT_PROP_SCANNABLE;
+		//extprop = 0;
+		//flags |= GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
+	}
+
+	if (BtAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
+	{
+		return false;
+	}
+
+    if (pCfg->Appearance != BT_APPEAR_UNKNOWN_GENERIC)
+    {
+    	if (BtAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
+    	{
+//    		return false;
+    	}
+    }
+
+    BtAdvPacket_t *uidadvpkt;
+
+    if (pCfg->pDevName != NULL)
+    {
+    	size_t l = strlen(pCfg->pDevName);
+    	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
+    	size_t mxl = advpkt->MaxLen - advpkt->Len - 2;
+
+    	if (l > 30 || l > mxl)
+    	{
+    		// Short name
+    		type = BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME;
+    		l = min((size_t)30, mxl);
+    	}
+
+    	if (BtAdvDataAdd(advpkt, type, (uint8_t*)pCfg->pDevName, l) == false)
+    	{
+    		return false;
+    	}
+
+    	uidadvpkt = pCfg->bExtAdv ? advpkt : srpkt;
+    }
+    else
+    {
+    	uidadvpkt = advpkt;
+    }
+
+    if (pCfg->pAdvUuid != NULL && pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+    {
+    	if (BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
+    	{
+
+    	}
+
+    }
+
+	if (pCfg->pAdvManData != NULL)
+	{
+		int l = pCfg->AdvManDataLen + 2;
+		BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
+		if (p == NULL)
+		{
+			return false;
+		}
+		*(uint16_t *)p->Data = pCfg->VendorId;
+		memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
+	}
+
+	if (pCfg->pSrManData != NULL)
+	{
+		int l = pCfg->SrManDataLen + 2;
+		BtAdvData_t *p = BtAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
+		if (p == NULL)
+		{
+			return false;
+		}
+		*(uint16_t *)p->Data = pCfg->VendorId;
+		memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
+	}
+
+	if (s_BtAppData.bExtAdv == false)
+	{
+		sdc_hci_cmd_le_set_adv_params_t advparam = {
+			.adv_interval_min = (uint16_t)mSecTo0_625(pCfg->AdvInterval),
+			.adv_interval_max = (uint16_t)mSecTo0_625(pCfg->AdvInterval + 50),
+			.adv_type = BTADV_TYPE_ADV_NONCONN_IND,//ADV_DIRECT_IND,
+			.own_address_type = BT_ADDR_TYPE_PUBLIC,
+			.peer_address_type = 0,
+			.peer_address = {0,},
+			.adv_channel_map = 7,
+			.adv_filter_policy = 0
+		};
+
+		if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+		{
+			advparam.adv_type = BTADV_TYPE_ADV_IND;
+		}
+
+		int sdc_res = sdc_hci_cmd_le_set_adv_params(&advparam);
+
+		if (sdc_res != 0)
+		{
+			return false;
+		}
+
+		s_BtDevAdvData.adv_data_length = advpkt->Len;
+
+		sdc_res = sdc_hci_cmd_le_set_adv_data(&s_BtDevAdvData);
+		if (sdc_res != 0)
+		{
+			return false;
+		}
+
+		if (srpkt->Len > 0)
+		{
+			s_BtDevSrData.scan_response_data_length = srpkt->Len;
+
+			sdc_res = sdc_hci_cmd_le_set_scan_response_data(&s_BtDevSrData);
+			if (sdc_res != 0)
+			{
+				return false;
+			}
+		}
+	}
+	else
+	{
+		// Use extended advertisement
+
+		BtExtAdvParam_t extparam = {
+			.AdvHdl = 0,
+			.EvtProp = extprop,//BLE_EXT_ADV_EVT_PROP_CONNECTABLE,// | BLE_EXT_ADV_EVT_PROP_SCANNABLE,
+			.PrimIntervalMin = (uint16_t)mSecTo0_625(pCfg->AdvInterval),
+			.PrimIntervalMax = (uint16_t)mSecTo0_625(pCfg->AdvInterval + 50),
+			.PrimChanMap = 7,
+			.OwnAddrType = BT_ADDR_TYPE_PUBLIC,
+			.PrimPhy = BTADV_EXTADV_PHY_1M,
+			.SecondPhy = BTADV_EXTADV_PHY_2M,
+			.ScanNotifEnable = 0,
+		};
+
+		sdc_hci_cmd_le_set_ext_adv_params_t &exadvparm = *(sdc_hci_cmd_le_set_ext_adv_params_t*)&extparam;
+		sdc_hci_cmd_le_set_ext_adv_params_return_t rexadvparm;
+		int res = sdc_hci_cmd_le_set_ext_adv_params(&exadvparm, &rexadvparm);
+
+		if (res != 0)
+		{
+			return false;
+//			printf("sdc_hci_cmd_le_set_ext_adv_params : %x\n", res);
+		}
+
+		s_BtDevExtAdvData.adv_handle = 0;
+		s_BtDevExtAdvData.operation = 3;
+		s_BtDevExtAdvData.fragment_preference = 1;
+		s_BtDevExtAdvData.adv_data_length = advpkt->Len;
+
+		res = sdc_hci_cmd_le_set_ext_adv_data(&s_BtDevExtAdvData);
+		if (res != 0)
+		{
+			return false;
+//			printf("sdc_hci_cmd_le_set_ext_adv_data : %x\n", res);
+		}
+
+		if (srpkt->Len > 0)
+		{
+			s_BtDevExtSrData.adv_handle = 0;
+			s_BtDevExtSrData.operation = 3;
+			s_BtDevExtSrData.fragment_preference = 1;
+			s_BtDevExtSrData.scan_response_data_length = advpkt->Len;
+
+			res = sdc_hci_cmd_le_set_ext_scan_response_data(&s_BtDevExtSrData);
+			if (res != 0)
+			{
+				return false;
+//				printf("sdc_hci_cmd_le_set_ext_adv_data : %x\n", res);
+			}
+		}
+	}
+
+	return true;
 }
 
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
@@ -548,12 +934,14 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	s_BtAppData.Role = pCfg->Role;
-	/*
-	g_BleAppData.bExtAdv = pBleAppCfg->bExtAdv;
-	g_BleAppData.bScan = false;
-	g_BleAppData.bAdvertising = false;
-	g_BleAppData.VendorId = pBleAppCfg->VendorID;
-	*/
+
+	s_BtAppData.bExtAdv = pCfg->bExtAdv;
+	s_BtAppData.bScan = false;
+//	g_BtAppData.bAdvertising = false;
+	s_BtAppData.VendorId = pCfg->VendorId;
+	s_BtAppData.ProductId = pCfg->ProductId;
+	s_BtAppData.ProductVer = pCfg->ProductVer;
+	s_BtAppData.Appearance = pCfg->Appearance;
 	s_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	s_BtAppData.ConnLedPin = pCfg->ConnLedPin;
 	s_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
@@ -641,10 +1029,29 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+	{
+//    		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
+//    		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
+
+		BtGapServiceInit();//&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
+//    		s_BtDevSdc.NbSrvc++;
+//    		BtGattServiceInit(&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
+//    		s_BtDevSdc.NbSrvc++;
+
+//		BleAppInitUserServices();
+		BtAppInitCustomServices();
+	}
 
 	BtAppInitCustomData();
 
-	BtDevInit((BtDevCfg_t*)pCfg);
+    if (pCfg->Role & (BTDEV_ROLE_BROADCASTER | BTDEV_ROLE_PERIPHERAL))
+    {
+		if (BtAppAdvInit(pCfg) == false)
+		{
+			return false;
+		}
+    }
 /*
     BtGapInit(pCfg->Role);
 
@@ -678,9 +1085,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
     	}
 #endif
     }
-
-	BtGapSetDevName(pBleAppCfg->pDevName);
 */
+	BtGapSetDevName(pCfg->pDevName);
+
     //BleAppGapDeviceNameSet(pBleAppCfg->pDevName);
 
 #if (__FPU_USED == 1)
@@ -697,7 +1104,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	//BtHciInit(&s_BtDevCfg);
 
-	s_BtAppData.bInitialized = true;
+    s_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
 
 	return true;
@@ -705,14 +1112,14 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 void BtAppRun()
 {
-	if (s_BtAppData.bInitialized == false)
+	if (s_BtAppData.State != BTAPP_STATE_INITIALIZED)
 	{
 		return;
 	}
 
 	if (s_BtAppData.Role & (BTDEV_ROLE_PERIPHERAL | BTDEV_ROLE_BROADCASTER))
 	{
-		BtDevAdvStart();
+		BtAppAdvStart();
 	}
 
 
@@ -732,10 +1139,10 @@ void BtAppRun()
 			{
 				case SDC_HCI_MSG_TYPE_EVT:
 					// Event available
-					BtHciProcessEvent(BtDevGetInstance(), (BtHciEvtPacket_t*)buf);
+					BtHciProcessEvent(&s_BtHciDev, (BtHciEvtPacket_t*)buf);
 					break;
 				case SDC_HCI_MSG_TYPE_DATA:
-					BtHciProcessData(BtDevGetInstance(), (BtHciACLDataPacket_t*)buf);
+					BtHciProcessData(&s_BtHciDev, (BtHciACLDataPacket_t*)buf);
 					break;
 			}
 		}

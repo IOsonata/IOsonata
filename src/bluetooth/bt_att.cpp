@@ -44,7 +44,7 @@ SOFTWARE.
 
 //extern UART g_Uart;
 
-void BtAttSendError(BtDev_t * const pDev, BtHciACLDataPacket_t * const pAcl, uint16_t Hdl, uint8_t OpCode, uint8_t ErrCode)
+void BtAttSendError(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pAcl, uint16_t Hdl, uint8_t OpCode, uint8_t ErrCode)
 {
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)pAcl->Data;
 	BtAttErrorRsp_t *errsp = (BtAttErrorRsp_t*)&l2pdu->Att;
@@ -63,7 +63,7 @@ void BtAttSendError(BtDev_t * const pDev, BtHciACLDataPacket_t * const pAcl, uin
 //	g_Uart.printf("n=%d\r\n", n);
 }
 
-void BtProcessAttData(BtDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu)
+void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu)
 {
 	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;

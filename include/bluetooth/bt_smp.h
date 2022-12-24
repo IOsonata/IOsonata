@@ -118,7 +118,7 @@ typedef struct __Bt_Smp_Pairing_Confirm {
 extern "C" {
 #endif
 
-void BtProcessSmpData(BtDev_t * const pDev, BtL2CapPdu_t * const pRcvPdu);
+void BtProcessSmpData(BtHciDevice_t * const pDev, BtL2CapPdu_t * const pRcvPdu);
 
 #ifdef __cplusplus
 }

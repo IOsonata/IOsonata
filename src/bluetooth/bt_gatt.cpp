@@ -38,7 +38,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/bt_dev.h"
+//#include "bluetooth/bt_ctlr.h"
 
 #ifndef BT_GATT_ENTRY_MAX_COUNT
 #define BT_GATT_ENTRY_MAX_COUNT		100
@@ -525,7 +525,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 
 	if (p->Val32 & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
 	{
-		BtDevNotify(ConnHdl, pChar->ValHdl, pVal, Len);
+		BtCtlrNotify(ConnHdl, pChar->ValHdl, pVal, Len);
 	}
 
 	return true;

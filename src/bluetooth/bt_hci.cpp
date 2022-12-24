@@ -44,7 +44,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "coredev/uart.h"
 
-void BtProcessAttData(BtDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
+void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
 //extern UART g_Uart;
 
@@ -64,7 +64,8 @@ bool BtHciInit(BtHciDevCfg_t const *pCfg)
 	return true;
 }*/
 
-void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
+//void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
+void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 {
 //	g_Uart.printf("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
 
@@ -226,7 +227,7 @@ void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 	}
 }
 
-void BtHciProcessEvent(BtDev_t *pDev, BtHciEvtPacket_t *pEvtPkt)
+void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 {
 //	g_Uart.printf("### BtHciProcessEvent %x ###\r\n", pEvtPkt->Hdr.Evt);
 
@@ -394,7 +395,7 @@ void BtHciProcessEvent(BtDev_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 }
 
 
-void BtHciProcessData(BtDev_t * const pDev, BtHciACLDataPacket_t * const pPkt)
+void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt)
 {
 	BtL2CapPdu_t *l2frame = (BtL2CapPdu_t*)pPkt->Data;
 
@@ -444,7 +445,7 @@ void BtHciProcessData(BtDev_t * const pDev, BtHciACLDataPacket_t * const pPkt)
 */
 }
 
-void BtHciNotify(BtDev_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len)
+void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len)
 {
 	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;

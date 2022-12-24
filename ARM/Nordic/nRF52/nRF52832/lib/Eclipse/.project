@@ -1131,29 +1131,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_ctlr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ctlr.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_ctlr_nrf52.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/bt_ctlr_nrf52.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_ctlr_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_ctlr_sdc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_dev_nrf52.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_dev_nrf52.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_dev_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_dev_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gap.cpp</name>
@@ -1169,6 +1149,16 @@
 			<name>src/bluetooth/bt_gatt_nrf5.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gatt_nrf5.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gatt_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>$%7BPARENT-3-PROJECT_LOC%7D/src/bt_gatt_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gatt_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>$%7BPARENT-4-PROJECT_LOC%7D/src/bt_gatt_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_hci.cpp</name>

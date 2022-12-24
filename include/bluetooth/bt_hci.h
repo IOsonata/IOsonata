@@ -705,12 +705,12 @@ static inline uint16_t mSecTo1_25(float Val) {
 */
 
 //bool BtHciInit(BtHciDevCfg_t const *pCfg);
-void BtHciProcessData(BtDev_t * const pDev, BtHciACLDataPacket_t * const pPkt);
+void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt);
 
-static inline int BtHciSendData(BtDev_t * const pDev, void * const pData, int Len) {
+static inline int BtHciSendData(BtHciDevice_t * const pDev, void * const pData, int Len) {
 	return pDev->SendData(pData, Len);
 }
-void BtHciNotify(BtDev_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
+void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
 
 
 #ifdef __cplusplus
