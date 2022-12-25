@@ -52,11 +52,11 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
-#ifndef NRFXLIB_SDC
-#include "app_util_platform.h"
-#include "app_scheduler.h"
-#include "ble_app_nrf5.h"
-#endif
+//#ifndef NRFXLIB_SDC
+//#include "app_util_platform.h"
+//#include "app_scheduler.h"
+//#include "ble_app_nrf5.h"
+//#endif
 
 #include "sensors/bsec_interface.h"
 
@@ -129,8 +129,8 @@ const static TIMER_CFG s_TimerCfg = {
 
 Timer g_Timer;
 
-const BtDevCfg_t s_BtDevCfg = {
-	BTDEV_ROLE_BROADCASTER,
+const BtAppCfg_t s_BtDevCfg = {
+	BTAPP_ROLE_BROADCASTER,
 	0, 						// Number of central link
 	1, 						// Number of peripheral link
 	DEVICE_NAME,                 // Device name
@@ -144,8 +144,8 @@ const BtDevCfg_t s_BtDevCfg = {
 	sizeof(g_AdvDataBuff),      // Length of manufacture specific data
 	NULL,
 	0,
-	BTDEV_SECTYPE_NONE,    // Secure connection type
-	BTDEV_SECEXCHG_NONE,   // Security key exchange
+	BTGAP_SECTYPE_NONE,    // Secure connection type
+	BTAPP_SECEXCHG_NONE,   // Security key exchange
 	NULL,      				// Service uuids to advertise
 	0, 						// Total number of uuids
 	APP_ADV_INTERVAL_MSEC,       // Advertising interval in msec
@@ -481,7 +481,7 @@ void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
 void BtAppAdvTimeoutHandler()
 {
 	ReadPTHData();
-	BtDevAdvStart();//BLEAPP_ADVMODE_FAST);
+	BtAdvStart();//BLEAPP_ADVMODE_FAST);
 }
 
 void HardwareInit()

@@ -288,7 +288,7 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 	BtGattEvtHandler(Evt, pCtx);
 }
 
-void BtAppInitCustomServices()
+void BtAppInitUserServices()
 {
     bool res;
 
@@ -296,7 +296,7 @@ void BtAppInitCustomServices()
     //APP_ERROR_CHECK(err_code);
 }
 
-void BtAppInitCustomData()
+void BtAppInitUserData()
 {
 
 }

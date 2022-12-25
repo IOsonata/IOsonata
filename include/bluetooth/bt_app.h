@@ -221,13 +221,13 @@ extern "C" {
  * 	This function is called prio to initializing services
  *
  */
-void BtAppInitCustomData();
+void BtAppInitUserData();
 
 /**
  * @brief	User function to initialize all app services
  * 	This is called before initializing advertisement
  */
-void BtAppInitCustomServices();
+void BtAppInitUserServices();
 void BtAppEvtConnected(uint16_t ConnHdl);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx);

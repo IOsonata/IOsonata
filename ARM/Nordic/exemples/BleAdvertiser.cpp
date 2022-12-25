@@ -110,7 +110,7 @@ void TimerTrigEvtHandler(TimerDev_t * const pTimer, int TrigNo, void * const pCo
 	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
 }
 
-void BtAppInitCustomData()
+void BtAppInitUserData()
 {
 	g_Timer.Init(s_TimerCfg);
 

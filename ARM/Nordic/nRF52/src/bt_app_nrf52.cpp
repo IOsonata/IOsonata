@@ -1772,7 +1772,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
 	if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
 	{
-		BtAppInitCustomServices();
+		BtAppInitUserServices();
 	}
 
 	if (pCfg->pDevInfo != NULL)
@@ -1782,7 +1782,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     BtGattInit();
 
-    BtAppInitCustomData();
+    BtAppInitUserData();
 
     BtAppPeerMngrInit(pCfg->SecType, pCfg->SecExchg, false);//bEraseBond);
 

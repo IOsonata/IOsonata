@@ -296,7 +296,7 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 	BtGattEvtHandler(Evt, pCtx);
 }
 
-void BtAppInitCustomServices()
+void BtAppInitUserServices()
 {
     bool res;
 
@@ -336,7 +336,7 @@ void HardwareInit()
 	IOPinEnableInterrupt(0, APP_IRQ_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
-void BtAppInitCustomData()
+void BtAppInitUserData()
 {
 	// Add passkey pairing
     //ble_opt_t opt;

@@ -41,21 +41,21 @@ Modified by          Date              Description
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_app.h"
 
-__attribute__((weak)) void BtAppInitCustomData()
+__attribute__((weak)) void BtAppInitUserData()
 {
 
 }
 
-__attribute__((weak)) void BtDevInitCustomData()
-{
+//__attribute__((weak)) void BtDevInitCustomData()
+//{
 
-}
+//}
 
-__attribute__((weak)) void BtDevInitCustomSrvc()
-{
+//__attribute__((weak)) void BtDevInitCustomSrvc()
+//{
 
-}
-__attribute__((weak)) void BtAppInitCustomServices()
+//}
+__attribute__((weak)) void BtAppInitUserServices()
 {
 
 }

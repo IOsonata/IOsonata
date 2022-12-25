@@ -1040,10 +1040,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 //    		s_BtDevSdc.NbSrvc++;
 
 //		BleAppInitUserServices();
-		BtAppInitCustomServices();
+		BtAppInitUserServices();
 	}
 
-	BtAppInitCustomData();
+	BtAppInitUserData();
 
     if (pCfg->Role & (BTDEV_ROLE_BROADCASTER | BTDEV_ROLE_PERIPHERAL))
     {
