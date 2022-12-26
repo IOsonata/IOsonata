@@ -38,8 +38,6 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#include "bluetooth/bt_dev.h"
-
 /** @addtogroup Bluetooth
  * @{ */
 
@@ -715,12 +713,6 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 
 #ifdef __cplusplus
 }
-
-class HciIntrf : public DeviceIntrf {
-public:
-private:
-};
-
 #endif
 
 /** @} */

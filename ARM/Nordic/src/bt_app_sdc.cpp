@@ -54,7 +54,6 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/timer.h"
 #include "bluetooth/bt_app.h"
-#include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
 #include "bluetooth/bt_l2cap.h"
@@ -214,7 +213,7 @@ static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 
 void BtAppSetDevName(const char *pName)
 {
-	BtDevSetDevName(pName);
+	BtGapSetDevName(pName);
 }
 /*
 char * const BleAppGetDevName()
@@ -542,7 +541,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		srpkt = &s_BtDevSrPkt;
 	}
 
-	if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		if (pCfg->AdvTimeout != 0)
 		{
@@ -554,7 +553,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		}
 		extprop |= BTADV_EXTADV_EVT_PROP_CONNECTABLE;// | BLE_EXT_ADV_EVT_PROP_SCANNABLE;
 	}
-	else if (pCfg->Role & BTDEV_ROLE_BROADCASTER)
+	else if (pCfg->Role & BTAPP_ROLE_BROADCASTER)
 	{
 		//extprop |= BLE_EXT_ADV_EVT_PROP_OMIT_ADDR;
 		//extprop |= BLE_EXT_ADV_EVT_PROP_SCANNABLE;
@@ -602,7 +601,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
     	uidadvpkt = advpkt;
     }
 
-    if (pCfg->pAdvUuid != NULL && pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+    if (pCfg->pAdvUuid != NULL && pCfg->Role & BTAPP_ROLE_PERIPHERAL)
     {
     	if (BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
     	{
@@ -650,7 +649,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 			.adv_filter_policy = 0
 		};
 
-		if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+		if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 		{
 			advparam.adv_type = BTADV_TYPE_ADV_IND;
 		}
@@ -775,7 +774,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 			sdc_coex_adv_mode_configure(true);
 		}
 	}
-	if (pCfg->Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
+	if (pCfg->Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
 		// Config for central role
 		sdc_support_scan();
@@ -791,7 +790,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
     uint32_t ram = 0;
 	sdc_cfg_t cfg;
 
-	int l = pCfg->MaxMtu == 0 ? BTDEV_DEFAULT_MAX_DATA_LEN : pCfg->MaxMtu;
+	int l = pCfg->MaxMtu == 0 ? BTAPP_DEFAULT_MAX_DATA_LEN : pCfg->MaxMtu;
 	cfg.buffer_cfg.rx_packet_size = l;
 	cfg.buffer_cfg.tx_packet_size = l;
 	cfg.buffer_cfg.rx_packet_count = 4;
@@ -814,7 +813,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	if (pCfg->Role & (BTDEV_ROLE_PERIPHERAL | BTDEV_ROLE_BROADCASTER))
+	if (pCfg->Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
 		cfg.peripheral_count.count = pCfg->PeriLinkCount;
@@ -848,7 +847,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		}
 	}
 
-	if (pCfg->Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
+	if (pCfg->Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
 		// Config for central role
 		cfg.central_count.count = pCfg->CentLinkCount;
@@ -1029,7 +1028,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
 //    		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
 //    		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
@@ -1045,7 +1044,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	BtAppInitUserData();
 
-    if (pCfg->Role & (BTDEV_ROLE_BROADCASTER | BTDEV_ROLE_PERIPHERAL))
+    if (pCfg->Role & (BTAPP_ROLE_BROADCASTER | BTAPP_ROLE_PERIPHERAL))
     {
 		if (BtAppAdvInit(pCfg) == false)
 		{
@@ -1117,7 +1116,7 @@ void BtAppRun()
 		return;
 	}
 
-	if (s_BtAppData.Role & (BTDEV_ROLE_PERIPHERAL | BTDEV_ROLE_BROADCASTER))
+	if (s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		BtAppAdvStart();
 	}

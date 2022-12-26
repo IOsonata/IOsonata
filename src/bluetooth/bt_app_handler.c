@@ -38,7 +38,6 @@ Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 #include <stdbool.h>
 
-#include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_app.h"
 
 __attribute__((weak)) void BtAppInitUserData()

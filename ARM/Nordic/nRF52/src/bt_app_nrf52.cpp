@@ -41,6 +41,7 @@ SOFTWARE.
 #include "ble_hci.h"
 #include "nrf_error.h"
 #include "ble_gatt.h"
+#include "ble_gap.h"
 #include "ble_advdata.h"
 #include "ble_srv_common.h"
 #include "ble_advertising.h"
@@ -703,7 +704,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
    }
    // on_ble_evt(p_ble_evt);
 #if 1
-    if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtAppData.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
+    if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtAppData.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
     {
 #if 0
     	switch (p_ble_evt->header.evt_id)
@@ -724,7 +725,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 #endif
     	BtAppCentralEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
     }
-    if (s_BtAppData.Role & BTDEV_ROLE_PERIPHERAL)
+    if (s_BtAppData.Role & BTAPP_ROLE_PERIPHERAL)
     {
     	BtGattEvtHandler((uint32_t)p_ble_evt, p_context);
     	//BtAppPeriphEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
@@ -877,19 +878,19 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
 
     switch (SecType)
     {
-    	case BTDEV_SECTYPE_NONE:
+    	case BTGAP_SECTYPE_NONE:
 			break;
-		case BTDEV_SECTYPE_STATICKEY_NO_MITM:
+		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
 			break;
-		case BTDEV_SECTYPE_STATICKEY_MITM:
+		case BTGAP_SECTYPE_STATICKEY_MITM:
 			sec_param.mitm = 1;
 			break;
-		case BTDEV_SECTYPE_LESC_MITM:
-		case BTDEV_SECTYPE_SIGNED_MITM:
+		case BTGAP_SECTYPE_LESC_MITM:
+		case BTGAP_SECTYPE_SIGNED_MITM:
 			sec_param.mitm = 1;
 		    sec_param.lesc = 1;
 			break;
-		case BTDEV_SECTYPE_SIGNED_NO_MITM:
+		case BTGAP_SECTYPE_SIGNED_NO_MITM:
 		    sec_param.lesc = 1;
 			break;
     }
@@ -901,24 +902,24 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     	sec_param.mitm = 1;
     }
 */
-    int type = SecKeyExchg & (BTDEV_SECEXCHG_KEYBOARD | BTDEV_SECEXCHG_DISPLAY);
+    int type = SecKeyExchg & (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY);
     switch (type)
     {
-		case BTDEV_SECEXCHG_KEYBOARD:
+		case BTAPP_SECEXCHG_KEYBOARD:
 			sec_param.keypress = 1;
 			sec_param.io_caps  = BLE_GAP_IO_CAPS_KEYBOARD_ONLY;
 			break;
 
-		case BTDEV_SECEXCHG_DISPLAY:
+		case BTAPP_SECEXCHG_DISPLAY:
 			sec_param.io_caps  = BLE_GAP_IO_CAPS_DISPLAY_ONLY;
     			break;
-		case (BTDEV_SECEXCHG_KEYBOARD | BTDEV_SECEXCHG_DISPLAY):
+		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY):
 			sec_param.keypress = 1;
 			sec_param.io_caps  = BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY;
 			break;
     }
 
-    if (SecKeyExchg & BTDEV_SECEXCHG_OOB)
+    if (SecKeyExchg & BTAPP_SECEXCHG_OOB)
     {
     	sec_param.oob = 1;
 //    	nfc_ble_pair_init(&g_AdvInstance, NFC_PAIRING_MODE_JUST_WORKS);
@@ -1031,7 +1032,7 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 		srpkt = &s_BleAppSrPkt;
 	}
 
-	if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		if (pCfg->AdvTimeout != 0)
 		{
@@ -1045,7 +1046,7 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 												BLE_GAP_ADV_TYPE_EXTENDED_CONNECTABLE_NONSCANNABLE_UNDIRECTED :
 												BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
 	}
-	else if (pCfg->Role & BTDEV_ROLE_BROADCASTER)
+	else if (pCfg->Role & BTAPP_ROLE_BROADCASTER)
 	{
 		s_BtAppData.AdvParam.properties.type = pCfg->bExtAdv ?
 												BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED :
@@ -1093,7 +1094,7 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
     	uidadvpkt = advpkt;
     }
 
-    if (pCfg->pAdvUuid != NULL && pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+    if (pCfg->pAdvUuid != NULL && pCfg->Role & BTAPP_ROLE_PERIPHERAL)
     {
     	/*
     	if (pCfg->pAdvUuid->BaseIdx > 0 && pCfg->pAdvUuid->Type == BT_UUID_TYPE_16)
@@ -1737,7 +1738,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     // Initialize SoftDevice.
     BtAppStackInit(s_BtAppData.MaxMtu, pCfg->CentLinkCount, pCfg->PeriLinkCount,
-    				pCfg->Role & BTDEV_ROLE_PERIPHERAL);
+    				pCfg->Role & BTAPP_ROLE_PERIPHERAL);
     				//pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND);
 //    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
 
@@ -1770,7 +1771,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
 	conn_params_init();
 
-	if (pCfg->Role & BTDEV_ROLE_PERIPHERAL)
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		BtAppInitUserServices();
 	}

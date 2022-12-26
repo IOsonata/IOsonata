@@ -42,7 +42,6 @@ SOFTWARE.
 #include <stddef.h>
 
 #include "bluetooth/bt_l2cap.h"
-#include "bluetooth/bt_dev.h"
 
 #define BT_SMP_CODE_PAIRING_REQ						1
 #define BT_SMP_CODE_PAIRING_RSP						2

@@ -38,10 +38,9 @@ SOFTWARE.
 #include "istddef.h"
 #include "cfifo.h"
 #include "bluetooth/bt_intrf.h"
-#include "bluetooth/bt_dev.h"
-#include "interrupt.h"
-//#include "bluetooth/ble_srvc.h"
+#include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
+#include "interrupt.h"
 
 #define BTINTRF_PACKET_SIZE		(20)// + sizeof(BLEINTRF_PKT) - 1)
 #define BTINTRF_CFIFO_SIZE		BTINTRF_CFIFO_TOTAL_MEMSIZE(2, BTINTRF_PACKET_SIZE)
