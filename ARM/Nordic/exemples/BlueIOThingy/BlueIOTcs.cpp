@@ -34,7 +34,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
 
-#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_app.h"
 #include "board.h"
 #include "BlueIOThingy.h"
 
@@ -104,6 +104,6 @@ BtGattSrvc_t *GetConfSrvcInstance()
 
 uint32_t ConfSrvcInit()
 {
-	return BtDevAddSrvc(&g_ConfSrvc, &s_ConfSrvcCfg);
+	return BtGattSrvcAdd(&g_ConfSrvc, &s_ConfSrvcCfg);
 }
 

@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <inttypes.h>
 
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_app.h"
 #include "board.h"
 #include "BlueIOThingy.h"
 
@@ -157,7 +157,7 @@ BtGattSrvc_t *GetEnvSrvcInstance()
 
 uint32_t EnvSrvcInit()
 {
-	return BtDevAddSrvc(&g_EnvSrvc, &s_EnvSrvcCfg);
+	return BtGattSrvcAdd(&g_EnvSrvc, &s_EnvSrvcCfg);
 }
 
 void EnvSrvcNotifTemp(float Temp)
@@ -168,7 +168,7 @@ void EnvSrvcNotifTemp(float Temp)
     t.integer = (int)Temp;
     t.decimal = (uint8_t)((Temp - (float)t.integer) * 100.0);
 
-	BtDevNotify(&g_EnvSrvc.pCharArray[THINGY_TES_TEMPCHAR_IDX], (uint8_t*)&t, sizeof(t));
+	BtAppNotify(&g_EnvSrvc.pCharArray[THINGY_TES_TEMPCHAR_IDX], (uint8_t*)&t, sizeof(t));
 }
 
 
@@ -180,13 +180,13 @@ void EnvSrvcNotifPressure(float Press)
     b.decimal = (uint8_t)((Press - (float)b.integer) * 100.0);
 
     BtGattSrvc_t *p = GetEnvSrvcInstance();
-    BtDevNotify(&p->pCharArray[THINGY_TES_PRESCHAR_IDX], (uint8_t*)&b, sizeof(b));
+    BtAppNotify(&p->pCharArray[THINGY_TES_PRESCHAR_IDX], (uint8_t*)&b, sizeof(b));
 }
 
 void EnvSrvcNotifHumi(uint8_t Humi)
 {
 	BtGattSrvc_t *p = GetEnvSrvcInstance();
-	BtDevNotify(&p->pCharArray[THINGY_TES_HUMICHAR_IDX], &Humi, sizeof(Humi));
+	BtAppNotify(&p->pCharArray[THINGY_TES_HUMICHAR_IDX], &Humi, sizeof(Humi));
 }
 
 

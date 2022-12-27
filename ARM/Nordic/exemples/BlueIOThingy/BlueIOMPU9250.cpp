@@ -9,7 +9,7 @@
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
-#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_gap.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "device_intrf.h"
@@ -242,7 +242,7 @@ static void mpulib_tap_cb(unsigned char direction, unsigned char count)
 static void mpulib_orient_cb(unsigned char orientation)
 {
 	BtGattSrvc_t *p = GetImuSrvcInstance();
-	BtDevNotify(&p->pCharArray[2], &orientation, 1);
+	BtAppNotify(&p->pCharArray[2], &orientation, 1);
 
 /*    if (m_motion.features & DRV_MOTION_FEATURE_MASK_ORIENTATION)
     {

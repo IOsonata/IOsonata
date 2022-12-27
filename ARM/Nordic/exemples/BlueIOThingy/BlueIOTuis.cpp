@@ -136,7 +136,7 @@ static BtGattChar_t s_UIChars[] = {
 
 /// Service definition
 const BtGattSrvcCfg_t s_UISrvcCfg = {
-    BTDEV_SECTYPE_NONE,       	// Secure or Open service/char
+    0,//BTDEV_SECTYPE_NONE,       	// Secure or Open service/char
 	true,
     THINGY_BASE_UUID,           	// Base UUID
     BLE_UUID_TUIS_SERVICE,       	// Service UUID
@@ -157,7 +157,7 @@ BtGattSrvc_t *GetUISrvcInstance()
 
 uint32_t UISrvcInit()
 {
-	return BtDevAddSrvc(&g_UISrvc, &s_UISrvcCfg);
+	return BtGattSrvcAdd(&g_UISrvc, &s_UISrvcCfg);
 }
 
 void LedCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)

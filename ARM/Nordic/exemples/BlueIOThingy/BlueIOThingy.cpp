@@ -154,8 +154,8 @@ BtUuidArr_t s_AdvUuids = {
 	.Uuid16 = {BLE_UUID_TCS_SERVICE,},
 };
 
-const BtDevCfg_t s_BleAppCfg = {
-	.Role = BTDEV_ROLE_PERIPHERAL,
+const BtAppCfg_t s_BleAppCfg = {
+	.Role = BTAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
 	.pDevName = DEVICE_NAME,			// Device name
@@ -168,8 +168,8 @@ const BtDevCfg_t s_BleAppCfg = {
 	.AdvManDataLen = sizeof(g_AdvDataBuff),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BTDEV_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BTDEV_SECEXCHG_NONE,	// Security key exchange
+	.SecType = BTGAP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
 	.bCompleteUuidList = true,
 	.pAdvUuid = &s_AdvUuids,      			// Service uuids to advertise
 	//.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(ble_uuid_t), 					// Total number of uuids
@@ -426,7 +426,7 @@ void ReadPTHData()
 	g_TphSensor.StartSampling();
 
 	// Update advertisement data
-	BtDevAdvManDataSet(g_AdvDataBuff, sizeof(g_AdvDataBuff), NULL, 0);
+	BtAppAdvManDataSet(g_AdvDataBuff, sizeof(g_AdvDataBuff), NULL, 0);
 
 	EnvSrvcNotifTemp((float)data.Temperature / 100.0);
 
@@ -461,7 +461,7 @@ void TimerHandler(Timer *pTimer, uint32_t Evt)
 }
 
 /// BLE event handler.  Need this to handle events for the services
-void BtAppPeriphEvtHandler(uint32_t p_ble_evt, void *pCtx)
+void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 {
 #ifndef USE_TIMER_UPDATE
     if (p_ble_evt->header.evt_id == BLE_GAP_EVT_TIMEOUT)
@@ -472,10 +472,11 @@ void BtAppPeriphEvtHandler(uint32_t p_ble_evt, void *pCtx)
     }
 #endif
 
-    BtGattEvtHandler(GetConfSrvcInstance(), p_ble_evt);
-    BtGattEvtHandler(GetUISrvcInstance(), p_ble_evt);
-    BtGattEvtHandler(GetEnvSrvcInstance(), p_ble_evt);
-    BtGattEvtHandler(GetImuSrvcInstance(), p_ble_evt);
+    BtGattEvtHandler(Evt, pCtx);
+//    BtGattEvtHandler(GetConfSrvcInstance(), p_ble_evt);
+//    BtGattEvtHandler(GetUISrvcInstance(), p_ble_evt);
+//    BtGattEvtHandler(GetEnvSrvcInstance(), p_ble_evt);
+//    BtGattEvtHandler(GetImuSrvcInstance(), p_ble_evt);
 }
 
 /// Initialize all services needed for this firmware

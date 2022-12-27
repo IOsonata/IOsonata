@@ -41,12 +41,11 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "convutil.h"
-#include "bluetooth/ble_app.h"
-#include "ble_app_nrf5.h"
-#include "ble_intrf.h"
-#include "ble_service.h"
+#include "bluetooth/bt_app.h"
+#include "bluetooth/bt_intrf.h"
+#include "bluetooth/bt_gap.h"
 #include "bluetooth/blueio_blesrvc.h"
-#include "bluetooth/ble_hcidef.h"
+#include "bluetooth/bt_gatt.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
 #include "custom_board.h"
@@ -56,8 +55,8 @@ SOFTWARE.
 //#include "audio/audiodev.h"
 #include "board.h"
 
-void MicCharSetNotify(BLESRVC *pBleSvc, bool bEnable);
-void CfgSrvcCallback(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len);
+void MicCharSetNotify(BtGattChar_t *pBleSvc, bool bEnable);
+void CfgSrvcCallback(BtGattChar_t *pBleSvc, uint8_t *pData, int Offset, int Len);
 
 #define DEVICE_NAME                     "BlePdmDemo"                          /**< Name of device. Will be included in the advertising data. */
 
@@ -108,10 +107,16 @@ typedef struct __Pdm_Packet {
 	int16_t Data[PDM_BUFF_MAXLEN / 2];
 } PdmPacket_t;
 
-void UartTxSrvcCallback(BLESRVC *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
+//void UartTxSrvcCallback(BtGattChar_t *pBlueIOSvc, uint8_t *pData, int Offset, int Len);
 
-static const ble_uuid_t  s_AdvUuids[] = {
-	{BLE_PDM_UUID_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
+//static const ble_uuid_t  s_AdvUuids[] = {
+//	{BLE_PDM_UUID_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
+//};
+static const BtUuidArr_t s_AdvUuid = {
+	.BaseIdx = 1,
+	.Type = BT_UUID_TYPE_16,
+	.Count = 1,
+	.Uuid16 = {BLE_PDM_UUID_SERVICE,}
 };
 
 static const char s_CfgCharDescString[] = {
@@ -124,18 +129,20 @@ static const char s_DataCharDescString[] = {
 
 uint8_t g_ManData[8];
 
+static uint8_t s_PdmWrChar = 0;
+
 /// Characteristic definitions
-BleSrvcChar_t g_PdmChars[] = {
+BtGattChar_t g_PdmChars[] = {
 	{
 		// Write characteristic
 		.Uuid = BLE_PDM_CFG_UUID_CHAR,		// char UUID
 		.MaxDataLen = 1,					// char max data length
-		.Property = BLESVC_CHAR_PROP_WRITE ,	// char properties define by BLUEIOSVC_CHAR_PROP_...
+		.Property = BT_GATT_CHAR_PROP_WRITE ,	// char properties define by BLUEIOSVC_CHAR_PROP_...
 		.pDesc = s_CfgCharDescString,	// char UTF-8 description string
 		.WrCB = CfgSrvcCallback,	// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		.pDefValue = NULL,					// pointer to char default values
+		.pValue = &s_PdmWrChar,					// pointer to char default values
 		.ValueLen = 0						// Default value length in bytes
 	},
 	{
@@ -143,35 +150,36 @@ BleSrvcChar_t g_PdmChars[] = {
 		.Uuid = BLE_PDM_DATA_UUID_CHAR,
 		.MaxDataLen = sizeof(PdmPacket_t),
 		.Property =
-		BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN,
+				BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
 		.pDesc = s_DataCharDescString,		// char UTF-8 description string
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = MicCharSetNotify,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		.pDefValue = NULL,					// pointer to char default values
+		.pValue = NULL,					// pointer to char default values
 		.ValueLen = 0,						// Default value length in bytes
 	},
 };
 
-static const int s_BlePdmNbChar = sizeof(g_PdmChars) / sizeof(BleSrvcChar_t);
+static const int s_BlePdmNbChar = sizeof(g_PdmChars) / sizeof(BtGattChar_t);
 
 uint8_t g_LWrBuffer[512];
 
 /// Service definition
-const BleSrvcCfg_t s_PdmSrvcCfg = {
-	.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
-	.UuidBase = {BLE_PDM_UUID_BASE,},		// Base UUID
-	1,
-	.UuidSvc = BLE_PDM_UUID_SERVICE,		// Service UUID
+const BtGattSrvcCfg_t s_PdmSrvcCfg = {
+	//.SecType = BT_GATT_SRVC_SECTYPE_NONE,		// Secure or Open service/char
+	.bCustom = true,
+	.UuidBase = BLE_PDM_UUID_BASE,		// Base UUID
+//	1,
+	.UuidSrvc = BLE_PDM_UUID_SERVICE,		// Service UUID
 	.NbChar = s_BlePdmNbChar,				// Total number of characteristics for the service
 	.pCharArray = g_PdmChars,				// Pointer a an array of characteristic
 	.pLongWrBuff = g_LWrBuffer,				// pointer to user long write buffer
 	.LongWrBuffSize = sizeof(g_LWrBuffer),	// long write buffer size
 };
 
-BleSrvc_t g_BlePdmSrvc;
+BtGattSrvc_t g_BlePdmSrvc;
 
-const BleAppDevInfo_t s_BlePdmDevDesc = {
+const BtAppDevInfo_t s_BlePdmDevDesc = {
 	MODEL_NAME,       		// Model name
 	MANUFACTURER_NAME,		// Manufacturer name
 	"123",					// Serial number string
@@ -179,24 +187,24 @@ const BleAppDevInfo_t s_BlePdmDevDesc = {
 	"0.0",					// Hardware version string
 };
 
-const BleAppCfg_t s_BleAppCfg = {
-	.Role = BLEAPP_ROLE_PERIPHERAL,
+const BtAppCfg_t s_BleAppCfg = {
+	.Role = BTAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
 	//.AppMode = BLEAPP_MODE_APPSCHED,	// Use scheduler
 	.pDevName = DEVICE_NAME,			// Device name
-	.VendorID = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
+	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
 	.Appearance = 0,
-	.pDevDesc = &s_BlePdmDevDesc,
+	.pDevInfo = &s_BlePdmDevDesc,
 	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BLEAPP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BLEAPP_SECEXCHG_NONE,	// Security key exchange
+	.SecType = BTGAP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
 	.pAdvUuid = NULL,      			// Service uuids to advertise
 	//.NbAdvUuid = 0, 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -214,13 +222,13 @@ const BleAppCfg_t s_BleAppCfg = {
 
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-#define BLEINTRF_FIFOSIZE			BLEINTRF_CFIFO_TOTAL_MEMSIZE(20, sizeof(PdmPacket_t))
+#define BLEINTRF_FIFOSIZE			BTINTRF_CFIFO_TOTAL_MEMSIZE(20, sizeof(PdmPacket_t))
 
 alignas(4) static uint8_t s_BleIntrfRxFifo[BLEINTRF_FIFOSIZE];
 alignas(4) static uint8_t s_BleIntrfTxFifo[BLEINTRF_FIFOSIZE];
 
 
-static const BleIntrfCfg_t s_BleInrfCfg = {
+static const BtIntrfCfg_t s_BleInrfCfg = {
 	&g_BlePdmSrvc,
 	0,
 	1,
@@ -233,7 +241,7 @@ static const BleIntrfCfg_t s_BleInrfCfg = {
 	nullptr,//BleIntrfEvtCallback,
 };
 
-BleIntrf g_BleIntrf;
+BtIntrf g_BleIntrf;
 
 static const IOPinCfg_t s_PdmPins[] = {
 	{ICS_41352_CLK_PORT, ICS_41352_CLK_PIN, ICS_41352_CLK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -273,7 +281,7 @@ int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
 volatile bool g_bEnable = false;
 
-int BleIntrfEvtCallback(DEVINTRF *pDev, DEVINTRF_EVT EvtId, uint8_t *pData, int Len)
+int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pData, int Len)
 {
 //	g_InactCntdwn = g_InactTimeOut;
 
@@ -285,12 +293,12 @@ int BleIntrfEvtCallback(DEVINTRF *pDev, DEVINTRF_EVT EvtId, uint8_t *pData, int 
 	return 0;
 }
 
-void CfgSrvcCallback(BLESRVC *pBleSvc, uint8_t *pData, int Offset, int Len)
+void CfgSrvcCallback(BtGattChar_t *pBleSvc, uint8_t *pData, int Offset, int Len)
 {
 
 }
 
-void MicCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
+void MicCharSetNotify(BtGattChar_t *pBleSvc, bool bEnable)
 {
 	g_bEnable = bEnable;
 	if (bEnable)
@@ -307,22 +315,26 @@ void MicCharSetNotify(BLESRVC *pBleSvc, bool bEnable)
 	}
 }
 
-void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
+void BtPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
+	/*
+	ble_evt_t *p_ble_evt = (ble_evt_t*)Evt;
+
     switch (p_ble_evt->header.evt_id)
     {
     	case BLE_GAP_EVT_DISCONNECTED:
     		PdmStop(&g_PdmDev);
     		break;
     }
-    BleSrvcEvtHandler(&g_BlePdmSrvc, p_ble_evt);
+    BleSrvcEvtHandler(&g_BlePdmSrvc, p_ble_evt);*/
+	BtGattEvtHandler(Evt, pCtx);
 }
 
-void BleAppInitUserServices()
+void BtAppInitUserServices()
 {
     uint32_t       err_code;
 
-    err_code = BleSrvcInit(&g_BlePdmSrvc, &s_PdmSrvcCfg);
+    err_code = BtGattSrvcAdd(&g_BlePdmSrvc, &s_PdmSrvcCfg);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -433,7 +445,7 @@ void HardwareInit()
 	PdmInit(&g_PdmDev, &s_PdmCfg);
 }
 
-void BleAppInitUserData()
+void BtAppInitUserData()
 {
 	// Add passkey pairing
 //    ble_opt_t opt;
@@ -460,11 +472,11 @@ int main()
 {
    HardwareInit();
 
-    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
+    BtAppInit(&s_BleAppCfg);//, true);
 
     g_BleIntrf.Init(s_BleInrfCfg);
 
-    BleAppRun();
+    BtAppRun();
 
 	return 0;
 }

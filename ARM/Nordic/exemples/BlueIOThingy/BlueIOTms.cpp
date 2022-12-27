@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_intrf.h"
-#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_app.h"
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
 #include "sensors/mag_sensor.h"
@@ -365,7 +365,7 @@ BtGattSrvc_t *GetImuSrvcInstance()
 
 uint32_t ImuSrvcInit()
 {
-	return BtDevAddSrvc(&g_ImuSrvc, &s_ImuSrvcCfg);
+	return BtGattSrvcAdd(&g_ImuSrvc, &s_ImuSrvcCfg);
 }
 
 void ImuConfCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
@@ -409,7 +409,7 @@ void ImuQuatDataSend(long Quat[4])
 	q[3] = Quat[3];
 #endif
 
-	uint32_t err = BtDevNotify(&g_ImuSrvc.pCharArray[IMUCHAR_IDX_QUAT], (uint8_t*)q, sizeof(long) * 4);
+	uint32_t err = BtAppNotify(&g_ImuSrvc.pCharArray[IMUCHAR_IDX_QUAT], (uint8_t*)q, sizeof(long) * 4);
 	if (err != 0)
 	{
 		//printf("quat Error %x\r\n", err);
@@ -444,7 +444,7 @@ void ImuRawDataSend(ACCELSENSOR_DATA &AccData, GYROSENSOR_DATA GyroData, MAGSENS
 	raw.compass.y = MagData.Y / 256;
 	raw.compass.z = MagData.Z / 256;
 
-	uint32_t err = BtDevNotify(&GetImuSrvcInstance()->pCharArray[5], (uint8_t*)&raw, sizeof(ble_tms_raw_t));
+	uint32_t err = BtAppNotify(&GetImuSrvcInstance()->pCharArray[5], (uint8_t*)&raw, sizeof(ble_tms_raw_t));
 	if (err != 0)
 	{
 		///printf("raw Error %x\r\n", err);
