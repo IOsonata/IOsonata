@@ -480,7 +480,7 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 }
 
 /// Initialize all services needed for this firmware
-void BtDevInitCustomSrvc()
+void BtAppInitUserServices()
 {
     uint32_t res = 0;
 
