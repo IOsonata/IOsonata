@@ -134,7 +134,8 @@ BtGattChar_t g_UartChars[] = {
 uint8_t g_LWrBuffer[512];
 
 const BtGattSrvcCfg_t s_UartSrvcCfg = {
-	BTDEV_SECTYPE_NONE,	    // Secure or Open service/char
+	//BTDEV_SECTYPE_NONE,	    // Secure or Open service/char
+	0,
 	true,
 	BLUEIO_UUID_BASE,        // Base UUID
 	BLUEIO_UUID_UART_SERVICE,   // Service UUID
@@ -146,7 +147,7 @@ const BtGattSrvcCfg_t s_UartSrvcCfg = {
 
 BtGattSrvc_t g_UartBleSrvc;
 
-const BtDevInfo_t s_UartBleDevDesc {
+const BtAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           // Model name
 	MANUFACTURER_NAME,          // Manufacturer name
 	"",                     // Serial number string
@@ -156,8 +157,8 @@ const BtDevInfo_t s_UartBleDevDesc {
 
 uint32_t SD_FreeRTOS_Handler(void);
 
-const BtDevCfg_t s_BleAppCfg = {
-	.Role = BTDEV_ROLE_PERIPHERAL,
+const BtAppCfg_t s_BleAppCfg = {
+	.Role = BTAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link
 	.pDevName = DEVICE_NAME,			// Device name
@@ -170,8 +171,8 @@ const BtDevCfg_t s_BleAppCfg = {
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BTDEV_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BTDEV_SECEXCHG_NONE,	// Security key exchange
+	.SecType = BTGAP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
+	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
 	.pAdvUuid = NULL,      			// Service uuids to advertise
 	//.NbAdvUuid = 0, 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -368,7 +369,7 @@ static void RxTask(void * pvParameter)
         int l = g_Uart.Rx(buff, 128);
         if (l > 0)
         {
-            BtDevNotify(&g_UartBleSrvc.pCharArray[0], buff, l);
+            BtAppNotify(&g_UartBleSrvc.pCharArray[0], buff, l);
         }
     }
 }
