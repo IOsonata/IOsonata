@@ -7,6 +7,18 @@ Low freq timers, RTC, are assigned to device number from 0 to TIMER_NRFX_RTC_MAX
 High freq timers, TIMER, are assigned to device number from TIMER_NRFX_RTC_MAX to
 TIMER_NRFX_RTC_MAX + TIMER_NRFX_HF_MAX -1
 
+Device number mapping as follow:
+
+DevNo		nRF52832 hardware		Clock type		Max Freq (Hz)	Used by SoftDevice
+  0			RTC0					LFCLK			32k				Y
+  1			RTC1					LFCLK			32k				Y
+  2			RTC2					LFCLK			32k
+  3			TIMER0					HFCLK			16M				Y
+  4			TIMER1					HFCLK			16M
+  5			TIMER2					HFCLK			16M
+  6			TIMER3					HFCLK			16M
+  7			TIMER4					HFCLK			16M
+
 @author	Hoang Nguyen Hoan
 @date	Sep. 7, 2017
 
