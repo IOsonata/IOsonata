@@ -372,16 +372,25 @@ bool BtIntrfInit(BtDevIntrf_t *pIntrf, const BtIntrfCfg_t *pCfg)
 	pIntrf->DevIntrf.pDevData = (void*)pIntrf;
 	pIntrf->pSrvc = pCfg->pSrvc;
 	pIntrf->pSrvc->pContext = pIntrf;
+	pIntrf->RxCharIdx = -1;
+	pIntrf->TxCharIdx = -1;
 
-	pIntrf->RxCharIdx = pCfg->RxCharIdx;
-	pIntrf->TxCharIdx = pCfg->TxCharIdx;
+	if (pCfg->RxCharIdx < pCfg->pSrvc->NbChar)
+	{
+		pIntrf->RxCharIdx = pCfg->RxCharIdx;
+	}
 
-	if (pIntrf->RxCharIdx >= 0)
+	if (pCfg->TxCharIdx < pCfg->pSrvc->NbChar)
+	{
+		pIntrf->TxCharIdx = pCfg->TxCharIdx;
+	}
+
+	if (pIntrf->RxCharIdx >= 0 &&  pIntrf->RxCharIdx < pCfg->pSrvc->NbChar)
 	{
 		pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].WrCB = BtIntrfRxWrCB;
 	}
 
-	if (pIntrf->TxCharIdx >= 0)
+	if (pIntrf->TxCharIdx >= 0 &&  pIntrf->TxCharIdx < pCfg->pSrvc->NbChar)
 	{
 		pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx].TxCompleteCB = BtIntrfTxComplete;
 	}
