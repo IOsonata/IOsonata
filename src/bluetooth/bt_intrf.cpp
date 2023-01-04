@@ -203,6 +203,11 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
     bool res = true;
     uint16_t connhdl = BtGapGetConnection();
 
+    if (pIntrf->TxCharIdx < 0)
+    {
+    	return false;
+    }
+
     if (pIntrf->TransBuffLen > 0)
     {
     	res = BtGattCharNotify(connhdl, &pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx], pIntrf->TransBuff, pIntrf->TransBuffLen);
@@ -371,8 +376,15 @@ bool BtIntrfInit(BtDevIntrf_t *pIntrf, const BtIntrfCfg_t *pCfg)
 	pIntrf->RxCharIdx = pCfg->RxCharIdx;
 	pIntrf->TxCharIdx = pCfg->TxCharIdx;
 
-	pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].WrCB = BtIntrfRxWrCB;
-	pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx].TxCompleteCB = BtIntrfTxComplete;
+	if (pIntrf->RxCharIdx >= 0)
+	{
+		pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].WrCB = BtIntrfRxWrCB;
+	}
+
+	if (pIntrf->TxCharIdx >= 0)
+	{
+		pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx].TxCompleteCB = BtIntrfTxComplete;
+	}
 	//pIntrf->pSrvc->pCharArray[pIntrf->RxCharIdx].pSrvc = pIntrf->pSrvc;
 	//pIntrf->pSrvc->pCharArray[pIntrf->TxCharIdx].pSrvc = pIntrf->pSrvc;
 
