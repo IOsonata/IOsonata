@@ -109,14 +109,6 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 //uint32_t BleSrvcCharSetValue(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	//uint16_t hdl = BtGapGetConnection();
-
-	if (s_ConnHandle == BT_GATT_HANDLE_INVALID)
-	{
-		//return NRF_ERROR_INVALID_STATE;
-		return false;
-	}
-
 	ble_gatts_value_t value;
 
     memset(&value, 0, sizeof(ble_gatts_value_t));
