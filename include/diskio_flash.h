@@ -447,6 +447,75 @@ extern "C" {
 }
 #endif
 
+/// 512Mb MT25QL512 Flash definition
+#define FLASH_MT25QL512(InitCB, WaitCB)		{ \
+	.DevNo = 0, \
+	.TotalSize = 512 * 1024 / 8, \
+	.SectSize = 4, \
+	.BlkSize = 32, \
+	.WriteSize = 256, \
+	.AddrSize = 4, \
+	.DevId = 0x20ba20, \
+	.DevIdSize = 3, \
+	.pInitCB = InitCB,\
+	.pWaitCB = WaitCB }
+
+/// Micron N25Q128A 128Mb, QUAD
+#define FLASH_N25Q128A(InitCB, WaitCB)		{ \
+    .DevNo = 0, \
+    .TotalSize = 128 * 1024 / 8, \
+	.SectSize = 4, \
+    .BlkSize = 32, \
+    .WriteSize = 256, \
+    .AddrSize = 3, \
+    .pInitCB = InitCB, \
+    .pWaitCB = WaitCB, \
+	.RdCmd = { FLASH_CMD_QREAD, 10}, \
+	.WrCmd = { FLASH_CMD_QWRITE, 0 }, }
+
+/// Macronix MX25R3235F 32Mb Quad
+#define FLASH_MX25R3235F(InitCB, WaitCB)		{ \
+    .DevNo = 0, \
+    .TotalSize = 32 * 1024 / 8, \
+	.SectSize = 4, \
+    .BlkSize = 64,\
+    .WriteSize = 256, \
+    .AddrSize = 3, \
+    .pInitCB = InitCB, \
+    .pWaitCB = WaitCB, \
+	.RdCmd = { FLASH_CMD_4READ, 6}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+
+/// Macronix MX25R6435F 64Mb Quad
+#define FLASH_MX25R6435F(InitCB, WaitCB)		{ \
+    .DevNo = 0, \
+    .TotalSize = 64 * 1024 / 8, \
+	.SectSize = 4, \
+    .BlkSize = 64, \
+    .WriteSize = 256, \
+    .AddrSize = 3, \
+	.DevId = 0x1728c2, \
+	.DevIdSize = 3, \
+    .pInitCB = InitCB, \
+    .pWaitCB = WaitCB, \
+	.RdCmd = { FLASH_CMD_4READ, 6}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+
+/// IS25LP512M 512Mb Quad
+#define FLASH_IS25LP512(InitCB, WaitCB)			{ \
+	.DevNo = 0, \
+	.TotalSize = 512 * 1024 / 8, \
+	.SectSize = 4, \
+	.BlkSize = 32, \
+	.WriteSize = 256, \
+	.AddrSize = 4, \
+	.DevId = 0x1a609d, \
+	.DevIdSize = 3, \
+	.pInitCB = InitCB, \
+	.pWaitCB = WaitCB, \
+	.RdCmd = { FLASH_CMD_4READ, 6}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+
 /** @} End of group Storage */
 
 #endif	// __DISKIO_FLASH_H__
