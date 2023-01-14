@@ -473,6 +473,17 @@ extern "C" {
 	.RdCmd = { FLASH_CMD_QREAD, 10}, \
 	.WrCmd = { FLASH_CMD_QWRITE, 0 }, }
 
+/// MX25U1635E 16Mb
+#define FLASH_MX25U1635E(InitCB, WaitCB)		{ \
+	.DevNo = 0, \
+	.TotalSize = 32 * 1024 / 8, \
+	.SectSize = 4, \
+	.BlkSize = 32, \
+	.WriteSize = 256, \
+	.AddrSize = 3, \
+	.pInitCB = InitCB, \
+	.pWaitCB = WaitCB, }
+
 /// Macronix MX25R3235F 32Mb Quad
 #define FLASH_MX25R3235F(InitCB, WaitCB)		{ \
     .DevNo = 0, \
