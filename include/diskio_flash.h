@@ -512,7 +512,7 @@ extern "C" {
 	.DevId = 0x1920c2, \
 	.DevIdSize = 3, \
 	.pInitCB = InitCB, \
-	.pWaitCB = WaiCB, \
+	.pWaitCB = WaitCB, \
 	.RdCmd = { FLASH_CMD_QREAD, 6}, \
 	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
 
