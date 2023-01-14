@@ -501,6 +501,21 @@ extern "C" {
 	.RdCmd = { FLASH_CMD_4READ, 6}, \
 	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
 
+/// MX25L25645G 256Mb
+#define FLASH_MX25L25645G(InitCB, WaitCB)		{ \
+	.DevNo = 0, \
+	.TotalSize = 256 * 1024 / 8, \
+	.SectSize = 4, \
+	.BlkSize = 32, \
+	.WriteSize = 256, \
+	.AddrSize = 4, \
+	.DevId = 0x1920c2, \
+	.DevIdSize = 3, \
+	.pInitCB = InitCB, \
+	.pWaitCB = WaiCB, \
+	.RdCmd = { FLASH_CMD_QREAD, 6}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+
 /// IS25LP512M 512Mb Quad
 #define FLASH_IS25LP512(InitCB, WaitCB)			{ \
 	.DevNo = 0, \
