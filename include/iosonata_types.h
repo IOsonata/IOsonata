@@ -67,40 +67,40 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #pragma pack(push, 1)
 
 /// Temperature, Pressure, Humidity sensor data
-typedef struct __TempPresHumi_Sensor {
+typedef struct __TempPresHumi_Sensor_Data {
 	uint32_t Pressure;			//!< Barometric pressure in Pa no decimal
 	int16_t  Temperature;		//!< Temperature in degree C, 2 decimals fixed point
 	uint16_t Humidity;			//!< Relative humidity in %, 2 decimals fixed point
-} TphSensor_t;
+} TphSensorData_t;
 
 /// Air quality gas sensor data
-typedef struct __AirQual_Sensor {
+typedef struct __AirQual_Sensor_Data {
 	uint32_t GasRes;			//!< Gas resistance
 	uint16_t AirQIdx;			//!< Air quality index
 	uint8_t	AirQuality;			//!< Indicate air quality
-} AQSensor_t;
-
+} AQSensorV_t;
+#if 0
 /// Accelerometer data
-typedef struct __Accel_Sensor {
+typedef struct __Accel_Sensor_Data {
 	uint16_t AccelX;
 	uint16_t AccelY;
 	uint16_t AccelZ;
-} AccelSensor_t;
+} AccelSensorData_t;
 
 /// Gyroscope data
-typedef struct __BlueIO_Data_Gyro {
+typedef struct __Gyro_Sensor_Data {
 	uint16_t GyroX;
 	uint16_t GyroY;
 	uint16_t GyroZ;
-} BLUEIO_DATA_GYRO;
+} GyroSensorData_t;
 
 /// Magnetometer data
-typedef struct __BlueIO_Data_Mag {
+typedef struct __Mag_Sensor_Data {
 	uint16_t MagX;
 	uint16_t MagY;
 	uint16_t MagZ;
-} BLUEIO_DATA_MAG;
-
+} MagSensorData_t;
+#endif
 /// Proximity sensor data
 typedef struct __BlueIO_Data_Proxy {
 	uint32_t Id;				//!< Sensor ID
@@ -196,7 +196,7 @@ typedef struct __BlueIO_Core_Temp {
 typedef struct __BlueIO_SigCap_Header {
 	uint8_t ChanNum:7;		// 7-bit [6...0] channel/port number
 	uint8_t ChanType:1; 		// 1-bit (MSB) channel type (Analog-0) / (Digital-1)
-}SigCapHdr_t;
+} SigCapHdr_t;
 
 /// SigCap_Data frame format for both Analog and Digital captured data
 typedef struct __BlueIO_SigCap_Data {
