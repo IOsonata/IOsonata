@@ -45,6 +45,8 @@ SOFTWARE.
 #include "bluetooth/bleadv_mandata.h"
 //#include "bluetooth/bt_dev.h"
 
+#include "ble_gap.h" //from nRF5_SDK
+
 /** @addtogroup Bluetooth
   * @{
   */
@@ -190,6 +192,14 @@ typedef struct __Bt_Dev_Data {
 } BtDev_t;
 #endif
 
+typedef struct __Bt_App_Scan_Cfg {
+	uint32_t Interval;			//!< Scan interval in msec
+	uint32_t Duration;			//!< Scan window in msec
+	uint32_t Timeout;			//!< Scan timeout in sec
+	uint8_t BaseUid[16];		//!< Base UUID to look for
+	uint16_t ServUid;			//!< Service Uid to look for
+} BtAppScanCfg_t;
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -271,12 +281,15 @@ void BleAppAdvStop();
 void BleAppDisconnect();
 
 //bool BleAppScanInit(BleAppScanCfg_t *pCfg);
-void BleAppScan();
-void BleAppScanStop();
+bool BtAppScanInit(BtAppScanCfg_t *pCfg);
+//void BleAppScan();
+void BtAppScan();
+void BtAppScanStop();
+uint32_t BtAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 //bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 //uint32_t BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
-bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);
-bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DatLen);
+bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);
+bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DatLen);
 int8_t GetValidTxPower(int TxPwr);
 bool isConnected();
 

@@ -1877,6 +1877,105 @@ void BtAppRun()
 	*/
 }
 
+void BtAppScan()
+{
+	ret_code_t err_code;
+
+	if (s_BtAppData.bScan == true)
+	{
+		err_code = sd_ble_gap_scan_start(NULL, &g_BleScanReportData);
+	}
+	else
+	{
+		s_BtAppData.bScan = true;
+
+		err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
+	}
+	APP_ERROR_CHECK(err_code);
+}
+
+bool BtAppScanInit(BtAppScanCfg_t *pCfg)
+{
+	if (pCfg == NULL)
+	{
+		return false;
+	}
+
+	s_BleScanParams.timeout = pCfg->Timeout;
+	s_BleScanParams.window = pCfg->Duration;
+	s_BleScanParams.interval = pCfg->Interval;
+
+    uint8_t uidtype = BLE_UUID_TYPE_VENDOR_BEGIN;
+
+    ble_uuid128_t uid;
+
+    memcpy(uid.uuid128, pCfg->BaseUid, 16);
+
+    ret_code_t err_code = sd_ble_uuid_vs_add(&uid, &uidtype);
+    APP_ERROR_CHECK(err_code);
+
+    s_BtAppData.bScan = true;
+
+	err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
+	APP_ERROR_CHECK(err_code);
+
+	return err_code == NRF_SUCCESS;
+}
+
+uint32_t BtAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam)
+{
+	ret_code_t err_code = sd_ble_gap_connect(pDevAddr, &s_BleScanParams,
+                                  	  	  	 pConnParam,
+											 BTAPP_CONN_CFG_TAG);
+    //APP_ERROR_CHECK(err_code);
+
+    s_BtAppData.bScan = false;
+
+    //return err_code == NRF_SUCCESS;
+    return err_code;
+}
+
+bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
+{
+	if (ConnHandle == BLE_CONN_HANDLE_INVALID || CharHandle == BLE_CONN_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+    ble_gattc_write_params_t const write_params =
+    {
+        .write_op = BLE_GATT_OP_WRITE_CMD,
+        .flags    = BLE_GATT_EXEC_WRITE_FLAG_PREPARED_WRITE,
+        .handle   = CharHandle,
+        .offset   = 0,
+        .len      = DataLen,
+        .p_value  = pData
+    };
+
+    return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
+}
+
+bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * const pCharUid)
+{
+    uint32_t                 err_code;
+    ble_gattc_write_params_t write_params;
+    uint8_t                  buf[BLE_CCCD_VALUE_LEN];
+
+    buf[0] = BLE_GATT_HVX_NOTIFICATION;
+    buf[1] = 0;
+
+    write_params.write_op = BLE_GATT_OP_WRITE_CMD;//BLE_GATT_OP_WRITE_REQ;
+    write_params.flags = BLE_GATT_EXEC_WRITE_FLAG_PREPARED_WRITE,
+    write_params.handle   = CharHandle;
+    write_params.offset   = 0;
+    write_params.len      = sizeof(buf);
+    write_params.p_value  = buf;
+
+    err_code = sd_ble_gattc_write(ConnHandle, &write_params);
+
+    return err_code == NRF_SUCCESS;
+}
+
 #if 0
 void BleTimerAppRun()
 {

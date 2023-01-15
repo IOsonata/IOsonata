@@ -260,7 +260,7 @@ void BleAppScanStop();
 #endif
 //void BleAppAdvStart(BLEAPP_ADVMODE AdvMode);
 //bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
-uint32_t BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
+uint32_t BtAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 //bool BleAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);
 //bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DatLen);
 //int8_t GetValidTxPower(int TxPwr);
