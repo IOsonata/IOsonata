@@ -96,6 +96,8 @@ NRF_CLI_DEF(m_cli_cdc_acm,
 #define USBD_POWER_DETECTION true
 #endif
 
+uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
+uint8_t g_extern_usbd_product_string[12 + 1] = { "RadioTest" };
 
 static void usbd_user_ev_handler(app_usbd_event_type_t event)
 {
