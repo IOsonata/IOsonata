@@ -43,9 +43,6 @@ SOFTWARE.
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bleadv_mandata.h"
-//#include "bluetooth/bt_dev.h"
-
-#include "ble_gap.h" //from nRF5_SDK
 
 /** @addtogroup Bluetooth
   * @{
@@ -285,7 +282,7 @@ bool BtAppScanInit(BtAppScanCfg_t *pCfg);
 //void BleAppScan();
 void BtAppScan();
 void BtAppScanStop();
-uint32_t BtAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
+bool BtAppConnect(uint8_t pDevAddr[6]);//, ble_gap_conn_params_t * const pConnParam);
 //bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 //uint32_t BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);

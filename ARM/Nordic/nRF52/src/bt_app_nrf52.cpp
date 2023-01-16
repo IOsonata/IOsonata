@@ -80,12 +80,29 @@ SOFTWARE.
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
-#include "ble_app_nrf5.h"
+//#include "ble_app_nrf5.h"
 #include "ble_dev.h"
 #include "app_evt_handler.h"
 
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
+
+/**< MTU size used in the softdevice enabling and to reply to a BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST event. */
+#if (NRF_SD_BLE_API_VERSION <= 3)
+   #define NRF_BLE_MAX_MTU_SIZE        GATT_MTU_SIZE_DEFAULT
+#else
+
+#if  defined(BLE_GATT_MTU_SIZE_DEFAULT) && !defined(GATT_MTU_SIZE_DEFAULT)
+#define GATT_MTU_SIZE_DEFAULT BLE_GATT_MTU_SIZE_DEFAULT
+#endif
+
+#if  defined(BLE_GATT_ATT_MTU_DEFAULT) && !defined(GATT_MTU_SIZE_DEFAULT)
+#define GATT_MTU_SIZE_DEFAULT  			BLE_GATT_ATT_MTU_DEFAULT
+#endif
+
+#define NRF_BLE_MAX_MTU_SIZE            GATT_MTU_SIZE_DEFAULT
+
+#endif
 
 #define BTAPP_CONN_CFG_TAG            1     /**< A tag identifying the SoftDevice BLE configuration. */
 
@@ -1922,17 +1939,20 @@ bool BtAppScanInit(BtAppScanCfg_t *pCfg)
 	return err_code == NRF_SUCCESS;
 }
 
-uint32_t BtAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam)
+//uint32_t BtAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam)
+bool BtAppConnect(uint8_t pDevAddr[6])//, ble_gap_conn_params_t * const pConnParam)
 {
+#if 0
 	ret_code_t err_code = sd_ble_gap_connect(pDevAddr, &s_BleScanParams,
                                   	  	  	 pConnParam,
 											 BTAPP_CONN_CFG_TAG);
     //APP_ERROR_CHECK(err_code);
 
     s_BtAppData.bScan = false;
+#endif
 
     //return err_code == NRF_SUCCESS;
-    return err_code;
+    return true;
 }
 
 bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
