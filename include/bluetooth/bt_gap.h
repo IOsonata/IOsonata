@@ -132,6 +132,12 @@ SOFTWARE.
 #define BT_GAP_PHY_2MBITS								(1<<1)
 #define BT_GAP_PHY_CODED								(1<<2)
 
+#define BT_GAP_CONN_SLAVE_LATENCY						0 		//!< Slave latency.
+#define BT_GAP_CONN_SUP_TIMEOUT							4000	//!< Connection supervisory timeout (4 seconds), in msec.
+
+#define BT_GAP_SCAN_INTERVAL							100	//!< Determines scan interval in millisecond.
+#define BT_GAP_SCAN_WINDOW								100	//!< Determines scan window in millisecond.
+#define BT_GAP_SCAN_TIMEOUT								0	//!< Timeout when scanning. 0x0000 disables timeout.
 
 typedef enum __Bt_Gap_SecType {
 	BTGAP_SECTYPE_NONE = BT_GAP_SECTYPE_NONE,
@@ -143,6 +149,18 @@ typedef enum __Bt_Gap_SecType {
 } BTGAP_SECTYPE;
 
 #pragma pack(push, 4)
+
+typedef struct __Bt_Gap_Peer_Address {
+	uint8_t Type;				//!< Address type
+	uint8_t Addr[6];			//!< Address
+} BtGapPeerAddr_t;
+
+typedef struct __Bt_Gap_Conn_Params {
+	uint16_t IntervalMin;		//!< Min connection interval in 1.25ms counts
+	uint16_t IntervalMax;		//!< Max connection interval in 1.25ms counts
+	uint16_t Latency;			//!< Peripheral latency
+	uint16_t Timeout;			//!< Supervision timeout in 10ms count
+} BtGapConnParams_t;
 
 typedef struct __Bt_Gap_Connection {
 	uint16_t Hdl;				//!< Connection handle
@@ -164,8 +182,8 @@ typedef struct __Bt_Gap_Config {
 	uint32_t SecType;			//!< Security type
 	uint32_t AdvInterval;		//!< Advertisement interval in msec
 	uint32_t AdvTimeout;		//!< Advertisement timeout in msec
-	uint32_t ConnIntervalMin;	//!< Min connection interval in msec
-	uint32_t ConnIntervalMax;	//!< Max connection interval in msec
+	uint16_t ConnIntervalMin;	//!< Min connection interval in msec
+	uint16_t ConnIntervalMax;	//!< Max connection interval in msec
 	uint16_t SlaveLatency;		//!< Slave latency
 	uint16_t SupTimeout;		//!< Connection supervisory timeout
 } BtGapCfg_t;
@@ -185,6 +203,11 @@ uint16_t BtGapGetConnection();
 size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
 bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);
 void BtGapDeleteConnection(uint16_t Hdl);
+bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);
+bool BtGapScanInit(BtGapScanCfg_t * const pCfg);
+bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len);
+bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len);
+
 
 #ifdef __cplusplus
 }

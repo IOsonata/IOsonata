@@ -120,8 +120,8 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 #define SCHED_QUEUE_SIZE          		40                        /**< Maximum number of events in the scheduler queue. */
 #endif
 
-#define SLAVE_LATENCY                   0                                           /**< Slave latency. */
-#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
+//#define SLAVE_LATENCY                   0                                           /**< Slave latency. */
+//#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
 
 #define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)  /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
 #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000) /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
@@ -240,26 +240,6 @@ NRF_SDH_BLE_OBSERVER(s_DbDiscovery_obs,
 
 NRF_BLE_SCAN_DEF(g_Scan);
 
-static ble_gap_scan_params_t s_BleScanParams =
-{
-#if (NRF_SD_BLE_API_VERSION >= 6)
-	1,
-	0,
-#endif
-    1,		// Active scan
-#if (NRF_SD_BLE_API_VERSION <= 2)
-	0,	// .selective
-	NULL,	// .p_whitelist
-#endif
-#if (NRF_SD_BLE_API_VERSION >= 3)
-	0,				// Use whitelist
-	1, 				// Report directed advertisement
-#endif
-	SCAN_INTERVAL,	// Scan interval
-	SCAN_WINDOW,	// Scan window
-	SCAN_TIMEOUT,	// Scan timeout
-};
-
 static uint8_t g_BleScanBuff[BLE_GAP_SCAN_BUFFER_EXTENDED_MAX];
 
 static ble_data_t g_BleScanReportData = {
@@ -277,7 +257,6 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 
 __ALIGN(4) static ble_gap_lesc_p256_pk_t    s_lesc_public_key;      /**< LESC ECC Public Key */
 __ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC ECC DH Key*/
-static ble_gap_conn_sec_mode_t s_gap_conn_mode;
 
 bool isConnected()
 {
@@ -393,6 +372,8 @@ void BtAppDisconnect()
 
 void BtAppGapDeviceNameSet(const char* pDeviceName)
 {
+	BtGapSetDevName(pDeviceName);
+/*
     uint32_t                err_code;
 
     err_code = sd_ble_gap_device_name_set(&s_gap_conn_mode,
@@ -400,67 +381,7 @@ void BtAppGapDeviceNameSet(const char* pDeviceName)
                                           strlen( pDeviceName ));
     APP_ERROR_CHECK(err_code);
     //ble_advertising_restart_without_whitelist(&g_AdvInstance);
-}
-/**@brief Function for the GAP initialization.
- *
- * @details This function will set up all the necessary GAP (Generic Access Profile) parameters of
- *          the device. It also sets the permissions and appearance.
- */
-
-void BtGapParamInit(const BtGapCfg_t *pCfg)
-{
-    uint32_t                err_code;
-    ble_gap_conn_params_t   gap_conn_params;
-
-    switch (pCfg->SecType)
-    {
-    	case BTGAP_SECTYPE_NONE:
-    	    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&s_gap_conn_mode);
-    	    break;
-		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
-		    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&s_gap_conn_mode);
-    	    break;
-		case BTGAP_SECTYPE_STATICKEY_MITM:
-		    BLE_GAP_CONN_SEC_MODE_SET_ENC_WITH_MITM(&s_gap_conn_mode);
-    	    break;
-		case BTGAP_SECTYPE_LESC_MITM:
-			BLE_GAP_CONN_SEC_MODE_SET_LESC_ENC_WITH_MITM(&s_gap_conn_mode);
-    	    break;
-		case BTGAP_SECTYPE_SIGNED_NO_MITM:
-			BLE_GAP_CONN_SEC_MODE_SET_SIGNED_NO_MITM(&s_gap_conn_mode);
-    	    break;
-		case BTGAP_SECTYPE_SIGNED_MITM:
-			BLE_GAP_CONN_SEC_MODE_SET_SIGNED_WITH_MITM(&s_gap_conn_mode);
-    	    break;
-    }
-/*
-    if (pBleAppCfg->pDevName != NULL)
-    {
-    	err_code = sd_ble_gap_device_name_set(&s_gap_conn_mode,
-                                          (const uint8_t *) pBleAppCfg->pDevName,
-                                          strlen(pBleAppCfg->pDevName));
-    	APP_ERROR_CHECK(err_code);
-    }
-
-    err_code = sd_ble_gap_appearance_set(pBleAppCfg->Appearance);
-    APP_ERROR_CHECK(err_code);
 */
-    memset(&gap_conn_params, 0, sizeof(gap_conn_params));
-
-//    if (pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT)
-//    if (pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND)
-    if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
-    {
-		gap_conn_params.min_conn_interval = MSEC_TO_UNITS(pCfg->ConnIntervalMin, UNIT_1_25_MS);// MIN_CONN_INTERVAL;
-		gap_conn_params.max_conn_interval = MSEC_TO_UNITS(pCfg->ConnIntervalMax, UNIT_1_25_MS);//MAX_CONN_INTERVAL;
-		gap_conn_params.slave_latency     = SLAVE_LATENCY;
-		gap_conn_params.conn_sup_timeout  = CONN_SUP_TIMEOUT;
-
-		err_code = sd_ble_gap_ppcp_set(&gap_conn_params);
-		APP_ERROR_CHECK(err_code);
-    }
-
-   // BtGapInit(pBleAppCfg->Role);
 }
 #endif
 
@@ -1759,7 +1680,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     				//pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND);
 //    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
 
-
+/*
 	if (pCfg->pDevName != NULL)
     {
 		int l = strlen(pCfg->pDevName);
@@ -1768,6 +1689,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
                                           min(l, 30));
         APP_ERROR_CHECK(err_code);
     }
+    */
     err_code = sd_ble_gap_appearance_set(pCfg->Appearance);
     APP_ERROR_CHECK(err_code);
 
@@ -1780,11 +1702,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 		.AdvTimeout = pCfg->AdvTimeout,
 		.ConnIntervalMin = pCfg->ConnIntervalMin,
 		.ConnIntervalMax = pCfg->ConnIntervalMax,
-		.SlaveLatency = SLAVE_LATENCY,
-		.SupTimeout = CONN_SUP_TIMEOUT
+		.SlaveLatency = BT_GAP_CONN_SLAVE_LATENCY,
+		.SupTimeout = BT_GAP_CONN_SUP_TIMEOUT
     };
 
 	BtGapInit(&gapcfg);
+
+	if (pCfg->pDevName != NULL)
+	{
+		BtGapSetDevName(pCfg->pDevName);
+	}
 
 	conn_params_init();
 
@@ -1896,28 +1823,27 @@ void BtAppRun()
 
 void BtAppScan()
 {
-	ret_code_t err_code;
-
 	if (s_BtAppData.bScan == true)
 	{
-		err_code = sd_ble_gap_scan_start(NULL, &g_BleScanReportData);
+		//err_code = sd_ble_gap_scan_start(NULL, &g_BleScanReportData);
+		BtGapScanNext(g_BleScanReportData.p_data, g_BleScanReportData.len);
 	}
 	else
 	{
 		s_BtAppData.bScan = true;
 
-		err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
+//		err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
+		BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
 	}
-	APP_ERROR_CHECK(err_code);
 }
 
-bool BtAppScanInit(BtAppScanCfg_t *pCfg)
+bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 {
-	if (pCfg == NULL)
+	if (BtGapScanInit(pCfg) == false)
 	{
 		return false;
 	}
-
+/*
 	s_BleScanParams.timeout = pCfg->Timeout;
 	s_BleScanParams.window = pCfg->Duration;
 	s_BleScanParams.interval = pCfg->Interval;
@@ -1930,18 +1856,21 @@ bool BtAppScanInit(BtAppScanCfg_t *pCfg)
 
     ret_code_t err_code = sd_ble_uuid_vs_add(&uid, &uidtype);
     APP_ERROR_CHECK(err_code);
-
+*/
     s_BtAppData.bScan = true;
 
-	err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
-	APP_ERROR_CHECK(err_code);
+//	err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
+//	APP_ERROR_CHECK(err_code);
 
-	return err_code == NRF_SUCCESS;
+//	return err_code == NRF_SUCCESS;
+    return BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
 }
 
 //uint32_t BtAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam)
-bool BtAppConnect(uint8_t pDevAddr[6])//, ble_gap_conn_params_t * const pConnParam)
+bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
 {
+	return BtGapConnect(pPeerAddr, pConnParam);
+
 #if 0
 	ret_code_t err_code = sd_ble_gap_connect(pDevAddr, &s_BleScanParams,
                                   	  	  	 pConnParam,

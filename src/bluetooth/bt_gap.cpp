@@ -165,18 +165,23 @@ alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppExtSrData
 alignas(4) static BleAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppExtSrData.scan_response_data};
 #endif
 
-void BtGapSetDevName(const char *pName)
+__attribute__((weak)) void BtGapSetDevName(const char *pName)
 {
+	if (pName == nullptr)
+	{
+		return;
+	}
+
 	// Update name in GAP characteristic
 	BtGattCharSetValue(&s_BtGapChar[0], (void*)pName, strlen(pName));
 }
 
-char * const BtGapGetDevName()
+__attribute__((weak)) char * const BtGapGetDevName()
 {
 	return s_BtGapCharDevName;
 }
 
-void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
+__attribute__((weak)) void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
 {
 	BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
 	BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);

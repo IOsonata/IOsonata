@@ -142,8 +142,8 @@ typedef struct __Bt_App_Cfg {
 	uint32_t AdvTimeout;			//!< In sec
 	uint32_t AdvSlowInterval;		//!< Slow advertising interval, if > 0, fallback to
 									//!< slow interval on adv timeout and advertise until connected
-	uint32_t ConnIntervalMin;   	//!< Min. connection interval
-	uint32_t ConnIntervalMax;   	//!< Max connection interval
+	uint16_t ConnIntervalMin;   	//!< Min. connection interval in msec
+	uint16_t ConnIntervalMax;   	//!< Max connection interval in msec
 	int8_t ConnLedPort;				//!< Connection LED port number
 	int8_t ConnLedPin;				//!< Connection LED pin number
 	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
@@ -278,11 +278,11 @@ void BleAppAdvStop();
 void BleAppDisconnect();
 
 //bool BleAppScanInit(BleAppScanCfg_t *pCfg);
-bool BtAppScanInit(BtAppScanCfg_t *pCfg);
+bool BtAppScanInit(BtGapScanCfg_t *pCfg);
 //void BleAppScan();
 void BtAppScan();
 void BtAppScanStop();
-bool BtAppConnect(uint8_t pDevAddr[6]);//, ble_gap_conn_params_t * const pConnParam);
+bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);//, ble_gap_conn_params_t * const pConnParam);
 //bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 //uint32_t BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);
