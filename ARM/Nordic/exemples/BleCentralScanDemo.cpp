@@ -43,9 +43,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "nrf_ble_scan.h"
 
 #include "istddef.h"
-#include "bluetooth/ble_app.h"
-#include "ble_app_nrf5.h"
-#include "ble_service.h"
+#include "bluetooth/bt_app.h"
+//#include "ble_app_nrf5.h"
+//#include "ble_service.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "ble_dev.h"
 #include "blueio_board.h"
@@ -86,8 +86,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
 
-const BleAppCfg_t s_BleAppCfg = {
-	BLEAPP_ROLE_CENTRAL,
+const BtAppCfg_t s_BleAppCfg = {
+	BTAPP_ROLE_CENTRAL,
 	1, 							// Number of central link
 	0, 							// Number of peripheral link
 	DEVICE_NAME,                // Device name
@@ -101,8 +101,8 @@ const BleAppCfg_t s_BleAppCfg = {
 	0,//sizeof(g_ManData),      // Length of manufacture specific data
 	NULL,
 	0,
-	BLEAPP_SECTYPE_NONE,    	// Secure connection type
-	BLEAPP_SECEXCHG_NONE,   	// Security key exchange
+	BTGAP_SECTYPE_NONE,    	// Secure connection type
+	BTAPP_SECEXCHG_NONE,   	// Security key exchange
 	NULL,      					// Service uuids to advertise
 	0, 							// Total number of uuids
 	0,       					// Advertising interval in msec
@@ -198,7 +198,7 @@ const ble_uuid_t s_UartBleSrvAdvUuid = {
 	.type = BLE_UUID_TYPE_BLE,
 };
 
-BleAppScanCfg_t s_bleScanInitCfg = {
+BtGapScanCfg_t s_bleScanInitCfg = {
 		.Interval = SCAN_INTERVAL,
 		.Duration = SCAN_WINDOW,
 		.Timeout = SCAN_TIMEOUT,
@@ -241,7 +241,7 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
     	{
     		// Enable Notify
         	//g_Uart.printf("Enable notify\r\n");
-        	BleAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].charateristics[dcharidx].cccd_handle);
+        	BtAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].charateristics[dcharidx].cccd_handle);
         	g_BleRxCharHdl = pDev->Services[idx].charateristics[dcharidx].characteristic.handle_value;
         	g_Uart.printf("Found!\r\n");
     	}
@@ -338,7 +338,7 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 				}
 
 				//Scan BLE bridge device again
-				BleAppScan();
+				BtAppScan();
 			}
 			break;
         case BLE_GAP_EVT_TIMEOUT:
@@ -395,7 +395,7 @@ void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 	{
 		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
-			BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, l);
+			BtAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, l);
 		}
 	}
 }
@@ -437,17 +437,17 @@ int main()
 {
     HardwareInit();
 
-    BleAppInit((const BleAppCfg_t *)&s_BleAppCfg);//, true);
+    BtAppInit(&s_BleAppCfg);//, true);
 
     //uint32_t ret = sd_ble_gap_scan_start(&g_ScanParams, &g_AdvScanReportData);
    // APP_ERROR_CHECK(ret);
 
     // Register the non-GATT service and its characteristics
-    BleAppScanInit((BleAppScanCfg_t *)&s_bleScanInitCfg);
+    BtAppScanInit(&s_bleScanInitCfg);
 
-    BleAppScan();
+    BtAppScan();
 
-    BleAppRun();
+    BtAppRun();
 
 	return 0;
 }
