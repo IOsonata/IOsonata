@@ -292,53 +292,65 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 				// Scan data report
 				const ble_gap_evt_adv_report_t * p_adv_report = &p_gap_evt->params.adv_report;
 
-				// Find device by name
-				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, TARGET_BRIDGE_DEV_NAME))
-	//            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
+				// Get device
+				uint16_t offset = 0;
+				uint16_t len = ble_advdata_search(p_adv_report->data.p_data,
+												  p_adv_report->data.len,
+												  &offset,
+												  BLE_GAP_AD_TYPE_COMPLETE_LOCAL_NAME);
+				if (len == 0)
 				{
-					/* Uncomment this code if the user wants to connect to the chosen BLE bridge device
-						err_code = BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
-						msDelay(100);
-					 */
-
-					/* Read device's Adv data
-					 * Check ble_gap_evt_adv_report_t struct
-					 * for more detail about data fields
-					*/
-					g_Uart.printf("MAC addr: %x:%x:%x:%x:%x:%x | TxPower: %d | RSSI: %d\r\n",
-							p_adv_report->peer_addr.addr[5],
-							p_adv_report->peer_addr.addr[4],
-							p_adv_report->peer_addr.addr[3],
-							p_adv_report->peer_addr.addr[2],
-							p_adv_report->peer_addr.addr[1],
-							p_adv_report->peer_addr.addr[0],
-							p_adv_report->tx_power,
-							p_adv_report->rssi);
-
-					// Parse Manufacturer Specific data
-					uint16_t mfgDataOffset = 0;
-					uint16_t mfgDataLen = ble_advdata_search(p_adv_report->data.p_data,
-															p_adv_report->data.len,
-															&mfgDataOffset,
-															BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA);
-					if (mfgDataLen == 0)
-					{
-						g_Uart.printf("Failed to parse Mfg Specific data\r\n");
-					}
-					else
-					{
-						uint8_t *p_MfgSpecData = &p_adv_report->data.p_data[mfgDataOffset];
-						g_Uart.printf("Manufacturer Specific Data [%d bytes]: ", mfgDataLen);
-						for (int i = 0; i < mfgDataLen; i++)
-						{
-							g_Uart.printf("0x%x ", p_MfgSpecData[i]);
-						}
-						g_Uart.printf("\r\n\r\n");
-					}
-
+					offset = 0;
+					len = ble_advdata_search(p_adv_report->data.p_data,
+											 p_adv_report->data.len,
+											 &offset,
+											 BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME);
 				}
 
-				//Scan BLE bridge device again
+				if (len > 0)
+				{
+					g_Uart.printf("%s\r\n", &p_adv_report->data.p_data[offset]);
+				}
+				else
+				{
+					g_Uart.printf("Unknown name\r\n");
+				}
+				/* Read device's Adv data
+				 * Check ble_gap_evt_adv_report_t struct
+				 * for more detail about data fields
+				*/
+				g_Uart.printf("MAC addr: %x:%x:%x:%x:%x:%x | TxPower: %d | RSSI: %d\r\n",
+						p_adv_report->peer_addr.addr[5],
+						p_adv_report->peer_addr.addr[4],
+						p_adv_report->peer_addr.addr[3],
+						p_adv_report->peer_addr.addr[2],
+						p_adv_report->peer_addr.addr[1],
+						p_adv_report->peer_addr.addr[0],
+						p_adv_report->tx_power,
+						p_adv_report->rssi);
+
+				// Parse Manufacturer Specific data
+				uint16_t mfgDataOffset = 0;
+				uint16_t mfgDataLen = ble_advdata_search(p_adv_report->data.p_data,
+														p_adv_report->data.len,
+														&mfgDataOffset,
+														BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA);
+				if (mfgDataLen == 0)
+				{
+					g_Uart.printf("Failed to parse Mfg Specific data\r\n");
+				}
+				else
+				{
+					uint8_t *p_MfgSpecData = &p_adv_report->data.p_data[mfgDataOffset];
+					g_Uart.printf("Manufacturer Specific Data [%d bytes]: ", mfgDataLen);
+					for (int i = 0; i < mfgDataLen; i++)
+					{
+						g_Uart.printf("0x%x ", p_MfgSpecData[i]);
+					}
+					g_Uart.printf("\r\n\r\n");
+				}
+
+				// Continue scan
 				BtAppScan();
 			}
 			break;
