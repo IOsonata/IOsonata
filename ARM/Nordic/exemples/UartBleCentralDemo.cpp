@@ -320,8 +320,9 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
 
 }
 
-void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
+void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 {
+	ble_evt_t * p_ble_evt = (ble_evt_t*)Evt;
     ret_code_t err_code;
     const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
     const ble_common_evt_t *p_common_evt = &p_ble_evt->evt.common_evt;
