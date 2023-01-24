@@ -8,7 +8,8 @@ SEARCH_DIR("../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
-GROUP(-lgcc -lc -lnosys)
+GROUP(-lgcc -lc)
+
 
 MEMORY
 {
@@ -24,6 +25,7 @@ MEMORY
 
 	/** Location of bootloader setting in flash. */
 	BOOTLOADER_SETTINGS (rw) : ORIGIN = 0x0007F000, LENGTH = 0x1000
+
 }
 
 

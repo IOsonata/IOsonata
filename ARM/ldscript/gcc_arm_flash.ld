@@ -49,6 +49,10 @@ ENTRY(ResetEntry)
 
 
 __CheckSum = 0;
+__StackTop = ORIGIN(RAM) + LENGTH(RAM);
+
+/* Use 2/3 of remaining RAM for heap, 1/3 for Stack */
+__HeapSize = (__StackTop - __HeapBase) * 2 / 3;
 
 SECTIONS {
 
@@ -215,10 +219,12 @@ SECTIONS {
 	
 	.heap : ALIGN(4)
 	{
+      __HeapBase = .;
 		__end__ = .;
 		end = __end__;
 		_pvHeapStart = .;
-		*(.heap*)
+		KEEP(*(.heap*))
+		. = __HeapBase + __HeapSize;
 		__HeapLimit = .;
 	} > RAM
 
@@ -227,12 +233,11 @@ SECTIONS {
 	 * values to stack symbols later */
 	.stack_dummy : ALIGN(4)
 	{
-		*(.stack*)
+		KEEP(*(.stack*))
 	} > RAM
 
 	/* Set stack top to end of RAM, and stack limit move down by
 	 * size of stack_dummy section */
-	__StackTop = ORIGIN(RAM) + LENGTH(RAM);
 	__StackLimit = __HeapLimit + 4;/*__StackTop - SIZEOF(.stack_dummy);*/
 	PROVIDE(__stack = __StackTop);
 	

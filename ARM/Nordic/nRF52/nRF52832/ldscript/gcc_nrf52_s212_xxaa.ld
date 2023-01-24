@@ -15,7 +15,7 @@ SEARCH_DIR("../../../../../EHAL/ARM/Nordic/nRF52/CMSIS/Release")
 SEARCH_DIR("../../../../../../EHAL/ARM/Nordic/nRF52/CMSIS/Release")
 SEARCH_DIR("../../../../../../../EHAL/ARM/Nordic/nRF52/CMSIS/Release")
 SEARCH_DIR("../../../../../../../../EHAL/ARM/Nordic/nRF52/CMSIS/Release")
-GROUP(-lgcc -lc -lnosys -lCMSIS)
+GROUP(-lgcc -lc)
 
 MEMORY
 {

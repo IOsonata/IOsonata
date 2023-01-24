@@ -34,6 +34,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/types.h>
 
 #if defined ( __ARMCC_VERSION )
 extern int Image$$ER_ZI$$Length;
@@ -47,6 +48,10 @@ extern unsigned long __data_end__;
 extern unsigned long __bss_start__;
 extern unsigned long __bss_end__;
 extern unsigned long __bss_size__;
+extern unsigned long __end__;
+extern unsigned long __HeapSize;
+extern unsigned long __HeapBase;
+extern unsigned long __HeapLimit;
 #endif
 
 #ifdef __ICCARM__
@@ -158,3 +163,27 @@ void ResetEntry (void)
 
 }
 
+__attribute__((weak))  void _exit(int Status)
+{
+	while(1);
+}
+
+__attribute__((weak)) caddr_t _sbrk(int incr)
+{
+  static unsigned long *heap_end = 0;
+  unsigned long *prev_heap_end;
+
+  if (heap_end == 0)
+  {
+    heap_end = &__HeapBase;
+  }
+
+  prev_heap_end = heap_end;
+  if ((heap_end + incr) > (unsigned long*) &__HeapLimit)
+  {
+    return ((void*)-1); // error - no more memory
+  }
+  heap_end += incr;
+
+  return (caddr_t) prev_heap_end;
+}
