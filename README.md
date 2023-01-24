@@ -35,7 +35,7 @@ In order to compile the IOsonata target libraries these external SDK & lib are r
 
 [ICM-20948 Motion_Driver](https://invensense.tdk.com/developers/software-downloads/) : Create a user at https://invensense.tdk.com/developers/software-downloads/. In the "Development Kits" block, download "DK-20948 SmartMotion eMD 1.1.0". Unzip the downloaded file and navigate to EMD-Core/sources. Copy the folder `Invn` to `external/Invn` as indicated in the folder tree bellow.
 
-[BSEC](https://www.bosch-sensortec.com/bst/products/all_products/bsec) : Bosch Sensortec Environmental Cluster (BSEC) Software for #BME680 environmental sensor.  BSEC is needed for calculating Air Quality Index.  Go to https://www.bosch-sensortec.com/bst/products/all_products/bsec at the end of the page.  Select checkbox to accept license terms to download.  Unzip the the downloaded file. Rename the extracted folder to `BSEC` and copy the whole folder to `external` as indicated in the folder tree below.  
+[BSEC](https://github.com/boschsensortec/Bosch-BSEC2-Library) : Bosch Sensortec Environmental Cluster (BSEC) Software for #BME680 environmental sensor.  BSEC is needed for calculating Air Quality Index.  Go to https://github.com/boschsensortec/Bosch-BSEC2-Library. Clone it to `external/BSEC` as indicated in the folder tree below.  
  
 [LWIP](https://savannah.nongnu.org/projects/lwip/) : A Lightweight TCP/IP stack. This library is required for IoT network connectivity over Ethernet, Wifi, LTE, ... Download it via this link https://download.savannah.nongnu.org/releases/lwip/. Rename the extracted folder as `lwip` and copy it to `external`.
 
