@@ -9,9 +9,9 @@ Temperature, Pressure, Humidity (TPH). Support I2C or SPI interface.  Data is pr
 to UART.
 
 NOTE : The BME680 Air Quality Index is undocumented.  It requires the library
-Bosch Sensortec Environmental Cluster (BSEC) Software. Download from
-https://www.bosch-sensortec.com/bst/products/all_products/bsec and put in
-external folder as indicated on the folder tree.
+Bosch Sensortec Environmental Cluster (BSEC) Software. Go to
+https://github.com/boschsensortec/Bosch-BSEC2-Library. Clone it to `external/BSEC`
+as indicated on the folder tree.
 
 The BSEC library must be initialized in the main application prior to initializing
 this driver by calling the function
@@ -56,6 +56,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/tph_bme280.h"
 #include "sensors/tphg_bme680.h"
 #include "sensors/tph_ms8607.h"
+#include "sensors/gas_sensor.h"
 #include "blueio_board.h"
 #include "idelay.h"
 
@@ -141,6 +142,7 @@ static const SPICfg_t s_SpiCfg = {
 	true, //DMA
 	false,
     6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	0,
     NULL
 };
 
@@ -219,6 +221,8 @@ TphBme280 g_EnvSensor;
 //TphMS8607	g_EnvSensor;
 #endif
 
+GasSensor &g_Gas = g_EnvSensor;
+
 //
 // Print a greeting message on standard output and exit.
 //
@@ -274,7 +278,8 @@ int main()
 	}
 
 #ifdef BME680
-	g_EnvSensor.Init(s_GasSensorCfg, g_pIntrf, &g_Timer);
+//	g_EnvSensor.Init(s_GasSensorCfg, g_pIntrf, &g_Timer);
+	g_Gas.Init(s_GasSensorCfg, &g_I2c, NULL);//&g_Timer);
 #endif
 
 	float lastiaq = -1;

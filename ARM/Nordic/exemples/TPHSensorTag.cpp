@@ -10,9 +10,9 @@ Support I2C and SPI interface
 
 
 NOTE : The BME680 Air Quality Index is undocumented.  It requires the library
-Bosch Sensortec Environmental Cluster (BSEC) Software. Download from
-https://www.bosch-sensortec.com/bst/products/all_products/bsec and put in
-external folder as indicated on the folder tree.
+Bosch Sensortec Environmental Cluster (BSEC) Software. Go to
+https://github.com/boschsensortec/Bosch-BSEC2-Library. Clone it to `external/BSEC`
+as indicated on the folder tree.
 
 The BSEC library must be initialized in the main application prior to initializing
 this driver by calling the function
