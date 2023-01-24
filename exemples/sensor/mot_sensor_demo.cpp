@@ -99,6 +99,7 @@ static const SPICfg_t s_SpiCfg = {
 	true,
 	false,
     6,      // Interrupt priority
+	0xFF,
     NULL
 };
 
@@ -156,8 +157,8 @@ static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
-//#define ICM20948
-#define MPU9250
+#define ICM20948
+//#define MPU9250
 //#define BMI160
 //#define H3LIS331DL
 
@@ -270,7 +271,8 @@ bool HardwareInit()
 #endif
 
 #if defined(ICM20948) || defined(MPU9250)
-		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
+		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
+//		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
 #endif
 	}
 

@@ -104,6 +104,7 @@ static const SPICfg_t s_SpiMasterCfg = {
 	true,	// DMA
 	true,
     6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	0xff,
     NULL
 };
 
@@ -140,6 +141,7 @@ static const SPICfg_t s_SpiSlaveCfg = {
 	true,	// DMA
 	true,
     6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	0xff,
 	SpiSlaveHandler
 };
 
