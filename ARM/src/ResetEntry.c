@@ -35,6 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #if defined ( __ARMCC_VERSION )
 extern int Image$$ER_ZI$$Length;
@@ -156,34 +157,80 @@ void ResetEntry (void)
 #endif
 
 	/*
-	 * Embedded system don't return to OS.  main() should not mormally
+	 * Embedded system don't return to OS.  main() should not normally
 	 * returns.  In case it does, just loop here.
 	 */
+	__asm("BKPT #0");
 	while(1);
 
 }
 
-__attribute__((weak))  void _exit(int Status)
+__attribute__((weak)) void _exit(int Status)
 {
+	__asm("BKPT #0");
 	while(1);
 }
 
 __attribute__((weak)) caddr_t _sbrk(int incr)
 {
-  static unsigned long *heap_end = 0;
-  unsigned long *prev_heap_end;
+	static unsigned long *heap_end = 0;
+	unsigned long *prev_heap_end;
 
-  if (heap_end == 0)
-  {
-    heap_end = &__HeapBase;
-  }
+	if (heap_end == 0)
+	{
+		heap_end = &__HeapBase;
+	}
 
-  prev_heap_end = heap_end;
-  if ((heap_end + incr) > (unsigned long*) &__HeapLimit)
-  {
-    return ((void*)-1); // error - no more memory
-  }
-  heap_end += incr;
+	prev_heap_end = heap_end;
+	if ((heap_end + incr) > (unsigned long*) &__HeapLimit)
+	{
+		return ((void*)-1); // error - no more memory
+	}
+	heap_end += incr;
 
-  return (caddr_t) prev_heap_end;
+	return (caddr_t) prev_heap_end;
 }
+
+__attribute__ ((weak)) int _close(int Fd)
+{
+	return -1;
+}
+
+__attribute__ ((weak)) int _lseek(int Fd, int Offset)
+{
+	return -1;
+}
+
+
+__attribute__ ((weak)) int _read (int Fd, char *pBuff, size_t Len)
+{
+	return -1;
+}
+
+__attribute__ ((weak)) int _write (int Fd, char *pBuff, size_t Len)
+{
+	return -1;
+}
+
+__attribute__ ((weak)) int _fstat(int file, struct stat *st)
+{
+  st->st_mode = S_IFCHR;
+
+  return 0;
+}
+
+__attribute__ ((weak)) int _isatty(int file)
+{
+  return 1;
+}
+
+__attribute__ ((weak)) void _kill(int pid, int sig)
+{
+  return;
+}
+
+__attribute__ ((weak)) int _getpid(void)
+{
+  return -1;
+}
+
