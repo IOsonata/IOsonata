@@ -300,6 +300,10 @@ void nRFxI2CPowerOff(DevIntrf_t * const pDev)
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 0;
 #endif
+
+
+	IOPinDisable(dev->pI2cDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo, dev->pI2cDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo);
+	IOPinDisable(dev->pI2cDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PortNo, dev->pI2cDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo);
 }
 
 uint32_t nRFxI2CGetRate(DevIntrf_t * const pDev)
