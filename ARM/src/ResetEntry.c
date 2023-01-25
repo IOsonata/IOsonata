@@ -191,6 +191,11 @@ __attribute__((weak)) caddr_t _sbrk(int incr)
 	return (caddr_t) prev_heap_end;
 }
 
+__attribute__ ((weak)) int _open(const char * const pPathName, int Flags, int Mode)
+{
+	return -1;
+}
+
 __attribute__ ((weak)) int _close(int Fd)
 {
 	return -1;
