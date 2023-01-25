@@ -151,6 +151,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
 		</link>
 		<link>
+			<name>include/iatomic.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
+		</link>
+		<link>
 			<name>include/idelay.h</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/include/idelay.h</locationURI>
