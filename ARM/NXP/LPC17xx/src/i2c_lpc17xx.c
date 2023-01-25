@@ -103,19 +103,19 @@ void LpcI2CStopCond(LPCI2CDEV *pDev)
 }
 
 
-void LpcI2CDisable(DEVINTRF *pDev)
+void LpcI2CDisable(DevIntrf_t *pDev)
 {
 	if (pDev && pDev->pDevData)
 		((LPCI2CDEV*)pDev->pDevData)->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_I2ENC;
 }
 
-void LpcI2CEnable(DEVINTRF *pDev)
+void LpcI2CEnable(DevIntrf_t *pDev)
 {
 	if (pDev && pDev->pDevData)
 		((LPCI2CDEV*)pDev->pDevData)->pI2CReg->I2CONSET |= LPCI2C_I2CONSET_I2EN;
 }
 
-uint32_t LpcI2CGetRate(DEVINTRF *pDev)
+uint32_t LpcI2CGetRate(DevIntrf_t *pDev)
 {
 	int rate = 0;
 
@@ -125,7 +125,7 @@ uint32_t LpcI2CGetRate(DEVINTRF *pDev)
 	return rate;
 }
 
-uint32_t LpcI2CSetRate(DEVINTRF *pDev, uint32_t RateHz)
+uint32_t LpcI2CSetRate(DevIntrf_t *pDev, uint32_t RateHz)
 {
 	if (pDev == NULL || pDev->pDevData == NULL)
 		return 0;
@@ -142,7 +142,7 @@ uint32_t LpcI2CSetRate(DEVINTRF *pDev, uint32_t RateHz)
 	return RateHz;
 }
 
-bool LpcI2CStartRx(DEVINTRF *pDev, uint32_t DevAddr)
+bool LpcI2CStartRx(DevIntrf_t *pDev, uint32_t DevAddr)
 {
 	if (pDev == NULL || pDev->pDevData == NULL)
 		return false;
@@ -163,7 +163,7 @@ bool LpcI2CStartRx(DEVINTRF *pDev, uint32_t DevAddr)
 }
 
 // Receive Data only, no Start/Stop condition
-int LpcI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
+int LpcI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
 {
 	I2CSTATUS status;
 	int rcount = 0;
@@ -191,7 +191,7 @@ int LpcI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
 }
 
 // Send Data only, no Start/Stop condition
-int LpcI2CTxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
+int LpcI2CTxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 {
 	I2CSTATUS status;
 	int tcount = 0;
@@ -214,12 +214,12 @@ int LpcI2CTxData(DEVINTRF *pDev, uint8_t *pData, int DataLen)
 	return tcount;
 }
 
-void LpcI2CStopRx(DEVINTRF *pDev)
+void LpcI2CStopRx(DevIntrf_t *pDev)
 {
 	LpcI2CStopCond((LPCI2CDEV *)pDev->pDevData);
 }
 
-bool LpcI2CStartTx(DEVINTRF *pDev, uint32_t DevAddr)
+bool LpcI2CStartTx(DevIntrf_t *pDev, uint32_t DevAddr)
 {
 	if (pDev == NULL || pDev->pDevData == NULL)
 		return false;
@@ -243,7 +243,7 @@ bool LpcI2CStartTx(DEVINTRF *pDev, uint32_t DevAddr)
 	return false;
 }
 
-void LpcI2CStopTx(DEVINTRF *pDev)
+void LpcI2CStopTx(DevIntrf_t *pDev)
 {
 	LpcI2CStopCond((LPCI2CDEV *)pDev->pDevData);
 }

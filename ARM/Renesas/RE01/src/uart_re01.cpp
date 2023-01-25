@@ -272,7 +272,7 @@ void Re01UartIRQHandler(int IntNo, void *pCtx)
 }
 
 
-static inline uint32_t Re01UARTGetRate(DEVINTRF * const pDev) {
+static inline uint32_t Re01UARTGetRate(DevIntrf_t * const pDev) {
 	return ((Re01UartDev_t*)pDev->pDevData)->pUartDev->Rate;
 }
 
@@ -309,7 +309,7 @@ static const struct __SemrDiv {
 	{6, SCI0_SEMR_ABCSE_Msk}
 };
 
-static uint32_t Re01UARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
+static uint32_t Re01UARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	Re01UartDev_t *dev = (Re01UartDev_t *)pDev->pDevData;
 	uint32_t pclk = SystemPeriphClockGet(0);
@@ -359,11 +359,11 @@ static uint32_t Re01UARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 	return baud;	// return actual baudrate
 }
 
-static inline bool Re01UARTStartRx(DEVINTRF * const pSerDev, uint32_t DevAddr) {
+static inline bool Re01UARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr) {
 	return true;
 }
 
-static int Re01UARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
+static int Re01UARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
 	Re01UartDev_t *dev = (Re01UartDev_t *)pDev->pDevData;
 	int cnt = 0;
@@ -417,14 +417,14 @@ static int Re01UARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
 	return cnt;
 }
 
-static inline void Re01UARTStopRx(DEVINTRF * const pDev) {
+static inline void Re01UARTStopRx(DevIntrf_t * const pDev) {
 }
 
-static inline bool Re01UARTStartTx(DEVINTRF * const pDev, uint32_t DevAddr) {
+static inline bool Re01UARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
 	return true;
 }
 
-static int Re01UARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
+static int Re01UARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 {
 	Re01UartDev_t *dev = (Re01UartDev_t *)pDev->pDevData;
 	int cnt = 0;
@@ -506,11 +506,11 @@ static int Re01UARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
 	return cnt;
 }
 
-void Re01UARTStopTx(DEVINTRF * const pDev)
+void Re01UARTStopTx(DevIntrf_t * const pDev)
 {
 }
 
-void Re01UARTDisable(DEVINTRF * const pDev)
+void Re01UARTDisable(DevIntrf_t * const pDev)
 {
 	Re01UartDev_t *dev = (Re01UartDev_t *)pDev->pDevData;
 
@@ -524,7 +524,7 @@ void Re01UARTDisable(DEVINTRF * const pDev)
 	}
 }
 
-void Re01UARTEnable(DEVINTRF * const pDev)
+void Re01UARTEnable(DevIntrf_t * const pDev)
 {
 	Re01UartDev_t *dev = (Re01UartDev_t *)pDev->pDevData;
 
@@ -542,7 +542,7 @@ void Re01UARTEnable(DEVINTRF * const pDev)
 	}
 }
 
-void Re01UARTPowerOff(DEVINTRF * const pDev)
+void Re01UARTPowerOff(DevIntrf_t * const pDev)
 {
 }
 

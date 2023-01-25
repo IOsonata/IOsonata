@@ -394,7 +394,7 @@ extern "C" void LPTIM1_IRQHandler()
 	NVIC_ClearPendingIRQ(LPTIM1_IRQn);
 }
 
-extern "C" void LPTIM2_IRQHandler()
+extern "C" __WEAK void LPTIM2_IRQHandler()
 {
 	Stm32l4LptIRQHandler(g_Stm32l4TimerData[1].pTimer);
 

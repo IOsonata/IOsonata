@@ -129,7 +129,7 @@ bool Sam4eI2CWaitStop(SAM4E_I2CDEV * const pDev, int Timeout)
 	return false;
 }
 
-void Sam4eI2CDisable(DEVINTRF * const pDev)
+void Sam4eI2CDisable(DevIntrf_t * const pDev)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
@@ -137,7 +137,7 @@ void Sam4eI2CDisable(DEVINTRF * const pDev)
 	dev->pReg->TWI_CR = TWI_CR_MSDIS | TWI_CR_SVDIS;
 }
 
-void Sam4eI2CEnable(DEVINTRF * const pDev)
+void Sam4eI2CEnable(DevIntrf_t * const pDev)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
@@ -154,19 +154,19 @@ void Sam4eI2CEnable(DEVINTRF * const pDev)
 	}
 }
 
-void Sam4eI2CPowerOff(DEVINTRF * const pDev)
+void Sam4eI2CPowerOff(DevIntrf_t * const pDev)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 }
 
-uint32_t Sam4eI2CGetRate(DEVINTRF * const pDev)
+uint32_t Sam4eI2CGetRate(DevIntrf_t * const pDev)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
 	return dev->pI2cDev->Cfg.Rate;
 }
 
-uint32_t Sam4eI2CSetRate(DEVINTRF * const pDev, uint32_t RateHz)
+uint32_t Sam4eI2CSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 	uint32_t cldiv;
@@ -200,7 +200,7 @@ uint32_t Sam4eI2CSetRate(DEVINTRF * const pDev, uint32_t RateHz)
 	return 0;
 }
 
-bool Sam4eI2CStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
+bool Sam4eI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
@@ -218,7 +218,7 @@ bool Sam4eI2CStartRx(DEVINTRF * const pDev, uint32_t DevAddr)
 }
 
 // Receive Data only, no Start/Stop condition
-int Sam4eI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
+int Sam4eI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 	int cnt = 0;
@@ -245,7 +245,7 @@ int Sam4eI2CRxData(DEVINTRF *pDev, uint8_t *pBuff, int BuffLen)
 	return cnt;
 }
 
-void Sam4eI2CStopRx(DEVINTRF * const pDev)
+void Sam4eI2CStopRx(DevIntrf_t * const pDev)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
@@ -260,7 +260,7 @@ void Sam4eI2CStopRx(DEVINTRF * const pDev)
     dev->pReg->TWI_IADR = 0;
 }
 
-bool Sam4eI2CStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
+bool Sam4eI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
@@ -271,7 +271,7 @@ bool Sam4eI2CStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-int Sam4eI2CTxData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+int Sam4eI2CTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 	uint32_t d;
@@ -293,7 +293,7 @@ int Sam4eI2CTxData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 	return cnt;
 }
 
-int Sam4eI2CTxSrData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
+int Sam4eI2CTxSrData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 	uint32_t d = 0;
@@ -312,7 +312,7 @@ int Sam4eI2CTxSrData(DEVINTRF * const pDev, uint8_t *pData, int DataLen)
 	return cnt;
 }
 
-void Sam4eI2CStopTx(DEVINTRF * const pDev)
+void Sam4eI2CStopTx(DevIntrf_t * const pDev)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
@@ -322,7 +322,7 @@ void Sam4eI2CStopTx(DEVINTRF * const pDev)
 	Sam4eI2CWaitStop(dev, 10000);
 }
 
-void Sam4eI2CReset(DEVINTRF * const pDev)
+void Sam4eI2CReset(DevIntrf_t * const pDev)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 
@@ -334,7 +334,7 @@ void Sam4eI2CReset(DEVINTRF * const pDev)
 	dev->pReg->TWI_RHR;
 }
 
-void I2CIrqHandler(int DevNo, DEVINTRF * const pDev)
+void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
     SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 

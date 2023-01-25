@@ -227,12 +227,12 @@ extern "C" void UART6_IRQHandler()
 }
 #endif
 
-static uint32_t STM32F03xUARTGetRate(DEVINTRF * const pDev)
+static uint32_t STM32F03xUARTGetRate(DevIntrf_t * const pDev)
 {
 	return ((STM32F0X_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
 }
 
-static uint32_t STM32F03xUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
+static uint32_t STM32F03xUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 	uint32_t fclkfreq = SystemCoreClockGet();
@@ -262,12 +262,12 @@ static uint32_t STM32F03xUARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 	return dev->pUartDev->Rate;
 }
 
-static bool STM32F03xUARTStartRx(DEVINTRF * const pSerDev, uint32_t DevAddr)
+static bool STM32F03xUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
 {
 	return true;
 }
 
-static int STM32F03xUARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
+static int STM32F03xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
@@ -299,15 +299,15 @@ static int STM32F03xUARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Buffle
 	return cnt;
 }
 
-static void STM32F03xUARTStopRx(DEVINTRF * const pDev) {
+static void STM32F03xUARTStopRx(DevIntrf_t * const pDev) {
 }
 
-static bool STM32F03xUARTStartTx(DEVINTRF * const pDev, uint32_t DevAddr)
+static bool STM32F03xUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	return true;
 }
 
-static int STM32F03xUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
+static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
     int cnt = 0;
@@ -343,10 +343,10 @@ static int STM32F03xUARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datale
     return cnt;
 }
 
-static inline void STM32F03xUARTStopTx(DEVINTRF * const pDev) {
+static inline void STM32F03xUARTStopTx(DevIntrf_t * const pDev) {
 }
 
-static void STM32F03xUARTDisable(DEVINTRF * const pDev)
+static void STM32F03xUARTDisable(DevIntrf_t * const pDev)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 
@@ -356,7 +356,7 @@ static void STM32F03xUARTDisable(DEVINTRF * const pDev)
 	RCC->CFGR3 &= ~RCC_CFGR3_USART1SW_Msk;
 }
 
-static void STM32F03xUARTEnable(DEVINTRF * const pDev)
+static void STM32F03xUARTEnable(DevIntrf_t * const pDev)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 
@@ -376,7 +376,7 @@ static void STM32F03xUARTEnable(DEVINTRF * const pDev)
 
 }
 
-static void STM32F03xUARTPowerOff(DEVINTRF * const pDev)
+static void STM32F03xUARTPowerOff(DevIntrf_t * const pDev)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 
@@ -413,7 +413,7 @@ static void STM32F03xUARTPowerOff(DEVINTRF * const pDev)
 	dev->pReg->CR2 &= ~USART_CR2_CLKEN;
 }
 
-static void STM32F03xUARTReset(DEVINTRF * const pDev)
+static void STM32F03xUARTReset(DevIntrf_t * const pDev)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 
