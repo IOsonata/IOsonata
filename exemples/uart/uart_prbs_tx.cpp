@@ -52,6 +52,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define TEST_BUFSIZE		64
 
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
+
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE			CFIFO_MEMSIZE(TEST_BUFSIZE * 4)
@@ -76,7 +80,7 @@ static const UARTCfg_t s_UartCfg = {
 	.pRxMem = NULL,
 	.TxMemSize = 0,//FIFOSIZE,
 	.pTxMem = NULL,//g_TxBuff,
-	.bDMAMode = true,
+	.bDMAMode = false,
 };
 
 #ifdef DEMO_C
@@ -86,10 +90,6 @@ UARTDev_t g_UartDev;
 // For C++ object programming
 // UART object instance
 UART g_Uart;
-#endif
-
-#ifdef BOARD_OSC
-MCU_OSC g_McuOsc = BOARD_OSC;
 #endif
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)

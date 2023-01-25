@@ -90,7 +90,7 @@ UART g_Uart;
 #endif
 
 #ifdef BOARD_OSC
-MCU_OSC g_McuOsc = BOARD_OSC;
+McuOsc_t g_McuOsc = BOARD_OSC;
 #endif
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)

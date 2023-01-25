@@ -57,11 +57,11 @@ uint8_t g_RxBuff[FIFOSIZE];
 
 // This defines the s_UartPortPins map and pin count.
 // See board.h for target device specific definitions
-static const IOPINCFG s_UartPortPins[] = UART_PORTPINS;
+static const IOPinCfg_t s_UartPortPins[] = UART_PINS;
 
 // UART configuration data
 const UARTCfg_t g_UartCfg = {
-	.DevNo = UART_NO,
+	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = sizeof(s_UartPortPins) / sizeof(IOPINCFG),
 	.Rate = 115200,

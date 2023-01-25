@@ -58,16 +58,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_RTS_PIN		-1
 #define UART_RTS_PINOP		0
 
-#define SPI0_DEVNO			0
-#define SPI0_MISO_PORT		0
-#define SPI0_MISO_PIN        			15//13
-#define SPI0_MISO_PINOP      			1
-#define SPI0_MOSI_PORT       			0
-#define SPI0_MOSI_PIN        			16//12
-#define SPI0_MOSI_PINOP      			1
-#define SPI0_SCK_PORT        			0
-#define SPI0_SCK_PIN         			17//11
-#define SPI0_SCK_PINOP       			1
+#define SPI_MASTER_DEVNO					0
+#define SPI_MASTER_MISO_PORT				0
+#define SPI_MASTER_MISO_PIN        			15//13
+#define SPI_MASTER_MISO_PINOP      			1
+#define SPI_MASTER_MOSI_PORT       			0
+#define SPI_MASTER_MOSI_PIN        			16//12
+#define SPI_MASTER_MOSI_PINOP      			1
+#define SPI_MASTER_SCK_PORT        			0
+#define SPI_MASTER_SCK_PIN         			17//11
+#define SPI_MASTER_SCK_PINOP       			1
 
 
 #endif // __BOARD_H__
