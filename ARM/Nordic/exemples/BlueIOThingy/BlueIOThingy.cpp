@@ -52,7 +52,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "app_util_platform.h"
 #include "app_scheduler.h"
 
-#include "bsec_interface.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
@@ -75,6 +74,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 #include "seep.h"
 #include "diskio_flash.h"
+#include "sensors/bsec_interface.h"
 
 #include "BlueIOThingy.h"
 #include "BlueIOMPU9250.h"

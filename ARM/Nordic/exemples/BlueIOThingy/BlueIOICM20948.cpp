@@ -21,8 +21,16 @@
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "idelay.h"
+
+#define INVN
+
+#ifdef INVN
 #include "imu/imu_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
+#else
+#include "imu/imu_icm20948.h"
+#include "sensors/agm_icm20948.h"
+#endif
 
 #include "BlueIOThingy.h"
 #include "board.h"
@@ -53,13 +61,21 @@ static const MAGSENSOR_CFG s_MagCfg = {
 	.Precision = MAGSENSOR_PRECISION_HIGH,
 };
 
+#ifdef INVN
 static AgmInvnIcm20948 s_MotSensor;
+#else
+static AgmIcm20948 s_MotSensor;
+#endif
 
 static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
+#ifdef INVN
 static ImuInvnIcm20948 s_Imu;
+#else
+static ImuIcm20948 s_Imu;
+#endif
 
 static Timer *s_pTimer = NULL;
 
@@ -150,6 +166,7 @@ bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 	if (res == true)
 	{
 		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor, &s_MotSensor, &s_MotSensor);
+//		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor);
 	}
 
 	if (res)
