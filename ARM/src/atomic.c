@@ -32,24 +32,27 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <signal.h>
+
 #include "cmsis_gcc.h"
 
-int __atomic_fetch_add_4(int *d, int val, int mem)
+unsigned __atomic_fetch_add_4(volatile void *d, unsigned val, int mem)
 {
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
-	*d += val;
+	*(unsigned*)d += val;
 	__set_PRIMASK(primask);
 
-	return *d;
+	return *(unsigned*)d;
 }
 
-int __atomic_fetch_sub_4(int *d, int val, int mem)
+unsigned __atomic_fetch_sub_4(volatile void *d, unsigned val, int mem)
 {
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
-	*d -= val;
+	*(unsigned*)d -= val;
 	__set_PRIMASK(primask);
 
-	return *d;
+	return *(unsigned*)d;
 }
+
