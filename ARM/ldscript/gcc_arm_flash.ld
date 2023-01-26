@@ -51,8 +51,12 @@ ENTRY(ResetEntry)
 __CheckSum = 0;
 __StackTop = ORIGIN(RAM) + LENGTH(RAM);
 
+ASSERT(__HeapBase < __StackTop, "region RAM overflowed")
+
 /* Use 2/3 of remaining RAM for heap, 1/3 for Stack */
 __HeapSize = (__StackTop - __HeapBase) * 2 / 3;
+ASSERT(__HeapSize > 0, "region RAM overflowed with heap");
+		
 
 SECTIONS {
 
@@ -243,6 +247,5 @@ SECTIONS {
 	
 	/* Check if data + heap + stack exceeds RAM limit */
 	ASSERT(__StackLimit < __StackTop, "region RAM overflowed with stack")
-
 }
 
