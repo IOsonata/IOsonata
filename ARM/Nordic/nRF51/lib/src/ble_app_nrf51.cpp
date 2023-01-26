@@ -148,13 +148,13 @@ static BtAppData_t s_BtAppData = {
 	BTAPP_STATE_UNKNOWN, BTAPP_ROLE_PERIPHERAL, BLE_CONN_HANDLE_INVALID, -1, -1,
 };
 
-alignas(4) static uint8_t s_BleAppAdvBuff[256];
+alignas(4) static uint8_t s_BleAppAdvBuff[32];
 alignas(4) static BtAdvPacket_t s_BleAppAdvPkt = { 31, 0, s_BleAppAdvBuff};
-alignas(4) static BtAdvPacket_t s_BleAppExtAdvPkt = { 255, 0, s_BleAppAdvBuff};
+alignas(4) static BtAdvPacket_t s_BleAppExtAdvPkt = { 32, 0, s_BleAppAdvBuff};
 
-alignas(4) static uint8_t s_BleAppSrBuff[256];
+alignas(4) static uint8_t s_BleAppSrBuff[32];
 alignas(4) static BtAdvPacket_t s_BleAppSrPkt = { 31, 0, s_BleAppSrBuff};
-alignas(4) static BtAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppSrBuff};
+alignas(4) static BtAdvPacket_t s_BleAppExtSrPkt = { 32, 0, s_BleAppSrBuff};
 
 //static ble_gap_adv_data_t s_BtAppAdvData = {
 //	.adv_data = {s_BleAppAdvBuff, 0},
@@ -1241,6 +1241,8 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 		*(uint16_t *)p->Data = pCfg->VendorId;
 		memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
 	}
+
+	return true;
 }
 
 void BtAppDisInit(const BtAppCfg_t *pCfg)
