@@ -228,8 +228,8 @@ SECTIONS {
 		end = __end__;
 		_pvHeapStart = .;
 		KEEP(*(.heap*))
-		. = __HeapBase + __HeapSize;
-		__HeapLimit = .;
+		/*. = __HeapBase + __HeapSize;*/
+		__HeapLimit = __HeapBase + __HeapSize;
 	} > RAM
 
 	/* .stack_dummy section doesn't contains any symbols. It is only
