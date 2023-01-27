@@ -36,6 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #if defined ( __ARMCC_VERSION )
 extern int Image$$ER_ZI$$Length;
@@ -173,18 +174,19 @@ __attribute__((weak)) void _exit(int Status)
 
 __attribute__((weak)) caddr_t _sbrk(int incr)
 {
-	static unsigned long *heap_end = 0;
-	unsigned long *prev_heap_end;
+	static uint8_t *heap_end = 0;
+	uint8_t *prev_heap_end;
 
 	if (heap_end == 0)
 	{
-		heap_end = &__HeapBase;
+		heap_end = (uint8_t*)&__HeapBase;
 	}
 
 	prev_heap_end = heap_end;
-	if ((heap_end + incr) > (unsigned long*) &__HeapLimit)
+	if ((heap_end + incr) > (uint8_t*) &__HeapLimit)
 	{
-		return ((void*)-1); // error - no more memory
+		errno = ENOMEM;
+		return (caddr_t)-1; // error - no more memory
 	}
 	heap_end += incr;
 
