@@ -51,13 +51,6 @@ ENTRY(ResetEntry)
 __CheckSum = 0;
 __StackTop = ORIGIN(RAM) + LENGTH(RAM);
 
-ASSERT(__HeapBase < __StackTop, "region RAM overflowed")
-
-/* Use 2/3 of remaining RAM for heap, 1/3 for Stack */
-__HeapSize = (__StackTop - __HeapBase) * 2 / 3;
-ASSERT(__HeapSize > 0, "region RAM overflowed with heap");
-		
-
 SECTIONS {
 
     /* Require ARM vectors located at begining of FLASH region at address 0*/
@@ -226,9 +219,13 @@ SECTIONS {
       __HeapBase = .;
 		__end__ = .;
 		end = __end__;
+		__heap_start__ = __end__;
 		_pvHeapStart = .;
 		KEEP(*(.heap*))
-		/*. = __HeapBase + __HeapSize;*/
+
+		__heap_size__ = 	(ORIGIN(RAM) + LENGTH(RAM)) * 2 / 3;
+		__HeapSize = __heap_size__;
+		__heap_end__ = __heap_start__ + __heap_size__;
 		__HeapLimit = __HeapBase + __HeapSize;
 	} > RAM
 
@@ -247,5 +244,7 @@ SECTIONS {
 	
 	/* Check if data + heap + stack exceeds RAM limit */
 	ASSERT(__StackLimit < __StackTop, "region RAM overflowed with stack")
+	ASSERT(__heap_start__ < __StackTop, "region RAM overflowed with heap")
+
 }
 

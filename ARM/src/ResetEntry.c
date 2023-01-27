@@ -50,10 +50,9 @@ extern unsigned long __data_end__;
 extern unsigned long __bss_start__;
 extern unsigned long __bss_end__;
 extern unsigned long __bss_size__;
-extern unsigned long __end__;
-extern unsigned long __HeapSize;
-extern unsigned long __HeapBase;
-extern unsigned long __HeapLimit;
+extern unsigned long __heap_start__;
+extern unsigned long __heap_size__;
+extern unsigned long __heap_end__;
 #endif
 
 #ifdef __ICCARM__
@@ -166,6 +165,8 @@ void ResetEntry (void)
 
 }
 
+#if 1
+
 __attribute__((weak)) void _exit(int Status)
 {
 	__asm("BKPT #0");
@@ -174,23 +175,20 @@ __attribute__((weak)) void _exit(int Status)
 
 __attribute__((weak)) caddr_t _sbrk(int incr)
 {
-	static uint8_t *heap_end = 0;
-	uint8_t *prev_heap_end;
+	static uint32_t top = (uint32_t)&__heap_start__;
+	uint32_t heap = top;
 
-	if (heap_end == 0)
-	{
-		heap_end = (uint8_t*)&__HeapBase;
-	}
+	top += incr;
 
-	prev_heap_end = heap_end;
-	if ((heap_end + incr) > (uint8_t*) &__HeapLimit)
+	if (top > (uint32_t)&__heap_end__)
 	{
+		top = heap;
 		errno = ENOMEM;
+
 		return (caddr_t)-1; // error - no more memory
 	}
-	heap_end += incr;
 
-	return (caddr_t) prev_heap_end;
+	return (caddr_t) heap;
 }
 
 __attribute__ ((weak)) int _open(const char * const pPathName, int Flags, int Mode)
@@ -221,23 +219,24 @@ __attribute__ ((weak)) int _write (int Fd, char *pBuff, size_t Len)
 
 __attribute__ ((weak)) int _fstat(int file, struct stat *st)
 {
-  st->st_mode = S_IFCHR;
+	st->st_mode = S_IFCHR;
 
-  return 0;
+	return 0;
 }
 
 __attribute__ ((weak)) int _isatty(int file)
 {
-  return 1;
+	return 1;
 }
 
 __attribute__ ((weak)) void _kill(int pid, int sig)
 {
-  return;
+	return;
 }
 
 __attribute__ ((weak)) int _getpid(void)
 {
-  return -1;
+	return -1;
 }
 
+#endif
