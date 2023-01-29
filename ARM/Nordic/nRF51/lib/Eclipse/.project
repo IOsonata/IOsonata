@@ -386,11 +386,6 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/i2c_spi_nrf5x_irq.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_spi_nrf5x_irq.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/imu</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>

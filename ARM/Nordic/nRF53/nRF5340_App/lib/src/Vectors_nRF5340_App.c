@@ -55,11 +55,11 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CACHE_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPU_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CLOCK_POWER_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPIM4_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SAADC_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void TIMER0_IRQHandler(void);
@@ -92,6 +92,13 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void USBD_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void USBREGULATOR_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void KMU_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CRYPTOCELL_IRQHandler(void);
+
+__attribute__((weak)) void SPI_IRQHandler(int DevNo) {while(1);};
+__attribute__((weak)) void I2C_IRQHandler(int DevNo) {while(1);};//TWI0_IRQHandler();
+__attribute__((weak, alias("DEF_IRQHandler"))) void UARTE0_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void UARTE1_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void UARTE2_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void UARTE3_IRQHandler(void);
 
 #if (__FPU_USED == 1)
 __WEAK void FPU_IRQHandler(void);
@@ -185,4 +192,88 @@ void (* const __Vectors[200])(void) = {
 	CRYPTOCELL_IRQHandler,
 	0
 };
+
+__attribute__((weak)) void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void)
+{
+	if (NRF_SPIM0_S->INTENSET)
+	{
+		SPI_IRQHandler(0);
+	}
+
+	if (NRF_TWIM0_S->INTENSET)
+	{
+		//TWI0_IRQHandler(0);
+		I2C_IRQHandler(0);
+	}
+
+	if (NRF_UARTE0_S->INTENSET)
+	{
+		UARTE0_IRQHandler();
+	}
+
+	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
+}
+
+__attribute__((weak)) void SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler(void)
+{
+	if (NRF_SPIM1_S->INTENSET)
+	{
+		SPI_IRQHandler(1);
+	}
+
+	if (NRF_TWIM1_S->INTENSET)
+	{
+		//TWI0_IRQHandler(0);
+		I2C_IRQHandler(1);
+	}
+
+	if (NRF_UARTE1_S->INTENSET)
+	{
+		UARTE1_IRQHandler();
+	}
+
+	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
+}
+
+__attribute__((weak)) void SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler(void)
+{
+	if (NRF_SPIM2_S->INTENSET)
+	{
+		SPI_IRQHandler(2);
+	}
+
+	if (NRF_TWIM2_S->INTENSET)
+	{
+		//TWI0_IRQHandler(0);
+		I2C_IRQHandler(2);
+	}
+
+	if (NRF_UARTE2_S->INTENSET)
+	{
+		UARTE2_IRQHandler();
+	}
+
+	NVIC_ClearPendingIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
+}
+
+__attribute__((weak)) void SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler(void)
+{
+	if (NRF_SPIM3_S->INTENSET)
+	{
+		SPI_IRQHandler(3);
+	}
+
+	if (NRF_TWIM3_S->INTENSET)
+	{
+		//TWI0_IRQHandler(0);
+		I2C_IRQHandler(3);
+	}
+
+	if (NRF_UARTE3_S->INTENSET)
+	{
+		UARTE3_IRQHandler();
+	}
+
+	NVIC_ClearPendingIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
+}
 

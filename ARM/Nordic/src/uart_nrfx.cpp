@@ -1037,7 +1037,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 #ifdef UARTE_PRESENT
 
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-		SetSharedIntHandler(pCfg->DevNo, &pDev->DevIntrf, UartIrqHandler);
+		//SetSharedIntHandler(pCfg->DevNo, &pDev->DevIntrf, UartIrqHandler);
 #endif
 
 		if (pDev->DevIntrf.bDma == true)
@@ -1148,10 +1148,21 @@ extern "C" void UART0_IRQHandler()
 }
 #endif
 
-#ifdef NRF52840_XXAA
+#if defined(NRF52840_XXAA) || defined(NRF9160_XXAA) || defined(NRF5340_XXAA_App)
 extern "C" void UARTE1_IRQHandler()
 {
 	UartIrqHandler(1, &s_nRFxUARTDev[1].pUartDev->DevIntrf);
 }
 #endif
 
+#if defined(NRF9160_XXAA) || defined(NRF5340_XXAA_App)
+extern "C" void UARTE2_IRQHandler()
+{
+	UartIrqHandler(2, &s_nRFxUARTDev[2].pUartDev->DevIntrf);
+}
+
+extern "C" void UARTE3_IRQHandler()
+{
+	UartIrqHandler(3, &s_nRFxUARTDev[3].pUartDev->DevIntrf);
+}
+#endif

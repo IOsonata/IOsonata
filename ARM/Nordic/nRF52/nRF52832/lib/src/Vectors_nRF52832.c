@@ -55,8 +55,8 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void POWER_CLOCK_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UARTE0_UART0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void NFCT_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SAADC_IRQHandler(void);
@@ -88,6 +88,9 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void PWM2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPIM2_SPIS2_SPI2_IRQHandler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void RTC2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2S_IRQHandler(void);
+
+__attribute__((weak)) void SPI_IRQHandler(int DevNo) { while(1);};
+__attribute__((weak)) void I2C_IRQHandler(int DevNo) { while(1);};
 
 #if (__FPU_USED == 1)
 __WEAK void FPU_IRQHandler(void);
@@ -185,4 +188,33 @@ __WEAK void FPU_IRQHandler(void)
     *fpscr = *fpscr & ~(0x0000009F);
 }
 #endif
+
+__WEAK void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)
+{
+	if (NRF_SPIM0->INTENSET)
+	{
+		SPI_IRQHandler(0);
+	}
+
+	if (NRF_TWIM0->INTENSET)
+	{
+		I2C_IRQHandler(0);
+	}
+
+	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
+}
+
+__WEAK void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
+{
+	if (NRF_SPIM1->INTENSET)
+	{
+		SPI_IRQHandler(1);
+	}
+
+	if (NRF_TWIM0->INTENSET)
+	{
+		I2C_IRQHandler(1);
+	}
+	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
+}
 

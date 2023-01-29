@@ -578,9 +578,10 @@ void nRFxI2CReset(DevIntrf_t * const pDev)
 #endif
 }
 
-void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
+//void I2CIrqHandler(int DevNo, I2CDev_t * const pDev)
+extern "C" void I2C_IRQHandler(int DevNo)
 {
-    nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
+    nRFTwiDev_t *dev = &s_nRFxI2CDev[DevNo];//(nRFTwiDev_t*)&pDev->DevIntrf.pDevData;
 
     if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
     {
@@ -590,11 +591,11 @@ void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
     	{
     		// Read command received
 
-    		if (pDev->EvtCB)
+    		if (dev->pI2cDev->DevIntrf.EvtCB)
     		{
     			int len = dev->pDmaSReg->EVENTS_RXSTARTED ? dev->pDmaSReg->RXD.AMOUNT : 0;
 
-    			pDev->EvtCB(pDev, DEVINTRF_EVT_READ_RQST, NULL, len);
+    			dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_READ_RQST, NULL, len);
     		}
     		dev->pDmaSReg->EVENTS_RXSTARTED = 0;
     		dev->pDmaSReg->EVENTS_READ = 0;
@@ -608,9 +609,9 @@ void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
     	{
     		// Write command received
 
-    		if (pDev->EvtCB)
+    		if (dev->pI2cDev->DevIntrf.EvtCB)
     		{
-    			pDev->EvtCB(pDev, DEVINTRF_EVT_WRITE_RQST, NULL, 0);
+    			dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_WRITE_RQST, NULL, 0);
     		}
     		dev->pDmaSReg->EVENTS_WRITE = 0;
     		dev->pDmaSReg->RXD.PTR = (uint32_t)dev->pI2cDev->pTRBuff[dev->pDmaSReg->MATCH];
@@ -635,9 +636,9 @@ void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
     			dev->pDmaSReg->EVENTS_TXSTARTED = 0;
     		}
     		dev->pDmaSReg->EVENTS_STOPPED = 0;
-    		if (pDev->EvtCB)
+    		if (dev->pI2cDev->DevIntrf.EvtCB)
     		{
-    			pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, NULL, len);
+    			dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, len);
     		}
     	}
     	if (dev->pDmaSReg->EVENTS_ERROR)
@@ -821,7 +822,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     }
     if (inten != 0)
     {
-    	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, I2CIrqHandler);
+    	//SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, I2CIrqHandler);
 
     	switch (pCfgData->DevNo)
     	{

@@ -426,11 +426,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/shared_irq_nrf5340_application.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/shared_irq_nrf5340_application.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/slip_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/slip_intrf.cpp</locationURI>

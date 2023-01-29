@@ -54,8 +54,8 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void POWER_CLOCK_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UARTE0_UART0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void NFCT_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SAADC_IRQHandler(void);
@@ -200,4 +200,33 @@ __WEAK void FPU_IRQHandler(void)
     *fpscr = *fpscr & ~(0x0000009F);
 }
 #endif
+
+__attribute__((weak)) void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)
+{
+	if (NRF_SPIM0->INTENSET)
+	{
+		SPI_IRQHandler(0);
+	}
+
+	if (NRF_TWIM0->INTENSET)
+	{
+		I2C_IRQHandler(0);
+	}
+
+	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
+}
+
+__attribute__((weak)) void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
+{
+	if (NRF_SPIM1->INTENSET)
+	{
+		SPI_IRQHandler(1);
+	}
+
+	if (NRF_TWIM0->INTENSET)
+	{
+		I2C_IRQHandler(1);
+	}
+	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
+}
 

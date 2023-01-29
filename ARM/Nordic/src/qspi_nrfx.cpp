@@ -169,7 +169,7 @@ bool nRFxQSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Receive Data only, no Start/Stop condition
 int nRFxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
     int cnt = 0;
 
 	nRFxQSPIWaitReady(dev, 10000);
@@ -216,7 +216,7 @@ int nRFxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 // Stop receive
 void nRFxQSPIStopRx(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
 
 	nRFxQSPIWaitEventReady(dev, 10000);
 
@@ -233,7 +233,7 @@ void nRFxQSPIStopRx(DevIntrf_t * const pDev)
 // Initiate transmit
 bool nRFxQSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
@@ -255,7 +255,7 @@ bool nRFxQSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Transmit Data only, no Start/Stop condition
 int nRFxQSPITxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
 	int cnt = 0;
 
 	nRFxQSPIWaitReady(dev, 10000);
@@ -303,7 +303,7 @@ int nRFxQSPITxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 // Stop transmit
 void nRFxQSPIStopTx(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
 
 	nRFxQSPIWaitEventReady(dev, 10000);
 	nRFxQSPIWaitReady(dev, 10000);
@@ -491,7 +491,7 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 
 extern "C" void QSPI_IRQHandler()
 {
-
+	NVIC_ClearPendingIRQ(QSPI_IRQn);
 }
 
 SPIPHY SPISetPhy(SPIDev_t * const pDev, SPIPHY Phy)

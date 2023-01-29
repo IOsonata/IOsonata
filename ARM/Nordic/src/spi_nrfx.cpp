@@ -543,17 +543,18 @@ void nRFxSPIReset(DevIntrf_t * const pDev)
 
 }
 
-void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev)
+//void SPIIrqHandler(int DevNo, SPIDev_t * const pDev)//DevIntrf_t * const pDev)
+extern "C" void SPI_IRQHandler(int DevNo)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	NrfSpiDev_t *dev = &g_nRFxSPIDev[DevNo];//(NrfSpiDev_t *)pDev->DevIntrf.pDevData;
 
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
 		if (dev->pDmaSReg->EVENTS_ENDRX)
 		{
-			if (dev->pSpiDev->Cfg.EvtCB)
+			if (dev->pSpiDev->DevIntrf.EvtCB)
 			{
-				dev->pSpiDev->Cfg.EvtCB(pDev, DEVINTRF_EVT_RX_FIFO_FULL, NULL, 0);
+				dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_RX_FIFO_FULL, NULL, 0);
 			}
 			dev->pDmaSReg->EVENTS_ENDRX = 0;
 			dev->pDmaSReg->STATUS = dev->pDmaSReg->STATUS;
@@ -561,12 +562,12 @@ void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev)
 
 		if (dev->pDmaSReg->EVENTS_END)
 		{
-			if (dev->pSpiDev->Cfg.EvtCB)
+			if (dev->pSpiDev->DevIntrf.EvtCB)
 			{
 #ifdef SPIM_PRESENT
-				dev->pSpiDev->Cfg.EvtCB(pDev, DEVINTRF_EVT_COMPLETED, (uint8_t*)dev->pDmaSReg->RXD.PTR, dev->pDmaSReg->RXD.AMOUNT);
+				dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, (uint8_t*)dev->pDmaSReg->RXD.PTR, dev->pDmaSReg->RXD.AMOUNT);
 #else
-				dev->pSpiDev->Cfg.EvtCB(pDev, DEVINTRF_EVT_COMPLETED, (uint8_t*)dev->pDmaSReg->RXDPTR, dev->pDmaSReg->AMOUNTRX);
+				dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, (uint8_t*)dev->pDmaSReg->RXDPTR, dev->pDmaSReg->AMOUNTRX);
 #endif
 			}
 			dev->pDmaSReg->EVENTS_END = 0;
@@ -574,9 +575,9 @@ void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev)
 
 		if (dev->pDmaSReg->EVENTS_ACQUIRED)
 		{
-			if (dev->pSpiDev->Cfg.EvtCB)
+			if (dev->pSpiDev->DevIntrf.EvtCB)
 			{
-				dev->pSpiDev->Cfg.EvtCB(pDev, DEVINTRF_EVT_STATECHG, NULL, 0);
+				dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_STATECHG, NULL, 0);
 			}
 			dev->pDmaSReg->STATUS = dev->pDmaSReg->STATUS;
 
@@ -833,7 +834,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
     if (pCfgData->bIntEn && pCfgData->Mode == SPIMODE_SLAVE)
     {
-    	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, SPIIrqHandler);
+    	//SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, SPIIrqHandler);
 
     	switch (pCfgData->DevNo)
     	{
@@ -934,3 +935,18 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	return true;
 }
 
+#ifdef NRF52_SERIES
+extern "C" void SPIM2_SPIS2_SPI2_IRQHandler(void)
+{
+	SPI_IRQHandler(2);//, g_nRFxSPIDev[2].pSpiDev);
+    NVIC_ClearPendingIRQ(SPIM2_SPIS2_SPI2_IRQn);
+}
+
+#ifdef NRF52840_XXAA
+extern "C" void SPIM3_IRQHandler(void)
+{
+	SPI_IRQHandler(3);//, g_nRFxSPIDev[3].pSpiDev);
+    NVIC_ClearPendingIRQ(SPIM3_IRQn);
+}
+#endif
+#endif
