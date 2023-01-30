@@ -51,6 +51,7 @@ Modified by          Date              Description
 #pragma pack(push, 4)
 typedef struct __ADC_nRF52_Data {
 	AdcnRF52 *pDevObj;
+	uint32_t OvrSample;
 	//DEVEVTCB EvtHandler;
 	int NbChanAct;
     int SampleCnt;
@@ -66,7 +67,7 @@ typedef struct __ADC_nRF52_Data {
 #pragma pack(pop)
 
 alignas(4) static ADCNRF52_DATA s_AdcnRF52DevData = {
-	NULL
+	NULL, 0,
 };
 
 //#define ADC_CFIFO_SIZE		CFIFO_TOTAL_MEMSIZE(SAADC_NRF52_MAX_CHAN, sizeof(ADC_DATA))
@@ -241,6 +242,7 @@ bool AdcnRF52::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 		return false;
 
 	// Undocumented : Forced power on just in case that it was turned off.
+	*(volatile uint32_t *)((uint32_t)NRF_SAADC + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)NRF_SAADC + 0xFFC) = 1;
 
 	memset(&s_AdcnRF52DevData, 0, sizeof(s_AdcnRF52DevData));
@@ -266,11 +268,14 @@ bool AdcnRF52::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 
 	Resolution(Cfg.Resolution);
 
-#ifdef __ICCARM__
+	/// NOTE: ARM GCC 11 and above generate bad branch on if (ov>0)
+	/// when using __builtin_clzl although both __CLZ & __builtin..
+	/// generate same value
+//#ifdef __ICCARM__
 	int ov = 31 - __CLZ(Cfg.OvrSample);
-#else
-	int ov = 31 - __builtin_clzl(Cfg.OvrSample);
-#endif
+//#else
+//	int ov = 31 - __builtin_clzl(Cfg.OvrSample);
+//#endif
 
 	if (ov > 0)
 	{
@@ -281,6 +286,8 @@ bool AdcnRF52::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 		// none
 		NRF_SAADC->OVERSAMPLE = SAADC_OVERSAMPLE_OVERSAMPLE_Bypass << SAADC_OVERSAMPLE_OVERSAMPLE_Pos;
 	}
+
+	s_AdcnRF52DevData.OvrSample = NRF_SAADC->OVERSAMPLE;
 
 	vMode = Cfg.Mode;
 	if (Cfg.Mode == ADC_CONV_MODE_CONTINUOUS)
@@ -463,6 +470,18 @@ bool AdcnRF52::OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan)
 
 	NRF_SAADC->ENABLE = 0;
 
+	/// NOTE: Oversampling only work when NbChan is 1
+	/// Multichannels results in Scan mode which is mutually with Oversampling
+	if (NbChan > 1)
+	{
+		// Disable oversampling on multichannels
+		NRF_SAADC->OVERSAMPLE = 0;
+	}
+	else
+	{
+		NRF_SAADC->OVERSAMPLE = s_AdcnRF52DevData.OvrSample;
+	}
+
 	for (int i = 0; i < NbChan; i++)
 	{
 		uint32_t chconfig = 0;	// CH[].CONFIG register value
@@ -555,11 +574,11 @@ bool AdcnRF52::OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan)
 		else
 		{
 			s_AdcnRF52DevData.GainFactor[pChanCfg[i].Chan] /= (float)resdiv * (float)((pChanCfg[i].Gain >> 8)& 0xFF);
-#ifdef __ICCARM__
+//#ifdef __ICCARM__
 			chconfig |= ((5 + (31 - __CLZ(pChanCfg[i].Gain >> 8))) << SAADC_CH_CONFIG_GAIN_Pos) & SAADC_CH_CONFIG_GAIN_Msk;
-#else
-			chconfig |= ((5 + (31 - __builtin_clzl(pChanCfg[i].Gain >> 8))) << SAADC_CH_CONFIG_GAIN_Pos) & SAADC_CH_CONFIG_GAIN_Msk;
-#endif
+//#else
+//			chconfig |= ((5 + (31 - __builtin_clzl(pChanCfg[i].Gain >> 8))) << SAADC_CH_CONFIG_GAIN_Pos) & SAADC_CH_CONFIG_GAIN_Msk;
+//#endif
 		}
 
 		if (pChanCfg[i].PinP.Conn == ADC_PIN_CONN_VDD)

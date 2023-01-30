@@ -87,11 +87,15 @@ bool AdcLTC2495::OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan)
 
 		uint32_t gain = pChanCfg[i].Gain >> 8;	// Fractional gain not available
 
+		if (gain > 0)
+		{
 #ifdef __ICCARM__
-		d[1] |= 0x80 | ((31 - __CLZ(gain)) & 0xFF);
+			d[1] |= 0x80 | ((31 - __CLZ(gain)) & 0xFF);
 #else
-		d[1] |= 0x80 | ((31 - __builtin_clzl(gain)) & 0xFF);
+			d[1] |= 0x80 | ((31 - __builtin_clzl(gain)) & 0xFF);
 #endif
+		}
+
 		Write(&d[0], 1, &d[1], 1);
 
 		gain = (gain & 0x7) << 2;
