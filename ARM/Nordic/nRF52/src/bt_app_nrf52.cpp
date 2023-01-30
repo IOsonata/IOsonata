@@ -321,6 +321,8 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
+	BtGattCharSetValue(pChar, pData, DataLen);
+
 	if (pChar->bNotify == false)
 		return false;
 
