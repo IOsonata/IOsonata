@@ -17,8 +17,8 @@ MX25R1635F :
 static const FLASHDISKIO_CFG s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 16 * 1024 / 8,		// 16 Mbits in KBytes
-	.SectSize = 4,					// 4K
-    .BlkSize = 64,					// 64K
+	.SectSize = 4 * 1024,					// 4K
+    .BlkSize = 64 * 1024,					// 64K
     .WriteSize = 256,				// Write page size
     .AddrSize = 3,              	// 3 bytes addressing
 	.pInitCB = NULL.				// no special init require.
@@ -31,8 +31,8 @@ S25FS :
 static const FLASHDISKIO_CFG s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 128 * 1024 / 8,	// 128 Mbits
-	.SectSize = 4,					// 4K
-    .BlkSize = 64,					// 64K
+	.SectSize = 4 * 1024,					// 4K
+    .BlkSize = 64 * 1024,					// 64K
     .WriteSize = 512,				// Write page size
     .AddrSize = 3,
     .pInitCB = s25fs_init,			// Special initialization require
@@ -78,8 +78,8 @@ MX66U51235F :
 static const FLASHDISKIO_CFG s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 256 * 1024 / 8,	// 256 Mbits in KBytes
-	.SectSize = 4,					// 4K
-    .BlkSize = 64,					// 64K
+	.SectSize = 4 * 1024,					// 4K
+    .BlkSize = 64 * 1024,					// 64K
     .WriteSize = 128,				// Write page size
     .AddrSize = 4,                  // 256+ Mbits needs 4 bytes addressing
     .pInitCB = NULL,
@@ -91,8 +91,8 @@ static const FLASHDISKIO_CFG s_FlashDiskCfg = {
 static FLASHDISKIO_CFG s_N25Q128A_QFlashCfg = {
     .DevNo = 0,
     .TotalSize = 128 * 1024 / 8,	// 128 Mbits in KBytes
-	.SectSize = 4,
-    .BlkSize = 32,
+	.SectSize = 4 * 1024,
+    .BlkSize = 32 * 1024,
     .WriteSize = 256,
     .AddrSize = 3,					// 3 bytes addressing
     .pInitCB = NULL,//MX25U1635E_init,
@@ -105,8 +105,8 @@ static FLASHDISKIO_CFG s_N25Q128A_QFlashCfg = {
 static FLASHDISKIO_CFG s_MX25R3235F_QFlashCfg = {
     .DevNo = 0,
     .TotalSize = 32 * 1024 / 8,		// 16 Mbits
-	.SectSize = 4,
-    .BlkSize = 64,
+	.SectSize = 4 * 1024,
+    .BlkSize = 64 * 1024,
     .WriteSize = 256,
     .AddrSize = 3,					// 3 bytes addressing
     .pInitCB = NULL,//MX25U1635E_init,
@@ -243,8 +243,8 @@ typedef FlaskDiskIOCb_t	FLASHDISKIOCB;
 typedef struct {
     int         DevNo;          //!< Device number or address for interface use
     uint32_t    TotalSize;      //!< Total Flash size in KBytes
-    uint16_t    SectSize;		//!< Sector erase size in KBytes
-    uint16_t	BlkSize;		//!< Block erase size in KBytes
+    uint16_t    SectSize;		//!< Sector erase size in Bytes
+    uint16_t	BlkSize;		//!< Block erase size in Bytes
     uint32_t    WriteSize;      //!< Writable page size in bytes
     int         AddrSize;       //!< Address size in bytes
     uint32_t	DevId;			//!< Device ID, read using FLASH_CMD_READID
@@ -427,8 +427,8 @@ protected:
 	bool WaitReady(uint32_t Timeout = 100000, uint32_t usRtyDelay = 0);
 
 private:
-	uint16_t    vSectSize;		//!< Erasable sector size in KBytes
-	uint16_t    vBlkSize;		//!< Erasable block size in KBytes
+	uint16_t    vSectSize;		//!< Erasable sector size in Bytes
+	uint16_t    vBlkSize;		//!< Erasable block size in Bytes
 	uint32_t    vWriteSize;		//!< Min writable size in bytes
 	uint32_t    vTotalSize;		//!< Total Flash size in KBytes
 	int         vAddrSize;		//!< Address size in bytes
@@ -451,8 +451,8 @@ extern "C" {
 #define FLASH_MT25QL512(InitCB, WaitCB)		{ \
 	.DevNo = 0, \
 	.TotalSize = 512 * 1024 / 8, \
-	.SectSize = 4, \
-	.BlkSize = 32, \
+	.SectSize = 4 * 1024, \
+	.BlkSize = 32 * 1024, \
 	.WriteSize = 256, \
 	.AddrSize = 4, \
 	.DevId = 0x20ba20, \
@@ -464,8 +464,8 @@ extern "C" {
 #define FLASH_N25Q128A(InitCB, WaitCB)		{ \
     .DevNo = 0, \
     .TotalSize = 128 * 1024 / 8, \
-	.SectSize = 4, \
-    .BlkSize = 32, \
+	.SectSize = 4 * 1024, \
+    .BlkSize = 32 * 1024, \
     .WriteSize = 256, \
     .AddrSize = 3, \
     .pInitCB = InitCB, \
@@ -477,8 +477,8 @@ extern "C" {
 #define FLASH_MX25U1635E(InitCB, WaitCB)		{ \
 	.DevNo = 0, \
 	.TotalSize = 32 * 1024 / 8, \
-	.SectSize = 4, \
-	.BlkSize = 32, \
+	.SectSize = 4 * 1024, \
+	.BlkSize = 32 * 1024, \
 	.WriteSize = 256, \
 	.AddrSize = 3, \
 	.pInitCB = InitCB, \
@@ -488,8 +488,8 @@ extern "C" {
 #define FLASH_MX25R3235F(InitCB, WaitCB)		{ \
     .DevNo = 0, \
     .TotalSize = 32 * 1024 / 8, \
-	.SectSize = 4, \
-    .BlkSize = 64,\
+	.SectSize = 4 * 1024, \
+    .BlkSize = 64 * 1024,\
     .WriteSize = 256, \
     .AddrSize = 3, \
     .pInitCB = InitCB, \
@@ -501,8 +501,8 @@ extern "C" {
 #define FLASH_MX25R6435F(InitCB, WaitCB)		{ \
     .DevNo = 0, \
     .TotalSize = 64 * 1024 / 8, \
-	.SectSize = 4, \
-    .BlkSize = 64, \
+	.SectSize = 4 * 1024, \
+    .BlkSize = 64 * 1024, \
     .WriteSize = 256, \
     .AddrSize = 3, \
 	.DevId = 0x1728c2, \
@@ -516,8 +516,8 @@ extern "C" {
 #define FLASH_MX25L25645G(InitCB, WaitCB)		{ \
 	.DevNo = 0, \
 	.TotalSize = 256 * 1024 / 8, \
-	.SectSize = 4, \
-	.BlkSize = 32, \
+	.SectSize = 4 * 1024, \
+	.BlkSize = 32 * 1024, \
 	.WriteSize = 256, \
 	.AddrSize = 4, \
 	.DevId = 0x1920c2, \
@@ -531,8 +531,8 @@ extern "C" {
 #define FLASH_IS25LP512(InitCB, WaitCB)			{ \
 	.DevNo = 0, \
 	.TotalSize = 512 * 1024 / 8, \
-	.SectSize = 4, \
-	.BlkSize = 32, \
+	.SectSize = 4 * 1024, \
+	.BlkSize = 32 * 1024, \
 	.WriteSize = 256, \
 	.AddrSize = 4, \
 	.DevId = 0x1a609d, \

@@ -269,7 +269,7 @@ void Flash::Erase()
 void Flash::EraseBlock(uint32_t BlkNo, int NbBlk)
 {
     uint8_t d[8];
-    uint32_t addr = BlkNo * vBlkSize * 1024;
+    uint32_t addr = BlkNo * vBlkSize;
     uint8_t *p = (uint8_t*)&addr;
 
     d[0] = FLASH_CMD_BLOCK_ERASE;
@@ -297,7 +297,7 @@ void Flash::EraseBlock(uint32_t BlkNo, int NbBlk)
             }
         	vpInterf->Tx(vDevNo, d, vAddrSize + 1);
         }
-        addr += vBlkSize * 1024;
+        addr += vBlkSize;
     }
     WaitReady(-1, 1000000);
     WriteDisable();

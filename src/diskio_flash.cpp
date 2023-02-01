@@ -274,7 +274,7 @@ void FlashDiskIO::Erase()
 void FlashDiskIO::EraseBlock(uint32_t BlkNo, int NbBlk)
 {
     uint8_t d[8];
-    uint32_t addr = BlkNo * vBlkSize * 1024;
+    uint32_t addr = BlkNo * vBlkSize;
     uint8_t *p = (uint8_t*)&addr;
 
     d[0] = FLASH_CMD_BLOCK_ERASE;
@@ -302,7 +302,7 @@ void FlashDiskIO::EraseBlock(uint32_t BlkNo, int NbBlk)
             }
         	vpInterf->Tx(vDevNo, d, vAddrSize + 1);
         }
-        addr += vBlkSize * 1024;
+        addr += vBlkSize;
     }
     WaitReady(-1, 1000000);
     WriteDisable();
@@ -317,7 +317,7 @@ void FlashDiskIO::EraseBlock(uint32_t BlkNo, int NbBlk)
 void FlashDiskIO::EraseSector(uint32_t SectNo, int NbSect)
 {
     uint8_t d[8];
-    uint32_t addr = SectNo * vSectSize * 1024;
+    uint32_t addr = SectNo * vSectSize;
     uint8_t *p = (uint8_t*)&addr;
 
     d[0] = FLASH_CMD_SECTOR_ERASE;
@@ -345,7 +345,7 @@ void FlashDiskIO::EraseSector(uint32_t SectNo, int NbSect)
             }
         	vpInterf->Tx(vDevNo, d, vAddrSize + 1);
         }
-        addr += vSectSize * 1024;
+        addr += vSectSize;
     }
     WaitReady(-1, 1000000);
     WriteDisable();
