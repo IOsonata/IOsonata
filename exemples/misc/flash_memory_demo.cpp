@@ -35,7 +35,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/uart.h"
 #include "coredev/spi.h"
+#if 1
+#include "flash.h"
+#else
 #include "diskio_flash.h"
+#endif
 #include "stddev.h"
 #include "idelay.h"
 
@@ -83,7 +87,7 @@ static const SPICfg_t s_SpiCfg = {
     .Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    .Rate = 32000000,   // Speed in Hz
+    .Rate = 4000000,   // Speed in Hz
     .DataSize = 8,      // Data Size
     .MaxRetry = 5,      // Max retries
     .BitOrder = SPIDATABIT_MSB,
@@ -106,6 +110,21 @@ bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface);
 bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface);
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
+#if 1
+static FlashCfg_t s_FlashCfg = {
+    .DevNo = 0,
+    .TotalSize = 32 * 1024 / 8,      // 32 Mbits
+	.SectSize = 4 * 1024,		// 4K
+    .BlkSize = 32 * 1024,		// 32K
+    .WriteSize = 256,
+    .AddrSize = 3,                          // 3 bytes addressing
+    .pInitCB = NULL,//MX25U1635E_init,
+    .pWaitCB = NULL,//FlashWriteDelayCallback,
+};
+
+Flash g_Flash;
+
+#else
 static FlashDiskIOCfg_t s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 32 * 1024 / 8,      // 32 Mbits
@@ -113,8 +132,8 @@ static FlashDiskIOCfg_t s_FlashDiskCfg = {
     .BlkSize = 32,		// 32K
     .WriteSize = 256,
     .AddrSize = 3,                          // 3 bytes addressing
-    .pInitCB = MX25U1635E_init,
-    .pWaitCB = FlashWriteDelayCallback,
+    .pInitCB = NULL,//MX25U1635E_init,
+    .pWaitCB = NULL,//FlashWriteDelayCallback,
 };
 
 static FlashDiskIOCfg_t s_MT25QL512Cfg = {
@@ -190,7 +209,7 @@ static FlashDiskIOCfg_t s_IS25LP512_FlashCfg = {
 	.DevIdSize = 3,
 	.pInitCB = NULL,//IS25LP512M_Init,			// no special init require.
 	.pWaitCB = FlashWriteDelayCallback,					// blocking, no wait callback
-	.RdCmd = { FLASH_CMD_4READ, 6},
+	.RdCmd = { FLASH_CMD_QREAD, 6},
 	.WrCmd = { FLASH_CMD_4WRITE, 0 },
 };
 
@@ -200,6 +219,7 @@ static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
 DiskIOCache_t g_FlashCache = {
     -1, 0xFFFFFFFF, s_FlashCacheMem
 };
+#endif
 
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
 {
@@ -350,16 +370,18 @@ int main()
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 
 	//if (g_FlashDiskIO.Init(s_MX25R6435F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
-	if (g_FlashDiskIO.Init(s_IS25LP512_FlashCfg, &g_Spi, &g_FlashCache, 1) == false)
+//	if (g_FlashDiskIO.Init(s_IS25LP512_FlashCfg, &g_Spi, &g_FlashCache, 1) == false)
+	//if (g_FlashDiskIO.Init(s_FlashDiskCfg, &g_Spi, &g_FlashCache, 1) == false)
+	if (g_Flash.Init(s_FlashCfg, &g_Spi) == false)
 	{
 		printf("Init Flash failed\r\n");
 	}
 
 	//g_QFlash.Init(s_QFlashCfg, &g_FlashCache, 1);
 
-	uint8_t buff[512];
-	uint8_t buff2[512];
-	uint8_t tmp[512];
+	uint8_t buff[s_FlashCfg.SectSize];
+	uint8_t buff2[s_FlashCfg.SectSize];
+	uint8_t tmp[s_FlashCfg.SectSize];
 	uint16_t *p = (uint16_t*)buff;
 
 	memset(tmp, 0xa5, 512);
@@ -372,23 +394,23 @@ int main()
 
 	// Ease could take a few minutes
 	//g_FlashDiskIO.EraseBlock(0, 4);
-	g_FlashDiskIO.Erase();
+	g_Flash.Erase();
 	printf("Writing 2KB data...\r\n");
 
-	g_FlashDiskIO.SectWrite(1, buff);
+	g_Flash.SectWrite(1, buff);
 
 	p = (uint16_t*)buff2;
 	for (int i = 0; i < 256; i++)
 	{
 		p[i] = i;
 	}
-	g_FlashDiskIO.SectWrite(2UL, buff2);
+	g_Flash.SectWrite(2UL, buff2);
 	//g_FlashDiskIO.SectWrite(4, buff);
-	//g_FlashDiskIO.SectWrite(8, buff);
+	g_Flash.SectWrite(8, buff);
 
 	printf("Validate readback...\r\n");
 
-	g_FlashDiskIO.SectRead(1, tmp);
+	g_Flash.SectRead(1, tmp);
 
 	for (int i = 0; i < 512; i++)
 	{
@@ -408,7 +430,7 @@ int main()
 	}
 
 	memset(tmp, 0, 512);
-	g_FlashDiskIO.SectRead(2, tmp);
+	g_Flash.SectRead(2, tmp);
 	for (int i = 0; i < 512; i++)
 	{
 		if (buff2[i] != tmp[i])
@@ -425,9 +447,9 @@ int main()
 	{
 		printf("Sector 2 verify success\r\n");
 	}
-	g_FlashDiskIO.EraseSector(0, 1);
+	g_Flash.EraseSector(0, 1);
 	msDelay(1000);
-	g_FlashDiskIO.SectRead(0, tmp);
+	g_Flash.SectRead(0, tmp);
 
 	memset(buff, 0xff, 512);
 	if (memcmp(buff, tmp, 512) != 0)
@@ -440,8 +462,8 @@ int main()
 	}
 
 
-	g_FlashDiskIO.SectWrite(0, buff2);
-	g_FlashDiskIO.SectRead(0, tmp);
+	g_Flash.SectWrite(0, buff2);
+	g_Flash.SectRead(0, tmp);
 
 	if (memcmp(buff2, tmp, 512) != 0)
 	{
@@ -453,7 +475,7 @@ int main()
 	}
 
 	memset(tmp, 0, 512);
-	g_FlashDiskIO.SectRead(4, tmp);
+	g_Flash.SectRead(4, tmp);
 	if (memcmp(buff, tmp, 512) != 0)
 	{
 		printf("Sector 4 verify failed\r\n");
@@ -464,7 +486,7 @@ int main()
 	}
 
 	memset(tmp, 0, 512);
-	g_FlashDiskIO.SectRead(8, tmp);
+	g_Flash.SectRead(8, tmp);
 	if (memcmp(buff, tmp, 512) != 0)
 	{
 		printf("Sector 8 verify failed\r\n");

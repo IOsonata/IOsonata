@@ -151,6 +151,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
 		</link>
 		<link>
+			<name>include/flash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/flash.h</locationURI>
+		</link>
+		<link>
 			<name>include/iatomic.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
@@ -434,6 +439,11 @@
 			<name>src/fatfs_vdisk.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/fatfs_vdisk.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/flash.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/flash.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/i-syst_logo_color_320x153.c</name>
