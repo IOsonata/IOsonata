@@ -172,7 +172,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLUEIO840
 
 #define SPI_DEVNO     					4
-#define SPI_PHY						SPIPHY_QUAD_SDR
+#define SPI_PHY							SPIPHY_QUAD_SDR
 
 #ifdef BLUEIO840
 #define QSPI_SCK_PORT        			0
@@ -190,6 +190,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define QSPI_D3_PORT       				0
 #define QSPI_D3_PIN        				14
 #define QSPI_D3_PINOP      				1
+
+#define FLASH_CFG(InitCB, WaitCB)		FLASH_MX25L25645G(InitCB, WaitCB)
+
 #else
 #define QSPI_SCK_PORT        			0
 #define QSPI_SCK_PIN         			19

@@ -106,6 +106,7 @@ bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface);
 bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface);
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
+/*
 static FlashCfg_t s_FlashCfg = {
     .DevNo = 0,
     .TotalSize = 32 * 1024 / 8,      // 32 Mbits
@@ -116,6 +117,7 @@ static FlashCfg_t s_FlashCfg = {
     .pInitCB = MX25U1635E_init,
     .pWaitCB = FlashWriteDelayCallback,
 };
+*/
 
 static FlashCfg_t s_MT25QL512Cfg = {
 	.DevNo = 0,
@@ -212,6 +214,8 @@ static FlashCfg_t s_IS25LP512_FlashCfg = {
 	.RdCmd = { FLASH_CMD_QREAD, 6},
 	.WrCmd = { FLASH_CMD_4WRITE, 0 },
 };
+
+static const FlashCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);
 
 Flash g_Flash;
 
@@ -369,7 +373,8 @@ int main()
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 
 	//if (g_FlashDiskIO.Init(s_MX25R6435F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
-	if (g_Flash.Init(s_MX25L25645G_FlashCfg, &g_Spi)==false)//, &g_FlashCache, 1) == false)
+//	if (g_Flash.Init(s_MX25L25645G_FlashCfg, &g_Spi)==false)//, &g_FlashCache, 1) == false)
+	if (g_Flash.Init(s_FlashCfg, &g_Spi)==false)//, &g_FlashCache, 1) == false)
 	{
 		printf("Init Flash failed\r\n");
 	}

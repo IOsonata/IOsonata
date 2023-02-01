@@ -134,9 +134,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define I2C0_SCL_PINOP					BLUEIO_TAG_BME680_I2C_SCL_PINOP
 #endif
 
+#define BLUEIO_TAG_EVIM
 #ifdef BLUEIO_TAG_EVIM
 #define SPI_DEVNO      					1
 #define SPI_MODE						SPIMODE_NORMAL
+#define SPI_PHY							SPIPHY_NORMAL
 #define SPI_MISO_PORT       			0
 #define SPI_MISO_PIN        			15//13
 #define SPI_MISO_PINOP      			1
@@ -164,6 +166,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define FLASH_HOLD_PORT            	0
 #define FLASH_HOLD_PIN             	26
 #define FLASH_HOLD_PINOP           	0
+
+#define FLASH_CFG(InitCB, WaitCB)	FLASH_MX25U1635E(InitCB, WaitCB)
+
 #else
 #define SPI_DEVNO      					1
 #define SPI_PHY							SPIPHY_NORMAL
