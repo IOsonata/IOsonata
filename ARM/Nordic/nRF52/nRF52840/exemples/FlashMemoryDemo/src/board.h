@@ -168,8 +168,29 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define FLASH_HOLD_PINOP           	0
 #else
 #ifdef QSPI
+
+#define BLUEIO840
+
 #define SPI_DEVNO     					4
 #define SPI_PHY						SPIPHY_QUAD_SDR
+
+#ifdef BLUEIO840
+#define QSPI_SCK_PORT        			0
+#define QSPI_SCK_PIN         			13
+#define QSPI_SCK_PINOP       			1
+#define QSPI_D0_PORT       				0
+#define QSPI_D0_PIN        				12
+#define QSPI_D0_PINOP      				1
+#define QSPI_D1_PORT       				1
+#define QSPI_D1_PIN        				9
+#define QSPI_D1_PINOP      				1
+#define QSPI_D2_PORT       				0
+#define QSPI_D2_PIN        				11
+#define QSPI_D2_PINOP      				1
+#define QSPI_D3_PORT       				0
+#define QSPI_D3_PIN        				14
+#define QSPI_D3_PINOP      				1
+#else
 #define QSPI_SCK_PORT        			0
 #define QSPI_SCK_PIN         			19
 #define QSPI_SCK_PINOP       			1
@@ -185,6 +206,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define QSPI_D3_PORT       				0
 #define QSPI_D3_PIN        				23
 #define QSPI_D3_PINOP      				1
+#endif
+
 #define SPI_CS_MODE					SPICSEL_AUTO
 #else
 #define SPI_DEVNO      					1
@@ -201,9 +224,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SPI_CS_MODE						SPICSEL_AUTO
 #endif
 
+#ifdef BLUEIO840
+#define FLASH_CS_PORT          		1
+#define FLASH_CS_PIN           		8
+#define FLASH_CS_PINOP         		0
+#else
 #define FLASH_CS_PORT          		0
 #define FLASH_CS_PIN           		24
 #define FLASH_CS_PINOP         		0
+#endif
 
 #define FLASH_HOLD_PORT            	0
 #define FLASH_HOLD_PIN             	23

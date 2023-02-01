@@ -241,8 +241,8 @@ typedef struct {
     int         AddrSize;       //!< Address size in bytes
     uint32_t	DevId;			//!< Device ID, read using FLASH_CMD_READID
     int			DevIdSize;		//!< Length of device id in bytes to read (max 4 bytes)
-    FlaskCb_t pInitCB; 	//!< For custom initialization. Set to NULL if not used
-    FlaskCb_t pWaitCB;	//!< If provided, this is called when there are
+    FlaskCb_t 	pInitCB; 		//!< For custom initialization. Set to NULL if not used
+    FlaskCb_t 	pWaitCB;		//!< If provided, this is called when there are
     							//!< long delays, such as mass erase, to allow application
     							//!< to perform other tasks while waiting
     CmdCycle_t	RdCmd;			//!< QSPI read cmd and dummy cycle
@@ -436,6 +436,102 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+/// 512Mb MT25QL512 Flash definition
+#define FLASH_MT25QL512(InitCB, WaitCB)		{ \
+	.DevNo = 0, \
+	.TotalSize = 512 * 1024 / 8, \
+	.SectSize = 4 * 1024, \
+	.BlkSize = 32 * 1024, \
+	.WriteSize = 256, \
+	.AddrSize = 4, \
+	.DevId = 0x20ba20, \
+	.DevIdSize = 3, \
+	.pInitCB = InitCB,\
+	.pWaitCB = WaitCB }
+
+/// Micron N25Q128A 128Mb, QUAD
+#define FLASH_N25Q128A(InitCB, WaitCB)		{ \
+    .DevNo = 0, \
+    .TotalSize = 128 * 1024 / 8, \
+	.SectSize = 4 * 1024, \
+    .BlkSize = 32 * 1024, \
+    .WriteSize = 256, \
+    .AddrSize = 3, \
+    .pInitCB = InitCB, \
+    .pWaitCB = WaitCB, \
+	.RdCmd = { FLASH_CMD_QREAD, 10}, \
+	.WrCmd = { FLASH_CMD_QWRITE, 0 }, }
+
+/// MX25U1635E 16Mb
+#define FLASH_MX25U1635E(InitCB, WaitCB)		{ \
+	.DevNo = 0, \
+	.TotalSize = 32 * 1024 / 8, \
+	.SectSize = 4 * 1024, \
+	.BlkSize = 32 * 1024, \
+	.WriteSize = 256, \
+	.AddrSize = 3, \
+	.pInitCB = InitCB, \
+	.pWaitCB = WaitCB, }
+
+/// Macronix MX25R3235F 32Mb Quad
+#define FLASH_MX25R3235F(InitCB, WaitCB)		{ \
+    .DevNo = 0, \
+    .TotalSize = 32 * 1024 / 8, \
+	.SectSize = 4 * 1024, \
+    .BlkSize = 64 * 1024,\
+    .WriteSize = 256, \
+    .AddrSize = 3, \
+    .pInitCB = InitCB, \
+    .pWaitCB = WaitCB, \
+	.RdCmd = { FLASH_CMD_4READ, 6}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+
+/// Macronix MX25R6435F 64Mb Quad
+#define FLASH_MX25R6435F(InitCB, WaitCB)		{ \
+    .DevNo = 0, \
+    .TotalSize = 64 * 1024 / 8, \
+	.SectSize = 4 * 1024, \
+    .BlkSize = 64 * 1024, \
+    .WriteSize = 256, \
+    .AddrSize = 3, \
+	.DevId = 0x1728c2, \
+	.DevIdSize = 3, \
+    .pInitCB = InitCB, \
+    .pWaitCB = WaitCB, \
+	.RdCmd = { FLASH_CMD_4READ, 6}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+
+/// MX25L25645G 256Mb
+#define FLASH_MX25L25645G(InitCB, WaitCB)		{ \
+	.DevNo = 0, \
+	.TotalSize = 256 * 1024 / 8, \
+	.SectSize = 4 * 1024, \
+	.BlkSize = 32 * 1024, \
+	.WriteSize = 256, \
+	.AddrSize = 4, \
+	.DevId = 0x1920c2, \
+	.DevIdSize = 3, \
+	.pInitCB = InitCB, \
+	.pWaitCB = WaitCB, \
+	.RdCmd = { FLASH_CMD_QREAD, 6}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+
+/// IS25LP512M 512Mb Quad
+#define FLASH_IS25LP512(InitCB, WaitCB)			{ \
+	.DevNo = 0, \
+	.TotalSize = 512 * 1024 / 8, \
+	.SectSize = 4 * 1024, \
+	.BlkSize = 32 * 1024, \
+	.WriteSize = 256, \
+	.AddrSize = 4, \
+	.DevId = 0x1a609d, \
+	.DevIdSize = 3, \
+	.pInitCB = InitCB, \
+	.pWaitCB = WaitCB, \
+	.RdCmd = { FLASH_CMD_4READ, 6}, \
+	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
+
 
 /** @} End of group Storage */
 

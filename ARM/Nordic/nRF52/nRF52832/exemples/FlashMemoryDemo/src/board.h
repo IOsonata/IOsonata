@@ -167,18 +167,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #else
 #define SPI_DEVNO      					1
 #define SPI_PHY							SPIPHY_NORMAL
-#define SPI_MISO_PORT       			0
-#define SPI_MISO_PIN        			5//13
+#define SPI_MISO_PORT       			BLUEIO_SPI2_MISO_PORT
+#define SPI_MISO_PIN        			BLUEIO_SPI2_MISO_PIN
 #define SPI_MISO_PINOP      			1
-#define SPI_MOSI_PORT       			0
-#define SPI_MOSI_PIN        			7//12
+#define SPI_MOSI_PORT       			BLUEIO_SPI2_MOSI_PORT
+#define SPI_MOSI_PIN        			BLUEIO_SPI2_MOSI_PIN
 #define SPI_MOSI_PINOP      			1
-#define SPI_SCK_PORT        			0
-#define SPI_SCK_PIN         			4
+#define SPI_SCK_PORT        			BLUEIO_SPI2_SCK_PORT
+#define SPI_SCK_PIN         			BLUEIO_SPI2_SCK_PIN
 #define SPI_SCK_PINOP       			1
 
 #define SPI_FLASH_CS_PORT          	0
-#define SPI_FLASH_CS_PIN           	18
+#define SPI_FLASH_CS_PIN           	26//18
 #define SPI_FLASH_CS_PINOP         	0
 
 #define FLASH_HOLD_PORT            	0

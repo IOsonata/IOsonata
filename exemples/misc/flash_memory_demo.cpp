@@ -35,11 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/uart.h"
 #include "coredev/spi.h"
-#if 1
 #include "flash.h"
-#else
-#include "diskio_flash.h"
-#endif
 #include "stddev.h"
 #include "idelay.h"
 
@@ -110,7 +106,6 @@ bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface);
 bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface);
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
-#if 1
 static FlashCfg_t s_FlashCfg = {
     .DevNo = 0,
     .TotalSize = 32 * 1024 / 8,      // 32 Mbits
@@ -118,29 +113,15 @@ static FlashCfg_t s_FlashCfg = {
     .BlkSize = 32 * 1024,		// 32K
     .WriteSize = 256,
     .AddrSize = 3,                          // 3 bytes addressing
-    .pInitCB = NULL,//MX25U1635E_init,
-    .pWaitCB = NULL,//FlashWriteDelayCallback,
+    .pInitCB = MX25U1635E_init,
+    .pWaitCB = FlashWriteDelayCallback,
 };
 
-Flash g_Flash;
-
-#else
-static FlashDiskIOCfg_t s_FlashDiskCfg = {
-    .DevNo = 0,
-    .TotalSize = 32 * 1024 / 8,      // 32 Mbits
-	.SectSize = 4,		// 4K
-    .BlkSize = 32,		// 32K
-    .WriteSize = 256,
-    .AddrSize = 3,                          // 3 bytes addressing
-    .pInitCB = NULL,//MX25U1635E_init,
-    .pWaitCB = NULL,//FlashWriteDelayCallback,
-};
-
-static FlashDiskIOCfg_t s_MT25QL512Cfg = {
+static FlashCfg_t s_MT25QL512Cfg = {
 	.DevNo = 0,
 	.TotalSize = 512 * 1024 / 8,      	// 512 Mbits
-	.SectSize = 4,
-	.BlkSize = 32,						// minimum erase block size
+	.SectSize = 4 * 1024,
+	.BlkSize = 32 * 1024,						// minimum erase block size
 	.WriteSize = 256,					// Write page size
 	.AddrSize = 4,                      // 3 bytes addressing
 	.DevId = 0x20ba20,
@@ -150,11 +131,11 @@ static FlashDiskIOCfg_t s_MT25QL512Cfg = {
 };
 
 // Micron N25Q128A
-static FlashDiskIOCfg_t s_N25Q128A_QFlashCfg = {
+static FlashCfg_t s_N25Q128A_QFlashCfg = {
     .DevNo = 0,
     .TotalSize = 128 * 1024 / 8,      // 128 Mbits
-	.SectSize = 4,		// 4K
-    .BlkSize = 32,		// 32K
+	.SectSize = 4 * 1024,		// 4K
+    .BlkSize = 32 * 1024,		// 32K
     .WriteSize = 256,
     .AddrSize = 3,      // 3 bytes addressing
 	//.DevId = 0x18ba20,//0x1628c2,	// C21628
@@ -166,11 +147,11 @@ static FlashDiskIOCfg_t s_N25Q128A_QFlashCfg = {
 };
 
 // Macronix MX25R3235F
-static FlashDiskIOCfg_t s_MX25R3235F_QFlashCfg = {
+static FlashCfg_t s_MX25R3235F_QFlashCfg = {
     .DevNo = 0,
     .TotalSize = 32 * 1024 / 8,      // 32 Mbits
-	.SectSize = 4,		// 4K
-    .BlkSize = 64,		// 64K
+	.SectSize = 4 * 1024,		// 4K
+    .BlkSize = 64 * 1024,		// 64K
     .WriteSize = 256,
     .AddrSize = 3,                          // 3 bytes addressing
 //	.DevId = 0x1628c2,	// C21628
@@ -182,11 +163,11 @@ static FlashDiskIOCfg_t s_MX25R3235F_QFlashCfg = {
 };
 
 // Macronix MX25R6435F
-static FlashDiskIOCfg_t s_MX25R6435F_QFlashCfg = {
+static FlashCfg_t s_MX25R6435F_QFlashCfg = {
     .DevNo = 0,
     .TotalSize = 64 * 1024 / 8,      // 32 Mbits
-	.SectSize = 4,		// 4K
-    .BlkSize = 64,		// 64K
+	.SectSize = 4 * 1024,		// 4K
+    .BlkSize = 64 * 1024,		// 64K
     .WriteSize = 256,
     .AddrSize = 3,      // 3 bytes addressing
 	.DevId = 0x1728c2,
@@ -197,12 +178,31 @@ static FlashDiskIOCfg_t s_MX25R6435F_QFlashCfg = {
 	.WrCmd = { FLASH_CMD_4WRITE, 0 },
 };
 
+// MX25L25645G
+static const FlashCfg_t s_MX25L25645G_FlashCfg = FLASH_MX25L25645G(NULL, FlashWriteDelayCallback);
+#if 0
+{
+	.DevNo = 0,
+	.TotalSize = 256 * 1024 / 8,      	// 256 Mbits
+	.SectSize = 4 * 1024,
+	.BlkSize = 32 * 1024,						// minimum erase block size
+	.WriteSize = 256,					// Write page size
+	.AddrSize = 4,                      // 3 bytes addressing
+	.DevId = 0x1920c2,
+	.DevIdSize = 3,
+	.pInitCB = NULL,//IS25LP512M_Init,			// no special init require.
+	.pWaitCB = FlashWriteDelayCallback,					// blocking, no wait callback
+	.RdCmd = { FLASH_CMD_QREAD, 6},
+	.WrCmd = { FLASH_CMD_4WRITE, 0 },
+};
+#endif
+
 // IS25LP512M
-static FlashDiskIOCfg_t s_IS25LP512_FlashCfg = {
+static FlashCfg_t s_IS25LP512_FlashCfg = {
 	.DevNo = 0,
 	.TotalSize = 512 * 1024 / 8,      	// 512 Mbits
-	.SectSize = 4,
-	.BlkSize = 32,						// minimum erase block size
+	.SectSize = 4 * 1024,
+	.BlkSize = 32 * 1024,						// minimum erase block size
 	.WriteSize = 256,					// Write page size
 	.AddrSize = 4,                      // 3 bytes addressing
 	.DevId = 0x1a609d,
@@ -213,13 +213,12 @@ static FlashDiskIOCfg_t s_IS25LP512_FlashCfg = {
 	.WrCmd = { FLASH_CMD_4WRITE, 0 },
 };
 
-FlashDiskIO g_FlashDiskIO;
+Flash g_Flash;
 
-static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
-DiskIOCache_t g_FlashCache = {
-    -1, 0xFFFFFFFF, s_FlashCacheMem
-};
-#endif
+//static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
+//DiskIOCache_t g_FlashCache = {
+//    -1, 0xFFFFFFFF, s_FlashCacheMem
+//};
 
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
 {
@@ -370,9 +369,7 @@ int main()
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
 
 	//if (g_FlashDiskIO.Init(s_MX25R6435F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
-//	if (g_FlashDiskIO.Init(s_IS25LP512_FlashCfg, &g_Spi, &g_FlashCache, 1) == false)
-	//if (g_FlashDiskIO.Init(s_FlashDiskCfg, &g_Spi, &g_FlashCache, 1) == false)
-	if (g_Flash.Init(s_FlashCfg, &g_Spi) == false)
+	if (g_Flash.Init(s_MX25L25645G_FlashCfg, &g_Spi)==false)//, &g_FlashCache, 1) == false)
 	{
 		printf("Init Flash failed\r\n");
 	}
@@ -406,7 +403,7 @@ int main()
 	}
 	g_Flash.SectWrite(2UL, buff2);
 	//g_FlashDiskIO.SectWrite(4, buff);
-	g_Flash.SectWrite(8, buff);
+	//g_FlashDiskIO.SectWrite(8, buff);
 
 	printf("Validate readback...\r\n");
 
@@ -475,25 +472,27 @@ int main()
 	}
 
 	memset(tmp, 0, 512);
-	g_Flash.SectRead(4, tmp);
-	if (memcmp(buff, tmp, 512) != 0)
+	g_Flash.SectWrite(30, buff2);
+	g_Flash.SectRead(30, tmp);
+	if (memcmp(buff2, tmp, 512) != 0)
 	{
-		printf("Sector 4 verify failed\r\n");
+		printf("Sector 30 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 4 verify success\r\n");
+		printf("Sector 30 verify success\r\n");
 	}
 
 	memset(tmp, 0, 512);
-	g_Flash.SectRead(8, tmp);
-	if (memcmp(buff, tmp, 512) != 0)
+	g_Flash.SectWrite(40, buff2);
+	g_Flash.SectRead(40, tmp);
+	if (memcmp(buff2, tmp, 512) != 0)
 	{
-		printf("Sector 8 verify failed\r\n");
+		printf("Sector 40 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 8 verify success\r\n");
+		printf("Sector 40 verify success\r\n");
 	}
 
 	printf("FLash Test Completed\r\n");
