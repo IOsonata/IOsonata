@@ -14,7 +14,7 @@ Example of defining Flash device info :
 -----
 MX25R1635F :
 
-static const FLASHDISKIO_CFG s_FlashDiskCfg = {
+static const FlashDiskIOCfg_t s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 16 * 1024 / 8,		// 16 Mbits in KBytes
 	.SectSize = 4 * 1024,					// 4K
@@ -28,7 +28,7 @@ static const FLASHDISKIO_CFG s_FlashDiskCfg = {
 -----
 S25FS :
 
-static const FLASHDISKIO_CFG s_FlashDiskCfg = {
+static const FlashDiskIOCfg_t s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 128 * 1024 / 8,	// 128 Mbits
 	.SectSize = 4 * 1024,					// 4K
@@ -75,7 +75,7 @@ bool s25fs_init(int DevNo, DeviceIntrf *pInterf)
 -----
 MX66U51235F :
 
-static const FLASHDISKIO_CFG s_FlashDiskCfg = {
+static const FlashDiskIOCfg_t s_FlashDiskCfg = {
     .DevNo = 0,
     .TotalSize = 256 * 1024 / 8,	// 256 Mbits in KBytes
 	.SectSize = 4 * 1024,					// 4K
@@ -88,7 +88,7 @@ static const FLASHDISKIO_CFG s_FlashDiskCfg = {
 
 
 // Quad SPI Flash Micron N25Q128A
-static FLASHDISKIO_CFG s_N25Q128A_QFlashCfg = {
+static FlashDiskIOCfg_t s_N25Q128A_QFlashCfg = {
     .DevNo = 0,
     .TotalSize = 128 * 1024 / 8,	// 128 Mbits in KBytes
 	.SectSize = 4 * 1024,
@@ -102,7 +102,7 @@ static FLASHDISKIO_CFG s_N25Q128A_QFlashCfg = {
 };
 
 // Quad SPI Flash Macronix MX25R3235F
-static FLASHDISKIO_CFG s_MX25R3235F_QFlashCfg = {
+static FlashDiskIOCfg_t s_MX25R3235F_QFlashCfg = {
     .DevNo = 0,
     .TotalSize = 32 * 1024 / 8,		// 16 Mbits
 	.SectSize = 4 * 1024,
@@ -244,8 +244,8 @@ typedef struct {
     int         DevNo;          //!< Device number or address for interface use
     uint32_t    TotalSize;      //!< Total Flash size in KBytes
     uint16_t    SectSize;		//!< Sector erase size in Bytes
-    uint16_t	BlkSize;		//!< Block erase size in Bytes
-    uint32_t    WriteSize;      //!< Writable page size in bytes
+    uint32_t	BlkSize;		//!< Block erase size in Bytes
+    uint16_t    WriteSize;      //!< Writable page size in bytes
     int         AddrSize;       //!< Address size in bytes
     uint32_t	DevId;			//!< Device ID, read using FLASH_CMD_READID
     int			DevIdSize;		//!< Length of device id in bytes to read (max 4 bytes)
@@ -427,9 +427,9 @@ protected:
 	bool WaitReady(uint32_t Timeout = 100000, uint32_t usRtyDelay = 0);
 
 private:
-	uint16_t    vSectSize;		//!< Erasable sector size in Bytes
-	uint16_t    vBlkSize;		//!< Erasable block size in Bytes
-	uint32_t    vWriteSize;		//!< Min writable size in bytes
+	uint16_t    vWriteSize;		//!< Min writable size in bytes
+	uint16_t    vSectSize;		//!< Erasable sector size in bytes
+	uint32_t    vBlkSize;		//!< Erasable block size in bytes
 	uint32_t    vTotalSize;		//!< Total Flash size in KBytes
 	int         vAddrSize;		//!< Address size in bytes
 	int         vDevNo;			//!< Device No

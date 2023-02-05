@@ -52,7 +52,7 @@ SDCard::~SDCard()
 bool SDCard::Init(DeviceIntrf * const pDevInterf, uint8_t *  const pCacheMem, int CacheMemSize)
 {
 	int nbcache = 0;
-	DISKIO_CACHE_DESC *cachedesc = NULL;
+	DiskIOCache_t *cachedesc = NULL;
 	uint8_t *p = pCacheMem;
 
 	if (pCacheMem)
@@ -79,7 +79,7 @@ bool SDCard::Init(DeviceIntrf * const pDevInterf, uint8_t *  const pCacheMem, in
 	return Init(pDevInterf, cachedesc, nbcache);
 }
 
-bool SDCard::Init(DeviceIntrf * const pDevInterf, DISKIO_CACHE_DESC * const pCacheBlk, int NbCacheBlk)
+bool SDCard::Init(DeviceIntrf * const pDevInterf, DiskIOCache_t * const pCacheBlk, int NbCacheBlk)
 {
 	uint8_t data[4];
 	uint16_t r = 0xffff;

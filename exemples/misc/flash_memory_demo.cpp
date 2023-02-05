@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/uart.h"
 #include "coredev/spi.h"
-#include "flash.h"
+#include "diskio_flash.h"
 #include "stddev.h"
 #include "idelay.h"
 
@@ -106,123 +106,14 @@ bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface);
 bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface);
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
-/*
-static FlashCfg_t s_FlashCfg = {
-    .DevNo = 0,
-    .TotalSize = 32 * 1024 / 8,      // 32 Mbits
-	.SectSize = 4 * 1024,		// 4K
-    .BlkSize = 32 * 1024,		// 32K
-    .WriteSize = 256,
-    .AddrSize = 3,                          // 3 bytes addressing
-    .pInitCB = MX25U1635E_init,
-    .pWaitCB = FlashWriteDelayCallback,
+static const FlashDiskIOCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);
+
+FlashDiskIO g_Flash;
+
+static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
+DiskIOCache_t g_FlashCache = {
+    -1, 0xFFFFFFFF, s_FlashCacheMem
 };
-*/
-
-static FlashCfg_t s_MT25QL512Cfg = {
-	.DevNo = 0,
-	.TotalSize = 512 * 1024 / 8,      	// 512 Mbits
-	.SectSize = 4 * 1024,
-	.BlkSize = 32 * 1024,						// minimum erase block size
-	.WriteSize = 256,					// Write page size
-	.AddrSize = 4,                      // 3 bytes addressing
-	.DevId = 0x20ba20,
-	.DevIdSize = 3,
-	.pInitCB = MT25QL512_Init,			// no special init require.
-	.pWaitCB = FlashWriteDelayCallback,					// blocking, no wait callback
-};
-
-// Micron N25Q128A
-static FlashCfg_t s_N25Q128A_QFlashCfg = {
-    .DevNo = 0,
-    .TotalSize = 128 * 1024 / 8,      // 128 Mbits
-	.SectSize = 4 * 1024,		// 4K
-    .BlkSize = 32 * 1024,		// 32K
-    .WriteSize = 256,
-    .AddrSize = 3,      // 3 bytes addressing
-	//.DevId = 0x18ba20,//0x1628c2,	// C21628
-	//.DevIdSize = 3,
-    .pInitCB = NULL,
-    .pWaitCB = FlashWriteDelayCallback,
-	.RdCmd = { FLASH_CMD_QREAD, 10},
-	.WrCmd = { FLASH_CMD_QWRITE, 0 },
-};
-
-// Macronix MX25R3235F
-static FlashCfg_t s_MX25R3235F_QFlashCfg = {
-    .DevNo = 0,
-    .TotalSize = 32 * 1024 / 8,      // 32 Mbits
-	.SectSize = 4 * 1024,		// 4K
-    .BlkSize = 64 * 1024,		// 64K
-    .WriteSize = 256,
-    .AddrSize = 3,                          // 3 bytes addressing
-//	.DevId = 0x1628c2,	// C21628
-//	.DevIdSize = 3,
-    .pInitCB = NULL,
-    .pWaitCB = NULL,
-	.RdCmd = { FLASH_CMD_4READ, 6},
-	.WrCmd = { FLASH_CMD_4WRITE, 0 },
-};
-
-// Macronix MX25R6435F
-static FlashCfg_t s_MX25R6435F_QFlashCfg = {
-    .DevNo = 0,
-    .TotalSize = 64 * 1024 / 8,      // 32 Mbits
-	.SectSize = 4 * 1024,		// 4K
-    .BlkSize = 64 * 1024,		// 64K
-    .WriteSize = 256,
-    .AddrSize = 3,      // 3 bytes addressing
-	.DevId = 0x1728c2,
-	.DevIdSize = 3,
-    .pInitCB = NULL,//MX25U6435F_init,
-    .pWaitCB = NULL,
-	.RdCmd = { FLASH_CMD_4READ, 6},
-	.WrCmd = { FLASH_CMD_4WRITE, 0 },
-};
-
-// MX25L25645G
-static const FlashCfg_t s_MX25L25645G_FlashCfg = FLASH_MX25L25645G(NULL, FlashWriteDelayCallback);
-#if 0
-{
-	.DevNo = 0,
-	.TotalSize = 256 * 1024 / 8,      	// 256 Mbits
-	.SectSize = 4 * 1024,
-	.BlkSize = 32 * 1024,						// minimum erase block size
-	.WriteSize = 256,					// Write page size
-	.AddrSize = 4,                      // 3 bytes addressing
-	.DevId = 0x1920c2,
-	.DevIdSize = 3,
-	.pInitCB = NULL,//IS25LP512M_Init,			// no special init require.
-	.pWaitCB = FlashWriteDelayCallback,					// blocking, no wait callback
-	.RdCmd = { FLASH_CMD_QREAD, 6},
-	.WrCmd = { FLASH_CMD_4WRITE, 0 },
-};
-#endif
-
-// IS25LP512M
-static FlashCfg_t s_IS25LP512_FlashCfg = {
-	.DevNo = 0,
-	.TotalSize = 512 * 1024 / 8,      	// 512 Mbits
-	.SectSize = 4 * 1024,
-	.BlkSize = 32 * 1024,						// minimum erase block size
-	.WriteSize = 256,					// Write page size
-	.AddrSize = 4,                      // 3 bytes addressing
-	.DevId = 0x1a609d,
-	.DevIdSize = 3,
-	.pInitCB = NULL,//IS25LP512M_Init,			// no special init require.
-	.pWaitCB = FlashWriteDelayCallback,					// blocking, no wait callback
-	.RdCmd = { FLASH_CMD_QREAD, 6},
-	.WrCmd = { FLASH_CMD_4WRITE, 0 },
-};
-
-static const FlashCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);
-
-Flash g_Flash;
-
-//static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
-//DiskIOCache_t g_FlashCache = {
-//    -1, 0xFFFFFFFF, s_FlashCacheMem
-//};
 
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
 {
