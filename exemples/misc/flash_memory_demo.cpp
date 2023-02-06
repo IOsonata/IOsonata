@@ -58,7 +58,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = 0,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 1000000,			// Rate
+	.Rate = 115200,			// Rate
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,					// Stop bit
@@ -106,7 +106,7 @@ bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface);
 bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface);
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
-static const FlashDiskIOCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);
+static const FlashDiskIOCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);//FLASH_CFG(MX25U1635E_init, NULL);
 
 FlashDiskIO g_Flash;
 
@@ -188,8 +188,11 @@ bool MX25U1635E_init(int DevNo, DeviceIntrf* pInterface)
 
     d = FLASH_CMD_READID;
     cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 2 );
-    //if ( r != 0x28C2 )
-    //	return false;
+    if ( r != 0x25C2 )
+    {
+    	printf("Wrong FLASH_CMD_READID response\r\n");
+    	return false;
+    }
 
     printf("Flash found!\r\n");
     // Enable write
@@ -244,18 +247,18 @@ bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface)
 //
 int main()
 {
-	//g_Uart.Init(s_UartCfg);
+	g_Uart.Init(s_UartCfg);
 
 	// Retarget printf to UART
-	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
-	//UARTRetargetEnable(g_Uart, STDIN_FILENO);
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
+	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 
 	printf("Flash Memory Demo\r\n");
 	//getchar();
 
 	g_Spi.Init(s_SpiCfg);
 
-   // IOPinConfig(FLASH_HOLD_PORT, FLASH_HOLD_PIN, FLASH_HOLD_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	// IOPinConfig(FLASH_HOLD_PORT, FLASH_HOLD_PIN, FLASH_HOLD_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 
 	// Regular SPI FLash
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
@@ -265,7 +268,7 @@ int main()
 
 	//if (g_FlashDiskIO.Init(s_MX25R6435F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
 //	if (g_Flash.Init(s_MX25L25645G_FlashCfg, &g_Spi)==false)//, &g_FlashCache, 1) == false)
-	if (g_Flash.Init(s_FlashCfg, &g_Spi)==false)//, &g_FlashCache, 1) == false)
+	if (g_Flash.Init(s_FlashCfg, &g_Spi) == false)//, &g_FlashCache, 1) == false)
 	{
 		printf("Init Flash failed\r\n");
 	}
@@ -275,71 +278,21 @@ int main()
 	uint8_t buff[s_FlashCfg.SectSize];
 	uint8_t buff2[s_FlashCfg.SectSize];
 	uint8_t tmp[s_FlashCfg.SectSize];
-	uint16_t *p = (uint16_t*)buff;
+	uint16_t *p = (uint16_t*) buff;
 
 	memset(tmp, 0xa5, 512);
 	for (int i = 0; i < 256; i++)
 	{
-		p[i] = 255-i;
+		p[i] = 255 - i;
 	}
 
-	printf("Erasing... Please wait\r\n");
-
-	// Ease could take a few minutes
-	//g_FlashDiskIO.EraseBlock(0, 4);
+	// Erase the whole flash memory
+	printf("Erasing... Please wait for a few minutes\r\n");
 	g_Flash.Erase();
-	printf("Writing 2KB data...\r\n");
+	//g_Flash.EraseBlock(0, 4);
 
-	g_Flash.SectWrite(1, buff);
-
-	p = (uint16_t*)buff2;
-	for (int i = 0; i < 256; i++)
-	{
-		p[i] = i;
-	}
-	g_Flash.SectWrite(2UL, buff2);
-	//g_FlashDiskIO.SectWrite(4, buff);
-	//g_FlashDiskIO.SectWrite(8, buff);
-
-	printf("Validate readback...\r\n");
-
-	g_Flash.SectRead(1, tmp);
-
-	for (int i = 0; i < 512; i++)
-	{
-		if (buff[i] != tmp[i])
-		{
-			printf("Failed %d\r\n", i);
-			break;
-		}
-	}
-	if (memcmp(buff, tmp, 512) != 0)
-	{
-		printf("Sector 0 verify failed\r\n");
-	}
-	else
-	{
-		printf("Sector 0 verify success\r\n");
-	}
-
-	memset(tmp, 0, 512);
-	g_Flash.SectRead(2, tmp);
-	for (int i = 0; i < 512; i++)
-	{
-		if (buff2[i] != tmp[i])
-		{
-			printf("Failed %d\r\n", i);
-			break;
-		}
-	}
-	if (memcmp(buff2, tmp, 512) != 0)
-	{
-		printf("Sector 2 verify failed\r\n");
-	}
-	else
-	{
-		printf("Sector 2 verify success\r\n");
-	}
+	// Test Sector 0
+	printf("Erase Sector 0...");
 	g_Flash.EraseSector(0, 1);
 	msDelay(1000);
 	g_Flash.SectRead(0, tmp);
@@ -347,52 +300,111 @@ int main()
 	memset(buff, 0xff, 512);
 	if (memcmp(buff, tmp, 512) != 0)
 	{
-		printf("Sector 1 verify erase failed\r\n");
+		printf("Failed\r\n");
 	}
 	else
 	{
-		printf("Sector 1 verify erase success\r\n");
+		printf("Success\r\n");
 	}
 
-
+	printf("Write new data to sector 0...");
 	g_Flash.SectWrite(0, buff2);
 	g_Flash.SectRead(0, tmp);
 
 	if (memcmp(buff2, tmp, 512) != 0)
 	{
-		printf("Sector 0 verify failed\r\n");
+		printf("Failed\r\n");
 	}
 	else
 	{
-		printf("Sector 0 verify success\r\n");
+		printf("Success\r\n");
 	}
 
+	// Test Sector 1
+	printf("Writing %d data to Sector 1...", s_FlashCfg.SectSize);
+	g_Flash.SectWrite(1, buff);
+	g_Flash.SectRead(1, tmp);
+//	for (int i = 0; i < 512; i++)
+//	{
+//		if (buff[i] != tmp[i])
+//		{
+//			printf("Failed %d\r\n", i);
+//			break;
+//		}
+//	}
+
+	if (memcmp(buff, tmp, 512) != 0)
+	{
+		printf("Failed\r\n");
+	}
+	else
+	{
+		printf("Success\r\n");
+	}
+
+	// Test Sector 2
+	printf("Write to sector 2...");
+	p = (uint16_t*) buff2;
+	for (int i = 0; i < 256; i++)
+	{
+		p[i] = i;
+	}
+	g_Flash.SectWrite(2UL, buff2);
+
+	printf("Validate readback Sector 2...");
+	memset(tmp, 0, 512);
+	g_Flash.SectRead(2, tmp);
+//	for (int i = 0; i < 512; i++)
+//	{
+//		if (buff2[i] != tmp[i])
+//		{
+//			printf("Failed %d\r\n", i);
+//			break;
+//		}
+//	}
+
+	if (memcmp(buff2, tmp, 512) != 0)
+	{
+		printf("Failed\r\n");
+	}
+	else
+	{
+		printf("Success\r\n");
+	}
+
+	// Test Sector 30
+	printf("Write and read back sector 30...");
 	memset(tmp, 0, 512);
 	g_Flash.SectWrite(30, buff2);
 	g_Flash.SectRead(30, tmp);
 	if (memcmp(buff2, tmp, 512) != 0)
 	{
-		printf("Sector 30 verify failed\r\n");
+		printf("Failed\r\n");
 	}
 	else
 	{
-		printf("Sector 30 verify success\r\n");
+		printf("Success\r\n");
 	}
 
+	// Test Sector 40
+	printf("Write and read back sector 40...");
 	memset(tmp, 0, 512);
 	g_Flash.SectWrite(40, buff2);
 	g_Flash.SectRead(40, tmp);
 	if (memcmp(buff2, tmp, 512) != 0)
 	{
-		printf("Sector 40 verify failed\r\n");
+		printf("Failed\r\n");
 	}
 	else
 	{
-		printf("Sector 40 verify success\r\n");
+		printf("Success\r\n");
 	}
 
 	printf("FLash Test Completed\r\n");
 
-	while(1) { __WFE(); }
+	while (1)
+	{
+		__WFE();
+	}
 
 }
