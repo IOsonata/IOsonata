@@ -476,7 +476,7 @@ extern "C" {
 /// MX25U1635E 16Mb
 #define FLASH_MX25U1635E(InitCB, WaitCB)		{ \
 	.DevNo = 0, \
-	.TotalSize = 32 * 1024 / 8, \
+	.TotalSize = 16 * 1024 / 8, \
 	.SectSize = 4 * 1024, \
 	.BlkSize = 32 * 1024, \
 	.WriteSize = 256, \
