@@ -35,6 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/uart.h"
 #include "coredev/spi.h"
+#include "flash.h"
 #include "diskio_flash.h"
 #include "stddev.h"
 #include "idelay.h"
@@ -101,12 +102,13 @@ SPI g_Spi;
 //#endif
 
 bool MT25QL512_Init(int DevNo, DeviceIntrf* pInterface);
-bool MX25U1635E_init(int pDevNo, DeviceIntrf* ppInterface);
+bool MX25U1635E_init(int pDevNo, DevIntrf_t* ppInterface);
 bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface);
 bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface);
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf);
 
-static const FlashDiskIOCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);//FLASH_CFG(MX25U1635E_init, NULL);
+//static const FlashDiskIOCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);//FLASH_CFG(MX25U1635E_init, NULL);
+static const FlashCfg_t s_FlashCfg = FLASH_CFG(MX25U1635E_init, NULL);//FLASH_CFG(MX25U1635E_init, NULL);
 
 FlashDiskIO g_Flash;
 
@@ -176,7 +178,7 @@ bool MT25QL512_Init(int DevNo, DeviceIntrf* pInterface)
     return true;
 }
 
-bool MX25U1635E_init(int DevNo, DeviceIntrf* pInterface)
+bool MX25U1635E_init(int DevNo, DevIntrf_t* pInterface)
 {
     if (pInterface == NULL)
         return false;
@@ -187,7 +189,8 @@ bool MX25U1635E_init(int DevNo, DeviceIntrf* pInterface)
     uint32_t r = 0;
 
     d = FLASH_CMD_READID;
-    cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 2 );
+    //cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 2 );
+    cnt = DeviceIntrfRead(pInterface, DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 2 );
     if ( r != 0x25C2 )
     {
     	printf("Wrong FLASH_CMD_READID response\r\n");
@@ -197,8 +200,8 @@ bool MX25U1635E_init(int DevNo, DeviceIntrf* pInterface)
     printf("Flash found!\r\n");
     // Enable write
     d = FLASH_CMD_EN4B;
-    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
-
+    //cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+    cnt = DeviceIntrfTx(pInterface, DevNo, (uint8_t*)&d, 1);
     return true;
 }
 
