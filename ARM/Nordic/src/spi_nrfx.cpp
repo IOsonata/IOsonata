@@ -543,6 +543,13 @@ void nRFxSPIReset(DevIntrf_t * const pDev)
 
 }
 
+void *nRFxSPIGetHandle(DevIntrf_t * const pDev)
+{
+	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+
+	return dev->pSpiDev;
+}
+
 //void SPIIrqHandler(int DevNo, SPIDev_t * const pDev)//DevIntrf_t * const pDev)
 extern "C" void SPI_IRQHandler(int DevNo)
 {
@@ -701,6 +708,7 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 	pDev->DevIntrf.bDma = pDev->Cfg.bDmaEn;
 	pDev->DevIntrf.PowerOff = nRFxSPIPowerOff;
 	pDev->DevIntrf.Reset = nRFxSPIReset;
+	pDev->DevIntrf.GetHandle = nRFxSPIGetHandle;
 
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 

@@ -220,6 +220,8 @@ static inline int UARTRx(UARTDev_t * const pDev, uint8_t *pBuff, int Bufflen) {
 static inline int UARTTx(UARTDev_t * const pDev, uint8_t *pData, int Datalen) {
 	return DeviceIntrfTx(&pDev->DevIntrf, 0, pData, Datalen);
 }
+static inline UARTDev_t *UARTGetDevHandle(DevIntrf_t * const pDevIntrf) { return (UARTDev_t *)DeviceIntrfGetHandle(pDevIntrf); }
+
 void UARTprintf(UARTDev_t * const pDev, const char *pFormat, ...);
 void UARTvprintf(UARTDev_t * const pDev, const char *pFormat, va_list vl);
 void UARTRetargetEnable(UARTDev_t * const pDev, int FileNo);

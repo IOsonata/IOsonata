@@ -308,7 +308,7 @@ int SDCard::WriteData(uint8_t *pData, int Len)
 	return cnt;
 }
 
-int SDCard::GetSectSize(void)
+uint16_t SDCard::GetSectSize(void)
 {
 	return vDev.SectSize;
 }

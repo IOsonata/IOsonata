@@ -308,6 +308,7 @@ void SPISetSlaveRxBuffer(SPIDev_t * const pDev, int SlaveIdx, uint8_t * const pB
  */
 void SPISetSlaveTxData(SPIDev_t * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen);
 
+static inline SPIDev_t *SPIGetHandle(DevIntrf_t * const pDevIntrf) { return (SPIDev_t *)DeviceIntrfGetHandle(pDevIntrf); }
 
 #ifdef __cplusplus
 }

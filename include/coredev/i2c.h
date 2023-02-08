@@ -237,6 +237,7 @@ static inline int I2CTxData(I2CDev_t * const pDev, uint8_t *pData, int Datalen) 
 	return DeviceIntrfTxData(&pDev->DevIntrf, pData, Datalen);
 }
 static inline void I2CStopTx(I2CDev_t * const pDev) { DeviceIntrfStopTx(&pDev->DevIntrf); }
+static inline I2CDev_t *I2CGetDevHandle(DevIntrf_t * const pDevIntrf) { return (I2CDev_t *)DeviceIntrfGetHandle(pDevIntrf); }
 
 /**
  * @brief	Set I2C slave data for read command.

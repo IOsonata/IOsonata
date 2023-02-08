@@ -783,6 +783,13 @@ void nRFUARTPowerOff(DevIntrf_t * const pDev)
 	}
 }
 
+void *nRFUARTGetHandle(DevIntrf_t * const pDev)
+{
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
+
+	return dev->pUartDev;
+}
+
 static void apply_workaround_for_enable_anomaly(nRFUartDev_t * const pDev)
 {
 #if defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || defined(NRF9160_XXAA)
@@ -999,6 +1006,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.StopTx = nRFUARTStopTx;
 	pDev->DevIntrf.MaxRetry = UART_RETRY_MAX;
 	pDev->DevIntrf.PowerOff = nRFUARTPowerOff;
+	pDev->DevIntrf.GetHandle = nRFUARTGetHandle;
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 

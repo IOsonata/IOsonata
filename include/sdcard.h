@@ -87,7 +87,7 @@ public:
 	int GetResponse(uint8_t *pBuff, int BuffLen);
 	int ReadData(uint8_t *pBuff, int BuffLen);
 	int WriteData(uint8_t *pData, int Len);
-	int GetSectSize(void);
+	uint16_t GetSectSize(void);
 	uint32_t GetNbSect(void);
 	// @return size in KB
 	uint32_t GetSize(void);

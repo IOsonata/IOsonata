@@ -97,7 +97,7 @@ public:
 	 *
 	 * @return	Sector size in bytes.
 	 */
-	virtual int GetSectSize(void) { return DISKIO_SECT_SIZE; }
+	virtual uint16_t GetSectSize(void) = 0;// { return DISKIO_SECT_SIZE; }
 
 	/**
 	 * @brief	Get total number of sect.

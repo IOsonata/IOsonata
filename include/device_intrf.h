@@ -290,6 +290,8 @@ struct __device_intrf {
      * @param	pDevIntrf : Pointer to an instance of the Device Interface
 	 */
 	void (*PowerOff)(DevIntrf_t * const pDevIntrf);
+
+	void *(*GetHandle)(DevIntrf_t * const pDevIntrf);
 };
 
 #pragma pack(pop)
@@ -569,6 +571,10 @@ static inline void DeviceIntrfPowerOff(DevIntrf_t * const pDev) {
  */
 static inline DEVINTRF_TYPE DeviceIntrfGetType(DevIntrf_t * const pDev) {
     return pDev->Type;
+}
+
+static inline void *DeviceIntrfGetHandle(DevIntrf_t * const pDev) {
+	return pDev->GetHandle(pDev);
 }
 
 #ifdef __cplusplus

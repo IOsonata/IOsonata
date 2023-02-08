@@ -578,6 +578,13 @@ void nRFxI2CReset(DevIntrf_t * const pDev)
 #endif
 }
 
+void *nRFxI2CGetHandle(DevIntrf_t * const pDev)
+{
+	I2CDev_t *dev = (I2CDev_t*)((nRFTwiDev_t*)pDev->pDevData)->pI2cDev;
+
+	return dev;
+}
+
 //void I2CIrqHandler(int DevNo, I2CDev_t * const pDev)
 extern "C" void I2C_IRQHandler(int DevNo)
 {
@@ -733,9 +740,11 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	}
 	pDev->DevIntrf.StopTx = nRFxI2CStopTx;
 	pDev->DevIntrf.Reset = nRFxI2CReset;
+	pDev->DevIntrf.GetHandle = nRFxI2CGetHandle;
 	pDev->DevIntrf.IntPrio = pCfgData->IntPrio;
 	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
+
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	reg->SHORTS = 0;

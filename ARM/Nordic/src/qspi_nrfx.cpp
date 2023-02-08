@@ -397,6 +397,12 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 	return true;
 }
 
+void *nRFxQSPIGetHandle(DevIntrf_t * const pDev)
+{
+	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+
+	return dev->pSpiDev;
+}
 
 bool nRFxQSPIInit(SPIDev_t * const pDev)
 {
@@ -475,6 +481,7 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 	pDev->DevIntrf.MaxRetry = pDev->Cfg.MaxRetry;
 	pDev->DevIntrf.bDma = pDev->Cfg.bDmaEn;
 	pDev->DevIntrf.PowerOff = nRFxQSPIPowerOff;
+	pDev->DevIntrf.GetHandle = nRFxQSPIGetHandle;
 	pDev->DevIntrf.EnCnt = 1;
 
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);

@@ -46,11 +46,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <unistd.h>
 #endif
 
-#define STDDEV_MAX					6		//!< Max number of standard device
+#define STDDEV_MAX				6		//!< Max number of standard device
 #define STDDEV_NAME_MAX			8
 
-#define STDFS_FILENO				3		//!< Default File system
-#define STDDEV_USER_FILENO	4		//!< Start of user device fileno idx
+#define STDFS_FILENO			3		//!< Default File system
+#define STDDEV_USER_FILENO		4		//!< Start of user device fileno idx
 
 // open
 typedef int (*STDDEVOPEN)(void * const pDevObj, const char *pDevName, int Flags, int Mode);

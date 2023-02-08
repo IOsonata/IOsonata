@@ -43,14 +43,19 @@ SOFTWARE.
 
 FlashDiskIO::FlashDiskIO() : DiskIO()
 {
-	vpWaitCB = NULL;
-	vpInterf = NULL;
+	//vpWaitCB = NULL;
+	//vpInterf = NULL;
 	DiskIO::vType = DISKIO_TYPE_ERASEWR;
 }
 
-bool FlashDiskIO::Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,
+bool FlashDiskIO::Init(const FlashCfg_t &Cfg, DeviceIntrf * const pInterf,
 					   DiskIOCache_t * const pCacheBlk, int NbCacheBlk)
 {
+	if (FlashInit(&vDevData, &Cfg, *pInterf) == false)
+	{
+		return false;
+	}
+	/*
     if (pInterf == NULL)
         return false;
 
@@ -118,7 +123,7 @@ bool FlashDiskIO::Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,
             vpInterf->Tx(vDevNo, (uint8_t*)&cmd, 1);
         }
     }
-
+*/
     if (pCacheBlk && NbCacheBlk > 0)
     {
         SetCache(pCacheBlk, NbCacheBlk);
@@ -126,7 +131,7 @@ bool FlashDiskIO::Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,
 
 	return true;
 }
-
+#if 0
 uint32_t FlashDiskIO::ReadId(int Len)
 {
 	uint32_t id = -1;
@@ -458,11 +463,15 @@ bool FlashDiskIO::SectWrite(uint32_t SectNo, uint8_t *pData)
 	return true;
 }
 
+#endif
+
 /**
  * @brief	Reset DiskIO to its default state
  */
 void FlashDiskIO::Reset()
 {
+	FlashReset(&vDevData);
+#if 0
     if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
     {
     	vpInterf->StartTx(vDevNo);
@@ -481,7 +490,7 @@ void FlashDiskIO::Reset()
     	d = FLASH_CMD_RESET_DEVICE;
     	vpInterf->Tx(vDevNo, &d, 1);
     }
-
+#endif
 	DiskIO::Reset();
 }
 

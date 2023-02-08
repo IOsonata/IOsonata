@@ -41,51 +41,49 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "flash.h"
 
-Flash::Flash()
+bool FlashInit(FlashDev_t * const pDev, const FlashCfg_t *pCfg, DevIntrf_t * const pDevIntrf)
 {
-	vpWaitCB = NULL;
-	vpInterf = NULL;
-}
+    pDev->pDevIntrf = NULL;
+    pDev->pWaitCB = NULL;
 
-bool Flash::Init(const FlashCfg_t &Cfg, DeviceIntrf * const pInterf)
-{
-    if (pInterf == NULL)
+    if (pDevIntrf == NULL)
         return false;
 
-    if (Cfg.pInitCB)
+    pDev->pDevIntrf	= pDevIntrf;
+
+    if (pCfg->pInitCB)
     {
-        if (Cfg.pInitCB(Cfg.DevNo, pInterf) == false)
+        if (pCfg->pInitCB(pCfg->DevNo, pDevIntrf) == false)
             return false;
     }
 
-    if (Cfg.pWaitCB)
-    	vpWaitCB = Cfg.pWaitCB;
+    if (pCfg->pWaitCB)
+    	pDev->pWaitCB = pCfg->pWaitCB;
 
-    vDevNo          = Cfg.DevNo;
-    vSectSize		= Cfg.SectSize;
-    vBlkSize		= Cfg.BlkSize;
-    vWriteSize = Cfg.WriteSize;
-    vTotalSize      = Cfg.TotalSize;
-    vAddrSize       = Cfg.AddrSize;
-    vRdCmd			= Cfg.RdCmd;
-	vWrCmd			= Cfg.WrCmd;
-    vpInterf        = pInterf;
+    pDev->DevNo		= pCfg->DevNo;
+    pDev->SectSize	= pCfg->SectSize;
+    pDev->BlkSize	= pCfg->BlkSize;
+    pDev->PageSize	= pCfg->PageSize;
+    pDev->TotalSize	= pCfg->TotalSize;
+    pDev->AddrSize	= pCfg->AddrSize;
+    pDev->RdCmd		= pCfg->RdCmd;
+	pDev->WrCmd		= pCfg->WrCmd;
 
-    if (pInterf->Type() == DEVINTRF_TYPE_QSPI)
+    if (pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
     {
-    	SPIDev_t *dev = *(SPI*)pInterf;
-    	QuadSPISetMemSize(dev, vTotalSize);
+    	SPIDev_t *dev = SPIGetHandle(pDevIntrf);
+    	QuadSPISetMemSize(dev, pDev->TotalSize);
     }
 
-    Reset();
+    FlashReset(pDev);
 
-    if (Cfg.DevIdSize > 0 && Cfg.DevId != 0)
+    if (pCfg->DevIdSize > 0 && pCfg->DevId != 0)
     {
     	int rtry = 5;
 
     	do {
-    		uint32_t d = ReadId(Cfg.DevIdSize);
-    		if (d == Cfg.DevId)
+    		uint32_t d = FlashReadId(pDev, pCfg->DevIdSize);
+    		if (d == pCfg->DevId)
     		{
     			break;
     		}
@@ -97,32 +95,36 @@ bool Flash::Init(const FlashCfg_t &Cfg, DeviceIntrf * const pInterf)
     	}
     }
 
-    if (vAddrSize > 3)
+    if (pDev->AddrSize > 3)
     {
     	// Enable 4 bytes address
         uint8_t cmd = FLASH_CMD_EN4B;
 
-        if (pInterf->Type() == DEVINTRF_TYPE_QSPI)
+        if (pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
         {
-			vpInterf->StartRx(vDevNo);
-			QuadSPISendCmd(*(SPI*)vpInterf, cmd, -1, 0, 0, 0);
-			vpInterf->StopRx();
+        	SPIDev_t *dev = SPIGetHandle(pDevIntrf);
+
+			SPIStartRx(dev, pDev->DevNo);
+			QuadSPISendCmd(dev, cmd, -1, 0, 0, 0);
+			SPIStopRx(dev);
         }
         else
         {
-            vpInterf->Tx(vDevNo, (uint8_t*)&cmd, 1);
+            DeviceIntrfTx(pDevIntrf, pDev->DevNo, (uint8_t*)&cmd, 1);
         }
     }
-
-   // if (pCacheBlk && NbCacheBlk > 0)
-    //{
-    //    SetCache(pCacheBlk, NbCacheBlk);
-   // }
 
 	return true;
 }
 
-uint32_t Flash::ReadId(int Len)
+/**
+ * @brief	Read Flash ID
+ *
+ * @param	Len : Length of id to read in bytes
+ *
+ * @return	Flash ID
+ */
+uint32_t FlashReadId(FlashDev_t * const pDev, int Len)
 {
 	uint32_t id = -1;
 
@@ -130,23 +132,25 @@ uint32_t Flash::ReadId(int Len)
 	{
 		id = 0;
 
-		if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+		if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
 		{
-			vpInterf->StartRx(vDevNo);
-			QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_READID, -1, 0, Len, 0);
-			vpInterf->RxData((uint8_t*)&id, Len);
-			vpInterf->StopRx();
+	    	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
+	    	SPIStartRx(dev, pDev->DevNo);
+			QuadSPISendCmd(dev, FLASH_CMD_READID, -1, 0, Len, 0);
+			SPIRxData(dev, (uint8_t*)&id, Len);
+			SPIStopRx(dev);
 		}
 		else
 		{
 			uint8_t cmd = FLASH_CMD_READID;
 #if 1
-			vpInterf->Read(vDevNo, &cmd, 1, (uint8_t*)&id, Len);
+			DeviceIntrfRead(pDev->pDevIntrf, pDev->DevNo, &cmd, 1, (uint8_t*)&id, Len);
 #else
-			vpInterf->StartRx(vDevNo);
-			vpInterf->TxData(&cmd, 1);
-			vpInterf->RxData((uint8_t*)&id, Len);
-			vpInterf->StopRx();
+			DeviceIntrfStartRx(pDev->pDevIntrf, pDev->DevNo);
+			DeviceIntrfTxData(pDev->pDevIntrf, &cmd, 1);
+			DeviceIntrfRxData(pDev->pDevIntrf, (uint8_t*)&id, Len);
+			DeviceIntrfStopRx(pDev->pDevIntrf, );
 #endif
 		}
 
@@ -155,43 +159,46 @@ uint32_t Flash::ReadId(int Len)
     return id;
 }
 
-uint8_t Flash::ReadStatus()
+
+uint8_t FlashReadStatus(FlashDev_t * const pDev)
 {
     uint8_t d = 0;
 
-	if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+	if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
     {
-		vpInterf->StartRx(vDevNo);
-    	QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_READSTATUS, -1, 0, 1, 0);
-		vpInterf->RxData((uint8_t*)&d, 1);
-		vpInterf->StopRx();
+    	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
+		SPIStartRx(dev, pDev->DevNo);
+    	QuadSPISendCmd(dev, FLASH_CMD_READSTATUS, -1, 0, 1, 0);
+    	SPIRxData(dev, (uint8_t*)&d, 1);
+    	SPIStopRx(dev);
     }
     else
     {
 		d = FLASH_CMD_READSTATUS;
-		vpInterf->StartRx(vDevNo);
-		vpInterf->TxData(&d, 1);
-		vpInterf->RxData(&d, 1);
-		vpInterf->StopRx();
+		DeviceIntrfStartRx(pDev->pDevIntrf, pDev->DevNo);
+		DeviceIntrfTxData(pDev->pDevIntrf, &d, 1);
+		DeviceIntrfRxData(pDev->pDevIntrf, &d, 1);
+		DeviceIntrfStopRx(pDev->pDevIntrf);
     }
 
     return d;
 }
 
-bool Flash::WaitReady(uint32_t Timeout, uint32_t usRtyDelay)
+bool FlashWaitReady(FlashDev_t * const pDev, uint32_t Timeout, uint32_t usRtyDelay)
 {
     uint8_t d;
 
     do {
-    	d = ReadStatus();
+    	d = FlashReadStatus(pDev);
 
         if (!(d & FLASH_STATUS_WIP))
             return true;
 
         if (usRtyDelay > 0)
         {
-            if (vpWaitCB)
-            	vpWaitCB(vDevNo, vpInterf);
+            if (pDev->pWaitCB)
+            	pDev->pWaitCB(pDev->DevNo, pDev->pDevIntrf);
             else
             	usDelay(usRtyDelay);
         }
@@ -201,63 +208,69 @@ bool Flash::WaitReady(uint32_t Timeout, uint32_t usRtyDelay)
     return false;
 }
 
-void Flash::WriteDisable()
+void FlashWriteDisable(FlashDev_t * const pDev)
 {
-	if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+	if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
     {
-		vpInterf->StartTx(vDevNo);
-    	QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_WRDISABLE, -1, 0, 0, 0);
-		vpInterf->StopTx();
+    	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
+    	SPIStartTx(dev, pDev->DevNo);
+    	QuadSPISendCmd(dev, FLASH_CMD_WRDISABLE, -1, 0, 0, 0);
+    	SPIStopTx(dev);
     }
     else
     {
     	uint8_t d = FLASH_CMD_WRDISABLE;
-    	vpInterf->Tx(vDevNo, &d, 1);
+    	DeviceIntrfTx(pDev->pDevIntrf, pDev->DevNo, &d, 1);
     }
 }
 
-bool Flash::WriteEnable(uint32_t Timeout)
+bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout)
 {
     uint8_t d;
 
-    WaitReady(Timeout);
+    FlashWaitReady(pDev, Timeout, 0);
 
-	if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+	if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
     {
-		vpInterf->StartTx(vDevNo);
-    	QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_WRENABLE, -1, 0, 0, 0);
-		vpInterf->StopTx();
+    	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
+    	SPIStartTx(dev, pDev->DevNo);
+    	QuadSPISendCmd(dev, FLASH_CMD_WRENABLE, -1, 0, 0, 0);
+		SPIStopTx(dev);
     }
     else
     {
     	d = FLASH_CMD_WRENABLE;
-    	vpInterf->Tx(vDevNo, &d, 1);
+    	DeviceIntrfTx(pDev->pDevIntrf, pDev->DevNo, &d, 1);
     }
     return false;
 }
 
-void Flash::Erase()
+void FlashErase(FlashDev_t * const pDev)
 {
     uint8_t d;
 
-    WriteEnable();
-    WaitReady();
+    FlashWriteEnable(pDev, 10000);
+    FlashWaitReady(pDev, 100000, 0);
 
-	if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+	if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
     {
-		vpInterf->StartTx(vDevNo);
-    	QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_BULK_ERASE, -1, 0, 0, 0);
-		vpInterf->StopTx();
+    	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
+		SPIStartTx(dev, pDev->DevNo);
+    	QuadSPISendCmd(dev, FLASH_CMD_BULK_ERASE, -1, 0, 0, 0);
+		SPIStopTx(dev);
     }
     else
     {
 		d = FLASH_CMD_BULK_ERASE;
 
-		vpInterf->Tx(vDevNo, &d, 1);
+		DeviceIntrfTx(pDev->pDevIntrf, pDev->DevNo, &d, 1);
     }
     // This is a long wait polling at every second only
-    WaitReady(-1, 1000000);
-    WriteDisable();
+    FlashWaitReady(pDev, -1, 1000000);
+    FlashWriteDisable(pDev);
 }
 
 /**
@@ -266,41 +279,43 @@ void Flash::Erase()
  * @param   BlkNo   : Starting block number to erase.
  *          NbBlk   : Number of consecutive blocks to erase
  */
-void Flash::EraseBlock(uint32_t BlkNo, int NbBlk)
+void FlashEraseBlock(FlashDev_t * const pDev, uint32_t BlkNo, int NbBlk)
 {
     uint8_t d[8];
-    uint32_t addr = BlkNo * vBlkSize;
+    uint32_t addr = BlkNo * pDev->BlkSize;
     uint8_t *p = (uint8_t*)&addr;
 
     d[0] = FLASH_CMD_BLOCK_ERASE;
 
     for (int k = 0; k < NbBlk; k++)
     {
-        WaitReady(-1, 100);
+        FlashWaitReady(pDev, -1, 100);
 
         // Need to re-enable write here, because some flash
         // devices may reset write enable after a write
         // complete
-        WriteEnable();
+        FlashWriteEnable(pDev, 10000);
 
-    	if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+    	if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
         {
-    		vpInterf->StartTx(vDevNo);
-    		QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_BLOCK_ERASE, addr, vAddrSize, 0, 0);
-    		vpInterf->StopTx();
+        	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
+    		SPIStartTx(dev, pDev->DevNo);
+    		QuadSPISendCmd(dev, FLASH_CMD_BLOCK_ERASE, addr, pDev->AddrSize, 0, 0);
+    		SPIStopTx(dev);
         }
         else
         {
-            for (int i = 1; i <= vAddrSize; i++)
+            for (int i = 1; i <= pDev->AddrSize; i++)
             {
-                d[i] = p[vAddrSize - i];
+                d[i] = p[pDev->AddrSize - i];
             }
-        	vpInterf->Tx(vDevNo, d, vAddrSize + 1);
+        	DeviceIntrfTx(pDev->pDevIntrf, pDev->DevNo, d, pDev->AddrSize + 1);
         }
-        addr += vBlkSize;
+        addr += pDev->BlkSize;
     }
-    WaitReady(-1, 1000000);
-    WriteDisable();
+    FlashWaitReady(pDev, -1, 100);
+    FlashWriteDisable(pDev);
 }
 
 /**
@@ -309,75 +324,86 @@ void Flash::EraseBlock(uint32_t BlkNo, int NbBlk)
  * @param   SectNo   : Starting block number to erase.
  *          NbSect   : Number of consecutive blocks to erase
  */
-void Flash::EraseSector(uint32_t SectNo, int NbSect)
+void FlashEraseSector(FlashDev_t * const pDev, uint32_t SectNo, int NbSect)
 {
     uint8_t d[8];
-    uint32_t addr = SectNo * vSectSize;// * 1024;
+    uint32_t addr = SectNo * pDev->SectSize;// * 1024;
     uint8_t *p = (uint8_t*)&addr;
 
-    d[0] = FLASH_CMD_SECTOR_ERASE;
+    if (pDev->AddrSize > 3)
+    {
+    	d[0] = FLASH_CMD_SECTOR_ERASE_4B;
+    }
+    else
+    {
+    	d[0] = FLASH_CMD_SECTOR_ERASE;
+    }
 
     for (int k = 0; k < NbSect; k++)
     {
-        WaitReady(-1, 100);
+        FlashWaitReady(pDev, -1, 100);
 
         // Need to re-enable write here, because some flash
         // devices may reset write enable after a write
         // complete
-        WriteEnable();
+        FlashWriteEnable(pDev, 10000);
 
-    	if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+    	if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
         {
-    		vpInterf->StartTx(vDevNo);
-    		QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_SECTOR_ERASE, addr, vAddrSize, 0, 0);
-    		vpInterf->StopTx();
+        	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
+    		SPIStartTx(dev, pDev->DevNo);
+    		QuadSPISendCmd(dev, d[0], addr, pDev->AddrSize, 0, 0);
+    		SPIStopTx(dev);
         }
         else
         {
-            for (int i = 1; i <= vAddrSize; i++)
+            for (int i = 1; i <= pDev->AddrSize; i++)
             {
-                d[i] = p[vAddrSize - i];
+                d[i] = p[pDev->AddrSize - i];
             }
-        	vpInterf->Tx(vDevNo, d, vAddrSize + 1);
+        	DeviceIntrfTx(pDev->pDevIntrf, pDev->DevNo, d, pDev->AddrSize + 1);
         }
-        addr += vSectSize;// * 1024;
+        addr += pDev->SectSize;// * 1024;
     }
-    WaitReady(-1, 1000000);
-    WriteDisable();
+    FlashWaitReady(pDev, -1, 100);
+    FlashWriteDisable(pDev);
 }
 
 /**
  * Read one sector from physical device
  */
-bool Flash::SectRead(uint32_t SectNo, uint8_t *pBuff)
+bool FlashSectRead(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pBuff)
 {
    	uint8_t d[9];
-    uint32_t addr = SectNo * vSectSize;//DISKIO_SECT_SIZE;
+    uint32_t addr = SectNo * pDev->SectSize;//DISKIO_SECT_SIZE;
     uint8_t *p = (uint8_t*)&addr;
-    int cnt = vSectSize;//DISKIO_SECT_SIZE;
+    int cnt = pDev->SectSize;//DISKIO_SECT_SIZE;
 
     // Makesure there is no write access pending
-    WaitReady(100000);
+    FlashWaitReady(pDev, 100000, 0);
 
-    if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+    if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
     {
-		vpInterf->StartRx(vDevNo);
-    	QuadSPISendCmd(*(SPI*)vpInterf, vRdCmd.Cmd , addr, vAddrSize, vSectSize/*DISKIO_SECT_SIZE*/, vRdCmd.DummyCycle);
-		vpInterf->RxData(pBuff, vSectSize/*DISKIO_SECT_SIZE*/);
-		vpInterf->StopRx();
+    	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
+		SPIStartRx(dev, pDev->DevNo);
+    	QuadSPISendCmd(dev, pDev->RdCmd.Cmd , addr, pDev->AddrSize, pDev->SectSize/*DISKIO_SECT_SIZE*/, pDev->RdCmd.DummyCycle);
+		SPIRxData(dev, pBuff, pDev->SectSize/*DISKIO_SECT_SIZE*/);
+		SPIStopRx(dev);
     }
     else
     {
     	d[0] = FLASH_CMD_READ;
 		while (cnt > 0)
 		{
-			for (int i = 1; i <= vAddrSize; i++)
-				d[i] = p[vAddrSize - i];
+			for (int i = 1; i <= pDev->AddrSize; i++)
+				d[i] = p[pDev->AddrSize - i];
 
-			vpInterf->StartRx(vDevNo);
-			vpInterf->TxData((uint8_t*)d, vAddrSize + 1);
-			int l = vpInterf->RxData(pBuff, vSectSize/*DISKIO_SECT_SIZE*/);
-			vpInterf->StopRx();
+			DeviceIntrfStartRx(pDev->pDevIntrf, pDev->DevNo);
+			DeviceIntrfTxData(pDev->pDevIntrf, (uint8_t*)d, pDev->AddrSize + 1);
+			int l = DeviceIntrfRxData(pDev->pDevIntrf, pBuff, pDev->SectSize/*DISKIO_SECT_SIZE*/);
+			DeviceIntrfStopRx(pDev->pDevIntrf);
 			if (l <= 0)
 				return false;
 			cnt -= l;
@@ -392,27 +418,29 @@ bool Flash::SectRead(uint32_t SectNo, uint8_t *pBuff)
 /**
  * Write one sector to physical device
  */
-bool Flash::SectWrite(uint32_t SectNo, uint8_t *pData)
+bool FlashSectWrite(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pData)
 {
     uint8_t d[9];
-    uint32_t addr = SectNo * vSectSize;//DISKIO_SECT_SIZE;
+    uint32_t addr = SectNo * pDev->SectSize;//DISKIO_SECT_SIZE;
     uint8_t *p = (uint8_t*)&addr;
 
-    int cnt = vSectSize;//DISKIO_SECT_SIZE;
+    int cnt = pDev->SectSize;//DISKIO_SECT_SIZE;
 
-    if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+    if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
     {
+    	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
 		while (cnt > 0)
 		{
-			int l = min(cnt, (int)vWriteSize);
+			int l = min(cnt, (int)pDev->PageSize);
 
-			WriteEnable();
-			vpInterf->StartTx(vDevNo);
+			FlashWriteEnable(pDev, 10000);
+			SPIStartTx(dev, pDev->DevNo);
 
-			QuadSPISendCmd(*(SPI*)vpInterf, vWrCmd.Cmd, addr, vAddrSize, l, vWrCmd.DummyCycle);
+			QuadSPISendCmd(dev, pDev->WrCmd.Cmd, addr, pDev->AddrSize, l, pDev->WrCmd.DummyCycle);
 
-			l = vpInterf->TxData(pData, l);
-			vpInterf->StopTx();
+			l = SPITxData(dev, pData, l);
+			SPIStopTx(dev);
 			cnt -= l;
 			pData += l;
 			addr += l;
@@ -424,22 +452,22 @@ bool Flash::SectWrite(uint32_t SectNo, uint8_t *pData)
 
 		while (cnt > 0)
 		{
-			for (int i = 1; i <= vAddrSize; i++)
-				d[i] = p[vAddrSize - i];
+			for (int i = 1; i <= pDev->AddrSize; i++)
+				d[i] = p[pDev->AddrSize - i];
 
-			int l = min(cnt, (int)vWriteSize);
+			int l = min(cnt, (int)pDev->PageSize);
 
-			WaitReady();
+			FlashWaitReady(pDev, 10000, 0);
 
 			// Some Flash will reset write enable bit at completion
 			// when page size is less than 512 bytes.
 			// We need to set it again
-			WriteEnable();
+			FlashWriteEnable(pDev, 10000);
 
-			vpInterf->StartTx(vDevNo);
-			vpInterf->TxData((uint8_t*)d, vAddrSize + 1);
-			l = vpInterf->TxData(pData, l);
-			vpInterf->StopTx();
+			DeviceIntrfStartTx(pDev->pDevIntrf, pDev->DevNo);
+			DeviceIntrfTxData(pDev->pDevIntrf, (uint8_t*)d, pDev->AddrSize + 1);
+			l = DeviceIntrfTxData(pDev->pDevIntrf, pData, l);
+			DeviceIntrfStopTx(pDev->pDevIntrf);
 			if (l <= 0)
 				return false;
 			cnt -= l;
@@ -448,7 +476,7 @@ bool Flash::SectWrite(uint32_t SectNo, uint8_t *pData)
 		}
     }
 
-	WriteDisable();
+	FlashWriteDisable(pDev);
 
 	return true;
 }
@@ -456,25 +484,27 @@ bool Flash::SectWrite(uint32_t SectNo, uint8_t *pData)
 /**
  * @brief	Reset flash to its default state
  */
-void Flash::Reset()
+void FlashReset(FlashDev_t * const pDev)
 {
-    if (vpInterf->Type() == DEVINTRF_TYPE_QSPI)
+    if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
     {
-    	vpInterf->StartTx(vDevNo);
-		QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_RESET_ENABLE, -1, 0, 0, 0);
-		vpInterf->StopTx();
-    	vpInterf->StartTx(vDevNo);
-		QuadSPISendCmd(*(SPI*)vpInterf, FLASH_CMD_RESET_DEVICE, -1, 0, 0, 0);
-		vpInterf->StopTx();
+    	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
+
+    	SPIStartTx(dev, pDev->DevNo);
+		QuadSPISendCmd(dev, FLASH_CMD_RESET_ENABLE, -1, 0, 0, 0);
+		SPIStopTx(dev);
+    	SPIStartTx(dev, pDev->DevNo);
+		QuadSPISendCmd(dev, FLASH_CMD_RESET_DEVICE, -1, 0, 0, 0);
+		SPIStopTx(dev);
     }
     else
     {
     	uint8_t d = FLASH_CMD_RESET_ENABLE;
 
-    	vpInterf->Tx(vDevNo, &d, 1);
+    	DeviceIntrfTx(pDev->pDevIntrf, pDev->DevNo, &d, 1);
 
     	d = FLASH_CMD_RESET_DEVICE;
-    	vpInterf->Tx(vDevNo, &d, 1);
+    	DeviceIntrfTx(pDev->pDevIntrf, pDev->DevNo, &d, 1);
     }
 }
 

@@ -177,89 +177,13 @@ SOFTWARE.
 
 #include "diskio.h"
 #include "device_intrf.h"
+#include "flash.h"
 
 /** @addtogroup Storage
   * @{
   */
 
-#define FLASH_CMD_READID			0x9F
-#define FLASH_CMD_RDCR              0x15    //!< Read configuration register
-#define FLASH_CMD_WRSR              0x01    //!< Write Register (Status 1, Configuration 1)
-#define FLASH_CMD_WRITE             0x2
-#define FLASH_CMD_DWRITE            0xA2
-#define FLASH_CMD_4WRITE            0x38
-#define FLASH_CMD_QWRITE			0x32
-#define FLASH_CMD_E4WRITE			0x12
-#define FLASH_CMD_READ              0x3
-#define FLASH_CMD_FAST_READ			0xB
-#define FLASH_CMD_DREAD				0x3B	//!< Dual read - address single, data dual
-#define FLASH_CMD_QREAD				0x6B	//!< Quad read - address single, data quad
-#define FLASH_CMD_2READ				0xBB	//!< 2 x I/O read - address dual, data dual
-#define FLASH_CMD_4READ				0xEB	//!< 4 x I/O read - address quad, data quad
-#define FLASH_CMD_WRDISABLE         0x4
-#define FLASH_CMD_READSTATUS        0x5
-#define FLASH_CMD_WRENABLE          0x6
-#define FLASH_CMD_EN4B              0xB7    //!< Enable 4 bytes address
-#define FLASH_CMD_DIS4B             0xE9    //!< Disable 4 bytes address
-#define FLASH_CMD_SECTOR_ERASE		0x20	//!< Sector erase
-#define FLASH_CMD_BLOCK_ERASE_32    0x52	//!< 32KB Block erase
-#define FLASH_CMD_BLOCK_ERASE       0xD8	//!< Block erase
-#define FLASH_CMD_BULK_ERASE        0xC7	//!< Chip erase
-#define FLASH_CMD_BULK_ERASE_ALT	0x60	//!< Alternate chip erase command
-
-#define FLASH_CMD_RESET_ENABLE		0x66	//!< Enable reset
-#define FLASH_CMD_RESET_DEVICE		0x99	//!< Reset
-
-#define FLASH_STATUS_WIP            (1<<0)  // Write In Progress
-#define FLASH_STATUS_WEL			(1<<1)	// Write enable
-#define FLASH_STATUS_QE				(1<<6)	// Quad enable
-
-#pragma pack(push, 1)
-/// Quad SPI flash can have different command code and dummy cycle.
-/// This structure is to define supported command for the Flash config.
-/// Assign the appropriate command code and dymmy cycle count in the config structure
-typedef struct __Quad_Flash_Cmd {
-	uint8_t Cmd;				//!< Command code
-	uint8_t DummyCycle;			//!< Dummy cycle
-} CmdCycle_t;
-
-typedef CmdCycle_t	CMDCYCLE;
 #ifdef __cplusplus
-
-/**
- * @brief FlashDiskIO callback function.
- *
- * This a general callback function hook for special purpose defined in the FLASHDISKIO_CFG
- *
- * @param   DevNo 	: Device number or address used by the interface
- * @param   pInterf : Interface used to access the flash (SPI, I2C or whatever
- *
- * @return  true - Success\n
- *          false - Failed.
- */
-typedef bool (*FlaskDiskIOCb_t)(int DevNo, DeviceIntrf * const pInterf);
-typedef FlaskDiskIOCb_t	FLASHDISKIOCB;
-
-typedef struct {
-    int         DevNo;          //!< Device number or address for interface use
-    uint32_t    TotalSize;      //!< Total Flash size in KBytes
-    uint16_t    SectSize;		//!< Sector erase size in Bytes
-    uint32_t	BlkSize;		//!< Block erase size in Bytes
-    uint16_t    WriteSize;      //!< Writable page size in bytes
-    int         AddrSize;       //!< Address size in bytes
-    uint32_t	DevId;			//!< Device ID, read using FLASH_CMD_READID
-    int			DevIdSize;		//!< Length of device id in bytes to read (max 4 bytes)
-    FlaskDiskIOCb_t pInitCB; 	//!< For custom initialization. Set to NULL if not used
-    FlaskDiskIOCb_t pWaitCB;	//!< If provided, this is called when there are
-    							//!< long delays, such as mass erase, to allow application
-    							//!< to perform other tasks while waiting
-    CmdCycle_t	RdCmd;			//!< QSPI read cmd and dummy cycle
-    CmdCycle_t	WrCmd;			//!< QSPI write cmd and dummy cycle
-} FlashDiskIOCfg_t;
-
-typedef FlashDiskIOCfg_t	FLASHDISKIO_CFG;
-
-#pragma pack(pop)
 
 /// @brief	Flash disk base class
 ///
@@ -270,6 +194,8 @@ class FlashDiskIO : public DiskIO {
 public:
 	FlashDiskIO();
 	virtual ~FlashDiskIO() {}
+
+	operator FlashDev_t * const () { return &vDevData; }
 
 	/**
 	 * @brief	Initialize Flash Disk.
@@ -283,7 +209,7 @@ public:
 	 * 			- true 	: Success
 	 * 			- false	: Failed
 	 */
-	bool Init(const FlashDiskIOCfg_t &Cfg, DeviceIntrf * const pInterf,
+	bool Init(const FlashCfg_t &Cfg, DeviceIntrf * const pInterf,
 			  DiskIOCache_t * const pCacheBlk = NULL, int NbCacheBlk = 0);
 
 	/**
@@ -291,21 +217,21 @@ public:
 	 *
 	 * @return	Total size in KBytes
 	 */
-	virtual uint32_t GetSize(void) { return vTotalSize; }
+	virtual uint32_t GetSize(void) { return vDevData.TotalSize; }
 
     /**
 	 * @brief	Device specific minimum erasable block size in bytes.
 	 *
 	 * @return	Block size in bytes
 	 */
-	virtual uint32_t GetMinEraseSize(void) { return vSectSize; }
+	virtual uint16_t GetSectSize(void) { return vDevData.SectSize; }
 
 	/**
 	 * @brief	Device specific minimum write size in bytes
 	 *
 	 * @return	Size in bytes
 	 */
-	virtual uint32_t GetMinWriteSize() { return vWriteSize; }
+	virtual uint32_t GetPageSize() { return vDevData.PageSize; }
 
 	/**
 	 * @brief	Perform mass erase (ERASE ALL).
@@ -313,7 +239,7 @@ public:
 	 * This function may take a long time to complete. If task switching is require, add delay
 	 * callback function to the configuration at initialization.
 	 */
-	virtual void Erase();
+	virtual void Erase() { FlashErase(&vDevData); }
 
 	/**
 	 * @brief	Erase Flash block.
@@ -321,7 +247,7 @@ public:
 	 * @param	BlkNo	: Starting block number to erase.
 	 * @param	NbBlk	: Number of consecutive blocks to erase
 	 */
-	virtual void EraseBlock(uint32_t BlkNo, int NbBlk);
+	virtual void EraseBlock(uint32_t BlkNo, int NbBlk) { FlashEraseBlock(&vDevData, BlkNo, NbBlk); }
 
 	/**
 	 * @brief	Erase Flash block.
@@ -329,7 +255,7 @@ public:
 	 * @param	BlkNo	: Starting block number to erase.
 	 * @param	NbBlk	: Number of consecutive blocks to erase
 	 */
-	virtual void EraseSector(uint32_t SectNo, int NbSect);
+	virtual void EraseSector(uint32_t SectNo, int NbSect) { FlashEraseSector(&vDevData, SectNo, NbSect); }
 
 	/**
 	 * @brief	Read one sector from physical device.
@@ -342,7 +268,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool SectRead(uint32_t SectNo, uint8_t *pBuff);
+	virtual bool SectRead(uint32_t SectNo, uint8_t *pBuff) { return FlashSectRead(&vDevData, SectNo, pBuff); }
 
 	/**
 	 * @brief	Write one sector to physical device
@@ -355,7 +281,7 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool SectWrite(uint32_t SectNo, uint8_t *pData);
+	virtual bool SectWrite(uint32_t SectNo, uint8_t *pData) { return FlashSectWrite(&vDevData, SectNo, pData); }
 
 	/**
 	 * @brief	Read Flash ID
@@ -364,14 +290,14 @@ public:
 	 *
 	 * @return	Flash ID
 	 */
-	uint32_t ReadId(int Len);
+	uint32_t ReadId(int Len) { return FlashReadId(&vDevData, Len); }
 
 	/**
 	 * @brief	Read Flash status.
 	 *
 	 * @return	Flash status
 	 */
-	uint8_t ReadStatus();
+	uint8_t ReadStatus() { return FlashReadStatus(&vDevData); }
 
 	/**
 	 * @brief	Get the sector erase size
@@ -380,7 +306,7 @@ public:
 	 *
 	 * @return	Size in KBytes
 	 */
-	uint16_t SectEraseSize() { return vSectSize; }
+	uint16_t SectEraseSize() { return vDevData.SectSize; }
 
 	/**
 	 * @brief	Get the block erase size
@@ -389,7 +315,7 @@ public:
 	 *
 	 * @return	Size in KBytes
 	 */
-	uint16_t BlockEraseSize() { return vBlkSize; }
+	uint16_t BlockEraseSize() { return vDevData.BlkSize; }
 
 	/**
 	 * @brief	Reset DiskIO to its default state
@@ -427,17 +353,7 @@ protected:
 	bool WaitReady(uint32_t Timeout = 100000, uint32_t usRtyDelay = 0);
 
 private:
-	uint16_t    vWriteSize;		//!< Min writable size in bytes
-	uint16_t    vSectSize;		//!< Erasable sector size in bytes
-	uint32_t    vBlkSize;		//!< Erasable block size in bytes
-	uint32_t    vTotalSize;		//!< Total Flash size in KBytes
-	int         vAddrSize;		//!< Address size in bytes
-	int         vDevNo;			//!< Device No
-	DeviceIntrf *vpInterf;		//!< Device interface to access Flash
-	FlaskDiskIOCb_t vpWaitCB;	//!< User wait callback when long wait time is required. This is to allows
-								//!< user application to perform task switch or other thing while waiting.
-	CmdCycle_t	vRdCmd;			//!< QSPI read/write and dummy cycle
-	CmdCycle_t	vWrCmd;			//!< QSPI read/write and dummy cycle
+	FlashDev_t vDevData;		//!< Flash device data
 };
 
 extern "C" {
@@ -446,101 +362,6 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-
-/// 512Mb MT25QL512 Flash definition
-#define FLASH_MT25QL512(InitCB, WaitCB)		{ \
-	.DevNo = 0, \
-	.TotalSize = 512 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
-	.BlkSize = 32 * 1024, \
-	.WriteSize = 256, \
-	.AddrSize = 4, \
-	.DevId = 0x20ba20, \
-	.DevIdSize = 3, \
-	.pInitCB = InitCB,\
-	.pWaitCB = WaitCB }
-
-/// Micron N25Q128A 128Mb, QUAD
-#define FLASH_N25Q128A(InitCB, WaitCB)		{ \
-    .DevNo = 0, \
-    .TotalSize = 128 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
-    .BlkSize = 32 * 1024, \
-    .WriteSize = 256, \
-    .AddrSize = 3, \
-    .pInitCB = InitCB, \
-    .pWaitCB = WaitCB, \
-	.RdCmd = { FLASH_CMD_QREAD, 10}, \
-	.WrCmd = { FLASH_CMD_QWRITE, 0 }, }
-
-/// MX25U1635E 16Mb
-#define FLASH_MX25U1635E(InitCB, WaitCB)		{ \
-	.DevNo = 0, \
-	.TotalSize = 16 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
-	.BlkSize = 32 * 1024, \
-	.WriteSize = 256, \
-	.AddrSize = 3, \
-	.pInitCB = InitCB, \
-	.pWaitCB = WaitCB, }
-
-/// Macronix MX25R3235F 32Mb Quad
-#define FLASH_MX25R3235F(InitCB, WaitCB)		{ \
-    .DevNo = 0, \
-    .TotalSize = 32 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
-    .BlkSize = 64 * 1024,\
-    .WriteSize = 256, \
-    .AddrSize = 3, \
-    .pInitCB = InitCB, \
-    .pWaitCB = WaitCB, \
-	.RdCmd = { FLASH_CMD_4READ, 6}, \
-	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
-
-/// Macronix MX25R6435F 64Mb Quad
-#define FLASH_MX25R6435F(InitCB, WaitCB)		{ \
-    .DevNo = 0, \
-    .TotalSize = 64 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
-    .BlkSize = 64 * 1024, \
-    .WriteSize = 256, \
-    .AddrSize = 3, \
-	.DevId = 0x1728c2, \
-	.DevIdSize = 3, \
-    .pInitCB = InitCB, \
-    .pWaitCB = WaitCB, \
-	.RdCmd = { FLASH_CMD_4READ, 6}, \
-	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
-
-/// MX25L25645G 256Mb
-#define FLASH_MX25L25645G(InitCB, WaitCB)		{ \
-	.DevNo = 0, \
-	.TotalSize = 256 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
-	.BlkSize = 32 * 1024, \
-	.WriteSize = 256, \
-	.AddrSize = 4, \
-	.DevId = 0x1920c2, \
-	.DevIdSize = 3, \
-	.pInitCB = InitCB, \
-	.pWaitCB = WaitCB, \
-	.RdCmd = { FLASH_CMD_QREAD, 6}, \
-	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
-
-/// IS25LP512M 512Mb Quad
-#define FLASH_IS25LP512(InitCB, WaitCB)			{ \
-	.DevNo = 0, \
-	.TotalSize = 512 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
-	.BlkSize = 32 * 1024, \
-	.WriteSize = 256, \
-	.AddrSize = 4, \
-	.DevId = 0x1a609d, \
-	.DevIdSize = 3, \
-	.pInitCB = InitCB, \
-	.pWaitCB = WaitCB, \
-	.RdCmd = { FLASH_CMD_4READ, 6}, \
-	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
 
 /** @} End of group Storage */
 
