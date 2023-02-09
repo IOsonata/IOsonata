@@ -110,7 +110,7 @@ static const FlashCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);
 
 FlashDiskIO g_Flash;
 
-static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
+static uint8_t s_FlashCacheMem[4096];
 DiskIOCache_t g_FlashCache = {
     -1, 0xFFFFFFFF, s_FlashCacheMem
 };
