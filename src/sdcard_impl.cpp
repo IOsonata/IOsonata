@@ -54,10 +54,11 @@ bool SDCard::Init(DeviceIntrf * const pDevInterf, uint8_t *  const pCacheMem, in
 	int nbcache = 0;
 	DiskIOCache_t *cachedesc = NULL;
 	uint8_t *p = pCacheMem;
+	uint32_t sectsize = GetSectSize();
 
 	if (pCacheMem)
 	{
-		nbcache = CacheMemSize / DISKIO_SECT_SIZE;
+		nbcache = CacheMemSize / sectsize;
 
 		if (nbcache > SDCARD_CACHE_MAX)
 			nbcache = SDCARD_CACHE_MAX;
@@ -69,7 +70,7 @@ bool SDCard::Init(DeviceIntrf * const pDevInterf, uint8_t *  const pCacheMem, in
 			for (int i = 0; i < nbcache; i++)
 			{
 				vCacheDesc[i].pSectData = p;
-				p += DISKIO_SECT_SIZE;
+				p += sectsize;
 			}
 
 			cachedesc = vCacheDesc;

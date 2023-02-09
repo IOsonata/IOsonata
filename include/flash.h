@@ -212,6 +212,8 @@ SOFTWARE.
 #define FLASH_STATUS_WEL			(1<<1)	// Write enable
 #define FLASH_STATUS_QE				(1<<6)	// Quad enable
 
+#define FLASH_SECTOR_ERASE_SIZE		(4096)	//! Most flash has this sector size
+
 #pragma pack(push, 1)
 /// Quad SPI flash can have different command code and dummy cycle.
 /// This structure is to define supported command for the Flash config.
@@ -239,8 +241,8 @@ typedef bool (*FlaskCb_t)(int DevNo, DevIntrf_t * const pDevIntrf);
 typedef struct __Flash_Config {
     int         DevNo;          //!< Device number or address for interface use
     uint32_t    TotalSize;      //!< Total Flash size in KBytes
-    uint16_t    SectSize;		//!< Sector erase size in Bytes
     uint32_t	BlkSize;		//!< Block erase size in Bytes
+    uint16_t    SectSize;		//!< Sector erase size in Bytes
     uint16_t    PageSize;      	//!< Writable page size in bytes
     int         AddrSize;       //!< Address size in bytes
     uint32_t	DevId;			//!< Device ID, read using FLASH_CMD_READID
@@ -420,11 +422,12 @@ bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout);
 #endif
 
 /// 512Mb MT25QL512 Flash definition
+#define FLASH_MT25QL512_SECTSIZE		FLASH_SECTOR_ERASE_SIZE
 #define FLASH_MT25QL512(InitCB, WaitCB)		{ \
 	.DevNo = 0, \
 	.TotalSize = 512 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
 	.BlkSize = 32 * 1024, \
+	.SectSize = FLASH_MT25QL512_SECTSIZE, \
 	.PageSize = 256, \
 	.AddrSize = 4, \
 	.DevId = 0x20ba20, \
@@ -433,11 +436,12 @@ bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout);
 	.pWaitCB = WaitCB }
 
 /// Micron N25Q128A 128Mb, QUAD
+#define FLASH_N25Q128A_SECTSIZE			FLASH_SECTOR_ERASE_SIZE
 #define FLASH_N25Q128A(InitCB, WaitCB)		{ \
     .DevNo = 0, \
     .TotalSize = 128 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
     .BlkSize = 32 * 1024, \
+	.SectSize = FLASH_N25Q128A_SECTSIZE, \
     .PageSize = 256, \
     .AddrSize = 3, \
     .pInitCB = InitCB, \
@@ -446,22 +450,24 @@ bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout);
 	.WrCmd = { FLASH_CMD_QWRITE, 0 }, }
 
 /// MX25U1635E 16Mb
+#define FLASH_MX25U1635E_SECTSIZE		FLASH_SECTOR_ERASE_SIZE
 #define FLASH_MX25U1635E(InitCB, WaitCB)		{ \
 	.DevNo = 0, \
 	.TotalSize = 16 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
 	.BlkSize = 32 * 1024, \
+	.SectSize = FLASH_MX25U1635E_SECTSIZE, \
 	.PageSize = 256, \
 	.AddrSize = 3, \
 	.pInitCB = InitCB, \
 	.pWaitCB = WaitCB, }
 
 /// Macronix MX25R3235F 32Mb Quad
+#define FLASH_MX25R3235F_SECTSIZE		FLASH_SECTOR_ERASE_SIZE
 #define FLASH_MX25R3235F(InitCB, WaitCB)		{ \
     .DevNo = 0, \
     .TotalSize = 32 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
     .BlkSize = 64 * 1024,\
+	.SectSize = FLASH_MX25R3235F_SECTSIZE, \
     .PageSize = 256, \
     .AddrSize = 3, \
     .pInitCB = InitCB, \
@@ -470,11 +476,12 @@ bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout);
 	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
 
 /// Macronix MX25R6435F 64Mb Quad
+#define FLASH_MX25R6435F_SECTSIZE		FLASH_SECTOR_ERASE_SIZE
 #define FLASH_MX25R6435F(InitCB, WaitCB)		{ \
     .DevNo = 0, \
     .TotalSize = 64 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
     .BlkSize = 64 * 1024, \
+	.SectSize = FLASH_MX25R6435F_SECTSIZE, \
     .PageSize = 256, \
     .AddrSize = 3, \
 	.DevId = 0x1728c2, \
@@ -485,11 +492,12 @@ bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout);
 	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
 
 /// MX25L25645G 256Mb
+#define FLASH_MX25L25645G_SECTSIZE		FLASH_SECTOR_ERASE_SIZE
 #define FLASH_MX25L25645G(InitCB, WaitCB)		{ \
 	.DevNo = 0, \
 	.TotalSize = 256 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
 	.BlkSize = 32 * 1024, \
+	.SectSize = FLASH_MX25L25645G_SECTSIZE, \
 	.PageSize = 256, \
 	.AddrSize = 4, \
 	.DevId = 0x1920c2, \
@@ -500,11 +508,12 @@ bool FlashWriteEnable(FlashDev_t * const pDev, uint32_t Timeout);
 	.WrCmd = { FLASH_CMD_4WRITE, 0 }, }
 
 /// IS25LP512M 512Mb Quad
+#define FLASH_IS25LP512_SECTSIZE		FLASH_SECTOR_ERASE_SIZE
 #define FLASH_IS25LP512(InitCB, WaitCB)			{ \
 	.DevNo = 0, \
 	.TotalSize = 512 * 1024 / 8, \
-	.SectSize = 4 * 1024, \
 	.BlkSize = 32 * 1024, \
+	.SectSize = FLASH_IS25LP512_SECTSIZE, \
 	.PageSize = 256, \
 	.AddrSize = 4, \
 	.DevId = 0x1a609d, \

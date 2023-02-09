@@ -40,7 +40,6 @@ SOFTWARE.
 #include "idelay.h"
 #include "coredev/spi.h"
 #include "flash.h"
-#include "diskio.h"
 
 bool FlashInit(FlashDev_t * const pDev, const FlashCfg_t *pCfg, DevIntrf_t * const pDevIntrf)
 {
@@ -328,7 +327,7 @@ void FlashEraseBlock(FlashDev_t * const pDev, uint32_t BlkNo, int NbBlk)
 void FlashEraseSector(FlashDev_t * const pDev, uint32_t SectNo, int NbSect)
 {
     uint8_t d[8];
-    uint32_t addr = SectNo * DISKIO_SECT_SIZE;// pDev->SectSize;// * 1024;
+    uint32_t addr = SectNo * pDev->SectSize;// * 1024;
     uint8_t *p = (uint8_t*)&addr;
 
     if (pDev->AddrSize > 3)
@@ -365,7 +364,7 @@ void FlashEraseSector(FlashDev_t * const pDev, uint32_t SectNo, int NbSect)
             }
         	DeviceIntrfTx(pDev->pDevIntrf, pDev->DevNo, d, pDev->AddrSize + 1);
         }
-        addr += DISKIO_SECT_SIZE;//pDev->SectSize;// * 1024;
+        addr += pDev->SectSize;// * 1024;
     }
     FlashWaitReady(pDev, -1, 100);
     FlashWriteDisable(pDev);
@@ -377,9 +376,9 @@ void FlashEraseSector(FlashDev_t * const pDev, uint32_t SectNo, int NbSect)
 bool FlashSectRead(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pBuff)
 {
    	uint8_t d[9];
-    uint32_t addr = SectNo * DISKIO_SECT_SIZE;//pDev->SectSize;
+    uint32_t addr = SectNo * pDev->SectSize;
     uint8_t *p = (uint8_t*)&addr;
-    int cnt = DISKIO_SECT_SIZE;//pDev->SectSize;
+    int cnt = pDev->SectSize;
 
     // Makesure there is no write access pending
     FlashWaitReady(pDev, 100000, 0);
@@ -389,8 +388,8 @@ bool FlashSectRead(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pBuff)
     	SPIDev_t *dev = SPIGetHandle(pDev->pDevIntrf);
 
 		SPIStartRx(dev, pDev->DevNo);
-    	QuadSPISendCmd(dev, pDev->RdCmd.Cmd , addr, pDev->AddrSize, DISKIO_SECT_SIZE /*pDev->SectSize*/, pDev->RdCmd.DummyCycle);
-		SPIRxData(dev, pBuff, DISKIO_SECT_SIZE/*pDev->SectSize*/);
+    	QuadSPISendCmd(dev, pDev->RdCmd.Cmd , addr, pDev->AddrSize, pDev->SectSize, pDev->RdCmd.DummyCycle);
+		SPIRxData(dev, pBuff, pDev->SectSize);
 		SPIStopRx(dev);
     }
     else
@@ -403,7 +402,7 @@ bool FlashSectRead(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pBuff)
 
 			DeviceIntrfStartRx(pDev->pDevIntrf, pDev->DevNo);
 			DeviceIntrfTxData(pDev->pDevIntrf, (uint8_t*)d, pDev->AddrSize + 1);
-			int l = DeviceIntrfRxData(pDev->pDevIntrf, pBuff, DISKIO_SECT_SIZE /*pDev->SectSize*/);
+			int l = DeviceIntrfRxData(pDev->pDevIntrf, pBuff, pDev->SectSize);
 			DeviceIntrfStopRx(pDev->pDevIntrf);
 			if (l <= 0)
 				return false;
@@ -422,10 +421,10 @@ bool FlashSectRead(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pBuff)
 bool FlashSectWrite(FlashDev_t * const pDev, uint32_t SectNo, uint8_t *pData)
 {
     uint8_t d[9];
-    uint32_t addr = SectNo * DISKIO_SECT_SIZE;/*pDev->SectSize*/
+    uint32_t addr = SectNo * pDev->SectSize;
     uint8_t *p = (uint8_t*)&addr;
 
-    int cnt = DISKIO_SECT_SIZE;/*pDev->SectSize*/
+    int cnt = pDev->SectSize;
 
     if (pDev->pDevIntrf->Type == DEVINTRF_TYPE_QSPI)
     {

@@ -124,13 +124,14 @@ int DiskIO::Read(uint32_t SectNo, uint32_t SectOffset, uint8_t *pBuff, uint32_t 
 	if (pBuff == NULL)
 		return -1;
 
-	int l = min(Len, ((uint32_t)DISKIO_SECT_SIZE - SectOffset));
+	uint32_t sectsize = GetSectSize();
+	int l = min(Len, (sectsize - SectOffset));
 
 	int idx = GetCacheSect(SectNo);
 	if (idx < 0)
 	{
 	    // No cache, do physical read
-	    uint8_t d[DISKIO_SECT_SIZE];
+	    uint8_t d[sectsize];
 	    SectRead(SectNo, d);
 	    memcpy(pBuff, d + SectOffset, l);
 	}
@@ -148,8 +149,9 @@ int DiskIO::Read(uint32_t SectNo, uint32_t SectOffset, uint8_t *pBuff, uint32_t 
 
 int DiskIO::Read(uint64_t Offset, uint8_t *pBuff, uint32_t Len)
 {
-	uint64_t sectno = Offset / DISKIO_SECT_SIZE;
-	uint32_t sectoff = Offset % DISKIO_SECT_SIZE;
+	uint32_t sectsize = GetSectSize();
+	uint64_t sectno = Offset / sectsize;
+	uint32_t sectoff = Offset % sectsize;
 
 	uint32_t retval = 0;
 
@@ -162,7 +164,7 @@ int DiskIO::Read(uint64_t Offset, uint8_t *pBuff, uint32_t Len)
 		Len -= l;
 		retval += l;
 		sectoff += l;
-		if (sectoff >= DISKIO_SECT_SIZE)
+		if (sectoff >= sectsize)
 		{
 			sectno++;
 			sectoff = 0;
@@ -177,13 +179,14 @@ int DiskIO::Write(uint32_t SectNo, uint32_t SectOffset, uint8_t *pData, uint32_t
 	if (pData == NULL)
 		return -1;
 
-	uint32_t l = min(Len, DISKIO_SECT_SIZE - SectOffset);
+	uint32_t sectsize = GetSectSize();
+	uint32_t l = min(Len, sectsize - SectOffset);
 
 	int idx = GetCacheSect(SectNo, true);
 	if (idx < 0)
 	{
 	    // No cache, do physical write
-	    uint8_t d[DISKIO_SECT_SIZE];
+	    uint8_t d[sectsize];
 	    SectRead(SectNo, d);
 	    memcpy(d + SectOffset, pData, l);
 	    SectWrite(SectNo, d);
@@ -203,8 +206,9 @@ int DiskIO::Write(uint32_t SectNo, uint32_t SectOffset, uint8_t *pData, uint32_t
 
 int DiskIO::Write(uint64_t Offset, uint8_t *pData, uint32_t Len)
 {
-	uint64_t sectno = Offset / DISKIO_SECT_SIZE;
-	uint32_t sectoff = Offset % DISKIO_SECT_SIZE;
+	uint32_t sectsize = GetSectSize();
+	uint64_t sectno = Offset / sectsize;
+	uint32_t sectoff = Offset % sectsize;
 
 	uint32_t retval = 0;
 
@@ -217,7 +221,7 @@ int DiskIO::Write(uint64_t Offset, uint8_t *pData, uint32_t Len)
 		Len -= l;
 		retval += l;
 		sectoff += l;
-		if (sectoff >= DISKIO_SECT_SIZE)
+		if (sectoff >= sectsize)
 		{
 			sectno++;
 			sectoff = 0;
