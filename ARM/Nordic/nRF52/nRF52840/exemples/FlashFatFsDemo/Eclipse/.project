@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>EepromDemo</name>
+	<name>FlashFatFsDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -33,22 +33,12 @@
 		<link>
 			<name>src/board.h</name>
 			<type>1</type>
-			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/board.h</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/eeprom_demo.cpp</name>
+			<name>src/flash_fatfs_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/eeprom_demo.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/flash_fatfs_demo.cpp</locationURI>
 		</link>
 	</linkedResources>
-	<variableList>
-		<variable>
-			<name>copy_PARENT</name>
-			<value>$%7BPARENT-2-PROJECT_LOC%7D/exemples/EepromTest</value>
-		</variable>
-		<variable>
-			<name>copy_PARENT1</name>
-			<value>$%7BPARENT-6-PROJECT_LOC%7D</value>
-		</variable>
-	</variableList>
 </projectDescription>

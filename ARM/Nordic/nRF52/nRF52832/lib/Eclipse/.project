@@ -431,6 +431,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/excelitas_serlink.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/fatfs</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/fatfs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/fatfs.cpp</locationURI>
@@ -1344,6 +1349,41 @@
 			<name>src/display/igfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/igfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fatfs/ff.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ff.c</locationURI>
+		</link>
+		<link>
+			<name>src/fatfs/ff.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ff.h</locationURI>
+		</link>
+		<link>
+			<name>src/fatfs/ff_diskio.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ff_diskio.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fatfs/ff_diskio.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ff_diskio.h</locationURI>
+		</link>
+		<link>
+			<name>src/fatfs/ffconf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ffconf.h</locationURI>
+		</link>
+		<link>
+			<name>src/fatfs/ffsystem.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ffsystem.c</locationURI>
+		</link>
+		<link>
+			<name>src/fatfs/ffunicode.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ffunicode.c</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>
