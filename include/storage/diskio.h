@@ -40,7 +40,7 @@ SOFTWARE.
   * @{
   */
 
-//#define DISKIO_SECT_SIZE		    512     //!< Disk sector size in bytes
+#define DISKIO_LOGICAL_SECT_SIZE    512     //!< Disk logical sector size in bytes
 #define DISKIO_CACHE_SECT_MAX	    1       //!< Max number of cache sector
 #define DISKIO_CACHE_DIRTY_BIT      (1<<31) //!< This bit is set in the UseCnt if there was
                                             //!< write to the cache
@@ -91,6 +91,7 @@ typedef DiskIOCache_t	DISKIO_CACHE_DESC;
 class DiskIO {
 public:
 	DiskIO();
+	virtual ~DiskIO() {}
 
 	/**
 	 * @brief	Get the size of one sector.

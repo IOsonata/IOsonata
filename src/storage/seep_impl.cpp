@@ -38,7 +38,7 @@ using namespace std;
 
 #include "istddef.h"
 #include "idelay.h"
-#include "seep.h"
+#include "storage/seep.h"
 #include "iopinctrl.h"
 
 Seep::Seep()

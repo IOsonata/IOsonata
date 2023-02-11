@@ -47,8 +47,8 @@ Modified by          Date              Description
 #include <wchar.h>
 
 #include "stddev.h"
-#include "sdcard.h"
-#include "fatfs.h"
+#include "storage/sdcard.h"
+#include "storage/fatfs.h"
 
 
 //#define FATFS_FDBASE_ID		0x5A00L

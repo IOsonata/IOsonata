@@ -36,18 +36,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include "nrf.h"
-
 #include "ff.h"			/* Obtains integer types */
 #include "ff_diskio.h"		/* Declarations of device I/O functions */
 
+#include "idelay.h"
 #include "coredev/uart.h"
 #include "coredev/spi.h"
-#include "diskio_flash.h"
+#include "storage/diskio_flash.h"
 #include "stddev.h"
-#include "idelay.h"
-
-#include "ff.h"
 
 // This include contain i/o definition the board in use
 #include "board.h"
@@ -102,15 +98,15 @@ static const SPICfg_t s_SpiCfg = {
     .Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    .Rate = 8000000,   // Speed in Hz
+    .Rate = 4000000,   // Speed in Hz
     .DataSize = 8,      // Data Size
     .MaxRetry = 5,      // Max retries
     .BitOrder = SPIDATABIT_MSB,
     .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
     .ClkPol = SPICLKPOL_HIGH,         // clock polarity
     .ChipSel = SPICSEL_AUTO,
-	.bDmaEn = false,	// DMA
-	.bIntEn = true,
+	.bDmaEn = true,	// DMA
+	.bIntEn = false,
     .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
     .EvtCB = NULL
 };
@@ -200,7 +196,7 @@ int main()
 
 	if (fres != FR_OK)
 	{
-		fres = f_mkfs ("0:", &s_MkFsParm, g_FFBuf, 4096);
+		fres = f_mkfs ("0:", &s_MkFsParm, g_FFBuf, DISKIO_LOGICAL_SECT_SIZE);
 	}
 	printf("Fres = %d\n", fres);
 
@@ -393,35 +389,41 @@ DRESULT disk_write (
 		return RES_OK;
 	}
 
+	uint32_t sz = g_FlashDiskIO.GetSectSize();
+	uint32_t offset = sector * DISKIO_LOGICAL_SECT_SIZE;
 	uint8_t blkbuf[4096];
 	uint8_t *p = (uint8_t *)buff;
-	uint32_t blk = (sector >> 3);
-	uint32_t boff = (sector % 8) * 512;
-	uint64_t offs = blk << 12;//* 512;
+	uint32_t blk = offset / sz;
+	uint32_t boff = offset % sz;
+	//uint64_t offs = blk << 12;//* 512;
 
 	printf("write sect : %d %d %d %d\n", sector, count, blk, boff);
 
-	g_FlashDiskIO.Read(offs, blkbuf, 4096);
+	offset = blk * sz;
+
+	g_FlashDiskIO.Read(offset, blkbuf, sz);
 	g_FlashDiskIO.EraseSector(blk, 1);
 
 	while (count > 0)
 	{
-		memcpy(&blkbuf[boff], p, 512);
-		boff += 512;
+		memcpy(&blkbuf[boff], p, DISKIO_LOGICAL_SECT_SIZE);
+		boff += DISKIO_LOGICAL_SECT_SIZE;
 		count--;
 
-		if (count > 0 && boff >= 4096)
+		if (count > 0 && boff >= sz)
 		{
-			g_FlashDiskIO.Write(offs, blkbuf, 4096);
+			//g_FlashDiskIO.SectWrite(blk, blkbuf);//, DISKIO_LOGICAL_SECT_SIZE);
+			g_FlashDiskIO.Write(offset, blkbuf, sz);
 			boff = 0;
 			blk++;
-			offs = blk << 12;//* 512;
-			g_FlashDiskIO.Read(offs, blkbuf, 4096);
+			offset = blk * sz;//* 512;
+			g_FlashDiskIO.Read(offset, blkbuf, sz);
 			g_FlashDiskIO.EraseSector(blk, 1);
 		}
-		p += 512;
+		p += DISKIO_LOGICAL_SECT_SIZE;
 	}
-	g_FlashDiskIO.Write(offs, blkbuf, 4096);
+	g_FlashDiskIO.Write(offset, blkbuf, sz);
+//	g_FlashDiskIO.SectWrite(blk, blkbuf);
 
 
 	return RES_OK;
@@ -459,11 +461,15 @@ DRESULT disk_ioctl (
 		case GET_SECTOR_COUNT :
 
 			// Process of the command for the MMC/SD card
-			*(uint32_t *)buff = g_FlashDiskIO.GetNbSect();
+		{
+			uint32_t c = g_FlashDiskIO.GetSize() * 1024UL / DISKIO_LOGICAL_SECT_SIZE;
+			*(uint32_t *)buff = c;//g_FlashDiskIO.GetNbSect();
+			printf("Sect Count : %d\r\n", c);
+		}
 			return RES_OK;
 
 		case GET_SECTOR_SIZE :
-			*(uint32_t *)buff = 512;//g_FlashDiskIO.GetSectSize();
+			*(uint32_t *)buff = DISKIO_LOGICAL_SECT_SIZE;//g_FlashDiskIO.GetSectSize();
 			return RES_OK;
 		case GET_BLOCK_SIZE:
 			*(uint32_t *)buff = 32768;

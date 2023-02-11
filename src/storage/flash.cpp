@@ -39,7 +39,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "idelay.h"
 #include "coredev/spi.h"
-#include "flash.h"
+#include "storage/flash.h"
 
 bool FlashInit(FlashDev_t * const pDev, const FlashCfg_t *pCfg, DevIntrf_t * const pDevIntrf)
 {

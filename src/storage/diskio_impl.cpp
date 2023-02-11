@@ -38,7 +38,7 @@ Modified by          Date              Description
 
 #include "istddef.h"
 #include "crc.h"
-#include "diskio.h"
+#include "storage/diskio.h"
 
 using namespace std;
 

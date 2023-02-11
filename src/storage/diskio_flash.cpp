@@ -37,9 +37,9 @@ SOFTWARE.
 #include <string.h>
 
 #include "istddef.h"
-#include "diskio_flash.h"
 #include "idelay.h"
 #include "coredev/spi.h"
+#include "storage/diskio_flash.h"
 
 FlashDiskIO::FlashDiskIO() : DiskIO()
 {

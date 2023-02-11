@@ -43,9 +43,7 @@ Modified by          Date              Description
 #include <string.h>
 #include <stdio.h>
 
-#include "cmsis_compiler.h"
-
-#include "fatfs.h"
+#include "storage/fatfs.h"
 
 #define OS_REQUIRE_CLUSTERS		12
 
@@ -83,7 +81,7 @@ uint32_t FATFSVDiskGetClusterSector(FATFS_VDISK *pVDisk, uint32_t ClusterNo)
 	return pVDisk->pBootSect->SecPerClus * (ClusterNo - 2) + pVDisk->DataStartSectNo;
 }
 
-__WEAK uint8_t *FATFSVDiskGetSectorData(FATFS_VDISK *pVDisk, uint32_t SectNo, uint32_t SectOff, int Len)
+__attribute__((weak)) uint8_t *FATFSVDiskGetSectorData(FATFS_VDISK *pVDisk, uint32_t SectNo, uint32_t SectOff, int Len)
 {
 	uint8_t *p = NULL;
 

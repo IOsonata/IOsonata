@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/spi.h"
 #include "iopinctrl.h"
 #include "coredev/shared_irq.h"
-#include "diskio_flash.h"
+#include "storage/flash.h"
 #include "convutil.h"
 
 #include "spi_nrfx.h"

@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/uart.h"
 #include "coredev/spi.h"
-#include "diskio_flash.h"
+#include "storage/diskio_flash.h"
 #include "stddev.h"
 #include "idelay.h"
 

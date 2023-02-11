@@ -121,16 +121,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/diskio.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/diskio.h</locationURI>
-		</link>
-		<link>
-			<name>include/diskio_flash.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/diskio_flash.h</locationURI>
-		</link>
-		<link>
 			<name>include/display</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -144,16 +134,6 @@
 			<name>include/excelitas_serlink.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/excelitas_serlink.h</locationURI>
-		</link>
-		<link>
-			<name>include/fatfs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fatfs.h</locationURI>
-		</link>
-		<link>
-			<name>include/flash.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/flash.h</locationURI>
 		</link>
 		<link>
 			<name>include/iatomic.h</name>
@@ -261,19 +241,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/sdcard.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sdcard.h</locationURI>
-		</link>
-		<link>
 			<name>include/sdk_config.h</name>
 			<type>1</type>
 			<locationURI>copy_PARENT/include/sdk_config.h</locationURI>
-		</link>
-		<link>
-			<name>include/seep.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/seep.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors</name>
@@ -289,6 +259,11 @@
 			<name>include/stddev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/sys</name>
@@ -1039,6 +1014,36 @@
 			<name>include/sensors/tphg_bme680.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tphg_bme680.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/diskio.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/diskio_flash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/fatfs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/flash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/sdcard.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/sdcard.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/seep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
 		</link>
 		<link>
 			<name>include/sys/dirent.h</name>
