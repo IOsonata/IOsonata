@@ -99,6 +99,9 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void CRYPTOCELL_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPIM3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PWM3_IRQHandler(void);
 
+__attribute__((weak)) void SPI_IRQHandler(int DevNo) { while(1);};
+__attribute__((weak)) void I2C_IRQHandler(int DevNo) { while(1);};
+
 /**
  * This interrupt vector is by default located in FLASH. Though it can not be
  * changed at runtime. All functions in the vector are weak.  it can be
