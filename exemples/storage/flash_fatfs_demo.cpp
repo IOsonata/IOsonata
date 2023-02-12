@@ -182,6 +182,9 @@ int main()
 	bool res;
 
 	res = g_Uart.Init(s_UartCfg);
+
+	printf("flash_fatfs_demo\n");
+
 	g_Spi.Init(s_SpiCfg);
 
 	if (g_FlashDiskIO.Init(s_FlashCfg, &g_Spi, s_FlashCache, s_NbFlashCache) == true)
@@ -198,24 +201,23 @@ int main()
 
 	FRESULT fres = f_mount(&FatFs, "0:", 1);
 
-	printf("Fres = %d\n", fres);
-
 	if (fres != FR_OK)
 	{
+		printf("formating wait...\n");
 		fres = f_mkfs ("0:", &s_MkFsParm, g_FFBuf, 4096);
+		printf("Fres = %d\n", fres);
 	}
-	printf("Fres = %d\n", fres);
 
 	FIL fp;
 
 	fres = f_open(&fp, "test.txt", FA_READ | FA_WRITE | FA_CREATE_ALWAYS);
 
-	printf("Fres = %d\n", fres);
-
 	uint32_t l = 0;
 
 	if (fres == FR_OK)
 	{
+		printf("file open/create success\n");
+
 		fres = f_write(&fp, g_Data, 4096, (unsigned*)&l);
 		fres = f_lseek(&fp, 0);
 		fres = f_read(&fp, g_Temp, 4096, (unsigned*)&l);
@@ -235,10 +237,9 @@ int main()
 
 	fres = f_open(&fp, "test.txt", FA_READ);// | FA_CREATE_ALWAYS);
 
-	printf("Fres = %d\n", fres);
-
 	if (fres == FR_OK)
 	{
+		printf("file open success\n");
 		fres = f_read(&fp, g_Temp, 4096, (unsigned*)&l);
 		f_close(&fp);
 
@@ -247,6 +248,9 @@ int main()
 			printf("read failed\n");
 		}
 	}
+
+	printf("test complete\n");
+
 	while(1)
 	{
 		__WFE();

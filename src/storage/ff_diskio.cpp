@@ -145,7 +145,6 @@ DRESULT disk_read (
 	}
 
 	uint64_t offset = (uint64_t)sector * FF_MIN_SS;
-	printf("read sect : %d\n", sector);
 
 	while (count > 0)
 	{
@@ -194,8 +193,6 @@ DRESULT disk_write (
 
 	uint32_t offs = sector * FF_MIN_SS;
 
-	printf("write sect : %d %d\n", sector, offs);
-
 	s_pFFDiskIO->Write(offs, (uint8_t*)buff, count * FF_MIN_SS);
 
 	return RES_OK;
@@ -234,7 +231,7 @@ DRESULT disk_ioctl (
 
 			// Process of the command for the MMC/SD card
 			*(uint32_t *)buff = s_pFFDiskIO->GetSize() * 1024U / FF_MIN_SS;
-			printf("Nb Sector %u\r\n", *(uint32_t *)buff);
+
 			return RES_OK;
 
 		case GET_SECTOR_SIZE :
