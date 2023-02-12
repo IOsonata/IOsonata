@@ -281,7 +281,9 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool SectWrite(uint32_t SectNo, uint8_t *pData) { return FlashSectWrite(&vDevData, SectNo, pData); }
+	virtual bool SectWrite(uint32_t SectNo, uint8_t *pData) {
+		EraseSector(SectNo, 1);
+		return FlashSectWrite(&vDevData, SectNo, pData); }
 
 	/**
 	 * @brief	Read Flash ID

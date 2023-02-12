@@ -169,6 +169,8 @@ public:
 	 */
 	virtual void Erase() {}
 
+	virtual void EraseSector(uint32_t SectNo, int NbSect) {}
+
 	int	GetCacheSect(uint32_t SectNo, bool bLock = false);
 	void SetCache(DiskIOCache_t * const pCacheBlk, int NbCacheBlk);
 	void Flush();

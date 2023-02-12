@@ -1646,6 +1646,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/ff_diskio.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/ff_diskio.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/storage/flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
