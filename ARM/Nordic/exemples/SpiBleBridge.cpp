@@ -47,8 +47,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "coredev/uart.h"
-#include "flash.h"
-#include "diskio_flash.h"
+#include "storage/flash.h"
+#include "storage/diskio_flash.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
@@ -73,9 +73,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define SPI_PKT_SIZE				sizeof(SPI_PKT) // size of a SPI packet in byte
 #define SPI_BLEINTRF_PKTSIZE		(SPI_PKT_SIZE)
-#define SPI_BLEINTRF_FIFOSIZE		BTINTRF_CFIFO_TOTAL_MEMSIZE(5, SPI_BLEINTRF_PKTSIZE)//(NbPkt, PktSize)
+#define SPI_BLEINTRF_FIFOSIZE		BTINTRF_CFIFO_TOTAL_MEMSIZE(20, SPI_BLEINTRF_PKTSIZE)//(NbPkt, PktSize)
 #define SPI_MAX_DATA_LEN			(SPI_PKT_SIZE)
-#define SPIFIFOSIZE 				CFIFO_MEMSIZE(SPI_MAX_DATA_LEN * 5)
+//#define SPIFIFOSIZE 				CFIFO_MEMSIZE(SPI_MAX_DATA_LEN * 10)
 
 #if defined(BLUEIO_TAG_EVIM)
 #define FLASH_CFG(InitCB, WaitCB)	FLASH_MX25U1635E(InitCB, WaitCB)
@@ -269,12 +269,11 @@ HCFIFO g_Spi2BleFifo;
  * ******************** Flash memory config section *******************************
  ****************************************************************************************/
 static const FlashCfg_t s_FlashCfg = FLASH_CFG(MX25U1635E_init, NULL);//FLASH_CFG(MX25U1635E_init, NULL)
-
 FlashDiskIO g_Flash;
-//alignas(4) static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
-//DiskIOCache_t g_FlashCache = {
-//		-1, 0xFFFFFFFF, s_FlashCacheMem
-//};
+alignas(4) static uint8_t s_FlashCache[4096];
+DiskIOCache_t g_FlashCache = {
+		-1, 0xFFFFFFFF, s_FlashCache
+};
 
 static SPI_PKT g_SpiPkt = {0,};
 static SPI_PKT g_SpiReadPkt;
@@ -508,7 +507,7 @@ bool SpiBleInit()
 			return false;
 		}
 
-		res = g_Flash.Init(s_FlashCfg, &g_SpiMaster);
+		res = g_Flash.Init(s_FlashCfg, &g_SpiMaster, &g_FlashCache, 1);
 		if (res == false)
 		{
 			DEBUG_PRINTF("Flash memory init FAILED\r\n");
@@ -716,8 +715,8 @@ bool TestFlashSector()
 		return false;
 	}
 
-	uint8_t buff[FLASH_CHUNK_TEST_SIZE];
-	uint8_t d[FLASH_CHUNK_TEST_SIZE];
+	uint8_t buff[s_FlashCfg.SectSize];
+	uint8_t d[s_FlashCfg.SectSize];
 	bool ret;
 
 	DEBUG_PRINTF("Prepare data for testing\r\n");
@@ -735,7 +734,7 @@ bool TestFlashSector()
 	if (g_Flash.SectRead(Addr, buff))
 		DEBUG_PRINTF("Done\n");
 
-	if (memcmp(buff, d, FLASH_CHUNK_TEST_SIZE) != 0)
+	if (memcmp(buff, d, sizeof(d)) != 0)
 	{
 		DEBUG_PRINTF("Sector %d FAILED\n", Addr);
 		g_SpiPkt.Data[0] = 0x00;
