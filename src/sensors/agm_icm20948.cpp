@@ -500,7 +500,7 @@ bool AgmIcm20948::UpdateData()
 {
 	bool res = MagIcm20948::UpdateData();
 	uint16_t regaddr = ICM20948_ACCEL_XOUT_H;
-	int8_t d[20];
+	uint8_t d[20];
 	uint64_t t;
 	if (vpTimer)
 	{
@@ -516,19 +516,19 @@ bool AgmIcm20948::UpdateData()
 		Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 14);
 
 		AccelSensor::vData.Timestamp = t;
-		AccelSensor::vData.X = ((int16_t)d[0] << 8) | d[1];
-		AccelSensor::vData.Y = ((int16_t)d[2] << 8) | d[3];
-		AccelSensor::vData.Z = ((int16_t)d[4] << 8) | d[5];
+		AccelSensor::vData.X = ((int16_t)(d[0] << 8) | d[1]);
+		AccelSensor::vData.Y = ((int16_t)(d[2] << 8) | d[3]);
+		AccelSensor::vData.Z = ((int16_t)(d[4] << 8) | d[5]);
 		GyroSensor::vData.Timestamp = t;
-		GyroSensor::vData.X = ((int16_t)d[6] << 8) | d[7];
-		GyroSensor::vData.Y = ((int16_t)d[8] << 8) | d[9];
-		GyroSensor::vData.Z = ((int16_t)d[10] << 8) | d[11];
+		GyroSensor::vData.X = ((int16_t)(d[6] << 8) | d[7]);
+		GyroSensor::vData.Y = ((int16_t)(d[8] << 8) | d[9]);
+		GyroSensor::vData.Z = ((int16_t)(d[10] << 8) | d[11]);
 
 
 		// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
 		int16_t t = ((int16_t)d[12] << 8) | d[13];
 		TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | d[13]) * 100 / 33387 + 2100;
-		printf("Temp : %d %d\r\n", t, TempSensor::vData.Temperature);
+		//printf("Temp : %d %d\r\n", t, TempSensor::vData.Temperature);
 
 		res = true;
 	}
@@ -709,7 +709,7 @@ void AgmIcm20948::IntHandler()
 	uint16_t regaddr = 0;
 	uint8_t d;
 
-	d = Read8((uint8_t*)&regaddr, 2);
+	//d = Read8((uint8_t*)&regaddr, 2);
 //	if (d & MPU9250_AG_INT_STATUS_RAW_DATA_RDY_INT)
 	{
 		UpdateData();
