@@ -39,11 +39,11 @@ Modified by          Date              Description
 #define STDDEV_FDIDX_MASK		0xF
 #define STDDEV_FDIDX_NBITS		4
 
-STDDEV *g_DevTable[STDDEV_MAX] = {
+StdDev_t *g_DevTable[STDDEV_MAX] = {
 	NULL,
 };
 
-int InstallBlkDev(STDDEV * const pDev, int MapId)
+int InstallBlkDev(StdDev_t * const pDev, int MapId)
 {
 	int retval = -1;
 

@@ -56,7 +56,7 @@ int UARTStdDevWrite(void *pDevObj, int Handle, uint8_t *pBuff, size_t Len);
 // seek
 
 
-STDDEV g_UartStdDev = {
+StdDev_t g_UartStdDev = {
 	"UARTIO",
 	NULL,
 	UARTStdDevOpen,

@@ -73,7 +73,7 @@ typedef struct {
 	STDDEVSEEK	Seek;		//!< Pointer to Seek function
 } StdDev_t;
 
-typedef StdDev_t	STDDEV;
+//typedef StdDev_t	STDDEV;
 
 #pragma pack(pop)
 

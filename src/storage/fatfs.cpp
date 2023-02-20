@@ -56,7 +56,7 @@ Modified by          Date              Description
 
 FatFS g_FatFS;
 
-const STDDEV g_FatFSBlkDev = {
+const StdDev_t g_FatFSBlkDev = {
 	"FAT:",
 	(void*)&g_FatFS,
 	FATFSOpen,		// Open function
@@ -126,7 +126,7 @@ bool FatFS::Init(DiskIO *pDiskIO)
 			}
 			dir++;
 		}*/
-	InstallBlkDev((STDDEV*)&g_FatFSBlkDev, STDFS_FILENO);
+	InstallBlkDev((StdDev_t*)&g_FatFSBlkDev, STDFS_FILENO);
 
 	return true;
 }
