@@ -120,7 +120,7 @@ public:
 	 * @return	Minimum erase size in bytes.
 	 * 			0 for direct R/W device
 	 */
-	virtual uint32_t GetMinEraseSize(void) { return 0; }
+	virtual uint32_t GetMinEraseSize(void) { return GetSectSize(); }
 
 	/**
 	 * @brief	Read one sector from physical device.
