@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
-@example	flash_littlefs_demo.cpp
+@example	flash_stdfs_demo.cpp
 
-@brief	LittleFs demo on Flash memory
+@brief	Standard file I/O implementation demo on Flash memory
 
 @author	Hoang Nguyen Hoan
-@date	Feb. 17, 2023
+@date	Feb. 20, 2023
 
 @license
 
@@ -36,27 +36,18 @@ SOFTWARE.
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include "lfs.h"
-
-#include "stddev.h"
 #include "idelay.h"
 #include "coredev/uart.h"
 #include "coredev/spi.h"
 #include "storage/diskio_flash.h"
+#include "storage/stdfs_littlefs.h"
 
 // This include contain i/o definition the board in use
 #include "board.h"
 
-#define TIMER_TRIG_ID0			0
-#define TIMER_TRIG_ID0_PERIOD	1000UL		// 1 second
-
 #define TEST_BUFSIZE		256
 
 int nRFUartEvtHandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-int LittleFsRead(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size);
-int LittleFsProg(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size);
-int LittleFsErase(const struct lfs_config *c, lfs_block_t block);
-int LittleFsSync(const struct lfs_config *c);
 
 
 #define FIFOSIZE			CFIFO_MEMSIZE(TEST_BUFSIZE * 4)
@@ -140,52 +131,6 @@ static const int s_NbFlashCache = sizeof(s_FlashCache) / sizeof(DiskIOCache_t);
 static bool s_bInitialized = false;
 
 // variables used by the filesystem
-lfs_t lfs;
-lfs_file_t file;
-
-// configuration of the filesystem is provided by this struct
-const struct lfs_config cfg = {
-    // block device operations
-    .read  = LittleFsRead,
-    .prog  = LittleFsProg,
-    .erase = LittleFsErase,
-    .sync  = LittleFsSync,
-
-    // block device configuration
-    .read_size = 16,
-    .prog_size = 16,
-    .block_size = s_FlashCfg.SectSize,
-    .block_count = s_FlashCfg.TotalSize * 1024UL / s_FlashCfg.SectSize,
-    .block_cycles = 500,
-    .cache_size = 16,
-    .lookahead_size = 16,
-};
-
-int LittleFsRead(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size)
-{
-	g_FlashDiskIO.Read(block, off, (uint8_t*)buffer, size);
-
-	return LFS_ERR_OK;
-}
-
-int LittleFsProg(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size)
-{
-	g_FlashDiskIO.Write(block, off, (uint8_t*)buffer, size);
-	return LFS_ERR_OK;
-}
-
-int LittleFsErase(const struct lfs_config *c, lfs_block_t block)
-{
-	g_FlashDiskIO.EraseSector(block, 1);
-	return LFS_ERR_OK;
-}
-
-int LittleFsSync(const struct lfs_config *c)
-{
-	g_FlashDiskIO.Flush();
-
-	return LFS_ERR_OK;
-}
 
 bool FlashWriteDelayCallback(int DevNo, DevIntrf_t *pInterf)
 {
@@ -226,7 +171,7 @@ int main()
 
 	res = g_Uart.Init(s_UartCfg);
 
-	printf("flash_littlefs_demo\n");
+	printf("flash_fatfs_demo\n");
 
 	g_Spi.Init(s_SpiCfg);
 
@@ -241,56 +186,58 @@ int main()
 		p[i] = i;
 	}
 
-    // mount the filesystem
-    int err = lfs_mount(&lfs, &cfg);
+	res = StdFSInit(&g_FlashDiskIO);
 
-    // reformat if we can't mount the filesystem
-    // this should only happen on the first boot
-    if (err)
-    {
-		printf("formating wait...\n");
+	if (res == false)
+	{
+		// mount the filesystem
+//		int err = lfs_mount(&lfs, &cfg);
 
-		lfs_format(&lfs, &cfg);
-        lfs_mount(&lfs, &cfg);
-    }
+		// reformat if we can't mount the filesystem
+		// this should only happen on the first boot
+//		if (err) {
+//			lfs_format(&lfs, &cfg);
+//			lfs_mount(&lfs, &cfg);
+//		}
+	}
 
-    err = lfs_file_open(&lfs, &file, "test.txt", LFS_O_RDWR | LFS_O_CREAT);
-    if (err == LFS_ERR_OK)
-    {
+	FILE *fp = fopen("test.txt", "wrb+");
+
+	if (fp)
+	{
 		printf("file open/create success\n");
-	    lfs_file_write(&lfs, &file, g_Data, 4096);
-	    lfs_file_rewind(&lfs, &file);
-	    lfs_file_read(&lfs, &file, g_Temp, 4096);
-	    lfs_file_close(&lfs, &file);
+//		fwrite(g_Data, 4096, 1, fp);
+		//fseek(fp, 0, SEEK_SET);
+		fread(g_Temp, 4096, 1, fp);
+		fclose(fp);
 
-	    //if (memcmp(g_Temp, g_Data, 4096) != 0)
-		for (int i = 0; i < 4096; i++)
+		if (memcmp(g_Temp, g_Data, 4096) != 0)
+		//for (int i = 0; i < 4096; i++)
 		{
-			if (g_Data[i] != g_Temp[i])
+			//if (g_Data[i] != g_Temp[i])
 			{
-				printf("read failed %d\n", i);
+				printf("read failed %d\n");//, i);
 			}
 		}
-    }
+	}
 
 	memset(g_Temp, 0xa5, 4096);
 
-    err = lfs_file_open(&lfs, &file, "test.txt", LFS_O_RDWR | LFS_O_CREAT);
-    if (err == LFS_ERR_OK)
-    {
-		printf("file open success\n");
+	fp = NULL;
+	fp = fopen("test.txt", "wrb+");
 
-	    lfs_file_read(&lfs, &file, g_Temp, 4096);
-	    lfs_file_close(&lfs, &file);
+	if (fp)
+	{
+		printf("file open success\n");
+		//fseek(fp, 0, SEEK_SET);
+		fread(g_Temp, 4096, 1, fp);
+	    fclose(fp);
 
 	    if (memcmp(g_Temp, g_Data, 4096) != 0)
 		{
 			printf("read failed\n");
 		}
-    }
-
-    // release any resources we were using
-    lfs_unmount(&lfs);
+	}
 
 	printf("test complete\n");
 

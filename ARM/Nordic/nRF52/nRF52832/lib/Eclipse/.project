@@ -1051,6 +1051,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/stdfs_littlefs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/stdfs_littlefs.h</locationURI>
+		</link>
+		<link>
 			<name>include/sys/dirent.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
@@ -1689,6 +1694,11 @@
 			<name>src/storage/seep_impl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/seep_impl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/stdfs_littlefs.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers</name>

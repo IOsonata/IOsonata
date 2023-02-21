@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>FlashLittleFsDemo</name>
+	<name>FlashStdFsDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -36,9 +36,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/flash_littlefs_demo.cpp</name>
+			<name>src/flash_stdfs_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/flash_littlefs_demo.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/flash_stdfs_demo.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
