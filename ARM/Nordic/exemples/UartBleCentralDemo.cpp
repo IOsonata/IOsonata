@@ -59,7 +59,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "cfifo.h"
 #include "iopinctrl.h"
 
-//#define DEBUG_PRINT
+#define DEBUG_PRINT
 
 // BLE
 #define DEVICE_NAME             "UARTCentral"                   		/**< Name of device. Will be included in the advertising data. */
@@ -101,7 +101,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLE_CLIENT_ID_07 		{0xD9, 0xC7, 0xEE, 0x21, 0xB0, 0xE1}
 #define BLE_CLIENT_ID_08		{0xEF, 0x58, 0x1A, 0xFC, 0x50, 0xAE}
 
-uint8_t g_clientMacAddr[6] = BLE_CLIENT_ID_08;
+#define BLE_CLIENT_ID_09		{0xCB, 0xAC, 0xB6, 0x1D, 0x1D, 0x84}
+
+uint8_t g_clientMacAddr[6] = BLE_CLIENT_ID_09;
 uint8_t g_searchCnt = 0;
 
 // CFIFO for BleAppWrite
@@ -115,7 +117,7 @@ volatile int g_UartRxExtBuffLen = 0;
 volatile uint32_t g_DropCnt = 0;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
+//void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
 void BleTxSchedHandler(void * p_event_data, uint16_t event_size);
 
 IOPinCfg_t s_Leds[] = LED_PIN_MAP;
@@ -219,10 +221,10 @@ ble_data_t g_AdvScanReportData = {
 };
 
 static ble_gap_conn_params_t s_ConnParams = {
-	.min_conn_interval = (uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_MIN_CONNECTION_INTERVAL, UNIT_1_25_MS),
-	.max_conn_interval = (uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_MAX_CONNECTION_INTERVAL, UNIT_1_25_MS),
+	.min_conn_interval = 8,//(uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_MIN_CONNECTION_INTERVAL, UNIT_1_25_MS),
+	.max_conn_interval = 40,//(uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_MAX_CONNECTION_INTERVAL, UNIT_1_25_MS),
 	.slave_latency = (uint16_t)NRF_BLE_SCAN_SLAVE_LATENCY,
-	.conn_sup_timeout = (uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_SUPERVISION_TIMEOUT, UNIT_10_MS),
+	.conn_sup_timeout = NRF_BLE_SCAN_SUPERVISION_TIMEOUT,
 };
 
 
@@ -351,10 +353,12 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 					mac[i] = p_adv_report->peer_addr.addr[5-i];
 				}
 
+				g_Uart.printf("%x:%x:\r\n", mac[0], mac[1]);
 				// Find device by name
 //				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, TARGET_BRIDGE_DEV_NAME))
 //	            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
 				if (memcmp(g_clientMacAddr, mac, 6) == 0)
+				//if (mac[0] == 0xCB || mac[0] == 0x84)
 				{
 					// Connect to the found BLE bridge device
 					BtGapPeerAddr_t addr = {.Type = p_adv_report->peer_addr.addr_type,};

@@ -126,7 +126,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef FIND_CLIENT_BY_NAME
 // BLE clients
-#define BLE_CLIENT_NAME			"UartBleBridge"
+#define BLE_CLIENT_NAME			"UARTBridge"
 
 #else
 #define BLE_CLIENT_ID_01		{0xEF, 0x58, 0x1A, 0xFC, 0x50, 0xAE}
@@ -184,8 +184,6 @@ void HardwareInit();
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void UartRxSchedHandler(void * p_event_data, uint16_t event_size);
 
-void BleDevDiscovered(BLEPERIPH_DEV *pDev);
-void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
 void BleTxSchedHandler(void * p_event_data, uint16_t event_size);
 
 void UsbInit();
@@ -450,10 +448,10 @@ ble_data_t g_AdvScanReportData = {
 };
 
 static ble_gap_conn_params_t s_ConnParams = {
-	.min_conn_interval = (uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_MIN_CONNECTION_INTERVAL, UNIT_1_25_MS),
-	.max_conn_interval = (uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_MAX_CONNECTION_INTERVAL, UNIT_1_25_MS),
-	.slave_latency = (uint16_t)NRF_BLE_SCAN_SLAVE_LATENCY,
-	.conn_sup_timeout = (uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_SUPERVISION_TIMEOUT, UNIT_10_MS),
+	.min_conn_interval = 8,//NRF_BLE_SCAN_MIN_CONNECTION_INTERVAL,
+	.max_conn_interval = 40,//NRF_BLE_SCAN_MAX_CONNECTION_INTERVAL,
+	.slave_latency = NRF_BLE_SCAN_SLAVE_LATENCY,
+	.conn_sup_timeout = NRF_BLE_SCAN_SUPERVISION_TIMEOUT,
 };
 
 
@@ -552,9 +550,10 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
 
 }
 
-void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
+void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 {
     ret_code_t err_code;
+	ble_evt_t * p_ble_evt = (ble_evt_t*)Evt;
     const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
     const ble_common_evt_t *p_common_evt = &p_ble_evt->evt.common_evt;
     const ble_gattc_evt_t *p_gattc_evt = &p_ble_evt->evt.gattc_evt;
@@ -582,7 +581,12 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 				}
 
 #ifdef FIND_CLIENT_BY_NAME
-				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, BLE_CLIENT_NAME))
+				bool res = ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, BLE_CLIENT_NAME);
+				if (res == false)
+				{
+					res = ble_advdata_short_name_find(p_adv_report->data.p_data, p_adv_report->data.len, BLE_CLIENT_NAME, strlen(BLE_CLIENT_NAME));
+				}
+				if (res == true)
 #else
 				if (memcmp(g_clientMacAddr, mac, 6) == 0)// Find device by MAC address
 #endif
@@ -597,7 +601,10 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 						.Latency = s_ConnParams.slave_latency,
 						.Timeout = s_ConnParams.conn_sup_timeout
 					};
-					BtAppConnect(&addr, &conn);
+					res = BtAppConnect(&addr, &conn);
+					len = sprintf(s, "res = %x\r\n", res);
+					PRINT_DEBUG(s,len);
+
 					msDelay(10);
 				}
 				else
