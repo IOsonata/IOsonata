@@ -187,15 +187,8 @@ typedef struct __Bt_Dev_Data {
 	bool bSecure;
 	bool bScan;
 } BtDev_t;
-#endif
 
-typedef struct __Bt_App_Scan_Cfg {
-	uint32_t Interval;			//!< Scan interval in msec
-	uint32_t Duration;			//!< Scan window in msec
-	uint32_t Timeout;			//!< Scan timeout in sec
-	uint8_t BaseUid[16];		//!< Base UUID to look for
-	uint16_t ServUid;			//!< Service Uid to look for
-} BtAppScanCfg_t;
+#endif
 
 #pragma pack(pop)
 

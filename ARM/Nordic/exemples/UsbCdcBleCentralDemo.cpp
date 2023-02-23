@@ -83,8 +83,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble_gap.h"
 #include "ble_advdata.h"
 #include "nrf_ble_scan.h"
-#include "ble_app.h"
-#include "ble_service.h"
+#include "bluetooth/bt_app.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "ble_dev.h"
 #include "ble_gattc.h"
@@ -185,7 +184,6 @@ void HardwareInit();
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void UartRxSchedHandler(void * p_event_data, uint16_t event_size);
 
-void BleAppInitUserData();
 void BleDevDiscovered(BLEPERIPH_DEV *pDev);
 void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
 void BleTxSchedHandler(void * p_event_data, uint16_t event_size);
@@ -389,32 +387,23 @@ UART g_Uart;
  * BLE section
  ************************************************************/
 
-const BLEAPP_CFG s_BleAppCfg = {
-	{ // Clock config nrf_clock_lf_cfg_t
-#ifdef IMM_NRF51822
-		NRF_CLOCK_LF_SRC_RC,	// Source RC
-		1, 1, 0
-#else
-		NRF_CLOCK_LF_SRC_XTAL,	// Source 32KHz XTAL
-		0, 0, NRF_CLOCK_LF_ACCURACY_20_PPM
-#endif
-
-	},
+const BtAppCfg_t s_BleAppCfg = {
+	.Role = BTAPP_ROLE_CENTRAL,
 	1,//1, 						// Number of central link
 	0, 							// Number of peripheral link
-	BLEAPP_MODE_APPSCHED,   	// Use scheduler
 	DEVICE_NAME,                 // Device name
 	ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
 	1,                      	// PnP Product ID
 	0,							// Pnp prod version
-	false,						// Enable device information service (DIS)
+	0,
 	NULL,//&s_UartBleDevDesc,
+	false,						// Enable device information service (DIS)
 	NULL,//g_ManData,           // Manufacture specific data to advertise
 	0,//sizeof(g_ManData),      // Length of manufacture specific data
 	NULL,
 	0,
-	BLEAPP_SECTYPE_NONE,    	// Secure connection type
-	BLEAPP_SECEXCHG_NONE,   	// Security key exchange
+	BTGAP_SECTYPE_NONE,    	// Secure connection type
+	BTAPP_SECEXCHG_NONE,   	// Security key exchange
 	NULL,      					// Service uuids to advertise
 	0, 							// Total number of uuids
 	0,       					// Advertising interval in msec
@@ -474,12 +463,12 @@ const ble_uuid_t s_UartBleSrvAdvUuid = {
 	.type = BLE_UUID_TYPE_BLE,
 };
 
-BleAppScanCfg_t s_bleScanInitCfg = {
+BtGapScanCfg_t s_bleScanInitCfg = {
 		.Interval = SCAN_INTERVAL,
 		.Duration = SCAN_WINDOW,
 		.Timeout = SCAN_TIMEOUT,
 		.BaseUid = BLUEIO_UUID_BASE,
-		.ServUid = s_UartBleSrvAdvUuid,
+		.ServUid = BLUEIO_UUID_UART_SERVICE,//s_UartBleSrvAdvUuid,
 };
 
 BLEPERIPH_DEV g_ConnectedDev = {
@@ -528,7 +517,7 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
     	if (dcharidx >= 0 && pDev->Services[idx].charateristics[dcharidx].characteristic.char_props.notify)
     	{
     		// Enable Notify
-        	BleAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].charateristics[dcharidx].cccd_handle);
+        	BtAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].charateristics[dcharidx].cccd_handle);
         	g_BleRxCharHdl = pDev->Services[idx].charateristics[dcharidx].characteristic.handle_value;
         	l = sprintf(s, "Found!\r\n");
         	PRINT_DEBUG(s,l);
@@ -600,7 +589,15 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 				{
 					len = sprintf(s, "Target client device FOUND!\r\n");
 					PRINT_DEBUG(s,len);
-					err_code = BleAppConnect((ble_gap_addr_t *)&p_adv_report->peer_addr, &s_ConnParams);
+					BtGapPeerAddr_t addr = {.Type = p_adv_report->peer_addr.addr_type,};
+					memcpy(addr.Addr, p_adv_report->peer_addr.addr, 6);
+					BtGapConnParams_t conn = {
+						.IntervalMin = s_ConnParams.min_conn_interval,
+						.IntervalMax = s_ConnParams.max_conn_interval,
+						.Latency = s_ConnParams.slave_latency,
+						.Timeout = s_ConnParams.conn_sup_timeout
+					};
+					BtAppConnect(&addr, &conn);
 					msDelay(10);
 				}
 				else
@@ -608,7 +605,7 @@ void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt)
 					g_searchCnt++;
 					len = sprintf(s, "Keep searching #%d\r\n", g_searchCnt);
 					PRINT_DEBUG(s,len)
-					BleAppScan();
+					BtAppScan();
 				}
 			}
 			break;
@@ -823,7 +820,7 @@ void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
 	{
 		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
-			g_TxSuccess = BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, g_UsbRxBuff, g_UsbRxBuffLen);
+			g_TxSuccess = BtAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, g_UsbRxBuff, g_UsbRxBuffLen);
 		}
 	}
 
@@ -1061,7 +1058,7 @@ int main(void)
 	HardwareInit();
 
     // BLE init
-    ret = BleAppInit((const BLEAPP_CFG *)&s_BleAppCfg, true);
+    ret = BtAppInit(&s_BleAppCfg);
     msDelay(250);
     len = sprintf(s, "Bluetooth init...Done!\r\n");
     PRINT_DEBUG(s,len)
@@ -1081,9 +1078,9 @@ int main(void)
 	PRINT_DEBUG(s,len)
 #endif
 
-	BleAppScanInit((BleAppScanCfg_t *)&s_bleScanInitCfg);// Register the non-GATT BLE services and their characteristics
-	BleAppScan();
-	BleAppRun();
+	BtAppScanInit(&s_bleScanInitCfg);// Register the non-GATT BLE services and their characteristics
+	BtAppScan();
+	BtAppRun();
 
 	return 0;
 }

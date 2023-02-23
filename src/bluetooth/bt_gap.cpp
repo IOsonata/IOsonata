@@ -189,6 +189,10 @@ __attribute__((weak)) void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
 }
 #endif
 
+__attribute__((weak)) void BtGapParamInit(const BtGapCfg_t *pCfg)
+{
+}
+
 void BtGapInit(const BtGapCfg_t *pCfg)
 {
 	memset(s_BtGapConnection, 0xFF, sizeof(s_BtGapConnection));
