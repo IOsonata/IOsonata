@@ -220,11 +220,11 @@ ble_data_t g_AdvScanReportData = {
 	.len = BLE_GAP_SCAN_BUFFER_EXTENDED_MAX
 };
 
-static ble_gap_conn_params_t s_ConnParams = {
-	.min_conn_interval = 8,//(uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_MIN_CONNECTION_INTERVAL, UNIT_1_25_MS),
-	.max_conn_interval = 40,//(uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_MAX_CONNECTION_INTERVAL, UNIT_1_25_MS),
-	.slave_latency = (uint16_t)NRF_BLE_SCAN_SLAVE_LATENCY,
-	.conn_sup_timeout = NRF_BLE_SCAN_SUPERVISION_TIMEOUT,
+static BtGapConnParams_t s_ConnParams = {
+	.IntervalMin = 7.5,//NRF_BLE_SCAN_MIN_CONNECTION_INTERVAL,
+	.IntervalMax = 40,//NRF_BLE_SCAN_MAX_CONNECTION_INTERVAL,
+	.Latency = NRF_BLE_SCAN_SLAVE_LATENCY,
+	.Timeout = NRF_BLE_SCAN_SUPERVISION_TIMEOUT,
 };
 
 
@@ -363,13 +363,8 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 					// Connect to the found BLE bridge device
 					BtGapPeerAddr_t addr = {.Type = p_adv_report->peer_addr.addr_type,};
 					memcpy(addr.Addr, p_adv_report->peer_addr.addr, 6);
-					BtGapConnParams_t conn = {
-						.IntervalMin = s_ConnParams.min_conn_interval,
-						.IntervalMax = s_ConnParams.max_conn_interval,
-						.Latency = s_ConnParams.slave_latency,
-						.Timeout = s_ConnParams.conn_sup_timeout
-					};
-					BtAppConnect(&addr, &conn);
+
+					BtAppConnect(&addr, &s_ConnParams);
 					msDelay(10);
 				}
 				else

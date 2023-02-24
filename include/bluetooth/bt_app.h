@@ -142,8 +142,8 @@ typedef struct __Bt_App_Cfg {
 	uint32_t AdvTimeout;			//!< In sec
 	uint32_t AdvSlowInterval;		//!< Slow advertising interval, if > 0, fallback to
 									//!< slow interval on adv timeout and advertise until connected
-	uint16_t ConnIntervalMin;   	//!< Min. connection interval in msec
-	uint16_t ConnIntervalMax;   	//!< Max connection interval in msec
+	float ConnIntervalMin;   		//!< Min. connection interval in msec
+	float ConnIntervalMax;   		//!< Max connection interval in msec
 	int8_t ConnLedPort;				//!< Connection LED port number
 	int8_t ConnLedPin;				//!< Connection LED pin number
 	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)

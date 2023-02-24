@@ -156,8 +156,8 @@ typedef struct __Bt_Gap_Peer_Address {
 } BtGapPeerAddr_t;
 
 typedef struct __Bt_Gap_Conn_Params {
-	uint16_t IntervalMin;		//!< Min connection interval in 1.25ms counts
-	uint16_t IntervalMax;		//!< Max connection interval in 1.25ms counts
+	float IntervalMin;			//!< Min connection interval in ms
+	float IntervalMax;			//!< Max connection interval in ms
 	uint16_t Latency;			//!< Peripheral latency
 	uint16_t Timeout;			//!< Supervision timeout in 10ms count
 } BtGapConnParams_t;
@@ -182,8 +182,8 @@ typedef struct __Bt_Gap_Config {
 	uint32_t SecType;			//!< Security type
 	uint32_t AdvInterval;		//!< Advertisement interval in msec
 	uint32_t AdvTimeout;		//!< Advertisement timeout in msec
-	uint16_t ConnIntervalMin;	//!< Min connection interval in msec
-	uint16_t ConnIntervalMax;	//!< Max connection interval in msec
+	float ConnIntervalMin;	//!< Min connection interval in msec
+	float ConnIntervalMax;	//!< Max connection interval in msec
 	uint16_t SlaveLatency;		//!< Slave latency
 	uint16_t SupTimeout;		//!< Connection supervisory timeout
 } BtGapCfg_t;
