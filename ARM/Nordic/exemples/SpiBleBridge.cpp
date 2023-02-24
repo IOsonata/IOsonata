@@ -635,9 +635,16 @@ void ProcSpiPkt(SPI_PKT *pkt)
 /** Read data From flash and send it to Ble */
 bool ReadFlash(SPI_PKT *pkt)
 {
+	SPI_PKT p = {0,};
 	uint32_t l = 0;
-	l = g_Flash.Read(pkt->Addr, pkt->Data, pkt->DataLen);
-	pkt->DataLen = l;
+	p.Cmd = pkt->Cmd;
+	p.Addr = pkt->Addr;
+	p.DataLen = pkt->DataLen;
+
+	DEBUG_PRINTF("ReadFlash %d bytes from addr = \r\n", p.DataLen, p.Addr);
+	l = g_Flash.Read(p.Addr, p.Data, p.DataLen);
+	p.DataLen = l;
+
 	if (l <= 0)
 	{
 		DEBUG_PRINTF("Flash returns 0-byte read\r\n");
@@ -645,8 +652,8 @@ bool ReadFlash(SPI_PKT *pkt)
 	}
 	else
 	{
-		DEBUG_PRINTF("Send flash data to Ble\r\n");
-		g_BleSpiIntrf.Tx(0, (uint8_t*)&pkt, SPI_PKT_SIZE);
+		//DEBUG_PRINTF("Send flash data to Ble\r\n");
+		g_BleSpiIntrf.Tx(0, (uint8_t*)&p, SPI_PKT_SIZE);
 	}
 	return true;
 }
