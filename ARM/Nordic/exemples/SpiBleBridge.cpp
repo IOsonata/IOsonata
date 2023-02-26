@@ -58,22 +58,33 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //#define NORDIC_NUS_SERVICE
 
 // SPI Command code in the SPI_PKT
+#define SPI_IDLE_STATE					0x00
+
+#define SPI_FLASH_WRITE_INIT			0x15
 #define SPI_WRITE_DATA_FLASH			0x10
 #define SPI_READ_DATA_FLASH				0x1F
+
 #define SPI_WRITE_CFG					0x20
 #define SPI_READ_CFG					0x2F
+
 #define SPI_WRITE_FLASH_SPEC			0x30
 #define SPI_READ_FLASH_SPEC				0x3F
+
 #define SPI_ERASE_FLASH					0x35 // Erase the whole flash memory
 #define SPI_TEST_FLASH_SECTOR			0x36
+
 #define SPI_WRITE_GENENRIC				0xA0
 #define SPI_READ_GENERIC				0xAF
+
+#define FLASH_WRITE_ACK_SUCCESS			0xAA
+#define FLASH_WRITE_ACK_FAILED			0x55
+
 
 #define FLASH_CHUNK_TEST_SIZE	512 // Number of bytes to verify, counting from the given Address
 
 #define SPI_PKT_SIZE				sizeof(SPI_PKT) // size of a SPI packet in byte
 #define SPI_BLEINTRF_PKTSIZE		(SPI_PKT_SIZE)
-#define SPI_BLEINTRF_FIFOSIZE		BTINTRF_CFIFO_TOTAL_MEMSIZE(5, SPI_BLEINTRF_PKTSIZE)//(NbPkt, PktSize)
+#define SPI_BLEINTRF_FIFOSIZE		BTINTRF_CFIFO_TOTAL_MEMSIZE(10, SPI_BLEINTRF_PKTSIZE)//(NbPkt, PktSize)
 #define SPI_MAX_DATA_LEN			(SPI_PKT_SIZE)
 //#define SPIFIFOSIZE 				CFIFO_MEMSIZE(SPI_MAX_DATA_LEN * 10)
 
@@ -127,6 +138,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLESRV_SPIM_READ_CHAR_IDX		0
 #define BLESRV_SPIM_WRITE_CHAR_IDX		1
 #define BLESRV_SPIM_CONFIG_CHAR_IDX		2
+
+
+static IOPinCfg_t s_RGBLeds[] = RGB_LED_PIN_MAP;
+static int s_NbRGBLeds = sizeof(s_RGBLeds) / sizeof(IOPinCfg_t);
 
 /// UART object instance
 UART g_Uart;
@@ -182,22 +197,9 @@ static BtGattChar_t g_SpiMasChars[] = {
 		.pValue = NULL,							// pointer to char default values
 		.ValueLen = 0							// Default value length in bytes
 	},
-//	{
-//		// SPI Configuration characteristic
-//		.Uuid = BLE_SPI_UUID_CONFIG_CHAR,		// char UUID
-//		.MaxDataLen = SPI_MAX_DATA_LEN,			// char max data length
-//		.Property = BLE_SPI_UUID_CONFIG_CHAR_PROP,// char properties define by BLUEIOSVC_CHAR_PROP_...
-//		.pDesc = s_SpiCfgDescStr,			// char UTF-8 description string
-//		.WrCB = SpiCfgSrvcCallback,			// Callback for write char, set to NULL for read char
-//		.SetNotifCB = NULL,						// Callback on set notification
-//		.TxCompleteCB = NULL,					// Tx completed callback
-//		.pValue = NULL,						// pointer to char default values
-//		.ValueLen = 0							// Default value length in bytes
-//	},
 };
 
 static const int s_BleSpiNbChar = sizeof(g_SpiMasChars) / sizeof(BtGattChar_t);
-//uint8_t g_LWrBuffer[512];
 
 /* BlueIO SPI service definition */
 BtGattSrvcCfg_t s_SpiSrvcCfg = {
@@ -276,7 +278,10 @@ DiskIOCache_t g_FlashCache = {
 };
 
 static SPI_PKT g_SpiPkt = {0,};
-static SPI_PKT g_SpiReadPkt;
+static SPI_PKT g_SpiRspPkt = {0,};
+
+uint8_t g_CurProcState = SPI_IDLE_STATE;
+uint32_t g_TotByteWrite;
 
 #if 0
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
@@ -413,7 +418,7 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
-	BtGattEvtHandler(Evt, pCtx);
+
 }
 
 void BtAppInitUserServices()
@@ -486,6 +491,12 @@ void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
 	DEBUG_PRINTF("Spi-Ble Bridge Demo\r\n");
+
+	// RGB led
+	IOPinCfg(s_RGBLeds, s_NbRGBLeds);
+	IOPinClear(RGB_RED_PORT, RGB_RED_PIN);
+	IOPinClear(RGB_GREEN_PORT, RGB_GREEN_PIN);
+	IOPinClear(RGB_BLUE_PORT, RGB_BLUE_PIN);
 }
 
 bool SpiBleInit()
@@ -582,6 +593,7 @@ int BleSpiIntrfEvtCb(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int
 	return cnt;
 }
 
+
 /** Process the packet received from SPI_Write char
  * @param pkt
  */
@@ -589,26 +601,23 @@ void ProcSpiPkt(SPI_PKT *pkt)
 {
 	switch (pkt->Cmd)
 	{
+	case SPI_FLASH_WRITE_INIT:
+		FlashWriteInit(pkt);
+		break;
 	case SPI_WRITE_DATA_FLASH:
-	{
-		uint32_t l = g_Flash.Write(pkt->Addr, pkt->Data, pkt->DataLen);
-		if (l < pkt->DataLen)
-			DEBUG_PRINTF("Flash write miss %d byte data\n", pkt->DataLen - l);
-	}
+		WritePacketToFlash(pkt);
 		break;
 	case SPI_READ_DATA_FLASH:
 		ReadFlash(pkt);
 		break;
-
+	// TODO: Update new SPI config
 	case SPI_WRITE_CFG:
-		// TODO: Update new SPI config
 		break;
 	case SPI_READ_CFG:
 		ReadSpiCfg();
 		break;
-
+	// TODO: Update new Flash Dev config
 	case SPI_WRITE_FLASH_SPEC:
-		// TODO: Update new Flash Dev config
 		break;
 	case SPI_READ_FLASH_SPEC:
 		ReadFlashDevCfg();
@@ -619,7 +628,6 @@ void ProcSpiPkt(SPI_PKT *pkt)
 	case SPI_TEST_FLASH_SECTOR:
 		TestFlashSector();
 		break;
-
 	// TODO: Generic SPI interface
 	case SPI_WRITE_GENENRIC:
 		break;
@@ -635,6 +643,8 @@ void ProcSpiPkt(SPI_PKT *pkt)
 /** Read data From flash and send it to Ble */
 bool ReadFlash(SPI_PKT *pkt)
 {
+	g_CurProcState = SPI_READ_DATA_FLASH;
+
 	SPI_PKT p = {0,};
 	uint32_t l = 0;
 	p.Cmd = pkt->Cmd;
@@ -648,13 +658,16 @@ bool ReadFlash(SPI_PKT *pkt)
 	if (l <= 0)
 	{
 		DEBUG_PRINTF("Flash returns 0-byte read\r\n");
+		g_CurProcState = SPI_IDLE_STATE;
 		return false;
 	}
 	else
 	{
 		//DEBUG_PRINTF("Send flash data to Ble\r\n");
 		g_BleSpiIntrf.Tx(0, (uint8_t*)&p, SPI_PKT_SIZE);
+		g_CurProcState = SPI_IDLE_STATE;
 	}
+
 	return true;
 }
 
@@ -663,18 +676,25 @@ bool ReadFlash(SPI_PKT *pkt)
  */
 bool ReadFlashDevCfg()
 {
+	DEBUG_PRINTF("READ FLASH DEVICE CONFIGURATION\r\n");
+
+	g_CurProcState = SPI_READ_FLASH_SPEC;
+
 	g_SpiPkt.Cmd = SPI_READ_FLASH_SPEC;
 	g_SpiPkt.Addr = 0xFFFFFFFFu;
 	g_SpiPkt.DataLen = sizeof(s_FlashCfg);
 	memcpy(g_SpiPkt.Data, (uint8_t*)&s_FlashCfg, sizeof(s_FlashCfg));
+
 	if (g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, SPI_PKT_SIZE) == SPI_PKT_SIZE)
 	{
 		DEBUG_PRINTF("Flash Device Spec sent SUCCESS\n");
+		g_CurProcState = SPI_IDLE_STATE;
 		return true;
 	}
 	else
 	{
 		DEBUG_PRINTF("Sending not enough Flash Device Spec data \n");
+		g_CurProcState = SPI_IDLE_STATE;
 		return false;
 	}
 }
@@ -685,18 +705,25 @@ bool ReadFlashDevCfg()
  */
 bool ReadSpiCfg()
 {
+	DEBUG_PRINTF("READ SPI CONFIGURATION\r\n");
+
+	g_CurProcState = SPI_READ_CFG;
+
 	g_SpiPkt.Cmd = SPI_READ_CFG;
-	g_SpiPkt.Addr = 0xFFFFFFFFu;
+	g_SpiPkt.Addr = 0xFFFFFFFFU;
 	g_SpiPkt.DataLen = sizeof(s_SpiMasCfg);
 	memcpy(g_SpiPkt.Data, (uint8_t*)&s_SpiMasCfg, sizeof(s_SpiMasCfg));
+
 	if (g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, SPI_PKT_SIZE) == SPI_PKT_SIZE)
 	{
 		DEBUG_PRINTF("Spi Cfg sent SUCCESS\n");
+		g_CurProcState = SPI_IDLE_STATE;
 		return true;
 	}
 	else
 	{
 		DEBUG_PRINTF("Sending not enough Spi Cfg data \n");
+		g_CurProcState = SPI_IDLE_STATE;
 		return false;
 	}
 }
@@ -710,8 +737,10 @@ bool ReadSpiCfg()
  */
 bool TestFlashSector()
 {
+	g_CurProcState = SPI_TEST_FLASH_SECTOR;
+
 	uint32_t Addr = g_SpiPkt.Addr;
-	DEBUG_PRINTF("Test flash sector %d ...\n", Addr);
+	DEBUG_PRINTF("TEST FLASH SECTOR %d ...\n", Addr);
 	g_SpiPkt.DataLen = 1;
 	memset(g_SpiPkt.Data, 0xFF, MAX_FLASH_DATA_LEN);
 	if (Addr > 31)
@@ -755,13 +784,14 @@ bool TestFlashSector()
 	}
 
 	g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, SPI_PKT_SIZE);
+	g_CurProcState = SPI_IDLE_STATE;
 	return ret;
 }
 
 /** Erase the whole flash memory */
 bool EraseWholeFlash()
 {
-	DEBUG_PRINTF("Erase the whole flash memory. Wait for about 10 seconds...");
+	DEBUG_PRINTF("ERASE THE WHOLE FLASH MEMORY. Wait for about 10 seconds...");
 	g_Flash.Erase();
 
 	g_SpiPkt.Cmd = SPI_ERASE_FLASH;
@@ -775,19 +805,83 @@ bool EraseWholeFlash()
 }
 
 
+void FlashWriteInit(SPI_PKT *pkt)
+{
+	DEBUG_PRINTF("FLASH WRITE INIT\r\n");
+	uint32_t tbw = pkt->Data[0] | (pkt->Data[1] << 8) | (pkt->Data[2] << 16)
+			| (pkt->Data[3] << 24);
+
+	DEBUG_PRINTF("Start Addr = 0x%x\r\n", pkt->Addr);
+	DEBUG_PRINTF("Total byte to write = %d\r\n", tbw);
+
+	// Prepare the response packet
+	g_SpiRspPkt.Cmd = pkt->Cmd;
+	g_SpiRspPkt.Addr = pkt->Addr;
+	g_SpiRspPkt.DataLen = 5;
+	memset(g_SpiRspPkt.Data, 0xFF, MAX_FLASH_DATA_LEN);
+	memcpy(&g_SpiRspPkt.Data[0], &pkt->Data[0], 4);
+
+	if (tbw > (s_FlashCfg.TotalSize - pkt->Addr - 1))
+	{
+		DEBUG_PRINTF("Total byte write is larger than flash capacity\r\n");
+		g_SpiRspPkt.Data[4] = FLASH_WRITE_ACK_FAILED;
+		g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, SPI_PKT_SIZE);
+		memset((uint8_t*)&g_SpiRspPkt, 0, SPI_PKT_SIZE);
+	}
+	else
+	{
+		g_CurProcState = SPI_FLASH_WRITE_INIT;
+		g_TotByteWrite = tbw;
+	}
+}
+
+void WritePacketToFlash(SPI_PKT *pkt)
+{
+	uint32_t tbw = 0;
+	if (g_CurProcState != SPI_FLASH_WRITE_INIT)
+	{
+		DEBUG_PRINTF("Need a flash_write_init command first \r\n");
+	}
+	else
+	{
+		// TODO: Stop time-out timer trigger
+		g_CurProcState = SPI_FLASH_WRITE_INIT;
+
+		uint32_t l = g_Flash.Write(pkt->Addr, pkt->Data, pkt->DataLen);
+		if (l < pkt->DataLen)
+		{
+			DEBUG_PRINTF("Flash write miss %d byte data\n", pkt->DataLen - l);
+			g_CurProcState = SPI_IDLE_STATE;
+			memcpy(&tbw, &g_SpiRspPkt.Data[0], 4);
+			tbw = tbw - (g_TotByteWrite + l);
+			g_SpiRspPkt.Data[4] = FLASH_WRITE_ACK_FAILED;
+			g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, SPI_PKT_SIZE);
+			g_CurProcState = SPI_IDLE_STATE;
+		}
+		else
+		{
+			g_TotByteWrite -= l;
+			if (g_TotByteWrite == 0)
+			{
+				g_CurProcState = SPI_IDLE_STATE;
+				g_SpiRspPkt.Data[4] = FLASH_WRITE_ACK_SUCCESS;
+				g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, SPI_PKT_SIZE);
+				DEBUG_PRINTF("FLASH WRITE...ACCOMPLISHED\r\n");
+				DEBUG_PRINTF("Start address = 0x%x\r\n", g_SpiRspPkt.Addr);
+				memcpy(&tbw, &g_SpiRspPkt.Data[0], 4);
+				DEBUG_PRINTF("Total byte written = %d\r\n", tbw);
+			}
+			else
+			{
+				// TODO: Start time-out trigger
+			}
+		}
+	}
+}
+
 void ToggleLed()
 {
-#if defined(BLYST840)
-	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
-#elif defined(BLUEIO832)
-#if HW_REV >= 2
-	IOPinToggle(RGB_GREEN_PORT, RGB_GREEN_PIN);
-#else
-	IOPinToggle(LED1_PORT, LED1_PIN);
-#endif
-#elif defined(BLYST_NANO)
-	IOPinToggle(s_Leds[1].PortNo, s_Leds[1].PinNo);
-#elif defined(BLUEIO_TAG_EVIM)
+#if defined(BLUEIO_TAG_EVIM)
 	IOPinToggle(RGB_GREEN_PORT, RGB_GREEN_PIN);
 #endif
 }
