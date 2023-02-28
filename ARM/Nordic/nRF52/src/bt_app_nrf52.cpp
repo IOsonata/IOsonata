@@ -732,36 +732,67 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		srpkt = &s_BleAppSrPkt;
 	}
 
-	if (pAdvData)
+	if (s_BtAppData.bExtAdv == false)
 	{
-		int l = AdvLen + 2;
-		BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-
-		if (p == NULL)
+		if (pAdvData)
 		{
-			return false;
+			int l = AdvLen + 2;
+			BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
+			if (p == NULL)
+			{
+				return false;
+			}
+			*(uint16_t *)p->Data = s_BtAppData.VendorId;
+			memcpy(&p->Data[2], pAdvData, AdvLen);
+
+			s_BtAppAdvData.adv_data.len = advpkt->Len;
 		}
-		*(uint16_t *)p->Data = s_BtAppData.VendorId;
-		memcpy(&p->Data[2], pAdvData, AdvLen);
 
-		s_BtAppAdvData.adv_data.len = advpkt->Len;
+		if (pSrData)
+		{
+			int l = SrLen + 2;
+			BtAdvData_t *p = BtAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
+			if (p == NULL)
+			{
+				return false;
+			}
+			*(uint16_t *)p->Data = s_BtAppData.VendorId;
+			memcpy(&p->Data[2], pAdvData, AdvLen);
+
+			s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
+		}
 	}
-
-	if (pSrData)
+	else
 	{
-		int l = SrLen + 2;
-		BtAdvData_t *p = BtAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+		// Ext Adv
+		int l = 2;
 
-		if (p == NULL)
+		if (pAdvData)
 		{
-			return false;
+			l += AdvLen;
 		}
-		*(uint16_t *)p->Data = s_BtAppData.VendorId;
-		memcpy(&p->Data[2], pAdvData, AdvLen);
 
-		s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
+		if (pSrData)
+		{
+			l += SrLen;
+		}
+
+		if (l > 2)
+		{
+			BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
+			if (p == NULL)
+			{
+				return false;
+			}
+			*(uint16_t *)p->Data = s_BtAppData.VendorId;
+			memcpy(&p->Data[2], pAdvData, AdvLen);
+			memcpy(&p->Data[2 + AdvLen], pSrData, SrLen);
+			s_BtAppAdvData.adv_data.len = advpkt->Len;
+		}
 	}
-
 	// SDK15 doesn't allow dynamically updating adv data.  Have to stop and re-start advertising
 	if (s_BtAppData.State == BTAPP_STATE_ADVERTISING)
 	{
@@ -1009,20 +1040,66 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 
     BtAdvPacket_t *uidadvpkt;
 
-    if (pCfg->pDevName != NULL)
+    if (pCfg->bExtAdv == false)
     {
-    	size_t l = strlen(pCfg->pDevName);
-    	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
-    	size_t mxl = advpkt->MaxLen - advpkt->Len - 2;
+		if (pCfg->pAdvManData != NULL)
+		{
+			int l = pCfg->AdvManDataLen + 2;
+			BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 
-    	if (l > 30 || l > mxl)
-    	{
-    		// Short name
-    		type = BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME;
-    		l = min((size_t)30, mxl);
-    	}
+			if (p == NULL)
+			{
+				return false;
+			}
+			*(uint16_t *)p->Data = pCfg->VendorId;
+			memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
+		}
 
-    	if (BtAdvDataAdd(advpkt, type, (uint8_t*)pCfg->pDevName, l) == false)
+		if (pCfg->pSrManData != NULL)
+		{
+			int l = pCfg->SrManDataLen + 2;
+			BtAdvData_t *p = BtAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
+			if (p == NULL)
+			{
+				return false;
+			}
+			*(uint16_t *)p->Data = pCfg->VendorId;
+			memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
+		}
+    }
+    else
+    {
+    	// Ext Adv
+    	int l = 2;
+
+		if (pCfg->pAdvManData != NULL)
+		{
+			l += pCfg->AdvManDataLen;
+		}
+
+		if (pCfg->pSrManData != NULL)
+		{
+			l += pCfg->SrManDataLen;
+		}
+
+		if (l > 2)
+		{
+			BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
+			if (p == NULL)
+			{
+				return false;
+			}
+			*(uint16_t *)p->Data = pCfg->VendorId;
+			memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
+			memcpy(&p->Data[2 + pCfg->AdvManDataLen], pCfg->pSrManData, pCfg->SrManDataLen);
+		}
+    }
+
+	if (pCfg->pDevName != NULL)
+    {
+    	if (BtAdvDataSetDevName(advpkt, pCfg->pDevName) == false)
     	{
     		return false;
     	}
@@ -1036,70 +1113,12 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 
     if (pCfg->pAdvUuid != NULL && pCfg->Role & BTAPP_ROLE_PERIPHERAL)
     {
-    	/*
-    	if (pCfg->pAdvUuid->BaseIdx > 0 && pCfg->pAdvUuid->Type == BT_UUID_TYPE_16)
-    	{
+		if (BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
+		{
 
-    		// Convert custom uuid to 128 bits
-			int l = (pCfg->pAdvUuid->Count - 1) * sizeof(BtUuid_t) + sizeof(BtUuidArr_t);
-			uint8_t x[l];
-
-			memcpy(x, pCfg->pAdvUuid, l);
-			BtUuidArr_t *ua = (BtUuidArr_t*)x;
-
-			ua->Type = BT_UUID_TYPE_128;
-
-
-			for (int i = 0; i < pCfg->pAdvUuid->Count; i++)
-			{
-				ble_uuid_t uid = { pCfg->pAdvUuid->Uuid16[i], (uint8_t)(pCfg->pAdvUuid->BaseIdx == 0 ? BLE_UUID_TYPE_BLE : BLE_UUID_TYPE_VENDOR_BEGIN)};
-
-				uint8_t len = 0;
-				uint32_t res = sd_ble_uuid_encode(&uid, &len, ua->Uuid128[i]);
-				if (res != 0)
-				{
-					//printf("err %x\n", res);
-				}
-			}
-			if (BleAdvDataAddUuid(uidadvpkt, ua, pCfg->bCompleteUuidList) == false)
-			{
-
-			}
-    	}
-    	else*/
-    	{
-			if (BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
-			{
-
-			}
-    	}
+		}
     }
 
-	if (pCfg->pAdvManData != NULL)
-	{
-		int l = pCfg->AdvManDataLen + 2;
-		BtAdvData_t *p = BtAdvDataAllocate(advpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-
-		if (p == NULL)
-		{
-			return false;
-		}
-		*(uint16_t *)p->Data = pCfg->VendorId;
-		memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
-	}
-
-	if (pCfg->pSrManData != NULL)
-	{
-		int l = pCfg->SrManDataLen + 2;
-		BtAdvData_t *p = BtAdvDataAllocate(srpkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-
-		if (p == NULL)
-		{
-			return false;
-		}
-		*(uint16_t *)p->Data = pCfg->VendorId;
-		memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
-	}
 	s_BtAppData.AdvParam.p_peer_addr 	= NULL;	// Undirected advertisement.
 	s_BtAppData.AdvParam.interval    	= MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
 	s_BtAppData.AdvParam.duration     	= MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
