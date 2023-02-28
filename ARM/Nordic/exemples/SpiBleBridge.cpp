@@ -664,7 +664,7 @@ bool ReadFlash(SPI_PKT *pkt)
 	else
 	{
 		//DEBUG_PRINTF("Send flash data to Ble\r\n");
-		g_BleSpiIntrf.Tx(0, (uint8_t*)&p, SPI_PKT_SIZE);
+		g_BleSpiIntrf.Tx(0, (uint8_t*)&p, 7 + l);//SPI_PKT_SIZE);
 		g_CurProcState = SPI_IDLE_STATE;
 	}
 
@@ -685,7 +685,9 @@ bool ReadFlashDevCfg()
 	g_SpiPkt.DataLen = sizeof(s_FlashCfg);
 	memcpy(g_SpiPkt.Data, (uint8_t*)&s_FlashCfg, sizeof(s_FlashCfg));
 
-	if (g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, SPI_PKT_SIZE) == SPI_PKT_SIZE)
+	uint16_t len = 7 + g_SpiPkt.DataLen;
+
+	if (g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, len) == len)
 	{
 		DEBUG_PRINTF("Flash Device Spec sent SUCCESS\n");
 		g_CurProcState = SPI_IDLE_STATE;
@@ -714,7 +716,8 @@ bool ReadSpiCfg()
 	g_SpiPkt.DataLen = sizeof(s_SpiMasCfg);
 	memcpy(g_SpiPkt.Data, (uint8_t*)&s_SpiMasCfg, sizeof(s_SpiMasCfg));
 
-	if (g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, SPI_PKT_SIZE) == SPI_PKT_SIZE)
+	uint16_t len = 7 + g_SpiPkt.DataLen;
+	if (g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, len) == len)
 	{
 		DEBUG_PRINTF("Spi Cfg sent SUCCESS\n");
 		g_CurProcState = SPI_IDLE_STATE;
@@ -747,7 +750,7 @@ bool TestFlashSector()
 	{
 		DEBUG_PRINTF("Wrong sector index\r\n");
 		g_SpiPkt.Data[0] = 0x00;
-		g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, SPI_PKT_SIZE);
+		g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, 8);
 		return false;
 	}
 
@@ -783,7 +786,7 @@ bool TestFlashSector()
 		ret = true;
 	}
 
-	g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, SPI_PKT_SIZE);
+	g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, 8);
 	g_CurProcState = SPI_IDLE_STATE;
 	return ret;
 }
@@ -799,7 +802,7 @@ bool EraseWholeFlash()
 	g_SpiPkt.DataLen = 1;
 	memset(g_SpiPkt.Data, 0xFF, MAX_FLASH_DATA_LEN);
 	g_SpiPkt.Data[0] = 0xAA;
-	g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, SPI_PKT_SIZE);
+	g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiPkt, 8);
 	DEBUG_PRINTF("Done\r\n");
 	return true;
 }
@@ -821,11 +824,11 @@ void FlashWriteInit(SPI_PKT *pkt)
 	memset(g_SpiRspPkt.Data, 0xFF, MAX_FLASH_DATA_LEN);
 	memcpy(&g_SpiRspPkt.Data[0], &pkt->Data[0], 4);
 
-	if (tbw > ((s_FlashCfg.TotalSize << 10) - pkt->Addr - 1))
+	if (tbw > ((s_FlashCfg.TotalSize << 10) - pkt->Addr))
 	{
 		DEBUG_PRINTF("Total byte write is larger than flash capacity\r\n");
 		g_SpiRspPkt.Data[4] = FLASH_WRITE_ACK_FAILED;
-		g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, SPI_PKT_SIZE);
+		g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, 12);//SPI_PKT_SIZE);
 		memset((uint8_t*)&g_SpiRspPkt, 0, SPI_PKT_SIZE);
 		g_CurProcState = SPI_IDLE_STATE;
 	}
@@ -856,7 +859,7 @@ void WritePacketToFlash(SPI_PKT *pkt)
 			memcpy(&tbw, &g_SpiRspPkt.Data[0], 4);
 			tbw = tbw - (g_TotByteWrite + l);
 			g_SpiRspPkt.Data[4] = FLASH_WRITE_ACK_FAILED;
-			g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, SPI_PKT_SIZE);
+			g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, 12);
 			g_CurProcState = SPI_IDLE_STATE;
 		}
 		else
@@ -866,7 +869,7 @@ void WritePacketToFlash(SPI_PKT *pkt)
 			{
 				g_CurProcState = SPI_IDLE_STATE;
 				g_SpiRspPkt.Data[4] = FLASH_WRITE_ACK_SUCCESS;
-				g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, SPI_PKT_SIZE);
+				g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, 12);
 				DEBUG_PRINTF("FLASH WRITE...ACCOMPLISHED\r\n");
 				DEBUG_PRINTF("Start address = 0x%x\r\n", g_SpiRspPkt.Addr);
 				memcpy(&tbw, &g_SpiRspPkt.Data[0], 4);
