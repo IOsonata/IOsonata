@@ -821,12 +821,13 @@ void FlashWriteInit(SPI_PKT *pkt)
 	memset(g_SpiRspPkt.Data, 0xFF, MAX_FLASH_DATA_LEN);
 	memcpy(&g_SpiRspPkt.Data[0], &pkt->Data[0], 4);
 
-	if (tbw > (s_FlashCfg.TotalSize - pkt->Addr - 1))
+	if (tbw > ((s_FlashCfg.TotalSize << 10) - pkt->Addr - 1))
 	{
 		DEBUG_PRINTF("Total byte write is larger than flash capacity\r\n");
 		g_SpiRspPkt.Data[4] = FLASH_WRITE_ACK_FAILED;
 		g_BleSpiIntrf.Tx(0, (uint8_t*)&g_SpiRspPkt, SPI_PKT_SIZE);
 		memset((uint8_t*)&g_SpiRspPkt, 0, SPI_PKT_SIZE);
+		g_CurProcState = SPI_IDLE_STATE;
 	}
 	else
 	{
