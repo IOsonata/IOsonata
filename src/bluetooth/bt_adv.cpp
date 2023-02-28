@@ -242,7 +242,7 @@ bool BtAdvDataAddUuid(BtAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bo
 	return BtAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)pUid->Uuid16, l);
 }
 
-void BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName)
+bool BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName)
 {
 	size_t l = strlen(pName);
 	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
@@ -256,5 +256,5 @@ void BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName)
 	}
 
 	// Update name in advertisement packet
-	BtAdvDataAdd(pAdvPkt, type, (uint8_t*)pName, l);
+	return BtAdvDataAdd(pAdvPkt, type, (uint8_t*)pName, l);
 }

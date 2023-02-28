@@ -193,7 +193,8 @@ void BtAdvDataRemove(BtAdvPacket_t * const pAdvPkt, uint8_t Type);
  * @param 	pAdvPkt	: Pointer to Adv packet to add data into
  * @param 	pUid	: Pointer to UUID array list
  * @param 	bComplete : true - UUID list is complete, false - partial
- * @return
+ *
+ * @return	true - success
  */
 bool BtAdvDataAddUuid(BtAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bool bComplete);
 
@@ -202,8 +203,10 @@ bool BtAdvDataAddUuid(BtAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bo
  *
  * @param 	pAdvPkt	: Pointer to Adv packet to add data into
  * @param	pName	: Pointer to device name string
+ *
+ * @return	true - success
  */
-void BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName);
+bool BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName);
 
 void BtAdvStart();
 void BtAdvStop();
