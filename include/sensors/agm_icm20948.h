@@ -137,7 +137,7 @@ SOFTWARE.
 
 #define ICM20948_INT_ENABLE_3_FIFO_WM_EN_MASK		(0xf<<0)// Enable FIFO watermark interrupt on pin 1
 
-#define ICM20948_I2C_MST_STATUS			(ICM20948_REG_BANK0 | 23)
+#define ICM20948_I2C_MST_STATUS			(ICM20948_REG_BANK0 | 23)	// 0x17
 
 #define ICM20948_I2C_MST_STATUS_I2C_SLV0_NACK		(1<<0)	// Slave 0 NACK
 #define ICM20948_I2C_MST_STATUS_I2C_SLV1_NACK		(1<<1)	// Slave 1 NACK
@@ -148,7 +148,18 @@ SOFTWARE.
 #define ICM20948_I2C_MST_STATUS_I2C_SLV4_DONE		(1<<6)	// Slave 4 transfer complete
 #define ICM20948_I2C_MST_STATUS_PASS_THROUGH		(1<<7)	// FSYNC interrupt flag
 
-#define ICM20948_INT_STATUS				(ICM20948_REG_BANK0 | 25)
+#define ICM20948_DMP_INT_STATUS			(ICM20948_REG_BANK0 | 24)	// 0x18
+
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT			(1<<1)
+#define ICM20948_DMP_INT_STATUS_WAKE_ON_MOTION_INT	(1<<3)
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0		(1<<0)	// CI Command
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_2		(1<<1)	// CIM Command - SMD
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_3		(1<<2)	// CIM Command - Pedometer
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_4		(1<<4)	// CIM Command - Pedometer binning
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_5		(1<<5)	// CIM Command - Bring To See Gesture
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_6		(1<<6)	// CIM Command - Look To See Gesture
+
+#define ICM20948_INT_STATUS				(ICM20948_REG_BANK0 | 25)	// 0x19
 
 #define ICM20948_INT_STATUS_I2C_MIST_INT			(1<<0)	// I2C master interrupt flag
 #define ICM20948_INT_STATUS_DMP_INT1				(1<<1)	// DMP interrupt on pin 1

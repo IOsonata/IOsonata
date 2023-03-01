@@ -60,15 +60,11 @@ typedef struct __GasSensor_Data {
 	float	 AirQualIdx;		//!< Air Quality Index
 } GaseSensorData_t;
 
-typedef GaseSensorData_t	GASSENSOR_DATA;
-
 /// @brief	Heating temperature setting point for the heating profile
 typedef struct __GasSensor_Heater {
 	int16_t	Temp;				//!< Heater temperature in Celsius in 2 decimal fix point (3145 = 31.45 Degree)
 	int16_t Dur;				//!< heating duration in msec
 } GasSensorHeater_t;
-
-typedef GasSensorHeater_t	GASSENSOR_HEAT;
 
 #pragma pack(pop)
 
@@ -82,8 +78,6 @@ typedef struct __GasSensor_Config {
 	int				NbHeatPoint;//!< Number of heating point in profile
 	const GasSensorHeater_t *pHeatProfile;	//!< Pointer to array of heating temperature profile
 } GasSensorCfg_t;
-
-typedef GasSensorCfg_t	GASSENSOR_CFG;
 
 #pragma pack(pop)
 
