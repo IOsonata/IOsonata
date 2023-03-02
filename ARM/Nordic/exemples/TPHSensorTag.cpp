@@ -251,7 +251,7 @@ static const IOPinCfg_t s_GpioPins[] = {
 static const int s_NbGpioPins = sizeof(s_GpioPins) / sizeof(IOPinCfg_t);
 
 // Configure environmental sensor
-static TPHSENSOR_CFG s_TphSensorCfg = {
+static TPHSensorCfg_t s_TphSensorCfg = {
 #ifdef NEBLINA_MODULE
     0,      // SPI CS index 0 connected to BME280
 #else
@@ -265,15 +265,15 @@ static TPHSENSOR_CFG s_TphSensorCfg = {
 	1
 };
 
-static const GASSENSOR_HEAT s_HeaterProfile[] = {
+static const GasSensorHeater_t s_HeaterProfile[] = {
 	{ 375, 125 },
 };
 
-static const GASSENSOR_CFG s_GasSensorCfg = {
+static const GasSensorCfg_t s_GasSensorCfg = {
 	BME680_I2C_DEV_ADDR0,	// Device address
 	SENSOR_OPMODE_SINGLE,	// Operating mode
 	10,
-	sizeof(s_HeaterProfile) / sizeof(GASSENSOR_HEAT),
+	sizeof(s_HeaterProfile) / sizeof(GasSensorCfg_t),
 	s_HeaterProfile
 };
 
@@ -375,8 +375,8 @@ void ADCEventHandler(Device *pAdcDev, DEV_EVT Evt)
 void ReadPTHData()
 {
 	static uint32_t gascnt = 0;
-	TPHSENSOR_DATA data;
-	GASSENSOR_DATA gdata;
+	TPHSensorData_t data;
+	GasSensorData_t gdata;
 #if 1
 
 	g_I2c.Enable();
@@ -539,13 +539,13 @@ void HardwareInit()
 	usDelay(300000);
 
     // Update sensor data
-    TPHSENSOR_DATA tphdata;
+    TPHSensorData_t tphdata;
 
     g_TphSensor.Read(tphdata);
 
     if (g_TphSensor.DeviceID() == BME680_ID)
     {
-		GASSENSOR_DATA gdata;
+		GasSensorData_t gdata;
 		g_GasSensor.Read(gdata);
     }
 
