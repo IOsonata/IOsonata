@@ -182,11 +182,11 @@ DeviceIntrf *g_pIntrf = &g_Spi;
 #endif
 
 //********** SENSOR **********
-static const GASSENSOR_HEAT s_HeaterProfile[] = {
+static const GasSensorHeater_t s_HeaterProfile[] = {
 	{ 375, 125 },
 };
 
-static const GASSENSOR_CFG s_GasSensorCfg = {
+static const GasSensorCfg_t s_GasSensorCfg = {
 #ifdef	TPH_I2C
 	BME680_I2C_DEV_ADDR0,	// I2C Device address
 #else
@@ -194,11 +194,11 @@ static const GASSENSOR_CFG s_GasSensorCfg = {
 #endif
 	SENSOR_OPMODE_SINGLE,	// Operating mode
 	500,
-	sizeof(s_HeaterProfile) / sizeof(GASSENSOR_HEAT),
+	sizeof(s_HeaterProfile) / sizeof(GasSensorHeater_t),
 	s_HeaterProfile
 };
 
-static const TPHSENSOR_CFG s_TphSensorCfg = {
+static const TPHSensorCfg_t s_TphSensorCfg = {
 
 #ifdef	TPH_I2C
 	BME680_I2C_DEV_ADDR0,	// I2C Device address
@@ -237,8 +237,8 @@ GasSensor &g_Gas = g_EnvSensor;
 //
 int main()
 {
-	TPHSENSOR_DATA tphdata;
-	GASSENSOR_DATA gdata;
+	TPHSensorData_t tphdata;
+	GasSensorData_t gdata;
 
 	bool res = true;
 

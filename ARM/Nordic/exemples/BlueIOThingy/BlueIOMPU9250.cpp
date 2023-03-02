@@ -450,7 +450,7 @@ int drv_mpu9250_ms_get(unsigned long * p_count)
  */
 int drv_mpu9250_int_register(struct int_param_s * p_int_param)
 {
-	printf("drv_mpu9250_int_register\r\n");
+	//printf("drv_mpu9250_int_register\r\n");
 	IOPinConfig(BLUEIO_TAG_EVIM_IMU_INT_PORT, BLUEIO_TAG_EVIM_IMU_INT_PIN, BLUEIO_TAG_EVIM_IMU_INT_PINOP,
 			IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
 	IOPinEnableInterrupt(BLUEIO_TAG_EVIM_IMU_INT_NO, 6, BLUEIO_TAG_EVIM_IMU_INT_PORT,

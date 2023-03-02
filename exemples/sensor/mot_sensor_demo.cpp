@@ -84,35 +84,25 @@ static const IOPinCfg_t s_SpiPins[] = {
 };
 
 static const SPICfg_t s_SpiCfg = {
-    SPI_DEVNO,
-	SPIPHY_NORMAL,
-    SPIMODE_MASTER,
-    s_SpiPins,
-    sizeof(s_SpiPins) / sizeof(IOPINCFG),
-    2000000,   // Speed in Hz
-    8,      // Data Size
-    5,      // Max retries
-    SPIDATABIT_MSB,
-    SPIDATAPHASE_SECOND_CLK, // Data phase
-    SPICLKPOL_LOW,         // clock polarity
-    SPICSEL_AUTO,
-	true,
-	false,
-    6,      // Interrupt priority
-	0xFF,
-    NULL
+	.DevNo = SPI_DEVNO,
+	.Phy = SPI_PHY,
+	.Mode = SPIMODE_MASTER,
+	.pIOPinMap = s_SpiPins,
+	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
+	.Rate = 4000000,   // Speed in Hz
+	.DataSize = 8,      // Data Size
+	.MaxRetry = 5,      // Max retries
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_SECOND_CLK, // Data phase
+	.ClkPol = SPICLKPOL_LOW,         // clock polarity
+	.ChipSel = SPICSEL_AUTO,
+	.bDmaEn = true,	// DMA
+	.bIntEn = false,
+	.IntPrio = 6,      // Interrupt priority
+	.EvtCB = NULL
 };
 
 SPI g_Spi;
-
-static const IOPinCfg_t s_GpioPins[] = {
-	{BLUEIO_BUT1_PORT, BLUEIO_BUT1_PIN, BLUEIO_BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// But 1
-	{BLUEIO_BUT2_PORT, BLUEIO_BUT2_PIN, BLUEIO_BUT2_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// But 2
-	{BLUEIO_TAG_EVIM_IMU_INT_PORT, BLUEIO_TAG_EVIM_IMU_INT_PIN, BLUEIO_TAG_EVIM_IMU_INT_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, // IMU int pin
-	{0, 24, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// But 2
-};
-
-static const int s_NbGpioPins = sizeof(s_GpioPins) / sizeof(IOPinCfg_t);
 
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt);
 
@@ -164,8 +154,6 @@ static const ImuCfg_t s_ImuCfg = {
 
 #ifdef ICM20948
 ImuIcm20948 g_Imu;
-AgmIcm20948 g_MotSensor;
-#elif 0
 AgmIcm20948 g_MotSensor;
 #elif defined(MPU9250)
 ImuMpu9250 g_Imu;
@@ -271,7 +259,7 @@ bool HardwareInit()
 #endif
 
 #if defined(ICM20948) || defined(MPU9250)
-		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
+		//res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
 //		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
 #endif
 	}
@@ -335,7 +323,7 @@ int main()
 
 
 	uint32_t prevt = 0;
-	int cnt = 100;
+	int cnt = 10;
 	while (1)
 	{
 //		uint32_t t = g_Timer.uSecond();
@@ -359,14 +347,14 @@ int main()
 			g_pMag->Read(mrawdata);
 		}
 
-		//g_Imu.Read(accdata);
+		g_MotSensor.Read(accdata);
 		//g_Imu.Read(quat);
 
 		if (cnt-- < 0)
 		{
-			cnt = 100;
-			printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)dt, arawdata.X, arawdata.Y, arawdata.Z);
-			//printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
+			cnt = 10;
+			//printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)dt, arawdata.X, arawdata.Y, arawdata.Z);
+			printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
 			//printf("Quat %d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
 		}
 	}

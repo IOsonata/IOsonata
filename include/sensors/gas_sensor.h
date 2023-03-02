@@ -58,7 +58,7 @@ typedef struct __GasSensor_Data {
 	uint32_t GasRes[GASSENSOR_MEASUREMENT_POINT_MAX];	//!< Gas resistance value
 	int		 MeasIdx;			//!< Latest measure point index
 	float	 AirQualIdx;		//!< Air Quality Index
-} GaseSensorData_t;
+} GasSensorData_t;
 
 /// @brief	Heating temperature setting point for the heating profile
 typedef struct __GasSensor_Heater {
@@ -115,7 +115,7 @@ public:
 	 * 			- true	: If new data is returned
 	 * 			- false	: If old data is returned
 	 */
-	virtual bool Read(GaseSensorData_t &GasData) = 0;
+	virtual bool Read(GasSensorData_t &GasData) = 0;
 
 	/**
 	 * @brief	Set gas heating profile (require implementation).
@@ -131,7 +131,7 @@ public:
 
 protected:
 
-	GaseSensorData_t vGasData;	//!< Last measured data
+	GasSensorData_t vGasData;	//!< Last measured data
 };
 
 extern "C" {

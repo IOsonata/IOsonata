@@ -176,7 +176,7 @@ typedef struct __Seep_Config {
    					    //<! while waiting. Set to NULL is not used
 } SeepCfg_t;
 
-typedef SeepCfg_t	SEEP_CFG;
+typedef SeepCfg_t	EpromCfg_t;
 
 /// @brief Device internal data.
 ///
@@ -195,7 +195,7 @@ typedef struct __Seep_Device {
    					    //<! while waiting. Set to NULL is not used
 } SeepDev_t;
 
-typedef SeepDev_t	SEEPDEV;
+typedef SeepDev_t	EpromDev_t;
 
 #pragma pack(pop)
 

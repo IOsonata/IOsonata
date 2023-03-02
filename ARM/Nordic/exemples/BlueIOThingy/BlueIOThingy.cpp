@@ -72,14 +72,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/timer.h"
 #include "board.h"
 #include "idelay.h"
-#include "seep.h"
-#include "diskio_flash.h"
+#include "storage/seep.h"
+#include "storage/diskio_flash.h"
 #include "sensors/bsec_interface.h"
 
 #include "BlueIOThingy.h"
 #include "BlueIOMPU9250.h"
 
-#define DEVICE_NAME                     "Thingy52"                            /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "BlueIOThingy"                            /**< Name of device. Will be included in the advertising data. */
 
 #define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
 
@@ -279,7 +279,7 @@ I2C g_I2c;
 //DeviceIntrf *g_pIntrf = &g_I2c;
 
 // Configure environmental sensor
-static TPHSENSOR_CFG s_TphSensorCfg = {
+static TPHSensorCfg_t s_TphSensorCfg = {
 #ifdef NEBLINA_MODULE
 	.DevAddr = 0,      // SPI CS index 0 connected to BME280
 #else
@@ -293,15 +293,15 @@ static TPHSENSOR_CFG s_TphSensorCfg = {
 	.FilterCoeff = 1,
 };
 
-static const GASSENSOR_HEAT s_HeaterProfile[] = {
+static const GasSensorHeater_t s_HeaterProfile[] = {
 	{ 375, 125 },
 };
 
-static const GASSENSOR_CFG s_GasSensorCfg = {
+static const GasSensorCfg_t s_GasSensorCfg = {
 	BME680_I2C_DEV_ADDR0,	// Device address
 	SENSOR_OPMODE_SINGLE,	// Operating mode
 	500,
-	sizeof(s_HeaterProfile) / sizeof(GASSENSOR_HEAT),
+	sizeof(s_HeaterProfile) / sizeof(GasSensorHeater_t),
 	s_HeaterProfile
 };
 
@@ -319,7 +319,7 @@ TphSensor &g_TphSensor = g_MS8607Sensor;
 
 GasSensor &g_GasSensor = g_Bme680Sensor;
 
-static const ACCELSENSOR_CFG s_AccelCfg = {
+static const AccelSensorCfg_t s_AccelCfg = {
 	.DevAddr = 0,	// SPI CS idx
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,	// 50Hz (in mHz)
@@ -332,7 +332,7 @@ static const ACCELSENSOR_CFG s_AccelCfg = {
 //AgmMpu9250 g_AgmSensor;
 AccelAdxl362 g_AccelSensor;
 
-static const SEEP_CFG s_SeepCfg = {
+static const SeepCfg_t s_SeepCfg = {
 	.DevAddr = 0x50,
 	.AddrLen = 2,
 	.PageSize = 32,
@@ -345,14 +345,16 @@ Seep g_Seep;
 
 FlashDiskIO g_FlashDiskIO;
 
-static uint8_t s_FlashCacheMem[DISKIO_SECT_SIZE];
-DISKIO_CACHE_DESC g_FlashCache = {
+static uint8_t s_FlashCacheMem[FLASH_MX25U1635E_SECTSIZE];
+DiskIOCache_t g_FlashCache = {
     -1, 0xFFFFFFFF, s_FlashCacheMem
 };
 
 bool MX25U1635E_init(int pDevNo, DeviceIntrf* ppInterface);
 
-static FLASHDISKIO_CFG s_FlashDiskCfg = {
+static FlashCfg_t s_FlashDiskCfg = FLASH_MX25U1635E(NULL, NULL);
+#if 0
+{
     .DevNo = 1,
     .TotalSize = 16 * 1024 * 1024 / 8,      // 256 Mbits
     .SectSize = 4,
@@ -362,6 +364,7 @@ static FLASHDISKIO_CFG s_FlashDiskCfg = {
     .pInitCB = MX25U1635E_init,//mx66u51235f_init,
     .pWaitCB = NULL,//FlashWriteDelayCallback,
 };
+#endif
 
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
 {
@@ -393,7 +396,7 @@ bool MX25U1635E_init(int DevNo, DeviceIntrf* pInterface)
 void ReadPTHData()
 {
 	static uint32_t gascnt = 0;
-	TPHSENSOR_DATA data;
+	TPHSensorData_t data;
 
 	g_TphSensor.Read(data);
 
@@ -401,7 +404,7 @@ void ReadPTHData()
 
 	if (g_TphSensor.DeviceID() == BME680_ID && (gascnt & 0x3) == 0)
 	{
-		GASSENSOR_DATA gdata;
+		GasSensorData_t gdata;
 		BleAdvManData_AqSensor_t gas;
 
 		g_GasSensor.Read(gdata);
@@ -472,7 +475,7 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
     }
 #endif
 
-    BtGattEvtHandler(Evt, pCtx);
+   // BtGattEvtHandler(Evt, pCtx);
 //    BtGattEvtHandler(GetConfSrvcInstance(), p_ble_evt);
 //    BtGattEvtHandler(GetUISrvcInstance(), p_ble_evt);
 //    BtGattEvtHandler(GetEnvSrvcInstance(), p_ble_evt);
@@ -590,18 +593,20 @@ void HardwareInit()
 
     g_Seep.Init(s_SeepCfg, &g_I2c);
 
+#if 0
     uint8_t d = 0xa5;
     g_Seep.Write(0, &d, 1);
 
     d = 0;
     g_Seep.Read(0, &d, 1);
 
-    printf("%d\r\n", d);
+    //printf("%d\r\n", d);
 
     uint8_t reg[2] = { 0xb, 0};
     uint8_t val[2] = {0, };
 
     g_Spi.Read(0, reg, 2, val, 2);
+#endif
 
     if (MPU9250Init(&g_Spi, &g_Timer) == true)
     {
@@ -644,13 +649,13 @@ void HardwareInit()
 	usDelay(200000);
 
     // Update sensor data
-    TPHSENSOR_DATA tphdata;
+    TPHSensorData_t tphdata;
 
     g_TphSensor.Read(tphdata);
 
     if (g_TphSensor.DeviceID() == BME680_ID)
     {
-		GASSENSOR_DATA gdata;
+		GasSensorData_t gdata;
 		g_GasSensor.Read(gdata);
     }
 

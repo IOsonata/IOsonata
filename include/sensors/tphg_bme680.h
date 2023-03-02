@@ -388,7 +388,7 @@ public:
 	 * @return	true - new data
 	 * 			false - old data
 	 */
-	bool Read(GaseSensorData_t &GasData);
+	bool Read(GasSensorData_t &GasData);
 
 	/**
 	 * @brief	Read TPH data
