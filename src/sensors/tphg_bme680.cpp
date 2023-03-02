@@ -720,14 +720,14 @@ bool TphgBme680::Read(TPHSensorData_t &TphData)
 	return retval;
 }
 
-bool TphgBme680::Read(GaseSensorData_t &GasData)
+bool TphgBme680::Read(GasSensorData_t &GasData)
 {
 	bool retval = vbGasData;
 
 	if (vbGasData == false)
 		retval = UpdateData();
 
-	memcpy(&GasData, &vGasData, sizeof(GaseSensorData_t));
+	memcpy(&GasData, &vGasData, sizeof(GasSensorData_t));
 
 	uint8_t reg = BME680_REG_CTRL_GAS1;
 

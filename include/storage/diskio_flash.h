@@ -175,9 +175,9 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 
-#include "diskio.h"
+#include "storage/diskio.h"
+#include "storage/flash.h"
 #include "device_intrf.h"
-#include "flash.h"
 
 /** @addtogroup Storage
   * @{

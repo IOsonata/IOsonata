@@ -57,7 +57,7 @@ typedef struct __GyroSensor_Raw_Data {
     };
 } GyroSensorRawData_t;
 
-typedef GyroSensorRawData_t	GYROSENSOR_RAWDATA;
+//typedef GyroSensorRawData_t	GYROSENSOR_RAWDATA;
 
 /// Gyroscope sensor data
 typedef struct __GyroSensor_Data {
@@ -72,7 +72,7 @@ typedef struct __GyroSensor_Data {
 	};
 } GyroSensorData_t;
 
-typedef GyroSensorData_t	GYROSENSOR_DATA;
+//typedef GyroSensorData_t	GYROSENSOR_DATA;
 
 typedef struct __GyroSensor_Config {
 	uint32_t		DevAddr;		//!< Either I2C dev address or CS index select if SPI is used
@@ -84,7 +84,7 @@ typedef struct __GyroSensor_Config {
 	DEVINTR_POL		IntPol;			//!< Interrupt pin polarity
 } GyroSensorCfg_t;
 
-typedef GyroSensorCfg_t	GYROSENSOR_CFG;
+//typedef GyroSensorCfg_t	GYROSENSOR_CFG;
 
 #pragma pack(pop)
 

@@ -81,7 +81,7 @@ typedef struct __DiskIO_Cache_Desc {
 	uint8_t		*pSectData;	//!< Pointer to sector cache memory. Must be at least 1 sector size
 } DiskIOCache_t;
 
-typedef DiskIOCache_t	DISKIO_CACHE_DESC;
+//typedef DiskIOCache_t	DISKIO_CACHE_DESC;
 
 #pragma pack(pop)
 

@@ -22,7 +22,7 @@
 #include "BlueIOThingy.h"
 #include "BlueIOMPU9250.h"
 
-static const ACCELSENSOR_CFG s_AccelCfg = {
+static const AccelSensorCfg_t s_AccelCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
@@ -32,7 +32,7 @@ static const ACCELSENSOR_CFG s_AccelCfg = {
 	.IntPol = DEVINTR_POL_LOW,
 };
 
-static const GYROSENSOR_CFG s_GyroCfg = {
+static const GyroSensorCfg_t s_GyroCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
@@ -40,7 +40,7 @@ static const GYROSENSOR_CFG s_GyroCfg = {
 	.FltrFreq = 200,
 };
 
-static const MAGSENSOR_CFG s_MagCfg = {
+static const MagSensorCfg_t s_MagCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,//SENSOR_OPMODE_SINGLE,
 	.Freq = 50000,
@@ -130,14 +130,14 @@ static struct platform_data_s compass_pdata = {
 #endif
 #endif
 
-void ImuRawDataSend(ACCELSENSOR_DATA &AccData, GYROSENSOR_DATA GyroData, MAGSENSOR_DATA &MagData);
+void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSensorData_t &MagData);
 void ImuQuatDataSend(long Quat[4]);
 
 static void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 {
-	ACCELSENSOR_DATA accdata;
-	GYROSENSOR_DATA gyrodata;
-	MAGSENSOR_DATA magdata;
+	AccelSensorData_t accdata;
+	GyroSensorData_t gyrodata;
+	MagSensorData_t magdata;
 	ImuQuat_t quat;
 	long q[4];
 
@@ -450,7 +450,7 @@ int drv_mpu9250_ms_get(unsigned long * p_count)
  */
 int drv_mpu9250_int_register(struct int_param_s * p_int_param)
 {
-	printf("drv_mpu9250_int_register\r\n");
+	//printf("drv_mpu9250_int_register\r\n");
 	IOPinConfig(BLUEIO_TAG_EVIM_IMU_INT_PORT, BLUEIO_TAG_EVIM_IMU_INT_PIN, BLUEIO_TAG_EVIM_IMU_INT_PINOP,
 			IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
 	IOPinEnableInterrupt(BLUEIO_TAG_EVIM_IMU_INT_NO, 6, BLUEIO_TAG_EVIM_IMU_INT_PORT,
