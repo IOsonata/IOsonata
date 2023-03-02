@@ -57,7 +57,7 @@ typedef struct __AccelSensor_Raw_Data {
 	};
 } AccelSensorRawData_t;
 
-typedef AccelSensorRawData_t	ACCELSENSOR_RAWDATA;
+//typedef AccelSensorRawData_t	ACCELSENSOR_RAWDATA;
 
 /// Accelerometer sensor data in G
 typedef struct __AccelSensor_Data {
@@ -72,7 +72,7 @@ typedef struct __AccelSensor_Data {
 	};
 } AccelSensorData_t;
 
-typedef AccelSensorData_t	ACCELSENSOR_DATA;
+//typedef AccelSensorData_t	ACCELSENSOR_DATA;
 
 typedef void (*AccelSensorEvtCb_t)(AccelSensorData_t *pData);
 
@@ -88,7 +88,7 @@ typedef struct __AccelSensor_Config {
 	AccelSensorEvtCb_t IntHandler;
 } AccelSensorCfg_t;
 
-typedef AccelSensorCfg_t	ACCELSENSOR_CFG;
+//typedef AccelSensorCfg_t	ACCELSENSOR_CFG;
 
 #pragma pack(pop)
 

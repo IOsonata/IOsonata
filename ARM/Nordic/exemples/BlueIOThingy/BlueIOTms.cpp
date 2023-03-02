@@ -428,7 +428,7 @@ void ImuRawCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_RAW);
 }
 
-void ImuRawDataSend(ACCELSENSOR_DATA &AccData, GYROSENSOR_DATA GyroData, MAGSENSOR_DATA &MagData)
+void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSensorData_t &MagData)
 {
 	ble_tms_raw_t raw;
 

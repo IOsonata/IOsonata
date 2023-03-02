@@ -56,7 +56,7 @@ typedef struct __MagSensor_Raw_Data {
     };
 } MagSensorRawData_t;
 
-typedef MagSensorRawData_t	MAGSENSOR_RAWDATA;
+//typedef MagSensorRawData_t	MAGSENSOR_RAWDATA;
 
 /// Magnetometer sensor data
 typedef struct __MagSensor_Data {
@@ -71,7 +71,7 @@ typedef struct __MagSensor_Data {
 	};
 } MagSensorData_t;
 
-typedef MagSensorData_t	MAGSENSOR_DATA;
+//typedef MagSensorData_t	MAGSENSOR_DATA;
 
 typedef enum __MagSensor_Precision {
 	MAGSENSOR_PRECISION_LOW,
@@ -88,7 +88,7 @@ typedef struct __MagSensor_Config {
 	DEVINTR_POL		IntPol;		//!< Interrupt polarity
 } MagSensorCfg_t;
 
-typedef MagSensorCfg_t	MAGSENSOR_CFG;
+//typedef MagSensorCfg_t	MAGSENSOR_CFG;
 
 #pragma pack(pop)
 
