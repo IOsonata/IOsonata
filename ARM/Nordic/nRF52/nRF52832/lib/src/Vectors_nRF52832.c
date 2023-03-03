@@ -89,8 +89,8 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SPIM2_SPIS2_SPI2_IRQHandler(
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void RTC2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2S_IRQHandler(void);
 
-__attribute__((weak)) void SPI_IRQHandler(int DevNo) { while(1);};
-__attribute__((weak)) void I2C_IRQHandler(int DevNo) { while(1);};
+//__attribute__((weak)) void SPI_IRQHandler(int DevNo) { while(1);};
+//__attribute__((weak)) void I2C_IRQHandler(int DevNo) { while(1);};
 
 #if (__FPU_USED == 1)
 __WEAK void FPU_IRQHandler(void);
@@ -189,6 +189,7 @@ __WEAK void FPU_IRQHandler(void)
 }
 #endif
 
+#if 0
 __WEAK void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)
 {
 	if (NRF_SPIM0->INTENSET)
@@ -217,4 +218,4 @@ __WEAK void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
 	}
 	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
 }
-
+#endif

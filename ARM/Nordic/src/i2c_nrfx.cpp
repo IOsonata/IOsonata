@@ -59,6 +59,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NRFX_I2C_TRBUFF_SIZE	4
 
+void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev);
+
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;
@@ -585,8 +587,8 @@ void *nRFxI2CGetHandle(DevIntrf_t * const pDev)
 	return dev;
 }
 
-//void I2CIrqHandler(int DevNo, I2CDev_t * const pDev)
-extern "C" void I2C_IRQHandler(int DevNo)
+void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev)
+//extern "C" void I2C_IRQHandler(int DevNo)
 {
     nRFTwiDev_t *dev = &s_nRFxI2CDev[DevNo];//(nRFTwiDev_t*)&pDev->DevIntrf.pDevData;
 
@@ -831,7 +833,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     }
     if (inten != 0)
     {
-    	//SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, I2CIrqHandler);
+    	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, I2CIrqHandler);
 
     	switch (pCfgData->DevNo)
     	{
