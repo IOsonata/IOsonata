@@ -1001,6 +1001,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/temp_sensor.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/tir_calipile.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tir_calipile.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/tir_sensor.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tir_sensor.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/tph_bme280.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tph_bme280.h</locationURI>
@@ -1639,6 +1649,11 @@
 			<name>src/sensors/mag_sensor.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_sensor.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/tir_calipile.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/tir_calipile.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/tph_bme280.cpp</name>
