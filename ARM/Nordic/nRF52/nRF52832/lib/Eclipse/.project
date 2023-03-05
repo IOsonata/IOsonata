@@ -1268,7 +1268,7 @@
 		<link>
 			<name>src/coredev/shared_intrf_nrf5x.c</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/src/shared_intrf_nrf5x.c</location>
+			<locationURI>PARENT-4-PROJECT_LOC/src/shared_intrf_nrf5x.c</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>
