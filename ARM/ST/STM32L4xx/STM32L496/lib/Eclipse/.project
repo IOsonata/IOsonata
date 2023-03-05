@@ -301,29 +301,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/diskio_flash.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_flash.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/diskio_impl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/diskio_impl.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/display</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/fatfs.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/fatfs.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/fatfs_vdisk.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu</name>
@@ -371,16 +351,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sbuffer.c</locationURI>
 		</link>
 		<link>
-			<name>src/sdcard_impl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sdcard_impl.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/seep_impl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/seep_impl.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/sensors</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -394,6 +364,11 @@
 			<name>src/stddev.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/stddev.c</locationURI>
+		</link>
+		<link>
+			<name>src/storage</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/sysstatus.c</name>
@@ -1019,6 +994,51 @@
 			<name>src/sensors/tphg_bme680.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/tphg_bme680.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/diskio_flash.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/diskio_impl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_impl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/fatfs.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/fatfs_vdisk.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs_vdisk.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/ff_diskio.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/ff_diskio.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/flash.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/sdcard_impl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/sdcard_impl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/seep_impl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/seep_impl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/stdfs_littlefs.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers</name>

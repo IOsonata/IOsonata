@@ -38,7 +38,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 #include "idelay.h"
-#include "diskio_flash.h"
+#include "storage/diskio_flash.h"
 
 extern STM32L4XX_SPIDEV s_STM32L4xxSPIDev[STM32L4XX_SPI_MAXDEV];
 extern const int g_NbSTM32L4xxSPIDev = sizeof(s_STM32L4xxSPIDev) / sizeof(STM32L4XX_SPIDEV);

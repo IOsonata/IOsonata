@@ -73,10 +73,11 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SWI1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SWI2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SWI3_IRQHandler(void);
 
+/*
 __attribute__((weak)) void SPI_IRQHandler(int DevNo) {while(1);};
 __attribute__((weak)) void I2C_IRQHandler(int DevNo) {while(1);};//TWI0_IRQHandler();
 __attribute__((weak)) void UARTE0_IRQHandler();
-
+*/
 
 
 /**
@@ -135,7 +136,7 @@ void (* const __Vectors[200])(void) = {
 	SWI3_IRQHandler,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
-
+/*
 void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void)
 {
 	if (NRF_SPIM0_NS->INTENSET)
@@ -156,4 +157,4 @@ void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void)
 
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
 }
-
+*/

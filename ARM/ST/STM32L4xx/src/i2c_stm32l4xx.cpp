@@ -38,7 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 #include "idelay.h"
-#include "diskio_flash.h"
+#include "storage/diskio_flash.h"
 
 #ifdef STM32L4S9xx
 #define STM32L4XX_I2C_MAXDEV		4

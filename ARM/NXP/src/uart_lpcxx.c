@@ -34,6 +34,7 @@ Modified by          Date              Description
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <inttypes.h>
 
 #include "cmsis_gcc.h"
 #include "istddef.h"

@@ -67,6 +67,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
@@ -94,6 +96,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
@@ -135,7 +139,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/coredev/shared_irq_nrf91.cpp|src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -206,6 +210,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
@@ -233,6 +239,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
@@ -274,7 +282,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/coredev/shared_irq_nrf91.cpp|src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -343,6 +351,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
@@ -370,6 +380,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
@@ -411,7 +423,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/coredev/shared_irq_nrf91.cpp|src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

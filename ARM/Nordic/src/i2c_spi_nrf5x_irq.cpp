@@ -98,7 +98,7 @@ extern "C" void SPI1_TWI1_IRQHandler(void)
 	NVIC_ClearPendingIRQ(SPI1_TWI1_IRQn);
 #endif
 }
-
+/*
 #ifdef NRF52_SERIES
 extern "C" void SPIM2_SPIS2_SPI2_IRQHandler(void)
 {
@@ -119,5 +119,7 @@ extern "C" void SPIM3_IRQHandler(void)
     NVIC_ClearPendingIRQ(SPIM3_IRQn);
 }
 #endif
+
 #endif
+*/
 

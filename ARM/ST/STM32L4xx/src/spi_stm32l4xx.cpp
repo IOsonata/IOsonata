@@ -38,7 +38,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 #include "idelay.h"
-#include "diskio_flash.h"
+#include "storage/diskio_flash.h"
 
 #ifdef STM32L4S9xx
 bool STM32L4xxOctoSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData);

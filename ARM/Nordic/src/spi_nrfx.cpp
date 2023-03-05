@@ -47,7 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "spi_nrfx.h"
 
 bool nRFxQSPIInit(SPIDev_t * const pDev);
-void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev);
+//void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev);
 
 alignas(4) static const NrfSpiFreq_t s_nRFxSPIFreq[] = {
 #ifdef SPIM_PRESENT
@@ -551,7 +551,7 @@ void *nRFxSPIGetHandle(DevIntrf_t * const pDev)
 	return dev->pSpiDev;
 }
 
-void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev)
+void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev)
 //extern "C" void SPI_IRQHandler(int DevNo)
 {
 	NrfSpiDev_t *dev = &g_nRFxSPIDev[DevNo];//(NrfSpiDev_t *)pDev->DevIntrf.pDevData;
@@ -843,7 +843,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
     if (pCfgData->bIntEn && pCfgData->Mode == SPIMODE_SLAVE)
     {
-    	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, SPIIrqHandler);
+    	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, SPI_IRQHandler);
 
     	switch (pCfgData->DevNo)
     	{
@@ -947,16 +947,14 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 #ifdef NRF52_SERIES
 extern "C" void SPIM2_SPIS2_SPI2_IRQHandler(void)
 {
-	//SPI_IRQHandler(2);//, g_nRFxSPIDev[2].pSpiDev);
-	g_nRFxSPIDev[2].pSpiDev;
+	SPI_IRQHandler(2, &g_nRFxSPIDev[2].pSpiDev->DevIntrf);
     NVIC_ClearPendingIRQ(SPIM2_SPIS2_SPI2_IRQn);
 }
 
 #ifdef NRF52840_XXAA
 extern "C" void SPIM3_IRQHandler(void)
 {
-	SPI_IRQHandler(3);//, g_nRFxSPIDev[3].pSpiDev);
-	g_nRFxSPIDev[3].pSpiDev;
+	SPI_IRQHandler(3, &g_nRFxSPIDev[3].pSpiDev->DevIntrf);
     NVIC_ClearPendingIRQ(SPIM3_IRQn);
 }
 #endif

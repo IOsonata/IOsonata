@@ -69,6 +69,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 								</option>
@@ -89,6 +91,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 								</option>
@@ -115,7 +119,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/shared_irq_nrf5340_application.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -190,6 +194,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 								</option>
@@ -210,6 +216,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 								</option>
@@ -236,7 +244,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/shared_irq_nrf5340_application.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

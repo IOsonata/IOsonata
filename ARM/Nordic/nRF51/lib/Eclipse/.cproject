@@ -100,6 +100,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../CMSIS/RTOS/RTX/INC"/>
+									<listOptionValue builtIn="false" value="../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../micro-ecc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../external/invn"/>
@@ -166,6 +168,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../CMSIS/RTOS/RTX/INC"/>
+									<listOptionValue builtIn="false" value="../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../micro-ecc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../external/invn"/>
@@ -329,6 +333,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../CMSIS/RTOS/RTX/INC"/>
+									<listOptionValue builtIn="false" value="../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../micro-ecc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../external/invn"/>
@@ -395,6 +401,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../CMSIS/RTOS/RTX/INC"/>
+									<listOptionValue builtIn="false" value="../../../../../../littlefs"/>
+									<listOptionValue builtIn="false" value="../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../micro-ecc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../external/invn"/>

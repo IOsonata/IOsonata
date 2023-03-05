@@ -31,6 +31,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
+#include <inttypes.h>
 
 #include "LPC11Uxx.h"
 #include "uart_lpcxx.h"
