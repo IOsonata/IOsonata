@@ -611,9 +611,9 @@
 			<locationURI>PARENT-5-PROJECT_LOC/include/coredev/pdm.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/shared_irq.h</name>
+			<name>include/coredev/shared_intrf.h</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/include/coredev/shared_irq.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/include/coredev/shared_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/spi.h</name>
@@ -876,9 +876,14 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/i2c_spi_nrf5x_irq.cpp</name>
+			<name>src/coredev/shared_intrf.c</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_spi_nrf5x_irq.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/shared_intrf.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/shared_intrf_nrf5x.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/shared_intrf_nrf5x.c</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>

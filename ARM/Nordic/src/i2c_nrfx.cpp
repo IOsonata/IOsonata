@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/i2c.h"
 #include "iopinctrl.h"
 #include "idelay.h"
-#include "coredev/shared_irq.h"
+#include "coredev/shared_intrf.h"
 
 #ifdef TWIM_PRESENT
 #define NRFX_I2C_MAXDEV				TWIM_COUNT
@@ -833,7 +833,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     }
     if (inten != 0)
     {
-    	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, I2C_IRQHandler);
+    	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, I2C_IRQHandler);
 
     	switch (pCfgData->DevNo)
     	{

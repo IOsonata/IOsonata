@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "coredev/spi.h"
 #include "iopinctrl.h"
-#include "coredev/shared_irq.h"
+#include "coredev/shared_intrf.h"
 #include "storage/flash.h"
 #include "convutil.h"
 

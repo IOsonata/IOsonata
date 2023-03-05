@@ -426,9 +426,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/shared_irq.h</name>
+			<name>include/coredev/shared_intrf.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_irq.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/spi.h</name>
@@ -716,9 +716,14 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/shared_irq_nrf91.cpp</name>
+			<name>src/coredev/shared_intrf.c</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/shared_irq_nrf91.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/shared_intrf_nrf91.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/shared_intrf_nrf91.c</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>

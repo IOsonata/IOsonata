@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "iopinctrl.h"
 #include "coredev/uart.h"
 #include "interrupt.h"
-#include "coredev/shared_irq.h"
+#include "coredev/shared_intrf.h"
 
 // There is no indication in the datasheet about how many hardware fifo
 // this value seems to produce best performance

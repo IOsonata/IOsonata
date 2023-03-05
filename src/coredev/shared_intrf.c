@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	shared_irq.h
+@file	shared_inrtf.cpp
 
-@brief	Shared IRQ handler
+@brief	Shared device interface
 
-This is a generic header for shared irq. Each MCU must implement it's own
-shared interrupt handler.
+This is a generic implementation for shared device interface.
+Each MCU must implement it's own shared interface interrupt handler.
 
 @author	Nguyen Hoan Hoang
 @date	Mar. 12, 2020
@@ -23,7 +23,7 @@ copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+copies or substantial portions of the Softare.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -34,20 +34,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include "coredev/shared_intrf.h"
 
-#ifndef __SHARED_IRQ_H__
-#define __SHARED_IRQ_H__
+void SharedIntrfSetIrqHandler(int DevNo, DevIntrf_t *pDev, IrqHandler_t Handler)
+{
+	if (DevNo < 0 || DevNo >= g_SharedIntrfMaxCnt)
+	{
+		return;
+	}
 
-typedef void (*IRQHANDLER)(int DevNo, DevIntrf_t *pDev);
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-void SetSharedIntHandler(int DevNo, DevIntrf_t * const pDev, IRQHANDLER Handler);
-
-#ifdef __cplusplus
+	g_SharedIntrf[DevNo].pIntrf = pDev;
+	g_SharedIntrf[DevNo].Handler = Handler;
 }
-#endif
-
-#endif // __SHARED_IRQ_H__

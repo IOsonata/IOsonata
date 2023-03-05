@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "coredev/spi.h"
 #include "iopinctrl.h"
-#include "coredev/shared_irq.h"
+#include "coredev/shared_intrf.h"
 
 #include "spi_nrfx.h"
 
@@ -843,7 +843,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
     if (pCfgData->bIntEn && pCfgData->Mode == SPIMODE_SLAVE)
     {
-    	SetSharedIntHandler(pCfgData->DevNo, &pDev->DevIntrf, SPI_IRQHandler);
+    	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, SPI_IRQHandler);
 
     	switch (pCfgData->DevNo)
     	{

@@ -49,8 +49,8 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void POWER_CLOCK_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UART0_IRQHandler(void);
-__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPI0_TWI0_IRQHandler(void);
-__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SPI1_TWI1_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SPI0_TWI0_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SPI1_TWI1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void ADC_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void TIMER0_IRQHandler(void);
@@ -71,9 +71,6 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SWI2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SWI3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SWI4_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SWI5_IRQHandler(void);
-
-//__attribute__((weak)) void SPI_IRQHandler(int DevNo) { while(1);};
-//__attribute__((weak)) void I2C_IRQHandler(int DevNo) { while(1);};
 
 /**
  * This interrupt vector is by default located in FLASH. Though it can not be
@@ -132,35 +129,3 @@ void (*const __Vectors[])(void) =
     0,		/*Reserved */
     0		/*Reserved */
 };
-
-/*
-__attribute__((weak)) void SPI0_TWI0_IRQHandler(void)
-{
-	if (NRF_SPI0->INTENSET)
-	{
-		SPI_IRQHandler(0);
-	}
-
-	if (NRF_TWI0->INTENSET)
-	{
-		I2C_IRQHandler(0);
-	}
-
-	NVIC_ClearPendingIRQ(SPI0_TWI0_IRQn);
-}
-
-__attribute__((weak)) void SPI1_TWI1_IRQHandler(void)
-{
-	if (NRF_SPI1->INTENSET)
-	{
-		SPI_IRQHandler(1);
-	}
-
-	if (NRF_TWI1->INTENSET)
-	{
-		I2C_IRQHandler(1);
-	}
-
-	NVIC_ClearPendingIRQ(SPI1_TWI1_IRQn);
-}
-*/
