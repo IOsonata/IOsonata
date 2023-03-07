@@ -85,7 +85,7 @@ static const IOPinCfg_t s_SpiPins[] = {
 
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
-	.Phy = SPI_PHY,
+	.Phy = SPIPHY_NORMAL,
 	.Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
