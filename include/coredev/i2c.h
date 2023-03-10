@@ -239,6 +239,9 @@ static inline int I2CTxData(I2CDev_t * const pDev, uint8_t *pData, int Datalen) 
 static inline void I2CStopTx(I2CDev_t * const pDev) { DeviceIntrfStopTx(&pDev->DevIntrf); }
 static inline I2CDev_t *I2CGetDevHandle(DevIntrf_t * const pDevIntrf) { return (I2CDev_t *)DeviceIntrfGetHandle(pDevIntrf); }
 
+static inline void I2CSuspend(I2CDev_t * const pDev) { DeviceIntrfSuspend(&pDev->DevIntrf); }
+static inline void I2CResume(I2CDev_t * const pDev) { DeviceIntrfResume(&pDev->DevIntrf); }
+
 /**
  * @brief	Set I2C slave data for read command.
  *
@@ -310,6 +313,13 @@ public:
 	}
 	virtual void StopTx(void) { DeviceIntrfStopTx(&vDevData.DevIntrf); }
 	
+	// Suspend the operation of I2C interface due by triggering clock stretching
+	virtual void Suspend(void) {DeviceIntrfSuspend(&vDevData.DevIntrf); }
+
+	// Resume the operation of I2C interface after clock stretching
+	virtual void Resume(void) {DeviceIntrfResume(&vDevData.DevIntrf); }
+
+
 	/**
 	 * @brief	Set I2C slave data for read command.
 	 *
