@@ -557,6 +557,7 @@ void nRFxI2CSuspend(DevIntrf_t * const pDev)
 #ifdef TWIS_PRESENT
 		dev->pDmaSReg->TASKS_SUSPEND = 1;
 		dev->pDmaSReg->EVENTS_READ = 0;
+		dev->pDmaSReg->EVENTS_RXSTARTED = 0;
 #endif
 	}
 }
@@ -567,6 +568,11 @@ void nRFxI2CResume(DevIntrf_t *const pDev)
 	if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 	{
 #ifdef TWIS_PRESENT
+		dev->pDmaSReg->TASKS_SUSPEND = 0;
+
+		dev->pDmaSReg->TXD.PTR = (uint32_t) dev->pI2cDev->pRRData[dev->pDmaSReg->MATCH];
+		dev->pDmaSReg->TXD.MAXCNT = dev->pI2cDev->RRDataLen[dev->pDmaSReg->MATCH] & 0xFF;
+
 		dev->pDmaSReg->TASKS_PREPARETX = 1;
 		dev->pDmaSReg->TASKS_RESUME = 1;
 
@@ -635,11 +641,14 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
     		dev->pDmaSReg->EVENTS_RXSTARTED = 0;
     		dev->pDmaSReg->EVENTS_READ = 0;
 
-    		dev->pDmaSReg->TXD.PTR = (uint32_t) dev->pI2cDev->pRRData[dev->pDmaSReg->MATCH];
-    		dev->pDmaSReg->TXD.MAXCNT = dev->pI2cDev->RRDataLen[dev->pDmaSReg->MATCH] & 0xFF;
+    		if (dev->pI2cDev->Cfg.bClkStretch == false)
+    		{
+    			dev->pDmaSReg->TXD.PTR = (uint32_t) dev->pI2cDev->pRRData[dev->pDmaSReg->MATCH];
+    			dev->pDmaSReg->TXD.MAXCNT = dev->pI2cDev->RRDataLen[dev->pDmaSReg->MATCH] & 0xFF;
 
-    		dev->pDmaSReg->TASKS_PREPARETX = dev->pI2cDev->Cfg.bClkStretch ? 0 : 1;
-    		dev->pDmaSReg->TASKS_RESUME = dev->pI2cDev->Cfg.bClkStretch ? 0 : 1;
+    			dev->pDmaSReg->TASKS_PREPARETX = 1;
+    			dev->pDmaSReg->TASKS_RESUME = 1;
+    		}
     	}
 
     	if (dev->pDmaSReg->EVENTS_WRITE)
