@@ -272,20 +272,6 @@ struct __device_intrf {
 	void (*StopTx)(DevIntrf_t * const pDevIntrf);
 
 	/**
-	 * @brief	Suspend the current data transaction
-	 *
-	 * @param	pDevIntrf : Pointer to an instance of the Device Interface
-	 */
-	void (*Suspend)(DevIntrf_t * const pDevIntrf);
-
-	/**
-	 * @brief	Resume the current data transaction
-	 *
-	 * @param	pDevIntrf : Pointer to an instance of the Device Interface
-	 */
-	void (*Resume)(DevIntrf_t * const pDevIntrf);
-
-	/**
 	 * @brief	This function perform a reset of interface.  Must provide empty
 	 * function of not used.
 	 *
@@ -552,26 +538,6 @@ static inline int DeviceIntrfTxData(DevIntrf_t * const pDev, uint8_t *pData, int
 static inline void DeviceIntrfStopTx(DevIntrf_t * const pDev) {
     pDev->StopTx(pDev);
 	atomic_flag_clear(&pDev->bBusy);
-}
-
-/**
- * @brief	Suspend data transaction
- *
-  *
- * @param	pDev : Pointer to an instance of the Device Interface
- */
-static inline void DeviceIntrfSuspend(DevIntrf_t * const pDev) {
-    pDev->Suspend(pDev);
-}
-
-/**
- * @brief	Resume data transaction
- *
-  *
- * @param	pDev : Pointer to an instance of the Device Interface
- */
-static inline void DeviceIntrfResume(DevIntrf_t * const pDev) {
-    pDev->Resume(pDev);
 }
 
 /**

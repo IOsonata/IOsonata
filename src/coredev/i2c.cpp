@@ -89,7 +89,7 @@ void I2CBusReset(I2CDev_t * const pDev)
  *
  * @return	None
  */
-void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen) {
+__attribute__((weak)) void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen) {
 	if (SlaveIdx < 0 || SlaveIdx >= I2C_SLAVEMODE_MAX_ADDR || pDev == NULL)
 		return;
 
@@ -110,7 +110,7 @@ void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pDa
  *
  * @return	None
  */
-void I2CSetWriteRqstBuffer(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pBuff, int BuffLen)
+__attribute__((weak)) void I2CSetWriteRqstBuffer(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pBuff, int BuffLen)
 {
 	if (SlaveIdx < 0 || SlaveIdx >= I2C_SLAVEMODE_MAX_ADDR || pDev == NULL)
 		return;
