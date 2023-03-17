@@ -596,10 +596,12 @@ void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pDa
 
     nRFTwiDev_t *nrfdev = (nRFTwiDev_t*)pDev->DevIntrf.pDevData;
 
+#ifdef TWIM_PRESENT
     nrfdev->pDmaSReg->TXD.PTR = (uint32_t)pDev->pRRData[SlaveIdx];
     nrfdev->pDmaSReg->TXD.MAXCNT = pDev->RRDataLen[SlaveIdx] & 0xFF;
     nrfdev->pDmaSReg->TASKS_PREPARETX = 1;
     nrfdev->pDmaSReg->TASKS_RESUME = 1;
+#endif
 }
 
 void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)

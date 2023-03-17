@@ -127,10 +127,17 @@ int main()
 
 	// Configure buttons
 	IOPinCfg(s_Buttons, s_NbButtons);
+#if 0
 	//IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler, NULL);
 	//IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler, NULL);
 	//IOPinEnableInterrupt(BUT3_SENSE_INT, BUT3_INT_PRIO, BUT3_PORT, BUT3_PIN, BUT3_SENSE, But3Handler, NULL);
+	IOPinEnableInterrupt(-1, BUT1_INT_PRIO, BUT1_PORT, (1<<BUT1_PIN) | (1<<BUT2_PIN), BUT_SENSE, But1Handler, NULL);
 
+	while(1)
+	{
+		__WFE();
+	}
+#endif
 
 	int i = 0;
 
@@ -142,10 +149,11 @@ int main()
 			//printf("%d: %x\r\n", i, x);
 			g_bBut1Pressed = true;
 		}
-		IOPinToggle(s_Leds[i].PortNo, s_Leds[i].PinNo);
+		//IOPinToggle(s_Leds[i].PortNo, s_Leds[i].PinNo);
+		IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
 		msDelay(250);
-	//	IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
-	//	msDelay(5000);
+		IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
+		msDelay(250);
 		i = (i + 1) % 3;
 	}
 

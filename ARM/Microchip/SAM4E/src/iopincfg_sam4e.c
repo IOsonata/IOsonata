@@ -243,7 +243,7 @@ void IOPinDisableInterrupt(int IntNo)
  * 			pCtx	: Pointer to context parameter to passe to callback function
  * 					  This context pointer is a private data from application firmware
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
 	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || IntNo != PortNo)
 	{

@@ -270,14 +270,16 @@ void IOPinDisableInterrupt(int IntNo);
  * @param	IntNo	: Interrupt number.
  * @param	IntPrio : Interrupt priority
  * @param	PortNo  : Port number (up to 32 ports)
- * @param	PinNo   : Pin number (up to 32 pins)
+ * @param	PinNo   : Pin number (up to 32 pins). In port interrupt mode, this
+ * 					  parameter contains pins mask.
+ * 					  NOTE: Port interrupt support is MCU dependent
  * @param	Sense   : Sense type of event on the I/O pin
  * @param	pEvtCB	: Pointer to callback function when event occurs
  * @param	pCtx	: Pointer to context data to be pass to the handler function
  *
  * @return	true - success
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx);
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx);
 
 /**
  * @brief	Allocate I/O pin sensing interrupt event

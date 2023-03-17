@@ -41,7 +41,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "idelay.h"
-#include "seep.h"
+#include "storage/seep.h"
 
 #include "board.h"
 

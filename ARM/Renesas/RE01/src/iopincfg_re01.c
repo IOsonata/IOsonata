@@ -391,7 +391,7 @@ void IOPinDisableInterrupt(int IntNo)
  * 			pEvtCB	: Pointer to callback function when event occurs
  * 			pCtx	: Pointer to context data to be pass to the handler function
  */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
 	if (IntNo < 0 || IntNo >= RE01_1500KB_PIN_MAX_INT)// ||
 //		IsValidIOInterrupt(IntNo, PortNo, PinNo) == false)
