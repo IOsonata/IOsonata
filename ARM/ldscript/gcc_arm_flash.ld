@@ -113,10 +113,13 @@ SECTIONS {
  		KEEP(*(SORT(.dtors.*)))
  		KEEP(*crtend.o (.dtors))
 		*(.text*)
-		*(.rodata .rodata.* .rodata1)
 		*(.gnu.linkonce.r.*)
 	} > FLASH
     
+	.rodata : ALIGN(4) 
+	{ 
+		*(.rodata .rodata.* .rodata1)
+	} > FLASH
 
 	.ARM.extab : ALIGN(4)
 	{
