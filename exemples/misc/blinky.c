@@ -164,7 +164,11 @@ int main()
 		msDelay(250);
 		IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
 		msDelay(250);
-		i = (i + 1) % 3;
+		i++;
+		if (i >= s_NbLeds)
+		{
+			i = 0;
+		}
 	}
 
 	PulseTrain(&g_PulseTrainCfg, 0);
