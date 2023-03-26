@@ -50,8 +50,10 @@ SOFTWARE.
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
+#ifdef BUTTON_PINS_MAP
 static const IOPinCfg_t s_Buttons[] = BUTTON_PINS_MAP;
 static const int s_NbButtons = sizeof(s_Buttons) / sizeof(IOPinCfg_t);
+#endif
 
 static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
 static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
@@ -70,19 +72,21 @@ volatile bool g_bBut1Pressed = false;
 volatile bool g_bBut2Pressed = false;
 volatile bool g_bBut3Pressed = false;
 
+#ifdef BUT2_INT
 void But1Handler(int IntNo, void *pCtx)
 {
-	if (IntNo == BUT1_SENSE_INT)
+	if (IntNo == BUT1_INT)
 	{
 		g_bBut1Pressed = true;
 		printf("But 1 Int\r\n");
 	}
 }
+#endif
 
-#ifdef BUT2_SENSE_INT
+#ifdef BUT2_INT
 void But2Handler(int IntNo, void *pCtx)
 {
-	if (IntNo == BUT2_SENSE_INT)
+	if (IntNo == BUT2_INT)
 	{
 		g_bBut2Pressed = true;
 		printf("But 2 Int\r\n");
@@ -90,7 +94,7 @@ void But2Handler(int IntNo, void *pCtx)
 }
 #endif
 
-#ifdef BUT3_SENSE_INT
+#ifdef BUT3_INT
 void But3Handler(int IntNo, void *pCtx)
 {
 	if (IntNo == BUT3_SENSE_INT)
@@ -126,7 +130,10 @@ int main()
 	}
 
 	// Configure buttons
+#ifdef BUTTON_PINS_MAP
 	IOPinCfg(s_Buttons, s_NbButtons);
+#endif
+
 #if 0
 	//IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler, NULL);
 	//IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler, NULL);
@@ -144,11 +151,14 @@ int main()
 	// Loop until button pressed
 	while (g_bBut1Pressed == false)
 	{
+
+#ifdef BUTTON_PINS_MAP
 		if (IOPinRead(s_Buttons[0].PortNo, s_Buttons[0].PinNo) == 0)
 		{
 			//printf("%d: %x\r\n", i, x);
 			g_bBut1Pressed = true;
 		}
+#endif
 		//IOPinToggle(s_Leds[i].PortNo, s_Leds[i].PinNo);
 		IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
 		msDelay(250);
