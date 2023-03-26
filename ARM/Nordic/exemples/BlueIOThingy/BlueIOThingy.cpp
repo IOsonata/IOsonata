@@ -57,11 +57,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/bt_app.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
-#include "blueio_board.h"
 #include "coredev/uart.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
-#include "custom_board.h"
+//#include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "sensors/tph_bme280.h"
@@ -70,7 +69,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/agm_mpu9250.h"
 #include "sensors/accel_adxl362.h"
 #include "coredev/timer.h"
-#include "board.h"
 #include "idelay.h"
 #include "storage/seep.h"
 #include "storage/diskio_flash.h"
@@ -78,6 +76,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "BlueIOThingy.h"
 #include "BlueIOMPU9250.h"
+
+#include "board.h"
 
 #define DEVICE_NAME                     "BlueIOThingy"                            /**< Name of device. Will be included in the advertising data. */
 
@@ -179,14 +179,23 @@ const BtAppCfg_t s_BleAppCfg = {
 										// slow interval on adv timeout and advertise until connected
 	.ConnIntervalMin = MIN_CONN_INTERVAL,
 	.ConnIntervalMax = MAX_CONN_INTERVAL,
-	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
-	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
-	.ConnLedActLevel = 0,
+	.ConnLedPort = BLUEIOTHINGY_CONNECT_LED_PORT,// Led port nuber
+	.ConnLedPin = BLUEIOTHINGY_CONNECT_LED_PIN,// Led pin number
+	.ConnLedActLevel = BLUEIOTHINGY_CONNECT_LED_ACTIVE,
 	.TxPower = 0,						// Tx power
 	.SDEvtHandler = NULL,				// RTOS Softdevice handler
 	.MaxMtu = 53,
 };
 
+#ifdef BUTTON_PINS_MAP
+static const IOPinCfg_t s_Buttons[] = BUTTON_PINS_MAP;
+static const int s_NbButtons = sizeof(s_Buttons) / sizeof(IOPinCfg_t);
+#endif
+
+static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
+static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
+
+#if 0
 static const IOPinCfg_t s_GpioPins[] = {
     {BLUEIO_BUT1_PORT, BLUEIO_BUT1_PIN, BLUEIO_BUT1_PINOP,
      IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
@@ -207,8 +216,10 @@ static const IOPinCfg_t s_GpioPins[] = {
 };
 
 static const int s_NbGpioPins = sizeof(s_GpioPins) / sizeof(IOPinCfg_t);
+#endif
 
-static const IOPinCfg_t s_SpiPins[] = {
+static const IOPinCfg_t s_SpiPins[] = BLUEIOTHINGY_SPI2_PINS_MAP;
+/*{
     {SPI2_SCK_PORT, SPI2_SCK_PIN, SPI2_SCK_PINOP,
 		IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
     {SPI2_MISO_PORT, SPI2_MISO_PIN, SPI2_MISO_PINOP,
@@ -219,10 +230,10 @@ static const IOPinCfg_t s_SpiPins[] = {
 		IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{BLUEIO_TAG_EVIM_FLASH_CS_PORT, BLUEIO_TAG_EVIM_FLASH_CS_PIN, BLUEIO_TAG_EVIM_FLASH_CS_PINOP,
 		IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// CS
-};
+};*/
 
 static const SPICFG s_SpiCfg = {
-    .DevNo = SPI2_DEVNO,
+    .DevNo = BLUEIOTHINGY_SPI2_DEVNO,
     .Phy = SPIPHY_NORMAL,
 	.Mode = SPIMODE_MASTER,
     .pIOPinMap = s_SpiPins,
@@ -245,7 +256,8 @@ SPI g_Spi;
 //DeviceIntrf *g_pIntrf = &g_Spi;
 
 // Configure I2C interface
-static const IOPinCfg_t s_I2cPins[] {
+static const IOPinCfg_t s_I2cPins[] = BLUEIOTHINGY_I2C0_PINS_MAP;
+/*{
 #if defined(TPH_BME280) || defined(TPH_BME680)
 		{I2C0_SDA_PORT, I2C0_SDA_PIN, I2C0_SDA_PINOP, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL},
 		{I2C0_SCL_PORT, I2C0_SCL_PIN, I2C0_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -255,9 +267,10 @@ static const IOPinCfg_t s_I2cPins[] {
 		{0, 3, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 #endif
 };
+*/
 
 static const I2CCfg_t s_I2cCfg = {
-	.DevNo = 0,			// I2C device number
+	.DevNo = BLUEIOTHINGY_I2C0_DEVNO,			// I2C device number
 	.Type = I2CTYPE_STANDARD,
 	.Mode = I2CMODE_MASTER,
 	.pIOPinMap = s_I2cPins,
@@ -572,13 +585,20 @@ void HardwareInit()
 	// Set this only if nRF is power at 2V or more
 	NRF_POWER->DCDCEN = POWER_DCDCEN_DCDCEN_Enabled << POWER_DCDCEN_DCDCEN_Pos;
 
-	IOPinCfg(s_GpioPins, s_NbGpioPins);
+	// Configure Leds
+	IOPinCfg(s_Leds, s_NbLeds);
+
+//	IOPinCfg(s_GpioPins, s_NbGpioPins);
+
+#ifdef BUTTON_PINS_MAP
+	IOPinCfg(s_Buttons, s_NbButtons);
+#endif
 
 	// Turn off all LEDs
-	IOPinSet(BLUEIO_LED1_PORT, BLUEIO_LED1_PIN);
-	IOPinClear(BLUEIO_TAG_EVIM_LED2R_PORT, BLUEIO_TAG_EVIM_LED2R_PIN);
-	IOPinClear(BLUEIO_TAG_EVIM_LED2G_PORT, BLUEIO_TAG_EVIM_LED2G_PIN);
-	IOPinClear(BLUEIO_TAG_EVIM_LED2B_PORT, BLUEIO_TAG_EVIM_LED2B_PIN);
+	IOPinSet(BLUEIOTHINGY_CONNECT_LED_PORT, BLUEIOTHINGY_CONNECT_LED_PIN);
+	IOPinClear(BLUEIOTHINGY_LEDR_PORT, BLUEIOTHINGY_LEDR_PIN);
+	IOPinClear(BLUEIOTHINGY_LEDG_PORT, BLUEIOTHINGY_LEDG_PIN);
+	IOPinClear(BLUEIOTHINGY_LEDB_PORT, BLUEIOTHINGY_LEDB_PIN);
 
 	//IOPinSet(BLUEIO_TAG_EVIM_LED2_RED_PORT, BLUEIO_TAG_EVIM_LED2_RED_PIN);
 	//IOPinSet(BLUEIO_TAG_EVIM_LED2_GREEN_PORT, BLUEIO_TAG_EVIM_LED2_GREEN_PIN);

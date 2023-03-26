@@ -117,8 +117,8 @@ typedef enum __LED_Type {
 /// LED logic level.
 /// This defines only for gpio type
 typedef enum __LED_Logic_level {
-	LED_LOGIC_LOW = 0,		//!< LED_LOGIC_LOW
-	LED_LOGIC_HIGH = 1		//!< LED_LOGIC_HIGH
+	LED_LOGIC_LOW = 0,		//!< LED active low
+	LED_LOGIC_HIGH = 1		//!< LED active high
 } LED_LOGIC;
 
 #pragma pack(push, 4)
@@ -132,6 +132,8 @@ typedef struct __LED_Dev {
 } LedDev_t;
 
 #pragma pack(pop)
+
+#ifdef __cplusplus
 
 /// LED device abstract base class
 ///
@@ -312,6 +314,8 @@ private:
 	Pwm *vpPwm;
 	PwmChanCfg_t vPwmChanCfg[LEDPWM_MAX];
 };
+
+#endif	// __cplusplus
 
 /** @} end group MiscDev */
 

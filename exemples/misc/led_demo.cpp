@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include "pwm.h"
 #include "idelay.h"
-#include "blueio_board.h"
+//#include "blueio_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "miscdev/led.h"
@@ -66,12 +66,14 @@ static const PwmChanCfg_t s_PwmChanCfg[] = {
 		.Port = LED3_PORT,
 		.Pin = LED3_PIN,
 	},
+#ifdef LED4_PORT
 	{
 		.Chan = 2,
 		.Pol = PWM_POL_HIGH,
 		.Port = LED4_PORT,
 		.Pin = LED4_PIN,
 	},
+#endif
 };
 
 const int s_NbPwmChan = sizeof(s_PwmChanCfg) / sizeof(PwmChanCfg_t);
@@ -81,7 +83,9 @@ Pwm g_Pwm;
 Led g_Led1;
 Led g_Led2;
 Led g_Led3;
+#ifdef LED4_PORT
 Led g_Led4;
+#endif
 LedPwm g_Led2Pwm;
 
 //
@@ -101,16 +105,12 @@ int main()
 {
 	g_Pwm.Init(s_PwmCfg);
 
-	g_Led1.Init(LED1_PORT, LED1_PIN, LED_LOGIC_LOW);
+	g_Led1.Init(LED1_PORT, LED1_PIN, LED1_ACTIVE);
 
-#ifdef BLUEIO_TAG
-	g_Led2.Init(LED2_PORT, LED2_PIN, LED_LOGIC_HIGH);
-	g_Led3.Init(LED3_PORT, LED3_PIN, LED_LOGIC_HIGH);
-	g_Led4.Init(LED4_PORT, LED4_PIN, LED_LOGIC_HIGH);
-#else
-	g_Led2.Init(LED2_PORT, LED2_PIN, LED_LOGIC_LOW);
-	g_Led3.Init(LED3_PORT, LED3_PIN, LED_LOGIC_LOW);
-	g_Led4.Init(LED4_PORT, LED4_PIN, LED_LOGIC_LOW);
+	g_Led2.Init(LED2_PORT, LED2_PIN, LED2_ACTIVE);
+	g_Led3.Init(LED3_PORT, LED3_PIN, LED3_ACTIVE);
+#ifdef LED4_PORT
+	g_Led4.Init(LED4_PORT, LED4_PIN, LED4_ACTIVE);
 #endif
 
 	//while (1)
@@ -123,9 +123,11 @@ int main()
 		g_Led3.Toggle();
 		msDelay(1000);
 		g_Led3.Off();
+#ifdef LED4_PORT
 		g_Led4.Toggle();
 		msDelay(1000);
 		g_Led4.Off();
+#endif
 	}
 
 	g_Led2Pwm.Init(&g_Pwm, (PwmChanCfg_t*)s_PwmChanCfg, s_NbPwmChan);
