@@ -336,7 +336,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		gpiotereg->EVENTS_PORT = 0;
 		gpiotereg->INTENSET = GPIOTE_INTENSET_PORT_Msk;
 
-		for (int i = 0; i < 31; i++)
+		for (int i = 0; i <= 31; i++)
 		{
 			if ((1<<i) & PinNo)
 			{
