@@ -268,7 +268,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 void BtAppAdvTimeoutHandler();
 void BtAppAdvStart();
 void BleAppAdvStop();
-void BleAppDisconnect();
+void BtAppDisconnect();
 
 //bool BleAppScanInit(BleAppScanCfg_t *pCfg);
 bool BtAppScanInit(BtGapScanCfg_t *pCfg);
