@@ -139,6 +139,9 @@ SOFTWARE.
 #define BT_GAP_SCAN_WINDOW								100	//!< Determines scan window in millisecond.
 #define BT_GAP_SCAN_TIMEOUT								0	//!< Timeout when scanning. 0x0000 disables timeout.
 
+#define BT_GAP_SCAN_BUFFER_SIZE_DEFAULT					(256*4)
+
+
 typedef enum __Bt_Gap_SecType {
 	BTGAP_SECTYPE_NONE = BT_GAP_SECTYPE_NONE,
 	BTGAP_SECTYPE_STATICKEY_NO_MITM = BT_GAP_SECTYPE_STATICKEY_NO_MITM,
