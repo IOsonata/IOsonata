@@ -495,14 +495,14 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	reg->TASKS_STOP = 1;
 	reg->TASKS_CLEAR = 1;
 
+	// Only support timer mode, 32-bit counter
+	reg->MODE = TIMER_MODE_MODE_Timer;
+	reg->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
+
 	// Init clock source for TIMERs
 	if (!(NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk))
 	{
 		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
-
-		// Only support timer mode, 32bits counter
-		reg->MODE = TIMER_MODE_MODE_Timer;
-		reg->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
 
 		// Clock source not available.  Only 64MHz XTAL
 		s_nRfxHFClockSem++;
