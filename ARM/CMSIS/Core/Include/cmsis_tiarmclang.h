@@ -1,11 +1,11 @@
 /**************************************************************************//**
- * @file     cmsis_armclang.h
- * @brief    CMSIS compiler armclang (Arm Compiler 6) header file
- * @version  V5.5.0
- * @date     20. January 2023
+ * @file     cmsis_tiarmclang.h
+ * @brief    CMSIS compiler tiarmclang header file
+ * @version  V1.0.0
+ * @date     04. April 2023
  ******************************************************************************/
 /*
- * Copyright (c) 2009-2023 Arm Limited. All rights reserved.
+ * Copyright (c) 2023 Arm Limited. All rights reserved.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -24,8 +24,8 @@
 
 /*lint -esym(9058, IRQn)*/ /* disable MISRA 2012 Rule 2.4 for IRQn */
 
-#ifndef __CMSIS_ARMCLANG_H
-#define __CMSIS_ARMCLANG_H
+#ifndef __CMSIS_TIARMCLANG_H
+#define __CMSIS_TIARMCLANG_H
 
 #pragma clang system_header   /* treat file as system include file */
 
@@ -120,15 +120,15 @@
 /* #########################  Startup and Lowlevel Init  ######################## */
 
 #ifndef __PROGRAM_START
-#define __PROGRAM_START           __main
+#define __PROGRAM_START           _c_int00
 #endif
 
 #ifndef __INITIAL_SP
-#define __INITIAL_SP              Image$$ARM_LIB_STACK$$ZI$$Limit
+#define __INITIAL_SP              __STACK_END
 #endif
 
 #ifndef __STACK_LIMIT
-#define __STACK_LIMIT             Image$$ARM_LIB_STACK$$ZI$$Base
+#define __STACK_LIMIT             __STACK_SIZE
 #endif
 
 #ifndef __VECTOR_TABLE
@@ -136,7 +136,7 @@
 #endif
 
 #ifndef __VECTOR_TABLE_ATTRIBUTE
-#define __VECTOR_TABLE_ATTRIBUTE  __attribute__((used, section("RESET")))
+#define __VECTOR_TABLE_ATTRIBUTE  __attribute__((used, section(".intvecs")))
 #endif
 
 #if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
@@ -1507,4 +1507,4 @@ __STATIC_FORCEINLINE int32_t __SMMLA (int32_t op1, int32_t op2, int32_t op3)
 /** @} end of group CMSIS_SIMD_intrinsics */
 
 
-#endif /* __CMSIS_ARMCLANG_H */
+#endif /* __CMSIS_TIARMCLANG_H */
