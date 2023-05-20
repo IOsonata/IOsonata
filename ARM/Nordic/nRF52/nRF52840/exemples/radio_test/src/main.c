@@ -56,6 +56,7 @@
 #include "nrf.h"
 #include "radio_test.h"
 #include "app_uart.h"
+#include "app_timer.h"
 #include "app_error.h"
 #include "nordic_common.h"
 #include "nrf_drv_clock.h"

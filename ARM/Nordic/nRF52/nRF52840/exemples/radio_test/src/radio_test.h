@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2012-2018 - 2019, Nordic Semiconductor ASA
+ * Copyright (c) 2012-2020 - 2021, Nordic Semiconductor ASA
  *
  * All rights reserved.
  *
@@ -42,10 +42,18 @@
 
 #include <stdint.h>
 
+#include "nrf_radio.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/** Indicates devices that support BLE LR and 802.15.4 radio modes. */
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA)
+    #define USE_MORE_RADIO_MODES 1
+#else
+    #define USE_MORE_RADIO_MODES 0
+#endif
 
 #define RADIO_MAX_PAYLOAD_LEN     256   /**< Maximum radio RX or TX payload. */
 #define IEEE_MAX_PAYLOAD_LEN      127   /**< IEEE 802.15.4 maximum payload length. */
@@ -61,87 +69,98 @@ typedef enum
     TRANSMIT_PATTERN_11001100, /**< Pattern 11001100(CC). */
 } transmit_pattern_t;
 
+/**@brief Radio test mode. */
+typedef enum  {
+    UNMODULATED_TX,          /**< TX carrier. */
+    MODULATED_TX,            /**< Modulated TX carrier. */
+    RX,                      /**< RX carrier. */
+    TX_SWEEP,                /**< TX carrier sweep. */
+    RX_SWEEP,                /**< RX carrier sweep. */
+    MODULATED_TX_DUTY_CYCLE, /**< Duty-cycled modulated TX carrier. */
+} radio_test_mode_t;
+
+/**@brief Radio test configuration. */
+typedef struct {
+    radio_test_mode_t type; /**< Radio test type. */
+    nrf_radio_mode_t mode;  /**< Radio mode. Data rate and modulation. */
+
+    union {
+        struct {
+            nrf_radio_txpower_t txpower; /**< Radio output power. */
+            uint8_t channel;             /**< Radio channel. */
+        } unmodulated_tx;                /**< TX carrier Parameters. */
+
+        struct {
+            nrf_radio_txpower_t txpower; /**< Radio output power. */
+            transmit_pattern_t pattern;  /**< Radio transmission pattern. */
+            uint8_t channel;             /**< Radio channel. */
+            uint32_t packets_num;        /**< Number of pacets to transmit. Set to zero for continuous TX. */
+            void (*cb)(void);            /**< Callback to indicate that TX is finished. */
+        } modulated_tx;                  /**< Modulated TX carrier Parameters. */
+
+        struct {
+            transmit_pattern_t pattern; /**< Radio transmission pattern. */
+            uint8_t channel;            /**< Radio channel. */
+        } rx;                           /**< RX carrier Parameters. */
+
+        struct {
+                nrf_radio_txpower_t txpower; /**< Radio output power. */
+                uint8_t channel_start;       /**< Radio start channel (frequency). */
+                uint8_t channel_end;         /**< Radio end channel (frequency). */
+                uint32_t delay_ms;           /**< Delay time in milliseconds. */
+        } tx_sweep;                          /**< TX carrier sweep Parameters. */
+
+        struct {
+                uint8_t channel_start; /**< Radio start channel (frequency). */
+                uint8_t channel_end;   /**< Radio end channel (frequency). */
+                uint32_t delay_ms;     /**< Delay time in milliseconds. */
+        } rx_sweep;                    /**< RX carrier sweep Parameters. */
+
+        struct {
+            nrf_radio_txpower_t txpower; /**< Radio output power. */
+            transmit_pattern_t pattern;  /**< Radio transmission pattern. */
+            uint8_t channel;             /**< Radio channel. */
+            uint32_t duty_cycle;         /**< Duty cycle. */
+        } modulated_tx_duty_cycle;       /**< Duty-cycled modulated TX carrier Parameters. */
+    } params; /**< Test Parameters. */
+
+} radio_test_config_t;
+
+/**@brief Radio RX statistics. */
+typedef struct {
+        struct {
+                uint8_t *buf; /**< Content of the last packet. */
+                size_t len;   /**< Length of the last packet. */
+        } last_packet;        /**< The last packet descriptor. */
+
+        uint32_t packet_cnt; /**< Number of received packets with valid CRC. */
+} radio_rx_stats_t;
 
 /**
- * @brief Function for turning on the TX carrier test mode.
+ * @brief Function for initializing the Radio Test module.
  *
- * @param[in] tx_power Radio output power.
- * @param[in] mode     Radio mode.
- * @param[in] channel  Radio channel(frequency).
+ * @param[in] p_config  Radio test configuration.
  */
-void radio_unmodulated_tx_carrier(uint8_t tx_power, uint8_t mode, uint8_t channel);
-
+void radio_test_init(radio_test_config_t * p_config);
 
 /**
- * @brief Function for starting the modulated TX carrier by repeatedly sending a packet with a random address and
- * a random payload.
+ * @brief Function for starting radio test.
  *
- * @param[in] tx_power Radio output power.
- * @param[in] mode     Radio mode. Data rate and modulation.
- * @param[in] channel  Radio channel (frequency).
+ * @param[in] p_config  Radio test configuration.
  */
-void radio_modulated_tx_carrier(uint8_t tx_power, uint8_t mode, uint8_t channel);
-
+void radio_test_start(radio_test_config_t * p_config);
 
 /**
- * @brief Function for turning on the RX receive mode.
+ * @brief Function for stopping ongoing test (Radio and Timer operations).
+ */
+void radio_test_cancel(void);
+
+/**
+ * @brief Function for get RX statistics.
  *
- * @param[in] mode    Radio mode. Data rate and modulation.
- * @param[in] channel Radio channel (frequency).
+ * @param[out] p_rx_stats RX statistics.
  */
-void radio_rx(uint8_t mode, uint8_t channel);
-
-
-/**
- * @brief Function for turning on the TX carrier sweep. This test uses Timer 0 to restart the TX carrier at different channels.
- *
- * @param[in] tx_power      Radio output power.
- * @param[in] mode          Radio mode. Data rate and modulation.
- * @param[in] channel_start Radio start channel (frequency).
- * @param[in] channel_end   Radio end channel (frequency).
- * @param[in] delay_ms      Delay time in milliseconds.
- */
-void radio_tx_sweep_start(uint8_t tx_power,
-                          uint8_t mode,
-                          uint8_t channel_start,
-                          uint8_t channel_end,
-                          uint8_t delay_ms);
-
-
-/**
- * @brief Function for turning on the RX carrier sweep. This test uses Timer 0 to restart the RX carrier at different channels.
- *
- * @param[in] mode          Radio mode. Data rate and modulation.
- * @param[in] channel_start Radio start channel (frequency).
- * @param[in] channel_end   Radio end channel (frequency).
- * @param[in] delay_ms      Delay time in milliseconds.
- */
-void radio_rx_sweep_start(uint8_t mode,
-                          uint8_t channel_start,
-                          uint8_t channel_end,
-                          uint8_t delay_ms);
-
-
-/**
- * @brief Function for stopping Timer 0.
- */
-void radio_sweep_end(void);
-
-
-/**
- * @brief Function for starting the duty-cycled modulated TX carrier by repeatedly sending a packet with a random address and
- * a random payload.
- *
- * @param[in] tx_power   Radio output power.
- * @param[in] mode       Radio mode. Data rate and modulation.
- * @param[in] channel    Radio start channel (frequency).
- * @param[in] duty_cycle Duty cycle.
- */
-void radio_modulated_tx_carrier_duty_cycle(uint8_t tx_power,
-                                           uint8_t mode,
-                                           uint8_t channel,
-                                           uint8_t duty_cycle);
-
+void radio_rx_stats_get(radio_rx_stats_t * p_rx_stats);
 
 /**
  * @brief Function for toggling the DC/DC converter state.

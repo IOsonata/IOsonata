@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2017 - 2019, Nordic Semiconductor ASA
+ * Copyright (c) 2017 - 2021, Nordic Semiconductor ASA
  *
  * All rights reserved.
  *
@@ -46,44 +46,53 @@
 #ifdef USE_APP_CONFIG
 #include "app_config.h"
 #endif
-// <h> nRF_Core 
+// <h> Application 
 
 //==========================================================
-// <e> NRF_MPU_LIB_ENABLED - nrf_mpu_lib - Module for MPU
-//==========================================================
-#ifndef NRF_MPU_LIB_ENABLED
-#define NRF_MPU_LIB_ENABLED 1
-#endif
-// <q> NRF_MPU_LIB_CLI_CMDS  - Enable CLI commands specific to the module.
- 
-
-#ifndef NRF_MPU_LIB_CLI_CMDS
-#define NRF_MPU_LIB_CLI_CMDS 0
+// <o> CLI_EXAMPLE_LOG_QUEUE_SIZE - CLI log queue size 
+#ifndef CLI_EXAMPLE_LOG_QUEUE_SIZE
+#define CLI_EXAMPLE_LOG_QUEUE_SIZE 20
 #endif
 
-// </e>
-
-// <e> NRF_STACK_GUARD_ENABLED - nrf_stack_guard - Stack guard
-//==========================================================
-#ifndef NRF_STACK_GUARD_ENABLED
-#define NRF_STACK_GUARD_ENABLED 1
-#endif
-// <o> NRF_STACK_GUARD_CONFIG_SIZE  - Size of the stack guard.
- 
-// <5=> 32 bytes 
-// <6=> 64 bytes 
-// <7=> 128 bytes 
-// <8=> 256 bytes 
-// <9=> 512 bytes 
-// <10=> 1024 bytes 
-// <11=> 2048 bytes 
-// <12=> 4096 bytes 
-
-#ifndef NRF_STACK_GUARD_CONFIG_SIZE
-#define NRF_STACK_GUARD_CONFIG_SIZE 7
+// <o> NRF21540_DO_NOT_USE_NATIVE_RADIO_IRQ_HANDLER  
+#ifndef NRF21540_DO_NOT_USE_NATIVE_RADIO_IRQ_HANDLER
+#define NRF21540_DO_NOT_USE_NATIVE_RADIO_IRQ_HANDLER 1
 #endif
 
-// </e>
+// <o> NRF21540_EGU_NO  
+#ifndef NRF21540_EGU_NO
+#define NRF21540_EGU_NO 0
+#endif
+
+// <o> NRF21540_PDN_PPI_CHANNEL_NO  
+#ifndef NRF21540_PDN_PPI_CHANNEL_NO
+#define NRF21540_PDN_PPI_CHANNEL_NO 3
+#endif
+
+// <o> NRF21540_RADIO_DISABLED_EGU_CHANNEL_NO  
+#ifndef NRF21540_RADIO_DISABLED_EGU_CHANNEL_NO
+#define NRF21540_RADIO_DISABLED_EGU_CHANNEL_NO 1
+#endif
+
+// <o> NRF21540_RADIO_DISABLED_TO_EGU_PPI_CHANNEL_NO  
+#ifndef NRF21540_RADIO_DISABLED_TO_EGU_PPI_CHANNEL_NO
+#define NRF21540_RADIO_DISABLED_TO_EGU_PPI_CHANNEL_NO 6
+#endif
+
+// <o> NRF21540_RADIO_READY_EGU_CHANNEL_NO  
+#ifndef NRF21540_RADIO_READY_EGU_CHANNEL_NO
+#define NRF21540_RADIO_READY_EGU_CHANNEL_NO 0
+#endif
+
+// <o> NRF21540_RADIO_READY_TO_EGU_PPI_CHANNEL_NO  
+#ifndef NRF21540_RADIO_READY_TO_EGU_PPI_CHANNEL_NO
+#define NRF21540_RADIO_READY_TO_EGU_PPI_CHANNEL_NO 5
+#endif
+
+// <o> NRF21540_USER_PPI_CHANNEL_NO  
+#ifndef NRF21540_USER_PPI_CHANNEL_NO
+#define NRF21540_USER_PPI_CHANNEL_NO 4
+#endif
 
 // </h> 
 //==========================================================
@@ -91,35 +100,6 @@
 // <h> nRF_Drivers 
 
 //==========================================================
-// <e> GPIOTE_ENABLED - nrf_drv_gpiote - GPIOTE peripheral driver - legacy layer
-//==========================================================
-#ifndef GPIOTE_ENABLED
-#define GPIOTE_ENABLED 1
-#endif
-// <o> GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS - Number of lower power input pins 
-#ifndef GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS
-#define GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS 4
-#endif
-
-// <o> GPIOTE_CONFIG_IRQ_PRIORITY  - Interrupt priority
- 
-
-// <i> Priorities 0,2 (nRF51) and 0,1,4,5 (nRF52) are reserved for SoftDevice
-// <0=> 0 (highest) 
-// <1=> 1 
-// <2=> 2 
-// <3=> 3 
-// <4=> 4 
-// <5=> 5 
-// <6=> 6 
-// <7=> 7 
-
-#ifndef GPIOTE_CONFIG_IRQ_PRIORITY
-#define GPIOTE_CONFIG_IRQ_PRIORITY 6
-#endif
-
-// </e>
-
 // <e> NRFX_CLOCK_ENABLED - nrfx_clock - CLOCK peripheral driver
 //==========================================================
 #ifndef NRFX_CLOCK_ENABLED
@@ -205,106 +185,28 @@
 
 // </e>
 
-// <e> NRFX_GPIOTE_ENABLED - nrfx_gpiote - GPIOTE peripheral driver
-//==========================================================
-#ifndef NRFX_GPIOTE_ENABLED
-#define NRFX_GPIOTE_ENABLED 1
-#endif
-// <o> NRFX_GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS - Number of lower power input pins 
-#ifndef NRFX_GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS
-#define NRFX_GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS 1
-#endif
-
-// <o> NRFX_GPIOTE_CONFIG_IRQ_PRIORITY  - Interrupt priority
- 
-// <0=> 0 (highest) 
-// <1=> 1 
-// <2=> 2 
-// <3=> 3 
-// <4=> 4 
-// <5=> 5 
-// <6=> 6 
-// <7=> 7 
-
-#ifndef NRFX_GPIOTE_CONFIG_IRQ_PRIORITY
-#define NRFX_GPIOTE_CONFIG_IRQ_PRIORITY 6
-#endif
-
-// <e> NRFX_GPIOTE_CONFIG_LOG_ENABLED - Enables logging in the module.
-//==========================================================
-#ifndef NRFX_GPIOTE_CONFIG_LOG_ENABLED
-#define NRFX_GPIOTE_CONFIG_LOG_ENABLED 0
-#endif
-// <o> NRFX_GPIOTE_CONFIG_LOG_LEVEL  - Default Severity level
- 
-// <0=> Off 
-// <1=> Error 
-// <2=> Warning 
-// <3=> Info 
-// <4=> Debug 
-
-#ifndef NRFX_GPIOTE_CONFIG_LOG_LEVEL
-#define NRFX_GPIOTE_CONFIG_LOG_LEVEL 3
-#endif
-
-// <o> NRFX_GPIOTE_CONFIG_INFO_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef NRFX_GPIOTE_CONFIG_INFO_COLOR
-#define NRFX_GPIOTE_CONFIG_INFO_COLOR 0
-#endif
-
-// <o> NRFX_GPIOTE_CONFIG_DEBUG_COLOR  - ANSI escape code prefix.
- 
-// <0=> Default 
-// <1=> Black 
-// <2=> Red 
-// <3=> Green 
-// <4=> Yellow 
-// <5=> Blue 
-// <6=> Magenta 
-// <7=> Cyan 
-// <8=> White 
-
-#ifndef NRFX_GPIOTE_CONFIG_DEBUG_COLOR
-#define NRFX_GPIOTE_CONFIG_DEBUG_COLOR 0
-#endif
-
-// </e>
-
-// </e>
-
 // <e> NRFX_POWER_ENABLED - nrfx_power - POWER peripheral driver
 //==========================================================
 #ifndef NRFX_POWER_ENABLED
 #define NRFX_POWER_ENABLED 1
 #endif
 // <o> NRFX_POWER_CONFIG_IRQ_PRIORITY  - Interrupt priority
- 
-// <0=> 0 (highest) 
-// <1=> 1 
-// <2=> 2 
-// <3=> 3 
-// <4=> 4 
-// <5=> 5 
-// <6=> 6 
-// <7=> 7 
+
+// <0=> 0 (highest)
+// <1=> 1
+// <2=> 2
+// <3=> 3
+// <4=> 4
+// <5=> 5
+// <6=> 6
+// <7=> 7
 
 #ifndef NRFX_POWER_CONFIG_IRQ_PRIORITY
 #define NRFX_POWER_CONFIG_IRQ_PRIORITY 6
 #endif
 
 // <q> NRFX_POWER_CONFIG_DEFAULT_DCDCEN  - The default configuration of main DCDC regulator
- 
+
 
 // <i> This settings means only that components for DCDC regulator are installed and it can be enabled.
 
@@ -313,7 +215,7 @@
 #endif
 
 // <q> NRFX_POWER_CONFIG_DEFAULT_DCDCENHV  - The default configuration of High Voltage DCDC regulator
- 
+
 
 // <i> This settings means only that components for DCDC regulator are installed and it can be enabled.
 
@@ -416,12 +318,150 @@
 
 // </e>
 
-// <q> NRFX_SYSTICK_ENABLED  - nrfx_systick - ARM(R) SysTick driver
+// <e> NRFX_TIMER_ENABLED - nrfx_timer - TIMER periperal driver
+//==========================================================
+#ifndef NRFX_TIMER_ENABLED
+#define NRFX_TIMER_ENABLED 1
+#endif
+// <q> NRFX_TIMER0_ENABLED  - Enable TIMER0 instance
  
 
-#ifndef NRFX_SYSTICK_ENABLED
-#define NRFX_SYSTICK_ENABLED 1
+#ifndef NRFX_TIMER0_ENABLED
+#define NRFX_TIMER0_ENABLED 1
 #endif
+
+// <q> NRFX_TIMER1_ENABLED  - Enable TIMER1 instance
+ 
+
+#ifndef NRFX_TIMER1_ENABLED
+#define NRFX_TIMER1_ENABLED 0
+#endif
+
+// <q> NRFX_TIMER2_ENABLED  - Enable TIMER2 instance
+ 
+
+#ifndef NRFX_TIMER2_ENABLED
+#define NRFX_TIMER2_ENABLED 0
+#endif
+
+// <q> NRFX_TIMER3_ENABLED  - Enable TIMER3 instance
+ 
+
+#ifndef NRFX_TIMER3_ENABLED
+#define NRFX_TIMER3_ENABLED 0
+#endif
+
+// <q> NRFX_TIMER4_ENABLED  - Enable TIMER4 instance
+ 
+
+#ifndef NRFX_TIMER4_ENABLED
+#define NRFX_TIMER4_ENABLED 0
+#endif
+
+// <o> NRFX_TIMER_DEFAULT_CONFIG_FREQUENCY  - Timer frequency if in Timer mode
+ 
+// <0=> 16 MHz 
+// <1=> 8 MHz 
+// <2=> 4 MHz 
+// <3=> 2 MHz 
+// <4=> 1 MHz 
+// <5=> 500 kHz 
+// <6=> 250 kHz 
+// <7=> 125 kHz 
+// <8=> 62.5 kHz 
+// <9=> 31.25 kHz 
+
+#ifndef NRFX_TIMER_DEFAULT_CONFIG_FREQUENCY
+#define NRFX_TIMER_DEFAULT_CONFIG_FREQUENCY 0
+#endif
+
+// <o> NRFX_TIMER_DEFAULT_CONFIG_MODE  - Timer mode or operation
+ 
+// <0=> Timer 
+// <1=> Counter 
+
+#ifndef NRFX_TIMER_DEFAULT_CONFIG_MODE
+#define NRFX_TIMER_DEFAULT_CONFIG_MODE 0
+#endif
+
+// <o> NRFX_TIMER_DEFAULT_CONFIG_BIT_WIDTH  - Timer counter bit width
+ 
+// <0=> 16 bit 
+// <1=> 8 bit 
+// <2=> 24 bit 
+// <3=> 32 bit 
+
+#ifndef NRFX_TIMER_DEFAULT_CONFIG_BIT_WIDTH
+#define NRFX_TIMER_DEFAULT_CONFIG_BIT_WIDTH 0
+#endif
+
+// <o> NRFX_TIMER_DEFAULT_CONFIG_IRQ_PRIORITY  - Interrupt priority
+ 
+// <0=> 0 (highest) 
+// <1=> 1 
+// <2=> 2 
+// <3=> 3 
+// <4=> 4 
+// <5=> 5 
+// <6=> 6 
+// <7=> 7 
+
+#ifndef NRFX_TIMER_DEFAULT_CONFIG_IRQ_PRIORITY
+#define NRFX_TIMER_DEFAULT_CONFIG_IRQ_PRIORITY 6
+#endif
+
+// <e> NRFX_TIMER_CONFIG_LOG_ENABLED - Enables logging in the module.
+//==========================================================
+#ifndef NRFX_TIMER_CONFIG_LOG_ENABLED
+#define NRFX_TIMER_CONFIG_LOG_ENABLED 0
+#endif
+// <o> NRFX_TIMER_CONFIG_LOG_LEVEL  - Default Severity level
+ 
+// <0=> Off 
+// <1=> Error 
+// <2=> Warning 
+// <3=> Info 
+// <4=> Debug 
+
+#ifndef NRFX_TIMER_CONFIG_LOG_LEVEL
+#define NRFX_TIMER_CONFIG_LOG_LEVEL 3
+#endif
+
+// <o> NRFX_TIMER_CONFIG_INFO_COLOR  - ANSI escape code prefix.
+ 
+// <0=> Default 
+// <1=> Black 
+// <2=> Red 
+// <3=> Green 
+// <4=> Yellow 
+// <5=> Blue 
+// <6=> Magenta 
+// <7=> Cyan 
+// <8=> White 
+
+#ifndef NRFX_TIMER_CONFIG_INFO_COLOR
+#define NRFX_TIMER_CONFIG_INFO_COLOR 0
+#endif
+
+// <o> NRFX_TIMER_CONFIG_DEBUG_COLOR  - ANSI escape code prefix.
+ 
+// <0=> Default 
+// <1=> Black 
+// <2=> Red 
+// <3=> Green 
+// <4=> Yellow 
+// <5=> Blue 
+// <6=> Magenta 
+// <7=> Cyan 
+// <8=> White 
+
+#ifndef NRFX_TIMER_CONFIG_DEBUG_COLOR
+#define NRFX_TIMER_CONFIG_DEBUG_COLOR 0
+#endif
+
+// </e>
+
+// </e>
 
 // <e> NRFX_UARTE_ENABLED - nrfx_uarte - UARTE peripheral driver
 //==========================================================
@@ -676,31 +716,31 @@
 #define NRFX_USBD_ENABLED 1
 #endif
 // <o> NRFX_USBD_CONFIG_IRQ_PRIORITY  - Interrupt priority
- 
-// <0=> 0 (highest) 
-// <1=> 1 
-// <2=> 2 
-// <3=> 3 
-// <4=> 4 
-// <5=> 5 
-// <6=> 6 
-// <7=> 7 
+
+// <0=> 0 (highest)
+// <1=> 1
+// <2=> 2
+// <3=> 3
+// <4=> 4
+// <5=> 5
+// <6=> 6
+// <7=> 7
 
 #ifndef NRFX_USBD_CONFIG_IRQ_PRIORITY
 #define NRFX_USBD_CONFIG_IRQ_PRIORITY 6
 #endif
 
 // <o> NRFX_USBD_CONFIG_DMASCHEDULER_MODE  - USBD DMA scheduler working scheme
- 
-// <0=> Prioritized access 
-// <1=> Round Robin 
+
+// <0=> Prioritized access
+// <1=> Round Robin
 
 #ifndef NRFX_USBD_CONFIG_DMASCHEDULER_MODE
 #define NRFX_USBD_CONFIG_DMASCHEDULER_MODE 0
 #endif
 
 // <q> NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST  - Give priority to isochronous transfers
- 
+
 
 // <i> This option gives priority to isochronous transfers.
 // <i> Enabling it assures that isochronous transfers are always processed,
@@ -713,7 +753,7 @@
 #endif
 
 // <q> NRFX_USBD_CONFIG_ISO_IN_ZLP  - Respond to an IN token on ISO IN endpoint with ZLP when no data is ready
- 
+
 
 // <i> If set, ISO IN endpoint will respond to an IN token with ZLP when no data is ready to be sent.
 // <i> Else, there will be no response.
@@ -773,24 +813,24 @@
 #define POWER_ENABLED 1
 #endif
 // <o> POWER_CONFIG_IRQ_PRIORITY  - Interrupt priority
- 
+
 
 // <i> Priorities 0,2 (nRF51) and 0,1,4,5 (nRF52) are reserved for SoftDevice
-// <0=> 0 (highest) 
-// <1=> 1 
-// <2=> 2 
-// <3=> 3 
-// <4=> 4 
-// <5=> 5 
-// <6=> 6 
-// <7=> 7 
+// <0=> 0 (highest)
+// <1=> 1
+// <2=> 2
+// <3=> 3
+// <4=> 4
+// <5=> 5
+// <6=> 6
+// <7=> 7
 
 #ifndef POWER_CONFIG_IRQ_PRIORITY
 #define POWER_CONFIG_IRQ_PRIORITY 6
 #endif
 
 // <q> POWER_CONFIG_DEFAULT_DCDCEN  - The default configuration of main DCDC regulator
- 
+
 
 // <i> This settings means only that components for DCDC regulator are installed and it can be enabled.
 
@@ -799,7 +839,7 @@
 #endif
 
 // <q> POWER_CONFIG_DEFAULT_DCDCENHV  - The default configuration of High Voltage DCDC regulator
- 
+
 
 // <i> This settings means only that components for DCDC regulator are installed and it can be enabled.
 
@@ -810,11 +850,13 @@
 // </e>
 
 // <q> SYSTICK_ENABLED  - nrf_drv_systick - ARM(R) SysTick driver - legacy layer
- 
+
 
 #ifndef SYSTICK_ENABLED
 #define SYSTICK_ENABLED 1
 #endif
+
+
 
 // <e> UART_ENABLED - nrf_drv_uart - UART/UARTE peripheral driver - legacy layer
 //==========================================================
@@ -916,69 +958,19 @@
 
 // </e>
 
-// <e> USBD_ENABLED - nrf_drv_usbd - Software Component
-//==========================================================
-#ifndef USBD_ENABLED
-#define USBD_ENABLED 1
-#endif
-// <o> USBD_CONFIG_IRQ_PRIORITY  - Interrupt priority
- 
-
-// <i> Priorities 0,2 (nRF51) and 0,1,4,5 (nRF52) are reserved for SoftDevice
-// <0=> 0 (highest) 
-// <1=> 1 
-// <2=> 2 
-// <3=> 3 
-// <4=> 4 
-// <5=> 5 
-// <6=> 6 
-// <7=> 7 
-
-#ifndef USBD_CONFIG_IRQ_PRIORITY
-#define USBD_CONFIG_IRQ_PRIORITY 6
-#endif
-
-// <o> USBD_CONFIG_DMASCHEDULER_MODE  - USBD SMA scheduler working scheme
- 
-// <0=> Prioritized access 
-// <1=> Round Robin 
-
-#ifndef USBD_CONFIG_DMASCHEDULER_MODE
-#define USBD_CONFIG_DMASCHEDULER_MODE 0
-#endif
-
-// <q> USBD_CONFIG_DMASCHEDULER_ISO_BOOST  - Give priority to isochronous transfers
- 
-
-// <i> This option gives priority to isochronous transfers.
-// <i> Enabling it assures that isochronous transfers are always processed,
-// <i> even if multiple other transfers are pending.
-// <i> Isochronous endpoints are prioritized before the usbd_dma_scheduler_algorithm
-// <i> function is called, so the option is independent of the algorithm chosen.
-
-#ifndef USBD_CONFIG_DMASCHEDULER_ISO_BOOST
-#define USBD_CONFIG_DMASCHEDULER_ISO_BOOST 1
-#endif
-
-// <q> USBD_CONFIG_ISO_IN_ZLP  - Respond to an IN token on ISO IN endpoint with ZLP when no data is ready
- 
-
-// <i> If set, ISO IN endpoint will respond to an IN token with ZLP when no data is ready to be sent.
-// <i> Else, there will be no response.
-// <i> NOTE: This option does not work on Engineering A chip.
-
-#ifndef USBD_CONFIG_ISO_IN_ZLP
-#define USBD_CONFIG_ISO_IN_ZLP 0
-#endif
-
-// </e>
-
 // </h> 
 //==========================================================
 
 // <h> nRF_Libraries 
 
 //==========================================================
+// <q> APP_FIFO_ENABLED  - app_fifo - Software FIFO implementation
+ 
+
+#ifndef APP_FIFO_ENABLED
+#define APP_FIFO_ENABLED 1
+#endif
+
 // <e> APP_SCHEDULER_ENABLED - app_scheduler - Events scheduler
 //==========================================================
 #ifndef APP_SCHEDULER_ENABLED
@@ -1116,7 +1108,7 @@
 #define APP_USBD_PID 0x520F
 #endif
 
-// <o> APP_USBD_DEVICE_VER_MAJOR - Major device version  <0-99> 
+// <o> APP_USBD_DEVICE_VER_MAJOR - Major device version  <0-99>
 
 
 // <i> Major device version, will be converted automatically to BCD notation. Use just decimal values.
@@ -1125,7 +1117,7 @@
 #define APP_USBD_DEVICE_VER_MAJOR 1
 #endif
 
-// <o> APP_USBD_DEVICE_VER_MINOR - Minor device version  <0-9> 
+// <o> APP_USBD_DEVICE_VER_MINOR - Minor device version  <0-9>
 
 
 // <i> Minor device version, will be converted automatically to BCD notation. Use just decimal values.
@@ -1134,7 +1126,7 @@
 #define APP_USBD_DEVICE_VER_MINOR 0
 #endif
 
-// <o> APP_USBD_DEVICE_VER_SUB - Sub-minor device version  <0-9> 
+// <o> APP_USBD_DEVICE_VER_SUB - Sub-minor device version  <0-9>
 
 
 // <i> Sub-minor device version, will be converted automatically to BCD notation. Use just decimal values.
@@ -1144,13 +1136,13 @@
 #endif
 
 // <q> APP_USBD_CONFIG_SELF_POWERED  - Self-powered device, as opposed to bus-powered.
- 
+
 
 #ifndef APP_USBD_CONFIG_SELF_POWERED
 #define APP_USBD_CONFIG_SELF_POWERED 1
 #endif
 
-// <o> APP_USBD_CONFIG_MAX_POWER - MaxPower field in configuration descriptor in milliamps.  <0-500> 
+// <o> APP_USBD_CONFIG_MAX_POWER - MaxPower field in configuration descriptor in milliamps.  <0-500>
 
 
 #ifndef APP_USBD_CONFIG_MAX_POWER
@@ -1158,7 +1150,7 @@
 #endif
 
 // <q> APP_USBD_CONFIG_POWER_EVENTS_PROCESS  - Process power events.
- 
+
 
 // <i> Enable processing power events in USB event handler.
 
@@ -1176,7 +1168,7 @@
 #ifndef APP_USBD_CONFIG_EVENT_QUEUE_ENABLE
 #define APP_USBD_CONFIG_EVENT_QUEUE_ENABLE 0
 #endif
-// <o> APP_USBD_CONFIG_EVENT_QUEUE_SIZE - The size of the event queue.  <16-64> 
+// <o> APP_USBD_CONFIG_EVENT_QUEUE_SIZE - The size of the event queue.  <16-64>
 
 
 // <i> The size of the queue for the events that would be processed in the main loop.
@@ -1186,15 +1178,15 @@
 #endif
 
 // <o> APP_USBD_CONFIG_SOF_HANDLING_MODE  - Change SOF events handling mode.
- 
+
 
 // <i> Normal queue   - SOF events are pushed normally into the event queue.
 // <i> Compress queue - SOF events are counted and binded with other events or executed when the queue is empty.
 // <i>                  This prevents the queue from filling up with SOF events.
 // <i> Interrupt      - SOF events are processed in interrupt.
-// <0=> Normal queue 
-// <1=> Compress queue 
-// <2=> Interrupt 
+// <0=> Normal queue
+// <1=> Compress queue
+// <2=> Interrupt
 
 #ifndef APP_USBD_CONFIG_SOF_HANDLING_MODE
 #define APP_USBD_CONFIG_SOF_HANDLING_MODE 1
@@ -1203,19 +1195,19 @@
 // </e>
 
 // <q> APP_USBD_CONFIG_SOF_TIMESTAMP_PROVIDE  - Provide a function that generates timestamps for logs based on the current SOF.
- 
 
-// <i> The function app_usbd_sof_timestamp_get is implemented if the logger is enabled. 
-// <i> Use it when initializing the logger. 
-// <i> SOF processing is always enabled when this configuration parameter is active. 
-// <i> Note: This option is configured outside of APP_USBD_CONFIG_LOG_ENABLED. 
-// <i> This means that it works even if the logging in this very module is disabled. 
+
+// <i> The function app_usbd_sof_timestamp_get is implemented if the logger is enabled.
+// <i> Use it when initializing the logger.
+// <i> SOF processing is always enabled when this configuration parameter is active.
+// <i> Note: This option is configured outside of APP_USBD_CONFIG_LOG_ENABLED.
+// <i> This means that it works even if the logging in this very module is disabled.
 
 #ifndef APP_USBD_CONFIG_SOF_TIMESTAMP_PROVIDE
 #define APP_USBD_CONFIG_SOF_TIMESTAMP_PROVIDE 0
 #endif
 
-// <o> APP_USBD_CONFIG_DESC_STRING_SIZE - Maximum size of the NULL-terminated string of the string descriptor.  <31-254> 
+// <o> APP_USBD_CONFIG_DESC_STRING_SIZE - Maximum size of the NULL-terminated string of the string descriptor.  <31-254>
 
 
 // <i> 31 characters can be stored in the internal USB buffer used for transfers.
@@ -1226,7 +1218,7 @@
 #endif
 
 // <q> APP_USBD_CONFIG_DESC_STRING_UTF_ENABLED  - Enable UTF8 conversion.
- 
+
 
 // <i> Enable UTF8-encoded characters. In normal processing, only ASCII characters are available.
 
@@ -1250,7 +1242,7 @@
 #define APP_USBD_STRING_ID_MANUFACTURER 1
 #endif
 // <q> APP_USBD_STRINGS_MANUFACTURER_EXTERN  - Define whether @ref APP_USBD_STRINGS_MANUFACTURER is created by macro or declared as a global variable.
- 
+
 
 #ifndef APP_USBD_STRINGS_MANUFACTURER_EXTERN
 #define APP_USBD_STRINGS_MANUFACTURER_EXTERN 0
@@ -1280,7 +1272,7 @@
 #define APP_USBD_STRING_ID_PRODUCT 2
 #endif
 // <q> APP_USBD_STRINGS_PRODUCT_EXTERN  - Define whether @ref APP_USBD_STRINGS_PRODUCT is created by macro or declared as a global variable.
- 
+
 
 #ifndef APP_USBD_STRINGS_PRODUCT_EXTERN
 #define APP_USBD_STRINGS_PRODUCT_EXTERN 0
@@ -1304,7 +1296,7 @@
 #define APP_USBD_STRING_ID_SERIAL 3
 #endif
 // <q> APP_USBD_STRING_SERIAL_EXTERN  - Define whether @ref APP_USBD_STRING_SERIAL is created by macro or declared as a global variable.
- 
+
 
 #ifndef APP_USBD_STRING_SERIAL_EXTERN
 #define APP_USBD_STRING_SERIAL_EXTERN 0
@@ -1328,7 +1320,7 @@
 #define APP_USBD_STRING_ID_CONFIGURATION 4
 #endif
 // <q> APP_USBD_STRING_CONFIGURATION_EXTERN  - Define whether @ref APP_USBD_STRINGS_CONFIGURATION is created by macro or declared as global variable.
- 
+
 
 #ifndef APP_USBD_STRING_CONFIGURATION_EXTERN
 #define APP_USBD_STRING_CONFIGURATION_EXTERN 0
@@ -1365,136 +1357,21 @@
 
 // </e>
 
-// <q> CRC16_ENABLED  - crc16 - CRC16 calculation routines
+
+// <e> APP_UART_ENABLED - app_uart - UART driver
+//==========================================================
+#ifndef APP_UART_ENABLED
+#define APP_UART_ENABLED 1
+#endif
+// <o> APP_UART_DRIVER_INSTANCE  - UART instance used
  
+// <0=> 0 
 
-#ifndef CRC16_ENABLED
-#define CRC16_ENABLED 1
-#endif
-
-// <e> FDS_ENABLED - fds - Flash data storage module
-//==========================================================
-#ifndef FDS_ENABLED
-#define FDS_ENABLED 1
-#endif
-// <h> Pages - Virtual page settings
-
-// <i> Configure the number of virtual pages to use and their size.
-//==========================================================
-// <o> FDS_VIRTUAL_PAGES - Number of virtual flash pages to use. 
-// <i> One of the virtual pages is reserved by the system for garbage collection.
-// <i> Therefore, the minimum is two virtual pages: one page to store data and one page to be used by the system for garbage collection.
-// <i> The total amount of flash memory that is used by FDS amounts to @ref FDS_VIRTUAL_PAGES * @ref FDS_VIRTUAL_PAGE_SIZE * 4 bytes.
-
-#ifndef FDS_VIRTUAL_PAGES
-#define FDS_VIRTUAL_PAGES 3
-#endif
-
-// <o> FDS_VIRTUAL_PAGE_SIZE  - The size of a virtual flash page.
- 
-
-// <i> Expressed in number of 4-byte words.
-// <i> By default, a virtual page is the same size as a physical page.
-// <i> The size of a virtual page must be a multiple of the size of a physical page.
-// <1024=> 1024 
-// <2048=> 2048 
-
-#ifndef FDS_VIRTUAL_PAGE_SIZE
-#define FDS_VIRTUAL_PAGE_SIZE 1024
-#endif
-
-// <o> FDS_VIRTUAL_PAGES_RESERVED - The number of virtual flash pages that are used by other modules. 
-// <i> FDS module stores its data in the last pages of the flash memory.
-// <i> By setting this value, you can move flash end address used by the FDS.
-// <i> As a result the reserved space can be used by other modules.
-
-#ifndef FDS_VIRTUAL_PAGES_RESERVED
-#define FDS_VIRTUAL_PAGES_RESERVED 0
-#endif
-
-// </h> 
-//==========================================================
-
-// <h> Backend - Backend configuration
-
-// <i> Configure which nrf_fstorage backend is used by FDS to write to flash.
-//==========================================================
-// <o> FDS_BACKEND  - FDS flash backend.
- 
-
-// <i> NRF_FSTORAGE_SD uses the nrf_fstorage_sd backend implementation using the SoftDevice API. Use this if you have a SoftDevice present.
-// <i> NRF_FSTORAGE_NVMC uses the nrf_fstorage_nvmc implementation. Use this setting if you don't use the SoftDevice.
-// <1=> NRF_FSTORAGE_NVMC 
-// <2=> NRF_FSTORAGE_SD 
-
-#ifndef FDS_BACKEND
-#define FDS_BACKEND 1
-#endif
-
-// </h> 
-//==========================================================
-
-// <h> Queue - Queue settings
-
-//==========================================================
-// <o> FDS_OP_QUEUE_SIZE - Size of the internal queue. 
-// <i> Increase this value if you frequently get synchronous FDS_ERR_NO_SPACE_IN_QUEUES errors.
-
-#ifndef FDS_OP_QUEUE_SIZE
-#define FDS_OP_QUEUE_SIZE 4
-#endif
-
-// </h> 
-//==========================================================
-
-// <h> CRC - CRC functionality
-
-//==========================================================
-// <e> FDS_CRC_CHECK_ON_READ - Enable CRC checks.
-
-// <i> Save a record's CRC when it is written to flash and check it when the record is opened.
-// <i> Records with an incorrect CRC can still be 'seen' by the user using FDS functions, but they cannot be opened.
-// <i> Additionally, they will not be garbage collected until they are deleted.
-//==========================================================
-#ifndef FDS_CRC_CHECK_ON_READ
-#define FDS_CRC_CHECK_ON_READ 0
-#endif
-// <o> FDS_CRC_CHECK_ON_WRITE  - Perform a CRC check on newly written records.
- 
-
-// <i> Perform a CRC check on newly written records.
-// <i> This setting can be used to make sure that the record data was not altered while being written to flash.
-// <1=> Enabled 
-// <0=> Disabled 
-
-#ifndef FDS_CRC_CHECK_ON_WRITE
-#define FDS_CRC_CHECK_ON_WRITE 0
+#ifndef APP_UART_DRIVER_INSTANCE
+#define APP_UART_DRIVER_INSTANCE 0
 #endif
 
 // </e>
-
-// </h> 
-//==========================================================
-
-// <h> Users - Number of users
-
-//==========================================================
-// <o> FDS_MAX_USERS - Maximum number of callbacks that can be registered. 
-#ifndef FDS_MAX_USERS
-#define FDS_MAX_USERS 4
-#endif
-
-// </h> 
-//==========================================================
-
-// </e>
-
-// <q> HARDFAULT_HANDLER_ENABLED  - hardfault_default - HardFault default handler for debugging and release
- 
-
-#ifndef HARDFAULT_HANDLER_ENABLED
-#define HARDFAULT_HANDLER_ENABLED 1
-#endif
 
 // <e> NRF_BALLOC_ENABLED - nrf_balloc - Block allocator module
 //==========================================================
@@ -1552,97 +1429,12 @@
 
 // </e>
 
-// <e> NRF_CLI_RTT_ENABLED - nrf_cli_rtt - RTT command line interface transport
-//==========================================================
-#ifndef NRF_CLI_RTT_ENABLED
-#define NRF_CLI_RTT_ENABLED 1
-#endif
-// <o> NRF_CLI_RTT_TERMINAL_ID - RTT terminal ID for CLI. 
-#ifndef NRF_CLI_RTT_TERMINAL_ID
-#define NRF_CLI_RTT_TERMINAL_ID 0
-#endif
-
-// <o> NRF_CLI_RTT_TX_RETRY_DELAY_MS - Period before retrying writing to RTT 
-#ifndef NRF_CLI_RTT_TX_RETRY_DELAY_MS
-#define NRF_CLI_RTT_TX_RETRY_DELAY_MS 10
-#endif
-
-// <o> NRF_CLI_RTT_TX_RETRY_CNT - Writing to RTT retries. 
-// <i> If RTT fails to accept any new data after retries
-// <i> module assumes that host is not active and on next
-// <i> request it will perform only one write attempt.
-// <i> On successful writing, module assumes that host is active
-// <i> and scheme with retry is applied again.
-
-#ifndef NRF_CLI_RTT_TX_RETRY_CNT
-#define NRF_CLI_RTT_TX_RETRY_CNT 5
-#endif
-
-// </e>
-
 // <q> NRF_CLI_UART_ENABLED  - nrf_cli_uart - UART command line interface transport
  
 
 #ifndef NRF_CLI_UART_ENABLED
 #define NRF_CLI_UART_ENABLED 1
 #endif
-
-// <e> NRF_FSTORAGE_ENABLED - nrf_fstorage - Flash abstraction library
-//==========================================================
-#ifndef NRF_FSTORAGE_ENABLED
-#define NRF_FSTORAGE_ENABLED 1
-#endif
-// <h> nrf_fstorage - Common settings
-
-// <i> Common settings to all fstorage implementations
-//==========================================================
-// <q> NRF_FSTORAGE_PARAM_CHECK_DISABLED  - Disable user input validation
- 
-
-// <i> If selected, use ASSERT to validate user input.
-// <i> This effectively removes user input validation in production code.
-// <i> Recommended setting: OFF, only enable this setting if size is a major concern.
-
-#ifndef NRF_FSTORAGE_PARAM_CHECK_DISABLED
-#define NRF_FSTORAGE_PARAM_CHECK_DISABLED 0
-#endif
-
-// </h> 
-//==========================================================
-
-// <h> nrf_fstorage_sd - Implementation using the SoftDevice
-
-// <i> Configuration options for the fstorage implementation using the SoftDevice
-//==========================================================
-// <o> NRF_FSTORAGE_SD_QUEUE_SIZE - Size of the internal queue of operations 
-// <i> Increase this value if API calls frequently return the error @ref NRF_ERROR_NO_MEM.
-
-#ifndef NRF_FSTORAGE_SD_QUEUE_SIZE
-#define NRF_FSTORAGE_SD_QUEUE_SIZE 4
-#endif
-
-// <o> NRF_FSTORAGE_SD_MAX_RETRIES - Maximum number of attempts at executing an operation when the SoftDevice is busy 
-// <i> Increase this value if events frequently return the @ref NRF_ERROR_TIMEOUT error.
-// <i> The SoftDevice might fail to schedule flash access due to high BLE activity.
-
-#ifndef NRF_FSTORAGE_SD_MAX_RETRIES
-#define NRF_FSTORAGE_SD_MAX_RETRIES 8
-#endif
-
-// <o> NRF_FSTORAGE_SD_MAX_WRITE_SIZE - Maximum number of bytes to be written to flash in a single operation 
-// <i> This value must be a multiple of four.
-// <i> Lowering this value can increase the chances of the SoftDevice being able to execute flash operations in between radio activity.
-// <i> This value is bound by the maximum number of bytes that can be written to flash in a single call to @ref sd_flash_write.
-// <i> That is 1024 bytes for nRF51 ICs and 4096 bytes for nRF52 ICs.
-
-#ifndef NRF_FSTORAGE_SD_MAX_WRITE_SIZE
-#define NRF_FSTORAGE_SD_MAX_WRITE_SIZE 4096
-#endif
-
-// </h> 
-//==========================================================
-
-// </e>
 
 // <q> NRF_MEMOBJ_ENABLED  - nrf_memobj - Linked memory allocator module
  
@@ -1809,48 +1601,12 @@
 #define NRF_STRERROR_ENABLED 1
 #endif
 
-// <h> app_button - buttons handling module
-
-//==========================================================
-// <q> BUTTON_ENABLED  - Enables Button module
+// <q> RETARGET_ENABLED  - retarget - Retargeting stdio functions
  
 
-#ifndef BUTTON_ENABLED
-#define BUTTON_ENABLED 1
+#ifndef RETARGET_ENABLED
+#define RETARGET_ENABLED 1
 #endif
-
-// <q> BUTTON_HIGH_ACCURACY_ENABLED  - Enables GPIOTE high accuracy for buttons
- 
-
-#ifndef BUTTON_HIGH_ACCURACY_ENABLED
-#define BUTTON_HIGH_ACCURACY_ENABLED 0
-#endif
-
-// </h> 
-//==========================================================
-
-// <h> app_usbd_cdc_acm - USB CDC ACM class
-
-//==========================================================
-// <q> APP_USBD_CDC_ACM_ENABLED  - Enabling USBD CDC ACM Class library
- 
-
-#ifndef APP_USBD_CDC_ACM_ENABLED
-#define APP_USBD_CDC_ACM_ENABLED 1
-#endif
-
-// <q> APP_USBD_CDC_ACM_ZLP_ON_EPSIZE_WRITE  - Send ZLP on write with same size as endpoint
- 
-
-// <i> If enabled, CDC ACM class will automatically send a zero length packet after transfer which has the same size as endpoint.
-// <i> This may limit throughput if a lot of binary data is sent, but in terminal mode operation it makes sure that the data is always displayed right after it is sent.
-
-#ifndef APP_USBD_CDC_ACM_ZLP_ON_EPSIZE_WRITE
-#define APP_USBD_CDC_ACM_ZLP_ON_EPSIZE_WRITE 1
-#endif
-
-// </h> 
-//==========================================================
 
 // <h> nrf_cli - Command line interface
 
@@ -1876,7 +1632,7 @@
 
 // <o> NRF_CLI_CMD_BUFF_SIZE - Maximum buffer size for a single command. 
 #ifndef NRF_CLI_CMD_BUFF_SIZE
-#define NRF_CLI_CMD_BUFF_SIZE 384
+#define NRF_CLI_CMD_BUFF_SIZE 128
 #endif
 
 // <q> NRF_CLI_ECHO_STATUS  - CLI echo status. If set, echo is ON.
@@ -1890,19 +1646,19 @@
  
 
 #ifndef NRF_CLI_WILDCARD_ENABLED
-#define NRF_CLI_WILDCARD_ENABLED 1
+#define NRF_CLI_WILDCARD_ENABLED 0
 #endif
 
 // <q> NRF_CLI_METAKEYS_ENABLED  - Enable additional control keys for CLI commands like ctrl+a, ctrl+e, ctrl+w, ctrl+u
  
 
 #ifndef NRF_CLI_METAKEYS_ENABLED
-#define NRF_CLI_METAKEYS_ENABLED 1
+#define NRF_CLI_METAKEYS_ENABLED 0
 #endif
 
 // <o> NRF_CLI_PRINTF_BUFF_SIZE - Maximum print buffer size. 
 #ifndef NRF_CLI_PRINTF_BUFF_SIZE
-#define NRF_CLI_PRINTF_BUFF_SIZE 23
+#define NRF_CLI_PRINTF_BUFF_SIZE 50
 #endif
 
 // <e> NRF_CLI_HISTORY_ENABLED - Enable CLI history mode.
@@ -1926,7 +1682,7 @@
  
 
 #ifndef NRF_CLI_VT100_COLORS_ENABLED
-#define NRF_CLI_VT100_COLORS_ENABLED 0
+#define NRF_CLI_VT100_COLORS_ENABLED 1
 #endif
 
 // <q> NRF_CLI_STATISTICS_ENABLED  - Enable CLI statistics.
@@ -1940,7 +1696,7 @@
  
 
 #ifndef NRF_CLI_LOG_BACKEND
-#define NRF_CLI_LOG_BACKEND 0
+#define NRF_CLI_LOG_BACKEND 1
 #endif
 
 // <q> NRF_CLI_USES_TASK_MANAGER_ENABLED  - Enable CLI to use task_manager
@@ -1951,19 +1707,17 @@
 #endif
 
 // </h> 
-//==========================================================
-
 // <h> nrf_cli_cdc_acm - CDC ACM command line interface transport
 
 //==========================================================
 // <q> NRF_CLI_CDC_ACM_ENABLED  - Enable/disable the CLI CDC ACM module.
- 
+
 
 #ifndef NRF_CLI_CDC_ACM_ENABLED
 #define NRF_CLI_CDC_ACM_ENABLED 1
 #endif
 
-// <o> NRF_CLI_CDC_ACM_COMM_INTERFACE - COMM interface number. 
+// <o> NRF_CLI_CDC_ACM_COMM_INTERFACE - COMM interface number.
 #ifndef NRF_CLI_CDC_ACM_COMM_INTERFACE
 #define NRF_CLI_CDC_ACM_COMM_INTERFACE 0
 #endif
@@ -1973,7 +1727,7 @@
 #define NRF_CLI_CDC_ACM_COMM_EPIN NRF_DRV_USBD_EPIN2
 #endif
 
-// <o> NRF_CLI_CDC_ACM_DATA_INTERFACE - DATA interface number. 
+// <o> NRF_CLI_CDC_ACM_DATA_INTERFACE - DATA interface number.
 #ifndef NRF_CLI_CDC_ACM_DATA_INTERFACE
 #define NRF_CLI_CDC_ACM_DATA_INTERFACE 1
 #endif
@@ -1988,7 +1742,7 @@
 #define NRF_CLI_CDC_ACM_DATA_EPOUT NRF_DRV_USBD_EPOUT1
 #endif
 
-// </h> 
+// </h>
 //==========================================================
 
 // <h> nrf_fprintf - fprintf function.
@@ -2012,7 +1766,7 @@
  
 
 #ifndef NRF_FPRINTF_DOUBLE_ENABLED
-#define NRF_FPRINTF_DOUBLE_ENABLED 1
+#define NRF_FPRINTF_DOUBLE_ENABLED 0
 #endif
 
 // </h> 
@@ -2024,79 +1778,6 @@
 // <h> nRF_Log 
 
 //==========================================================
-// <e> NRF_LOG_BACKEND_FLASH_ENABLED - nrf_log_backend_flash - Log flash backend
-//==========================================================
-#ifndef NRF_LOG_BACKEND_FLASH_ENABLED
-#define NRF_LOG_BACKEND_FLASH_ENABLED 1
-#endif
-// <q> NRF_LOG_BACKEND_FLASH_CLI_CMDS  - Enable CLI commands for this module.
- 
-
-#ifndef NRF_LOG_BACKEND_FLASH_CLI_CMDS
-#define NRF_LOG_BACKEND_FLASH_CLI_CMDS 1
-#endif
-
-// <e> NRF_LOG_BACKEND_FLASHLOG_ENABLED - Enable flashlog backend.
-//==========================================================
-#ifndef NRF_LOG_BACKEND_FLASHLOG_ENABLED
-#define NRF_LOG_BACKEND_FLASHLOG_ENABLED 0
-#endif
-// <o> NRF_LOG_BACKEND_FLASHLOG_QUEUE_SIZE - Logger messages queue size. 
-// <i> Queue holds log messages pending to be written to flash.
-// <i> Note that the queue holds logger messages and thus the queue size determines
-// <i> increasing the pool of logger messages (see log message pool configuration).
-
-#ifndef NRF_LOG_BACKEND_FLASHLOG_QUEUE_SIZE
-#define NRF_LOG_BACKEND_FLASHLOG_QUEUE_SIZE 8
-#endif
-
-// </e>
-
-// <e> NRF_LOG_BACKEND_CRASHLOG_ENABLED - Enable crashlog backend.
-//==========================================================
-#ifndef NRF_LOG_BACKEND_CRASHLOG_ENABLED
-#define NRF_LOG_BACKEND_CRASHLOG_ENABLED 0
-#endif
-// <o> NRF_LOG_BACKEND_CRASHLOG_FIFO_SIZE - Number of log messages held to be flushed in panic. 
-// <i> Crashlog FIFO always keeps a defined number of the most
-// <i> recent logs (severity level is set on runtime).
-// <i> Note that the FIFO holds logger messages and thus the FIFO size determines
-// <i> increasing the pool of logger messages (see log message pool configuration).
-
-#ifndef NRF_LOG_BACKEND_CRASHLOG_FIFO_SIZE
-#define NRF_LOG_BACKEND_CRASHLOG_FIFO_SIZE 8
-#endif
-
-// </e>
-
-// <o> NRF_LOG_BACKEND_FLASH_SER_BUFFER_SIZE - Size of the buffer used for serialize log message. 
-// <i> Message is trimmed if it is longer. It may happen in case of 
-// <i> hexdump message. Buffer size must be multiple of 4.
-
-#ifndef NRF_LOG_BACKEND_FLASH_SER_BUFFER_SIZE
-#define NRF_LOG_BACKEND_FLASH_SER_BUFFER_SIZE 64
-#endif
-
-// <h> Flash log location - Configuration of flash area used for storing the logs.
-
-//==========================================================
-// <o> NRF_LOG_BACKEND_FLASH_START_PAGE - Starting page.  
-// <i> If 0, then pages directly after the application are used.
-
-#ifndef NRF_LOG_BACKEND_FLASH_START_PAGE
-#define NRF_LOG_BACKEND_FLASH_START_PAGE 0
-#endif
-
-// <o> NRF_LOG_BACKEND_PAGES - Number of pages. 
-#ifndef NRF_LOG_BACKEND_PAGES
-#define NRF_LOG_BACKEND_PAGES 1
-#endif
-
-// </h> 
-//==========================================================
-
-// </e>
-
 // <e> NRF_LOG_BACKEND_RTT_ENABLED - nrf_log_backend_rtt - Log RTT backend
 //==========================================================
 #ifndef NRF_LOG_BACKEND_RTT_ENABLED
@@ -2133,7 +1814,7 @@
 // <e> NRF_LOG_BACKEND_UART_ENABLED - nrf_log_backend_uart - Log UART backend
 //==========================================================
 #ifndef NRF_LOG_BACKEND_UART_ENABLED
-#define NRF_LOG_BACKEND_UART_ENABLED 0
+#define NRF_LOG_BACKEND_UART_ENABLED 1
 #endif
 // <o> NRF_LOG_BACKEND_UART_TX_PIN - UART TX pin 
 #ifndef NRF_LOG_BACKEND_UART_TX_PIN
@@ -2200,7 +1881,7 @@
 // <i> RAM memory usage.
 
 #ifndef NRF_LOG_MSGPOOL_ELEMENT_COUNT
-#define NRF_LOG_MSGPOOL_ELEMENT_COUNT 16
+#define NRF_LOG_MSGPOOL_ELEMENT_COUNT 8
 #endif
 
 // </h> 
@@ -2250,7 +1931,7 @@
 // <4=> Debug 
 
 #ifndef NRF_LOG_DEFAULT_LEVEL
-#define NRF_LOG_DEFAULT_LEVEL 4
+#define NRF_LOG_DEFAULT_LEVEL 3
 #endif
 
 // <q> NRF_LOG_DEFERRED  - Enable deffered logger.
@@ -2311,7 +1992,7 @@
 // <e> NRF_LOG_USES_COLORS - If enabled then ANSI escape code for colors is prefixed to every string
 //==========================================================
 #ifndef NRF_LOG_USES_COLORS
-#define NRF_LOG_USES_COLORS 1
+#define NRF_LOG_USES_COLORS 0
 #endif
 // <o> NRF_LOG_COLOR_DEFAULT  - ANSI escape code prefix.
  
@@ -2368,7 +2049,7 @@
 // <i> Function for getting the timestamp is provided by the user
 //==========================================================
 #ifndef NRF_LOG_USES_TIMESTAMP
-#define NRF_LOG_USES_TIMESTAMP 1
+#define NRF_LOG_USES_TIMESTAMP 0
 #endif
 // <o> NRF_LOG_TIMESTAMP_DEFAULT_FREQUENCY - Default frequency of the timestamp (in Hz) or 0 to use app_timer frequency. 
 #ifndef NRF_LOG_TIMESTAMP_DEFAULT_FREQUENCY
@@ -3696,7 +3377,7 @@
 // <e> APP_TIMER_CONFIG_LOG_ENABLED - Enables logging in the module.
 //==========================================================
 #ifndef APP_TIMER_CONFIG_LOG_ENABLED
-#define APP_TIMER_CONFIG_LOG_ENABLED 1
+#define APP_TIMER_CONFIG_LOG_ENABLED 0
 #endif
 // <o> APP_TIMER_CONFIG_LOG_LEVEL  - Default Severity level
  
@@ -3707,7 +3388,7 @@
 // <4=> Debug 
 
 #ifndef APP_TIMER_CONFIG_LOG_LEVEL
-#define APP_TIMER_CONFIG_LOG_LEVEL 4
+#define APP_TIMER_CONFIG_LOG_LEVEL 3
 #endif
 
 // <o> APP_TIMER_CONFIG_INITIAL_LOG_LEVEL  - Initial severity level if dynamic filtering is enabled.
