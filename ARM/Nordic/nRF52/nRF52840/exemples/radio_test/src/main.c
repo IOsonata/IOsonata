@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2018 - 2019, Nordic Semiconductor ASA
+ * Copyright (c) 2014-2020 - 2021, Nordic Semiconductor ASA
  *
  * All rights reserved.
  *
@@ -54,7 +54,7 @@
 #include <stdio.h>
 #include "bsp.h"
 #include "nrf.h"
-#include "radio_test.h"
+#include "radio_cmd.h"
 #include "app_uart.h"
 #include "app_timer.h"
 #include "app_error.h"
@@ -67,11 +67,13 @@
 #include "nrf_cli.h"
 //#include "nrf_cli_uart.h"
 #include "nrf_cli_cdc_acm.h"
-#include "nrf_drv_usbd.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
+#if defined(NRF21540_DRIVER_ENABLE) && (NRF21540_DRIVER_ENABLE == 1)
+#include "nrf21540.h"
+#endif
 
 #if 0
 NRF_CLI_UART_DEF(m_cli_uart_transport, 0, 64, 16);
@@ -88,6 +90,7 @@ NRF_CLI_DEF(m_cli_cdc_acm,
             '\r',
             CLI_EXAMPLE_LOG_QUEUE_SIZE);
 #endif
+
 /**
  * @brief Enable power USB detection
  *
@@ -123,7 +126,6 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event)
             break;
     }
 }
-
 
 /**@brief Function for starting a command line interface that works on the UART transport layer.
  */
@@ -199,14 +201,8 @@ static void log_init(void)
 
 /** @brief Function for configuring all peripherals used in this example.
  */
-static void init(void)
+static void clock_init(void)
 {
-    NRF_RNG->TASKS_START = 1;
-
-#ifdef NVMC_ICACHECNF_CACHEEN_Msk
-    NRF_NVMC->ICACHECNF  = NVMC_ICACHECNF_CACHEEN_Enabled << NVMC_ICACHECNF_CACHEEN_Pos;
-#endif // NVMC_ICACHECNF_CACHEEN_Msk
-
     // Start 64 MHz crystal oscillator.
     NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
     NRF_CLOCK->TASKS_HFCLKSTART    = 1;
@@ -234,22 +230,34 @@ int main(void)
     err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
 
-    init();
+    clock_init();
+    radio_cmd_init();
 
     cli_init();
     usbd_init();
-
     cli_start();
 
-    NVIC_EnableIRQ(TIMER0_IRQn);
-    __enable_irq();
+#if defined(NRF21540_DRIVER_ENABLE) && (NRF21540_DRIVER_ENABLE == 1)
+    //Initialization of nRF21540 front-end Bluetooth® range extender chip. Do not use if your hardware doesn't support it.
+    err_code = nrf21540_init();
+    APP_ERROR_CHECK(err_code);
+#endif
 
     NRF_LOG_RAW_INFO("Radio test example started.\r\n");
 
     while (true)
     {
+#if defined(NRF21540_DRIVER_ENABLE) && (NRF21540_DRIVER_ENABLE == 1)
+        if (nrf21540_is_error())
+        {
+          //do something in case of nRF21540 error
+          while(1);
+        }
+#endif
         UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
         nrf_cli_process(&m_cli_cdc_acm);
+
+        __WFE();
     }
 }
 
