@@ -216,19 +216,19 @@ int main()
 	printf("Read %d bytes: ", c);
 	for (int i = 0; i < c; i++)
 	{
-		g_Uart.printf("%x ", buff[i]);
+		printf("%x ", buff[i]);
 	}
-	g_Uart.printf("\r\n");
+	printf("\r\n");
 
 	// Master send read command without setting anything
 	nBytes = 5;
 	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, NULL, 0, buff, nBytes);
-	g_Uart.printf("Master send read command without setting anything %d bytes: \r\n", c);
+	printf("Master send read command without setting anything %d bytes: \r\n", c);
 	for (int i = 0; i < c; i++)
 	{
-		g_Uart.printf("%x ", buff[i]);
+		printf("%x ", buff[i]);
 	}
-	g_Uart.printf("\r\n");
+	printf("\r\n");
 
 	while (1)
 	{
