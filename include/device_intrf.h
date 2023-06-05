@@ -137,6 +137,10 @@ struct __device_intrf {
 								//!< device is still using it
 	DEVINTRF_TYPE Type;     	//!< Identify the type of interface
 	bool bDma;					//!< Enable DMA transfer support. Not all hardware interface supports this feature
+	bool bIntEn;				//!< Enable interrupt support. Not all hardware interface supports this feature
+	atomic_bool bTxComplete;	//!< Flag indicating Tx transfer completed. This is for internal use when ascynch interrupt eneabled
+	atomic_bool bCmdMode;		//!< Flag indicating a Tx follow by Rx/Tx transfer.  Usually used for read/write register value or
+	 	 	 	 	 	 	 	//!< cmd/response type. This flag is relevant only when interrupt is enabled async transfer
 
 	// Bellow are all mandatory functions to implement
 	// On init, all implementation must fill these function, no NULL allowed
@@ -218,7 +222,7 @@ struct __device_intrf {
 	 *
 	 * @param	pDevIntrf : Pointer to an instance of the Device Interface
 	 */
-	void (*StopRx)(DevIntrf_t * const pSerDev);
+	void (*StopRx)(DevIntrf_t * const pDevIntrf);
 
 	/**
 	 * @brief	Prepare start condition to transfer data with subsequence TxData.
@@ -310,7 +314,8 @@ extern "C" {
  * @param	pDev	: Pointer to an instance of the Device Interface
  */
 static inline void DeviceIntrfDisable(DevIntrf_t * const pDev) {
-	if (--pDev->EnCnt < 1) {
+	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt - 1) < 1)	{
+//	if (--pDev->EnCnt < 1) {
     	pDev->Disable(pDev);
     	pDev->EnCnt = 0;
 	}
@@ -322,7 +327,8 @@ static inline void DeviceIntrfDisable(DevIntrf_t * const pDev) {
  * @param	pDev	: Pointer to an instance of the Device Interface
  */
 static inline void DeviceIntrfEnable(DevIntrf_t * const pDev) {
-	if (++pDev->EnCnt == 1) {
+	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt + 1) == 1)	{
+//	if (++pDev->EnCnt == 1) {
     	pDev->Enable(pDev);
     }
 }

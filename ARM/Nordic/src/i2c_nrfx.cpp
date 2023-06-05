@@ -344,10 +344,10 @@ bool nRFxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 
 #ifdef TWI_PRESENT
 	dev->pReg->ADDRESS = DevAddr;
-	dev->pReg->INTENCLR = 0xFFFFFFFF;
+	//dev->pReg->INTENCLR = 0xFFFFFFFF;
 #else
 	dev->pDmaReg->ADDRESS = DevAddr;
-	dev->pDmaReg->INTENCLR = 0xFFFFFFFF;
+	//dev->pDmaReg->INTENCLR = 0xFFFFFFFF;
 #endif
 
 	return true;
@@ -359,6 +359,16 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
+/*
+	if (pDev->bCmdMode)
+	{
+		int Timeout = 100000;
+		while (pDev->bTxComplete == false && --Timeout > 0);
+		pDev->bTxComplete = false;
+	}
+
+	pDev->bCmdMode = false;*/
+
 #ifdef TWIM_PRESENT
 	while (BuffLen > 0)
 	{
@@ -373,9 +383,15 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		dev->pDmaReg->TASKS_RESUME = 1;
 		dev->pDmaReg->TASKS_STARTRX = 1;
 
-		if (nRFxI2CWaitRxComplete(dev, 1000000) == false)
-		    break;
-
+		if (pDev->bIntEn == false)
+		{
+			if (nRFxI2CWaitRxComplete(dev, 1000000) == false)
+				break;
+		}
+		else
+		{
+			break;
+		}
 		BuffLen -= l;
 		pBuff += l;
 		cnt += l;
@@ -402,11 +418,13 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
 
 	while (BuffLen > 0)
 	{
-		if (nRFxI2CWaitRxComplete(dev, 100000) == false)
+		if (pDev->bIntEn == false)
 		{
-			break;
+			if (nRFxI2CWaitRxComplete(dev, 1000000) == false)
+			{
+				break;
+			}
 		}
-
 		*pBuff = dev->pReg->RXD;
 
 		BuffLen--;
@@ -430,15 +448,19 @@ void nRFxI2CStopRx(DevIntrf_t * const pDev)
 	reg->TASKS_RESUME = 1;
     reg->TASKS_STOP = 1;
 
-    if (dev->pI2cDev->DevIntrf.bDma == false)
+    if (pDev->bIntEn == false)
     {
-        // must read dummy last byte to generate NACK & STOP condition
-    	nRFxI2CWaitRxComplete(dev, 100000);
+		if (dev->pI2cDev->DevIntrf.bDma == false)
+		{
+			// must read dummy last byte to generate NACK & STOP condition
+			nRFxI2CWaitRxComplete(dev, 1000000);
 #ifdef TWI_PRESENT
-    	(void)dev->pReg->RXD;
+			(void)dev->pReg->RXD;
 #endif
+		}
+
+    	nRFxI2CWaitStop(dev, 1000000);
     }
-    nRFxI2CWaitStop(dev, 1000);
 }
 
 bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
@@ -447,11 +469,11 @@ bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 
 #ifdef TWI_PRESENT
 	dev->pReg->ADDRESS = DevAddr;
-	dev->pReg->INTENCLR = 0xFFFFFFFF;
+	//dev->pReg->INTENCLR = 0xFFFFFFFF;
 	NRF_TWI_Type *reg = dev->pReg;
 #else
 	dev->pDmaReg->ADDRESS = DevAddr;
-	dev->pDmaReg->INTENCLR = 0xFFFFFFFF;
+	//dev->pDmaReg->INTENCLR = 0xFFFFFFFF;
 	NRF_TWIM_Type *reg = dev->pDmaReg;
 #endif
     if (reg->EVENTS_ERROR)
@@ -487,9 +509,15 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 		dev->pDmaReg->TASKS_RESUME = 1;
 		dev->pDmaReg->TASKS_STARTTX = 1;
 
-		if (nRFxI2CWaitTxComplete(dev, 100000) == false)
-            break;
-
+		if (pDev->bIntEn == false || pDev->bCmdMode)
+		{
+			if (nRFxI2CWaitTxComplete(dev, 100000) == false)
+				break;
+		}
+		else
+		{
+			return l;
+		}
 		DataLen -= l;
 		pData += l;
 		cnt += l;
@@ -545,7 +573,11 @@ void nRFxI2CStopTx(DevIntrf_t * const pDev)
 	reg->TASKS_RESUME = 1;
     reg->TASKS_STOP = 1;
 
-    nRFxI2CWaitStop(dev, 1000);
+    if (pDev->bIntEn == false)
+    {
+    	nRFxI2CWaitStop(dev, 1000000);
+
+    }
 }
 
 void nRFxI2CReset(DevIntrf_t * const pDev)
@@ -682,6 +714,107 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
     {
     	// Master mode
     	// TODO: implement interrupt handling for master mode
+    	int len = 0;
+
+#ifdef TWIM_PRESENT
+    	NRF_TWIM_Type *reg = dev->pDmaReg;
+#else
+    	NRF_TWI_Type *reg = dev->pReg;
+#endif
+
+        if (reg->EVENTS_ERROR)
+        {
+            // Abort in case error
+            reg->ERRORSRC = reg->ERRORSRC;
+            reg->EVENTS_ERROR = 0;
+            reg->TASKS_STOP = 1;
+            while( !reg->EVENTS_STOPPED );
+            printf("error\r\n");
+        }
+
+        if (reg->EVENTS_STOPPED)
+        {
+            reg->EVENTS_STOPPED = 0;
+
+#ifdef TWIM_PRESENT
+
+            reg->EVENTS_TXSTARTED = 0;
+			len = dev->pDmaReg->RXD.AMOUNT;
+			if (reg->EVENTS_RXSTARTED)
+			{
+				//DeviceIntrfRxComplete(pDev);
+	            reg->EVENTS_RXSTARTED = 0;
+			}
+#endif
+			//printf("cplt %d\r\n", len);
+    		if (dev->pI2cDev->DevIntrf.EvtCB)
+    		{
+    			dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, len);
+    		}
+        }
+
+#ifdef TWIM_PRESENT
+        if (pDev->bDma)
+        {
+			if (reg->EVENTS_LASTTX)
+			{
+				// Must wait for last DMA then issue a stop
+				//DeviceIntrfTxComplete(pDev);
+				reg->EVENTS_LASTTX = 0;
+
+				if (pDev->bCmdMode == false)
+				{
+					DeviceIntrfStopTx(pDev);
+					atomic_store(&pDev->bTxComplete, true);
+
+//					pDev->bTxComplete = true;
+				}
+
+				if (dev->pI2cDev->DevIntrf.EvtCB)
+				{
+					dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, len);
+				}
+/*
+				if (pDev->bCmdMode == false)
+				{
+					reg->EVENTS_SUSPENDED = 0;
+					reg->TASKS_RESUME = 1;
+				    reg->TASKS_STOP = 1;
+				}
+				else
+				{
+
+				}*/
+			}
+			if (reg->EVENTS_LASTRX)
+			{
+				// Must wait for last DMA then issue a stop
+				reg->EVENTS_LASTRX = 0;
+				//DeviceIntrfRxComplete(pDev);
+				//printf("last RX %d\r\n", dev->pDmaReg->RXD.AMOUNT);
+
+				if (pDev->bCmdMode == false)
+				{
+				//	printf("Stop RX\r\n");
+					DeviceIntrfStopRx(pDev);
+				}
+				else
+				{
+
+				}
+			}
+        }
+        else
+#endif
+        {
+#ifdef TWI_PRESENT
+            if (dev->pReg->EVENTS_TXDSENT)
+            {
+            	dev->pReg->EVENTS_TXDSENT = 0;
+
+            }
+#endif
+        }
     }
 
 }
@@ -738,6 +871,9 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;
 	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
+	pDev->DevIntrf.bIntEn = pCfgData->bIntEn;
+	pDev->DevIntrf.bTxComplete = false;
+	pDev->DevIntrf.bCmdMode = false;
 	pDev->DevIntrf.Disable = nRFxI2CDisable;
 	pDev->DevIntrf.Enable = nRFxI2CEnable;
 	pDev->DevIntrf.PowerOff = nRFxI2CPowerOff;
@@ -746,11 +882,6 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.StartRx = nRFxI2CStartRx;
 	pDev->DevIntrf.StopRx = nRFxI2CStopRx;
 	pDev->DevIntrf.StartTx = nRFxI2CStartTx;
-
-#ifndef TWI_PRESENT
-	// Only DMA mode avail.  Force DMA
-	pDev->DevIntrf.bDma = true;
-#endif
 
 	if (pDev->DevIntrf.bDma)
 	{
@@ -768,6 +899,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.IntPrio = pCfgData->IntPrio;
 	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
+
 
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
@@ -814,6 +946,11 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
         	}
         }
 
+        // Slave mode only avail in DMA mode
+        pDev->DevIntrf.bDma = true;
+		pDev->DevIntrf.RxData = nRFxI2CRxDataDMA;
+		pDev->DevIntrf.TxData = nRFxI2CTxDataDMA;
+
 		sreg->SHORTS = TWIS_SHORTS_READ_SUSPEND_Msk | TWIS_SHORTS_WRITE_SUSPEND_Msk;
         sreg->EVENTS_READ = 0;
         sreg->EVENTS_WRITE = 0;
@@ -836,10 +973,23 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     else
 #endif
     {
+        reg->EVENTS_ERROR = 0;
+        reg->EVENTS_RXSTARTED = 0;
+        reg->EVENTS_TXSTARTED = 0;
+        reg->EVENTS_STOPPED = 0;
+
 #ifdef TWIM_PRESENT
 
 		if (pDev->DevIntrf.bDma)
 		{
+			if (pDev->DevIntrf.bIntEn)
+			{
+				inten = TWIM_INTEN_LASTTX_Msk | TWIM_INTEN_LASTRX_Msk |
+						TWIM_INTEN_ERROR_Msk | TWIM_INTEN_STOPPED_Msk;
+
+				//reg->ENABLE = enval;
+			}
+
 			enval = (TWIM_ENABLE_ENABLE_Enabled << TWIM_ENABLE_ENABLE_Pos);
 		    reg->ENABLE = enval;
 		}
@@ -851,8 +1001,12 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 			s_nRFxI2CDev[pCfgData->DevNo].pReg->EVENTS_RXDREADY = 0;
 			s_nRFxI2CDev[pCfgData->DevNo].pReg->ENABLE = enval;
 #endif
+			// Interrupt not available in non DMA
+			pDev->DevIntrf.bIntEn = false;
 		}
+
     }
+
     if (inten != 0)
     {
     	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, I2C_IRQHandler);
@@ -916,7 +1070,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 				break;
 #endif
     	}
-    	reg->INTENSET = inten;
+    	reg->INTEN = inten;
     }
 
 //    reg->ENABLE = enval;

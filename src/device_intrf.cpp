@@ -40,6 +40,26 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "device_intrf.h"
 
+/*
+bool DeviceIntrfWaitRxComplete(DevIntrf_t * const pDev, int Timeout)
+{
+	while (pDev->bRxComplete == false && --Timeout > 0);
+
+	atomic_store(&pDev->bRxComplete, false);
+
+	DeviceIntrfStopRx(pDev);
+
+	return Timeout > 0;
+}
+
+void DeviceIntrfRxComplete(DevIntrf_t * const pDev)
+{
+	atomic_store(&pDev->bRxComplete, true);
+
+	DeviceIntrfStopRx(pDev);
+}
+*/
+
 // NOTE : For thread safe use
 //
 // DeviceIntrfStartRx
@@ -56,15 +76,32 @@ int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 	int nrtry = pDev->MaxRetry;
 
 	do {
-		if (DeviceIntrfStartRx(pDev, DevAddr)) {
+		if (DeviceIntrfStartRx(pDev, DevAddr))
+		{
+			pDev->bCmdMode = false;
 			count = pDev->RxData(pDev, pBuff, BuffLen);
+        	if (pDev->bIntEn == true)
+			{
+        		break;
+			}
+
 			DeviceIntrfStopRx(pDev);
 		}
 	} while(count <= 0 && nrtry-- > 0);
 
 	return count;
 }
+/*
+void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
+{
+	atomic_store(&pDev->bTxComplete, true);
 
+	if (pDev->bCmdMode == false)
+	{
+		DeviceIntrfStopTx(pDev);
+	}
+}
+*/
 int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int BuffLen)
 {
 	if (pBuff == NULL || BuffLen <= 0)
@@ -74,13 +111,29 @@ int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 	int nrtry = pDev->MaxRetry;
 
 	do {
-		if (DeviceIntrfStartTx(pDev, DevAddr)) {
+		if (DeviceIntrfStartTx(pDev, DevAddr))
+		{
+			pDev->bCmdMode = false;
 			count = pDev->TxData(pDev, pBuff, BuffLen);
+        	if (pDev->bIntEn == true)
+			{
+        		break;
+			}
 			DeviceIntrfStopTx(pDev);
 		}
 	} while (count <= 0 && nrtry-- > 0);
 
 	return count;
+}
+
+
+bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout)
+{
+	while (pDev->bTxComplete == false && --Timeout > 0);
+
+	atomic_store(&pDev->bTxComplete, false);
+
+	return Timeout > 0;
 }
 
 int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen,
@@ -97,6 +150,7 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, 
         {
             if (pAdCmd)
             {
+            	pDev->bCmdMode = true;
             	if (pDev->TxSrData)
             	{
             		count = pDev->TxSrData(pDev, pAdCmd, AdCmdLen);
@@ -104,6 +158,12 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, 
             	else
             	{
             		count = pDev->TxData(pDev, pAdCmd, AdCmdLen);
+            	}
+
+            	if (pDev->bIntEn == true)
+            	{
+            		DeviceIntrfWaitTxComplete(pDev, 1000000);
+					pDev->bCmdMode = false;
             	}
             }
            // if (pDev->TxSrData)
@@ -114,7 +174,11 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, 
             }
            	count = pDev->RxData(pDev, pRxBuff, RxLen);
 
-           	DeviceIntrfStopRx(pDev);
+        	if (pDev->bIntEn == true)
+        	{
+        		break;
+        	}
+			DeviceIntrfStopRx(pDev);
         }
     } while (count <= 0 && nrtry-- > 0);
 
@@ -149,7 +213,12 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd,
     do {
         if (DeviceIntrfStartTx(pDev, DevAddr))
         {
+    		pDev->bCmdMode = false;
             count = pDev->TxData(pDev, d, txlen);
+        	if (pDev->bIntEn == true)
+        	{
+        		break;
+        	}
 			DeviceIntrfStopTx(pDev);
         }
     } while (count <= 0 && nrtry-- > 0);
