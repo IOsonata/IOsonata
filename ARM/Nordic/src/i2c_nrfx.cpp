@@ -973,14 +973,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     else
 #endif
     {
-        reg->EVENTS_ERROR = 0;
+#ifdef TWIM_PRESENT
+
         reg->EVENTS_RXSTARTED = 0;
         reg->EVENTS_TXSTARTED = 0;
         reg->EVENTS_STOPPED = 0;
 
-#ifdef TWIM_PRESENT
-
-		if (pDev->DevIntrf.bDma)
+        if (pDev->DevIntrf.bDma)
 		{
 			if (pDev->DevIntrf.bIntEn)
 			{
@@ -1070,7 +1069,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 				break;
 #endif
     	}
-    	reg->INTEN = inten;
+    	reg->INTENSET = inten;
     }
 
 //    reg->ENABLE = enval;
