@@ -164,11 +164,11 @@ typedef struct __I2C_Config {
 	bool bDmaEn;			//!< true - Use DMA mode only on supported devices
 	bool bIntEn;			//!< true - Interrupt enable
 	int	IntPrio;			//!< Interrupt priority.  Value is implementation specific
-	bool bClkStretch;		//!< Clock stretching enable
+//	bool bClkStretch;		//!< Clock stretching enable
 	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
 } I2CCfg_t;
 
-//typedef I2CCfg_t	I2CCFG;
+typedef I2CCfg_t	TwiCfg_t;
 
 /// Device driver data require by low level functions
 typedef struct {
@@ -180,7 +180,7 @@ typedef struct {
 	int TRBuffLen[I2C_SLAVEMODE_MAX_ADDR];		//!< Write request buffer length in bytes
 } I2CDev_t;
 
-//typedef I2CDev_t	I2CDEV;
+typedef I2CDev_t	TwiDev_t;
 
 #pragma pack(pop)
 

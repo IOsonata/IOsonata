@@ -39,6 +39,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 #include "istddef.h"
+#include "cfifo.h"
 #include "coredev/i2c.h"
 #include "iopinctrl.h"
 #include "idelay.h"
@@ -59,6 +60,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NRFX_I2C_TRBUFF_SIZE	4
 
+// Default fifo size if one is not provided is not provided in the config.
+#define NRFX_I2C_BUFF_SIZE			8
+
+#define NRFX_I2C_CFIFO_SIZE			CFIFO_MEMSIZE(NRFX_I2C_BUFF_SIZE)
+
 //void I2CIrqHandler(int DevNo, DevIntrf_t * const pDev);
 
 #pragma pack(push, 4)
@@ -74,7 +80,8 @@ typedef struct {
 		NRF_TWIS_Type *pDmaSReg;// Slave DMA register map
 #endif
 	};
-	uint8_t TRData[NRFX_I2CSLAVE_MAXDEV][NRFX_I2C_TRBUFF_SIZE];
+	//uint8_t TRData[NRFX_I2CSLAVE_MAXDEV][NRFX_I2C_TRBUFF_SIZE];
+//	uint8_t RxFifioMem[NRFX_I2C_CFIFO_SIZE];
 } nRFTwiDev_t;
 
 typedef struct {
