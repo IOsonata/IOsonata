@@ -60,8 +60,7 @@ typedef enum {
                                 //!< if handler does not process FIFO (returns 0)
 	DEVINTRF_EVT_TX_TIMEOUT,    //!< Tx timeout
 	DEVINTRF_EVT_TX_READY,      //!< Ready to transmit
-	DEVINTRF_EVT_TX_FIFO_FULL,  //!< Transmit FIFO full, FIFO will be pushed out
-                                //!< if handler does not process FIFO (returns 0)
+	DEVINTRF_EVT_TX_FIFO_EMPTY, //!< Transmit FIFO empty, all data are transmitted
 	DEVINTRF_EVT_STATECHG,      //!< State changed. State data is device dependent.
                                 //!< To be interpreted by implementation
     DEVINTRF_EVT_READ_RQST,     //!< Receive a read request from host
