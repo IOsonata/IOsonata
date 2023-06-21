@@ -138,7 +138,7 @@ struct __device_intrf {
 	bool bDma;					//!< Enable DMA transfer support. Not all hardware interface supports this feature
 	bool bIntEn;				//!< Enable interrupt support. Not all hardware interface supports this feature
 	atomic_bool bTxComplete;	//!< Flag indicating Tx transfer completed. This is for internal use when ascynch interrupt eneabled
-	atomic_bool bCmdMode;		//!< Flag indicating a Tx follow by Rx/Tx transfer.  Usually used for read/write register value or
+	atomic_bool bNoStop;		//!< Flag indicating a continous transfer.  Usually used for read/write register value or
 	 	 	 	 	 	 	 	//!< cmd/response type. This flag is relevant only when interrupt is enabled async transfer
 
 	// Bellow are all mandatory functions to implement
@@ -203,14 +203,19 @@ struct __device_intrf {
 	bool (*StartRx)(DevIntrf_t * const pDevIntrf, uint32_t DevAddr);
 
 	/**
-	 * @brief	Receive data into pBuff passed in parameter.  Assuming StartRx was
-	 * called prior calling this function to get the actual data
+	 * @brief	Receive data into pBuff passed in parameter.
+	 * Assuming StartRx was called prior calling this function to get the actual data
+	 *
+	 * Return -1 in case of interrupt based or transfer without waiting for completion.
+	 * for example I2C where stop condition is handled asynchronously
 	 *
 	 * @param	pDevIntrf : Pointer to an instance of the Device Interface
 	 * @param	pBuff 	  : Pointer to memory area to receive data.
 	 * @param	BuffLen   : Length of buffer memory in bytes
 	 *
 	 * @return	Number of bytes read
+	 * 			-1	special case for interrupt driven without waiting for completion
+	 * 				for example I2C where stop condition is handled asynchronously
 	 */
 	int (*RxData)(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int BuffLen);
 
@@ -391,6 +396,15 @@ int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pData, int DataLen);
 
 /**
+ * @brief	Signal Tx transfer completed.
+ *
+ * This is useful for interrupt based transfer
+ *
+ * @param	pDev	: Pointer to an instance of the Device Interface
+ */
+void DeviceIntrfTxComplete(DevIntrf_t * const pDev);
+
+/**
  * @brief	Device read transfer.
  *
  * A device read transfer usually starts with a write of a command or register address.
@@ -457,14 +471,19 @@ static inline bool DeviceIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 }
 
 /**
- * @brief	Receive data into pBuff passed in parameter.  Assuming StartRx was
- * called prior calling this function to get the actual data
+ * @brief	Receive data into pBuff passed in parameter.
+ * Assuming StartRx was called prior calling this function to get the actual data
  *
- * @param	pDev 	: Pointer to an instance of the Device Interface
- * @param	pBuff 	: Pointer to memory area to receive data.
- * @param	BuffLen : Length of buffer memory in bytes
+ * Return -1 in case of interrupt based or transfer without waiting for completion.
+ * for example I2C where stop condition is handled asynchronously
+ *
+ * @param	pDevIntrf : Pointer to an instance of the Device Interface
+ * @param	pBuff 	  : Pointer to memory area to receive data.
+ * @param	BuffLen   : Length of buffer memory in bytes
  *
  * @return	Number of bytes read
+ * 			-1	special case for interrupt driven without waiting for completion
+ * 				for example I2C where stop condition is handled asynchronously
  */
 static inline int DeviceIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen) {
 	return pDev->RxData(pDev, pBuff, BuffLen);
@@ -746,25 +765,30 @@ public:
 	virtual bool StartRx(uint32_t DevAddr) = 0;
 
 	/**
-	 * @brief	Receive data into pBuff passed in parameter.  Assuming StartRx was
-	 * called prior calling this function to get the actual data
+	 * @brief	Receive data into pBuff passed in parameter.
+	 * Assuming StartRx was called prior calling this function to get the actual data
+	 *
+	 * Return -1 in case of interrupt based or transfer without waiting for completion.
+	 * for example I2C where stop condition is handled asynchronously
 	 *
 	 * @param	pBuff 	  : Pointer to memory area to receive data.
 	 * @param	BuffLen   : Length of buffer memory in bytes
 	 *
 	 * @return	Number of bytes read
+	 * 			-1	special case for interrupt driven without waiting for completion
+	 * 				for example I2C where stop condition is handled asynchronously
 	 */
 	virtual int RxData(uint8_t *pBuff, int BuffLen) = 0;
 
-	// Stop receive
-	// WARNING !!!!!
-	// This functions MUST ONLY be called if StartRx returns true.
 	/**
 	 * @brief	Completion of read data phase.
 	 *
 	 * Do require post processing after data has been received via RxData
 	 * This function must clear the busy state for re-entrancy.\n
 	 * Call this function only if StartRx was successful.
+	 *
+	 * WARNING !!!!!
+	 * NOTE: This functions MUST ONLY be called if StartRx returns true.
 	 */
 	virtual void StopRx(void) = 0;
 
