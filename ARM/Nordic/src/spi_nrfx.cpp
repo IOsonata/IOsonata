@@ -691,6 +691,8 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 
 	nRFxSPISetRate(&pDev->DevIntrf, pDev->Cfg.Rate);
 
+	pDev->DevIntrf.bTxReady = true;
+	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_SPI;
 	pDev->DevIntrf.Disable = nRFxSPIDisable;
 	pDev->DevIntrf.Enable = nRFxSPIEnable;
@@ -707,6 +709,7 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.MaxRetry = pDev->Cfg.MaxRetry;
 	pDev->DevIntrf.bDma = pDev->Cfg.bDmaEn;
+	pDev->DevIntrf.bIntEn = pDev->Cfg.bIntEn;
 	pDev->DevIntrf.PowerOff = nRFxSPIPowerOff;
 	pDev->DevIntrf.Reset = nRFxSPIReset;
 	pDev->DevIntrf.GetHandle = nRFxSPIGetHandle;

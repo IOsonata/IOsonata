@@ -40,6 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "istddef.h"
 #include "cfifo.h"
+#include "interrupt.h"
 #include "coredev/i2c.h"
 #include "iopinctrl.h"
 #include "idelay.h"
@@ -56,6 +57,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #else
 #define NRFX_I2CSLAVE_MAXDEV		0
 #endif
+
 #define NRFX_I2C_DMA_MAXCNT			((1<<TWIS0_EASYDMA_MAXCNT_SIZE)-1)
 
 #define NRFX_I2C_TRBUFF_SIZE	4
@@ -80,8 +82,12 @@ typedef struct {
 		NRF_TWIS_Type *pDmaSReg;// Slave DMA register map
 #endif
 	};
-	//uint8_t TRData[NRFX_I2CSLAVE_MAXDEV][NRFX_I2C_TRBUFF_SIZE];
-//	uint8_t RxFifioMem[NRFX_I2C_CFIFO_SIZE];
+	int RxBufflen;
+	int RxIdx;
+	uint8_t *pRxBuff;
+	int TxDatalen;
+	int TxIdx;
+	uint8_t *pTxData;
 } nRFTwiDev_t;
 
 typedef struct {
@@ -109,28 +115,28 @@ alignas(4) static nRFTwiDev_t s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{
-		0, NULL, (NRF_TWIM_Type *)NRF_TWIM0_NS_BASE
+		0, NULL, (NRF_TWIM_Type *)NRF_TWIM0_NS_BASE,
 	},
 #else
 	{
-		0, NULL, (NRF_TWIM_Type *)NRF_TWIM0_S_BASE
+		0, NULL, (NRF_TWIM_Type *)NRF_TWIM0_S_BASE,
 	},
 	{
-		1, NULL, (NRF_TWIM_Type *)NRF_TWIM1_S_BASE
+		1, NULL, (NRF_TWIM_Type *)NRF_TWIM1_S_BASE,
 	},
 	{
-		2, NULL, (NRF_TWIM_Type *)NRF_TWIM2_S_BASE
+		2, NULL, (NRF_TWIM_Type *)NRF_TWIM2_S_BASE,
 	},
 	{
-		3, NULL, (NRF_TWIM_Type *)NRF_TWIM3_S_BASE
+		3, NULL, (NRF_TWIM_Type *)NRF_TWIM3_S_BASE,
 	},
 #endif
 #else
 	{
-		0, NULL, (NRF_TWI_Type *)NRF_TWI0_BASE
+		0, NULL, (NRF_TWI_Type *)NRF_TWI0_BASE,
 	},
 	{
-		1, NULL, (NRF_TWI_Type *)NRF_TWI1_BASE
+		1, NULL, (NRF_TWI_Type *)NRF_TWI1_BASE,
 	},
 #endif
 };
@@ -390,12 +396,11 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		dev->pDmaReg->TASKS_RESUME = 1;
 		dev->pDmaReg->TASKS_STARTRX = 1;
 
-		if (pDev->bIntEn == false)
+		if (pDev->bIntEn == true)
 		{
-			if (nRFxI2CWaitRxComplete(dev, 1000000) == false)
-				break;
+			return -1;
 		}
-		else
+		if (nRFxI2CWaitRxComplete(dev, 1000000) == false)
 		{
 			break;
 		}
@@ -408,35 +413,54 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 }
 
 // Receive Data only, no Start/Stop condition
-int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
+int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	int cnt = 0;
 
-	if (pBuff == NULL || BuffLen <= 0)
+	if (pBuff == NULL || Bufflen <= 0)
 	{
 		return 0;
 	}
 
 #ifdef TWI_PRESENT
-
-	dev->pReg->EVENTS_STOPPED = 0;
-	dev->pReg->TASKS_STARTRX = 1;
-
-	while (BuffLen > 0)
+	if (pDev->bIntEn == true)
 	{
-		if (pDev->bIntEn == false)
+		dev->RxBufflen = Bufflen;
+		dev->RxIdx = 0;
+		dev->pRxBuff = pBuff;
+
+		dev->pReg->SHORTS = TWI_SHORTS_BB_SUSPEND_Msk;
+		dev->pReg->EVENTS_SUSPENDED = 0;
+		dev->pReg->EVENTS_STOPPED = 0;
+		dev->pReg->TASKS_STARTRX = 1;
+
+		cnt = -1;
+	}
+	else
+	{
+		dev->pReg->SHORTS = 0;
+		dev->pReg->EVENTS_STOPPED = 0;
+		dev->pReg->TASKS_STARTRX = 1;
+
+		while (Bufflen > 0)
 		{
-			if (nRFxI2CWaitRxComplete(dev, 1000000) == false)
+			if (nRFxI2CWaitRxComplete(dev, 100000) == false)
 			{
 				break;
 			}
-		}
-		*pBuff = dev->pReg->RXD;
 
-		BuffLen--;
-		pBuff++;
-		cnt++;
+			*pBuff = dev->pReg->RXD;
+
+			Bufflen--;
+			pBuff++;
+			cnt++;
+
+			if (Bufflen == 1)
+			{
+			    dev->pReg->TASKS_STOP = 1;
+			}
+		}
 	}
 #endif
 
@@ -452,22 +476,14 @@ void nRFxI2CStopRx(DevIntrf_t * const pDev)
 	NRF_TWI_Type *reg = dev->pReg;
 #endif
 
+//	dev->pReg->SHORTS = TWI_SHORTS_BB_STOP_Msk;
 	reg->TASKS_RESUME = 1;
     reg->TASKS_STOP = 1;
 
-    if (pDev->bIntEn == false)
-    {
-		if (dev->pI2cDev->DevIntrf.bDma == false)
-		{
-			// must read dummy last byte to generate NACK & STOP condition
-			nRFxI2CWaitRxComplete(dev, 1000000);
-#ifdef TWI_PRESENT
-			(void)dev->pReg->RXD;
-#endif
-		}
-
-    	nRFxI2CWaitStop(dev, 1000000);
-    }
+	if (pDev->bIntEn == false)
+	{
+		nRFxI2CWaitStop(dev, 1000000);
+	}
 }
 
 bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
@@ -476,11 +492,9 @@ bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 
 #ifdef TWI_PRESENT
 	dev->pReg->ADDRESS = DevAddr;
-	//dev->pReg->INTENCLR = 0xFFFFFFFF;
 	NRF_TWI_Type *reg = dev->pReg;
 #else
 	dev->pDmaReg->ADDRESS = DevAddr;
-	//dev->pDmaReg->INTENCLR = 0xFFFFFFFF;
 	NRF_TWIM_Type *reg = dev->pDmaReg;
 #endif
     if (reg->EVENTS_ERROR)
@@ -516,14 +530,14 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 		dev->pDmaReg->TASKS_RESUME = 1;
 		dev->pDmaReg->TASKS_STARTTX = 1;
 
-		if (pDev->bIntEn == false || pDev->bCmdMode)
+		if (pDev->bIntEn == false || pDev->bNoStop)
 		{
 			if (nRFxI2CWaitTxComplete(dev, 100000) == false)
 				break;
 		}
 		else
 		{
-			return l;
+			return -1;
 		}
 		DataLen -= l;
 		pData += l;
@@ -533,27 +547,62 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 	return cnt;
 }
 
-int nRFxI2CTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
+int nRFxI2CTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
+	int rtry = pDev->MaxRetry;
 
+	//atomic_store(&pDev->bTxComplete, false);
 #ifdef TWI_PRESENT
+	dev->pReg->SHORTS = 0;
+	dev->pReg->EVENTS_STOPPED = 0;
 	dev->pReg->TASKS_STARTTX = 1;
 
-	while (DataLen > 0)
+	if (pDev->bIntEn == true)
 	{
-		dev->pReg->TXD = *pData;
+		dev->TxDatalen = Datalen;
+		dev->TxIdx = 0;
+		dev->pTxData = pData;
 
-		if (nRFxI2CWaitTxComplete(dev, 10000) == false)
+		//g_Uart.printf("TxData %d\r\n", Datalen);
+		if (pDev->bTxReady == true)
 		{
-			break;
+			//g_Uart.printf("iTx %x %d\r\n", dev->pTxData[dev->TxIdx], dev->pReg->EVENTS_RXDREADY);
+			pDev->bTxReady = false;
+			dev->pReg->TXD = dev->pTxData[dev->TxIdx];
+
+			if (pDev->bNoStop == true)
+			{
+				//if (nRFxI2CWaitTxComplete(dev, 100000) == false)
+				{
+				//	break;
+				}
+			}
 		}
 
-		DataLen--;
-		pData++;
-		cnt++;
+		return -1;
+	}
+	else
+	{
+
+		pDev->bTxReady = false;
+		while (Datalen > 0 && rtry > 0)
+		{
+//			g_Uart.printf("Tx %d %x\r\n", Datalen, *pData);
+			dev->pReg->TXD = *pData;
+			if (nRFxI2CWaitTxComplete(dev, 100000) == false)
+			{
+				//g_Uart.printf("Tx Failed\r\n");
+				rtry--;
+				continue;
+			}
+			Datalen--;
+			cnt++;
+			pData++;
+		}
+		pDev->bTxReady = true;
 	}
 #endif
 	return cnt;
@@ -715,6 +764,7 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
     	{
     		dev->pDmaSReg->EVENTS_ERROR = 0;
     	}
+
 #endif
     }
     else
@@ -732,28 +782,29 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
         if (reg->EVENTS_ERROR)
         {
             // Abort in case error
+            printf("error %x\r\n", reg->ERRORSRC);
             reg->ERRORSRC = reg->ERRORSRC;
             reg->EVENTS_ERROR = 0;
+            reg->TASKS_RESUME = 1;
             reg->TASKS_STOP = 1;
             while( !reg->EVENTS_STOPPED );
-            printf("error\r\n");
         }
 
         if (reg->EVENTS_STOPPED)
         {
             reg->EVENTS_STOPPED = 0;
 
+			len = dev->RxIdx;
 #ifdef TWIM_PRESENT
 
             reg->EVENTS_TXSTARTED = 0;
-			len = dev->pDmaReg->RXD.AMOUNT;
 			if (reg->EVENTS_RXSTARTED)
 			{
+				len = dev->pDmaReg->RXD.AMOUNT;
 				//DeviceIntrfRxComplete(pDev);
 	            reg->EVENTS_RXSTARTED = 0;
 			}
 #endif
-			//printf("cplt %d\r\n", len);
     		if (dev->pI2cDev->DevIntrf.EvtCB)
     		{
     			dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, len);
@@ -769,14 +820,16 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
 				//DeviceIntrfTxComplete(pDev);
 				reg->EVENTS_LASTTX = 0;
 
-				if (pDev->bCmdMode == false)
+				DeviceIntrfTxComplete(pDev);
+/*
+				if (pDev->bNoStop == false)
 				{
 					DeviceIntrfStopTx(pDev);
 					atomic_store(&pDev->bTxComplete, true);
 
 //					pDev->bTxComplete = true;
 				}
-
+*/
 				if (dev->pI2cDev->DevIntrf.EvtCB)
 				{
 					dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, len);
@@ -798,11 +851,10 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
 				// Must wait for last DMA then issue a stop
 				reg->EVENTS_LASTRX = 0;
 				//DeviceIntrfRxComplete(pDev);
-				//printf("last RX %d\r\n", dev->pDmaReg->RXD.AMOUNT);
 
-				if (pDev->bCmdMode == false)
+				if (pDev->bNoStop == false)
 				{
-				//	printf("Stop RX\r\n");
+					//printf("Stop RX\r\n");
 					DeviceIntrfStopRx(pDev);
 				}
 				else
@@ -815,10 +867,66 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
 #endif
         {
 #ifdef TWI_PRESENT
+
             if (dev->pReg->EVENTS_TXDSENT)
             {
-            	dev->pReg->EVENTS_TXDSENT = 0;
+				dev->pReg->EVENTS_TXDSENT = 0;
+				dev->TxIdx++;
+				dev->TxDatalen--;
 
+				if (dev->TxDatalen > 0)
+				{
+					dev->pReg->TXD = dev->pTxData[dev->TxIdx];
+				}
+				else
+				{
+					if (dev->pI2cDev->DevIntrf.EvtCB)
+					{
+						dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_TX_FIFO_EMPTY, NULL, dev->TxIdx);
+					}
+					if (pDev->bNoStop == false)
+					{
+						//g_Uart.printf("TxStop\r\n");
+						DeviceIntrfStopTx(pDev);
+					}
+					atomic_store(&pDev->bTxReady, true);
+				}
+				//if (dev->pI2cDev->DevIntrf.EvtCB)
+				//{
+				//	dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, dev->TxIdx - 1);
+				//}
+            }
+            if (dev->pReg->EVENTS_RXDREADY)
+            {
+				dev->pReg->EVENTS_RXDREADY = 0;
+				dev->pRxBuff[dev->RxIdx] = dev->pReg->RXD;
+
+           		dev->RxBufflen--;
+           		dev->RxIdx++;
+
+           		//while (dev->pReg->EVENTS_SUSPENDED == 0 && dev->pReg->EVENTS_STOPPED == 0);
+
+           		dev->pReg->EVENTS_SUSPENDED = 0;
+				if (dev->RxBufflen > 1)
+        		{
+					dev->pReg->EVENTS_STOPPED = 0;
+					dev->pReg->TASKS_RESUME = 1;
+        		}
+				else if (dev->RxBufflen > 0)
+        		{
+    				if (pDev->bNoStop == false)
+    				{
+    					//g_Uart.printf("StopRx\r\n");
+    					//dev->bRxReady = false;
+    					DeviceIntrfStopRx(pDev);
+    				}
+        		}
+				if (dev->pI2cDev->DevIntrf.EvtCB)
+				{
+					//uint32_t d = dev->pReg->RXD;
+					//int cnt = CFifoUsed(dev->hRxFifo);
+					//dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_RX_DATA, (uint8_t*)&d, dev->RxIdx);
+				}
             }
 #endif
         }
@@ -875,12 +983,19 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 	nRFxI2CSetRate(&pDev->DevIntrf, pCfgData->Rate);
 
+	s_nRFxI2CDev[pCfgData->DevNo].RxBufflen = 0;
+	s_nRFxI2CDev[pCfgData->DevNo].RxIdx = 0;
+	s_nRFxI2CDev[pCfgData->DevNo].pRxBuff = NULL;
+	s_nRFxI2CDev[pCfgData->DevNo].TxDatalen = 0;
+	s_nRFxI2CDev[pCfgData->DevNo].TxIdx = 0;
+	s_nRFxI2CDev[pCfgData->DevNo].pTxData = NULL;
+	//s_nRFxI2CDev[pCfgData->DevNo].bTxReady = true;
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;
 	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
 	pDev->DevIntrf.bIntEn = pCfgData->bIntEn;
-	pDev->DevIntrf.bTxComplete = false;
-	pDev->DevIntrf.bCmdMode = false;
+	pDev->DevIntrf.bTxReady = true;
+	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.Disable = nRFxI2CDisable;
 	pDev->DevIntrf.Enable = nRFxI2CEnable;
 	pDev->DevIntrf.PowerOff = nRFxI2CPowerOff;
@@ -907,6 +1022,9 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
 
+
+	//s_nRFxI2CDev[pCfgData->DevNo].hRxFifo = CFifoInit(s_nRFxI2CDev[pCfgData->DevNo].RxFifoMem, NRFX_I2C_CFIFO_SIZE, 1, true);
+	//s_nRFxI2CDev[pCfgData->DevNo].hTxFifo = CFifoInit(s_nRFxI2CDev[pCfgData->DevNo].TxFifoMem, NRFX_I2C_CFIFO_SIZE, 1, true);
 
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
@@ -1008,7 +1126,14 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 			s_nRFxI2CDev[pCfgData->DevNo].pReg->ENABLE = enval;
 #endif
 			// Interrupt not available in non DMA
-			pDev->DevIntrf.bIntEn = false;
+//			pDev->DevIntrf.bIntEn = false;
+			if (pDev->DevIntrf.bIntEn)
+			{
+				inten = TWI_INTENSET_TXDSENT_Msk | TWI_INTENSET_RXDREADY_Msk |
+						TWI_INTENSET_ERROR_Msk | TWI_INTENSET_STOPPED_Msk | TWI_INTENSET_SUSPENDED_Msk;
+
+				//reg->ENABLE = enval;
+			}
 		}
 
     }

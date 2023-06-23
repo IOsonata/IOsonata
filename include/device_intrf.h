@@ -137,10 +137,9 @@ struct __device_intrf {
 	DEVINTRF_TYPE Type;     	//!< Identify the type of interface
 	bool bDma;					//!< Enable DMA transfer support. Not all hardware interface supports this feature
 	bool bIntEn;				//!< Enable interrupt support. Not all hardware interface supports this feature
-	atomic_bool bTxComplete;	//!< Flag indicating Tx transfer completed. This is for internal use when ascynch interrupt eneabled
+	atomic_bool bTxReady;		//!< Flag indicating Tx is ready for transfer.
 	atomic_bool bNoStop;		//!< Flag indicating a continous transfer.  Usually used for read/write register value or
 	 	 	 	 	 	 	 	//!< cmd/response type. This flag is relevant only when interrupt is enabled async transfer
-
 	// Bellow are all mandatory functions to implement
 	// On init, all implementation must fill these function, no NULL allowed
 	// If a function is not used. It must be implemented as do nothing function

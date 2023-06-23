@@ -75,7 +75,7 @@ int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 
 void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
 {
-	atomic_store(&pDev->bTxComplete, true);
+	atomic_store(&pDev->bTxReady, true);
 
 	if (pDev->bNoStop == false)
 	{
@@ -110,9 +110,7 @@ int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
 
 bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout)
 {
-	while (pDev->bTxComplete == false && --Timeout > 0);
-
-	atomic_store(&pDev->bTxComplete, false);
+	while (pDev->bTxReady == false && --Timeout > 0);
 
 	return Timeout > 0;
 }
