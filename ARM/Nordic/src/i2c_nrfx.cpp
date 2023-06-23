@@ -1124,7 +1124,6 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 			enval = (TWI_ENABLE_ENABLE_Enabled << TWI_ENABLE_ENABLE_Pos);
 			s_nRFxI2CDev[pCfgData->DevNo].pReg->EVENTS_RXDREADY = 0;
 			s_nRFxI2CDev[pCfgData->DevNo].pReg->ENABLE = enval;
-#endif
 			// Interrupt not available in non DMA
 //			pDev->DevIntrf.bIntEn = false;
 			if (pDev->DevIntrf.bIntEn)
@@ -1134,6 +1133,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 				//reg->ENABLE = enval;
 			}
+#endif
 		}
 
     }
