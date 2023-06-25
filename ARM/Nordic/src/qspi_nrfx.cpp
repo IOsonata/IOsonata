@@ -48,11 +48,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "spi_nrfx.h"
 
-extern NrfSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV];
+extern nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV];
 
 #if defined(NRF52840_XXAA) || defined(NRF5340_XXAA_APPLICATION)
 
-static bool nRFxQSPIWaitReady(NrfSpiDev_t * const pDev, uint32_t Timeout)
+static bool nRFxQSPIWaitReady(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
 	uint32_t val = 0;
 
@@ -66,7 +66,7 @@ static bool nRFxQSPIWaitReady(NrfSpiDev_t * const pDev, uint32_t Timeout)
 	return false;
 }
 
-static bool nRFxQSPIWaitEventReady(NrfSpiDev_t * const pDev, uint32_t Timeout)
+static bool nRFxQSPIWaitEventReady(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
 	uint32_t val = 0;
 
@@ -84,7 +84,7 @@ static bool nRFxQSPIWaitEventReady(NrfSpiDev_t * const pDev, uint32_t Timeout)
 
 static void nRFxQSPIDisable(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	dev->pQSpiReg->TASKS_DEACTIVATE = 1;
 	dev->pQSpiReg->ENABLE = (QSPI_ENABLE_ENABLE_Disabled << QSPI_ENABLE_ENABLE_Pos);
@@ -92,7 +92,7 @@ static void nRFxQSPIDisable(DevIntrf_t * const pDev)
 
 static void nRFxQSPIEnable(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	dev->pQSpiReg->ENABLE = (QSPI_ENABLE_ENABLE_Enabled << QSPI_ENABLE_ENABLE_Pos);
 	dev->pQSpiReg->EVENTS_READY = 0;
@@ -102,7 +102,7 @@ static void nRFxQSPIEnable(DevIntrf_t * const pDev)
 
 static void nRFxQSPIPowerOff(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	// Undocumented Power down.  Nordic Bug with DMA causing high current consumption
 	*(volatile uint32_t *)((uint32_t)dev->pQSpiReg + 0xFFC);
@@ -123,7 +123,7 @@ static uint32_t nRFxQSPIGetRate(DevIntrf_t * const pDev)
 	int rate = 0;
 
 	if (pDev && pDev->pDevData)
-		rate = ((NrfSpiDev_t*)pDev->pDevData)->pSpiDev->Cfg.Rate;
+		rate = ((nRFSpiDev_t*)pDev->pDevData)->pSpiDev->Cfg.Rate;
 
 	return rate;
 }
@@ -132,7 +132,7 @@ static uint32_t nRFxQSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 {
 	uint32_t rate = 0;
 	uint32_t sckfreq = (32000000 + (DataRate >> 1)) / DataRate - 1;
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	dev->pQSpiReg->IFCONFIG1 &= ~QSPI_IFCONFIG1_SCKFREQ_Msk;
 	dev->pQSpiReg->IFCONFIG1 |= (sckfreq & 0xFFFF) << QSPI_IFCONFIG1_SCKFREQ_Pos;
@@ -147,7 +147,7 @@ static uint32_t nRFxQSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 // Initial receive
 bool nRFxQSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
@@ -169,7 +169,7 @@ bool nRFxQSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Receive Data only, no Start/Stop condition
 int nRFxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
     int cnt = 0;
 
 	nRFxQSPIWaitReady(dev, 10000);
@@ -216,7 +216,7 @@ int nRFxQSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 // Stop receive
 void nRFxQSPIStopRx(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	nRFxQSPIWaitEventReady(dev, 10000);
 
@@ -233,7 +233,7 @@ void nRFxQSPIStopRx(DevIntrf_t * const pDev)
 // Initiate transmit
 bool nRFxQSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
@@ -255,7 +255,7 @@ bool nRFxQSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Transmit Data only, no Start/Stop condition
 int nRFxQSPITxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 	int cnt = 0;
 
 	nRFxQSPIWaitReady(dev, 10000);
@@ -303,7 +303,7 @@ int nRFxQSPITxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 // Stop transmit
 void nRFxQSPIStopTx(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	nRFxQSPIWaitEventReady(dev, 10000);
 	nRFxQSPIWaitReady(dev, 10000);
@@ -319,7 +319,7 @@ void nRFxQSPIStopTx(DevIntrf_t * const pDev)
 
 bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	uint32_t ifcfg0 = dev->pQSpiReg->IFCONFIG0;
 
 	if (AddrLen > 3)
@@ -399,7 +399,7 @@ bool nRFxQSPISendCmd(DevIntrf_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_
 
 void *nRFxQSPIGetHandle(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
 	return dev->pSpiDev;
 }
@@ -465,6 +465,8 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 			break;
 	}
 
+	pDev->DevIntrf.bTxReady = true;
+	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_QSPI;
 	pDev->DevIntrf.Disable = nRFxQSPIDisable;
 	pDev->DevIntrf.Enable = nRFxQSPIEnable;

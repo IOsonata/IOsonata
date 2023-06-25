@@ -49,7 +49,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 bool nRFxQSPIInit(SPIDev_t * const pDev);
 //void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev);
 
-alignas(4) static const NrfSpiFreq_t s_nRFxSPIFreq[] = {
+alignas(4) static const nRFSpiFreq_t s_nRFxSPIFreq[] = {
 #ifdef SPIM_PRESENT
 		{125000, SPIM_FREQUENCY_FREQUENCY_K125},
 		{250000, SPIM_FREQUENCY_FREQUENCY_K250},
@@ -73,9 +73,9 @@ alignas(4) static const NrfSpiFreq_t s_nRFxSPIFreq[] = {
 #endif
 };
 
-static const int s_NbnRFxSPIFreq = sizeof(s_nRFxSPIFreq) / sizeof(NrfSpiFreq_t);
+static const int s_NbnRFxSPIFreq = sizeof(s_nRFxSPIFreq) / sizeof(nRFSpiFreq_t);
 
-alignas(4) NrfSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
+alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{
@@ -125,10 +125,10 @@ alignas(4) NrfSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 #endif
 };
 
-static const int s_NbnRFxSPIDev = sizeof(g_nRFxSPIDev) / sizeof(NrfSpiDev_t);
+static const int s_NbnRFxSPIDev = sizeof(g_nRFxSPIDev) / sizeof(nRFSpiDev_t);
 
 #ifdef SPIM_PRESENT
-bool nRFxSPIWaitDMA(NrfSpiDev_t * const pDev, uint32_t Timeout)
+bool nRFxSPIWaitDMA(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
 	uint32_t val = 0;
 
@@ -145,7 +145,7 @@ bool nRFxSPIWaitDMA(NrfSpiDev_t * const pDev, uint32_t Timeout)
 #endif
 
 #ifdef SPI_PRESENT
-bool nRFxSPIWaitReady(NrfSpiDev_t * const pDev, uint32_t Timeout)
+bool nRFxSPIWaitReady(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
 	do {
         if (pDev->pReg->EVENTS_READY)
@@ -160,7 +160,7 @@ bool nRFxSPIWaitReady(NrfSpiDev_t * const pDev, uint32_t Timeout)
 #endif
 
 #ifdef SPIM_PRESENT
-bool nRFxSPIWaitRX(NrfSpiDev_t * const pDev, uint32_t Timeout)
+bool nRFxSPIWaitRX(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
 	uint32_t val = 0;
 
@@ -181,7 +181,7 @@ static uint32_t nRFxSPIGetRate(DevIntrf_t * const pDev)
 	int rate = 0;
 
 	if (pDev && pDev->pDevData)
-		rate = ((NrfSpiDev_t*)pDev->pDevData)->pSpiDev->Cfg.Rate;
+		rate = ((nRFSpiDev_t*)pDev->pDevData)->pSpiDev->Cfg.Rate;
 
 	return rate;
 }
@@ -190,7 +190,7 @@ static uint32_t nRFxSPIGetRate(DevIntrf_t * const pDev)
 // return actual rate
 uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 	uint32_t regval = 0;
 
 
@@ -214,7 +214,7 @@ uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 void nRFxSPIDisable(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
@@ -236,7 +236,7 @@ void nRFxSPIDisable(DevIntrf_t * const pDev)
 
 void nRFxSPIEnable(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
@@ -258,7 +258,7 @@ void nRFxSPIEnable(DevIntrf_t * const pDev)
 
 void nRFxSPIPowerOff(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	// Undocumented Power down.  Nordic Bug with DMA causing high current consumption
 #ifdef SPIM_PRESENT
@@ -286,7 +286,7 @@ void nRFxSPIPowerOff(DevIntrf_t * const pDev)
 // Initial receive
 bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
@@ -316,7 +316,7 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Receive Data only, no Start/Stop condition
 int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
     int cnt = 0;
 
 #ifdef SPI_PRESENT
@@ -343,7 +343,7 @@ int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 // Receive Data only, no Start/Stop condition
 int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
 #if 0
@@ -394,7 +394,7 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 // Stop receive
 void nRFxSPIStopRx(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_AUTO)
 	{
@@ -406,7 +406,7 @@ void nRFxSPIStopRx(DevIntrf_t * const pDev)
 // Initiate transmit
 bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
@@ -436,7 +436,7 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Send Data only, no Start/Stop condition
 int nRFxSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t*)pDev->pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t*)pDev->pDevData;
     int cnt = 0;
 
 #ifdef SPI_PRESENT
@@ -469,7 +469,7 @@ int nRFxSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 // Transmit Data only, no Start/Stop condition
 int nRFxSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
 #if 0
@@ -520,7 +520,7 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 // Stop transmit
 void nRFxSPIStopTx(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_AUTO)
 	{
@@ -546,7 +546,7 @@ void nRFxSPIReset(DevIntrf_t * const pDev)
 
 void *nRFxSPIGetHandle(DevIntrf_t * const pDev)
 {
-	NrfSpiDev_t *dev = (NrfSpiDev_t *)pDev-> pDevData;
+	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
 	return dev->pSpiDev;
 }
@@ -554,7 +554,7 @@ void *nRFxSPIGetHandle(DevIntrf_t * const pDev)
 void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev)
 //extern "C" void SPI_IRQHandler(int DevNo)
 {
-	NrfSpiDev_t *dev = &g_nRFxSPIDev[DevNo];//(NrfSpiDev_t *)pDev->DevIntrf.pDevData;
+	nRFSpiDev_t *dev = &g_nRFxSPIDev[DevNo];//(NrfSpiDev_t *)pDev->DevIntrf.pDevData;
 
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
@@ -819,6 +819,13 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
 	pDev->Cfg = *pCfgData;
 	g_nRFxSPIDev[pCfgData->DevNo].pSpiDev  = pDev;
+	g_nRFxSPIDev[pCfgData->DevNo].RxBufflen = 0;
+	g_nRFxSPIDev[pCfgData->DevNo].RxIdx = 0;
+	g_nRFxSPIDev[pCfgData->DevNo].pRxBuff = NULL;
+	g_nRFxSPIDev[pCfgData->DevNo].TxDatalen = 0;
+	g_nRFxSPIDev[pCfgData->DevNo].TxIdx = 0;
+	g_nRFxSPIDev[pCfgData->DevNo].pTxData = NULL;
+
 	pDev->DevIntrf.pDevData = (void*)&g_nRFxSPIDev[pCfgData->DevNo];
 
 #if defined(NRF52840) || defined(NRF5340_XXAA_APPLICATION)

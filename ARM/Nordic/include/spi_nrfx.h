@@ -76,14 +76,18 @@ typedef struct {
 	uint8_t Cmd;	// Current QSPI command code
 	uint32_t ParamLen;	// Command parameter length in bytes
 	uint32_t Param[2];	// Command Parameter data
-} NrfSpiDev_t;
-
-//typedef NrfSpiDev_t		NRFX_SPIDEV;
+	int RxBufflen;
+	int RxIdx;
+	uint8_t *pRxBuff;
+	int TxDatalen;
+	int TxIdx;
+	uint8_t *pTxData;
+} nRFSpiDev_t;
 
 typedef struct {
 	uint32_t Freq;
 	uint32_t RegVal;
-} NrfSpiFreq_t;
+} nRFSpiFreq_t;
 
 //typedef NrfSpiFreq_t	NRFX_SPIFREQ;
 
