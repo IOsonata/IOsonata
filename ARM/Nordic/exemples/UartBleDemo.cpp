@@ -293,16 +293,13 @@ void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 {
-	BtGattEvtHandler(Evt, pCtx);
+	//BtGattEvtHandler(Evt, pCtx);
 }
 
 void BtAppInitUserServices()
 {
     bool res;
-
     res = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
-   // err_code = BtDevAddSrvc(&g_UartBleSrvc, &s_UartSrvcCfg);
-    //APP_ERROR_CHECK(err_code);
 }
 
 void ButEvent(int IntNo, void *pCtx)
@@ -433,7 +430,7 @@ int main()
 
     //g_Uart.Disable();
 
-    BtAppInit(&s_BleAppCfg);//, true);
+    BtAppInit(&s_BleAppCfg);
 
     BtAppRun();
 
