@@ -517,6 +517,8 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 	{
 		int l = min(DataLen, NRFX_I2C_DMA_MAXCNT);
 
+		pDev->bTxReady = false;
+
 		dev->pDmaReg->EVENTS_ERROR = 0;
 		dev->pDmaReg->EVENTS_STOPPED = 0;
 	    if (dev->pI2cDev->DevIntrf.bDma)
