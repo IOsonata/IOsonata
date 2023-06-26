@@ -47,6 +47,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
+#include <atomic>
 
 #include "coredev/i2c.h"
 #include "coredev/uart.h"
@@ -69,7 +70,7 @@ static const UARTCfg_t s_UartCfg = {
 	UART_DEVNO,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	1000000,			// Rate
+	115200,			// Rate
 	8,
 	UART_PARITY_NONE,
 	1,					// Stop bit
@@ -89,6 +90,8 @@ UART g_Uart;
 //********** I2C Master **********
 #define I2C_SCL_RATE	100000 // Rate in Hz, supported 100k, 250k, and 400k
 
+int I2CMasterIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+
 static const IOPinCfg_t s_I2cMasterPins[] = {
 	{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
 	{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
@@ -106,9 +109,9 @@ static const I2CCfg_t s_I2cCfgMaster = {
 	.NbSlaveAddr = 0,			// Number of slave addresses
 	.SlaveAddr = {0,},		// Slave addresses
 	.bDmaEn = true,
-	.bIntEn = false,
+	.bIntEn = true,
 	.IntPrio = 7,			// Interrupt prio
-	.EvtCB = NULL		// Event callback
+	.EvtCB = I2CMasterIntrfHandler		// Event callback
 };
 
 I2C g_I2CMaster;
@@ -123,7 +126,25 @@ uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
 uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
 bool s_bWriteRqst = false;
 int s_Offset = 0;
+std::atomic<bool> g_bCompleted(false);
+std::atomic<int> g_RxCnt(0);
 
+int I2CMasterIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
+{
+	switch (EvtId)
+	{
+		case DEVINTRF_EVT_TX_READY:
+			//g_bCompleted = true;
+			break;
+		case DEVINTRF_EVT_COMPLETED:
+			g_RxCnt = Len;
+			printf("DEVINTRF_EVT_COMPLETED %d\r\n", (int)g_RxCnt);
+			g_bCompleted = true;
+			break;
+	}
+
+	return 0;
+}
 
 void HardwareInit()
 {
@@ -133,7 +154,7 @@ void HardwareInit()
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
 
-	printf("Init I2C Master/Slave demo\r\n");
+	g_Uart.printf("Init I2C Master demo\r\n");
 }
 
 //
@@ -193,9 +214,19 @@ int main()
 
 	offset = 0; // want to read/write from offset position
 	uint8_t nBytes = 11;
+	int c = 0;
+
+#if 1
 //	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
 	//printf("Write %d bytes at offset %d\r\n", c, offset);
-	int c = g_I2CMaster.Tx(I2C_SLAVE_ADDR, buff, nBytes);
+	c = g_I2CMaster.Tx(I2C_SLAVE_ADDR, buff, nBytes);
+
+	while (s_I2cCfgMaster.bIntEn)
+	{
+		if (g_bCompleted == true)
+			break;
+	}
+
 	printf("Write %d bytes\r\n", c);
 	printf("s_WriteRqstData: ");
 	for (int i = offset; i < offset + nBytes; i++)
@@ -203,37 +234,84 @@ int main()
 		printf("%x ", s_WriteRqstData[i]);
 	}
 	printf("\r\n");
+#endif
 
-
+	g_bCompleted = false;
 
 	// Master send read command to read 10 bytes from offset defined in data[0]
 	//offset = 3;
 	nBytes = 9;
 	memset(buff, 0xFF, I2C_BUFF_SIZE);
+#if 1
 //	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, nBytes);
 	//printf("Read %d bytes from offset %d: ", c, offset);
+	printf("Rx %d bytes\r\n", nBytes);
 	c = g_I2CMaster.Rx(I2C_SLAVE_ADDR, buff, nBytes);
+	while (s_I2cCfgMaster.bIntEn)
+	{
+		__WFE();
+		if (g_bCompleted == true)
+		{
+			c = g_RxCnt;
+			break;
+		}
+	}
 	printf("Read %d bytes: ", c);
 	for (int i = 0; i < c; i++)
 	{
 		printf("%x ", buff[i]);
 	}
 	printf("\r\n");
+	g_bCompleted = false;
+#endif
 
+#if 1
 	// Master send read command without setting anything
 	nBytes = 5;
-	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, NULL, 0, buff, nBytes);
+	uint8_t ad[2] = {3, 13};
+	//c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &ad, 1, 0, 0);
+#if 1
+	g_Uart.printf("Read 1, %d\r\n", nBytes);
+	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, ad, 1, buff, nBytes);
+	while (s_I2cCfgMaster.bIntEn)
+	{
+		__WFE();
+		if (g_bCompleted == true)
+		{
+			c = g_RxCnt;
+			break;
+		}
+	}
 	printf("Master send read command without setting anything %d bytes: \r\n", c);
 	for (int i = 0; i < c; i++)
 	{
 		printf("%x ", buff[i]);
 	}
 	printf("\r\n");
+//#else
+	g_bCompleted = false;
 
-	while (1)
+	g_Uart.printf("Read %d\r\n", nBytes);
+	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, NULL, 0, buff, nBytes);
+	while (s_I2cCfgMaster.bIntEn)
 	{
 		__WFE();
+		if (g_bCompleted == true)
+		{
+			c = g_RxCnt;
+			break;
+		}
 	}
+	printf("Master send read command without setting anything %d bytes: \r\n", c);
+	for (int i = 0; i < c; i++)
+	{
+		printf("%x ", buff[i]);
+	}
+	printf("\r\n");
+#endif
+#endif
+
+	while(1) __WFE();
 
 	return 0;
 }
