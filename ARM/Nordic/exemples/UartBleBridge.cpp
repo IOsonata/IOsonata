@@ -224,7 +224,7 @@ BtIntrf g_BtIntrf;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-// UART configuration data
+/// UART pin configuration
 
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
 
@@ -285,15 +285,13 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
-	BtGattEvtHandler(Evt, pCtx);
+	//BtGattEvtHandler(Evt, pCtx);
 }
 
 void BtAppInitUserServices()
 {
     bool res;
-
     res = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
-    //APP_ERROR_CHECK(err_code);
 }
 
 void BtAppInitUserData()
@@ -379,7 +377,7 @@ int main()
 {
     HardwareInit();
 
-    BtAppInit(&s_BleAppCfg);//, true);
+    BtAppInit(&s_BleAppCfg);
 
     g_BtIntrf.Init(s_BleInrfCfg);
 
