@@ -36,11 +36,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/spi_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/spi_slave_demo.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/spi/spi_slave_demo.cpp</locationURI>

@@ -322,20 +322,31 @@ int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 #ifdef SPI_PRESENT
     dev->pReg->EVENTS_READY = 0;
 
-    while (BuffLen > 0)
+    if (pDev->bIntEn == true)
     {
-        dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
-
-        if (nRFxSPIWaitReady(dev, 100000) == false)
-            break;
-
-        *pBuff = dev->pReg->RXD;
-
-        BuffLen--;
-        pBuff++;
-        cnt++;
+    	dev->RxBufflen = BuffLen;
+    	dev->RxIdx = 0;
+    	dev->pRxBuff = pBuff;
+    	cnt = -1;
+		dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
+		//dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
     }
+    else
+    {
+		while (BuffLen > 0)
+		{
+			dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
 
+			if (nRFxSPIWaitReady(dev, 100000) == false)
+				break;
+
+			*pBuff = dev->pReg->RXD;
+
+			BuffLen--;
+			pBuff++;
+			cnt++;
+		}
+    }
 #endif
     return cnt;
 }
@@ -445,22 +456,37 @@ int nRFxSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
         return 0;
     }
 
-    while (DataLen > 0)
+    pDev->bTxReady = false;
+
+    if (pDev->bIntEn)
     {
-        dev->pReg->TXD = *pData;
+    	dev->pTxData = pData;
+    	dev->TxDatalen = DataLen;
+    	dev->TxIdx = 0;
+		dev->pReg->TXD = *pData;
+		dev->TxIdx++;
+		dev->TxDatalen--;
 
-        if (nRFxSPIWaitReady(dev, 10000) == false)
-        {
-            break;
-        }
-
-        int d = dev->pReg->RXD;
-
-        DataLen--;
-        pData++;
-        cnt++;
+    	return -1;
     }
+    else
+    {
+		while (DataLen > 0)
+		{
+			dev->pReg->TXD = *pData;
 
+			if (nRFxSPIWaitReady(dev, 10000) == false)
+			{
+				break;
+			}
+
+			int d = dev->pReg->RXD;
+
+			DataLen--;
+			pData++;
+			cnt++;
+		}
+    }
 #endif
 
     return cnt;
@@ -602,6 +628,87 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 #endif
 			dev->pDmaSReg->EVENTS_ACQUIRED = 0;
 			dev->pDmaSReg->TASKS_RELEASE = 1;
+		}
+	}
+	else
+	{
+		// Master mode
+
+#ifdef SPIM_PRESENT
+		if (pDev->bDma)
+		{
+			if (dev->pDmaReg->EVENTS_STOPPED)
+			{
+				dev->pDmaReg->EVENTS_STOPPED = 0;
+			}
+
+			if (dev->pDmaReg->EVENTS_ENDRX)
+			{
+				dev->pDmaReg->EVENTS_ENDRX = 0;
+			}
+			if (dev->pDmaReg->EVENTS_ENDTX)
+			{
+				dev->pDmaReg->EVENTS_ENDTX = 0;
+			}
+			if (dev->pDmaReg->EVENTS_END)
+			{
+				dev->pDmaReg->EVENTS_END = 0;
+				pDev->bTxReady = true;
+
+				if (dev->pSpiDev->DevIntrf.EvtCB)
+				{
+					dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, dev->RxIdx);
+				}
+			}
+		}
+		else
+#endif
+		{
+			if (dev->pReg->EVENTS_READY)
+			{
+				dev->pReg->EVENTS_READY = 0;
+
+				if (dev->RxBufflen > 0)
+				{
+					dev->pRxBuff[dev->RxIdx] = dev->pReg->RXD;
+					dev->RxBufflen--;
+					dev->RxIdx++;
+					if (dev->RxBufflen <= 0 && dev->pSpiDev->DevIntrf.EvtCB)
+					{
+						DeviceIntrfStopRx(pDev);
+						dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, dev->RxIdx);
+					}
+				}
+				else
+				{
+					(void)dev->pReg->RXD;
+				}
+
+				if (dev->TxDatalen > 0)
+				{
+					dev->pReg->TXD = dev->pTxData[dev->TxIdx];
+					dev->TxIdx++;
+					dev->TxDatalen--;
+				}
+				else
+				{
+					pDev->bTxReady = true;
+					if (pDev->bNoStop == false && dev->TxIdx > 0)
+					{
+						DeviceIntrfStopTx(pDev);
+						if (dev->pSpiDev->DevIntrf.EvtCB)
+						{
+							dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, dev->TxIdx);
+						}
+
+					}
+					dev->TxIdx = 0;
+					if (dev->RxBufflen > 0)
+					{
+						dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
+					}
+				}
+			}
 		}
 	}
 }
@@ -775,12 +882,21 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 		{
 			reg->ORC = 0xFF;
 			reg->ENABLE = (SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos);
+	        if (pDev->DevIntrf.bIntEn == true)
+	        {
+	        	inten = reg->INTENSET = SPIM_INTENSET_ENDRX_Msk | SPIM_INTENSET_ENDTX_Msk |
+	        							SPIM_INTENSET_END_Msk | SPIM_INTENSET_STOPPED_Msk;
+	        }
 		}
 		else
 		{
 #ifdef SPI_PRESENT
 			g_nRFxSPIDev[pDev->Cfg.DevNo].pReg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
 			g_nRFxSPIDev[pDev->Cfg.DevNo].pReg->EVENTS_READY = 0;
+	        if (pDev->DevIntrf.bIntEn == true)
+	        {
+	        	inten = reg->INTENSET = SPI_INTENSET_READY_Msk;
+	        }
 #endif
 		}
 #else
@@ -790,7 +906,12 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 
 		reg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
         reg->EVENTS_READY = 0;
+        if (pDev->DevIntrf.bIntEn == true)
+        {
+        	inten = reg->INTENSET = SPI_INTENSET_READY_Msk;
+        }
 #endif
+
 	}
 
 	reg->INTENSET = inten;
@@ -851,7 +972,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	}
 
 
-    if (pCfgData->bIntEn && pCfgData->Mode == SPIMODE_SLAVE)
+    if (pCfgData->bIntEn || pCfgData->Mode == SPIMODE_SLAVE)
     {
     	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, SPI_IRQHandler);
 
