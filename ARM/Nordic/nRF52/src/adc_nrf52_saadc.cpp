@@ -706,7 +706,10 @@ int AdcnRF52::Read(AdcData_t *pBuff, int Len)
 					// => GainFactor = Reference / (Resolution * Gain)
 					// => Vin = ADCresult * GainFactor
 					pBuff->Data = (float)s_AdcnRF52DevData.ResData[i] * s_AdcnRF52DevData.GainFactor[i];
-					pBuff->Timestamp = s_AdcnRF52DevData.SampleCnt;
+					if (s_AdcnRF52DevData.pTimer == NULL)
+						pBuff->Timestamp = s_AdcnRF52DevData.SampleCnt;
+					else
+						pBuff->Timestamp = s_AdcnRF52DevData.pTimer->uSecond();
 					pBuff++;
 					cnt++;
 					Len--;
@@ -735,7 +738,10 @@ int AdcnRF52::Read(AdcData_t *pBuff, int Len)
 					// => GainFactor = Reference / (Resolution * Gain)
 					// => Vin = ADCresult * GainFactor
 					pBuff->Data = (float)s_AdcnRF52DevData.ResData[i] * s_AdcnRF52DevData.GainFactor[i];
-					pBuff->Timestamp = s_AdcnRF52DevData.SampleCnt;
+					if (s_AdcnRF52DevData.pTimer == NULL)
+						pBuff->Timestamp = s_AdcnRF52DevData.SampleCnt;
+					else
+						pBuff->Timestamp = s_AdcnRF52DevData.pTimer->uSecond();
 					pBuff++;
 					cnt++;
 				}
