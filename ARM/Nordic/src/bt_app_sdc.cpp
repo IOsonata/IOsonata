@@ -297,12 +297,14 @@ void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 
 }
 
-void BleAppEnterDfu()
+void BtAppEnterDfu()
 {
+	/* TODO: implement */
 }
 
-void BleAppDisconnect()
+void BtAppDisconnect()
 {
+	/* TODO: implement */
 }
 /*
 void BleAppGapDeviceNameSet(const char* pDeviceName)
