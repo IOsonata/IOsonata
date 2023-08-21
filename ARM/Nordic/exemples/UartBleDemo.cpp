@@ -37,8 +37,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
+#ifndef NRFXLIB_SDC
 #include "app_util_platform.h"
 #include "app_scheduler.h"
+#else
+#define APP_IRQ_PRIORITY_LOW	6
+#endif
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
