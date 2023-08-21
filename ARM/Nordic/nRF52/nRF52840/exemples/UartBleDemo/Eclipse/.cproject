@@ -485,18 +485,20 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections.363214173" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other.217266771" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile.1366233507" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
-									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/s140_nrf52840_xxaa.ld&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_nrf52840_xxaa.ld&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano.1765798293" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths.15454458" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" useByScannerDiscovery="false" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/Eclipse/Debug_SDC&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/mpsl/lib/cortex-m4/hard-float&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/mpsl/fem/common/lib/cortex-m4/hard-float&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/softdevice_controller/lib/cortex-m4/hard-float&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs.137999363" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" useByScannerDiscovery="false" valueType="libs">
 									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
 									<listOptionValue builtIn="false" value="mpsl"/>
 									<listOptionValue builtIn="false" value="softdevice_controller_multirole"/>
+									<listOptionValue builtIn="false" value="mpsl_fem_common"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input.49420590" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
@@ -648,17 +650,19 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections.366783633" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other.1477290332" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" useByScannerDiscovery="false" value="-Wl,--start-group -lgcc -lc -lm -Wl,--end-group" valueType="string"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile.385785590" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" useByScannerDiscovery="false" valueType="stringList">
-									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/s140_nrf52840_xxaa.ld&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../ldscript/gcc_nrf52840_xxaa.ld&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano.40388499" name="Use newlib-nano (--specs=nano.specs)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.usenewlibnano" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs.740180157" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" useByScannerDiscovery="false" valueType="libs">
 									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
 									<listOptionValue builtIn="false" value="mpsl"/>
 									<listOptionValue builtIn="false" value="softdevice_controller_multirole"/>
+									<listOptionValue builtIn="false" value="mpsl_fem_common"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths.688539688" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" useByScannerDiscovery="false" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/Eclipse/Release_SDC&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/mpsl/lib/cortex-m4/hard-float&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/mpsl/fem/common/lib/cortex-m4/hard-float&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/softdevice_controller/lib/cortex-m4/hard-float&quot;"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input.1104705964" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
