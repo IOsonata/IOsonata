@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2010 - 2021, Nordic Semiconductor ASA All rights reserved.
+Copyright (c) 2010 - 2023, Nordic Semiconductor ASA All rights reserved.
 
 SPDX-License-Identifier: BSD-3-Clause
 
@@ -45,6 +45,12 @@ POSSIBILITY OF SUCH DAMAGE.
 /* The serial box interrupt ISRs were renamed. Adding old names as macros. */
 #define SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler          SERIAL0_IRQHandler
 #define SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn                SERIAL0_IRQn
+ 
+ /* DPPI */
+#define DPPI_PRESENT   DPPIC_PRESENT
+#define DPPI_COUNT     DPPIC_COUNT
+#define DPPI_CH_NUM    DPPIC_CH_NUM
+#define DPPI_GROUP_NUM DPPIC_GROUP_NUM
  
  /*lint --flb "Leave library region" */
 

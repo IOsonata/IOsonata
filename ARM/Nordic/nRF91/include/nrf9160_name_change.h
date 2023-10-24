@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2010 - 2021, Nordic Semiconductor ASA All rights reserved.
+Copyright (c) 2010 - 2023, Nordic Semiconductor ASA All rights reserved.
 
 SPDX-License-Identifier: BSD-3-Clause
 
@@ -35,24 +35,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifndef NRF9160_NAME_CHANGE_H
 #define NRF9160_NAME_CHANGE_H
 
-/*lint ++flb "Enter library region */
-
-/* This file is given to prevent your SW from not compiling with the updates made to nrf9160.h and 
- * nrf9160_bitfields.h. The macros defined in this file were available previously. Do not use these
- * macros on purpose. Use the ones defined in nrf9160.h and nrf9160_bitfields.h instead.
- */
- 
- /* SAADC enums */
- /* Changes to enum names in SAADC */
- #define SAADC_CH_PSELP_PSELP_VDD       SAADC_CH_PSELP_PSELP_VDDGPIO
- #define SAADC_CH_PSELP_PSELN_VDD       SAADC_CH_PSELP_PSELN_VDDGPIO
- 
- /* CTRLAP PERI Fields */
- #define CTRLAPPERI_ERASEPROTECT_LOCK_ERASEPROTECTLOCK_Pos       CTRLAPPERI_ERASEPROTECT_LOCK_LOCK_Pos     
- #define CTRLAPPERI_ERASEPROTECT_LOCK_ERASEPROTECTLOCK_Msk       CTRLAPPERI_ERASEPROTECT_LOCK_LOCK_Msk     
- #define CTRLAPPERI_ERASEPROTECT_LOCK_ERASEPROTECTLOCK_Unlocked  CTRLAPPERI_ERASEPROTECT_LOCK_LOCK_Unlocked
- #define CTRLAPPERI_ERASEPROTECT_LOCK_ERASEPROTECTLOCK_Locked    CTRLAPPERI_ERASEPROTECT_LOCK_LOCK_Locked  
- 
- /*lint --flb "Leave library region" */
+#include nrf91_name_change.h
 
 #endif /* NRF9160_NAME_CHANGE_H */

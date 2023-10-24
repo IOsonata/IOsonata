@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2010 - 2021, Nordic Semiconductor ASA All rights reserved.
+Copyright (c) 2010 - 2023, Nordic Semiconductor ASA All rights reserved.
 
 SPDX-License-Identifier: BSD-3-Clause
 
@@ -112,11 +112,11 @@ POSSIBILITY OF SUCH DAMAGE.
 #define CCM_COUNT 1
 
 /* Distributed Peripheral to Peripheral Interconnect */
-#define DPPI_PRESENT
-#define DPPI_COUNT 1
+#define DPPIC_PRESENT
+#define DPPIC_COUNT 1
 
-#define DPPI_CH_NUM 32
-#define DPPI_GROUP_NUM 6
+#define DPPIC_CH_NUM 32
+#define DPPIC_GROUP_NUM 6
 
 /* Event Generator Unit */
 #define EGU_PRESENT
