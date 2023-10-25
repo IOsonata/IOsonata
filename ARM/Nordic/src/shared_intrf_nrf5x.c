@@ -47,7 +47,9 @@ SOFTWARE.
 const int g_SharedIntrfMaxCnt = MAX_NB_DEV;
 SharedIntrf_t g_SharedIntrf[MAX_NB_DEV] = { {0, 0},};
 
-#ifdef NRF52_SERIES
+#ifdef NRF52805_XXAA
+void TWIM0_TWIS0_TWI0_IRQHandler()
+#elif defined(NRF52_SERIES)
 void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)
 #else
 void SPI0_TWI0_IRQHandler(void)
@@ -57,13 +59,16 @@ void SPI0_TWI0_IRQHandler(void)
 	{
 		g_SharedIntrf[0].Handler(0, g_SharedIntrf[0].pIntrf);
 	}
-#ifdef NRF52_SERIES
+#ifdef NRF52805_XXAA
+	NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_IRQn);
+#elif defined(NRF52_SERIES)
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
 #else
 	NVIC_ClearPendingIRQ(SPI0_TWI0_IRQn);
 #endif
 }
 
+#ifndef NRF52805_XXAA
 #ifdef NRF52_SERIES
 void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
 #else
@@ -80,4 +85,5 @@ void SPI1_TWI1_IRQHandler(void)
 	NVIC_ClearPendingIRQ(SPI1_TWI1_IRQn);
 #endif
 }
+#endif
 

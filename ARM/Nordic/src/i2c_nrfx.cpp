@@ -135,9 +135,11 @@ alignas(4) static nRFTwiDev_t s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
 	{
 		0, NULL, (NRF_TWI_Type *)NRF_TWI0_BASE,
 	},
+#if NRFX_I2C_MAXDEV > 1
 	{
 		1, NULL, (NRF_TWI_Type *)NRF_TWI1_BASE,
 	},
+#endif
 #endif
 };
 
@@ -1190,6 +1192,12 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
                 NVIC_EnableIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
                 break;
 #endif
+#elif defined(NRF52805_XXAA)
+    	    case 0:
+				NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_IRQn);
+				NVIC_SetPriority(TWIM0_TWIS0_TWI0_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(TWIM0_TWIS0_TWI0_IRQn);
+				break;
 #elif defined(NRF52_SERIES)
     	    case 0:
 				NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);

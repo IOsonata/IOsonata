@@ -689,10 +689,17 @@ static void nRFUARTDisable(DevIntrf_t * const pDev)
 	NRF_UART_Type *reg = dev->pReg;
 	reg->TASKS_STOPRX = 1;
 	reg->TASKS_STOPTX = 1;
+#ifdef NRF52805_XXAA
+	reg->PSEL.RXD = -1;
+	reg->PSEL.TXD = -1;
+	reg->PSEL.RTS = -1;
+	reg->PSEL.CTS = -1;
+#else
 	reg->PSELRXD = -1;
 	reg->PSELTXD = -1;
 	reg->PSELRTS = -1;
 	reg->PSELCTS = -1;
+#endif
 #else
 	NRF_UARTE_Type *reg = dev->pDmaReg;
 	reg->TASKS_STOPRX = 1;
@@ -737,11 +744,17 @@ static void nRFUARTEnable(DevIntrf_t * const pDev)
 #endif
 	{
 #ifdef UART_PRESENT
+#ifdef NRF52805_XXAA
+		dev->pReg->PSEL.RXD = dev->RxPin;
+		dev->pReg->PSEL.TXD = dev->TxPin;
+		dev->pReg->PSEL.CTS = dev->CtsPin;
+		dev->pReg->PSEL.RTS = dev->RtsPin;
+#else
 		dev->pReg->PSELRXD = dev->RxPin;
 		dev->pReg->PSELTXD = dev->TxPin;
 		dev->pReg->PSELCTS = dev->CtsPin;
 		dev->pReg->PSELRTS = dev->RtsPin;
-
+#endif
 		dev->pReg->ENABLE |= (UART_ENABLE_ENABLE_Enabled << UART_ENABLE_ENABLE_Pos);
 		dev->pReg->TASKS_STARTRX = 1;
 		dev->pReg->TASKS_STARTTX = 1;
@@ -942,14 +955,24 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
     	s_nRFxUARTDev[devno].pReg->CONFIG |= (UART_CONFIG_HWFC_Enabled << UART_CONFIG_HWFC_Pos);
     	s_nRFxUARTDev[devno].CtsPin = (pincfg[UARTPIN_CTS_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_CTS_IDX].PortNo << 5);
     	s_nRFxUARTDev[devno].RtsPin = (pincfg[UARTPIN_RTS_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_RTS_IDX].PortNo << 5);
+#ifdef NRF52805_XXAA
+    	s_nRFxUARTDev[devno].pReg->PSEL.CTS = s_nRFxUARTDev[devno].CtsPin;
+    	s_nRFxUARTDev[devno].pReg->PSEL.RTS = s_nRFxUARTDev[devno].RtsPin;
+#else
     	s_nRFxUARTDev[devno].pReg->PSELCTS = s_nRFxUARTDev[devno].CtsPin;
     	s_nRFxUARTDev[devno].pReg->PSELRTS = s_nRFxUARTDev[devno].RtsPin;
+#endif
 	}
 	else
 	{
 		s_nRFxUARTDev[devno].pReg->CONFIG &= ~(UART_CONFIG_HWFC_Enabled << UART_CONFIG_HWFC_Pos);
+#ifdef NRF52805_XXAA
+		s_nRFxUARTDev[devno].pReg->PSEL.RTS = -1;
+		s_nRFxUARTDev[devno].pReg->PSEL.CTS = -1;
+#else
 		s_nRFxUARTDev[devno].pReg->PSELRTS = -1;
 		s_nRFxUARTDev[devno].pReg->PSELCTS = -1;
+#endif
 		s_nRFxUARTDev[devno].CtsPin = -1;
 		s_nRFxUARTDev[devno].RtsPin = -1;
 	}
@@ -1124,9 +1147,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 #endif
 #else
 			case 0:
+#ifdef NRF51
 				NVIC_ClearPendingIRQ(UART0_IRQn);
 				NVIC_SetPriority(UART0_IRQn, pCfg->IntPrio);
 				NVIC_EnableIRQ(UART0_IRQn);
+#else
+				NVIC_ClearPendingIRQ(UARTE0_UART0_IRQn);
+				NVIC_SetPriority(UARTE0_UART0_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(UARTE0_UART0_IRQn);
+#endif
 				break;
 #ifdef NRF52840_XXAA
 			case 1:

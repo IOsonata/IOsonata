@@ -104,9 +104,11 @@ alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 	{
 		0, NULL, (NRF_SPI_Type*)NRF_SPI0_BASE,
 	},
+#if NRFX_SPI_MAXDEV > 1
 	{
 		1, NULL, (NRF_SPI_Type*)NRF_SPI1_BASE,
 	},
+#endif
 #if NRFX_SPI_MAXDEV > 2
 	{
 		2, NULL, {.pDmaReg = (NRF_SPIM_Type*)NRF_SPIM2_BASE},
@@ -664,6 +666,7 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 		else
 #endif
 		{
+#ifdef SPI_PRESENT
 			if (dev->pReg->EVENTS_READY)
 			{
 				dev->pReg->EVENTS_READY = 0;
@@ -709,6 +712,7 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 					}
 				}
 			}
+#endif
 		}
 	}
 }
@@ -978,7 +982,13 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
     	switch (pCfgData->DevNo)
     	{
-#ifdef NRF52_SERIES
+#ifdef NRF52805_XXAA
+			case 0:
+				NVIC_ClearPendingIRQ(SPIM0_SPIS0_SPI0_IRQn);
+				NVIC_SetPriority(SPIM0_SPIS0_SPI0_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SPIM0_SPIS0_SPI0_IRQn);
+				break;
+#elif defined(NRF52_SERIES)
     		case 0:
                 NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
                 NVIC_SetPriority(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn, pCfgData->IntPrio);
@@ -1076,12 +1086,13 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 }
 
 #ifdef NRF52_SERIES
+#ifndef NRF52805_XXAA
 extern "C" void SPIM2_SPIS2_SPI2_IRQHandler(void)
 {
 	SPI_IRQHandler(2, &g_nRFxSPIDev[2].pSpiDev->DevIntrf);
     NVIC_ClearPendingIRQ(SPIM2_SPIS2_SPI2_IRQn);
 }
-
+#endif
 #ifdef NRF52840_XXAA
 extern "C" void SPIM3_IRQHandler(void)
 {
