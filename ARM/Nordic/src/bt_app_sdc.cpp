@@ -806,6 +806,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+/*
 	cfg.event_length.event_length_us = 7500;
 	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 				       	  SDC_CFG_TYPE_EVENT_LENGTH,
@@ -814,7 +815,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	{
 		return false;
 	}
-
+*/
 	if (pCfg->Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
