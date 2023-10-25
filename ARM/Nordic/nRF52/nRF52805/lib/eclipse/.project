@@ -291,6 +291,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/ResetEntry.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
+		</link>
+		<link>
 			<name>src/Vectors_nRF52805.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_nRF52805.c</locationURI>
