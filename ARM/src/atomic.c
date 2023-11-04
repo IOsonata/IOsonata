@@ -56,12 +56,14 @@ unsigned __atomic_fetch_sub_4(volatile void *d, unsigned val, int mem)
 	return *(unsigned*)d;
 }
 
+// Missing for M0
 unsigned __atomic_exchange_4(volatile void *d, unsigned val, int mem)
 {
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
+	unsigned r = *(unsigned*)d;
 	*(unsigned*)d = val;
 	__set_PRIMASK(primask);
 
-	return *(unsigned*)d;
+	return *(unsigned*)r;
 }
