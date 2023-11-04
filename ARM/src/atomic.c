@@ -34,7 +34,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include <signal.h>
 
-#include "cmsis_gcc.h"
+#include "cmsis_compiler.h"
 
 unsigned __atomic_fetch_add_4(volatile void *d, unsigned val, int mem)
 {
@@ -56,3 +56,12 @@ unsigned __atomic_fetch_sub_4(volatile void *d, unsigned val, int mem)
 	return *(unsigned*)d;
 }
 
+unsigned __atomic_exchange_4(volatile void *d, unsigned val, int mem)
+{
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+	*(unsigned*)d = val;
+	__set_PRIMASK(primask);
+
+	return *(unsigned*)d;
+}
