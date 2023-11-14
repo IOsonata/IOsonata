@@ -534,12 +534,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	{
 		pDev->Cfg.bIntEn = true;	// Force interrupt in slave mode
 
+#if 0
 		if (pDev->Cfg.bClkStretch == false)
 		{
 			// Clock stretching enable
 			cr1 |= I2C_CR1_NOSTRETCH;
 		}
-
+#endif
 
 	}
 	else

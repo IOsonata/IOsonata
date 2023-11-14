@@ -152,18 +152,18 @@ int main(void)
   {
   }
 
-
 	/* Reset transmission flag */
   UartReady = RESET;
 	}
 
+#if 0
   /*##-4- Put UART peripheral in reception process ###########################*/
   if(HAL_UART_Receive_IT(&UartHandle, (uint8_t *)aRxBuffer, RXBUFFERSIZE) != HAL_OK)
   {
     Error_Handler();
   }
 
-#else
+//#else
   
   /* The board receives the message and sends it back */
 
@@ -218,11 +218,13 @@ int main(void)
 
   /* Turn on LED2 if test passes then enter infinite loop */
   BSP_LED_On(LED2);
+#endif
 
   /* Infinite loop */
   while (1)
   {
   }
+
 }
 
 /**
