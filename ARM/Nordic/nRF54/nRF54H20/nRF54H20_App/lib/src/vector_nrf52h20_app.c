@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	vector_nf54h20.c
+@file	vector_nf54h20_app.c
 
 @brief	Interrupt Vectors table for ARM Cortex-M33 specific to nRF54H20 App core.
 
@@ -36,7 +36,6 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include "nrf.h"
-//#include "nrf54h20_application_vectors.h"
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);

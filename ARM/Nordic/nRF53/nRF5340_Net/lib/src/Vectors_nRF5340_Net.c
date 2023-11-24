@@ -85,10 +85,15 @@ __attribute__ ((section(".intvec"), used))
 void (* const __vector_table[])(void) = {
 #else
 __attribute__ ((section(".vectors"), used))
-void (* const __Vectors[200])(void) = {
+void (* const __Vectors[100])(void) = {
 #endif
-	(void (*) )((int32_t)&__StackTop),
+#if defined ( __ARMCC_VERSION )
+	(void (*)(void) )((uint32_t)0x20000000 + 0x10000),
+	Reset_Handler,
+#else
+	(void (*)(void) )((uint32_t)&__StackTop),
 	ResetEntry,
+#endif
 	NMI_Handler,
 	HardFault_Handler,
 	MemoryManagement_Handler,

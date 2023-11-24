@@ -56,7 +56,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @Param	Dir     : I/O direction
  */
 static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	NRF_GPIO_Type *reg = NRF_P0_NS;
 #else
@@ -99,7 +99,7 @@ static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int Pi
  * @return	Pin state 1 or 0
  */
 static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	return (NRF_P0_NS->IN >> PinNo) & 1;
 #else
@@ -131,7 +131,7 @@ static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	NRF_P0_NS->OUTSET = (1 << PinNo);
 #else
@@ -166,7 +166,7 @@ static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int PinNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	NRF_P0_NS->OUTCLR = (1 << PinNo);
 #else
@@ -201,7 +201,7 @@ static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int Pin
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int PinNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	NRF_P0_NS->OUT ^= (1 << PinNo);
 #else
@@ -237,7 +237,7 @@ static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int Pi
  * @return	Bit field pin states
  */
 static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	return NRF_P0_NS->IN;
 #else
@@ -269,7 +269,7 @@ static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) 
  * @Param	Data	: Bit field state of all pins on port
  */
 static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uint32_t Data) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	NRF_P0_NS->OUT = Data;
 #else
