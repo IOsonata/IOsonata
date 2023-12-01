@@ -958,6 +958,12 @@ void BtGattInit(void)
     {
     	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, s_BtAppData.MaxMtu);
     	APP_ERROR_CHECK(err_code);
+
+    	ble_opt_t opt;
+    	memset(&opt, 0x00, sizeof(opt));
+    	opt.gattc_opt.uuid_disc.auto_add_vs_enable = 1;
+    	err_code = sd_ble_opt_set(BLE_GATTC_OPT_UUID_DISC, &opt);
+    	APP_ERROR_CHECK(err_code);
     }
 }
 
