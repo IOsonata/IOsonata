@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "mpsl.h"
 #include "mpsl_coex.h"
+#include "mpsl_fem_init.h"
 #include "sdc.h"
 #include "sdc_soc.h"
 #include "sdc_hci_cmd_le.h"
@@ -913,6 +914,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	lfclk.skip_wait_lfclk_started = MPSL_DEFAULT_SKIP_WAIT_LFCLK_STARTED;
+
+	mpsl_fem_init();
 
 	// Initialize Nordic multi-protocol support library (MPSL)
 	res = mpsl_init(&lfclk, PendSV_IRQn, BtStackMpslAssert);
