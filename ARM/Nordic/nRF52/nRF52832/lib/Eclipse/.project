@@ -786,6 +786,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_lcdmtrx.h</locationURI>
 		</link>
 		<link>
+			<name>include/display/display_ssd1351.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_ssd1351.h</locationURI>
+		</link>
+		<link>
 			<name>include/display/display_st77xx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/display_st77xx.h</locationURI>
@@ -1326,6 +1331,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/display/display_einkmtrx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_einkmtrx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_epdmtrx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_epdmtrx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/display/display_hx8357.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_hx8357.cpp</locationURI>
@@ -1341,9 +1356,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_lcdmtrx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/display/display_ssd1351.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_ssd1351.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/display/display_st77xx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_st77xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_uc8151x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_uc8151x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/eink_intrf.cpp</name>
