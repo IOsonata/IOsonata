@@ -592,7 +592,11 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         	s_BtAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
         	s_BtAppData.State = BTAPP_STATE_IDLE;
         	BtAppEvtDisconnected(p_ble_evt->evt.gap_evt.conn_handle);
-        	BtAdvStart();
+			if (s_BtAppData.Role == BTAPP_ROLE_PERIPHERAL
+					|| s_BtAppData.Role == BTAPP_ROLE_BROADCASTER)
+			{
+				BtAdvStart();
+			}
         	break;
         case BLE_GAP_EVT_ADV_SET_TERMINATED:
         	BtAppAdvTimeoutHandler();
