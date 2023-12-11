@@ -61,7 +61,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 #define DEVICE_NAME                     "BlePrbs"                            /**< Name of device. Will be included in the advertising data. */
 
-#define PACKET_SIZE						20
+#define PACKET_SIZE						244
 
 #define MANUFACTURER_NAME               "I-SYST inc."							/**< Manufacturer. Will be passed to Device Information Service. */
 #define MODEL_NAME                      "IMM-NRF52x"                            /**< Model number. Will be passed to Device Information Service. */
@@ -72,7 +72,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 #define APP_ADV_TIMEOUT					0//MSEC_TO_UNITS(180000, UNIT_10_MS)		/**< The advertising timeout (in units of 10ms seconds). */
 
-#define MIN_CONN_INTERVAL               8 //MSEC_TO_UNITS(10, UNIT_1_25_MS)			/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
+#define MIN_CONN_INTERVAL               7.5 //MSEC_TO_UNITS(10, UNIT_1_25_MS)			/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               40//MSEC_TO_UNITS(40, UNIT_1_25_MS)			/**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
 #define BLE_UART_UUID_BASE			BLUEIO_UUID_BASE
@@ -192,7 +192,8 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
-	.SDEvtHandler = NULL				// RTOS Softdevice handler
+	.SDEvtHandler = NULL,				// RTOS Softdevice handler
+	.MaxMtu = 255,
 };
 
 #define BLEINTRF_FIFOSIZE			BTINTRF_CFIFO_TOTAL_MEMSIZE(10, PACKET_SIZE)
@@ -343,7 +344,7 @@ void BtAppInitUserData()
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
-	uint8_t buff[20];
+	uint8_t buff[PACKET_SIZE];
 
 	switch (EvtId)
 	{
