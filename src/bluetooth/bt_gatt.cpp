@@ -39,6 +39,8 @@ SOFTWARE.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gatt.h"
 //#include "bluetooth/bt_ctlr.h"
+//#include "coredev/uart.h"
+//extern UART g_Uart;
 
 #ifndef BT_GATT_ENTRY_MAX_COUNT
 #define BT_GATT_ENTRY_MAX_COUNT		100
@@ -178,7 +180,7 @@ bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len)
 		return false;
 	}
 
-	BtGattListEntry_t *p = (BtGattListEntry_t*)&s_BtGattEntryTbl[Hdl - 1];
+	BtGattListEntry_t *p = (BtGattListEntry_t*)&s_BtGattEntryTbl[Hdl-1];
 
 	if (p->TypeUuid.BaseIdx == 0)
 	{
@@ -377,8 +379,13 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 //				}
 //				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
-				pBuff[0] = pEntry->Val32 & 0xFF;
-				pBuff[1] = (pEntry->Val32 >> 8) & 0xFF;
+				{
+					uint16_t *p = (uint16_t*)pBuff;
+
+					*p = pEntry->pChar->bNotify ? BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION : 0;
+				}
+				//pBuff[0] = pEntry->Val32 & 0xFF;
+			//pBuff[1] = (pEntry->Val32 >> 8) & 0xFF;
 				len = 2;
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
@@ -419,7 +426,6 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 {
 	BtGattListEntry_t *p = &s_BtGattEntryTbl[Hdl - 1];
-
 	size_t len = 0;
 
 	if (p->TypeUuid.BaseIdx == 0)
@@ -438,8 +444,16 @@ size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
-				p->Val32 = *(uint16_t*)pBuff;
-				len = 2;
+				//p->Val32 = *(uint16_t*)pBuff;
+				//len = 2;
+				p->pChar->bNotify = *(uint16_t*)pBuff & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION;
+				if (p->pChar->bNotify)	///p->Val32 *(uint16_t*)pBuff & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
+				{
+					if (p->pChar->SetNotifCB)
+					{
+						p->pChar->SetNotifCB(p->pChar, p->pChar->bNotify);
+					}
+				}
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
@@ -598,9 +612,10 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
             // Characteristic Descriptor CCC
             p->TypeUuid = {0, BT_UUID_TYPE_16, BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
         	p->Hdl = s_NbGattListEntry;
-        	p->Val32 = 0;
-
+        	//p->Val32 = 0;
+        	p->pChar = c;
         	c->CccdHdl = s_NbGattListEntry;
+//        	g_Uart.printf("NotHdl : %d %p\r\n", s_NbGattListEntry, p->pChar);
         }
 
         if (c->pDesc)
