@@ -34,9 +34,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
-//#include "app_util_platform.h"
-#include "app_scheduler.h"
-
 #include "istddef.h"
 #include "idelay.h"
 #include "bluetooth/bt_app.h"
@@ -51,11 +48,18 @@ SOFTWARE.
 #include "prbs.h"
 #include "coredev/system_core_clock.h"
 
+//#define APP_SCHED		// use Nordic app scheduler
+
+#ifdef APP_SCHED
+#include "app_scheduler.h"
+#endif
+
 #include "board.h"
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
+
 
 //#define NORDIC_NUS_SERVICE
 
@@ -117,25 +121,25 @@ BtGattChar_t g_UartChars[] = {
 		.Uuid = BLE_UART_UUID_READ_CHAR,
 		.MaxDataLen = PACKET_SIZE,
 		.Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = s_RxCharDescString,         // char UTF-8 description string
+		.pDesc = s_RxCharDescString,		// char UTF-8 description string
 		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB = ReadCharSetNotif,						// Callback on set notification
-		.TxCompleteCB = NULL,						// Tx completed callback
+		.SetNotifCB = ReadCharSetNotif,		// Callback on set notification
+		.TxCompleteCB = NULL,				// Tx completed callback
 		.pValue = s_RxCharValMem,
 		//.CharVal = {PACKET_SIZE, 0, s_UartRxCharMem},						// char values
-		0,							// Default value length in bytes
+		0,									// Default value length in bytes
 	},
 	{
 		// Write characteristic
 		.Uuid = BLE_UART_UUID_WRITE_CHAR,	// char UUID
 		.MaxDataLen = PACKET_SIZE,
 		.Property = BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP | BT_GATT_CHAR_PROP_VALEN,	// char properties define by BLUEIOSVC_CHAR_PROP_...
-		.pDesc = s_TxCharDescString,			// char UTF-8 description string
+		.pDesc = s_TxCharDescString,		// char UTF-8 description string
 		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,						// Callback on set notification
-		.TxCompleteCB = NULL,						// Tx completed callback
+		.SetNotifCB = NULL,					// Callback on set notification
+		.TxCompleteCB = NULL,				// Tx completed callback
 		//.CharVal = {PACKET_SIZE, 0, s_UartTxCharMem},						// char values
-		0							// Default value length in bytes
+		0									// Default value length in bytes
 	},
 };
 
@@ -148,11 +152,11 @@ const BtGattSrvcCfg_t s_UartSrvcCfg = {
 	.bCustom = true,
 	.UuidBase = BLE_UART_UUID_BASE,		// Base UUID
 	//1,
-	.UuidSrvc = BLE_UART_UUID_SERVICE,   	// Service UUID
-	.NbChar = s_BleUartNbChar,            // Total number of characteristics for the service
-	.pCharArray = g_UartChars,                // Pointer a an array of characteristic
-	.pLongWrBuff = g_LWrBuffer,                // pointer to user long write buffer
-	.LongWrBuffSize = sizeof(g_LWrBuffer)         // long write buffer size
+	.UuidSrvc = BLE_UART_UUID_SERVICE,	// Service UUID
+	.NbChar = s_BleUartNbChar,			// Total number of characteristics for the service
+	.pCharArray = g_UartChars,			// Pointer a an array of characteristic
+	.pLongWrBuff = g_LWrBuffer,			// pointer to user long write buffer
+	.LongWrBuffSize = sizeof(g_LWrBuffer)	// long write buffer size
 };
 
 BtGattSrvc_t g_UartBleSrvc;
@@ -179,9 +183,9 @@ const BtAppCfg_t s_BleAppCfg = {
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BTGAP_SECTYPE_NONE,    // Secure connection type
+	.SecType = BTGAP_SECTYPE_NONE,    	// Secure connection type
 	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
-	.pAdvUuid = NULL,      			// Service uuids to advertise
+	.pAdvUuid = NULL,      				// Service uuids to advertise
 	//.NbAdvUuid = 0, 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
 	.AdvTimeout = APP_ADV_TIMEOUT,		// Advertising timeout in sec
@@ -190,9 +194,9 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnIntervalMin = MIN_CONN_INTERVAL,
 	.ConnIntervalMax = MAX_CONN_INTERVAL,
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
-	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
-	.TxPower = 0,						// Tx power
-	.SDEvtHandler = NULL,				// RTOS Softdevice handler
+	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,	// Led pin number
+	.TxPower = 0,							// Tx power
+	.SDEvtHandler = NULL,					// RTOS Softdevice handler
 	.MaxMtu = 255,
 };
 
@@ -207,9 +211,9 @@ static const BtIntrfCfg_t s_BleInrfCfg = {
 	.TxCharIdx = BLESRV_READ_CHAR_IDX,
 	.PacketSize = PACKET_SIZE,			// Packet size : use default
 	.bBlocking = true,
-	.RxFifoMemSize = BLEINTRF_FIFOSIZE,			// Rx Fifo mem size
+	.RxFifoMemSize = BLEINTRF_FIFOSIZE,	// Rx Fifo mem size
 	.pRxFifoMem = s_BleIntrfRxFifo,		// Rx Fifo mem pointer
-	.TxFifoMemSize = BLEINTRF_FIFOSIZE,			// Tx Fifo mem size
+	.TxFifoMemSize = BLEINTRF_FIFOSIZE,	// Tx Fifo mem size
 	.pTxFifoMem = s_BleIntrfTxFifo,		// Tx Fifo mem pointer
 	.EvtCB = BleIntrfEvtCallback
 };
@@ -277,14 +281,15 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 	return cnt;
 }
 
+#ifdef APP_SCHED
 void PrbsChedHandler(void * p_event_data, uint16_t event_size)
-//void PrbsChedHandler(uint32_t Evt, void *pCtx)
+#else
+void PrbsChedHandler(uint32_t Evt, void *pCtx)
+#endif
 {
 	static uint8_t buff[PACKET_SIZE];
 	static int bufflen = 0;
 	static uint8_t d = 0xff;
-
-	//g_Uart.printf("PrbsChedHandler\r\n");
 
 	if (bufflen == 0)
 	{
@@ -300,26 +305,25 @@ void PrbsChedHandler(void * p_event_data, uint16_t event_size)
 //		g_Uart.Tx(buff, bufflen);
 		if (g_BtIntrf.Tx(0, buff, bufflen) > 0)
 		{
-			//g_Uart.printf("PrbsChedHandler Sent %d\r\n", bufflen);
 			bufflen = 0;
 		}
-		else
-		{
-			//g_Uart.printf("Drop\r\n");
-		}
-
+#ifdef APP_SCHED
 		app_sched_event_put(NULL, 0, PrbsChedHandler);
-//		AppEvtHandlerQue(0, 0, PrbsChedHandler);
+#else
+		AppEvtHandlerQue(0, 0, PrbsChedHandler);
+#endif
 	}
-//	msDelay(100);
 }
 
 void ReadCharSetNotif(BtGattChar_t *pChar, bool bEnable)
 {
 	if (bEnable)
 	{
+#ifdef APP_SCHED
 		app_sched_event_put(NULL, 0, PrbsChedHandler);
-		//AppEvtHandlerQue(0, 0, PrbsChedHandler);
+#else
+		AppEvtHandlerQue(0, 0, PrbsChedHandler);
+#endif
 	}
 }
 
@@ -332,8 +336,6 @@ void BtAppInitUserServices()
 {
     bool res;
     res = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
-
-//    AppEvtHandlerQue(0, 0, PrbsChedHandler);
 }
 
 void BtAppInitUserData()
