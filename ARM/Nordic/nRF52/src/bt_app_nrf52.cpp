@@ -1828,7 +1828,8 @@ void BtAppRun()
 //			if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
 			{
 				app_sched_execute();
-				AppEvtHandlerDispatch();
+//				AppEvtHandlerDispatch();
+				AppEvtHandlerExec();
 			}
 			nrf_ble_lesc_request_handler();
 			sd_app_evt_wait();
@@ -2182,9 +2183,13 @@ extern "C" void SD_EVT_IRQHandler(void)
 	}
 	else
 	{
+#if 0
 		ret_code_t ret_code = app_sched_event_put(NULL, 0, appsh_events_poll);
 
 		APP_ERROR_CHECK(ret_code);
+#else
+		nrf_sdh_evts_poll();
+#endif
 	}
 }
 
