@@ -138,7 +138,7 @@ alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BtDevExtSrData 
 alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 255, 0, s_BtDevExtSrData.scan_response_data};
 #endif
 
-alignas(4) static uint8_t s_BtStackSdcMemPool[10000];
+alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
 #if 0
 static BtHciDevCfg_t s_BtHciDevCfg = {
 	.SendData = HciSdcSendData,
