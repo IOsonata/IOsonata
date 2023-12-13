@@ -124,6 +124,23 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
  *
  * @return	None
  */
+void AppEvtHandlerDispatch()
+{
+	AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t*)CFifoGet(s_hAppEvtHandlerFifo);
+
+	if (p != nullptr)
+	{
+		p->Handler(p->EvtId, p->pCtx);
+	}
+}
+
+/**
+ * @brief	Execute all event
+ *
+ * @param	None
+ *
+ * @return	None
+ */
 void AppEvtHandlerExec()
 {
 	while (1)

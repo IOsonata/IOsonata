@@ -109,6 +109,15 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler);
  *
  * @return	None
  */
+void AppEvtHandlerDispatch();
+
+/**
+ * @brief	Execute all event
+ *
+ * @param	None
+ *
+ * @return	None
+ */
 void AppEvtHandlerExec();
 
 #ifdef __cplusplus
