@@ -1828,7 +1828,7 @@ void BtAppRun()
 //			if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
 			{
 				app_sched_execute();
-				AppEvtHandlerExec();
+				AppEvtHandlerDispatch();
 			}
 			nrf_ble_lesc_request_handler();
 			sd_app_evt_wait();
