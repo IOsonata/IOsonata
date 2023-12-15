@@ -202,7 +202,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	.MaxMtu = 255,
 };
 
-#define BLEINTRF_FIFOSIZE			CFIFO_TOTAL_MEMSIZE(10, 22)
+#define BLEINTRF_FIFOSIZE			BTINTRF_CFIFO_TOTAL_MEMSIZE(10, PACKET_SIZE)
 
 alignas(4) static uint8_t s_BleIntrfRxFifo[BLEINTRF_FIFOSIZE];
 alignas(4) static uint8_t s_BleIntrfTxFifo[BLEINTRF_FIFOSIZE];
