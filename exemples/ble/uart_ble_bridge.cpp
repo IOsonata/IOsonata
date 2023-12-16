@@ -257,6 +257,7 @@ const UARTCfg_t g_UartCfg = {
 	.pRxMem = s_UartRxFifo,
 	.TxMemSize = UARTFIFOSIZE,
 	.pTxMem = s_UartTxFifo,
+	.bDMAMode = true,
 };
 
 /// UART object instance
