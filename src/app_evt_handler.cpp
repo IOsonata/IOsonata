@@ -143,12 +143,14 @@ void AppEvtHandlerDispatch()
  */
 void AppEvtHandlerExec()
 {
-	while (1)
+	int cnt = 30;
+
+	do
 	{
 		AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t*)CFifoGet(s_hAppEvtHandlerFifo);
 
 		if (p == nullptr)
 			break;
 		p->Handler(p->EvtId, p->pCtx);
-	}
+	} while(--cnt > 0);
 }
