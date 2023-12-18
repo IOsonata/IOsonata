@@ -283,6 +283,12 @@ bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16
 int8_t GetValidTxPower(int TxPwr);
 bool isConnected();
 
+/// return true - Ble initialized
+bool BtInitialized();
+
+/// return true - Ble connected
+bool BtConnected();
+
 #ifdef __cplusplus
 }
 #endif

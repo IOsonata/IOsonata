@@ -258,6 +258,16 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 __ALIGN(4) static ble_gap_lesc_p256_pk_t    s_lesc_public_key;      /**< LESC ECC Public Key */
 __ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC ECC DH Key*/
 
+bool BtInitialized()
+{
+	return s_BtAppData.State != BTAPP_STATE_UNKNOWN;
+}
+
+bool BtConnected()
+{
+	return s_BtAppData.ConnHdl != BLE_CONN_HANDLE_INVALID;
+}
+
 bool isConnected()
 {
 	return s_BtAppData.ConnHdl != BLE_CONN_HANDLE_INVALID;
@@ -1683,6 +1693,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 		APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
     }
 
+    if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
+    {
+    	return false;
+    }
+
 //    nrf_ble_lesc_init();
 
     nrf_clock_lf_cfg_t lfclk = {
@@ -1790,11 +1805,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     NVIC_ClearPendingIRQ(FPU_IRQn);
     NVIC_EnableIRQ(FPU_IRQn);
 #endif
-
-    if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
-    {
-    	return false;
-    }
 
     s_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
