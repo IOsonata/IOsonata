@@ -49,8 +49,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
-#define BYTE_MODE
-#define TEST_BUFSIZE		64
+//#define BYTE_MODE
+#define TEST_BUFSIZE		16
 
 #define SDK_NRFX	// Use nrfx_uarte, comment out this define to use app_uart_fifo
 
@@ -112,8 +112,14 @@ int main()
     	//printf("Error %x\n\r", err_code);
     }
 
-    sprintf(buff, "UART PRBS Test\n\r");
-    while (nrfx_uarte_tx(&g_Uarte, buff, strlen(buff)) != NRF_SUCCESS);
+    //sprintf(buff, "UART PRBS Test\n\r");
+    //while (nrfx_uarte_tx(&g_Uarte, buff, strlen(buff)) != NRFX_SUCCESS);
+
+	for (int i = 0; i < TEST_BUFSIZE; i++)
+	{
+		d = Prbs8(d);
+		buff[i] = d;
+	}
 
 	while(1)
 	{
@@ -124,12 +130,22 @@ int main()
 			d = Prbs8(d);
 		}
 #else
-		for (int i = 0; i < TEST_BUFSIZE; i++)
+		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) == NRFX_SUCCESS)
 		{
-			d = Prbs8(d);
-			buff[i] = d;
+	        bool endtx;
+	        bool txstopped;
+	        do
+	        {
+	            endtx     = nrf_uarte_event_check(g_Uarte.p_reg, NRF_UARTE_EVENT_ENDTX);
+	            txstopped = nrf_uarte_event_check(g_Uarte.p_reg, NRF_UARTE_EVENT_TXSTOPPED);
+	        }
+	        while ((!endtx) && (!txstopped));
+			for (int i = 0; i < TEST_BUFSIZE; i++)
+			{
+				d = Prbs8(d);
+				buff[i] = d;
+			}
 		}
-		while (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) != NRF_SUCCESS);
 #endif
 	}
 #else
