@@ -47,6 +47,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
+//#define DEMO_C
+//#define USE_GETCHAR
+
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
@@ -65,7 +68,7 @@ const UARTCfg_t g_UartCfg = {
 	UART_DEVNO,
 	s_UartPins,
 	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	115200,			// Rate
+	1000000,			// Rate
 	8,
 	UART_PARITY_NONE,
 	1,					// Stop bit
@@ -133,9 +136,15 @@ int main()
 	printf("Hello, welcome to UART retarget demo\r\n");
 	while(1)
 	{
+#ifdef USE_GETCHAR
+		printf("Please type something\r\n");
+		char c = getchar();
+		printf("You typed : '%c'\r\n", c);
+#else
 		printf("Please type something then press enter\r\n");
 		scanf("%s", &buff);
 		printf("You typed : '%s'\r\n", buff);
+#endif
 	}
 	return 0;
 }
