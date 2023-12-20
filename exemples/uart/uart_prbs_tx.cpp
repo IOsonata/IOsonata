@@ -50,7 +50,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //#define DEMO_C	// Select demo C code
 #define BYTE_MODE
 
-#define TEST_BUFSIZE		64
+#define TEST_BUFSIZE		16
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
@@ -58,7 +58,11 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-#define FIFOSIZE			CFIFO_MEMSIZE(TEST_BUFSIZE * 4)
+#define UARTFIFOSIZE			CFIFO_MEMSIZE(TEST_BUFSIZE)
+
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
+
 
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
@@ -76,11 +80,11 @@ static const UARTCfg_t s_UartCfg = {
 	.IntPrio = 1,
 	.EvtCallback = nRFUartEvthandler,
 	.bFifoBlocking = true,
-	.RxMemSize = 0,
-	.pRxMem = NULL,
-	.TxMemSize = 0,//FIFOSIZE,
-	.pTxMem = NULL,//g_TxBuff,
-	.bDMAMode = false,
+	.RxMemSize = 0,//UARTFIFOSIZE,
+	.pRxMem = NULL,//s_UartRxFifo,
+	.TxMemSize = 0,//UARTFIFOSIZE,//FIFOSIZE,
+	.pTxMem = NULL,//s_UartTxFifo,//g_TxBuff,
+	.bDMAMode = true,
 };
 
 #ifdef DEMO_C
