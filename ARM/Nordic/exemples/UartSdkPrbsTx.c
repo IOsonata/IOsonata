@@ -50,9 +50,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 //#define BYTE_MODE
-#define TEST_BUFSIZE		16
+#define TEST_BUFSIZE		64
 
 #define SDK_NRFX	// Use nrfx_uarte, comment out this define to use app_uart_fifo
+
+static volatile bool s_bTxDone = false;
 
 #ifndef SDK_NRFX
 #define UART_TX_BUF_SIZE 512                         /**< UART TX buffer size. */
@@ -94,9 +96,18 @@ const nrfx_uarte_config_t g_UarteCfg = {
 void uart_error_handle(nrfx_uarte_event_t const * p_event, void *ctx)
 {
 //	printf("Uarte Handler\r\n");
+	switch(p_event->type)
+	{
+		case NRFX_UARTE_EVT_TX_DONE: ///< Requested TX transfer completed.
+			s_bTxDone = true;
+			break;
+		case NRFX_UARTE_EVT_RX_DONE: ///< Requested RX transfer completed.
+		 	 break;
+		case NRFX_UARTE_EVT_ERROR:   ///< Error reported by UART peripheral.
+			break;
+	}
 }
 #endif
-
 
 int main()
 {
@@ -130,16 +141,10 @@ int main()
 			d = Prbs8(d);
 		}
 #else
+		s_bTxDone = false;
 		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) == NRFX_SUCCESS)
 		{
-	        bool endtx;
-	        bool txstopped;
-	        do
-	        {
-	            endtx     = nrf_uarte_event_check(g_Uarte.p_reg, NRF_UARTE_EVENT_ENDTX);
-	            txstopped = nrf_uarte_event_check(g_Uarte.p_reg, NRF_UARTE_EVENT_TXSTOPPED);
-	        }
-	        while ((!endtx) && (!txstopped));
+			while (s_bTxDone == false);
 			for (int i = 0; i < TEST_BUFSIZE; i++)
 			{
 				d = Prbs8(d);
