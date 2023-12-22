@@ -354,6 +354,11 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		{
 			reg->EVENTS_RXDRDY = 0;
 			dev->RxDmaCnt++;
+			if (dev->pUartDev->EvtCallback)
+			{
+				len = CFifoUsed(dev->pUartDev->hRxFifo);
+				cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
+			}
 		}
 	}
 
