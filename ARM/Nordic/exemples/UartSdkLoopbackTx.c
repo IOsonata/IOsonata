@@ -55,6 +55,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SDK_NRFX	// Use nrfx_uarte, comment out this define to use app_uart_fifo
 
 static volatile bool s_bTxDone = false;
+static volatile bool s_bRxDone = false;
 
 #ifndef SDK_NRFX
 #define UART_TX_BUF_SIZE 512                         /**< UART TX buffer size. */
@@ -86,7 +87,7 @@ void uart_error_handle(app_uart_evt_t * p_event)
 
 const nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(0);
 const nrfx_uarte_config_t g_UarteCfg = {
-	.pselrxd = UART_RX_PIN,
+	.pselrxd = 6,//UART_RX_PIN,
 	.pseltxd = UART_TX_PIN,
 	.hwfc = NRF_UARTE_HWFC_DISABLED,
 	.baudrate = NRF_UARTE_BAUDRATE_1000000,
@@ -102,6 +103,7 @@ void uart_error_handle(nrfx_uarte_event_t const * p_event, void *ctx)
 			s_bTxDone = true;
 			break;
 		case NRFX_UARTE_EVT_RX_DONE: ///< Requested RX transfer completed.
+			s_bRxDone = true;
 		 	 break;
 		case NRFX_UARTE_EVT_ERROR:   ///< Error reported by UART peripheral.
 			break;
@@ -142,15 +144,13 @@ int main()
 		}
 #else
 		s_bTxDone = false;
-		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) == NRFX_SUCCESS)
-		{
-			while (s_bTxDone == false);
-			for (int i = 0; i < TEST_BUFSIZE; i++)
-			{
-				d = Prbs8(d);
-				buff[i] = d;
-			}
-		}
+		while (nrfx_uarte_rx(&g_Uarte, buff, TEST_BUFSIZE) != NRFX_SUCCESS);
+		while (s_bRxDone == false);
+		s_bRxDone = false;
+		s_bTxDone = false;
+		while (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) != NRFX_SUCCESS);
+		while (s_bTxDone == false);
+
 #endif
 	}
 #else
