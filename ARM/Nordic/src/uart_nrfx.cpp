@@ -53,9 +53,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NRFX_UART_DMA_MAXCNT		((1<<UARTE0_EASYDMA_MAXCNT_SIZE)-1)
 
 // Default fifo size if one is not provided is not provided in the config.
-#define NRFX_UART_BUFF_SIZE			(4 * NRFX_UART_HWFIFO_SIZE)
+#define NRFX_UART_RXDMA_SIZE		(NRFX_UART_HWFIFO_SIZE)
+#define NRFX_UART_TXDMA_SIZE		(4 * NRFX_UART_HWFIFO_SIZE)
 
-#define NRFX_UART_CFIFO_SIZE		CFIFO_MEMSIZE(NRFX_UART_BUFF_SIZE)
+#define NRFX_UART_CFIFO_SIZE		CFIFO_MEMSIZE(4 * NRFX_UART_HWFIFO_SIZE)
 
 #pragma pack(push, 4)
 // Device driver data require by low level functions
@@ -74,10 +75,11 @@ typedef struct __nRF_UART_Dev {
 	uint32_t TxPin;
 	uint32_t CtsPin;
 	uint32_t RtsPin;
+	uint32_t RxDmaCnt;
 	uint8_t RxFifoMem[NRFX_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[NRFX_UART_CFIFO_SIZE];
-	uint8_t TxDmaCache[NRFX_UART_BUFF_SIZE];
-	uint8_t RxDmaCache;
+	uint8_t RxDmaMem[NRFX_UART_RXDMA_SIZE];
+	uint8_t TxDmaMem[NRFX_UART_TXDMA_SIZE];
 } nRFUartDev_t;
 
 typedef struct {
@@ -138,7 +140,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCache = false,
 	},
 #else
 	{
@@ -149,7 +150,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCache = false,
 	},
 	{
 		.DevNo = 1,
@@ -159,7 +159,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCache = false,
 	},
 	{
 		.DevNo = 2,
@@ -169,7 +168,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCache = false,
 	},
 	{
 		.DevNo = 3,
@@ -179,7 +177,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCache = false,
 	},
 #endif
 #else
@@ -191,7 +188,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCache = false,
 	},
 #if NRFX_UART_MAXDEV > 1
 	{
@@ -202,7 +198,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCache = false,
 	},
 #endif
 #if NRFX_UART_MAXDEV > 2
@@ -214,7 +209,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCache = false,
 	},
 #endif
 #if NRFX_UART_MAXDEV > 3
@@ -226,7 +220,6 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.TxPin = (uint32_t)-1,
 		.CtsPin = (uint32_t)-1,
 		.RtsPin = (uint32_t)-1,
-		.RxDmaCache = false,
 	},
 #endif
 #endif
@@ -298,36 +291,43 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 #ifdef UART_PRESENT
 		uint8_t *d;
 
-		cnt = 0;
-		do {
-			reg->EVENTS_RXDRDY = 0;
-			dev->pUartDev->bRxReady = false;
-
-			d = CFifoPut(dev->pUartDev->hRxFifo);
-			if (d == NULL)
-			{
-				dev->pUartDev->bRxReady = true;
-				dev->pUartDev->RxDropCnt++;// g_nRF51RxDropCnt++;
-				break;
-			}
-			*d = reg->RXD;
-			cnt++;
-		} while (reg->EVENTS_RXDRDY && cnt < NRFX_UART_HWFIFO_SIZE) ;
-
-		if (dev->pUartDev->EvtCallback)
+		if (pDev->bDma == false)
 		{
-			len = CFifoUsed(dev->pUartDev->hRxFifo);
-			if (dev->pReg->EVENTS_RXTO)
-			{
-				dev->pReg->EVENTS_RXTO = 0;
+			cnt = 0;
+			do {
+				reg->EVENTS_RXDRDY = 0;
 				dev->pUartDev->bRxReady = false;
-				cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXTIMEOUT, NULL, len);
+
+				d = CFifoPut(dev->pUartDev->hRxFifo);
+				if (d == NULL)
+				{
+					dev->pUartDev->bRxReady = true;
+					dev->pUartDev->RxDropCnt++;// g_nRF51RxDropCnt++;
+					break;
+				}
+				*d = reg->RXD;
+				cnt++;
+			} while (reg->EVENTS_RXDRDY && cnt < NRFX_UART_HWFIFO_SIZE) ;
+
+			if (dev->pUartDev->EvtCallback)
+			{
+				len = CFifoUsed(dev->pUartDev->hRxFifo);
+				if (dev->pReg->EVENTS_RXTO)
+				{
+					dev->pReg->EVENTS_RXTO = 0;
+					dev->pUartDev->bRxReady = false;
+					cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXTIMEOUT, NULL, len);
+				}
+				else
+					cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
 			}
-			else
-				cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
 		}
-#else
-		reg->EVENTS_RXDRDY = 0;
+		else
+//#else
+		{
+			reg->EVENTS_RXDRDY = 0;
+			dev->RxDmaCnt++;
+		}
 #endif
 	}
 
@@ -335,12 +335,16 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	if (dev->pDmaReg->EVENTS_ENDRX)
 	{
 		// No DMA support for RX, just clear the event
+		dev->pDmaReg->EVENTS_RXDRDY = 0;
 		dev->pDmaReg->EVENTS_ENDRX = 0;
-#ifndef UART_PRESENT
-		uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
+		dev->RxDmaCnt = 0;
+
+//#ifndef UART_PRESENT
+		int l = dev->pDmaReg->RXD.AMOUNT;
+		uint8_t *p = CFifoPutMultiple(dev->pUartDev->hRxFifo, &l);
 		if (p)
 		{
-			*p = dev->RxDmaCache;
+			memcpy(p, dev->RxDmaMem, l);
 		}
 		else
 		{
@@ -351,8 +355,8 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		// until buffer is filled. It will be blocked.
 		// The RX timeout logic of the nRF series is implemented wrong. We cannot use it.
 		dev->pUartDev->bRxReady = false;
-		dev->pDmaReg->RXD.MAXCNT = 1;
-		dev->pDmaReg->RXD.PTR = (uint32_t)&dev->RxDmaCache;
+		//dev->pDmaReg->RXD.MAXCNT = NRFX_UART_BUFF_SIZE;
+		//dev->pDmaReg->RXD.PTR = (uint32_t)dev->RxDmaMem;
 		dev->pDmaReg->TASKS_STARTRX = 1;
 
 		if (dev->pUartDev->EvtCallback)
@@ -360,7 +364,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			len = CFifoUsed(dev->pUartDev->hRxFifo);
 			cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
 		}
-#endif
+//#endif
 	}
 #endif
 
@@ -410,7 +414,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		dev->pDmaReg->EVENTS_ENDTX = 0;
 		dev->pDmaReg->EVENTS_TXSTOPPED = 0;
 
-		int l = NRFX_UART_BUFF_SIZE;//min(CFifoUsed(pDev->pUartDev->hTxFifo), NRF52_UART_DMA_MAX_LEN);
+		int l = NRFX_UART_TXDMA_SIZE;//min(CFifoUsed(pDev->pUartDev->hTxFifo), NRF52_UART_DMA_MAX_LEN);
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
 		if (p)
 		{
@@ -419,10 +423,10 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			// Transfer to tx cache before sending as CFifo will immediately make the memory
 			// block available for reuse in the Put request. This could cause an overwrite
 			// if uart tx has not completed in time.
-			memcpy(&dev->TxDmaCache, p, l);
+			memcpy(&dev->TxDmaMem, p, l);
 
 			dev->pDmaReg->TXD.MAXCNT = l;
-			dev->pDmaReg->TXD.PTR = (uint32_t)dev->TxDmaCache;
+			dev->pDmaReg->TXD.PTR = (uint32_t)dev->TxDmaMem;
 			dev->pDmaReg->TASKS_STARTTX = 1;
 		}
 		else
@@ -567,7 +571,27 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		int l  = Bufflen;
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &l);
 		if (p == NULL)
+		{
+#if 1
+			if (pDev->bDma == true && CFifoUsed(dev->pUartDev->hRxFifo) <= 0)
+			{
+				if (dev->RxDmaCnt > 0)
+				{
+					dev->pDmaReg->TASKS_STOPRX = 1;
+				}
+			}
+#else
+			if (pDev->bDma == true && CFifoUsed(dev->pUartDev->hRxFifo) <= 0)
+			{
+				if (dev->bFlush == false)
+				{
+					dev->bFlush = true;
+					dev->pDmaReg->TASKS_FLUSHRX = 1;
+				}
+			}
+#endif
 			break;
+		}
 		memcpy(pBuff, p, l);
 		cnt += l;
 		pBuff += l;
@@ -577,20 +601,25 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 
 	if (dev->pUartDev->bRxReady)
 	{
-#ifdef UART_PRESENT
-		uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
-		if (p)
+#ifdef UARTE_PRESENT
+		if (pDev->bDma == true)
 		{
-			dev->pReg->EVENTS_RXDRDY = 0;
 			dev->pUartDev->bRxReady = false;
-			*p = dev->pReg->RXD;
+			dev->pDmaReg->RXD.MAXCNT = NRFX_UART_RXDMA_SIZE;
+			dev->pDmaReg->RXD.PTR = (uint32_t)dev->RxDmaMem;
+			dev->pDmaReg->TASKS_STARTRX = 1;
 		}
-#else
-		dev->pUartDev->bRxReady = false;
-		dev->pDmaReg->RXD.MAXCNT = 1;
-		dev->pDmaReg->RXD.PTR = (uint32_t)&dev->RxDmaCache;
-		dev->pDmaReg->TASKS_STARTRX = 1;
+		else
 #endif
+		{
+			uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
+			if (p)
+			{
+				dev->pReg->EVENTS_RXDRDY = 0;
+				dev->pUartDev->bRxReady = false;
+				*p = dev->pReg->RXD;
+			}
+		}
 	}
 
 	return cnt;
@@ -636,7 +665,7 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 #ifdef UARTE_PRESENT
         	if (pDev->bDma == true)
         	{
-        		int l = NRFX_UART_BUFF_SIZE;//min(CFifoUsed(dev->pUartDev->hTxFifo), NRF52_UART_DMA_MAX_LEN);
+        		int l = NRFX_UART_TXDMA_SIZE;//min(CFifoUsed(dev->pUartDev->hTxFifo), NRF52_UART_DMA_MAX_LEN);
         		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
         		if (p)
         		{
@@ -645,10 +674,10 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
         			// Transfer to tx cache before sending as CFifo will immediately make the memory
         			// block available for reuse in the Put request. This could cause an overwrite
         			// if uart tx has not completed in time.
-        			memcpy(dev->TxDmaCache, p, l);
+        			memcpy(dev->TxDmaMem, p, l);
 
 					dev->pDmaReg->TXD.MAXCNT = l;
-					dev->pDmaReg->TXD.PTR = (uint32_t)dev->TxDmaCache;
+					dev->pDmaReg->TXD.PTR = (uint32_t)dev->TxDmaMem;
 					dev->pDmaReg->TASKS_STARTTX = 1;
         		}
         	}
@@ -734,9 +763,10 @@ static void nRFUARTEnable(DevIntrf_t * const pDev)
 
 		dev->pDmaReg->ENABLE |= (UARTE_ENABLE_ENABLE_Enabled << UARTE_ENABLE_ENABLE_Pos);
 		// Not using DMA transfer on Rx. It is useless on UART as we need to process 1 char at a time
-#ifndef UART_PRESENT
-		dev->pDmaReg->RXD.PTR = (uint32_t)&dev->RxDmaCache;
-#endif
+//#ifndef UART_PRESENT
+		dev->pDmaReg->RXD.MAXCNT = NRFX_UART_RXDMA_SIZE;
+		dev->pDmaReg->RXD.PTR = (uint32_t)dev->RxDmaMem;
+//#endif
 		dev->pDmaReg->EVENTS_ENDRX = 0;
 		dev->pDmaReg->TASKS_STARTRX = 1;
 	}
@@ -1044,13 +1074,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		s_nRFxUARTDev[devno].pDmaReg->ENABLE = (UARTE_ENABLE_ENABLE_Enabled << UARTE_ENABLE_ENABLE_Pos);
 
-#ifndef UART_PRESENT
+//#ifndef UART_PRESENT
 		// We need to transfer only 1 byte at a time for Rx. Otherwise, it will not interrupt
 		// until buffer is filled. It will be blocked.
 		// The RX timeout logic of the nRF series is implemented wrong. We cannot use it.
-		s_nRFxUARTDev[devno].pDmaReg->RXD.MAXCNT = 1;
-		s_nRFxUARTDev[devno].pDmaReg->RXD.PTR = (uint32_t)&s_nRFxUARTDev[devno].RxDmaCache;
-#endif
+		s_nRFxUARTDev[devno].pDmaReg->RXD.MAXCNT = NRFX_UART_RXDMA_SIZE;
+		s_nRFxUARTDev[devno].pDmaReg->RXD.PTR = (uint32_t)s_nRFxUARTDev[devno].RxDmaMem;
+//#endif
 		s_nRFxUARTDev[devno].pDmaReg->EVENTS_ENDRX = 0;
 		s_nRFxUARTDev[devno].pDmaReg->TASKS_STARTRX = 1;
 	}
