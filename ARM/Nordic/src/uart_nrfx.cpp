@@ -45,6 +45,30 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "interrupt.h"
 #include "coredev/shared_intrf.h"
 
+// Defining common bitfields for both DMA & non DMA registers
+#define NRFX_UART_ERRORSRC_BREAK_Pos (3UL) /*!< Position of BREAK field. */
+#define NRFX_UART_ERRORSRC_BREAK_Msk (0x1UL << NRFX_UART_ERRORSRC_BREAK_Pos) /*!< Bit mask of BREAK field. */
+#define NRFX_UART_ERRORSRC_BREAK_NotPresent (0UL) /*!< Read: error not present */
+#define NRFX_UART_ERRORSRC_BREAK_Present (1UL) /*!< Read: error present */
+
+/* Bit 2 : Framing error occurred */
+#define NRFX_UART_ERRORSRC_FRAMING_Pos (2UL) /*!< Position of FRAMING field. */
+#define NRFX_UART_ERRORSRC_FRAMING_Msk (0x1UL << NRFX_UART_ERRORSRC_FRAMING_Pos) /*!< Bit mask of FRAMING field. */
+#define NRFX_UART_ERRORSRC_FRAMING_NotPresent (0UL) /*!< Read: error not present */
+#define NRFX_UART_ERRORSRC_FRAMING_Present (1UL) /*!< Read: error present */
+
+/* Bit 1 : Parity error */
+#define NRFX_UART_ERRORSRC_PARITY_Pos (1UL) /*!< Position of PARITY field. */
+#define NRFX_UART_ERRORSRC_PARITY_Msk (0x1UL << NRFX_UART_ERRORSRC_PARITY_Pos) /*!< Bit mask of PARITY field. */
+#define NRFX_UART_ERRORSRC_PARITY_NotPresent (0UL) /*!< Read: error not present */
+#define NRFX_UART_ERRORSRC_PARITY_Present (1UL) /*!< Read: error present */
+
+/* Bit 0 : Overrun error */
+#define NRFX_UART_ERRORSRC_OVERRUN_Pos (0UL) /*!< Position of OVERRUN field. */
+#define NRFX_UART_ERRORSRC_OVERRUN_Msk (0x1UL << NRFX_UART_ERRORSRC_OVERRUN_Pos) /*!< Bit mask of OVERRUN field. */
+#define NRFX_UART_ERRORSRC_OVERRUN_NotPresent (0UL) /*!< Read: error not present */
+#define NRFX_UART_ERRORSRC_OVERRUN_Present (1UL) /*!< Read: error present */
+
 // There is no indication in the datasheet about how many hardware fifo
 // this value seems to produce best performance
 #define NRFX_UART_HWFIFO_SIZE		4
@@ -276,9 +300,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	NRF_UARTE_Type *reg = dev->pDmaReg;
 #endif
 
-	uint8_t rxto = reg->EVENTS_RXTO;
-
-	if (rxto)
+	if (reg->EVENTS_RXTO)
 	{
 #ifdef UARTE_PRESENT
 		dev->pDmaReg->TASKS_FLUSHRX = 1;
@@ -309,12 +331,6 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		//dev->pDmaReg->RXD.MAXCNT = NRFX_UART_BUFF_SIZE;
 		//dev->pDmaReg->RXD.PTR = (uint32_t)dev->RxDmaMem;
 		dev->pDmaReg->TASKS_STARTRX = 1;
-
-		if (dev->pUartDev->EvtCallback)
-		{
-			len = CFifoUsed(dev->pUartDev->hRxFifo);
-			cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
-		}
 	}
 	else
 #endif
@@ -354,11 +370,11 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		{
 			reg->EVENTS_RXDRDY = 0;
 			dev->RxDmaCnt++;
-			if (dev->pUartDev->EvtCallback)
-			{
-				len = CFifoUsed(dev->pUartDev->hRxFifo);
-				cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
-			}
+		}
+		if (dev->pUartDev->EvtCallback)
+		{
+			len = CFifoUsed(dev->pUartDev->hRxFifo);
+			cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
 		}
 	}
 
@@ -436,47 +452,58 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	}
 #endif
 
+	// Handle errors
 	if (reg->EVENTS_ERROR)
 	{
 		uint32_t err = reg->ERRORSRC;
 		reg->EVENTS_ERROR = 0;
-#ifdef UART_PRESENT
-		if (err & UART_ERRORSRC_OVERRUN_Msk)
-		{
-			dev->pUartDev->RxOvrErrCnt++;//g_nRF51RxErrCnt++;
-			len = 0;
-			cnt = 0;
-			//int l = 0;
-			uint8_t *d;
-			do {
-				dev->pReg->EVENTS_RXDRDY = 0;
-				d = CFifoPut(dev->pUartDev->hRxFifo);
-				if (d == NULL)
-				{
-					dev->pUartDev->bRxReady = true;
-					break;
-				}
-				dev->pUartDev->bRxReady = false;
-				*d = dev->pReg->RXD;
-				cnt++;
-			} while (dev->pReg->EVENTS_RXDRDY && cnt < NRFX_UART_HWFIFO_SIZE);
 
-			if (dev->pUartDev->EvtCallback)
+		if (err & NRFX_UART_ERRORSRC_OVERRUN_Msk)
+		{
+			dev->pUartDev->RxOvrErrCnt++;
+			len = 0;
+
+#ifdef UARTE_PRESENT
+			if (pDev->bDma == true)
 			{
-				len = CFifoUsed(dev->pUartDev->hRxFifo);
-				dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
+				dev->pDmaReg->TASKS_STOPRX = 1;
+			}
+			else
+#endif
+			{
+#ifdef UART_PRESENT
+				cnt = NRFX_UART_HWFIFO_SIZE;
+				do {
+					dev->pReg->EVENTS_RXDRDY = 0;
+					uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
+					if (p == NULL)
+					{
+						dev->pUartDev->bRxReady = true;
+						break;
+					}
+					dev->pUartDev->bRxReady = false;
+					*p = dev->pReg->RXD;
+					cnt++;
+				} while (dev->pReg->EVENTS_RXDRDY && --cnt > 0);
+				if (dev->pUartDev->EvtCallback)
+				{
+					len = CFifoUsed(dev->pUartDev->hRxFifo);
+					dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
+				}
+#endif
 			}
 		}
-		if (err & UART_ERRORSRC_FRAMING_Msk)
+		if (err & NRFX_UART_ERRORSRC_FRAMING_Msk)
 		{
 			dev->pUartDev->FramErrCnt++;
 		}
-		if (err & UART_ERRORSRC_PARITY_Msk)
+		if (err & NRFX_UART_ERRORSRC_PARITY_Msk)
 		{
 			dev->pUartDev->ParErrCnt++;
 		}
-#else
-#endif
+		if (err & NRFX_UART_ERRORSRC_BREAK_Msk)
+		{
+		}
 		reg->ERRORSRC = reg->ERRORSRC;
 		len = 0;
 		if (dev->pUartDev->EvtCallback)
@@ -559,6 +586,7 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &l);
 		if (p == NULL)
 		{
+#ifdef UARTE_PRESENT
 			if (pDev->bDma == true && CFifoUsed(dev->pUartDev->hRxFifo) <= 0)
 			{
 				if (dev->RxDmaCnt > 0)
@@ -566,6 +594,7 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 					dev->pDmaReg->TASKS_STOPRX = 1;
 				}
 			}
+#endif
 			break;
 		}
 		memcpy(pBuff, p, l);
@@ -588,6 +617,7 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		else
 #endif
 		{
+#ifdef UART_PRESENT
 			uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
 			if (p)
 			{
@@ -595,6 +625,7 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 				dev->pUartDev->bRxReady = false;
 				*p = dev->pReg->RXD;
 			}
+#endif
 		}
 	}
 
