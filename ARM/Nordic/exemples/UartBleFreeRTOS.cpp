@@ -198,7 +198,7 @@ static IOPinCfg_t s_UartPins[] = {
     {UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
 };
 
-const UARTCFG g_UartCfg = {
+const UARTCfg_t g_UartCfg = {
 	.DevNo = 0,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
