@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>UartSdkPrbsTest</name>
+	<name>UartPrbsTxSdk5</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -31,14 +31,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/UartSdkPrbsTx.c</name>
+			<name>src/UartPrbsTxSdk5.c</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/exemples/UartSdkPrbsTx.c</locationURI>
+			<locationURI>$%7BPARENT-5-PROJECT_LOC%7D/exemples/UartPrbsTxSdk5.c</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
+			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/board.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx</name>
@@ -48,7 +48,7 @@
 		<link>
 			<name>src/sdk_config.h</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/UartSdkPrbsTest/src/sdk_config.h</location>
+			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/sdk_config.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers</name>
@@ -63,7 +63,33 @@
 		<link>
 			<name>src/nrfx/drivers/src/nrfx_uarte.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uarte.c</locationURI>
+			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uarte.c</locationURI>
 		</link>
 	</linkedResources>
+	<variableList>
+		<variable>
+			<name>copy_PARENT</name>
+			<value>$%7BPARENT-4-PROJECT_LOC%7D</value>
+		</variable>
+		<variable>
+			<name>copy_PARENT1</name>
+			<value>$%7Bcopy_PARENT%7D/nRF52/nRF52840/exemples/UartSdkPrbsTest</value>
+		</variable>
+		<variable>
+			<name>copy_PARENT11</name>
+			<value>$%7Bcopy_PARENT123%7D/nRF52/nRF52840/exemples/UartSdkPrbsTest</value>
+		</variable>
+		<variable>
+			<name>copy_PARENT12</name>
+			<value>$%7BPARENT-3-copy_PARENT%7D</value>
+		</variable>
+		<variable>
+			<name>copy_PARENT121</name>
+			<value>$%7Bcopy_PARENT12%7D/IOsonata</value>
+		</variable>
+		<variable>
+			<name>copy_PARENT123</name>
+			<value>$%7Bcopy_PARENT%7D/nRF52</value>
+		</variable>
+	</variableList>
 </projectDescription>
