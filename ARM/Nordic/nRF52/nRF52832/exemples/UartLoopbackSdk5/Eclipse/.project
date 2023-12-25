@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>UartSdkLoopbackTest</name>
+	<name>UartLoopbackSdk5</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -31,14 +31,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/UartSdkLoopbackTx.c</name>
+			<name>src/UartLoopbackSdk5.c</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/exemples/UartSdkLoopbackTx.c</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/exemples/UartLoopbackSdk5.c</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT1/src/board.h</locationURI>
+			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/board.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx</name>
@@ -48,7 +48,7 @@
 		<link>
 			<name>src/sdk_config.h</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/UartSdkPrbsTest/src/sdk_config.h</location>
+			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/sdk_config.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers</name>
@@ -73,7 +73,7 @@
 		</variable>
 		<variable>
 			<name>copy_PARENT1</name>
-			<value>$%7Bcopy_PARENT%7D/nRF52/nRF52832/exemples/UartSdkPrbsTest</value>
+			<value>$%7Bcopy_PARENT%7D/nRF52/nRF52832/exemples/UartLoopbackSdk5</value>
 		</variable>
 		<variable>
 			<name>copy_PARENT12</name>
