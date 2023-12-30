@@ -201,7 +201,15 @@ bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len)
 //			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 //				break;
 			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
-				p->Val32 = *(uint8_t*)pAttVal;
+//				p->Val32 = *(uint8_t*)pAttVal;
+				p->pChar->bNotify = *(uint16_t*)pAttVal & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION;
+				if (p->pChar->bNotify)	///p->Val32 *(uint16_t*)pBuff & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
+				{
+					if (p->pChar->SetNotifCB)
+					{
+						p->pChar->SetNotifCB(p->pChar, p->pChar->bNotify);
+					}
+				}
 				break;
 			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
@@ -383,6 +391,7 @@ size_t BtGattGetValue(BtGattListEntry_t *pEntry, uint8_t *pBuff)
 					uint16_t *p = (uint16_t*)pBuff;
 
 					*p = pEntry->pChar->bNotify ? BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION : 0;
+					//*p |= pEntry->pChar->bIndic ? BT_GATT_CLIENT_CHAR_CONFIG_INDICATION : 0;
 				}
 				//pBuff[0] = pEntry->Val32 & 0xFF;
 			//pBuff[1] = (pEntry->Val32 >> 8) & 0xFF;
@@ -517,6 +526,8 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 	{
 		return false;
 	}
+
+	return pChar->bNotify;
 
 	BtGattListEntry_t *p = &s_BtGattEntryTbl[pChar->CccdHdl - 1];
 

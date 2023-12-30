@@ -326,7 +326,7 @@ typedef struct __Bt_Att_Execute_Write_Rsp {
 /// NOTE: Variable length
 typedef struct __Bt_Att_Handle_Value_Ntf {
 	uint8_t OpCode;			//!< Attribute opcode
-	uint16_t Hdl;			//!< Attribute handle
+	uint16_t ValHdl;		//!< Attribute value handle
 	uint8_t Data[1];		//!< Variable length data
 } BtAttHandleValueNtf_t;
 

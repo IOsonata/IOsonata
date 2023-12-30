@@ -114,8 +114,8 @@ typedef uint8_t		BtGattCharExtProp_t;
 // Attribute value : UTF-8
 typedef char *		BtGattCharUserDesc_t;
 
-#define BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION		1
-#define BT_GATT_CLIENT_CHAR_CONFIG_INDICATION		2
+#define BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION		(1<<0)
+#define BT_GATT_CLIENT_CHAR_CONFIG_INDICATION		(1<<1)
 
 // Client characteristic configuration declaration attribute UUID 0x2902
 typedef uint8_t BtGatClientCharConfig_t;
@@ -176,7 +176,8 @@ struct __Bt_Gatt_Characteristic {
 	void * const pValue;				//!< Characteristic data value
 	uint16_t ValueLen;					//!< Current length in bytes of data value
 	// Bellow are private data. Do not modify
-	bool bNotify;                       //!< Notify flag for read characteristic
+	bool bNotify;                       //!< Notify enable flag for read characteristic
+	bool bIndic;						//!< Indication enable flag
 	uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
 	uint16_t Hdl;       				//!< char handle
 	uint16_t ValHdl;					//!< char value handle
