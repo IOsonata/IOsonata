@@ -42,25 +42,24 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "coredev/uart.h"
 
-//extern UART g_Uart;
+extern UART g_Uart;
 
 void BtAttSendError(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pAcl, uint16_t Hdl, uint8_t OpCode, uint8_t ErrCode)
 {
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)pAcl->Data;
-	BtAttErrorRsp_t *errsp = (BtAttErrorRsp_t*)&l2pdu->Att;
+	BtAtt_t *errsp = (BtAtt_t*)&l2pdu->Att;
 
 	errsp->OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
-	errsp->ReqOpCode = OpCode;
-	errsp->Hdl = Hdl;
-	errsp->Error = ErrCode;
+	errsp->ErrorRsp.ReqOpCode = OpCode;
+	errsp->ErrorRsp.Hdl = Hdl;
+	errsp->ErrorRsp.Error = ErrCode;
 
-	l2pdu->Hdr.Len = sizeof(BtAttErrorRsp_t);
-	pAcl->Hdr.Len = sizeof(BtAttErrorRsp_t) + sizeof(BtL2CapHdr_t);
+	l2pdu->Hdr.Len = sizeof(BtAttErrorRsp_t) + 1;
+	pAcl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 //	g_Uart.printf("Error %x\r\n", ErrCode);
 
 	uint32_t n = pDev->SendData((uint8_t*)pAcl, pAcl->Hdr.Len + sizeof(pAcl->Hdr));
-//	g_Uart.printf("n=%d\r\n", n);
 }
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu)
@@ -68,6 +67,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+	BtAtt_t *rspatt = (BtAtt_t*)&l2pdu->Att;
 
 //	g_Uart.printf("ATT OpCode %x, L2Cap len %d\n", pRcvPdu->Att.OpCode, pRcvPdu->Hdr.Len);
 
@@ -77,24 +77,23 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 	l2pdu->Hdr = pRcvPdu->Hdr;
 
-
 	switch (pRcvPdu->Att.OpCode)
 	{
 		case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ:
 			{
-				BtAttExchgMtuReqRsp_t *req = (BtAttExchgMtuReqRsp_t*)&pRcvPdu->Att;
+//				BtAttExchgMtuReqReq_t *req = (BtAttExchgMtuReqReq_t*)&pRcvPdu->Att.ExchgMtuReqReq;
 
 //				g_Uart.printf("ATT_EXCHANGE_MTU_REQ:\r\n");
 //				g_Uart.printf("RxMtu %d\r\n", req->RxMtu);
 
-				l2pdu->Hdr.Len = sizeof(BtAttExchgMtuReqRsp_t);
+				l2pdu->Hdr.Len = sizeof(BtAttExchgMtuReqRsp_t) + 1;
 
-				BtAttExchgMtuReqRsp_t *att = (BtAttExchgMtuReqRsp_t*)&l2pdu->Att;
+				//BtAtt_t *att = (BtAtt_t*)&l2pdu->Att;
 
-				att->OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
-				att->RxMtu = 512;	// TODO: get real mtu
+				rspatt->OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
+				rspatt->ExchgMtuReqRsp.RxMtu = 247;	// TODO: get real mtu
 
-				acl->Hdr.Len = sizeof(BtAttExchgMtuReqRsp_t) + sizeof(BtL2CapHdr_t);
+				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 				uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 //				g_Uart.printf("n=%d\r\n", n);
@@ -103,7 +102,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 		case BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ:
 			{
 //				g_Uart.printf("ATT_FIND_INFORMATION_REQ:\r\n");
-				BtAttFindInfoReq_t *req = (BtAttFindInfoReq_t*)&pRcvPdu->Att;
+				BtAttFindInfoReq_t *req = (BtAttFindInfoReq_t*)&pRcvPdu->Att.FindInfoReq;
 
 //				g_Uart.printf("sHdl: %x, eHdl: %x\r\n", req->StartHdl, req->EndHdl);
 
@@ -113,9 +112,10 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 					break;
 				}
 
-				BtAttFindInfoRsp_t *rsp = (BtAttFindInfoRsp_t*)&l2pdu->Att;
+//				BtAttFindInfoRsp_t *rsp = (BtAttFindInfoRsp_t*)&l2pdu->Att;
+				//BtAtt_t *rsp = (BtAtt_t*)&l2pdu->Att;
 
-				rsp->OpCode = BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP;
+				rspatt->OpCode = BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP;
 
 				int l = 0;
 #if 0
@@ -179,14 +179,14 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 							BtUuidGetBase(en.TypeUuid.BaseIdx, uuid128);
 
-							rsp->Fmt = BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128;
+							rspatt->FindInfoRsp.Fmt = BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128;
 
 						//	for (int i = 0; i < c; i++)
 							{
-								rsp->HdlUuid128[0].Hdl = en.Hdl;
+								rspatt->FindInfoRsp.HdlUuid128[0].Hdl = en.Hdl;
 								uuid128[12] = en.TypeUuid.Uuid & 0xff;
 								uuid128[13] = en.TypeUuid.Uuid >> 8;
-								memcpy(rsp->HdlUuid128[0].Uuid, uuid128, 16);
+								memcpy(rspatt->FindInfoRsp.HdlUuid128[0].Uuid, uuid128, 16);
 
 //								g_Uart.printf("HDL : %d, ", rsp->HdlUuid128[0].Hdl);
 //
@@ -201,12 +201,12 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 						}
 						else
 						{
-							rsp->Fmt = BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16;
+							rspatt->FindInfoRsp.Fmt = BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16;
 
 							//for (int i = 0; i < c; i++)
 							{
-								rsp->HdlUuid16[0].Hdl = en.Hdl;
-								rsp->HdlUuid16[0].Uuid = en.TypeUuid.Uuid;
+								rspatt->FindInfoRsp.HdlUuid16[0].Hdl = en.Hdl;
+								rspatt->FindInfoRsp.HdlUuid16[0].Uuid = en.TypeUuid.Uuid;
 
 //								g_Uart.printf("HDL : %d, Uuid16 : 0x%04x\r\n", rsp->HdlUuid16[0].Hdl, rsp->HdlUuid16[0].Uuid);
 
@@ -248,7 +248,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 				// search through all attributes, the starting handle shall be set to
 				// 0x0001 and the ending handle shall be set to 0xFFFF.
 
-				BtAttReadByTypeReq_t *req = (BtAttReadByTypeReq_t*)&pRcvPdu->Att;
+				BtAttReadByTypeReq_t *req = (BtAttReadByTypeReq_t*)&pRcvPdu->Att.ReadByTypeReq;
 
 				if (req->StartHdl < 1 || req->EndHdl < 1 || req->StartHdl > req->EndHdl)
 				{
@@ -256,11 +256,12 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 					break;
 				}
 
-				BtAttReadByTypeRsp_t *rsp = (BtAttReadByTypeRsp_t*)&l2pdu->Att;
+//				BtAttReadByTypeRsp_t *rsp = (BtAttReadByTypeRsp_t*)&l2pdu->Att;
+//				BtAtt_t *rsp = (BtAtt_t*)&l2pdu->Att;
 
-				rsp->OpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP;
+				rspatt->OpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP;
 
-				uint8_t *p = (uint8_t*)rsp->Data;
+				uint8_t *p = (uint8_t*)rspatt->ReadByTypeRsp.Data;
 
 //				g_Uart.printf("sHdl: %x, eHdl: %x, Type: %x\r\n", req->StartHdl, req->EndHdl, req->Uuid.Uuid16);
 #if 0
@@ -310,7 +311,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 					p[0] = entry.Hdl & 0xFF;
 					p[1] = entry.Hdl >> 8;
 					p +=2;
-					rsp->Len = BtGattGetValue(&entry, p) + 2;
+					rspatt->ReadByTypeRsp.Len = BtGattGetValue(&entry, p) + 2;
 //					g_Uart.printf("Att Val: ");
 
 //					for (int j = 0; j < rsp->Len; j++)
@@ -319,7 +320,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 //					}
 //					g_Uart.printf("\r\n");
 
-					l2pdu->Hdr.Len = 2 + rsp->Len;//rsp->Len * c;
+					l2pdu->Hdr.Len = 2 + rspatt->ReadByTypeRsp.Len;//rsp->Len * c;
 					acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 //					g_Uart.printf("rsp->Len : %d, hdr.len : %d, %d\r\n", rsp->Len, l2pdu->Hdr.Len, acl->Hdr.Len);
@@ -336,10 +337,10 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 			{
 				// The ATT_READ_REQ PDU is used to request the server to read the value
 				// of an attribute and return its value in an ATT_READ_RSP PDU.
-				BtAttReadReq_t *req = (BtAttReadReq_t*)&pRcvPdu->Att;
-				BtAttReadRsp_t *rsp = (BtAttReadRsp_t*)&l2pdu->Att;
+				BtAttReadReq_t *req = (BtAttReadReq_t*)&pRcvPdu->Att.ReadReq;
+				//BtAtt_t *rsp = (BtAtt_t*)&l2pdu->Att;
 
-				rsp->OpCode = BT_ATT_OPCODE_ATT_READ_RSP;
+				rspatt->OpCode = BT_ATT_OPCODE_ATT_READ_RSP;
 
 //				g_Uart.printf("ATT_READ_REQ : Hdl = %d\r\n", req->Hdl);
 
@@ -348,7 +349,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 				if (BtGattGetEntryHandle(req->Hdl, &eg) == true)
 				{
 					int baseidx = eg.Uuid.BaseIdx;
-					int l = BtGattGetValue(&eg, rsp->Data);
+					int l = BtGattGetValue(&eg, rspatt->ReadRsp.Data);
 
 //					g_Uart.printf("Data : ");
 //					for (int j= 0; j < l; j++)
@@ -376,7 +377,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 						rsp->Data[1] = eg.Uuid.Uuid >> 8;
 					}
 */
-					l2pdu->Hdr.Len = sizeof(BtAttReadRsp_t) - 1 + l;
+					l2pdu->Hdr.Len = sizeof(BtAttReadRsp_t) + l;
 					acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 					uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
@@ -400,14 +401,14 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 			break;
 		case BT_ATT_OPCODE_ATT_READ_REQ_BLOB_REQ:
 			{
-				BtAttBlobReq_t *req = (BtAttBlobReq_t*)&pRcvPdu->Att;
+				BtAttBlobReq_t *req = (BtAttBlobReq_t*)&pRcvPdu->Att.BlobReq;
 
 //				g_Uart.printf("BT_ATT_OPCODE_ATT_READ_REQ_BLOB_REQ:\r\n");
 //				g_Uart.printf("Hdl: %x, offset: %x\r\n", req->Hdl, req->Offset);
 
-				BtAttBlobRsp_t *rsp = (BtAttBlobRsp_t*)&l2pdu->Att;
+				//BtAtt_t *rsp = (BtAtt_t*)&l2pdu->Att;
 
-				rsp->OpCode = BT_ATT_OPCODE_ATT_READ_REQ_BLOB_RSP;
+				rspatt->OpCode = BT_ATT_OPCODE_ATT_READ_REQ_BLOB_RSP;
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ:
@@ -420,7 +421,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 			break;
 		case BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ:
 			{
-				BtAttReadByGroupTypeReq_t *req = (BtAttReadByGroupTypeReq_t*)&pRcvPdu->Att;
+				BtAttReadByGroupTypeReq_t *req = (BtAttReadByGroupTypeReq_t*)&pRcvPdu->Att.ReadByGroupTypeReq;
 
 				if (req->StartHdl < 1 || req->EndHdl < 1 || req->StartHdl > req->EndHdl)
 				{
@@ -428,9 +429,9 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 					break;
 				}
 
-				BtAttReadByGroupTypeRsp_t *rsp = (BtAttReadByGroupTypeRsp_t*)&l2pdu->Att;
+				//BtAttReadByGroupTypeRsp_t *rsp = (BtAttReadByGroupTypeRsp_t*)&l2pdu->Att;
 
-				rsp->OpCode = BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_RSP;
+				rspatt->OpCode = BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_RSP;
 
 //				g_Uart.printf("ATT_READ_BY_GROUP_TYPE_REQ:\r\n");
 //				g_Uart.printf("sHdl:%d, eHdl:%d, Uuid: ", req->StartHdl, req->EndHdl, req->Uid.Uuid16);
@@ -445,9 +446,9 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 					int c = BtGattGetListUuid(&uid16, req->StartHdl, list, 20, &lasthdl);
 
-					uint8_t *p = (uint8_t*)rsp->Data;
+					uint8_t *p = (uint8_t*)rspatt->ReadByGroupTypeRsp.Data;
 
-					rsp->Len = 0;
+					rspatt->ReadByGroupTypeRsp.Len = 0;
 
 					if (c > 0)
 					{
@@ -473,7 +474,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 							p += sizeof(BtAttHdlRange_t);
 
-							rsp->Len = BtGattGetValue(&list[i], p);
+							rspatt->ReadByGroupTypeRsp.Len = BtGattGetValue(&list[i], p);
 
 //							g_Uart.printf("UUID: ");
 //							for (int j = 0; j < rsp->Len; j++)
@@ -482,15 +483,15 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 //							}
 //							g_Uart.printf("\r\n");
 
-							p += rsp->Len;
-							l += 4 + rsp->Len;
+							p += rspatt->ReadByGroupTypeRsp.Len;
+							l += 4 + rspatt->ReadByGroupTypeRsp.Len;
 						}
 
 						if (l > 0)
 						{
-							rsp->Len += 4;
+							rspatt->ReadByGroupTypeRsp.Len += 4;
 
-							l2pdu->Hdr.Len = sizeof(BtAttReadByGroupTypeRsp_t) - 1 + l;
+							l2pdu->Hdr.Len = sizeof(BtAttReadByGroupTypeRsp_t) + l;
 							acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 //							g_Uart.printf("rsp->Len : %d, %d, %d, %d\r\n", rsp->Len, l, l2pdu->Hdr.Len, acl->Hdr.Len);
@@ -516,7 +517,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 			break;
 		case BT_ATT_OPCODE_ATT_WRITE_REQ:
 			{
-				BtAttWriteReq_t *req = (BtAttWriteReq_t*)&pRcvPdu->Att;
+				BtAttWriteReq_t *req = (BtAttWriteReq_t*)&pRcvPdu->Att.WriteReq;
 
 //				g_Uart.printf("BT_ATT_OPCODE_ATT_WRITE_REQ:\r\n");
 //				g_Uart.printf("Hdl: %x\r\n", req->Hdl);
@@ -526,12 +527,12 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 					BtAttSendError(pDev, acl, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 					break;
 				}
-				BtAttWriteRsp_t *rsp = (BtAttWriteRsp_t*)&l2pdu->Att;
+				//BtAttWriteRsp_t *rsp = (BtAttWriteRsp_t*)&l2pdu->Att;
 				size_t l = pRcvPdu->Hdr.Len;
 
 				l = BtGattWriteValue(req->Hdl, req->Data, l);
 
-				rsp->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
+				rspatt->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 
 				l2pdu->Hdr.Len = 1;
 				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
@@ -543,7 +544,7 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 			break;
 		case BT_ATT_OPCODE_ATT_CMD:
 			{
-				BtAttSignedWriteCmd_t *req = (BtAttSignedWriteCmd_t*)&pRcvPdu->Att;
+				BtAttSignedWriteCmd_t *req = (BtAttSignedWriteCmd_t*)&pRcvPdu->Att.SignedWriteCmd;
 
 //				g_Uart.printf("ATT_CMD:\r\n");
 //				g_Uart.printf("Hdl: %x, data len: %d\r\n", req->Hdl, pRcvPdu->Hdr.Len -  3);

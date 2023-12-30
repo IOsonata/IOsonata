@@ -38,6 +38,8 @@ SOFTWARE.
 
 #include <inttypes.h>
 
+#include "bt_att.h"
+
 #define BT_L2CAP_CID_FIXED_START			1
 #define BT_L2CAP_CID_FIXED_END				0x3F	//
 
@@ -183,13 +185,13 @@ typedef union __Bt_L2Cap_IFrame_Fields {
 		uint8_t Data[1];			//!< Information data
 	} Ext;
 } BtL2CapIFrame_t;
-
+#if 0
 /// NOTE: Variable length structure
 typedef struct __Bt_L2Cap_Att {
 	uint8_t OpCode;					//!< Attribute protocol Opcode
 	uint8_t Param[1];				//!< Attribute protocol parameters
 } BtL2CapAtt_t;
-
+#endif
 typedef struct __Bt_L2Cap_Smp {
 	uint8_t Code;
 	uint8_t Data[1];			//!< Max data size is 65 byte secure or 23 non secure
@@ -209,7 +211,8 @@ typedef struct __Bt_L2Cap_Pdu {
 		uint32_t ExtControl;		//!< L2CAP I-Frame and S-Frame 32 bits ext control bits
 		BtL2CapSFrame_t SFrame;		//!< S-Frame control bit fields and payload
 		BtL2CapIFrame_t IFrame;		//!< I-Frame control bit fields and payload
-		BtL2CapAtt_t Att;			//!< Attribute payload, CID 4
+		//BtL2CapAtt_t Att;			//!< Attribute payload, CID 4
+		BtAtt_t Att;				//!< Attribute payload, CID 4
 		BtL2CapSmp_t Smp;			//!< SMP payload CID 6
 	};
 } BtL2CapPdu_t;

@@ -461,11 +461,12 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF;
 
-	BtGattCharNotify_t *p = (BtGattCharNotify_t*)l2pdu->Att.Param;
+//	BtGattCharNotify_t *p = (BtGattCharNotify_t*)l2pdu->Att.Param;
+	BtAtt_t *p = (BtAtt_t*)&l2pdu->Att;
 
-	p->ValHdl = ValHdl;
-	memcpy(p->Data, pData, Len);
-	l2pdu->Hdr.Len = sizeof(BtGattCharNotify_t) + Len;
+	p->HandleValueNtf.ValHdl = ValHdl;
+	memcpy(p->HandleValueNtf.Data, pData, Len);
+	l2pdu->Hdr.Len = sizeof(BtAttHandleValueNtf_t) + Len;
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 //	g_Uart.printf("Len : %d, %d, %d\r\n", Len, l2pdu->Hdr.Len, acl->Hdr.Len);

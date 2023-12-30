@@ -43,6 +43,10 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_l2cap.h"
 
+#include "coredev/uart.h"
+
+extern UART g_Uart;
+
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData, size_t Len)
 {
 	if (BtGattCharSetValue(pChar, pData, Len) == false)
@@ -57,7 +61,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 		BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
-	//	g_Uart.printf("BtHciMotify : %d %d \r\n", ConnHdl, ValHdl);
+		g_Uart.printf("BtHciMotify : %d %d \r\n", ConnHdl, pChar->ValHdl);
 
 		acl->Hdr.ConnHdl = ConnHdl;
 		acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
@@ -68,12 +72,12 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF;
 
 //		uint8_t *param = l2pdu->Att.Param;
-		BtGattCharNotify_t *p = (BtGattCharNotify_t*)l2pdu->Att.Param;
+		//BtGattCharNotify_t *p = (BtGattCharNotify_t*)l2pdu->Att.Param;
 
 //		*(uint16_t*)param = pChar->ValHdl;
 //		param += 2;
-		p->ValHdl = pChar->ValHdl;
-		memcpy(p->Data, pData, Len);
+		l2pdu->Att.HandleValueNtf.ValHdl = pChar->ValHdl;
+		memcpy(l2pdu->Att.HandleValueNtf.Data, pData, Len);
 		l2pdu->Hdr.Len = sizeof(BtGattCharNotify_t) + Len;
 		acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 

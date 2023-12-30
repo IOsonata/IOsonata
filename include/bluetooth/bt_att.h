@@ -39,8 +39,8 @@ SOFTWARE.
 #include <inttypes.h>
 
 #include "bluetooth/bt_uuid.h"
-#include "bluetooth/bt_l2cap.h"
-#include "bluetooth/bt_ctlr.h"
+//#include "bluetooth/bt_l2cap.h"
+//#include "bluetooth/bt_ctlr.h"
 
 #define BT_ATT_OPCODE_FLAG_COMMAND						(1<<6)
 #define BT_ATT_OPCODE_FLAG_AUTH_SIGNATURE				(1<<7)
@@ -115,7 +115,7 @@ typedef struct __Bt_Att_Handle_Range {
 
 /// Error response : ATT_OPCODE_ATT_ERROR_RSP
 typedef struct __Bt_Att_ErrorRsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t ReqOpCode;		//!< Request opcode in error
 	uint16_t Hdl;			//!< Start handle in error
 	uint8_t Error;			//!< Error code
@@ -123,13 +123,13 @@ typedef struct __Bt_Att_ErrorRsp {
 
 /// Exchange MTU request/response : ATT_EXCHANGE_MTU_REQ, ATT_EXCHANGE_MTU_RSP
 typedef struct __Bt_Att_Exchange_Mtu_Req_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t RxMtu;			//!< Receive MTU size
 } BtAttExchgMtuReqRsp_t;
 
 /// Find information request : ATT_FIND_INFO_REQ
 typedef struct __Bt_Att_Find_Info_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t StartHdl;		//!< Start handle
 	uint16_t EndHdl;		//!< End handle
 } BtAttFindInfoReq_t;
@@ -140,7 +140,7 @@ typedef struct __Bt_Att_Find_Info_Req {
 
 /// NOTE: Variable length
 typedef struct __Bt_Att_Find_Info_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Fmt;			//!< Format
 	union {
 		BtAttHdlUuid16_t HdlUuid16[1];
@@ -151,7 +151,7 @@ typedef struct __Bt_Att_Find_Info_Rsp {
 /// Find by type value request : ATT_FIND_BY_TYPE_VALUE_REQ
 /// NOTE: Variable length
 typedef struct __Bt_Att_Find_By_Type_Value_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t StartHdl;		//!< Start handle
 	uint16_t EndHdl;		//!< End handle
 	uint16_t Type;			//!< Attribute type 2 octet UUID to find
@@ -161,13 +161,13 @@ typedef struct __Bt_Att_Find_By_Type_Value_Req {
 /// Find by type value response : ATT_FIND_BY_TYPE_VALUE_RSP
 /// NOTE: Variable length
 typedef struct __Bt_Att_Find_By_Type_Value_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	BtAttHdlRange_t Hdl[1];	//!< Array of handles
 } BtAttFindByTypeValueRsp_t;
 
 /// Read by type request : ATT_READ_BY_TYPE_REQ
 typedef struct __Bt_Att_Read_By_Type_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t StartHdl;		//!< Start handle
 	uint16_t EndHdl;		//!< End handle
 	BtUuidVal_t Uuid;		//!< UUID
@@ -176,54 +176,54 @@ typedef struct __Bt_Att_Read_By_Type_Req {
 /// Read by type response : ATT_READ_BY_TYPE_RSP
 /// NOTE: variable length
 typedef struct __Bt_Att_Read_By_Type_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Len;			//!< The size of each attribute handle- value pair
 	uint8_t Data[1];
 } BtAttReadByTypeRsp_t;
 
 /// Read request : ATT_READ_REQ
 typedef struct __Bt_Att_Read_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl;			//!< Attribute handle to be read
 } BtAttReadReq_t;
 
 /// Read response : ATT_READ_RSP
 /// NOTE: Variable length
 typedef struct __Bt_Att_Read_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Data[1];		//!< Attribute values returned
 } BtAttReadRsp_t;
 
 /// Read blob request : ATT_READ_BLOB_REQ
 typedef struct __Bt_Att_Read_Blob_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl;			//!< Attribute handle to be read
 	uint16_t Offset;		//!< Offset location of data to read
 } BtAttBlobReq_t;
 
 /// Read blob response : ATT_READ_BLOB_RSP
 typedef struct __Bt_Att_Read_Blob_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Data[1];		//!< Attribute values returned
 } BtAttBlobRsp_t;
 
 /// Read multiple request : ATT_READ_MULTIPLE_REQ
 /// NOTE: Variable length
 typedef struct __Bt_Att_Read_Multiple_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl[1];		//!< Array of attribute handle to be read
 } BtAttReadMultipleReq_t;
 
 /// Read multiple response : ATT_READ_MULTIPLE_RSP
 /// NOTE: Variable length
 typedef struct __Bt_Att_Read_Multiple_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Data[1];		//!< Attribute values returned
 } BtAttReadMultipleRsp_t;
 
 /// Read by group type request : ATT_READ_BY_GROUP_TYPE_REQ
 typedef struct __Bt_Att_Read_By_Group_Type_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t StartHdl;		//!< Start handle
 	uint16_t EndHdl;		//!< End handle
 	BtUuidVal_t Uid;		//!< UUID
@@ -245,40 +245,40 @@ typedef struct __Bt_Att_Read_By_Group_Type_Rsp_Uuid128 {
 
 /// NOTE: Variable length
 typedef struct __Bt_Att_Read_By_Group_Type_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Len;			//!< Size of each attribute data
 	uint8_t Data[1];		//!< Array of attribute data returned
 } BtAttReadByGroupTypeRsp_t;
 
 /// Read multiple variable request : ATT_READ_MULTIPLE_VARIABLE_REQ
 typedef struct __Bt_Att_Read_Multiple_Variable_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl[1];		//!< Array of attribute handle to be read
 } BtAttReadMultipleVarReq_t;
 
 /// Read multiple variable response : ATT_READ_MULTIPLE_VARIABLE_RSP
 typedef struct __Bt_Att_Read_Multiple_Variable_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Data[1];		//!< Array of variable attribute data returned. Require parsing
 } BtAttReadMultipleVarRsp_t;
 
 /// Write request : ATT_WRITE_REQ
 /// NOTE: Variable length
 typedef struct __Bt_Att_Write_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl;			//!< Attribute handle to write
 	uint8_t Data[1];		//!< Variable length data to write
 } BtAttWriteReq_t;
 
 /// Write response : ATT_WRITE_RSP
 typedef struct __Bt_Att_Write_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 } BtAttWriteRsp_t;
 
 /// Write command : ATT_WRITE_CMD
 /// NOTE: Variable length
 typedef struct __Bt_Att_Write_Cmd {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl;			//!< Attribute handle to write
 	uint8_t Data[1];		//!< Variable length data to write
 } BtAttWriteCmd_t;
@@ -286,7 +286,7 @@ typedef struct __Bt_Att_Write_Cmd {
 /// Signed write command : ATT_SIGNED_WRITE_CMD
 /// NOTE: Variable length
 typedef struct __Bt_Att_Signed_Write_Cmd {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl;			//!< Attribute handle to write
 	uint8_t Data[12];		//!< Variable length data to write along with 12 bytes authen signature
 } BtAttSignedWriteCmd_t;
@@ -294,7 +294,7 @@ typedef struct __Bt_Att_Signed_Write_Cmd {
 /// Prepare write request : ATT_PREPARE_WRITE_REQ
 /// NOTE: Variable length
 typedef struct __Bt_Att_Prepare_Write_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl;			//!< Attribute handle to write
 	uint16_t Offset;		//!< Offset of attribute data to write
 	uint8_t Data[1];		//!< Variable length data to write
@@ -303,7 +303,7 @@ typedef struct __Bt_Att_Prepare_Write_Req {
 /// Prepare write response : ATT_PREPARE_WRITE_RSP
 /// NOTE: Variable length
 typedef struct __Bt_Att_Prepare_Write_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl;			//!< Attribute handle to write
 	uint16_t Offset;		//!< Offset of attribute data to write
 	uint8_t Data[1];		//!< Variable length data to write
@@ -311,13 +311,13 @@ typedef struct __Bt_Att_Prepare_Write_Rsp {
 
 /// Execute write request : ATT_EXECUTE_WRITE_REQ
 typedef struct __Bt_Att_Execute_Write_Req {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Flag;			//!< 0 - Cancel prepare writes, 1 - Execute write
 } BtAttExecuteWriteReq_t;
 
 /// Execute write response : ATT_EXECUTE_WRITE_RSP
 typedef struct __Bt_Att_Execute_Write_Rsp {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 } BtAttExecuteWriteRsp_t;
 
 // Server initiated
@@ -325,7 +325,7 @@ typedef struct __Bt_Att_Execute_Write_Rsp {
 /// Handle value NTF : ATT_HANDLE_VALUE_NTF
 /// NOTE: Variable length
 typedef struct __Bt_Att_Handle_Value_Ntf {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t ValHdl;		//!< Attribute value handle
 	uint8_t Data[1];		//!< Variable length data
 } BtAttHandleValueNtf_t;
@@ -333,22 +333,60 @@ typedef struct __Bt_Att_Handle_Value_Ntf {
 /// Handle value IND : ATT_HANDLE_VALUE_IND
 /// NOTE: Variable length
 typedef struct __Bt_Att_Handle_Value_Ind {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl;			//!< Attribute handle
 	uint8_t Data[1];		//!< Variable length data
 } BtAttHandleValueInd_t;
 
 /// Handle value CFM : ATT_HANDLE_VALUE_CFM
 typedef struct __Bt_Att_Handle_Value_Cfm {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 } BtAttHandleValueCfm_t;
 
 /// Multiple handle value NTF : ATT_MULTIPLE_VALUE_NTF
 /// NOTE: Variable length
 typedef struct __Bt_Att_Multiple_Handle_Value_Ntf {
-	uint8_t OpCode;			//!< Attribute opcode
+//	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Data[1];		//!< Variable length data
 } BtAttMultipleHandleValueNtf_t;
+
+typedef struct __Bt_Attribute {
+	uint8_t OpCode;			//!< Attribute opcode
+	union {
+		BtAttErrorRsp_t ErrorRsp;
+		BtAttExchgMtuReqRsp_t ExchgMtuReqRsp;
+		BtAttFindInfoReq_t FindInfoReq;
+		BtAttFindInfoRsp_t FindInfoRsp;
+		BtAttFindByTypeValueReq_t FindByTypeValueReq;
+		BtAttFindByTypeValueRsp_t FindByTypeValueRsp;
+		BtAttReadByTypeReq_t ReadByTypeReq;
+		BtAttReadByTypeRsp_t ReadByTypeRsp;
+		BtAttReadReq_t ReadReq;
+		BtAttReadRsp_t ReadRsp;
+		BtAttBlobReq_t BlobReq;
+		BtAttBlobRsp_t BlobRsp;
+		BtAttReadMultipleReq_t ReadMultipleReq;
+		BtAttReadMultipleRsp_t ReadMultipleRsp;
+		BtAttReadByGroupTypeReq_t ReadByGroupTypeReq;
+		BtAttReadByGroupTypeRspUuid16_t ReadByGroupTypeRspUuid16;
+		BtAttReadByGroupTypeRspUuid128_t ReadByGroupTypeRspUuid128;
+		BtAttReadByGroupTypeRsp_t ReadByGroupTypeRsp;
+		BtAttReadMultipleVarReq_t ReadMultipleVarReq;
+		BtAttReadMultipleVarRsp_t ReadMultipleVarRsp;
+		BtAttWriteReq_t WriteReq;
+		BtAttWriteRsp_t WriteRsp;
+		BtAttWriteCmd_t WriteCmd;
+		BtAttSignedWriteCmd_t SignedWriteCmd;
+		BtAttPrepareWriteReq_t PrepareWriteReq;
+		BtAttPrepareWriteRsp_t PrepareWriteRsp;
+		BtAttExecuteWriteReq_t ExecuteWriteReq;
+		BtAttExecuteWriteRsp_t ExecuteWriteRsp;
+		BtAttHandleValueNtf_t HandleValueNtf;
+		BtAttHandleValueInd_t HandleValueInd;
+		BtAttHandleValueCfm_t HandleValueCfm;
+		BtAttMultipleHandleValueNtf_t MultipleHandleValueNtf;
+	};
+} BtAtt_t;
 
 #pragma pack(pop)
 
@@ -356,7 +394,7 @@ typedef struct __Bt_Att_Multiple_Handle_Value_Ntf {
 extern "C" {
 #endif
 
-void BtAttProcessData(BtCtlrDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
+//void BtAttProcessData(BtCtlrDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
 #ifdef __cplusplus
 }
