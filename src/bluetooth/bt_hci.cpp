@@ -128,7 +128,8 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE:
 			break;
-		case BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE:
+		case BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V1:
+		case BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V2:
 			{
 				BtHciLeEvtEnhConnComplete_t *p = (BtHciLeEvtEnhConnComplete_t*)pLeEvtPkt->Data;
 
@@ -167,9 +168,11 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_EXT_ADV_REPORT:
 			break;
-		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V1:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2:
 			break;
-		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V1:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2:
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_LOST:
 			break;
@@ -200,7 +203,8 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_CTE_RQST_FAILED:
 			break;
-		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED_V1:
+		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_TRANSFER_RECEIVED_V2:
 			break;
 		case BT_HCI_EVT_LE_CIS_ESTABLISHED:
 			break;
@@ -253,7 +257,7 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 			break;
 		case BT_HCI_EVT_REMOTE_NAME_RQST_COMPLETE:
 			break;
-		case BT_HCI_EVT_ENCRYPTION_CHANGE:
+		case BT_HCI_EVT_ENCRYPTION_CHANGE_V1:
 			break;
 		case BT_HCI_EVT_ENCRYPTION_CHANGE_V2:
 			break;
