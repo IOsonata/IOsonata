@@ -96,12 +96,12 @@ typedef struct __Bt_Gatt_Char_Prefered_Conn_Params {
 	uint16_t Latency;			//!< Peripheral latency
 	uint16_t Timeout;			//!< Supervision timeout in 10ms count
 } BtGattPreferedConnParams_t;
-
+/*
 typedef struct __Bt_Gatt_Char_Notify {
 	uint16_t ValHdl;			//!< Characteristic value handle
 	uint8_t Data[1];			//!< Characteristic attribute value
 } BtGattCharNotify_t;
-
+*/
 #pragma pack(pop)
 
 #define BT_GATT_CHAR_EXT_PROP_RELIABLE_WRITE	1	//!< Reliable write using procedure Section 4.9.5
