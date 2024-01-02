@@ -401,7 +401,7 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 
 void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt)
 {
-	BtL2CapPdu_t *l2frame = (BtL2CapPdu_t*)pPkt->Data;
+	BtL2CapPdu_t *l2rcv = (BtL2CapPdu_t*)pPkt->Data;
 
 //	g_Uart.printf("** BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
 //	for (int i = 0; i < pPkt->Hdr.Len; i++)
@@ -410,19 +410,39 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 //	}
 //	g_Uart.printf("\r\nCID: %x\r\n", l2frame->Hdr.Cid);
 
-	switch (l2frame->Hdr.Cid)
+	switch (l2rcv->Hdr.Cid)
 	{
 		case BT_L2CAP_CID_ACL_U:
 			break;
 		case BT_L2CAP_CID_CONNECTIONLESS:
 			break;
 		case BT_L2CAP_CID_ATT:
-			BtProcessAttData(pDev, pPkt->Hdr.ConnHdl, l2frame);
+		{
+			uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
+			BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
+			BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+			acl->Hdr.ConnHdl = pPkt->Hdr.ConnHdl;
+			acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+			acl->Hdr.BCFlag = 0;
+
+			l2pdu->Hdr = l2rcv->Hdr;
+
+			l2pdu->Hdr.Len = BtAttProcessData(pPkt->Hdr.ConnHdl, &l2rcv->Att, l2rcv->Hdr.Len, &l2pdu->Att);
+
+			if (l2pdu->Hdr.Len > 0)
+			{
+				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+				uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+			}
+		}
+//			BtProcessAttData(pDev, pPkt->Hdr.ConnHdl, l2frame);
 			break;
 		case BT_L2CAP_CID_SIGNAL:
 			break;
 		case BT_L2CAP_CID_SEC_MNGR:
-			BtProcessSmpData(pDev, l2frame);
+			BtProcessSmpData(pDev, l2rcv);
 			break;
 	}
 //	g_Uart.printf("-----\r\n");

@@ -394,8 +394,14 @@ typedef struct __Bt_Attribute {
 extern "C" {
 #endif
 
-uint32_t BtAttSetMaxMtu(uint32_t MaxMtu);
-
+/**
+ * @brief	Set max attribute MTU
+ *
+ * @param	MaxMtu : Max MTU
+ *
+ * @return	Current max MTU
+ */
+uint16_t BtAttSetMaxMtu(uint16_t MaxMtu);
 uint32_t BtAttProcessData(uint16_t ConnHdl, BtAtt_t * const pInAtt, int ReqLen, BtAtt_t * const pOutAtt);
 
 #ifdef __cplusplus

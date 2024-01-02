@@ -47,7 +47,7 @@ SOFTWARE.
 
 static uint16_t s_AttMaxMtu = 515;
 
-uint32_t BtAttSetMaxMtu(uint32_t MaxMtu)
+uint16_t BtAttSetMaxMtu(uint16_t MaxMtu)
 {
 	if (MaxMtu > 27)
 	{
