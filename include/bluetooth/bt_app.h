@@ -59,6 +59,10 @@ SOFTWARE.
 #define BTAPP_DEFAULT_MAX_DATA_LEN		251
 #endif
 
+#ifndef BTAPP_DEFAULT_MAX_MTU
+#define BTAPP_DEFAULT_MAX_MTU			515
+#endif
+
 typedef enum __Bt_App_Role {
 	BTAPP_ROLE_BROADCASTER	= BT_GAP_ROLE_BROADCASTER,		//!< non connectable Advertising only
 	BTAPP_ROLE_OBSERVER		= BT_GAP_ROLE_OBSERVER,			//!< non connectable central

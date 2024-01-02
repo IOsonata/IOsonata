@@ -886,6 +886,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	BtAttSetMaxMtu(pCfg->MaxMtu);
+
     return true;
 }
 

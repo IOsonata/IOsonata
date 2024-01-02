@@ -394,7 +394,9 @@ typedef struct __Bt_Attribute {
 extern "C" {
 #endif
 
-//void BtAttProcessData(BtCtlrDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
+uint32_t BtAttSetMaxMtu(uint32_t MaxMtu);
+
+uint32_t BtAttProcessData(uint16_t ConnHdl, BtAtt_t * const pInAtt, int ReqLen, BtAtt_t * const pOutAtt);
 
 #ifdef __cplusplus
 }
