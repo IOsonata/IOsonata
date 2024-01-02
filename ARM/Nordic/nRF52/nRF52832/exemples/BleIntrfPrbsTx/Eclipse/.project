@@ -33,7 +33,7 @@
 		<link>
 			<name>src/bleintrf_prbs_tx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/ble/bleintrf_prbs_tx.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/bleintrf_prbs_tx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>

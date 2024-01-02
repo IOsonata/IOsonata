@@ -38,7 +38,7 @@
 		<link>
 			<name>src/uart_ble_bridge.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/ble/uart_ble_bridge.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/uart_ble_bridge.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
