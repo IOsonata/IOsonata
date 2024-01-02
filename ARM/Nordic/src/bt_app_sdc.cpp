@@ -793,7 +793,9 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
     uint32_t ram = 0;
 	sdc_cfg_t cfg;
 
-	int l = pCfg->MaxMtu == 0 ? BTAPP_DEFAULT_MAX_DATA_LEN : pCfg->MaxMtu;
+	uint16_t mtu = 	BtAttSetMaxMtu(pCfg->MaxMtu);
+
+	int l = pCfg->MaxMtu == 0 ? BTAPP_DEFAULT_MAX_DATA_LEN : mtu - 3;
 	cfg.buffer_cfg.rx_packet_size = l;
 	cfg.buffer_cfg.tx_packet_size = l;
 	cfg.buffer_cfg.rx_packet_count = 4;
@@ -885,8 +887,6 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	{
 		return false;
 	}
-
-	BtAttSetMaxMtu(pCfg->MaxMtu);
 
     return true;
 }
