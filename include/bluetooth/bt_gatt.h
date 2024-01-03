@@ -269,6 +269,7 @@ void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 //void BtGattServiceInit(BtGattSrvc_t * const pSrvc);
 void BtGattEvtHandler(uint32_t Evt, void * const pCtx);
 void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const pCtx);
+void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 
 #ifdef __cplusplus
 }

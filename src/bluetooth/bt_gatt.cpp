@@ -538,6 +538,7 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 
 	return false;
 }
+
 /*
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
@@ -683,6 +684,27 @@ __attribute__((weak)) void BtGattEvtHandler(uint32_t Evt, void * const pCtx)
 		while (p)
 		{
 			BtGattSrvcEvtHandler(p, Evt, pCtx);
+
+			p = p->pNext;
+		}
+	}
+}
+
+void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
+{
+	if (s_pBtGattSrvcList)
+	{
+		BtGattSrvc_t *p = s_pBtGattSrvcList;
+
+		while (p)
+		{
+			for (int i = 0 ; i < p->NbChar; i++)
+			{
+				if (p->pCharArray[i].TxCompleteCB)
+				{
+					p->pCharArray[i].TxCompleteCB(&p->pCharArray[i], i);
+				}
+			}
 
 			p = p->pNext;
 		}

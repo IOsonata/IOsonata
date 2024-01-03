@@ -73,6 +73,7 @@ static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
 void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt);
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason);
+void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 #pragma pack(push, 4)
@@ -111,7 +112,7 @@ static BtHciDevice_t s_BtHciDev = {
 	.EvtHandler = BtAppEvtHandler,
 	.Connected = BtAppConnected,
 	.Disconnected = BtAppDisconnected,
-	.SendCompleted = nullptr,
+	.SendCompleted = BtAppSendCompleted,
 };
 //BtDev_t g_BtDevSdc;
 
@@ -295,7 +296,7 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 
 void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 {
-
+	BtGattSendCompleted(ConnHdl, NbPktSent);
 }
 
 void BtAppEnterDfu()
