@@ -321,11 +321,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/cfifo.c</locationURI>
 		</link>
 		<link>
-			<name>src/cli</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/converters</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -366,11 +361,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153.c</locationURI>
 		</link>
 		<link>
-			<name>src/i-syst_logo_color_320x153_big.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153_big.c</locationURI>
-		</link>
-		<link>
 			<name>src/imu</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -399,11 +389,6 @@
 			<name>src/isha256.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/isha256.c</locationURI>
-		</link>
-		<link>
-			<name>src/logo.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/logo.c</locationURI>
 		</link>
 		<link>
 			<name>src/md5.c</name>
@@ -1111,11 +1096,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_host.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_host.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
@@ -1129,11 +1109,6 @@
 			<name>src/bluetooth/bt_uuid.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/cli/icli.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/cli/icli.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
@@ -1254,11 +1229,6 @@
 			<name>src/display/eink_intrf.cpp.new</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp.new</locationURI>
-		</link>
-		<link>
-			<name>src/display/eink_vb3300.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts</name>
