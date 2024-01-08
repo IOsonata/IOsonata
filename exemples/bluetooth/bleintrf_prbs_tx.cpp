@@ -62,8 +62,13 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 
 //#define NORDIC_NUS_SERVICE
-
-#define DEVICE_NAME                     "BlePrbs"                            /**< Name of device. Will be included in the advertising data. */
+#ifdef S132
+#define DEVICE_NAME                     "BlePrbs_S132"                            /**< Name of device. Will be included in the advertising data. */
+#elif defined(S140)
+#define DEVICE_NAME                     "BlePrbs_S140"                            /**< Name of device. Will be included in the advertising data. */
+#else
+#define DEVICE_NAME                     "BlePrbs_SDC"                            /**< Name of device. Will be included in the advertising data. */
+#endif
 
 #define PACKET_SIZE						244
 
@@ -195,7 +200,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,	// Led pin number
 	.TxPower = 0,							// Tx power
 	.SDEvtHandler = NULL,					// RTOS Softdevice handler
-	.MaxMtu = 255,
+	.MaxMtu = 247,
 };
 
 #define BLEINTRF_FIFOSIZE			BTINTRF_CFIFO_TOTAL_MEMSIZE(10, PACKET_SIZE)
@@ -366,7 +371,13 @@ void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
 
-	g_Uart.printf("BleIntrfPrbsTx\r\n");
+#ifdef S132
+	g_Uart.printf("BleIntrfPrbsTx_SoftDevice132\r\n");
+#elif defined(S140)
+	g_Uart.printf("BleIntrfPrbsTx_SoftDevice140\r\n");
+#else
+	g_Uart.printf("BleIntrfPrbsTx_SDC\r\n");
+#endif
 }
 
 //
