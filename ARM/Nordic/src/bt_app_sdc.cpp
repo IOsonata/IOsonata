@@ -796,9 +796,11 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	uint16_t mtu = 	BtAttSetMaxMtu(pCfg->MaxMtu);
 
-	int l = pCfg->MaxMtu == 0 ? BTAPP_DEFAULT_MAX_DATA_LEN : mtu - 3;
-	cfg.buffer_cfg.rx_packet_size = l;
-	cfg.buffer_cfg.tx_packet_size = l;
+	//int l = pCfg->MaxMtu == 0 ? BTAPP_DEFAULT_MAX_DATA_LEN : mtu + 4;
+
+	// Reserve max always. It seems sdc lib is not capable of changing it in runtime
+	cfg.buffer_cfg.rx_packet_size = BTAPP_DEFAULT_MAX_DATA_LEN;
+	cfg.buffer_cfg.tx_packet_size = BTAPP_DEFAULT_MAX_DATA_LEN;
 	cfg.buffer_cfg.rx_packet_count = 4;
 	cfg.buffer_cfg.tx_packet_count = 4;
 
@@ -1158,7 +1160,7 @@ void BtAppRun()
 	}
 }
 
-void BleAppScan()
+void BtAppScan()
 {
 #if 0
 	ret_code_t err_code;
