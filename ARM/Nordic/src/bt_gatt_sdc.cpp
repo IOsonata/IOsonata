@@ -43,7 +43,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_l2cap.h"
 
-extern volatile int s_NbPktSent;
+extern volatile int s_SdcAclTxPktAvail;
 
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData, size_t Len)
 {
@@ -52,7 +52,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 //		return false;
 //	}
 
-	if (s_NbPktSent > 3)
+	if (s_SdcAclTxPktAvail <= 0)
 	{
 		return false;
 	}
@@ -78,7 +78,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		if (sdc_hci_data_put((uint8_t*)acl) == 0)
 		{
 			//acl->Hdr.Len + sizeof(acl->Hdr);
-			s_NbPktSent++;
+			s_SdcAclTxPktAvail--;
 			return true;
 		}
 	}

@@ -50,9 +50,6 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};
 
-volatile int s_NbPktSent = 0;
-
-
 /*
 bool BtHciInit(BtHciDevCfg_t const *pCfg)
 {
@@ -304,7 +301,6 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 					for (int i = 0; i < p->NbHdl; i++)
 					{
 						pDev->SendCompleted(p->Completed[i].Hdl, p->Completed[i].NbPkt);
-						s_NbPktSent -= p->Completed[i].NbPkt;
 					}
 				}
 
@@ -475,7 +471,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 	}
 */
 }
-
+/*
 void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len)
 {
 	if (s_NbPktSent > 3)
@@ -509,3 +505,4 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 	s_NbPktSent++;
 //	g_Uart.printf("n=%d\r\n", n);
 }
+*/

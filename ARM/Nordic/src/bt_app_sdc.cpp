@@ -170,6 +170,7 @@ const static TimerCfg_t s_BtAppSdcTimerCfg = {
 };
 
 static Timer g_BtAppSdcTimer;
+volatile int s_SdcAclTxPktAvail = BT_SDC_TX_MAX_PACKET_COUNT + 1;
 
 static void BtStackMpslAssert(const char * const file, const uint32_t line)
 {
@@ -300,6 +301,8 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 {
 	BtGattSendCompleted(ConnHdl, NbPktSent);
+
+	s_SdcAclTxPktAvail += NbPktSent;
 }
 
 void BtAppEnterDfu()
