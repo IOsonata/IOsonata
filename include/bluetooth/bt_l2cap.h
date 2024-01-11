@@ -212,7 +212,7 @@ typedef struct __Bt_L2Cap_Pdu {
 		BtL2CapSFrame_t SFrame;		//!< S-Frame control bit fields and payload
 		BtL2CapIFrame_t IFrame;		//!< I-Frame control bit fields and payload
 		//BtL2CapAtt_t Att;			//!< Attribute payload, CID 4
-		BtAtt_t Att;				//!< Attribute payload, CID 4
+		BtAttReqRsp_t Att;			//!< Attribute payload, CID 4
 		BtL2CapSmp_t Smp;			//!< SMP payload CID 6
 	};
 } BtL2CapPdu_t;

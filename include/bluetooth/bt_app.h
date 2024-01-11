@@ -122,7 +122,6 @@ typedef struct __Bt_App_Dev_Info {
 	const char *pHwVerStr;		//!< Hardware version string
 } BtAppDevInfo_t;
 
-
 typedef struct __Bt_App_Cfg {
 	BTAPP_ROLE	Role;				//!< Application mode peripheral/central/mix
 	int CentLinkCount;				//!< Number of central link
@@ -158,6 +157,7 @@ typedef struct __Bt_App_Cfg {
 	int PeriphDevCnt;				//!< Max number of peripheral connection
 	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler
 	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
+	size_t AttDBMemSize;			//!< User overload mem size for stack usage, set to 0 if not overloading default.
 } BtAppCfg_t;
 
 #if 0

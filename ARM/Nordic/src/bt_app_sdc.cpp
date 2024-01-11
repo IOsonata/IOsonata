@@ -64,6 +64,9 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
 
+#define BT_SDC_RX_MAX_PACKET_COUNT			2
+#define BT_SDC_TX_MAX_PACKET_COUNT			3
+
 //BleConn_t g_BleConn = {0,};
 extern UART g_Uart;
 
@@ -139,7 +142,7 @@ alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BtDevExtSrData 
 alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 255, 0, s_BtDevExtSrData.scan_response_data};
 #endif
 
-alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
+alignas(8) static uint8_t s_BtStackSdcMemPool[12000];
 #if 0
 static BtHciDevCfg_t s_BtHciDevCfg = {
 	.SendData = HciSdcSendData,
@@ -801,8 +804,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	// Reserve max always. It seems sdc lib is not capable of changing it in runtime
 	cfg.buffer_cfg.rx_packet_size = BTAPP_DEFAULT_MAX_DATA_LEN;
 	cfg.buffer_cfg.tx_packet_size = BTAPP_DEFAULT_MAX_DATA_LEN;
-	cfg.buffer_cfg.rx_packet_count = 4;
-	cfg.buffer_cfg.tx_packet_count = 4;
+	cfg.buffer_cfg.rx_packet_count = BT_SDC_RX_MAX_PACKET_COUNT;
+	cfg.buffer_cfg.tx_packet_count = BT_SDC_TX_MAX_PACKET_COUNT;
 
 	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 				       	  SDC_CFG_TYPE_BUFFER_CFG,
@@ -812,7 +815,13 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-/*
+
+	sdc_hci_cmd_vs_event_length_set_t evlen = {
+		.event_length_us = 7500,
+	};
+	sdc_hci_cmd_vs_event_length_set(&evlen);
+
+	/*
 	cfg.event_length.event_length_us = 7500;
 	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 				       	  SDC_CFG_TYPE_EVENT_LENGTH,

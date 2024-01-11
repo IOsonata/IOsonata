@@ -43,13 +43,19 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_l2cap.h"
 
+extern volatile int s_NbPktSent;
+
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData, size_t Len)
 {
-	if (BtGattCharSetValue(pChar, pData, Len) == false)
+//	if (BtGattCharSetValue(pChar, pData, Len) == false)
+//	{
+//		return false;
+//	}
+
+	if (s_NbPktSent > 3)
 	{
 		return false;
 	}
-
 	if (isBtGattCharNotifyEnabled(pChar))
 	{
 		uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
@@ -57,7 +63,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 		acl->Hdr.ConnHdl = ConnHdl;
-		acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+		acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;/*BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU |*/ BT_HCI_PBFLAG_START_FLUSHABLE;
 		acl->Hdr.BCFlag = 0;
 
 		l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
@@ -69,7 +75,12 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		l2pdu->Hdr.Len = sizeof(BtAttHandleValueNtf_t) + Len;
 		acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-		return sdc_hci_data_put((uint8_t*)acl) == 0 ? acl->Hdr.Len + sizeof(acl->Hdr) : 0;
+		if (sdc_hci_data_put((uint8_t*)acl) == 0)
+		{
+			//acl->Hdr.Len + sizeof(acl->Hdr);
+			s_NbPktSent++;
+			return true;
+		}
 	}
 
 	return false;

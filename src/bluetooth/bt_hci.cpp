@@ -49,6 +49,10 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 //extern UART g_Uart;
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};
+
+volatile int s_NbPktSent = 0;
+
+
 /*
 bool BtHciInit(BtHciDevCfg_t const *pCfg)
 {
@@ -63,6 +67,7 @@ bool BtHciInit(BtHciDevCfg_t const *pCfg)
 
 	return true;
 }*/
+
 
 //void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
@@ -299,8 +304,10 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 					for (int i = 0; i < p->NbHdl; i++)
 					{
 						pDev->SendCompleted(p->Completed[i].Hdl, p->Completed[i].NbPkt);
+						s_NbPktSent -= p->Completed[i].NbPkt;
 					}
 				}
+
 			}
 			break;
 		case BT_HCI_EVT_MODE_CHANGE:
@@ -428,7 +435,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 
 			l2pdu->Hdr = l2rcv->Hdr;
 
-			l2pdu->Hdr.Len = BtAttProcessData(pPkt->Hdr.ConnHdl, &l2rcv->Att, l2rcv->Hdr.Len, &l2pdu->Att);
+			l2pdu->Hdr.Len = BtGattProcessReq(pPkt->Hdr.ConnHdl, &l2rcv->Att, l2rcv->Hdr.Len, &l2pdu->Att);
 
 			if (l2pdu->Hdr.Len > 0)
 			{
@@ -471,6 +478,10 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 
 void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len)
 {
+	if (s_NbPktSent > 3)
+	{
+		return;
+	}
 	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
@@ -486,7 +497,7 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF;
 
 //	BtGattCharNotify_t *p = (BtGattCharNotify_t*)l2pdu->Att.Param;
-	BtAtt_t *p = (BtAtt_t*)&l2pdu->Att;
+	BtAttReqRsp_t *p = (BtAttReqRsp_t*)&l2pdu->Att;
 
 	p->HandleValueNtf.ValHdl = ValHdl;
 	memcpy(p->HandleValueNtf.Data, pData, Len);
@@ -495,5 +506,6 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 
 //	g_Uart.printf("Len : %d, %d, %d\r\n", Len, l2pdu->Hdr.Len, acl->Hdr.Len);
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	s_NbPktSent++;
 //	g_Uart.printf("n=%d\r\n", n);
 }

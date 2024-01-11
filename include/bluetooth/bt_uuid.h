@@ -681,9 +681,10 @@ SOFTWARE.
 #define BT_UUID_PROTOCOL_CMTP                                       				0x001B
 #define BT_UUID_PROTOCOL_MCAP_CONTROL_CHANNEL                       				0x001E
 #define BT_UUID_PROTOCOL_MCAP_DATA_CHANNEL                          				0x001F
+#define BT_UUID_PROTOCOL_L2CAP                              						0x0100
 
+#define BT_UUID_BROWSE_PUBLIC_ROOT													0x1002
 
-#define BT_UUID_SDO_GATT_SERVICE_L2CAP                              				0x0100
 #define BT_UUID_SDO_GATT_SERVICE_FIRA_CONSORTIUM1                   				0xFFF3
 #define BT_UUID_SDO_GATT_SERVICE_FIRA_CONSORTIUM2                   				0xFFF4
 #define BT_UUID_SDO_GATT_SERVICE_CAR_CONNECTIVITY_CONSORTIUM        				0xFFF5

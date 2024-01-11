@@ -39,8 +39,6 @@ SOFTWARE.
 #include <inttypes.h>
 
 #include "bluetooth/bt_uuid.h"
-//#include "bluetooth/bt_l2cap.h"
-//#include "bluetooth/bt_ctlr.h"
 
 #define BT_ATT_OPCODE_FLAG_COMMAND						(1<<6)
 #define BT_ATT_OPCODE_FLAG_AUTH_SIGNATURE				(1<<7)
@@ -84,17 +82,20 @@ SOFTWARE.
 #define BT_ATT_ERROR_REQUEST_NOT_SUPP					6		//!< Request not supported
 #define BT_ATT_ERROR_INVALID_OFFSET						7		//!< Invalid offset
 #define BT_ATT_ERROR_INSUF_AUTHOR						8		//!< Insufficient authorization
-#define BT_ATT_ERROR_PREPARE_QUE_FULL					9		//!< Pepare writes que full
+#define BT_ATT_ERROR_PREPARE_QUE_FULL					9		//!< Prepare writes que full
 #define BT_ATT_ERROR_ATT_NOT_FOUND						10		//!< Attribute not found
 #define BT_ATT_ERROR_ATT_NOT_LONG						11		//!< Attribute cannot be read using ATT_READ_BLOB_REQ
 #define BT_ATT_ERROR_ENCRYPT_KEY_TOO_SHORT				12		//!< Encryption key size too short
-#define BT_ATT_ERROR_INVALID_ATT_VALUE					13		//!< Invalide attribute value
+#define BT_ATT_ERROR_INVALID_ATT_VALUE					13		//!< Invalid attribute value
 #define BT_ATT_ERROR_UNLIKELY_ERROR						14		//!< Unknown error
 #define BT_ATT_ERROR_INSUF_ENCRYPT						15		//!< Require encryption
 #define BT_ATT_ERROR_UNSUPP_GROUP_TYPE					16		//!< Unsupported group type
 #define BT_ATT_ERROR_INSUF_RESOURCE						17		//!< Insufficient resources
 #define BT_ATT_ERROR_DB_OUT_SYNC						19		//!< Database out of sync
 #define BT_ATT_ERROR_VALUE_NOT_ALLOWED					20		//!< Value not allowed
+
+#define BT_ATT_PERMISSION_READ
+#define BT_ATT_PERMISSION_WRITE
 
 #pragma pack(push, 1)
 
@@ -226,7 +227,7 @@ typedef struct __Bt_Att_Read_By_Group_Type_Req {
 //	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t StartHdl;		//!< Start handle
 	uint16_t EndHdl;		//!< End handle
-	BtUuidVal_t Uid;		//!< UUID
+	BtUuidVal_t Uuid;		//!< UUID
 } BtAttReadByGroupTypeReq_t;
 
 /// Read by group type response : ATT_READ_BY_GROUP_TYPE_RSP
@@ -350,7 +351,7 @@ typedef struct __Bt_Att_Multiple_Handle_Value_Ntf {
 	uint8_t Data[1];		//!< Variable length data
 } BtAttMultipleHandleValueNtf_t;
 
-typedef struct __Bt_Attribute {
+typedef struct __Bt_Attribute_Req_Rsp {
 	uint8_t OpCode;			//!< Attribute opcode
 	union {
 		BtAttErrorRsp_t ErrorRsp;
@@ -386,7 +387,49 @@ typedef struct __Bt_Attribute {
 		BtAttHandleValueCfm_t HandleValueCfm;
 		BtAttMultipleHandleValueNtf_t MultipleHandleValueNtf;
 	};
-} BtAtt_t;
+} BtAttReqRsp_t;
+/*
+// Service attribute : type UUID 0x2800 Primary, 0x2801 Secondary
+typedef struct __Bt_Att_Srvc_Declar {
+	BtUuid_t Uuid;				//!< Service UUID
+} BtAttSrvcDeclar_t;
+
+// Service include attribute : 0x2802
+typedef struct __Bt_Att_Srvc_Include {
+	uint16_t SrvcHdl;			//!< Service attribute handle
+	uint16_t EndGrpHdl;			//!< End group handle
+	BtUuid_t SrvcUuid;			//!< Service UUID
+} BtAttSrvcInclude_t;
+
+// Characteristic declaration attribute : type UUID 0x2803
+typedef struct __Bt_Att_Char_Declar {
+	uint8_t Prop;						//!< Orable properties
+	uint16_t ValHdl;					//!< Value handle
+	BtUuidVal_t Uuid;					//!< Characteristic UUID
+} BtAttCharDeclar_t;
+
+// Characteristic declaration attribute value : type UUID 0x2803
+typedef struct __Bt_Att_Char_Declar_Val {
+	uint8_t Prop;						//!< Orable properties
+	uint16_t ValHdl;					//!< Value handle
+	BtUuidVal_t Uuid;					//!< Characteristic UUID
+} BtAttCharDeclarVal_t;
+*/
+#pragma pack(pop)
+
+#pragma pack(push,4)
+
+typedef struct __Bt_Att_DB_Entry		BtAttDBEntry_t;
+
+struct __Bt_Att_DB_Entry {
+	uint16_t Hdl;						//!< Attribute handle
+	BtUuid16_t TypeUuid;				//!< Attribute type UUID
+	uint32_t Permission;				//!< Attribute Permission
+	uint16_t DataLen;					//!< Data length
+	BtAttDBEntry_t *pPrev;
+	BtAttDBEntry_t *pNext;
+	uint8_t Data[1];					//!< Variable length attribute data
+};
 
 #pragma pack(pop)
 
@@ -394,6 +437,14 @@ typedef struct __Bt_Attribute {
 extern "C" {
 #endif
 
+void BtAttDBInit();
+BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen);//, void *pData, int DataLen);
+BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl);
+BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid);
+BtAttDBEntry_t * const BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd);
+BtAttDBEntry_t * const BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd);
+
+uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode, uint8_t ErrCode);
 /**
  * @brief	Set max attribute MTU
  *
@@ -402,7 +453,7 @@ extern "C" {
  * @return	Current max MTU
  */
 uint16_t BtAttSetMaxMtu(uint16_t MaxMtu);
-uint32_t BtAttProcessData(uint16_t ConnHdl, BtAtt_t * const pInAtt, int ReqLen, BtAtt_t * const pOutAtt);
+uint32_t BtAttProcessData(uint16_t ConnHdl, BtAttReqRsp_t * const pInAtt, int ReqLen, BtAttReqRsp_t * const pOutAtt);
 
 #ifdef __cplusplus
 }
