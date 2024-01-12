@@ -202,6 +202,8 @@ void BtGapParamInit(const BtGapCfg_t *pCfg);
 void BtGapServiceInit();//BtGattSrvc_t * const pSrvc);
 bool isBtGapConnected();
 void BtGapSetDevName(const char *pName);
+void BtGapSetAppearance(uint16_t Val);
+void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal);
 uint16_t BtGapGetConnection();
 size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
 bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);

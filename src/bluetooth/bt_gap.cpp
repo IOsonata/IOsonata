@@ -65,11 +65,11 @@ alignas(4) static BtGapConnection_t s_BtGapConnection[BT_GAP_CONN_MAX_COUNT] = {
 };
 
 #if 1
-static uint16_t s_BtGapCharApperance = 0;
-static char s_BtGapCharDevName[BT_GAP_DEVNAME_MAX_LEN];
-static BtGattPreferedConnParams_t s_BtGapCharPerferedConnParams = {
-	USEC_TO_1250(7500), MSEC_TO_1_25(40), 0, 400
-};
+//static uint16_t s_BtGapCharApperance = 0;
+//static char s_BtGapCharDevName[BT_GAP_DEVNAME_MAX_LEN];
+//static BtGattPreferedConnParams_t s_BtGapCharPerferedConnParams = {
+//	USEC_TO_1250(7500), MSEC_TO_1_25(40), 0, 400
+//};
 
 static BtGattChar_t s_BtGapChar[] = {
 	{
@@ -81,8 +81,8 @@ static BtGattChar_t s_BtGapChar[] = {
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = s_BtGapCharDevName,
-		.ValueLen = 0,
+		//.pValue = s_BtGapCharDevName,
+		//.ValueLen = 0,
 	},
 	{
 		// Appearance characteristic
@@ -93,8 +93,8 @@ static BtGattChar_t s_BtGapChar[] = {
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = &s_BtGapCharApperance,
-		.ValueLen = 2,
+		//.pValue = &s_BtGapCharApperance,
+		//.ValueLen = 2,
 	},
 	{
 		// Prefered connection parameter characteristic
@@ -105,8 +105,8 @@ static BtGattChar_t s_BtGapChar[] = {
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = &s_BtGapCharPerferedConnParams,
-		.ValueLen = sizeof(BtGattPreferedConnParams_t),
+//		.pValue = &s_BtGapCharPerferedConnParams,
+//		.ValueLen = sizeof(BtGattPreferedConnParams_t),
 	},
 };
 
@@ -133,8 +133,8 @@ static BtGattChar_t s_BtGattChar[] = {
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = &s_BtGattCharSrvcChanged,
-		.ValueLen = 0,
+		//.pValue = &s_BtGattCharSrvcChanged,
+		//.ValueLen = 0,
 	},
 };
 
@@ -178,7 +178,17 @@ __attribute__((weak)) void BtGapSetDevName(const char *pName)
 
 __attribute__((weak)) char * const BtGapGetDevName()
 {
-	return s_BtGapCharDevName;
+	return (char*)s_BtGapChar[0].pValue;
+}
+
+__attribute__((weak)) void BtGapSetAppearance(uint16_t Val)
+{
+	BtGattCharSetValue(&s_BtGapChar[1], &Val, 2);
+}
+
+__attribute__((weak)) void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal)
+{
+	BtGattCharSetValue(&s_BtGapChar[2], pVal, sizeof(BtGattPreferedConnParams_t));
 }
 
 __attribute__((weak)) void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
@@ -186,6 +196,12 @@ __attribute__((weak)) void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
 	BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
 	BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
 //	BtGattSrvcAdd(pSrvc, &s_BtGapSrvcCfg);
+
+	//BtGattPreferedConnParams_t connparm = {
+//		USEC_TO_1250(7500), MSEC_TO_1_25(40), 0, 400
+//	};
+
+//	BtGattCharSetValue(&s_BtGapChar[2], &connparm, sizeof(BtGattPreferedConnParams_t));
 }
 #endif
 

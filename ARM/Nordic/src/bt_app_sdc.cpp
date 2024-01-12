@@ -142,7 +142,7 @@ alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BtDevExtSrData 
 alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 255, 0, s_BtDevExtSrData.scan_response_data};
 #endif
 
-alignas(8) static uint8_t s_BtStackSdcMemPool[12000];
+alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
 #if 0
 static BtHciDevCfg_t s_BtHciDevCfg = {
 	.SendData = HciSdcSendData,
@@ -1053,16 +1053,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
-//    		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
-//    		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
-
 		BtGapServiceInit();//&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
-//    		s_BtDevSdc.NbSrvc++;
-//    		BtGattServiceInit(&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
-//    		s_BtDevSdc.NbSrvc++;
-
-//		BleAppInitUserServices();
 		BtAppInitUserServices();
+
+		BtGapSetAppearance(pCfg->Appearance);
+
+		BtGattPreferedConnParams_t connparm = {
+			MSEC_TO_1_25(pCfg->ConnIntervalMin), MSEC_TO_1_25(pCfg->ConnIntervalMax),
+			0, 400};
+		BtGapSetPreferedConnParam(&connparm);
 	}
 
 	BtAppInitUserData();

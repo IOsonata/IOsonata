@@ -89,7 +89,7 @@ static BtGattSrvcCfg_t s_BtGattDftlSrvcCfg = {
 //static int s_NbGattSrvcEntry = 0;
 static BtGattSrvc_t *s_pBtGattSrvcList = nullptr;
 //static BtGattSrvc_t *s_pBtGattSrvcTail = nullptr;
-static uint16_t s_GattMaxMtu = 247;
+/*static uint16_t s_GattMaxMtu = 247;
 
 uint16_t BtGttGetMaxMtu(uint16_t MaxMtu)
 {
@@ -105,7 +105,7 @@ uint16_t BtGattSetMaxMtu(uint16_t MaxMtu)
 
 	return s_GattMaxMtu;
 }
-
+*/
 BtGattSrvc_t * const BtGattGetSrvcList()
 {
 	return s_pBtGattSrvcList;
@@ -310,13 +310,7 @@ size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 
 	return len;
 }
-/*
-BtGattListEntry_t *GetEntryTable(size_t *count)
-{
-	*count = s_NbGattListEntry;
-	return s_BtGattEntryTbl;
-}
-*/
+
 __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar->ValHdl == BT_GATT_HANDLE_INVALID)
@@ -324,20 +318,10 @@ __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const 
 		return false;
 	}
 
-	if (pChar->MaxDataLen < Len)
-	{
-		return false;
-	}
-
 	int l = min((uint16_t)Len, pChar->MaxDataLen);
 
 	memcpy(pChar->pValue, pVal, l);
-
-	if (pChar->Property & BT_GATT_CHAR_PROP_VALEN)
-	{
-		pChar->ValueLen = l;
-		//pChar->pData->DataLen = l;
-	}
+	pChar->ValueLen = l;
 
 	return true;
 }
@@ -351,25 +335,6 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 
 	return pChar->bNotify;
 }
-
-/*
-bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
-{
-	if (BtGattCharSetValue(pChar, pVal, Len) == false)
-	{
-		return false;
-	}
-
-	BtGattListEntry_t *p = &s_BtGattEntryTbl[pChar->CccdHdl - 1];
-
-	if (p->Val32 & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION)
-	{
-		BtCtlrNotify(ConnHdl, pChar->ValHdl, pVal, Len);
-	}
-
-	return true;
-}
-*/
 
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 {
@@ -597,15 +562,14 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 //				g_Uart.printf("ATT_EXCHANGE_MTU_REQ:\r\n");
 //				g_Uart.printf("RxMtu %d %d\r\n", pReqAtt->ExchgMtuReqRsp.RxMtu, s_AttMaxMtu);
 
-				if (pReqAtt->ExchgMtuReqRsp.RxMtu < 27)
+				if (pReqAtt->ExchgMtuReqRsp.RxMtu < 23)
 				{
 					retval = BtAttError(pRspAtt, ConnHdl, BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ, BT_ATT_ERROR_INVALID_ATT_VALUE);
 					break;
 				}
 				retval = sizeof(BtAttExchgMtuReqRsp_t) + 1;
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
-				s_GattMaxMtu = min(s_GattMaxMtu, pReqAtt->ExchgMtuReqRsp.RxMtu);
-				pRspAtt->ExchgMtuReqRsp.RxMtu = s_GattMaxMtu;
+				pRspAtt->ExchgMtuReqRsp.RxMtu = BtAttSetMaxMtu(pReqAtt->ExchgMtuReqRsp.RxMtu);
 
 				//g_Uart.printf("MTU : %d\r\n", s_AttMaxMtu);
 			}

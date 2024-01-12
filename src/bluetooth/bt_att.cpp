@@ -63,7 +63,7 @@ static uint16_t s_LastHdl = 0;
 
 uint16_t BtAttSetMaxMtu(uint16_t MaxMtu)
 {
-	if (MaxMtu > 23)
+	if (MaxMtu >= 23)
 	{
 		s_AttMaxMtu = MaxMtu;
 	}
