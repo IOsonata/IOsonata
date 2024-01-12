@@ -47,15 +47,22 @@ extern volatile int s_SdcAclTxPktAvail;
 
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData, size_t Len)
 {
-//	if (BtGattCharSetValue(pChar, pData, Len) == false)
-//	{
-//		return false;
-//	}
-
 	if (s_SdcAclTxPktAvail <= 0)
 	{
 		return false;
 	}
+
+	//	if (BtGattCharSetValue(pChar, pData, Len) == false)
+	//	{
+	//		return false;
+	//	}
+
+	memcpy(pChar->pValue, pData, Len);
+	if (pChar->Property & BT_GATT_CHAR_PROP_VALEN)
+	{
+		pChar->ValueLen = Len;
+	}
+
 	if (isBtGattCharNotifyEnabled(pChar))
 	{
 		uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];

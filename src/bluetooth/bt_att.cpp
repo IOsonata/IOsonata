@@ -35,15 +35,16 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <inttypes.h>
 #include <stddef.h>
+#include <memory.h>
 
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
-#include "coredev/uart.h"
+//#include "coredev/uart.h"
 
-extern UART g_Uart;
+//extern UART g_Uart;
 
 /// Default Attribute database mem size
 /// User App can re-define a bigger or smaller value to fit use case
@@ -54,7 +55,6 @@ extern UART g_Uart;
 static uint16_t s_AttMaxMtu = 515;
 
 alignas(4) __attribute__((weak)) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
-//static uint8_t *s_pBtAttDBMem = s_BtAttDBMem;
 static size_t s_BtAttDBMemSize = sizeof(s_BtAttDBMem);
 static const uint32_t s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
 static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDBMem;
@@ -91,7 +91,7 @@ BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, voi
 	}
 
 	entry->TypeUuid = *pUuid;
-	entry->Hdl = ++s_LastHdl; //(uint16_t)((uint32_t)entry - (uint32_t)s_pBtAttDBMem);
+	entry->Hdl = ++s_LastHdl;
 	entry->DataLen = MaxDataLen;
 
 	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)((uint8_t*)entry + l);

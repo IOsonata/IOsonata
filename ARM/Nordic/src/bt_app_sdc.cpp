@@ -68,7 +68,7 @@ SOFTWARE.
 #define BT_SDC_TX_MAX_PACKET_COUNT			3
 
 //BleConn_t g_BleConn = {0,};
-extern UART g_Uart;
+//extern UART g_Uart;
 
 static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
 	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
