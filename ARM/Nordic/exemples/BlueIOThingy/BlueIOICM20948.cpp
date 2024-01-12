@@ -4,8 +4,11 @@
  *  Created on: Dec 24, 2018
  *      Author: hoan
  */
-#include "ble.h"
-#include "app_scheduler.h"
+//#include "ble.h"
+//#include "app_scheduler.h"
+#include "bluetooth/bt_app.h"
+#include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_intrf.h"
 
 #include "Devices/Drivers/Icm20948/Icm20948.h"
 #include "Devices/Drivers/Icm20948/Icm20948Defs.h"

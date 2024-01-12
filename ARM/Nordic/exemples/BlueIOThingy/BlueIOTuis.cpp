@@ -95,42 +95,42 @@ static uint8_t s_UiCharPinData[BLE_TUIS_MAX_DATA_LEN];
 static BtGattChar_t s_UIChars[] = {
     {
         // Version characteristic.  This is the minimum required for Thingy App to work
-    	BLE_UUID_TUIS_LED_CHAR,
-        sizeof(BLE_TUIS_LED),
-		BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_READ,
-        NULL,    					// char UTF-8 description string
-		LedCharWrhandler,           // Callback for write char, set to NULL for read char
-        NULL,                       // Callback on set notification
-		NULL,
-        NULL,                       // Tx completed callback
-		s_UiCharLedData,                       // pointer to char default values
-        0,                          // Default value length in bytes
+    	.Uuid 			= BLE_UUID_TUIS_LED_CHAR,
+        .MaxDataLen 	= sizeof(BLE_TUIS_LED),
+		.Property 		= BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_READ,
+        .pDesc 			= NULL,    					// char UTF-8 description string
+		.WrCB 			= LedCharWrhandler,           // Callback for write char, set to NULL for read char
+        .SetNotifCB 	= NULL,                       // Callback on set notification
+		.SetIndCB 		= NULL,
+        .TxCompleteCB	= NULL,                       // Tx completed callback
+//		s_UiCharLedData,                       // pointer to char default values
+//        0,                          // Default value length in bytes
     },
     {
         // Version characteristic.  This is the minimum required for Thingy App to work
-    	BLE_UUID_TUIS_BUTTON_CHAR,
-        1,							// Max data len
-		BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_READ,
-        NULL,    					// char UTF-8 description string
-        NULL,                       // Callback for write char, set to NULL for read char
-		ButtonCharSetNotify,                       // Callback on set notification
-		NULL,
-        NULL,                       // Tx completed callback
-		&s_UiCharButData,                       // pointer to char default values
-        0,                          // Default value length in bytes
+    	.Uuid 			= BLE_UUID_TUIS_BUTTON_CHAR,
+        .MaxDataLen 	= 1,							// Max data len
+		.Property 		= BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_READ,
+        .pDesc 			= NULL,    					// char UTF-8 description string
+        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
+		.SetNotifCB 	= ButtonCharSetNotify,                       // Callback on set notification
+		.SetIndCB 		= NULL,
+        .TxCompleteCB	= NULL,                       // Tx completed callback
+//		&s_UiCharButData,                       // pointer to char default values
+//        0,                          // Default value length in bytes
     },
     {
         // Version characteristic.  This is the minimum required for Thingy App to work
-    	BLE_UUID_TUIS_PIN_CHAR,
-        BLE_TUIS_MAX_DATA_LEN,
-		BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
-        NULL,    					// char UTF-8 description string
-        NULL,                       // Callback for write char, set to NULL for read char
-        NULL,                       // Callback on set notification
-		NULL,
-        NULL,                       // Tx completed callback
-		s_UiCharPinData,                       // pointer to char default values
-        0,                          // Default value length in bytes
+    	.Uuid 			= BLE_UUID_TUIS_PIN_CHAR,
+        .MaxDataLen 	= BLE_TUIS_MAX_DATA_LEN,
+		.Property 		= BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+        .pDesc 			= NULL,    					// char UTF-8 description string
+        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
+        .SetNotifCB 	= NULL,                       // Callback on set notification
+		.SetIndCB 		= NULL,
+        .TxCompleteCB	= NULL,                       // Tx completed callback
+//		s_UiCharPinData,                       // pointer to char default values
+//        0,                          // Default value length in bytes
     },
 };
 

@@ -4,14 +4,15 @@
  *  Created on: Jul 25, 2018
  *      Author: hoan
  */
-#include "app_util_platform.h"
-#include "app_scheduler.h"
+//#include "app_util_platform.h"
+//#include "app_scheduler.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
+#include "app_evt_handler.h"
 #include "device_intrf.h"
 #include "coredev/spi.h"
 #include "coredev/timer.h"
@@ -133,7 +134,8 @@ static struct platform_data_s compass_pdata = {
 void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSensorData_t &MagData);
 void ImuQuatDataSend(long Quat[4]);
 
-static void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
+//static void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
+static void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 {
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
@@ -168,7 +170,8 @@ static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 	switch (Evt)
 	{
 		case DEV_EVT_DATA_RDY:
-			app_sched_event_put(NULL, 0, ImuDataChedHandler);
+			AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+			//app_sched_event_put(NULL, 0, ImuDataChedHandler);
 			//ImuDataChedHandler(NULL, 0);
 			//g_MotSensor.Read(accdata);
 			break;

@@ -95,42 +95,42 @@ static uint8_t s_EnvCharHumi[BLE_TES_MAX_DATA_LEN];
 BtGattChar_t g_EnvChars[] = {
     {
         // Temperature characteristic
-        BLE_UUID_TES_TEMPERATURE_CHAR,
-        BLE_TES_MAX_DATA_LEN,
-        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-        s_EnvTempCharDescString,    // char UTF-8 description string
-        NULL,                       // Callback for write char, set to NULL for read char
-        NULL,                       // Callback on set notification
-        NULL,                       // Tx completed callback
-		NULL,
-		s_EnvCharTemp,                       // pointer to char default values
-        0,                          // Default value length in bytes
+        .Uuid 			= BLE_UUID_TES_TEMPERATURE_CHAR,
+        .MaxDataLen 	= BLE_TES_MAX_DATA_LEN,
+        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
+        .pDesc 			= s_EnvTempCharDescString,    // char UTF-8 description string
+        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
+        .SetNotifCB 	= NULL,                       // Callback on set notification
+        .SetIndCB 		= NULL,                       // Tx completed callback
+		.TxCompleteCB	= NULL,
+//		s_EnvCharTemp,                       // pointer to char default values
+//        0,                          // Default value length in bytes
     },
     {
         // Pressure characteristic
-        BLE_UUID_TES_PRESSURE_CHAR, // char UUID
-        BLE_TES_MAX_DATA_LEN,       // char max data length
-        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-        s_EnvPresCharDescString,    // char UTF-8 description string
-        NULL,                       // Callback for write char, set to NULL for read char
-        NULL,                       // Callback on set notification
-        NULL,                       // Tx completed callback
-		NULL,
-		s_EnvCharPres,                       // pointer to char default values
-        0                           // Default value length in bytes
+		.Uuid 			= BLE_UUID_TES_PRESSURE_CHAR, // char UUID
+		.MaxDataLen 	= BLE_TES_MAX_DATA_LEN,       // char max data length
+		.Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
+		.pDesc 			= s_EnvPresCharDescString,    // char UTF-8 description string
+		.WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
+		.SetNotifCB 	= NULL,                       // Callback on set notification
+		.SetIndCB 		= NULL,                       // Tx completed callback
+		.TxCompleteCB	= NULL,
+//		s_EnvCharPres,                       // pointer to char default values
+//        0                           // Default value length in bytes
     },
     {
         // Humidity characteristic
-        BLE_UUID_TES_HUMIDITY_CHAR, // char UUID
-        BLE_TES_MAX_DATA_LEN,       // char max data length
-        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-        s_EnvHumCharDescString,     // char UTF-8 description string
-        NULL,                       // Callback for write char, set to NULL for read char
-        NULL,                       // Callback on set notification
-        NULL,                       // Tx completed callback
-		NULL,
-		s_EnvCharHumi,                       // pointer to char default values
-        0                           // Default value length in bytes
+		.Uuid 			= BLE_UUID_TES_HUMIDITY_CHAR, // char UUID
+		.MaxDataLen 	= BLE_TES_MAX_DATA_LEN,       // char max data length
+		.Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
+		.pDesc 			= s_EnvHumCharDescString,     // char UTF-8 description string
+		.WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
+		.SetNotifCB 	= NULL,                       // Callback on set notification
+		.SetIndCB 		= NULL,                       // Tx completed callback
+		.TxCompleteCB	= NULL,
+//		s_EnvCharHumi,                       // pointer to char default values
+//       0                           // Default value length in bytes
     },
 };
 

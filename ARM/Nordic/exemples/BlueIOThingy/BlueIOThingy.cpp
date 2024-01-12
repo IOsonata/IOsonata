@@ -49,8 +49,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <string.h>
 
-#include "app_util_platform.h"
-#include "app_scheduler.h"
+//#include "app_util_platform.h"
+//#include "app_scheduler.h"
 
 
 #include "istddef.h"
@@ -73,6 +73,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "storage/seep.h"
 #include "storage/diskio_flash.h"
 #include "sensors/bsec_interface.h"
+#include "app_evt_handler.h"
 
 #include "BlueIOThingy.h"
 #include "BlueIOMPU9250.h"
@@ -119,8 +120,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 #endif
 
+#define BT_ATT_DB_MEMSIZE				4096
 
-
+uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
 
 uint8_t g_AdvDataBuff[10] = {
 	BLEADV_MANDATA_TYPE_TPH,
@@ -138,7 +140,7 @@ const static TimerCfg_t s_TimerCfg = {
     .DevNo = 2,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
-	.IntPrio = APP_IRQ_PRIORITY_LOW,
+	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,
 	.EvtHandler = NULL,//TimerHandler
 };
 
@@ -184,7 +186,8 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedActLevel = BLUEIOTHINGY_CONNECT_LED_ACTIVE,
 	.TxPower = 0,						// Tx power
 	.SDEvtHandler = NULL,				// RTOS Softdevice handler
-	.MaxMtu = 53,
+	.MaxMtu = 247,
+	.AttDBMemSize = BT_ATT_DB_MEMSIZE,
 };
 
 #ifdef BUTTON_PINS_MAP
@@ -247,7 +250,7 @@ static const SPICFG s_SpiCfg = {
     .ChipSel = SPICSEL_AUTO,
 	.bDmaEn = true,
 	.bIntEn = false,
-    .IntPrio = APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+    .IntPrio = 6,//APP_IRQ_PRIORITY_LOW,      // Interrupt priority
     .EvtCB = NULL
 };
 
@@ -282,7 +285,7 @@ static const I2CCfg_t s_I2cCfg = {
 	.SlaveAddr = {0,},		// Slave addresses
 	.bDmaEn = true,
 	.bIntEn = false,		// use interrupt
-	.IntPrio = APP_IRQ_PRIORITY_LOW,// Interrupt prio
+	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,// Interrupt prio
 	.EvtCB = NULL		// Event callback
 };
 
@@ -454,7 +457,8 @@ void ReadPTHData()
 	gascnt++;
 }
 
-void SchedAdvData(void * p_event_data, uint16_t event_size)
+//void SchedAdvData(void * p_event_data, uint16_t event_size)
+static void SchedAdvData(uint32_t Evt, void *pCtx)
 {
 	ReadPTHData();
 }
@@ -463,7 +467,8 @@ void AppTimerHandler(TimerDev_t * const pTimer, int TrigNo, void *pContext)
 {
 	if (TrigNo == 0)
 	{
-		app_sched_event_put(pContext, sizeof(uint32_t), SchedAdvData);
+		AppEvtHandlerQue(0, pContext, SchedAdvData);
+//		app_sched_event_put(pContext, sizeof(uint32_t), SchedAdvData);
 	}
 }
 
@@ -472,7 +477,8 @@ void TimerHandler(Timer *pTimer, uint32_t Evt)
     if (Evt & TIMER_EVT_TRIGGER(0))
     {
 		// NOTE : Use app_sched is needed as Softdevice will crash if called directly
-		app_sched_event_put(&Evt, sizeof(uint32_t), SchedAdvData);
+		AppEvtHandlerQue(0, &Evt, SchedAdvData);
+//		app_sched_event_put(&Evt, sizeof(uint32_t), SchedAdvData);
     }
 }
 
