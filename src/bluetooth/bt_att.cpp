@@ -52,7 +52,7 @@ SOFTWARE.
 #define BT_ATT_DB_MEMSIZE			2048	//!< Mem size in byte
 #endif
 
-static uint16_t s_AttMaxMtu = 515;
+static uint16_t s_AttMtu = BT_ATT_MTU_MIN;
 
 alignas(4) __attribute__((weak)) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
 static size_t s_BtAttDBMemSize = sizeof(s_BtAttDBMem);
@@ -61,14 +61,19 @@ static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDB
 static BtAttDBEntry_t *s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
 static uint16_t s_LastHdl = 0;
 
-uint16_t BtAttSetMaxMtu(uint16_t MaxMtu)
+uint16_t BtAttSetMtu(uint16_t Mtu)
 {
-	if (MaxMtu >= 23)
+	if (Mtu >= BT_ATT_MTU_MIN && Mtu <= BT_ATT_MTU_MAX)
 	{
-		s_AttMaxMtu = MaxMtu;
+		s_AttMtu = Mtu;
 	}
 
-	return s_AttMaxMtu;
+	return s_AttMtu;
+}
+
+uint16_t BtAttGetMtu()
+{
+	return s_AttMtu;
 }
 
 void BtAttDBInit(size_t MemSize)

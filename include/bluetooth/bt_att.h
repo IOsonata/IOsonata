@@ -97,6 +97,9 @@ SOFTWARE.
 #define BT_ATT_PERMISSION_READ
 #define BT_ATT_PERMISSION_WRITE
 
+#define BT_ATT_MTU_MIN				23
+#define BT_ATT_MTU_MAX				247
+
 #pragma pack(push, 1)
 
 typedef struct __Bt_Att_Hdl_Uuid_16 {
@@ -200,13 +203,13 @@ typedef struct __Bt_Att_Read_Blob_Req {
 //	uint8_t OpCode;			//!< Attribute opcode
 	uint16_t Hdl;			//!< Attribute handle to be read
 	uint16_t Offset;		//!< Offset location of data to read
-} BtAttBlobReq_t;
+} BtAttReadBlobReq_t;
 
 /// Read blob response : ATT_READ_BLOB_RSP
 typedef struct __Bt_Att_Read_Blob_Rsp {
 //	uint8_t OpCode;			//!< Attribute opcode
 	uint8_t Data[1];		//!< Attribute values returned
-} BtAttBlobRsp_t;
+} BtAttReadBlobRsp_t;
 
 /// Read multiple request : ATT_READ_MULTIPLE_REQ
 /// NOTE: Variable length
@@ -364,8 +367,8 @@ typedef struct __Bt_Attribute_Req_Rsp {
 		BtAttReadByTypeRsp_t ReadByTypeRsp;
 		BtAttReadReq_t ReadReq;
 		BtAttReadRsp_t ReadRsp;
-		BtAttBlobReq_t BlobReq;
-		BtAttBlobRsp_t BlobRsp;
+		BtAttReadBlobReq_t ReadBlobReq;
+		BtAttReadBlobRsp_t ReadBlobRsp;
 		BtAttReadMultipleReq_t ReadMultipleReq;
 		BtAttReadMultipleRsp_t ReadMultipleRsp;
 		BtAttReadByGroupTypeReq_t ReadByGroupTypeReq;
@@ -452,7 +455,8 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
  *
  * @return	Current max MTU
  */
-uint16_t BtAttSetMaxMtu(uint16_t MaxMtu);
+uint16_t BtAttSetMtu(uint16_t MaxMtu);
+uint16_t BtAttGetMtu();
 uint32_t BtAttProcessData(uint16_t ConnHdl, BtAttReqRsp_t * const pInAtt, int ReqLen, BtAttReqRsp_t * const pOutAtt);
 
 #ifdef __cplusplus

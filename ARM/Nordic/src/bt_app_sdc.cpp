@@ -800,7 +800,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
     uint32_t ram = 0;
 	sdc_cfg_t cfg;
 
-	uint16_t mtu = 	BtAttSetMaxMtu(pCfg->MaxMtu);
+	uint16_t mtu = 	BtAttSetMtu(pCfg->MaxMtu);
 
 	//int l = pCfg->MaxMtu == 0 ? BTAPP_DEFAULT_MAX_DATA_LEN : mtu + 4;
 
