@@ -34,6 +34,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <memory.h>
+#include <stdio.h>
 
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
@@ -551,7 +552,7 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 {
 	uint32_t retval = 0;
 
-	//g_Uart.printf("ATT OpCode %x, L2Cap len %d\n", pReqAtt->OpCode, ReqLen);
+//	g_Uart.printf("ATT OpCode %x, L2Cap len %d\n", pReqAtt->OpCode, ReqLen);
 
 	switch (pReqAtt->OpCode)
 	{
@@ -773,8 +774,8 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_RSP;
 
-				//g_Uart.printf("ATT_READ_BY_GROUP_TYPE_REQ:\r\n");
-				//g_Uart.printf("sHdl:%x, eHdl:%x, Uuid: %x\r\n", req->StartHdl, req->EndHdl, req->Uuid.Uuid16);
+//				g_Uart.printf("ATT_READ_BY_GROUP_TYPE_REQ:\r\n");
+//				g_Uart.printf("sHdl:%x, eHdl:%x, Uuid: %x\r\n", req->StartHdl, req->EndHdl, req->Uuid.Uuid16);
 
 				uint8_t *p = (uint8_t*)pRspAtt->ReadByGroupTypeRsp.Data;
 				BtUuid16_t uid16 = { 0, BT_UUID_TYPE_16, req->Uuid.Uuid16};
@@ -797,30 +798,36 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 				}
 				uint8_t prevlen = 0;
 
-				while (entry)
+				while (entry && l < 20)
 				{
 					if (entry->Hdl >= req->StartHdl && entry->Hdl <= req->EndHdl && baseidx == entry->TypeUuid.BaseIdx)
 					{
-						//g_Uart.printf("shdl : %x, ehdl : %x\r\n", hu->StartHdl, hu->EndHdl);
+//						g_Uart.printf("shdl : %x, ehdl : %x\r\n", hu->StartHdl, hu->EndHdl);
 						p += sizeof(BtAttHdlRange_t);
 						pRspAtt->ReadByGroupTypeRsp.Len = BtGattGetValue(entry, p);
-
-						//for (int i=0; i< pRspAtt->ReadByGroupTypeRsp.Len; i++)
-						//{
-						//	g_Uart.printf("%02x ", p[i]);
-						//}
-						//g_Uart.printf("Len : %d\r\n", pRspAtt->ReadByGroupTypeRsp.Len);
+/*
+						g_Uart.printf("Val Len : %d\r\n", pRspAtt->ReadByGroupTypeRsp.Len);
+						for (int i=0; i< pRspAtt->ReadByGroupTypeRsp.Len; i++)
+						{
+							g_Uart.printf("%02x ", p[i]);
+						}
+						g_Uart.printf("\r\n");
+*/
 						if (prevlen > 0 && prevlen != pRspAtt->ReadByGroupTypeRsp.Len)
 						{
 							pRspAtt->ReadByGroupTypeRsp.Len = prevlen;
 							break;
 						}
-						prevlen = pRspAtt->ReadByGroupTypeRsp.Len;
+						else
+						{
+							prevlen = pRspAtt->ReadByGroupTypeRsp.Len;
+						}
 						p += pRspAtt->ReadByGroupTypeRsp.Len;
 						l += 4 + pRspAtt->ReadByGroupTypeRsp.Len;
 						((BtAttHdlRange_t*)p)->StartHdl = hu->EndHdl;
 						hu = (BtAttHdlRange_t*)p;
 						hu->EndHdl = req->EndHdl;
+//						g_Uart.printf("Len : %d\r\n", l);
 					}
 					else
 					{
@@ -833,8 +840,8 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 				{
 					pRspAtt->ReadByGroupTypeRsp.Len += 4;
 
-					retval = sizeof(BtAttReadByGroupTypeRsp_t) + l;
-					//g_Uart.printf("retval %d\r\n", retval);
+					retval = l + 2;
+//					g_Uart.printf("retval %d\r\n", retval);
 					break;
 				}
 				else
