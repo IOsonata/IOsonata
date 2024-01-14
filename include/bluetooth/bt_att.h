@@ -102,6 +102,8 @@ SOFTWARE.
 
 #define BT_ATT_HANDLE_INVALID		0xFFFFU
 
+typedef struct __Bt_Att_DB_Entry		BtAttDBEntry_t;
+
 #pragma pack(push, 1)
 
 typedef struct __Bt_Att_Hdl_Uuid_16 {
@@ -397,6 +399,9 @@ typedef struct __Bt_Attribute_Req_Rsp {
 // Service attribute : type UUID 0x2800 Primary, 0x2801 Secondary
 typedef struct __Bt_Att_Srvc_Declar {
 	BtUuid_t Uuid;						//!< Service UUID
+	//uint8_t SecType;					//!< Secure or Open service/char
+	int NbChar;
+	BtAttDBEntry_t *pCharEntry[1];		//!< Variable length char entry table
 } BtAttSrvcDeclar_t;
 
 // Service include attribute : 0x2802
@@ -410,7 +415,8 @@ typedef struct __Bt_Att_Srvc_Include {
 typedef struct __Bt_Att_Char_Declar {
 	uint8_t Prop;						//!< Orable properties
 	uint16_t ValHdl;					//!< Value handle
-	BtUuid_t Uuid;					//!< Characteristic UUID
+	BtUuid_t Uuid;						//!< Characteristic UUID
+	BtAttDBEntry_t *pSrvcEntry;			//!< Point to owner service entry
 } BtAttCharDeclar_t;
 
 // Characteristic declaration attribute value : type UUID 0x2803
@@ -420,11 +426,17 @@ typedef struct __Bt_Att_Char_Declar {
 //	BtUuid_t Uuid;						//!< Characteristic UUID
 //} BtAttCharDeclarVal_t;
 
+typedef struct __Bt_Att_Char_Value {
+	//size_t MaxDataLen;					//!< Max data length
+	//size_t DataLen;						//!< Length of actual data
+	//BtGattCharWrCb_t WrCB;				//!< Pointer to characteristic write callback
+	//BtGattChar_t *pChar;				//!< Pointer to owner characteristic
+	uint8_t Data[1];					//!< Variable length data buffer
+} BtAttCharValue_t;
+
 #pragma pack(pop)
 
 #pragma pack(push,4)
-
-typedef struct __Bt_Att_DB_Entry		BtAttDBEntry_t;
 
 struct __Bt_Att_DB_Entry {
 	uint16_t Hdl;						//!< Attribute handle

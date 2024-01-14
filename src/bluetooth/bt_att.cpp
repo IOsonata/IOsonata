@@ -56,7 +56,7 @@ static uint16_t s_AttMtu = BT_ATT_MTU_MIN;
 
 alignas(4) __attribute__((weak)) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
 static size_t s_BtAttDBMemSize = sizeof(s_BtAttDBMem);
-static const uint32_t s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
+static uint32_t s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
 static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDBMem;
 static BtAttDBEntry_t *s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
 static uint16_t s_LastHdl = 0;
@@ -89,7 +89,7 @@ void BtAttDBInit(size_t MemSize)
 {
 	s_BtAttDBMemSize = MemSize;
 	memset(s_BtAttDBMem, 0, s_BtAttDBMemSize);
-	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemSize);
+	s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
 }
 
 BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)

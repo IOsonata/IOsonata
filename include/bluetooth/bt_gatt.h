@@ -52,8 +52,8 @@ typedef uint8_t		BtGattCharExtProp_t;
 // Attribute value : UTF-8
 typedef char *		BtGattCharUserDesc_t;
 
-#define BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION		(1<<0)
-#define BT_GATT_CLIENT_CHAR_CONFIG_INDICATION		(1<<1)
+#define BT_CLIENT_CHAR_CONFIG_NOTIFICATION		(1<<0)
+#define BT_CLIENT_CHAR_CONFIG_INDICATION		(1<<1)
 
 // Client characteristic configuration declaration attribute UUID 0x2902
 typedef uint8_t BtGatClientCharConfig_t;
@@ -146,6 +146,8 @@ typedef struct __Bt_Gatt_Char_Value {
 	//size_t MaxDataLen;					//!< Max data length
 	//size_t DataLen;						//!< Length of actual data
 	//BtGattCharWrCb_t WrCB;				//!< Pointer to characteristic write callback
+	BtGattCharWrCb_t WrCB;              //!< Callback for write char, set to NULL for read char
+	BtGattCharTxComplete_t TxCompleteCB;//!< Callback when TX is completed
 	BtGattChar_t *pChar;				//!< Pointer to owner characteristic
 	uint8_t Data[1];					//!< Variable length data buffer
 } BtGattCharValue_t;
@@ -205,7 +207,7 @@ struct __Bt_Gatt_Characteristic {
 };
 
 typedef struct __Bt_Gatt_Service_Config {
-	uint8_t SecType;			//!< Secure or Open service/char
+	uint8_t SecType;					//!< Secure or Open service/char
 	bool bCustom;						//!< True - for custom service Base UUID, false - Bluetooth SIG standard
 	uint8_t UuidBase[16];				//!< 128 bits custom base UUID
 	uint16_t UuidSrvc;					//!< Service UUID

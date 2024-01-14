@@ -268,7 +268,7 @@ size_t BtGattWriteAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pDa
 					BtGattCharClientConfig_t *p = (BtGattCharClientConfig_t*)pEntry->Data;
 
 					p->CccVal = *(uint16_t*)pData;
-					p->pChar->bNotify = p->CccVal & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION ? true: false;
+					p->pChar->bNotify = p->CccVal & BT_CLIENT_CHAR_CONFIG_NOTIFICATION ? true: false;
 					if (p->pChar->SetNotifCB)
 					{
 						p->pChar->SetNotifCB(p->pChar, p->pChar->bNotify);
@@ -285,10 +285,10 @@ size_t BtGattWriteAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pDa
 					p->pChar->ValueLen = min(Len, p->pChar->MaxDataLen);// - sizeof(BtGattCharValue_t));
 					memcpy(p->Data, pData, p->pChar->ValueLen);
 
-					if (p->pChar->WrCB)
+					if (p->WrCB)
 					{
 	//					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-						p->pChar->WrCB(p->pChar, pData, 0, Len);
+						p->WrCB(p->pChar, pData, 0, Len);
 					}
 				}
 
@@ -301,10 +301,10 @@ size_t BtGattWriteAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pDa
 		p->pChar->ValueLen = min(Len,  p->pChar->MaxDataLen);//- sizeof(BtGattCharValue_t));
 		memcpy(p->Data, pData, p->pChar->ValueLen);
 
-		if (p->pChar->WrCB)
+		if (p->WrCB)
 		{
 //					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-			p->pChar->WrCB(p->pChar, pData, 0, Len);
+			p->WrCB(p->pChar, pData, 0, Len);
 		}
 	}
 
@@ -340,7 +340,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 {
 	bool retval = false;
 	uint8_t baseidx = 0;
-	BtAttDBEntry_t *entry = nullptr;
 
 	// Add base UUID to internal list.
 	if (pCfg->bCustom)
@@ -351,25 +350,27 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 	pSrvc->Uuid.Uuid16 = pCfg->UuidSrvc;
 
 	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_PRIMARY_SERVICE };
-	int l = sizeof(BtAttSrvcDeclar_t);
+	int l = sizeof(BtAttSrvcDeclar_t) + (pCfg->NbChar - 1) * sizeof(BtAttDBEntry_t*);
 
-	entry = BtAttDBAddEntry(&typeuuid, l);
+	BtAttDBEntry_t *srvcentry = BtAttDBAddEntry(&typeuuid, l);
 
-	if (entry == nullptr)
+	if (srvcentry == nullptr)
 	{
 		return false;
 	}
 
-	BtAttSrvcDeclar_t *srvcdec = (BtAttSrvcDeclar_t*) entry->Data;
-	srvcdec->Uuid = pSrvc->Uuid;
-	entry->DataLen = l;
+	BtAttSrvcDeclar_t *srvcdec = (BtAttSrvcDeclar_t*) srvcentry->Data;
 
-	pSrvc->Hdl = entry->Hdl;
+	srvcdec->Uuid = pSrvc->Uuid;
+	srvcdec->NbChar = pCfg->NbChar;
+
+	pSrvc->Hdl = srvcentry->Hdl;
 	pSrvc->NbChar = pCfg->NbChar;
     pSrvc->pCharArray = pCfg->pCharArray;
 
     BtGattChar_t *c = pSrvc->pCharArray;
 
+	BtAttDBEntry_t *entry = nullptr;
 
     for (int i = 0; i < pCfg->NbChar; i++, c++)
     {
@@ -382,9 +383,14 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
     		return false;
     	}
 
+    	srvcdec->pCharEntry[i] = entry;
+
     	BtAttCharDeclar_t *chardec = (BtAttCharDeclar_t*)entry->Data;
+
     	chardec->Prop = (uint8_t)c->Property;
     	chardec->Uuid = {c->BaseUuidIdx, BT_UUID_TYPE_16, c->Uuid};
+    	chardec->pSrvcEntry = srvcentry;
+
 /*		if (c->BaseUuidIdx > 0)
 		{
 			BtUuidGetBase(c->BaseUuidIdx, chardec->Uuid.Uuid128);
@@ -424,7 +430,8 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
     	//charval->MaxDataLen = c->MaxDataLen;
     	//charval->DataLen = 0;
     	charval->pChar = c;
-    	//charval->WrCB = c->WrCB;
+    	charval->WrCB = c->WrCB;
+    	charval->TxCompleteCB = c->TxCompleteCB;
 
     	c->bNotify = false;
         if (c->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
