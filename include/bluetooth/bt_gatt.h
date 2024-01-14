@@ -267,8 +267,11 @@ bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len);
 //int BtGattGetListUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, BtGattListEntry_t *pArr, int MaxEntry, uint16_t *pLastHdl);
 //bool BeGattFindEntryUuid(BtUuid16_t *pTypeUuid, uint16_t StartHdl, uint16_t EndHdl, BtGattListEntry_t *pEntry);
 //bool BtGattGetEntryHandle(uint16_t Hdl, BtGattListEntry_t *pArr);
-size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff);
-size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len);
+//size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff);
+//size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len);
+
+size_t BtGattReadAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, uint16_t Len);
+size_t BtGattWriteAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, uint16_t Len);
 //BtGattListEntry_t *GetEntryTable(size_t *pCount);
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);

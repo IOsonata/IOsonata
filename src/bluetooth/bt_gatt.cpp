@@ -124,7 +124,8 @@ void BtGattInsertSrvcList(BtGattSrvc_t * const pSrvc)
 	s_pBtGattSrvcList = pSrvc;
 }
 
-size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff)
+//size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff)
+size_t BtGattReadAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, uint16_t Len)
 {
 	if (pBuff == nullptr)
 	{
@@ -137,8 +138,8 @@ size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff)
 	{
 		switch (pEntry->TypeUuid.Uuid)
 		{
-			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
-			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
+			case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
+			case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
 				{
 					BtGattSrvcDeclar_t *p = (BtGattSrvcDeclar_t*)pEntry->Data;
 
@@ -160,14 +161,14 @@ size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff)
 					}
 				}
 				break;
-			case BT_UUID_GATT_DECLARATIONS_INCLUDE:
+			case BT_UUID_DECLARATIONS_INCLUDE:
 				{
 					BtGattSrvcInclude_t *p = (BtGattSrvcInclude_t*)pEntry->Data;
 					len = p->SrvcUuid.BaseIdx > 0 ? 20 : 6;
 				}
 
 				break;
-			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
+			case BT_UUID_DECLARATIONS_CHARACTERISTIC:
 				{
 					BtGattCharDeclar_t *p = (BtGattCharDeclar_t*)pEntry->Data;
 					//len = pEntry->DataLen;
@@ -193,16 +194,16 @@ size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff)
 					}
 				}
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 //				if (pEntry->pVal)
 //				{
 //					strcpy((char*)pBuff, (char*)pEntry->pVal);
 //					len = strlen((char*)pEntry->pVal);
 //				}
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+			case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
 				{
 					BtGattCharClientConfig_t *d = (BtGattCharClientConfig_t*)pEntry->Data;
 
@@ -210,7 +211,7 @@ size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff)
 					len = 2;
 				}
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+			case BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
 //			case BT_UUID_GATT_CHAR_SERVICE_CHANGED:
 //				pBuff[0] = pEntry->Val32 & 0xFF;
@@ -239,38 +240,34 @@ size_t BtGattGetValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff)
 	return len;
 }
 
-size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
+//size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
+size_t BtGattWriteAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, uint16_t Len)
 {
 	size_t len = 0;
-	BtAttDBEntry_t *entry = BtAttDBFindHandle(Hdl);//&s_BtGattEntryTbl[Hdl - 1];
+	//BtAttDBEntry_t *entry = BtAttDBFindHandle(Hdl);//&s_BtGattEntryTbl[Hdl - 1];
 
-	if (entry == nullptr)
+	if (pEntry->TypeUuid.BaseIdx == 0)
 	{
-		return 0;
-	}
-
-	if (entry->TypeUuid.BaseIdx == 0)
-	{
-		switch (entry->TypeUuid.Uuid)
+		switch (pEntry->TypeUuid.Uuid)
 		{
-			case BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE:
-			case BT_UUID_GATT_DECLARATIONS_SECONDARY_SERVICE:
+			case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
+			case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
 				break;
-			case BT_UUID_GATT_DECLARATIONS_INCLUDE:
+			case BT_UUID_DECLARATIONS_INCLUDE:
 				break;
-			case BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC:
+			case BT_UUID_DECLARATIONS_CHARACTERISTIC:
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+			case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
 				{
 					//g_Uart.printf("BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION\r\n");
 
-					BtGattCharClientConfig_t *p = (BtGattCharClientConfig_t*)entry->Data;
+					BtGattCharClientConfig_t *p = (BtGattCharClientConfig_t*)pEntry->Data;
 
-					p->CccVal = *(uint16_t*)pBuff;
+					p->CccVal = *(uint16_t*)pData;
 					p->pChar->bNotify = p->CccVal & BT_GATT_CLIENT_CHAR_CONFIG_NOTIFICATION ? true: false;
 					if (p->pChar->SetNotifCB)
 					{
@@ -279,19 +276,19 @@ size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 //					g_Uart.printf("CccdHdl : %x\r\n", p->pChar->CccdHdl);
 				}
 				break;
-			case BT_UUID_GATT_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+			case BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
 				break;
 			default:
 				{
-					BtGattCharValue_t *p = (BtGattCharValue_t*)entry->Data;
+					BtGattCharValue_t *p = (BtGattCharValue_t*)pEntry->Data;
 
-					p->pChar->ValueLen = min(Len, (size_t)p->pChar->MaxDataLen);// - sizeof(BtGattCharValue_t));
-					memcpy(p->Data, pBuff, p->pChar->ValueLen);
+					p->pChar->ValueLen = min(Len, p->pChar->MaxDataLen);// - sizeof(BtGattCharValue_t));
+					memcpy(p->Data, pData, p->pChar->ValueLen);
 
 					if (p->pChar->WrCB)
 					{
 	//					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-						p->pChar->WrCB(p->pChar, pBuff, 0, Len);
+						p->pChar->WrCB(p->pChar, pData, 0, Len);
 					}
 				}
 
@@ -299,15 +296,15 @@ size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 	}
 	else
 	{
-		BtGattCharValue_t *p = (BtGattCharValue_t*)entry->Data;
+		BtGattCharValue_t *p = (BtGattCharValue_t*)pEntry->Data;
 
-		p->pChar->ValueLen = min(Len,  (size_t)p->pChar->MaxDataLen);//- sizeof(BtGattCharValue_t));
-		memcpy(p->Data, pBuff, p->pChar->ValueLen);
+		p->pChar->ValueLen = min(Len,  p->pChar->MaxDataLen);//- sizeof(BtGattCharValue_t));
+		memcpy(p->Data, pData, p->pChar->ValueLen);
 
 		if (p->pChar->WrCB)
 		{
 //					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-			p->pChar->WrCB(p->pChar, pBuff, 0, Len);
+			p->pChar->WrCB(p->pChar, pData, 0, Len);
 		}
 	}
 
@@ -353,7 +350,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 	pSrvc->Uuid.Type = BT_UUID_TYPE_16;
 	pSrvc->Uuid.Uuid16 = pCfg->UuidSrvc;
 
-	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_GATT_DECLARATIONS_PRIMARY_SERVICE };
+	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_PRIMARY_SERVICE };
 	int l = sizeof(BtGattSrvcDeclar_t);
 
 	entry = BtAttDBAddEntry(&typeuuid, l);
@@ -376,7 +373,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 
     for (int i = 0; i < pCfg->NbChar; i++, c++)
     {
-    	typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_GATT_DECLARATIONS_CHARACTERISTIC };
+    	typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_CHARACTERISTIC };
     	l = sizeof(BtGattCharDeclar_t);
 
     	entry = BtAttDBAddEntry(&typeuuid, l);
@@ -433,7 +430,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
         if (c->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
         {
             // Characteristic Descriptor CCC
-            typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
+            typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
             l = sizeof(BtGattCharClientConfig_t);
         	entry = BtAttDBAddEntry(&typeuuid, l);
         	if (entry == nullptr)
@@ -454,7 +451,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
         if (c->pDesc)
         {
         	// Characteristic Description
-        	typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION };
+        	typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION };
         	size_t l = sizeof(BtGattDescCharUserDesc_t);
         	entry = BtAttDBAddEntry(&typeuuid, l);
         	if (entry == nullptr)
@@ -549,7 +546,7 @@ void BtGattServiceInit(BtGattSrvc_t * const pSrvc)
 	BtGattSrvcAdd(pSrvc, &s_BtGattDftlSrvcCfg);
 }
 */
-
+#if 0
 uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int ReqLen, BtAttReqRsp_t * const pRspAtt)
 {
 	uint32_t retval = 0;
@@ -684,7 +681,7 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 					p[0] = entry->Hdl & 0xFF;
 					p[1] = entry->Hdl >> 8;
 					p +=2;
-					pRspAtt->ReadByTypeRsp.Len = BtGattGetValue(entry, 0, p) + 2;
+					pRspAtt->ReadByTypeRsp.Len = BtGattReadAttValue(entry, 0, p, 20) + 2;
 //					g_Uart.printf("Att Val: ");
 
 //					for (int j = 0; j < rsp->Len; j++)
@@ -711,7 +708,7 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 
 				if (entry)
 				{
-					retval = BtGattGetValue(entry, 0, pRspAtt->ReadRsp.Data)  + 1;
+					retval = BtGattReadAttValue(entry, 0, pRspAtt->ReadRsp.Data, 20)  + 1;
 				}
 				else
 				{
@@ -733,7 +730,7 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 
 				if (entry)
 				{
-					retval = BtGattGetValue(entry, pReqAtt->ReadBlobReq.Offset, pRspAtt->ReadBlobRsp.Data) + 1;
+					retval = BtGattReadAttValue(entry, pReqAtt->ReadBlobReq.Offset, pRspAtt->ReadBlobRsp.Data, 20) + 1;
 				}
 				else
 				{
@@ -760,7 +757,7 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 						retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleReq.Hdl[i], BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 						break;
 					}
-					int l = BtGattGetValue(entry, 0, p);
+					int l = BtGattReadAttValue(entry, 0, p, 20);
 					p += l;
 					retval += l;
 				}
@@ -808,7 +805,7 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 					{
 //						g_Uart.printf("shdl : %x, ehdl : %x\r\n", hu->StartHdl, hu->EndHdl);
 						p += sizeof(BtAttHdlRange_t);
-						pRspAtt->ReadByGroupTypeRsp.Len = BtGattGetValue(entry, 0, p);
+						pRspAtt->ReadByGroupTypeRsp.Len = BtGattReadAttValue(entry, 0, p, 20);
 /*
 						g_Uart.printf("Val Len : %d\r\n", pRspAtt->ReadByGroupTypeRsp.Len);
 						for (int i=0; i< pRspAtt->ReadByGroupTypeRsp.Len; i++)
@@ -863,17 +860,28 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 
 				if (req->Hdl < 1)
 				{
-					BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
+					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 					break;
 				}
+
+				BtAttDBEntry_t *entry = BtAttDBFindHandle(req->Hdl);
+
+				if (entry)
+				{
 				//BtAttWriteRsp_t *rsp = (BtAttWriteRsp_t*)&l2pdu->Att;
-				size_t l = ReqLen;
+					size_t l = ReqLen;
 
-				l = BtGattWriteValue(req->Hdl, req->Data, l);
+					l = BtGattWriteAttValue(entry, 0, req->Data, l);
 
-				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
+					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 
-				retval = 1;
+					retval = 1;
+				}
+				else
+				{
+					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
+
+				}
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_CMD:		// Write without response
@@ -883,11 +891,16 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 //				g_Uart.printf("ATT_CMD:\r\n");
 //				g_Uart.printf("Hdl: %x, data len: %d\r\n", req->Hdl, pRcvPdu->Hdr.Len -  3);
 
-				size_t l = ReqLen;
+				BtAttDBEntry_t *entry = BtAttDBFindHandle(req->Hdl);
 
-				l = BtGattWriteValue(req->Hdl, req->Data, l - 3);
+				if (entry)
+				{
+					size_t l = ReqLen;
 
-				retval = 0;
+					l = BtGattWriteAttValue(entry, 0, req->Data, l - 3);
+
+					retval = 0;
+				}
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:
@@ -908,5 +921,5 @@ uint32_t BtGattProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int R
 
 	return retval;
 }
-
+#endif
 

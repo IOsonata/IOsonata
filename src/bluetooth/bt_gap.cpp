@@ -74,7 +74,7 @@ alignas(4) static BtGapConnection_t s_BtGapConnection[BT_GAP_CONN_MAX_COUNT] = {
 static BtGattChar_t s_BtGapChar[] = {
 	{
 		// Device name characteristic
-		.Uuid = BT_UUID_GATT_DEVICE_NAME,
+		.Uuid = BT_UUID_CHARACTERISTIC_DEVICE_NAME,
 		.MaxDataLen = BT_GAP_DEVNAME_MAX_LEN,
 		.Property =	BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
 		.pDesc = NULL,						// char UTF-8 description string
@@ -86,7 +86,7 @@ static BtGattChar_t s_BtGapChar[] = {
 	},
 	{
 		// Appearance characteristic
-		.Uuid = BT_UUID_GATT_APPEARANCE,
+		.Uuid = BT_UUID_CHARACTERISTIC_APPEARANCE,
 		.MaxDataLen = 2,
 		.Property =	BT_GATT_CHAR_PROP_READ,
 		.pDesc = NULL,						// char UTF-8 description string
@@ -98,7 +98,7 @@ static BtGattChar_t s_BtGapChar[] = {
 	},
 	{
 		// Prefered connection parameter characteristic
-		.Uuid = BT_UUID_GATT_PERIPHERAL_PREFERRED_CONNECTION_PARAMETERS,
+		.Uuid = BT_UUID_CHARACTERISTIC_PERIPH_PREFERRED_CONN_PARAM,
 		.MaxDataLen = sizeof(BtGattPreferedConnParams_t),
 		.Property =	BT_GATT_CHAR_PROP_READ,
 		.pDesc = NULL,						// char UTF-8 description string
@@ -126,7 +126,7 @@ static BtGattCharSrvcChanged_t s_BtGattCharSrvcChanged = {0,};
 static BtGattChar_t s_BtGattChar[] = {
 	{
 		// Read characteristic
-		.Uuid = BT_UUID_GATT_CHAR_SERVICE_CHANGED,
+		.Uuid = BT_UUID_CHARACTERISTIC_SERVICE_CHANGED,
 		.MaxDataLen = sizeof(BtGattCharSrvcChanged_t),
 		.Property =	BT_GATT_CHAR_PROP_INDICATE,
 		.pDesc = NULL,						// char UTF-8 description string
@@ -197,6 +197,7 @@ __attribute__((weak)) void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
 	BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
 //	BtGattSrvcAdd(pSrvc, &s_BtGapSrvcCfg);
 
+	BtAttSetHandler(BtGattReadAttValue, BtGattWriteAttValue);
 	//BtGattPreferedConnParams_t connparm = {
 //		USEC_TO_1250(7500), MSEC_TO_1_25(40), 0, 400
 //	};

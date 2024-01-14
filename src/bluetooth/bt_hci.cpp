@@ -431,7 +431,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 
 			l2pdu->Hdr = l2rcv->Hdr;
 
-			l2pdu->Hdr.Len = BtGattProcessReq(pPkt->Hdr.ConnHdl, &l2rcv->Att, l2rcv->Hdr.Len, &l2pdu->Att);
+			l2pdu->Hdr.Len = BtAttProcessReq(pPkt->Hdr.ConnHdl, &l2rcv->Att, l2rcv->Hdr.Len, &l2pdu->Att);
 
 			if (l2pdu->Hdr.Len > 0)
 			{

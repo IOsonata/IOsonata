@@ -436,11 +436,14 @@ struct __Bt_Att_DB_Entry {
 
 #pragma pack(pop)
 
+typedef size_t (*AttReadValFct_t)(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, uint16_t Len);
+typedef size_t (*AttWriteValFct_t)(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, uint16_t Len);
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void BtAttDBInit();
+void BtAttDBInit(size_t MemSize);
 BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen);//, void *pData, int DataLen);
 BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl);
 BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid);
@@ -457,7 +460,8 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
  */
 uint16_t BtAttSetMtu(uint16_t MaxMtu);
 uint16_t BtAttGetMtu();
-uint32_t BtAttProcessData(uint16_t ConnHdl, BtAttReqRsp_t * const pInAtt, int ReqLen, BtAttReqRsp_t * const pOutAtt);
+uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pInAtt, int ReqLen, BtAttReqRsp_t * const pOutAtt);
+void BtAttSetHandler(AttReadValFct_t ReadFct, AttWriteValFct_t WriteFct);
 
 #ifdef __cplusplus
 }
