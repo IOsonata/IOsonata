@@ -61,7 +61,7 @@ SOFTWARE.
 #endif
 
 alignas(4) static BtGapConnection_t s_BtGapConnection[BT_GAP_CONN_MAX_COUNT] = {
-	{.Hdl = BT_GATT_HANDLE_INVALID,},
+	{.Hdl = BT_ATT_HANDLE_INVALID,},
 };
 
 #if 1
@@ -230,7 +230,7 @@ bool isBtGapConnected()
 {
 	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
 	{
-		if (s_BtGapConnection[i].Hdl != BT_GATT_HANDLE_INVALID)
+		if (s_BtGapConnection[i].Hdl != BT_ATT_HANDLE_INVALID)
 		{
 			return true;
 		}
@@ -243,13 +243,13 @@ uint16_t BtGapGetConnection()
 {
 	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
 	{
-		if (s_BtGapConnection[i].Hdl != BT_GATT_HANDLE_INVALID)
+		if (s_BtGapConnection[i].Hdl != BT_ATT_HANDLE_INVALID)
 		{
 			return s_BtGapConnection[i].Hdl;
 		}
 	}
 
-	return BT_GATT_HANDLE_INVALID;
+	return BT_ATT_HANDLE_INVALID;
 }
 
 size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
@@ -258,7 +258,7 @@ size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 
 	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
 	{
-		if (s_BtGapConnection[i].Hdl != BT_GATT_HANDLE_INVALID)
+		if (s_BtGapConnection[i].Hdl != BT_ATT_HANDLE_INVALID)
 		{
 			pHdl[count++] = s_BtGapConnection[i].Hdl;
 		}
@@ -271,7 +271,7 @@ bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_
 {
 	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
 	{
-		if (s_BtGapConnection[i].Hdl == BT_GATT_HANDLE_INVALID)
+		if (s_BtGapConnection[i].Hdl == BT_ATT_HANDLE_INVALID)
 		{
 			s_BtGapConnection[i].Hdl = ConnHdl;
 			s_BtGapConnection[i].Role = Role;

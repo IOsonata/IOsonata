@@ -42,7 +42,6 @@ SOFTWARE.
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_att.h"
 
-#define BT_GATT_HANDLE_INVALID				0xFFFFU
 #define BT_GATT_CHAR_EXT_PROP_RELIABLE_WRITE	1	//!< Reliable write using procedure Section 4.9.5
 #define BT_GATT_CHAR_EXT_PROP_WRITABLE_AUX		2	//!< Write to descriptor defined in Section 3.3.3.2
 
@@ -102,7 +101,7 @@ typedef void (*BtGattCharTxComplete_t) (BtGattChar_t *pChar, int CharIdx);
 typedef void (*BtGattSrvcAuthRqst_t)(BtGattSrvc_t *pBleSvc, uint32_t evt);
 
 #pragma pack(push,1)
-
+/*
 // Service attribute : type UUID 0x2800 Primary, 0x2801 Secondary
 typedef struct __Bt_Gatt_Srvc_Declar {
 	BtUuid_t Uuid;				//!< Service UUID
@@ -114,7 +113,7 @@ typedef struct __Bt_Gatt_Srvc_Include {
 	uint16_t EndGrpHdl;			//!< End group handle
 	BtUuid_t SrvcUuid;			//!< Service UUID
 } BtGattSrvcInclude_t;
-
+*/
 #define BT_GATT_CHAR_PROP_BROADCAST			1	//!< If set, permits broadcasts of the
 												//!< Characteristic Value using Server
 												//! Characteristic Configuration Descriptor.

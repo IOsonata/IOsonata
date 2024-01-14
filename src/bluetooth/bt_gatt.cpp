@@ -141,7 +141,7 @@ size_t BtGattReadAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuf
 			case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
 			case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
 				{
-					BtGattSrvcDeclar_t *p = (BtGattSrvcDeclar_t*)pEntry->Data;
+					BtAttSrvcDeclar_t *p = (BtAttSrvcDeclar_t*)pEntry->Data;
 
 					if (p->Uuid.BaseIdx > 0)
 					{
@@ -163,14 +163,14 @@ size_t BtGattReadAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuf
 				break;
 			case BT_UUID_DECLARATIONS_INCLUDE:
 				{
-					BtGattSrvcInclude_t *p = (BtGattSrvcInclude_t*)pEntry->Data;
+					BtAttSrvcInclude_t *p = (BtAttSrvcInclude_t*)pEntry->Data;
 					len = p->SrvcUuid.BaseIdx > 0 ? 20 : 6;
 				}
 
 				break;
 			case BT_UUID_DECLARATIONS_CHARACTERISTIC:
 				{
-					BtGattCharDeclar_t *p = (BtGattCharDeclar_t*)pEntry->Data;
+					BtAttCharDeclar_t *p = (BtAttCharDeclar_t*)pEntry->Data;
 					//len = pEntry->DataLen;
 					//memcpy(pBuff, pEntry->Data, len);
 					pBuff[0] = p->Prop;
@@ -313,7 +313,7 @@ size_t BtGattWriteAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pDa
 
 __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	if (pChar->ValHdl == BT_GATT_HANDLE_INVALID)
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
 	{
 		return false;
 	}
@@ -328,7 +328,7 @@ __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const 
 
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 {
-	if (pChar->CccdHdl == BT_GATT_HANDLE_INVALID)
+	if (pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
 	{
 		return false;
 	}
@@ -351,7 +351,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 	pSrvc->Uuid.Uuid16 = pCfg->UuidSrvc;
 
 	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_PRIMARY_SERVICE };
-	int l = sizeof(BtGattSrvcDeclar_t);
+	int l = sizeof(BtAttSrvcDeclar_t);
 
 	entry = BtAttDBAddEntry(&typeuuid, l);
 
@@ -360,7 +360,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 		return false;
 	}
 
-	BtGattSrvcDeclar_t *srvcdec = (BtGattSrvcDeclar_t*) entry->Data;
+	BtAttSrvcDeclar_t *srvcdec = (BtAttSrvcDeclar_t*) entry->Data;
 	srvcdec->Uuid = pSrvc->Uuid;
 	entry->DataLen = l;
 
@@ -374,7 +374,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
     for (int i = 0; i < pCfg->NbChar; i++, c++)
     {
     	typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_CHARACTERISTIC };
-    	l = sizeof(BtGattCharDeclar_t);
+    	l = sizeof(BtAttCharDeclar_t);
 
     	entry = BtAttDBAddEntry(&typeuuid, l);
     	if (entry == nullptr)
@@ -382,7 +382,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
     		return false;
     	}
 
-    	BtGattCharDeclar_t *chardec = (BtGattCharDeclar_t*)entry->Data;
+    	BtAttCharDeclar_t *chardec = (BtAttCharDeclar_t*)entry->Data;
     	chardec->Prop = (uint8_t)c->Property;
     	chardec->Uuid = {c->BaseUuidIdx, BT_UUID_TYPE_16, c->Uuid};
 /*		if (c->BaseUuidIdx > 0)
@@ -400,10 +400,10 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 			entry->DataLen = 5;
 		}
 */
-    	c->ValHdl = BT_GATT_HANDLE_INVALID;
-		c->DescHdl = BT_GATT_HANDLE_INVALID;
-		c->CccdHdl = BT_GATT_HANDLE_INVALID;
-		c->SccdHdl = BT_GATT_HANDLE_INVALID;
+    	c->ValHdl = BT_ATT_HANDLE_INVALID;
+		c->DescHdl = BT_ATT_HANDLE_INVALID;
+		c->CccdHdl = BT_ATT_HANDLE_INVALID;
+		c->SccdHdl = BT_ATT_HANDLE_INVALID;
         c->pSrvc = pSrvc;
     	c->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
 
@@ -489,7 +489,7 @@ __attribute__((weak)) void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 {
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
-		if (pSrvc->pCharArray[i].CccdHdl != BT_GATT_HANDLE_INVALID)
+		if (pSrvc->pCharArray[i].CccdHdl != BT_ATT_HANDLE_INVALID)
 		{
 			pSrvc->pCharArray[i].bNotify = false;
 			pSrvc->pCharArray[i].bIndic = false;

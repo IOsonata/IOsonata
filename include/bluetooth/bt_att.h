@@ -100,6 +100,8 @@ SOFTWARE.
 #define BT_ATT_MTU_MIN				23
 #define BT_ATT_MTU_MAX				247
 
+#define BT_ATT_HANDLE_INVALID		0xFFFFU
+
 #pragma pack(push, 1)
 
 typedef struct __Bt_Att_Hdl_Uuid_16 {
@@ -391,33 +393,33 @@ typedef struct __Bt_Attribute_Req_Rsp {
 		BtAttMultipleHandleValueNtf_t MultipleHandleValueNtf;
 	};
 } BtAttReqRsp_t;
-/*
+
 // Service attribute : type UUID 0x2800 Primary, 0x2801 Secondary
 typedef struct __Bt_Att_Srvc_Declar {
-	BtUuid_t Uuid;				//!< Service UUID
+	BtUuid_t Uuid;						//!< Service UUID
 } BtAttSrvcDeclar_t;
 
 // Service include attribute : 0x2802
 typedef struct __Bt_Att_Srvc_Include {
-	uint16_t SrvcHdl;			//!< Service attribute handle
-	uint16_t EndGrpHdl;			//!< End group handle
-	BtUuid_t SrvcUuid;			//!< Service UUID
+	uint16_t SrvcHdl;					//!< Service attribute handle
+	uint16_t EndGrpHdl;					//!< End group handle
+	BtUuid_t SrvcUuid;					//!< Service UUID
 } BtAttSrvcInclude_t;
 
 // Characteristic declaration attribute : type UUID 0x2803
 typedef struct __Bt_Att_Char_Declar {
 	uint8_t Prop;						//!< Orable properties
 	uint16_t ValHdl;					//!< Value handle
-	BtUuidVal_t Uuid;					//!< Characteristic UUID
+	BtUuid_t Uuid;					//!< Characteristic UUID
 } BtAttCharDeclar_t;
 
 // Characteristic declaration attribute value : type UUID 0x2803
-typedef struct __Bt_Att_Char_Declar_Val {
-	uint8_t Prop;						//!< Orable properties
-	uint16_t ValHdl;					//!< Value handle
-	BtUuidVal_t Uuid;					//!< Characteristic UUID
-} BtAttCharDeclarVal_t;
-*/
+//typedef struct __Bt_Att_Char_Declar_Val {
+//	uint8_t Prop;						//!< Orable properties
+//	uint16_t ValHdl;					//!< Value handle
+//	BtUuid_t Uuid;						//!< Characteristic UUID
+//} BtAttCharDeclarVal_t;
+
 #pragma pack(pop)
 
 #pragma pack(push,4)
