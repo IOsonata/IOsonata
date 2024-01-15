@@ -205,7 +205,7 @@ size_t BtGattReadAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuf
 				break;
 			case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
 				{
-					BtGattCharClientConfig_t *d = (BtGattCharClientConfig_t*)pEntry->Data;
+					BtDescClientCharConfig_t *d = (BtDescClientCharConfig_t*)pEntry->Data;
 
 					*(uint16_t*)pBuff = d->CccVal;
 					len = 2;
@@ -265,7 +265,7 @@ size_t BtGattWriteAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pDa
 				{
 					//g_Uart.printf("BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION\r\n");
 
-					BtGattCharClientConfig_t *p = (BtGattCharClientConfig_t*)pEntry->Data;
+					BtDescClientCharConfig_t *p = (BtDescClientCharConfig_t*)pEntry->Data;
 
 					p->CccVal = *(uint16_t*)pData;
 					p->pChar->bNotify = p->CccVal & BT_CLIENT_CHAR_CONFIG_NOTIFICATION ? true: false;
@@ -439,19 +439,19 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
         {
             // Characteristic Descriptor CCC
             typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
-            l = sizeof(BtGattCharClientConfig_t);
+            l = sizeof(BtDescClientCharConfig_t);
         	entry = BtAttDBAddEntry(&typeuuid, l);
         	if (entry == nullptr)
         	{
         		return false;
         	}
 
-        	BtGattCharClientConfig_t *ccc = (BtGattCharClientConfig_t*)entry->Data;
+        	BtDescClientCharConfig_t *ccc = (BtDescClientCharConfig_t*)entry->Data;
 
         	ccc->pChar = c;
         	ccc->CccVal = 0;
-        	ccc->SetIndCB = c->SetIndCB;
-        	ccc->SetNtfCB = c->SetNotifCB;
+        	//ccc->SetIndCB = c->SetIndCB;
+        	//ccc->SetNtfCB = c->SetNotifCB;
     		c->CccdHdl = entry->Hdl;
 
         }
@@ -505,7 +505,7 @@ __attribute__((weak)) void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 			BtAttDBEntry_t *entry = BtAttDBFindHandle(pSrvc->pCharArray[i].CccdHdl);
 			if (entry)
 			{
-				BtGattCharClientConfig_t *p = (BtGattCharClientConfig_t*)entry->Data;
+				BtDescClientCharConfig_t *p = (BtDescClientCharConfig_t*)entry->Data;
 				p->CccVal = 0;
 			}
 		}

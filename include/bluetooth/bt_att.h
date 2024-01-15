@@ -485,6 +485,13 @@ typedef struct __Bt_Att_Char_Value {
 	uint8_t Data[1];					//!< Variable length data buffer
 } BtAttCharValue_t;
 
+typedef struct __Bt_Desc_Client_Char_Config {
+	BtGattChar_t *pChar;				//!< Owner characteristic
+	uint16_t CccVal;					//!< Characteristic value handle
+	//BtCharSetNotifCb_t SetNtfCB;		//!< Set notification callback
+	//BtCharSetIndCb_t SetIndCB;			//!< Set indication callback
+} BtDescClientCharConfig_t;
+
 #pragma pack(pop)
 
 #pragma pack(push,4)

@@ -164,14 +164,14 @@ typedef struct __Bt_Gatt_Char_Prefered_Conn_Params {
 	uint16_t Latency;					//!< Peripheral latency
 	uint16_t Timeout;					//!< Supervision timeout in 10ms count
 } BtGattPreferedConnParams_t;
-
+#if 0
 typedef struct __Bt_Gatt_Char_Client_Config {
 	BtGattChar_t *pChar;				//!< Owner characteristic
 	uint16_t CccVal;					//!< Characteristic value handle
 	BtCharSetNotifCb_t SetNtfCB;		//!< Set notification callback
 	BtCharSetIndCb_t SetIndCB;			//!< Set indication callback
 } BtGattCharClientConfig_t;
-
+#endif
 //BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION
 typedef struct __Bt_Gatt_Desc_Char_User_Desc {
 	BtGattChar_t *pChar;				//!< Owner characteristic
