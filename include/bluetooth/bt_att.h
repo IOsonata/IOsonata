@@ -102,7 +102,43 @@ SOFTWARE.
 
 #define BT_ATT_HANDLE_INVALID		0xFFFFU
 
+typedef struct __Bt_Characteristic		BtGattChar_t;
+typedef struct __Bt_Service				BtGattSrvc_t;
+typedef struct __Bt_Characteristic		BtChar_t;
+typedef struct __Bt_Service				BtSrvc_t;
+
 typedef struct __Bt_Att_DB_Entry		BtAttDBEntry_t;
+
+/**
+ * @brief	Callback on write
+ */
+typedef void (*BtCharWrCb_t) (BtChar_t *pChar, uint8_t *pData, int Offset, int Len);
+
+/**
+ * @brief	Callback on set notification
+ */
+typedef void (*BtCharSetNotifCb_t) (BtChar_t *pChar, bool bEnable);
+
+/**
+ * @brief	Callback on set indication
+ */
+typedef void (*BtCharSetIndCb_t) (BtChar_t *pChar, bool bEnable);
+
+/**
+ * @brief	Callback when transmission is completed
+ *
+ * @param	pChar
+ * @param	CharIdx
+ */
+typedef void (*BtCharTxComplete_t) (BtChar_t *pChar, int CharIdx);
+
+/**
+ * @brief	Callback on authorization request
+ *
+ * @param	pBleSvc
+ * @param	evt
+ */
+typedef void (*BtSrvcAuthRqst_t)(BtSrvc_t *pBleSvc, uint32_t evt);
 
 #pragma pack(push, 1)
 
@@ -399,9 +435,10 @@ typedef struct __Bt_Attribute_Req_Rsp {
 // Service attribute : type UUID 0x2800 Primary, 0x2801 Secondary
 typedef struct __Bt_Att_Srvc_Declar {
 	BtUuid_t Uuid;						//!< Service UUID
+	BtSrvc_t *pSrvc;
 	//uint8_t SecType;					//!< Secure or Open service/char
-	int NbChar;
-	BtAttDBEntry_t *pCharEntry[1];		//!< Variable length char entry table
+	//int NbChar;
+	//BtAttDBEntry_t *pCharEntry[1];		//!< Variable length char entry table
 } BtAttSrvcDeclar_t;
 
 // Service include attribute : 0x2802
@@ -411,12 +448,26 @@ typedef struct __Bt_Att_Srvc_Include {
 	BtUuid_t SrvcUuid;					//!< Service UUID
 } BtAttSrvcInclude_t;
 
+#define BT_CHAR_PROP_BROADCAST			1	//!< If set, permits broadcasts of the
+												//!< Characteristic Value using Server
+												//! Characteristic Configuration Descriptor.
+												//! If set, the Server Characteristic Configuration
+												//! Descriptor shall exist.
+#define BT_CHAR_PROP_READ				2	//!< If set, permits reads of the Characteristic Value
+#define BT_CHAR_PROP_WRITE_WORESP		4	//!<
+#define BT_CHAR_PROP_WRITE				8
+#define BT_CHAR_PROP_NOTIFY				0x10
+#define BT_CHAR_PROP_INDICATE			0x20
+#define BT_CHAR_PROP_AUTH_SIGNED		0x40
+#define BT_CHAR_PROP_EXT_PROP			0x80
+#define BT_CHAR_PROP_VALEN				0x8000
+
 // Characteristic declaration attribute : type UUID 0x2803
 typedef struct __Bt_Att_Char_Declar {
-	uint8_t Prop;						//!< Orable properties
+	//uint8_t Prop;						//!< Orable properties
 	uint16_t ValHdl;					//!< Value handle
 	BtUuid_t Uuid;						//!< Characteristic UUID
-	BtAttDBEntry_t *pSrvcEntry;			//!< Point to owner service entry
+	BtChar_t *pChar;					//!< Point to owner service entry
 } BtAttCharDeclar_t;
 
 // Characteristic declaration attribute value : type UUID 0x2803
@@ -430,7 +481,7 @@ typedef struct __Bt_Att_Char_Value {
 	//size_t MaxDataLen;					//!< Max data length
 	//size_t DataLen;						//!< Length of actual data
 	//BtGattCharWrCb_t WrCB;				//!< Pointer to characteristic write callback
-	//BtGattChar_t *pChar;				//!< Pointer to owner characteristic
+	BtChar_t *pChar;					//!< Pointer to owner characteristic
 	uint8_t Data[1];					//!< Variable length data buffer
 } BtAttCharValue_t;
 
@@ -446,6 +497,50 @@ struct __Bt_Att_DB_Entry {
 	BtAttDBEntry_t *pPrev;
 	BtAttDBEntry_t *pNext;
 	uint8_t Data[1];					//!< Variable length attribute data
+};
+
+struct __Bt_Characteristic {
+	uint16_t Uuid;						//!< Characteristic UUID
+	uint16_t MaxDataLen;				//!< Characteristic max data length in bytes
+	uint32_t Property;              	//!< char properties defined by orable BT_GATT_CHAR_PROP_...
+	const char *pDesc;                  //!< char UTF-8 description string
+	BtCharWrCb_t WrCB;              	//!< Callback for write char, set to NULL for read char
+	BtCharSetNotifCb_t SetNotifCB;		//!< Callback on set notification
+	BtCharSetIndCb_t SetIndCB;			//!< Callback on set indication
+	BtCharTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
+	void *pValue;						//!< Characteristic data value
+	uint16_t ValueLen;					//!< Current length in bytes of data value
+	// Bellow are private data. Do not modify
+	bool bNotify;                       //!< Notify enable flag for read characteristic
+	bool bIndic;						//!< Indication enable flag
+	uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
+	uint16_t Hdl;       				//!< char handle
+	uint16_t ValHdl;					//!< char value handle
+	uint16_t DescHdl;					//!< descriptor handle
+	uint16_t CccdHdl;					//!< client char configuration descriptor handle
+	uint16_t SccdHdl;					//!< Server char configuration value
+	BtSrvc_t *pSrvc;					//!< Pointer to the service instance which this char belongs to.
+	//BtGattCharValue_t *pData;
+};
+
+/*
+ * Bluetooth service private data to be passed when calling service related functions.
+ * The data is filled by BleSrvcInit function.
+ * Pointer to this structure is often referred as Service Handle
+ *
+ */
+struct __Bt_Service {
+    int NbChar;							//!< Number of characteristic defined for this service
+    BtGattChar_t *pCharArray;			//!< Pointer to array of characteristics
+    uint16_t Hdl;            			//!< Service handle
+//    uint16_t ConnHdl;					//!< Connection handle
+    BtUuid_t Uuid;						//!< Service UUID
+    uint8_t	*pLongWrBuff;				//!< pointer to user long write buffer
+    int	LongWrBuffSize;					//!< long write buffer size
+    void *pContext;
+    BtSrvcAuthRqst_t AuthReqCB;			//!< Authorization request callback
+    BtSrvc_t *pPrev;
+    BtSrvc_t *pNext;
 };
 
 #pragma pack(pop)

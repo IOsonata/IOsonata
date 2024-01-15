@@ -66,9 +66,7 @@ typedef uint8_t		BtGattServerCharConfig_t;
 //typedef size_t (*BtGattAttRdHandler_t)(uint16_t Hdl, void *pBuff, size_t Len, void *pCtx);
 //typedef size_t (*BtGattAttWrHandler_t)(uint16_t Hdl, void *pData, size_t Len, void *pCtx);
 
-typedef struct __Bt_Gatt_Characteristic		BtGattChar_t;
-typedef struct __Bt_Gatt_Service			BtGattSrvc_t;
-
+#if 0
 /**
  * @brief	Callback on write
  */
@@ -99,6 +97,7 @@ typedef void (*BtGattCharTxComplete_t) (BtGattChar_t *pChar, int CharIdx);
  * @param	p_ble_evt
  */
 typedef void (*BtGattSrvcAuthRqst_t)(BtGattSrvc_t *pBleSvc, uint32_t evt);
+#endif
 
 #pragma pack(push,1)
 /*
@@ -127,13 +126,14 @@ typedef struct __Bt_Gatt_Srvc_Include {
 #define BT_GATT_CHAR_PROP_AUTH_SIGNED		0x40
 #define BT_GATT_CHAR_PROP_EXT_PROP			0x80
 #define BT_GATT_CHAR_PROP_VALEN				0x8000
-
+#if 0
 // Characteristic declaration attribute : type UUID 0x2803
 typedef struct __Bt_Gatt_Char_Declar {
 	uint8_t Prop;						//!< Orable properties
 	uint16_t ValHdl;					//!< Value handle
 	BtUuid_t Uuid;						//!< Characteristic UUID
 } BtGattCharDeclar_t;
+#endif
 /*
 // Characteristic declaration attribute value : type UUID 0x2803
 typedef struct __Bt_Gatt_Char_Declar_Val {
@@ -142,16 +142,17 @@ typedef struct __Bt_Gatt_Char_Declar_Val {
 	BtUuidVal_t Uuid;					//!< Characteristic UUID
 } BtGattCharDeclarVal_t;
 */
+#if 0
 typedef struct __Bt_Gatt_Char_Value {
 	//size_t MaxDataLen;					//!< Max data length
 	//size_t DataLen;						//!< Length of actual data
 	//BtGattCharWrCb_t WrCB;				//!< Pointer to characteristic write callback
-	BtGattCharWrCb_t WrCB;              //!< Callback for write char, set to NULL for read char
-	BtGattCharTxComplete_t TxCompleteCB;//!< Callback when TX is completed
+	BtCharWrCb_t WrCB;              	//!< Callback for write char, set to NULL for read char
+	BtCharTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
 	BtGattChar_t *pChar;				//!< Pointer to owner characteristic
 	uint8_t Data[1];					//!< Variable length data buffer
 } BtGattCharValue_t;
-
+#endif
 typedef struct __Bt_Gatt_Char_Srvc_Changed {
 	uint16_t StartHdl;					//!< Start service handle
 	uint16_t EndHdl;					//!< End service handle
@@ -167,8 +168,8 @@ typedef struct __Bt_Gatt_Char_Prefered_Conn_Params {
 typedef struct __Bt_Gatt_Char_Client_Config {
 	BtGattChar_t *pChar;				//!< Owner characteristic
 	uint16_t CccVal;					//!< Characteristic value handle
-	BtGattCharSetNotifCb_t SetNtfCB;	//!< Set notification callback
-	BtGattCharSetIndCb_t SetIndCB;		//!< Set indication callback
+	BtCharSetNotifCb_t SetNtfCB;		//!< Set notification callback
+	BtCharSetIndCb_t SetIndCB;			//!< Set indication callback
 } BtGattCharClientConfig_t;
 
 //BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION
@@ -181,7 +182,7 @@ typedef struct __Bt_Gatt_Desc_Char_User_Desc {
 
 
 #pragma pack(push,4)
-
+#if 0
 struct __Bt_Gatt_Characteristic {
 	uint16_t Uuid;						//!< Characteristic UUID
 	uint16_t MaxDataLen;				//!< Characteristic max data length in bytes
@@ -205,7 +206,7 @@ struct __Bt_Gatt_Characteristic {
 	BtGattSrvc_t *pSrvc;				//!< Pointer to the service instance which this char belongs to.
 	//BtGattCharValue_t *pData;
 };
-
+#endif
 typedef struct __Bt_Gatt_Service_Config {
 	uint8_t SecType;					//!< Secure or Open service/char
 	bool bCustom;						//!< True - for custom service Base UUID, false - Bluetooth SIG standard
@@ -215,9 +216,10 @@ typedef struct __Bt_Gatt_Service_Config {
 	BtGattChar_t *pCharArray;          	//!< Pointer a an array of characteristic
     uint8_t *pLongWrBuff;				//!< pointer to user long write buffer
     int	LongWrBuffSize;					//!< long write buffer size
-    BtGattSrvcAuthRqst_t AuthReqCB;		//!< Authorization request callback
+    BtSrvcAuthRqst_t AuthReqCB;			//!< Authorization request callback
 } BtGattSrvcCfg_t;
 
+#if 0
 /*
  * Bluetooth service private data to be passed when calling service related functions.
  * The data is filled by BleSrvcInit function.
@@ -237,6 +239,8 @@ struct __Bt_Gatt_Service {
     BtGattSrvc_t *pPrev;
     BtGattSrvc_t *pNext;
 };
+#endif
+
 /*
 typedef struct __Bt_Gatt_List_Entry {
 	uint16_t Hdl;						//!< Attribute handle

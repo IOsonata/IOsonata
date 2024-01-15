@@ -173,7 +173,7 @@ size_t BtGattReadAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuf
 					BtAttCharDeclar_t *p = (BtAttCharDeclar_t*)pEntry->Data;
 					//len = pEntry->DataLen;
 					//memcpy(pBuff, pEntry->Data, len);
-					pBuff[0] = p->Prop;
+					pBuff[0] = p->pChar->Property;
 					pBuff[1] = p->ValHdl & 0xFF;
 					pBuff[2] = (p->ValHdl >> 8)& 0xFF;
 
@@ -219,7 +219,7 @@ size_t BtGattReadAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuf
 //				len = 2;
 			default:
 				{
-					BtGattCharValue_t *p = (BtGattCharValue_t*)pEntry->Data;
+					BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
 
 					size_t l = min(p->pChar->ValueLen - Offset, BtAttGetMtu());
 					memcpy(pBuff, p->Data + Offset, l);
@@ -230,7 +230,7 @@ size_t BtGattReadAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuf
 	}
 	else
 	{
-		BtGattCharValue_t *p = (BtGattCharValue_t*)pEntry->Data;
+		BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
 
 		size_t l = min(p->pChar->ValueLen - Offset, BtAttGetMtu());
 		memcpy(pBuff, p->Data + Offset, l);
@@ -280,15 +280,15 @@ size_t BtGattWriteAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pDa
 				break;
 			default:
 				{
-					BtGattCharValue_t *p = (BtGattCharValue_t*)pEntry->Data;
+					BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
 
 					p->pChar->ValueLen = min(Len, p->pChar->MaxDataLen);// - sizeof(BtGattCharValue_t));
 					memcpy(p->Data, pData, p->pChar->ValueLen);
 
-					if (p->WrCB)
+					if (p->pChar->WrCB)
 					{
 	//					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-						p->WrCB(p->pChar, pData, 0, Len);
+						p->pChar->WrCB(p->pChar, pData, 0, Len);
 					}
 				}
 
@@ -296,15 +296,15 @@ size_t BtGattWriteAttValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pDa
 	}
 	else
 	{
-		BtGattCharValue_t *p = (BtGattCharValue_t*)pEntry->Data;
+		BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
 
 		p->pChar->ValueLen = min(Len,  p->pChar->MaxDataLen);//- sizeof(BtGattCharValue_t));
 		memcpy(p->Data, pData, p->pChar->ValueLen);
 
-		if (p->WrCB)
+		if (p->pChar->WrCB)
 		{
 //					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-			p->WrCB(p->pChar, pData, 0, Len);
+			p->pChar->WrCB(p->pChar, pData, 0, Len);
 		}
 	}
 
@@ -350,7 +350,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 	pSrvc->Uuid.Uuid16 = pCfg->UuidSrvc;
 
 	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_PRIMARY_SERVICE };
-	int l = sizeof(BtAttSrvcDeclar_t) + (pCfg->NbChar - 1) * sizeof(BtAttDBEntry_t*);
+	int l = sizeof(BtAttSrvcDeclar_t);// + (pCfg->NbChar - 1) * sizeof(BtAttDBEntry_t*);
 
 	BtAttDBEntry_t *srvcentry = BtAttDBAddEntry(&typeuuid, l);
 
@@ -362,7 +362,8 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 	BtAttSrvcDeclar_t *srvcdec = (BtAttSrvcDeclar_t*) srvcentry->Data;
 
 	srvcdec->Uuid = pSrvc->Uuid;
-	srvcdec->NbChar = pCfg->NbChar;
+	srvcdec->pSrvc = pSrvc;
+	//srvcdec->NbChar = pCfg->NbChar;
 
 	pSrvc->Hdl = srvcentry->Hdl;
 	pSrvc->NbChar = pCfg->NbChar;
@@ -383,13 +384,13 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
     		return false;
     	}
 
-    	srvcdec->pCharEntry[i] = entry;
+    	//srvcdec->pCharEntry[i] = entry;
 
     	BtAttCharDeclar_t *chardec = (BtAttCharDeclar_t*)entry->Data;
 
-    	chardec->Prop = (uint8_t)c->Property;
+    	//chardec->Prop = (uint8_t)c->Property;
     	chardec->Uuid = {c->BaseUuidIdx, BT_UUID_TYPE_16, c->Uuid};
-    	chardec->pSrvcEntry = srvcentry;
+    	chardec->pChar = c;
 
 /*		if (c->BaseUuidIdx > 0)
 		{
@@ -415,12 +416,12 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 
     	// Characteristic value
     	typeuuid = {c->BaseUuidIdx, BT_UUID_TYPE_16, c->Uuid };
-    	entry = BtAttDBAddEntry(&typeuuid, c->MaxDataLen + sizeof(BtGattCharValue_t));
+    	entry = BtAttDBAddEntry(&typeuuid, c->MaxDataLen + sizeof(BtAttCharValue_t));
     	if (entry == nullptr)
     	{
     		return false;
     	}
-    	BtGattCharValue_t *charval = (BtGattCharValue_t*)entry->Data;
+    	BtAttCharValue_t *charval = (BtAttCharValue_t*)entry->Data;
 
     	chardec->ValHdl = entry->Hdl;
     	c->ValHdl = chardec->ValHdl;
@@ -430,8 +431,8 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
     	//charval->MaxDataLen = c->MaxDataLen;
     	//charval->DataLen = 0;
     	charval->pChar = c;
-    	charval->WrCB = c->WrCB;
-    	charval->TxCompleteCB = c->TxCompleteCB;
+    	//charval->WrCB = c->WrCB;
+    	//charval->TxCompleteCB = c->TxCompleteCB;
 
     	c->bNotify = false;
         if (c->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
