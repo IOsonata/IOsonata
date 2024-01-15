@@ -326,7 +326,7 @@ void BtAppEnterDfu()
 
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	if (s_BtAppData.ConnHdl == BT_GATT_HANDLE_INVALID)
+	if (s_BtAppData.ConnHdl == BT_ATT_HANDLE_INVALID)
 	{
 		return false;
 	}
