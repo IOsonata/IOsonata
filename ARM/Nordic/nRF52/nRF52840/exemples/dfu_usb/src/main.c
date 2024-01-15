@@ -61,6 +61,10 @@
 #include "nrf_bootloader_info.h"
 #include "nrf_delay.h"
 
+
+uint8_t g_extern_usbd_serial_number[12 + 1] = { "12345678"};//User-defined value
+uint8_t g_extern_usbd_product_string[16 + 1] = { "DFU Over USB" };
+
 static void on_error(void)
 {
     NRF_LOG_FINAL_FLUSH();
