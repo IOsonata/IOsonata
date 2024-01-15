@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/iosonata_dfu_public_key.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/iosonata_dfu_public_key.c</locationURI>
+		</link>
+		<link>
 			<name>src/main.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.c</locationURI>
