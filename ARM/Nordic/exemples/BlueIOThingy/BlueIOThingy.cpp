@@ -120,7 +120,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 #endif
 
-#define BT_ATT_DB_MEMSIZE				4096
+#define BT_ATT_DB_MEMSIZE				(3200)
 
 uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
 
@@ -382,6 +382,42 @@ static FlashCfg_t s_FlashDiskCfg = FLASH_MX25U1635E(NULL, NULL);
 };
 #endif
 
+#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
+
+static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+static uint8_t s_UartTxFifo[UARTFIFOSIZE];
+
+/// UART pins definitions
+static IOPinCfg_t s_UartPins[] = {
+	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
+	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
+	//{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
+	//{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RTS
+};
+
+/// UART configuration
+const UARTCfg_t g_UartCfg = {
+	.DevNo = 0,							// Device number zero based
+	.pIOPinMap = s_UartPins,				// UART assigned pins
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
+	.Rate = 115200,						// Baudrate
+	.DataBits = 8,						// Data bits
+	.Parity = UART_PARITY_NONE,			// Parity
+	.StopBits = 1,						// Stop bit
+	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
+	.bIntMode = true,					// Interrupt mode
+	.IntPrio = 6,	// Interrupt priority
+	.EvtCallback = NULL,//nRFUartEvthandler,	// UART event handler
+	.bFifoBlocking = true,				// Blocking FIFO
+	.RxMemSize = UARTFIFOSIZE,
+	.pRxMem = s_UartRxFifo,
+	.TxMemSize = UARTFIFOSIZE,
+	.pTxMem = s_UartTxFifo,
+};
+
+/// UART object instance
+UART g_Uart;
+
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
 {
 	return true;
@@ -447,12 +483,14 @@ void ReadPTHData()
 	// Update advertisement data
 	BtAppAdvManDataSet(g_AdvDataBuff, sizeof(g_AdvDataBuff), NULL, 0);
 
-	EnvSrvcNotifTemp((float)data.Temperature / 100.0);
+	if (isConnected())
+	{
+		EnvSrvcNotifTemp((float)data.Temperature / 100.0);
 
-	EnvSrvcNotifPressure((float)data.Pressure / 100.0);
+		EnvSrvcNotifPressure((float)data.Pressure / 100.0);
 
-	EnvSrvcNotifHumi(data.Humidity / 100);
-
+		EnvSrvcNotifHumi(data.Humidity / 100);
+	}
 
 	gascnt++;
 }
@@ -590,6 +628,9 @@ void HardwareInit()
 {
 	// Set this only if nRF is power at 2V or more
 	NRF_POWER->DCDCEN = POWER_DCDCEN_DCDCEN_Enabled << POWER_DCDCEN_DCDCEN_Pos;
+
+	g_Uart.Init(g_UartCfg);
+	g_Uart.printf("BlueIOThingy\r\n");
 
 	// Configure Leds
 	IOPinCfg(s_Leds, s_NbLeds);

@@ -396,6 +396,11 @@ void ImuQuatDataSend(long Quat[4])
 	if (g_ImuChars[IMUCHAR_IDX_QUAT].bNotify == false)
 		return;
 
+	if (isConnected() == false)
+	{
+		return;
+	}
+
 	long q[4];
 #if 0
 	q[0] = Quat[0];
@@ -430,6 +435,11 @@ void ImuRawCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 
 void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSensorData_t &MagData)
 {
+	if (isConnected() == false)
+	{
+		return;
+	}
+
 	ble_tms_raw_t raw;
 
 	raw.accel.x = AccData.X / 256;

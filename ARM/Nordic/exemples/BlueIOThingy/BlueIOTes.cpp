@@ -137,12 +137,12 @@ BtGattChar_t g_EnvChars[] = {
 /// Service definition
 const BtGattSrvcCfg_t s_EnvSrvcCfg = {
     //BLESRVC_SECTYPE_NONE,       // Secure or Open service/char
-	0,
-	true,
-    THINGY_BASE_UUID,        // Base UUID
-    BLE_UUID_TES_SERVICE,       // Service UUID
-    sizeof(g_EnvChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
-    g_EnvChars,                 // Pointer a an array of characteristic
+	.SecType = 0,
+	.bCustom = true,
+    .UuidBase = THINGY_BASE_UUID,        // Base UUID
+    .UuidSrvc = BLE_UUID_TES_SERVICE,       // Service UUID
+    .NbChar = sizeof(g_EnvChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
+    .pCharArray = g_EnvChars,                 // Pointer a an array of characteristic
     NULL,                       // pointer to user long write buffer
     0,                          // long write buffer size
 	NULL

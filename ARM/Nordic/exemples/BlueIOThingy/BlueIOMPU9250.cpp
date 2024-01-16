@@ -245,7 +245,11 @@ static void mpulib_tap_cb(unsigned char direction, unsigned char count)
 static void mpulib_orient_cb(unsigned char orientation)
 {
 	BtGattSrvc_t *p = GetImuSrvcInstance();
-	BtAppNotify(&p->pCharArray[2], &orientation, 1);
+
+	if (isConnected())
+	{
+		BtAppNotify(&p->pCharArray[2], &orientation, 1);
+	}
 
 /*    if (m_motion.features & DRV_MOTION_FEATURE_MASK_ORIENTATION)
     {
