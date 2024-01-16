@@ -465,32 +465,29 @@ typedef struct __Bt_Att_Srvc_Include {
 // Characteristic declaration attribute : type UUID 0x2803
 typedef struct __Bt_Att_Char_Declar {
 	//uint8_t Prop;						//!< Orable properties
-	uint16_t ValHdl;					//!< Value handle
+	//uint16_t ValHdl;					//!< Value handle
 	BtUuid_t Uuid;						//!< Characteristic UUID
 	BtChar_t *pChar;					//!< Point to owner service entry
 } BtAttCharDeclar_t;
 
-// Characteristic declaration attribute value : type UUID 0x2803
-//typedef struct __Bt_Att_Char_Declar_Val {
-//	uint8_t Prop;						//!< Orable properties
-//	uint16_t ValHdl;					//!< Value handle
-//	BtUuid_t Uuid;						//!< Characteristic UUID
-//} BtAttCharDeclarVal_t;
-
 typedef struct __Bt_Att_Char_Value {
-	//size_t MaxDataLen;					//!< Max data length
-	//size_t DataLen;						//!< Length of actual data
-	//BtGattCharWrCb_t WrCB;				//!< Pointer to characteristic write callback
 	BtChar_t *pChar;					//!< Pointer to owner characteristic
 	uint8_t Data[1];					//!< Variable length data buffer
 } BtAttCharValue_t;
 
+#define BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION		(1<<0)
+#define BT_DESC_CLIENT_CHAR_CONFIG_INDICATION		(1<<1)
+
 typedef struct __Bt_Desc_Client_Char_Config {
 	BtGattChar_t *pChar;				//!< Owner characteristic
 	uint16_t CccVal;					//!< Characteristic value handle
-	//BtCharSetNotifCb_t SetNtfCB;		//!< Set notification callback
-	//BtCharSetIndCb_t SetIndCB;			//!< Set indication callback
 } BtDescClientCharConfig_t;
+
+//BT_UUID_GATT_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION
+typedef struct __Bt_Desc_Char_User_Desc {
+	BtChar_t *pChar;					//!< Owner characteristic
+	//const char *pDescStr;				//!< Description string
+} BtDescCharUserDesc_t;
 
 #pragma pack(pop)
 
@@ -552,9 +549,6 @@ struct __Bt_Service {
 
 #pragma pack(pop)
 
-typedef size_t (*AttReadValFct_t)(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, uint16_t Len);
-typedef size_t (*AttWriteValFct_t)(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, uint16_t Len);
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -577,7 +571,6 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
 uint16_t BtAttSetMtu(uint16_t MaxMtu);
 uint16_t BtAttGetMtu();
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pInAtt, int ReqLen, BtAttReqRsp_t * const pOutAtt);
-void BtAttSetHandler(AttReadValFct_t ReadFct, AttWriteValFct_t WriteFct);
 
 #ifdef __cplusplus
 }

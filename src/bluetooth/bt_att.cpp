@@ -61,9 +61,6 @@ static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDB
 static BtAttDBEntry_t *s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
 static uint16_t s_LastHdl = 0;
 
-static AttReadValFct_t s_AttReadValue = nullptr;
-static AttWriteValFct_t s_AttWriteValue = nullptr;
-
 uint16_t BtAttSetMtu(uint16_t Mtu)
 {
 	if (Mtu >= BT_ATT_MTU_MIN && Mtu <= BT_ATT_MTU_MAX)
@@ -78,13 +75,13 @@ uint16_t BtAttGetMtu()
 {
 	return s_AttMtu;
 }
-
+/*
 void BtAttSetHandler(AttReadValFct_t ReadFct, AttWriteValFct_t WriteFct)
 {
 	s_AttReadValue = ReadFct;
 	s_AttWriteValue = WriteFct;
 }
-
+*/
 void BtAttDBInit(size_t MemSize)
 {
 	s_BtAttDBMemSize = MemSize;
@@ -196,6 +193,188 @@ BtAttDBEntry_t * const BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStar
 	return first;
 }
 
+size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, uint16_t Len)
+{
+	if (pBuff == nullptr)
+	{
+		return 0;
+	}
+
+	size_t len = 0;
+
+	if (pEntry->TypeUuid.BaseIdx == 0)
+	{
+		switch (pEntry->TypeUuid.Uuid)
+		{
+			case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
+			case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
+				{
+					BtAttSrvcDeclar_t *p = (BtAttSrvcDeclar_t*)pEntry->Data;
+
+					if (p->Uuid.BaseIdx > 0)
+					{
+						BtUuidGetBase(p->Uuid.BaseIdx, pBuff);
+
+						pBuff[12] = p->Uuid.Uuid16 & 0xFF;
+						pBuff[13] = p->Uuid.Uuid16 >> 8;
+
+						len = 16;
+					}
+					else
+					{
+						pBuff[0] = p->Uuid.Uuid16 & 0xFF;
+						pBuff[1] = p->Uuid.Uuid16 >> 8;
+
+						len = 2;
+					}
+				}
+				break;
+			case BT_UUID_DECLARATIONS_INCLUDE:
+				{
+					BtAttSrvcInclude_t *p = (BtAttSrvcInclude_t*)pEntry->Data;
+					len = p->SrvcUuid.BaseIdx > 0 ? 20 : 6;
+				}
+
+				break;
+			case BT_UUID_DECLARATIONS_CHARACTERISTIC:
+				{
+					BtAttCharDeclar_t *p = (BtAttCharDeclar_t*)pEntry->Data;
+					//len = pEntry->DataLen;
+					//memcpy(pBuff, pEntry->Data, len);
+					pBuff[0] = p->pChar->Property;
+					pBuff[1] = p->pChar->ValHdl & 0xFF;
+					pBuff[2] = (p->pChar->ValHdl >> 8)& 0xFF;
+
+					BtUuidVal_t *u = (BtUuidVal_t*)&pBuff[3];
+					if (p->Uuid.BaseIdx > 0)
+					{
+						BtUuidGetBase(p->Uuid.BaseIdx, u->Uuid128);
+
+						u->Uuid128[12] = p->Uuid.Uuid16 & 0xFF;
+						u->Uuid128[13] = p->Uuid.Uuid16 >> 8;
+
+						len = 19;
+					}
+					else
+					{
+						u->Uuid16 = p->Uuid.Uuid16;
+						len = 5;
+					}
+				}
+				break;
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+				break;
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+//				if (pEntry->pVal)
+				{
+					BtDescCharUserDesc_t *p = (BtDescCharUserDesc_t*)pEntry->Data;
+					strcpy((char*)pBuff, p->pChar->pDesc);
+					len = strlen((char*)pBuff);
+				}
+				break;
+			case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+				{
+					BtDescClientCharConfig_t *d = (BtDescClientCharConfig_t*)pEntry->Data;
+
+					*(uint16_t*)pBuff = d->CccVal;
+					len = 2;
+				}
+				break;
+			case BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+				break;
+			default:
+				{
+					BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
+
+					size_t l = min(p->pChar->ValueLen - Offset, BtAttGetMtu());
+					memcpy(pBuff, p->Data + Offset, l);
+					len = l;
+				}
+
+		}
+	}
+	else
+	{
+		BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
+
+		size_t l = min(p->pChar->ValueLen - Offset, BtAttGetMtu());
+		memcpy(pBuff, p->Data + Offset, l);
+		len = l;
+	}
+
+	return len;
+}
+
+//size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
+size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, uint16_t Len)
+{
+	size_t len = 0;
+	//BtAttDBEntry_t *entry = BtAttDBFindHandle(Hdl);//&s_BtGattEntryTbl[Hdl - 1];
+
+	if (pEntry->TypeUuid.BaseIdx == 0)
+	{
+		switch (pEntry->TypeUuid.Uuid)
+		{
+			case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
+			case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
+				break;
+			case BT_UUID_DECLARATIONS_INCLUDE:
+				break;
+			case BT_UUID_DECLARATIONS_CHARACTERISTIC:
+				break;
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+				break;
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+				break;
+			case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+				{
+					//g_Uart.printf("BT_UUID_GATT_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION\r\n");
+
+					BtDescClientCharConfig_t *p = (BtDescClientCharConfig_t*)pEntry->Data;
+
+					p->CccVal = *(uint16_t*)pData;
+					p->pChar->bNotify = p->CccVal & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION ? true: false;
+					if (p->pChar->SetNotifCB)
+					{
+						p->pChar->SetNotifCB(p->pChar, p->pChar->bNotify);
+					}
+//					g_Uart.printf("CccdHdl : %x\r\n", p->pChar->CccdHdl);
+				}
+				break;
+			case BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+				break;
+			default:
+				{
+					BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
+
+					p->pChar->ValueLen = min(Len, p->pChar->MaxDataLen);// - sizeof(BtGattCharValue_t));
+					memcpy(p->Data, pData, p->pChar->ValueLen);
+
+					if (p->pChar->WrCB)
+					{
+	//					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
+						p->pChar->WrCB(p->pChar, pData, 0, Len);
+					}
+				}
+
+		}
+	}
+	else
+	{
+		BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
+
+		p->pChar->ValueLen = min(Len,  p->pChar->MaxDataLen);//- sizeof(BtGattCharValue_t));
+		memcpy(p->Data, pData, p->pChar->ValueLen);
+
+		if (p->pChar->WrCB)
+		{
+//					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
+			p->pChar->WrCB(p->pChar, pData, 0, Len);
+		}
+	}
+
+	return len;
+}
 
 uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode, uint8_t ErrCode)
 {
@@ -341,7 +520,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					p[0] = entry->Hdl & 0xFF;
 					p[1] = entry->Hdl >> 8;
 					p +=2;
-					pRspAtt->ReadByTypeRsp.Len = s_AttReadValue(entry, 0, p, 20) + 2;
+					pRspAtt->ReadByTypeRsp.Len = BtAttReadValue(entry, 0, p, 20) + 2;
 //					g_Uart.printf("Att Val: ");
 
 //					for (int j = 0; j < rsp->Len; j++)
@@ -368,7 +547,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				if (entry)
 				{
-					retval = s_AttReadValue(entry, 0, pRspAtt->ReadRsp.Data, 20)  + 1;
+					retval = BtAttReadValue(entry, 0, pRspAtt->ReadRsp.Data, 20)  + 1;
 				}
 				else
 				{
@@ -390,7 +569,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				if (entry)
 				{
-					retval = s_AttReadValue(entry, pReqAtt->ReadBlobReq.Offset, pRspAtt->ReadBlobRsp.Data, 20) + 1;
+					retval = BtAttReadValue(entry, pReqAtt->ReadBlobReq.Offset, pRspAtt->ReadBlobRsp.Data, 20) + 1;
 				}
 				else
 				{
@@ -417,7 +596,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleReq.Hdl[i], BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 						break;
 					}
-					int l = s_AttReadValue(entry, 0, p, 20);
+					int l = BtAttReadValue(entry, 0, p, 20);
 					p += l;
 					retval += l;
 				}
@@ -465,7 +644,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					{
 //						g_Uart.printf("shdl : %x, ehdl : %x\r\n", hu->StartHdl, hu->EndHdl);
 						p += sizeof(BtAttHdlRange_t);
-						pRspAtt->ReadByGroupTypeRsp.Len = s_AttReadValue(entry, 0, p, 20);
+						pRspAtt->ReadByGroupTypeRsp.Len = BtAttReadValue(entry, 0, p, 20);
 /*
 						g_Uart.printf("Val Len : %d\r\n", pRspAtt->ReadByGroupTypeRsp.Len);
 						for (int i=0; i< pRspAtt->ReadByGroupTypeRsp.Len; i++)
@@ -531,7 +710,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				//BtAttWriteRsp_t *rsp = (BtAttWriteRsp_t*)&l2pdu->Att;
 					size_t l = ReqLen;
 
-					l = s_AttWriteValue(entry, 0, req->Data, l);
+					l = BtAttWriteValue(entry, 0, req->Data, l);
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 
@@ -557,7 +736,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				{
 					size_t l = ReqLen;
 
-					l = s_AttWriteValue(entry, 0, req->Data, l - 3);
+					l = BtAttWriteValue(entry, 0, req->Data, l - 3);
 
 					retval = 0;
 				}

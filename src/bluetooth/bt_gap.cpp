@@ -197,7 +197,7 @@ __attribute__((weak)) void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
 	BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
 //	BtGattSrvcAdd(pSrvc, &s_BtGapSrvcCfg);
 
-	BtAttSetHandler(BtGattReadAttValue, BtGattWriteAttValue);
+	//BtAttSetHandler(BtGattReadAttValue, BtGattWriteAttValue);
 	//BtGattPreferedConnParams_t connparm = {
 //		USEC_TO_1250(7500), MSEC_TO_1_25(40), 0, 400
 //	};
