@@ -57,8 +57,8 @@ SOFTWARE.
 #define BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP				9		//!< Length, attribute data list
 #define BT_ATT_OPCODE_ATT_READ_REQ						0xA		//!< Attribute handle
 #define BT_ATT_OPCODE_ATT_READ_RSP						0xB		//!< Attribute value
-#define BT_ATT_OPCODE_ATT_READ_REQ_BLOB_REQ				0xC		//!< Attribute handle
-#define BT_ATT_OPCODE_ATT_READ_REQ_BLOB_RSP				0xD		//!< Part attribute value
+#define BT_ATT_OPCODE_ATT_READ_BLOB_REQ					0xC		//!< Attribute handle
+#define BT_ATT_OPCODE_ATT_READ_BLOB_RSP					0xD		//!< Part attribute value
 #define BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ				0xE		//!< Handle set
 #define BT_ATT_OPCODE_ATT_READ_MULTIPLE_RSP				0xF		//!< Value set
 #define BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ		0x10	//!< Start handle, End handle, UUID

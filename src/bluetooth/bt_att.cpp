@@ -594,11 +594,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				}
 			}
 			break;
-		case BT_ATT_OPCODE_ATT_READ_REQ_BLOB_REQ:
+		case BT_ATT_OPCODE_ATT_READ_BLOB_REQ:
 			{
 				//g_Uart.printf("BT_ATT_OPCODE_ATT_READ_REQ_BLOB_REQ:\r\n");
 
-				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_REQ_BLOB_RSP;
+				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_BLOB_RSP;
 				BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->ReadBlobReq.Hdl);
 
 				if (entry)
@@ -607,7 +607,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				}
 				else
 				{
-					retval = BtAttError(pRspAtt, pReqAtt->ReadBlobReq.Hdl, BT_ATT_OPCODE_ATT_READ_REQ_BLOB_REQ, BT_ATT_ERROR_INVALID_HANDLE);
+					retval = BtAttError(pRspAtt, pReqAtt->ReadBlobReq.Hdl, BT_ATT_OPCODE_ATT_READ_BLOB_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 				}
 			}
 			break;
