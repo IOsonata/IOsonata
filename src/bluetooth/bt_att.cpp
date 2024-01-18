@@ -713,6 +713,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				}
 			}
 			break;
+
 		case BT_ATT_OPCODE_ATT_WRITE_REQ:	// Write With Response
 			{
 				BtAttWriteReq_t *req = (BtAttWriteReq_t*)&pReqAtt->WriteReq;
@@ -763,6 +764,39 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:
 			break;
 		case BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ:
+			{
+				//g_Uart.printf("BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ\r\n");
+				uint16_t *hdl = pReqAtt->ReadMultipleVarReq.Hdl;
+				uint8_t *p = pRspAtt->ReadMultipleVarRsp.Data;
+				int l = 0;
+
+				while (ReqLen > 0 && (s_AttMtu - l) >= BT_ATT_MTU_MIN)
+				{
+					BtAttDBEntry_t *entry = BtAttDBFindHandle(*hdl);
+
+					if (entry == nullptr)
+					{
+						break;
+					}
+
+					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP;
+					uint16_t n = BtAttReadValue(entry, 0, p + 2, s_AttMtu - l - 2);
+					p[0] = n & 0xFF;
+					p[1] = n >> 8;
+					p += n + 2;
+					l += n + 2;
+					hdl++;
+					ReqLen -= 2;
+				}
+				if (l > 0)
+				{
+					retval = l + 1;
+				}
+				else
+				{
+					retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleVarReq.Hdl[0], BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
+				}
+			}
 			break;
 		case BT_ATT_OPCODE_ATT_MULTIPLE_HANDLE_VALUE_NTF:
 			break;
@@ -771,6 +805,9 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		case BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND:
 			break;
 		case BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM:
+			{
+				//g_Uart.printf("BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM:\r\n");
+			}
 			break;
 		case BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD:
 			break;

@@ -992,7 +992,7 @@ bool BtUuid16To128(BtUuid16_t * const pUuid, uint8_t Uuid128[16]);
  *
  * @return	true - success
  */
-bool BtUuid32To128(BtUuid16_t * const pUuid, uint8_t Uuid128[16]);
+bool BtUuid32To128(BtUuid32_t * const pUuid, uint8_t Uuid128[16]);
 
 #ifdef __cplusplus
 }

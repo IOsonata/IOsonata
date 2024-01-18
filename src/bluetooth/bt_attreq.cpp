@@ -65,3 +65,91 @@ bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint1
 //	BtHciSendAtt(BtAttReqRsp_t req, 2);
 	return true;
 }
+
+bool BtAttFindInformationRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl)
+{
+	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+	acl->Hdr.ConnHdl = ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ;
+	l2pdu->Att.FindInfoReq.StartHdl = StartHdl;
+	l2pdu->Att.FindInfoReq.EndHdl = EndHdl;
+	l2pdu->Hdr.Len = sizeof(BtAttFindInfoReq_t) + 1;
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+
+	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+
+	g_Uart.printf("BtAttFindInformationRequest : %d, %d\r\n", StartHdl, EndHdl);
+
+//	BtHciSendAtt(BtAttReqRsp_t req, 2);
+	return true;
+}
+
+bool BtAttFindByTypeValueRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, uint16_t AttType, uint8_t *pAttVal, size_t ValLen)
+{
+	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+	acl->Hdr.ConnHdl = ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ;
+	l2pdu->Att.FindByTypeValueReq.StartHdl = StartHdl;
+	l2pdu->Att.FindByTypeValueReq.EndHdl = EndHdl;
+	l2pdu->Att.FindByTypeValueReq.Type = AttType;
+	memcpy(l2pdu->Att.FindByTypeValueReq.Val, pAttVal, ValLen);
+	l2pdu->Hdr.Len = sizeof(BtAttFindByTypeValueReq_t) + ValLen;
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+
+	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+
+	g_Uart.printf("BtAttFindByTypeValueRequest : %d, %d %d\r\n", StartHdl, EndHdl, AttType);
+
+	return true;
+}
+
+bool BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid)
+{
+	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+	acl->Hdr.ConnHdl = ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ;
+	l2pdu->Att.ReadByTypeReq.StartHdl = StartHdl;
+	l2pdu->Att.ReadByTypeReq.EndHdl = EndHdl;
+	l2pdu->Hdr.Len = 5;
+	if (pUuid->BaseIdx > 0)
+	{
+		BtUuidTo128(pUuid, l2pdu->Att.ReadByTypeReq.Uuid.Uuid128);
+		l2pdu->Hdr.Len += 16;
+	}
+	else
+	{
+		l2pdu->Att.ReadByTypeReq.Uuid.Uuid16 = pUuid->Uuid16;
+		l2pdu->Hdr.Len + 2;
+	}
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+
+	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+
+	g_Uart.printf("BtAttReadByTypeRequest : %d, %d %d\r\n", StartHdl, EndHdl, pUuid->BaseIdx);
+
+	return true;
+}
