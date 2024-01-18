@@ -523,7 +523,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					p[0] = entry->Hdl & 0xFF;
 					p[1] = entry->Hdl >> 8;
 					p +=2;
-					pRspAtt->ReadByTypeRsp.Len = BtAttReadValue(entry, 0, p, 20) + 2;
+					pRspAtt->ReadByTypeRsp.Len = BtAttReadValue(entry, 0, p, s_AttMtu - 2) + 2;
 
 					retval = 2 + pRspAtt->ReadByTypeRsp.Len;//rsp->Len * c;
 					break;
@@ -546,7 +546,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					p[1] = entry->Hdl >> 8;
 					p +=2;
 
-					int cnt = BtAttReadValue(entry, 0, p, s_AttMtu) + 2;
+					int cnt = BtAttReadValue(entry, 0, p, s_AttMtu - l) + 2;
 					if (pRspAtt->ReadByTypeRsp.Len == 0)
 					{
 						pRspAtt->ReadByTypeRsp.Len = cnt;
@@ -587,7 +587,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				if (entry)
 				{
-					retval = BtAttReadValue(entry, 0, pRspAtt->ReadRsp.Data, s_AttMtu)  + 1;
+					retval = BtAttReadValue(entry, 0, pRspAtt->ReadRsp.Data, s_AttMtu - 1)  + 1;
 				}
 				else
 				{
@@ -604,7 +604,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				if (entry)
 				{
-					retval = BtAttReadValue(entry, pReqAtt->ReadBlobReq.Offset, pRspAtt->ReadBlobRsp.Data, s_AttMtu) + 1;
+					retval = BtAttReadValue(entry, pReqAtt->ReadBlobReq.Offset, pRspAtt->ReadBlobRsp.Data, s_AttMtu - 1) + 1;
 				}
 				else
 				{
@@ -677,7 +677,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					{
 						p += sizeof(BtAttHdlRange_t);
 
-						int cnt = BtAttReadValue(entry, 0, p, s_AttMtu);
+						int cnt = BtAttReadValue(entry, 0, p, s_AttMtu - l - sizeof(BtAttHdlRange_t));
 
 						if (pRspAtt->ReadByGroupTypeRsp.Len == 0)
 						{
