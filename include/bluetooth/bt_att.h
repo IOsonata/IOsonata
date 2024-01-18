@@ -37,8 +37,10 @@ SOFTWARE.
 #define __BT_ATT_H__
 
 #include <inttypes.h>
+#include <stddef.h>
 
 #include "bluetooth/bt_uuid.h"
+#include "bluetooth/bt_hci.h"
 
 #define BT_ATT_OPCODE_FLAG_COMMAND						(1<<6)
 #define BT_ATT_OPCODE_FLAG_AUTH_SIGNATURE				(1<<7)
@@ -571,6 +573,8 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
 uint16_t BtAttSetMtu(uint16_t MaxMtu);
 uint16_t BtAttGetMtu();
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pInAtt, int ReqLen, BtAttReqRsp_t * const pOutAtt);
+
+bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Mtu);
 
 #ifdef __cplusplus
 }

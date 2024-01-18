@@ -728,7 +728,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 static inline int BtHciSendData(BtHciDevice_t * const pDev, void * const pData, int Len) {
 	return pDev->SendData(pData, Len);
 }
-void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
+//void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
 
 
 #ifdef __cplusplus

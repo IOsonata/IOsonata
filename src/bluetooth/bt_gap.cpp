@@ -190,11 +190,11 @@ __attribute__((weak)) void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t 
 {
 	BtGattCharSetValue(&s_BtGapChar[2], pVal, sizeof(BtGattPreferedConnParams_t));
 }
-
+#if 0
 __attribute__((weak)) void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
 {
-	BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
-	BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
+	//BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
+	//BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
 //	BtGattSrvcAdd(pSrvc, &s_BtGapSrvcCfg);
 
 	//BtAttSetHandler(BtGattReadAttValue, BtGattWriteAttValue);
@@ -204,6 +204,7 @@ __attribute__((weak)) void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
 
 //	BtGattCharSetValue(&s_BtGapChar[2], &connparm, sizeof(BtGattPreferedConnParams_t));
 }
+#endif
 #endif
 
 __attribute__((weak)) void BtGapParamInit(const BtGapCfg_t *pCfg)

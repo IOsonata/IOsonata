@@ -277,6 +277,9 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 //	s_BtGattSrvc.ConnHdl = ConnHdl;
 
 	BtAppEvtConnected(ConnHdl);
+
+	BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
+
 }
 
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
@@ -1051,9 +1054,21 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	BtGapCfg_t gapcfg = {
+		.Role = pCfg->Role,
+		.SecType = pCfg->SecType,
+		.AdvInterval = pCfg->AdvInterval,
+		.AdvTimeout = pCfg->AdvTimeout,
+		.ConnIntervalMin = pCfg->ConnIntervalMin,
+		.ConnIntervalMax = pCfg->ConnIntervalMax,
+		.SlaveLatency = 0,
+		.SupTimeout = 400
+	};
+
+	BtGapInit(&gapcfg);
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
-		BtGapServiceInit();//&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
+		//BtGapServiceInit();//&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
 		BtAppInitUserServices();
 
 		BtGapSetAppearance(pCfg->Appearance);
