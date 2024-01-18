@@ -41,9 +41,8 @@ SOFTWARE.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
-//#include "bluetooth/bt_gatt.h"
-//#include "coredev/uart.h"
 
+//#include "coredev/uart.h"
 //extern UART g_Uart;
 
 /// Default Attribute database mem size
@@ -206,7 +205,7 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 
 	if (pEntry->TypeUuid.BaseIdx == 0)
 	{
-		//g_Uart.printf("BtAttReadValue : %x\r\n", pEntry->TypeUuid.Uuid);
+		//g_Uart.printf("BtAttReadValue : %x, %d\r\n", pEntry->TypeUuid.Uuid, Len);
 
 		switch (pEntry->TypeUuid.Uuid)
 		{
@@ -534,7 +533,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				int l = 0;
 				pRspAtt->ReadByTypeRsp.Len = 0;
 
-				while (entry && l < s_AttMtu)
+				while (entry && (s_AttMtu - l) >= BT_ATT_MTU_MIN)
 				{
 
 					if (entry->Hdl < req->StartHdl || entry->Hdl > req->EndHdl)
@@ -546,7 +545,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					p[1] = entry->Hdl >> 8;
 					p +=2;
 
-					int cnt = BtAttReadValue(entry, 0, p, s_AttMtu - l) + 2;
+					int cnt = BtAttReadValue(entry, 0, p, s_AttMtu - l - 2) + 2;
 					if (pRspAtt->ReadByTypeRsp.Len == 0)
 					{
 						pRspAtt->ReadByTypeRsp.Len = cnt;
@@ -623,7 +622,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				int nhdl = (ReqLen - 1) >> 1;
 				uint8_t *p = pRspAtt->ReadMultipleRsp.Data;
 				retval = 1;
-				for (int i = 0; i < nhdl && retval < 20; i++)
+				for (int i = 0; i < nhdl && (s_AttMtu - retval) < BT_ATT_MTU_MIN; i++)
 				{
 					BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->ReadMultipleReq.Hdl[i]);
 					if (entry == nullptr)
@@ -671,7 +670,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				pRspAtt->ReadByGroupTypeRsp.Len = 0;
 
-				while (entry && l < s_AttMtu)
+				while (entry && (s_AttMtu - l) >= BT_ATT_MTU_MIN)
 				{
 					if (entry->Hdl >= req->StartHdl && entry->Hdl <= req->EndHdl && baseidx == entry->TypeUuid.BaseIdx)
 					{
