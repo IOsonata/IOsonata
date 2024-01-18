@@ -159,12 +159,13 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 	// Add base UUID to internal list.
 	if (pCfg->bCustom)
 	{
-		pSrvc->Uuid.BaseIdx = BtUuidAddBase(pCfg->UuidBase);
+		baseidx = BtUuidAddBase(pCfg->UuidBase);
 	}
-	pSrvc->Uuid.Type = BT_UUID_TYPE_16;
-	pSrvc->Uuid.Uuid16 = pCfg->UuidSrvc;
+
+	pSrvc->Uuid = { baseidx, BT_UUID_TYPE_16, pCfg->UuidSrvc };
 
 	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_PRIMARY_SERVICE };
+
 	int l = sizeof(BtAttSrvcDeclar_t);// + (pCfg->NbChar - 1) * sizeof(BtAttDBEntry_t*);
 
 	BtAttDBEntry_t *srvcentry = BtAttDBAddEntry(&typeuuid, l);
@@ -204,8 +205,9 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
     	BtAttCharDeclar_t *chardec = (BtAttCharDeclar_t*)entry->Data;
 
     	//chardec->Prop = (uint8_t)c->Property;
-    	chardec->Uuid = {c->BaseUuidIdx, BT_UUID_TYPE_16, c->Uuid};
+    	chardec->Uuid = {baseidx, BT_UUID_TYPE_16, c->Uuid};
     	chardec->pChar = c;
+
 
 /*		if (c->BaseUuidIdx > 0)
 		{
@@ -230,7 +232,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
     	c->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
 
     	// Characteristic value
-    	typeuuid = {c->BaseUuidIdx, BT_UUID_TYPE_16, c->Uuid };
+    	typeuuid = {baseidx, BT_UUID_TYPE_16, c->Uuid };
     	entry = BtAttDBAddEntry(&typeuuid, c->MaxDataLen + sizeof(BtAttCharValue_t));
     	if (entry == nullptr)
     	{
