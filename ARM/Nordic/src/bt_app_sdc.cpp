@@ -906,6 +906,11 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	if (pCfg->AttDBMemSize > 0)
+	{
+		BtAttDBInit(pCfg->AttDBMemSize);
+	}
+
     return true;
 }
 
