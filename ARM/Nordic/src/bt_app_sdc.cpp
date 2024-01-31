@@ -518,37 +518,30 @@ static uint8_t BtStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
 
 static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 {
-#if defined(NRF5340_XXAA)
-	NRF_RNG_NS->CONFIG = RNG_CONFIG_DERCEN_Enabled;
-
-	NRF_RNG_NS->TASKS_START = 1;
-
-	for (int i = 0; i < Len; i++)
-	{
-		while (NRF_RNG_NS->EVENTS_VALRDY == 0);
-
-		pBuff[i] = NRF_RNG_NS->VALUE;
-	}
-
-	NRF_RNG_NS->TASKS_STOP = 1;
-
-	NRF_RNG_NS->CONFIG = RNG_CONFIG_DERCEN_Disabled;
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+#ifdef NRF5340_XXAA_NETWORK
+	NRF_RNG_Type *reg = NRF_RNG_NS;
 #else
-	NRF_RNG->CONFIG = RNG_CONFIG_DERCEN_Enabled;
+	NRF_RNG_Type *reg = NRF_RNG_S;
+#endif
+#else
+	NRF_RNG_Type *reg = NRF_RNG;
+#endif
 
-	NRF_RNG->TASKS_START = 1;
+	reg->CONFIG = RNG_CONFIG_DERCEN_Enabled;
+
+	reg->TASKS_START = 1;
 
 	for (int i = 0; i < Len; i++)
 	{
-		while (NRF_RNG->EVENTS_VALRDY == 0);
+		while (reg->EVENTS_VALRDY == 0);
 
-		pBuff[i] = NRF_RNG->VALUE;
+		pBuff[i] = reg->VALUE;
 	}
 
-	NRF_RNG->TASKS_STOP = 1;
+	reg->TASKS_STOP = 1;
 
-	NRF_RNG->CONFIG = RNG_CONFIG_DERCEN_Disabled;
-#endif
+	reg->CONFIG = RNG_CONFIG_DERCEN_Disabled;
 }
 
 bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
