@@ -186,14 +186,79 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_nRF5340_Net.c</locationURI>
 		</link>
 		<link>
+			<name>src/app_evt_handler.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/base64.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/base64.c</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/cfifo.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/cfifo.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/crc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crc.c</locationURI>
+		</link>
+		<link>
+			<name>src/device.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/device.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/device_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/prbs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/prbs.c</locationURI>
+		</link>
+		<link>
+			<name>src/sbuffer.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sbuffer.c</locationURI>
+		</link>
+		<link>
+			<name>src/slip_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/slip_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/stddev.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/stddev.c</locationURI>
+		</link>
+		<link>
 			<name>src/system_nrf5340_network.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/system_nrf5340_network.c</locationURI>
+		</link>
+		<link>
+			<name>src/utf8.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/utf8.c</locationURI>
+		</link>
+		<link>
+			<name>src/utf8cvt.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/utf8cvt.cpp</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bleadv_mandata.h</name>
@@ -249,6 +314,66 @@
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_adv.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_handler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_app_sdc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_att.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_attreq.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attreq.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gap.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gatt.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gatt.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gatt_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gatt_sdc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_uuid.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/i2c.cpp</name>

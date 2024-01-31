@@ -30,6 +30,8 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf53.h"
 #include "system_nrf53_approtect.h"
 
+#include "coredev/system_core_clock.h"
+
 /*lint ++flb "Enter library region" */
 
 
@@ -40,6 +42,13 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #elif defined ( __ICCARM__ )
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 #endif
+
+// Overload this variable in application firmware to change oscillator
+__WEAK McuOsc_t g_McuOsc = {
+	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20 },
+	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20 },
+	.bUSBClk = false
+};
 
 void SystemCoreClockUpdate(void)
 {

@@ -518,6 +518,22 @@ static uint8_t BtStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
 
 static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 {
+#if defined(NRF5340_XXAA)
+	NRF_RNG_NS->CONFIG = RNG_CONFIG_DERCEN_Enabled;
+
+	NRF_RNG_NS->TASKS_START = 1;
+
+	for (int i = 0; i < Len; i++)
+	{
+		while (NRF_RNG_NS->EVENTS_VALRDY == 0);
+
+		pBuff[i] = NRF_RNG_NS->VALUE;
+	}
+
+	NRF_RNG_NS->TASKS_STOP = 1;
+
+	NRF_RNG_NS->CONFIG = RNG_CONFIG_DERCEN_Disabled;
+#else
 	NRF_RNG->CONFIG = RNG_CONFIG_DERCEN_Enabled;
 
 	NRF_RNG->TASKS_START = 1;
@@ -532,6 +548,7 @@ static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 	NRF_RNG->TASKS_STOP = 1;
 
 	NRF_RNG->CONFIG = RNG_CONFIG_DERCEN_Disabled;
+#endif
 }
 
 bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
@@ -1219,9 +1236,11 @@ void BtAppScanStop()
 		s_BtAppData.bScan = false;
 	}
 }
-#if 0
-bool BtAppScanInit(BtAppScanCfg_t *pCfg)
+#if 1
+bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 {
+	sdc_hci_cmd_le_set_scan_params_t paraam;
+
 	return false;
 #if 0
 	if (pCfg == NULL)
