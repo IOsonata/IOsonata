@@ -34,12 +34,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <memory.h>
+
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 
-#include "coredev/uart.h"
+//#include "coredev/uart.h"
 
-extern UART g_Uart;
+//extern UART g_Uart;
 
 bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Mtu)
 {
@@ -60,7 +62,7 @@ bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint1
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	g_Uart.printf("BtAttExchangeMtuRequest : %d, %d\r\n", n, Mtu);
+	//g_Uart.printf("BtAttExchangeMtuRequest : %d, %d\r\n", n, Mtu);
 
 //	BtHciSendAtt(BtAttReqRsp_t req, 2);
 	return true;
@@ -86,7 +88,7 @@ bool BtAttFindInformationRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	g_Uart.printf("BtAttFindInformationRequest : %d, %d\r\n", StartHdl, EndHdl);
+	//g_Uart.printf("BtAttFindInformationRequest : %d, %d\r\n", StartHdl, EndHdl);
 
 //	BtHciSendAtt(BtAttReqRsp_t req, 2);
 	return true;
@@ -114,7 +116,7 @@ bool BtAttFindByTypeValueRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	g_Uart.printf("BtAttFindByTypeValueRequest : %d, %d %d\r\n", StartHdl, EndHdl, AttType);
+	//g_Uart.printf("BtAttFindByTypeValueRequest : %d, %d %d\r\n", StartHdl, EndHdl, AttType);
 
 	return true;
 }
@@ -157,7 +159,7 @@ bool BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	g_Uart.printf("BtAttReadByTypeRequest : %d, %d %d\r\n", StartHdl, EndHdl, pUuid->BaseIdx);
+	//g_Uart.printf("BtAttReadByTypeRequest : %d, %d %d\r\n", StartHdl, EndHdl, pUuid->BaseIdx);
 
 	return true;
 }
@@ -181,7 +183,7 @@ bool BtAttReadRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	g_Uart.printf("BtAttReadRequest : %d\r\n", Hdl);
+	//g_Uart.printf("BtAttReadRequest : %d\r\n", Hdl);
 
 	return true;
 }
@@ -206,7 +208,7 @@ bool BtAttReadBlobRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	g_Uart.printf("BtAttReadBlobRequest : %d %x\r\n", Hdl, Offset);
+	//g_Uart.printf("BtAttReadBlobRequest : %d %x\r\n", Hdl, Offset);
 
 	return true;
 }
@@ -230,7 +232,7 @@ bool BtAttReadMultipleRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	g_Uart.printf("BtAttReadMultipleRequest : %x %d\r\n", pHdl[0], NbHdl);
+	//g_Uart.printf("BtAttReadMultipleRequest : %x %d\r\n", pHdl[0], NbHdl);
 
 	return true;
 }

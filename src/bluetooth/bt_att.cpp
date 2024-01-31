@@ -660,7 +660,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				BtAttDBEntry_t *entry = BtAttDBFindHdlRange(&uid16, &hu->StartHdl, &hu->EndHdl);
 
-				int baseidx = entry->TypeUuid.BaseIdx;
+				int baseidx = 0;// = entry->TypeUuid.BaseIdx;
 
 				if (entry)
 				{

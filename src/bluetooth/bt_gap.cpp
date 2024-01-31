@@ -83,6 +83,11 @@ static BtGattChar_t s_BtGapChar[] = {
 		.TxCompleteCB = NULL,				// Tx completed callback
 		//.pValue = s_BtGapCharDevName,
 		//.ValueLen = 0,
+		.Hdl = BT_ATT_HANDLE_INVALID,
+		.ValHdl = BT_ATT_HANDLE_INVALID,
+		.DescHdl = BT_ATT_HANDLE_INVALID,
+		.CccdHdl = BT_ATT_HANDLE_INVALID,
+		.SccdHdl = BT_ATT_HANDLE_INVALID,
 	},
 	{
 		// Appearance characteristic
@@ -95,6 +100,11 @@ static BtGattChar_t s_BtGapChar[] = {
 		.TxCompleteCB = NULL,				// Tx completed callback
 		//.pValue = &s_BtGapCharApperance,
 		//.ValueLen = 2,
+		.Hdl = BT_ATT_HANDLE_INVALID,
+		.ValHdl = BT_ATT_HANDLE_INVALID,
+		.DescHdl = BT_ATT_HANDLE_INVALID,
+		.CccdHdl = BT_ATT_HANDLE_INVALID,
+		.SccdHdl = BT_ATT_HANDLE_INVALID,
 	},
 	{
 		// Prefered connection parameter characteristic
@@ -107,6 +117,11 @@ static BtGattChar_t s_BtGapChar[] = {
 		.TxCompleteCB = NULL,				// Tx completed callback
 //		.pValue = &s_BtGapCharPerferedConnParams,
 //		.ValueLen = sizeof(BtGattPreferedConnParams_t),
+		.Hdl = BT_ATT_HANDLE_INVALID,
+		.ValHdl = BT_ATT_HANDLE_INVALID,
+		.DescHdl = BT_ATT_HANDLE_INVALID,
+		.CccdHdl = BT_ATT_HANDLE_INVALID,
+		.SccdHdl = BT_ATT_HANDLE_INVALID,
 	},
 };
 
@@ -135,6 +150,11 @@ static BtGattChar_t s_BtGattChar[] = {
 		.TxCompleteCB = NULL,				// Tx completed callback
 		//.pValue = &s_BtGattCharSrvcChanged,
 		//.ValueLen = 0,
+		.Hdl = BT_ATT_HANDLE_INVALID,
+		.ValHdl = BT_ATT_HANDLE_INVALID,
+		.DescHdl = BT_ATT_HANDLE_INVALID,
+		.CccdHdl = BT_ATT_HANDLE_INVALID,
+		.SccdHdl = BT_ATT_HANDLE_INVALID,
 	},
 };
 
@@ -173,6 +193,7 @@ __attribute__((weak)) void BtGapSetDevName(const char *pName)
 	}
 
 	// Update name in GAP characteristic
+
 	BtGattCharSetValue(&s_BtGapChar[0], (void*)pName, strlen(pName));
 }
 
@@ -302,3 +323,4 @@ void BtGapDeleteConnection(uint16_t Hdl)
 		BtGattSrvcDisconnected(&s_BtGattSrvc);
 	}
 }
+
