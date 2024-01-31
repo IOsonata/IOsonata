@@ -1109,7 +1109,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 #ifdef UARTE_PRESENT
 
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-		//SetSharedIntHandler(pCfg->DevNo, &pDev->DevIntrf, UartIrqHandler);
+    	//SharedIntrfSetIrqHandler(pCfg->DevNo, &pDev->DevIntrf, SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler);
+		SharedIntrfSetIrqHandler(pCfg->DevNo, &pDev->DevIntrf, UartIrqHandler);
 #endif
 
 		if (pDev->DevIntrf.bDma == true)

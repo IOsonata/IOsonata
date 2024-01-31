@@ -40,6 +40,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);
+extern void Reset_Handler(void);
+extern char Image$$ER_ZI$$Base[];
+extern char Image$$ARM_LIB_STACK$$ZI$$Base[];
 
 void DEF_IRQHandler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
@@ -63,7 +66,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void AAR_CCM_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void TEMP_IRQHandler(void);
 __attribute__((weak, /*alias("DEF_IRQHandler")*/)) void RTC0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void IPC_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void EGU0_IRQHandler(void);
 __attribute__((weak, /*alias("DEF_IRQHandler")*/)) void RTC1_IRQHandler(void);
 __attribute__((weak, /*alias("DEF_IRQHandler")*/)) void TIMER1_IRQHandler(void);
@@ -122,7 +125,7 @@ void (* const __Vectors[100])(void) = {
 	TEMP_IRQHandler,
 	RTC0_IRQHandler,
 	IPC_IRQHandler,
-	SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler,
+	SERIAL0_IRQHandler,
 	EGU0_IRQHandler,
 	0,
 	RTC1_IRQHandler,
