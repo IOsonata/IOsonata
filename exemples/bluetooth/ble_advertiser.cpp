@@ -48,6 +48,8 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 
+#include "board.h"
+
 // Uncomment this to set custom board oscillator
 // Default library setting is :
 // #define MCUOSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
@@ -56,7 +58,7 @@ SOFTWARE.
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
-#define EXTADV		// Uncomment to enable extended advertisement
+//#define EXTADV		// Uncomment to enable extended advertisement
 
 #ifdef EXTADV
 #define DEVICE_NAME                     "Advertising extra long long name"
@@ -94,7 +96,7 @@ const BtAppCfg_t s_BtAppCfg = {
 };
 
 static const TimerCfg_t s_TimerCfg = {
-	.DevNo = 2,
+	.DevNo = TIMER_DEVNO,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,
 	.IntPrio = 6,
