@@ -45,7 +45,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/iopincfg.h"
 
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+#define IOPIN_MAX_INT			(GPIOTE20_GPIOTE_NCHANNELS_SIZE + GPIOTE30_GPIOTE_NCHANNELS_SIZE)
+#else
+#ifndef GPIOTE_CH_NUM
+#define GPIOTE_CH_NUM	8
+#endif
+
 #define IOPIN_MAX_INT			(GPIOTE_CH_NUM)
+#endif
 
 #pragma pack(push, 4)
 typedef struct {
@@ -57,6 +65,86 @@ typedef struct {
 #pragma pack(pop)
 
 __ALIGN(4) static PinSenseEvtHook_t s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
+
+NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
+{
+	NRF_GPIO_Type *reg = NULL;
+
+	if (PortNo == -1 || PortNo >= GPIO_COUNT)
+		return NULL;
+
+	switch (PortNo)
+	{
+		case 0:
+#if defined(NRF51) || defined(NRF52_SERIES)
+			reg = NRF_GPIO;
+#elif defined(NRF5340_XXAA_NETWORK)
+			reg = NRF_P0_NS;
+#else
+			if (PortNo & 0x80)
+			{
+				reg = NRF_P0_NS;
+			}
+			else
+			{
+				reg = NRF_P0_S;
+			}
+#endif
+			break;
+#if GPIO_COUNT > 1
+		case 1:
+#if defined(NRF52840_XXAA)
+			reg = NRF_P1;
+#elif defined(NRF5340_XXAA_NETWORK)
+			reg = NRF_P1_NS;
+#else
+			if (PortNo & 0x80)
+			{
+				reg = NRF_P1_NS;
+			}
+			else
+			{
+				reg = NRF_P1_S;
+			}
+#endif
+			break;
+#endif
+#if GPIO_COUNT > 2
+		case 2:
+#if defined(NRF5340_XXAA_NETWORK)
+			reg = NRF_P2_NS;
+#else
+			if (PortNo & 0x80)
+			{
+				reg = NRF_P2_NS;
+			}
+			else
+			{
+				reg = NRF_P2_S;
+			}
+#endif
+			break;
+#endif
+#if GPIO_COUNT > 3
+		case 3:
+#if defined(NRF54H20_XXAA_NETWORK)
+			reg = NRF_P3_NS;
+#else
+			if (PortNo & 0x80)
+			{
+				reg = NRF_P3_NS;
+			}
+			else
+			{
+				reg = NRF_P3_S;
+			}
+#endif
+			break;
+#endif
+	}
+
+	return reg;
+}
 
 /**
  * @brief Configure individual I/O pin. nRF51 only have 1 port so PortNo is not used
@@ -74,33 +162,12 @@ __ALIGN(4) static PinSenseEvtHook_t s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NU
 void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
 	uint32_t cnf = 0;
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_GPIO_Type *reg = NRF_P0_NS;
-#else
-	NRF_GPIO_Type *reg = NRF_P0_S;
-
-	if (PortNo & 0x80)
+	if (reg == NULL || PinNo == -1)
 	{
-		// non-secure access
-		reg = NRF_P0_NS;
-	}
-#endif
-#else
-	NRF_GPIO_Type *reg = NRF_GPIO;
-
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		reg = NRF_P1;
-	}
-
-#endif
-#endif
-
-	if (PortNo == -1 || PinNo == -1)
 		return;
+	}
 
 	if (Dir == IOPINDIR_OUTPUT)
 	{
@@ -129,7 +196,11 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 
 	if (Type == IOPINTYPE_OPENDRAIN)
 	{
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+		cnf |= (GPIO_PIN_CNF_DRIVE0_S0 << GPIO_PIN_CNF_DRIVE0_Pos) | (GPIO_PIN_CNF_DRIVE1_D1 << GPIO_PIN_CNF_DRIVE1_Pos);
+#else
 		cnf |= (GPIO_PIN_CNF_DRIVE_S0D1 << GPIO_PIN_CNF_DRIVE_Pos);
+#endif
 	}
 
 	reg->PIN_CNF[PinNo] = cnf;
@@ -147,32 +218,12 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
  */
 void IOPinDisable(int PortNo, int PinNo)
 {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_GPIO_Type *reg = NRF_P0_NS;
-#else
-	NRF_GPIO_Type *reg = NRF_P0_S;
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-	if (PortNo & 0x80)
+	if (reg == NULL || PinNo == -1)
 	{
-		// non-secure access
-		reg = NRF_P0_NS;
-	}
-#endif
-#else
-	NRF_GPIO_Type *reg = NRF_GPIO;
-
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		reg = NRF_P1;
-	}
-
-#endif
-#endif
-
-	if (PortNo == -1 || PinNo == -1)
 		return;
+	}
 
 	reg->PIN_CNF[PinNo] = (GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos);
 }
@@ -187,9 +238,11 @@ void IOPinDisableInterrupt(int IntNo)
     if (IntNo >= IOPIN_MAX_INT)
         return;
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE_NS;
+#elif defined(NRF54L15_ENGA_XXAA)
+	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE20_S;
 #else
 	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE0_S;
     if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
@@ -209,7 +262,7 @@ void IOPinDisableInterrupt(int IntNo)
     }
     else
     {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
     	NRF_GPIO_Type *reg = NRF_P0_NS;
 #else
@@ -246,7 +299,7 @@ void IOPinDisableInterrupt(int IntNo)
             return;
     }
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_DisableIRQ(GPIOTE_IRQn);
@@ -294,7 +347,18 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     if (IntNo >= IOPIN_MAX_INT)
 		return false;
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+    NRF_GPIOTE_Type *gpiotereg = NULL;
+
+    if (PortNo == 0)
+    {
+    	gpiotereg = NRF_GPIOTE30_S;
+    }
+    else
+    {
+    	gpiotereg = NRF_GPIOTE20_S;
+    }
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
     NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE_NS;
 	NRF_GPIO_Type *reg = NRF_P0_NS;
@@ -407,7 +471,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		s_GpIOSenseEvt[IntNo].pCtx = pCtx;
 	}
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
     NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_SetPriority(GPIOTE_IRQn, IntPrio);
@@ -493,29 +557,12 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
  */
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_GPIO_Type *reg = NRF_P0_NS;
-#else
-	NRF_GPIO_Type *reg = NRF_P0_S;
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-	if (PortNo & 0x80)
+	if (reg == NULL || PinNo == -1)
 	{
-		// non-secure access
-		reg = NRF_P0_NS;
+		return;
 	}
-#endif
-#else
-	NRF_GPIO_Type *reg = NRF_GPIO;
-
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		reg = NRF_P1;
-	}
-
-#endif
-#endif
 
 	// Clear sense
 	reg->PIN_CNF[PinNo] &= ~(GPIO_PIN_CNF_SENSE_Msk << GPIO_PIN_CNF_SENSE_Pos);
@@ -548,29 +595,12 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
  */
 void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_GPIO_Type *reg = NRF_P0_NS;
-#else
-	NRF_GPIO_Type *reg = NRF_P0_S;
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-	if (PortNo & 0x80)
+	if (reg == NULL || PinNo == -1)
 	{
-		// non-secure access
-		reg = NRF_P0_NS;
+		return;
 	}
-#endif
-#else
-	NRF_GPIO_Type *reg = NRF_GPIO;
-
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		reg = NRF_P1;
-	}
-
-#endif
-#endif
 
 	uint32_t val = ((reg->PIN_CNF[PinNo] >> GPIO_PIN_CNF_DRIVE_Pos) & GPIO_PIN_CNF_DRIVE_Msk) & 6;
 	reg->PIN_CNF[PinNo] &= ~(GPIO_PIN_CNF_DRIVE_Msk << GPIO_PIN_CNF_DRIVE_Pos);
@@ -583,7 +613,7 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 	reg->PIN_CNF[PinNo] |= (val << GPIO_PIN_CNF_DRIVE_Pos);
 }
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 void __WEAK GPIOTE_IRQHandler(void)
 {
