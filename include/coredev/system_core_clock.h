@@ -62,6 +62,7 @@ typedef struct __Oscillator_Desc {
 	OSC_TYPE Type;		//!< Oscillator type RC, crystal, oscillator
 	uint32_t Freq;		//!< Frequency in Hz
 	uint32_t Accuracy;	//!< Accuracy in PPM
+	uint32_t LoadCap;	//!< Crystal's load capacitance in pF
 } OscDesc_t;
 
 ///
@@ -116,6 +117,13 @@ static inline uint32_t GetLowFreqOscFreq() { return g_McuOsc.LowPwrOsc.Freq; }
 static inline uint32_t GetLowFreqOscAcc() { return g_McuOsc.LowPwrOsc.Accuracy; }
 
 /**
+ * @brief	Get systtem low frequency crystal load capacitance
+ *
+ * @return	Capacitance value in pF
+ */
+static inline uint32_t GetLowFreqLoadCap() { return g_McuOsc.LowPwrOsc.LoadCap; }
+
+/**
  * @brief	Get system low frequency oscillator descriptor
  *
  * @return	Return pointer to oscillator descriptor
@@ -142,6 +150,13 @@ static inline uint32_t GetHighFreqOscFreq() { return g_McuOsc.CoreOsc.Freq; }
  * @return	Return oscillator accuracy in PPM
  */
 static inline uint32_t GetHighFreqOscAcc() { return g_McuOsc.CoreOsc.Accuracy; }
+
+/**
+ * @brief	Get systtem low frequency crystal load capacitance
+ *
+ * @return	Capacitance value in pF
+ */
+static inline uint32_t GetHighFreqLoadCap() { return g_McuOsc.CoreOsc.LoadCap; }
 
 /**
  * @brief	Get system core high frequency oscillator descriptor
