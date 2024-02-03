@@ -38,9 +38,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "nrf_section_iter.h"
 #include "nrf_sdh_ble.h"
 #include "ble_srv_common.h"
+#include "ble_gatt_db.h"
 
 #include "ble_app_nrf5.h"
-#include "ble_dev.h"
+#include "bluetooth/bt_dev.h"
 
 void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context);
 

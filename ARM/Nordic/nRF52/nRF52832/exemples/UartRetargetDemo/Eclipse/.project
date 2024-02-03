@@ -36,6 +36,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
+			<name>src/uart_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/uart_retarget_demo.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/uart/uart_retarget_demo.cpp</locationURI>

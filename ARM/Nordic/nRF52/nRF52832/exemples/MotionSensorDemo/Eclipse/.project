@@ -36,6 +36,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
+			<name>src/imu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/mot_sensor_demo.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/sensor/mot_sensor_demo.cpp</locationURI>
@@ -46,9 +51,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/sensors/agm_mpu9250.cpp</name>
+			<name>src/imu/imu_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_mpu9250.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/agm_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

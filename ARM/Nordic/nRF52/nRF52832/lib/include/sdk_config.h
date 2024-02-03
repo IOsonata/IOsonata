@@ -46,6 +46,11 @@
 #ifdef USE_APP_CONFIG
 #include "app_config.h"
 #endif
+
+#define CoreDebug						DCB
+#define CoreDebug_DEMCR_TRCENA_Msk		DCB_DEMCR_TRCENA_Msk
+#define CoreDebug_DHCSR_C_DEBUGEN_Msk	DCB_DHCSR_C_DEBUGEN_Msk
+
 // <h> nRF_ANT 
 
 //==========================================================
@@ -3377,6 +3382,12 @@
 #define NRFX_CLOCK_CONFIG_IRQ_PRIORITY 6
 #endif
 
+#ifndef NRFX_CLOCK_DEFAULT_CONFIG_IRQ_PRIORITY
+#define NRFX_CLOCK_DEFAULT_CONFIG_IRQ_PRIORITY NRFX_CLOCK_CONFIG_IRQ_PRIORITY
+#endif
+
+
+
 // <e> NRFX_CLOCK_CONFIG_LOG_ENABLED - Enables logging in the module.
 //==========================================================
 #ifndef NRFX_CLOCK_CONFIG_LOG_ENABLED
@@ -4163,6 +4174,10 @@
 
 #ifndef NRFX_POWER_CONFIG_IRQ_PRIORITY
 #define NRFX_POWER_CONFIG_IRQ_PRIORITY 6
+#endif
+
+#ifndef NRFX_POWER_DEFAULT_CONFIG_IRQ_PRIORITY
+#define NRFX_POWER_DEFAULT_CONFIG_IRQ_PRIORITY NRFX_POWER_CONFIG_IRQ_PRIORITY
 #endif
 
 // <q> NRFX_POWER_CONFIG_DEFAULT_DCDCEN  - The default configuration of main DCDC regulator

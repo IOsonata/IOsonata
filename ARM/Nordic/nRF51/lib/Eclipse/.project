@@ -201,6 +201,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/nrfthingy.h</locationURI>
 		</link>
 		<link>
+			<name>include/nrfx_config.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/nrfx_config.h</locationURI>
+		</link>
+		<link>
 			<name>include/prbs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/include/prbs.h</locationURI>
@@ -437,11 +442,6 @@
 		</link>
 		<link>
 			<name>src/pwrmgnt</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/rtx</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -1029,11 +1029,6 @@
 			<name>src/pwrmgnt/pm_as3701.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/pwrmgnt/pm_as3701.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/rtx/RTX_Conf_CM.c</name>
-			<type>1</type>
-			<locationURI>copy_PARENT/src/rtx/RTX_Conf_CM.c</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_adxl362.cpp</name>

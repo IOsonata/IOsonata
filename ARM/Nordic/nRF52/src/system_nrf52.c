@@ -183,7 +183,7 @@ void SystemInit(void)
         /* Workaround for Errata 32 "DIF: Debug session automatically enables TracePort pins" found at the Errata document
            for your device located at https://infocenter.nordicsemi.com/index.jsp */
         if (nrf52_errata_32()){
-            CoreDebug->DEMCR &= ~CoreDebug_DEMCR_TRCENA_Msk;
+            DCB->DEMCR &= ~DCB_DEMCR_TRCENA_Msk;
         }
     #endif
 
@@ -370,4 +370,6 @@ void SystemInit(void)
             NVIC_SystemReset();
         }
     #endif
+
+	SysTick_Config(640000);
 }

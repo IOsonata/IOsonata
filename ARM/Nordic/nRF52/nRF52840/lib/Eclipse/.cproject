@@ -69,6 +69,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -166,11 +173,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.316168204" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -220,6 +222,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -317,11 +326,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1477272557" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -380,7 +384,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -454,6 +458,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -551,11 +562,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1766650961" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -605,6 +611,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -702,11 +715,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.384332120" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -765,7 +773,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -839,6 +847,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -936,11 +951,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.40910095" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -990,6 +1000,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -1087,11 +1104,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1950306409" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -1150,7 +1162,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1223,6 +1235,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -1320,11 +1339,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1491985591" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -1374,6 +1388,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -1471,11 +1492,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.27824883" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -1534,7 +1550,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1608,6 +1624,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -1705,11 +1728,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.286247667" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -1760,6 +1778,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -1857,11 +1882,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.358439290" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -1921,7 +1941,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1994,6 +2014,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -2091,11 +2118,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1980343057" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -2146,6 +2168,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -2243,11 +2272,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/external/nrf_cc310/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.776142675" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -2307,7 +2331,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2379,6 +2403,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -2422,6 +2449,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -2547,6 +2577,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -2590,6 +2623,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>

@@ -626,11 +626,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ctlr.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_dev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_gap.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
@@ -1161,6 +1156,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_attreq.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attreq.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_dev.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_gap.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
@@ -1169,6 +1174,11 @@
 			<name>src/bluetooth/bt_gap_nrf52.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_gap_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_gap_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gap_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gatt.cpp</name>
@@ -3249,11 +3259,6 @@
 			<name>src/nRF5_SDK/nrfx/drivers/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/hal/nrf_ecb.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/hal/nrf_ecb.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/hal/nrf_nvmc.c</name>
