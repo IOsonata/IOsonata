@@ -81,7 +81,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
 //#include "ble_app_nrf5.h"
-#include "ble_dev.h"
+#include "bluetooth/bt_dev.h"
 #include "app_evt_handler.h"
 
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);

@@ -518,7 +518,10 @@ static uint8_t BtStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
 
 static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+	NRF_CRACEN_Type *reg = NRF_CRACEN_S;
+#else
+#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	NRF_RNG_Type *reg = NRF_RNG_NS;
 #else
@@ -542,6 +545,7 @@ static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 	reg->TASKS_STOP = 1;
 
 	reg->CONFIG = RNG_CONFIG_DERCEN_Disabled;
+#endif
 }
 
 bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
@@ -1140,12 +1144,13 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	BtGapSetDevName(pCfg->pDevName);
 
     //BleAppGapDeviceNameSet(pBleAppCfg->pDevName);
-
+#ifndef NRF54L15_ENGA_XXAA
 #if (__FPU_USED == 1)
     // Patch for softdevice & FreeRTOS to sleep properly when FPU is in used
     NVIC_SetPriority(FPU_IRQn, 6);
     NVIC_ClearPendingIRQ(FPU_IRQn);
     NVIC_EnableIRQ(FPU_IRQn);
+#endif
 #endif
 
     if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
