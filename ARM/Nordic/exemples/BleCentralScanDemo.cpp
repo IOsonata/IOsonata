@@ -36,18 +36,21 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#include "app_util_platform.h"
+
+#ifndef NRFXLIB_SDC
+//#include "app_util_platform.h"
 #include "app_scheduler.h"
-#include "ble_gap.h"
+//#include "ble_gap.h"
 #include "ble_advdata.h"
 #include "nrf_ble_scan.h"
+#include "ble_gatt_db.h"
+#endif
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
-//#include "ble_app_nrf5.h"
-//#include "ble_service.h"
+#include "bluetooth/bt_gap.h"
 #include "bluetooth/blueio_blesrvc.h"
-#include "ble_dev.h"
+#include "bluetooth/bt_dev.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
 #include "custom_board.h"//Does this make the LED_2 & LED_3 do not work?
@@ -55,7 +58,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "board.h"
 #include "idelay.h"
-#include "ble_gattc.h"
+//#include "ble_gattc.h"
 //#include "ble_db_discovery.h"
 //#include "ble_nus_c.h"
 //#include "nrf_sdh_ble.h"
@@ -71,8 +74,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MIN_CONN_INTERVAL       10 //MSEC_TO_UNITS(10, UNIT_1_25_MS) 		/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL       40 //MSEC_TO_UNITS(40, UNIT_1_25_MS) 		/**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
-#define SCAN_INTERVAL           MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
-#define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
+#define SCAN_INTERVAL           1000 //MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
+#define SCAN_WINDOW             100 //MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
 #define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
 
 #define TARGET_BRIDGE_DEV_NAME	"BlueIO832Mini"							/**< Name of BLE bridge/client device to be scanned */
@@ -84,7 +87,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
+void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
 
 const BtAppCfg_t s_BleAppCfg = {
 	BTAPP_ROLE_CENTRAL,
@@ -141,7 +144,7 @@ UARTCfg_t g_UartCfg = {
 	.StopBits = 1,								// Stop bit
 	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
 	.bIntMode = true,							// Interrupt mode
-	.IntPrio = APP_IRQ_PRIORITY_LOW,			// Interrupt priority
+	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,			// Interrupt priority
 	.EvtCallback = nRFUartEvthandler,			// UART event handler
 	.bFifoBlocking = true,						// Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
@@ -156,6 +159,7 @@ UART g_Uart;
 
 int g_DelayCnt = 0;
 
+#if 0
 /** @brief Parameters used when scanning. */
 static ble_gap_scan_params_t const g_ScanParams =
 {
@@ -176,12 +180,19 @@ static ble_gap_scan_params_t const g_ScanParams =
 	SCAN_WINDOW,	// Scan window
 	SCAN_TIMEOUT,	// Scan timeout
 };
+#else
+static BtGapScanCfg_t const g_ScanParams = {
+	.Interval = SCAN_INTERVAL,
+	.Duration = SCAN_WINDOW,
+	.Timeout = SCAN_TIMEOUT,
+};
+#endif
 
-uint8_t g_ScanBuff[BLE_GAP_SCAN_BUFFER_EXTENDED_MAX];
+uint8_t g_ScanBuff[BT_GAP_SCAN_BUFFER_SIZE_DEFAULT];//BLE_GAP_SCAN_BUFFER_EXTENDED_MAX];
 
 ble_data_t g_AdvScanReportData = {
 	.p_data = g_ScanBuff,
-	.len = BLE_GAP_SCAN_BUFFER_EXTENDED_MAX
+	.len = BT_GAP_SCAN_BUFFER_SIZE_DEFAULT,//BLE_GAP_SCAN_BUFFER_EXTENDED_MAX
 };
 
 static ble_gap_conn_params_t s_ConnParams = {

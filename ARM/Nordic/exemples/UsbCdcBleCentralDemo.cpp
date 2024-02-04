@@ -61,6 +61,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "app_usbd_string_desc.h"
 #include "app_usbd_cdc_acm.h"
 #include "app_usbd_serial_num.h"
+#include "ble_gatt_db.h"
+
 //#include "app_usbd_cdc_acm_internal.h"
 //#include "app_usbd_class_base.h"
 
@@ -85,7 +87,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "nrf_ble_scan.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/blueio_blesrvc.h"
-#include "ble_dev.h"
+#include "bluetooth/bt_dev.h"
 #include "ble_gattc.h"
 
 #include "cfifo.h"

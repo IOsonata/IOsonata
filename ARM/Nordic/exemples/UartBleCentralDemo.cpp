@@ -41,13 +41,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble_gap.h"
 #include "ble_advdata.h"
 #include "nrf_ble_scan.h"
+#include "ble_gatt_db.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
 //#include "ble_app_nrf5.h"
 //#include "ble_service.h"
 #include "bluetooth/blueio_blesrvc.h"
-#include "ble_dev.h"
+#include "bluetooth/bt_dev.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
 #include "custom_board.h"//Does this make the LED_2 & LED_3 do not work?
