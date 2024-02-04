@@ -67,26 +67,15 @@ SECTIONS {
 	} > FLASH 
 	
 	/* This is where the firmware informaton is stored. Usefull for bootloader */
+
 	.Version : ALIGN(4)
 	{
 		KEEP(*(.Version))
 		LONG(__CheckSum);
 		FILL(0xff)  /* fill unsused area to have consistant checksum */
-		. = 0x400 - SIZEOF(.ivector);/* - SIZEOF(.Version);*/
+/*		. = 0x400 - SIZEOF(.ivector);/* - SIZEOF(.Version);*/
 	} > FLASH
 		
-	/* Require Frescale Flash security config */
-	/* Auto fill with 0xFF is section not present in code */
-	.FSec : ALIGN(4)
-	{
-		KEEP(*(.fseccfg))
-		/* in case security config is not defined, fill in default */
-		LONG(0xffffffff);
-		LONG(0xffffffff);
-		LONG(0xffffffff);
-		LONG(0xfffffffe);
-	} > FLASH
-	
 	.AppStart : ALIGN(4)
 	{
 		/* Application Entry point starts here.  Normaly is the ResetEntry function */ 
