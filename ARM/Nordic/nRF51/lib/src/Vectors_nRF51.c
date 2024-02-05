@@ -45,7 +45,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void HardFault_Handler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
+__attribute__((weak/*, alias("DNT_IRQHandler")*/)) void SysTick_Handler(void) {}
 __attribute__((weak, alias("DEF_IRQHandler"))) void POWER_CLOCK_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UART0_IRQHandler(void);

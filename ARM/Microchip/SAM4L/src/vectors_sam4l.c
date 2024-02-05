@@ -52,7 +52,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void UsageFault_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DebugMon_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
+__attribute__((weak/*, alias("DNT_IRQHandler")*/)) void SysTick_Handler(void) {}
 
 __attribute__((weak, alias("DEF_IRQHandler"))) void HFLASHC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PDCA_0_Handler(void);

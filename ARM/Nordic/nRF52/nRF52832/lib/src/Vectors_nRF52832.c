@@ -51,7 +51,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void UsageFault_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DebugMonitor_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SysTick_Handler(void) {}
 __attribute__((weak, alias("DEF_IRQHandler"))) void POWER_CLOCK_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UARTE0_UART0_IRQHandler(void);
