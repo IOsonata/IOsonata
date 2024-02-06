@@ -453,7 +453,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
 
     // Initialize service structure
    // pSrvc->ConnHdl  = BLE_CONN_HANDLE_INVALID;
-
+#if 1
     // Add base UUID to softdevice's internal list.
    // for (int i = 0; i < pCfg->NbUuidBase; i++)
     {
@@ -471,8 +471,8 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
 			//baseidx = BtUuidAddBase(pCfg->UuidBase);
     	}
     }
-
-    ble_uuid.type = pSrvc->Uuid.BaseIdx;
+#endif
+    ble_uuid.type = BtUuidAddBase(pCfg->UuidBase);//pSrvc->Uuid.BaseIdx;
     ble_uuid.uuid = pCfg->UuidSrvc;
 
     err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->Hdl);

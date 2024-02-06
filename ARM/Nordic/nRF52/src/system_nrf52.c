@@ -80,13 +80,13 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
                         | (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos) \
                         | (GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos))
 
-#if IS_NRF52832
+#if defined (IS_NRF52832) && IS_NRF52832
     #define TRACECLK_PIN_CNF NRF_P0->PIN_CNF[20]
     #define TRACEDATA0_PIN_CNF NRF_P0->PIN_CNF[18]
     #define TRACEDATA1_PIN_CNF NRF_P0->PIN_CNF[16]
     #define TRACEDATA2_PIN_CNF NRF_P0->PIN_CNF[15]
     #define TRACEDATA3_PIN_CNF NRF_P0->PIN_CNF[14]
-#elif  IS_NRF52833 || IS_NRF52840
+#elif (defined (IS_NRF52833) && IS_NRF52833) || (defined (IS_NRF52840) && IS_NRF52840)
     #define TRACECLK_PIN_CNF NRF_P0->PIN_CNF[7]
     #define TRACEDATA0_PIN_CNF NRF_P1->PIN_CNF[0]
     #define TRACEDATA1_PIN_CNF NRF_P0->PIN_CNF[12]
@@ -98,9 +98,14 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 /* Select correct reset pin */
 /* Handle DEVELOP_IN-targets first as they take precedence over the later macros */
-#if    IS_NRF52805 || IS_NRF52810 || IS_NRF52811 || IS_NRF52832
+#if (defined(IS_NRF52805) && IS_NRF52805) || \
+    (defined(IS_NRF52810) && IS_NRF52810) || \
+    (defined(IS_NRF52811) && IS_NRF52811) || \
+    (defined(IS_NRF52832) && IS_NRF52832)
     #define RESET_PIN 21ul
-#elif  IS_NRF52820 || IS_NRF52833 || IS_NRF52840
+#elif (defined(IS_NRF52820) && IS_NRF52820) || \
+      (defined(IS_NRF52833) && IS_NRF52833) || \
+      (defined(IS_NRF52840) && IS_NRF52840)
     #define RESET_PIN 18ul
 #else
     #error "A supported device macro must be defined."
@@ -108,8 +113,8 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 // Overload this variable in application firmware to change oscillator
 __WEAK McuOsc_t g_McuOsc = {
-	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20 },
-	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20 },
+	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, },
+	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, },
 	.bUSBClk = false
 };
 
@@ -370,6 +375,4 @@ void SystemInit(void)
             NVIC_SystemReset();
         }
     #endif
-
-	SysTick_Config(640000);
 }
