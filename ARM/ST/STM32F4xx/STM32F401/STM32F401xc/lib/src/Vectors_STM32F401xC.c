@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	Vector_STM32L401xx.c
+@file	Vector_STM32F401xC.c
 
-@brief	Interrupt Vectors table for ARM Cortex-M4 STM32L401xx.
+@brief	Interrupt Vectors table for ARM Cortex-M4 STM32F401xC.
 
 		 CMSIS & GCC compiler
 		 linker section name .Vectors is used for the table
@@ -11,7 +11,7 @@
 
 @license
 
-Copyright (c) 2014, I-SYST inc., all rights reserved
+Copyright (c) 2018, I-SYST inc., all rights reserved
 
 Permission to use, copy, modify, and distribute this software for any purpose
 with or without fee is hereby granted, provided that the above copyright
@@ -38,6 +38,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);
+extern void Reset_Handler(void);
+extern char Image$$ER_ZI$$Base[];
+extern char Image$$ARM_LIB_STACK$$ZI$$Base[];
 
 void DEF_IRQHandler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
@@ -49,6 +52,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DebugMon_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
 __attribute__((weak/*, alias("DNT_IRQHandler")*/)) void SysTick_Handler(void) {}
+
 __attribute__((weak, alias("DEF_IRQHandler"))) void WWDG_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PVD_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void TAMP_STAMP_IRQHandler(void);
@@ -103,8 +107,14 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void DMA2_Stream7_IRQHandler(void
 __attribute__((weak, alias("DEF_IRQHandler"))) void USART6_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2C3_EV_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2C3_ER_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void FPU_IRQHandler(void);
+//__attribute__((weak, alias("DEF_IRQHandler"))) void FPU_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPI4_IRQHandler(void);
+
+#if (__FPU_USED == 1)
+__WEAK void FPU_IRQHandler(void);
+#else
+__attribute__((weak, alias("DEF_IRQHandler"))) void FPU_IRQHandler(void);
+#endif
 
 /**
  * This interrupt vector is by default located in FLASH. Though it can not be
@@ -112,10 +122,20 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SPI4_IRQHandler(void);
  * overloaded by application function
  *
  */
-__attribute__ ((section(".intvect"), used))
-void (* const g_Vectors[])(void) = {
-	(void (*) )((int32_t)&__StackTop),
+#ifdef __ICCARM__
+__attribute__ ((section(".intvec"), used))
+void (* const __vector_table[])(void) = {
+#else
+__attribute__ ((section(".vectors"), used))
+void (* const __Vectors[])(void) = {
+#endif
+#if defined ( __ARMCC_VERSION )
+	(void (*)(void) )((uint32_t)0x20000000 + 0x10000),
+	Reset_Handler,
+#else
+	(void (*)(void) )((uint32_t)&__StackTop),
 	ResetEntry,
+#endif
 	NMI_Handler,
 	HardFault_Handler,
 	MemManage_Handler,
@@ -128,7 +148,7 @@ void (* const g_Vectors[])(void) = {
 	PendSV_Handler,
 	SysTick_Handler,
 
-// STM32L011xx specific
+// STM32F401xx specific
     WWDG_IRQHandler,					// Window WatchDog
     PVD_IRQHandler,                  // PVD through EXTI Line detection
 	TAMP_STAMP_IRQHandler,         	// Tamper and TimeStamps through the EXTI line
@@ -202,7 +222,20 @@ void (* const g_Vectors[])(void) = {
 	SPI4_IRQHandler,                 // SPI4
 };
 
-const uint32_t g_iVectorSize = sizeof(g_Vectors) + 4;
-
+#if (__FPU_USED == 1)
+// Function handles and clears exception flags in FPSCR register and at the stack.
+// During interrupt, handler execution FPU registers might be copied to the stack
+// (see lazy stacking option) and it is necessary to clear data at the stack
+// which will be recovered in the return from interrupt handling.
+__WEAK void FPU_IRQHandler(void)
+{
+    // Prepare pointer to stack address with pushed FPSCR register (0x40 is FPSCR register offset in stacked data)
+    uint32_t * fpscr = (uint32_t * )(FPU->FPCAR + 0x40);
+    // Execute FPU instruction to activate lazy stacking
+    (void)__get_FPSCR();
+    // Clear flags in stacked FPSCR register. To clear IDC, IXC, UFC, OFC, DZC and IOC flags, use 0x0000009F mask.
+    *fpscr = *fpscr & ~(0x0000009F);
+}
+#endif
 
 
