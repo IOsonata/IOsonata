@@ -2403,9 +2403,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/soc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/templates&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -2449,9 +2449,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/soc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/templates&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -2577,9 +2577,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/soc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/templates&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -2623,9 +2623,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/soc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-hal_nordic/nrfx/templates&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
@@ -2707,20 +2707,21 @@
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
 	<storageModule moduleId="refreshScope" versionNumber="2">
+		<configuration configurationName="Debug_SDC"/>
+		<configuration configurationName="Debug_AllGpio"/>
+		<configuration configurationName="Release_Log"/>
+		<configuration configurationName="Release_NoReset"/>
+		<configuration configurationName="Debug_NoNFC">
+			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
+		</configuration>
 		<configuration configurationName="Release_AllGpio"/>
 		<configuration configurationName="Release_FPU">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
-		<configuration configurationName="Debug_AllGpio"/>
-		<configuration configurationName="Release_Log"/>
 		<configuration configurationName="Debug_FPU">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
 		<configuration configurationName="Release_NoNFC">
-			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
-		</configuration>
-		<configuration configurationName="Release_NoReset"/>
-		<configuration configurationName="Debug_NoNFC">
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
 		<configuration configurationName="Debug_Log"/>
@@ -2731,6 +2732,7 @@
 			<resource resourceType="PROJECT" workspacePath="/IOsonata_nRF52840"/>
 		</configuration>
 		<configuration configurationName="Debug_NoReset"/>
+		<configuration configurationName="Release_SDC"/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 </cproject>
