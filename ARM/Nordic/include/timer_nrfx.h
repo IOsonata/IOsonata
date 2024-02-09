@@ -62,7 +62,11 @@ SOFTWARE.
 ///
 #define TIMER_NRFX_RTC_BASE_FREQ   			32768
 #define TIMER_NRFX_RTC_MAX                 	RTC_COUNT	//!< Number RTC available
+#if defined(NRF54L15_ENGA_XXAA)
+#define TIMER_NRFX_RTC_MAX_TRIGGER_EVT     	RTC10_CC_NUM_SIZE	//!< Max number of supported counter trigger event
+#else
 #define TIMER_NRFX_RTC_MAX_TRIGGER_EVT     	RTC1_CC_NUM	//!< Max number of supported counter trigger event
+#endif
 
 /// High frequency timer using Timer 16MHz clock source.
 ///
@@ -70,8 +74,10 @@ SOFTWARE.
 #define TIMER_NRFX_HF_MAX              		TIMER_COUNT		//!< Number high frequency timer available
 #if TIMER_NRFX_HF_MAX < 4
 #define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER2_CC_NUM	//!< Max number of supported counter trigger event
-#else
+#elif TIMER_NRFX_HF_MAX < 6
 #define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER3_CC_NUM	//!< Max number of supported counter trigger event
+#elif TIMER_NRFX_HF_MAX < 7
+#define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER10_CC_NUM_SIZE	//!< Max number of supported counter trigger event
 #endif
 
 #ifdef __cplusplus
