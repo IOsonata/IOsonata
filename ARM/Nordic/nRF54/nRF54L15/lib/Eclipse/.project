@@ -1056,11 +1056,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_host.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_host.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
@@ -1074,11 +1069,6 @@
 			<name>src/bluetooth/bt_uuid.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/cli/icli.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/cli/icli.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
@@ -1164,11 +1154,6 @@
 			<name>src/display/eink_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/display/eink_vb3300.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts</name>
