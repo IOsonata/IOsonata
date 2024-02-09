@@ -7,7 +7,7 @@ CMSIS & GCC compiler
 linker section name .Vectors is used for the table
 
 @author	Nguyen Hoan Hoang
-@date	Mov. 24, 2023
+@date	Nov. 24, 2023
 
 @license
 
@@ -126,7 +126,7 @@ __attribute__ ((section(".intvec"), used))
 void (* const __vector_table[])(void) = {
 #else
 __attribute__ ((section(".vectors"), used))
-void (* const __Vectors[500])(void) = {
+void (* const __Vectors[])(void) = {
 #endif
 #if defined ( __ARMCC_VERSION )
 	(void (*)(void) )((uint32_t)0x20000000 + 0x10000),

@@ -47,6 +47,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #define IOPIN_MAX_INT			(GPIOTE20_GPIOTE_NCHANNELS_SIZE + GPIOTE30_GPIOTE_NCHANNELS_SIZE)
+#define GPIO_PIN_CNF_DRIVE_Pos (8UL)              /*!< Position of DRIVE0 field.                                            */
+#define GPIO_PIN_CNF_DRIVE_Msk (0xFUL << GPIO_PIN_CNF_DRIVE0_Pos) /*!< Bit mask of DRIVE0 field.                            */
 #else
 #ifndef GPIOTE_CH_NUM
 #define GPIOTE_CH_NUM	8
@@ -237,7 +239,7 @@ void IOPinDisableInterrupt(int IntNo)
 {
     if (IntNo >= IOPIN_MAX_INT)
         return;
-
+#if 0
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE_NS;
@@ -257,8 +259,21 @@ void IOPinDisableInterrupt(int IntNo)
     if (IntNo < 0)
     {
         IntNo = IOPIN_MAX_INT;
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+        if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+        {
+			gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
+			gpiotereg->EVENTS_PORT[0].NONSECURE = 0;
+        }
+        else
+        {
+			gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0SECURE_Msk;
+			gpiotereg->EVENTS_PORT[0].SECURE = 0;
+        }
+#else
         gpiotereg->INTENCLR = GPIOTE_INTENSET_PORT_Msk;
         gpiotereg->EVENTS_PORT = 0;
+#endif
     }
     else
     {
@@ -299,11 +314,11 @@ void IOPinDisableInterrupt(int IntNo)
             return;
     }
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+//#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_DisableIRQ(GPIOTE_IRQn);
-#else
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
     if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
     {
     	NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
@@ -314,13 +329,41 @@ void IOPinDisableInterrupt(int IntNo)
     	NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
         NVIC_DisableIRQ(GPIOTE1_IRQn);
     }
-#endif
+#elif defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x7F00)
+    {
+		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+		{
+			NVIC_ClearPendingIRQ(GPIOTE30_0_IRQn);
+			NVIC_DisableIRQ(GPIOTE30_0_IRQn);
+		}
+		else
+		{
+			NVIC_ClearPendingIRQ(GPIOTE30_1_IRQn);
+			NVIC_DisableIRQ(GPIOTE30_1_IRQn);
+		}
+    }
+    else
+    {
+		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+		{
+			NVIC_ClearPendingIRQ(GPIOTE20_0_IRQn);
+			NVIC_DisableIRQ(GPIOTE20_0_IRQn);
+		}
+		else
+		{
+			NVIC_ClearPendingIRQ(GPIOTE20_1_IRQn);
+			NVIC_DisableIRQ(GPIOTE20_1_IRQn);
+		}
+    }
+
 #else
     NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_DisableIRQ(GPIOTE_IRQn);
 #endif
 
     gpiotereg->INTENCLR = 0xFFFFFFFF;
+#endif
 }
 
 /**
@@ -335,7 +378,7 @@ void IOPinDisableInterrupt(int IntNo)
  *
  * @param	IntNo	: Interrupt number. -1 for port event interrupt
  * 			IntPrio : Interrupt priority
- * 			PortNo  : Port number (up to 32 ports)
+ * 			PortNo  : Port number (up to 32 ports). Bit 7 (0x80) set for Non Secure
  * 			PinNo   : Pin number (up to 32 pins). In port interrupt, this
  * 					  parameter contains pin mask instead of pin number
  * 			Sense   : Sense type of event on the I/O pin
@@ -346,17 +389,32 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 {
     if (IntNo >= IOPIN_MAX_INT)
 		return false;
-
+#if 0
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
     NRF_GPIOTE_Type *gpiotereg = NULL;
 
-    if (PortNo == 0)
+    if ((PortNo & 0x7F) == 0)
     {
-    	gpiotereg = NRF_GPIOTE30_S;
+    	if (PortNo & 0x80)
+    	{
+    		gpiotereg = NRF_GPIOTE30_NS;
+    	}
+    	else
+    	{
+    		gpiotereg = NRF_GPIOTE30_S;
+    	}
+
     }
     else
     {
-    	gpiotereg = NRF_GPIOTE20_S;
+    	if (PortNo & 0x80)
+    	{
+    		gpiotereg = NRF_GPIOTE20_NS;
+    	}
+    	else
+    	{
+    		gpiotereg = NRF_GPIOTE20_S;
+    	}
     }
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
@@ -397,9 +455,11 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	if (IntNo < 0)
 	{
 		IntNo = IOPIN_MAX_INT;
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+#else
 		gpiotereg->EVENTS_PORT = 0;
 		gpiotereg->INTENSET = GPIOTE_INTENSET_PORT_Msk;
-
+#endif
 		for (int i = 0; i <= 31; i++)
 		{
 			if ((1<<i) & PinNo)
@@ -471,12 +531,12 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		s_GpIOSenseEvt[IntNo].pCtx = pCtx;
 	}
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+//#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
     NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_SetPriority(GPIOTE_IRQn, IntPrio);
     NVIC_EnableIRQ(GPIOTE_IRQn);
-#else
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 	if (PortNo & 0x80)
 	{
 	    NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
@@ -489,13 +549,43 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	    NVIC_SetPriority(GPIOTE1_IRQn, IntPrio);
 	    NVIC_EnableIRQ(GPIOTE1_IRQn);
 	}
-#endif
+#elif defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+	if ((PortNo & 0x7F) == 0)
+	{
+		if (PortNo & 0x80)
+		{
+			NVIC_ClearPendingIRQ(GPIOTE30_0_IRQn);
+			NVIC_SetPriority(GPIOTE30_0_IRQn, IntPrio);
+			NVIC_EnableIRQ(GPIOTE30_0_IRQn);
+		}
+		else
+		{
+			NVIC_ClearPendingIRQ(GPIOTE30_1_IRQn);
+			NVIC_SetPriority(GPIOTE30_1_IRQn, IntPrio);
+			NVIC_EnableIRQ(GPIOTE30_1_IRQn);
+		}
+	}
+	else
+	{
+		if (PortNo & 0x80)
+		{
+		    NVIC_ClearPendingIRQ(GPIOTE20_0_IRQn);
+		    NVIC_SetPriority(GPIOTE20_0_IRQn, IntPrio);
+		    NVIC_EnableIRQ(GPIOTE20_0_IRQn);
+		}
+		else
+		{
+		    NVIC_ClearPendingIRQ(GPIOTE20_1_IRQn);
+		    NVIC_SetPriority(GPIOTE20_1_IRQn, IntPrio);
+		    NVIC_EnableIRQ(GPIOTE20_1_IRQn);
+		}
+	}
 #else
     NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_SetPriority(GPIOTE_IRQn, IntPrio);
     NVIC_EnableIRQ(GPIOTE_IRQn);
 #endif
-
+#endif
     return true;
 }
 
@@ -613,7 +703,7 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 	reg->PIN_CNF[PinNo] |= (val << GPIO_PIN_CNF_DRIVE_Pos);
 }
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+//#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 #ifdef NRF5340_XXAA_NETWORK
 void __WEAK GPIOTE_IRQHandler(void)
 {
@@ -636,7 +726,7 @@ void __WEAK GPIOTE_IRQHandler(void)
 
 	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
 }
-#else
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 void __WEAK GPIOTE0_IRQHandler(void)
 {
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
@@ -680,7 +770,27 @@ void __WEAK GPIOTE1_IRQHandler(void)
 
 	NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
 }
-#endif
+#elif defined(NRF54H20_XXAA)
+#elif defined(NRF54L15_ENGA_XXAA)
+void __WEAK GPIOTE20_0_IRQHandler(void)
+{
+	NVIC_ClearPendingIRQ(GPIOTE20_0_IRQn);
+}
+
+void __WEAK GPIOTE20_1_IRQHandler(void)
+{
+	NVIC_ClearPendingIRQ(GPIOTE20_1_IRQn);
+}
+
+void __WEAK GPIOTE30_0_IRQHandler(void)
+{
+	NVIC_ClearPendingIRQ(GPIOTE30_0_IRQn);
+}
+
+void __WEAK GPIOTE30_1_IRQHandler(void)
+{
+	NVIC_ClearPendingIRQ(GPIOTE30_1_IRQn);
+}
 #else
 void __WEAK GPIOTE_IRQHandler(void)
 {

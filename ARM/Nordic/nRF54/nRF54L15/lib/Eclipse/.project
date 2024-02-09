@@ -1021,11 +1021,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_app.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_app_handler.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
@@ -1039,21 +1034,6 @@
 			<name>src/bluetooth/bt_att.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_ctlr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ctlr.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_ctlr_att.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ctlr_att.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_dev.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gap.cpp</name>
@@ -1116,16 +1096,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/i2c_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/i2s_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/i2s_nrfx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/coredev/iopincfg_nrfx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
@@ -1141,39 +1111,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/spi_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/coredev/timer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/timer_hf_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_hf_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/timer_lf_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrfx.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/timer_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/uart_nrfx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/uart_nrfx.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>
@@ -1224,6 +1169,11 @@
 			<name>src/display/eink_intrf.cpp.new</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp.new</locationURI>
+		</link>
+		<link>
+			<name>src/display/eink_vb3300.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts</name>
