@@ -76,7 +76,7 @@ SOFTWARE.
 #define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER2_CC_NUM	//!< Max number of supported counter trigger event
 #elif TIMER_NRFX_HF_MAX < 6
 #define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER3_CC_NUM	//!< Max number of supported counter trigger event
-#elif TIMER_NRFX_HF_MAX < 7
+#elif TIMER_NRFX_HF_MAX < 8
 #define TIMER_NRFX_HF_MAX_TRIGGER_EVT  		TIMER10_CC_NUM_SIZE	//!< Max number of supported counter trigger event
 #endif
 
