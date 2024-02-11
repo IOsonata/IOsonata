@@ -43,6 +43,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "nrf.h"
 
+#if defined(NRF51)
+#include "nrf_gpiote.h"
+#else
+#include "nrf_peripherals.h"
+#endif
+
 #include "coredev/iopincfg.h"
 
 #ifdef 	__cplusplus
@@ -62,7 +68,11 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo);
  * @Param	Dir     : I/O direction
  */
 static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir) {
+#if GPIO_COUNT > 1
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
+#else
+	NRF_GPIO_Type *reg = NRF_GPIO;
+#endif
 
 	if (reg == NULL || PinNo == -1)
 	{
@@ -90,29 +100,13 @@ static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int Pi
  * @return	Pin state 1 or 0
  */
 static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-#ifdef NRF5340_XXAA_NETWORK
-	return (NRF_P0_NS->IN >> PinNo) & 1;
+#if GPIO_COUNT > 1
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
+	return (reg->IN >> PinNo) & 1;
 #else
-	if (PortNo & 0x80)
-	{
-		return (NRF_P0_NS->IN >> PinNo) & 1;
-	}
-	return (NRF_P0_S->IN >> PinNo) & 1;
+	return (NRF_GPIO->IN >> PinNo) & 1;
 #endif
-#else
 
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		return (NRF_P1->IN >> PinNo) & 1;
-	}
-	else
-#endif
-	{
-		return (NRF_GPIO->IN >> PinNo) & 1;
-	}
-#endif
 }
 
 /**
@@ -122,31 +116,12 @@ static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_P0_NS->OUTSET = (1 << PinNo);
-#else
-	if (PortNo & 0x80)
-	{
-		NRF_P0_NS->OUTSET = (1 << PinNo);
-	}
-	else
-	{
-		NRF_P0_S->OUTSET = (1 << PinNo);
-	}
-#endif
-#else
+#if GPIO_COUNT > 1
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		NRF_P1->OUTSET = (1 << PinNo);
-	}
-	else
-#endif
-	{
-		NRF_GPIO->OUTSET = (1 << PinNo);
-	}
+	reg->OUTSET = (1 << PinNo);
+#else
+	NRF_GPIO->OUTSET = (1 << PinNo);
 #endif
 }
 
@@ -157,31 +132,12 @@ static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int PinNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_P0_NS->OUTCLR = (1 << PinNo);
-#else
-	if (PortNo & 0x80)
-	{
-		NRF_P0_NS->OUTCLR = (1 << PinNo);
-	}
-	else
-	{
-		NRF_P0_S->OUTCLR = (1 << PinNo);
-	}
-#endif
-#else
+#if GPIO_COUNT > 1
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		NRF_P1->OUTCLR = (1 << PinNo);
-	}
-	else
-#endif
-	{
-		NRF_GPIO->OUTCLR = (1 << PinNo);
-	}
+	reg->OUTCLR = (1 << PinNo);
+#else
+	NRF_GPIO->OUTCLR = (1 << PinNo);
 #endif
 }
 
@@ -192,31 +148,12 @@ static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int Pin
  * @Param	PinNo  	: Pin number
  */
 static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int PinNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_P0_NS->OUT ^= (1 << PinNo);
-#else
-	if (PortNo & 0x80)
-	{
-		NRF_P0_NS->OUT ^= (1 << PinNo);
-	}
-	else
-	{
-		NRF_P0_S->OUT ^= (1 << PinNo);
-	}
-#endif
-#else
+#if GPIO_COUNT > 1
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		NRF_P1->OUT ^= (1 << PinNo);
-	}
-	else
-#endif
-	{
-		NRF_GPIO->OUT ^= (1 << PinNo);
-	}
+	reg->OUT ^= (1 << PinNo);
+#else
+	NRF_GPIO->OUT ^= (1 << PinNo);
 #endif
 }
 
@@ -228,28 +165,12 @@ static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int Pi
  * @return	Bit field pin states
  */
 static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-#ifdef NRF5340_XXAA_NETWORK
-	return NRF_P0_NS->IN;
-#else
-	if (PortNo & 0x80)
-	{
-		return NRF_P0_NS->IN;
-	}
-	return NRF_P0_S->IN;
-#endif
-#else
+#if GPIO_COUNT > 1
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		return NRF_P1->IN;
-	}
-	else
-#endif
-	{
-		return NRF_GPIO->IN;
-	}
+	return reg->IN;
+#else
+	return NRF_GPIO->IN;
 #endif
 }
 
@@ -260,31 +181,12 @@ static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) 
  * @Param	Data	: Bit field state of all pins on port
  */
 static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uint32_t Data) {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_P0_NS->OUT = Data;
-#else
-	if (PortNo & 0x80)
-	{
-		NRF_P0_NS->OUT = Data;
-	}
-	else
-	{
-		NRF_P0_S->OUT = Data;
-	}
-#endif
-#else
+#if GPIO_COUNT > 1
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		NRF_P1->OUT = Data;
-	}
-	else
-#endif
-	{
-		NRF_GPIO->OUT = Data;
-	}
+	reg->OUT = Data;
+#else
+	NRF_GPIO->OUT = Data;
 #endif
 }
 
