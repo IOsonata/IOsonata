@@ -574,6 +574,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+	// Start HF clock if needed
+	if (NRF_CLOCK->XO.STAT == 0)
+	{
+		NRF_CLOCK->TASKS_XOSTART = 1;
+		while (NRF_CLOCK->XO.STAT == 0);
+	}
+
 	int devno = pCfg->DevNo;
 	NRF_UARTE_Type *reg = s_nRFxUARTDev[devno].pDmaReg;
 
@@ -609,11 +616,6 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	// DMA mode avail only, force DMA
 	pDev->DevIntrf.bDma = true;
-
-	if (NRF_CLOCK->XO.STAT == 0)
-	{
-		NRF_CLOCK->TASKS_XOSTART = 1;
-	}
 
 	s_nRFxUARTDev[devno].RxPin = (pincfg[UARTPIN_RX_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_RX_IDX].PortNo << 5);
 	s_nRFxUARTDev[devno].TxPin = (pincfg[UARTPIN_TX_IDX].PinNo & 0x1f) | (pincfg[UARTPIN_TX_IDX].PortNo << 5);
