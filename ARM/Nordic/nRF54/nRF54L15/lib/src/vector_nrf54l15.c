@@ -54,7 +54,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SecureFault_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DebugMon_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SysTick_Handler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void SysTick_Handler(void) {}
 
 __attribute__((weak, alias("DEF_IRQHandler"))) void SWI00_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SWI01_IRQHandler(void);

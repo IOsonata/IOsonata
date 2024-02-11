@@ -148,7 +148,7 @@ typedef struct {
 	UART_PARITY Parity;			//!< Data parity
 	int StopBits;				//!< Number of stop bits
 	UART_FLWCTRL FlowControl;	//!< Flow control
-	bool bIntMode;				//!< Interrupt mode support
+	bool bIntMode;				//!< Enable interrupt support
 	int IntPrio;				//!< Interrupt priority
 	UARTEvtHandler_t EvtCallback;		//!< UART event callback
 	bool bFifoBlocking;			//!< CFIFO operating mode, false : drop when full
@@ -156,7 +156,7 @@ typedef struct {
 	uint8_t *pRxMem;			//!< Pointer to memory allocated for RX CFIFO
 	int TxMemSize;				//!< Memory size in bytes for Tx CFIFO
 	uint8_t *pTxMem;			//!< Pointer to memory allocated for TX FIFO
-	bool bDMAMode;				//!< DMA transfer support
+	bool bDMAMode;				//!< Enable DMA transfer support
 	bool bIrDAMode;				//!< Enable IrDA
 	bool bIrDAInvert;			//!< IrDA input inverted
 	bool bIrDAFixPulse;			//!< Enable IrDA fix pulse
@@ -176,7 +176,6 @@ struct __Uart_Dev {
 	UART_PARITY Parity;			//!< Data parity
 	int StopBits;				//!< Number of stop bits
 	UART_FLWCTRL FlowControl;	//!<
-	bool bIntMode;				//!< Interrupt mdoe
 	bool bIrDAMode;				//!< Enable IrDA
 	bool bIrDAInvert;			//!< IrDA input inverted
 	bool bIrDAFixPulse;			//!< Enable IrDA fix pulse

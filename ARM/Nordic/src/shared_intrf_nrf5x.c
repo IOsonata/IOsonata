@@ -51,6 +51,8 @@ SharedIntrf_t g_SharedIntrf[MAX_NB_DEV] = { {0, 0},};
 void TWIM0_TWIS0_TWI0_IRQHandler()
 #elif defined(NRF52_SERIES)
 void SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQHandler(void)
+#elif defined(NRF54L15_ENGA_XXAA)
+void SERIAL30_IRQHandler(void)
 #else
 void SPI0_TWI0_IRQHandler(void)
 #endif
@@ -63,6 +65,8 @@ void SPI0_TWI0_IRQHandler(void)
 	NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_IRQn);
 #elif defined(NRF52_SERIES)
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
+#elif defined(NRF54L15_ENGA_XXAA)
+	NVIC_ClearPendingIRQ(SERIAL30_IRQn);
 #else
 	NVIC_ClearPendingIRQ(SPI0_TWI0_IRQn);
 #endif
@@ -71,6 +75,8 @@ void SPI0_TWI0_IRQHandler(void)
 #ifndef NRF52805_XXAA
 #ifdef NRF52_SERIES
 void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
+#elif defined(NRF54L15_ENGA_XXAA)
+void SERIAL20_IRQHandler(void)
 #else
 void SPI1_TWI1_IRQHandler(void)
 #endif
@@ -81,9 +87,39 @@ void SPI1_TWI1_IRQHandler(void)
 	}
 #ifdef NRF52_SERIES
 	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQn);
+#elif defined(NRF54L15_ENGA_XXAA)
+	NVIC_ClearPendingIRQ(SERIAL20_IRQn);
 #else
 	NVIC_ClearPendingIRQ(SPI1_TWI1_IRQn);
 #endif
 }
 #endif
 
+#if defined(NRF54L15_ENGA_XXAA)
+void SERIAL21_IRQHandler(void)
+{
+	if (g_SharedIntrf[2].pIntrf != NULL)
+	{
+		g_SharedIntrf[2].Handler(2, g_SharedIntrf[2].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL21_IRQn);
+}
+
+void SERIAL22_IRQHandler(void)
+{
+	if (g_SharedIntrf[3].pIntrf != NULL)
+	{
+		g_SharedIntrf[3].Handler(3, g_SharedIntrf[3].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL22_IRQn);
+}
+
+void SERIAL00_IRQHandler(void)
+{
+	if (g_SharedIntrf[4].pIntrf != NULL)
+	{
+		g_SharedIntrf[4].Handler(4, g_SharedIntrf[4].pIntrf);
+	}
+	NVIC_ClearPendingIRQ(SERIAL30_IRQn);
+}
+#endif

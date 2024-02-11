@@ -30,6 +30,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf54l_approtect.h"
 #include "system_config_sau.h"
 
+#include "coredev/system_core_clock.h"
 /*lint ++flb "Enter library region" */
 
 #define __SYSTEM_CLOCK_DEFAULT      (64000000ul)
@@ -39,6 +40,13 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #elif defined ( __ICCARM__ )
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 #endif    
+
+// Overload this variable in application firmware to change oscillator
+__WEAK McuOsc_t g_McuOsc = {
+	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 0},
+	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 0},
+	.bUSBClk = false
+};
 
 void SystemCoreClockUpdate(void)
 {
@@ -86,6 +94,16 @@ void SystemInit(void)
         #endif
     }
 #endif
+//            INTCAP = (((CAPACITANCE-5.5)*(FICR->XOSC32MTRIM.SLOPE+791)) +
+//                       FICR->XOSC32MTRIM.OFFSET<<2)>>8;
+	uint32_t intcap = 0;
+	if (g_McuOsc.CoreOsc.LoadCap > 0)
+	{
+		uint32_t slope = (NRF_FICR->XOSC32MTRIM & FICR_XOSC32MTRIM_SLOPE_Msk) >> FICR_XOSC32MTRIM_SLOPE_Pos;
+		uint32_t offset = (NRF_FICR->XOSC32MTRIM & FICR_XOSC32MTRIM_OFFSET_Msk) >> FICR_XOSC32MTRIM_OFFSET_Pos;
+		intcap = (uint32_t)((((float)g_McuOsc.CoreOsc.LoadCap - 5.5) * (slope + 791)) + (offset << 2))>>8;
+	}
+	NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = intcap;
 
 #endif
 
@@ -99,6 +117,7 @@ void SystemInit(void)
                 #error "Illegal CPU frequency set"
             #else
             NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
+
             #endif
         #endif
 

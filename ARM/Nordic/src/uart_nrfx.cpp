@@ -1046,7 +1046,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 //	pDev->DevIntrf.bDma = pCfg->bDmaEn;
-//	pDev->DevIntrf.bIntEn = pCfg->bIntEn;
+	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
 	pDev->DataBits = pCfg->DataBits;
 	pDev->FlowControl = pCfg->FlowControl;
@@ -1056,7 +1056,6 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->bIntMode = pCfg->bIntMode;
 	pDev->EvtCallback = pCfg->EvtCallback;
 	pDev->DevIntrf.Disable = nRFUARTDisable;
 	pDev->DevIntrf.Enable = nRFUARTEnable;

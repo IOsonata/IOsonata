@@ -51,6 +51,21 @@ SOFTWARE.
 #define NRF_TIMER1			NRF_TIMER1_NS
 #define NRF_TIMER2			NRF_TIMER2_NS
 #define NRF_CLOCK			NRF_CLOCK_NS
+#elif defined(NRF54L15_ENGA_XXAA)
+#define NRF_TIMER0			NRF_TIMER00_S
+#define NRF_TIMER1			NRF_TIMER10_S
+#define NRF_TIMER2			NRF_TIMER20_S
+#define NRF_TIMER3			NRF_TIMER21_S
+#define NRF_TIMER4			NRF_TIMER22_S
+#define NRF_TIMER5			NRF_TIMER23_S
+#define NRF_TIMER6			NRF_TIMER24_S
+#define TIMER0_CC_NUM		TIMER00_CC_NUM_SIZE
+#define TIMER1_CC_NUM		TIMER10_CC_NUM_SIZE
+#define TIMER2_CC_NUM		TIMER20_CC_NUM_SIZE
+#define TIMER3_CC_NUM		TIMER21_CC_NUM_SIZE
+#define TIMER4_CC_NUM		TIMER22_CC_NUM_SIZE
+#define TIMER5_CC_NUM		TIMER23_CC_NUM_SIZE
+#define TIMER6_CC_NUM		TIMER24_CC_NUM_SIZE
 #endif
 
 #pragma pack(push, 4)
@@ -102,6 +117,22 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.pReg = NRF_TIMER4,
 		.MaxNbTrigEvt = TIMER4_CC_NUM,
 		.CountCC = TIMER4_CC_NUM - 1,
+	},
+#endif
+#if TIMER_NRFX_HF_MAX > 5
+	{
+		.DevNo = TIMER_NRFX_RTC_MAX + 5,
+		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
+		.pReg = NRF_TIMER5,
+		.MaxNbTrigEvt = TIMER5_CC_NUM,
+		.CountCC = TIMER5_CC_NUM - 1,
+	},
+	{
+		.DevNo = TIMER_NRFX_RTC_MAX + 6,
+		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
+		.pReg = NRF_TIMER6,
+		.MaxNbTrigEvt = TIMER6_CC_NUM,
+		.CountCC = TIMER6_CC_NUM - 1,
 	},
 #endif
 };
@@ -195,6 +226,18 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 	// Clock source not available.  Only 64MHz XTAL
 	if (s_nRfxHFClockSem <= 0)
 	{
+#if defined(NRF54L15_ENGA_XXAA)
+		if (!(NRF_CLOCK->PLL.STAT & CLOCK_PLL_STAT_STATE_Msk))
+		{
+			NRF_CLOCK->TASKS_PLLSTART = 1;
+		}
+
+		if (!(NRF_CLOCK->XO.STAT & CLOCK_XO_STAT_STATE_Msk))
+		{
+			NRF_CLOCK->TASKS_XOSTART = 1;
+		}
+
+#else
 		NRF_CLOCK->TASKS_HFCLKSTART = 1;
 
 		int timout = 1000000;
@@ -210,7 +253,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 			return false;
 
 		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-
+#endif
 		s_nRfxHFClockSem++;
 	}
 
@@ -219,25 +262,60 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 	switch (devno)
 	{
 		case 0:
+#if defined(NRF54L15_ENGA_XXAA)
+			NVIC_ClearPendingIRQ(TIMER00_IRQn);
+			NVIC_EnableIRQ(TIMER00_IRQn);
+#else
 			NVIC_ClearPendingIRQ(TIMER0_IRQn);
 			NVIC_EnableIRQ(TIMER0_IRQn);
+#endif
 			break;
 		case 1:
+#if defined(NRF54L15_ENGA_XXAA)
+			NVIC_ClearPendingIRQ(TIMER10_IRQn);
+			NVIC_EnableIRQ(TIMER10_IRQn);
+#else
 			NVIC_ClearPendingIRQ(TIMER1_IRQn);
 			NVIC_EnableIRQ(TIMER1_IRQn);
+#endif
 			break;
 		case 2:
+#if defined(NRF54L15_ENGA_XXAA)
+			NVIC_ClearPendingIRQ(TIMER20_IRQn);
+			NVIC_EnableIRQ(TIMER20_IRQn);
+#else
 			NVIC_ClearPendingIRQ(TIMER2_IRQn);
 			NVIC_EnableIRQ(TIMER2_IRQn);
+#endif
 			break;
 #if TIMER_NRFX_HF_MAX > 3
 		case 3:
+#if defined(NRF54L15_ENGA_XXAA)
+			NVIC_ClearPendingIRQ(TIMER21_IRQn);
+			NVIC_EnableIRQ(TIMER21_IRQn);
+#else
 			NVIC_ClearPendingIRQ(TIMER3_IRQn);
 			NVIC_EnableIRQ(TIMER3_IRQn);
+#endif
 			break;
 		case 4:
+#if defined(NRF54L15_ENGA_XXAA)
+			NVIC_ClearPendingIRQ(TIMER22_IRQn);
+			NVIC_EnableIRQ(TIMER22_IRQn);
+#else
 			NVIC_ClearPendingIRQ(TIMER4_IRQn);
 			NVIC_EnableIRQ(TIMER4_IRQn);
+#endif
+			break;
+#endif
+#if TIMER_NRFX_HF_MAX > 5
+		case 5:
+			NVIC_ClearPendingIRQ(TIMER23_IRQn);
+			NVIC_EnableIRQ(TIMER23_IRQn);
+			break;
+		case 6:
+			NVIC_ClearPendingIRQ(TIMER24_IRQn);
+			NVIC_EnableIRQ(TIMER24_IRQn);
 			break;
 #endif
     }
@@ -258,32 +336,71 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 
 	if (s_nRfxHFClockSem <= 0)
 	{
+#if defined(NRF54L15_ENGA_XXAA)
+		NRF_CLOCK->TASKS_XOSTOP = 1;
+#else
 		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
+#endif
 		s_nRfxHFClockSem = 0;
 	}
 
     switch (devno)
     {
         case 0:
-            NVIC_ClearPendingIRQ(TIMER0_IRQn);
+#if defined(NRF54L15_ENGA_XXAA)
+        	NVIC_ClearPendingIRQ(TIMER00_IRQn);
+            NVIC_DisableIRQ(TIMER00_IRQn);
+#else
+        	NVIC_ClearPendingIRQ(TIMER0_IRQn);
             NVIC_DisableIRQ(TIMER0_IRQn);
+#endif
             break;
         case 1:
+#if defined(NRF54L15_ENGA_XXAA)
+        	NVIC_ClearPendingIRQ(TIMER10_IRQn);
+            NVIC_DisableIRQ(TIMER10_IRQn);
+#else
             NVIC_ClearPendingIRQ(TIMER1_IRQn);
             NVIC_DisableIRQ(TIMER1_IRQn);
+#endif
             break;
         case 2:
+#if defined(NRF54L15_ENGA_XXAA)
+        	NVIC_ClearPendingIRQ(TIMER20_IRQn);
+            NVIC_DisableIRQ(TIMER20_IRQn);
+#else
             NVIC_ClearPendingIRQ(TIMER2_IRQn);
             NVIC_DisableIRQ(TIMER2_IRQn);
+#endif
             break;
 #if TIMER_NRFX_HF_MAX > 3
         case 3:
+#if defined(NRF54L15_ENGA_XXAA)
+        	NVIC_ClearPendingIRQ(TIMER21_IRQn);
+            NVIC_DisableIRQ(TIMER21_IRQn);
+#else
             NVIC_ClearPendingIRQ(TIMER3_IRQn);
             NVIC_DisableIRQ(TIMER3_IRQn);
+#endif
             break;
         case 4:
+#if defined(NRF54L15_ENGA_XXAA)
+        	NVIC_ClearPendingIRQ(TIMER22_IRQn);
+            NVIC_DisableIRQ(TIMER22_IRQn);
+#else
             NVIC_ClearPendingIRQ(TIMER4_IRQn);
             NVIC_DisableIRQ(TIMER4_IRQn);
+#endif
+            break;
+#endif
+#if TIMER_NRFX_HF_MAX > 5
+        case 5:
+        	NVIC_ClearPendingIRQ(TIMER23_IRQn);
+            NVIC_DisableIRQ(TIMER23_IRQn);
+            break;
+        case 6:
+        	NVIC_ClearPendingIRQ(TIMER24_IRQn);
+            NVIC_DisableIRQ(TIMER24_IRQn);
             break;
 #endif
     }
@@ -500,6 +617,8 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	reg->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
 
 	// Init clock source for TIMERs
+#if defined(NRF54L15_ENGA_XXAA)
+#else
 	if (!(NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk))
 	{
 		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
@@ -523,35 +642,78 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 
 		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
 	}
+#endif
 
 	// Init interrupt for TIMERs
 	switch (devno)
 	{
 	case 0:
+#if defined(NRF54L15_ENGA_XXAA)
+		NVIC_ClearPendingIRQ(TIMER00_IRQn);
+		NVIC_SetPriority(TIMER00_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER00_IRQn);
+#else
 		NVIC_ClearPendingIRQ(TIMER0_IRQn);
 		NVIC_SetPriority(TIMER0_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER0_IRQn);
+#endif
 		break;
 	case 1:
+#if defined(NRF54L15_ENGA_XXAA)
+		NVIC_ClearPendingIRQ(TIMER10_IRQn);
+		NVIC_SetPriority(TIMER10_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER10_IRQn);
+#else
 		NVIC_ClearPendingIRQ(TIMER1_IRQn);
 		NVIC_SetPriority(TIMER1_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER1_IRQn);
+#endif
 		break;
 	case 2:
+#if defined(NRF54L15_ENGA_XXAA)
+		NVIC_ClearPendingIRQ(TIMER20_IRQn);
+		NVIC_SetPriority(TIMER20_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER20_IRQn);
+#else
 		NVIC_ClearPendingIRQ(TIMER2_IRQn);
 		NVIC_SetPriority(TIMER2_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER2_IRQn);
+#endif
 		break;
 #if TIMER_NRFX_HF_MAX > 3
 	case 3:
+#if defined(NRF54L15_ENGA_XXAA)
+		NVIC_ClearPendingIRQ(TIMER21_IRQn);
+		NVIC_SetPriority(TIMER21_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER21_IRQn);
+#else
 		NVIC_ClearPendingIRQ(TIMER3_IRQn);
 		NVIC_SetPriority(TIMER3_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER3_IRQn);
+#endif
 		break;
 	case 4:
+#if defined(NRF54L15_ENGA_XXAA)
+		NVIC_ClearPendingIRQ(TIMER22_IRQn);
+		NVIC_SetPriority(TIMER22_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER22_IRQn);
+#else
 		NVIC_ClearPendingIRQ(TIMER4_IRQn);
 		NVIC_SetPriority(TIMER4_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER4_IRQn);
+#endif
+		break;
+#endif
+#if TIMER_NRFX_HF_MAX > 5
+	case 5:
+		NVIC_ClearPendingIRQ(TIMER23_IRQn);
+		NVIC_SetPriority(TIMER23_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER23_IRQn);
+		break;
+	case 6:
+		NVIC_ClearPendingIRQ(TIMER24_IRQn);
+		NVIC_SetPriority(TIMER24_IRQn, pCfg->IntPrio);
+		NVIC_EnableIRQ(TIMER24_IRQn);
 		break;
 #endif
 	}

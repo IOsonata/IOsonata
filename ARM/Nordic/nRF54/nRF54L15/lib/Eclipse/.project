@@ -611,6 +611,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/timer_nrfx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/timer_nrfx.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
@@ -1036,6 +1041,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_attreq.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attreq.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_gap.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
@@ -1096,6 +1106,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.c</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/shared_intrf_nrf5x.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/shared_intrf_nrf5x.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
@@ -1106,9 +1121,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/timer_hf_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_hf_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_lf_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lf_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_nrfx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_nrf54x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_nrf54x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>
