@@ -141,6 +141,17 @@ static void RtcIRQHandler(int DevNo)
 
 extern "C" {
 
+#if defined(NRF54L15_ENGA_XXAA)
+__WEAK void RTC10_IRQHandler()
+{
+	RtcIRQHandler(0);
+}
+
+__WEAK void RTC30_IRQHandler()
+{
+	RtcIRQHandler(1);
+}
+#else
 __WEAK void RTC0_IRQHandler()
 {
 	RtcIRQHandler(0);
@@ -155,6 +166,7 @@ __WEAK void RTC2_IRQHandler()
 {
 	RtcIRQHandler(2);
 }
+#endif
 #endif
 
 }   // extern "C"
@@ -469,9 +481,9 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			break;
 		case 1:
 #if defined(NRF54L15_ENGA_XXAA)
-			NVIC_ClearPendingIRQ(RTC10_IRQn);
-			NVIC_SetPriority(RTC10_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(RTC10_IRQn);
+			NVIC_ClearPendingIRQ(RTC30_IRQn);
+			NVIC_SetPriority(RTC30_IRQn, pCfg->IntPrio);
+			NVIC_EnableIRQ(RTC30_IRQn);
 #else
 			NVIC_ClearPendingIRQ(RTC1_IRQn);
 			NVIC_SetPriority(RTC1_IRQn, pCfg->IntPrio);

@@ -578,7 +578,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	if (NRF_CLOCK->XO.STAT == 0)
 	{
 		NRF_CLOCK->TASKS_XOSTART = 1;
-		while (NRF_CLOCK->XO.STAT == 0);
+		int timout = 1000000;
+		while (timout-- > 0 && NRF_CLOCK->EVENTS_XOSTARTED == 0);
+
+		if (timout <= 0)
+			return false;
+
+		NRF_CLOCK->EVENTS_XOSTARTED = 0;
 	}
 
 	int devno = pCfg->DevNo;

@@ -189,6 +189,43 @@ static void TimerIRQHandler(int DevNo)
 
 extern "C" {
 
+#if defined(NRF54L15_ENGA_XXAA)
+__WEAK void TIMER00_IRQHandler()
+{
+	TimerIRQHandler(0);
+}
+
+__WEAK void TIMER10_IRQHandler()
+{
+	TimerIRQHandler(1);
+}
+
+__WEAK void TIMER20_IRQHandler()
+{
+	TimerIRQHandler(2);
+}
+
+__WEAK void TIMER21_IRQHandler()
+{
+	TimerIRQHandler(3);
+}
+
+__WEAK void TIMER22_IRQHandler()
+{
+	TimerIRQHandler(4);
+}
+
+__WEAK void TIMER23_IRQHandler()
+{
+	TimerIRQHandler(5);
+}
+
+__WEAK void TIMER24_IRQHandler()
+{
+	TimerIRQHandler(6);
+}
+
+#else
 __WEAK void TIMER0_IRQHandler()
 {
 	TimerIRQHandler(0);
@@ -214,6 +251,7 @@ __WEAK void TIMER4_IRQHandler()
 {
 	TimerIRQHandler(4);
 }
+#endif
 #endif
 
 }   // extern "C"
@@ -618,6 +656,21 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 
 	// Init clock source for TIMERs
 #if defined(NRF54L15_ENGA_XXAA)
+	if (!(NRF_CLOCK->XO.STAT & CLOCK_XO_STAT_STATE_Msk))
+	{
+		// Clock source not available.  Only 32MHz XTAL
+		s_nRfxHFClockSem++;
+		NRF_CLOCK->TASKS_XOSTART = 1;
+
+		// Check if HFCLK is running or not
+		int timout = 1000000;
+		while (timout-- > 0 && NRF_CLOCK->EVENTS_XOSTARTED == 0);
+
+		if (timout <= 0)
+			return false;
+
+		NRF_CLOCK->EVENTS_XOSTARTED = 0;
+	}
 #else
 	if (!(NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk))
 	{
