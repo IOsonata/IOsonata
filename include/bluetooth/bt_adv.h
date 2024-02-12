@@ -44,17 +44,17 @@ SOFTWARE.
 typedef enum __Bt_Addr_Type {
 	BT_ADDR_TYPE_PUBLIC = 0,			//!< Public device address
 	BT_ADDR_TYPE_RAND = 1,				//!< Random device address
-	BT_ADDR_TYPE_RESOLV = 2,			//!< Resolvable private
-	BT_ADDR_TYPE_RESOLV_RAND = 3		//!< Resolvable private, if not exist use random
+	BT_ADDR_TYPE_RESOLV = 2,			//!< Public Identity Address (Corresponds to Resolved Private Address)
+	BT_ADDR_TYPE_RANDOM_STATIC = 3		//!< Random (static) Identity Address (Corresponds to Resolved Private Address)
 } BT_ADDR_TYPE;
 
 /// BLE Advertising type
 typedef enum __Bt_Adv_Type {
 	BTADV_TYPE_ADV_IND = 0,				//!< Connectable and scannable undirected advertising
-	BTADV_TYPE_ADV_DIRECT_HIGH_IND = 1,	//!< Connectable high duty cycle directed advertising
+	BTADV_TYPE_ADV_DIRECT_IND = 1,		//!< Connectable high duty cycle directed advertising
 	BTADV_TYPE_ADV_SCAN_IND = 2,		//!< Scannable undirected advertising
 	BTADV_TYPE_ADV_NONCONN_IND = 3,		//!< Non connectable undirected advertising
-	BTADV_TYPE_ADV_DIRECT_LOW_IND = 4	//!< Connectable low duty cycle directed advertising
+	BTADV_TYPE_SCAN_RSP = 4				//!< Scan Response (SCAN_RSP)
 } BTADV_TYPE;
 
 typedef enum __Bt_Adv_Filter_Policy {

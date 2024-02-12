@@ -675,6 +675,13 @@ typedef struct __Bt_Hci_ISO_Data_Load {
 	uint8_t SduFrag[1];			//!< ISO SDU fragment
 } BtHciISODataLoad_t;
 
+typedef struct Bt_Hci_Ext_Scan_Param {
+	uint8_t OwnAddrType;
+	uint8_t ScanFilterPolicy;
+	uint8_t Phy;
+
+} BtHciExtScanParam_t;
+
 #pragma pack(pop)
 
 typedef struct __Bt_Hci_Device		BtHciDevice_t;
@@ -704,6 +711,7 @@ struct __Bt_Hci_Device {
 	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
 	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
 	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
+	void (*ScanReport)(uint8_t Type, uint8_t NbReport, void *pReport);
 };
 
 #ifdef __cplusplus

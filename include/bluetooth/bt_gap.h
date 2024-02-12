@@ -173,6 +173,7 @@ typedef struct __Bt_Gap_Connection {
 } BtGapConnection_t;
 
 typedef struct __Bt_Gap_Scan_Cfg {
+	uint8_t Phy;
 	uint32_t Interval;			//!< Scan interval in msec
 	uint32_t Duration;			//!< Scan window in msec
 	uint32_t Timeout;			//!< Scan timeout in sec
@@ -185,8 +186,8 @@ typedef struct __Bt_Gap_Config {
 	uint32_t SecType;			//!< Security type
 	uint32_t AdvInterval;		//!< Advertisement interval in msec
 	uint32_t AdvTimeout;		//!< Advertisement timeout in msec
-	float ConnIntervalMin;	//!< Min connection interval in msec
-	float ConnIntervalMax;	//!< Max connection interval in msec
+	float ConnIntervalMin;		//!< Min connection interval in msec
+	float ConnIntervalMax;		//!< Max connection interval in msec
 	uint16_t SlaveLatency;		//!< Slave latency
 	uint16_t SupTimeout;		//!< Connection supervisory timeout
 } BtGapCfg_t;

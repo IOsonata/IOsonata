@@ -192,14 +192,19 @@ typedef struct __Bt_HciLe_Evt_ConnComplete {
 	uint8_t CentralClkAccu;		//!< Central clock accuracy PPM table
 } BtHciLeEvtConnComplete_t;
 
+/// NOTE: Variable length
+typedef struct __Bt_Adv_Report {
+	uint8_t EvtType;			//!< Adv report type
+	uint8_t AddrType;			//!< Address type
+	uint8_t Addr[6];			//!< Address
+	uint8_t DataLen;			//!< Data length
+	uint8_t Data[1];			//!< Adv data followed with 1 byte RSSI value
+} BtAdvReport_t;
+
+/// NOTE: Variable length
 typedef struct __Bt_HciLe_Evt_Adv_Report {
 	uint8_t NbReport;			//!< Number of responses in event
-	struct Report {
-		uint8_t EvtType;
-		uint8_t AddrType;
-		uint8_t Addr[6];
-		uint8_t DataLen;
-	};
+	BtAdvReport_t Report[1];	//!< Variable length Adv reports
 } BtHciLeEvtAdvReport_t;
 
 typedef struct __Bt_HciLe_Evt_Conn_Update_Complete {
