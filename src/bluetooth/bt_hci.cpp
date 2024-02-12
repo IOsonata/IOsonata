@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
 @file	bt_hci.cpp
 
-@brief	Bluetooth HCI implementation
+@brief	Bluetooth HCI implementation Host side
 
-Generic implementation & definitions of Bluetooth HCI (Host Controller Interface)
+Generic implementation & definitions of Bluetooth HCI (Host Controller Interface) Host side
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 22, 2022
@@ -46,7 +46,7 @@ SOFTWARE.
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
-//extern UART g_Uart;
+extern UART g_Uart;
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};
 
@@ -69,7 +69,7 @@ bool BtHciInit(BtHciDevCfg_t const *pCfg)
 //void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 {
-//	g_Uart.printf("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
+	g_Uart.printf("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
 
 	switch (pLeEvtPkt->Evt)
 	{
@@ -89,12 +89,16 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			{
 				BtHciLeEvtAdvReport_t *p = (BtHciLeEvtAdvReport_t*)pLeEvtPkt->Data;
 
-//				g_Uart.printf("BT_HCI_EVT_LE_ADV_REPORT: %d\r\n", p->NbReport);
+				g_Uart.printf("BT_HCI_EVT_LE_ADV_REPORT: %d\r\n", p->NbReport);
 
 				for (int i = 0; i < p->NbReport; i++)
 				{
-
+					g_Uart.printf("%02x %02x %02x %02x %02x %02x, Datalen = %d\r\n",
+								p->Report[i].Addr[0], p->Report[i].Addr[1], p->Report[i].Addr[2],
+								p->Report[i].Addr[3], p->Report[i].Addr[4], p->Report[i].Addr[5], p->Report[i].DataLen);
 				}
+
+				pDev->ScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
 			}
 			break;
 		case BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE:
@@ -169,6 +173,21 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_PHY_UPDATE_COMPLETE:
 			break;
 		case BT_HCI_EVT_LE_EXT_ADV_REPORT:
+			{
+				g_Uart.printf("BT_HCI_EVT_LE_EXT_ADV_REPORT:\r\n");
+				BtHciLeEvtExtAdvReport_t *p = (BtHciLeEvtExtAdvReport_t*)pLeEvtPkt->Data;
+
+				g_Uart.printf("Nb reports : %d\r\n", p->NbReport);
+				for (int i = 0; i < p->NbReport; i++)
+				{
+					g_Uart.printf("%02x %02x %02x %02x %02x %02x, Datlen = %d\r\n",
+								p->Report[i].Addr[0], p->Report[i].Addr[1], p->Report[i].Addr[2],
+								p->Report[i].Addr[3], p->Report[i].Addr[4], p->Report[i].Addr[5],
+								p->Report[i].DataLen);
+
+				}
+				pDev->ScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
+			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V1:
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2:
@@ -235,7 +254,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 
 void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 {
-//	g_Uart.printf("### BtHciProcessEvent %x ###\r\n", pEvtPkt->Hdr.Evt);
+	//g_Uart.printf("### BtHciProcessEvent %x ###\r\n", pEvtPkt->Hdr.Evt);
 
 	switch (pEvtPkt->Hdr.Evt)
 	{
@@ -406,12 +425,12 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 {
 	BtL2CapPdu_t *l2rcv = (BtL2CapPdu_t*)pPkt->Data;
 
-//	g_Uart.printf("** BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
-//	for (int i = 0; i < pPkt->Hdr.Len; i++)
-//	{
-//		g_Uart.printf("%x ", pPkt->Data[i]);
-//	}
-//	g_Uart.printf("\r\nCID: %x\r\n", l2frame->Hdr.Cid);
+	g_Uart.printf("** BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
+	for (int i = 0; i < pPkt->Hdr.Len; i++)
+	{
+		g_Uart.printf("%x ", pPkt->Data[i]);
+	}
+	g_Uart.printf("\r\nCID: %x\r\n", l2rcv->Hdr.Cid);
 
 	switch (l2rcv->Hdr.Cid)
 	{
