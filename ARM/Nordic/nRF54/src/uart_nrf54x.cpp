@@ -143,7 +143,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 		.RtsPin = (uint32_t)-1,
 	},
 	{	// On P2
-		.DevNo = 3,
+		.DevNo = 4,
 		.pDmaReg = NRF_UARTE00_S,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
