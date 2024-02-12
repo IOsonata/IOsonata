@@ -120,6 +120,6 @@ void SERIAL00_IRQHandler(void)
 	{
 		g_SharedIntrf[4].Handler(4, g_SharedIntrf[4].pIntrf);
 	}
-	NVIC_ClearPendingIRQ(SERIAL30_IRQn);
+	NVIC_ClearPendingIRQ(SERIAL00_IRQn);
 }
 #endif
