@@ -1,0 +1,111 @@
+/**-------------------------------------------------------------------------
+@file	board.h
+
+@brief	Board specific definitions
+
+This file contains all I/O definitions for a specific board for the
+application firmware.  This files should be located in each project and
+modified to suit the need for the application use case.
+
+@author	Hoang Nguyen Hoan
+@date	Nov. 16, 2016
+
+@license
+
+Copyright (c) 2024, I-SYST inc., all rights reserved
+
+Permission to use, copy, modify, and distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright
+notice and this permission notice appear in all copies, and none of the
+names : I-SYST or its contributors may be used to endorse or
+promote products derived from this software without specific prior written
+permission.
+
+For info or contributing contact : info at i-syst dot com
+
+THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+----------------------------------------------------------------------------*/
+
+#ifndef __BOARD_H__
+#define __BOARD_H__
+
+#include "blystnano_boards.h"
+
+#define BOARD			IBK_BLYST_NANO
+
+#if BOARD == IBK_BLUEIO
+
+#define BUTTON_PINS_MAP		IBK_BLUEIO_BUT_PINS_CFG
+#define BUT1_SENSE			IBK_BLUEIO_BUT1_SENSE
+#define BUT2_SENSE			IBK_BLUEIO_BUT2_SENSE
+
+#define LED_PINS_MAP		IBK_BLUEIO_LED_PINS_CFG
+
+#elif BOARD == IBK_BLYST_NANO
+
+#define BUTTON_PINS_MAP		IBK_BLYST_NANO_BUT_PINS_CFG
+#define BUT1_SENSE			IBK_BLYST_NANO_BUT1_SENSE
+#define BUT2_SENSE			IBK_BLYST_NANO_BUT2_SENSE
+
+#define LED_PINS_MAP		IBK_BLYST_NANO_LED_PINS_CFG
+
+#elif BOARD == BLUEIO_TAG_EVIM
+
+#define BUTTON_PINS_MAP		BLUEIO_TAG_EVIM_BUT_PINS_CFG
+#define BUT1_SENSE			BLUEIO_TAG_EVIM_BUT1_SENSE
+#define BUT2_SENSE			BLUEIO_TAG_EVIM_BUT2_SENSE
+
+#define LED_PINS_MAP		BLUEIO_TAG_EVIM_LED_PINS_CFG
+
+#elif BOARD == BLYST_NANO_DK
+
+#define BUTTON_PINS_MAP		BLYST_NANO_DK_BUT_PINS_CFG
+#define BUT1_SENSE			BLYST_NANO_DK_BUT1_SENSE
+#define BUT2_SENSE			BLYST_NANO_DK_BUT2_SENSE
+
+#define LED_PINS_MAP		BLYST_NANO_DK_LED_PINS_CFG
+
+#elif BOARD == BLUEIO832_MINI
+
+#define LED_PINS_MAP		BLUEIO832_MINI_LED_PINS_CFG
+
+#elif BOARD == BLUEPYRO_CR24S_M3225
+
+#define LED_PINS_MAP		BLUEPYRO_CR24S_M3225_LED_PINS_CFG
+
+#define LED1_PORT			BLUEPYRO_CR24S_M3225_LED1_PORT
+#define LED1_PIN			BLUEPYRO_CR24S_M3225_LED1_PIN
+#define LED1_ACTIVE			BLUEPYRO_CR24S_M3225_LED1_ACTIVE
+#define LED2_PORT			BLUEPYRO_CR24S_M3225_LED2R_PORT
+#define LED2_PIN			BLUEPYRO_CR24S_M3225_LED2R_PIN
+#define LED2_ACTIVE			BLUEPYRO_CR24S_M3225_LED2R_ACTIVE
+#define LED3_PORT			BLUEPYRO_CR24S_M3225_LED2G_PORT
+#define LED3_PIN			BLUEPYRO_CR24S_M3225_LED2G_PIN
+#define LED3_ACTIVE			BLUEPYRO_CR24S_M3225_LED2G_ACTIVE
+#define LED4_PORT			BLUEPYRO_CR24S_M3225_LED2B_PORT
+#define LED4_PIN			BLUEPYRO_CR24S_M3225_LED2B_PIN
+#define LED4_ACTIVE			BLUEPYRO_CR24S_M3225_LED2B_ACTIVE
+
+#endif
+
+#define BUT1_INT		0
+#define BUT1_INT_PRIO	6
+#define BUT2_INT		1
+#define BUT2_INT_PRIO	6
+
+#define PULSE_TRAIN_PINS_MAP	BLYSTNANO_PULSE_TRAIN_PINS
+
+#define TIMER_DEVNO		2
+
+#endif // __BOARD_H__
+
