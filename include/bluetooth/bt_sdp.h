@@ -1,18 +1,18 @@
 /**-------------------------------------------------------------------------
-@file	bt_app_handler.cpp
+@file	bt_sdp.h
 
-@brief	Bluetooth application firmware event callback
+@brief	Generic Bluetooth Service Discover Protocol (SDP)
 
-Dummy user app handler.  All functions can be overloaded
+Generic Bluetooth Service Discover Protocol (SDP)
 
 @author	Hoang Nguyen Hoan
-@date	Feb. 23, 2017
+@date	Feb. 06, 2024
 
 @license
 
 MIT License
 
-Copyright (c) 2017, I-SYST inc., all rights reserved
+Copyright (c) 2024, I-SYST, all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -32,65 +32,21 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-----------------------------------------------------------------------------
-Modified by          Date              Description
-
 ----------------------------------------------------------------------------*/
-#include <stdbool.h>
+#ifndef __BT_SDP_H__
+#define __BT_SDP_H__
 
-#include "bluetooth/bt_app.h"
+typedef struct __Sdp_Service_Record {
 
-__attribute__((weak)) void BtAppInitUserData()
-{
+} SdpSrvcRecord_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+#ifdef __cplusplus
 }
+#endif
 
-//__attribute__((weak)) void BtDevInitCustomData()
-//{
-
-//}
-
-//__attribute__((weak)) void BtDevInitCustomSrvc()
-//{
-
-//}
-__attribute__((weak)) void BtAppInitUserServices()
-{
-
-}
-
-__attribute__((weak)) void BtAppAdvTimeoutHandler()
-{
-
-}
-
-__attribute__((weak))  void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
-{
-
-}
-
-__attribute__((weak))  void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
-{
-
-}
-
-__attribute__((weak)) void BtAppRtosWaitEvt(void)
-{
-
-}
-
-__attribute__((weak)) void BtAppEvtConnected(uint16_t ConnHdl)
-{
-
-}
-
-__attribute__((weak)) void BtAppEvtDisconnected(uint16_t ConnHdl)
-{
-
-}
-
-__attribute__((weak)) void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
-{
-
-}
-
+#endif // __BT_SDP_H__

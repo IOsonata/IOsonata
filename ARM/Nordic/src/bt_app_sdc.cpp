@@ -68,7 +68,7 @@ SOFTWARE.
 #define BT_SDC_TX_MAX_PACKET_COUNT			3
 
 //BleConn_t g_BleConn = {0,};
-//extern UART g_Uart;
+extern UART g_Uart;
 
 static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
 	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
@@ -77,6 +77,7 @@ void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt);
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason);
 void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
+void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *DavData);
 static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 #pragma pack(push, 4)
@@ -116,6 +117,7 @@ static BtHciDevice_t s_BtHciDev = {
 	.Connected = BtAppConnected,
 	.Disconnected = BtAppDisconnected,
 	.SendCompleted = BtAppSendCompleted,
+	.ScanReport = BtAppScanReport,
 };
 //BtDev_t g_BtDevSdc;
 
@@ -1223,6 +1225,9 @@ void BtAppScan()
 	}
 	APP_ERROR_CHECK(err_code);
 #endif
+
+	BtGapScanStart(NULL, 0);
+
 }
 
 void BtAppScanStop()
@@ -1238,6 +1243,8 @@ void BtAppScanStop()
 bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 {
 	sdc_hci_cmd_le_set_scan_params_t paraam;
+
+	BtGapScanInit(pCfg);
 
 	return false;
 #if 0

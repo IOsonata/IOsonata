@@ -44,13 +44,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble_advdata.h"
 #include "nrf_ble_scan.h"
 #include "ble_gatt_db.h"
+#include "bluetooth/bt_dev.h"
 #endif
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/blueio_blesrvc.h"
-#include "bluetooth/bt_dev.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
 #include "custom_board.h"//Does this make the LED_2 & LED_3 do not work?
@@ -185,11 +185,15 @@ static BtGapScanCfg_t const g_ScanParams = {
 	.Interval = SCAN_INTERVAL,
 	.Duration = SCAN_WINDOW,
 	.Timeout = SCAN_TIMEOUT,
+	.BaseUid = BLUEIO_UUID_BASE,
+	.ServUid = BLUEIO_UUID_UART_SERVICE,//s_UartBleSrvAdvUuid,
 };
 #endif
 
 uint8_t g_ScanBuff[BT_GAP_SCAN_BUFFER_SIZE_DEFAULT];//BLE_GAP_SCAN_BUFFER_EXTENDED_MAX];
 
+
+#if 0
 ble_data_t g_AdvScanReportData = {
 	.p_data = g_ScanBuff,
 	.len = BT_GAP_SCAN_BUFFER_SIZE_DEFAULT,//BLE_GAP_SCAN_BUFFER_EXTENDED_MAX
@@ -202,19 +206,18 @@ static ble_gap_conn_params_t s_ConnParams = {
 	.conn_sup_timeout = (uint16_t)MSEC_TO_UNITS(NRF_BLE_SCAN_SUPERVISION_TIMEOUT, UNIT_10_MS),
 };
 
-
-//BLE_UUID_TYPE_BLE
-const ble_uuid_t s_UartBleSrvAdvUuid = {
-	.uuid = BLUEIO_UUID_UART_SERVICE,
-	.type = BLE_UUID_TYPE_BLE,
-};
-
-BtGapScanCfg_t s_bleScanInitCfg = {
+static BtGapScanCfg_t s_bleScanInitCfg = {
 		.Interval = SCAN_INTERVAL,
 		.Duration = SCAN_WINDOW,
 		.Timeout = SCAN_TIMEOUT,
 		.BaseUid = BLUEIO_UUID_BASE,
 		.ServUid = BLUEIO_UUID_UART_SERVICE,//s_UartBleSrvAdvUuid,
+};
+
+//BLE_UUID_TYPE_BLE
+const ble_uuid_t s_UartBleSrvAdvUuid = {
+	.uuid = BLUEIO_UUID_UART_SERVICE,
+	.type = BLE_UUID_TYPE_BLE,
 };
 
 BLEPERIPH_DEV g_ConnectedDev = {
@@ -387,6 +390,47 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
         	break;
   }
 }
+#endif
+
+void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
+{
+//	g_Uart.printf("BtAppScanReport : Rssi = %d\r\n", Rssi);
+	g_Uart.printf("%02x %02x %02x %02x %02x %02x : RSSI = %d, ",
+					Addr[0], Addr[1], Addr[2],
+					Addr[3], Addr[4], Addr[5], Rssi);
+	if (AdvLen > 0)
+	{
+		char name[32];
+		size_t l = BtAdvDataGetDevName(pAdvData, AdvLen, name, 32);
+
+		if (l > 0)
+		{
+			name[l-1] = 0;
+			g_Uart.printf("%s\r\n", name);
+		}
+		else
+		{
+			g_Uart.printf("(No Name)\r\n", name);
+		}
+
+		uint8_t buff[256];
+		l = BtAdvDataGetManData(pAdvData, AdvLen, buff, 256);
+		if (l > 0)
+		{
+			g_Uart.printf("Len = %d - ", l);
+			for (int i = 0; i < l; i++)
+			{
+				g_Uart.printf("%02x ", buff[i]);
+			}
+
+			g_Uart.printf("\r\n");
+		}
+	}
+	else
+	{
+		g_Uart.printf("(No data)\r\n");
+	}
+}
 
 void HardwareInit()
 {
@@ -417,9 +461,9 @@ void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 	int l = g_Uart.Rx(buff, PACKET_SIZE);
 	if (l > 0)
 	{
-		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
+	//	if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
-			BtAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, l);
+	//		BtAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, l);
 		}
 	}
 }
@@ -433,7 +477,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			app_sched_event_put(NULL, 0, UartRxChedHandler);
+		//	app_sched_event_put(NULL, 0, UartRxChedHandler);
 			break;
 		case UART_EVT_TXREADY:
 			break;
@@ -467,7 +511,7 @@ int main()
    // APP_ERROR_CHECK(ret);
 
     // Register the non-GATT service and its characteristics
-    BtAppScanInit(&s_bleScanInitCfg);
+    BtAppScanInit((BtGapScanCfg_t*)&g_ScanParams);
 
     BtAppScan();
 

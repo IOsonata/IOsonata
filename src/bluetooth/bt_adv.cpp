@@ -258,3 +258,37 @@ bool BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName)
 	// Update name in advertisement packet
 	return BtAdvDataAdd(pAdvPkt, type, (uint8_t*)pName, l);
 }
+
+size_t BtAdvDataGetDevName(uint8_t *pAdvData, size_t AdvLen, char *pName, size_t NameLen)
+{
+	size_t retval = 0;
+	int idx = BtAdvDataFindAdvTag(BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME, pAdvData, AdvLen);
+
+	if (idx < 0)
+	{
+		idx = BtAdvDataFindAdvTag(BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME, pAdvData, AdvLen);
+	}
+	if (idx >= 0)
+	{
+		BtAdvData_t *p = (BtAdvData_t*)&pAdvData[idx];
+		retval = min(NameLen, (size_t)p->Hdr.Len);
+		memcpy(pName, p->Data, retval);
+	}
+
+	return retval;
+}
+
+size_t BtAdvDataGetManData(uint8_t *pAdvData, size_t AdvLen, uint8_t *pBuff, size_t BuffLen)
+{
+	size_t retval = 0;
+	int idx = BtAdvDataFindAdvTag(BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, pAdvData, AdvLen);
+
+	if (idx >= 0)
+	{
+		BtAdvData_t *p = (BtAdvData_t*)&pAdvData[idx];
+		retval = min(BuffLen, (size_t)p->Hdr.Len);
+		memcpy(pBuff, p->Data, retval);
+	}
+
+	return retval;
+}

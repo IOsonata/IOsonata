@@ -208,6 +208,9 @@ bool BtAdvDataAddUuid(BtAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bo
  */
 bool BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName);
 
+size_t BtAdvDataGetDevName(uint8_t *pAdvData, size_t AdvLen, char *pName, size_t NameLen);
+size_t BtAdvDataGetManData(uint8_t *pAdvData, size_t AdvLen, uint8_t *pBuff, size_t BuffLen);
+
 void BtAdvStart();
 void BtAdvStop();
 

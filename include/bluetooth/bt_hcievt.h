@@ -277,7 +277,7 @@ typedef struct __Bt_HciLe_Evt_Directed_Adv_Report {
 		uint8_t Addr[6];		//!< Address of the advertising device
 		uint8_t DirAddrType;	//!< device address type
 		uint8_t DirAddr[6];		//!< device address
-		uint8_t Rssi;			//!< in dBm (-127 to +20)
+		int8_t Rssi;			//!< in dBm (-127 to +20)
 	} Report[1];
 } BtHciLeDirectedAdvReport_t;
 
@@ -297,7 +297,7 @@ typedef struct __Bt_ExtAdv_Report {
 	uint8_t SecPhy;
 	uint8_t AdvSid;
 	uint8_t TxPwr;
-	uint8_t Rssi;
+	int8_t Rssi;
 	uint16_t PeriodAdvInterval;
 	uint8_t DirAddrType;
 	uint8_t DirAddr[6];
@@ -326,7 +326,7 @@ typedef struct __Bt_HciLe_Evt_PeriodAdvSyncEstablished {
 typedef struct __Bt_HciLe_Evt_Periodic_Adv_Report {
 	uint16_t SyncHdl;
 	uint8_t TxPwr;
-	uint8_t Rssi;
+	int8_t Rssi;
 	uint8_t CteType;
 	uint8_t DataStatus;
 	uint8_t DataLen;
@@ -359,7 +359,7 @@ typedef struct __Bt_HciLe_Evt_Chan_Sel_Algo {
 typedef struct __Bt_HciLe_Evt_Connectionless_IQ_Report {
 	uint16_t SyncHdl;
 	uint8_t ChanIdx;
-	uint16_t Rssi;
+	int16_t Rssi;
 	uint8_t RssiAntId;
 	uint8_t CteType;
 	uint8_t SlotDur;
@@ -377,7 +377,7 @@ typedef struct __Bt_HciLe_Evt_Conn_IQ_Report {
 	uint16_t ConnHdl;
 	uint8_t RxPhy;
 	uint8_t DataChanIdx;
-	uint16_t Rssi;
+	int16_t Rssi;
 	uint8_t RssiAntId;
 	uint8_t CteType;
 	uint8_t SlotDur;

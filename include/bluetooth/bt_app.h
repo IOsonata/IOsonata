@@ -236,6 +236,7 @@ void BtAppEvtConnected(uint16_t ConnHdl);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx);
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
+void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData);
 
 
 //void BleDevServiceDiscovered(uint16_t ConnHdl, uint16_t Count, ble_gattc_service_t * const pServices);

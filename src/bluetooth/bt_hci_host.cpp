@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	bt_hci.cpp
+@file	bt_hci_host.cpp
 
 @brief	Bluetooth HCI implementation Host side
 
@@ -41,12 +41,13 @@ SOFTWARE.
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"
+#include "bluetooth/bt_scan.h"
 #include "istddef.h"
-#include "coredev/uart.h"
+//#include "coredev/uart.h"
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
-extern UART g_Uart;
+//extern UART g_Uart;
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};
 
@@ -69,7 +70,7 @@ bool BtHciInit(BtHciDevCfg_t const *pCfg)
 //void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 {
-	g_Uart.printf("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
+	//g_Uart.printf("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
 
 	switch (pLeEvtPkt->Evt)
 	{
@@ -89,16 +90,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			{
 				BtHciLeEvtAdvReport_t *p = (BtHciLeEvtAdvReport_t*)pLeEvtPkt->Data;
 
-				g_Uart.printf("BT_HCI_EVT_LE_ADV_REPORT: %d\r\n", p->NbReport);
-
-				for (int i = 0; i < p->NbReport; i++)
-				{
-					g_Uart.printf("%02x %02x %02x %02x %02x %02x, Datalen = %d\r\n",
-								p->Report[i].Addr[0], p->Report[i].Addr[1], p->Report[i].Addr[2],
-								p->Report[i].Addr[3], p->Report[i].Addr[4], p->Report[i].Addr[5], p->Report[i].DataLen);
-				}
-
-				pDev->ScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
+				BtScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
 			}
 			break;
 		case BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE:
@@ -174,19 +166,22 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_EXT_ADV_REPORT:
 			{
-				g_Uart.printf("BT_HCI_EVT_LE_EXT_ADV_REPORT:\r\n");
-				BtHciLeEvtExtAdvReport_t *p = (BtHciLeEvtExtAdvReport_t*)pLeEvtPkt->Data;
+				//g_Uart.printf("BT_HCI_EVT_LE_EXT_ADV_REPORT:\r\n");
+				BtHciLeEvtExtAdvReport_t *report = (BtHciLeEvtExtAdvReport_t*)pLeEvtPkt->Data;
+				BtExtAdvReport_t *p = (BtExtAdvReport_t*)report->Report;
 
-				g_Uart.printf("Nb reports : %d\r\n", p->NbReport);
-				for (int i = 0; i < p->NbReport; i++)
+//				g_Uart.printf("BT_HCI_EVT_LE_EXT_ADV_REPORT\r\n");
+				//g_Uart.printf("Nb reports : %d\r\n", report->NbReport);
+				for (int i = 0; i < report->NbReport; i++)
 				{
-					g_Uart.printf("%02x %02x %02x %02x %02x %02x, Datlen = %d\r\n",
-								p->Report[i].Addr[0], p->Report[i].Addr[1], p->Report[i].Addr[2],
-								p->Report[i].Addr[3], p->Report[i].Addr[4], p->Report[i].Addr[5],
-								p->Report[i].DataLen);
-
+				//	g_Uart.printf("%02x %02x %02x %02x %02x %02x, Datlen = %d\r\n",
+//								p[i].Addr[0], p[i].Addr[1], p[i].Addr[2],
+//								p[i].Addr[3], p[i].Addr[4], p[i].Addr[5],
+//								p[i].DataLen);
+					pDev->ScanReport(p[i].Rssi, p[i].AddrType, p[i].Addr, p[i].DataLen, p[i].Data);
 				}
-				pDev->ScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
+
+				//BtScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
 			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V1:
@@ -424,14 +419,14 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt)
 {
 	BtL2CapPdu_t *l2rcv = (BtL2CapPdu_t*)pPkt->Data;
-
+/*
 	g_Uart.printf("** BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
 	for (int i = 0; i < pPkt->Hdr.Len; i++)
 	{
 		g_Uart.printf("%x ", pPkt->Data[i]);
 	}
 	g_Uart.printf("\r\nCID: %x\r\n", l2rcv->Hdr.Cid);
-
+*/
 	switch (l2rcv->Hdr.Cid)
 	{
 		case BT_L2CAP_CID_ACL_U:

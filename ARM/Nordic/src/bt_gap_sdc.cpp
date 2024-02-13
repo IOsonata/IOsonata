@@ -50,28 +50,36 @@ SOFTWARE.
 
 #include "sdc_hci_cmd_le.h"
 
+#include "convutil.h"
 #include "bluetooth/bt_gap.h"
+
+#include "coredev/uart.h"
+extern UART g_Uart;
 
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
 	uint8_t buff[255];
 	sdc_hci_cmd_le_set_ext_scan_params_t *param = (sdc_hci_cmd_le_set_ext_scan_params_t *)buff;
 
-	param->own_address_type = 0;
+	param->own_address_type = 1;
 	param->scanning_filter_policy = 0;
-	param->scanning_phys = 0;
-	param->array_params[0] = { 1, pCfg->Interval, pCfg->Duration};
+	param->scanning_phys = 1;
+	param->array_params[0] = { 1, mSecTo0_625(pCfg->Interval), mSecTo0_625(pCfg->Duration) };
 
 
 	uint8_t res = sdc_hci_cmd_le_set_ext_scan_params(param);
-
-	return true;
+g_Uart.printf("sdc_hci_cmd_le_set_ext_scan_params : 0x%x (%d)\r\n", res, res);
+	return res == 0;
 }
 
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 {
+	sdc_hci_cmd_le_set_ext_scan_enable_t param = { 1, 1, 0, 0 };
+
+	uint8_t res = sdc_hci_cmd_le_set_ext_scan_enable(&param);
 	
-	return true;
+	g_Uart.printf("sdc_hci_cmd_le_set_ext_scan_enable : 0x%x (%d)\r\n", res, res);
+	return res == 0;
 }
 
 bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
