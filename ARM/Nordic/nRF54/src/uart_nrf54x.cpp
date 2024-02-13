@@ -3,6 +3,16 @@
 
 @brief	nRF54x UART implementation
 
+nRF54L15 UART mapping
+
+DevNo		nRF54L15 hardware		Max Rate (Baud)
+0			UART30					1M
+1			UART20					1M
+2			UART21					1M
+3			UART22					1M
+4			UART00					1M
+
+
 @author	Hoang Nguyen Hoan
 @date	Feb. 10, 2024
 
