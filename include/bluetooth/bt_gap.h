@@ -172,8 +172,16 @@ typedef struct __Bt_Gap_Connection {
 	uint8_t PeerAddr[6];
 } BtGapConnection_t;
 
+typedef enum __Bt_Scan_Type {
+	BTSCAN_TYPE_PASSIVE,		//!< without scan/response data
+	BTSCAN_TYPE_PASSIVE_EXT,		//!< without scan/response data
+	BTSCAN_TYPE_ACTIVE			//!< with scan/response data
+} BTSCAN_TYPE;
+
 typedef struct __Bt_Gap_Scan_Cfg {
-	uint8_t Phy;
+	BTSCAN_TYPE Type;			//!< Scan type
+	uint8_t Phy;				//!< PHY to scan
+	BTADDR_TYPE OwnAddrType;
 	uint32_t Interval;			//!< Scan interval in msec
 	uint32_t Duration;			//!< Scan window in msec
 	uint32_t Timeout;			//!< Scan timeout in sec

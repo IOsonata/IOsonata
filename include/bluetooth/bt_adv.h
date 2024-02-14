@@ -42,11 +42,11 @@ SOFTWARE.
 #pragma pack(push, 1)
 
 typedef enum __Bt_Addr_Type {
-	BT_ADDR_TYPE_PUBLIC = 0,			//!< Public device address
-	BT_ADDR_TYPE_RAND = 1,				//!< Random device address
-	BT_ADDR_TYPE_RESOLV = 2,			//!< Public Identity Address (Corresponds to Resolved Private Address)
-	BT_ADDR_TYPE_RANDOM_STATIC = 3		//!< Random (static) Identity Address (Corresponds to Resolved Private Address)
-} BT_ADDR_TYPE;
+	BTADDR_TYPE_PUBLIC = 0,			//!< Public device address
+	BTADDR_TYPE_RAND = 1,				//!< Random device address
+	BTADDR_TYPE_RESOLV = 2,			//!< Public Identity Address (Corresponds to Resolved Private Address)
+	BTADDR_TYPE_RANDOM_STATIC = 3		//!< Random (static) Identity Address (Corresponds to Resolved Private Address)
+} BTADDR_TYPE;
 
 /// BLE Advertising type
 typedef enum __Bt_Adv_Type {
@@ -77,8 +77,8 @@ typedef struct __Bt_Adv_Param {
 	uint16_t IntervalMin;				//!< Advertising interval min. t = minval * 0.625ms
 	uint16_t IntervalMax;				//!< Advertising interval max. t = maxval * 0.625ms
 	BTADV_TYPE Type:8;
-	BT_ADDR_TYPE OwnAddrType:8;
-	BT_ADDR_TYPE PeerAddrType:8;		//!< only BLEADV_ADDR_TYPE_PUBLIC or BLEADV_ADDR_TYPE_RAND
+	BTADDR_TYPE OwnAddrType:8;
+	BTADDR_TYPE PeerAddrType:8;			//!< only BLEADV_ADDR_TYPE_PUBLIC or BLEADV_ADDR_TYPE_RAND
 	uint8_t PeerAddr[6];				//!< Peer address
 	uint8_t ChanMap;					//!< Advertising channel map
 	BTADV_FILTER_POLICY FilterPolicy;	//!< Advertising filter policy
@@ -104,8 +104,8 @@ typedef struct _Bt_Ext_Adv_Param {
 	uint32_t PrimIntervalMin:24;		//!< Primary advertising interval min. in 625 usec unit
 	uint32_t PrimIntervalMax:24;		//!< Primary advertising interval max. in 625 usec unit
 	uint32_t PrimChanMap:8;				//!< Primary channel map
-	BT_ADDR_TYPE OwnAddrType:8;
-	BT_ADDR_TYPE PeerAddrType:8;		//!< only BLEADV_ADDR_TYPE_PUBLIC or BLEADV_ADDR_TYPE_RAND
+	BTADDR_TYPE OwnAddrType:8;
+	BTADDR_TYPE PeerAddrType:8;			//!< only BLEADV_ADDR_TYPE_PUBLIC or BLEADV_ADDR_TYPE_RAND
 	uint8_t PeerAddr[6];				//!< Peer address
 	BTADV_FILTER_POLICY FilterPolicy;			//!< Advertising filter policy
 	uint8_t TxPwr;						//!< Advertising TX power in dBm

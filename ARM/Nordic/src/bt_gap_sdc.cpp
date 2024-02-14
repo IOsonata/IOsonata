@@ -59,27 +59,42 @@ extern UART g_Uart;
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
 	uint8_t buff[255];
-	sdc_hci_cmd_le_set_ext_scan_params_t *param = (sdc_hci_cmd_le_set_ext_scan_params_t *)buff;
+	sdc_hci_cmd_le_set_ext_scan_params_t *extparam = (sdc_hci_cmd_le_set_ext_scan_params_t *)buff;
+	sdc_hci_cmd_le_set_scan_params_t param;
 
-	param->own_address_type = 1;
-	param->scanning_filter_policy = 0;
-	param->scanning_phys = 1;
-	param->array_params[0] = { 1, mSecTo0_625(pCfg->Interval), mSecTo0_625(pCfg->Duration) };
+	extparam->own_address_type = 1;
+	extparam->scanning_filter_policy = 0;
+	extparam->scanning_phys = pCfg->Phy;
+	extparam->array_params[0] = { 1, mSecTo0_625(pCfg->Interval), mSecTo0_625(pCfg->Duration) };
 
+	param.le_scan_type = pCfg->Type;
+	param.own_address_type = pCfg->OwnAddrType;
+	param.scanning_filter_policy = 0; // TODO
+	param.le_scan_interval = mSecTo0_625(pCfg->Interval);
+	param.le_scan_window = mSecTo0_625(pCfg->Duration);
 
-	uint8_t res = sdc_hci_cmd_le_set_ext_scan_params(param);
+	uint8_t res = sdc_hci_cmd_le_set_scan_params(&param);
+	g_Uart.printf("sdc_hci_cmd_le_set_scan_params : 0x%x (%d)\r\n", res, res);
+	res = sdc_hci_cmd_le_set_ext_scan_params(extparam);
 g_Uart.printf("sdc_hci_cmd_le_set_ext_scan_params : 0x%x (%d)\r\n", res, res);
 	return res == 0;
 }
 
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 {
-	sdc_hci_cmd_le_set_ext_scan_enable_t param = { 1, 1, 0, 0 };
+	sdc_hci_cmd_le_set_ext_scan_enable_t extparam = { 1, 1, 0, 0 };
+	sdc_hci_cmd_le_set_scan_enable_t param = { 1, 0 };
 
-	uint8_t res = sdc_hci_cmd_le_set_ext_scan_enable(&param);
+	uint8_t //res = sdc_hci_cmd_le_set_scan_enable(&param);
+	res = sdc_hci_cmd_le_set_ext_scan_enable(&extparam);
 	
 	g_Uart.printf("sdc_hci_cmd_le_set_ext_scan_enable : 0x%x (%d)\r\n", res, res);
 	return res == 0;
+}
+
+void BtGapScanStop()
+{
+
 }
 
 bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
