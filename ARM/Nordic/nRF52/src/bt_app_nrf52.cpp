@@ -660,9 +660,20 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 #if 1
     if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtAppData.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
     {
-#if 0
     	switch (p_ble_evt->header.evt_id)
         {
+    		case BLE_GAP_EVT_ADV_REPORT:
+				{
+					// Scan data report
+					ble_gap_evt_adv_report_t * p_adv_report = (ble_gap_evt_adv_report_t*)&p_gap_evt->params.adv_report;
+
+					BtAppScanReport(p_adv_report->rssi, p_adv_report->peer_addr.addr_type,
+							p_adv_report->peer_addr.addr, p_adv_report->data.len, p_adv_report->data.p_data);
+					// Continue scan
+					BtAppScan();
+				}
+    			break;
+#if 0
             case BLE_GAP_EVT_TIMEOUT:
             {
                 const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
@@ -675,8 +686,8 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
                 }
             }
             break;
-        }
 #endif
+        }
     	BtAppCentralEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
     }
     if (s_BtAppData.Role & BTAPP_ROLE_PERIPHERAL)
