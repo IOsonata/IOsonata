@@ -1051,6 +1051,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_gap_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gap_sdc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_gatt.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gatt.cpp</locationURI>
@@ -1069,6 +1074,11 @@
 			<name>src/bluetooth/bt_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_scan.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_scan.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_smp.cpp</name>
