@@ -46,7 +46,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
-//#define BYTE_MODE
+#define BYTE_MODE
 #define TEST_BUFSIZE		64
 
 static volatile bool s_bTxDone = false;
@@ -81,6 +81,24 @@ int main()
 	uint8_t d = 0xff;
 	uint8_t buff[TEST_BUFSIZE];
 
+	if (NRF_CLOCK->PLL.STAT == 0)
+	{
+		NRF_CLOCK->TASKS_PLLSTART = 1;
+	}
+
+	// Start HF clock if needed
+	if (NRF_CLOCK->XO.STAT == 0)
+	{
+		NRF_CLOCK->TASKS_XOSTART = 1;
+		int timout = 1000000;
+		while (timout-- > 0 && NRF_CLOCK->EVENTS_XOSTARTED == 0);
+
+		if (timout <= 0)
+			return false;
+
+		NRF_CLOCK->EVENTS_XOSTARTED = 0;
+	}
+
     err_code = nrfx_uarte_init(&g_Uarte, &g_UarteCfg, uart_error_handle);
     if (err_code != 0)
     {
@@ -99,7 +117,7 @@ int main()
 	while(1)
 	{
 #ifdef BYTE_MODE
-		if (nrfx_uarte_tx(&g_Uarte, &d, 1) == NRF_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, &d, 1, 0) == 0)
 		{
 			// If success send next code
 			d = Prbs8(d);
