@@ -583,7 +583,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		return false;
 	}
-
+#if 0
 	// Start HF clock if needed
 	if (NRF_CLOCK->XO.STAT == 0)
 	{
@@ -596,6 +596,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 		NRF_CLOCK->EVENTS_XOSTARTED = 0;
 	}
+#endif
 
 	int devno = pCfg->DevNo;
 	NRF_UARTE_Type *reg = s_nRFxUARTDev[devno].pDmaReg;

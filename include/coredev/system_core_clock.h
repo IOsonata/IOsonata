@@ -62,7 +62,8 @@ typedef struct __Oscillator_Desc {
 	OSC_TYPE Type;		//!< Oscillator type RC, crystal, oscillator
 	uint32_t Freq;		//!< Frequency in Hz
 	uint32_t Accuracy;	//!< Accuracy in PPM
-	uint32_t LoadCap;	//!< Crystal's load capacitance in pF
+	uint32_t LoadCap;	//!< Crystal's load capacitance in 10 x pF. SystemInit could not handle FPU
+	 	 	 	 	 	//!< therefore cap value is x10 to include the first decimal number
 } OscDesc_t;
 
 ///
