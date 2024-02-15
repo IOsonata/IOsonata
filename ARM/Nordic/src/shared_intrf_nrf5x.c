@@ -40,6 +40,8 @@ SOFTWARE.
 
 #ifdef NRF52840_XXAA
 #define MAX_NB_DEV		4
+#elif defined(NRF54L15_ENGA_XXAA)
+#define MAX_NB_DEV		5
 #else
 #define MAX_NB_DEV		3
 #endif
