@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NORDIC_DK
 
-#define UART_DEVNO			0
+#define UART_DEVNO			3
 
 #ifdef NORDIC_DK
 // PCA10156
@@ -92,19 +92,19 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NRFX_UART_INST	21
 
 #define UART_RX_PORT		1
-#define UART_RX_PIN			11
+#define UART_RX_PIN			5//11
 #define UART_RX_PINOP		1
 
 #define UART_TX_PORT		1
-#define UART_TX_PIN			10
+#define UART_TX_PIN			4//10
 #define UART_TX_PINOP		1
 
 #define UART_CTS_PORT		1
-#define UART_CTS_PIN		13
+#define UART_CTS_PIN		7//13
 #define UART_CTS_PINOP		1
 
 #define UART_RTS_PORT		1
-#define UART_RTS_PIN		12
+#define UART_RTS_PIN		6//12
 #define UART_RTS_PINOP		1
 
 #elif (UART_DEVNO == 3)
@@ -113,18 +113,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define UART_RX_PORT		1
 #define UART_RX_PIN			11
-#define UART_RX_PINOP		1
+#define UART_RX_PINOP		5//1
 
 #define UART_TX_PORT		1
-#define UART_TX_PIN			10
+#define UART_TX_PIN			4//10
 #define UART_TX_PINOP		1
 
 #define UART_CTS_PORT		1
-#define UART_CTS_PIN		13
+#define UART_CTS_PIN		7//13
 #define UART_CTS_PINOP		1
 
 #define UART_RTS_PORT		1
-#define UART_RTS_PIN		12
+#define UART_RTS_PIN		6//12
 #define UART_RTS_PINOP		1
 
 #elif (UART_DEVNO == 4)
@@ -136,7 +136,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_RX_PINOP		1
 
 #define UART_TX_PORT		2
-#define UART_TX_PIN			2
+#define UART_TX_PIN			8
 #define UART_TX_PINOP		1
 
 #define UART_CTS_PORT		2
