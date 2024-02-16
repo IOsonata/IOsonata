@@ -48,18 +48,107 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifdef NORDIC_DK
 // PCA10156
 
+#if UART_DEVNO == 0
+
+#define NRFX_UART_INST	30
+
 #define UART_RX_PORT		0
 #define UART_RX_PIN			1
 #define UART_RX_PINOP		1
+
 #define UART_TX_PORT		0
 #define UART_TX_PIN			0
 #define UART_TX_PINOP		1
+
 #define UART_CTS_PORT		0
 #define UART_CTS_PIN		3
 #define UART_CTS_PINOP		1
+
 #define UART_RTS_PORT		0
 #define UART_RTS_PIN		2
 #define UART_RTS_PINOP		1
+
+#elif UART_DEVNO == 1
+
+#define NRFX_UART_INST	20
+
+#define UART_RX_PORT		1
+#define UART_RX_PIN			5
+#define UART_RX_PINOP		1
+
+#define UART_TX_PORT		1
+#define UART_TX_PIN			4
+#define UART_TX_PINOP		1
+
+#define UART_CTS_PORT		1
+#define UART_CTS_PIN		7
+#define UART_CTS_PINOP		1
+
+#define UART_RTS_PORT		1
+#define UART_RTS_PIN		6
+#define UART_RTS_PINOP		1
+
+#elif (UART_DEVNO == 2)
+
+#define NRFX_UART_INST	21
+
+#define UART_RX_PORT		1
+#define UART_RX_PIN			11
+#define UART_RX_PINOP		1
+
+#define UART_TX_PORT		1
+#define UART_TX_PIN			10
+#define UART_TX_PINOP		1
+
+#define UART_CTS_PORT		1
+#define UART_CTS_PIN		13
+#define UART_CTS_PINOP		1
+
+#define UART_RTS_PORT		1
+#define UART_RTS_PIN		12
+#define UART_RTS_PINOP		1
+
+#elif (UART_DEVNO == 3)
+
+#define NRFX_UART_INST	22
+
+#define UART_RX_PORT		1
+#define UART_RX_PIN			11
+#define UART_RX_PINOP		1
+
+#define UART_TX_PORT		1
+#define UART_TX_PIN			10
+#define UART_TX_PINOP		1
+
+#define UART_CTS_PORT		1
+#define UART_CTS_PIN		13
+#define UART_CTS_PINOP		1
+
+#define UART_RTS_PORT		1
+#define UART_RTS_PIN		12
+#define UART_RTS_PINOP		1
+
+#elif (UART_DEVNO == 4)
+
+#define NRFX_UART_INST	0
+
+#define UART_RX_PORT		2
+#define UART_RX_PIN			0
+#define UART_RX_PINOP		1
+
+#define UART_TX_PORT		2
+#define UART_TX_PIN			2
+#define UART_TX_PINOP		1
+
+#define UART_CTS_PORT		2
+#define UART_CTS_PIN		4
+#define UART_CTS_PINOP		1
+
+#define UART_RTS_PORT		2
+#define UART_RTS_PIN		5
+#define UART_RTS_PINOP		1
+
+#endif // UART_DEVNO
 #else
 #define UART_RX_PORT		BLUEIO_UART_RX_PORT
 #define UART_RX_PIN			BLUEIO_UART_RX_PIN
