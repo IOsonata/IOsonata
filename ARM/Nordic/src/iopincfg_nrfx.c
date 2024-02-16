@@ -8,27 +8,27 @@
 
 @license
 
-Copyright (c) 2014, I-SYST inc., all rights reserved
+MIT
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Copyright (c) 2011, I-SYST inc., all rights reserved
 
-For info or contributing contact : hnhoan at i-syst dot com
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
@@ -148,6 +148,50 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 	return reg;
 }
 
+NRF_GPIOTE_Type *nRFGpioteGetReg(int IntNo)
+{
+	NRF_GPIOTE_Type *reg = NULL;
+
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+	if (IntNo > 4)
+	{
+	    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+	    {
+	    	reg = NRF_GPIOTE20_NS;
+	    }
+	    else
+	    {
+	    	reg = NRF_GPIOTE20_S;
+	    }
+	}
+	else
+	{
+	    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+	    {
+	    	reg = NRF_GPIOTE30_NS;
+	    }
+	    else
+	    {
+	    	reg = NRF_GPIOTE30_S;
+	    }
+	}
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#ifdef NRF5340_XXAA_NETWORK
+	reg = NRF_GPIOTE_NS;
+#else
+	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE0_S;
+    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+    {
+    	reg = NRF_GPIOTE1_NS;
+    }
+#endif
+#else
+    reg = NRF_GPIOTE;
+#endif
+
+    return reg;
+}
+
 /**
  * @brief Configure individual I/O pin. nRF51 only have 1 port so PortNo is not used
  *
@@ -239,22 +283,8 @@ void IOPinDisableInterrupt(int IntNo)
 {
     if (IntNo >= IOPIN_MAX_INT)
         return;
-#if 0
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE_NS;
-#elif defined(NRF54L15_ENGA_XXAA)
-	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE20_S;
-#else
-	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE0_S;
-    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
-    {
-    	gpiotereg = NRF_GPIOTE1_NS;
-    }
-#endif
-#else
-    NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE;
-#endif
+
+    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(IntNo);
 
     if (IntNo < 0)
     {
@@ -262,13 +292,29 @@ void IOPinDisableInterrupt(int IntNo)
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
         if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
         {
-			gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
-			gpiotereg->EVENTS_PORT[0].NONSECURE = 0;
+        	if (IntNo > 4)
+        	{
+				gpiotereg->INTENCLR1 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
+				gpiotereg->EVENTS_PORT[1].NONSECURE = 0;
+        	}
+        	else
+        	{
+				gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
+				gpiotereg->EVENTS_PORT[0].NONSECURE = 0;
+        	}
         }
         else
         {
-			gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0SECURE_Msk;
-			gpiotereg->EVENTS_PORT[0].SECURE = 0;
+        	if (IntNo > 4)
+        	{
+        		gpiotereg->INTENCLR1 = GPIOTE_INTENCLR0_PORT0SECURE_Msk;
+    			gpiotereg->EVENTS_PORT[1].SECURE = 0;
+        	}
+        	else
+        	{
+        		gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0SECURE_Msk;
+    			gpiotereg->EVENTS_PORT[0].SECURE = 0;
+        	}
         }
 #else
         gpiotereg->INTENCLR = GPIOTE_INTENSET_PORT_Msk;
@@ -277,28 +323,20 @@ void IOPinDisableInterrupt(int IntNo)
     }
     else
     {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-#ifdef NRF5340_XXAA_NETWORK
-    	NRF_GPIO_Type *reg = NRF_P0_NS;
-#else
-    	NRF_GPIO_Type *reg = NRF_P0_S;
-        if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
-        {
-        	reg = NRF_P0_NS;
-        }
-#endif
-#else
-        NRF_GPIO_Type *reg = NRF_GPIO;
+    	NRF_GPIO_Type *reg = nRFGpioGetReg(s_GpIOSenseEvt[IntNo].PortPinNo >> 8);
 
-#ifdef NRF52840_XXAA
-        if ((s_GpIOSenseEvt[IntNo].PortPinNo >> 8) == 1)
-        {
-            reg = NRF_P1;
-        }
-
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+    	if (IntNo > 4)
+    	{
+    		gpiotereg->INTENCLR1 = (1 << (IntNo - 4));
+    	}
+    	else
+    	{
+    		gpiotereg->INTENCLR0 = (1 << IntNo);
+    	}
+#else
+    	gpiotereg->INTENCLR = (1 << IntNo);
 #endif
-#endif
-        gpiotereg->INTENCLR = (1 << IntNo);
         gpiotereg->CONFIG[IntNo] = 0;
         reg->PIN_CNF[s_GpIOSenseEvt[IntNo].PortPinNo & 0xFF] &= ~GPIO_PIN_CNF_SENSE_Msk;
     }
@@ -314,7 +352,38 @@ void IOPinDisableInterrupt(int IntNo)
             return;
     }
 
-//#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+//#if defined(NRF91_SERIES) || defined(NRF53_SERIES) ||
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x7F00)
+    {
+		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+		{
+			NVIC_ClearPendingIRQ(GPIOTE20_0_IRQn);
+			NVIC_DisableIRQ(GPIOTE20_0_IRQn);
+		}
+		else
+		{
+			NVIC_ClearPendingIRQ(GPIOTE20_1_IRQn);
+			NVIC_DisableIRQ(GPIOTE20_1_IRQn);
+		}
+		gpiotereg->INTENCLR1 = 0xFFFFFFFF;
+    }
+    else
+    {
+		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+		{
+			NVIC_ClearPendingIRQ(GPIOTE30_0_IRQn);
+			NVIC_DisableIRQ(GPIOTE30_0_IRQn);
+		}
+		else
+		{
+			NVIC_ClearPendingIRQ(GPIOTE30_1_IRQn);
+			NVIC_DisableIRQ(GPIOTE30_1_IRQn);
+		}
+		gpiotereg->INTENCLR1 = 0xFFFFFFFF;
+    }
+
+#else
 #ifdef NRF5340_XXAA_NETWORK
 	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_DisableIRQ(GPIOTE_IRQn);
@@ -329,34 +398,6 @@ void IOPinDisableInterrupt(int IntNo)
     	NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
         NVIC_DisableIRQ(GPIOTE1_IRQn);
     }
-#elif defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x7F00)
-    {
-		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
-		{
-			NVIC_ClearPendingIRQ(GPIOTE30_0_IRQn);
-			NVIC_DisableIRQ(GPIOTE30_0_IRQn);
-		}
-		else
-		{
-			NVIC_ClearPendingIRQ(GPIOTE30_1_IRQn);
-			NVIC_DisableIRQ(GPIOTE30_1_IRQn);
-		}
-    }
-    else
-    {
-		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
-		{
-			NVIC_ClearPendingIRQ(GPIOTE20_0_IRQn);
-			NVIC_DisableIRQ(GPIOTE20_0_IRQn);
-		}
-		else
-		{
-			NVIC_ClearPendingIRQ(GPIOTE20_1_IRQn);
-			NVIC_DisableIRQ(GPIOTE20_1_IRQn);
-		}
-    }
-
 #else
     NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_DisableIRQ(GPIOTE_IRQn);
@@ -389,7 +430,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 {
     if (IntNo >= IOPIN_MAX_INT)
 		return false;
-#if 0
+
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
     NRF_GPIOTE_Type *gpiotereg = NULL;
 
@@ -419,10 +460,10 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
     NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE_NS;
-	NRF_GPIO_Type *reg = NRF_P0_NS;
+	//NRF_GPIO_Type *reg = NRF_P0_NS;
 #else
     NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE0_S;
-	NRF_GPIO_Type *reg = NRF_P0_S;
+	//NRF_GPIO_Type *reg = NRF_P0_S;
 
 	if (PortNo & 0x80)
 	{
@@ -432,7 +473,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	}
 #endif
 #else
-	NRF_GPIO_Type *reg = NRF_GPIO;
+	//NRF_GPIO_Type *reg = NRF_GPIO;
 	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE;
 
 #ifdef NRF52840_XXAA
@@ -443,6 +484,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 
 #endif
 #endif
+
+	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
 #ifdef GPIOTE_CONFIG_PORT_Msk
 #define GPIOTE_CONFIG_PORT_PIN_Msk (GPIOTE_CONFIG_PORT_Msk | GPIOTE_CONFIG_PSEL_Msk)
@@ -524,7 +567,19 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		}
 
 		gpiotereg->CONFIG[IntNo] = cfg;
+
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+		if (IntNo > 4)
+		{
+			gpiotereg->INTENSET1 = (1 << (IntNo - 4));
+		}
+		else
+		{
+			gpiotereg->INTENSET0 = (1 << IntNo);
+		}
+#else
 		gpiotereg->INTENSET = (1 << IntNo);
+#endif
 	    s_GpIOSenseEvt[IntNo].Sense = Sense;
 		s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
 		s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
@@ -584,7 +639,6 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_SetPriority(GPIOTE_IRQn, IntPrio);
     NVIC_EnableIRQ(GPIOTE_IRQn);
-#endif
 #endif
     return true;
 }
