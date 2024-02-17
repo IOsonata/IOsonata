@@ -148,14 +148,14 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 	return reg;
 }
 
-NRF_GPIOTE_Type *nRFGpioteGetReg(int IntNo)
+NRF_GPIOTE_Type *nRFGpioteGetReg(int PortNo)
 {
 	NRF_GPIOTE_Type *reg = NULL;
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-	if (IntNo > 3)
+	if (PortNo & 0x7F)
 	{
-	    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+	    if (PortNo & 0x80)
 	    {
 	    	reg = NRF_GPIOTE20_NS;
 	    }
@@ -166,7 +166,7 @@ NRF_GPIOTE_Type *nRFGpioteGetReg(int IntNo)
 	}
 	else
 	{
-	    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+	    if (PortNo & 0x80)
 	    {
 	    	reg = NRF_GPIOTE30_NS;
 	    }
@@ -179,8 +179,8 @@ NRF_GPIOTE_Type *nRFGpioteGetReg(int IntNo)
 #ifdef NRF5340_XXAA_NETWORK
 	reg = NRF_GPIOTE_NS;
 #else
-	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE0_S;
-    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+	reg = NRF_GPIOTE0_S;
+    if (PortNo & 0x80)
     {
     	reg = NRF_GPIOTE1_NS;
     }
@@ -284,7 +284,7 @@ void IOPinDisableInterrupt(int IntNo)
     if (IntNo >= IOPIN_MAX_INT)
         return;
 
-    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(IntNo);
+    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo].PortPinNo >> 8);
 
     if (IntNo < 0)
     {
@@ -431,61 +431,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     if (IntNo >= IOPIN_MAX_INT)
 		return false;
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
-    NRF_GPIOTE_Type *gpiotereg = NULL;
-
-    if ((PortNo & 0x7F) == 0)
-    {
-    	if (PortNo & 0x80)
-    	{
-    		gpiotereg = NRF_GPIOTE30_NS;
-    	}
-    	else
-    	{
-    		gpiotereg = NRF_GPIOTE30_S;
-    	}
-
-    }
-    else
-    {
-    	if (PortNo & 0x80)
-    	{
-    		gpiotereg = NRF_GPIOTE20_NS;
-    	}
-    	else
-    	{
-    		gpiotereg = NRF_GPIOTE20_S;
-    	}
-    }
-#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-#ifdef NRF5340_XXAA_NETWORK
-    NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE_NS;
-	//NRF_GPIO_Type *reg = NRF_P0_NS;
-#else
-    NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE0_S;
-	//NRF_GPIO_Type *reg = NRF_P0_S;
-
-	if (PortNo & 0x80)
-	{
-		// non-secure access
-		reg = NRF_P0_NS;
-		gpiotereg = NRF_GPIOTE1_NS;
-	}
-#endif
-#else
-	//NRF_GPIO_Type *reg = NRF_GPIO;
-	NRF_GPIOTE_Type *gpiotereg = NRF_GPIOTE;
-
-#ifdef NRF52840_XXAA
-	if (PortNo == 1)
-	{
-		reg = NRF_P1;
-	}
-
-#endif
-#endif
-
-
+    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(PortNo);
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
 #ifdef GPIOTE_CONFIG_PORT_Msk
