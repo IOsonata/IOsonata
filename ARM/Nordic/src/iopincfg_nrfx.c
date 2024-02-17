@@ -495,11 +495,39 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 #endif
 
 	uint32_t cfg = 0;
+	int idx = IntNo > 3 ? IntNo - 4 : IntNo;
 
 	if (IntNo < 0)
 	{
 		IntNo = IOPIN_MAX_INT;
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+
+		if (IntNo > 3)
+		{
+			if (PortNo & 0x80)
+			{
+				gpiotereg->EVENTS_PORT[1].NONSECURE = 0;
+				gpiotereg->INTENSET1 = GPIOTE_INTENSET1_PORT0NONSECURE_Msk;
+			}
+			else
+			{
+				gpiotereg->EVENTS_PORT[1].SECURE = 0;
+				gpiotereg->INTENSET1 = GPIOTE_INTENSET1_PORT0SECURE_Msk;
+			}
+		}
+		else
+		{
+			if (PortNo & 0x80)
+			{
+				gpiotereg->EVENTS_PORT[0].NONSECURE = 0;
+				gpiotereg->INTENSET0 = GPIOTE_INTENSET0_PORT0NONSECURE_Msk;
+			}
+			else
+			{
+				gpiotereg->EVENTS_PORT[0].SECURE = 0;
+				gpiotereg->INTENSET0 = GPIOTE_INTENSET0_PORT0SECURE_Msk;
+			}
+		}
 #else
 		gpiotereg->EVENTS_PORT = 0;
 		gpiotereg->INTENSET = GPIOTE_INTENSET_PORT_Msk;
@@ -532,6 +560,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 					default:
 						;
 				}
+
+				gpiotereg->CONFIG[idx] = cfg;
 
 				s_GpIOSenseEvt[IntNo].Sense = Sense;
 				s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | i; // For use when disable interrupt
@@ -567,7 +597,6 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 				;
 		}
 
-		int idx = IntNo > 3 ? IntNo - 4 : IntNo;
 		gpiotereg->CONFIG[idx] = cfg;
 
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
@@ -848,14 +877,14 @@ void __WEAK GPIOTE1_IRQHandler(void)
 #elif defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
 
 // Unsecure
-void GPIOTE20_0_IRQHandler(void)
+void __WEAK GPIOTE20_0_IRQHandler(void)
 {
 	for (int i = 0; i < GPIOTE20_GPIOTE_NCHANNELS_SIZE; i++)
 	{
 		if (NRF_GPIOTE20_NS->EVENTS_IN[i])
 		{
 			if (s_GpIOSenseEvt[i + 4].SensEvtCB)
-				s_GpIOSenseEvt[i + 4].SensEvtCB(i, s_GpIOSenseEvt[i + 4].pCtx);
+				s_GpIOSenseEvt[i + 4].SensEvtCB(i + 4, s_GpIOSenseEvt[i + 4].pCtx);
 			NRF_GPIOTE20_NS->EVENTS_IN[i] = 0;
 		}
 	}
@@ -873,14 +902,15 @@ void GPIOTE20_0_IRQHandler(void)
 }
 
 // Secure
-void GPIOTE20_1_IRQHandler(void)
+void __WEAK GPIOTE20_1_IRQHandler(void)
 {
+
 	for (int i = 0; i < GPIOTE20_GPIOTE_NCHANNELS_SIZE; i++)
 	{
 		if (NRF_GPIOTE20_S->EVENTS_IN[i])
 		{
 			if (s_GpIOSenseEvt[i + 4].SensEvtCB)
-				s_GpIOSenseEvt[i + 4].SensEvtCB(i, s_GpIOSenseEvt[i + 4].pCtx);
+				s_GpIOSenseEvt[i + 4].SensEvtCB(i + 4, s_GpIOSenseEvt[i + 4].pCtx);
 			NRF_GPIOTE20_S->EVENTS_IN[i] = 0;
 		}
 	}
@@ -896,7 +926,7 @@ void GPIOTE20_1_IRQHandler(void)
 	NVIC_ClearPendingIRQ(GPIOTE20_1_IRQn);
 }
 
-void  GPIOTE30_0_IRQHandler(void)
+void __WEAK GPIOTE30_0_IRQHandler(void)
 {
 	for (int i = 0; i < GPIOTE30_GPIOTE_NCHANNELS_SIZE; i++)
 	{
@@ -919,7 +949,7 @@ void  GPIOTE30_0_IRQHandler(void)
 	NVIC_ClearPendingIRQ(GPIOTE30_0_IRQn);
 }
 
-void  GPIOTE30_1_IRQHandler(void)
+void __WEAK GPIOTE30_1_IRQHandler(void)
 {
 	for (int i = 0; i < GPIOTE30_GPIOTE_NCHANNELS_SIZE; i++)
 	{
