@@ -88,9 +88,15 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_ADV_REPORT:
 			{
-				BtHciLeEvtAdvReport_t *p = (BtHciLeEvtAdvReport_t*)pLeEvtPkt->Data;
+				BtHciLeEvtAdvReport_t *report = (BtHciLeEvtAdvReport_t*)pLeEvtPkt->Data;
+				BtAdvReport_t *p = (BtAdvReport_t*)report->Report;
 
-				BtScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
+				for (int i = 0; i < report->NbReport; i++)
+				{
+					int8_t rssi = (int8_t)p[i].Data[p[i].DataLen];
+					pDev->ScanReport(rssi, p[i].AddrType, p[i].Addr, p[i].DataLen, p[i].Data);
+				}
+				//BtScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
 			}
 			break;
 		case BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE:

@@ -49,7 +49,7 @@ void BtParseExtAdvReport(BtExtAdvReport_t *pReport)
 {
 
 }
-
+#if 0
 void BtScanReport(uint8_t Type, uint8_t NbReport, void *pReport)
 {
 	switch (Type)
@@ -94,3 +94,4 @@ void BtScanReport(uint8_t Type, uint8_t NbReport, void *pReport)
 			break;
 	}
 }
+#endif
