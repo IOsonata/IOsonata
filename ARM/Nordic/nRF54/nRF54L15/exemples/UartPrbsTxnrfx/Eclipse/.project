@@ -46,6 +46,31 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx_config.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_config.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx_config_common.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_config_common.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx_config_nrf54l15_enga_application.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_config_nrf54l15_enga_application.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx_glue.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_glue.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx_log.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_log.h</locationURI>
+		</link>
+		<link>
 			<name>src/nrfx/drivers</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>

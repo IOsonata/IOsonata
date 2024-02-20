@@ -55,7 +55,7 @@ extern "C" {
 
 // Uncomment this line to use the standard MDK way of binding IRQ handlers
 // at linking time.
-//#include <soc/nrfx_irqs.h>
+#include <soc/nrfx_irqs.h>
 
 //------------------------------------------------------------------------------
 
@@ -88,7 +88,7 @@ extern "C" {
  *
  * @param irq_number IRQ number.
  */
-#define NRFX_IRQ_ENABLE(irq_number)
+#define NRFX_IRQ_ENABLE(irq_number)		NVIC_EnableIRQ(irq_number)
 
 /**
  * @brief Macro for checking if a specific IRQ is enabled.
@@ -98,28 +98,28 @@ extern "C" {
  * @retval true  If the IRQ is enabled.
  * @retval false Otherwise.
  */
-#define NRFX_IRQ_IS_ENABLED(irq_number)
+#define NRFX_IRQ_IS_ENABLED(irq_number)		
 
 /**
  * @brief Macro for disabling a specific IRQ.
  *
  * @param irq_number IRQ number.
  */
-#define NRFX_IRQ_DISABLE(irq_number)
+#define NRFX_IRQ_DISABLE(irq_number)	NVIC_DisableIRQ(irq_number)
 
 /**
  * @brief Macro for setting a specific IRQ as pending.
  *
  * @param irq_number IRQ number.
  */
-#define NRFX_IRQ_PENDING_SET(irq_number)
+#define NRFX_IRQ_PENDING_SET(irq_number)	NVIC_SetPendingIRQ(irq_number)
 
 /**
  * @brief Macro for clearing the pending status of a specific IRQ.
  *
  * @param irq_number IRQ number.
  */
-#define NRFX_IRQ_PENDING_CLEAR(irq_number)
+#define NRFX_IRQ_PENDING_CLEAR(irq_number)	NVIC_ClearPendingIRQ(irq_number)
 
 /**
  * @brief Macro for checking the pending status of a specific IRQ.
