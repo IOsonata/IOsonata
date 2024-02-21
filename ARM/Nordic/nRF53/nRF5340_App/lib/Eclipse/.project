@@ -501,6 +501,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/system_core_clock.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/timer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/timer.h</locationURI>

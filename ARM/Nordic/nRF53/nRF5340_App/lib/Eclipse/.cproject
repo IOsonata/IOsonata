@@ -50,6 +50,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize.221532053" name="Print size" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.1380067522" name="Float ABI" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.526181657" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.auto" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id.490107256" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id" value="1287942917" valueType="string"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.1176563003" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
 							<builder buildPath="${workspace_loc:/IOsonata_nRF5340}/Debug" id="ilg.gnuarmeclipse.managedbuild.cross.builder.1793780387" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.1912565593" name="GNU ARM Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
@@ -73,6 +74,10 @@
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/mdk"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.514323037" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -95,6 +100,10 @@
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/mdk"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.289898634" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
@@ -198,6 +207,10 @@
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/mdk"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.246804536" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -220,6 +233,10 @@
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/mdk"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.969861879" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>

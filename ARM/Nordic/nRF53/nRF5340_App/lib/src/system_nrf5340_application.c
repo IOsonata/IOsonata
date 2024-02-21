@@ -31,6 +31,8 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf53.h"
 #include "system_nrf53_approtect.h"
 
+#include "coredev/system_core_clock.h"
+
 /*lint ++flb "Enter library region" */
 
 void SystemStoreFICRNS();
@@ -57,6 +59,13 @@ void SystemStoreFICRNS();
 #elif defined ( __ICCARM__ )
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 #endif
+
+// Overload this variable in application firmware to change oscillator
+__WEAK McuOsc_t g_McuOsc = {
+	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 0 },
+	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 0 },
+	.bUSBClk = false
+};
 
 void SystemCoreClockUpdate(void)
 {
@@ -257,7 +266,7 @@ void SystemInit(void)
 
         #endif
 
-        /* Allow Non-Secure code to run FPU instructions.
+		/* Allow Non-Secure code to run FPU instructions.
          * If only the secure code should control FPU power state these registers should be configured accordingly in the secure application code. */
         SCB->NSACR |= (3UL << 10ul);
 
@@ -274,6 +283,22 @@ void SystemInit(void)
         __DSB();
         __ISB();
     #endif
+
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL && g_McuOsc.CoreOsc.LoadCap > 0)
+	{
+		uint32_t offset = (NRF_FICR_S->XOSC32MTRIM & FICR_XOSC32MTRIM_OFFSET_Msk) >> FICR_XOSC32MTRIM_OFFSET_Pos;
+		uint32_t slope = (NRF_FICR_S->XOSC32MTRIM & FICR_XOSC32MTRIM_SLOPE_Msk) >> FICR_XOSC32MTRIM_SLOPE_Pos;
+		uint32_t caps = (((slope + 56) * ((uint32_t)(g_McuOsc.CoreOsc.LoadCap * 2.0) - 14)) +
+						((offset - 8) << 4) + 32) >> 6;
+		NRF_OSCILLATORS_S->XOSC32MCAPS = ((caps << OSCILLATORS_XOSC32MCAPS_CAPVALUE_Pos) & OSCILLATORS_XOSC32MCAPS_CAPVALUE_Msk) |
+										 OSCILLATORS_XOSC32MCAPS_ENABLE_Msk;
+	}
+
+	if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL && g_McuOsc.LowPwrOsc.LoadCap > 0)
+	{
+		NRF_OSCILLATORS_S->XOSC32KI.INTCAP = OSCILLATORS_XOSC32KI_INTCAP_INTCAP_C7PF;
+	}
+
 }
 
 /* Workaround to allow NS code to access FICR. Override NRF_FICR_NS to move FICR_NS buffer. */
