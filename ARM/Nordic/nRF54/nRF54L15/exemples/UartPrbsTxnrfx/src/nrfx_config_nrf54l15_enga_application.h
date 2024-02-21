@@ -1277,7 +1277,7 @@
  * Boolean. Accepted values: 0 and 1.
  */
 #ifndef NRFX_TWIS20_ENABLED
-#define NRFX_TWIS20_ENABLED 0
+#define NRFX_TWIS20_ENABLED 1
 #endif
 
 /**
@@ -1286,7 +1286,7 @@
  * Boolean. Accepted values: 0 and 1.
  */
 #ifndef NRFX_TWIS21_ENABLED
-#define NRFX_TWIS21_ENABLED 0
+#define NRFX_TWIS21_ENABLED 1
 #endif
 
 /**
@@ -1295,7 +1295,7 @@
  * Boolean. Accepted values: 0 and 1.
  */
 #ifndef NRFX_TWIS22_ENABLED
-#define NRFX_TWIS22_ENABLED 0
+#define NRFX_TWIS22_ENABLED 1
 #endif
 
 /**
@@ -1304,7 +1304,7 @@
  * Boolean. Accepted values: 0 and 1.
  */
 #ifndef NRFX_TWIS30_ENABLED
-#define NRFX_TWIS30_ENABLED 0
+#define NRFX_TWIS30_ENABLED 1
 #endif
 
 /**

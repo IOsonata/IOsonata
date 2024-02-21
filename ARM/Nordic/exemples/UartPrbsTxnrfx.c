@@ -40,27 +40,34 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <memory.h>
 
 #include "nrfx_uarte.h"
+#include "iopinctrl.h"
 
 #include "prbs.h"
 
 // This include contain i/o definition the board in use
 #include "board.h"
 
-#define BYTE_MODE
-#define TEST_BUFSIZE		64
+//#define BYTE_MODE
+#define TEST_BUFSIZE		16
+
+static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
+static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
 static volatile bool s_bTxDone = false;
 
-const nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(30);
+uint8_t s_CacheBuff[TEST_BUFSIZE];
+
+const nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(NRFX_UART_INST);
 const nrfx_uarte_config_t g_UarteCfg = {
-	.rxd_pin = UART_RX_PIN,
-	.txd_pin = UART_TX_PIN,
+	.rxd_pin = (UART_RX_PORT << 5) | UART_RX_PIN,
+	.txd_pin = (UART_TX_PORT << 5) | UART_TX_PIN,
+	.tx_cache = { s_CacheBuff, TEST_BUFSIZE},
 	.config = {.hwfc = NRF_UARTE_HWFC_DISABLED, 0, 1, 0 },
 	.baudrate = NRF_UARTE_BAUDRATE_1000000,
 	.interrupt_priority = 1
 };
 
-void uart_error_handle(nrfx_uarte_event_t const * p_event, void *ctx)
+void uart_event_handler(nrfx_uarte_event_t const * p_event, void *ctx)
 {
 //	printf("Uarte Handler\r\n");
 	switch(p_event->type)
@@ -81,6 +88,15 @@ int main()
 	uint8_t d = 0xff;
 	uint8_t buff[TEST_BUFSIZE];
 
+	IOPinCfg(s_Leds, s_NbLeds);
+
+	// Clear all leds
+	for (int i = 0; i < s_NbLeds; i++)
+	{
+		IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
+	}
+
+#if 0
 	if (NRF_CLOCK->PLL.STAT == 0)
 	{
 		NRF_CLOCK->TASKS_PLLSTART = 1;
@@ -98,9 +114,10 @@ int main()
 
 		NRF_CLOCK->EVENTS_XOSTARTED = 0;
 	}
+#endif
 
-    err_code = nrfx_uarte_init(&g_Uarte, &g_UarteCfg, uart_error_handle);
-    if (err_code != 0)
+    err_code = nrfx_uarte_init(&g_Uarte, &g_UarteCfg, uart_event_handler);
+    if (err_code != NRFX_SUCCESS)
     {
     	//printf("Error %x\n\r", err_code);
     }
@@ -117,14 +134,14 @@ int main()
 	while(1)
 	{
 #ifdef BYTE_MODE
-		if (nrfx_uarte_tx(&g_Uarte, &d, 1, 0) == 0)
+		if (nrfx_uarte_tx(&g_Uarte, &d, 1, NRFX_UARTE_TX_BLOCKING) == NRFX_SUCCESS)
 		{
 			// If success send next code
 			d = Prbs8(d);
 		}
 #else
 		s_bTxDone = false;
-		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, 0) == 0)
+		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, 0) == NRFX_SUCCESS)//NRFX_UARTE_TX_LINK) == NRFX_SUCCESS)
 		{
 			while (s_bTxDone == false);
 			for (int i = 0; i < TEST_BUFSIZE; i++)
@@ -137,3 +154,4 @@ int main()
 	}
 	return 0;
 }
+
