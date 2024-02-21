@@ -50,7 +50,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 //#define BYTE_MODE
-#define TEST_BUFSIZE		64
+#define TEST_BUFSIZE		16
 
 #define SDK_NRFX	// Use nrfx_uarte, comment out this define to use app_uart_fifo
 

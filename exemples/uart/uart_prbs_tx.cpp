@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 //#define DEMO_C	// Select demo C code
-#define BYTE_MODE
+//#define BYTE_MODE
 
 #define TEST_BUFSIZE		16
 
