@@ -367,8 +367,18 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	{
 		if (s_nRFxBaudrate[i].Baud >= Rate)
 		{
-		    dev->pDmaReg->BAUDRATE = s_nRFxBaudrate[i].RegVal;
-		    rate = s_nRFxBaudrate[i].Baud;
+			if (dev->pDmaReg == NRF_UARTE00)
+			{
+				// Patch for UARTE00 clock
+				uint32_t f = SystemCoreClock / 16000000;
+				dev->pDmaReg->BAUDRATE = s_nRFxBaudrate[i].RegVal / f;
+				rate = s_nRFxBaudrate[i].Baud;
+			}
+			else
+			{
+				dev->pDmaReg->BAUDRATE = s_nRFxBaudrate[i].RegVal;
+				rate = s_nRFxBaudrate[i].Baud;
+			}
 		    break;
 		}
 	}
