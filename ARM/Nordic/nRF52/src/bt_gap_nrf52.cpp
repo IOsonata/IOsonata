@@ -153,7 +153,7 @@ void BtGapSetDevName(const char* pDeviceName)
     //ble_advertising_restart_without_whitelist(&g_AdvInstance);
 }
 
-bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
+bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)//, BtGapScanParam_t * const pScanParam)
 {
 	ble_gap_scan_params_t scparam = {};
 	ble_gap_conn_params_t cparam;
@@ -183,9 +183,9 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
-	s_ScanParams.timeout = pCfg->Timeout;
-	s_ScanParams.window = pCfg->Duration;
-	s_ScanParams.interval = pCfg->Interval;
+	s_ScanParams.timeout = pCfg->Param.Timeout;
+	s_ScanParams.window = pCfg->Param.Duration;
+	s_ScanParams.interval = pCfg->Param.Interval;
 
     uint8_t uidtype = BLE_UUID_TYPE_VENDOR_BEGIN;
 

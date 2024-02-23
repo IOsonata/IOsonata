@@ -36,12 +36,15 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
+#ifndef NRFXLIB_SDC
 #include "app_util_platform.h"
 #include "app_scheduler.h"
 #include "ble_gap.h"
 #include "ble_advdata.h"
 #include "nrf_ble_scan.h"
 #include "ble_gatt_db.h"
+#include "ble_gattc.h"
+#endif
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
@@ -56,7 +59,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "board.h"
 #include "idelay.h"
-#include "ble_gattc.h"
 #include "cfifo.h"
 #include "iopinctrl.h"
 
@@ -73,8 +75,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MIN_CONN_INTERVAL       10//MSEC_TO_UNITS(10, UNIT_1_25_MS) 		/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL       40//MSEC_TO_UNITS(40, UNIT_1_25_MS) 		/**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
-#define SCAN_INTERVAL           MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
-#define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
+#define SCAN_INTERVAL           1000//MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
+#define SCAN_WINDOW             100//MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
 #define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
 
 #define TARGET_BRIDGE_DEV_NAME	"BlueIO832Mini"							/**< Name of BLE bridge/client device to be scanned */
@@ -104,7 +106,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BLE_CLIENT_ID_09		{0xCB, 0xAC, 0xB6, 0x1D, 0x1D, 0x84}
 
-uint8_t g_clientMacAddr[6] = BLE_CLIENT_ID_09;
+#define BLE_CLIENT_ID_10		{0xe1, 0x3e, 0xde, 0xad, 0x2a, 0xe0}
+
+uint8_t g_clientMacAddr[6] = BLE_CLIENT_ID_10;
 uint8_t g_searchCnt = 0;
 
 // CFIFO for BleAppWrite
@@ -179,7 +183,7 @@ UARTCfg_t g_UartCfg = {
 	.StopBits = 1,								// Stop bit
 	.FlowControl = UART_FLWCTRL_NONE,			// Flow control
 	.bIntMode = true,							// Interrupt mode
-	.IntPrio = APP_IRQ_PRIORITY_LOW,			// Interrupt priority
+	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,			// Interrupt priority
 	.EvtCallback = nRFUartEvthandler,			// UART event handler
 	.bFifoBlocking = true,						// Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
@@ -192,9 +196,33 @@ UARTCfg_t g_UartCfg = {
 // UART object instance
 UART g_Uart;
 
+static const BtGapScanCfg_t g_ScanParams = {
+	.Type = BTSCAN_TYPE_ACTIVE,
+	.Param = {
+		.OwnAddrType = BTADDR_TYPE_RAND,
+		.Interval = SCAN_INTERVAL,
+		.Duration = SCAN_WINDOW,
+		.Timeout = SCAN_TIMEOUT,
+	},
+	.BaseUid = BLUEIO_UUID_BASE,
+	.ServUid = BLUEIO_UUID_UART_SERVICE,//s_UartBleSrvAdvUuid,
+};
 
+//BtDev_t g_ConnectedDev = {
+//	.ConnHdl = BT_CONN_HDL_INVALID,
+//};
+
+static BtGapConnParams_t s_ConnParams = {
+	.IntervalMin = 7.5,//NRF_BLE_SCAN_MIN_CONNECTION_INTERVAL,
+	.IntervalMax = 40,//NRF_BLE_SCAN_MAX_CONNECTION_INTERVAL,
+	.Latency = 0,//NRF_BLE_SCAN_SLAVE_LATENCY,
+	.Timeout = 4000,//NRF_BLE_SCAN_SUPERVISION_TIMEOUT,
+};
+
+#ifndef NRFXLIB_SDC
+#if 0
 /** @brief Parameters used when scanning. */
-static ble_gap_scan_params_t const g_ScanParams =
+static const ble_gap_scan_params_t g_ScanParams =
 {
 #if (NRF_SD_BLE_API_VERSION >= 6)
 	0,
@@ -213,19 +241,13 @@ static ble_gap_scan_params_t const g_ScanParams =
 	SCAN_WINDOW,	// Scan window
 	SCAN_TIMEOUT,	// Scan timeout
 };
+#endif
 
 uint8_t g_ScanBuff[BLE_GAP_SCAN_BUFFER_EXTENDED_MAX];
 
 ble_data_t g_AdvScanReportData = {
 	.p_data = g_ScanBuff,
 	.len = BLE_GAP_SCAN_BUFFER_EXTENDED_MAX
-};
-
-static BtGapConnParams_t s_ConnParams = {
-	.IntervalMin = 7.5,//NRF_BLE_SCAN_MIN_CONNECTION_INTERVAL,
-	.IntervalMax = 40,//NRF_BLE_SCAN_MAX_CONNECTION_INTERVAL,
-	.Latency = NRF_BLE_SCAN_SLAVE_LATENCY,
-	.Timeout = NRF_BLE_SCAN_SUPERVISION_TIMEOUT,
 };
 
 
@@ -235,22 +257,14 @@ const ble_uuid_t s_UartBleSrvAdvUuid = {
 	.type = BLE_UUID_TYPE_BLE,
 };
 
-BtGapScanCfg_t s_bleScanInitCfg = {
-		.Interval = SCAN_INTERVAL,
-		.Duration = SCAN_WINDOW,
-		.Timeout = SCAN_TIMEOUT,
-		.BaseUid = BLUEIO_UUID_BASE,
-		.ServUid = s_UartBleSrvAdvUuid.uuid,
-};
-
-BLEPERIPH_DEV g_ConnectedDev = {
+BtDev_t g_ConnectedDev = {
 	.ConnHdl = BLE_CONN_HANDLE_INVALID,
 };
 
 uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
 uint16_t g_BleRxCharHdl = BLE_CONN_HANDLE_INVALID;
 
-void BleDevDiscovered(BLEPERIPH_DEV *pDev)
+void BleDevDiscovered(BtDev_t *pDev)
 {
 #ifdef DEBUG_PRINT
 	g_Uart.printf("Number service discovered: %d\r\n", g_ConnectedDev.NbSrvc);
@@ -397,6 +411,30 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
         	break;
   }
 }
+#endif
+
+void BtAppEvtConnected(uint16_t ConnHdl)
+{
+	g_Uart.printf("BtAppEvtConnected %d (%x)\r\n", ConnHdl);
+}
+
+void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
+{
+//	g_Uart.printf("BtAppScanReport : Rssi = %d\r\n", Rssi);
+	g_Uart.printf("%02x %02x %02x %02x %02x %02x : RSSI = %d, ",
+					Addr[0], Addr[1], Addr[2],
+					Addr[3], Addr[4], Addr[5], Rssi);
+
+	if (memcmp(g_clientMacAddr, Addr, 6) == 0)
+	{
+		g_Uart.printf("Found matching device. Stop Scan\r\n");
+		BtGapScanStop();
+
+		BtGapPeerAddr_t add = {.Type = AddrType, };
+		memcpy(add.Addr, Addr, 6);
+		BtGapConnect(&add, &s_ConnParams);
+	}
+}
 
 void HardwareInit()
 {
@@ -404,8 +442,9 @@ void HardwareInit()
 
 	IOPinCfg(s_Leds, s_NbLeds);
 	IOPinSet(LED_BLUE_PORT, LED_BLUE_PIN);
-	IOPinClear(LED_GREEN_PORT, LED_GREEN_PIN);
-	IOPinClear(LED_RED_PORT, LED_RED_PIN);
+	IOPinSet(LED_GREEN_PORT, LED_GREEN_PIN);
+	IOPinSet(LED_RED_PORT, LED_RED_PIN);
+	IOPinSet(LED4_PORT, LED4_PIN);
 
 	// Retarget printf to uart if semihosting is not used
 	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
@@ -456,6 +495,7 @@ void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
 
 	if (p !=NULL)
 	{
+#ifndef NRFXLIB_SDC
 		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
 			BtAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, p, len);
@@ -463,6 +503,7 @@ void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
 
 		// Schedule this func again if g_UartRx2BleFifo is not empty
 		app_sched_event_put(NULL, 0, BleTxSchedHandler);
+#endif
 	}
 
 	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
@@ -519,13 +560,13 @@ void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
 		}
 
 		// Schedule the BleTxSchedHandler for sending data via BLE
-		app_sched_event_put(NULL, 0, BleTxSchedHandler);
+		//app_sched_event_put(NULL, 0, BleTxSchedHandler);
 	}
 
 	// Schedule the UartRxSchedHandler if ExternalUartRxBuffer still has data
 	if (g_UartRxExtBuffLen > 0)
 	{
-		app_sched_event_put(NULL,  0,  UartRxSchedHandler);
+		//app_sched_event_put(NULL,  0,  UartRxSchedHandler);
 	}
 
 }
@@ -540,7 +581,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 		case UART_EVT_RXDATA:
 			if (g_UartRxExtBuffLen <= 0)
 			{
-				app_sched_event_put(NULL, 0, UartRxSchedHandler);
+				//app_sched_event_put(NULL, 0, UartRxSchedHandler);
 			}
 
 			break;
@@ -576,7 +617,9 @@ int main()
    // APP_ERROR_CHECK(ret);
 
     // Register the non-GATT service and its characteristics
-    BtAppScanInit(&s_bleScanInitCfg);
+    //BtAppScanInit(&s_bleScanInitCfg);
+
+    BtAppScanInit((BtGapScanCfg_t*)&g_ScanParams);
 
     BtAppScan();
 

@@ -63,6 +63,8 @@ SOFTWARE.
 #define BTAPP_DEFAULT_MAX_MTU			515
 #endif
 
+#define BT_CONN_HDL_INVALID				0xFFFF
+
 typedef enum __Bt_App_Role {
 	BTAPP_ROLE_BROADCASTER	= BT_GAP_ROLE_BROADCASTER,		//!< non connectable Advertising only
 	BTAPP_ROLE_OBSERVER		= BT_GAP_ROLE_OBSERVER,			//!< non connectable central

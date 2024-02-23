@@ -178,13 +178,17 @@ typedef enum __Bt_Scan_Type {
 	BTSCAN_TYPE_ACTIVE			//!< with scan/response data
 } BTSCAN_TYPE;
 
-typedef struct __Bt_Gap_Scan_Cfg {
-	BTSCAN_TYPE Type;			//!< Scan type
+typedef struct __Bt_Gap_Scan_Param {
 	uint8_t Phy;				//!< PHY to scan
 	BTADDR_TYPE OwnAddrType;
 	uint32_t Interval;			//!< Scan interval in msec
 	uint32_t Duration;			//!< Scan window in msec
 	uint32_t Timeout;			//!< Scan timeout in sec
+} BtGapScanParam_t;
+
+typedef struct __Bt_Gap_Scan_Cfg {
+	BTSCAN_TYPE Type;			//!< Scan type
+	BtGapScanParam_t Param;		//!< Scan parameters
 	uint8_t BaseUid[16];		//!< Base UUID to look for
 	uint16_t ServUid;			//!< Service Uid to look for
 } BtGapScanCfg_t;
@@ -217,11 +221,11 @@ uint16_t BtGapGetConnection();
 size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
 bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);
 void BtGapDeleteConnection(uint16_t Hdl);
-bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);
+bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);//, BtGapScanParam_t * const pScanParam);
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg);
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len);
 bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len);
-
+void BtGapScanStop();
 
 #ifdef __cplusplus
 }

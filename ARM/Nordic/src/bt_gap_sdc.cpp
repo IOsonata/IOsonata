@@ -56,26 +56,29 @@ SOFTWARE.
 #include "coredev/uart.h"
 extern UART g_Uart;
 
+BtGapScanParam_t s_ScanParams;
+
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
 	uint8_t buff[255];
 	sdc_hci_cmd_le_set_ext_scan_params_t *extparam = (sdc_hci_cmd_le_set_ext_scan_params_t *)buff;
 	sdc_hci_cmd_le_set_scan_params_t param;
 
+	memcpy(&s_ScanParams, &pCfg->Param, sizeof(BtGapScanParam_t));
 	extparam->own_address_type = 1;
 	extparam->scanning_filter_policy = 0;
-	extparam->scanning_phys = pCfg->Phy;
-	extparam->array_params[0] = { 1, mSecTo0_625(pCfg->Interval), mSecTo0_625(pCfg->Duration) };
+	extparam->scanning_phys = pCfg->Param.Phy;
+	extparam->array_params[0] = { 1, mSecTo0_625(pCfg->Param.Interval), mSecTo0_625(pCfg->Param.Duration) };
 
 	param.le_scan_type = pCfg->Type;
-	param.own_address_type = pCfg->OwnAddrType;
+	param.own_address_type = pCfg->Param.OwnAddrType;
 	param.scanning_filter_policy = 0; // TODO
-	param.le_scan_interval = mSecTo0_625(pCfg->Interval);
-	param.le_scan_window = mSecTo0_625(pCfg->Duration);
+	param.le_scan_interval = mSecTo0_625(pCfg->Param.Interval);
+	param.le_scan_window = mSecTo0_625(pCfg->Param.Duration);
 
-	uint8_t res = sdc_hci_cmd_le_set_scan_params(&param);
-	g_Uart.printf("sdc_hci_cmd_le_set_scan_params : 0x%x (%d)\r\n", res, res);
-	res = sdc_hci_cmd_le_set_ext_scan_params(extparam);
+	//uint8_t res = sdc_hci_cmd_le_set_scan_params(&param);
+	//g_Uart.printf("sdc_hci_cmd_le_set_scan_params : 0x%x (%d)\r\n", res, res);
+	uint8_t res = sdc_hci_cmd_le_set_ext_scan_params(extparam);
 g_Uart.printf("sdc_hci_cmd_le_set_ext_scan_params : 0x%x (%d)\r\n", res, res);
 	return res == 0;
 }
@@ -94,12 +97,71 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 
 void BtGapScanStop()
 {
+	sdc_hci_cmd_le_set_ext_scan_enable_t extparam = {0,};
 
+	uint8_t res = sdc_hci_cmd_le_set_ext_scan_enable(&extparam);
 }
 
 bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 {
 	
 	return true;
+}
+
+bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)//, BtGapScanParam_t * const pScanParam)
+{
+	sdc_hci_cmd_le_create_conn_t param = {
+		.le_scan_interval = mSecTo1_25(s_ScanParams.Interval),
+		.le_scan_window = mSecTo1_25(s_ScanParams.Duration),
+		.initiator_filter_policy = 0,
+		.peer_address_type = pPeerAddr->Type,
+		.peer_address = {
+				pPeerAddr->Addr[0], pPeerAddr->Addr[1], pPeerAddr->Addr[2],
+				pPeerAddr->Addr[3], pPeerAddr->Addr[4], pPeerAddr->Addr[5]},
+		.own_address_type = s_ScanParams.OwnAddrType,
+		.conn_interval_min = mSecTo1_25(pConnParam->IntervalMin),
+		.conn_interval_max = mSecTo1_25(pConnParam->IntervalMax),
+		.max_latency = pConnParam->Latency,
+		.supervision_timeout = pConnParam->Timeout / 10,
+		.min_ce_length = 0,
+		.max_ce_length = 0
+	};
+
+	uint8_t res = sdc_hci_cmd_le_create_conn(&param);
+
+	return res == 0;
+/*
+	sdc_hci_cmd_le_ext_create_conn_t extparam = {
+		.initiator_filter_policy = 0,
+		.own_address_type = 0,
+		.peer_address_type = pPeerAddr->Type,
+		.peer_address = {
+				pPeerAddr->Addr[0], pPeerAddr->Addr[1], pPeerAddr->Addr[2],
+				pPeerAddr->Addr[3], pPeerAddr->Addr[4], pPeerAddr->Addr[5]},
+		.initiating_phys = 0,
+		.array_params = {0,},
+	};*/
+
+#if 0
+	ble_gap_scan_params_t scparam = {};
+	ble_gap_conn_params_t cparam;
+	ble_gap_addr_t addr = { .addr_id_peer = 0, .addr_type = pPeerAddr->Type, };
+
+	memcpy(addr.addr,  pPeerAddr->Addr, 6);
+
+	cparam.min_conn_interval = MSEC_TO_UNITS(pConnParam->IntervalMin, UNIT_1_25_MS);
+	cparam.max_conn_interval = MSEC_TO_UNITS(pConnParam->IntervalMax, UNIT_1_25_MS);
+	cparam.slave_latency = pConnParam->Latency;
+	cparam.conn_sup_timeout = MSEC_TO_UNITS(pConnParam->Timeout, UNIT_10_MS);
+
+
+	ret_code_t err_code = sd_ble_gap_connect(&addr, &s_ScanParams, &cparam,
+											 BT_GAP_CONN_CFG_TAG);
+    //APP_ERROR_CHECK(err_code);
+
+//    s_BtAppData.bScan = false;
+
+    return err_code == NRF_SUCCESS;
+#endif
 }
 

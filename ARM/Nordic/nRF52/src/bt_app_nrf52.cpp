@@ -140,9 +140,9 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 //#define BLEAPP_ROLE_CENTRAL				2
 
 // These are to be passed as parameters
-#define SCAN_INTERVAL           MSEC_TO_UNITS(100, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
-#define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)		/**< Determines scan window in units of 0.625 millisecond. */
-#define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
+//#define SCAN_INTERVAL           MSEC_TO_UNITS(100, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
+//#define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)		/**< Determines scan window in units of 0.625 millisecond. */
+//#define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
 
 #pragma pack(push, 4)
 
@@ -673,19 +673,30 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 					BtAppScan();
 				}
     			break;
-#if 0
             case BLE_GAP_EVT_TIMEOUT:
-            {
-                const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
+				{
+					const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
 
-                ble_gap_evt_timeout_t const * p_timeout = &p_gap_evt->params.timeout;
+					ble_gap_evt_timeout_t const * p_timeout = &p_gap_evt->params.timeout;
 
-                if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
-                {
-                    g_BleAppData.bScan = false;
-                }
-            }
+					if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
+					{
+						s_BtAppData.bScan = false;
+					}
+				}
             break;
+#if 0
+            case BLE_GAP_EVT_SCAN_REQ_REPORT:
+            	{
+            	    ble_gap_evt_scan_req_report_t const * p_req_report = &p_gap_evt->params.scan_req_report;
+            	}
+            	break;
+            case BLE_GATTC_EVT_HVX:
+            	if (p_ble_evt->evt.gattc_evt.params.hvx.handle == g_BleRxCharHdl)
+            	{
+            		g_Uart.Tx(p_ble_evt->evt.gattc_evt.params.hvx.data, p_ble_evt->evt.gattc_evt.params.hvx.len);
+            	}
+            	break;
 #endif
         }
     	BtAppCentralEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
