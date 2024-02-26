@@ -84,12 +84,12 @@ typedef struct __nRF_UART_Dev {
 	uint8_t RxDmaMem[NRFX_UART_RXDMA_SIZE];
 	uint8_t TxDmaMem[NRFX_UART_TXDMA_SIZE];
 } nRFUartDev_t;
-
+/*
 typedef struct {
 	int Baud;
 	int RegVal;
 } nRFUartBaud_t;
-
+*/
 #pragma pack(pop)
 /*
 alignas(4) static const nRFUartBaud_t s_nRFxBaudrate[] = {
@@ -363,8 +363,11 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 	int rate = 0;
 
-	uint32_t regval = (uint32_t)(( ( ((uint64_t)Rate << 32) + (8000000)  )/ 16000000) + 0x800) & 0xFFFFF000;
-	rate = (uint32_t)(((uint64_t)regval * 16000000) >> 32);
+	// NOTE: Thanks to hmolesworth for the Baudrate calculation posted on devzone.
+	// https://devzone.nordicsemi.com/f/nordic-q-a/43280/technical-question-regarding-uart-baud-rate-generator-baudrate-register-offset-0x524/458422
+
+	uint32_t regval = (uint32_t)(((((uint64_t)Rate << 32ULL) + 8000000ULL) / 16000000ULL) + 0x800ULL) & 0xFFFFF000;
+	rate = (uint32_t)(((uint64_t)regval * 16000000ULL) >> 32ULL);
 
 	if (dev->pDmaReg == NRF_UARTE00)
 	{
