@@ -91,7 +91,7 @@ typedef struct {
 } nRFUartBaud_t;
 
 #pragma pack(pop)
-
+/*
 alignas(4) static const nRFUartBaud_t s_nRFxBaudrate[] = {
 	{1200, UARTE_BAUDRATE_BAUDRATE_Baud1200},
 	{2400, UARTE_BAUDRATE_BAUDRATE_Baud2400},
@@ -114,7 +114,7 @@ alignas(4) static const nRFUartBaud_t s_nRFxBaudrate[] = {
 };
 
 static const int s_NbBaudrate = sizeof(s_nRFxBaudrate) / sizeof(nRFUartBaud_t);
-
+*/
 alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 	{	// On P0
 		.DevNo = 0,
@@ -363,6 +363,22 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 	int rate = 0;
 
+	uint32_t regval = (uint32_t)(( ( ((uint64_t)Rate << 32) + (8000000)  )/ 16000000) + 0x800) & 0xFFFFF000;
+	rate = (uint32_t)(((uint64_t)regval * 16000000) >> 32);
+
+	if (dev->pDmaReg == NRF_UARTE00)
+	{
+		// Patch for UARTE00 clock
+		uint32_t f = SystemCoreClock / 16000000;
+		dev->pDmaReg->BAUDRATE = regval / f;
+//		rate = s_nRFxBaudrate[i].Baud;
+	}
+	else
+	{
+		dev->pDmaReg->BAUDRATE = regval;
+//		rate = s_nRFxBaudrate[i].Baud;
+	}
+#if 0
 	for (int i = 0; i < s_NbBaudrate; i++)
 	{
 		if (s_nRFxBaudrate[i].Baud >= Rate)
@@ -384,6 +400,7 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	}
 
 	return rate;
+#endif
 }
 
 static bool nRFUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)

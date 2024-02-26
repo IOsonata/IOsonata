@@ -112,7 +112,7 @@ typedef struct {
 } nRFUartBaud_t;
 
 #pragma pack(pop)
-
+/*
 alignas(4) static const nRFUartBaud_t s_nRFxBaudrate[] = {
 #ifdef UART_PRESENT
 	{1200, UART_BAUDRATE_BAUDRATE_Baud1200},
@@ -122,7 +122,9 @@ alignas(4) static const nRFUartBaud_t s_nRFxBaudrate[] = {
 	{14400, UART_BAUDRATE_BAUDRATE_Baud14400},
 	{19200, UART_BAUDRATE_BAUDRATE_Baud19200},
 	{28800, UART_BAUDRATE_BAUDRATE_Baud28800},
+	{31250, UART_BAUDRATE_BAUDRATE_Baud31250},
 	{38400, UART_BAUDRATE_BAUDRATE_Baud38400},
+	{56000, UART_BAUDRATE_BAUDRATE_Baud56000},
 	{57600, UART_BAUDRATE_BAUDRATE_Baud57600},
 	{76800, UART_BAUDRATE_BAUDRATE_Baud76800},
 	{115200, UART_BAUDRATE_BAUDRATE_Baud115200},
@@ -152,7 +154,7 @@ alignas(4) static const nRFUartBaud_t s_nRFxBaudrate[] = {
 };
 
 static const int s_NbBaudrate = sizeof(s_nRFxBaudrate) / sizeof(nRFUartBaud_t);
-
+*/
 alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
@@ -552,6 +554,17 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 	int rate = 0;
 
+	uint32_t regval = (uint32_t)(( ( ((uint64_t)Rate << 32) + (8000000)  )/ 16000000) + 0x800) & 0xFFFFF000;
+	rate = (uint32_t)(((uint64_t)regval * 16000000) >> 32);
+
+#ifdef UARTE_PRESENT
+		    dev->pDmaReg->BAUDRATE = regval;
+#else
+		    dev->pReg->BAUDRATE = regval;
+#endif
+
+	return rate;
+#if 0
 	for (int i = 0; i < s_NbBaudrate; i++)
 	{
 		if (s_nRFxBaudrate[i].Baud >= Rate)
@@ -567,6 +580,7 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	}
 
 	return rate;
+#endif
 }
 
 static bool nRFUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
@@ -919,6 +933,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	IOPinSet(pincfg[UARTPIN_TX_IDX].PortNo, pincfg[UARTPIN_TX_IDX].PinNo);
 	IOPinCfg(pincfg, pCfg->NbIOPins);
+
+	for (int i = 0; i < pCfg->NbIOPins; i++)
+	{
+		IOPinSetStrength(pincfg[UARTPIN_TX_IDX].PortNo, pincfg[UARTPIN_TX_IDX].PinNo, IOPINSTRENGTH_STRONG);
+	}
 
 	pDev->DevIntrf.pDevData = &s_nRFxUARTDev[devno];
 	s_nRFxUARTDev[devno].pUartDev = pDev;
