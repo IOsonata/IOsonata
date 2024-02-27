@@ -70,6 +70,16 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo);
 static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir) {
 #if GPIO_COUNT > 1
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
+	NRF_GPIO_Type *reg;
+	if (PortNo & 0x80)
+	{
+		reg = NRF_P0_NS;
+	}
+	else
+	{
+		reg = NRF_P0_S;
+	}
 #else
 	NRF_GPIO_Type *reg = NRF_GPIO;
 #endif
@@ -103,6 +113,12 @@ static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo
 #if GPIO_COUNT > 1
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 	return (reg->IN >> PinNo) & 1;
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
+	if (PortNo & 0x80)
+	{
+		return (NRF_P0_NS->IN >> PinNo) & 1;
+	}
+	return (NRF_P0_S->IN >> PinNo) & 1;
 #else
 	return (NRF_GPIO->IN >> PinNo) & 1;
 #endif
@@ -120,6 +136,15 @@ static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
 	reg->OUTSET = (1 << PinNo);
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
+	if (PortNo & 0x80)
+	{
+		NRF_P0_NS->OUTSET = (1 << PinNo);
+	}
+	else
+	{
+		NRF_P0_S->OUTSET = (1 << PinNo);
+	}
 #else
 	NRF_GPIO->OUTSET = (1 << PinNo);
 #endif
@@ -136,6 +161,15 @@ static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int Pin
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
 	reg->OUTCLR = (1 << PinNo);
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
+	if (PortNo & 0x80)
+	{
+		NRF_P0_NS->OUTCLR = (1 << PinNo);
+	}
+	else
+	{
+		NRF_P0_S->OUTCLR = (1 << PinNo);
+	}
 #else
 	NRF_GPIO->OUTCLR = (1 << PinNo);
 #endif
@@ -152,6 +186,15 @@ static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int Pi
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
 	reg->OUT ^= (1 << PinNo);
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
+	if (PortNo & 0x80)
+	{
+		NRF_P0_NS->OUT ^= (1 << PinNo);
+	}
+	else
+	{
+		NRF_P0_S->OUT ^= (1 << PinNo);
+	}
 #else
 	NRF_GPIO->OUT ^= (1 << PinNo);
 #endif
@@ -169,6 +212,12 @@ static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) 
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
 	return reg->IN;
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
+	if (PortNo & 0x80)
+	{
+		return NRF_P0_NS->IN;
+	}
+	return NRF_P0_S->IN;
 #else
 	return NRF_GPIO->IN;
 #endif
@@ -185,6 +234,15 @@ static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uin
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
 	reg->OUT = Data;
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
+	if (PortNo & 0x80)
+	{
+		NRF_P0_NS->OUT = Data;
+	}
+	else
+	{
+		NRF_P0_S->OUT = Data;
+	}
 #else
 	NRF_GPIO->OUT = Data;
 #endif
