@@ -401,9 +401,9 @@ static uint32_t nRFUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		    break;
 		}
 	}
+#endif
 
 	return rate;
-#endif
 }
 
 static bool nRFUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
