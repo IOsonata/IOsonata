@@ -48,6 +48,8 @@ SOFTWARE.
 //#include "ble_nus_c.h"
 //#include "nrf_sdh_ble.h"
 
+//#define DUMP_MAN_SPEC_DATA
+
 // BLE
 #define DEVICE_NAME             "UARTCentral"                   		/**< Name of device. Will be included in the advertising data. */
 
@@ -145,9 +147,12 @@ UART g_Uart;
 int g_DelayCnt = 0;
 
 static BtGapScanCfg_t const g_ScanParams = {
-	.Interval = SCAN_INTERVAL,
-	.Duration = SCAN_WINDOW,
-	.Timeout = SCAN_TIMEOUT,
+	.Type = BTSCAN_TYPE_ACTIVE,
+	.Param = {
+		.Interval = SCAN_INTERVAL,
+		.Duration = SCAN_WINDOW,
+		.Timeout = SCAN_TIMEOUT,
+	},
 	.BaseUid = BLUEIO_UUID_BASE,
 	.ServUid = BLUEIO_UUID_UART_SERVICE,//s_UartBleSrvAdvUuid,
 };
@@ -157,9 +162,6 @@ uint8_t g_ScanBuff[BT_GAP_SCAN_BUFFER_SIZE_DEFAULT];//BLE_GAP_SCAN_BUFFER_EXTEND
 void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
 {
 //	g_Uart.printf("BtAppScanReport : Rssi = %d\r\n", Rssi);
-	g_Uart.printf("%02x %02x %02x %02x %02x %02x : RSSI = %d, ",
-					Addr[0], Addr[1], Addr[2],
-					Addr[3], Addr[4], Addr[5], Rssi);
 	if (AdvLen > 0)
 	{
 		char name[32];
@@ -168,11 +170,14 @@ void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 		if (l > 0)
 		{
 			name[l-1] = 0;
+			g_Uart.printf("%02x %02x %02x %02x %02x %02x : RSSI = %d, ",
+							Addr[0], Addr[1], Addr[2],
+							Addr[3], Addr[4], Addr[5], Rssi);
 			g_Uart.printf("%s\r\n", name);
 		}
 		else
 		{
-			g_Uart.printf("(No Name)\r\n", name);
+//			g_Uart.printf("(No Name)\r\n", name);
 		}
 #ifdef DUMP_MAN_SPEC_DATA
 		uint8_t buff[256];
