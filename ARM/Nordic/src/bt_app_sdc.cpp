@@ -289,6 +289,9 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 //	s_BtGapSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
 //	s_BtGattSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
 
+//	g_Uart.printf("BtAppDisconnected: ConnHdl= %d (0x%x); Reason = %d (0x%x)\r\n",
+//			ConnHdl, ConnHdl, Reason, Reason);
+
 	BtGapDeleteConnection(ConnHdl);
 
 	if (isBtGapConnected() == false)
@@ -668,8 +671,8 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	if (s_BtAppData.bExtAdv == false)
 	{
 		sdc_hci_cmd_le_set_adv_params_t advparam = {
-			.adv_interval_min = (uint16_t)mSecTo0_625(pCfg->AdvInterval),
-			.adv_interval_max = (uint16_t)mSecTo0_625(pCfg->AdvInterval + 50),
+			.adv_interval_min = mSecTo0_625(pCfg->AdvInterval),
+			.adv_interval_max = mSecTo0_625(pCfg->AdvInterval + 50),
 			.adv_type = BTADV_TYPE_ADV_NONCONN_IND,//ADV_DIRECT_IND,
 			.own_address_type = BTADDR_TYPE_PUBLIC,
 			.peer_address_type = 0,
@@ -716,8 +719,8 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		BtExtAdvParam_t extparam = {
 			.AdvHdl = 0,
 			.EvtProp = extprop,//BLE_EXT_ADV_EVT_PROP_CONNECTABLE,// | BLE_EXT_ADV_EVT_PROP_SCANNABLE,
-			.PrimIntervalMin = (uint16_t)mSecTo0_625(pCfg->AdvInterval),
-			.PrimIntervalMax = (uint16_t)mSecTo0_625(pCfg->AdvInterval + 50),
+			.PrimIntervalMin = mSecTo0_625(pCfg->AdvInterval),
+			.PrimIntervalMax = mSecTo0_625(pCfg->AdvInterval + 50),
 			.PrimChanMap = 7,
 			.OwnAddrType = BTADDR_TYPE_PUBLIC,
 			.PrimPhy = BTADV_EXTADV_PHY_1M,

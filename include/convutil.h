@@ -80,7 +80,7 @@ static inline uint16_t uSecTo625(uint32_t Val) {
 };
 
 static inline uint16_t mSecTo0_625(float Val) {
-	return (uint16_t)(Val / 1.250F);
+	return (uint16_t)(Val / 0.625F);
 };
 
 /**

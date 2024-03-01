@@ -111,8 +111,8 @@ bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)//, BtGapScanParam_t * const pScanParam)
 {
 	sdc_hci_cmd_le_create_conn_t param = {
-		.le_scan_interval = mSecTo1_25(s_ScanParams.Interval),
-		.le_scan_window = mSecTo1_25(s_ScanParams.Duration),
+		.le_scan_interval = mSecTo0_625(s_ScanParams.Interval),
+		.le_scan_window = mSecTo0_625(s_ScanParams.Duration),
 		.initiator_filter_policy = 0,
 		.peer_address_type = pPeerAddr->Type,
 		.peer_address = {
@@ -122,7 +122,7 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 		.conn_interval_min = mSecTo1_25(pConnParam->IntervalMin),
 		.conn_interval_max = mSecTo1_25(pConnParam->IntervalMax),
 		.max_latency = pConnParam->Latency,
-		.supervision_timeout = pConnParam->Timeout / 10,
+		.supervision_timeout = (uint16_t)(pConnParam->Timeout / 10),
 		.min_ce_length = 0,
 		.max_ce_length = 0
 	};
