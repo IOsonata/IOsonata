@@ -122,30 +122,30 @@ extern "C" {
 
 /// Inline min functions when there isn't one available.
 #ifndef min
-static inline int min(int x, int y) { return x > y ? y : x; }
+static inline int min(int x, int y) { return  y ^ ((x ^ y) & -(x < y));} // { return x > y ? y : x; }
 #endif
 #ifndef umin
-static inline unsigned umin(unsigned x, unsigned y) { return x > y ? y : x; }
+static inline unsigned umin(unsigned x, unsigned y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
 #endif
 #ifndef llmin
-static inline int64_t llmin(int64_t x, int64_t y) { return x > y ? y : x; }
+static inline int64_t llmin(int64_t x, int64_t y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
 #endif
 #ifndef ullmin
-static inline uint64_t ullmin(uint64_t x, uint64_t y) { return x > y ? y : x; }
+static inline uint64_t ullmin(uint64_t x, uint64_t y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
 #endif
 
 /// An inline max function when there isn't one available.
 #ifndef max
-static inline int max(int x, int y) { return x > y ? x : y; }
+static inline int max(int x, int y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
 #endif
 #ifndef umax
-static inline unsigned umax(unsigned x, unsigned y) { return x > y ? x : y; }
+static inline unsigned umax(unsigned x, unsigned y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
 #endif
 #ifndef llmax
-static inline int64_t llmax(int64_t x, int64_t y) { return x > y ? x : y; }
+static inline int64_t llmax(int64_t x, int64_t y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
 #endif
 #ifndef ullmax
-static inline uint64_t ullmax(uint64_t x, uint64_t y) { return x > y ? x : y; }
+static inline uint64_t ullmax(uint64_t x, uint64_t y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
 #endif
 
 #ifdef __cplusplus
@@ -153,21 +153,21 @@ static inline uint64_t ullmax(uint64_t x, uint64_t y) { return x > y ? x : y; }
 
 #if !defined(WIN32) && !defined(__linux)
 /// Overloading min/max for C++ only
-static inline unsigned min(unsigned x, unsigned y) { return x > y ? y : x; }
+static inline unsigned min(unsigned x, unsigned y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
 #if !defined(__ICCARM__) && !defined(__clang__) && !defined(WIN32)
-static inline int32_t min(int32_t x, int32_t y) { return x > y ? y : x; }
-static inline uint32_t min(uint32_t x, uint32_t y) { return x > y ? y : x; }
+static inline int32_t min(int32_t x, int32_t y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
+static inline uint32_t min(uint32_t x, uint32_t y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
 #endif
-static inline int64_t min(int64_t x, int64_t y) { return x > y ? y : x; }
-static inline uint64_t min(uint64_t x, uint64_t y) { return x > y ? y : x; }
+static inline int64_t min(int64_t x, int64_t y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
+static inline uint64_t min(uint64_t x, uint64_t y) { return  y ^ ((x ^ y) & -(x < y)); } // { return x > y ? y : x; }
 
-static inline unsigned max(unsigned x, unsigned y) { return x > y ? x : y; }
+static inline unsigned max(unsigned x, unsigned y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
 #if !defined(__ICCARM__) && !defined(__clang__) && !defined(WIN32)
-static inline int32_t max(int32_t x, int32_t y) { return x > y ? x : y; }
-static inline uint32_t max(uint32_t x, uint32_t y) { return x > y ? x : y; }
+static inline int32_t max(int32_t x, int32_t y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
+static inline uint32_t max(uint32_t x, uint32_t y) { return x ^ ((x ^ y) & -(x < y)); } //{ return x > y ? x : y; }
 #endif
-static inline int64_t max(int64_t x, int64_t y) { return x > y ? x : y; }
-static inline uint64_t max(uint64_t x, uint64_t y) { return x > y ? x : y; }
+static inline int64_t max(int64_t x, int64_t y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
+static inline uint64_t max(uint64_t x, uint64_t y) { return x ^ ((x ^ y) & -(x < y)); } // { return x > y ? x : y; }
 #endif
 #endif
 
