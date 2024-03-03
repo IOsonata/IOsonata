@@ -54,21 +54,21 @@ void UARTSetCtrlLineState(UARTDEV *pDev, uint32_t LineState)
     
 }
 
-uint32_t OsxUARTGetRate(DEVINTRF *pDev)
+uint32_t OsxUARTGetRate(DevIntrf_t *pDev)
 {
     return 0;
 }
 
-uint32_t OsxUARTSetRate(DEVINTRF *pDev, uint32_t Rate)
+uint32_t OsxUARTSetRate(DevIntrf_t *pDev, uint32_t Rate)
 {
     return 0;
 }
 
-static inline bool OsxUARTStartRx(DEVINTRF *pSerDev, uint32_t DevAddr) {
+static inline bool OsxUARTStartRx(DevIntrf_t *pSerDev, uint32_t DevAddr) {
     return true;
 }
 
-int OsxUARTRxData(DEVINTRF *pDev, uint8_t *pBuff, int Bufflen)
+int OsxUARTRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 {
     int cnt = 0;
     
@@ -92,13 +92,13 @@ int OsxUARTRxData(DEVINTRF *pDev, uint8_t *pBuff, int Bufflen)
     return cnt;
 }
 
-static inline void OsxUARTStopRx(DEVINTRF *pSerDev) {}
+static inline void OsxUARTStopRx(DevIntrf_t *pSerDev) {}
 
-static inline bool OsxUARTStartTx(DEVINTRF *pDev, uint32_t DevAddr) {
+static inline bool OsxUARTStartTx(DevIntrf_t *pDev, uint32_t DevAddr) {
     return true;
 }
 
-int OsxUARTTxData(DEVINTRF *pDev, uint8_t *pData, int Datalen)
+int OsxUARTTxData(DevIntrf_t *pDev, uint8_t *pData, int Datalen)
 {
     int cnt = 0;
     
@@ -112,9 +112,9 @@ int OsxUARTTxData(DEVINTRF *pDev, uint8_t *pData, int Datalen)
     return cnt;
 }
 
-static inline void OsxUARTStopTx(DEVINTRF *pDev) {}
+static inline void OsxUARTStopTx(DevIntrf_t *pDev) {}
 
-void OsxUARTDisable(DEVINTRF *pDev)
+void OsxUARTDisable(DevIntrf_t *pDev)
 {
     if (pDev)
     {
@@ -127,7 +127,7 @@ void OsxUARTDisable(DEVINTRF *pDev)
     }
 }
 
-void OsxUARTEnable(DEVINTRF *pDev)
+void OsxUARTEnable(DevIntrf_t *pDev)
 {
     if (pDev)
     {
@@ -141,7 +141,7 @@ void OsxUARTEnable(DEVINTRF *pDev)
 
 
 
-bool UARTInit(UARTDEV *pDev, const UARTCFG *pCfgData)
+bool UARTInit(UARTDEV *pDev, const UARTCfg_t *pCfgData)
 {
 	if (pDev == NULL || pCfgData == NULL)
         return false;
