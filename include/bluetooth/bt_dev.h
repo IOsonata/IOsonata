@@ -39,7 +39,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __BT_DEV_H__
 
 #include "device.h"
+
+#ifndef NRFXLIB_SDC
 #include "ble_gatt_db.h"
+#endif
 
 /** @addtogroup Bluetooth
   * @{
