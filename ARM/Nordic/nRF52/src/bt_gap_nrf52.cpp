@@ -224,3 +224,8 @@ bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 
 	return err_code == NRF_SUCCESS;
 }
+
+void BtGapScanStop()
+{
+	sd_ble_gap_scan_stop();
+}
