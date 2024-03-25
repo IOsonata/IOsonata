@@ -39,9 +39,17 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 
-//#include "coredev/uart.h"
+/******** For DEBUG ************/
+#define UART_DEBUG_ENABLE
 
-//extern UART g_Uart;
+#ifdef UART_DEBUG_ENABLE
+#include "coredev/uart.h"
+extern UART g_Uart;
+#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
+#endif
+/*******************************/
 
 bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Mtu)
 {
@@ -54,7 +62,7 @@ bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint1
 	acl->Hdr.BCFlag = 0;
 
 	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ;
-	l2pdu->Att.ExchgMtuReqRsp.RxMtu = BtAttGetMtu();
+	l2pdu->Att.ExchgMtuReqRsp.RxMtu = Mtu;//BtAttGetMtu();
 	l2pdu->Hdr.Len = sizeof(BtAttExchgMtuReqRsp_t) + 1;
 	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
 
@@ -62,7 +70,7 @@ bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint1
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	//g_Uart.printf("BtAttExchangeMtuRequest : %d, %d\r\n", n, Mtu);
+	DEBUG_PRINTF("BtAttExchangeMtuRequest : %d, %d\r\n", n, Mtu);
 
 //	BtHciSendAtt(BtAttReqRsp_t req, 2);
 	return true;
@@ -88,7 +96,7 @@ bool BtAttFindInformationRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	//g_Uart.printf("BtAttFindInformationRequest : %d, %d\r\n", StartHdl, EndHdl);
+	DEBUG_PRINTF("BtAttFindInformationRequest (%s): %d, %d\r\n", n == 0 ? "FAILED" : "SUCCESS", StartHdl, EndHdl);
 
 //	BtHciSendAtt(BtAttReqRsp_t req, 2);
 	return true;
@@ -114,9 +122,9 @@ bool BtAttFindByTypeValueRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	DEBUG_PRINTF("BtAttFindByTypeValueRequest : %d, %d %d\r\n", StartHdl, EndHdl, AttType);
 
-	//g_Uart.printf("BtAttFindByTypeValueRequest : %d, %d %d\r\n", StartHdl, EndHdl, AttType);
+	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
 	return true;
 }
@@ -145,12 +153,12 @@ bool BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16
 		if (pUuid->Type == BT_UUID_TYPE_32)
 		{
 			l2pdu->Att.ReadByTypeReq.Uuid.Uuid32 = pUuid->Uuid32;
-			l2pdu->Hdr.Len + 4;
+			l2pdu->Hdr.Len += 4;
 		}
 		else
 		{
 			l2pdu->Att.ReadByTypeReq.Uuid.Uuid16 = pUuid->Uuid16;
-			l2pdu->Hdr.Len + 2;
+			l2pdu->Hdr.Len += 2;
 		}
 	}
 	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
@@ -159,7 +167,7 @@ bool BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	//g_Uart.printf("BtAttReadByTypeRequest : %d, %d %d\r\n", StartHdl, EndHdl, pUuid->BaseIdx);
+	DEBUG_PRINTF("BtAttReadByTypeRequest : %d, %d %d\r\n", StartHdl, EndHdl, pUuid->BaseIdx);
 
 	return true;
 }
@@ -183,7 +191,7 @@ bool BtAttReadRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	//g_Uart.printf("BtAttReadRequest : %d\r\n", Hdl);
+	//DEBUG_PRINTF("BtAttReadRequest Hdl: %d\r\n", Hdl);
 
 	return true;
 }
@@ -208,7 +216,7 @@ bool BtAttReadBlobRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	//g_Uart.printf("BtAttReadBlobRequest : %d %x\r\n", Hdl, Offset);
+	DEBUG_PRINTF("BtAttReadBlobRequest : %d %x\r\n", Hdl, Offset);
 
 	return true;
 }
@@ -232,7 +240,65 @@ bool BtAttReadMultipleRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	//g_Uart.printf("BtAttReadMultipleRequest : %x %d\r\n", pHdl[0], NbHdl);
+	DEBUG_PRINTF("BtAttReadMultipleRequest : %x %d\r\n", pHdl[0], NbHdl);
+
+	return true;
+}
+
+
+/**
+ * Send AttReadByGroupTypeRequest command to target device
+ * For parsing information of a group attribute
+ * @param pDev		: Pointer to the BLE HCI object
+ * @param ConnHdl	: Connection handle
+ * @param StartHdl	: Start handle of the ATT group type to read
+ * @param EndHdl	: End handle of the ATT group type to read
+ * @param pUuid		: Contain the UUID type to be read
+ * @return
+ */
+bool BtAttReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid)
+{
+	DEBUG_PRINTF("Call BtAttReadByGroupTypeRequest\r\n");
+
+	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*) buff;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*) acl->Data;
+
+	acl->Hdr.ConnHdl = ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ;
+	l2pdu->Att.ReadByGroupTypeReq.StartHdl = StartHdl;
+	l2pdu->Att.ReadByGroupTypeReq.EndHdl = EndHdl;
+	l2pdu->Hdr.Len = 5;// 1-byte OpCode + 2-byte StartHdl + 2-byte EndHdl
+	if (pUuid->BaseIdx > 0)
+	{
+		BtUuidTo128(pUuid, l2pdu->Att.ReadByTypeReq.Uuid.Uuid128);
+		l2pdu->Hdr.Len += 16;
+	}
+	else
+	{
+		if (pUuid->Type == BT_UUID_TYPE_32)
+		{
+			l2pdu->Att.ReadByTypeReq.Uuid.Uuid32 = pUuid->Uuid32;
+			l2pdu->Hdr.Len += 4;
+		}
+		else
+		{
+			l2pdu->Att.ReadByTypeReq.Uuid.Uuid16 = pUuid->Uuid16;
+			l2pdu->Hdr.Len += 2;
+		}
+	}
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+
+	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+	uint32_t n = pDev->SendData((uint8_t*) acl,
+			acl->Hdr.Len + sizeof(acl->Hdr));
+
+//	DEBUG_PRINTF("BtAttReadByGroupTypeRequest : StartHdl %d, EndHdl %d, BaseIdx %d\r\n", StartHdl,
+//			EndHdl, pUuid->BaseIdx);
 
 	return true;
 }

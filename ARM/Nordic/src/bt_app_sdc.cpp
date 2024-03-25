@@ -49,7 +49,6 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "convutil.h"
-#include "coredev/uart.h"
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "coredev/system_core_clock.h"
@@ -68,7 +67,18 @@ SOFTWARE.
 #define BT_SDC_TX_MAX_PACKET_COUNT			3
 
 //BleConn_t g_BleConn = {0,};
+
+/******** For DEBUG ************/
+#define UART_DEBUG_ENABLE
+
+#ifdef UART_DEBUG_ENABLE
+#include "coredev/uart.h"
 extern UART g_Uart;
+#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
+#endif
+/*******************************/
 
 static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
 	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
@@ -78,7 +88,10 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t Pe
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason);
 void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *DavData);
+void BtAppDiscoverDevice(BtHciDevice_t * const pDev, uint16_t ConnHdl);
+
 static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
+
 
 #pragma pack(push, 4)
 
@@ -118,8 +131,13 @@ static BtHciDevice_t s_BtHciDev = {
 	.Disconnected = BtAppDisconnected,
 	.SendCompleted = BtAppSendCompleted,
 	.ScanReport = BtAppScanReport,
+	//.DiscoverDevice = BtAppDiscoverDevice,
 };
-//BtDev_t g_BtDevSdc;
+
+// Struct containing the connected peripheral device's connection information
+BtDev_t g_BtDevSdc = {
+	.ConnHdl = BT_CONN_HDL_INVALID,
+};
 
 /**@brief Bluetooth SIG debug mode Private Key */
 __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
@@ -280,7 +298,39 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 
 	BtAppEvtConnected(ConnHdl);
 
-	BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
+	//BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
+
+	DEBUG_PRINTF("This device's Role = %d\r\n", s_BtAppData.Role);
+	if (s_BtAppData.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+	{
+		g_BtDevSdc.ConnHdl = ConnHdl;
+		memcpy(g_BtDevSdc.Addr, PeerAddr, 6);
+		g_BtDevSdc.pHciDev = (BtHciDevice_t*) &s_BtHciDev;
+		s_BtHciDev.pBtDev = (void *)&g_BtDevSdc;
+
+		// TODO: obtain the connected peripheral device's name and store to g_BtDevSdc.Name;
+
+
+		BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
+	}
+}
+
+void BtAppDiscoverDevice(BtHciDevice_t * const pDev, uint16_t ConnHdl)
+{
+	// TODO: Add Device Discovery
+	DEBUG_PRINTF("Start discovering device\r\n");
+
+	// Reset counter and Service list
+	g_BtDevSdc.NbSrvc = 0;
+	memset(g_BtDevSdc.Services, 0, sizeof(BtGattDBSrvc_t) * BLEPERIPH_DEV_SERVICE_MAXCNT);
+
+	// ATT_READ_BY_GROUP_TYPE_REQ
+	BtUuid_t Uuid = {
+			.BaseIdx = 0, // Standard bluetooth
+			.Type = BT_UUID_TYPE_16,
+			.Uuid16 = BT_UUID_DECLARATIONS_PRIMARY_SERVICE,
+	};
+	BtAttReadByGroupTypeRequest(pDev, ConnHdl, 1, 0xFFFF, &Uuid);
 
 }
 
@@ -289,8 +339,8 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 //	s_BtGapSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
 //	s_BtGattSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
 
-//	g_Uart.printf("BtAppDisconnected: ConnHdl= %d (0x%x); Reason = %d (0x%x)\r\n",
-//			ConnHdl, ConnHdl, Reason, Reason);
+	DEBUG_PRINTF("BtAppDisconnected: ConnHdl= %d (0x%x); Reason = %d (0x%x)\r\n",
+			ConnHdl, ConnHdl, Reason, Reason);
 
 	BtGapDeleteConnection(ConnHdl);
 
@@ -983,6 +1033,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	s_BtAppData.Role = pCfg->Role;
+	DEBUG_PRINTF("s_BtAppData.Role = %d\r\n", s_BtAppData.Role);
 
 	s_BtAppData.bExtAdv = pCfg->bExtAdv;
 	s_BtAppData.bScan = false;
@@ -1135,13 +1186,13 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 #if 0
     	for (int i = 0; i < count; i++)
     	{
-    		g_Uart.printf("tbl[%d]: Hdl: %d (0x%04x), Uuid: %04x, Data: ", i, tbl[i].Hdl, tbl[i].Hdl, tbl[i].TypeUuid.Uuid);
+    		DEBUG_PRINTF("tbl[%d]: Hdl: %d (0x%04x), Uuid: %04x, Data: ", i, tbl[i].Hdl, tbl[i].Hdl, tbl[i].TypeUuid.Uuid);
     		uint8_t *p = (uint8_t*)&tbl[i].Val32;
     		for (int j = 0; j < 20; j++)
     		{
-    			g_Uart.printf("0x%02x ", p[j]);
+    			DEBUG_PRINTF("0x%02x ", p[j]);
     		}
-    		g_Uart.printf("\r\n");
+    		DEBUG_PRINTF("\r\n");
     	}
 #endif
     }

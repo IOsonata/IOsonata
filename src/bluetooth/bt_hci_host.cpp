@@ -43,11 +43,15 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_scan.h"
 #include "istddef.h"
-//#include "coredev/uart.h"
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
-//extern UART g_Uart;
+/******** For DEBUG ************/
+#include "coredev/uart.h"
+extern UART g_Uart;
+#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+/*******************************/
+
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};
 
@@ -70,7 +74,7 @@ bool BtHciInit(BtHciDevCfg_t const *pCfg)
 //void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 {
-	//g_Uart.printf("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
+	//DEBUG_PRINTF("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
 
 	switch (pLeEvtPkt->Evt)
 	{
@@ -81,6 +85,8 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				{
 					pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
 					//BLEAPP_ROLE role = p->Role == 1 ? BLEAPP_ROLE_PERIPHERAL : BLEAPP_ROLE_CENTRAL;
+					DEBUG_PRINTF("BT_HCI_EVT_LE_CONN_COMPLETE \r\n");
+					DEBUG_PRINTF("Target device Role = %d \n", p->Role);
 
 	//					printf("hdl %x, %d\n", conhdl, role);
 				}
@@ -102,12 +108,14 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE:
 			{
 				BtHciLeEvtConnUpdateComplete_t *p = (BtHciLeEvtConnUpdateComplete_t*)pLeEvtPkt->Data;
+				DEBUG_PRINTF("BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE \r\n");
+				DEBUG_PRINTF("Latency = %d, SuperTimeout = %d\r\n", p->Latency, p->SuperTimeout);
 			}
 			break;
 		case BT_HCI_EVT_LE_READ_REMOTE_FEATURES_COMPLETE:
 			{
 				BtHciLeEvtReadRemoteFeatureComplete_t *p = (BtHciLeEvtReadRemoteFeatureComplete_t*)pLeEvtPkt->Data;
-//				g_Uart.printf("BT_HCI_EVT_LE_READ_REMOTE_FEATURES_COMPLETE \r\n");
+//				DEBUG_PRINTF("BT_HCI_EVT_LE_READ_REMOTE_FEATURES_COMPLETE \r\n");
 			}
 			break;
 		case BT_HCI_EVT_LE_LONGTERM_KEY_RQST:
@@ -115,6 +123,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST:
 			{
 				BtHciLeEvtRemoteConnParamReq_t *p = (BtHciLeEvtRemoteConnParamReq_t*)pLeEvtPkt->Data;
+				DEBUG_PRINTF("BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST\r\n");
 			}
 			break;
 		case BT_HCI_EVT_LE_DATA_LEN_CHANGE:
@@ -124,8 +133,11 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				pDev->RxDataLen = p->MaxRxLen;
 				pDev->TxDataLen = p->MaxTxLen;
 
-//				g_Uart.printf("BT_HCI_EVT_LE_DATA_LEN_CHANGE: %x %d\r\n", p->ConnHdl, p->MaxRxLen);
-
+				DEBUG_PRINTF("BT_HCI_EVT_LE_DATA_LEN_CHANGE:\r\n", p->ConnHdl, p->MaxRxLen);
+				DEBUG_PRINTF(
+						"MaxRxLen = %d, MaxRxTime = %d \r\n"
+						"MaxTxLen = %d, MaxTxTime = %d \r\n",
+						p->MaxRxLen, p->MaxRxTime, p->MaxTxLen, p->MaxTxTime);
 			}
 			break;
 		case BT_HCI_EVT_LE_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE:
@@ -137,10 +149,12 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			{
 				BtHciLeEvtEnhConnComplete_t *p = (BtHciLeEvtEnhConnComplete_t*)pLeEvtPkt->Data;
 
-//				g_Uart.printf("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE : hdl %x, role:%d\n", p->ConnHdl, p->Role);
+//				DEBUG_PRINTF("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE : hdl %x, role:%d\n", p->ConnHdl, p->Role);
 
 				if (p->Status == 0)
 				{
+					DEBUG_PRINTF("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V1/V2\r\n");
+					DEBUG_PRINTF("Target device Role = %d\r\n", p->Role);
 					pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
 
 					//s_ConnHdl = p->ConnHdl;
@@ -162,25 +176,29 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 					memcpy(c->Param, p->PeerAddr, 6);
 					c->Param[6] = 1;// staty Periph
 					int res = sdc_hci_cmd_put(buf);
-					g_Uart.printf("sdc_hci_cmd_put : res %d\r\n", res);*/
+					DEBUG_PRINTF("sdc_hci_cmd_put : res %d\r\n", res);*/
 				}
 			}
 			break;
 		case BT_HCI_EVT_LE_DIRECTED_ADV_REPORT:
 			break;
 		case BT_HCI_EVT_LE_PHY_UPDATE_COMPLETE:
+		{
+			BtHciLeEvtPhyUpdateComplete_t *p = (BtHciLeEvtPhyUpdateComplete_t *) pLeEvtPkt->Data;
+			DEBUG_PRINTF("Status = %d, RxPhy = %d, TxPhy = %d \r\n", p->Status, p->RxPhy, p->TxPhy);
+		}
 			break;
 		case BT_HCI_EVT_LE_EXT_ADV_REPORT:
 			{
-				//g_Uart.printf("BT_HCI_EVT_LE_EXT_ADV_REPORT:\r\n");
+				//DEBUG_PRINTF("BT_HCI_EVT_LE_EXT_ADV_REPORT:\r\n");
 				BtHciLeEvtExtAdvReport_t *report = (BtHciLeEvtExtAdvReport_t*)pLeEvtPkt->Data;
 				BtExtAdvReport_t *p = (BtExtAdvReport_t*)report->Report;
 
-//				g_Uart.printf("BT_HCI_EVT_LE_EXT_ADV_REPORT\r\n");
-				//g_Uart.printf("Nb reports : %d\r\n", report->NbReport);
+				//DEBUG_PRINTF("BT_HCI_EVT_LE_EXT_ADV_REPORT\r\n");
+				//DEBUG_PRINTF("Nb reports : %d\r\n", report->NbReport);
 				for (int i = 0; i < report->NbReport; i++)
 				{
-				//	g_Uart.printf("%02x %02x %02x %02x %02x %02x, Datlen = %d\r\n",
+//					DEBUG_PRINTF("%02x %02x %02x %02x %02x %02x, Datlen = %d\r\n",
 //								p[i].Addr[0], p[i].Addr[1], p[i].Addr[2],
 //								p[i].Addr[3], p[i].Addr[4], p[i].Addr[5],
 //								p[i].DataLen);
@@ -208,7 +226,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			{
 				BtHciLeEvtChanSelAlgo_t *p = (BtHciLeEvtChanSelAlgo_t *)pLeEvtPkt->Data;
 
-//				g_Uart.printf("BT_HCI_EVT_LE_CHAN_SELECTION_ALGO : hdl:%x %d\r\n", p->ConnHdl, p->ChanSelAlgo);
+//				DEBUG_PRINTF("BT_HCI_EVT_LE_CHAN_SELECTION_ALGO : hdl:%x %d\r\n", p->ConnHdl, p->ChanSelAlgo);
 
 				//sdc_hci_cmd_le_read_channel_map_t cmc;
 				//sdc_hci_cmd_le_read_channel_map_return_t cmr;
@@ -216,7 +234,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				//cmc.conn_handle = g_BleConn.Handle;
 				//sdc_hci_cmd_le_read_channel_map(&cmc, &cmr);
 
-				//g_Uart.printf("  %d %d %d %d %d\r\n", cmr.conn_handle, cmr.channel_map[0], cmr.channel_map[1], cmr.channel_map[2], cmr.channel_map[4]);
+				//DEBUG_PRINTF("  %d %d %d %d %d\r\n", cmr.conn_handle, cmr.channel_map[0], cmr.channel_map[1], cmr.channel_map[2], cmr.channel_map[4]);
 			}
 			break;
 		case BT_HCI_EVT_LE_CONNLESS_IQ_REPORT:
@@ -255,7 +273,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 
 void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 {
-	//g_Uart.printf("### BtHciProcessEvent %x ###\r\n", pEvtPkt->Hdr.Evt);
+	//DEBUG_PRINTF("### BtHciProcessEvent %x ###\r\n", pEvtPkt->Hdr.Evt);
 
 	switch (pEvtPkt->Hdr.Evt)
 	{
@@ -264,13 +282,19 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_INQUERY_RESULT:
 			break;
 		case BT_HCI_EVT_CONN_COMPLETE:
+		{
+			BtHciEvtConnCompete_t *p = (BtHciEvtConnCompete_t *) pEvtPkt->Data;
+			DEBUG_PRINTF("BtHciProcessEvent: ConnectionComplete, Status = %d (0x%x) \r\n",
+									p->Status, p->Status);
+		}
 			break;
 		case BT_HCI_EVT_CONN_REQUEST:
 			break;
 		case BT_HCI_EVT_DISCONN_COMPLETE:
 			{
 				BtHciEvtDisconComplete_t *p = (BtHciEvtDisconComplete_t*)pEvtPkt->Data;
-//				g_Uart.printf("Disconnected\r\n");
+				DEBUG_PRINTF("BtHciProcessEvent: Disconnected, Status = %d (0x%x) \r\n",
+						p->Status, p->Status);
 
 				pDev->Disconnected(p->ConnHdl, p->Reason);
 			}
@@ -296,10 +320,10 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_COMMAND_COMPLETE:
 			break;
 		case BT_HCI_EVT_COMMAND_STATUS:
-//			g_Uart.printf("BT_HCI_EVT_COMMAND_STATUS : %d\r\n", pEvtPkt->Hdr.Len);//
+//			DEBUG_PRINTF("BT_HCI_EVT_COMMAND_STATUS : %d\r\n", pEvtPkt->Hdr.Len);//
 //			for (int i = 0; i < pEvtPkt->Hdr.Len; i++)
-//				g_Uart.printf("%x ", pEvtPkt->Data[i]);
-//			g_Uart.printf("\r\n");
+//				DEBUG_PRINTF("%x ", pEvtPkt->Data[i]);
+//			DEBUG_PRINTF("\r\n");
 			break;
 		case BT_HCI_EVT_HARDWARE_ERROR:
 			break;
@@ -311,10 +335,10 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 			{
 				BtHciEvtNbCompletedPkt_t *p = (BtHciEvtNbCompletedPkt_t*)pEvtPkt->Data;
 
-				//				g_Uart.printf("BT_HCI_EVT_NB_COMPLETED_PACKET: %d\r\n", p->NbHdl);
+				//				DEBUG_PRINTF("BT_HCI_EVT_NB_COMPLETED_PACKET: %d\r\n", p->NbHdl);
 //				for (int i = 0; i < p->NbHdl; i++)
 //				{
-//					g_Uart.printf("Hdl: %x - NbPkt: %d\r\n", p->Completed[i].Hdl, p->Completed[i].NbPkt);
+//					DEBUG_PRINTF("Hdl: %x - NbPkt: %d\r\n", p->Completed[i].Hdl, p->Completed[i].NbPkt);
 //				}
 				if (pDev->SendCompleted)
 				{
@@ -351,7 +375,7 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_PAGE_SCAN_REPETITION_MODE_CHANGE:
 			break;
 		case BT_HCI_EVT_FLOW_SPECS_COMPLETE:
-//			g_Uart.printf("BT_HCI_EVT_FLOW_SPECS_COMPLETE\r\n");
+//			DEBUG_PRINTF("BT_HCI_EVT_FLOW_SPECS_COMPLETE\r\n");
 			break;
 		case BT_HCI_EVT_INQUIRY_RESULT_WITH_RSSI:
 			break;
@@ -368,7 +392,7 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_ENCRYPTION_KEY_REFRESH_COMPLETE:
 			break;
 		case BT_HCI_EVT_IO_CAPABILITY_RQST:
-//			g_Uart.printf("BT_HCI_EVT_IO_CAPABILITY_RQST\r\n");
+//			DEBUG_PRINTF("BT_HCI_EVT_IO_CAPABILITY_RQST\r\n");
 			break;
 		case BT_HCI_EVT_IO_CAPABILITY_RESPONSE:
 			break;
@@ -415,10 +439,11 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_SAM_STATUS_CHANGE:
 			break;
 		case BT_HCI_EVT_LE:
+			//DEBUG_PRINTF("BT_HCI_EVT_LE\r\n");
 			BtHciProcessLeEvent(pDev, (BtHciLeEvtPacket_t *)pEvtPkt->Data);
 			break;
 	}
-//	g_Uart.printf("+++++\r\n");
+//	DEBUG_PRINTF("+++++\r\n");
 }
 
 
@@ -426,12 +451,12 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 {
 	BtL2CapPdu_t *l2rcv = (BtL2CapPdu_t*)pPkt->Data;
 /*
-	g_Uart.printf("** BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
+	DEBUG_PRINTF("** BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
 	for (int i = 0; i < pPkt->Hdr.Len; i++)
 	{
-		g_Uart.printf("%x ", pPkt->Data[i]);
+		DEBUG_PRINTF("%x ", pPkt->Data[i]);
 	}
-	g_Uart.printf("\r\nCID: %x\r\n", l2rcv->Hdr.Cid);
+	DEBUG_PRINTF("\r\nCID: %x\r\n", l2rcv->Hdr.Cid);
 */
 	switch (l2rcv->Hdr.Cid)
 	{
@@ -441,6 +466,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			break;
 		case BT_L2CAP_CID_ATT:
 		{
+			//DEBUG_PRINTF("BT_L2CAP_CID_ATT\r\n");
 			uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 			BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 			BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
@@ -468,8 +494,8 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			BtProcessSmpData(pDev, l2rcv);
 			break;
 	}
-//	g_Uart.printf("-----\r\n");
-	//g_Uart.printf("L2Cap : Len %d, Chan %d, Type %d\r\n", l2frame->Hdr.Len, l2frame->Hdr.Cid, l2frame->SFrame.Std.Type);
+//	DEBUG_PRINTF("-----\r\n");
+	//DEBUG_PRINTF("L2Cap : Len %d, Chan %d, Type %d\r\n", l2frame->Hdr.Len, l2frame->Hdr.Cid, l2frame->SFrame.Std.Type);
 /*
 	if (l2frame->Control & BT_L2CAP_CONTROL_TYPE_SFRAME)
 	{
@@ -478,7 +504,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 	else
 	{
 		// I-Frame
-		g_Uart.printf("I : TxSeq %d, R %d, Req %d, Sar %d, L %d\r\n", l2frame->IFrame.Std.TxSeq,
+		DEBUG_PRINTF("I : TxSeq %d, R %d, Req %d, Sar %d, L %d\r\n", l2frame->IFrame.Std.TxSeq,
 					  l2frame->IFrame.Std.RetransDis, l2frame->IFrame.Std.ReqSeq,
 					  l2frame->IFrame.Std.Sar, l2frame->IFrame.Std.Len);
 
@@ -486,7 +512,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		{
 			//BtAttPdu_t *att = (BtAttPdu_t*)l2frame->Att;
 
-			g_Uart.printf("att %x\r\n", l2frame->Att.OpCode);
+			DEBUG_PRINTF("att %x\r\n", l2frame->Att.OpCode);
 		}
 	}
 */
@@ -502,7 +528,7 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
 	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
-//	g_Uart.printf("BtHciMotify : %d %d \r\n", ConnHdl, ValHdl);
+//	DEBUG_PRINTF("BtHciMotify : %d %d \r\n", ConnHdl, ValHdl);
 
 	acl->Hdr.ConnHdl = ConnHdl;
 	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
@@ -520,9 +546,9 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 	l2pdu->Hdr.Len = sizeof(BtAttHandleValueNtf_t) + Len;
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-//	g_Uart.printf("Len : %d, %d, %d\r\n", Len, l2pdu->Hdr.Len, acl->Hdr.Len);
+//	DEBUG_PRINTF("Len : %d, %d, %d\r\n", Len, l2pdu->Hdr.Len, acl->Hdr.Len);
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 	s_NbPktSent++;
-//	g_Uart.printf("n=%d\r\n", n);
+//	DEBUG_PRINTF("n=%d\r\n", n);
 }
 */

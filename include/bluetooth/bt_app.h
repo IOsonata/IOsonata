@@ -43,6 +43,7 @@ SOFTWARE.
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bleadv_mandata.h"
+#include "bluetooth/bt_dev.h"
 
 /** @addtogroup Bluetooth
   * @{
@@ -63,7 +64,8 @@ SOFTWARE.
 #define BTAPP_DEFAULT_MAX_MTU			515
 #endif
 
-#define BT_CONN_HDL_INVALID				0xFFFF
+#define BT_CONN_HDL_INVALID				0xFFFF	// Invalid Connection Handle
+#define BT_CONN_HDL_ALL					0xFFFE	// Applies to all Connection Handles
 
 typedef enum __Bt_App_Role {
 	BTAPP_ROLE_BROADCASTER	= BT_GAP_ROLE_BROADCASTER,		//!< non connectable Advertising only
@@ -239,7 +241,6 @@ void BtAppEvtDisconnected(uint16_t ConnHdl);
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx);
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
 void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData);
-
 
 //void BleDevServiceDiscovered(uint16_t ConnHdl, uint16_t Count, ble_gattc_service_t * const pServices);
 

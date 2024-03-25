@@ -75,6 +75,12 @@ SOFTWARE.
 #define BT_GATT_CHAR_PROP_EXT_PROP			BT_CHAR_PROP_EXT_PROP
 #define BT_GATT_CHAR_PROP_VALEN				BT_CHAR_PROP_VALEN
 
+
+#ifndef BT_GATT_DB_MAX_CHARS
+#define BT_GATT_DB_MAX_CHARS	6 	/**< The maximum number of characteristics present in a service record. */
+#endif
+
+
 #pragma pack(push,1)
 
 typedef struct __Bt_Gatt_Char_Srvc_Changed {
@@ -93,7 +99,6 @@ typedef struct __Bt_Gatt_Char_Prefered_Conn_Params {
 
 
 #pragma pack(push,4)
-
 typedef struct __Bt_Gatt_Service_Config {
 	uint8_t SecType;					//!< Secure or Open service/char
 	bool bCustom;						//!< True - for custom service Base UUID, false - Bluetooth SIG standard
@@ -105,6 +110,82 @@ typedef struct __Bt_Gatt_Service_Config {
     int	LongWrBuffSize;					//!< long write buffer size
     BtSrvcAuthRqst_t AuthReqCB;			//!< Authorization request callback
 } BtGattSrvcCfg_t;
+
+#pragma pack(pop)
+
+
+/* Struct analogous to ble_gatt_db.h of SoftDevice lib for central device*/
+#pragma pack(push,4)
+
+typedef struct __Bt_Gattc_Hdl_Range {
+	uint16_t StartHdl;					//!< Start service handle
+	uint16_t EndHdl;					//!< End service handle
+} BtGattcHdlRange_t;
+
+/**@brief GATT Characteristic Properties.
+ * Equivalent to ble_gatt_char_props_t
+ * */
+typedef struct
+{
+  /* Standard properties */
+  uint8_t broadcast       :1; /**< Broadcasting of the value permitted. */
+  uint8_t read            :1; /**< Reading the value permitted. */
+  uint8_t write_wo_resp   :1; /**< Writing the value with Write Command permitted. */
+  uint8_t write           :1; /**< Writing the value with Write Request permitted. */
+  uint8_t notify          :1; /**< Notification of the value permitted. */
+  uint8_t indicate        :1; /**< Indications of the value permitted. */
+  uint8_t auth_signed_wr  :1; /**< Writing the value with Signed Write Command permitted. */
+} BtGattCharProps_t;//ble_gatt_char_props_t;
+
+/**@brief GATT Characteristic Extended Properties.
+ * Equivalent to ble_gatt_char_ext_props_t
+ * */
+typedef struct
+{
+  /* Extended properties */
+  uint8_t reliable_wr     :1; /**< Writing the value with Queued Write operations permitted. */
+  uint8_t wr_aux          :1; /**< Writing the Characteristic User Description descriptor permitted. */
+} BtGattCharExtProps_t;//ble_gatt_char_ext_props_t;
+
+
+/**@brief GATT characteristic.
+ * Equivalent to ble_gattc_char_t
+ * */
+typedef struct
+{
+	//BtSrvcUuid_t              	uuid;                 /**< Characteristic UUID. */
+	BtUuid16_t					uuid;
+	BtGattCharProps_t   		char_props;           /**< Characteristic Properties. */
+	uint8_t                 	char_ext_props : 1;   /**< Extended properties present. */
+	uint16_t                	handle_decl;          /**< Handle of the Characteristic Declaration. */
+	uint16_t                	handle_value;         /**< Handle of the Characteristic Value. */
+} BtGattcChar_t;
+
+/**@brief Structure for holding the characteristic and the handle of its CCCD present on a server.
+ * 	Equivalent to ble_gatt_db_char_t
+ *
+ */
+typedef struct
+{
+    BtGattcChar_t 	characteristic;    /**< Structure containing information about the characteristic. */
+    uint16_t        cccd_handle;       /**< CCCD Handle value for this characteristic. This will be set to BLE_GATT_HANDLE_INVALID if a CCCD is not present at the server. */
+    uint16_t        ext_prop_handle;   /**< Extended Properties Handle value for this characteristic. This will be set to BLE_GATT_HANDLE_INVALID if an Extended Properties descriptor is not present at the server. */
+    uint16_t        user_desc_handle;  /**< User Description Handle value for this characteristic. This will be set to BLE_GATT_HANDLE_INVALID if a User Description descriptor is not present at the server. */
+    uint16_t        report_ref_handle; /**< Report Reference Handle value for this characteristic. This will be set to BLE_GATT_HANDLE_INVALID if a Report Reference descriptor is not present at the server. */
+} BtGattDBChar_t;
+
+/**@brief Structure for holding information about the service and the characteristics present on a
+ *        server.
+ *        Equivalent to ble_gatt_db_srv_t
+ */
+typedef struct
+{
+	//BtSrvcUuid_t        srv_uuid;                                  /**< UUID of the service. */
+	BtUuid16_t			srv_uuid;
+    uint8_t             char_count;                                /**< Number of characteristics present in the service. */
+    BtGattcHdlRange_t	handle_range;                              /**< Service Handle Range. */
+    BtGattDBChar_t      charateristics[BT_GATT_DB_MAX_CHARS];     /**< Array of information related to the characteristics present in the service. This list can extend further than one. */
+} BtGattDBSrvc_t;//ble_gatt_db_srv_t;
 
 #pragma pack(pop)
 

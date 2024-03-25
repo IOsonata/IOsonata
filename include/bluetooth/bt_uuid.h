@@ -921,6 +921,13 @@ typedef struct __Bt_Uuid_Array {
 	};
 } BtUuidArr_t;
 
+#if 0
+typedef struct __Bt_Srvc_Uuid {
+	uint16_t    uuid; /**< 16-bit UUID value or octets 12-13 of 128-bit UUID. */
+	uint8_t     type; /**< UUID type, see @ref BLE_UUID_TYPES. If type is @ref BLE_UUID_TYPE_UNKNOWN, the value of uuid is undefined. */
+} BtSrvcUuid_t;
+#endif
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -993,6 +1000,21 @@ bool BtUuid16To128(BtUuid16_t * const pUuid, uint8_t Uuid128[16]);
  * @return	true - success
  */
 bool BtUuid32To128(BtUuid32_t * const pUuid, uint8_t Uuid128[16]);
+
+/**
+ * @brief	Extract 16-bit UUID and 128-bit BaseUUID from the given Uuid128
+ * 			Lookup the internal table for the given Uuid128
+ * 			If found, return the index of this Uuid128 in the table
+ * 			If not found, add this Uuid128 to the table and return its index in the table
+ *
+ * @param 	pUuid	: Reference to the BtUuid32_t to convert
+ * @param 	Uuid128	: Buffer to store the 128 bits UUID result
+ *
+ * @return	The index in the internal UUID table
+ * 			-1 : Not found
+ */
+int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t BaseUuid128[16], uint8_t Uuid128[16]);
+
 
 #ifdef __cplusplus
 }

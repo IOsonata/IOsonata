@@ -713,6 +713,7 @@ struct __Bt_Hci_Device {
 	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
 	void (*ScanReport)(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *DavData);
 	//BtAdvSCanReport_t *pAdvReport);//uint8_t Type, uint8_t NbReport, void *pReport);
+	void *pBtDev;// Pointer to the connected peripheral device's info
 };
 
 #ifdef __cplusplus

@@ -95,13 +95,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *  - Name : the advertising name of the device
  *  - MAC address of the device
  */
-#define TARGET_BRIDGE_DEV_NAME	"BlueIO832Mini"	/**< Name of BLE peripheral device to be scanned */
+#define TARGET_BRIDGE_DEV_NAME	"UARTDemo"	/**< Name of BLE peripheral device to be scanned */
 
 #define Nordic_PCA10040_DK		{0x25, 0xD3, 0x83, 0x6A, 0xEA, 0xDE}
 #define BlueIO832_01			{0x7C, 0x75, 0x96, 0x65, 0x28, 0xF1}
 #define BlueIO832_02			{0xC3, 0x84, 0xC0, 0x8C, 0x2A, 0xC2}
+#define UART_Demo				{0x12, 0xB1, 0x6A, 0xE7, 0x68, 0xE4}
 
-uint8_t g_clientMacAddr[6] = BlueIO832_02;
+uint8_t g_clientMacAddr[6] = UART_Demo;
 uint8_t g_searchCnt = 0;
 
 // CFIFO for BleAppWrite
@@ -208,6 +209,14 @@ static BtGapConnParams_t s_ConnParams = {
 	.Latency = 0,
 	.Timeout = 4000,
 };
+
+extern BtDev_t g_BtDevSdc;
+
+#if 0
+BtDev_t g_ConnectedDev = {
+	.ConnHdl = BT_CONN_HDL_INVALID,
+};
+#endif
 
 #ifndef NRFXLIB_SDC
 #if 0
@@ -406,6 +415,14 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
 	g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
+
+	//g_Uart.printf("This device's Role = %s\r\n", s_BleAppCfg.Role == BT_GAP_ROLE_CENTRAL ? "Central" : "Peripheral");
+	if (s_BleAppCfg.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+	{
+		//BtAppDiscoverDevice(&g_ConnectedDev);
+
+		//BtAppAssignPeriphDevice(&g_ConnectedDev);
+	}
 }
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)
