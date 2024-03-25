@@ -139,7 +139,7 @@ bool BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16
 	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
 	acl->Hdr.BCFlag = 0;
 
-	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ;
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ;//BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ;
 	l2pdu->Att.ReadByTypeReq.StartHdl = StartHdl;
 	l2pdu->Att.ReadByTypeReq.EndHdl = EndHdl;
 	l2pdu->Hdr.Len = 5;
@@ -167,7 +167,7 @@ bool BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16
 
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
-	DEBUG_PRINTF("BtAttReadByTypeRequest : %d, %d %d\r\n", StartHdl, EndHdl, pUuid->BaseIdx);
+	//DEBUG_PRINTF("BtAttReadByTypeRequest : %d, %d %d\r\n", StartHdl, EndHdl, pUuid->BaseIdx);
 
 	return true;
 }
@@ -258,7 +258,7 @@ bool BtAttReadMultipleRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint
  */
 bool BtAttReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid)
 {
-	DEBUG_PRINTF("Call BtAttReadByGroupTypeRequest\r\n");
+	DEBUG_PRINTF("BtAttReadByGroupTypeRequest() called\r\n");
 
 	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
 	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*) buff;

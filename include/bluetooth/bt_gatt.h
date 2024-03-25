@@ -153,7 +153,6 @@ typedef struct
  * */
 typedef struct
 {
-	//BtSrvcUuid_t              	uuid;                 /**< Characteristic UUID. */
 	BtUuid16_t					uuid;
 	BtGattCharProps_t   		char_props;           /**< Characteristic Properties. */
 	uint8_t                 	char_ext_props : 1;   /**< Extended properties present. */
@@ -180,7 +179,6 @@ typedef struct
  */
 typedef struct
 {
-	//BtSrvcUuid_t        srv_uuid;                                  /**< UUID of the service. */
 	BtUuid16_t			srv_uuid;
     uint8_t             char_count;                                /**< Number of characteristics present in the service. */
     BtGattcHdlRange_t	handle_range;                              /**< Service Handle Range. */

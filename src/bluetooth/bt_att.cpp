@@ -437,9 +437,9 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 	{
 	case BT_ATT_OPCODE_ATT_ERROR_RSP:
 	{
-		DEBUG_PRINTF("BT_ATT_OPCODE_ATT_ERROR_RSP (0x01) \r\n");
-		DEBUG_PRINTF("OpCode = 0x%x, ErrCode = 0x%x \r\n", pRspAtt->ErrorRsp.ReqOpCode,
-				pRspAtt->ErrorRsp.Error);
+		DEBUG_PRINTF(
+				"BT_ATT_OPCODE_ATT_ERROR_RSP (0x01): OpCode 0x%x, ErrCode 0x%x \r\n",
+				pRspAtt->ErrorRsp.ReqOpCode, pRspAtt->ErrorRsp.Error);
 
 		// Error code processing
 		BtAttProcessError(ConnHdl, pRspAtt, RspLen);
@@ -484,6 +484,26 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 	case BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP:
 	{
 		DEBUG_PRINTF("BT_ATT_OPCODE_ATT_READ_BY_TYPE_RSP (0x09)\r\n");
+		BtAttReadByTypeRsp_t *p = (BtAttReadByTypeRsp_t *) &pRspAtt->ReadByTypeRsp;
+		DEBUG_PRINTF("Len %d, Raw Data (hex): ", p->Len);
+		for (int i = 0; i < p->Len; i++)
+			DEBUG_PRINTF("%X ", p->Data[i]);
+		DEBUG_PRINTF("\r\n");
+
+		// TODO: Processing the received data, store data into g_BtDevSdc.Services[CurIdx.SrvIdx].charateristics[CurIdx.CharIdx]
+		uint16_t hdl = p->Data[0] | (p->Data[1] << 8);
+		uint8_t CharProp = p->Data[2];
+		uint16_t CharHdl = p->Data[3] | (p->Data[4] << 8);
+		uint16_t CharUuid16 = p->Data[5] | (p->Data[6] << 8);
+
+		DEBUG_PRINTF("Hdl %d, CharProp 0x%X, CharHdl %d, CharUuid16 0x%X\r\n",
+				hdl, CharProp, CharHdl, CharUuid16);
+		g_BtDevSdc.Services[CurIdx.SrvIdx].char_count++;
+		DEBUG_PRINTF("New char_count = %d\r\n", g_BtDevSdc.Services[CurIdx.SrvIdx].char_count);
+		BtGattDBChar_t *pChar =
+				(BtGattDBChar_t*) &g_BtDevSdc.Services[CurIdx.SrvIdx].charateristics[CurIdx.CharIdx];
+
+
 	}
 	break;
 	case BT_ATT_OPCODE_ATT_READ_RSP:
@@ -541,7 +561,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 				(BtAttReadByGroupTypeRsp_t*) &pRspAtt->ReadByGroupTypeRsp;
 		DEBUG_PRINTF("Len = %d, Raw data (hex): ", p->Len);
 		for (int i = 0; i < p->Len; i++)
-			DEBUG_PRINTF("%x ", p->Data[i]);
+			DEBUG_PRINTF("%X ", p->Data[i]);
 		DEBUG_PRINTF("\r\n");
 
 		bool bScanNext = false;
@@ -550,12 +570,13 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		g_BtDevSdc.NbSrvc++;
 		uint8_t SrvcIdx = g_BtDevSdc.NbSrvc - 1;
 
+		// Process the received data
 		if (p->Len <= 6)
 		{
 			// UUID 16
 			BtAttReadByGroupTypeRspUuid16_t *g =
 					(BtAttReadByGroupTypeRspUuid16_t*) p->Data;
-			DEBUG_PRINTF("StartHdl = %d, EndHdl = %d, BLE service UUID16 (hex) = %x\r\n", g->HdlStart, g->HdlEnd, g->Uuid);
+			DEBUG_PRINTF("StartHdl = %d, EndHdl = %d, Service UUID16 0x%X \r\n", g->HdlStart, g->HdlEnd, g->Uuid);
 
 			BtGattDBSrvc_t *pSrvc =
 					(BtGattDBSrvc_t*) &g_BtDevSdc.Services[SrvcIdx];
@@ -574,13 +595,14 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 			BtAttReadByGroupTypeRspUuid128_t *g =
 					(BtAttReadByGroupTypeRspUuid128_t*) p->Data;
 			DEBUG_PRINTF("StartHdl = %d, EndHdl = %d \r\n", g->HdlStart, g->HdlEnd);
-			DEBUG_PRINTF("Custom BLE service UUID 128 (hex) = ");
+			DEBUG_PRINTF("Custom service UUID128 (hex): ");
 			for (int i = 0; i < 16; i++)
 				DEBUG_PRINTF("%X ", g->Uuid[i]);
 			DEBUG_PRINTF("\r\n");
 
 			uint8_t BaseUuid128[16];
-			BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &g_BtDevSdc.Services[SrvcIdx];
+			BtGattDBSrvc_t *pSrvc =
+					(BtGattDBSrvc_t*) &g_BtDevSdc.Services[SrvcIdx];
 			pSrvc->handle_range.StartHdl = g->HdlStart;
 			pSrvc->handle_range.EndHdl = g->HdlEnd;
 			int idx = BtUuid128To16(&pSrvc->srv_uuid, BaseUuid128, g->Uuid);
@@ -588,13 +610,13 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 			DEBUG_PRINTF("BaseUUID128 (hex) = ");
 			for (int i = 0; i < 16; i++)
 				DEBUG_PRINTF("%x ", BaseUuid128[i]);
-			DEBUG_PRINTF("was added at the internal table index %d\r\n", idx);
+			DEBUG_PRINTF("was added at the internal table with index %d\r\n", idx);
 
 			bScanNext = (g->HdlEnd != 0xFFFF) ? true : false;
 			NextStartHdl = (g->HdlEnd != 0xFFFF) ? (g->HdlEnd + 1) : 0xFFFF;
 		}
 
-		// Read the next group type
+		// Send command to Read the next group type
 		if (bScanNext)
 		{
 			// Continue to read the next group
@@ -712,15 +734,17 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			break;
 		case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ:
 			{
-				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ (0x08): %x - %x\r\n", pReqAtt->ReadByTypeReq.StartHdl, pReqAtt->ReadByTypeReq.EndHdl);
-
 				// Only the attributes with attribute handles between and including
 				// the Starting Handle and the Ending Handle with the attribute type
 				// that is the same as the Attribute Type given will be returned. To
 				// search through all attributes, the starting handle shall be set to
 				// 0x0001 and the ending handle shall be set to 0xFFFF.
-
 				BtAttReadByTypeReq_t *req = (BtAttReadByTypeReq_t*)&pReqAtt->ReadByTypeReq;
+
+				DEBUG_PRINTF(
+						"BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ (0x08): StartHdl %d, EndHdl %d, Uuid16 0x%X \r\n",
+						pReqAtt->ReadByTypeReq.StartHdl, pReqAtt->ReadByTypeReq.EndHdl,
+						req->Uuid.Uuid16);
 
 				if (req->StartHdl > req->EndHdl)
 				{
@@ -732,10 +756,18 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				uint8_t *p = (uint8_t*)pRspAtt->ReadByTypeRsp.Data;
 
-//				DEBUG_PRINTF("sHdl: %x, eHdl: %x, Type: %x\r\n", req->StartHdl, req->EndHdl, req->Uuid.Uuid16);
+				//DEBUG_PRINTF("sHdl: %x, eHdl: %x, Type: %x\r\n", req->StartHdl, req->EndHdl, req->Uuid.Uuid16);
 				BtUuid16_t uid16 = { 0, BT_UUID_TYPE_16, req->Uuid.Uuid16};
 
 				BtAttDBEntry_t *entry = BtAttDBFindUuidRange(&uid16, req->StartHdl, req->EndHdl);
+				if (entry)
+				{
+					DEBUG_PRINTF("Entry found\r\n");
+				}
+				else
+				{
+					DEBUG_PRINTF("Entry not found\r\n");
+				}
 #if 0
 				if (entry)
 				{
@@ -755,7 +787,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				while (entry && (s_AttMtu - l) >= BT_ATT_MTU_MIN)
 				{
-
 					if (entry->Hdl < req->StartHdl || entry->Hdl > req->EndHdl)
 					{
 						break;
@@ -780,6 +811,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					req->StartHdl = entry->pNext->Hdl;
 					entry = BtAttDBFindUuidRange(&uid16, req->StartHdl, req->EndHdl);
 				}
+
 				if (l > 0)
 				{
 					retval = l + 2;
@@ -919,13 +951,13 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						int cnt = BtAttReadValue(entry, 0, p, s_AttMtu - l - sizeof(BtAttHdlRange_t));
 
 						BtAttSrvcDeclar_t *x = (BtAttSrvcDeclar_t *) p;
-						DEBUG_PRINTF("Ble Service uuid16 = 0x%x \r\n", x->Uuid.Uuid16);
-						DEBUG_PRINTF("pRspAtt->ReadByGroupTypeRsp.Len = %d \r\n", pRspAtt->ReadByGroupTypeRsp.Len);
+						DEBUG_PRINTF("Ble Service UUID16 = 0x%X \r\n", x->Uuid.Uuid16);
+						//DEBUG_PRINTF("pRspAtt->ReadByGroupTypeRsp.Len = %d \r\n", pRspAtt->ReadByGroupTypeRsp.Len);
 
 						if (pRspAtt->ReadByGroupTypeRsp.Len == 0)
 						{
 							pRspAtt->ReadByGroupTypeRsp.Len = cnt;
-							DEBUG_PRINTF("cnt = %d\r\n", cnt);
+							//DEBUG_PRINTF("cnt = %d\r\n", cnt);
 						}
 						else if (cnt != pRspAtt->ReadByGroupTypeRsp.Len)
 						{
@@ -953,7 +985,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				{
 					pRspAtt->ReadByGroupTypeRsp.Len += 4;
 					retval = l + 2;
-					DEBUG_PRINTF("retval = %d\r\n", retval);
+					//DEBUG_PRINTF("retval = %d\r\n", retval);
 					break;
 				}
 				else
@@ -1090,10 +1122,12 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 				DEBUG_PRINTF("StartHdl = %d, EndHdl = %d\r\n", p->handle_range.StartHdl, p->handle_range.EndHdl);
 			}
 
-			// Call BT_ATT_OPCODE_ATT_READ_REQ to parse the second handle of the first service
+			// Call BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ to parse the first service
+			//// Call BT_ATT_OPCODE_ATT_READ_REQ to parse the second handle of the first service
 			// Note that the StartHandle is the handle for this service
 			CurIdx.SrvIdx = 0;
 			BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &g_BtDevSdc.Services[CurIdx.SrvIdx];
+			CurIdx.CharIdx = 0;
 			CurIdx.Hdl = pSrvc->handle_range.StartHdl + 1;
 			if (CurIdx.Hdl > pSrvc->handle_range.EndHdl)
 			{
@@ -1101,8 +1135,22 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 			}
 			else
 			{
-				BtAttReadRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev,
-						g_BtDevSdc.ConnHdl, CurIdx.Hdl);
+				//BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid)
+				uint16_t sHdl = pSrvc->handle_range.StartHdl;
+				uint16_t eHdl = pSrvc->handle_range.EndHdl;
+				//BtUuid_t *pUuid = (BtUuid_t*) &pSrvc->srv_uuid;
+
+				BtUuid_t Uuid =	{ 0, BT_UUID_TYPE_16, (uint16_t) BT_UUID_DECLARATIONS_CHARACTERISTIC };
+
+				DEBUG_PRINTF(
+						"Parse the characteristic of the first service ConnHdl %d, sHdl %d, eHdl %d, uuid 0x%X, baseIdx %d\r\n",
+						g_BtDevSdc.ConnHdl, sHdl, eHdl, Uuid.Uuid16, Uuid.BaseIdx);
+
+				BtAttReadByTypeRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev,
+						g_BtDevSdc.ConnHdl, sHdl, eHdl, &Uuid);
+
+				//BtAttReadRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev,
+				//		g_BtDevSdc.ConnHdl, CurIdx.Hdl);
 			}
 		}
 	}
