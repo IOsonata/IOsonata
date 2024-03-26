@@ -76,9 +76,9 @@ static uint16_t s_LastHdl = 0;
 extern BtDev_t g_BtDevSdc;
 #pragma pack(push,1)
 typedef struct {
-	uint8_t	SrvIdx;
-	uint8_t Hdl;
-	uint8_t CharIdx;
+	uint8_t	SrvIdx;		// Current Service Idx
+	uint8_t Hdl;		// Current handle
+	uint8_t CharIdx;	// Current Characteristic Idx
 } CurParseInf_t;
 #pragma pack(pop)
 
@@ -87,6 +87,9 @@ CurParseInf_t CurIdx = {
 	.Hdl = 0,
 	.CharIdx = 0,
 };
+
+// Current UUID type to be search
+BtUuid_t s_UuidType = {0, BT_UUID_TYPE_16, (uint16_t) BT_UUID_DECLARATIONS_CHARACTERISTIC };
 
 uint16_t BtAttSetMtu(uint16_t Mtu)
 {
@@ -285,13 +288,17 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 
 				u->Uuid128[12] = p->Uuid.Uuid16 & 0xFF;
 				u->Uuid128[13] = p->Uuid.Uuid16 >> 8;
-
 				len = 19;
+				DEBUG_PRINTF("UUID128 (hex) = ");
+				for (int i = 0; i < 16; i++)
+					DEBUG_PRINTF("%X ", u->Uuid128[i]);
+				DEBUG_PRINTF("\r\n");
 			}
 			else
 			{
 				u->Uuid16 = p->Uuid.Uuid16;
 				len = 5;
+				DEBUG_PRINTF("UUID16 = 0x%X \r\n", u->Uuid16);
 			}
 		}
 			break;
@@ -316,6 +323,7 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 					(BtDescClientCharConfig_t*) pEntry->Data;
 
 			*(uint16_t*) pBuff = d->CccVal;
+			DEBUG_PRINTF("Hdl = %d, CCC val = %d\r\n", pEntry->Hdl, d->CccVal);
 			len = 2;
 		}
 			break;
@@ -491,19 +499,87 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		DEBUG_PRINTF("\r\n");
 
 		// TODO: Processing the received data, store data into g_BtDevSdc.Services[CurIdx.SrvIdx].charateristics[CurIdx.CharIdx]
-		uint16_t hdl = p->Data[0] | (p->Data[1] << 8);
+		uint16_t Hdl = p->Data[0] | (p->Data[1] << 8);
 		uint8_t CharProp = p->Data[2];
-		uint16_t CharHdl = p->Data[3] | (p->Data[4] << 8);
-		uint16_t CharUuid16 = p->Data[5] | (p->Data[6] << 8);
+		uint16_t CharHdlVal = p->Data[3] | (p->Data[4] << 8);
 
-		DEBUG_PRINTF("Hdl %d, CharProp 0x%X, CharHdl %d, CharUuid16 0x%X\r\n",
-				hdl, CharProp, CharHdl, CharUuid16);
+		uint16_t CharUuid16;
+		if (p->Len <=7)
+			CharUuid16 = p->Data[5] | (p->Data[6] << 8);
+		else if (p->Len > 7 && p->Len <= 9)
+			uint32_t CharUuid32 = p->Data[5] | (p->Data[6] << 8) | (p->Data[7] << 16) | (p->Data[8] << 24);
+		else // 128-bit UUID
+		{
+			// TODO: implement it
+			CharUuid16 = 0;
+			DEBUG_PRINTF("128-bit UUID. Need to extract UUID16\r\n");
+		}
+
+		CurIdx.CharIdx++;
 		g_BtDevSdc.Services[CurIdx.SrvIdx].char_count++;
-		DEBUG_PRINTF("New char_count = %d\r\n", g_BtDevSdc.Services[CurIdx.SrvIdx].char_count);
+
+		DEBUG_PRINTF("New char_count = %d\r\n",
+				g_BtDevSdc.Services[CurIdx.SrvIdx].char_count);
 		BtGattDBChar_t *pChar =
 				(BtGattDBChar_t*) &g_BtDevSdc.Services[CurIdx.SrvIdx].charateristics[CurIdx.CharIdx];
+		memcpy((uint8_t*) &pChar->characteristic.char_props, &CharProp,
+				sizeof(BtGattCharProps_t));
 
+		pChar->characteristic.handle_value = CharHdlVal;
+		pChar->characteristic.uuid.Uuid = CharUuid16;
+		pChar->characteristic.uuid.BaseIdx = s_UuidType.BaseIdx;
+		pChar->characteristic.uuid.Type = s_UuidType.Type;
 
+		DEBUG_PRINTF("Hdl %d, CharProp 0x%X, CharHdlVal %d, CharUuid16 0x%X\r\n",
+				Hdl, pChar->characteristic.char_props,
+				pChar->characteristic.handle_value, pChar->characteristic.uuid.Uuid);
+
+#if 0
+		// Search for CCC handle
+		if (pChar->characteristic.char_props.notify
+				|| pChar->characteristic.char_props.indicate)
+		{
+			CurIdx.Hdl = Hdl + 2;
+			uint8_t eHdl =
+					g_BtDevSdc.Services[CurIdx.SrvIdx].handle_range.EndHdl;
+			if (CurIdx.Hdl <= eHdl)
+			{
+				DEBUG_PRINTF("Search for CCC handle value with Hdl = %d\r\n",
+						CurIdx.Hdl);
+				s_UuidType.BaseIdx = 0;
+				s_UuidType.Type = BT_UUID_TYPE_16;
+				s_UuidType.Uuid16 =
+				BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
+				BtAttReadRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev,
+						g_BtDevSdc.ConnHdl, CurIdx.Hdl); // assume that CCC attribute is right next to the characteristic atrribute
+			}
+		}
+#endif
+
+		// Search for the next BLE characteristic
+		uint8_t eHdl = g_BtDevSdc.Services[CurIdx.SrvIdx].handle_range.EndHdl;
+		if (Hdl + 1 <= eHdl)
+		{
+			CurIdx.Hdl = Hdl + 1;
+			DEBUG_PRINTF("Search for the next characteristic with sHdl = %d\r\n", CurIdx.Hdl);
+			s_UuidType.BaseIdx = 0;
+			s_UuidType.Type = BT_UUID_TYPE_16;
+			s_UuidType.Uuid16 = BT_UUID_DECLARATIONS_CHARACTERISTIC;
+			BtAttReadByTypeRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev,
+					g_BtDevSdc.ConnHdl, CurIdx.Hdl, eHdl, &s_UuidType);
+		}
+#if 0
+		else // Search for the first BLE characteristic of the next BLE service
+		{
+			CurIdx.SrvIdx += 1;
+			CurIdx.CharIdx = 0;
+			CurIdx.Hdl = Hdl + 2;
+			DEBUG_PRINTF("Search for the next BLE service with sHdl = %d \r\n", CurIdx.Hdl);
+			s_UuidType.BaseIdx = 0;
+			s_UuidType.Type = BT_UUID_TYPE_16;
+			s_UuidType.Uuid16 = BT_UUID_DECLARATIONS_PRIMARY_SERVICE;
+		}
+#endif
 	}
 	break;
 	case BT_ATT_OPCODE_ATT_READ_RSP:
@@ -742,7 +818,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				BtAttReadByTypeReq_t *req = (BtAttReadByTypeReq_t*)&pReqAtt->ReadByTypeReq;
 
 				DEBUG_PRINTF(
-						"BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ (0x08): StartHdl %d, EndHdl %d, Uuid16 0x%X \r\n",
+						"BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ (0x08): StartHdl %d, EndHdl %d, Uuid16Type 0x%X \r\n",
 						pReqAtt->ReadByTypeReq.StartHdl, pReqAtt->ReadByTypeReq.EndHdl,
 						req->Uuid.Uuid16);
 
@@ -1128,30 +1204,54 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 			CurIdx.SrvIdx = 0;
 			BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &g_BtDevSdc.Services[CurIdx.SrvIdx];
 			CurIdx.CharIdx = 0;
-			CurIdx.Hdl = pSrvc->handle_range.StartHdl + 1;
+			CurIdx.Hdl = pSrvc->handle_range.StartHdl;
 			if (CurIdx.Hdl > pSrvc->handle_range.EndHdl)
 			{
 				DEBUG_PRINTF("Parsing Hdl (%d) larger than EndHdl (%d)\r\n", CurIdx.Hdl, pSrvc->handle_range.EndHdl);
 			}
 			else
 			{
-				//BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid)
 				uint16_t sHdl = pSrvc->handle_range.StartHdl;
 				uint16_t eHdl = pSrvc->handle_range.EndHdl;
-				//BtUuid_t *pUuid = (BtUuid_t*) &pSrvc->srv_uuid;
 
-				BtUuid_t Uuid =	{ 0, BT_UUID_TYPE_16, (uint16_t) BT_UUID_DECLARATIONS_CHARACTERISTIC };
+				s_UuidType.BaseIdx = 0;
+				s_UuidType.Type = BT_UUID_TYPE_16;
+				s_UuidType.Uuid16 = BT_UUID_DECLARATIONS_CHARACTERISTIC;
 
 				DEBUG_PRINTF(
 						"Parse the characteristic of the first service ConnHdl %d, sHdl %d, eHdl %d, uuid 0x%X, baseIdx %d\r\n",
-						g_BtDevSdc.ConnHdl, sHdl, eHdl, Uuid.Uuid16, Uuid.BaseIdx);
+						g_BtDevSdc.ConnHdl, sHdl, eHdl, s_UuidType.Uuid16, s_UuidType.BaseIdx);
 
-				BtAttReadByTypeRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev,
-						g_BtDevSdc.ConnHdl, sHdl, eHdl, &Uuid);
-
-				//BtAttReadRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev,
-				//		g_BtDevSdc.ConnHdl, CurIdx.Hdl);
+				BtAttReadByTypeRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev, g_BtDevSdc.ConnHdl, sHdl, eHdl, &s_UuidType);
 			}
+		}
+	}
+		break;
+	case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ:
+	{
+		if (pRspAtt->ErrorRsp.Error == BT_ATT_ERROR_ATT_NOT_FOUND)
+		{
+			DEBUG_PRINTF("ATT with sHdl %d of SrvcIdx %d not found. Scan the next BLE service\r\n", CurIdx.Hdl, CurIdx.SrvIdx);
+			if (CurIdx.SrvIdx >= g_BtDevSdc.NbSrvc - 1)
+			{
+				DEBUG_PRINTF("Out of number of service\r\n");
+				DEBUG_PRINTF("Back to explore each characteristic\r\n");
+			}
+			else
+			{
+				CurIdx.SrvIdx++;
+				CurIdx.CharIdx = 0;
+				BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &g_BtDevSdc.Services[CurIdx.SrvIdx];
+				CurIdx.Hdl = pSrvc->handle_range.StartHdl;
+				uint16_t sHdl = pSrvc->handle_range.StartHdl;
+				uint16_t eHdl = pSrvc->handle_range.EndHdl;
+
+				s_UuidType.BaseIdx = 0;
+				s_UuidType.Type = BT_UUID_TYPE_16;
+				s_UuidType.Uuid16 = BT_UUID_DECLARATIONS_CHARACTERISTIC;
+				BtAttReadByTypeRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev, g_BtDevSdc.ConnHdl, sHdl, eHdl, &s_UuidType);
+			}
+
 		}
 	}
 		break;
