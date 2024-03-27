@@ -226,21 +226,27 @@ bool BtUuid32To128(BtUuid32_t * const pUuid, uint8_t Uuid128[16])
 }
 
 /**
- * Check if the given 128-bit UUID was already in the internal UUID table
- * 	If not, add this 128-bit UUID in the the table
+ * 	Check if the base UUID128 of a given 128-bit UUID was already in the internal UUID table
+ * 	If not, add the base UUID128 of this 128-bit UUID into the the table
  * 	Extract the 16-bit UUID (byte 12 and 13) from the given 128-bit UUID
- * 	Extract the Base 128-bit UUID from the given 128-bit UUID
  *
  * @param pUuid16		: Pointer to the 16-bit UUID
- * @param BaseUuid128	: Array for storing the Base 128-bit UUID
- * @param Uuid128		: The given 128-bit UUID
+ * @param Uuid128		: The input 128-bit UUID
  *
  * @return
- * 		The index of the given 128-bit UUID in the internal UUID table
+ * 		The index of the base UUID128 in the internal UUID table
  */
-int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t BaseUuid128[16], uint8_t Uuid128[16])
+int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t Uuid128[16])
 {
 	int idx = -1;
+
+	// Extract 16-bit UUID from Uuid128
+	//pUuid16->BaseIdx = idx;
+	pUuid16->Type = BT_UUID_TYPE_128;
+	memcpy(&pUuid16->Uuid, &Uuid128[12], 2);
+
+	Uuid128[12] = 0;
+	Uuid128[13] = 0;
 
 	for (int i = 0; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
 	{
@@ -259,16 +265,7 @@ int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t BaseUuid128[16], uint8_t Uuid128[
 	{
 		idx = BtUuidAddBase(Uuid128);
 	}
-
-	// Extract 16-bit UUID from Uuid128
 	pUuid16->BaseIdx = idx;
-	pUuid16->Type = BT_UUID_TYPE_16;
-	memcpy(&pUuid16->Uuid, &Uuid128[12], 2);
-
-	// Extract the BaseUuid128 from Uuid128
-	memcpy(BaseUuid128, Uuid128, 16);
-	BaseUuid128[12] = 0;
-	BaseUuid128[13] = 0;
 
 	return idx;
 }
