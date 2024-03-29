@@ -1002,19 +1002,17 @@ bool BtUuid16To128(BtUuid16_t * const pUuid, uint8_t Uuid128[16]);
 bool BtUuid32To128(BtUuid32_t * const pUuid, uint8_t Uuid128[16]);
 
 /**
- * @brief	Extract 16-bit UUID and 128-bit BaseUUID from the given Uuid128
- * 			Lookup the internal table for the given Uuid128
- * 			If found, return the index of this Uuid128 in the table
- * 			If not found, add this Uuid128 to the table and return its index in the table
+ * 	Check if the base UUID128 of a given 128-bit UUID was already in the internal UUID table
+ * 	If not, add the base UUID128 of this 128-bit UUID into the the table
+ * 	Extract the 16-bit UUID (byte 12 and 13) from the given 128-bit UUID
  *
- * @param 	pUuid	: Reference to the BtUuid32_t to convert
- * @param 	Uuid128	: Buffer to store the 128 bits UUID result
+ * @param pUuid16		: Pointer to the 16-bit UUID
+ * @param Uuid128		: The input 128-bit UUID
  *
- * @return	The index in the internal UUID table
- * 			-1 : Not found
+ * @return
+ * 		The index of the base UUID128 in the internal UUID table
  */
-int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t BaseUuid128[16], uint8_t Uuid128[16]);
-
+int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t Uuid128[16]);
 
 #ifdef __cplusplus
 }
