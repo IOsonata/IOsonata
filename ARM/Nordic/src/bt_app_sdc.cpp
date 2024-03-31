@@ -317,7 +317,6 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 
 void BtAppDiscoverDevice(BtHciDevice_t * const pDev, uint16_t ConnHdl)
 {
-	// TODO: Add Device Discovery
 	DEBUG_PRINTF("Start discovering device\r\n");
 
 	// Reset counter and Service list
@@ -354,6 +353,11 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 
 	s_BtAppData.ConnHdl = BtGapGetConnection();
 
+	if (s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	{
+		s_BtAppData.State = BTAPP_STATE_IDLE;
+		BtAppAdvStart();
+	}
 }
 
 void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
