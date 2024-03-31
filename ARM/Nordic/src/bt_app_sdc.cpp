@@ -323,14 +323,13 @@ void BtAppDiscoverDevice(BtHciDevice_t * const pDev, uint16_t ConnHdl)
 	g_BtDevSdc.NbSrvc = 0;
 	memset(g_BtDevSdc.Services, 0, sizeof(BtGattDBSrvc_t) * BLEPERIPH_DEV_SERVICE_MAXCNT);
 
-	// ATT_READ_BY_GROUP_TYPE_REQ
+	// Start the discover process by discovering the Primary services
 	BtUuid_t Uuid = {
 			.BaseIdx = 0, // Standard bluetooth
 			.Type = BT_UUID_TYPE_16,
 			.Uuid16 = BT_UUID_DECLARATIONS_PRIMARY_SERVICE,
 	};
-	BtAttReadByGroupTypeRequest(pDev, ConnHdl, 1, 0xFFFF, &Uuid);
-
+	BtAttStartReadByGroupTypeRequest(pDev, ConnHdl, 1, 0xFFFF, &Uuid);
 }
 
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)

@@ -427,6 +427,15 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 	return len;
 }
 
+bool BtAttStartReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid)
+{
+	if (pDev == NULL || pUuid == NULL)
+		return false;
+
+	memcpy((uint8_t*)&s_UuidType, (uint8_t*)pUuid, sizeof(BtUuid_t));
+	return BtAttReadByGroupTypeRequest(pDev, ConnHdl, StartHdl, EndHdl, &s_UuidType);
+}
+
 uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode, uint8_t ErrCode)
 {
 	pRspAtt->OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
@@ -886,7 +895,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				DEBUG_PRINTF("TODO:");
 			}
 			break;
-		case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ:
+		case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ: // Parse UUID Type of characteristic inside a BLE service
 			{
 				// Only the attributes with attribute handles between and including
 				// the Starting Handle and the Ending Handle with the attribute type
