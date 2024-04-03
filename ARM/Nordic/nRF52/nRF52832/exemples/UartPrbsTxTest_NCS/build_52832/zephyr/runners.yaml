@@ -1,0 +1,56 @@
+# Available runners configured by board.cmake.
+runners:
+- nrfjprog
+- nrfutil
+- jlink
+- pyocd
+- openocd
+
+# Default flash runner if --runner is not given.
+flash-runner: nrfjprog
+
+# Default debug runner if --runner is not given.
+debug-runner: jlink
+
+# Common runner configuration values.
+config:
+  board_dir: C:/Users/Thinh/ncs/v2.6.0/zephyr/boards/arm/nrf52dk_nrf52832
+  # Build outputs:
+  elf_file: zephyr.elf
+  hex_file: zephyr.hex
+  bin_file: zephyr.bin
+  # Host tools:
+  gdb: C:/Users/Thinh/ncs/toolchains/cf2149caf2/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb.exe
+  openocd: C:/ToolPacks/OpenOCD-20211118-0.11.0/bin/openocd.exe
+  openocd_search:
+    - C:/Users/Thinh/ncs/toolchains/cf2149caf2/opt/zephyr-sdk/sysroots/AMD64-pokysdk-linux/usr/share/openocd/scripts
+
+# Runner specific arguments
+args:
+  nrfjprog:
+    []
+
+  nrfutil:
+    []
+
+  jlink:
+    - --dt-flash=y
+    - --device=nRF52832_xxAA
+    - --speed=4000
+  pyocd:
+    - --dt-flash=y
+    - --target=nrf52832
+    - --frequency=4000000
+  openocd:
+    - --cmd-load
+    - flash write_image erase
+    - --cmd-verify
+    - verify_image
+    - --cmd-pre-init
+    - set WORKAREASIZE 0x4000
+    - --cmd-pre-init
+    - source [find interface/jlink.cfg]
+    - --cmd-pre-init
+    - transport select swd
+    - --cmd-pre-init
+    - source [find target/nrf52.cfg]
