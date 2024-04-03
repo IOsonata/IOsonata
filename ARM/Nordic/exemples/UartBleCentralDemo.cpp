@@ -414,14 +414,12 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
-	g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
+	//g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
 
-	//g_Uart.printf("This device's Role = %s\r\n", s_BleAppCfg.Role == BT_GAP_ROLE_CENTRAL ? "Central" : "Peripheral");
+	g_Uart.printf("This device's Role = %s\r\n", s_BleAppCfg.Role == BT_GAP_ROLE_CENTRAL ? "Central" : "Peripheral");
 	if (s_BleAppCfg.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
-		//BtAppDiscoverDevice(&g_ConnectedDev);
-
-		//BtAppAssignPeriphDevice(&g_ConnectedDev);
+		BtAppDiscoverDevice(ConnHdl);
 	}
 }
 

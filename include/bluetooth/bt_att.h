@@ -551,6 +551,18 @@ struct __Bt_Service {
 
 #pragma pack(pop)
 
+#pragma pack(push,1)
+/**
+ * Struct to keep track of the current Service index, Characteristic index,
+ * and attribute handle being parsed
+ */
+typedef struct {
+	uint8_t	SrvIdx;		// Current Service Idx
+	uint8_t Hdl;		// Current handle
+	uint8_t CharIdx;	// Current Characteristic Idx
+} CurParseInf_t;
+#pragma pack(pop)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -573,6 +585,7 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
 uint16_t BtAttSetMtu(uint16_t MaxMtu);
 uint16_t BtAttGetMtu();
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pInAtt, int ReqLen, BtAttReqRsp_t * const pOutAtt);
+void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen);
 
 bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Mtu);
 

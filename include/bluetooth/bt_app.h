@@ -297,6 +297,8 @@ bool BtInitialized();
 /// return true - Ble connected
 bool BtConnected();
 
+void BtAppDiscoverDevice(uint16_t ConnHdl);
+
 #ifdef __cplusplus
 }
 #endif

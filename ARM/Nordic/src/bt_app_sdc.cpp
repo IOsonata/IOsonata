@@ -88,7 +88,6 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t Pe
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason);
 void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *DavData);
-void BtAppDiscoverDevice(BtHciDevice_t * const pDev, uint16_t ConnHdl);
 
 static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
@@ -293,29 +292,25 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	s_BtAppData.ConnHdl = ConnHdl;
 
 	BtGapAddConnection(ConnHdl, Role, PeerAddrType, PeerAddr);
-//	s_BtGapSrvc.ConnHdl = ConnHdl;
-//	s_BtGattSrvc.ConnHdl = ConnHdl;
 
-	BtAppEvtConnected(ConnHdl);
+	BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
 
-	//BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
+	g_BtDevSdc.ConnHdl = ConnHdl;
+	memcpy(g_BtDevSdc.Addr, PeerAddr, 6);
+	g_BtDevSdc.pHciDev = (BtHciDevice_t*) &s_BtHciDev;
+	s_BtHciDev.pBtDev = (void*) &g_BtDevSdc;
 
-	DEBUG_PRINTF("This device's Role = %d\r\n", s_BtAppData.Role);
+	//DEBUG_PRINTF("This device's Role = %d\r\n", s_BtAppData.Role);
 	if (s_BtAppData.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
-		g_BtDevSdc.ConnHdl = ConnHdl;
-		memcpy(g_BtDevSdc.Addr, PeerAddr, 6);
-		g_BtDevSdc.pHciDev = (BtHciDevice_t*) &s_BtHciDev;
-		s_BtHciDev.pBtDev = (void *)&g_BtDevSdc;
-
 		// TODO: obtain the connected peripheral device's name and store to g_BtDevSdc.Name;
-
-
-		BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
+		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
 	}
+
+	BtAppEvtConnected(ConnHdl);
 }
 
-void BtAppDiscoverDevice(BtHciDevice_t * const pDev, uint16_t ConnHdl)
+void BtAppDiscoverDevice(uint16_t ConnHdl)
 {
 	DEBUG_PRINTF("Start discovering device\r\n");
 
@@ -329,7 +324,7 @@ void BtAppDiscoverDevice(BtHciDevice_t * const pDev, uint16_t ConnHdl)
 			.Type = BT_UUID_TYPE_16,
 			.Uuid16 = BT_UUID_DECLARATIONS_PRIMARY_SERVICE,
 	};
-	BtAttStartReadByGroupTypeRequest(pDev, ConnHdl, 1, 0xFFFF, &Uuid);
+	BtAttStartReadByGroupTypeRequest(g_BtDevSdc.pHciDev, ConnHdl, 1, 0xFFFF, &Uuid);
 }
 
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)

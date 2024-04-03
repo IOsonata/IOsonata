@@ -626,6 +626,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ctlr.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_dev.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_gap.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
@@ -1169,6 +1174,11 @@
 			<name>src/bluetooth/bt_attreq.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attreq.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_attrsp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_dev.cpp</name>
