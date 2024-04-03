@@ -41,24 +41,48 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blueio_board.h"
 
-//#define NORDIC_DK
+#define NORDIC_DK
 //#define NEBLINA
 
-#define UART_DEVNO				0
+#define UART_DEVNO			1
 
 #ifdef NORDIC_DK
+
+#if UART_DEVNO == 0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			8
 #define UART_RX_PINOP		1
+
 #define UART_TX_PORT		0
 #define UART_TX_PIN			6
 #define UART_TX_PINOP		1
+
 #define UART_CTS_PORT		0
 #define UART_CTS_PIN		7
 #define UART_CTS_PINOP		1
+
 #define UART_RTS_PORT		0
 #define UART_RTS_PIN		5
 #define UART_RTS_PINOP		1
+
+#elif UART_DEVNO == 1
+#define UART_RX_PORT		1
+#define UART_RX_PIN			1
+#define UART_RX_PINOP		1
+
+#define UART_TX_PORT		1
+#define UART_TX_PIN			2
+#define UART_TX_PINOP		1
+
+#define UART_CTS_PORT		0
+#define UART_CTS_PIN		7
+#define UART_CTS_PINOP		1
+
+#define UART_RTS_PORT		0
+#define UART_RTS_PIN		5
+#define UART_RTS_PINOP		1
+#endif // UART_DEVNO
+
 #elif defined(NEBLINA)
 #define UART_RX_PORT		0
 #define UART_RX_PIN			6
