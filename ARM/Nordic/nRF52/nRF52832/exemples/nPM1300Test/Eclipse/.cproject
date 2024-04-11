@@ -78,6 +78,8 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
 								</option>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1691939971" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" value="true" valueType="boolean"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.835889669" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" value="true" valueType="boolean"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.388725523" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.2079980736" name="GNU Arm Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
@@ -212,6 +214,8 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
 								</option>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.111459866" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" value="true" valueType="boolean"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.143644738" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" value="true" valueType="boolean"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.983291060" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.1751269072" name="GNU Arm Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">

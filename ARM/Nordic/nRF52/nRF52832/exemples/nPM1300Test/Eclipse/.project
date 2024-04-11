@@ -33,12 +33,22 @@
 		<link>
 			<name>src/board.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/src/board.h</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
 			<name>src/main.cpp</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/src/main.cpp</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_npm1300.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/pwrmgnt/pm_npm1300.cpp</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>

@@ -9,6 +9,7 @@
 #include "coredev/i2c.h"
 #include "coredev/uart.h"
 #include "stddev.h"
+#include "pwrmgnt/pm_npm1300.h"
 
 #include "board.h"
 
@@ -33,16 +34,25 @@ static const I2CCfg_t s_I2cCfg = {
 	.NbSlaveAddr = 0,			// Number of slave addresses
 	.SlaveAddr = {0,},		// Slave addresses
 	.bDmaEn = true,
-	.bIntEn = true,
+	.bIntEn = false,
 	.IntPrio = 7,			// Interrupt prio
-	.EvtCB = I2CIntrfHandler		// Event callback
+	//.EvtCB = I2CIntrfHandler		// Event callback
 };
 
-I2C g_I2CMaster;
+I2C g_I2C;
+
+PwrMgntCfg_t s_PwrCfg = {
+	.DevAddr = NPM1300_I2C_7BITS_ADDR,
+};
+
+PmnPM1300 g_nPM1300;
 
 void HardwareInit()
 {
-	g_I2CMaster.Init(s_I2cCfg);
+	g_I2C.Init(s_I2cCfg);
+
+	g_nPM1300.Init(s_PwrCfg, &g_I2C);
+
 }
 
 //
@@ -63,5 +73,21 @@ void HardwareInit()
 
 int main()
 {
+	HardwareInit();
+
+	//g_nPM1300.Enable();
+	if (g_nPM1300.Battery())
+	{
+		printf("Battery present\n");
+	}
+	while (1)
+	{
+		if (g_nPM1300.Charging())
+		{
+			printf("Charging\n");
+		}
+		__WFE();
+	}
+
 	return 0;
 }

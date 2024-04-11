@@ -34,11 +34,68 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <stdio.h>
 
 #include "pwrmgnt/pm_npm1300.h"
 
 bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
+	if (pIntrf == NULL)
+	{
+		return false;
+	}
+
+	vDevAddr = Cfg.DevAddr;
+	Interface(pIntrf);
+
+	uint16_t regaddr = NPM1300_DEVICE_INFO_REG;
+	uint8_t buff[10];
+
+	//Write((uint8_t*)&regaddr, 2, 0, 0);
+	uint32_t d = 0;
+
+#if 0
+	Read((uint8_t*)&regaddr, 2, (uint8_t*)buff, 4);
+
+	for (int i = 0; i < 10; i++)
+	{
+		printf("%x ", buff[i]);
+	}
+	printf("\n\r");
+#else
+	Read((uint8_t*)&regaddr, 2, (uint8_t*)&d, 4);
+	printf("%x\r\n", d);
+	if (d != NPM1300_DEVICE_ID)
+	{
+		return false;
+	}
+#endif
+
+	regaddr = NPM1300_VBUSIN_USBC_DETECT_STATUS_REG;
+	d = Read8((uint8_t*)&regaddr, 2);
+	printf("d=%x\n", d);
+
+	regaddr = NPM1300_VBUSIN_VBUSIN_ILIM0_REG;
+	d = NPM1300_VBUSIN_VBUSIN_ILIM0_1500MA;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = NPM1300_BCHARGER_BCHGVTERM_REG;
+	d = NPM1300_BCHARGER_BCHGVTERM_BCHGVTERMNORM_4V00;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = NPM1300_LEDDRV_LEDDRV0_MODESEL_REG;
+	d = NPM1300_LEDDRV_LEDDRV0_MODESEL_CHARGING;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = NPM1300_BCHARGER_BCHGISET_MSB_REG;
+	d = 200;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = NPM1300_BCHARGER_BCHGENABLE_SET_REG;
+	d = NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING;
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
 	return true;
 }
 
@@ -67,7 +124,10 @@ int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
  */
 bool PmnPM1300::Enable()
 {
+	uint16_t regaddr = NPM1300_BCHARGER_BCHGENABLE_SET_REG;
+	uint8_t d = NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING;
 
+	Write8((uint8_t*)&regaddr, 2, d);
 }
 
 /**
@@ -119,7 +179,15 @@ uint32_t PmnPM1300::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32
  */
 bool PmnPM1300::Charging()
 {
+	uint16_t regaddr = NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG;
+	uint8_t	d = 0;
 
+	d = Read8((uint8_t*)&regaddr, 2);
+
+	return d & (NPM1300_BCHARGER_BCHG_CHARGE_STATUS_TRICKLECHARGE |
+				NPM1300_BCHARGER_BCHG_CHARGE_STATUS_CONSTANTCURRENT |
+				NPM1300_BCHARGER_BCHG_CHARGE_STATUS_CONSTANTVOLTAGE |
+				NPM1300_BCHARGER_BCHG_CHARGE_STATUS_RECHARGE);
 }
 
 /**
@@ -129,7 +197,12 @@ bool PmnPM1300::Charging()
  */
 bool PmnPM1300::Battery()
 {
+	uint16_t regaddr = NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG;
+	uint8_t	d = 0;
 
+	d = Read8((uint8_t*)&regaddr, 2);
+
+	return d & NPM1300_BCHARGER_BCHG_CHARGE_STATUS_BATTERYDETECTED;
 }
 
 /**
