@@ -34,8 +34,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#indef __PM_NPM1300_H__
+#ifndef __PM_NPM1300_H__
 #define __PM_NPM1300_H__
+
+#include <stdint.h>
+
+#include "pwrmgnt/pwrmgnt.h"
+
+/** @addtogroup Power
+  * @{
+  */
 
 #define NPM1300_VBUSIN_TASKUPDATE_ILIMSW_REG		0x200	// Select input current limit
 #define NPM1300_VBUSIN_TASKUPDATE_ILIMSW_SELVBUSILIM0					(1<<0)	// Set to use vbusinilim0. Vbus removal results in switch 
@@ -190,22 +198,181 @@ SOFTWARE.
 #define NMP1300_GPIOS_GPIOSTATUS_REG				0x61E	// GPIO status
 
 #define NMP1300_ADC_TASKVBAT_MEASURE_REG			0x500	// Take VBAT measurement
-#define NMP1300_ADC_TASKNTC_MEASURE_REG				0x501	// take NTC measurement
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
-#define NMP1300_ADC_
+#define NMP1300_ADC_TASKNTC_MEASURE_REG				0x501	// Take NTC measurement
+#define NMP1300_ADC_TASKTEMP_MEASURE_REG			0x502	// Take die temp measurement
+#define NMP1300_ADC_TASKVSYS_MEASURE_REG			0x503	// Take VSYS measurement
+#define NMP1300_ADC_TASKIBAT_MEASURE_REG			0x506	// Take IBAT measurement
+#define NMP1300_ADC_TASKVBUS7_MEASURE_REG			0x507	// Take VBUS 7V measurement
+#define NMP1300_ADC_TASKDELAYEDVBAT_MEASURE_REG		0x508	// Take delayed VBAT measurement
+#define NMP1300_ADC_ADCCONFIG_REG					0x509	// ADC config
+#define NMP1300_ADC_ADCNTCRSEL_REG					0x50A	// Select Battery NTC register
+#define NMP1300_ADC_ADCAUTOTIMCONF_REG				0x50B	// Auto measurement intervals
+#define NMP1300_ADC_TASKAUTOTIMUPDATE_REG			0x50C	// Update toggle for NTC and die temp auto time
+#define NMP1300_ADC_ADCDELTIMCONF_REG				0x50D	// VBAT delay timer control
+#define NMP1300_ADC_ADCIBATMEAS_STATUS_REG			0x510	// Battery current measurement status
+#define NMP1300_ADC_ADCVBAT_RESULTMSB_REG			0x511	// ADC VBAT measurement result MSB
+#define NMP1300_ADC_ADCNTC_RESULTMSB_REG			0x512	// ADC NTC measurement result MSB
+#define NMP1300_ADC_ADCTEMP_RESULTMSB_REG			0x513	// ADC die temp measurement result MSB
+#define NMP1300_ADC_ADCVSYS_RESULTMSB_REG			0x514	// ADC VSYS measurement result MSB
+#define NMP1300_ADC_ADCGP0_RESULTLSBS_REG			0x515	// ADC result LSB's (vbat, ntc, temp and vsys)
+#define NMP1300_ADC_ADCVBAT0_RESULTMSB_REG			0x516	// ADC VBAT0 burst measurement result MSB
+#define NMP1300_ADC_ADCVBAT1_RESULTMSB_REG			0x517	// ADC VBAT1 burst measurement result MSB
+#define NMP1300_ADC_ADCVBAT2_RESULTMSB_REG			0x518	// ADC VBAT2 burst measurement result MSB
+#define NMP1300_ADC_ADCVBAT3_RESULTMSB_REG			0x519	// ADC VBAT3 burst measurement result MSB
+#define NMP1300_ADC_ADCGP1_RESULTLSBS_REG			0x51A	// ADC result LSB's (vbat_burst0, 1, 2 and 3)
+#define NMP1300_ADC_ADCIBAT_MEASEN_REG				0x524	// Enable auto IBAT measurement
+
+#define NMP1300_POF_POFCONFIG_REG					0x900	// Power Failure Detection block configuration
+
+#define NMP1300_TIMER_TIMER_SET_REG					0x700	// Start timer
+#define NMP1300_TIMER_TIMER_CLR_REG					0x701	// Stop timer
+#define NMP1300_TIMER_TIMER_TARGET_STROBE_REG		0x703	// Strobe for timer target
+#define NMP1300_TIMER_WATCHDOG_KICK_REG				0x704	// Watchdog kick
+#define NMP1300_TIMER_TIMER_CONFIG_REG				0x705	// Timer mode selection
+#define NMP1300_TIMER_TIMER_STATUS_REG				0x706	// Timer status
+#define NMP1300_TIMER_TIMER_HBYTE_REG				0x708	// Timer MSB
+#define NMP1300_TIMER_TIMER_MIDBYTE_REG				0x709	// Timer mid byte
+#define NMP1300_TIMER_TIMER_LOBYTE_REG				0x70A	// Timer LSB
+
+#define NMP1300_SHIP_TASKENTER_HIBERNATE_REG		0xB00	// Task enter hibernate
+#define NMP1300_SHIP_TASKSHPHLD_CFGSTROBE_REG		0xB01	// Task ship hold config
+#define NMP1300_SHIP_TASKENTER_SHIPMODE_REG			0xB02	// Task enter ship mode
+#define NMP1300_SHIP_TASKRESET_CONFIG_REG			0xB03	// Request reset config
+#define NMP1300_SHIP_SHPHLD_CONFIG_REG				0xB04	// Ship hold button press timer config
+#define NMP1300_SHIP_SHPHLD_STATUS_REG				0xB05	// Status of the SHPHLD pin
+#define NMP1300_SHIP_LPRESET_CONFIG_REG				0xB06	// Long press reset config register
+
+#define NMP1300_MAIN_TASKSW_RESET_REG				0x001	// Task force a full reboot power cycle
+#define NMP1300_MAIN_EVENTS_ADCSET_REG				0x002	// ADC events event set
+#define NMP1300_MAIN_EVENTS_ADCCLR_REG				0x003	// ADC events event clear
+#define NMP1300_MAIN_INTENEVENTS_ADCSET_REG			0x004	// ADC events interrupt enable set
+#define NMP1300_MAIN_INTENEVENTS_ADCCLR_REG			0x005	// ADC events interrupt enable clear
+#define NMP1300_MAIN_EVENTS_BCHARGER0SET_REG		0x006	// Battery Charger Temperature Events Event Set
+#define NMP1300_MAIN_EVENTS_BCHARGER0CLR_REG		0x007	// Battery Charger Temperature Events Event clear
+#define NMP1300_MAIN_INTENEVENT_SBCHARGER0SET_REG	0x008	// Battery Charger Temperature Events Interrupt Enable Set
+#define NMP1300_MAIN_INTENEVENT_SBCHARGER0CLR_REG	0x009	// Battery Charger Temperature Events Interrupt Enable Clear
+#define NMP1300_MAIN_EVENTS_BCHARGER1SET_REG		0x00A	// Battery Charger Status Events Event Set
+#define NMP1300_MAIN_EVENTS_BCHARGER1CLR_REG		0x00B	// Battery Charger Status Events Event Clear
+#define NMP1300_MAIN_INTENEVENTS_BCHARGER1SET_REG	0x00C	// Battery Charger Status Events Interrupt Enable Set
+#define NMP1300_MAIN_INTENEVENTS_BCHARGER1CLR_REG	0x00D	// Battery Charger Status Events Interrupt Enable Clear
+#define NMP1300_MAIN_EVENTS_BCHARGER2SET_REG		0x00E	// Battery Charger Battery Events Event Set
+#define NMP1300_MAIN_EVENTS_BCHARGER2CLR_REG		0x00F	// Battery Charger Battery Events Event Clear
+#define NMP1300_MAIN_INTENEVENTS_BCHARGER2SET_REG	0x010	// Battery Charger Battery Events Interrupt Enable Set
+#define NMP1300_MAIN_INTENEVENTS_BCHARGER2CLR_REG	0x011	// Battery Charger Battery Events Interrupt Enable Clear
+#define NMP1300_MAIN_EVENTS_SHPHLDSET_REG			0x012	// ShipHold pin Events Event Set
+#define NMP1300_MAIN_EVENTS_SHPHLDCLR_REG			0x013	// ShipHold pin Events Event Clear
+#define NMP1300_MAIN_INTENEVENTS_SHPHLDSET_REG		0x014	// ShipHold pin Events Interrupt Enable Set
+#define NMP1300_MAIN_INTENEVENTS_SHPHLDCLR_REG		0x015	// ShipHold pin Events Interrupt Enable Clear
+#define NMP1300_MAIN_EVENTS_VBUSIN0SET_REG			0x016	// VBUSIN Voltage Detection Events Event Set
+#define NMP1300_MAIN_EVENTS_VBUSIN0CLR_REG			0x017	// VBUSIN Voltage Detection Events Event Clear
+#define NMP1300_MAIN_INTENEVENTS_VBUSIN0SET_REG		0x018	// VBUSIN Voltage Detection Events Interrupt Enable Set
+#define NMP1300_MAIN_INTENEVENTS_VBUSIN0CLR_REG		0x019	// VBUSIN Voltage Detection Events Interrupt Enable Clear
+#define NMP1300_MAIN_EVENTS_VBUSIN1SET_REG			0x01A	// VBUSIN Thermal and USB Events Event Set
+#define NMP1300_MAIN_EVENTS_VBUSIN1CLR_REG			0x01B	// VBUSIN Thermal and USB Events Event Clear
+#define NMP1300_MAIN_INTENEVENTS_VBUSIN1SET_REG		0x01C	// VBUSIN Thermal and USB Events Interrupt Enable Set
+#define NMP1300_MAIN_INTENEVENTS_VBUSIN1CLR_REG		0x01D	// VBUSIN Thermal and USB Events Interrupt Enable Clear
+#define NMP1300_MAIN_EVENTS_GPIOSET_REG				0x022	// GPIO Event Event Set
+#define NMP1300_MAIN_EVENTS_GPIOCLR_REG				0x023	// GPIO Event Event Clear
+#define NMP1300_MAIN_INTENEVENTS_GPIOSET_REG		0x24	// GPIO Event Interrupt Enable Set
+#define NMP1300_MAIN_INTENEVENTS_GPIOCLR_REG		0x24	// GPIO Event Interrupt Enable Clear
+
+#define NMP1300_ERRLOG_TASKCLRERRLOG_REG			0xE00	// task to clear the Errlog registers
+#define NMP1300_ERRLOG_SCRATCH0_REG					0xE01	// Scratch register 0
+#define NMP1300_ERRLOG_SCRATCH1_REG					0xE02	// Scratch register 1
+#define NMP1300_ERRLOG_RSTCAUSE_REG					0xE03	// Error log for internal reset causes. Cleared withTASK_CLR_ERRLOG
+#define NMP1300_ERRLOG_CHARGERERRREASON				0xE04	// Error log for slowDomain. Cleared with TASK_CLR_ERRLOG
+#define NMP1300_ERRLOG_CHARGERERRSENSOR				0xE05	// Bcharger Fsm sensor error. Cleared with TASK_CLR_ERRLOG
+
+#ifdef __cplusplus
+
+class PmnPM1300 : public PowerMgnt {
+public:
+	bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf);
+
+	/**
+	 * @brief	Set output voltage
+	 *
+	 * If output voltage is zero, turn off the output.
+	 *
+	 * @param	VoutIdx : Zero based index of output source
+	 * @param	mVolt : Output voltage in mV
+	 * @param	mALimit : Output current limit in mA if available
+	 * 						set to zero for max capacity
+	 *
+	 * @return	Actual output voltage in mV
+	 *
+	 */
+	int32_t SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit);
+
+	/**
+	 * @brief	Power on or wake up device
+	 *
+	 * @return	true - If success
+	 */
+	bool Enable();
+
+	/**
+	 * @brief	Put device in power down or power saving sleep mode
+	 *
+	 * This function is used to put the device in lowest power mode
+	 * possible so that the Enable function can wake up without full
+	 * initialization.
+	 */
+	void Disable();
+
+	/**
+	 * @brief	Reset device to it initial default state
+	 */
+	void Reset();
+
+	void PowerOff();
+
+	/**
+	 * @brief	Set battery charging
+	 *
+	 * If charge current is set to zero, charging is turned off
+	 *
+	 * @param	Type : Charging type
+	 * @param	mVoltEoC : End of charge voltage in mV
+	 * @param	mACurr : Charge current limit
+	 * 					0 : Disable charge
+	 *
+	 * @return	Actual charge current set.
+	 */
+	uint32_t SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr);
+
+	/**
+	 * @brief	Charging status
+	 *
+	 * @return	true - Charging
+	 */
+	virtual bool Charging();
+
+	/**
+	 * @brief	Battery present status
+	 *
+	 * @return	true - Battery present
+	 */
+	virtual bool Battery();
+	/**
+	 * @brief	Interrupt handler
+	 *
+	 * Optional implementation to handle interrupt. This is device specific.
+	 *
+	 */
+	virtual void IrqHandler();
+
+private:
+};
+
+extern "C" {
+#endif	// __cplusplus
 
 
+#ifdef __cplusplus
+}
+#endif
+
+/** @} End of group Power */
 
 #endif	// __PM_NPM1300_H__
