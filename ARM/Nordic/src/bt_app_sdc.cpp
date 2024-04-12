@@ -212,7 +212,7 @@ static void BtStackSdcCB()
 	int32_t res = 0;
 	sdc_hci_msg_type_t mtype;
 
-	res = sdc_hci_get(buf, &mtype);
+	res = sdc_hci_get(buf, (uint8_t*)&mtype);
 	if (res == 0)
 	{
 		switch (mtype)
@@ -825,8 +825,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	sdc_hci_cmd_cb_reset();
 
 	sdc_rand_source_t rand_functions = {
-		.rand_prio_low_get = BtStackRandPrioLowGet,
-		.rand_prio_high_get = BtStackRandPrioHighGet,
+		//.rand_prio_low_get = BtStackRandPrioLowGet,
+		//.rand_prio_high_get = BtStackRandPrioHighGet,
 		.rand_poll = BtStackRandPrioLowGetBlocking
 	};
 
@@ -1242,7 +1242,7 @@ void BtAppRun()
 		uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
 		int32_t res = 0;
 		sdc_hci_msg_type_t mtype;
-		res = sdc_hci_get(buf, &mtype);
+		res = sdc_hci_get(buf, (uint8_t*)&mtype);
 		if (res == 0)
 		{
 			switch (mtype)
