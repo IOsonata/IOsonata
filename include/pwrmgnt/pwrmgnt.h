@@ -88,7 +88,7 @@ typedef struct __PowerMgnt_Config {
 	int32_t VEndChrg;					//!< End of charge voltage level in mV
 	uint32_t ChrgCurr;					//!< Charge current in mA
 	uint32_t ChrgTimeout;				//!< Charge timeout in minutes
-	BatProfile_t * const pBatProf;		//!< Pointer to battery profile
+	const BatProfile_t * const pBatProf;	//!< Pointer to battery profile
 	bool bIntEn;						//!< Interrupt enable
 	int IntPrio;						//!< Interrupt priority
 	int OffSwPin;						//!< Power switch button I/O pin assignment

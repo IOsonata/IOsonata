@@ -36,6 +36,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 
+#include "convutil.h"
 #include "pwrmgnt/pm_npm1300.h"
 
 bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
@@ -48,14 +49,14 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	vDevAddr = Cfg.DevAddr;
 	Interface(pIntrf);
 
-	uint16_t regaddr = NPM1300_DEVICE_INFO_REG;
+	uint16_t regaddr = EndianCvt16(NPM1300_DEVICE_INFO_REG);
 	uint8_t buff[10];
 
 	//Write((uint8_t*)&regaddr, 2, 0, 0);
-	uint32_t d = 0;
+	uint32_t d = 0xFF;
 
-#if 0
-	Read((uint8_t*)&regaddr, 2, (uint8_t*)buff, 4);
+#if 1
+	Read((uint8_t*)&regaddr, 2, (uint8_t*)buff, 9);
 
 	for (int i = 0; i < 10; i++)
 	{
@@ -71,20 +72,47 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	}
 #endif
 
-	regaddr = NPM1300_VBUSIN_USBC_DETECT_STATUS_REG;
+	regaddr = EndianCvt16(NPM1300_VBUSIN_USBC_DETECT_STATUS_REG);
 	d = Read8((uint8_t*)&regaddr, 2);
-	printf("d=%x\n", d);
+	printf("USBC_DETECT=%x\n", d);
 
-	regaddr = NPM1300_VBUSIN_VBUSIN_ILIM0_REG;
+	regaddr = EndianCvt16(NPM1300_VBUSIN_VBUSIN_STATUS_REG);
+	d = Read8((uint8_t*)&regaddr, 2);
+	printf("VBUSIN_STATUS=%x\n", d);
+
+	regaddr = EndianCvt16(NPM1300_VBUSIN_VBUSIN_ILIM0_REG);
 	d = NPM1300_VBUSIN_VBUSIN_ILIM0_1500MA;
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	regaddr = NPM1300_BCHARGER_BCHGVTERM_REG;
-	d = NPM1300_BCHARGER_BCHGVTERM_BCHGVTERMNORM_4V00;
+	regaddr = EndianCvt16(NPM1300_VBUSIN_TASKUPDATE_ILIMSW_REG);
+	d = NPM1300_VBUSIN_TASKUPDATE_ILIMSW_SELVBUSILIM0;
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	regaddr = NPM1300_LEDDRV_LEDDRV0_MODESEL_REG;
+	// LED0
+	regaddr = EndianCvt16(NPM1300_LEDDRV_LEDDRV0_MODESEL_REG);
 	d = NPM1300_LEDDRV_LEDDRV0_MODESEL_CHARGING;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = EndianCvt16(NPM1300_BUCK_BUCK2ENA_SET_REG);
+	d = NPM1300_BUCK_BUCK2ENA_SET_TASKBUCK2ENASET;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = EndianCvt16(NPM1300_BUCK_BUCK2NORM_VOUT_REG);
+	d = Read8((uint8_t*)&regaddr, 2);
+	printf("BUCK2NORM_VOUT=%d\n", d);
+
+	regaddr = EndianCvt16(NPM1300_BUCK_BUCK2RET_VOUT_REG);
+	d = NPM1300_BUCK_BUCK2RET_VOUT_3V3;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = EndianCvt16(NPM1300_BUCK_BUCK2RET_VOUT_REG);
+	d = Read8((uint8_t*)&regaddr, 2);
+	printf("BUCK2RET_VOUT=%d\n", d);
+
+	SetCharge(PWRMGNT_CHARGE_TYPE_NORMAL, Cfg.VEndChrg, Cfg.ChrgCurr);
+/*
+	regaddr = NPM1300_BCHARGER_BCHGVTERM_REG;
+	d = NPM1300_BCHARGER_BCHGVTERM_BCHGVTERMNORM_4V00;
 	Write8((uint8_t*)&regaddr, 2, d);
 
 	regaddr = NPM1300_BCHARGER_BCHGISET_MSB_REG;
@@ -95,7 +123,7 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	d = NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING;
 
 	Write8((uint8_t*)&regaddr, 2, d);
-
+*/
 	return true;
 }
 
@@ -114,7 +142,8 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
  */
 int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 {
-
+	uint16_t regaddr = VoutIdx == 0 ? NPM1300_BUCK_BUCK1NORM_VOUT_REG : NPM1300_BUCK_BUCK2NORM_VOUT_REG;
+	regaddr = EndianCvt16(regaddr);
 }
 
 /**
@@ -124,7 +153,7 @@ int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
  */
 bool PmnPM1300::Enable()
 {
-	uint16_t regaddr = NPM1300_BCHARGER_BCHGENABLE_SET_REG;
+	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_SET_REG);
 	uint8_t d = NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING;
 
 	Write8((uint8_t*)&regaddr, 2, d);
@@ -169,7 +198,67 @@ void PmnPM1300::PowerOff()
  */
 uint32_t PmnPM1300::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr)
 {
+	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGISET_MSB_REG);
+	uint8_t msb = mACurr >> 2;
+	uint8_t lsb = (mACurr >> 1) & 1;
+	uint8_t v = 0;
 
+	if (msb < 8)
+	{
+		// 32 mA
+		msb = 8;
+		lsb = 0;
+	}
+	else if (msb > 200)
+	{
+		msb = 200;
+		lsb = 0;
+	}
+
+	printf("%d : msb %d, lsb %d\r\n", mACurr, msb, lsb);
+
+	Write8((uint8_t*)&regaddr, 2, msb);
+
+	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGISET_LSB_REG);
+	Write8((uint8_t*)&regaddr, 2, lsb);
+
+	if (mVoltEoC < 3500)
+	{
+		mVoltEoC = 3500;
+	}
+	else if (mVoltEoC > 4450)
+	{
+		mVoltEoC = 4450;
+	}
+
+	if (mVoltEoC < 4000)
+	{
+		v = (mVoltEoC - 3500) / 50;
+	}
+	else
+	{
+		v = (mVoltEoC - 4000) / 50 + 4;
+	}
+
+	printf("%d : %d\r\n", mVoltEoC, v);
+	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGVTERM_REG);
+	Write8((uint8_t*)&regaddr, 2, v);
+
+	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_ERR_REASON_REG);
+	uint8_t d = Read8((uint8_t*)&regaddr, 2);
+
+	printf("Reason %x\r\n", d);
+
+	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_SET_REG);
+	d = NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING | NPM1300_BCHARGER_BCHGENABLE_SET_ENABLEFULLCHGCOOL;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_ERR_REASON_REG);
+	d = Read8((uint8_t*)&regaddr, 2);
+
+	printf("Reason %x\r\n", d);
+
+	return ((uint32_t)msb << 2UL) + ((uint32_t)lsb << 1UL);
 }
 
 /**
@@ -179,7 +268,7 @@ uint32_t PmnPM1300::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32
  */
 bool PmnPM1300::Charging()
 {
-	uint16_t regaddr = NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG;
+	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG);
 	uint8_t	d = 0;
 
 	d = Read8((uint8_t*)&regaddr, 2);
@@ -197,7 +286,7 @@ bool PmnPM1300::Charging()
  */
 bool PmnPM1300::Battery()
 {
-	uint16_t regaddr = NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG;
+	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG);
 	uint8_t	d = 0;
 
 	d = Read8((uint8_t*)&regaddr, 2);
