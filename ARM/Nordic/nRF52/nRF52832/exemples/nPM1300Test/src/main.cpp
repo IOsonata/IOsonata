@@ -41,8 +41,25 @@ static const I2CCfg_t s_I2cCfg = {
 
 I2C g_I2C;
 
+const BatProfile_t s_BatProf = {
+	.OpVolt = 3700,
+	.ChrgVolt = 4100,
+	.Capacity = 3000,
+};
+
+const PwrMgntVoutCfg_t s_PwrVoutCfg[] = {
+	{ .mVout = 0, .mAlimit = 0 },
+	{ .mVout = 3300, .mAlimit = 100 }
+};
+
 PwrMgntCfg_t s_PwrCfg = {
 	.DevAddr = NPM1300_I2C_7BITS_ADDR,
+	//.InCurLimit = 1500,
+	.pVout = NULL,
+	.NbVout = 0,
+	.VEndChrg = 4100,
+	.ChrgCurr = 800,
+	.pBatProf = &s_BatProf,
 };
 
 PmnPM1300 g_nPM1300;

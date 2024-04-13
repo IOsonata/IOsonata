@@ -56,7 +56,7 @@ class PowerMgnt;
 typedef enum __Charge_Type {
 	PWRMGNT_CHARGE_TYPE_NORMAL,
 	PWRMGNT_CHARGE_TYPE_TRICKLE,
-	PWRMGNT_CHARGE_TYPE_AUTO				//!< Auto select optimum charge by driver implementation
+	PWRMGNT_CHARGE_TYPE_AUTO			//!< Auto select optimum charge by driver implementation
 } PWRMGNT_CHARGE_TYPE;
 
 typedef struct __Vout_Cfg {
@@ -65,10 +65,10 @@ typedef struct __Vout_Cfg {
 } PwrMgntVoutCfg_t;
 
 typedef enum __PowerMgnt_Evt {
-	PWRMGNT_EVT_CHARGE_FULL,					//!< Battery full
-	PWRMGNT_EVT_LOW_BAT,						//!< Battery low
-	PWRMGNT_EVT_OVER_HEAT,					//!< Over heat detected
-	PWRMGNT_EVT_CHARGE_DETECTED				//!< Charge source detected
+	PWRMGNT_EVT_CHARGE_FULL,			//!< Battery full
+	PWRMGNT_EVT_LOW_BAT,				//!< Battery low
+	PWRMGNT_EVT_OVER_HEAT,				//!< Over heat detected
+	PWRMGNT_EVT_CHARGE_DETECTED			//!< Charge source detected
 } PWRMGNT_EVT;
 
 typedef struct __Bat_Profile {
@@ -83,7 +83,8 @@ typedef void (*PwrMgntEvtHandler_t)(PowerMgnt *pSelf, PWRMGNT_EVT Evt);
 
 typedef struct __PowerMgnt_Config {
 	uint32_t DevAddr;					//!< Device address
-	PwrMgntVoutCfg_t * const pVout;			//!< Pointer to V out settings
+	//uint32_t InCurLimit;				//!< Input current limit in mA, USB in current limit. Device dependent
+	PwrMgntVoutCfg_t * const pVout;		//!< Pointer to V out settings
 	size_t NbVout;						//!< Number of V out
 	int32_t VEndChrg;					//!< End of charge voltage level in mV
 	uint32_t ChrgCurr;					//!< Charge current in mA
@@ -100,7 +101,7 @@ typedef struct __PowerMgnt_Config {
 
 #pragma pack(pop)
 
-class PowerMgnt : public Device {
+class PowerMgnt : virtual public Device {
 public:
 	virtual bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf *pIntrf) = 0;
 
@@ -172,7 +173,7 @@ typedef struct __FuelGauge_Cfg {
 	FGBatLowEvtHandler_t BatLowHandler;		//!< Battery low event handler
 } FuelGaugeCfg_t;
 
-class FuelGauge : public Device {
+class FuelGauge : virtual public Device {
 public:
 	virtual bool Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt) = 0;
 

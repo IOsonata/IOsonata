@@ -76,17 +76,20 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	d = Read8((uint8_t*)&regaddr, 2);
 	printf("USBC_DETECT=%x\n", d);
 
+	//if (d & (NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC1CMP_1A5HIGHPOWER | NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC2CMP_1A5HIGHPOWER))
+	{
+		regaddr = EndianCvt16(NPM1300_VBUSIN_VBUSIN_ILIM0_REG);
+		d = NPM1300_VBUSIN_VBUSIN_ILIM0_1500MA;
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		regaddr = EndianCvt16(NPM1300_VBUSIN_TASKUPDATE_ILIMSW_REG);
+		d = NPM1300_VBUSIN_TASKUPDATE_ILIMSW_SELVBUSILIM0;
+		Write8((uint8_t*)&regaddr, 2, d);
+	}
+
 	regaddr = EndianCvt16(NPM1300_VBUSIN_VBUSIN_STATUS_REG);
 	d = Read8((uint8_t*)&regaddr, 2);
 	printf("VBUSIN_STATUS=%x\n", d);
-
-	regaddr = EndianCvt16(NPM1300_VBUSIN_VBUSIN_ILIM0_REG);
-	d = NPM1300_VBUSIN_VBUSIN_ILIM0_1500MA;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	regaddr = EndianCvt16(NPM1300_VBUSIN_TASKUPDATE_ILIMSW_REG);
-	d = NPM1300_VBUSIN_TASKUPDATE_ILIMSW_SELVBUSILIM0;
-	Write8((uint8_t*)&regaddr, 2, d);
 
 	// LED0
 	regaddr = EndianCvt16(NPM1300_LEDDRV_LEDDRV0_MODESEL_REG);
@@ -125,6 +128,44 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	Write8((uint8_t*)&regaddr, 2, d);
 */
 	return true;
+}
+
+bool PmnPM1300::Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt)
+{
+
+}
+
+/**
+ * @brief	Get battery level
+ *
+ * Returns battery level in 1 digit fixed point decimal.
+ *
+ * ex. 123 => 12.3%
+ *
+ * @return	Battery level in (0-100) % in 1 digit fixed point
+ */
+uint16_t PmnPM1300::Level()
+{
+
+}
+
+/**
+ * @brief	Get battery temperature
+ *
+ * Returns battery temperature in 1 digit fixed point decimal.
+ *
+ * ex. 123 => 12.3 C
+ *
+ * @return	Battery level in (0-100) degree C in 1 digit fixed point
+ */
+int32_t PmnPM1300::Temperature()
+{
+
+}
+
+int32_t PmnPM1300::Voltage()
+{
+
 }
 
 /**
