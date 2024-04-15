@@ -113,6 +113,23 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	printf("BUCK2RET_VOUT=%d\n", d);
 
 	SetCharge(PWRMGNT_CHARGE_TYPE_NORMAL, Cfg.VEndChrg, Cfg.ChrgCurr);
+
+	if (Cfg.bIntEn == true)
+	{
+		// Configure GPIO1 as interrupt pin
+		regaddr = EndianCvt16(NPM1300_GPIOS_GPIOPDEN1_REG);
+		d = NPM1300_GPIOS_GPIOPDEN_ENABLE;
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		regaddr = EndianCvt16(NPM1300_GPIOS_GPIOMODE1_REG);
+		d = NPM1300_GPIOS_GPIOMODE_GPOIRQ;
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		regaddr = EndianCvt16(NPM1300_MAIN_INTENEVENTS_VBUSIN0SET_REG);
+		d = NPM1300_MAIN_INTENEVENTS_VBUSIN0SET_EVENTVBUSDETECTED |
+			NPM1300_MAIN_INTENEVENTS_VBUSIN0SET_EVENTVBUSREMOVED;
+		Write8((uint8_t*)&regaddr, 2, d);
+	}
 /*
 	regaddr = NPM1300_BCHARGER_BCHGVTERM_REG;
 	d = NPM1300_BCHARGER_BCHGVTERM_BCHGVTERMNORM_4V00;
@@ -222,7 +239,17 @@ void PmnPM1300::Reset()
 
 void PmnPM1300::PowerOff()
 {
+	uint16_t regaddr = EndianCvt16(NPM1300_VBUSIN_VBUSIN_STATUS_REG);
+	uint8_t d = Read8((uint8_t*)&regaddr, 2);
 
+	if (d & NPM1300_VBUSIN_VBUSIN_STATUS_VBUSINPRESENT_DETECTED)
+	{
+		return;
+	}
+
+	regaddr = EndianCvt16(NPM1300_SHIP_TASKENTER_SHIPMODE_REG);
+	d = 1;
+	Write8((uint8_t*)&regaddr, 2, d);
 }
 
 /**
