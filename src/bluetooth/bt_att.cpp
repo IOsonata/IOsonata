@@ -38,13 +38,7 @@ SOFTWARE.
 #include <memory.h>
 
 #include "istddef.h"
-#include "bluetooth/bt_hci.h"
-#include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
-
-#include "bluetooth/bt_dev.h"
-#include "bluetooth/bt_uuid.h"
-#include "bluetooth/bt_gatt.h"
 
 /******** For DEBUG ************/
 #define UART_DEBUG_ENABLE
@@ -72,17 +66,6 @@ static uint32_t s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
 static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDBMem;
 static BtAttDBEntry_t *s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
 static uint16_t s_LastHdl = 0;
-
-extern BtDev_t g_BtDevSdc;
-
-CurParseInf_t g_CurIdx = {
-	.SrvIdx = 0,
-	.Hdl = 0,
-	.CharIdx = 0,
-};
-
-// Current UUID type to be search
-BtUuid_t g_UuidType = {0, BT_UUID_TYPE_16, (uint16_t) BT_UUID_DECLARATIONS_CHARACTERISTIC };
 
 uint16_t BtAttSetMtu(uint16_t Mtu)
 {
@@ -420,15 +403,6 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 	return len;
 }
 
-bool BtAttStartReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid)
-{
-	if (pDev == NULL || pUuid == NULL)
-		return false;
-
-	memcpy((uint8_t*)&g_UuidType, (uint8_t*)pUuid, sizeof(BtUuid_t));
-	return BtAttReadByGroupTypeRequest(pDev, ConnHdl, StartHdl, EndHdl, &g_UuidType);
-}
-
 uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode, uint8_t ErrCode)
 {
 	pRspAtt->OpCode = BT_ATT_OPCODE_ATT_ERROR_RSP;
@@ -618,8 +592,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				// The ATT_READ_REQ PDU is used to request the server to read the value
 				// of an attribute and return its value in an ATT_READ_RSP PDU.
 				BtAttReadReq_t *req = (BtAttReadReq_t*)&pReqAtt->ReadReq;
-				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_READ_REQ (0x0A): ServIdx = %d, CharIdx = %d, Hdl = %d\r\n", g_CurIdx.SrvIdx, g_CurIdx.CharIdx, req->Hdl);
-
+\
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_RSP;
 
 				BtAttDBEntry_t *entry = BtAttDBFindHandle(req->Hdl);
@@ -875,130 +848,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		default:
 			//DEBUG_PRINTF("OpCode : %x\r\n", pReqAtt->OpCode);
 			BtAttProcessRsp(ConnHdl, pReqAtt, ReqLen);
-	}
-
-	return retval;
-}
-
-uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen)
-{
-	uint32_t retval = 0;
-
-	switch (pRspAtt->ErrorRsp.ReqOpCode)
-	{
-	case BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ:
-	{
-		if (pRspAtt->ErrorRsp.Error == BT_ATT_ERROR_ATT_NOT_FOUND)
-		{
-			DEBUG_PRINTF("ATT not found at StartHdl = %d\r\n", pRspAtt->ErrorRsp.Hdl);
-			DEBUG_PRINTF("Total found BLE services = %d \r\n", g_BtDevSdc.NbSrvc);
-
-			for (int i=0; i < g_BtDevSdc.NbSrvc; i++)
-			{
-				DEBUG_PRINTF("Service #%d: ", i);
-				BtGattDBSrvc_t *p = (BtGattDBSrvc_t *) &g_BtDevSdc.Services[i];
-				DEBUG_PRINTF("StartHdl = %d, EndHdl = %d\r\n", p->handle_range.StartHdl, p->handle_range.EndHdl);
-			}
-
-			// Look into the first BLE Srvc
-			g_CurIdx.SrvIdx = 0;
-			BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &g_BtDevSdc.Services[g_CurIdx.SrvIdx];
-			g_CurIdx.CharIdx = 0;
-			g_CurIdx.Hdl = pSrvc->handle_range.StartHdl;
-			if (g_CurIdx.Hdl > pSrvc->handle_range.EndHdl)
-			{
-				DEBUG_PRINTF("Parsing Hdl (%d) larger than EndHdl (%d)\r\n", g_CurIdx.Hdl, pSrvc->handle_range.EndHdl);
-			}
-			else
-			{
-				uint16_t sHdl = pSrvc->handle_range.StartHdl;
-				uint16_t eHdl = pSrvc->handle_range.EndHdl;
-
-				//g_UuidType.BaseIdx = 0;
-				//g_UuidType.Type = BT_UUID_TYPE_16;
-				g_UuidType.Uuid16 = BT_UUID_DECLARATIONS_CHARACTERISTIC;
-
-				DEBUG_PRINTF(
-						"Parse the characteristic of the first service ConnHdl %d, sHdl %d, eHdl %d, uuid 0x%X, baseIdx %d\r\n",
-						g_BtDevSdc.ConnHdl, sHdl, eHdl, g_UuidType.Uuid16, g_UuidType.BaseIdx);
-
-				BtAttReadByTypeRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev, g_BtDevSdc.ConnHdl, sHdl, eHdl, &g_UuidType);
-			}
-		}
-	}
-		break;
-	case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ:
-	{
-		if (pRspAtt->ErrorRsp.Error == BT_ATT_ERROR_ATT_NOT_FOUND)
-		{
-			DEBUG_PRINTF("ATT with sHdl %d of SrvcIdx %d not found \r\n", g_CurIdx.Hdl, g_CurIdx.SrvIdx);
-
-			if (g_CurIdx.SrvIdx >= g_BtDevSdc.NbSrvc - 1)
-			{
-				DEBUG_PRINTF("Out of number of services. Restart to scan for different Uuid16 Type\r\n");
-				g_CurIdx.SrvIdx = 0;
-				g_CurIdx.CharIdx = 0;
-				BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &g_BtDevSdc.Services[g_CurIdx.SrvIdx];
-				g_CurIdx.Hdl = pSrvc->handle_range.StartHdl;
-				uint16_t sHdl = pSrvc->handle_range.StartHdl;
-				uint16_t eHdl = pSrvc->handle_range.EndHdl;
-
-				//g_UuidType.BaseIdx = 0;
-				//g_UuidType.Type = BT_UUID_TYPE_16;
-
-				switch (g_UuidType.Uuid16)
-				{
-				case BT_UUID_DECLARATIONS_CHARACTERISTIC:
-				{
-					DEBUG_PRINTF("Characteristic scan done. Summary:\r\n");
-					for (int i = 0; i < g_BtDevSdc.NbSrvc; i++)
-						DEBUG_PRINTF("    SrvcIdx %d has %d characteristics\r\n", i, g_BtDevSdc.Services[i].char_count);
-
-					DEBUG_PRINTF("Start Scanning for BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION 0x2902\r\n");
-					g_UuidType.Uuid16 = BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
-				}
-					break;
-				case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
-				{
-					DEBUG_PRINTF("Start Scanning for BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION 0x2901\r\n");
-					g_UuidType.Uuid16 = BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION;
-				}
-					break;
-				default:
-					DEBUG_PRINTF("Unprocess Uuid16 Type (code 0x%X)\r\n", g_UuidType.Uuid16);
-				}
-
-				DEBUG_PRINTF("SrvcIdx %d, CharIdx %d, sHdl %d, eHdl %d \r\n", g_CurIdx.SrvIdx, g_CurIdx.CharIdx, sHdl, eHdl);
-				BtAttReadByTypeRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev, g_BtDevSdc.ConnHdl, sHdl, eHdl, &g_UuidType);
-			}
-			else
-			{
-				DEBUG_PRINTF("Parse the next BLE SrvcIdx %d\r\n", g_CurIdx.CharIdx + 1);
-				g_CurIdx.SrvIdx++;
-				g_CurIdx.CharIdx = 0;
-				BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &g_BtDevSdc.Services[g_CurIdx.SrvIdx];
-				g_CurIdx.Hdl = pSrvc->handle_range.StartHdl;
-				uint16_t sHdl = pSrvc->handle_range.StartHdl;
-				uint16_t eHdl = pSrvc->handle_range.EndHdl;
-				DEBUG_PRINTF("sHdl %d, eHdl %d \r\n", sHdl, eHdl);
-
-				//g_UuidType.BaseIdx = 0;
-				//g_UuidType.Type = BT_UUID_TYPE_16;
-				BtAttReadByTypeRequest((BtHciDevice_t*) g_BtDevSdc.pHciDev, g_BtDevSdc.ConnHdl, sHdl, eHdl, &g_UuidType);
-			}
-		}
-	}
-		break;
-	case BT_ATT_OPCODE_ATT_READ_REQ:
-	{
-		if (pRspAtt->ErrorRsp.Error == BT_ATT_ERROR_INVALID_HANDLE)
-		{
-			DEBUG_PRINTF("BT_ATT_OPCODE_ATT_READ_REQ (0x0A) error: invalid handle\r\n");
-		}
-	}
-		break;
-	default:
-		break;
 	}
 
 	return retval;

@@ -302,3 +302,17 @@ bool BtAttReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 
 	return true;
 }
+
+// Current UUID type to be search
+BtUuid_t g_UuidType = {0, BT_UUID_TYPE_16, (uint16_t) BT_UUID_DECLARATIONS_CHARACTERISTIC };
+
+bool BtAttStartReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid)
+{
+	if (pDev == NULL || pUuid == NULL)
+		return false;
+
+	memcpy((uint8_t*)&g_UuidType, (uint8_t*)pUuid, sizeof(BtUuid_t));
+	return BtAttReadByGroupTypeRequest(pDev, ConnHdl, StartHdl, EndHdl, &g_UuidType);
+}
+
+
