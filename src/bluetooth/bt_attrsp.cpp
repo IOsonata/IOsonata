@@ -46,7 +46,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 
 /******** For DEBUG ************/
-#define UART_DEBUG_ENABLE
+//#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"
@@ -59,7 +59,7 @@ extern UART g_Uart;
 
 extern BtDev_t g_BtDevSdc;
 extern BtUuid_t g_UuidType;
-extern CurParseInf_t g_CurIdx;
+CurParseInf_t g_CurIdx;
 
 uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen)
 {

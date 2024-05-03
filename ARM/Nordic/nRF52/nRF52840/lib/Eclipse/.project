@@ -991,6 +991,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usbd_cdc_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_intrf.h</locationURI>
+		</link>
+		<link>
 			<name>src/Invn/Devices</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1604,6 +1609,11 @@
 			<name>src/storage/stdfs_littlefs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_cdc_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_intrf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers</name>

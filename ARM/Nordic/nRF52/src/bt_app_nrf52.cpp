@@ -258,6 +258,23 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 __ALIGN(4) static ble_gap_lesc_p256_pk_t    s_lesc_public_key;      /**< LESC ECC Public Key */
 __ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC ECC DH Key*/
 
+static BtDev_t *s_pBlePeriphData = NULL;
+
+void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context);
+
+__attribute__ ((section("." "sdh_ble_observers1"))) __attribute__((used))
+static nrf_sdh_ble_evt_observer_t s_BlePeriphDiscObs = {
+	.handler   = BlePeriphDiscEvtHandler,
+	.p_context = (void*)&s_pBlePeriphData
+};
+
+static int s_CurSrvcHdl = 1;
+static ble_uuid_t *s_CurSrvcUuid = NULL;
+static ble_gatt_db_srv_t s_CurSrvcDisc;
+static int s_CurSrvcIdx = 0;
+static int s_CurCharIdx = 0;
+static ble_gattc_handle_range_t s_CurRange;
+
 bool BtInitialized()
 {
 	return s_BtAppData.State != BTAPP_STATE_UNKNOWN;
@@ -301,6 +318,203 @@ static void BtAppConnLedOn()
     {
         IOPinClear(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
     }
+}
+
+void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
+{
+	BtDev_t *periph = *(BtDev_t**)p_context;
+	ble_gattc_evt_t    const * p_ble_gattc_evt = &(p_ble_evt->evt.gattc_evt);
+
+    switch (p_ble_evt->header.evt_id)
+    {
+        case BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP:
+        	{
+        		if (p_ble_gattc_evt->gatt_status == BLE_GATT_STATUS_SUCCESS)
+                {
+        			ble_gattc_evt_prim_srvc_disc_rsp_t const * p_prim_srvc_disc_rsp_evt =
+                		&(p_ble_gattc_evt->params.prim_srvc_disc_rsp);
+
+					for (int i = 0; i < p_prim_srvc_disc_rsp_evt->count; i++, periph->NbSrvc++)
+					{
+	        			periph->Services[periph->NbSrvc].char_count = 0;
+	        			periph->Services[periph->NbSrvc].srv_uuid = p_prim_srvc_disc_rsp_evt->services[i].uuid;
+	        			periph->Services[periph->NbSrvc].handle_range = p_prim_srvc_disc_rsp_evt->services[i].handle_range;
+
+						s_CurSrvcHdl = p_prim_srvc_disc_rsp_evt->services[i].handle_range.end_handle;
+					}
+
+					s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
+					s_CurRange.start_handle++;	// the service uses 1 handle already
+					uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
+                }
+        		else
+        		{
+        			BleDevDiscovered(periph);
+        		}
+        	}
+        	break;
+
+        case BLE_GATTC_EVT_CHAR_DISC_RSP:
+            if (p_ble_gattc_evt->gatt_status == BLE_GATT_STATUS_SUCCESS)
+            {
+                ble_gattc_evt_char_disc_rsp_t const * p_char_disc_rsp_evt;
+
+                p_char_disc_rsp_evt = &(p_ble_gattc_evt->params.char_disc_rsp);
+
+                for (int i = 0; i < p_char_disc_rsp_evt->count; i++, periph->Services[s_CurSrvcIdx].char_count++)
+                {
+                    memcpy(&periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].characteristic,
+                    	   &p_char_disc_rsp_evt->chars[i], sizeof(ble_gattc_char_t));
+                    periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].cccd_handle = BLE_GATT_HANDLE_INVALID;
+                    periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].ext_prop_handle = BLE_GATT_HANDLE_INVALID;
+                    periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].user_desc_handle = BLE_GATT_HANDLE_INVALID;
+                    periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].report_ref_handle = BLE_GATT_HANDLE_INVALID;
+                    s_CurRange.start_handle = p_char_disc_rsp_evt->chars[i].handle_value + 1;
+                }
+
+				uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
+				//printf("char err = %x\r\n", err);
+            }
+            else
+            {
+            	//printf("Char Status = %x, range %x\r\n", p_ble_gattc_evt->gatt_status, s_CurRange);
+    			if (s_CurRange.start_handle <= s_CurRange.end_handle)
+    			{
+    				s_CurCharIdx = 0;
+    				s_CurRange.start_handle = periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].characteristic.handle_value + 1;
+        			uint32_t err = sd_ble_gattc_descriptors_discover(periph->ConnHdl, &s_CurRange);
+    			}
+    			else
+    			{
+    				s_CurSrvcIdx++;
+					if (s_CurSrvcIdx < periph->NbSrvc)
+					{
+						s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
+    					s_CurRange.start_handle++;	// the service uses 1 handle already
+						uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
+					}
+					else
+					{
+						uint32_t err_code = sd_ble_gattc_primary_services_discover(periph->ConnHdl, s_CurRange.end_handle, NULL);
+					}
+    			}
+            }
+            break;
+
+        case BLE_GATTC_EVT_DESC_DISC_RSP:
+            if (p_ble_gattc_evt->gatt_status == BLE_GATT_STATUS_SUCCESS)
+            {
+            	const ble_gattc_evt_desc_disc_rsp_t * p_desc_disc_rsp_evt = &(p_ble_gattc_evt->params.desc_disc_rsp);
+
+            	for (int i = 0; i < p_desc_disc_rsp_evt->count; i++)
+            	{
+                    switch (p_desc_disc_rsp_evt->descs[i].uuid.uuid)
+                    {
+                        case BLE_UUID_DESCRIPTOR_CLIENT_CHAR_CONFIG:
+                            periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].cccd_handle = p_desc_disc_rsp_evt->descs[i].handle;
+                            s_CurRange.start_handle++;
+                            break;
+
+                        case BLE_UUID_DESCRIPTOR_CHAR_EXT_PROP:
+                            periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].ext_prop_handle = p_desc_disc_rsp_evt->descs[i].handle;
+                            s_CurRange.start_handle++;
+                            break;
+
+                        case BLE_UUID_DESCRIPTOR_CHAR_USER_DESC:
+                            periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].user_desc_handle = p_desc_disc_rsp_evt->descs[i].handle;
+                            s_CurRange.start_handle++;
+                            break;
+
+                        case BLE_UUID_REPORT_REF_DESCR:
+                            periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].report_ref_handle = p_desc_disc_rsp_evt->descs[i].handle;
+                            s_CurRange.start_handle++;
+                            break;
+                        case BLE_UUID_CHARACTERISTIC:
+                        	{
+                        		// It's a characteristic
+                    			s_CurCharIdx++;
+            					if (s_CurCharIdx < periph->Services[s_CurSrvcIdx].char_count)
+            					{
+            	    				s_CurRange.start_handle = periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].characteristic.handle_value + 1;
+                        			uint32_t err = sd_ble_gattc_descriptors_discover(periph->ConnHdl, &s_CurRange);
+                        			return;
+                        		//	break;
+                    			}
+//                        		uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
+                        	}
+                        	break;
+                        default:
+                        	;
+                    }
+            	}
+        		if (s_CurRange.start_handle < s_CurRange.end_handle)
+            	{
+        			s_CurCharIdx++;
+					if (s_CurCharIdx < periph->Services[s_CurSrvcIdx].char_count)
+					{
+	    				s_CurRange.start_handle = periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].characteristic.handle_value + 1;
+            			uint32_t err = sd_ble_gattc_descriptors_discover(periph->ConnHdl, &s_CurRange);
+            			break;
+        			}
+            	}
+				else
+				{
+					s_CurSrvcIdx++;
+					if (s_CurSrvcIdx < periph->NbSrvc)
+					{
+						s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
+						uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
+					}
+					else
+					{
+						uint32_t err_code = sd_ble_gattc_primary_services_discover(periph->ConnHdl, s_CurRange.end_handle, NULL);
+
+					}
+				}
+
+
+
+            }
+            else
+            {
+    			s_CurCharIdx++;
+				if (s_CurCharIdx < periph->Services[s_CurSrvcIdx].char_count)
+				{
+        			uint32_t err = sd_ble_gattc_descriptors_discover(periph->ConnHdl, &s_CurRange);
+        			break;
+    			}
+				else
+				{
+					s_CurSrvcIdx++;
+					if (s_CurSrvcIdx < periph->NbSrvc)
+					{
+						s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
+						uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
+					}
+					else
+					{
+						uint32_t err_code = sd_ble_gattc_primary_services_discover(periph->ConnHdl, s_CurRange.end_handle, NULL);
+					}
+				}
+            }
+            break;
+
+        default:
+            break;
+    }
+
+}
+
+bool BtAppDiscoverDevice(BtDev_t * const pDev)
+{
+	s_pBlePeriphData = pDev;
+	s_CurSrvcIdx = 0;
+	s_CurCharIdx = 0;
+
+    uint32_t err_code = sd_ble_gattc_primary_services_discover(pDev->ConnHdl, 1, NULL);
+
+    return err_code == NRF_SUCCESS;
+    //return err_code;
 }
 
 void BtAppEnterDfu()

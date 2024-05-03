@@ -46,12 +46,15 @@ SOFTWARE.
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
+#if 0
 /******** For DEBUG ************/
 #include "coredev/uart.h"
 extern UART g_Uart;
 #define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
 /*******************************/
-
+#else
+#define DEBUG_PRINTF(...)
+#endif
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};
 

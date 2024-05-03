@@ -41,7 +41,7 @@ SOFTWARE.
 #include "bluetooth/bt_att.h"
 
 /******** For DEBUG ************/
-#define UART_DEBUG_ENABLE
+//#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"

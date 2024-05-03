@@ -69,7 +69,7 @@ SOFTWARE.
 //BleConn_t g_BleConn = {0,};
 
 /******** For DEBUG ************/
-#define UART_DEBUG_ENABLE
+//#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"
@@ -310,13 +310,13 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	BtAppEvtConnected(ConnHdl);
 }
 
-void BtAppDiscoverDevice(uint16_t ConnHdl)
+bool BtAppDiscoverDevice(BtDev_t * const pDev)
 {
 	DEBUG_PRINTF("Start discovering device\r\n");
 
 	// Reset counter and Service list
-	g_BtDevSdc.NbSrvc = 0;
-	memset(g_BtDevSdc.Services, 0, sizeof(BtGattDBSrvc_t) * BLEPERIPH_DEV_SERVICE_MAXCNT);
+	pDev->NbSrvc = 0;
+	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BLEPERIPH_DEV_SERVICE_MAXCNT);
 
 	// Start the discover process by discovering the Primary services
 	BtUuid_t Uuid = {
@@ -324,7 +324,8 @@ void BtAppDiscoverDevice(uint16_t ConnHdl)
 			.Type = BT_UUID_TYPE_16,
 			.Uuid16 = BT_UUID_DECLARATIONS_PRIMARY_SERVICE,
 	};
-	BtAttStartReadByGroupTypeRequest(g_BtDevSdc.pHciDev, ConnHdl, 1, 0xFFFF, &Uuid);
+
+	return BtAttStartReadByGroupTypeRequest(pDev->pHciDev, pDev->ConnHdl, 1, 0xFFFF, &Uuid);
 }
 
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
@@ -519,7 +520,7 @@ void BtAppAdvStart()
 	}
 }
 
-void BleAppAdvStop()
+void BtAppAdvStop()
 {
 	int res = 0;
 

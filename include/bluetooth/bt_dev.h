@@ -97,7 +97,7 @@ extern "C" {
 #endif
 
 //bool BleAppDiscoverDevice(BleDev_t * const pDev);
-uint32_t BleAppDiscoverDevice(BtDev_t * const pDev);
+//uint32_t BleAppDiscoverDevice(BtDev_t * const pDev);
 /**
  * @brief	Peripheral discovered callback.
  *

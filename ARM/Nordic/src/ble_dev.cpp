@@ -43,6 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "ble_app_nrf5.h"
 #include "bluetooth/bt_dev.h"
 
+#if 0
 void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context);
 
 static BtDev_t *s_pBlePeriphData = NULL;
@@ -60,11 +61,6 @@ static int s_CurSrvcIdx = 0;
 static int s_CurCharIdx = 0;
 static ble_gattc_handle_range_t s_CurRange;
 
-__WEAK void BleDevDiscovered(BtDev_t *pDev)
-{
-
-}
-
 //bool BleAppDiscoverDevice(BleDev_t * const pDev)
 uint32_t BleAppDiscoverDevice(BtDev_t * const pDev)
 {
@@ -76,6 +72,12 @@ uint32_t BleAppDiscoverDevice(BtDev_t * const pDev)
 
     //return err_code == NRF_SUCCESS;
     return err_code;
+}
+#endif
+
+__WEAK void BleDevDiscovered(BtDev_t *pDev)
+{
+
 }
 
 int BleDevFindService(BtDev_t * const pDev, uint16_t Uuid)
@@ -139,7 +141,7 @@ void BlePeriphDiscService(uint16_t ConnHandle, ble_uuid_t * const pSrvcUuid)
 
 }
 */
-
+#if 0
 void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 {
 	BtDev_t *periph = *(BtDev_t**)p_context;
@@ -324,3 +326,4 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
     }
 
 }
+#endif
