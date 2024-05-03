@@ -210,13 +210,9 @@ static BtGapConnParams_t s_ConnParams = {
 	.Timeout = 4000,
 };
 
-extern BtDev_t g_BtDevSdc;
-
-#if 0
 BtDev_t g_ConnectedDev = {
 	.ConnHdl = BT_CONN_HDL_INVALID,
 };
-#endif
 
 #ifndef NRFXLIB_SDC
 #if 0
@@ -254,10 +250,6 @@ ble_data_t g_AdvScanReportData = {
 const ble_uuid_t s_UartBleSrvAdvUuid = {
 	.uuid = BLUEIO_UUID_UART_SERVICE,
 	.type = BLE_UUID_TYPE_BLE,
-};
-
-BtDev_t g_ConnectedDev = {
-	.ConnHdl = BLE_CONN_HANDLE_INVALID,
 };
 
 uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
@@ -353,7 +345,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
     	case BLE_GAP_EVT_CONNECTED:
     		{
 				g_ConnectedDev.ConnHdl = p_gap_evt->conn_handle;
-				err_code = BleAppDiscoverDevice(&g_ConnectedDev);
+				BtAppDiscoverDevice(&g_ConnectedDev);
     		}
     		break;
         case BLE_GAP_EVT_ADV_REPORT:
@@ -419,7 +411,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	g_Uart.printf("This device's Role = %s\r\n", s_BleAppCfg.Role == BT_GAP_ROLE_CENTRAL ? "Central" : "Peripheral");
 	if (s_BleAppCfg.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
-		BtAppDiscoverDevice(ConnHdl);
+		BtAppDiscoverDevice(&g_ConnectedDev);
 	}
 }
 
