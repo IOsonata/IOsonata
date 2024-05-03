@@ -847,7 +847,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			break;
 		default:
 			//DEBUG_PRINTF("OpCode : %x\r\n", pReqAtt->OpCode);
-			BtAttProcessRsp(ConnHdl, pReqAtt, ReqLen);
+			;
 	}
 
 	return retval;

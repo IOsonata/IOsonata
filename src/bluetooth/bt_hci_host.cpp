@@ -485,6 +485,10 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 
 				uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 			}
+			else
+			{
+				BtAttProcessRsp(pPkt->Hdr.ConnHdl, &l2rcv->Att, l2rcv->Hdr.Len);
+			}
 		}
 //			BtProcessAttData(pDev, pPkt->Hdr.ConnHdl, l2frame);
 			break;
