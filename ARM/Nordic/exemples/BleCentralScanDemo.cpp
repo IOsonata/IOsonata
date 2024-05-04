@@ -182,6 +182,9 @@ static ble_gap_scan_params_t const g_ScanParams =
 };
 #else
 static BtGapScanCfg_t const g_ScanParams = {
+	.Type = BTSCAN_TYPE_ACTIVE,
+	.Phy = BT_GAP_PHY_1MBITS,
+	.OwnAddrType = BTADDR_TYPE_PUBLIC,
 	.Interval = SCAN_INTERVAL,
 	.Duration = SCAN_WINDOW,
 	.Timeout = SCAN_TIMEOUT,
