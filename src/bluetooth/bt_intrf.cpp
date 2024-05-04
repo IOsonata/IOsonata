@@ -358,14 +358,21 @@ bool BtIntrfInit(BtDevIntrf_t *pIntrf, const BtIntrfCfg_t *pCfg)
 		pIntrf->PacketSize = pCfg->PacketSize + BTINTRF_PKHDR_LEN;
 	}
 
-	if (pCfg->pRxFifoMem == NULL || pCfg->pTxFifoMem == NULL)
+	if (pCfg->pRxFifoMem == nullptr)
 	{
 		pIntrf->hRxFifo = CFifoInit(s_BtDevIntrfRxFifoMem, BTINTRF_CFIFO_SIZE, pIntrf->PacketSize, pCfg->bBlocking);
-		pIntrf->hTxFifo = CFifoInit(s_BtDevIntrfRxFifoMem, BTINTRF_CFIFO_SIZE, pIntrf->PacketSize, pCfg->bBlocking);
 	}
 	else
 	{
 		pIntrf->hRxFifo = CFifoInit(pCfg->pRxFifoMem, pCfg->RxFifoMemSize, pIntrf->PacketSize, pCfg->bBlocking);
+	}
+
+	if (pCfg->pTxFifoMem == nullptr)
+	{
+		pIntrf->hTxFifo = CFifoInit(s_BtDevIntrfTxFifoMem, BTINTRF_CFIFO_SIZE, pIntrf->PacketSize, pCfg->bBlocking);
+	}
+	else
+	{
 		pIntrf->hTxFifo = CFifoInit(pCfg->pTxFifoMem, pCfg->TxFifoMemSize, pIntrf->PacketSize, pCfg->bBlocking);
 	}
 
