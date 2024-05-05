@@ -309,6 +309,11 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		dev->pDmaReg->TASKS_FLUSHRX = 1;
 #endif
 		reg->EVENTS_RXTO = 0;
+		if (dev->pUartDev->EvtCallback)
+		{
+			len = CFifoUsed(dev->pUartDev->hRxFifo);
+			cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXTIMEOUT, NULL, len);
+		}
 	}
 
 #ifdef UARTE_PRESENT
