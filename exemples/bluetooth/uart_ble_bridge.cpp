@@ -45,6 +45,7 @@ SOFTWARE.
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "app_evt_handler.h"
+#include "prbs.h"
 
 #include "board.h"
 
@@ -52,7 +53,7 @@ SOFTWARE.
 
 #define DEVICE_NAME                     "UARTBridge"                            /**< Name of device. Will be included in the advertising data. */
 
-#define PACKET_SIZE						20
+#define PACKET_SIZE						244
 
 #define MANUFACTURER_NAME               "I-SYST inc."							/**< Manufacturer. Will be passed to Device Information Service. */
 #define MODEL_NAME                      "IMM-NRF51x"                            /**< Model number. Will be passed to Device Information Service. */
@@ -189,7 +190,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
 	.SDEvtHandler = NULL,				// RTOS Softdevice handler
-	.MaxMtu = 255,
+	.MaxMtu = 244,
 };
 
 #define BLEINTRF_FIFOSIZE			BTINTRF_CFIFO_TOTAL_MEMSIZE(10, PACKET_SIZE)
@@ -234,7 +235,7 @@ const UARTCfg_t g_UartCfg = {
 	.DevNo = 0,							// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
-	.Rate = 1000000,						// Baudrate
+	.Rate = 114200,						// Baudrate
 	.DataBits = 8,						// Data bits
 	.Parity = UART_PARITY_NONE,			// Parity
 	.StopBits = 1,						// Stop bit
@@ -290,16 +291,21 @@ void BtAppInitUserData()
 
 }
 
+static volatile bool s_bStreamming = false;
+
 //void UartRxChedHandler(void * p_event_data, uint16_t event_size)
+static uint32_t drop = 0;
 void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
 	static uint8_t buff[PACKET_SIZE];
 	static int bufflen = 0;
+	static uint8_t d = 0;
 	bool flush = false;
 
-	int l = g_Uart.Rx(&buff[bufflen], PACKET_SIZE - bufflen);
+	int l = PACKET_SIZE - bufflen;
 	if (l > 0)
 	{
+		l = g_Uart.Rx(&buff[bufflen], l);
 		bufflen += l;
 		if (bufflen >= PACKET_SIZE)
 		{
@@ -308,20 +314,32 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	}
 	else
 	{
-		if (bufflen > 0)
-		{
-			flush = true;
-		}
+		flush = true;
 	}
 
 	if (flush)
 	{
-		g_BtIntrf.Tx(0, buff, bufflen);
+		for (int i = 0; i < bufflen; i++)
+		{
+			if (d != Prbs8(buff[i]) & d != 0)
+			{
+				drop++;
+			}
+			d = Prbs8(buff[i]);
+		}
+//		g_Uart.printf("drop : %d\r\n", drop);
+		if (isConnected())
+		{
+			g_BtIntrf.Tx(0, buff, bufflen);
+		}
 		bufflen = 0;
-//		app_sched_event_put(NULL, 0, UartRxChedHandler);
-		AppEvtHandlerQue(0, 0, UartRxChedHandler);
+		flush = false;
 	}
+//	app_sched_event_put(NULL, 0, UartRxChedHandler);
+	s_bStreamming = true;
+	AppEvtHandlerQue(0, 0, UartRxChedHandler);
 }
+uint32_t schedcnt = 0;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
@@ -332,8 +350,13 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-//			app_sched_event_put(NULL, 0, UartRxChedHandler);
-			AppEvtHandlerQue(0, 0, UartRxChedHandler);
+			if (s_bStreamming == false)
+			{
+				schedcnt++;
+				//app_sched_event_put(NULL, 0, UartRxChedHandler);
+				AppEvtHandlerQue(0, 0, UartRxChedHandler);
+			}
+			//UartRxChedHandler(0, 0);
 			break;
 		case UART_EVT_TXREADY:
 			break;
