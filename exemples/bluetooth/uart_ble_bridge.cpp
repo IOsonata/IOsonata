@@ -226,8 +226,8 @@ alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RTS
+	//{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
+	//{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RTS
 };
 
 /// UART configuration
@@ -307,7 +307,7 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	{
 		l = g_Uart.Rx(&buff[bufflen], l);
 		bufflen += l;
-		if (bufflen >= PACKET_SIZE)
+		if (bufflen >= PACKET_SIZE || l == 0)
 		{
 			flush = true;
 		}
@@ -349,6 +349,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	switch (EvtId)
 	{
 		case UART_EVT_RXTIMEOUT:
+
 		case UART_EVT_RXDATA:
 			if (s_bStreamming == false)
 			{
