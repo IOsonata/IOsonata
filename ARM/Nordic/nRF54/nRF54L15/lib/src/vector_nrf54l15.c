@@ -70,10 +70,10 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void RRAMC_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void VPR00_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CTRLAP_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CM33SS_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER00_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER00_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPU10_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER10_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void RTC10_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER10_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void RTC10_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void EGU10_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void AAR10_CCM10_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void ECB10_IRQHandler(void);
@@ -84,11 +84,13 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL20_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL21_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL22_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void EGU20_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER20_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER21_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER22_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER23_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER24_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER20_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER21_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER22_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER23_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER24_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void PDM20_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void PDM21_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PWM20_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PWM21_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PWM22_IRQHandler(void);
@@ -107,7 +109,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void GRTC_2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void GRTC_3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPU30_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL30_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void RTC30_IRQHandler(void);
+__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void RTC30_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void COMP_LPCOMP_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void WDT30_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void WDT31_IRQHandler(void);
@@ -285,8 +287,8 @@ void (* const __Vectors[])(void) = {
 	TIMER10_IRQHandler,
 	RTC10_IRQHandler,
 	EGU10_IRQHandler,
-	AAR10_CCM10_IRQHandler,
-	ECB10_IRQHandler,
+	0, //AAR10_CCM10_IRQHandler,
+	0,//ECB10_IRQHandler,
 	RADIO_0_IRQHandler,
 	RADIO_1_IRQHandler,
 	0,
@@ -357,8 +359,8 @@ void (* const __Vectors[])(void) = {
 	TIMER23_IRQHandler,
 	TIMER24_IRQHandler,
 	0,
-	0,
-	0,
+	PDM20_IRQHandler,
+	PDM21_IRQHandler,
 	PWM20_IRQHandler,
 	PWM21_IRQHandler,
 	PWM22_IRQHandler,

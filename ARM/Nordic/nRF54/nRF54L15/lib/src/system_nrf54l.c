@@ -50,7 +50,7 @@ __WEAK McuOsc_t g_McuOsc = {
 	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 70},
 #else
 	// Nordic DK
-	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 100},
+	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 150},
 	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 155},
 #endif
 	.bUSBClk = false

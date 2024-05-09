@@ -62,7 +62,7 @@ SOFTWARE.
 ///
 #define TIMER_NRFX_RTC_BASE_FREQ   			32768
 #define TIMER_NRFX_RTC_MAX                 	RTC_COUNT	//!< Number RTC available
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
 #define TIMER_NRFX_RTC_MAX_TRIGGER_EVT     	RTC10_CC_NUM_SIZE	//!< Max number of supported counter trigger event
 #else
 #define TIMER_NRFX_RTC_MAX_TRIGGER_EVT     	RTC1_CC_NUM	//!< Max number of supported counter trigger event

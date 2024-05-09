@@ -48,7 +48,7 @@ SOFTWARE.
 #endif
 #define CLOCK_LFCLKSRC_SRC_RC		CLOCK_LFCLKSRC_SRC_LFRC
 #define CLOCK_LFCLKSRC_SRC_Xtal		CLOCK_LFCLKSRC_SRC_LFXO
-#elif defined(NRF54L15_ENGA_XXAA)
+#elif defined(NRF54L15_XXAA)
 #define NRF_CLOCK		NRF_CLOCK_S
 #define NRF_RTC0		NRF_RTC10_S
 #define NRF_RTC1		NRF_RTC30_S
@@ -141,7 +141,7 @@ static void RtcIRQHandler(int DevNo)
 
 extern "C" {
 
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
 __WEAK void RTC10_IRQHandler()
 {
 	RtcIRQHandler(0);
@@ -181,7 +181,7 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
     switch (pTimer->DevNo)
     {
         case 0:
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
             NVIC_ClearPendingIRQ(RTC10_IRQn);
             NVIC_EnableIRQ(RTC10_IRQn);
 #else
@@ -190,7 +190,7 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 #endif
             break;
         case 1:
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
             NVIC_ClearPendingIRQ(RTC30_IRQn);
             NVIC_EnableIRQ(RTC30_IRQn);
 #else
@@ -218,7 +218,7 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
     switch (pTimer->DevNo)
     {
         case 0:
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
         	NVIC_ClearPendingIRQ(RTC10_IRQn);
             NVIC_DisableIRQ(RTC10_IRQn);
 #else
@@ -227,7 +227,7 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 1:
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
         	NVIC_ClearPendingIRQ(RTC30_IRQn);
             NVIC_DisableIRQ(RTC30_IRQn);
 #else
@@ -409,7 +409,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     reg->TASKS_STOP = 1;
     reg->TASKS_CLEAR = 1;
 
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
     if (!(NRF_CLOCK->LFCLK.STAT & CLOCK_LFCLK_STAT_STATE_Msk))
 #else
     if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
@@ -422,14 +422,14 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		{
 			case TIMER_CLKSRC_DEFAULT:
 			case TIMER_CLKSRC_LFRC:
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
 				NRF_CLOCK->LFCLK.SRC = CLOCK_LFCLK_SRC_SRC_LFRC << CLOCK_LFCLK_SRC_SRC_Pos;
 #else
 				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos;
 #endif
 				break;
 			case TIMER_CLKSRC_LFXTAL:
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
 				NRF_CLOCK->LFCLK.SRC = CLOCK_LFCLK_STAT_SRC_LFXO << CLOCK_LFCLK_SRC_SRC_Pos;
 #else
 				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos;
@@ -450,7 +450,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 		do
 		{
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
 			if ((NRF_CLOCK->LFCLK.STAT & CLOCK_LFCLK_STAT_STATE_Msk) && NRF_CLOCK->EVENTS_LFCLKSTARTED)
 #else
 			if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) && NRF_CLOCK->EVENTS_LFCLKSTARTED)
@@ -469,7 +469,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	switch (pCfg->DevNo)
 	{
 		case 0:
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
 			NVIC_ClearPendingIRQ(RTC10_IRQn);
 			NVIC_SetPriority(RTC10_IRQn, pCfg->IntPrio);
 			NVIC_EnableIRQ(RTC10_IRQn);
@@ -480,7 +480,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 #endif
 			break;
 		case 1:
-#if defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54L15_XXAA)
 			NVIC_ClearPendingIRQ(RTC30_IRQn);
 			NVIC_SetPriority(RTC30_IRQn, pCfg->IntPrio);
 			NVIC_EnableIRQ(RTC30_IRQn);

@@ -69,7 +69,7 @@ SOFTWARE.
 //BleConn_t g_BleConn = {0,};
 
 /******** For DEBUG ************/
-//#define UART_DEBUG_ENABLE
+#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"
@@ -193,13 +193,13 @@ volatile int s_SdcAclTxPktAvail = BT_SDC_TX_MAX_PACKET_COUNT + 1;
 
 static void BtStackMpslAssert(const char * const file, const uint32_t line)
 {
-//	printf("MPSL Fault: %s, %d\n", file, line);
+	DEBUG_PRINTF("MPSL Fault: %s, %d\n", file, line);
 	while(1);
 }
 
 static void BtStackSdcAssert(const char * file, const uint32_t line)
 {
-//	printf("SDC Fault: %s, %d\n", file, line);
+	DEBUG_PRINTF("SDC Fault: %s, %d\n", file, line);
 	while(1);
 }
 
@@ -572,7 +572,7 @@ static uint8_t BtStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
 
 static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 {
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_ENGA_XXAA)
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 	NRF_CRACEN_Type *reg = NRF_CRACEN_S;
 #else
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
@@ -821,6 +821,9 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {
 	// Initialize Nordic Softdevice controller
+
+	DEBUG_PRINTF("BtAppStackInit\r\n");
+
 	int32_t res = sdc_init(BtStackSdcAssert);
 
 	sdc_hci_cmd_cb_reset();
@@ -871,6 +874,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
     uint32_t ram = 0;
 	sdc_cfg_t cfg;
 
+	DEBUG_PRINTF("BtAttSetMtu\r\n");
+
 	uint16_t mtu = 	BtAttSetMtu(pCfg->MaxMtu);
 
 	//int l = pCfg->MaxMtu == 0 ? BTAPP_DEFAULT_MAX_DATA_LEN : mtu + 4;
@@ -880,6 +885,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	cfg.buffer_cfg.tx_packet_size = BTAPP_DEFAULT_MAX_DATA_LEN;
 	cfg.buffer_cfg.rx_packet_count = BT_SDC_RX_MAX_PACKET_COUNT;
 	cfg.buffer_cfg.tx_packet_count = BT_SDC_TX_MAX_PACKET_COUNT;
+
+	DEBUG_PRINTF("sdc_cfg_set\r\n");
 
 	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 				       	  SDC_CFG_TYPE_BUFFER_CFG,
@@ -968,6 +975,9 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
     // Enable BLE stack.
+
+	DEBUG_PRINTF("sdc_enable\r\n");
+
 	res = sdc_enable(BtStackSdcCB, s_BtStackSdcMemPool);
 	if (res != 0)
 	{
@@ -1009,6 +1019,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	lfclk.skip_wait_lfclk_started = MPSL_DEFAULT_SKIP_WAIT_LFCLK_STARTED;
 
 	mpsl_fem_init();
+
+	DEBUG_PRINTF("mpsl_init\r\n");
 
 	// Initialize Nordic multi-protocol support library (MPSL)
 	res = mpsl_init(&lfclk, PendSV_IRQn, BtStackMpslAssert);
@@ -1057,6 +1069,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
     if (BtAppStackInit(pCfg) == false)
     {
+    	DEBUG_PRINTF("BtAppStackInit failed\r\n");
     	return false;
     }
 
@@ -1065,6 +1078,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	memset(abuf, 0, 100);
 
 	sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *addr = (sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *)abuf;
+
+	DEBUG_PRINTF("sdc_hci_cmd_vs_zephyr_read_static_addresses\r\n");
 
 	res = sdc_hci_cmd_vs_zephyr_read_static_addresses(addr);
 	if (res == 0)
@@ -1139,6 +1154,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		.SupTimeout = 400
 	};
 
+	DEBUG_PRINTF("BtGapInit\r\n");
+
 	BtGapInit(&gapcfg);
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
@@ -1199,7 +1216,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	BtGapSetDevName(pCfg->pDevName);
 
     //BleAppGapDeviceNameSet(pBleAppCfg->pDevName);
-#ifndef NRF54L15_ENGA_XXAA
+#ifndef NRF54L15_XXAA
 #if (__FPU_USED == 1)
     // Patch for softdevice & FreeRTOS to sleep properly when FPU is in used
     NVIC_SetPriority(FPU_IRQn, 6);
