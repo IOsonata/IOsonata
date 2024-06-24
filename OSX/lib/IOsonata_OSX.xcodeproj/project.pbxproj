@@ -57,7 +57,6 @@
 		406FC7B4233A00C400106BCA /* device_intrf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC71A233A00C400106BCA /* device_intrf.cpp */; };
 		406FC7C7233A00C400106BCA /* isha1.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC72E233A00C400106BCA /* isha1.c */; };
 		406FC7C9233A00C400106BCA /* cfifo.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC730233A00C400106BCA /* cfifo.c */; };
-		406FC7CD233A00C400106BCA /* diskio_impl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC734233A00C400106BCA /* diskio_impl.cpp */; };
 		406FC7CE233A00C400106BCA /* adc_ltc2495.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC736233A00C400106BCA /* adc_ltc2495.cpp */; };
 		406FC7CF233A00C400106BCA /* device.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC737233A00C400106BCA /* device.cpp */; };
 		406FC7D0233A00C400106BCA /* uart_retarget.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC738233A00C400106BCA /* uart_retarget.c */; };
@@ -132,7 +131,6 @@
 		406FC71A233A00C400106BCA /* device_intrf.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = device_intrf.cpp; sourceTree = "<group>"; };
 		406FC72E233A00C400106BCA /* isha1.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = isha1.c; sourceTree = "<group>"; };
 		406FC730233A00C400106BCA /* cfifo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cfifo.c; sourceTree = "<group>"; };
-		406FC734233A00C400106BCA /* diskio_impl.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = diskio_impl.cpp; sourceTree = "<group>"; };
 		406FC736233A00C400106BCA /* adc_ltc2495.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = adc_ltc2495.cpp; sourceTree = "<group>"; };
 		406FC737233A00C400106BCA /* device.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = device.cpp; sourceTree = "<group>"; };
 		406FC738233A00C400106BCA /* uart_retarget.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = uart_retarget.c; sourceTree = "<group>"; };
@@ -272,7 +270,6 @@
 				406FC71A233A00C400106BCA /* device_intrf.cpp */,
 				406FC72E233A00C400106BCA /* isha1.c */,
 				406FC730233A00C400106BCA /* cfifo.c */,
-				406FC734233A00C400106BCA /* diskio_impl.cpp */,
 				406FC735233A00C400106BCA /* converters */,
 				406FC737233A00C400106BCA /* device.cpp */,
 				406FC738233A00C400106BCA /* uart_retarget.c */,
@@ -394,7 +391,7 @@
 		406FC6652339FDA800106BCA /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 1100;
+				LastUpgradeCheck = 1320;
 				ORGANIZATIONNAME = "Nguyen Hoan Hoang";
 				TargetAttributes = {
 					406FC66C2339FDA800106BCA = {
@@ -439,7 +436,6 @@
 				406FC801233A016300106BCA /* usb_hidhost_impl.cpp in Sources */,
 				406FC7B4233A00C400106BCA /* device_intrf.cpp in Sources */,
 				406FC7DF233A00C400106BCA /* timer.cpp in Sources */,
-				406FC7CD233A00C400106BCA /* diskio_impl.cpp in Sources */,
 				406FC7D3233A00C400106BCA /* stddev.c in Sources */,
 				406FC7DB233A00C400106BCA /* usb_hidhost.cpp in Sources */,
 				406FC802233A016300106BCA /* uart_osx.cpp in Sources */,
@@ -480,6 +476,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -504,7 +501,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -538,6 +535,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -556,7 +554,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
