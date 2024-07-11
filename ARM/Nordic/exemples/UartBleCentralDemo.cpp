@@ -257,6 +257,8 @@ uint16_t g_BleRxCharHdl = BLE_CONN_HANDLE_INVALID;
 
 void BleDevDiscovered(BtDev_t *pDev)
 {
+	int flag = 3;
+#if 0
 #ifdef DEBUG_PRINT
 	g_Uart.printf("Number service discovered: %d\r\n", g_ConnectedDev.NbSrvc);
     for (int i = 0; i < pDev->NbSrvc; i++)
@@ -272,22 +274,27 @@ void BleDevDiscovered(BtDev_t *pDev)
     // Find the desired UART-BLE Service
     g_Uart.printf("Looking for UART Service with UUID = 0x%x ...", BLUEIO_UUID_UART_SERVICE);
 #endif
+#endif
+
     int idx = BleDevFindService(pDev, BLUEIO_UUID_UART_SERVICE);
     if (idx != -1)
     {
+    	flag--;
 #ifdef DEBUG_PRINT
-    	g_Uart.printf("Found!\r\n");
+    	g_Uart.printf("Device found and paired with!\r\n");
 #endif
     	// Rx characteristic
     	int dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
 #ifdef DEBUG_PRINT
-    	g_Uart.printf("Find UART_RX_CHAR idx = 0x%x (%d)...", idx, idx);
+    	g_Uart.printf("Find UART_RX_CHAR idx = 0x%x (%d)...", dcharidx, dcharidx);
 #endif
     	if (dcharidx >= 0 && pDev->Services[idx].charateristics[dcharidx].characteristic.char_props.notify)
     	{
+    		flag--;
     		// Enable Notify
         	//g_Uart.printf("Enable notify\r\n");
-        	BtAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].charateristics[dcharidx].cccd_handle);
+        	uint32_t ec = BtAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].charateristics[dcharidx].cccd_handle);
+
         	g_BleRxCharHdl = pDev->Services[idx].charateristics[dcharidx].characteristic.handle_value;
 #ifdef DEBUG_PRINT
         	g_Uart.printf("Found!\r\n");
@@ -303,10 +310,11 @@ void BleDevDiscovered(BtDev_t *pDev)
     	// Tx characteristic
     	dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
 #ifdef DEBUG_PRINT
-    	g_Uart.printf("Find UART_TX_CHAR idx = 0x%x (%d) ...", idx, idx);
+    	g_Uart.printf("Find UART_TX_CHAR idx = 0x%x (%d) ...", dcharidx, dcharidx);
 #endif
     	if (dcharidx >= 0)
     	{
+    		flag--;
     		g_BleTxCharHdl = pDev->Services[idx].charateristics[dcharidx].characteristic.handle_value;
 #ifdef DEBUG_PRINT
     		g_Uart.printf("Found!\r\n");
@@ -326,10 +334,16 @@ void BleDevDiscovered(BtDev_t *pDev)
 #endif
     }
 
+    if (flag == 0)
+    {
+    	g_Uart.printf("Start data communication\r\n\r\n");
+    	msDelay(10);
+    }
 }
 
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 {
+
 	ble_evt_t * p_ble_evt = (ble_evt_t*)Evt;
     ret_code_t err_code;
     const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
@@ -358,8 +372,8 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 				{
 					mac[i] = p_adv_report->peer_addr.addr[5-i];
 				}
+				//g_Uart.printf("%x:%x:\r\n", mac[0], mac[1]);
 
-				g_Uart.printf("%x:%x:\r\n", mac[0], mac[1]);
 				// Find device by name
 //				if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, TARGET_BRIDGE_DEV_NAME))
 //	            if (memcmp(addr, p_adv_report->peer_addr.addr, 6) == 0)
@@ -395,6 +409,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
         	}
         	break;
         case BLE_GATTC_EVT_HVX:
+        	//g_Uart.printf("handle = %d \r\n", p_ble_evt->evt.gattc_evt.params.hvx.handle);
         	if (p_ble_evt->evt.gattc_evt.params.hvx.handle == g_BleRxCharHdl)
         	{
         		g_Uart.Tx(p_ble_evt->evt.gattc_evt.params.hvx.data, p_ble_evt->evt.gattc_evt.params.hvx.len);
@@ -408,7 +423,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 {
 	//g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
 
-	g_Uart.printf("This device's Role = %s\r\n", s_BleAppCfg.Role == BT_GAP_ROLE_CENTRAL ? "Central" : "Peripheral");
+	//g_Uart.printf("This device's Role = %s\r\n", s_BleAppCfg.Role == BT_GAP_ROLE_CENTRAL ? "Central" : "Peripheral");
 	if (s_BleAppCfg.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
 		BtAppDiscoverDevice(&g_ConnectedDev);
@@ -567,13 +582,13 @@ void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
 		}
 
 		// Schedule the BleTxSchedHandler for sending data via BLE
-		//app_sched_event_put(NULL, 0, BleTxSchedHandler);
+		app_sched_event_put(NULL, 0, BleTxSchedHandler);
 	}
 
 	// Schedule the UartRxSchedHandler if ExternalUartRxBuffer still has data
 	if (g_UartRxExtBuffLen > 0)
 	{
-		//app_sched_event_put(NULL,  0,  UartRxSchedHandler);
+		app_sched_event_put(NULL,  0,  UartRxSchedHandler);
 	}
 
 }
@@ -588,7 +603,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 		case UART_EVT_RXDATA:
 			if (g_UartRxExtBuffLen <= 0)
 			{
-				//app_sched_event_put(NULL, 0, UartRxSchedHandler);
+				app_sched_event_put(NULL, 0, UartRxSchedHandler);
 			}
 
 			break;
