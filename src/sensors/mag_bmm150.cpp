@@ -74,11 +74,11 @@ bool MagBmm150::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Time
 	// fix it to lowest value.
 	// X, Y : 13 bits, Z : 15 bits, RHALL : 14 bits
 	vPrecision = MAGSENSOR_PRECISION_LOW;
-	vSensitivity[0] = BMI150_FLUX_DENSITY_XY / BMI150_ADC_RANGE_XY;
+	vSensitivity[0] = BMM150_FLUX_DENSITY_XY / BMM150_ADC_RANGE_XY;
 	vSensitivity[1] = vSensitivity[0];
-	vSensitivity[2] = BMI150_FLUX_DENSITY_Z / BMI150_ADC_RANGE_Z;
+	vSensitivity[2] = BMM150_FLUX_DENSITY_Z / BMM150_ADC_RANGE_Z;
 
-	vRange = BMI150_ADC_RANGE_XY;
+	vRange = BMM150_ADC_RANGE_XY;
 	vData.Sensitivity[0] = vSensitivity[0];
 	vData.Sensitivity[1] = vSensitivity[1];
 	vData.Sensitivity[2] = vSensitivity[2];

@@ -40,7 +40,6 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
-#include "sensors/mag_bmm150.h"
 
 #define BMI323_I2C_7BITS_DEVADDR							0x68
 

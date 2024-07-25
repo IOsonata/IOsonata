@@ -141,6 +141,21 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pI
 
 	Write8((uint8_t*)&regaddr, 2, d);
 
+	if (CfgData.bInter == true)
+	{
+		regaddr = ICM20948_INT_PIN_CFG;
+		d = ICM20948_INT_PIN_CFG_INT_ANYRD_2CLEAR | ICM20948_INT_PIN_CFG_INT1_ACTL;
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		regaddr = ICM20948_INT_ENABLE;
+		d = 0xff;
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		regaddr = ICM20948_INT_ENABLE_1;
+		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
+		Write8((uint8_t*)&regaddr, 2, d);
+	}
+
 	return true;
 }
 
@@ -706,10 +721,33 @@ bool AgmIcm20948::SelectBank(uint8_t BankNo)
 
 void AgmIcm20948::IntHandler()
 {
-	uint16_t regaddr = 0;
-	uint8_t d;
+	uint16_t regaddr = ICM20948_INT_STATUS;
+	uint8_t istatus1;
+	uint16_t istatus2;
 
-	//d = Read8((uint8_t*)&regaddr, 2);
+	istatus1 = Read8((uint8_t*)&regaddr, 2);
+
+	if (istatus1 & ICM20948_INT_STATUS_I2C_MIST_INT)
+	{
+
+	}
+
+	if (istatus1 & ICM20948_INT_STATUS_DMP_INT1)
+	{
+		regaddr = ICM20948_DMP_INT_STATUS;
+		istatus2 = Read8((uint8_t*)&regaddr, 2);
+		Write8((uint8_t*)&regaddr, 2, istatus2);
+	}
+
+	if (istatus1 & ICM20948_INT_STATUS_PLL_RDY_INT)
+	{
+
+	}
+
+	if (istatus1 & ICM20948_INT_STATUS_WOM_INT)
+	{
+
+	}
 //	if (d & MPU9250_AG_INT_STATUS_RAW_DATA_RDY_INT)
 	{
 		UpdateData();

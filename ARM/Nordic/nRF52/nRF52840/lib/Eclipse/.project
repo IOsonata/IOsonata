@@ -811,6 +811,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ag_bmi160.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/ag_bmi323.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ag_bmi323.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/agm_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948.h</locationURI>
@@ -884,6 +889,11 @@
 			<name>include/sensors/mag_bmm150.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_bmm150.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/mag_bmm350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_bmm350.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/mag_sensor.h</name>
@@ -1496,6 +1506,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_bmi160.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sensors/ag_bmi323.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_bmi323.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sensors/agm_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
@@ -1539,6 +1554,11 @@
 			<name>src/sensors/mag_bmm150.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_bmm150.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_bmm350.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_bmm350.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/mag_sensor.cpp</name>
