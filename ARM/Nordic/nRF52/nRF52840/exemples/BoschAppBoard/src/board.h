@@ -39,116 +39,50 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#include "nrf.h"
-#include "blueio_board.h"
+#define LED_RED_PORT					0
+#define LED_RED_PIN						7
+#define LED_RED_PINOP					0
+#define LED_GREEN_PORT					0
+#define LED_GREEN_PIN					11
+#define LED_GREEN_PINOP					0
+#define LED_BLUE_PORT					0
+#define LED_BLUE_PIN					12
+#define LED_BLUE_PINOP					0
 
-//#define NORDIC_DK			// For Nordic DevKit
-//#define NEBLINA			// Neblina board
+#define I2C_DEVNO						0
+#define I2C_SDA_PORT					0
+#define I2C_SDA_PIN						29
+#define I2C_SDA_PINOP					1
+#define I2C_SCL_PORT					0
+#define I2C_SCL_PIN						26
+#define I2C_SCL_PINOP					1
 
-#ifdef NORDIC_DK
+#define SPI_DEVNO            			2
+#define SPI_MISO_PORT        			0
+#define SPI_MISO_PIN         			15
+#define SPI_MISO_PINOP       			1
+#define SPI_MOSI_PORT        			0
+#define SPI_MOSI_PIN         			6
+#define SPI_MOSI_PINOP       			1
+#define SPI_SCK_PORT         			0
+#define SPI_SCK_PIN          			16
+#define SPI_SCK_PINOP        			1
 
-#define UART_TX_PIN					9//7
-#define UART_RX_PIN					11//8
-#define UART_RTS_PIN					8//11
-#define UART_CTS_PIN					10//12
+#define SPI_BMI323_CS_PORT         		0
+#define SPI_BMI323_CS_PIN          		24
+#define SPI_BMI323_CS_PINOP        		1
 
-#define SPI_DEVNO            		2
-#define SPI_MISO_PORT        		0
-#define SPI_MISO_PIN         		13
-#define SPI_MISO_PINOP       		1
-#define SPI_MOSI_PORT        		0
-#define SPI_MOSI_PIN         		12
-#define SPI_MOSI_PINOP       		1
-#define SPI_SCK_PORT         		0
-#define SPI_SCK_PIN          		11
-#define SPI_SCK_PINOP        		1
+#define VDD_EN_PORT						1
+#define VDD_EN_PIN						12
+#define VDD_EN_PINOP					0
 
-#define SPI_BME280_CS_PORT         	0
-#define SPI_BME280_CS_PIN          	26
-#define SPI_BME280_CS_PINOP        	1
+#define VDDIO_EN_PORT					0
+#define VDDIO_EN_PIN					2
+#define VDDIO_EN_PINOP					0
 
-#elif defined(NEBLINA)
-
-#define SPI_DEVNO            		2
-#define SPI_MISO_PORT        		0
-#define SPI_MISO_PIN         		13
-#define SPI_MISO_PINOP       		1
-#define SPI_MOSI_PORT        		0
-#define SPI_MOSI_PIN         		12
-#define SPI_MOSI_PINOP       		1
-#define SPI_SCK_PORT         		0
-#define SPI_SCK_PIN          		11
-#define SPI_SCK_PINOP        		1
-
-#define NEBLINA_SPI_BMI160_CS_PORT         0
-#define NEBLINA_SPI_BMI160_CS_PIN          24
-#define NEBLINA_SPI_BMI160_CS_PINOP        0
-
-#else
-
-// I-SYST BlueIO boards
-
-#define UART_RX_PORT					BLUEIO_UART_RX_PORT
-#define UART_RX_PIN						BLUEIO_UART_RX_PIN
-#define UART_RX_PINOP					BLUEIO_UART_RX_PINOP
-#define UART_TX_PORT					BLUEIO_UART_TX_PORT
-#define UART_TX_PIN						BLUEIO_UART_TX_PIN
-#define UART_TX_PINOP					BLUEIO_UART_TX_PINOP
-#define UART_CTS_PORT					BLUEIO_UART_CTS_PORT
-#define UART_CTS_PIN					BLUEIO_UART_CTS_PIN
-#define UART_CTS_PINOP					BLUEIO_UART_CTS_PINOP
-#define UART_RTS_PORT					BLUEIO_UART_RTS_PORT
-#define UART_RTS_PIN					BLUEIO_UART_RTS_PIN
-#define UART_RTS_PINOP					BLUEIO_UART_RTS_PINOP
-
-//#define BLUEIO_TAG_BME680_PROTO
-#ifdef BLUEIO_TAG_BME680_PROTO
-#define I2C0_SDA_PORT					BLUEIO_TAG_BME280_I2C_SDA_PORT
-#define I2C0_SDA_PIN					BLUEIO_TAG_BME280_I2C_SDA_PIN
-#define I2C0_SDA_PINOP					BLUEIO_TAG_BME280_I2C_SDA_PINOP
-#define I2C0_SCL_PORT					BLUEIO_TAG_BME280_I2C_SCL_PORT
-#define I2C0_SCL_PIN					BLUEIO_TAG_BME280_I2C_SCL_PIN
-#define I2C0_SCL_PINOP					BLUEIO_TAG_BME280_I2C_SCL_PINOP
-#else
-#define I2C0_SDA_PORT					BLUEIO_TAG_BME680_I2C_SDA_PORT
-#define I2C0_SDA_PIN					BLUEIO_TAG_BME680_I2C_SDA_PIN
-#define I2C0_SDA_PINOP					BLUEIO_TAG_BME680_I2C_SDA_PINOP
-#define I2C0_SCL_PORT					BLUEIO_TAG_BME680_I2C_SCL_PORT
-#define I2C0_SCL_PIN					BLUEIO_TAG_BME680_I2C_SCL_PIN
-#define I2C0_SCL_PINOP					BLUEIO_TAG_BME680_I2C_SCL_PINOP
-#endif
-/*
-#define SPI_DEVNO      					1
-#define SPI_MISO_PORT       			0
-#define SPI_MISO_PIN        			13
-#define SPI_MISO_PINOP      			1
-#define SPI_MOSI_PORT       			0
-#define SPI_MOSI_PIN        			12
-#define SPI_MOSI_PINOP      			1
-#define SPI_SCK_PORT        			0
-#define SPI_SCK_PIN         			11
-#define SPI_SCK_PINOP       			1
-*/
-#define SPI_DEVNO      				2
-#define SPI_MISO_PORT       			0
-#define SPI_MISO_PIN        			15
-#define SPI_MISO_PINOP      			1
-#define SPI_MOSI_PORT       			0
-#define SPI_MOSI_PIN        			16
-#define SPI_MOSI_PINOP      			1
-#define SPI_SCK_PORT        			0
-#define SPI_SCK_PIN         			17
-#define SPI_SCK_PINOP       			1
-
-#define BME280_CS_IDX          		0
-#define BME280_CS_PORT         		0
-#define BME280_CS_PIN          		26
-#define BME280_CS_PINOP        		1
-
-#define BLUEIO_TAG_EVIM_IMU_INT_NO		0
-
-#endif
-
+#define LS_EN_PORT						0
+#define LS_EN_PIN						3
+#define LS_EN_PINOP						0
 
 #endif // __BOARD_H__
 
