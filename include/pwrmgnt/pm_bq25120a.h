@@ -186,7 +186,31 @@ SOFTWARE.
 
 class PmBq25120a : public PowerMgnt {
 public:
+
+	/**
+	 * @brief	Initialization
+	 *
+	 * @param 	Cfg 	: Reference to the configuration data
+	 * @param	pIntrf	: Pointer to the communication interface.
+	 * 					  Most programmable PMIC is I2C
+	 *
+	 * @return	true - success
+	 */
 	bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf);
+
+	/**
+	 * @brief	Set output voltage
+	 *
+	 * If output voltage is zero, turn off the output.
+	 *
+	 * @param	VoutIdx : Zero based index of output source
+	 * @param	mVolt : Output voltage in mV
+	 * @param	mALimit : Output current limit in mA if available
+	 * 						set to zero for max capacity
+	 *
+	 * @return	Actual output voltage in mV
+	 *
+	 */
 	int32_t SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit);
 
 	/**

@@ -84,7 +84,7 @@ typedef void (*PwrMgntEvtHandler_t)(PowerMgnt *pSelf, PWRMGNT_EVT Evt);
 typedef struct __PowerMgnt_Config {
 	uint32_t DevAddr;					//!< Device address
 	//uint32_t InCurLimit;				//!< Input current limit in mA, USB in current limit. Device dependent
-	PwrMgntVoutCfg_t * const pVout;		//!< Pointer to V out settings
+	const PwrMgntVoutCfg_t * const pVout;		//!< Pointer to V out settings
 	size_t NbVout;						//!< Number of V out
 	int32_t VEndChrg;					//!< End of charge voltage level in mV
 	uint32_t ChrgCurr;					//!< Charge current in mA
@@ -103,6 +103,16 @@ typedef struct __PowerMgnt_Config {
 
 class PowerMgnt : virtual public Device {
 public:
+
+	/**
+	 * @brief	Initialization
+	 *
+	 * @param 	Cfg 	: Reference to the configuration data
+	 * @param	pIntrf	: Pointer to the communication interface.
+	 * 					  Most programmable PMIC is I2C
+	 *
+	 * @return	true - success
+	 */
 	virtual bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf *pIntrf) = 0;
 
 	/**
@@ -157,7 +167,7 @@ public:
 	virtual void IrqHandler() {}
 
 protected:
-	uint32_t vChrgCurr;		//!< Charge current
+	uint32_t vChrgCurr;	//!< Charge current
 	PwrMgntEvtHandler_t vpEvtHandler;
 
 private:

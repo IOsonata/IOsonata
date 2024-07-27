@@ -40,7 +40,6 @@ SOFTWARE.
 
 const int s_Bq25120aBaseVolt[] = { 12500, 13000, 15000, 18000 };
 const int s_Bq25120aBaseVoltCnt = sizeof(s_Bq25120aBaseVolt) / sizeof(int);
-const int s_Bq25120aTypVol[] = { 1100, 1200, 1250, 1333, 1417, 1500, 1583, 1667, 1750, 1833, 1917, 2000, 2083, 2167, 2250, 2333 };
 
 bool PmBq25120a::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
@@ -52,8 +51,16 @@ bool PmBq25120a::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	vDevAddr = Cfg.DevAddr;
 	Interface(pIntrf);
 
-	SetVout(0, Cfg.pVout[0].mVout, Cfg.pVout[0].mAlimit);
-	SetVout(1, Cfg.pVout[1].mVout, Cfg.pVout[1].mAlimit);
+	if (Cfg.pVout)
+	{
+		SetVout(0, Cfg.pVout[0].mVout, Cfg.pVout[0].mAlimit);	// Vout
+		SetVout(1, Cfg.pVout[1].mVout, Cfg.pVout[1].mAlimit);	// LS/LDO
+	}
+
+	if (Cfg.pBatProf != nullptr)
+	{
+		vChrgCurr = Cfg.ChrgCurr;
+	}
 
 	return true;
 }
@@ -102,6 +109,8 @@ int32_t PmBq25120a::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 					{
 						diff = d;
 						sel = i << 5;
+						// NOTE : Special case when sel == 0, base voltage start was skip
+						// 2 step count to handle 1.25V and above.
 						out = i == 0 ? t + 2 : t;
 						vout = (s_Bq25120aBaseVolt[i] + step * t + 5) / 10;// + (i ^ 1);
 					}
@@ -130,7 +139,9 @@ int32_t PmBq25120a::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
  */
 bool PmBq25120a::Enable()
 {
+	bool retval = false;
 
+	return retval;
 }
 
 /**
@@ -160,7 +171,7 @@ void PmBq25120a::PowerOff()
 
 uint32_t PmBq25120a::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr)
 {
-
+	return 0;
 }
 
 bool PmBq25120a::Charging()
@@ -171,9 +182,16 @@ bool PmBq25120a::Charging()
 	return d & BQ25120A_STATUS_SHIPMODE_CTRL_CHARGING;
 }
 
+/**
+ * @brief	Battery present status
+ *
+ * @return	true - Battery present
+ */
 bool PmBq25120a::Battery()
 {
+	bool retval = false;
 
+	return retval;
 }
 
 void PmBq25120a::IrqHandler()
