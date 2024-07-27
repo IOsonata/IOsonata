@@ -92,6 +92,8 @@ int32_t PmBq25120a::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 		}
 		else
 		{
+			// Calculation here is performed in higher precision
+			// Voltage is converted to 100 nV units. Therefore multiply everything by 10
 			mVolt *= 10;
 			for (uint8_t i = 0; i < s_Bq25120aBaseVoltCnt && diff != 0; i++)
 			{
@@ -112,7 +114,9 @@ int32_t PmBq25120a::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 						// NOTE : Special case when sel == 0, base voltage start was skip
 						// 2 step count to handle 1.25V and above.
 						out = i == 0 ? t + 2 : t;
-						vout = (s_Bq25120aBaseVolt[i] + step * t + 5) / 10;// + (i ^ 1);
+
+						// Divide by 10 to get back to mV units for vout
+						vout = (s_Bq25120aBaseVolt[i] + step * t + 5) / 10;
 					}
 				}
 			}
