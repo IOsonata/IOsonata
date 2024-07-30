@@ -46,9 +46,19 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/sensors</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/pwrmgnt/pm_bq25120a.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/pwrmgnt/pm_bq25120a.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/ag_bmi323.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/ag_bmi323.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

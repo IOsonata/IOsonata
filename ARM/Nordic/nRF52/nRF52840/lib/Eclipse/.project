@@ -456,6 +456,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/pulse_train.c</locationURI>
 		</link>
 		<link>
+			<name>src/pwrmgnt</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/sbuffer.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sbuffer.c</locationURI>
@@ -784,6 +789,36 @@
 			<name>include/miscdev/tca6424a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwrmgnt/fg_lc709203f.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/fg_lc709203f.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwrmgnt/pm_as3701.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_as3701.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwrmgnt/pm_bq25120a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_bq25120a.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwrmgnt/pm_mp2696a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_mp2696a.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwrmgnt/pm_npm1300.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_npm1300.h</locationURI>
+		</link>
+		<link>
+			<name>include/pwrmgnt/pwrmgnt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_adxl362.h</name>
@@ -1479,6 +1514,31 @@
 			<name>src/nrf5_SDK_Mesh/stack</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/fg_lc709203f.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/fg_lc709203f.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_as3701.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_as3701.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_bq25120a.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_bq25120a.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_mp2696a.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_mp2696a.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_npm1300.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_npm1300.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_adxl362.cpp</name>

@@ -55,8 +55,8 @@ static const SPICfg_t s_SpiCfg = {
 	.DataSize = 8,      // Data Size
 	.MaxRetry = 5,      // Max retries
 	.BitOrder = SPIDATABIT_MSB,
-	.DataPhase = SPIDATAPHASE_SECOND_CLK, // Data phase
-	.ClkPol = SPICLKPOL_LOW,         // clock polarity
+	.DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
+	.ClkPol = SPICLKPOL_HIGH,         // clock polarity
 	.ChipSel = SPICSEL_AUTO,
 	.bDmaEn = true,	// DMA
 	.bIntEn = false,
@@ -91,24 +91,6 @@ static const I2CCfg_t s_I2cCfg = {
 
 I2C g_I2c;
 
-static const AccelSensorCfg_t s_AccelCfg = {
-	.DevAddr = 0,
-	.OpMode = SENSOR_OPMODE_CONTINUOUS,
-	.Freq = 1000,
-	.Scale = 2,
-	.FltrFreq = 0,
-	.bInter = true,
-	.IntPol = DEVINTR_POL_LOW,
-};
-
-static const GyroSensorCfg_t s_GyroCfg = {
-	.DevAddr = 0,
-	.OpMode = SENSOR_OPMODE_CONTINUOUS,
-	.Freq = 50000,
-	.Sensitivity = 10,
-	.FltrFreq = 200,
-};
-
 static const PwrMgntVoutCfg_t s_PmVoutCfg[] = {
 	{
 		.mVout = 3300,
@@ -130,6 +112,31 @@ PwrMgntCfg_t s_PmicCfg = {
 
 PmBq25120a g_Pmic;
 
+static const AccelSensorCfg_t s_AccelCfg = {
+	.DevAddr = 0,
+	.OpMode = SENSOR_OPMODE_CONTINUOUS,
+	.Freq = 1000,
+	.Scale = 2,
+	.FltrFreq = 0,
+	.bInter = true,
+	.IntPol = DEVINTR_POL_LOW,
+};
+
+static const GyroSensorCfg_t s_GyroCfg = {
+	.DevAddr = 0,
+	.OpMode = SENSOR_OPMODE_CONTINUOUS,
+	.Freq = 50000,
+	.Sensitivity = 10,
+	.FltrFreq = 200,
+};
+
+AgBmi323 g_MotSensor;
+AccelSensor *g_pAccel = NULL;
+GyroSensor *g_pGyro = NULL;
+
+uint32_t g_DT = 0;
+static uint32_t g_TPrev = 0;
+
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
@@ -150,10 +157,20 @@ bool HardwareInit()
 	IOPinSet(LED_BLUE_PORT, LED_BLUE_PIN);
 	IOPinSet(VDD_EN_PORT, VDD_EN_PIN);
 	IOPinSet(LS_EN_PORT, LS_EN_PIN);
+	IOPinSet(VDDIO_EN_PORT, VDDIO_EN_PIN);
 
 	g_Timer.Init(s_TimerCfg);
 
 	res = g_Spi.Init(s_SpiCfg);
+
+	msDelay(10);
+
+
+	res = g_MotSensor.Init(s_AccelCfg, &g_Spi, &g_Timer);
+	if (res == true)
+	{
+		g_pAccel = &g_MotSensor;
+	}
 
 	return res;
 }
@@ -161,5 +178,46 @@ bool HardwareInit()
 int main()
 {
 	HardwareInit();
+	AccelSensorRawData_t arawdata;
+	AccelSensorData_t accdata;
+	GyroSensorRawData_t grawdata;
+	GyroSensorData_t gyrodata;
+
+	memset(&arawdata, 0, sizeof(AccelSensorRawData_t));
+	memset(&accdata, 0, sizeof(AccelSensorData_t));
+	memset(&gyrodata, 0, sizeof(GyroSensorData_t));
+
+
+	uint32_t prevt = 0;
+	int cnt = 10;
+	while (1)
+	{
+//		uint32_t t = g_Timer.uSecond();
+
+		//NRF_POWER->SYSTEMOFF = POWER_SYSTEMOFF_SYSTEMOFF_Enter;
+		//__WFE();
+		g_MotSensor.UpdateData();
+
+		uint32_t dt = arawdata.Timestamp - prevt;
+		prevt = arawdata.Timestamp;
+
+		g_MotSensor.Read(arawdata);
+
+		if (g_pGyro)
+		{
+			g_pGyro->Read(grawdata);
+		}
+
+		g_MotSensor.Read(accdata);
+		//g_Imu.Read(quat);
+
+		if (cnt-- < 0)
+		{
+			cnt = 10;
+			//printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)dt, arawdata.X, arawdata.Y, arawdata.Z);
+			printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
+			//printf("Quat %d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
+		}
+	}
 }
 

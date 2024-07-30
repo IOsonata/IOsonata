@@ -35,6 +35,7 @@ SOFTWARE.
 #include <math.h>
 
 #include "idelay.h"
+#include "convutil.h"
 #include "sensors/ag_bmi323.h"
 
 static const uint32_t s_BMI323Odr[] = {
@@ -66,7 +67,7 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 		Write16(&regaddr, 1, BMI323_INT_CONFIG_LATCHED);
 
 		regaddr = BMI323_INT_MAP2_REG;
-		d = Read16(&regaddr, 1) & ~BMI323_INT_MAP2_ACC_DRDY_MASK;
+		d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_INT_MAP2_ACC_DRDY_MASK;
 		d |= BMI323_INT_MAP2_ACC_DRDY_INT1;
 		Write16(&regaddr, 1, d);///BMI160_INT_EN_1_INT_HIGHG_X_EN | BMI160_INT_EN_1_INT_HIGHG_Y_EN |
 				//BMI160_INT_EN_1_INT_HIGHG_Z_EN |*/ BMI160_INT_EN_1_INT_DRDY_EN);
@@ -94,7 +95,7 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 uint8_t AccelBmi323::Scale(uint8_t Value)
 {
 	uint8_t regaddr = BMI323_ACC_CONFIG_REG;
-	uint16_t d = Read16(&regaddr, 1) & ~BMI323_ACC_CONFIG_RANGE_MASK;
+	uint16_t d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_ACC_CONFIG_RANGE_MASK;
 
 	if (Value < 3)
 	{
@@ -175,7 +176,7 @@ uint32_t AccelBmi323::FilterFreq(uint32_t Freq)
 uint32_t AccelBmi323::SamplingFrequency(uint32_t Freq)
 {
 	uint8_t regaddr = BMI323_ACC_CONFIG_REG;
-	uint32_t accconf = Read16(&regaddr, 1) & ~BMI323_ACC_CONFIG_ODR_MASK;
+	uint32_t accconf = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_ACC_CONFIG_ODR_MASK;
 	uint32_t f = 0;
 	uint32_t dif = 100000;
 
@@ -223,21 +224,21 @@ bool AccelBmi323::Enable()
 	uint8_t d;
 
 	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_ACC_EN;
+	d = EndianCvt16(Read16(&regaddr, 1)) | EndianCvt16(BMI323_FIFO_CONFIG_ACC_EN);
 
 	Write16(&regaddr, 1, d);
 
 	msDelay(1); // Require delay, do not remove
 
 	regaddr = BMI323_ACC_CONFIG_REG;
-	d = Read16(&regaddr, 1) & ~BMI323_ACC_CONFIG_MODE_MASK;
+	d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_ACC_CONFIG_MODE_MASK;
 	d |= BMI323_ACC_CONFIG_MODE_CONT_EN;
 	Write16(&regaddr, 1, d);
 
 	msDelay(20); // Require delay, do not remove
 
 	regaddr = BMI323_ERR_REG;
-	d = Read16(&regaddr, 1);
+	d = EndianCvt16(Read16(&regaddr, 1));
 
 	if (d != 0)
 	{
@@ -250,14 +251,14 @@ bool AccelBmi323::Enable()
 void AccelBmi323::Disable()
 {
 	uint8_t regaddr = BMI323_ACC_CONFIG_REG;
-	uint16_t d = Read16(&regaddr, 1) & ~BMI323_ACC_CONFIG_MODE_MASK;
+	uint16_t d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_ACC_CONFIG_MODE_MASK;
 
 	Write16(&regaddr, 1, d);
 
 	msDelay(10);
 
 	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = Read16(&regaddr, 1) & ~BMI323_FIFO_CONFIG_ACC_EN;
+	d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_FIFO_CONFIG_ACC_EN;
 	Write16(&regaddr, 1, d);
 
 //	regaddr = BMI323_ERR_REG;
@@ -312,7 +313,7 @@ uint32_t GyroBmi323::FilterFreq(uint32_t Freq)
 uint32_t GyroBmi323::SamplingFrequency(uint32_t Freq)
 {
 	uint8_t regaddr = BMI323_GYR_CONFIG_REG;
-	uint32_t accconf = Read16(&regaddr, 1) & ~BMI323_GYR_CONFIG_ODR_MASK;
+	uint32_t accconf = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_GYR_CONFIG_ODR_MASK;
 	uint32_t f = 0;
 	uint32_t dif = 100000;
 
@@ -358,7 +359,7 @@ uint32_t GyroBmi323::SamplingFrequency(uint32_t Freq)
 uint32_t GyroBmi323::Sensitivity(uint32_t Value)
 {
 	uint8_t regaddr = BMI323_GYR_CONFIG_REG;
-	uint32_t d = Read16(&regaddr, 1) & ~BMI323_GYR_CONFIG_RANGE_MASK;
+	uint32_t d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_GYR_CONFIG_RANGE_MASK;
 	uint32_t range = 0;
 
 	if (Value < 250)
@@ -400,20 +401,20 @@ bool GyroBmi323::Enable()
 	uint8_t d;
 
 	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_GYR_EN;
+	d = EndianCvt16(Read16(&regaddr, 1)) | BMI323_FIFO_CONFIG_GYR_EN;
 
 	Write16(&regaddr, 1, d);
 
 	msDelay(5); // Require delay, do not remove
 
 	regaddr = BMI323_GYR_CONFIG_REG;
-	d = Read16(&regaddr, 1) | BMI323_GYR_CONFIG_MODE_CONT_EN;
+	d = EndianCvt16(Read16(&regaddr, 1)) | BMI323_GYR_CONFIG_MODE_CONT_EN;
 	Write16(&regaddr, 1, d);
 
 	msDelay(40); // Require delay, do not remove
 
 	regaddr = BMI323_ERR_REG;
-	d = Read16(&regaddr, 1);
+	d = EndianCvt16(Read16(&regaddr, 1));
 
 	if (d != 0)
 	{
@@ -426,16 +427,16 @@ bool GyroBmi323::Enable()
 void GyroBmi323::Disable()
 {
 	uint8_t regaddr = BMI323_GYR_CONFIG_REG;
-	uint16_t d = Read16(&regaddr, 1) & ~BMI323_GYR_CONFIG_MODE_MASK;
+	uint16_t d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_GYR_CONFIG_MODE_MASK;
 	Write16(&regaddr, 1, d);
 
 	msDelay(10);
 
 	regaddr = BMI323_ERR_REG;
-	Read16(&regaddr, 1);
+	d = EndianCvt16(Read16(&regaddr, 1));
 
 	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = Read16(&regaddr, 1) & ~BMI323_FIFO_CONFIG_GYR_EN;
+	d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_FIFO_CONFIG_GYR_EN;
 
 	Write16(&regaddr, 1, d);
 }
@@ -461,7 +462,7 @@ bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 
 	// Read chip id
 	regaddr = BMI323_CHIP_ID_REG;
-	d = Read16(&regaddr, 1);
+	d = EndianCvt16(Read16(&regaddr, 1));
 
 	if (d != BMI323_CHIP_ID)
 	{
@@ -476,12 +477,12 @@ bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	msDelay(50);
 
 	regaddr = BMI323_FIFO_CTRL_REG;
-	Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
+	Write16(&regaddr, 1, EndianCvt16(BMI323_FIFO_CTRL_FLUSH));
 
 	msDelay(10);
 
 	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_TIME_EN | BMI323_FIFO_CONFIG_TEMP_EN;
+	d = EndianCvt16(Read16(&regaddr, 1)) | EndianCvt16(BMI323_FIFO_CONFIG_TIME_EN | BMI323_FIFO_CONFIG_TEMP_EN);
 
 	Write16(&regaddr, 1, d);
 

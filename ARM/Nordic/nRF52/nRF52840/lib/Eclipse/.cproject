@@ -545,6 +545,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/audio&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc/acm&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/nrf_ble_gatt&quot;"/>
@@ -698,6 +699,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/audio&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc/acm&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/nrf_ble_gatt&quot;"/>
@@ -2406,6 +2408,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
@@ -2453,6 +2456,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
@@ -2507,7 +2511,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/nrf5_SDK_Mesh|src/nRF5_SDK|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_intrf.cpp|src/bluetooth/ble_dev.cpp|src/bluetooth/ble_app_nrf52.cpp|src/bluetooth/ble_app_handler.c|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usbd_cdc_intrf.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/nrf5_SDK_Mesh|src/nRF5_SDK|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_intrf.cpp|src/bluetooth/ble_dev.cpp|src/bluetooth/ble_app_nrf52.cpp|src/bluetooth/ble_app_handler.c|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2582,6 +2586,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
@@ -2629,6 +2634,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/templates&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
@@ -2683,7 +2689,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/nrf5_SDK_Mesh|src/nRF5_SDK|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_intrf.cpp|src/bluetooth/ble_dev.cpp|src/bluetooth/ble_app_nrf52.cpp|src/bluetooth/ble_app_handler.c|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usbd_cdc_intrf.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/nrf5_SDK_Mesh|src/nRF5_SDK|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_intrf.cpp|src/bluetooth/ble_dev.cpp|src/bluetooth/ble_app_nrf52.cpp|src/bluetooth/ble_app_handler.c|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
