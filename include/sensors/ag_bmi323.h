@@ -478,6 +478,8 @@ SOFTWARE.
 #define BMI323_CFG_RES_VALUE_ONE_MASK							(0x1F)
 #define BMI323_CFG_RES_VALUE_TWO_MASK							(0x3<<14)
 
+#define BMI323_ADC_RANGE				0x7FFF		// 16 Bits
+
 #ifdef __cplusplus
 
 class AccelBmi323 : public AccelSensor {

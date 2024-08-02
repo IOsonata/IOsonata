@@ -49,7 +49,7 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 	AccelSensor::Type(SENSOR_TYPE_ACCEL);
 
-	vData.Range = Range(0x7FFF);
+	vData.Range = Range(BMI323_ADC_RANGE);
 	Scale(CfgData.Scale);
 	SamplingFrequency(CfgData.Freq);
 	FilterFreq(CfgData.FltrFreq);
@@ -200,7 +200,7 @@ uint32_t AccelBmi323::SamplingFrequency(uint32_t Freq)
 			if (x < dif)
 			{
 				accconf &= ~BMI323_ACC_CONFIG_ODR_MASK;
-				accconf |= i = 2;
+				accconf |= i + 2;
 				dif = x;
 				f = t;
 			}
@@ -211,6 +211,7 @@ uint32_t AccelBmi323::SamplingFrequency(uint32_t Freq)
 			}
 		}
 	}
+	printf("acconfig = %d\n", accconf);
 	Write16(&regaddr, 1, accconf);
 
 	msDelay(1);
@@ -221,7 +222,7 @@ uint32_t AccelBmi323::SamplingFrequency(uint32_t Freq)
 bool AccelBmi323::Enable()
 {
 	uint8_t regaddr;
-	uint8_t d;
+	uint16_t d;
 
 	regaddr = BMI323_FIFO_CONFIG_REG;
 	d = EndianCvt16(Read16(&regaddr, 1)) | EndianCvt16(BMI323_FIFO_CONFIG_ACC_EN);
@@ -233,6 +234,7 @@ bool AccelBmi323::Enable()
 	regaddr = BMI323_ACC_CONFIG_REG;
 	d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_ACC_CONFIG_MODE_MASK;
 	d |= BMI323_ACC_CONFIG_MODE_CONT_EN;
+	printf("Enable : %x\n", d);
 	Write16(&regaddr, 1, d);
 
 	msDelay(20); // Require delay, do not remove
@@ -398,7 +400,7 @@ uint32_t GyroBmi323::Sensitivity(uint32_t Value)
 bool GyroBmi323::Enable()
 {
 	uint8_t regaddr;
-	uint8_t d;
+	uint16_t d;
 
 	regaddr = BMI323_FIFO_CONFIG_REG;
 	d = EndianCvt16(Read16(&regaddr, 1)) | BMI323_FIFO_CONFIG_GYR_EN;
@@ -535,9 +537,17 @@ bool AgBmi323::UpdateData()
 	bool res = false;
 	uint8_t dflag = 0;
 	uint8_t regaddr = BMI323_FIFO_FILL_LEVEL_REG;
-	int len = 0;
+	int len = EndianCvt16(Read16(&regaddr, 1));
 
-	Device::Read(&regaddr, 1, (uint8_t*)&len, 2);
+
+	//Device::Read(&regaddr, 1, (uint8_t*)&len, 2);
+
+	printf("fifo len = %d\n", len);
+
+	regaddr = BMI323_ACC_DATA_X_REG;
+	uint16_t x = EndianCvt16(Read16(&regaddr, 1));
+	printf("x = %d\n", x);
+
 	if (len <= 0)
 	{
 		return false;
