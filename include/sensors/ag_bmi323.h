@@ -480,6 +480,12 @@ SOFTWARE.
 
 #define BMI323_ADC_RANGE				0x7FFF		// 16 Bits
 
+#define BMI323_FIFO_DATA_FLAG_ACC					(1<<0)	//!< Fifo contains Acc data
+#define BMI323_FIFO_DATA_FLAG_GYR					(1<<1)	//!< Fifo contains Gyr data
+#define BMI323_FIFO_DATA_FLAG_TEMP					(1<<2)	//!< Fifo contains temperature data
+#define BMI323_FIFO_DATA_FLAG_TIME					(1<<3)	//!< Fifo contains timer data
+
+
 #ifdef __cplusplus
 
 class AccelBmi323 : public AccelSensor {
@@ -503,6 +509,9 @@ public:
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual uint8_t FifoDataFlag() = 0;
+	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
+	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
 };
 
 class GyroBmi323 : public GyroSensor {
@@ -527,6 +536,9 @@ public:
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual uint8_t FifoDataFlag() = 0;
+	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
+	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
 };
 
 class AgBmi323 : public AccelBmi323, public GyroBmi323 {
@@ -561,6 +573,14 @@ protected:
 
 	bool vbInitialized;
 	bool vbSensorEnabled[3];
+
+private:
+	virtual uint8_t FifoDataFlag() { return vFifoDataFlag; }
+	virtual void FifoDataFlagSet(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag; }
+	virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
+
+	uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
+	size_t vFifoFrameSize;	// Data word count
 };
 
 #endif // __cplusplus

@@ -45,7 +45,9 @@ static const uint32_t s_BMI323Odr[] = {
 bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init((uint32_t)CfgData.DevAddr, pIntrf, pTimer) == false)
+	{
 		return false;
+	}
 
 	AccelSensor::Type(SENSOR_TYPE_ACCEL);
 
@@ -54,23 +56,28 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 	SamplingFrequency(CfgData.Freq);
 	FilterFreq(CfgData.FltrFreq);
 
-	AccelBmi323::Enable();
-
 	if (CfgData.bInter)
 	{
 		uint8_t regaddr = BMI323_INT_MAP2_REG;
-		uint16_t d = 0;//BMI160_INT_EN_0_INT_ANYMO_X_EN | BMI160_INT_EN_0_INT_ANYMO_Y_EN | BMI160_INT_EN_0_INT_ANYMO_Z_EN;
+		uint16_t d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_INT_MAP2_ACC_DRDY_MASK;
 
+		d |= BMI323_INT_MAP2_ACC_DRDY_INT1;
+		Write16(&regaddr, 1, d);
+
+		regaddr = BMI323_FIFO_WATERMARK_REG;
+		d = 0x1FF;
 		Write16(&regaddr, 1, d);
 
 		regaddr = BMI323_INT_CONFIG_REG;
 		Write16(&regaddr, 1, BMI323_INT_CONFIG_LATCHED);
 
 		regaddr = BMI323_INT_MAP2_REG;
-		d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_INT_MAP2_ACC_DRDY_MASK;
-		d |= BMI323_INT_MAP2_ACC_DRDY_INT1;
-		Write16(&regaddr, 1, d);///BMI160_INT_EN_1_INT_HIGHG_X_EN | BMI160_INT_EN_1_INT_HIGHG_Y_EN |
-				//BMI160_INT_EN_1_INT_HIGHG_Z_EN |*/ BMI160_INT_EN_1_INT_DRDY_EN);
+		d = EndianCvt16(Read16(&regaddr, 1)) & ~(BMI323_INT_MAP2_ACC_DRDY_MASK |
+				BMI323_INT_MAP2_FIFO_FULL_MASK | BMI323_INT_MAP2_FIFO_WATERMARK_MASK |
+				BMI323_INT_MAP2_ERR_STATUS_MASK);
+		d |= BMI323_INT_MAP2_ACC_DRDY_INT1 | BMI323_INT_MAP2_FIFO_FULL_INT1 |
+			 BMI323_INT_MAP2_ERR_STATUS_INT1 | BMI323_INT_MAP2_FIFO_WATERMARK_INT1;
+		Write16(&regaddr, 1, d);
 
 		regaddr = BMI323_IO_CTRL_REG;
 		d = BMI323_IO_CTRL_INT1_PUSHPULL | BMI323_IO_CTRL_INT1_OUTPUT_EN;
@@ -82,12 +89,9 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 		Write16(&regaddr, 1, d);
 
-		//regaddr = BMI160_INT_MAP_0;
-		//Write16(&regaddr, 1, BMI160_INT_MAP_0_INT1_HIGHG | BMI160_INT_MAP_0_INT1_ANYMOTION);
-
-		//regaddr = BMI160_INT_MAP_1;
-		//Write16(&regaddr, 1, BMI160_INT_MAP_1_INT1_DRDY);
 	}
+
+	AccelBmi323::Enable();
 
 	return true;
 }
@@ -129,46 +133,41 @@ uint8_t AccelBmi323::Scale(uint8_t Value)
 uint32_t AccelBmi323::FilterFreq(uint32_t Freq)
 {
 	uint8_t t = AccelSensor::SamplingFrequency() / Freq;
-/*	uint8_t regaddr = BMI160_ACC_CONF;
-	uint8_t d = Read16(&regaddr, 1) & ~BMI160_ACC_CONF_ACC_BWP_MASK;
+	uint8_t regaddr = BMI323_ACC_CONFIG_REG;
+	uint16_t d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_ACC_CONFIG_AVG_NUM_MASK;
 
 	if ( t < 4)
 	{
-		d |= BMI160_ACC_CONF_ACC_BWP_OSR2;
+		d |= BMI323_ACC_CONFIG_AVG_NUM_2;
 		t = 1;
 	}
 	else if (t < 8)
 	{
-		d |= BMI160_ACC_CONF_ACC_BWP_OSR4;
+		d |= BMI323_ACC_CONFIG_AVG_NUM_4;
 		t = 2;
 	}
 	else if (t < 16)
 	{
-		d |= BMI160_ACC_CONF_ACC_BWP_AVG8;
+		d |= BMI323_ACC_CONFIG_AVG_NUM_8;
 		t = 3;
 	}
 	else if (t < 32)
 	{
-		d |= BMI160_ACC_CONF_ACC_BWP_AVG16;
+		d |= BMI323_ACC_CONFIG_AVG_NUM_16;
 		t = 4;
 	}
 	else if (t < 64)
 	{
-		d |= BMI160_ACC_CONF_ACC_BWP_AVG32;
+		d |= BMI323_ACC_CONFIG_AVG_NUM_32;
 		t = 5;
-	}
-	else if (t < 128)
-	{
-		d |= BMI160_ACC_CONF_ACC_BWP_AVG64;
-		t = 6;
 	}
 	else
 	{
-		d |= BMI160_ACC_CONF_ACC_BWP_AVG128;
-		t = 7;
+		d |= BMI323_ACC_CONFIG_AVG_NUM_64;
+		t = 6;
 	}
 
-	Write16(&regaddr, 1, d);*/
+	Write16(&regaddr, 1, d);
 
 	return AccelSensor::FilterFreq(AccelSensor::SamplingFrequency() >> t);
 }
@@ -225,11 +224,16 @@ bool AccelBmi323::Enable()
 	uint16_t d;
 
 	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = EndianCvt16(Read16(&regaddr, 1)) | EndianCvt16(BMI323_FIFO_CONFIG_ACC_EN);
+	d = EndianCvt16(Read16(&regaddr, 1)) | BMI323_FIFO_CONFIG_ACC_EN;
+
+	printf("fifo cfg %x\n", d);
 
 	Write16(&regaddr, 1, d);
 
 	msDelay(1); // Require delay, do not remove
+
+	regaddr = BMI323_FIFO_CTRL_REG;
+	Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
 
 	regaddr = BMI323_ACC_CONFIG_REG;
 	d = EndianCvt16(Read16(&regaddr, 1)) & ~BMI323_ACC_CONFIG_MODE_MASK;
@@ -246,6 +250,8 @@ bool AccelBmi323::Enable()
 	{
 		return false;
 	}
+
+	FifoDataFlagSet(BMI323_FIFO_DATA_FLAG_ACC);
 
 	return true;
 }
@@ -476,23 +482,18 @@ bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	DeviceID(d);
 	Valid(true);
 
-	msDelay(50);
-
 	regaddr = BMI323_FIFO_CTRL_REG;
-	Write16(&regaddr, 1, EndianCvt16(BMI323_FIFO_CTRL_FLUSH));
+	Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
 
 	msDelay(10);
 
 	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = EndianCvt16(Read16(&regaddr, 1)) | EndianCvt16(BMI323_FIFO_CONFIG_TIME_EN | BMI323_FIFO_CONFIG_TEMP_EN);
+	d = EndianCvt16(Read16(&regaddr, 1)) | BMI323_FIFO_CONFIG_TIME_EN | BMI323_FIFO_CONFIG_TEMP_EN;
 
 	Write16(&regaddr, 1, d);
 
-	msDelay(2);
-
-	//regaddr = BMI160_FIFO_DOWNS;
-	//Write16(&regaddr, 1, (2<<BMI160_FIFO_DOWNS_GYR_FIFO_DOWNS_BITPOS) | BMI160_FIFO_DOWNS_GYR_FIFO_FILT_DATA |
-	//					(2<<BMI160_FIFO_DOWNS_ACC_FIFO_DOWNS_BITPOS) | BMI160_FIFO_DOWNS_ACC_FIFO_FILT_DATA);
+	vFifoDataFlag = BMI323_FIFO_DATA_FLAG_TEMP | BMI323_FIFO_DATA_FLAG_TIME;
+	vFifoFrameSize = 2;
 
 	return true;
 }
@@ -523,9 +524,6 @@ void AgBmi323::Reset()
 	Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
 
 	msDelay(10);
-	//MagBmi160::Reset();
-
-//	msDelay(5);
 
 	// Read err register to clear
 	regaddr = BMI323_ERR_REG;
@@ -538,169 +536,52 @@ bool AgBmi323::UpdateData()
 	uint8_t dflag = 0;
 	uint8_t regaddr = BMI323_FIFO_FILL_LEVEL_REG;
 	int len = EndianCvt16(Read16(&regaddr, 1));
-
+	uint8_t fifo[256];
 
 	//Device::Read(&regaddr, 1, (uint8_t*)&len, 2);
 
-	printf("fifo len = %d\n", len);
+	//printf("fifo len = %d\n", len);
 
-	regaddr = BMI323_ACC_DATA_X_REG;
-	uint16_t x = EndianCvt16(Read16(&regaddr, 1));
-	printf("x = %d\n", x);
-
-	if (len <= 0)
+	if (len > vFifoFrameSize)
 	{
-		return false;
-	}
-/*
-#if 0
-	if (len > 1024)
-	{
-		uint8_t regaddr = BMI323_FIFO_CTRL_REG;
-		Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
+		regaddr = BMI323_FIFO_DATA_REG;
+		Read(&regaddr, 1, fifo, vFifoFrameSize << 1);
 
-		msDelay(10);
+		int16_t *p = (int16_t*)fifo;
 
-		return false;
-	}
-#else
-	len = min(len, BMI160_FIFO_MAX_SIZE);
-#endif
-	//printf("len %d\r\n", len);
-
-	uint8_t buff[BMI160_FIFO_MAX_SIZE];
-	uint64_t t = 0;
-
-	if (vpTimer)
-	{
-		t = vpTimer->uSecond();
-	}
-
-	//regaddr = BMI160_DATA_MAG_X_LSB;
-	//Device::Read(&regaddr, 1, (uint8_t*)MagSensor::vData.Val, 6);
-	//printf("mx %d %d %d\r\n", MagSensor::vData.X, MagSensor::vData.Y, MagSensor::vData.Z);
-
-	len += 4; // read time stamp
-
-	regaddr = BMI160_FIFO_DATA;
-	len = Device::Read(&regaddr, 1, buff, len);
-
-	uint8_t *p = buff;
-
-	while (len > 0)
-	{
-		BMI160_HEADER *hdr = (BMI160_HEADER *)p;
-
-		len--;
-
-		if (*p == 0x80 || len < 1)
+		if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_ACC)
 		{
-			break;
+			AccelSensor::vData.X = EndianCvt16(p[0]);
+			AccelSensor::vData.Y = EndianCvt16(p[1]);
+			AccelSensor::vData.Z = EndianCvt16(p[2]);
+			//memcpy(AccelSensor::vData.Val, p, 6);
+			p += 3;
 		}
-
-		p++;
-
-		if (hdr->Type == BMI160_FRAME_TYPE_DATA)
+		if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_GYR)
 		{
-			//printf("Data frame %x %d\r\n", *p, len);
-			if (hdr->Parm & BMI160_FRAME_DATA_PARM_MAG)
-			{
-				if (len >= 8)
-				{
-					dflag |= (1<<2);
-					memcpy(MagSensor::vData.Val, p, 6);
-
-					MagSensor::vData.Timestamp = t;
-					MagSensor::vData.Val[0] >>= 3;
-					MagSensor::vData.Val[1] >>= 3;
-					MagSensor::vData.Val[2] >>= 1;
-				}
-				p += 8;
-				len -= 8;
-			}
-			if (hdr->Parm & BMI160_FRAME_DATA_PARM_GYRO)
-			{
-				if (len >= 6)
-				{
-					dflag |= (1<<1);
-					memcpy(GyroBmi323::vData.Val, p, 6);
-					GyroBmi323::vData.Timestamp = t;
-					GyroBmi323::vData.Sensitivity = GyroSensor::Sensitivity();
-				}
-				p += 6;
-				len -= 6;
-			}
-			if (hdr->Parm & BMI160_FRAME_DATA_PARM_ACCEL)
-			{
-				if (len >= 6)
-				{
-					dflag |= (1<<0);
-					memcpy(AccelBmi323::vData.Val, p, 6);
-					AccelBmi323::vData.Timestamp = t;
-					AccelBmi323::vData.Scale = AccelSensor::Scale();
-				}
-				p += 6;
-				len -= 6;
-			}
+			GyroSensor::vData.X = EndianCvt16(p[0]);
+			GyroSensor::vData.Y = EndianCvt16(p[1]);
+			GyroSensor::vData.Z = EndianCvt16(p[2]);
+			p += 3;
 		}
-		else if (hdr->Type == BMI160_FRAME_TYPE_CONTROL)
+		if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TEMP)
 		{
-			switch (hdr->Parm)
-			{
-				case BMI160_FRAME_CONTROL_PARM_SKIP:
-					AccelBmi323::vDropCnt += *p;
-					GyroBmi323::vDropCnt = AccelBmi323::vDropCnt;
-					len--;
-					p++;
-					break;
-				case BMI160_FRAME_CONTROL_PARM_TIME:
-					if (len >= 3)
-					{
-						dflag |= (1<<3);
-						uint64_t t = 0;
-
-						memcpy(&t, p, 3);
-						t &= 0xFFFFFF;
-						t *= BMI160_TIME_RESOLUTION_USEC;
-
-						if (vpTimer == nullptr)
-						{
-							if (dflag & 1)
-							{
-								AccelBmi323::vData.Timestamp = t;
-							}
-							if (dflag & 2)
-							{
-								GyroBmi323::vData.Timestamp = t;
-							}
-							if (dflag & 4)
-							{
-								//MagBmi160::vData.Timestamp = t;
-							}
-						}
-					}
-					len -= 3;
-					p += 3;
-					break;
-				case BMI160_FRAME_CONTROL_PARM_INPUT:
-					//Read16(&regaddr, 1);
-					//printf("Input\r\n");
-					p++;
-					len--;
-					break;
-//				default:
-					//printf("Control??\r\n");
-			}
+			int16_t temp = EndianCvt16(p[0]);
+			///memcpy(GyroSensor::vData.Val, p, 6);
+			//AccelSensor::vData.Timestamp = *p;
+			p++;
 		}
-		else
+		if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TIME)
 		{
-			//printf("Unknown\r\n");
+			AccelSensor::vData.Timestamp = EndianCvt16(p[0]);
+			GyroSensor::vData.Timestamp = EndianCvt16(p[0]);
 		}
-	}
-*/
-	if (dflag != 0 && vEvtHandler)
-	{
-		vEvtHandler(this, DEV_EVT_DATA_RDY);
+		else if (vpTimer)
+		{
+			uint64_t t = vpTimer->mSecond();
+			AccelSensor::vData.Timestamp = t;
+			GyroSensor::vData.Timestamp = t;
+		}
 	}
 
 	return res;
@@ -714,9 +595,56 @@ void AgBmi323::IntHandler()
 	// Read all status
 	Read(&regaddr, 1, (uint8_t*)&d, 2);
 
-	if (d & (BMI323_INT_STATUS_IBI_GYR_DRDY | BMI323_INT_STATUS_IBI_ACC_DRDY |
-			 BMI323_INT_STATUS_IBI_FWM | BMI323_INT_STATUS_IBI_FFULL))
+	if (d & (BMI323_INT1_STATUS_ACC_DRDY | BMI323_INT1_STATUS_GYR_DRDY |
+			BMI323_INT1_STATUS_FWM | BMI323_INT1_STATUS_FFULL))
 	{
 		UpdateData();
+
+		if (vEvtHandler)
+		{
+			vEvtHandler(this, DEV_EVT_DATA_RDY);
+		}
 	}
 }
+
+static inline size_t FifoFrameSize(uint8_t Flag)
+{
+	size_t retval = 0;
+
+	if (Flag & BMI323_FIFO_DATA_FLAG_ACC)
+	{
+		retval += 3;
+	}
+
+	if (Flag & BMI323_FIFO_DATA_FLAG_GYR)
+	{
+		retval += 3;
+	}
+
+	if (Flag & BMI323_FIFO_DATA_FLAG_TEMP)
+	{
+		retval++;
+	}
+
+	if (Flag & BMI323_FIFO_DATA_FLAG_TIME)
+	{
+		retval += 1;
+	}
+
+	return retval;
+}
+
+void AgBmi323::FifoDataFlagSet(uint8_t Flag)
+{
+	vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag;
+
+	vFifoFrameSize = FifoFrameSize(vFifoDataFlag);
+}
+
+void AgBmi323::FifoDataFlagClr(uint8_t Flag)
+{
+	vFifoDataFlag = (vFifoDataFlag & ~Flag);
+
+	vFifoFrameSize = FifoFrameSize(vFifoDataFlag);
+}
+

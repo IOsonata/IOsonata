@@ -115,7 +115,7 @@ PmBq25120a g_Pmic;
 static const AccelSensorCfg_t s_AccelCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
-	.Freq = 1000,
+	.Freq = 100000,
 	.Scale = 2,
 	.FltrFreq = 0,
 	.bInter = true,
@@ -214,8 +214,9 @@ int main()
 		if (cnt-- < 0)
 		{
 			cnt = 10;
+			uint32_t t = accdata.Timestamp;
 			//printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)dt, arawdata.X, arawdata.Y, arawdata.Z);
-			printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
+			printf("Accel %d %d: %f %f %f %u\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z, t);
 			//printf("Quat %d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
 		}
 	}
