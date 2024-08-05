@@ -31,9 +31,49 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/bmi3.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/bmi3.c</locationURI>
+		</link>
+		<link>
+			<name>src/bmi3.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/bmi3.h</locationURI>
+		</link>
+		<link>
+			<name>src/bmi323.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/bmi323.c</locationURI>
+		</link>
+		<link>
+			<name>src/bmi323.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/bmi323.h</locationURI>
+		</link>
+		<link>
+			<name>src/bmi323_defs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/bmi323_defs.h</locationURI>
+		</link>
+		<link>
+			<name>src/bmi3_defs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/bmi3_defs.h</locationURI>
+		</link>
+		<link>
 			<name>src/board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
+		</link>
+		<link>
+			<name>src/common.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/common.c</locationURI>
+		</link>
+		<link>
+			<name>src/common.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/common.h</locationURI>
 		</link>
 		<link>
 			<name>src/main.cpp</name>
