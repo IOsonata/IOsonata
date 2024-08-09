@@ -1023,14 +1023,19 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	DEBUG_PRINTF("mpsl_init\r\n");
 
 	// Initialize Nordic multi-protocol support library (MPSL)
-	res = mpsl_init(&lfclk, PendSV_IRQn, BtStackMpslAssert);
+	res = mpsl_init(&lfclk, SWI00_IRQn, BtStackMpslAssert);
 	if (res < 0)
 	{
 		return false;
 	}
 
+#ifdef NRF54L15_XXAA
+	NVIC_SetPriority(SWI00_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
+	NVIC_EnableIRQ(SWI00_IRQn);
+#else
 	NVIC_SetPriority(PendSV_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
 	NVIC_EnableIRQ(PendSV_IRQn);
+#endif
 
 	s_BtAppData.CoexMode = pCfg->CoexMode;
 
@@ -1444,7 +1449,11 @@ bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint1
 }
 
 extern "C" {
+#ifdef NRF54L15_XXAA
+void SWI00_IRQHandler(void)
+#else
 void PendSV_Handler(void)
+#endif
 {
 	mpsl_low_priority_process();
 }
