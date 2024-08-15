@@ -41,6 +41,10 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/mag_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define BMM150_I2C_7BITS_DEVADDR							0x10	// CSB = 0, SDO = 0
 #define BMM150_I2C_7BITS_DEVADDR_ALT1						0x11	// CSB = 0, SDO = 1
 #define BMM150_I2C_7BITS_DEVADDR_ALT2						0x12	// CSB = 1, SDO = 0
@@ -156,5 +160,7 @@ public:
 
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AG_BMI160_H__

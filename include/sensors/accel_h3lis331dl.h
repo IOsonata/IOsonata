@@ -41,6 +41,10 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/accel_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define H3LIS331DL_I2C_DEVADDR				0x18	//!< 7 bits i2c address for SA0 = 0
 #define H3LIS331DL_I2C_DEVADDR1				0x19	//!< 7 bits i2c address for SA0 = 1
 
@@ -177,6 +181,7 @@ SOFTWARE.
 #define H3LIS331DL_INT2_DURATION_REG		0x37
 #define H3LIS331DL_INT2_DURATION_MASK							(0x7F<<0)
 
+#ifdef __cplusplus
 
 class AccelH3lis331dl : public AccelSensor {
 public:
@@ -258,5 +263,9 @@ public:
 
 private:
 };
+
+#endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __ACCEL_H3LIS331DL_H__

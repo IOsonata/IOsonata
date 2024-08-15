@@ -45,6 +45,10 @@ SOFTWARE.
 #include "sensors/mag_sensor.h"
 #include "sensors/temp_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define LSM303AGR_ACCEL_I2C_DEVADDR			0x19	//!< 7 bit i2c address for Accel
 #define LSM303AGR_MAG_I2C_DEVADDR			0x1E	//!< 7 bit i2c address for Mag
 
@@ -334,6 +338,8 @@ SOFTWARE.
 
 #define LSM303AGR_MAG_SENSITTIVITY				150		// nanoTesla per bit
 
+#ifdef __cplusplus
+
 // Accel, Mag, Temperature
 class AccelLsm303agr : public AccelSensor, public TempSensor  {
 public:
@@ -461,6 +467,8 @@ private:
 	int16_t vOffset[3];
 };
 
+#endif // __cplusplus
 
+/** @} End of group Sensors */
 
 #endif // __AM_LSM303AGR_H__

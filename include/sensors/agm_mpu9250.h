@@ -46,6 +46,10 @@ SOFTWARE.
 #include "sensors/mag_sensor.h"
 #include "sensors/temp_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define MPU9250_I2C_DEV_ADDR0			0x68		// AD0 low
 #define MPU9250_I2C_DEV_ADDR1			0x69		// AD0 high
 
@@ -604,5 +608,7 @@ private:
 };
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AGM_MPU9250_H__

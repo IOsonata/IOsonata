@@ -40,6 +40,10 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #pragma pack(push, 1)
 
 /// Magnetometer raw sensor data
@@ -159,5 +163,7 @@ private:
 };
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __MAG_SENSOR_H__

@@ -40,6 +40,10 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #pragma pack(push, 1)
 
 /// Accelerometer raw sensor data
@@ -194,5 +198,7 @@ private:
 };
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __ACCEL_SENSOR_H__

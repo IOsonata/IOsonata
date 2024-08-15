@@ -43,6 +43,10 @@ SOFTWARE.
 #include "sensors/gyro_sensor.h"
 #include "sensors/mag_bmm150.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define BMI160_I2C_7BITS_DEVADDR							0x68
 #define BMI160_I2C_7BITS_DEVADDR_ALT						0x69	// When SDO pull to VDDIO
 
@@ -580,5 +584,7 @@ protected:
 };
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AG_BMI160_H__

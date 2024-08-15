@@ -41,6 +41,10 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/mag_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define AK09916_I2C_7BITS_DEVADDR							0xC
 
 #define AK09916_WIA1_REG		0
@@ -108,5 +112,7 @@ public:
 
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AG_AK09916_H__

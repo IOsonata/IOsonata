@@ -43,6 +43,10 @@ SOFTWARE.
 #include "sensors/mag_ak09916.h"
 #include "sensors/temp_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define ICM20948_I2C_DEV_ADDR0			0x68		// AD0 low
 #define ICM20948_I2C_DEV_ADDR1			0x69		// AD0 high
 
@@ -757,6 +761,8 @@ private:
 };
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AGM_ICM20948_H__
 
