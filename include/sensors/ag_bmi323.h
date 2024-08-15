@@ -3,6 +3,10 @@
 
 @brief	Bosch BMI323 accel gyro implementation
 
+This file implements only accel & gyro part of the BMI323. IMU features are
+implemented in imu implementation file.
+
+NOTE: BMI323 read always send a dummy byte first.  Se datasheet for detail.
 
 @author	Hoang Nguyen Hoan
 @date	July 18, 2024
@@ -40,6 +44,10 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
+
+/** @addtogroup Sensors
+  * @{
+  */
 
 #define BMI323_I2C_7BITS_DEVADDR							0x68
 
@@ -564,9 +572,7 @@ public:
 protected:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
-	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
-		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
-	}
+	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
 		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
@@ -581,9 +587,12 @@ private:
 
 	uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
 	size_t vFifoFrameSize;	// Data word count
+	uint16_t vPrevTime;
+	uint64_t vRollover;
 };
 
 #endif // __cplusplus
 
+/** @} End of group Sensors */
 
 #endif	// __AG_BMI323_H__

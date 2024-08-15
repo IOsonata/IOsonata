@@ -41,6 +41,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "sensors/accel_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define ADXL362_DEVID_AD_REG		0x00
 
 #define ADXL362_DEVID_AD							0xAD
@@ -210,6 +214,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define ADXL362_DEVID	((ADXL362_DEVID_MST << 8) | ADXL362_DEVID_AD)
 
+#ifdef __cplusplus
 class AccelAdxl362 : public AccelSensor {
 public:
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
@@ -226,7 +231,10 @@ private:
 
 	bool vbInitialized;
 };
+#endif // __cplusplus
 
+
+/** @} End of group Sensors */
 
 #endif //__ACCEL_ADXL362_H__
 
