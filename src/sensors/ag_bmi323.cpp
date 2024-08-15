@@ -38,6 +38,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <math.h>
 
+#include "istddef.h"
 #include "idelay.h"
 #include "convutil.h"
 #include "sensors/ag_bmi323.h"
@@ -551,12 +552,22 @@ bool AgBmi323::UpdateData()
 
 	//printf("fifo len = %d\n", len);
 
-	if (len > vFifoFrameSize)
+	len = (min(len, 128) / vFifoFrameSize) * vFifoFrameSize;
+
+	if (len > 0)//vFifoFrameSize)
 	{
 		regaddr = BMI323_FIFO_DATA_REG;
-		Read(&regaddr, 1, fifo, vFifoFrameSize << 1);
+		Read(&regaddr, 1, fifo, len << 1);
 
-		int16_t *p = (int16_t*)fifo;
+
+	int16_t *p = (int16_t*)fifo;
+
+	//printf("fifo len = %d\n", len);
+
+	while (len > 0)
+	{
+//		regaddr = BMI323_FIFO_DATA_REG;
+//		Read(&regaddr, 1, fifo, vFifoFrameSize << 1);
 
 		if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_ACC)
 		{
@@ -592,6 +603,8 @@ bool AgBmi323::UpdateData()
 			//printf("t = %d\r\n", (uint32_t)t);
 			AccelSensor::vData.Timestamp = t;
 			GyroSensor::vData.Timestamp = t;
+
+			p++;
 		}
 		else if (vpTimer)
 		{
@@ -599,8 +612,10 @@ bool AgBmi323::UpdateData()
 			AccelSensor::vData.Timestamp = t;
 			GyroSensor::vData.Timestamp = t;
 		}
-	}
 
+		len -= vFifoFrameSize;
+	}
+	}
 	return res;
 }
 
@@ -657,7 +672,7 @@ static size_t FifoFrameSize(uint8_t Flag)
 
 	if (Flag & BMI323_FIFO_DATA_FLAG_TIME)
 	{
-		retval += 1;
+		retval ++;
 	}
 
 	return retval;
