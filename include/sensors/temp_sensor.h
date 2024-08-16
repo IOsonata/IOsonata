@@ -129,7 +129,7 @@ public:
 
 protected:
 
-	TempSensorData_t	vData;				//!< Last measured data
+	TempSensorData_t vData;				//!< Last measured data
 	TempDataRdyCb_t vDataRdyHandler;	//!< Data ready event handler
 };
 

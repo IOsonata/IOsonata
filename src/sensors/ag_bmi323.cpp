@@ -43,9 +43,9 @@ SOFTWARE.
 #include "convutil.h"
 #include "sensors/ag_bmi323.h"
 
-static const uint32_t s_BMI323Odr[] = {
-	781, 1562, 3125,
-};
+//static const uint32_t s_BMI323Odr[] = {
+//	781, 1562, 3125,
+//};
 
 bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
@@ -191,12 +191,12 @@ uint32_t AccelBmi323::SamplingFrequency(uint32_t Freq)
 
 	if (Freq < 1000)
 	{
-		accconf = 0;
+		accconf |= 1;
 		f = 781;
 	}
 	else if (Freq < 2500)
 	{
-		accconf = 1;
+		accconf |= 2;
 		f = 1562;
 	}
 	else
@@ -209,7 +209,7 @@ uint32_t AccelBmi323::SamplingFrequency(uint32_t Freq)
 			if (x < dif)
 			{
 				accconf &= ~BMI323_ACC_CONFIG_ODR_MASK;
-				accconf |= i + 2;
+				accconf |= i + 3;
 				dif = x;
 				f = t;
 			}
@@ -220,7 +220,7 @@ uint32_t AccelBmi323::SamplingFrequency(uint32_t Freq)
 			}
 		}
 	}
-	printf("acconfig = %d\n", accconf);
+	//printf("AccelBmi323::SamplingFrequency %d %d %x\n", Freq, f, accconf);
 	Write16(&regaddr, 1, accconf);
 
 	msDelay(1);
@@ -290,11 +290,20 @@ bool GyroBmi323::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf
 
 	GyroSensor::Type(SENSOR_TYPE_GYRO);
 
-	vData.Range = Range(0x7FFF);
+	vData.Range = Range(BMI323_ADC_RANGE);
 
 	Sensitivity(CfgData.Sensitivity);
 	SamplingFrequency(CfgData.Freq);
 	FilterFreq(CfgData.FltrFreq);
+
+	uint8_t regaddr = BMI323_ERR_REG;
+	uint16_t d = Read16(&regaddr, 1);
+
+	if (d != 0)
+	{
+		printf("GyroBmi323::Init error %x\n\r", d);
+		return false;
+	}
 
 	GyroBmi323::Enable();
 
@@ -304,26 +313,41 @@ bool GyroBmi323::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf
 uint32_t GyroBmi323::FilterFreq(uint32_t Freq)
 {
 	uint8_t t = GyroSensor::SamplingFrequency() / Freq;
-/*	uint8_t regaddr = BMI160_GYR_CONF;
-	uint8_t d = Read16(&regaddr, 1) & ~BMI160_GYR_CONF_GYR_BWP_MASK;
+	uint8_t regaddr = BMI323_GYR_CONFIG_REG;
+	uint8_t d = Read16(&regaddr, 1) & ~BMI323_GYR_CONFIG_AVG_NUM_MASK;
 
-	if ( t < 4)
+	if (t < 4)
 	{
-		d |= BMI160_GYR_CONF_GYR_BWP_OSR2;
+		d |= BMI323_GYR_CONFIG_AVG_NUM_2;
 		t = 1;
 	}
 	else if (t < 8)
 	{
-		d |= BMI160_GYR_CONF_GYR_BWP_OSR4;
+		d |= BMI323_GYR_CONFIG_AVG_NUM_4;
 		t = 2;
+	}
+	else if (t < 16)
+	{
+		d |= BMI323_GYR_CONFIG_AVG_NUM_8;
+		t = 3;
+	}
+	else if (t < 32)
+	{
+		d |= BMI323_GYR_CONFIG_AVG_NUM_16;
+		t = 4;
+	}
+	else if (t < 64)
+	{
+		d |= BMI323_GYR_CONFIG_AVG_NUM_32;
+		t = 5;
 	}
 	else
 	{
-		d |= BMI160_GYR_CONF_GYR_BWP_NORMAL;
-		t = 3;
+		d |= BMI323_GYR_CONFIG_AVG_NUM_64;
+		t = 6;
 	}
 
-	Write16(&regaddr, 1, d);*/
+	Write16(&regaddr, 1, d);
 
 	return GyroSensor::FilterFreq(GyroSensor::SamplingFrequency() >> t);
 }
@@ -331,18 +355,18 @@ uint32_t GyroBmi323::FilterFreq(uint32_t Freq)
 uint32_t GyroBmi323::SamplingFrequency(uint32_t Freq)
 {
 	uint8_t regaddr = BMI323_GYR_CONFIG_REG;
-	uint32_t accconf = Read16(&regaddr, 1) & ~BMI323_GYR_CONFIG_ODR_MASK;
+	uint32_t conf = Read16(&regaddr, 1) & ~BMI323_GYR_CONFIG_ODR_MASK;
 	uint32_t f = 0;
 	uint32_t dif = 100000;
 
 	if (Freq < 1000)
 	{
-		accconf = 0;
+		conf |= 1;
 		f = 781;
 	}
 	else if (Freq < 2500)
 	{
-		accconf = 1;
+		conf |= 2;
 		f = 1562;
 	}
 	else
@@ -354,8 +378,8 @@ uint32_t GyroBmi323::SamplingFrequency(uint32_t Freq)
 
 			if (x < dif)
 			{
-				accconf &= ~BMI323_GYR_CONFIG_ODR_MASK;
-				accconf |= i = 2;
+				conf &= ~BMI323_GYR_CONFIG_ODR_MASK;
+				conf |= i + 3;
 				dif = x;
 				f = t;
 			}
@@ -366,8 +390,8 @@ uint32_t GyroBmi323::SamplingFrequency(uint32_t Freq)
 			}
 		}
 	}
-
-	Write16(&regaddr, 1, accconf);
+//printf("SamplingFrequency %d %d %x\r\n", Freq, f, conf);
+	Write16(&regaddr, 1, conf);
 
 	msDelay(1);
 
@@ -423,21 +447,40 @@ bool GyroBmi323::Enable()
 
 	Write16(&regaddr, 1, d);
 
-	msDelay(5); // Require delay, do not remove
+	msDelay(1); // Require delay, do not remove
 
-	regaddr = BMI323_GYR_CONFIG_REG;
-	d = Read16(&regaddr, 1) | BMI323_GYR_CONFIG_MODE_CONT_EN;
-	Write16(&regaddr, 1, d);
-
-	msDelay(40); // Require delay, do not remove
+	regaddr = BMI323_FIFO_CTRL_REG;
+	Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
 
 	regaddr = BMI323_ERR_REG;
 	d = Read16(&regaddr, 1);
 
 	if (d != 0)
 	{
+		printf("BMI323_FIFO_CTRL_FLUSH err %x\r\n", d);
 		return false;
 	}
+
+	regaddr = BMI323_GYR_CONFIG_REG;
+	d = Read16(&regaddr, 1) & ~BMI323_GYR_CONFIG_MODE_MASK;
+	d |= BMI323_GYR_CONFIG_MODE_CONT_EN;
+
+	printf("Gyr Cfg : %x\r\n", d);
+
+	Write16(&regaddr, 1, d);
+
+	msDelay(20); // Require delay, do not remove
+
+	regaddr = BMI323_ERR_REG;
+	d = Read16(&regaddr, 1);
+
+	if (d != 0)
+	{
+		printf("Gyr err %x\r\n", d);
+		return false;
+	}
+
+	FifoDataFlagSet(BMI323_FIFO_DATA_FLAG_GYR);
 
 	return true;
 }
@@ -457,6 +500,40 @@ void GyroBmi323::Disable()
 	d = Read16(&regaddr, 1) & ~BMI323_FIFO_CONFIG_GYR_EN;
 
 	Write16(&regaddr, 1, d);
+}
+
+bool TempBmi323::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+{
+	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+		return false;
+
+	TempSensor::Type(SENSOR_TYPE_TEMP);
+
+
+	return true;
+}
+
+/**
+ * @brief	Power on or wake up device
+ *
+ * @return	true - If success
+ */
+bool TempBmi323::Enable()
+{
+	bool retval = false;
+
+	FifoDataFlagSet(BMI323_FIFO_DATA_FLAG_TEMP);
+
+	return retval;
+}
+
+/**
+ * @brief	Put device in power down or power saving sleep mode
+ *
+ * @return	None
+ */
+void TempBmi323::Disable()
+{
 }
 
 bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
@@ -548,73 +625,71 @@ bool AgBmi323::UpdateData()
 	int len = Read16(&regaddr, 1);
 	uint8_t fifo[256];
 
-	//Device::Read(&regaddr, 1, (uint8_t*)&len, 2);
-
-	//printf("fifo len = %d\n", len);
-
+	// Re-adjust length to read full frame only
 	len = (min(len, 128) / vFifoFrameSize) * vFifoFrameSize;
 
-	if (len > 0)//vFifoFrameSize)
+	if (len >= vFifoFrameSize)
 	{
 		regaddr = BMI323_FIFO_DATA_REG;
-		Read(&regaddr, 1, fifo, len << 1);
+		len = Read(&regaddr, 1, fifo, len << 1) >> 1;
 
+		int16_t *p = (int16_t*)fifo;
 
-	int16_t *p = (int16_t*)fifo;
-
-	//printf("fifo len = %d\n", len);
-
-	while (len > 0)
-	{
-//		regaddr = BMI323_FIFO_DATA_REG;
-//		Read(&regaddr, 1, fifo, vFifoFrameSize << 1);
-
-		if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_ACC)
+		while (len >= vFifoFrameSize)
 		{
-			//AccelSensor::vData.X = p[0];
-			//AccelSensor::vData.Y = p[1];
-			//AccelSensor::vData.Z = p[2];
-			memcpy(AccelSensor::vData.Val, p, 6);
-			p += 3;
-		}
-		if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_GYR)
-		{
-			//GyroSensor::vData.X = p[0];
-			//GyroSensor::vData.Y = p[1];
-			//GyroSensor::vData.Z = p[2];
-			memcpy(GyroSensor::vData.Val, p, 6);
-			p += 3;
-		}
-		if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TEMP)
-		{
-			int16_t temp = p[0];
-			//memcpy(GyroSensor::vData.Val, p, 6);
-			//AccelSensor::vData.Timestamp = *p;
-			p++;
-		}
-		if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TIME)
-		{
-			if (vPrevTime > (uint16_t)p[0])
+			if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_ACC)
 			{
-				vRollover += 0x10000U;
+				if (p[0] != BMI323_ACC_DUMMY_X)
+				{
+					// Take valid data only
+					memcpy(AccelSensor::vData.Val, p, 6);
+					AccelSensor::vSampleCnt++;
+				}
+				p += 3;
 			}
-			vPrevTime = (uint16_t)p[0];
-			uint64_t t = vRollover + ((uint64_t)p[0] & 0xFFFFULL);
-			//printf("t = %d\r\n", (uint32_t)t);
-			AccelSensor::vData.Timestamp = t;
-			GyroSensor::vData.Timestamp = t;
+			if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_GYR)
+			{
+				if (p[0] != BMI323_GYR_DUMMY_X)
+				{
+					// Take valid data only
+					memcpy(GyroSensor::vData.Val, p, 6);
+					GyroSensor::vSampleCnt++;
+				}
+				p += 3;
+			}
+			if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TEMP)
+			{
+				if (p[0] != BMI323_TEMP_DUMMY)
+				{
+					// Take valid data only
+					TempSensor::vData.Temperature = p[0];
+					TempSensor::vSampleCnt++;
+				}
+				p++;
+			}
+			if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TIME)
+			{
+				if (vPrevTime > (uint16_t)p[0])
+				{
+					vRollover += 0x10000U;
+				}
+				vPrevTime = (uint16_t)p[0];
+				uint64_t t = vRollover + ((uint64_t)p[0] & 0xFFFFULL);
+				AccelSensor::vData.Timestamp = t;
+				GyroSensor::vData.Timestamp = t;
+				TempSensor::vData.Timestamp = t;
+				p++;
+			}
+			else if (vpTimer)
+			{
+				uint64_t t = vpTimer->mSecond();
+				AccelSensor::vData.Timestamp = t;
+				GyroSensor::vData.Timestamp = t;
+				TempSensor::vData.Timestamp = t;
+			}
 
-			p++;
+			len -= vFifoFrameSize;
 		}
-		else if (vpTimer)
-		{
-			uint64_t t = vpTimer->mSecond();
-			AccelSensor::vData.Timestamp = t;
-			GyroSensor::vData.Timestamp = t;
-		}
-
-		len -= vFifoFrameSize;
-	}
 	}
 	return res;
 }

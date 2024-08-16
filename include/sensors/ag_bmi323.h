@@ -44,6 +44,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
+#include "sensors/temp_sensor.h"
 
 /** @addtogroup Sensors
   * @{
@@ -487,6 +488,9 @@ SOFTWARE.
 #define BMI323_CFG_RES_VALUE_TWO_MASK							(0x3<<14)
 
 #define BMI323_ADC_RANGE				0x7FFF		// 16 Bits
+#define BMI323_ACC_DUMMY_X				0x7F01
+#define BMI323_GYR_DUMMY_X				0x7F02
+#define BMI323_TEMP_DUMMY				-32768	//0x8000
 
 #define BMI323_FIFO_DATA_FLAG_ACC					(1<<0)	//!< Fifo contains Acc data
 #define BMI323_FIFO_DATA_FLAG_GYR					(1<<1)	//!< Fifo contains Gyr data
@@ -549,13 +553,58 @@ private:
 	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
 };
 
-class AgBmi323 : public AccelBmi323, public GyroBmi323 {
+class TempBmi323 : public TempSensor {
+public:
+	/**
+	 * @brief	Initialize sensor (require implementation).
+	 *
+	 * @param 	CfgData : Reference to configuration data
+	 * @param	pIntrf 	: Pointer to interface to the sensor.
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 * @param	pTimer	: Pointer to timer for retrieval of time stamp
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 *
+	 * @return
+	 * 			- true	: Success
+	 * 			- false	: Failed
+	 */
+	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	/**
+	 * @brief	Power on or wake up device
+	 *
+	 * @return	true - If success
+	 */
+	virtual bool Enable();
+
+	/**
+	 * @brief	Put device in power down or power saving sleep mode
+	 *
+	 * @return	None
+	 */
+	virtual void Disable();
+
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual uint8_t FifoDataFlag() = 0;
+	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
+	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
+};
+
+class AgBmi323 : public AccelBmi323, public GyroBmi323, public TempBmi323 {
 public:
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[0] = AccelBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[0];
 	}
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[1] = GyroBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[1];
+	}
+
+	virtual bool Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) {
+		vbSensorEnabled[2] = TempBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[2];
 	}
 
 	virtual bool Enable();
