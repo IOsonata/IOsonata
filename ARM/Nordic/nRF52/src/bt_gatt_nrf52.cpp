@@ -449,7 +449,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
 {
     uint32_t   err;
     ble_uuid_t ble_uuid;
-	//uint8_t baseidx = 0;
+	uint8_t baseidx = 0;
 
     // Initialize service structure
    // pSrvc->ConnHdl  = BLE_CONN_HANDLE_INVALID;
@@ -462,17 +462,17 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
 			pSrvc->Uuid.BaseIdx = BtUuidAddBase(pCfg->UuidBase);
 
 			uint8_t type;
-			err = sd_ble_uuid_vs_add((ble_uuid128_t*)pCfg->UuidBase, &type);// \>UuidType);
+			err = sd_ble_uuid_vs_add((ble_uuid128_t*)pCfg->UuidBase, &ble_uuid.type);// \>UuidType);
 			if (err != NRF_SUCCESS)
 			{
 				return false;
 			}
-			pSrvc->Uuid.BaseIdx = type;
+			//pSrvc->Uuid.BaseIdx = type;
 			//baseidx = BtUuidAddBase(pCfg->UuidBase);
     	}
     }
 #endif
-    ble_uuid.type = BtUuidAddBase(pCfg->UuidBase);//pSrvc->Uuid.BaseIdx;
+//    ble_uuid.type = BtUuidAddBase(pCfg->UuidBase);//pSrvc->Uuid.BaseIdx;
     ble_uuid.uuid = pCfg->UuidSrvc;
 
     err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->Hdl);
