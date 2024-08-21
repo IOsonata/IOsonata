@@ -136,7 +136,7 @@ extern "C" {
  * @return	Temperature in degree C * 100
  */
 static inline int32_t CalcNtcTemp(uint32_t R, uint32_t R25, uint32_t Beta) {
-	return (int32_t)(100.0 / (log((float)R/R25) / (float)Beta + 1.0 / 298.15) - 273.15);
+	return (int32_t)(100.0 / (log((float)R/R25) / (float)Beta + 1.0 / 298.15) - 27315);
 }
 
 /**
