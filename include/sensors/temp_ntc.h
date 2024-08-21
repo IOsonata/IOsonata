@@ -49,6 +49,10 @@ SOFTWARE.
 
 #include "sensors/temp_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 typedef struct __Ntc_Temp_Res {
 	int32_t Temp;	//!< Temperature in C * 100
 	uint32_t Res;	//!< Resistor value in Ohm
@@ -149,5 +153,7 @@ int32_t LookupNtcTemp(uint32_t Res, const NtcTempRes_t *pNtcTbl, const size_t Ta
 #ifdef __cplusplus
 }
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __TEMP_NTC_H__

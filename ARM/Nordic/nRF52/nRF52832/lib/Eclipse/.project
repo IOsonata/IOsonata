@@ -1036,6 +1036,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/sensor.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/temp_ntc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/temp_ntc.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/temp_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/temp_sensor.h</locationURI>
@@ -1769,6 +1774,11 @@
 			<name>src/sensors/mag_sensor.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_sensor.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/temp_ntc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/temp_ntc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/tir_calipile.cpp</name>
