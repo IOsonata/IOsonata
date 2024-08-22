@@ -83,10 +83,12 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 		regaddr = BMI323_INT_MAP2_REG;
 		d = (Read16(&regaddr, 1));
 		d &= ~BMI323_INT_MAP2_ACC_DRDY_MASK;
-		//d |= BMI323_INT_MAP2_FIFO_FULL_MASK | BMI323_INT_MAP2_FIFO_WATERMARK_MASK |
-		//	 BMI323_INT_MAP2_ERR_STATUS_MASK);
-		d |= BMI323_INT_MAP2_ACC_DRDY_INT1 | BMI323_INT_MAP2_FIFO_FULL_INT1 |
-			 BMI323_INT_MAP2_ERR_STATUS_INT1 | BMI323_INT_MAP2_FIFO_WATERMARK_INT1;
+		d |= BMI323_INT_MAP2_ACC_DRDY_INT1;//
+
+		if (vpTimer == nullptr)
+		{
+			d |= BMI323_INT_MAP2_ERR_STATUS_INT1 | BMI323_INT_MAP2_FIFO_WATERMARK_INT1 | BMI323_INT_MAP2_FIFO_FULL_INT1;
+		}
 		Write16(&regaddr, 1, d);
 
 		regaddr = BMI323_IO_CTRL_REG;
@@ -233,17 +235,19 @@ bool AccelBmi323::Enable()
 	uint8_t regaddr;
 	uint16_t d;
 
-	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_ACC_EN;
+	if (vpTimer == nullptr)
+	{
+		regaddr = BMI323_FIFO_CONFIG_REG;
+		d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_ACC_EN;
+		Write16(&regaddr, 1, d);
 
-	printf("fifo cfg %x\n", d);
+		msDelay(1); // Require delay, do not remove
 
-	Write16(&regaddr, 1, d);
+		regaddr = BMI323_FIFO_CTRL_REG;
+		Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
 
-	msDelay(1); // Require delay, do not remove
-
-	regaddr = BMI323_FIFO_CTRL_REG;
-	Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
+		FifoDataFlagSet(BMI323_FIFO_DATA_FLAG_ACC);
+	}
 
 	regaddr = BMI323_ACC_CONFIG_REG;
 	d = Read16(&regaddr, 1) & ~BMI323_ACC_CONFIG_MODE_MASK;
@@ -260,8 +264,6 @@ bool AccelBmi323::Enable()
 	{
 		return false;
 	}
-
-	FifoDataFlagSet(BMI323_FIFO_DATA_FLAG_ACC);
 
 	return true;
 }
@@ -304,6 +306,17 @@ bool GyroBmi323::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf
 		printf("GyroBmi323::Init error %x\n\r", d);
 		return false;
 	}
+
+	regaddr = BMI323_INT_MAP2_REG;
+	d = (Read16(&regaddr, 1));
+	d &= ~BMI323_INT_MAP2_GYR_DRDY_MASK;
+	d |= BMI323_INT_MAP2_GYR_DRDY_INT1;//
+
+	if (vpTimer == nullptr)
+	{
+		d |= BMI323_INT_MAP2_ERR_STATUS_INT1 | BMI323_INT_MAP2_FIFO_FULL_INT1 | BMI323_INT_MAP2_FIFO_WATERMARK_INT1;
+	}
+	Write16(&regaddr, 1, d);
 
 	GyroBmi323::Enable();
 
@@ -442,15 +455,20 @@ bool GyroBmi323::Enable()
 	uint8_t regaddr;
 	uint16_t d;
 
-	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_GYR_EN;
+	if (vpTimer == nullptr)
+	{
+		regaddr = BMI323_FIFO_CONFIG_REG;
+		d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_GYR_EN;
 
-	Write16(&regaddr, 1, d);
+		Write16(&regaddr, 1, d);
 
-	msDelay(1); // Require delay, do not remove
+		msDelay(1); // Require delay, do not remove
 
-	regaddr = BMI323_FIFO_CTRL_REG;
-	Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
+		regaddr = BMI323_FIFO_CTRL_REG;
+		Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
+
+		FifoDataFlagSet(BMI323_FIFO_DATA_FLAG_GYR);
+	}
 
 	regaddr = BMI323_ERR_REG;
 	d = Read16(&regaddr, 1);
@@ -479,8 +497,6 @@ bool GyroBmi323::Enable()
 		printf("Gyr err %x\r\n", d);
 		return false;
 	}
-
-	FifoDataFlagSet(BMI323_FIFO_DATA_FLAG_GYR);
 
 	return true;
 }
@@ -552,7 +568,7 @@ bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 
 	if (pTimer != NULL)
 	{
-		AccelSensor::vpTimer = pTimer;
+		vpTimer = pTimer;
 	}
 
 	// Read chip id
@@ -574,13 +590,16 @@ bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 
 	msDelay(10);
 
-	regaddr = BMI323_FIFO_CONFIG_REG;
-	d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_TIME_EN | BMI323_FIFO_CONFIG_TEMP_EN;
+	if (vpTimer == nullptr)
+	{
+		regaddr = BMI323_FIFO_CONFIG_REG;
+		d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_TIME_EN | BMI323_FIFO_CONFIG_TEMP_EN;
 
-	Write16(&regaddr, 1, d);
+		Write16(&regaddr, 1, d);
 
-	vFifoDataFlag = BMI323_FIFO_DATA_FLAG_TEMP | BMI323_FIFO_DATA_FLAG_TIME;
-	vFifoFrameSize = 2;
+		vFifoDataFlag = BMI323_FIFO_DATA_FLAG_TEMP | BMI323_FIFO_DATA_FLAG_TIME;
+		vFifoFrameSize = 2;
+	}
 
 	return true;
 }
@@ -620,76 +639,84 @@ void AgBmi323::Reset()
 bool AgBmi323::UpdateData()
 {
 	bool res = false;
-	uint8_t dflag = 0;
-	uint8_t regaddr = BMI323_FIFO_FILL_LEVEL_REG;
-	int len = Read16(&regaddr, 1);
-	uint8_t fifo[256];
 
-	// Re-adjust length to read full frame only
-	len = (min(len, 128) / vFifoFrameSize) * vFifoFrameSize;
-
-	if (len >= vFifoFrameSize)
+	if (vpTimer == nullptr)
 	{
-		regaddr = BMI323_FIFO_DATA_REG;
-		len = Read(&regaddr, 1, fifo, len << 1) >> 1;
+		uint8_t dflag = 0;
+		uint8_t regaddr = BMI323_FIFO_FILL_LEVEL_REG;
+		int len = Read16(&regaddr, 1);
+		uint8_t fifo[256];
 
-		int16_t *p = (int16_t*)fifo;
+		// Re-adjust length to read full frame only
+		len = (min(len, 128) / vFifoFrameSize) * vFifoFrameSize;
 
-		while (len >= vFifoFrameSize)
+		if (len >= vFifoFrameSize)
 		{
-			if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_ACC)
-			{
-				if (p[0] != BMI323_ACC_DUMMY_X)
-				{
-					// Take valid data only
-					memcpy(AccelSensor::vData.Val, p, 6);
-					AccelSensor::vSampleCnt++;
-				}
-				p += 3;
-			}
-			if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_GYR)
-			{
-				if (p[0] != BMI323_GYR_DUMMY_X)
-				{
-					// Take valid data only
-					memcpy(GyroSensor::vData.Val, p, 6);
-					GyroSensor::vSampleCnt++;
-				}
-				p += 3;
-			}
-			if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TEMP)
-			{
-				if (p[0] != BMI323_TEMP_DUMMY)
-				{
-					// Take valid data only
-					TempSensor::vData.Temperature = p[0];
-					TempSensor::vSampleCnt++;
-				}
-				p++;
-			}
-			if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TIME)
-			{
-				if (vPrevTime > (uint16_t)p[0])
-				{
-					vRollover += 0x10000U;
-				}
-				vPrevTime = (uint16_t)p[0];
-				uint64_t t = vRollover + ((uint64_t)p[0] & 0xFFFFULL);
-				AccelSensor::vData.Timestamp = t;
-				GyroSensor::vData.Timestamp = t;
-				TempSensor::vData.Timestamp = t;
-				p++;
-			}
-			else if (vpTimer)
-			{
-				uint64_t t = vpTimer->mSecond();
-				AccelSensor::vData.Timestamp = t;
-				GyroSensor::vData.Timestamp = t;
-				TempSensor::vData.Timestamp = t;
-			}
+			regaddr = BMI323_FIFO_DATA_REG;
+			len = Read(&regaddr, 1, fifo, len << 1) >> 1;
 
-			len -= vFifoFrameSize;
+			int16_t *p = (int16_t*)fifo;
+
+			while (len >= vFifoFrameSize)
+			{
+				if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_ACC)
+				{
+					if (p[0] != BMI323_ACC_DUMMY_X)
+					{
+						// Take valid data only
+						memcpy(AccelSensor::vData.Val, p, 6);
+						AccelSensor::vSampleCnt++;
+					}
+					p += 3;
+				}
+				if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_GYR)
+				{
+					if (p[0] != BMI323_GYR_DUMMY_X)
+					{
+						// Take valid data only
+						memcpy(GyroSensor::vData.Val, p, 6);
+						GyroSensor::vSampleCnt++;
+					}
+					p += 3;
+				}
+				if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TEMP)
+				{
+					if (p[0] != BMI323_TEMP_DUMMY)
+					{
+						// Take valid data only
+						TempSensor::vData.Temperature = p[0];
+						TempSensor::vSampleCnt++;
+					}
+					p++;
+				}
+				if (vFifoDataFlag & BMI323_FIFO_DATA_FLAG_TIME)
+				{
+					if (vPrevTime > (uint16_t)p[0])
+					{
+						vRollover += 0x10000U;
+					}
+					vPrevTime = (uint16_t)p[0];
+					uint64_t t = vRollover + ((uint64_t)p[0] & 0xFFFFULL);
+					AccelSensor::vData.Timestamp = t;
+					GyroSensor::vData.Timestamp = t;
+					TempSensor::vData.Timestamp = t;
+					p++;
+				}
+				else if (vpTimer)
+				{
+					uint64_t t = vpTimer->mSecond();
+					AccelSensor::vData.Timestamp = t;
+					GyroSensor::vData.Timestamp = t;
+					TempSensor::vData.Timestamp = t;
+				}
+
+				len -= vFifoFrameSize;
+			}
 		}
+	}
+	else
+	{
+		// Non FIFO
 	}
 	return res;
 }
