@@ -123,12 +123,17 @@ extern "C" {
 /**
  * @brief	Calculate Temperature based on datasheet R25 & Beta parameters
  * 
+ * This function do a linear approximation calculation of the NTC temperature. It does not take
+ * into account the coefficient A, B, C, D
+ *
  * Calculation is based on the formula :
  * 
  * 	Tk = 1 / (ln(R/R25) / Beta + 1 / T25); T25 = 298.15K
  *
  * 	Tc = Tk - 273.15K
  * 
+ * This calculation only have a precision about 2 C. For better precision, use lookup table
+ *
  * @param 	R		: Measured resistor value in Ohm
  * @param	R25		: Datasheet resistor value at 25C in Ohm
  * @param	Beta	: Datasheet Beta value
