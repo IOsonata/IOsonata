@@ -119,7 +119,7 @@ static const AccelSensorCfg_t s_AccelCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 100000,
-	.Scale = 2,
+	.Scale = 8,
 	.FltrFreq = 0,
 	.bInter = true,
 	.IntPol = DEVINTR_POL_LOW,
@@ -128,9 +128,9 @@ static const AccelSensorCfg_t s_AccelCfg = {
 static const GyroSensorCfg_t s_GyroCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
-	.Freq = 50000,
+	.Freq = 200000,
 	.Sensitivity = 10,
-	.FltrFreq = 200,
+	.FltrFreq = 0,
 };
 
 AgBmi323 g_MotSensor;
@@ -162,6 +162,14 @@ extern "C" {
  */
 BMI3_INTF_RET_TYPE bmi3_i2c_read(uint8_t reg_addr, uint8_t *reg_data, uint32_t len, void *intf_ptr)
 {
+    uint8_t device_addr = *(uint8_t*)intf_ptr;
+
+    if (g_I2c.Read(device_addr, &reg_addr, 1, reg_data, len) > 0)
+    {
+    	return 0;
+    }
+
+    return -1;
 
 }
 
@@ -178,7 +186,14 @@ BMI3_INTF_RET_TYPE bmi3_i2c_read(uint8_t reg_addr, uint8_t *reg_data, uint32_t l
  */
 BMI3_INTF_RET_TYPE bmi3_i2c_write(uint8_t reg_addr, const uint8_t *reg_data, uint32_t len, void *intf_ptr)
 {
+    uint8_t device_addr = *(uint8_t*)intf_ptr;
 
+    if (g_I2c.Write(device_addr, &reg_addr, 1, (uint8_t*)reg_data, len) > 0)
+    {
+    	return 0;
+    }
+
+    return -1;
 }
 
 /*!
@@ -411,6 +426,72 @@ static int8_t set_sensor_fifo_config(struct bmi3_dev *dev)
     return rslt;
 }
 
+/*!
+ *  @brief This internal API is used to set configurations for gyro.
+ */
+static int8_t set_gyro_config(struct bmi3_dev *dev)
+{
+    struct bmi3_map_int map_int = { 0 };
+
+    /* Status of API are returned to this variable. */
+    int8_t rslt;
+
+    /* Structure to define the type of sensor and its configurations. */
+    struct bmi3_sens_config config;
+
+    /* Configure the type of feature. */
+    config.type = BMI323_GYRO;
+
+    /* Get default configurations for the type of feature selected. */
+    rslt = bmi323_get_sensor_config(&config, 1, dev);
+    bmi3_error_codes_print_result("Get sensor config", rslt);
+
+    if (rslt == BMI323_OK)
+    {
+        map_int.gyr_drdy_int = BMI3_INT1;
+
+        /* Map data ready interrupt to interrupt pin. */
+        rslt = bmi323_map_interrupt(map_int, dev);
+        bmi3_error_codes_print_result("Map interrupt", rslt);
+
+        if (rslt == BMI323_OK)
+        {
+            /* The user can change the following configuration parameters according to their requirement. */
+            /* Output Data Rate. By default ODR is set as 100Hz for gyro. */
+            config.cfg.gyr.odr = BMI3_GYR_ODR_100HZ;
+
+            /* Gyroscope Angular Rate Measurement Range. By default the range is 2000dps. */
+            config.cfg.gyr.range = BMI3_GYR_RANGE_2000DPS;
+
+            /*  The Gyroscope bandwidth coefficient defines the 3 dB cutoff frequency in relation to the ODR
+             *  Value   Name      Description
+             *    0   odr_half   BW = gyr_odr/2
+             *    1  odr_quarter BW = gyr_odr/4
+             */
+            config.cfg.gyr.bwp = BMI3_GYR_BW_ODR_HALF;
+
+            /* By default the gyro is disabled. Gyro is enabled by selecting the mode. */
+            config.cfg.gyr.gyr_mode = BMI3_GYR_MODE_NORMAL;
+
+            /* Value    Name    Description
+             *  000     avg_1   No averaging; pass sample without filtering
+             *  001     avg_2   Averaging of 2 samples
+             *  010     avg_4   Averaging of 4 samples
+             *  011     avg_8   Averaging of 8 samples
+             *  100     avg_16  Averaging of 16 samples
+             *  101     avg_32  Averaging of 32 samples
+             *  110     avg_64  Averaging of 64 samples
+             */
+            config.cfg.gyr.avg_num = BMI3_GYR_AVG1;
+
+            /* Set the gyro configurations. */
+            rslt = bmi323_set_sensor_config(&config, 1, dev);
+            bmi3_error_codes_print_result("Set sensor config", rslt);
+        }
+    }
+
+    return rslt;
+}
 
 bool HardwareInit()
 {
@@ -439,6 +520,13 @@ bool HardwareInit()
 	{
 		g_pAccel = &g_MotSensor;
 	}
+
+	res = g_MotSensor.Init(s_GyroCfg, &g_Spi, &g_Timer);
+	if (res == true)
+	{
+		g_pGyro = &g_MotSensor;
+	}
+
 #endif
 
 	return res;
@@ -538,7 +626,7 @@ int main()
     bmi3_coines_deinit();
 
     return rslt;
-#elif 1
+#elif 0
 
     /* Sensor initialization configuration. */
     struct bmi3_dev dev;
@@ -758,6 +846,101 @@ int main()
 
     return rslt;
 
+#elif 0
+    /* Status of API are returned to this variable. */
+    int8_t rslt;
+
+    /* Variable to define limit to print gyro data. */
+    uint8_t limit = 100;
+
+    float x = 0, y = 0, z = 0;
+    uint8_t indx = 0;
+
+    /* Sensor initialization configuration. */
+    struct bmi3_dev dev = { 0 };
+
+    /* Create an instance of sensor data structure. */
+    struct bmi3_sensor_data sensor_data = { 0 };
+
+    /* Initialize the interrupt status of gyro. */
+    uint16_t int_status = 0;
+
+    /* Structure to define gyro configuration. */
+    struct bmi3_sens_config config = { 0 };
+
+    /* Function to select interface between SPI and I2C, according to that the device structure gets updated.
+     * Interface reference is given as a parameter
+     * For I2C : BMI3_I2C_INTF
+     * For SPI : BMI3_SPI_INTF
+     */
+    rslt = bmi3_interface_init(&dev, BMI3_SPI_INTF);
+    bmi3_error_codes_print_result("bmi3_interface_init", rslt);
+
+    if (rslt == BMI323_OK)
+    {
+        /* Initialize bmi323. */
+        rslt = bmi323_init(&dev);
+        bmi3_error_codes_print_result("bmi323_init", rslt);
+
+        if (rslt == BMI323_OK)
+        {
+            /* Gyro configuration settings. */
+            rslt = set_gyro_config(&dev);
+
+            if (rslt == BMI323_OK)
+            {
+                rslt = bmi323_get_sensor_config(&config, 1, &dev);
+                bmi3_error_codes_print_result("bmi323_get_sensor_config", rslt);
+            }
+
+            if (rslt == BMI323_OK)
+            {
+                /* Select gyro sensor. */
+                sensor_data.type = BMI323_GYRO;
+
+                printf("\nData set, Range, Gyr_Raw_X, Gyr_Raw_Y, Gyr_Raw_Z, Gyr_dps_X, Gyr_dps_Y, Gyr_dps_Z\n\n");
+
+                /* Loop to print gyro data when interrupt occurs. */
+                while (indx <= limit)
+                {
+                    /* To get the data ready interrupt status of gyro. */
+                    rslt = bmi323_get_int1_status(&int_status, &dev);
+                    bmi3_error_codes_print_result("Get interrupt status", rslt);
+
+                    /* To check the data ready interrupt status and print the status for 10 samples. */
+                    if (int_status & BMI3_INT_STATUS_GYR_DRDY)
+                    {
+                        /* Get gyro data for x, y and z axis. */
+                        rslt = bmi323_get_sensor_data(&sensor_data, 1, &dev);
+                        bmi3_error_codes_print_result("Get sensor data", rslt);
+
+                        /* Converting lsb to degree per second for 16 bit gyro at 2000dps range. */
+                        x = lsb_to_dps(sensor_data.sens_data.gyr.x, (float)2000, dev.resolution);
+                        y = lsb_to_dps(sensor_data.sens_data.gyr.y, (float)2000, dev.resolution);
+                        z = lsb_to_dps(sensor_data.sens_data.gyr.z, (float)2000, dev.resolution);
+
+                        /* Print the data in dps. */
+                        printf("%d, %d, %d, %d, %d, %4.2f, %4.2f, %4.2f\n",
+                               indx,
+                               config.cfg.gyr.range,
+                               sensor_data.sens_data.gyr.x,
+                               sensor_data.sens_data.gyr.y,
+                               sensor_data.sens_data.gyr.z,
+                               x,
+                               y,
+                               z);
+
+                        indx++;
+                    }
+                }
+            }
+        }
+    }
+
+    bmi3_coines_deinit();
+
+    return rslt;
+
 #else
 	AccelSensorRawData_t arawdata;
 	AccelSensorData_t accdata;
@@ -769,7 +952,7 @@ int main()
 	memset(&gyrodata, 0, sizeof(GyroSensorData_t));
 
 
-	uint32_t prevt = 0;
+	uint64_t prevt = 0;
 	int cnt = 10;
 	while (1)
 	{
@@ -777,16 +960,14 @@ int main()
 
 		//NRF_POWER->SYSTEMOFF = POWER_SYSTEMOFF_SYSTEMOFF_Enter;
 		//__WFE();
-		g_MotSensor.UpdateData();
-
-		uint32_t dt = arawdata.Timestamp - prevt;
-		prevt = arawdata.Timestamp;
+		g_MotSensor.IntHandler();
 
 		g_MotSensor.Read(arawdata);
 
 		if (g_pGyro)
 		{
 			g_pGyro->Read(grawdata);
+			g_pGyro->Read(gyrodata);
 		}
 
 		g_MotSensor.Read(accdata);
@@ -794,10 +975,20 @@ int main()
 
 		if (cnt-- < 0)
 		{
+			uint32_t dt = arawdata.Timestamp - prevt;
+			prevt = arawdata.Timestamp;
+
 			cnt = 10;
 			uint32_t t = accdata.Timestamp;
-			printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)dt, arawdata.X, arawdata.Y, arawdata.Z);
-			//printf("Accel %d %d: %f %f %f %u\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z, t);
+#if 0
+			printf("Accel %d: %d %d %d\r\n", dt, arawdata.X, arawdata.Y, arawdata.Z);
+			printf("Gyro %d: %d %d %d\r\n", dt, grawdata.X, grawdata.Y, grawdata.Z);
+			//printf("Accel %d %d: %f %f %f %u\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z, (uint32_t)t);
+#else
+			//printf("%12d: %d %d %d, %d %d %d\r\n", dt, arawdata.X, arawdata.Y, arawdata.Z, grawdata.X, grawdata.Y, grawdata.Z);
+			printf("%d: %f %f %f, %f %f %f %u\r\n", (uint32_t)dt, accdata.X, accdata.Y, accdata.Z, gyrodata.X, gyrodata.Y, gyrodata.Z, (uint32_t)t);
+#endif
+			//printf("Accel %d %d: %f %f %f %u\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z, (uint32_t)t);
 			//printf("Quat %d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
 		}
 	}

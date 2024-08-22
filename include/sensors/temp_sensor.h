@@ -61,6 +61,8 @@ typedef struct __TemperatureSensor_Data {
 
 #pragma pack(pop)
 
+#ifdef __cplusplus
+
 class TempSensor;
 
 typedef void (*TempDataRdyCb_t)(TempSensor * const pSensor, TempSensorData_t *pData);
@@ -82,7 +84,6 @@ typedef struct __TempSensor_Config {
 
 #pragma pack(pop)
 
-#ifdef __cplusplus
 
 /// Temperature sensor base class.  Sensor implementation must derive form this class
 class TempSensor : public Sensor {

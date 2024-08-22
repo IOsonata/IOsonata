@@ -70,8 +70,8 @@ SOFTWARE.
 
 #define BMI323_STATUS_POR_DETECTED							(1<<0)	//!< Power on Reset
 #define BMI323_STATUS_DRDY_TEMP								(1<<5)	//!< Data ready for temperature
-#define BMI323_STATUS_DRDY_GYR								(6<<1)	//!< Data ready for gyroscope
-#define BMI323_STATUS_DRDY_ACC								(7<<1)	//!< Data ready for accelerometer
+#define BMI323_STATUS_DRDY_GYR								(1<<6)	//!< Data ready for gyroscope
+#define BMI323_STATUS_DRDY_ACC								(1<<7)	//!< Data ready for accelerometer
 
 #define BMI323_ACC_DATA_X_REG			0x3
 #define BMI323_ACC_DATA_Y_REG			0x4

@@ -585,13 +585,13 @@ bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	DeviceID(d);
 	Valid(true);
 
-	regaddr = BMI323_FIFO_CTRL_REG;
-	Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
-
-	msDelay(10);
-
 	if (vpTimer == nullptr)
 	{
+		regaddr = BMI323_FIFO_CTRL_REG;
+		Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
+
+		msDelay(10);
+
 		regaddr = BMI323_FIFO_CONFIG_REG;
 		d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_TIME_EN | BMI323_FIFO_CONFIG_TEMP_EN;
 
@@ -639,13 +639,15 @@ void AgBmi323::Reset()
 bool AgBmi323::UpdateData()
 {
 	bool res = false;
+	uint8_t regaddr;
+	int len = 0;
 
 	if (vpTimer == nullptr)
 	{
-		uint8_t dflag = 0;
-		uint8_t regaddr = BMI323_FIFO_FILL_LEVEL_REG;
-		int len = Read16(&regaddr, 1);
 		uint8_t fifo[256];
+
+		regaddr = BMI323_FIFO_FILL_LEVEL_REG;
+		len = Read16(&regaddr, 1);
 
 		// Re-adjust length to read full frame only
 		len = (min(len, 128) / vFifoFrameSize) * vFifoFrameSize;
@@ -712,12 +714,41 @@ bool AgBmi323::UpdateData()
 
 				len -= vFifoFrameSize;
 			}
+			res = true;
 		}
 	}
 	else
 	{
 		// Non FIFO
+		uint64_t t = vpTimer->uSecond();
+
+		regaddr = BMI323_STATUS_REG;
+		uint16_t d = Read16(&regaddr, 1);
+
+		if (d & BMI323_STATUS_DRDY_ACC)
+		{
+			regaddr = BMI323_ACC_DATA_X_REG;
+			Read(&regaddr, 1, (uint8_t*)AccelSensor::vData.Val, 6);
+			AccelSensor::vData.Timestamp = t;
+
+			res = true;
+		}
+		if (d & BMI323_STATUS_DRDY_GYR)
+		{
+			regaddr = BMI323_GYR_DATA_X_REG;
+			Read(&regaddr, 1, (uint8_t*)GyroSensor::vData.Val, 6);
+			GyroSensor::vData.Timestamp = t;
+			res = true;
+		}
+		if (d & BMI323_STATUS_DRDY_TEMP)
+		{
+			regaddr = BMI323_TEMP_DATA_REG;
+			Read(&regaddr, 1, (uint8_t*)&TempSensor::vData.Temperature, 2);
+			TempSensor::vData.Timestamp = t;
+			res = true;
+		}
 	}
+
 	return res;
 }
 
@@ -730,9 +761,9 @@ void AgBmi323::IntHandler()
 	//Read(&regaddr, 1, (uint8_t*)&d, 2);
 	d = Read16(&regaddr, 1);
 
-//	if (d & (BMI323_INT1_STATUS_ACC_DRDY | BMI323_INT1_STATUS_GYR_DRDY |
-//			BMI323_INT1_STATUS_FWM | BMI323_INT1_STATUS_FFULL))
-	if (d & BMI323_INT1_STATUS_FWM | BMI323_INT1_STATUS_FFULL)
+	if (d & (BMI323_INT1_STATUS_ACC_DRDY | BMI323_INT1_STATUS_GYR_DRDY |
+			BMI323_INT1_STATUS_FWM | BMI323_INT1_STATUS_FFULL))
+//	if (d & BMI323_INT1_STATUS_FWM | BMI323_INT1_STATUS_FFULL)
 	{
 		UpdateData();
 
