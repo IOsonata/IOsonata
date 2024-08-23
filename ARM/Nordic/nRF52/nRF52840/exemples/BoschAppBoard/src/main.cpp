@@ -119,7 +119,7 @@ static const AccelSensorCfg_t s_AccelCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 100000,
-	.Scale = 8,
+	.Scale = 2,
 	.FltrFreq = 0,
 	.bInter = true,
 	.IntPol = DEVINTR_POL_LOW,
@@ -626,7 +626,7 @@ int main()
     bmi3_coines_deinit();
 
     return rslt;
-#elif 0
+#elif 1
 
     /* Sensor initialization configuration. */
     struct bmi3_dev dev;
@@ -806,7 +806,7 @@ int main()
                     z = lsb_to_dps(fifo_gyro_data[idx].z, (float)2000, dev.resolution);
 
                     /* Print the data in dps. */
-                    printf("%d, %d, %d, %d, %4.2f, %4.2f, %4.2f, %d\n",
+                    printf("%4d, %+4d, %+4d, %+4d, %+4.2f, %+4.2f, %+4.2f, %d\n",
                            idx,
                            fifo_gyro_data[idx].x,
                            fifo_gyro_data[idx].y,
@@ -973,7 +973,7 @@ int main()
 		g_MotSensor.Read(accdata);
 		//g_Imu.Read(quat);
 
-		if (cnt-- < 0)
+		//if (cnt-- < 0)
 		{
 			uint32_t dt = arawdata.Timestamp - prevt;
 			prevt = arawdata.Timestamp;
@@ -986,7 +986,7 @@ int main()
 			//printf("Accel %d %d: %f %f %f %u\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z, (uint32_t)t);
 #else
 			//printf("%12d: %d %d %d, %d %d %d\r\n", dt, arawdata.X, arawdata.Y, arawdata.Z, grawdata.X, grawdata.Y, grawdata.Z);
-			printf("%d: %f %f %f, %f %f %f %u\r\n", (uint32_t)dt, accdata.X, accdata.Y, accdata.Z, gyrodata.X, gyrodata.Y, gyrodata.Z, (uint32_t)t);
+			printf("%d: %.4f %.4f %.4f, %+4.4f %+4.4f %+4.4f %u\r\n", (uint32_t)dt, accdata.X, accdata.Y, accdata.Z, gyrodata.X, gyrodata.Y, gyrodata.Z, (uint32_t)t);
 #endif
 			//printf("Accel %d %d: %f %f %f %u\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z, (uint32_t)t);
 			//printf("Quat %d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
