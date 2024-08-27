@@ -306,6 +306,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/isha256.c</locationURI>
 		</link>
 		<link>
+			<name>src/littlefs</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/md5.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/md5.c</locationURI>
@@ -809,6 +814,26 @@
 			<name>src/imu/imu_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_mpu9250.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/littlefs/lfs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs.c</locationURI>
+		</link>
+		<link>
+			<name>src/littlefs/lfs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs.h</locationURI>
+		</link>
+		<link>
+			<name>src/littlefs/lfs_util.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs_util.c</locationURI>
+		</link>
+		<link>
+			<name>src/littlefs/lfs_util.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs_util.h</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/buzzer.cpp</name>
