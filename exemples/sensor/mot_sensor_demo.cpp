@@ -39,6 +39,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "idelay.h"
 #include "coredev/spi.h"
+#include "coredev/i2c.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "coredev/timer.h"
@@ -47,10 +48,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/agm_mpu9250.h"
 #include "sensors/agm_lsm9ds1.h"
 #include "sensors/ag_bmi160.h"
+#include "sensors/ag_bmi323.h"
 #include "sensors/accel_h3lis331dl.h"
 #include "imu/imu_invn_icm20948.h"
 #include "imu/imu_icm20948.h"
 #include "imu/imu_mpu9250.h"
+
+//#include "bmi323.h"
+//#include "common.h"
 
 #include "board.h"
 
@@ -78,8 +83,8 @@ static const IOPinCfg_t s_SpiPins[] = {
 	{NEBLINA_SPI_H3LIS_CS_PORT, NEBLINA_SPI_H3LIS_CS_PIN, NEBLINA_SPI_H3LIS_CS_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 #else
-	{BLUEIO_TAG_EVIM_IMU_CS_PORT, BLUEIO_TAG_EVIM_IMU_CS_PIN, BLUEIO_TAG_EVIM_IMU_CS_PINOP,
-     IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{SPI_BMI323_CS_PORT, SPI_BMI323_CS_PIN, SPI_BMI323_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
+	{SPI_H3LIS331_CS_PORT, SPI_H3LIS331_CS_PIN, SPI_H3LIS331_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 #endif
 };
 
@@ -104,6 +109,31 @@ static const SPICfg_t s_SpiCfg = {
 
 SPI g_Spi;
 
+//********** I2C **********
+static const IOPinCfg_t s_I2cPins[] = {
+	{I2C0_SDA_PORT, I2C0_SDA_PIN, I2C0_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
+	{I2C0_SCL_PORT, I2C0_SCL_PIN, I2C0_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
+};
+
+static const I2CCfg_t s_I2cCfg = {
+	.DevNo = 0,			// I2C device number
+	.Type = I2CTYPE_STANDARD,
+	.Mode = I2CMODE_MASTER,
+	.pIOPinMap = s_I2cPins,
+	.NbIOPins = sizeof(s_I2cPins) / sizeof(IOPinCfg_t),
+	.Rate = 100000,	// Rate
+	.MaxRetry = 5,			// Retry
+	.AddrType = I2CADDR_TYPE_NORMAL,
+	0,			// Number of slave addresses
+	{0,},		// Slave addresses
+	true,	// DMA
+	false,		// Use interrupt
+	7,			// Interrupt prio
+	NULL		// Event callback
+};
+
+I2C g_I2c;
+
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt);
 
 const static TimerCfg_t s_TimerCfg = {
@@ -117,9 +147,9 @@ const static TimerCfg_t s_TimerCfg = {
 Timer g_Timer;
 
 static const AccelSensorCfg_t s_AccelCfg = {
-	.DevAddr = 0,
+	.DevAddr = 0,//BMI323_I2C_7BITS_DEVADDR,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
-	.Freq = 1000,
+	.Freq = 50000,
 	.Scale = 2,
 	.FltrFreq = 0,
 	.bInter = true,
@@ -127,7 +157,7 @@ static const AccelSensorCfg_t s_AccelCfg = {
 };
 
 static const GyroSensorCfg_t s_GyroCfg = {
-	.DevAddr = 0,
+	.DevAddr = 0,//BMI323_I2C_7BITS_DEVADDR,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
 	.Sensitivity = 10,
@@ -147,10 +177,11 @@ static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
-#define ICM20948
+//#define ICM20948
 //#define MPU9250
 //#define BMI160
 //#define H3LIS331DL
+#define BMI323
 
 #ifdef ICM20948
 ImuIcm20948 g_Imu;
@@ -160,6 +191,8 @@ ImuMpu9250 g_Imu;
 AgmMpu9250 g_MotSensor;
 #elif defined(BMI160)
 AgBmi160 g_MotSensor;
+#elif defined(BMI323)
+AgBmi323 g_MotSensor;
 #elif defined(H3LIS331DL)
 AccelH3lis331dl g_MotSensor;
 #else
@@ -233,10 +266,13 @@ bool HardwareInit()
 {
 	bool res;
 
+
 	g_Timer.Init(s_TimerCfg);
-
+//#if SPI
 	res = g_Spi.Init(s_SpiCfg);
-
+//#else
+	res = g_I2c.Init(s_I2cCfg);
+//#endif
 	if (res == true)
 	{
 		res = g_MotSensor.Init(s_AccelCfg, &g_Spi, &g_Timer);
@@ -251,10 +287,10 @@ bool HardwareInit()
 			g_pGyro = &g_MotSensor;
 		}
 
-		res = g_MotSensor.Init(s_MagCfg, &g_Spi);
-		if (res == true)
+		//res = g_MotSensor.Init(s_MagCfg, &g_Spi);
+		//if (res == true)
 		{
-			g_pMag = &g_MotSensor;
+		//	g_pMag = &g_MotSensor;
 		}
 #endif
 

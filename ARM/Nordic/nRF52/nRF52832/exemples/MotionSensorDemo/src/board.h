@@ -94,11 +94,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define I2C0_SCL_PIN				17
 #define I2C0_SCL_PINOP				1
 
-#define UART_RX_PORT				0
-#define UART_RX_PIN					8
-#define UART_TX_PORT				0
-#define UART_TX_PIN					7
-
 #define SPI_DEVNO            		1
 #define SPI_MISO_PORT        		0
 #define SPI_MISO_PIN         		13
@@ -109,6 +104,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SPI_SCK_PORT         		0
 #define SPI_SCK_PIN          		11
 #define SPI_SCK_PINOP        		1
+
+#define UART_RX_PORT				0
+#define UART_RX_PIN					8
+#define UART_TX_PORT				0
+#define UART_TX_PIN					7
 
 #define SPI_BMI323_CS_PORT         	0
 #define SPI_BMI323_CS_PIN          	6
