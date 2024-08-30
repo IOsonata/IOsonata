@@ -44,6 +44,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //#define NORDIC_DK			// For Nordic DevKit
 //#define NEBLINA			// Neblina board
+#define BLYST_MOTION
 
 #ifdef NORDIC_DK
 
@@ -83,6 +84,49 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NEBLINA_SPI_BMI160_CS_PORT         0
 #define NEBLINA_SPI_BMI160_CS_PIN          24
 #define NEBLINA_SPI_BMI160_CS_PINOP        0
+
+#elif defined(BLYST_MOTION)
+
+#define I2C0_SDA_PORT				0
+#define I2C0_SDA_PIN				18
+#define I2C0_SDA_PINOP				1
+#define I2C0_SCL_PORT				0
+#define I2C0_SCL_PIN				17
+#define I2C0_SCL_PINOP				1
+
+#define UART_RX_PORT				0
+#define UART_RX_PIN					8
+#define UART_TX_PORT				0
+#define UART_TX_PIN					7
+
+#define SPI_DEVNO            		1
+#define SPI_MISO_PORT        		0
+#define SPI_MISO_PIN         		13
+#define SPI_MISO_PINOP       		1
+#define SPI_MOSI_PORT        		0
+#define SPI_MOSI_PIN         		12
+#define SPI_MOSI_PINOP       		1
+#define SPI_SCK_PORT         		0
+#define SPI_SCK_PIN          		11
+#define SPI_SCK_PINOP        		1
+
+#define SPI_BMI323_CS_PORT         	0
+#define SPI_BMI323_CS_PIN          	6
+#define SPI_BMI323_CS_PINOP        	0
+
+#define SPI_H3LIS331_CS_PORT       	0
+#define SPI_H3LIS331_CS_PIN        	15
+#define SPI_H3LIS331_CS_PINOP      	0
+
+#define BMI323_INT_PORT				0
+#define BMI323_INT_PIN				16
+#define BMI323_INT_PINOP			0
+
+#define BMM350_INT_PORT				0
+#define BMM350_INT_PIN				19
+#define BMM350_INT_PINOP			0
+
+
 
 #else
 
