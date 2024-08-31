@@ -82,9 +82,11 @@ static const IOPinCfg_t s_SpiPins[] = {
      IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{NEBLINA_SPI_H3LIS_CS_PORT, NEBLINA_SPI_H3LIS_CS_PIN, NEBLINA_SPI_H3LIS_CS_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-#else
+#elif defined(BLYST_MOTION)
 	{SPI_BMI323_CS_PORT, SPI_BMI323_CS_PIN, SPI_BMI323_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 	{SPI_H3LIS331_CS_PORT, SPI_H3LIS331_CS_PIN, SPI_H3LIS331_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
+#else
+	{BLUEIO_TAG_EVIM_IMU_CS_PORT, BLUEIO_TAG_EVIM_IMU_CS_PIN, BLUEIO_TAG_EVIM_IMU_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 #endif
 };
 
@@ -177,11 +179,11 @@ static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
-//#define ICM20948
+#define ICM20948
 //#define MPU9250
 //#define BMI160
 //#define H3LIS331DL
-#define BMI323
+//#define BMI323
 
 #ifdef ICM20948
 ImuIcm20948 g_Imu;
@@ -295,7 +297,7 @@ bool HardwareInit()
 #endif
 
 #if defined(ICM20948) || defined(MPU9250)
-		//res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
+		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
 //		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
 #endif
 	}

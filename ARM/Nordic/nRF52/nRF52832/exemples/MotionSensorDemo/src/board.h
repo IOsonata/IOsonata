@@ -44,7 +44,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //#define NORDIC_DK			// For Nordic DevKit
 //#define NEBLINA			// Neblina board
-#define BLYST_MOTION
+//#define BLYST_MOTION
 
 #ifdef NORDIC_DK
 

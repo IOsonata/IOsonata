@@ -319,6 +319,8 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 		regaddr = ICM20948_DMP_PROG_START_ADDRH;
 		vpIcm->Write((uint8_t*)&regaddr, 2, d, 2);
 
+		Init(Cfg, pIcm, pIcm, pIcm);
+
 		return true;
 	}
 
@@ -334,7 +336,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 
 	Imu::Init(Cfg, pAccel, pGyro, pMag);
 
-	vpIcm = (AgmIcm20948*)pAccel;
+//	vpIcm = (AgmIcm20948*)pAccel;
 	vEvtHandler = Cfg.EvtHandler;
 
 
@@ -343,6 +345,12 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 
 bool ImuIcm20948::Enable()
 {
+	uint16_t regaddr = ICM20948_USER_CTRL;
+	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2);
+
+	d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+	vpIcm->Write8((uint8_t*)&regaddr,	2, d);
+
 	return vpIcm->Enable();
 }
 
