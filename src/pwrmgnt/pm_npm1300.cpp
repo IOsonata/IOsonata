@@ -149,7 +149,7 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 
 bool PmnPM1300::Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt)
 {
-
+	return false;
 }
 
 /**
@@ -163,7 +163,7 @@ bool PmnPM1300::Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, Powe
  */
 uint16_t PmnPM1300::Level()
 {
-
+	return 0;
 }
 
 /**
@@ -177,12 +177,12 @@ uint16_t PmnPM1300::Level()
  */
 int32_t PmnPM1300::Temperature()
 {
-
+	return 0;
 }
 
 int32_t PmnPM1300::Voltage()
 {
-
+	return 0;
 }
 
 /**
@@ -202,6 +202,11 @@ int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 {
 	uint16_t regaddr = VoutIdx == 0 ? NPM1300_BUCK_BUCK1NORM_VOUT_REG : NPM1300_BUCK_BUCK2NORM_VOUT_REG;
 	regaddr = EndianCvt16(regaddr);
+	uint8_t d = NPM1300_LDSW_LDSW2VOUTSEL_2V;
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	return mVolt;
 }
 
 /**
@@ -215,6 +220,8 @@ bool PmnPM1300::Enable()
 	uint8_t d = NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING;
 
 	Write8((uint8_t*)&regaddr, 2, d);
+
+	return true;
 }
 
 /**
