@@ -130,6 +130,14 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 			NPM1300_MAIN_INTENEVENTS_VBUSIN0SET_EVENTVBUSREMOVED;
 		Write8((uint8_t*)&regaddr, 2, d);
 	}
+
+	for (int i = 0; i < Cfg.NbVout; i++)
+	{
+		if (Cfg.pVout[i].mVout > 0)
+		{
+			SetVout(i, Cfg.pVout[i].mVout, Cfg.pVout[i].mAlimit);
+		}
+	}
 /*
 	regaddr = NPM1300_BCHARGER_BCHGVTERM_REG;
 	d = NPM1300_BCHARGER_BCHGVTERM_BCHGVTERMNORM_4V00;
@@ -202,11 +210,12 @@ int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 {
 	uint16_t regaddr = VoutIdx == 0 ? NPM1300_BUCK_BUCK1NORM_VOUT_REG : NPM1300_BUCK_BUCK2NORM_VOUT_REG;
 	regaddr = EndianCvt16(regaddr);
-	uint8_t d = NPM1300_LDSW_LDSW2VOUTSEL_2V;
+	uint32_t vdif = (mVolt - 1000) / 100;
+	uint8_t d = (uint8_t)vdif;
 
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	return mVolt;
+	return (int32_t)d * 100 + 1000;
 }
 
 /**
