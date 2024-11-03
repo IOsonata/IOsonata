@@ -1,0 +1,2124 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../functions/">
+      
+      
+        <link rel="next" href="../hierarchy/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.0, mkdocs-material-9.5.31">
+    
+    
+      
+        <title>Group device_intrf - IOSonata Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.3cba04c6.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#group-device_intrf" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="IOSonata Documentation" class="md-header__button md-logo" aria-label="IOSonata Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            IOSonata Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Group device_intrf
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="IOSonata Documentation" class="md-nav__button md-logo" aria-label="IOSonata Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    IOSonata Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    IOSonata Documentation
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../class/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Classes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../functions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Device
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Device
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../annotated/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Class List
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../class_member_enums/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Class Member Enums
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../class_member_functions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Class Member Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../class_member_typedefs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Class Member Typedefs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../class_member_variables/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Class Member Variables
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../class_members/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Class Members
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../classes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Class Index
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../device_8h/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    File device.h
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../device_8h_source/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    File device.h
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../device__intrf_8h/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    File device_intrf.h
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../device__intrf_8h_source/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    File device_intrf.h
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dir_d44c64559bbebec7f509842c48db8b23/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Dir include
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../files/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    File List
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../functions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Group device_intrf
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Group device_intrf
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Classes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Types
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Functions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-static-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Static Functions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-types-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Types Documentation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Public Types Documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#enum-devintrf_evt" class="md-nav__link">
+    <span class="md-ellipsis">
+      enum DEVINTRF_EVT
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typedef-devintrf_type" class="md-nav__link">
+    <span class="md-ellipsis">
+      typedef DEVINTRF_TYPE
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typedef-devintrfevthandler_t" class="md-nav__link">
+    <span class="md-ellipsis">
+      typedef DevIntrfEvtHandler_t
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typedef-devintrf_t" class="md-nav__link">
+    <span class="md-ellipsis">
+      typedef DevIntrf_t
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enum-__dev_intrf_type" class="md-nav__link">
+    <span class="md-ellipsis">
+      enum __Dev_Intrf_Type
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-functions-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Functions Documentation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Public Functions Documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfread" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfRead
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfrx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfRx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrftx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfTx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrftxcomplete" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfTxComplete
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfwrite" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfWrite
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-static-functions-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Static Functions Documentation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Public Static Functions Documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfdisable" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfDisable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfenable" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfEnable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfgethandle" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfGetHandle
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfgetrate" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfGetRate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfgettype" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfGetType
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfpoweroff" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfPowerOff
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfreset" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfReset
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfrxdata" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfRxData
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfsetrate" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfSetRate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfstartrx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfStartRx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfstarttx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfStartTx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfstoprx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfStopRx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfstoptx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfStopTx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrftxdata" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfTxData
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hierarchy/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Class Hierarchy
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../links/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Links
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../macros/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Macros
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modules/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Modules
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../namespace_member_enums/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Namespace Member Enums
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../namespace_member_functions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Namespace Member Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../namespace_member_typedefs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Namespace Member Typedefs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../namespace_member_variables/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Namespace Member Variables
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../namespace_members/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Namespace Members
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../namespaces/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Namespace List
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Related Pages
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../struct____device__intrf/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Struct __device_intrf
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../variables/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Variables
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Classes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Types
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Functions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-static-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Static Functions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-types-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Types Documentation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Public Types Documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#enum-devintrf_evt" class="md-nav__link">
+    <span class="md-ellipsis">
+      enum DEVINTRF_EVT
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typedef-devintrf_type" class="md-nav__link">
+    <span class="md-ellipsis">
+      typedef DEVINTRF_TYPE
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typedef-devintrfevthandler_t" class="md-nav__link">
+    <span class="md-ellipsis">
+      typedef DevIntrfEvtHandler_t
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typedef-devintrf_t" class="md-nav__link">
+    <span class="md-ellipsis">
+      typedef DevIntrf_t
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enum-__dev_intrf_type" class="md-nav__link">
+    <span class="md-ellipsis">
+      enum __Dev_Intrf_Type
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-functions-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Functions Documentation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Public Functions Documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfread" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfRead
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfrx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfRx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrftx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfTx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrftxcomplete" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfTxComplete
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfwrite" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfWrite
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-static-functions-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Public Static Functions Documentation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Public Static Functions Documentation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfdisable" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfDisable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfenable" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfEnable
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfgethandle" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfGetHandle
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfgetrate" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfGetRate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfgettype" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfGetType
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfpoweroff" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfPowerOff
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfreset" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfReset
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfrxdata" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfRxData
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfsetrate" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfSetRate
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfstartrx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfStartRx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfstarttx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfStartTx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfstoprx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfStopRx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrfstoptx" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfStopTx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#function-deviceintrftxdata" class="md-nav__link">
+    <span class="md-ellipsis">
+      function DeviceIntrfTxData
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="group-device_intrf">Group device_intrf</h1>
+<p><a href="../modules/"><strong>Modules</strong></a> <strong>&gt;</strong> <a href="./"><strong>device_intrf</strong></a></p>
+<h2 id="classes">Classes</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Type</th>
+<th style="text-align: left;">Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">struct</td>
+<td style="text-align: left;"><a href="../struct____device__intrf/"><strong>__device_intrf</strong></a> <br><em>Device interface data structure.</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="public-types">Public Types</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Type</th>
+<th style="text-align: left;">Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">enum</td>
+<td style="text-align: left;"><a href="#enum-devintrf_evt"><strong>DEVINTRF_EVT</strong></a>  <br><em>Device interface event types.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">typedef enum <a href="./#enum-__dev_intrf_type"><strong>__Dev_Intrf_Type</strong></a></td>
+<td style="text-align: left;"><a href="#typedef-devintrf_type"><strong>DEVINTRF_TYPE</strong></a>  <br><em>Enumerating interface types.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">typedef int(*</td>
+<td style="text-align: left;"><a href="#typedef-devintrfevthandler_t"><strong>DevIntrfEvtHandler_t</strong></a>  <br><em>Event handler callback.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">typedef struct <a href="../struct____device__intrf/"><strong>__device_intrf</strong></a></td>
+<td style="text-align: left;"><a href="#typedef-devintrf_t"><strong>DevIntrf_t</strong></a>  <br><em>Device Interface forward data structure type definition. This structure is the base object. Pointer to an instance of this is passed to all function calls. See structure definition bellow for more details.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">enum</td>
+<td style="text-align: left;"><a href="#enum-__dev_intrf_type"><strong>__Dev_Intrf_Type</strong></a>  <br><em>Enumerating interface types.</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="public-functions">Public Functions</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Type</th>
+<th style="text-align: left;">Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">int</td>
+<td style="text-align: left;"><a href="#function-deviceintrfread"><strong>DeviceIntrfRead</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev, uint32_t DevAddr, uint8_t * pAdCmd, int AdCmdLen, uint8_t * pRxBuff, int RxLen) <br><em>Device read transfer.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">int</td>
+<td style="text-align: left;"><a href="#function-deviceintrfrx"><strong>DeviceIntrfRx</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev, uint32_t DevAddr, uint8_t * pBuff, int BuffLen) <br><em>Full receive data sequence.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">int</td>
+<td style="text-align: left;"><a href="#function-deviceintrftx"><strong>DeviceIntrfTx</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev, uint32_t DevAddr, uint8_t * pData, int DataLen) <br><em>Full transmit data sequence.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">void</td>
+<td style="text-align: left;"><a href="#function-deviceintrftxcomplete"><strong>DeviceIntrfTxComplete</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br><em>Signal Tx transfer completed.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">int</td>
+<td style="text-align: left;"><a href="#function-deviceintrfwrite"><strong>DeviceIntrfWrite</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev, uint32_t DevAddr, uint8_t * pAdCmd, int AdCmdLen, uint8_t * pData, int DataLen) <br><em>Device write transfer.</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="public-static-functions">Public Static Functions</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Type</th>
+<th style="text-align: left;">Name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">void</td>
+<td style="text-align: left;"><a href="#function-deviceintrfdisable"><strong>DeviceIntrfDisable</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br><em>Disable interface. Put the interface in lowest power mode.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">void</td>
+<td style="text-align: left;"><a href="#function-deviceintrfenable"><strong>DeviceIntrfEnable</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br><em>Wake up the interface.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">void *</td>
+<td style="text-align: left;"><a href="#function-deviceintrfgethandle"><strong>DeviceIntrfGetHandle</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br></td>
+</tr>
+<tr>
+<td style="text-align: right;">uint32_t</td>
+<td style="text-align: left;"><a href="#function-deviceintrfgetrate"><strong>DeviceIntrfGetRate</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br><em>Get data rate of the interface in Hertz. This is not a clock frequency but rather the transfer frequency (number of transfers per second). It has meaning base on the implementation as bits/sec or bytes/sec or whatever the case.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;"><a href="./#typedef-devintrf_type"><strong>DEVINTRF_TYPE</strong></a></td>
+<td style="text-align: left;"><a href="#function-deviceintrfgettype"><strong>DeviceIntrfGetType</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br><em>Get interface type.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">void</td>
+<td style="text-align: left;"><a href="#function-deviceintrfpoweroff"><strong>DeviceIntrfPowerOff</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br><em>Power off interface completely for power saving.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">void</td>
+<td style="text-align: left;"><a href="#function-deviceintrfreset"><strong>DeviceIntrfReset</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br><em>This function perform a reset of interface.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">int</td>
+<td style="text-align: left;"><a href="#function-deviceintrfrxdata"><strong>DeviceIntrfRxData</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev, uint8_t * pBuff, int BuffLen) <br><em>Receive data into pBuff passed in parameter. Assuming StartRx was called prior calling this function to get the actual data.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">uint32_t</td>
+<td style="text-align: left;"><a href="#function-deviceintrfsetrate"><strong>DeviceIntrfSetRate</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev, uint32_t Rate) <br><em>Set data rate of the interface in Hertz.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">bool</td>
+<td style="text-align: left;"><a href="#function-deviceintrfstartrx"><strong>DeviceIntrfStartRx</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev, uint32_t DevAddr) <br><em>Prepare start condition to receive data with subsequence RxData.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">bool</td>
+<td style="text-align: left;"><a href="#function-deviceintrfstarttx"><strong>DeviceIntrfStartTx</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev, uint32_t DevAddr) <br><em>Prepare start condition to transfer data with subsequence TxData.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">void</td>
+<td style="text-align: left;"><a href="#function-deviceintrfstoprx"><strong>DeviceIntrfStopRx</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br><em>Completion of read data phase.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">void</td>
+<td style="text-align: left;"><a href="#function-deviceintrfstoptx"><strong>DeviceIntrfStopTx</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev) <br><em>Completion of sending data via TxData.</em></td>
+</tr>
+<tr>
+<td style="text-align: right;">int</td>
+<td style="text-align: left;"><a href="#function-deviceintrftxdata"><strong>DeviceIntrfTxData</strong></a> (<a href="./#typedef-devintrf_t"><strong>DevIntrf_t</strong></a> *const pDev, uint8_t * pData, int DataLen) <br><em>Transfer data from pData passed in parameter. Assuming StartTx was called prior calling this function to send the actual data.</em></td>
+</tr>
+</tbody>
+</table>
+<h2 id="public-types-documentation">Public Types Documentation</h2>
+<h3 id="enum-devintrf_evt">enum DEVINTRF_EVT</h3>
+<pre><code>enum DEVINTRF_EVT {
+    DEVINTRF_EVT_RX_TIMEOUT,
+    DEVINTRF_EVT_RX_DATA,
+    DEVINTRF_EVT_RX_FIFO_FULL,
+    DEVINTRF_EVT_TX_TIMEOUT,
+    DEVINTRF_EVT_TX_READY,
+    DEVINTRF_EVT_TX_FIFO_EMPTY,
+    DEVINTRF_EVT_STATECHG,
+    DEVINTRF_EVT_READ_RQST,
+    DEVINTRF_EVT_WRITE_RQST,
+    DEVINTRF_EVT_COMPLETED
+};
+</code></pre>
+<hr>
+
+<h3 id="typedef-devintrf_type">typedef DEVINTRF_TYPE</h3>
+<pre><code>typedef enum __Dev_Intrf_Type DEVINTRF_TYPE;
+</code></pre>
+<hr>
+
+<h3 id="typedef-devintrfevthandler_t">typedef DevIntrfEvtHandler_t</h3>
+<p><em>Event handler callback.</em> </p>
+<pre><code>typedef int(* DevIntrfEvtHandler_t) (DevIntrf_t *const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
+</code></pre>
+<p>This is normally being called within interrupts, avoid blocking</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Device handle </li>
+<li><code>EvtId</code> : Event code </li>
+<li><code>pBuffer</code> : In/Out Buffer containing data
+ on DEVINTRF_EVT_RX_TIMEOUT &amp; DEVINTRF_EVT_RXDATA, pBuffer contains data received. If driver implements CFIFO, this parameter is NULL with BufferLen indicating total data in FIFO.
+ on DEVINTRF_EVT_TX_READY, pBuffer contains data to be transmit with max length BufferLen. If driver implements CFIFO, this parameter is NULL and BufferLen indicates amount of data stored in FIFO
+ on DEVINTRF_EVT_STATECHG, pBuffer contains state data. This is implementation specific for example UART implementation would contains line state info.</li>
+<li><code>Len</code> : Max buffer length. See above description</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>Number of bytes processed. Implementation specific.
+ in case of FIFO_FULL events, FIFO will be pushed out if return value is zero </p>
+<hr>
+
+<h3 id="typedef-devintrf_t">typedef DevIntrf_t</h3>
+<pre><code>typedef struct __device_intrf DevIntrf_t;
+</code></pre>
+<hr>
+
+<h3 id="enum-__dev_intrf_type">enum __Dev_Intrf_Type</h3>
+<pre><code>enum __Dev_Intrf_Type {
+    DEVINTRF_TYPE_UNKOWN,
+    DEVINTRF_TYPE_BT,
+    DEVINTRF_TYPE_ETH,
+    DEVINTRF_TYPE_I2C,
+    DEVINTRF_TYPE_CEL,
+    DEVINTRF_TYPE_SPI,
+    DEVINTRF_TYPE_QSPI,
+    DEVINTRF_TYPE_UART,
+    DEVINTRF_TYPE_USB,
+    DEVINTRF_TYPE_WIFI,
+    DEVINTRF_TYPE_I2S,
+    DEVINTRF_TYPE_PDM,
+    DEVINTRF_TYPE_OSPI
+};
+</code></pre>
+<hr>
+<h2 id="public-functions-documentation">Public Functions Documentation</h2>
+<h3 id="function-deviceintrfread">function DeviceIntrfRead</h3>
+<p><em>Device read transfer.</em> </p>
+<pre><code>int DeviceIntrfRead (
+    DevIntrf_t *const pDev,
+    uint32_t DevAddr,
+    uint8_t * pAdCmd,
+    int AdCmdLen,
+    uint8_t * pRxBuff,
+    int RxLen
+) 
+</code></pre>
+<p>A device read transfer usually starts with a write of a command or register address. Then follows with a read data results. This function encapsulate that functionality.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+<li><code>DevAddr</code> : The device selection id scheme </li>
+<li><code>pAdCmd</code> : Pointer to buffer containing address or command code to send </li>
+<li><code>AdCmdLen</code> : Size of addr/Cmd in bytes </li>
+<li><code>pRxBuff</code> : Pointer to memory area to receive data. </li>
+<li><code>RxLen</code> : Length of buffer memory in bytes</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>Number of bytes read </p>
+<hr>
+
+<h3 id="function-deviceintrfrx">function DeviceIntrfRx</h3>
+<p><em>Full receive data sequence.</em> </p>
+<pre><code>int DeviceIntrfRx (
+    DevIntrf_t *const pDev,
+    uint32_t DevAddr,
+    uint8_t * pBuff,
+    int BuffLen
+) 
+</code></pre>
+<p>This function does full receive data sequence by calling StartRx, RxData, StopRx.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+<li><code>DevAddr</code> : The device selection id scheme </li>
+<li><code>pBuff</code> : Pointer to memory area to receive data. </li>
+<li><code>BuffLen</code> : Length of buffer memory in bytes</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>Number of bytes read </p>
+<hr>
+
+<h3 id="function-deviceintrftx">function DeviceIntrfTx</h3>
+<p><em>Full transmit data sequence.</em> </p>
+<pre><code>int DeviceIntrfTx (
+    DevIntrf_t *const pDev,
+    uint32_t DevAddr,
+    uint8_t * pData,
+    int DataLen
+) 
+</code></pre>
+<p>This function does full transmit data sequence by calling StartTx, TxData, StopTx.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+<li><code>DevAddr</code> : The device selection id scheme </li>
+<li><code>pData</code> : Pointer to data to send. </li>
+<li><code>DataLen</code> : Length of data in bytes</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>Number of bytes read </p>
+<hr>
+
+<h3 id="function-deviceintrftxcomplete">function DeviceIntrfTxComplete</h3>
+<p><em>Signal Tx transfer completed.</em> </p>
+<pre><code>void DeviceIntrfTxComplete (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<p>This is useful for interrupt based transfer</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+</ul>
+<hr>
+
+<h3 id="function-deviceintrfwrite">function DeviceIntrfWrite</h3>
+<p><em>Device write transfer.</em> </p>
+<pre><code>int DeviceIntrfWrite (
+    DevIntrf_t *const pDev,
+    uint32_t DevAddr,
+    uint8_t * pAdCmd,
+    int AdCmdLen,
+    uint8_t * pData,
+    int DataLen
+) 
+</code></pre>
+<p>A device write transfer usually starts with a write of a command or register address. Then follows with a write data. This function encapsulate that functionality.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+<li><code>DevAddr</code> : The device selection id scheme </li>
+<li><code>pAdCmd</code> : Pointer to buffer containing address or command code to send </li>
+<li><code>AdCmdLen</code> : Size of addr/Cmd in bytes </li>
+<li><code>pData</code> : Pointer to data to send. </li>
+<li><code>DataLen</code> : Length of data in bytes</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>Number of bytes of data sent (not counting the Addr/Cmd). </p>
+<hr>
+<h2 id="public-static-functions-documentation">Public Static Functions Documentation</h2>
+<h3 id="function-deviceintrfdisable">function DeviceIntrfDisable</h3>
+<p><em>Disable interface. Put the interface in lowest power mode.</em> </p>
+<pre><code>static inline void DeviceIntrfDisable (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<p>If this is a physical interface, provide a way to turn off for energy saving. Make sure the turn off procedure can be turned back on without going through the full initialization sequence</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+</ul>
+<hr>
+
+<h3 id="function-deviceintrfenable">function DeviceIntrfEnable</h3>
+<p><em>Wake up the interface.</em> </p>
+<pre><code>static inline void DeviceIntrfEnable (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+</ul>
+<hr>
+
+<h3 id="function-deviceintrfgethandle">function DeviceIntrfGetHandle</h3>
+<pre><code>static inline void * DeviceIntrfGetHandle (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<hr>
+
+<h3 id="function-deviceintrfgetrate">function DeviceIntrfGetRate</h3>
+<p><em>Get data rate of the interface in Hertz. This is not a clock frequency but rather the transfer frequency (number of transfers per second). It has meaning base on the implementation as bits/sec or bytes/sec or whatever the case.</em> </p>
+<pre><code>static inline uint32_t DeviceIntrfGetRate (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>Transfer rate per second </p>
+<hr>
+
+<h3 id="function-deviceintrfgettype">function DeviceIntrfGetType</h3>
+<p><em>Get interface type.</em> </p>
+<pre><code>static inline DEVINTRF_TYPE DeviceIntrfGetType (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<p><strong>Returns:</strong></p>
+<p>Interface type </p>
+<hr>
+
+<h3 id="function-deviceintrfpoweroff">function DeviceIntrfPowerOff</h3>
+<p><em>Power off interface completely for power saving.</em> </p>
+<pre><code>static inline void DeviceIntrfPowerOff (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<p>This function will power off the interface completely. Not all interface provides this type of functionality. Once power off is call, full initialization cycle is required. Therefore there is no PowerOn counter part of this function contrary to the Enable/Disable functions.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+</ul>
+<hr>
+
+<h3 id="function-deviceintrfreset">function DeviceIntrfReset</h3>
+<p><em>This function perform a reset of interface.</em> </p>
+<pre><code>static inline void DeviceIntrfReset (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+</ul>
+<hr>
+
+<h3 id="function-deviceintrfrxdata">function DeviceIntrfRxData</h3>
+<p><em>Receive data into pBuff passed in parameter. Assuming StartRx was called prior calling this function to get the actual data.</em> </p>
+<pre><code>static inline int DeviceIntrfRxData (
+    DevIntrf_t *const pDev,
+    uint8_t * pBuff,
+    int BuffLen
+) 
+</code></pre>
+<p>Return -1 in case of interrupt based or transfer without waiting for completion. for example I2C where stop condition is handled asynchronously</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDevIntrf</code> : Pointer to an instance of the Device Interface </li>
+<li><code>pBuff</code> : Pointer to memory area to receive data. </li>
+<li><code>BuffLen</code> : Length of buffer memory in bytes</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>Number of bytes read -1 special case for interrupt driven without waiting for completion for example I2C where stop condition is handled asynchronously </p>
+<hr>
+
+<h3 id="function-deviceintrfsetrate">function DeviceIntrfSetRate</h3>
+<p><em>Set data rate of the interface in Hertz.</em> </p>
+<pre><code>static inline uint32_t DeviceIntrfSetRate (
+    DevIntrf_t *const pDev,
+    uint32_t Rate
+) 
+</code></pre>
+<p>This is not a clock frequency but rather the transfer frequency (number of transfers per second). It has meaning base on the implementation as bits/sec or bytes/sec or whatever the case</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+<li><code>Rate</code> : Data rate to be set in Hertz (transfer per second)</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>Actual transfer rate per second set. It is the real capable rate closest to rate being requested. </p>
+<hr>
+
+<h3 id="function-deviceintrfstartrx">function DeviceIntrfStartRx</h3>
+<p><em>Prepare start condition to receive data with subsequence RxData.</em> </p>
+<pre><code>static inline bool DeviceIntrfStartRx (
+    DevIntrf_t *const pDev,
+    uint32_t DevAddr
+) 
+</code></pre>
+<p>This can be in case such as start condition for I2C or Chip Select for SPI or precondition for DMA transfer or whatever requires it or not This function must check &amp; set the busy state for re-entrancy</p>
+<p>NOTE: On success StopRx must be called to release busy flag</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+<li><code>DevAddr</code> : The device selection id scheme</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>true - Success
+ false - failed. </p>
+<hr>
+
+<h3 id="function-deviceintrfstarttx">function DeviceIntrfStartTx</h3>
+<p><em>Prepare start condition to transfer data with subsequence TxData.</em> </p>
+<pre><code>static inline bool DeviceIntrfStartTx (
+    DevIntrf_t *const pDev,
+    uint32_t DevAddr
+) 
+</code></pre>
+<p>This can be in case such as start condition for I2C or Chip Select for SPI or precondition for DMA transfer or whatever requires it or not This function must check &amp; set the busy state for re-entrancy</p>
+<p>On success StopRx must be called to release busy flag</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+<li><code>DevAddr</code> : The device selection id scheme</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>true - Success
+ false - failed </p>
+<hr>
+
+<h3 id="function-deviceintrfstoprx">function DeviceIntrfStopRx</h3>
+<p><em>Completion of read data phase.</em> </p>
+<pre><code>static inline void DeviceIntrfStopRx (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<p>Do require post processing after data has been received via RxData This function must clear the busy state for re-entrancy</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+</ul>
+<hr>
+
+<h3 id="function-deviceintrfstoptx">function DeviceIntrfStopTx</h3>
+<p><em>Completion of sending data via TxData.</em> </p>
+<pre><code>static inline void DeviceIntrfStopTx (
+    DevIntrf_t *const pDev
+) 
+</code></pre>
+<p>Perform the require post processing after all data was transmitted via TxData. This function must clear the busy state for re-entrancy</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+</ul>
+<hr>
+
+<h3 id="function-deviceintrftxdata">function DeviceIntrfTxData</h3>
+<p><em>Transfer data from pData passed in parameter. Assuming StartTx was called prior calling this function to send the actual data.</em> </p>
+<pre><code>static inline int DeviceIntrfTxData (
+    DevIntrf_t *const pDev,
+    uint8_t * pData,
+    int DataLen
+) 
+</code></pre>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>pDev</code> : Pointer to an instance of the Device Interface </li>
+<li><code>pData</code> : Pointer to memory area of data to send. </li>
+<li><code>DataLen</code> : Length of data memory in bytes</li>
+</ul>
+<p><strong>Returns:</strong></p>
+<p>Number of bytes sent </p>
+<hr>
+
+<hr />
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.fe8b6f2b.min.js"></script>
+      
+    
+  </body>
+</html>

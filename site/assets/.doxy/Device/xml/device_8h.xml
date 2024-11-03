@@ -1,0 +1,286 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.12.0" xml:lang="en-US">
+  <compounddef id="device_8h" kind="file" language="C++">
+    <compoundname>device.h</compoundname>
+    <includes local="no">stdint.h</includes>
+    <includes local="no">stdbool.h</includes>
+    <includes local="yes">coredev/iopincfg.h</includes>
+    <includes local="yes">coredev/timer.h</includes>
+    <includes refid="device__intrf_8h" local="yes">device_intrf.h</includes>
+    <incdepgraph>
+      <node id="1">
+        <label>include/device.h</label>
+        <link refid="device_8h"/>
+        <childnode refid="2" relation="include">
+        </childnode>
+        <childnode refid="3" relation="include">
+        </childnode>
+        <childnode refid="4" relation="include">
+        </childnode>
+        <childnode refid="5" relation="include">
+        </childnode>
+        <childnode refid="6" relation="include">
+        </childnode>
+      </node>
+      <node id="6">
+        <label>device_intrf.h</label>
+        <link refid="device__intrf_8h"/>
+        <childnode refid="2" relation="include">
+        </childnode>
+        <childnode refid="3" relation="include">
+        </childnode>
+        <childnode refid="7" relation="include">
+        </childnode>
+      </node>
+      <node id="4">
+        <label>coredev/iopincfg.h</label>
+      </node>
+      <node id="5">
+        <label>coredev/timer.h</label>
+      </node>
+      <node id="7">
+        <label>stdatomic.h</label>
+      </node>
+      <node id="3">
+        <label>stdbool.h</label>
+      </node>
+      <node id="2">
+        <label>stdint.h</label>
+      </node>
+    </incdepgraph>
+    <sectiondef kind="enum">
+      <memberdef kind="enum" id="device_8h_1abf56bff8bcc748952a8abb54e6fe1505" prot="public" static="no" strong="no">
+        <type></type>
+        <name>__Dev_Interrupt_Polarity</name>
+        <enumvalue id="device_8h_1abf56bff8bcc748952a8abb54e6fe1505a1fd0244f93e8ade9f9100a6de6bdb51c" prot="public">
+          <name>DEVINTR_POL_LOW</name>
+          <briefdescription>
+<para>Interrupt pin active low. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="device_8h_1abf56bff8bcc748952a8abb54e6fe1505a19f9eca19302aa93d6461c52e13e4f51" prot="public">
+          <name>DEVINTR_POL_HIGH</name>
+          <briefdescription>
+<para>Interrupt pin active high. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <briefdescription>
+<para>Defines interrupt pin polarity of the device. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>Many hardware devices can have interrupt pin polarity configurable. </para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device.h" line="58" column="1" bodyfile="include/device.h" bodystart="58" bodyend="61"/>
+      </memberdef>
+      <memberdef kind="enum" id="device_8h_1a655574bcbda12ebdf314f981f31ca313" prot="public" static="no" strong="no">
+        <type></type>
+        <name>__Device_Event</name>
+        <enumvalue id="device_8h_1a655574bcbda12ebdf314f981f31ca313a77462995cf73d773c552280e5cdb52e9" prot="public">
+          <name>DEV_EVT_DATA_RDY</name>
+          <briefdescription>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device.h" line="63" column="1" bodyfile="include/device.h" bodystart="63" bodyend="65"/>
+      </memberdef>
+    </sectiondef>
+    <sectiondef kind="typedef">
+      <memberdef kind="typedef" id="device_8h_1a030421f74c095683bdf503454e6c9a8f" prot="public" static="no">
+        <type>enum <ref refid="device_8h_1abf56bff8bcc748952a8abb54e6fe1505" kindref="member">__Dev_Interrupt_Polarity</ref></type>
+        <definition>typedef enum __Dev_Interrupt_Polarity DEVINTR_POL</definition>
+        <argsstring></argsstring>
+        <name>DEVINTR_POL</name>
+        <briefdescription>
+<para>Defines interrupt pin polarity of the device. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>Many hardware devices can have interrupt pin polarity configurable. </para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device.h" line="61" column="13"/>
+      </memberdef>
+      <memberdef kind="typedef" id="device_8h_1aca266a7f3d15f4c4dcd93e251ed33b72" prot="public" static="no">
+        <type>enum __Device_Event</type>
+        <definition>typedef enum __Device_Event DEV_EVT</definition>
+        <argsstring></argsstring>
+        <name>DEV_EVT</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device.h" line="65" column="9"/>
+      </memberdef>
+    </sectiondef>
+    <briefdescription>
+<para>Generic device base class. </para>
+    </briefdescription>
+    <detaileddescription>
+<para><hruler/>
+</para>
+<para>This is the base class to implement all sort devices, hardware or software. For example a sensor device or a software audio/video decoder. The device can transfer data via it&apos;s DeviceIntrf object.</para>
+<para>Important NOTE : For performance, there is no pointer or parameter validation at this low level layer. It is the responsibility of caller to pre-validate all access</para>
+<para><simplesect kind="author"><para>Hoang Nguyen Hoan </para>
+</simplesect>
+<simplesect kind="date"><para>Feb. 12, 2017</para>
+</simplesect>
+@license</para>
+<para>Copyright (c) 2017, I-SYST inc., all rights reserved</para>
+<para>Permission to use, copy, modify, and distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies, and none of the names : I-SYST or its contributors may be used to endorse or promote products derived from this software without specific prior written permission.</para>
+<para>For info or contributing contact : hnhoan at i-syst dot com</para>
+<para>THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS `<lsquo/>AS IS<rsquo/>&apos; AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</para>
+<para><hruler/>
+ </para>
+    </detaileddescription>
+    <programlisting>
+<codeline lineno="1"></codeline>
+<codeline lineno="42"><highlight class="normal"></highlight><highlight class="preprocessor">#ifndef<sp/>__DEVICE_H__</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="43"><highlight class="normal"></highlight><highlight class="preprocessor">#define<sp/>__DEVICE_H__</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="44"><highlight class="normal"></highlight></codeline>
+<codeline lineno="45"><highlight class="normal"></highlight><highlight class="preprocessor">#include<sp/>&lt;stdint.h&gt;</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="46"><highlight class="normal"></highlight></codeline>
+<codeline lineno="47"><highlight class="normal"></highlight><highlight class="preprocessor">#ifndef<sp/>__cplusplus</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="48"><highlight class="normal"></highlight><highlight class="preprocessor">#include<sp/>&lt;stdbool.h&gt;</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="49"><highlight class="normal"></highlight><highlight class="preprocessor">#endif</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="50"><highlight class="normal"></highlight></codeline>
+<codeline lineno="51"><highlight class="normal"></highlight><highlight class="preprocessor">#include<sp/>&quot;coredev/iopincfg.h&quot;</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="52"><highlight class="normal"></highlight><highlight class="preprocessor">#include<sp/>&quot;coredev/timer.h&quot;</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="53"><highlight class="normal"></highlight><highlight class="preprocessor">#include<sp/>&quot;<ref refid="device__intrf_8h" kindref="compound">device_intrf.h</ref>&quot;</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="54"><highlight class="normal"></highlight></codeline>
+<codeline lineno="58" refid="device_8h_1abf56bff8bcc748952a8abb54e6fe1505" refkind="member"><highlight class="keyword">typedef</highlight><highlight class="normal"><sp/></highlight><highlight class="keyword">enum</highlight><highlight class="normal"><sp/><ref refid="device_8h_1abf56bff8bcc748952a8abb54e6fe1505" kindref="member">__Dev_Interrupt_Polarity</ref><sp/>{</highlight></codeline>
+<codeline lineno="59" refid="device_8h_1abf56bff8bcc748952a8abb54e6fe1505a1fd0244f93e8ade9f9100a6de6bdb51c" refkind="member"><highlight class="normal"><sp/><sp/><sp/><sp/><ref refid="device_8h_1abf56bff8bcc748952a8abb54e6fe1505a1fd0244f93e8ade9f9100a6de6bdb51c" kindref="member">DEVINTR_POL_LOW</ref>,<sp/><sp/><sp/><sp/></highlight></codeline>
+<codeline lineno="60"><highlight class="normal"><sp/><sp/><sp/><sp/><ref refid="device_8h_1abf56bff8bcc748952a8abb54e6fe1505a19f9eca19302aa93d6461c52e13e4f51" kindref="member">DEVINTR_POL_HIGH</ref><sp/><sp/><sp/><sp/></highlight></codeline>
+<codeline lineno="61" refid="device_8h_1a030421f74c095683bdf503454e6c9a8f" refkind="member"><highlight class="normal">}<sp/><ref refid="device_8h_1a030421f74c095683bdf503454e6c9a8f" kindref="member">DEVINTR_POL</ref>;</highlight></codeline>
+<codeline lineno="62"><highlight class="normal"></highlight></codeline>
+<codeline lineno="63"><highlight class="normal"></highlight><highlight class="keyword">typedef</highlight><highlight class="normal"><sp/></highlight><highlight class="keyword">enum</highlight><highlight class="normal"><sp/>__Device_Event<sp/>{</highlight></codeline>
+<codeline lineno="64"><highlight class="normal"><sp/><sp/><sp/><sp/>DEV_EVT_DATA_RDY</highlight></codeline>
+<codeline lineno="65"><highlight class="normal">}<sp/>DEV_EVT;</highlight></codeline>
+<codeline lineno="66"><highlight class="normal"></highlight></codeline>
+<codeline lineno="67"><highlight class="normal"></highlight><highlight class="preprocessor">#ifdef<sp/>__cplusplus</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="68"><highlight class="normal"></highlight></codeline>
+<codeline lineno="69"><highlight class="normal"></highlight><highlight class="keyword">class<sp/></highlight><highlight class="normal">Device;</highlight></codeline>
+<codeline lineno="70"><highlight class="normal"></highlight></codeline>
+<codeline lineno="71"><highlight class="normal"></highlight><highlight class="keyword">typedef</highlight><highlight class="normal"><sp/>void<sp/>(*DevEvtHandler_t)(Device<sp/>*<sp/></highlight><highlight class="keyword">const</highlight><highlight class="normal"><sp/>pDev,<sp/>DEV_EVT<sp/>Evt);</highlight></codeline>
+<codeline lineno="72"><highlight class="normal"></highlight><highlight class="comment">//typedef<sp/>DevEvtHandler_t<sp/><sp/><sp/><sp/><sp/><sp/><sp/>DEVEVTCB;</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="73"><highlight class="normal"></highlight></codeline>
+<codeline lineno="82"><highlight class="keyword">class<sp/></highlight><highlight class="normal">Device<sp/>{</highlight></codeline>
+<codeline lineno="83"><highlight class="normal"></highlight><highlight class="keyword">public</highlight><highlight class="normal">:</highlight></codeline>
+<codeline lineno="84"><highlight class="normal"><sp/><sp/><sp/><sp/>Device();</highlight></codeline>
+<codeline lineno="85"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/>~Device()<sp/>{}</highlight></codeline>
+<codeline lineno="86"><highlight class="normal"></highlight></codeline>
+<codeline lineno="87"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="comment">//</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="88"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="comment">//<sp/>***<sp/>Require<sp/>implementations<sp/>***</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="89"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="comment">//</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="90"><highlight class="normal"></highlight></codeline>
+<codeline lineno="96"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/>Enable()<sp/>=<sp/>0;</highlight></codeline>
+<codeline lineno="97"><highlight class="normal"></highlight></codeline>
+<codeline lineno="105"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>Disable()<sp/>=<sp/>0;</highlight></codeline>
+<codeline lineno="106"><highlight class="normal"></highlight></codeline>
+<codeline lineno="110"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>Reset()<sp/>=<sp/>0;</highlight></codeline>
+<codeline lineno="111"><highlight class="normal"></highlight></codeline>
+<codeline lineno="112"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="comment">//</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="113"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="comment">//<sp/>***<sp/>Optional<sp/>implementations<sp/>***</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="114"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="comment">//</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="115"><highlight class="normal"></highlight></codeline>
+<codeline lineno="122"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>PowerOff()<sp/>{}</highlight></codeline>
+<codeline lineno="123"><highlight class="normal"></highlight></codeline>
+<codeline lineno="133"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>DeviceAddress(uint32_t<sp/>Addr)<sp/>{<sp/>vDevAddr<sp/>=<sp/><sp/>Addr;<sp/>}</highlight></codeline>
+<codeline lineno="134"><highlight class="normal"></highlight></codeline>
+<codeline lineno="140"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/>uint32_t<sp/>DeviceAddress()<sp/>{<sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>vDevAddr;<sp/>}</highlight></codeline>
+<codeline lineno="141"><highlight class="normal"></highlight></codeline>
+<codeline lineno="150"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/>uint64_t<sp/>DeviceID()<sp/>{<sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>vDevId;<sp/>}</highlight></codeline>
+<codeline lineno="151"><highlight class="normal"></highlight></codeline>
+<codeline lineno="166"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>Read(uint8_t<sp/>*pCmdAddr,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>CmdAddrLen,<sp/>uint8_t<sp/>*pBuff,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>BuffLen);</highlight></codeline>
+<codeline lineno="167"><highlight class="normal"></highlight></codeline>
+<codeline lineno="182"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>Write(uint8_t<sp/>*pCmdAddr,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>CmdAddrLen,<sp/>uint8_t<sp/>*pData,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>DataLen);</highlight></codeline>
+<codeline lineno="183"><highlight class="normal"></highlight></codeline>
+<codeline lineno="192"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/>uint8_t<sp/>Read8(uint8_t<sp/>*pRegAddr,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>RegAddrLen)<sp/>{</highlight></codeline>
+<codeline lineno="193"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/>uint8_t<sp/>val<sp/>=<sp/>0;</highlight></codeline>
+<codeline lineno="194"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/>Read(pRegAddr,<sp/>RegAddrLen,<sp/>&amp;val,<sp/>1);</highlight></codeline>
+<codeline lineno="195"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>val;</highlight></codeline>
+<codeline lineno="196"><highlight class="normal"><sp/><sp/><sp/><sp/>}</highlight></codeline>
+<codeline lineno="197"><highlight class="normal"></highlight></codeline>
+<codeline lineno="206"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/>uint16_t<sp/>Read16(uint8_t<sp/>*pRegAddr,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>RegAddrLen)<sp/>{</highlight></codeline>
+<codeline lineno="207"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/>uint16_t<sp/>val<sp/>=<sp/>0;</highlight></codeline>
+<codeline lineno="208"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/>Read(pRegAddr,<sp/>RegAddrLen,(uint8_t*)<sp/>&amp;val,<sp/>2);</highlight></codeline>
+<codeline lineno="209"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>val;</highlight></codeline>
+<codeline lineno="210"><highlight class="normal"><sp/><sp/><sp/><sp/>}</highlight></codeline>
+<codeline lineno="211"><highlight class="normal"></highlight></codeline>
+<codeline lineno="220"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/>uint32_t<sp/>Read32(uint8_t<sp/>*pRegAddr,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>RegAddrLen)<sp/>{</highlight></codeline>
+<codeline lineno="221"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/>uint32_t<sp/>val<sp/>=<sp/>0;</highlight></codeline>
+<codeline lineno="222"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/>Read(pRegAddr,<sp/>RegAddrLen,<sp/>(uint8_t*)&amp;val,<sp/>4);</highlight></codeline>
+<codeline lineno="223"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>val;</highlight></codeline>
+<codeline lineno="224"><highlight class="normal"><sp/><sp/><sp/><sp/>}</highlight></codeline>
+<codeline lineno="225"><highlight class="normal"></highlight></codeline>
+<codeline lineno="235"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/>Write8(uint8_t<sp/>*pRegAddr,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>RegAddrLen,<sp/>uint8_t<sp/>Data)<sp/>{</highlight></codeline>
+<codeline lineno="236"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>Write(pRegAddr,<sp/>RegAddrLen,<sp/>&amp;Data,<sp/>1)<sp/>&gt;<sp/>0;</highlight></codeline>
+<codeline lineno="237"><highlight class="normal"><sp/><sp/><sp/><sp/>}</highlight></codeline>
+<codeline lineno="238"><highlight class="normal"></highlight></codeline>
+<codeline lineno="248"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/>Write16(uint8_t<sp/>*pRegAddr,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>RegAddrLen,<sp/>uint16_t<sp/>Data)<sp/>{</highlight></codeline>
+<codeline lineno="249"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>Write(pRegAddr,<sp/>RegAddrLen,<sp/>(uint8_t*)&amp;Data,<sp/>2)<sp/>&gt;<sp/>1;</highlight></codeline>
+<codeline lineno="250"><highlight class="normal"><sp/><sp/><sp/><sp/>}</highlight></codeline>
+<codeline lineno="251"><highlight class="normal"></highlight></codeline>
+<codeline lineno="261"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/>Write32(uint8_t<sp/>*pRegAddr,<sp/></highlight><highlight class="keywordtype">int</highlight><highlight class="normal"><sp/>RegAddrLen,<sp/>uint32_t<sp/>Data)<sp/>{</highlight></codeline>
+<codeline lineno="262"><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>Write(pRegAddr,<sp/>RegAddrLen,<sp/>(uint8_t*)&amp;Data,<sp/>1)<sp/>&gt;<sp/>3;</highlight></codeline>
+<codeline lineno="263"><highlight class="normal"><sp/><sp/><sp/><sp/>}</highlight></codeline>
+<codeline lineno="264"><highlight class="normal"></highlight></codeline>
+<codeline lineno="272"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/>Valid()<sp/>{<sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>vbValid;<sp/>}</highlight></codeline>
+<codeline lineno="273"><highlight class="normal"></highlight></codeline>
+<codeline lineno="274"><highlight class="normal"><sp/><sp/><sp/><sp/><ref refid="group__device__intrf_1ga516997d784c793ac41d8be424090aa0e" kindref="member">DEVINTRF_TYPE</ref><sp/>InterfaceType()<sp/>{<sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>vpIntrf<sp/>!=<sp/></highlight><highlight class="keyword">nullptr</highlight><highlight class="normal"><sp/>?<sp/>vpIntrf-&gt;Type()<sp/>:<sp/><ref refid="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63afc8bda9988c586b70055e5bc5a88f8bd" kindref="member">DEVINTRF_TYPE_UNKOWN</ref>;<sp/>}</highlight></codeline>
+<codeline lineno="275"><highlight class="normal"></highlight></codeline>
+<codeline lineno="283"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keyword">operator</highlight><highlight class="normal"><sp/>Timer<sp/>*<sp/></highlight><highlight class="keyword">const</highlight><highlight class="normal"><sp/>()<sp/>{<sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>vpTimer;<sp/>}<sp/><sp/><sp/></highlight><highlight class="comment">//<sp/>Get<sp/>device<sp/>interface<sp/>data<sp/>(handle)</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="284"><highlight class="normal"></highlight></codeline>
+<codeline lineno="285"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>SetEvtHandler(DevEvtHandler_t<sp/>EvtHandler)<sp/>{<sp/>vEvtHandler<sp/>=<sp/>EvtHandler;<sp/>}</highlight></codeline>
+<codeline lineno="286"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keyword">virtual</highlight><highlight class="normal"><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>EvtHandler(DEV_EVT<sp/>Evt)<sp/>{<sp/></highlight><highlight class="keywordflow">if</highlight><highlight class="normal"><sp/>(vEvtHandler)<sp/>vEvtHandler(</highlight><highlight class="keyword">this</highlight><highlight class="normal">,<sp/>Evt);<sp/>}</highlight></codeline>
+<codeline lineno="287"><highlight class="normal"></highlight></codeline>
+<codeline lineno="288"><highlight class="normal"></highlight><highlight class="keyword">protected</highlight><highlight class="normal">:</highlight></codeline>
+<codeline lineno="289"><highlight class="normal"></highlight></codeline>
+<codeline lineno="298"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>DeviceID(uint64_t<sp/>DevId)<sp/>{<sp/>vDevId<sp/>=<sp/>DevId;<sp/>}</highlight></codeline>
+<codeline lineno="299"><highlight class="normal"></highlight></codeline>
+<codeline lineno="306"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>Valid(</highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/>bVal)<sp/>{<sp/>vbValid<sp/>=<sp/>bVal;<sp/>}</highlight></codeline>
+<codeline lineno="307"><highlight class="normal"></highlight></codeline>
+<codeline lineno="313"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>Interface(DeviceIntrf<sp/>*<sp/></highlight><highlight class="keyword">const</highlight><highlight class="normal"><sp/>pIntrf)<sp/>{<sp/>vpIntrf<sp/>=<sp/>pIntrf;<sp/>}</highlight></codeline>
+<codeline lineno="314"><highlight class="normal"></highlight></codeline>
+<codeline lineno="320"><highlight class="normal"><sp/><sp/><sp/><sp/>DeviceIntrf<sp/>*<sp/></highlight><highlight class="keyword">const</highlight><highlight class="normal"><sp/>Interface()<sp/>{<sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>vpIntrf;<sp/>}</highlight></codeline>
+<codeline lineno="321"><highlight class="normal"></highlight></codeline>
+<codeline lineno="322"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keywordtype">void</highlight><highlight class="normal"><sp/>InterruptEnabled(</highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/>En)<sp/>{<sp/>vbIntEn<sp/>=<sp/>En;<sp/>}</highlight></codeline>
+<codeline lineno="323"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/>InterruptEnabled()<sp/>{<sp/></highlight><highlight class="keywordflow">return</highlight><highlight class="normal"><sp/>vbIntEn;<sp/>}</highlight></codeline>
+<codeline lineno="324"><highlight class="normal"></highlight></codeline>
+<codeline lineno="325"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/>vbValid;<sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight></codeline>
+<codeline lineno="326"><highlight class="normal"><sp/><sp/><sp/><sp/>uint32_t<sp/><sp/><sp/><sp/>vDevAddr;<sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight></codeline>
+<codeline lineno="327"><highlight class="normal"><sp/><sp/><sp/><sp/>DeviceIntrf<sp/>*vpIntrf;<sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight></codeline>
+<codeline lineno="328"><highlight class="normal"><sp/><sp/><sp/><sp/>Timer<sp/><sp/><sp/><sp/><sp/><sp/><sp/>*vpTimer;<sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight></codeline>
+<codeline lineno="329"><highlight class="normal"><sp/><sp/><sp/><sp/>uint64_t<sp/><sp/><sp/><sp/>vDevId;<sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight></codeline>
+<codeline lineno="331"><highlight class="normal"><sp/><sp/><sp/><sp/></highlight><highlight class="keywordtype">bool</highlight><highlight class="normal"><sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/>vbIntEn;<sp/><sp/><sp/><sp/><sp/><sp/><sp/><sp/></highlight></codeline>
+<codeline lineno="332"><highlight class="normal"><sp/><sp/><sp/><sp/>DevEvtHandler_t<sp/>vEvtHandler;<sp/><sp/><sp/><sp/></highlight></codeline>
+<codeline lineno="333"><highlight class="normal">};</highlight></codeline>
+<codeline lineno="334"><highlight class="normal"></highlight></codeline>
+<codeline lineno="335"><highlight class="normal"></highlight><highlight class="keyword">extern</highlight><highlight class="normal"><sp/></highlight><highlight class="stringliteral">&quot;C&quot;</highlight><highlight class="normal"><sp/>{</highlight></codeline>
+<codeline lineno="336"><highlight class="normal"></highlight><highlight class="preprocessor">#endif<sp/><sp/></highlight><highlight class="comment">//<sp/>__cplusplus</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="337"><highlight class="normal"></highlight></codeline>
+<codeline lineno="338"><highlight class="normal"></highlight></codeline>
+<codeline lineno="339"><highlight class="normal"></highlight><highlight class="preprocessor">#ifdef<sp/>__cplusplus</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="340"><highlight class="normal">}</highlight></codeline>
+<codeline lineno="341"><highlight class="normal"></highlight></codeline>
+<codeline lineno="342"><highlight class="normal"></highlight><highlight class="preprocessor">#endif<sp/><sp/></highlight><highlight class="comment">//<sp/>__cplusplus</highlight><highlight class="normal"></highlight></codeline>
+<codeline lineno="343"><highlight class="normal"></highlight></codeline>
+<codeline lineno="344"><highlight class="normal"></highlight><highlight class="preprocessor">#endif<sp/><sp/></highlight><highlight class="comment">//<sp/>__DEVICE_H__</highlight><highlight class="normal"></highlight></codeline>
+    </programlisting>
+    <location file="include/device.h"/>
+  </compounddef>
+</doxygen>

@@ -1,0 +1,1136 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.12.0" xml:lang="en-US">
+  <compounddef id="group__device__intrf" kind="group">
+    <compoundname>device_intrf</compoundname>
+    <title>Device Interface</title>
+    <innerclass refid="struct____device__intrf" prot="public">__device_intrf</innerclass>
+    <sectiondef kind="enum">
+      <memberdef kind="enum" id="group__device__intrf_1gaf4485d6e89060a99145de3e773dbd006" prot="public" static="no" strong="no">
+        <type></type>
+        <name>DEVINTRF_EVT</name>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006a7c83015972461c2cdb94fa87357eed35" prot="public">
+          <name>DEVINTRF_EVT_RX_TIMEOUT</name>
+          <briefdescription>
+<para>Rx timeout. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006abe5547c21d61ae4a683eb8340a4cd613" prot="public">
+          <name>DEVINTRF_EVT_RX_DATA</name>
+          <briefdescription>
+<para>Data received. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006a1e0dc5ad7c9080f8741c75e62ca9599b" prot="public">
+          <name>DEVINTRF_EVT_RX_FIFO_FULL</name>
+          <briefdescription>
+          </briefdescription>
+          <detaileddescription>
+<para>Receive FIFO full, FIFO will be pushed out if handler does not process FIFO (returns 0) </para>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006a842959e64f10a316c81cce45fd0b7fd4" prot="public">
+          <name>DEVINTRF_EVT_TX_TIMEOUT</name>
+          <briefdescription>
+<para>Tx timeout. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006a6551bc54a6f30ac6ab0386dd53f7a30d" prot="public">
+          <name>DEVINTRF_EVT_TX_READY</name>
+          <briefdescription>
+<para>Ready to transmit. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006ac31166e00ad4b96dfc7373e8392f361e" prot="public">
+          <name>DEVINTRF_EVT_TX_FIFO_EMPTY</name>
+          <briefdescription>
+<para>Transmit FIFO empty, all data are transmitted. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006a26351da498fd6805aa5227e03d0140c5" prot="public">
+          <name>DEVINTRF_EVT_STATECHG</name>
+          <briefdescription>
+          </briefdescription>
+          <detaileddescription>
+<para>State changed. State data is device dependent. To be interpreted by implementation </para>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006a4166d3ec97a6872f4fc122744ed029bb" prot="public">
+          <name>DEVINTRF_EVT_READ_RQST</name>
+          <briefdescription>
+<para>Receive a read request from host. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006a9b478ddb12c0f77443a408507d1cedbb" prot="public">
+          <name>DEVINTRF_EVT_WRITE_RQST</name>
+          <briefdescription>
+<para>Received a write request from host. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1ggaf4485d6e89060a99145de3e773dbd006aeda24d115c931927f12dc81c79d586a9" prot="public">
+          <name>DEVINTRF_EVT_COMPLETED</name>
+          <briefdescription>
+<para>Transfer completed. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <briefdescription>
+<para>Device interface event types. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="56" column="1" bodyfile="include/device_intrf.h" bodystart="56" bodyend="69"/>
+      </memberdef>
+      <memberdef kind="enum" id="group__device__intrf_1ga9612b427565732d1688556e3c68e1a63" prot="public" static="no" strong="no">
+        <type></type>
+        <name>__Dev_Intrf_Type</name>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63afc8bda9988c586b70055e5bc5a88f8bd" prot="public">
+          <name>DEVINTRF_TYPE_UNKOWN</name>
+          <briefdescription>
+<para>Software or unknown type interface. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63a9099c97494992393d494099b6af5cebc" prot="public">
+          <name>DEVINTRF_TYPE_BT</name>
+          <briefdescription>
+<para>Bluetooth. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63abe5134ccd0b52a9fab2907adbab817c0" prot="public">
+          <name>DEVINTRF_TYPE_ETH</name>
+          <briefdescription>
+<para>Ethernet. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63a1ee642910dc12e4b4c43e0d54066c353" prot="public">
+          <name>DEVINTRF_TYPE_I2C</name>
+          <briefdescription>
+<para>I2C (TWI) </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63aba95de45a65d39b1fc05f7b31f1e5be7" prot="public">
+          <name>DEVINTRF_TYPE_CEL</name>
+          <briefdescription>
+<para>Cellular (GSM, LTE,...) </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63a9a462e4be04633e39f0b12f660167eb2" prot="public">
+          <name>DEVINTRF_TYPE_SPI</name>
+          <briefdescription>
+<para>SPI. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63a03cd4e9c2ef3fceaea2e9f1550c3fcc5" prot="public">
+          <name>DEVINTRF_TYPE_QSPI</name>
+          <briefdescription>
+<para>Quad SPI. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63a02c8b52ecb94b75255a29c52f416623a" prot="public">
+          <name>DEVINTRF_TYPE_UART</name>
+          <briefdescription>
+<para>UART or Serial port. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63ad0b70e635f4c99be62249495f9056748" prot="public">
+          <name>DEVINTRF_TYPE_USB</name>
+          <briefdescription>
+<para>USB. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63a467c325ef115cc55650d4c2ba69d88c3" prot="public">
+          <name>DEVINTRF_TYPE_WIFI</name>
+          <briefdescription>
+<para>Wifi. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63ae7ce2cecc77ccb1fd216896bf15846ea" prot="public">
+          <name>DEVINTRF_TYPE_I2S</name>
+          <briefdescription>
+<para>I2S. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63a8f4d476d32c2bdc1c22f128f4ab41a70" prot="public">
+          <name>DEVINTRF_TYPE_PDM</name>
+          <briefdescription>
+<para>PDM. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="group__device__intrf_1gga9612b427565732d1688556e3c68e1a63a88dcb7fbabaf2339743f7f0ad89c295a" prot="public">
+          <name>DEVINTRF_TYPE_OSPI</name>
+          <briefdescription>
+<para>Octo SPI. </para>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <briefdescription>
+<para>Enumerating interface types. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="72" column="1" bodyfile="include/device_intrf.h" bodystart="72" bodyend="86"/>
+      </memberdef>
+    </sectiondef>
+    <sectiondef kind="typedef">
+      <memberdef kind="typedef" id="group__device__intrf_1ga516997d784c793ac41d8be424090aa0e" prot="public" static="no">
+        <type>enum <ref refid="group__device__intrf_1ga9612b427565732d1688556e3c68e1a63" kindref="member">__Dev_Intrf_Type</ref></type>
+        <definition>typedef enum __Dev_Intrf_Type DEVINTRF_TYPE</definition>
+        <argsstring></argsstring>
+        <name>DEVINTRF_TYPE</name>
+        <briefdescription>
+<para>Enumerating interface types. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="86" column="15"/>
+      </memberdef>
+      <memberdef kind="typedef" id="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" prot="public" static="no">
+        <type>struct <ref refid="struct____device__intrf" kindref="compound">__device_intrf</ref></type>
+        <definition>typedef struct __device_intrf DevIntrf_t</definition>
+        <argsstring></argsstring>
+        <name>DevIntrf_t</name>
+        <briefdescription>
+<para>Device Interface forward data structure type definition. This structure is the base object. Pointer to an instance of this is passed to all function calls. See structure definition bellow for more details. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="91" column="29" bodyfile="include/device_intrf.h" bodystart="91" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="typedef" id="group__device__intrf_1ga2d9e41943b4a6c267e8ac472983ac13b" prot="public" static="no">
+        <type>int(*</type>
+        <definition>typedef int(* DevIntrfEvtHandler_t) (DevIntrf_t *const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)</definition>
+        <argsstring>)(DevIntrf_t *const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)</argsstring>
+        <name>DevIntrfEvtHandler_t</name>
+        <briefdescription>
+<para>Event handler callback. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>This is normally being called within interrupts, avoid blocking</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Device handle </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>EvtId</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Event code </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pBuffer</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: In/Out Buffer containing data<linebreak/>
+ on DEVINTRF_EVT_RX_TIMEOUT &amp; DEVINTRF_EVT_RXDATA, pBuffer contains data received. If driver implements CFIFO, this parameter is NULL with BufferLen indicating total data in FIFO.<linebreak/>
+ on DEVINTRF_EVT_TX_READY, pBuffer contains data to be transmit with max length BufferLen. If driver implements CFIFO, this parameter is NULL and BufferLen indicates amount of data stored in FIFO<linebreak/>
+ on DEVINTRF_EVT_STATECHG, pBuffer contains state data. This is implementation specific for example UART implementation would contains line state info.</para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>Len</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Max buffer length. See above description</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes processed. Implementation specific.<linebreak/>
+ in case of FIFO_FULL events, FIFO will be pushed out if return value is zero </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="115" column="9" bodyfile="include/device_intrf.h" bodystart="115" bodyend="-1"/>
+      </memberdef>
+    </sectiondef>
+    <sectiondef kind="func">
+      <memberdef kind="function" id="group__device__intrf_1gaf39f24f6598d90aa3b90e0ba9d8e49c1" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>void</type>
+        <definition>static void DeviceIntrfDisable</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfDisable</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+<para>Disable interface. Put the interface in lowest power mode. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>If this is a physical interface, provide a way to turn off for energy saving. Make sure the turn off procedure can be turned back on without going through the full initialization sequence</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="319" column="20" bodyfile="include/device_intrf.h" bodystart="319" bodyend="325"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga57235f4c29e4322cf202534a5f93b4ac" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>void</type>
+        <definition>static void DeviceIntrfEnable</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfEnable</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+<para>Wake up the interface. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="332" column="20" bodyfile="include/device_intrf.h" bodystart="332" bodyend="337"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga20bff38dba1ed735f80516bf183db2e5" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>uint32_t</type>
+        <definition>static uint32_t DeviceIntrfGetRate</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfGetRate</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+<para>Get data rate of the interface in Hertz. This is not a clock frequency but rather the transfer frequency (number of transfers per second). It has meaning base on the implementation as bits/sec or bytes/sec or whatever the case. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Transfer rate per second </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="348" column="24" bodyfile="include/device_intrf.h" bodystart="348" bodyend="350"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1gaf699adc18397c79b539494cac94162ef" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>uint32_t</type>
+        <definition>static uint32_t DeviceIntrfSetRate</definition>
+        <argsstring>(DevIntrf_t *const pDev, uint32_t Rate)</argsstring>
+        <name>DeviceIntrfSetRate</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <param>
+          <type>uint32_t</type>
+          <declname>Rate</declname>
+        </param>
+        <briefdescription>
+<para>Set data rate of the interface in Hertz. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>This is not a clock frequency but rather the transfer frequency (number of transfers per second). It has meaning base on the implementation as bits/sec or bytes/sec or whatever the case</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>Rate</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Data rate to be set in Hertz (transfer per second)</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Actual transfer rate per second set. It is the real capable rate closest to rate being requested. </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="365" column="24" bodyfile="include/device_intrf.h" bodystart="365" bodyend="367"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1gaaf3ca84c9b06710c8eae6270da8f9a17" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int DeviceIntrfRx</definition>
+        <argsstring>(DevIntrf_t *const pDev, uint32_t DevAddr, uint8_t *pBuff, int BuffLen)</argsstring>
+        <name>DeviceIntrfRx</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <param>
+          <type>uint32_t</type>
+          <declname>DevAddr</declname>
+        </param>
+        <param>
+          <type>uint8_t *</type>
+          <declname>pBuff</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>BuffLen</declname>
+        </param>
+        <briefdescription>
+<para>Full receive data sequence. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>This function does full receive data sequence by calling StartRx, RxData, StopRx.</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DevAddr</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: The device selection id scheme </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pBuff</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to memory area to receive data. </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>BuffLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Length of buffer memory in bytes</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes read </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="381" column="5" declfile="include/device_intrf.h" declline="381" declcolumn="5"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga69db17fb3d558cb46968b98e75caae99" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int DeviceIntrfTx</definition>
+        <argsstring>(DevIntrf_t *const pDev, uint32_t DevAddr, uint8_t *pData, int DataLen)</argsstring>
+        <name>DeviceIntrfTx</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <param>
+          <type>uint32_t</type>
+          <declname>DevAddr</declname>
+        </param>
+        <param>
+          <type>uint8_t *</type>
+          <declname>pData</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>DataLen</declname>
+        </param>
+        <briefdescription>
+<para>Full transmit data sequence. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>This function does full transmit data sequence by calling StartTx, TxData, StopTx.</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DevAddr</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: The device selection id scheme </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pData</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to data to send. </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DataLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Length of data in bytes</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes read </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="395" column="5" declfile="include/device_intrf.h" declline="395" declcolumn="5"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga2813f209b1f406a8ad17a514d4c7bb8d" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void DeviceIntrfTxComplete</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfTxComplete</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+<para>Signal Tx transfer completed. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>This is useful for interrupt based transfer</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="404" column="6" declfile="include/device_intrf.h" declline="404" declcolumn="6"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga4c9348ae8aaaec7e97819331f9ab63c2" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int DeviceIntrfRead</definition>
+        <argsstring>(DevIntrf_t *const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pRxBuff, int RxLen)</argsstring>
+        <name>DeviceIntrfRead</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <param>
+          <type>uint32_t</type>
+          <declname>DevAddr</declname>
+        </param>
+        <param>
+          <type>uint8_t *</type>
+          <declname>pAdCmd</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>AdCmdLen</declname>
+        </param>
+        <param>
+          <type>uint8_t *</type>
+          <declname>pRxBuff</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>RxLen</declname>
+        </param>
+        <briefdescription>
+<para>Device read transfer. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>A device read transfer usually starts with a write of a command or register address. Then follows with a read data results. This function encapsulate that functionality.</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DevAddr</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: The device selection id scheme </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pAdCmd</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to buffer containing address or command code to send </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>AdCmdLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Size of addr/Cmd in bytes </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pRxBuff</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to memory area to receive data. </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>RxLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Length of buffer memory in bytes</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes read </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="421" column="5" declfile="include/device_intrf.h" declline="421" declcolumn="5"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga380390f878da911e0d9979d68a941eac" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int DeviceIntrfWrite</definition>
+        <argsstring>(DevIntrf_t *const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pData, int DataLen)</argsstring>
+        <name>DeviceIntrfWrite</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <param>
+          <type>uint32_t</type>
+          <declname>DevAddr</declname>
+        </param>
+        <param>
+          <type>uint8_t *</type>
+          <declname>pAdCmd</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>AdCmdLen</declname>
+        </param>
+        <param>
+          <type>uint8_t *</type>
+          <declname>pData</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>DataLen</declname>
+        </param>
+        <briefdescription>
+<para>Device write transfer. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>A device write transfer usually starts with a write of a command or register address. Then follows with a write data. This function encapsulate that functionality.</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DevAddr</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: The device selection id scheme </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pAdCmd</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to buffer containing address or command code to send </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>AdCmdLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Size of addr/Cmd in bytes </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pData</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to data to send. </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DataLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Length of data in bytes</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes of data sent (not counting the Addr/Cmd). </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="439" column="5" declfile="include/device_intrf.h" declline="439" declcolumn="5"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga237b13059151f680c5452b6091462e9b" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>bool</type>
+        <definition>static bool DeviceIntrfStartRx</definition>
+        <argsstring>(DevIntrf_t *const pDev, uint32_t DevAddr)</argsstring>
+        <name>DeviceIntrfStartRx</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <param>
+          <type>uint32_t</type>
+          <declname>DevAddr</declname>
+        </param>
+        <briefdescription>
+<para>Prepare start condition to receive data with subsequence RxData. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>This can be in case such as start condition for I2C or Chip Select for SPI or precondition for DMA transfer or whatever requires it or not This function must check &amp; set the busy state for re-entrancy</para>
+<para>NOTE: On success StopRx must be called to release busy flag</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DevAddr</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: The device selection id scheme</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>true - Success<linebreak/>
+ false - failed. </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="457" column="20" bodyfile="include/device_intrf.h" bodystart="457" bodyend="470"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga942e35c8b253d79e84aaf1c1cdf13953" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>int</type>
+        <definition>static int DeviceIntrfRxData</definition>
+        <argsstring>(DevIntrf_t *const pDev, uint8_t *pBuff, int BuffLen)</argsstring>
+        <name>DeviceIntrfRxData</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <param>
+          <type>uint8_t *</type>
+          <declname>pBuff</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>BuffLen</declname>
+        </param>
+        <briefdescription>
+<para>Receive data into pBuff passed in parameter. Assuming StartRx was called prior calling this function to get the actual data. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>Return -1 in case of interrupt based or transfer without waiting for completion. for example I2C where stop condition is handled asynchronously</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pBuff</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to memory area to receive data. </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>BuffLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Length of buffer memory in bytes</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes read -1 special case for interrupt driven without waiting for completion for example I2C where stop condition is handled asynchronously </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="487" column="19" bodyfile="include/device_intrf.h" bodystart="487" bodyend="489"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga805c57aa553519d480abf49ac38f1359" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>void</type>
+        <definition>static void DeviceIntrfStopRx</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfStopRx</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+<para>Completion of read data phase. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>Do require post processing after data has been received via RxData This function must clear the busy state for re-entrancy</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="499" column="20" bodyfile="include/device_intrf.h" bodystart="499" bodyend="502"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga59a6344aaea3e06592a7d0ec5ef41327" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>bool</type>
+        <definition>static bool DeviceIntrfStartTx</definition>
+        <argsstring>(DevIntrf_t *const pDev, uint32_t DevAddr)</argsstring>
+        <name>DeviceIntrfStartTx</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <param>
+          <type>uint32_t</type>
+          <declname>DevAddr</declname>
+        </param>
+        <briefdescription>
+<para>Prepare start condition to transfer data with subsequence TxData. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>This can be in case such as start condition for I2C or Chip Select for SPI or precondition for DMA transfer or whatever requires it or not This function must check &amp; set the busy state for re-entrancy</para>
+<para>On success StopRx must be called to release busy flag</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DevAddr</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: The device selection id scheme</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>true - Success<linebreak/>
+ false - failed </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="523" column="20" bodyfile="include/device_intrf.h" bodystart="523" bodyend="536"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga4cb8e4d834320273ba7ff16c0f4f8df4" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>int</type>
+        <definition>static int DeviceIntrfTxData</definition>
+        <argsstring>(DevIntrf_t *const pDev, uint8_t *pData, int DataLen)</argsstring>
+        <name>DeviceIntrfTxData</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <param>
+          <type>uint8_t *</type>
+          <declname>pData</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>DataLen</declname>
+        </param>
+        <briefdescription>
+<para>Transfer data from pData passed in parameter. Assuming StartTx was called prior calling this function to send the actual data. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pData</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to memory area of data to send. </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DataLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Length of data memory in bytes</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes sent </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="548" column="19" bodyfile="include/device_intrf.h" bodystart="548" bodyend="550"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1gae67db85403a8e3291fbca96db1c84161" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>void</type>
+        <definition>static void DeviceIntrfStopTx</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfStopTx</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+<para>Completion of sending data via TxData. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>Perform the require post processing after all data was transmitted via TxData. This function must clear the busy state for re-entrancy</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="561" column="20" bodyfile="include/device_intrf.h" bodystart="561" bodyend="564"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1gadb5891c23ae1d672a2a348515b661ece" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>void</type>
+        <definition>static void DeviceIntrfReset</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfReset</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+<para>This function perform a reset of interface. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="571" column="20" bodyfile="include/device_intrf.h" bodystart="571" bodyend="574"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga257c24b8a93968d1b904602360920f20" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>void</type>
+        <definition>static void DeviceIntrfPowerOff</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfPowerOff</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+<para>Power off interface completely for power saving. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>This function will power off the interface completely. Not all interface provides this type of functionality. Once power off is call, full initialization cycle is required. Therefore there is no PowerOn counter part of this function contrary to the Enable/Disable functions.</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDev</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="586" column="20" bodyfile="include/device_intrf.h" bodystart="586" bodyend="588"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga9c03fed67bed4d8346208fa7dd4a00e7" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type><ref refid="group__device__intrf_1ga516997d784c793ac41d8be424090aa0e" kindref="member">DEVINTRF_TYPE</ref></type>
+        <definition>static DEVINTRF_TYPE DeviceIntrfGetType</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfGetType</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+<para>Get interface type. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="return"><para>Interface type </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="595" column="29" bodyfile="include/device_intrf.h" bodystart="595" bodyend="597"/>
+      </memberdef>
+      <memberdef kind="function" id="group__device__intrf_1ga9e5bb4590705985c0aae40fd93e1649b" prot="public" static="yes" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>void *</type>
+        <definition>static void * DeviceIntrfGetHandle</definition>
+        <argsstring>(DevIntrf_t *const pDev)</argsstring>
+        <name>DeviceIntrfGetHandle</name>
+        <param>
+          <type><ref refid="group__device__intrf_1ga4ec1d3a7535b4a8dccf41debd670f5f9" kindref="member">DevIntrf_t</ref> *const</type>
+          <declname>pDev</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="599" column="20" bodyfile="include/device_intrf.h" bodystart="599" bodyend="601"/>
+      </memberdef>
+    </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+  </compounddef>
+</doxygen>

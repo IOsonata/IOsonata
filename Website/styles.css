@@ -1,0 +1,350 @@
+/* Importing Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Playwrite+BE+VLG:wght@100..400&family=Playwrite+DK+Uloopet:wght@100..400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap');
+
+/* Backdrop Section */
+.backdrop {
+    background-image: url(Assets/main_page_wallpaper.png);
+    background-repeat: no-repeat;
+    background-position: right;
+    width: 100%;
+    height: 800px;
+    margin-top: 0;
+    color: black;
+    font-family: "Open Sans", sans-serif;
+}
+
+.backdrop .backdrop_content {
+    background-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 10px 10px 10px rgba(255, 255, 255, 0.8);
+    padding: 80px 20px 20px 20px;
+    margin: 20px;
+    border-radius: 20px;
+    width: fit-content;
+}
+
+.backdrop .backdrop_content h1 {
+    margin-bottom: 0;
+    display: inline-flex;
+    justify-content: center;
+}
+
+.backdrop .backdrop_content h1 span {
+    display: inline-flex;
+    font-size: 120px;
+    font-family: "Playwrite DK Uloopet", cursive;
+    font-weight: 100;
+    animation: bounce 3s infinite;
+}
+
+@keyframes bounce {
+    0%, 50%, 100% {
+        transform: translateY(0);
+    }
+    25% {
+        transform: translateY(-20px);
+    }
+}
+
+.backdrop .backdrop_content h1 span:nth-of-type(1) { animation-delay: 0.1s; }
+.backdrop .backdrop_content h1 span:nth-of-type(2) { animation-delay: 0.2s; }
+.backdrop .backdrop_content h1 span:nth-of-type(3) { animation-delay: 0.3s; opacity: 0; }
+.backdrop .backdrop_content h1 span:nth-of-type(4) { animation-delay: 0.4s; }
+.backdrop .backdrop_content h1 span:nth-of-type(5) { animation-delay: 0.5s; }
+.backdrop .backdrop_content h1 span:nth-of-type(6) { animation-delay: 0.6s; }
+.backdrop .backdrop_content h1 span:nth-of-type(7) { animation-delay: 0.7s; }
+.backdrop .backdrop_content h1 span:nth-of-type(8) { animation-delay: 0.8s; }
+.backdrop .backdrop_content h1 span:nth-of-type(9) { animation-delay: 0.9s; }
+
+.backdrop .backdrop_content h2 {
+    font-size: 40px;
+    font-family: "Playwrite DK Uloopet", cursive;
+    font-weight: 100;
+    margin-top: 0;
+}
+
+.backdrop .backdrop_content p {
+    font-size: 20px;
+    font-weight: 100;
+    width: 800px;
+    margin-top: 0;
+    line-height: 40px;
+}
+
+/* Media Queries for Backdrop Section */
+@media (max-width: 800px) {
+    .backdrop .backdrop_content {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+    }
+
+    .backdrop .backdrop_content h1 span {
+        font-size: 40px;
+        overflow: hidden;
+        font-weight: bold;
+    }
+
+    .backdrop .backdrop_content h2 {
+        font-size: 30px;
+        overflow: hidden;
+    }
+
+    .backdrop .backdrop_content p {
+        width: 80%;
+    }
+}
+
+/* About Me Section */
+.about_me {
+    background-color: #1e6169;
+    width: 100%;
+    min-height: 600px;
+    height: fit-content;
+    padding-bottom: 40px;
+    color: white;
+    margin: 0;
+    display: inline-flex;
+    justify-content: center;
+}
+
+.about_me h1, .about_me p, .about_me a {
+    margin-left: 60px;
+}
+
+.about_me h1 {
+    max-width: 400px;
+    padding-top: 60px;
+}
+
+.about_me p {
+    font-size: 20px;
+    max-width: 600px;
+    width: 100%;
+    line-height: 40px;
+    margin-bottom: 50px;
+}
+
+.about_me div a {
+    color: white;
+    text-decoration: none;
+    background-color: rgb(222, 177, 87);
+    border-radius: 5px;
+    padding: 15px;
+    transition: all 0.5s ease;
+}
+
+.about_me div a:hover {
+    background-color: rgb(181, 145, 73);
+}
+
+.about_me .display_image {
+    margin: 100px 40px 40px 60px;
+    padding: 0;
+    min-width: 600px;
+    max-width: 600px;
+    height: 300px;
+    background-image: url(Assets/IOsonata_Github.png);
+    background-size: contain;
+    background-repeat: no-repeat;
+    box-shadow: 12px 12px 2px 1px rgba(16, 0, 24, 0.2);
+    border-radius: 20px;
+    transition: all 0.2s ease;
+}
+
+.about_me .display_image:nth-of-type(1) { display: none; }
+
+.about_me .display_image:hover {
+    filter: brightness(0.4);
+}
+
+/* Media Queries for About Me Section */
+@media (max-width: 800px) {
+    .about_me {
+        display: grid;
+        min-height: 1200px;
+    }
+
+    .about_me h1, .about_me p, .about_me a {
+        margin-left: 40px;
+    }
+
+    .about_me h1 {
+        margin-top: 20px;
+    }
+
+    .about_me .display_image {
+        min-width: 300px;
+        max-width: 300px;
+        height: 150px;
+    }
+
+    .about_me p {
+        max-width: 300px;
+        font-size: 20px;
+    }
+
+    .about_me .display_image:nth-of-type(1) { display: block; }
+    .about_me .display_image:nth-of-type(2) { display: none; }
+}
+
+/* Guide Section */
+.guide {
+    background-color: #ff5a40;
+    width: 100%;
+    min-height: 500px;
+    color: white;
+    margin-top: -40px;
+    display: inline-flex;
+    justify-content: center;
+}
+
+.guide .guide_text {
+    margin: 40px;
+}
+
+.guide .display_image {
+    margin: 60px 40px 40px 60px;
+    padding: 0;
+    min-width: 451px;
+    max-width: 451px;
+    height: 348px;
+    background-image: url(Assets/installer_icon.png);
+    background-repeat: no-repeat;
+    box-shadow: 12px 12px 2px 1px rgba(0, 0, 255, 0.2);
+    border-radius: 20px;
+    transition: all 0.2s ease;
+}
+
+.guide .display_image:hover {
+    filter: brightness(0.4);
+}
+
+.guide .guide_text a {
+    color: white;
+    text-decoration: none;
+    background-color: rgb(222, 177, 87);
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 80px;
+    transition: all 0.5s ease;
+}
+
+.guide .guide_text a:hover {
+    background-color: rgb(181, 145, 73);
+}
+
+.guide p {
+    font-size: 20px;
+    max-width: 600px;
+    width: 100%;
+    line-height: 40px;
+    margin-bottom: 40px;
+}
+
+/* Media Queries for Guide Section */
+@media (max-width: 800px) {
+    .guide {
+        display: grid;
+        min-height: 900px;
+    }
+}
+
+/* Documentation Section */
+.limitation {
+    background-color: #ffffff;
+    width: 100%;
+    min-height: 500px;
+    color: rgb(0, 0, 0);
+    margin-top: -40px;
+}
+
+.limitation .limitation_text {
+    margin: 40px;
+    padding: 40px;
+    text-align: start;
+}
+
+.limitation .limitation_text h1 {
+    padding-top: 40px;
+}
+
+.limitation .limitation_text p {
+    font-size: 20px;
+    width: 100%;
+    line-height: 40px;
+}
+
+.limitation table {
+    margin: 0 auto;
+    margin-top: -40px;
+    margin-bottom: 120px;
+    text-align: center;
+    width: 80%;
+}
+
+.limitation table th, .limitation table td {
+    padding-left: 20px;
+}
+
+.ide_logo {
+    height: 150px;
+    transition: all 0.2s ease;
+}
+
+.ide_logo:hover {
+    height: 150px;
+    transform: scale(1.2);
+}
+
+/* Media Queries for IDE Logo */
+@media (max-width: 800px) {
+    .ide_logo {
+        height: 75px;
+    }
+}
+
+/* Contact Section */
+.contact_form {
+    background-color: #000000;
+    width: 100%;
+    min-height: 500px;
+    color: rgb(255, 255, 255);
+    margin-top: -40px;
+    padding: 40px;
+}
+
+.contact_form h1 {
+    margin: 40px;
+}
+
+.contact_form p {
+    min-width: 400px;
+    max-width: 570px;
+    line-height: 40px;
+    margin: 40px;
+}
+
+.contact_form a {
+    padding: 10px;
+    background-color: #ff5a40;
+    color: white;
+    width: 200px;
+    margin-top: 20px;
+    border-radius: 5px;
+    transition: all 0.2s ease;
+    margin: 40px;
+    text-decoration: none;
+}
+
+.contact_form a:hover {
+    background-color: #913325;
+}
+
+/* Media Queries for Contact Form Section */
+@media (max-width: 800px) {
+    .contact_form p {
+        min-width: 0;
+        max-width: 300px;
+    }
+}

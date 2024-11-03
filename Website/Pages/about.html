@@ -1,0 +1,186 @@
+<title>IO Sonata - About</title>
+
+<link href="../header.css" rel="stylesheet" type="text/css"/>
+<link href="page_styles.css" rel="stylesheet" type="text/css"/>
+<link href="hierarchy.css" rel="stylesheet" type="text/css"/>
+
+<link rel="icon" type="image/x-icon" href="../Assets/iosonata_logo.png">
+
+<link rel="stylesheet" href="https://unicons.iconscout.com/release/v4.0.0/css/line.css" />
+<link href='https://unpkg.com/boxicons@2.0.7/css/boxicons.min.css' rel='stylesheet'>
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet"/>
+
+<body>
+    <!--Top Footer-->
+    <div class="top_container">
+        <a href="https://www.i-syst.com/" class="social_media_logo">
+            <img src="../Assets/I-Syst's logo.png">
+        </a>
+
+        <a href="https://github.com/IOsonata/IOsonata" class="social_media_logo">
+            <img src="../Assets/github.png">
+        </a>
+        <a href="" class="social_media_logo">
+            <img src="../Assets/instagram.png">
+        </a>
+        <a href="https://x.com/isyst_inc" class="social_media_logo">
+            <img src="../Assets/twitter.png">
+        </a>
+    </div>
+
+    <!--Navigation Menu-->
+    <nav id="header">
+        <div class="navbar">
+            <!--Hamburger Menu-->
+            <i class='bx bx-menu'></i>
+
+            <!--IO Sonata's Logo-->
+            <div class="logo">
+                <a href="../../index.html">
+                    <img src="../Assets/iosonata_header_logo.png"/>
+                </a>
+            </div>
+
+            <!--Navbar Options-->
+            <ul class="links">
+                <div class="sidebar-logo">
+                    <span class="logo">
+                        <img src="../Assets/iosonata_logo.png"/>
+                    </span>
+                    <i class='uil-times'></i>
+                </div>
+                <li><a href="about.html">About</a></li>
+                <li><a href="guide.html">Guide</a></li>
+                <li><a href="../../site/index.html" target="blank">Documentation</a></li>
+                <li><a href="contact.html">Contact</a></li>
+            </ul>
+
+            <!--Search Bar-->
+            <i class="uil uil-search search-icon" id="searchIcon"></i>
+            <!--
+            <div class="search-box">
+                <i class="uil uil-search search-icon"></i>
+                <input type="text" placeholder="Search...">
+            </div>
+            -->
+        </div>
+    </nav>
+
+    <!--Page Path-->
+    <div class="page_path">
+        <a href="../../index.html">Home</a> > <a href="about.html"><b>About</b></a>
+    </div>
+
+    <!--Content-->
+    <div class="about_content">
+        <br>
+        <h1>About</h1>
+        <p>IOsonata multi-platform multi-architecture power & performance optimized software library for fast and easy IoT MCU firmware development.
+            Object Oriented design, no board package to define, just pure plug & play any boards !</p>
+
+        <div class="about_section_2">
+            <h1>Current IDE Limitations</h1>
+            <ul>
+                <li>Eclipse & GCC : Full C++ support, full file io support.</li>
+                <li>IAR : Full C++ support, no system support for file io. File io only available with semihosting.
+                    Bug in IAR : It cannot debug or flash Nordic nRF series using CMSIS-DAP.
+                </li>
+                <li>
+                    uVision : Requires compiler version 6. Minimal support for file IO. However uVision can be configured to GCC instead.
+                </li>
+                <li>
+                    CrossWorks : GCC C++ is stripped down to bare bone, no file io support, no atomic support and many others.
+                    In order to use full GCC C++, CrossWorks must be configured to use an external compiler.
+                </li>
+                <li>
+                    Segger Stusio : Stripped down version of CrossWorks. Even less functional.
+                    Only supports jlink, cannot be used with any other jtag.
+                    SES is not recommended for heavy firmware development.
+                </li>
+            </ul>
+        </div>
+
+        <div class="about_section_3">
+            <h1>External SDK and Libraries</h1>
+            <ul>
+                <li>
+                    <a href="https://www.nordicsemi.com/Products/Development-software/nRF5-SDK/Download#infotabs" target="_blank">nRF5_SDK</a> : Nordic nRF5x Bluetooth Low Energy
+                </li>
+                <li>
+                    <a href="https://www.nordicsemi.com/Software-and-Tools/Software/nRF5-SDK-for-Mesh/Download#infotabs" target="_blank">nrf5_SDK_Mesh</a> : Nordic nRF5 SDK for Bluetoth Mesh
+                </li>
+                <li>
+                    <a href="https://invensense.tdk.com/developers/software-downloads/" target="_blank">ICM-20948 Motion_Driver</a>
+                </li>
+                <li>
+                    <a href="https://github.com/boschsensortec/Bosch-BSEC2-Library" target="_blank">BSEC</a> : Bosch Sensortec Environmental Cluster (BSEC) Software
+                </li>
+                <li>
+                    <a href="https://savannah.nongnu.org/projects/lwip/" target="_blank">LWIP</a> : Lightweight TCP/IP stack.
+                </li>
+            </ul>
+        </div>
+
+        <br>
+        <div class="about_section_4">
+            <h1>Development Boards</h1>
+            <p>Discover some of I-Syst's boards to use the IOSonata Library in conjunction :</p><br>
+            <table class="about_boards">
+                <tr>
+                    <td>
+                        <a href="https://www.crowdsupply.com/i-syst/blyst-nano" target="_blank">
+                            <img src="../Assets/Blyst-Nano.png">
+                        </a>
+                    </td>
+                    <td>
+                        <a href="https://www.tindie.com/products/hnhoan/bluetooth-5-nrf52832-arm-m4f-dev-board-30-io/" target="_blank">
+                            <img src="../Assets/IDK-Blyst-Nano.png">
+                        </a>
+                    </td>
+                    <td>
+                        <a href="https://www.tindie.com/stores/hnhoan/" target="_blank">
+                            <img src="../Assets/BlueIO-Tag-Evim.jpg">
+                        </a>
+                    </td>
+                    <td>
+                        <a href="https://play.google.com/store/apps/details?id=no.nordicsemi.android.nrfthingy&hl=en&gl=US&pli=1" target="_blank">
+                            <img src="../Assets/Nordic_Thingy.webp">
+                        </a>
+                    </td>
+                </tr>
+                <tr>
+                    <td>BLYST-NANO</td>
+                    <td>IDK-BLYST-NANO <br> Development Board</td>
+                    <td>BLUEIO-TAG-EVIM</td>
+                    <td>Nordic Thingy </td>
+                </tr>
+            </table>
+        </div>
+        
+        <!--<h1>Supported Drivers and Sensors</h1>-->
+
+    <!--Footer-->
+    <div class="footer">
+        <h1>Copyright (c) 2024 I-SYST inc. All rights reserved</h1>
+
+        <div>
+            <a href="https://www.i-syst.com/" class="social_media_logo">
+                <img src="../Assets/I-Syst's logo.png">
+            </a>
+    
+            <a href="https://github.com/IOsonata/IOsonata" class="social_media_logo">
+                <img src="../Assets/github.png">
+            </a>
+            <a href="" class="social_media_logo">
+                <img src="../Assets/instagram.png">
+            </a>
+            <a href="https://x.com/isyst_inc" class="social_media_logo">
+                <img src="../Assets/twitter.png">
+            </a>
+        </div>
+    </div>
+
+    <script src="../script.js"></script>
+    <script src="hierarchy_actions.js"></script>
+</body>

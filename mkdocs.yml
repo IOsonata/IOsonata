@@ -1,0 +1,18 @@
+site_name: "IOSonata Documentation"
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdoxy:
+      projects:
+        Device:
+          src-dirs: include/device.h include/device_intrf.h
+          full-doc: True
+          doxy-cfg:
+            FILE_PATTERNS: "*.h"
+            RECURSIVE: True
+            HIDE_UNDOC_CLASSES: YES
+            HIDE_UNDOC_MEMBERS: YES
+            HIDE_UNDOC_RELATIONS: YES

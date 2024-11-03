@@ -1,0 +1,649 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.12.0" xml:lang="en-US">
+  <compounddef id="struct____device__intrf" kind="struct" language="C++" prot="public">
+    <compoundname>__device_intrf</compoundname>
+    <includes refid="device__intrf_8h" local="no">device_intrf.h</includes>
+    <sectiondef kind="public-attrib">
+      <memberdef kind="variable" id="struct____device__intrf_1aee6dc445ec6ec513a994409f86e29b03" prot="public" static="no" mutable="no">
+        <type>void *</type>
+        <definition>void* __device_intrf::pDevData</definition>
+        <argsstring></argsstring>
+        <name>pDevData</name>
+        <qualifiedname>__device_intrf::pDevData</qualifiedname>
+        <briefdescription>
+<para>Private device interface implementation data. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="129" column="6" bodyfile="include/device_intrf.h" bodystart="129" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a31161ac02fd7ac0848dca85ce186d04c" prot="public" static="no" mutable="no">
+        <type>int</type>
+        <definition>int __device_intrf::IntPrio</definition>
+        <argsstring></argsstring>
+        <name>IntPrio</name>
+        <qualifiedname>__device_intrf::IntPrio</qualifiedname>
+        <briefdescription>
+<para>Interrupt priority. Value is implementation specific. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="130" column="4" bodyfile="include/device_intrf.h" bodystart="130" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1af5761267153c932fc8e755e620787b46" prot="public" static="no" mutable="no">
+        <type><ref refid="group__device__intrf_1ga2d9e41943b4a6c267e8ac472983ac13b" kindref="member">DevIntrfEvtHandler_t</ref></type>
+        <definition>DevIntrfEvtHandler_t __device_intrf::EvtCB</definition>
+        <argsstring></argsstring>
+        <name>EvtCB</name>
+        <qualifiedname>__device_intrf::EvtCB</qualifiedname>
+        <briefdescription>
+<para>Interrupt based event callback function pointer. Must be set to NULL if not used. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="131" column="22" bodyfile="include/device_intrf.h" bodystart="131" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1afa4b5044c0f05de1ce2f68bfa4da4450" prot="public" static="no" mutable="no">
+        <type>atomic_flag</type>
+        <definition>atomic_flag __device_intrf::bBusy</definition>
+        <argsstring></argsstring>
+        <name>bBusy</name>
+        <qualifiedname>__device_intrf::bBusy</qualifiedname>
+        <briefdescription>
+<para>Busy flag to be set check and set at start and reset at end of transmission. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="132" column="13" bodyfile="include/device_intrf.h" bodystart="132" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a231802f30134b71fa87b9a6c8e96a6a8" prot="public" static="no" mutable="no">
+        <type>int</type>
+        <definition>int __device_intrf::MaxRetry</definition>
+        <argsstring></argsstring>
+        <name>MaxRetry</name>
+        <qualifiedname>__device_intrf::MaxRetry</qualifiedname>
+        <briefdescription>
+<para>Max retry when data could not be transfered (Rx/Tx returns zero count) </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="133" column="5" bodyfile="include/device_intrf.h" bodystart="133" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a0b3b6504d0723f1d8f4b7d8152210fb7" prot="public" static="no" mutable="no">
+        <type>atomic_int</type>
+        <definition>atomic_int __device_intrf::EnCnt</definition>
+        <argsstring></argsstring>
+        <name>EnCnt</name>
+        <qualifiedname>__device_intrf::EnCnt</qualifiedname>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+<para>Count the number of time device is enabled, this used as ref count where multiple devices are using the same interface. It is to avoid it being disabled while another device is still using it </para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="134" column="12" bodyfile="include/device_intrf.h" bodystart="134" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a186c1337cebb430f3ae8ae55b5188f50" prot="public" static="no" mutable="no">
+        <type><ref refid="group__device__intrf_1ga516997d784c793ac41d8be424090aa0e" kindref="member">DEVINTRF_TYPE</ref></type>
+        <definition>DEVINTRF_TYPE __device_intrf::Type</definition>
+        <argsstring></argsstring>
+        <name>Type</name>
+        <qualifiedname>__device_intrf::Type</qualifiedname>
+        <briefdescription>
+<para>Identify the type of interface. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="137" column="15" bodyfile="include/device_intrf.h" bodystart="137" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a07c9dda8b7687e6c6cd23fb855004bbd" prot="public" static="no" mutable="no">
+        <type>bool</type>
+        <definition>bool __device_intrf::bDma</definition>
+        <argsstring></argsstring>
+        <name>bDma</name>
+        <qualifiedname>__device_intrf::bDma</qualifiedname>
+        <briefdescription>
+<para>Enable DMA transfer support. Not all hardware interface supports this feature. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="138" column="6" bodyfile="include/device_intrf.h" bodystart="138" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a8d97af8c6caa28fdcaf9c716ebbafbf8" prot="public" static="no" mutable="no">
+        <type>bool</type>
+        <definition>bool __device_intrf::bIntEn</definition>
+        <argsstring></argsstring>
+        <name>bIntEn</name>
+        <qualifiedname>__device_intrf::bIntEn</qualifiedname>
+        <briefdescription>
+<para>Enable interrupt support. Not all hardware interface supports this feature. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="139" column="6" bodyfile="include/device_intrf.h" bodystart="139" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1ae690f670ac02b0f5570cb100aaefe7e3" prot="public" static="no" mutable="no">
+        <type>atomic_bool</type>
+        <definition>atomic_bool __device_intrf::bTxReady</definition>
+        <argsstring></argsstring>
+        <name>bTxReady</name>
+        <qualifiedname>__device_intrf::bTxReady</qualifiedname>
+        <briefdescription>
+<para>Flag indicating Tx is ready for transfer. </para>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="140" column="13" bodyfile="include/device_intrf.h" bodystart="140" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a50e21f227755ae9c62abd459ddce6faa" prot="public" static="no" mutable="no">
+        <type>atomic_bool</type>
+        <definition>atomic_bool __device_intrf::bNoStop</definition>
+        <argsstring></argsstring>
+        <name>bNoStop</name>
+        <qualifiedname>__device_intrf::bNoStop</qualifiedname>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+<para>Flag indicating a continous transfer. Usually used for read/write register value or cmd/response type. This flag is relevant only when interrupt is enabled async transfer </para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="141" column="13" bodyfile="include/device_intrf.h" bodystart="141" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a2cc1893c825868c29781fa60dbfbbf19" prot="public" static="no" mutable="no">
+        <type>void(*</type>
+        <definition>void(* __device_intrf::Disable) (DevIntrf_t *const pDevIntrf)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf)</argsstring>
+        <name>Disable</name>
+        <qualifiedname>__device_intrf::Disable</qualifiedname>
+        <briefdescription>
+<para>Put the interface to sleep for maximum energy saving. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>If this is a physical interface, provide a way to put the interface to sleep for maximum energy saving possible. This function must be implemented in such a way that the interface can be re-enable without going through full initialization sequence.</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="157" column="1" bodyfile="include/device_intrf.h" bodystart="157" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1ab5e105b4db1f9d6c240b653dd07aeba0" prot="public" static="no" mutable="no">
+        <type>void(*</type>
+        <definition>void(* __device_intrf::Enable) (DevIntrf_t *const pDevIntrf)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf)</argsstring>
+        <name>Enable</name>
+        <qualifiedname>__device_intrf::Enable</qualifiedname>
+        <briefdescription>
+<para>Wake up the interface. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="164" column="1" bodyfile="include/device_intrf.h" bodystart="164" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a3b560c6b3450ab6d815cb83a63f39641" prot="public" static="no" mutable="no">
+        <type>uint32_t(*</type>
+        <definition>uint32_t(* __device_intrf::GetRate) (DevIntrf_t *const pDevIntrf)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf)</argsstring>
+        <name>GetRate</name>
+        <qualifiedname>__device_intrf::GetRate</qualifiedname>
+        <briefdescription>
+<para>Get data rate of the interface in Hertz. This is not a clock frequency but rather the transfer frequency (number of transfers per second). It has meaning base on the implementation as bits/sec or bytes/sec or whatever the case. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Transfer rate per second </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="175" column="1" bodyfile="include/device_intrf.h" bodystart="175" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a5068880640684e6919ff5fe5b14242eb" prot="public" static="no" mutable="no">
+        <type>uint32_t(*</type>
+        <definition>uint32_t(* __device_intrf::SetRate) (DevIntrf_t *const pDevIntrf, uint32_t Rate)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf, uint32_t Rate)</argsstring>
+        <name>SetRate</name>
+        <qualifiedname>__device_intrf::SetRate</qualifiedname>
+        <briefdescription>
+<para>Set data rate of the interface in Hertz. This is not a clock frequency but rather the transfer frequency (number of transfers per second). It has meaning base on the implementation as bits/sec or bytes/sec or whatever the case. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>Rate</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Data rate to be set in Hertz (transfer per second)</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Actual transfer rate per second set. It is the real capable rate closest to rate being requested. </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="188" column="1" bodyfile="include/device_intrf.h" bodystart="188" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a32f91db3dc4e9728c5885dd9348f8496" prot="public" static="no" mutable="no">
+        <type>bool(*</type>
+        <definition>bool(* __device_intrf::StartRx) (DevIntrf_t *const pDevIntrf, uint32_t DevAddr)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf, uint32_t DevAddr)</argsstring>
+        <name>StartRx</name>
+        <qualifiedname>__device_intrf::StartRx</qualifiedname>
+        <briefdescription>
+<para>Prepare start condition to receive data with subsequence RxData. This can be in case such as start condition for I2C or Chip Select for SPI or precondition for DMA transfer or whatever requires it or not This function must check &amp; set the busy state for re-entrancy. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DevAddr</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: The device selection id scheme</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>true - Success<linebreak/>
+ false - failed. </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="202" column="1" bodyfile="include/device_intrf.h" bodystart="202" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1aabf495aca1c3de95b01b5299c84cd4ab" prot="public" static="no" mutable="no">
+        <type>int(*</type>
+        <definition>int(* __device_intrf::RxData) (DevIntrf_t *const pDevIntrf, uint8_t *pBuff, int BuffLen)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf, uint8_t *pBuff, int BuffLen)</argsstring>
+        <name>RxData</name>
+        <qualifiedname>__device_intrf::RxData</qualifiedname>
+        <briefdescription>
+<para>Receive data into pBuff passed in parameter. Assuming StartRx was called prior calling this function to get the actual data. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>Return -1 in case of interrupt based or transfer without waiting for completion. for example I2C where stop condition is handled asynchronously</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pBuff</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to memory area to receive data. </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>BuffLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Length of buffer memory in bytes</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes read -1 special case for interrupt driven without waiting for completion for example I2C where stop condition is handled asynchronously </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="219" column="1" bodyfile="include/device_intrf.h" bodystart="219" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1abd049e2b5c99cca15cabb3d85e376dc2" prot="public" static="no" mutable="no">
+        <type>void(*</type>
+        <definition>void(* __device_intrf::StopRx) (DevIntrf_t *const pDevIntrf)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf)</argsstring>
+        <name>StopRx</name>
+        <qualifiedname>__device_intrf::StopRx</qualifiedname>
+        <briefdescription>
+<para>Completion of read data phase. Do require post processing after data has been received via RxData This function must clear the busy state for reentrancy. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="228" column="1" bodyfile="include/device_intrf.h" bodystart="228" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1afe9bd24880dcc7135c6b26379e757083" prot="public" static="no" mutable="no">
+        <type>bool(*</type>
+        <definition>bool(* __device_intrf::StartTx) (DevIntrf_t *const pDevIntrf, uint32_t DevAddr)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf, uint32_t DevAddr)</argsstring>
+        <name>StartTx</name>
+        <qualifiedname>__device_intrf::StartTx</qualifiedname>
+        <briefdescription>
+<para>Prepare start condition to transfer data with subsequence TxData. This can be in case such as start condition for I2C or Chip Select for SPI or precondition for DMA transfer or whatever requires it or not This function must check &amp; set the busy state for re-entrancy. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DevAddr</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: The device selection id scheme</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>true - Success<linebreak/>
+ false - failed </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="242" column="1" bodyfile="include/device_intrf.h" bodystart="242" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1abf29bb5dc5ecf484d11736cb05642c4e" prot="public" static="no" mutable="no">
+        <type>int(*</type>
+        <definition>int(* __device_intrf::TxData) (DevIntrf_t *const pDevIntrf, uint8_t *pData, int DataLen)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf, uint8_t *pData, int DataLen)</argsstring>
+        <name>TxData</name>
+        <qualifiedname>__device_intrf::TxData</qualifiedname>
+        <briefdescription>
+<para>Transfer data from pData passed in parameter. Assuming StartTx was called prior calling this function to send the actual data. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pData</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to memory area of data to send. </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DataLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Length of data memory in bytes</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes sent </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="254" column="1" bodyfile="include/device_intrf.h" bodystart="254" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1ab351bfb21d19496abcafa1c498b4f488" prot="public" static="no" mutable="no">
+        <type>int(*</type>
+        <definition>int(* __device_intrf::TxSrData) (DevIntrf_t *const pDevIntrf, uint8_t *pData, int DataLen)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf, uint8_t *pData, int DataLen)</argsstring>
+        <name>TxSrData</name>
+        <qualifiedname>__device_intrf::TxSrData</qualifiedname>
+        <briefdescription>
+<para>Transfer data from pData passed in parameter with re-start. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>Assuming StartTx was called prior calling this function to send the actual data. This is a special function for some I2C devices that requires writing the data into a special register for write-restart-read sequence. One of such MCU is the Atmel SAM series. The data length in this case cannot exceed 4 bytes.</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>pData</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to memory area of data to send. </para>
+</parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>DataLen</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Length of data memory in bytes</para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="return"><para>Number of bytes sent </para>
+</simplesect>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="270" column="1" bodyfile="include/device_intrf.h" bodystart="270" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a343de68346eda1f204bda10f4c2c80fd" prot="public" static="no" mutable="no">
+        <type>void(*</type>
+        <definition>void(* __device_intrf::StopTx) (DevIntrf_t *const pDevIntrf)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf)</argsstring>
+        <name>StopTx</name>
+        <qualifiedname>__device_intrf::StopTx</qualifiedname>
+        <briefdescription>
+<para>Completion of sending data via TxData. Do require post processing after all data was transmitted via TxData. This function must clear the busy state for re-entrancy. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="279" column="1" bodyfile="include/device_intrf.h" bodystart="279" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1ac1b9ea451b8b83414eeb7573c5d99d93" prot="public" static="no" mutable="no">
+        <type>void(*</type>
+        <definition>void(* __device_intrf::Reset) (DevIntrf_t *const pDevIntrf)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf)</argsstring>
+        <name>Reset</name>
+        <qualifiedname>__device_intrf::Reset</qualifiedname>
+        <briefdescription>
+<para>This function perform a reset of interface. Must provide empty function of not used. </para>
+        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="287" column="1" bodyfile="include/device_intrf.h" bodystart="287" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1a30cf003eaa0091d4a3d44c7290987688" prot="public" static="no" mutable="no">
+        <type>void(*</type>
+        <definition>void(* __device_intrf::PowerOff) (DevIntrf_t *const pDevIntrf)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf)</argsstring>
+        <name>PowerOff</name>
+        <qualifiedname>__device_intrf::PowerOff</qualifiedname>
+        <briefdescription>
+<para>Power off device for power saving. </para>
+        </briefdescription>
+        <detaileddescription>
+<para>This function will power off device completely. Not all device provide this type of functionality. Once power off is call, full initialization cycle is required. Therefore their is no PowerOn counter part of this function contrary to the Enable/Disable functions.</para>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>pDevIntrf</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>: Pointer to an instance of the Device Interface </para>
+</parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="299" column="1" bodyfile="include/device_intrf.h" bodystart="299" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="struct____device__intrf_1aa86e45c48278c8b89161e23b589bfebb" prot="public" static="no" mutable="no">
+        <type>void *(*</type>
+        <definition>void *(* __device_intrf::GetHandle) (DevIntrf_t *const pDevIntrf)</definition>
+        <argsstring>)(DevIntrf_t *const pDevIntrf)</argsstring>
+        <name>GetHandle</name>
+        <qualifiedname>__device_intrf::GetHandle</qualifiedname>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="include/device_intrf.h" line="301" column="1" bodyfile="include/device_intrf.h" bodystart="301" bodyend="-1"/>
+      </memberdef>
+    </sectiondef>
+    <briefdescription>
+<para>Device interface data structure. </para>
+    </briefdescription>
+    <detaileddescription>
+<para>This structure is the actual interface for both C++ &amp; C code It is used to provide C compatibility instead of using C++ interface which is only for C++</para>
+<para>This data structure is visible for implementer of interface. It is seen as handle for application to pass to the interface function calls. Application firmware should not access any member of this structure directly. </para>
+    </detaileddescription>
+    <collaborationgraph>
+      <node id="1">
+        <label>__device_intrf</label>
+        <link refid="struct____device__intrf"/>
+        <childnode refid="1" relation="usage">
+          <edgelabel>EvtCB</edgelabel>
+        </childnode>
+      </node>
+    </collaborationgraph>
+    <location file="include/device_intrf.h" line="128" column="1" bodyfile="include/device_intrf.h" bodystart="128" bodyend="302"/>
+    <listofallmembers>
+      <member refid="struct____device__intrf_1afa4b5044c0f05de1ce2f68bfa4da4450" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>bBusy</name></member>
+      <member refid="struct____device__intrf_1a07c9dda8b7687e6c6cd23fb855004bbd" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>bDma</name></member>
+      <member refid="struct____device__intrf_1a8d97af8c6caa28fdcaf9c716ebbafbf8" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>bIntEn</name></member>
+      <member refid="struct____device__intrf_1a50e21f227755ae9c62abd459ddce6faa" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>bNoStop</name></member>
+      <member refid="struct____device__intrf_1ae690f670ac02b0f5570cb100aaefe7e3" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>bTxReady</name></member>
+      <member refid="struct____device__intrf_1a2cc1893c825868c29781fa60dbfbbf19" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>Disable</name></member>
+      <member refid="struct____device__intrf_1ab5e105b4db1f9d6c240b653dd07aeba0" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>Enable</name></member>
+      <member refid="struct____device__intrf_1a0b3b6504d0723f1d8f4b7d8152210fb7" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>EnCnt</name></member>
+      <member refid="struct____device__intrf_1af5761267153c932fc8e755e620787b46" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>EvtCB</name></member>
+      <member refid="struct____device__intrf_1aa86e45c48278c8b89161e23b589bfebb" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>GetHandle</name></member>
+      <member refid="struct____device__intrf_1a3b560c6b3450ab6d815cb83a63f39641" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>GetRate</name></member>
+      <member refid="struct____device__intrf_1a31161ac02fd7ac0848dca85ce186d04c" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>IntPrio</name></member>
+      <member refid="struct____device__intrf_1a231802f30134b71fa87b9a6c8e96a6a8" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>MaxRetry</name></member>
+      <member refid="struct____device__intrf_1aee6dc445ec6ec513a994409f86e29b03" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>pDevData</name></member>
+      <member refid="struct____device__intrf_1a30cf003eaa0091d4a3d44c7290987688" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>PowerOff</name></member>
+      <member refid="struct____device__intrf_1ac1b9ea451b8b83414eeb7573c5d99d93" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>Reset</name></member>
+      <member refid="struct____device__intrf_1aabf495aca1c3de95b01b5299c84cd4ab" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>RxData</name></member>
+      <member refid="struct____device__intrf_1a5068880640684e6919ff5fe5b14242eb" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>SetRate</name></member>
+      <member refid="struct____device__intrf_1a32f91db3dc4e9728c5885dd9348f8496" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>StartRx</name></member>
+      <member refid="struct____device__intrf_1afe9bd24880dcc7135c6b26379e757083" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>StartTx</name></member>
+      <member refid="struct____device__intrf_1abd049e2b5c99cca15cabb3d85e376dc2" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>StopRx</name></member>
+      <member refid="struct____device__intrf_1a343de68346eda1f204bda10f4c2c80fd" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>StopTx</name></member>
+      <member refid="struct____device__intrf_1abf29bb5dc5ecf484d11736cb05642c4e" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>TxData</name></member>
+      <member refid="struct____device__intrf_1ab351bfb21d19496abcafa1c498b4f488" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>TxSrData</name></member>
+      <member refid="struct____device__intrf_1a186c1337cebb430f3ae8ae55b5188f50" prot="public" virt="non-virtual"><scope>__device_intrf</scope><name>Type</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>
