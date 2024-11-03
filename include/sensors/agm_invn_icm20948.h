@@ -46,6 +46,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/gyro_sensor.h"
 #include "sensors/mag_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
+#ifdef __cplusplus
+
 class AgmInvnIcm20948 : public AccelSensor, public GyroSensor, public MagSensor {
 public:
 	/**
@@ -138,6 +144,9 @@ private:
 	int32_t vCfgGyroFsr; // Default = +/- 2000dps. Valid ranges: 250, 500, 1000, 2000
 };
 
+#endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AGM_INVN_ICM20948_H__
 

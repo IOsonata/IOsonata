@@ -141,6 +141,21 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pI
 
 	Write8((uint8_t*)&regaddr, 2, d);
 
+	if (CfgData.bInter == true)
+	{
+		regaddr = ICM20948_INT_PIN_CFG;
+		d = ICM20948_INT_PIN_CFG_INT_ANYRD_2CLEAR | ICM20948_INT_PIN_CFG_INT1_ACTL;
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		regaddr = ICM20948_INT_ENABLE;
+		d = 0xff;
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		regaddr = ICM20948_INT_ENABLE_1;
+		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
+		Write8((uint8_t*)&regaddr, 2, d);
+	}
+
 	return true;
 }
 
@@ -706,10 +721,33 @@ bool AgmIcm20948::SelectBank(uint8_t BankNo)
 
 void AgmIcm20948::IntHandler()
 {
-	uint16_t regaddr = 0;
-	uint8_t d;
+	uint16_t regaddr = ICM20948_INT_STATUS;
+	uint8_t istatus1;
+	uint16_t istatus2;
 
-	//d = Read8((uint8_t*)&regaddr, 2);
+	istatus1 = Read8((uint8_t*)&regaddr, 2);
+
+	if (istatus1 & ICM20948_INT_STATUS_I2C_MIST_INT)
+	{
+
+	}
+
+	if (istatus1 & ICM20948_INT_STATUS_DMP_INT1)
+	{
+		regaddr = ICM20948_DMP_INT_STATUS;
+		istatus2 = Read8((uint8_t*)&regaddr, 2);
+		Write8((uint8_t*)&regaddr, 2, istatus2);
+	}
+
+	if (istatus1 & ICM20948_INT_STATUS_PLL_RDY_INT)
+	{
+
+	}
+
+	if (istatus1 & ICM20948_INT_STATUS_WOM_INT)
+	{
+
+	}
 //	if (d & MPU9250_AG_INT_STATUS_RAW_DATA_RDY_INT)
 	{
 		UpdateData();
@@ -750,28 +788,43 @@ bool AgmIcm20948::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntr
 
 bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t MemAddr)
 {
-	int len = Len;
+	int len = Len, l = 0;
 	uint8_t *p = pDmpImage;
-	uint8_t regaddr;
+	uint16_t regaddr;
 	uint16_t memaddr = MemAddr;
 
-	SelectBank(0);
+	regaddr = ICM20948_PWR_MGMT_1;
+	uint8_t pwrstate;
+
+	pwrstate = Read8((uint8_t*)&regaddr, 2);
+
+	// make sure it is on full power
+	Write8((uint8_t*)&regaddr, 2, pwrstate & ~(ICM20948_PWR_MGMT_1_LP_EN | ICM20948_PWR_MGMT_1_SLEEP));
+
+	regaddr = ICM20948_DMP_MEM_BANKSEL;
+	Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
+
+	regaddr = ICM20948_DMP_MEM_STARTADDR;
+	Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
+
+	l = min(len, ICM20948_DMP_MEM_BANK_SIZE - (memaddr % ICM20948_DMP_MEM_BANK_SIZE));
 
 	while (len > 0)
 	{
-		int l = min(len, ICM20948_DMP_MEM_BANK_SIZE - (memaddr & 0xff));
-
-		regaddr = ICM20948_DMP_MEM_BANKSEL;
-		Write8(&regaddr, 1, memaddr >> 8);
-		regaddr = ICM20948_DMP_MEM_STARTADDR;
-		Write8(&regaddr, 1, memaddr & 0xFF);
-
 		regaddr = ICM20948_DMP_MEM_RW;
-		Write(&regaddr, 1, p, l);
+		l = Write((uint8_t*)&regaddr, 2, p, l);
 
 		p += l;
 		memaddr += l;
 		len -= l;
+
+		regaddr = ICM20948_DMP_MEM_BANKSEL;
+		Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
+
+		regaddr = ICM20948_DMP_MEM_STARTADDR;
+		Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
+
+		l = min(len, ICM20948_DMP_MEM_BANK_SIZE);
 	}
 
 	len = Len;
@@ -779,18 +832,20 @@ bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t Me
 	memaddr = MemAddr;
 
 	// Verify
+
+	regaddr = ICM20948_DMP_MEM_BANKSEL;
+	Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
+
+	regaddr = ICM20948_DMP_MEM_STARTADDR;
+	Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
+	l = min(len, ICM20948_DMP_MEM_BANK_SIZE - (memaddr % ICM20948_DMP_MEM_BANK_SIZE));
+
 	while (len > 0)
 	{
 		uint8_t m[ICM20948_DMP_MEM_BANK_SIZE];
-		int l = min(len, ICM20948_DMP_MEM_BANK_SIZE - (memaddr & 0xff));
-
-		regaddr = ICM20948_DMP_MEM_BANKSEL;
-		Write8(&regaddr, 1, memaddr >> 8);
-		regaddr = ICM20948_DMP_MEM_STARTADDR;
-		Write8(&regaddr, 1, memaddr & 0xFF);
 
 		regaddr = ICM20948_DMP_MEM_RW;
-		Read(&regaddr, 1, m, l);
+		Read((uint8_t*)&regaddr, 2, m, l);
 
 		if (memcmp(p, m, l) != 0)
 		{
@@ -800,7 +855,18 @@ bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t Me
 		p += l;
 		memaddr += l;
 		len -= l;
+
+		regaddr = ICM20948_DMP_MEM_BANKSEL;
+		Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
+
+		regaddr = ICM20948_DMP_MEM_STARTADDR;
+		Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
+
+		l = min(len, ICM20948_DMP_MEM_BANK_SIZE);
 	}
+
+	// Restore power state
+	Write8((uint8_t*)&regaddr, 2, pwrstate);
 
 	return true;
 }

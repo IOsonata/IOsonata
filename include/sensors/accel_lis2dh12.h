@@ -42,6 +42,10 @@ SOFTWARE.
 #include "sensors/accel_sensor.h"
 #include "sensors/temp_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define LIS2DH12_I2C_DEVADDR				0x18	//!< 7 bits i2c address for SA0 = 0
 #define LIS2DH12_I2C_DEVADDR1				0x19	//!< 7 bits i2c address for SA0 = 1
 
@@ -248,6 +252,8 @@ SOFTWARE.
 
 #define LIS2DH12_TEMP_MAX_C					127
 
+#ifdef __cplusplus
+
 class AccelLis2dh12 : public AccelSensor, public TempSensor {
 public:
 	/**
@@ -326,5 +332,9 @@ private:
 
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 };
+
+#endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __ACCEL_LIS2DH12_H__

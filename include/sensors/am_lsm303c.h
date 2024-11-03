@@ -45,6 +45,10 @@ SOFTWARE.
 #include "sensors/mag_sensor.h"
 #include "sensors/temp_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define LSM303C_ACCEL_I2C_DEVADDR			0x1D	//!< 7 bit i2c address for Accel
 #define LSM303C_MAG_I2C_DEVADDR				0x1E	//!< 7 bit i2c address for Mag
 
@@ -299,6 +303,7 @@ SOFTWARE.
 
 #define LSM303C_THS_H_M_THS_MASK								(0x7F)
 
+#ifdef __cplusplus
 
 // Accel, Mag, Temperature
 class AccLsm303c : public AccelSensor, public TempSensor  {
@@ -404,6 +409,8 @@ private:
 	bool vbInitialized;
 };
 
+#endif // __cplusplus
 
+/** @} End of group Sensors */
 
 #endif // __AM_LSM303C_H__

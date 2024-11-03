@@ -13,7 +13,7 @@ SEARCH_DIR("../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
-GROUP(-lstdc++ -lgcc -lc)
+GROUP(-lstdc++ -lgcc -lc -lnosys)
 
 
 MEMORY

@@ -38,7 +38,6 @@ SOFTWARE.
 #include <stdlib.h>
 
 #include "mpsl.h"
-#include "mpsl_coex.h"
 #include "mpsl_fem_init.h"
 #include "sdc.h"
 #include "sdc_soc.h"
@@ -855,7 +854,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 		if (pCfg->CoexMode != BTAPP_COEXMODE_NONE)
 		{
-			sdc_coex_adv_mode_configure(true);
+//			sdc_coex_adv_mode_configure(true);
 		}
 	}
 	if (pCfg->Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
@@ -1023,24 +1022,34 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	DEBUG_PRINTF("mpsl_init\r\n");
 
 	// Initialize Nordic multi-protocol support library (MPSL)
+#ifdef NRF54L15_XXAA
+	res = mpsl_init(&lfclk, SWI00_IRQn, BtStackMpslAssert);
+#else
 	res = mpsl_init(&lfclk, PendSV_IRQn, BtStackMpslAssert);
+#endif
+
 	if (res < 0)
 	{
 		return false;
 	}
 
+#ifdef NRF54L15_XXAA
+	NVIC_SetPriority(SWI00_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
+	NVIC_EnableIRQ(SWI00_IRQn);
+#else
 	NVIC_SetPriority(PendSV_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
 	NVIC_EnableIRQ(PendSV_IRQn);
+#endif
 
 	s_BtAppData.CoexMode = pCfg->CoexMode;
 
 	if (pCfg->CoexMode == BTAPP_COEXMODE_1W)
 	{
-		mpsl_coex_support_1wire_gpiote_if();
+		//mpsl_coex_support_1wire_gpiote_if();
 	}
 	else if (pCfg->CoexMode == BTAPP_COEXMODE_3W)
 	{
-		mpsl_coex_support_802152_3wire_gpiote_if();
+		//mpsl_coex_support_802152_3wire_gpiote_if();
 	}
 
 	s_BtAppData.Role = pCfg->Role;
@@ -1444,7 +1453,11 @@ bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint1
 }
 
 extern "C" {
+#ifdef NRF54L15_XXAA
+void SWI00_IRQHandler(void)
+#else
 void PendSV_Handler(void)
+#endif
 {
 	mpsl_low_priority_process();
 }

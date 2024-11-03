@@ -130,6 +130,14 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 			NPM1300_MAIN_INTENEVENTS_VBUSIN0SET_EVENTVBUSREMOVED;
 		Write8((uint8_t*)&regaddr, 2, d);
 	}
+
+	for (int i = 0; i < Cfg.NbVout; i++)
+	{
+		if (Cfg.pVout[i].mVout > 0)
+		{
+			SetVout(i, Cfg.pVout[i].mVout, Cfg.pVout[i].mAlimit);
+		}
+	}
 /*
 	regaddr = NPM1300_BCHARGER_BCHGVTERM_REG;
 	d = NPM1300_BCHARGER_BCHGVTERM_BCHGVTERMNORM_4V00;
@@ -149,7 +157,7 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 
 bool PmnPM1300::Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt)
 {
-
+	return false;
 }
 
 /**
@@ -163,7 +171,7 @@ bool PmnPM1300::Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, Powe
  */
 uint16_t PmnPM1300::Level()
 {
-
+	return 0;
 }
 
 /**
@@ -177,12 +185,12 @@ uint16_t PmnPM1300::Level()
  */
 int32_t PmnPM1300::Temperature()
 {
-
+	return 0;
 }
 
 int32_t PmnPM1300::Voltage()
 {
-
+	return 0;
 }
 
 /**
@@ -202,6 +210,12 @@ int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 {
 	uint16_t regaddr = VoutIdx == 0 ? NPM1300_BUCK_BUCK1NORM_VOUT_REG : NPM1300_BUCK_BUCK2NORM_VOUT_REG;
 	regaddr = EndianCvt16(regaddr);
+	uint32_t vdif = (mVolt - 1000) / 100;
+	uint8_t d = (uint8_t)vdif;
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	return (int32_t)d * 100 + 1000;
 }
 
 /**
@@ -215,6 +229,8 @@ bool PmnPM1300::Enable()
 	uint8_t d = NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING;
 
 	Write8((uint8_t*)&regaddr, 2, d);
+
+	return true;
 }
 
 /**

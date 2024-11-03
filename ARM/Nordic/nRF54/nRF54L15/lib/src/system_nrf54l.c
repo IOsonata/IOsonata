@@ -44,14 +44,16 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 // Overload this variable in application firmware to change oscillator
 __WEAK McuOsc_t g_McuOsc = {
-#if 1
+#if 0
 	// BLYSTL15
 	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 10, 100},
 	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 70},
 #else
 	// Nordic DK
-	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 150},
-	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 155},
+	// 32MHz, 8pF
+	// 32.768kHz, 9pF
+	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 80},
+	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 90},
 #endif
 	.bUSBClk = false
 };

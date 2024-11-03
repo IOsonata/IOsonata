@@ -40,6 +40,10 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #pragma pack(push, 1)
 
 /// Gyroscope raw sensor data
@@ -158,5 +162,7 @@ protected:
 };
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __GYRO_SENSOR_H__

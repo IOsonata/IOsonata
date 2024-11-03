@@ -44,6 +44,10 @@ SOFTWARE.
 #include "sensors/mag_sensor.h"
 #include "sensors/temp_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define FXOS8700CQ_I2C_DEVADDR				0x1E	//!< 7 bit i2c address SA0 = 0, SA1 = 0
 #define FXOS8700CQ_I2C_DEVADDR1				0x1D	//!< 7 bit i2c address SA0 = 1, SA1 = 0
 #define FXOS8700CQ_I2C_DEVADDR2				0x1C	//!< 7 bit i2c address SA0 = 0, SA1 = 1
@@ -56,7 +60,7 @@ SOFTWARE.
 #define FXOS8700CQ_STATUS_REG				0x0
 #define FXOS8700CQ_OUT_X_MSB_REG			0x1
 
-
+#ifdef __cplusplus
 
 // Accel, Mag, Temperature
 class AmFxos8700cq : public AccelSensor, public MagSensor {
@@ -110,5 +114,9 @@ private:
 
 	bool vbInitialized;
 };
+
+#endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AM_FXOS8700CQ_H__

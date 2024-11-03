@@ -44,6 +44,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/gyro_sensor.h"
 #include "sensors/mag_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 // 7 bits I2C device addresses
 #define LSM9DS1_AG_I2C_ADDR0			0x6A
 #define LSM9DS1_AG_I2C_ADDR1		0x6B
@@ -482,5 +486,7 @@ private:
 };
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AGM_LSM9DS1_H__

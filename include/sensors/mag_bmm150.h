@@ -41,6 +41,10 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/mag_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define BMM150_I2C_7BITS_DEVADDR							0x10	// CSB = 0, SDO = 0
 #define BMM150_I2C_7BITS_DEVADDR_ALT1						0x11	// CSB = 0, SDO = 1
 #define BMM150_I2C_7BITS_DEVADDR_ALT2						0x12	// CSB = 1, SDO = 0
@@ -130,11 +134,11 @@ SOFTWARE.
 #define BMM150_REPETITION_XY_REG	0x51
 #define BMM150_REPETITION_Z_REG		0x52
 
-#define BMI150_ADC_RANGE_XY			((1<<12) - 1)	// 13 bits
-#define BMI150_ADC_RANGE_Z			((1<<14) - 1)	// 13 bits
+#define BMM150_ADC_RANGE_XY			((1<<12) - 1)	// 13 bits
+#define BMM150_ADC_RANGE_Z			((1<<14) - 1)	// 15 bits
 
-#define BMI150_FLUX_DENSITY_XY		1300000 //!< max flux density in nT
-#define BMI150_FLUX_DENSITY_Z		2500000 //!< max flux density in nT
+#define BMM150_FLUX_DENSITY_XY		1300000 //!< max flux density in nT
+#define BMM150_FLUX_DENSITY_Z		2500000 //!< max flux density in nT
 
 #pragma pack(push, 1)
 
@@ -156,5 +160,7 @@ public:
 
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AG_BMI160_H__

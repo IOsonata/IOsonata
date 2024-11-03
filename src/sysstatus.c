@@ -33,7 +33,11 @@ Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 //#pragma file_attr("prefersMem=external")
 #include <string.h>
+#ifndef WIN32
 #include <stdatomic.h>
+#else
+#include "iatomic.h"
+#endif
 #include <signal.h>
 
 #include "sysstatus.h"

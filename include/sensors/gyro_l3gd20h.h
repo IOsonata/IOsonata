@@ -42,6 +42,10 @@ SOFTWARE.
 #include "sensors/gyro_sensor.h"
 #include "sensors/temp_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define L3GD20H_I2C_7BITS_DEVADDR0			0x6A	//!< 7 bit i2c address SA0 = 0
 #define L3GD20H_I2C_7BITS_DEVADDR1			0x6B	//!< 7 bit i2c address SA0 = 1
 
@@ -172,6 +176,8 @@ SOFTWARE.
 #define L3GD20H_LOW_ODR_I2C_DIS									(1<<3)		//!< Disable I2C
 #define L3GD20H_LOW_ODR_DRDY_ACTIVE_LOW							(1<<5)		//!< DRDY/INT2 pin active level
 
+#ifdef __cplusplus
+
 /// L3GD20H Gyro device class
 class GyroL3gd20h : public GyroSensor, public TempSensor  {
 public:
@@ -205,6 +211,8 @@ private:
 	bool vbInitialized;
 };
 
+#endif // __cplusplus
 
+/** @} End of group Sensors */
 
 #endif // __GYRO_L3GD20H_H__

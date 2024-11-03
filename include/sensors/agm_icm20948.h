@@ -43,6 +43,10 @@ SOFTWARE.
 #include "sensors/mag_ak09916.h"
 #include "sensors/temp_sensor.h"
 
+/** @addtogroup Sensors
+  * @{
+  */
+
 #define ICM20948_I2C_DEV_ADDR0			0x68		// AD0 low
 #define ICM20948_I2C_DEV_ADDR1			0x69		// AD0 high
 
@@ -547,7 +551,7 @@ SOFTWARE.
 #define ICM20948_DMP_PROG_START_ADDRH	(ICM20948_REG_BANK2 | 0x50)
 #define ICM20948_DMP_PROG_START_ADDRL	(ICM20948_REG_BANK2 | 0x51)
 
-#define ICM20948_DMP_MEM_BANK_SIZE		256
+#define ICM20948_DMP_MEM_BANK_SIZE		256		//!< DMP memory bank size
 
 #pragma pack(push, 1)
 
@@ -757,6 +761,8 @@ private:
 };
 
 #endif // __cplusplus
+
+/** @} End of group Sensors */
 
 #endif // __AGM_ICM20948_H__
 

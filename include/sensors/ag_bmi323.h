@@ -3,6 +3,10 @@
 
 @brief	Bosch BMI323 accel gyro implementation
 
+This file implements only accel & gyro part of the BMI323. IMU features are
+implemented in imu implementation file.
+
+NOTE: BMI323 read always send a dummy byte first.  Se datasheet for detail.
 
 @author	Hoang Nguyen Hoan
 @date	July 18, 2024
@@ -40,7 +44,11 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
-#include "sensors/mag_bmm150.h"
+#include "sensors/temp_sensor.h"
+
+/** @addtogroup Sensors
+  * @{
+  */
 
 #define BMI323_I2C_7BITS_DEVADDR							0x68
 
@@ -62,8 +70,8 @@ SOFTWARE.
 
 #define BMI323_STATUS_POR_DETECTED							(1<<0)	//!< Power on Reset
 #define BMI323_STATUS_DRDY_TEMP								(1<<5)	//!< Data ready for temperature
-#define BMI323_STATUS_DRDY_GYR								(6<<1)	//!< Data ready for gyroscope
-#define BMI323_STATUS_DRDY_ACC								(7<<1)	//!< Data ready for accelerometer
+#define BMI323_STATUS_DRDY_GYR								(1<<6)	//!< Data ready for gyroscope
+#define BMI323_STATUS_DRDY_ACC								(1<<7)	//!< Data ready for accelerometer
 
 #define BMI323_ACC_DATA_X_REG			0x3
 #define BMI323_ACC_DATA_Y_REG			0x4
@@ -479,6 +487,17 @@ SOFTWARE.
 #define BMI323_CFG_RES_VALUE_ONE_MASK							(0x1F)
 #define BMI323_CFG_RES_VALUE_TWO_MASK							(0x3<<14)
 
+#define BMI323_ADC_RANGE				0x7FFF		// 16 Bits
+#define BMI323_ACC_DUMMY_X				0x7F01
+#define BMI323_GYR_DUMMY_X				0x7F02
+#define BMI323_TEMP_DUMMY				-32768	//0x8000
+
+#define BMI323_FIFO_DATA_FLAG_ACC					(1<<0)	//!< Fifo contains Acc data
+#define BMI323_FIFO_DATA_FLAG_GYR					(1<<1)	//!< Fifo contains Gyr data
+#define BMI323_FIFO_DATA_FLAG_TEMP					(1<<2)	//!< Fifo contains temperature data
+#define BMI323_FIFO_DATA_FLAG_TIME					(1<<3)	//!< Fifo contains timer data
+
+
 #ifdef __cplusplus
 
 class AccelBmi323 : public AccelSensor {
@@ -502,6 +521,9 @@ public:
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual uint8_t FifoDataFlag() = 0;
+	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
+	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
 };
 
 class GyroBmi323 : public GyroSensor {
@@ -526,15 +548,63 @@ public:
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual uint8_t FifoDataFlag() = 0;
+	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
+	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
 };
 
-class AgBmi323 : public AccelBmi323, public GyroBmi323 {
+class TempBmi323 : public TempSensor {
+public:
+	/**
+	 * @brief	Initialize sensor (require implementation).
+	 *
+	 * @param 	CfgData : Reference to configuration data
+	 * @param	pIntrf 	: Pointer to interface to the sensor.
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 * @param	pTimer	: Pointer to timer for retrieval of time stamp
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 *
+	 * @return
+	 * 			- true	: Success
+	 * 			- false	: Failed
+	 */
+	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	/**
+	 * @brief	Power on or wake up device
+	 *
+	 * @return	true - If success
+	 */
+	virtual bool Enable();
+
+	/**
+	 * @brief	Put device in power down or power saving sleep mode
+	 *
+	 * @return	None
+	 */
+	virtual void Disable();
+
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual uint8_t FifoDataFlag() = 0;
+	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
+	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
+};
+
+class AgBmi323 : public AccelBmi323, public GyroBmi323, public TempBmi323 {
 public:
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[0] = AccelBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[0];
 	}
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[1] = GyroBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[1];
+	}
+
+	virtual bool Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) {
+		vbSensorEnabled[2] = TempBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[2];
 	}
 
 	virtual bool Enable();
@@ -551,18 +621,27 @@ public:
 protected:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
-	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
-		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
-	}
+	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
 		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
 
 	bool vbInitialized;
 	bool vbSensorEnabled[3];
+
+private:
+	virtual uint8_t FifoDataFlag() { return vFifoDataFlag; }
+	virtual void FifoDataFlagSet(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag; }
+	virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
+
+	uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
+	size_t vFifoFrameSize;	// Data word count
+	uint16_t vPrevTime;
+	uint64_t vRollover;
 };
 
 #endif // __cplusplus
 
+/** @} End of group Sensors */
 
 #endif	// __AG_BMI323_H__

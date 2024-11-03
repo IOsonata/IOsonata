@@ -40,10 +40,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "device.h"
 
-#ifdef NRFXLIB_SDC
-#include "bluetooth/bt_gatt.h"
-#else
+#ifdef SOFTDEVICE_PRESENT
 #include "ble_gatt_db.h"
+#else
+#include "bluetooth/bt_gatt.h"
 #endif
 
 /** @addtogroup Bluetooth
@@ -68,7 +68,7 @@ typedef struct __Bt_Dev_Data {
 	uint8_t Addr[6];
 	uint16_t ConnHdl;
 	int NbSrvc;
-#ifndef NRFXLIB_SDC
+#ifdef SOFTDEVICE_PRESENT
 	ble_gatt_db_srv_t Services[BLEPERIPH_DEV_SERVICE_MAXCNT];
 #else
 	BtHciDevice_t *pHciDev;
