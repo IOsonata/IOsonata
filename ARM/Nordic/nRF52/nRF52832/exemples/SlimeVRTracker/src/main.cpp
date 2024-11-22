@@ -15,6 +15,7 @@
 #include "nrf_gpio.h"
 #include "app_util.h"
 
+#include "crc.h"
 #include "board.h"
 
 
@@ -33,13 +34,21 @@
         STATIC_ASSERT(NUM_VA_ARGS(__VA_ARGS__) > 0 && NUM_VA_ARGS(__VA_ARGS__) <= 63)
 
 static nrf_esb_payload_t tx_payload = NRF_ESB_CREATE_PAYLOAD1(0, 0x01, 0x00);
+static nrf_esb_payload_t tx_payload_pair = NRF_ESB_CREATE_PAYLOAD1(0,
+														  0, 0, 0, 0, 0, 0, 0, 0);
 
 static nrf_esb_payload_t rx_payload;
-static uint32_t button_state_1;
-static uint32_t button_state_2;
-static uint32_t button_state_3;
-static uint32_t button_state_4;
+
+static uint8_t paired_addr[8] = {0};
+//static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
+static bool esb_paired = false;
+
+//static uint32_t button_state_1;
+//static uint32_t button_state_2;
+//static uint32_t button_state_3;
+//static uint32_t button_state_4;
 static volatile bool esb_completed = false;
+static uint8_t s_TrackerId;
 
 void system_off( void )
 {
@@ -82,14 +91,34 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
             // Get the most recent element from the RX FIFO.
             while (nrf_esb_read_rx_payload(&rx_payload) == NRF_SUCCESS) ;
 
-            // For each LED, set it as indicated in the rx_payload, but invert it for the button
-            // which is pressed. This is because the ack payload from the PRX is reflecting the
-            // state from before receiving the packet.
-          //  nrf_gpio_pin_write(LED_1, !( ((rx_payload.data[0] & 0x01) == 0) ^ (button_state_1 == BTN_PRESSED)) );
-            //nrf_gpio_pin_write(LED_2, !( ((rx_payload.data[0] & 0x02) == 0) ^ (button_state_2 == BTN_PRESSED)) );
-            //nrf_gpio_pin_write(LED_3, !( ((rx_payload.data[0] & 0x04) == 0) ^ (button_state_3 == BTN_PRESSED)) );
-            //nrf_gpio_pin_write(LED_4, !( ((rx_payload.data[0] & 0x08) == 0) ^ (button_state_4 == BTN_PRESSED)) );
-            break;
+			if (!paired_addr[0]) // zero, not paired
+			{
+				if (rx_payload.length == 8)
+					memcpy(paired_addr, rx_payload.data, sizeof(paired_addr));
+			}
+			else
+			{
+				if (rx_payload.length == 4)
+				{
+					// TODO: Device should never receive packets if it is already paired, why is this packet received?
+					// This may be part of acknowledge
+/*					if (!nrfx_timer_init_check(&m_timer))
+					{
+						LOG_WRN("Timer not initialized");
+						break;
+					}
+					if (timer_state == false)
+					{
+						nrfx_timer_resume(&m_timer);
+						timer_state = true;
+					}
+					nrfx_timer_clear(&m_timer);
+					last_reset = 0;
+					led_clock = (rx_payload.data[0] << 8) + rx_payload.data[1]; // sync led flashes :)
+					led_clock_offset = 0;
+					LOG_DBG("RX, timer reset");*/
+				}
+			}            break;
     }
 
     esb_completed = true;
@@ -108,9 +137,9 @@ void clocks_start( void )
 uint32_t esb_init( void )
 {
     uint32_t err_code;
-    uint8_t base_addr_0[4] = {0xE7, 0xE7, 0xE7, 0xE7};
-    uint8_t base_addr_1[4] = {0xC2, 0xC2, 0xC2, 0xC2};
-    uint8_t addr_prefix[8] = {0xE7, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8 };
+    uint8_t base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
+    uint8_t base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8};
+    uint8_t addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
 
 #ifndef NRF_ESB_LEGACY
     nrf_esb_config_t nrf_esb_config         = NRF_ESB_DEFAULT_CONFIG;
@@ -213,7 +242,66 @@ void recover_state()
     tx_payload.data[1] = loop_count << 4;
 }
 
+inline void esb_set_addr_paired(void)
+{
+	// Recreate receiver address
+	uint8_t addr_buffer[16] = {0};
+	for (int i = 0; i < 4; i++)
+	{
+		addr_buffer[i] = paired_addr[i + 2];
+		addr_buffer[i + 4] = paired_addr[i + 2] + paired_addr[6];
+	}
+	for (int i = 0; i < 8; i++)
+		addr_buffer[i + 8] = paired_addr[7] + i;
+	for (int i = 0; i < 16; i++)
+	{
+		if (addr_buffer[i] == 0x00 || addr_buffer[i] == 0x55 || addr_buffer[i] == 0xAA) // Avoid invalid addresses (see nrf datasheet)
+			addr_buffer[i] += 8;
+	}
+	memcpy(base_addr_0, addr_buffer, sizeof(base_addr_0));
+	memcpy(base_addr_1, addr_buffer + 4, sizeof(base_addr_1));
+	memcpy(addr_prefix, addr_buffer + 8, sizeof(addr_prefix));
+}
 
+void esb_pair()
+{
+	if (!paired_addr[0]) // zero, no receiver paired
+	{
+		tx_payload_pair.noack = false;
+		uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR; // Use device address as unique identifier (although it is not actually guaranteed, see datasheet)
+		memcpy(&tx_payload_pair.data[2], addr, 6);
+
+		uint8_t checksum = crc8_ccitt(&tx_payload_pair.data[2], 6, 0x07);
+		if (checksum == 0)
+			checksum = 8;
+//		LOG_INF("Checksum: %02X", checksum);
+		tx_payload_pair.data[0] = checksum; // Use checksum to make sure packet is for this device
+//		set_led(SYS_LED_PATTERN_SHORT, SYS_LED_PRIORITY_CONNECTION);
+		while (paired_addr[0] != checksum)
+		{
+			if (paired_addr[0])
+			{
+				//LOG_INF("Incorrect checksum: %02X", paired_addr[0]);
+				paired_addr[0] = 0; // Packet not for this device
+			}
+			nrf_esb_flush_rx();
+			nrf_esb_flush_tx();
+			nrf_esb_write_payload(&tx_payload_pair); // TODO: Does this still fail after a while?
+			nrf_esb_start_tx();
+			//k_msleep(1000);
+		}
+	}
+
+	s_TrackerId = paired_addr[1];
+
+	esb_set_addr_paired();
+	esb_paired = true;
+}
+
+void HardwareInit()
+{
+
+}
 
 //
 // Print a greeting message on standard output and exit.
@@ -236,8 +324,13 @@ int main()
     uint32_t err_code;
     // Initialize
     clocks_start();
+
+    HardwareInit();
+
     err_code = esb_init();
     APP_ERROR_CHECK(err_code);
+
+    esb_pair();
 
     gpio_init();
 
