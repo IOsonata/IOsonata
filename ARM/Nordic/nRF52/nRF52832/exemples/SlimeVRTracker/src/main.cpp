@@ -14,10 +14,15 @@
 #include "nrf_delay.h"
 #include "nrf_gpio.h"
 #include "app_util.h"
+#include "fds.h"
 
+#include "istddef.h"
 #include "crc.h"
 #include "board.h"
 
+
+#define FIRMWARE_VERSION	0
+#define DEVICE_NAME			"BLYST-MOTION"
 
 #define RESET_MEMORY_TEST_BYTE  (0x0DUL)        /**< Known sequence written to a special register to check if this wake up is from System OFF. */
 #define RAM_RETENTION_OFF       (0x00000003UL)  /**< The flag used to turn off RAM retention on nRF52. */
@@ -25,7 +30,8 @@
 #define BTN_PRESSED     0                       /**< Value of a pressed button. */
 #define BTN_RELEASED    1                       /**< Value of a released button. */
 
-//#define NRF_ESB_LEGACY
+#define FDS_DATA_FILE     (0xF010)
+#define FDS_DATA_REC_KEY  (0x7010)
 
 /*lint -save -esym(40, BUTTON_1) -esym(40, BUTTON_2) -esym(40, BUTTON_3) -esym(40, BUTTON_4) -esym(40, LED_1) -esym(40, LED_2) -esym(40, LED_3) -esym(40, LED_4) */
 
@@ -33,13 +39,27 @@
         {.length = NUM_VA_ARGS(__VA_ARGS__), .pipe = _pipe, .data = {__VA_ARGS__}};         \
         STATIC_ASSERT(NUM_VA_ARGS(__VA_ARGS__) > 0 && NUM_VA_ARGS(__VA_ARGS__) <= 63)
 
+
+typedef struct __App_Data {
+	uint8_t TrackerId;
+	uint8_t PairedAdddr[8];
+} AppData_t;
+
+__attribute__ ((section(".Version"), used))
+const AppInfo_t g_AppInfo = {
+	DEVICE_NAME, {FIRMWARE_VERSION, 0, BUILDN},
+	{'I', 'O', 's', 'o', 'n', 'a', 't', 'a', 'I', '-', 'S', 0x55, 0xA5, 0x5A, 0xA5, 0x5A},
+};
+
+AppData_t g_AppData = {
+};
+
 static nrf_esb_payload_t tx_payload = NRF_ESB_CREATE_PAYLOAD1(0, 0x01, 0x00);
-static nrf_esb_payload_t tx_payload_pair = NRF_ESB_CREATE_PAYLOAD1(0,
-														  0, 0, 0, 0, 0, 0, 0, 0);
+static nrf_esb_payload_t tx_payload_pair = NRF_ESB_CREATE_PAYLOAD1(0, 0, 0, 0, 0, 0, 0, 0, 0);
 
 static nrf_esb_payload_t rx_payload;
 
-static uint8_t paired_addr[8] = {0};
+//static uint8_t paired_addr[8] = {0};
 //static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
 static bool esb_paired = false;
 
@@ -48,7 +68,19 @@ static bool esb_paired = false;
 //static uint32_t button_state_3;
 //static uint32_t button_state_4;
 static volatile bool esb_completed = false;
-static uint8_t s_TrackerId;
+//static uint8_t s_TrackerId;
+
+alignas(4) static fds_record_t const g_AppDataRecord =
+{
+    .file_id           = FDS_DATA_FILE,
+    .key               = FDS_DATA_REC_KEY,
+    .data = {
+		.p_data = &g_AppData,
+    /* The length of a record is always expressed in 4-byte units (words). */
+		.length_words = (sizeof(AppData_t) + 3) >> 2,
+    }
+};
+volatile bool g_FdsInitialized = false;
 
 void system_off( void )
 {
@@ -77,6 +109,50 @@ void system_off( void )
     while (true);
 }
 
+static void fds_evt_handler(fds_evt_t const * p_evt)
+{
+    switch (p_evt->id)
+    {
+        case FDS_EVT_INIT:
+            if (p_evt->result == NRF_SUCCESS)
+            {
+            	g_FdsInitialized = true;
+            }
+            break;
+
+        case FDS_EVT_WRITE:
+        {
+            if (p_evt->result == NRF_SUCCESS)
+            {
+            }
+        } break;
+
+        case FDS_EVT_DEL_RECORD:
+        {
+            if (p_evt->result == NRF_SUCCESS)
+            {
+            }
+        } break;
+
+        default:
+            break;
+    }
+}
+
+void UpdateRecord()
+{
+    fds_record_desc_t desc = {0};
+    fds_find_token_t  tok  = {0};
+
+    uint32_t rc = fds_record_find(FDS_DATA_FILE, FDS_DATA_REC_KEY, &desc, &tok);
+
+    if (rc == NRF_SUCCESS)
+    {
+    	rc = fds_record_update(&desc, &g_AppDataRecord);
+    	APP_ERROR_CHECK(rc);
+    }
+}
+
 
 void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
 {
@@ -91,10 +167,10 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
             // Get the most recent element from the RX FIFO.
             while (nrf_esb_read_rx_payload(&rx_payload) == NRF_SUCCESS) ;
 
-			if (!paired_addr[0]) // zero, not paired
+			if (!g_AppData.PairedAdddr[0]) // zero, not paired
 			{
 				if (rx_payload.length == 8)
-					memcpy(paired_addr, rx_payload.data, sizeof(paired_addr));
+					memcpy(g_AppData.PairedAdddr, rx_payload.data, sizeof(g_AppData.PairedAdddr));
 			}
 			else
 			{
@@ -118,7 +194,8 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
 					led_clock_offset = 0;
 					LOG_DBG("RX, timer reset");*/
 				}
-			}            break;
+			}
+			break;
     }
 
     esb_completed = true;
@@ -241,7 +318,7 @@ void recover_state()
 
     tx_payload.data[1] = loop_count << 4;
 }
-
+#if 0
 inline void esb_set_addr_paired(void)
 {
 	// Recreate receiver address
@@ -297,10 +374,71 @@ void esb_pair()
 	esb_set_addr_paired();
 	esb_paired = true;
 }
+#endif
 
 void HardwareInit()
 {
+    (void) fds_register(fds_evt_handler);
+    uint32_t rc = fds_init();
+    APP_ERROR_CHECK(rc);
 
+    while (g_FdsInitialized != true)
+    {
+        __WFE();
+    }
+
+    fds_record_desc_t desc = {0};
+    fds_find_token_t  tok  = {0};
+
+    rc = fds_record_find(FDS_DATA_FILE, FDS_DATA_REC_KEY, &desc, &tok);
+
+    if (rc == NRF_SUCCESS)
+    {
+    	AppData_t data;
+
+    	do {
+			/* A config file is in flash. Let's update it. */
+			fds_flash_record_t appdata = {0};
+
+			/* Open the record and read its contents. */
+			rc = fds_record_open(&desc, &appdata);
+			APP_ERROR_CHECK(rc);
+
+//			uint8_t *p = (uint8_t *)appdata.p_data;
+			//g_AppData.Duty = p->Duty;
+			//g_AppData.Temp = p->Temp;
+			//g_AppData.bTempHold = p->bTempHold;
+			memcpy(&data, appdata.p_data, sizeof(AppData_t));
+			/* Close the record when done reading. */
+			rc = fds_record_close(&desc);
+			APP_ERROR_CHECK(rc);
+
+			rc = fds_record_find(FDS_DATA_FILE, FDS_DATA_REC_KEY, &desc, &tok);
+    	} while (rc == NRF_SUCCESS);
+
+    	uint8_t *p = (uint8_t *)&data;
+		uint8_t cs = 0;
+
+		for (int i = 0; i < sizeof(AppData_t); i++, p++)
+		{
+			cs += *p;
+		}
+
+		if (cs == 0)
+		{
+			memcpy(&g_AppData, &data, sizeof(AppData_t));
+		}
+		else
+		{
+			UpdateRecord();
+		}
+
+    }
+    else
+    {
+        rc = fds_record_write(&desc, &g_AppDataRecord);
+        APP_ERROR_CHECK(rc);
+    }
 }
 
 //
@@ -330,7 +468,7 @@ int main()
     err_code = esb_init();
     APP_ERROR_CHECK(err_code);
 
-    esb_pair();
+  //  esb_pair();
 
     gpio_init();
 

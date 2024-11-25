@@ -65,13 +65,23 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/boards&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/proprietary_rf/esb&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic_fifo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fds&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fstorage&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/log&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/softdevice/s132/headers&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.161900023" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="FDS_BACKEND=NRF_FSTORAGE_NVMC"/>
 									<listOptionValue builtIn="false" value="NRF52832_XXAA"/>
+									<listOptionValue builtIn="false" value="BUILDN=$$(date +&quot;%y%m%d&quot;)"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.undef.2009457253" name="Undefined symbols (-U)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.undef" useByScannerDiscovery="true" valueType="undefDefinedSymbols">
+									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1068125181" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -91,14 +101,22 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/boards&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/proprietary_rf/esb&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic_fifo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fds&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fstorage&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/log&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/softdevice/s132/headers&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.946485249" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="FDS_BACKEND=NRF_FSTORAGE_NVMC"/>
 									<listOptionValue builtIn="false" value="NRF52832_XXAA"/>
+									<listOptionValue builtIn="false" value="BUILDN=$$(date +&quot;%y%m%d&quot;)"/>
 								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.undef.1757590126" name="Undefined symbols (-U)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.undef" useByScannerDiscovery="true" valueType="undefDefinedSymbols"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.329211537" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.102963785" name="GNU Arm Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
@@ -217,13 +235,23 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/boards&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/proprietary_rf/esb&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic_fifo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fds&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fstorage&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/log&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/softdevice/s132/headers&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1292266764" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="FDS_BACKEND=NRF_FSTORAGE_NVMC"/>
 									<listOptionValue builtIn="false" value="NRF52832_XXAA"/>
+									<listOptionValue builtIn="false" value="BUILDN=$$(date +&quot;%y%m%d&quot;)"/>
+								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.undef.1956877096" name="Undefined symbols (-U)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.undef" useByScannerDiscovery="true" valueType="undefDefinedSymbols">
+									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.964693688" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -243,14 +271,22 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/boards&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/proprietary_rf/esb&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic_fifo&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fds&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fstorage&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/log&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/softdevice/s132/headers&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.44549021" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="FDS_BACKEND=NRF_FSTORAGE_NVMC"/>
 									<listOptionValue builtIn="false" value="NRF52832_XXAA"/>
+									<listOptionValue builtIn="false" value="BUILDN=$$(date +&quot;%y%m%d&quot;)"/>
 								</option>
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="true" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.undef.2054231045" name="Undefined symbols (-U)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.undef" useByScannerDiscovery="true" valueType="undefDefinedSymbols"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.1718967048" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.2036489849" name="GNU Arm Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
