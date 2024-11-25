@@ -17,7 +17,11 @@
 #include "fds.h"
 
 #include "istddef.h"
+#include "idelay.h"
 #include "crc.h"
+#include "coredev/uart.h"
+#include "iopinctrl.h"
+
 #include "board.h"
 
 
@@ -51,8 +55,7 @@ const AppInfo_t g_AppInfo = {
 	{'I', 'O', 's', 'o', 'n', 'a', 't', 'a', 'I', '-', 'S', 0x55, 0xA5, 0x5A, 0xA5, 0x5A},
 };
 
-AppData_t g_AppData = {
-};
+AppData_t g_AppData = { (uint8_t)-1, };
 
 static nrf_esb_payload_t tx_payload = NRF_ESB_CREATE_PAYLOAD1(0, 0x01, 0x00);
 static nrf_esb_payload_t tx_payload_pair = NRF_ESB_CREATE_PAYLOAD1(0, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -81,6 +84,50 @@ alignas(4) static fds_record_t const g_AppDataRecord =
     }
 };
 volatile bool g_FdsInitialized = false;
+
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
+
+//int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+
+#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
+
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
+
+
+static const IOPinCfg_t s_UartPins[] = UART_PINS;
+
+// UART configuration data
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = 1000000,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 1,
+	//.EvtCallback = nRFUartEvthandler,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,//UARTFIFOSIZE,
+	.pRxMem = NULL,//s_UartRxFifo,
+	.TxMemSize = 0,//UARTFIFOSIZE,//FIFOSIZE,
+	.pTxMem = NULL,//s_UartTxFifo,//g_TxBuff,
+	.bDMAMode = true,
+};
+
+UART g_Uart;
+
+
+static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
+static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8};
+static const uint8_t discovery_addr_prefix[8] = {0xFE, 0xFF, 0x29, 0x27, 0x09, 0x02, 0xB2, 0xD6};
+static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
+
 
 void system_off( void )
 {
@@ -170,12 +217,22 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
 			if (!g_AppData.PairedAdddr[0]) // zero, not paired
 			{
 				if (rx_payload.length == 8)
+				{
+					g_Uart.printf("rx_payload.data[0] = %02x ", rx_payload.data[0]);
+					for (int i = 1; i < 8; i++)
+					{
+						g_Uart.printf("%02x ", rx_payload.data[i]);
+					}
+					g_Uart.printf("\r\n");
 					memcpy(g_AppData.PairedAdddr, rx_payload.data, sizeof(g_AppData.PairedAdddr));
+					UpdateRecord();
+				}
 			}
 			else
 			{
 				if (rx_payload.length == 4)
 				{
+					g_Uart.printf("Error\r\n");
 					// TODO: Device should never receive packets if it is already paired, why is this packet received?
 					// This may be part of acknowledge
 /*					if (!nrfx_timer_init_check(&m_timer))
@@ -209,7 +266,6 @@ void clocks_start( void )
     NRF_CLOCK->TASKS_HFCLKSTART = 1;
     while (NRF_CLOCK->EVENTS_HFCLKSTARTED == 0);
 }
-
 
 uint32_t esb_init( void )
 {
@@ -378,6 +434,9 @@ void esb_pair()
 
 void HardwareInit()
 {
+	IOPinConfig(LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinClear(LED1_PORT, LED1_PIN);
+
     (void) fds_register(fds_evt_handler);
     uint32_t rc = fds_init();
     APP_ERROR_CHECK(rc);
@@ -404,10 +463,6 @@ void HardwareInit()
 			rc = fds_record_open(&desc, &appdata);
 			APP_ERROR_CHECK(rc);
 
-//			uint8_t *p = (uint8_t *)appdata.p_data;
-			//g_AppData.Duty = p->Duty;
-			//g_AppData.Temp = p->Temp;
-			//g_AppData.bTempHold = p->bTempHold;
 			memcpy(&data, appdata.p_data, sizeof(AppData_t));
 			/* Close the record when done reading. */
 			rc = fds_record_close(&desc);
@@ -439,6 +494,42 @@ void HardwareInit()
         rc = fds_record_write(&desc, &g_AppDataRecord);
         APP_ERROR_CHECK(rc);
     }
+
+    g_Uart.Init(s_UartCfg);
+    g_Uart.printf("SlimeVR Tracker Demo\n\r");
+
+    IOPinSet(LED1_PORT, LED1_PIN);
+
+    if (g_AppData.PairedAdddr[0] == 0)
+    {
+    	// Not paired
+		memcpy(base_addr_0, discovery_base_addr_0, sizeof(base_addr_0));
+		memcpy(base_addr_1, discovery_base_addr_1, sizeof(base_addr_1));
+		memcpy(addr_prefix, discovery_addr_prefix, sizeof(addr_prefix));
+
+		tx_payload_pair.noack = false;
+		uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR; // Use device address as unique identifier (although it is not actually guaranteed, see datasheet)
+		memcpy(&tx_payload_pair.data[2], addr, 6);
+    }
+    else
+    {
+    	uint8_t addr_buffer[16] = {0};
+    	for (int i = 0; i < 4; i++)
+    	{
+    		addr_buffer[i] = g_AppData.PairedAdddr[i + 2];
+    		addr_buffer[i + 4] = g_AppData.PairedAdddr[i + 2] + g_AppData.PairedAdddr[6];
+    	}
+    	for (int i = 0; i < 8; i++)
+    		addr_buffer[i + 8] = g_AppData.PairedAdddr[7] + i;
+    	for (int i = 0; i < 16; i++)
+    	{
+    		if (addr_buffer[i] == 0x00 || addr_buffer[i] == 0x55 || addr_buffer[i] == 0xAA) // Avoid invalid addresses (see nrf datasheet)
+    			addr_buffer[i] += 8;
+    	}
+    	memcpy(base_addr_0, addr_buffer, sizeof(base_addr_0));
+    	memcpy(base_addr_1, addr_buffer + 4, sizeof(base_addr_1));
+    	memcpy(addr_prefix, addr_buffer + 8, sizeof(addr_prefix));
+    }
 }
 
 //
@@ -468,6 +559,41 @@ int main()
     err_code = esb_init();
     APP_ERROR_CHECK(err_code);
 
+    msDelay(100);
+
+    if (g_AppData.PairedAdddr[0] == 0)
+    {
+		tx_payload_pair.noack = false;
+		uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR; // Use device address as unique identifier (although it is not actually guaranteed, see datasheet)
+		memcpy(&tx_payload_pair.data[2], addr, 6);
+
+		uint8_t cs = crc8_ccitt(&tx_payload_pair.data[2], 6, 7);
+		if (cs == 0)
+			cs = 8;
+
+		tx_payload_pair.data[0] = cs;
+
+		g_Uart.printf("0 - tx_payload_pair.data[0] = %02x ", tx_payload_pair.data[0]);
+		for (int i = 1; i < 8; i++)
+		{
+			g_Uart.printf("%02x ", tx_payload_pair.data[i]);
+		}
+		g_Uart.printf("\r\n");
+
+		g_Uart.printf("0 - rx_payload.data[0] = %02x ", rx_payload.data[0]);
+		for (int i = 1; i < 8; i++)
+		{
+			g_Uart.printf("%02x ", rx_payload.data[i]);
+		}
+		g_Uart.printf("\r\n");
+
+		nrf_esb_write_payload(&tx_payload_pair); // TODO: Does this still fail after a while?
+
+		while (g_AppData.PairedAdddr[0] != cs)
+		{
+			__WFE();
+		}
+    }
   //  esb_pair();
 
     gpio_init();
