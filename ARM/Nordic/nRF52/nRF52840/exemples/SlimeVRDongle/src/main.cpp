@@ -23,6 +23,8 @@
 #include "iopinctrl.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
+
+#include "SlimeVRDongle.h"
 #include "board.h"
 #include "stddev.h"
 
@@ -53,10 +55,35 @@ const UARTCfg_t g_UartCfg = {
 // UART object instance
 UART g_Uart;
 
-static nrf_esb_payload_t        rx_payload;
+uint8_t stored_trackers = 0;
+uint64_t stored_tracker_addr[MAX_TRACKERS] = {0};
+
+uint16_t AddTracker(uint64_t Addr)
+{
+	uint16_t retid = stored_trackers;
+
+	for (int i = 0; i < stored_trackers; i++) // Check if the device is already stored
+	{
+		if (Addr != 0 && stored_tracker_addr[i] == Addr)
+		{
+			//LOG_INF("Found device linked to id %d with address %012llX", i, found_addr);
+			return i;
+		}
+	}
+
+	if (stored_trackers < MAX_TRACKERS)
+	{
+		stored_tracker_addr[stored_trackers] = Addr;
+
+		stored_trackers++;
+	}
+
+	return retid;
+}
+
 
 /*lint -save -esym(40, BUTTON_1) -esym(40, BUTTON_2) -esym(40, BUTTON_3) -esym(40, BUTTON_4) -esym(40, LED_1) -esym(40, LED_2) -esym(40, LED_3) -esym(40, LED_4) */
-
+#if 0
 void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
 {
     switch (p_event->evt_id)
@@ -85,7 +112,7 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
     NRF_GPIO->OUTCLR = 0xFUL << 12;
     NRF_GPIO->OUTSET = (p_event->tx_attempts & 0x0F) << 12;
 }
-
+#endif
 
 void clocks_start( void )
 {
@@ -94,7 +121,7 @@ void clocks_start( void )
 
     while (NRF_CLOCK->EVENTS_HFCLKSTARTED == 0);
 }
-
+#if 0
 uint32_t esb_init( void )
 {
     uint32_t err_code;
@@ -125,6 +152,7 @@ uint32_t esb_init( void )
 
     return err_code;
 }
+#endif
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
@@ -150,13 +178,14 @@ void HardwareInit()
 	g_Uart.Init(g_UartCfg);
 	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
-	IOPinConfig(0, 23, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinConfig(BUT_PORT, BUT_PIN, BUT_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 
 	printf("UART BLE Central Demo\r\n");
 }
 
 int main(void)
 {
+	static bool pairmode = true;
     ret_code_t err_code;
 
     HardwareInit();
@@ -166,36 +195,34 @@ int main(void)
 
     clocks_start();
 
+#if 0
     err_code = esb_init();
    // APP_ERROR_CHECK(err_code);
 
     //bsp_board_leds_init();
     err_code = nrf_esb_start_rx();
     //APP_ERROR_CHECK(err_code);
+#endif
 
     //NRF_LOG_DEBUG("Enhanced ShockBurst Transmitter Example running.\r\n");
 
     while (true)
     {
-        //NRF_LOG_DEBUG("Transmitting packet %02x\r\n", tx_payload.data[1]);
+    	EsbSetAddr(pairmode);
 
-/*        tx_payload.noack = false;
-        if (nrf_esb_write_payload(&tx_payload) == NRF_SUCCESS)
-        {
-            // Toggle one of the LEDs.
-            nrf_gpio_pin_write(LED_1, !(tx_payload.data[1]%8>0 && tx_payload.data[1]%8<=4));
-            nrf_gpio_pin_write(LED_2, !(tx_payload.data[1]%8>1 && tx_payload.data[1]%8<=5));
-            nrf_gpio_pin_write(LED_3, !(tx_payload.data[1]%8>2 && tx_payload.data[1]%8<=6));
-            nrf_gpio_pin_write(LED_4, !(tx_payload.data[1]%8>3));
-            tx_payload.data[1]++;
-        }
-        else
-        {
-            NRF_LOG_WARNING("Sending packet failed\r\n");
-        }
 
-        nrf_delay_us(50000);*/
-    	__WFE();
+        err_code = esb_init();
+       // APP_ERROR_CHECK(err_code);
+
+        //bsp_board_leds_init();
+        err_code = nrf_esb_start_rx();
+        //APP_ERROR_CHECK(err_code);
+
+        do {
+        	__WFE();
+        } while (IOPinRead(BUT_PORT, BUT_PIN) == false);
+
+        pairmode != pairmode;
     }
 }
 /*lint -restore */
