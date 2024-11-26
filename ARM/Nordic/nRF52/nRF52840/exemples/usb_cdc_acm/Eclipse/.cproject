@@ -79,7 +79,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/bsp&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/button&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/cli&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/cli/uart&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/cli/cdc_acm&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fds&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fifo&quot;"/>
@@ -146,7 +146,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c|src/nRF5_SDK/libraries/log/src/nrf_log_frontend.c|src/nRF5_SDK/libraries/log/src/nrf_log_default_backends.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_uart.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_serial.c|src/nRF5_SDK/libraries/button/app_button.c|src/nRF5_SDK/libraries/bsp/bsp.c|src/nRF5_SDK/libraries/bsp/bsp_cli.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_clock.c|src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_power.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_gpiote.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|src/nRF5_SDK/libraries/cli|src/nRF5_SDK/libraries/cli/uart|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c|src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|src/nRF5_SDK/libraries/usbd/class|src/nRF5_SDK/libraries/usbd/class/dummy/app_usbd_dummy.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c|src/nRF5_SDK/libraries/log/src/nrf_log_frontend.c|src/nRF5_SDK/libraries/log/src/nrf_log_default_backends.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_uart.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_serial.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_clock.c|src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_power.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|src/nRF5_SDK/libraries/cli/uart|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c|src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|src/nRF5_SDK/libraries/usbd/class|src/nRF5_SDK/libraries/usbd/class/dummy/app_usbd_dummy.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -165,7 +165,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="" id="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release.1163212096" name="Release" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release">
+				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="" id="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release.1163212096" name="Release" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release">
 					<folderInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release.1163212096." name="/" resourcePath="">
 						<toolChain id="ilg.gnuarmeclipse.managedbuild.cross.toolchain.elf.release.42409377" name="ARM Cross GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.elf.release">
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash.1563075927" name="Create flash image" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash" value="true" valueType="boolean"/>
@@ -229,7 +229,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/bsp&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/button&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/cli&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/cli/uart&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/cli/cdc_acm&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/delay&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fds&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/fifo&quot;"/>
@@ -296,7 +296,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c|src/nRF5_SDK/libraries/log/src/nrf_log_frontend.c|src/nRF5_SDK/libraries/log/src/nrf_log_default_backends.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_uart.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_serial.c|src/nRF5_SDK/libraries/button/app_button.c|src/nRF5_SDK/libraries/bsp/bsp.c|src/nRF5_SDK/libraries/bsp/bsp_cli.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_clock.c|src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_power.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_gpiote.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|src/nRF5_SDK/libraries/cli|src/nRF5_SDK/libraries/cli/uart|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c|src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|src/nRF5_SDK/libraries/usbd/class|src/nRF5_SDK/libraries/usbd/class/dummy/app_usbd_dummy.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c|src/nRF5_SDK/libraries/log/src/nrf_log_frontend.c|src/nRF5_SDK/libraries/log/src/nrf_log_default_backends.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_uart.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_serial.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_clock.c|src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_power.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|src/nRF5_SDK/libraries/cli/uart|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c|src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|src/nRF5_SDK/libraries/usbd/class|src/nRF5_SDK/libraries/usbd/class/dummy/app_usbd_dummy.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
