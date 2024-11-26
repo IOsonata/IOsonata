@@ -122,61 +122,11 @@ APP_TIMER_DEF(m_timer_0);
 extern uint32_t m_counter;
 extern bool m_counter_active;
 
-#if CLI_OVER_USB_CDC_ACM
-
-/**
- * @brief Enable power USB detection
- *
- * Configure if example supports USB port connection
- */
-#ifndef USBD_POWER_DETECTION
-#define USBD_POWER_DETECTION true
-#endif
-
-uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
-uint8_t g_extern_usbd_product_string[12 + 1] = { "CLI" };
-
-static void usbd_user_ev_handler(app_usbd_event_type_t event)
-{
-    switch (event)
-    {
-        case APP_USBD_EVT_STOPPED:
-            app_usbd_disable();
-            break;
-        case APP_USBD_EVT_POWER_DETECTED:
-            if (!nrf_drv_usbd_is_enabled())
-            {
-                app_usbd_enable();
-            }
-            break;
-        case APP_USBD_EVT_POWER_REMOVED:
-            app_usbd_stop();
-            break;
-        case APP_USBD_EVT_POWER_READY:
-            app_usbd_start();
-            break;
-        default:
-            break;
-    }
-}
-
-#endif //CLI_OVER_USB_CDC_ACM
-
 /**
  * @brief Command line interface instance
  * */
 #define CLI_EXAMPLE_LOG_QUEUE_SIZE  (4)
 
-#if CLI_OVER_USB_CDC_ACM
-NRF_CLI_CDC_ACM_DEF(m_cli_cdc_acm_transport);
-NRF_CLI_DEF(m_cli_cdc_acm,
-            "usb_cli:~$ ",
-            &m_cli_cdc_acm_transport.transport,
-            '\r',
-            CLI_EXAMPLE_LOG_QUEUE_SIZE);
-#endif //CLI_OVER_USB_CDC_ACM
-
-#if CLI_OVER_UART
 #if 0
 NRF_CLI_UART_DEF(m_cli_uart_transport, 0, 64, 16);
 NRF_CLI_DEF(m_cli_uart,
@@ -204,21 +154,12 @@ nrf_cli_t m_cli_uart = {
 	.p_name = "uart_cli:~$ ",
 	.p_iface = &m_cli_uart_transport,
 	.p_ctx = &m_cli_uart_ctx,//CONCAT_2(name, _ctx),
-	.p_log_backend = NULL,//NRF_CLI_BACKEND_PTR(m_cli_uart),
+	.p_log_backend = NRF_CLI_BACKEND_PTR(m_cli_uart),
 	.p_fprintf_ctx = &m_cli_uart_fprintf_ctx,//CONCAT_2(name, _fprintf_ctx),
 	.p_cmd_hist_mempool = NRF_CLI_MEMOBJ_PTR(m_cli_uart),
 };
 
 
-#endif
-#endif
-#if 0
-NRF_CLI_RTT_DEF(m_cli_rtt_transport);
-NRF_CLI_DEF(m_cli_rtt,
-            "rtt_cli:~$ ",
-            &m_cli_rtt_transport.transport,
-            '\n',
-            CLI_EXAMPLE_LOG_QUEUE_SIZE);
 #endif
 
 static void timer_handle(void * p_context)
@@ -236,31 +177,14 @@ static void cli_start(void)
 {
     ret_code_t ret;
 
-#if CLI_OVER_USB_CDC_ACM
-    ret = nrf_cli_start(&m_cli_cdc_acm);
-    APP_ERROR_CHECK(ret);
-#endif
-
-#if CLI_OVER_UART
     ret = nrf_cli_start(&m_cli_uart);
     APP_ERROR_CHECK(ret);
-#endif
-#if 0
-    ret = nrf_cli_start(&m_cli_rtt);
-    APP_ERROR_CHECK(ret);
-#endif
 }
 
 static void cli_init(void)
 {
     ret_code_t ret;
 
-#if CLI_OVER_USB_CDC_ACM
-    ret = nrf_cli_init(&m_cli_cdc_acm, NULL, true, true, NRF_LOG_SEVERITY_INFO);
-    APP_ERROR_CHECK(ret);
-#endif
-
-#if CLI_OVER_UART
 //    nrf_drv_uart_config_t uart_config = NRF_DRV_UART_DEFAULT_CONFIG;
 // This defines the s_UartPortPins map and pin count.
 // See board.h for target device specific definitions
@@ -292,61 +216,11 @@ const UARTCfg_t g_UartCfg = {
 //    uart_config.hwfc    = NRF_UART_HWFC_DISABLED;
     ret = nrf_cli_init(&m_cli_uart, &g_UartCfg, true, true, NRF_LOG_SEVERITY_INFO);
     APP_ERROR_CHECK(ret);
-#endif
-#if 0
-    ret = nrf_cli_init(&m_cli_rtt, NULL, true, true, NRF_LOG_SEVERITY_INFO);
-    APP_ERROR_CHECK(ret);
-#endif
 }
-
-
-static void usbd_init(void)
-{
-#if CLI_OVER_USB_CDC_ACM
-    ret_code_t ret;
-    static const app_usbd_config_t usbd_config = {
-        .ev_handler = app_usbd_event_execute,
-        .ev_state_proc = usbd_user_ev_handler
-    };
-    ret = app_usbd_init(&usbd_config);
-    APP_ERROR_CHECK(ret);
-
-    app_usbd_class_inst_t const * class_cdc_acm =
-            app_usbd_cdc_acm_class_inst_get(&nrf_cli_cdc_acm);
-    ret = app_usbd_class_append(class_cdc_acm);
-    APP_ERROR_CHECK(ret);
-
-    if (USBD_POWER_DETECTION)
-    {
-        ret = app_usbd_power_events_enable();
-        APP_ERROR_CHECK(ret);
-    }
-    else
-    {
-        NRF_LOG_INFO("No USB power detection enabled\nStarting USB now");
-
-        app_usbd_enable();
-        app_usbd_start();
-    }
-
-    /* Give some time for the host to enumerate and connect to the USB CDC port */
-    nrf_delay_ms(1000);
-#endif
-}
-
 
 static void cli_process(void)
 {
-#if CLI_OVER_USB_CDC_ACM
-    nrf_cli_process(&m_cli_cdc_acm);
-#endif
-
-#if CLI_OVER_UART
     nrf_cli_process(&m_cli_uart);
-#endif
-#if 0
-    nrf_cli_process(&m_cli_rtt);
-#endif
 }
 
 

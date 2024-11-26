@@ -1098,7 +1098,7 @@
 // <e> APP_USBD_ENABLED - app_usbd - USB Device library
 //==========================================================
 #ifndef APP_USBD_ENABLED
-#define APP_USBD_ENABLED 1
+#define APP_USBD_ENABLED 0
 #endif
 // <s> APP_USBD_VID - Vendor ID.
 
@@ -1960,7 +1960,7 @@
  
 
 #ifndef NRF_CLI_CDC_ACM_ENABLED
-#define NRF_CLI_CDC_ACM_ENABLED 1
+#define NRF_CLI_CDC_ACM_ENABLED 0
 #endif
 
 // <o> NRF_CLI_CDC_ACM_COMM_INTERFACE - COMM interface number. 

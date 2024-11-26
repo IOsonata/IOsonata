@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>cli</name>
+	<name>UartCliDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -28,6 +28,11 @@
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/board.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/nRF52840/exemples/cli/src/board.h</locationURI>
 		</link>
 		<link>
 			<name>src/demo_cli_cmds.c</name>
@@ -145,11 +150,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/cli/cdc_acm</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/cli/cli_utils_cmds.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cli_utils_cmds.c</locationURI>
@@ -173,11 +173,6 @@
 			<name>src/nRF5_SDK/libraries/cli/nrf_cli_vt100.h</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/nrf_cli_vt100.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/rtt</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/cli/uart</name>
@@ -260,26 +255,6 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_uart.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cdc_acm/nrf_cli_cdc_acm.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/rtt/nrf_cli_rtt.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/rtt/nrf_cli_rtt.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/cli/rtt/nrf_cli_rtt.h</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/rtt/nrf_cli_rtt.h</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/cli/uart/nrf_cli_uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/uart/nrf_cli_uart.c</locationURI>
@@ -338,11 +313,6 @@
 			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uarte.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_usbd.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/prs</name>
