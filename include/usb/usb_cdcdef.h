@@ -237,7 +237,7 @@ typedef struct __USB_Functional_Descriptor {
 									//!< For a list of the supported values, see Table 13.
 	uint8_t bData[1];				//!< Data array. These fields will vary depending
 									//!< on the functional descriptor being represented.
-} USB_FCTDESC;
+} UsbCdcDesc_t;
 
 typedef struct __USB_Header_Functional_Descriptor {
 	uint8_t bFunctionLength;		//!< Size of this descriptor in bytes.
@@ -245,7 +245,7 @@ typedef struct __USB_Header_Functional_Descriptor {
 	uint8_t bDescriptorSubtype;		//!< Header functional descriptor subtype as defined in Table 13.
 	uint16_t bcdCDC;				//!< USB Class Definitions for Communications
 									//!< Devices Specification release number in binary-coded decimal.
-} USB_CDC_HEADER_DESC;
+} UsbCdcHeaderDesc_t;
 
 typedef struct __USB_Union_Functional_Descriptor {
 	uint8_t bFunctionLength;		//!< Size of this functional descriptor, in bytes.
@@ -254,7 +254,7 @@ typedef struct __USB_Union_Functional_Descriptor {
 	uint8_t bControlInterface;		//!< The interface number of the Communications or Data Class
 									//!< interface, designated as the controlling interface for the union.*
 	uint8_t bSubordinateInterf[1];	//!< Interface number of first subordinate interface in the union. *
-} USB_CDC_UNION_DESC;
+} UsbCdcUnionDesc_t;
 
 typedef struct __USB_Country_Functional_Descriptor {
 	uint8_t bFunctionLength;		//!< Size of this functional descriptor, in bytes.
@@ -268,7 +268,7 @@ typedef struct __USB_Country_Functional_Descriptor {
 	uint16_t wCountryCode[1];		//!< Country code in the format as defined in [ISO3166],
 									//!< release date as specified in offset 3 for the first
 									//!< supported country.
-} USB_CDC_COUNTRY_DESC;
+} UsbCdcCountryDesc_t;
 
 typedef struct __USB_Call_Management_Functional_Descriptor {
 	uint8_t bFunctionLength;		//!< Size of this functional descriptor, in bytes.
@@ -293,7 +293,7 @@ typedef struct __USB_Call_Management_Functional_Descriptor {
 									//!< bit D1 is reset to zero for future compatibility.
 	uint8_t bDataInterface;			//!< Interface number of Data Class interface optionally
 									//!< used for call management.
-} USB_CDC_CM_DESC;
+} UsbCdcCallMngmtDesc_t;
 
 typedef struct __USB_Abstract_Control_Management_Functional_Descriptor {
 	uint8_t bFunctionLength;		//!< Size of this functional descriptor, in bytes.
@@ -316,7 +316,7 @@ typedef struct __USB_Abstract_Control_Management_Functional_Descriptor {
 									//!< requests/notifications are supported by a
 									//!< CommunicationsClass interface with the SubClass code
 									//!< of Abstract Control Model.
-} USB_CDC_ACM_DESC;
+} UsbCdcACMDesc_t;
 
 typedef struct __USB_Direct_Line_Management_Functional_Descriptor {
 	uint8_t bFunctionLength;		//!< Size of this functional descriptor, in bytes.
@@ -332,7 +332,7 @@ typedef struct __USB_Direct_Line_Management_Functional_Descriptor {
 									//!< circuit. (see Section 6.3.6)
 									//!< - D1: 1 - Device supports the request combination
 									//!< of Set_Aux_Line_State, Ring_Aux_Jack, and notific
-} USB_CDC_DLM_DESC;
+} UsbCdcDLMDesc_t;
 
 #pragma pack(pop)
 

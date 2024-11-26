@@ -121,7 +121,7 @@ typedef struct __USB_Msc_Command_Block_Wrapper {
 									//!< the command block is being sent.
 	uint8_t bCBWCBLength;			//!< The valid length of the CBWCB in bytes
 	uint8_t CBWCB[16];				//!< The command block to be executed by the device.
-} USB_MSC_CBW;
+} UsbMscCmdBlkWrapper_t;
 
 typedef struct __USB_Msc_Command_Status_Wrapper {
 	uint32_t dCSWSignature;			//!< Signature that helps identify this data packet
@@ -131,7 +131,7 @@ typedef struct __USB_Msc_Command_Status_Wrapper {
 									//!< received in the dCBWTag of the associated CBW
 	uint32_t dCSWDataResidue;		//!< See USB MSC Bulk only docs for details
 	uint8_t	bCSWStatus;				//!< bCSWStatus indicates the success or failure
-} USB_MSC_CSW;
+} UsbMscCmdStatusWrapper_t;
 
 #pragma pack(pop)
 

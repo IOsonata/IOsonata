@@ -35,7 +35,7 @@ enum  USBD_EVENT_T {
 #pragma pack(push, 1)
 
 typedef struct {
-	USB_DEVICE_DESC *device_desc; 	// Pointer to USB device descriptor
+	UsbDevDesc_t *device_desc; 	// Pointer to USB device descriptor
 	uint8_t *string_desc;			// Pointer to array of USB string descriptors
 	uint8_t *full_speed_desc;
 	uint8_t *high_speed_desc;
@@ -166,7 +166,7 @@ typedef struct {
 	void(* 	WakeUpCfg )(USBD_HANDLE_T hUsb, uint32_t cfg);
 	void(* 	SetAddress )(USBD_HANDLE_T hUsb, uint32_t adr);
 	void(* 	Configure )(USBD_HANDLE_T hUsb, uint32_t cfg);
-	void(* 	ConfigEP )(USBD_HANDLE_T hUsb, USB_ENDPOINT_DESC *pEPD);
+	void(* 	ConfigEP )(USBD_HANDLE_T hUsb, UsbEndPointDesc_t *pEPD);
 	void(* 	DirCtrlEP )(USBD_HANDLE_T hUsb, uint32_t dir);
 	void(* 	EnableEP )(USBD_HANDLE_T hUsb, uint32_t EPNum);
 	void(* 	DisableEP )(USBD_HANDLE_T hUsb, uint32_t EPNum);

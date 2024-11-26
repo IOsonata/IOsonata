@@ -118,7 +118,7 @@ typedef struct __USB_HID_Report_Descriptor {
 									//!< Set_Descriptor Request for a table of class
 									//!< descriptor constants.
 	uint16_t wDescriptorLength;		//!< total size of the Report descriptor.
-} USB_HID_REP_DESC;
+} UsbHidReportDesc_t;
 
 typedef struct __USB_HID_Descriptor {
 	uint8_t bLength;				//!< Total size of the HID descriptor.
@@ -127,8 +127,8 @@ typedef struct __USB_HID_Descriptor {
 	uint8_t bCountryCode;			//!< country code of the localized hardware.
 	uint8_t bNumDescriptors;		//!< number of class descriptors (always at
 									//!< least one i.e. Report descriptor.)
-	USB_HID_REP_DESC RepDesc[1];	//!< Array of HID report descriptor class
-} USB_HID_DESC;
+	UsbHidReportDesc_t RepDesc[1];	//!< Array of HID report descriptor class
+} UsbHidDesc_t;
 
 
 #pragma pack(pop)

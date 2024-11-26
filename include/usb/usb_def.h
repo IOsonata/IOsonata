@@ -179,7 +179,7 @@ typedef struct __USB_Setup_Data {
 									//!< Word-sized field that varies according to request;
 									//!< typically used to pass an index or offset
 	uint16_t wLength;				//!< Number of bytes to transfer if there is a Data stage
-} USB_SETUP_DATA;
+} UsbSetupData_t;
 
 
 typedef struct __USB_Device_Descriptor {
@@ -201,7 +201,7 @@ typedef struct __USB_Device_Descriptor {
 	uint8_t		iProduct;			//!< Index of Product String Descriptor
 	uint8_t		iSerialNumber;		//!< Index of Serial Number String Descriptor
 	uint8_t		bNumConfigurations;	//!< Number of Possible Configurations
-} USB_DEVICE_DESC;
+} UsbDevDesc_t;
 
 typedef struct __USB_Device_Qualifier_Descriptor {
 	uint8_t bLength;				//!< Size of descriptor
@@ -213,7 +213,7 @@ typedef struct __USB_Device_Qualifier_Descriptor {
 	uint8_t bMaxPacketSize0;		//!< Maximum packet size for other speed
 	uint8_t bNumConfigurations;		//!< Number of Other-speed Configurations
 	uint8_t bReserved;				//!< Reserved for future use, must be zero
-} USB_DEVICE_QUAL;
+} UsbDevQualDesc_t;
 
 typedef struct __USB_Config_Descriptor {
 	uint8_t		bLength;			//!< Size of Descriptor in Bytes (9 bytes)
@@ -227,7 +227,7 @@ typedef struct __USB_Config_Descriptor {
 									//!< - D5 Remote Wakeup
 									//!< - D4..0 Reserved, set to 0.
 	uint8_t		bMaxPower;			//!< Maximum Power Consumption in 2mA units
-} USB_CONFIG_DESC;
+} UsbCfgDesc_t;
 
 typedef struct __USB_Other_Speed_Configuration_Descriptor {
 	uint8_t bLength;				//!< Size of descriptor
@@ -238,7 +238,7 @@ typedef struct __USB_Other_Speed_Configuration_Descriptor {
 	uint8_t iConfiguration;			//!< Index of string descriptor
 	uint8_t bmAttributes;			//!< Same as Configuration descriptor
 	uint8_t bMaxPower;				//!< Same as Configuration descriptor
-} USB_OSPEED_CONFIG_DESC;
+} UsbOtherSpeedDesc_t;
 
 typedef struct __USB_Interface_Descriptor {
 	uint8_t		bLength;			//!< Size of Descriptor in Bytes (9 Bytes)
@@ -250,7 +250,7 @@ typedef struct __USB_Interface_Descriptor {
 	uint8_t		bInterfaceSubClass;	//!< Subclass Code (defined by USB Org)
 	uint8_t		bInterfaceProtocol;	//!< Protocol Code (defined by USB Org)
 	uint8_t		iInterface;			//!< Index of String Descriptor describing this interface
-} USB_INTERFACE_DESC;
+} UsbIntrfDesc_t;
 
 #define USB_ENDPADDR_DIRIN(addr)	((addr & 0xF) | 0x80)
 #define USB_ENDPADDR_DIROUT(addr)	(addr & 0xF)
@@ -298,7 +298,7 @@ typedef struct __USB_Endpoint_Descriptor {
 	uint8_t		bInterval;			//!< Interval for polling endpoint data transfers. Value in frame counts.
 									//!< Ignored for Bulk & Control Endpoints. Isochronous must equal 1 and
 									//!< field may range from 1 to 255 for interrupt endpoints.
-} USB_ENDPOINT_DESC;
+} UsbEndPointDesc_t;
 
 typedef struct __USB_Interface_Association_Descriptor {
 	uint8_t bLength;				//!< Size of this descriptor in bytes.
@@ -321,7 +321,7 @@ typedef struct __USB_Interface_Association_Descriptor {
 									//!< codes are qualified by the values of the
 									//!< bFunctionClass and bFunctionSubClass fields.
 	uint8_t iFunction;				//!< Index of string descriptor describing this function.
-} USB_IAD_DESC;
+} UsbInrtfAssDesc_t;
 
 typedef struct __USB_OTG_Descriptor {
 	uint8_t bLength;				//!< Size of Descriptor
@@ -336,19 +336,19 @@ typedef struct __USB_OTG_Descriptor {
 									//!< decimal (i.e. 2.0 is 0200H). This field identifies
 									//!< the release of the OTG and EH supplement with
 									//!< which the device and its descriptors are compliant.
-} USB_OTG_DESC;
+} UsbOTGDesc_t;
 
 typedef struct __USB_String_Language_Descriptor {
 	uint8_t		bLength;			//!< Size of Descriptor in Bytes
 	uint8_t		bDescriptorType;	//!< String Descriptor (0x03)
 	uint16_t	wLangId[1];			//!< Array of supported language Code Zero (e.g. 0x0409 English - United States)
-} USB_STRLANG_DESC;
+} UsbStrLangDesc_t;
 
 typedef struct __USB_String_Descriptor {
 	uint8_t		bLength;			//!< Size of Descriptor in Bytes
 	uint8_t		bDescriptorType;	//!< String Descriptor (0x03)
 	uint16_t	wStr[1];			//!< Unicode String
-} USB_STR_DESC;
+} UsbStrDesc_t;
 
 
 #pragma pack(pop)
