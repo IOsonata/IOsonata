@@ -56,9 +56,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usbd_hid.cpp</name>
+			<name>src/usbd.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/usbd_hid.cpp</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/usbd.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
