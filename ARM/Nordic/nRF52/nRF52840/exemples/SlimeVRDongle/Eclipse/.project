@@ -51,6 +51,16 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fds/fds.c</locationURI>
 		</link>
 		<link>
+			<name>src/fprintf</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/libraries</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/main.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
@@ -59,6 +69,41 @@
 			<name>src/usbd.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/usbd.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fprintf/nrf_fprintf.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/fprintf/nrf_fprintf.c</locationURI>
+		</link>
+		<link>
+			<name>src/fprintf/nrf_fprintf_format.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/fprintf/nrf_fprintf_format.c</locationURI>
+		</link>
+		<link>
+			<name>src/libraries/cli</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/libraries/cli/cdc_acm</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/libraries/cli/cli_utils_cmds.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cli_utils_cmds.c</locationURI>
+		</link>
+		<link>
+			<name>src/libraries/cli/nrf_cli.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/nrf_cli.c</locationURI>
+		</link>
+		<link>
+			<name>src/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

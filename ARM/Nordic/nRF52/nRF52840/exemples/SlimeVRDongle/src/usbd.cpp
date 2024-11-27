@@ -27,6 +27,8 @@
 
 #include "usb/usb_hiddef.h"
 
+#include "SlimeVRDongle.h"
+
 static void usbd_user_ev_handler(app_usbd_event_type_t event);
 static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                     app_usbd_cdc_acm_user_event_t event);
@@ -85,29 +87,24 @@ NRF_CLI_DEFCPP(m_cli_cdc_acm,
 #define USBD_POWER_DETECTION true
 #endif
 
+#define USBD_INTERFACE_HID				0		// Interface 0 - HID
+#define USBD_EPIN_HID					NRFX_USBD_EPIN1
+#define USBD_EPOUT_HID					NRFX_USBD_EPOUT1
 
-#define CDC_ACM_COMM_INTERFACE  0
-#define CDC_ACM_COMM_EPIN       NRF_DRV_USBD_EPIN2
+#define USBD_INTERFACE_CDC_ACM_COMM  	1
+#define USBD_EPIN_CDC_ACM_COMM       	NRFX_USBD_EPIN2
 
-#define CDC_ACM_DATA_INTERFACE  1
-#define CDC_ACM_DATA_EPIN       NRF_DRV_USBD_EPIN1
-#define CDC_ACM_DATA_EPOUT      NRF_DRV_USBD_EPOUT1
+#define USBD_INTERFACE_CDC_ACM_DATA  	2
+#define USBD_EPIN_CDC_ACM_DATA       	NRFX_USBD_EPIN3
+#define USBD_EPOUT_CDC_ACM_DATA      	NRFX_USBD_EPOUT3
 
-#define INTERFACE_CONFIGS APP_USBD_CDC_ACM_CONFIG(CDC_ACM_COMM_INTERFACE, CDC_ACM_COMM_EPIN, CDC_ACM_DATA_INTERFACE, CDC_ACM_DATA_EPIN, CDC_ACM_DATA_EPOUT)
+#define INTERFACE_CONFIG_CDC APP_USBD_CDC_ACM_CONFIG(USBD_INTERFACE_CDC_ACM_COMM, USBD_EPIN_CDC_ACM_COMM, USBD_INTERFACE_CDC_ACM_DATA, USBD_EPIN_CDC_ACM_DATA, USBD_EPOUT_CDC_ACM_DATA)
 
-#define CLASS_CONFIG_PART (APP_USBD_CDC_ACM_INST_CONFIG(cdc_acm_user_ev_handler, \
-        					CDC_ACM_COMM_INTERFACE,                       \
-							CDC_ACM_COMM_EPIN,                            \
-							CDC_ACM_DATA_INTERFACE,                       \
-							CDC_ACM_DATA_EPIN,                            \
-							CDC_ACM_DATA_EPOUT,                           \
-							APP_USBD_CDC_COMM_PROTOCOL_AT_V250,           \
-							&m_app_cdc_acm_ep))
 
 extern const app_usbd_class_methods_t app_usbd_cdc_acm_class_methods;
 
-static uint8_t m_app_cdc_acm_ep = { (APP_USBD_EXTRACT_INTERVAL_FLAG(CDC_ACM_COMM_EPIN) ?
-	APP_USBD_EXTRACT_INTERVAL_VALUE(CDC_ACM_COMM_EPIN) : APP_USBD_CDC_ACM_DEFAULT_INTERVAL)};
+static uint8_t m_app_cdc_acm_ep = { (APP_USBD_EXTRACT_INTERVAL_FLAG(USBD_EPIN_CDC_ACM_COMM) ?
+	APP_USBD_EXTRACT_INTERVAL_VALUE(USBD_EPIN_CDC_ACM_COMM) : APP_USBD_CDC_ACM_DEFAULT_INTERVAL)};
 
 //static APP_USBD_CLASS_DATA_TYPE(type_name) CONCAT_2(instance_name, _data);
 static app_usbd_cdc_acm_data_t	m_app_cdc_acm_data;
@@ -115,11 +112,11 @@ static app_usbd_cdc_acm_data_t	m_app_cdc_acm_data;
 // Define a USB instance
 static const app_usbd_cdc_acm_inst_t s_usb_inst =
 {
-	.comm_interface = CDC_ACM_COMM_INTERFACE,
-	.comm_epin = CDC_ACM_COMM_EPIN,
-	.data_interface = CDC_ACM_DATA_INTERFACE,
-	.data_epout = CDC_ACM_DATA_EPOUT,
-	.data_epin = CDC_ACM_DATA_EPIN,
+	.comm_interface = USBD_INTERFACE_CDC_ACM_COMM,
+	.comm_epin = USBD_EPIN_CDC_ACM_COMM,
+	.data_interface = USBD_INTERFACE_CDC_ACM_DATA,
+	.data_epout = USBD_EPOUT_CDC_ACM_DATA,
+	.data_epin = USBD_EPIN_CDC_ACM_DATA,
 	.protocol = APP_USBD_CDC_COMM_PROTOCOL_AT_V250,
 	.user_ev_handler = cdc_acm_user_ev_handler,
 	.p_ep_interval = &m_app_cdc_acm_ep,
@@ -134,24 +131,14 @@ const app_usbd_cdc_acm_t m_app_cdc_acm =
 			.p_class_methods = &app_usbd_cdc_acm_class_methods,
 			.iface =
 			{
-					.cnt = NUM_VA_ARGS(BRACKET_EXTRACT(INTERFACE_CONFIGS)),
-					.config = { APP_USBD_CLASS_IFACES_CONFIG_EXTRACT(INTERFACE_CONFIGS) },
-					.ep = { APP_USBD_CLASS_IFACES_EP_EXTRACT(INTERFACE_CONFIGS) },
+					.cnt = NUM_VA_ARGS(BRACKET_EXTRACT(INTERFACE_CONFIG_CDC)),
+					.config = { APP_USBD_CLASS_IFACES_CONFIG_EXTRACT(INTERFACE_CONFIG_CDC) },
+					.ep = { APP_USBD_CLASS_IFACES_EP_EXTRACT(INTERFACE_CONFIG_CDC) },
 			},
 			.inst = s_usb_inst,//BRACKET_EXTRACT(CLASS_CONFIG_PART),
 	},
 };
 
-
-/**
- * @brief HID generic class interface number.
- * */
-#define HID_GENERIC_INTERFACE  0
-
-/**
- * @brief HID generic class endpoint number.
- * */
-#define HID_GENERIC_EPIN       NRF_DRV_USBD_EPIN1
 
 /**
  * @brief Mouse speed (value sent via HID when board button is pressed).
@@ -221,7 +208,7 @@ const app_usbd_cdc_acm_t m_app_cdc_acm =
  * */
 #define ENDPOINT_LIST()                                      \
 (                                                            \
-        HID_GENERIC_EPIN                                     \
+		USBD_EPIN_HID                                     \
 )
 /**
  * @brief HID generic mouse action types
@@ -401,7 +388,7 @@ static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                              protocol)
 
 #endif
-
+#if 1
 /**
  * @brief USB HID instance initializer @ref app_usbd_hid_inst_t.
  *
@@ -437,7 +424,7 @@ static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
         .user_event_handler = user_ev_handler,               \
         .p_ep_interval = ep_list                             \
     }
-
+#endif
 /**
  * @brief Reuse HID mouse report descriptor for HID generic class
  */
@@ -503,6 +490,10 @@ APP_USBD_CLASS_INST_GLOBAL_DEFCPP(
             interfaces_configs,                                                 \
             class_config_part)
 #endif
+
+#define INTERFACE_CONFIGS APP_USBD_HID_GENERIC_CONFIG(USBD_INTERFACE_HID, ENDPOINT_LIST())
+
+
 static APP_USBD_CLASS_DATA_TYPE(app_usbd_hid_generic) CONCAT_2(m_app_hid_generic, _data);
 const APP_USBD_CLASS_INSTANCE_TYPE(app_usbd_hid_generic) m_app_hid_generic =
 #if 0
@@ -522,7 +513,8 @@ const APP_USBD_CLASS_INSTANCE_TYPE(app_usbd_hid_generic) m_app_hid_generic =
 		APP_USBD_CLASS_INSTANCE_INITVAL(
 				&CONCAT_2(m_app_hid_generic, _data),
 				&app_usbd_generic_class_methods,
-		APP_USBD_HID_GENERIC_CONFIG(HID_GENERIC_INTERFACE, ENDPOINT_LIST()),
+		//APP_USBD_HID_GENERIC_CONFIG(USBD_INTERFACE_HID, ENDPOINT_LIST()),
+				INTERFACE_CONFIGS,
 	    (APP_USBD_HID_GENERIC_INST_CONFIG(&CONCAT_2(m_app_hid_generic, _in),
 	                                      &CONCAT_2(m_app_hid_generic, _out),
 	                                      &CONCAT_2(m_app_hid_generic, _feature),
@@ -869,7 +861,7 @@ static void bsp_event_callback(bsp_event_t ev)
 }
 #endif
 #if NRF_CLI_ENABLED
-static void init_cli(void)
+void init_cli(void)
 {
     ret_code_t ret;
     ret = nrf_cli_init(&m_cli_cdc_acm, nullptr, true, true, NRF_LOG_SEVERITY_INFO);
@@ -897,7 +889,7 @@ static ret_code_t idle_handle(app_usbd_class_inst_t const * p_inst, uint8_t repo
 
 }
 
-void UsbInt()
+void UsbInit()
 {
     ret_code_t ret;
     static const app_usbd_config_t usbd_config = {
@@ -907,9 +899,21 @@ void UsbInt()
     ret = app_usbd_init(&usbd_config);
     APP_ERROR_CHECK(ret);
 
+	app_usbd_serial_num_generate();
+
     app_usbd_class_inst_t const * class_cdc_acm =
             app_usbd_cdc_acm_class_inst_get(&nrf_cli_cdc_acm);
     ret = app_usbd_class_append(class_cdc_acm);
     APP_ERROR_CHECK(ret);
 
+    if (USBD_POWER_DETECTION)
+    {
+        ret = app_usbd_power_events_enable();
+        APP_ERROR_CHECK(ret);
+    }
+    else
+    {
+        app_usbd_enable();
+        app_usbd_start();
+    }
 }

@@ -17,6 +17,11 @@
 #include "nrf.h"
 #include "nrf_esb.h"
 #include "fds.h"
+#include "nrf_cli.h"
+#include "nrf_drv_clock.h"
+#include "nrf_drv_power.h"
+//#include "nrf_cli_uart.h"
+#include "nrf_cli_cdc_acm.h"
 
 #include "istddef.h"
 #include "idelay.h"
@@ -48,6 +53,9 @@ const AppInfo_t g_AppInfo = {
 
 AppData_t g_AppData = { (uint8_t)-1, };
 
+uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
+uint8_t g_extern_usbd_product_string[15 + 1] = { "SlimeVRDongle" };
+
 alignas(4) static fds_record_t const g_AppDataRecord =
 {
     .file_id           = FDS_DATA_FILE,
@@ -59,6 +67,54 @@ alignas(4) static fds_record_t const g_AppDataRecord =
     }
 };
 volatile bool g_FdsInitialized = false;
+
+
+#if 0//NRF_CLI_ENABLED
+/**
+ * @brief Macro for defining a command line interface instance.
+ *
+ * @param[in] name              Instance name.
+ * @param[in] cli_prefix        CLI prefix string.
+ * @param[in] p_transport_iface Pointer to the transport interface.
+ * @param[in] newline_ch        Deprecated parameter, not used any more. Any uint8_t value can be used.
+ * @param[in] log_queue_size    Logger processing queue size.
+ */
+#define NRF_CLI_DEFCPP(name, cli_prefix, p_transport_iface, newline_ch, log_queue_size)    \
+	    extern nrf_cli_t const name;                                            \
+        static nrf_cli_ctx_t CONCAT_2(name, _ctx);                              \
+        NRF_FPRINTF_DEF(CONCAT_2(name, _fprintf_ctx),                           \
+                        &name,                                                  \
+                        CONCAT_2(name, _ctx).printf_buff,                       \
+                        NRF_CLI_PRINTF_BUFF_SIZE,                               \
+                        false,                                                  \
+                        nrf_cli_print_stream);                                  \
+        NRF_LOG_BACKEND_CLI_DEF(CONCAT_2(name, _log_backend), log_queue_size);  \
+        NRF_CLI_HISTORY_MEM_OBJ(name);                                          \
+        /*lint -save -e31*/                                                     \
+        nrf_cli_t const name = {                                         		\
+            .p_name = cli_prefix,                                               \
+            .p_iface = p_transport_iface,                                       \
+            .p_ctx = &CONCAT_2(name, _ctx),                                     \
+            .p_log_backend = NRF_CLI_BACKEND_PTR(name),                         \
+            .p_fprintf_ctx = &CONCAT_2(name, _fprintf_ctx),                     \
+            .p_cmd_hist_mempool = NRF_CLI_MEMOBJ_PTR(name),                     \
+        } /*lint -restore*/
+
+//NRF_CLI_CDC_ACM_DEF(m_cli_cdc_acm_transport);
+//#define NRF_CLI_CDC_ACM_DEF(_name_)
+static nrf_cli_cdc_acm_internal_cb_t m_cli_cdc_acm_transport_cb;
+static const nrf_cli_cdc_acm_internal_t m_cli_cdc_acm_transport = {
+	.transport = {.p_api = &nrf_cli_cdc_acm_transport_api},
+	.p_cb = &m_cli_cdc_acm_transport_cb,
+};
+
+NRF_CLI_DEFCPP(m_cli_cdc_acm,
+            "usb_cli:~$ ",
+            &m_cli_cdc_acm_transport.transport,
+            '\r',
+            CLI_EXAMPLE_LOG_QUEUE_SIZE);
+#endif
+
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
@@ -248,6 +304,8 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 
 	return cnt;
 }
+
+
 void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
@@ -312,6 +370,9 @@ void HardwareInit()
         rc = fds_record_write(&desc, &g_AppDataRecord);
         APP_ERROR_CHECK(rc);
     }
+
+    init_cli();
+    UsbInit();
 }
 
 int main(void)
@@ -319,12 +380,18 @@ int main(void)
 	static bool pairmode = true;
     ret_code_t err_code;
 
+	ret_code_t ret;
+
+	ret = nrf_drv_clock_init();
+    //clocks_start();
+
     HardwareInit();
+//    cli_init();
+  //  cli_start();
 
     //err_code = NRF_LOG_INIT(NULL);
     //APP_ERROR_CHECK(err_code);
 
-    clocks_start();
 
 #if 0
     err_code = esb_init();
