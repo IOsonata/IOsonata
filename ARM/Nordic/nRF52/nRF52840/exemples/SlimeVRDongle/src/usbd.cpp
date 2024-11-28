@@ -82,46 +82,9 @@ NRF_CLI_DEF(m_cli_cdc_acm,
    .bNumConfigurations = 1                             /* Fixed value: only one configuration supported*/\
 }
 
-extern "C"
-const app_usbd_descriptor_device_t m_device_dsc =
-    APP_USBD_CORE_DEVICE_DESCRIPTOR;
+// This is to overside hard coded VID/PID in Nordic Lib
+extern "C" const app_usbd_descriptor_device_t m_device_dsc = APP_USBD_CORE_DEVICE_DESCRIPTOR;
 
-/**
- * @brief Mouse speed (value sent via HID when board button is pressed).
- * */
-#define CONFIG_MOUSE_MOVE_SPEED (3)
-
-/**
- * @brief Mouse move repeat time in milliseconds
- */
-#define CONFIG_MOUSE_MOVE_TIME_MS (5)
-
-
-/* GPIO used as LED & buttons in this example */
-//#define LED_USB_START    (BSP_BOARD_LED_0)
-//#define LED_HID_REP_IN   (BSP_BOARD_LED_2)
-
-#define BTN_MOUSE_X_POS  0
-#define BTN_MOUSE_Y_POS  1
-#define BTN_MOUSE_LEFT   2
-#define BTN_MOUSE_RIGHT  3
-
-/**
- * @brief Left button mask in buttons report
- */
-#define HID_BTN_LEFT_MASK  (1U << 0)
-
-/**
- * @brief Right button mask in buttons report
- */
-#define HID_BTN_RIGHT_MASK (1U << 1)
-
-/* HID report layout */
-#define HID_BTN_IDX   0 /**< Button bit mask position */
-#define HID_X_IDX     1 /**< X offset position */
-#define HID_Y_IDX     2 /**< Y offset position */
-#define HID_W_IDX     3 /**< Wheel position  */
-#define HID_REP_SIZE  4 /**< The size of the report */
 
 /**
  * @brief Number of reports defined in report descriptor.
@@ -171,49 +134,43 @@ typedef enum {
  * */
 static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                 app_usbd_hid_user_event_t event);
-#if 0
-/**
- * @brief USB HID instance initializer @ref app_usbd_hid_inst_t.
- *
- * @param subclass_dsc          HID subclass descriptors.
- * @param sub_boot              Subclass boot. (@ref app_usbd_hid_subclass_t)
- * @param protocl               HID protocol. (@ref app_usbd_hid_protocol_t)
- * @param report_buff_in        Input report buffer list.
- * @param report_buff_out       Output report buffer.
- * @param report_buff_feature   Feature report buffer.
- * @param user_ev_handler       @ref app_usbd_hid_user_ev_handler_t.
- * @param hid_methods           @ref app_usbd_hid_methods_t.
- * @param ep_list               List of endpoints and intervals
- * */
 
-#define APP_USBD_HID_INST_CONFIG(subclass_dsc,               \
-                                 sub_boot,                   \
-                                 protocl,                    \
-                                 report_buff_in,             \
-                                 report_buff_out,            \
-                                 report_buff_feature,        \
-                                 user_ev_handler,            \
-                                 hid_methods,                \
-                                 ep_list)                    \
-    {                                                        \
-        .p_subclass_desc = subclass_dsc,                     \
-        .subclass_desc_count = ARRAY_SIZE(subclass_dsc),     \
-        .subclass_boot = sub_boot,                           \
-        .protocol = protocl,                                 \
-        .p_rep_buffer_in = report_buff_in,                   \
-        .p_rep_buffer_out = report_buff_out,                 \
-        .p_rep_buffer_feature = report_buff_feature,         \
-        .p_hid_methods = hid_methods,                        \
-        .user_event_handler = user_ev_handler,               \
-        .p_ep_interval = ep_list                             \
-    }
-#endif
+// SlimeVR HID report desc
+/*
+0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
+0x09, 0x00,        // Usage (Undefined)
+0xA1, 0x01,        // Collection (Application)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x15, 0x00,        //   Logical Minimum (0)
+0x25, 0xFF,        //   Logical Maximum (-1)
+0x75, 0x08,        //   Report Size (8)
+0x95, 0x04,        //   Report Count (4)
+0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x15, 0x00,        //   Logical Minimum (0)
+0x26, 0xFF, 0xFF,  //   Logical Maximum (-1)
+0x75, 0x10,        //   Report Size (16)
+0x95, 0x08,        //   Report Count (8)
+0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+0xC0,              // End Collection
+*/
+
 /**
  * @brief Reuse HID mouse report descriptor for HID generic class
  */
 //APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
 
-#if 1
+#if 0
 #define SLIMEVR_HID_REPORT_DESC		{\
 	0x05, 0x01,      \
 	0x09, 0x00,      \
@@ -243,36 +200,9 @@ static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
 	0xC0,            \
 }
 APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(s_SlimeHIDReportDesc, SLIMEVR_HID_REPORT_DESC);
-/*
-0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
-0x09, 0x00,        // Usage (Undefined)
-0xA1, 0x01,        // Collection (Application)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x15, 0x00,        //   Logical Minimum (0)
-0x25, 0xFF,        //   Logical Maximum (-1)
-0x75, 0x08,        //   Report Size (8)
-0x95, 0x04,        //   Report Count (4)
-0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x15, 0x00,        //   Logical Minimum (0)
-0x26, 0xFF, 0xFF,  //   Logical Maximum (-1)
-0x75, 0x10,        //   Report Size (16)
-0x95, 0x08,        //   Report Count (8)
-0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-0xC0,              // End Collection
-*/
 #else
-static const uint8_t s_SlimeHIDReportDesc_data[] = {
+// not using Nordic macro
+static const uint8_t s_SlimeHIDReportDescData[] = {
 	0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
 	0x09, 0x00,        // Usage (Undefined)
 	0xA1, 0x01,        // Collection (Application)
@@ -300,77 +230,14 @@ static const uint8_t s_SlimeHIDReportDesc_data[] = {
 	0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
 	0xC0,              // End Collection
 };
+static const app_usbd_hid_subclass_desc_t s_SlimeHIDReportDesc = { sizeof(s_SlimeHIDReportDesc), APP_USBD_DESCRIPTOR_REPORT, s_SlimeHIDReportDescData};
 #endif
 
 static const app_usbd_hid_subclass_desc_t * reps[] = { &s_SlimeHIDReportDesc };
-//		sizeof(s_SlimeHIDReportDesc), APP_USBD_DESCRIPTOR_REPORT, s_SlimeHIDReportDesc};
 
-/*lint -save -e26 -e64 -e123 -e505 -e651*/
-#if 0
-/**
- * @brief Global HID generic instance
- */
-APP_USBD_HID_GENERIC_GLOBAL_DEF_INTERNALCPP(m_app_hid_generic,
-                                HID_GENERIC_INTERFACE,
-                                hid_user_ev_handler,
-                                ENDPOINT_LIST(),
-                                reps,
-                                REPORT_IN_QUEUE_SIZE,
-                                REPORT_OUT_MAXSIZE,
-                                REPORT_FEATURE_MAXSIZE,
-                                APP_USBD_HID_SUBCLASS_BOOT,
-                                APP_USBD_HID_PROTO_MOUSE);
-#else
-#if 0
-static app_usbd_hid_report_buffer_t CONCAT_2(m_app_hid_generic, _in);
-APP_USBD_HID_GENERIC_GLOBAL_OUT_REP_DEF(CONCAT_2(m_app_hid_generic, _out),
-		REPORT_OUT_MAXSIZE + 1);
-APP_USBD_HID_GENERIC_GLOBAL_FEATURE_REP_DEF(CONCAT_2(m_app_hid_generic, _feature),
-		REPORT_FEATURE_MAXSIZE + 1);
-static uint8_t CONCAT_2(m_app_hid_generic, _ep)[]=
-    {MACRO_MAP(APP_USBD_HID_GENERIC_INTERVAL,BRACKET_EXTRACT(ENDPOINT_LIST()))};
-NRF_QUEUE_DEF(app_usbd_hid_report_buffer_t,
-		m_app_hid_generic_queue,
-		REPORT_IN_QUEUE_SIZE,
-              NRF_QUEUE_MODE_OVERFLOW);
-#endif
-#if 0
-APP_USBD_CLASS_INST_GLOBAL_DEFCPP(
-		m_app_hid_generic,
-    app_usbd_hid_generic,
-    &app_usbd_generic_class_methods,
-    APP_USBD_HID_GENERIC_CONFIG(HID_GENERIC_INTERFACE, ENDPOINT_LIST()),
-    (APP_USBD_HID_GENERIC_INST_CONFIG(&CONCAT_2(m_app_hid_generic, _in),
-                                      &CONCAT_2(m_app_hid_generic, _out),
-                                      &CONCAT_2(m_app_hid_generic, _feature),
-									  hid_user_ev_handler,
-                                      &m_app_hid_generic_queue,
-									  reps,
-									  APP_USBD_HID_SUBCLASS_BOOT,
-									  APP_USBD_HID_PROTO_MOUSE,
-                                      CONCAT_2(m_app_hid_generic, _ep)))
-);
-#endif
-#if 0
-#define APP_USBD_CLASS_INST_GLOBAL_DEFCPP(instance_name,                           \
-                                       type_name,                               \
-                                       class_methods,                           \
-                                       interfaces_configs,                      \
-                                       class_config_part)                       \
-    static APP_USBD_CLASS_DATA_TYPE(type_name) CONCAT_2(instance_name, _data);  \
-    const APP_USBD_CLASS_INSTANCE_TYPE(type_name) instance_name =               \
-        APP_USBD_CLASS_INSTANCE_INITVALCPP(                                        \
-            &CONCAT_2(instance_name, _data),                                    \
-            class_methods,                                                      \
-            interfaces_configs,                                                 \
-            class_config_part)
-#endif
 
 #define INTERFACE_CONFIGS APP_USBD_HID_GENERIC_CONFIG(USBD_INTERFACE_HID, ENDPOINT_LIST())
 
-
-//static APP_USBD_CLASS_DATA_TYPE(app_usbd_hid_generic) CONCAT_2(m_app_hid_generic, _data);
-//const APP_USBD_CLASS_INSTANCE_TYPE(app_usbd_hid_generic) m_app_hid_generic =
 #if 0
 		{
 	.specific = {
@@ -402,22 +269,14 @@ APP_USBD_CLASS_INST_GLOBAL_DEFCPP(
 	);
 
 #endif
-#endif
+
 #if 1
-/**
- * @brief Reuse HID mouse report descriptor for HID generic class
- */
-//APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
 
-//static const app_usbd_hid_subclass_desc_t * reps[] = {&mouse_desc};
-
-/*lint -save -e26 -e64 -e123 -e505 -e651*/
-
-/**
+		/**
  * @brief Global HID generic instance
  */
 APP_USBD_HID_GENERIC_GLOBAL_DEF(m_app_hid_generic,
-		USBD_INTERFACE_HID,
+								USBD_INTERFACE_HID,
                                 hid_user_ev_handler,
                                 ENDPOINT_LIST(),
                                 reps,
@@ -479,6 +338,7 @@ static int8_t hid_acc_for_report_get(int16_t acc)
     }
 }
 
+#if 0
 /**
  * @brief Internal function that process mouse state
  *
@@ -560,7 +420,7 @@ static void hid_generic_mouse_action(hid_generic_mouse_action_t action, int8_t p
     }
     CRITICAL_REGION_EXIT();
 }
-
+#endif
 /**
  * @brief Class specific event handler.
  *
@@ -581,7 +441,7 @@ static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
         case APP_USBD_HID_USER_EVT_IN_REPORT_DONE:
         {
             m_report_pending = false;
-            hid_generic_mouse_process_state();
+            //hid_generic_mouse_process_state();
            // bsp_board_led_invert(LED_HID_REP_IN);
             break;
         }
@@ -653,6 +513,7 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event)
     }
 }
 
+#if 0
 static void mouse_move_timer_handler(void * p_context)
 {
     UNUSED_PARAMETER(p_context);
@@ -674,7 +535,6 @@ static void mouse_move_timer_handler(void * p_context)
   //      UNUSED_RETURN_VALUE(app_timer_stop(m_mouse_move_timer));
     }
 }
-#if 0
 static void bsp_event_callback(bsp_event_t ev)
 {
     switch ((unsigned int)ev)

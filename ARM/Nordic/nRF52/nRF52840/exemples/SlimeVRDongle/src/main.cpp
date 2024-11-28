@@ -54,7 +54,7 @@ const AppInfo_t g_AppInfo = {
 AppData_t g_AppData = { (uint8_t)-1, };
 
 uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
-uint8_t g_extern_usbd_product_string[15 + 1] = { "SlimeVRDongle" };
+uint8_t g_extern_usbd_product_string[40 + 1] = { "SlimeNRF Receiver BLYST840 Dongle" };
 
 alignas(4) static fds_record_t const g_AppDataRecord =
 {
