@@ -162,6 +162,19 @@ static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
 //APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
 
 #if 0
+/*
+static const uint8_t hid_report_desc[] = {
+	HID_USAGE_PAGE(HID_USAGE_GEN_DESKTOP),
+	HID_USAGE(HID_USAGE_GEN_DESKTOP_UNDEFINED),
+	HID_COLLECTION(HID_COLLECTION_APPLICATION),
+		HID_USAGE(HID_USAGE_GEN_DESKTOP_UNDEFINED),
+		HID_REPORT_SIZE(8),
+		HID_REPORT_COUNT(64),
+		HID_INPUT(0x02),
+	HID_END_COLLECTION,
+};
+*/
+
 #define SLIMEVR_HID_REPORT_DESC		{\
 	0x05, 0x01,      \
 	0x09, 0x00,      \
@@ -198,26 +211,8 @@ static const uint8_t s_SlimeHIDReportDescData[] = {
 	0x09, 0x00,        // Usage (Undefined)
 	0xA1, 0x01,        // Collection (Application)
 	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x15, 0x00,        //   Logical Minimum (0)
-	0x25, 0xFF,        //   Logical Maximum (-1)
 	0x75, 0x08,        //   Report Size (8)
-	0x95, 0x04,        //   Report Count (4)
-	0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x09, 0x00,        //   Usage (Undefined)
-	0x15, 0x00,        //   Logical Minimum (0)
-	0x26, 0xFF, 0xFF,  //   Logical Maximum (-1)
-	0x75, 0x10,        //   Report Size (16)
-	0x95, 0x08,        //   Report Count (8)
+	0x95, 0x40,        //   Report Count (64)
 	0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
 	0xC0,              // End Collection
 };
