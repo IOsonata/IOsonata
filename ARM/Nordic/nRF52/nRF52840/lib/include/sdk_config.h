@@ -6673,14 +6673,14 @@
  
 
 #ifndef APP_USBD_HID_GENERIC_ENABLED
-#define APP_USBD_HID_GENERIC_ENABLED 0
+#define APP_USBD_HID_GENERIC_ENABLED 1
 #endif
 
 // <q> APP_USBD_HID_KBD_ENABLED  - app_usbd_hid_kbd - USB HID keyboard
  
 
 #ifndef APP_USBD_HID_KBD_ENABLED
-#define APP_USBD_HID_KBD_ENABLED 0
+#define APP_USBD_HID_KBD_ENABLED 1
 #endif
 
 // <q> APP_USBD_HID_MOUSE_ENABLED  - app_usbd_hid_mouse - USB HID mouse
@@ -7680,6 +7680,43 @@
 // </h> 
 //==========================================================
 
+// <h> nrf_cli_cdc_acm - CDC ACM command line interface transport
+
+//==========================================================
+// <q> NRF_CLI_CDC_ACM_ENABLED  - Enable/disable the CLI CDC ACM module.
+
+
+#ifndef NRF_CLI_CDC_ACM_ENABLED
+#define NRF_CLI_CDC_ACM_ENABLED 1
+#endif
+
+// <o> NRF_CLI_CDC_ACM_COMM_INTERFACE - COMM interface number.
+#ifndef NRF_CLI_CDC_ACM_COMM_INTERFACE
+#define NRF_CLI_CDC_ACM_COMM_INTERFACE 0
+#endif
+
+// <s> NRF_CLI_CDC_ACM_COMM_EPIN - COMM IN endpoint number.
+#ifndef NRF_CLI_CDC_ACM_COMM_EPIN
+#define NRF_CLI_CDC_ACM_COMM_EPIN NRF_DRV_USBD_EPIN2
+#endif
+
+// <o> NRF_CLI_CDC_ACM_DATA_INTERFACE - DATA interface number.
+#ifndef NRF_CLI_CDC_ACM_DATA_INTERFACE
+#define NRF_CLI_CDC_ACM_DATA_INTERFACE 1
+#endif
+
+// <s> NRF_CLI_CDC_ACM_DATA_EPIN - DATA IN endpoint number.
+#ifndef NRF_CLI_CDC_ACM_DATA_EPIN
+#define NRF_CLI_CDC_ACM_DATA_EPIN NRF_DRV_USBD_EPIN1
+#endif
+
+// <s> NRF_CLI_CDC_ACM_DATA_EPOUT - DATA OUT endpoint number.
+#ifndef NRF_CLI_CDC_ACM_DATA_EPOUT
+#define NRF_CLI_CDC_ACM_DATA_EPOUT NRF_DRV_USBD_EPOUT1
+#endif
+
+//==========================================================
+
 // <h> nrf_fprintf - fprintf function.
 
 //==========================================================
@@ -7687,7 +7724,7 @@
  
 
 #ifndef NRF_FPRINTF_ENABLED
-#define NRF_FPRINTF_ENABLED 0
+#define NRF_FPRINTF_ENABLED 1
 #endif
 
 // <q> NRF_FPRINTF_FLAG_AUTOMATIC_CR_ON_LF_ENABLED  - For each printed LF, function will add CR.
