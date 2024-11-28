@@ -7678,6 +7678,14 @@
 #endif
 
 // </h> 
+
+// <q> NRF_CLI_UART_ENABLED  - nrf_cli_uart - UART command line interface transport
+
+
+#ifndef NRF_CLI_UART_ENABLED
+#define NRF_CLI_UART_ENABLED 0
+#endif
+
 //==========================================================
 
 // <h> nrf_cli_cdc_acm - CDC ACM command line interface transport

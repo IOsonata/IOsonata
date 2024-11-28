@@ -126,6 +126,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/esb_intrf.h</locationURI>
 		</link>
 		<link>
+			<name>include/hiddef.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/hiddef.h</locationURI>
+		</link>
+		<link>
 			<name>include/iatomic.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
@@ -1026,6 +1031,21 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/app_usbd_cdc_acm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/app_usbd_cdc_acm.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/app_usbd_cdc_acm_internal.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/app_usbd_cdc_acm_internal.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/app_usbd_hid.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/app_usbd_hid.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usb_cdcdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_cdcdef.h</locationURI>
@@ -1846,6 +1866,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/cli</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/crypto</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1882,6 +1907,11 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/memobj</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/pwr_mgmt</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -2551,6 +2581,31 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/balloc/nrf_balloc.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/cli/ble_uart</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/cli/cdc_acm</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/cli/cli_utils_cmds.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cli_utils_cmds.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/cli/nrf_cli.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/nrf_cli.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/cli/uart</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -2709,6 +2764,11 @@
 			<name>src/nRF5_SDK/libraries/memobj/nrf_memobj.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/memobj/nrf_memobj.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/pwr_mgmt/nrf_pwr_mgmt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/pwr_mgmt/nrf_pwr_mgmt.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/queue/nrf_queue.c</name>
@@ -4239,6 +4299,21 @@
 			<name>src/nRF5_SDK/ble/ble_services/ble_dis/ble_dis.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dis/ble_dis.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/cli/ble_uart/nrf_cli_ble_uart.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/ble_uart/nrf_cli_ble_uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/cli/uart/nrf_cli_uart.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/uart/nrf_cli_uart.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend/cc310</name>

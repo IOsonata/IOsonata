@@ -55,7 +55,7 @@
 #include "app_usbd_hid_mouse.h"
 #include "app_usbd_hid_kbd.h"
 #include "app_error.h"
-#include "bsp.h"
+//#include "bsp.h"
 
 #include "bsp_cli.h"
 #include "nrf_cli.h"
@@ -239,7 +239,7 @@ static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
 APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
 
 static const app_usbd_hid_subclass_desc_t * reps[] = {&mouse_desc};
-
+#if 0
 /*lint -save -e26 -e64 -e123 -e505 -e651*/
 /**
  * @brief USB HID instance initializer @ref app_usbd_hid_inst_t.
@@ -276,7 +276,7 @@ static const app_usbd_hid_subclass_desc_t * reps[] = {&mouse_desc};
         .user_event_handler = user_ev_handler,               \
         .p_ep_interval = ep_list                             \
     }
-
+#endif
 /**
  * @brief Global HID generic instance
  */
@@ -293,6 +293,8 @@ APP_USBD_HID_GENERIC_GLOBAL_DEF(m_app_hid_generic,
 
 /*lint -restore*/
 
+uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
+uint8_t g_extern_usbd_product_string[15 + 1] = { "UsbCdcAcmDemo" };
 
 /**
  * @brief Mouse state
@@ -445,7 +447,7 @@ static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
         {
             m_report_pending = false;
             hid_generic_mouse_process_state();
-            bsp_board_led_invert(LED_HID_REP_IN);
+        //    bsp_board_led_invert(LED_HID_REP_IN);
             break;
         }
         case APP_USBD_HID_USER_EVT_SET_BOOT_PROTO:
@@ -482,19 +484,19 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event)
         case APP_USBD_EVT_DRV_SUSPEND:
             m_report_pending = false;
             app_usbd_suspend_req(); // Allow the library to put the peripheral into sleep mode
-            bsp_board_leds_off();
+         //   bsp_board_leds_off();
             break;
         case APP_USBD_EVT_DRV_RESUME:
             m_report_pending = false;
-            bsp_board_led_on(LED_USB_START);
+          //  bsp_board_led_on(LED_USB_START);
             break;
         case APP_USBD_EVT_STARTED:
             m_report_pending = false;
-            bsp_board_led_on(LED_USB_START);
+          //  bsp_board_led_on(LED_USB_START);
             break;
         case APP_USBD_EVT_STOPPED:
             app_usbd_disable();
-            bsp_board_leds_off();
+          //  bsp_board_leds_off();
             break;
         case APP_USBD_EVT_POWER_DETECTED:
             NRF_LOG_INFO("USB power detected");
@@ -521,14 +523,14 @@ static void mouse_move_timer_handler(void * p_context)
     UNUSED_PARAMETER(p_context);
     bool used = false;
 
-    if (bsp_button_is_pressed(BTN_MOUSE_X_POS))
+//    if (bsp_button_is_pressed(BTN_MOUSE_X_POS))
     {
-        hid_generic_mouse_action(HID_GENERIC_MOUSE_X, CONFIG_MOUSE_MOVE_SPEED);
+//        hid_generic_mouse_action(HID_GENERIC_MOUSE_X, CONFIG_MOUSE_MOVE_SPEED);
         used = true;
     }
-    if (bsp_button_is_pressed(BTN_MOUSE_Y_POS))
+//    if (bsp_button_is_pressed(BTN_MOUSE_Y_POS))
     {
-        hid_generic_mouse_action(HID_GENERIC_MOUSE_Y, CONFIG_MOUSE_MOVE_SPEED);
+//        hid_generic_mouse_action(HID_GENERIC_MOUSE_Y, CONFIG_MOUSE_MOVE_SPEED);
         used = true;
     }
 
@@ -571,7 +573,7 @@ static void bsp_event_callback(bsp_event_t ev)
     }
 }
 
-
+#if 0
 /**
  * @brief Auxiliary internal macro
  *
@@ -597,13 +599,13 @@ static void init_bsp(void)
     /* Configure LEDs */
     bsp_board_init(BSP_INIT_LEDS);
 }
-
+#endif
 #if NRF_CLI_ENABLED
 static void init_cli(void)
 {
     ret_code_t ret;
-    ret = bsp_cli_init(bsp_event_callback);
-    APP_ERROR_CHECK(ret);
+ //   ret = bsp_cli_init(bsp_event_callback);
+   // APP_ERROR_CHECK(ret);
     ret = nrf_cli_init(&m_cli_cdc_acm, nullptr, true, true, NRF_LOG_SEVERITY_INFO);
     APP_ERROR_CHECK(ret);
     ret = nrf_cli_start(&m_cli_cdc_acm);
@@ -655,7 +657,7 @@ int main(void)
     ret = app_timer_create(&m_mouse_move_timer, APP_TIMER_MODE_REPEATED, mouse_move_timer_handler);
     APP_ERROR_CHECK(ret);
 
-    init_bsp();
+   // init_bsp();
 #if NRF_CLI_ENABLED
     init_cli();
 #endif
