@@ -43,7 +43,7 @@ static const nrf_cli_cdc_acm_internal_t m_cli_cdc_acm_transport = {
 };
 
 NRF_CLI_DEF(m_cli_cdc_acm,
-            "usb_cli:~$ ",
+            "Slime:~$ ",
             &m_cli_cdc_acm_transport.transport,
             '\r',
             CLI_EXAMPLE_LOG_QUEUE_SIZE);
@@ -119,15 +119,6 @@ extern "C" const app_usbd_descriptor_device_t m_device_dsc = APP_USBD_CORE_DEVIC
 (                                                            \
 		USBD_EPIN_HID                                     \
 )
-/**
- * @brief HID generic mouse action types
- */
-typedef enum {
-    HID_GENERIC_MOUSE_X,
-    HID_GENERIC_MOUSE_Y,
-    HID_GENERIC_MOUSE_BTN_LEFT,
-    HID_GENERIC_MOUSE_BTN_RIGHT,
-} hid_generic_mouse_action_t;
 
 /**
  * @brief User event handler.
@@ -288,20 +279,6 @@ APP_USBD_HID_GENERIC_GLOBAL_DEF(m_app_hid_generic,
 
 /*lint -restore*/
 #endif
-
-
-/**
- * @brief Mouse state
- *
- * Current mouse status
- */
-struct
-{
-    int16_t acc_x;    /**< Accumulated x state */
-    int16_t acc_y;    /**< Accumulated y state */
-    uint8_t btn;      /**< Current btn state */
-    uint8_t last_btn; /**< Last transfered button state */
-}m_mouse_state;
 
 /**
  * @brief Mark the ongoing transmission
@@ -600,6 +577,7 @@ static ret_code_t idle_handle(app_usbd_class_inst_t const * p_inst, uint8_t repo
 void UsbInit()
 {
     ret_code_t ret;
+
     static const app_usbd_config_t usbd_config = {
         .ev_state_proc = usbd_user_ev_handler
     };
@@ -622,6 +600,12 @@ void UsbInit()
 
     ret = app_usbd_class_append(class_inst_generic);
     APP_ERROR_CHECK(ret);
+
+    ret = nrf_cli_init(&m_cli_cdc_acm, nullptr, true, true, NRF_LOG_SEVERITY_INFO);
+    APP_ERROR_CHECK(ret);
+
+//    ret = nrf_cli_start(&m_cli_cdc_acm);
+//    APP_ERROR_CHECK(ret);
 
     if (USBD_POWER_DETECTION)
     {

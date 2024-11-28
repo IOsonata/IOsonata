@@ -7598,7 +7598,7 @@
  
 
 #ifndef NRF_CLI_BUILD_IN_CMDS_ENABLED
-#define NRF_CLI_BUILD_IN_CMDS_ENABLED 1
+#define NRF_CLI_BUILD_IN_CMDS_ENABLED 0
 #endif
 
 // <o> NRF_CLI_CMD_BUFF_SIZE - Maximum buffer size for a single command. 
@@ -7629,7 +7629,7 @@
 
 // <o> NRF_CLI_PRINTF_BUFF_SIZE - Maximum print buffer size. 
 #ifndef NRF_CLI_PRINTF_BUFF_SIZE
-#define NRF_CLI_PRINTF_BUFF_SIZE 23
+#define NRF_CLI_PRINTF_BUFF_SIZE 256
 #endif
 
 // <e> NRF_CLI_HISTORY_ENABLED - Enable CLI history mode.
@@ -7653,7 +7653,7 @@
  
 
 #ifndef NRF_CLI_VT100_COLORS_ENABLED
-#define NRF_CLI_VT100_COLORS_ENABLED 1
+#define NRF_CLI_VT100_COLORS_ENABLED 0
 #endif
 
 // <q> NRF_CLI_STATISTICS_ENABLED  - Enable CLI statistics.

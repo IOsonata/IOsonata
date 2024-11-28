@@ -34,6 +34,8 @@
 #include "board.h"
 #include "stddev.h"
 
+extern nrf_cli_t const m_cli_cdc_acm;
+
 #define FIRMWARE_VERSION	0
 #define DEVICE_NAME			"SlimeVRDongle"
 
@@ -67,81 +69,6 @@ alignas(4) static fds_record_t const g_AppDataRecord =
     }
 };
 volatile bool g_FdsInitialized = false;
-
-
-#if 0//NRF_CLI_ENABLED
-/**
- * @brief Macro for defining a command line interface instance.
- *
- * @param[in] name              Instance name.
- * @param[in] cli_prefix        CLI prefix string.
- * @param[in] p_transport_iface Pointer to the transport interface.
- * @param[in] newline_ch        Deprecated parameter, not used any more. Any uint8_t value can be used.
- * @param[in] log_queue_size    Logger processing queue size.
- */
-#define NRF_CLI_DEFCPP(name, cli_prefix, p_transport_iface, newline_ch, log_queue_size)    \
-	    extern nrf_cli_t const name;                                            \
-        static nrf_cli_ctx_t CONCAT_2(name, _ctx);                              \
-        NRF_FPRINTF_DEF(CONCAT_2(name, _fprintf_ctx),                           \
-                        &name,                                                  \
-                        CONCAT_2(name, _ctx).printf_buff,                       \
-                        NRF_CLI_PRINTF_BUFF_SIZE,                               \
-                        false,                                                  \
-                        nrf_cli_print_stream);                                  \
-        NRF_LOG_BACKEND_CLI_DEF(CONCAT_2(name, _log_backend), log_queue_size);  \
-        NRF_CLI_HISTORY_MEM_OBJ(name);                                          \
-        /*lint -save -e31*/                                                     \
-        nrf_cli_t const name = {                                         		\
-            .p_name = cli_prefix,                                               \
-            .p_iface = p_transport_iface,                                       \
-            .p_ctx = &CONCAT_2(name, _ctx),                                     \
-            .p_log_backend = NRF_CLI_BACKEND_PTR(name),                         \
-            .p_fprintf_ctx = &CONCAT_2(name, _fprintf_ctx),                     \
-            .p_cmd_hist_mempool = NRF_CLI_MEMOBJ_PTR(name),                     \
-        } /*lint -restore*/
-
-//NRF_CLI_CDC_ACM_DEF(m_cli_cdc_acm_transport);
-//#define NRF_CLI_CDC_ACM_DEF(_name_)
-static nrf_cli_cdc_acm_internal_cb_t m_cli_cdc_acm_transport_cb;
-static const nrf_cli_cdc_acm_internal_t m_cli_cdc_acm_transport = {
-	.transport = {.p_api = &nrf_cli_cdc_acm_transport_api},
-	.p_cb = &m_cli_cdc_acm_transport_cb,
-};
-
-NRF_CLI_DEFCPP(m_cli_cdc_acm,
-            "usb_cli:~$ ",
-            &m_cli_cdc_acm_transport.transport,
-            '\r',
-            CLI_EXAMPLE_LOG_QUEUE_SIZE);
-#endif
-
-
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-
-static IOPinCfg_t s_UartPins[] = {
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
-};
-
-const UARTCfg_t g_UartCfg = {
-	0,
-	s_UartPins,
-	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	1000000,
-	8,
-	UART_PARITY_NONE,
-	1,	// Stop bit
-	UART_FLWCTRL_HW,
-	true,
-	7,
-	nRFUartEvthandler,
-	true,
-};
-
-// UART object instance
-UART g_Uart;
 
 static void fds_evt_handler(fds_evt_t const * p_evt)
 {
@@ -243,16 +170,7 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
     NRF_GPIO->OUTCLR = 0xFUL << 12;
     NRF_GPIO->OUTSET = (p_event->tx_attempts & 0x0F) << 12;
 }
-#endif
 
-void clocks_start( void )
-{
-    NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-    NRF_CLOCK->TASKS_HFCLKSTART = 1;
-
-    while (NRF_CLOCK->EVENTS_HFCLKSTARTED == 0);
-}
-#if 0
 uint32_t esb_init( void )
 {
     uint32_t err_code;
@@ -285,33 +203,9 @@ uint32_t esb_init( void )
 }
 #endif
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
-{
-	int cnt = 0;
-	uint8_t buff[20];
-
-	switch (EvtId)
-	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
-			//app_sched_event_put(NULL, 0, UartRxChedHandler);
-			break;
-		case UART_EVT_TXREADY:
-			break;
-		case UART_EVT_LINESTATE:
-			break;
-	}
-
-	return cnt;
-}
-
-
 void HardwareInit()
 {
-	g_Uart.Init(g_UartCfg);
 	IOPinConfig(BUT_PORT, BUT_PIN, BUT_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-
-	printf("UART BLE Central Demo\r\n");
 
     (void) fds_register(fds_evt_handler);
     uint32_t rc = fds_init();
@@ -371,7 +265,7 @@ void HardwareInit()
         APP_ERROR_CHECK(rc);
     }
 
-    init_cli();
+    //init_cli();
     UsbInit();
 }
 
@@ -383,15 +277,15 @@ int main(void)
 	ret_code_t ret;
 
 	ret = nrf_drv_clock_init();
-    //clocks_start();
 
     HardwareInit();
-//    cli_init();
-  //  cli_start();
 
-    //err_code = NRF_LOG_INIT(NULL);
-    //APP_ERROR_CHECK(err_code);
+    msDelay(1000);
 
+    nrf_cli_print(&m_cli_cdc_acm, "SlimeNRF Receiver BLYST840 Dongle");
+
+    ret = nrf_cli_start(&m_cli_cdc_acm);
+    APP_ERROR_CHECK(ret);
 
 #if 0
     err_code = esb_init();
@@ -417,6 +311,7 @@ int main(void)
         //APP_ERROR_CHECK(err_code);
 
         do {
+        	nrf_cli_process(&m_cli_cdc_acm);
         	__WFE();
         } while (IOPinRead(BUT_PORT, BUT_PIN) == false);
 
