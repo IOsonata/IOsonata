@@ -34,36 +34,6 @@ static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                     app_usbd_cdc_acm_user_event_t event);
 
 #if NRF_CLI_ENABLED
-/**
- * @brief Macro for defining a command line interface instance.
- *
- * @param[in] name              Instance name.
- * @param[in] cli_prefix        CLI prefix string.
- * @param[in] p_transport_iface Pointer to the transport interface.
- * @param[in] newline_ch        Deprecated parameter, not used any more. Any uint8_t value can be used.
- * @param[in] log_queue_size    Logger processing queue size.
- */
-#define NRF_CLI_DEFCPP(name, cli_prefix, p_transport_iface, newline_ch, log_queue_size)    \
-	    extern nrf_cli_t const name;                                            \
-        static nrf_cli_ctx_t CONCAT_2(name, _ctx);                              \
-        NRF_FPRINTF_DEF(CONCAT_2(name, _fprintf_ctx),                           \
-                        &name,                                                  \
-                        CONCAT_2(name, _ctx).printf_buff,                       \
-                        NRF_CLI_PRINTF_BUFF_SIZE,                               \
-                        false,                                                  \
-                        nrf_cli_print_stream);                                  \
-        NRF_LOG_BACKEND_CLI_DEF(CONCAT_2(name, _log_backend), log_queue_size);  \
-        NRF_CLI_HISTORY_MEM_OBJ(name);                                          \
-        /*lint -save -e31*/                                                     \
-        nrf_cli_t const name = {                                         		\
-            .p_name = cli_prefix,                                               \
-            .p_iface = p_transport_iface,                                       \
-            .p_ctx = &CONCAT_2(name, _ctx),                                     \
-            .p_log_backend = NRF_CLI_BACKEND_PTR(name),                         \
-            .p_fprintf_ctx = &CONCAT_2(name, _fprintf_ctx),                     \
-            .p_cmd_hist_mempool = NRF_CLI_MEMOBJ_PTR(name),                     \
-        } /*lint -restore*/
-
 //NRF_CLI_CDC_ACM_DEF(m_cli_cdc_acm_transport);
 //#define NRF_CLI_CDC_ACM_DEF(_name_)
 static nrf_cli_cdc_acm_internal_cb_t m_cli_cdc_acm_transport_cb;
@@ -72,7 +42,7 @@ static const nrf_cli_cdc_acm_internal_t m_cli_cdc_acm_transport = {
 	.p_cb = &m_cli_cdc_acm_transport_cb,
 };
 
-NRF_CLI_DEFCPP(m_cli_cdc_acm,
+NRF_CLI_DEF(m_cli_cdc_acm,
             "usb_cli:~$ ",
             &m_cli_cdc_acm_transport.transport,
             '\r',
@@ -87,58 +57,34 @@ NRF_CLI_DEFCPP(m_cli_cdc_acm,
 #define USBD_POWER_DETECTION true
 #endif
 
-#define USBD_INTERFACE_HID				0		// Interface 0 - HID
-#define USBD_EPIN_HID					NRFX_USBD_EPIN1
-#define USBD_EPOUT_HID					NRFX_USBD_EPOUT1
+// Nordic CLI uses interface 1 & 2 already
+#define USBD_INTERFACE_HID				3		// Interface 3 - HID
+#define USBD_EPIN_HID					NRFX_USBD_EPIN3
+#define USBD_EPOUT_HID					NRFX_USBD_EPOUT3
 
-#define USBD_INTERFACE_CDC_ACM_COMM  	1
-#define USBD_EPIN_CDC_ACM_COMM       	NRFX_USBD_EPIN2
+#define APP_USBD_CORE_DEVICE_DESCRIPTOR  {                                                               \
+   .bLength = sizeof(app_usbd_descriptor_device_t),    /* descriptor size */                             \
+   .bDescriptorType = APP_USBD_DESCRIPTOR_DEVICE,      /* descriptor type */                             \
+   .bcdUSB = APP_USBD_BCD_VER_MAKE(2,0,0),             /* USB BCD version: 2.0 */                        \
+   .bDeviceClass = 0,                                  /* device class: 0 - specified by interface */    \
+   .bDeviceSubClass = 0,                               /* device subclass: 0 - specified by interface */ \
+   .bDeviceProtocol = 0,                               /* device protocol: 0 - specified by interface */ \
+   .bMaxPacketSize0 = NRF_DRV_USBD_EPSIZE,             /* endpoint size: fixed to: NRF_DRV_USBD_EPSIZE*/ \
+   .idVendor = APP_USBD_VID,                           /* Vendor ID*/                                    \
+   .idProduct = APP_USBD_PID,                          /* Product ID*/                                   \
+   .bcdDevice = APP_USBD_BCD_VER_MAKE(                 /* Device version BCD */                          \
+       APP_USBD_DEVICE_VER_MAJOR,                                                                        \
+       APP_USBD_DEVICE_VER_MINOR,                                                                        \
+       APP_USBD_DEVICE_VER_SUB),                                                                         \
+   .iManufacturer = APP_USBD_STRING_ID_MANUFACTURER,   /* String ID: manufacturer */                     \
+   .iProduct = APP_USBD_STRING_ID_PRODUCT,             /* String ID: product */                          \
+   .iSerialNumber = APP_USBD_STRING_ID_SERIAL,         /* String ID: serial */                           \
+   .bNumConfigurations = 1                             /* Fixed value: only one configuration supported*/\
+}
 
-#define USBD_INTERFACE_CDC_ACM_DATA  	2
-#define USBD_EPIN_CDC_ACM_DATA       	NRFX_USBD_EPIN3
-#define USBD_EPOUT_CDC_ACM_DATA      	NRFX_USBD_EPOUT3
-
-#define INTERFACE_CONFIG_CDC APP_USBD_CDC_ACM_CONFIG(USBD_INTERFACE_CDC_ACM_COMM, USBD_EPIN_CDC_ACM_COMM, USBD_INTERFACE_CDC_ACM_DATA, USBD_EPIN_CDC_ACM_DATA, USBD_EPOUT_CDC_ACM_DATA)
-
-
-extern const app_usbd_class_methods_t app_usbd_cdc_acm_class_methods;
-
-static uint8_t m_app_cdc_acm_ep = { (APP_USBD_EXTRACT_INTERVAL_FLAG(USBD_EPIN_CDC_ACM_COMM) ?
-	APP_USBD_EXTRACT_INTERVAL_VALUE(USBD_EPIN_CDC_ACM_COMM) : APP_USBD_CDC_ACM_DEFAULT_INTERVAL)};
-
-//static APP_USBD_CLASS_DATA_TYPE(type_name) CONCAT_2(instance_name, _data);
-static app_usbd_cdc_acm_data_t	m_app_cdc_acm_data;
-
-// Define a USB instance
-static const app_usbd_cdc_acm_inst_t s_usb_inst =
-{
-	.comm_interface = USBD_INTERFACE_CDC_ACM_COMM,
-	.comm_epin = USBD_EPIN_CDC_ACM_COMM,
-	.data_interface = USBD_INTERFACE_CDC_ACM_DATA,
-	.data_epout = USBD_EPOUT_CDC_ACM_DATA,
-	.data_epin = USBD_EPIN_CDC_ACM_DATA,
-	.protocol = APP_USBD_CDC_COMM_PROTOCOL_AT_V250,
-	.user_ev_handler = cdc_acm_user_ev_handler,
-	.p_ep_interval = &m_app_cdc_acm_ep,
-};
-
-const app_usbd_cdc_acm_t m_app_cdc_acm =
-{
-	//.base = 0,
-	.specific =
-	{
-			.p_data = &m_app_cdc_acm_data,
-			.p_class_methods = &app_usbd_cdc_acm_class_methods,
-			.iface =
-			{
-					.cnt = NUM_VA_ARGS(BRACKET_EXTRACT(INTERFACE_CONFIG_CDC)),
-					.config = { APP_USBD_CLASS_IFACES_CONFIG_EXTRACT(INTERFACE_CONFIG_CDC) },
-					.ep = { APP_USBD_CLASS_IFACES_EP_EXTRACT(INTERFACE_CONFIG_CDC) },
-			},
-			.inst = s_usb_inst,//BRACKET_EXTRACT(CLASS_CONFIG_PART),
-	},
-};
-
+extern "C"
+const app_usbd_descriptor_device_t m_device_dsc =
+    APP_USBD_CORE_DEVICE_DESCRIPTOR;
 
 /**
  * @brief Mouse speed (value sent via HID when board button is pressed).
@@ -227,169 +173,6 @@ static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                 app_usbd_hid_user_event_t event);
 #if 0
 /**
- * @brief Generate the initialization data for.
- *
- * Macro that generates the initialization data for instance.
- *
- * @param p_ram_data         Pointer to writable instance data structure.
- * @param class_methods      Class methods.
- * @param interfaces_configs Exactly the same interface config data that in @ref APP_USBD_CLASS_INSTANCE_TYPEDEF
- * @param class_config_part  Configuration part. The data should be inside brackets.
- *                           Any data here would be removed from brackets and then put as an initialization
- *                           data for class_part member of instance structure.
- *
- * @note It should not be used directly in the final application. See @ref APP_USBD_CLASS_INST_DEF instead.
- */
-#define APP_USBD_CLASS_INSTANCE_INITVALCPP(p_ram_data,                                     \
-                                        class_methods,                                  \
-                                        interfaces_configs,                             \
-                                        class_config_part)                              \
-    {                                                                                   \
-        .specific = {                                                                   \
-            .p_data = p_ram_data,                                                       \
-            .p_class_methods = class_methods,                                           \
-            .iface = {                                                                  \
-                .cnt    = NUM_VA_ARGS(BRACKET_EXTRACT(interfaces_configs)),             \
-                .config = { APP_USBD_CLASS_IFACES_CONFIG_EXTRACT(interfaces_configs) }, \
-                .ep     = { APP_USBD_CLASS_IFACES_EP_EXTRACT(interfaces_configs) }      \
-            },                                                                          \
-            BRACKET_EXTRACT(class_config_part)                                          \
-        }                                                                               \
-    }
-
-/**
- * @brief Define the base class instance in global scope.
- *
- * This is the same macro like @ref APP_USBD_CLASS_INST_DEF but it creates the instance
- * without static keyword.
- *
- * @param instance_name      See documentation for @ref APP_USBD_CLASS_INST_DEF
- * @param type_name          See documentation for @ref APP_USBD_CLASS_INST_DEF
- * @param class_methods      See documentation for @ref APP_USBD_CLASS_INST_DEF
- * @param interfaces_configs See documentation for @ref APP_USBD_CLASS_INST_DEF
- * @param class_config_part  See documentation for @ref APP_USBD_CLASS_INST_DEF
- */
-#define APP_USBD_CLASS_INST_GLOBAL_DEFCPP(instance_name,                           \
-                                       type_name,                               \
-                                       class_methods,                           \
-                                       interfaces_configs,                      \
-                                       class_config_part)                       \
-    static APP_USBD_CLASS_DATA_TYPE(type_name) CONCAT_2(instance_name, _data);  \
-    const APP_USBD_CLASS_INSTANCE_TYPE(type_name) instance_name =               \
-        APP_USBD_CLASS_INSTANCE_INITVALCPP(                                        \
-            &CONCAT_2(instance_name, _data),                                    \
-            class_methods,                                                      \
-            interfaces_configs,                                                 \
-            class_config_part)
-
-
-#define APP_USBD_HID_GENERIC_GLOBAL_DEF_INTERNALCPP(instance_name,                     \
-                                                 interface_number,                  \
-                                                 user_ev_handler,                   \
-                                                 endpoint_list,                     \
-                                                 subclass_descriptors,              \
-                                                 report_in_queue_size,              \
-                                                 report_out_maxsize,                \
-                                                 report_feature_maxsize,            \
-                                                 subclass_boot,                     \
-                                                 protocol)                          \
-    static app_usbd_hid_report_buffer_t CONCAT_2(instance_name, _in);               \
-    APP_USBD_HID_GENERIC_GLOBAL_OUT_REP_DEF(CONCAT_2(instance_name, _out),          \
-                                            report_out_maxsize + 1);                \
-    APP_USBD_HID_GENERIC_GLOBAL_FEATURE_REP_DEF(CONCAT_2(instance_name, _feature),  \
-                                            report_feature_maxsize + 1);            \
-    static uint8_t CONCAT_2(instance_name, _ep)[]=                                  \
-        {MACRO_MAP(APP_USBD_HID_GENERIC_INTERVAL,BRACKET_EXTRACT(endpoint_list))};  \
-    NRF_QUEUE_DEF(app_usbd_hid_report_buffer_t,                                     \
-                  instance_name##_queue,                                            \
-                  report_in_queue_size,                                             \
-                  NRF_QUEUE_MODE_OVERFLOW);                                         \
-    APP_USBD_CLASS_INST_GLOBAL_DEFCPP(                                                 \
-        instance_name,                                                              \
-        app_usbd_hid_generic,                                                       \
-        &app_usbd_generic_class_methods,                                            \
-        APP_USBD_HID_GENERIC_CONFIG(interface_number, endpoint_list),               \
-        (APP_USBD_HID_GENERIC_INST_CONFIG(&CONCAT_2(instance_name, _in),            \
-                                          &CONCAT_2(instance_name, _out),           \
-                                          &CONCAT_2(instance_name, _feature),       \
-                                          user_ev_handler,                          \
-                                          &instance_name##_queue,                   \
-                                          subclass_descriptors,                     \
-                                          subclass_boot,                            \
-                                          protocol,                                 \
-                                          CONCAT_2(instance_name, _ep)))            \
-    )
-
-
-/**
- * @brief Global definition of app_usbd_hid_generic_t class.
- *
- * @param instance_name             Name of global instance.
- * @param interface_number          Unique interface index.
- * @param user_ev_handler           User event handler (optional).
- * @param endpoint_list             Input endpoint list (@ref nrf_drv_usbd_ep_t).
- * @param subclass_descriptors      HID subclass descriptors.
- * @param report_in_queue_size      IN report queue size.
- * @param report_out_maxsize        Maximum output report size.
- * @param report_feature_maxsize    Maximum feature report size.
- * @param subclass_boot             Subclass boot (@ref app_usbd_hid_subclass_t).
- * @param protocol                  HID protocol (@ref app_usbd_hid_protocol_t).
- *
- * @note This macro is just simplified version of @ref APP_USBD_HID_GENERIC_GLOBAL_DEF_INTERNAL.
- *
- * Example class definition:
- * @code
-
-       APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
-
-       static const app_usbd_hid_subclass_desc_t * reps[] = {&mouse_desc};
-
-       #define ENDPOINT_LIST                                        \
-       (                                                            \
-               NRF_DRV_USBD_EPIN1                                   \
-       )
-
-       #define REPORT_COUNT        1
-       #define REPORT_OUT_MAXSIZE  0
-
-       APP_USBD_HID_GENERIC_GLOBAL_DEF(m_app_hid_generic,
-                                       0,
-                                       hid_user_ev_handler,
-                                       ENDPOINT_LIST(),
-                                       reps,
-                                       REPORT_IN_QUEUE_SIZE,
-                                       REPORT_OUT_MAXSIZE,
-                                       REPORT_FEATURE_MAXSIZE,
-                                       APP_USBD_HID_SUBCLASS_BOOT,
-                                       APP_USBD_HID_PROTO_MOUSE);
-  @endcode
- *
- */
-/*lint -emacro( (40), APP_USBD_HID_GENERIC_GLOBAL_DEF) */
-#define APP_USBD_HID_GENERIC_GLOBAL_DEFCPP(instance_name,                  \
-                                        interface_number,               \
-                                        user_ev_handler,                \
-                                        endpoint_list,                  \
-                                        subclass_descriptors,           \
-                                        report_in_queue_size,           \
-                                        report_out_maxsize,             \
-                                        report_feature_maxsize,         \
-                                        subclass_boot,                  \
-                                        protocol)                       \
-    APP_USBD_HID_GENERIC_GLOBAL_DEF_INTERNALCPP(instance_name,             \
-                                             interface_number,          \
-                                             user_ev_handler,           \
-                                             endpoint_list,             \
-                                             subclass_descriptors,      \
-                                             report_in_queue_size,      \
-                                             report_out_maxsize,        \
-                                             report_feature_maxsize,    \
-                                             subclass_boot,             \
-                                             protocol)
-
-#endif
-#if 1
-/**
  * @brief USB HID instance initializer @ref app_usbd_hid_inst_t.
  *
  * @param subclass_dsc          HID subclass descriptors.
@@ -428,9 +211,99 @@ static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
 /**
  * @brief Reuse HID mouse report descriptor for HID generic class
  */
-APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
+//APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
 
-static const app_usbd_hid_subclass_desc_t * reps[] = {&mouse_desc};
+#if 1
+#define SLIMEVR_HID_REPORT_DESC		{\
+	0x05, 0x01,      \
+	0x09, 0x00,      \
+	0xA1, 0x01,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x15, 0x00,      \
+	0x25, 0xFF,      \
+	0x75, 0x08,      \
+	0x95, 0x04,      \
+	0x81, 0x02,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x09, 0x00,      \
+	0x15, 0x00,      \
+	0x26, 0xFF, 0xFF,\
+	0x75, 0x10,      \
+	0x95, 0x08,      \
+	0x81, 0x02,      \
+	0xC0,            \
+}
+APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(s_SlimeHIDReportDesc, SLIMEVR_HID_REPORT_DESC);
+/*
+0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
+0x09, 0x00,        // Usage (Undefined)
+0xA1, 0x01,        // Collection (Application)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x15, 0x00,        //   Logical Minimum (0)
+0x25, 0xFF,        //   Logical Maximum (-1)
+0x75, 0x08,        //   Report Size (8)
+0x95, 0x04,        //   Report Count (4)
+0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x09, 0x00,        //   Usage (Undefined)
+0x15, 0x00,        //   Logical Minimum (0)
+0x26, 0xFF, 0xFF,  //   Logical Maximum (-1)
+0x75, 0x10,        //   Report Size (16)
+0x95, 0x08,        //   Report Count (8)
+0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+0xC0,              // End Collection
+*/
+#else
+static const uint8_t s_SlimeHIDReportDesc_data[] = {
+	0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
+	0x09, 0x00,        // Usage (Undefined)
+	0xA1, 0x01,        // Collection (Application)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x15, 0x00,        //   Logical Minimum (0)
+	0x25, 0xFF,        //   Logical Maximum (-1)
+	0x75, 0x08,        //   Report Size (8)
+	0x95, 0x04,        //   Report Count (4)
+	0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x09, 0x00,        //   Usage (Undefined)
+	0x15, 0x00,        //   Logical Minimum (0)
+	0x26, 0xFF, 0xFF,  //   Logical Maximum (-1)
+	0x75, 0x10,        //   Report Size (16)
+	0x95, 0x08,        //   Report Count (8)
+	0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+	0xC0,              // End Collection
+};
+#endif
+
+static const app_usbd_hid_subclass_desc_t * reps[] = { &s_SlimeHIDReportDesc };
+//		sizeof(s_SlimeHIDReportDesc), APP_USBD_DESCRIPTOR_REPORT, s_SlimeHIDReportDesc};
 
 /*lint -save -e26 -e64 -e123 -e505 -e651*/
 #if 0
@@ -448,6 +321,7 @@ APP_USBD_HID_GENERIC_GLOBAL_DEF_INTERNALCPP(m_app_hid_generic,
                                 APP_USBD_HID_SUBCLASS_BOOT,
                                 APP_USBD_HID_PROTO_MOUSE);
 #else
+#if 0
 static app_usbd_hid_report_buffer_t CONCAT_2(m_app_hid_generic, _in);
 APP_USBD_HID_GENERIC_GLOBAL_OUT_REP_DEF(CONCAT_2(m_app_hid_generic, _out),
 		REPORT_OUT_MAXSIZE + 1);
@@ -459,6 +333,7 @@ NRF_QUEUE_DEF(app_usbd_hid_report_buffer_t,
 		m_app_hid_generic_queue,
 		REPORT_IN_QUEUE_SIZE,
               NRF_QUEUE_MODE_OVERFLOW);
+#endif
 #if 0
 APP_USBD_CLASS_INST_GLOBAL_DEFCPP(
 		m_app_hid_generic,
@@ -494,8 +369,8 @@ APP_USBD_CLASS_INST_GLOBAL_DEFCPP(
 #define INTERFACE_CONFIGS APP_USBD_HID_GENERIC_CONFIG(USBD_INTERFACE_HID, ENDPOINT_LIST())
 
 
-static APP_USBD_CLASS_DATA_TYPE(app_usbd_hid_generic) CONCAT_2(m_app_hid_generic, _data);
-const APP_USBD_CLASS_INSTANCE_TYPE(app_usbd_hid_generic) m_app_hid_generic =
+//static APP_USBD_CLASS_DATA_TYPE(app_usbd_hid_generic) CONCAT_2(m_app_hid_generic, _data);
+//const APP_USBD_CLASS_INSTANCE_TYPE(app_usbd_hid_generic) m_app_hid_generic =
 #if 0
 		{
 	.specific = {
@@ -509,7 +384,7 @@ const APP_USBD_CLASS_INSTANCE_TYPE(app_usbd_hid_generic) m_app_hid_generic =
 		BRACKET_EXTRACT(class_config_part)
 
 };
-#else
+#elif 0
 		APP_USBD_CLASS_INSTANCE_INITVAL(
 				&CONCAT_2(m_app_hid_generic, _data),
 				&app_usbd_generic_class_methods,
@@ -525,43 +400,16 @@ const APP_USBD_CLASS_INSTANCE_TYPE(app_usbd_hid_generic) m_app_hid_generic =
 										  APP_USBD_HID_PROTO_MOUSE,
 	                                      CONCAT_2(m_app_hid_generic, _ep)))
 	);
+
 #endif
 #endif
-/*
-0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
-0x09, 0x00,        // Usage (Undefined)
-0xA1, 0x01,        // Collection (Application)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x15, 0x00,        //   Logical Minimum (0)
-0x25, 0xFF,        //   Logical Maximum (-1)
-0x75, 0x08,        //   Report Size (8)
-0x95, 0x04,        //   Report Count (4)
-0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x15, 0x00,        //   Logical Minimum (0)
-0x26, 0xFF, 0xFF,  //   Logical Maximum (-1)
-0x75, 0x10,        //   Report Size (16)
-0x95, 0x08,        //   Report Count (8)
-0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-0xC0,              // End Collection
-*/
-#if 0
+#if 1
 /**
  * @brief Reuse HID mouse report descriptor for HID generic class
  */
-APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
+//APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
 
-static const app_usbd_hid_subclass_desc_t * reps[] = {&mouse_desc};
+//static const app_usbd_hid_subclass_desc_t * reps[] = {&mouse_desc};
 
 /*lint -save -e26 -e64 -e123 -e505 -e651*/
 
@@ -569,7 +417,7 @@ static const app_usbd_hid_subclass_desc_t * reps[] = {&mouse_desc};
  * @brief Global HID generic instance
  */
 APP_USBD_HID_GENERIC_GLOBAL_DEF(m_app_hid_generic,
-                                HID_GENERIC_INTERFACE,
+		USBD_INTERFACE_HID,
                                 hid_user_ev_handler,
                                 ENDPOINT_LIST(),
                                 reps,
@@ -904,6 +752,15 @@ void UsbInit()
     app_usbd_class_inst_t const * class_cdc_acm =
             app_usbd_cdc_acm_class_inst_get(&nrf_cli_cdc_acm);
     ret = app_usbd_class_append(class_cdc_acm);
+    APP_ERROR_CHECK(ret);
+
+    app_usbd_class_inst_t const * class_inst_generic;
+    class_inst_generic = app_usbd_hid_generic_class_inst_get(&m_app_hid_generic);
+
+    ret = hid_generic_idle_handler_set(class_inst_generic, idle_handle);
+    APP_ERROR_CHECK(ret);
+
+    ret = app_usbd_class_append(class_inst_generic);
     APP_ERROR_CHECK(ret);
 
     if (USBD_POWER_DETECTION)
