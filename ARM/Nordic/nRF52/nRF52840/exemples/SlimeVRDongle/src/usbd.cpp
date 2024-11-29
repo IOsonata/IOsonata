@@ -176,33 +176,16 @@ static const uint8_t hid_report_desc[] = {
 */
 
 #define SLIMEVR_HID_REPORT_DESC		{\
-	0x05, 0x01,      \
-	0x09, 0x00,      \
-	0xA1, 0x01,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x15, 0x00,      \
-	0x25, 0xFF,      \
-	0x75, 0x08,      \
-	0x95, 0x04,      \
-	0x81, 0x02,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x09, 0x00,      \
-	0x15, 0x00,      \
-	0x26, 0xFF, 0xFF,\
-	0x75, 0x10,      \
-	0x95, 0x08,      \
-	0x81, 0x02,      \
-	0xC0,            \
+		0x05, 0x01,        \
+		0x09, 0x00,        \
+		0xA1, 0x01,        \
+		0x09, 0x00,        \
+		0x75, 0x08,        \
+		0x95, 0x40,        \
+		0x81, 0x02,        \
+		0xC0,              \
 }
+
 APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(s_SlimeHIDReportDesc, SLIMEVR_HID_REPORT_DESC);
 #else
 // not using Nordic macro
@@ -216,7 +199,7 @@ static const uint8_t s_SlimeHIDReportDescData[] = {
 	0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
 	0xC0,              // End Collection
 };
-static const app_usbd_hid_subclass_desc_t s_SlimeHIDReportDesc = { sizeof(s_SlimeHIDReportDesc), APP_USBD_DESCRIPTOR_REPORT, s_SlimeHIDReportDescData};
+static const app_usbd_hid_subclass_desc_t s_SlimeHIDReportDesc = { sizeof(s_SlimeHIDReportDescData), APP_USBD_DESCRIPTOR_REPORT, s_SlimeHIDReportDescData};
 #endif
 
 static const app_usbd_hid_subclass_desc_t * reps[] = { &s_SlimeHIDReportDesc };
