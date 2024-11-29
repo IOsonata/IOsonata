@@ -34,18 +34,19 @@
 #include "board.h"
 #include "stddev.h"
 
-extern nrf_cli_t const m_cli_cdc_acm;
-
 #define FIRMWARE_VERSION	0
 #define DEVICE_NAME			"SlimeVRDongle"
 
 #define FDS_DATA_FILE     (0xF010)
 #define FDS_DATA_REC_KEY  (0x7010)
 
+#pragma pack(push, 1)
 typedef struct __App_Data {
-	uint8_t NbTracker;
+	uint8_t Cs;		// Checksum
+	int8_t NbTracker;
 	uint64_t TrackerAddr[MAX_TRACKERS];
 } AppData_t;
+#pragma pack(pop)
 
 __attribute__ ((section(".Version"), used))
 const AppInfo_t g_AppInfo = {
@@ -53,10 +54,26 @@ const AppInfo_t g_AppInfo = {
 	{'I', 'O', 's', 'o', 'n', 'a', 't', 'a', 'S', 'l', 'i', 0x55, 0xA5, 0x5A, 0xA5, 0x5A},
 };
 
-AppData_t g_AppData = { (uint8_t)-1, };
+alignas(4) AppData_t g_AppData = { 0, -1, };
 
 uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
 uint8_t g_extern_usbd_product_string[40 + 1] = { "SlimeNRF Receiver BLYST840 Dongle" };
+
+#if NRF_CLI_ENABLED
+//NRF_CLI_CDC_ACM_DEF(m_cli_cdc_acm_transport);
+//#define NRF_CLI_CDC_ACM_DEF(_name_)
+static nrf_cli_cdc_acm_internal_cb_t m_cli_cdc_acm_transport_cb;
+static const nrf_cli_cdc_acm_internal_t m_cli_cdc_acm_transport = {
+	.transport = {.p_api = &nrf_cli_cdc_acm_transport_api},
+	.p_cb = &m_cli_cdc_acm_transport_cb,
+};
+
+NRF_CLI_DEF(m_cli_cdc_acm,
+            "Slime:~$ ",
+            &m_cli_cdc_acm_transport.transport,
+            '\r',
+            CLI_EXAMPLE_LOG_QUEUE_SIZE);
+#endif
 
 alignas(4) static fds_record_t const g_AppDataRecord =
 {
@@ -69,6 +86,7 @@ alignas(4) static fds_record_t const g_AppDataRecord =
     }
 };
 volatile bool g_FdsInitialized = false;
+volatile bool g_FdsCleaned = false;
 
 static void fds_evt_handler(fds_evt_t const * p_evt)
 {
@@ -95,6 +113,10 @@ static void fds_evt_handler(fds_evt_t const * p_evt)
             }
         } break;
 
+        case FDS_EVT_GC:
+        	//UpdateRecord();
+        	g_FdsCleaned = true;
+        	break;
         default:
             break;
     }
@@ -110,7 +132,18 @@ void UpdateRecord()
     if (rc == NRF_SUCCESS)
     {
     	rc = fds_record_update(&desc, &g_AppDataRecord);
-    	APP_ERROR_CHECK(rc);
+
+    	if (rc == FDS_ERR_NO_SPACE_IN_FLASH)
+    	{
+    		// Remove deleted record to make space
+    		g_FdsCleaned = false;
+    		fds_gc();
+
+    		while (g_FdsCleaned == false) __WFE();
+
+        	rc = fds_record_update(&desc, &g_AppDataRecord);
+        	APP_ERROR_CHECK(rc);
+    	}
     }
 }
 
@@ -228,7 +261,6 @@ void HardwareInit()
     	do {
 			/* A config file is in flash. Let's update it. */
 			fds_flash_record_t appdata = {0};
-
 			/* Open the record and read its contents. */
 			rc = fds_record_open(&desc, &appdata);
 			APP_ERROR_CHECK(rc);
@@ -261,11 +293,10 @@ void HardwareInit()
     }
     else
     {
-        rc = fds_record_write(&desc, &g_AppDataRecord);
+		rc = fds_record_write(&desc, &g_AppDataRecord);
         APP_ERROR_CHECK(rc);
     }
 
-    //init_cli();
     UsbInit();
 }
 
@@ -278,25 +309,29 @@ int main(void)
 
 	ret = nrf_drv_clock_init();
 
-    HardwareInit();
+	// Update default checksum
+	uint8_t *p = (uint8_t*)&g_AppData;
+
+	g_AppData.Cs = 0;
+
+	for (int i = 0; i < sizeof(AppData_t); i++, p++)
+	{
+		g_AppData.Cs += *p;
+	}
+
+	g_AppData.Cs = 0 - g_AppData.Cs;
+
+    ret = nrf_cli_init(&m_cli_cdc_acm, nullptr, true, true, NRF_LOG_SEVERITY_INFO);
+    APP_ERROR_CHECK(ret);
+
+	HardwareInit();
 
     msDelay(1000);
 
-    nrf_cli_print(&m_cli_cdc_acm, "SlimeNRF Receiver BLYST840 Dongle");
+    nrf_cli_print(&m_cli_cdc_acm, "\nSlimeNRF Receiver BLYST840 Dongle");
 
     ret = nrf_cli_start(&m_cli_cdc_acm);
     APP_ERROR_CHECK(ret);
-
-#if 0
-    err_code = esb_init();
-   // APP_ERROR_CHECK(err_code);
-
-    //bsp_board_leds_init();
-    err_code = nrf_esb_start_rx();
-    //APP_ERROR_CHECK(err_code);
-#endif
-
-    //NRF_LOG_DEBUG("Enhanced ShockBurst Transmitter Example running.\r\n");
 
     while (true)
     {

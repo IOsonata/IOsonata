@@ -33,21 +33,6 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event);
 static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                     app_usbd_cdc_acm_user_event_t event);
 
-#if NRF_CLI_ENABLED
-//NRF_CLI_CDC_ACM_DEF(m_cli_cdc_acm_transport);
-//#define NRF_CLI_CDC_ACM_DEF(_name_)
-static nrf_cli_cdc_acm_internal_cb_t m_cli_cdc_acm_transport_cb;
-static const nrf_cli_cdc_acm_internal_t m_cli_cdc_acm_transport = {
-	.transport = {.p_api = &nrf_cli_cdc_acm_transport_api},
-	.p_cb = &m_cli_cdc_acm_transport_cb,
-};
-
-NRF_CLI_DEF(m_cli_cdc_acm,
-            "Slime:~$ ",
-            &m_cli_cdc_acm_transport.transport,
-            '\r',
-            CLI_EXAMPLE_LOG_QUEUE_SIZE);
-#endif
 
 
 /**
@@ -468,72 +453,6 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event)
     }
 }
 
-#if 0
-static void mouse_move_timer_handler(void * p_context)
-{
-    UNUSED_PARAMETER(p_context);
-    bool used = false;
-
-   // if (bsp_button_is_pressed(BTN_MOUSE_X_POS))
-    {
-        hid_generic_mouse_action(HID_GENERIC_MOUSE_X, CONFIG_MOUSE_MOVE_SPEED);
-        used = true;
-    }
-  //  if (bsp_button_is_pressed(BTN_MOUSE_Y_POS))
-    {
-        hid_generic_mouse_action(HID_GENERIC_MOUSE_Y, CONFIG_MOUSE_MOVE_SPEED);
-        used = true;
-    }
-
-    if(!used)
-    {
-  //      UNUSED_RETURN_VALUE(app_timer_stop(m_mouse_move_timer));
-    }
-}
-static void bsp_event_callback(bsp_event_t ev)
-{
-    switch ((unsigned int)ev)
-    {
-        case CONCAT_2(BSP_EVENT_KEY_, BTN_MOUSE_X_POS):
-            hid_generic_mouse_action(HID_GENERIC_MOUSE_X, CONFIG_MOUSE_MOVE_SPEED);
-            UNUSED_RETURN_VALUE(app_timer_start(m_mouse_move_timer, APP_TIMER_TICKS(CONFIG_MOUSE_MOVE_TIME_MS), NULL));
-            break;
-
-        case CONCAT_2(BSP_EVENT_KEY_, BTN_MOUSE_Y_POS):
-            hid_generic_mouse_action(HID_GENERIC_MOUSE_Y, CONFIG_MOUSE_MOVE_SPEED);
-            UNUSED_RETURN_VALUE(app_timer_start(m_mouse_move_timer, APP_TIMER_TICKS(CONFIG_MOUSE_MOVE_TIME_MS), NULL));
-            break;
-
-        case CONCAT_2(BSP_EVENT_KEY_, BTN_MOUSE_RIGHT):
-            hid_generic_mouse_action(HID_GENERIC_MOUSE_BTN_RIGHT, 1);
-            break;
-        case CONCAT_2(BSP_USER_EVENT_RELEASE_, BTN_MOUSE_RIGHT):
-            hid_generic_mouse_action(HID_GENERIC_MOUSE_BTN_RIGHT, -1);
-            break;
-
-        case CONCAT_2(BSP_EVENT_KEY_, BTN_MOUSE_LEFT):
-            hid_generic_mouse_action(HID_GENERIC_MOUSE_BTN_LEFT, 1);
-            break;
-        case CONCAT_2(BSP_USER_EVENT_RELEASE_, BTN_MOUSE_LEFT):
-            hid_generic_mouse_action(HID_GENERIC_MOUSE_BTN_LEFT, -1);
-            break;
-
-        default:
-            return; // no implementation needed
-    }
-}
-#endif
-#if NRF_CLI_ENABLED
-void init_cli(void)
-{
-    ret_code_t ret;
-    ret = nrf_cli_init(&m_cli_cdc_acm, nullptr, true, true, NRF_LOG_SEVERITY_INFO);
-    APP_ERROR_CHECK(ret);
-    ret = nrf_cli_start(&m_cli_cdc_acm);
-    APP_ERROR_CHECK(ret);
-}
-#endif
-
 static ret_code_t idle_handle(app_usbd_class_inst_t const * p_inst, uint8_t report_id)
 {
     switch (report_id)
@@ -578,12 +497,6 @@ void UsbInit()
 
     ret = app_usbd_class_append(class_inst_generic);
     APP_ERROR_CHECK(ret);
-
-    ret = nrf_cli_init(&m_cli_cdc_acm, nullptr, true, true, NRF_LOG_SEVERITY_INFO);
-    APP_ERROR_CHECK(ret);
-
-//    ret = nrf_cli_start(&m_cli_cdc_acm);
-//    APP_ERROR_CHECK(ret);
 
     if (USBD_POWER_DETECTION)
     {

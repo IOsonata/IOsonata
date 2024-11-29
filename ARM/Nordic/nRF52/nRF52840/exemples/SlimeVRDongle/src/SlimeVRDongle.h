@@ -14,6 +14,7 @@ void init_cli();
 uint32_t esb_init(void);
 void EsbSetAddr(bool PairMode);
 uint16_t AddTracker(uint64_t Addr);
+void UpdateRecord();
 
 #ifdef __cplusplus
 }
