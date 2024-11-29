@@ -56,7 +56,7 @@ const AppInfo_t g_AppInfo = {
 
 alignas(4) AppData_t g_AppData = { 0, -1, };
 
-uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
+//uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
 uint8_t g_extern_usbd_product_string[40 + 1] = { "SlimeNRF Receiver BLYST840 Dongle" };
 
 #if NRF_CLI_ENABLED

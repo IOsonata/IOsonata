@@ -6593,7 +6593,7 @@
 // <i> Note: This value is not editable in Configuration Wizard.
 // <i> Serial number that is defined the same way like in @ref APP_USBD_STRINGS_MANUFACTURER.
 #ifndef APP_USBD_STRING_SERIAL
-#define APP_USBD_STRING_SERIAL g_extern_usbd_serial_number
+#define APP_USBD_STRING_SERIAL g_extern_serial_number // g_extern_usbd_serial_number
 //#define APP_USBD_STRING_SERIAL APP_USBD_STRING_DESC("000000000000")
 #endif
 
