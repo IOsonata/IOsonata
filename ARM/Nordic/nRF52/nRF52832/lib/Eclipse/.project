@@ -1091,6 +1091,21 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/fds.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/fds.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/fds_nvmc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/fds_nvmc.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/fds_sd.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/fds_sd.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/flash.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/flash.h</locationURI>
@@ -1826,6 +1841,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/fds.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/fds.c</locationURI>
+		</link>
+		<link>
 			<name>src/storage/ff_diskio.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/ff_diskio.cpp</locationURI>
@@ -2322,11 +2342,6 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/experimental_section_vars</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fds</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -3194,11 +3209,6 @@
 			<name>src/nRF5_SDK/libraries/experimental_section_vars/nrf_section_iter.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/experimental_section_vars/nrf_section_iter.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fds/fds.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fds/fds.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage.c</name>

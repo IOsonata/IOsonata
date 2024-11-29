@@ -46,11 +46,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/esb.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/fds.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fds/fds.c</locationURI>
-		</link>
-		<link>
 			<name>src/main.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>

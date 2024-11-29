@@ -45,6 +45,7 @@
 
 
 typedef struct __App_Data {
+	uint8_t Cs;				// Checksum
 	uint8_t TrackerId;
 	uint8_t PairedAdddr[8];
 } AppData_t;
@@ -84,6 +85,7 @@ alignas(4) static fds_record_t const g_AppDataRecord =
     }
 };
 volatile bool g_FdsInitialized = false;
+volatile bool g_FdsCleaned = false;
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
@@ -181,6 +183,10 @@ static void fds_evt_handler(fds_evt_t const * p_evt)
             }
         } break;
 
+        case FDS_EVT_GC:
+        	g_FdsCleaned = true;
+        	break;
+
         default:
             break;
     }
@@ -196,7 +202,18 @@ void UpdateRecord()
     if (rc == NRF_SUCCESS)
     {
     	rc = fds_record_update(&desc, &g_AppDataRecord);
-    	APP_ERROR_CHECK(rc);
+
+    	if (rc == FDS_ERR_NO_SPACE_IN_FLASH)
+    	{
+    		// Remove deleted record to make space
+    		g_FdsCleaned = false;
+    		fds_gc();
+
+    		while (g_FdsCleaned == false) __WFE();
+
+        	rc = fds_record_update(&desc, &g_AppDataRecord);
+        	APP_ERROR_CHECK(rc);
+    	}
     }
 }
 
@@ -553,6 +570,18 @@ int main()
     uint32_t err_code;
     // Initialize
     clocks_start();
+
+	// Update default checksum
+	uint8_t *p = (uint8_t*)&g_AppData;
+
+	g_AppData.Cs = 0;
+
+	for (int i = 0; i < sizeof(AppData_t); i++, p++)
+	{
+		g_AppData.Cs += *p;
+	}
+
+	g_AppData.Cs = 0 - g_AppData.Cs;
 
     HardwareInit();
 

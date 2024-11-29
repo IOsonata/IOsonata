@@ -114,9 +114,9 @@ static void fds_evt_handler(fds_evt_t const * p_evt)
         } break;
 
         case FDS_EVT_GC:
-        	//UpdateRecord();
         	g_FdsCleaned = true;
         	break;
+
         default:
             break;
     }
