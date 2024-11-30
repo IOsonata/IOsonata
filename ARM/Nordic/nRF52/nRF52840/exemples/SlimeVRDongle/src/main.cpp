@@ -173,68 +173,6 @@ uint16_t AddTracker(uint64_t Addr)
 }
 
 
-/*lint -save -esym(40, BUTTON_1) -esym(40, BUTTON_2) -esym(40, BUTTON_3) -esym(40, BUTTON_4) -esym(40, LED_1) -esym(40, LED_2) -esym(40, LED_3) -esym(40, LED_4) */
-#if 0
-void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
-{
-    switch (p_event->evt_id)
-    {
-        case NRF_ESB_EVENT_TX_SUCCESS:
-         //   NRF_LOG_DEBUG("TX SUCCESS EVENT\r\n");
-            break;
-        case NRF_ESB_EVENT_TX_FAILED:
-        //    NRF_LOG_DEBUG("TX FAILED EVENT\r\n");
-            break;
-        case NRF_ESB_EVENT_RX_RECEIVED:
-         //   NRF_LOG_DEBUG("RX RECEIVED EVENT\r\n");
-            while (nrf_esb_read_rx_payload(&rx_payload) == NRF_SUCCESS)
-            {
-                if (rx_payload.length > 0)
-                {
-                	IOPinSet(0, 23);
-                	g_Uart.printf("Received : %d bytes\n", rx_payload.length);
-                	IOPinClear(0, 23);
-
-                    //NRF_LOG_DEBUG("RX RECEIVED PAYLOAD\r\n");
-                }
-            }
-            break;
-    }
-    NRF_GPIO->OUTCLR = 0xFUL << 12;
-    NRF_GPIO->OUTSET = (p_event->tx_attempts & 0x0F) << 12;
-}
-
-uint32_t esb_init( void )
-{
-    uint32_t err_code;
-    uint8_t base_addr_0[4] = {0xE6, 0xE6, 0xE6, 0xE6};
-    uint8_t base_addr_1[4] = {0xC2, 0xC2, 0xC2, 0xC2};
-    uint8_t addr_prefix[8] = {0xE7, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8 };
-
-    nrf_esb_config_t nrf_esb_config         = NRF_ESB_DEFAULT_CONFIG;
-    nrf_esb_config.payload_length           = 2;
-    nrf_esb_config.protocol                 = NRF_ESB_PROTOCOL_ESB_DPL;
-    nrf_esb_config.bitrate                  = NRF_ESB_BITRATE_2MBPS;
-    nrf_esb_config.mode                     = NRF_ESB_MODE_PRX;
-    nrf_esb_config.event_handler            = nrf_esb_event_handler;
-    nrf_esb_config.selective_auto_ack       = true;
-
-    err_code = nrf_esb_init(&nrf_esb_config);
-
-    VERIFY_SUCCESS(err_code);
-
-    err_code = nrf_esb_set_base_address_0(base_addr_0);
-    VERIFY_SUCCESS(err_code);
-
-    err_code = nrf_esb_set_base_address_1(base_addr_1);
-    VERIFY_SUCCESS(err_code);
-
-    err_code = nrf_esb_set_prefixes(addr_prefix, 8);
-    VERIFY_SUCCESS(err_code);
-
-    return err_code;
-}
-#endif
 
 void HardwareInit()
 {

@@ -111,40 +111,6 @@ extern "C" const app_usbd_descriptor_device_t m_device_dsc = APP_USBD_CORE_DEVIC
 static void hid_user_ev_handler(app_usbd_class_inst_t const * p_inst,
                                 app_usbd_hid_user_event_t event);
 
-// SlimeVR HID report desc
-/*
-0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
-0x09, 0x00,        // Usage (Undefined)
-0xA1, 0x01,        // Collection (Application)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x15, 0x00,        //   Logical Minimum (0)
-0x25, 0xFF,        //   Logical Maximum (-1)
-0x75, 0x08,        //   Report Size (8)
-0x95, 0x04,        //   Report Count (4)
-0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x09, 0x00,        //   Usage (Undefined)
-0x15, 0x00,        //   Logical Minimum (0)
-0x26, 0xFF, 0xFF,  //   Logical Maximum (-1)
-0x75, 0x10,        //   Report Size (16)
-0x95, 0x08,        //   Report Count (8)
-0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-0xC0,              // End Collection
-*/
-
-/**
- * @brief Reuse HID mouse report descriptor for HID generic class
- */
-//APP_USBD_HID_GENERIC_SUBCLASS_REPORT_DESC(mouse_desc,APP_USBD_HID_MOUSE_REPORT_DSC_BUTTON(2));
 
 #if 0
 /*
