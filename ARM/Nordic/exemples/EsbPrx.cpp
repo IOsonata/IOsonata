@@ -114,7 +114,7 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
     }
 }
 
-static void clock_irq_handler(nrfx_clock_evt_type_t evt)
+static void nrfx_clock_irq_handler(nrfx_clock_evt_type_t evt)
 {
     if (evt == NRFX_CLOCK_EVT_HFCLK_STARTED)
     {
@@ -126,14 +126,15 @@ static void clock_irq_handler(nrfx_clock_evt_type_t evt)
 
 void clocks_start( void )
 {
-#if 1
+#if 0
     NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
     NRF_CLOCK->TASKS_HFCLKSTART = 1;
 
     while (NRF_CLOCK->EVENTS_HFCLKSTARTED == 0);
 #else
-    ret_code_t err_code = nrfx_clock_init(clock_irq_handler);
-    nrfx_clock_enable();
+    ret_code_t err_code = nrfx_clock_init(nrfx_clock_irq_handler);
+    nrfx_clock_hfclk_start();
+    while (nrfx_clock_hfclk_is_running() == false);
 #endif
 }
 
