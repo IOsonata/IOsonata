@@ -31,24 +31,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/main.c</name>
+			<name>src/EsbPtx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/main.c</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/exemples/EsbPtx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/boards</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/boards/boards.c</name>
+			<name>src/board.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/boards/boards.c</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

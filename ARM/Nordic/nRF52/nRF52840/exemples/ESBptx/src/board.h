@@ -41,6 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blueio_board.h"
 
+
 #define BUT1_PORT			0
 #define BUT1_PIN			13
 #define BUT1_PINOP			0
@@ -54,17 +55,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED1_PINOP			0
 #define LED1_LOGIC			LED_LOGIC_LOW
 
-#define LED2_PORT			0
-#define LED2_PIN			29
+#define LED2_PORT			1
+#define LED2_PIN			8
 #define LED2_PINOP			0
 
-#define LED3_PORT			0
-#define LED3_PIN			28
+#define LED3_PORT			1
+#define LED3_PIN			9
 #define LED3_PINOP			0
-
-#define LED4_PORT			0
-#define LED4_PIN			27
-#define LED4_PINOP			0
 
 #define UART_DEVNO			0
 #define UART_RX_PORT		BLUEIO_UART_RX_PORT
