@@ -206,6 +206,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/net</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/nrf_log_backend_uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/nrf_log_backend_uart.h</locationURI>
@@ -894,6 +899,11 @@
 			<name>include/miscdev/tca6424a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
+		</link>
+		<link>
+			<name>include/net/nrf_mac.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrf_mac.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt/fg_lc709203f.h</name>
