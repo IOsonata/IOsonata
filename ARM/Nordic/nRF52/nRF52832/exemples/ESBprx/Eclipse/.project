@@ -31,14 +31,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/EsbPrx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/exemples/EsbPrx.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
-		</link>
-		<link>
-			<name>src/main.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
