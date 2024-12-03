@@ -389,7 +389,7 @@ static void nrf_drv_power_on_sd_disable(void)
 #if NRF_POWER_HAS_USBREG
     if (nrfx_power_usb_handler_get() != NULL)
     {
-       nrf_power_int_enable(
+       nrf_power_int_enable(NRF_POWER,
            NRF_POWER_INT_USBDETECTED_MASK |
            NRF_POWER_INT_USBREMOVED_MASK  |
            NRF_POWER_INT_USBPWRRDY_MASK);

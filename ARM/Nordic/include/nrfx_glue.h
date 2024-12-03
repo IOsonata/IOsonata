@@ -71,7 +71,7 @@ extern "C" {
  *
  * @param expression Expression to be evaluated.
  */
-//#define NRFX_STATIC_ASSERT(expression)
+#define NRFX_STATIC_ASSERT(expression)	_Static_assert(expression, "assert")
 
 //------------------------------------------------------------------------------
 #ifdef NRF51
