@@ -179,7 +179,7 @@ int main(void)
     g_Led1.Init(LED1_PORT, LED1_PIN, LED1_LOGIC);
 
     err_code = esb_init();
-    APP_ERROR_CHECK(err_code);
+    //APP_ERROR_CHECK(err_code);
 
 
     while (true)
