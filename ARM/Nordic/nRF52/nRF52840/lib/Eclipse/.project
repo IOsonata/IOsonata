@@ -2758,7 +2758,7 @@
 		<link>
 			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_nvmc.c</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_nvmc.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_fstorage_nvmc.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_sd.c</name>
@@ -4184,6 +4184,11 @@
 			<name>src/nrfx/drivers/src/nrfx_clock.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_clock.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_nvmc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_nvmc.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers/src/nrfx_power.c</name>

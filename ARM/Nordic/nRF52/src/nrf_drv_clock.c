@@ -40,8 +40,9 @@
 
 #include <nordic_common.h>
 #include "nrf_drv_clock.h"
+#include "app_util_platform.h"
 
-#if NRF_MODULE_ENABLED(NRF_CLOCK)
+//#if NRF_MODULE_ENABLED(NRF_CLOCK)
 
 #ifdef SOFTDEVICE_PRESENT
 #include "nrf_sdh.h"
@@ -615,4 +616,4 @@ NRF_SDH_STATE_OBSERVER(m_sd_state_observer, CLOCK_CONFIG_STATE_OBSERVER_PRIO) =
 #undef NRF_CLOCK_LFCLK_Xtal
 #undef NRF_CLOCK_LFCLK_Synth
 
-#endif // NRF_MODULE_ENABLED(NRF_CLOCK)
+//#endif // NRF_MODULE_ENABLED(NRF_CLOCK)
