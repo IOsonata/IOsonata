@@ -1084,7 +1084,7 @@ static ret_code_t app_usbd_core_event_handler(app_usbd_class_inst_t const * cons
         {
             if (nrf_atomic_flag_clear_fetch(&m_rwu_pending) != 0)
             {
-                nrf_usbd_task_trigger(NRF_USBD_TASK_NODRIVEDPDM);
+                nrf_usbd_task_trigger(NRF_USBD, NRF_USBD_TASK_NODRIVEDPDM);
             }
 
             ASSERT(usbd_core_state_get() >= APP_USBD_STATE_Unattached);

@@ -3398,7 +3398,7 @@
 		<link>
 			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_clock.c</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_clock.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_drv_clock.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c</name>
