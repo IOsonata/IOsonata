@@ -501,6 +501,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/nrfthingy_env_service.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/prbs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/prbs.c</locationURI>
@@ -1691,6 +1696,16 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx/drivers</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/soc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/pwrmgnt/fg_lc709203f.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/fg_lc709203f.cpp</locationURI>
@@ -2661,6 +2676,16 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx/drivers/src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/soc/nrfx_atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
 			<name>src/Invn/Devices/Drivers/Ak0991x</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -2978,7 +3003,7 @@
 		<link>
 			<name>src/nRF5_SDK/ble/ble_dtm/ble_dtm.c</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_dtm/ble_dtm.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/ble_dtm.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/ble_dtm/ble_dtm_hw_nrf52.c</name>
@@ -3228,7 +3253,7 @@
 		<link>
 			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_nvmc.c</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_nvmc.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_fstorage_nvmc.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_sd.c</name>
@@ -3378,7 +3403,7 @@
 		<link>
 			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_power.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_drv_power.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_rng.c</name>
@@ -5229,6 +5254,26 @@
 			<name>src/nrf5_SDK_Mesh/stack/src/mesh_stack.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrf5_SDK_Mesh/mesh/stack/src/mesh_stack.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_clock.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nrfx_clock.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_nvmc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_nvmc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_power.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_power.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_rng.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_rng.c</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers/Ak0991x/Ak0991x.c</name>
