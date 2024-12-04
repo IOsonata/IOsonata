@@ -75,11 +75,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/fnmatch/fnmatch.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/fnmatch/fnmatch.c</locationURI>
@@ -115,11 +110,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/pwr_mgmt</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/ringbuf</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -131,16 +121,6 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/strerror</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -195,16 +175,6 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/mpu/nrf_mpu_lib.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/pwr_mgmt/nrf_pwr_mgmt.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/pwr_mgmt/nrf_pwr_mgmt.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/pwr_mgmt/nrf_pwr_mgmt.h</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/pwr_mgmt/nrf_pwr_mgmt.h</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/ringbuf/nrf_ringbuf.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/ringbuf/nrf_ringbuf.c</locationURI>
@@ -228,36 +198,6 @@
 			<name>src/nRF5_SDK/libraries/strerror/nrf_strerror.h</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/strerror/nrf_strerror.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_clock.h</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_clock.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_power.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_power.h</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_power.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_uart.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</name>
@@ -313,46 +253,6 @@
 			<name>src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/log/src/nrf_log_str_formatter.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_nvmc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_nvmc.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_power.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_power.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uart.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uarte.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_usbd.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/prs</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/prs/nrfx_prs.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

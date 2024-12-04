@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/bootloader</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/iosonata_dfu_public_key.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/iosonata_dfu_public_key.c</locationURI>
@@ -54,6 +59,51 @@
 			<name>src/secure_bootloader_gcc_nrf52.ld</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/secure_bootloader_gcc_nrf52.ld</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/ble_dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_app_start.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_app_start.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_app_start_final.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_app_start_final.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_dfu_timers.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_dfu_timers.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_fw_activation.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_fw_activation.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_info.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_info.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_wdt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_wdt.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble</name>
@@ -86,6 +136,81 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/bootloader/ble_dfu/nrf_dfu_ble.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/ble_dfu/nrf_dfu_ble.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/dfu-cc.pb.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/dfu-cc.pb.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_flash.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_flash.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_handling_error.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_handling_error.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_mbr.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_mbr.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_req_handler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_req_handler.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_settings.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_settings.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_settings_svci.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_settings_svci.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_svci.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_svci.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_svci_handler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_svci_handler.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_transport.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_transport.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_utils.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_utils.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_validation.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_validation.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_ver_validation.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_ver_validation.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/common</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -112,11 +237,6 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/balloc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -229,51 +349,6 @@
 			<name>src/nRF5_SDK/libraries/balloc/nrf_balloc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/balloc/nrf_balloc.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/ble_dfu</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/nrf_bootloader.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/nrf_bootloader.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/nrf_bootloader_app_start.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/nrf_bootloader_app_start.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/nrf_bootloader_app_start_final.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/nrf_bootloader_app_start_final.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/nrf_bootloader_dfu_timers.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/nrf_bootloader_dfu_timers.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/nrf_bootloader_fw_activation.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/nrf_bootloader_fw_activation.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/nrf_bootloader_info.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/nrf_bootloader_info.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/nrf_bootloader_wdt.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/nrf_bootloader_wdt.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/crc32/crc32.c</name>
@@ -399,81 +474,6 @@
 			<name>src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/softdevice/common/nrf_sdh_soc.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/ble_dfu/nrf_dfu_ble.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/ble_dfu/nrf_dfu_ble.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/dfu-cc.pb.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/dfu-cc.pb.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_flash.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_flash.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_handling_error.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_handling_error.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_mbr.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_mbr.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_req_handler.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_req_handler.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_settings.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings_svci.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_settings_svci.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_svci.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci_handler.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_svci_handler.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_transport.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_transport.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_utils.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_utils.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_validation.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_validation.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_ver_validation.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/bootloader/dfu/nrf_dfu_ver_validation.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend/cc310_bl</name>
