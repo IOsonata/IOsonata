@@ -127,7 +127,7 @@ static void lfclk_stop(void)
     // LFCLK can be started independently by the watchdog and cannot be stopped
     // by the CLOCK peripheral. This code handles this situation and prevents LFCLK to be stopped.
     // Otherwise driver can stuck when waiting for the operation to complete.
-    if (!nrf_wdt_started())
+    if (!nrf_wdt_started_check(NRF_WDT))
     {
         nrfx_clock_lfclk_stop();
         m_clock_cb.lfclk_on = false;
@@ -195,7 +195,7 @@ ret_code_t nrf_drv_clock_init(void)
         m_clock_cb.module_initialized = true;
     }
 
-    if (nrf_wdt_started())
+    if (nrf_wdt_started_check(NRF_WDT))
     {
         m_clock_cb.lfclk_on = true;
     }
