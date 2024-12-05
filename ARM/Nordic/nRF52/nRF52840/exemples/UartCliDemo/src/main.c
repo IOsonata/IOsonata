@@ -228,7 +228,7 @@ static void flashlog_init(void)
 {
     ret_code_t ret;
     int32_t backend_id;
-
+#if 0
     ret = nrf_log_backend_flash_init(&nrf_fstorage_nvmc);
     APP_ERROR_CHECK(ret);
 #if NRF_LOG_BACKEND_FLASHLOG_ENABLED
@@ -243,6 +243,7 @@ static void flashlog_init(void)
     APP_ERROR_CHECK_BOOL(backend_id >= 0);
 
     nrf_log_backend_enable(&m_crash_log_backend);
+#endif
 #endif
 }
 
@@ -295,7 +296,7 @@ int main(void)
    // APP_ERROR_CHECK(ret);
 
 
-    UNUSED_RETURN_VALUE(nrf_log_config_load());
+    //UNUSED_RETURN_VALUE(nrf_log_config_load());
 
     cli_start();
 

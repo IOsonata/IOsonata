@@ -2027,19 +2027,19 @@
 // <e> NRF_LOG_BACKEND_FLASH_ENABLED - nrf_log_backend_flash - Log flash backend
 //==========================================================
 #ifndef NRF_LOG_BACKEND_FLASH_ENABLED
-#define NRF_LOG_BACKEND_FLASH_ENABLED 1
+#define NRF_LOG_BACKEND_FLASH_ENABLED 0
 #endif
 // <q> NRF_LOG_BACKEND_FLASH_CLI_CMDS  - Enable CLI commands for this module.
  
 
 #ifndef NRF_LOG_BACKEND_FLASH_CLI_CMDS
-#define NRF_LOG_BACKEND_FLASH_CLI_CMDS 1
+#define NRF_LOG_BACKEND_FLASH_CLI_CMDS 0
 #endif
 
 // <e> NRF_LOG_BACKEND_FLASHLOG_ENABLED - Enable flashlog backend.
 //==========================================================
 #ifndef NRF_LOG_BACKEND_FLASHLOG_ENABLED
-#define NRF_LOG_BACKEND_FLASHLOG_ENABLED 1
+#define NRF_LOG_BACKEND_FLASHLOG_ENABLED 0
 #endif
 // <o> NRF_LOG_BACKEND_FLASHLOG_QUEUE_SIZE - Logger messages queue size. 
 // <i> Queue holds log messages pending to be written to flash.
@@ -2055,7 +2055,7 @@
 // <e> NRF_LOG_BACKEND_CRASHLOG_ENABLED - Enable crashlog backend.
 //==========================================================
 #ifndef NRF_LOG_BACKEND_CRASHLOG_ENABLED
-#define NRF_LOG_BACKEND_CRASHLOG_ENABLED 1
+#define NRF_LOG_BACKEND_CRASHLOG_ENABLED 0
 #endif
 // <o> NRF_LOG_BACKEND_CRASHLOG_FIFO_SIZE - Number of log messages held to be flushed in panic. 
 // <i> Crashlog FIFO always keeps a defined number of the most
@@ -2133,7 +2133,7 @@
 // <e> NRF_LOG_BACKEND_UART_ENABLED - nrf_log_backend_uart - Log UART backend
 //==========================================================
 #ifndef NRF_LOG_BACKEND_UART_ENABLED
-#define NRF_LOG_BACKEND_UART_ENABLED 1
+#define NRF_LOG_BACKEND_UART_ENABLED 0
 #endif
 // <o> NRF_LOG_BACKEND_UART_TX_PIN - UART TX pin 
 #ifndef NRF_LOG_BACKEND_UART_TX_PIN
@@ -2178,7 +2178,7 @@
 // <e> NRF_LOG_ENABLED - nrf_log - Logger
 //==========================================================
 #ifndef NRF_LOG_ENABLED
-#define NRF_LOG_ENABLED 1
+#define NRF_LOG_ENABLED 0
 #endif
 // <h> Log message pool - Configuration of log message pool
 
@@ -2238,7 +2238,7 @@
  
 
 #ifndef NRF_LOG_CLI_CMDS
-#define NRF_LOG_CLI_CMDS 1
+#define NRF_LOG_CLI_CMDS 0
 #endif
 
 // <o> NRF_LOG_DEFAULT_LEVEL  - Default Severity level
@@ -2259,14 +2259,14 @@
 // <i> Log data is buffered and can be processed in idle.
 
 #ifndef NRF_LOG_DEFERRED
-#define NRF_LOG_DEFERRED 1
+#define NRF_LOG_DEFERRED 0
 #endif
 
 // <q> NRF_LOG_FILTERS_ENABLED  - Enable dynamic filtering of logs.
  
 
 #ifndef NRF_LOG_FILTERS_ENABLED
-#define NRF_LOG_FILTERS_ENABLED 1
+#define NRF_LOG_FILTERS_ENABLED 0
 #endif
 
 // <q> NRF_LOG_NON_DEFFERED_CRITICAL_REGION_ENABLED  - Enable use of critical region for non deffered mode when flushing logs.
@@ -2311,7 +2311,7 @@
 // <e> NRF_LOG_USES_COLORS - If enabled then ANSI escape code for colors is prefixed to every string
 //==========================================================
 #ifndef NRF_LOG_USES_COLORS
-#define NRF_LOG_USES_COLORS 1
+#define NRF_LOG_USES_COLORS 0
 #endif
 // <o> NRF_LOG_COLOR_DEFAULT  - ANSI escape code prefix.
  
@@ -3696,7 +3696,7 @@
 // <e> APP_TIMER_CONFIG_LOG_ENABLED - Enables logging in the module.
 //==========================================================
 #ifndef APP_TIMER_CONFIG_LOG_ENABLED
-#define APP_TIMER_CONFIG_LOG_ENABLED 1
+#define APP_TIMER_CONFIG_LOG_ENABLED 0
 #endif
 // <o> APP_TIMER_CONFIG_LOG_LEVEL  - Default Severity level
  
@@ -5012,7 +5012,7 @@
 // <e> PM_LOG_ENABLED - Enable logging in Peer Manager and its submodules.
 //==========================================================
 #ifndef PM_LOG_ENABLED
-#define PM_LOG_ENABLED 1
+#define PM_LOG_ENABLED 0
 #endif
 // <o> PM_LOG_LEVEL  - Default Severity level
  

@@ -58,16 +58,14 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/CMSIS//CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/device&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/strerror&quot;"/>
@@ -105,16 +103,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/CMSIS//CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/device&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/strerror&quot;"/>
@@ -258,16 +253,14 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/CMSIS//CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/device&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/strerror&quot;"/>
@@ -304,16 +297,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/CMSIS//CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/CMSIS/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/freertos/portable/GCC/nrf52&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/FreeRTOS/FreeRTOS/Source/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/device&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/util&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/strerror&quot;"/>

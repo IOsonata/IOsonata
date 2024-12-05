@@ -15,6 +15,7 @@ uint32_t esb_init(void);
 void EsbSetAddr(bool PairMode);
 uint16_t AddTracker(uint64_t Addr);
 void UpdateRecord();
+extern nrf_cli_t const m_cli_cdc_acm;
 
 #ifdef __cplusplus
 }

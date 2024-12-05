@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2017 - 2019, Nordic Semiconductor ASA
+ * Copyright (c) 2017 - 2021, Nordic Semiconductor ASA
  *
  * All rights reserved.
  *
@@ -126,7 +126,7 @@
 // <e> NRF_BL_DFU_ENTER_METHOD_BUTTON - Enter DFU mode on button press.
 //==========================================================
 #ifndef NRF_BL_DFU_ENTER_METHOD_BUTTON
-#define NRF_BL_DFU_ENTER_METHOD_BUTTON 1
+#define NRF_BL_DFU_ENTER_METHOD_BUTTON 0
 #endif
 // <o> NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN  - Button for entering DFU mode.
  
@@ -180,7 +180,7 @@
 // <47=> 47 (P1.15) 
 
 #ifndef NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN
-#define NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN 13
+#define NRF_BL_DFU_ENTER_METHOD_BUTTON_PIN 25
 #endif
 
 // </e>
@@ -196,14 +196,14 @@
  
 
 #ifndef NRF_BL_DFU_ENTER_METHOD_GPREGRET
-#define NRF_BL_DFU_ENTER_METHOD_GPREGRET 1
+#define NRF_BL_DFU_ENTER_METHOD_GPREGRET 0
 #endif
 
 // <q> NRF_BL_DFU_ENTER_METHOD_BUTTONLESS  - Enter DFU mode when the Boolean enter_buttonless_dfu in DFU settings is true.
  
 
 #ifndef NRF_BL_DFU_ENTER_METHOD_BUTTONLESS
-#define NRF_BL_DFU_ENTER_METHOD_BUTTONLESS 1
+#define NRF_BL_DFU_ENTER_METHOD_BUTTONLESS 0
 #endif
 
 // </h> 
@@ -1112,7 +1112,7 @@
 // <i> the current app or SoftDevice without knowing the signature key.
 
 #ifndef NRF_DFU_SINGLE_BANK_APP_UPDATES
-#define NRF_DFU_SINGLE_BANK_APP_UPDATES 0
+#define NRF_DFU_SINGLE_BANK_APP_UPDATES 1
 #endif
 
 // </h> 
@@ -1562,6 +1562,17 @@
 
 #ifndef NRFX_USBD_CONFIG_ISO_IN_ZLP
 #define NRFX_USBD_CONFIG_ISO_IN_ZLP 0
+#endif
+
+// <q> NRFX_USBD_USE_WORKAROUND_FOR_ANOMALY_211  - Use workaround for anomaly 211
+ 
+
+// <i> If set, workaround for anomaly 211 will be enabled.
+// <i> Anomaly 211 - Device remains in SUSPEND too long when host resumes
+// <i> bus activity (sending SOF packets) without a RESUME condition.
+
+#ifndef NRFX_USBD_USE_WORKAROUND_FOR_ANOMALY_211
+#define NRFX_USBD_USE_WORKAROUND_FOR_ANOMALY_211 0
 #endif
 
 // </e>

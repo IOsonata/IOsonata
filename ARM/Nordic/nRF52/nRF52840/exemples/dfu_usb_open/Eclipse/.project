@@ -31,6 +31,16 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/app_usbd.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/app_usbd.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/custom_board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/custom_board.h</locationURI>
@@ -46,6 +56,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nrf_drv_power.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nrf_drv_power.c</locationURI>
+		</link>
+		<link>
 			<name>src/open_bootloader_gcc_nrf52.ld</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/open_bootloader_gcc_nrf52.ld</locationURI>
@@ -54,6 +69,51 @@
 			<name>src/sdk_config.h</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/sdk_config.h</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_app_start.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_app_start.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_app_start_final.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_app_start_final.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_dfu_timers.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_dfu_timers.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_fw_activation.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_fw_activation.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_info.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_info.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/nrf_bootloader_wdt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/nrf_bootloader_wdt.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/serial_dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/boards</name>
@@ -74,6 +134,91 @@
 			<name>src/nRF5_SDK/nrfx</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/dfu-cc.pb.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/dfu-cc.pb.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_flash.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_flash.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_handling_error.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_handling_error.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_mbr.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_mbr.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_req_handler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_req_handler.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_settings.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_settings.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_settings_svci.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_settings_svci.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_svci.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_svci.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_svci_handler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_svci_handler.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_transport.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_transport.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_trigger_usb.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_trigger_usb.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_utils.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_utils.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_validation.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_validation.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/dfu/nrf_dfu_ver_validation.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/dfu/nrf_dfu_ver_validation.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/serial_dfu/nrf_dfu_serial.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/serial_dfu/nrf_dfu_serial.c</locationURI>
+		</link>
+		<link>
+			<name>src/bootloader/serial_dfu/nrf_dfu_serial_usb.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/bootloader/serial_dfu/nrf_dfu_serial_usb.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/boards/boards.c</name>
@@ -122,6 +267,11 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/usbd</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/util</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -329,6 +479,11 @@
 			<name>src/nRF5_SDK/libraries/usbd/class</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/util/app_util_platform.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_util_platform.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c</name>

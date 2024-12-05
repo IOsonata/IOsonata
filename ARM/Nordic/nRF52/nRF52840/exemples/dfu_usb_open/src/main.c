@@ -67,6 +67,8 @@
 /* Timer used to blink LED on DFU progress. */
 APP_TIMER_DEF(m_dfu_progress_led_timer);
 
+const char g_extern_usbd_product_string[] = {"Open DFU Bootloader"};
+
 static void on_error(void)
 {
     NRF_LOG_FINAL_FLUSH();
@@ -112,7 +114,7 @@ static void dfu_progress_led_timeout_handler(void * p_context)
                                         p_context);
     APP_ERROR_CHECK(err_code);
 
-    bsp_board_led_invert(BSP_BOARD_LED_1);
+   // bsp_board_led_invert(BSP_BOARD_LED_1);
 }
 
 /**
@@ -148,11 +150,11 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
             break;
         case NRF_DFU_EVT_DFU_INITIALIZED:
         {
-            bsp_board_init(BSP_INIT_LEDS);
+           // bsp_board_init(BSP_INIT_LEDS);
 
-            if (!nrf_clock_lf_is_running())
+            if (!nrf_clock_lf_is_running(NRF_CLOCK))
             {
-                nrf_clock_task_trigger(NRF_CLOCK_TASK_LFCLKSTART);
+                nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
             }
             err_code = app_timer_init();
             APP_ERROR_CHECK(err_code);

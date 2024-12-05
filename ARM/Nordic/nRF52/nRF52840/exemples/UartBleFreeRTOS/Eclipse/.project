@@ -51,7 +51,7 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK</name>
+			<name>src/libraries</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -101,7 +101,7 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/timers.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx</name>
+			<name>src/libraries/util</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -141,14 +141,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx/drivers</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
+			<name>src/libraries/util/app_util_platform.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_util_platform.c</locationURI>
 		</link>
 		<link>
 			<name>src/FreeRTOS/portable/Common/mpu_wrappers.c</name>
@@ -159,21 +154,6 @@
 			<name>src/FreeRTOS/portable/MemMang/heap_3.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/FreeRTOS/FreeRTOS/Source/portable/MemMang/heap_3.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_clock.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

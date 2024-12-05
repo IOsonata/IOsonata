@@ -54,7 +54,7 @@ const AppInfo_t g_AppInfo = {
 	{'I', 'O', 's', 'o', 'n', 'a', 't', 'a', 'S', 'l', 'i', 0x55, 0xA5, 0x5A, 0xA5, 0x5A},
 };
 
-alignas(4) AppData_t g_AppData = { 0, -1, };
+alignas(4) AppData_t g_AppData = { 0, 0, };
 
 //uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
 uint8_t g_extern_usbd_product_string[40 + 1] = { "SlimeNRF Receiver BLYST840 Dongle" };
@@ -280,7 +280,7 @@ int main(void)
        // APP_ERROR_CHECK(err_code);
 
         //bsp_board_leds_init();
-        err_code = nrf_esb_start_rx();
+        //err_code = nrf_esb_start_rx();
         //APP_ERROR_CHECK(err_code);
 
         do {

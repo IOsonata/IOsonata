@@ -125,6 +125,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/util</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/cli/cdc_acm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -198,6 +203,11 @@
 			<name>src/nRF5_SDK/libraries/strerror/nrf_strerror.h</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/strerror/nrf_strerror.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/util/app_util_platform.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_util_platform.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c</name>

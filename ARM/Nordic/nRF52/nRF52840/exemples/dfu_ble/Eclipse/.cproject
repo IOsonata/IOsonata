@@ -228,7 +228,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/bootloader|src/nRF5_SDK/libraries/crypto/backend/cc310_bl|src/nRF5_SDK/hal|src/nRF5_SDK/libraries/util|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/ble|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_flags|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/iosonata_dfu_public_key.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/bootloader|src/nRF5_SDK/libraries/crypto/backend/cc310_bl|src/nRF5_SDK/hal|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/ble|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_flags|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/iosonata_dfu_public_key.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
