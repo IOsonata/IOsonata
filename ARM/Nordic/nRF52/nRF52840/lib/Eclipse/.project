@@ -2843,7 +2843,7 @@
 		<link>
 			<name>src/nRF5_SDK/libraries/scheduler/app_scheduler.c</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/scheduler/app_scheduler.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/app_scheduler.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/sha256/sha256.c</name>
@@ -2863,7 +2863,7 @@
 		<link>
 			<name>src/nRF5_SDK/libraries/timer/app_timer.c</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/timer/app_timer.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/app_timer.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/timer/app_timer_freertos.c</name>

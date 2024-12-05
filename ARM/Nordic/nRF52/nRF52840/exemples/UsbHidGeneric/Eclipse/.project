@@ -31,9 +31,24 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/libraries</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/main.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/libraries/util</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/libraries/util/app_util_platform.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_util_platform.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

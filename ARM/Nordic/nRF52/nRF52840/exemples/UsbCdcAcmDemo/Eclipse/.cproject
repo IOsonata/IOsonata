@@ -62,15 +62,14 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/fnmatch&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/drivers_nrf/nrf_soc_nosd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/boards&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
@@ -114,15 +113,14 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/fnmatch&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/drivers_nrf/nrf_soc_nosd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/boards&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
@@ -202,7 +200,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="nRF5_SDK/libraries/usbd|nRF5_SDK/libraries/bsp/bsp.c|nRF5_SDK/libraries/bsp/bsp_cli.c|nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c|nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|nRF5_SDK/nrfx/drivers/src/nrfx_power.c|nRF5_SDK/nrfx/drivers/src/nrfx_gpiote.c|nRF5_SDK/nrfx/drivers/src/nrfx_clock.c|nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|nRF5_SDK/boards|nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|nRF5_SDK/libraries/usbd/class|nRF5_SDK/libraries/cli/nrf_cli.c|nRF5_SDK/libraries/cli/cli_utils_cmds.c|nRF5_SDK/libraries/cli/uart|nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|nRF5_SDK/libraries/usbd/app_usbd_core.c|nRF5_SDK/libraries/usbd/app_usbd_string_desc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry excluding="nRF5_SDK/libraries/pwr_mgmt|nRF5_SDK/libraries/usbd|nRF5_SDK/libraries/bsp/bsp.c|nRF5_SDK/libraries/bsp/bsp_cli.c|nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c|nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|nRF5_SDK/nrfx/drivers/src/nrfx_power.c|nRF5_SDK/nrfx/drivers/src/nrfx_gpiote.c|nRF5_SDK/nrfx/drivers/src/nrfx_clock.c|nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|nRF5_SDK/boards|nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|nRF5_SDK/libraries/usbd/class|nRF5_SDK/libraries/cli/nrf_cli.c|nRF5_SDK/libraries/cli/cli_utils_cmds.c|nRF5_SDK/libraries/cli/uart|nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|nRF5_SDK/libraries/usbd/app_usbd_core.c|nRF5_SDK/libraries/usbd/app_usbd_string_desc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -277,15 +275,14 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/fnmatch&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/drivers_nrf/nrf_soc_nosd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/boards&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
@@ -329,15 +326,14 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/fnmatch&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/utf_converter&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/fprintf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/drivers_nrf/nrf_soc_nosd&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/boards&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
@@ -417,7 +413,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="nRF5_SDK/libraries/usbd|nRF5_SDK/libraries/bsp/bsp.c|nRF5_SDK/libraries/bsp/bsp_cli.c|nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c|nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|nRF5_SDK/nrfx/drivers/src/nrfx_power.c|nRF5_SDK/nrfx/drivers/src/nrfx_gpiote.c|nRF5_SDK/nrfx/drivers/src/nrfx_clock.c|nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|nRF5_SDK/boards|nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|nRF5_SDK/libraries/usbd/class|nRF5_SDK/libraries/cli/nrf_cli.c|nRF5_SDK/libraries/cli/cli_utils_cmds.c|nRF5_SDK/libraries/cli/uart|nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|nRF5_SDK/libraries/usbd/app_usbd_core.c|nRF5_SDK/libraries/usbd/app_usbd_string_desc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry excluding="nRF5_SDK/libraries/pwr_mgmt|nRF5_SDK/libraries/usbd|nRF5_SDK/libraries/bsp/bsp.c|nRF5_SDK/libraries/bsp/bsp_cli.c|nRF5_SDK/libraries/cli/cdc_acm/nrf_cli_cdc_acm.c|nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|nRF5_SDK/nrfx/drivers/src/nrfx_power.c|nRF5_SDK/nrfx/drivers/src/nrfx_gpiote.c|nRF5_SDK/nrfx/drivers/src/nrfx_clock.c|nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|nRF5_SDK/boards|nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|nRF5_SDK/libraries/usbd/class|nRF5_SDK/libraries/cli/nrf_cli.c|nRF5_SDK/libraries/cli/cli_utils_cmds.c|nRF5_SDK/libraries/cli/uart|nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|nRF5_SDK/libraries/usbd/app_usbd_core.c|nRF5_SDK/libraries/usbd/app_usbd_string_desc.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

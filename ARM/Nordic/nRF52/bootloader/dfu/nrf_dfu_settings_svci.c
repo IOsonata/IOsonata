@@ -111,6 +111,7 @@ bool nrf_dfu_settings_peer_data_is_valid(void)
 
 #else // not NRF_DFU_BLE_REQUIRES_BONDS
 
+#if defined(NRF_DFU_TRANSPORT_BLE) && NRF_DFU_TRANSPORT_BLE
 ret_code_t nrf_dfu_settings_adv_name_write(nrf_dfu_adv_name_t * p_adv_name)
 {
     uint32_t        ret_val;
@@ -159,6 +160,7 @@ bool nrf_dfu_settings_adv_name_is_valid(void)
 
     return (p_adv_name->crc == crc);
 }
+#endif
 
 #endif
 
@@ -167,7 +169,8 @@ bool nrf_dfu_settings_adv_name_is_valid(void)
 ret_code_t nrf_dfu_settings_additional_erase(void)
 {
     ret_code_t ret_code = NRF_SUCCESS;
-    
+#if defined(NRF_DFU_TRANSPORT_BLE) && NRF_DFU_TRANSPORT_BLE
+
     // Check CRC for both types.
     if (   (s_dfu_settings.peer_data.crc != 0xFFFFFFFF)
         || (s_dfu_settings.adv_name.crc  != 0xFFFFFFFF))
@@ -178,7 +181,7 @@ ret_code_t nrf_dfu_settings_additional_erase(void)
         nrfx_nvmc_page_erase(BOOTLOADER_SETTINGS_ADDRESS);
         nrfx_nvmc_words_write(BOOTLOADER_SETTINGS_ADDRESS, (uint32_t const *)&s_dfu_settings, DFU_SETTINGS_PEER_DATA_OFFSET / 4);
     }
-
+#endif
     return ret_code;
 }
 //lint -restore

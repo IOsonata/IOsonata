@@ -44,10 +44,6 @@
  */
 
 #include "nrf.h"
-#include "nrf_drv_usbd.h"
-#include "nrf_drv_clock.h"
-#include "nrf_drv_power.h"
-
 #include "app_error.h"
 #include "app_util.h"
 #include "app_usbd_core.h"
@@ -58,6 +54,9 @@
 #include "app_usbd_serial_num.h"
 #include "nrf_cli.h"
 #include "nrf_cli_cdc_acm.h"
+#include "nrf_drv_usbd.h"
+#include "nrf_drv_clock.h"
+#include "nrf_drv_power.h"
 
 // IOsonata's UART, PinCfg
 #include "board.h"

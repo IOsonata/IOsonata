@@ -180,7 +180,7 @@ ret_code_t nrf_drv_clock_init(void)
         m_clock_cb.hfclk_requests = 0;
         m_clock_cb.p_lf_head      = NULL;
         m_clock_cb.lfclk_requests = 0;
-        err_code = nrfx_clock_init(clock_irq_handler);
+        err_code = nrfx_clock_init(clock_irq_handler) & 0xFFF;
 #ifdef SOFTDEVICE_PRESENT
         if (!nrf_sdh_is_enabled())
 #endif

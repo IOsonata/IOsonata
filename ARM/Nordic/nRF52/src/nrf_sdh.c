@@ -49,8 +49,12 @@
 #include "nrf_nvic.h"
 #include "sdk_config.h"
 #include "app_error.h"
-#include "app_util_platform.h"
+//#include "app_util_platform.h"
 
+#ifdef SOFTDEVICE_PRESENT
+/* Global nvic state instance, required by nrf_nvic.h */
+__WEAK nrf_nvic_state_t nrf_nvic_state;
+#endif
 
 #define NRF_LOG_MODULE_NAME nrf_sdh
 #if NRF_SDH_LOG_ENABLED
@@ -198,14 +202,19 @@ ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg)
     // Notify observers about starting SoftDevice enable process.
     sdh_state_observer_notify(NRF_SDH_EVT_STATE_ENABLE_PREPARE);
 
-    CRITICAL_REGION_ENTER();
+    //CRITICAL_REGION_ENTER();
+    uint8_t __CR_NESTED = 0;
+    /* return value can be safely ignored */
+    (void) sd_nvic_critical_region_enter(&__CR_NESTED);
+
 #ifdef ANT_LICENSE_KEY
     ret_code = sd_softdevice_enable(clock_lf_cfg, app_error_fault_handler, ANT_LICENSE_KEY);
 #else
     ret_code = sd_softdevice_enable(clock_lf_cfg, app_error_fault_handler);
 #endif
     m_nrf_sdh_enabled = (ret_code == NRF_SUCCESS);
-    CRITICAL_REGION_EXIT();
+    //CRITICAL_REGION_EXIT();
+    (void) sd_nvic_critical_region_exit(__CR_NESTED);
 
     if (ret_code != NRF_SUCCESS)
     {
@@ -254,14 +263,19 @@ ret_code_t nrf_sdh_enable_request(void)
         .accuracy     = NRF_SDH_CLOCK_LF_ACCURACY
     };
 
-    CRITICAL_REGION_ENTER();
+//    CRITICAL_REGION_ENTER();
+    uint8_t __CR_NESTED = 0;
+    /* return value can be safely ignored */
+    (void) sd_nvic_critical_region_enter(&__CR_NESTED);
+
 #ifdef ANT_LICENSE_KEY
     ret_code = sd_softdevice_enable(&clock_lf_cfg, app_error_fault_handler, ANT_LICENSE_KEY);
 #else
     ret_code = sd_softdevice_enable(&clock_lf_cfg, app_error_fault_handler);
 #endif
     m_nrf_sdh_enabled = (ret_code == NRF_SUCCESS);
-    CRITICAL_REGION_EXIT();
+//    CRITICAL_REGION_EXIT();
+    (void) sd_nvic_critical_region_exit(__CR_NESTED);
 
     if (ret_code != NRF_SUCCESS)
     {
@@ -303,10 +317,15 @@ ret_code_t nrf_sdh_disable_request(void)
     // Notify observers about starting SoftDevice disable process.
     sdh_state_observer_notify(NRF_SDH_EVT_STATE_DISABLE_PREPARE);
 
-    CRITICAL_REGION_ENTER();
+    //CRITICAL_REGION_ENTER();
+    uint8_t __CR_NESTED = 0;
+    /* return value can be safely ignored */
+    (void) sd_nvic_critical_region_enter(&__CR_NESTED);
+
     ret_code          = sd_softdevice_disable();
     m_nrf_sdh_enabled = false;
-    CRITICAL_REGION_EXIT();
+//    CRITICAL_REGION_EXIT();
+    (void) sd_nvic_critical_region_exit(__CR_NESTED);
 
     if (ret_code != NRF_SUCCESS)
     {

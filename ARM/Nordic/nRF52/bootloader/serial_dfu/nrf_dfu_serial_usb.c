@@ -323,18 +323,18 @@ static uint32_t usb_dfu_transport_init(nrf_dfu_observer_t observer)
 
     NRF_LOG_DEBUG("Initializing drivers.");
 
-    err_code = nrf_drv_clock_init();
+    err_code = nrf_drv_clock_init() & 0xFFF;
     if (err_code != NRF_ERROR_MODULE_ALREADY_INITIALIZED)
     {
         VERIFY_SUCCESS(err_code);
     }
 
-    err_code = nrf_drv_power_init(NULL);
+    err_code = nrf_drv_power_init(NULL) & 0xFFF;
     VERIFY_SUCCESS(err_code);
 
     app_usbd_serial_num_generate();
 
-    err_code = app_usbd_init(&usbd_config);
+    err_code = app_usbd_init(&usbd_config) & 0xFFF;
     VERIFY_SUCCESS(err_code);
 
     app_usbd_class_inst_t const * class_cdc_acm = app_usbd_cdc_acm_class_inst_get(&m_app_cdc_acm);

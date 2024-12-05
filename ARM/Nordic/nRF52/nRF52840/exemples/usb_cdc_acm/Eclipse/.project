@@ -100,12 +100,12 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/log</name>
+			<name>src/nRF5_SDK/libraries/cli</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/pwr_mgmt</name>
+			<name>src/nRF5_SDK/libraries/log</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -150,6 +150,11 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/button/app_button.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/cli/cdc_acm</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/cli/cli_utils_cmds.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/cli/cli_utils_cmds.c</locationURI>
@@ -163,11 +168,6 @@
 			<name>src/nRF5_SDK/libraries/log/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/pwr_mgmt/nrf_pwr_mgmt.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/pwr_mgmt/nrf_pwr_mgmt.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/ringbuf/nrf_ringbuf.c</name>
