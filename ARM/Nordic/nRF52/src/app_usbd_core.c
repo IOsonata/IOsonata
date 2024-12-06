@@ -46,9 +46,11 @@
 #include "app_usbd_string_desc.h"
 #include "nrf.h"
 #include "nrf_atomic.h"
-#include "app_util_platform.h"
+//#include "app_util_platform.h"
 #include "app_usbd.h"
 #include "app_usbd_class_base.h"
+
+#include "interrupt.h"
 
 #define NRF_LOG_MODULE_NAME app_usbd_core
 
@@ -759,7 +761,8 @@ static ret_code_t setup_device_req_get_descriptor(app_usbd_class_inst_t const * 
 
             /* Start first transfer */
             ret_code_t ret;
-            CRITICAL_REGION_ENTER();
+            //CRITICAL_REGION_ENTER();
+            uint32_t state = DisableInterrupt();
 
             ret = app_usbd_ep_handled_transfer(
                 NRF_DRV_USBD_EPIN0,
@@ -771,7 +774,8 @@ static ret_code_t setup_device_req_get_descriptor(app_usbd_class_inst_t const * 
                     NRF_DRV_USBD_EPIN0,
                     &m_setup_data_handler_empty_desc);
             }
-            CRITICAL_REGION_EXIT();
+            //CRITICAL_REGION_EXIT();
+            EnableInterrupt(state);
 
             return ret;
         }
@@ -1211,14 +1215,17 @@ ret_code_t app_usbd_core_setup_rsp(app_usbd_setup_t const * p_setup,
         zlp_required ? NRF_DRV_USBD_TRANSFER_ZLP_FLAG : 0);
 
     ret_code_t ret;
-    CRITICAL_REGION_ENTER();
+    //CRITICAL_REGION_ENTER();
+    uint32_t state = DisableInterrupt();
+
     ret = app_usbd_ep_transfer(NRF_DRV_USBD_EPIN0, &transfer);
     if (NRF_SUCCESS == ret)
     {
         ret = app_usbd_core_setup_data_handler_set(NRF_DRV_USBD_EPIN0,
                                                    &m_setup_data_handler_empty_desc);
     }
-    CRITICAL_REGION_EXIT();
+    //CRITICAL_REGION_EXIT();
+    EnableInterrupt(state);
 
     return ret;
 }

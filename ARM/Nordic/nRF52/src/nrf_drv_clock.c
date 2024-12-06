@@ -38,10 +38,12 @@
  *
  */
 
+#include <stdatomic.h>
+
 #include <nordic_common.h>
 #include "nrf_drv_clock.h"
 
-#if NRF_MODULE_ENABLED(NRF_CLOCK)
+//#if NRF_MODULE_ENABLED(NRF_CLOCK)
 
 #ifdef SOFTDEVICE_PRESENT
 #include "nrf_sdh.h"
@@ -49,6 +51,8 @@
 #endif
 
 #include <hal/nrf_wdt.h>
+
+#include "interrupt.h"
 
 #define NRF_LOG_MODULE_NAME clock
 #if CLOCK_CONFIG_LOG_ENABLED
@@ -227,8 +231,10 @@ static void item_enqueue(nrf_drv_clock_handler_item_t ** p_head,
         p_next = p_next->p_next;
     }
 
-    p_item->p_next = (*p_head ? *p_head : NULL);
-    *p_head = p_item;
+    //p_item->p_next = (*p_head ? *p_head : NULL);
+    atomic_store(&p_item->p_next, (*p_head ? *p_head : NULL));
+	//*p_head = p_item;
+    atomic_store(p_head, p_item);
 }
 
 static nrf_drv_clock_handler_item_t * item_dequeue(nrf_drv_clock_handler_item_t ** p_head)
@@ -236,7 +242,8 @@ static nrf_drv_clock_handler_item_t * item_dequeue(nrf_drv_clock_handler_item_t 
     nrf_drv_clock_handler_item_t * p_item = *p_head;
     if (p_item)
     {
-        *p_head = p_item->p_next;
+//        *p_head = p_item->p_next;
+    	atomic_store(p_head, p_item->p_next);
     }
     return p_item;
 }
@@ -251,13 +258,15 @@ void nrf_drv_clock_lfclk_request(nrf_drv_clock_handler_item_t * p_handler_item)
         {
             p_handler_item->event_handler(NRF_DRV_CLOCK_EVT_LFCLK_STARTED);
         }
-        CRITICAL_REGION_ENTER();
-        ++(m_clock_cb.lfclk_requests);
-        CRITICAL_REGION_EXIT();
+        atomic_fetch_add(&m_clock_cb.lfclk_requests, 1);
+        //CRITICAL_REGION_ENTER();
+        //++(m_clock_cb.lfclk_requests);
+        //CRITICAL_REGION_EXIT();
     }
     else
     {
-        CRITICAL_REGION_ENTER();
+        //CRITICAL_REGION_ENTER();
+    	uint32_t state = DisableInterrupt();
         if (p_handler_item)
         {
             item_enqueue((nrf_drv_clock_handler_item_t **)&m_clock_cb.p_lf_head,
@@ -267,8 +276,10 @@ void nrf_drv_clock_lfclk_request(nrf_drv_clock_handler_item_t * p_handler_item)
         {
             nrfx_clock_lfclk_start();
         }
-        ++(m_clock_cb.lfclk_requests);
-        CRITICAL_REGION_EXIT();
+        atomic_fetch_add(&m_clock_cb.lfclk_requests, 1);
+        //++(m_clock_cb.lfclk_requests);
+        //CRITICAL_REGION_EXIT();
+        EnableInterrupt(state);
     }
 
     ASSERT(m_clock_cb.lfclk_requests > 0);
@@ -279,13 +290,17 @@ void nrf_drv_clock_lfclk_release(void)
     ASSERT(m_clock_cb.module_initialized);
     ASSERT(m_clock_cb.lfclk_requests > 0);
 
-    CRITICAL_REGION_ENTER();
-    --(m_clock_cb.lfclk_requests);
+    //CRITICAL_REGION_ENTER();
+    uint32_t state = DisableInterrupt();
+
+    //--(m_clock_cb.lfclk_requests);
+    atomic_fetch_sub(&m_clock_cb.lfclk_requests, 1);
     if (m_clock_cb.lfclk_requests == 0)
     {
         lfclk_stop();
     }
-    CRITICAL_REGION_EXIT();
+//    CRITICAL_REGION_EXIT();
+    EnableInterrupt(state);
 }
 
 bool nrf_drv_clock_lfclk_is_running(void)
@@ -312,13 +327,17 @@ void nrf_drv_clock_hfclk_request(nrf_drv_clock_handler_item_t * p_handler_item)
         {
             p_handler_item->event_handler(NRF_DRV_CLOCK_EVT_HFCLK_STARTED);
         }
-        CRITICAL_REGION_ENTER();
-        ++(m_clock_cb.hfclk_requests);
-        CRITICAL_REGION_EXIT();
+
+        atomic_fetch_add(&m_clock_cb.hfclk_requests, 1);
+        //CRITICAL_REGION_ENTER();
+        //++(m_clock_cb.hfclk_requests);
+        //CRITICAL_REGION_EXIT();
     }
     else
     {
-        CRITICAL_REGION_ENTER();
+        //CRITICAL_REGION_ENTER();
+    	uint32_t state = DisableInterrupt();
+
         if (p_handler_item)
         {
             item_enqueue((nrf_drv_clock_handler_item_t **)&m_clock_cb.p_hf_head,
@@ -328,8 +347,11 @@ void nrf_drv_clock_hfclk_request(nrf_drv_clock_handler_item_t * p_handler_item)
         {
             hfclk_start();
         }
-        ++(m_clock_cb.hfclk_requests);
-        CRITICAL_REGION_EXIT();
+
+        atomic_fetch_add(&m_clock_cb.hfclk_requests, 1);
+        //++(m_clock_cb.hfclk_requests);
+        //CRITICAL_REGION_EXIT();
+        EnableInterrupt(state);
     }
 
     ASSERT(m_clock_cb.hfclk_requests > 0);
@@ -340,13 +362,17 @@ void nrf_drv_clock_hfclk_release(void)
     ASSERT(m_clock_cb.module_initialized);
     ASSERT(m_clock_cb.hfclk_requests > 0);
 
-    CRITICAL_REGION_ENTER();
-    --(m_clock_cb.hfclk_requests);
+    //CRITICAL_REGION_ENTER();
+    uint32_t state = DisableInterrupt();
+
+    //--(m_clock_cb.hfclk_requests);
+    atomic_fetch_sub(&m_clock_cb.hfclk_requests, 1);
     if (m_clock_cb.hfclk_requests == 0)
     {
         hfclk_stop();
     }
-    CRITICAL_REGION_EXIT();
+    //CRITICAL_REGION_EXIT();
+    EnableInterrupt(state);
 }
 
 bool nrf_drv_clock_hfclk_is_running(void)
@@ -435,7 +461,8 @@ ret_code_t nrf_drv_clock_calibration_abort(void)
 {
     ret_code_t err_code = NRF_SUCCESS;
 #if CALIBRATION_SUPPORT
-    CRITICAL_REGION_ENTER();
+    //CRITICAL_REGION_ENTER();
+    uint32_t state = DisableInterrupt();
     switch (m_clock_cb.cal_state)
     {
     case CAL_STATE_CT:
@@ -454,7 +481,8 @@ ret_code_t nrf_drv_clock_calibration_abort(void)
     default:
         break;
     }
-    CRITICAL_REGION_EXIT();
+    //CRITICAL_REGION_EXIT();
+    EnableInterrupt(state);
 
     NRF_LOG_INFO("Function: %s, error code: %s.",
                   (uint32_t)__func__,
@@ -577,16 +605,21 @@ static void sd_state_evt_handler(nrf_sdh_state_evt_t state, void * p_context)
             break;
 
         case NRF_SDH_EVT_STATE_ENABLED:
-            CRITICAL_REGION_ENTER();
+        {
+            //CRITICAL_REGION_ENTER();
+        	uint32_t state = DisableInterrupt();
             /* Make sure that nrf_drv_clock module is initialized */
             if (!m_clock_cb.module_initialized)
             {
                 (void)nrf_drv_clock_init();
             }
             /* SD is one of the LFCLK requesters, but it will enable it by itself. */
-            ++(m_clock_cb.lfclk_requests);
+            //++(m_clock_cb.lfclk_requests);
+            atomic_fetch_add(&m_clock_cb.lfclk_requests, 1);
             m_clock_cb.lfclk_on = true;
-            CRITICAL_REGION_EXIT();
+//            CRITICAL_REGION_EXIT();
+            EnableInterrupt(state);
+        }
             break;
 
         case NRF_SDH_EVT_STATE_DISABLED:
@@ -615,4 +648,4 @@ NRF_SDH_STATE_OBSERVER(m_sd_state_observer, CLOCK_CONFIG_STATE_OBSERVER_PRIO) =
 #undef NRF_CLOCK_LFCLK_Xtal
 #undef NRF_CLOCK_LFCLK_Synth
 
-#endif // NRF_MODULE_ENABLED(NRF_CLOCK)
+//#endif // NRF_MODULE_ENABLED(NRF_CLOCK)
