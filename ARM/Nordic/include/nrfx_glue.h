@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright (c) 2017 - 2024, Nordic Semiconductor ASA
  * All rights reserved.
  *
@@ -33,12 +33,6 @@
 
 #ifndef NRFX_GLUE_H__
 #define NRFX_GLUE_H__
-
-// THIS IS A TEMPLATE FILE.
-// It should be copied to a suitable location within the host environment into
-// which nrfx is integrated, and the following macros should be provided with
-// appropriate implementations.
-// And this comment should be removed from the customized file.
 
 #ifdef __cplusplus
 extern "C" {
@@ -312,14 +306,15 @@ static inline bool NRFX_IRQ_IS_PENDING(IRQn_Type irq_number)
 
 //------------------------------------------------------------------------------
 
+#ifndef NRFXLIB_SDC
 /**
  * @brief When set to a non-zero value, this macro specifies that the
  *        @ref nrfx_error_codes and the @ref nrfx_err_t type itself are defined
  *        in a customized way and the default definitions from @c <nrfx_error.h>
  *        should not be used.
  */
-#define NRFX_CUSTOM_ERROR_CODES 0
-
+#define NRFX_CUSTOM_ERROR_CODES 1
+#endif
 //------------------------------------------------------------------------------
 
 /**
@@ -339,7 +334,7 @@ static inline bool NRFX_IRQ_IS_PENDING(IRQn_Type irq_number)
  * @param[in] p_buffer Pointer to the buffer.
  * @param[in] size     Size of the buffer.
  */
-#define NRFY_CACHE_WB(p_buffer, size)
+//#define NRFY_CACHE_WB(p_buffer, size)
 
 /**
  * @brief Macro for invalidating cache lines associated with the specified buffer.
@@ -349,7 +344,7 @@ static inline bool NRFX_IRQ_IS_PENDING(IRQn_Type irq_number)
  * @param[in] p_buffer Pointer to the buffer.
  * @param[in] size     Size of the buffer.
  */
-#define NRFY_CACHE_INV(p_buffer, size)
+//#define NRFY_CACHE_INV(p_buffer, size)
 
 /**
  * @brief Macro for writing back and invalidating cache lines associated with
@@ -360,34 +355,72 @@ static inline bool NRFX_IRQ_IS_PENDING(IRQn_Type irq_number)
  * @param[in] p_buffer Pointer to the buffer.
  * @param[in] size     Size of the buffer.
  */
-#define NRFY_CACHE_WBINV(p_buffer, size)
+//#define NRFY_CACHE_WBINV(p_buffer, size)
+
+#if NRFX_CUSTOM_ERROR_CODES == 1
+
+#include <sdk_errors.h>
+/**
+ * @brief When set to a non-zero value, this macro specifies that the
+ *        @ref nrfx_error_codes and the @ref ret_code_t type itself are defined
+ *        in a customized way and the default definitions from @c <nrfx_error.h>
+ *        should not be used.
+ */
+#define NRFX_CUSTOM_ERROR_CODES 1
+
+typedef ret_code_t nrfx_err_t;
+
+#define NRFX_SUCCESS                    NRF_SUCCESS
+#define NRFX_ERROR_INTERNAL             NRF_ERROR_INTERNAL
+#define NRFX_ERROR_NO_MEM               NRF_ERROR_NO_MEM
+#define NRFX_ERROR_NOT_SUPPORTED        NRF_ERROR_NOT_SUPPORTED
+#define NRFX_ERROR_INVALID_PARAM        NRF_ERROR_INVALID_PARAM
+#define NRFX_ERROR_INVALID_STATE        NRF_ERROR_INVALID_STATE
+#define NRFX_ERROR_INVALID_LENGTH       NRF_ERROR_INVALID_LENGTH
+#define NRFX_ERROR_TIMEOUT              NRF_ERROR_TIMEOUT
+#define NRFX_ERROR_FORBIDDEN            NRF_ERROR_FORBIDDEN
+#define NRFX_ERROR_NULL                 NRF_ERROR_NULL
+#define NRFX_ERROR_INVALID_ADDR         NRF_ERROR_INVALID_ADDR
+#define NRFX_ERROR_BUSY                 NRF_ERROR_BUSY
+#define NRFX_ERROR_ALREADY_INITIALIZED  NRF_ERROR_MODULE_ALREADY_INITIALIZED
+#define NRFX_ERROR_ALREADY				NRF_ERROR_MODULE_ALREADY_INITIALIZED
+
+#define NRFX_ERROR_DRV_TWI_ERR_OVERRUN  NRF_ERROR_DRV_TWI_ERR_OVERRUN
+#define NRFX_ERROR_DRV_TWI_ERR_ANACK    NRF_ERROR_DRV_TWI_ERR_ANACK
+#define NRFX_ERROR_DRV_TWI_ERR_DNACK    NRF_ERROR_DRV_TWI_ERR_DNACK
+#else
+typedef uint32_t 	ret_code_t;
+#endif // NRFX_CUSTOM_ERROR_CODES
+
 
 //------------------------------------------------------------------------------
 
 /** @brief Bitmask that defines DPPI channels that are reserved for use outside of the nrfx library. */
-#define NRFX_DPPI_CHANNELS_USED   0
+#define NRFX_DPPI_CHANNELS_USED   NRF_DPPI_CHANNELS_USED
 
 /** @brief Bitmask that defines DPPI groups that are reserved for use outside of the nrfx library. */
-#define NRFX_DPPI_GROUPS_USED     0
+#define NRFX_DPPI_GROUPS_USED     NRF_DPPI_GROUPS_USED
 
 /** @brief Bitmask that defines PPI channels that are reserved for use outside of the nrfx library. */
-#define NRFX_PPI_CHANNELS_USED    0
+#define NRFX_PPI_CHANNELS_USED    NRF_PPI_CHANNELS_USED
 
 /** @brief Bitmask that defines PPI groups that are reserved for use outside of the nrfx library. */
-#define NRFX_PPI_GROUPS_USED      0
+#define NRFX_PPI_GROUPS_USED      NRF_PPI_GROUPS_USED
 
 /** @brief Bitmask that defines GPIOTE channels that are reserved for use outside of the nrfx library. */
 #define NRFX_GPIOTE_CHANNELS_USED 0
+
+/**
+ * @brief Bitmask defining SWI instances reserved to be used outside of nrfx.
+ */
+#define NRFX_SWI_USED           NRF_SWI_USED
 
 /** @brief Bitmask that defines EGU instances that are reserved for use outside of the nrfx library. */
 #define NRFX_EGUS_USED            0
 
 /** @brief Bitmask that defines TIMER instances that are reserved for use outside of the nrfx library. */
-#define NRFX_TIMERS_USED          0
+#define NRFX_TIMERS_USED          NRF_TIMERS_USED
 
-#ifndef ret_code_t
-typedef uint32_t	ret_code_t;
-#endif
 
 /** @} */
 

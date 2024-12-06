@@ -40,9 +40,8 @@
 
 #include <nordic_common.h>
 #include "nrf_drv_clock.h"
-#include "app_util_platform.h"
 
-//#if NRF_MODULE_ENABLED(NRF_CLOCK)
+#if NRF_MODULE_ENABLED(NRF_CLOCK)
 
 #ifdef SOFTDEVICE_PRESENT
 #include "nrf_sdh.h"
@@ -180,7 +179,7 @@ ret_code_t nrf_drv_clock_init(void)
         m_clock_cb.hfclk_requests = 0;
         m_clock_cb.p_lf_head      = NULL;
         m_clock_cb.lfclk_requests = 0;
-        err_code = nrfx_clock_init(clock_irq_handler) & 0xFFF;
+        err_code = nrfx_clock_init(clock_irq_handler);
 #ifdef SOFTDEVICE_PRESENT
         if (!nrf_sdh_is_enabled())
 #endif
@@ -616,4 +615,4 @@ NRF_SDH_STATE_OBSERVER(m_sd_state_observer, CLOCK_CONFIG_STATE_OBSERVER_PRIO) =
 #undef NRF_CLOCK_LFCLK_Xtal
 #undef NRF_CLOCK_LFCLK_Synth
 
-//#endif // NRF_MODULE_ENABLED(NRF_CLOCK)
+#endif // NRF_MODULE_ENABLED(NRF_CLOCK)
