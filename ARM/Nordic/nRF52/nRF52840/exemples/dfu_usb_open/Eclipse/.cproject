@@ -68,9 +68,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/nrf_dfu_trigger&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
@@ -83,10 +87,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/ble/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/block_dev&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/slip&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc/acm&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/nrf_dfu_trigger&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/sha256&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
@@ -145,9 +145,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/nrf_dfu_trigger&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
@@ -160,10 +164,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/ble/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/block_dev&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/slip&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc/acm&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/nrf_dfu_trigger&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/sha256&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
@@ -246,7 +246,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/usbd/class/nrf_dfu_trigger/app_usbd_nrf_dfu_trigger.c|src/nRF5_SDK/nrfx|src/nRF5_SDK/boards/boards.c|src/nRF5_SDK/libraries/timer/app_timer2.c|src/nRF5_SDK/libraries/timer/drv_rtc.c|src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c|src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/nRF5_SDK/libraries/bootloader|src/bootloader/dfu/nrf_dfu_trigger_usb.c|src/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/drivers_nrf|src/nRF5_SDK/utf_converter|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/nRF5_SDK/nrfx/hal|src/iosonata_dfu_public_key.c|src/Vectors_nRF52840.c|src/system_nrf52840.c|src/ResetEntry.c|src/nRF5_SDK/libraries/util/app_error.c|src/nRF5_SDK/libraries/util/app_error_handler_gcc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sdk5/bootloader/dfu/nrf_dfu_trigger_usb.c|src/bootloader/dfu/nrf_dfu_trigger_usb.c|src/nRF5_SDK/libraries/usbd/class/nrf_dfu_trigger/app_usbd_nrf_dfu_trigger.c|src/nRF5_SDK/nrfx|src/nRF5_SDK/boards/boards.c|src/nRF5_SDK/libraries/timer/app_timer2.c|src/nRF5_SDK/libraries/timer/drv_rtc.c|src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c|src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/nRF5_SDK/libraries/bootloader|src/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/drivers_nrf|src/nRF5_SDK/utf_converter|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/nRF5_SDK/nrfx/hal|src/iosonata_dfu_public_key.c|src/Vectors_nRF52840.c|src/system_nrf52840.c|src/ResetEntry.c|src/nRF5_SDK/libraries/util/app_error.c|src/nRF5_SDK/libraries/util/app_error_handler_gcc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -316,9 +316,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/nrf_dfu_trigger&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
@@ -331,10 +335,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/ble/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/block_dev&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/slip&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc/acm&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/nrf_dfu_trigger&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/sha256&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
@@ -391,9 +391,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/usbd/class/nrf_dfu_trigger&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
@@ -406,10 +410,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/ble/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/block_dev&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/slip&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc/acm&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/nrf_dfu_trigger&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/sha256&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/atomic&quot;"/>
@@ -491,7 +491,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/usbd/class/nrf_dfu_trigger/app_usbd_nrf_dfu_trigger.c|src/nRF5_SDK/nrfx|src/nRF5_SDK/boards/boards.c|src/nRF5_SDK/libraries/timer/app_timer2.c|src/nRF5_SDK/libraries/timer/drv_rtc.c|src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c|src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/nRF5_SDK/libraries/bootloader|src/bootloader/dfu/nrf_dfu_trigger_usb.c|src/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/utf_converter|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/nRF5_SDK/nrfx/hal|src/iosonata_dfu_public_key.c|src/Vectors_nRF52840.c|src/system_nrf52840.c|src/ResetEntry.c|src/nRF5_SDK/libraries/util/app_error.c|src/nRF5_SDK/libraries/util/app_error_handler_gcc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sdk5/bootloader/dfu/nrf_dfu_trigger_usb.c|src/bootloader/dfu/nrf_dfu_trigger_usb.c|src/nRF5_SDK/libraries/usbd/class/nrf_dfu_trigger/app_usbd_nrf_dfu_trigger.c|src/nRF5_SDK/nrfx|src/nRF5_SDK/boards/boards.c|src/nRF5_SDK/libraries/timer/app_timer2.c|src/nRF5_SDK/libraries/timer/drv_rtc.c|src/nRF5_SDK/libraries/usbd/app_usbd_string_desc.c|src/nRF5_SDK/libraries/usbd/app_usbd_serial_num.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/nRF5_SDK/libraries/bootloader|src/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/utf_converter|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/nRF5_SDK/nrfx/hal|src/iosonata_dfu_public_key.c|src/Vectors_nRF52840.c|src/system_nrf52840.c|src/ResetEntry.c|src/nRF5_SDK/libraries/util/app_error.c|src/nRF5_SDK/libraries/util/app_error_handler_gcc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

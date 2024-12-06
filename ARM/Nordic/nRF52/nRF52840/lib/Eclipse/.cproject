@@ -66,6 +66,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -147,17 +157,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/audio&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/nrf_ble_gatt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/peer_manager&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/ble_advertising&quot;"/>
@@ -220,6 +222,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -301,9 +313,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
@@ -387,7 +396,7 @@
 					</folderInfo>
 					<fileInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1502496384.1958532650.1072991927" name="nrf_mac.h" rcbsApplicability="disable" resourcePath="include/net/nrf_mac.h" toolsToInvoke=""/>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/usbd|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -458,6 +467,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -539,17 +558,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/audio&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/nrf_ble_gatt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/peer_manager&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/ble_advertising&quot;"/>
@@ -612,6 +623,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -693,9 +714,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
@@ -778,7 +796,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/usbd|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -849,6 +867,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -930,17 +958,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/audio&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/nrf_ble_gatt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/peer_manager&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/ble_advertising&quot;"/>
@@ -1003,6 +1023,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -1084,9 +1114,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
@@ -1169,7 +1196,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/usbd|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1239,6 +1266,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -1320,17 +1357,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/audio&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/nrf_ble_gatt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/peer_manager&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/ble_advertising&quot;"/>
@@ -1393,6 +1422,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -1474,9 +1513,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
@@ -1559,7 +1595,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/usbd|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1630,6 +1666,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -1711,17 +1757,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/audio&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/nrf_ble_gatt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/peer_manager&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/ble_advertising&quot;"/>
@@ -1785,6 +1823,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -1866,9 +1914,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
@@ -1952,7 +1997,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/usbd|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2022,6 +2067,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -2103,17 +2158,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/audio&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/nrf_ble_gatt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/peer_manager&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/ble/ble_advertising&quot;"/>
@@ -2177,6 +2224,16 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
@@ -2258,9 +2315,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/pwr_mgmt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/crc32&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/mem_manager&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/experimental_section_vars&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/svc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/ringbuf&quot;"/>
@@ -2344,7 +2398,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/usbd|src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/util/app_util_platform.c|src/nRF5_SDK/libraries/usbd/app_usbd.c|src/nRF5_SDK/nrfx/drivers|src/nRF5_SDK/nrfx/hal|src/nRF5_SDK/libraries/usbd/app_usbd_core.c|src/bluetooth/bt_attrsp.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_attreq.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/ble_app_sdc.cpp|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2524,7 +2578,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb/app_usbd.c|src/storage/fds.c|src/usb/app_usbd_core.c|src/usb/usbd_cdc_intrf.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/nrf5_SDK_Mesh|src/nRF5_SDK|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_intrf.cpp|src/bluetooth/ble_dev.cpp|src/bluetooth/ble_app_nrf52.cpp|src/bluetooth/ble_app_handler.c|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sdk5|src/usb/app_usbd_cdc_acm.c|src/usb/app_usbd.c|src/storage/fds.c|src/usb/app_usbd_core.c|src/usb/usbd_cdc_intrf.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/nrf5_SDK_Mesh|src/nRF5_SDK|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_intrf.cpp|src/bluetooth/ble_dev.cpp|src/bluetooth/ble_app_nrf52.cpp|src/bluetooth/ble_app_handler.c|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -2704,7 +2758,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb/app_usbd.c|src/storage/fds.c|src/usb/app_usbd_core.c|src/usb/usbd_cdc_intrf.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/nrf5_SDK_Mesh|src/nRF5_SDK|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_intrf.cpp|src/bluetooth/ble_dev.cpp|src/bluetooth/ble_app_nrf52.cpp|src/bluetooth/ble_app_handler.c|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sdk5|src/usb/app_usbd_cdc_acm.c|src/usb/app_usbd.c|src/storage/fds.c|src/usb/app_usbd_core.c|src/usb/usbd_cdc_intrf.cpp|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/nrf5_SDK_Mesh|src/nRF5_SDK|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh.c|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_intrf.cpp|src/bluetooth/ble_dev.cpp|src/bluetooth/ble_app_nrf52.cpp|src/bluetooth/ble_app_handler.c|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/audio/i2s_nrfx.cpp|src/system_nrf52840.c|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c|src/nRF5_SDK/drivers_nrf/nrf_soc_nosd/nrf_soc.c|src/nrf5_SDK_Mesh/models/experimental|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/serial|src/nRF5_SDK/libraries/timer/app_timer_rtx.c|src/nRF5_SDK/libraries/timer/app_timer_freertos.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

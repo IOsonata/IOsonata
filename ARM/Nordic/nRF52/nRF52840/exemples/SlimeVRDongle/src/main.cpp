@@ -54,7 +54,7 @@ const AppInfo_t g_AppInfo = {
 	{'I', 'O', 's', 'o', 'n', 'a', 't', 'a', 'S', 'l', 'i', 0x55, 0xA5, 0x5A, 0xA5, 0x5A},
 };
 
-alignas(4) AppData_t g_AppData = { 0, 0, };
+alignas(4) AppData_t g_AppData = { 0, -1, };
 
 //uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
 uint8_t g_extern_usbd_product_string[40 + 1] = { "SlimeNRF Receiver BLYST840 Dongle" };
@@ -238,6 +238,30 @@ void HardwareInit()
     UsbInit();
 }
 
+static void nrfx_clock_irq_handler(nrfx_clock_evt_type_t evt)
+{
+    if (evt == NRFX_CLOCK_EVT_HFCLK_STARTED)
+    {
+    }
+    if (evt == NRFX_CLOCK_EVT_LFCLK_STARTED)
+    {
+    }
+}
+
+void clocks_start( void )
+{
+#if 0
+    NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+    NRF_CLOCK->TASKS_HFCLKSTART = 1;
+
+    while (NRF_CLOCK->EVENTS_HFCLKSTARTED == 0);
+#else
+    ret_code_t err_code = nrfx_clock_init(nrfx_clock_irq_handler);
+    nrfx_clock_hfclk_start();
+    while (nrfx_clock_hfclk_is_running() == false);
+#endif
+}
+
 int main(void)
 {
 	static bool pairmode = true;
@@ -245,7 +269,7 @@ int main(void)
 
 	ret_code_t ret;
 
-	ret = nrf_drv_clock_init();
+	clocks_start();
 
 	// Update default checksum
 	uint8_t *p = (uint8_t*)&g_AppData;
@@ -280,7 +304,7 @@ int main(void)
        // APP_ERROR_CHECK(err_code);
 
         //bsp_board_leds_init();
-        //err_code = nrf_esb_start_rx();
+        err_code = nrf_esb_start_rx();
         //APP_ERROR_CHECK(err_code);
 
         do {

@@ -70,9 +70,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/ble_dfu&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
@@ -135,9 +135,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/ble_dfu&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
@@ -228,7 +228,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/bootloader|src/nRF5_SDK/libraries/crypto/backend/cc310_bl|src/nRF5_SDK/hal|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/ble|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_flags|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/iosonata_dfu_public_key.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/micro-ecc|src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/bootloader|src/nRF5_SDK/libraries/crypto/backend/cc310_bl|src/nRF5_SDK/hal|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/ble|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_flags|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/iosonata_dfu_public_key.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

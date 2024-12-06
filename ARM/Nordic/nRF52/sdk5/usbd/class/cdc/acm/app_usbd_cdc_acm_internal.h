@@ -61,11 +61,13 @@ extern "C" {
 APP_USBD_CLASS_FORWARD(app_usbd_cdc_acm);
 
 /*lint -save -e165*/
+#if 0
 /**
  * @brief Forward declaration of @ref app_usbd_cdc_acm_user_event_e.
  *
  */
-//typedef enum app_usbd_cdc_acm_user_event_e app_usbd_cdc_acm_user_event_t;
+enum app_usbd_cdc_acm_user_event_e;
+#else
 /**
  * @brief Events passed to user event handler.
  *
@@ -83,6 +85,7 @@ typedef enum app_usbd_cdc_acm_user_event_e {
     APP_USBD_CDC_ACM_USER_EVT_PORT_OPEN,   /**< User event PORT_OPEN.  */
     APP_USBD_CDC_ACM_USER_EVT_PORT_CLOSE,  /**< User event PORT_CLOSE. */
 } app_usbd_cdc_acm_user_event_t;
+#endif
 
 /*lint -restore*/
 
@@ -94,7 +97,7 @@ typedef enum app_usbd_cdc_acm_user_event_e {
  *
  */
 typedef void (*app_usbd_cdc_acm_user_ev_handler_t)(app_usbd_class_inst_t const *    p_inst,
-                                                  app_usbd_cdc_acm_user_event_t event);
+                                                 enum app_usbd_cdc_acm_user_event_e event);
 
 /**
  * @brief CDC ACM class part of class instance data.

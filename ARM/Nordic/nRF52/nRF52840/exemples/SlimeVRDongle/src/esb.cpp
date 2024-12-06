@@ -11,10 +11,8 @@
 #include "nrf_esb.h"
 #include "nrf_error.h"
 #include "sdk_common.h"
-#include "nrf_cli.h"
 
 #include "crc.h"
-#include "nrf_mac.h"
 
 #include "SlimeVRDongle.h"
 
@@ -53,12 +51,18 @@ static uint8_t base_addr_0[4], base_addr_1[4], addr_prefix[8] = {0};
 static bool esb_initialized = false;
 static bool esb_paired = false;
 
+// Get MAC address
+uint64_t GetDevAddress(void)
+{
+	uint64_t addr = (*(uint64_t *)NRF_FICR->DEVICEADDR) & 0xFFFFFFFFFFFFUL;
+	addr |= 0xC00000000000UL;
+
+	return addr;
+}
 
 void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
 {
 	nrf_esb_payload_t rxpayload;
-
-	nrf_cli_print(&m_cli_cdc_acm, "nrf_esb_event_handler %d", p_event->evt_id);
 
     switch (p_event->evt_id)
     {
@@ -69,9 +73,6 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
         case NRF_ESB_EVENT_RX_RECEIVED:
             while (nrf_esb_read_rx_payload(&rxpayload) == NRF_SUCCESS)
             {
-            	nrf_cli_print(&m_cli_cdc_acm, "Rx %d", rxpayload.length);
-            	nrf_esb_write_payload(&tx_payload_pair); // Add to TX buffer
-
                 switch (rxpayload.length)
                 {
 					case 8:	// RX Pairing Packet
@@ -95,11 +96,10 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
 						;
                 }
             }
-            nrf_cli_print(&m_cli_cdc_acm, "RX complete");
             break;
     }
-    //NRF_GPIO->OUTCLR = 0xFUL << 12;
-    //NRF_GPIO->OUTSET = (p_event->tx_attempts & 0x0F) << 12;
+    NRF_GPIO->OUTCLR = 0xFUL << 12;
+    NRF_GPIO->OUTSET = (p_event->tx_attempts & 0x0F) << 12;
 }
 
 
@@ -108,11 +108,17 @@ uint32_t esb_init()
 	int err_code;
 
     nrf_esb_config_t nrf_esb_config         = NRF_ESB_DEFAULT_CONFIG;
+    nrf_esb_config.payload_length           = 2;
     nrf_esb_config.protocol                 = NRF_ESB_PROTOCOL_ESB_DPL;
     nrf_esb_config.bitrate                  = NRF_ESB_BITRATE_2MBPS;
     nrf_esb_config.mode                     = NRF_ESB_MODE_PRX;
     nrf_esb_config.event_handler            = nrf_esb_event_handler;
     nrf_esb_config.tx_output_power			= NRF_ESB_TX_POWER_8DBM;
+    nrf_esb_config.selective_auto_ack       = true;
+
+	// Fast startup mode
+	NRF_RADIO->MODECNF0 |= RADIO_MODECNF0_RU_Fast << RADIO_MODECNF0_RU_Pos;
+	// nrf_radio_modecnf0_set(NRF_RADIO, true, 0);
 
     err_code = nrf_esb_init(&nrf_esb_config);
 
@@ -129,18 +135,6 @@ uint32_t esb_init()
 
 	esb_initialized = true;
 
-	nrf_esb_flush_tx();
-	nrf_esb_flush_rx();
-
-	err_code = nrf_esb_start_rx();
-
-	tx_payload_pair.noack = false;
-	tx_payload_pair.length = 8;
-	uint64_t addr = nrf_get_mac_address();
-	memcpy(&tx_payload_pair.data[2], &addr, 6);
-	nrf_cli_print(&m_cli_cdc_acm, "MAC %x%08x", (uint32_t)(addr >> 32UL), (uint32_t)(addr & 0xFFFFFFFFUL));
-	nrf_esb_write_payload(&tx_payload_pair);
-
 	return 0;
 }
 
@@ -152,11 +146,13 @@ void EsbSetAddr(bool PairMode)
 		memcpy(base_addr_1, discovery_base_addr_1, sizeof(base_addr_1));
 		memcpy(addr_prefix, discovery_addr_prefix, sizeof(addr_prefix));
 
+		tx_payload_pair.noack = false;
+		uint64_t addr = GetDevAddress();
+		memcpy(&tx_payload_pair.data[2], &addr, 6);
 	}
 	else
 	{
-		// Not sure why SlimeNRF does this
-		uint64_t addr = nrf_get_mac_address();
+		uint64_t addr = GetDevAddress();
 		uint8_t buf[6] = {0};
 		memcpy(buf, &addr, 6);
 		uint8_t addr_buffer[16] = {0};
@@ -180,7 +176,7 @@ void EsbSetAddr(bool PairMode)
 
 void ProcessPairing(nrf_esb_payload_t *pPayload)
 {
-	uint64_t addr = nrf_get_mac_address();
+	uint64_t addr = GetDevAddress();
 	uint64_t found_addr;
 
 	tx_payload_pair.noack = false;
@@ -193,17 +189,13 @@ void ProcessPairing(nrf_esb_payload_t *pPayload)
 
 	if (cs == pPayload->data[0])
 	{
-		nrf_cli_print(&m_cli_cdc_acm, "Pair address valid");
-
 		memcpy(&found_addr, pPayload->data, 8);
+
+		nrf_cli_print(&m_cli_cdc_acm, "found_addr : %08x%08x", (uint32_t)(found_addr >> 32U), (uint32_t)(found_addr & 0xFFFFFFFFUL));
 
 		found_addr >>= 16;
 
-		nrf_cli_print(&m_cli_cdc_acm, "Pair address valid %x%08x", (uint32_t)(found_addr >> 32UL), (uint32_t)(found_addr & 0xFFFFFFFFUL));
-
 		uint16_t send_tracker_id = AddTracker(found_addr); // Use new tracker id
-
-		nrf_cli_print(&m_cli_cdc_acm, "id = %x", send_tracker_id);
 
 		if (send_tracker_id < MAX_TRACKERS)
 		{
@@ -212,5 +204,6 @@ void ProcessPairing(nrf_esb_payload_t *pPayload)
 		}
 	}
 
+	nrf_esb_write_payload(&tx_payload_pair); // Add to TX buffer
 }
 
