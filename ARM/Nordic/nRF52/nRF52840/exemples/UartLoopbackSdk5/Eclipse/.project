@@ -65,6 +65,16 @@
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uarte.c</locationURI>
 		</link>
+		<link>
+			<name>src/nrfx/drivers/src/prs</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/prs/nrfx_prs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/prs/nrfx_prs.c</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

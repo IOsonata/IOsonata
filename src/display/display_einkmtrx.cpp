@@ -62,7 +62,7 @@ bool EInkMatrix::Init(DisplayCfg_t &Cfg, DeviceIntrf *pIntrf)
  */
 bool Enable()
 {
-
+	return false;
 }
 
 /**

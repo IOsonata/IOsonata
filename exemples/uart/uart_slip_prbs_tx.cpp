@@ -62,7 +62,7 @@ static const IOPINCFG s_UartPortPins[] = UART_PORTPINS;
 
 // UART configuration data
 const UARTCfg_t g_UartCfg = {
-	.DevNo = UART_NO,
+	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = sizeof(s_UartPortPins) / sizeof(IOPINCFG),
 	.Rate = 460800,

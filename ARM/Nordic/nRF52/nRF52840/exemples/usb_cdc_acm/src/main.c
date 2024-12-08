@@ -56,6 +56,7 @@
 #include "app_usbd_string_desc.h"
 #include "app_usbd_cdc_acm.h"
 #include "app_usbd_serial_num.h"
+#include "app_timer.h"
 
 #include "boards.h"
 #include "bsp.h"
