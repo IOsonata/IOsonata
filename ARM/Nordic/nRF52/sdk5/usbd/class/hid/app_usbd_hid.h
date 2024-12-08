@@ -332,7 +332,7 @@ typedef struct {
  * @param hid_methods           @ref app_usbd_hid_methods_t.
  * @param ep_list               List of endpoints and intervals
  * */
-
+#if 0
 #define APP_USBD_HID_INST_CONFIG(subclass_dsc,               \
                                  sub_boot,                   \
                                  protocl,                    \
@@ -354,6 +354,29 @@ typedef struct {
         .protocol = protocl,                                 \
         .p_ep_interval = ep_list                             \
     }
+#else
+#define APP_USBD_HID_INST_CONFIG(subclass_dsc,               \
+                                 sub_boot,                   \
+                                 protocl,                    \
+                                 report_buff_in,             \
+                                 report_buff_out,            \
+                                 report_buff_feature,        \
+                                 user_ev_handler,            \
+                                 hid_methods,                \
+                                 ep_list)                    \
+    {                                                        \
+        .p_subclass_desc = subclass_dsc,                     \
+        .subclass_desc_count = ARRAY_SIZE(subclass_dsc),     \
+        .subclass_boot = sub_boot,                           \
+        .protocol = protocl,                                 \
+        .p_rep_buffer_in = report_buff_in,                   \
+        .p_rep_buffer_out = report_buff_out,                 \
+        .p_rep_buffer_feature = report_buff_feature,         \
+        .p_hid_methods = hid_methods,                        \
+        .user_event_handler = user_ev_handler,               \
+        .p_ep_interval = ep_list                             \
+    }
+#endif
 
 /**
  * @brief HID internal context.
