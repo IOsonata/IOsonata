@@ -30,19 +30,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#include "blueio_board.h"
-#include "coredev/timer.h"
-#include "coredev/uart.h"
-#include "cfifo.h"
-#include "ble_app.h"
-#include "ble_service.h"
-#include "ble_intrf.h"
-#include "bluetooth/blueio_blesrvc.h"
-
-/// BlueIO breakout board
-
-#define DEVICE_NAME     "BleCentral"				/**< Name of device. Will be included in the advertising data. */
-#define MODEL_NAME      "Blyst840"               	/**< Model number. Will be passed to Device Information Service. */
 
 //#define UDG
 
@@ -158,112 +145,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
 }
 
-#define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                  /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                  /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
-
-#define APP_ADV_INTERVAL                MSEC_TO_UNITS(64, UNIT_0_625_MS)	/**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
-
-#define APP_ADV_TIMEOUT					MSEC_TO_UNITS(0, UNIT_10_MS)		/**< The advertising timeout (in units of 10ms seconds). */
-
-#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(10, UNIT_1_25_MS)     /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
-#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(40, UNIT_1_25_MS)     /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
-
-/// BlueIO device UUIDs
-#define BLE_UART_UUID_BASE			BLUEIO_UUID_BASE				// Base UUID of the device
-#define BLE_UART_UUID_SERVICE			BLUEIO_UUID_UART_SERVICE		// BlueIO UART service
-
-#define BLE_UART_UUID_TX_CHAR			BLUEIO_UUID_UART_TX_CHAR		// UART Tx characteristic
-#define BLE_UART_UUID_TX_CHAR_PROP		(BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_WRAUTH | BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
-
-#define BLE_UART_UUID_RX_CHAR			BLUEIO_UUID_UART_RX_CHAR		// UART Rx characteristic
-#define BLE_UART_UUID_RX_CHAR_PROP		(BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
-
-#define BLE_UART_UUID_CONFIG_CHAR		BLUEIO_UUID_UART_CONFIG_CHAR 							// UART configuration characteristic
-#define BLE_UART_UUID_CONFIG_CHAR_PROP	(BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_WRAUTH | BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN | \
-											BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY ) // Property of UART confg. char.
-
-/// Re-use the UART Rx characteristic for the Configuration ACK
-
-// BLE I2C Service
-#define BLE_I2C_UUID_BASE			BLUEIO_UUID_BASE				// Base UUID of the device
-#define BLE_I2C_UUID_SERVICE			BLUEIO_UUID_I2C_SERVICE			// BlueIO I2C service
-
-#define BLE_I2C_UUID_TX_CHAR			BLUEIO_UUID_I2C_TX_CHAR			// I2C Tx characteristic
-#define BLE_I2C_UUID_TX_CHAR_PROP		(BLESVC_CHAR_PROP_WRITE | \
-											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
-
-#define BLE_I2C_UUID_RX_CHAR			BLUEIO_UUID_I2C_RX_CHAR			// I2C Rx characteristic
-#define BLE_I2C_UUID_RX_CHAR_PROP		(BLESVC_CHAR_PROP_READ | \
-											BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
-
-#define BLE_I2C_UUID_CONFIG_CHAR		BLUEIO_UUID_I2C_CONFIG_CHAR 	// I2C configuration characteristic
-#define BLE_I2C_UUID_CONFIG_CHAR_PROP	(BLESVC_CHAR_PROP_WRITE | \
-											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of I2C config. char.
-
-// BLE SPI Service
-#define BLE_SPI_UUID_BASE				BLUEIO_UUID_BASE				// Base UUID of the device
-#define BLE_SPI_UUID_SERVICE			BLUEIO_UUID_SPI_SERVICE			// BlueIO SPI service
-
-#define BLE_SPI_UUID_TX_CHAR			BLUEIO_UUID_SPI_TX_CHAR			// SPI Tx characteristic
-#define BLE_SPI_UUID_TX_CHAR_PROP		(BLESVC_CHAR_PROP_WRITE | \
-											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
-
-#define BLE_SPI_UUID_RX_CHAR			BLUEIO_UUID_SPI_RX_CHAR			// SPI Rx characteristic
-#define BLE_SPI_UUID_RX_CHAR_PROP		(BLESVC_CHAR_PROP_READ | \
-											BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
-
-#define BLE_SPI_UUID_CONFIG_CHAR		BLUEIO_UUID_SPI_CONFIG_CHAR 	// SPI configuration characteristic
-#define BLE_SPI_UUID_CONFIG_CHAR_PROP	(BLESVC_CHAR_PROP_WRITE | \
-											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of SPI config. char.
-
-//#define BLE_SPI_UUID_CONFIG_CHAR			BLUEIO_UUID_SPI_CONFIG_CHAR		// SPI Configuration characteristic
-//#define BLE_SPI_UUID_CONFIG_CHAR_PROP	(BLESVC_CHAR_PROP_WRITE | \
-//											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of SPI config. char.
-
-// I/O Control Service (GPIO ??)
-#define BLE_CTRL_UUID_BASE 				BLUEIO_UUID_BASE
-#define BLE_CTRL_UUID_SERVICE			BLUEIO_UUID_CTRL_SERVICE
-#define BLE_CTRL_UUID_DATA_CHAR			BLUEIO_UUID_CTRL_DATACHAR
-#define BLE_CTRL_UUID_DATA_CHAR_PROP 	(BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN)
-#define BLE_CTRL_UUID_CMD_CHAR			BLUEIO_UUID_CTRL_CMDCHAR
-#define BLE_CTRL_UUID_CMD_CHAR_PROP		(BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN)
-
-#define MAX_COUNT 	5
-
-#define BLE_MTU_SIZE			256//byte
-#define PACKET_SIZE				128
-
-// UART
-#define UART_MAX_DATA_LEN  		(PACKET_SIZE)
-#define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN*4)
-
-// I2C
-#define I2C_MAX_DATA_LEN		(PACKET_SIZE)
-#define I2CFIFOSIZE				CFIFO_MEMSIZE(I2C_MAX_DATA_LEN * 4)
-#define I2C_SLAVE_ADDR			0x22
-
-// SPI
-#define SPI_MAX_DATA_LEN		(PACKET_SIZE)
-#define SPIFIFOSIZE 			CFIFO_MEMSIZE(SPI_MAX_DATA_LEN * 4)
-
-// BLE Interface buffer
-#define BLEINTRF_PKTSIZE		(BLE_MTU_SIZE)
-#define BLEINTRF_FIFOSIZE		BLEINTRF_CFIFO_TOTAL_MEMSIZE(15, BLEINTRF_PKTSIZE)//(NbPkt, PktSize)
-
-#define BLESRV_READ_CHAR_IDX		0
-#define BLESRV_WRITE_CHAR_IDX		1
-#define BLESRV_CONFIG_CHAR_IDX		2
-
-// USB
-#define USBFIFOSIZE				CFIFO_MEMSIZE(PACKET_SIZE*5)
-
-
-//// BLE Interface event handler
-//int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-//int BleCfgIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-//// Button event handler
-//void ButEvent(int IntNo, void *pCtx);
 
 
 #endif // __BOARD_H__
