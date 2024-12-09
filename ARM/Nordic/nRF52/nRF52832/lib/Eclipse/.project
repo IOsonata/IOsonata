@@ -251,6 +251,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/sdk5</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/sdk_config.h</name>
 			<type>1</type>
 			<locationURI>copy_PARENT/include/sdk_config.h</locationURI>
@@ -299,11 +304,6 @@
 			<name>include/temp_nrf5x.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/temp_nrf5x.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/utf8.h</name>
@@ -524,6 +524,11 @@
 			<name>src/sbuffer.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sbuffer.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/sensors</name>
@@ -936,6 +941,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
 		</link>
 		<link>
+			<name>include/sdk5/include</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/accel_adxl362.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_adxl362.h</locationURI>
@@ -1106,21 +1116,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/fds.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/fds.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/fds_nvmc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/fds_nvmc.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/fds_sd.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/fds_sd.h</locationURI>
-		</link>
-		<link>
 			<name>include/storage/flash.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/flash.h</locationURI>
@@ -1144,31 +1139,6 @@
 			<name>include/sys/dirent.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usb_cdcdef.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_cdcdef.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usb_def.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_def.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usb_hiddef.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_hiddef.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usb_hidhost.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_hidhost.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usb_mscdef.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices</name>
@@ -1299,16 +1269,6 @@
 			<name>src/bluetooth/bt_uuid.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/nrf_sdh.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh.c</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/nrf_sdh_soc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh_soc.c</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/uart_bleintrf.cpp</name>
@@ -1621,11 +1581,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/proprietary_rf</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1724,6 +1679,11 @@
 			<name>src/pwrmgnt/pm_npm1300.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_npm1300.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_adxl362.cpp</name>
@@ -1866,11 +1826,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/storage/fds.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/fds.c</locationURI>
-		</link>
-		<link>
 			<name>src/storage/ff_diskio.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/ff_diskio.cpp</locationURI>
@@ -1894,6 +1849,71 @@
 			<name>src/storage/stdfs_littlefs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/fds.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/fds.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/fds_nvmc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/fds_nvmc.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/fds_sd.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/fds_sd.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_cli.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_cli.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_drv_clock.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_clock.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_drv_power.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_power.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_drv_rng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_rng.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_drv_usbd.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_usbd.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_drv_usbd_errata.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_usbd_errata.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_fstorage.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_fstorage.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_fstorage_nvmc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_fstorage_nvmc.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_fstorage_sd.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_fstorage_sd.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/include/nrf_pwr_mgmt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_pwr_mgmt.h</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers</name>
@@ -2371,11 +2391,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/fstorage</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/hardfault</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -2427,26 +2442,6 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/util</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/hal</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/soc</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -2684,6 +2679,56 @@
 			<name>src/nrfx/soc/nrfx_atomic.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/fds.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/fds.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/nrf_drv_clock.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_clock.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/nrf_drv_power.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_power.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/nrf_drv_rng.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_rng.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/nrf_fstorage.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/nrf_fstorage_nvmc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage_nvmc.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/nrf_fstorage_sd.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage_sd.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/nrf_pwr_mgmt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_pwr_mgmt.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/nrf_sdh.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_sdh.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/src/nrf_sdh_soc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_sdh_soc.c</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers/Ak0991x</name>
@@ -3246,21 +3291,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/experimental_section_vars/nrf_section_iter.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_nvmc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_fstorage_nvmc.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_sd.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_sd.c</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/hardfault/hardfault_implementation.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/hardfault/hardfault_implementation.c</locationURI>
@@ -3384,36 +3414,6 @@
 			<name>src/nRF5_SDK/libraries/util/sdk_mapped_flags.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/sdk_mapped_flags.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/hal/nrf_nvmc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/hal/nrf_nvmc.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_drv_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_power.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_drv_power.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_rng.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_rng.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/soc/nrfx_atomic.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/soc/nrfx_atomic.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/proprietary_rf/esb/nrf_esb.c</name>
@@ -5404,36 +5404,6 @@
 			<name>src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/log/src/nrf_log_str_formatter.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_gpiote.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_gpiote.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_nvmc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_nvmc.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_power.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_power.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_rng.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_rng.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_systick.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrf5_SDK_Mesh/models/foundation/config/CMakeLists.txt</name>
