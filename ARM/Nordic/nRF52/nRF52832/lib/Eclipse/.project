@@ -941,9 +941,74 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
 		</link>
 		<link>
-			<name>include/sdk5/include</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
+			<name>include/sdk5/app_util_platform.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/app_util_platform.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/fds.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/fds.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/fds_nvmc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/fds_nvmc.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/fds_sd.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/fds_sd.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_cli.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_cli.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_drv_clock.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_clock.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_drv_power.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_power.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_drv_rng.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_rng.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_drv_usbd.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_usbd.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_drv_usbd_errata.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_usbd_errata.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_fstorage.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_fstorage.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_fstorage_nvmc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_fstorage_nvmc.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_fstorage_sd.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_fstorage_sd.h</locationURI>
+		</link>
+		<link>
+			<name>include/sdk5/nrf_pwr_mgmt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_pwr_mgmt.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_adxl362.h</name>
@@ -1681,9 +1746,54 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_npm1300.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/sdk5/src</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
+			<name>src/sdk5/fds.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/fds.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/nrf_drv_clock.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_clock.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/nrf_drv_power.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_power.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/nrf_drv_rng.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_rng.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/nrf_fstorage.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/nrf_fstorage_nvmc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage_nvmc.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/nrf_fstorage_sd.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage_sd.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/nrf_pwr_mgmt.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_pwr_mgmt.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/nrf_sdh_soc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_sdh_soc.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk5/nrf_sdh_weak.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_sdh_weak.c</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_adxl362.cpp</name>
@@ -1849,71 +1959,6 @@
 			<name>src/storage/stdfs_littlefs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/fds.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/fds.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/fds_nvmc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/fds_nvmc.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/fds_sd.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/fds_sd.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_cli.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_cli.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_drv_clock.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_clock.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_drv_power.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_power.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_drv_rng.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_rng.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_drv_usbd.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_usbd.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_drv_usbd_errata.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_drv_usbd_errata.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_fstorage.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_fstorage.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_fstorage_nvmc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_fstorage_nvmc.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_fstorage_sd.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_fstorage_sd.h</locationURI>
-		</link>
-		<link>
-			<name>include/sdk5/include/nrf_pwr_mgmt.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/include/nrf_pwr_mgmt.h</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers</name>
@@ -2679,56 +2724,6 @@
 			<name>src/nrfx/soc/nrfx_atomic.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/fds.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/fds.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/nrf_drv_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/nrf_drv_power.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_power.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/nrf_drv_rng.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_rng.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/nrf_fstorage.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/nrf_fstorage_nvmc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage_nvmc.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/nrf_fstorage_sd.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage_sd.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/nrf_pwr_mgmt.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_pwr_mgmt.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/nrf_sdh.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_sdh.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/src/nrf_sdh_soc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_sdh_soc.c</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers/Ak0991x</name>

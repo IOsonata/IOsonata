@@ -47,6 +47,7 @@ SOFTWARE.
 #include "bluetooth/bt_appearance.h"
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
+//#include "board.h"
 
 // Uncomment this to set custom board oscillator
 // Default library setting is :
@@ -122,8 +123,8 @@ void BleAppAdvTimeoutHandler()
 {
 	g_AdvCnt++;
 
-	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
-	BleAppAdvStart();
+	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
+	BtAdvStart();
 }
 #endif
 
