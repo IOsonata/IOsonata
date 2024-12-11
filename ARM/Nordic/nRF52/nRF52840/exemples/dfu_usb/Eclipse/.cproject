@@ -65,6 +65,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/dfu&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/ble_dfu&quot;"/>
@@ -132,6 +133,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/dfu&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../sdk5/bootloader/ble_dfu&quot;"/>

@@ -36,7 +36,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
-#include "app_util_platform.h"
 #include "app_scheduler.h"
 
 #include "istddef.h"

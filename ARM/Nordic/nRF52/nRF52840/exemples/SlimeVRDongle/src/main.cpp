@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+
 #include "sdk_common.h"
 #include "nrf.h"
 #include "nrf_esb.h"
@@ -33,6 +34,7 @@
 #include "SlimeVRDongle.h"
 #include "board.h"
 #include "stddev.h"
+
 
 #define FIRMWARE_VERSION	0
 #define DEVICE_NAME			"SlimeVRDongle"
@@ -315,4 +317,45 @@ int main(void)
         pairmode != pairmode;
     }
 }
-/*lint -restore */
+
+void cmd_info(nrf_cli_t const * p_cli, size_t argc, char ** argv)
+{
+    nrf_cli_print(&m_cli_cdc_acm, "info");
+}
+
+void cmd_list(nrf_cli_t const * p_cli, size_t argc, char ** argv)
+{
+    nrf_cli_print(&m_cli_cdc_acm, "list");
+}
+
+void cmd_reboot(nrf_cli_t const * p_cli, size_t argc, char ** argv)
+{
+    nrf_cli_print(&m_cli_cdc_acm, "reboot");
+}
+
+void cmd_pair(nrf_cli_t const * p_cli, size_t argc, char ** argv)
+{
+    nrf_cli_print(&m_cli_cdc_acm, "pair");
+}
+
+void cmd_clear(nrf_cli_t const * p_cli, size_t argc, char ** argv)
+{
+    nrf_cli_print(&m_cli_cdc_acm, "clear");
+}
+
+void cmd_help(nrf_cli_t const * p_cli, size_t argc, char ** argv)
+{
+    nrf_cli_print(&m_cli_cdc_acm, "clear");
+}
+
+NRF_CLI_CMD_REGISTER(info, NULL, "Display device information", cmd_info);
+NRF_CLI_CMD_REGISTER(list, NULL, "List paired devices", cmd_list);
+NRF_CLI_CMD_REGISTER(reboot, NULL, "Reboot", cmd_reboot);
+NRF_CLI_CMD_REGISTER(pair, NULL, "Enter pairing mode", cmd_pair);
+NRF_CLI_CMD_REGISTER(clear, NULL, "Clear paired devices list", cmd_clear);
+NRF_CLI_CMD_REGISTER(h, NULL, "Help", cmd_help);
+NRF_CLI_CMD_REGISTER(help, NULL, "Help", cmd_help);
+
+
+
+
