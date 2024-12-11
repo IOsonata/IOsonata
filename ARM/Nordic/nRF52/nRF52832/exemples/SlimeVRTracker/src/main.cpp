@@ -48,6 +48,7 @@ typedef struct __App_Data {
 	uint8_t Cs;				// Checksum
 	uint8_t TrackerId;
 	uint8_t PairedAdddr[8];
+	bool bPairMode;
 } AppData_t;
 
 __attribute__ ((section(".Version"), used))
@@ -56,7 +57,7 @@ const AppInfo_t g_AppInfo = {
 	{'I', 'O', 's', 'o', 'n', 'a', 't', 'a', 'I', '-', 'S', 0x55, 0xA5, 0x5A, 0xA5, 0x5A},
 };
 
-AppData_t g_AppData = { (uint8_t)-1, };
+AppData_t g_AppData = { 0, (uint8_t)-1, };
 
 static nrf_esb_payload_t tx_payload = NRF_ESB_CREATE_PAYLOAD1(0, 0x01, 0x00);
 static nrf_esb_payload_t tx_payload_pair = NRF_ESB_CREATE_PAYLOAD1(0, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -449,6 +450,15 @@ void esb_pair()
 }
 #endif
 
+// Get MAC address
+uint64_t GetDevAddress(void)
+{
+	uint64_t addr = (*(uint64_t *)NRF_FICR->DEVICEADDR) & 0xFFFFFFFFFFFFUL;
+	addr |= 0xC00000000000UL;
+
+	return addr;
+}
+
 void HardwareInit()
 {
 	IOPinConfig(LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
@@ -520,16 +530,19 @@ void HardwareInit()
     if (g_AppData.PairedAdddr[0] == 0)
     {
     	// Not paired
+    	g_Uart.printf("Pairing\r\n");
+
 		memcpy(base_addr_0, discovery_base_addr_0, sizeof(base_addr_0));
 		memcpy(base_addr_1, discovery_base_addr_1, sizeof(base_addr_1));
 		memcpy(addr_prefix, discovery_addr_prefix, sizeof(addr_prefix));
 
 		tx_payload_pair.noack = false;
-		uint64_t *addr = (uint64_t *)NRF_FICR->DEVICEADDR; // Use device address as unique identifier (although it is not actually guaranteed, see datasheet)
-		memcpy(&tx_payload_pair.data[2], addr, 6);
+		uint64_t addr = GetDevAddress();//(uint64_t *)NRF_FICR->DEVICEADDR;
+		memcpy(&tx_payload_pair.data[2], &addr, 6);
     }
     else
     {
+    	g_Uart.printf("Running\r\n");
     	uint8_t addr_buffer[16] = {0};
     	for (int i = 0; i < 4; i++)
     	{
