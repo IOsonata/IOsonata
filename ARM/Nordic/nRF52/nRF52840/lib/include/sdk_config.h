@@ -47,7 +47,7 @@
 #include "app_config.h"
 #endif
 
-#define CoreDebug						DCB
+//#define CoreDebug						DCB
 #define CoreDebug_DEMCR_TRCENA_Msk		DCB_DEMCR_TRCENA_Msk
 #define CoreDebug_DHCSR_C_DEBUGEN_Msk	DCB_DHCSR_C_DEBUGEN_Msk
 

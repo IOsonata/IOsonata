@@ -125,6 +125,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/util</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/micro-ecc/types.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/types.h</locationURI>
@@ -293,6 +298,11 @@
 			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_sd.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_sd.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/util/app_util_platform.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_util_platform.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/hal/nrf_nvmc.c</name>
