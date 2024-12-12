@@ -1,0 +1,126 @@
+solution:
+  created-for: cmsis-toobox@2.1.0
+
+  cdefault:
+
+  misc:
+    - for-compiler: GCC
+      C-CPP:
+        - -masm-syntax-unified
+        - -Wall
+
+  packs:
+    - pack: ARM::CMSIS
+      path: ../../../
+
+  target-types:
+    #Target: CM0
+    - type: CM0
+
+    #Target: CM0plus
+    - type: CM0plus
+
+    #Target: CM3
+    - type: CM3
+
+    #Target: CM4
+    - type: CM4
+
+    #Target: CM7
+    - type: CM7
+
+    #Target: CM23
+    - type: CM23
+
+    #Target: CM23S
+    - type: CM23S
+
+    #Target: CM23NS
+    - type: CM23NS
+
+    #Target: CM33
+    - type: CM33
+
+    #Target: CM33S
+    - type: CM33S
+
+    #Target: CM33NS
+    - type: CM33NS
+
+    #Target: CM35P
+    - type: CM35P
+
+    #Target: CM35PS
+    - type: CM35PS
+
+    #Target: CM35PNS
+    - type: CM35PNS
+
+    #Target: CM52
+    - type: CM52
+
+    #Target: CM52S
+    - type: CM52S
+
+    #Target: CM52NS
+    - type: CM52NS
+
+    #Target: CM55
+    - type: CM55
+
+    #Target: CM55S
+    - type: CM55S
+
+    #Target: CM55NS
+    - type: CM55NS
+
+    #Target: CM85
+    - type: CM85
+
+    #Target: CM85S
+    - type: CM85S
+
+    #Target: CM85NS
+    - type: CM85NS
+
+    #Target: CA5
+    - type: CA5
+
+    #Target: CA7
+    - type: CA7
+
+    #Target: CA9
+    - type: CA9
+
+  build-types:
+    - type: none
+      optimize: none
+      debug: on
+
+    - type: balanced
+      optimize: balanced
+      debug: on
+
+    - type: size
+      optimize: size
+      debug: on
+
+    - type: speed
+      optimize: speed
+      debug: on
+
+  projects:
+    - project: ./Validation.cproject.yml
+    - project: ./Bootloader.cproject.yml
+      for-context:
+        - +CM23NS
+        - +CM33NS
+        - +CM35PNS
+        - +CM52NS
+        - +CM55NS
+        - +CM85NS
+
+  output-dirs:
+    cprjdir: ./build/$TargetType$/$Compiler$/$BuildType$/$Project$
+    intdir:  ./build/$TargetType$/$Compiler$/$BuildType$/$Project$/intdir
+    outdir:  ./build/$TargetType$/$Compiler$/$BuildType$/$Project$/outdir

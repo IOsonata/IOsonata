@@ -29,6 +29,9 @@ class DeviceAxis(Enum):
     CM35P = ('Cortex-M35P', 'CM35P')
     CM35PS = ('Cortex-M35PS', 'CM35PS')
     CM35PNS = ('Cortex-M35PNS', 'CM35PNS')
+    CM52 = ('Cortex-M52', 'CM52')
+    CM52S = ('Cortex-M52S', 'CM52S')
+    CM52NS = ('Cortex-M52NS', 'CM52NS')
     CM55 = ('Cortex-M55', 'CM55')
     CM55S = ('Cortex-M55S', 'CM55S')
     CM55NS = ('Cortex-M55NS', 'CM55NS')
@@ -74,7 +77,7 @@ def timestamp():
     return datetime.now().strftime('%Y%m%d%H%M%S')
 
 
-@matrix_command(test_report=FileReport(f"lit.xml") | JUnitReport())
+@matrix_command(exit_code=[0, 1], test_report=FileReport(f"lit.xml") | JUnitReport())
 def run_lit(toolchain, device, optimize):
     return ["lit", "--xunit-xml-output", f"lit.xml", "-D", f"toolchain={toolchain}", "-D", f"device={device}", "-D", f"optimize={optimize}", "src" ]
 
@@ -82,6 +85,13 @@ def run_lit(toolchain, device, optimize):
 @matrix_filter
 def filter_iar(config):
     return config.compiler == CompilerAxis.IAR
+
+
+@matrix_filter
+def filter_gcc_cm52(config):
+    device = config.device.match('CM52*')
+    compiler = config.compiler == CompilerAxis.GCC
+    return device and compiler
 
 
 if __name__ == "__main__":

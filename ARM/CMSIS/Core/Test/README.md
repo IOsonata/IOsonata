@@ -76,9 +76,9 @@ The following tools are required to build and run the CoreValidation tests:
 - [CMSIS-Toolbox 2.1.0](https://artifacts.keil.arm.com/cmsis-toolbox/2.1.0/)*
 - [CMake 3.25.2](https://cmake.org/download/)*
 - [Ninja 1.10.2](https://github.com/ninja-build/ninja/releases)*
-- [Arm Compiler 6.20](https://artifacts.keil.arm.com/arm-compiler/6.20/21/)*
+- [Arm Compiler 6.22](https://artifacts.tools.arm.com/arm-compiler/6.22/45/)*
 - [GCC Compiler 13.2.1](https://artifacts.keil.arm.com/arm-none-eabi-gcc/13.2.1/)*
-- [Clang Compiler 17.0.1](https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/releases/tag/release-17.0.1)*
+- [Clang Compiler 18.1.3](https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/releases/tag/release-18.1.3)*
 - [Arm Virtual Hardware for Cortex-M based on FastModels 11.22.39](https://artifacts.keil.arm.com/avh/11.22.39/)*
 - [Python 3.9](https://www.python.org/downloads/)
 - [LLVM FileCheck](https://github.com/llvm/llvm-project/releases/)
@@ -136,7 +136,7 @@ In case of failing test cases, one can run a single test case with verbose outpu
 PASS: CMSIS-Core :: src/apsr.c (1 of 1)
 Script:
 --
-: 'RUN: at line 2';   arm-none-eabi-gcc -mcpu=cortex-m3 -mfloat-abi=soft -O1 -I ../Include -D CORE_HEADER=\"core_cm3.h\" -c -D __CM3_REV=0x0000U -D __MPU_PRESENT=1U -D __VTOR_PRESENT=1U -D __NVIC_PRIO_BITS=3U -D __Vendor_SysTickConfig=0U -o ./src/Output/apsr.c.o ./src/apsr.c; llvm-objdump --mcpu=cortex-m3 -d ./src/Output/apsr.c.o | FileCheck --allow-unused-prefixes --check-prefixes CHECK,CHECK-THUMB ./src/apsr.c
+: 'RUN: at line 2';   arm-none-eabi-gcc -mcpu=cortex-m3 -mfloat-abi=soft -O1 -I ../Include -D CORE_HEADER="core_cm3.h" -c -D __CM3_REV=0x0000U -D __MPU_PRESENT=1U -D __VTOR_PRESENT=1U -D __NVIC_PRIO_BITS=3U -D __Vendor_SysTickConfig=0U -o ./src/Output/apsr.c.o ./src/apsr.c; llvm-objdump --mcpu=cortex-m3 -d ./src/Output/apsr.c.o | FileCheck --allow-unused-prefixes --check-prefixes CHECK,CHECK-THUMB ./src/apsr.c
 --
 Exit Code: 0
  :

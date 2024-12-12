@@ -325,6 +325,84 @@ DEVICES = {
             '__Vendor_SysTickConfig': '0U'
         }
     },
+    'CM52': {
+        'arch': 'thumbv8.1m.main',
+        'triple': 'thumbv8m',
+        'abi': 'eabihf',
+        'mcpu': 'cortex-m52',
+        'mfpu': 'fpv5-d16',
+        'mpu': True,
+        'features': ['thumbv6m', 'thumbv7m', 'dsp', 'thumbv8m.base', 'thumbv8m.main', 'thumbv8.1m.main', 'thumb-2', 'sat', 'ldrex', 'clz'],
+        'header': 'core_cm52.h',
+        'defines': {
+            '__CM52_REV': '0x0000U',
+            '__FPU_PRESENT': '1U',
+            '__FPU_DP': '1U',
+            '__MPU_PRESENT': '1U',
+            '__ICACHE_PRESENT': '1U',
+            '__DCACHE_PRESENT': '1U',
+            '__UCACHE_PRESENT': '1U',
+            '__SAUREGION_PRESENT': '8U',
+            '__DSP_PRESENT': '1U',
+            '__VTOR_PRESENT': '1U',
+            '__PMU_PRESENT': '1U',
+            '__PMU_NUM_EVENTCNT': '8U',
+            '__NVIC_PRIO_BITS': '3U',
+            '__Vendor_SysTickConfig': '0U'
+        }
+    },
+    'CM52S': {
+        'arch': 'thumbv8.1m.main',
+        'triple': 'thumbv8m',
+        'abi': 'eabihf',
+        'mcpu': 'cortex-m52',
+        'mfpu': 'fpv5-d16',
+        'mpu': True,
+        'features': ['thumbv6m', 'thumbv7m', 'dsp', 'thumbv8m.base', 'thumbv8m.main', 'thumbv8.1m.main', 'thumb-2', 'sat', 'ldrex', 'clz'],
+        'header': 'core_cm52.h',
+        'defines': {
+            '__CM52_REV': '0x0000U',
+            '__FPU_PRESENT': '1U',
+            '__FPU_DP': '1U',
+            '__MPU_PRESENT': '1U',
+            '__ICACHE_PRESENT': '1U',
+            '__DCACHE_PRESENT': '1U',
+            '__UCACHE_PRESENT': '1U',
+            '__SAUREGION_PRESENT': '8U',
+            '__DSP_PRESENT': '1U',
+            '__VTOR_PRESENT': '1U',
+            '__PMU_PRESENT': '1U',
+            '__PMU_NUM_EVENTCNT': '8U',
+            '__NVIC_PRIO_BITS': '3U',
+            '__Vendor_SysTickConfig': '0U'
+        }
+    },
+    'CM52NS': {
+        'arch': 'thumbv8.1m.main',
+        'triple': 'thumbv8m',
+        'abi': 'eabihf',
+        'mcpu': 'cortex-m52',
+        'mfpu': 'fpv5-d16',
+        'mpu': True,
+        'features': ['thumbv6m', 'thumbv7m', 'dsp', 'thumbv8m.base', 'thumbv8m.main', 'thumbv8.1m.main', 'thumb-2', 'sat', 'ldrex', 'clz'],
+        'header': 'core_cm52.h',
+        'defines': {
+            '__CM52_REV': '0x0000U',
+            '__FPU_PRESENT': '1U',
+            '__FPU_DP': '1U',
+            '__MPU_PRESENT': '1U',
+            '__ICACHE_PRESENT': '1U',
+            '__DCACHE_PRESENT': '1U',
+            '__UCACHE_PRESENT': '1U',
+            '__SAUREGION_PRESENT': '8U',
+            '__DSP_PRESENT': '1U',
+            '__VTOR_PRESENT': '1U',
+            '__PMU_PRESENT': '1U',
+            '__PMU_NUM_EVENTCNT': '8U',
+            '__NVIC_PRIO_BITS': '3U',
+            '__Vendor_SysTickConfig': '0U'
+        }
+    },    
     'CM55': {
         'arch': 'thumbv8.1m.main',
         'triple': 'thumbv8m',
@@ -346,7 +424,6 @@ DEVICES = {
             '__VTOR_PRESENT': '1U',
             '__PMU_PRESENT': '1U',
             '__PMU_NUM_EVENTCNT': '8U',
-            '__DSP_PRESENT': '1U',
             '__NVIC_PRIO_BITS': '3U',
             '__Vendor_SysTickConfig': '0U'
         }
@@ -372,7 +449,6 @@ DEVICES = {
             '__VTOR_PRESENT': '1U',
             '__PMU_PRESENT': '1U',
             '__PMU_NUM_EVENTCNT': '8U',
-            '__DSP_PRESENT': '1U',
             '__NVIC_PRIO_BITS': '3U',
             '__Vendor_SysTickConfig': '0U'
         }
@@ -398,7 +474,6 @@ DEVICES = {
             '__VTOR_PRESENT': '1U',
             '__PMU_PRESENT': '1U',
             '__PMU_NUM_EVENTCNT': '8U',
-            '__DSP_PRESENT': '1U',
             '__NVIC_PRIO_BITS': '3U',
             '__Vendor_SysTickConfig': '0U'
         }
@@ -424,7 +499,6 @@ DEVICES = {
             '__VTOR_PRESENT': '1U',
             '__PMU_PRESENT': '1U',
             '__PMU_NUM_EVENTCNT': '8U',
-            '__DSP_PRESENT': '1U',
             '__NVIC_PRIO_BITS': '3U',
             '__Vendor_SysTickConfig': '0U'
         }
@@ -450,7 +524,6 @@ DEVICES = {
             '__VTOR_PRESENT': '1U',
             '__PMU_PRESENT': '1U',
             '__PMU_NUM_EVENTCNT': '8U',
-            '__DSP_PRESENT': '1U',
             '__NVIC_PRIO_BITS': '3U',
             '__Vendor_SysTickConfig': '0U'
         }
@@ -476,7 +549,6 @@ DEVICES = {
             '__VTOR_PRESENT': '1U',
             '__PMU_PRESENT': '1U',
             '__PMU_NUM_EVENTCNT': '8U',
-            '__DSP_PRESENT': '1U',
             '__NVIC_PRIO_BITS': '3U',
             '__Vendor_SysTickConfig': '0U'
         }
@@ -681,7 +753,7 @@ class Toolchain_AC6(Toolchain):
     def get_ccflags(self):
         ccflags = [
             '--target=arm-arm-none-eabi', f'-mcpu={DEVICES[self.device]["mcpu"]}', f'-mfpu={DEVICES[self.device]["mfpu"]}', 
-            self.OPTIMIZE[self.optimize], '-I', os.path.abspath('../Include'), '-c', '-D', f'CORE_HEADER=\\"{DEVICES[device]["header"]}\\"']
+            self.OPTIMIZE[self.optimize], '-I', os.path.abspath('../Include'), '-c', '-D', f'CORE_HEADER="{DEVICES[device]["header"]}"']
         if device.endswith('S') and not device.endswith('NS'):
             ccflags += ["-mcmse"]
         ccflags += list(sum([('-D', f'{define}={value}') for (define, value) in DEVICES[self.device]['defines'].items()], ()))
@@ -709,7 +781,7 @@ class Toolchain_GCC(Toolchain):
         ccflags = [
             f'-mcpu={DEVICES[self.device]["mcpu"]}', f'-mfloat-abi={floatabi}', 
             self.OPTIMIZE[self.optimize], '-I', os.path.abspath('../Include'), 
-            '-D', f'CORE_HEADER=\\"{DEVICES[device]["header"]}\\"', '-c']
+            '-D', f'CORE_HEADER="{DEVICES[device]["header"]}"', '-c']
         if DEVICES[self.device]["mfpu"] != "none":
             ccflags += [f'-mfpu={DEVICES[self.device]["mfpu"]}']
         if device.endswith('S') and not device.endswith('NS'):
@@ -736,6 +808,9 @@ class Toolchain_Clang(Toolchain):
         'CM35P': 'thumbv8m.main-none-unknown-eabihf',
         'CM35PS': 'thumbv8m.main-none-unknown-eabihf',
         'CM35PNS': 'thumbv8m.main-none-unknown-eabihf',
+        'CM52': 'thumbv8.1m.main-none-unknown-eabihf',
+        'CM52S': 'thumbv8.1m.main-none-unknown-eabihf',
+        'CM52NS': 'thumbv8.1m.main-none-unknown-eabihf',
         'CM55': 'thumbv8.1m.main-none-unknown-eabihf',
         'CM55S': 'thumbv8.1m.main-none-unknown-eabihf',
         'CM55NS': 'thumbv8.1m.main-none-unknown-eabihf',
@@ -765,7 +840,7 @@ class Toolchain_Clang(Toolchain):
         ccflags = [
             f'--target={self.TARGET[self.device]}', self.OPTIMIZE[self.optimize], 
             f'-mcpu={DEVICES[self.device]["mcpu"]}', f'-mfpu={DEVICES[self.device]["mfpu"]}', 
-            '-I', os.path.abspath('../Include'), '-c', '-D', f'CORE_HEADER=\\"{DEVICES[device]["header"]}\\"']
+            '-I', os.path.abspath('../Include'), '-c', '-D', f'CORE_HEADER="{DEVICES[device]["header"]}"']
         if device.endswith('S') and not device.endswith('NS'):
             ccflags += ["-mcmse"]
         ccflags += list(sum([('-D', f'{define}={value}') for (define, value) in DEVICES[self.device]['defines'].items()], ()))
