@@ -155,7 +155,7 @@ typedef struct __Bt_App_Cfg {
 	int8_t ConnLedPin;				//!< Connection LED pin number
 	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
 	int TxPower;					//!< Tx power in dBm, -20 to +4 dBm TX power, configurable in 4 dB steps
-	uint32_t (*SDEvtHandler)(void); //!< Require for BLEAPP_MODE_RTOS
+	void (*SDEvtHandler)(void); //!< Require for BLEAPP_MODE_RTOS
 	uint16_t MaxMtu;				//!< Max MTU size or 0 for default
 	BTAPP_COEXMODE CoexMode;		//!< Enable support for CoEx
 	int PeriphDevCnt;				//!< Max number of peripheral connection
