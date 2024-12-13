@@ -150,7 +150,7 @@
 			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC_vli.h</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx/hal</name>
+			<name>src/nRF5_SDK/nrfx/legacy</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -305,9 +305,9 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_util_platform.c</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/nrfx/hal/nrf_nvmc.c</name>
+			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_rng.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/hal/nrf_nvmc.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_rng.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/softdevice/common/nrf_sdh.c</name>

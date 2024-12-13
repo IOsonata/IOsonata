@@ -83,6 +83,7 @@ SOFTWARE.
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_dev.h"
 #include "app_evt_handler.h"
+#include "sd_dispatch.h"
 
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
@@ -162,7 +163,7 @@ typedef struct __Bt_App_Data {
 	//ble_gap_adv_data_t AdvData;
 //	int PeriphDevCnt;
 //	BLEAPP_PERIPH *pPeriphDev;
-	uint32_t (*SDEvtHandler)(void) ;
+	void (*SDEvtHandler)(void) ;
 	//ble_advdata_t AdvData;
 	//ble_advdata_t SrData;
     //ble_advdata_manuf_data_t ManufData;
@@ -1942,6 +1943,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     	0
     };
 
+    if (s_BtAppData.SDEvtHandler)
+    {
+    	SetSoftdeviceDispatch(s_BtAppData.SDEvtHandler);
+    }
+    else
+    {
+    	SetSoftdeviceDispatch(nrf_sdh_evts_poll);
+    }
+
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
 	if (lfosc->Type == OSC_TYPE_RC)
 	{
@@ -2398,7 +2408,7 @@ static void appsh_events_poll(void * p_event_data, uint16_t event_size)
     UNUSED_PARAMETER(p_event_data);
     UNUSED_PARAMETER(event_size);
 }
-
+#if 0
 extern "C" void SD_EVT_IRQHandler(void)
 {
 #if 0
@@ -2440,11 +2450,14 @@ extern "C" void SD_EVT_IRQHandler(void)
 #endif
 	}
 }
-
+#endif
+#if 1
 // We need this here in order for the Linker to keep the nrf_sdh_soc.c
 // which is require for Softdevice to function properly
 // Create section set "sdh_soc_observers".
 // This is needed for FSTORAGE event to work.
+extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
+
 NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {
     .handler   = nrf_sdh_soc_evts_poll,
     .p_context = NULL,
@@ -2464,5 +2477,6 @@ extern nrf_crypto_backend_info_t const nrf_hw_backend;
 __attribute__ ((used)) static uint32_t s_pnrf_hw_backend_info = (uint32_t)&nrf_hw_backend;
 #endif
 
+#endif
 #endif
 

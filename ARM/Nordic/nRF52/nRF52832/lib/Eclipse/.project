@@ -1336,6 +1336,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/sd_dispatch.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/sd_dispatch.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/uart_bleintrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/uart_bleintrf.cpp</locationURI>
@@ -1642,6 +1647,11 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/nrfx</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -2497,6 +2507,11 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/util</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/nrfx/legacy</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -3441,6 +3456,11 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/sdk_mapped_flags.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_rng.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_rng.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/proprietary_rf/esb/nrf_esb.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/proprietary_rf/esb/nrf_esb.c</locationURI>
@@ -3454,11 +3474,6 @@
 			<name>src/nRF5_SDK/softdevice/common/nrf_sdh_ble.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/softdevice/common/nrf_sdh_ble.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/softdevice/common/nrf_sdh_freertos.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c</name>
