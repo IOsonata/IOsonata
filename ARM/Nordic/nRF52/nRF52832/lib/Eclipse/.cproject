@@ -74,13 +74,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/hal&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -243,13 +243,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/hal&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -451,13 +451,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/hal&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -622,13 +622,13 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/hal&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -908,7 +908,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx|src/nrfx/soc/nrfx_atomic.c|src/sdk5|src/imu/imu_soft.cpp|src/storage/fds.c|src/bluetooth/bt_dev.cpp|src/nRF5_SDK|src/nRF5_SDK/softdevice|src/bluetooth/nrf_sdh.c|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_ctlr_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_dev.cpp|src/mbedtls|src/micro-ecc|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/ble_app_nrf52.cpp|src/nrf5_SDK_Mesh|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/cli/icli.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/models/proprietary|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/bootloader|src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/sd_dispatch.cpp|src/nrfx|src/nrfx/soc/nrfx_atomic.c|src/sdk5|src/imu/imu_soft.cpp|src/storage/fds.c|src/bluetooth/bt_dev.cpp|src/nRF5_SDK|src/nRF5_SDK/softdevice|src/bluetooth/nrf_sdh.c|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_ctlr_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_dev.cpp|src/mbedtls|src/micro-ecc|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/ble_app_nrf52.cpp|src/nrf5_SDK_Mesh|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/cli/icli.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/models/proprietary|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/bootloader|src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -1067,7 +1067,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx|src/nrfx/soc/nrfx_atomic.c|src/sdk5|src/imu/imu_soft.cpp|src/storage/fds.c|src/bluetooth/bt_dev.cpp|src/nRF5_SDK|src/nRF5_SDK/softdevice|src/bluetooth/nrf_sdh.c|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_ctlr_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_dev.cpp|src/mbedtls|src/micro-ecc|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/ble_app_nrf52.cpp|src/nrf5_SDK_Mesh|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/cli/icli.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/models/proprietary|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/bootloader|src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/bluetooth/sd_dispatch.cpp|src/nrfx|src/nrfx/soc/nrfx_atomic.c|src/sdk5|src/imu/imu_soft.cpp|src/storage/fds.c|src/bluetooth/bt_dev.cpp|src/nRF5_SDK|src/nRF5_SDK/softdevice|src/bluetooth/nrf_sdh.c|src/fatfs/ff_diskio.cpp|src/bluetooth/bt_gap_nrf52.cpp|src/bluetooth/bt_dev_sdc.cpp|src/bluetooth/bt_gatt_nrf52.cpp|src/bluetooth/bt_ctlr_nrf52.cpp|src/bluetooth/bt_gatt_nrf5.cpp|src/bluetooth/bt_dev_nrf52.cpp|src/bluetooth/bt_app_nrf52.cpp|src/nrf_log_backend_uart.c|src/esb_intrf.cpp|src/bluetooth/blueio_blesrvc.cpp|src/bluetooth/ble_service.cpp|src/bluetooth/ble_dev.cpp|src/mbedtls|src/micro-ecc|src/bluetooth/uart_bleintrf.cpp|src/bluetooth/nrf_sdh_soc.c|src/bluetooth/ble_app_nrf52.cpp|src/nrf5_SDK_Mesh|src/sbuffer.c|src/nrf5_SDK_Mesh/external|src/cli/icli.cpp|src/nrf5_SDK_Mesh/serial|src/nrf5_SDK_Mesh/models/proprietary|src/nrf5_SDK_Mesh/models/vendor|src/nrf5_SDK_Mesh/bootloader|src/coredev/timer_nrf_app_timer.cpp|src/audio/audiodev.cpp|src/nrf5_SDK_Mesh/vendor|src/nRF5_SDK/softdevice/common/nrf_sdh_soc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/softdevice/common/nrf_sdh.c|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/sysstatus_impl.cpp|src/nrfthingy_env_service.cpp|src/nrfthingy_conf_service.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

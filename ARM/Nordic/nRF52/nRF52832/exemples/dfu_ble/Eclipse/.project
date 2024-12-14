@@ -70,21 +70,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/micro-ecc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrf_drv_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/pb_common.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/external/nano-pb/pb_common.c</locationURI>
@@ -121,36 +106,6 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/fstorage</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/util</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/micro-ecc/types.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/types.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/micro-ecc/uECC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/micro-ecc/uECC.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/micro-ecc/uECC_vli.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC_vli.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -298,16 +253,6 @@
 			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_sd.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_sd.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/util/app_util_platform.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_util_platform.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_rng.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_rng.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/softdevice/common/nrf_sdh.c</name>
