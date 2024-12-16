@@ -223,20 +223,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/ble_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/bootloader/serial_dfu&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/audio&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/cdc/acm&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/hid&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../sdk5/usbd/class/msc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
@@ -244,6 +230,20 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/soc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/serial_dfu&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/audio&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc/acm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/hid&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/msc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
@@ -469,9 +469,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
@@ -480,6 +477,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
@@ -626,9 +626,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/mdk&quot;"/>
@@ -637,6 +634,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/dfu&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nRF5_SDK/components/libraries/bootloader/ble_dfu&quot;"/>
