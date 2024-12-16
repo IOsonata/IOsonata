@@ -184,6 +184,9 @@ public:
 	virtual void IntHandler() = 0;
 	virtual bool Calibrate() = 0;
 	virtual void SetAxisAlignmentMatrix(int8_t * const pMatrix) = 0;
+
+	// Features
+	virtual bool Euler(bool bEn) = 0;
 	virtual bool Compass(bool bEn) = 0;
 	virtual bool Pedometer(bool bEn) = 0;
 	virtual bool Quaternion(bool bEn, int NbAxis) = 0;

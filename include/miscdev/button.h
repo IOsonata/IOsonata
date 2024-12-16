@@ -37,7 +37,6 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#include "coredev/iopincfg.h"
 #include "coredev/timer.h"
 
 typedef enum __Button_State{
@@ -61,14 +60,18 @@ typedef struct __Button_Config {
 	BUTTON_TYPE Type;			//!< Button type
 	uint8_t Port;				//!< Gpio port #
 	uint8_t Pin;				//!< Gpio pin #
+	uint8_t PinOp;
 	BUTTON_LOGIC Act;			//!< Button active logic
+	bool bInt;					//!< Interrupt enable
 } ButtonCfg_t;
 
 typedef struct __Button_Dev {
 	BUTTON_TYPE Type;			//!< Button type
 	uint8_t Port;				//!< Gpio port #
 	uint8_t Pin;				//!< Gpio pin #
+	uint8_t PinOp;
 	BUTTON_LOGIC Act;			//!< Button active logic
+	bool bInt;					//!< Interrupt enable
 	TimerDev_t * pTimerDev;		//!< Pointer to timer device
 	volatile BUTTON_STATE State;//!< Current button state
 } ButtonDev_t;

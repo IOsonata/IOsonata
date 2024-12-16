@@ -59,6 +59,38 @@ bool Imu::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * con
 
 IMU_FEATURE Imu::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
 {
+	uint32_t bit = 0x8000;
+
+	while (bit != 0)
+	{
+		switch (FeatureBit & bit)
+		{
+			case IMU_FEATURE_EULER:
+				Euler(bEnDis);
+				break;
+			case IMU_FEATURE_QUATERNION:
+				//Quaternion(bEnDis);
+				break;
+			case IMU_FEATURE_COMPASS:
+				Compass(bEnDis);
+				break;
+			case IMU_FEATURE_GRAVITY:
+				//Gravity(bEnDis);
+				break;
+			case IMU_FEATURE_EXTERNAL_ACCEL:
+				break;
+			case IMU_FEATURE_TAP:
+				break;
+			case IMU_FEATURE_ROTATION:
+				break;
+			case IMU_FEATURE_VIBRATION:
+				break;
+			case IMU_FEATURE_PEDOMETER:
+				break;
+			case IMU_FEATURE_CYCLING:
+				break;
+		}
+	}
 	if (bEnDis == true)
 	{
 		// Enable

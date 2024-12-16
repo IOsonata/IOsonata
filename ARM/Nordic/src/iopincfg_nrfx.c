@@ -45,10 +45,14 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#if defined(NRF54L15_XXAA)
 #define IOPIN_MAX_INT			(GPIOTE20_GPIOTE_NCHANNELS_SIZE + GPIOTE30_GPIOTE_NCHANNELS_SIZE)
-#define GPIO_PIN_CNF_DRIVE_Pos (8UL)              /*!< Position of DRIVE0 field.                                            */
-#define GPIO_PIN_CNF_DRIVE_Msk (0xFUL << GPIO_PIN_CNF_DRIVE0_Pos) /*!< Bit mask of DRIVE0 field.                            */
+#define GPIO_PIN_CNF_DRIVE_Pos (8UL)              //!< Position of DRIVE0 field.
+#define GPIO_PIN_CNF_DRIVE_Msk (0xFUL << GPIO_PIN_CNF_DRIVE0_Pos) //!< Bit mask of DRIVE0 field.
+#elif defined(NRF54H20_XXAA)
+#define IOPIN_MAX_INT			(GPIOTE130_GPIOTE_NCHANNELS_SIZE)
+#define GPIO_PIN_CNF_DRIVE_Pos (8UL)              //!< Position of DRIVE0 field.
+#define GPIO_PIN_CNF_DRIVE_Msk (0xFUL << GPIO_PIN_CNF_DRIVE0_Pos) //!< Bit mask of DRIVE0 field.
 #else
 #ifndef GPIOTE_CH_NUM
 #define GPIOTE_CH_NUM	8

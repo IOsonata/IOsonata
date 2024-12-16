@@ -47,7 +47,7 @@ SOFTWARE.
 #include "bluetooth/bt_appearance.h"
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
-
+#include "coredev/uart.h"
 #include "board.h"
 
 // Uncomment this to set custom board oscillator
@@ -58,6 +58,40 @@ SOFTWARE.
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
+static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
+static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
+
+#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
+
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
+
+#if 1
+static const IOPinCfg_t s_UartPins[] = UART_PINS;
+
+// UART configuration data
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = 1000000,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 1,
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,//UARTFIFOSIZE,
+	.pRxMem = NULL,//s_UartRxFifo,
+	.TxMemSize = 0,//UARTFIFOSIZE,//FIFOSIZE,
+	.pTxMem = NULL,//s_UartTxFifo,//g_TxBuff,
+	.bDMAMode = true,
+};
+
+UART g_Uart;
+#endif
 //#define EXTADV		// Uncomment to enable extended advertisement
 
 #ifdef EXTADV
@@ -67,7 +101,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
 #define APP_ADV_INTERVAL_MSEC       50
-#define APP_ADV_TIMEOUT_MSEC      	0
+#define APP_ADV_TIMEOUT_MSEC      	1000
 
 uint32_t g_AdvCnt = 0;
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
@@ -102,11 +136,13 @@ static const TimerCfg_t s_TimerCfg = {
 	.IntPrio = 6,
 };
 
-#if 1
+#if 0
 Timer g_Timer;
 
 void TimerTrigEvtHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext)
 {
+	IOPinToggle(s_Leds[3].PortNo, s_Leds[3].PinNo);
+
 	g_AdvCnt++;
 
 	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
@@ -114,26 +150,53 @@ void TimerTrigEvtHandler(TimerDev_t * const pTimer, int TrigNo, void * const pCo
 
 void BtAppInitUserData()
 {
+	IOPinSet(s_Leds[2].PortNo, s_Leds[2].PinNo);
 	g_Timer.Init(s_TimerCfg);
 
 	g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, TimerTrigEvtHandler);
 }
 
 #else
-void BleAppAdvTimeoutHandler()
+void BtAppAdvTimeoutHandler()
 {
 	g_AdvCnt++;
 
-	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
-	BleAppAdvStart();
+	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
 }
 #endif
 
+/* NOTE 1: Build DFU zip file
+ * SoftDevice v7.2.0
+ * 		nrfutil pkg generate --hw-version 52 --sd-req 0x0101 --application-version 0x0 --application ./BleAdvertiser.hex --key-file ../../../../../../src/iosonata_dfukey.pem BleAdvertiser_package.zip
+ *
+ * SoftDevice v7.3.0
+ * 		nrfutil pkg generate --hw-version 52 --sd-req 0x0124 --application-version 0x0 --application ./BleAdvertiser.hex --key-file ../../../../../../src/iosonata_dfukey.pem BleAdvertiser_package.zip
+ */
+
 int main()
 {
-    BtAppInit(&s_BtAppCfg);
+	// Configure Leds
+	IOPinCfg(s_Leds, s_NbLeds);
 
-    BtAppRun();
+	IOPinToggle(0,4);
+
+	bool res = g_Uart.Init(s_UartCfg);
+
+	g_Uart.printf("BleAdvertiser\n\r");
+
+	// Clear all leds
+	for (int i = 0; i < s_NbLeds; i++)
+	{
+		IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
+	}
+
+	IOPinSet(s_Leds[0].PortNo, s_Leds[0].PinNo);
+
+	BtAppInit(&s_BtAppCfg);
+
+	IOPinSet(s_Leds[1].PortNo, s_Leds[1].PinNo);
+
+	BtAppRun();
 
 	return 0;
 }

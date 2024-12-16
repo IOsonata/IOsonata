@@ -35,6 +35,7 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "miscdev/button.h"
+#include "coredev/iopincfg.h"
 
 bool ButtonInit(ButtonDev_t * const pBut, ButtonCfg_t * const pCfg, TimerDev_t * const pTimer)
 {
@@ -47,8 +48,23 @@ bool ButtonInit(ButtonDev_t * const pBut, ButtonCfg_t * const pCfg, TimerDev_t *
 	pBut->Pin = pCfg->Pin;
 	pBut->Port = pCfg->Port;
 	pBut->Type = pCfg->Type;
+	pBut->bInt = pCfg->bInt;
 	pBut->State = BUTTON_STATE_UP;
+	pBut->pTimerDev = pTimer;
 
+	if (pBut->Act == BUTTON_LOGIC_HIGH)
+	{
+		IOPinConfig(pBut->Port, pBut->Pin, pBut->PinOp, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
+	}
+	else
+	{
+		IOPinConfig(pBut->Port, pBut->Pin, pBut->PinOp, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	}
+
+	if (pBut->bInt == true)
+	{
+
+	}
 	return true;
 }
 

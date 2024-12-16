@@ -57,6 +57,7 @@ public:
 	void SetAxisAlignmentMatrix(int8_t * const pMatrix);
 	virtual bool Compass(bool bEn);
 	virtual bool Pedometer(bool bEn);
+	virtual bool Euler(bool bEn) { return false; }
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 	/**
@@ -137,11 +138,8 @@ protected:
 		return vpMpu->Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
 
-
-protected:
 	virtual int Read(uint16_t Addr, uint8_t *pBuff, int Len);
 	virtual int Write(uint16_t Addr, uint8_t *pData, int Len);
-
 
 private:
 

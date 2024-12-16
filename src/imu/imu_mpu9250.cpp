@@ -468,7 +468,7 @@ uint16_t EncodeMatrix(int8_t * const pMatrix)
     return c;
 }
 
-bool ValidateQuat(int32_t Q[4])
+static bool ValidateQuat(int32_t Q[4])
 {
 	int32_t sq = 0;
 	int32_t q;

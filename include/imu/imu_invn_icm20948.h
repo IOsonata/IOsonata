@@ -56,6 +56,7 @@ public:
 	virtual void SetAxisAlignmentMatrix(int8_t * const pMatrix) ;
 	virtual bool Compass(bool bEn);
 	virtual bool Pedometer(bool bEn);
+	virtual bool Euler(bool bEn) { return false; }
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 
@@ -114,6 +115,7 @@ private:
 	static int InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
 	static int InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
 
+	AgmInvnIcm20948 *vpIcm;
 	inv_icm20948_t *vpIcmDevice;
 	inv_icm20948_t vIcmDevice;
 	int32_t vCfgAccFsr; // Default = +/- 4g. Valid ranges: 2, 4, 8, 16

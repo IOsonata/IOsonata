@@ -735,8 +735,15 @@ void AgmIcm20948::IntHandler()
 	if (istatus1 & ICM20948_INT_STATUS_DMP_INT1)
 	{
 		regaddr = ICM20948_DMP_INT_STATUS;
-		istatus2 = Read8((uint8_t*)&regaddr, 2);
-		Write8((uint8_t*)&regaddr, 2, istatus2);
+		istatus2 = Read16((uint8_t*)&regaddr, 2);
+		Write16((uint8_t*)&regaddr, 2, istatus2);
+
+		if (istatus2 & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
+		{
+			regaddr = ICM20948_FIFO_COUNTH;
+			uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
+			printf("cnt = %d\r\n", cnt);
+		}
 	}
 
 	if (istatus1 & ICM20948_INT_STATUS_PLL_RDY_INT)
