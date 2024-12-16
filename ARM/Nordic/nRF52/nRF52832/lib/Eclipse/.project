@@ -5308,7 +5308,7 @@
 		<link>
 			<name>src/nrfx/drivers/src/nrfx_clock.c</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/nrfx_clock.c</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_clock.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers/src/nrfx_nvmc.c</name>
