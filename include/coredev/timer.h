@@ -222,7 +222,7 @@ struct __Timer_Device {
 	/**
 	 * @brief   Disable timer trigger event.
 	 *
-	 * @param   TrigNo : Trigger number to disable. Index value starting at 0
+     * @param   pTimerDev  : Trigger number to disable. Index value starting at 0
 	 */
 	void (*DisableExtTrigger)(TimerDev_t * const pTimerDev);
 
@@ -307,7 +307,7 @@ static inline uint64_t nsTimerEnableTrigger(TimerDev_t * const pTimer, int TrigN
 											void * const pContext) {
 	return pTimer->EnableTrigger(pTimer, TrigNo, nsPeriod, Type, Handler, pContext);
 }
-static inline uint64_t msTimerEnableTimerTrigger(TimerDev_t * const pTimer,  int TrigNo, uint32_t msPeriod,
+static inline uint64_t msTimerEnableTrigger(TimerDev_t * const pTimer,  int TrigNo, uint32_t msPeriod,
 										 	TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 											void * const pContext) {
 	return (uint32_t)((uint64_t )pTimer->EnableTrigger(pTimer, TrigNo, (uint64_t)((uint64_t)msPeriod * 1000000ULL),
@@ -317,14 +317,14 @@ static inline uint64_t msTimerEnableTimerTrigger(TimerDev_t * const pTimer,  int
 /**
  * @brief   Disable timer trigger event.
  *
- * @param	pTimer	: Pointer to Timer device private data (timer handle)
+ * @param   pTimerDev   : Pointer to Timer device private data (timer handle)
  */
 static inline void TimerDisableExtTrigger(TimerDev_t * const pTimerDev) { pTimerDev->DisableExtTrigger(pTimerDev); }
 
 /**
  * @brief	Enable external timer trigger event.
  *
- * @param	pTimer	: Pointer to Timer device private data (timer handle)
+ * @param	pTimerDev   : Pointer to Timer device private data (timer handle)
  * @param   TrigDevNo : External trigger device number to enable. Index value starting at 0
  *
  * @return  true - Success
@@ -338,21 +338,23 @@ static inline bool TimerEnableExtTrigger(TimerDev_t * const pTimerDev, int TrigD
  *
  * This function return the current timer in msec since last reset.
  *
+ * @param   pTimerDev  : Pointer to Timer device private data (timer handle)
  * @return  Counter in millisecond
  */
-static inline uint32_t TimerGetMilisecond(TimerDev_t * const pTimer) {
-	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod / 1000000ULL;
+static inline uint32_t TimerGetMilisecond(TimerDev_t * const pTimerDev) {
+	return pTimerDev->GetTickCount(pTimerDev) * pTimerDev->nsPeriod / 1000000ULL;
 }
 
 /**
  * @brief   Convert tick count to millisecond.
  *
+ * @param   pTimerDev : Pointer to Timer device private data (timer handle)
  * @param   Count : Timer tick count value
  *
  * @return  Converted count in millisecond
  */
-static inline uint32_t TimerTickToMilisecond(TimerDev_t * const pTimer, uint64_t Count) {
-	return Count * pTimer->nsPeriod / 1000000ULL;
+static inline uint32_t TimerTickToMilisecond(TimerDev_t * const pTimerDev, uint64_t Count) {
+	return Count * pTimerDev->nsPeriod / 1000000ULL;
 }
 
 /**
@@ -360,10 +362,12 @@ static inline uint32_t TimerTickToMilisecond(TimerDev_t * const pTimer, uint64_t
  *
  * This function return the current timer in usec since last reset.
  *
+ * @param   pTimerDev  : Pointer to Timer device private data (timer handle)
+ *
  * @return  Counter in microsecond
  */
-static inline uint32_t TimerGetMicrosecond(TimerDev_t * const pTimer) {
-	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod / 1000ULL;
+static inline uint32_t TimerGetMicrosecond(TimerDev_t * const pTimerDev) {
+	return pTimerDev->GetTickCount(pTimerDev) * pTimerDev->nsPeriod / 1000ULL;
 }
 
 /**
@@ -371,10 +375,12 @@ static inline uint32_t TimerGetMicrosecond(TimerDev_t * const pTimer) {
  *
  * @param   Count : Timer tick count value
  *
+ * @param   pTimerDev  : Pointer to Timer device private data (timer handle)
+ *
  * @return  Converted count in microsecond
  */
-static inline uint32_t TimerTickToMicrosecond(TimerDev_t * const pTimer, uint64_t Count) {
-	return Count * pTimer->nsPeriod / 1000ULL;
+static inline uint32_t TimerTickToMicrosecond(TimerDev_t * const pTimerDev, uint64_t Count) {
+	return Count * pTimerDev->nsPeriod / 1000ULL;
 }
 
 /**
@@ -382,21 +388,24 @@ static inline uint32_t TimerTickToMicrosecond(TimerDev_t * const pTimer, uint64_
  *
  * This function return the current timer in nsec since last reset.
  *
+ * @param   pTimerDev  : Pointer to Timer device private data (timer handle)
+ *
  * @return  Counter in nanosecond
  */
-static inline uint64_t TimerGetNanosecond(TimerDev_t * const pTimer) {
-	return pTimer->GetTickCount(pTimer) * pTimer->nsPeriod;
+static inline uint64_t TimerGetNanosecond(TimerDev_t * const pTimerDev) {
+	return pTimerDev->GetTickCount(pTimerDev) * pTimerDev->nsPeriod;
 }
 
 /**
  * @brief   Convert tick count to nanosecond
  *
+ * @param   pTimerDev  : Pointer to Timer device private data (timer handle)
  * @param   Count : Timer tick count value
  *
  * @return  Converted count in nanosecond
  */
-static inline uint64_t TimerTickToNanosecond(TimerDev_t * const pTimer, uint64_t Count) {
-	return Count * pTimer->nsPeriod;
+static inline uint64_t TimerTickToNanosecond(TimerDev_t * const pTimerDev, uint64_t Count) {
+	return Count * pTimerDev->nsPeriod;
 }
 
 #ifdef __cplusplus
@@ -408,7 +417,7 @@ public:
 
 	Timer() { vTimer.pObj = this; }
 
-	virtual operator TimerDev_t const * () { return &vTimer; }
+	virtual operator TimerDev_t * const () { return &vTimer; }
 
     /**
      * @brief   Timer initialization.

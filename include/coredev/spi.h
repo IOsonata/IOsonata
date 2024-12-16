@@ -285,11 +285,10 @@ bool QuadSPISendCmd(SPIDev_t * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t A
  * receiving read command.
  *
  * @param	pDev	: Pointer SPI driver data initialized by SPIInit function
- * @param	SlaveIdx: Slave address index to assign the buffer
+ * @param	SlaveIdx : Slave address index to assign the buffer
  * @param	pBuff	: Pointer to buffer to receive data from master
  * @param	BuffLen	: Total buffer length in bytes
  *
- * @return	None
  */
 void SPISetSlaveRxBuffer(SPIDev_t * const pDev, int SlaveIdx, uint8_t * const pBuff, int BuffLen);
 
@@ -300,11 +299,10 @@ void SPISetSlaveRxBuffer(SPIDev_t * const pDev, int SlaveIdx, uint8_t * const pB
  * receiving write command.
  *
  * @param	pDev	: Pointer I2C driver data initialized be I2CInit function
- * @param	SlaveIdx: Slave address index to assign the data buffer
+ * @param	SlaveIdx : Slave address index to assign the data buffer
  * @param	pData	: Pointer to data buffer to send to master
  * @param	DataLen	: Total data length in bytes
  *
- * @return	None
  */
 void SPISetSlaveTxData(SPIDev_t * const pDev, int SlaveIdx, uint8_t * const pData, int DataLen);
 
@@ -363,11 +361,10 @@ public:
 	 * This function sets internal pointer to the location of data to be returned to SPI master upon
 	 * receiving read command.
 	 *
-	 * @param	SlaveIdx: Slave address index to assign the buffer
+	 * @param	SlaveIdx : Slave address index to assign the buffer
 	 * @param	pBuff	: Pointer to buffer to receive data from master
 	 * @param	BuffLen	: Total buffer length in bytes
 	 *
-	 * @return	None
 	 */
 	virtual void SetSlaveRxBuffer(int SlaveIdx, uint8_t * const pBuff, int BuffLen) {
 		SPISetSlaveRxBuffer(&vDevData, SlaveIdx, pBuff, BuffLen);
@@ -379,11 +376,10 @@ public:
 	 * This function sets internal pointer to the location of buffer to data from SPI master upon
 	 * receiving write command.
 	 *
-	 * @param	SlaveIdx: Slave address index to assign the data buffer
+	 * @param	SlaveIdx : Slave address index to assign the data buffer
 	 * @param	pData	: Pointer to data buffer to send to master
 	 * @param	DataLen	: Total data length in bytes
 	 *
-	 * @return	None
 	 */
 	virtual void SetSlaveTxData(int SlaveIdx, uint8_t * const pData, int DataLen) {
 		SPISetSlaveTxData(&vDevData, SlaveIdx, pData, DataLen);

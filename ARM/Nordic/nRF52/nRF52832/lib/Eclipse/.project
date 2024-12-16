@@ -871,6 +871,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/mpu9250_dmpmap.h</locationURI>
 		</link>
 		<link>
+			<name>include/miscdev/button.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/button.h</locationURI>
+		</link>
+		<link>
 			<name>include/miscdev/buzzer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/buzzer.h</locationURI>
@@ -1594,6 +1599,11 @@
 			<name>src/micro-ecc/uECC.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/button.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/button.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/buzzer.cpp</name>

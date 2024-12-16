@@ -321,7 +321,7 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense);
  *
  * @param	PortNo 	: Port number (up to 32 ports)
  * @param	PinNo  	: Pin number (up to 32 pins)
- * @param	Strength: Pin drive strength
+ * @param	Strength  : Pin drive strength
  */
 void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength);
 

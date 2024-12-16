@@ -44,6 +44,9 @@ SOFTWARE.
 
 #include "board.h"
 
+//#define DEMO_C
+#define DEMO_C_OBJ
+
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 #ifdef MCUOSC
@@ -65,7 +68,11 @@ const static TimerCfg_t s_TimerCfg = {
 	.EvtHandler = TimerHandler
 };
 
+#ifdef DEMO_C
+TimerDev_t g_TimerDev;
+#else
 Timer g_Timer;
+#endif
 
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
@@ -108,25 +115,47 @@ int main(void)
 {
 	IOPinCfg(s_Leds, s_NbLeds);
 
-    g_Timer.Init(s_TimerCfg);
+#ifdef DEMO_C
+	TimerInit(&g_TimerDev, &s_TimerCfg);
 
-    // Configure 100ms timer interrupt trigger
-	uint64_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS);
+	uint64_t period = msTimerEnableTrigger(&g_TimerDev, 0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, NULL, NULL);
 	if (period == 0)
 	{
 		printf("Trigger 0 failed\r\n");
 	}
-	period = g_Timer.EnableTimerTrigger(1, 50UL, TIMER_TRIG_TYPE_CONTINUOUS);
+	period = msTimerEnableTrigger(&g_TimerDev, 1, 100UL, TIMER_TRIG_TYPE_CONTINUOUS, NULL, NULL);
 	if (period == 0)
 	{
 		printf("Trigger 1 failed\r\n");
 	}
 
+#else
+    g_Timer.Init(s_TimerCfg);
+
+    // Configure 100ms timer interrupt trigger
+	uint64_t period = g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS);
+	if (period == 0)
+	{
+		printf("Trigger 0 failed\r\n");
+	}
+	period = g_Timer.EnableTimerTrigger(1, 100UL, TIMER_TRIG_TYPE_CONTINUOUS);
+	if (period == 0)
+	{
+		printf("Trigger 1 failed\r\n");
+	}
+#endif
+
 	printf("Period = %u\r\n", (uint32_t)period);
     while (1)
     {
         __WFI();
+#ifdef DEMO_C
+        printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)TimerGetMilisecond(&g_TimerDev), g_Period[0] / 1000, g_Period[1] / 1000);
+#elif defined(DEMO_C_OBJ)
+        printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)TimerGetMilisecond(g_Timer), g_Period[0] / 1000, g_Period[1] / 1000);
+#else
         printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)g_Timer.mSecond(), g_Period[0] / 1000, g_Period[1] / 1000);
+#endif
     }
 }
 

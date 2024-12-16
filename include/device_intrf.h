@@ -476,7 +476,7 @@ static inline bool DeviceIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
  * Return -1 in case of interrupt based or transfer without waiting for completion.
  * for example I2C where stop condition is handled asynchronously
  *
- * @param	pDevIntrf : Pointer to an instance of the Device Interface
+ * @param	pDev : Pointer to an instance of the Device Interface
  * @param	pBuff 	  : Pointer to memory area to receive data.
  * @param	BuffLen   : Length of buffer memory in bytes
  *
