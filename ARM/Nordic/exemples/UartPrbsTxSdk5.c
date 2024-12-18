@@ -86,10 +86,12 @@ void uart_error_handle(app_uart_evt_t * p_event)
 
 const nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(0);
 const nrfx_uarte_config_t g_UarteCfg = {
-	.pselrxd = UART_RX_PIN,
-	.pseltxd = UART_TX_PIN,
-	.hwfc = NRF_UARTE_HWFC_DISABLED,
+	.rxd_pin = UART_RX_PIN,
+	.txd_pin = UART_TX_PIN,
 	.baudrate = NRF_UARTE_BAUDRATE_1000000,
+	.config = {
+		.hwfc = NRF_UARTE_HWFC_DISABLED,
+	},
 	.interrupt_priority = 1
 };
 
@@ -142,7 +144,7 @@ int main()
 		}
 #else
 		s_bTxDone = false;
-		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) == NRFX_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, NRFX_UARTE_TX_BLOCKING) == NRFX_SUCCESS)
 		{
 			while (s_bTxDone == false);
 			for (int i = 0; i < TEST_BUFSIZE; i++)
