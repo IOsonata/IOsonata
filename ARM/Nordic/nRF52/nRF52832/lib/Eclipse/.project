@@ -3076,9 +3076,24 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_advertising/ble_advertising.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/ble_advertising/ble_advertising.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_advertising/ble_advertising.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/ble_dtm/ble_dtm.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/ble_dtm.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_dtm/ble_dtm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_dtm/ble_dtm.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_dtm/ble_dtm_hw.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_dtm/ble_dtm_hw.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/ble_dtm/ble_dtm_hw_nrf52.c</name>
@@ -3091,9 +3106,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_link_ctx_manager/ble_link_ctx_manager.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/ble_link_ctx_manager/ble_link_ctx_manager.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_link_ctx_manager/ble_link_ctx_manager.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/ble_racp/ble_racp.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_racp/ble_racp.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_racp/ble_racp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_racp/ble_racp.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/ble_radio_notification/ble_radio_notification.c</name>
@@ -3101,12 +3126,27 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_radio_notification/ble_radio_notification.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/ble_radio_notification/ble_radio_notification.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_radio_notification/ble_radio_notification.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/ble_services/ble_bas</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/ble_services/ble_dis</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_hids</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -3136,9 +3176,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/nrf_ble_gatt/nrf_ble_gatt.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/nrf_ble_gatt/nrf_ble_gatt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/nrf_ble_gatt/nrf_ble_gatt.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/nrf_ble_qwr/nrf_ble_qwr.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/nrf_ble_qwr/nrf_ble_qwr.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/nrf_ble_qwr/nrf_ble_qwr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/nrf_ble_qwr/nrf_ble_qwr.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/nrf_ble_scan/nrf_ble_scan.c</name>
@@ -3146,9 +3196,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/nrf_ble_scan/nrf_ble_scan.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/nrf_ble_scan/nrf_ble_scan.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/nrf_ble_scan/nrf_ble_scan.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/auth_status_tracker.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/auth_status_tracker.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/auth_status_tracker.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/auth_status_tracker.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/gatt_cache_manager.c</name>
@@ -3156,9 +3216,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/gatt_cache_manager.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/gatt_cache_manager.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/gatt_cache_manager.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/gatts_cache_manager.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/gatts_cache_manager.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/gatts_cache_manager.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/gatts_cache_manager.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/id_manager.c</name>
@@ -3166,9 +3236,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/id_manager.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/id_manager.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/id_manager.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/nrf_ble_lesc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/nrf_ble_lesc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/nrf_ble_lesc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/nrf_ble_lesc.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/peer_data_storage.c</name>
@@ -3176,9 +3256,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_data_storage.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/peer_data_storage.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_data_storage.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/peer_database.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_database.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/peer_database.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_database.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/peer_id.c</name>
@@ -3186,9 +3276,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_id.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/peer_id.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_id.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/peer_manager.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_manager.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/peer_manager.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_manager.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/peer_manager_handler.c</name>
@@ -3196,9 +3296,29 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_manager_handler.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/peer_manager_handler.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_manager_handler.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/peer_manager_internal.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_manager_internal.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/peer_manager_types.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/peer_manager_types.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/pm_buffer.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/pm_buffer.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/pm_buffer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/pm_buffer.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/security_dispatcher.c</name>
@@ -3206,9 +3326,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/security_dispatcher.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/security_dispatcher.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/security_dispatcher.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/peer_manager/security_manager.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/security_manager.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/peer_manager/security_manager.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/peer_manager/security_manager.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/atomic/nrf_atomic.c</name>
@@ -5396,9 +5526,49 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_bas/ble_bas.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_bas/ble_bas.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_bas/ble_bas.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_dfu/ble_dfu.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dfu/ble_dfu.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_dfu/ble_dfu.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dfu/ble_dfu.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_dfu/ble_dfu_bonded.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dfu/ble_dfu_bonded.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_dfu/ble_dfu_unbonded.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dfu/ble_dfu_unbonded.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/ble_services/ble_dis/ble_dis.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dis/ble_dis.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_dis/ble_dis.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dis/ble_dis.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_hids/ble_hids.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_hids/ble_hids.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_services/ble_hids/ble_hids.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_hids/ble_hids.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend/mbedtls</name>
