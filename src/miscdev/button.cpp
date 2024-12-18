@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	button.cpp
 
-@brief	Button class
+@brief	Button implementation
 
 
 @author	Hoang Nguyen Hoan
@@ -34,8 +34,22 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 
+#include "istddef.h"
 #include "miscdev/button.h"
-#include "coredev/iopincfg.h"
+
+void ButtonIrqHandler(int IntNo, void *pCtx)
+{
+	ButtonDev_t *but = (ButtonDev_t*)pCtx;
+
+	if (IntNo == but->IntNo)
+	{
+		if (but->EvtHandler)
+		{
+			but->State = (BUTTON_STATE)(IOPinRead(but->Port, but->Pin) ^ (int)but->Act);
+			but->EvtHandler(but, but->State);
+		}
+	}
+}
 
 bool ButtonInit(ButtonDev_t * const pBut, ButtonCfg_t * const pCfg, TimerDev_t * const pTimer)
 {
@@ -51,6 +65,8 @@ bool ButtonInit(ButtonDev_t * const pBut, ButtonCfg_t * const pCfg, TimerDev_t *
 	pBut->bInt = pCfg->bInt;
 	pBut->State = BUTTON_STATE_UP;
 	pBut->pTimerDev = pTimer;
+	pBut->IntNo = pCfg->IntNo;
+	pBut->EvtHandler = pCfg->EvtHandler;
 
 	if (pBut->Act == BUTTON_LOGIC_HIGH)
 	{
@@ -63,7 +79,7 @@ bool ButtonInit(ButtonDev_t * const pBut, ButtonCfg_t * const pCfg, TimerDev_t *
 
 	if (pBut->bInt == true)
 	{
-
+        IOPinEnableInterrupt(pCfg->IntNo, 6, pCfg->Port, pCfg->Pin, IOPINSENSE_TOGGLE, NULL, pBut);
 	}
 	return true;
 }

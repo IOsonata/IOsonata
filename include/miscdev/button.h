@@ -38,10 +38,11 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "coredev/timer.h"
+#include "iopinctrl.h"
 
 typedef enum __Button_State{
-	BUTTON_STATE_UP,
 	BUTTON_STATE_DOWN,
+	BUTTON_STATE_UP,
 } BUTTON_STATE;
 
 typedef enum __Button_Logic {
@@ -54,27 +55,36 @@ typedef enum __Button_Type {
 	BUTTON_TYPE_CAPSENSE
 } BUTTON_TYPE;
 
+
+typedef struct __Button_Dev		ButtonDev_t;
+
+typedef void (*ButEvtHandler_t)(ButtonDev_t *pBut, BUTTON_STATE State);
+
 #pragma pack(push, 4)
 
 typedef struct __Button_Config {
 	BUTTON_TYPE Type;			//!< Button type
-	uint8_t Port;				//!< Gpio port #
-	uint8_t Pin;				//!< Gpio pin #
+	int Port;				//!< Gpio port #
+	int Pin;				//!< Gpio pin #
 	uint8_t PinOp;
 	BUTTON_LOGIC Act;			//!< Button active logic
 	bool bInt;					//!< Interrupt enable
+	uint8_t IntNo;				//!< Interrupt number to use
+	ButEvtHandler_t EvtHandler;
 } ButtonCfg_t;
 
-typedef struct __Button_Dev {
+struct __Button_Dev {
 	BUTTON_TYPE Type;			//!< Button type
 	uint8_t Port;				//!< Gpio port #
 	uint8_t Pin;				//!< Gpio pin #
 	uint8_t PinOp;
 	BUTTON_LOGIC Act;			//!< Button active logic
 	bool bInt;					//!< Interrupt enable
+	uint8_t IntNo;				//!< Interrupt number to use
 	TimerDev_t * pTimerDev;		//!< Pointer to timer device
 	volatile BUTTON_STATE State;//!< Current button state
-} ButtonDev_t;
+	ButEvtHandler_t EvtHandler;
+};
 
 #pragma pack(pop)
 
@@ -83,7 +93,7 @@ extern "C" {
 #endif
 
 bool ButtonInit(ButtonDev_t * const pBut, ButtonCfg_t * const pCfg, TimerDev_t * const pTimer);
-static inline BUTTON_STATE ButtonGetState(ButtonDev_t * const pBut) { return pBut->State; }
+static inline BUTTON_STATE ButtonGetState(ButtonDev_t * const pBut) { return (BUTTON_STATE)(IOPinRead(pBut->Port, pBut->Pin) ^ (int)pBut->Act); }
 
 #ifdef __cplusplus
 }
