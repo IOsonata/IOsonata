@@ -230,6 +230,14 @@ uint32_t SystemPeriphClockGet(int Idx);
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq);
 
+/**
+ * @brief	Initialize oscillator
+ *
+ * This function is MCU dependent. It is call to configure the oscillators.
+ * For example set internal load capacitance value
+ *
+ */
+void SystemOscInit(void);
 
 #ifdef __cplusplus
 }

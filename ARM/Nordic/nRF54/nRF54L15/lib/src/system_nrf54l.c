@@ -42,22 +42,6 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 #endif    
 
-// Overload this variable in application firmware to change oscillator
-__WEAK McuOsc_t g_McuOsc = {
-#if 0
-	// BLYSTL15
-	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 10, 100},
-	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 70},
-#else
-	// Nordic DK
-	// 32MHz, 8pF
-	// 32.768kHz, 9pF
-	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 80},
-	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 90},
-#endif
-	.bUSBClk = false
-};
-
 
 void SystemCoreClockUpdate(void)
 {
@@ -199,38 +183,9 @@ void SystemInit(void)
             #endif
         #endif
     #endif
-	/* As specified in the nRF54L15 PS:
-	 * CAPVALUE = (((CAPACITANCE-5.5)*(FICR->XOSC32MTRIM.SLOPE+791)) +
-	 *              FICR->XOSC32MTRIM.OFFSET<<2)>>8;
-	 * where CAPACITANCE is the desired total load capacitance value in pF,
-	 * holding any value between 4.0 pF and 17.0 pF in 0.25 pF steps.
-	 */
-	uint32_t intcap = 0;
-	if (g_McuOsc.CoreOsc.LoadCap > 0)
-	{
-		int32_t slope = (NRF_FICR->XOSC32MTRIM & FICR_XOSC32MTRIM_SLOPE_Msk) >> FICR_XOSC32MTRIM_SLOPE_Pos;
-		slope = ((-(slope>>8))<<8) | slope;
-		uint32_t offset = (NRF_FICR->XOSC32MTRIM & FICR_XOSC32MTRIM_OFFSET_Msk) >> FICR_XOSC32MTRIM_OFFSET_Pos;
-		intcap = (uint32_t)(((g_McuOsc.CoreOsc.LoadCap - 55) * (slope + 791)) / 10 + (offset << 2))>>8;
-	}
-	NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = intcap;
 
-	intcap = 0;
-	if (g_McuOsc.LowPwrOsc.LoadCap > 0)
-	{
-		/* As specified in the nRF54L15 PS:
-		 * CAPVALUE = round( (CAPACITANCE - 4) * (FICR->XOSC32KTRIM.SLOPE + 0.765625 * 2^9)/(2^9)
-		 *            + FICR->XOSC32KTRIM.OFFSET/(2^6) );
-		 * where CAPACITANCE is the desired capacitor value in pF, holding any
-		 * value between 4 pF and 18 pF in 0.5 pF steps.
-		 */
-		int32_t slope = (NRF_FICR->XOSC32KTRIM & FICR_XOSC32KTRIM_SLOPE_Msk) >> FICR_XOSC32KTRIM_SLOPE_Pos;
-		slope = ((-(slope>>8))<<8) | slope;
-		uint32_t offset = (NRF_FICR->XOSC32KTRIM & FICR_XOSC32KTRIM_OFFSET_Msk) >> FICR_XOSC32KTRIM_OFFSET_Pos;
+	SystemOscInit();
 
-		intcap = (((g_McuOsc.LowPwrOsc.LoadCap - 40UL) * (uint32_t)(slope + 392) + 5) / 5120) + (offset >> 6);
-	}
-	NRF_OSCILLATORS->XOSC32KI.INTCAP = intcap;
 }
 
 /*lint --flb "Leave library region" */
