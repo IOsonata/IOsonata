@@ -75,8 +75,6 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SPU10_IRQHandler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER10_IRQHandler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void RTC10_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void EGU10_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void AAR10_CCM10_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void ECB10_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPU20_IRQHandler(void);
@@ -109,13 +107,12 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void GRTC_2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void GRTC_3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPU30_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL30_IRQHandler(void);
-__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void RTC30_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void CLOCK_POWER_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void COMP_LPCOMP_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void WDT30_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void WDT31_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE30_0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE30_1_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void CLOCK_POWER_IRQHandler(void);
 
 /**
  * This interrupt vector is by default located in FLASH. Though it can not be

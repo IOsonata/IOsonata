@@ -37,8 +37,8 @@ SOFTWARE.
 #include <atomic>
 #include <stdlib.h>
 
-#include "mpsl.h"
-#include "mpsl_fem_init.h"
+//#include "mpsl.h"
+//#include "mpsl_fem_init.h"
 #include "sdc.h"
 #include "sdc_soc.h"
 #include "sdc_hci_cmd_le.h"
@@ -59,6 +59,7 @@ SOFTWARE.
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_appearance.h"
+#include "nrf_mpsl.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
 
@@ -190,11 +191,13 @@ const static TimerCfg_t s_BtAppSdcTimerCfg = {
 static Timer g_BtAppSdcTimer;
 volatile int s_SdcAclTxPktAvail = BT_SDC_TX_MAX_PACKET_COUNT + 1;
 
+#if 0
 static void BtStackMpslAssert(const char * const file, const uint32_t line)
 {
 	DEBUG_PRINTF("MPSL Fault: %s, %d\n", file, line);
 	while(1);
 }
+#endif
 
 static void BtStackSdcAssert(const char * file, const uint32_t line)
 {
@@ -556,6 +559,7 @@ uint16_t BleAppGetConnHandle()
 
 static uint8_t BtStackRandPrioLowGet(uint8_t *pBuff, uint8_t Len)
 {
+	DEBUG_PRINTF("BtStackRandPrioLowGet\r\n");
 	for (int i = 0; i < Len; i++)
 	{
 		pBuff[i] = rand();
@@ -573,6 +577,9 @@ static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 {
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 	NRF_CRACEN_Type *reg = NRF_CRACEN_S;
+
+	BtStackRandPrioLowGet(pBuff, Len);
+
 #else
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
@@ -650,7 +657,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
     {
     	if (BtAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_APPEARANCE, (uint8_t*)&pCfg->Appearance, 2) == false)
     	{
-//    		return false;
+    		return false;
     	}
     }
 
@@ -685,7 +692,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
     {
     	if (BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
     	{
-
+    		return false;
     	}
 
     }
@@ -814,6 +821,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		}
 	}
 
+	DEBUG_PRINTF("BtAppAdvInit returns true\r\n");
 	return true;
 }
 
@@ -973,7 +981,13 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	{
 		return false;
 	}
-    // Enable BLE stack.
+
+	if (MpslInit() == false)
+	{
+		return false;
+	}
+
+	// Enable BLE stack.
 
 	DEBUG_PRINTF("sdc_enable\r\n");
 
@@ -999,6 +1013,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	int32_t res = 0;
+#if 0
 	mpsl_clock_lfclk_cfg_t lfclk = {MPSL_CLOCK_LF_SRC_RC, 0,};
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
 
@@ -1021,9 +1036,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	DEBUG_PRINTF("mpsl_init\r\n");
 
+
 	// Initialize Nordic multi-protocol support library (MPSL)
 #ifdef NRF54L15_XXAA
+	//NVIC_SetPriority(SWI00_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
+	//NVIC_EnableIRQ(SWI00_IRQn);
+
 	res = mpsl_init(&lfclk, SWI00_IRQn, BtStackMpslAssert);
+	res = mpsl_clock_hfclk_latency_set(MPSL_CLOCK_HF_LATENCY_TYPICAL);
+	mpsl_pan_rfu();
 #else
 	res = mpsl_init(&lfclk, PendSV_IRQn, BtStackMpslAssert);
 #endif
@@ -1036,10 +1057,18 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 #ifdef NRF54L15_XXAA
 	NVIC_SetPriority(SWI00_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
 	NVIC_EnableIRQ(SWI00_IRQn);
+//	NVIC_SetPriority(RADIO_0_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
+//	NVIC_EnableIRQ(RADIO_0_IRQn);
 #else
 	NVIC_SetPriority(PendSV_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
 	NVIC_EnableIRQ(PendSV_IRQn);
 #endif
+#endif
+
+//	if (MpslInit() == false)
+//	{
+//		return false;
+//	}
 
 	s_BtAppData.CoexMode = pCfg->CoexMode;
 
@@ -1088,7 +1117,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *addr = (sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *)abuf;
 
-	DEBUG_PRINTF("sdc_hci_cmd_vs_zephyr_read_static_addresses\r\n");
+	DEBUG_PRINTF("sdc_hci_cmd_vs_zephyr_read_static_addresses %p\r\n", *addr);
 
 	res = sdc_hci_cmd_vs_zephyr_read_static_addresses(addr);
 	if (res == 0)
@@ -1259,6 +1288,7 @@ void BtAppRun()
 		BtAppAdvStart();
 	}
 
+DEBUG_PRINTF("Loop\r\n");
 
 	while (1)
 	{
@@ -1452,6 +1482,7 @@ bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint1
 #endif
 }
 
+#if 0
 extern "C" {
 #ifdef NRF54L15_XXAA
 void SWI00_IRQHandler(void)
@@ -1459,28 +1490,73 @@ void SWI00_IRQHandler(void)
 void PendSV_Handler(void)
 #endif
 {
+	DEBUG_PRINTF("mpsl_low_priority_process\r\n");
 	mpsl_low_priority_process();
 }
 
+
+#ifdef NRF54L15_XXAA
+void RADIO_0_IRQHandler(void)
+#else
 void RADIO_IRQHandler(void)
+#endif
 {
+	DEBUG_PRINTF("MPSL_IRQ_RADIO_Handler\r\n");
 	MPSL_IRQ_RADIO_Handler();
 }
 
+#ifdef NRF54L15_XXAA
+void CLOCK_POWER_IRQHandler()
+#else
 void POWER_CLOCK_IRQHandler()
+#endif
 {
+	DEBUG_PRINTF("MPSL_IRQ_CLOCK_Handler\r\n");
 	MPSL_IRQ_CLOCK_Handler();
 }
 
+#ifdef NRF54L15_XXAA
+void GRTC_3_IRQHandler(void)
+#else
 void RTC0_IRQHandler(void)
+#endif
 {
+	DEBUG_PRINTF("MPSL_IRQ_RTC0_Handler\r\n");
 	MPSL_IRQ_RTC0_Handler();
 }
 
+#ifdef NRF54L15_XXAA
+void TIMER10_IRQHandler(void)
+#else
 void TIMER0_IRQHandler(void)
+#endif
 {
+	DEBUG_PRINTF("MPSL_IRQ_TIMER0_Handler\r\n");
 	MPSL_IRQ_TIMER0_Handler();
 }
+
+/** @brief MPSL requesting CONSTLAT to be on.
+ *
+ * The application needs to implement this function.
+ * MPSL will call the function when it needs CONSTLAT to be on.
+ * It only calls the function on nRF54L Series devices.
+ */
+void mpsl_constlat_request_callback(void)
+{
+	DEBUG_PRINTF("mpsl_constlat_request_callback\r\n");
 }
 
+/** @brief De-request CONSTLAT to be on.
+ *
+ * The application needs to implement this function.
+ * MPSL will call the function when it no longer needs CONSTLAT to be on.
+ * It only only calls the function on nRF54L Series devices.
+ */
+void mpsl_lowpower_request_callback(void)
+{
+	DEBUG_PRINTF("mpsl_lowpower_request_callback\r\n");
+}
 
+}
+
+#endif

@@ -161,6 +161,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/nrf_mpsl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrf_mpsl.h</locationURI>
+		</link>
+		<link>
 			<name>include/nrfx_config_nrf54l15_application.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/include/nrfx_config_nrf54l15_application.h</locationURI>
@@ -364,6 +369,11 @@
 			<name>src/miscdev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrf_mpsl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nrf_mpsl.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx</name>

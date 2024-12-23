@@ -45,5 +45,20 @@
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/bt_app_sdc.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/nrfx_clock.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/nrfx_clock.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx_clock_mpsl.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/nrfx_clock_mpsl.c</locationURI>
+		</link>
+		<link>
+			<name>src/osc_nrf54l.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/osc_nrf54l.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

@@ -414,6 +414,7 @@ void nrfx_power_irq_handler(void)
 #endif
 }
 
+#if 0
 #if NRFX_CHECK(NRFX_CLOCK_ENABLED)
 /*
  * If both POWER and CLOCK drivers are used, a common IRQ handler function must
@@ -430,6 +431,7 @@ __WEAK void nrfx_power_clock_irq_handler(void)
     nrfx_power_irq_handler();
     nrfx_clock_irq_handler();
 }
+#endif
 #endif
 
 #endif // NRFX_CHECK(NRFX_POWER_ENABLED)

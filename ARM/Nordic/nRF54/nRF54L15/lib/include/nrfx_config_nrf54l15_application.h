@@ -76,7 +76,7 @@
  * Boolean. Accepted values: 0 and 1.
  */
 #ifndef NRFX_CLOCK_CONFIG_LF_CAL_ENABLED
-#define NRFX_CLOCK_CONFIG_LF_CAL_ENABLED 1
+#define NRFX_CLOCK_CONFIG_LF_CAL_ENABLED 0
 #endif
 
 /**

@@ -34,6 +34,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "nrf.h"
+#include "nrf_oscillators.h"
 
 #include "coredev/system_core_clock.h"
 
@@ -55,6 +56,8 @@ __WEAK McuOsc_t g_McuOsc = {
 
 void SystemOscInit(void)
 {
+//	 INTCAP = (((CAPACITANCE-5.5)*(FICR->XOSC32MTRIM.SLOPE+791)) +
+//	           FICR->XOSC32MTRIM.OFFSET*4)/256
 	/* As specified in the nRF54L15 PS:
 	 * CAPVALUE = (((CAPACITANCE-5.5)*(FICR->XOSC32MTRIM.SLOPE+791)) +
 	 *              FICR->XOSC32MTRIM.OFFSET<<2)>>8;
@@ -67,9 +70,13 @@ void SystemOscInit(void)
 		int32_t slope = (NRF_FICR->XOSC32MTRIM & FICR_XOSC32MTRIM_SLOPE_Msk) >> FICR_XOSC32MTRIM_SLOPE_Pos;
 		slope = ((-(slope>>8))<<8) | slope;
 		uint32_t offset = (NRF_FICR->XOSC32MTRIM & FICR_XOSC32MTRIM_OFFSET_Msk) >> FICR_XOSC32MTRIM_OFFSET_Pos;
-		intcap = (uint32_t)(((g_McuOsc.CoreOsc.LoadCap - 55) * (slope + 791)) / 10 + (offset << 2))>>8;
+		intcap = (uint32_t)((((g_McuOsc.CoreOsc.LoadCap * 2 - 40) - 55) * (slope + 791)) / 10 + (offset << 2))>>8;
 	}
-	NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = 20;//intcap;
+//	NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = 32;//intcap;
+	//intcap = NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP;
+
+	//intcap = OSCILLATORS_HFXO_CAP_CALCULATE(NRF_FICR, (12));
+	NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = intcap;
 
 	intcap = 0;
 	if (g_McuOsc.LowPwrOsc.LoadCap > 0)
@@ -86,6 +93,7 @@ void SystemOscInit(void)
 
 		intcap = (((g_McuOsc.LowPwrOsc.LoadCap - 40UL) * (uint32_t)(slope + 392) + 5) / 5120) + (offset >> 6);
 	}
-	NRF_OSCILLATORS->XOSC32KI.INTCAP = 36;//intcap;
+	NRF_OSCILLATORS->XOSC32KI.INTCAP = 20;//intcap;
+	intcap = NRF_OSCILLATORS->XOSC32KI.INTCAP;
 }
 
