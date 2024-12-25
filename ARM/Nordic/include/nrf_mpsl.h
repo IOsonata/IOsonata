@@ -41,7 +41,7 @@ SOFTWARE.
 extern "C" {
 #endif
 
-bool nrf_mpsl_init(void);
+bool MpslInit(void);
 
 #ifdef __cplusplus
 }
