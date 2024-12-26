@@ -167,14 +167,14 @@ private:
 class AgBmi270 : public AccelBmi270, public GyroBmi270, public TempBmi270 {
 public:
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
-		vbSensorEnabled[0] = AccelBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[0];
+		vbSensorEnabled[0] = AccelBmi270::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[0];
 	}
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
-		vbSensorEnabled[1] = GyroBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[1];
+		vbSensorEnabled[1] = GyroBmi270::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[1];
 	}
 
 	virtual bool Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) {
-		vbSensorEnabled[2] = TempBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[2];
+		vbSensorEnabled[2] = TempBmi270::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[2];
 	}
 
 	virtual bool Enable();
