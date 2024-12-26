@@ -144,6 +144,13 @@ private:
 	int32_t vCfgGyroFsr; // Default = +/- 2000dps. Valid ranges: 250, 500, 1000, 2000
 };
 
+extern "C" {
+#endif // __cplusplus
+
+// public C functions
+
+#ifdef __cplusplus
+}
 #endif // __cplusplus
 
 /** @} End of group Sensors */

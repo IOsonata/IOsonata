@@ -97,6 +97,17 @@ static uint8_t convert_to_generic_ids[INV_ICM20948_SENSOR_MAX] = {
 	INV_SENSOR_TYPE_B2S
 };
 */
+
+__attribute__((weak)) void inv_icm20948_sleep(int ms)
+{
+	msDelay(ms);
+}
+
+__attribute__((weak)) void inv_icm20948_sleep_us(int us)
+{
+	usDelay(us);
+}
+
 int AgmInvnIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
 {
 	AgmInvnIcm20948 *dev = (AgmInvnIcm20948*)context;

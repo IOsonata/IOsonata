@@ -156,12 +156,12 @@ SOFTWARE.
 
 #define ICM20948_DMP_INT_STATUS_MSG_DMP_INT			(1<<1)
 #define ICM20948_DMP_INT_STATUS_WAKE_ON_MOTION_INT	(1<<3)
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0		(1<<0)	// CI Command
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_2		(1<<1)	// CIM Command - SMD
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_3		(1<<2)	// CIM Command - Pedometer
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_4		(1<<4)	// CIM Command - Pedometer binning
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_5		(1<<5)	// CIM Command - Bring To See Gesture
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_6		(1<<6)	// CIM Command - Look To See Gesture
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0		(1<<8)	// CI Command
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_2		(1<<9)	// CIM Command - SMD
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_3		(1<<10)	// CIM Command - Pedometer
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_4		(1<<12)	// CIM Command - Pedometer binning
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_5		(1<<13)	// CIM Command - Bring To See Gesture
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_6		(1<<14)	// CIM Command - Look To See Gesture
 
 #define ICM20948_INT_STATUS				(ICM20948_REG_BANK0 | 25)	// 0x19
 
@@ -741,7 +741,6 @@ public:
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
 	int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 	int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
-	bool SelectBank(uint8_t BankNo);
 
 	bool UpdateData();
 	virtual void IntHandler();
@@ -752,6 +751,7 @@ private:
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
+	bool SelectBank(uint8_t BankNo);
 
 	bool vbInitialized;
 	uint8_t vMagCtrl1Val;

@@ -53,6 +53,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "imu/imu_invn_icm20948.h"
 #include "imu/imu_icm20948.h"
 #include "imu/imu_mpu9250.h"
+#include "coredev/uart.h"
 
 //#include "bmi323.h"
 //#include "common.h"
@@ -60,6 +61,39 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 std::atomic<bool> g_bTest(false);
+
+#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
+
+#ifdef BLYST_MOTION
+
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
+
+static const IOPinCfg_t s_UartPins[] = UART_PINS;
+
+// UART configuration data
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = 1000000,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 1,
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,//UARTFIFOSIZE,
+	.pRxMem = NULL,//s_UartRxFifo,
+	.TxMemSize = 0,//UARTFIFOSIZE,//FIFOSIZE,
+	.pTxMem = NULL,//s_UartTxFifo,//g_TxBuff,
+	.bDMAMode = true,
+};
+
+UART g_Uart;
+#endif
 
 //#include "sensor.h"
 //#define AK0991x_DEFAULT_I2C_ADDR	0x0C	/* The default I2C address for AK0991x Magnetometers */
@@ -186,8 +220,8 @@ static const ImuCfg_t s_ImuCfg = {
 //#define BMI323
 
 #ifdef ICM20948
-ImuIcm20948 g_Imu;
-AgmIcm20948 g_MotSensor;
+ImuInvnIcm20948 g_Imu;
+AgmInvnIcm20948 g_MotSensor;
 #elif defined(MPU9250)
 ImuMpu9250 g_Imu;
 AgmMpu9250 g_MotSensor;
@@ -254,20 +288,15 @@ uint64_t inv_icm20948_get_time_us(void)
 	return g_Timer.uSecond();
 }
 
-void inv_icm20948_sleep(int ms)
-{
-	msDelay(ms);
-}
-
-void inv_icm20948_sleep_us(int us)
-{
-	usDelay(us);
-}
-
 bool HardwareInit()
 {
 	bool res;
 
+#ifdef BLYST_MOTION
+	g_Uart.Init(s_UartCfg);
+
+	g_Uart.printf("BlystMotion Board\n\r");
+#endif
 
 	g_Timer.Init(s_TimerCfg);
 //#if SPI
@@ -297,8 +326,8 @@ bool HardwareInit()
 #endif
 
 #if defined(ICM20948) || defined(MPU9250)
-		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
-//		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
+//		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
+		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
 #endif
 	}
 
@@ -392,7 +421,7 @@ int main()
 		{
 			cnt = 10;
 			//printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)dt, arawdata.X, arawdata.Y, arawdata.Z);
-			printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
+			g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
 			//printf("Quat %d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
 		}
 	}
