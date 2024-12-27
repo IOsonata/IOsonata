@@ -205,7 +205,7 @@ bool AgmInvnIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf *pIntrf,
 	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_RAW_ACCELEROMETER, (const void *)&vCfgAccFsr);
 	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_ACCELEROMETER, (const void *)&vCfgAccFsr);
 
-	AccelSensor::Range(ICM20948_ACC_ADC_RANGE);
+	AccelSensor::vData.Range = AccelSensor::Range(ICM20948_ACC_ADC_RANGE);
 	Scale(CfgData.Scale);
 	//LowPassFreq(vSampFreq / 2000);
 
@@ -233,7 +233,7 @@ bool AgmInvnIcm20948::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf *pIntrf, 
 	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_GYROSCOPE, (const void *)&vCfgGyroFsr);
 	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED, (const void *)&vCfgGyroFsr);
 
-	GyroSensor::Range(ICM20948_GYRO_ADC_RANGE);
+	GyroSensor::vData.Range = GyroSensor::Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(CfgData.Sensitivity);
 
 	return true;

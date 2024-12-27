@@ -130,7 +130,7 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pI
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
-	AccelSensor::Range(ICM20948_ACC_ADC_RANGE);
+	vData.Range = Range(ICM20948_ACC_ADC_RANGE);
 
 	SamplingFrequency(CfgData.Freq);
 	Scale(CfgData.Scale);
@@ -281,7 +281,7 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 	SamplingFrequency(CfgData.Freq);
 
-	GyroSensor::Range(ICM20948_GYRO_ADC_RANGE);
+	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(CfgData.Sensitivity);
 
 	uint16_t regaddr = ICM20948_PWR_MGMT_2;
