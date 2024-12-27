@@ -50,6 +50,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   * @{
   */
 
+#define ICM20948_ACC_ADC_RANGE			32767
+#define ICM20948_GYRO_ADC_RANGE			32767
+#define AK09916_ADC_RANGE				32752
+
 #ifdef __cplusplus
 
 class AgmInvnIcm20948 : public AccelSensor, public GyroSensor, public MagSensor {

@@ -205,6 +205,7 @@ bool AgmInvnIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf *pIntrf,
 	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_RAW_ACCELEROMETER, (const void *)&vCfgAccFsr);
 	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_ACCELEROMETER, (const void *)&vCfgAccFsr);
 
+	AccelSensor::Range(ICM20948_ACC_ADC_RANGE);
 	Scale(CfgData.Scale);
 	//LowPassFreq(vSampFreq / 2000);
 
@@ -232,6 +233,7 @@ bool AgmInvnIcm20948::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf *pIntrf, 
 	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_GYROSCOPE, (const void *)&vCfgGyroFsr);
 	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED, (const void *)&vCfgGyroFsr);
 
+	GyroSensor::Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(CfgData.Sensitivity);
 
 	return true;
@@ -243,6 +245,8 @@ bool AgmInvnIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf *pIntrf, T
 		return false;
 
 	int rc = inv_icm20948_initialize_auxiliary(&vIcmDevice);
+
+	MagSensor::Range(AK09916_ADC_RANGE);
 
 	return rc == 0;
 }
