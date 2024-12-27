@@ -134,7 +134,7 @@ uint8_t AccelBmi323::Scale(uint8_t Value)
 		Value = 16;
 	}
 
-	Write16(&regaddr, 1, BMI323_ACC_CONFIG_RANGE_2G);
+	Write16(&regaddr, 1, d);//BMI323_ACC_CONFIG_RANGE_2G);
 	msDelay(1);	// Require delay, donot remove
 
 	vData.Scale = Value;

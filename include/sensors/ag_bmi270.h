@@ -114,12 +114,12 @@ SOFTWARE.
 #define BMI270_INT_STATUS0_ANY_MOTION_OUT							(1<<6)	//!< Any motion detection output
 
 #define BMI270_INT_STATUS1_REG						0x1D
-#define BMI270_INT_STATUS1_FFULL_INT								(1<<0)	//!< FIFO full interrupt
-#define BMI270_INT_STATUS1_FWM_INT									(1<<1)	//!< FIFO watermark interrupt
-#define BMI270_INT_STATUS1_ERR_INT									(1<<2)	//!< Error interrupt
-#define BMI270_INT_STATUS1_AUX_DRDY_INT								(1<<5)	//!< Auxiliary data ready interrupt
-#define BMI270_INT_STATUS1_GYR_DRDY_INT								(1<<6)	//!< Gyroscope data ready interrupt
-#define BMI270_INT_STATUS1_ACC_DRDY_INT								(1<<7)	//!< Accelerometer data ready interrupt
+#define BMI270_INT_STATUS1_FIFO_FULL								(1<<0)	//!< FIFO full interrupt
+#define BMI270_INT_STATUS1_FIFO_WATERMARK							(1<<1)	//!< FIFO watermark interrupt
+#define BMI270_INT_STATUS1_ERR										(1<<2)	//!< Error interrupt
+#define BMI270_INT_STATUS1_AUX_DRDY									(1<<5)	//!< Auxiliary data ready interrupt
+#define BMI270_INT_STATUS1_GYR_DRDY									(1<<6)	//!< Gyroscope data ready interrupt
+#define BMI270_INT_STATUS1_ACC_DRDY									(1<<7)	//!< Accelerometer data ready interrupt
 
 #define BMI270_STEP_COUNT_LSB_REG					0x1E
 #define BMI270_STEP_COUNT_MSB_REG					0x1F
@@ -530,7 +530,8 @@ SOFTWARE.
 #define BMI270_FIFO_DOWNS_ACC_FIFO_DOWNS_MASK						(7<<4)	//!< Down sampling for acc
 #define BMI270_FIFO_DOWNS_ACC_FIFO_FILT_DATA						(1<<7)	//!< Enable filtered data acc
 
-// FIFO watermark level LSB
+// FIFO watermark level
+#define BMI270_FIFO_WATERMARK_REG					0x46
 #define BMI270_FIFO_WTM_LSB_REG						0x46
 #define BMI270_FIFO_WTM_LSB_MASK									(0xFF<<0)
 #define BMI270_FIFO_WTM_MSB_REG						0x47
@@ -737,8 +738,17 @@ SOFTWARE.
 #define BMI270_CMD_USR_GAIN											(3<<0)	//!< Applies new gyro gain value
 #define BMI270_CMD_NVM_PROG											(0xA0<<0)	//!< Write the NVM backed register into NVM
 #define BMI270_CMD_FIFO_FLUSH										(0xB0<<0)	//!< Clears FIFO content
-#define BMI270_CMD_SOFT_RESET										(0xB6<<0)	//!< Trigger reset
+#define BMI270_CMD_SOFTRESET										(0xB6<<0)	//!< Trigger reset
 
+#define BMI270_ADC_RANGE				0x7FFF		// 16 Bits
+#define BMI270_ACC_DUMMY_X				0x7F01
+#define BMI270_GYR_DUMMY_X				0x7F02
+#define BMI270_TEMP_DUMMY				-32768	//0x8000
+
+#define BMI270_FIFO_DATA_FLAG_ACC					(1<<0)	//!< Fifo contains Acc data
+#define BMI270_FIFO_DATA_FLAG_GYR					(1<<1)	//!< Fifo contains Gyr data
+#define BMI270_FIFO_DATA_FLAG_TEMP					(1<<2)	//!< Fifo contains temperature data
+#define BMI270_FIFO_DATA_FLAG_TIME					(1<<3)	//!< Fifo contains timer data
 
 #ifdef __cplusplus
 
