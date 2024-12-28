@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>IOsonata_nRF52805</name>
+	<name>IOsonata_nRF52810</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -171,9 +171,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/nrfx_config_nrf52805.h</name>
+			<name>include/nrfx_config_nrf52810.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/nrfx_config_nrf52805.h</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/include/nrfx_config_nrf52810.h</locationURI>
 		</link>
 		<link>
 			<name>include/prbs.h</name>
@@ -236,9 +236,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatusdef.h</locationURI>
 		</link>
 		<link>
-			<name>include/system_nrf52805.h</name>
+			<name>include/system_nrf52810.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/system_nrf52805.h</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/include/system_nrf52810.h</locationURI>
 		</link>
 		<link>
 			<name>include/usb</name>
@@ -306,9 +306,9 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
 		</link>
 		<link>
-			<name>src/Vectors_nRF52805.c</name>
+			<name>src/Vectors_nRF52810.c</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_nRF52805.c</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_nRF52810.c</locationURI>
 		</link>
 		<link>
 			<name>src/app_evt_handler.cpp</name>

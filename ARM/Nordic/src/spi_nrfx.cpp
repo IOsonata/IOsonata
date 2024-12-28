@@ -982,7 +982,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
     	switch (pCfgData->DevNo)
     	{
-#ifdef NRF52805_XXAA
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA)
 			case 0:
 				NVIC_ClearPendingIRQ(SPIM0_SPIS0_SPI0_IRQn);
 				NVIC_SetPriority(SPIM0_SPIS0_SPI0_IRQn, pCfgData->IntPrio);
@@ -1086,7 +1086,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 }
 
 #ifdef NRF52_SERIES
-#ifndef NRF52805_XXAA
+#if !defined(NRF52805_XXAA) && !defined(NRF52810_XXAA)
 extern "C" void SPIM2_SPIS2_SPI2_IRQHandler(void)
 {
 	SPI_IRQHandler(2, &g_nRFxSPIDev[2].pSpiDev->DevIntrf);

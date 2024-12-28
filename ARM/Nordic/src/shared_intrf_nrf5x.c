@@ -63,7 +63,7 @@ void SPI0_TWI0_IRQHandler(void)
 	{
 		g_SharedIntrf[0].Handler(0, g_SharedIntrf[0].pIntrf);
 	}
-#ifdef NRF52805_XXAA
+#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA)
 	NVIC_ClearPendingIRQ(TWIM0_TWIS0_TWI0_IRQn);
 #elif defined(NRF52_SERIES)
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn);
@@ -74,7 +74,7 @@ void SPI0_TWI0_IRQHandler(void)
 #endif
 }
 
-#ifndef NRF52805_XXAA
+#if !defined(NRF52805_XXAA) && ! defined(NRF52810_XXAA)
 #ifdef NRF52_SERIES
 void SPIM1_SPIS1_TWIM1_TWIS1_SPI1_TWI1_IRQHandler(void)
 #elif defined(NRF54L15_XXAA)
