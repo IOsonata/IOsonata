@@ -881,6 +881,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ag_bmi160.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/ag_bmi270.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ag_bmi270.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/ag_bmi323.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ag_bmi323.h</locationURI>
@@ -1651,6 +1656,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_bmi160.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sensors/ag_bmi270.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_bmi270.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sensors/ag_bmi323.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_bmi323.cpp</locationURI>
@@ -1674,6 +1684,11 @@
 			<name>src/sensors/am_fxos8700cq.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_fxos8700cq.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/am_lsm303agr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_lsm303agr.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/am_lsm303c.cpp</name>
@@ -1724,6 +1739,11 @@
 			<name>src/sensors/temp_ntc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/temp_ntc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/tir_calipile.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/tir_calipile.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/tph_bme280.cpp</name>
