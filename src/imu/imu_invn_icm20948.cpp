@@ -310,6 +310,7 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 		memcpy(&(event.data.mag.accuracy_flag), arg, sizeof(event.data.mag.accuracy_flag));
 		break;*/
 	case INV_ICM20948_SENSOR_GEOMAGNETIC_ROTATION_VECTOR:
+		break;
 	case INV_ICM20948_SENSOR_ROTATION_VECTOR:
 		memcpy(&(event.data.quaternion.accuracy), arg, sizeof(event.data.quaternion.accuracy));
 		memcpy(event.data.quaternion.quat, data, sizeof(event.data.quaternion.quat));

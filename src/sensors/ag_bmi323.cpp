@@ -71,11 +71,9 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 		regaddr = BMI323_FIFO_WATERMARK_REG;
 		d = Read16(&regaddr, 1);
-		printf("WM %d %x\r\n", d, d);
 		d = 800;
 		Write16(&regaddr, 1, d);
 		d = Read16(&regaddr, 1);
-		printf("WM %d %x\r\n", d, d);
 
 		regaddr = BMI323_INT_CONFIG_REG;
 		Write16(&regaddr, 1, BMI323_INT_CONFIG_LATCHED);
@@ -252,7 +250,7 @@ bool AccelBmi323::Enable()
 	regaddr = BMI323_ACC_CONFIG_REG;
 	d = Read16(&regaddr, 1) & ~BMI323_ACC_CONFIG_MODE_MASK;
 	d |= BMI323_ACC_CONFIG_MODE_CONT_EN;
-	printf("Enable : %x\n", d);
+
 	Write16(&regaddr, 1, d);
 
 	msDelay(20); // Require delay, do not remove
