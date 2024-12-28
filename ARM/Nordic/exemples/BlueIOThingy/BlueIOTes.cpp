@@ -103,8 +103,8 @@ BtGattChar_t g_EnvChars[] = {
         .SetNotifCB 	= NULL,                       // Callback on set notification
         .SetIndCB 		= NULL,                       // Tx completed callback
 		.TxCompleteCB	= NULL,
-//		s_EnvCharTemp,                       // pointer to char default values
-//        0,                          // Default value length in bytes
+		.pValue			= s_EnvCharTemp,                       // pointer to char default values
+		.ValueLen		= 0,                          // Default value length in bytes
     },
     {
         // Pressure characteristic
