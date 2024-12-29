@@ -108,7 +108,7 @@ bool AccelAdxl362::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	Scale(Cfg.Scale);
 
-	if (Cfg.bInter)
+	if (Cfg.Inter)
 	{
 
 	}

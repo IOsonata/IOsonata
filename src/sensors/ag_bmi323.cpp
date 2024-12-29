@@ -61,7 +61,7 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 	SamplingFrequency(CfgData.Freq);
 	FilterFreq(CfgData.FltrFreq);
 
-	if (CfgData.bInter)
+	if (CfgData.Inter)
 	{
 		uint8_t regaddr = BMI323_INT_MAP2_REG;
 		uint16_t d = Read16(&regaddr, 1) & ~BMI323_INT_MAP2_ACC_DRDY_MASK;

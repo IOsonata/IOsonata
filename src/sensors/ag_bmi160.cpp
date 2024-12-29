@@ -54,7 +54,7 @@ bool AccelBmi160::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 	AccelBmi160::Enable();
 
-	if (CfgData.bInter)
+	if (CfgData.Inter)
 	{
 		uint8_t regaddr = BMI160_INT_EN_0;
 		uint8_t d = 0;//BMI160_INT_EN_0_INT_ANYMO_X_EN | BMI160_INT_EN_0_INT_ANYMO_Y_EN | BMI160_INT_EN_0_INT_ANYMO_Z_EN;

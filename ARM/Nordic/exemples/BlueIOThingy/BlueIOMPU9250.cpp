@@ -29,7 +29,7 @@ static const AccelSensorCfg_t s_AccelCfg = {
 	.Freq = 50000,
 	.Scale = 2,
 	.FltrFreq = 0,
-	.bInter = true,
+	.Inter = 1,
 	.IntPol = DEVINTR_POL_LOW,
 };
 

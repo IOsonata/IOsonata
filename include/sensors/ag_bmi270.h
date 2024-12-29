@@ -49,11 +49,13 @@ SOFTWARE.
   * @{
   */
 
-#define BMI270_I2C_7BITS_DEVADDR		0x68
+#define BMI270_I2C_7BITS_DEVADDR0		0x68
+#define BMI270_I2C_7BITS_DEVADDR1		0x69
 
 #define BMI270_CHIP_ID_REG     				     	0x0
 
-#define BMI270_CHIP_ID          		                            0x24
+// Datasheet is 0x24, but reading from the chip is 0x21
+#define BMI270_CHIP_ID          		                            0x21 // Datasheet shows 0x24
 
 #define BMI270_ERR_REG								0x2
 #define BMI270_ERR_FATAL											(1<<0)

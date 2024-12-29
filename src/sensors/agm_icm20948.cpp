@@ -57,7 +57,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 
 	if (pTimer != NULL)
 	{
-		AccelSensor::vpTimer = pTimer;
+		vpTimer = pTimer;
 	}
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
@@ -141,10 +141,18 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pI
 
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	if (CfgData.bInter == true)
+	if (CfgData.Inter)
 	{
 		regaddr = ICM20948_INT_PIN_CFG;
-		d = ICM20948_INT_PIN_CFG_INT_ANYRD_2CLEAR | ICM20948_INT_PIN_CFG_INT1_ACTL;
+
+		if (CfgData.IntPol == DEVINTR_POL_HIGH)
+		{
+			d = ICM20948_INT_PIN_CFG_INT_ANYRD_2CLEAR;
+		}
+		else
+		{
+			d = ICM20948_INT_PIN_CFG_INT_ANYRD_2CLEAR | ICM20948_INT_PIN_CFG_INT1_ACTL;
+		}
 		Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE;
@@ -723,43 +731,70 @@ bool AgmIcm20948::SelectBank(uint8_t BankNo)
 void AgmIcm20948::IntHandler()
 {
 	uint16_t regaddr = ICM20948_INT_STATUS;
-	uint8_t istatus1;
-	uint16_t istatus2;
+	uint8_t istatus[4];
 
-	istatus1 = Read8((uint8_t*)&regaddr, 2);
+	int cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
 
-	if (istatus1 & ICM20948_INT_STATUS_I2C_MIST_INT)
+	printf("%x %x %x %x\n", istatus[0], istatus[1], istatus[2], istatus[3]);
+
+	if (istatus[0] & ICM20948_INT_STATUS_I2C_MIST_INT)
 	{
 
 	}
-
-	if (istatus1 & ICM20948_INT_STATUS_DMP_INT1)
+#if 1
+	if (istatus[0] & ICM20948_INT_STATUS_DMP_INT1)
 	{
 		regaddr = ICM20948_DMP_INT_STATUS;
-		istatus2 = Read16((uint8_t*)&regaddr, 2);
-		Write16((uint8_t*)&regaddr, 2, istatus2);
+		uint16_t distatus = Read16((uint8_t*)&regaddr, 2);
+		Write16((uint8_t*)&regaddr, 2, distatus);
 
-		if (istatus2 & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
+//		if (distatus & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
 		{
 			regaddr = ICM20948_FIFO_COUNTH;
 			uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
-			printf("cnt = %d\r\n", cnt);
+			printf("cnt = %x %d\r\n", distatus, cnt);
+
+			for (int i = 0; i < cnt; i++)
+			{
+				regaddr = ICM20948_FIFO_R_W;
+				uint8_t d = Read8((uint8_t*)&regaddr, 2);
+				printf("Fifo d=%x\n", d);
+			}
 		}
 	}
-
-	if (istatus1 & ICM20948_INT_STATUS_PLL_RDY_INT)
+#endif
+	if (istatus[0] & ICM20948_INT_STATUS_PLL_RDY_INT)
 	{
 
 	}
 
-	if (istatus1 & ICM20948_INT_STATUS_WOM_INT)
+	if (istatus[0] & ICM20948_INT_STATUS_WOM_INT)
 	{
 
 	}
-//	if (d & MPU9250_AG_INT_STATUS_RAW_DATA_RDY_INT)
+
+	if (istatus[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT)
 	{
 		UpdateData();
 	}
+
+	if (istatus[2] & ICM20948_INT_STATUS_2_FIFO_OVERFLOW_INT_MASK)
+	{
+		printf("FIFO ovr Int\n");
+	}
+
+	if (istatus[3] & ICM20948_INT_STATUS_3_FIFO_WM_INT_MASK)
+	{
+		printf("WM Int\n");
+
+	}
+
+	regaddr = ICM20948_INT_STATUS;
+	cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
+
+//	printf("x- %x %x %x %x\n", istatus[0], istatus[1], istatus[2], istatus[3]);
+	//istatus[0] = istatus[1] = istatus[2] = istatus[3] = 0;
+	//cnt = Write((uint8_t*)&regaddr, 2, istatus, 4);
 }
 
 /**

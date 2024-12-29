@@ -107,7 +107,7 @@ bool AccelLis2dh12::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 	Scale(Cfg.Scale);
 	uint32_t f = SamplingFrequency(Cfg.Freq);
 
-	if (Cfg.bInter == true)
+	if (Cfg.Inter)
 	{
 
 		regaddr = LIS2DH12_CTRL_REG3;

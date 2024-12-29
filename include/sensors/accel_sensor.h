@@ -87,7 +87,7 @@ typedef struct __AccelSensor_Config {
 	uint32_t		Freq;		//!< Sampling frequency in mHz (miliHertz) if continuous mode is used
 	uint16_t		Scale;		//!< Accelerometer sensor scale in g force (2g, 4g, ...
 	uint32_t		FltrFreq;	//!< Filter cutoff frequency in mHz
-	bool 			bInter;		//!< true - enable interrupt
+	uint8_t 		Inter;		//!< 0 - Disable, Bit0 - enable interrupt 1, Bit1 - enable interrupt 2,...
 	DEVINTR_POL		IntPol;		//!< interrupt polarity
 	AccelSensorEvtCb_t IntHandler;
 } AccelSensorCfg_t;

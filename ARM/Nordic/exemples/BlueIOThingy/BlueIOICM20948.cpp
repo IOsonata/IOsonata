@@ -20,12 +20,14 @@
 #include "Devices/Drivers/Icm20948/Icm20948Setup.h"
 #include "Devices/SensorTypes.h"
 
+#include "Fusion/Fusion.h"
+
 #include "bluetooth/bt_app.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "idelay.h"
 
-#define INVN
+//#define INVN
 
 #ifdef INVN
 #include "imu/imu_invn_icm20948.h"
@@ -35,6 +37,7 @@
 #include "sensors/agm_icm20948.h"
 #endif
 
+#include "BlueIOICM20948.h"
 #include "BlueIOThingy.h"
 #include "board.h"
 
@@ -47,7 +50,7 @@ static const AccelSensorCfg_t s_AccelCfg = {
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,	// 50Hz (in mHz)
 	.Scale = 2,
-	.bInter = true,
+	.Inter = 1,
 	.IntPol = DEVINTR_POL_LOW,
 };
 
@@ -81,6 +84,7 @@ static ImuIcm20948 s_Imu;
 #endif
 
 static Timer *s_pTimer = NULL;
+FusionAhrs ahrs;
 
 void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 {
@@ -94,6 +98,7 @@ void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 	s_Imu.Read(gyrodata);
 	s_Imu.Read(magdata);
 	ImuRawDataSend(accdata, gyrodata, magdata);
+#if 0
 	s_Imu.Read(quat);
 	//q[0] = ((float)quat.Q[0] / 32768.0) * (float)(1<<30);
 	//q[1] = ((float)quat.Q[1] / 32768.0) * (float)(1<<30);
@@ -108,8 +113,22 @@ void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 	q[2] = quat.Q[2] * (1 << 30);
 	q[3] = quat.Q[3] * (1 << 30);
 	//printf("Quat %d: %d %d %d %d\r\n", quat.Timestamp, q[0], q[1], q[2], q[3]);
+#else
+    FusionVector gyroscope = {gyrodata.X, gyrodata.Y, gyrodata.Z}; // replace this with actual gyroscope data in degrees/s
+    FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
+
+    FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
+    FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
+	q[0] = fq.array[0];// * (1 << 30);
+	q[1] = fq.array[1];// * (1 << 30);
+	q[2] = fq.array[2];// * (1 << 30);
+	q[3] = fq.array[3];// * (1 << 30);
+#endif
+	//printf("I : %f %f %f %f\n", quat.Q[0], quat.Q[1], quat.Q[2], quat.Q[3]);
+	printf("F : %f %f %f %f\n", fq.array[0], fq.array[1], fq.array[2], fq.array[3]);
 	ImuQuatDataSend(q);
 }
+
 
 static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 {
@@ -128,7 +147,7 @@ uint64_t inv_icm20948_get_time_us(void)
 {
 	return s_pTimer ? s_pTimer->uSecond() : 0;
 }
-
+/*
 void inv_icm20948_sleep(int ms)
 {
 	msDelay(ms);
@@ -138,24 +157,50 @@ void inv_icm20948_sleep_us(int us)
 {
 	usDelay(us);
 }
+*/
 
 void ICM20948IntHandler(int IntNo, void *pCtx)
 {
+	AccelSensorData_t accdata;
+	GyroSensorData_t gyrodata;
+	MagSensorData_t magdata;
+
 	if (IntNo == BLUEIOTHINGY_IMU_INT_NO)
 	{
 		s_Imu.IntHandler();
+#if 0
+		s_MotSensor.IntHandler();
+		s_MotSensor.Read(accdata);
+		s_MotSensor.Read(gyrodata);
+		s_MotSensor.Read(magdata);
+        FusionVector gyroscope = {gyrodata.X, gyrodata.Y, gyrodata.Z}; // replace this with actual gyroscope data in degrees/s
+        FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
+
+        FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
+        FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
+    	ImuRawDataSend(accdata, gyrodata, magdata);
+
+    	long q[4];
+    	q[0] = fq.array[0] * 256;//(1 << 30);
+    	q[1] = fq.array[1] * 256;//(1 << 30);
+    	q[2] = fq.array[2] * 256;//(1 << 30);
+    	q[3] = fq.array[3] * 256;//(1 << 30);
+    	//printf("Quat %d: %d %d %d %d\r\n", quat.Timestamp, q[0], q[1], q[2], q[3]);
+    	ImuQuatDataSend(q);
+#endif
 	}
+}
+
+void ICM20948EnableFeature(uint32_t Feature)
+{
+	//s_MotionFeature |= Feature;
+	s_Imu.Enable();
 }
 
 bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 {
 	s_pTimer = pTimer;
 
-	IOPinConfig(BLUEIOTHINGY_IMU_INT_PORT, BLUEIOTHINGY_IMU_INT_PIN, BLUEIOTHINGY_IMU_INT_PINOP,
-				IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
-	IOPinEnableInterrupt(BLUEIOTHINGY_IMU_INT_NO, 6, BLUEIOTHINGY_IMU_INT_PORT,
-						 BLUEIOTHINGY_IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION,
-						 ICM20948IntHandler, NULL);
 
 	bool res = s_MotSensor.Init(s_AccelCfg, pIntrF);
 	if (res == true)
@@ -168,14 +213,25 @@ bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 	}
 	if (res == true)
 	{
+#ifdef INVN
 		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor, &s_MotSensor, &s_MotSensor);
-//		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor);
+#else
+		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor);
+#endif
 	}
 
 	if (res)
 	{
-		s_Imu.Enable();
+//		s_Imu.Enable();
+	    FusionAhrsInitialise(&ahrs);
+
 	}
+
+	IOPinConfig(BLUEIOTHINGY_IMU_INT_PORT, BLUEIOTHINGY_IMU_INT_PIN, BLUEIOTHINGY_IMU_INT_PINOP,
+				IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
+	IOPinEnableInterrupt(BLUEIOTHINGY_IMU_INT_NO, 6, BLUEIOTHINGY_IMU_INT_PORT,
+						 BLUEIOTHINGY_IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION,
+						 ICM20948IntHandler, NULL);
 
 	return res;
 }

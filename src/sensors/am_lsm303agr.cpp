@@ -122,9 +122,9 @@ bool AccelLsm303agr::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntr
 	Scale(Cfg.Scale);
 	uint32_t f = SamplingFrequency(Cfg.Freq);
 
-	vbIntEn = Cfg.bInter;
+	vbIntEn = Cfg.Inter != 0;
 
-	if (Cfg.bInter)
+	if (Cfg.Inter)
 	{
 		vIntHandler = Cfg.IntHandler;
 
@@ -685,9 +685,9 @@ bool MagLsm303agr::Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Ti
 	MagSensor::Read(&regaddr, 1, (uint8_t*)vOffset, 6);
 
 	regaddr = LSM303AGR_INT_CTRL_REG_M_REG;
-	vbIntEn = Cfg.bInter;
+	vbIntEn = Cfg.Inter != 0;
 
-	if (vbIntEn)
+	if (Cfg.Inter)
 	{
 		Write8(&regaddr, 1, LSM303AGR_INT_CTRL_REG_M_IEN | LSM303AGR_INT_CTRL_REG_M_IEL |
 							LSM303AGR_INT_CTRL_REG_M_IEA | LSM303AGR_INT_CTRL_REG_M_ZIEN |

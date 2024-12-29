@@ -84,12 +84,12 @@ typedef enum __MagSensor_Precision {
 
 /// Mag configuration data
 typedef struct __MagSensor_Config {
-	uint32_t		DevAddr;	//!< Either I2C 7 bits device address or CS index select if SPI is used
-	SENSOR_OPMODE 	OpMode;		//!< Operating mode
-	uint32_t		Freq;		//!< Sampling frequency in mHz (miliHertz) if continuous mode is used
+	uint32_t		DevAddr;		//!< Either I2C 7 bits device address or CS index select if SPI is used
+	SENSOR_OPMODE 	OpMode;			//!< Operating mode
+	uint32_t		Freq;			//!< Sampling frequency in mHz (miliHertz) if continuous mode is used
 	MAGSENSOR_PRECISION	Precision;	//!< Sampling precision in bits
-	bool 			bInter;		//!< true - enable interrupt
-	DEVINTR_POL		IntPol;		//!< Interrupt polarity
+	uint8_t 		Inter;			//!< 0 - Disable, Bit0 - enable interrupt 1, Bit1 - enable interrupt 2,...
+	DEVINTR_POL		IntPol;			//!< Interrupt polarity
 } MagSensorCfg_t;
 
 //typedef MagSensorCfg_t	MAGSENSOR_CFG;

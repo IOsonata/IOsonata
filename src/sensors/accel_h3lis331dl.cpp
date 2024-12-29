@@ -104,7 +104,7 @@ bool AccelH3lis331dl::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pInt
 	Scale(Cfg.Scale);
 	FilterFreq(Cfg.FltrFreq);
 
-	if (Cfg.bInter)
+	if (Cfg.Inter)
 	{
 		regaddr = H3LIS331DL_CTRL_REG3_A_REG;
 		d = Read8(&regaddr, 1) & ~(H3LIS331DL_CTRL_REG3_IHL_LOW | H3LIS331DL_CTRL_REG3_PP_OD);

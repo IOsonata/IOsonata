@@ -256,10 +256,19 @@ bool AgmInvnIcm20948::Enable()
 	int i = INV_SENSOR_TYPE_MAX;
 
 	/* Disable all sensors */
+#if 0
 	while(i-- > 0) {
 		inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
 	}
+#else
+	inv_icm20948_enable_sensor(&vIcmDevice, INV_ICM20948_SENSOR_ACCELEROMETER, 1);
+	inv_icm20948_enable_sensor(&vIcmDevice, INV_ICM20948_SENSOR_GYROSCOPE, 1);
+	inv_icm20948_enable_sensor(&vIcmDevice, INV_ICM20948_SENSOR_RAW_ACCELEROMETER, 1);
+	inv_icm20948_enable_sensor(&vIcmDevice, INV_ICM20948_SENSOR_RAW_GYROSCOPE, 1);
+	inv_icm20948_enable_sensor(&vIcmDevice, INV_ICM20948_SENSOR_MAGNETIC_FIELD_UNCALIBRATED, 1);
+	inv_icm20948_enable_sensor(&vIcmDevice, INV_ICM20948_SENSOR_GAME_ROTATION_VECTOR, 1);
 
+#endif
 	return true;
 }
 

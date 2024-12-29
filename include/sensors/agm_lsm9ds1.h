@@ -357,6 +357,8 @@ public:
 	 */
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint16_t Scale(uint16_t Value);			// Accel
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint32_t FilterFreq(uint32_t Freq);
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
@@ -377,6 +379,8 @@ public:
 	 */
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint32_t FilterFreq(uint32_t Freq);
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
@@ -470,9 +474,13 @@ public:
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
 
 
-	virtual bool Read(AccelSensorData_t &Data);
-	virtual bool Read(GyroSensorData_t &Data);
-	virtual bool Read(MagSensorData_t &Data);
+	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(GyroSensorRawData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(MagSensorRawData_t &Data) { return MagSensor::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return MagSensor::Read(Data); }
+//	virtual void Read(TempSensorData_t &Data) { return TempSensor::Read(Data); }
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);

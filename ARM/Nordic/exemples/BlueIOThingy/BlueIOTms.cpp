@@ -42,6 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 #include "BlueIOThingy.h"
 #include "BlueIOMPU9250.h"
+#include "BlueIOICM20948.h"
 
 void ImuConfCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
 void ImuTapCharSetNotify(BtGattChar_t *pChar, bool bEnable);
@@ -389,6 +390,7 @@ void ImuQuaternionCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	g_ImuChars[IMUCHAR_IDX_QUAT].bNotify = true;
 	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_QUAT);
+	ICM20948EnableFeature(MPU9250_MOTION_FEATURE_QUAT);
 }
 
 void ImuQuatDataSend(long Quat[4])

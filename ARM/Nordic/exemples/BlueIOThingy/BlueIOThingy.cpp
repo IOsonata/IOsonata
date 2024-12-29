@@ -340,7 +340,7 @@ static const AccelSensorCfg_t s_AccelCfg = {
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,	// 50Hz (in mHz)
 	.Scale = 2,
-	.bInter = true,
+	.Inter = 1,
 	.IntPol = DEVINTR_POL_LOW,
 };
 

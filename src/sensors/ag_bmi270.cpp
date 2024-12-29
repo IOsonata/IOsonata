@@ -55,7 +55,7 @@ bool AccelBmi270::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 	SamplingFrequency(CfgData.Freq);
 	FilterFreq(CfgData.FltrFreq);
 
-	if (CfgData.bInter)
+	if (CfgData.Inter)
 	{
 		uint8_t regaddr = BMI270_INT_MAP_DATA_REG;
 		uint8_t d = BMI270_INT_MAP_DATA_FFULL_INT1 |

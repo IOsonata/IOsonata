@@ -43,18 +43,26 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "coredev/timer.h"
-#include "sensors/agm_icm20948.h"
-#include "sensors/agm_invn_icm20948.h"
 #include "sensors/agm_mpu9250.h"
 #include "sensors/agm_lsm9ds1.h"
 #include "sensors/ag_bmi160.h"
 #include "sensors/ag_bmi323.h"
+#include "sensors/ag_bmi270.h"
 #include "sensors/accel_h3lis331dl.h"
-#include "imu/imu_invn_icm20948.h"
-#include "imu/imu_icm20948.h"
 #include "imu/imu_mpu9250.h"
 #include "coredev/uart.h"
 
+#include "Fusion/Fusion.h"
+
+//#define INVN
+
+#ifdef INVN
+#include "sensors/agm_invn_icm20948.h"
+#include "imu/imu_invn_icm20948.h"
+#else
+#include "sensors/agm_icm20948.h"
+#include "imu/imu_icm20948.h"
+#endif
 //#include "bmi323.h"
 //#include "common.h"
 
@@ -76,7 +84,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 1000000,
+	.Rate = 115200,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -106,23 +114,8 @@ UART g_Uart;
 //int idd_io_hal_read_reg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
 //int idd_io_hal_write_reg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
 //inv_bool_t interface_is_SPI(void);
-
-static const IOPinCfg_t s_SpiPins[] = {
-    {SPI_SCK_PORT, SPI_SCK_PIN, SPI_SCK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-    {SPI_MISO_PORT, SPI_MISO_PIN, SPI_MISO_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-    {SPI_MOSI_PORT, SPI_MOSI_PIN, SPI_MOSI_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-#ifdef NEBLINA
-	{NEBLINA_SPI_BMI160_CS_PORT, NEBLINA_SPI_BMI160_CS_PIN, NEBLINA_SPI_BMI160_CS_PINOP,
-     IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{NEBLINA_SPI_H3LIS_CS_PORT, NEBLINA_SPI_H3LIS_CS_PIN, NEBLINA_SPI_H3LIS_CS_PINOP,
-	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-#elif defined(BLYST_MOTION)
-	{SPI_BMI323_CS_PORT, SPI_BMI323_CS_PIN, SPI_BMI323_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
-	{SPI_H3LIS331_CS_PORT, SPI_H3LIS331_CS_PIN, SPI_H3LIS331_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
-#else
-	{BLUEIO_TAG_EVIM_IMU_CS_PORT, BLUEIO_TAG_EVIM_IMU_CS_PIN, BLUEIO_TAG_EVIM_IMU_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
-#endif
-};
+#ifdef SPI_PINS
+static const IOPinCfg_t s_SpiPins[] = SPI_PINS;
 
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
@@ -144,12 +137,11 @@ static const SPICfg_t s_SpiCfg = {
 };
 
 SPI g_Spi;
+#endif
 
+#ifdef I2C_PINS
 //********** I2C **********
-static const IOPinCfg_t s_I2cPins[] = {
-	{I2C0_SDA_PORT, I2C0_SDA_PIN, I2C0_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
-	{I2C0_SCL_PORT, I2C0_SCL_PIN, I2C0_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
-};
+static const IOPinCfg_t s_I2cPins[] = I2C_PINS;
 
 static const I2CCfg_t s_I2cCfg = {
 	.DevNo = 0,			// I2C device number
@@ -169,6 +161,7 @@ static const I2CCfg_t s_I2cCfg = {
 };
 
 I2C g_I2c;
+#endif
 
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt);
 
@@ -183,17 +176,17 @@ const static TimerCfg_t s_TimerCfg = {
 Timer g_Timer;
 
 static const AccelSensorCfg_t s_AccelCfg = {
-	.DevAddr = 0,//BMI323_I2C_7BITS_DEVADDR,
+	.DevAddr = ACC_DEV_ADDR,//BMI323_I2C_7BITS_DEVADDR,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
 	.Scale = 2,
 	.FltrFreq = 0,
-	.bInter = true,
+	.Inter = 1,
 	.IntPol = DEVINTR_POL_LOW,
 };
 
 static const GyroSensorCfg_t s_GyroCfg = {
-	.DevAddr = 0,//BMI323_I2C_7BITS_DEVADDR,
+	.DevAddr = ACC_DEV_ADDR,//BMI323_I2C_7BITS_DEVADDR,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
 	.Sensitivity = 10,
@@ -218,10 +211,18 @@ static const ImuCfg_t s_ImuCfg = {
 //#define BMI160
 //#define H3LIS331DL
 //#define BMI323
+//#define BMI270
 
-#ifdef ICM20948
+#if BOARD == BLUEIO_TAG_EVIM
+#ifdef INVN
 ImuInvnIcm20948 g_Imu;
 AgmInvnIcm20948 g_MotSensor;
+#else
+ImuIcm20948 g_Imu;
+AgmIcm20948 g_MotSensor;
+#endif
+#elif BOARD == BLYST_MOTION
+AgBmi323 g_MotSensor;
 #elif defined(MPU9250)
 ImuMpu9250 g_Imu;
 AgmMpu9250 g_MotSensor;
@@ -231,6 +232,8 @@ AgBmi160 g_MotSensor;
 AgBmi323 g_MotSensor;
 #elif defined(H3LIS331DL)
 AccelH3lis331dl g_MotSensor;
+#elif defined(BMI270)
+AgBmi270 g_MotSensor;
 #else
 AgmLsm9ds1 g_MotSensor;
 #endif
@@ -268,7 +271,7 @@ void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 }
 
 
-void ImuIntHandler(int IntNo)
+void ImuIntHandler(int IntNo, void *pCtx)
 {
 	if (IntNo == 0)
 	{
@@ -277,7 +280,7 @@ void ImuIntHandler(int IntNo)
 		g_DT = t - g_TPrev;
 		g_TPrev = t;
 
-		//g_Imu.IntHandler();
+		g_Imu.IntHandler();
 		//g_MotSensor.IntHandler();
 		//IOPinClear(0, 24);
 	}
@@ -299,42 +302,49 @@ bool HardwareInit()
 #endif
 
 	g_Timer.Init(s_TimerCfg);
-//#if SPI
+
+#ifdef SPI_PINS
 	res = g_Spi.Init(s_SpiCfg);
-//#else
+	DeviceIntrf *pintrf = &g_Spi;
+#elif defined(I2C_PINS)
 	res = g_I2c.Init(s_I2cCfg);
-//#endif
+	DeviceIntrf *pintrf = &g_I2c;
+#else
+#error "No interface defined"
+#endif
+
 	if (res == true)
 	{
-		res = g_MotSensor.Init(s_AccelCfg, &g_Spi, &g_Timer);
+		res = g_MotSensor.Init(s_AccelCfg, pintrf, &g_Timer);
 		if (res == true)
 		{
 			g_pAccel = &g_MotSensor;
 		}
 #if !defined(H3LIS331DL)
-		res = g_MotSensor.Init(s_GyroCfg, &g_Spi);
+		res = g_MotSensor.Init(s_GyroCfg, pintrf);
 		if (res == true)
 		{
 			g_pGyro = &g_MotSensor;
 		}
 
-		//res = g_MotSensor.Init(s_MagCfg, &g_Spi);
-		//if (res == true)
+		res = g_MotSensor.Init(s_MagCfg, &g_Spi);
+		if (res == true)
 		{
-		//	g_pMag = &g_MotSensor;
+			g_pMag = &g_MotSensor;
 		}
 #endif
 
 #if defined(ICM20948) || defined(MPU9250)
-//		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
-		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
+
+		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
+//		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
 #endif
 	}
 
 	if (res == true)
 	{
-		//IOPinCfg(s_GpioPins, s_NbGpioPins);
-		//IOPinEnableInterrupt(0, 6, BLUEIO_TAG_EVIM_IMU_INT_PORT, BLUEIO_TAG_EVIM_IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION, ImuIntHandler);
+		IOPinConfig(IMU_INT_PORT, IMU_INT_PIN, IMU_INT_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+		IOPinEnableInterrupt(0, 6, IMU_INT_PORT, IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION, ImuIntHandler, NULL);
 
 		int8_t m[9] = { 1, 0, 0,
 						0, 1, 0,
@@ -391,13 +401,21 @@ int main()
 
 	uint32_t prevt = 0;
 	int cnt = 10;
+
+	//g_MotSensor.Enable();
+
+	g_Imu.Enable();
+
+    FusionAhrs ahrs;
+    FusionAhrsInitialise(&ahrs);
+
 	while (1)
 	{
 //		uint32_t t = g_Timer.uSecond();
 
 		//NRF_POWER->SYSTEMOFF = POWER_SYSTEMOFF_SYSTEMOFF_Enter;
-		//__WFE();
-		g_MotSensor.UpdateData();
+		__WFE();
+		//g_MotSensor.UpdateData();
 
 		uint32_t dt = arawdata.Timestamp - prevt;
 		prevt = arawdata.Timestamp;
@@ -415,14 +433,25 @@ int main()
 		}
 
 		g_MotSensor.Read(accdata);
+		g_MotSensor.Read(gyrodata);
 		//g_Imu.Read(quat);
+        FusionVector gyroscope = {gyrodata.X, gyrodata.Y, gyrodata.Z}; // replace this with actual gyroscope data in degrees/s
+        FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
+
+        FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
+
+        //FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+        FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
 
 		if (cnt-- < 0)
 		{
 			cnt = 10;
 			//printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)dt, arawdata.X, arawdata.Y, arawdata.Z);
-			g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
-			//printf("Quat %d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
+			//g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
+			g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, gyrodata.X, gyrodata.Y, gyrodata.Z);
+//	        printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
+			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
+			printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, fq.element.x, fq.element.y, fq.element.z, fq.element.w);
 		}
 	}
 }
