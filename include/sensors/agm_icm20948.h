@@ -153,7 +153,14 @@ SOFTWARE.
 #define ICM20948_I2C_MST_STATUS_PASS_THROUGH		(1<<7)	// FSYNC interrupt flag
 
 #define ICM20948_DMP_INT_STATUS			(ICM20948_REG_BANK0 | 24)	// 0x18
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0		(1<<0)	// CI Command
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_2		(1<<1)	// CIM Command - SMD
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_3		(1<<2)	// CIM Command - Pedometer
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_4		(1<<4)	// CIM Command - Pedometer binning
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_5		(1<<5)	// CIM Command - Bring To See Gesture
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_6		(1<<6)	// CIM Command - Look To See Gesture
 
+#if 0
 #define ICM20948_DMP_INT_STATUS_MSG_DMP_INT			(1<<1)
 #define ICM20948_DMP_INT_STATUS_WAKE_ON_MOTION_INT	(1<<3)
 #define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0		(1<<8)	// CI Command
@@ -162,6 +169,7 @@ SOFTWARE.
 #define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_4		(1<<12)	// CIM Command - Pedometer binning
 #define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_5		(1<<13)	// CIM Command - Bring To See Gesture
 #define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_6		(1<<14)	// CIM Command - Look To See Gesture
+#endif
 
 #define ICM20948_INT_STATUS				(ICM20948_REG_BANK0 | 25)	// 0x19
 
@@ -546,6 +554,7 @@ SOFTWARE.
 #define ICM20948_ACC_ADC_RANGE			32767
 #define ICM20948_GYRO_ADC_RANGE			32767
 
+// DMP
 #define ICM20948_DMP_MEM_STARTADDR		(ICM20948_REG_BANK0 | 0x7C)
 #define ICM20948_DMP_MEM_RW           	(ICM20948_REG_BANK0 | 0x7D)
 #define ICM20948_DMP_MEM_BANKSEL		(ICM20948_REG_BANK0 | 0x7E)
