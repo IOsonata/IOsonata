@@ -102,10 +102,15 @@ public:
 	 */
 	virtual bool Read(MagSensorData_t &Data) { return Imu::Read(Data); }
 
+
 protected:
 	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 
 private:
+
+	virtual int ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len);
+	virtual int WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len);
+
 	/**
 	 * @brief	Read device's register/memory block
 	 *

@@ -562,6 +562,7 @@ SOFTWARE.
 #define ICM20948_DMP_PROG_START_ADDRL	(ICM20948_REG_BANK2 | 0x51)
 
 #define ICM20948_DMP_MEM_BANK_SIZE		256		//!< DMP memory bank size
+#define ICM20948_FIFO_SIZE_MAX			0x1000
 
 #pragma pack(push, 1)
 

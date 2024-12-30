@@ -49,7 +49,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 
 	uint16_t regaddr;
 	uint8_t d;
-	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+	uint8_t userctrl = ICM20948_USER_CTRL_FIFO_EN ;//| ICM20948_USER_CTRL_DMP_EN;
 	uint8_t lpconfig = ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	Interface(pIntrf);
@@ -138,7 +138,10 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pI
 
 	regaddr = ICM20948_PWR_MGMT_2;
 	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+	Write8((uint8_t*)&regaddr, 2, d);
 
+	regaddr = ICM20948_FIFO_EN_2;
+	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
 	Write8((uint8_t*)&regaddr, 2, d);
 
 	if (CfgData.Inter)
@@ -156,12 +159,12 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pI
 		Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE;
-		d = 0xff;
+		d = ICM20948_INT_ENABLE_WOM_INT_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE_1;
 		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
-		Write8((uint8_t*)&regaddr, 2, d);
+		//Write8((uint8_t*)&regaddr, 2, d);
 	}
 
 	return true;
@@ -294,7 +297,11 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 	uint16_t regaddr = ICM20948_PWR_MGMT_2;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
+	Write8((uint8_t*)&regaddr, 2, d);
 
+	regaddr = ICM20948_FIFO_EN_2;
+	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_GYRO_X_FIFO_EN |
+		ICM20948_FIFO_EN_2_GYRO_Y_FIFO_EN | ICM20948_FIFO_EN_2_GYRO_Z_FIFO_EN;
 	Write8((uint8_t*)&regaddr, 2, d);
 
 	return true;
@@ -437,6 +444,10 @@ bool MagIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf * const pIntrf
 		return false;
 	}
 
+	regaddr = ICM20948_FIFO_EN_1;
+	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_1_SLV_0_FIFO_EN;
+	Write8((uint8_t*)&regaddr, 2, d);
+
 	return true;
 }
 
@@ -471,6 +482,9 @@ void AgmIcm20948::Reset()
 	uint16_t regaddr = ICM20948_PWR_MGMT_1;
 
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_DEVICE_RESET);
+	regaddr = ICM20948_FIFO_RST;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
+
 }
 
 bool AgmIcm20948::StartSampling()
@@ -741,28 +755,18 @@ void AgmIcm20948::IntHandler()
 	{
 
 	}
-#if 1
 	if (istatus[0] & ICM20948_INT_STATUS_DMP_INT1)
 	{
 		regaddr = ICM20948_DMP_INT_STATUS;
-		uint16_t distatus = Read16((uint8_t*)&regaddr, 2);
-		Write16((uint8_t*)&regaddr, 2, distatus);
+		uint16_t distatus = Read8((uint8_t*)&regaddr, 2);
+//		Write16((uint8_t*)&regaddr, 2, distatus);
 
-//		if (distatus & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
+		if (distatus)// & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
 		{
-			regaddr = ICM20948_FIFO_COUNTH;
-			uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
-			printf("cnt = %x %d\r\n", distatus, cnt);
-
-			for (int i = 0; i < cnt; i++)
-			{
-				regaddr = ICM20948_FIFO_R_W;
-				uint8_t d = Read8((uint8_t*)&regaddr, 2);
-				printf("Fifo d=%x\n", d);
-			}
+			// DMP msg
+			printf("distatus %x\n", distatus);
 		}
 	}
-#endif
 	if (istatus[0] & ICM20948_INT_STATUS_PLL_RDY_INT)
 	{
 
@@ -780,12 +784,37 @@ void AgmIcm20948::IntHandler()
 
 	if (istatus[2] & ICM20948_INT_STATUS_2_FIFO_OVERFLOW_INT_MASK)
 	{
-		printf("FIFO ovr Int\n");
+		printf("FIFO ovr Int ");
+		regaddr = ICM20948_FIFO_COUNTH;
+		uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
+		cnt = EndianCvt16(cnt);
+
+		printf("cnt = %d\r\n", cnt);
 	}
 
 	if (istatus[3] & ICM20948_INT_STATUS_3_FIFO_WM_INT_MASK)
 	{
-		printf("WM Int\n");
+		printf("WM Int ");
+		regaddr = ICM20948_FIFO_COUNTH;
+		uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
+		cnt = EndianCvt16(cnt);
+
+		printf("cnt = %d\r\n", cnt);
+
+#if 0
+		for (int i = 0; i < cnt; i++)
+		{
+			regaddr = ICM20948_FIFO_R_W;
+			uint8_t d = Read8((uint8_t*)&regaddr, 2);
+			printf("Fifo d=%x\n", d);
+		}
+#else
+		uint8_t dd[cnt];
+		memset(dd, 0, cnt);
+		regaddr = ICM20948_FIFO_R_W;
+		int l = Read((uint8_t*)&regaddr, 2, dd, cnt);
+		printf("l:%d %x %x %x %x\n", l, dd[0], dd[1], dd[2], dd[3]);
+#endif
 
 	}
 

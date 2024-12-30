@@ -279,11 +279,33 @@ SOFTWARE.
 #define B2S_MTX_21              (209 * 16 + 12)
 #define B2S_MTX_22              (210 * 16)
 
-#define DMP_START_ADDR   	0x1000U
+// Dmp3 orientation parameters (Q30) initialization
+#define Q0_QUAT6				(33 * 16 + 0)
+#define Q1_QUAT6				(33 * 16 + 4)
+#define Q2_QUAT6				(33 * 16 + 8)
+#define Q3_QUAT6				(33 * 16 + 12)
+
+#define DMP_START_ADDRESS   ((unsigned short)0x1000)
 #define DMP_MEM_BANK_SIZE   256
 #define DMP_LOAD_START      0x90
 
 #define DMP_CODE_SIZE 14301
+
+#define DMP_ACCEL_SET			0x0080 //!< 0x8000 - calibrated accel if accel calibrated, raw accel otherwise
+#define DMP_GYRO_SET			0x0040 //!< 0x4000 - raw gyro
+#define DMP_CPASS_SET			0x0020 //!< 0x2000 - raw magnetic
+#define DMP_ALS_SET				0x0010 //!< 0x1000 - ALS/proximity
+#define DMP_QUAT6_SET			0x0008 //!< 0x0800 - game rotation vector
+#define DMP_QUAT9_SET			0x0004 //!< 0x0400 - rotation vector with heading accuracy
+#define DMP_PQUAT6_SET			0x0002 //!< 0x0200 - truncated game rotation vector for batching
+#define DMP_GEOMAG_SET			0x0001 //!< 0x0100 - geomag rotation vector with heading accuracy
+#define DMP_PRESSURE_SET		0x8000 //!< 0x0080 - pressure
+#define DMP_GYRO_CALIBR_SET		0x4000 //!< 0x0040 - calibrated gyro
+#define DMP_CPASS_CALIBR_SET	0x2000 //!< 0x0020 - calibrated magnetic
+#define DMP_PED_STEPDET_SET		0x1000 //!< 0x0010 - timestamp when each step is detected
+#define DMP_HEADER2_SET			0x0800 //!< 0x0008 - enable/disable data output in data output control register 2
+#define DMP_PED_STEPIND_SET		0x0700 //!< 0x0007 - number of steps detected will be attached to the 3 least significant bits of header
+
 
 static const uint8_t s_Dmp3Image[] = {
 #include "imu/icm20948_img_dmp3a.h"
@@ -306,18 +328,23 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 
 	vpIcm = pIcm;
 
+	uint16_t regaddr = ICM20948_USER_CTRL;
+	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
+	//vpIcm->Write8((uint8_t*)&regaddr,	2, d);
+
+	regaddr = ICM20948_FIFO_RST;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 
 	if (vpIcm->UploadDMPImage((uint8_t*)s_Dmp3Image, DMP_CODE_SIZE, DMP_LOAD_START))
 	{
-		uint16_t regaddr;
-		uint8_t d[2];
+		uint8_t dd[2];
 
-		d[0] = DMP_START_ADDR >> 8U;
-		d[1] = DMP_START_ADDR & 0xFFU;
+		dd[0] = DMP_START_ADDRESS >> 8U;
+		dd[1] = DMP_START_ADDRESS & 0xFFU;
 
 		// Write DMP program start address
 		regaddr = ICM20948_DMP_PROG_START_ADDRH;
-		vpIcm->Write((uint8_t*)&regaddr, 2, d, 2);
+		vpIcm->Write((uint8_t*)&regaddr, 2, dd, 2);
 
 		Init(Cfg, pIcm, pIcm, pIcm);
 
@@ -333,11 +360,45 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	{
 		return false;
 	}
+	uint16_t regaddr;
+	uint8_t d;
 
 	Imu::Init(Cfg, pAccel, pGyro, pMag);
 
-//	vpIcm = (AgmIcm20948*)pAccel;
+	// Reset FIFO
+#if 0
+	regaddr = ICM20948_FIFO_RST;
+	d = ICM20948_FIFO_RST_FIFO_RESET_MASK;
+	Write8((uint8_t*)&regaddr, 2, d);
+	regaddr = ICM20948_FIFO_EN_1;
+	d = ICM20948_FIFO_EN_1_SLV_0_FIFO_EN;
+	Write8((uint8_t*)&regaddr, 2, d);
+#endif
+
+	regaddr = ICM20948_FIFO_EN_2;
+	d = 0xf;	// All
+	Write8((uint8_t*)&regaddr, 2, d);
+
 	vEvtHandler = Cfg.EvtHandler;
+
+
+//	vpIcm = (AgmIcm20948*)pAccel;
+	regaddr = ICM20948_INT_ENABLE;
+	d = Read8((uint8_t*)&regaddr, 2);
+	d |= ICM20948_INT_ENABLE_DMP_INT1_EN;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = ICM20948_INT_ENABLE_1;
+	d = 0;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = ICM20948_INT_ENABLE_2;
+	d = 1;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = ICM20948_INT_ENABLE_3;
+	d = 1;
+	Write8((uint8_t*)&regaddr, 2, d);
 
 
 	return true;
@@ -348,7 +409,7 @@ bool ImuIcm20948::Enable()
 	uint16_t regaddr = ICM20948_USER_CTRL;
 	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2);
 
-	d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+	d |= ICM20948_USER_CTRL_DMP_EN | ICM20948_USER_CTRL_FIFO_EN;
 	vpIcm->Write8((uint8_t*)&regaddr,	2, d);
 
 	return vpIcm->Enable();
@@ -366,6 +427,12 @@ void ImuIcm20948::Reset()
 
 IMU_FEATURE ImuIcm20948::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
 {
+	if (FeatureBit & IMU_FEATURE_QUATERNION)
+	{
+		uint16_t f = DMP_QUAT9_SET;
+		uint16_t m = DATA_OUT_CTL1;
+		WriteDMP(m, (uint8_t*)&f, 2);
+	}
 	return Imu::Feature();
 }
 
@@ -390,6 +457,23 @@ bool ImuIcm20948::Pedometer(bool bEn)
 
 bool ImuIcm20948::Quaternion(bool bEn, int NbAxis)
 {
+	Imu::Feature(IMU_FEATURE_QUATERNION, bEn);
+	uint16_t f = DMP_QUAT9_SET;
+	uint16_t m = DATA_OUT_CTL1;
+
+	if (NbAxis <9)
+	{
+		f = DMP_QUAT6_SET;
+	}
+
+	WriteDMP(m, (uint8_t*)&f, 2);
+
+	if (vbIntEn)
+	{
+		m = DATA_INTR_CTL;
+		WriteDMP(m, (uint8_t*)&f, 2);
+	}
+
 	return true;
 }
 
@@ -410,6 +494,49 @@ bool ImuIcm20948::UpdateData()
 
 void ImuIcm20948::IntHandler()
 {
+	uint16_t addr = ICM20948_DMP_INT_STATUS;
+	uint8_t d;
+
+//	ReadDMP(addr, &d, 1);
+
 	vpIcm->IntHandler();
+
+	//printf("ImuIcm20948::IntHandler : %x\n", d);
+}
+
+int ImuIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
+{
+	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL;
+
+	Write8((uint8_t*)&regaddr, 2, MemAddr >> 8);
+
+	regaddr = ICM20948_DMP_MEM_STARTADDR;
+	Write8((uint8_t*)&regaddr, 2, MemAddr & 0xFF);
+
+	regaddr = ICM20948_DMP_MEM_RW;
+	for (int i = 0; i < Len; i++)
+	{
+		pBuff[i] = Read8((uint8_t*)&regaddr, 2);
+	}
+
+	return Len;
+}
+
+int ImuIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
+{
+	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL;
+
+	Write8((uint8_t*)&regaddr, 2, MemAddr >> 8);
+
+	regaddr = ICM20948_DMP_MEM_STARTADDR;
+	Write8((uint8_t*)&regaddr, 2, MemAddr & 0xFF);
+
+	regaddr = ICM20948_DMP_MEM_RW;
+	for (int i = 0; i < Len; i++)
+	{
+		Write8((uint8_t*)&regaddr, 2, pData[i]);
+	}
+
+	return Len;
 }
 

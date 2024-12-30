@@ -183,6 +183,7 @@ bool ImuInvnIcm20948::Enable()
 
 	/* Disable all sensors */
 	while(i-- > 0) {
+		//inv_icm20948_set_sensor_period(vpIcmDevice, (inv_icm20948_sensor)i, 20);
 		inv_icm20948_enable_sensor(vpIcmDevice, (inv_icm20948_sensor)i, 1);
 	}
 
@@ -231,6 +232,16 @@ bool ImuInvnIcm20948::Pedometer(bool bEn)
 
 bool ImuInvnIcm20948::Quaternion(bool bEn, int NbAxis)
 {
+	printf("ImuInvnIcm20948::Quaternion\n");
+
+	if (NbAxis < 9)
+	{
+
+	}
+	else
+	{
+
+	}
 	return true;
 }
 
@@ -314,11 +325,24 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 	case INV_ICM20948_SENSOR_ROTATION_VECTOR:
 		memcpy(&(event.data.quaternion.accuracy), arg, sizeof(event.data.quaternion.accuracy));
 		memcpy(event.data.quaternion.quat, data, sizeof(event.data.quaternion.quat));
-//		vQuat.Q1 = event.data.quaternion.quat[0] * 16384.0;
-//		vQuat.Q2 = event.data.quaternion.quat[1] * 16384.0;
-//		vQuat.Q3 = event.data.quaternion.quat[2] * 16384.0;
-//		vQuat.Q4 = event.data.quaternion.quat[3] * 16384.0;
-//		vQuat.Timestamp = timestamp;
+
+#if 0
+		vQuat.Q1 = event.data.quaternion.quat[0] * 16384.0;
+		vQuat.Q2 = event.data.quaternion.quat[1] * 16384.0;
+		vQuat.Q3 = event.data.quaternion.quat[2] * 16384.0;
+		vQuat.Q4 = event.data.quaternion.quat[3] * 16384.0;
+#else
+		{
+		float *d = (float*)data;
+		float a = *(float*)arg;
+		vQuat.Q1 = d[0];
+		vQuat.Q2 = d[1];
+		vQuat.Q3 = d[2];
+		vQuat.Q4 = d[3];
+
+		}
+#endif
+		vQuat.Timestamp = timestamp;
 		break;
 	case INV_ICM20948_SENSOR_GAME_ROTATION_VECTOR:
 	{
@@ -329,13 +353,14 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 
 		accel_accuracy = (uint8_t)inv_icm20948_get_accel_accuracy();
 		gyro_accuracy = (uint8_t)inv_icm20948_get_gyro_accuracy();
-
+#if 0
 		event.data.quaternion.accuracy_flag = min(accel_accuracy, gyro_accuracy);
 		vQuat.Q1 = event.data.quaternion.quat[0];// * 32768.0;
 		vQuat.Q2 = event.data.quaternion.quat[1];// * 32768.0;
 		vQuat.Q3 = event.data.quaternion.quat[2];// * 32768.0;
 		vQuat.Q4 = event.data.quaternion.quat[3];// * 32768.0;
 		vQuat.Timestamp = timestamp;
+#endif
 	}
 		break;
 	case INV_ICM20948_SENSOR_ACTIVITY_CLASSIFICATON:
@@ -363,7 +388,7 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 		memcpy(event.data.raw3d.vect, data, sizeof(event.data.raw3d.vect));
 		break;*/
 	default:
-		((AgmInvnIcm20948*)vpAccel)->UpdateData(sensortype, timestamp, data, arg);
+		//((AgmInvnIcm20948*)vpAccel)->UpdateData(sensortype, timestamp, data, arg);
 		return;
 	}
 
