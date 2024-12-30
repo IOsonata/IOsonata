@@ -564,6 +564,8 @@ SOFTWARE.
 #define ICM20948_DMP_MEM_BANK_SIZE		256		//!< DMP memory bank size
 #define ICM20948_FIFO_SIZE_MAX			0x1000
 
+#define ICM20948_RW_PAGE_SIZE			16
+
 #pragma pack(push, 1)
 
 #pragma pack(pop)
