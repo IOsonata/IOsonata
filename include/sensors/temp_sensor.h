@@ -76,7 +76,8 @@ typedef struct __TempSensor_Config {
 	SENSOR_OPMODE OpMode;		//!< Operating mode
 	uint32_t Freq;				//!< Sampling frequency in mHz (milliHerz) if continuous mode is used
 	uint32_t IntPrio;			//!< Interrupt priority
-	bool bIntEn;				//!< Interrupt enable
+	uint8_t Inter;				//!< 0 - Disable, Bit0 - enable interrupt 1, Bit1 - enable interrupt 2,...
+	DEVINTR_POL	IntPol;			//!< interrupt polarity
 	int	TempOvrs;				//!< Oversampling measurement for temperature
 	uint32_t FilterCoeff;		//!< Filter coefficient select value (this value is device dependent)
 	TempDataRdyCb_t DataRdyCB;	//!< Data ready handler
