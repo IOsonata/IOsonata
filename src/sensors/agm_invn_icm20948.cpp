@@ -55,6 +55,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 #include "idelay.h"
+#include "convutil.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 #include "sensors/agm_invn_icm20948.h"
@@ -196,55 +197,144 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 	return true;
 }
 
-bool AgmInvnIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool AccelInvnIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Timer *pTimer)
 {
-	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;
-
-	vCfgAccFsr = CfgData.Scale;
-	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_RAW_ACCELEROMETER, (const void *)&vCfgAccFsr);
-	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_ACCELEROMETER, (const void *)&vCfgAccFsr);
 
 	AccelSensor::vData.Range = AccelSensor::Range(ICM20948_ACC_ADC_RANGE);
-	Scale(CfgData.Scale);
-	//LowPassFreq(vSampFreq / 2000);
 
-	//regaddr = MPU9250_AG_INT_ENABLE;
-	//Write8(&regaddr, 1, MPU9250_AG_INT_ENABLE_DMP_EN);
-
-//	Reset();
-
-	msDelay(100);
-
-//	regaddr = MPU9250_AG_PWR_MGMT_1;
-//	Write8(&regaddr, 1, MPU9250_AG_PWR_MGMT_1_CYCLE);
+	SamplingFrequency(Cfg.Freq);
+	Scale(Cfg.Scale);
+	FilterFreq(Cfg.FltrFreq);
 
 	return true;
 }
 
-bool AgmInvnIcm20948::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+uint16_t AccelInvnIcm20948::Scale(uint16_t Value)
 {
-	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	enum mpu_accel_fs d;
+
+	if (Value < 3)
+	{
+		d = MPU_FS_2G;
+		Value = 2;
+	}
+	else if (Value < 6)
+	{
+		d = MPU_FS_4G;
+		Value = 4;
+	}
+	else if (Value < 12)
+	{
+		d = MPU_FS_8G;
+		Value = 8;
+	}
+	else
+	{
+		d = MPU_FS_16G;
+		Value = 16;
+	}
+
+	inv_icm20948_set_accel_fullscale(*this, d);
+
+	return AccelSensor::Scale(Value);
+}
+
+uint32_t AccelInvnIcm20948::SamplingFrequency(uint32_t Freq)
+{
+	// ODR = 1.125 kHz/(1+ACCEL_SMPLRT_DIV[11:0])
+
+	uint32_t div = (1125000 + (Freq >>1)) / Freq - 1;
+	uint16_t d = EndianCvt16(div);
+	uint16_t regaddr = REG_ACCEL_SMPLRT_DIV_1;
+
+	Write16((uint8_t*)&regaddr, 2, d);
+
+	div++;
+//	inv_icm20948_ctrl_set_accel_quaternion_gain(s, div);
+//	inv_icm20948_ctrl_set_accel_cal_params(s, div);
+//	s->lLastHwSmplrtDividerAcc = div;
+	return AccelSensor::SamplingFrequency(1125000 / div);
+}
+
+uint32_t AccelInvnIcm20948::FilterFreq(uint32_t Freq)
+{
+	return 0;
+}
+
+bool GyroInvnIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Timer *pTimer)
+{
+	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;
-
-	vCfgGyroFsr = CfgData.Sensitivity;
-
-	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_RAW_GYROSCOPE, (const void *)&vCfgGyroFsr);
-	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_GYROSCOPE, (const void *)&vCfgGyroFsr);
-	inv_icm20948_set_fsr(&vIcmDevice, INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED, (const void *)&vCfgGyroFsr);
 
 	GyroSensor::vData.Range = GyroSensor::Range(ICM20948_GYRO_ADC_RANGE);
-	Sensitivity(CfgData.Sensitivity);
+	Sensitivity(Cfg.Sensitivity);
+	SamplingFrequency(Cfg.Freq);
 
 	return true;
 }
 
-bool AgmInvnIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+uint32_t GyroInvnIcm20948::Sensitivity(uint32_t Value)
+{
+#if 1
+	enum mpu_gyro_fs gfsr;
+
+	if (Value < 325)
+	{
+		gfsr = MPU_FS_250dps;
+		Value = 250;
+	}
+	else if (Value < 750)
+	{
+		gfsr = MPU_FS_500dps;
+		Value = 500;
+	}
+	else if (Value < 1500)
+	{
+		gfsr = MPU_FS_1000dps;
+		Value = 1000;
+	}
+	else
+	{
+		gfsr = MPU_FS_2000dps;
+		Value = 2000;
+	}
+
+	inv_icm20948_set_gyro_fullscale(*this, gfsr);
+#else
+
+	uint32_t d = Value;
+	inv_icm20948_set_fsr(*this, INV_ICM20948_SENSOR_RAW_GYROSCOPE, (const void *)&d);
+	inv_icm20948_set_fsr(*this, INV_ICM20948_SENSOR_GYROSCOPE, (const void *)&d);
+	inv_icm20948_set_fsr(*this, INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED, (const void *)&d);
+
+#endif
+	return GyroSensor::Sensitivity(Value);
+}
+
+uint32_t GyroInvnIcm20948::SamplingFrequency(uint32_t Freq)
+{
+	// ODR = 1.1 kHz/(1+GYRO_SMPLRT_DIV[7:0])
+
+	uint32_t div = (1100000 + (Freq >> 1)) / Freq - 1;
+	uint16_t regaddr = REG_GYRO_SMPLRT_DIV;
+	Write8((uint8_t*)&regaddr, 2, div);
+
+	return GyroSensor::SamplingFrequency(1100000 / (div + 1));
+}
+
+uint32_t GyroInvnIcm20948::FilterFreq(uint32_t Freq)
+{
+	return 0;
+}
+
+bool MagInvnIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
 {
 	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
-	int rc = inv_icm20948_initialize_auxiliary(&vIcmDevice);
+	int rc = inv_icm20948_initialize_auxiliary(*this);
 
 	MagSensor::Range(AK09916_ADC_RANGE);
 
@@ -314,7 +404,7 @@ bool AgmInvnIcm20948::WakeOnEvent(bool bEnable, int Threshold)
 
 	return true;
 }
-
+#if 0
 // Accel low pass frequency
 uint32_t AgmInvnIcm20948::FilterFreq(uint32_t Freq)
 {
@@ -333,7 +423,7 @@ uint32_t AgmInvnIcm20948::Sensitivity(uint32_t Value)
 
 	return GyroSensor::Sensitivity(Value);
 }
-
+#endif
 bool AgmInvnIcm20948::UpdateData()
 {
 	inv_icm20948_poll_sensor(&vIcmDevice, (void*)this, SensorEventHandler);
@@ -341,11 +431,30 @@ bool AgmInvnIcm20948::UpdateData()
 	return true;
 }
 
+bool AgmInvnIcm20948::SelectBank(uint8_t BankNo)
+{
+	if (BankNo > 3 || vCurrBank == BankNo)
+		return false;
+
+	vCurrBank = BankNo;
+
+	uint8_t regaddr = REG_BANK_SEL;
+
+	return Write8(&regaddr, 1, (BankNo << 4) & 0xF0);
+}
+
 int AgmInvnIcm20948::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
-	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	if (CmdAddrLen == 2)
 	{
-		*pCmdAddr |= 0x80;
+		uint16_t *p = (uint16_t*)pCmdAddr;
+		SelectBank(*p >> 7);
+		CmdAddrLen--;
+		*p &= 0x7f;
+	}
+//	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+//		*pCmdAddr |= 0x80;
 	}
 
 	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
@@ -353,12 +462,24 @@ int AgmInvnIcm20948::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int
 
 int AgmInvnIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
 {
-	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+#if 1
+	if (CmdAddrLen == 2)
 	{
-		*pCmdAddr &= 0x7F;
+		uint16_t *p = (uint16_t*)pCmdAddr;
+		SelectBank(*p >> 7);
+		CmdAddrLen--;
+		*p &= 0x7f;
+	}
+//	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+//		*pCmdAddr &= 0x7F;
 	}
 
 	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+#else
+	inv_icm20948_write_mems_reg(&vIcmDevice, *(uint16_t*)pCmdAddr, DataLen, pData);
+#endif
+	return DataLen;
 }
 
 void AgmInvnIcm20948::IntHandler()
@@ -486,6 +607,129 @@ void AgmInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 	default:
 		return;
 	}
+}
+
+int AgmInvnIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
+{
+	int retval = 0;
+
+	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+		uint16_t regaddr = REG_USER_CTRL;
+		uint8_t userctrl = Read8((uint8_t*)&regaddr, 2) | BIT_I2C_MST_EN;
+
+#if 1
+		uint8_t d[4];
+
+		regaddr = REG_I2C_SLV0_ADDR;
+
+		d[0] = (DevAddr & 0x7f) | INV_MPU_BIT_I2C_READ;
+		d[1] = *pCmdAddr;
+
+		while (BuffLen > 0)
+		{
+			int cnt = min(15, BuffLen);
+
+			d[2] = INV_MPU_BIT_SLV_EN | (cnt & 0xf);
+
+			Write((uint8_t*)&regaddr, 2, d, 3);
+
+			regaddr = REG_USER_CTRL;
+			Write8((uint8_t*)&regaddr, 2, userctrl);
+
+			// Delay require for transfer to complete
+			msDelay(60);
+
+			Write8((uint8_t*)&regaddr, 2, userctrl & ~BIT_I2C_MST_EN);
+
+			regaddr = REG_I2C_SLV0_DO;
+			cnt = Read((uint8_t*)&regaddr, 1, pBuff, cnt);
+			if (cnt <= 0)
+				break;
+
+			pBuff += cnt;
+			BuffLen -= cnt;
+			retval += cnt;
+			d[1] += cnt;
+		}
+#else
+		regaddr = ICM20948_I2C_SLV0_ADDR;
+		Write8((uint8_t*)&regaddr, 2, (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD);
+
+		regaddr = ICM20948_I2C_SLV0_REG;
+		Write8((uint8_t*)&regaddr, 2, *pCmdAddr);
+
+		regaddr = ICM20948_I2C_SLV0_CTRL;
+		Write8((uint8_t*)&regaddr, 2, ICM20948_I2C_SLV0_CTRL_I2C_SLV0_EN | (1 & ICM20948_I2C_SLV0_CTRL_I2C_SLV0_LENG_MASK));
+
+		regaddr = ICM20948_USER_CTRL;
+		Write8((uint8_t*)&regaddr, 2, userctrl);
+
+		msDelay(100);
+
+		Write8((uint8_t*)&regaddr, 2, userctrl & ~ICM20948_USER_CTRL_I2C_MST_EN);
+		regaddr = ICM20948_EXT_SLV_SENS_DATA_00;
+		int cnt = Read((uint8_t*)&regaddr, 2, pBuff, 1);
+
+		BuffLen -= cnt;
+
+		regaddr = ICM20948_I2C_SLV0_CTRL;
+		Write8((uint8_t*)&regaddr, 2, 0);
+
+
+#endif
+	}
+	else
+	{
+		retval = vpIntrf->Read(DevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	}
+
+	return retval;
+}
+
+int AgmInvnIcm20948::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+{
+	int retval = 0;
+
+	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+		uint16_t regaddr = REG_USER_CTRL;
+		uint8_t d[8];
+		uint8_t userctrl = Read8((uint8_t*)&regaddr, 2) | BIT_I2C_MST_EN;
+
+		regaddr = REG_I2C_SLV0_ADDR;
+		Write8((uint8_t*)&regaddr, 2, (DevAddr & 0x7F));
+
+		d[0] = *pCmdAddr;
+		d[1] = 1;// | ICM20948_I2C_SLV0_CTRL_I2C_SLV0_EN;	// Length : Write is done 1 byte at a time
+
+		while (DataLen > 0)
+		{
+			d[2] = *pData;
+
+			regaddr = REG_I2C_SLV0_REG;
+			Write((uint8_t*)&regaddr, 2, d, 3);
+
+			regaddr = REG_USER_CTRL;
+			Write8((uint8_t*)&regaddr, 2, userctrl);
+
+			// Delay require for transfer to complete
+			msDelay(60);
+
+			Write8((uint8_t*)&regaddr, 2, userctrl & ~BIT_I2C_MST_EN);
+
+			d[0]++;
+			pData++;
+			DataLen--;
+			retval++;
+		}
+	}
+	else
+	{
+		retval = vpIntrf->Write(DevAddr, pCmdAddr, CmdAddrLen, pData, DataLen);
+	}
+
+	return retval;
 }
 
 #if 0

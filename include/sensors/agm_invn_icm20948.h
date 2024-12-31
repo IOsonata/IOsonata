@@ -45,6 +45,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
 #include "sensors/mag_sensor.h"
+#include "sensors/mag_ak09916.h"
 
 /** @addtogroup Sensors
   * @{
@@ -56,7 +57,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef __cplusplus
 
-class AgmInvnIcm20948 : public AccelSensor, public GyroSensor, public MagSensor {
+class AccelInvnIcm20948 : public AccelSensor {
 public:
 	/**
 	 * @brief	Initialize accelerometer sensor.
@@ -70,7 +71,18 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual uint16_t Scale(uint16_t Value);
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint32_t FilterFreq(uint32_t Freq);
 
+private:
+
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual operator inv_icm20948_t * const () = 0;	// Get device interface data (handle)
+};
+
+class GyroInvnIcm20948 : public GyroSensor {
+public:
 	/**
 	 * @brief	Initialize gyroscope sensor.
 	 *
@@ -83,7 +95,17 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint32_t FilterFreq(uint32_t Freq);
 
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual operator inv_icm20948_t * const () = 0;	// Get device interface data (handle)
+};
+
+class MagInvnIcm20948 : public MagAk09916 {
+public:
 	/**
 	 * @brief	Initialize magnetometer sensor.
 	 *
@@ -96,6 +118,74 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL);
+//	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	//virtual bool Enable();
+	//virtual void Disable();
+
+protected:
+	virtual int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) = 0;
+	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) = 0;
+
+	uint8_t vMagCtrl1Val;
+	int16_t vMagSenAdj[3];
+
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+//	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	//virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) = 0;
+	//virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) = 0;
+
+	uint32_t vDevAddr;
+	virtual operator inv_icm20948_t * const () = 0;	// Get device interface data (handle)
+};
+
+class AgmInvnIcm20948 : public AccelInvnIcm20948, public GyroInvnIcm20948, public MagInvnIcm20948 {
+public:
+
+	/**
+	 * @brief	Initialize accelerometer sensor.
+	 *
+	 * NOTE: This sensor must be the first to be initialized.
+	 *
+	 * @param 	Cfg		: Accelerometer configuration data
+	 * @param 	pIntrf	: Pointer to communication interface
+	 * @param 	pTimer	: Pointer to Timer use for time stamp
+	 *
+	 * @return	true - Success
+	 */
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+		return AccelInvnIcm20948::Init(Cfg, pIntrf, pTimer);
+	}
+
+	/**
+	 * @brief	Initialize gyroscope sensor.
+	 *
+	 * NOTE : Accelerometer must be initialized first prior to this one.
+	 *
+	 * @param 	Cfg		: Accelerometer configuration data
+	 * @param 	pIntrf	: Pointer to communication interface
+	 * @param 	pTimer	: Pointer to Timer use for time stamp
+	 *
+	 * @return	true - Success
+	 */
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
+		return GyroInvnIcm20948::Init(Cfg, pIntrf, pTimer);
+	}
+
+	/**
+	 * @brief	Initialize magnetometer sensor.
+	 *
+	 * NOTE : Accelerometer must be initialized first prior to this one.
+	 *
+	 * @param 	Cfg		: Accelerometer configuration data
+	 * @param 	pIntrf	: Pointer to communication interface
+	 * @param 	pTimer	: Pointer to Timer use for time stamp
+	 *
+	 * @return	true - Success
+	 */
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
+		return MagInvnIcm20948::Init(Cfg, pIntrf, pTimer);
+	}
 
 	virtual bool Enable();
 	virtual void Disable();
@@ -111,11 +201,11 @@ public:
 	virtual bool WakeOnEvent(bool bEnable, int Threshold);
 
 	virtual bool StartSampling();
-	virtual uint32_t FilterFreq(uint32_t Freq);
+/*	virtual uint32_t FilterFreq(uint32_t Freq);
 
 	virtual uint16_t Scale(uint16_t Value);			// Accel
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
-
+*/
 	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(GyroSensorRawData_t &Data) { return GyroSensor::Read(Data); }
@@ -141,11 +231,15 @@ private:
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
+	virtual int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
+	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	bool SelectBank(uint8_t BankNo);
 
 	bool vbInitialized;
 	inv_icm20948_t vIcmDevice;
-	int32_t vCfgAccFsr; // Default = +/- 4g. Valid ranges: 2, 4, 8, 16
-	int32_t vCfgGyroFsr; // Default = +/- 2000dps. Valid ranges: 250, 500, 1000, 2000
+	//int32_t vCfgAccFsr; // Default = +/- 4g. Valid ranges: 2, 4, 8, 16
+	//int32_t vCfgGyroFsr; // Default = +/- 2000dps. Valid ranges: 250, 500, 1000, 2000
+	uint8_t vCurrBank;
 };
 
 extern "C" {

@@ -599,7 +599,7 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 		{
 			int cnt = min(ICM20948_I2C_SLV_MAXLEN, BuffLen);
 
-			d[2] = ICM20948_I2C_SLV0_CTRL_I2C_SLV0_EN | (cnt & ICM20948_I2C_SLV0_CTRL_I2C_SLV0_LENG_MASK);
+			d[2] = ICM20948_I2C_SLV0_CTRL_I2C_SLV0_EN | (cnt & ICM20948_I2C_SLV0_CTRL_I2C_SLV0_LEN_MASK);
 
 			Write((uint8_t*)&regaddr, 2, d, 3);
 
