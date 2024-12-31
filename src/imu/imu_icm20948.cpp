@@ -32,6 +32,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "idelay.h"
+#include "convutil.h"
 #include "imu/imu_icm20948.h"
 #include "sensors/agm_icm20948.h"
 
@@ -328,13 +329,18 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 
 	vpIcm = pIcm;
 
+	// Disable DMP & FIFO before FIFO can be reseted and DMP firmware loaded
 	uint16_t regaddr = ICM20948_USER_CTRL;
 	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
-	//vpIcm->Write8((uint8_t*)&regaddr,	2, d);
+	vpIcm->Write8((uint8_t*)&regaddr,	2, d);
+
+	// Reset FIFO
 
 	regaddr = ICM20948_FIFO_RST;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
+	Write8((uint8_t*)&regaddr, 2, 0);
 
+	// Upload DMP firmware
 	if (vpIcm->UploadDMPImage((uint8_t*)s_Dmp3Image, DMP_CODE_SIZE, DMP_LOAD_START))
 	{
 		uint8_t dd[2];
@@ -348,6 +354,10 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 
 		Init(Cfg, pIcm, pIcm, pIcm);
 
+		regaddr = ICM20948_USER_CTRL;
+		d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+		Write8((uint8_t*)&regaddr, 2, d);
+
 		return true;
 	}
 
@@ -356,16 +366,23 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 
 bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
-	if (pAccel == NULL)
+	// Min require for IMU are accel & gyro
+	if (pAccel == nullptr || pGyro == nullptr)
 	{
 		return false;
 	}
+
 	uint16_t regaddr;
 	uint8_t d;
 
 	Imu::Init(Cfg, pAccel, pGyro, pMag);
+	vEvtHandler = Cfg.EvtHandler;
 
-	// Reset FIFO
+	// Set FIFO watermark 80%
+	uint16_t memaddr = FIFO_WATERMARK;
+	d = EndianCvt16(800);
+	WriteDMP(memaddr, (uint8_t*)&d, 2);
+
 #if 0
 	regaddr = ICM20948_FIFO_RST;
 	d = ICM20948_FIFO_RST_FIFO_RESET_MASK;
@@ -376,13 +393,9 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 #endif
 
 	regaddr = ICM20948_FIFO_EN_2;
-	d = 0xf;	// All
+	d = 0x1f;	// All
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	vEvtHandler = Cfg.EvtHandler;
-
-
-//	vpIcm = (AgmIcm20948*)pAccel;
 	regaddr = ICM20948_INT_ENABLE;
 	d = Read8((uint8_t*)&regaddr, 2);
 	d |= ICM20948_INT_ENABLE_DMP_INT1_EN;
@@ -400,6 +413,9 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	d = 1;
 	Write8((uint8_t*)&regaddr, 2, d);
 
+
+	uint32_t f = pAccel->SamplingFrequency();
+	printf("f %d\n", f);
 
 	return true;
 }

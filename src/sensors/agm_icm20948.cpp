@@ -38,7 +38,7 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "sensors/agm_icm20948.h"
 
-bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
 {
 	//if (vbInitialized)
 	if (Valid())
@@ -49,7 +49,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 
 	uint16_t regaddr;
 	uint8_t d;
-	uint8_t userctrl = ICM20948_USER_CTRL_FIFO_EN ;//| ICM20948_USER_CTRL_DMP_EN;
+	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
 	uint8_t lpconfig = ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	Interface(pIntrf);
@@ -89,22 +89,14 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 	// the chip would not respond properly to motion detection
 	msDelay(500);
 
-	regaddr = ICM20948_USER_CTRL;
-	Write8((uint8_t*)&regaddr, 2, userctrl);
-
 	regaddr = ICM20948_PWR_MGMT_1;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
 
-	//regaddr = ICM20948_PWR_MGMT_2;
-	//Write8((uint8_t*)&regaddr, 2, 0x3f);
+	regaddr = ICM20948_FIFO_RST;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 
-	// Init master I2C interface
-
-	//regaddr = ICM20948_FIFO_EN_1;
-	//Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_1_SLV_0_FIFO_EN);
-
-	//regaddr = ICM20948_LP_CONFIG;
-	//Write8((uint8_t*)&regaddr, 2, lpconfig);
+	regaddr = ICM20948_USER_CTRL;
+	Write8((uint8_t*)&regaddr, 2, userctrl);
 
 /*
 	regaddr = ICM20948_I2C_MST_CTRL;
@@ -117,38 +109,12 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * con
 	regaddr = ICM20948_ODR_ALIGN_EN;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
 
-	vbInitialized  = true;
-
-	return true;
-}
-
-bool AccelIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
-{
-	uint16_t regaddr;
-	uint8_t d;
-
-	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
-		return false;
-
-	vData.Range = Range(ICM20948_ACC_ADC_RANGE);
-
-	SamplingFrequency(CfgData.Freq);
-	Scale(CfgData.Scale);
-	FilterFreq(CfgData.FltrFreq);
-
-	regaddr = ICM20948_PWR_MGMT_2;
-	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	regaddr = ICM20948_FIFO_EN_2;
-	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	if (CfgData.Inter)
+	// ICM20948 has only 1 interrupt pin. Don't care the value
+	if (Inter)
 	{
 		regaddr = ICM20948_INT_PIN_CFG;
 
-		if (CfgData.IntPol == DEVINTR_POL_HIGH)
+		if (IntPol == DEVINTR_POL_HIGH)
 		{
 			d = ICM20948_INT_PIN_CFG_INT_ANYRD_2CLEAR;
 		}
@@ -164,8 +130,44 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pI
 
 		regaddr = ICM20948_INT_ENABLE_1;
 		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
-		//Write8((uint8_t*)&regaddr, 2, d);
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		/*
+		regaddr = ICM20948_INT_ENABLE_2;
+		d = 1;
+		Write8((uint8_t*)&regaddr, 2, d);
+		regaddr = ICM20948_INT_ENABLE_3;
+		d = 1;
+		Write8((uint8_t*)&regaddr, 2, d);
+		*/
 	}
+
+	vbInitialized  = true;
+
+	return true;
+}
+
+bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+{
+	uint16_t regaddr;
+	uint8_t d;
+
+	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
+		return false;
+
+	vData.Range = Range(ICM20948_ACC_ADC_RANGE);
+
+	SamplingFrequency(Cfg.Freq);
+	Scale(Cfg.Scale);
+	FilterFreq(Cfg.FltrFreq);
+
+	regaddr = ICM20948_PWR_MGMT_2;
+	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+//	regaddr = ICM20948_FIFO_EN_2;
+//	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
+//	Write8((uint8_t*)&regaddr, 2, d);
 
 	return true;
 }
@@ -205,22 +207,7 @@ uint32_t AccelIcm20948::SamplingFrequency(uint32_t Freq)
 {
 	// ODR = 1.125 kHz/(1+ACCEL_SMPLRT_DIV[11:0])
 
-	// Find closes DIV value
-	uint16_t div = 0;
-	int diff = 1200;
-
-	for (int i = 0; i < 0x1000; i++)
-	{
-		uint32_t f = 1125 / (1 + i);
-		int df = Freq > f ? Freq - f : f - Freq;
-
-		if (df < diff)
-		{
-			diff = df;
-			div = i;
-			AccelSensor::vSampFreq = f;
-		}
-	}
+	uint32_t div = (1125000 + (Freq >>1))/ Freq - 1;
 
 	uint16_t regaddr = ICM20948_ACCEL_SMPLRT_DIV_1;
 	Write8((uint8_t*)&regaddr, 2, div >> 8);
@@ -228,7 +215,7 @@ uint32_t AccelIcm20948::SamplingFrequency(uint32_t Freq)
 	regaddr = ICM20948_ACCEL_SMPLRT_DIV_2;
 	Write8((uint8_t*)&regaddr, 2, div & 0xFF);
 
-	return AccelSensor::vSampFreq;
+	return AccelSensor::SamplingFrequency(1125000 / (1 + div));
 }
 
 uint32_t AccelIcm20948::FilterFreq(uint32_t Freq)
@@ -285,24 +272,24 @@ uint32_t AccelIcm20948::FilterFreq(uint32_t Freq)
 	return AccelSensor::FilterFreq(Freq);
 }
 
-bool GyroIcm20948::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
 		return false;
 
-	SamplingFrequency(CfgData.Freq);
+	SamplingFrequency(Cfg.Freq);
 
 	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
-	Sensitivity(CfgData.Sensitivity);
+	Sensitivity(Cfg.Sensitivity);
 
 	uint16_t regaddr = ICM20948_PWR_MGMT_2;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	regaddr = ICM20948_FIFO_EN_2;
-	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_GYRO_X_FIFO_EN |
-		ICM20948_FIFO_EN_2_GYRO_Y_FIFO_EN | ICM20948_FIFO_EN_2_GYRO_Z_FIFO_EN;
-	Write8((uint8_t*)&regaddr, 2, d);
+//	regaddr = ICM20948_FIFO_EN_2;
+//	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_GYRO_X_FIFO_EN |
+//		ICM20948_FIFO_EN_2_GYRO_Y_FIFO_EN | ICM20948_FIFO_EN_2_GYRO_Z_FIFO_EN;
+//	Write8((uint8_t*)&regaddr, 2, d);
 
 	return true;
 }
@@ -340,27 +327,11 @@ uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
 {
 	// ODR = 1.1 kHz/(1+GYRO_SMPLRT_DIV[7:0])
 
-	// Find closes DIV value
-	uint16_t div = 0;
-	int diff = 1200;
-
-	for (int i = 0; i < 0x100; i++)
-	{
-		uint32_t f = 1100 / (1 + i);
-		int df = Freq > f ? Freq - f : f - Freq;
-
-		if (df < diff)
-		{
-			diff = df;
-			div = i;
-			GyroSensor::vSampFreq = f;
-		}
-	}
-
+	uint32_t div = (1100000 + (Freq >> 1)) / Freq - 1;
 	uint16_t regaddr = ICM20948_GYRO_SMPLRT_DIV;
 	Write8((uint8_t*)&regaddr, 2, div);
 
-	return GyroSensor::vSampFreq;
+	return GyroSensor::SamplingFrequency(1100000 / (div + 1));
 }
 
 uint32_t GyroIcm20948::FilterFreq(uint32_t Freq)
@@ -422,12 +393,12 @@ uint32_t GyroIcm20948::FilterFreq(uint32_t Freq)
 	return GyroSensor::FilterFreq(Freq);
 }
 
-bool MagIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool MagIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint16_t regaddr;
 	uint8_t d;
 
-	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
 		return false;
 
 	msDelay(200);
@@ -439,14 +410,14 @@ bool MagIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf * const pIntrf
 	regaddr = ICM20948_I2C_MST_ODR_CONFIG;
 	Write8((uint8_t*)&regaddr, 2, 0);
 
-	if (MagAk09916::Init(CfgData, pIntrf, pTimer) == false)
+	if (MagAk09916::Init(Cfg, pIntrf, pTimer) == false)
 	{
 		return false;
 	}
 
-	regaddr = ICM20948_FIFO_EN_1;
-	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_1_SLV_0_FIFO_EN;
-	Write8((uint8_t*)&regaddr, 2, d);
+//	regaddr = ICM20948_FIFO_EN_1;
+//	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_1_SLV_0_FIFO_EN;
+//	Write8((uint8_t*)&regaddr, 2, d);
 
 	return true;
 }
@@ -749,7 +720,7 @@ void AgmIcm20948::IntHandler()
 
 	int cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
 
-	printf("%x %x %x %x\n", istatus[0], istatus[1], istatus[2], istatus[3]);
+	//printf("%x %x %x %x\n", istatus[0], istatus[1], istatus[2], istatus[3]);
 
 	if (istatus[0] & ICM20948_INT_STATUS_I2C_MIST_INT)
 	{
@@ -777,6 +748,36 @@ void AgmIcm20948::IntHandler()
 
 	}
 
+	uint32_t drdy = (istatus[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT) |
+			(istatus[2] & ICM20948_INT_STATUS_2_FIFO_OVERFLOW_INT_MASK) |
+			(istatus[3] & ICM20948_INT_STATUS_3_FIFO_WM_INT_MASK);
+	if (drdy)
+	{
+		regaddr = ICM20948_FIFO_COUNTH;
+		uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
+		//printf("cnt = %d : ", cnt);
+		cnt = EndianCvt16(cnt);
+
+//		printf("%d\n", cnt);
+		if (cnt > 2)
+		{
+			regaddr = ICM20948_FIFO_R_W;
+//			uint16_t h = Read16((uint8_t*)&regaddr, 2);
+			uint8_t dd[16];
+			dd [0] = Read8((uint8_t*)&regaddr, 2);
+			dd [1] = Read8((uint8_t*)&regaddr, 2);
+
+//			Read((uint8_t*)&regaddr, 2, dd, 16);
+			regaddr = ICM20948_FIFO_COUNTH;
+			uint16_t cnt1 = Read16((uint8_t*)&regaddr, 2);
+			//printf("cnt = %d : ", cnt);
+			cnt1 = EndianCvt16(cnt1);
+			printf("%d Fifo header=%x %x %d\n", cnt, dd[0], dd[1], cnt1);
+
+		}
+	}
+
+#if 1
 	if (istatus[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT)
 	{
 		UpdateData();
@@ -817,6 +818,7 @@ void AgmIcm20948::IntHandler()
 #endif
 
 	}
+#endif
 
 	regaddr = ICM20948_INT_STATUS;
 	cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
@@ -843,9 +845,9 @@ void AgmIcm20948::IntHandler()
  * 			- true	: Success
  * 			- false	: Failed
  */
-bool AgmIcm20948::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AgmIcm20948::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
 		return false;
 
 	uint16_t regaddr = ICM20948_PWR_MGMT_1;

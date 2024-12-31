@@ -125,7 +125,7 @@ SOFTWARE.
 
 #define ICM20948_INT_ENABLE_I2C_MST_INT_EN			(1<<0)	// Enable I2C master interrupt on pin 1
 #define ICM20948_INT_ENABLE_DMP_INT1_EN				(1<<1)	// Enable DMP interrupt on pin 1
-#define ICM20948_INT_ENABLE_PLL_RDY_EN				(1<<2)	// Enable interrupt on pin 1
+#define ICM20948_INT_ENABLE_PLL_RDY_EN				(1<<2)	// Enable PLL ready interrupt on pin 1
 #define ICM20948_INT_ENABLE_WOM_INT_EN				(1<<3)	// Enable wake on motion interrupt on pin 1
 #define ICM20948_INT_ENABLE_REG_WOF_EN				(1<<7)	// Enable wake on FSYNC interrupt
 
@@ -250,6 +250,8 @@ SOFTWARE.
 
 #define ICM20948_DATA_RDY_STATUS_RAW_DATA_RDY_MASK	(0xf<<0)
 #define ICM20948_DATA_RDY_STATUS_WOF_STATUS			(1<<7)		// Wake on FSYNC interrupt status
+
+#define ICM20948_HWTEMP_FIX_DISABLE_REG	(ICM20948_REG_BANK0 | 117)	// Undocumented
 
 #define ICM20948_FIFO_CFG				(ICM20948_REG_BANK0 | 118)
 
@@ -553,6 +555,7 @@ SOFTWARE.
 
 #define ICM20948_ACC_ADC_RANGE			32767
 #define ICM20948_GYRO_ADC_RANGE			32767
+#define AK09916_ADC_RANGE				32752
 
 // DMP
 #define ICM20948_DMP_MEM_STARTADDR		(ICM20948_REG_BANK0 | 0x7C)
@@ -564,7 +567,6 @@ SOFTWARE.
 #define ICM20948_DMP_MEM_BANK_SIZE		256		//!< DMP memory bank size
 #define ICM20948_FIFO_SIZE_MAX			0x1000
 
-#define ICM20948_RW_PAGE_SIZE			16
 
 #pragma pack(push, 1)
 
@@ -591,7 +593,7 @@ public:
 	virtual uint32_t FilterFreq(uint32_t Freq);
 
 private:
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
 };
 
 class GyroIcm20948 : public GyroSensor {
@@ -613,7 +615,7 @@ public:
 	virtual uint32_t FilterFreq(uint32_t Freq);
 
 private:
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
 };
 
 class MagIcm20948 : public MagAk09916 {
@@ -642,7 +644,8 @@ protected:
 	int16_t vMagSenAdj[3];
 
 private:
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
+//	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
 	//virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) = 0;
 	//virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) = 0;
 
@@ -763,7 +766,8 @@ public:
 private:
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
-	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
+//	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
+	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
 	bool SelectBank(uint8_t BankNo);
 
 	bool vbInitialized;
