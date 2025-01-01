@@ -402,24 +402,24 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	Write8((uint8_t*)&regaddr, 2, d);
 #endif
 
-	regaddr = ICM20948_FIFO_EN_2;
+	regaddr = ICM20948_FIFO_EN_2_REG;
 	d = 0x1f;	// All
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	regaddr = ICM20948_INT_ENABLE;
+	regaddr = ICM20948_INT_ENABLE_REG;
 	d = Read8((uint8_t*)&regaddr, 2);
 	d |= ICM20948_INT_ENABLE_DMP_INT1_EN;
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	regaddr = ICM20948_INT_ENABLE_1;
+	regaddr = ICM20948_INT_ENABLE_1_REG;
 	d = 0;
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	regaddr = ICM20948_INT_ENABLE_2;
+	regaddr = ICM20948_INT_ENABLE_2_REG;
 	d = 1;
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	regaddr = ICM20948_INT_ENABLE_3;
+	regaddr = ICM20948_INT_ENABLE_3_REG;
 	d = 1;
 	Write8((uint8_t*)&regaddr, 2, d);
 
@@ -432,7 +432,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 
 bool ImuIcm20948::Enable()
 {
-	uint16_t regaddr = ICM20948_USER_CTRL;
+	uint16_t regaddr = ICM20948_USER_CTRL_REG;
 	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2);
 
 	d |= ICM20948_USER_CTRL_DMP_EN | ICM20948_USER_CTRL_FIFO_EN;
@@ -520,7 +520,7 @@ bool ImuIcm20948::UpdateData()
 
 void ImuIcm20948::IntHandler()
 {
-	uint16_t addr = ICM20948_DMP_INT_STATUS;
+	uint16_t addr = ICM20948_DMP_INT_STATUS_REG;
 	uint8_t d;
 
 //	ReadDMP(addr, &d, 1);

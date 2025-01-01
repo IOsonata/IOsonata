@@ -54,7 +54,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "Fusion/Fusion.h"
 
-//#define INVN
+#define INVN
 
 #ifdef INVN
 #include "sensors/agm_invn_icm20948.h"
@@ -336,7 +336,7 @@ bool HardwareInit()
 
 #if defined(ICM20948) || defined(MPU9250)
 
-		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
+//		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
 //		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
 #endif
 	}
@@ -407,7 +407,7 @@ int main()
 	g_Imu.Enable();
 
     FusionAhrs ahrs;
-    FusionAhrsInitialise(&ahrs);
+    //FusionAhrsInitialise(&ahrs);
 
 	while (1)
 	{
@@ -435,13 +435,13 @@ int main()
 		g_MotSensor.Read(accdata);
 		g_MotSensor.Read(gyrodata);
 		//g_Imu.Read(quat);
-        FusionVector gyroscope = {gyrodata.X, gyrodata.Y, gyrodata.Z}; // replace this with actual gyroscope data in degrees/s
-        FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
+        //FusionVector gyroscope = {gyrodata.X, gyrodata.Y, gyrodata.Z}; // replace this with actual gyroscope data in degrees/s
+       // FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
 
-        FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
+       // FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
 
         //FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
-        FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
+       // FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
 
 		if (cnt-- < 0)
 		{
@@ -451,7 +451,7 @@ int main()
 			g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, gyrodata.X, gyrodata.Y, gyrodata.Z);
 //	        printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
 			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
-			printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, fq.element.x, fq.element.y, fq.element.z, fq.element.w);
+			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, fq.element.x, fq.element.y, fq.element.z, fq.element.w);
 		}
 	}
 }

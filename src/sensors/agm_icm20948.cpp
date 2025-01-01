@@ -71,7 +71,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	vCurrBank = -1;
 
 	// Read chip id
-	regaddr = ICM20948_WHO_AM_I;
+	regaddr = ICM20948_WHO_AM_I_REG;
 	d = Read8((uint8_t*)&regaddr, 2);
 
 	if (d != ICM20948_WHO_AM_I_ID)
@@ -89,13 +89,13 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	// the chip would not respond properly to motion detection
 	msDelay(500);
 
-	regaddr = ICM20948_PWR_MGMT_1;
+	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
 
-	regaddr = ICM20948_FIFO_RST;
+	regaddr = ICM20948_FIFO_RST_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 
-	regaddr = ICM20948_USER_CTRL;
+	regaddr = ICM20948_USER_CTRL_REG;
 	Write8((uint8_t*)&regaddr, 2, userctrl);
 
 /*
@@ -106,13 +106,13 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	regaddr = ICM20948_I2C_MST_ODR_CONFIG;
 	Write8((uint8_t*)&regaddr, 2, 0);
 */
-	regaddr = ICM20948_ODR_ALIGN_EN;
+	regaddr = ICM20948_ODR_ALIGN_EN_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
 
 	// ICM20948 has only 1 interrupt pin. Don't care the value
 	if (Inter)
 	{
-		regaddr = ICM20948_INT_PIN_CFG;
+		regaddr = ICM20948_INT_PIN_CFG_REG;
 
 		if (IntPol == DEVINTR_POL_HIGH)
 		{
@@ -124,11 +124,11 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		}
 		Write8((uint8_t*)&regaddr, 2, d);
 
-		regaddr = ICM20948_INT_ENABLE;
+		regaddr = ICM20948_INT_ENABLE_REG;
 		d = ICM20948_INT_ENABLE_WOM_INT_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
 
-		regaddr = ICM20948_INT_ENABLE_1;
+		regaddr = ICM20948_INT_ENABLE_1_REG;
 		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
 
@@ -161,7 +161,7 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 	Scale(Cfg.Scale);
 	FilterFreq(Cfg.FltrFreq);
 
-	regaddr = ICM20948_PWR_MGMT_2;
+	regaddr = ICM20948_PWR_MGMT_2_REG;
 	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
 	Write8((uint8_t*)&regaddr, 2, d);
 
@@ -174,7 +174,7 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 
 uint16_t AccelIcm20948::Scale(uint16_t Value)
 {
-	uint16_t regaddr = ICM20948_ACCEL_CONFIG;
+	uint16_t regaddr = ICM20948_ACCEL_CONFIG_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_MASK;
 
 	if (Value < 4)
@@ -209,10 +209,10 @@ uint32_t AccelIcm20948::SamplingFrequency(uint32_t Freq)
 
 	uint32_t div = (1125000 + (Freq >>1))/ Freq - 1;
 
-	uint16_t regaddr = ICM20948_ACCEL_SMPLRT_DIV_1;
+	uint16_t regaddr = ICM20948_ACCEL_SMPLRT_DIV_1_REG;
 	Write8((uint8_t*)&regaddr, 2, div >> 8);
 
-	regaddr = ICM20948_ACCEL_SMPLRT_DIV_2;
+	regaddr = ICM20948_ACCEL_SMPLRT_DIV_2_REG;
 	Write8((uint8_t*)&regaddr, 2, div & 0xFF);
 
 	return AccelSensor::SamplingFrequency(1125000 / (1 + div));
@@ -220,7 +220,7 @@ uint32_t AccelIcm20948::SamplingFrequency(uint32_t Freq)
 
 uint32_t AccelIcm20948::FilterFreq(uint32_t Freq)
 {
-	uint16_t regaddr = ICM20948_ACCEL_CONFIG;
+	uint16_t regaddr = ICM20948_ACCEL_CONFIG_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_MASK | ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE);
 
 	if (Freq == 0)
@@ -282,7 +282,7 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(Cfg.Sensitivity);
 
-	uint16_t regaddr = ICM20948_PWR_MGMT_2;
+	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
 	Write8((uint8_t*)&regaddr, 2, d);
 
@@ -296,7 +296,7 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 
 uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 {
-	uint16_t regaddr = ICM20948_GYRO_CONFIG_1;
+	uint16_t regaddr = ICM20948_GYRO_CONFIG_1_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_MASK;
 
 	if (Value < 500)
@@ -328,7 +328,7 @@ uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
 	// ODR = 1.1 kHz/(1+GYRO_SMPLRT_DIV[7:0])
 
 	uint32_t div = (1100000 + (Freq >> 1)) / Freq - 1;
-	uint16_t regaddr = ICM20948_GYRO_SMPLRT_DIV;
+	uint16_t regaddr = ICM20948_GYRO_SMPLRT_DIV_REG;
 	Write8((uint8_t*)&regaddr, 2, div);
 
 	return GyroSensor::SamplingFrequency(1100000 / (div + 1));
@@ -336,7 +336,7 @@ uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
 
 uint32_t GyroIcm20948::FilterFreq(uint32_t Freq)
 {
-	uint16_t regaddr = ICM20948_GYRO_CONFIG_1;
+	uint16_t regaddr = ICM20948_GYRO_CONFIG_1_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_MASK | ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE);
 
 	if (Freq == 0)
@@ -403,11 +403,16 @@ bool MagIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Ti
 
 	msDelay(200);
 
-	regaddr = ICM20948_I2C_MST_CTRL;
+	// Disable LP mode
+	regaddr = ICM20948_LP_CONFIG_REG;
+	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_LP_CONFIG_I2C_MST_CYCLE;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = ICM20948_I2C_MST_CTRL_REG;
 	d = 0;
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	regaddr = ICM20948_I2C_MST_ODR_CONFIG;
+	regaddr = ICM20948_I2C_MST_ODR_CONFIG_REG;
 	Write8((uint8_t*)&regaddr, 2, 0);
 
 	if (MagAk09916::Init(Cfg, pIntrf, pTimer) == false)
@@ -433,27 +438,27 @@ void AgmIcm20948::Disable()
 	uint8_t d;
 
 	// Disable Accel & Gyro
-	regaddr = ICM20948_PWR_MGMT_2;
+	regaddr = ICM20948_PWR_MGMT_2_REG;
 	d = ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK | ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
 	Write8((uint8_t*)&regaddr, 2, 0);
 
-	regaddr = ICM20948_USER_CTRL;
+	regaddr = ICM20948_USER_CTRL_REG;
 	Write8((uint8_t*)&regaddr, 2, 0);
 
-	regaddr = ICM20948_LP_CONFIG;
+	regaddr = ICM20948_LP_CONFIG_REG;
 	Write8((uint8_t*)&regaddr, 2, 0);
 
-	regaddr = ICM20948_PWR_MGMT_1;
+	regaddr = ICM20948_PWR_MGMT_1_REG;
 	d = ICM20948_PWR_MGMT_1_TEMP_DIS | ICM20948_PWR_MGMT_1_SLEEP;// | ICM20948_PWR_MGMT_1_CLKSEL_STOP;
 	Write8((uint8_t*)&regaddr, 2, d);
 }
 
 void AgmIcm20948::Reset()
 {
-	uint16_t regaddr = ICM20948_PWR_MGMT_1;
+	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
 
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_DEVICE_RESET);
-	regaddr = ICM20948_FIFO_RST;
+	regaddr = ICM20948_FIFO_RST_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 
 }
@@ -508,7 +513,7 @@ uint32_t AgmIcm20948::Sensitivity(uint32_t Value)
 bool AgmIcm20948::UpdateData()
 {
 	bool res = MagIcm20948::UpdateData();
-	uint16_t regaddr = ICM20948_ACCEL_XOUT_H;
+	uint16_t regaddr = ICM20948_ACCEL_XOUT_H_REG;
 	uint8_t d[20];
 	uint64_t t;
 	if (vpTimer)
@@ -516,12 +521,12 @@ bool AgmIcm20948::UpdateData()
 		t = vpTimer->uSecond();
 	}
 
-	regaddr = ICM20948_INT_STATUS_1;//ICM20948_DATA_RDY_STATUS;
+	regaddr = ICM20948_INT_STATUS_1_REG;//ICM20948_DATA_RDY_STATUS;
 	d[0] = Read8((uint8_t*)&regaddr, 2);
 
 	if (d[0] & 1)
 	{
-		regaddr = ICM20948_ACCEL_XOUT_H;
+		regaddr = ICM20948_ACCEL_XOUT_H_REG;
 		Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 14);
 
 		AccelSensor::vData.Timestamp = t;
@@ -584,13 +589,13 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
-		uint16_t regaddr = ICM20948_USER_CTRL;
+		uint16_t regaddr = ICM20948_USER_CTRL_REG;
 		uint8_t userctrl = Read8((uint8_t*)&regaddr, 2) | ICM20948_USER_CTRL_I2C_MST_EN;
 
 #if 1
 		uint8_t d[4];
 
-		regaddr = ICM20948_I2C_SLV0_ADDR;
+		regaddr = ICM20948_I2C_SLV0_ADDR_REG;
 
 		d[0] = (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD;
 		d[1] = *pCmdAddr;
@@ -603,7 +608,7 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 
 			Write((uint8_t*)&regaddr, 2, d, 3);
 
-			regaddr = ICM20948_USER_CTRL;
+			regaddr = ICM20948_USER_CTRL_REG;
 			Write8((uint8_t*)&regaddr, 2, userctrl);
 
 			// Delay require for transfer to complete
@@ -611,7 +616,7 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 
 			Write8((uint8_t*)&regaddr, 2, userctrl & ~ICM20948_USER_CTRL_I2C_MST_EN);
 
-			regaddr = ICM20948_EXT_SLV_SENS_DATA_00;
+			regaddr = ICM20948_EXT_SLV_SENS_DATA_00_REG;
 			cnt = Read((uint8_t*)&regaddr, 1, pBuff, cnt);
 			if (cnt <= 0)
 				break;
@@ -662,11 +667,11 @@ int AgmIcm20948::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
-		uint16_t regaddr = ICM20948_USER_CTRL;
+		uint16_t regaddr = ICM20948_USER_CTRL_REG;
 		uint8_t d[8];
 		uint8_t userctrl = Read8((uint8_t*)&regaddr, 2) | ICM20948_USER_CTRL_I2C_MST_EN;
 
-		regaddr = ICM20948_I2C_SLV0_ADDR;
+		regaddr = ICM20948_I2C_SLV0_ADDR_REG;
 		Write8((uint8_t*)&regaddr, 2, (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_WR);
 
 		d[0] = *pCmdAddr;
@@ -676,10 +681,10 @@ int AgmIcm20948::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint
 		{
 			d[2] = *pData;
 
-			regaddr = ICM20948_I2C_SLV0_REG;
+			regaddr = ICM20948_I2C_SLV0_REG_REG;
 			Write((uint8_t*)&regaddr, 2, d, 3);
 
-			regaddr = ICM20948_USER_CTRL;
+			regaddr = ICM20948_USER_CTRL_REG;
 			Write8((uint8_t*)&regaddr, 2, userctrl);
 
 			// Delay require for transfer to complete
@@ -708,14 +713,14 @@ bool AgmIcm20948::SelectBank(uint8_t BankNo)
 
 	vCurrBank = BankNo;
 
-	uint8_t regaddr = ICM20948_REG_BANK_SEL;
+	uint8_t regaddr = ICM20948_REG_BANK_SEL_REG;
 
 	return Write8(&regaddr, 1, (BankNo << ICM20948_REG_BANK_SEL_USER_BANK_BITPOS) & ICM20948_REG_BANK_SEL_USER_BANK_MASK);
 }
 
 void AgmIcm20948::IntHandler()
 {
-	uint16_t regaddr = ICM20948_INT_STATUS;
+	uint16_t regaddr = ICM20948_INT_STATUS_REG;
 	uint8_t istatus[4];
 
 	int cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
@@ -728,7 +733,7 @@ void AgmIcm20948::IntHandler()
 	}
 	if (istatus[0] & ICM20948_INT_STATUS_DMP_INT1)
 	{
-		regaddr = ICM20948_DMP_INT_STATUS;
+		regaddr = ICM20948_DMP_INT_STATUS_REG;
 		uint16_t distatus = Read8((uint8_t*)&regaddr, 2);
 //		Write16((uint8_t*)&regaddr, 2, distatus);
 
@@ -761,7 +766,7 @@ void AgmIcm20948::IntHandler()
 //		printf("%d\n", cnt);
 		if (cnt > 2)
 		{
-			regaddr = ICM20948_FIFO_R_W;
+			regaddr = ICM20948_FIFO_R_W_REG;
 //			uint16_t h = Read16((uint8_t*)&regaddr, 2);
 			uint8_t dd[16];
 			dd [0] = Read8((uint8_t*)&regaddr, 2);
@@ -812,7 +817,7 @@ void AgmIcm20948::IntHandler()
 #else
 		uint8_t dd[cnt];
 		memset(dd, 0, cnt);
-		regaddr = ICM20948_FIFO_R_W;
+		regaddr = ICM20948_FIFO_R_W_REG;
 		int l = Read((uint8_t*)&regaddr, 2, dd, cnt);
 		printf("l:%d %x %x %x %x\n", l, dd[0], dd[1], dd[2], dd[3]);
 #endif
@@ -820,7 +825,7 @@ void AgmIcm20948::IntHandler()
 	}
 #endif
 
-	regaddr = ICM20948_INT_STATUS;
+	regaddr = ICM20948_INT_STATUS_REG;
 	cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
 
 //	printf("x- %x %x %x %x\n", istatus[0], istatus[1], istatus[2], istatus[3]);
@@ -850,7 +855,7 @@ bool AgmIcm20948::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, T
 	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
 		return false;
 
-	uint16_t regaddr = ICM20948_PWR_MGMT_1;
+	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2);
 
 	// Enable temperature sensor
@@ -866,12 +871,12 @@ bool AgmIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage
 		return false;
 
 	// Disable DMP & FIFO before FIFO can be reseted and DMP firmware loaded
-	uint16_t regaddr = ICM20948_USER_CTRL;
+	uint16_t regaddr = ICM20948_USER_CTRL_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
 	Write8((uint8_t*)&regaddr,	2, d);
 
 	// Reset FIFO
-	regaddr = ICM20948_FIFO_RST;
+	regaddr = ICM20948_FIFO_RST_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 	Write8((uint8_t*)&regaddr, 2, 0);
 
@@ -886,7 +891,7 @@ bool AgmIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage
 		regaddr = ICM20948_DMP_PROG_START_ADDRH_REG;
 		Write16((uint8_t*)&regaddr, 2, DmpStartAddr);
 
-		regaddr = ICM20948_USER_CTRL;
+		regaddr = ICM20948_USER_CTRL_REG;
 		d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
 
@@ -903,7 +908,7 @@ bool AgmIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)//, ui
 	uint16_t regaddr;
 	uint16_t memaddr = ICM20948_DMP_LOAD_MEM_START_ADDR;
 
-	regaddr = ICM20948_PWR_MGMT_1;
+	regaddr = ICM20948_PWR_MGMT_1_REG;
 	uint8_t pwrstate;
 
 	pwrstate = Read8((uint8_t*)&regaddr, 2);
