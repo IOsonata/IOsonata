@@ -41,7 +41,8 @@ SOFTWARE.
 class ImuIcm20948 : public Imu {
 public:
 
-	bool Init(const ImuCfg_t &Cfg, AgmIcm20948 *pIcm);
+	//bool Init(const ImuCfg_t &Cfg, AgmIcm20948 *pIcm);
+	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 
 	virtual bool Enable();
 	virtual void Disable();
@@ -104,7 +105,6 @@ public:
 
 
 protected:
-	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 
 private:
 

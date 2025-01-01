@@ -236,8 +236,13 @@ uint16_t AccelInvnIcm20948::Scale(uint16_t Value)
 		Value = 16;
 	}
 
-	inv_icm20948_set_accel_fullscale(*this, d);
 
+#if 1
+	uint16_t regaddr = REG_ACCEL_CONFIG;
+	Write8((uint8_t*)&regaddr, 2, d);
+#else
+	inv_icm20948_set_accel_fullscale(*this, d);
+#endif
 	return AccelSensor::Scale(Value);
 }
 
@@ -258,9 +263,69 @@ uint32_t AccelInvnIcm20948::SamplingFrequency(uint32_t Freq)
 	return AccelSensor::SamplingFrequency(1125000 / div);
 }
 
+#define ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE					(1<<0)	// Enable accel DLPF
+
+#define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_MASK				(3<<1)	// Full scale select mask
+#define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_2G				(0<<1)	// Full scale select 2g
+#define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_4G				(1<<1)	// Full scale select 4g
+#define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_8G				(2<<1)	// Full scale select 8g
+#define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_16G				(3<<1)	// Full scale select 16g
+
+#define ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_MASK			(7<<3)	// Low pass filter config
+#define ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS			3
+
 uint32_t AccelInvnIcm20948::FilterFreq(uint32_t Freq)
 {
-	return 0;
+	uint16_t regaddr = REG_ACCEL_CONFIG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_MASK | ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE);
+
+	if (Freq == 0)
+	{
+		Freq = 1248000;
+	}
+	else if (Freq < 11000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (6 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 8300;	// NBW
+	}
+	else if (Freq < 23000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (5 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 17000;
+	}
+	else if (Freq < 50000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (4 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 34400;
+	}
+	else if (Freq < 110000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (3 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 68800;
+	}
+	else if (Freq < 240000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (2 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 136000;
+	}
+	else if (Freq < 470000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (1 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 265000;
+	}
+	else if (Freq < 1000000)
+	{
+		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (7 << ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS);
+		Freq = 499000;
+	}
+	else
+	{
+		Freq = 1248000;
+	}
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	return AccelSensor::FilterFreq(Freq);
 }
 
 bool GyroInvnIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Timer *pTimer)
@@ -277,7 +342,6 @@ bool GyroInvnIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Tim
 
 uint32_t GyroInvnIcm20948::Sensitivity(uint32_t Value)
 {
-#if 1
 	enum mpu_gyro_fs gfsr;
 
 	if (Value < 325)
@@ -302,14 +366,7 @@ uint32_t GyroInvnIcm20948::Sensitivity(uint32_t Value)
 	}
 
 	inv_icm20948_set_gyro_fullscale(*this, gfsr);
-#else
 
-	uint32_t d = Value;
-	inv_icm20948_set_fsr(*this, INV_ICM20948_SENSOR_RAW_GYROSCOPE, (const void *)&d);
-	inv_icm20948_set_fsr(*this, INV_ICM20948_SENSOR_GYROSCOPE, (const void *)&d);
-	inv_icm20948_set_fsr(*this, INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED, (const void *)&d);
-
-#endif
 	return GyroSensor::Sensitivity(Value);
 }
 
@@ -326,7 +383,7 @@ uint32_t GyroInvnIcm20948::SamplingFrequency(uint32_t Freq)
 
 uint32_t GyroInvnIcm20948::FilterFreq(uint32_t Freq)
 {
-	return 0;
+	return GyroSensor::FilterFreq(Freq);
 }
 
 bool MagInvnIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
@@ -346,7 +403,7 @@ bool AgmInvnIcm20948::Enable()
 	int i = INV_SENSOR_TYPE_MAX;
 
 	/* Disable all sensors */
-#if 0
+#if 1
 	while(i-- > 0) {
 		inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
 	}
@@ -395,35 +452,11 @@ bool AgmInvnIcm20948::WakeOnEvent(bool bEnable, int Threshold)
 	}
 	else
 	{
-//	    regaddr = MPU9250_AG_INT_ENABLE;
-	    Write8((uint8_t*)&regaddr, 2, 0);
-
-//	    regaddr = MPU9250_AG_PWR_MGMT_1;
-		Write8((uint8_t*)&regaddr, 2, 0);
 	}
 
 	return true;
 }
-#if 0
-// Accel low pass frequency
-uint32_t AgmInvnIcm20948::FilterFreq(uint32_t Freq)
-{
-	return AccelSensor::FilterFreq(Freq);
-}
 
-// Accel scale
-uint16_t AgmInvnIcm20948::Scale(uint16_t Value)
-{
-	return AccelSensor::Scale(Value);
-}
-
-// Gyro scale
-uint32_t AgmInvnIcm20948::Sensitivity(uint32_t Value)
-{
-
-	return GyroSensor::Sensitivity(Value);
-}
-#endif
 bool AgmInvnIcm20948::UpdateData()
 {
 	inv_icm20948_poll_sensor(&vIcmDevice, (void*)this, SensorEventHandler);
@@ -452,17 +485,12 @@ int AgmInvnIcm20948::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int
 		CmdAddrLen--;
 		*p &= 0x7f;
 	}
-//	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
-	{
-//		*pCmdAddr |= 0x80;
-	}
 
 	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 }
 
 int AgmInvnIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
 {
-#if 1
 	if (CmdAddrLen == 2)
 	{
 		uint16_t *p = (uint16_t*)pCmdAddr;
@@ -470,16 +498,8 @@ int AgmInvnIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, in
 		CmdAddrLen--;
 		*p &= 0x7f;
 	}
-//	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
-	{
-//		*pCmdAddr &= 0x7F;
-	}
 
 	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
-#else
-	inv_icm20948_write_mems_reg(&vIcmDevice, *(uint16_t*)pCmdAddr, DataLen, pData);
-#endif
-	return DataLen;
 }
 
 void AgmInvnIcm20948::IntHandler()

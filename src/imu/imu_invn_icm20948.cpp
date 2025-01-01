@@ -389,8 +389,11 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 		break;*/
 	default:
 		//((AgmInvnIcm20948*)vpAccel)->UpdateData(sensortype, timestamp, data, arg);
+//		vpIcm->UpdateData(sensortype, timestamp, data, arg);
 		return;
 	}
+
+	vpIcm->UpdateData(sensortype, timestamp, data, arg);
 
 	if (vEvtHandler != NULL)
 	{

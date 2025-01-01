@@ -860,12 +860,48 @@ bool AgmIcm20948::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, T
 	return true;
 }
 
-bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t MemAddr)
+bool AgmIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len)
+{
+	if (pDmpImage == NULL || Len == 0)
+		return false;
+
+	// Disable DMP & FIFO before FIFO can be reseted and DMP firmware loaded
+	uint16_t regaddr = ICM20948_USER_CTRL;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
+	Write8((uint8_t*)&regaddr,	2, d);
+
+	// Reset FIFO
+	regaddr = ICM20948_FIFO_RST;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
+	Write8((uint8_t*)&regaddr, 2, 0);
+
+	// load external image
+	bool res = UploadDMPImage(pDmpImage, Len);
+
+	if (res)
+	{
+		DmpStartAddr = EndianCvt16(DmpStartAddr);
+
+		// Write DMP program start address
+		regaddr = ICM20948_DMP_PROG_START_ADDRH_REG;
+		Write16((uint8_t*)&regaddr, 2, DmpStartAddr);
+
+		regaddr = ICM20948_USER_CTRL;
+		d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		return true;
+	}
+
+	return false;
+}
+
+bool AgmIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)//, uint16_t MemAddr)
 {
 	int len = Len, l = 0;
-	uint8_t *p = pDmpImage;
+	uint8_t *p = (uint8_t*)pDmpImage;
 	uint16_t regaddr;
-	uint16_t memaddr = MemAddr;
+	uint16_t memaddr = ICM20948_DMP_LOAD_MEM_START_ADDR;
 
 	regaddr = ICM20948_PWR_MGMT_1;
 	uint8_t pwrstate;
@@ -875,42 +911,42 @@ bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t Me
 	// make sure it is on full power
 	Write8((uint8_t*)&regaddr, 2, pwrstate & ~(ICM20948_PWR_MGMT_1_LP_EN | ICM20948_PWR_MGMT_1_SLEEP));
 
-	regaddr = ICM20948_DMP_MEM_BANKSEL;
+	regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 	Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
 
-	regaddr = ICM20948_DMP_MEM_STARTADDR;
+	regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
 	Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
 
 	l = min(len, ICM20948_DMP_MEM_BANK_SIZE - (memaddr % ICM20948_DMP_MEM_BANK_SIZE));
 
 	while (len > 0)
 	{
-		regaddr = ICM20948_DMP_MEM_RW;
+		regaddr = ICM20948_DMP_MEM_RW_REG;
 		l = Write((uint8_t*)&regaddr, 2, p, l);
 
 		p += l;
 		memaddr += l;
 		len -= l;
 
-		regaddr = ICM20948_DMP_MEM_BANKSEL;
+		regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 		Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
 
-		regaddr = ICM20948_DMP_MEM_STARTADDR;
+		regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
 		Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
 
 		l = min(len, ICM20948_DMP_MEM_BANK_SIZE);
 	}
 
 	len = Len;
-	p = pDmpImage;
-	memaddr = MemAddr;
+	p = (uint8_t*)pDmpImage;
+	memaddr = ICM20948_DMP_LOAD_MEM_START_ADDR;
 
 	// Verify
 
-	regaddr = ICM20948_DMP_MEM_BANKSEL;
+	regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 	Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
 
-	regaddr = ICM20948_DMP_MEM_STARTADDR;
+	regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
 	Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
 	l = min(len, ICM20948_DMP_MEM_BANK_SIZE - (memaddr % ICM20948_DMP_MEM_BANK_SIZE));
 
@@ -918,7 +954,7 @@ bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t Me
 	{
 		uint8_t m[ICM20948_DMP_MEM_BANK_SIZE];
 
-		regaddr = ICM20948_DMP_MEM_RW;
+		regaddr = ICM20948_DMP_MEM_RW_REG;
 		Read((uint8_t*)&regaddr, 2, m, l);
 
 		if (memcmp(p, m, l) != 0)
@@ -930,10 +966,10 @@ bool AgmIcm20948::UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t Me
 		memaddr += l;
 		len -= l;
 
-		regaddr = ICM20948_DMP_MEM_BANKSEL;
+		regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 		Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
 
-		regaddr = ICM20948_DMP_MEM_STARTADDR;
+		regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
 		Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
 
 		l = min(len, ICM20948_DMP_MEM_BANK_SIZE);

@@ -558,15 +558,21 @@ SOFTWARE.
 #define AK09916_ADC_RANGE				32752
 
 // DMP
-#define ICM20948_DMP_MEM_STARTADDR		(ICM20948_REG_BANK0 | 0x7C)
-#define ICM20948_DMP_MEM_RW           	(ICM20948_REG_BANK0 | 0x7D)
-#define ICM20948_DMP_MEM_BANKSEL		(ICM20948_REG_BANK0 | 0x7E)
-#define ICM20948_DMP_PROG_START_ADDRH	(ICM20948_REG_BANK2 | 0x50)
-#define ICM20948_DMP_PROG_START_ADDRL	(ICM20948_REG_BANK2 | 0x51)
+#define ICM20948_DMP_MEM_STARTADDR_REG	(ICM20948_REG_BANK0 | 0x7C)
+#define ICM20948_DMP_MEM_RW_REG        	(ICM20948_REG_BANK0 | 0x7D)
+#define ICM20948_DMP_MEM_BANKSEL_REG	(ICM20948_REG_BANK0 | 0x7E)
+#define ICM20948_DMP_PROG_START_ADDRH_REG	(ICM20948_REG_BANK2 | 0x50)
+#define ICM20948_DMP_PROG_START_ADDRL_REG	(ICM20948_REG_BANK2 | 0x51)
 
-#define ICM20948_DMP_MEM_BANK_SIZE		256		//!< DMP memory bank size
+#define ICM20948_DMP_MEM_BANK_SIZE			256		//!< DMP memory bank size
+#define ICM20948_DMP_PROG_START_ADDR		0x1000U
+#define ICM20948_DMP_LOAD_MEM_START_ADDR	0x90
+
 #define ICM20948_FIFO_SIZE_MAX			0x1000
 
+#define ICM20948_ACCEL_IDX		0
+#define ICM20948_GYRO_IDX		1
+#define ICM20948_MAG_IDX		2
 
 #pragma pack(push, 1)
 
@@ -760,21 +766,25 @@ public:
 
 	bool UpdateData();
 	virtual void IntHandler();
-
-	bool UploadDMPImage(uint8_t * const pDmpImage, int Len, uint16_t MemAddr);
+	int GetFifoLen();
+	int ReadFifo(uint8_t * const pBuff, int Len);
+	void ResetFifo();
+	bool InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len);
 
 private:
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
 //	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
+	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
 	bool SelectBank(uint8_t BankNo);
 
 	bool vbInitialized;
-	uint8_t vMagCtrl1Val;
-	int16_t vMagSenAdj[3];
-	uint8_t vCurrBank;
 	bool vbDmpEnabled;
+	bool vbSensorEnabled[3];
+//	uint8_t vMagCtrl1Val;
+//	int16_t vMagSenAdj[3];
+	uint8_t vCurrBank;
 };
 
 #endif // __cplusplus

@@ -319,7 +319,7 @@ static const float s_CfgMountingMatrix[9]= {
 	0, 1.f, 0,
 	0, 0, 1.f
 };
-
+#if 0
 bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 {
 	if (pIcm == NULL)
@@ -363,11 +363,21 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 
 	return false;
 }
+#endif
 
 bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
-	// Min require for IMU are accel & gyro
-	if (pAccel == nullptr || pGyro == nullptr)
+	// Min require for IMU are accel & gyro, must be combo device
+	if (pAccel == nullptr || pGyro == nullptr || (AgmIcm20948*)pAccel != (AgmIcm20948*)pGyro)
+	{
+		return false;
+	}
+
+	vpIcm = (AgmIcm20948*)pAccel;
+
+	bool res = vpIcm->InitDMP(DMP_START_ADDRESS, s_Dmp3Image, DMP_CODE_SIZE);
+
+	if (res == false)
 	{
 		return false;
 	}
@@ -522,14 +532,14 @@ void ImuIcm20948::IntHandler()
 
 int ImuIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
 {
-	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL;
+	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 
 	Write8((uint8_t*)&regaddr, 2, MemAddr >> 8);
 
-	regaddr = ICM20948_DMP_MEM_STARTADDR;
+	regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
 	Write8((uint8_t*)&regaddr, 2, MemAddr & 0xFF);
 
-	regaddr = ICM20948_DMP_MEM_RW;
+	regaddr = ICM20948_DMP_MEM_RW_REG;
 	for (int i = 0; i < Len; i++)
 	{
 		pBuff[i] = Read8((uint8_t*)&regaddr, 2);
@@ -540,14 +550,14 @@ int ImuIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
 
 int ImuIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
 {
-	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL;
+	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 
 	Write8((uint8_t*)&regaddr, 2, MemAddr >> 8);
 
-	regaddr = ICM20948_DMP_MEM_STARTADDR;
+	regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
 	Write8((uint8_t*)&regaddr, 2, MemAddr & 0xFF);
 
-	regaddr = ICM20948_DMP_MEM_RW;
+	regaddr = ICM20948_DMP_MEM_RW_REG;
 	for (int i = 0; i < Len; i++)
 	{
 		Write8((uint8_t*)&regaddr, 2, pData[i]);
