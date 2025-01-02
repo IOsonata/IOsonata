@@ -672,7 +672,8 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
-		return AccelIcm20948::Init(Cfg, pIntrf, pTimer);
+		vbSensorEnabled[ICM20948_ACCEL_IDX] = AccelIcm20948::Init(Cfg, pIntrf, pTimer);
+		return vbSensorEnabled[ICM20948_ACCEL_IDX];
 	}
 
 	/**
@@ -687,7 +688,8 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
-		return GyroIcm20948::Init(Cfg, pIntrf, pTimer);
+		vbSensorEnabled[ICM20948_GYRO_IDX] = GyroIcm20948::Init(Cfg, pIntrf, pTimer);
+		return vbSensorEnabled[ICM20948_GYRO_IDX];
 	}
 
 	/**
@@ -702,7 +704,8 @@ public:
 	 * @return	true - Success
 	 */
 	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf* const pIntrf, Timer * const pTimer = NULL) {
-		return MagIcm20948::Init(Cfg, pIntrf, pTimer);
+		vbSensorEnabled[ICM20948_MAG_IDX] = MagIcm20948::Init(Cfg, pIntrf, pTimer);
+		return vbSensorEnabled[ICM20948_MAG_IDX];
 	}
 
 	/**
@@ -774,7 +777,6 @@ public:
 private:
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
-//	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
 	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
 	bool SelectBank(uint8_t BankNo);
@@ -782,8 +784,6 @@ private:
 	bool vbInitialized;
 	bool vbDmpEnabled;
 	bool vbSensorEnabled[3];
-//	uint8_t vMagCtrl1Val;
-//	int16_t vMagSenAdj[3];
 	uint8_t vCurrBank;
 };
 

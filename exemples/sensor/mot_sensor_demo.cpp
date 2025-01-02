@@ -54,7 +54,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "Fusion/Fusion.h"
 
-#define INVN
+//#define INVN
 
 #ifdef INVN
 #include "sensors/agm_invn_icm20948.h"
@@ -180,7 +180,7 @@ static const AccelSensorCfg_t s_AccelCfg = {
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
 	.Scale = 2,
-	.FltrFreq = 0,
+	.FltrFreq = 50000,
 	.Inter = 1,
 	.IntPol = DEVINTR_POL_LOW,
 };
@@ -280,8 +280,8 @@ void ImuIntHandler(int IntNo, void *pCtx)
 		g_DT = t - g_TPrev;
 		g_TPrev = t;
 
-		g_Imu.IntHandler();
-		//g_MotSensor.IntHandler();
+		//g_Imu.IntHandler();
+		g_MotSensor.IntHandler();
 		//IOPinClear(0, 24);
 	}
 }
@@ -404,7 +404,7 @@ int main()
 
 	//g_MotSensor.Enable();
 
-	g_Imu.Enable();
+	//g_Imu.Enable();
 
     FusionAhrs ahrs;
     //FusionAhrsInitialise(&ahrs);
@@ -445,10 +445,10 @@ int main()
 
 		if (cnt-- < 0)
 		{
-			cnt = 10;
+			//cnt = 10;
 			//printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)dt, arawdata.X, arawdata.Y, arawdata.Z);
-			//g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
-			g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, gyrodata.X, gyrodata.Y, gyrodata.Z);
+			printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
+			//g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, gyrodata.X, gyrodata.Y, gyrodata.Z);
 //	        printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
 			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
 			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, fq.element.x, fq.element.y, fq.element.z, fq.element.w);

@@ -890,6 +890,8 @@ bool AgmIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage
 		d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
 
+		vbDmpEnabled = true;
+
 		return true;
 	}
 
