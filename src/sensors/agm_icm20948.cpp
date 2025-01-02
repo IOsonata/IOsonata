@@ -403,11 +403,6 @@ bool MagIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Ti
 
 	msDelay(200);
 
-	// Disable LP mode
-	regaddr = ICM20948_LP_CONFIG_REG;
-	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_LP_CONFIG_I2C_MST_CYCLE;
-	Write8((uint8_t*)&regaddr, 2, d);
-
 	regaddr = ICM20948_I2C_MST_CTRL_REG;
 	d = 0;
 	Write8((uint8_t*)&regaddr, 2, d);
@@ -758,7 +753,7 @@ void AgmIcm20948::IntHandler()
 			(istatus[3] & ICM20948_INT_STATUS_3_FIFO_WM_INT_MASK);
 	if (drdy)
 	{
-		regaddr = ICM20948_FIFO_COUNTH;
+		regaddr = ICM20948_FIFO_COUNTH_REG;
 		uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
 		//printf("cnt = %d : ", cnt);
 		cnt = EndianCvt16(cnt);
@@ -773,7 +768,7 @@ void AgmIcm20948::IntHandler()
 			dd [1] = Read8((uint8_t*)&regaddr, 2);
 
 //			Read((uint8_t*)&regaddr, 2, dd, 16);
-			regaddr = ICM20948_FIFO_COUNTH;
+			regaddr = ICM20948_FIFO_COUNTH_REG;
 			uint16_t cnt1 = Read16((uint8_t*)&regaddr, 2);
 			//printf("cnt = %d : ", cnt);
 			cnt1 = EndianCvt16(cnt1);
@@ -791,7 +786,7 @@ void AgmIcm20948::IntHandler()
 	if (istatus[2] & ICM20948_INT_STATUS_2_FIFO_OVERFLOW_INT_MASK)
 	{
 		printf("FIFO ovr Int ");
-		regaddr = ICM20948_FIFO_COUNTH;
+		regaddr = ICM20948_FIFO_COUNTH_REG;
 		uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
 		cnt = EndianCvt16(cnt);
 
@@ -801,7 +796,7 @@ void AgmIcm20948::IntHandler()
 	if (istatus[3] & ICM20948_INT_STATUS_3_FIFO_WM_INT_MASK)
 	{
 		printf("WM Int ");
-		regaddr = ICM20948_FIFO_COUNTH;
+		regaddr = ICM20948_FIFO_COUNTH_REG;
 		uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
 		cnt = EndianCvt16(cnt);
 
@@ -901,7 +896,7 @@ bool AgmIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage
 	return false;
 }
 
-bool AgmIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)//, uint16_t MemAddr)
+bool AgmIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
 {
 	int len = Len, l = 0;
 	uint8_t *p = (uint8_t*)pDmpImage;
