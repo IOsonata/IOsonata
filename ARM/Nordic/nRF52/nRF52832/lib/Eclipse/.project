@@ -316,6 +316,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/Fusion</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/Invn</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -856,6 +861,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_mpu9250.h</locationURI>
 		</link>
 		<link>
+			<name>include/imu/imu_xiot_fusion.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_xiot_fusion.h</locationURI>
+		</link>
+		<link>
 			<name>include/imu/mpu9250_dmpkey.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/mpu9250_dmpkey.h</locationURI>
@@ -1139,6 +1149,61 @@
 			<name>include/sys/dirent.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/Fusion.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/Fusion.h</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionAhrs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.c</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionAhrs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.h</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionAxes.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAxes.h</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionCalibration.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCalibration.h</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionCompass.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.c</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionCompass.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.h</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionConvention.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionConvention.h</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionMath.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionMath.h</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionOffset.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionOffset.c</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionOffset.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionOffset.h</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices</name>
@@ -1499,6 +1564,11 @@
 			<name>src/imu/imu_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_mpu9250.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/imu/imu_xiot_fusion.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_xiot_fusion.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/littlefs/lfs.c</name>
