@@ -63,7 +63,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		// in SPI mode, use i2c master mode to access Mag device (AK09916)
-		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS | ICM20948_USER_CTRL_I2C_MST_EN;
+		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS;// | ICM20948_USER_CTRL_I2C_MST_EN;
 
 		//lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
 	}
@@ -87,7 +87,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 
 	// NOTE : require delay for reset to stabilize
 	// the chip would not respond properly to motion detection
-	msDelay(500);
+	msDelay(10);
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
@@ -98,14 +98,6 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	regaddr = ICM20948_USER_CTRL_REG;
 	Write8((uint8_t*)&regaddr, 2, userctrl);
 
-/*
-	regaddr = ICM20948_I2C_MST_CTRL;
-	d = 0;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	regaddr = ICM20948_I2C_MST_ODR_CONFIG;
-	Write8((uint8_t*)&regaddr, 2, 0);
-*/
 	regaddr = ICM20948_ODR_ALIGN_EN_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
 
@@ -586,28 +578,28 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 	{
 		uint16_t regaddr = ICM20948_USER_CTRL_REG;
 		uint8_t userctrl = Read8((uint8_t*)&regaddr, 2) | ICM20948_USER_CTRL_I2C_MST_EN;
-
-#if 1
 		uint8_t d[4];
 
 		regaddr = ICM20948_I2C_SLV0_ADDR_REG;
-
-		d[0] = (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD;
-		d[1] = *pCmdAddr;
+		Write8((uint8_t*)&regaddr, 2, (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD);
+		//d[0] = (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD;
+		d[0] = *pCmdAddr;
 
 		while (BuffLen > 0)
 		{
 			int cnt = min(ICM20948_I2C_SLV_MAXLEN, BuffLen);
 
-			d[2] = ICM20948_I2C_SLV0_CTRL_I2C_SLV0_EN | (cnt & ICM20948_I2C_SLV0_CTRL_I2C_SLV0_LEN_MASK);
+			d[1] = ICM20948_I2C_SLV0_CTRL_I2C_SLV0_EN | (cnt & ICM20948_I2C_SLV0_CTRL_I2C_SLV0_LEN_MASK);
 
-			Write((uint8_t*)&regaddr, 2, d, 3);
+			regaddr = ICM20948_I2C_SLV0_REG_REG;
+			Write((uint8_t*)&regaddr, 2, d, 2);
 
+			// Start transfer
 			regaddr = ICM20948_USER_CTRL_REG;
 			Write8((uint8_t*)&regaddr, 2, userctrl);
 
 			// Delay require for transfer to complete
-			msDelay(60);
+			msDelay(2);
 
 			Write8((uint8_t*)&regaddr, 2, userctrl & ~ICM20948_USER_CTRL_I2C_MST_EN);
 
@@ -621,32 +613,6 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 			retval += cnt;
 			d[1] += cnt;
 		}
-#else
-		regaddr = ICM20948_I2C_SLV0_ADDR;
-		Write8((uint8_t*)&regaddr, 2, (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD);
-
-		regaddr = ICM20948_I2C_SLV0_REG;
-		Write8((uint8_t*)&regaddr, 2, *pCmdAddr);
-
-		regaddr = ICM20948_I2C_SLV0_CTRL;
-		Write8((uint8_t*)&regaddr, 2, ICM20948_I2C_SLV0_CTRL_I2C_SLV0_EN | (1 & ICM20948_I2C_SLV0_CTRL_I2C_SLV0_LENG_MASK));
-
-		regaddr = ICM20948_USER_CTRL;
-		Write8((uint8_t*)&regaddr, 2, userctrl);
-
-		msDelay(100);
-
-		Write8((uint8_t*)&regaddr, 2, userctrl & ~ICM20948_USER_CTRL_I2C_MST_EN);
-		regaddr = ICM20948_EXT_SLV_SENS_DATA_00;
-		int cnt = Read((uint8_t*)&regaddr, 2, pBuff, 1);
-
-		BuffLen -= cnt;
-
-		regaddr = ICM20948_I2C_SLV0_CTRL;
-		Write8((uint8_t*)&regaddr, 2, 0);
-
-
-#endif
 	}
 	else
 	{
@@ -683,7 +649,7 @@ int AgmIcm20948::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint
 			Write8((uint8_t*)&regaddr, 2, userctrl);
 
 			// Delay require for transfer to complete
-			msDelay(60);
+			msDelay(2);
 
 			Write8((uint8_t*)&regaddr, 2, userctrl & ~ICM20948_USER_CTRL_I2C_MST_EN);
 
@@ -719,7 +685,6 @@ void AgmIcm20948::IntHandler()
 	uint8_t istatus[4];
 
 	int cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
-
 	//printf("%x %x %x %x\n", istatus[0], istatus[1], istatus[2], istatus[3]);
 
 	if (istatus[0] & ICM20948_INT_STATUS_I2C_MIST_INT)
@@ -729,7 +694,8 @@ void AgmIcm20948::IntHandler()
 	if (istatus[0] & ICM20948_INT_STATUS_DMP_INT1)
 	{
 		regaddr = ICM20948_DMP_INT_STATUS_REG;
-		uint16_t distatus = Read8((uint8_t*)&regaddr, 2);
+		uint16_t distatus;
+		Read((uint8_t*)&regaddr, 2, (uint8_t*)&distatus, 1);
 //		Write16((uint8_t*)&regaddr, 2, distatus);
 
 		if (distatus)// & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
@@ -747,14 +713,14 @@ void AgmIcm20948::IntHandler()
 	{
 
 	}
-
 	uint32_t drdy = (istatus[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT) |
 			(istatus[2] & ICM20948_INT_STATUS_2_FIFO_OVERFLOW_INT_MASK) |
 			(istatus[3] & ICM20948_INT_STATUS_3_FIFO_WM_INT_MASK);
 	if (drdy)
 	{
 		regaddr = ICM20948_FIFO_COUNTH_REG;
-		uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
+		uint16_t cnt;
+		Read((uint8_t*)&regaddr, 2, (uint8_t*)&cnt, 2);
 		//printf("cnt = %d : ", cnt);
 		cnt = EndianCvt16(cnt);
 
@@ -764,15 +730,15 @@ void AgmIcm20948::IntHandler()
 			regaddr = ICM20948_FIFO_R_W_REG;
 //			uint16_t h = Read16((uint8_t*)&regaddr, 2);
 			uint8_t dd[16];
-			dd [0] = Read8((uint8_t*)&regaddr, 2);
-			dd [1] = Read8((uint8_t*)&regaddr, 2);
+		//	dd [0] = Read8((uint8_t*)&regaddr, 2);
+		//	dd [1] = Read8((uint8_t*)&regaddr, 2);
 
 //			Read((uint8_t*)&regaddr, 2, dd, 16);
 			regaddr = ICM20948_FIFO_COUNTH_REG;
-			uint16_t cnt1 = Read16((uint8_t*)&regaddr, 2);
+			//uint16_t cnt1 = Read16((uint8_t*)&regaddr, 2);
 			//printf("cnt = %d : ", cnt);
-			cnt1 = EndianCvt16(cnt1);
-			printf("%d Fifo header=%x %x %d\n", cnt, dd[0], dd[1], cnt1);
+			//cnt1 = EndianCvt16(cnt1);
+	//		printf("%d Fifo header=%x %x %d\n", cnt, dd[0], dd[1], cnt1);
 
 		}
 	}
@@ -785,43 +751,43 @@ void AgmIcm20948::IntHandler()
 
 	if (istatus[2] & ICM20948_INT_STATUS_2_FIFO_OVERFLOW_INT_MASK)
 	{
-		printf("FIFO ovr Int ");
+	//	printf("FIFO ovr Int ");
 		regaddr = ICM20948_FIFO_COUNTH_REG;
-		uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
+		//uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
 		cnt = EndianCvt16(cnt);
 
-		printf("cnt = %d\r\n", cnt);
+	//	printf("cnt = %d\r\n", cnt);
 	}
 
 	if (istatus[3] & ICM20948_INT_STATUS_3_FIFO_WM_INT_MASK)
 	{
-		printf("WM Int ");
+		//printf("WM Int ");
 		regaddr = ICM20948_FIFO_COUNTH_REG;
-		uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
-		cnt = EndianCvt16(cnt);
+		//uint16_t cnt = Read16((uint8_t*)&regaddr, 2);
+		//cnt = EndianCvt16(cnt);
 
-		printf("cnt = %d\r\n", cnt);
+		//printf("cnt = %d\r\n", cnt);
 
 #if 0
 		for (int i = 0; i < cnt; i++)
 		{
 			regaddr = ICM20948_FIFO_R_W;
 			uint8_t d = Read8((uint8_t*)&regaddr, 2);
-			printf("Fifo d=%x\n", d);
+			//printf("Fifo d=%x\n", d);
 		}
 #else
 		uint8_t dd[cnt];
 		memset(dd, 0, cnt);
 		regaddr = ICM20948_FIFO_R_W_REG;
-		int l = Read((uint8_t*)&regaddr, 2, dd, cnt);
-		printf("l:%d %x %x %x %x\n", l, dd[0], dd[1], dd[2], dd[3]);
+	//	int l = Read((uint8_t*)&regaddr, 2, dd, cnt);
+		//printf("l:%d %x %x %x %x\n", l, dd[0], dd[1], dd[2], dd[3]);
 #endif
 
 	}
 #endif
 
-	regaddr = ICM20948_INT_STATUS_REG;
-	cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
+	//regaddr = ICM20948_INT_STATUS_REG;
+	//cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
 
 //	printf("x- %x %x %x %x\n", istatus[0], istatus[1], istatus[2], istatus[3]);
 	//istatus[0] = istatus[1] = istatus[2] = istatus[3] = 0;

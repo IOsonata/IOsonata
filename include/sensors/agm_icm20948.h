@@ -412,7 +412,7 @@ SOFTWARE.
 #define ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD					(1<<7)	// Read transfer
 #define ICM20948_I2C_SLV0_ADDR_I2C_SLV0_WR					(0<<7)	// Write transfer
 
-#define ICM20948_I2C_SLV0_REG_REG			(ICM20948_REG_BANK3 | 4)						// I2C slave 0 register address from where to begin data transfer.
+#define ICM20948_I2C_SLV0_REG_REG			(ICM20948_REG_BANK3 | 4)	// I2C slave 0 register address from where to begin data transfer.
 
 #define ICM20948_I2C_SLV0_CTRL_REG			(ICM20948_REG_BANK3 | 5)
 
