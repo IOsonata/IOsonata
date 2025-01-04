@@ -117,7 +117,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE_REG;
-		d = ICM20948_INT_ENABLE_WOM_INT_EN;
+		d = ICM20948_INT_ENABLE_WOM_INT_EN | ICM20948_INT_ENABLE_I2C_MST_INT_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE_1_REG;
@@ -511,7 +511,7 @@ bool AgmIcm20948::UpdateData()
 	regaddr = ICM20948_INT_STATUS_1_REG;//ICM20948_DATA_RDY_STATUS;
 	d[0] = Read8((uint8_t*)&regaddr, 2);
 
-	if (d[0] & 1)
+	//if (d[0] & 1)
 	{
 		regaddr = ICM20948_ACCEL_XOUT_H_REG;
 		Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 14);
@@ -689,7 +689,7 @@ void AgmIcm20948::IntHandler()
 
 	if (istatus[0] & ICM20948_INT_STATUS_I2C_MIST_INT)
 	{
-
+		printf("ICM20948_INT_STATUS_I2C_MIST_INT\n");
 	}
 	if (istatus[0] & ICM20948_INT_STATUS_DMP_INT1)
 	{
@@ -746,6 +746,7 @@ void AgmIcm20948::IntHandler()
 #if 1
 	if (istatus[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT)
 	{
+//		printf("ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT\n");
 		UpdateData();
 	}
 
