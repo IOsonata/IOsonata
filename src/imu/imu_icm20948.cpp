@@ -411,20 +411,23 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	d |= ICM20948_INT_ENABLE_DMP_INT1_EN;
 	Write8((uint8_t*)&regaddr, 2, d);
 
+	// Disable data ready interrupt
 	regaddr = ICM20948_INT_ENABLE_1_REG;
 	d = 0;
 	Write8((uint8_t*)&regaddr, 2, d);
 
+	// FIFO overflow interrupt enable
 	regaddr = ICM20948_INT_ENABLE_2_REG;
 	d = 1;
 	Write8((uint8_t*)&regaddr, 2, d);
 
+	// FIFO watermark enable
 	regaddr = ICM20948_INT_ENABLE_3_REG;
 	d = 1;
 	Write8((uint8_t*)&regaddr, 2, d);
 
 
-	uint32_t f = pAccel->SamplingFrequency();
+	uint32_t f = pGyro->SamplingFrequency();
 	printf("f %d\n", f);
 
 	return true;
@@ -436,13 +439,18 @@ bool ImuIcm20948::Enable()
 	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2);
 
 	d |= ICM20948_USER_CTRL_DMP_EN | ICM20948_USER_CTRL_FIFO_EN;
-	vpIcm->Write8((uint8_t*)&regaddr,	2, d);
+	vpIcm->Write8((uint8_t*)&regaddr, 2, d);
 
 	return vpIcm->Enable();
 }
 
 void ImuIcm20948::Disable()
 {
+	uint16_t regaddr = ICM20948_USER_CTRL_REG;
+	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
+
+	vpIcm->Write8((uint8_t*)&regaddr, 2, d);
+
 	vpIcm->Disable();
 }
 
