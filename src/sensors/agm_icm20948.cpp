@@ -63,9 +63,8 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		// in SPI mode, use i2c master mode to access Mag device (AK09916)
-		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS;// | ICM20948_USER_CTRL_I2C_MST_EN;
-
-		//lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
+		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS;
+		lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
 	}
 
 	vCurrBank = -1;
@@ -92,6 +91,9 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
 
+	regaddr = ICM20948_PWR_MGMT_2_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_2_DISABLE_ALL);
+
 	regaddr = ICM20948_FIFO_RST_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 
@@ -108,16 +110,16 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 
 		if (IntPol == DEVINTR_POL_HIGH)
 		{
-			d = ICM20948_INT_PIN_CFG_INT_ANYRD_2CLEAR;
+			d = 0;
 		}
 		else
 		{
-			d = ICM20948_INT_PIN_CFG_INT_ANYRD_2CLEAR | ICM20948_INT_PIN_CFG_INT1_ACTL;
+			d = 0 | ICM20948_INT_PIN_CFG_INT1_ACTL;
 		}
 		Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE_REG;
-		d = ICM20948_INT_ENABLE_WOM_INT_EN | ICM20948_INT_ENABLE_I2C_MST_INT_EN;
+		d = ICM20948_INT_ENABLE_I2C_MST_INT_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE_1_REG;
@@ -153,9 +155,9 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 	Scale(Cfg.Scale);
 	FilterFreq(Cfg.FltrFreq);
 
-	regaddr = ICM20948_PWR_MGMT_2_REG;
-	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
-	Write8((uint8_t*)&regaddr, 2, d);
+//	regaddr = ICM20948_PWR_MGMT_2_REG;
+//	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+//	Write8((uint8_t*)&regaddr, 2, d);
 
 //	regaddr = ICM20948_FIFO_EN_2;
 //	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
@@ -264,6 +266,16 @@ uint32_t AccelIcm20948::FilterFreq(uint32_t Freq)
 	return AccelSensor::FilterFreq(Freq);
 }
 
+bool AccelIcm20948::Enable()
+{
+	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	return true;
+}
+
 bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
@@ -274,9 +286,9 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(Cfg.Sensitivity);
 
-	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
-	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
-	Write8((uint8_t*)&regaddr, 2, d);
+//	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
+//	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
+//	Write8((uint8_t*)&regaddr, 2, d);
 
 //	regaddr = ICM20948_FIFO_EN_2;
 //	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_GYRO_X_FIFO_EN |
@@ -385,6 +397,16 @@ uint32_t GyroIcm20948::FilterFreq(uint32_t Freq)
 	return GyroSensor::FilterFreq(Freq);
 }
 
+bool GyroIcm20948::Enable()
+{
+	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	return true;
+}
+
 bool MagIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint16_t regaddr;
@@ -414,8 +436,31 @@ bool MagIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Ti
 	return true;
 }
 
+AgmIcm20948::AgmIcm20948()
+{
+	vbInitialized  = false;
+	vbDmpEnabled = false;
+	vbSensorEnabled[0] = vbSensorEnabled[1] = vbSensorEnabled[2] = false;
+	vType = SENSOR_TYPE_TEMP | SENSOR_TYPE_ACCEL | SENSOR_TYPE_GYRO | SENSOR_TYPE_MAG;
+}
+
 bool AgmIcm20948::Enable()
 {
+	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2);
+
+	if (vbSensorEnabled[ICM20948_ACCEL_IDX])
+	{
+		d &= ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+	}
+
+	if (vbSensorEnabled[ICM20948_GYRO_IDX])
+	{
+		d &= ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
+	}
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
 	return true;
 }
 
@@ -426,8 +471,8 @@ void AgmIcm20948::Disable()
 
 	// Disable Accel & Gyro
 	regaddr = ICM20948_PWR_MGMT_2_REG;
-	d = ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK | ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
-	Write8((uint8_t*)&regaddr, 2, 0);
+	d = ICM20948_PWR_MGMT_2_DISABLE_ALL;
+	Write8((uint8_t*)&regaddr, 2, d);
 
 	regaddr = ICM20948_USER_CTRL_REG;
 	Write8((uint8_t*)&regaddr, 2, 0);
@@ -437,6 +482,13 @@ void AgmIcm20948::Disable()
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	d = ICM20948_PWR_MGMT_1_TEMP_DIS | ICM20948_PWR_MGMT_1_SLEEP;// | ICM20948_PWR_MGMT_1_CLKSEL_STOP;
+	Write8((uint8_t*)&regaddr, 2, d);
+}
+
+void AgmIcm20948::PowerOff()
+{
+	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
+	uint8_t d = ICM20948_PWR_MGMT_1_TEMP_DIS | ICM20948_PWR_MGMT_1_SLEEP;
 	Write8((uint8_t*)&regaddr, 2, d);
 }
 
@@ -458,21 +510,26 @@ bool AgmIcm20948::StartSampling()
 // Implement wake on motion
 bool AgmIcm20948::WakeOnEvent(bool bEnable, int Threshold)
 {
-    uint16_t regaddr;
+    uint16_t regaddr = ICM20948_INT_ENABLE_REG;
+    uint8_t d = Read8((uint8_t*)&regaddr, 2);
 
 	if (bEnable == true)
 	{
-		Reset();
+	    Write8((uint8_t*)&regaddr, 2, d | ICM20948_INT_ENABLE_WOM_INT_EN);
 
-		msDelay(2000);
+	    regaddr = ICM20948_ACCEL_WOM_THR_REG;
+	    Write8((uint8_t*)&regaddr, 2, Threshold);
+
+	    regaddr = ICM20948_ACCEL_INTEL_CTRL_REG;
+	    Write8((uint8_t*)&regaddr, 2, ICM20948_ACCEL_INTEL_CTRL_ACCEL_INTEL_EN |
+	    							  ICM20948_ACCEL_INTEL_CTRL_ACCEL_INTEL_MODE_CMPPREV);
 	}
 	else
 	{
-//	    regaddr = MPU9250_AG_INT_ENABLE;
-	    Write8((uint8_t*)&regaddr, 2, 0);
+	    Write8((uint8_t*)&regaddr, 2, d & ~ICM20948_INT_ENABLE_WOM_INT_EN);
 
-//	    regaddr = MPU9250_AG_PWR_MGMT_1;
-		Write8((uint8_t*)&regaddr, 2, 0);
+	    regaddr = ICM20948_ACCEL_INTEL_CTRL_REG;
+	    Write8((uint8_t*)&regaddr, 2, 0);
 	}
 
 	return true;
@@ -499,39 +556,66 @@ uint32_t AgmIcm20948::Sensitivity(uint32_t Value)
 */
 bool AgmIcm20948::UpdateData()
 {
-	bool res = MagIcm20948::UpdateData();
-	uint16_t regaddr = ICM20948_ACCEL_XOUT_H_REG;
+	uint16_t regaddr = ICM20948_INT_STATUS_REG;
+	uint8_t status[4];
 	uint8_t d[20];
 	uint64_t t;
+
+	Read((uint8_t*)&regaddr, 2, status, 4);
+
+	if (status[0] & ICM20948_INT_STATUS_PLL_RDY_INT)
+	{
+
+	}
+
+	if (status[0] & ICM20948_INT_STATUS_WOM_INT)
+	{
+
+	}
+	if (status[0] & ICM20948_INT_STATUS_I2C_MIST_INT)
+	{
+		printf("ICM20948_INT_STATUS_I2C_MIST_INT\n");
+	}
+	if (status[0] & ICM20948_INT_STATUS_DMP_INT1)
+	{
+		printf("ICM20948_INT_STATUS_DMP_INT1\n");
+	}
+
+	bool res = MagIcm20948::UpdateData();
+
 	if (vpTimer)
 	{
 		t = vpTimer->uSecond();
 	}
 
-	regaddr = ICM20948_INT_STATUS_1_REG;//ICM20948_DATA_RDY_STATUS;
-	d[0] = Read8((uint8_t*)&regaddr, 2);
-
-	//if (d[0] & 1)
+	if (vbDmpEnabled)
 	{
-		regaddr = ICM20948_ACCEL_XOUT_H_REG;
-		Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 14);
 
-		AccelSensor::vData.Timestamp = t;
-		AccelSensor::vData.X = ((int16_t)(d[0] << 8) | d[1]);
-		AccelSensor::vData.Y = ((int16_t)(d[2] << 8) | d[3]);
-		AccelSensor::vData.Z = ((int16_t)(d[4] << 8) | d[5]);
-		GyroSensor::vData.Timestamp = t;
-		GyroSensor::vData.X = ((int16_t)(d[6] << 8) | d[7]);
-		GyroSensor::vData.Y = ((int16_t)(d[8] << 8) | d[9]);
-		GyroSensor::vData.Z = ((int16_t)(d[10] << 8) | d[11]);
+	}
+	else
+	{
+		if (status[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT)
+		{
+			regaddr = ICM20948_ACCEL_XOUT_H_REG;
+			Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 14);
+
+			AccelSensor::vData.Timestamp = t;
+			AccelSensor::vData.X = ((int16_t)(d[0] << 8) | d[1]);
+			AccelSensor::vData.Y = ((int16_t)(d[2] << 8) | d[3]);
+			AccelSensor::vData.Z = ((int16_t)(d[4] << 8) | d[5]);
+			GyroSensor::vData.Timestamp = t;
+			GyroSensor::vData.X = ((int16_t)(d[6] << 8) | d[7]);
+			GyroSensor::vData.Y = ((int16_t)(d[8] << 8) | d[9]);
+			GyroSensor::vData.Z = ((int16_t)(d[10] << 8) | d[11]);
 
 
-		// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
-		int16_t t = ((int16_t)d[12] << 8) | d[13];
-		TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | d[13]) * 100 / 33387 + 2100;
-		//printf("Temp : %d %d\r\n", t, TempSensor::vData.Temperature);
+			// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
+			int16_t t = ((int16_t)d[12] << 8) | d[13];
+			TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | d[13]) * 100 / 33387 + 2100;
+			TempSensor::vData.Timestamp = t;
 
-		res = true;
+			res = true;
+		}
 	}
 
 	return res;
@@ -681,9 +765,13 @@ bool AgmIcm20948::SelectBank(uint8_t BankNo)
 
 void AgmIcm20948::IntHandler()
 {
-	uint16_t regaddr = ICM20948_INT_STATUS_REG;
-	uint8_t istatus[4];
+	UpdateData();
 
+	//status = Read8((uint8_t*)&regaddr, 2);
+	//printf("- status %x\n", status);
+	//Write8((uint8_t*)&regaddr, 2, status);
+
+#if 0
 	int cnt = Read((uint8_t*)&regaddr, 2, istatus, 4);
 	//printf("%x %x %x %x\n", istatus[0], istatus[1], istatus[2], istatus[3]);
 
@@ -703,15 +791,6 @@ void AgmIcm20948::IntHandler()
 			// DMP msg
 			printf("distatus %x\n", distatus);
 		}
-	}
-	if (istatus[0] & ICM20948_INT_STATUS_PLL_RDY_INT)
-	{
-
-	}
-
-	if (istatus[0] & ICM20948_INT_STATUS_WOM_INT)
-	{
-
 	}
 	uint32_t drdy = (istatus[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT) |
 			(istatus[2] & ICM20948_INT_STATUS_2_FIFO_OVERFLOW_INT_MASK) |
@@ -744,7 +823,7 @@ void AgmIcm20948::IntHandler()
 	}
 
 #if 1
-	if (istatus[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT)
+//	if (istatus[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT)
 	{
 //		printf("ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT\n");
 		UpdateData();
@@ -793,6 +872,7 @@ void AgmIcm20948::IntHandler()
 //	printf("x- %x %x %x %x\n", istatus[0], istatus[1], istatus[2], istatus[3]);
 	//istatus[0] = istatus[1] = istatus[2] = istatus[3] = 0;
 	//cnt = Write((uint8_t*)&regaddr, 2, istatus, 4);
+#endif
 }
 
 /**

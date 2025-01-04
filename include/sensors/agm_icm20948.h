@@ -95,7 +95,7 @@ SOFTWARE.
 #define ICM20948_PWR_MGMT_1_CLKSEL_INTERN_20MHZ		(0<<0)
 #define ICM20948_PWR_MGMT_1_CLKSEL_AUTO				(1<<0)
 #define ICM20948_PWR_MGMT_1_CLKSEL_STOP				(7<<0)
-#define ICM20948_PWR_MGMT_1_TEMP_DIS				(1<3)	// Disable temperature sensor
+#define ICM20948_PWR_MGMT_1_TEMP_DIS				(1<<3)	// Disable temperature sensor
 #define ICM20948_PWR_MGMT_1_LP_EN					(1<<5)	// Low Power enable
 #define ICM20948_PWR_MGMT_1_SLEEP					(1<<6)	// Enter sleep
 #define ICM20948_PWR_MGMT_1_DEVICE_RESET			(1<<7)	// Reset to default settings
@@ -330,7 +330,7 @@ SOFTWARE.
 
 #define ICM20948_ACCEL_INTEL_CTRL_REG		(ICM20948_REG_BANK2 | 18)
 
-#define ICM20948_ACCEL_INTEL_CTRL_ACCEL_INTEL_MODE_INT		(1<<0)	// Select WOM algorithm
+#define ICM20948_ACCEL_INTEL_CTRL_ACCEL_INTEL_MODE_CMPPREV	(1<<0)	// Select WOM algorithm
 #define ICM20948_ACCEL_INTEL_CTRL_ACCEL_INTEL_EN			(1<<1)	// Enable WOM logic
 
 #define ICM20948_ACCEL_WOM_THR_REG			(ICM20948_REG_BANK2 | 19)
@@ -573,6 +573,8 @@ SOFTWARE.
 #define ICM20948_ACCEL_IDX		0
 #define ICM20948_GYRO_IDX		1
 #define ICM20948_MAG_IDX		2
+#define ICM20948_TEMP_IDX		3
+#define ICM20948_NB_SENSOR		4
 
 #pragma pack(push, 1)
 
@@ -597,6 +599,7 @@ public:
 	virtual uint16_t Scale(uint16_t Value);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t FilterFreq(uint32_t Freq);
+	virtual bool Enable();
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
@@ -619,6 +622,7 @@ public:
 	virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t FilterFreq(uint32_t Freq);
+	virtual bool Enable();
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
@@ -660,6 +664,8 @@ private:
 
 class AgmIcm20948 : public AccelIcm20948, public GyroIcm20948, public MagIcm20948, public TempSensor {
 public:
+	AgmIcm20948();
+
 	/**
 	 * @brief	Initialize accelerometer sensor.
 	 *
@@ -711,7 +717,7 @@ public:
 	/**
 	 * @brief	Initialize sensor (require implementation).
 	 *
-	 * @param 	CfgData : Reference to configuration data
+	 * @param 	Cfg 	: Reference to configuration data
 	 * @param	pIntrf 	: Pointer to interface to the sensor.
 	 * 					  This pointer will be kept internally
 	 * 					  for all access to device.
@@ -725,11 +731,18 @@ public:
 	 * 			- true	: Success
 	 * 			- false	: Failed
 	 */
-	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	virtual bool Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
 
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
+	/**
+	 * @brief	Power off the device completely.
+	 *
+	 * If supported, this will put the device in complete power down.
+	 * Full re-initialization is required to re-enable the device.
+	 */
+	virtual void PowerOff();
 
 	/**
 	 * @brief	Enable/Disable wake on motion event
@@ -780,11 +793,13 @@ private:
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
 	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
 	bool SelectBank(uint8_t BankNo);
+	AgmIcm20948(const AgmIcm20948&); // no copy constructor
 
 	bool vbInitialized;
 	bool vbDmpEnabled;
-	bool vbSensorEnabled[3];
+	bool vbSensorEnabled[ICM20948_NB_SENSOR];
 	uint8_t vCurrBank;
+	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within
 };
 
 #endif // __cplusplus

@@ -182,7 +182,7 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 		s_Imu.IntHandler();
 #else
 		s_MotSensor.IntHandler();
-		AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+		//AppEvtHandlerQue(0, 0, ImuDataChedHandler);
 #if 1
 		s_MotSensor.Read(accdata);
 		s_MotSensor.Read(gyrodata);
@@ -236,6 +236,7 @@ bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 
 	if (res)
 	{
+		s_MotSensor.Enable();
 //		s_Imu.Enable();
 	    FusionAhrsInitialise(&ahrs);
 

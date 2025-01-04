@@ -54,6 +54,7 @@ SOFTWARE.
 ///
 /// This enum defines different sensor types.  It is sometime convenient to know
 /// which type of sensor the object is
+#if 0
 typedef enum __Sensor_Type {
 	SENSOR_TYPE_TEMP,				//!< Temperature
 	SENSOR_TYPE_HUMI,				//!< Humidity
@@ -71,6 +72,28 @@ typedef enum __Sensor_Type {
 	SENSOR_TYPE_SPECTRAL,			//!< Spectroscopy
 	SENSOR_TYPE_RADAR,				//!< Radar type
 } SENSOR_TYPE;
+#else
+///
+/// Bit field definition for sensor type.  Orable for combo sensor
+///
+#define SENSOR_TYPE_TEMP				(1<<0)	//!< Temperature
+#define SENSOR_TYPE_HUMI				(1<<1)	//!< Humidity
+#define SENSOR_TYPE_MOIST				(1<<2)	//!< Moisture
+#define SENSOR_TYPE_PRESSURE			(1<<3)	//!< Pressure
+#define SENSOR_TYPE_ACCEL				(1<<4)	//!< Accelerometer
+#define SENSOR_TYPE_GYRO				(1<<5)	//!< Gyroscope
+#define SENSOR_TYPE_MAG					(1<<6)	//!< Magnetometer
+#define SENSOR_TYPE_IR					(1<<7)	//!< Infrared
+#define SENSOR_TYPE_LIGHT				(1<<8)	//!< Luminosity
+#define SENSOR_TYPE_SOUND				(1<<9)	//!< Sound sensor suck as ultrasound. Microphone can also be consider as sensor
+#define SENSOR_TYPE_FORCE				(1<<10)	//!< Force tension/pressure kind of
+#define SENSOR_TYPE_VIBRATION			(1<<11)	//!< Vibration
+#define SENSOR_TYPE_LIQUID				(1<<12)	//!< Liquid level or other type of liquid measurement
+#define SENSOR_TYPE_SPECTRAL			(1<<13)	//!< Spectroscopy
+#define SENSOR_TYPE_RADAR				(1<<14)	//!< Radar type
+
+typedef uint32_t		SENSOR_TYPE;
+#endif
 
 /// @brief	Sensor operating mode.
 ///
