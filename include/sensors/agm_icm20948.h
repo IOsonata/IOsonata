@@ -575,7 +575,7 @@ SOFTWARE.
 #define ICM20948_FIFO_HEADER_ACCEL					0x8000
 #define ICM20948_FIFO_HEADER_ACCEL_SIZE				6
 #define ICM20948_FIFO_HEADER_GYRO					0x4000
-#define ICM20948_FIFO_HEADER_GYRO_SIZE				6
+#define ICM20948_FIFO_HEADER_GYRO_SIZE				12	// 6 bytes Gyro data + 6 bytes Gyro bias
 #define ICM20948_FIFO_HEADER_CPASS					0x2000
 #define ICM20948_FIFO_HEADER_CPASS_SIZE				6
 #define ICM20948_FIFO_HEADER_ALS					0x1000
@@ -598,6 +598,10 @@ SOFTWARE.
 #define ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE		4
 #define ICM20948_FIFO_HEADER_HEADER2				0x0008
 #define ICM20948_FIFO_HEADER_HEADER2_SIZE			2
+#define ICM20948_FIFO_HEADER_FOOTER					0x0001
+#define ICM20948_FIFO_FOOTER_SIZE					2
+
+#define ICM20948_FIFO_HEADER_MASK					0xfff81
 
 #define ICM20948_FIFO_HEADER2_ACCEL_ACCUR			0x4000
 #define ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE		2
@@ -614,8 +618,9 @@ SOFTWARE.
 #define ICM20948_FIFO_HEADER2_SECOND_ONOFF			0x0040
 #define ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE		2
 
+#define ICM20948_FIFO_HEADER2_MASK					0x7cc0
+
 #define ICM20948_FIFO_HEADER_SIZE					2
-#define ICM20948_FIFO_FOOTER_SIZE					2
 
 #define ICM20948_FIFO_MAX_PKT_SIZE					(ICM20948_FIFO_HEADER_ACCEL_SIZE + ICM20948_FIFO_HEADER_GYRO_SIZE +\
 													 ICM20948_FIFO_HEADER_CPASS_SIZE + ICM20948_FIFO_HEADER_ALS_SIZE +\
@@ -854,13 +859,17 @@ private:
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
 	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
 	bool SelectBank(uint8_t BankNo);
-	size_t ProcessDMPFifo(size_t Len, uint64_t Timestamp);
+	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
 	size_t CalcFifoPacketSize(uint16_t Header, uint16_t Mask, const size_t *Lookup, size_t LookupSize);
 	bool vbInitialized;
 	bool vbDmpEnabled;
 	bool vbSensorEnabled[ICM20948_NB_SENSOR];
 	uint8_t vCurrBank;
 	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within
+	uint16_t vFifoHdr;	//!< DMP FIFO header
+	uint16_t vFifoHdr2;	//!< DMP FIFO header
+	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE]; //!< FIFO cache
+	size_t vFifoDataLen;	//!< Data length currently in fifo
 };
 
 #endif // __cplusplus
