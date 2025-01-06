@@ -202,7 +202,7 @@ bool AccelInvnIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf *pIntrf, T
 	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
-	AccelSensor::vData.Range = AccelSensor::Range(ICM20948_ACC_ADC_RANGE);
+	vData.Range = Range(ICM20948_ACC_ADC_RANGE);
 
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
@@ -333,7 +333,7 @@ bool GyroInvnIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Tim
 	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
-	GyroSensor::vData.Range = GyroSensor::Range(ICM20948_GYRO_ADC_RANGE);
+	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(Cfg.Sensitivity);
 	SamplingFrequency(Cfg.Freq);
 
@@ -365,7 +365,15 @@ uint32_t GyroInvnIcm20948::Sensitivity(uint32_t Value)
 		Value = 2000;
 	}
 
+#if 0
 	inv_icm20948_set_gyro_fullscale(*this, gfsr);
+#else
+	uint16_t regaddr = REG_GYRO_CONFIG_1;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(3<<1);
+	d |= (gfsr << 1);
+	Write8((uint8_t*)&regaddr, 2, d);
+
+#endif
 
 	return GyroSensor::Sensitivity(Value);
 }
@@ -386,16 +394,35 @@ uint32_t GyroInvnIcm20948::FilterFreq(uint32_t Freq)
 	return GyroSensor::FilterFreq(Freq);
 }
 
-bool MagInvnIcm20948::Init(const MagSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer *pTimer)
+bool MagInvnIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Timer *pTimer)
 {
-	if (Init(CfgData.DevAddr, pIntrf, pTimer) == false)
+	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
+#if 0
 	int rc = inv_icm20948_initialize_auxiliary(*this);
+	MagSensor::Range(AK09916_ADC_RANGE);
+	return rc == 0;
+#else
+	msDelay(200);
+
+	uint16_t regaddr = REG_I2C_MST_CTRL;
+	uint8_t d = 0;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = REG_I2C_MST_ODR_CONFIG;
+	Write8((uint8_t*)&regaddr, 2, 0);
+
+	if (MagAk09916::Init(Cfg, pIntrf, pTimer) == false)
+	{
+		return false;
+	}
+
+#endif
 
 	MagSensor::Range(AK09916_ADC_RANGE);
 
-	return rc == 0;
+	return true;
 }
 
 bool AgmInvnIcm20948::Enable()
@@ -403,7 +430,7 @@ bool AgmInvnIcm20948::Enable()
 	int i = INV_SENSOR_TYPE_MAX;
 
 	/* Disable all sensors */
-#if 1
+#if 0
 	while(i-- > 0) {
 		inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
 	}

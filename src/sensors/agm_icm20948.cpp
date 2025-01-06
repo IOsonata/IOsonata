@@ -177,14 +177,6 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 	Scale(Cfg.Scale);
 	FilterFreq(Cfg.FltrFreq);
 
-//	regaddr = ICM20948_PWR_MGMT_2_REG;
-//	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
-//	Write8((uint8_t*)&regaddr, 2, d);
-
-//	regaddr = ICM20948_FIFO_EN_2;
-//	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
-//	Write8((uint8_t*)&regaddr, 2, d);
-
 	return true;
 }
 
@@ -193,17 +185,17 @@ uint16_t AccelIcm20948::Scale(uint16_t Value)
 	uint16_t regaddr = ICM20948_ACCEL_CONFIG_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_MASK;
 
-	if (Value < 4)
+	if (Value < 3)
 	{
 		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_2G;
 		Value = 2;
 	}
-	else if (Value < 8)
+	else if (Value < 6)
 	{
 		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_4G;
 		Value = 4;
 	}
-	else if (Value < 16)
+	else if (Value < 12)
 	{
 		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_8G;
 		Value = 8;
@@ -303,19 +295,9 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
 		return false;
 
-	SamplingFrequency(Cfg.Freq);
-
 	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(Cfg.Sensitivity);
-
-//	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
-//	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
-//	Write8((uint8_t*)&regaddr, 2, d);
-
-//	regaddr = ICM20948_FIFO_EN_2;
-//	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_GYRO_X_FIFO_EN |
-//		ICM20948_FIFO_EN_2_GYRO_Y_FIFO_EN | ICM20948_FIFO_EN_2_GYRO_Z_FIFO_EN;
-//	Write8((uint8_t*)&regaddr, 2, d);
+	SamplingFrequency(Cfg.Freq);
 
 	return true;
 }
@@ -325,17 +307,17 @@ uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 	uint16_t regaddr = ICM20948_GYRO_CONFIG_1_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_MASK;
 
-	if (Value < 500)
+	if (Value < 325)
 	{
 		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_250DPS;
 		Value = 250;
 	}
-	else if (Value < 1000)
+	else if (Value < 750)
 	{
 		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_500DPS;
 		Value = 500;
 	}
-	else if (Value < 2000)
+	else if (Value < 1500)
 	{
 		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS;
 		Value = 1000;
@@ -345,6 +327,8 @@ uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_2000DPS;
 		Value = 2000;
 	}
+
+	Write8((uint8_t*)&regaddr, 2, d);
 
 	return GyroSensor::Sensitivity(Value);
 }
@@ -371,42 +355,42 @@ uint32_t GyroIcm20948::FilterFreq(uint32_t Freq)
 	}
 	else if (Freq < 11000)
 	{
-		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (6 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= (6 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 8900;	// NBW
 	}
 	else if (Freq < 23000)
 	{
-		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (5 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= (5 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 17800;
 	}
 	else if (Freq < 50000)
 	{
-		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (4 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= (4 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 35900;
 	}
 	else if (Freq < 110000)
 	{
-		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (3 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= (3 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 73300;
 	}
 	else if (Freq < 150000)
 	{
-		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (2 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= (2 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 154300;
 	}
 	else if (Freq < 190000)
 	{
-		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (1 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= (1 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 187600;
 	}
 	else if (Freq < 360000)
 	{
-		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (0 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= (0 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 229800;
 	}
 	else if (Freq < 1000000)
 	{
-		d |= ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE | (7 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= (7 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 376500;
 	}
 	else
@@ -577,99 +561,19 @@ uint32_t AgmIcm20948::Sensitivity(uint32_t Value)
 }
 */
 
-size_t AgmIcm20948::CalcFifoPacketSize(uint16_t Header, uint16_t Mask, const size_t *Lookup, size_t LookupSize)
+size_t AgmIcm20948::CalcFifoPacketSize(uint16_t Header, uint16_t Mask, const size_t *pLookup, size_t LookupSize)
 {
 	size_t cnt = 0;
-#if 1
 	uint16_t bit = Mask;
-	for (int i = 0; i < LookupSize; i++)
+
+	for (int i = 0; i < LookupSize && Mask != 0; i++)
 	{
-		if (Header & bit)
+		if (Header & Mask)
 		{
-			cnt += Lookup[i];
+			cnt += pLookup[i];
 		}
-		bit >>= 1;
+		Mask >>= 1;
 	}
-//printf("cnt %d\n", cnt);
-#else
-	if (Header & ICM20948_FIFO_HEADER_ACCEL)
-	{
-		cnt += ICM20948_FIFO_HEADER_ACCEL_SIZE;
-	}
-
-	if (Header & ICM20948_FIFO_HEADER_GYRO)
-	{
-		cnt += ICM20948_FIFO_HEADER_GYRO_SIZE;
-	}
-
-	if (Header & ICM20948_FIFO_HEADER_CPASS)
-	{
-		cnt += ICM20948_FIFO_HEADER_CPASS_SIZE;
-	}
-
-	if (Header & ICM20948_FIFO_HEADER_ALS)
-	{
-		cnt += ICM20948_FIFO_HEADER_ALS_SIZE;
-	}
-
-	if (Header & ICM20948_FIFO_HEADER_QUAT6)
-	{
-		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
-	}
-
-	if (Header & ICM20948_FIFO_HEADER_QUAT9)
-	{
-		cnt += ICM20948_FIFO_HEADER_QUAT9_SIZE;
-	}
-
-	if (Header & ICM20948_FIFO_HEADER_STEP_DETECTOR)
-	{
-		cnt += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
-	}
-
-	if (Header & ICM20948_FIFO_HEADER_GEOMAG)
-	{
-		cnt += ICM20948_FIFO_HEADER_GEOMAG_SIZE;
-	}
-
-	if (Header & ICM20948_FIFO_HEADER_PRESSURE)
-	{
-		cnt += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-	}
-
-	if (Header & ICM20948_FIFO_HEADER_CALIB_CPASS)
-	{
-		cnt += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
-	}
-
-	if (Header2 > 0)
-	{
-		if (Header2 & ICM20948_FIFO_HEADER2_ACCEL_ACCUR)
-		{
-			cnt += ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
-		}
-
-		if (Header2 & ICM20948_FIFO_HEADER2_GYRO_ACCUR)
-		{
-			cnt += ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
-		}
-
-		if (Header2 & ICM20948_FIFO_HEADER2_CPASS_ACCUR)
-		{
-			cnt += ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE;
-		}
-
-		if (Header2 & ICM20948_FIFO_HEADER2_PICKUP)
-		{
-			cnt += ICM20948_FIFO_HEADER2_PICKUP_SIZE;
-		}
-
-		if (Header2 & ICM20948_FIFO_HEADER2_ACTI_RECOG)
-		{
-			cnt += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
-		}
-	}
-#endif
 
 	return cnt;
 }
@@ -718,9 +622,9 @@ size_t AgmIcm20948::ProcessDMPFifo(size_t Len, uint64_t Timestamp)
 	if (header & ICM20948_FIFO_HEADER_ACCEL)
 	{
 		AccelSensor::vData.Timestamp = Timestamp;
-		AccelSensor::vData.X = ((int16_t)(p[0] << 8) | p[1]);
-		AccelSensor::vData.Y = ((int16_t)(p[2] << 8) | p[3]);
-		AccelSensor::vData.Z = ((int16_t)(p[4] << 8) | p[5]);
+		AccelSensor::vData.X = (((int16_t)p[0] << 8) | (p[1] & 0xFF)) << 15;
+		AccelSensor::vData.Y = (((int16_t)p[2] << 8) | (p[3] & 0xFF)) << 15;
+		AccelSensor::vData.Z = (((int16_t)p[4] << 8) | (p[5] & 0xFF)) << 15;
 
 		//printf("DMP Accel %d %d %d\n", AccelSensor::vData.X, AccelSensor::vData.Y, AccelSensor::vData.Z);
 		p += 6;
@@ -731,21 +635,21 @@ size_t AgmIcm20948::ProcessDMPFifo(size_t Len, uint64_t Timestamp)
 	{
 //		printf("DMP Gyro\n");
 		GyroSensor::vData.Timestamp = Timestamp;
-		GyroSensor::vData.X = ((int16_t)(p[0] << 8) | p[1]);
-		GyroSensor::vData.Y = ((int16_t)(p[2] << 8) | p[3]);
-		GyroSensor::vData.Z = ((int16_t)(p[4] << 8) |p[5]);
+		GyroSensor::vData.X = ((int16_t)p[0] << 8) | (p[1] & 0xFF);
+		GyroSensor::vData.Y = ((int16_t)p[2] << 8) | (p[3] & 0xFF);
+		GyroSensor::vData.Z = ((int16_t)p[4] << 8) | (p[5] & 0xFF);
 
-		p += 6;
-		cnt += 6;
+		p += 12;
+		cnt += 12;
 	}
 
 	if (header & ICM20948_FIFO_HEADER_CPASS)
 	{
 //		printf("DMP Mag\n");
 		MagSensor::vData.Timestamp = Timestamp;
-		MagSensor::vData.X = ((int16_t)(p[0] << 8) | p[1]);
-		MagSensor::vData.Y = ((int16_t)(p[2] << 8) | p[3]);
-		MagSensor::vData.Z = ((int16_t)(p[4] << 8) |p[5]);
+		MagSensor::vData.X = ((int16_t)p[0] << 8) | (p[1] & 0xFF);
+		MagSensor::vData.Y = ((int16_t)p[2] << 8) | (p[3] & 0xFF);
+		MagSensor::vData.Z = ((int16_t)p[4] << 8) | (p[5] & 0xFF);
 
 		p += 6;
 		cnt += 6;
@@ -988,12 +892,12 @@ int AgmIcm20948::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int Buf
 		SelectBank(pCmdAddr[1]);
 		CmdAddrLen--;
 	}
-
+/*
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		*pCmdAddr |= 0x80;
 	}
-
+*/
 	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 }
 
@@ -1005,12 +909,12 @@ int AgmIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int Da
 		SelectBank(pCmdAddr[1]);
 		CmdAddrLen--;
 	}
-
+/*
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		*pCmdAddr &= 0x7F;
 	}
-
+*/
 	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 }
 
