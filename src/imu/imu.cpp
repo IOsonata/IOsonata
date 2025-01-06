@@ -90,6 +90,8 @@ IMU_FEATURE Imu::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
 			case IMU_FEATURE_CYCLING:
 				break;
 		}
+
+		bit >>= 1;
 	}
 	if (bEnDis == true)
 	{

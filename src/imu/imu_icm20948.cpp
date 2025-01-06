@@ -430,6 +430,76 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	uint32_t f = pGyro->SamplingFrequency();
 	printf("f %d\n", f);
 
+	uint32_t scale = pAccel->Scale();
+	uint32_t scale2;
+
+	printf("scale : %d\n", scale);
+	switch (scale)
+	{
+	case 2:
+		scale =  EndianCvt32(33554432L);  // 2^25
+		scale2 = EndianCvt32(524288L);	// 2^19
+		break;
+	case 4:
+		scale =  EndianCvt32(67108864L);  // 2^26
+		scale2 = EndianCvt32(262144L);  // 2^18
+		break;
+	case 8:
+		scale = EndianCvt32(134217728L);  // 2^27
+		scale2 = EndianCvt32(131072L);  // 2^17
+		break;
+	case 16:
+		scale = EndianCvt32(268435456L);  // 2^28
+		scale2 = EndianCvt32(65536L);  // 2^16
+		break;
+	case 32:
+		scale = EndianCvt32(536870912L);  // 2^29
+		scale2 = EndianCvt32(32768L);  // 2^15
+		break;
+	}
+
+	regaddr = ACC_SCALE;
+	WriteDMP(regaddr, (uint8_t*)&scale, 4);
+
+	regaddr = ACC_SCALE2;
+	WriteDMP(regaddr, (uint8_t*)&scale2, 4);
+
+	uint16_t div = Read16((uint8_t*)&regaddr, 2) & 0xFF0F;
+
+	regaddr = ODR_ACCEL;
+	WriteDMP(regaddr, (uint8_t*)&div, 2);
+
+	uint32_t sens = pGyro->Sensitivity();
+	printf("Sensitivity %d\n", sens);
+
+	switch (sens) {
+	case 4000:
+		sens =  EndianCvt32(536870912L);  // 2^29
+		break;
+	case 2000:
+		sens =  EndianCvt32(268435456L);  // 2^28
+		break;
+	case 1000:
+		sens = EndianCvt32(134217728L);  // 2^27
+		break;
+	case 500:
+		sens = EndianCvt32(67108864L);  // 2^26
+		break;
+	case 250:
+		sens = EndianCvt32(33554432L);  // 2^25
+		break;
+	}
+
+	regaddr = GYRO_FULLSCALE;
+	WriteDMP(regaddr, (uint8_t*)&sens, 4);
+
+	regaddr = DATA_OUT_CTL1;
+	uint16_t x = 0x8000; // axel
+	WriteDMP(regaddr, (uint8_t*)&x, 2);
+
+	x = 0x4000; // Gyro
+	WriteDMP(regaddr, (uint8_t*)&x, 2);
+
 	return true;
 }
 
@@ -467,7 +537,8 @@ IMU_FEATURE ImuIcm20948::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
 		uint16_t m = DATA_OUT_CTL1;
 		WriteDMP(m, (uint8_t*)&f, 2);
 	}
-	return Imu::Feature();
+
+	return Imu::Feature(FeatureBit, bEnDis);
 }
 
 bool ImuIcm20948::Calibrate()

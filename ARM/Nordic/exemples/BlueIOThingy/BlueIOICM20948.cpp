@@ -220,13 +220,13 @@ bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 	s_pTimer = pTimer;
 
 
-	bool res = s_MotSensor.Init(s_AccelCfg, pIntrF);
+	bool res = s_MotSensor.Init(s_AccelCfg, pIntrF, pTimer);
 	if (res == true)
 	{
-		res |= s_MotSensor.Init(s_GyroCfg, pIntrF);
+		res |= s_MotSensor.Init(s_GyroCfg, pIntrF, pTimer);
 		if (res == true)
 		{
-			res |= s_MotSensor.Init(s_MagCfg, pIntrF);
+			res |= s_MotSensor.Init(s_MagCfg, pIntrF, pTimer);
 		}
 	}
 	if (res == true)

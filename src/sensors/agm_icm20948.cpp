@@ -38,6 +38,28 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "sensors/agm_icm20948.h"
 
+typedef struct {
+	size_t Len;
+} FifoDataLen_t;
+
+static const size_t s_FifoDataLenLookup1[] = {
+	ICM20948_FIFO_HEADER_ACCEL_SIZE, ICM20948_FIFO_HEADER_GYRO_SIZE,
+	ICM20948_FIFO_HEADER_CPASS_SIZE, ICM20948_FIFO_HEADER_ALS_SIZE,
+	ICM20948_FIFO_HEADER_QUAT6_SIZE, ICM20948_FIFO_HEADER_QUAT9_SIZE,
+	ICM20948_FIFO_HEADER_PEDO_QUAT6_SIZE, ICM20948_FIFO_HEADER_GEOMAG_SIZE,
+	ICM20948_FIFO_HEADER_PRESSURE_SIZE, ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE,
+	ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE, ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE
+};
+static const size_t s_NbFifoDataLenLookup1 = sizeof(s_FifoDataLenLookup1) / sizeof(size_t);
+
+static const size_t s_FifoDataLenLookup2[] = {
+	ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE, ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE,
+	ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE, ICM20948_FIFO_HEADER2_FSYNC_SIZE,
+	ICM20948_FIFO_HEADER2_PICKUP_SIZE, 0, 0, ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE,
+	2
+};
+static const size_t s_NbFifoDataLenLookup2 = sizeof(s_FifoDataLenLookup2) / sizeof(size_t);
+
 bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
 {
 	//if (vbInitialized)
@@ -554,14 +576,286 @@ uint32_t AgmIcm20948::Sensitivity(uint32_t Value)
 	return GyroSensor::Sensitivity();
 }
 */
+
+size_t AgmIcm20948::CalcFifoPacketSize(uint16_t Header, uint16_t Mask, const size_t *Lookup, size_t LookupSize)
+{
+	size_t cnt = 0;
+#if 1
+	uint16_t bit = Mask;
+	for (int i = 0; i < LookupSize; i++)
+	{
+		if (Header & bit)
+		{
+			cnt += Lookup[i];
+		}
+		bit >>= 1;
+	}
+//printf("cnt %d\n", cnt);
+#else
+	if (Header & ICM20948_FIFO_HEADER_ACCEL)
+	{
+		cnt += ICM20948_FIFO_HEADER_ACCEL_SIZE;
+	}
+
+	if (Header & ICM20948_FIFO_HEADER_GYRO)
+	{
+		cnt += ICM20948_FIFO_HEADER_GYRO_SIZE;
+	}
+
+	if (Header & ICM20948_FIFO_HEADER_CPASS)
+	{
+		cnt += ICM20948_FIFO_HEADER_CPASS_SIZE;
+	}
+
+	if (Header & ICM20948_FIFO_HEADER_ALS)
+	{
+		cnt += ICM20948_FIFO_HEADER_ALS_SIZE;
+	}
+
+	if (Header & ICM20948_FIFO_HEADER_QUAT6)
+	{
+		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
+	}
+
+	if (Header & ICM20948_FIFO_HEADER_QUAT9)
+	{
+		cnt += ICM20948_FIFO_HEADER_QUAT9_SIZE;
+	}
+
+	if (Header & ICM20948_FIFO_HEADER_STEP_DETECTOR)
+	{
+		cnt += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+	}
+
+	if (Header & ICM20948_FIFO_HEADER_GEOMAG)
+	{
+		cnt += ICM20948_FIFO_HEADER_GEOMAG_SIZE;
+	}
+
+	if (Header & ICM20948_FIFO_HEADER_PRESSURE)
+	{
+		cnt += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
+	}
+
+	if (Header & ICM20948_FIFO_HEADER_CALIB_CPASS)
+	{
+		cnt += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
+	}
+
+	if (Header2 > 0)
+	{
+		if (Header2 & ICM20948_FIFO_HEADER2_ACCEL_ACCUR)
+		{
+			cnt += ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
+		}
+
+		if (Header2 & ICM20948_FIFO_HEADER2_GYRO_ACCUR)
+		{
+			cnt += ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
+		}
+
+		if (Header2 & ICM20948_FIFO_HEADER2_CPASS_ACCUR)
+		{
+			cnt += ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE;
+		}
+
+		if (Header2 & ICM20948_FIFO_HEADER2_PICKUP)
+		{
+			cnt += ICM20948_FIFO_HEADER2_PICKUP_SIZE;
+		}
+
+		if (Header2 & ICM20948_FIFO_HEADER2_ACTI_RECOG)
+		{
+			cnt += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
+		}
+	}
+#endif
+
+	return cnt;
+}
+
+size_t AgmIcm20948::ProcessDMPFifo(size_t Len, uint64_t Timestamp)
+{
+	bool retval = false;
+	size_t cnt = 0;
+	uint16_t regaddr = ICM20948_FIFO_R_W_REG;
+	uint16_t header2 = 0;
+	uint16_t header = EndianCvt16(Read16((uint8_t*)&regaddr, 2));
+	size_t pklen = CalcFifoPacketSize(header, 0x8000, s_FifoDataLenLookup1, s_NbFifoDataLenLookup1);
+
+	cnt += 2;
+
+	if (header & ICM20948_FIFO_HEADER_HEADER2)
+	{
+		header2 = EndianCvt16(Read16((uint8_t*)&regaddr, 2));
+		pklen += CalcFifoPacketSize(header2, 0x4000, s_FifoDataLenLookup2, s_NbFifoDataLenLookup2);
+		cnt += 2;
+	}
+
+	pklen += 2; // Footer
+
+	//cnt += 2;
+
+	uint8_t fifo[pklen];
+	uint8_t *p = fifo;
+
+	if (pklen > Len)
+	{
+		return 0;
+	}
+	while (pklen > 0)
+	{
+		size_t l = min(pklen, (size_t)ICM20948_FIFO_PAGE_SIZE);
+		l = Read((uint8_t*)&regaddr, 2, p, l);
+		Len -= l;
+		p += l;
+		pklen -= l;
+//		cnt += l;
+	}
+
+	p = fifo;
+
+	if (header & ICM20948_FIFO_HEADER_ACCEL)
+	{
+		AccelSensor::vData.Timestamp = Timestamp;
+		AccelSensor::vData.X = ((int16_t)(p[0] << 8) | p[1]);
+		AccelSensor::vData.Y = ((int16_t)(p[2] << 8) | p[3]);
+		AccelSensor::vData.Z = ((int16_t)(p[4] << 8) | p[5]);
+
+		//printf("DMP Accel %d %d %d\n", AccelSensor::vData.X, AccelSensor::vData.Y, AccelSensor::vData.Z);
+		p += 6;
+		cnt += 6;
+	}
+
+	if (header & ICM20948_FIFO_HEADER_GYRO)
+	{
+//		printf("DMP Gyro\n");
+		GyroSensor::vData.Timestamp = Timestamp;
+		GyroSensor::vData.X = ((int16_t)(p[0] << 8) | p[1]);
+		GyroSensor::vData.Y = ((int16_t)(p[2] << 8) | p[3]);
+		GyroSensor::vData.Z = ((int16_t)(p[4] << 8) |p[5]);
+
+		p += 6;
+		cnt += 6;
+	}
+
+	if (header & ICM20948_FIFO_HEADER_CPASS)
+	{
+//		printf("DMP Mag\n");
+		MagSensor::vData.Timestamp = Timestamp;
+		MagSensor::vData.X = ((int16_t)(p[0] << 8) | p[1]);
+		MagSensor::vData.Y = ((int16_t)(p[2] << 8) | p[3]);
+		MagSensor::vData.Z = ((int16_t)(p[4] << 8) |p[5]);
+
+		p += 6;
+		cnt += 6;
+	}
+
+	if (header & ICM20948_FIFO_HEADER_ALS)
+	{
+//		printf("DMP ALS\n");
+		p += ICM20948_FIFO_HEADER_ALS_SIZE;
+		cnt += ICM20948_FIFO_HEADER_ALS_SIZE;
+	}
+
+	if (ICM20948_FIFO_HEADER_QUAT6)
+	{
+//		printf("DMP Q6\n");
+		p += ICM20948_FIFO_HEADER_QUAT6_SIZE;
+		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
+	}
+
+	if (header & ICM20948_FIFO_HEADER_QUAT9)
+	{
+//		printf("DMP Q9\n");
+		p += ICM20948_FIFO_HEADER_QUAT9_SIZE;
+		cnt += ICM20948_FIFO_HEADER_QUAT9_SIZE;
+	}
+
+	if (header & ICM20948_FIFO_HEADER_STEP_DETECTOR)
+	{
+//		printf("DMP Step\n");
+		p += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		cnt += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+	}
+
+	if (header & ICM20948_FIFO_HEADER_GEOMAG)
+	{
+		p += ICM20948_FIFO_HEADER_GEOMAG_SIZE;
+		cnt += ICM20948_FIFO_HEADER_GEOMAG_SIZE;
+	}
+
+	if (header & ICM20948_FIFO_HEADER_PRESSURE)
+	{
+//		printf("DMP Pres\n");
+		p += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
+		cnt += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
+	}
+
+	if (header & ICM20948_FIFO_HEADER_CALIB_CPASS)
+	{
+//		printf("DMP Cal pass\n");
+		p += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
+		cnt += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
+	}
+
+	if (header2 > 0)
+	{
+		if (header2 & ICM20948_FIFO_HEADER2_ACCEL_ACCUR)
+		{
+//			printf("DMP Accel acc\n");
+			p += ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
+		}
+
+		if (header2 & ICM20948_FIFO_HEADER2_GYRO_ACCUR)
+		{
+//			printf("DMP Gyro acc\n");
+			p += ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
+		}
+
+		if (header2 & ICM20948_FIFO_HEADER2_CPASS_ACCUR)
+		{
+			p += ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE;
+		}
+
+		if (header2 & ICM20948_FIFO_HEADER2_PICKUP)
+		{
+			p += ICM20948_FIFO_HEADER2_PICKUP_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_PICKUP_SIZE;
+		}
+
+		if (header2 & ICM20948_FIFO_HEADER2_ACTI_RECOG)
+		{
+			p += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
+		}
+	}
+
+	p += ICM20948_FIFO_FOOTER_SIZE;
+	cnt += ICM20948_FIFO_FOOTER_SIZE;
+
+	//printf("h: %x %x : %x %x %x %x\n", header, header2, pFifo[0], pFifo[1], pFifo[2], pFifo[3]);
+
+	return cnt;
+}
+
 bool AgmIcm20948::UpdateData()
 {
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
 	uint8_t status[4];
 	uint8_t d[20];
 	uint64_t t;
+	bool res = false;
 
 	Read((uint8_t*)&regaddr, 2, status, 4);
+
+	if (vpTimer)
+	{
+		t = vpTimer->uSecond();
+	}
 
 	if (status[0] & ICM20948_INT_STATUS_PLL_RDY_INT)
 	{
@@ -576,24 +870,90 @@ bool AgmIcm20948::UpdateData()
 	{
 		printf("ICM20948_INT_STATUS_I2C_MIST_INT\n");
 	}
-	if (status[0] & ICM20948_INT_STATUS_DMP_INT1)
+	if (status[0] & ICM20948_INT_STATUS_DMP_INT1 || status[2] || status[3])
 	{
-		printf("ICM20948_INT_STATUS_DMP_INT1\n");
+		regaddr = ICM20948_DMP_INT_STATUS_REG;
+		uint16_t distatus;
+		Read((uint8_t*)&regaddr, 2, (uint8_t*)&distatus, 1);
+	//		Write16((uint8_t*)&regaddr, 2, distatus);
+
+		if (distatus)// & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
+		{
+			// DMP msg
+			//printf("distatus %x\n", distatus);
+		}
+
+		//printf("ICM20948_INT_STATUS_DMP_INT1\n");
+//		if (status[2] || status[3])
+		{
+			regaddr = ICM20948_FIFO_COUNTH_REG;
+			int cnt = Read16((uint8_t*)&regaddr, 2);
+			cnt = EndianCvt16(cnt);
+#if 1
+			if (cnt >= ICM20948_FIFO_MAX_PKT_SIZE)
+			{
+				ProcessDMPFifo(cnt, t);
+			}
+#else
+			uint8_t fifo[cnt];
+			uint8_t *p = fifo;
+			regaddr = ICM20948_FIFO_R_W_REG;
+			int len = cnt;
+//			uint16_t header, header2;
+
+			if (cnt > 3)
+			{
+				uint16_t header = EndianCvt16(Read16((uint8_t*)&regaddr, 2));
+				uint16_t header2 = 0;
+				size_t pklen = CalcFifoPacketSize(header, 0x8000, s_FifoDataLenLookup1, s_NbFifoDataLenLookup1);
+
+				if (header & ICM20948_FIFO_HEADER_HEADER2)
+				{
+					header2 = EndianCvt16(Read16((uint8_t*)&regaddr, 2));
+					pklen += CalcFifoPacketSize(header2, 0x4000, s_FifoDataLenLookup2, s_NbFifoDataLenLookup2);
+				}
+
+				pklen += 2; // Footer
+
+				if (pklen <= cnt)
+				{
+					while (pklen > 0)
+					{
+						size_t l = min(pklen, (size_t)ICM20948_FIFO_PAGE_SIZE);
+						l = Read((uint8_t*)&regaddr, 2, p, l);
+						cnt -= l;
+						p += l;
+						pklen -= l;
+					}
+				}
+			}
+#endif
+			/*
+			cnt = len;
+			p = fifo;
+			while (cnt > 0)
+			{
+				size_t l = ProcessDMPFifo(p, cnt, t);
+				if (l == 0)
+				{
+					break;
+				}
+				p += l;
+				cnt -= l;
+			}
+*/
+		}
 	}
 
-	bool res = MagIcm20948::UpdateData();
 
-	if (vpTimer)
-	{
-		t = vpTimer->uSecond();
-	}
 
 	if (vbDmpEnabled)
 	{
-
 	}
 	else
 	{
+		res = MagIcm20948::UpdateData();
+
 		if (status[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT)
 		{
 			regaddr = ICM20948_ACCEL_XOUT_H_REG;
@@ -683,7 +1043,7 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 			Write8((uint8_t*)&regaddr, 2, userctrl);
 
 			// Delay require for transfer to complete
-			msDelay(2);
+			msDelay(3);
 
 			Write8((uint8_t*)&regaddr, 2, userctrl & ~ICM20948_USER_CTRL_I2C_MST_EN);
 
@@ -763,10 +1123,20 @@ bool AgmIcm20948::SelectBank(uint8_t BankNo)
 	return Write8(&regaddr, 1, (BankNo << ICM20948_REG_BANK_SEL_USER_BANK_BITPOS) & ICM20948_REG_BANK_SEL_USER_BANK_MASK);
 }
 
+static uint64_t s_UpdateDt;
+
 void AgmIcm20948::IntHandler()
 {
+	uint64_t t = vpTimer->uSecond();
 	UpdateData();
-
+	if (s_UpdateDt == 0)
+	{
+		s_UpdateDt = vpTimer->uSecond() - t;
+	}
+	else
+	{
+		s_UpdateDt = (s_UpdateDt + vpTimer->uSecond() - t) /2;
+	}
 	//status = Read8((uint8_t*)&regaddr, 2);
 	//printf("- status %x\n", status);
 	//Write8((uint8_t*)&regaddr, 2, status);
