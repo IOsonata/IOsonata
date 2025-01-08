@@ -849,6 +849,7 @@ size_t AgmIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 
 	if (Len < ICM20948_FIFO_FOOTER_SIZE)
 	{
+		vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
 	//printf("Footer size\n");
 		return cnt;
 	}

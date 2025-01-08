@@ -276,6 +276,7 @@ uint32_t AccelInvnIcm20948::SamplingFrequency(uint32_t Freq)
 
 uint32_t AccelInvnIcm20948::FilterFreq(uint32_t Freq)
 {
+#if 1
 	uint16_t regaddr = REG_ACCEL_CONFIG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_MASK | ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE);
 
@@ -324,7 +325,7 @@ uint32_t AccelInvnIcm20948::FilterFreq(uint32_t Freq)
 	}
 
 	Write8((uint8_t*)&regaddr, 2, d);
-
+#endif
 	return AccelSensor::FilterFreq(Freq);
 }
 
@@ -342,6 +343,7 @@ bool GyroInvnIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Tim
 
 uint32_t GyroInvnIcm20948::Sensitivity(uint32_t Value)
 {
+#if 1
 	enum mpu_gyro_fs gfsr;
 
 	if (Value < 325)
@@ -365,13 +367,13 @@ uint32_t GyroInvnIcm20948::Sensitivity(uint32_t Value)
 		Value = 2000;
 	}
 
-#if 0
 	inv_icm20948_set_gyro_fullscale(*this, gfsr);
 #else
-	uint16_t regaddr = REG_GYRO_CONFIG_1;
-	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(3<<1);
-	d |= (gfsr << 1);
-	Write8((uint8_t*)&regaddr, 2, d);
+//Scale bug, make it spin
+	uint32_t d = Value;
+	inv_icm20948_set_fsr(*this, INV_ICM20948_SENSOR_RAW_GYROSCOPE, (const void *)&d);
+	inv_icm20948_set_fsr(*this, INV_ICM20948_SENSOR_GYROSCOPE, (const void *)&d);
+	inv_icm20948_set_fsr(*this, INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED, (const void *)&d);
 
 #endif
 
@@ -400,23 +402,99 @@ bool MagInvnIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Timer
 		return false;
 
 #if 0
-	int rc = inv_icm20948_initialize_auxiliary(*this);
-	MagSensor::Range(AK09916_ADC_RANGE);
-	return rc == 0;
-#else
-	msDelay(200);
+//	int rc = inv_icm20948_initialize_auxiliary(*this);
+	//int rc = inv_icm20948_set_slave_compass_id(*this, ((struct inv_icm20948 *)*this)->secondary_state.compass_slave_id);
 
+	int result = 0;
+
+	struct inv_icm20948 *s = (struct inv_icm20948 *)*this;
+
+	inv_icm20948_prevent_lpen_control(s);
+	//activate_compass(s);
+	s->s_compass_available = 1;
+	//inv_icm20948_init_secondary(s);
+	s->secondary_state.slv_reg[0].addr = REG_I2C_SLV0_ADDR;
+	s->secondary_state.slv_reg[0].reg  = REG_I2C_SLV0_REG;
+	s->secondary_state.slv_reg[0].ctrl = REG_I2C_SLV0_CTRL;
+	s->secondary_state.slv_reg[0].d0   = REG_I2C_SLV0_DO;
+
+    s->secondary_state.slv_reg[1].addr = REG_I2C_SLV1_ADDR;
+	s->secondary_state.slv_reg[1].reg  = REG_I2C_SLV1_REG;
+	s->secondary_state.slv_reg[1].ctrl = REG_I2C_SLV1_CTRL;
+	s->secondary_state.slv_reg[1].d0   = REG_I2C_SLV1_DO;
+
+    s->secondary_state.slv_reg[2].addr = REG_I2C_SLV2_ADDR;
+	s->secondary_state.slv_reg[2].reg  = REG_I2C_SLV2_REG;
+	s->secondary_state.slv_reg[2].ctrl = REG_I2C_SLV2_CTRL;
+	s->secondary_state.slv_reg[2].d0   = REG_I2C_SLV2_DO;
+
+	s->secondary_state.slv_reg[3].addr = REG_I2C_SLV3_ADDR;
+	s->secondary_state.slv_reg[3].reg  = REG_I2C_SLV3_REG;
+	s->secondary_state.slv_reg[3].ctrl = REG_I2C_SLV3_CTRL;
+	s->secondary_state.slv_reg[3].d0   = REG_I2C_SLV3_DO;
+
+	inv_icm20948_secondary_stop_channel(s, 0);
+
+	// Set up the secondary I2C bus on 20630.
+	//inv_icm20948_set_secondary(s);
 	uint16_t regaddr = REG_I2C_MST_CTRL;
 	uint8_t d = 0;
-	Write8((uint8_t*)&regaddr, 2, d);
+	Write8((uint8_t*)&regaddr, 2, BIT_I2C_MST_P_NSR);
 
 	regaddr = REG_I2C_MST_ODR_CONFIG;
-	Write8((uint8_t*)&regaddr, 2, 0);
+	Write8((uint8_t*)&regaddr, 2, MIN_MST_ODR_CONFIG);
+
+	//Setup Compass
+	result = inv_icm20948_setup_compass_akm(s);
+
+	//Setup Compass mounting matrix into DMP
+	result |= inv_icm20948_compass_dmp_cal(s, s->mounting_matrix, s->mounting_matrix_secondary_compass);
+
+	if (result)
+	{
+		//desactivate_compass(s);
+		s->s_compass_available = 0;
+
+	}
+
+	//result = inv_icm20948_sleep_mems(s);
+	inv_icm20948_allow_lpen_control(s);
+
+	MagSensor::Range(AK09916_ADC_RANGE);
+	return result == 0;
+#else
+	//msDelay(200);
+
+	struct inv_icm20948 *s = (struct inv_icm20948 *)*this;
+	s->s_compass_available = 1;
+	//inv_icm20948_init_secondary(s);
+	s->secondary_state.slv_reg[0].addr = REG_I2C_SLV0_ADDR;
+	s->secondary_state.slv_reg[0].reg  = REG_I2C_SLV0_REG;
+	s->secondary_state.slv_reg[0].ctrl = REG_I2C_SLV0_CTRL;
+	s->secondary_state.slv_reg[0].d0   = REG_I2C_SLV0_DO;
+
+	//inv_icm20948_secondary_stop_channel(s, 0);
+	uint16_t regaddr = REG_I2C_MST_CTRL;
+	//Write8((uint8_t*)&regaddr, 2, 0);
+
+
+//	regaddr = REG_I2C_MST_CTRL;
+//	uint8_t d = 0;
+	Write8((uint8_t*)&regaddr, 2, BIT_I2C_MST_P_NSR);
+
+	regaddr = REG_I2C_MST_ODR_CONFIG;
+	Write8((uint8_t*)&regaddr, 2, MIN_MST_ODR_CONFIG);
 
 	if (MagAk09916::Init(Cfg, pIntrf, pTimer) == false)
 	{
 		return false;
 	}
+
+	((struct inv_icm20948 *)*this)->s_compass_available = 1;
+	//int result = inv_icm20948_setup_compass_akm(*this);
+
+	//Setup Compass mounting matrix into DMP
+	int result = inv_icm20948_compass_dmp_cal(*this, ((struct inv_icm20948 *)*this)->mounting_matrix, ((struct inv_icm20948 *)*this)->mounting_matrix_secondary_compass);
 
 #endif
 
@@ -430,7 +508,7 @@ bool AgmInvnIcm20948::Enable()
 	int i = INV_SENSOR_TYPE_MAX;
 
 	/* Disable all sensors */
-#if 0
+#if 1
 	while(i-- > 0) {
 		inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
 	}
