@@ -499,7 +499,7 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 {
 	bool retval = false;
 	size_t cnt = 0;
-	uint16_t regaddr = REG_FIFO_R_W;//ICM20948_FIFO_R_W_REG;
+	//uint16_t regaddr = REG_FIFO_R_W;//ICM20948_FIFO_R_W_REG;
 	uint8_t *d = pFifo;//[ICM20948_FIFO_PAGE_SIZE];
 
 	if (vFifoHdr & ICM20948_FIFO_HEADER_ACCEL)
@@ -508,7 +508,7 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_ACCEL_SIZE);
+
 #if 0
 		AccelSensor::vData.Timestamp = Timestamp;
 		AccelSensor::vData.X = ((d[0] << 8) | (d[1] & 0xFF));// << 15;
@@ -529,7 +529,7 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_GYRO_SIZE);
+
 #if 0
 		GyroSensor::vData.Timestamp = Timestamp;
 		GyroSensor::vData.X = ((uint16_t)d[0] << 8) | ((uint16_t)d[1] & 0xFF);
@@ -551,7 +551,7 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_CPASS_SIZE);
+
 #if 0
 		MagSensor::vData.Timestamp = Timestamp;
 		MagSensor::vData.X = ((int16_t)d[0] << 8) | (d[1] & 0xFF);
@@ -572,7 +572,6 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_ALS_SIZE);
 
 		d += ICM20948_FIFO_HEADER_ALS_SIZE;
 		cnt += ICM20948_FIFO_HEADER_ALS_SIZE;
@@ -586,7 +585,17 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_QUAT6_SIZE);
+
+		int32_t q[3];
+
+		q[0] = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+		q[2] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
+		q[3] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
+
+		//vQuat.Q1 = d[0];
+		//vQuat.Q2 = d[1];
+		//vQuat.Q3 = d[2];
+		//vQuat.Q4 = d[3];
 
 		d += ICM20948_FIFO_HEADER_QUAT6_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
@@ -737,6 +746,7 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 
 	if (Len < ICM20948_FIFO_FOOTER_SIZE)
 	{
+		vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
 	//printf("Footer size\n");
 		return cnt;
 	}
@@ -757,24 +767,3 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 
 	return cnt;
 }
-
-int ImuInvnIcm20948::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
-{
-	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
-	{
-		*pCmdAddr |= 0x80;
-	}
-
-	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
-}
-
-int ImuInvnIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
-{
-	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
-	{
-		*pCmdAddr &= 0x7F;
-	}
-
-	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
-}
-
