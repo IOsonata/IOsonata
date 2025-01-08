@@ -781,6 +781,7 @@ bool AgmInvnIcm20948::UpdateData()
 
 	if (vbDmpEnabled)
 	{
+		return false;
 		regaddr = REG_FIFO_COUNT_H;//ICM20948_FIFO_COUNTH_REG;
 		size_t cnt = Read16((uint8_t*)&regaddr, 2);
 		cnt = EndianCvt16(cnt);
@@ -788,19 +789,19 @@ bool AgmInvnIcm20948::UpdateData()
 		regaddr = REG_FIFO_R_W;
 		uint8_t *p = &vFifo[vFifoDataLen];
 
-		while (cnt > 0)
+		while (cnt > ICM20948_FIFO_PAGE_SIZE)
 		{
-			int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, (size_t)ICM20948_FIFO_SIZE_MAX - vFifoDataLen));
+			//int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, (size_t)ICM20948_FIFO_SIZE_MAX - vFifoDataLen));
 
-			if (l == 0)
-			{
-				break;
-			}
-			l = Read((uint8_t*)&regaddr, 2, p, l);
+//			if (l == 0)
+//			{
+//				break;
+//			}
+			int l = Read((uint8_t*)&regaddr, 2, p, 16);
 			p += l;
 			vFifoDataLen += l;
 			cnt -= l;
-		}
+		//}
 
 		while (vFifoDataLen > 2)
 		{
@@ -848,6 +849,7 @@ bool AgmInvnIcm20948::UpdateData()
 			{
 				memmove(vFifo, &vFifo[l], vFifoDataLen);
 			}
+		}
 		}
 	}
 	else
@@ -918,6 +920,31 @@ int AgmInvnIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, in
 	}
 
 	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+}
+
+void AgmInvnIcm20948::UpdateData(SENSOR_TYPE Type, uint64_t Timestamp, uint8_t * const pData)
+{
+	switch (Type)
+	{
+		case SENSOR_TYPE_ACCEL:
+			AccelSensor::vData.Timestamp = Timestamp;
+			AccelSensor::vData.X = ((pData[0] << 8) | (pData[1] & 0xFF));
+			AccelSensor::vData.Y = ((pData[2] << 8) | (pData[3] & 0xFF));
+			AccelSensor::vData.Z = ((pData[4] << 8) | (pData[5] & 0xFF));
+			break;
+		case SENSOR_TYPE_GYRO:
+			GyroSensor::vData.Timestamp = Timestamp;
+			GyroSensor::vData.X = ((pData[0] << 8) | (pData[1] & 0xFF));
+			GyroSensor::vData.Y = ((pData[2] << 8) | (pData[3] & 0xFF));
+			GyroSensor::vData.Z = ((pData[4] << 8) | (pData[5] & 0xFF));
+			break;
+		case SENSOR_TYPE_MAG:
+			MagSensor::vData.Timestamp = Timestamp;
+			MagSensor::vData.X = ((int16_t)pData[0] << 8) | (pData[1] & 0xFF);
+			MagSensor::vData.Y = ((int16_t)pData[2] << 8) | (pData[3] & 0xFF);
+			MagSensor::vData.Z = ((int16_t)pData[4] << 8) | (pData[5] & 0xFF);
+			break;
+	}
 }
 
 size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)

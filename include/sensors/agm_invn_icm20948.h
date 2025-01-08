@@ -221,6 +221,7 @@ public:
 	bool UpdateData();
 	virtual void IntHandler();
 	void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
+	void UpdateData(SENSOR_TYPE Type, uint64_t Timestamp, uint8_t * const pData);
 
 	operator inv_icm20948_t * const () { return &vIcmDevice; }
 
@@ -229,6 +230,7 @@ public:
 	static void SensorEventHandler(void * context, enum inv_icm20948_sensor sensor, uint64_t timestamp, const void * data, const void *arg);
 
 	AgmInvnIcm20948();
+	void ResetFifo();
 
 private:
 	// Default base initialization. Does detection and set default config for all sensor.
@@ -238,7 +240,6 @@ private:
 	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
 	bool SelectBank(uint8_t BankNo);
 	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
-	void ResetFifo();
 
 	bool vbInitialized;
 	inv_icm20948_t vIcmDevice;
@@ -248,8 +249,8 @@ private:
 	bool vbDmpEnabled;
 	uint16_t vFifoHdr;	//!< DMP FIFO header
 	uint16_t vFifoHdr2;	//!< DMP FIFO header
-//	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE]; //!< FIFO cache
-	uint8_t vFifo[ICM20948_FIFO_SIZE_MAX];
+	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE * 2]; //!< FIFO cache
+	//uint8_t vFifo[ICM20948_FIFO_SIZE_MAX];
 	size_t vFifoDataLen;	//!< Data length currently in fifo
 	bool vbSensorEnabled[ICM20948_NB_SENSOR];
 	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within

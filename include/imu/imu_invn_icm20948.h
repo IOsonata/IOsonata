@@ -116,6 +116,7 @@ private:
 	static void SensorEventHandler(void * context, enum inv_icm20948_sensor sensor, uint64_t timestamp, const void * data, const void *arg);
 	static int InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
 	static int InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
+	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
 
 	AgmInvnIcm20948 *vpIcm;
 	inv_icm20948_t *vpIcmDevice;
