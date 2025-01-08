@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "imu/imu_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 
-#define ICM20948_WHO_AM_I_ID		0xEA
+//#define ICM20948_WHO_AM_I_ID		0xEA
 
 #define AK0991x_DEFAULT_I2C_ADDR	0x0C	/* The default I2C address for AK0991x Magnetometers */
 #define AK0991x_SECONDARY_I2C_ADDR  0x0E	/* The secondary I2C address for AK0991x Magnetometers */
@@ -170,6 +170,7 @@ bool ImuInvnIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, Gyro
 
 	Imu::Init(Cfg, pAccel, pGyro, pMag);
 
+	vpIcm = (AgmInvnIcm20948*)pAccel;
 	//vpSensorDev = (AgmInvnIcm20948*)pAccel;
 	vEvtHandler = Cfg.EvtHandler;
 	vpIcmDevice = *(AgmInvnIcm20948*)pAccel;
@@ -268,12 +269,14 @@ void ImuInvnIcm20948::IntHandler()
 	}
 }
 */
+#if 1
 void ImuInvnIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
 	ImuInvnIcm20948 *dev = (ImuInvnIcm20948*)context;
 
 	dev->UpdateData(sensortype, timestamp, data, arg);
 }
+#endif
 
 void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
@@ -389,7 +392,7 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 		break;*/
 	default:
 		//((AgmInvnIcm20948*)vpAccel)->UpdateData(sensortype, timestamp, data, arg);
-//		vpIcm->UpdateData(sensortype, timestamp, data, arg);
+		//vpIcm->UpdateData(sensortype, timestamp, data, arg);
 		return;
 	}
 
@@ -399,6 +402,15 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 	{
 		vEvtHandler(this, DEV_EVT_DATA_RDY);
 	}
+}
+
+void ImuInvnIcm20948::IntHandler()
+{
+#if 0
+	inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);
+#else
+	vpIcm->IntHandler();
+#endif
 }
 
 int ImuInvnIcm20948::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)

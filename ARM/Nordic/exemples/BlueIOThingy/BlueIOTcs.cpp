@@ -104,6 +104,13 @@ BtGattSrvc_t *GetConfSrvcInstance()
 
 uint32_t ConfSrvcInit()
 {
-	return BtGattSrvcAdd(&g_ConfSrvc, &s_ConfSrvcCfg);
+	bool res = BtGattSrvcAdd(&g_ConfSrvc, &s_ConfSrvcCfg);
+
+	if (res)
+	{
+		BtGattCharSetValue(g_ConfChars, (uint8_t*)&s_ThingyVersion, 3);
+	}
+
+	return 0;
 }
 

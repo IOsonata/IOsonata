@@ -28,7 +28,7 @@
 #include "bluetooth/bt_gatt.h"
 #include "idelay.h"
 
-//#define INVN
+#define INVN
 
 #ifdef INVN
 #include "imu/imu_invn_icm20948.h"
@@ -88,9 +88,9 @@ static ImuIcm20948 s_Imu;
 static Timer *s_pTimer = NULL;
 FusionAhrs ahrs;
 
-void ImuDataChedHandler(uint32_t Evt, void *pCtx)
+//void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 
-//void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
+void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 {
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
@@ -98,7 +98,7 @@ void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 	ImuQuat_t quat;
 	long q[4];
 
-#if 0
+#if 1
 	//	s_Imu.Read(accdata);
 	//	s_Imu.Read(gyrodata);
 	//	s_Imu.Read(magdata);
@@ -148,7 +148,7 @@ static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 	{
 		case DEV_EVT_DATA_RDY:
 			//app_sched_event_put(NULL, 0, ImuDataChedHandler);
-			//ImuDataChedHandler(NULL, 0);
+			ImuDataChedHandler(NULL, 0);
 			//g_MotSensor.Read(accdata);
 			break;
 	}
@@ -178,10 +178,11 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 
 	if (IntNo == BLUEIOTHINGY_IMU_INT_NO)
 	{
-#if 0
+#if 1
 		s_Imu.IntHandler();
 #else
 		s_MotSensor.IntHandler();
+#endif
 		//AppEvtHandlerQue(0, 0, ImuDataChedHandler);
 #if 1
 		s_MotSensor.Read(accdata);
@@ -205,14 +206,13 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
     	//printf("Quat %d: %d %d %d\r\n", q[0], q[1], q[2], q[3]);
     	ImuQuatDataSend(q);
 #endif
-#endif
 	}
 }
 
 void ICM20948EnableFeature(uint32_t Feature)
 {
 	//s_MotionFeature |= Feature;
-	//s_Imu.Enable();
+	s_Imu.Enable();
 }
 
 bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
@@ -231,12 +231,12 @@ bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 	}
 	if (res == true)
 	{
-		//res |= s_Imu.Init(s_ImuCfg, &s_MotSensor, &s_MotSensor, &s_MotSensor);
+		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor, &s_MotSensor, &s_MotSensor);
 	}
 
 	if (res)
 	{
-		s_MotSensor.Enable();
+		//s_MotSensor.Enable();
 //		s_Imu.Enable();
 	    FusionAhrsInitialise(&ahrs);
 

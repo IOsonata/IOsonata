@@ -50,7 +50,7 @@ public:
 	virtual void Disable();
 	virtual void Reset();
 	virtual bool UpdateData();
-	virtual void IntHandler() {inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);}
+	virtual void IntHandler();// { /*vpIcm->IntHandler(); } /*/inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);}
 	virtual IMU_FEATURE Feature(IMU_FEATURE FeatureBit, bool bEnDis);
 	virtual bool Calibrate();
 	virtual void SetAxisAlignmentMatrix(int8_t * const pMatrix) ;
