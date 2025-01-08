@@ -72,7 +72,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	uint16_t regaddr;
 	uint8_t d;
 	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	uint8_t lpconfig = 0;//ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
+	uint8_t lpconfig = ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	Interface(pIntrf);
 	DeviceAddress(DevAddr);
@@ -86,7 +86,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	{
 		// in SPI mode, use i2c master mode to access Mag device (AK09916)
 		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS;
-		//lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
+		lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
 	}
 
 	vCurrBank = -1;
@@ -457,19 +457,31 @@ bool AgmIcm20948::Enable()
 {
 	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2);
+	uint8_t fifoen = 0;
 
 	if (vbSensorEnabled[ICM20948_ACCEL_IDX])
 	{
 		d &= ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+		fifoen |= ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
 	}
 
 	if (vbSensorEnabled[ICM20948_GYRO_IDX])
 	{
 		d &= ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
+		fifoen |= (ICM20948_FIFO_EN_2_GYRO_X_FIFO_EN | ICM20948_FIFO_EN_2_GYRO_Y_FIFO_EN |
+				   ICM20948_FIFO_EN_2_GYRO_Z_FIFO_EN);
 	}
+	regaddr = ICM20948_FIFO_EN_2_REG;
+	Write8((uint8_t*)&regaddr, 2, fifoen);
 
+	regaddr = ICM20948_PWR_MGMT_2_REG;
 	Write8((uint8_t*)&regaddr, 2, d);
 
+	if (vbSensorEnabled[ICM20948_MAG_IDX])
+	{
+		regaddr = ICM20948_FIFO_EN_1_REG;
+		Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_1_SLV_0_FIFO_EN);
+	}
 	return true;
 }
 
@@ -490,7 +502,7 @@ void AgmIcm20948::Disable()
 	Write8((uint8_t*)&regaddr, 2, 0);
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
-	d = ICM20948_PWR_MGMT_1_TEMP_DIS | ICM20948_PWR_MGMT_1_SLEEP;// | ICM20948_PWR_MGMT_1_CLKSEL_STOP;
+	d = ICM20948_PWR_MGMT_1_TEMP_DIS;// | ICM20948_PWR_MGMT_1_SLEEP;// | ICM20948_PWR_MGMT_1_CLKSEL_STOP;
 	Write8((uint8_t*)&regaddr, 2, d);
 }
 
@@ -563,6 +575,28 @@ uint32_t AgmIcm20948::Sensitivity(uint32_t Value)
 	return GyroSensor::Sensitivity();
 }
 */
+void AgmIcm20948::ResetFifo(void)
+{
+	uint16_t regaddr;
+	uint16_t cnt;
+
+	regaddr = ICM20948_USER_CTRL_REG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2);
+	Write8((uint8_t*)&regaddr, 2, d & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN));
+
+	do {
+		regaddr = ICM20948_FIFO_RST_REG;
+		Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
+		Write8((uint8_t*)&regaddr, 2, 0x1e);
+		msDelay(1);
+
+		regaddr = ICM20948_FIFO_COUNTH_REG;
+		cnt = EndianCvt16(Read16((uint8_t*)&regaddr, 2)) & 0x1FFF;
+	} while (cnt != 0);
+
+	regaddr = ICM20948_USER_CTRL_REG;
+	Write8((uint8_t*)&regaddr, 2, d);
+}
 
 size_t AgmIcm20948::CalcFifoPacketSize(uint16_t Header, uint16_t Mask, const size_t *pLookup, size_t LookupSize)
 {
@@ -815,13 +849,13 @@ size_t AgmIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 
 	if (Len < ICM20948_FIFO_FOOTER_SIZE)
 	{
-	printf("Footer size\n");
+	//printf("Footer size\n");
 		return cnt;
 	}
 	//Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_FOOTER_SIZE);
 	if (d[0] != 0 || d[1] != 0)
 	{
-		printf("bad packet\n");
+		//printf("bad packet %x %x\n", d[0], d[1]);
 	}
 
 	cnt += ICM20948_FIFO_FOOTER_SIZE;
@@ -879,6 +913,7 @@ bool AgmIcm20948::UpdateData()
 			//printf("distatus %x\n", distatus);
 		}
 	}
+#if 0
 		//printf("ICM20948_INT_STATUS_DMP_INT1\n");
 //		if (status[2] || status[3])
 		{
@@ -901,7 +936,7 @@ bool AgmIcm20948::UpdateData()
 #endif
 			regaddr = ICM20948_FIFO_R_W_REG;
 
-			//while (cnt > 2)
+			while (cnt > 2)
 			{
 				if (vFifoHdr == 0 && vFifoHdr2 == 0)
 				{
@@ -913,7 +948,15 @@ bool AgmIcm20948::UpdateData()
 					}
 					// Read headers from FIFO
 					vFifoHdr = Read16((uint8_t*)&regaddr, 2);
-					vFifoHdr = EndianCvt16(vFifoHdr) | ICM20948_FIFO_HEADER_FOOTER;
+					vFifoHdr = EndianCvt16(vFifoHdr);// | ICM20948_FIFO_HEADER_FOOTER;
+
+					if (vFifoHdr == 0 || vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
+					{
+						// Bad header
+						ResetFifo();
+						return false;
+					}
+
 					//vFifoHdr &= ICM20948_FIFO_HEADER_MASK;
 					//vFifoHdr = ((uint16_t)vFifo[0] << 8) | (vFifo[1] & 0xff) | ICM20948_FIFO_HEADER_FOOTER;
 
@@ -932,6 +975,12 @@ bool AgmIcm20948::UpdateData()
 					{
 						vFifoHdr2 = Read16((uint8_t*)&regaddr, 2);
 						vFifoHdr2 = EndianCvt16(vFifoHdr2);
+
+						if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
+						{
+							ResetFifo();
+							return false;
+						}
 						//vFifoHdr2 &= ICM20948_FIFO_HEADER2_MASK;
 						//vFifoHdr2 = ((uint16_t)vFifo[2] << 8) | (vFifo[3] & 0xff);
 						//vFifoDataLen -= 2;
@@ -1024,11 +1073,78 @@ bool AgmIcm20948::UpdateData()
 */
 		}
 
-
-
+#endif
 
 	if (vbDmpEnabled)
 	{
+		regaddr = ICM20948_FIFO_COUNTH_REG;
+		size_t cnt = Read16((uint8_t*)&regaddr, 2);
+		cnt = EndianCvt16(cnt);
+
+		regaddr = ICM20948_FIFO_R_W_REG;
+		uint8_t *p = &vFifo[vFifoDataLen];
+
+		while (cnt > 0)
+		{
+			int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, (size_t)ICM20948_FIFO_SIZE_MAX - vFifoDataLen));
+
+			if (l == 0)
+			{
+				break;
+			}
+			l = Read((uint8_t*)&regaddr, 2, p, l);
+			p += l;
+			vFifoDataLen += l;
+			cnt -= l;
+		}
+
+		while (vFifoDataLen > 2)
+		{
+			if (vFifoHdr == 0 && vFifoHdr2 == 0)
+			{
+				int l = 0;
+				// new packet
+				vFifoHdr = ((uint16_t)vFifo[0] << 8U) | ((uint16_t)vFifo[1] & 0xFF);
+
+				if (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
+				{
+					ResetFifo();
+					return false;
+				}
+
+				l = 2;
+
+				if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
+				{
+					vFifoHdr2 = ((uint16_t)vFifo[2] << 8U) | ((uint16_t)vFifo[3] & 0xFF);
+
+					if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
+					{
+						ResetFifo();
+						return false;
+					}
+
+					l += 2;
+				}
+				vFifoDataLen -= l;
+
+				if (vFifoDataLen > 0)
+				{
+					memmove(vFifo, &vFifo[l], vFifoDataLen);
+				}
+//				printf("Header %x %x\n", vFifoHdr, vFifoHdr2);
+			}
+			int l = ProcessDMPFifo(vFifo, vFifoDataLen, t);
+			if (l == 0)
+			{
+				return false;
+			}
+			vFifoDataLen -= l;
+			if (vFifoDataLen > 0)
+			{
+				memmove(vFifo, &vFifo[l], vFifoDataLen);
+			}
+		}
 	}
 	else
 	{
@@ -1366,11 +1482,14 @@ bool AgmIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage
 	uint16_t regaddr = ICM20948_USER_CTRL_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
 	Write8((uint8_t*)&regaddr,	2, d);
-
+#if 0
 	// Reset FIFO
 	regaddr = ICM20948_FIFO_RST_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 	Write8((uint8_t*)&regaddr, 2, 0);
+#else
+	ResetFifo();
+#endif
 
 	// load external image
 	bool res = UploadDMPImage(pDmpImage, Len);
@@ -1383,9 +1502,9 @@ bool AgmIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage
 		regaddr = ICM20948_DMP_PROG_START_ADDRH_REG;
 		Write16((uint8_t*)&regaddr, 2, DmpStartAddr);
 
-		regaddr = ICM20948_USER_CTRL_REG;
-		d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-		Write8((uint8_t*)&regaddr, 2, d);
+//		regaddr = ICM20948_USER_CTRL_REG;
+//		d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+//		Write8((uint8_t*)&regaddr, 2, d);
 
 		vbDmpEnabled = true;
 

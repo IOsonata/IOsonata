@@ -32,6 +32,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "idelay.h"
+#include "istddef.h"
 #include "convutil.h"
 #include "imu/imu_icm20948.h"
 #include "sensors/agm_icm20948.h"
@@ -373,7 +374,16 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 		return false;
 	}
 
+	uint16_t regaddr;
+	uint16_t d;
+
 	vpIcm = (AgmIcm20948*)pAccel;
+
+	regaddr = ICM20948_USER_CTRL_REG;
+	d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	vpIcm->Disable();
 
 	bool res = vpIcm->InitDMP(DMP_START_ADDRESS, s_Dmp3Image, DMP_CODE_SIZE);
 
@@ -382,29 +392,42 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 		return false;
 	}
 
-	uint16_t regaddr;
-	uint8_t d;
-
 	Imu::Init(Cfg, pAccel, pGyro, pMag);
 	vEvtHandler = Cfg.EvtHandler;
+
+#if 1
+	regaddr = DATA_OUT_CTL1;
+	d = 0;
+	WriteDMP(regaddr, (uint8_t*)&d, 2);
+
+	regaddr = DATA_OUT_CTL2;
+	WriteDMP(regaddr, (uint8_t*)&d, 2);
+
+	regaddr = DATA_INTR_CTL;
+	WriteDMP(regaddr, (uint8_t*)&d, 2);
+
+	regaddr = MOTION_EVENT_CTL;
+	WriteDMP(regaddr, (uint8_t*)&d, 2);
+
+	regaddr = DATA_RDY_STATUS;
+	WriteDMP(regaddr, (uint8_t*)&d, 2);
+#endif
 
 	// Set FIFO watermark 80%
 	uint16_t memaddr = FIFO_WATERMARK;
 	d = EndianCvt16(800);
 	WriteDMP(memaddr, (uint8_t*)&d, 2);
 
-#if 0
-	regaddr = ICM20948_FIFO_RST;
-	d = ICM20948_FIFO_RST_FIFO_RESET_MASK;
-	Write8((uint8_t*)&regaddr, 2, d);
-	regaddr = ICM20948_FIFO_EN_1;
-	d = ICM20948_FIFO_EN_1_SLV_0_FIFO_EN;
-	Write8((uint8_t*)&regaddr, 2, d);
-#endif
+	regaddr = ICM20948_FIFO_MODE_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_MODE_SNAPSHOT); // blocking
 
-	regaddr = ICM20948_FIFO_EN_2_REG;
-	d = 0x1f;	// All
-	Write8((uint8_t*)&regaddr, 2, d);
+	//regaddr = ICM20948_FIFO_EN_1_REG;
+	//d = ICM20948_FIFO_EN_1_SLV_0_FIFO_EN;
+//	Write8((uint8_t*)&regaddr, 2, d);
+
+//	regaddr = ICM20948_FIFO_EN_2_REG;
+//	d = ICM20948_FIFO_EN_2_TEMP_FIFO_EN;
+//	Write8((uint8_t*)&regaddr, 2, d);
 
 	regaddr = ICM20948_INT_ENABLE_REG;
 	d = Read8((uint8_t*)&regaddr, 2);
@@ -426,7 +449,28 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	d = 1;
 	Write8((uint8_t*)&regaddr, 2, d);
 
+	regaddr = ICM20948_USER_CTRL_REG;
+	d = Read8((uint8_t*)&regaddr, 2);
+	d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+	Write8((uint8_t*)&regaddr, 2, d);
 
+	regaddr = ICM20948_FIFO_CFG_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_CFG_SINGLE);
+
+	regaddr = ICM20948_FIFO_CFG_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_CFG_SINGLE);
+
+	regaddr = ICM20948_FIFO_RST_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
+	Write8((uint8_t*)&regaddr, 2, 0x1e);
+
+	regaddr = ICM20948_FIFO_EN_1_REG;
+	Write8((uint8_t*)&regaddr, 2, 0);
+
+	regaddr = ICM20948_FIFO_EN_2_REG;
+	Write8((uint8_t*)&regaddr, 2, 0);
+
+#if 0
 	uint32_t f = pGyro->SamplingFrequency();
 	printf("f %d\n", f);
 
@@ -494,24 +538,27 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	WriteDMP(regaddr, (uint8_t*)&sens, 4);
 
 	regaddr = DATA_OUT_CTL1;
-	uint16_t x = 0x8000; // axel
+	uint16_t x = 0xFFFF; // axel
 	WriteDMP(regaddr, (uint8_t*)&x, 2);
+#endif
 
-	x = 0x4000; // Gyro
-	WriteDMP(regaddr, (uint8_t*)&x, 2);
+//	x = 0x4000; // Gyro
+//	WriteDMP(regaddr, (uint8_t*)&x, 2);
 
 	return true;
 }
 
 bool ImuIcm20948::Enable()
 {
+	bool res = vpIcm->Enable();
+
 	uint16_t regaddr = ICM20948_USER_CTRL_REG;
 	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2);
 
 	d |= ICM20948_USER_CTRL_DMP_EN | ICM20948_USER_CTRL_FIFO_EN;
 	vpIcm->Write8((uint8_t*)&regaddr, 2, d);
 
-	return vpIcm->Enable();
+	return res;
 }
 
 void ImuIcm20948::Disable()
@@ -619,9 +666,14 @@ int ImuIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
 	Write8((uint8_t*)&regaddr, 2, MemAddr & 0xFF);
 
 	regaddr = ICM20948_DMP_MEM_RW_REG;
-	for (int i = 0; i < Len; i++)
+	uint8_t *p = pBuff;
+
+	while (Len > 0)
 	{
-		pBuff[i] = Read8((uint8_t*)&regaddr, 2);
+		int l = min(16, Len);
+		l = Read((uint8_t*)&regaddr, 2, p, l);
+		p += l;
+		Len -= l;
 	}
 
 	return Len;
@@ -637,9 +689,14 @@ int ImuIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
 	Write8((uint8_t*)&regaddr, 2, MemAddr & 0xFF);
 
 	regaddr = ICM20948_DMP_MEM_RW_REG;
-	for (int i = 0; i < Len; i++)
+	uint8_t *p = pData;
+
+	while (Len > 0)
 	{
-		Write8((uint8_t*)&regaddr, 2, pData[i]);
+		int l = min(16, Len);
+		l = Write((uint8_t*)&regaddr, 2, p, l);
+		p += l;
+		Len -= l;
 	}
 
 	return Len;
