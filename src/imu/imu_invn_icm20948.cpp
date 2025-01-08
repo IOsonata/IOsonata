@@ -63,6 +63,14 @@ static const float s_CfgMountingMatrix[9]= {
 	0, 0, 1.f
 };
 
+ImuInvnIcm20948::ImuInvnIcm20948()
+{
+	vpIcm = nullptr;
+	vpIcmDevice = nullptr;
+	vFifoHdr = vFifoHdr2 = 0;
+	vFifoDataLen = 0;
+}
+
 #if 0
 int ImuInvnIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
 {

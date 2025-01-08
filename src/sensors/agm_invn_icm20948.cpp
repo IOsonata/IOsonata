@@ -781,11 +781,11 @@ bool AgmInvnIcm20948::UpdateData()
 
 	if (vbDmpEnabled)
 	{
-		regaddr = ICM20948_FIFO_COUNTH_REG;
+		regaddr = REG_FIFO_COUNT_H;//ICM20948_FIFO_COUNTH_REG;
 		size_t cnt = Read16((uint8_t*)&regaddr, 2);
 		cnt = EndianCvt16(cnt);
 
-		regaddr = ICM20948_FIFO_R_W_REG;
+		regaddr = REG_FIFO_R_W;
 		uint8_t *p = &vFifo[vFifoDataLen];
 
 		while (cnt > 0)
@@ -924,7 +924,7 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 {
 	bool retval = false;
 	size_t cnt = 0;
-	uint16_t regaddr = ICM20948_FIFO_R_W_REG;
+	uint16_t regaddr = REG_FIFO_R_W;//ICM20948_FIFO_R_W_REG;
 	uint8_t *d = pFifo;//[ICM20948_FIFO_PAGE_SIZE];
 
 	if (vFifoHdr & ICM20948_FIFO_HEADER_ACCEL)
@@ -1189,21 +1189,21 @@ void AgmInvnIcm20948::ResetFifo()
 	uint16_t regaddr;
 	uint16_t cnt;
 
-	regaddr = ICM20948_USER_CTRL_REG;
+	regaddr = REG_USER_CTRL;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2);
 	Write8((uint8_t*)&regaddr, 2, d & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN));
 
 	do {
-		regaddr = ICM20948_FIFO_RST_REG;
+		regaddr = REG_FIFO_RST;
 		Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 		Write8((uint8_t*)&regaddr, 2, 0x1e);
 		msDelay(1);
 
-		regaddr = ICM20948_FIFO_COUNTH_REG;
+		regaddr = REG_FIFO_COUNT_H;
 		cnt = EndianCvt16(Read16((uint8_t*)&regaddr, 2)) & 0x1FFF;
 	} while (cnt != 0);
 
-	regaddr = ICM20948_USER_CTRL_REG;
+	regaddr = REG_USER_CTRL;
 	Write8((uint8_t*)&regaddr, 2, d);
 }
 

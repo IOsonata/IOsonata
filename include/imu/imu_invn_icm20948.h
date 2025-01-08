@@ -105,6 +105,8 @@ public:
 	 */
 	virtual bool Read(MagSensorData_t &Data) { return Imu::Read(Data); }
 
+	ImuInvnIcm20948();
+
 protected:
 
 private:
@@ -117,9 +119,14 @@ private:
 
 	AgmInvnIcm20948 *vpIcm;
 	inv_icm20948_t *vpIcmDevice;
-	inv_icm20948_t vIcmDevice;
-	int32_t vCfgAccFsr; // Default = +/- 4g. Valid ranges: 2, 4, 8, 16
-	int32_t vCfgGyroFsr; // Default = +/- 2000dps. Valid ranges: 250, 500, 1000, 2000
+	//inv_icm20948_t vIcmDevice;
+//	int32_t vCfgAccFsr; // Default = +/- 4g. Valid ranges: 2, 4, 8, 16
+//	int32_t vCfgGyroFsr; // Default = +/- 2000dps. Valid ranges: 250, 500, 1000, 2000
+	uint16_t vFifoHdr;	//!< DMP FIFO header
+	uint16_t vFifoHdr2;	//!< DMP FIFO header
+//	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE]; //!< FIFO cache
+	uint8_t vFifo[ICM20948_FIFO_SIZE_MAX];
+	size_t vFifoDataLen;	//!< Data length currently in fifo
 };
 
 
