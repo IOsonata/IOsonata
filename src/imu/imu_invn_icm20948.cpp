@@ -34,6 +34,8 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
+#include <math.h>
+
 #include "Devices/Drivers/Icm20948/Icm20948.h"
 #include "Devices/Drivers/Icm20948/Icm20948Defs.h"
 #include "Devices/Drivers/Icm20948/Icm20948Dmp3Driver.h"
@@ -421,7 +423,7 @@ void ImuInvnIcm20948::IntHandler()
 #if 0
 	vpIcm->IntHandler();
 #else
-	vpIcm->IntHandler();
+	//vpIcm->IntHandler();
 
 	uint64_t t;
 	uint16_t regaddr = REG_FIFO_COUNT_H;//ICM20948_FIFO_COUNTH_REG;
@@ -589,13 +591,13 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		int32_t q[3];
 
 		q[0] = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
-		q[2] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
-		q[3] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
+		q[1] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
+		q[2] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
 
-		//vQuat.Q1 = d[0];
-		//vQuat.Q2 = d[1];
-		//vQuat.Q3 = d[2];
-		//vQuat.Q4 = d[3];
+		vQuat.Q2 = (float)q[0] / (1 << 30);
+		vQuat.Q3 = (float)q[1] / (1 << 30);
+		vQuat.Q4 = (float)q[2] / (1 << 30);
+		vQuat.Q1 = sqrt(1.0 - vQuat.Q2 * vQuat.Q2 - vQuat.Q3 * vQuat.Q3 - vQuat.Q4 * vQuat.Q4);
 
 		d += ICM20948_FIFO_HEADER_QUAT6_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
@@ -609,7 +611,17 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_QUAT9_SIZE);
+
+		int32_t q[3];
+
+		q[0] = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+		q[1] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
+		q[2] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
+
+		vQuat.Q2 = (float)q[0] / (1 << 30);
+		vQuat.Q3 = (float)q[1] / (1 << 30);
+		vQuat.Q4 = (float)q[2] / (1 << 30);
+		vQuat.Q1 = sqrt(1.0 - vQuat.Q2 * vQuat.Q2 - vQuat.Q3 * vQuat.Q3 - vQuat.Q4 * vQuat.Q4);
 
 		d += ICM20948_FIFO_HEADER_QUAT9_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT9_SIZE;
@@ -623,7 +635,8 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE);
+
+		int32_t stp = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
 
 		d += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
 		cnt += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
@@ -637,7 +650,12 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_GEOMAG_SIZE);
+
+		int32_t q[3];
+
+		q[0] = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+		q[1] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
+		q[2] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
 
 		d += ICM20948_FIFO_HEADER_GEOMAG_SIZE;
 		cnt += ICM20948_FIFO_HEADER_GEOMAG_SIZE;
@@ -651,7 +669,7 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_PRESSURE_SIZE);
+
 		d += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
 		cnt += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
 		Len -= ICM20948_FIFO_HEADER_PRESSURE_SIZE;
@@ -664,7 +682,13 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE);
+
+		int32_t q[3];
+
+		q[0] = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+		q[1] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
+		q[2] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
+
 		d += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
 		cnt += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
 		Len -= ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
@@ -679,7 +703,8 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 			{
 				return cnt;
 			}
-//			Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE);
+
+			int16_t a = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
 
 			d += ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
 			cnt += ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
@@ -693,7 +718,8 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 			{
 				return cnt;
 			}
-//			Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE);
+
+			int16_t a = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
 
 			d += ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
 			cnt += ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
@@ -721,7 +747,8 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 			{
 				return cnt;
 			}
-//			Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER2_PICKUP_SIZE);
+
+			int16_t a = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
 
 			d += ICM20948_FIFO_HEADER2_PICKUP_SIZE;
 			cnt += ICM20948_FIFO_HEADER2_PICKUP_SIZE;
@@ -735,7 +762,9 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 			{
 				return cnt;
 			}
-//			Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE);
+
+			int16_t bacstate = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
+			int32_t bacts = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
 
 			d += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
 			cnt += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
@@ -750,11 +779,8 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 	//printf("Footer size\n");
 		return cnt;
 	}
-	//Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_FOOTER_SIZE);
-	if (d[0] != 0 || d[1] != 0)
-	{
-		//printf("bad packet %x %x\n", d[0], d[1]);
-	}
+
+	int16_t odrcnt = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
 
 	cnt += ICM20948_FIFO_FOOTER_SIZE;
 	Len -= ICM20948_FIFO_FOOTER_SIZE;
