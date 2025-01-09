@@ -61,10 +61,10 @@ SOFTWARE.
 
 // concatenate bank select to second byte of register address making
 // register address a 16 bits value
-#define ICM20948_REG_BANK0				(0<<8)
-#define ICM20948_REG_BANK1				(1<<8)
-#define ICM20948_REG_BANK2				(2<<8)
-#define ICM20948_REG_BANK3				(3<<8)
+#define ICM20948_REG_BANK0				(0<<7)
+#define ICM20948_REG_BANK1				(1<<7)
+#define ICM20948_REG_BANK2				(2<<7)
+#define ICM20948_REG_BANK3				(3<<7)
 
 //*** Register Bank 0
 
@@ -858,6 +858,7 @@ public:
 	int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
 
 	bool UpdateData();
+	void UpdateData(SENSOR_TYPE Type, uint64_t Timestamp, uint8_t * const pData);
 	virtual void IntHandler();
 	int GetFifoLen();
 	int ReadFifo(uint8_t * const pBuff, int Len);
