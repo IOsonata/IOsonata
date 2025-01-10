@@ -291,7 +291,7 @@ void ImuInvnIcm20948::SensorEventHandler(void * context, enum inv_icm20948_senso
 
 void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
-	//float raw_bias_data[6];
+	float raw_bias_data[6];
 	inv_sensor_event_t event;
 	//uint8_t sensor_id = convert_to_generic_ids[sensortype];
 
@@ -324,11 +324,11 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 	case INV_ICM20948_SENSOR_ACCELEROMETER:
 		memcpy(event.data.acc.vect, data, sizeof(event.data.acc.vect));
 		memcpy(&(event.data.acc.accuracy_flag), arg, sizeof(event.data.acc.accuracy_flag));
-		vAccData.X = event.data.acc.vect[0] * 256.0;
-		vAccData.Y = event.data.acc.vect[1] * 256.0;
-		vAccData.Z = event.data.acc.vect[2] * 256.0;
-		vAccData.Timestamp = timestamp;
-		printf("a %d : %d %d %d\r\n", vAccData.Timestamp, vAccData.X, vAccData.Y, vAccData.Z);
+		//vAccData.X = event.data.acc.vect[0] * 256.0;
+		//vAccData.Y = event.data.acc.vect[1] * 256.0;
+		//vAccData.Z = event.data.acc.vect[2] * 256.0;
+		//vAccData.Timestamp = timestamp;
+		//printf("a %d : %d %d %d\r\n", vAccData.Timestamp, vAccData.X, vAccData.Y, vAccData.Z);
 		break;
 	case INV_ICM20948_SENSOR_GEOMAGNETIC_FIELD:
 		memcpy(event.data.mag.vect, data, sizeof(event.data.mag.vect));
@@ -403,11 +403,11 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 		break;*/
 	default:
 		//((AgmInvnIcm20948*)vpAccel)->UpdateData(sensortype, timestamp, data, arg);
-		//vpIcm->UpdateData(sensortype, timestamp, data, arg);
-		return;
+		vpIcm->UpdateData(sensortype, timestamp, data, arg);
+//		return;
 	}
 
-	vpIcm->UpdateData(sensortype, timestamp, data, arg);
+//	vpIcm->UpdateData(sensortype, timestamp, data, arg);
 
 	if (vEvtHandler != NULL)
 	{
@@ -417,7 +417,7 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 
 void ImuInvnIcm20948::IntHandler()
 {
-#if 0
+#if 1
 	inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);
 #else
 #if 0
