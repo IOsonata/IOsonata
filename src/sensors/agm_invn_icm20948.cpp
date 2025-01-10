@@ -149,18 +149,30 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 	uint8_t d;
 	struct inv_icm20948_serif icm20948_serif;
 
-	icm20948_serif.context   = this;
-	icm20948_serif.read_reg  = InvnReadReg;
-	icm20948_serif.write_reg = InvnWriteReg;
-	icm20948_serif.max_read  = 255; /* maximum number of bytes allowed per serial read */
-	icm20948_serif.max_write = 255; /* maximum number of bytes allowed per serial write */
-	icm20948_serif.is_spi = vpIntrf->Type() == DEVINTRF_TYPE_SPI;
+	//inv_icm20948_reset_states(&vIcmDevice, &icm20948_serif);
+	memset(&vIcmDevice, 0, sizeof(inv_icm20948_t));
+	vIcmDevice.serif.context   = this;
+	vIcmDevice.serif.read_reg  = InvnReadReg;
+	vIcmDevice.serif.write_reg = InvnWriteReg;
+	vIcmDevice.serif.max_read  = 16; /* maximum number of bytes allowed per serial read */
+	vIcmDevice.serif.max_write = 16; /* maximum number of bytes allowed per serial write */
+	vIcmDevice.serif.is_spi = vpIntrf->Type() == DEVINTRF_TYPE_SPI;
 
-	inv_icm20948_reset_states(&vIcmDevice, &icm20948_serif);
 
-	inv_icm20948_register_aux_compass(&vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, (uint8_t)AK0991x_DEFAULT_I2C_ADDR);
 
-	inv_icm20948_get_whoami(&vIcmDevice, &d);
+	//inv_icm20948_register_aux_compass(&vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, (uint8_t)AK0991x_DEFAULT_I2C_ADDR);
+	vIcmDevice.secondary_state.compass_slave_id = HW_AK09916;
+	vIcmDevice.secondary_state.compass_chip_addr = AK0991x_DEFAULT_I2C_ADDR;
+	vIcmDevice.secondary_state.compass_state = INV_ICM20948_COMPASS_INITED;
+	/* initialise mounting matrix of compass to identity akm9916 */
+	vIcmDevice.mounting_matrix_secondary_compass[0] = 1 ;
+	vIcmDevice.mounting_matrix_secondary_compass[4] = -1;
+	vIcmDevice.mounting_matrix_secondary_compass[8] = -1;
+
+
+	//inv_icm20948_get_whoami(&vIcmDevice, &d);
+	uint16_t regaddr = REG_WHO_AM_I;
+	d = Read8((uint8_t*)&regaddr, 2);
 
 	if (d != ICM20948_WHO_AM_I_ID)
 	{
@@ -186,7 +198,7 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 
 	inv_icm20948_initialize(&vIcmDevice, s_Dmp3Image, sizeof(s_Dmp3Image));
 	/* Initialize auxiliary sensors */
-	inv_icm20948_register_aux_compass( &vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, AK0991x_DEFAULT_I2C_ADDR);
+	//inv_icm20948_register_aux_compass( &vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, AK0991x_DEFAULT_I2C_ADDR);
 	//rc = inv_icm20948_initialize_auxiliary(&vIcmDevice);
 
 	// re-initialize base state structure
@@ -238,6 +250,7 @@ uint16_t AccelInvnIcm20948::Scale(uint16_t Value)
 
 
 #if 1
+	((inv_icm20948_t*)*this)->base_state.accel_fullscale = d;
 	uint16_t regaddr = REG_ACCEL_CONFIG;
 	Write8((uint8_t*)&regaddr, 2, d);
 #else
@@ -368,6 +381,8 @@ uint32_t GyroInvnIcm20948::Sensitivity(uint32_t Value)
 #if 1
 	inv_icm20948_set_gyro_fullscale(*this, gfsr);
 #else
+	((inv_icm20948_t*)*this)->base_state.gyro_fullscale = gfsr;
+
 	uint16_t regaddr = REG_GYRO_CONFIG_1;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(3<<1);
 	d |= (gfsr << 1);
@@ -544,7 +559,11 @@ void AgmInvnIcm20948::Disable()
 
 void AgmInvnIcm20948::Reset()
 {
-	inv_icm20948_soft_reset(&vIcmDevice);
+	//inv_icm20948_soft_reset(&vIcmDevice);
+	uint16_t regaddr = REG_PWR_MGMT_1;
+	Write8((uint8_t*)&regaddr, 2, BIT_H_RESET);
+
+	msDelay(100);
 }
 
 bool AgmInvnIcm20948::StartSampling()
