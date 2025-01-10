@@ -202,7 +202,7 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 	//rc = inv_icm20948_initialize_auxiliary(&vIcmDevice);
 
 	// re-initialize base state structure
-	inv_icm20948_init_structure(&vIcmDevice);
+	//inv_icm20948_init_structure(&vIcmDevice);
 
 	vbInitialized  = true;
 
@@ -1200,6 +1200,7 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 
 	if (Len < ICM20948_FIFO_FOOTER_SIZE)
 	{
+		vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
 	//printf("Footer size\n");
 		return cnt;
 	}

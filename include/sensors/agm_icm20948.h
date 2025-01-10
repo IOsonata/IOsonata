@@ -37,6 +37,9 @@ SOFTWARE.
 
 #include <stdint.h>
 
+#include "Devices/SensorTypes.h"
+#include "Devices/Drivers/Icm20948/Icm20948Setup.h"
+
 #include "coredev/iopincfg.h"
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
@@ -864,6 +867,7 @@ public:
 	int ReadFifo(uint8_t * const pBuff, int Len);
 	void ResetFifo();
 	bool InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len);
+	void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
 
 private:
 	AgmIcm20948(const AgmIcm20948&); // no copy constructor

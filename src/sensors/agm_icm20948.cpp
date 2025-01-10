@@ -31,6 +31,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include "Devices/Drivers/Icm20948/Icm20948.h"
+#include "Devices/Drivers/Icm20948/Icm20948Defs.h"
+#include "Devices/Drivers/Icm20948/Icm20948Dmp3Driver.h"
+#include "Devices/Drivers/Icm20948/Icm20948DataBaseDriver.h"
+#include "Devices/Drivers/Icm20948/Icm20948DataBaseControl.h"
+#include "Devices/Drivers/Icm20948/Icm20948AuxTransport.h"
+#include "Devices/Drivers/Icm20948/Icm20948MPUFifoControl.h"
+#include "Devices/Drivers/Icm20948/Icm20948Setup.h"
+#include "Devices/SensorTypes.h"
+
 #include "istddef.h"
 #include "convutil.h"
 #include "idelay.h"
@@ -594,6 +604,9 @@ void AgmIcm20948::ResetFifo(void)
 		cnt = EndianCvt16(Read16((uint8_t*)&regaddr, 2)) & 0x1FFF;
 	} while (cnt != 0);
 
+	regaddr = ICM20948_INT_STATUS_2_REG;
+	Write16((uint8_t*)&regaddr, 2, 0);
+
 	regaddr = ICM20948_USER_CTRL_REG;
 	Write8((uint8_t*)&regaddr, 2, d);
 }
@@ -896,6 +909,121 @@ void AgmIcm20948::UpdateData(SENSOR_TYPE Type, uint64_t Timestamp, uint8_t * con
 	}
 }
 
+void AgmIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
+{
+	float raw_bias_data[6];
+	inv_sensor_event_t event;
+	//uint8_t sensor_id = convert_to_generic_ids[sensortype];
+
+	memset((void *)&event, 0, sizeof(event));
+	event.sensor = sensortype;
+	event.timestamp = timestamp;
+	switch (sensortype)
+	{
+	case INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED:
+		memcpy(raw_bias_data, data, sizeof(raw_bias_data));
+		memcpy(event.data.gyr.vect, &raw_bias_data[0], sizeof(event.data.gyr.vect));
+		memcpy(event.data.gyr.bias, &raw_bias_data[3], sizeof(event.data.gyr.bias));
+		memcpy(&(event.data.gyr.accuracy_flag), arg, sizeof(event.data.gyr.accuracy_flag));
+		break;
+	case INV_ICM20948_SENSOR_MAGNETIC_FIELD_UNCALIBRATED:
+		memcpy(raw_bias_data, data, sizeof(raw_bias_data));
+		memcpy(event.data.mag.vect, &raw_bias_data[0], sizeof(event.data.mag.vect));
+		memcpy(event.data.mag.bias, &raw_bias_data[3], sizeof(event.data.mag.bias));
+		memcpy(&(event.data.gyr.accuracy_flag), arg, sizeof(event.data.gyr.accuracy_flag));
+		break;
+	case INV_ICM20948_SENSOR_GYROSCOPE:
+		{
+		//memcpy(event.data.gyr.vect, data, sizeof(event.data.gyr.vect));
+		//memcpy(&(event.data.gyr.accuracy_flag), arg, sizeof(event.data.gyr.accuracy_flag));
+			float *p = (float*)data;
+			GyroSensor::vData.X = p[0] * 256.0;
+			GyroSensor::vData.Y = p[1] * 256.0;
+			GyroSensor::vData.Z = p[2] * 256.0;
+			GyroSensor::vData.Timestamp = timestamp;
+		}
+		break;
+	case INV_ICM20948_SENSOR_GRAVITY:
+		{
+			memcpy(event.data.acc.vect, data, sizeof(event.data.acc.vect));
+			event.data.acc.accuracy_flag = inv_icm20948_get_accel_accuracy();
+			float *p = (float*)data;
+			AccelSensor::vData.X = p[0] * 256.0;
+			AccelSensor::vData.Y = p[1] * 256.0;
+			AccelSensor::vData.Z = p[2] * 256.0;
+			AccelSensor::vData.Timestamp = timestamp;
+		}
+		break;
+	case INV_ICM20948_SENSOR_LINEAR_ACCELERATION:
+	case INV_ICM20948_SENSOR_ACCELEROMETER:
+		{
+			float *p = (float*)data;
+			//memcpy(event.data.acc.vect, data, sizeof(event.data.acc.vect));
+			//memcpy(&(event.data.acc.accuracy_flag), arg, sizeof(event.data.acc.accuracy_flag));
+			AccelSensor::vData.X = p[0] * 256.0;
+			AccelSensor::vData.Y = p[1] * 256.0;
+			AccelSensor::vData.Z = p[2] * 256.0;
+			AccelSensor::vData.Timestamp = timestamp;
+		}
+		break;
+	case INV_ICM20948_SENSOR_GEOMAGNETIC_FIELD:
+		{
+			float *p = (float*)data;
+			//memcpy(event.data.mag.vect, data, sizeof(event.data.mag.vect));
+			//memcpy(&(event.data.mag.accuracy_flag), arg, sizeof(event.data.mag.accuracy_flag));
+			MagSensor::vData.X = p[0] * 256.0;
+			MagSensor::vData.Y = p[1] * 256.0;
+			MagSensor::vData.Z = p[2] * 256.0;
+			MagSensor::vData.Timestamp = timestamp;
+		}
+		break;
+	case INV_ICM20948_SENSOR_GEOMAGNETIC_ROTATION_VECTOR:
+	case INV_ICM20948_SENSOR_ROTATION_VECTOR:
+		memcpy(&(event.data.quaternion.accuracy), arg, sizeof(event.data.quaternion.accuracy));
+		memcpy(event.data.quaternion.quat, data, sizeof(event.data.quaternion.quat));
+		break;
+	case INV_ICM20948_SENSOR_GAME_ROTATION_VECTOR:
+	{
+		uint8_t accel_accuracy;
+		uint8_t gyro_accuracy;
+
+		memcpy(event.data.quaternion.quat, data, sizeof(event.data.quaternion.quat));
+
+		accel_accuracy = (uint8_t)inv_icm20948_get_accel_accuracy();
+		gyro_accuracy = (uint8_t)inv_icm20948_get_gyro_accuracy();
+
+		event.data.quaternion.accuracy_flag = min(accel_accuracy, gyro_accuracy);
+	}
+		break;
+	case INV_ICM20948_SENSOR_ACTIVITY_CLASSIFICATON:
+		memcpy(&(event.data.bac.event), data, sizeof(event.data.bac.event));
+		break;
+	case INV_ICM20948_SENSOR_FLIP_PICKUP:
+	case INV_ICM20948_SENSOR_WAKEUP_TILT_DETECTOR:
+	case INV_ICM20948_SENSOR_STEP_DETECTOR:
+	case INV_ICM20948_SENSOR_WAKEUP_SIGNIFICANT_MOTION:
+		event.data.event = true;
+		break;
+	case INV_ICM20948_SENSOR_B2S:
+		event.data.event = true;
+		memcpy(&(event.data.b2s.direction), data, sizeof(event.data.b2s.direction));
+		break;
+	case INV_ICM20948_SENSOR_STEP_COUNTER:
+		memcpy(&(event.data.step.count), data, sizeof(event.data.step.count));
+		break;
+	case INV_ICM20948_SENSOR_ORIENTATION:
+		//we just want to copy x,y,z from orientation data
+		memcpy(&(event.data.orientation), data, 3*sizeof(float));
+		break;
+	case INV_ICM20948_SENSOR_RAW_ACCELEROMETER:
+	case INV_ICM20948_SENSOR_RAW_GYROSCOPE:
+		memcpy(event.data.raw3d.vect, data, sizeof(event.data.raw3d.vect));
+		break;
+	default:
+		return;
+	}
+}
+
 bool AgmIcm20948::UpdateData()
 {
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
@@ -906,7 +1034,7 @@ bool AgmIcm20948::UpdateData()
 	//uint8_t fifo[ICM20948_FIFO_PAGE_SIZE];
 	//uint8_t *p = fifo;
 
-	Read((uint8_t*)&regaddr, 2, status, 4);
+	Read((uint8_t*)&regaddr, 2, status, 2);
 
 	if (vpTimer)
 	{
@@ -1103,6 +1231,7 @@ bool AgmIcm20948::UpdateData()
 
 	if (vbDmpEnabled)
 	{
+#if 0
 		regaddr = ICM20948_FIFO_COUNTH_REG;
 		size_t cnt = Read16((uint8_t*)&regaddr, 2);
 		cnt = EndianCvt16(cnt);
@@ -1171,6 +1300,7 @@ bool AgmIcm20948::UpdateData()
 				memmove(vFifo, &vFifo[l], vFifoDataLen);
 			}
 		}
+#endif
 	}
 	else
 	{

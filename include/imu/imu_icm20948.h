@@ -34,6 +34,8 @@ SOFTWARE.
 #ifndef __IMU_ICM20948_H__
 #define __IMU_ICM20948_H__
 
+#include "Devices/Drivers/Icm20948/Icm20948.h"
+
 #include "device_intrf.h"
 #include "imu/imu.h"
 #include "sensors/agm_icm20948.h"
@@ -102,6 +104,7 @@ public:
 	 * @return	True - Success.
 	 */
 	virtual bool Read(MagSensorData_t &Data) { return Imu::Read(Data); }
+	void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
 
 
 protected:
@@ -140,8 +143,19 @@ private:
 	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
 		return vpIcm->Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
+	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
+
+	static int InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
+	static int InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
+	static void SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
 
 	AgmIcm20948 *vpIcm;
+	inv_icm20948_t vInvnDev;	//!< Invn driver instance. To use with invn function calls
+	uint16_t vFifoHdr;			//!< DMP FIFO header
+	uint16_t vFifoHdr2;			//!< DMP FIFO header
+	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE * 2]; //!< FIFO cache
+//	uint8_t vFifo[ICM20948_FIFO_SIZE_MAX];
+	size_t vFifoDataLen;		//!< Data length currently in fifo
 };
 
 

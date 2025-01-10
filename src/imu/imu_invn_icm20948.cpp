@@ -417,13 +417,13 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 
 void ImuInvnIcm20948::IntHandler()
 {
-#if 1
+#if 0
 	inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);
 #else
 #if 0
 	vpIcm->IntHandler();
 #else
-	//vpIcm->IntHandler();
+	vpIcm->IntHandler();
 
 	uint64_t t;
 	uint16_t regaddr = REG_FIFO_COUNT_H;//ICM20948_FIFO_COUNTH_REG;
@@ -436,12 +436,11 @@ void ImuInvnIcm20948::IntHandler()
 	}
 
 	regaddr = REG_FIFO_R_W;
-	uint8_t *p = &vFifo[vFifoDataLen];
 
 	while (cnt > ICM20948_FIFO_PAGE_SIZE)
 	{
-		int l = vpIcm->Read((uint8_t*)&regaddr, 2, p, 16);
-		p += l;
+		int l = vpIcm->Read((uint8_t*)&regaddr, 2, &vFifo[vFifoDataLen], 16);
+
 		vFifoDataLen += l;
 		cnt -= l;
 
@@ -456,6 +455,9 @@ void ImuInvnIcm20948::IntHandler()
 				if (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
 				{
 					vpIcm->ResetFifo();
+					vFifoHdr = vFifoHdr2 = 0;
+					vFifoDataLen = 0;
+					cnt = 0;
 					return;
 				}
 
@@ -468,6 +470,9 @@ void ImuInvnIcm20948::IntHandler()
 					if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
 					{
 						vpIcm->ResetFifo();
+						vFifoHdr = vFifoHdr2 = 0;
+						vFifoDataLen = 0;
+						cnt = 0;
 						return;
 					}
 

@@ -31,6 +31,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <math.h>
+
+#include "Devices/Drivers/Icm20948/Icm20948.h"
+#include "Devices/Drivers/Icm20948/Icm20948Defs.h"
+#include "Devices/Drivers/Icm20948/Icm20948Dmp3Driver.h"
+#include "Devices/Drivers/Icm20948/Icm20948DataBaseDriver.h"
+#include "Devices/Drivers/Icm20948/Icm20948DataBaseControl.h"
+#include "Devices/Drivers/Icm20948/Icm20948AuxTransport.h"
+#include "Devices/Drivers/Icm20948/Icm20948MPUFifoControl.h"
+#include "Devices/Drivers/Icm20948/Icm20948Setup.h"
+#include "Devices/SensorTypes.h"
+
 #include "idelay.h"
 #include "istddef.h"
 #include "convutil.h"
@@ -320,6 +332,34 @@ static const float s_CfgMountingMatrix[9]= {
 	0, 1.f, 0,
 	0, 0, 1.f
 };
+
+int ImuIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
+{
+	AgmIcm20948 *dev = (AgmIcm20948*)context;
+//	return spi_master_transfer_rx(NULL, reg, rbuffer, rlen);
+//	reg |= 0x80;
+	int cnt = dev->Read(&reg, 1, rbuffer, (int)rlen);
+
+	return cnt > 0 ? 0 : 1;
+}
+
+int ImuIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
+{
+	AgmIcm20948 *dev = (AgmIcm20948*)context;
+//	return spi_master_transfer_tx(NULL, reg, wbuffer, wlen);
+
+	int cnt = dev->Write(&reg, 1, (uint8_t*)wbuffer, (int)wlen);
+
+	return cnt > 0 ? 0 : 1;
+}
+
+void ImuIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
+{
+	ImuIcm20948 *dev = (ImuIcm20948*)context;
+
+	dev->UpdateData(sensortype, timestamp, data, arg);
+}
+
 #if 0
 bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 {
@@ -374,16 +414,68 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 		return false;
 	}
 
+	vpIcm = (AgmIcm20948*)pAccel;
+
+	// Initialize INVN device data structure
+	//inv_icm20948_reset_states(&vIcmDevice, &icm20948_serif);
+
+	memset(&vInvnDev, 0, sizeof(inv_icm20948_t));
+	vInvnDev.serif.context   = vpIcm;
+	vInvnDev.serif.read_reg  = InvnReadReg;
+	vInvnDev.serif.write_reg = InvnWriteReg;
+	vInvnDev.serif.max_read  = 16; /* maximum number of bytes allowed per serial read */
+	vInvnDev.serif.max_write = 16; /* maximum number of bytes allowed per serial write */
+	vInvnDev.serif.is_spi = pAccel->InterfaceType() == DEVINTRF_TYPE_SPI;
+
+	if (pMag)
+	{
+		// Initialize Mag data
+
+		//inv_icm20948_register_aux_compass(&vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, (uint8_t)AK0991x_DEFAULT_I2C_ADDR);
+		vInvnDev.secondary_state.compass_slave_id = HW_AK09916;
+		vInvnDev.secondary_state.compass_chip_addr = AK09916_I2C_7BITS_DEVADDR;
+		vInvnDev.secondary_state.compass_state = INV_ICM20948_COMPASS_INITED;
+
+		// initialise mounting matrix of compass to identity akm9916
+		vInvnDev.mounting_matrix_secondary_compass[0] = 1 ;
+		vInvnDev.mounting_matrix_secondary_compass[4] = -1;
+		vInvnDev.mounting_matrix_secondary_compass[8] = -1;
+	}
+
+	// Setup accel and gyro mounting matrix and associated angle for current board
+	inv_icm20948_init_matrix(&vInvnDev);
+
+	for (int i = 0; i < INV_ICM20948_SENSOR_MAX; i++) {
+		inv_icm20948_set_matrix(&vInvnDev, s_CfgMountingMatrix, (inv_icm20948_sensor)i);
+	}
+
+	memset(&vInvnDev.base_state, 0, sizeof(vInvnDev.base_state));
+	vInvnDev.base_state.pwr_mgmt_1 = BIT_CLK_PLL;
+	vInvnDev.base_state.pwr_mgmt_2 = BIT_PWR_ACCEL_STBY | BIT_PWR_GYRO_STBY | BIT_PWR_PRESSURE_STBY;
+
+	if (vInvnDev.serif.is_spi)
+	{
+		vInvnDev.base_state.serial_interface = SERIAL_INTERFACE_SPI;
+		vInvnDev.base_state.user_ctrl = BIT_I2C_IF_DIS;
+	}
+	else
+	{
+		vInvnDev.base_state.serial_interface = SERIAL_INTERFACE_I2C;
+	}
+
 	uint16_t regaddr;
 	uint16_t d;
 
-	vpIcm = (AgmIcm20948*)pAccel;
 
 	regaddr = ICM20948_USER_CTRL_REG;
-	d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
-	Write8((uint8_t*)&regaddr, 2, d);
+	vInvnDev.base_state.user_ctrl = vpIcm->Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
+
+	vpIcm->Write8((uint8_t*)&regaddr, 2, d | vInvnDev.base_state.user_ctrl);
+
+	inv_icm20948_wakeup_mems(&vInvnDev);
 
 	vpIcm->Disable();
+
 
 	bool res = vpIcm->InitDMP(DMP_START_ADDRESS, s_Dmp3Image, DMP_CODE_SIZE);
 
@@ -392,9 +484,47 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 		return false;
 	}
 
+	vInvnDev.base_state.firmware_loaded = 1;
+
 	Imu::Init(Cfg, pAccel, pGyro, pMag);
 	vEvtHandler = Cfg.EvtHandler;
 
+	//inv_icm20948_initialize(&vInvnDev, s_Dmp3Image, sizeof(s_Dmp3Image));
+	inv_icm20948_set_gyro_divider(&vInvnDev, FIFO_DIVIDER);       //Initial sampling rate 1125Hz/19+1 = 56Hz.
+	inv_icm20948_set_accel_divider(&vInvnDev, FIFO_DIVIDER);      //Initial sampling rate 1125Hz/19+1 = 56Hz.
+
+	// Init the sample rate to 56 Hz for BAC,STEPC and B2S
+	dmp_icm20948_set_bac_rate(&vInvnDev, DMP_ALGO_FREQ_56);
+	dmp_icm20948_set_b2s_rate(&vInvnDev, DMP_ALGO_FREQ_56);
+
+	// FIFO Setup.
+	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_CFG, BIT_SINGLE_FIFO_CFG); // FIFO Config. fixme do once? burst write?
+	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_RST, 0x1f); // Reset all FIFOs.
+	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_RST, 0x1e); // Keep all but Gyro FIFO in reset.
+	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN, 0x0); // Slave FIFO turned off.
+	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN_2, 0x0); // Hardware FIFO turned off.
+
+	d = pAccel->Scale();
+
+	switch (d)
+	{
+		case 2:
+			vInvnDev.base_state.accel_fullscale = MPU_FS_2G;
+			break;
+		case 4:
+			vInvnDev.base_state.accel_fullscale = MPU_FS_4G;
+			break;
+		case 8:
+			vInvnDev.base_state.accel_fullscale = MPU_FS_8G;
+			break;
+		case 16:
+			vInvnDev.base_state.accel_fullscale = MPU_FS_16G;
+			break;
+	}
+
+	inv_icm20948_set_accel_fullscale(&vInvnDev, vInvnDev.base_state.accel_fullscale);
+
+#if 0
 #if 1
 	regaddr = DATA_OUT_CTL1;
 	d = 0;
@@ -541,7 +671,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	uint16_t x = 0xFFFF; // axel
 	WriteDMP(regaddr, (uint8_t*)&x, 2);
 #endif
-
+#endif
 //	x = 0x4000; // Gyro
 //	WriteDMP(regaddr, (uint8_t*)&x, 2);
 
@@ -557,6 +687,14 @@ bool ImuIcm20948::Enable()
 
 	d |= ICM20948_USER_CTRL_DMP_EN | ICM20948_USER_CTRL_FIFO_EN;
 	vpIcm->Write8((uint8_t*)&regaddr, 2, d);
+
+	int i = INV_SENSOR_TYPE_MAX;
+
+	/* Disable all sensors */
+	while(i-- > 0) {
+		//inv_icm20948_set_sensor_period(vpIcmDevice, (inv_icm20948_sensor)i, 20);
+		inv_icm20948_enable_sensor(&vInvnDev, (inv_icm20948_sensor)i, 1);
+	}
 
 	return res;
 }
@@ -644,16 +782,249 @@ bool ImuIcm20948::UpdateData()
 	return true;
 }
 
+void ImuIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
+{
+	float raw_bias_data[6];
+	inv_sensor_event_t event;
+	//uint8_t sensor_id = convert_to_generic_ids[sensortype];
+
+	memset((void *)&event, 0, sizeof(event));
+	event.sensor = sensortype;
+	event.timestamp = timestamp;
+	switch (sensortype)
+	{
+	case INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED:
+		memcpy(raw_bias_data, data, sizeof(raw_bias_data));
+		memcpy(event.data.gyr.vect, &raw_bias_data[0], sizeof(event.data.gyr.vect));
+		memcpy(event.data.gyr.bias, &raw_bias_data[3], sizeof(event.data.gyr.bias));
+		memcpy(&(event.data.gyr.accuracy_flag), arg, sizeof(event.data.gyr.accuracy_flag));
+		break;
+	case INV_ICM20948_SENSOR_MAGNETIC_FIELD_UNCALIBRATED:
+		memcpy(raw_bias_data, data, sizeof(raw_bias_data));
+		memcpy(event.data.mag.vect, &raw_bias_data[0], sizeof(event.data.mag.vect));
+		memcpy(event.data.mag.bias, &raw_bias_data[3], sizeof(event.data.mag.bias));
+		memcpy(&(event.data.gyr.accuracy_flag), arg, sizeof(event.data.gyr.accuracy_flag));
+		break;
+	case INV_ICM20948_SENSOR_GYROSCOPE:
+		memcpy(event.data.gyr.vect, data, sizeof(event.data.gyr.vect));
+		memcpy(&(event.data.gyr.accuracy_flag), arg, sizeof(event.data.gyr.accuracy_flag));
+		break;
+	case INV_ICM20948_SENSOR_GRAVITY:
+		memcpy(event.data.acc.vect, data, sizeof(event.data.acc.vect));
+		event.data.acc.accuracy_flag = inv_icm20948_get_accel_accuracy();
+		break;
+	case INV_ICM20948_SENSOR_LINEAR_ACCELERATION:
+	case INV_ICM20948_SENSOR_ACCELEROMETER:
+		memcpy(event.data.acc.vect, data, sizeof(event.data.acc.vect));
+		memcpy(&(event.data.acc.accuracy_flag), arg, sizeof(event.data.acc.accuracy_flag));
+		//vAccData.X = event.data.acc.vect[0] * 256.0;
+		//vAccData.Y = event.data.acc.vect[1] * 256.0;
+		//vAccData.Z = event.data.acc.vect[2] * 256.0;
+		//vAccData.Timestamp = timestamp;
+		//printf("a %d : %d %d %d\r\n", vAccData.Timestamp, vAccData.X, vAccData.Y, vAccData.Z);
+		break;
+	case INV_ICM20948_SENSOR_GEOMAGNETIC_FIELD:
+		memcpy(event.data.mag.vect, data, sizeof(event.data.mag.vect));
+		memcpy(&(event.data.mag.accuracy_flag), arg, sizeof(event.data.mag.accuracy_flag));
+		break;
+	case INV_ICM20948_SENSOR_GEOMAGNETIC_ROTATION_VECTOR:
+		break;
+	case INV_ICM20948_SENSOR_ROTATION_VECTOR:
+		memcpy(&(event.data.quaternion.accuracy), arg, sizeof(event.data.quaternion.accuracy));
+		memcpy(event.data.quaternion.quat, data, sizeof(event.data.quaternion.quat));
+
+#if 0
+		vQuat.Q1 = event.data.quaternion.quat[0] * 16384.0;
+		vQuat.Q2 = event.data.quaternion.quat[1] * 16384.0;
+		vQuat.Q3 = event.data.quaternion.quat[2] * 16384.0;
+		vQuat.Q4 = event.data.quaternion.quat[3] * 16384.0;
+#else
+		{
+		float *d = (float*)data;
+		float a = *(float*)arg;
+		vQuat.Q1 = d[0];
+		vQuat.Q2 = d[1];
+		vQuat.Q3 = d[2];
+		vQuat.Q4 = d[3];
+
+		}
+#endif
+		vQuat.Timestamp = timestamp;
+		break;
+	case INV_ICM20948_SENSOR_GAME_ROTATION_VECTOR:
+	{
+		uint8_t accel_accuracy;
+		uint8_t gyro_accuracy;
+
+		memcpy(event.data.quaternion.quat, data, sizeof(event.data.quaternion.quat));
+
+		accel_accuracy = (uint8_t)inv_icm20948_get_accel_accuracy();
+		gyro_accuracy = (uint8_t)inv_icm20948_get_gyro_accuracy();
+#if 0
+		event.data.quaternion.accuracy_flag = min(accel_accuracy, gyro_accuracy);
+		vQuat.Q1 = event.data.quaternion.quat[0];// * 32768.0;
+		vQuat.Q2 = event.data.quaternion.quat[1];// * 32768.0;
+		vQuat.Q3 = event.data.quaternion.quat[2];// * 32768.0;
+		vQuat.Q4 = event.data.quaternion.quat[3];// * 32768.0;
+		vQuat.Timestamp = timestamp;
+#endif
+	}
+		break;
+	case INV_ICM20948_SENSOR_ACTIVITY_CLASSIFICATON:
+		memcpy(&(event.data.bac.event), data, sizeof(event.data.bac.event));
+		break;
+	case INV_ICM20948_SENSOR_FLIP_PICKUP:
+	case INV_ICM20948_SENSOR_WAKEUP_TILT_DETECTOR:
+	case INV_ICM20948_SENSOR_STEP_DETECTOR:
+	case INV_ICM20948_SENSOR_WAKEUP_SIGNIFICANT_MOTION:
+		event.data.event = true;
+		break;
+	case INV_ICM20948_SENSOR_B2S:
+		event.data.event = true;
+		memcpy(&(event.data.b2s.direction), data, sizeof(event.data.b2s.direction));
+		break;
+	case INV_ICM20948_SENSOR_STEP_COUNTER:
+		memcpy(&(event.data.step.count), data, sizeof(event.data.step.count));
+		break;
+	case INV_ICM20948_SENSOR_ORIENTATION:
+		//we just want to copy x,y,z from orientation data
+		memcpy(&(event.data.orientation), data, 3*sizeof(float));
+		break;
+/*	case INV_ICM20948_SENSOR_RAW_ACCELEROMETER:
+	case INV_ICM20948_SENSOR_RAW_GYROSCOPE:
+		memcpy(event.data.raw3d.vect, data, sizeof(event.data.raw3d.vect));
+		break;*/
+	default:
+		//((AgmInvnIcm20948*)vpAccel)->UpdateData(sensortype, timestamp, data, arg);
+		//vpIcm->UpdateData(sensortype, timestamp, data, arg);
+//		return;
+		;
+	}
+
+	vpIcm->UpdateData(sensortype, timestamp, data, arg);
+
+	if (vEvtHandler != NULL)
+	{
+		vEvtHandler(this, DEV_EVT_DATA_RDY);
+	}
+}
+
 void ImuIcm20948::IntHandler()
 {
-	uint16_t addr = ICM20948_DMP_INT_STATUS_REG;
+#if 1
+	inv_icm20948_poll_sensor(&vInvnDev, (void*)this, SensorEventHandler);
+#else
+	uint16_t regaddr = ICM20948_INT_STATUS_REG;
+	uint8_t status[4];
 	uint8_t d;
 
-//	ReadDMP(addr, &d, 1);
+	//vpIcm->IntHandler();
 
-	vpIcm->IntHandler();
+	vpIcm->Read((uint8_t*)&regaddr, 2, status, 4);
 
-	//printf("ImuIcm20948::IntHandler : %x\n", d);
+
+	regaddr = ICM20948_DMP_INT_STATUS_REG;
+	d = vpIcm->Read8((uint8_t*)&regaddr, 2);
+
+	uint64_t t;
+	regaddr = ICM20948_FIFO_COUNTH_REG;
+	size_t cnt = vpIcm->Read16((uint8_t*)&regaddr, 2);
+	cnt = EndianCvt16(cnt);
+
+	if (vpTimer)
+	{
+		t = vpTimer->uSecond();
+	}
+
+	if (status[2])
+	{
+		printf("%x overflow %d\n", status[2], cnt);
+		vpIcm->ResetFifo();
+		vFifoHdr = vFifoHdr2 = 0;
+		vFifoDataLen = 0;
+		cnt = 0;
+
+		return;
+	}
+
+	regaddr = REG_FIFO_R_W;
+
+	while (cnt >= ICM20948_FIFO_PAGE_SIZE)
+	{
+		if (vFifoDataLen > ICM20948_FIFO_PAGE_SIZE)
+		{
+			printf("VFifoLen : %d\n", vFifoDataLen);
+		}
+		int l = vpIcm->Read((uint8_t*)&regaddr, 2, &vFifo[vFifoDataLen], ICM20948_FIFO_PAGE_SIZE);
+
+		int x = vFifoDataLen;
+		vFifoDataLen += l;
+
+		if (vFifoDataLen > ICM20948_FIFO_PAGE_SIZE * 2)
+		{
+			printf("-VFifoLen : %d %d %d\n", vFifoDataLen, x, l);
+		}
+		cnt -= l;
+
+		while (vFifoDataLen > 3)
+		{
+			if (vFifoHdr == 0 && vFifoHdr2 == 0)
+			{
+				int l = 0;
+				// new packet
+				vFifoHdr = ((uint16_t)vFifo[0] << 8U) | ((uint16_t)vFifo[1] & 0xFF);
+
+				if (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
+				{
+					vpIcm->ResetFifo();
+					vFifoHdr = vFifoHdr2 = 0;
+					vFifoDataLen = 0;
+					cnt = 0;
+					return;
+				}
+
+				l = 2;
+
+				if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
+				{
+					vFifoHdr2 = ((uint16_t)vFifo[2] << 8U) | ((uint16_t)vFifo[3] & 0xFF);
+
+					if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
+					{
+						vpIcm->ResetFifo();
+						vFifoHdr = vFifoHdr2 = 0;
+						vFifoDataLen = 0;
+						cnt = 0;
+						return;
+					}
+
+					l += 2;
+				}
+				vFifoDataLen -= l;
+
+				if (vFifoDataLen > 0)
+				{
+					memmove(vFifo, &vFifo[l], vFifoDataLen);
+				}
+	//				printf("Header %x %x\n", vFifoHdr, vFifoHdr2);
+			}
+			int l = ProcessDMPFifo(vFifo, vFifoDataLen, t);
+			if (l == 0)
+			{
+				return;
+			}
+			vFifoDataLen -= l;
+			if (vFifoDataLen > 0)
+			{
+				memmove(vFifo, &vFifo[l], vFifoDataLen);
+				if (vFifoDataLen > ICM20948_FIFO_PAGE_SIZE)
+				{
+					printf("3-VFifoLen : %d\n", vFifoDataLen);
+				}
+			}
+		}
+	}
+#endif
 }
 
 int ImuIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
@@ -700,5 +1071,302 @@ int ImuIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
 	}
 
 	return Len;
+}
+
+size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)
+{
+	bool retval = false;
+	size_t cnt = 0;
+	//uint16_t regaddr = REG_FIFO_R_W;//ICM20948_FIFO_R_W_REG;
+	uint8_t *d = pFifo;//[ICM20948_FIFO_PAGE_SIZE];
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_ACCEL)
+	{
+		if (Len < ICM20948_FIFO_HEADER_ACCEL_SIZE)
+		{
+			return cnt;
+		}
+
+#if 0
+		AccelSensor::vData.Timestamp = Timestamp;
+		AccelSensor::vData.X = ((d[0] << 8) | (d[1] & 0xFF));// << 15;
+		AccelSensor::vData.Y = ((d[2] << 8) | (d[3] & 0xFF));// << 15;
+		AccelSensor::vData.Z = ((d[4] << 8) | (d[5] & 0xFF));// << 15;
+
+#endif
+		vpIcm->UpdateData(SENSOR_TYPE_ACCEL, Timestamp, d);
+		d += ICM20948_FIFO_HEADER_ACCEL_SIZE;
+		cnt += ICM20948_FIFO_HEADER_ACCEL_SIZE;
+		Len -= ICM20948_FIFO_HEADER_ACCEL_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_ACCEL; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_GYRO)
+	{
+		if (Len < ICM20948_FIFO_HEADER_GYRO_SIZE)
+		{
+			return cnt;
+		}
+
+#if 0
+		GyroSensor::vData.Timestamp = Timestamp;
+		GyroSensor::vData.X = ((uint16_t)d[0] << 8) | ((uint16_t)d[1] & 0xFF);
+		GyroSensor::vData.Y = ((uint16_t)d[2] << 8) | ((uint16_t)d[3] & 0xFF);
+		GyroSensor::vData.Z = ((uint16_t)d[4] << 8) | ((uint16_t)d[5] & 0xFF);
+#endif
+		// TODO : Process gyro bias
+		vpIcm->UpdateData(SENSOR_TYPE_GYRO, Timestamp, d);
+
+		d += ICM20948_FIFO_HEADER_GYRO_SIZE;
+		cnt += ICM20948_FIFO_HEADER_GYRO_SIZE;
+		Len -= ICM20948_FIFO_HEADER_GYRO_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_GYRO; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_CPASS)
+	{
+		if (Len < ICM20948_FIFO_HEADER_CPASS_SIZE)
+		{
+			return cnt;
+		}
+
+#if 0
+		MagSensor::vData.Timestamp = Timestamp;
+		MagSensor::vData.X = ((int16_t)d[0] << 8) | (d[1] & 0xFF);
+		MagSensor::vData.Y = ((int16_t)d[2] << 8) | (d[3] & 0xFF);
+		MagSensor::vData.Z = ((int16_t)d[4] << 8) | (d[5] & 0xFF);
+#endif
+		vpIcm->UpdateData(SENSOR_TYPE_MAG, Timestamp, d);
+
+		d += ICM20948_FIFO_HEADER_CPASS_SIZE;
+		cnt += ICM20948_FIFO_HEADER_CPASS_SIZE;
+		Len -= ICM20948_FIFO_HEADER_CPASS_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_CPASS; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_ALS)
+	{
+		if (Len < ICM20948_FIFO_HEADER_ALS_SIZE)
+		{
+			return cnt;
+		}
+
+		d += ICM20948_FIFO_HEADER_ALS_SIZE;
+		cnt += ICM20948_FIFO_HEADER_ALS_SIZE;
+		Len -= ICM20948_FIFO_HEADER_ALS_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_ALS; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_QUAT6)
+	{
+		if (Len < ICM20948_FIFO_HEADER_QUAT6_SIZE)
+		{
+			return cnt;
+		}
+
+		int32_t q[3];
+
+		q[0] = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+		q[1] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
+		q[2] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
+
+		vQuat.Q2 = (float)q[0] / (1 << 30);
+		vQuat.Q3 = (float)q[1] / (1 << 30);
+		vQuat.Q4 = (float)q[2] / (1 << 30);
+		vQuat.Q1 = sqrt(1.0 - vQuat.Q2 * vQuat.Q2 - vQuat.Q3 * vQuat.Q3 - vQuat.Q4 * vQuat.Q4);
+
+		d += ICM20948_FIFO_HEADER_QUAT6_SIZE;
+		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
+		Len -= ICM20948_FIFO_HEADER_QUAT6_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_QUAT6; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_QUAT9)
+	{
+		if (Len < ICM20948_FIFO_HEADER_QUAT9_SIZE)
+		{
+			return cnt;
+		}
+
+		int32_t q[3];
+
+		q[0] = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+		q[1] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
+		q[2] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
+
+		vQuat.Q2 = (float)q[0] / (1 << 30);
+		vQuat.Q3 = (float)q[1] / (1 << 30);
+		vQuat.Q4 = (float)q[2] / (1 << 30);
+		vQuat.Q1 = sqrt(1.0 - vQuat.Q2 * vQuat.Q2 - vQuat.Q3 * vQuat.Q3 - vQuat.Q4 * vQuat.Q4);
+
+		d += ICM20948_FIFO_HEADER_QUAT9_SIZE;
+		cnt += ICM20948_FIFO_HEADER_QUAT9_SIZE;
+		Len -= ICM20948_FIFO_HEADER_QUAT9_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_QUAT9; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_STEP_DETECTOR)
+	{
+		if (Len < ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE)
+		{
+			return cnt;
+		}
+
+		int32_t stp = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+
+		d += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		cnt += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		Len -= ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_STEP_DETECTOR; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_GEOMAG)
+	{
+		if (Len < ICM20948_FIFO_HEADER_GEOMAG_SIZE)
+		{
+			return cnt;
+		}
+
+		int32_t q[3];
+
+		q[0] = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+		q[1] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
+		q[2] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
+
+		d += ICM20948_FIFO_HEADER_GEOMAG_SIZE;
+		cnt += ICM20948_FIFO_HEADER_GEOMAG_SIZE;
+		Len -= ICM20948_FIFO_HEADER_GEOMAG_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_GEOMAG; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_PRESSURE)
+	{
+		if (Len < ICM20948_FIFO_HEADER_PRESSURE_SIZE)
+		{
+			return cnt;
+		}
+
+		d += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
+		cnt += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
+		Len -= ICM20948_FIFO_HEADER_PRESSURE_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_PRESSURE; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_CPASS)
+	{
+		if (Len < ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE)
+		{
+			return cnt;
+		}
+
+		int32_t q[3];
+
+		q[0] = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+		q[1] = ((int32_t)d[4] << 24) | (((int32_t)d[5] << 16) & 0xFF0000) | (((int32_t)d[6] << 8) & 0xFF00) | ((int32_t)d[7] & 0xFF);
+		q[2] = ((int32_t)d[8] << 24) | (((int32_t)d[9] << 16) & 0xFF0000) | (((int32_t)d[10] << 8) & 0xFF00) | ((int32_t)d[11] & 0xFF);
+
+		d += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
+		cnt += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
+		Len -= ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_CALIB_CPASS; // Clear bit
+	}
+
+	if (vFifoHdr2 != 0)
+	{
+		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_ACCEL_ACCUR)
+		{
+			if (Len < ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE)
+			{
+				return cnt;
+			}
+
+			int16_t a = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
+
+			d += ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
+			Len -= ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
+			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_ACCEL_ACCUR; // Clear bit
+		}
+
+		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_GYRO_ACCUR)
+		{
+			if (Len < ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE)
+			{
+				return cnt;
+			}
+
+			int16_t a = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
+
+			d += ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
+			Len -= ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
+			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_GYRO_ACCUR; // Clear bit
+		}
+
+		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_CPASS_ACCUR)
+		{
+			if (Len < ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE)
+			{
+				return cnt;
+			}
+//			Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE);
+
+			d += ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE;
+			Len -= ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE;
+			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_CPASS_ACCUR; // Clear bit
+		}
+
+		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_PICKUP)
+		{
+			if (Len < ICM20948_FIFO_HEADER2_PICKUP_SIZE)
+			{
+				return cnt;
+			}
+
+			int16_t a = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
+
+			d += ICM20948_FIFO_HEADER2_PICKUP_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_PICKUP_SIZE;
+			Len -= ICM20948_FIFO_HEADER2_PICKUP_SIZE;
+			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_PICKUP; // Clear bit
+		}
+
+		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_ACTI_RECOG)
+		{
+			if (Len < ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE)
+			{
+				return cnt;
+			}
+
+			int16_t bacstate = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
+			int32_t bacts = ((int32_t)d[0] << 24) | (((int32_t)d[1] << 16) & 0xFF0000) | (((int32_t)d[2] << 8) & 0xFF00) | ((int32_t)d[3] & 0xFF);
+
+			d += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
+			Len -= ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
+			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_ACTI_RECOG; // Clear bit
+		}
+	}
+
+	if (Len < ICM20948_FIFO_FOOTER_SIZE)
+	{
+		vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
+	//printf("Footer size\n");
+		return cnt;
+	}
+
+	int16_t odrcnt = ((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF);
+
+	cnt += ICM20948_FIFO_FOOTER_SIZE;
+	Len -= ICM20948_FIFO_FOOTER_SIZE;
+	vFifoHdr &= ~ICM20948_FIFO_HEADER_FOOTER; // Clear bit
+
+//	printf("fh %x %x\n", vFifoHdr, vFifoHdr2);
+
+	vFifoHdr = vFifoHdr2 = 0;
+	//printf("h: %x %x : %x %x %x %x\n", header, header2, pFifo[0], pFifo[1], pFifo[2], pFifo[3]);
+
+	return cnt;
 }
 
