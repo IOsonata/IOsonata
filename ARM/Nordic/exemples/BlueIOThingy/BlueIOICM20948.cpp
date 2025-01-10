@@ -99,19 +99,12 @@ void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 	long q[4];
 
 #if 1
-	//	s_Imu.Read(accdata);
-	//	s_Imu.Read(gyrodata);
-	//	s_Imu.Read(magdata);
-		ImuRawDataSend(accdata, gyrodata, magdata);
+		s_Imu.Read(accdata);
+		s_Imu.Read(gyrodata);
+		s_Imu.Read(magdata);
+	ImuRawDataSend(accdata, gyrodata, magdata);
 	s_Imu.Read(quat);
-	//q[0] = ((float)quat.Q[0] / 32768.0) * (float)(1<<30);
-	//q[1] = ((float)quat.Q[1] / 32768.0) * (float)(1<<30);
-	//q[2] = ((float)quat.Q[2] / 32768.0) * (float)(1<<30);
-	//q[3] = ((float)quat.Q[3] / 32768.0) * (float)(1<<30);
-	//q[0] = quat.Q[0] << 15;
-	//q[1] = quat.Q[1] << 15;
-	//q[2] = quat.Q[2] << 15;
-	//q[3] = quat.Q[3] << 15;
+
 	q[0] = quat.Q[0] * (1 << 30);
 	q[1] = quat.Q[1] * (1 << 30);
 	q[2] = quat.Q[2] * (1 << 30);
@@ -175,6 +168,8 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
+	ImuQuat_t quat;
+	long q[4];
 
 	if (IntNo == BLUEIOTHINGY_IMU_INT_NO)
 	{
@@ -185,6 +180,14 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 #endif
 		//AppEvtHandlerQue(0, 0, ImuDataChedHandler);
 #if 1
+		s_Imu.Read(quat);
+
+		q[0] = quat.Q[0] * (1 << 30);
+		q[1] = quat.Q[1] * (1 << 30);
+		q[2] = quat.Q[2] * (1 << 30);
+		q[3] = quat.Q[3] * (1 << 30);
+    	ImuQuatDataSend(q);
+#else
 		s_MotSensor.Read(accdata);
 		s_MotSensor.Read(gyrodata);
 		s_MotSensor.Read(magdata);
