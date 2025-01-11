@@ -98,7 +98,7 @@ void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 	ImuQuat_t quat;
 	long q[4];
 
-#if 1
+#if 0
 		s_Imu.Read(accdata);
 		s_Imu.Read(gyrodata);
 		s_Imu.Read(magdata);
@@ -118,8 +118,10 @@ void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 
     FusionVector gyroscope = {gyrodata.X, gyrodata.Y, gyrodata.Z}; // replace this with actual gyroscope data in degrees/s
     FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
+    FusionVector magnetometer = {magdata.X, magdata.Y, magdata.Z};
 
-    FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
+//    FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
+            FusionAhrsUpdate(&ahrs, gyroscope, accelerometer, magnetometer, 0.02);
     FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
 	q[0] = fq.array[0] * (1 << 30);
 	q[1] = fq.array[1] * (1 << 30);
@@ -179,7 +181,7 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 		s_MotSensor.IntHandler();
 #endif
 		//AppEvtHandlerQue(0, 0, ImuDataChedHandler);
-#if 1
+#if 0
 		s_Imu.Read(quat);
 
 		q[0] = quat.Q[0] * (1 << 30);
@@ -195,8 +197,8 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
         FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
         FusionVector magnetometer = {magdata.X, magdata.Y, magdata.Z};
 
-//        FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
-        FusionAhrsUpdate(&ahrs, gyroscope, accelerometer, magnetometer, 0.02);
+        FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
+//        FusionAhrsUpdate(&ahrs, gyroscope, accelerometer, magnetometer, 0.02);
         FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
     	ImuRawDataSend(accdata, gyrodata, magdata);
 
@@ -239,8 +241,8 @@ bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 
 	if (res)
 	{
-		//s_MotSensor.Enable();
-//		s_Imu.Enable();
+//		s_MotSensor.Enable();
+	//	s_Imu.Enable();
 	    FusionAhrsInitialise(&ahrs);
 
 	}
