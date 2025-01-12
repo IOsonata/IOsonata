@@ -60,7 +60,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 1000000,
+	.Rate = 115200,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -81,7 +81,15 @@ UART g_Uart;
 
 Led g_Led1;
 
-static nrf_esb_payload_t s_TxPayload = {0x08, 0, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00};
+//static nrf_esb_payload_t s_TxPayload = {0x08, 0, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00};
+static nrf_esb_payload_t s_TxPayload = {
+		.length = 8,
+		.pipe = 0,
+		.rssi = 0,
+		.noack = 0,
+		.pid = 0,
+		.data = {0xB, 0xE, 0xE, 0xF, 0x1, 0x2, 0x3, 0x4},
+};
 
 void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
 {
@@ -99,9 +107,19 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
             break;
         case NRF_ESB_EVENT_RX_RECEIVED:
             // Get the most recent element from the RX FIFO.
-            while (nrf_esb_read_rx_payload(&rxpayload) == NRF_SUCCESS) ;
+            while (nrf_esb_read_rx_payload(&rxpayload) == NRF_SUCCESS)
+            {
+            	if (rxpayload.length > 0)
+            	{
+            		g_Uart.printf("Received: %d bytes, PID: %d, RSSI: %d\r\n", rxpayload.length, rxpayload.pid, rxpayload.rssi);
+            		g_Uart.printf("RX data (hex): ");
+					for (int i = 0; i < rxpayload.length; i++)
+						g_Uart.printf("%x ", rxpayload.data[i]);
+					g_Uart.printf("\r\n");
+            	}
+            }
 
-            g_Uart.printf("rx = %d bytes\r\n", rxpayload.length);
+//            g_Uart.printf("rx = %d bytes\r\n", rxpayload.length);
 
             break;
     }
@@ -169,18 +187,23 @@ uint32_t esb_init( void )
     return NRF_SUCCESS;
 }
 
+void HardwareInit()
+{
+	clocks_start();
+
+	g_Uart.Init(s_UartCfg);
+	g_Led1.Init(LED1_PORT, LED1_PIN, LED1_LOGIC);
+
+	msDelay(500);
+	g_Uart.printf("ESB Tx Demo\r\n");
+}
+
 int main(void)
 {
-    uint32_t err_code;
-    // Initialize
-    clocks_start();
+	HardwareInit();
 
-    g_Uart.Init(s_UartCfg);
-    g_Led1.Init(LED1_PORT, LED1_PIN, LED1_LOGIC);
-
+	uint32_t err_code;
     err_code = esb_init();
-    //APP_ERROR_CHECK(err_code);
-
 
     while (true)
     {
@@ -188,7 +211,10 @@ int main(void)
 
     	if (nrf_esb_write_payload(&s_TxPayload) == NRF_SUCCESS)
         {
-        	g_Uart.printf("Send OK\r\n");
+    		g_Uart.printf("Sent %d bytes, TX data (hex): ", s_TxPayload.length);
+    		for (int i = 0; i < s_TxPayload.length; i++)
+    			g_Uart.printf("%x ", s_TxPayload.data[i]);
+    		g_Uart.printf("\r\n\r\n");
         }
         else
         {

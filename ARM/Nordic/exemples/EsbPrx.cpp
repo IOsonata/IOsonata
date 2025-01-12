@@ -63,7 +63,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 1000000,
+	.Rate = 115200,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -84,7 +84,15 @@ UART g_Uart;
 
 Led g_Led1;
 
-static nrf_esb_payload_t s_TxPayload = {0x01, 0, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00};
+//static nrf_esb_payload_t s_TxPayload = {0x01, 0, 0x00, 0x00, 0x00, {0x11, 0x00, 0x00, 0x00}};
+static nrf_esb_payload_t s_TxPayload = {
+		.length = 5,	//!< Length of the payload data (maximum NRF_ESB_MAX_PAYLOAD_LENGTH).
+		.pipe = 0,		//!< Pipe used for this payload.
+		.rssi = 0,		//!< RSSI for the received packet.
+		.noack = 0,		//!< Flag indicating that this packet will not be acknowledgement. Flag is ignored when selective auto ack is enabled.
+		.pid = 0,		//!< PID assigned during communication.
+		.data = {0xC, 0xA, 0xF, 0xF, 0xE}, //!< The payload data.
+};
 
 void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
 {
@@ -106,7 +114,11 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
             {
                 if (rxpayload.length > 0)
                 {
-                	g_Uart.printf("Rx: %d bytes\n", rxpayload.length);
+                	g_Uart.printf("Received %d bytes, PID: %d, RSSI: %d\r\n", rxpayload.length, rxpayload.pid, rxpayload.rssi);
+                	g_Uart.printf("RX data (hex): ");
+                	for (int i = 0; i < rxpayload.length; i++)
+                		g_Uart.printf("%x ", rxpayload.data[i]);
+                	g_Uart.printf("\r\n\r\n");
                 }
             }
             nrf_esb_write_payload(&s_TxPayload);
@@ -184,20 +196,17 @@ void HardwareInit()
 
 	g_Led1.Init(LED1_PORT, LED1_PIN, LED1_LOGIC);
 
-	g_Uart.printf("ESB Prx Demo\r\n");
+	g_Uart.printf("ESB Rx Demo\r\n");
 }
 
 int main(void)
 {
-    ret_code_t err_code;
-
     HardwareInit();
 
-
+    ret_code_t err_code;
     err_code = esb_init();
 
     err_code = nrf_esb_start_rx();
-
 
     while (true)
     {
