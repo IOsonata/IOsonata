@@ -52,14 +52,18 @@ uint16_t AccelSensor::Scale(uint16_t Value)
 {
 	float scale = 0.0;
 
-	if (vScale != 0)
+	if (vRange == 0)
 	{
-		scale = (float)Value / (float)vScale;
+		return 0;
 	}
-	else
-	{
+//	if (vScale != 0)
+//	{
+//		scale = (float)Value / (float)vScale;
+//	}
+//	else
+//	{
 		scale = (float)Value / (float)vRange;
-	}
+//	}
 
 	for (int i = 0; i < 3; i++)
 	{
