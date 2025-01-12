@@ -147,6 +147,8 @@ public:
 	virtual uint16_t Sensitivity(uint16_t Value);
 
     virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
+    virtual void SetCalibrationMatrix(float (&Gain)[3][3]);
+	virtual void SetCalibrationOffset(float (&Offset)[3]);
 	virtual void ClearCalibration();
 	GyroSensor() {
 		Type(SENSOR_TYPE_GYRO);

@@ -91,6 +91,27 @@ void AccelSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])
 	}
 }
 
+void AccelSensor::SetCalibrationMatrix(float (&Gain)[3][3])
+{
+	float scale = (float)vScale / (float)vRange;
+
+	for (int i = 0; i < 3; i++)
+	{
+		vCalibGain[0][i] = Gain[0][i] * scale;
+		vCalibGain[1][i] = Gain[1][i] * scale;
+		vCalibGain[2][i] = Gain[2][i] * scale;
+	}
+}
+
+void AccelSensor::SetCalibrationOffset(float (&Offset)[3])
+{
+	float scale = (float)vScale / (float)vRange;
+
+	vCalibOffset[0] = Offset[0] * scale;
+	vCalibOffset[1] = Offset[1] * scale;
+	vCalibOffset[2] = Offset[2] * scale;
+}
+
 void AccelSensor::ClearCalibration()
 {
 	memset(vCalibOffset, 0, sizeof(float) * 3);

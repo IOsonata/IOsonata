@@ -177,6 +177,8 @@ public:
 	virtual uint32_t Range(uint32_t Value) { vData.Range = Value; return Sensor::Range(Value); }
 
     virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
+    virtual void SetCalibrationMatrix(float (&Gain)[3][3]);
+	virtual void SetCalibrationOffset(float (&Offset)[3]);
 	virtual void ClearCalibration();
 	virtual bool StartSampling() { return true; }
 
