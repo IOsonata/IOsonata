@@ -36,7 +36,7 @@ SOFTWARE.
 
 #include "imu/imu_xiot_fusion.h"
 
-#define SAMPLE_RATE		100
+#define SAMPLE_RATE		50
 
 bool ImuXiotFusion::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
@@ -49,18 +49,18 @@ bool ImuXiotFusion::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSe
 	    FusionOffset offset;
 	    //FusionAhrs ahrs;
 
-	    FusionOffsetInitialise(&offset, SAMPLE_RATE);
+	    FusionOffsetInitialise(&offset, pAccel->SamplingFrequency() / 1000);
 	    FusionAhrsInitialise(&vAhrs);
 
 	    // Set AHRS algorithm settings
 	    /*const FusionAhrsSettings*/
 	    vSettings = {
-	            .convention = FusionConventionNwu,
-	            .gain = 0.5f,
-	            .gyroscopeRange = (float)pGyro->Sensitivity(),// 2000.0f, /* replace this with actual gyroscope range in degrees/s */
-	            .accelerationRejection = 10.0f,
-	            .magneticRejection = 10.0f,
-	            .recoveryTriggerPeriod = 5 * SAMPLE_RATE, /* 5 seconds */
+			.convention = FusionConventionNwu,
+			.gain = 0.5f,
+			.gyroscopeRange = (float)pGyro->Sensitivity(),// 2000.0f, /* replace this with actual gyroscope range in degrees/s */
+			.accelerationRejection = 10.0f,
+			.magneticRejection = 10.0f,
+			.recoveryTriggerPeriod = 5 * pAccel->SamplingFrequency() / 1000, /* 5 seconds */
 	    };
 	    FusionAhrsSetSettings(&vAhrs, &vSettings);
 
@@ -89,30 +89,54 @@ bool ImuXiotFusion::UpdateData()
 	AccelSensorData_t acc;
 	GyroSensorData_t gyro;
 	MagSensorData_t mag;
-	FusionVector fvgyro = { .axis = { gyro.X,  gyro.Y, gyro.Z} };
-	FusionVector fvacc = { .axis = { acc.X,  acc.Y, acc.Z} };
-	FusionVector fvmag = { .axis = { mag.X,  mag.Y, mag.Z} };
 
 	Read(acc);
 	Read(gyro);
 
+	if (vpMag)
+	{
+		Read(mag);
+	}
 	float deltatime = (acc.Timestamp - vPrevTimeStamp) / 1000000.0;
 
 
     // Update gyroscope AHRS algorithm
-    FusionAhrsUpdate(&vAhrs, fvgyro, fvacc, fvmag, deltatime);
+
+	FusionVector fvgyro = { .axis = { gyro.X,  gyro.Y, gyro.Z} };
+	FusionVector fvacc = { .axis = { acc.X,  acc.Y, acc.Z} };
+
+	if (vpMag)
+	{
+		FusionVector fvmag = { .axis = { mag.X,  mag.Y, mag.Z} };
+	    FusionAhrsUpdate(&vAhrs, fvgyro, fvacc, fvmag, deltatime);
+	}
+	else
+	{
+		FusionAhrsUpdateNoMagnetometer(&vAhrs, fvgyro, fvacc, 0.02);
+	}
+
+    FusionAhrsGetQuaternion(&vAhrs);
+
+    *vQuat.Q = *vAhrs.quaternion.array;
 
 	return true;
 }
 
 void ImuXiotFusion::IntHandler()
 {
+	vpAccel->IntHandler();
+	vpGyro->IntHandler();
+	if (vpMag)
+	{
+		vpMag->IntHandler();
+	}
 
+	UpdateData();
 }
 
 uint32_t ImuXiotFusion::Rate(uint32_t DataRate)
 {
-	return SAMPLE_RATE;
+	return Imu::Rate(DataRate);
 }
 
 bool ImuXiotFusion::Calibrate()
