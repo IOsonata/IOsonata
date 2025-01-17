@@ -49,6 +49,16 @@ bool MagBmm350::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Time
 {
 	MagSensor::Type(SENSOR_TYPE_MAG);
 
+	Interface(pIntrf);
+
+	if (pIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+		DeviceAddress(Cfg.DevAddr);
+	}
+	else
+	{
+		DeviceAddress(BMM350_I2C_7BITS_DEVADDR);
+	}
 	//vData.Range = Range(((1<<15) - 1) >> 1);
 	//vData.Scale = 2500;
 
@@ -65,7 +75,20 @@ bool MagBmm350::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Time
 
 	if (d != BMM350_CHIP_ID)
 	{
-		return false;
+		if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+		{
+			DeviceAddress(BMM350_I2C_7BITS_DEVADDR2);
+			MagBmm350::Read(&regaddr, 1, &d, 1);
+
+			if (d != BMM350_CHIP_ID)
+			{
+				return false;
+			}
+		}
+		else
+		{
+			return false;
+		}
 	}
 
 	// There is no setting to change precision

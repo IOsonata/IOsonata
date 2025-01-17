@@ -85,7 +85,26 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	uint8_t lpconfig = ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	Interface(pIntrf);
-	DeviceAddress(DevAddr);
+
+	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+	{
+		switch (DevAddr)
+		{
+			case 1:
+			case ICM20948_I2C_DEV_ADDR1:
+				DeviceAddress(ICM20948_I2C_DEV_ADDR1);
+				break;
+			case 0:
+			case ICM20948_I2C_DEV_ADDR0:
+			default:
+				DeviceAddress(ICM20948_I2C_DEV_ADDR0);
+				break;
+		}
+	}
+	else
+	{
+		DeviceAddress(DevAddr);
+	}
 
 	if (pTimer != NULL)
 	{

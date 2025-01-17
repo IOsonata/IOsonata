@@ -139,7 +139,26 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 		return false;
 
 	Interface(pIntrf);
-	DeviceAddress(DevAddr);
+
+	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+	{
+		switch (DevAddr)
+		{
+			case 1:
+			case ICM20948_I2C_DEV_ADDR1:
+				DeviceAddress(ICM20948_I2C_DEV_ADDR1);
+				break;
+			case 0:
+			case ICM20948_I2C_DEV_ADDR0:
+			default:
+				DeviceAddress(ICM20948_I2C_DEV_ADDR0);
+				break;
+		}
+	}
+	else
+	{
+		DeviceAddress(DevAddr);
+	}
 
 	if (pTimer != NULL)
 	{
