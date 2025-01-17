@@ -46,9 +46,9 @@ SOFTWARE.
   */
 
 #define BMM150_I2C_7BITS_DEVADDR							0x10	// CSB = 0, SDO = 0
-#define BMM150_I2C_7BITS_DEVADDR_ALT1						0x11	// CSB = 0, SDO = 1
-#define BMM150_I2C_7BITS_DEVADDR_ALT2						0x12	// CSB = 1, SDO = 0
-#define BMM150_I2C_7BITS_DEVADDR_ALT3						0x13	// CSB = 1, SDO = 1
+#define BMM150_I2C_7BITS_DEVADDR1							0x11	// CSB = 0, SDO = 1
+#define BMM150_I2C_7BITS_DEVADDR2							0x12	// CSB = 1, SDO = 0
+#define BMM150_I2C_7BITS_DEVADDR3							0x13	// CSB = 1, SDO = 1
 
 #define BMM150_CHIP_ID_REG          0x40 // Note: this is readable only when bit0 of reg 0x4B is enabled
 
