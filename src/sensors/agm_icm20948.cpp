@@ -72,7 +72,6 @@ static const size_t s_NbFifoDataLenLookup2 = sizeof(s_FifoDataLenLookup2) / size
 
 bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
 {
-	//if (vbInitialized)
 	if (Valid())
 		return true;;
 
@@ -465,9 +464,18 @@ bool MagIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Ti
 		return false;
 	}
 
+	float g[3][3] = {
+		1.0, 0.0, 0.0,
+		0.0, -1.0, 0.0,
+		0.0, 0.0, -1.0 };
+	float offs[3] = {0.0, 0.0, 0.0};
+
+	SetCalibration(g, offs);
+
 //	regaddr = ICM20948_FIFO_EN_1;
 //	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_1_SLV_0_FIFO_EN;
 //	Write8((uint8_t*)&regaddr, 2, d);
+
 
 	return true;
 }
@@ -1323,7 +1331,7 @@ bool AgmIcm20948::UpdateData()
 	}
 	else
 	{
-		res = MagIcm20948::UpdateData();
+		//res = MagIcm20948::UpdateData();
 
 		if (status[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT)
 		{
@@ -1339,6 +1347,7 @@ bool AgmIcm20948::UpdateData()
 			GyroSensor::vData.Y = ((int16_t)(d[8] << 8) | d[9]);
 			GyroSensor::vData.Z = ((int16_t)(d[10] << 8) | d[11]);
 
+			//MagIcm20948::UpdateData();
 
 			// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
 			int16_t t = ((int16_t)d[12] << 8) | d[13];

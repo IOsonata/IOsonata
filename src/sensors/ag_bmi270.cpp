@@ -549,12 +549,31 @@ bool AgBmi270::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	uint8_t regaddr;
 	uint8_t d;
 
-	Interface(pIntrf);
-	Device::DeviceAddress(DevAddr);
-
 	if (pTimer != NULL)
 	{
 		vpTimer = pTimer;
+	}
+
+	Interface(pIntrf);
+
+	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+	{
+		switch (DevAddr)
+		{
+			case 1:
+			case BMI270_I2C_7BITS_DEVADDR1:
+				DeviceAddress(BMI270_I2C_7BITS_DEVADDR1);
+				break;
+			case 0:
+			case BMI270_I2C_7BITS_DEVADDR0:
+			default:
+				DeviceAddress(BMI270_I2C_7BITS_DEVADDR0);
+				break;
+		}
+	}
+	else
+	{
+		DeviceAddress(DevAddr);
 	}
 
 	// Read chip id
