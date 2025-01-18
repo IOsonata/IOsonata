@@ -70,8 +70,9 @@ typedef enum {
 
 /// Enumerating interface types
 typedef enum __Dev_Intrf_Type {
+	DEVINTRF_TYPE_NULL,			//!< No interface
     DEVINTRF_TYPE_UNKOWN,       //!< Software or unknown type interface
-    DEVINTRF_TYPE_BT,          //!< Bluetooth
+    DEVINTRF_TYPE_BT,          	//!< Bluetooth
     DEVINTRF_TYPE_ETH,          //!< Ethernet
     DEVINTRF_TYPE_I2C,          //!< I2C (TWI)
     DEVINTRF_TYPE_CEL,          //!< Cellular (GSM, LTE,...)

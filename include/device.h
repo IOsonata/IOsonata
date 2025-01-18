@@ -271,7 +271,7 @@ public:
 	 */
 	bool Valid() { return vbValid; }
 
-	DEVINTRF_TYPE InterfaceType() { return vpIntrf != nullptr ? vpIntrf->Type() : DEVINTRF_TYPE_UNKOWN; }
+	DEVINTRF_TYPE InterfaceType() { return vpIntrf != nullptr ? vpIntrf->Type() : DEVINTRF_TYPE_NULL; }
 
 	/**
 	 * @brief	Get timer pointer used for timestamping
