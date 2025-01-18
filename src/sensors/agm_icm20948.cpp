@@ -78,37 +78,53 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	if (pIntrf == NULL)
 		return false;
 
-	uint16_t regaddr;
-	uint8_t d;
-	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	uint8_t lpconfig = ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
-
 	Interface(pIntrf);
+
+	vCurrBank = -1;
+
+	// Read chip id
+	uint16_t regaddr = ICM20948_WHO_AM_I_REG;
+	uint8_t d;
 
 	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
 	{
-		switch (DevAddr)
+		DeviceAddress(ICM20948_I2C_DEV_ADDR0);
+		d = Read8((uint8_t*)&regaddr, 2);
+
+		if (d != ICM20948_WHO_AM_I_ID)
 		{
-			case 1:
-			case ICM20948_I2C_DEV_ADDR1:
-				DeviceAddress(ICM20948_I2C_DEV_ADDR1);
-				break;
-			case 0:
-			case ICM20948_I2C_DEV_ADDR0:
-			default:
-				DeviceAddress(ICM20948_I2C_DEV_ADDR0);
-				break;
+			// Try alternate address
+			DeviceAddress(ICM20948_I2C_DEV_ADDR1);
+			d = Read8((uint8_t*)&regaddr, 2);
+			if (d != ICM20948_WHO_AM_I_ID)
+			{
+				return false;
+			}
 		}
 	}
 	else
 	{
 		DeviceAddress(DevAddr);
+		d = Read8((uint8_t*)&regaddr, 2);
+		if (d != ICM20948_WHO_AM_I_ID)
+		{
+			return false;
+		}
 	}
+
+	DeviceID(d);
 
 	if (pTimer != NULL)
 	{
 		vpTimer = pTimer;
 	}
+
+	Valid(true);
+
+	Reset();
+
+	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+	uint8_t lpconfig = ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
@@ -117,26 +133,10 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
 	}
 
-	vCurrBank = -1;
-
-	// Read chip id
-	regaddr = ICM20948_WHO_AM_I_REG;
-	d = Read8((uint8_t*)&regaddr, 2);
-
-	if (d != ICM20948_WHO_AM_I_ID)
-	{
-		return false;
-	}
-
-	Reset();
-
-	DeviceID(d);
-	Valid(true);
-
 
 	// NOTE : require delay for reset to stabilize
 	// the chip would not respond properly to motion detection
-	msDelay(10);
+	msDelay(500);
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);

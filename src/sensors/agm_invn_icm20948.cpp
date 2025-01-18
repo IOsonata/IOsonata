@@ -131,7 +131,6 @@ int AgmInvnIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * w
 
 bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 {
-	//if (vbInitialized)
 	if (Valid())
 		return true;;
 
@@ -140,32 +139,49 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 
 	Interface(pIntrf);
 
+	vCurrBank = -1;
+
+	// Read chip id
+	uint16_t regaddr = ICM20948_WHO_AM_I_REG;
+	uint8_t d;
+
 	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
 	{
-		switch (DevAddr)
+		DeviceAddress(ICM20948_I2C_DEV_ADDR0);
+		d = Read8((uint8_t*)&regaddr, 2);
+
+		if (d != ICM20948_WHO_AM_I_ID)
 		{
-			case 1:
-			case ICM20948_I2C_DEV_ADDR1:
-				DeviceAddress(ICM20948_I2C_DEV_ADDR1);
-				break;
-			case 0:
-			case ICM20948_I2C_DEV_ADDR0:
-			default:
-				DeviceAddress(ICM20948_I2C_DEV_ADDR0);
-				break;
+			// Try alternate address
+			DeviceAddress(ICM20948_I2C_DEV_ADDR1);
+			d = Read8((uint8_t*)&regaddr, 2);
+			if (d != ICM20948_WHO_AM_I_ID)
+			{
+				return false;
+			}
 		}
 	}
 	else
 	{
 		DeviceAddress(DevAddr);
+		d = Read8((uint8_t*)&regaddr, 2);
+		if (d != ICM20948_WHO_AM_I_ID)
+		{
+			return false;
+		}
 	}
+
+	DeviceID(d);
 
 	if (pTimer != NULL)
 	{
 		vpTimer = pTimer;
 	}
 
-	uint8_t d;
+	Valid(true);
+
+	Reset();
+
 	struct inv_icm20948_serif icm20948_serif;
 
 	//inv_icm20948_reset_states(&vIcmDevice, &icm20948_serif);
@@ -176,8 +192,6 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 	vIcmDevice.serif.max_read  = 16; /* maximum number of bytes allowed per serial read */
 	vIcmDevice.serif.max_write = 16; /* maximum number of bytes allowed per serial write */
 	vIcmDevice.serif.is_spi = vpIntrf->Type() == DEVINTRF_TYPE_SPI;
-
-
 
 	//inv_icm20948_register_aux_compass(&vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, (uint8_t)AK0991x_DEFAULT_I2C_ADDR);
 	vIcmDevice.secondary_state.compass_slave_id = HW_AK09916;
@@ -190,23 +204,10 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 
 
 	//inv_icm20948_get_whoami(&vIcmDevice, &d);
-	uint16_t regaddr = REG_WHO_AM_I;
-	d = Read8((uint8_t*)&regaddr, 2);
-
-	if (d != ICM20948_WHO_AM_I_ID)
-	{
-		return false;
-	}
-
-	Reset();
-
-	DeviceID(d);
-	Valid(true);
-
 
 	// NOTE : require delay for reset to stabilize
 	// the chip would not respond properly to motion detection
-	usDelay(500000);
+	msDelay(500);
 
 	// Setup accel and gyro mounting matrix and associated angle for current board
 	inv_icm20948_init_matrix(&vIcmDevice);
