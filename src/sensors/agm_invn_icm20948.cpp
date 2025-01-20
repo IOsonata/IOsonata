@@ -225,6 +225,7 @@ bool AgmInvnIcm20948::Init(uint32_t DevAddr, DeviceIntrf *pIntrf, Timer *pTimer)
 	//inv_icm20948_init_structure(&vIcmDevice);
 
 	vbInitialized  = true;
+	vbDmpEnabled = true;
 
 	return true;
 }
@@ -369,6 +370,7 @@ bool GyroInvnIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Tim
 	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(Cfg.Sensitivity);
 	SamplingFrequency(Cfg.Freq);
+	FilterFreq(Cfg.FltrFreq);
 
 	return true;
 }
@@ -608,10 +610,12 @@ bool AgmInvnIcm20948::WakeOnEvent(bool bEnable, int Threshold)
 
 	return true;
 }
+size_t s_ProcessCnt = 0;
+size_t s_BadHdrCnt = 0;
 
 bool AgmInvnIcm20948::UpdateData()
 {
-#if 0
+#if 1
 	inv_icm20948_poll_sensor(&vIcmDevice, (void*)this, SensorEventHandler);
 	return true;
 #else
@@ -656,171 +660,11 @@ bool AgmInvnIcm20948::UpdateData()
 			//printf("distatus %x\n", distatus);
 		}
 	}
-#if 0
-		//printf("ICM20948_INT_STATUS_DMP_INT1\n");
-//		if (status[2] || status[3])
-		{
-			regaddr = ICM20948_FIFO_COUNTH_REG;
-			size_t cnt = Read16((uint8_t*)&regaddr, 2);
-			cnt = EndianCvt16(cnt);
-#if 0
-			while (cnt > 0)
-			{
-				int l = min(cnt, min((size_t)ICM20948_FIFO_PAGE_SIZE, ICM20948_FIFO_SIZE_MAX - vFifoDataLen));
-				if (l <= 0)
-				{
-					break;
-				}
-				regaddr = ICM20948_FIFO_R_W_REG;
-				l = Read((uint8_t*)&regaddr, 2, &vFifo[vFifoDataLen], l);
-				vFifoDataLen += l;
-				cnt -= l;
-			}
-#endif
-			regaddr = ICM20948_FIFO_R_W_REG;
 
-			while (cnt > 2)
-			{
-				if (vFifoHdr == 0 && vFifoHdr2 == 0)
-				{
-					// New packet
-					if (cnt < 4)
-					{
-						// Not enough data in fifo
-						return false;
-					}
-					// Read headers from FIFO
-					vFifoHdr = Read16((uint8_t*)&regaddr, 2);
-					vFifoHdr = EndianCvt16(vFifoHdr);// | ICM20948_FIFO_HEADER_FOOTER;
-
-					if (vFifoHdr == 0 || vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
-					{
-						// Bad header
-						ResetFifo();
-						return false;
-					}
-
-					//vFifoHdr &= ICM20948_FIFO_HEADER_MASK;
-					//vFifoHdr = ((uint16_t)vFifo[0] << 8) | (vFifo[1] & 0xff) | ICM20948_FIFO_HEADER_FOOTER;
-
-					//vFifoDataLen -= 2;
-					cnt -= 2;
-//					if (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
-					{
-						// bad header
-//						vFifoHdr = 0;
-//						return false;
-					}
-
-					//printf("vFifoHdr %x\n", vFifoHdr);
-
-					if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
-					{
-						vFifoHdr2 = Read16((uint8_t*)&regaddr, 2);
-						vFifoHdr2 = EndianCvt16(vFifoHdr2);
-
-						if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
-						{
-							ResetFifo();
-							return false;
-						}
-						//vFifoHdr2 &= ICM20948_FIFO_HEADER2_MASK;
-						//vFifoHdr2 = ((uint16_t)vFifo[2] << 8) | (vFifo[3] & 0xff);
-						//vFifoDataLen -= 2;
-						cnt -= 2;
-						vFifoHdr &= ~ICM20948_FIFO_HEADER_HEADER2; // Clear bit
-					//	if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
-						{
-							// bad header
-					//		vFifoHdr = vFifoHdr2 = 0;
-
-					//		return false;
-						}
-					}
-					//printf("%x %x\n", vFifoHdr, vFifoHdr2);
-				}
-				else
-				//if (cnt > 0 && (vFifoHdr != 0 || vFifoHdr2 != 0))
-				{
-					int l = min(cnt, (size_t)ICM20948_FIFO_PAGE_SIZE - vFifoDataLen);
-					l = Read((uint8_t*)&regaddr, 2, &vFifo[vFifoDataLen], l);
-
-					vFifoDataLen += l;
-					cnt -= l;
-
-					l = ProcessDMPFifo(vFifo, vFifoDataLen, t);
-					if (l == 0)
-					{
-						return false;
-					}
-					vFifoDataLen -= l;
-					if (vFifoDataLen > 0)
-					{
-						memmove(vFifo, &vFifo[l], vFifoDataLen);
-					}
-				}
-			}
-#if 0
-#if 0
-			if (cnt >= ICM20948_FIFO_MAX_PKT_SIZE)
-			{
-				ProcessDMPFifo(cnt, t);
-			}
-#else
-			uint8_t fifo[cnt];
-			uint8_t *p = fifo;
-			regaddr = ICM20948_FIFO_R_W_REG;
-			int len = cnt;
-
-			if (cnt > 3)
-			{
-				uint16_t header = EndianCvt16(Read16((uint8_t*)&regaddr, 2));
-				uint16_t header2 = 0;
-				size_t pklen = CalcFifoPacketSize(header, 0x8000, s_FifoDataLenLookup1, s_NbFifoDataLenLookup1);
-
-				if (header & ICM20948_FIFO_HEADER_HEADER2)
-				{
-					header2 = EndianCvt16(Read16((uint8_t*)&regaddr, 2));
-					pklen += CalcFifoPacketSize(header2, 0x4000, s_FifoDataLenLookup2, s_NbFifoDataLenLookup2);
-				}
-
-				pklen += 2; // Footer
-
-				if (pklen <= cnt)
-				{
-					while (pklen > 0)
-					{
-						size_t l = min(pklen, (size_t)ICM20948_FIFO_PAGE_SIZE);
-						l = Read((uint8_t*)&regaddr, 2, p, l);
-						cnt -= l;
-						p += l;
-						pklen -= l;
-					}
-				}
-			}
-#endif
-#endif
-			/*
-			cnt = len;
-			p = fifo;
-			while (cnt > 0)
-			{
-				size_t l = ProcessDMPFifo(p, cnt, t);
-				if (l == 0)
-				{
-					break;
-				}
-				p += l;
-				cnt -= l;
-			}
-*/
-		}
-
-#endif
-
+#if 1
 	if (vbDmpEnabled)
 	{
-		return false;
+		//return false;
 		regaddr = REG_FIFO_COUNT_H;//ICM20948_FIFO_COUNTH_REG;
 		size_t cnt = Read16((uint8_t*)&regaddr, 2);
 		cnt = EndianCvt16(cnt);
@@ -828,21 +672,26 @@ bool AgmInvnIcm20948::UpdateData()
 		regaddr = REG_FIFO_R_W;
 		uint8_t *p = &vFifo[vFifoDataLen];
 
-		while (cnt > ICM20948_FIFO_PAGE_SIZE)
+		while (cnt > 0)
 		{
-			//int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, (size_t)ICM20948_FIFO_SIZE_MAX - vFifoDataLen));
+			int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, (size_t)ICM20948_FIFO_SIZE_MAX - vFifoDataLen));
 
-//			if (l == 0)
-//			{
-//				break;
-//			}
-			int l = Read((uint8_t*)&regaddr, 2, p, 16);
+			if (l == 0)
+			{
+				break;
+			}
+			l = Read((uint8_t*)&regaddr, 2, p, l);
 			p += l;
 			vFifoDataLen += l;
+			if (vFifoDataLen > ICM20948_FIFO_SIZE_MAX)// + ICM20948_FIFO_PAGE_SIZE)
+			{
+				printf("overflow %d %d\n", vFifoDataLen, cnt);
+			}
 			cnt -= l;
-		//}
-
-		while (vFifoDataLen > 2)
+		}
+		s_ProcessCnt++;
+		p = vFifo;
+		while (vFifoDataLen > 0)
 		{
 			if (vFifoHdr == 0 && vFifoHdr2 == 0)
 			{
@@ -852,7 +701,10 @@ bool AgmInvnIcm20948::UpdateData()
 
 				if (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
 				{
+					s_BadHdrCnt++;
+					printf("Bad hdr %d %d\n", s_BadHdrCnt, s_ProcessCnt);
 					ResetFifo();
+					vFifoDataLen = 0;
 					return false;
 				}
 
@@ -864,7 +716,10 @@ bool AgmInvnIcm20948::UpdateData()
 
 					if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
 					{
+						s_BadHdrCnt++;
+						printf("Bad hdr2 %d %d\n", s_BadHdrCnt, s_ProcessCnt);
 						ResetFifo();
+						vFifoDataLen = 0;
 						return false;
 					}
 
@@ -872,26 +727,33 @@ bool AgmInvnIcm20948::UpdateData()
 				}
 				vFifoDataLen -= l;
 
+				p += l;
 				if (vFifoDataLen > 0)
 				{
-					memmove(vFifo, &vFifo[l], vFifoDataLen);
+					//memmove(vFifo, &vFifo[l], vFifoDataLen);
 				}
 //				printf("Header %x %x\n", vFifoHdr, vFifoHdr2);
 			}
-			int l = ProcessDMPFifo(vFifo, vFifoDataLen, t);
+			int l = ProcessDMPFifo(p, vFifoDataLen, t);
 			if (l == 0)
 			{
-				return false;
+				break;
 			}
+			p += l;
 			vFifoDataLen -= l;
 			if (vFifoDataLen > 0)
 			{
-				memmove(vFifo, &vFifo[l], vFifoDataLen);
+				//memmove(vFifo, &vFifo[l], vFifoDataLen);
 			}
 		}
+		if (vFifoDataLen > 0)
+		{
+			memmove(vFifo, p, vFifoDataLen);
 		}
+
 	}
 	else
+#endif
 	{
 		//res = MagIcm20948::UpdateData();
 
@@ -1025,6 +887,20 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		GyroSensor::vData.Z = ((uint16_t)d[4] << 8) | ((uint16_t)d[5] & 0xFF);
 
 		// TODO : Process gyro bias
+		uint16_t bias[3];
+
+		bias[0] = ((uint16_t)d[6] << 8) | ((uint16_t)d[7] & 0xFF);
+		bias[1] = ((uint16_t)d[8] << 8) | ((uint16_t)d[9] & 0xFF);
+		bias[2] = ((uint16_t)d[10] << 8) | ((uint16_t)d[11] & 0xFF);
+
+		GyroSensor::vData.X += bias[0] * (1<<4);
+		GyroSensor::vData.Y += bias[1] * (1<<4);
+		GyroSensor::vData.Z += bias[2] * (1<<4);
+
+		if (bias[0] > 0)
+		{
+			printf("bias : %d %d %d\r\n", bias[0], bias[1], bias[2]);
+		}
 		d += ICM20948_FIFO_HEADER_GYRO_SIZE;
 		cnt += ICM20948_FIFO_HEADER_GYRO_SIZE;
 		Len -= ICM20948_FIFO_HEADER_GYRO_SIZE;
@@ -1269,6 +1145,9 @@ void AgmInvnIcm20948::ResetFifo()
 		regaddr = REG_FIFO_COUNT_H;
 		cnt = EndianCvt16(Read16((uint8_t*)&regaddr, 2)) & 0x1FFF;
 	} while (cnt != 0);
+
+	regaddr = ICM20948_INT_STATUS_2_REG;
+	Write16((uint8_t*)&regaddr, 2, 0);
 
 	regaddr = REG_USER_CTRL;
 	Write8((uint8_t*)&regaddr, 2, d);

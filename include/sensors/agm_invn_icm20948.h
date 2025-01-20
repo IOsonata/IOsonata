@@ -249,8 +249,8 @@ private:
 	bool vbDmpEnabled;
 	uint16_t vFifoHdr;	//!< DMP FIFO header
 	uint16_t vFifoHdr2;	//!< DMP FIFO header
-	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE * 2]; //!< FIFO cache
-	//uint8_t vFifo[ICM20948_FIFO_SIZE_MAX];
+	//uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE * 2]; //!< FIFO cache
+	uint8_t vFifo[ICM20948_FIFO_SIZE_MAX + ICM20948_FIFO_PAGE_SIZE];
 	size_t vFifoDataLen;	//!< Data length currently in fifo
 	bool vbSensorEnabled[ICM20948_NB_SENSOR];
 	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within
