@@ -417,7 +417,7 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 
 void ImuInvnIcm20948::IntHandler()
 {
-#if 0
+#if 1
 	inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);
 #else
 #if 0
@@ -668,17 +668,17 @@ size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_GEOMAG; // Clear bit
 	}
 
-	if (vFifoHdr & ICM20948_FIFO_HEADER_PRESSURE)
+	if (vFifoHdr & ICM20948_FIFO_HEADER_PRESS_TEMP)
 	{
-		if (Len < ICM20948_FIFO_HEADER_PRESSURE_SIZE)
+		if (Len < ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE)
 		{
 			return cnt;
 		}
 
-		d += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-		cnt += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-		Len -= ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-		vFifoHdr &= ~ICM20948_FIFO_HEADER_PRESSURE; // Clear bit
+		d += ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+		cnt += ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+		Len -= ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_PRESS_TEMP; // Clear bit
 	}
 
 	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_CPASS)

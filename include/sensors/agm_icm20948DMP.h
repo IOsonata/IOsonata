@@ -288,9 +288,9 @@ SOFTWARE.
 #define ICM20948_DMP_Q2_QUAT6							(33 * 16 + 8)
 #define ICM20948_DMP_Q3_QUAT6							(33 * 16 + 12)
 
-#define ICM20948_DMP_START_ADDRESS   					((unsigned short)0x1000)
+#define ICM20948_DMP_PROG_START_ADDR   					(0x1000U)
 #define ICM20948_DMP_MEM_BANK_SIZE   					256
-#define ICM20948_DMP_LOAD_START      					0x90
+#define ICM20948_DMP_LOAD_MEM_START_ADDR				0x90
 
 #define ICM20948_DMP_CODE_SIZE 							14301
 

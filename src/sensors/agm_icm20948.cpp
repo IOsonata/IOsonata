@@ -46,8 +46,11 @@ SOFTWARE.
 #include "idelay.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
+#include "coredev/uart.h"
 #include "sensors/agm_icm20948.h"
 #include "sensors/agm_icm20948DMP.h"
+
+extern UART g_Uart;
 
 typedef struct {
 	size_t Len;
@@ -58,7 +61,7 @@ static const size_t s_FifoDataLenLookup1[] = {
 	ICM20948_FIFO_HEADER_CPASS_SIZE, ICM20948_FIFO_HEADER_ALS_SIZE,
 	ICM20948_FIFO_HEADER_QUAT6_SIZE, ICM20948_FIFO_HEADER_QUAT9_SIZE,
 	ICM20948_FIFO_HEADER_PEDO_QUAT6_SIZE, ICM20948_FIFO_HEADER_GEOMAG_SIZE,
-	ICM20948_FIFO_HEADER_PRESSURE_SIZE, ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE,
+	ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE, ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE,
 	ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE, ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE
 };
 static const size_t s_NbFifoDataLenLookup1 = sizeof(s_FifoDataLenLookup1) / sizeof(size_t);
@@ -178,7 +181,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
 
 	// Upload DMP
-	//InitDMP(ICM20948_DMP_START_ADDRESS, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
+	InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
 
 	ResetDMPCtrlReg();
 
@@ -243,7 +246,7 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
-	FilterFreq(Cfg.FltrFreq);
+	//FilterFreq(Cfg.FltrFreq);
 
 	return true;
 }
@@ -372,7 +375,7 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(Cfg.Sensitivity);
 	SamplingFrequency(Cfg.Freq);
-	FilterFreq(Cfg.FltrFreq);
+	//FilterFreq(Cfg.FltrFreq);
 
 	return true;
 }
@@ -877,17 +880,17 @@ size_t AgmIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_GEOMAG; // Clear bit
 	}
 
-	if (vFifoHdr & ICM20948_FIFO_HEADER_PRESSURE)
+	if (vFifoHdr & ICM20948_FIFO_HEADER_PRESS_TEMP)
 	{
-		if (Len < ICM20948_FIFO_HEADER_PRESSURE_SIZE)
+		if (Len < ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE)
 		{
 			return cnt;
 		}
 //		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_PRESSURE_SIZE);
-		d += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-		cnt += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-		Len -= ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-		vFifoHdr &= ~ICM20948_FIFO_HEADER_PRESSURE; // Clear bit
+		d += ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+		cnt += ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+		Len -= ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_PRESS_TEMP; // Clear bit
 	}
 
 	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_CPASS)
@@ -1140,6 +1143,9 @@ void AgmIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t times
 	}
 }
 
+static size_t s_FifoProcessCnt = 0;
+static size_t s_BadHdrCnt = 0;
+
 bool AgmIcm20948::UpdateData()
 {
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
@@ -1175,6 +1181,8 @@ bool AgmIcm20948::UpdateData()
 		regaddr = ICM20948_DMP_INT_STATUS_REG;
 		uint16_t distatus;
 		Read((uint8_t*)&regaddr, 2, (uint8_t*)&distatus, 1);
+
+		//g_Uart.printf("DMP int %x\r\n", distatus);
 	//		Write16((uint8_t*)&regaddr, 2, distatus);
 
 		if (distatus)// & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
@@ -1187,6 +1195,8 @@ bool AgmIcm20948::UpdateData()
 #if 1
 	if (vbDmpEnabled)
 	{
+		s_FifoProcessCnt++;
+
 		regaddr = ICM20948_FIFO_COUNTH_REG;
 		size_t cnt = Read16((uint8_t*)&regaddr, 2);
 		cnt = EndianCvt16(cnt);
@@ -1194,31 +1204,42 @@ bool AgmIcm20948::UpdateData()
 		regaddr = ICM20948_FIFO_R_W_REG;
 		uint8_t *p = &vFifo[vFifoDataLen];
 
-		while (cnt > ICM20948_FIFO_PAGE_SIZE)
+		while (cnt > 0)//ICM20948_FIFO_PAGE_SIZE)
 		{
-//			int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, (size_t)ICM20948_FIFO_SIZE_MAX - vFifoDataLen));
+			int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, sizeof(vFifo) - vFifoDataLen));
 
-//			if (l == 0)
-//			{
-//				break;
-//			}
-			int l = Read((uint8_t*)&regaddr, 2, p, l);
+			if (l == 0)
+			{
+				break;
+			}
+			l = Read((uint8_t*)&regaddr, 2, p, l);
 			p += l;
 			vFifoDataLen += l;
 			cnt -= l;
-		//}
+		}
 
-		while (vFifoDataLen > 2)
+		p = vFifo;
+
+		if (p[0] == 0 && p[1] == 0)
+		{
+			g_Uart.printf("Hdr zero %d %p %p\r\n", vFifoDataLen, p, vFifo);
+		}
+		while (vFifoDataLen > 0)
 		{
 			if (vFifoHdr == 0 && vFifoHdr2 == 0)
 			{
 				int l = 0;
-				// new packet
-				vFifoHdr = ((uint16_t)vFifo[0] << 8U) | ((uint16_t)vFifo[1] & 0xFF);
 
-				if (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
+				// new packet
+				vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
+
+				if (vFifoHdr == 0 || (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
 				{
+					s_BadHdrCnt++;
+					g_Uart.printf("Bad hdr %x %d %d %d\r\n", vFifoHdr, s_BadHdrCnt, s_FifoProcessCnt, vFifoDataLen);
 					ResetFifo();
+					vFifoDataLen = 0;
+					cnt = 0;
 					return false;
 				}
 
@@ -1226,11 +1247,20 @@ bool AgmIcm20948::UpdateData()
 
 				if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
 				{
-					vFifoHdr2 = ((uint16_t)vFifo[2] << 8U) | ((uint16_t)vFifo[3] & 0xFF);
+					if (vFifoDataLen < 4)
+					{
+						vFifoHdr = 0;
+						break;
+					}
+					vFifoHdr2 = ((uint16_t)p[2] << 8U) | ((uint16_t)p[3] & 0xFF);
 
 					if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
 					{
+						s_BadHdrCnt++;
+						g_Uart.printf("Bad hdr2 %x %d %d\r\n", vFifoHdr2, s_BadHdrCnt, s_FifoProcessCnt);
 						ResetFifo();
+						vFifoDataLen = 0;
+						cnt = 0;
 						return false;
 					}
 
@@ -1238,24 +1268,28 @@ bool AgmIcm20948::UpdateData()
 				}
 				vFifoDataLen -= l;
 
+				p += l;
+
 				if (vFifoDataLen > 0)
 				{
-					memmove(vFifo, &vFifo[l], vFifoDataLen);
+//					memmove(vFifo, &vFifo[l], vFifoDataLen);
 				}
 				//printf("Header %x %x\n", vFifoHdr, vFifoHdr2);
 			}
-			int l = ProcessDMPFifo(vFifo, vFifoDataLen, t);
+			int l = ProcessDMPFifo(p, vFifoDataLen, t);
 			if (l == 0)
 			{
-				return false;
+				break;//return false;
 			}
 			vFifoDataLen -= l;
-			if (vFifoDataLen > 0)
-			{
-				memmove(vFifo, &vFifo[l], vFifoDataLen);
-			}
+			p += l;
 		}
+		if (vFifoDataLen > 0 && p != vFifo)
+		{
+			//g_Uart.printf("move %d %d\r\n", vFifoDataLen, cnt);
+			memmove(vFifo, p, vFifoDataLen);
 		}
+
 	}
 	else
 #endif
@@ -1668,7 +1702,13 @@ bool AgmIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
 	uint8_t *p = (uint8_t*)pDmpImage;
 	uint16_t regaddr;
 	uint16_t memaddr = ICM20948_DMP_LOAD_MEM_START_ADDR;
-
+	size_t psize = ICM20948_DMP_MEM_BANK_SIZE;
+	
+	if (Interface()->Type() == DEVINTRF_TYPE_I2C)
+	{
+		psize = ICM20948_FIFO_PAGE_SIZE;
+	}
+			
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	uint8_t pwrstate;
 
@@ -1725,6 +1765,7 @@ bool AgmIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
 
 		if (memcmp(p, m, l) != 0)
 		{
+			g_Uart.printf("failed loading DMP\r\n");
 			return false;
 		}
 

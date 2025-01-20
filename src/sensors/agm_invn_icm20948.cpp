@@ -58,7 +58,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "convutil.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
+#include "coredev/uart.h"
 #include "sensors/agm_invn_icm20948.h"
+
+extern UART g_Uart;
 
 //#define ICM20948_WHO_AM_I_ID		0xEA
 
@@ -428,6 +431,59 @@ uint32_t GyroInvnIcm20948::SamplingFrequency(uint32_t Freq)
 
 uint32_t GyroInvnIcm20948::FilterFreq(uint32_t Freq)
 {
+	uint16_t regaddr = ICM20948_GYRO_CONFIG_1_REG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_MASK | ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE);
+
+	if (Freq == 0)
+	{
+		Freq = 12316000;
+	}
+	else if (Freq < 11000)
+	{
+		d |= (6 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 8900;	// NBW
+	}
+	else if (Freq < 23000)
+	{
+		d |= (5 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 17800;
+	}
+	else if (Freq < 50000)
+	{
+		d |= (4 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 35900;
+	}
+	else if (Freq < 110000)
+	{
+		d |= (3 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 73300;
+	}
+	else if (Freq < 150000)
+	{
+		d |= (2 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 154300;
+	}
+	else if (Freq < 190000)
+	{
+		d |= (1 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 187600;
+	}
+	else if (Freq < 360000)
+	{
+		d |= (0 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 229800;
+	}
+	else if (Freq < 1000000)
+	{
+		d |= (7 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		Freq = 376500;
+	}
+	else
+	{
+		Freq = 12316000;
+	}
+
+	Write8((uint8_t*)&regaddr, 2, d);
 	return GyroSensor::FilterFreq(Freq);
 }
 
@@ -615,7 +671,7 @@ size_t s_BadHdrCnt = 0;
 
 bool AgmInvnIcm20948::UpdateData()
 {
-#if 1
+#if 0
 	inv_icm20948_poll_sensor(&vIcmDevice, (void*)this, SensorEventHandler);
 	return true;
 #else
@@ -674,7 +730,7 @@ bool AgmInvnIcm20948::UpdateData()
 
 		while (cnt > 0)
 		{
-			int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, (size_t)ICM20948_FIFO_SIZE_MAX - vFifoDataLen));
+			int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, sizeof(vFifo) - vFifoDataLen));
 
 			if (l == 0)
 			{
@@ -685,7 +741,7 @@ bool AgmInvnIcm20948::UpdateData()
 			vFifoDataLen += l;
 			if (vFifoDataLen > ICM20948_FIFO_SIZE_MAX)// + ICM20948_FIFO_PAGE_SIZE)
 			{
-				printf("overflow %d %d\n", vFifoDataLen, cnt);
+				g_Uart.printf("overflow %d %d\n", vFifoDataLen, cnt);
 			}
 			cnt -= l;
 		}
@@ -697,12 +753,12 @@ bool AgmInvnIcm20948::UpdateData()
 			{
 				int l = 0;
 				// new packet
-				vFifoHdr = ((uint16_t)vFifo[0] << 8U) | ((uint16_t)vFifo[1] & 0xFF);
+				vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
 
-				if (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
+				if (vFifoHdr == 0 || (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
 				{
 					s_BadHdrCnt++;
-					printf("Bad hdr %d %d\n", s_BadHdrCnt, s_ProcessCnt);
+					g_Uart.printf("Bad hdr %x %d %d\n", vFifoHdr, s_BadHdrCnt, s_ProcessCnt);
 					ResetFifo();
 					vFifoDataLen = 0;
 					return false;
@@ -712,12 +768,17 @@ bool AgmInvnIcm20948::UpdateData()
 
 				if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
 				{
-					vFifoHdr2 = ((uint16_t)vFifo[2] << 8U) | ((uint16_t)vFifo[3] & 0xFF);
+					if (vFifoDataLen < 4)
+					{
+						vFifoHdr = 0;
+						return false;
+					}
+					vFifoHdr2 = ((uint16_t)p[2] << 8U) | ((uint16_t)p[3] & 0xFF);
 
 					if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
 					{
 						s_BadHdrCnt++;
-						printf("Bad hdr2 %d %d\n", s_BadHdrCnt, s_ProcessCnt);
+						g_Uart.printf("Bad hdr2 %d %d\n", s_BadHdrCnt, s_ProcessCnt);
 						ResetFifo();
 						vFifoDataLen = 0;
 						return false;
@@ -887,19 +948,25 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		GyroSensor::vData.Z = ((uint16_t)d[4] << 8) | ((uint16_t)d[5] & 0xFF);
 
 		// TODO : Process gyro bias
-		uint16_t bias[3];
+		float bias[3];
 
-		bias[0] = ((uint16_t)d[6] << 8) | ((uint16_t)d[7] & 0xFF);
-		bias[1] = ((uint16_t)d[8] << 8) | ((uint16_t)d[9] & 0xFF);
-		bias[2] = ((uint16_t)d[10] << 8) | ((uint16_t)d[11] & 0xFF);
+		bias[0] = (float)(((uint16_t)d[6] << 8) | ((uint16_t)d[7] & 0xFF)) / (float)(1<<20);
+		bias[1] = (float)(((uint16_t)d[8] << 8) | ((uint16_t)d[9] & 0xFF)) / (float)(1<<20);
+		bias[2] = (float)(((uint16_t)d[10] << 8) | ((uint16_t)d[11] & 0xFF)) / (float)(1<<20);
 
-		GyroSensor::vData.X += bias[0] * (1<<4);
-		GyroSensor::vData.Y += bias[1] * (1<<4);
-		GyroSensor::vData.Z += bias[2] * (1<<4);
+		GyroSensor::SetCalibrationOffset(bias);
+		//bias[0] /= (1<<20);
+		//bias[1] /= (1<<20);
+		//bias[2] /= (1<<20);
+
+		//GyroSensor::vData.X += bias[0];// / (1<<4);
+		//GyroSensor::vData.Y += bias[1];// / (1<<4);
+		//GyroSensor::vData.Z += bias[2];// / (1<<4);
+
 
 		if (bias[0] > 0)
 		{
-			printf("bias : %d %d %d\r\n", bias[0], bias[1], bias[2]);
+		//	g_Uart.printf("bias : %d %d %d\r\n", bias[0], bias[1], bias[2]);
 		}
 		d += ICM20948_FIFO_HEADER_GYRO_SIZE;
 		cnt += ICM20948_FIFO_HEADER_GYRO_SIZE;
@@ -995,17 +1062,17 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_GEOMAG; // Clear bit
 	}
 
-	if (vFifoHdr & ICM20948_FIFO_HEADER_PRESSURE)
+	if (vFifoHdr & ICM20948_FIFO_HEADER_PRESS_TEMP)
 	{
-		if (Len < ICM20948_FIFO_HEADER_PRESSURE_SIZE)
+		if (Len < ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE)
 		{
 			return cnt;
 		}
 //		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_PRESSURE_SIZE);
-		d += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-		cnt += ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-		Len -= ICM20948_FIFO_HEADER_PRESSURE_SIZE;
-		vFifoHdr &= ~ICM20948_FIFO_HEADER_PRESSURE; // Clear bit
+		d += ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+		cnt += ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+		Len -= ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_PRESS_TEMP; // Clear bit
 	}
 
 	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_CPASS)
