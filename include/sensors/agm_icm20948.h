@@ -139,10 +139,12 @@ SOFTWARE.
 #define ICM20948_INT_ENABLE_2_REG			(ICM20948_REG_BANK0 | 18)
 
 #define ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN_MASK	(0xf<<0)// Enable FIFO overflow interrupt on pin 1
+#define ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN		(1<<0)
 
 #define ICM20948_INT_ENABLE_3_REG			(ICM20948_REG_BANK0 | 19)
 
 #define ICM20948_INT_ENABLE_3_FIFO_WM_EN_MASK		(0xf<<0)// Enable FIFO watermark interrupt on pin 1
+#define ICM20948_INT_ENABLE_3_FIFO_WM_EN			(1<<0)
 
 #define ICM20948_I2C_MST_STATUS_REG			(ICM20948_REG_BANK0 | 23)	// 0x17
 
@@ -656,6 +658,7 @@ SOFTWARE.
 #define ICM20948_TEMP_IDX		3
 #define ICM20948_NB_SENSOR		4
 
+
 #pragma pack(push, 1)
 
 #pragma pack(pop)
@@ -876,10 +879,12 @@ private:
 	// All sensor init must call this first prio to initializing itself
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
 	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
+	void ResetDMPCtrlReg();
+	int ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len);
+	int WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len);
 	bool SelectBank(uint8_t BankNo);
 	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
 	size_t CalcFifoPacketSize(uint16_t Header, uint16_t Mask, const size_t *Lookup, size_t LookupSize);
-	bool vbInitialized;
 	bool vbDmpEnabled;
 	bool vbSensorEnabled[ICM20948_NB_SENSOR];
 	uint8_t vCurrBank;

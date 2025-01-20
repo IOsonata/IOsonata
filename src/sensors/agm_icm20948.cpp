@@ -47,6 +47,7 @@ SOFTWARE.
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 #include "sensors/agm_icm20948.h"
+#include "sensors/agm_icm20948DMP.h"
 
 typedef struct {
 	size_t Len;
@@ -70,6 +71,11 @@ static const size_t s_FifoDataLenLookup2[] = {
 };
 static const size_t s_NbFifoDataLenLookup2 = sizeof(s_FifoDataLenLookup2) / sizeof(size_t);
 
+static const uint8_t s_Dmp3Image[] = {
+#include "imu/icm20948_img_dmp3a.h"
+};
+static const int s_DmpImageSize = sizeof(s_Dmp3Image);
+
 bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
 {
 	if (Valid())
@@ -86,8 +92,26 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	uint16_t regaddr = ICM20948_WHO_AM_I_REG;
 	uint8_t d;
 
-	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+	if (DevAddr == ICM20948_I2C_DEV_ADDR0 || DevAddr == ICM20948_I2C_DEV_ADDR1)
 	{
+		if (pIntrf->Type() != DEVINTRF_TYPE_I2C)
+		{
+			// Device address is set to I2C but interface is not
+			return false;
+		}
+
+		DeviceAddress(DevAddr);
+		d = Read8((uint8_t*)&regaddr, 2);
+
+		if (d != ICM20948_WHO_AM_I_ID)
+		{
+			return false;
+		}
+	}
+	else if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+	{
+		// Interface is I2C but device address is not set.
+		// Detect device
 		DeviceAddress(ICM20948_I2C_DEV_ADDR0);
 		d = Read8((uint8_t*)&regaddr, 2);
 
@@ -104,14 +128,17 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	}
 	else
 	{
+		// Not I2C interface
 		DeviceAddress(DevAddr);
 		d = Read8((uint8_t*)&regaddr, 2);
+
 		if (d != ICM20948_WHO_AM_I_ID)
 		{
 			return false;
 		}
 	}
 
+	// Device found, save device id
 	DeviceID(d);
 
 	if (pTimer != NULL)
@@ -136,7 +163,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 
 	// NOTE : require delay for reset to stabilize
 	// the chip would not respond properly to motion detection
-	msDelay(500);
+	msDelay(50);
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
@@ -144,15 +171,29 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	regaddr = ICM20948_PWR_MGMT_2_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_2_DISABLE_ALL);
 
-	regaddr = ICM20948_FIFO_RST_REG;
-	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
-	Write8((uint8_t*)&regaddr, 2, 0);
-
 	regaddr = ICM20948_USER_CTRL_REG;
 	Write8((uint8_t*)&regaddr, 2, userctrl);
 
 	regaddr = ICM20948_ODR_ALIGN_EN_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
+
+	// Upload DMP
+	InitDMP(ICM20948_DMP_START_ADDRESS, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
+
+	ResetDMPCtrlReg();
+
+	// Fifo watermark 80%
+	uint16_t val = EndianCvt16(800);
+	WriteDMP(ICM20948_DMP_FIFO_WATERMARK, (uint8_t*)&val, 2);
+
+	regaddr = ICM20948_FIFO_CFG_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_CFG_SINGLE);
+
+	// Undocumented value
+	regaddr = ICM20948_SINGLE_FIFO_PRIORITY_SEL;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_SINGLE_FIFO_PRIORITY_SEL_0XE4);
+
+
 
 	// ICM20948 has only 1 interrupt pin. Don't care the value
 	if (Inter)
@@ -170,24 +211,22 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE_REG;
-		d = ICM20948_INT_ENABLE_I2C_MST_INT_EN;
+		d = ICM20948_INT_ENABLE_DMP_INT1_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
 
-		regaddr = ICM20948_INT_ENABLE_1_REG;
-		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
-		Write8((uint8_t*)&regaddr, 2, d);
+//		regaddr = ICM20948_INT_ENABLE_1_REG;
+//		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
+//		Write8((uint8_t*)&regaddr, 2, d);
 
-		/*
-		regaddr = ICM20948_INT_ENABLE_2;
-		d = 1;
-		Write8((uint8_t*)&regaddr, 2, d);
-		regaddr = ICM20948_INT_ENABLE_3;
-		d = 1;
-		Write8((uint8_t*)&regaddr, 2, d);
-		*/
+
+		regaddr = ICM20948_INT_ENABLE_2_REG;
+		Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN);
+
+		regaddr = ICM20948_INT_ENABLE_3_REG;
+		Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_3_FIFO_WM_EN);
+
 	}
 
-	vbInitialized  = true;
 
 	return true;
 }
@@ -204,7 +243,7 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
-	FilterFreq(Cfg.FltrFreq);
+	//FilterFreq(Cfg.FltrFreq);
 
 	return true;
 }
@@ -311,10 +350,16 @@ uint32_t AccelIcm20948::FilterFreq(uint32_t Freq)
 
 bool AccelIcm20948::Enable()
 {
-	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
-	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+	uint16_t regaddr = ICM20948_FIFO_EN_2_REG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
 
 	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = ICM20948_PWR_MGMT_2_REG;
+	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+
+	Write8((uint8_t*)&regaddr, 2, d);
+
 
 	return true;
 }
@@ -482,7 +527,6 @@ bool MagIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Ti
 
 AgmIcm20948::AgmIcm20948()
 {
-	vbInitialized  = false;
 	vbDmpEnabled = false;
 	vbSensorEnabled[0] = vbSensorEnabled[1] = vbSensorEnabled[2] = false;
 	vType = SENSOR_TYPE_TEMP | SENSOR_TYPE_ACCEL | SENSOR_TYPE_GYRO | SENSOR_TYPE_MAG;
@@ -492,12 +536,27 @@ AgmIcm20948::AgmIcm20948()
 
 bool AgmIcm20948::Enable()
 {
-	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
-	uint8_t d = Read8((uint8_t*)&regaddr, 2);
 	uint8_t fifoen = 0;
+	uint8_t d, userctrl;
+	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
+
+	regaddr = ICM20948_USER_CTRL_REG;
+	userctrl = Read8((uint8_t*)&regaddr, 2);
+	Write8((uint8_t*)&regaddr, 2, userctrl & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN));
+
+	ResetFifo();
+
+	regaddr = ICM20948_PWR_MGMT_1_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
+
+	msDelay(100);
+
+	regaddr = ICM20948_PWR_MGMT_2_REG;
+	d = Read8((uint8_t*)&regaddr, 2);
 
 	if (vbSensorEnabled[ICM20948_ACCEL_IDX])
 	{
+//		AccelIcm20948::Enable();
 		d &= ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
 		fifoen |= ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
 	}
@@ -517,8 +576,14 @@ bool AgmIcm20948::Enable()
 	if (vbSensorEnabled[ICM20948_MAG_IDX])
 	{
 		regaddr = ICM20948_FIFO_EN_1_REG;
-		Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_1_SLV_0_FIFO_EN);
+//		Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_1_SLV_0_FIFO_EN);
 	}
+
+	regaddr = ICM20948_USER_CTRL_REG;
+	//d = Read8((uint8_t*)&regaddr, 2);
+	userctrl |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+	Write8((uint8_t*)&regaddr, 2, userctrl);
+
 	return true;
 }
 
@@ -539,14 +604,14 @@ void AgmIcm20948::Disable()
 	Write8((uint8_t*)&regaddr, 2, 0);
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
-	d = ICM20948_PWR_MGMT_1_TEMP_DIS;// | ICM20948_PWR_MGMT_1_SLEEP;// | ICM20948_PWR_MGMT_1_CLKSEL_STOP;
+	d = ICM20948_PWR_MGMT_1_TEMP_DIS | ICM20948_PWR_MGMT_1_CLKSEL_STOP | ICM20948_PWR_MGMT_1_LP_EN;// | ICM20948_PWR_MGMT_1_SLEEP;// | ICM20948_PWR_MGMT_1_CLKSEL_STOP;
 	Write8((uint8_t*)&regaddr, 2, d);
 }
 
 void AgmIcm20948::PowerOff()
 {
 	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
-	uint8_t d = ICM20948_PWR_MGMT_1_TEMP_DIS | ICM20948_PWR_MGMT_1_SLEEP;
+	uint8_t d = ICM20948_PWR_MGMT_1_TEMP_DIS | ICM20948_PWR_MGMT_1_SLEEP | ICM20948_PWR_MGMT_1_CLKSEL_STOP;
 	Write8((uint8_t*)&regaddr, 2, d);
 }
 
@@ -555,10 +620,23 @@ void AgmIcm20948::Reset()
 	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
 
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_DEVICE_RESET);
-	regaddr = ICM20948_FIFO_RST_REG;
-	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
+//	regaddr = ICM20948_FIFO_RST_REG;
+//	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 
 }
+
+void AgmIcm20948::ResetDMPCtrlReg()
+{
+	uint16_t regaddr = ICM20948_DMP_DATA_OUT_CTL1;
+	uint8_t d[2] = {0, 0};
+
+	WriteDMP(ICM20948_DMP_DATA_OUT_CTL1, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_OUT_CTL2, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_INTR_CTL, d, 2);
+	WriteDMP(ICM20948_DMP_MOTION_EVENT_CTL, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_RDY_STATUS, d, 2);
+}
+
 
 bool AgmIcm20948::StartSampling()
 {
@@ -624,7 +702,7 @@ void AgmIcm20948::ResetFifo(void)
 	do {
 		regaddr = ICM20948_FIFO_RST_REG;
 		Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
-		Write8((uint8_t*)&regaddr, 2, 0x1e);
+		Write8((uint8_t*)&regaddr, 2, ~ICM20948_FIFO_RST_FIFO_RESET_MASK);//0x1e);
 		msDelay(1);
 
 		regaddr = ICM20948_FIFO_COUNTH_REG;
@@ -1094,171 +1172,10 @@ bool AgmIcm20948::UpdateData()
 			//printf("distatus %x\n", distatus);
 		}
 	}
-#if 0
-		//printf("ICM20948_INT_STATUS_DMP_INT1\n");
-//		if (status[2] || status[3])
-		{
-			regaddr = ICM20948_FIFO_COUNTH_REG;
-			size_t cnt = Read16((uint8_t*)&regaddr, 2);
-			cnt = EndianCvt16(cnt);
-#if 0
-			while (cnt > 0)
-			{
-				int l = min(cnt, min((size_t)ICM20948_FIFO_PAGE_SIZE, ICM20948_FIFO_SIZE_MAX - vFifoDataLen));
-				if (l <= 0)
-				{
-					break;
-				}
-				regaddr = ICM20948_FIFO_R_W_REG;
-				l = Read((uint8_t*)&regaddr, 2, &vFifo[vFifoDataLen], l);
-				vFifoDataLen += l;
-				cnt -= l;
-			}
-#endif
-			regaddr = ICM20948_FIFO_R_W_REG;
-
-			while (cnt > 2)
-			{
-				if (vFifoHdr == 0 && vFifoHdr2 == 0)
-				{
-					// New packet
-					if (cnt < 4)
-					{
-						// Not enough data in fifo
-						return false;
-					}
-					// Read headers from FIFO
-					vFifoHdr = Read16((uint8_t*)&regaddr, 2);
-					vFifoHdr = EndianCvt16(vFifoHdr);// | ICM20948_FIFO_HEADER_FOOTER;
-
-					if (vFifoHdr == 0 || vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
-					{
-						// Bad header
-						ResetFifo();
-						return false;
-					}
-
-					//vFifoHdr &= ICM20948_FIFO_HEADER_MASK;
-					//vFifoHdr = ((uint16_t)vFifo[0] << 8) | (vFifo[1] & 0xff) | ICM20948_FIFO_HEADER_FOOTER;
-
-					//vFifoDataLen -= 2;
-					cnt -= 2;
-//					if (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
-					{
-						// bad header
-//						vFifoHdr = 0;
-//						return false;
-					}
-
-					//printf("vFifoHdr %x\n", vFifoHdr);
-
-					if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
-					{
-						vFifoHdr2 = Read16((uint8_t*)&regaddr, 2);
-						vFifoHdr2 = EndianCvt16(vFifoHdr2);
-
-						if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
-						{
-							ResetFifo();
-							return false;
-						}
-						//vFifoHdr2 &= ICM20948_FIFO_HEADER2_MASK;
-						//vFifoHdr2 = ((uint16_t)vFifo[2] << 8) | (vFifo[3] & 0xff);
-						//vFifoDataLen -= 2;
-						cnt -= 2;
-						vFifoHdr &= ~ICM20948_FIFO_HEADER_HEADER2; // Clear bit
-					//	if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
-						{
-							// bad header
-					//		vFifoHdr = vFifoHdr2 = 0;
-
-					//		return false;
-						}
-					}
-					//printf("%x %x\n", vFifoHdr, vFifoHdr2);
-				}
-				else
-				//if (cnt > 0 && (vFifoHdr != 0 || vFifoHdr2 != 0))
-				{
-					int l = min(cnt, (size_t)ICM20948_FIFO_PAGE_SIZE - vFifoDataLen);
-					l = Read((uint8_t*)&regaddr, 2, &vFifo[vFifoDataLen], l);
-
-					vFifoDataLen += l;
-					cnt -= l;
-
-					l = ProcessDMPFifo(vFifo, vFifoDataLen, t);
-					if (l == 0)
-					{
-						return false;
-					}
-					vFifoDataLen -= l;
-					if (vFifoDataLen > 0)
-					{
-						memmove(vFifo, &vFifo[l], vFifoDataLen);
-					}
-				}
-			}
-#if 0
-#if 0
-			if (cnt >= ICM20948_FIFO_MAX_PKT_SIZE)
-			{
-				ProcessDMPFifo(cnt, t);
-			}
-#else
-			uint8_t fifo[cnt];
-			uint8_t *p = fifo;
-			regaddr = ICM20948_FIFO_R_W_REG;
-			int len = cnt;
-
-			if (cnt > 3)
-			{
-				uint16_t header = EndianCvt16(Read16((uint8_t*)&regaddr, 2));
-				uint16_t header2 = 0;
-				size_t pklen = CalcFifoPacketSize(header, 0x8000, s_FifoDataLenLookup1, s_NbFifoDataLenLookup1);
-
-				if (header & ICM20948_FIFO_HEADER_HEADER2)
-				{
-					header2 = EndianCvt16(Read16((uint8_t*)&regaddr, 2));
-					pklen += CalcFifoPacketSize(header2, 0x4000, s_FifoDataLenLookup2, s_NbFifoDataLenLookup2);
-				}
-
-				pklen += 2; // Footer
-
-				if (pklen <= cnt)
-				{
-					while (pklen > 0)
-					{
-						size_t l = min(pklen, (size_t)ICM20948_FIFO_PAGE_SIZE);
-						l = Read((uint8_t*)&regaddr, 2, p, l);
-						cnt -= l;
-						p += l;
-						pklen -= l;
-					}
-				}
-			}
-#endif
-#endif
-			/*
-			cnt = len;
-			p = fifo;
-			while (cnt > 0)
-			{
-				size_t l = ProcessDMPFifo(p, cnt, t);
-				if (l == 0)
-				{
-					break;
-				}
-				p += l;
-				cnt -= l;
-			}
-*/
-		}
-
-#endif
 
 	if (vbDmpEnabled)
 	{
-#if 0
+#if 1
 		regaddr = ICM20948_FIFO_COUNTH_REG;
 		size_t cnt = Read16((uint8_t*)&regaddr, 2);
 		cnt = EndianCvt16(cnt);
@@ -1314,7 +1231,7 @@ bool AgmIcm20948::UpdateData()
 				{
 					memmove(vFifo, &vFifo[l], vFifoDataLen);
 				}
-//				printf("Header %x %x\n", vFifoHdr, vFifoHdr2);
+				printf("Header %x %x\n", vFifoHdr, vFifoHdr2);
 			}
 			int l = ProcessDMPFifo(vFifo, vFifoDataLen, t);
 			if (l == 0)
@@ -1612,6 +1529,52 @@ void AgmIcm20948::IntHandler()
 	//istatus[0] = istatus[1] = istatus[2] = istatus[3] = 0;
 	//cnt = Write((uint8_t*)&regaddr, 2, istatus, 4);
 #endif
+}
+
+int AgmIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
+{
+	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
+
+	Write8((uint8_t*)&regaddr, 2, MemAddr >> 8);
+
+	regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
+	Write8((uint8_t*)&regaddr, 2, MemAddr & 0xFF);
+
+	regaddr = ICM20948_DMP_MEM_RW_REG;
+	uint8_t *p = pBuff;
+
+	while (Len > 0)
+	{
+		int l = min(16, Len);
+		l = Read((uint8_t*)&regaddr, 2, p, l);
+		p += l;
+		Len -= l;
+	}
+
+	return Len;
+}
+
+int AgmIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
+{
+	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
+
+	Write8((uint8_t*)&regaddr, 2, MemAddr >> 8);
+
+	regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
+	Write8((uint8_t*)&regaddr, 2, MemAddr & 0xFF);
+
+	regaddr = ICM20948_DMP_MEM_RW_REG;
+	uint8_t *p = pData;
+
+	while (Len > 0)
+	{
+		int l = min(16, Len);
+		l = Write((uint8_t*)&regaddr, 2, p, l);
+		p += l;
+		Len -= l;
+	}
+
+	return Len;
 }
 
 /**
