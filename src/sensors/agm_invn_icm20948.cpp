@@ -703,7 +703,7 @@ bool AgmInvnIcm20948::UpdateData()
 	{
 		printf("ICM20948_INT_STATUS_I2C_MIST_INT\n");
 	}
-	if (status[0] & ICM20948_INT_STATUS_DMP_INT1 || status[2] || status[3])
+	if (status[0] & ICM20948_INT_STATUS_DMP_INT1 || status[3])
 	{
 		regaddr = ICM20948_DMP_INT_STATUS_REG;
 		uint16_t distatus;
@@ -715,6 +715,14 @@ bool AgmInvnIcm20948::UpdateData()
 			// DMP msg
 			//printf("distatus %x\n", distatus);
 		}
+	}
+
+	if (status[2])
+	{
+		g_Uart.printf("Fifo overflow\r\n");
+		ResetFifo();
+		vFifoDataLen = 0;
+		vFifoHdr = vFifoHdr2 = 0;
 	}
 
 #if 1
@@ -761,6 +769,7 @@ bool AgmInvnIcm20948::UpdateData()
 					g_Uart.printf("Bad hdr %x %d %d\n", vFifoHdr, s_BadHdrCnt, s_ProcessCnt);
 					ResetFifo();
 					vFifoDataLen = 0;
+					vFifoHdr = 0;
 					return false;
 				}
 
@@ -781,19 +790,16 @@ bool AgmInvnIcm20948::UpdateData()
 						g_Uart.printf("Bad hdr2 %d %d\n", s_BadHdrCnt, s_ProcessCnt);
 						ResetFifo();
 						vFifoDataLen = 0;
+						vFifoHdr = vFifoHdr2 = 0;
 						return false;
 					}
 
 					l += 2;
+					vFifoHdr &= ~ICM20948_FIFO_HEADER_HEADER2;
 				}
 				vFifoDataLen -= l;
 
 				p += l;
-				if (vFifoDataLen > 0)
-				{
-					//memmove(vFifo, &vFifo[l], vFifoDataLen);
-				}
-//				printf("Header %x %x\n", vFifoHdr, vFifoHdr2);
 			}
 			int l = ProcessDMPFifo(p, vFifoDataLen, t);
 			if (l == 0)
@@ -802,12 +808,8 @@ bool AgmInvnIcm20948::UpdateData()
 			}
 			p += l;
 			vFifoDataLen -= l;
-			if (vFifoDataLen > 0)
-			{
-				//memmove(vFifo, &vFifo[l], vFifoDataLen);
-			}
 		}
-		if (vFifoDataLen > 0)
+		if (vFifoDataLen > 0 && p != vFifo)
 		{
 			memmove(vFifo, p, vFifoDataLen);
 		}
@@ -1034,18 +1036,18 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_QUAT9; // Clear bit
 	}
 
-	if (vFifoHdr & ICM20948_FIFO_HEADER_STEP_DETECTOR)
+	if (vFifoHdr & ICM20948_FIFO_HEADER_PEDO_QUAT6)
 	{
-		if (Len < ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE)
+		if (Len < ICM20948_FIFO_HEADER_PEDO_QUAT6_SIZE)
 		{
 			return cnt;
 		}
 //		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE);
 
-		d += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
-		cnt += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
-		Len -= ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
-		vFifoHdr &= ~ICM20948_FIFO_HEADER_STEP_DETECTOR; // Clear bit
+		d += ICM20948_FIFO_HEADER_PEDO_QUAT6_SIZE;
+		cnt += ICM20948_FIFO_HEADER_PEDO_QUAT6_SIZE;
+		Len -= ICM20948_FIFO_HEADER_PEDO_QUAT6_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_PEDO_QUAT6; // Clear bit
 	}
 
 	if (vFifoHdr & ICM20948_FIFO_HEADER_GEOMAG)
@@ -1078,6 +1080,8 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_GYRO)
 	{
 		// Hardware unit scaled by 2^15
+		// Although bit is set but no data, try to read data will corrupt fifo
+#if 0
 		if (Len < ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE)
 		{
 			return cnt;
@@ -1086,9 +1090,9 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		d += ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
 		cnt += ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
 		Len -= ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
+#endif
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_CALIB_GYRO; // Clear bit
 	}
-
 	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_CPASS)
 	{
 		if (Len < ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE)
