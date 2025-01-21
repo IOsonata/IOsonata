@@ -812,11 +812,11 @@ size_t AgmIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 
 	if (vFifoHdr & ICM20948_FIFO_HEADER_ALS)
 	{
+		// Byte[0]: Dummy, Byte[2:1]: Ch0DATA, Byte[4:3]: Ch1DATA, Byte[6:5]: PDATA, Byte[7]: Dummy
 		if (Len < ICM20948_FIFO_HEADER_ALS_SIZE)
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_ALS_SIZE);
 
 		d += ICM20948_FIFO_HEADER_ALS_SIZE;
 		cnt += ICM20948_FIFO_HEADER_ALS_SIZE;
@@ -830,7 +830,6 @@ size_t AgmIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_QUAT6_SIZE);
 
 		d += ICM20948_FIFO_HEADER_QUAT6_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
@@ -882,6 +881,7 @@ size_t AgmIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 
 	if (vFifoHdr & ICM20948_FIFO_HEADER_PRESS_TEMP)
 	{
+		// Byte [2:0]: Pressure data, Byte [5:3]: Temperature data
 		if (Len < ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE)
 		{
 			return cnt;
@@ -893,17 +893,46 @@ size_t AgmIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_PRESS_TEMP; // Clear bit
 	}
 
+	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_GYRO)
+	{
+		// Hardware unit scaled by 2^15
+		if (Len < ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE)
+		{
+			return cnt;
+		}
+
+		d += ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
+		cnt += ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
+		Len -= ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_CALIB_GYRO; // Clear bit
+	}
+
 	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_CPASS)
 	{
+		// The unit is uT scaled by 2^16
 		if (Len < ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE)
 		{
 			return cnt;
 		}
-//		Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE);
+
 		d += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
 		cnt += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
 		Len -= ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_CALIB_CPASS; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_STEP_DETECTOR)
+	{
+		// The unit is uT scaled by 2^16
+		if (Len < ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE)
+		{
+			return cnt;
+		}
+
+		d += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		cnt += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		Len -= ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_STEP_DETECTOR; // Clear bit
 	}
 
 	if (vFifoHdr2 != 0)
@@ -950,6 +979,20 @@ size_t AgmIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_CPASS_ACCUR; // Clear bit
 		}
 
+		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_FSYNC)
+		{
+			if (Len < ICM20948_FIFO_HEADER2_FSYNC_SIZE)
+			{
+				return cnt;
+			}
+//			Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER2_PICKUP_SIZE);
+
+			d += ICM20948_FIFO_HEADER2_FSYNC_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_FSYNC_SIZE;
+			Len -= ICM20948_FIFO_HEADER2_FSYNC_SIZE;
+			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_FSYNC; // Clear bit
+		}
+
 		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_PICKUP)
 		{
 			if (Len < ICM20948_FIFO_HEADER2_PICKUP_SIZE)
@@ -976,6 +1019,20 @@ size_t AgmIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 			cnt += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
 			Len -= ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
 			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_ACTI_RECOG; // Clear bit
+		}
+
+		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_SECOND_ONOFF)
+		{
+			if (Len < ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE)
+			{
+				return cnt;
+			}
+//			Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE);
+
+			d += ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE;
+			Len -= ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE;
+			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_SECOND_ONOFF; // Clear bit
 		}
 	}
 
@@ -1220,10 +1277,6 @@ bool AgmIcm20948::UpdateData()
 
 		p = vFifo;
 
-		if (p[0] == 0 && p[1] == 0)
-		{
-			g_Uart.printf("Hdr zero %d %p %p\r\n", vFifoDataLen, p, vFifo);
-		}
 		while (vFifoDataLen > 0)
 		{
 			if (vFifoHdr == 0 && vFifoHdr2 == 0)
@@ -1233,7 +1286,7 @@ bool AgmIcm20948::UpdateData()
 				// new packet
 				vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
 
-				if (vFifoHdr == 0 || (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
+				if ((vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
 				{
 					s_BadHdrCnt++;
 					g_Uart.printf("Bad hdr %x %d %d %d\r\n", vFifoHdr, s_BadHdrCnt, s_FifoProcessCnt, vFifoDataLen);
@@ -1243,6 +1296,7 @@ bool AgmIcm20948::UpdateData()
 					return false;
 				}
 
+				vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
 				l = 2;
 
 				if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
@@ -1250,7 +1304,7 @@ bool AgmIcm20948::UpdateData()
 					if (vFifoDataLen < 4)
 					{
 						vFifoHdr = 0;
-						break;
+						return false;
 					}
 					vFifoHdr2 = ((uint16_t)p[2] << 8U) | ((uint16_t)p[3] & 0xFF);
 
@@ -1264,6 +1318,7 @@ bool AgmIcm20948::UpdateData()
 						return false;
 					}
 
+					vFifoHdr &= ~ICM20948_FIFO_HEADER_HEADER2;
 					l += 2;
 				}
 				vFifoDataLen -= l;

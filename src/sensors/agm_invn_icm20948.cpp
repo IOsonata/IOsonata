@@ -1075,6 +1075,20 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_PRESS_TEMP; // Clear bit
 	}
 
+	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_GYRO)
+	{
+		// Hardware unit scaled by 2^15
+		if (Len < ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE)
+		{
+			return cnt;
+		}
+
+		d += ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
+		cnt += ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
+		Len -= ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_CALIB_GYRO; // Clear bit
+	}
+
 	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_CPASS)
 	{
 		if (Len < ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE)
@@ -1086,6 +1100,20 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 		cnt += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
 		Len -= ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_CALIB_CPASS; // Clear bit
+	}
+
+	if (vFifoHdr & ICM20948_FIFO_HEADER_STEP_DETECTOR)
+	{
+		// The unit is uT scaled by 2^16
+		if (Len < ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE)
+		{
+			return cnt;
+		}
+
+		d += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		cnt += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		Len -= ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+		vFifoHdr &= ~ICM20948_FIFO_HEADER_STEP_DETECTOR; // Clear bit
 	}
 
 	if (vFifoHdr2 != 0)
@@ -1132,6 +1160,20 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_CPASS_ACCUR; // Clear bit
 		}
 
+		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_FSYNC)
+		{
+			if (Len < ICM20948_FIFO_HEADER2_FSYNC_SIZE)
+			{
+				return cnt;
+			}
+//			Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER2_PICKUP_SIZE);
+
+			d += ICM20948_FIFO_HEADER2_FSYNC_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_FSYNC_SIZE;
+			Len -= ICM20948_FIFO_HEADER2_FSYNC_SIZE;
+			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_FSYNC; // Clear bit
+		}
+
 		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_PICKUP)
 		{
 			if (Len < ICM20948_FIFO_HEADER2_PICKUP_SIZE)
@@ -1158,6 +1200,20 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 			cnt += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
 			Len -= ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
 			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_ACTI_RECOG; // Clear bit
+		}
+
+		if (vFifoHdr2 & ICM20948_FIFO_HEADER2_SECOND_ONOFF)
+		{
+			if (Len < ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE)
+			{
+				return cnt;
+			}
+//			Read((uint8_t*)&regaddr, 2, d, ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE);
+
+			d += ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE;
+			cnt += ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE;
+			Len -= ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE;
+			vFifoHdr2 &= ~ICM20948_FIFO_HEADER2_SECOND_ONOFF; // Clear bit
 		}
 	}
 
