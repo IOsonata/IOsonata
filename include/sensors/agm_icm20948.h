@@ -138,12 +138,12 @@ SOFTWARE.
 
 #define ICM20948_INT_ENABLE_2_REG			(ICM20948_REG_BANK0 | 18)
 
-#define ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN_MASK	(0xf<<0)// Enable FIFO overflow interrupt on pin 1
+#define ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN_MASK	(0x1f<<0)// Enable FIFO overflow interrupt on pin 1
 #define ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN		(1<<0)
 
 #define ICM20948_INT_ENABLE_3_REG			(ICM20948_REG_BANK0 | 19)
 
-#define ICM20948_INT_ENABLE_3_FIFO_WM_EN_MASK		(0xf<<0)// Enable FIFO watermark interrupt on pin 1
+#define ICM20948_INT_ENABLE_3_FIFO_WM_EN_MASK		(0x1f<<0)// Enable FIFO watermark interrupt on pin 1
 #define ICM20948_INT_ENABLE_3_FIFO_WM_EN			(1<<0)
 
 #define ICM20948_I2C_MST_STATUS_REG			(ICM20948_REG_BANK0 | 23)	// 0x17
@@ -159,11 +159,14 @@ SOFTWARE.
 
 #define ICM20948_DMP_INT_STATUS_REG			(ICM20948_REG_BANK0 | 24)	// 0x18
 #define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0		(1<<0)	// CI Command
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_2		(1<<1)	// CIM Command - SMD
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_3		(1<<2)	// CIM Command - Pedometer
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_4		(1<<4)	// CIM Command - Pedometer binning
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_5		(1<<5)	// CIM Command - Bring To See Gesture
-#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_6		(1<<6)	// CIM Command - Look To See Gesture
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_1		(1<<1)	// CIM Command - Motion detection SMD
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_2		(1<<2)	// CIM Command - Pedometer
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_3		(1<<3)	// CIM Command - Pedometer binning
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_4		(1<<4)	// CIM Command - Bring To See Gesture
+#define ICM20948_DMP_INT_STATUS_MSG_DMP_INT_5		(1<<5)	// CIM Command - Look To See Gesture
+
+#define ICM20948_DMP_INT_STATUS_MOTION_DETECT_SMD	(1<<1)
+#define ICM20948_DMP_INT_STATUS_TITL_EVENT			(1<<3)
 
 #if 0
 #define ICM20948_DMP_INT_STATUS_MSG_DMP_INT			(1<<1)
@@ -189,14 +192,14 @@ SOFTWARE.
 
 #define ICM20948_INT_STATUS_2_REG			(ICM20948_REG_BANK0 | 27)
 
-#define ICM20948_INT_STATUS_2_FIFO_OVERFLOW_INT_MASK	(0xf<<0)	// FIFO overflow interrupt
+#define ICM20948_INT_STATUS_2_FIFO_OVERFLOW_INT_MASK	(0x1f<<0)	// FIFO overflow interrupt
 
 #define ICM20948_INT_STATUS_3_REG			(ICM20948_REG_BANK0 | 28)
 
-#define ICM20948_INT_STATUS_3_FIFO_WM_INT_MASK	(0xf<<0)	// Watermark interrupt for FIFO
+#define ICM20948_INT_STATUS_3_FIFO_WM_INT_MASK	(0x1f<<0)	// Watermark interrupt for FIFO
 
 #define ICM20948_SINGLE_FIFO_PRIORITY_SEL	(ICM20948_REG_BANK0 | 0x26)	// Undocumented
-#define ICM20948_SINGLE_FIFO_PRIORITY_SEL_0XE4		(0XE4)	// To have accelerometers datas and the interrupt without gyro enables.
+#define ICM20948_SINGLE_FIFO_PRIORITY_SEL_0XE4		(0XE4)	// To have accelerometers data and the interrupt without gyro enables.
 
 #define ICM20948_DELAY_TIMEH_REG			(ICM20948_REG_BANK0 | 40)
 #define ICM20948_DELAY_TIMEL_REG			(ICM20948_REG_BANK0 | 41)
@@ -266,6 +269,13 @@ SOFTWARE.
 #define ICM20948_FIFO_CFG_MUTLI						(1<<0)		// Set to 1 of interrupt status for each sensor is required
 #define ICM20948_FIFO_CFG_SINGLE					(0<<0)
 
+// DMP
+#define ICM20948_DMP_MEM_STARTADDR_REG		(ICM20948_REG_BANK0 | 0x7C)
+#define ICM20948_DMP_MEM_RW_REG        		(ICM20948_REG_BANK0 | 0x7D)
+#define ICM20948_DMP_MEM_BANKSEL_REG		(ICM20948_REG_BANK0 | 0x7E)
+#define ICM20948_DMP_PROG_START_ADDRH_REG	(ICM20948_REG_BANK2 | 0x50)
+#define ICM20948_DMP_PROG_START_ADDRL_REG	(ICM20948_REG_BANK2 | 0x51)
+
 //*** Register Bank 1
 
 #define ICM20948_SELF_TEST_X_GYRO_REG		(ICM20948_REG_BANK1 | 2)
@@ -294,14 +304,14 @@ SOFTWARE.
 #define ICM20948_GYRO_CONFIG_1_REG			(ICM20948_REG_BANK2 | 1)
 
 #define ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE					(1<<0)
-
-#define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_MASK				(3<<1)
+#define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_MASK				(2<<1)
 #define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_250DPS			(0<<1)
 #define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_500DPS			(1<<1)
 #define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS			(2<<1)
 #define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_2000DPS			(3<<1)
-
-#define ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_MASK			(7<<3)
+#define ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_MASK			(7<<3)	// Format is dAbwB_nXbwY :
+																	//		A is integer part of 3db BW, B is fraction.
+																	// 		X is integer part of nyquist bandwidth, Y is fraction
 #define ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS			3
 
 #define ICM20948_GYRO_CONFIG_2_REG			(ICM20948_REG_BANK2 | 2)
@@ -315,7 +325,6 @@ SOFTWARE.
 #define ICM20948_GYRO_CONFIG_2_GYRO_AVGCFG_32X				(5<<0)
 #define ICM20948_GYRO_CONFIG_2_GYRO_AVGCFG_64X				(6<<0)
 #define ICM20948_GYRO_CONFIG_2_GYRO_AVGCFG_128X				(7<<0)
-
 #define ICM20948_GYRO_CONFIG_2_ZGYRO_CTEN					(1<<3)	// Z Gyro self test enable
 #define ICM20948_GYRO_CONFIG_2_YGYRO_CTEN					(1<<4)	// Z Gyro self test enable
 #define ICM20948_GYRO_CONFIG_2_XGYRO_CTEN					(1<<5)	// Z Gyro self test enable
@@ -347,14 +356,14 @@ SOFTWARE.
 #define ICM20948_ACCEL_CONFIG_REG			(ICM20948_REG_BANK2 | 20)
 
 #define ICM20948_ACCEL_CONFIG_ACCEL_FCHOICE					(1<<0)	// Enable accel DLPF
-
 #define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_MASK				(3<<1)	// Full scale select mask
 #define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_2G				(0<<1)	// Full scale select 2g
 #define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_4G				(1<<1)	// Full scale select 4g
 #define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_8G				(2<<1)	// Full scale select 8g
 #define ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_16G				(3<<1)	// Full scale select 16g
-
-#define ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_MASK			(7<<3)	// Low pass filter config
+#define ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_MASK			(7<<3)	// Format is dAbwB_nXbwZ :
+																	//		A is integer part of 3db BW, B is fraction.
+																	//		X is integer part of nyquist bandwidth, Y is fraction
 #define ICM20948_ACCEL_CONFIG_ACCEL_DLPFCFG_BITPOS			3
 
 #define ICM20948_ACCEL_CONFIG_2_REG			(ICM20948_REG_BANK2 | 21)
@@ -364,7 +373,6 @@ SOFTWARE.
 #define ICM20948_ACCEL_CONFIG_2_DEC3_CFG_8					(1<<0)	// 8 samples
 #define ICM20948_ACCEL_CONFIG_2_DEC3_CFG_16					(2<<0)	// 16 samples
 #define ICM20948_ACCEL_CONFIG_2_DEC3_CFG_32					(3<<0)	// 32 samples
-
 #define ICM20948_ACCEL_CONFIG_2_AZ_ST_EN_REG				(1<<2)	// Z accel self test enable
 #define ICM20948_ACCEL_CONFIG_2_AY_ST_EN_REG				(1<<3)	// Y accel self test enable
 #define ICM20948_ACCEL_CONFIG_2_AX_ST_EN_REG				(1<<4)	// X accel self test enable
@@ -380,14 +388,13 @@ SOFTWARE.
 #define ICM20948_FSYNC_CONFIG_EXT_SYNC_SET_ACCEL_XOUT_L		(5<<0)
 #define ICM20948_FSYNC_CONFIG_EXT_SYNC_SET_ACCEL_YOUT_L		(6<<0)
 #define ICM20948_FSYNC_CONFIG_EXT_SYNC_SET_ACCEL_ZOUT_L		(7<<0)
-
 #define ICM20948_FSYNC_CONFIG_WOF_EDGE_INT					(1<<4)	// FSYNC interrupt level
 #define ICM20948_FSYNC_CONFIG_WOF_DEGLITCH_EN				(1<<5)	// Enable digital deglitching of FSYNC inpiut for Wake on FSYNC
 #define ICM20948_FSYNC_CONFIG_DELAY_TIME_EN					(1<<7)	// Enable delay time measurement between FSYNC event and the first ODR event
 
 #define ICM20948_TEMP_CONFIG_REG			(ICM20948_REG_BANK2 | 83)
 
-#define ICM20948_TEMP_CONFIG_MASK							(7<<0)	// Low pass filter for temperature sensor
+#define ICM20948_TEMP_CONFIG_DLPFCFG						(7<<0)	// Low pass filter for temperature sensor
 
 #define ICM20948_MOD_CTRL_USR_REG			(ICM20948_REG_BANK2 | 84)
 
@@ -565,13 +572,6 @@ SOFTWARE.
 #define ICM20948_ACC_ADC_RANGE			32767
 #define ICM20948_GYRO_ADC_RANGE			32767
 #define AK09916_ADC_RANGE				32752
-
-// DMP
-#define ICM20948_DMP_MEM_STARTADDR_REG		(ICM20948_REG_BANK0 | 0x7C)
-#define ICM20948_DMP_MEM_RW_REG        		(ICM20948_REG_BANK0 | 0x7D)
-#define ICM20948_DMP_MEM_BANKSEL_REG		(ICM20948_REG_BANK0 | 0x7E)
-#define ICM20948_DMP_PROG_START_ADDRH_REG	(ICM20948_REG_BANK2 | 0x50)
-#define ICM20948_DMP_PROG_START_ADDRL_REG	(ICM20948_REG_BANK2 | 0x51)
 
 //#define ICM20948_DMP_MEM_BANK_SIZE			256		//!< DMP memory bank size
 //#define ICM20948_DMP_PROG_START_ADDR		0x1000U

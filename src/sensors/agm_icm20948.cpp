@@ -181,7 +181,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
 
 	// Upload DMP
-	InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
+//	InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
 
 	ResetDMPCtrlReg();
 
@@ -433,42 +433,42 @@ uint32_t GyroIcm20948::FilterFreq(uint32_t Freq)
 	}
 	else if (Freq < 11000)
 	{
-		d |= (6 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (6 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 8900;	// NBW
 	}
 	else if (Freq < 23000)
 	{
-		d |= (5 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (5 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 17800;
 	}
 	else if (Freq < 50000)
 	{
-		d |= (4 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (4 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 35900;
 	}
 	else if (Freq < 110000)
 	{
-		d |= (3 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (3 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 73300;
 	}
 	else if (Freq < 150000)
 	{
-		d |= (2 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (2 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 154300;
 	}
 	else if (Freq < 190000)
 	{
-		d |= (1 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (1 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 187600;
 	}
 	else if (Freq < 360000)
 	{
-		d |= (0 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (0 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 229800;
 	}
 	else if (Freq < 1000000)
 	{
-		d |= (7 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (7 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 376500;
 	}
 	else
@@ -1357,20 +1357,31 @@ bool AgmIcm20948::UpdateData()
 			Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 14);
 
 			AccelSensor::vData.Timestamp = t;
-			AccelSensor::vData.X = ((int16_t)(d[0] << 8) | d[1]);
-			AccelSensor::vData.Y = ((int16_t)(d[2] << 8) | d[3]);
-			AccelSensor::vData.Z = ((int16_t)(d[4] << 8) | d[5]);
+			AccelSensor::vData.X = ((int16_t)(d[0] << 8) | ((int16_t)d[1] & 0xFF));
+			AccelSensor::vData.Y = ((int16_t)(d[2] << 8) | ((int16_t)d[3] & 0xFF));
+			AccelSensor::vData.Z = ((int16_t)(d[4] << 8) | ((int16_t)d[5] & 0xFF));
 			GyroSensor::vData.Timestamp = t;
-			GyroSensor::vData.X = ((int16_t)(d[6] << 8) | d[7]);
-			GyroSensor::vData.Y = ((int16_t)(d[8] << 8) | d[9]);
-			GyroSensor::vData.Z = ((int16_t)(d[10] << 8) | d[11]);
+			GyroSensor::vData.X = ((int16_t)(d[6] << 8) | ((int16_t)d[7] & 0xFF));
+			GyroSensor::vData.Y = ((int16_t)(d[8] << 8) | ((int16_t)d[9] & 0xFF));
+			GyroSensor::vData.Z = ((int16_t)(d[10] << 8) | ((int16_t)d[11] & 0xFF));
+
 
 			//MagIcm20948::UpdateData();
 
 			// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
 			int16_t t = ((int16_t)d[12] << 8) | d[13];
-			TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | d[13]) * 100 / 33387 + 2100;
+			TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | ((int16_t)d[13] & 0xFF)) * 100 / 33387 + 2100;
 			TempSensor::vData.Timestamp = t;
+
+			regaddr = ICM20948_XG_OFFS_USRH_REG;
+			Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 6);
+
+			float gyroffs[3];
+			gyroffs[0] = (float)((int16_t)(d[0] << 8) | ((int16_t)d[1] & 0xFF)) * 0.0305;
+			gyroffs[1] = (float)((int16_t)(d[2] << 8) | ((int16_t)d[3] & 0xFF)) * 0.0305;
+			gyroffs[2] = (float)((int16_t)(d[4] << 8) | ((int16_t)d[5] & 0xFF)) * 0.0305;
+
+			GyroSensor::SetCalibrationOffset(gyroffs);
 
 			res = true;
 		}
