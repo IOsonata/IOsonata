@@ -286,6 +286,8 @@ SOFTWARE.
 #define ICM20948_SELF_TEST_Y_ACCEL_REG		(ICM20948_REG_BANK1 | 15)
 #define ICM20948_SELF_TEST_Z_ACCEL_REG		(ICM20948_REG_BANK1 | 16)
 
+// Accel offset trim. 0.98 mg steps
+#define ICM20948_ACCEL_TRIM_SCALE							(0.000098)
 #define ICM20948_XA_OFFS_H_REG				(ICM20948_REG_BANK1 | 20)
 #define ICM20948_XA_OFFS_L_REG				(ICM20948_REG_BANK1 | 21)
 
@@ -329,6 +331,8 @@ SOFTWARE.
 #define ICM20948_GYRO_CONFIG_2_YGYRO_CTEN					(1<<4)	// Z Gyro self test enable
 #define ICM20948_GYRO_CONFIG_2_XGYRO_CTEN					(1<<5)	// Z Gyro self test enable
 
+// Accel offset trim. 0.98 mg steps
+#define ICM20948_GYRO_TRIM_SCALE							(0.0305)
 #define ICM20948_XG_OFFS_USRH_REG			(ICM20948_REG_BANK2 | 3)
 #define ICM20948_XG_OFFS_USRL_REG			(ICM20948_REG_BANK2 | 4)
 #define ICM20948_YG_OFFS_USRH_REG			(ICM20948_REG_BANK2 | 5)
@@ -409,7 +413,6 @@ SOFTWARE.
 #define ICM20948_I2C_MST_CTRL_REG			(ICM20948_REG_BANK3 | 1)
 
 #define ICM20948_I2C_MST_CTRL_I2C_MST_CLK_MASK				(0xf<<0)// I2C master clock freq
-
 #define ICM20948_I2C_MST_CTRL_I2C_MST_P_NSR					(1<<4)	// Control I2C master transition from one slave to the next
 #define ICM20948_I2C_MST_CTRL_MULT_MST_EN					(1<<7)	// Enable multi-master capability
 

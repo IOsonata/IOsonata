@@ -244,6 +244,20 @@ bool AccelInvnIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf *pIntrf, T
 	Scale(Cfg.Scale);
 	FilterFreq(Cfg.FltrFreq);
 
+	// Read manufacture trim offset
+	uint16_t regaddr = ICM20948_XA_OFFS_H_REG;
+	uint8_t d[10];
+
+	Device::Read((uint8_t*)&regaddr, 2, d, 6);
+
+	float offs[3];
+
+	offs[0] = (float)(((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF)) * 0.000098;
+	offs[1] = (float)(((int16_t)d[2] << 8) | ((int16_t)d[3] & 0xFF)) * 0.000098;
+	offs[2] = (float)(((int16_t)d[4] << 8) | ((int16_t)d[5] & 0xFF)) * 0.000098;
+
+	SetCalibrationOffset(offs);
+
 	return true;
 }
 
@@ -287,7 +301,7 @@ uint32_t AccelInvnIcm20948::SamplingFrequency(uint32_t Freq)
 {
 	// ODR = 1.125 kHz/(1+ACCEL_SMPLRT_DIV[11:0])
 
-	uint32_t div = (1125000 + (Freq >>1)) / Freq - 1;
+	uint32_t div = (1125000 + (Freq >> 1)) / Freq - 1;
 	uint16_t d = EndianCvt16(div);
 	uint16_t regaddr = REG_ACCEL_SMPLRT_DIV_1;
 
@@ -374,6 +388,19 @@ bool GyroInvnIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf *pIntrf, Tim
 	Sensitivity(Cfg.Sensitivity);
 	SamplingFrequency(Cfg.Freq);
 	FilterFreq(Cfg.FltrFreq);
+
+	// Read manufacture trim offset
+	uint16_t regaddr = ICM20948_XG_OFFS_USRH_REG;
+	uint8_t d[10];
+	Device::Read((uint8_t*)&regaddr, 2, d, 6);
+
+	float offs[3];
+
+	offs[0] = (float)(((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF)) * 0.0305;
+	offs[1] = (float)(((int16_t)d[2] << 8) | ((int16_t)d[3] & 0xFF)) * 0.0305;
+	offs[2] = (float)(((int16_t)d[4] << 8) | ((int16_t)d[5] & 0xFF)) * 0.0305;
+
+	SetCalibrationOffset(offs);
 
 	return true;
 }
@@ -837,8 +864,8 @@ bool AgmInvnIcm20948::UpdateData()
 
 			// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
 			int16_t t = ((int16_t)d[12] << 8) | d[13];
-		//	TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | d[13]) * 100 / 33387 + 2100;
-		//	TempSensor::vData.Timestamp = t;
+			//TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | d[13]) * 100 / 33387 + 2100;
+			//TempSensor::vData.Timestamp = t;
 
 			res = true;
 		}

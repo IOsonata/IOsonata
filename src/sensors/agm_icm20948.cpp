@@ -79,6 +79,33 @@ static const uint8_t s_Dmp3Image[] = {
 };
 static const int s_DmpImageSize = sizeof(s_Dmp3Image);
 
+static const float s_CfgMountingMatrix[9]= {
+	1.f, 0, 0,
+	0, 1.f, 0,
+	0, 0, 1.f
+};
+
+inv_icm20948_t vIcmDevice;
+int InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
+{
+	AgmIcm20948 *dev = (AgmIcm20948*)context;
+//	return spi_master_transfer_rx(NULL, reg, rbuffer, rlen);
+//	reg |= 0x80;
+	int cnt = dev->Read(&reg, 1, rbuffer, (int)rlen);
+
+	return cnt > 0 ? 0 : 1;
+}
+
+int InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
+{
+	AgmIcm20948 *dev = (AgmIcm20948*)context;
+//	return spi_master_transfer_tx(NULL, reg, wbuffer, wlen);
+
+	int cnt = dev->Write(&reg, 1, (uint8_t*)wbuffer, (int)wlen);
+
+	return cnt > 0 ? 0 : 1;
+}
+
 bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
 {
 	if (Valid())
@@ -153,6 +180,43 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 
 	Reset();
 
+	struct inv_icm20948_serif icm20948_serif;
+
+	//inv_icm20948_reset_states(&vIcmDevice, &icm20948_serif);
+	memset(&vIcmDevice, 0, sizeof(inv_icm20948_t));
+	vIcmDevice.serif.context   = this;
+	vIcmDevice.serif.read_reg  = InvnReadReg;
+	vIcmDevice.serif.write_reg = InvnWriteReg;
+	vIcmDevice.serif.max_read  = 16; /* maximum number of bytes allowed per serial read */
+	vIcmDevice.serif.max_write = 16; /* maximum number of bytes allowed per serial write */
+	vIcmDevice.serif.is_spi = vpIntrf->Type() == DEVINTRF_TYPE_SPI;
+
+	//inv_icm20948_register_aux_compass(&vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, (uint8_t)AK0991x_DEFAULT_I2C_ADDR);
+	vIcmDevice.secondary_state.compass_slave_id = HW_AK09916;
+
+#define AK0991x_DEFAULT_I2C_ADDR	0x0C	/* The default I2C address for AK0991x Magnetometers */
+
+	vIcmDevice.secondary_state.compass_chip_addr = AK0991x_DEFAULT_I2C_ADDR;
+	vIcmDevice.secondary_state.compass_state = INV_ICM20948_COMPASS_INITED;
+	/* initialise mounting matrix of compass to identity akm9916 */
+	vIcmDevice.mounting_matrix_secondary_compass[0] = 1 ;
+	vIcmDevice.mounting_matrix_secondary_compass[4] = -1;
+	vIcmDevice.mounting_matrix_secondary_compass[8] = -1;
+
+#if 0
+	msDelay(500);
+
+	// Setup accel and gyro mounting matrix and associated angle for current board
+	inv_icm20948_init_matrix(&vIcmDevice);
+
+	for (int i = 0; i < INV_ICM20948_SENSOR_MAX; i++) {
+		inv_icm20948_set_matrix(&vIcmDevice, s_CfgMountingMatrix, (inv_icm20948_sensor)i);
+	}
+
+	inv_icm20948_initialize(&vIcmDevice, s_Dmp3Image, sizeof(s_Dmp3Image));
+	vbDmpEnabled = true;
+
+#else
 	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
 	uint8_t lpconfig = 0;//ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
@@ -181,9 +245,13 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
 
 	// Upload DMP
-	//InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
+	InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
 
 	ResetDMPCtrlReg();
+	ResetFifo();
+
+	regaddr = ICM20948_HWTEMP_FIX_DISABLE_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_HWTEMP_FIX_DISABLE_DIS);
 
 	// Fifo watermark 80%
 	uint16_t val = EndianCvt16(800);
@@ -195,8 +263,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	// Undocumented value
 	regaddr = ICM20948_SINGLE_FIFO_PRIORITY_SEL;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_SINGLE_FIFO_PRIORITY_SEL_0XE4);
-
-
+#endif
 
 	// ICM20948 has only 1 interrupt pin. Don't care the value
 	if (Inter)
@@ -229,14 +296,13 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 
 	}
 
-
 	return true;
 }
 
 bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint16_t regaddr;
-	uint8_t d;
+	uint8_t d[10];
 
 	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
 		return false;
@@ -245,7 +311,19 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
-	//FilterFreq(Cfg.FltrFreq);
+	FilterFreq(Cfg.FltrFreq);
+
+	// Read manufacture trim offset
+	regaddr = ICM20948_XA_OFFS_H_REG;
+	Device::Read((uint8_t*)&regaddr, 2, d, 6);
+
+	float offs[3];
+
+	offs[0] = (float)(((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF)) * ICM20948_ACCEL_TRIM_SCALE;
+	offs[1] = (float)(((int16_t)d[2] << 8) | ((int16_t)d[3] & 0xFF)) * ICM20948_ACCEL_TRIM_SCALE;
+	offs[2] = (float)(((int16_t)d[4] << 8) | ((int16_t)d[5] & 0xFF)) * ICM20948_ACCEL_TRIM_SCALE;
+
+	SetCalibrationOffset(offs);
 
 	return true;
 }
@@ -285,13 +363,11 @@ uint32_t AccelIcm20948::SamplingFrequency(uint32_t Freq)
 {
 	// ODR = 1.125 kHz/(1+ACCEL_SMPLRT_DIV[11:0])
 
-	uint32_t div = (1125000 + (Freq >>1))/ Freq - 1;
+	uint32_t div = (1125000 + (Freq >> 1))/ Freq - 1;
+	div = EndianCvt16(div);
 
 	uint16_t regaddr = ICM20948_ACCEL_SMPLRT_DIV_1_REG;
-	Write8((uint8_t*)&regaddr, 2, div >> 8);
-
-	regaddr = ICM20948_ACCEL_SMPLRT_DIV_2_REG;
-	Write8((uint8_t*)&regaddr, 2, div & 0xFF);
+	Write16((uint8_t*)&regaddr, 2, div);
 
 	return AccelSensor::SamplingFrequency(1125000 / (1 + div));
 }
@@ -376,6 +452,19 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	SamplingFrequency(Cfg.Freq);
 	FilterFreq(Cfg.FltrFreq);
 
+	// Read manufacture trim offset
+	uint16_t regaddr = ICM20948_XG_OFFS_USRH_REG;
+	uint8_t d[10];
+	Device::Read((uint8_t*)&regaddr, 2, d, 6);
+
+	float offs[3];
+
+	offs[0] = (float)(((int16_t)d[0] << 8) | ((int16_t)d[1] & 0xFF)) * ICM20948_GYRO_TRIM_SCALE;
+	offs[1] = (float)(((int16_t)d[2] << 8) | ((int16_t)d[3] & 0xFF)) * ICM20948_GYRO_TRIM_SCALE;
+	offs[2] = (float)(((int16_t)d[4] << 8) | ((int16_t)d[5] & 0xFF)) * ICM20948_GYRO_TRIM_SCALE;
+
+	SetCalibrationOffset(offs);
+
 	return true;
 }
 
@@ -406,6 +495,8 @@ uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 	}
 
 	Write8((uint8_t*)&regaddr, 2, d);
+
+	inv_icm20948_set_gyro_fullscale(&vIcmDevice, d);
 
 	return GyroSensor::Sensitivity(Value);
 }
@@ -501,11 +592,11 @@ bool MagIcm20948::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Ti
 	msDelay(200);
 
 	regaddr = ICM20948_I2C_MST_CTRL_REG;
-	d = 0;
+	d = ICM20948_I2C_MST_CTRL_I2C_MST_P_NSR | 7;
 	Write8((uint8_t*)&regaddr, 2, d);
 
 	regaddr = ICM20948_I2C_MST_ODR_CONFIG_REG;
-	Write8((uint8_t*)&regaddr, 2, 0);
+	Write8((uint8_t*)&regaddr, 2, 4);
 
 	if (MagAk09916::Init(Cfg, pIntrf, pTimer) == false)
 	{
@@ -542,7 +633,7 @@ bool AgmIcm20948::Enable()
 	uint8_t fifoen = 0;
 	uint8_t d, userctrl;
 	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
-
+#if 1
 	regaddr = ICM20948_USER_CTRL_REG;
 	userctrl = Read8((uint8_t*)&regaddr, 2);
 	Write8((uint8_t*)&regaddr, 2, userctrl & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN));
@@ -557,11 +648,15 @@ bool AgmIcm20948::Enable()
 	regaddr = ICM20948_PWR_MGMT_2_REG;
 	d = Read8((uint8_t*)&regaddr, 2);
 
+	uint16_t dout = ICM20948_DMP_QUAT6_SET | ICM20948_DMP_QUAT9_SET | ICM20948_DMP_PRESSURE_SET;
+
 	if (vbSensorEnabled[ICM20948_ACCEL_IDX])
 	{
 //		AccelIcm20948::Enable();
 		d &= ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
 		fifoen |= ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
+
+		dout |= ICM20948_DMP_ACCEL_SET;
 	}
 
 	if (vbSensorEnabled[ICM20948_GYRO_IDX])
@@ -569,6 +664,7 @@ bool AgmIcm20948::Enable()
 		d &= ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
 		fifoen |= (ICM20948_FIFO_EN_2_GYRO_X_FIFO_EN | ICM20948_FIFO_EN_2_GYRO_Y_FIFO_EN |
 				   ICM20948_FIFO_EN_2_GYRO_Z_FIFO_EN);
+		dout |= ICM20948_DMP_GYRO_SET;
 	}
 	regaddr = ICM20948_FIFO_EN_2_REG;
 	Write8((uint8_t*)&regaddr, 2, fifoen);
@@ -580,12 +676,29 @@ bool AgmIcm20948::Enable()
 	{
 		regaddr = ICM20948_FIFO_EN_1_REG;
 //		Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_1_SLV_0_FIFO_EN);
+		dout |= ICM20948_DMP_CPASS_SET;
 	}
+
 
 	regaddr = ICM20948_USER_CTRL_REG;
 	//d = Read8((uint8_t*)&regaddr, 2);
 	userctrl |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	Write8((uint8_t*)&regaddr, 2, userctrl);
+	//Write8((uint8_t*)&regaddr, 2, userctrl);
+
+
+#endif
+	//uint16_t dout = ICM20948_DMP_QUAT6_SET | ICM20948_DMP_QUAT9_SET | ICM20948_DMP_PRESSURE_SET | ICM20948_DMP_ACCEL_SET | ICM20948_DMP_GYRO_SET;
+
+	dout = EndianCvt16(dout);
+	regaddr = ICM20948_DMP_DATA_OUT_CTL1;
+	WriteDMP(regaddr, (uint8_t*)&dout, 2);
+
+	int i = INV_SENSOR_TYPE_MAX;
+
+//	while(i-- > 0) {
+//		inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
+//	}
+
 
 	return true;
 }
@@ -1379,16 +1492,6 @@ bool AgmIcm20948::UpdateData()
 			int16_t t = ((int16_t)d[12] << 8) | d[13];
 			TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | ((int16_t)d[13] & 0xFF)) * 100 / 33387 + 2100;
 			TempSensor::vData.Timestamp = t;
-
-			regaddr = ICM20948_XG_OFFS_USRH_REG;
-			Read((uint8_t*)&regaddr, 2, (uint8_t*)d, 6);
-
-			float gyroffs[3];
-			gyroffs[0] = (float)((int16_t)(d[0] << 8) | ((int16_t)d[1] & 0xFF)) * 0.0305;
-			gyroffs[1] = (float)((int16_t)(d[2] << 8) | ((int16_t)d[3] & 0xFF)) * 0.0305;
-			gyroffs[2] = (float)((int16_t)(d[4] << 8) | ((int16_t)d[5] & 0xFF)) * 0.0305;
-
-			GyroSensor::SetCalibrationOffset(gyroffs);
 
 			res = true;
 		}
