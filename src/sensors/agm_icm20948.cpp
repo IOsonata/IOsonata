@@ -154,7 +154,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	Reset();
 
 	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	uint8_t lpconfig = ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
+	uint8_t lpconfig = 0;//ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
@@ -181,7 +181,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
 
 	// Upload DMP
-	InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
+	//InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
 
 	ResetDMPCtrlReg();
 
@@ -220,7 +220,6 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		regaddr = ICM20948_INT_ENABLE_1_REG;
 		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
-
 
 		regaddr = ICM20948_INT_ENABLE_2_REG;
 		Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN);
@@ -375,7 +374,7 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
 	Sensitivity(Cfg.Sensitivity);
 	SamplingFrequency(Cfg.Freq);
-	//FilterFreq(Cfg.FltrFreq);
+	FilterFreq(Cfg.FltrFreq);
 
 	return true;
 }
@@ -586,7 +585,7 @@ bool AgmIcm20948::Enable()
 	regaddr = ICM20948_USER_CTRL_REG;
 	//d = Read8((uint8_t*)&regaddr, 2);
 	userctrl |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	//Write8((uint8_t*)&regaddr, 2, userctrl);
+	Write8((uint8_t*)&regaddr, 2, userctrl);
 
 	return true;
 }
@@ -1309,7 +1308,7 @@ bool AgmIcm20948::UpdateData()
 					return false;
 				}
 
-				vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
+				//vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
 				l = 2;
 
 				if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
@@ -1534,15 +1533,27 @@ bool AgmIcm20948::SelectBank(uint8_t BankNo)
 	return Write8(&regaddr, 1, (BankNo << ICM20948_REG_BANK_SEL_USER_BANK_BITPOS) & ICM20948_REG_BANK_SEL_USER_BANK_MASK);
 }
 
+static uint64_t g_Dt = 0;
+static uint64_t g_PrevT = 0;
+static uint64_t g_IntDt = 0;
+
 void AgmIcm20948::IntHandler()
 {
-	uint64_t t = 0;
+	uint64_t t = vpTimer->uSecond();
+
 	UpdateData();
 
-	if (vpTimer)
+	if (g_Dt == 0)
 	{
-		t = vpTimer->uSecond();
+		g_Dt = vpTimer->uSecond() - t;
 	}
+	else
+	{
+		g_Dt = (g_Dt + vpTimer->uSecond() - t) >> 1;
+	}
+
+	g_IntDt = t - g_PrevT;
+	g_PrevT = t;
 	//status = Read8((uint8_t*)&regaddr, 2);
 	//printf("- status %x\n", status);
 	//Write8((uint8_t*)&regaddr, 2, status);

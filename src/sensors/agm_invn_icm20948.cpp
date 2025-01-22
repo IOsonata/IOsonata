@@ -440,42 +440,42 @@ uint32_t GyroInvnIcm20948::FilterFreq(uint32_t Freq)
 	}
 	else if (Freq < 11000)
 	{
-		d |= (6 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (6 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 8900;	// NBW
 	}
 	else if (Freq < 23000)
 	{
-		d |= (5 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (5 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 17800;
 	}
 	else if (Freq < 50000)
 	{
-		d |= (4 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (4 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 35900;
 	}
 	else if (Freq < 110000)
 	{
-		d |= (3 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (3 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 73300;
 	}
 	else if (Freq < 150000)
 	{
-		d |= (2 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (2 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 154300;
 	}
 	else if (Freq < 190000)
 	{
-		d |= (1 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (1 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 187600;
 	}
 	else if (Freq < 360000)
 	{
-		d |= (0 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (0 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 229800;
 	}
 	else if (Freq < 1000000)
 	{
-		d |= (7 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
+		d |= ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE | (7 << ICM20948_GYRO_CONFIG_1_GYRO_DLPFCFG_BITPOS);
 		Freq = 376500;
 	}
 	else
@@ -1244,14 +1244,30 @@ size_t AgmInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Time
 
 	return cnt;
 }
+static uint64_t g_Dt = 0;
+static uint64_t g_PrevT = 0;
+static uint64_t g_IntDt = 0;
 
 void AgmInvnIcm20948::IntHandler()
 {
+	uint64_t t = vpTimer->uSecond();
+
 #if 0
 	inv_icm20948_poll_sensor(&vIcmDevice, (void*)this, SensorEventHandler);
 #else
 	UpdateData();
 #endif
+	if (g_Dt == 0)
+	{
+		g_Dt = vpTimer->uSecond() - t;
+	}
+	else
+	{
+		g_Dt = (g_Dt + vpTimer->uSecond() - t) >> 1;
+	}
+
+	g_IntDt = t - g_PrevT;
+	g_PrevT = t;
 }
 
 void AgmInvnIcm20948::ResetFifo()
