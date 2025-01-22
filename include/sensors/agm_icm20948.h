@@ -683,6 +683,9 @@ public:
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t FilterFreq(uint32_t Freq);
 	virtual bool Enable();
+	void UpdateData(uint64_t Timestamp, int16_t X, int16_t Y, int16_t Z) {
+		vData.Timestamp = Timestamp; vData.X = X; vData.Y = Y; vData.Z = Z;
+	}
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
@@ -706,6 +709,9 @@ public:
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t FilterFreq(uint32_t Freq);
 	virtual bool Enable();
+	void UpdateData(uint64_t Timestamp, int16_t X, int16_t Y, int16_t Z) {
+		vData.Timestamp = Timestamp; vData.X = X; vData.Y = Y; vData.Z = Z;
+	}
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
@@ -728,6 +734,9 @@ public:
 //	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	//virtual bool Enable();
 	//virtual void Disable();
+	void UpdateData(uint64_t Timestamp, int16_t X, int16_t Y, int16_t Z) {
+		vData.Timestamp = Timestamp; vData.X = X; vData.Y = Y; vData.Z = Z;
+	}
 
 protected:
 	virtual int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) = 0;
