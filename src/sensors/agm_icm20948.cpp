@@ -213,7 +213,160 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	}
 
 #if 1
-	inv_icm20948_initialize(&vIcmDevice, s_Dmp3Image, sizeof(s_Dmp3Image));
+#if 0
+//	inv_icm20948_initialize(&vIcmDevice, s_Dmp3Image, sizeof(s_Dmp3Image));
+
+	if(vIcmDevice.serif.is_spi) {
+		/* Hardware initialization */
+		// No image to be loaded from flash, no pointer to pass.
+		if (inv_icm20948_initialize_lower_driverx(&vIcmDevice, SERIAL_INTERFACE_SPI, s_Dmp3Image, ICM20948_DMP_CODE_SIZE)) {
+			return false;
+		}
+	}
+	else {
+		/* Hardware initialization */
+		// No image to be loaded from flash, no pointer to pass.
+		if (inv_icm20948_initialize_lower_driverx(&vIcmDevice, SERIAL_INTERFACE_I2C, s_Dmp3Image, ICM20948_DMP_CODE_SIZE)) {
+			return false;
+		}
+	}
+
+#else
+	{
+		int result = 0;
+		static unsigned char data;
+		// set static variable
+		vIcmDevice.sAllowLpEn = 1;
+		vIcmDevice.s_compass_available = 0;
+		// ICM20948 do not support the proximity sensor for the moment.
+		// s_proximity_available variable is nerver changes
+		vIcmDevice.s_proximity_available = 0;
+
+		// Set varialbes to default values
+		memset(&vIcmDevice.base_state, 0, sizeof(vIcmDevice.base_state));
+		vIcmDevice.base_state.pwr_mgmt_1 = ICM20948_PWR_MGMT_1_CLKSEL_AUTO;
+		vIcmDevice.base_state.pwr_mgmt_2 = ICM20948_PWR_MGMT_2_DISABLE_ALL;//BIT_PWR_ACCEL_STBY | BIT_PWR_GYRO_STBY | BIT_PWR_PRESSURE_STBY;
+		vIcmDevice.base_state.serial_interface = vIcmDevice.serif.is_spi ? SERIAL_INTERFACE_SPI : SERIAL_INTERFACE_I2C;
+		//result |= inv_icm20948_read_mems_reg(&vIcmDevice, REG_USER_CTRL, 1, &vIcmDevice.base_state.user_ctrl);
+
+		vIcmDevice.base_state.user_ctrl = 0;
+
+		//result |= inv_icm20948_wakeup_mems(&vIcmDevice);
+		regaddr = ICM20948_PWR_MGMT_1_REG;
+		Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
+
+		regaddr = ICM20948_PWR_MGMT_2_REG;
+		Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_2_DISABLE_ALL);
+
+		//result |= inv_icm20948_read_mems_reg(&vIcmDevice, REG_WHO_AM_I, 1, &data);
+
+		/* secondary cycle mode should be set all the time */
+		data = BIT_I2C_MST_CYCLE|BIT_ACCEL_CYCLE|BIT_GYRO_CYCLE;
+
+		// Set default mode to low power mode
+		result |= inv_icm20948_set_lowpower_or_highperformance(&vIcmDevice, 0);
+
+		// Disable Ivory DMP.
+		if(vIcmDevice.base_state.serial_interface == SERIAL_INTERFACE_SPI)
+			vIcmDevice.base_state.user_ctrl = ICM20948_USER_CTRL_I2C_IF_DIS;
+		else
+			vIcmDevice.base_state.user_ctrl = 0;
+
+//		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_USER_CTRL, vIcmDevice.base_state.user_ctrl);
+
+		regaddr = ICM20948_USER_CTRL_REG;
+		Write8((uint8_t*)&regaddr, 2, vIcmDevice.base_state.user_ctrl);
+#if 1
+		bool res = InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
+		if (res)
+#else
+		//Setup Ivory DMP.
+		result |= inv_icm20948_load_firmware(&vIcmDevice, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
+		if(result)
+			return result;
+		else
+#endif
+			vIcmDevice.base_state.firmware_loaded = 1;
+		//result |= inv_icm20948_set_dmp_address(&vIcmDevice);
+		// Turn off all sensors on DMP by default.
+		//result |= dmp_set_data_output_control1(0);   // FIXME in DMP, these should be off by default.
+//		result |= dmp_icm20948_reset_control_registers(&vIcmDevice);
+/*
+		unsigned char dat[4]={0};
+
+		//reset data output control registers
+		result = inv_icm20948_write_memsx(&vIcmDevice, ICM20948_DMP_DATA_OUT_CTL1, 2, &dat[0]);
+		result += inv_icm20948_write_memsx(&vIcmDevice, ICM20948_DMP_DATA_OUT_CTL2, 2, &dat[0]);
+
+		//reset data interrupt control register
+		result += inv_icm20948_write_memsx(&vIcmDevice, ICM20948_DMP_DATA_INTR_CTL, 2, &dat[0]);
+
+		//reset motion event control register
+		result += inv_icm20948_write_memsx(&vIcmDevice, ICM20948_DMP_MOTION_EVENT_CTL, 2, &dat[0]);
+
+		//reset data ready status register
+		result += inv_icm20948_write_memsx(&vIcmDevice, ICM20948_DMP_DATA_RDY_STATUS, 2, &dat[0]);
+
+		//if((power_state & CHIP_AWAKE) == 0)   // Wake up chip since it is asleep
+		//	result = inv_icm20948_set_chip_power_state(&vIcmDevice, CHIP_AWAKE, 1);
+
+		//result |= inv_icm20948_set_chip_power_state(&vIcmDevice, CHIP_LP_ENABLE, 0);
+*/
+		ResetDMPCtrlReg();
+		vIcmDevice.lLastBankSelected = -1;
+
+		// set FIFO watermark to 80% of actual FIFO size
+//		result |= dmp_icm20948_set_FIFO_watermark(&vIcmDevice, 800);
+		// Fifo watermark 80%
+		uint16_t val = EndianCvt16(800);
+		WriteDMP(ICM20948_DMP_FIFO_WATERMARK, (uint8_t*)&val, 2);
+
+		// Enable Interrupts.
+		data = 0x2;
+//		result |= inv_icm20948_write_mems_reg(&vIcmDevice, REG_INT_ENABLE, 1, &data); // Enable DMP Interrupt
+
+		data = 0x1;
+		//result |= inv_icm20948_write_mems_reg(&vIcmDevice, REG_INT_ENABLE_2, 1, &data); // Enable FIFO Overflow Interrupt
+
+		// TRACKING : To have accelerometers datas and the interrupt without gyro enables.
+		data = 0XE4;
+		//result |= inv_icm20948_write_mems_reg(&vIcmDevice, REG_SINGLE_FIFO_PRIORITY_SEL, 1, &data);
+		// Undocumented value
+		regaddr = ICM20948_SINGLE_FIFO_PRIORITY_SEL;
+		Write8((uint8_t*)&regaddr, 2, ICM20948_SINGLE_FIFO_PRIORITY_SEL_0XE4);
+
+		// Disable HW temp fix
+		inv_icm20948_read_mems_reg(&vIcmDevice, REG_HW_FIX_DISABLE,1,&data);
+		data |= 0x08;
+		inv_icm20948_write_mems_reg(&vIcmDevice, REG_HW_FIX_DISABLE,1,&data);
+
+		// Setup MEMs properties.
+		vIcmDevice.base_state.accel_averaging = 1; //Change this value if higher sensor sample avergaing is required.
+		vIcmDevice.base_state.gyro_averaging = 1;  //Change this value if higher sensor sample avergaing is required.
+		inv_icm20948_set_gyro_divider(&vIcmDevice, FIFO_DIVIDER);       //Initial sampling rate 1125Hz/19+1 = 56Hz.
+		//inv_icm20948_set_accel_divider(&vIcmDevice, FIFO_DIVIDER);      //Initial sampling rate 1125Hz/19+1 = 56Hz.
+
+		// Init the sample rate to 56 Hz for BAC,STEPC and B2S
+		dmp_icm20948_set_bac_rate(&vIcmDevice, DMP_ALGO_FREQ_56);
+		dmp_icm20948_set_b2s_rate(&vIcmDevice, DMP_ALGO_FREQ_56);
+
+		// FIFO Setup.
+		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_CFG, BIT_SINGLE_FIFO_CFG); // FIFO Config. fixme do once? burst write?
+		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_RST, 0x1f); // Reset all FIFOs.
+		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_RST, 0x1e); // Keep all but Gyro FIFO in reset.
+		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_EN, 0x0); // Slave FIFO turned off.
+		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_EN_2, 0x0); // Hardware FIFO turned off.
+
+		vIcmDevice.base_state.lp_en_support = 1;
+
+		//if(vIcmDevice.base_state.lp_en_support == 1)
+			inv_icm20948_set_chip_power_state(&vIcmDevice, CHIP_LP_ENABLE, 1);
+
+		result |= inv_icm20948_sleep_mems(&vIcmDevice);
+
+//		return true;
+	}
+#endif
 	vbDmpEnabled = true;
 
 #else
@@ -251,7 +404,8 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	ResetFifo();
 
 	regaddr = ICM20948_HWTEMP_FIX_DISABLE_REG;
-	Write8((uint8_t*)&regaddr, 2, ICM20948_HWTEMP_FIX_DISABLE_DIS);
+	d = Read8((uint8_t*)&regaddr, 2) | 0x08;
+	Write8((uint8_t*)&regaddr, 2, d);//ICM20948_HWTEMP_FIX_DISABLE_DIS);
 
 	// Fifo watermark 80%
 	uint16_t val = EndianCvt16(800);
@@ -284,9 +438,9 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		d = ICM20948_INT_ENABLE_DMP_INT1_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
 
-		regaddr = ICM20948_INT_ENABLE_1_REG;
-		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
-		Write8((uint8_t*)&regaddr, 2, d);
+		//regaddr = ICM20948_INT_ENABLE_1_REG;
+		//d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
+		//Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE_2_REG;
 		Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN);
@@ -295,6 +449,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_3_FIFO_WM_EN);
 
 	}
+	vIcmDevice.lLastBankSelected = -1;
 
 	return true;
 }
@@ -1886,18 +2041,21 @@ int AgmIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
 
 	Write8((uint8_t*)&regaddr, 2, MemAddr >> 8);
 
-	regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
-	Write8((uint8_t*)&regaddr, 2, MemAddr & 0xFF);
-
-	regaddr = ICM20948_DMP_MEM_RW_REG;
+	MemAddr &= 0xFF;
 	uint8_t *p = pData;
 
 	while (Len > 0)
 	{
+		regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
+		Write8((uint8_t*)&regaddr, 2, MemAddr);
+
+		regaddr = ICM20948_DMP_MEM_RW_REG;
+
 		int l = min(16, Len);
 		l = Write((uint8_t*)&regaddr, 2, p, l);
 		p += l;
 		Len -= l;
+		MemAddr += l;
 	}
 
 	return Len;
@@ -1964,9 +2122,9 @@ bool AgmIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage
 		regaddr = ICM20948_DMP_PROG_START_ADDRH_REG;
 		Write16((uint8_t*)&regaddr, 2, DmpStartAddr);
 
-//		regaddr = ICM20948_USER_CTRL_REG;
-//		d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-//		Write8((uint8_t*)&regaddr, 2, d);
+		regaddr = ICM20948_USER_CTRL_REG;
+		d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+		Write8((uint8_t*)&regaddr, 2, d);
 
 		vbDmpEnabled = true;
 

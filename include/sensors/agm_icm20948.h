@@ -263,7 +263,7 @@ SOFTWARE.
 #define ICM20948_DATA_RDY_STATUS_WOF_STATUS			(1<<7)		// Wake on FSYNC interrupt status
 
 #define ICM20948_HWTEMP_FIX_DISABLE_REG		(ICM20948_REG_BANK0 | 117)	// Undocumented
-#define ICM20948_HWTEMP_FIX_DISABLE_DIS				(1<<4)
+#define ICM20948_HWTEMP_FIX_DISABLE_DIS				(1<<3)
 
 #define ICM20948_FIFO_CFG_REG				(ICM20948_REG_BANK0 | 118)
 #define ICM20948_FIFO_CFG_MUTLI						(1<<0)		// Set to 1 of interrupt status for each sensor is required
