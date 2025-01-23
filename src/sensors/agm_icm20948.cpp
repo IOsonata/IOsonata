@@ -759,6 +759,31 @@ AgmIcm20948::AgmIcm20948()
 	vFifoDataLen = 0;
 }
 
+static const ANDROID_SENSORS s_InvSensor2AndroidSensor[] = {
+	ANDROID_SENSOR_ACCELEROMETER,
+	ANDROID_SENSOR_GYROSCOPE,
+	ANDROID_SENSOR_RAW_ACCELEROMETER,
+	ANDROID_SENSOR_RAW_GYROSCOPE,
+	ANDROID_SENSOR_MAGNETIC_FIELD_UNCALIBRATED,
+	ANDROID_SENSOR_GYROSCOPE_UNCALIBRATED,
+	ANDROID_SENSOR_ACTIVITY_CLASSIFICATON,
+	ANDROID_SENSOR_STEP_DETECTOR,
+	ANDROID_SENSOR_STEP_COUNTER,
+	ANDROID_SENSOR_GAME_ROTATION_VECTOR,
+	ANDROID_SENSOR_ROTATION_VECTOR,
+	ANDROID_SENSOR_GEOMAGNETIC_ROTATION_VECTOR,
+	ANDROID_SENSOR_GEOMAGNETIC_FIELD,
+	ANDROID_SENSOR_WAKEUP_SIGNIFICANT_MOTION,
+	ANDROID_SENSOR_FLIP_PICKUP,
+	ANDROID_SENSOR_WAKEUP_TILT_DETECTOR,
+	ANDROID_SENSOR_GRAVITY,
+	ANDROID_SENSOR_LINEAR_ACCELERATION,
+	ANDROID_SENSOR_ORIENTATION,
+	ANDROID_SENSOR_B2S,
+	ANDROID_SENSOR_NUM_MAX,
+};
+
+#if 1
 static uint8_t sensor_type_2_android_sensorx(enum inv_icm20948_sensor sensor)
 {
 	switch(sensor) {
@@ -785,7 +810,7 @@ static uint8_t sensor_type_2_android_sensorx(enum inv_icm20948_sensor sensor)
 	default:                                                return ANDROID_SENSOR_NUM_MAX;
 	}
 }
-
+#endif
 static unsigned char sensor_needs_compassx(unsigned char androidSensor)
 {
 	switch(androidSensor) {
@@ -1707,12 +1732,12 @@ bool AgmIcm20948::Enable()
 	regaddr = ICM20948_DMP_DATA_OUT_CTL1;
 	WriteDMP(regaddr, (uint8_t*)&dout, 2);
 
-	int i = INV_SENSOR_TYPE_MAX;
+	int i = INV_ICM20948_SENSOR_MAX - 1;
 
 	while(i-- > 0) {
 		//inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
 				uint8_t androidSensor = sensor_type_2_android_sensorx((inv_icm20948_sensor)i);
-
+				//uint8_t androidSensor = s_InvSensor2AndroidSensor[i];
 				if(0!=inv_icm20948_ctrl_enable_sensorx(&vIcmDevice, androidSensor, 1))
 					return 0;
 
