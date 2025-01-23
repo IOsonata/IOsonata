@@ -234,86 +234,6 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 			vIcmDevice.base_state.user_ctrl = 0;
 
 		vIcmDevice.base_state.user_ctrl = 0;
-#if 0
-	{
-
-		//result |= inv_icm20948_wakeup_mems(&vIcmDevice);
-		regaddr = ICM20948_PWR_MGMT_1_REG;
-		Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
-
-		regaddr = ICM20948_PWR_MGMT_2_REG;
-		Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_2_DISABLE_ALL);
-
-		//result |= inv_icm20948_read_mems_reg(&vIcmDevice, REG_WHO_AM_I, 1, &data);
-
-		/* secondary cycle mode should be set all the time */
-		data = BIT_I2C_MST_CYCLE|BIT_ACCEL_CYCLE|BIT_GYRO_CYCLE;
-
-		// Set default mode to low power mode
-		//result |= inv_icm20948_set_lowpower_or_highperformance(&vIcmDevice, 0);
-
-		// Disable Ivory DMP.
-
-//		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_USER_CTRL, vIcmDevice.base_state.user_ctrl);
-
-		regaddr = ICM20948_USER_CTRL_REG;
-		Write8((uint8_t*)&regaddr, 2, vIcmDevice.base_state.user_ctrl);
-		bool res = InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
-		if (res)
-			vIcmDevice.base_state.firmware_loaded = 1;
-		ResetDMPCtrlReg();
-		vIcmDevice.lLastBankSelected = -1;
-
-		// Fifo watermark 80%
-		uint16_t val = EndianCvt16(800);
-		WriteDMP(ICM20948_DMP_FIFO_WATERMARK, (uint8_t*)&val, 2);
-
-		// Undocumented value
-		regaddr = ICM20948_SINGLE_FIFO_PRIORITY_SEL;
-		Write8((uint8_t*)&regaddr, 2, ICM20948_SINGLE_FIFO_PRIORITY_SEL_0XE4);
-
-		// Disable HW temp fix
-		inv_icm20948_read_mems_reg(&vIcmDevice, REG_HW_FIX_DISABLE,1,&data);
-		data |= 0x08;
-		inv_icm20948_write_mems_reg(&vIcmDevice, REG_HW_FIX_DISABLE,1,&data);
-
-		// Setup MEMs properties.
-		vIcmDevice.base_state.accel_averaging = 1; //Change this value if higher sensor sample avergaing is required.
-		vIcmDevice.base_state.gyro_averaging = 1;  //Change this value if higher sensor sample avergaing is required.
-		//inv_icm20948_set_gyro_divider(&vIcmDevice, FIFO_DIVIDER);       //Initial sampling rate 1125Hz/19+1 = 56Hz.
-		vIcmDevice.base_state.gyro_div = FIFO_DIVIDER;
-
-		regaddr = ICM20948_GYRO_SMPLRT_DIV_REG;
-		Write8((uint8_t*)&regaddr, 2, FIFO_DIVIDER);
-
-
-		//inv_icm20948_set_accel_divider(&vIcmDevice, FIFO_DIVIDER);      //Initial sampling rate 1125Hz/19+1 = 56Hz.
-
-		// Init the sample rate to 56 Hz for BAC,STEPC and B2S
-		dmp_icm20948_set_bac_rate(&vIcmDevice, DMP_ALGO_FREQ_56);
-		dmp_icm20948_set_b2s_rate(&vIcmDevice, DMP_ALGO_FREQ_56);
-
-		// FIFO Setup.
-/*		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_CFG, BIT_SINGLE_FIFO_CFG); // FIFO Config. fixme do once? burst write?
-		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_RST, 0x1f); // Reset all FIFOs.
-		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_RST, 0x1e); // Keep all but Gyro FIFO in reset.
-		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_EN, 0x0); // Slave FIFO turned off.
-		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_EN_2, 0x0); // Hardware FIFO turned off.
-*/
-		ResetFifo();
-
-		vIcmDevice.base_state.lp_en_support = 1;
-
-		//if(vIcmDevice.base_state.lp_en_support == 1)
-			inv_icm20948_set_chip_power_state(&vIcmDevice, CHIP_LP_ENABLE, 1);
-
-		result |= inv_icm20948_sleep_mems(&vIcmDevice);
-
-//		return true;
-	}
-	vbDmpEnabled = true;
-
-#else
 	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
 	uint8_t lpconfig = 0;//ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
@@ -382,8 +302,6 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	//	inv_icm20948_set_chip_power_state(&vIcmDevice, CHIP_LP_ENABLE, 1);
 
 //	inv_icm20948_sleep_mems(&vIcmDevice);
-
-#endif
 
 	// ICM20948 has only 1 interrupt pin. Don't care the value
 	if (Inter)
@@ -841,6 +759,889 @@ AgmIcm20948::AgmIcm20948()
 	vFifoDataLen = 0;
 }
 
+static uint8_t sensor_type_2_android_sensorx(enum inv_icm20948_sensor sensor)
+{
+	switch(sensor) {
+	case INV_ICM20948_SENSOR_ACCELEROMETER:                 return ANDROID_SENSOR_ACCELEROMETER;
+	case INV_ICM20948_SENSOR_GYROSCOPE:                     return ANDROID_SENSOR_GYROSCOPE;
+	case INV_ICM20948_SENSOR_RAW_ACCELEROMETER:             return ANDROID_SENSOR_RAW_ACCELEROMETER;
+	case INV_ICM20948_SENSOR_RAW_GYROSCOPE:                 return ANDROID_SENSOR_RAW_GYROSCOPE;
+	case INV_ICM20948_SENSOR_MAGNETIC_FIELD_UNCALIBRATED:   return ANDROID_SENSOR_MAGNETIC_FIELD_UNCALIBRATED;
+	case INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED:        return ANDROID_SENSOR_GYROSCOPE_UNCALIBRATED;
+	case INV_ICM20948_SENSOR_ACTIVITY_CLASSIFICATON:        return ANDROID_SENSOR_ACTIVITY_CLASSIFICATON;
+	case INV_ICM20948_SENSOR_STEP_DETECTOR:                 return ANDROID_SENSOR_STEP_DETECTOR;
+	case INV_ICM20948_SENSOR_STEP_COUNTER:                  return ANDROID_SENSOR_STEP_COUNTER;
+	case INV_ICM20948_SENSOR_GAME_ROTATION_VECTOR:          return ANDROID_SENSOR_GAME_ROTATION_VECTOR;
+	case INV_ICM20948_SENSOR_ROTATION_VECTOR:               return ANDROID_SENSOR_ROTATION_VECTOR;
+	case INV_ICM20948_SENSOR_GEOMAGNETIC_ROTATION_VECTOR:   return ANDROID_SENSOR_GEOMAGNETIC_ROTATION_VECTOR;
+	case INV_ICM20948_SENSOR_GEOMAGNETIC_FIELD:             return ANDROID_SENSOR_GEOMAGNETIC_FIELD;
+	case INV_ICM20948_SENSOR_WAKEUP_SIGNIFICANT_MOTION:     return ANDROID_SENSOR_WAKEUP_SIGNIFICANT_MOTION;
+	case INV_ICM20948_SENSOR_FLIP_PICKUP:                   return ANDROID_SENSOR_FLIP_PICKUP;
+	case INV_ICM20948_SENSOR_WAKEUP_TILT_DETECTOR:          return ANDROID_SENSOR_WAKEUP_TILT_DETECTOR;
+	case INV_ICM20948_SENSOR_GRAVITY:                       return ANDROID_SENSOR_GRAVITY;
+	case INV_ICM20948_SENSOR_LINEAR_ACCELERATION:           return ANDROID_SENSOR_LINEAR_ACCELERATION;
+	case INV_ICM20948_SENSOR_ORIENTATION:                   return ANDROID_SENSOR_ORIENTATION;
+	case INV_ICM20948_SENSOR_B2S:                           return ANDROID_SENSOR_B2S;
+	default:                                                return ANDROID_SENSOR_NUM_MAX;
+	}
+}
+
+static unsigned char sensor_needs_compassx(unsigned char androidSensor)
+{
+	switch(androidSensor) {
+		case ANDROID_SENSOR_GEOMAGNETIC_FIELD:
+		case ANDROID_SENSOR_ROTATION_VECTOR:
+		case ANDROID_SENSOR_MAGNETIC_FIELD_UNCALIBRATED:
+		case ANDROID_SENSOR_GEOMAGNETIC_ROTATION_VECTOR:
+		case ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD:
+		case ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR:
+		case ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD_UNCALIBRATED:
+		case ANDROID_SENSOR_WAKEUP_GEOMAGNETIC_ROTATION_VECTOR:
+			return 1;
+
+		default :
+			return 0;
+	}
+}
+
+// BAC ped y ration for wearable, the value will influence pedometer result
+#define BAC_PED_Y_RATIO_WEARABLE 1073741824
+
+// Determine the fastest ODR for all gravity-based sensors
+#define AUGMENTED_SENSOR_GET_6QUAT_MIN_ODR(s, newOdr) \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_GRAVITY)) \
+		newOdr = MIN(s->sGravityOdrMs,newOdr); \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_GAME_ROTATION_VECTOR)) \
+		newOdr = MIN(s->sGrvOdrMs,newOdr);  \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_LINEAR_ACCELERATION)) \
+		newOdr = MIN(s->sLinAccOdrMs,newOdr);
+#define AUGMENTED_SENSOR_GET_6QUATWU_MIN_ODR(s, newOdr) \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_WAKEUP_GRAVITY)) \
+		newOdr = MIN(s->sGravityWuOdrMs,newOdr); \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_WAKEUP_GAME_ROTATION_VECTOR)) \
+		newOdr = MIN(s->sGrvWuOdrMs,newOdr);  \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_WAKEUP_LINEAR_ACCELERATION)) \
+		newOdr = MIN(s->sLinAccWuOdrMs,newOdr);
+
+// Determine the fastest ODR for all rotation vector-based sensors
+#define AUGMENTED_SENSOR_GET_9QUAT_MIN_ODR(s, newOdr) \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_ORIENTATION)) \
+		newOdr = MIN(s->sOriOdrMs,newOdr); \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_ROTATION_VECTOR)) \
+		newOdr = MIN(s->sRvOdrMs,newOdr);
+#define AUGMENTED_SENSOR_GET_9QUATWU_MIN_ODR(s, newOdr) \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_WAKEUP_ORIENTATION)) \
+		newOdr = MIN(s->sOriWuOdrMs,newOdr); \
+	if	(inv_icm20948_ctrl_androidSensor_enabled	(s, ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR)) \
+		newOdr = MIN(s->sRvWuOdrMs,newOdr);
+
+void inv_icm20948_augmented_sensors_update_odrx(struct inv_icm20948 * s, unsigned char androidSensor, unsigned short * updatedDelayPtr)
+{
+	unsigned short lDelayInMs = 0xFFFF; // max value of uint16_t, so that we can get min value of all enabled sensors
+	switch(androidSensor)
+	{
+		case ANDROID_SENSOR_GRAVITY:
+        case ANDROID_SENSOR_GAME_ROTATION_VECTOR:
+        case ANDROID_SENSOR_LINEAR_ACCELERATION:
+			AUGMENTED_SENSOR_GET_6QUAT_MIN_ODR(s, lDelayInMs);
+			*updatedDelayPtr = lDelayInMs;
+			break;
+		case ANDROID_SENSOR_WAKEUP_GRAVITY:
+        case ANDROID_SENSOR_WAKEUP_GAME_ROTATION_VECTOR:
+        case ANDROID_SENSOR_WAKEUP_LINEAR_ACCELERATION:
+			AUGMENTED_SENSOR_GET_6QUATWU_MIN_ODR(s, lDelayInMs);
+			*updatedDelayPtr = lDelayInMs;
+			break;
+		case ANDROID_SENSOR_ORIENTATION:
+        case ANDROID_SENSOR_ROTATION_VECTOR:
+			AUGMENTED_SENSOR_GET_9QUAT_MIN_ODR(s, lDelayInMs);
+			*updatedDelayPtr = lDelayInMs;
+			break;
+		case ANDROID_SENSOR_WAKEUP_ORIENTATION:
+        case ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR:
+			AUGMENTED_SENSOR_GET_9QUATWU_MIN_ODR(s, lDelayInMs);
+			*updatedDelayPtr = lDelayInMs;
+			break;
+		default :
+			break;
+	}
+
+}
+
+static void inv_reGenerate_sensorControl(struct inv_icm20948 * s, const short *sen_num_2_ctrl, unsigned short *sensor_control, uint8_t header2_count)
+{
+	short delta;
+	int i, cntr;
+	unsigned long tmp_androidSensorsOn_mask;
+
+	//check if only header2 still remaining
+	if(header2_count)
+		*sensor_control = HEADER2_SET;
+	else
+		*sensor_control = 0;
+	for (i = 0; i < 2; i++) {
+		cntr = 32 * i;
+		tmp_androidSensorsOn_mask = s->inv_androidSensorsOn_mask[i];
+		while (tmp_androidSensorsOn_mask) {
+			if (tmp_androidSensorsOn_mask & 1) {
+				delta = sen_num_2_ctrl[cntr];
+				if (delta != -1) *sensor_control |= delta;
+			}
+			tmp_androidSensorsOn_mask >>= 1;
+			cntr++;
+		}
+	}
+}
+
+/** Computes the sensor control register that needs to be sent to the DMP
+* @param[in] androidSensor A sensor number, the numbers correspond to sensors.h definition in Android
+* @param[in] enable non-zero to turn sensor on, 0 to turn sensor off
+* @param[in] sen_num_2_ctrl Table matching android sensor number to bits in DMP control register
+* @param[in,out] sensor_control Sensor control register to write to DMP to enable/disable sensors
+*/
+static void inv_convert_androidSensor_to_control(struct inv_icm20948 * s, unsigned char androidSensor, unsigned char enable, const short *sen_num_2_ctrl, unsigned short *sensor_control)
+{
+	short delta = 0;
+
+	if (androidSensor == ANDROID_SENSOR_ACTIVITY_CLASSIFICATON || androidSensor == ANDROID_SENSOR_FLIP_PICKUP ||
+			androidSensor == ANDROID_SENSOR_WAKEUP_TILT_DETECTOR || androidSensor == ANDROID_SENSOR_B2S) {
+		if (enable) {
+			*sensor_control |= HEADER2_SET;
+			//we increment counter
+			s->header2_count ++;
+		}
+		else {
+			s->header2_count --;
+			// control has to be regenerated when removing sensors because of overlap
+			inv_reGenerate_sensorControl(s, sen_num_2_ctrl, sensor_control, s->header2_count);
+		}
+	}
+
+	if (androidSensor >= ANDROID_SENSOR_NUM_MAX)
+		return; // Sensor not supported
+
+	delta = sen_num_2_ctrl[androidSensor];
+	if (delta == -1)
+		return; // This sensor not supported
+
+	if (enable) {
+		s->inv_androidSensorsOn_mask[(androidSensor>>5)] |= 1L << (androidSensor & 0x1F); // Set bit
+		*sensor_control |= delta;
+	}
+	else {
+		s->inv_androidSensorsOn_mask[(androidSensor>>5)] &= ~(1L << (androidSensor & 0x1F)); // Clear bit
+		// control has to be regenerated when removing sensors because of overlap
+		inv_reGenerate_sensorControl(s, sen_num_2_ctrl, sensor_control, s->header2_count);
+	}
+
+	return;
+}
+
+typedef	struct {
+	enum ANDROID_SENSORS AndroidSensor;
+	enum INV_SENSORS     InvSensor;
+}	MinDelayGenElementT;
+
+#define MinDelayGen(s, list) MinDelayGenActual(s, list, sizeof(list) / sizeof (MinDelayGenElementT))
+
+static unsigned short MinDelayGenActual(struct inv_icm20948 *s, const MinDelayGenElementT *element, unsigned long elementQuan)
+{
+	unsigned short minDelay = (unsigned short) -1;
+
+	while(elementQuan--) {
+		if (inv_icm20948_ctrl_androidSensor_enabled(s, element->AndroidSensor)) {
+			unsigned short odrDelay = s->inv_dmp_odr_delays[element->InvSensor];
+
+			if (minDelay > odrDelay)
+					minDelay = odrDelay;
+		}
+		element++;
+	} // end while elements to process
+
+	return	minDelay;
+}
+
+
+/** @brief Get minimum ODR to be applied to accel engine based on all accel-based enabled sensors.
+* @return ODR in ms we expect to be applied to accel engine
+*/
+static unsigned short getMinDlyAccel(struct inv_icm20948 *s)
+{
+	const MinDelayGenElementT MinDelayGenAccelList[] ={
+		{ANDROID_SENSOR_ACCELEROMETER,                      INV_SENSOR_ACCEL                },
+		{ANDROID_SENSOR_RAW_ACCELEROMETER,                  INV_SENSOR_ACCEL                },
+		{ANDROID_SENSOR_WAKEUP_ACCELEROMETER,               INV_SENSOR_WAKEUP_ACCEL         },
+		{ANDROID_SENSOR_GEOMAGNETIC_ROTATION_VECTOR,        INV_SENSOR_GEOMAG               },
+		{ANDROID_SENSOR_WAKEUP_GEOMAGNETIC_ROTATION_VECTOR, INV_SENSOR_WAKEUP_GEOMAG        },
+		{ANDROID_SENSOR_STEP_DETECTOR,                      INV_SENSOR_STEP_COUNTER         },
+		{ANDROID_SENSOR_STEP_COUNTER,                       INV_SENSOR_STEP_COUNTER         },
+		{ANDROID_SENSOR_WAKEUP_STEP_DETECTOR,               INV_SENSOR_WAKEUP_STEP_COUNTER  },
+		{ANDROID_SENSOR_WAKEUP_STEP_COUNTER,                INV_SENSOR_WAKEUP_STEP_COUNTER  },
+		{ANDROID_SENSOR_WAKEUP_SIGNIFICANT_MOTION,          INV_SENSOR_WAKEUP_STEP_COUNTER  },
+		{ANDROID_SENSOR_WAKEUP_TILT_DETECTOR,               INV_SENSOR_WAKEUP_TILT_DETECTOR },
+		{ANDROID_SENSOR_GRAVITY,                            INV_SENSOR_SIXQ_accel           },
+		{ANDROID_SENSOR_GAME_ROTATION_VECTOR,               INV_SENSOR_SIXQ_accel           },
+		{ANDROID_SENSOR_LINEAR_ACCELERATION,                INV_SENSOR_SIXQ_accel           },
+		{ANDROID_SENSOR_WAKEUP_GRAVITY,                     INV_SENSOR_WAKEUP_SIXQ_accel    },
+		{ANDROID_SENSOR_WAKEUP_GAME_ROTATION_VECTOR,        INV_SENSOR_WAKEUP_SIXQ_accel    },
+		{ANDROID_SENSOR_WAKEUP_LINEAR_ACCELERATION,         INV_SENSOR_WAKEUP_SIXQ_accel    },
+		{ANDROID_SENSOR_ORIENTATION,                        INV_SENSOR_NINEQ_accel          },
+		{ANDROID_SENSOR_ROTATION_VECTOR,                    INV_SENSOR_NINEQ_accel          },
+		{ANDROID_SENSOR_WAKEUP_ORIENTATION,                 INV_SENSOR_WAKEUP_NINEQ_accel   },
+		{ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR,             INV_SENSOR_WAKEUP_NINEQ_accel   }
+	};
+
+	unsigned short lMinOdr = MinDelayGen(s, MinDelayGenAccelList);
+
+	if(inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_ACCELEROMETER))
+		if(inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_RAW_ACCELEROMETER))
+			s->inv_dmp_odr_delays[INV_SENSOR_ACCEL] = min(s->odr_acc_ms,s->odr_racc_ms);
+		else
+			s->inv_dmp_odr_delays[INV_SENSOR_ACCEL] = s->odr_acc_ms;
+	else
+		if(inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_RAW_ACCELEROMETER))
+			s->inv_dmp_odr_delays[INV_SENSOR_ACCEL] = s->odr_racc_ms;
+
+	if (s->bac_status != 0)
+		lMinOdr = min(lMinOdr, s->inv_dmp_odr_delays[INV_SENSOR_ACTIVITY_CLASSIFIER]);
+	if (s->flip_pickup_status != 0)
+		lMinOdr = min(lMinOdr, s->inv_dmp_odr_delays[INV_SENSOR_FLIP_PICKUP]);
+	if (s->b2s_status != 0)
+		lMinOdr = min(lMinOdr, s->inv_dmp_odr_delays[INV_SENSOR_BRING_TO_SEE]);
+
+	/** To have correct algorithm performance and quick convergence of GMRV, it is advised to set accelerometer to 225Hz.
+	    In case power consumption is to be improved at the expense of performance, this setup should be commented out */
+	if (   inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_WAKEUP_GEOMAGNETIC_ROTATION_VECTOR)
+		|| inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_GEOMAGNETIC_ROTATION_VECTOR) )
+		lMinOdr = min(lMinOdr, 5);
+
+	/** To have correct algorithm performance and quick convergence of RV, it is advised to set accelerometer to 225Hz.
+	    In case power consumption is to be improved at the expense of performance, this setup should be commented out */
+	if (   inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR)
+		|| inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_ROTATION_VECTOR) )
+		lMinOdr = min(lMinOdr, 5);
+
+	return lMinOdr;
+}
+
+/** @brief Get minimum ODR to be applied to gyro engine based on all gyro-based enabled sensors.
+* @return ODR in ms we expect to be applied to gyro engine
+*/
+static unsigned short getMinDlyGyro(struct inv_icm20948 *s)
+{
+	const MinDelayGenElementT MinDelayGenGyroList[] = {
+		{ANDROID_SENSOR_GYROSCOPE_UNCALIBRATED,        INV_SENSOR_GYRO              },
+		{ANDROID_SENSOR_WAKEUP_GYROSCOPE_UNCALIBRATED, INV_SENSOR_WAKEUP_GYRO       },
+		{ANDROID_SENSOR_GYROSCOPE,                     INV_SENSOR_CALIB_GYRO        },
+		{ANDROID_SENSOR_RAW_GYROSCOPE,                 INV_SENSOR_GYRO              },
+		{ANDROID_SENSOR_WAKEUP_GYROSCOPE,              INV_SENSOR_WAKEUP_CALIB_GYRO },
+		{ANDROID_SENSOR_GRAVITY,                       INV_SENSOR_SIXQ              },
+		{ANDROID_SENSOR_GAME_ROTATION_VECTOR,          INV_SENSOR_SIXQ              },
+		{ANDROID_SENSOR_LINEAR_ACCELERATION,           INV_SENSOR_SIXQ              },
+		{ANDROID_SENSOR_WAKEUP_GRAVITY,                INV_SENSOR_WAKEUP_SIXQ       },
+		{ANDROID_SENSOR_WAKEUP_GAME_ROTATION_VECTOR,   INV_SENSOR_WAKEUP_SIXQ       },
+		{ANDROID_SENSOR_WAKEUP_LINEAR_ACCELERATION,    INV_SENSOR_WAKEUP_SIXQ       },
+		{ANDROID_SENSOR_ORIENTATION,                   INV_SENSOR_NINEQ             },
+		{ANDROID_SENSOR_ROTATION_VECTOR,               INV_SENSOR_NINEQ             },
+		{ANDROID_SENSOR_WAKEUP_ORIENTATION,            INV_SENSOR_WAKEUP_NINEQ      },
+		{ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR,        INV_SENSOR_WAKEUP_NINEQ      }
+	};
+
+	unsigned short lMinOdr = MinDelayGen(s, MinDelayGenGyroList);
+
+	if(inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_GYROSCOPE_UNCALIBRATED))
+		if(inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_RAW_GYROSCOPE))
+			s->inv_dmp_odr_delays[INV_SENSOR_GYRO] = min(s->odr_gyr_ms,s->odr_rgyr_ms);
+		else
+			s->inv_dmp_odr_delays[INV_SENSOR_GYRO] = s->odr_gyr_ms;
+	else
+		if(inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_RAW_GYROSCOPE))
+			s->inv_dmp_odr_delays[INV_SENSOR_GYRO] = s->odr_rgyr_ms;
+
+	/** To have correct algorithm performance and quick convergence of RV, it is advised to set gyro to 225Hz.
+	    In case power consumption is to be improved at the expense of performance, this setup should be commented out */
+	if (   inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR)
+		|| inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_ROTATION_VECTOR) )
+		lMinOdr	= min(lMinOdr, 5);
+
+	return lMinOdr;
+}
+
+/** @brief Get minimum ODR to be applied to compass engine based on all compass-based enabled sensors.
+* @return ODR in ms we expect to be applied to compass engine
+*/
+static unsigned short getMinDlyCompass(struct inv_icm20948 *s)
+{
+	const MinDelayGenElementT MinDelayGenCpassList[] = {
+		{ANDROID_SENSOR_MAGNETIC_FIELD_UNCALIBRATED,        INV_SENSOR_COMPASS              },
+		{ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD_UNCALIBRATED, INV_SENSOR_WAKEUP_COMPASS       },
+		{ANDROID_SENSOR_GEOMAGNETIC_FIELD,                  INV_SENSOR_CALIB_COMPASS        },
+		{ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD,              INV_SENSOR_WAKEUP_CALIB_COMPASS },
+		{ANDROID_SENSOR_GEOMAGNETIC_ROTATION_VECTOR,        INV_SENSOR_GEOMAG_cpass         },
+		{ANDROID_SENSOR_ORIENTATION,                        INV_SENSOR_NINEQ_cpass          },
+		{ANDROID_SENSOR_ROTATION_VECTOR,                    INV_SENSOR_NINEQ_cpass          },
+		{ANDROID_SENSOR_WAKEUP_GEOMAGNETIC_ROTATION_VECTOR, INV_SENSOR_WAKEUP_GEOMAG_cpass  },
+		{ANDROID_SENSOR_WAKEUP_ORIENTATION,                 INV_SENSOR_WAKEUP_NINEQ_cpass   },
+		{ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR,             INV_SENSOR_WAKEUP_NINEQ_cpass   }
+	};
+
+	unsigned short lMinOdr = MinDelayGen(s, MinDelayGenCpassList);
+
+	/** To have correct algorithm performance and quick convergence of GMRV, it is advised to set compass to 70Hz.
+	    In case power consumption is to be improved at the expense of performance, this setup should be commented out */
+	if (   inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_WAKEUP_GEOMAGNETIC_ROTATION_VECTOR)
+		|| inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_GEOMAGNETIC_ROTATION_VECTOR) )
+		lMinOdr= min(lMinOdr, 15);
+	/** To have correct algorithm performance and quick convergence of RV, it is advised to set compass to 35Hz.
+	    In case power consumption is to be improved at the expense of performance, this setup should be commented out */
+	if (   inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR)
+		|| inv_icm20948_ctrl_androidSensor_enabled(s, ANDROID_SENSOR_ROTATION_VECTOR) )
+		lMinOdr = min(lMinOdr, 28);
+
+	return lMinOdr;
+}
+
+static short get_multiple_56_rate(unsigned short delayInMs)
+{
+	short lfreq = 0;
+
+	// > 1KHz
+	if( delayInMs < 2 ){
+	lfreq = DMP_ALGO_FREQ_900;
+	}
+	// 225Hz - 500Hz
+	else if(( delayInMs >= 2 ) && ( delayInMs < 4 )){
+	lfreq = DMP_ALGO_FREQ_450;
+	}
+	// 112Hz - 225Hz
+	else if(( delayInMs >= 4 ) && ( delayInMs < 8 )){
+	lfreq = DMP_ALGO_FREQ_225;
+	}
+	// 56Hz - 112Hz
+	else if(( delayInMs >= 8 ) && ( delayInMs < 17 )){
+	lfreq = DMP_ALGO_FREQ_112;
+	}
+	// < 56Hz
+	else if(delayInMs >= 17){
+	lfreq = DMP_ALGO_FREQ_56;
+	}
+
+	return lfreq;
+}
+
+static int DividerRateSet(struct inv_icm20948 *s, unsigned short minDelay, unsigned short hwSampleRateDivider, enum INV_SENSORS InvSensor)
+{
+	int result = 0;
+
+	if (minDelay != 0xFFFF) {
+		unsigned short dmpOdrDivider = (minDelay * 1125L) / (hwSampleRateDivider * 1000L); // a divider from (1125Hz/hw_smplrt_divider).
+
+		s->inv_dmp_odr_dividers[InvSensor] = hwSampleRateDivider * dmpOdrDivider;
+		result |= dmp_icm20948_set_sensor_rate(s, InvSensor, (dmpOdrDivider - 1));
+	}
+
+	return result;
+}
+
+static unsigned short SampleRateDividerGet(unsigned short minDelay)
+{
+	unsigned short delay = min(INV_ODR_MIN_DELAY, minDelay); // because of GYRO_SMPLRT_DIV which relies on 8 bits, we can't have ODR value higher than 200ms
+	return delay * 1125L / 1000L; // a divider from 1125Hz.
+}
+
+static int inv_set_hw_smplrt_dmp_odrs(struct inv_icm20948 * s)
+{
+	int result = 0;
+	unsigned short minDly, minDly_accel, minDly_gyro;
+	unsigned short minDly_cpass;
+	unsigned short minDly_pressure;
+	unsigned short hw_smplrt_divider = 0;
+
+	const MinDelayGenElementT MinDelayGenPressureList[] = {
+		{ANDROID_SENSOR_PRESSURE,                           INV_SENSOR_PRESSURE             },
+		{ANDROID_SENSOR_WAKEUP_PRESSURE,                    INV_SENSOR_WAKEUP_PRESSURE      }
+	};
+	const MinDelayGenElementT MinDelayGenAccel2List[] = {
+		{ANDROID_SENSOR_ACCELEROMETER,                      INV_SENSOR_ACCEL                },
+		{ANDROID_SENSOR_WAKEUP_ACCELEROMETER,               INV_SENSOR_WAKEUP_ACCEL         },
+		{ANDROID_SENSOR_RAW_ACCELEROMETER,                  INV_SENSOR_ACCEL                },
+		{ANDROID_SENSOR_LINEAR_ACCELERATION,                INV_SENSOR_SIXQ_accel           },
+		{ANDROID_SENSOR_WAKEUP_LINEAR_ACCELERATION,         INV_SENSOR_WAKEUP_SIXQ_accel    }
+	};
+	const MinDelayGenElementT MinDelayGenAccel3List[] = {
+		{ANDROID_SENSOR_GEOMAGNETIC_ROTATION_VECTOR,        INV_SENSOR_GEOMAG               },
+		{ANDROID_SENSOR_WAKEUP_GEOMAGNETIC_ROTATION_VECTOR, INV_SENSOR_WAKEUP_GEOMAG        }
+	};
+	const MinDelayGenElementT MinDelayGenAccel4List[] = {
+		{ANDROID_SENSOR_STEP_DETECTOR,                      INV_SENSOR_STEP_COUNTER         },
+		{ANDROID_SENSOR_STEP_COUNTER,                       INV_SENSOR_STEP_COUNTER         },
+		{ANDROID_SENSOR_WAKEUP_STEP_DETECTOR,               INV_SENSOR_WAKEUP_STEP_COUNTER  },
+		{ANDROID_SENSOR_WAKEUP_STEP_COUNTER,                INV_SENSOR_WAKEUP_STEP_COUNTER  },
+		{ANDROID_SENSOR_WAKEUP_SIGNIFICANT_MOTION,          INV_SENSOR_WAKEUP_STEP_COUNTER  }
+	};
+	const MinDelayGenElementT MinDelayGenGyro2List[] = {
+		{ANDROID_SENSOR_GYROSCOPE_UNCALIBRATED,             INV_SENSOR_GYRO                 },
+		{ANDROID_SENSOR_WAKEUP_GYROSCOPE_UNCALIBRATED,      INV_SENSOR_WAKEUP_GYRO          },
+		{ANDROID_SENSOR_GYROSCOPE,                          INV_SENSOR_CALIB_GYRO           },
+		{ANDROID_SENSOR_RAW_GYROSCOPE,                      INV_SENSOR_GYRO           },
+		{ANDROID_SENSOR_WAKEUP_GYROSCOPE,                   INV_SENSOR_WAKEUP_CALIB_GYRO    }
+	};
+	const MinDelayGenElementT MinDelayGenGyro3List[] = {
+		{ANDROID_SENSOR_GYROSCOPE,                          INV_SENSOR_CALIB_GYRO           },
+		{ANDROID_SENSOR_WAKEUP_GYROSCOPE,                   INV_SENSOR_WAKEUP_CALIB_GYRO    }
+	};
+	const MinDelayGenElementT MinDelayGenGyro4List[] = {
+		{ANDROID_SENSOR_GRAVITY,                            INV_SENSOR_SIXQ                 },
+		{ANDROID_SENSOR_GAME_ROTATION_VECTOR,               INV_SENSOR_SIXQ                 },
+		{ANDROID_SENSOR_LINEAR_ACCELERATION,                INV_SENSOR_SIXQ                 },
+		{ANDROID_SENSOR_WAKEUP_GRAVITY,                     INV_SENSOR_WAKEUP_SIXQ          },
+		{ANDROID_SENSOR_WAKEUP_GAME_ROTATION_VECTOR,        INV_SENSOR_WAKEUP_SIXQ          },
+		{ANDROID_SENSOR_WAKEUP_LINEAR_ACCELERATION,         INV_SENSOR_WAKEUP_SIXQ          }
+	};
+	const MinDelayGenElementT MinDelayGenGyro5List[] = {
+		{ANDROID_SENSOR_ORIENTATION,                        INV_SENSOR_NINEQ                },
+		{ANDROID_SENSOR_ROTATION_VECTOR,                    INV_SENSOR_NINEQ                },
+		{ANDROID_SENSOR_WAKEUP_ORIENTATION,                 INV_SENSOR_WAKEUP_NINEQ         },
+		{ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR,             INV_SENSOR_WAKEUP_NINEQ         }
+	};
+	const MinDelayGenElementT MinDelayGenCpass2List[] = {
+		{ANDROID_SENSOR_MAGNETIC_FIELD_UNCALIBRATED,        INV_SENSOR_COMPASS              },
+		{ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD_UNCALIBRATED,	INV_SENSOR_WAKEUP_COMPASS       }
+	};
+	const MinDelayGenElementT MinDelayGenCpass3List[] = {
+		{ANDROID_SENSOR_GEOMAGNETIC_FIELD,                  INV_SENSOR_CALIB_COMPASS        },
+		{ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD,              INV_SENSOR_WAKEUP_CALIB_COMPASS }
+	};
+	const MinDelayGenElementT MinDelayGenPressure2List[] = {
+		{ANDROID_SENSOR_PRESSURE,                           INV_SENSOR_PRESSURE             },
+		{ANDROID_SENSOR_WAKEUP_PRESSURE,                    INV_SENSOR_WAKEUP_PRESSURE      }
+	};
+
+	// Engine ACCEL Based
+	minDly_accel = getMinDlyAccel(s);
+
+	// Engine Gyro Based
+	minDly_gyro  = getMinDlyGyro(s);
+
+	// Engine Cpass Based
+	minDly_cpass = getMinDlyCompass(s);
+
+	// Engine Pressure Based
+	minDly_pressure	=	MinDelayGen	(s, MinDelayGenPressureList);
+
+	// get min delay of all enabled sensors of all sensor engine groups
+	minDly = min(minDly_gyro, minDly_accel);
+	minDly = min(minDly, minDly_cpass);
+	minDly = min(minDly, minDly_pressure);
+
+	// switch between low power and low noise at 500Hz boundary
+	if (minDly != 0xFFFF) {
+		// above 500Hz boundary, force LN mode
+		if (minDly==1) {
+			if (s->base_state.chip_lp_ln_mode == CHIP_LOW_POWER_ICM20948) {
+				s->go_back_lp_when_odr_low = 1;
+				inv_icm20948_enter_low_noise_mode(s);
+			}
+		} else { // below 500 Hz boundary, go back to originally requested mode
+			if (s->go_back_lp_when_odr_low) {
+				s->go_back_lp_when_odr_low = 0;
+				inv_icm20948_enter_duty_cycle_mode(s);
+			}
+		}
+	} else // all sensors are turned OFF, force originally requested mode
+	{
+		if (s->go_back_lp_when_odr_low) {
+			s->go_back_lp_when_odr_low = 0;
+			inv_icm20948_enter_duty_cycle_mode(s);
+		}
+	}
+
+	if (minDly_accel != 0xFFFF)    minDly_accel = minDly;
+	if (minDly_gyro  != 0xFFFF)    minDly_gyro  = minDly;
+	if (minDly_cpass != 0xFFFF)    minDly_cpass = minDly;
+	if (minDly_pressure != 0xFFFF) minDly_pressure = minDly;
+
+	if (s->bac_request != 0) {
+		unsigned short lBACMinDly = min(INV_ODR_DEFAULT_BAC, minDly_accel);
+		// estimate closest decimator value to have 56Hz multiple and apply it
+		lBACMinDly = 1000/(get_multiple_56_rate(lBACMinDly));
+		dmp_icm20948_set_bac_rate(s, get_multiple_56_rate(lBACMinDly));
+		minDly_accel = lBACMinDly;
+		hw_smplrt_divider = SampleRateDividerGet(minDly_accel);
+		result |= DividerRateSet(s, lBACMinDly, hw_smplrt_divider, INV_SENSOR_ACTIVITY_CLASSIFIER);
+	}
+	if (s->b2s_status != 0) {
+		unsigned short lB2SMinDly = min(INV_ODR_DEFAULT_B2S, minDly_accel);
+		lB2SMinDly = 1000/(get_multiple_56_rate(lB2SMinDly));
+		dmp_icm20948_set_b2s_rate(s, get_multiple_56_rate(lB2SMinDly));
+		minDly_accel = lB2SMinDly;
+		hw_smplrt_divider = SampleRateDividerGet(minDly_accel);
+		result |= DividerRateSet(s, lB2SMinDly, hw_smplrt_divider, INV_SENSOR_BRING_TO_SEE);
+	}
+
+	// set odrs for each enabled sensors
+
+	// Engine ACCEL Based
+	if (minDly_accel != 0xFFFF)	{ // 0xFFFF -- none accel based sensor enable
+		hw_smplrt_divider = SampleRateDividerGet(minDly_accel);
+
+		if (hw_smplrt_divider != s->lLastHwSmplrtDividerAcc) {
+
+			result |= inv_icm20948_ctrl_set_accel_quaternion_gain(s, hw_smplrt_divider);
+			result |= inv_icm20948_ctrl_set_accel_cal_params(s, hw_smplrt_divider);
+			result |= inv_icm20948_set_accel_divider(s, hw_smplrt_divider - 1);
+			s->lLastHwSmplrtDividerAcc = hw_smplrt_divider;
+		}
+
+		result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenAccel2List), hw_smplrt_divider, INV_SENSOR_ACCEL);
+		result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenAccel3List), hw_smplrt_divider, INV_SENSOR_GEOMAG);
+		result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenAccel4List), hw_smplrt_divider, INV_SENSOR_STEP_COUNTER);
+
+	}
+
+	// Engine Gyro Based
+	if (minDly_gyro != 0xFFFF) { // 0xFFFF -- none gyro based sensor enable
+		hw_smplrt_divider = SampleRateDividerGet(minDly_gyro);
+
+		if (hw_smplrt_divider != s->lLastHwSmplrtDividerGyr) {
+			result |= inv_icm20948_set_gyro_divider(s, (unsigned char)(hw_smplrt_divider - 1));
+			s->lLastHwSmplrtDividerGyr = hw_smplrt_divider;
+		}
+
+		result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenGyro2List), hw_smplrt_divider, INV_SENSOR_GYRO);
+		result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenGyro3List), hw_smplrt_divider, INV_SENSOR_CALIB_GYRO);
+		result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenGyro4List), hw_smplrt_divider, INV_SENSOR_SIXQ);
+		result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenGyro5List), hw_smplrt_divider, INV_SENSOR_NINEQ);
+	}
+
+	// Engine Cpass and Pressure Based
+	if ((minDly_cpass != 0xFFFF) || (minDly_pressure != 0xFFFF)) {
+		unsigned int lI2cEffectiveDivider = 0;
+
+		// if compass or pressure are alone, compute 1st stage divider, otherwise it will be taken from accel or gyro
+		if ( (minDly_accel == 0xFFFF) && (minDly_gyro == 0xFFFF) )
+			hw_smplrt_divider = SampleRateDividerGet(minDly);
+
+		// Apply compass or pressure ODR to I2C and get effective ODR
+		// so that 2nd level of divider can take into account real frequency we can expect
+		// to determine its divider value
+		result |= inv_icm20948_secondary_set_odr(s, hw_smplrt_divider, &lI2cEffectiveDivider);
+
+		// if compass or pressure are alone, recompute 1st stage divider based on configured divider for I2C
+		// otherwise divider is taken from accel or gyro, so there is no need to recompute effective divider value
+		// based on the divider we just applied
+		if ( (minDly_accel == 0xFFFF) && (minDly_gyro == 0xFFFF) )
+			hw_smplrt_divider = lI2cEffectiveDivider;
+
+		if (minDly_cpass != 0xFFFF) {
+			result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenCpass2List), hw_smplrt_divider, INV_SENSOR_COMPASS);
+			result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenCpass3List), hw_smplrt_divider, INV_SENSOR_CALIB_COMPASS);
+		}
+
+		if (minDly_pressure != 0xFFFF)
+			result |= DividerRateSet(s, MinDelayGen(s, MinDelayGenPressure2List), hw_smplrt_divider, INV_SENSOR_PRESSURE);
+	}
+
+	return result;
+}
+
+static int inv_enable_sensor_internalx(struct inv_icm20948 * s, unsigned char androidSensor, unsigned char enable, char * mems_put_to_sleep)
+{
+	int result = 0;
+	unsigned short inv_event_control = 0;
+	unsigned short data_rdy_status = 0;
+	unsigned long steps=0;
+	const short inv_androidSensor_to_control_bits[ANDROID_SENSOR_NUM_MAX]=
+	{
+		// Unsupported Sensors are -1
+		-1, // Meta Data
+		-32760, //0x8008, // Accelerometer
+		0x0028, // Magnetic Field
+		0x0408, // Orientation
+		0x4048, // Gyroscope
+		0x1008, // Light
+		0x0088, // Pressure
+		-1, // Temperature
+		-1, // Proximity <----------- fixme
+		0x0808, // Gravity
+		-30712, // 0x8808, // Linear Acceleration
+		0x0408, // Rotation Vector
+		-1, // Humidity
+		-1, // Ambient Temperature
+		0x2008, // Magnetic Field Uncalibrated
+		0x0808, // Game Rotation Vector
+		0x4008, // Gyroscope Uncalibrated
+		0, // Significant Motion
+		0x0018, // Step Detector
+		0x0010, // Step Counter <----------- fixme
+		0x0108, // Geomagnetic Rotation Vector
+		-1, //ANDROID_SENSOR_HEART_RATE,
+		-1, //ANDROID_SENSOR_PROXIMITY,
+
+		-32760, // ANDROID_SENSOR_WAKEUP_ACCELEROMETER,
+		0x0028, // ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD,
+		0x0408, // ANDROID_SENSOR_WAKEUP_ORIENTATION,
+		0x4048, // ANDROID_SENSOR_WAKEUP_GYROSCOPE,
+		0x1008, // ANDROID_SENSOR_WAKEUP_LIGHT,
+		0x0088, // ANDROID_SENSOR_WAKEUP_PRESSURE,
+		0x0808, // ANDROID_SENSOR_WAKEUP_GRAVITY,
+		-30712, // ANDROID_SENSOR_WAKEUP_LINEAR_ACCELERATION,
+		0x0408, // ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR,
+		-1,		// ANDROID_SENSOR_WAKEUP_RELATIVE_HUMIDITY,
+		-1,		// ANDROID_SENSOR_WAKEUP_AMBIENT_TEMPERATURE,
+		0x2008, // ANDROID_SENSOR_WAKEUP_MAGNETIC_FIELD_UNCALIBRATED,
+		0x0808, // ANDROID_SENSOR_WAKEUP_GAME_ROTATION_VECTOR,
+		0x4008, // ANDROID_SENSOR_WAKEUP_GYROSCOPE_UNCALIBRATED,
+		0x0018, // ANDROID_SENSOR_WAKEUP_STEP_DETECTOR,
+		0x0010, // ANDROID_SENSOR_WAKEUP_STEP_COUNTER,
+		0x0108, // ANDROID_SENSOR_WAKEUP_GEOMAGNETIC_ROTATION_VECTOR
+		-1,		// ANDROID_SENSOR_WAKEUP_HEART_RATE,
+		0,		// ANDROID_SENSOR_WAKEUP_TILT_DETECTOR,
+		(short)0x8008, // Raw Acc
+		0x4048, // Raw Gyr
+	};
+	if(enable && !inv_icm20948_ctrl_androidSensor_enabled(s, androidSensor))
+		s->skip_sample[inv_icm20948_sensor_android_2_sensor_type(androidSensor)] = 1;
+
+	if (androidSensor == ANDROID_SENSOR_WAKEUP_SIGNIFICANT_MOTION) {
+		if (enable) {
+			s->smd_status = INV_SMD_EN;
+			s->bac_request ++;
+		}
+		else {
+			s->smd_status = 0;
+			s->bac_request --;
+		}
+	}
+
+	if (androidSensor == ANDROID_SENSOR_STEP_DETECTOR) {
+		if (enable) {
+			s->ped_int_status = INV_PEDOMETER_INT_EN;
+			s->bac_request ++;
+		}
+		else {
+			s->ped_int_status = 0;
+			s->bac_request --;
+		}
+	}
+
+	if (androidSensor == ANDROID_SENSOR_STEP_COUNTER) {
+		if (enable) {
+			s->bac_request ++;
+		}
+		else {
+			s->bac_request --;
+		}
+	}
+
+	if (androidSensor == ANDROID_SENSOR_FLIP_PICKUP) {
+		if (enable){
+			s->flip_pickup_status = FLIP_PICKUP_SET;
+		}
+		else
+			s->flip_pickup_status = 0;
+	}
+
+	if (androidSensor == ANDROID_SENSOR_B2S) {
+		if(enable){
+			s->b2s_status = INV_BTS_EN;
+			s->bac_request ++;
+		}
+		else {
+			s->b2s_status = 0;
+			s->bac_request --;
+		}
+	}
+	if (androidSensor == ANDROID_SENSOR_ACTIVITY_CLASSIFICATON)
+		inv_icm20948_ctrl_enable_activity_classifier(s, enable);
+
+	if (androidSensor == ANDROID_SENSOR_WAKEUP_TILT_DETECTOR)
+		inv_icm20948_ctrl_enable_tilt(s, enable);
+
+	inv_convert_androidSensor_to_control(s, androidSensor, enable, inv_androidSensor_to_control_bits, &s->inv_sensor_control);
+	result = dmp_icm20948_set_data_output_control1(s, s->inv_sensor_control);
+	if (s->b2s_status)
+		result |= dmp_icm20948_set_data_interrupt_control(s, s->inv_sensor_control|0x8008);
+		// result |= dmp_icm20948_set_data_interrupt_control(s, s->inv_sensor_control|0x0000);
+	else
+		result |= dmp_icm20948_set_data_interrupt_control(s, s->inv_sensor_control);
+
+	if (s->inv_sensor_control & ACCEL_SET)
+		s->inv_sensor_control2 |= ACCEL_ACCURACY_SET;
+	else
+		s->inv_sensor_control2 &= ~ACCEL_ACCURACY_SET;
+
+	if ((s->inv_sensor_control & GYRO_CALIBR_SET) || (s->inv_sensor_control & GYRO_SET))
+		s->inv_sensor_control2 |= GYRO_ACCURACY_SET;
+	else
+		s->inv_sensor_control2 &= ~GYRO_ACCURACY_SET;
+
+	if ((s->inv_sensor_control & CPASS_CALIBR_SET) || (s->inv_sensor_control & QUAT9_SET)
+		|| (s->inv_sensor_control & GEOMAG_SET) || (s->inv_sensor_control & CPASS_SET))
+		s->inv_sensor_control2 |= CPASS_ACCURACY_SET;
+	else
+		s->inv_sensor_control2 &= ~CPASS_ACCURACY_SET;
+
+	if(s->flip_pickup_status)
+		s->inv_sensor_control2 |= FLIP_PICKUP_SET;
+	else
+		s->inv_sensor_control2 &= ~FLIP_PICKUP_SET;
+
+	// inv_event_control   |= s->b2s_status;
+	if(s->b2s_status)
+	{
+		inv_event_control |= INV_BRING_AND_LOOK_T0_SEE_EN;
+		inv_event_control |= INV_PEDOMETER_EN;
+#ifndef ICM20948_FOR_MOBILE // Next lines change BAC behavior to wearable platform
+		inv_event_control |= INV_BAC_WEARABLE_EN;
+		dmp_icm20948_set_ped_y_ratio(s, BAC_PED_Y_RATIO_WEARABLE);
+#endif
+	}
+	else
+	{
+		inv_event_control &= ~INV_BRING_AND_LOOK_T0_SEE_EN;
+		inv_event_control &= ~INV_PEDOMETER_EN;
+#ifndef ICM20948_FOR_MOBILE // Next lines change BAC behavior to wearable platform
+		inv_event_control &= ~INV_BAC_WEARABLE_EN;
+#endif
+	}
+
+	result |= dmp_icm20948_set_data_output_control2(s, s->inv_sensor_control2);
+
+	// sets DATA_RDY_STATUS in DMP based on which sensors are on
+	if (s->inv_androidSensorsOn_mask[0] & INV_NEEDS_GYRO_MASK || s->inv_androidSensorsOn_mask[1] & INV_NEEDS_GYRO_MASK1)
+		data_rdy_status |= GYRO_AVAILABLE;
+
+	if (s->inv_androidSensorsOn_mask[0] & INV_NEEDS_ACCEL_MASK || s->inv_androidSensorsOn_mask[1] & INV_NEEDS_ACCEL_MASK1)
+		data_rdy_status |= ACCEL_AVAILABLE;
+
+	if (s->flip_pickup_status || s->b2s_status)
+		data_rdy_status |= ACCEL_AVAILABLE;
+
+	if (s->bac_status)
+		data_rdy_status |= ACCEL_AVAILABLE;
+
+	if (s->inv_androidSensorsOn_mask[0] & INV_NEEDS_COMPASS_MASK || s->inv_androidSensorsOn_mask[1] & INV_NEEDS_COMPASS_MASK1) {
+		data_rdy_status |= SECONDARY_COMPASS_AVAILABLE;
+		inv_event_control |= INV_COMPASS_CAL_EN;
+	}
+	// turn on gyro cal only if gyro is available
+	if (data_rdy_status & GYRO_AVAILABLE)
+		inv_event_control |= INV_GYRO_CAL_EN;
+
+	// turn on acc cal only if acc is available
+	if (data_rdy_status & ACCEL_AVAILABLE)
+		inv_event_control |= INV_ACCEL_CAL_EN;
+
+	inv_event_control |= s->smd_status | s->ped_int_status;
+
+	if (s->inv_sensor_control & QUAT9_SET)
+		inv_event_control |= INV_NINE_AXIS_EN;
+
+	if (s->inv_sensor_control & (PED_STEPDET_SET | PED_STEPIND_SET) || inv_event_control & INV_SMD_EN) {
+		inv_event_control |= INV_PEDOMETER_EN;
+#ifndef ICM20948_FOR_MOBILE // Next lines change BAC behavior to wearable platform
+		inv_event_control |= INV_BAC_WEARABLE_EN;
+		dmp_icm20948_set_ped_y_ratio(s, BAC_PED_Y_RATIO_WEARABLE);
+#endif
+	}
+
+	if (s->inv_sensor_control2 & ACT_RECOG_SET) {
+		inv_event_control |= INV_PEDOMETER_EN;
+#ifndef ICM20948_FOR_MOBILE // Next lines this to change BAC behavior to wearable platform
+		inv_event_control |= INV_BAC_WEARABLE_EN;
+		dmp_icm20948_set_ped_y_ratio(s, BAC_PED_Y_RATIO_WEARABLE);
+#endif
+	}
+
+	if (s->inv_sensor_control2 & FLIP_PICKUP_SET){
+		inv_event_control |= FLIP_PICKUP_EN;
+	}
+
+	if (s->inv_sensor_control & GEOMAG_SET)
+		inv_event_control |= GEOMAG_EN;
+
+	result |= dmp_icm20948_set_motion_event_control(s, inv_event_control);
+
+	// A sensor was just enabled/disabled, need to recompute the required ODR for all augmented sensor-related sensors
+	// The fastest ODR will always be applied to other related sensors
+	if (   (androidSensor == ANDROID_SENSOR_GRAVITY)
+		|| (androidSensor == ANDROID_SENSOR_GAME_ROTATION_VECTOR)
+		|| (androidSensor == ANDROID_SENSOR_LINEAR_ACCELERATION) ) {
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_SIXQ]);
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_SIXQ_accel]);
+	}
+
+	if (   (androidSensor == ANDROID_SENSOR_ORIENTATION)
+		|| (androidSensor == ANDROID_SENSOR_ROTATION_VECTOR) ) {
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_NINEQ]);
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_NINEQ_accel]);
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_NINEQ_cpass]);
+	}
+
+	if (   (androidSensor == ANDROID_SENSOR_WAKEUP_GRAVITY)
+		|| (androidSensor == ANDROID_SENSOR_WAKEUP_GAME_ROTATION_VECTOR)
+		|| (androidSensor == ANDROID_SENSOR_WAKEUP_LINEAR_ACCELERATION) ) {
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_WAKEUP_SIXQ]);
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_WAKEUP_SIXQ_accel]);
+	}
+
+	if (   (androidSensor == ANDROID_SENSOR_WAKEUP_ORIENTATION)
+		|| (androidSensor == ANDROID_SENSOR_WAKEUP_ROTATION_VECTOR) ) {
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_WAKEUP_NINEQ]);
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_WAKEUP_NINEQ_accel]);
+		inv_icm20948_augmented_sensors_update_odrx(s, androidSensor, &s->inv_dmp_odr_delays[INV_SENSOR_WAKEUP_NINEQ_cpass]);
+	}
+
+	result |= inv_set_hw_smplrt_dmp_odrs(s);
+	result |= inv_icm20948_set_gyro_sf(s, inv_icm20948_get_gyro_divider(s), inv_icm20948_get_gyro_fullscale(s));
+
+	if (!s->inv_sensor_control && !(s->inv_androidSensorsOn_mask[0] & (1L << ANDROID_SENSOR_WAKEUP_SIGNIFICANT_MOTION)) && !s->b2s_status) {
+		*mems_put_to_sleep =1 ;
+		result |= inv_icm20948_sleep_mems(s);
+	}
+
+	// DMP no longer controls PWR_MGMT_2 because of hardware bug, 0x80 set to override default behaviour of inv_icm20948_enable_hw_sensors()
+	result |= inv_icm20948_enable_hw_sensors(s, (int)data_rdy_status | 0x80);
+
+	// set DATA_RDY_STATUS in DMP
+	if (data_rdy_status & SECONDARY_COMPASS_AVAILABLE)	{
+		data_rdy_status |= SECONDARY_COMPASS_AVAILABLE;
+	}
+
+	result |= dmp_icm20948_set_data_rdy_status(s, data_rdy_status);
+
+	// To have the all steps when you enable the sensor
+	if (androidSensor == ANDROID_SENSOR_STEP_COUNTER)
+	{
+		if (enable)
+		{
+			dmp_icm20948_get_pedometer_num_of_steps(s, &steps);
+			s->sStepCounterToBeSubtracted = steps - s->sOldSteps;
+		}
+	}
+
+	return result;
+}
+
+int inv_icm20948_ctrl_enable_sensorx(struct inv_icm20948 * s, unsigned char androidSensor, unsigned char enable)
+{
+	int result = 0;
+
+	if(sensor_needs_compassx(androidSensor))
+		if(!inv_icm20948_get_compass_availability(s))
+			return -1;
+
+	inv_icm20948_prevent_lpen_control(s);
+	if( s->mems_put_to_sleep ) {
+		s->mems_put_to_sleep = 0;
+		result |= inv_icm20948_wakeup_mems(s);
+	}
+	result |= inv_enable_sensor_internalx(s, androidSensor, enable, &s->mems_put_to_sleep);
+	inv_icm20948_allow_lpen_control(s);
+	return result;
+}
+
 bool AgmIcm20948::Enable()
 {
 	uint8_t fifoen = 0;
@@ -909,7 +1710,12 @@ bool AgmIcm20948::Enable()
 	int i = INV_SENSOR_TYPE_MAX;
 
 	while(i-- > 0) {
-		inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
+		//inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
+				uint8_t androidSensor = sensor_type_2_android_sensorx((inv_icm20948_sensor)i);
+
+				if(0!=inv_icm20948_ctrl_enable_sensorx(&vIcmDevice, androidSensor, 1))
+					return 0;
+
 	}
 
 
