@@ -306,7 +306,7 @@ SOFTWARE.
 #define ICM20948_GYRO_CONFIG_1_REG			(ICM20948_REG_BANK2 | 1)
 
 #define ICM20948_GYRO_CONFIG_1_GYRO_FCHOICE					(1<<0)
-#define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_MASK				(2<<1)
+#define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_MASK				(3<<1)
 #define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_250DPS			(0<<1)
 #define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_500DPS			(1<<1)
 #define ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS			(2<<1)
@@ -883,6 +883,8 @@ public:
 	void ResetFifo();
 	bool InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len);
 	void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
+	int ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len);
+	int WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len);
 
 private:
 	AgmIcm20948(const AgmIcm20948&); // no copy constructor
@@ -892,8 +894,6 @@ private:
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
 	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
 	void ResetDMPCtrlReg();
-	int ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len);
-	int WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len);
 	bool SelectBank(uint8_t BankNo);
 	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
 	size_t CalcFifoPacketSize(uint16_t Header, uint16_t Mask, const size_t *Lookup, size_t LookupSize);

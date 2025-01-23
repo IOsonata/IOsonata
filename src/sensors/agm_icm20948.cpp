@@ -203,7 +203,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	vIcmDevice.mounting_matrix_secondary_compass[4] = -1;
 	vIcmDevice.mounting_matrix_secondary_compass[8] = -1;
 
-#if 0
+#if 1
 	msDelay(500);
 
 	// Setup accel and gyro mounting matrix and associated angle for current board
@@ -332,29 +332,66 @@ uint16_t AccelIcm20948::Scale(uint16_t Value)
 {
 	uint16_t regaddr = ICM20948_ACCEL_CONFIG_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_MASK;
+	int32_t scale, scale2;
 
 	if (Value < 3)
 	{
 		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_2G;
 		Value = 2;
+		scale = (1 << 25);  // 33554432L
+		scale2 = (1 << 19);	// 524288L
 	}
 	else if (Value < 6)
 	{
 		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_4G;
 		Value = 4;
+		scale =  (1 << 26);	// 67108864L
+		scale2 = (1 << 18);	// 262144L
 	}
 	else if (Value < 12)
 	{
 		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_8G;
 		Value = 8;
+		scale = (1 << 27);  // 134217728L
+		scale2 = (1 << 17);	// 131072L
 	}
 	else
 	{
 		d |= ICM20948_ACCEL_CONFIG_ACCEL_FS_SEL_16G;
 		Value = 16;
+		scale = (1 << 28);  // 268435456L
+		scale2 = (1 << 16);	// 65536L
 	}
 
 	Write8((uint8_t*)&regaddr, 2, d);
+
+	/**
+	* Sets scale in DMP to convert accel data to 1g=2^25 regardless of fsr.
+	* @param[in] fsr for accel parts
+	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
+
+	For 2g parts, 2g = 2^15 -> 1g = 2^14,.
+	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^14 (<<16) becomes 1g=2^30, to make 1g=2^25, >>5 bits.
+	In Q-30 math, >> 5 equals multiply by 2^25 = 33554432.
+
+	For 8g parts, 8g = 2^15 -> 1g = 2^12.
+	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^12 (<<16) becomes 1g=2^28, to make 1g=2^25, >>3bits.
+	In Q-30 math, >> 3 equals multiply by 2^27 = 134217728.
+	*/
+	regaddr = ICM20948_DMP_ACC_SCALE;
+	scale = EndianCvt32(scale);
+	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale, 4);
+
+	/**
+	* According to input fsr, a scale factor will be set at memory location ACC_SCALE2
+	* to convert calibrated accel data to 16-bit format same as what comes out of MPU register.
+	* It is a reverse scaling of the scale factor written to ACC_SCALE.
+	* @param[in] fsr for accel parts
+	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
+	*/
+	regaddr = ICM20948_DMP_ACC_SCALE2;
+	scale2 = EndianCvt32(scale2);
+	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale2, 4);
 
 	return AccelSensor::Scale(Value);
 }
@@ -448,8 +485,8 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 		return false;
 
 	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
-	Sensitivity(Cfg.Sensitivity);
 	SamplingFrequency(Cfg.Freq);
+	Sensitivity(Cfg.Sensitivity);
 	FilterFreq(Cfg.FltrFreq);
 
 	// Read manufacture trim offset
@@ -472,29 +509,51 @@ uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 {
 	uint16_t regaddr = ICM20948_GYRO_CONFIG_1_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_MASK;
+	int32_t scale;
 
 	if (Value < 325)
 	{
 		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_250DPS;
 		Value = 250;
+		scale = (1 << 25); // 33554432L
 	}
 	else if (Value < 750)
 	{
 		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_500DPS;
 		Value = 500;
+		scale = (1 << 26); // 67108864L
 	}
 	else if (Value < 1500)
 	{
 		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS;
 		Value = 1000;
+		scale = (1 << 27); // 134217728L
 	}
 	else
 	{
 		d |= ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_2000DPS;
 		Value = 2000;
+		scale = (1 << 28); // 268435456L
 	}
 
 	Write8((uint8_t*)&regaddr, 2, d);
+
+	/**
+	* Sets scale in DMP to convert gyro data to 4000dps=2^30 regardless of fsr.
+	* @param[in] fsr for gyro parts
+	4000: 4000dps. 2000: 2000dps. 1000: 1000dps. 500: 500dps. 250: 250dps.
+
+	For 4000dps parts, 4000dps = 2^15.
+	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 4000dps=2^31, to make 4000dps=2^30, >>1 bit.
+	In Q-30 math, >> 1 equals multiply by 2^29 = 536870912.
+
+	For 2000dps parts, 2000dps = 2^15.
+	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 2000dps=2^31, to make 4000dps=2^30, >>2 bits.
+	In Q-30 math, >> 2 equals multiply by 2^28 = 268435456.
+	*/
+	regaddr = ICM20948_DMP_GYRO_FULLSCALE;
+	scale = EndianCvt32(scale);
+//	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale, 4);
 
 	inv_icm20948_set_gyro_fullscale(&vIcmDevice, d);
 
@@ -508,6 +567,39 @@ uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
 	uint32_t div = (1100000 + (Freq >> 1)) / Freq - 1;
 	uint16_t regaddr = ICM20948_GYRO_SMPLRT_DIV_REG;
 	Write8((uint8_t*)&regaddr, 2, div);
+
+	// gyro_level should be set to 4 regardless of fullscale, due to the addition of API dmp_icm20648_set_gyro_fsr()
+	// 4 = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS
+	uint8_t tbpll;
+	regaddr = ICM20948_TIMEBASE_CORRECTION_PLL_REG;
+	tbpll = Read8((uint8_t*)&regaddr, 2);
+
+	const uint64_t MagicConstant = 264446880937391ULL;
+	const uint64_t MagicConstantScale = 100000ULL;
+	uint64_t res;
+	int32_t gyrosf;
+
+	if (tbpll & 0x80)
+	{
+		res = (MagicConstant * (long long)(1ULL << ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS) * (1 + div) / (1270 - (tbpll & 0x7F)) / MagicConstantScale);
+	}
+	else
+	{
+		res = (MagicConstant * (long long)(1ULL << ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS) * (1 + div) / (1270 + tbpll) / MagicConstantScale);
+	}
+
+	/*
+	    In above deprecated FP version, worst case arguments can produce a result that overflows a signed long.
+	    Here, for such cases, we emulate the FP behavior of setting the result to the maximum positive value, as
+	    the compiler's conversion of a u64 to an s32 is simple truncation of the u64's high half, sadly....
+	*/
+	if  (res > 0x7FFFFFFF)
+		gyrosf = EndianCvt32(0x7FFFFFFF);
+	else
+		gyrosf = EndianCvt32((int32_t)res);
+
+	regaddr = ICM20948_DMP_GYRO_SF;
+	//((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&gyrosf, 4);
 
 	return GyroSensor::SamplingFrequency(1100000 / (div + 1));
 }
@@ -633,7 +725,7 @@ bool AgmIcm20948::Enable()
 	uint8_t fifoen = 0;
 	uint8_t d, userctrl;
 	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
-#if 1
+#if 0
 	regaddr = ICM20948_USER_CTRL_REG;
 	userctrl = Read8((uint8_t*)&regaddr, 2);
 	Write8((uint8_t*)&regaddr, 2, userctrl & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN));
@@ -683,11 +775,11 @@ bool AgmIcm20948::Enable()
 	regaddr = ICM20948_USER_CTRL_REG;
 	//d = Read8((uint8_t*)&regaddr, 2);
 	userctrl |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	//Write8((uint8_t*)&regaddr, 2, userctrl);
+	Write8((uint8_t*)&regaddr, 2, userctrl);
 
 
 #endif
-	//uint16_t dout = ICM20948_DMP_QUAT6_SET | ICM20948_DMP_QUAT9_SET | ICM20948_DMP_PRESSURE_SET | ICM20948_DMP_ACCEL_SET | ICM20948_DMP_GYRO_SET;
+	uint16_t dout = ICM20948_DMP_QUAT6_SET | ICM20948_DMP_QUAT9_SET | ICM20948_DMP_PRESSURE_SET | ICM20948_DMP_ACCEL_SET | ICM20948_DMP_GYRO_SET;
 
 	dout = EndianCvt16(dout);
 	regaddr = ICM20948_DMP_DATA_OUT_CTL1;
@@ -695,9 +787,9 @@ bool AgmIcm20948::Enable()
 
 	int i = INV_SENSOR_TYPE_MAX;
 
-//	while(i-- > 0) {
-//		inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
-//	}
+	while(i-- > 0) {
+		inv_icm20948_enable_sensor(&vIcmDevice, (inv_icm20948_sensor)i, 1);
+	}
 
 
 	return true;
