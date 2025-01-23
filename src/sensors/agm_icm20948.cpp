@@ -203,7 +203,6 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	vIcmDevice.mounting_matrix_secondary_compass[4] = -1;
 	vIcmDevice.mounting_matrix_secondary_compass[8] = -1;
 
-#if 1
 	msDelay(500);
 
 	// Setup accel and gyro mounting matrix and associated angle for current board
@@ -213,11 +212,12 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		inv_icm20948_set_matrix(&vIcmDevice, s_CfgMountingMatrix, (inv_icm20948_sensor)i);
 	}
 
+#if 1
 	inv_icm20948_initialize(&vIcmDevice, s_Dmp3Image, sizeof(s_Dmp3Image));
 	vbDmpEnabled = true;
 
 #else
-	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+	uint8_t userctrl = ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
 	uint8_t lpconfig = 0;//ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
@@ -553,9 +553,9 @@ uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 	*/
 	regaddr = ICM20948_DMP_GYRO_FULLSCALE;
 	scale = EndianCvt32(scale);
-//	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale, 4);
+	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale, 4);
 
-	inv_icm20948_set_gyro_fullscale(&vIcmDevice, d);
+	//inv_icm20948_set_gyro_fullscale(&vIcmDevice, d);
 
 	return GyroSensor::Sensitivity(Value);
 }
@@ -599,7 +599,7 @@ uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
 		gyrosf = EndianCvt32((int32_t)res);
 
 	regaddr = ICM20948_DMP_GYRO_SF;
-	//((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&gyrosf, 4);
+	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&gyrosf, 4);
 
 	return GyroSensor::SamplingFrequency(1100000 / (div + 1));
 }
