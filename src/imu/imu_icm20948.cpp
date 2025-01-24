@@ -452,13 +452,13 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	}
 
 	memset(&vInvnDev.base_state, 0, sizeof(vInvnDev.base_state));
-	vInvnDev.base_state.pwr_mgmt_1 = BIT_CLK_PLL;
-	vInvnDev.base_state.pwr_mgmt_2 = BIT_PWR_ACCEL_STBY | BIT_PWR_GYRO_STBY | BIT_PWR_PRESSURE_STBY;
+	vInvnDev.base_state.pwr_mgmt_1 = ICM20948_PWR_MGMT_1_CLKSEL_AUTO;
+	vInvnDev.base_state.pwr_mgmt_2 = ICM20948_PWR_MGMT_2_DISABLE_ALL;
 
 	if (vInvnDev.serif.is_spi)
 	{
 		vInvnDev.base_state.serial_interface = SERIAL_INTERFACE_SPI;
-		vInvnDev.base_state.user_ctrl = BIT_I2C_IF_DIS;
+		vInvnDev.base_state.user_ctrl = ICM20948_USER_CTRL_I2C_IF_DIS;
 	}
 	else
 	{
@@ -474,7 +474,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 
 	vpIcm->Write8((uint8_t*)&regaddr, 2, d | vInvnDev.base_state.user_ctrl);
 
-	inv_icm20948_wakeup_mems(&vInvnDev);
+//	inv_icm20948_wakeup_mems(&vInvnDev);
 
 	vpIcm->Disable();
 
@@ -718,11 +718,56 @@ void ImuIcm20948::Reset()
 
 IMU_FEATURE ImuIcm20948::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
 {
+	if (FeatureBit & IMU_FEATURE_EULER)
+	{
+
+	}
+
 	if (FeatureBit & IMU_FEATURE_QUATERNION)
 	{
 		uint16_t f = ICM20948_DMP_QUAT9_SET;
 		uint16_t m = ICM20948_DMP_DATA_OUT_CTL1;
 		WriteDMP(m, (uint8_t*)&f, 2);
+	}
+
+	if (FeatureBit & IMU_FEATURE_COMPASS)
+	{
+
+	}
+
+	if (FeatureBit & IMU_FEATURE_GRAVITY)
+	{
+
+	}
+
+	if (FeatureBit & IMU_FEATURE_EXTERNAL_ACCEL)
+	{
+
+	}
+
+	if (FeatureBit & IMU_FEATURE_TAP)
+	{
+
+	}
+
+	if (FeatureBit & IMU_FEATURE_ROTATION)
+	{
+
+	}
+
+	if (FeatureBit & IMU_FEATURE_VIBRATION)
+	{
+
+	}
+
+	if (FeatureBit & IMU_FEATURE_PEDOMETER)
+	{
+
+	}
+
+	if (FeatureBit & IMU_FEATURE_CYCLING)
+	{
+
 	}
 
 	return Imu::Feature(FeatureBit, bEnDis);

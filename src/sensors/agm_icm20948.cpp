@@ -234,93 +234,13 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 			vIcmDevice.base_state.user_ctrl = 0;
 
 		vIcmDevice.base_state.user_ctrl = 0;
-#if 0
-	{
-
-		//result |= inv_icm20948_wakeup_mems(&vIcmDevice);
-		regaddr = ICM20948_PWR_MGMT_1_REG;
-		Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
-
-		regaddr = ICM20948_PWR_MGMT_2_REG;
-		Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_2_DISABLE_ALL);
-
-		//result |= inv_icm20948_read_mems_reg(&vIcmDevice, REG_WHO_AM_I, 1, &data);
-
-		/* secondary cycle mode should be set all the time */
-		data = BIT_I2C_MST_CYCLE|BIT_ACCEL_CYCLE|BIT_GYRO_CYCLE;
-
-		// Set default mode to low power mode
-		//result |= inv_icm20948_set_lowpower_or_highperformance(&vIcmDevice, 0);
-
-		// Disable Ivory DMP.
-
-//		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_USER_CTRL, vIcmDevice.base_state.user_ctrl);
-
-		regaddr = ICM20948_USER_CTRL_REG;
-		Write8((uint8_t*)&regaddr, 2, vIcmDevice.base_state.user_ctrl);
-		bool res = InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
-		if (res)
-			vIcmDevice.base_state.firmware_loaded = 1;
-		ResetDMPCtrlReg();
-		vIcmDevice.lLastBankSelected = -1;
-
-		// Fifo watermark 80%
-		uint16_t val = EndianCvt16(800);
-		WriteDMP(ICM20948_DMP_FIFO_WATERMARK, (uint8_t*)&val, 2);
-
-		// Undocumented value
-		regaddr = ICM20948_SINGLE_FIFO_PRIORITY_SEL;
-		Write8((uint8_t*)&regaddr, 2, ICM20948_SINGLE_FIFO_PRIORITY_SEL_0XE4);
-
-		// Disable HW temp fix
-		inv_icm20948_read_mems_reg(&vIcmDevice, REG_HW_FIX_DISABLE,1,&data);
-		data |= 0x08;
-		inv_icm20948_write_mems_reg(&vIcmDevice, REG_HW_FIX_DISABLE,1,&data);
-
-		// Setup MEMs properties.
-		vIcmDevice.base_state.accel_averaging = 1; //Change this value if higher sensor sample avergaing is required.
-		vIcmDevice.base_state.gyro_averaging = 1;  //Change this value if higher sensor sample avergaing is required.
-		//inv_icm20948_set_gyro_divider(&vIcmDevice, FIFO_DIVIDER);       //Initial sampling rate 1125Hz/19+1 = 56Hz.
-		vIcmDevice.base_state.gyro_div = FIFO_DIVIDER;
-
-		regaddr = ICM20948_GYRO_SMPLRT_DIV_REG;
-		Write8((uint8_t*)&regaddr, 2, FIFO_DIVIDER);
-
-
-		//inv_icm20948_set_accel_divider(&vIcmDevice, FIFO_DIVIDER);      //Initial sampling rate 1125Hz/19+1 = 56Hz.
-
-		// Init the sample rate to 56 Hz for BAC,STEPC and B2S
-		dmp_icm20948_set_bac_rate(&vIcmDevice, DMP_ALGO_FREQ_56);
-		dmp_icm20948_set_b2s_rate(&vIcmDevice, DMP_ALGO_FREQ_56);
-
-		// FIFO Setup.
-/*		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_CFG, BIT_SINGLE_FIFO_CFG); // FIFO Config. fixme do once? burst write?
-		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_RST, 0x1f); // Reset all FIFOs.
-		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_RST, 0x1e); // Keep all but Gyro FIFO in reset.
-		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_EN, 0x0); // Slave FIFO turned off.
-		result |= inv_icm20948_write_single_mems_reg(&vIcmDevice, REG_FIFO_EN_2, 0x0); // Hardware FIFO turned off.
-*/
-		ResetFifo();
-
-		vIcmDevice.base_state.lp_en_support = 1;
-
-		//if(vIcmDevice.base_state.lp_en_support == 1)
-			inv_icm20948_set_chip_power_state(&vIcmDevice, CHIP_LP_ENABLE, 1);
-
-		result |= inv_icm20948_sleep_mems(&vIcmDevice);
-
-//		return true;
-	}
-	vbDmpEnabled = true;
-
-#else
 	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
 	uint8_t lpconfig = 0;//ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		// in SPI mode, use i2c master mode to access Mag device (AK09916)
-//		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS;
+		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS;
 //		lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
 	}
 
@@ -382,8 +302,6 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	//	inv_icm20948_set_chip_power_state(&vIcmDevice, CHIP_LP_ENABLE, 1);
 
 //	inv_icm20948_sleep_mems(&vIcmDevice);
-
-#endif
 
 	// ICM20948 has only 1 interrupt pin. Don't care the value
 	if (Inter)

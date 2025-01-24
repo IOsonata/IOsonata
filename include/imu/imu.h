@@ -60,9 +60,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define IMU_FEATURE_EXTERNAL_ACCEL			(1<<4)		//!< External acceleration vector
 #define IMU_FEATURE_TAP						(1<<5)		//!< Tap sensing
 #define IMU_FEATURE_ROTATION				(1<<6)		//!< Rotation data
-#define IMU_FEATURE_VIBRATION				(1<<7)		//!< Rotation data
+#define IMU_FEATURE_VIBRATION				(1<<7)		//!< Vibration data
 #define IMU_FEATURE_PEDOMETER				(1<<8)		//!< Pedometer
-#define IMU_FEATURE_CYCLING					(1<<9)		//!< Pedometer
+#define IMU_FEATURE_CYCLING					(1<<9)		//!< Cycling
 
 typedef uint32_t	IMU_FEATURE;
 
