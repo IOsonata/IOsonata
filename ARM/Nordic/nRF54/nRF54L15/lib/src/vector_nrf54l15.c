@@ -73,7 +73,6 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void CM33SS_IRQHandler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER00_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPU10_IRQHandler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER10_IRQHandler(void);
-__attribute__((weak/*, alias("DEF_IRQHandler")*/)) void RTC10_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void EGU10_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_1_IRQHandler(void);
@@ -232,8 +231,8 @@ void (* const __Vectors[])(void) = {
     0,
     0,
     CTRLAP_IRQHandler,
-    CM33SS_IRQHandler,
     0,
+    CM33SS_IRQHandler,
     TIMER00_IRQHandler,
     0,
     0,
@@ -283,7 +282,7 @@ void (* const __Vectors[])(void) = {
     0,
     0,
     TIMER10_IRQHandler,
-    RTC10_IRQHandler,
+    0,
     EGU10_IRQHandler,
     0,
     0,
