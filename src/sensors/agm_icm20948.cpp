@@ -52,6 +52,8 @@ SOFTWARE.
 
 extern UART g_Uart;
 
+//#define DMP
+
 typedef struct {
 	size_t Len;
 } FifoDataLen_t;
@@ -235,13 +237,13 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 
 		vIcmDevice.base_state.user_ctrl = 0;
 	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	uint8_t lpconfig = 0;//ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
+	uint8_t lpconfig = ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		// in SPI mode, use i2c master mode to access Mag device (AK09916)
 		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS;
-//		lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
+		lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
 	}
 
 
@@ -261,15 +263,16 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	regaddr = ICM20948_ODR_ALIGN_EN_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
 
+	regaddr = ICM20948_HWTEMP_FIX_DISABLE_REG;
+	d = Read8((uint8_t*)&regaddr, 2) | 0x08;
+	Write8((uint8_t*)&regaddr, 2, d);//ICM20948_HWTEMP_FIX_DISABLE_DIS);
+
+#ifdef DMP
 	// Upload DMP
 	InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
 	vIcmDevice.base_state.firmware_loaded = 1;
 
 	ResetDMPCtrlReg();
-
-	regaddr = ICM20948_HWTEMP_FIX_DISABLE_REG;
-	d = Read8((uint8_t*)&regaddr, 2) | 0x08;
-	Write8((uint8_t*)&regaddr, 2, d);//ICM20948_HWTEMP_FIX_DISABLE_DIS);
 
 	// Fifo watermark 80%
 	uint16_t val = EndianCvt16(800);
@@ -296,7 +299,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	dmp_icm20948_set_b2s_rate(&vIcmDevice, DMP_ALGO_FREQ_56);
 
 	ResetFifo();
-
+#endif
 	vIcmDevice.base_state.lp_en_support = 0;
 	//if(vIcmDevice.base_state.lp_en_support == 1)
 	//	inv_icm20948_set_chip_power_state(&vIcmDevice, CHIP_LP_ENABLE, 1);
@@ -318,20 +321,22 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		}
 		Write8((uint8_t*)&regaddr, 2, d);
 
+#ifdef DMP
 		regaddr = ICM20948_INT_ENABLE_REG;
 		d = ICM20948_INT_ENABLE_DMP_INT1_EN;
 		Write8((uint8_t*)&regaddr, 2, d);
-
-		//regaddr = ICM20948_INT_ENABLE_1_REG;
-		//d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
-		//Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE_2_REG;
 		Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN);
 
 		regaddr = ICM20948_INT_ENABLE_3_REG;
 		Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_3_FIFO_WM_EN);
+#else
 
+		regaddr = ICM20948_INT_ENABLE_1_REG;
+		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
+		Write8((uint8_t*)&regaddr, 2, d);
+#endif
 	}
 	vIcmDevice.lLastBankSelected = -1;
 
@@ -404,6 +409,7 @@ uint16_t AccelIcm20948::Scale(uint16_t Value)
 
 	Write8((uint8_t*)&regaddr, 2, d);
 
+#ifdef DMP
 	/**
 	* Sets scale in DMP to convert accel data to 1g=2^25 regardless of fsr.
 	* @param[in] fsr for accel parts
@@ -431,6 +437,7 @@ uint16_t AccelIcm20948::Scale(uint16_t Value)
 	regaddr = ICM20948_DMP_ACC_SCALE2;
 	scale2 = EndianCvt32(scale2);
 	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale2, 4);
+#endif
 
 	return AccelSensor::Scale(Value);
 }
@@ -577,6 +584,7 @@ uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 
 	Write8((uint8_t*)&regaddr, 2, d);
 
+#ifdef DMP
 	/**
 	* Sets scale in DMP to convert gyro data to 4000dps=2^30 regardless of fsr.
 	* @param[in] fsr for gyro parts
@@ -595,6 +603,7 @@ uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale, 4);
 
 	//inv_icm20948_set_gyro_fullscale(&vIcmDevice, d);
+#endif
 
 	return GyroSensor::Sensitivity(Value);
 }
@@ -607,6 +616,7 @@ uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
 	uint16_t regaddr = ICM20948_GYRO_SMPLRT_DIV_REG;
 	Write8((uint8_t*)&regaddr, 2, div);
 
+#ifdef DMP
 	// gyro_level should be set to 4 regardless of fullscale, due to the addition of API dmp_icm20648_set_gyro_fsr()
 	// 4 = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS
 	uint8_t tbpll;
@@ -639,6 +649,7 @@ uint32_t GyroIcm20948::SamplingFrequency(uint32_t Freq)
 
 	regaddr = ICM20948_DMP_GYRO_SF;
 	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&gyrosf, 4);
+#endif
 
 	return GyroSensor::SamplingFrequency(1100000 / (div + 1));
 }
@@ -1672,6 +1683,8 @@ bool AgmIcm20948::Enable()
 	uint8_t fifoen = 0;
 	uint8_t d, userctrl;
 	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
+
+#ifdef DMP
 #if 0
 	regaddr = ICM20948_USER_CTRL_REG;
 	userctrl = Read8((uint8_t*)&regaddr, 2);
@@ -1759,7 +1772,17 @@ bool AgmIcm20948::Enable()
 		//inv_icm20948_allow_lpen_control(&vIcmDevice);
 #endif
 	}
+#else
+	if (vbSensorEnabled[ICM20948_ACCEL_IDX])
+	{
+		AccelIcm20948::Enable();
+	}
 
+	if (vbSensorEnabled[ICM20948_GYRO_IDX])
+	{
+		GyroIcm20948::Enable();
+	}
+#endif
 
 	return true;
 }
