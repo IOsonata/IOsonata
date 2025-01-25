@@ -181,9 +181,9 @@ const BtAppCfg_t s_BleAppCfg = {
 										// slow interval on adv timeout and advertise until connected
 	.ConnIntervalMin = MIN_CONN_INTERVAL,
 	.ConnIntervalMax = MAX_CONN_INTERVAL,
-	.ConnLedPort = BLUEIOTHINGY_CONNECT_LED_PORT,// Led port nuber
-	.ConnLedPin = BLUEIOTHINGY_CONNECT_LED_PIN,// Led pin number
-	.ConnLedActLevel = BLUEIOTHINGY_CONNECT_LED_LOGIC,
+	.ConnLedPort = CONNECT_LED_PORT,// Led port nuber
+	.ConnLedPin = CONNECT_LED_PIN,// Led pin number
+	.ConnLedActLevel = CONNECT_LED_LOGIC,
 	.TxPower = 0,						// Tx power
 	.SDEvtHandler = NULL,				// RTOS Softdevice handler
 	.MaxMtu = 247,
@@ -195,7 +195,7 @@ static const IOPinCfg_t s_Buttons[] = BUTTON_PINS_MAP;
 static const int s_NbButtons = sizeof(s_Buttons) / sizeof(IOPinCfg_t);
 #endif
 
-static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
+static const IOPinCfg_t s_Leds[] = LED_PINS;
 static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
 #if 0
@@ -221,7 +221,7 @@ static const IOPinCfg_t s_GpioPins[] = {
 static const int s_NbGpioPins = sizeof(s_GpioPins) / sizeof(IOPinCfg_t);
 #endif
 
-static const IOPinCfg_t s_SpiPins[] = BLUEIOTHINGY_SPI2_PINS_MAP;
+static const IOPinCfg_t s_SpiPins[] = SPI_PINS;
 /*{
     {SPI2_SCK_PORT, SPI2_SCK_PIN, SPI2_SCK_PINOP,
 		IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -236,7 +236,7 @@ static const IOPinCfg_t s_SpiPins[] = BLUEIOTHINGY_SPI2_PINS_MAP;
 };*/
 
 static const SPICFG s_SpiCfg = {
-    .DevNo = BLUEIOTHINGY_SPI2_DEVNO,
+    .DevNo = SPI_DEVNO,
     .Phy = SPIPHY_NORMAL,
 	.Mode = SPIMODE_MASTER,
     .pIOPinMap = s_SpiPins,
@@ -259,7 +259,7 @@ SPI g_Spi;
 //DeviceIntrf *g_pIntrf = &g_Spi;
 
 // Configure I2C interface
-static const IOPinCfg_t s_I2cPins[] = BLUEIOTHINGY_I2C0_PINS_MAP;
+static const IOPinCfg_t s_I2cPins[] = I2C_PINS;
 /*{
 #if defined(TPH_BME280) || defined(TPH_BME680)
 		{I2C0_SDA_PORT, I2C0_SDA_PIN, I2C0_SDA_PINOP, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -273,7 +273,7 @@ static const IOPinCfg_t s_I2cPins[] = BLUEIOTHINGY_I2C0_PINS_MAP;
 */
 
 static const I2CCfg_t s_I2cCfg = {
-	.DevNo = BLUEIOTHINGY_I2C0_DEVNO,			// I2C device number
+	.DevNo = I2C_DEVNO,			// I2C device number
 	.Type = I2CTYPE_STANDARD,
 	.Mode = I2CMODE_MASTER,
 	.pIOPinMap = s_I2cPins,
@@ -642,10 +642,10 @@ void HardwareInit()
 #endif
 
 	// Turn off all LEDs
-	IOPinSet(BLUEIOTHINGY_CONNECT_LED_PORT, BLUEIOTHINGY_CONNECT_LED_PIN);
-	IOPinClear(BLUEIOTHINGY_LEDR_PORT, BLUEIOTHINGY_LEDR_PIN);
-	IOPinClear(BLUEIOTHINGY_LEDG_PORT, BLUEIOTHINGY_LEDG_PIN);
-	IOPinClear(BLUEIOTHINGY_LEDB_PORT, BLUEIOTHINGY_LEDB_PIN);
+	IOPinSet(CONNECT_LED_PORT, CONNECT_LED_PIN);
+	IOPinClear(LED_RED_PORT, LED_RED_PIN);
+	IOPinClear(LED_GREEN_PORT, LED_GREEN_PIN);
+	IOPinClear(LED_BLUE_PORT, LED_BLUE_PIN);
 
 	//IOPinSet(BLUEIO_TAG_EVIM_LED2_RED_PORT, BLUEIO_TAG_EVIM_LED2_RED_PIN);
 	//IOPinSet(BLUEIO_TAG_EVIM_LED2_GREEN_PORT, BLUEIO_TAG_EVIM_LED2_GREEN_PIN);

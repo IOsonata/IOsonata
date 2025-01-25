@@ -77,6 +77,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/exemples/BlueIOThingy/BlueIOTuis.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/agm_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/agm_invn_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_invn_icm20948.cpp</locationURI>
@@ -90,6 +95,16 @@
 			<name>src/gcc_nrf52832_thingy_xxaa.ld</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/gcc_nrf52832_thingy_xxaa.ld</locationURI>
+		</link>
+		<link>
+			<name>src/imu_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/imu_invn_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_invn_icm20948.cpp</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>

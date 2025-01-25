@@ -27,14 +27,15 @@
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "idelay.h"
+#include "imu/imu.h"
 
-#define INVN
+//#define INVN
 
 #ifdef INVN
 #include "imu/imu_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 #else
-#include "imu/imu_icm20948.h"
+//#include "imu/imu_icm20948.h"
 #include "sensors/agm_icm20948.h"
 #endif
 
@@ -46,7 +47,7 @@ void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSe
 void ImuQuatDataSend(long Quat[4]);
 static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt);
 
-static const AccelSensorCfg_t s_AccelCfg = {
+static AccelSensorCfg_t s_AccelCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,	// 50Hz (in mHz)
@@ -82,11 +83,19 @@ static const ImuCfg_t s_ImuCfg = {
 #ifdef INVN
 static ImuInvnIcm20948 s_Imu;
 #else
-static ImuIcm20948 s_Imu;
+//static ImuIcm20948 s_Imu;
 #endif
 
 static Timer *s_pTimer = NULL;
 FusionAhrs ahrs;
+FusionAhrsSettings ahrs_settings =  {
+	.convention = FusionConventionNwu,
+	.gain = 0.5f,
+//	.gyroscopeRange = (float)pGyro->Sensitivity(),// 2000.0f, /* replace this with actual gyroscope range in degrees/s */
+	.accelerationRejection = 10.0f,
+	.magneticRejection = 10.0f,
+	.recoveryTriggerPeriod = 5 * 50, /* 5 seconds */
+};
 
 //void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 
@@ -98,7 +107,7 @@ void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 	ImuQuat_t quat;
 	long q[4];
 
-#if 0
+#ifdef INVN
 		s_Imu.Read(accdata);
 		s_Imu.Read(gyrodata);
 		s_Imu.Read(magdata);
@@ -173,10 +182,12 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 	ImuQuat_t quat;
 	long q[4];
 
-	if (IntNo == BLUEIOTHINGY_IMU_INT_NO)
+	if (IntNo == IMU_INT_NO)
 	{
-#if 1
+#if 0
 		s_Imu.IntHandler();
+		//ImuDataChedHandler(NULL, 0);
+		return;
 #else
 		s_MotSensor.IntHandler();
 #endif
@@ -217,26 +228,32 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 void ICM20948EnableFeature(uint32_t Feature)
 {
 	//s_MotionFeature |= Feature;
-	s_Imu.Enable();
+	s_MotSensor.Enable();
+	//s_Imu.Enable();
 }
 
-bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
+bool ICM20948Init(DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	s_pTimer = pTimer;
 
+	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+	{
+		s_AccelCfg.DevAddr = ICM20948_I2C_DEV_ADDR0;
+	}
 
-	bool res = s_MotSensor.Init(s_AccelCfg, pIntrF, pTimer);
+	bool res = s_MotSensor.Init(s_AccelCfg, pIntrf, pTimer);
+	if (res == false)
+	{
+		return res;
+	}
+	res |= s_MotSensor.Init(s_GyroCfg, pIntrf, pTimer);
 	if (res == true)
 	{
-		res |= s_MotSensor.Init(s_GyroCfg, pIntrF, pTimer);
-		if (res == true)
-		{
-			res |= s_MotSensor.Init(s_MagCfg, pIntrF, pTimer);
-		}
+		//res |= s_MotSensor.Init(s_MagCfg, pIntrf, pTimer);
 	}
 	if (res == true)
 	{
-		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor, &s_MotSensor, &s_MotSensor);
+//		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor, &s_MotSensor, nullptr);//&s_MotSensor);
 	}
 
 	if (res)
@@ -244,14 +261,24 @@ bool ICM20948Init(DeviceIntrf * const pIntrF, Timer * const pTimer)
 //		s_MotSensor.Enable();
 	//	s_Imu.Enable();
 	    FusionAhrsInitialise(&ahrs);
+/*	    ahrs_settings = {
+			.convention = FusionConventionNwu,
+			.gain = 0.5f,
+			.gyroscopeRange = (float)pGyro->Sensitivity(),// 2000.0f, // replace this with actual gyroscope range in degrees/s
+			.accelerationRejection = 10.0f,
+			.magneticRejection = 10.0f,
+			.recoveryTriggerPeriod = 5 * SAMPLE_RATE, // 5 seconds
+	    };*/
 
+	    ahrs_settings.gyroscopeRange = (float)((GyroSensor*)&s_MotSensor)->Sensitivity();
+	    FusionAhrsSetSettings(&ahrs, &ahrs_settings);
 	}
 
 	msDelay(100);
-	IOPinConfig(BLUEIOTHINGY_IMU_INT_PORT, BLUEIOTHINGY_IMU_INT_PIN, BLUEIOTHINGY_IMU_INT_PINOP,
+	IOPinConfig(IMU_INT_PORT, IMU_INT_PIN, IMU_INT_PINOP,
 				IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
-	IOPinEnableInterrupt(BLUEIOTHINGY_IMU_INT_NO, 6, BLUEIOTHINGY_IMU_INT_PORT,
-						 BLUEIOTHINGY_IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION,
+	IOPinEnableInterrupt(IMU_INT_NO, 6, IMU_INT_PORT,
+						 IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION,
 						 ICM20948IntHandler, NULL);
 
 	return res;
