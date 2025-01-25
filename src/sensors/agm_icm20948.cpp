@@ -1684,46 +1684,26 @@ int inv_icm20948_ctrl_enable_sensorx(struct inv_icm20948 * s, unsigned char andr
 
 bool AgmIcm20948::Enable()
 {
-	uint8_t fifoen = 0;
 	uint8_t d, userctrl;
+	uint16_t dout;
 	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
 
-#ifdef DMP
-#if 0
-	regaddr = ICM20948_USER_CTRL_REG;
-	userctrl = Read8((uint8_t*)&regaddr, 2);
-	Write8((uint8_t*)&regaddr, 2, userctrl & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN));
-
-	ResetFifo();
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
 
 	msDelay(100);
 
-	regaddr = ICM20948_PWR_MGMT_2_REG;
-	d = Read8((uint8_t*)&regaddr, 2);
-
-	uint16_t dout = ICM20948_DMP_QUAT6_SET | ICM20948_DMP_QUAT9_SET | ICM20948_DMP_PRESSURE_SET;
-
 	if (vbSensorEnabled[ICM20948_ACCEL_IDX])
 	{
-//		AccelIcm20948::Enable();
-		d &= ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
-		fifoen |= ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
-
+		AccelIcm20948::Enable();
 		dout |= ICM20948_DMP_ACCEL_SET;
 	}
 
 	if (vbSensorEnabled[ICM20948_GYRO_IDX])
 	{
-		d &= ~ICM20948_PWR_MGMT_2_DISABLE_GYRO_MASK;
-		fifoen |= (ICM20948_FIFO_EN_2_GYRO_X_FIFO_EN | ICM20948_FIFO_EN_2_GYRO_Y_FIFO_EN |
-				   ICM20948_FIFO_EN_2_GYRO_Z_FIFO_EN);
 		dout |= ICM20948_DMP_GYRO_SET;
 	}
-	regaddr = ICM20948_FIFO_EN_2_REG;
-	Write8((uint8_t*)&regaddr, 2, fifoen);
 
 	regaddr = ICM20948_PWR_MGMT_2_REG;
 	Write8((uint8_t*)&regaddr, 2, d);
@@ -1735,19 +1715,15 @@ bool AgmIcm20948::Enable()
 		dout |= ICM20948_DMP_CPASS_SET;
 	}
 
-
-	regaddr = ICM20948_USER_CTRL_REG;
-	//d = Read8((uint8_t*)&regaddr, 2);
-	userctrl |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	Write8((uint8_t*)&regaddr, 2, userctrl);
-
-
-#endif
-	uint16_t dout = ICM20948_DMP_QUAT6_SET | ICM20948_DMP_QUAT9_SET | ICM20948_DMP_PRESSURE_SET | ICM20948_DMP_ACCEL_SET | ICM20948_DMP_GYRO_SET;
-
+#ifdef DMP
 	dout = EndianCvt16(dout);
 	regaddr = ICM20948_DMP_DATA_OUT_CTL1;
 	WriteDMP(regaddr, (uint8_t*)&dout, 2);
+
+	regaddr = ICM20948_USER_CTRL_REG;
+	d = Read8((uint8_t*)&regaddr, 2);
+	d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+	Write8((uint8_t*)&regaddr, 2, userctrl);
 
 	int i = INV_ICM20948_SENSOR_MAX + 1;//INV_SENSOR_TYPE_MAX;
 
@@ -1775,17 +1751,7 @@ bool AgmIcm20948::Enable()
 		inv_enable_sensor_internalx(&vIcmDevice, androidSensor, 1, &vIcmDevice.mems_put_to_sleep);
 		//inv_icm20948_allow_lpen_control(&vIcmDevice);
 #endif
-	}
-#else
-	if (vbSensorEnabled[ICM20948_ACCEL_IDX])
-	{
-		AccelIcm20948::Enable();
-	}
 
-	if (vbSensorEnabled[ICM20948_GYRO_IDX])
-	{
-		GyroIcm20948::Enable();
-	}
 #endif
 
 	return true;
