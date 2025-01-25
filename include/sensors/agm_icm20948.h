@@ -130,7 +130,7 @@ SOFTWARE.
 #define ICM20948_INT_ENABLE_DMP_INT1_EN				(1<<1)	// Enable DMP interrupt on pin 1
 #define ICM20948_INT_ENABLE_PLL_RDY_EN				(1<<2)	// Enable PLL ready interrupt on pin 1
 #define ICM20948_INT_ENABLE_WOM_INT_EN				(1<<3)	// Enable wake on motion interrupt on pin 1
-#define ICM20948_INT_ENABLE_REG_WOF_EN				(1<<7)	// Enable wake on FSYNC interrupt
+#define ICM20948_INT_ENABLE_WOF_EN				(1<<7)	// Enable wake on FSYNC interrupt
 
 #define ICM20948_INT_ENABLE_1_REG			(ICM20948_REG_BANK0 | 17)
 
@@ -758,6 +758,11 @@ private:
 };
 
 class AgmIcm20948 : public AccelIcm20948, public GyroIcm20948, public MagIcm20948, public TempSensor {
+	friend class ImuIcm20948;
+	friend class AccelIcm20948;
+	friend class GyroIcm20948;
+	friend class MagIcm20948;
+
 public:
 	AgmIcm20948();
 
@@ -878,6 +883,10 @@ public:
 	bool UpdateData();
 	void UpdateData(SENSOR_TYPE Type, uint64_t Timestamp, uint8_t * const pData);
 	virtual void IntHandler();
+
+private:
+	AgmIcm20948(const AgmIcm20948&); // no copy constructor
+
 	int GetFifoLen();
 	int ReadFifo(uint8_t * const pBuff, int Len);
 	void ResetFifo();
@@ -885,18 +894,15 @@ public:
 	void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
 	int ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len);
 	int WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len);
-
-private:
-	AgmIcm20948(const AgmIcm20948&); // no copy constructor
-
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
 	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
-	void ResetDMPCtrlReg();
 	bool SelectBank(uint8_t BankNo);
 	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
 	size_t CalcFifoPacketSize(uint16_t Header, uint16_t Mask, const size_t *Lookup, size_t LookupSize);
+	void ResetDMPCtrlReg();
+
 	bool vbDmpEnabled;
 	bool vbSensorEnabled[ICM20948_NB_SENSOR];
 	uint8_t vCurrBank;

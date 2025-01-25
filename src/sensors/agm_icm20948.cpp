@@ -332,6 +332,9 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		regaddr = ICM20948_INT_ENABLE_3_REG;
 		Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_3_FIFO_WM_EN);
 #else
+		regaddr = ICM20948_INT_ENABLE_REG;
+		d = ICM20948_INT_ENABLE_WOM_INT_EN | ICM20948_INT_ENABLE_PLL_RDY_EN;
+		Write8((uint8_t*)&regaddr, 2, d);
 
 		regaddr = ICM20948_INT_ENABLE_1_REG;
 		d = ICM20948_INT_ENABLE_1_RAW_DATA_0_DRY_EN;
@@ -511,16 +514,17 @@ uint32_t AccelIcm20948::FilterFreq(uint32_t Freq)
 
 bool AccelIcm20948::Enable()
 {
-	uint16_t regaddr = ICM20948_FIFO_EN_2_REG;
-	uint8_t d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
+	uint16_t regaddr = ICM20948_PWR_MGMT_2_REG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
 
 	Write8((uint8_t*)&regaddr, 2, d);
 
-	regaddr = ICM20948_PWR_MGMT_2_REG;
-	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_ACCEL_MASK;
+#ifdef DMP
+	regaddr = ICM20948_FIFO_EN_2_REG;
+	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
 
 	Write8((uint8_t*)&regaddr, 2, d);
-
+#endif
 
 	return true;
 }

@@ -40,6 +40,24 @@ bool MagAk09916::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 	uint8_t regaddr = AK09916_WIA1_REG;
 	uint16_t d;
 
+	MagSensor::Type(SENSOR_TYPE_MAG);
+#if 0
+	Interface(pIntrf);
+
+	if (pIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+		DeviceAddress(Cfg.DevAddr);
+	}
+	else
+	{
+		DeviceAddress(AK09916_I2C_7BITS_DEVADDR);
+	}
+
+	if (pTimer != NULL)
+	{
+		vpTimer = pTimer;
+	}
+#endif
 	Read(AK09916_I2C_7BITS_DEVADDR, &regaddr, 1, (uint8_t*)&d, 2);
 
 	if (d != AK09916_COMPANY_DEVICE_ID)

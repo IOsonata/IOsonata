@@ -491,6 +491,120 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	Imu::Init(Cfg, pAccel, pGyro, pMag);
 	vEvtHandler = Cfg.EvtHandler;
 
+	vpIcm->ResetDMPCtrlReg();
+
+	// Fifo watermark 80%
+	uint16_t val = EndianCvt16(800);
+	WriteDMP(ICM20948_DMP_FIFO_WATERMARK, (uint8_t*)&val, 2);
+
+	regaddr = ICM20948_FIFO_CFG_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_CFG_SINGLE);
+
+	// Undocumented value
+	regaddr = ICM20948_SINGLE_FIFO_PRIORITY_SEL;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_SINGLE_FIFO_PRIORITY_SEL_0XE4);
+
+	// Setup MEMs properties.
+	vInvnDev.base_state.accel_averaging = 1; //Change this value if higher sensor sample avergaing is required.
+	vInvnDev.base_state.gyro_averaging = 1;  //Change this value if higher sensor sample avergaing is required.
+	vInvnDev.base_state.gyro_div = FIFO_DIVIDER;
+
+	int32_t scale = pGyro->Sensitivity();
+
+	switch(scale)
+	{
+		case 250:
+			scale = (1 << 25);
+			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_250DPS;
+			break;
+		case 500:
+			scale = (1 << 26);
+			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_500DPS;
+			break;
+		case 1000:
+			scale = (1 << 27);
+			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS;
+			break;
+		case 2000:
+			scale = (1 << 28);
+			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_2000DPS;
+			break;
+	}
+	/**
+	* Sets scale in DMP to convert gyro data to 4000dps=2^30 regardless of fsr.
+	* @param[in] fsr for gyro parts
+	4000: 4000dps. 2000: 2000dps. 1000: 1000dps. 500: 500dps. 250: 250dps.
+
+	For 4000dps parts, 4000dps = 2^15.
+	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 4000dps=2^31, to make 4000dps=2^30, >>1 bit.
+	In Q-30 math, >> 1 equals multiply by 2^29 = 536870912.
+
+	For 2000dps parts, 2000dps = 2^15.
+	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 2000dps=2^31, to make 4000dps=2^30, >>2 bits.
+	In Q-30 math, >> 2 equals multiply by 2^28 = 268435456.
+	*/
+	regaddr = ICM20948_DMP_GYRO_FULLSCALE;
+	scale = EndianCvt32(scale);
+	vpIcm->WriteDMP(regaddr, (uint8_t*)&scale, 4);
+
+	int32_t scale2;
+
+	d = pAccel->Scale();
+
+	switch (d)
+	{
+		case 2:
+			scale = (1 << 25);  // 33554432L
+			scale2 = (1 << 19);	// 524288L
+			vInvnDev.base_state.accel_fullscale = MPU_FS_2G;
+			break;
+		case 4:
+			scale =  (1 << 26);	// 67108864L
+			scale2 = (1 << 18);	// 262144L
+			vInvnDev.base_state.accel_fullscale = MPU_FS_4G;
+			break;
+		case 8:
+			scale = (1 << 27);  // 134217728L
+			scale2 = (1 << 17);	// 131072L
+			vInvnDev.base_state.accel_fullscale = MPU_FS_8G;
+			break;
+		case 16:
+			scale = (1 << 28);  // 268435456L
+			scale2 = (1 << 16);	// 65536L
+		vInvnDev.base_state.accel_fullscale = MPU_FS_16G;
+			break;
+	}
+
+	/**
+	* Sets scale in DMP to convert accel data to 1g=2^25 regardless of fsr.
+	* @param[in] fsr for accel parts
+	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
+
+	For 2g parts, 2g = 2^15 -> 1g = 2^14,.
+	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^14 (<<16) becomes 1g=2^30, to make 1g=2^25, >>5 bits.
+	In Q-30 math, >> 5 equals multiply by 2^25 = 33554432.
+
+	For 8g parts, 8g = 2^15 -> 1g = 2^12.
+	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^12 (<<16) becomes 1g=2^28, to make 1g=2^25, >>3bits.
+	In Q-30 math, >> 3 equals multiply by 2^27 = 134217728.
+	*/
+	regaddr = ICM20948_DMP_ACC_SCALE;
+	scale = EndianCvt32(scale);
+	vpIcm->WriteDMP(regaddr, (uint8_t*)&scale, 4);
+
+	/**
+	* According to input fsr, a scale factor will be set at memory location ACC_SCALE2
+	* to convert calibrated accel data to 16-bit format same as what comes out of MPU register.
+	* It is a reverse scaling of the scale factor written to ACC_SCALE.
+	* @param[in] fsr for accel parts
+	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
+	*/
+	regaddr = ICM20948_DMP_ACC_SCALE2;
+	scale2 = EndianCvt32(scale2);
+	vpIcm->WriteDMP(regaddr, (uint8_t*)&scale2, 4);
+
+//	inv_icm20948_set_accel_fullscale(&vInvnDev, vInvnDev.base_state.accel_fullscale);
+
 	//inv_icm20948_initialize(&vInvnDev, s_Dmp3Image, sizeof(s_Dmp3Image));
 	inv_icm20948_set_gyro_divider(&vInvnDev, FIFO_DIVIDER);       //Initial sampling rate 1125Hz/19+1 = 56Hz.
 	inv_icm20948_set_accel_divider(&vInvnDev, FIFO_DIVIDER);      //Initial sampling rate 1125Hz/19+1 = 56Hz.
@@ -500,31 +614,25 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	dmp_icm20948_set_b2s_rate(&vInvnDev, DMP_ALGO_FREQ_56);
 
 	// FIFO Setup.
-	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_CFG, BIT_SINGLE_FIFO_CFG); // FIFO Config. fixme do once? burst write?
-	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_RST, 0x1f); // Reset all FIFOs.
-	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_RST, 0x1e); // Keep all but Gyro FIFO in reset.
-	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN, 0x0); // Slave FIFO turned off.
-	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN_2, 0x0); // Hardware FIFO turned off.
+//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_CFG, BIT_SINGLE_FIFO_CFG); // FIFO Config. fixme do once? burst write?
+//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_RST, 0x1f); // Reset all FIFOs.
+//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_RST, 0x1e); // Keep all but Gyro FIFO in reset.
+//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN, 0x0); // Slave FIFO turned off.
+//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN_2, 0x0); // Hardware FIFO turned off.
 
-	d = pAccel->Scale();
+	vpIcm->ResetFifo();
 
-	switch (d)
-	{
-		case 2:
-			vInvnDev.base_state.accel_fullscale = MPU_FS_2G;
-			break;
-		case 4:
-			vInvnDev.base_state.accel_fullscale = MPU_FS_4G;
-			break;
-		case 8:
-			vInvnDev.base_state.accel_fullscale = MPU_FS_8G;
-			break;
-		case 16:
-			vInvnDev.base_state.accel_fullscale = MPU_FS_16G;
-			break;
-	}
+	vInvnDev.lLastBankSelected = -1;
 
-	inv_icm20948_set_accel_fullscale(&vInvnDev, vInvnDev.base_state.accel_fullscale);
+	regaddr = ICM20948_INT_ENABLE_REG;
+	d = ICM20948_INT_ENABLE_DMP_INT1_EN;
+	Write8((uint8_t*)&regaddr, 2, d);
+
+	regaddr = ICM20948_INT_ENABLE_2_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_2_FIFO_OVERFLOW_EN);
+
+	regaddr = ICM20948_INT_ENABLE_3_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_3_FIFO_WM_EN);
 
 #if 0
 #if 1
