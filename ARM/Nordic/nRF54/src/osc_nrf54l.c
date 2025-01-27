@@ -72,7 +72,7 @@ void SystemOscInit(void)
 		uint32_t offset = (NRF_FICR->XOSC32MTRIM & FICR_XOSC32MTRIM_OFFSET_Msk) >> FICR_XOSC32MTRIM_OFFSET_Pos;
 		intcap = (uint32_t)((((g_McuOsc.CoreOsc.LoadCap * 2 - 40) - 55) * (slope + 791)) / 10 + (offset << 2))>>8;
 	}
-//	NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = 32;//intcap;
+	//NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = intcap;
 	//intcap = NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP;
 
 	//intcap = OSCILLATORS_HFXO_CAP_CALCULATE(NRF_FICR, (12));
@@ -93,7 +93,7 @@ void SystemOscInit(void)
 
 		intcap = (((g_McuOsc.LowPwrOsc.LoadCap - 40UL) * (uint32_t)(slope + 392) + 5) / 5120) + (offset >> 6);
 	}
-	NRF_OSCILLATORS->XOSC32KI.INTCAP = 20;//intcap;
+	NRF_OSCILLATORS->XOSC32KI.INTCAP = intcap;
 	intcap = NRF_OSCILLATORS->XOSC32KI.INTCAP;
 }
 

@@ -85,16 +85,10 @@ alignas(4) static nRFGrtcData_t s_nRfxGrtcData[TIMER_NRFX_RTC_MAX] = {
 	},
 };
 
-static std::atomic<int> s_nRfxLFClockSem(0);
 static std::atomic<int> s_nRfxGrtcSem(0);
-
 
 static bool nRFxGrtcEnable(TimerDev_t * const pTimer)
 {
-    NRF_CLOCK->TASKS_LFCLKSTART = 1;
-
-    s_nRfxLFClockSem++;
-
     switch (pTimer->DevNo)
     {
         case 0:
@@ -158,14 +152,6 @@ static void nRFxGrtcDisable(TimerDev_t * const pTimer)
 
 
     NRF_GRTC->TASKS_STOP = 1;
-
-    s_nRfxLFClockSem--;
-
-    if (s_nRfxLFClockSem <= 0)
-    {
-    	s_nRfxLFClockSem = 0;
-    	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
-    }
 }
 
 static void nRFxGrtcReset(TimerDev_t * const pTimer)
@@ -421,6 +407,14 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	}
 
     nRFxGrtcSetFrequency(pTimer, pCfg->Freq);
+
+    if (s_nRfxGrtcSem == 0)
+    {
+		NRF_GRTC->MODE |= GRTC_MODE_SYSCOUNTEREN_Enabled;
+		NRF_GRTC->TASKS_START = 1;
+    }
+
+    s_nRfxGrtcSem++;
 
     return true;
 }
