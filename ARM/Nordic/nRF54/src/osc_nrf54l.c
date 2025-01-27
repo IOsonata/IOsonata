@@ -34,7 +34,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "nrf.h"
-#include "nrf_oscillators.h"
 
 #include "coredev/system_core_clock.h"
 
