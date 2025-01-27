@@ -64,7 +64,11 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX)
 	{
+#if defined(NRF54L_SERIES)
+		return nRFxGrtcInit(pTimer, pCfg);
+#else
 		return nRFxRtcInit(pTimer, pCfg);
+#endif
 	}
 
 	return nRFxTimerInit(pTimer, pCfg);

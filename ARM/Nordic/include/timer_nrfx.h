@@ -60,11 +60,13 @@ SOFTWARE.
 
 /// Low frequency timer using Real Time Counter (RTC) 32768 Hz clock source.
 ///
+#if defined(NRF54L_SERIES)
+#define TIMER_NRFX_RTC_BASE_FREQ   			16000000	// GRTC is fixed freq. 16MHz, except in sleep mode
+#define TIMER_NRFX_RTC_MAX                 	GRTC_GRTC_NINTERRUPTS_SIZE	//!< Number RTC available
+#define TIMER_NRFX_RTC_MAX_TRIGGER_EVT     	5	//!< Max number of supported counter trigger event
+#else
 #define TIMER_NRFX_RTC_BASE_FREQ   			32768
 #define TIMER_NRFX_RTC_MAX                 	RTC_COUNT	//!< Number RTC available
-#if defined(NRF54L15_XXAA)
-#define TIMER_NRFX_RTC_MAX_TRIGGER_EVT     	RTC10_CC_NUM_SIZE	//!< Max number of supported counter trigger event
-#else
 #define TIMER_NRFX_RTC_MAX_TRIGGER_EVT     	RTC1_CC_NUM	//!< Max number of supported counter trigger event
 #endif
 
@@ -84,7 +86,11 @@ SOFTWARE.
 extern "C" {
 #endif
 
+#if defined(NRF54L_SERIES)
+bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
+#else
 bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
+#endif
 bool nRFxTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 
 #ifdef __cplusplus

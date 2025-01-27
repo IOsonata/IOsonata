@@ -48,12 +48,6 @@ SOFTWARE.
 #endif
 #define CLOCK_LFCLKSRC_SRC_RC		CLOCK_LFCLKSRC_SRC_LFRC
 #define CLOCK_LFCLKSRC_SRC_Xtal		CLOCK_LFCLKSRC_SRC_LFXO
-#elif defined(NRF54L15_XXAA)
-#define NRF_CLOCK		NRF_CLOCK_S
-#define NRF_RTC0		NRF_RTC10_S
-#define NRF_RTC1		NRF_RTC30_S
-#define RTC0_CC_NUM		RTC10_CC_NUM_SIZE
-#define RTC1_CC_NUM		RTC30_CC_NUM_SIZE
 #endif
 
 #pragma pack(push, 4)
@@ -141,17 +135,6 @@ static void RtcIRQHandler(int DevNo)
 
 extern "C" {
 
-#if defined(NRF54L15_XXAA)
-__WEAK void RTC10_IRQHandler()
-{
-	RtcIRQHandler(0);
-}
-
-__WEAK void RTC30_IRQHandler()
-{
-	RtcIRQHandler(1);
-}
-#else
 __WEAK void RTC0_IRQHandler()
 {
 	RtcIRQHandler(0);
@@ -167,7 +150,6 @@ __WEAK void RTC2_IRQHandler()
 	RtcIRQHandler(2);
 }
 #endif
-#endif
 
 }   // extern "C"
 
@@ -181,22 +163,12 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
     switch (pTimer->DevNo)
     {
         case 0:
-#if defined(NRF54L15_XXAA)
-            NVIC_ClearPendingIRQ(RTC10_IRQn);
-            NVIC_EnableIRQ(RTC10_IRQn);
-#else
             NVIC_ClearPendingIRQ(RTC0_IRQn);
             NVIC_EnableIRQ(RTC0_IRQn);
-#endif
             break;
         case 1:
-#if defined(NRF54L15_XXAA)
-            NVIC_ClearPendingIRQ(RTC30_IRQn);
-            NVIC_EnableIRQ(RTC30_IRQn);
-#else
 			NVIC_ClearPendingIRQ(RTC1_IRQn);
             NVIC_EnableIRQ(RTC1_IRQn);
-#endif
             break;
 #if TIMER_NRFX_RTC_MAX > 2
         case 2:
@@ -218,22 +190,12 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
     switch (pTimer->DevNo)
     {
         case 0:
-#if defined(NRF54L15_XXAA)
-        	NVIC_ClearPendingIRQ(RTC10_IRQn);
-            NVIC_DisableIRQ(RTC10_IRQn);
-#else
         	NVIC_ClearPendingIRQ(RTC0_IRQn);
             NVIC_DisableIRQ(RTC0_IRQn);
-#endif
             break;
         case 1:
-#if defined(NRF54L15_XXAA)
-        	NVIC_ClearPendingIRQ(RTC30_IRQn);
-            NVIC_DisableIRQ(RTC30_IRQn);
-#else
         	NVIC_ClearPendingIRQ(RTC1_IRQn);
             NVIC_DisableIRQ(RTC1_IRQn);
-#endif
             break;
 #if TIMER_NRFX_RTC_MAX > 2
         case 2:
@@ -409,11 +371,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     reg->TASKS_STOP = 1;
     reg->TASKS_CLEAR = 1;
 
-#if defined(NRF54L15_XXAA)
-    if (!(NRF_CLOCK->LFCLK.STAT & CLOCK_LFCLK_STAT_STATE_Msk))
-#else
     if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
-#endif
     {
     	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
 
@@ -422,18 +380,10 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		{
 			case TIMER_CLKSRC_DEFAULT:
 			case TIMER_CLKSRC_LFRC:
-#if defined(NRF54L15_XXAA)
-				NRF_CLOCK->LFCLK.SRC = CLOCK_LFCLK_SRC_SRC_LFRC << CLOCK_LFCLK_SRC_SRC_Pos;
-#else
 				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_RC << CLOCK_LFCLKSRC_SRC_Pos;
-#endif
 				break;
 			case TIMER_CLKSRC_LFXTAL:
-#if defined(NRF54L15_XXAA)
-				NRF_CLOCK->LFCLK.SRC = CLOCK_LFCLK_STAT_SRC_LFXO << CLOCK_LFCLK_SRC_SRC_Pos;
-#else
 				NRF_CLOCK->LFCLKSRC = CLOCK_LFCLKSRC_SRC_Xtal << CLOCK_LFCLKSRC_SRC_Pos;
-#endif
 				break;
 	#if defined(NRF52_SERIES) || (NRF51)
 			case TIMER_CLKSRC_HFRC:
@@ -450,11 +400,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 		do
 		{
-#if defined(NRF54L15_XXAA)
-			if ((NRF_CLOCK->LFCLK.STAT & CLOCK_LFCLK_STAT_STATE_Msk) && NRF_CLOCK->EVENTS_LFCLKSTARTED)
-#else
 			if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) && NRF_CLOCK->EVENTS_LFCLKSTARTED)
-#endif
 				break;
 
 		} while (timout-- > 0);
@@ -469,26 +415,14 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	switch (pCfg->DevNo)
 	{
 		case 0:
-#if defined(NRF54L15_XXAA)
-			NVIC_ClearPendingIRQ(RTC10_IRQn);
-			NVIC_SetPriority(RTC10_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(RTC10_IRQn);
-#else
 			NVIC_ClearPendingIRQ(RTC0_IRQn);
 			NVIC_SetPriority(RTC0_IRQn, pCfg->IntPrio);
 			NVIC_EnableIRQ(RTC0_IRQn);
-#endif
 			break;
 		case 1:
-#if defined(NRF54L15_XXAA)
-			NVIC_ClearPendingIRQ(RTC30_IRQn);
-			NVIC_SetPriority(RTC30_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(RTC30_IRQn);
-#else
 			NVIC_ClearPendingIRQ(RTC1_IRQn);
 			NVIC_SetPriority(RTC1_IRQn, pCfg->IntPrio);
 			NVIC_EnableIRQ(RTC1_IRQn);
-#endif
 			break;
 #if TIMER_NRFX_RTC_MAX > 2
 		case 2:
