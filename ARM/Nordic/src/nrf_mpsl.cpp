@@ -92,6 +92,10 @@ bool MpslInit(void)
 	//NVIC_DisableIRQ(GRTC_3_IRQn);
 	//NVIC_SetPriority(GRTC_3_IRQn, MPSL_HIGH_IRQ_PRIORITY);
 	//NVIC_EnableIRQ(GRTC_3_IRQn);
+	//NRF_GRTC->INTENSET3 = 0xF80;
+	NRF_GRTC->MODE |= 2;
+	NRF_GRTC->TASKS_START = 1;
+
 
 	res = mpsl_init(&lfclk, SWI00_IRQn, MpslAssert);
 	res = mpsl_clock_hfclk_latency_set(MPSL_CLOCK_HF_LATENCY_TYPICAL);
