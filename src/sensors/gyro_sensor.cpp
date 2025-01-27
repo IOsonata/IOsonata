@@ -53,14 +53,16 @@ uint16_t GyroSensor::Sensitivity(uint16_t Value)
 	{
 		return 0;
 	}
-//	if (vSensitivity != 0)
-//	{
-//		scale = (float)Value / (float)vSensitivity;
-//	}
-//	else
-//	{
+
+	// Re-adjust calibration if already set before
+	if (vSensitivity != 0)
+	{
+		scale = (float)Value / (float)vSensitivity;
+	}
+	else
+	{
 		scale = (float)Value / (float)vRange;
-//	}
+	}
 
 	for (int i = 0; i < 3; i++)
 	{

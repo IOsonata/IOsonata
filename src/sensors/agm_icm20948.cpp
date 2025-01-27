@@ -362,7 +362,7 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 
 	// Read manufacture trim offset
 	regaddr = ICM20948_XA_OFFS_H_REG;
-	Device::Read((uint8_t*)&regaddr, 2, d, 6);
+	((AgmIcm20948*)this)->Read((uint8_t*)&regaddr, 2, d, 6);
 
 	float offs[3];
 
@@ -542,7 +542,7 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	// Read manufacture trim offset
 	uint16_t regaddr = ICM20948_XG_OFFS_USRH_REG;
 	uint8_t d[10];
-	Device::Read((uint8_t*)&regaddr, 2, d, 6);
+	((AgmIcm20948*)this)->Read((uint8_t*)&regaddr, 2, d, 6);
 
 	float offs[3];
 
@@ -1702,11 +1702,12 @@ bool AgmIcm20948::Enable()
 
 	if (vbSensorEnabled[ICM20948_GYRO_IDX])
 	{
+		GyroIcm20948::Enable();
 		dout |= ICM20948_DMP_GYRO_SET;
 	}
 
 	regaddr = ICM20948_PWR_MGMT_2_REG;
-	Write8((uint8_t*)&regaddr, 2, d);
+//	Write8((uint8_t*)&regaddr, 2, d);
 
 	if (vbSensorEnabled[ICM20948_MAG_IDX])
 	{

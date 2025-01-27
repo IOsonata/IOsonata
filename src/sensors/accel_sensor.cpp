@@ -56,14 +56,16 @@ uint16_t AccelSensor::Scale(uint16_t Value)
 	{
 		return 0;
 	}
-//	if (vScale != 0)
-//	{
-//		scale = (float)Value / (float)vScale;
-//	}
-//	else
-//	{
+
+	// Re-adjust calibration scale factor if already set before
+	if (vScale != 0)
+	{
+		scale = (float)Value / (float)vScale;
+	}
+	else
+	{
 		scale = (float)Value / (float)vRange;
-//	}
+	}
 
 	for (int i = 0; i < 3; i++)
 	{
