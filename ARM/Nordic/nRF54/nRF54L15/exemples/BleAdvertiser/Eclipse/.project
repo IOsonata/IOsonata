@@ -46,9 +46,14 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/bt_app_sdc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/nrf_mpsl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/nrf_mpsl.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/nrfx_clock.c</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/nrfx_clock.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/drivers/src/nrfx_clock.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx_clock_mpsl.c</name>
