@@ -359,61 +359,45 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
-#if 0
+#ifdef SPIM_PRESENT
+	dev->pDmaReg->TXD.PTR = 0;
+	dev->pDmaReg->TXD.MAXCNT = 0;
+	dev->pDmaReg->TXD.LIST = 0;
+#ifdef NRF52_SERIES
+	// Anomaly 109
 	if (BuffLen < 2)
 	{
-		// Work around Nordic DMA bug 1 byte transfer
-		dev->pReg->EVENTS_READY = 0;
-        dev->pReg->TXD = 0xFF;
-
-        if (nRFxSPIWaitReady(dev, 100000) == true)
-        {
-        	*pBuff = dev->pReg->RXD;
-        	cnt++;
-        }
+		dev->pDmaReg->RXD.MAXCNT = 0;
+		dev->pDmaReg->RXD.PTR = 0;
+		dev->pDmaReg->RXD.LIST = 0;
+		dev->pDmaReg->EVENTS_STARTED = 0;
+		dev->pDmaReg->TASKS_START = 1;
+		while (dev->pDmaReg->EVENTS_STARTED == 0);
+		dev->pDmaReg->EVENTS_STARTED = 0;
 	}
-	else
 #endif
+	dev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
+	dev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
+
+	while (BuffLen > 0)
 	{
-#ifdef SPIM_PRESENT
-		dev->pDmaReg->TXD.PTR = 0;
-		dev->pDmaReg->TXD.MAXCNT = 0;
-		dev->pDmaReg->TXD.LIST = 0;
-#ifdef NRF52_SERIES
-		// Anomaly 109
-		if (BuffLen < 2)
-		{
-			dev->pDmaReg->RXD.MAXCNT = 0;
-			dev->pDmaReg->RXD.PTR = 0;
-			dev->pDmaReg->RXD.LIST = 0;
-			dev->pDmaReg->EVENTS_STARTED = 0;
-			dev->pDmaReg->TASKS_START = 1;
-			while (dev->pDmaReg->EVENTS_STARTED == 0);
-			dev->pDmaReg->EVENTS_STARTED = 0;
-		}
-#endif
-		dev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
-		dev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
+		int l = min(BuffLen, NRFX_SPI_DMA_MAXCNT);
 
-		while (BuffLen > 0)
-		{
-			int l = min(BuffLen, NRFX_SPI_DMA_MAXCNT);
+		dev->pDmaReg->RXD.MAXCNT = l;
+		dev->pDmaReg->EVENTS_END = 0;
+		dev->pDmaReg->EVENTS_ENDRX = 0;
+		dev->pDmaReg->TASKS_START = 1;
 
-			dev->pDmaReg->RXD.MAXCNT = l;
-			dev->pDmaReg->EVENTS_END = 0;
-			dev->pDmaReg->EVENTS_ENDRX = 0;
-			dev->pDmaReg->TASKS_START = 1;
+		if (nRFxSPIWaitRX(dev, 100000) == false)
+			break;
 
-			if (nRFxSPIWaitRX(dev, 100000) == false)
-				break;
-
-			l = dev->pDmaReg->RXD.AMOUNT;
-			BuffLen -= l;
-			pBuff += l;
-			cnt += l;
-		}
-#endif
+		l = dev->pDmaReg->RXD.AMOUNT;
+		BuffLen -= l;
+		pBuff += l;
+		cnt += l;
 	}
+#endif
+
 	return cnt;
 }
 
@@ -513,61 +497,46 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
-#if 0
-	if (DataLen < 2)
-	{
-		// Work around Nordic DMA bug for 1 byte transfer
-        dev->pReg->TXD = *pData;
-
-        if (nRFxSPIWaitReady(dev, 10000) == true)
-        {
-        	int d = dev->pReg->RXD;
-        	cnt++;
-        }
-	}
-	else
-#endif
-	{
 #ifdef SPIM_PRESENT
-		dev->pDmaReg->RXD.PTR = 0;
-		dev->pDmaReg->RXD.MAXCNT = 0;
-		dev->pDmaReg->RXD.LIST = 0;
+	dev->pDmaReg->RXD.PTR = 0;
+	dev->pDmaReg->RXD.MAXCNT = 0;
+	dev->pDmaReg->RXD.LIST = 0;
 
 #ifdef NRF52_SERIES
-		// Anomaly 109
-		if (DataLen < 2)
+	// Anomaly 109
+	if (DataLen < 2)
+	{
+		dev->pDmaReg->TXD.MAXCNT = 0;
+		dev->pDmaReg->TXD.PTR = 0;
+		dev->pDmaReg->TXD.LIST = 0;
+		dev->pDmaReg->EVENTS_STARTED = 0;
+		dev->pDmaReg->TASKS_START = 1;
+		while (dev->pDmaReg->EVENTS_STARTED == 0);
+		dev->pDmaReg->EVENTS_STARTED = 0;
+	}
+#endif
+	dev->pDmaReg->TXD.PTR = (uint32_t)pData;
+	dev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
+	while (DataLen > 0)
+	{
+		int l = min(DataLen, NRFX_SPI_DMA_MAXCNT);
+		dev->pDmaReg->TXD.MAXCNT = l;
+		dev->pDmaReg->EVENTS_END = 0;
+		dev->pDmaReg->EVENTS_ENDTX = 0;
+		dev->pDmaReg->TASKS_START = 1;
+
+		if (nRFxSPIWaitDMA(dev, 100000) == false)
 		{
-			dev->pDmaReg->TXD.MAXCNT = 0;
-			dev->pDmaReg->TXD.PTR = 0;
-			dev->pDmaReg->TXD.LIST = 0;
-			dev->pDmaReg->EVENTS_STARTED = 0;
-			dev->pDmaReg->TASKS_START = 1;
-			while (dev->pDmaReg->EVENTS_STARTED == 0);
-			dev->pDmaReg->EVENTS_STARTED = 0;
+			break;
 		}
-#endif
-		dev->pDmaReg->TXD.PTR = (uint32_t)pData;
-		dev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
-		while (DataLen > 0)
-		{
-			int l = min(DataLen, NRFX_SPI_DMA_MAXCNT);
-			dev->pDmaReg->TXD.MAXCNT = l;
-			dev->pDmaReg->EVENTS_END = 0;
-			dev->pDmaReg->EVENTS_ENDTX = 0;
-			dev->pDmaReg->TASKS_START = 1;
 
-			if (nRFxSPIWaitDMA(dev, 100000) == false)
-			{
-				break;
-			}
-
-			l = dev->pDmaReg->TXD.AMOUNT;
-			DataLen -= l;
-			pData += l;
-			cnt += l;
+		l = dev->pDmaReg->TXD.AMOUNT;
+		DataLen -= l;
+		pData += l;
+		cnt += l;
 	}
 #endif
-	}
+
 	return cnt;
 }
 
