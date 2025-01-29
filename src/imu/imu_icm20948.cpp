@@ -50,278 +50,6 @@ SOFTWARE.
 #include "sensors/agm_icm20948.h"
 #include "sensors/agm_icm20948DMP.h"
 
-/* dmp3a.20x48-0.4.1 */
-#if 0
-#define CFG_FIFO_SIZE                   (4222)
-
-// data output control
-#define DATA_OUT_CTL1			(4 * 16)
-#define DATA_OUT_CTL2			(4 * 16 + 2)
-#define DATA_INTR_CTL			(4 * 16 + 12)
-#define FIFO_WATERMARK			(31 * 16 + 14)
-
-// motion event control
-#define MOTION_EVENT_CTL		(4 * 16 + 14)
-
-// indicates to DMP which sensors are available
-/*	1: gyro samples available
-2: accel samples available
-8: secondary samples available	*/
-#define DATA_RDY_STATUS			(8 * 16 + 10)
-
-// batch mode
-#define BM_BATCH_CNTR			(27 * 16)
-#define BM_BATCH_THLD			(19 * 16 + 12)
-#define BM_BATCH_MASK			(21 * 16 + 14)
-
-// sensor output data rate
-#define ODR_ACCEL				(11 * 16 + 14)
-#define ODR_GYRO				(11 * 16 + 10)
-#define ODR_CPASS				(11 * 16 +  6)
-#define ODR_ALS					(11 * 16 +  2)
-#define ODR_QUAT6				(10 * 16 + 12)
-#define ODR_QUAT9				(10 * 16 +  8)
-#define ODR_PQUAT6				(10 * 16 +  4)
-#define ODR_GEOMAG				(10 * 16 +  0)
-#define ODR_PRESSURE			(11 * 16 + 12)
-#define ODR_GYRO_CALIBR			(11 * 16 +  8)
-#define ODR_CPASS_CALIBR		(11 * 16 +  4)
-
-// sensor output data rate counter
-#define ODR_CNTR_ACCEL			(9 * 16 + 14)
-#define ODR_CNTR_GYRO			(9 * 16 + 10)
-#define ODR_CNTR_CPASS			(9 * 16 +  6)
-#define ODR_CNTR_ALS			(9 * 16 +  2)
-#define ODR_CNTR_QUAT6			(8 * 16 + 12)
-#define ODR_CNTR_QUAT9			(8 * 16 +  8)
-#define ODR_CNTR_PQUAT6			(8 * 16 +  4)
-#define ODR_CNTR_GEOMAG			(8 * 16 +  0)
-#define ODR_CNTR_PRESSURE		(9 * 16 + 12)
-#define ODR_CNTR_GYRO_CALIBR	(9 * 16 +  8)
-#define ODR_CNTR_CPASS_CALIBR	(9 * 16 +  4)
-
-// mounting matrix
-#define CPASS_MTX_00            (23 * 16)
-#define CPASS_MTX_01            (23 * 16 + 4)
-#define CPASS_MTX_02            (23 * 16 + 8)
-#define CPASS_MTX_10            (23 * 16 + 12)
-#define CPASS_MTX_11            (24 * 16)
-#define CPASS_MTX_12            (24 * 16 + 4)
-#define CPASS_MTX_20            (24 * 16 + 8)
-#define CPASS_MTX_21            (24 * 16 + 12)
-#define CPASS_MTX_22            (25 * 16)
-
-#define GYRO_SF					(19 * 16)
-#define ACCEL_FB_GAIN			(34 * 16)
-#define ACCEL_ONLY_GAIN			(16 * 16 + 12)
-
-// bias calibration
-#define GYRO_BIAS_X				(139 * 16 +  4)
-#define GYRO_BIAS_Y				(139 * 16 +  8)
-#define GYRO_BIAS_Z				(139 * 16 + 12)
-#define GYRO_ACCURACY			(138 * 16 +  2)
-#define GYRO_BIAS_SET			(138 * 16 +  6)
-#define GYRO_LAST_TEMPR			(134 * 16)
-#define GYRO_SLOPE_X			( 78 * 16 +  4)
-#define GYRO_SLOPE_Y			( 78 * 16 +  8)
-#define GYRO_SLOPE_Z			( 78 * 16 + 12)
-
-#define ACCEL_BIAS_X            (110 * 16 +  4)
-#define ACCEL_BIAS_Y            (110 * 16 +  8)
-#define ACCEL_BIAS_Z            (110 * 16 + 12)
-#define ACCEL_ACCURACY			(97 * 16)
-#define ACCEL_CAL_RESET			(77 * 16)
-#define ACCEL_VARIANCE_THRESH	(93 * 16)
-#define ACCEL_CAL_RATE			(94 * 16 + 4)
-#define ACCEL_PRE_SENSOR_DATA	(97 * 16 + 4)
-#define ACCEL_COVARIANCE		(101 * 16 + 8)
-#define ACCEL_ALPHA_VAR			(91 * 16)
-#define ACCEL_A_VAR				(92 * 16)
-#define ACCEL_CAL_INIT			(94 * 16 + 2)
-#define ACCEL_CAL_SCALE_COVQ_IN_RANGE	(194 * 16)
-#define ACCEL_CAL_SCALE_COVQ_OUT_RANGE	(195 * 16)
-#define ACCEL_CAL_TEMPERATURE_SENSITIVITY	(194 * 16 + 4)
-#define ACCEL_CAL_TEMPERATURE_OFFSET_TRIM	(194 * 16 + 12)
-
-#define CPASS_BIAS_X            (126 * 16 +  4)
-#define CPASS_BIAS_Y            (126 * 16 +  8)
-#define CPASS_BIAS_Z            (126 * 16 + 12)
-#define CPASS_ACCURACY			(37 * 16)
-#define CPASS_BIAS_SET			(34 * 16 + 14)
-#define MAR_MODE				(37 * 16 + 2)
-#define CPASS_COVARIANCE		(115 * 16)
-#define CPASS_COVARIANCE_CUR	(118 * 16 +  8)
-#define CPASS_REF_MAG_3D		(122 * 16)
-#define CPASS_CAL_INIT			(114 * 16)
-#define CPASS_EST_FIRST_BIAS	(113 * 16)
-#define MAG_DISTURB_STATE		(113 * 16 + 2)
-#define CPASS_VAR_COUNT			(112 * 16 + 6)
-#define CPASS_COUNT_7			( 87 * 16 + 2)
-#define CPASS_MAX_INNO			(124 * 16)
-#define CPASS_BIAS_OFFSET		(113 * 16 + 4)
-#define CPASS_CUR_BIAS_OFFSET	(114 * 16 + 4)
-#define CPASS_PRE_SENSOR_DATA	( 87 * 16 + 4)
-
-// Compass Cal params to be adjusted according to sampling rate
-#define CPASS_TIME_BUFFER		(112 * 16 + 14)
-#define CPASS_RADIUS_3D_THRESH_ANOMALY	(112 * 16 + 8)
-
-#define CPASS_STATUS_CHK		(25 * 16 + 12)
-
-// 9-axis
-#define MAGN_THR_9X				(80 * 16)
-#define MAGN_LPF_THR_9X			(80 * 16 +  8)
-#define QFB_THR_9X				(80 * 16 + 12)
-
-// DMP running counter
-#define DMPRATE_CNTR			(18 * 16 + 4)
-
-// pedometer
-#define PEDSTD_BP_B				(49 * 16 + 12)
-#define PEDSTD_BP_A4			(52 * 16)
-#define PEDSTD_BP_A3			(52 * 16 +  4)
-#define PEDSTD_BP_A2			(52 * 16 +  8)
-#define PEDSTD_BP_A1			(52 * 16 + 12)
-#define PEDSTD_SB				(50 * 16 +  8)
-#define PEDSTD_SB_TIME			(50 * 16 + 12)
-#define PEDSTD_PEAKTHRSH		(57 * 16 +  8)
-#define PEDSTD_TIML				(50 * 16 + 10)
-#define PEDSTD_TIMH				(50 * 16 + 14)
-#define PEDSTD_PEAK				(57 * 16 +  4)
-#define PEDSTD_STEPCTR			(54 * 16)
-#define PEDSTD_STEPCTR2			(58 * 16 +  8)
-#define PEDSTD_TIMECTR			(60 * 16 +  4)
-#define PEDSTD_DECI				(58 * 16)
-#define PEDSTD_SB2				(60 * 16 + 14)
-#define STPDET_TIMESTAMP		(18 * 16 +  8)
-#define PEDSTEP_IND				(19 * 16 +  4)
-#define PED_Y_RATIO				(17 * 16 +  0)
-
-// SMD
-#define SMD_VAR_TH              (141 * 16 + 12)
-#define SMD_VAR_TH_DRIVE        (143 * 16 + 12)
-#define SMD_DRIVE_TIMER_TH      (143 * 16 +  8)
-#define SMD_TILT_ANGLE_TH       (179 * 16 + 12)
-#define BAC_SMD_ST_TH           (179 * 16 +  8)
-#define BAC_ST_ALPHA4           (180 * 16 + 12)
-#define BAC_ST_ALPHA4A          (176 * 16 + 12)
-
-// Wake on Motion
-#define WOM_ENABLE              (64 * 16 + 14)
-#define WOM_STATUS              (64 * 16 + 6)
-#define WOM_THRESHOLD           (64 * 16)
-#define WOM_CNTR_TH             (64 * 16 + 12)
-
-// Activity Recognition
-#define BAC_RATE                (48  * 16 + 10)
-#define BAC_STATE               (179 * 16 +  0)
-#define BAC_STATE_PREV          (179 * 16 +  4)
-#define BAC_ACT_ON              (182 * 16 +  0)
-#define BAC_ACT_OFF             (183 * 16 +  0)
-#define BAC_STILL_S_F           (177 * 16 +  0)
-#define BAC_RUN_S_F             (177 * 16 +  4)
-#define BAC_DRIVE_S_F           (178 * 16 +  0)
-#define BAC_WALK_S_F            (178 * 16 +  4)
-#define BAC_SMD_S_F             (178 * 16 +  8)
-#define BAC_BIKE_S_F            (178 * 16 + 12)
-#define BAC_E1_SHORT            (146 * 16 +  0)
-#define BAC_E2_SHORT            (146 * 16 +  4)
-#define BAC_E3_SHORT            (146 * 16 +  8)
-#define BAC_VAR_RUN             (148 * 16 + 12)
-#define BAC_TILT_INIT           (181 * 16 +  0)
-#define BAC_MAG_ON              (225 * 16 +  0)
-#define BAC_PS_ON               (74  * 16 +  0)
-#define BAC_BIKE_PREFERENCE     (173 * 16 +  8)
-#define BAC_MAG_I2C_ADDR        (229 * 16 +  8)
-#define BAC_PS_I2C_ADDR         (75  * 16 +  4)
-#define BAC_DRIVE_CONFIDENCE    (144 * 16 +  0)
-#define BAC_WALK_CONFIDENCE     (144 * 16 +  4)
-#define BAC_SMD_CONFIDENCE      (144 * 16 +  8)
-#define BAC_BIKE_CONFIDENCE     (144 * 16 + 12)
-#define BAC_STILL_CONFIDENCE    (145 * 16 +  0)
-#define BAC_RUN_CONFIDENCE      (145 * 16 +  4)
-#define BAC_MODE_CNTR           (150 * 16)
-#define BAC_STATE_T_PREV        (185 * 16 +  4)
-#define BAC_ACT_T_ON            (184 * 16 +  0)
-#define BAC_ACT_T_OFF           (184 * 16 +  4)
-#define BAC_STATE_WRDBS_PREV    (185 * 16 +  8)
-#define BAC_ACT_WRDBS_ON        (184 * 16 +  8)
-#define BAC_ACT_WRDBS_OFF       (184 * 16 + 12)
-#define BAC_ACT_ON_OFF          (190 * 16 +  2)
-#define PREV_BAC_ACT_ON_OFF     (188 * 16 +  2)
-#define BAC_CNTR                (48  * 16 +  2)
-
-// Flip/Pick-up
-#define FP_VAR_ALPHA            (245 * 16 +  8)
-#define FP_STILL_TH             (246 * 16 +  4)
-#define FP_MID_STILL_TH         (244 * 16 +  8)
-#define FP_NOT_STILL_TH         (246 * 16 +  8)
-#define FP_VIB_REJ_TH           (241 * 16 +  8)
-#define FP_MAX_PICKUP_T_TH      (244 * 16 + 12)
-#define FP_PICKUP_TIMEOUT_TH    (248 * 16 +  8)
-#define FP_STILL_CONST_TH       (246 * 16 + 12)
-#define FP_MOTION_CONST_TH      (240 * 16 +  8)
-#define FP_VIB_COUNT_TH         (242 * 16 +  8)
-#define FP_STEADY_TILT_TH       (247 * 16 +  8)
-#define FP_STEADY_TILT_UP_TH    (242 * 16 + 12)
-#define FP_Z_FLAT_TH_MINUS      (243 * 16 +  8)
-#define FP_Z_FLAT_TH_PLUS       (243 * 16 + 12)
-#define FP_DEV_IN_POCKET_TH     (76  * 16 + 12)
-#define FP_PICKUP_CNTR          (247 * 16 +  4)
-#define FP_RATE                 (240 * 16 + 12)
-
-// Gyro FSR
-#define GYRO_FULLSCALE          (72 * 16 + 12)
-
-// Accel FSR
-#define ACC_SCALE               (30 * 16 + 0)
-#define ACC_SCALE2              (79 * 16 + 4)
-
-// EIS authentication
-#define EIS_AUTH_INPUT			(160 * 16 +   4)
-#define EIS_AUTH_OUTPUT			(160 * 16 +   0)
-
-// B2S
-#define B2S_RATE                (48  * 16 +   8)
-// mounting matrix
-#define B2S_MTX_00              (208 * 16)
-#define B2S_MTX_01              (208 * 16 + 4)
-#define B2S_MTX_02              (208 * 16 + 8)
-#define B2S_MTX_10              (208 * 16 + 12)
-#define B2S_MTX_11              (209 * 16)
-#define B2S_MTX_12              (209 * 16 + 4)
-#define B2S_MTX_20              (209 * 16 + 8)
-#define B2S_MTX_21              (209 * 16 + 12)
-#define B2S_MTX_22              (210 * 16)
-
-// Dmp3 orientation parameters (Q30) initialization
-#define Q0_QUAT6				(33 * 16 + 0)
-#define Q1_QUAT6				(33 * 16 + 4)
-#define Q2_QUAT6				(33 * 16 + 8)
-#define Q3_QUAT6				(33 * 16 + 12)
-
-#define DMP_START_ADDRESS   ((unsigned short)0x1000)
-#define DMP_MEM_BANK_SIZE   256
-#define DMP_LOAD_START      0x90
-
-#define DMP_CODE_SIZE 14301
-
-#define DMP_ACCEL_SET			0x0080 //!< 0x8000 - calibrated accel if accel calibrated, raw accel otherwise
-#define DMP_GYRO_SET			0x0040 //!< 0x4000 - raw gyro
-#define DMP_CPASS_SET			0x0020 //!< 0x2000 - raw magnetic
-#define DMP_ALS_SET				0x0010 //!< 0x1000 - ALS/proximity
-#define DMP_QUAT6_SET			0x0008 //!< 0x0800 - game rotation vector
-#define DMP_QUAT9_SET			0x0004 //!< 0x0400 - rotation vector with heading accuracy
-#define DMP_PQUAT6_SET			0x0002 //!< 0x0200 - truncated game rotation vector for batching
-#define DMP_GEOMAG_SET			0x0001 //!< 0x0100 - geomag rotation vector with heading accuracy
-#define DMP_PRESSURE_SET		0x8000 //!< 0x0080 - pressure
-#define DMP_GYRO_CALIBR_SET		0x4000 //!< 0x0040 - calibrated gyro
-#define DMP_CPASS_CALIBR_SET	0x2000 //!< 0x0020 - calibrated magnetic
-#define DMP_PED_STEPDET_SET		0x1000 //!< 0x0010 - timestamp when each step is detected
-#define DMP_HEADER2_SET			0x0800 //!< 0x0008 - enable/disable data output in data output control register 2
-#define DMP_PED_STEPIND_SET		0x0700 //!< 0x0007 - number of steps detected will be attached to the 3 least significant bits of header
-
-#endif
 
 static const uint8_t s_Dmp3Image[] = {
 #include "imu/icm20948_img_dmp3a.h"
@@ -479,7 +207,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	vpIcm->Disable();
 
 
-	bool res = vpIcm->InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
+	bool res = InitDMP(ICM20948_DMP_PROG_START_ADDR, s_Dmp3Image, ICM20948_DMP_CODE_SIZE);
 
 	if (res == false)
 	{
@@ -491,7 +219,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	Imu::Init(Cfg, pAccel, pGyro, pMag);
 	vEvtHandler = Cfg.EvtHandler;
 
-	vpIcm->ResetDMPCtrlReg();
+	ResetDMPCtrlReg();
 
 	// Fifo watermark 80%
 	uint16_t val = EndianCvt16(800);
@@ -509,99 +237,8 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	vInvnDev.base_state.gyro_averaging = 1;  //Change this value if higher sensor sample avergaing is required.
 	vInvnDev.base_state.gyro_div = FIFO_DIVIDER;
 
-	int32_t scale = pGyro->Sensitivity();
-
-	switch(scale)
-	{
-		case 250:
-			scale = (1 << 25);
-			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_250DPS;
-			break;
-		case 500:
-			scale = (1 << 26);
-			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_500DPS;
-			break;
-		case 1000:
-			scale = (1 << 27);
-			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS;
-			break;
-		case 2000:
-			scale = (1 << 28);
-			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_2000DPS;
-			break;
-	}
-	/**
-	* Sets scale in DMP to convert gyro data to 4000dps=2^30 regardless of fsr.
-	* @param[in] fsr for gyro parts
-	4000: 4000dps. 2000: 2000dps. 1000: 1000dps. 500: 500dps. 250: 250dps.
-
-	For 4000dps parts, 4000dps = 2^15.
-	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 4000dps=2^31, to make 4000dps=2^30, >>1 bit.
-	In Q-30 math, >> 1 equals multiply by 2^29 = 536870912.
-
-	For 2000dps parts, 2000dps = 2^15.
-	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 2000dps=2^31, to make 4000dps=2^30, >>2 bits.
-	In Q-30 math, >> 2 equals multiply by 2^28 = 268435456.
-	*/
-	regaddr = ICM20948_DMP_GYRO_FULLSCALE;
-	scale = EndianCvt32(scale);
-	vpIcm->WriteDMP(regaddr, (uint8_t*)&scale, 4);
-
-	int32_t scale2;
-
-	d = pAccel->Scale();
-
-	switch (d)
-	{
-		case 2:
-			scale = (1 << 25);  // 33554432L
-			scale2 = (1 << 19);	// 524288L
-			vInvnDev.base_state.accel_fullscale = MPU_FS_2G;
-			break;
-		case 4:
-			scale =  (1 << 26);	// 67108864L
-			scale2 = (1 << 18);	// 262144L
-			vInvnDev.base_state.accel_fullscale = MPU_FS_4G;
-			break;
-		case 8:
-			scale = (1 << 27);  // 134217728L
-			scale2 = (1 << 17);	// 131072L
-			vInvnDev.base_state.accel_fullscale = MPU_FS_8G;
-			break;
-		case 16:
-			scale = (1 << 28);  // 268435456L
-			scale2 = (1 << 16);	// 65536L
-		vInvnDev.base_state.accel_fullscale = MPU_FS_16G;
-			break;
-	}
-
-	/**
-	* Sets scale in DMP to convert accel data to 1g=2^25 regardless of fsr.
-	* @param[in] fsr for accel parts
-	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
-
-	For 2g parts, 2g = 2^15 -> 1g = 2^14,.
-	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^14 (<<16) becomes 1g=2^30, to make 1g=2^25, >>5 bits.
-	In Q-30 math, >> 5 equals multiply by 2^25 = 33554432.
-
-	For 8g parts, 8g = 2^15 -> 1g = 2^12.
-	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^12 (<<16) becomes 1g=2^28, to make 1g=2^25, >>3bits.
-	In Q-30 math, >> 3 equals multiply by 2^27 = 134217728.
-	*/
-	regaddr = ICM20948_DMP_ACC_SCALE;
-	scale = EndianCvt32(scale);
-	vpIcm->WriteDMP(regaddr, (uint8_t*)&scale, 4);
-
-	/**
-	* According to input fsr, a scale factor will be set at memory location ACC_SCALE2
-	* to convert calibrated accel data to 16-bit format same as what comes out of MPU register.
-	* It is a reverse scaling of the scale factor written to ACC_SCALE.
-	* @param[in] fsr for accel parts
-	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
-	*/
-	regaddr = ICM20948_DMP_ACC_SCALE2;
-	scale2 = EndianCvt32(scale2);
-	vpIcm->WriteDMP(regaddr, (uint8_t*)&scale2, 4);
+	SetDMPGyroScale();
+	SetDMPAccelScale();
 
 //	inv_icm20948_set_accel_fullscale(&vInvnDev, vInvnDev.base_state.accel_fullscale);
 
@@ -620,7 +257,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 //	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN, 0x0); // Slave FIFO turned off.
 //	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN_2, 0x0); // Hardware FIFO turned off.
 
-	vpIcm->ResetFifo();
+	ResetFifo();
 
 	vInvnDev.lLastBankSelected = -1;
 
@@ -786,6 +423,186 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 //	WriteDMP(regaddr, (uint8_t*)&x, 2);
 
 	return true;
+}
+
+void ImuIcm20948::ResetDMPCtrlReg()
+{
+	uint16_t regaddr = ICM20948_DMP_DATA_OUT_CTL1;
+	uint8_t d[2] = {0, 0};
+
+	WriteDMP(ICM20948_DMP_DATA_OUT_CTL1, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_OUT_CTL2, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_INTR_CTL, d, 2);
+	WriteDMP(ICM20948_DMP_MOTION_EVENT_CTL, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_RDY_STATUS, d, 2);
+}
+
+void ImuIcm20948::ResetFifo()
+{
+	uint16_t regaddr;
+	uint16_t cnt;
+
+	regaddr = ICM20948_USER_CTRL_REG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2);
+	Write8((uint8_t*)&regaddr, 2, d & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN));
+
+	do {
+		regaddr = ICM20948_FIFO_RST_REG;
+		Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
+		Write8((uint8_t*)&regaddr, 2, ~ICM20948_FIFO_RST_FIFO_RESET_MASK);//0x1e);
+		msDelay(1);
+
+		regaddr = ICM20948_FIFO_COUNTH_REG;
+		cnt = EndianCvt16(Read16((uint8_t*)&regaddr, 2)) & 0x1FFF;
+	} while (cnt != 0);
+
+	regaddr = ICM20948_INT_STATUS_2_REG;
+	Write16((uint8_t*)&regaddr, 2, 0);
+
+	regaddr = ICM20948_USER_CTRL_REG;
+	Write8((uint8_t*)&regaddr, 2, d);
+}
+
+bool ImuIcm20948::SetDMPAccelScale()
+{
+	int32_t scale, scale2;
+
+	uint16_t d = ((AccelSensor*)vpIcm)->Scale();
+
+	switch (d)
+	{
+		case 2:
+			scale = (1 << 25);  // 33554432L
+			scale2 = (1 << 19);	// 524288L
+			vInvnDev.base_state.accel_fullscale = MPU_FS_2G;
+			break;
+		case 4:
+			scale =  (1 << 26);	// 67108864L
+			scale2 = (1 << 18);	// 262144L
+			vInvnDev.base_state.accel_fullscale = MPU_FS_4G;
+			break;
+		case 8:
+			scale = (1 << 27);  // 134217728L
+			scale2 = (1 << 17);	// 131072L
+			vInvnDev.base_state.accel_fullscale = MPU_FS_8G;
+			break;
+		case 16:
+			scale = (1 << 28);  // 268435456L
+			scale2 = (1 << 16);	// 65536L
+		vInvnDev.base_state.accel_fullscale = MPU_FS_16G;
+			break;
+	}
+
+	/**
+	* Sets scale in DMP to convert accel data to 1g=2^25 regardless of fsr.
+	* @param[in] fsr for accel parts
+	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
+
+	For 2g parts, 2g = 2^15 -> 1g = 2^14,.
+	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^14 (<<16) becomes 1g=2^30, to make 1g=2^25, >>5 bits.
+	In Q-30 math, >> 5 equals multiply by 2^25 = 33554432.
+
+	For 8g parts, 8g = 2^15 -> 1g = 2^12.
+	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^12 (<<16) becomes 1g=2^28, to make 1g=2^25, >>3bits.
+	In Q-30 math, >> 3 equals multiply by 2^27 = 134217728.
+	*/
+	uint16_t regaddr = ICM20948_DMP_ACC_SCALE;
+	scale = EndianCvt32(scale);
+	WriteDMP(regaddr, (uint8_t*)&scale, 4);
+
+	/**
+	* According to input fsr, a scale factor will be set at memory location ACC_SCALE2
+	* to convert calibrated accel data to 16-bit format same as what comes out of MPU register.
+	* It is a reverse scaling of the scale factor written to ACC_SCALE.
+	* @param[in] fsr for accel parts
+	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
+	*/
+	regaddr = ICM20948_DMP_ACC_SCALE2;
+	scale2 = EndianCvt32(scale2);
+	WriteDMP(regaddr, (uint8_t*)&scale2, 4);
+
+}
+
+bool ImuIcm20948::SetDMPGyroScale()
+{
+	int32_t scale = ((GyroSensor*)vpIcm)->Sensitivity();
+
+	switch(scale)
+	{
+		case 250:
+			scale = (1 << 25);
+			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_250DPS;
+			break;
+		case 500:
+			scale = (1 << 26);
+			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_500DPS;
+			break;
+		case 1000:
+			scale = (1 << 27);
+			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS;
+			break;
+		case 2000:
+			scale = (1 << 28);
+			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_2000DPS;
+			break;
+	}
+	/**
+	* Sets scale in DMP to convert gyro data to 4000dps=2^30 regardless of fsr.
+	* @param[in] fsr for gyro parts
+	4000: 4000dps. 2000: 2000dps. 1000: 1000dps. 500: 500dps. 250: 250dps.
+
+	For 4000dps parts, 4000dps = 2^15.
+	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 4000dps=2^31, to make 4000dps=2^30, >>1 bit.
+	In Q-30 math, >> 1 equals multiply by 2^29 = 536870912.
+
+	For 2000dps parts, 2000dps = 2^15.
+	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 2000dps=2^31, to make 4000dps=2^30, >>2 bits.
+	In Q-30 math, >> 2 equals multiply by 2^28 = 268435456.
+	*/
+	uint16_t regaddr = ICM20948_DMP_GYRO_FULLSCALE;
+	scale = EndianCvt32(scale);
+	WriteDMP(regaddr, (uint8_t*)&scale, 4);
+
+	/**
+	 *
+	 * gyro_level should be set to 4 regardless of fullscale, due to the addition of API dmp_icm20648_set_gyro_fsr()
+	 * 4 = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS
+	 */
+	uint8_t tbpll;
+	regaddr = ICM20948_GYRO_SMPLRT_DIV_REG;
+	uint8_t div = Read8((uint8_t*)&regaddr, 2);
+
+	regaddr = ICM20948_TIMEBASE_CORRECTION_PLL_REG;
+	tbpll = Read8((uint8_t*)&regaddr, 2);
+
+
+
+	const uint64_t MagicConstant = 264446880937391ULL;
+	const uint64_t MagicConstantScale = 100000ULL;
+	uint64_t res;
+	int32_t gyrosf;
+
+	if (tbpll & 0x80)
+	{
+		res = (MagicConstant * (long long)(1ULL << ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS) * (1 + div) / (1270 - (tbpll & 0x7F)) / MagicConstantScale);
+	}
+	else
+	{
+		res = (MagicConstant * (long long)(1ULL << ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS) * (1 + div) / (1270 + tbpll) / MagicConstantScale);
+	}
+
+	/**
+	    In above deprecated FP version, worst case arguments can produce a result that overflows a signed long.
+	    Here, for such cases, we emulate the FP behavior of setting the result to the maximum positive value, as
+	    the compiler's conversion of a u64 to an s32 is simple truncation of the u64's high half, sadly....
+	*/
+	if  (res > 0x7FFFFFFF)
+		gyrosf = EndianCvt32(0x7FFFFFFF);
+	else
+		gyrosf = EndianCvt32((int32_t)res);
+
+	regaddr = ICM20948_DMP_GYRO_SF;
+	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&gyrosf, 4);
 }
 
 bool ImuIcm20948::Enable()
@@ -1082,9 +899,6 @@ void ImuIcm20948::IntHandler()
 	d = vpIcm->Read8((uint8_t*)&regaddr, 2);
 
 	uint64_t t;
-	regaddr = ICM20948_FIFO_COUNTH_REG;
-	size_t cnt = vpIcm->Read16((uint8_t*)&regaddr, 2);
-	cnt = EndianCvt16(cnt);
 
 	if (vpTimer)
 	{
@@ -1093,8 +907,7 @@ void ImuIcm20948::IntHandler()
 
 	if (status[2])
 	{
-		printf("%x overflow %d\n", status[2], cnt);
-		vpIcm->ResetFifo();
+		ResetFifo();
 		vFifoHdr = vFifoHdr2 = 0;
 		vFifoDataLen = 0;
 
@@ -1103,86 +916,87 @@ void ImuIcm20948::IntHandler()
 
 	regaddr = REG_FIFO_R_W;
 
-	while (cnt >= ICM20948_FIFO_PAGE_SIZE)
+	regaddr = ICM20948_FIFO_COUNTH_REG;
+	size_t cnt = Read16((uint8_t*)&regaddr, 2);
+	cnt = EndianCvt16(cnt);
+
+	regaddr = ICM20948_FIFO_R_W_REG;
+	uint8_t *p = &vFifo[vFifoDataLen];
+
+	while (cnt > 0)//ICM20948_FIFO_PAGE_SIZE)
 	{
-		if (vFifoDataLen > ICM20948_FIFO_PAGE_SIZE)
-		{
-			printf("VFifoLen : %d\n", vFifoDataLen);
-		}
-		int l = vpIcm->Read((uint8_t*)&regaddr, 2, &vFifo[vFifoDataLen], ICM20948_FIFO_PAGE_SIZE);
+		int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, sizeof(vFifo) - vFifoDataLen));
 
-		int x = vFifoDataLen;
+		if (l == 0)
+		{
+			break;
+		}
+		l = Read((uint8_t*)&regaddr, 2, p, l);
+		p += l;
 		vFifoDataLen += l;
-
-		if (vFifoDataLen > ICM20948_FIFO_PAGE_SIZE * 2)
-		{
-			printf("-VFifoLen : %d %d %d\n", vFifoDataLen, x, l);
-		}
 		cnt -= l;
+	}
 
-		uint8_t *p = vFifo;
+	p = vFifo;
 
-		while (vFifoDataLen > 3)
+	while (vFifoDataLen > 0)
+	{
+		if (vFifoHdr == 0 && vFifoHdr2 == 0)
 		{
-			if (vFifoHdr == 0 && vFifoHdr2 == 0)
-			{
-				int l = 0;
-				// new packet
-				vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
+			int l = 0;
 
-				if (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK)
+			// new packet
+			vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
+
+			if ((vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
+			{
+				ResetFifo();
+				vFifoDataLen = 0;
+				vFifoHdr = 0;
+				cnt = 0;
+				return;
+			}
+
+			//vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
+			l = 2;
+
+			if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
+			{
+				if (vFifoDataLen < 4)
 				{
-					vpIcm->ResetFifo();
-					vFifoHdr = vFifoHdr2 = 0;
+					vFifoHdr = 0;
+					return;
+				}
+				vFifoHdr2 = ((uint16_t)p[2] << 8U) | ((uint16_t)p[3] & 0xFF);
+
+				if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
+				{
+					ResetFifo();
 					vFifoDataLen = 0;
+					vFifoHdr = vFifoHdr2 = 0;
 					cnt = 0;
 					return;
 				}
 
-				l = 2;
-
-				if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
-				{
-					vFifoHdr2 = ((uint16_t)p[2] << 8U) | ((uint16_t)p[3] & 0xFF);
-
-					if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
-					{
-						vpIcm->ResetFifo();
-						vFifoHdr = vFifoHdr2 = 0;
-						vFifoDataLen = 0;
-						cnt = 0;
-						return;
-					}
-
-					l += 2;
-					vFifoHdr &= ~ICM20948_FIFO_HEADER_HEADER2;
-				}
-				vFifoDataLen -= l;
-				p+= l;
-
-//				if (vFifoDataLen > 0)
-				{
-//					memmove(vFifo, &vFifo[l], vFifoDataLen);
-				}
-	//				printf("Header %x %x\n", vFifoHdr, vFifoHdr2);
-			}
-			int l = ProcessDMPFifo(p, vFifoDataLen, t);
-			if (l == 0)
-			{
-				return;
+				l += 2;
+				vFifoHdr &= ~ICM20948_FIFO_HEADER_HEADER2;
 			}
 			vFifoDataLen -= l;
-			p += l;
-		}
-			if (vFifoDataLen > 0)
-			{
-				memmove(vFifo, p, vFifoDataLen);
-				if (vFifoDataLen > ICM20948_FIFO_PAGE_SIZE)
-				{
-					printf("3-VFifoLen : %d\n", vFifoDataLen);
-				}
-			}
 
+			p += l;
+
+		}
+		int l = ProcessDMPFifo(p, vFifoDataLen, t);
+		if (l == 0)
+		{
+			break;//return false;
+		}
+		vFifoDataLen -= l;
+		p += l;
+	}
+	if (vFifoDataLen > 0 && p != vFifo)
+	{
+		memmove(vFifo, p, vFifoDataLen);
 	}
 #endif
 }
@@ -1542,5 +1356,137 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 	vFifoHdr = vFifoHdr2 = 0;
 
 	return cnt;
+}
+
+bool ImuIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len)
+{
+	if (pDmpImage == NULL || Len == 0)
+		return false;
+
+	// Disable DMP & FIFO before FIFO can be reseted and DMP firmware loaded
+	uint16_t regaddr = ICM20948_USER_CTRL_REG;
+	uint8_t d = Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
+	Write8((uint8_t*)&regaddr,	2, d);
+#if 0
+	// Reset FIFO
+	regaddr = ICM20948_FIFO_RST_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
+	Write8((uint8_t*)&regaddr, 2, 0);
+#else
+	ResetFifo();
+#endif
+
+	// load external image
+	bool res = UploadDMPImage(pDmpImage, Len);
+
+	if (res)
+	{
+		DmpStartAddr = EndianCvt16(DmpStartAddr);
+
+		// Write DMP program start address
+		regaddr = ICM20948_DMP_PROG_START_ADDRH_REG;
+		Write16((uint8_t*)&regaddr, 2, DmpStartAddr);
+
+		regaddr = ICM20948_USER_CTRL_REG;
+		d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
+		Write8((uint8_t*)&regaddr, 2, d);
+
+		vbDmpEnabled = true;
+
+		return true;
+	}
+
+	return false;
+}
+
+bool ImuIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
+{
+	int len = Len, l = 0;
+	uint8_t *p = (uint8_t*)pDmpImage;
+	uint16_t regaddr;
+	uint16_t memaddr = ICM20948_DMP_LOAD_MEM_START_ADDR;
+	size_t psize = ICM20948_DMP_MEM_BANK_SIZE;
+
+	if (Interface()->Type() == DEVINTRF_TYPE_I2C)
+	{
+		psize = ICM20948_FIFO_PAGE_SIZE;
+	}
+
+	regaddr = ICM20948_PWR_MGMT_1_REG;
+	uint8_t pwrstate;
+
+	pwrstate = Read8((uint8_t*)&regaddr, 2);
+
+	// make sure it is on full power
+	Write8((uint8_t*)&regaddr, 2, pwrstate & ~(ICM20948_PWR_MGMT_1_LP_EN | ICM20948_PWR_MGMT_1_SLEEP));
+
+	regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
+	Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
+
+	regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
+	Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
+
+	l = min(len, ICM20948_FIFO_PAGE_SIZE - (memaddr % ICM20948_FIFO_PAGE_SIZE));
+
+	while (len > 0)
+	{
+		regaddr = ICM20948_DMP_MEM_RW_REG;
+		l = Write((uint8_t*)&regaddr, 2, p, l);
+
+		p += l;
+		memaddr += l;
+		len -= l;
+
+		regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
+		Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
+
+		regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
+		Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
+
+		l = min(len, ICM20948_FIFO_PAGE_SIZE);
+	}
+
+	len = Len;
+	p = (uint8_t*)pDmpImage;
+	memaddr = ICM20948_DMP_LOAD_MEM_START_ADDR;
+
+	// Verify
+
+	regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
+	Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
+
+	regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
+	Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
+	l = min(len, ICM20948_FIFO_PAGE_SIZE - (memaddr % ICM20948_FIFO_PAGE_SIZE));
+
+	while (len > 0)
+	{
+		uint8_t m[ICM20948_FIFO_PAGE_SIZE];
+
+		regaddr = ICM20948_DMP_MEM_RW_REG;
+		Read((uint8_t*)&regaddr, 2, m, l);
+
+		if (memcmp(p, m, l) != 0)
+		{
+			return false;
+		}
+
+		p += l;
+		memaddr += l;
+		len -= l;
+
+		regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
+		Write8((uint8_t*)&regaddr, 2, memaddr >> 8);
+
+		regaddr = ICM20948_DMP_MEM_STARTADDR_REG;
+		Write8((uint8_t*)&regaddr, 2, memaddr & 0xFF);
+
+		l = min(len, ICM20948_FIFO_PAGE_SIZE);
+	}
+
+	// Restore power state
+	Write8((uint8_t*)&regaddr, 2, pwrstate);
+
+	return true;
 }
 

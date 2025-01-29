@@ -58,24 +58,6 @@ typedef struct {
 	size_t Len;
 } FifoDataLen_t;
 
-static const size_t s_FifoDataLenLookup1[] = {
-	ICM20948_FIFO_HEADER_ACCEL_SIZE, ICM20948_FIFO_HEADER_GYRO_SIZE,
-	ICM20948_FIFO_HEADER_CPASS_SIZE, ICM20948_FIFO_HEADER_ALS_SIZE,
-	ICM20948_FIFO_HEADER_QUAT6_SIZE, ICM20948_FIFO_HEADER_QUAT9_SIZE,
-	ICM20948_FIFO_HEADER_PEDO_QUAT6_SIZE, ICM20948_FIFO_HEADER_GEOMAG_SIZE,
-	ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE, ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE,
-	ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE, ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE
-};
-static const size_t s_NbFifoDataLenLookup1 = sizeof(s_FifoDataLenLookup1) / sizeof(size_t);
-
-static const size_t s_FifoDataLenLookup2[] = {
-	ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE, ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE,
-	ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE, ICM20948_FIFO_HEADER2_FSYNC_SIZE,
-	ICM20948_FIFO_HEADER2_PICKUP_SIZE, 0, 0, ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE,
-	2
-};
-static const size_t s_NbFifoDataLenLookup2 = sizeof(s_FifoDataLenLookup2) / sizeof(size_t);
-
 static const uint8_t s_Dmp3Image[] = {
 #include "imu/icm20948_img_dmp3a.h"
 };
@@ -182,60 +164,10 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 
 	Reset();
 
-	struct inv_icm20948_serif icm20948_serif;
+	// NOTE : require delay for reset to stabilize
+	// the chip would not respond properly to motion detection
+	msDelay(100);
 
-	//inv_icm20948_reset_states(&vIcmDevice, &icm20948_serif);
-	memset(&vIcmDevice, 0, sizeof(inv_icm20948_t));
-	vIcmDevice.serif.context   = this;
-	vIcmDevice.serif.read_reg  = InvnReadReg;
-	vIcmDevice.serif.write_reg = InvnWriteReg;
-	vIcmDevice.serif.max_read  = 16; /* maximum number of bytes allowed per serial read */
-	vIcmDevice.serif.max_write = 16; /* maximum number of bytes allowed per serial write */
-	vIcmDevice.serif.is_spi = vpIntrf->Type() == DEVINTRF_TYPE_SPI;
-
-	//inv_icm20948_register_aux_compass(&vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, (uint8_t)AK0991x_DEFAULT_I2C_ADDR);
-	vIcmDevice.secondary_state.compass_slave_id = HW_AK09916;
-
-#define AK0991x_DEFAULT_I2C_ADDR	0x0C	/* The default I2C address for AK0991x Magnetometers */
-
-	vIcmDevice.secondary_state.compass_chip_addr = AK0991x_DEFAULT_I2C_ADDR;
-	vIcmDevice.secondary_state.compass_state = INV_ICM20948_COMPASS_INITED;
-	/* initialise mounting matrix of compass to identity akm9916 */
-	vIcmDevice.mounting_matrix_secondary_compass[0] = 1 ;
-	vIcmDevice.mounting_matrix_secondary_compass[4] = -1;
-	vIcmDevice.mounting_matrix_secondary_compass[8] = -1;
-
-	msDelay(500);
-
-	// Setup accel and gyro mounting matrix and associated angle for current board
-	inv_icm20948_init_matrix(&vIcmDevice);
-
-	for (int i = 0; i < INV_ICM20948_SENSOR_MAX; i++) {
-		inv_icm20948_set_matrix(&vIcmDevice, s_CfgMountingMatrix, (inv_icm20948_sensor)i);
-	}
-
-		int result = 0;
-		static unsigned char data;
-		// set static variable
-		vIcmDevice.sAllowLpEn = 0;
-		vIcmDevice.s_compass_available = 0;
-		// ICM20948 do not support the proximity sensor for the moment.
-		// s_proximity_available variable is nerver changes
-		vIcmDevice.s_proximity_available = 0;
-
-		// Set varialbes to default values
-		memset(&vIcmDevice.base_state, 0, sizeof(vIcmDevice.base_state));
-		vIcmDevice.base_state.pwr_mgmt_1 = ICM20948_PWR_MGMT_1_CLKSEL_AUTO;
-		vIcmDevice.base_state.pwr_mgmt_2 = ICM20948_PWR_MGMT_2_DISABLE_ALL;//BIT_PWR_ACCEL_STBY | BIT_PWR_GYRO_STBY | BIT_PWR_PRESSURE_STBY;
-		vIcmDevice.base_state.serial_interface = vIcmDevice.serif.is_spi ? SERIAL_INTERFACE_SPI : SERIAL_INTERFACE_I2C;
-		//result |= inv_icm20948_read_mems_reg(&vIcmDevice, REG_USER_CTRL, 1, &vIcmDevice.base_state.user_ctrl);
-
-		if(vIcmDevice.base_state.serial_interface == SERIAL_INTERFACE_SPI)
-			vIcmDevice.base_state.user_ctrl = ICM20948_USER_CTRL_I2C_IF_DIS;
-		else
-			vIcmDevice.base_state.user_ctrl = 0;
-
-		vIcmDevice.base_state.user_ctrl = 0;
 	uint8_t userctrl = 0;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
 	uint8_t lpconfig = ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
@@ -245,11 +177,6 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS;
 		lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
 	}
-
-
-	// NOTE : require delay for reset to stabilize
-	// the chip would not respond properly to motion detection
-	msDelay(50);
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
@@ -372,6 +299,7 @@ bool AccelIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 
 	SetCalibrationOffset(offs);
 
+	g_Uart.printf("acc offs %.2f %.2f %.2f\r\n", offs[0], offs[1], offs[2]);
 	return true;
 }
 
@@ -411,36 +339,6 @@ uint16_t AccelIcm20948::Scale(uint16_t Value)
 	}
 
 	Write8((uint8_t*)&regaddr, 2, d);
-
-#ifdef DMP
-	/**
-	* Sets scale in DMP to convert accel data to 1g=2^25 regardless of fsr.
-	* @param[in] fsr for accel parts
-	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
-
-	For 2g parts, 2g = 2^15 -> 1g = 2^14,.
-	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^14 (<<16) becomes 1g=2^30, to make 1g=2^25, >>5 bits.
-	In Q-30 math, >> 5 equals multiply by 2^25 = 33554432.
-
-	For 8g parts, 8g = 2^15 -> 1g = 2^12.
-	DMP takes raw accel data and left shifts by 16 bits, so 1g=2^12 (<<16) becomes 1g=2^28, to make 1g=2^25, >>3bits.
-	In Q-30 math, >> 3 equals multiply by 2^27 = 134217728.
-	*/
-	regaddr = ICM20948_DMP_ACC_SCALE;
-	scale = EndianCvt32(scale);
-	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale, 4);
-
-	/**
-	* According to input fsr, a scale factor will be set at memory location ACC_SCALE2
-	* to convert calibrated accel data to 16-bit format same as what comes out of MPU register.
-	* It is a reverse scaling of the scale factor written to ACC_SCALE.
-	* @param[in] fsr for accel parts
-	2: 2g. 4: 4g. 8: 8g. 16: 16g. 32: 32g.
-	*/
-	regaddr = ICM20948_DMP_ACC_SCALE2;
-	scale2 = EndianCvt32(scale2);
-	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale2, 4);
-#endif
 
 	return AccelSensor::Scale(Value);
 }
@@ -519,13 +417,6 @@ bool AccelIcm20948::Enable()
 
 	Write8((uint8_t*)&regaddr, 2, d);
 
-#ifdef DMP
-	regaddr = ICM20948_FIFO_EN_2_REG;
-	d = Read8((uint8_t*)&regaddr, 2) | ICM20948_FIFO_EN_2_ACCEL_FIFO_EN;
-
-	Write8((uint8_t*)&regaddr, 2, d);
-#endif
-
 	return true;
 }
 
@@ -551,6 +442,8 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	offs[2] = (float)(((int16_t)d[4] << 8) | ((int16_t)d[5] & 0xFF)) * ICM20948_GYRO_TRIM_SCALE;
 
 	SetCalibrationOffset(offs);
+
+	g_Uart.printf("gyro offs %.2f %.2f %.2f\r\n", offs[0], offs[1], offs[2]);
 
 	return true;
 }
@@ -587,27 +480,6 @@ uint32_t GyroIcm20948::Sensitivity(uint32_t Value)
 	}
 
 	Write8((uint8_t*)&regaddr, 2, d);
-
-#ifdef DMP
-	/**
-	* Sets scale in DMP to convert gyro data to 4000dps=2^30 regardless of fsr.
-	* @param[in] fsr for gyro parts
-	4000: 4000dps. 2000: 2000dps. 1000: 1000dps. 500: 500dps. 250: 250dps.
-
-	For 4000dps parts, 4000dps = 2^15.
-	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 4000dps=2^31, to make 4000dps=2^30, >>1 bit.
-	In Q-30 math, >> 1 equals multiply by 2^29 = 536870912.
-
-	For 2000dps parts, 2000dps = 2^15.
-	DMP takes raw gyro data and left shifts by 16 bits, so (<<16) becomes 2000dps=2^31, to make 4000dps=2^30, >>2 bits.
-	In Q-30 math, >> 2 equals multiply by 2^28 = 268435456.
-	*/
-	regaddr = ICM20948_DMP_GYRO_FULLSCALE;
-	scale = EndianCvt32(scale);
-	((AgmIcm20948*)this)->WriteDMP(regaddr, (uint8_t*)&scale, 4);
-
-	//inv_icm20948_set_gyro_fullscale(&vIcmDevice, d);
-#endif
 
 	return GyroSensor::Sensitivity(Value);
 }
@@ -1707,7 +1579,9 @@ bool AgmIcm20948::Enable()
 	}
 
 	regaddr = ICM20948_PWR_MGMT_2_REG;
-//	Write8((uint8_t*)&regaddr, 2, d);
+	d = Read8((uint8_t*)&regaddr, 2) & ~ICM20948_PWR_MGMT_2_DISABLE_PRESSURE_MASK;
+
+	Write8((uint8_t*)&regaddr, 2, d);
 
 	if (vbSensorEnabled[ICM20948_MAG_IDX])
 	{
@@ -1791,6 +1665,8 @@ void AgmIcm20948::Reset()
 	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
 
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_DEVICE_RESET);
+	Write8((uint8_t*)&regaddr, 2, 0);
+
 //	regaddr = ICM20948_FIFO_RST_REG;
 //	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
 
@@ -2563,9 +2439,9 @@ int AgmIcm20948::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int Buf
 		CmdAddrLen--;
 	}
 
-	*(uint16_t*)pCmdAddr &= 0x7F;
+	uint8_t regaddr = *(uint16_t*)pCmdAddr & 0x7F;
 
-	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	return Device::Read(&regaddr, CmdAddrLen, pBuff, BuffLen);
 }
 
 
@@ -2577,9 +2453,9 @@ int AgmIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int Da
 		CmdAddrLen--;
 	}
 
-	*(uint16_t*)pCmdAddr &= 0x7F;
+	uint8_t regaddr = *(uint16_t*)pCmdAddr & 0x7F;
 
-	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+	return Device::Write(&regaddr, CmdAddrLen, pData, DataLen);
 }
 
 int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)

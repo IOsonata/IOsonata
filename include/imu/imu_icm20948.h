@@ -45,7 +45,8 @@ public:
 
 	//bool Init(const ImuCfg_t &Cfg, AgmIcm20948 *pIcm);
 	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
-
+	bool SetDMPAccelScale();
+	bool SetDMPGyroScale();
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -148,6 +149,10 @@ private:
 	static int InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
 	static int InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
 	static void SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
+	void ResetDMPCtrlReg();
+	void ResetFifo();
+	bool InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len);
+	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
 
 	AgmIcm20948 *vpIcm;
 	inv_icm20948_t vInvnDev;	//!< Invn driver instance. To use with invn function calls
@@ -156,6 +161,7 @@ private:
 	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE * 2]; //!< FIFO cache
 //	uint8_t vFifo[ICM20948_FIFO_SIZE_MAX];
 	size_t vFifoDataLen;		//!< Data length currently in fifo
+	bool vbDmpEnabled;
 };
 
 
