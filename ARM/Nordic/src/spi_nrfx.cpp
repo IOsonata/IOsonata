@@ -379,6 +379,19 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		dev->pDmaReg->TXD.PTR = 0;
 		dev->pDmaReg->TXD.MAXCNT = 0;
 		dev->pDmaReg->TXD.LIST = 0;
+#ifdef NRF52_SERIES
+		// Anomaly 109
+		if (BuffLen < 2)
+		{
+			dev->pDmaReg->RXD.MAXCNT = 0;
+			dev->pDmaReg->RXD.PTR = 0;
+			dev->pDmaReg->RXD.LIST = 0;
+			dev->pDmaReg->EVENTS_STARTED = 0;
+			dev->pDmaReg->TASKS_START = 1;
+			while (dev->pDmaReg->EVENTS_STARTED == 0);
+			dev->pDmaReg->EVENTS_STARTED = 0;
+		}
+#endif
 		dev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
 		dev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
 
@@ -519,9 +532,22 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 		dev->pDmaReg->RXD.PTR = 0;
 		dev->pDmaReg->RXD.MAXCNT = 0;
 		dev->pDmaReg->RXD.LIST = 0;
+
+#ifdef NRF52_SERIES
+		// Anomaly 109
+		if (DataLen < 2)
+		{
+			dev->pDmaReg->TXD.MAXCNT = 0;
+			dev->pDmaReg->TXD.PTR = 0;
+			dev->pDmaReg->TXD.LIST = 0;
+			dev->pDmaReg->EVENTS_STARTED = 0;
+			dev->pDmaReg->TASKS_START = 1;
+			while (dev->pDmaReg->EVENTS_STARTED == 0);
+			dev->pDmaReg->EVENTS_STARTED = 0;
+		}
+#endif
 		dev->pDmaReg->TXD.PTR = (uint32_t)pData;
 		dev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
-
 		while (DataLen > 0)
 		{
 			int l = min(DataLen, NRFX_SPI_DMA_MAXCNT);
