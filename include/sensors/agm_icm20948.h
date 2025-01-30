@@ -37,9 +37,6 @@ SOFTWARE.
 
 #include <stdint.h>
 
-#include "Devices/SensorTypes.h"
-#include "Devices/Drivers/Icm20948/Icm20948Setup.h"
-
 #include "coredev/iopincfg.h"
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
@@ -854,12 +851,6 @@ public:
 	virtual bool WakeOnEvent(bool bEnable, int Threshold);
 
 	virtual bool StartSampling();
-	//virtual uint32_t FilterFreq(uint32_t Freq);
-
-	//virtual uint16_t Scale(uint16_t Value);			// Accel
-	//virtual uint32_t Sensitivity(uint32_t Value);	// Gyro
-
-
 	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
 	virtual bool Read(GyroSensorRawData_t &Data) { return GyroSensor::Read(Data); }
@@ -887,31 +878,13 @@ public:
 private:
 	AgmIcm20948(const AgmIcm20948&); // no copy constructor
 
-	int GetFifoLen();
-	int ReadFifo(uint8_t * const pBuff, int Len);
-	void ResetFifo();
-	bool InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len);
-	void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
-	int ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len);
-	int WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len);
 	// Default base initialization. Does detection and set default config for all sensor.
 	// All sensor init must call this first prio to initializing itself
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
-	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
 	bool SelectBank(uint8_t BankNo);
-	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
-	size_t CalcFifoPacketSize(uint16_t Header, uint16_t Mask, const size_t *Lookup, size_t LookupSize);
-	void ResetDMPCtrlReg();
-
-	bool vbDmpEnabled;
 	bool vbSensorEnabled[ICM20948_NB_SENSOR];
 	uint8_t vCurrBank;
 	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within
-	uint16_t vFifoHdr;	//!< DMP FIFO header
-	uint16_t vFifoHdr2;	//!< DMP FIFO header
-//	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE << 1]; //!< FIFO cache
-	uint8_t vFifo[ICM20948_FIFO_SIZE_MAX + ICM20948_FIFO_PAGE_SIZE];
-	size_t vFifoDataLen;	//!< Data length currently in fifo
 };
 
 #endif // __cplusplus
