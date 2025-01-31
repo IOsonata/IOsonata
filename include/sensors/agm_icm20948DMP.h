@@ -43,26 +43,73 @@ SOFTWARE.
 //#define CFG_FIFO_SIZE                   (4222)
 
 // data output control
-#define ICM20948_DMP_DATA_OUT_CTL1						(4 * 16)
-#define ICM20948_DMP_DATA_OUT_CTL2						(4 * 16 + 2)
-#define ICM20948_DMP_DATA_INTR_CTL						(4 * 16 + 12)
-#define ICM20948_DMP_FIFO_WATERMARK						(31 * 16 + 14)
+#define ICM20948_DMP_DATA_OUT_CTL1_REG					(4 * 16)
+#define ICM20948_DMP_DATA_OUT_CTL1_ACCEL_SET					(0x8000)	//!< calibrated accel if accel calibrated, raw accel otherwise
+#define ICM20948_DMP_DATA_OUT_CTL1_GYRO_SET						(0x4000)	//!< Raw gyro
+#define ICM20948_DMP_DATA_OUT_CTL1_CPASS_SET					(0x2000)	//!< Raw magnetic
+#define ICM20948_DMP_DATA_OUT_CTL1_ALS_SET						(0x1000)	//!< ALS/proximity
+#define ICM20948_DMP_DATA_OUT_CTL1_QUAT6_SET					(0x0800)	//!< Game rotation vector
+#define ICM20948_DMP_DATA_OUT_CTL1_QUAT9_SET					(0x0400)	//!< Rotation vector with heading accuracy
+#define ICM20948_DMP_DATA_OUT_CTL1_PQUAT6_SET					(0x0200)	//!< Truncated game rotation vector for batching
+#define ICM20948_DMP_DATA_OUT_CTL1_GEOMAG_SET					(0x0100)	//!< Geomag rotation vector with heading accuracy
+#define ICM20948_DMP_DATA_OUT_CTL1_PRESSURE_SET					(0x0080)	//!< Pressure
+#define ICM20948_DMP_DATA_OUT_CTL1_GYRO_CALIB_SET				(0x0040)	//!< Calibrated gyro
+#define ICM20948_DMP_DATA_OUT_CTL1_CPASS_CLIB_SET				(0x0020)	//!< Calibrated mag
+#define ICM20948_DMP_DATA_OUT_CTL1_PED_STEPDET_SET				(0x0010)	//!< timestamp when each step is detected
+#define ICM20948_DMP_DATA_OUT_CTL1_HEADER2_SET					(0x0008)	//!< Enable/disable data output in data output control register 2
+#define ICM20948_DMP_DATA_OUT_CTL1_PED_STEPIND_SET				(0x0007)	//!< number of steps detected will be attached to the 3 least significant bits of header
+
+#define ICM20948_DMP_DATA_OUT_CTL2_REG					(4 * 16 + 2)
+#define ICM20948_DMP_DATA_OUT_CTL2_ACCEL_ACCURACY_SET			(0x4000)	//!< accel accuracy when changes, HEADER2_SET also needs to be set in data output control regsiter 1
+#define ICM20948_DMP_DATA_OUT_CTL2_GYRO_ACCURACY_SET			(0x2000)	//!< gyro accuracy when changes, HEADER2_SET also needs to be set in data output control regsiter 1
+#define ICM20948_DMP_DATA_OUT_CTL2_CPASS_ACCURACY_SET			(0x1000)	//!< compass accuracy when changes, HEADER2_SET also needs to be set in data output control regsiter 1
+#define ICM20948_DMP_DATA_OUT_CTL2_BATCH_MODE_EN				(0x0100)	//!< enable batching
+
+#define ICM20948_DMP_DATA_INTR_CTL_REG					(4 * 16 + 12)
+#define ICM20948_DMP_DATA_INTR_CTL_ACCEL_SET					(0x8000)	//!< calibrated accel if accel calibrated, raw accel otherwise
+#define ICM20948_DMP_DATA_INTR_CTL_GYRO_SET						(0x4000)	//!< raw gyro
+#define ICM20948_DMP_DATA_INTR_CTL_CPASS_SET					(0x2000)	//!< raw magnetic
+#define ICM20948_DMP_DATA_INTR_CTL_ALS_SET						(0x1000)	//!< ALS/proximity
+#define ICM20948_DMP_DATA_INTR_CTL_QUAT6_SET					(0x0800)	//!< game rotation vector
+#define ICM20948_DMP_DATA_INTR_CTL_QUAT9_SET					(0x0400)	//!< rotation vector with heading accuracy
+#define ICM20948_DMP_DATA_INTR_CTL_PQUAT6_SET					(0x0200)	//!< truncated game rotation vector for batching
+#define ICM20948_DMP_DATA_INTR_CTL_GEOMAG_SET					(0x0100)	//!< geomag rotation vector with heading accuracy
+#define ICM20948_DMP_DATA_INTR_CTL_PRESSURE_SET					(0x0080)	//!< pressure
+#define ICM20948_DMP_DATA_INTR_CTL_GYRO_CALIBR_SET				(0x0040)	//!< calibrated gyro
+#define ICM20948_DMP_DATA_INTR_CTL_CPASS_CALIBR_SET				(0x0020)	//!< calibrated magnetic
+#define ICM20948_DMP_DATA_INTR_CTL_PED_STEPDET_SET				(0x0010)	//!< timestamp when each step is detected
+#define ICM20948_DMP_DATA_INTR_CTL_HEADER2_SET					(0x0008)	//!< data output defined in data output control register 2
+#define ICM20948_DMP_DATA_INTR_CTL_PED_STEPIND_SET				(0x0007)	//!< number of steps detected will be attached to the 3 least significant bits of header
+
+#define ICM20948_DMP_FIFO_WATERMARK_REG					(31 * 16 + 14)
 
 // motion event control
-#define ICM20948_DMP_MOTION_EVENT_CTL					(4 * 16 + 14)
+#define ICM20948_DMP_MOTION_EVENT_CTL_REG				(4 * 16 + 14)
+#define ICM20948_DMP_MOTION_EVENT_CTL_BAC_WEAR_EN        		(0x8000)	//!< change BAC behavior for wearable platform
+#define ICM20948_DMP_MOTION_EVENT_CTL_PEDOMETER_EN				(0x4000)	//!< pedometer engine
+#define ICM20948_DMP_MOTION_EVENT_CTL_PEDOMETER_INT_EN			(0x2000)	//!< pedometer step detector interrupt
+#define ICM20948_DMP_MOTION_EVENT_CTL_SMD_EN					(0x0800)	//!< significant motion detection interrupt
+#define ICM20948_DMP_MOTION_EVENT_CTL_ACCEL_CAL_EN				(0x0200)	//!< accel calibration
+#define ICM20948_DMP_MOTION_EVENT_CTL_GYRO_CAL_EN				(0x0100)	//!< gyro calibration
+#define ICM20948_DMP_MOTION_EVENT_CTL_COMPASS_CAL_EN			(0x0080)	//!< compass calibration
+#define ICM20948_DMP_MOTION_EVENT_CTL_NINE_AXIS_EN				(0x0040)	//!< 9-axis algorithm execution
+#define ICM20948_DMP_MOTION_EVENT_CTL_GEOMAG_EN					(0x0008)	//!< Geomag algorithm execution
+#define ICM20948_DMP_MOTION_EVENT_CTL_BTS_LTS_EN          		(0x0004)	//!< bring & look to see
+#define ICM20948_DMP_MOTION_EVENT_CTL_BAC_ACCEL_ONLY_EN   		(0x0002)	//!< run BAC as accel only
 
 // indicates to DMP which sensors are available
 /*	1: gyro samples available
 2: accel samples available
 8: secondary samples available	*/
-#define ICM20948_DMP_DATA_RDY_STATUS					(8 * 16 + 10)
+#define ICM20948_DMP_DATA_RDY_STATUS_REG				(8 * 16 + 10)
 
 // batch mode
 #define ICM20948_DMP_BM_BATCH_CNTR						(27 * 16)
 #define ICM20948_DMP_BM_BATCH_THLD						(19 * 16 + 12)
 #define ICM20948_DMP_BM_BATCH_MASK						(21 * 16 + 14)
 
-// sensor output data rate
+// sensor output data rate divider
+// desired ODR = base engine rate/(divider + 1)
 #define ICM20948_DMP_ODR_ACCEL							(11 * 16 + 14)
 #define ICM20948_DMP_ODR_GYRO							(11 * 16 + 10)
 #define ICM20948_DMP_ODR_CPASS							(11 * 16 +  6)

@@ -171,7 +171,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 
 	// Fifo watermark 80%
 	uint16_t val = EndianCvt16(800);
-	WriteDMP(ICM20948_DMP_FIFO_WATERMARK, (uint8_t*)&val, 2);
+	WriteDMP(ICM20948_DMP_FIFO_WATERMARK_REG, (uint8_t*)&val, 2);
 
 	regaddr = ICM20948_FIFO_CFG_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_CFG_SINGLE);
@@ -206,14 +206,13 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 
 void ImuIcm20948::ResetDMPCtrlReg()
 {
-	uint16_t regaddr = ICM20948_DMP_DATA_OUT_CTL1;
 	uint8_t d[2] = {0, 0};
 
-	WriteDMP(ICM20948_DMP_DATA_OUT_CTL1, d, 2);
-	WriteDMP(ICM20948_DMP_DATA_OUT_CTL2, d, 2);
-	WriteDMP(ICM20948_DMP_DATA_INTR_CTL, d, 2);
-	WriteDMP(ICM20948_DMP_MOTION_EVENT_CTL, d, 2);
-	WriteDMP(ICM20948_DMP_DATA_RDY_STATUS, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_OUT_CTL1_REG, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_OUT_CTL2_REG, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_INTR_CTL_REG, d, 2);
+	WriteDMP(ICM20948_DMP_MOTION_EVENT_CTL_REG, d, 2);
+	WriteDMP(ICM20948_DMP_DATA_RDY_STATUS_REG, d, 2);
 }
 
 void ImuIcm20948::ResetFifo()
@@ -1292,18 +1291,13 @@ bool ImuIcm20948::Enable()
 
 	uint16_t regaddr = ICM20948_USER_CTRL_REG;
 	d = vpIcm->Read8((uint8_t*)&regaddr, 2);
-
 	d |= ICM20948_USER_CTRL_DMP_EN | ICM20948_USER_CTRL_FIFO_EN;
 	vpIcm->Write8((uint8_t*)&regaddr, 2, d);
 
 	dout = EndianCvt16(dout);
-	regaddr = ICM20948_DMP_DATA_OUT_CTL1;
+	regaddr = ICM20948_DMP_DATA_OUT_CTL1_REG;
 	WriteDMP(regaddr, (uint8_t*)&dout, 2);
 
-	regaddr = ICM20948_USER_CTRL_REG;
-	d = Read8((uint8_t*)&regaddr, 2);
-	d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	Write8((uint8_t*)&regaddr, 2, userctrl);
 #if 0
 	int i = INV_ICM20948_SENSOR_MAX + 1;//INV_SENSOR_TYPE_MAX;
 
@@ -1361,7 +1355,7 @@ IMU_FEATURE ImuIcm20948::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
 	if (FeatureBit & IMU_FEATURE_QUATERNION)
 	{
 		uint16_t f = ICM20948_DMP_QUAT9_SET;
-		uint16_t m = ICM20948_DMP_DATA_OUT_CTL1;
+		uint16_t m = ICM20948_DMP_DATA_OUT_CTL1_REG;
 		WriteDMP(m, (uint8_t*)&f, 2);
 	}
 
@@ -1431,7 +1425,7 @@ bool ImuIcm20948::Quaternion(bool bEn, int NbAxis)
 {
 	Imu::Feature(IMU_FEATURE_QUATERNION, bEn);
 	uint16_t f = ICM20948_DMP_QUAT9_SET;
-	uint16_t m = ICM20948_DMP_DATA_OUT_CTL1;
+	uint16_t m = ICM20948_DMP_DATA_OUT_CTL1_REG;
 
 	if (NbAxis <9)
 	{
@@ -1442,7 +1436,7 @@ bool ImuIcm20948::Quaternion(bool bEn, int NbAxis)
 
 	if (vbIntEn)
 	{
-		m = ICM20948_DMP_DATA_INTR_CTL;
+		m = ICM20948_DMP_DATA_INTR_CTL_REG;
 		WriteDMP(m, (uint8_t*)&f, 2);
 	}
 
