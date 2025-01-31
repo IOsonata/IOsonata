@@ -668,9 +668,6 @@ void AgmIcm20948::UpdateData(SENSOR_TYPE Type, uint64_t Timestamp, uint8_t * con
 	}
 }
 
-static size_t s_FifoProcessCnt = 0;
-static size_t s_BadHdrCnt = 0;
-
 bool AgmIcm20948::UpdateData()
 {
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
@@ -678,8 +675,6 @@ bool AgmIcm20948::UpdateData()
 	uint8_t d[20];
 	uint64_t t;
 	bool res = false;
-	//uint8_t fifo[ICM20948_FIFO_PAGE_SIZE];
-	//uint8_t *p = fifo;
 
 	Read((uint8_t*)&regaddr, 2, status, 2);
 
@@ -699,10 +694,7 @@ bool AgmIcm20948::UpdateData()
 	}
 	if (status[0] & ICM20948_INT_STATUS_I2C_MIST_INT)
 	{
-		printf("ICM20948_INT_STATUS_I2C_MIST_INT\n");
 	}
-
-	//res = MagIcm20948::UpdateData();
 
 	if (status[1] & ICM20948_INT_STATUS_1_RAW_DATA_0_RDY_INT)
 	{
@@ -764,6 +756,7 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 	int retval = 0;
 
 #if 0
+	// Use SLV4. This can read only 1 byte at a time
 	uint8_t *p = pBuff;
 	uint8_t d;
 	uint16_t regaddr = ICM20948_I2C_SLV4_ADDR_REG;
@@ -803,6 +796,7 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 	}
 
 #else
+	// Use SLV0 - Can read multi-bytes
 	uint16_t regaddr = ICM20948_USER_CTRL_REG;
 	uint8_t userctrl = Read8((uint8_t*)&regaddr, 2);// | ICM20948_USER_CTRL_I2C_MST_EN;
 	uint8_t d[4];
@@ -921,9 +915,5 @@ void AgmIcm20948::IntHandler()
 
 	g_IntDt = t - g_PrevT;
 	g_PrevT = t;
-	//status = Read8((uint8_t*)&regaddr, 2);
-	//printf("- status %x\n", status);
-	//Write8((uint8_t*)&regaddr, 2, status);
-
 }
 
