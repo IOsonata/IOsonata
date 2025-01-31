@@ -33,6 +33,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <math.h>
 
+/*
 #include "Devices/Drivers/Icm20948/Icm20948.h"
 #include "Devices/Drivers/Icm20948/Icm20948Defs.h"
 #include "Devices/Drivers/Icm20948/Icm20948Dmp3Driver.h"
@@ -42,6 +43,7 @@ SOFTWARE.
 #include "Devices/Drivers/Icm20948/Icm20948MPUFifoControl.h"
 #include "Devices/Drivers/Icm20948/Icm20948Setup.h"
 #include "Devices/SensorTypes.h"
+*/
 
 #include "idelay.h"
 #include "istddef.h"
@@ -83,6 +85,7 @@ int ImuIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuff
 	return cnt > 0 ? 0 : 1;
 }
 
+#if 0
 void ImuIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
 	ImuIcm20948 *dev = (ImuIcm20948*)context;
@@ -90,7 +93,6 @@ void ImuIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor se
 	dev->UpdateData(sensortype, timestamp, data, arg);
 }
 
-#if 0
 bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 {
 	if (pIcm == NULL)
@@ -146,64 +148,12 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 
 	vpIcm = (AgmIcm20948*)pAccel;
 
-	// Initialize INVN device data structure
-	//inv_icm20948_reset_states(&vIcmDevice, &icm20948_serif);
-
-	memset(&vInvnDev, 0, sizeof(inv_icm20948_t));
-	vInvnDev.serif.context   = vpIcm;
-	vInvnDev.serif.read_reg  = InvnReadReg;
-	vInvnDev.serif.write_reg = InvnWriteReg;
-	vInvnDev.serif.max_read  = 16; /* maximum number of bytes allowed per serial read */
-	vInvnDev.serif.max_write = 16; /* maximum number of bytes allowed per serial write */
-	vInvnDev.serif.is_spi = pAccel->InterfaceType() == DEVINTRF_TYPE_SPI;
-
-	if (pMag)
-	{
-		// Initialize Mag data
-
-		//inv_icm20948_register_aux_compass(&vIcmDevice, INV_ICM20948_COMPASS_ID_AK09916, (uint8_t)AK0991x_DEFAULT_I2C_ADDR);
-		vInvnDev.secondary_state.compass_slave_id = HW_AK09916;
-		vInvnDev.secondary_state.compass_chip_addr = AK09916_I2C_7BITS_DEVADDR;
-		vInvnDev.secondary_state.compass_state = INV_ICM20948_COMPASS_INITED;
-
-		// initialise mounting matrix of compass to identity akm9916
-		vInvnDev.mounting_matrix_secondary_compass[0] = 1 ;
-		vInvnDev.mounting_matrix_secondary_compass[4] = -1;
-		vInvnDev.mounting_matrix_secondary_compass[8] = -1;
-	}
-
-	// Setup accel and gyro mounting matrix and associated angle for current board
-	inv_icm20948_init_matrix(&vInvnDev);
-
-	for (int i = 0; i < INV_ICM20948_SENSOR_MAX; i++) {
-		inv_icm20948_set_matrix(&vInvnDev, s_CfgMountingMatrix, (inv_icm20948_sensor)i);
-	}
-
-	memset(&vInvnDev.base_state, 0, sizeof(vInvnDev.base_state));
-	vInvnDev.base_state.pwr_mgmt_1 = ICM20948_PWR_MGMT_1_CLKSEL_AUTO;
-	vInvnDev.base_state.pwr_mgmt_2 = ICM20948_PWR_MGMT_2_DISABLE_ALL;
-
-	if (vInvnDev.serif.is_spi)
-	{
-		vInvnDev.base_state.serial_interface = SERIAL_INTERFACE_SPI;
-		vInvnDev.base_state.user_ctrl = ICM20948_USER_CTRL_I2C_IF_DIS;
-	}
-	else
-	{
-		vInvnDev.base_state.serial_interface = SERIAL_INTERFACE_I2C;
-	}
-
-	uint16_t regaddr;
 	uint16_t d;
+	uint16_t regaddr = ICM20948_USER_CTRL_REG;
+	uint8_t userctrl = vpIcm->Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
 
-
-	regaddr = ICM20948_USER_CTRL_REG;
-	vInvnDev.base_state.user_ctrl = vpIcm->Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
-
-	vpIcm->Write8((uint8_t*)&regaddr, 2, d | vInvnDev.base_state.user_ctrl);
-
-//	inv_icm20948_wakeup_mems(&vInvnDev);
-
+	// Disable all to initialize DMP
+	vpIcm->Write8((uint8_t*)&regaddr, 2, userctrl);
 	vpIcm->Disable();
 
 
@@ -213,8 +163,6 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	{
 		return false;
 	}
-
-	vInvnDev.base_state.firmware_loaded = 1;
 
 	Imu::Init(Cfg, pAccel, pGyro, pMag);
 	vEvtHandler = Cfg.EvtHandler;
@@ -232,34 +180,15 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	regaddr = ICM20948_SINGLE_FIFO_PRIORITY_SEL;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_SINGLE_FIFO_PRIORITY_SEL_0XE4);
 
-	// Setup MEMs properties.
-	vInvnDev.base_state.accel_averaging = 1; //Change this value if higher sensor sample avergaing is required.
-	vInvnDev.base_state.gyro_averaging = 1;  //Change this value if higher sensor sample avergaing is required.
-	vInvnDev.base_state.gyro_div = FIFO_DIVIDER;
-
 	SetDMPGyroScale();
 	SetDMPAccelScale();
 
-//	inv_icm20948_set_accel_fullscale(&vInvnDev, vInvnDev.base_state.accel_fullscale);
-
-	//inv_icm20948_initialize(&vInvnDev, s_Dmp3Image, sizeof(s_Dmp3Image));
-	inv_icm20948_set_gyro_divider(&vInvnDev, FIFO_DIVIDER);       //Initial sampling rate 1125Hz/19+1 = 56Hz.
-	inv_icm20948_set_accel_divider(&vInvnDev, FIFO_DIVIDER);      //Initial sampling rate 1125Hz/19+1 = 56Hz.
-
-	// Init the sample rate to 56 Hz for BAC,STEPC and B2S
-	dmp_icm20948_set_bac_rate(&vInvnDev, DMP_ALGO_FREQ_56);
-	dmp_icm20948_set_b2s_rate(&vInvnDev, DMP_ALGO_FREQ_56);
-
-	// FIFO Setup.
-//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_CFG, BIT_SINGLE_FIFO_CFG); // FIFO Config. fixme do once? burst write?
-//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_RST, 0x1f); // Reset all FIFOs.
-//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_RST, 0x1e); // Keep all but Gyro FIFO in reset.
-//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN, 0x0); // Slave FIFO turned off.
-//	inv_icm20948_write_single_mems_reg(&vInvnDev, REG_FIFO_EN_2, 0x0); // Hardware FIFO turned off.
+	// These only works in 56 Hz as stated in the INVN example
+	d = 0;	// 56 Hz
+	WriteDMP(ICM20948_DMP_BAC_RATE, (uint8_t*)&d, 1);
+	WriteDMP(ICM20948_DMP_B2S_RATE, (uint8_t*)&d, 1);
 
 	ResetFifo();
-
-	vInvnDev.lLastBankSelected = -1;
 
 	regaddr = ICM20948_INT_ENABLE_REG;
 	d = ICM20948_INT_ENABLE_DMP_INT1_EN;
@@ -271,156 +200,6 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	regaddr = ICM20948_INT_ENABLE_3_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_INT_ENABLE_3_FIFO_WM_EN);
 
-#if 0
-#if 1
-	regaddr = DATA_OUT_CTL1;
-	d = 0;
-	WriteDMP(regaddr, (uint8_t*)&d, 2);
-
-	regaddr = DATA_OUT_CTL2;
-	WriteDMP(regaddr, (uint8_t*)&d, 2);
-
-	regaddr = DATA_INTR_CTL;
-	WriteDMP(regaddr, (uint8_t*)&d, 2);
-
-	regaddr = MOTION_EVENT_CTL;
-	WriteDMP(regaddr, (uint8_t*)&d, 2);
-
-	regaddr = DATA_RDY_STATUS;
-	WriteDMP(regaddr, (uint8_t*)&d, 2);
-#endif
-
-	// Set FIFO watermark 80%
-	uint16_t memaddr = FIFO_WATERMARK;
-	d = EndianCvt16(800);
-	WriteDMP(memaddr, (uint8_t*)&d, 2);
-
-	regaddr = ICM20948_FIFO_MODE_REG;
-	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_MODE_SNAPSHOT); // blocking
-
-	//regaddr = ICM20948_FIFO_EN_1_REG;
-	//d = ICM20948_FIFO_EN_1_SLV_0_FIFO_EN;
-//	Write8((uint8_t*)&regaddr, 2, d);
-
-//	regaddr = ICM20948_FIFO_EN_2_REG;
-//	d = ICM20948_FIFO_EN_2_TEMP_FIFO_EN;
-//	Write8((uint8_t*)&regaddr, 2, d);
-
-	regaddr = ICM20948_INT_ENABLE_REG;
-	d = Read8((uint8_t*)&regaddr, 2);
-	d |= ICM20948_INT_ENABLE_DMP_INT1_EN;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	// Disable data ready interrupt
-	regaddr = ICM20948_INT_ENABLE_1_REG;
-	d = 0;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	// FIFO overflow interrupt enable
-	regaddr = ICM20948_INT_ENABLE_2_REG;
-	d = 1;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	// FIFO watermark enable
-	regaddr = ICM20948_INT_ENABLE_3_REG;
-	d = 1;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	regaddr = ICM20948_USER_CTRL_REG;
-	d = Read8((uint8_t*)&regaddr, 2);
-	d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	regaddr = ICM20948_FIFO_CFG_REG;
-	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_CFG_SINGLE);
-
-	regaddr = ICM20948_FIFO_CFG_REG;
-	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_CFG_SINGLE);
-
-	regaddr = ICM20948_FIFO_RST_REG;
-	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
-	Write8((uint8_t*)&regaddr, 2, 0x1e);
-
-	regaddr = ICM20948_FIFO_EN_1_REG;
-	Write8((uint8_t*)&regaddr, 2, 0);
-
-	regaddr = ICM20948_FIFO_EN_2_REG;
-	Write8((uint8_t*)&regaddr, 2, 0);
-
-#if 0
-	uint32_t f = pGyro->SamplingFrequency();
-	printf("f %d\n", f);
-
-	uint32_t scale = pAccel->Scale();
-	uint32_t scale2;
-
-	printf("scale : %d\n", scale);
-	switch (scale)
-	{
-	case 2:
-		scale =  EndianCvt32(33554432L);  // 2^25
-		scale2 = EndianCvt32(524288L);	// 2^19
-		break;
-	case 4:
-		scale =  EndianCvt32(67108864L);  // 2^26
-		scale2 = EndianCvt32(262144L);  // 2^18
-		break;
-	case 8:
-		scale = EndianCvt32(134217728L);  // 2^27
-		scale2 = EndianCvt32(131072L);  // 2^17
-		break;
-	case 16:
-		scale = EndianCvt32(268435456L);  // 2^28
-		scale2 = EndianCvt32(65536L);  // 2^16
-		break;
-	case 32:
-		scale = EndianCvt32(536870912L);  // 2^29
-		scale2 = EndianCvt32(32768L);  // 2^15
-		break;
-	}
-
-	regaddr = ACC_SCALE;
-	WriteDMP(regaddr, (uint8_t*)&scale, 4);
-
-	regaddr = ACC_SCALE2;
-	WriteDMP(regaddr, (uint8_t*)&scale2, 4);
-
-	uint16_t div = Read16((uint8_t*)&regaddr, 2) & 0xFF0F;
-
-	regaddr = ODR_ACCEL;
-	WriteDMP(regaddr, (uint8_t*)&div, 2);
-
-	uint32_t sens = pGyro->Sensitivity();
-	printf("Sensitivity %d\n", sens);
-
-	switch (sens) {
-	case 4000:
-		sens =  EndianCvt32(536870912L);  // 2^29
-		break;
-	case 2000:
-		sens =  EndianCvt32(268435456L);  // 2^28
-		break;
-	case 1000:
-		sens = EndianCvt32(134217728L);  // 2^27
-		break;
-	case 500:
-		sens = EndianCvt32(67108864L);  // 2^26
-		break;
-	case 250:
-		sens = EndianCvt32(33554432L);  // 2^25
-		break;
-	}
-
-	regaddr = GYRO_FULLSCALE;
-	WriteDMP(regaddr, (uint8_t*)&sens, 4);
-
-	regaddr = DATA_OUT_CTL1;
-	uint16_t x = 0xFFFF; // axel
-	WriteDMP(regaddr, (uint8_t*)&x, 2);
-#endif
-#endif
-//	x = 0x4000; // Gyro
-//	WriteDMP(regaddr, (uint8_t*)&x, 2);
 
 	return true;
 }
@@ -474,22 +253,18 @@ bool ImuIcm20948::SetDMPAccelScale()
 		case 2:
 			scale = (1 << 25);  // 33554432L
 			scale2 = (1 << 19);	// 524288L
-			vInvnDev.base_state.accel_fullscale = MPU_FS_2G;
 			break;
 		case 4:
 			scale =  (1 << 26);	// 67108864L
 			scale2 = (1 << 18);	// 262144L
-			vInvnDev.base_state.accel_fullscale = MPU_FS_4G;
 			break;
 		case 8:
 			scale = (1 << 27);  // 134217728L
 			scale2 = (1 << 17);	// 131072L
-			vInvnDev.base_state.accel_fullscale = MPU_FS_8G;
 			break;
 		case 16:
 			scale = (1 << 28);  // 268435456L
 			scale2 = (1 << 16);	// 65536L
-		vInvnDev.base_state.accel_fullscale = MPU_FS_16G;
 			break;
 	}
 
@@ -531,19 +306,15 @@ bool ImuIcm20948::SetDMPGyroScale()
 	{
 		case 250:
 			scale = (1 << 25);
-			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_250DPS;
 			break;
 		case 500:
 			scale = (1 << 26);
-			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_500DPS;
 			break;
 		case 1000:
 			scale = (1 << 27);
-			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_1000DPS;
 			break;
 		case 2000:
 			scale = (1 << 28);
-			vInvnDev.base_state.gyro_div = ICM20948_GYRO_CONFIG_1_GYRO_FS_SEL_2000DPS;
 			break;
 	}
 	/**
@@ -604,7 +375,7 @@ bool ImuIcm20948::SetDMPGyroScale()
 	regaddr = ICM20948_DMP_GYRO_SF;
 	WriteDMP(regaddr, (uint8_t*)&gyrosf, 4);
 }
-
+#if 0
 static const ANDROID_SENSORS s_InvSensor2AndroidSensor[] = {
 	ANDROID_SENSOR_ACCELEROMETER,
 	ANDROID_SENSOR_GYROSCOPE,
@@ -1512,7 +1283,7 @@ int inv_icm20948_ctrl_enable_sensorx(struct inv_icm20948 * s, unsigned char andr
 	inv_icm20948_allow_lpen_control(s);
 	return result;
 }
-
+#endif
 bool ImuIcm20948::Enable()
 {
 	uint8_t d, userctrl;
@@ -1533,7 +1304,7 @@ bool ImuIcm20948::Enable()
 	d = Read8((uint8_t*)&regaddr, 2);
 	d |= ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
 	Write8((uint8_t*)&regaddr, 2, userctrl);
-
+#if 0
 	int i = INV_ICM20948_SENSOR_MAX + 1;//INV_SENSOR_TYPE_MAX;
 
 	while(i-- > 0) {
@@ -1561,6 +1332,7 @@ bool ImuIcm20948::Enable()
 		//inv_icm20948_allow_lpen_control(&vIcmDevice);
 #endif
 	}
+#endif
 	return res;
 }
 
@@ -1691,7 +1463,7 @@ bool ImuIcm20948::UpdateData()
 
 	return true;
 }
-
+#if 0
 void ImuIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
 	float raw_bias_data[6];
@@ -1818,30 +1590,23 @@ void ImuIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t times
 		vEvtHandler(this, DEV_EVT_DATA_RDY);
 	}
 }
-
+#endif
 void ImuIcm20948::IntHandler()
 {
-#if 0
-	inv_icm20948_poll_sensor(&vInvnDev, (void*)this, SensorEventHandler);
-#else
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
 	uint8_t status[4];
 	uint8_t d;
-
-	//vpIcm->IntHandler();
+	uint64_t t;
 
 	vpIcm->Read((uint8_t*)&regaddr, 2, status, 4);
-
-
-	regaddr = ICM20948_DMP_INT_STATUS_REG;
-	d = vpIcm->Read8((uint8_t*)&regaddr, 2);
-
-	uint64_t t;
 
 	if (vpTimer)
 	{
 		t = vpTimer->uSecond();
 	}
+
+	regaddr = ICM20948_DMP_INT_STATUS_REG;
+	d = vpIcm->Read8((uint8_t*)&regaddr, 2);
 
 	if (status[2])
 	{
@@ -1851,8 +1616,6 @@ void ImuIcm20948::IntHandler()
 
 		return;
 	}
-
-	regaddr = REG_FIFO_R_W;
 
 	regaddr = ICM20948_FIFO_COUNTH_REG;
 	size_t cnt = Read16((uint8_t*)&regaddr, 2);
@@ -1936,7 +1699,6 @@ void ImuIcm20948::IntHandler()
 	{
 		memmove(vFifo, p, vFifoDataLen);
 	}
-#endif
 }
 
 int ImuIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
