@@ -434,7 +434,6 @@ SOFTWARE.
 
 #define ICM20948_I2C_SLV_MAXLEN								(15)
 #define ICM20948_I2C_SLV0_CTRL_I2C_SLV0_LEN_MASK			(0xf<<0)	// Number of bytes to be read from I2C slave
-
 #define ICM20948_I2C_SLV0_CTRL_I2C_SLV0_GRP					(1<<4)	//
 #define ICM20948_I2C_SLV0_CTRL_I2C_SLV0_REG_DIS				(1<<5)	// When set, the transaction does not write a register value,
 																// it will only read data, or write data
@@ -454,7 +453,6 @@ SOFTWARE.
 #define ICM20948_I2C_SLV1_CTRL_REG			(ICM20948_REG_BANK3 | 9)
 
 #define ICM20948_I2C_SLV1_CTRL_I2C_SLV1_LENG_MASK			(0xf<<0)	// Number of bytes to be read from I2C slave
-
 #define ICM20948_I2C_SLV1_CTRL_I2C_SLV1_GRP					(1<<4)	//
 #define ICM20948_I2C_SLV1_CTRL_I2C_SLV1_REG_DIS				(1<<5)	// When set, the transaction does not write a register value,
 																// it will only read data, or write data
@@ -474,10 +472,8 @@ SOFTWARE.
 #define ICM20948_I2C_SLV2_CTRL_REG			(ICM20948_REG_BANK3 | 13)
 
 #define ICM20948_I2C_SLV2_CTRL_I2C_SLV2_LENG_MASK			(0xf<<0)	// Number of bytes to be read from I2C slave
-
 #define ICM20948_I2C_SLV2_CTRL_I2C_SLV2_GRP					(1<<4)	//
-#define ICM20948_I2C_SLV2_CTRL_I2C_SLV2_REG_DIS				(1<<5)	// When set, the transaction does not write a register value,
-																// it will only read data, or write data
+#define ICM20948_I2C_SLV2_CTRL_I2C_SLV2_REG_DIS				(1<<5)	// When set, the transaction does not write a register value,																// it will only read data, or write data
 #define ICM20948_I2C_SLV2_CTRL_I2C_SLV2_BYTE_SW				(1<<6)
 #define ICM20948_I2C_SLV2_CTRL_I2C_SLV2_EN					(1<<7)
 
@@ -494,10 +490,9 @@ SOFTWARE.
 #define ICM20948_I2C_SLV3_CTRL_REG			(ICM20948_REG_BANK3 | 17)
 
 #define ICM20948_I2C_SLV3_CTRL_I2C_SLV3_LENG_MASK			(0xf<<0)	// Number of bytes to be read from I2C slave
-
 #define ICM20948_I2C_SLV3_CTRL_I2C_SLV3_GRP					(1<<4)	//
 #define ICM20948_I2C_SLV3_CTRL_I2C_SLV3_REG_DIS				(1<<5)	// When set, the transaction does not write a register value,
-																// it will only read data, or write data
+															// it will only read data, or write data
 #define ICM20948_I2C_SLV3_CTRL_I2C_SLV3_BYTE_SW				(1<<6)
 #define ICM20948_I2C_SLV3_CTRL_I2C_SLV3_EN					(1<<7)
 
@@ -513,12 +508,10 @@ SOFTWARE.
 
 #define ICM20948_I2C_SLV4_CTRL_REG			(ICM20948_REG_BANK3 | 21)
 
-#define ICM20948_I2C_SLV4_CTRL_I2C_SLV4_LENG_MASK			(0xf<<0)	// Number of bytes to be read from I2C slave
-
-#define ICM20948_I2C_SLV4_CTRL_I2C_SLV4_GRP					(1<<4)	//
+#define ICM20948_I2C_SLV4_CTRL_I2C_SLV4_DLY_MASK			(0x1f<<0)	//
 #define ICM20948_I2C_SLV4_CTRL_I2C_SLV4_REG_DIS				(1<<5)	// When set, the transaction does not write a register value,
 																// it will only read data, or write data
-#define ICM20948_I2C_SLV4_CTRL_I2C_SLV4_BYTE_SW				(1<<6)
+#define ICM20948_I2C_SLV4_CTRL_I2C_SLV4_INT_EN 				(1<<6)
 #define ICM20948_I2C_SLV4_CTRL_I2C_SLV4_EN					(1<<7)
 
 #define ICM20948_I2C_SLV4_DO_REG			(ICM20948_REG_BANK3 | 22)						// Data out to slave
