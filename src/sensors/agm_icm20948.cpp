@@ -568,6 +568,7 @@ bool AgmIcm20948::Enable()
 
 	if (vbSensorEnabled[ICM20948_MAG_IDX])
 	{
+		MagIcm20948::Enable();
 	}
 
 	return true;
@@ -718,7 +719,7 @@ bool AgmIcm20948::UpdateData()
 		GyroSensor::vData.Z = ((int16_t)(d[10] << 8) | ((int16_t)d[11] & 0xFF));
 
 
-		//MagIcm20948::UpdateData();
+		MagAk09916::UpdateData();
 
 		// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
 		int16_t t = ((int16_t)d[12] << 8) | d[13];
@@ -825,7 +826,7 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 		Write8((uint8_t*)&regaddr, 2, userctrl);
 
 		// Delay require for transfer to complete
-		//msDelay(1);
+		msDelay(3);
 		regaddr = ICM20948_I2C_MST_STATUS_REG;
 
 		do {
