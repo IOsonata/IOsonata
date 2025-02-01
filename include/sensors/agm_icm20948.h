@@ -236,7 +236,8 @@ SOFTWARE.
 #define ICM20948_FIFO_EN_2_GYRO_X_FIFO_EN		(1<<1)	// Gyro X out fifo enable
 #define ICM20948_FIFO_EN_2_GYRO_Y_FIFO_EN		(1<<2)	// Gyro Y out fifo enable
 #define ICM20948_FIFO_EN_2_GYRO_Z_FIFO_EN		(1<<3)	// Gyro Z out fifo enable
-#define ICM20948_FIFO_EN_2_ACCEL_FIFO_EN		(1<<1)	// Accel out fifo enable
+#define ICM20948_FIFO_EN_2_ACCEL_FIFO_EN		(1<<4)	// Accel out fifo enable
+#define ICM20948_FIFO_EN_2_FIFO_EN_ALL			(0x1F)
 
 #define ICM20948_FIFO_RST_REG				(ICM20948_REG_BANK0 | 104)
 

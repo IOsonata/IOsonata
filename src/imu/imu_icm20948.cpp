@@ -190,6 +190,10 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 
 	ResetFifo();
 
+	regaddr = ICM20948_INT_ENABLE_1_REG;
+	d = 0;
+	Write8((uint8_t*)&regaddr, 2, d);
+
 	regaddr = ICM20948_INT_ENABLE_REG;
 	d = ICM20948_INT_ENABLE_DMP_INT1_EN;
 	Write8((uint8_t*)&regaddr, 2, d);
@@ -295,6 +299,7 @@ bool ImuIcm20948::SetDMPAccelScale()
 	scale2 = EndianCvt32(scale2);
 	WriteDMP(regaddr, (uint8_t*)&scale2, 4);
 
+	return true;
 }
 
 bool ImuIcm20948::SetDMPGyroScale()
@@ -373,6 +378,8 @@ bool ImuIcm20948::SetDMPGyroScale()
 
 	regaddr = ICM20948_DMP_GYRO_SF;
 	WriteDMP(regaddr, (uint8_t*)&gyrosf, 4);
+
+	return true;
 }
 #if 0
 static const ANDROID_SENSORS s_InvSensor2AndroidSensor[] = {
@@ -1298,6 +1305,9 @@ bool ImuIcm20948::Enable()
 	regaddr = ICM20948_DMP_DATA_OUT_CTL1_REG;
 	WriteDMP(regaddr, (uint8_t*)&dout, 2);
 
+	regaddr = ICM20948_FIFO_EN_2_REG;
+	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_2_FIFO_EN_ALL);
+
 #if 0
 	int i = INV_ICM20948_SENSOR_MAX + 1;//INV_SENSOR_TYPE_MAX;
 
@@ -1599,8 +1609,21 @@ void ImuIcm20948::IntHandler()
 		t = vpTimer->uSecond();
 	}
 
-	regaddr = ICM20948_DMP_INT_STATUS_REG;
-	d = vpIcm->Read8((uint8_t*)&regaddr, 2);
+	if (status[0] & ICM20948_INT_STATUS_DMP_INT1 || status[3])
+	{
+		regaddr = ICM20948_DMP_INT_STATUS_REG;
+		uint16_t distatus;
+		Read((uint8_t*)&regaddr, 2, (uint8_t*)&distatus, 1);
+
+		//g_Uart.printf("DMP int %x\r\n", distatus);
+	//		Write16((uint8_t*)&regaddr, 2, distatus);
+
+		if (distatus)// & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
+		{
+			// DMP msg
+			//printf("distatus %x\n", distatus);
+		}
+	}
 
 	if (status[2])
 	{
@@ -2106,7 +2129,7 @@ bool ImuIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
 	uint16_t memaddr = ICM20948_DMP_LOAD_MEM_START_ADDR;
 	size_t psize = ICM20948_DMP_MEM_BANK_SIZE;
 
-	if (Interface()->Type() == DEVINTRF_TYPE_I2C)
+	if (vpIcm->Interface()->Type() == DEVINTRF_TYPE_I2C)
 	{
 		psize = ICM20948_FIFO_PAGE_SIZE;
 	}
