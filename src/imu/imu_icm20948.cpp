@@ -147,6 +147,9 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	}
 
 	vpIcm = (AgmIcm20948*)pAccel;
+	vpAccel = pAccel;
+	vpGyro = pGyro;
+	vpMag = pMag;
 
 	uint16_t d;
 	uint16_t regaddr = ICM20948_USER_CTRL_REG;
@@ -187,6 +190,17 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	d = 0;	// 56 Hz
 	WriteDMP(ICM20948_DMP_BAC_RATE, (uint8_t*)&d, 1);
 	WriteDMP(ICM20948_DMP_B2S_RATE, (uint8_t*)&d, 1);
+
+	uint32_t freq = vpGyro->SamplingFrequency();
+	uint16_t div = 1125000 / freq - 1;
+
+	regaddr = ICM20948_DMP_ODR_ACCEL;
+	WriteDMP(regaddr, (uint8_t*)&div, 2);
+	regaddr = ICM20948_DMP_ODR_GYRO;
+	WriteDMP(regaddr, (uint8_t*)&div, 2);
+	regaddr = ICM20948_DMP_ODR_CPASS;
+	WriteDMP(regaddr, (uint8_t*)&div, 2);
+
 
 	ResetFifo();
 
@@ -1301,6 +1315,7 @@ bool ImuIcm20948::Enable()
 	d |= ICM20948_USER_CTRL_DMP_EN | ICM20948_USER_CTRL_FIFO_EN;
 	vpIcm->Write8((uint8_t*)&regaddr, 2, d);
 
+	dout = ICM20948_DMP_DATA_OUT_CTL1_ACCEL_SET | ICM20948_DMP_DATA_OUT_CTL1_GYRO_SET | ICM20948_DMP_DATA_OUT_CTL1_CPASS_SET;
 	dout = EndianCvt16(dout);
 	regaddr = ICM20948_DMP_DATA_OUT_CTL1_REG;
 	WriteDMP(regaddr, (uint8_t*)&dout, 2);
