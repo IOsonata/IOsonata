@@ -34,7 +34,10 @@ SOFTWARE.
 #ifndef __IMU_XIOT_FUSION_H__
 #define __IMU_XIOT_FUSION_H__
 
+#include "Fusion/Fusion.h"
+
 #include "imu/imu.h"
+
 
 #ifdef __cplusplus
 
@@ -51,6 +54,7 @@ public:
 	void SetAxisAlignmentMatrix(int8_t * const pMatrix);
 	virtual bool Compass(bool bEn);
 	virtual bool Pedometer(bool bEn);
+	virtual bool Euler(bool bEn) { return false; }
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 	/**

@@ -40,7 +40,7 @@ SOFTWARE.
 
 bool ImuXiotFusion::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
-	bool res = Init(Cfg, pAccel, pGyro, pMag);
+	bool res = Imu::Init(Cfg, pAccel, pGyro, pMag);
 
 	if (res == true)
 	{
@@ -71,7 +71,19 @@ bool ImuXiotFusion::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSe
 
 bool ImuXiotFusion::Enable()
 {
-	return true;
+	bool res = vpAccel->Enable();
+
+	if (res == true)
+	{
+		res = vpGyro->Enable();
+	}
+
+	if (vpMag && res == true)
+	{
+		res = vpMag->Enable();
+	}
+
+	return res;
 }
 
 void ImuXiotFusion::Disable()
@@ -117,7 +129,10 @@ bool ImuXiotFusion::UpdateData()
 
     FusionAhrsGetQuaternion(&vAhrs);
 
-    *vQuat.Q = *vAhrs.quaternion.array;
+    vQuat.Q[0] = vAhrs.quaternion.array[0];
+    vQuat.Q[1] = vAhrs.quaternion.array[1];
+    vQuat.Q[2] = vAhrs.quaternion.array[2];
+    vQuat.Q[3] = vAhrs.quaternion.array[3];
 
 	return true;
 }
