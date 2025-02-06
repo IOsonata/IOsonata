@@ -83,7 +83,7 @@ bool ImuXiotFusion::Enable()
 		res = vpGyro->Enable();
 	}
 
-	if (vpMag && res == true)
+	if (vpMag)
 	{
 		res = vpMag->Enable();
 	}
@@ -114,22 +114,28 @@ bool ImuXiotFusion::UpdateData()
 	{
 		Read(mag);
 	}
-	float deltatime = (acc.Timestamp - vPrevTimeStamp) / 1000000.0;
+	float deltatime = 0;
 
+
+	if (vPrevTimeStamp != 0)
+	{
+		deltatime = (gyro.Timestamp - vPrevTimeStamp) / 1000000.0;
+	}
+	vPrevTimeStamp = gyro.Timestamp;
 
     // Update gyroscope AHRS algorithm
 
-	FusionVector fvgyro = { .axis = { gyro.X,  gyro.Y, gyro.Z} };
-	FusionVector fvacc = { .axis = { acc.X,  acc.Y, acc.Z} };
+	FusionVector fvgyro = { gyro.X,  gyro.Y, gyro.Z };
+	FusionVector fvacc = { acc.X,  acc.Y, acc.Z };
 
 	if (vpMag)
 	{
-		FusionVector fvmag = { .axis = { mag.X,  mag.Y, mag.Z} };
+		FusionVector fvmag = { mag.X,  mag.Y, mag.Z };
 	    FusionAhrsUpdate(&vAhrs, fvgyro, fvacc, fvmag, deltatime);
 	}
 	else
 	{
-		FusionAhrsUpdateNoMagnetometer(&vAhrs, fvgyro, fvacc, 0.02);
+		FusionAhrsUpdateNoMagnetometer(&vAhrs, fvgyro, fvacc, deltatime);
 	}
 
     FusionAhrsGetQuaternion(&vAhrs);
