@@ -127,15 +127,18 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	msDelay(100);
 
 	uint8_t userctrl = ICM20948_USER_CTRL_I2C_MST_EN;//ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN;
-	uint8_t lpconfig = 0;//ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
+	//uint8_t lpconfig = 0;//ICM20948_LP_CONFIG_ACCEL_CYCLE | ICM20948_LP_CONFIG_GYRO_CYCLE;
 
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		// in SPI mode, use i2c master mode to access Mag device (AK09916)
 		userctrl |= ICM20948_USER_CTRL_I2C_IF_DIS;
+		//regaddr = ICM20948_USER_CTRL_REG;
+		//Write8((uint8_t*)&regaddr, 2, ICM20948_USER_CTRL_I2C_IF_DIS);
+
 	}
 
-	//lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
+//lpconfig |= ICM20948_LP_CONFIG_I2C_MST_CYCLE;
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
@@ -143,15 +146,17 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 	regaddr = ICM20948_PWR_MGMT_2_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_2_DISABLE_ALL);
 
-	regaddr = ICM20948_USER_CTRL_REG;
-	Write8((uint8_t*)&regaddr, 2, userctrl);
-
 	regaddr = ICM20948_ODR_ALIGN_EN_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_ODR_ALIGN_EN_ODR_ALIGN_EN);
+
+	// Must be set here, otherwise won't work
+	regaddr = ICM20948_USER_CTRL_REG;
+	Write8((uint8_t*)&regaddr, 2, userctrl);
 
 	regaddr = ICM20948_HWTEMP_FIX_DISABLE_REG;
 	d = Read8((uint8_t*)&regaddr, 2) | 0x08;
 	Write8((uint8_t*)&regaddr, 2, d);//ICM20948_HWTEMP_FIX_DISABLE_DIS);
+
 
 	// ICM20948 has only 1 interrupt pin. Don't care the value
 	if (Inter)
@@ -177,6 +182,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 		Write8((uint8_t*)&regaddr, 2, d);
 	}
 
+
 	if (vbSensorEnabled[ICM20948_TEMP_IDX] == false)
 	{
 		// Enable temperature sensor by default
@@ -189,6 +195,7 @@ bool AgmIcm20948::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Int
 
 		vbSensorEnabled[ICM20948_TEMP_IDX] = true;
 	}
+
 
 	return true;
 }
@@ -542,14 +549,13 @@ bool AgmIcm20948::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, T
 
 bool AgmIcm20948::Enable()
 {
-	uint8_t d, userctrl;
+	uint8_t d;
 	uint16_t regaddr = ICM20948_PWR_MGMT_1_REG;
-
 
 	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_PWR_MGMT_1_CLKSEL_AUTO);
 
-	msDelay(100);
+	msDelay(10);
 
 	if (vbSensorEnabled[ICM20948_ACCEL_IDX])
 	{
@@ -798,12 +804,11 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 #else
 	// Use SLV0 - Can read multi-bytes
 	uint16_t regaddr = ICM20948_USER_CTRL_REG;
-	uint8_t userctrl = Read8((uint8_t*)&regaddr, 2);// | ICM20948_USER_CTRL_I2C_MST_EN;
 	uint8_t d[4];
 
 	regaddr = ICM20948_I2C_SLV0_ADDR_REG;
 	Write8((uint8_t*)&regaddr, 2, (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD);
-	//d[0] = (DevAddr & ICM20948_I2C_SLV0_ADDR_I2C_ID_0_MASK) | ICM20948_I2C_SLV0_ADDR_I2C_SLV0_RD;
+
 	d[0] = *pCmdAddr;
 
 	while (BuffLen > 0)
@@ -815,9 +820,6 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 		regaddr = ICM20948_I2C_SLV0_REG_REG;
 		Write((uint8_t*)&regaddr, 2, d, 2);
 
-		// Start transfer
-		regaddr = ICM20948_USER_CTRL_REG;
-		Write8((uint8_t*)&regaddr, 2, userctrl);
 
 		// Delay require for transfer to complete
 		msDelay(3);
@@ -827,8 +829,6 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 			d[2] = Read8((uint8_t*)&regaddr, 2);
 
 		} while (d[2] & ICM20948_I2C_MST_STATUS_I2C_SLV0_NACK);
-
-		//Write8((uint8_t*)&regaddr, 2, userctrl & ~ICM20948_USER_CTRL_I2C_MST_EN);
 
 		regaddr = ICM20948_EXT_SLV_SENS_DATA_00_REG;
 		cnt = Read((uint8_t*)&regaddr, 1, pBuff, cnt);
