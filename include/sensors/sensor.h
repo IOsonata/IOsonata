@@ -38,8 +38,12 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 
-#ifndef __cplusplus
+#ifdef __cplusplus
+	#include <atomic>
+	using namespace std;
+#else
 #include <stdbool.h>
+#include <stdatomic.h>
 #endif
 
 #include "coredev/iopincfg.h"
@@ -332,6 +336,10 @@ public:
 	 */
 	virtual uint32_t Range(uint32_t Value) { vRange = Value; return vRange; }
 
+	bool DataReadySet(void) { return vbDataRdy.test_and_set(memory_order_acquire); }
+
+	void DataReadyClear(void) { atomic_flag_clear(&vbDataRdy); }
+
 protected:
 
 	SENSOR_TYPE vType;			//!< Sensor type
@@ -346,6 +354,8 @@ protected:
 	uint32_t vFilterrFreq;		//!< Filter frequency in mHz, many sensors can set a filter cutoff frequency
 	int vTimerTrigId;			//!< Timer interrupt trigger id (implementation dependent
 	uint32_t vRange;            //!< ADC range of the sensor, contains max value for conversion factor
+	atomic_flag vbDataRdy;		//!< Flag to indicate raw sensor data is ready for retrieval.
+								//!< This flag is normally set by interrupt and cleared by UpdateData
 };
 
 extern "C" {
