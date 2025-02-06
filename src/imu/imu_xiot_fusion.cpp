@@ -40,6 +40,11 @@ SOFTWARE.
 
 bool ImuXiotFusion::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
+	if (pAccel == nullptr || pGyro == nullptr)
+	{
+		return false;
+	}
+
 	bool res = Imu::Init(Cfg, pAccel, pGyro, pMag);
 
 	if (res == true)
