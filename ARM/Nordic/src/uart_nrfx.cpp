@@ -209,7 +209,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #else
 	{
 		.DevNo = 0,
-		{ .pReg = NRF_UART0, },
+		.pReg = NRF_UART0,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
