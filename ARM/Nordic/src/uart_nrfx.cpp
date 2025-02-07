@@ -161,7 +161,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #ifdef NRF5340_XXAA_NETWORK
 	{
 		.DevNo = 0,
-		{ .pDmaReg = NRF_UARTE0_NS, },
+		.pDmaReg = NRF_UARTE0_NS,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -171,7 +171,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #else
 	{
 		.DevNo = 0,
-		{ .pDmaReg = NRF_UARTE0_S, },
+		.pDmaReg = NRF_UARTE0_S,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -180,7 +180,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 	},
 	{
 		.DevNo = 1,
-		{ .pDmaReg = NRF_UARTE1_S, },
+		.pDmaReg = NRF_UARTE1_S,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -189,7 +189,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 	},
 	{
 		.DevNo = 2,
-		{ .pDmaReg = NRF_UARTE2_S, },
+		.pDmaReg = NRF_UARTE2_S,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -198,7 +198,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 	},
 	{
 		.DevNo = 3,
-		{ .pDmaReg = NRF_UARTE3_S, },
+		.pDmaReg = NRF_UARTE3_S,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -219,7 +219,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #if NRFX_UART_MAXDEV > 1
 	{
 		.DevNo = 1,
-		{ .pDmaReg = NRF_UARTE1, },
+		.pDmaReg = NRF_UARTE1,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -230,7 +230,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #if NRFX_UART_MAXDEV > 2
 	{
 		.DevNo = 2,
-		{ .pDmaReg = NRF_UARTE2, },
+		.pDmaReg = NRF_UARTE2,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -241,7 +241,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #if NRFX_UART_MAXDEV > 3
 	{
 		.DevNo = 3,
-		{ .pDmaReg = NRF_UARTE3, },
+		.pDmaReg = NRF_UARTE3,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
