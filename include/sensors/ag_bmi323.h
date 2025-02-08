@@ -50,7 +50,8 @@ SOFTWARE.
   * @{
   */
 
-#define BMI323_I2C_7BITS_DEVADDR							0x68
+#define BMI323_I2C_7BITS_DEVADDR0							0x68
+#define BMI323_I2C_7BITS_DEVADDR1							0x69
 
 #define BMI323_CHIP_ID_REG          	0x0
 
@@ -497,6 +498,10 @@ SOFTWARE.
 #define BMI323_FIFO_DATA_FLAG_TEMP					(1<<2)	//!< Fifo contains temperature data
 #define BMI323_FIFO_DATA_FLAG_TIME					(1<<3)	//!< Fifo contains timer data
 
+#define BMI323_ACCEL_IDX		0
+#define BMI323_GYRO_IDX			1
+#define BMI323_TEMP_IDX			2
+#define BMI323_NB_SENSOR		3
 
 #ifdef __cplusplus
 
@@ -597,14 +602,17 @@ private:
 class AgBmi323 : public AccelBmi323, public GyroBmi323, public TempBmi323 {
 public:
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
-		vbSensorEnabled[0] = AccelBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[0];
+		vbSensorEnabled[BMI323_ACCEL_IDX] = AccelBmi323::Init(Cfg, pIntrf, pTimer);
+		return vbSensorEnabled[BMI323_ACCEL_IDX];
 	}
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
-		vbSensorEnabled[1] = GyroBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[1];
+		vbSensorEnabled[BMI323_GYRO_IDX] = GyroBmi323::Init(Cfg, pIntrf, pTimer);
+		return vbSensorEnabled[BMI323_GYRO_IDX];
 	}
 
 	virtual bool Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) {
-		vbSensorEnabled[2] = TempBmi323::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[2];
+		vbSensorEnabled[BMI323_TEMP_IDX] = TempBmi323::Init(Cfg, pIntrf, pTimer);
+		return vbSensorEnabled[BMI323_TEMP_IDX];
 	}
 
 	virtual bool Enable();
@@ -627,7 +635,7 @@ protected:
 	}
 
 	bool vbInitialized;
-	bool vbSensorEnabled[3];
+	bool vbSensorEnabled[BMI323_NB_SENSOR];
 
 private:
 	virtual uint8_t FifoDataFlag() { return vFifoDataFlag; }

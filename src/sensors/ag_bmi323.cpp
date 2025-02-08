@@ -43,6 +43,9 @@ SOFTWARE.
 #include "convutil.h"
 #include "sensors/ag_bmi323.h"
 
+//#include "coredev/uart.h"
+//extern UART g_Uart;
+
 //static const uint32_t s_BMI323Odr[] = {
 //	781, 1562, 3125,
 //};
@@ -75,9 +78,6 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 		Write16(&regaddr, 1, d);
 		d = Read16(&regaddr, 1);
 
-		regaddr = BMI323_INT_CONFIG_REG;
-		Write16(&regaddr, 1, BMI323_INT_CONFIG_LATCHED);
-
 		regaddr = BMI323_INT_MAP2_REG;
 		d = (Read16(&regaddr, 1));
 		d &= ~BMI323_INT_MAP2_ACC_DRDY_MASK;
@@ -94,9 +94,12 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 		if (CfgData.IntPol == DEVINTR_POL_HIGH)
 		{
-			d |= BMI323_IO_CTRL_INT2_ACTIVE_HIGH;
+			d |= BMI323_IO_CTRL_INT1_ACTIVE_HIGH;
+			regaddr = BMI323_INT_CONFIG_REG;
+			Write16(&regaddr, 1, BMI323_INT_CONFIG_LATCHED);
 		}
 
+		regaddr = BMI323_IO_CTRL_REG;
 		Write16(&regaddr, 1, d);
 
 	}
@@ -301,7 +304,6 @@ bool GyroBmi323::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf
 
 	if (d != 0)
 	{
-		printf("GyroBmi323::Init error %x\n\r", d);
 		return false;
 	}
 
@@ -401,7 +403,7 @@ uint32_t GyroBmi323::SamplingFrequency(uint32_t Freq)
 			}
 		}
 	}
-//printf("SamplingFrequency %d %d %x\r\n", Freq, f, conf);
+
 	Write16(&regaddr, 1, conf);
 
 	msDelay(1);
@@ -473,7 +475,7 @@ bool GyroBmi323::Enable()
 
 	if (d != 0)
 	{
-		printf("BMI323_FIFO_CTRL_FLUSH err %x\r\n", d);
+//		printf("BMI323_FIFO_CTRL_FLUSH err %x\r\n", d);
 		return false;
 	}
 
@@ -481,7 +483,7 @@ bool GyroBmi323::Enable()
 	d = Read16(&regaddr, 1) & ~BMI323_GYR_CONFIG_MODE_MASK;
 	d |= BMI323_GYR_CONFIG_MODE_CONT_EN;
 
-	printf("Gyr Cfg : %x\r\n", d);
+//	printf("Gyr Cfg : %x\r\n", d);
 
 	Write16(&regaddr, 1, d);
 
@@ -492,7 +494,7 @@ bool GyroBmi323::Enable()
 
 	if (d != 0)
 	{
-		printf("Gyr err %x\r\n", d);
+//		printf("Gyr err %x\r\n", d);
 		return false;
 	}
 
@@ -562,6 +564,8 @@ bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	uint16_t d;
 
 	Interface(pIntrf);
+
+
 	Device::DeviceAddress(DevAddr);
 
 	if (pTimer != NULL)
@@ -569,9 +573,34 @@ bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 		vpTimer = pTimer;
 	}
 
+	if (pIntrf->Type() == DEVINTRF_TYPE_I2C)
+	{
+		switch (DevAddr)
+		{
+			case 1:
+			case BMI323_I2C_7BITS_DEVADDR1:
+				DeviceAddress(BMI323_I2C_7BITS_DEVADDR1);
+				break;
+			case 0:
+			case BMI323_I2C_7BITS_DEVADDR0:
+			default:
+				DeviceAddress(BMI323_I2C_7BITS_DEVADDR0);
+				break;
+		}
+	}
+	else
+	{
+		// SPI
+		DeviceAddress(DevAddr);
+
+		// Read dummy as per datasheet
+		regaddr = BMI323_CHIP_ID_REG;
+		d = Read16(&regaddr, 1);
+	}
+
 	// Read chip id
 	regaddr = BMI323_CHIP_ID_REG;
-	d = Read8(&regaddr, 1);
+	d = Read16(&regaddr, 1) & 0xFF;	// Bit 8-15 must be ignored
 
 	if (d != BMI323_CHIP_ID)
 	{
@@ -583,12 +612,30 @@ bool AgBmi323::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	DeviceID(d);
 	Valid(true);
 
+	regaddr = BMI323_ERR_REG;
+	d = Read16(&regaddr, 1);
+
+	if (d != 0)
+	{
+		return false;
+	}
+
+	// Read to clear
+	regaddr = BMI323_STATUS_REG;
+	d = Read16(&regaddr, 1);
+
+	if ((d & BMI323_STATUS_POR_DETECTED) == 0)
+	{
+		return false;
+	}
+
+	regaddr = BMI323_FIFO_CTRL_REG;
+	Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
+
+	msDelay(10);
+
 	if (vpTimer == nullptr)
 	{
-		regaddr = BMI323_FIFO_CTRL_REG;
-		Write16(&regaddr, 1, BMI323_FIFO_CTRL_FLUSH);
-
-		msDelay(10);
 
 		regaddr = BMI323_FIFO_CONFIG_REG;
 		d = Read16(&regaddr, 1) | BMI323_FIFO_CONFIG_TIME_EN | BMI323_FIFO_CONFIG_TEMP_EN;
