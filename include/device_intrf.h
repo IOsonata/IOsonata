@@ -84,6 +84,7 @@ typedef enum __Dev_Intrf_Type {
 	DEVINTRF_TYPE_I2S,			//!< I2S
 	DEVINTRF_TYPE_PDM,			//!< PDM
 	DEVINTRF_TYPE_OSPI,			//!< Octo SPI
+    DEVINTRF_TYPE_I3C,          //!< I3C
 } DEVINTRF_TYPE;
 
 /// @brief	Device Interface forward data structure type definition.
