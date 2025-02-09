@@ -761,7 +761,7 @@ SOFTWARE.
 #define BMI270_FIFO_DATA_FLAG_TEMP					(1<<2)	//!< Fifo contains temperature data
 #define BMI270_FIFO_DATA_FLAG_TIME					(1<<3)	//!< Fifo contains timer data
 
-#define BMI270_MAX_BURST_LEN			(36U)
+#define BMI270_MAX_BURST_LEN			(36U<<1)
 
 #ifdef __cplusplus
 
@@ -898,7 +898,7 @@ private:
 	virtual uint8_t FifoDataFlag() { return vFifoDataFlag; }
 	virtual void FifoDataFlagSet(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag; }
 	virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
-	bool LoadConfig(const uint8_t * const pData, size_t DataLen);
+	bool LoadConfig(const uint8_t *pData, size_t DataLen);
 
 	uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
 	size_t vFifoFrameSize;	// Data word count

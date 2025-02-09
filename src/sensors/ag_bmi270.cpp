@@ -1287,7 +1287,7 @@ void AgBmi270::FifoDataFlagClr(uint8_t Flag)
 	vFifoFrameSize = FifoFrameSize(vFifoDataFlag);
 }
 
-bool AgBmi270::LoadConfig(const uint8_t * const pData, size_t DataLen)
+bool AgBmi270::LoadConfig(const uint8_t *pData, size_t DataLen)
 {
 	uint8_t regaddr = BMI270_INIT_CTRL_REG;
 	uint16_t cfgaddr = 0;
@@ -1295,10 +1295,7 @@ bool AgBmi270::LoadConfig(const uint8_t * const pData, size_t DataLen)
 	// initiate load config
 	Write8(&regaddr, 1, 0);
 
-	size_t len = s_BMI270CfgDataLen;
-	const uint8_t *p = s_BMI270CfgData;
-
-	while (len > 0)
+	while (DataLen > 0)
 	{
 		uint8_t d[2];
 
@@ -1309,15 +1306,15 @@ bool AgBmi270::LoadConfig(const uint8_t * const pData, size_t DataLen)
 		Write(&regaddr, 1, d, 2);
 
 		regaddr = BMI270_INIT_DATA_REG;
-		size_t n = min(len, BMI270_MAX_BURST_LEN);
-		n = Write(&regaddr, 1, (uint8_t*)p, n);
+		size_t n = min(DataLen, BMI270_MAX_BURST_LEN);
+		n = Write(&regaddr, 1, (uint8_t*)pData, n);
 
 		if (n == 0)
 		{
 			break;
 		}
-		len -= n;
-		p += n;
+		DataLen -= n;
+		pData += n;
 		cfgaddr += n;
 	}
 
@@ -1325,6 +1322,6 @@ bool AgBmi270::LoadConfig(const uint8_t * const pData, size_t DataLen)
 	regaddr = BMI270_INIT_CTRL_REG;
 	Write8(&regaddr, 1, 1);
 
-	return len == s_BMI270CfgDataLen;
+	return DataLen == 0;
 }
 
