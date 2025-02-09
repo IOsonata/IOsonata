@@ -164,24 +164,33 @@ SOFTWARE.
 #define BMI270_FEAT_PAGE_REG						0x2F
 #define BMI270_FEAT_PAGE_MASK										(7<<0)
 
+#define BMI270_FPAGE0								(0<<8)	//!< Encode page on MSB
+#define BMI270_FPAGE1								(1<<8)
+#define BMI270_FPAGE2								(2<<8)
+#define BMI270_FPAGE3								(3<<8)
+#define BMI270_FPAGE4								(4<<8)
+#define BMI270_FPAGE5								(5<<8)
+#define BMI270_FPAGE6								(6<<8)
+#define BMI270_FPAGE7								(7<<8)
+
 // Input registers for feature config. Output registers for feature results
 #define BMI270_FEATURES_REG							0x30	//!< Features[16]
 
 // Page 0
-#define BMI270_FEATURES_SC_OUT_REG					0x30	//!< 4 bytes register for step counter
-#define BMI270_FEATURES_SC_OUT0_REG					0x30	//!< Step count bit 7:0
-#define BMI270_FEATURES_SC_OUT1_REG					0x31	//!< Step count bit 15:8
-#define BMI270_FEATURES_SC_OUT2_REG					0x32	//!< Step count bit 23:16
-#define BMI270_FEATURES_SC_OUT3_REG					0x33	//!< Step count bit 31:24
+#define BMI270_FEATURES_SC_OUT_REG					(BMI27_FPAGE0 | 0x30)	//!< 4 bytes register for step counter
+#define BMI270_FEATURES_SC_OUT0_REG					(BMI27_FPAGE0 | 0x30)	//!< Step count bit 7:0
+#define BMI270_FEATURES_SC_OUT1_REG					(BMI27_FPAGE0 | 0x31)	//!< Step count bit 15:8
+#define BMI270_FEATURES_SC_OUT2_REG					(BMI27_FPAGE0 | 0x32)	//!< Step count bit 23:16
+#define BMI270_FEATURES_SC_OUT3_REG					(BMI27_FPAGE0 | 0x33)	//!< Step count bit 31:24
 
-#define BMI270_FEATURES_ACT_OUT_REG					0x34	//!< Activity output
+#define BMI270_FEATURES_ACT_OUT_REG					(BMI27_FPAGE0 | 0x34)	//!< Activity output
 #define BMI270_FEATURES_ACT_OUT_MASK								(3<<0)
 #define BMI270_FEATURES_ACT_OUT_STILL								(0<<0)	//!< User stationary
 #define BMI270_FEATURES_ACT_OUT_WALKING								(1<<0)	//!< User walking
 #define BMI270_FEATURES_ACT_OUT_RUNNING								(2<<0)	//!< User running
 #define BMI270_FEATURES_ACT_OUT_UNKNOWN								(3<<0)	//!< Unknown state
 
-#define BMI270_FEATURES_WR_GESTURE_OUT_REG			0x36
+#define BMI270_FEATURES_WR_GESTURE_OUT_REG			(BMI27_FPAGE0 | 0x36)
 #define BMI270_FEATURES_WR_GESTURE_OUT_MASK							(7<<0)
 #define BMI270_FEATURES_WR_GESTURE_OUT_UNKNOWN						(0<<0)	//!< Unknown gesture
 #define BMI270_FEATURES_WR_GESTURE_OUT_PUSH_ARM_DOWN				(1<<0)	//!< Push arm down gesture
@@ -190,7 +199,7 @@ SOFTWARE.
 #define BMI270_FEATURES_WR_GESTURE_OUT_FLICK_IN						(4<<0)	//!< Arm flick in gesture
 #define BMI270_FEATURES_WR_GESTURE_OUT_FLICK_OUT					(5<<0)	//!< Arm flick out gesture
 
-#define BMI270_FEATURES_GYR_GAIN_STATUS_REG			0x38
+#define BMI270_FEATURES_GYR_GAIN_STATUS_REG			(BMI27_FPAGE0 | 0x38)
 #define BMI270_FEATURES_GYR_GAIN_STATUS_SAT_X						(1<<0)	//!< X saturated
 #define BMI270_FEATURES_GYR_GAIN_STATUS_SAT_Y						(1<<1)	//!< Y saturated
 #define BMI270_FEATURES_GYR_GAIN_STATUS_SAT_Z						(1<<2)	//!< Z saturated
@@ -200,16 +209,16 @@ SOFTWARE.
 #define BMI270_FEATURES_GYR_GAIN_STATUS_G_TRIG_STATUS_DL_ERR		(2<<3)	//!< Cmd aborted, download error
 #define BMI270_FEATURES_GYR_GAIN_STATUS_G_TRIG_STATUS_ABORT_ERR		(3<<3)	//!< Cmd aborted by host or due to motion detection
 
-#define BMI270_FEATURES_GYR_CAS_REG					0x3C
+#define BMI270_FEATURES_GYR_CAS_REG					(BMI27_FPAGE0 | 0x3C)
 #define BMI270_FEATURES_GYR_CAS_FACTOR_ZX_MASK						(0x7F)
 
 // Page 1
-#define BMI270_FEATURES_G_TRIG1_REG					0x32
+#define BMI270_FEATURES_G_TRIG1_REG					(BMI27_FPAGE1 | 0x32)
 #define BMI270_FEATURES_G_TRIG1_MAX_BURST_LEN_MASK					(0xF<<0)//!< Max burst length
 #define BMI270_FEATURES_G_TRIG1_SELECT								(1<<8)	//!< Select
 #define BMI270_FEATURES_G_TRIG1_BLOCK								(1<<9)	//!< Block feature with next G_TRIGGER cmd
 
-#define BMI270_FEATURES_GEN_SET1_REG				0x34	// 16 bits
+#define BMI270_FEATURES_GEN_SET1_REG				(BMI27_FPAGE1 | 0x34)	// 16 bits
 #define BMI270_FEATURES_GEN_SET1_MAP_X_AXIS_MASK					(3<<0)
 #define BMI270_FEATURES_GEN_SET1_MAP_X_AXIS_X						(0<<0)	//!< Map to X
 #define BMI270_FEATURES_GEN_SET1_MAP_X_AXIS_Y						(1<<0)	//!< Map to Y
@@ -228,23 +237,23 @@ SOFTWARE.
 #define BMI270_FEATURES_GEN_SET1_GYR_SELF_OFFSET					(1<<9)	//!< Enable self offset correction
 #define BMI270_FEATURES_GEN_SET1_NVM_PROG_PREP						(1<<10)	//!< Prepare the system for NVM programming
 
-#define BMI270_FEATURES_GYR_GAIN_UPD1_REG			0x36	// 16 bits
+#define BMI270_FEATURES_GYR_GAIN_UPD1_REG			(BMI27_FPAGE1 | 0x36)	// 16 bits
 #define BMI270_FEATURES_GYR_GAIN_UPD1_RATIO_X_MASK					(0x7FF<<0)
 
-#define BMI270_FEATURES_GYR_GAIN_UPD2_REG			0x38	// 16 bits
+#define BMI270_FEATURES_GYR_GAIN_UPD2_REG			(BMI27_FPAGE1 | 0x38)	// 16 bits
 #define BMI270_FEATURES_GYR_GAIN_UPD2_RATIO_Y_MASK					(0x7FF<<0)
 
-#define BMI270_FEATURES_GYR_GAIN_UPD3_REG			0x3A	// 16 bits
+#define BMI270_FEATURES_GYR_GAIN_UPD3_REG			(BMI27_FPAGE1 | 0x3A)	// 16 bits
 #define BMI270_FEATURES_GYR_GAIN_UPD3_RATIO_Z_MASK					(0x7FF<<0)
 #define BMI270_FEATURES_GYR_GAIN_UPD3_ENABLE						(1<<11)	//!< Enable gyroscope gain update
 
-#define BMI270_FEATURES_ANYMO1_REG					0x3C	// 16 bits
+#define BMI270_FEATURES_ANYMO1_REG					(BMI27_FPAGE1 | 0x3C)	// 16 bits
 #define BMI270_FEATURES_ANYMO1_DURATION_MASK						(0x1FFF)
 #define BMI270_FEATURES_ANYMO1_SELECT_X								(1<<13)	//!< Select the feature on a per axis basis
 #define BMI270_FEATURES_ANYMO1_SELECT_Y								(1<<14)	//!< Select the feature on a per axis basis
 #define BMI270_FEATURES_ANYMO1_SELECT_Z								(1<<15)	//!< Select the feature on a per axis basis
 
-#define BMI270_FEATURES_ANYMO2_REG					0x3E	// 16 bits
+#define BMI270_FEATURES_ANYMO2_REG					(BMI27_FPAGE1 | 0x3E)	// 16 bits
 #define BMI270_FEATURES_ANYMO2_THRESHOLD_MASK						(0x7FF<<0)	//!< Slope threshold value
 #define BMI270_FEATURES_ANYMO2_OUT_CONF_MASK						(0xF<<11)	//!< Enable interrupt bit assignment
 #define BMI270_FEATURES_ANYMO2_OUT_CONF_DISABLE						(0<<11)	//!< Disable interrupt assignment
@@ -259,13 +268,13 @@ SOFTWARE.
 #define BMI270_FEATURES_ANYMO2_ENABLE								(1<<15)	//!< Enable the feature
 
 // Page 2
-#define BMI270_FEATURES_MONO1_REG					0x30	// No motion detection config
+#define BMI270_FEATURES_MONO1_REG					(BMI27_FPAGE2 | 0x30)	// No motion detection config
 #define BMI270_FEATURES_MONO1_DURATION_MASK							(0x1FFF<<0)
 #define BMI270_FEATURES_MONO1_SELECT_X								(1<<13)	//!< Select the feature on a per axis basis
 #define BMI270_FEATURES_MONO1_SELECT_Y								(1<<14)	//!< Select the feature on a per axis basis
 #define BMI270_FEATURES_MONO1_SELECT_Z								(1<<1)	//!< Select the feature on a per axis basis
 
-#define BMI270_FEATURES_MONO2_REG					0x32	// No motion detection config
+#define BMI270_FEATURES_MONO2_REG					(BMI27_FPAGE2 | 0x32)	// No motion detection config
 #define BMI270_FEATURES_MONO2_THRESHOLD_MASK						(0x7FFF<<0)
 #define BMI270_FEATURES_NOMO2_OUT_CONF_MASK							(0xF<<11)	//!< Enable interrupt bit assignment
 #define BMI270_FEATURES_NOMO2_OUT_CONF_DISABLE						(0<<11)	//!< Disable interrupt assignment
@@ -278,10 +287,10 @@ SOFTWARE.
 #define BMI270_FEATURES_NOMO2_OUT_CONF_BIT6							(7<<11)	//!< Output assign to interrupt bit 6
 #define BMI270_FEATURES_NOMO2_ENABLE								(1<<15)	//!< Enable the feature
 
-#define BMI270_FEATURES_SIGMO1_REG					0x34	// 16 bits
+#define BMI270_FEATURES_SIGMO1_REG					(BMI27_FPAGE2 | 0x34)	// 16 bits
 #define BMI270_FEATURES_SIGMO1_BLOCK_SIZE_MASK						(0xFFFF<<0)
 
-#define BMI270_FEATURES_SIGMO2_REG					0x3E	// 16 bits
+#define BMI270_FEATURES_SIGMO2_REG					(BMI27_FPAGE2 | 0x3E)	// 16 bits
 #define BMI270_FEATURES_SIGMO2_ENABLE								(1<<0)	//!< Enable the feature
 #define BMI270_FEATURES_SIGMO2_OUT_CONF_MASK						(0xF<<1)	//!< Enable interrupt bit assignment
 #define BMI270_FEATURES_SIGMO2_OUT_CONF_DISABLE						(0<<1)	//!< Disable interrupt assignment
@@ -295,71 +304,71 @@ SOFTWARE.
 #define BMI270_FEATURES_SIGMO2_OUT_CONF_BIT7						(8<<1)	//!< Output assign to interrupt bit 7
 
 // Page 3
-#define BMI270_FEATURES_SC1_REG						0x30	// 16 bits
+#define BMI270_FEATURES_SC1_REG						(BMI27_FPAGE3 | 0x30)	// 16 bits
 #define BMI270_FEATURES_SC1_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC2_REG						0x32	// 16 bits
+#define BMI270_FEATURES_SC2_REG						(BMI27_FPAGE3 | 0x32)	// 16 bits
 #define BMI270_FEATURES_SC2_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC3_REG						0x34	// 16 bits
+#define BMI270_FEATURES_SC3_REG						(BMI27_FPAGE3 | 0x34)	// 16 bits
 #define BMI270_FEATURES_SC3_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC4_REG						0x36	// 16 bits
+#define BMI270_FEATURES_SC4_REG						(BMI27_FPAGE3 | 0x36)	// 16 bits
 #define BMI270_FEATURES_SC4_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC5_REG						0x38	// 16 bits
+#define BMI270_FEATURES_SC5_REG						(BMI27_FPAGE3 | 0x38)	// 16 bits
 #define BMI270_FEATURES_SC5_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC6_REG						0x3A	// 16 bits
+#define BMI270_FEATURES_SC6_REG						(BMI27_FPAGE3 | 0x3A)	// 16 bits
 #define BMI270_FEATURES_SC6_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC7_REG						0x3C	// 16 bits
+#define BMI270_FEATURES_SC7_REG						(BMI27_FPAGE3 | 0x3C)	// 16 bits
 #define BMI270_FEATURES_SC7_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC8_REG						0x3E	// 16 bits
+#define BMI270_FEATURES_SC8_REG						(BMI27_FPAGE3 | 0x3E)	// 16 bits
 #define BMI270_FEATURES_SC8_PARAM_MASK								(0xFFFF<<0)
 
 // Page 4
-#define BMI270_FEATURES_SC9_REG						0x30	// 16 bits
+#define BMI270_FEATURES_SC9_REG						(BMI27_FPAGE4 | 0x30)	// 16 bits
 #define BMI270_FEATURES_SC9_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC10_REG					0x32	// 16 bits
+#define BMI270_FEATURES_SC10_REG					(BMI27_FPAGE4 | 0x32)	// 16 bits
 #define BMI270_FEATURES_SC10_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC11_REG					0x34	// 16 bits
+#define BMI270_FEATURES_SC11_REG					(BMI27_FPAGE4 | 0x34)	// 16 bits
 #define BMI270_FEATURES_SC11_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC12_REG					0x36	// 16 bits
+#define BMI270_FEATURES_SC12_REG					(BMI27_FPAGE4 | 0x36)	// 16 bits
 #define BMI270_FEATURES_SC12_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC13_REG					0x38	// 16 bits
+#define BMI270_FEATURES_SC13_REG					(BMI27_FPAGE4 | 0x38)	// 16 bits
 #define BMI270_FEATURES_SC13_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC14_REG					0x3A	// 16 bits
+#define BMI270_FEATURES_SC14_REG					(BMI27_FPAGE4 | 0x3A)	// 16 bits
 #define BMI270_FEATURES_SC14_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC15_REG					0x3C	// 16 bits
+#define BMI270_FEATURES_SC15_REG					(BMI27_FPAGE4 | 0x3C)	// 16 bits
 #define BMI270_FEATURES_SC15_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC16_REG					0x3E	// 16 bits
+#define BMI270_FEATURES_SC16_REG					(BMI27_FPAGE4 | 0x3E)	// 16 bits
 #define BMI270_FEATURES_SC16_PARAM_MASK								(0xFFFF<<0)
 
 // Page 5
-#define BMI270_FEATURES_SC17_REG					0x30	// 16 bits
+#define BMI270_FEATURES_SC17_REG					(BMI27_FPAGE5 | 0x30)	// 16 bits
 #define BMI270_FEATURES_SC17_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC18_REG					0x32	// 16 bits
+#define BMI270_FEATURES_SC18_REG					(BMI27_FPAGE5 | 0x32)	// 16 bits
 #define BMI270_FEATURES_SC18_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC19_REG					0x34	// 16 bits
+#define BMI270_FEATURES_SC19_REG					(BMI27_FPAGE5 | 0x34)	// 16 bits
 #define BMI270_FEATURES_SC19_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC20_REG					0x36	// 16 bits
+#define BMI270_FEATURES_SC20_REG					(BMI27_FPAGE5 | 0x36)	// 16 bits
 #define BMI270_FEATURES_SC20_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC21_REG					0x38	// 16 bits
+#define BMI270_FEATURES_SC21_REG					(BMI27_FPAGE5 | 0x38)	// 16 bits
 #define BMI270_FEATURES_SC21_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC22_REG					0x3A	// 16 bits
+#define BMI270_FEATURES_SC22_REG					(BMI27_FPAGE5 | 0x3A)	// 16 bits
 #define BMI270_FEATURES_SC22_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC23_REG					0x3C	// 16 bits
+#define BMI270_FEATURES_SC23_REG					(BMI27_FPAGE5 | 0x3C)	// 16 bits
 #define BMI270_FEATURES_SC23_PARAM_MASK								(0xFFFF<<0)
-#define BMI270_FEATURES_SC24_REG					0x3E	// 16 bits
+#define BMI270_FEATURES_SC24_REG					(BMI27_FPAGE5 | 0x3E)	// 16 bits
 #define BMI270_FEATURES_SC24_PARAM_MASK								(0xFFFF<<0)
 
 // Page 6
-#define BMI270_FEATURES_SC25_REG					0x30	// 16 bits
+#define BMI270_FEATURES_SC25_REG					(BMI27_FPAGE6 | 0x30)	// 16 bits
 #define BMI270_FEATURES_SC25_PARAM_MASK								(0xFFFF<<0)
 
-#define BMI270_FEATURES_SC26_REG					0x32	// 16 bits
+#define BMI270_FEATURES_SC26_REG					(BMI27_FPAGE6 | 0x32)	// 16 bits
 #define BMI270_FEATURES_SC26_WATERMARK_LEVEL_MASK					(0x2FF<<0)
 #define BMI270_FEATURES_SC26_RESET_COUNTER							(1<<10)
 #define BMI270_FEATURES_SC26_EN_DETECTOR							(1<<11)
 #define BMI270_FEATURES_SC26_EN_COUNTER								(1<<12)
 #define BMI270_FEATURES_SC26_EN_ACTIVITY							(1<<13)
 
-#define BMI270_FEATURES_SC27_REG					0x34	//
+#define BMI270_FEATURES_SC27_REG					(BMI27_FPAGE6 | 0x34)	//
 #define BMI270_FEATURES_SC27_OUT_CONF_STEP_DETECTOR_MASK			(0xF<<0)	//!< Enable interrupt bit assignment
 #define BMI270_FEATURES_SC27_OUT_CONF_STEP_DETECTOR_BIT0			(1<<0)	//!< Output assign to interrupt bit 0
 #define BMI270_FEATURES_SC27_OUT_CONF_STEP_DETECTOR_BIT1			(2<<0)	//!< Output assign to interrupt bit 1
@@ -379,7 +388,7 @@ SOFTWARE.
 #define BMI270_FEATURES_SC27_OUT_CONF_ACTIVITY_DETECTOR_BIT6		(7<<4)	//!< Output assign to interrupt bit 6
 #define BMI270_FEATURES_SC27_OUT_CONF_ACTIVITY_DETECTOR_BIT7		(8<<4)	//!< Output assign to interrupt bit 7
 
-#define BMI270_FEATURES_WR_GEST1_REG				0x36
+#define BMI270_FEATURES_WR_GEST1_REG				(BMI27_FPAGE6 | 0x36)
 #define BMI270_FEATURES_WR_GEST1_OUT_CONF_MASK						(0xF<<0)	//!< Enable interrupt bit assignment
 #define BMI270_FEATURES_WR_GEST1_OUT_CONF_BIT0						(1<<0)	//!< Output assign to interrupt bit 0
 #define BMI270_FEATURES_WR_GEST1_OUT_CONF_BIT1						(2<<0)	//!< Output assign to interrupt bit 1
@@ -393,17 +402,17 @@ SOFTWARE.
 #define BMI270_FEATURES_WR_GEST1_WEARABLE_ARM_RIGHT					(1<<4)
 #define BMI270_FEATURES_WR_GEST1_ENABLE								(1<<5)
 
-#define BMI270_FEATURES_WR_GEST2_REG				0x38
+#define BMI270_FEATURES_WR_GEST2_REG				(BMI27_FPAGE6 | 0x38)
 #define BMI270_FEATURES_WR_GEST2_MIN_FLICK_PEAK_MASK				(0xFFFF<<0)
 
-#define BMI270_FEATURES_WR_GEST3_REG				0x3A
+#define BMI270_FEATURES_WR_GEST3_REG				(BMI27_FPAGE6 | 0x3A)
 #define BMI270_FEATURES_WR_GEST3_MIN_FLICK_SAMPLES_MASK				(0xFFFF<<0)
 
-#define BMI270_FEATURES_WR_GEST4_REG				0x3C
+#define BMI270_FEATURES_WR_GEST4_REG				(BMI27_FPAGE6 | 0x3C)
 #define BMI270_FEATURES_WR_GEST4_MAX_DURATION_MASK					(0xFFFF<<0)
 
 // Page 7
-#define BMI270_FEATURES_WR_WAKEUP1_REG				0x30
+#define BMI270_FEATURES_WR_WAKEUP1_REG				(BMI27_FPAGE7 | 0x30)
 #define BMI270_FEATURES_WR_WAKEUP1_OUT_CONF_MASK					(0xF<<0)	//!< Enable interrupt bit assignment
 #define BMI270_FEATURES_WR_WAKEUP1_OUT_CONF_BIT0					(1<<0)	//!< Output assign to interrupt bit 0
 #define BMI270_FEATURES_WR_WAKEUP1_OUT_CONF_BIT1					(2<<0)	//!< Output assign to interrupt bit 1
@@ -415,22 +424,22 @@ SOFTWARE.
 #define BMI270_FEATURES_WR_WAKEUP1_OUT_CONF_BIT7					(8<<0)	//!< Output assign to interrupt bit 7
 #define BMI270_FEATURES_WR_WAKEUP1_ENABLE							(1<<4)
 
-#define BMI270_FEATURES_WR_WAKEUP2_REG				0x32
+#define BMI270_FEATURES_WR_WAKEUP2_REG				(BMI27_FPAGE7 | 0x32)
 #define BMI270_FEATURES_WR_WAKEUP2_MIN_ANGLE_FOCUS_MASK				(0xFFFF<<0)
 
-#define BMI270_FEATURES_WR_WAKEUP3_REG				0x34
+#define BMI270_FEATURES_WR_WAKEUP3_REG				(BMI27_FPAGE7 | 0x34)
 #define BMI270_FEATURES_WR_WAKEUP3_MIN_ANGLE_NONFOCUS_MASK			(0xFFFF<<0)
 
-#define BMI270_FEATURES_WR_WAKEUP4_REG				0x36
+#define BMI270_FEATURES_WR_WAKEUP4_REG				(BMI27_FPAGE7 | 0x36)
 #define BMI270_FEATURES_WR_WAKEUP4_MAX_TILT_LR_MASK					(0xFFFF<<0)
 
-#define BMI270_FEATURES_WR_WAKEUP5_REG				0x38
+#define BMI270_FEATURES_WR_WAKEUP5_REG				(BMI27_FPAGE7 | 0x38)
 #define BMI270_FEATURES_WR_WAKEUP5_MAX_TILT_LL_MASK					(0xFFFF<<0)
 
-#define BMI270_FEATURES_WR_WAKEUP6_REG				0x3A
+#define BMI270_FEATURES_WR_WAKEUP6_REG				(BMI27_FPAGE7 | 0x3A)
 #define BMI270_FEATURES_WR_WAKEUP6_MAX_TILT_PD_MASK					(0xFFFF<<0)
 
-#define BMI270_FEATURES_WR_WAKEUP7_REG				0x3C
+#define BMI270_FEATURES_WR_WAKEUP7_REG				(BMI27_FPAGE7 | 0x3C)
 #define BMI270_FEATURES_WR_WAKEUP7_MAX_TILT_PU_MASK					(0xFFFF<<0)
 
 #define BMI270_ACC_CONF_REG							0x40
@@ -752,6 +761,8 @@ SOFTWARE.
 #define BMI270_FIFO_DATA_FLAG_TEMP					(1<<2)	//!< Fifo contains temperature data
 #define BMI270_FIFO_DATA_FLAG_TIME					(1<<3)	//!< Fifo contains timer data
 
+#define BMI270_MAX_BURST_LEN			(36U)
+
 #ifdef __cplusplus
 
 class AccelBmi270 : public AccelSensor {
@@ -887,6 +898,7 @@ private:
 	virtual uint8_t FifoDataFlag() { return vFifoDataFlag; }
 	virtual void FifoDataFlagSet(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag; }
 	virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
+	bool LoadConfig(const uint8_t * const pData, size_t DataLen);
 
 	uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
 	size_t vFifoFrameSize;	// Data word count
