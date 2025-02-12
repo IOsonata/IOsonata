@@ -54,8 +54,7 @@ SOFTWARE.
 
 #define BMI270_CHIP_ID_REG     				     	0x0
 
-// Datasheet is 0x24, but reading from the chip is 0x21
-#define BMI270_CHIP_ID          		                            0x21 // Datasheet shows 0x24
+#define BMI270_CHIP_ID          		                            0x24
 
 #define BMI270_ERR_REG								0x2
 #define BMI270_ERR_FATAL											(1<<0)
@@ -761,7 +760,7 @@ SOFTWARE.
 #define BMI270_FIFO_DATA_FLAG_TEMP					(1<<2)	//!< Fifo contains temperature data
 #define BMI270_FIFO_DATA_FLAG_TIME					(1<<3)	//!< Fifo contains timer data
 
-#define BMI270_MAX_BURST_LEN			(36U<<1)
+#define BMI270_MAX_BURST_LEN			(254U)
 
 #ifdef __cplusplus
 

@@ -1006,10 +1006,6 @@ bool AgBmi270::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	else
 	{
 		DeviceAddress(DevAddr);
-
-		// SPI require read dummy byte any register
-		regaddr = BMI270_CHIP_ID_REG;
-		d = Read8(&regaddr, 1);
 	}
 
 	// Read chip id
@@ -1035,9 +1031,23 @@ bool AgBmi270::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	regaddr = BMI270_PWR_CONF_REG;
 	Write8(&regaddr, 1, 0);
 
+	msDelay(1);
 
 	if (LoadConfig(s_BMI270CfgData, s_BMI270CfgDataLen) == false)
 	{
+		return false;
+	}
+
+	msDelay(30);
+
+	regaddr = BMI270_INTERNAL_STATUS_REG;
+	d = Read8(&regaddr, 1);
+
+	printf("status %x\r\n", d);
+
+	if ((d & BMI270_INTERNAL_STATUS_MESSAGE_INIT_OK) == 0)
+	{
+		printf("Init failed\r\n");
 		return false;
 	}
 
@@ -1238,12 +1248,19 @@ void AgBmi270::IntHandler()
 
 int AgBmi270::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
-	uint8_t b[BuffLen + 1];
-	int n = Device::Read(pCmdAddr, CmdAddrLen, b, BuffLen + 1);
+	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+		uint8_t b[BuffLen + 1];
+		int n = Device::Read(pCmdAddr, CmdAddrLen, b, BuffLen + 1);
 
-	memcpy(pBuff, &b[1], BuffLen);
+		memcpy(pBuff, &b[1], BuffLen);
 
-	return n;
+		return n - 1;
+	}
+	else
+	{
+		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	}
 }
 
 static size_t FifoFrameSize(uint8_t Flag)
@@ -1291,11 +1308,14 @@ bool AgBmi270::LoadConfig(const uint8_t *pData, size_t DataLen)
 {
 	uint8_t regaddr = BMI270_INIT_CTRL_REG;
 	uint16_t cfgaddr = 0;
+	uint8_t *p = (uint8_t*)pData;
+	uint8_t buff[BMI270_MAX_BURST_LEN];
+	size_t len = DataLen;
 
 	// initiate load config
 	Write8(&regaddr, 1, 0);
 
-	while (DataLen > 0)
+	while (len > 0)
 	{
 		uint8_t d[2];
 
@@ -1306,22 +1326,61 @@ bool AgBmi270::LoadConfig(const uint8_t *pData, size_t DataLen)
 		Write(&regaddr, 1, d, 2);
 
 		regaddr = BMI270_INIT_DATA_REG;
-		size_t n = min(DataLen, BMI270_MAX_BURST_LEN);
-		n = Write(&regaddr, 1, (uint8_t*)pData, n);
+		size_t n = min(len, BMI270_MAX_BURST_LEN) & ~1;
+		printf("n = %d\r\n", n);
+		n = Write(&regaddr, 1, p, n);
+		printf("write = %d\r\n", n);
 
 		if (n == 0)
 		{
 			break;
 		}
-		DataLen -= n;
-		pData += n;
+		len -= n;
+		p += n;
 		cfgaddr += n;
+	}
+
+	// Verify
+	len = DataLen;
+	cfgaddr = 0;
+	p = (uint8_t*)pData;
+
+	while (len > 0)
+	{
+		uint8_t d[2];
+
+		d[0] = (cfgaddr >> 1) & 0xF;
+		d[1] = (cfgaddr >> 5);
+
+		regaddr = BMI270_INIT_ADDR0_REG;
+		Write(&regaddr, 1, d, 2);
+
+		regaddr = BMI270_INIT_DATA_REG;
+		size_t n = min(len, BMI270_MAX_BURST_LEN) & ~1;
+
+		printf("n = %d\r\n", n);
+
+		n = Read(&regaddr, 1, buff, n);
+
+		if (n == 0)
+		{
+			break;
+		}
+
+		if (memcmp(buff, p, n) != 0)
+		{
+			printf("failed verify %x %d\r\n", cfgaddr, n);
+			break;
+		}
+		len -= n;
+		p += n;
+		cfgaddr += n;;
 	}
 
 	// Load config complete
 	regaddr = BMI270_INIT_CTRL_REG;
 	Write8(&regaddr, 1, 1);
 
-	return DataLen == 0;
+	return len == 0;
 }
 
