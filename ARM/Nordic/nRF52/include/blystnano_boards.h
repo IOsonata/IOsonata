@@ -47,7 +47,7 @@ SOFTWARE.
 #define BLUEPYRO_M3225						7
 #define BLUEPYRO_CR24S_M3225				8
 #define BLYST_MOTION						9
-#define BLUEIO_THING						10
+#define BLUEIO_THINGY						10
 
 #define BLYSTNANO_PULSE_TRAIN_PINS	{ \
 	{0, 2, 0}, {0, 3, 0}, {0, 4, 0}, {0, 5, 0}, {0, 6, 0}, {0, 7, 0}, {0, 8, 0}, \
