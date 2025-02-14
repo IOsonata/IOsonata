@@ -503,7 +503,7 @@ bool AccelBmi270::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 		Write8(&regaddr, 1, d);
 
 		regaddr = BMI270_INT_LATCH_REG;
-		Write8(&regaddr, 1, BMI270_INT_LATCH_PERM);
+		//Write8(&regaddr, 1, BMI270_INT_LATCH_PERM);
 
 		if (vpTimer == nullptr)
 		{
@@ -648,7 +648,7 @@ uint32_t AccelBmi270::SamplingFrequency(uint32_t Freq)
 			}
 		}
 	}
-	//printf("AccelBmi270::SamplingFrequency %d %d %x\n", Freq, f, accconf);
+//	printf("AccelBmi270::SamplingFrequency %d %d %x\n", Freq, f, accconf);
 	Write8(&regaddr, 1, accconf);
 
 	msDelay(1);
@@ -748,37 +748,37 @@ uint32_t GyroBmi270::FilterFreq(uint32_t Freq)
 {
 	uint8_t t = GyroSensor::SamplingFrequency() / Freq;
 #if 0
-	uint8_t regaddr = Bmi270_GYR_CONFIG_REG;
-	uint8_t d = Read16(&regaddr, 1) & ~Bmi270_GYR_CONFIG_AVG_NUM_MASK;
+	uint8_t regaddr = BMI270_GYR_CONF_REG;
+	uint8_t d = Read16(&regaddr, 1) & ~Bmi270_GYR_CONF_AVG_NUM_MASK;
 
 	if (t < 4)
 	{
-		d |= Bmi270_GYR_CONFIG_AVG_NUM_2;
+		d |= BMI270_GYR_CONF_AVG_NUM_2;
 		t = 1;
 	}
 	else if (t < 8)
 	{
-		d |= Bmi270_GYR_CONFIG_AVG_NUM_4;
+		d |= BMI270_GYR_CONF_AVG_NUM_4;
 		t = 2;
 	}
 	else if (t < 16)
 	{
-		d |= Bmi270_GYR_CONFIG_AVG_NUM_8;
+		d |= BMI270_GYR_CONF_AVG_NUM_8;
 		t = 3;
 	}
 	else if (t < 32)
 	{
-		d |= Bmi270_GYR_CONFIG_AVG_NUM_16;
+		d |= BMI270_GYR_CONF_AVG_NUM_16;
 		t = 4;
 	}
 	else if (t < 64)
 	{
-		d |= Bmi270_GYR_CONFIG_AVG_NUM_32;
+		d |= BMI270_GYR_CONF_AVG_NUM_32;
 		t = 5;
 	}
 	else
 	{
-		d |= Bmi270_GYR_CONFIG_AVG_NUM_64;
+		d |= BMI270_GYR_CONF_AVG_NUM_64;
 		t = 6;
 	}
 
@@ -1327,9 +1327,7 @@ bool AgBmi270::LoadConfig(const uint8_t *pData, size_t DataLen)
 
 		regaddr = BMI270_INIT_DATA_REG;
 		size_t n = min(len, BMI270_MAX_BURST_LEN) & ~1;
-		printf("n = %d\r\n", n);
 		n = Write(&regaddr, 1, p, n);
-		printf("write = %d\r\n", n);
 
 		if (n == 0)
 		{
@@ -1357,8 +1355,6 @@ bool AgBmi270::LoadConfig(const uint8_t *pData, size_t DataLen)
 
 		regaddr = BMI270_INIT_DATA_REG;
 		size_t n = min(len, BMI270_MAX_BURST_LEN) & ~1;
-
-		printf("n = %d\r\n", n);
 
 		n = Read(&regaddr, 1, buff, n);
 
