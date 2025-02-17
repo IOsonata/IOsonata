@@ -994,6 +994,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	s_nRFxI2CDev[pCfgData->DevNo].TxIdx = 0;
 	s_nRFxI2CDev[pCfgData->DevNo].pTxData = NULL;
 	//s_nRFxI2CDev[pCfgData->DevNo].bTxReady = true;
+	pDev->DevIntrf.MaxTrxLen = NRFX_I2C_DMA_MAXCNT;
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;
 	pDev->DevIntrf.bDma = pCfgData->bDmaEn;

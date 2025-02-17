@@ -39,6 +39,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __DEVICEINTRF_H__
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 	#include <atomic>
@@ -142,6 +143,8 @@ struct __device_intrf {
 	atomic_bool bTxReady;		//!< Flag indicating Tx is ready for transfer.
 	atomic_bool bNoStop;		//!< Flag indicating a continous transfer.  Usually used for read/write register value or
 	 	 	 	 	 	 	 	//!< cmd/response type. This flag is relevant only when interrupt is enabled async transfer
+	size_t MaxTrxLen; 	 		//!< Max length of per transfer transaction in bytes. This is normally set to max DMA transfer size.
+
 	// Bellow are all mandatory functions to implement
 	// On init, all implementation must fill these function, no NULL allowed
 	// If a function is not used. It must be implemented as do nothing function
@@ -602,6 +605,10 @@ static inline void *DeviceIntrfGetHandle(DevIntrf_t * const pDev) {
 	return pDev->GetHandle(pDev);
 }
 
+static inline size_t DeviceIntrfGetMaxTransferLen(DevIntrf_t * const pDev) {
+	return pDev->MaxTrxLen;
+}
+
 #ifdef __cplusplus
 }
 
@@ -845,6 +852,8 @@ public:
 	 * @brief	This function perform a reset of the interface.
 	 */
 	virtual void Reset(void) { DeviceIntrfReset(*this); }
+
+	size_t GetMaxTransferLen(void) { return DeviceIntrfGetMaxTransferLen(*this); }
 };
 
 #endif

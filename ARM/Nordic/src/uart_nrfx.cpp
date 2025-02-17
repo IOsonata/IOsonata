@@ -1071,6 +1071,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	s_nRFxUARTDev[devno].RxDmaCnt = 0;
 
 
+	pDev->DevIntrf.MaxTrxLen = NRFX_UART_DMA_MAXCNT;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 //	pDev->DevIntrf.bDma = pCfg->bDmaEn;
