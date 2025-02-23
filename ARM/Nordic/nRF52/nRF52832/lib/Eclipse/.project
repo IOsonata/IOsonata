@@ -486,16 +486,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/nrf_log_backend_uart.c</locationURI>
 		</link>
 		<link>
-			<name>src/nrfthingy_conf_service.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/nrfthingy_conf_service.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/nrfthingy_env_service.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/nrfthingy_env_service.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/nrfx</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -512,16 +502,6 @@
 		</link>
 		<link>
 			<name>src/pwrmgnt</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sbuffer.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sbuffer.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -549,11 +529,6 @@
 			<name>src/sysstatus.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
-		</link>
-		<link>
-			<name>src/sysstatus_impl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus_impl.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/system_nrf52.c</name>
@@ -1799,56 +1774,6 @@
 			<name>src/pwrmgnt/pm_npm1300.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_npm1300.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/fds.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/fds.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/nrf_drv_clock.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_clock.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/nrf_drv_power.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_power.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/nrf_drv_rng.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_drv_rng.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/nrf_fstorage.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/nrf_fstorage_nvmc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage_nvmc.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/nrf_fstorage_sd.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_fstorage_sd.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/nrf_pwr_mgmt.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_pwr_mgmt.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/nrf_sdh_soc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_sdh_soc.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk5/nrf_sdh_weak.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/sdk5/src/nrf_sdh_weak.c</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_adxl362.cpp</name>
