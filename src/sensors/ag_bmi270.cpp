@@ -1027,7 +1027,19 @@ bool AgBmi270::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const 
 	DeviceID(d);
 	Valid(true);
 
-	regaddr =
+	regaddr = BMI270_NV_CONF_REG;
+	d = Read8(&regaddr, 1);
+
+	if (pIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+		d |= BMI270_NV_CONF_SPI_EN;
+	}
+	else
+	{
+		d &= ~BMI270_NV_CONF_SPI_EN;
+	}
+	Write8(&regaddr, 1, d);
+
 	regaddr = BMI270_PWR_CONF_REG;
 	Write8(&regaddr, 1, 0);
 
