@@ -109,8 +109,9 @@ typedef uint32_t		SENSOR_TYPE;
 /// @note	Timer configuration and operation is handled by user firmware application
 typedef enum __Sensor_OpMode {
 	SENSOR_OPMODE_SINGLE,			//!< Single capture
-	SENSOR_OPMODE_CONTINUOUS,		//!< Hardware continuous capture
-	SENSOR_OPMODE_TIMER				//!< Using periodic timer
+	SENSOR_OPMODE_CONTINUOUS,		//!< Hardware continuous capture high power
+	SENSOR_OPMODE_TIMER,			//!< Using periodic timer
+	SENSOR_OPMODE_LOW_POWER,		//!< Hardware low power
 } SENSOR_OPMODE;
 
 ///@brief	Sensor state.
