@@ -38,6 +38,9 @@ SOFTWARE.
 
 #include "imu/imu.h"
 
+/** @addtogroup IMU
+  * @{
+  */
 
 #ifdef __cplusplus
 
@@ -120,5 +123,7 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+/** @} end group IMU */
 
 #endif // __IMU_XIOT_FUSION_H__
