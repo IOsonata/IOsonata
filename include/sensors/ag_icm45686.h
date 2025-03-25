@@ -1126,14 +1126,18 @@ SOFTWARE.
 #define ICM45686_IPREG_SYS2_REG_132_ACCEL_OIS_HPF1_BYP 					(1<<0)
 #define ICM45686_IPREG_SYS2_REG_132_ACCEL_OIS_M6_BYP					(1<<2)
 
-#define ICM45686_
+#define ICM45686_BASE_ADDRESS_IMEM_SRAM			0
+#define ICM45686_BASE_ADDRESS_IPREG_BAR			0xA000
+#define ICM45686_BASE_ADDRESS_IPREG_TOP1		0xA200
+#define ICM45686_BASE_ADDRESS_IPREG_SYS1		0xA400
+#define ICM45686_BASE_ADDRESS_IPREG_SYS2		0xA500
 
 #define ICM45686_ADC_RANGE				0x7FFF		// 16 Bits
 
-#define ICM45686_ACCEL_IDX		0
+#define ICM45686_ACCEL_IDX			0
 #define ICM45686_GYRO_IDX			1
 #define ICM45686_TEMP_IDX			2
-#define ICM45686_NB_SENSOR		3
+#define ICM45686_NB_SENSOR			3
 
 #ifdef __cplusplus
 
@@ -1157,10 +1161,7 @@ public:
 	virtual void Disable();
 
 private:
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
-	virtual uint8_t FifoDataFlag() = 0;
-	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
-	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
 };
 
 class GyroIcm45686 : public GyroSensor {
@@ -1184,10 +1185,7 @@ public:
 	virtual void Reset() {}
 
 private:
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
-	virtual uint8_t FifoDataFlag() = 0;
-	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
-	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
 };
 
 class TempIcm45686 : public TempSensor {
@@ -1225,18 +1223,46 @@ public:
 	virtual void Disable();
 
 private:
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
-	virtual uint8_t FifoDataFlag() = 0;
-	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
-	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
 };
 
 class AgIcm45686 : public AccelIcm45686, public GyroIcm45686, public TempIcm45686 {
+	friend class ImuIcm20948;
+	friend class AccelIcm20948;
+	friend class GyroIcm20948;
+	friend class MagIcm20948;
+
 public:
+
+	AgIcm45686();
+
+	/**
+	 * @brief	Initialize accelerometer sensor.
+	 *
+	 * NOTE: This sensor must be the first to be initialized.
+	 *
+	 * @param 	Cfg		: Accelerometer configuration data
+	 * @param 	pIntrf	: Pointer to communication interface
+	 * @param 	pTimer	: Pointer to Timer use for time stamp
+	 *
+	 * @return	true - Success
+	 */
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[ICM45686_ACCEL_IDX] = AccelIcm45686::Init(Cfg, pIntrf, pTimer);
 		return vbSensorEnabled[ICM45686_ACCEL_IDX];
 	}
+
+	/**
+	 * @brief	Initialize gyroscope sensor.
+	 *
+	 * NOTE : Accelerometer must be initialized first prior to this one.
+	 *
+	 * @param 	Cfg		: Accelerometer configuration data
+	 * @param 	pIntrf	: Pointer to communication interface
+	 * @param 	pTimer	: Pointer to Timer use for time stamp
+	 *
+	 * @return	true - Success
+	 */
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
 		vbSensorEnabled[ICM45686_GYRO_IDX] = GyroIcm45686::Init(Cfg, pIntrf, pTimer);
 		return vbSensorEnabled[ICM45686_GYRO_IDX];
@@ -1261,7 +1287,7 @@ public:
 protected:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
-	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
+	//int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
 		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
@@ -1270,14 +1296,39 @@ protected:
 	bool vbSensorEnabled[ICM45686_NB_SENSOR];
 
 private:
-	virtual uint8_t FifoDataFlag() { return vFifoDataFlag; }
-	virtual void FifoDataFlagSet(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag; }
-	virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
+	AgIcm45686(const AgIcm45686&); // no copy constructor
 
-	uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
-	size_t vFifoFrameSize;	// Data word count
+	// Default base initialization. Does detection and set default config for all sensor.
+	// All sensor init must call this first prio to initializing itself
+	/**
+	 * @brief	Initialize sensor (require implementation).
+	 *
+	 * @param 	Cfg 	: Reference to configuration data
+	 * @param	pIntrf 	: Pointer to interface to the sensor.
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 * @param	pTimer	: Pointer to timer for retrieval of time stamp
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 *
+	 * @return
+	 * 			- true	: Success
+	 * 			- false	: Failed
+	 */
+	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
+	//bool SelectBank(uint8_t BankNo);
+
+	//virtual uint8_t FifoDataFlag() { return vFifoDataFlag; }
+	//virtual void FifoDataFlagSet(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag; }
+	//virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
+
+	//uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
+	//size_t vFifoFrameSize;	// Data word count
 	uint16_t vPrevTime;
 	uint64_t vRollover;
+	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within
 };
 
 #endif // __cplusplus

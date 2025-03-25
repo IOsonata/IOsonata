@@ -45,6 +45,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/timer.h"
 #include "sensors/agm_mpu9250.h"
 #include "sensors/agm_lsm9ds1.h"
+#include "sensors/ag_icm45686.h"
 #include "sensors/ag_bmi160.h"
 #include "sensors/ag_bmi323.h"
 #include "sensors/ag_bmi270.h"
@@ -180,7 +181,7 @@ static const AccelSensorCfg_t s_AccelCfg = {
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
 	.Scale = 2,
-	.FltrFreq = 50000,
+//	.FltrFreq = 50000,
 	.Inter = 1,
 	.IntPol = DEVINTR_POL_LOW,
 };
@@ -189,8 +190,8 @@ static const GyroSensorCfg_t s_GyroCfg = {
 	.DevAddr = ACC_DEV_ADDR,//BMI323_I2C_7BITS_DEVADDR,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
-	.Sensitivity = 10,
-	.FltrFreq = 200,
+//	.Sensitivity = 10,
+//	.FltrFreq = 200,
 };
 
 static const MagSensorCfg_t s_MagCfg = {
@@ -235,8 +236,10 @@ AccelH3lis331dl g_MotSensor;
 #elif defined(BMI270)
 AgBmi270 g_MotSensor;
 #else
-AgmLsm9ds1 g_MotSensor;
+//AgmLsm9ds1 g_MotSensor;
+AgIcm45686 g_MotSensor;
 #endif
+
 
 AccelSensor *g_pAccel = NULL;
 GyroSensor *g_pGyro = NULL;
@@ -260,9 +263,9 @@ void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 	switch (Evt)
 	{
 		case DEV_EVT_DATA_RDY:
-			g_MotSensor.Read(accdata);
+			//g_MotSensor.Read(accdata);
 			//g_Imu.Read(accdata);
-			printf("Accel %d: %d %d %d\r\n", accdata.Timestamp, accdata.X, accdata.Y, accdata.Z);
+			//printf("Accel %d: %d %d %d\r\n", accdata.Timestamp, accdata.X, accdata.Y, accdata.Z);
 			//g_Imu.Read(quat);
 			//printf("Quat %d: %d %d %d %d\r\n", quat.Timestamp, quat.Q1, quat.Q2, quat.Q2, quat.Q3);
 
@@ -270,18 +273,25 @@ void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 	}
 }
 
+uint32_t g_Pdt = 0;
 
 void ImuIntHandler(int IntNo, void *pCtx)
 {
 	if (IntNo == 0)
 	{
 //		IOPinSet(0, 24);
-		uint32_t t = g_Timer.uSecond();
+		uint64_t t = g_Timer.uSecond();
 		g_DT = t - g_TPrev;
 		g_TPrev = t;
 
 		//g_Imu.IntHandler();
 		g_MotSensor.IntHandler();
+		//AccelSensorData_t accdata;
+
+		//g_MotSensor.Read(accdata);
+		//printf("Accel %f %f %f\r\n", accdata.X, accdata.Y, accdata.Z);
+
+		g_Pdt = (g_Timer.uSecond() - t);// + g_Pdt) >> 1;
 		//IOPinClear(0, 24);
 	}
 }
@@ -313,6 +323,9 @@ bool HardwareInit()
 #error "No interface defined"
 #endif
 
+	//IOPinConfig(IMU_INT_PORT, IMU_INT_PIN, IMU_INT_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	//IOPinEnableInterrupt(0, 6, IMU_INT_PORT, IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION, ImuIntHandler, NULL);
+
 	if (res == true)
 	{
 		res = g_MotSensor.Init(s_AccelCfg, pintrf, &g_Timer);
@@ -327,10 +340,10 @@ bool HardwareInit()
 			g_pGyro = &g_MotSensor;
 		}
 
-		res = g_MotSensor.Init(s_MagCfg, &g_Spi);
-		if (res == true)
+		//res = g_MotSensor.Init(s_MagCfg, &g_Spi);
+		//if (res == true)
 		{
-			g_pMag = &g_MotSensor;
+		//	g_pMag = &g_MotSensor;
 		}
 #endif
 
@@ -402,9 +415,9 @@ int main()
 	uint32_t prevt = 0;
 	int cnt = 10;
 
-	//g_MotSensor.Enable();
+	g_MotSensor.Enable();
 
-	//g_Imu.Enable();
+//	g_Imu.Enable();
 
     FusionAhrs ahrs;
     //FusionAhrsInitialise(&ahrs);
@@ -443,11 +456,11 @@ int main()
         //FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
        // FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
 
-		if (cnt-- < 0)
+		//if (cnt-- < 0)
 		{
-			//cnt = 10;
-			//printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)dt, arawdata.X, arawdata.Y, arawdata.Z);
-			printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, accdata.X, accdata.Y, accdata.Z);
+			cnt = 10;
+			printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)g_Pdt, arawdata.X, arawdata.Y, arawdata.Z);
+			//printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)g_Pdt, accdata.X, accdata.Y, accdata.Z);
 			//g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, gyrodata.X, gyrodata.Y, gyrodata.Z);
 //	        printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
 			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);

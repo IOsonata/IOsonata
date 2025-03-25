@@ -35,6 +35,11 @@ SOFTWARE.
 #ifndef __AG_LSM6DSV_H__
 #define __AG_LSM6DSV_H__
 
+#include <stdint.h>
+
+#include "sensors/accel_sensor.h"
+#include "sensors/gyro_sensor.h"
+#include "sensors/temp_sensor.h"
 
 /** @addtogroup Sensors
   * @{
@@ -1056,6 +1061,151 @@ SOFTWARE.
 
 
 #ifdef __cplusplus
+
+class AccelLsm6dsv : public AccelSensor {
+public:
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint8_t Scale(uint8_t Value);
+
+	/**
+	 * @brief	Set and enable filter cutoff frequency
+	 *
+	 * Optional implementation can override this to implement filtering supported by the device
+	 *
+	 * @param	Freq : Filter frequency in mHz
+	 *
+	 * @return	Actual frequency in mHz
+	 */
+	virtual uint32_t FilterFreq(uint32_t Freq);
+	virtual bool Enable();
+	virtual void Disable();
+
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual uint8_t FifoDataFlag() = 0;
+	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
+	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
+};
+
+class GyroLsm6dsv : public GyroSensor {
+public:
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual uint32_t Sensitivity(uint32_t Value);
+
+	/**
+	 * @brief	Set and enable filter cutoff frequency
+	 *
+	 * Optional implementation can override this to implement filtering supported by the device
+	 *
+	 * @param	Freq : Filter frequency in mHz
+	 *
+	 * @return	Actual frequency in mHz
+	 */
+	virtual uint32_t FilterFreq(uint32_t Freq);
+	virtual bool Enable();
+	virtual void Disable();
+	virtual void Reset() {}
+
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual uint8_t FifoDataFlag() = 0;
+	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
+	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
+};
+
+class TempLsm6dsv : public TempSensor {
+public:
+	/**
+	 * @brief	Initialize sensor (require implementation).
+	 *
+	 * @param 	CfgData : Reference to configuration data
+	 * @param	pIntrf 	: Pointer to interface to the sensor.
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 * @param	pTimer	: Pointer to timer for retrieval of time stamp
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 *
+	 * @return
+	 * 			- true	: Success
+	 * 			- false	: Failed
+	 */
+	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+	/**
+	 * @brief	Power on or wake up device
+	 *
+	 * @return	true - If success
+	 */
+	virtual bool Enable();
+
+	/**
+	 * @brief	Put device in power down or power saving sleep mode
+	 *
+	 * @return	None
+	 */
+	virtual void Disable();
+
+private:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) = 0;
+	virtual uint8_t FifoDataFlag() = 0;
+	virtual void FifoDataFlagSet(uint8_t Flag) = 0;
+	virtual void FifoDataFlagClr(uint8_t Flag) = 0;
+};
+
+class AgLsm6dsv : public AccelLsm6dsv, public GyroLsm6dsv, public TempLsm6dsv {
+public:
+	AgLsm6dsv();
+
+	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+		vbSensorEnabled[0] = AccelLsm6dsv::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[0];
+	}
+	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL) {
+		vbSensorEnabled[1] = GyroLsm6dsv::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[1];
+	}
+
+	virtual bool Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL) {
+		vbSensorEnabled[2] = TempLsm6dsv::Init(Cfg, pIntrf, pTimer); return vbSensorEnabled[2];
+	}
+
+	virtual bool Enable();
+	virtual void Disable();
+	virtual void Reset();
+	virtual bool Read(AccelSensorRawData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return AccelSensor::Read(Data); }
+	virtual bool Read(GyroSensorRawData_t &Data) { return GyroSensor::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return GyroSensor::Read(Data); }
+	virtual void IntHandler();
+	virtual bool StartSampling() { return true; }
+
+	bool UpdateData();
+protected:
+	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+
+	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+	}
+
+	bool vbInitialized;
+	bool vbSensorEnabled[3];
+
+private:
+	virtual uint8_t FifoDataFlag() { return vFifoDataFlag; }
+	virtual void FifoDataFlagSet(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag; }
+	virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
+	bool LoadConfig(const uint8_t *pData, size_t DataLen);
+
+	uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
+	size_t vFifoFrameSize;	// Data word count
+	uint16_t vPrevTime;
+	uint64_t vRollover;
+	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within
+};
+
 extern "C" {
 #endif // __cplusplus
 
