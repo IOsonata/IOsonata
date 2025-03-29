@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
-@file	ag_icm45686.cpp
+@file	ag_icm456x.cpp
 
-@brief	TDK Invensen ICM45686 accel gyro implementation
+@brief	TDK Invensen ICM456x series accel gyro implementation
 
-This file implements only accel & gyro part of the ICM45686. IMU features are
+This file implements only accel & gyro part of the ICM456x. IMU features are
 implemented in imu implementation file.
 
 
@@ -37,10 +37,10 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <memory.h>
 
-#include "sensors/ag_icm45686.h"
+#include "sensors/ag_icm456x.h"
 
 
-bool AccelIcm45686::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelIcm456x::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
 	{
@@ -49,47 +49,11 @@ bool AccelIcm45686::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 
 	return true;
 }
-uint32_t AccelIcm45686::SamplingFrequency(uint32_t Freq)
+uint32_t AccelIcm456x::SamplingFrequency(uint32_t Freq)
 {
 	return 0;
 }
-uint8_t AccelIcm45686::Scale(uint8_t Value)
-{
-	return 0;
-}
-
-/**
- * @brief	Set and enable filter cutoff frequency
- *
- * Optional implementation can override this to implement filtering supported by the device
- *
- * @param	Freq : Filter frequency in mHz
- *
- * @return	Actual frequency in mHz
- */
-uint32_t AccelIcm45686::FilterFreq(uint32_t Freq)
-{
-	return 0;
-}
-bool AccelIcm45686::Enable()
-{
-	return false;
-}
-
-void AccelIcm45686::Disable()
-{
-
-}
-
-bool GyroIcm45686::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
-{
-	return false;
-}
-uint32_t GyroIcm45686::SamplingFrequency(uint32_t Freq)
-{
-	return 0;
-}
-uint32_t GyroIcm45686::Sensitivity(uint32_t Value)
+uint8_t AccelIcm456x::Scale(uint8_t Value)
 {
 	return 0;
 }
@@ -103,16 +67,52 @@ uint32_t GyroIcm45686::Sensitivity(uint32_t Value)
  *
  * @return	Actual frequency in mHz
  */
-uint32_t GyroIcm45686::FilterFreq(uint32_t Freq)
+uint32_t AccelIcm456x::FilterFreq(uint32_t Freq)
 {
 	return 0;
 }
-bool GyroIcm45686::Enable()
+bool AccelIcm456x::Enable()
 {
 	return false;
 }
 
-void GyroIcm45686::Disable()
+void AccelIcm456x::Disable()
+{
+
+}
+
+bool GyroIcm456x::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+{
+	return false;
+}
+uint32_t GyroIcm456x::SamplingFrequency(uint32_t Freq)
+{
+	return 0;
+}
+uint32_t GyroIcm456x::Sensitivity(uint32_t Value)
+{
+	return 0;
+}
+
+/**
+ * @brief	Set and enable filter cutoff frequency
+ *
+ * Optional implementation can override this to implement filtering supported by the device
+ *
+ * @param	Freq : Filter frequency in mHz
+ *
+ * @return	Actual frequency in mHz
+ */
+uint32_t GyroIcm456x::FilterFreq(uint32_t Freq)
+{
+	return 0;
+}
+bool GyroIcm456x::Enable()
+{
+	return false;
+}
+
+void GyroIcm456x::Disable()
 {
 
 }
@@ -134,7 +134,7 @@ void GyroIcm45686::Disable()
  * 			- true	: Success
  * 			- false	: Failed
  */
-bool TempIcm45686::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool TempIcm456x::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	return true;
 }
@@ -144,7 +144,7 @@ bool TempIcm45686::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pInt
  *
  * @return	true - If success
  */
-bool TempIcm45686::Enable()
+bool TempIcm456x::Enable()
 {
 	return false;
 }
@@ -154,23 +154,23 @@ bool TempIcm45686::Enable()
  *
  * @return	None
  */
-void TempIcm45686::Disable()
+void TempIcm456x::Disable()
 {
 
 }
 
-AgIcm45686::AgIcm45686()
+AgIcm456x::AgIcm456x()
 {
 	memset(vbSensorEnabled, 0, sizeof(vbSensorEnabled));
 	vType = SENSOR_TYPE_TEMP | SENSOR_TYPE_ACCEL | SENSOR_TYPE_GYRO;
 }
 
-bool AgIcm45686::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	return false;
 }
 
-bool AgIcm45686::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
+bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
 {
 	if (Valid())
 		return true;;
@@ -180,10 +180,10 @@ bool AgIcm45686::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inte
 
 	Interface(pIntrf);
 
-	uint8_t regaddr = ICM45686_CHIP_ID_REG;
+	uint8_t regaddr = ICM456X_WHO_AM_I_REG;
 	uint8_t d;
 
-	if (DevAddr == ICM45686_I2C_7BITS_DEVADDR0 || DevAddr == ICM45686_I2C_7BITS_DEVADDR1)
+	if (DevAddr == ICM456X_I2C_7BITS_DEVADDR0 || DevAddr == ICM456X_I2C_7BITS_DEVADDR1)
 	{
 		if (pIntrf->Type() != DEVINTRF_TYPE_I2C)
 		{
@@ -194,7 +194,7 @@ bool AgIcm45686::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inte
 		DeviceAddress(DevAddr);
 		d = Read8((uint8_t*)&regaddr, 2);
 
-		if (d != ICM45686_WHO_AM_I_REG)
+		if (d != ICM456X_WHO_AM_I_REG)
 		{
 			return false;
 		}
@@ -203,15 +203,15 @@ bool AgIcm45686::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inte
 	{
 		// Interface is I2C but device address is not set.
 		// Detect device
-		DeviceAddress(ICM45686_I2C_7BITS_DEVADDR0);
+		DeviceAddress(ICM456X_I2C_7BITS_DEVADDR0);
 		d = Read8((uint8_t*)&regaddr, 2);
 
-		if (d != ICM45686_CHIP_ID)
+		if (d != ICM456X_CHIP_ID)
 		{
 			// Try alternate address
-			DeviceAddress(ICM45686_I2C_7BITS_DEVADDR1);
+			DeviceAddress(ICM456X_I2C_7BITS_DEVADDR1);
 			d = Read8((uint8_t*)&regaddr, 2);
-			if (d != ICM45686_CHIP_ID)
+			if (d != ICM456X_CHIP_ID)
 			{
 				return false;
 			}
@@ -223,7 +223,7 @@ bool AgIcm45686::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inte
 		DeviceAddress(DevAddr);
 		d = Read8((uint8_t*)&regaddr, 1);
 
-		if (d != ICM45686_CHIP_ID)
+		if (d != ICM456X_CHIP_ID)
 		{
 			return false;
 		}
@@ -241,30 +241,43 @@ bool AgIcm45686::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inte
 
 	Reset();
 
+	regaddr = ICM456X_FIFO_CONFIG0_REG;
+	Write8(&regaddr, 1, ICM456X_FIFO_CONFIG0_DEPTH_2K | ICM456X_FIFO_CONFIG0_MODE_STREAM);
+
+	regaddr = ICM456X_FIFO_CONFIG1_0_REG;
+
+	uint16_t wm = ICM456X_FIFO_SIZE * 80 / 100; // 80%
+
+	Write16(&regaddr, 1, wm);
+
+	regaddr = ICM456X_FIFO_CONFIG2_REG;
+	Write8(&regaddr, 1, ICM456X_FIFO_CONFIG2_WR_WM_GT_TH);
+
+
 	return true;
 }
 
-bool AgIcm45686::Enable()
+bool AgIcm456x::Enable()
 {
 	return false;
 }
 
-void AgIcm45686::Disable()
+void AgIcm456x::Disable()
 {
 
 }
 
-void AgIcm45686::Reset()
+void AgIcm456x::Reset()
 {
 
 }
 
-void AgIcm45686::IntHandler()
+void AgIcm456x::IntHandler()
 {
 
 }
 
-bool AgIcm45686::UpdateData()
+bool AgIcm456x::UpdateData()
 {
 	return false;
 }
