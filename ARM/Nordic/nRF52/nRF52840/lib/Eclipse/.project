@@ -886,6 +886,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ag_bmi323.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/ag_icm456x.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ag_icm456x.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/ag_lsm6dsv.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/ag_lsm6dsv.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/agm_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948.h</locationURI>
@@ -1024,21 +1034,6 @@
 			<name>include/storage/fatfs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/fds.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/fds.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/fds_nvmc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/fds_nvmc.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/fds_sd.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/fds_sd.h</locationURI>
 		</link>
 		<link>
 			<name>include/storage/flash.h</name>
@@ -1714,6 +1709,11 @@
 			<name>src/sensors/ag_bmi323.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_bmi323.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/ag_icm456x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_icm456x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/agm_icm20948.cpp</name>
