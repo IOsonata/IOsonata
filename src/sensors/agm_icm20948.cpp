@@ -671,6 +671,10 @@ void AgmIcm20948::UpdateData(SENSOR_TYPE Type, uint64_t Timestamp, uint8_t * con
 			MagSensor::vData.Y = ((int16_t)pData[2] << 8) | (pData[3] & 0xFF);
 			MagSensor::vData.Z = ((int16_t)pData[4] << 8) | (pData[5] & 0xFF);
 			break;
+		case SENSOR_TYPE_TEMP:
+			TempSensor::vData.Timestamp = Timestamp;
+			TempSensor::vData.Temperature =  (((int16_t)pData[0] << 8) | ((int16_t)pData[1] & 0xFF)) * 100 / 33387 + 2100;
+			break;
 	}
 }
 
