@@ -723,10 +723,10 @@ bool AgmIcm20948::UpdateData()
 
 		MagAk09916::UpdateData();
 
-		// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
-		int16_t t = ((int16_t)d[12] << 8) | d[13];
-		TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | ((int16_t)d[13] & 0xFF)) * 100 / 33387 + 2100;
 		TempSensor::vData.Timestamp = t;
+
+		// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
+		TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | ((int16_t)d[13] & 0xFF)) * 100 / 33387 + 2100;
 
 		res = true;
 	}
