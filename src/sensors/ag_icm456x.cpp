@@ -192,7 +192,7 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 		}
 
 		DeviceAddress(DevAddr);
-		d = Read8((uint8_t*)&regaddr, 2);
+		d = Read8((uint8_t*)&regaddr, 1);
 
 		if (d != ICM456X_WHO_AM_I_REG)
 		{
@@ -204,13 +204,13 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 		// Interface is I2C but device address is not set.
 		// Detect device
 		DeviceAddress(ICM456X_I2C_7BITS_DEVADDR0);
-		d = Read8((uint8_t*)&regaddr, 2);
+		d = Read8((uint8_t*)&regaddr, 1);
 
 		if (d != ICM456X_CHIP_ID)
 		{
 			// Try alternate address
 			DeviceAddress(ICM456X_I2C_7BITS_DEVADDR1);
-			d = Read8((uint8_t*)&regaddr, 2);
+			d = Read8((uint8_t*)&regaddr, 1);
 			if (d != ICM456X_CHIP_ID)
 			{
 				return false;
