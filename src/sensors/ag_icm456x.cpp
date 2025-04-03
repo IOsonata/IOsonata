@@ -37,6 +37,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <memory.h>
 
+#include "convutil.h"
 #include "sensors/ag_icm456x.h"
 
 
@@ -280,6 +281,65 @@ void AgIcm456x::IntHandler()
 bool AgIcm456x::UpdateData()
 {
 	return false;
+}
+
+/**
+ * @brief	Indirect read from mem or register
+ *
+ * @param	IRegAddr	: 16bits Reg/Mem address
+ * @param	pBuff		: Pointer to receive buffer
+ * @param	BuffLen		: Receive buffer length
+ *
+ * @return	Number of bytes read
+ */
+int AgIcm456x::Read(uint16_t IRegAddr, uint8_t *pBuff, int BuffLen)
+{
+	uint8_t reg = ICM456X_IREG_ADDR_15_8_REG;
+	uint8_t cnt = 0;
+
+	Write16(&reg, 1, EndianCvt16(IRegAddr));
+
+	reg = ICM456X_IREG_DATA_REG;
+
+	while (BuffLen > 0)
+	{
+		*pBuff = Read8(&reg, 1);
+		pBuff++;
+		BuffLen--;
+		cnt++;
+	}
+
+	return cnt;
+}
+
+/**
+ * @brief	Indirect write to mem or register
+ *
+ * @param	IRegAddr	: 16bits Reg/Mem address
+ * @param	pData		: Pointer to data to write
+ * @param	DataLen		: Data length
+ *
+ * @return	Number of bytes written
+ */
+int AgIcm456x::Write(uint16_t IRegAddr, uint8_t *pData, int DataLen)
+{
+	uint8_t reg = ICM456X_IREG_ADDR_15_8_REG;
+	uint8_t cnt = 0;
+
+	Write16(&reg, 1, EndianCvt16(IRegAddr));
+
+	reg = ICM456X_IREG_DATA_REG;
+
+	while (DataLen > 0)
+	{
+		Write8(&reg, 1, *pData);
+
+		pData++;
+		DataLen--;
+		cnt++;
+	}
+
+	return cnt;
 }
 
 //int AgIcm45686::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
