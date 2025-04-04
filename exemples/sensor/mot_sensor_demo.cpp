@@ -45,12 +45,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/timer.h"
 #include "sensors/agm_mpu9250.h"
 #include "sensors/agm_lsm9ds1.h"
-#include "sensors/ag_icm45686.h"
+#include "sensors/ag_icm456x.h"
 #include "sensors/ag_bmi160.h"
 #include "sensors/ag_bmi323.h"
 #include "sensors/ag_bmi270.h"
 #include "sensors/accel_h3lis331dl.h"
 #include "imu/imu_mpu9250.h"
+#include "imu/imu_xiot_fusion.h"
 #include "coredev/uart.h"
 
 #include "Fusion/Fusion.h"
@@ -207,14 +208,15 @@ static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
-#define ICM20948
+//#define ICM20948
 //#define MPU9250
 //#define BMI160
 //#define H3LIS331DL
 //#define BMI323
 //#define BMI270
+#define ICM456X
 
-#if BOARD == BLUEIO_TAG_EVIM
+#ifdef ICM20948
 #ifdef INVN
 ImuInvnIcm20948 g_Imu;
 AgmInvnIcm20948 g_MotSensor;
@@ -222,8 +224,6 @@ AgmInvnIcm20948 g_MotSensor;
 ImuIcm20948 g_Imu;
 AgmIcm20948 g_MotSensor;
 #endif
-#elif BOARD == BLYST_MOTION
-AgBmi323 g_MotSensor;
 #elif defined(MPU9250)
 ImuMpu9250 g_Imu;
 AgmMpu9250 g_MotSensor;
@@ -235,9 +235,9 @@ AgBmi323 g_MotSensor;
 AccelH3lis331dl g_MotSensor;
 #elif defined(BMI270)
 AgBmi270 g_MotSensor;
-#else
-//AgmLsm9ds1 g_MotSensor;
-AgIcm45686 g_MotSensor;
+#elif defined(ICM456X)
+ImuXiotFusion g_Imu;
+AgIcm456x g_MotSensor;
 #endif
 
 
@@ -266,8 +266,8 @@ void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 			//g_MotSensor.Read(accdata);
 			//g_Imu.Read(accdata);
 			//printf("Accel %d: %d %d %d\r\n", accdata.Timestamp, accdata.X, accdata.Y, accdata.Z);
-			//g_Imu.Read(quat);
-			//printf("Quat %d: %d %d %d %d\r\n", quat.Timestamp, quat.Q1, quat.Q2, quat.Q2, quat.Q3);
+			g_Imu.Read(quat);
+			printf("Quat %d: %d %d %d %d\r\n", quat.Timestamp, quat.Q1, quat.Q2, quat.Q2, quat.Q3);
 
 			break;
 	}
@@ -284,8 +284,8 @@ void ImuIntHandler(int IntNo, void *pCtx)
 		g_DT = t - g_TPrev;
 		g_TPrev = t;
 
-		//g_Imu.IntHandler();
-		g_MotSensor.IntHandler();
+		g_Imu.IntHandler();
+		//g_MotSensor.IntHandler();
 		//AccelSensorData_t accdata;
 
 		//g_MotSensor.Read(accdata);
@@ -340,18 +340,20 @@ bool HardwareInit()
 			g_pGyro = &g_MotSensor;
 		}
 
-		//res = g_MotSensor.Init(s_MagCfg, &g_Spi);
-		//if (res == true)
-		{
-		//	g_pMag = &g_MotSensor;
-		}
+		g_pMag = nullptr;
+
+//		res = g_MotSensor.Init(s_MagCfg, pintrf);
+//		if (res == true)
+//		{
+//			g_pMag = &g_MotSensor;
+//		}
 #endif
 
-#if defined(ICM20948) || defined(MPU9250)
+//#if defined(ICM20948) || defined(MPU9250)
 
 //		res = g_Imu.Init(s_ImuCfg, &g_MotSensor);
-//		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, &g_MotSensor);
-#endif
+		res = g_Imu.Init(s_ImuCfg, &g_MotSensor, &g_MotSensor, g_pMag);
+//#endif
 	}
 
 	if (res == true)
@@ -363,8 +365,8 @@ bool HardwareInit()
 						0, 1, 0,
 						0, 0, 1 };
 
-		//g_Imu.SetAxisAlignmentMatrix(m);
-		//g_Imu.Quaternion(true, 6);
+		g_Imu.SetAxisAlignmentMatrix(m);
+		g_Imu.Quaternion(true, 6);
 	}
 
 	//uint64_t period = g_Timer.EnableTimerTrigger(0, 1UL, TIMER_TRIG_TYPE_CONTINUOUS);
@@ -417,7 +419,7 @@ int main()
 
 	g_MotSensor.Enable();
 
-//	g_Imu.Enable();
+	g_Imu.Enable();
 
     FusionAhrs ahrs;
     //FusionAhrsInitialise(&ahrs);

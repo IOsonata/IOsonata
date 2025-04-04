@@ -48,15 +48,120 @@ bool AccelIcm456x::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return false;
 	}
 
+	uint8_t regaddr;
+
 	return true;
 }
 uint32_t AccelIcm456x::SamplingFrequency(uint32_t Freq)
 {
-	return 0;
+	uint8_t regaddr = ICM456X_ACCEL_CONFIG0_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_ACCEL_CONFIG0_ODR_MASK;
+
+	if (Freq < 2000)
+	{
+		Freq = 1652;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_1_6525;
+	}
+	else if (Freq < 4000)
+	{
+		Freq = 3125;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_3_125;
+	}
+	else if (Freq < 7000)
+	{
+		Freq = 6250;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_6_25;
+	}
+	else if (Freq < 13000)
+	{
+		Freq = 12500;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_12_5;
+	}
+	else if (Freq < 26000)
+	{
+		Freq = 25000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_25;
+	}
+	else if (Freq < 51000)
+	{
+		Freq = 50000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_50;
+	}
+	else if (Freq < 101000)
+	{
+		Freq = 100000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_100;
+	}
+	else if (Freq < 201000)
+	{
+		Freq = 200000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_200;
+	}
+	else if (Freq < 410000)
+	{
+		Freq = 400000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_400;
+	}
+	else if (Freq < 810000)
+	{
+		Freq = 800000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_800;
+	}
+	else if (Freq < 1700000)
+	{
+		Freq = 1600000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_1600;
+	}
+	else if (Freq < 3300000)
+	{
+		Freq = 3200000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_3200;
+	}
+	else if (Freq < 6500000)
+	{
+		Freq = 6400000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_6400;
+	}
+
+	Write8(&regaddr, 1, d);
+
+	return Freq;
 }
+
 uint8_t AccelIcm456x::Scale(uint8_t Value)
 {
-	return 0;
+	uint8_t regaddr = ICM456X_ACCEL_CONFIG0_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_ACCEL_CONFIG0_UI_FS_SEL_MASK;
+
+	if (Value <= 2)
+	{
+		d |= ICM456X_ACCEL_CONFIG0_UI_FS_SEL_2G;
+		Value = 2;
+	}
+	else if (Value <= 4)
+	{
+		d |= ICM456X_ACCEL_CONFIG0_UI_FS_SEL_4G;
+		Value = 4;
+	}
+	else if (Value <= 8)
+	{
+		d |= ICM456X_ACCEL_CONFIG0_UI_FS_SEL_8G;
+		Value = 8;
+	}
+	else if (Value <= 16)
+	{
+		d |= ICM456X_ACCEL_CONFIG0_UI_FS_SEL_16G;
+		Value = 16;
+	}
+	else
+	{
+		d |= ICM456X_ACCEL_CONFIG0_UI_FS_SEL_32G;
+		Value = 32;
+	}
+
+	Write8(&regaddr, 1, d);
+
+	return Value;
 }
 
 /**
@@ -254,6 +359,33 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 	regaddr = ICM456X_FIFO_CONFIG2_REG;
 	Write8(&regaddr, 1, ICM456X_FIFO_CONFIG2_WR_WM_GT_TH);
 
+	uint32_t intcfg = 0;
+
+	regaddr = ICM456X_INT1_CONFIG0_REG;
+
+	if (Inter)
+	{
+		intcfg = ICM456X_INT_CONFIG_FIFO_FULL_EN | ICM456X_INT_CONFIG_FIFO_THRS_EN |
+							  ICM456X_INT_CONFIG_DRDY_EN | ICM456X_INT_CONFIG_AUX1_DRDY_EN |
+							  ICM456X_INT_CONFIG_WOM_X_EN | ICM456X_INT_CONFIG_WOM_Y_EN | ICM456X_INT_CONFIG_WOM_Z_EN |
+							  ICM456X_INT_CONFIG_I2CM_DONE_EN | ICM456X_INT_CONFIG_APEX_EVENT_EN;
+
+		if (IntPol == DEVINTR_POL_HIGH)
+		{
+			intcfg |= ICM456X_INT_CONFIG_POLARITY_HIGH | ICM456X_INT_CONFIG_MODE_LATCH;
+		}
+
+		if (Inter == 1)
+		{
+			regaddr = ICM456X_INT1_CONFIG0_REG;
+		}
+		else
+		{
+			regaddr = ICM456X_INT2_CONFIG0_REG;
+		}
+
+	}
+	Write(&regaddr, 1, (uint8_t*)&intcfg, 3);
 
 	return true;
 }
@@ -270,7 +402,9 @@ void AgIcm456x::Disable()
 
 void AgIcm456x::Reset()
 {
+	uint8_t regaddr = ICM456X_REG_HOST_MSG_REG;
 
+	Write8(&regaddr, 1, ICM456X_REG_MISC2_SOFT_RST);
 }
 
 void AgIcm456x::IntHandler()

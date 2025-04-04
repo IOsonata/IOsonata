@@ -522,6 +522,25 @@ SOFTWARE.
 #define ICM456X_INT2_CONFIG2_MODE_LATCH									(1<<1)
 #define ICM456X_INT2_CONFIG2_DRIVE_OPEN_DRAIN							(1<<2)
 
+#define ICM456X_INT_CONFIG_FIFO_FULL_EN									(1<<0)	//!<
+#define ICM456X_INT_CONFIG_FIFO_THRS_EN									(1<<1)
+#define ICM456X_INT_CONFIG_DRDY_EN										(1<<2)
+#define ICM456X_INT_CONFIG_AUX1_DRDY_EN									(1<<3)
+#define ICM456X_INT_CONFIG_AP_FSYNC_EN									(1<<4)
+#define ICM456X_INT_CONFIG_AP_AGC_RDY_EN								(1<<5)
+#define ICM456X_INT_CONFIG_AUX1_AGC_RDY_EN								(1<<6)
+#define ICM456X_INT_CONFIG_RESET_DONE_EN								(1<<7)
+#define ICM456X_INT_CONFIG_PLL_RDY_EN									(1<<8)
+#define ICM456X_INT_CONFIG_WOM_X_EN										(1<<9)	//!<
+#define ICM456X_INT_CONFIG_WOM_Y_EN										(1<<10)
+#define ICM456X_INT_CONFIG_WOM_Z_EN										(1<<11)
+#define ICM456X_INT_CONFIG_I3C_PROTOCOL_ERR_EN							(1<<12)
+#define ICM456X_INT_CONFIG_I2CM_DONE_EN									(1<<13)
+#define ICM456X_INT_CONFIG_APEX_EVENT_EN								(1<<14)
+#define ICM456X_INT_CONFIG_POLARITY_HIGH								(1<<16)
+#define ICM456X_INT_CONFIG_MODE_LATCH									(1<<17)
+#define ICM456X_INT_CONFIG_DRIVE_OPEN_DRAIN								(1<<18)
+
 #define ICM456X_INT2_STATUS0_REG					0x59
 #define ICM456X_INT2_STATUS0_FIFO_FULL									(1<<0)
 #define ICM456X_INT2_STATUS0_FIFO_THS									(1<<1)
@@ -540,6 +559,22 @@ SOFTWARE.
 #define ICM456X_INT2_STATUS1_I3C_PROTOCOL_ERR							(1<<4)
 #define ICM456X_INT2_STATUS1_I2CM_DONE									(1<<5)
 #define ICM456X_INT2_STATUS1_APEX_EVENT									(1<<6)
+
+#define ICM456X_INT_STATUS_FIFO_FULL									(1<<0)
+#define ICM456X_INT_STATUS_FIFO_THS										(1<<1)
+#define ICM456X_INT_STATUS_DRDY											(1<<2)
+#define ICM456X_INT_STATUS_AUX1_DRDY									(1<<3)
+#define ICM456X_INT_STATUS_AP_FSYNC										(1<<4)
+#define ICM456X_INT_STATUS_AP_AGC_RDY									(1<<5)
+#define ICM456X_INT_STATUS_AUX1_AGC_RDY									(1<<6)
+#define ICM456X_INT_STATUS_RESET_DONE									(1<<7)
+#define ICM456X_INT_STATUS_PLL_RDY										(1<<8)
+#define ICM456X_INT_STATUS_WOM_X										(1<<9)
+#define ICM456X_INT_STATUS_WOM_Y										(1<<10)
+#define ICM456X_INT_STATUS_WOM_Z										(1<<11)
+#define ICM456X_INT_STATUS_I3C_PROTOCOL_ERR								(1<<12)
+#define ICM456X_INT_STATUS_I2CM_DONE									(1<<13)
+#define ICM456X_INT_STATUS_APEX_EVENT									(1<<14)
 
 #define ICM456X_WHO_AM_I_REG						ICM456X_CHIP_ID_REG
 
@@ -1353,9 +1388,9 @@ protected:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
 	//int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-	//int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
-	//	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
-	//}
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+	}
 
 	bool vbInitialized;
 	bool vbSensorEnabled[ICM456X_NB_SENSOR];

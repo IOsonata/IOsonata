@@ -51,7 +51,9 @@ SOFTWARE.
 #include "imu/imu_icm20948.h"
 #include "sensors/agm_icm20948.h"
 #include "sensors/agm_icm20948DMP.h"
+#include "coredev/uart.h"
 
+extern UART g_Uart;
 
 static const uint8_t s_Dmp3Image[] = {
 #include "imu/icm20948_img_dmp3a.h"
@@ -1473,11 +1475,152 @@ bool ImuIcm20948::Tap(bool bEn)
 	return true;
 }
 
+static size_t s_FifoProcessCnt = 0;
+static size_t s_BadHdrCnt = 0;
+
 bool ImuIcm20948::UpdateData()
 {
-	if (vEvtHandler != NULL)
+	uint16_t regaddr = ICM20948_INT_STATUS_REG;
+	uint8_t status[4];
+	uint8_t d[20];
+	uint64_t t;
+	bool res = false;
+
+	Read((uint8_t*)&regaddr, 2, status, 4);
+
+	if (vpTimer)
 	{
-		vEvtHandler(this, DEV_EVT_DATA_RDY);
+		t = vpTimer->uSecond();
+	}
+
+	if (status[0] & ICM20948_INT_STATUS_PLL_RDY_INT)
+	{
+
+	}
+
+	if (status[0] & ICM20948_INT_STATUS_WOM_INT)
+	{
+
+	}
+	if (status[0] & ICM20948_INT_STATUS_I2C_MIST_INT)
+	{
+		printf("ICM20948_INT_STATUS_I2C_MIST_INT\n");
+	}
+	if (status[0] & ICM20948_INT_STATUS_DMP_INT1 || status[3])
+	{
+		regaddr = ICM20948_DMP_INT_STATUS_REG;
+		uint16_t distatus;
+		Read((uint8_t*)&regaddr, 2, (uint8_t*)&distatus, 1);
+
+		//g_Uart.printf("DMP int %x\r\n", distatus);
+	//		Write16((uint8_t*)&regaddr, 2, distatus);
+
+		if (distatus)// & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
+		{
+			// DMP msg
+			//printf("distatus %x\n", distatus);
+		}
+	}
+
+	if (status[2])
+	{
+		printf("Fifo overflow\r\n");
+		ResetFifo();
+		vFifoDataLen = 0;
+		vFifoHdr = vFifoHdr2 = 0;
+	}
+
+//	if (vbDmpEnabled)
+	{
+		s_FifoProcessCnt++;
+
+		regaddr = ICM20948_FIFO_COUNTH_REG;
+		size_t cnt = Read16((uint8_t*)&regaddr, 2);
+		cnt = EndianCvt16(cnt);
+
+		regaddr = ICM20948_FIFO_R_W_REG;
+		uint8_t *p = &vFifo[vFifoDataLen];
+
+		while (cnt > 0)//ICM20948_FIFO_PAGE_SIZE)
+		{
+			int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, sizeof(vFifo) - vFifoDataLen));
+
+			if (l == 0)
+			{
+				break;
+			}
+			l = Read((uint8_t*)&regaddr, 2, p, l);
+			p += l;
+			vFifoDataLen += l;
+			cnt -= l;
+		}
+
+		p = vFifo;
+
+		while (vFifoDataLen > 0)
+		{
+			if (vFifoHdr == 0 && vFifoHdr2 == 0)
+			{
+				int l = 0;
+
+				// new packet
+				vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
+
+				if ((vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
+				{
+					s_BadHdrCnt++;
+					printf("Bad hdr %x %d %d %d\r\n", vFifoHdr, s_BadHdrCnt, s_FifoProcessCnt, vFifoDataLen);
+					ResetFifo();
+					vFifoDataLen = 0;
+					vFifoHdr = 0;
+					cnt = 0;
+					return false;
+				}
+
+				//vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
+				l = 2;
+
+				if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
+				{
+					if (vFifoDataLen < 4)
+					{
+						vFifoHdr = 0;
+						return false;
+					}
+					vFifoHdr2 = ((uint16_t)p[2] << 8U) | ((uint16_t)p[3] & 0xFF);
+
+					if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
+					{
+						s_BadHdrCnt++;
+						printf("Bad hdr2 %x %d %d\r\n", vFifoHdr2, s_BadHdrCnt, s_FifoProcessCnt);
+						ResetFifo();
+						vFifoDataLen = 0;
+						vFifoHdr = vFifoHdr2 = 0;
+						cnt = 0;
+						return false;
+					}
+
+					l += 2;
+					vFifoHdr &= ~ICM20948_FIFO_HEADER_HEADER2;
+				}
+				vFifoDataLen -= l;
+
+				p += l;
+
+			}
+			int l = ProcessDMPFifo(p, vFifoDataLen, t);
+			if (l == 0)
+			{
+				break;//return false;
+			}
+			vFifoDataLen -= l;
+			p += l;
+		}
+		if (vFifoDataLen > 0 && p != vFifo)
+		{
+			memmove(vFifo, p, vFifoDataLen);
+		}
+
 	}
 
 	return true;
@@ -1612,6 +1755,15 @@ void ImuIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t times
 #endif
 void ImuIcm20948::IntHandler()
 {
+	UpdateData();
+
+	if (vEvtHandler != NULL)
+	{
+		vEvtHandler(this, DEV_EVT_DATA_RDY);
+	}
+
+	return;
+
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
 	uint8_t status[4];
 	uint8_t d;
