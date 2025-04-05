@@ -117,7 +117,7 @@ uint32_t AccelIcm456x::SamplingFrequency(uint32_t Freq)
 		Freq = 3200000;
 		d |= ICM456X_ACCEL_CONFIG0_ODR_3200;
 	}
-	else if (Freq < 6500000)
+	else
 	{
 		Freq = 6400000;
 		d |= ICM456X_ACCEL_CONFIG0_ODR_6400;
@@ -189,15 +189,143 @@ void AccelIcm456x::Disable()
 
 bool GyroIcm456x::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	return false;
+	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
+	{
+		return false;
+	}
+
+	return true;
 }
 uint32_t GyroIcm456x::SamplingFrequency(uint32_t Freq)
 {
-	return 0;
+	uint8_t regaddr = ICM456X_GYRO_CONFIG0_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_GYRO_CONFIG0_ODR_MASK;
+
+	if (Freq < 2000)
+	{
+		Freq = 1652;
+		d |= ICM456X_GYRO_CONFIG0_ODR_1_6525;
+	}
+	else if (Freq < 4000)
+	{
+		Freq = 3125;
+		d |= ICM456X_GYRO_CONFIG0_ODR_3_125;
+	}
+	else if (Freq < 7000)
+	{
+		Freq = 6250;
+		d |= ICM456X_GYRO_CONFIG0_ODR_6_25;
+	}
+	else if (Freq < 13000)
+	{
+		Freq = 12500;
+		d |= ICM456X_GYRO_CONFIG0_ODR_12_5;
+	}
+	else if (Freq < 26000)
+	{
+		Freq = 25000;
+		d |= ICM456X_GYRO_CONFIG0_ODR_25;
+	}
+	else if (Freq < 51000)
+	{
+		Freq = 50000;
+		d |= ICM456X_GYRO_CONFIG0_ODR_50;
+	}
+	else if (Freq < 101000)
+	{
+		Freq = 100000;
+		d |= ICM456X_GYRO_CONFIG0_ODR_100;
+	}
+	else if (Freq < 201000)
+	{
+		Freq = 200000;
+		d |= ICM456X_GYRO_CONFIG0_ODR_200;
+	}
+	else if (Freq < 410000)
+	{
+		Freq = 400000;
+		d |= ICM456X_GYRO_CONFIG0_ODR_400;
+	}
+	else if (Freq < 810000)
+	{
+		Freq = 800000;
+		d |= ICM456X_GYRO_CONFIG0_ODR_800;
+	}
+	else if (Freq < 1700000)
+	{
+		Freq = 1600000;
+		d |= ICM456X_ACCEL_CONFIG0_ODR_1600;
+	}
+	else if (Freq < 3300000)
+	{
+		Freq = 3200000;
+		d |= ICM456X_GYRO_CONFIG0_ODR_3200;
+	}
+	else
+	{
+		Freq = 6400000;
+		d |= ICM456X_GYRO_CONFIG0_ODR_6400;
+	}
+
+	Write8(&regaddr, 1, d);
+
+	return Freq;
 }
+
 uint32_t GyroIcm456x::Sensitivity(uint32_t Value)
 {
-	return 0;
+	uint8_t regaddr = ICM456X_GYRO_CONFIG0_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_GYRO_CONFIG0_UI_FS_SEL_MASK;
+
+	if (Value <= 16)
+	{
+		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_15_625;
+		Value = 16;
+	}
+	else if (Value <= 32)
+	{
+		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_31_25;
+		Value = 31;
+	}
+	else if (Value <= 63)
+	{
+		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_62_5;
+		Value = 63;
+	}
+	else if (Value <= 125)
+	{
+		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_125;
+		Value = 125;
+	}
+	else if (Value <= 250)
+	{
+		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_250;
+		Value = 250;
+	}
+	else if (Value <= 500)
+	{
+		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_500;
+		Value = 500;
+	}
+	else if (Value <= 1000)
+	{
+		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_1000;
+		Value = 1000;
+	}
+	else if (Value <= 2000)
+	{
+		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_2000;
+		Value = 2000;
+	}
+	else
+	{
+		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_4000;
+		Value = 4000;
+	}
+
+	Write8(&regaddr, 1, d);
+
+	return Value;
 }
 
 /**
@@ -240,8 +368,13 @@ void GyroIcm456x::Disable()
  * 			- true	: Success
  * 			- false	: Failed
  */
-bool TempIcm456x::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool TempIcm456x::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
+	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
+	{
+		return false;
+	}
+
 	return true;
 }
 
