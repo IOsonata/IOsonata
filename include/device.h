@@ -285,6 +285,9 @@ public:
 
 protected:
 
+	void InterruptId(uint8_t IntId) { vIntId = IntId; }
+	uint8_t InterruptId(void) { return vIntId; }
+
 	/**
 	 * @brief	Store device id.
 	 *
@@ -328,6 +331,8 @@ protected:
 	 	 	 	 	 	 	 	//!< could be value read from hardware register or serial number
 	bool 		vbIntEn;		//!< Interrupt enabled
 	DevEvtHandler_t	vEvtHandler;	//!< Event handler callback
+	uint8_t		vIntId;			//!< Some devices can have multiple interrupt pin. This is to indicate which
+	 	 	 	 	 	 	 	//!< interrupt pin is configured to be used. 0 - No interrupt.
 };
 
 extern "C" {

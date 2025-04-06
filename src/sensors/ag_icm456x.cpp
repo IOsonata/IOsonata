@@ -48,7 +48,8 @@ bool AccelIcm456x::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return false;
 	}
 
-	uint8_t regaddr;
+	SamplingFrequency(Cfg.Freq);
+	Scale(Cfg.Scale);
 
 	return true;
 }
@@ -177,14 +178,25 @@ uint32_t AccelIcm456x::FilterFreq(uint32_t Freq)
 {
 	return 0;
 }
+
 bool AccelIcm456x::Enable()
 {
-	return false;
+	uint8_t regaddr = ICM456X_PWR_MGMT0_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_PWR_MGMT0_ACCEL_MODE_MASK;
+
+	d |= ICM456X_PWR_MGMT0_ACCEL_MODE_LOW_NOISE;
+	Write8(&regaddr, 1, d);
+
+	return true;
 }
 
 void AccelIcm456x::Disable()
 {
+	uint8_t regaddr = ICM456X_PWR_MGMT0_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_PWR_MGMT0_ACCEL_MODE_MASK;
 
+	d |= ICM456X_PWR_MGMT0_ACCEL_MODE_STDBY;
+	Write8(&regaddr, 1, d);
 }
 
 bool GyroIcm456x::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
@@ -193,6 +205,9 @@ bool GyroIcm456x::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, T
 	{
 		return false;
 	}
+
+	SamplingFrequency(Cfg.Freq);
+	Sensitivity(Cfg.Sensitivity);
 
 	return true;
 }
@@ -343,12 +358,22 @@ uint32_t GyroIcm456x::FilterFreq(uint32_t Freq)
 }
 bool GyroIcm456x::Enable()
 {
-	return false;
+	uint8_t regaddr = ICM456X_PWR_MGMT0_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_PWR_MGMT0_GYRO_MODE_MASK;
+
+	d |= ICM456X_PWR_MGMT0_GYRO_MODE_LOW_NOISE;
+	Write8(&regaddr, 1, d);
+
+	return true;
 }
 
 void GyroIcm456x::Disable()
 {
+	uint8_t regaddr = ICM456X_PWR_MGMT0_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_PWR_MGMT0_GYRO_MODE_MASK;
 
+	d |= ICM456X_PWR_MGMT0_GYRO_MODE_STDBY;
+	Write8(&regaddr, 1, d);
 }
 
 /**
@@ -406,7 +431,7 @@ AgIcm456x::AgIcm456x()
 
 bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	return false;
+	return true;
 }
 
 bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
@@ -517,6 +542,7 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 			regaddr = ICM456X_INT2_CONFIG0_REG;
 		}
 
+		InterruptId(Inter);
 	}
 	Write(&regaddr, 1, (uint8_t*)&intcfg, 3);
 
@@ -525,7 +551,14 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 
 bool AgIcm456x::Enable()
 {
-	return false;
+	bool res = AccelIcm456x::Enable();
+
+	if (res == true)
+	{
+		res = GyroIcm456x::Enable();
+	}
+
+	return res;
 }
 
 void AgIcm456x::Disable()
@@ -542,7 +575,25 @@ void AgIcm456x::Reset()
 
 void AgIcm456x::IntHandler()
 {
+	uint8_t regaddr = ICM456X_INT1_STATUS0_REG;
+	uint16_t istatus;
 
+	if (InterruptId() == 2)
+	{
+		regaddr = ICM456X_INT2_STATUS0_REG;
+	}
+
+	istatus  = Read16(&regaddr, 1);
+
+	if (istatus & ICM456X_INT_STATUS_DRDY)
+	{
+		printf("Data Ready\r\n");
+	}
+
+	if (istatus & ICM456X_INT_STATUS_FIFO_THS)
+	{
+		printf("fifo ths\r\n");
+	}
 }
 
 bool AgIcm456x::UpdateData()
