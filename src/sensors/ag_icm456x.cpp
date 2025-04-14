@@ -53,7 +53,7 @@ bool AccelIcm456x::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return false;
 	}
 
-	Range(ICM456X_ADC_RANGE);
+	vData.Range = Range(ICM456X_ADC_RANGE);
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
 
@@ -132,7 +132,7 @@ uint32_t AccelIcm456x::SamplingFrequency(uint32_t Freq)
 
 	Write8(&regaddr, 1, d);
 
-	return Freq;
+	return AccelSensor::SamplingFrequency(Freq);
 }
 
 uint8_t AccelIcm456x::Scale(uint8_t Value)
@@ -212,7 +212,7 @@ bool GyroIcm456x::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, T
 		return false;
 	}
 
-	Range(ICM456X_ADC_RANGE);
+	vData.Range = Range(ICM456X_ADC_RANGE);
 	SamplingFrequency(Cfg.Freq);
 	Sensitivity(Cfg.Sensitivity);
 
@@ -291,7 +291,7 @@ uint32_t GyroIcm456x::SamplingFrequency(uint32_t Freq)
 
 	Write8(&regaddr, 1, d);
 
-	return Freq;
+	return GyroSensor::SamplingFrequency(Freq);
 }
 
 uint32_t GyroIcm456x::Sensitivity(uint32_t Value)
@@ -616,17 +616,29 @@ bool AgIcm456x::UpdateData()
 	uint8_t dd[16];
 	uint64_t t = vpTimer->mSecond();
 	int cnt = Device::Read(&regaddr, 1, dd, 14);
-	if (cnt > 0)
+
+	if (cnt > 5)
 	{
+#if 0
 		AccelSensor::vData.Timestamp = t;
-		AccelSensor::vData.X = ((int16_t)dd[0] << 8) | ((int16_t)dd[1] & 0xFF);
-		AccelSensor::vData.Y = ((int16_t)dd[2] << 8) | ((int16_t)dd[3] & 0xFF);
-		AccelSensor::vData.Z = ((int16_t)dd[4] << 8) | ((int16_t)dd[5] & 0xFF);
+		AccelSensor::vData.X = (((int16_t)dd[0] << 8)) | ((int16_t)dd[1] & 0xFF);
+		AccelSensor::vData.Y = (((int16_t)dd[2] << 8)) | ((int16_t)dd[3] & 0xFF);
+		AccelSensor::vData.Z = (((int16_t)dd[4] << 8)) | ((int16_t)dd[5] & 0xFF);
 
 		GyroSensor::vData.Timestamp = t;
-		GyroSensor::vData.X = ((int16_t)dd[6] << 8) | ((int16_t)dd[7] & 0xFF);
-		GyroSensor::vData.Y = ((int16_t)dd[8] << 8) | ((int16_t)dd[9] & 0xFF);
-		GyroSensor::vData.Z = ((int16_t)dd[10] << 8) | ((int16_t)dd[11] & 0xFF);
+		GyroSensor::vData.X = (((int16_t)dd[6] << 8)) | ((int16_t)dd[7] & 0xFF);
+		GyroSensor::vData.Y = (((int16_t)dd[8] << 8)) | ((int16_t)dd[9] & 0xFF);
+		GyroSensor::vData.Z = (((int16_t)dd[10] << 8)) | ((int16_t)dd[11] & 0xFF);
+#else
+		AccelSensor::vData.Timestamp = t;
+		memcpy(AccelSensor::vData.Val, dd, 6);
+
+		if (cnt > 10)
+		{
+			GyroSensor::vData.Timestamp = t;
+			memcpy(GyroSensor::vData.Val, &dd[6], 6);
+		}
+#endif
 	}
 
 	return false;
