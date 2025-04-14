@@ -40,6 +40,11 @@ SOFTWARE.
 #include "convutil.h"
 #include "sensors/ag_icm456x.h"
 
+#if 0
+#include "coredev/uart.h"
+
+extern UART g_Uart;
+#endif
 
 bool AccelIcm456x::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
@@ -48,6 +53,7 @@ bool AccelIcm456x::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return false;
 	}
 
+	Range(ICM456X_ADC_RANGE);
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
 
@@ -162,7 +168,7 @@ uint8_t AccelIcm456x::Scale(uint8_t Value)
 
 	Write8(&regaddr, 1, d);
 
-	return Value;
+	return AccelSensor::Scale(Value);
 }
 
 /**
@@ -206,6 +212,7 @@ bool GyroIcm456x::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, T
 		return false;
 	}
 
+	Range(ICM456X_ADC_RANGE);
 	SamplingFrequency(Cfg.Freq);
 	Sensitivity(Cfg.Sensitivity);
 
@@ -340,7 +347,7 @@ uint32_t GyroIcm456x::Sensitivity(uint32_t Value)
 
 	Write8(&regaddr, 1, d);
 
-	return Value;
+	return GyroSensor::Sensitivity(Value);
 }
 
 /**
@@ -546,6 +553,8 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 	}
 	Write(&regaddr, 1, (uint8_t*)&intcfg, 3);
 
+//	Enable();
+
 	return true;
 }
 
@@ -576,28 +585,50 @@ void AgIcm456x::Reset()
 void AgIcm456x::IntHandler()
 {
 	uint8_t regaddr = ICM456X_INT1_STATUS0_REG;
-	uint16_t istatus;
-
-	if (InterruptId() == 2)
-	{
-		regaddr = ICM456X_INT2_STATUS0_REG;
-	}
+	uint16_t istatus, istatus2;
 
 	istatus  = Read16(&regaddr, 1);
 
+	//if (InterruptId() == 2)
+	{
+		regaddr = ICM456X_INT2_STATUS1_REG;
+	}
+	istatus2  = Read16(&regaddr, 1);
+
+	//g_Uart.printf("%x %x\r\n", istatus, istatus);
+
 	if (istatus & ICM456X_INT_STATUS_DRDY)
 	{
-		printf("Data Ready\r\n");
+		//printf("Data Ready\r\n");
+		UpdateData();
+
 	}
 
 	if (istatus & ICM456X_INT_STATUS_FIFO_THS)
 	{
-		printf("fifo ths\r\n");
+		//printf("fifo ths\r\n");
 	}
 }
 
 bool AgIcm456x::UpdateData()
 {
+	uint8_t regaddr = ICM456X_ACCEL_DATA_X1_UI_REG;
+	uint8_t dd[16];
+	uint64_t t = vpTimer->mSecond();
+	int cnt = Device::Read(&regaddr, 1, dd, 14);
+	if (cnt > 0)
+	{
+		AccelSensor::vData.Timestamp = t;
+		AccelSensor::vData.X = ((int16_t)dd[0] << 8) | ((int16_t)dd[1] & 0xFF);
+		AccelSensor::vData.Y = ((int16_t)dd[2] << 8) | ((int16_t)dd[3] & 0xFF);
+		AccelSensor::vData.Z = ((int16_t)dd[4] << 8) | ((int16_t)dd[5] & 0xFF);
+
+		GyroSensor::vData.Timestamp = t;
+		GyroSensor::vData.X = ((int16_t)dd[6] << 8) | ((int16_t)dd[7] & 0xFF);
+		GyroSensor::vData.Y = ((int16_t)dd[8] << 8) | ((int16_t)dd[9] & 0xFF);
+		GyroSensor::vData.Z = ((int16_t)dd[10] << 8) | ((int16_t)dd[11] & 0xFF);
+	}
+
 	return false;
 }
 
