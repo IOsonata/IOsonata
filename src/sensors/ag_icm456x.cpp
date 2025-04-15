@@ -551,7 +551,7 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 
 		InterruptId(Inter);
 	}
-	Write(&regaddr, 1, (uint8_t*)&intcfg, 3);
+	Write(&regaddr, 1, (uint8_t*)&intcfg, 2);
 
 //	Enable();
 
@@ -614,7 +614,7 @@ bool AgIcm456x::UpdateData()
 {
 	uint8_t regaddr = ICM456X_ACCEL_DATA_X1_UI_REG;
 	uint8_t dd[16];
-	uint64_t t = vpTimer->mSecond();
+	uint64_t t = vpTimer->uSecond();
 	int cnt = Device::Read(&regaddr, 1, dd, 14);
 
 	if (cnt > 5)
