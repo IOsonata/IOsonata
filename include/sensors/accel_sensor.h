@@ -174,7 +174,7 @@ public:
 	 *
 	 * @return	Actual maximum positive range value of the raw data
 	 */
-	virtual uint32_t Range(uint32_t Value) { vData.Range = Value; return Sensor::Range(Value); }
+	virtual uint32_t Range(uint32_t Value) { vData.Range = Sensor::Range(Value); return vData.Range; }
 
     virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
     virtual void SetCalibrationMatrix(float (&Gain)[3][3]);

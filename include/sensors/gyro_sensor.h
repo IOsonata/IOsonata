@@ -128,6 +128,19 @@ public:
 	virtual bool Read(GyroSensorData_t &Data);
 
 	/**
+	 * @brief	Set max measurement range of the device
+	 *
+	 * This function sets the maximum positive value of the raw data that can be read from
+	 * the sensor. Sensor device can implement this function to allow configuration variable
+	 * range value.
+	 *
+	 * @param	Max positive range value
+	 *
+	 * @return	Actual maximum positive range value of the raw data
+	 */
+	virtual uint32_t Range(uint32_t Value) { vData.Range = Sensor::Range(Value); return vData.Range; }
+
+	/**
 	 * @brief	Get the current sensitivity value.
 	 *
 	 * @return	Sensitivity value
