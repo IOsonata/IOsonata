@@ -114,9 +114,9 @@ typedef enum __Sensor_OpMode {
 	SENSOR_OPMODE_LOW_POWER,		//!< Hardware low power
 } SENSOR_OPMODE;
 
-///@brief	Sensor state.
+/// @brief	Sensor state.
 ///
-///To indicate current state of the sensor.
+/// To indicate current state of the sensor.
 ///
 typedef enum __Sensor_State {
 	SENSOR_STATE_SLEEP,				//!< Sleep state low power
@@ -124,6 +124,15 @@ typedef enum __Sensor_State {
 	SENSOR_STATE_SAMPLING			//!< Sampling in progress. In continuous operating mode
 									//!< the sensor would always be in sampling state.
 } SENSOR_STATE;
+
+/// @brief	Sensor data endianess
+///
+/// To idicate data byte order endianess
+///
+typedef enum __Sensor_Data_Byte_Order {
+	SENSOR_BYTEORDER_LITTLE,		//!< Data order little endian
+	SENSOR_BYTEORDER_BIG,			//!< Data order big endian
+} SENSOR_BYTEORDER;
 
 #ifdef __cplusplus
 
@@ -148,7 +157,7 @@ public:
 	 * @return	true - success
 	 * 			false - in case of error or sensor busy measuring
 	 */
-	virtual bool StartSampling() = 0;
+	virtual bool StartSampling(void) = 0;
 
 	/**
 	 * @brief	Read sensor and update internal data with new readings
@@ -159,7 +168,7 @@ public:
 	 *
 	 * @return	true - New data is updated
 	 */
-	virtual bool UpdateData() = 0;
+	virtual bool UpdateData(void) = 0;
 
 	/**
 	 * @brief	Interrupt handler (optional)
@@ -167,7 +176,7 @@ public:
 	 * Sensor that supports interrupt can implement this to handle interrupt.
 	 * Use generic DEVEVTCB callback and DEV_EVT to send event to user application
 	 */
-	virtual void IntHandler() {}
+	virtual void IntHandler(void) {}
 
 	/**
 	 * @brief	Set operating mode.
@@ -204,7 +213,7 @@ public:
 	 * 				- SENSOR_OPMODE_SINGLE
 	 * 				- SENSOR_OPMODE_CONTINUOUS
 	 */
-	virtual SENSOR_OPMODE Mode() { return vOpMode; }
+	virtual SENSOR_OPMODE Mode(void) { return vOpMode; }
 	operator SENSOR_OPMODE () { return vOpMode; }
 
 	/**
@@ -212,7 +221,7 @@ public:
 	 *
 	 * @return	Sampling period in nsec
 	 */
-	virtual uint64_t SamplingPeriod() { return vSampPeriod; }
+	virtual uint64_t SamplingPeriod(void) { return vSampPeriod; }
 
 	/**
 	 * @brief	Get sampling frequency.
@@ -220,7 +229,7 @@ public:
 	 *
 	 * @return	Frequency in mHz (milliHertz)
 	 */
-	virtual uint32_t SamplingFrequency() { return vSampFreq; }
+	virtual uint32_t SamplingFrequency(void) { return vSampFreq; }
 
 	/**
 	 * @brief	Set sampling frequency.
@@ -260,7 +269,7 @@ public:
 	 *				- SENSOR_STATE_IDLE
 	 *				- SENSOR_STATE_SAMPLING
 	 */
-	virtual SENSOR_STATE State() { return vState; }
+	virtual SENSOR_STATE State(void) { return vState; }
 	operator SENSOR_STATE () { return vState; }
 
 	static void TimerTrigHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext) {
@@ -288,7 +297,7 @@ public:
 	/**
 	 * @brief	Get type of this object.
 	 */
-	SENSOR_TYPE Type() { return vType; }
+	SENSOR_TYPE Type(void) { return vType; }
 	operator SENSOR_TYPE () { return vType; }
 
 	/**
@@ -296,12 +305,16 @@ public:
 	 */
 	SENSOR_TYPE Type(SENSOR_TYPE SensorType) { vType = SensorType; return vType; }
 
+	virtual SENSOR_BYTEORDER ByteOrder(SENSOR_BYTEORDER Val) { vByteOrder = Val; return vByteOrder; }
+	virtual SENSOR_BYTEORDER ByteOrder(void) { return vByteOrder; }
+	operator SENSOR_BYTEORDER () { return vByteOrder; }
+
 	/**
 	 * @brief	Get the current filter cutoff frequency
 	 *
 	 * @return	Frequency in mHz
 	 */
-	virtual uint32_t FilterFreq() { return vFilterrFreq; }
+	virtual uint32_t FilterFreq(void) { return vFilterrFreq; }
 
 	/**
 	 * @brief	Set and enable filter cutoff frequency
@@ -322,7 +335,7 @@ public:
 	 *
 	 * @return	Maximum positive range value of the raw data
 	 */
-	virtual uint32_t Range() { return vRange; }
+	virtual uint32_t Range(void) { return vRange; }
 
 	/**
 	 * @brief	Set max measurement range of the device
@@ -346,6 +359,7 @@ protected:
 	SENSOR_TYPE vType;			//!< Sensor type
 	SENSOR_STATE vState;		//!< Current sensor state
 	SENSOR_OPMODE vOpMode;		//!< Current operating mode
+	SENSOR_BYTEORDER vByteOrder;//!< Data byte order
 	uint32_t vSampFreq;			//!< Sampling frequency in milliHerz, relevant to CONTINUOUS mode
 	uint64_t vSampPeriod;		//!< Sampling period in nanosecond.
 	bool vbSampling;			//!< true - measurement in progress
