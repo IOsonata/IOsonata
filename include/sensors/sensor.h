@@ -125,15 +125,6 @@ typedef enum __Sensor_State {
 									//!< the sensor would always be in sampling state.
 } SENSOR_STATE;
 
-/// @brief	Sensor data endianess
-///
-/// To idicate data byte order endianess
-///
-typedef enum __Sensor_Data_Byte_Order {
-	SENSOR_BYTEORDER_LITTLE,		//!< Data order little endian
-	SENSOR_BYTEORDER_BIG,			//!< Data order big endian
-} SENSOR_BYTEORDER;
-
 #ifdef __cplusplus
 
 /// @brief	Sensor generic base class.
@@ -305,10 +296,6 @@ public:
 	 */
 	SENSOR_TYPE Type(SENSOR_TYPE SensorType) { vType = SensorType; return vType; }
 
-	virtual SENSOR_BYTEORDER ByteOrder(SENSOR_BYTEORDER Val) { vByteOrder = Val; return vByteOrder; }
-	virtual SENSOR_BYTEORDER ByteOrder(void) { return vByteOrder; }
-	operator SENSOR_BYTEORDER () { return vByteOrder; }
-
 	/**
 	 * @brief	Get the current filter cutoff frequency
 	 *
@@ -359,7 +346,6 @@ protected:
 	SENSOR_TYPE vType;			//!< Sensor type
 	SENSOR_STATE vState;		//!< Current sensor state
 	SENSOR_OPMODE vOpMode;		//!< Current operating mode
-	SENSOR_BYTEORDER vByteOrder;//!< Data byte order
 	uint32_t vSampFreq;			//!< Sampling frequency in milliHerz, relevant to CONTINUOUS mode
 	uint64_t vSampPeriod;		//!< Sampling period in nanosecond.
 	bool vbSampling;			//!< true - measurement in progress

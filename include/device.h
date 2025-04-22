@@ -58,6 +58,15 @@ typedef enum __Dev_Interrupt_Polarity {
 	DEVINTR_POL_HIGH	//!< Interrupt pin active high
 } DEVINTR_POL;
 
+/// @brief	Device data endianess
+///
+/// To indicate data byte order endianess
+///
+typedef enum __Dev_Data_Byte_Order {
+	DEV_BYTEORDER_LITTLE,		//!< Data order little endian
+	DEV_BYTEORDER_BIG,			//!< Data order big endian
+} DEV_BYTEORDER;
+
 typedef enum __Device_Event {
 	DEV_EVT_DATA_RDY
 } DEV_EVT;
@@ -323,6 +332,11 @@ protected:
 	void InterruptEnabled(bool En) { vbIntEn = En; }
 	bool InterruptEnabled() { return vbIntEn; }
 
+	virtual DEV_BYTEORDER ByteOrder(DEV_BYTEORDER Val) { vByteOrder = Val; return vByteOrder; }
+	virtual DEV_BYTEORDER ByteOrder(void) { return vByteOrder; }
+	operator DEV_BYTEORDER () { return vByteOrder; }
+
+
 	bool		vbValid;		//!< Device is valid ready to use (passed detection)
 	uint32_t 	vDevAddr;		//!< Device address or chip select index
 	DeviceIntrf *vpIntrf;		//!< Device's interface
@@ -333,6 +347,7 @@ protected:
 	DevEvtHandler_t	vEvtHandler;	//!< Event handler callback
 	uint8_t		vIntId;			//!< Some devices can have multiple interrupt pin. This is to indicate which
 	 	 	 	 	 	 	 	//!< interrupt pin is configured to be used. 0 - No interrupt.
+	DEV_BYTEORDER vByteOrder; 	//!< Data endianess
 };
 
 extern "C" {
