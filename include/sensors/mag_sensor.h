@@ -60,8 +60,6 @@ typedef struct __MagSensor_Raw_Data {
     };
 } MagSensorRawData_t;
 
-//typedef MagSensorRawData_t	MAGSENSOR_RAWDATA;
-
 /// Magnetometer sensor data
 typedef struct __MagSensor_Data {
 	uint64_t Timestamp;			//!< Time stamp count in usec
@@ -75,8 +73,8 @@ typedef struct __MagSensor_Data {
 	};
 } MagSensorData_t;
 
-//typedef MagSensorData_t	MAGSENSOR_DATA;
-
+// Some mag may offer select-able sampling precision such as the MPU9250 allows 14 or 16 bits selection
+/// Sampling precision
 typedef enum __MagSensor_Precision {
 	MAGSENSOR_PRECISION_LOW,
 	MAGSENSOR_PRECISION_HIGH
@@ -87,12 +85,10 @@ typedef struct __MagSensor_Config {
 	uint32_t		DevAddr;		//!< Either I2C 7 bits device address or CS index select if SPI is used
 	SENSOR_OPMODE 	OpMode;			//!< Operating mode
 	uint32_t		Freq;			//!< Sampling frequency in mHz (miliHertz) if continuous mode is used
-	MAGSENSOR_PRECISION	Precision;	//!< Sampling precision in bits
+	MAGSENSOR_PRECISION	Precision;	//!< Sampling precision
 	uint8_t 		Inter;			//!< 0 - Disable, Bit0 - enable interrupt 1, Bit1 - enable interrupt 2,...
 	DEVINTR_POL		IntPol;			//!< Interrupt polarity
 } MagSensorCfg_t;
-
-//typedef MagSensorCfg_t	MAGSENSOR_CFG;
 
 #pragma pack(pop)
 
@@ -154,7 +150,7 @@ protected:
 	}
 
 	uint16_t vSensitivity[3];		//!< Sample scaling factor in nanoTesla
-	MAGSENSOR_PRECISION vPrecision;	//!< Sampling precision in bits
+	MAGSENSOR_PRECISION vPrecision;	//!< Currently selected sampling precision
 	MagSensorRawData_t vData;	//!< Current sensor data updated with UpdateData()
 	float vCalibGain[3][3];
 	float vCalibOffset[3];
