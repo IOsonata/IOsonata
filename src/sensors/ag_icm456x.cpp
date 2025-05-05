@@ -37,10 +37,11 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <memory.h>
 
+#include "istddef.h"
 #include "convutil.h"
 #include "sensors/ag_icm456x.h"
 
-#if 0
+#if 1
 #include "coredev/uart.h"
 
 extern UART g_Uart;
@@ -53,7 +54,9 @@ bool AccelIcm456x::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return false;
 	}
 
-	vData.Range = Range(ICM456X_ADC_RANGE);
+	Type(SENSOR_TYPE_ACCEL);
+	//vData.Range =
+	Range(ICM456X_ADC_RANGE);
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
 
@@ -191,6 +194,11 @@ bool AccelIcm456x::Enable()
 	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_PWR_MGMT0_ACCEL_MODE_MASK;
 
 	d |= ICM456X_PWR_MGMT0_ACCEL_MODE_LOW_NOISE;
+//	d |= ICM456X_PWR_MGMT0_ACCEL_MODE_LOW_PWR;
+	Write8(&regaddr, 1, d);
+
+	regaddr = ICM456X_FIFO_CONFIG3_REG;
+	d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_ACCEL_EN;
 	Write8(&regaddr, 1, d);
 
 	return true;
@@ -203,6 +211,7 @@ void AccelIcm456x::Disable()
 
 	d |= ICM456X_PWR_MGMT0_ACCEL_MODE_STDBY;
 	Write8(&regaddr, 1, d);
+
 }
 
 bool GyroIcm456x::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
@@ -212,7 +221,9 @@ bool GyroIcm456x::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, T
 		return false;
 	}
 
-	vData.Range = Range(ICM456X_ADC_RANGE);
+	Type(SENSOR_TYPE_GYRO);
+	//vData.Range =
+	Range(ICM456X_ADC_RANGE);
 	SamplingFrequency(Cfg.Freq);
 	Sensitivity(Cfg.Sensitivity);
 
@@ -371,6 +382,10 @@ bool GyroIcm456x::Enable()
 	d |= ICM456X_PWR_MGMT0_GYRO_MODE_LOW_NOISE;
 	Write8(&regaddr, 1, d);
 
+	regaddr = ICM456X_FIFO_CONFIG3_REG;
+	d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_GYRO_EN;
+	Write8(&regaddr, 1, d);
+
 	return true;
 }
 
@@ -436,10 +451,10 @@ AgIcm456x::AgIcm456x()
 	vType = SENSOR_TYPE_TEMP | SENSOR_TYPE_ACCEL | SENSOR_TYPE_GYRO;
 }
 
-bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
-{
-	return true;
-}
+//bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
+//{
+//	return true;
+//}
 
 bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
 {
@@ -519,10 +534,34 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 
 	uint16_t wm = ICM456X_FIFO_SIZE * 80 / 100; // 80%
 
+	printf("wm = %d\r\n", wm);
+
 	Write16(&regaddr, 1, wm);
 
 	regaddr = ICM456X_FIFO_CONFIG2_REG;
-	Write8(&regaddr, 1, ICM456X_FIFO_CONFIG2_WR_WM_GT_TH);
+	Write8(&regaddr, 1, ICM456X_FIFO_CONFIG2_WR_WM_GT_TH | ICM456X_FIFO_CONFIG2_FLUSH);
+
+	uint16_t sreg = ICM456X_SREG_CTRL_REG;
+	d = ICM456X_SREG_CTRL_DATA_LITTLE_ENDIAN;
+	Write(sreg, &d, 1);
+
+	ByteOrder(DEV_BYTEORDER_LITTLE);
+
+	sreg = ICM456X_SMC_CONTROL_0_REG;
+	d = 0;
+	Read(sreg, &d, 1);
+
+	d |= ICM456X_SMC_CONTROL_0_TMST_EN | ICM456X_SMC_CONTROL_0_TMST_FSYNC_EN;
+	Write(sreg, &d, 1);
+
+	regaddr = ICM456X_FIFO_CONFIG3_REG;
+	d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN | ICM456X_FIFO_CONFIG3_HIRES_EN;
+
+	Write8(&regaddr, 1, d);
+
+	regaddr = ICM456X_FIFO_CONFIG4_REG;
+	Write8(&regaddr, 1, ICM456X_FIFO_CONFIG4_TMST_FSYNC_EN);
+
 
 	uint32_t intcfg = 0;
 
@@ -531,9 +570,9 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 	if (Inter)
 	{
 		intcfg = ICM456X_INT_CONFIG_FIFO_FULL_EN | ICM456X_INT_CONFIG_FIFO_THRS_EN |
-							  ICM456X_INT_CONFIG_DRDY_EN | ICM456X_INT_CONFIG_AUX1_DRDY_EN |
-							  ICM456X_INT_CONFIG_WOM_X_EN | ICM456X_INT_CONFIG_WOM_Y_EN | ICM456X_INT_CONFIG_WOM_Z_EN |
-							  ICM456X_INT_CONFIG_I2CM_DONE_EN | ICM456X_INT_CONFIG_APEX_EVENT_EN;
+				 ICM456X_INT_CONFIG_DRDY_EN | ICM456X_INT_CONFIG_AUX1_DRDY_EN |
+				 ICM456X_INT_CONFIG_WOM_X_EN | ICM456X_INT_CONFIG_WOM_Y_EN | ICM456X_INT_CONFIG_WOM_Z_EN |
+				 ICM456X_INT_CONFIG_I2CM_DONE_EN | ICM456X_INT_CONFIG_APEX_EVENT_EN;
 
 		if (IntPol == DEVINTR_POL_HIGH)
 		{
@@ -551,7 +590,7 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 
 		InterruptId(Inter);
 	}
-	Write(&regaddr, 1, (uint8_t*)&intcfg, 2);
+	Write(&regaddr, 1, (uint8_t*)&intcfg, 3);
 
 //	Enable();
 
@@ -560,12 +599,20 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 
 bool AgIcm456x::Enable()
 {
+	//uint8_t regaddr = ICM456X_FIFO_CONFIG3_REG;
+	//uint8_t d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN | ICM456X_FIFO_CONFIG3_HIRES_EN;
+
+	//Write8(&regaddr, 1, d);
+
 	bool res = AccelIcm456x::Enable();
 
 	if (res == true)
 	{
 		res = GyroIcm456x::Enable();
 	}
+
+
+	vFifoFrameSize = 20;
 
 	return res;
 }
@@ -595,7 +642,7 @@ void AgIcm456x::IntHandler()
 	}
 	istatus2  = Read16(&regaddr, 1);
 
-	//g_Uart.printf("%x %x\r\n", istatus, istatus);
+	//g_Uart.printf("%x %x\r\n", istatus, istatus2);
 
 	if (istatus & ICM456X_INT_STATUS_DRDY)
 	{
@@ -606,20 +653,69 @@ void AgIcm456x::IntHandler()
 
 	if (istatus & ICM456X_INT_STATUS_FIFO_THS)
 	{
-		//printf("fifo ths\r\n");
+		printf("fifo ths\r\n");
 	}
 }
 
 bool AgIcm456x::UpdateData()
 {
 	uint8_t regaddr = ICM456X_ACCEL_DATA_X1_UI_REG;
-	uint8_t dd[16];
-	uint64_t t = vpTimer->uSecond();
-	int cnt = Device::Read(&regaddr, 1, dd, 14);
+	uint8_t dd[ICM456X_FIFO_MAX_PKT_SIZE];
+	uint64_t t = 0;//vpTimer->uSecond();
+	int cnt = 0;//Device::Read(&regaddr, 1, dd, 14);
+
+	regaddr = ICM456X_FIFO_COUNT_0_REG;
+	int fifocnt = Read16(&regaddr, 1);
+
+	if (fifocnt > 0)
+	{
+		//g_Uart.printf("fifo cnt %d %d\r\n", fifocnt, EndianCvt16(fifocnt));
+
+		regaddr = ICM456X_FIFO_DATA_REG;
+		cnt = Read(&regaddr, 1, dd, vFifoFrameSize);
+#if 0
+		int pktlen = 8;
+		switch (dd[0] & 0x70)
+		{
+			case ICM456X_FIFO_HDR_ACCEL_EN | ICM456X_FIFO_HDR_GYRO_EN:
+				pktlen = 16;
+				break;
+			case ICM456X_FIFO_HDR_ACCEL_EN | ICM456X_FIFO_HDR_GYRO_EN | ICM456X_FIFO_HDR_HIRES_EN:
+				pktlen = 20;
+				break;
+		}
+		//cnt = Read(&regaddr, 1, dd, min(pktlen, ICM456X_FIFO_MAX_PKT_SIZE) - 1);
+#endif
+
+		//g_Uart.printf("%d : dd[0] = %x %x %x %x\r\n", cnt, dd[0], dd[1], dd[3], dd[3]);
+
+//		uint16_t *p = (uint16_t*)dd;
+
+		uint16_t t1;
+		memcpy(&t1, &dd[15], 2);
+
+		g_Uart.printf("cnt %d, t1 = %x\r\n", cnt, t1);
+
+		AccelSensor::vData.Timestamp = t;
+		memcpy(AccelSensor::vData.Val, &dd[1], 6);
+		//AccelSensor::vData.X = (int16_t)EndianCvt16(p[0]);
+		//AccelSensor::vData.Y = (int16_t)EndianCvt16(p[1]);
+		//AccelSensor::vData.Z = (int16_t)EndianCvt16(p[2]);
+
+		GyroSensor::vData.Timestamp = t;
+		memcpy(GyroSensor::vData.Val, &dd[7], 6);
+		//	GyroSensor::vData.X = (int16_t)EndianCvt16(p[3]);
+		//	GyroSensor::vData.Y = (int16_t)EndianCvt16(p[4]);
+		//	GyroSensor::vData.Z = (int16_t)EndianCvt16(p[5]);
+	}
+	else
+	{
+		cnt = Device::Read(&regaddr, 1, dd, 14);
+
 
 	if (cnt > 5)
 	{
-#if 0
+#if 1
 		AccelSensor::vData.Timestamp = t;
 		AccelSensor::vData.X = (((int16_t)dd[0] << 8)) | ((int16_t)dd[1] & 0xFF);
 		AccelSensor::vData.Y = (((int16_t)dd[2] << 8)) | ((int16_t)dd[3] & 0xFF);
@@ -630,15 +726,24 @@ bool AgIcm456x::UpdateData()
 		GyroSensor::vData.Y = (((int16_t)dd[8] << 8)) | ((int16_t)dd[9] & 0xFF);
 		GyroSensor::vData.Z = (((int16_t)dd[10] << 8)) | ((int16_t)dd[11] & 0xFF);
 #else
+		uint16_t *p = (uint16_t*)dd;
+
 		AccelSensor::vData.Timestamp = t;
 		memcpy(AccelSensor::vData.Val, dd, 6);
+		//AccelSensor::vData.X = (int16_t)EndianCvt16(p[0]);
+		//AccelSensor::vData.Y = (int16_t)EndianCvt16(p[1]);
+		//AccelSensor::vData.Z = (int16_t)EndianCvt16(p[2]);
 
 		if (cnt > 10)
 		{
 			GyroSensor::vData.Timestamp = t;
 			memcpy(GyroSensor::vData.Val, &dd[6], 6);
+		//	GyroSensor::vData.X = (int16_t)EndianCvt16(p[3]);
+		//	GyroSensor::vData.Y = (int16_t)EndianCvt16(p[4]);
+		//	GyroSensor::vData.Z = (int16_t)EndianCvt16(p[5]);
 		}
 #endif
+	}
 	}
 
 	return false;
@@ -676,6 +781,8 @@ int AgIcm456x::Read(uint16_t IRegAddr, uint8_t *pBuff, int BuffLen)
 /**
  * @brief	Indirect write to mem or register
  *
+ * NOTE: Require transfer in single write burst
+ *
  * @param	IRegAddr	: 16bits Reg/Mem address
  * @param	pData		: Pointer to data to write
  * @param	DataLen		: Data length
@@ -686,24 +793,11 @@ int AgIcm456x::Write(uint16_t IRegAddr, uint8_t *pData, int DataLen)
 {
 	uint8_t reg = ICM456X_IREG_ADDR_15_8_REG;
 	uint8_t cnt = 0;
+	uint8_t d[2 + DataLen] = { (uint8_t)(IRegAddr >> 8), (uint8_t)(IRegAddr & 0xFF), };
 
-	Write16(&reg, 1, EndianCvt16(IRegAddr));
+	memcpy(&d[2], pData, DataLen);
 
-	reg = ICM456X_IREG_DATA_REG;
-
-	while (DataLen > 0)
-	{
-		Write8(&reg, 1, *pData);
-
-		pData++;
-		DataLen--;
-		cnt++;
-	}
+	cnt = Write(&reg, 1, d, 2 + DataLen);
 
 	return cnt;
 }
-
-//int AgIcm45686::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
-//{
-//	return 0;
-//}

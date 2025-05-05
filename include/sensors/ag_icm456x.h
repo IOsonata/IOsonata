@@ -1174,7 +1174,7 @@ SOFTWARE.
 #define ICM456X_NB_SENSOR			3
 
 #define ICM456X_FIFO_SIZE			2048
-
+#define ICM456X_FIFO_MAX_PKT_SIZE	32
 
 #pragma pack(push, 1)
 
@@ -1302,10 +1302,6 @@ private:
 };
 
 class AgIcm456x : public AccelIcm456x, public GyroIcm456x, public TempIcm456x {
-	friend class ImuIcm20948;
-	friend class AccelIcm20948;
-	friend class GyroIcm20948;
-	friend class MagIcm20948;
 
 public:
 
@@ -1385,7 +1381,7 @@ public:
 
 	bool UpdateData();
 protected:
-	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	//virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
 		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
@@ -1427,7 +1423,7 @@ private:
 	//virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
 
 	//uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
-	//size_t vFifoFrameSize;	// Data word count
+	size_t vFifoFrameSize;	// Fifo frame size in bytes
 	uint16_t vPrevTime;
 	uint64_t vRollover;
 	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within
