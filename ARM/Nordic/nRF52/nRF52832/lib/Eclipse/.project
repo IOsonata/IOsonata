@@ -1061,6 +1061,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_ak09916.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/mag_ak09940.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_ak09940.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/mag_bmm150.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_bmm150.h</locationURI>
@@ -1869,6 +1874,11 @@
 			<name>src/sensors/mag_ak09916.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_ak09916.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_ak09940.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_ak09940.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/mag_bmm150.cpp</name>
