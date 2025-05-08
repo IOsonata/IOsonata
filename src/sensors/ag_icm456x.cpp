@@ -554,14 +554,18 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 	d |= ICM456X_SMC_CONTROL_0_TMST_EN | ICM456X_SMC_CONTROL_0_TMST_FSYNC_EN;
 	Write(sreg, &d, 1);
 
-	regaddr = ICM456X_FIFO_CONFIG3_REG;
-	d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN | ICM456X_FIFO_CONFIG3_HIRES_EN;
+//	regaddr = ICM456X_FIFO_CONFIG3_REG;
+//	d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN | ICM456X_FIFO_CONFIG3_HIRES_EN;
 
-	Write8(&regaddr, 1, d);
+//	Write8(&regaddr, 1, d);
 
 	regaddr = ICM456X_FIFO_CONFIG4_REG;
 	Write8(&regaddr, 1, ICM456X_FIFO_CONFIG4_TMST_FSYNC_EN);
 
+	regaddr = ICM456X_TMST_WOM_CONFIG_REG;
+	d = Read8(&regaddr, 1);
+
+	printf("d = %x\r\n", d);
 
 	uint32_t intcfg = 0;
 
@@ -599,10 +603,10 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 
 bool AgIcm456x::Enable()
 {
-	//uint8_t regaddr = ICM456X_FIFO_CONFIG3_REG;
-	//uint8_t d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN | ICM456X_FIFO_CONFIG3_HIRES_EN;
+	uint8_t regaddr = ICM456X_FIFO_CONFIG3_REG;
+	uint8_t d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN | ICM456X_FIFO_CONFIG3_HIRES_EN;
 
-	//Write8(&regaddr, 1, d);
+	Write8(&regaddr, 1, d);
 
 	bool res = AccelIcm456x::Enable();
 
@@ -661,7 +665,7 @@ bool AgIcm456x::UpdateData()
 {
 	uint8_t regaddr = ICM456X_ACCEL_DATA_X1_UI_REG;
 	uint8_t dd[ICM456X_FIFO_MAX_PKT_SIZE];
-	uint64_t t = 0;//vpTimer->uSecond();
+	uint64_t t = vpTimer->uSecond();
 	int cnt = 0;//Device::Read(&regaddr, 1, dd, 14);
 
 	regaddr = ICM456X_FIFO_COUNT_0_REG;
@@ -691,10 +695,18 @@ bool AgIcm456x::UpdateData()
 
 //		uint16_t *p = (uint16_t*)dd;
 
-		uint16_t t1;
-		memcpy(&t1, &dd[15], 2);
+		uint16_t t1 = dd[15] | (dd[16] << 8);
 
-		g_Uart.printf("cnt %d, t1 = %x\r\n", cnt, t1);
+		if (vPrevTime > t1)
+		{
+			// overflow
+			vRollover += 0x10000;
+		}
+
+		vPrevTime = t1;
+
+		t = t1 + vRollover;
+		//g_Uart.printf("t1 = %d %x\r\n", t1, (uint32_t)t);
 
 		AccelSensor::vData.Timestamp = t;
 		memcpy(AccelSensor::vData.Val, &dd[1], 6);
