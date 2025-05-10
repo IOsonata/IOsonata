@@ -854,6 +854,8 @@ public:
 	virtual void Reset(void) { DeviceIntrfReset(*this); }
 
 	size_t GetMaxTransferLen(void) { return DeviceIntrfGetMaxTransferLen(*this); }
+
+	virtual ~DeviceIntrf() {}
 };
 
 #endif

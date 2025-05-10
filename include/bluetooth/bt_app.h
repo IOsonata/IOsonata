@@ -214,6 +214,7 @@ public:
 	virtual void EnterDfu();
 	virtual void Start();
 
+	virtual ~BtApp() {}
 private:
 };
 
@@ -229,13 +230,13 @@ extern "C" {
  * 	This function is called prio to initializing services
  *
  */
-void BtAppInitUserData();
+void BtAppInitUserData(void);
 
 /**
  * @brief	User function to initialize all app services
  * 	This is called before initializing advertisement
  */
-void BtAppInitUserServices();
+void BtAppInitUserServices(void);
 void BtAppEvtConnected(uint16_t ConnHdl);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx);
@@ -258,13 +259,13 @@ void BtAppRtosWaitEvt(void);
  * @return	true - success
  */
 bool BtAppInit(const BtAppCfg_t * const pCfg);
-void BtAppEnterDfu();
-void BtAppRun();
-uint16_t BleAppGetConnHandle();
+void BtAppEnterDfu(void);
+void BtAppRun(void);
+uint16_t BleAppGetConnHandle(void);
 void BtAppGapDeviceNameSet(const char* ppDeviceName);
 
 void BtAppSetDevName(const char *pName);
-char * const BtAppGetDevName();
+char * const BtAppGetDevName(void);
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**
@@ -273,29 +274,29 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
  * 			false - not advertising
  */
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen);
-void BtAppAdvTimeoutHandler();
-void BtAppAdvStart();
-void BtAppAdvStop();
-void BtAppDisconnect();
+void BtAppAdvTimeoutHandler(void);
+void BtAppAdvStart(void);
+void BtAppAdvStop(void);
+void BtAppDisconnect(void);
 
 //bool BleAppScanInit(BleAppScanCfg_t *pCfg);
 bool BtAppScanInit(BtGapScanCfg_t *pCfg);
 //void BleAppScan();
-void BtAppScan();
-void BtAppScanStop();
+void BtAppScan(void);
+void BtAppScanStop(void);
 bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);//, ble_gap_conn_params_t * const pConnParam);
 //bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 //uint32_t BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam);
 bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle);
 bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DatLen);
 int8_t GetValidTxPower(int TxPwr);
-bool isConnected();
+bool isConnected(void);
 
 /// return true - Ble initialized
-bool BtInitialized();
+bool BtInitialized(void);
 
 /// return true - Ble connected
-bool BtConnected();
+bool BtConnected(void);
 
 bool BtAppDiscoverDevice(BtDev_t * const pDev);//uint16_t ConnHdl);
 

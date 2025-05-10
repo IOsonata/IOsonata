@@ -583,7 +583,7 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
  * @return	Current max MTU
  */
 uint16_t BtAttSetMtu(uint16_t MaxMtu);
-uint16_t BtAttGetMtu();
+uint16_t BtAttGetMtu(void);
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pInAtt, int ReqLen, BtAttReqRsp_t * const pOutAtt);
 void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen);
 

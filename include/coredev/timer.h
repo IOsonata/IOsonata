@@ -257,9 +257,9 @@ extern "C" {
  */
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 
-int TimerGetLowFreqDevCount();
-int TimerGetHighFreqDevCount();
-int TimerGetHighFreqDevNo();
+int TimerGetLowFreqDevCount(void);
+int TimerGetHighFreqDevCount(void);
+int TimerGetHighFreqDevNo(void);
 
 /**
  * @brief   Turn off timer.
@@ -416,6 +416,7 @@ class Timer {
 public:
 
 	Timer() { vTimer.pObj = this; }
+	virtual ~Timer() {}
 
 	virtual operator TimerDev_t * const () { return &vTimer; }
 

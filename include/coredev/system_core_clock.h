@@ -101,70 +101,70 @@ extern "C" {
  *
  * @return	Return oscillator type either internal RC or external crystal/osc
  */
-static inline OSC_TYPE GetLowFreqOscType() { return g_McuOsc.LowPwrOsc.Type; }
+static inline OSC_TYPE GetLowFreqOscType(void) { return g_McuOsc.LowPwrOsc.Type; }
 
 /**
  * @brief	Get system low frequency oscillator frequency in Hz
  *
  * @return	Return oscillator frequency in Hz
  */
-static inline uint32_t GetLowFreqOscFreq() { return g_McuOsc.LowPwrOsc.Freq; }
+static inline uint32_t GetLowFreqOscFreq(void) { return g_McuOsc.LowPwrOsc.Freq; }
 
 /**
  * @brief	Get system low frequency oscillator accuracy in PPM
  *
  * @return	Return oscillator accuracy in PPM
  */
-static inline uint32_t GetLowFreqOscAcc() { return g_McuOsc.LowPwrOsc.Accuracy; }
+static inline uint32_t GetLowFreqOscAcc(void) { return g_McuOsc.LowPwrOsc.Accuracy; }
 
 /**
  * @brief	Get systtem low frequency crystal load capacitance
  *
  * @return	Capacitance value in pF
  */
-static inline uint32_t GetLowFreqLoadCap() { return g_McuOsc.LowPwrOsc.LoadCap; }
+static inline uint32_t GetLowFreqLoadCap(void) { return g_McuOsc.LowPwrOsc.LoadCap; }
 
 /**
  * @brief	Get system low frequency oscillator descriptor
  *
  * @return	Return pointer to oscillator descriptor
  */
-static inline const OscDesc_t *GetLowFreqOscDesc() { return &g_McuOsc.LowPwrOsc; }
+static inline const OscDesc_t *GetLowFreqOscDesc(void) { return &g_McuOsc.LowPwrOsc; }
 
 /**
  * @brief	Get system core high frequency oscillator type
  *
  * @return	Return oscillator type either internal RC or external crystal/osc
  */
-static inline OSC_TYPE GetHighFreqOscType() { return g_McuOsc.CoreOsc.Type; }
+static inline OSC_TYPE GetHighFreqOscType(void) { return g_McuOsc.CoreOsc.Type; }
 
 /**
  * @brief	Get system core high frequency oscillator frequency in Hz
  *
  * @return	Return oscillator frequency in Hz
  */
-static inline uint32_t GetHighFreqOscFreq() { return g_McuOsc.CoreOsc.Freq; }
+static inline uint32_t GetHighFreqOscFreq(void) { return g_McuOsc.CoreOsc.Freq; }
 
 /**
  * @brief	Get system core high frequency oscillator accuracy in PPM
  *
  * @return	Return oscillator accuracy in PPM
  */
-static inline uint32_t GetHighFreqOscAcc() { return g_McuOsc.CoreOsc.Accuracy; }
+static inline uint32_t GetHighFreqOscAcc(void) { return g_McuOsc.CoreOsc.Accuracy; }
 
 /**
  * @brief	Get systtem low frequency crystal load capacitance
  *
  * @return	Capacitance value in pF
  */
-static inline uint32_t GetHighFreqLoadCap() { return g_McuOsc.CoreOsc.LoadCap; }
+static inline uint32_t GetHighFreqLoadCap(void) { return g_McuOsc.CoreOsc.LoadCap; }
 
 /**
  * @brief	Get system core high frequency oscillator descriptor
  *
  * @return	Return pointer to oscillator descriptor
  */
-static inline const OscDesc_t *GetHighFreqOscDesc() { return &g_McuOsc.CoreOsc; }
+static inline const OscDesc_t *GetHighFreqOscDesc(void) { return &g_McuOsc.CoreOsc; }
 
 /**
  * @brief	Select core clock oscillator type
@@ -199,7 +199,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
  *
  * @return	Core frequency in Hz.
  */
-uint32_t SystemCoreClockGet();
+uint32_t SystemCoreClockGet(void);
 
 /**
  * @brief	Get peripheral clock frequency (PCLK)

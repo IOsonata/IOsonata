@@ -39,6 +39,9 @@ SOFTWARE.
 
 class iGfx {
 public:
+
+	virtual ~iGfx() {}
+
 	bool Init(DisplayDotMatrix *pDev);
 
 	/**

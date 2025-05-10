@@ -140,6 +140,8 @@ typedef struct __LED_Dev {
 class LedDevice {
 public:
 
+	virtual ~LedDevice() {}
+
 	/**
 	 * Turns all LED 100% on
 	 */
@@ -203,6 +205,9 @@ private:
 /// Basic Led type controlled by GPIO on/off
 class Led : public LedDevice {
 public:
+
+	virtual ~Led() {}
+
 	/**
 	 * @brief	Initialize as standard GPIO LED
 	 *
@@ -245,6 +250,9 @@ private:
 /// Led type controlled by PWM
 class LedPwm : public LedDevice {
 public:
+
+	virtual ~LedPwm() {}
+
 	/**
 	 * @brief	Initialize as GPIO PWM LED
 	 *

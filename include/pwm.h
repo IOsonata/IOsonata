@@ -110,6 +110,8 @@ bool PWMSetDutyCycle(PwmDev_t *pDev, int Chan, int Percent);
 class Pwm {
 public:
 
+	virtual ~Pwm() {}
+
 	/**
 	 * @brief	Initialize PWM device
 	 *

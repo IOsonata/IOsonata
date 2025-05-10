@@ -52,6 +52,8 @@ typedef struct __Buzzer_Device {
 class Buzzer {
 public:
 
+	virtual ~Buzzer() {}
+
 	/**
 	 * @brief	Buzzer initialization
 	 *

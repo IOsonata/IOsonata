@@ -100,6 +100,8 @@ static inline BUTTON_STATE ButtonGetState(ButtonDev_t * const pBut) { return (BU
 
 class Button {
 public:
+	virtual ~Button() {}
+
 	virtual bool Init(ButtonCfg_t &Cfg, Timer * const pTimerObj = nullptr) { return ButtonInit(&vButDev, &Cfg, (pTimerObj ? (TimerDev_t * const)*pTimerObj : nullptr)); }
 	operator BUTTON_STATE const () { return vButDev.State; }
 

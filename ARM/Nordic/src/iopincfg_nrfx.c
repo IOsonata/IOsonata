@@ -643,7 +643,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     return true;
 }
 
-int IOPinFindAvailInterrupt()
+int IOPinFindAvailInterrupt(void)
 {
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
 	{

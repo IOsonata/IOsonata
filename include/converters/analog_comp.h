@@ -90,6 +90,8 @@ struct __Analog_Comp_Dev {
 
 class AnalogComp {
 public:
+	virtual ~AnalogComp() {}
+
 	virtual bool Init(const AnalogCompCfg_t &Cfg);
 	virtual bool Enable() { return vDevData.Enable(&vDevData); }
 	virtual void Disable() { vDevData.Disable(&vDevData); }

@@ -76,7 +76,7 @@ typedef Mbr_t	MBR;
 
 /// DiskIO cache descriptor
 typedef struct __DiskIO_Cache_Desc {
-	volatile int UseCnt;	//!< semaphore
+	int UseCnt;				//!< semaphore
 	uint32_t    SectNo;		//!< sector number of this cache
 	uint8_t		*pSectData;	//!< Pointer to sector cache memory. Must be at least 1 sector size
 } DiskIOCache_t;

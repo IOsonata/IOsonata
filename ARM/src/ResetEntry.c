@@ -62,8 +62,8 @@ extern void __iar_data_init3(void);
 extern void _call_main(void);
 #endif
 
-extern void _start();
-extern void _rtos_start();
+extern void _start(void);
+extern void _rtos_start(void);
 extern int main (void);
 extern void __libc_init_array(void);
 extern void SystemInit(void);
