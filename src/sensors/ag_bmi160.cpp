@@ -281,7 +281,7 @@ bool GyroBmi160::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf
 
 	GyroSensor::Type(SENSOR_TYPE_GYRO);
 
-	vData.Range = Range(0x7FFF);
+	Range(0x7FFF);
 
 	Sensitivity(CfgData.Sensitivity);
 	SamplingFrequency(CfgData.Freq);
@@ -394,8 +394,6 @@ uint32_t GyroBmi160::Sensitivity(uint32_t Value)
 		Write8(&regaddr, 1, BMI160_GYR_RANGE_GYR_RANGE_2000);
 		range = 2000;
 	}
-
-	vData.Sensitivity = range;
 
 	return GyroSensor::Sensitivity(range);
 }
@@ -817,7 +815,7 @@ bool AgBmi160::UpdateData()
 					dflag |= (1<<1);
 					memcpy(GyroBmi160::vData.Val, p, 6);
 					GyroBmi160::vData.Timestamp = t;
-					GyroBmi160::vData.Sensitivity = GyroSensor::Sensitivity();
+					GyroSensor::Sensitivity();
 				}
 				p += 6;
 				len -= 6;

@@ -716,7 +716,7 @@ bool GyroBmi270::Init(const GyroSensorCfg_t &CfgData, DeviceIntrf * const pIntrf
 
 	GyroSensor::Type(SENSOR_TYPE_GYRO);
 
-	vData.Range = Range(BMI270_ADC_RANGE);
+	Range(BMI270_ADC_RANGE);
 
 	Sensitivity(CfgData.Sensitivity);
 	SamplingFrequency(CfgData.Freq);
@@ -865,8 +865,6 @@ uint32_t GyroBmi270::Sensitivity(uint32_t Value)
 	}
 
 	Write16(&regaddr, 1, d);
-
-	vData.Sensitivity = range;
 
 	return GyroSensor::Sensitivity(range);
 }

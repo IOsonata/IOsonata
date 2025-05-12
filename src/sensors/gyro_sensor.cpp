@@ -72,9 +72,25 @@ uint16_t GyroSensor::Sensitivity(uint16_t Value)
 		vCalibOffset[i] *= scale;
 	}
 
+	vData.ScaleFactor = scale;
+
 	vSensitivity = Value;
 
 	return vSensitivity;
+}
+
+uint32_t GyroSensor::Range(uint32_t Value)
+{
+	if (Value == 0)
+	{
+		return Sensor::Range();
+	}
+
+	uint32_t r = Sensor::Range(Value);
+
+	vData.ScaleFactor = vSensitivity / r;
+
+	return r;
 }
 
 void GyroSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])

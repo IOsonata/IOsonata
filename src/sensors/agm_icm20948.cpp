@@ -343,7 +343,7 @@ bool GyroIcm20948::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, 
 	if (Init(Cfg.DevAddr, pIntrf, Cfg.Inter, Cfg.IntPol, pTimer) == false)
 		return false;
 
-	vData.Range = Range(ICM20948_GYRO_ADC_RANGE);
+	Range(ICM20948_GYRO_ADC_RANGE);
 	SamplingFrequency(Cfg.Freq);
 	Sensitivity(Cfg.Sensitivity);
 	FilterFreq(Cfg.FltrFreq);
