@@ -59,7 +59,7 @@ bool AccelBmi323::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 	AccelSensor::Type(SENSOR_TYPE_ACCEL);
 
-	vData.Range = Range(BMI323_ADC_RANGE);
+	Range(BMI323_ADC_RANGE);
 	Scale(CfgData.Scale);
 	SamplingFrequency(CfgData.Freq);
 	FilterFreq(CfgData.FltrFreq);
@@ -137,8 +137,6 @@ uint8_t AccelBmi323::Scale(uint8_t Value)
 
 	Write16(&regaddr, 1, d);//BMI323_ACC_CONFIG_RANGE_2G);
 	msDelay(1);	// Require delay, donot remove
-
-	vData.Scale = Value;
 
 	return AccelSensor::Scale(Value);
 }

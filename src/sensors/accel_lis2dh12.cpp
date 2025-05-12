@@ -102,7 +102,6 @@ bool AccelLis2dh12::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 	Write8(&regaddr, 1, d);
 
 	AccelSensor::Range(2047);
-	AccelSensor::vData.Range = 2047;
 
 	Scale(Cfg.Scale);
 	uint32_t f = SamplingFrequency(Cfg.Freq);
@@ -217,8 +216,6 @@ uint16_t AccelLis2dh12::Scale(uint16_t Value)
 
 	Write8(&regaddr, 1, d);
 
-	AccelSensor::vData.Scale = Value;
-
 	return AccelSensor::Scale(Value);
 }
 
@@ -328,7 +325,6 @@ uint32_t AccelLis2dh12::SamplingFrequency(uint32_t Freq)
 	d = Read8(&regaddr, 1);
 
 	AccelSensor::Range(range);
-	AccelSensor::vData.Range = range;
 	TempSensor::Range(trange);
 
 	return  AccelSensor::SamplingFrequency(f);

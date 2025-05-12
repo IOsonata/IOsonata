@@ -238,7 +238,7 @@ bool AccelInvnIcm20948::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf *pIntrf, T
 	if (Init(Cfg.DevAddr, pIntrf, pTimer) == false)
 		return false;
 
-	vData.Range = Range(ICM20948_ACC_ADC_RANGE);
+	Range(ICM20948_ACC_ADC_RANGE);
 
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);

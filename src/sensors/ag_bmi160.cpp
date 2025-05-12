@@ -47,7 +47,7 @@ bool AccelBmi160::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 	AccelSensor::Type(SENSOR_TYPE_ACCEL);
 
-	vData.Range = Range(0x7FFF);
+	Range(0x7FFF);
 	Scale(CfgData.Scale);
 	SamplingFrequency(CfgData.Freq);
 	FilterFreq(CfgData.FltrFreq);
@@ -115,8 +115,6 @@ uint8_t AccelBmi160::Scale(uint8_t Value)
 	}
 
 	msDelay(1);	// Require delay, donot remove
-
-	vData.Scale = Value;
 
 	return AccelSensor::Scale(Value);
 }
@@ -831,7 +829,6 @@ bool AgBmi160::UpdateData()
 					dflag |= (1<<0);
 					memcpy(AccelBmi160::vData.Val, p, 6);
 					AccelBmi160::vData.Timestamp = t;
-					AccelBmi160::vData.Scale = AccelSensor::Scale();
 				}
 				p += 6;
 				len -= 6;

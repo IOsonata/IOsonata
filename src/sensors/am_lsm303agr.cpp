@@ -117,7 +117,7 @@ bool AccelLsm303agr::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntr
 	Write8(&regaddr, 1, d);
 
 	vRShift = 4;
-	AccelSensor::vData.Range = AccelSensor::Range((1<<11)-1);
+	AccelSensor::Range((1<<11)-1);
 
 	Scale(Cfg.Scale);
 	uint32_t f = SamplingFrequency(Cfg.Freq);
@@ -290,7 +290,6 @@ uint32_t AccelLsm303agr::SamplingFrequency(uint32_t Freq)
 	Write8(&regaddr, 1, ctrl);
 
 	AccelSensor::Range(r);
-	AccelSensor::vData.Range = r;
 	TempSensor::Range(tr);
 
 	return AccelSensor::SamplingFrequency(f);
@@ -329,7 +328,6 @@ uint8_t AccelLsm303agr::Scale(uint8_t Value)
 	}
 
 	Write8(&regaddr, 1, ctrl);
-	AccelSensor::vData.Scale = g;
 
 	return AccelSensor::Scale(g);
 }

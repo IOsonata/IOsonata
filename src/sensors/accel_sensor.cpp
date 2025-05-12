@@ -37,7 +37,7 @@ SOFTWARE.
 
 bool AccelSensor::Read(AccelSensorData_t &Data)
 {
-	if (vData.Range == 0)
+	if (vRange == 0)
 		return false;
 
 	Data.Timestamp = vData.Timestamp;
@@ -75,9 +75,20 @@ uint16_t AccelSensor::Scale(uint16_t Value)
 		vCalibOffset[i] *= scale;
 	}
 
+	vData.GFactor = scale;
+
 	vScale = Value;
 
 	return vScale;
+}
+
+uint32_t AccelSensor::Range(uint32_t Value)
+{
+	uint32_t r = Sensor::Range(Value);
+
+	vData.GFactor = (float)vScale / r;
+
+	return r;
 }
 
 void AccelSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])

@@ -49,14 +49,15 @@ SOFTWARE.
 /// Accelerometer raw sensor data
 typedef struct __AccelSensor_Raw_Data {
 	uint64_t Timestamp;	//!< Time stamp count in usec
-	uint16_t Scale;		//!< Scale in G of the sensor
-	uint16_t Range;		//!< Sensor ADC range
+	float GFactor;		//!< g scale factor. Obtain g force = GFactor * RawData;
+//	uint16_t Scale;		//!< Scale in G of the sensor
+//	uint16_t Range;		//!< Sensor ADC range
 	union {
-		int16_t Val[3];
+		int32_t Val[3];
 		struct {
-			int16_t X;			//!< X axis
-			int16_t Y;			//!< Y axis
-			int16_t Z;			//!< Z axis
+			int32_t X;			//!< X axis
+			int32_t Y;			//!< Y axis
+			int32_t Z;			//!< Z axis
 		};
 	};
 } AccelSensorRawData_t;
@@ -174,7 +175,7 @@ public:
 	 *
 	 * @return	Actual maximum positive range value of the raw data
 	 */
-	virtual uint32_t Range(uint32_t Value) { vData.Range = Sensor::Range(Value); return vData.Range; }
+	virtual uint32_t Range(uint32_t Value);// { vData.GFactor = (float)Scale() / Sensor::Range(Value); return vData.Range; }
 
     virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
     virtual void SetCalibrationMatrix(float (&Gain)[3][3]);

@@ -487,7 +487,7 @@ bool AccelBmi270::Init(const AccelSensorCfg_t &CfgData, DeviceIntrf * const pInt
 
 	AccelSensor::Type(SENSOR_TYPE_ACCEL);
 
-	vData.Range = Range(BMI270_ADC_RANGE);
+	Range(BMI270_ADC_RANGE);
 	Scale(CfgData.Scale);
 	SamplingFrequency(CfgData.Freq);
 	FilterFreq(CfgData.FltrFreq);
@@ -556,8 +556,6 @@ uint8_t AccelBmi270::Scale(uint8_t Value)
 
 	Write8(&regaddr, 1, d);
 	msDelay(1);	// Require delay, donot remove
-
-	vData.Scale = Value;
 
 	return AccelSensor::Scale(Value);
 }

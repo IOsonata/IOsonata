@@ -880,8 +880,6 @@ bool AgmMpu9250::UpdateData()
 
 	if (val > 0)
 	{
-		AccelSensor::vData.Scale =  AccelSensor::Scale();
-		AccelSensor::vData.Range = 0x7FFF;
 		AccelSensor::vData.X = ((int32_t)d[0] << 8) | d[1];
 		AccelSensor::vData.Y = ((int32_t)d[2] << 8) | d[3];
 		AccelSensor::vData.Z = ((int32_t)d[4] << 8) | d[5];
