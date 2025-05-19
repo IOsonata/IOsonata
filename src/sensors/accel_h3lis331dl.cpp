@@ -362,8 +362,13 @@ bool AccelH3lis331dl::UpdateData()
 			vData.Timestamp = vpTimer->uSecond();
 		}
 		regaddr = H3LIS331DL_OUT_X_L_REG;
-		Read(&regaddr, 1, (uint8_t*)vData.Val, 6);
 
+		uint16_t dd[3];
+		Read(&regaddr, 1, (uint8_t*)dd, 6);
+
+		vData.X = dd[0];
+		vData.Y = dd[1];
+		vData.Z = dd[2];
 		//regaddr = H3LIS331DL_OUT_X_H_REG;
 		//vData.X = Read8(&regaddr, 1);
 

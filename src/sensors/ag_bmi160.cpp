@@ -825,8 +825,12 @@ bool AgBmi160::UpdateData()
 				if (len >= 6)
 				{
 					dflag |= (1<<0);
-					memcpy(AccelBmi160::vData.Val, p, 6);
-					AccelBmi160::vData.Timestamp = t;
+					//memcpy(AccelBmi160::vData.Val, p, 6);
+
+					AccelSensor::vData.Timestamp = t;
+					AccelSensor::vData.X = ((int8_t)p[1] << 8) | p[0];
+					AccelSensor::vData.Y = ((int8_t)p[3] << 8) | p[2];
+					AccelSensor::vData.Z = ((int8_t)p[5] << 8) | p[4];
 				}
 				p += 6;
 				len -= 6;
@@ -837,8 +841,8 @@ bool AgBmi160::UpdateData()
 			switch (hdr->Parm)
 			{
 				case BMI160_FRAME_CONTROL_PARM_SKIP:
-					AccelBmi160::vDropCnt += *p;
-					GyroBmi160::vDropCnt = AccelBmi160::vDropCnt;
+					AccelSensor::vDropCnt += *p;
+					GyroBmi160::vDropCnt = AccelSensor::vDropCnt;
 					len--;
 					p++;
 					break;
@@ -856,7 +860,7 @@ bool AgBmi160::UpdateData()
 						{
 							if (dflag & 1)
 							{
-								AccelBmi160::vData.Timestamp = t;
+								AccelSensor::vData.Timestamp = t;
 							}
 							if (dflag & 2)
 							{

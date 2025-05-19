@@ -520,7 +520,13 @@ bool AccelLis2dh12::UpdateData()
 		for (int i = 0; i < (fstatus & 0x1f); i++)
 		{
 			regaddr = LIS2DH12_OUT_X_L | 0x40;
-			Device::Read(&regaddr, 1, (uint8_t*)AccelSensor::vData.Val, 6);
+
+			uint16_t dd[3];
+
+			Device::Read(&regaddr, 1, (uint8_t*)dd, 6);
+			AccelSensor::vData.X = dd[0];
+			AccelSensor::vData.Y = dd[1];
+			AccelSensor::vData.Z = dd[2];
 		}
 	}
 

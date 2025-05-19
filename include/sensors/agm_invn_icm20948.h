@@ -75,7 +75,7 @@ public:
 	virtual uint16_t Scale(uint16_t Value);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t FilterFreq(uint32_t Freq);
-	virtual bool Read(AccelSensorData_t &Data) { memcpy(&Data, &vData, sizeof(AccelSensorData_t)); return true; }
+	//virtual bool Read(AccelSensorData_t &Data) { memcpy(&Data, &vData, sizeof(AccelSensorData_t)); return true; }
 
 private:
 

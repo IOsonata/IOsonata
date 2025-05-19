@@ -707,7 +707,10 @@ bool AgBmi323::UpdateData()
 					if (p[0] != BMI323_ACC_DUMMY_X)
 					{
 						// Take valid data only
-						memcpy(AccelSensor::vData.Val, p, 6);
+						//memcpy(AccelSensor::vData.Val, p, 6);
+						AccelSensor::vData.X = p[0];
+						AccelSensor::vData.Y = p[1];
+						AccelSensor::vData.Z = p[2];
 						AccelSensor::vSampleCnt++;
 					}
 					p += 3;
@@ -717,7 +720,10 @@ bool AgBmi323::UpdateData()
 					if (p[0] != BMI323_GYR_DUMMY_X)
 					{
 						// Take valid data only
-						memcpy(GyroSensor::vData.Val, p, 6);
+						//memcpy(GyroSensor::vData.Val, p, 6);
+						GyroSensor::vData.X = p[0];
+						GyroSensor::vData.Y = p[1];
+						GyroSensor::vData.Z = p[2];
 						GyroSensor::vSampleCnt++;
 					}
 					p += 3;
@@ -765,11 +771,15 @@ bool AgBmi323::UpdateData()
 
 		regaddr = BMI323_STATUS_REG;
 		uint16_t d = Read16(&regaddr, 1);
+		int16_t dd[3];
 
 		if (d & BMI323_STATUS_DRDY_ACC)
 		{
 			regaddr = BMI323_ACC_DATA_X_REG;
-			Read(&regaddr, 1, (uint8_t*)AccelSensor::vData.Val, 6);
+			Read(&regaddr, 1, (uint8_t*)dd, 6);
+			AccelSensor::vData.X = dd[0];
+			AccelSensor::vData.Y = dd[1];
+			AccelSensor::vData.Z = dd[2];
 			AccelSensor::vData.Timestamp = t;
 
 			res = true;
@@ -777,7 +787,10 @@ bool AgBmi323::UpdateData()
 		if (d & BMI323_STATUS_DRDY_GYR)
 		{
 			regaddr = BMI323_GYR_DATA_X_REG;
-			Read(&regaddr, 1, (uint8_t*)GyroSensor::vData.Val, 6);
+			Read(&regaddr, 1, (uint8_t*)dd, 6);
+			GyroSensor::vData.X = dd[0];
+			GyroSensor::vData.Y = dd[1];
+			GyroSensor::vData.Z = dd[2];
 			GyroSensor::vData.Timestamp = t;
 			res = true;
 		}

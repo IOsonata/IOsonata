@@ -486,7 +486,11 @@ bool AccelLsm303agr::UpdateData()
 		for (int i = 0; i < (fstatus & 0x1f); i++)
 		{
 			regaddr = LSM303AGR_OUT_X_L_A_REG | 0x40;
-			Read(&regaddr, 1, (uint8_t*)AccelSensor::vData.Val, 6);
+			int16_t dd[3];
+			Read(&regaddr, 1, (uint8_t*)dd, 6);
+			AccelSensor::vData.X = dd[0];
+			AccelSensor::vData.Y = dd[1];
+			AccelSensor::vData.Z = dd[2];
 		}
 
 		// Right justify to get correct value
