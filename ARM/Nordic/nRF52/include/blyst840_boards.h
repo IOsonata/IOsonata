@@ -37,12 +37,14 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 #include "miscdev/led.h"
+#include "board_beavertrack.h"
 
 #define IBK_NRF52840						1
 #define UDG_NRF52840						2
 #define BLUEIO840							3
 #define BLUEPYRO_M4025						4
 #define BLUEPYRO_CR24S_M4025				5
+#define BEAVERTRACK							6
 
 #define BLYST840_PULSE_TRAIN_PINS	{ \
 	{0, 2, 0}, {0, 3, 0}, {0, 4, 0}, {0, 5, 0}, {0, 6, 0}, {0, 7, 0}, {0, 8, 0}, \
