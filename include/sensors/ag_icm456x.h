@@ -1167,6 +1167,7 @@ SOFTWARE.
 #define ICM456X_IPREG_SYS2_REG_132_ACCEL_OIS_M6_BYP						(1<<2)
 
 #define ICM456X_ADC_RANGE						0x7FFF		// 16 Bits
+#define ICM456X_ADC_RANGE_HIRES					0x7FFFF		// 20 Bits
 
 #define ICM456X_ACCEL_IDX			0
 #define ICM456X_GYRO_IDX			1
@@ -1283,6 +1284,7 @@ public:
 	 * 			- false	: Failed
 	 */
 	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+
 	/**
 	 * @brief	Power on or wake up device
 	 *
@@ -1301,7 +1303,16 @@ private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
 };
 
+class AuxIntrfIcm456x : public DeviceIntrf {
+public:
+
+private:
+};
+
 class AgIcm456x : public AccelIcm456x, public GyroIcm456x, public TempIcm456x {
+
+	friend AccelIcm456x;
+	friend GyroIcm456x;
 
 public:
 
@@ -1392,6 +1403,7 @@ protected:
 
 	bool vbInitialized;
 	bool vbSensorEnabled[ICM456X_NB_SENSOR];
+	bool vHires;
 
 private:
 	AgIcm456x(const AgIcm456x&); // no copy constructor
@@ -1416,13 +1428,6 @@ private:
 	 * 			- false	: Failed
 	 */
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
-	//bool SelectBank(uint8_t BankNo);
-
-	//virtual uint8_t FifoDataFlag() { return vFifoDataFlag; }
-	//virtual void FifoDataFlagSet(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag) | Flag; }
-	//virtual void FifoDataFlagClr(uint8_t Flag);//  { vFifoDataFlag = (vFifoDataFlag & ~Flag); }
-
-	//uint8_t vFifoDataFlag;	// Fifo frame is dependent on enabled features
 	size_t vFifoFrameSize;	// Fifo frame size in bytes
 	uint16_t vPrevTime;
 	uint64_t vRollover;

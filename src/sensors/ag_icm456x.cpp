@@ -56,7 +56,7 @@ bool AccelIcm456x::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	Type(SENSOR_TYPE_ACCEL);
 	//vData.Range =
-	Range(ICM456X_ADC_RANGE);
+	Range(ICM456X_ADC_RANGE_HIRES);
 	SamplingFrequency(Cfg.Freq);
 	Scale(Cfg.Scale);
 
@@ -143,6 +143,8 @@ uint8_t AccelIcm456x::Scale(uint8_t Value)
 	uint8_t regaddr = ICM456X_ACCEL_CONFIG0_REG;
 	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_ACCEL_CONFIG0_UI_FS_SEL_MASK;
 
+	((AgIcm456x*)this)->vHires = false;
+
 	if (Value <= 2)
 	{
 		d |= ICM456X_ACCEL_CONFIG0_UI_FS_SEL_2G;
@@ -167,6 +169,7 @@ uint8_t AccelIcm456x::Scale(uint8_t Value)
 	{
 		d |= ICM456X_ACCEL_CONFIG0_UI_FS_SEL_32G;
 		Value = 32;
+		((AgIcm456x*)this)->vHires = true;
 	}
 
 	Write8(&regaddr, 1, d);
@@ -201,6 +204,15 @@ bool AccelIcm456x::Enable()
 	d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_ACCEL_EN;
 	Write8(&regaddr, 1, d);
 
+	if (((AgIcm456x*)this)->vFifoFrameSize < 8)
+	{
+		((AgIcm456x*)this)->vFifoFrameSize += 8;
+	}
+	else
+	{
+		((AgIcm456x*)this)->vFifoFrameSize += 6;
+	}
+
 	return true;
 }
 
@@ -223,7 +235,7 @@ bool GyroIcm456x::Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, T
 
 	Type(SENSOR_TYPE_GYRO);
 	//vData.Range =
-	Range(ICM456X_ADC_RANGE);
+	Range(ICM456X_ADC_RANGE_HIRES);
 	SamplingFrequency(Cfg.Freq);
 	Sensitivity(Cfg.Sensitivity);
 
@@ -310,6 +322,8 @@ uint32_t GyroIcm456x::Sensitivity(uint32_t Value)
 	uint8_t regaddr = ICM456X_GYRO_CONFIG0_REG;
 	uint8_t d = Read8(&regaddr, 1) & ~ICM456X_GYRO_CONFIG0_UI_FS_SEL_MASK;
 
+	((AgIcm456x*)this)->vHires = false;
+
 	if (Value <= 16)
 	{
 		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_15_625;
@@ -354,6 +368,7 @@ uint32_t GyroIcm456x::Sensitivity(uint32_t Value)
 	{
 		d |= ICM456X_GYRO_CONFIG0_UI_FS_SEL_4000;
 		Value = 4000;
+		((AgIcm456x*)this)->vHires = true;
 	}
 
 	Write8(&regaddr, 1, d);
@@ -374,6 +389,7 @@ uint32_t GyroIcm456x::FilterFreq(uint32_t Freq)
 {
 	return 0;
 }
+
 bool GyroIcm456x::Enable()
 {
 	uint8_t regaddr = ICM456X_PWR_MGMT0_REG;
@@ -386,6 +402,14 @@ bool GyroIcm456x::Enable()
 	d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_GYRO_EN;
 	Write8(&regaddr, 1, d);
 
+	if (((AgIcm456x*)this)->vFifoFrameSize < 8)
+	{
+		((AgIcm456x*)this)->vFifoFrameSize += 8;
+	}
+	else
+	{
+		((AgIcm456x*)this)->vFifoFrameSize += 6;
+	}
 	return true;
 }
 
@@ -396,6 +420,7 @@ void GyroIcm456x::Disable()
 
 	d |= ICM456X_PWR_MGMT0_GYRO_MODE_STDBY;
 	Write8(&regaddr, 1, d);
+
 }
 
 /**
@@ -426,35 +451,35 @@ bool TempIcm456x::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, T
 }
 
 /**
- * @brief	Power on or wake up device
+ * @brief	Enable temperature sensor
  *
  * @return	true - If success
  */
 bool TempIcm456x::Enable()
 {
-	return false;
+	// Temperature sensor is always enable for this device
+	return true;
 }
 
 /**
- * @brief	Put device in power down or power saving sleep mode
+ * @brief	Disable temperature sensor
  *
  * @return	None
  */
 void TempIcm456x::Disable()
 {
-
+	// Temperature sensor is always enable for this device
 }
 
 AgIcm456x::AgIcm456x()
 {
 	memset(vbSensorEnabled, 0, sizeof(vbSensorEnabled));
 	vType = SENSOR_TYPE_TEMP | SENSOR_TYPE_ACCEL | SENSOR_TYPE_GYRO;
+	vPrevTime = 0;
+	vRollover = 0;
+	vFifoFrameSize = 2;	// Min count 1 byte header + 1 byte temperature
+	vHires = false;
 }
-
-//bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
-//{
-//	return true;
-//}
 
 bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
 {
@@ -554,10 +579,10 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 	d |= ICM456X_SMC_CONTROL_0_TMST_EN | ICM456X_SMC_CONTROL_0_TMST_FSYNC_EN;
 	Write(sreg, &d, 1);
 
-//	regaddr = ICM456X_FIFO_CONFIG3_REG;
-//	d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN | ICM456X_FIFO_CONFIG3_HIRES_EN;
+	//regaddr = ICM456X_FIFO_CONFIG3_REG;
+	//d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN | ICM456X_FIFO_CONFIG3_HIRES_EN;
 
-//	Write8(&regaddr, 1, d);
+	//Write8(&regaddr, 1, d);
 
 	regaddr = ICM456X_FIFO_CONFIG4_REG;
 	Write8(&regaddr, 1, ICM456X_FIFO_CONFIG4_TMST_FSYNC_EN);
@@ -604,7 +629,15 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 bool AgIcm456x::Enable()
 {
 	uint8_t regaddr = ICM456X_FIFO_CONFIG3_REG;
-	uint8_t d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN | ICM456X_FIFO_CONFIG3_HIRES_EN;
+	uint8_t d = Read8(&regaddr, 1) | ICM456X_FIFO_CONFIG3_IF_EN;
+
+	vFifoFrameSize = 16;
+
+	if (vHires)
+	{
+		d |= ICM456X_FIFO_CONFIG3_HIRES_EN;
+		vFifoFrameSize = 20;
+	}
 
 	Write8(&regaddr, 1, d);
 
@@ -616,7 +649,6 @@ bool AgIcm456x::Enable()
 	}
 
 
-	vFifoFrameSize = 20;
 
 	return res;
 }
@@ -664,18 +696,41 @@ void AgIcm456x::IntHandler()
 bool AgIcm456x::UpdateData()
 {
 	uint8_t regaddr = ICM456X_ACCEL_DATA_X1_UI_REG;
-	uint8_t dd[ICM456X_FIFO_MAX_PKT_SIZE];
+	uint8_t dd[2048];
 	uint64_t t = vpTimer->uSecond();
 	int cnt = 0;//Device::Read(&regaddr, 1, dd, 14);
 
 	regaddr = ICM456X_FIFO_COUNT_0_REG;
 	int fifocnt = Read16(&regaddr, 1);
 
-	if (fifocnt > 0)
+#if 0
+	regaddr = ICM456X_FIFO_DATA_REG;
+
+	uint64_t xt = vpTimer->uSecond();
+	cnt = Read(&regaddr, 1, dd, fifocnt * vFifoFrameSize);
+	xt = vpTimer->uSecond() - xt;
+
+	double bs = (double)cnt / xt;
+
+	g_Uart.printf("%d, %d, %.4f B/s\r\n", cnt, (uint32_t)xt, bs );
+
+#else
+	while (fifocnt > 0)
 	{
 		//g_Uart.printf("fifo cnt %d %d\r\n", fifocnt, EndianCvt16(fifocnt));
 
 		regaddr = ICM456X_FIFO_DATA_REG;
+
+		//uint8_t hdr = Read8(&regaddr, 1);
+
+	//	if (hdr & ICM456X_FIFO_HDR_HIRES_EN)
+		{
+	//		cnt = Read(&regaddr, 1, dd, 19);
+		}
+	//	else
+		{
+	//		cnt = Read(&regaddr, 1, dd, 15);
+		}
 		cnt = Read(&regaddr, 1, dd, vFifoFrameSize);
 #if 0
 		int pktlen = 8;
@@ -693,9 +748,44 @@ bool AgIcm456x::UpdateData()
 
 		//g_Uart.printf("%d : dd[0] = %x %x %x %x\r\n", cnt, dd[0], dd[1], dd[3], dd[3]);
 
-//		uint16_t *p = (uint16_t*)dd;
+		uint8_t *p = dd;
 
-		uint16_t t1 = dd[15] | (dd[16] << 8);
+		uint8_t hdr = *p;
+		uint8_t hdr2 = 0;
+
+		p++;
+
+		if (hdr & ICM456X_FIFO_HDR_EXT_HDR_DATA)
+		{
+			hdr2 = *p;
+			p++;
+		}
+
+		int16_t a[3];
+		memcpy(a, p, 6);
+		AccelSensor::vData.X = (((int8_t)p[1] << 8) | p[0]);
+		AccelSensor::vData.Y = (((int8_t)p[3] << 8) | p[2]);
+		AccelSensor::vData.Z = (((int8_t)p[5] << 8) | p[4]);
+
+
+		p += 6;
+
+		//memcpy(GyroSensor::vData.Val, p, 6);
+		GyroSensor::vData.X = (((int8_t)p[1] << 8) | p[0]);
+		GyroSensor::vData.Y = (((int8_t)p[3] << 8) | p[2]);
+		GyroSensor::vData.Z = (((int8_t)p[5] << 8) | p[4]);
+
+		p += 6;
+
+		//g_Uart.printf("%x %d %x %d %x %d\r\n", AccelSensor::vData.X, AccelSensor::vData.X, AccelSensor::vData.Y, AccelSensor::vData.Y, AccelSensor::vData.Z, AccelSensor::vData.Z);
+
+		// Fifo hires Temperature in Degrees Centigrade = (FIFO_TEMP_DATA / 128) + 25
+		TempSensor::vData.Temperature = ((int16_t)(p[0] | (p[1] << 8)) >> 7) + 25;
+		p += 2;
+
+//		g_Uart.printf("%x %x T=%d, %d\r\n", p[0], p[1], TempSensor::vData.Temperature, tt);
+
+		uint16_t t1 = p[0] | (p[1] << 8);
 
 		if (vPrevTime > t1)
 		{
@@ -706,20 +796,35 @@ bool AgIcm456x::UpdateData()
 		vPrevTime = t1;
 
 		t = t1 + vRollover;
-		//g_Uart.printf("t1 = %d %x\r\n", t1, (uint32_t)t);
 
+		p += 2;
+#if 1
+		if (hdr & ICM456X_FIFO_HDR_HIRES_EN)
+		{
+		AccelSensor::vData.X <<= 4;
+		AccelSensor::vData.X |= (p[0] >> 4) & 0xF;
+		AccelSensor::vData.Y <<= 4;
+		AccelSensor::vData.Y |= (p[1] >> 4) & 0xF;
+		AccelSensor::vData.Z <<= 4;
+		AccelSensor::vData.Z |= (p[2] >> 4) & 0xF;
+
+		g_Uart.printf("%x %d %d %d\r\n", AccelSensor::vData.X, AccelSensor::vData.X, AccelSensor::vData.Y, AccelSensor::vData.Z);
+
+		GyroSensor::vData.X <<= 4;
+		GyroSensor::vData.X |= (p[0] & 0xF);
+		GyroSensor::vData.Y <<= 4;
+		GyroSensor::vData.Y |= (p[1] & 0xF);
+		GyroSensor::vData.Z <<= 4;
+		GyroSensor::vData.Z |= (p[2] & 0xF);
+		}
+#endif
 		AccelSensor::vData.Timestamp = t;
-		memcpy(AccelSensor::vData.Val, &dd[1], 6);
-		//AccelSensor::vData.X = (int16_t)EndianCvt16(p[0]);
-		//AccelSensor::vData.Y = (int16_t)EndianCvt16(p[1]);
-		//AccelSensor::vData.Z = (int16_t)EndianCvt16(p[2]);
-
 		GyroSensor::vData.Timestamp = t;
-		memcpy(GyroSensor::vData.Val, &dd[7], 6);
-		//	GyroSensor::vData.X = (int16_t)EndianCvt16(p[3]);
-		//	GyroSensor::vData.Y = (int16_t)EndianCvt16(p[4]);
-		//	GyroSensor::vData.Z = (int16_t)EndianCvt16(p[5]);
+		TempSensor::vData.Timestamp = t;
+
+		fifocnt--;
 	}
+#if 0
 	else
 	{
 		cnt = Device::Read(&regaddr, 1, dd, 14);
@@ -757,7 +862,8 @@ bool AgIcm456x::UpdateData()
 #endif
 	}
 	}
-
+#endif
+#endif
 	return false;
 }
 
