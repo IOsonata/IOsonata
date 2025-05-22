@@ -71,9 +71,14 @@
 #include "board.h"
 
 #if defined(APP_USBD_ENABLED) && APP_USBD_ENABLED
-#define CLI_OVER_USB_CDC_ACM 0
+#define CLI_OVER_USB_CDC_ACM 1
 #else
 #define CLI_OVER_USB_CDC_ACM 0
+#if defined(TX_PIN_NUMBER) && defined(RX_PIN_NUMBER)
+#define CLI_OVER_UART 1
+#else
+#define CLI_OVER_UART 0
+#endif
 #endif
 
 #if CLI_OVER_USB_CDC_ACM
@@ -84,14 +89,6 @@
 #include "app_usbd_string_desc.h"
 #include "app_usbd_cdc_acm.h"
 #endif //CLI_OVER_USB_CDC_ACM
-
-#if 1
-#if defined(TX_PIN_NUMBER) && defined(RX_PIN_NUMBER)
-#define CLI_OVER_UART 1
-#else
-#define CLI_OVER_UART 0
-#endif
-#endif
 
 #if CLI_OVER_UART
 #include "nrf_cli_uart.h"
@@ -251,11 +248,46 @@ static void cli_start(void)
 #endif
 }
 
+static void usbd_init(void)
+{
+#if CLI_OVER_USB_CDC_ACM
+    ret_code_t ret;
+    static const app_usbd_config_t usbd_config = {
+        .ev_handler = app_usbd_event_execute,
+        .ev_state_proc = usbd_user_ev_handler
+    };
+    ret = app_usbd_init(&usbd_config);
+    APP_ERROR_CHECK(ret);
+
+    app_usbd_class_inst_t const * class_cdc_acm =
+            app_usbd_cdc_acm_class_inst_get(&nrf_cli_cdc_acm);
+    ret = app_usbd_class_append(class_cdc_acm);
+    APP_ERROR_CHECK(ret);
+
+    if (USBD_POWER_DETECTION)
+    {
+        ret = app_usbd_power_events_enable();
+        APP_ERROR_CHECK(ret);
+    }
+    else
+    {
+        NRF_LOG_INFO("No USB power detection enabled\nStarting USB now");
+
+        app_usbd_enable();
+        app_usbd_start();
+    }
+
+    /* Give some time for the host to enumerate and connect to the USB CDC port */
+    nrf_delay_ms(1000);
+#endif
+}
+
 static void cli_init(void)
 {
     ret_code_t ret;
 
 #if CLI_OVER_USB_CDC_ACM
+    usbd_init();
     ret = nrf_cli_init(&m_cli_cdc_acm, NULL, true, true, NRF_LOG_SEVERITY_INFO);
     APP_ERROR_CHECK(ret);
 #endif
@@ -298,42 +330,6 @@ const UARTCfg_t g_UartCfg = {
     APP_ERROR_CHECK(ret);
 #endif
 }
-
-
-static void usbd_init(void)
-{
-#if CLI_OVER_USB_CDC_ACM
-    ret_code_t ret;
-    static const app_usbd_config_t usbd_config = {
-        .ev_handler = app_usbd_event_execute,
-        .ev_state_proc = usbd_user_ev_handler
-    };
-    ret = app_usbd_init(&usbd_config);
-    APP_ERROR_CHECK(ret);
-
-    app_usbd_class_inst_t const * class_cdc_acm =
-            app_usbd_cdc_acm_class_inst_get(&nrf_cli_cdc_acm);
-    ret = app_usbd_class_append(class_cdc_acm);
-    APP_ERROR_CHECK(ret);
-
-    if (USBD_POWER_DETECTION)
-    {
-        ret = app_usbd_power_events_enable();
-        APP_ERROR_CHECK(ret);
-    }
-    else
-    {
-        NRF_LOG_INFO("No USB power detection enabled\nStarting USB now");
-
-        app_usbd_enable();
-        app_usbd_start();
-    }
-
-    /* Give some time for the host to enumerate and connect to the USB CDC port */
-    nrf_delay_ms(1000);
-#endif
-}
-
 
 static void cli_process(void)
 {
