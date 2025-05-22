@@ -446,11 +446,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/md5.c</locationURI>
 		</link>
 		<link>
-			<name>src/micro-ecc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/miscdev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1509,11 +1504,6 @@
 			<name>src/littlefs/lfs_util.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs_util.h</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/uECC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/buzzer.cpp</name>
