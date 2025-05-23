@@ -1428,6 +1428,8 @@ private:
 	 * 			- false	: Failed
 	 */
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
+	void ProcessFifo(uint8_t *pData, size_t Len);
+
 	size_t vFifoFrameSize;	// Fifo frame size in bytes
 	uint16_t vPrevTime;
 	uint64_t vRollover;

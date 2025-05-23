@@ -41,7 +41,7 @@ SOFTWARE.
 #include "convutil.h"
 #include "sensors/ag_icm456x.h"
 
-#if 1
+#if 0
 #include "coredev/uart.h"
 
 extern UART g_Uart;
@@ -693,6 +693,98 @@ void AgIcm456x::IntHandler()
 	}
 }
 
+void AgIcm456x::ProcessFifo(uint8_t *pData, size_t Len)
+{
+	uint8_t *p = pData;
+	uint8_t hdr = *p;
+	uint8_t exhdr = 0;
+
+	p++;
+
+	if (hdr & ICM456X_FIFO_HDR_EXT_HDR_DATA)
+	{
+		exhdr = *p;
+		p++;
+	}
+
+	if (hdr & ICM456X_FIFO_HDR_ACCEL_EN)
+	{
+		AccelSensor::vData.X = (((int8_t)p[1] << 8) | p[0]);
+		AccelSensor::vData.Y = (((int8_t)p[3] << 8) | p[2]);
+		AccelSensor::vData.Z = (((int8_t)p[5] << 8) | p[4]);
+
+		p += 6;
+	}
+
+	if (hdr & ICM456X_FIFO_HDR_GYRO_EN)
+	{
+		GyroSensor::vData.X = (((int8_t)p[1] << 8) | p[0]);
+		GyroSensor::vData.Y = (((int8_t)p[3] << 8) | p[2]);
+		GyroSensor::vData.Z = (((int8_t)p[5] << 8) | p[4]);
+
+		p += 6;
+	}
+
+	if (exhdr & ICM456X_FIFO_EXTHDR_ES0_EN)
+	{
+		if (exhdr & ICM456X_FIFO_EXTHDR_ES0_9BYTES)
+		{
+		}
+		p += 9;
+	}
+
+	if (exhdr & ICM456X_FIFO_EXTHDR_ES1_EN)
+	{
+		p += 6;
+	}
+
+	if (hdr & 0x78)
+	{
+		if (hdr & ICM456X_FIFO_HDR_HIRES_EN)
+		{
+			// Fifo hires Temperature in Degrees Centigrade = (FIFO_TEMP_DATA / 128) + 25
+			TempSensor::vData.Temperature = ((int16_t)(p[0] | (p[1] << 8)) >> 7) + 25;
+			p += 2;
+
+			AccelSensor::vData.X <<= 4;
+			AccelSensor::vData.X |= (p[2] >> 4) & 0xF;
+			AccelSensor::vData.Y <<= 4;
+			AccelSensor::vData.Y |= (p[3] >> 4) & 0xF;
+			AccelSensor::vData.Z <<= 4;
+			AccelSensor::vData.Z |= (p[4] >> 4) & 0xF;
+
+	//		g_Uart.printf("%x %d %d %d\r\n", AccelSensor::vData.X, AccelSensor::vData.X, AccelSensor::vData.Y, AccelSensor::vData.Z);
+
+			GyroSensor::vData.X <<= 4;
+			GyroSensor::vData.X |= (p[2] & 0xF);
+			GyroSensor::vData.Y <<= 4;
+			GyroSensor::vData.Y |= (p[3] & 0xF);
+			GyroSensor::vData.Z <<= 4;
+			GyroSensor::vData.Z |= (p[4] & 0xF);
+		}
+		else
+		{
+			TempSensor::vData.Temperature = (((int8_t)p[0]) >> 1) + 25;
+			p++;
+		}
+		uint16_t t1 = p[0] | (p[1] << 8);
+
+		if (vPrevTime > t1)
+		{
+			// overflow
+			vRollover += 0x10000;
+		}
+
+		vPrevTime = t1;
+
+		uint64_t t = t1 + vRollover;
+
+		AccelSensor::vData.Timestamp = t;
+		GyroSensor::vData.Timestamp = t;
+		TempSensor::vData.Timestamp = t;
+	}
+}
+
 bool AgIcm456x::UpdateData()
 {
 	uint8_t regaddr = ICM456X_ACCEL_DATA_X1_UI_REG;
@@ -721,21 +813,29 @@ bool AgIcm456x::UpdateData()
 
 		regaddr = ICM456X_FIFO_DATA_REG;
 
-		//uint8_t hdr = Read8(&regaddr, 1);
+		cnt = Read(&regaddr, 1, dd, 2);
 
-	//	if (hdr & ICM456X_FIFO_HDR_HIRES_EN)
-		{
-	//		cnt = Read(&regaddr, 1, dd, 19);
-		}
-	//	else
-		{
-	//		cnt = Read(&regaddr, 1, dd, 15);
-		}
-		cnt = Read(&regaddr, 1, dd, vFifoFrameSize);
+		uint8_t hdr = dd[0];
+		uint8_t hdr2 = dd[1];
+
 #if 0
-		int pktlen = 8;
-		switch (dd[0] & 0x70)
+		if (hdr & ICM456X_FIFO_HDR_HIRES_EN)
 		{
+			cnt = Read(&regaddr, 1, dd, 20);
+		}
+		else
+		{
+			cnt = Read(&regaddr, 1, dd, 16);
+		}
+		//cnt = Read(&regaddr, 1, dd, vFifoFrameSize);
+#endif
+		int pktlen = 0;
+		switch (hdr & 0x70)
+		{
+			case ICM456X_FIFO_HDR_ACCEL_EN:
+			case ICM456X_FIFO_HDR_GYRO_EN:
+				pktlen = 8;
+				break;
 			case ICM456X_FIFO_HDR_ACCEL_EN | ICM456X_FIFO_HDR_GYRO_EN:
 				pktlen = 16;
 				break;
@@ -743,14 +843,41 @@ bool AgIcm456x::UpdateData()
 				pktlen = 20;
 				break;
 		}
-		//cnt = Read(&regaddr, 1, dd, min(pktlen, ICM456X_FIFO_MAX_PKT_SIZE) - 1);
-#endif
 
+		if (hdr & ICM456X_FIFO_HDR_EXT_HDR_DATA)
+		{
+			if (pktlen > 0)
+			{
+				// with accel or gyro data
+				pktlen = 32;
+			}
+			else
+			{
+				// No Accel & Gyro data
+				switch (hdr2 & 0x3)
+				{
+					case ICM456X_FIFO_EXTHDR_ES0_EN:
+					case ICM456X_FIFO_EXTHDR_ES1_EN:
+						pktlen = 16;
+						break;
+					case ICM456X_FIFO_EXTHDR_ES0_EN | ICM456X_FIFO_EXTHDR_ES1_EN:
+						pktlen = 20;
+						break;
+				}
+			}
+		}
+
+		cnt = Read(&regaddr, 1, dd, pktlen);
+
+		if (cnt > 0)
+		{
+			ProcessFifo(dd, pktlen);
+		}
 		//g_Uart.printf("%d : dd[0] = %x %x %x %x\r\n", cnt, dd[0], dd[1], dd[3], dd[3]);
-
+#if 0
 		uint8_t *p = dd;
 
-		uint8_t hdr = *p;
+		//hdr = *p;
 		uint8_t hdr2 = 0;
 
 		p++;
@@ -761,8 +888,8 @@ bool AgIcm456x::UpdateData()
 			p++;
 		}
 
-		int16_t a[3];
-		memcpy(a, p, 6);
+		//int16_t a[3];
+		//memcpy(a, p, 6);
 		AccelSensor::vData.X = (((int8_t)p[1] << 8) | p[0]);
 		AccelSensor::vData.Y = (((int8_t)p[3] << 8) | p[2]);
 		AccelSensor::vData.Z = (((int8_t)p[5] << 8) | p[4]);
@@ -808,7 +935,7 @@ bool AgIcm456x::UpdateData()
 		AccelSensor::vData.Z <<= 4;
 		AccelSensor::vData.Z |= (p[2] >> 4) & 0xF;
 
-		g_Uart.printf("%x %d %d %d\r\n", AccelSensor::vData.X, AccelSensor::vData.X, AccelSensor::vData.Y, AccelSensor::vData.Z);
+//		g_Uart.printf("%x %d %d %d\r\n", AccelSensor::vData.X, AccelSensor::vData.X, AccelSensor::vData.Y, AccelSensor::vData.Z);
 
 		GyroSensor::vData.X <<= 4;
 		GyroSensor::vData.X |= (p[0] & 0xF);
@@ -821,6 +948,7 @@ bool AgIcm456x::UpdateData()
 		AccelSensor::vData.Timestamp = t;
 		GyroSensor::vData.Timestamp = t;
 		TempSensor::vData.Timestamp = t;
+#endif
 
 		fifocnt--;
 	}
