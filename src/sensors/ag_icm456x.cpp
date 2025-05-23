@@ -795,18 +795,6 @@ bool AgIcm456x::UpdateData()
 	regaddr = ICM456X_FIFO_COUNT_0_REG;
 	int fifocnt = Read16(&regaddr, 1);
 
-#if 0
-	regaddr = ICM456X_FIFO_DATA_REG;
-
-	uint64_t xt = vpTimer->uSecond();
-	cnt = Read(&regaddr, 1, dd, fifocnt * vFifoFrameSize);
-	xt = vpTimer->uSecond() - xt;
-
-	double bs = (double)cnt / xt;
-
-	g_Uart.printf("%d, %d, %.4f B/s\r\n", cnt, (uint32_t)xt, bs );
-
-#else
 	while (fifocnt > 0)
 	{
 		//g_Uart.printf("fifo cnt %d %d\r\n", fifocnt, EndianCvt16(fifocnt));
@@ -818,17 +806,6 @@ bool AgIcm456x::UpdateData()
 		uint8_t hdr = dd[0];
 		uint8_t hdr2 = dd[1];
 
-#if 0
-		if (hdr & ICM456X_FIFO_HDR_HIRES_EN)
-		{
-			cnt = Read(&regaddr, 1, dd, 20);
-		}
-		else
-		{
-			cnt = Read(&regaddr, 1, dd, 16);
-		}
-		//cnt = Read(&regaddr, 1, dd, vFifoFrameSize);
-#endif
 		int pktlen = 0;
 		switch (hdr & 0x70)
 		{
@@ -873,126 +850,11 @@ bool AgIcm456x::UpdateData()
 		{
 			ProcessFifo(dd, pktlen);
 		}
-		//g_Uart.printf("%d : dd[0] = %x %x %x %x\r\n", cnt, dd[0], dd[1], dd[3], dd[3]);
-#if 0
-		uint8_t *p = dd;
-
-		//hdr = *p;
-		uint8_t hdr2 = 0;
-
-		p++;
-
-		if (hdr & ICM456X_FIFO_HDR_EXT_HDR_DATA)
-		{
-			hdr2 = *p;
-			p++;
-		}
-
-		//int16_t a[3];
-		//memcpy(a, p, 6);
-		AccelSensor::vData.X = (((int8_t)p[1] << 8) | p[0]);
-		AccelSensor::vData.Y = (((int8_t)p[3] << 8) | p[2]);
-		AccelSensor::vData.Z = (((int8_t)p[5] << 8) | p[4]);
-
-
-		p += 6;
-
-		//memcpy(GyroSensor::vData.Val, p, 6);
-		GyroSensor::vData.X = (((int8_t)p[1] << 8) | p[0]);
-		GyroSensor::vData.Y = (((int8_t)p[3] << 8) | p[2]);
-		GyroSensor::vData.Z = (((int8_t)p[5] << 8) | p[4]);
-
-		p += 6;
-
-		//g_Uart.printf("%x %d %x %d %x %d\r\n", AccelSensor::vData.X, AccelSensor::vData.X, AccelSensor::vData.Y, AccelSensor::vData.Y, AccelSensor::vData.Z, AccelSensor::vData.Z);
-
-		// Fifo hires Temperature in Degrees Centigrade = (FIFO_TEMP_DATA / 128) + 25
-		TempSensor::vData.Temperature = ((int16_t)(p[0] | (p[1] << 8)) >> 7) + 25;
-		p += 2;
-
-//		g_Uart.printf("%x %x T=%d, %d\r\n", p[0], p[1], TempSensor::vData.Temperature, tt);
-
-		uint16_t t1 = p[0] | (p[1] << 8);
-
-		if (vPrevTime > t1)
-		{
-			// overflow
-			vRollover += 0x10000;
-		}
-
-		vPrevTime = t1;
-
-		t = t1 + vRollover;
-
-		p += 2;
-#if 1
-		if (hdr & ICM456X_FIFO_HDR_HIRES_EN)
-		{
-		AccelSensor::vData.X <<= 4;
-		AccelSensor::vData.X |= (p[0] >> 4) & 0xF;
-		AccelSensor::vData.Y <<= 4;
-		AccelSensor::vData.Y |= (p[1] >> 4) & 0xF;
-		AccelSensor::vData.Z <<= 4;
-		AccelSensor::vData.Z |= (p[2] >> 4) & 0xF;
-
-//		g_Uart.printf("%x %d %d %d\r\n", AccelSensor::vData.X, AccelSensor::vData.X, AccelSensor::vData.Y, AccelSensor::vData.Z);
-
-		GyroSensor::vData.X <<= 4;
-		GyroSensor::vData.X |= (p[0] & 0xF);
-		GyroSensor::vData.Y <<= 4;
-		GyroSensor::vData.Y |= (p[1] & 0xF);
-		GyroSensor::vData.Z <<= 4;
-		GyroSensor::vData.Z |= (p[2] & 0xF);
-		}
-#endif
-		AccelSensor::vData.Timestamp = t;
-		GyroSensor::vData.Timestamp = t;
-		TempSensor::vData.Timestamp = t;
-#endif
 
 		fifocnt--;
 	}
-#if 0
-	else
-	{
-		cnt = Device::Read(&regaddr, 1, dd, 14);
 
-
-	if (cnt > 5)
-	{
-#if 1
-		AccelSensor::vData.Timestamp = t;
-		AccelSensor::vData.X = (((int16_t)dd[0] << 8)) | ((int16_t)dd[1] & 0xFF);
-		AccelSensor::vData.Y = (((int16_t)dd[2] << 8)) | ((int16_t)dd[3] & 0xFF);
-		AccelSensor::vData.Z = (((int16_t)dd[4] << 8)) | ((int16_t)dd[5] & 0xFF);
-
-		GyroSensor::vData.Timestamp = t;
-		GyroSensor::vData.X = (((int16_t)dd[6] << 8)) | ((int16_t)dd[7] & 0xFF);
-		GyroSensor::vData.Y = (((int16_t)dd[8] << 8)) | ((int16_t)dd[9] & 0xFF);
-		GyroSensor::vData.Z = (((int16_t)dd[10] << 8)) | ((int16_t)dd[11] & 0xFF);
-#else
-		uint16_t *p = (uint16_t*)dd;
-
-		AccelSensor::vData.Timestamp = t;
-		memcpy(AccelSensor::vData.Val, dd, 6);
-		//AccelSensor::vData.X = (int16_t)EndianCvt16(p[0]);
-		//AccelSensor::vData.Y = (int16_t)EndianCvt16(p[1]);
-		//AccelSensor::vData.Z = (int16_t)EndianCvt16(p[2]);
-
-		if (cnt > 10)
-		{
-			GyroSensor::vData.Timestamp = t;
-			memcpy(GyroSensor::vData.Val, &dd[6], 6);
-		//	GyroSensor::vData.X = (int16_t)EndianCvt16(p[3]);
-		//	GyroSensor::vData.Y = (int16_t)EndianCvt16(p[4]);
-		//	GyroSensor::vData.Z = (int16_t)EndianCvt16(p[5]);
-		}
-#endif
-	}
-	}
-#endif
-#endif
-	return false;
+	return true;
 }
 
 /**
