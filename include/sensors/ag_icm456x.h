@@ -842,24 +842,24 @@ SOFTWARE.
 #define ICM456X_IPREG_BAR_REG_59_PADS_PIN7_PE_TRIM_D2A_EN				(1<<7)
 
 #define ICM456X_IPREG_BAR_REG_60_REG						(ICM456X_BASE_ADDRESS_IPREG_BAR | 0x3C)
-#define ICM456X_IPREG_BAR_REG_60_PADS_PIN7_CS_PUD_TRIM_D2A_UP			(1<<0)
-#define ICM456X_IPREG_BAR_REG_60_PADS_AUX1_CS_PE_TRIM_D2A_UP			(1<<2)
-#define ICM456X_IPREG_BAR_REG_60_PADS_AUX1_CS_PUD_TRIM_D2A_EN			(1<<3)
-#define ICM456X_IPREG_BAR_REG_60_PADS_AUX_SCLK_TP2_FROM_PAD_DISABLE_TRIM_D2A	(1<<4)
-#define ICM456X_IPREG_BAR_REG_60_PADS_AUX1_SCLK_PE_TRIM_D2A_UP			(1<<5)
-#define ICM456X_IPREG_BAR_REG_60_PADS_AUX1_SCLK_PUD_TRIM_D2A_EN			(1<<6)
+#define ICM456X_IPREG_BAR_REG_60_PADS_PIN7_CS_PULLUP					(1<<0)
+#define ICM456X_IPREG_BAR_REG_60_PADS_PIN10_AUX1_CS_PULLUP				(1<<2)
+#define ICM456X_IPREG_BAR_REG_60_PADS_PIN10_AUX1_CS_PULLRES_EN			(1<<3)	//!< Enable Pin10 Aux CS pull resistor
+#define ICM456X_IPREG_BAR_REG_60_PADS_AUX_SCLK_I2C						(1<<4)
+#define ICM456X_IPREG_BAR_REG_60_PADS_PIN3_AUX1_SCLK_PULLUP				(1<<5)
+#define ICM456X_IPREG_BAR_REG_60_PADS_PIN3_AUX1_SCLK_PULLRES_EN			(1<<6)
 
 #define ICM456X_IPREG_BAR_REG_61_REG						(ICM456X_BASE_ADDRESS_IPREG_BAR | 0x3D)
-#define ICM456X_IPREG_BAR_REG_61_PADS_AUX1_SDI_PE_TRIM_D2A_UP			(1<<0)
-#define ICM456X_IPREG_BAR_REG_61_PADS_AUX1_SDI_PUD_TRIM_D2A_EN			(1<<1)
-#define ICM456X_IPREG_BAR_REG_61_PADS_AUX1_SDO_PE_TRIM_D2A_EN			(1<<3)
-#define ICM456X_IPREG_BAR_REG_61_PADS_AUX1_SDO_PUD_TRIM_D2A_UP			(1<<4)
-#define ICM456X_IPREG_BAR_REG_61_PADS_INT1_PE_TRIM_D2A_UP				(1<<6)
-#define ICM456X_IPREG_BAR_REG_61_PADS_INT1_PUD_TRIM_D2A_EN				(1<<7)
+#define ICM456X_IPREG_BAR_REG_61_PADS_PIN2_AUX1_SDI_PULLUP				(1<<0)
+#define ICM456X_IPREG_BAR_REG_61_PADS_PIN2_AUX1_SDI_PULLRES_EN			(1<<1)
+#define ICM456X_IPREG_BAR_REG_61_PADS_PIN11_AUX1_SDO_PULLRES_EN			(1<<3)
+#define ICM456X_IPREG_BAR_REG_61_PADS_PIN11_AUX1_SDO_PULLUP				(1<<4)
+#define ICM456X_IPREG_BAR_REG_61_PADS_PIN4_INT1_PULLUP					(1<<6)
+#define ICM456X_IPREG_BAR_REG_61_PADS_PIN4_INT1_PULLRES_EN				(1<<7)
 
 #define ICM456X_IPREG_BAR_REG_62_REG						(ICM456X_BASE_ADDRESS_IPREG_BAR | 0x3E)
-#define ICM456X_IPREG_BAR_REG_62_PADS_INT2_PE_TRIM_D2A_EN				(1<<1)
-#define ICM456X_IPREG_BAR_REG_62_PADS_INT2_PUD_TRIM_D2A_UP				(1<<2)
+#define ICM456X_IPREG_BAR_REG_62_PADS_INT2_PULLRES_EN					(1<<1)
+#define ICM456X_IPREG_BAR_REG_62_PADS_INT2_PULLUP						(1<<2)
 
 // USER BANK IPREG_TOP1 REGISTER MAP
 
@@ -903,10 +903,12 @@ SOFTWARE.
 #define ICM456X_I2CM_COMMAND_3_CH_SEL_ID2								(1<<6)
 #define ICM456X_I2CM_COMMAND_3_ENDFLAG									(1<<7)
 
-#define ICM456X_I2CM_DEV_PROFILE0_RD_ADDRESS_0_REG			(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0xE)
-#define ICM456X_I2CM_DEV_PROFILE1_DEV_ID_0_REG				(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0xF)
-#define ICM456X_I2CM_DEV_PROFILE2_RD_ADDRESS_1_REG			(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0x10)
-#define ICM456X_I2CM_DEV_PROFILE2_DEV_ID_1_REG				(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0x11)
+// Specifies the read address for channel 0 I2C master transaction
+#define ICM456X_I2CM_DEV_PROFILE0_REG						(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0xE)
+// Specifies the slave ID for channel 0 I2C master transaction
+#define ICM456X_I2CM_DEV_PROFILE1_REG						(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0xF)
+#define ICM456X_I2CM_DEV_PROFILE2_REG						(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0x10)
+#define ICM456X_I2CM_DEV_PROFILE3_REG						(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0x11)
 
 #define ICM456X_I2CM_CONTROL_REG							(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0x16)
 #define ICM456X_I2CM_CONTROL_I2CM_GO									(1<<0)
@@ -1215,7 +1217,66 @@ typedef struct __ICM456X_Fifo_ExtHdr {
 
 #pragma pack(pop)
 
+#pragma pack(push, 4)
+
+typedef struct __ICM456X_AuxIntrf {
+	DevIntrf_t DevIntrf;	//!< device interface implementation
+} Icm456xAuxIntrf_t;
+
+#pragma pack(pop)
+
 #ifdef __cplusplus
+
+class AgIcm456x;
+
+class Icm456xAuxIntrf : public DeviceIntrf {
+
+public:
+	Icm456xAuxIntrf() {}
+
+	virtual ~Icm456xAuxIntrf() {
+		Disable();
+	}
+
+	Icm456xAuxIntrf(Icm456xAuxIntrf&);	// Copy ctor not allowed
+
+	operator AgIcm456x * const () { return (AgIcm456x * const)vIntrfData.pDevData; }
+	virtual operator DevIntrf_t * const () { return &vIntrfData; }
+
+	bool Init(AgIcm456x * const pIcm);
+	//operator DevIntrf_t * const () { return &vDevData; }
+	uint32_t Rate(uint32_t RateHz) { return 100000; }
+	uint32_t Rate(void) { return 100000; };	// Get rate in Hz
+	void Enable(void);
+	void Disable(void);
+	virtual bool StartRx(uint32_t DevAddr);
+	// Receive Data only, no Start/Stop condition
+	virtual int RxData(uint8_t *pBuff, int BuffLen);
+	virtual void StopRx(void);
+	virtual bool StartTx(uint32_t DevAddr);
+	// Send Data only, no Start/Stop condition
+	virtual int TxData(uint8_t *pData, int DataLen);
+	virtual void StopTx(void);
+	/**
+	 * @brief	Device read transfer.
+	 *
+	 * A device read transfer usually starts with a write of a command or register address.
+	 * Then follows with a read data results. This function encapsulate that functionality.
+	 *
+	 * @param	DevAddr   	: The device selection id scheme
+	 * @param	pAdCmd		: Pointer to buffer containing address or command code to send
+	 * @param	AdCmdLen	: Size of addr/Cmd in bytes
+	 * @param	pBuff 	  	: Pointer to memory area to receive data.
+	 * @param	BuffLen   	: Length of buffer memory in bytes
+	 *
+	 * @return	Number of bytes read
+	 */
+	int Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen);
+
+
+private:
+	DevIntrf_t vIntrfData;
+};
 
 class AccelIcm456x : public AccelSensor {
 public:
@@ -1305,6 +1366,30 @@ private:
 
 class AuxIntrfIcm456x : public DeviceIntrf {
 public:
+	/**
+	 * @brief	Set data rate of the interface in Hertz.
+	 *
+	 * This is not a clock frequency but rather the transfer frequency (number
+	 * of transfers per second). It has meaning base on the implementation as
+	 * bits/sec or bytes/sec or whatever the case
+	 *
+	 * @param	DataRate : Data rate to be set in Hertz (transfer per second)
+	 *
+	 * @return 	Actual transfer rate per second set.  It is the real capable rate
+	 * 			closest to rate being requested.
+	 */
+	virtual uint32_t Rate(uint32_t DataRate);
+
+	/**
+	 * @brief	Get data rate of the interface in Hertz.
+	 *
+	 * This is not a clock frequency but rather the transfer frequency (number
+	 * of transfers per second). It has meaning base on the implementation as
+	 * bits/sec or bytes/sec or whatever the case
+	 *
+	 * @return	Transfer rate per second
+	 */
+	virtual uint32_t Rate(void);
 
 private:
 };
@@ -1317,6 +1402,8 @@ class AgIcm456x : public AccelIcm456x, public GyroIcm456x, public TempIcm456x {
 public:
 
 	AgIcm456x();
+
+	operator Icm456xAuxIntrf * const () { return &vAuxIntrf; }
 
 	/**
 	 * @brief	Initialize accelerometer sensor.
@@ -1391,6 +1478,7 @@ public:
 	virtual bool StartSampling() { return true; }
 
 	bool UpdateData();
+
 protected:
 	//virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 
@@ -1429,13 +1517,44 @@ private:
 	 */
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
 	void ProcessFifo(uint8_t *pData, size_t Len);
+#if 0
+	// Aux device interface implementation
+	bool AuxIntrfInit(void);
+	static void AuxIntrfDisable(DevIntrf_t * const pDev) {}
+	static void AuxIntrfEnable(DevIntrf_t * const pDev) {}
+	static void AuxIntrfPowerOff(DevIntrf_t * const pDev) {}
+	static uint32_t AuxIntrfGetRate(DevIntrf_t * const pDev);
+	static uint32_t AuxIntrfSetRate(DevIntrf_t * const pDev, uint32_t RateHz);
+	static bool AuxIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
+	static int AuxIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen);
+	static void AuxIntrfStopRx(DevIntrf_t * const pDev);
+	static bool AuxIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr);
+	static int AuxIntrfTxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen);
+	static void AuxIntrfStopTx(DevIntrf_t * const pDev);
+	static void AuxIntrfReset(DevIntrf_t * const pDev) {}
+	static void *AuxIntrfGetHandle(DevIntrf_t * const pDev) {
+		AgIcm456x *dev = (AgIcm456x*)pDev->pDevData;
+		return dev;
+	}
+
+#endif
 
 	size_t vFifoFrameSize;	// Fifo frame size in bytes
 	uint16_t vPrevTime;
 	uint64_t vRollover;
 	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within
+
+	Icm456xAuxIntrf vAuxIntrf;
 };
 
+
+extern "C" {
+#endif // __cplusplus
+
+// C function prototypes
+
+#ifdef __cplusplus
+}
 #endif // __cplusplus
 
 /** @} End of group Sensors */

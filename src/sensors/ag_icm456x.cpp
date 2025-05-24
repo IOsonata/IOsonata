@@ -479,6 +479,7 @@ AgIcm456x::AgIcm456x()
 	vRollover = 0;
 	vFifoFrameSize = 2;	// Min count 1 byte header + 1 byte temperature
 	vHires = false;
+	vAuxIntrf.Init(this);
 }
 
 bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter, DEVINTR_POL IntPol, Timer * const pTimer)
@@ -846,12 +847,13 @@ bool AgIcm456x::UpdateData()
 
 		cnt = Read(&regaddr, 1, dd, pktlen);
 
-		if (cnt > 0)
+		fifocnt--;
+
+		if (cnt > 0 && fifocnt <= 0)
 		{
 			ProcessFifo(dd, pktlen);
 		}
 
-		fifocnt--;
 	}
 
 	return true;
@@ -909,3 +911,224 @@ int AgIcm456x::Write(uint16_t IRegAddr, uint8_t *pData, int DataLen)
 
 	return cnt;
 }
+
+bool Icm456xAuxIntrf::Init(AgIcm456x * const pIcm)
+{
+	vIntrfData.pDevData = pIcm;
+
+	return true;
+}
+
+void Icm456xAuxIntrf::Enable(void)
+{
+	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
+	uint16_t regaddr = ICM456X_IPREG_BAR_REG_60_REG;
+	uint8_t d = ICM456X_IPREG_BAR_REG_60_PADS_AUX_SCLK_I2C|
+				ICM456X_IPREG_BAR_REG_60_PADS_PIN10_AUX1_CS_PULLUP |
+				ICM456X_IPREG_BAR_REG_60_PADS_PIN10_AUX1_CS_PULLRES_EN |
+				ICM456X_IPREG_BAR_REG_60_PADS_PIN3_AUX1_SCLK_PULLUP |
+				ICM456X_IPREG_BAR_REG_60_PADS_PIN3_AUX1_SCLK_PULLRES_EN;
+	icm->Write(regaddr, &d, 1);
+
+	regaddr = ICM456X_IPREG_BAR_REG_61_REG;
+	d = ICM456X_IPREG_BAR_REG_61_PADS_PIN2_AUX1_SDI_PULLUP | ICM456X_IPREG_BAR_REG_61_PADS_PIN2_AUX1_SDI_PULLRES_EN;
+	icm->Write(regaddr, &d, 1);
+}
+
+void Icm456xAuxIntrf::Disable(void)
+{
+}
+
+bool Icm456xAuxIntrf::StartRx(uint32_t DevAddr)
+{
+	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
+	uint16_t regaddr = ICM456X_I2CM_DEV_PROFILE1_REG;
+	uint8_t d = DevAddr;
+
+	regaddr = ICM456X_I2CM_COMMAND_0_REG;
+	d = 1 | ICM456X_I2CM_COMMAND_0_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_0_R_W_RD_W_AD |
+		ICM456X_I2CM_COMMAND_0_ENDFLAG;
+	icm->Write(regaddr, &d, 1);
+
+
+	return true;
+}
+
+// Receive Data only, no Start/Stop condition
+int Icm456xAuxIntrf::RxData(uint8_t *pBuff, int BuffLen)
+{
+	return BuffLen;
+}
+
+void Icm456xAuxIntrf::StopRx(void)
+{
+
+}
+
+bool Icm456xAuxIntrf::StartTx(uint32_t DevAddr)
+{
+	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
+	uint16_t regaddr = ICM456X_I2CM_DEV_PROFILE1_REG;
+	uint8_t d = DevAddr;
+
+	// Set device address
+	icm->Write(regaddr, &d, 1);
+
+	return true;
+}
+
+// Send Data only, no Start/Stop condition
+int Icm456xAuxIntrf::TxData(uint8_t *pData, int DataLen)
+{
+	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
+	uint16_t regaddr = ICM456X_I2CM_DEV_PROFILE1_REG;
+	uint8_t d = *pData;
+
+	return DataLen;
+}
+
+void Icm456xAuxIntrf::StopTx(void)
+{
+
+}
+
+int Icm456xAuxIntrf::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen)
+{
+	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
+	uint16_t regaddr = ICM456X_I2CM_DEV_PROFILE1_REG;
+	uint8_t d = DevAddr;
+
+	printf("Aux devaddr %x, %x\n", DevAddr, *pAdCmd);
+
+	// Set device address
+	icm->Write(regaddr, &d, 1);
+
+	// Set register address
+	regaddr = ICM456X_I2CM_DEV_PROFILE0_REG;
+	d = *pAdCmd;
+	icm->Write(regaddr, &d, 1);
+
+	// Set read command
+	regaddr = ICM456X_I2CM_COMMAND_0_REG;
+	d = 1 | ICM456X_I2CM_COMMAND_0_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_1_R_W_WR;
+	icm->Write(regaddr, &d, 1);
+
+	regaddr = ICM456X_I2CM_WR_DATA0_REG;
+	d = *pAdCmd;
+	icm->Write(regaddr, &d, 1);
+
+	regaddr = ICM456X_I2CM_COMMAND_1_REG;
+	d = (BuffLen & ICM456X_I2CM_COMMAND_1_BURSTLEN_MASK) | ICM456X_I2CM_COMMAND_1_CH_SEL_ID1 |
+		ICM456X_I2CM_COMMAND_1_R_W_RD_WO_AD | ICM456X_I2CM_COMMAND_1_ENDFLAG;
+	icm->Write(regaddr, &d, 1);
+
+	regaddr = ICM456X_I2CM_STATUS_REG;
+	d = 0;
+	icm->Write(regaddr, &d, 1);
+
+	// Execute
+	regaddr = ICM456X_I2CM_CONTROL_REG;
+	d = ICM456X_I2CM_CONTROL_I2CM_GO;
+	icm->Write(regaddr, &d, 1);
+
+	regaddr = ICM456X_I2CM_EXT_DEV_STATUS_REG;
+	icm->Read(regaddr, &d, 1);
+
+	printf("Ext status %x\n", d);
+
+	int timout = 1000;
+
+	while (timout > 0)
+	{
+		regaddr = ICM456X_I2CM_STATUS_REG;
+		icm->Read(regaddr, &d, 1);
+
+		printf("Status %x\n", d);
+
+		if (d & ICM456X_I2CM_STATUS_I2CM_DONE)
+		{
+			regaddr = ICM456X_I2CM_RD_DATA0_REG;
+			icm->Read(regaddr, pBuff, BuffLen);
+			break;
+		}
+	}
+
+
+	return BuffLen;
+}
+
+#if 0
+bool AgIcm456x::AuxIntrfInit(void)
+{
+	bool retval = false;
+
+	vAuxIntrf.DevIntrf.pDevData = this;
+	vAuxIntrf.DevIntrf.MaxTrxLen = 32;
+	vAuxIntrf.DevIntrf.EnCnt = 1;
+	vAuxIntrf.DevIntrf.Type = DEVINTRF_TYPE_I2C;
+	vAuxIntrf.DevIntrf.bDma = false;
+	vAuxIntrf.DevIntrf.bIntEn = false;
+	vAuxIntrf.DevIntrf.bTxReady = true;
+	vAuxIntrf.DevIntrf.bNoStop = false;
+	vAuxIntrf.DevIntrf.Disable = AuxIntrfDisable;
+	vAuxIntrf.DevIntrf.Enable = AuxIntrfEnable;
+	vAuxIntrf.DevIntrf.PowerOff = AuxIntrfPowerOff;
+	vAuxIntrf.DevIntrf.GetRate = AuxIntrfGetRate;
+	vAuxIntrf.DevIntrf.SetRate = AuxIntrfSetRate;
+	vAuxIntrf.DevIntrf.StartRx = AuxIntrfStartRx;
+	vAuxIntrf.DevIntrf.StopRx = AuxIntrfStopRx;
+	vAuxIntrf.DevIntrf.RxData = AuxIntrfRxData;
+	vAuxIntrf.DevIntrf.StartTx = AuxIntrfStartTx;
+	vAuxIntrf.DevIntrf.TxData = AuxIntrfTxData;
+	vAuxIntrf.DevIntrf.StopTx = AuxIntrfStopTx;
+	vAuxIntrf.DevIntrf.Reset = AuxIntrfReset;
+	vAuxIntrf.DevIntrf.GetHandle = AuxIntrfGetHandle;
+	vAuxIntrf.DevIntrf.IntPrio = 0;
+	vAuxIntrf.DevIntrf.EvtCB = nullptr;
+	vAuxIntrf.DevIntrf.MaxRetry = 5;
+
+	atomic_flag_clear(&vAuxIntrf.DevIntrf.bBusy);
+
+	return retval;
+}
+
+uint32_t AgIcm456x::AuxIntrfGetRate(DevIntrf_t * const pDev)
+{
+
+}
+
+uint32_t AgIcm456x::AuxIntrfSetRate(DevIntrf_t * const pDev, uint32_t RateHz)
+{
+
+}
+
+bool AgIcm456x::AuxIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
+{
+
+}
+
+int AgIcm456x::AuxIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
+{
+
+}
+
+void AgIcm456x::AuxIntrfStopRx(DevIntrf_t * const pDev)
+{
+
+}
+
+bool AgIcm456x::AuxIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
+{
+
+}
+
+int AgIcm456x::AuxIntrfTxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
+{
+
+}
+
+void AgIcm456x::AuxIntrfStopTx(DevIntrf_t * const pDev)
+{
+
+}
+#endif
