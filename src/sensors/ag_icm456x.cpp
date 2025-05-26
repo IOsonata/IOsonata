@@ -965,7 +965,7 @@ int AuxIntrfIcm456x::RxData(uint8_t *pBuff, int BuffLen)
 {
 	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
 	uint16_t regaddr = ICM456X_I2CM_COMMAND_0_REG + vAuxCmdIdx;
-	uint8_t d = ICM456X_I2CM_COMMAND_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_R_W_RD_W_AD |
+	uint8_t d = ICM456X_I2CM_COMMAND_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_R_W_RD_WO_AD |
 				ICM456X_I2CM_COMMAND_ENDFLAG;
 
 	int len = BuffLen > 15 ? 15 : BuffLen;
@@ -1025,7 +1025,7 @@ int AuxIntrfIcm456x::TxData(uint8_t *pData, int DataLen)
 	uint16_t regaddr = ICM456X_I2CM_DEV0_ADDRCMD_REG;
 	uint8_t d = *pData;
 
-	if (DataLen > 1)
+//	if (DataLen > 1)
 	{
 		regaddr = ICM456X_I2CM_COMMAND_0_REG + vAuxCmdIdx;
 		d = ICM456X_I2CM_COMMAND_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_R_W_WR;
@@ -1099,7 +1099,7 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 
 	// Set read command
 	regaddr = ICM456X_I2CM_COMMAND_0_REG;
-#if 1
+#if 0
 	d = 1 | ICM456X_I2CM_COMMAND_0_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_1_R_W_WR;
 	icm->Write(regaddr, &d, 1);
 

@@ -58,6 +58,7 @@ SOFTWARE.
 #define ICM20948_DMP_DATA_OUT_CTL1_PED_STEPDET_SET				(0x0010)	//!< timestamp when each step is detected
 #define ICM20948_DMP_DATA_OUT_CTL1_HEADER2_SET					(0x0008)	//!< Enable/disable data output in data output control register 2
 #define ICM20948_DMP_DATA_OUT_CTL1_PED_STEPIND_SET				(0x0007)	//!< number of steps detected will be attached to the 3 least significant bits of header
+#define ICM20948_DMP_DATA_OUT_CTL1_ALL_SET						(0xFFFF)
 
 #define ICM20948_DMP_DATA_OUT_CTL2_REG					(4 * 16 + 2)
 #define ICM20948_DMP_DATA_OUT_CTL2_ACCEL_ACCURACY_SET			(0x4000)	//!< accel accuracy when changes, HEADER2_SET also needs to be set in data output control regsiter 1

@@ -50,7 +50,16 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 	}
 	else
 	{
-		DeviceAddress(AK09940_I2C_7BITS_DEVADDR0);
+		for (uint32_t ad = AK09940_I2C_7BITS_DEVADDR0; ad <= AK09940_I2C_7BITS_DEVADDR3; ad++)
+		{
+			DeviceAddress(AK09940_I2C_7BITS_DEVADDR0);
+			Read(&regaddr, 1, (uint8_t*)&d, 2);
+
+			if (d == AK09940_COMPANY_DEVICE_ID)
+			{
+				break;
+			}
+		}
 	}
 
 	if (pTimer != NULL)
@@ -90,7 +99,8 @@ uint32_t MagAk09940::SamplingFrequency(uint32_t Freq)
 	uint8_t regaddr = AK09940_CTRL3_REG;
 	uint8_t d = 0;
 
-	Read(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+//	Read(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	Read(&regaddr, 1, &d, 1);
 
 	d &= AK09940_CTRL3_MODE_MASK;
 
@@ -156,7 +166,8 @@ void MagAk09940::PowerOff()
 	uint8_t regaddr = AK09940_CTRL2_REG;
 	uint8_t d = 0;
 
-	Write(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+//	Write(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	Write(&regaddr, 1, &d, 1);
 }
 
 bool MagAk09940::Enable()
@@ -171,10 +182,10 @@ void MagAk09940::Disable()
 	uint8_t regaddr = AK09940_CTRL3_REG;
 	uint8_t d = 0;
 
-	Read(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	Read(&regaddr, 1, &d, 1);
 	d &= AK09940_CTRL3_MODE_MASK;
 
-	Write(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	Write(&regaddr, 1, &d, 1);
 }
 
 void MagAk09940::Reset()
@@ -182,7 +193,7 @@ void MagAk09940::Reset()
 	uint8_t regaddr = AK09940_CTRL4_REG;
 	uint8_t d = AK09940_CTRL4_SRST;
 
-	Write(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, (uint8_t*)&d, 1);
+	Write(&regaddr, 1, (uint8_t*)&d, 1);
 }
 
 bool MagAk09940::UpdateData()
@@ -190,12 +201,12 @@ bool MagAk09940::UpdateData()
 	uint8_t regaddr = AK09940_ST1_REG;
 	uint8_t d;
 
-	Read(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	Read(&regaddr, 1, &d, 1);
 
 	if (d & AK09940_ST1_DRDY)
 	{
 		regaddr = AK09940_HXL_REG;
-		Read(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, (uint8_t*)vData.Val, 6);
+		Read(&regaddr, 1, (uint8_t*)vData.Val, 6);
 
 		if (vpTimer)
 		{
@@ -203,7 +214,7 @@ bool MagAk09940::UpdateData()
 		}
 
 		regaddr = AK09940_ST2_REG;
-		Read(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+		Read(&regaddr, 1, &d, 1);
 
 		return true;
 	}
