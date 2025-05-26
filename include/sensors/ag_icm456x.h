@@ -373,9 +373,15 @@ SOFTWARE.
 #define ICM456X_IOC_PAD_SCENARIO_AUX1_MODE_I2C							(1<<1)
 #define ICM456X_IOC_PAD_SCENARIO_AUX1_MODE_I2C_BYPASS					(2<<1)
 
-// ???
+// Configure AUX interface
 #define ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_REG		0x30
-#define ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_EN						(1<<0)
+#define ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_OVRDEN					(1<<0)	//!< Enable overwrite AUX1 enable value
+#define ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_EN						(1<<1)	//!< Enable AUX
+#define ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_MODE_MASK				(3<<2)
+#define ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_MODE_SPI_SLAVE			(0<<2)	//!< Mode SPI slave
+#define ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_MODE_I2CM				(1<<2)	//!< Mode I2C master
+#define ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_MODE_I2C_BYPASS			(2<<2)	//!< Mode I2C pass through. Valid only when main interface is I2C
+#define ICM456X_IOC_PAD_SCENARIO_AUX_OVRD_AUX1_MODE_OVRDEN				(1<<4)	//!< Enable overwrite AUX1 Mode value
 
 #define ICM456X_DRIVE_CONFIG0_REG					0x32
 #define ICM456X_DRIVE_CONFIG0_PADS_SPI_SLEW_MASK						(7<<1)
@@ -903,12 +909,28 @@ SOFTWARE.
 #define ICM456X_I2CM_COMMAND_3_CH_SEL_ID2								(1<<6)
 #define ICM456X_I2CM_COMMAND_3_ENDFLAG									(1<<7)
 
-// Specifies the read address for channel 0 I2C master transaction
+#define ICM456X_I2CM_COMMAND_BURSTLEN_MASK								(0xF<<0)
+#define ICM456X_I2CM_COMMAND_R_W_MASK									(3<<4)
+#define ICM456X_I2CM_COMMAND_R_W_WR										(0<<4)	//!< Write
+#define ICM456X_I2CM_COMMAND_R_W_RD_W_AD								(1<<4)	//!< Read with address specified
+#define ICM456X_I2CM_COMMAND_R_W_RD_WO_AD								(2<<4)	//!< Read without address
+#define ICM456X_I2CM_COMMAND_CH_SEL_ID1									(0<<6)
+#define ICM456X_I2CM_COMMAND_CH_SEL_ID2									(1<<6)
+#define ICM456X_I2CM_COMMAND_ENDFLAG									(1<<7)
+
+// Specifies the read cmd/address for channel 0 I2C master transaction
 #define ICM456X_I2CM_DEV_PROFILE0_REG						(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0xE)
+#define ICM456X_I2CM_DEV0_ADDRCMD_REG						ICM456X_I2CM_DEV_PROFILE0_REG
 // Specifies the slave ID for channel 0 I2C master transaction
 #define ICM456X_I2CM_DEV_PROFILE1_REG						(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0xF)
+#define ICM456X_I2CM_DEV0_DEVADDR_REG						ICM456X_I2CM_DEV_PROFILE1_REG
+
+// Specifies the read cmd/address for channel 1 I2C master transaction
 #define ICM456X_I2CM_DEV_PROFILE2_REG						(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0x10)
+#define ICM456X_I2CM_DEV1_ADDRCMD_REG						ICM456X_I2CM_DEV_PROFILE2_REG
+// Specifies the slave ID for channel 1 I2C master transaction
 #define ICM456X_I2CM_DEV_PROFILE3_REG						(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0x11)
+#define ICM456X_I2CM_DEV1_DEVADDR_REG						ICM456X_I2CM_DEV_PROFILE3_REG
 
 #define ICM456X_I2CM_CONTROL_REG							(ICM456X_BASE_ADDRESS_IPREG_TOP1 | 0x16)
 #define ICM456X_I2CM_CONTROL_I2CM_GO									(1<<0)
@@ -1229,16 +1251,16 @@ typedef struct __ICM456X_AuxIntrf {
 
 class AgIcm456x;
 
-class Icm456xAuxIntrf : public DeviceIntrf {
+class AuxIntrfIcm456x : public DeviceIntrf {
 
 public:
-	Icm456xAuxIntrf() {}
+	AuxIntrfIcm456x() {}
 
-	virtual ~Icm456xAuxIntrf() {
+	virtual ~AuxIntrfIcm456x() {
 		Disable();
 	}
 
-	Icm456xAuxIntrf(Icm456xAuxIntrf&);	// Copy ctor not allowed
+	AuxIntrfIcm456x(AuxIntrfIcm456x&);	// Copy ctor not allowed
 
 	operator AgIcm456x * const () { return (AgIcm456x * const)vIntrfData.pDevData; }
 	virtual operator DevIntrf_t * const () { return &vIntrfData; }
@@ -1271,11 +1293,27 @@ public:
 	 *
 	 * @return	Number of bytes read
 	 */
-	int Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen);
+	virtual int Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen);
 
+    /**
+     * @brief	Device write transfer.
+     *
+     * A device write transfer usually starts with a write of a command or register address.
+     * Then follows with a write data. This function encapsulate that functionality.
+     *
+     * @param	DevAddr   	: The device selection id scheme
+     * @param	pAdCmd		: Pointer to buffer containing address or command code to send
+     * @param	AdCmdLen	: Size of addr/Cmd in bytes
+     * @param	pData 	  	: Pointer to data to send.
+     * @param	DataLen   	: Length of data in bytes
+     *
+     * @return	Number of bytes of data sent (not counting the Addr/Cmd).
+     */
+    virtual int Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pData, int DataLen);
 
 private:
 	DevIntrf_t vIntrfData;
+	uint32_t vAuxCmdIdx;
 };
 
 class AccelIcm456x : public AccelSensor {
@@ -1364,36 +1402,6 @@ private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
 };
 
-class AuxIntrfIcm456x : public DeviceIntrf {
-public:
-	/**
-	 * @brief	Set data rate of the interface in Hertz.
-	 *
-	 * This is not a clock frequency but rather the transfer frequency (number
-	 * of transfers per second). It has meaning base on the implementation as
-	 * bits/sec or bytes/sec or whatever the case
-	 *
-	 * @param	DataRate : Data rate to be set in Hertz (transfer per second)
-	 *
-	 * @return 	Actual transfer rate per second set.  It is the real capable rate
-	 * 			closest to rate being requested.
-	 */
-	virtual uint32_t Rate(uint32_t DataRate);
-
-	/**
-	 * @brief	Get data rate of the interface in Hertz.
-	 *
-	 * This is not a clock frequency but rather the transfer frequency (number
-	 * of transfers per second). It has meaning base on the implementation as
-	 * bits/sec or bytes/sec or whatever the case
-	 *
-	 * @return	Transfer rate per second
-	 */
-	virtual uint32_t Rate(void);
-
-private:
-};
-
 class AgIcm456x : public AccelIcm456x, public GyroIcm456x, public TempIcm456x {
 
 	friend AccelIcm456x;
@@ -1403,7 +1411,7 @@ public:
 
 	AgIcm456x();
 
-	operator Icm456xAuxIntrf * const () { return &vAuxIntrf; }
+	operator AuxIntrfIcm456x * const () { return &vAuxIntrf; }
 
 	/**
 	 * @brief	Initialize accelerometer sensor.
@@ -1543,8 +1551,7 @@ private:
 	uint16_t vPrevTime;
 	uint64_t vRollover;
 	SENSOR_TYPE vType;	//!< Bit field indicating the sensors contain within
-
-	Icm456xAuxIntrf vAuxIntrf;
+	AuxIntrfIcm456x vAuxIntrf;
 };
 
 
