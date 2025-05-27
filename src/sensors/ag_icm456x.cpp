@@ -965,8 +965,17 @@ int AuxIntrfIcm456x::RxData(uint8_t *pBuff, int BuffLen)
 {
 	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
 	uint16_t regaddr = ICM456X_I2CM_COMMAND_0_REG + vAuxCmdIdx;
-	uint8_t d = ICM456X_I2CM_COMMAND_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_R_W_RD_WO_AD |
+	uint8_t d = ICM456X_I2CM_COMMAND_CH_SEL_ID1 |
 				ICM456X_I2CM_COMMAND_ENDFLAG;
+
+	if (vAuxCmdIdx > 0)
+	{
+		d |= ICM456X_I2CM_COMMAND_R_W_RD_WO_AD;
+	}
+	else
+	{
+		d |= ICM456X_I2CM_COMMAND_R_W_RD_W_AD;
+	}
 
 	int len = BuffLen > 15 ? 15 : BuffLen;
 
@@ -1025,7 +1034,7 @@ int AuxIntrfIcm456x::TxData(uint8_t *pData, int DataLen)
 	uint16_t regaddr = ICM456X_I2CM_DEV0_ADDRCMD_REG;
 	uint8_t d = *pData;
 
-//	if (DataLen > 1)
+	if (DataLen > 1)
 	{
 		regaddr = ICM456X_I2CM_COMMAND_0_REG + vAuxCmdIdx;
 		d = ICM456X_I2CM_COMMAND_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_R_W_WR;
@@ -1038,9 +1047,8 @@ int AuxIntrfIcm456x::TxData(uint8_t *pData, int DataLen)
 
 		regaddr = ICM456X_I2CM_WR_DATA0_REG;
 		icm->Write(regaddr, pData, len);
+		vAuxCmdIdx++;
 	}
-
-	vAuxCmdIdx++;
 
 	return DataLen;
 }
@@ -1073,7 +1081,7 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 {
 	int cnt = 0;
 
-#if 1
+#if 0
 	if (pAdCmd)
 	{
 		StartTx(DevAddr);
@@ -1086,8 +1094,7 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
 	uint16_t regaddr = ICM456X_I2CM_DEV_PROFILE1_REG;
 	uint8_t d = DevAddr;
-
-	printf("Aux devaddr %x, %x\n", DevAddr, *pAdCmd);
+	int rlen = min(BuffLen, 15);
 
 	// Set device address
 	icm->Write(regaddr, &d, 1);
@@ -1099,33 +1106,31 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 
 	// Set read command
 	regaddr = ICM456X_I2CM_COMMAND_0_REG;
-#if 0
-	d = 1 | ICM456X_I2CM_COMMAND_0_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_1_R_W_WR;
-	icm->Write(regaddr, &d, 1);
 
-	regaddr = ICM456X_I2CM_WR_DATA0_REG;
-	d = *pAdCmd;
-	icm->Write(regaddr, &d, 1);
+	if (AdCmdLen > 1)
+	{
+		int wlen = min(AdCmdLen, 6);
+		d = wlen | ICM456X_I2CM_COMMAND_0_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_1_R_W_WR;
+		icm->Write(regaddr, &d, 1);
 
-	regaddr = ICM456X_I2CM_COMMAND_1_REG;
-#endif
-	d = (BuffLen & ICM456X_I2CM_COMMAND_1_BURSTLEN_MASK) | ICM456X_I2CM_COMMAND_1_CH_SEL_ID1 |
-		ICM456X_I2CM_COMMAND_1_R_W_RD_WO_AD | ICM456X_I2CM_COMMAND_1_ENDFLAG;
-	icm->Write(regaddr, &d, 1);
+		regaddr = ICM456X_I2CM_WR_DATA0_REG;
+		icm->Write(regaddr, pAdCmd, wlen);
 
-	regaddr = ICM456X_I2CM_STATUS_REG;
-	d = 0;
+		regaddr = ICM456X_I2CM_COMMAND_1_REG;
+		d = rlen | ICM456X_I2CM_COMMAND_1_CH_SEL_ID1 |
+			ICM456X_I2CM_COMMAND_1_R_W_RD_WO_AD | ICM456X_I2CM_COMMAND_1_ENDFLAG;
+	}
+	else
+	{
+		d = rlen | ICM456X_I2CM_COMMAND_1_CH_SEL_ID1 |
+			ICM456X_I2CM_COMMAND_1_R_W_RD_W_AD | ICM456X_I2CM_COMMAND_1_ENDFLAG;
+	}
 	icm->Write(regaddr, &d, 1);
 
 	// Execute
 	regaddr = ICM456X_I2CM_CONTROL_REG;
 	d = ICM456X_I2CM_CONTROL_I2CM_GO;
 	icm->Write(regaddr, &d, 1);
-
-	regaddr = ICM456X_I2CM_EXT_DEV_STATUS_REG;
-	icm->Read(regaddr, &d, 1);
-
-	printf("Ext status %x\n", d);
 
 	int timout = 1000;
 
@@ -1134,12 +1139,10 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 		regaddr = ICM456X_I2CM_STATUS_REG;
 		icm->Read(regaddr, &d, 1);
 
-		printf("Status %x\n", d);
-
 		if (d & ICM456X_I2CM_STATUS_I2CM_DONE)
 		{
 			regaddr = ICM456X_I2CM_RD_DATA0_REG;
-			cnt = icm->Read(regaddr, pBuff, BuffLen);
+			cnt = icm->Read(regaddr, pBuff, rlen);
 			break;
 		}
 	}
@@ -1152,12 +1155,29 @@ int AuxIntrfIcm456x::Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint
 {
 	int cnt = 0;
 
+#if 0
 	if (pAdCmd)
 	{
 		StartTx(DevAddr);
 		TxData(pAdCmd, AdCmdLen);
 		StopTx();
 	}
+#else
+	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
+	uint16_t regaddr = ICM456X_I2CM_DEV_PROFILE1_REG;
+	uint8_t d = DevAddr;
+	int len = min(DataLen + 1, 6);
+
+	// Set device address
+	icm->Write(regaddr, &d, 1);
+
+	regaddr = ICM456X_I2CM_COMMAND_0_REG;
+	d = len | ICM456X_I2CM_COMMAND_0_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_1_R_W_WR | ICM456X_I2CM_COMMAND_1_ENDFLAG;
+	icm->Write(regaddr, &d, 1);
+
+	regaddr = ICM456X_I2CM_WR_DATA0_REG;
+	cnt = icm->Write(regaddr, pAdCmd, len);
+#endif
 
 	return cnt;
 }
