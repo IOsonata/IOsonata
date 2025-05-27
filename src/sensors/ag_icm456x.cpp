@@ -1166,7 +1166,15 @@ int AuxIntrfIcm456x::Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint
 	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
 	uint16_t regaddr = ICM456X_I2CM_DEV_PROFILE1_REG;
 	uint8_t d = DevAddr;
-	int len = min(DataLen + 1, 6);
+	uint8_t dd[AdCmdLen + DataLen];
+	int len = min(DataLen + AdCmdLen, 6);
+
+	memcpy(dd, pAdCmd, AdCmdLen);
+
+	if (pData)
+	{
+		memcpy(dd + AdCmdLen, pData, DataLen);
+	}
 
 	// Set device address
 	icm->Write(regaddr, &d, 1);
@@ -1176,7 +1184,7 @@ int AuxIntrfIcm456x::Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint
 	icm->Write(regaddr, &d, 1);
 
 	regaddr = ICM456X_I2CM_WR_DATA0_REG;
-	cnt = icm->Write(regaddr, pAdCmd, len);
+	cnt = icm->Write(regaddr, dd, len);
 #endif
 
 	return cnt;
