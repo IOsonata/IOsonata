@@ -556,6 +556,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/utf8cvt.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/vqf</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/audio/audiodev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev.h</locationURI>
@@ -866,6 +871,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_mpu9250.h</locationURI>
 		</link>
 		<link>
+			<name>include/imu/imu_vqf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_vqf.h</locationURI>
+		</link>
+		<link>
 			<name>include/imu/imu_xiot_fusion.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_xiot_fusion.h</locationURI>
@@ -1009,6 +1019,11 @@
 			<name>include/sensors/agm_icm20948DMP.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948DMP.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/agm_icm456x_ak09940.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm456x_ak09940.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/agm_invn_icm20948.h</name>
@@ -1596,6 +1611,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_mpu9250.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/imu/imu_vqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_vqf.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/imu/imu_xiot_fusion.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_xiot_fusion.cpp</locationURI>
@@ -1974,6 +1994,11 @@
 			<name>src/storage/stdfs_littlefs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/vqf/cpp</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers</name>
@@ -2764,6 +2789,16 @@
 			<name>src/nrfx/soc/nrfx_atomic.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/vqf/cpp/vqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/vqf/vqf/cpp/vqf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/vqf/cpp/vqf.hpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/vqf/vqf/cpp/vqf.hpp</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers/Ak0991x</name>
