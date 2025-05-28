@@ -189,7 +189,53 @@ uint8_t AccelIcm456x::Scale(uint8_t Value)
  */
 uint32_t AccelIcm456x::FilterFreq(uint32_t Freq)
 {
-	return 0;
+	uint32_t div = AccelSensor::SamplingFrequency() / Freq;
+	uint16_t regaddr = ICM456X_IPREG_SYS2_REG_131_REG;
+	uint8_t d = 0;
+
+	Read(regaddr, &d, 1);
+
+	d &= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_SEL_MASK;
+
+	if (div < 2)
+	{
+		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_BYPASS;
+		div = 1;
+	}
+	else if (div < 8)
+	{
+		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV4;
+		div = 4;
+	}
+	else if (div < 16)
+	{
+		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV8;
+		div = 8;
+	}
+	else if (div < 32)
+	{
+		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV16;
+		div = 16;
+	}
+	else if (div < 64)
+	{
+		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV32;
+		div = 32;
+	}
+	else if (div < 128)
+	{
+		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV64;
+		div = 64;
+	}
+	else
+	{
+		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV128;
+		div = 128;
+	}
+
+	Write(regaddr, &d, 1);
+
+	return AccelSensor::SamplingFrequency() / div;
 }
 
 bool AccelIcm456x::Enable()
@@ -388,7 +434,53 @@ uint32_t GyroIcm456x::Sensitivity(uint32_t Value)
  */
 uint32_t GyroIcm456x::FilterFreq(uint32_t Freq)
 {
-	return 0;
+	uint32_t div = GyroSensor::SamplingFrequency() / Freq;
+	uint16_t regaddr = ICM456X_IPREG_SYS1_REG_172_REG;
+	uint8_t d = 0;
+
+	Read(regaddr, &d, 1);
+
+	d &= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_SEL_MASK;
+
+	if (div < 2)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_BYPASS;
+		div = 1;
+	}
+	else if (div < 8)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV4;
+		div = 4;
+	}
+	else if (div < 16)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV8;
+		div = 8;
+	}
+	else if (div < 32)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV16;
+		div = 16;
+	}
+	else if (div < 64)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV32;
+		div = 32;
+	}
+	else if (div < 128)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV64;
+		div = 64;
+	}
+	else
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV128;
+		div = 128;
+	}
+
+	Write(regaddr, &d, 1);
+
+	return GyroSensor::SamplingFrequency() / div;
 }
 
 bool GyroIcm456x::Enable()

@@ -1337,6 +1337,8 @@ public:
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
+	virtual int Read(uint16_t IRegAddr, uint8_t *pBuff, int BuffLen) = 0;
+	virtual int Write(uint16_t IRegAddr, uint8_t *pData, int DataLen) = 0;
 };
 
 class GyroIcm456x : public GyroSensor {
@@ -1361,6 +1363,8 @@ public:
 
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
+	virtual int Read(uint16_t IRegAddr, uint8_t *pBuff, int BuffLen) = 0;
+	virtual int Write(uint16_t IRegAddr, uint8_t *pData, int DataLen) = 0;
 };
 
 class TempIcm456x : public TempSensor {
