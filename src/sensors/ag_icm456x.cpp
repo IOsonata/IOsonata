@@ -191,51 +191,108 @@ uint32_t AccelIcm456x::FilterFreq(uint32_t Freq)
 {
 	uint32_t div = AccelSensor::SamplingFrequency() / Freq;
 	uint16_t regaddr = ICM456X_IPREG_SYS2_REG_131_REG;
-	uint8_t d = 0;
+	uint8_t d = 0, avg = 0;
 
 	Read(regaddr, &d, 1);
 
 	d &= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_SEL_MASK;
 
+	regaddr = ICM456X_IPREG_SYS2_REG_129_REG;
+	Read(regaddr, &avg, 1);
+
+	avg &= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_SEL_MASK;
+
 	if (div < 2)
 	{
-		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_BYPASS;
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_BYPASS;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_1X;
 		div = 1;
+	}
+	else if (div < 4)
+	{
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_2X;
+		div = 2;
+	}
+	else if (div < 5)
+	{
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV4;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_4X;
+		div = 4;
+	}
+	else if (div < 7)
+	{
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV4;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_5X;
+		div = 5;
 	}
 	else if (div < 8)
 	{
-		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV4;
-		div = 4;
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV4;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_7X;
+		div = 7;
+	}
+	else if (div < 10)
+	{
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV8;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_8X;
+		div = 8;
+	}
+	else if (div < 11)
+	{
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV8;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_10X;
+		div = 10;
 	}
 	else if (div < 16)
 	{
-		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV8;
-		div = 8;
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV8;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_11X;
+		div = 11;
+	}
+	else if (div < 18)
+	{
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV16;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_16X;
+		div = 16;
+	}
+	else if (div < 20)
+	{
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV16;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_18X;
+		div = 18;
 	}
 	else if (div < 32)
 	{
-		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV16;
-		div = 16;
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV16;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_20X;
+		div = 20;
 	}
 	else if (div < 64)
 	{
-		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV32;
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV32;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_32X;
 		div = 32;
 	}
 	else if (div < 128)
 	{
-		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV64;
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV64;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_64X;
 		div = 64;
 	}
 	else
 	{
-		d = ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV128;
+		d |= ICM456X_IPREG_SYS2_REG_131_ACCEL_UI_LPFBW_ODR_DIV128;
+		avg |= ICM456X_IPREG_SYS2_REG_129_ACCEEL_LP_AVG_64X;
 		div = 128;
 	}
 
+	Write(regaddr, &avg, 1);
+
+	regaddr = ICM456X_IPREG_SYS2_REG_131_REG;
 	Write(regaddr, &d, 1);
 
-	return AccelSensor::SamplingFrequency() / div;
+
+	return AccelSensor::FilterFreq(AccelSensor::SamplingFrequency() / div);
 }
 
 bool AccelIcm456x::Enable()
@@ -436,51 +493,108 @@ uint32_t GyroIcm456x::FilterFreq(uint32_t Freq)
 {
 	uint32_t div = GyroSensor::SamplingFrequency() / Freq;
 	uint16_t regaddr = ICM456X_IPREG_SYS1_REG_172_REG;
-	uint8_t d = 0;
+	uint8_t d = 0, avg = 0;
 
 	Read(regaddr, &d, 1);
 
 	d &= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_SEL_MASK;
 
+	regaddr = ICM456X_IPREG_SYS1_REG_170_REG;
+	Read(regaddr, &avg, 1);
+
+	avg &= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_SEL_MASK;
+
 	if (div < 2)
 	{
 		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_BYPASS;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_1X;
 		div = 1;
+	}
+	else if (div < 4)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_BYPASS;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_2X;
+		div = 2;
+	}
+	else if (div < 5)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV4;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_4X;
+		div = 4;
+	}
+	else if (div < 7)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV4;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_5X;
+		div = 5;
 	}
 	else if (div < 8)
 	{
 		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV4;
-		div = 4;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_7X;
+		div = 7;
+	}
+	else if (div < 10)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV8;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_8X;
+		div = 8;
+	}
+	else if (div < 11)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV8;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_10X;
+		div = 10;
 	}
 	else if (div < 16)
 	{
 		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV8;
-		div = 8;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_11X;
+		div = 11;
+	}
+	else if (div < 18)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV16;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_16X;
+		div = 16;
+	}
+	else if (div < 20)
+	{
+		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV16;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_18X;
+		div = 18;
 	}
 	else if (div < 32)
 	{
 		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV16;
-		div = 16;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_20X;
+		div = 20;
 	}
 	else if (div < 64)
 	{
 		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV32;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_32X;
 		div = 32;
 	}
 	else if (div < 128)
 	{
 		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV64;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_64X;
 		div = 64;
 	}
 	else
 	{
 		d |= ICM456X_IPREG_SYS1_REG_172_GYRO_UI_LPFBW_ODR_DIV128;
+		avg |= ICM456X_IPREG_SYS1_REG_170_GYRO_LP_AVG_64X;
 		div = 128;
 	}
 
+	Write(regaddr, &avg, 1);
+
+	regaddr = ICM456X_IPREG_SYS1_REG_172_REG;
 	Write(regaddr, &d, 1);
 
-	return GyroSensor::SamplingFrequency() / div;
+	return GyroSensor::FilterFreq(GyroSensor::SamplingFrequency() / div);
 }
 
 bool GyroIcm456x::Enable()
