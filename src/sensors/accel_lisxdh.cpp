@@ -1,7 +1,9 @@
 /**-------------------------------------------------------------------------
-@file	accel_lis22dh12.cpp
+@file	accel_lisxdh.cpp
 
-@brief	Implementation of ST LIS2DH12 accel. sensor
+@brief	Implementation of ST LISxDH accel. sensor
+
+Implementation for LIS2DH12 & LIS3DH
 
 Note : More details about the registers programming are described in
        application AN5005. Those important details are not in the datasheet
@@ -35,10 +37,10 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
-#include "sensors/accel_lis2dh12.h"
+#include "sensors/accel_lisxdh.h"
 #include "idelay.h"
 
-bool AccelLis2dh12::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelLisxdh::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (pIntrf == NULL)
 	{
@@ -56,10 +58,10 @@ bool AccelLis2dh12::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * c
 	Reset();
 
 	// Read chip id
-	uint8_t regaddr = LIS2DH12_WHO_AM_I_REG;
+	uint8_t regaddr = LISXDH_WHO_AM_I_REG;
 	uint8_t d = Read8(&regaddr, 1);
 
-	if (d != LIS2DH12_WHO_AM_I_ID)
+	if (d != LISXDH_WHO_AM_I_ID)
 	{
 		return false;
 	}
@@ -81,7 +83,7 @@ bool AccelLis2dh12::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * c
  *
  * @return	true - Success
  */
-bool AccelLis2dh12::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelLisxdh::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (vbValid == false)
 	{
@@ -97,8 +99,8 @@ bool AccelLis2dh12::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 	}
 
 	// High res 12bits default
-	uint8_t regaddr = LIS2DH12_CTRL_REG4;
-	uint8_t d = Read8(&regaddr, 1) | LIS2DH12_CTRL_REG4_HR;
+	uint8_t regaddr = LISXDH_CTRL_REG4_REG;
+	uint8_t d = Read8(&regaddr, 1) | LISXDH_CTRL_REG4_HR_EN;
 	Write8(&regaddr, 1, d);
 
 	AccelSensor::Range(2047);
@@ -109,42 +111,42 @@ bool AccelLis2dh12::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 	if (Cfg.Inter)
 	{
 
-		regaddr = LIS2DH12_CTRL_REG3;
-		Write8(&regaddr, 1, LIS2DH12_CTRL_REG3_I1_OVERRUN | LIS2DH12_CTRL_REG3_I1_WTM);// |
-				//LIS2DH12_CTRL_REG3_I1_ZYXDA | LIS2DH12_CTRL_REG3_I1_IA1);
+		regaddr = LISXDH_CTRL_REG3_REG;
+		Write8(&regaddr, 1, LISXDH_CTRL_REG3_I1_OVERRUN | LISXDH_CTRL_REG3_I1_WTM);// |
+				//LISXDH_CTRL_REG3_I1_ZYXDA | LISXDH_CTRL_REG3_I1_IA1);
 
-		regaddr = LIS2DH12_CTRL_REG5;
-		Write8(&regaddr, 1, LIS2DH12_CTRL_REG5_LIR_INT1 | LIS2DH12_CTRL_REG5_D4D_INT1);
+		regaddr = LISXDH_CTRL_REG5_REG;
+		Write8(&regaddr, 1, LISXDH_CTRL_REG5_LIR_INT1 | LISXDH_CTRL_REG5_D4D_INT1);
 
-		regaddr = LIS2DH12_INT1_CFG;
+		regaddr = LISXDH_INT1_CFG_REG;
 		Write8(&regaddr, 1, 0xf);
 
-		regaddr = LIS2DH12_CTRL_REG6;
-		Write8(&regaddr, 1, LIS2DH12_CTRL_REG6_INT_POLARITY_LOW);
+		regaddr = LISXDH_CTRL_REG6_REG;
+		Write8(&regaddr, 1, LISXDH_CTRL_REG6_INT_POLARITY_LOW);
 
-		regaddr = LIS2DH12_INT1_DURATION;
+		regaddr = LISXDH_INT1_DURATION_REG;
 		Write8(&regaddr, 1, 1000 / f);
 
-		regaddr = LIS2DH12_INT1_THS;
+		regaddr = LISXDH_INT1_THS_REG;
 		Write8(&regaddr, 1, 1);
 
 		vbIntEn = true;
 	}
 	else
 	{
-		regaddr = LIS2DH12_INT1_CFG;
+		regaddr = LISXDH_INT1_CFG_REG;
 		Write8(&regaddr, 1, 0);
 	}
 
 	msDelay(1);
 
 	// Flush FIFO
- 	regaddr = LIS2DH12_FIFO_SRC_REG;
-	d = Read8(&regaddr, 1) & LIS2DH12_FIFO_SRC_REG_FSS_MASK;
+ 	regaddr = LISXDH_FIFO_SRC_REG;
+	d = Read8(&regaddr, 1) & LISXDH_FIFO_SRC_REG_FSS_MASK;
 
 	uint8_t b[196];
 
-	regaddr = LIS2DH12_OUT_X_L | 0x40;
+	regaddr = LISXDH_OUT_X_L_REG | 0x40;
 	if (d > 0)
 	{
 		Device::Read(&regaddr, 1, b, d * 6);
@@ -155,7 +157,7 @@ bool AccelLis2dh12::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf
 	return true;
 }
 
-bool AccelLis2dh12::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AccelLisxdh::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (vbValid == false)
 	{
@@ -165,18 +167,18 @@ bool AccelLis2dh12::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		}
 	}
 
-	uint8_t regaddr = LIS2DH12_TEMP_CFG_REG;
-	Write8(&regaddr, 1, LIS2DH12_TEMP_CFG_EN);
+	uint8_t regaddr = LISXDH_TEMP_CFG_REG;
+	Write8(&regaddr, 1, LISXDH_TEMP_CFG_TEMP_EN);
 
-	regaddr = LIS2DH12_CTRL_REG4;
-	uint8_t d = Read8(&regaddr, 1) | LIS2DH12_CTRL_REG4_BDU;
+	regaddr = LISXDH_CTRL_REG4_REG;
+	uint8_t d = Read8(&regaddr, 1) | LISXDH_CTRL_REG4_BDU;
 	Write8(&regaddr, 1, d);
 
-	regaddr = LIS2DH12_CTRL_REG1;
+	regaddr = LISXDH_CTRL_REG1_REG;
 	d = Read8(&regaddr, 1);
 
 
-	if (d & LIS2DH12_CTRL_REG1_LPEN)
+	if (d & LISXDH_CTRL_REG1_LPEN)
 	{
 		TempSensor::Range(127);
 	}
@@ -189,10 +191,10 @@ bool AccelLis2dh12::Init(const TempSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 }
 
 
-uint16_t AccelLis2dh12::Scale(uint16_t Value)
+uint16_t AccelLisxdh::Scale(uint16_t Value)
 {
-	uint8_t regaddr = LIS2DH12_CTRL_REG4;
-	uint8_t d = Read8(&regaddr, 1) & ~LIS2DH12_CTRL_REG4_FS_MASK;
+	uint8_t regaddr = LISXDH_CTRL_REG4_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~LISXDH_CTRL_REG4_FS_MASK;
 
 	if (Value < 3)
 	{
@@ -201,17 +203,17 @@ uint16_t AccelLis2dh12::Scale(uint16_t Value)
 	else if (Value < 6)
 	{
 		Value = 4;
-		d |= LIS2DH12_CTRL_REG4_FS_4G;
+		d |= LISXDH_CTRL_REG4_FS_4G;
 	}
 	else if (Value < 10)
 	{
 		Value = 8;
-		d |= LIS2DH12_CTRL_REG4_FS_8G;
+		d |= LISXDH_CTRL_REG4_FS_8G;
 	}
 	else
 	{
 		Value = 16;
-		d |= LIS2DH12_CTRL_REG4_FS_16G;
+		d |= LISXDH_CTRL_REG4_FS_16G;
 	}
 
 	Write8(&regaddr, 1, d);
@@ -226,23 +228,23 @@ uint16_t AccelLis2dh12::Scale(uint16_t Value)
  *
  * @return	Frequency in mHz (milliHerz)
  */
-uint32_t AccelLis2dh12::SamplingFrequency(uint32_t Freq)
+uint32_t AccelLisxdh::SamplingFrequency(uint32_t Freq)
 {
-	uint8_t regaddr = LIS2DH12_CTRL_REG4;
-	uint8_t d = Read8(&regaddr, 1) & ~(LIS2DH12_CTRL_REG4_HR);
+	uint8_t regaddr = LISXDH_CTRL_REG4_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~(LISXDH_CTRL_REG4_HR_EN);
 	uint32_t f = 0;
 	uint32_t range = 2047;
 	uint32_t trange = 511;
 
-	regaddr = LIS2DH12_CTRL_REG1;
-	d = Read8(&regaddr, 1) & ~(LIS2DH12_CTRL_REG1_ODR_MASK | LIS2DH12_CTRL_REG1_LPEN);
+	regaddr = LISXDH_CTRL_REG1_REG;
+	d = Read8(&regaddr, 1) & ~(LISXDH_CTRL_REG1_ODR_MASK | LISXDH_CTRL_REG1_LPEN);
 
 	if (Freq == 0 || Freq >= 2000000)
 	{
 		// High freq.
 		// 5.376 KHz, LP mode only
 		f = 5376000;
-		d |= LIS2DH12_CTRL_REG1_ODR_HR_LP | LIS2DH12_CTRL_REG1_LPEN;
+		d |= LISXDH_CTRL_REG1_ODR_HR_LP | LISXDH_CTRL_REG1_LPEN;
 		range = 127;
 		trange = 127;
 	}
@@ -250,55 +252,55 @@ uint32_t AccelLis2dh12::SamplingFrequency(uint32_t Freq)
 	{
 		// 1 Hz
 		f = 1;
-		d |= LIS2DH12_CTRL_REG1_ODR_1HZ;
+		d |= LISXDH_CTRL_REG1_ODR_1HZ;
 	}
 	else if (Freq < 17500)
 	{
 		// 10 Hz
 		f = 10;
-		d |= LIS2DH12_CTRL_REG1_ODR_10HZ;
+		d |= LISXDH_CTRL_REG1_ODR_10HZ;
 	}
 	else if (Freq < 37500)
 	{
 		// 25 Hz
 		f = 25;
-		d |= LIS2DH12_CTRL_REG1_ODR_25HZ;
+		d |= LISXDH_CTRL_REG1_ODR_25HZ;
 	}
 	else if (Freq < 75000)
 	{
 		// 50 Hz
 		f = 50;
-		d |= LIS2DH12_CTRL_REG1_ODR_50HZ;
+		d |= LISXDH_CTRL_REG1_ODR_50HZ;
 	}
 	else if (Freq < 150000)
 	{
 		// 100 Hz
 		f = 100;
-		d |= LIS2DH12_CTRL_REG1_ODR_100HZ;
+		d |= LISXDH_CTRL_REG1_ODR_100HZ;
 	}
 	else if (Freq < 300000)
 	{
 		// 200 Hz
 		f = 200;
-		d |= LIS2DH12_CTRL_REG1_ODR_200HZ;
+		d |= LISXDH_CTRL_REG1_ODR_200HZ;
 	}
 	else if (Freq < 600000)
 	{
 		// 400 Hz
 		f = 400;
-		d |= LIS2DH12_CTRL_REG1_ODR_400HZ;
+		d |= LISXDH_CTRL_REG1_ODR_400HZ;
 	}
 	else if (Freq < 1400000)
 	{
 		// 1.344 KHz, HR/Normal
 		f = 1344000;
-		d |= LIS2DH12_CTRL_REG1_ODR_HR_LP;
+		d |= LISXDH_CTRL_REG1_ODR_HR_LP;
 	}
 	else if (Freq < 2000000)
 	{
 		// 1.62 KHz, LP mode only
 		f = 1620000;
-		d |= LIS2DH12_CTRL_REG1_ODR_1620HZ | LIS2DH12_CTRL_REG1_LPEN;
+		d |= LISXDH_CTRL_REG1_ODR_1620HZ | LISXDH_CTRL_REG1_LPEN;
 		range = 127;
 		trange = 127;
 	}
@@ -306,22 +308,22 @@ uint32_t AccelLis2dh12::SamplingFrequency(uint32_t Freq)
 	{
 		// 5.376 KHz, LP mode only
 		f = 5376000;
-		d |= LIS2DH12_CTRL_REG1_ODR_HR_LP | LIS2DH12_CTRL_REG1_LPEN;
+		d |= LISXDH_CTRL_REG1_ODR_HR_LP | LISXDH_CTRL_REG1_LPEN;
 		range = 127;
 		trange = 127;
 	}
 
 	Write8(&regaddr, 1, d);
 
-	if ((d & LIS2DH12_CTRL_REG1_LPEN) == 0)
+	if ((d & LISXDH_CTRL_REG1_LPEN) == 0)
 	{
-		regaddr = LIS2DH12_CTRL_REG4;
-		d = Read8(&regaddr, 1) | LIS2DH12_CTRL_REG4_HR;
+		regaddr = LISXDH_CTRL_REG4_REG;
+		d = Read8(&regaddr, 1) | LISXDH_CTRL_REG4_HR_EN;
 		Write8(&regaddr, 1, d);
 	}
 
 	// Read this register for changes to take effect
-	regaddr = LIS2DH12_REFERENCE;
+	regaddr = LISXDH_REFERENCE_REG;
 	d = Read8(&regaddr, 1);
 
 	AccelSensor::Range(range);
@@ -339,51 +341,51 @@ uint32_t AccelLis2dh12::SamplingFrequency(uint32_t Freq)
  *
  * @return	Actual frequency in mHz
  */
-uint32_t AccelLis2dh12::FilterFreq(uint32_t Freq)
+uint32_t AccelLisxdh::FilterFreq(uint32_t Freq)
 {
-	uint8_t regaddr = LIS2DH12_CTRL_REG2;
-	uint8_t d = Read8(&regaddr, 1) & ~(LIS2DH12_CTRL_REG2_HPM_MASK | LIS2DH12_CTRL_REG2_FDS);
+	uint8_t regaddr = LISXDH_CTRL_REG2_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~(LISXDH_CTRL_REG2_HPM_MASK | LISXDH_CTRL_REG2_FDS);
 
 	if (Freq != 0)
 	{
-		d |= LIS2DH12_CTRL_REG2_FDS;
+		d |= LISXDH_CTRL_REG2_FDS;
 	}
 
 	Write8(&regaddr, 1, d);
 
-	regaddr = LIS2DH12_REFERENCE;
+	regaddr = LISXDH_REFERENCE_REG;
 	d = Read8(&regaddr, 1);
 
 	return AccelSensor::FilterFreq(Freq);
 }
 
-bool AccelLis2dh12::Enable()
+bool AccelLisxdh::Enable()
 {
-	uint8_t regaddr = LIS2DH12_CTRL_REG1;
+	uint8_t regaddr = LISXDH_CTRL_REG1_REG;
 	uint8_t d = Read8(&regaddr, 1);
 
-	Write8(&regaddr, 1, d | LIS2DH12_CTRL_REG1_XEN |
-			LIS2DH12_CTRL_REG1_YEN | LIS2DH12_CTRL_REG1_ZEN);
+	Write8(&regaddr, 1, d | LISXDH_CTRL_REG1_XEN |
+			LISXDH_CTRL_REG1_YEN | LISXDH_CTRL_REG1_ZEN);
 
 	if (vbIntEn)
 	{
-		regaddr = LIS2DH12_CTRL_REG5;
-		d = Read8(&regaddr, 1) | LIS2DH12_CTRL_REG5_FIFO_EN;
+		regaddr = LISXDH_CTRL_REG5_REG;
+		d = Read8(&regaddr, 1) | LISXDH_CTRL_REG5_FIFO_EN;
 		Write8(&regaddr, 1, d);
 
-		regaddr = LIS2DH12_FIFO_CTRL_REG;
-		d = Read8(&regaddr, 1) & ~(LIS2DH12_FIFO_CTRL_REG_FM_MASK | LIS2DH12_FIFO_CTRL_REG_FTH_MASK);
+		regaddr = LISXDH_FIFO_CTRL_REG;
+		d = Read8(&regaddr, 1) & ~(LISXDH_FIFO_CTRL_FM_MASK | LISXDH_FIFO_CTRL_FTH_MASK);
 
 		Write8(&regaddr, 1, d);
 
-		d |= LIS2DH12_FIFO_CTRL_REG_FM_STREAM | 1;
+		d |= LISXDH_FIFO_CTRL_FM_STREAM | 1;
 		Write8(&regaddr, 1, d);
 
 	}
 	else
 	{
-		regaddr = LIS2DH12_FIFO_CTRL_REG;
-		d = Read8(&regaddr, 1) & ~(LIS2DH12_FIFO_CTRL_REG_FM_MASK | LIS2DH12_FIFO_CTRL_REG_FTH_MASK);
+		regaddr = LISXDH_FIFO_CTRL_REG;
+		d = Read8(&regaddr, 1) & ~(LISXDH_FIFO_CTRL_FM_MASK | LISXDH_FIFO_CTRL_FTH_MASK);
 
 		Write8(&regaddr, 1, d);
 	}
@@ -391,74 +393,74 @@ bool AccelLis2dh12::Enable()
 	return true;
 }
 
-void AccelLis2dh12::Disable()
+void AccelLisxdh::Disable()
 {
-	uint8_t regaddr = LIS2DH12_CTRL_REG1;
-	uint8_t d = Read8(&regaddr, 1) & ~(LIS2DH12_CTRL_REG1_XEN |
-			LIS2DH12_CTRL_REG1_YEN | LIS2DH12_CTRL_REG1_ZEN);
+	uint8_t regaddr = LISXDH_CTRL_REG1_REG;
+	uint8_t d = Read8(&regaddr, 1) & ~(LISXDH_CTRL_REG1_XEN |
+			LISXDH_CTRL_REG1_YEN | LISXDH_CTRL_REG1_ZEN);
 
 	Write8(&regaddr, 1, d);
 
-	regaddr = LIS2DH12_FIFO_CTRL_REG;
-	d = Read8(&regaddr, 1) & ~(LIS2DH12_FIFO_CTRL_REG_FM_MASK | LIS2DH12_FIFO_CTRL_REG_FTH_MASK);
+	regaddr = LISXDH_FIFO_CTRL_REG;
+	d = Read8(&regaddr, 1) & ~(LISXDH_FIFO_CTRL_FM_MASK | LISXDH_FIFO_CTRL_FTH_MASK);
 	Write8(&regaddr, 1, d);
 
-	regaddr = LIS2DH12_CTRL_REG5;
-	d = Read8(&regaddr, 1) & ~LIS2DH12_CTRL_REG5_FIFO_EN;
+	regaddr = LISXDH_CTRL_REG5_REG;
+	d = Read8(&regaddr, 1) & ~LISXDH_CTRL_REG5_FIFO_EN;
 	Write8(&regaddr, 1, d);
 }
 
-void AccelLis2dh12::Reset()
+void AccelLisxdh::Reset()
 {
-	uint8_t regaddr = LIS2DH12_CTRL_REG1;
+	uint8_t regaddr = LISXDH_CTRL_REG1_REG;
 	uint8_t d = 0;
 
 	Write8(&regaddr, 1, 0);
 
-	regaddr = LIS2DH12_CTRL_REG2;
+	regaddr = LISXDH_CTRL_REG2_REG;
 	Write8(&regaddr, 1, 0);
 
-	regaddr = LIS2DH12_CTRL_REG3;
+	regaddr = LISXDH_CTRL_REG3_REG;
 	Write8(&regaddr, 1, 0);
 
-	regaddr = LIS2DH12_FIFO_CTRL_REG;
+	regaddr = LISXDH_FIFO_CTRL_REG;
 	Write8(&regaddr, 1, 0);
 
-	regaddr = LIS2DH12_CTRL_REG5;
-	Write8(&regaddr, 1, LIS2DH12_CTRL_REG5_BOOT);
+	regaddr = LISXDH_CTRL_REG5_REG;
+	Write8(&regaddr, 1, LISXDH_CTRL_REG5_BOOT);
 	msDelay(1);
 	Write8(&regaddr, 1, 0);
 
-	regaddr = LIS2DH12_REFERENCE;
+	regaddr = LISXDH_REFERENCE_REG;
 	d = Read8(&regaddr,1);
 
-	regaddr = LIS2DH12_INT1_SRC;
+	regaddr = LISXDH_INT1_SRC_REG;
 	d = Read8(&regaddr, 1);
 
 }
 
-void AccelLis2dh12::PowerOff()
+void AccelLisxdh::PowerOff()
 {
-	uint8_t regaddr = LIS2DH12_CTRL_REG1;
+	uint8_t regaddr = LISXDH_CTRL_REG1_REG;
 
 	Write8(&regaddr, 1, 0);
 }
 
-void AccelLis2dh12::IntHandler()
+void AccelLisxdh::IntHandler()
 {
-	uint8_t regaddr = LIS2DH12_STATUS_REG;
+	uint8_t regaddr = LISXDH_STATUS_REG;
 	uint8_t status = Read8(&regaddr, 1);
 
-	regaddr = LIS2DH12_FIFO_SRC_REG;
+	regaddr = LISXDH_FIFO_SRC_REG;
 	uint8_t fstatus = Read8(&regaddr, 1);
 
-	regaddr = LIS2DH12_INT1_SRC;
+	regaddr = LISXDH_INT1_SRC_REG;
 	uint8_t isrc1 = Read8(&regaddr, 1);
 
-	regaddr = LIS2DH12_INT2_SRC;
+	regaddr = LISXDH_INT2_SRC_REG;
 	uint8_t isrc2 = Read8(&regaddr, 1);
 
-	if ((fstatus & LIS2DH12_FIFO_SRC_REG_WTM) || isrc1 || isrc2)
+	if ((fstatus & LISXDH_FIFO_SRC_REG_WTM) || isrc1 || isrc2)
 	{
 		if (UpdateData() == true)
 		{
@@ -473,20 +475,20 @@ void AccelLis2dh12::IntHandler()
 		}
 	}
 
-	if (fstatus & LIS2DH12_FIFO_SRC_REG_OVRN_FIFO)
+	if (fstatus & LISXDH_FIFO_SRC_REG_OVRN_FIFO)
 	{
 		// Overrun, clear fifo
-		regaddr = LIS2DH12_FIFO_CTRL_REG;
-		uint8_t d = Read8(&regaddr, 1) & ~LIS2DH12_FIFO_CTRL_REG_FM_MASK;
+		regaddr = LISXDH_FIFO_CTRL_REG;
+		uint8_t d = Read8(&regaddr, 1) & ~LISXDH_FIFO_CTRL_FM_MASK;
 		Write8(&regaddr, 1, d);
-		d |= LIS2DH12_FIFO_CTRL_REG_FM_FIFO;
+		d |= LISXDH_FIFO_CTRL_FM_FIFO;
 		Write8(&regaddr, 1, d);
 	}
 }
 
-bool AccelLis2dh12::UpdateData()
+bool AccelLisxdh::UpdateData()
 {
-	uint8_t regaddr = LIS2DH12_STATUS_REG;
+	uint8_t regaddr = LISXDH_STATUS_REG;
 	uint8_t d = Read8(&regaddr, 1);
 	uint8_t fstatus;
 	uint32_t ts = 0;
@@ -496,12 +498,12 @@ bool AccelLis2dh12::UpdateData()
 		ts = vpTimer->uSecond();
 	}
 
-	regaddr = LIS2DH12_FIFO_SRC_REG;
+	regaddr = LISXDH_FIFO_SRC_REG;
 	fstatus = Read8(&regaddr, 1);
 
 	bool avail = false;
 
-	if ((fstatus & LIS2DH12_FIFO_SRC_REG_FSS_MASK) & vbIntEn)
+	if ((fstatus & LISXDH_FIFO_SRC_REG_FSS_MASK) & vbIntEn)
 	{
 		avail = true;
 	}
@@ -519,7 +521,7 @@ bool AccelLis2dh12::UpdateData()
 		}
 		for (int i = 0; i < (fstatus & 0x1f); i++)
 		{
-			regaddr = LIS2DH12_OUT_X_L | 0x40;
+			regaddr = LISXDH_OUT_X_L_REG | 0x40;
 
 			uint16_t dd[3];
 
@@ -530,16 +532,16 @@ bool AccelLis2dh12::UpdateData()
 		}
 	}
 
-	regaddr = LIS2DH12_STATUS_REG_AUX;
+	regaddr = LISXDH_STATUS_REG_AUX_REG;
 	d = Read8(&regaddr, 1);
-	if (d & LIS2DH12_STATUS_REG_AUX_TDA)
+	if (d & LISXDH_STATUS_REG_TDA_AUX_3DA)
 	{
 		if (vpTimer)
 		{
 			TempSensor::vData.Timestamp = ts;
 		}
 
-		regaddr = LIS2DH12_OUT_TEMP_L | 0x40;
+		regaddr = LISXDH_OUT_TEMP_ADC3_L_REG | 0x40;
 		uint16_t t = 0;
 		Device::Read(&regaddr, 1, (uint8_t*)&t, 2);
 
