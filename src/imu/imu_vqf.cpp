@@ -35,6 +35,7 @@ SOFTWARE.
 
 #include "imu/imu_vqf.h"
 
+#if 0
 #ifdef __ARM_ARCH
 
 #include "dsp/quaternion_math_functions.h"
@@ -47,6 +48,7 @@ void arm_quaternion2rotation_f32(const float32_t *pInputQuaternions,
     uint32_t nbQuaternions)*/
 
 #else
+#endif
 #endif
 
 static inline float square(float x) { return x * x; }
