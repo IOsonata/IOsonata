@@ -68,9 +68,21 @@ void QuatMultiply(const float q1[4], const float q2[4], float out[4])
 	out[3] = q1[0] * q2[3] + q1[1] * q2[2] - q1[2] * q2[1] + q1[3] * q2[0];
 }
 
-void NormalizeVect(float *pVect, size_t VectSize)
+void QuatApplyDelta(float q[], float delta, float out[])
 {
-	size_t n = VectSize - 1;
+    // out = quatMultiply([cos(delta/2), 0, 0, sin(delta/2)], q)
+	float c = cos(delta/2);
+	float s = sin(delta/2);
+	float w = c * q[0] - s * q[3];
+	float x = c * q[1] - s * q[2];
+	float y = c * q[2] + s * q[1];
+	float z = c * q[3] + s * q[0];
+    out[0] = w; out[1] = x; out[2] = y; out[3] = z;
+}
+
+void NormalizeVect(float *pVect, int VectSize)
+{
+	int n = VectSize - 1;
 	float div = 0;
 
 	while (n >= 0)
@@ -186,9 +198,34 @@ void Clip(float vec[], size_t N, float min, float max)
     }
 }
 
+float GainFromTau(float tau, float Ts)
+{
+    if (tau < 0.0) {
+        return 0; // k=0 for negative tau (disable update)
+    } else if (tau == 0.0) {
+        return 1; // k=1 for tau=0
+    } else {
+        return 1 - exp(-Ts/tau);  // fc = 1/(2*pi*tau)
+    }
+}
+
+void FilterCoeffs(float tau, float Ts, double outB[], double outA[])
+{
+    // second order Butterworth filter based on https://stackoverflow.com/a/52764064
+    double fc = (M_SQRT2 / (2.0*M_PI))/double(tau); // time constant of dampened, non-oscillating part of step response
+    double C = tan(M_PI*fc*double(Ts));
+    double D = C*C + sqrt(2)*C + 1;
+    double b0 = C*C/D;
+    outB[0] = b0;
+    outB[1] = 2*b0;
+    outB[2] = b0;
+    // a0 = 1.0
+    outA[0] = 2*(C*C-1)/D; // a1
+    outA[1] = (1-sqrt(2)*C+C*C)/D; // a2
+}
+
 ImuVqf::ImuVqf()
 {
-
 }
 
 bool ImuVqf::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
@@ -236,7 +273,38 @@ bool ImuVqf::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * 
 	    vParams.magMaxRejectionTime = 90.0f;
 
 	    vParams.magRejectionFactor = 3.0f;
+
+	    FilterCoeffs(vParams.tauAcc, vCoeffs.accTs, vCoeffs.accLpB, vCoeffs.accLpA);
+
+	    vCoeffs.kMag = GainFromTau(vParams.tauMag, vCoeffs.magTs);
+
+	    vCoeffs.biasP0 = square(vParams.biasSigmaInit * 100.0);
+	    // the system noise increases the variance from 0 to (0.1 °/s)^2 in biasForgettingTime seconds
+	    vCoeffs.biasV = square(0.1*100.0)*vCoeffs.accTs/vParams.biasForgettingTime;
+
+	#ifndef VQF_NO_MOTION_BIAS_ESTIMATION
+	    float pMotion = square(vParams.biasSigmaMotion * 100.0);
+	    vCoeffs.biasMotionW = square(pMotion) / vCoeffs.biasV + pMotion;
+	    vCoeffs.biasVerticalW = vCoeffs.biasMotionW / std::max(vParams.biasVerticalForgettingFactor, float(1e-10));
+	#endif
+
+	    float pRest = square(vParams.biasSigmaRest * 100.0);
+	    vCoeffs.biasRestW = square(pRest) / vCoeffs.biasV + pRest;
+
+	    FilterCoeffs(vParams.restFilterTau, vCoeffs.gyrTs, vCoeffs.restGyrLpB, vCoeffs.restGyrLpA);
+	    FilterCoeffs(vParams.restFilterTau, vCoeffs.accTs, vCoeffs.restAccLpB, vCoeffs.restAccLpA);
+
+	    vCoeffs.kMagRef = GainFromTau(vParams.magRefTau, vCoeffs.magTs);
+	    if (vParams.magCurrentTau > 0) {
+	        FilterCoeffs(vParams.magCurrentTau, vCoeffs.magTs, vCoeffs.magNormDipLpB, vCoeffs.magNormDipLpA);
+	    } else {
+	    	vCoeffs.magNormDipLpB[0] = vCoeffs.magNormDipLpB[1] = vCoeffs.magNormDipLpB[2] = NAN;
+	        vCoeffs.magNormDipLpA[0] = vCoeffs.magNormDipLpA[1] = NAN;
+	    }
+
 	}
+
+	Reset();
 
 	return res;
 }
@@ -265,7 +333,93 @@ void ImuVqf::Disable()
 
 void ImuVqf::Reset()
 {
+	vState.gyrQuat[0] = 1.0;
+	vState.gyrQuat[1] = 0.0;
+	vState.gyrQuat[2] = 0.0;
+	vState.gyrQuat[3] = 0.0;
 
+	vState.accQuat[0] = 1.0;
+	vState.accQuat[1] = 0.0;
+	vState.accQuat[2] = 0.0;
+	vState.accQuat[3] = 0.0;
+
+	vState.delta = 0.0;
+	vState.restDetected = false;
+	vState.magDistDetected = true;
+
+	vState.lastAccLp[0] = vState.lastAccLp[1] = vState.lastAccLp[2] = 0.0;
+
+	for (int i = 0; i < sizeof(vState.accLpState) / sizeof(vState.accLpState[0]); i++)
+	{
+		vState.accLpState[i] = NAN;
+	}
+    vState.lastAccCorrAngularRate = 0.0;
+
+    vState.kMagInit = 1.0;
+    vState.lastMagDisAngle = 0.0;
+    vState.lastMagCorrAngularRate = 0.0;
+
+    vState.bias[0] = vState.bias[1] = vState.bias[2] =  0.0;
+
+#ifndef VQF_NO_MOTION_BIAS_ESTIMATION
+    vState.biasP[0] = vCoeffs.biasP0;
+    vState.biasP[1] = 0.0;
+    vState.biasP[2] = 0.0;
+    vState.biasP[3] = 0.0;
+    vState.biasP[4] = vCoeffs.biasP0;
+    vState.biasP[5] = 0.0;
+    vState.biasP[6] = 0.0;
+    vState.biasP[7] = 0.0;
+    vState.biasP[8] = vCoeffs.biasP0;
+#else
+    vState.biasP = vCoeffs.biasP0;
+#endif
+
+#ifndef VQF_NO_MOTION_BIAS_ESTIMATION
+    for (int i = 0; i < sizeof(vState.motionBiasEstRLpState) / sizeof(vState.motionBiasEstRLpState[0]); i++)
+    {
+    	vState.motionBiasEstRLpState[i] = NAN;
+    }
+
+    for (int i = 0; i < sizeof(vState.motionBiasEstBiasLpState) / sizeof(vState.motionBiasEstBiasLpState[0]); i++)
+    {
+    	vState.motionBiasEstBiasLpState[i] = NAN;
+    }
+
+#endif
+
+    vState.restLastSquaredDeviations[0] = vState.restLastSquaredDeviations[1] = vState.restLastSquaredDeviations[2] = 0.0;
+
+    vState.restT = 0.0;
+
+    vState.restLastGyrLp[0] = vState.restLastGyrLp[1] = vState.restLastGyrLp[2] = 0.0;
+
+    for (int i = 0; i < sizeof(vState.restGyrLpState) / sizeof(vState.restGyrLpState[0]); i++)
+    {
+    	vState.restGyrLpState[i] = NAN;
+    }
+
+    vState.restLastAccLp[0] = vState.restLastAccLp[1] = vState.restLastAccLp[2] = 0.0;
+
+    for (int i = 0; i < sizeof(vState.restAccLpState) / sizeof(vState.restAccLpState[0]); i++)
+    {
+    	vState.restAccLpState[i] = NAN;
+    }
+
+    vState.magRefNorm = 0.0;
+    vState.magRefDip = 0.0;
+    vState.magUndisturbedT = 0.0;
+    vState.magRejectT = vParams.magMaxRejectionTime;
+    vState.magCandidateNorm = -1.0;
+    vState.magCandidateDip = 0.0;
+    vState.magCandidateT = 0.0;
+
+    vState.magNormDip[0] = vState.magNormDip[1] = 0.0;
+
+    for (int i = 0; i < sizeof(vState.magNormDipLpState) / sizeof(vState.magNormDipLpState[0]); i++)
+    {
+    	vState.magNormDipLpState[i] = NAN;
+    }
 }
 
 bool ImuVqf::UpdateData()
@@ -301,16 +455,22 @@ bool ImuVqf::UpdateData()
 	}
 	vPrevTimeStamp = gyro.Timestamp;
 
+	ProcessGyro();
+	ProcessAccel();
+
 	if (vpMag)
 	{
 		float vqf_mag[3] = { mag.X, mag.Y, mag.Z };
-		//vVqf.update(vqf_gyro, vqf_acc, vqf_mag);
+//		vVqf.update(vqf_gyro, vqf_acc, vqf_mag);
 		//vVqf.getQuat9D(q);
+	    QuatMultiply(vState.accQuat, vState.gyrQuat, q);
+	    QuatApplyDelta(q, vState.delta, q);
 	}
 	else
 	{
 //		vVqf.update(vqf_gyro, vqf_acc);
 //		vVqf.getQuat6D(q);
+	    QuatMultiply(vState.accQuat, vState.gyrQuat, q);
 	}
 
     vQuat.Q[0] = q[0];
@@ -379,6 +539,7 @@ void ImuVqf::ProcessAccel(void)
 	AccelSensorData_t acc;
 
 	Read(acc);
+	vCoeffs.accTs = acc.Timestamp / 1000000.0;
 
     // ignore [0 0 0] samples
     if (acc.X == 0.0 && acc.Y == 0.0 && acc.Z == 0.0)
@@ -392,11 +553,8 @@ void ImuVqf::ProcessAccel(void)
         FilterVec(acc.Val, 3, vParams.restFilterTau, vCoeffs.accTs, vCoeffs.restAccLpB, vCoeffs.restAccLpA,
                   vState.restAccLpState, vState.restLastAccLp);
 
-        acc.X -= vState.restLastAccLp[0];
-        acc.Y -= vState.restLastAccLp[1];
-        acc.Z -= vState.restLastAccLp[2];
-
-        vState.restLastSquaredDeviations[1] = acc.X * acc.X + acc.Y * acc.Y + acc.Z * acc.Z;
+        vState.restLastSquaredDeviations[1] = square(acc.X - vState.restLastAccLp[0])
+                + square(acc.Y - vState.restLastAccLp[1]) + square(acc.Z - vState.restLastAccLp[2]);
 
         if (vState.restLastSquaredDeviations[1] >= (vParams.restThAcc * vParams.restThAcc))
         {
@@ -457,7 +615,7 @@ void ImuVqf::ProcessAccel(void)
         float biasLp[2];
 
         // get rotation matrix corresponding to accGyrQuat
-//        getQuat6D(accGyrQuat);
+        //getQuat6D(accGyrQuat);
         QuatMultiply(vState.accQuat, vState.gyrQuat, accGyrQuat);
 
         R[0] = 1 - 2*square(accGyrQuat[2]) - 2*square(accGyrQuat[3]); // r11
@@ -586,6 +744,7 @@ void ImuVqf::ProcessGyro(void)
 	GyroSensorData_t gyro;
 
 	Read(gyro);
+	vCoeffs.gyrTs = gyro.Timestamp / 1000000.0;
 
     // rest detection
     if (vParams.restBiasEstEnabled || vParams.magDistRejectionEnabled) {
