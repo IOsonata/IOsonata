@@ -445,8 +445,8 @@ bool ImuVqf::UpdateData()
 	}
 	float deltatime = 0;
 
-	float vqf_gyro[3] = { gyro.X, gyro.Y, gyro.Z };
-	float vqf_acc[3] = { acc.X, acc.Y, acc.Z };
+//	float vqf_gyro[3] = { gyro.X * M_PI / 180.0f, gyro.Y * M_PI / 180.0f, gyro.Z * M_PI / 180.0f};
+//	float vqf_acc[3] = { acc.X, acc.Y, acc.Z };
 	float q[4];
 
 	if (vPrevTimeStamp != 0)
@@ -460,23 +460,23 @@ bool ImuVqf::UpdateData()
 
 	if (vpMag)
 	{
-		float vqf_mag[3] = { mag.X, mag.Y, mag.Z };
+//		float vqf_mag[3] = { mag.X, mag.Y, mag.Z };
 //		vVqf.update(vqf_gyro, vqf_acc, vqf_mag);
 		//vVqf.getQuat9D(q);
-	    QuatMultiply(vState.accQuat, vState.gyrQuat, q);
+	    QuatMultiply(vState.accQuat, vState.gyrQuat, vQuat.Q);
 	    QuatApplyDelta(q, vState.delta, q);
 	}
 	else
 	{
 //		vVqf.update(vqf_gyro, vqf_acc);
 //		vVqf.getQuat6D(q);
-	    QuatMultiply(vState.accQuat, vState.gyrQuat, q);
+	    QuatMultiply(vState.accQuat, vState.gyrQuat, vQuat.Q);
 	}
 
-    vQuat.Q[0] = q[0];
-    vQuat.Q[1] = q[1];
-    vQuat.Q[2] = q[2];
-    vQuat.Q[3] = q[3];
+  //  vQuat.Q[0] = q[0];
+    //vQuat.Q[1] = q[1];
+    //vQuat.Q[2] = q[2];
+    //vQuat.Q[3] = q[3];
 
 	return true;
 }
@@ -541,6 +541,8 @@ void ImuVqf::ProcessAccel(void)
 	Read(acc);
 	vCoeffs.accTs = acc.Timestamp / 1000000.0;
 
+	float vqf_acc[3] = {acc.X * 9.80665f, acc.Y * 9.80665f, acc.Z * 9.80665f};
+
     // ignore [0 0 0] samples
     if (acc.X == 0.0 && acc.Y == 0.0 && acc.Z == 0.0)
     {
@@ -550,11 +552,11 @@ void ImuVqf::ProcessAccel(void)
     // rest detection
     if (vParams.restBiasEstEnabled)
     {
-        FilterVec(acc.Val, 3, vParams.restFilterTau, vCoeffs.accTs, vCoeffs.restAccLpB, vCoeffs.restAccLpA,
+        FilterVec(vqf_acc, 3, vParams.restFilterTau, vCoeffs.accTs, vCoeffs.restAccLpB, vCoeffs.restAccLpA,
                   vState.restAccLpState, vState.restLastAccLp);
 
-        vState.restLastSquaredDeviations[1] = square(acc.X - vState.restLastAccLp[0])
-                + square(acc.Y - vState.restLastAccLp[1]) + square(acc.Z - vState.restLastAccLp[2]);
+        vState.restLastSquaredDeviations[1] = square(vqf_acc[0] - vState.restLastAccLp[0])
+                + square(vqf_acc[1] - vState.restLastAccLp[1]) + square(vqf_acc[2] - vState.restLastAccLp[2]);
 
         if (vState.restLastSquaredDeviations[1] >= (vParams.restThAcc * vParams.restThAcc))
         {
@@ -573,7 +575,7 @@ void ImuVqf::ProcessAccel(void)
     float accEarth[3];
 
     // filter acc in inertial frame
-    QuatRotate(vState.gyrQuat, acc.Val, accEarth);
+    QuatRotate(vState.gyrQuat, vqf_acc, accEarth);
     FilterVec(accEarth, 3, vParams.tauAcc, vCoeffs.accTs, vCoeffs.accLpB, vCoeffs.accLpA, vState.accLpState, vState.lastAccLp);
 
     // transform to 6D earth frame and normalize
@@ -744,15 +746,18 @@ void ImuVqf::ProcessGyro(void)
 	GyroSensorData_t gyro;
 
 	Read(gyro);
+
+	float vqf_gyro[3] = { gyro.X * (float)M_PI / 180.0f, gyro.Y * (float)M_PI / 180.0f, gyro.Z * (float)M_PI / 180.0f};
+
 	vCoeffs.gyrTs = gyro.Timestamp / 1000000.0;
 
     // rest detection
     if (vParams.restBiasEstEnabled || vParams.magDistRejectionEnabled) {
-        FilterVec(gyro.Val, 3, vParams.restFilterTau, vCoeffs.gyrTs, vCoeffs.restGyrLpB, vCoeffs.restGyrLpA,
+        FilterVec(vqf_gyro, 3, vParams.restFilterTau, vCoeffs.gyrTs, vCoeffs.restGyrLpB, vCoeffs.restGyrLpA,
                   vState.restGyrLpState, vState.restLastGyrLp);
 
-        vState.restLastSquaredDeviations[0] = square(gyro.Val[0] - vState.restLastGyrLp[0])
-                + square(gyro.Val[1] - vState.restLastGyrLp[1]) + square(gyro.Val[2] - vState.restLastGyrLp[2]);
+        vState.restLastSquaredDeviations[0] = square(vqf_gyro[0] - vState.restLastGyrLp[0])
+                + square(vqf_gyro[1] - vState.restLastGyrLp[1]) + square(vqf_gyro[2] - vState.restLastGyrLp[2]);
 
         float biasClip = vParams.biasClip * M_PI / 180.0;
         if (vState.restLastSquaredDeviations[0] >= square(vParams.restThGyr * M_PI / 180.0)
@@ -764,7 +769,7 @@ void ImuVqf::ProcessGyro(void)
     }
 
     // remove estimated gyro bias
-    float gyrNoBias[3] = {gyro.Val[0]-vState.bias[0], gyro.Val[1]-vState.bias[1], gyro.Val[2]-vState.bias[2]};
+    float gyrNoBias[3] = {vqf_gyro[0]-vState.bias[0], vqf_gyro[1]-vState.bias[1], vqf_gyro[2]-vState.bias[2]};
 
     // gyroscope prediction step
     float gyrNorm = 0.0;
@@ -949,6 +954,7 @@ void ImuVqf::ProcessMag(void)
 
 bool ImuVqf::Read(ImuQuat_t &Data)
 {
+#if 0
     QuatMultiply(vState.accQuat, vState.gyrQuat, Imu::vQuat.Q);
 
     if (vpMag)
@@ -968,7 +974,7 @@ bool ImuVqf::Read(ImuQuat_t &Data)
     	Imu::vQuat.Q3 = y;
     	Imu::vQuat.Q4 = z;
 	}
-
+#endif
     Data = vQuat;
 
 	return true;
