@@ -41,6 +41,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "imu/imu.h"
 #include "sensors/agm_invn_icm20948.h"
 
+/** @addtogroup IMU
+  * @{
+  */
+
 class ImuInvnIcm20948 : public Imu {
 public:
 
@@ -130,6 +134,7 @@ private:
 	size_t vFifoDataLen;	//!< Data length currently in fifo
 };
 
+/** @} end group IMU */
 
 
 #endif // __IMU_INVN_ICM20948_H__

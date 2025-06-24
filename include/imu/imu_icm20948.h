@@ -40,6 +40,10 @@ SOFTWARE.
 #include "imu/imu.h"
 #include "sensors/agm_icm20948.h"
 
+/** @addtogroup IMU
+  * @{
+  */
+
 class ImuIcm20948 : public Imu {
 public:
 
@@ -164,6 +168,6 @@ private:
 	bool vbDmpEnabled;
 };
 
-
+/** @} end group IMU */
 
 #endif // __IMU_INVN_ICM20948_H__
