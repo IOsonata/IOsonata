@@ -1316,20 +1316,20 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 	if (AdCmdLen > 1)
 	{
 		int wlen = min(AdCmdLen, 6);
-		d = wlen | ICM456X_I2CM_COMMAND_0_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_1_R_W_WR;
+		d = wlen | ICM456X_I2CM_COMMAND_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_R_W_WR;
 		icm->Write(regaddr, &d, 1);
 
 		regaddr = ICM456X_I2CM_WR_DATA0_REG;
 		icm->Write(regaddr, pAdCmd, wlen);
 
 		regaddr = ICM456X_I2CM_COMMAND_1_REG;
-		d = rlen | ICM456X_I2CM_COMMAND_1_CH_SEL_ID1 |
-			ICM456X_I2CM_COMMAND_1_R_W_RD_WO_AD | ICM456X_I2CM_COMMAND_1_ENDFLAG;
+		d = rlen | ICM456X_I2CM_COMMAND_CH_SEL_ID1 |
+			ICM456X_I2CM_COMMAND_R_W_RD_WO_AD | ICM456X_I2CM_COMMAND_ENDFLAG;
 	}
 	else
 	{
 		d = rlen | ICM456X_I2CM_COMMAND_1_CH_SEL_ID1 |
-			ICM456X_I2CM_COMMAND_1_R_W_RD_W_AD | ICM456X_I2CM_COMMAND_1_ENDFLAG;
+			ICM456X_I2CM_COMMAND_R_W_RD_W_AD | ICM456X_I2CM_COMMAND_ENDFLAG;
 	}
 	icm->Write(regaddr, &d, 1);
 
@@ -1386,11 +1386,35 @@ int AuxIntrfIcm456x::Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint
 	icm->Write(regaddr, &d, 1);
 
 	regaddr = ICM456X_I2CM_COMMAND_0_REG;
-	d = len | ICM456X_I2CM_COMMAND_0_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_1_R_W_WR | ICM456X_I2CM_COMMAND_1_ENDFLAG;
+	d = len | ICM456X_I2CM_COMMAND_CH_SEL_ID1 | ICM456X_I2CM_COMMAND_R_W_WR | ICM456X_I2CM_COMMAND_ENDFLAG;
 	icm->Write(regaddr, &d, 1);
 
 	regaddr = ICM456X_I2CM_WR_DATA0_REG;
-	cnt = icm->Write(regaddr, dd, len);
+	cnt = 0;
+//	cnt = icm->Write(regaddr, dd, len);
+	for (int i = 0; i < len; i++)
+	{
+		cnt += icm->Write(regaddr + i, &dd[i], 1);
+	}
+
+	// Execute
+	regaddr = ICM456X_I2CM_CONTROL_REG;
+	d = ICM456X_I2CM_CONTROL_I2CM_GO;
+	icm->Write(regaddr, &d, 1);
+
+	int timout = 1000;
+
+	while (timout > 0)
+	{
+		regaddr = ICM456X_I2CM_STATUS_REG;
+		icm->Read(regaddr, &d, 1);
+
+		if (d & ICM456X_I2CM_STATUS_I2CM_DONE)
+		{
+			break;
+		}
+	}
+
 #endif
 
 	return cnt;
