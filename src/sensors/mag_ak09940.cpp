@@ -33,6 +33,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
+#include "idelay.h"
 #include "sensors/mag_ak09940.h"
 
 bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
@@ -77,6 +78,11 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 
 	Reset();
 
+	regaddr = AK09940_CTRL1_REG;
+	d = 0;
+
+	Write(&regaddr, 1, (uint8_t*)&d, 1);
+
 	SamplingFrequency(Cfg.Freq);
 
 	Range(AK09940_ADC_RANGE);
@@ -91,6 +97,24 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 
 	ClearCalibration();
 
+	vOpMode = Cfg.OpMode;
+
+	if (Cfg.OpMode == SENSOR_OPMODE_CONTINUOUS)
+	{
+		regaddr = AK09940_CTRL3_REG;
+	}
+
+	if (Cfg.Inter != 0)
+	{
+
+	}
+
+	regaddr = AK09940_ST_REG;
+	Read(&regaddr, 1, (uint8_t*)&d, 2);
+
+	regaddr = AK09940_ST2_REG;
+	//Read(&regaddr, 1, (uint8_t*)&d, 1);
+
 	return true;
 }
 
@@ -102,9 +126,16 @@ uint32_t MagAk09940::SamplingFrequency(uint32_t Freq)
 //	Read(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
 	Read(&regaddr, 1, &d, 1);
 
-	d &= AK09940_CTRL3_MODE_MASK;
+	d &= ~AK09940_CTRL3_MODE_MASK;
 
-	Write(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	d = 0;
+
+	//Write(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	Write(&regaddr, 1, &d, 1);
+
+	//usDelay(100);
+
+	Read(&regaddr, 1, &d, 1);
 
 	if (Freq < 20000)
 	{
@@ -147,10 +178,13 @@ uint32_t MagAk09940::SamplingFrequency(uint32_t Freq)
 		Freq = 2500000;
 	}
 
-	Write(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	//d |= AK09940_CTRL3_MT_LN1;
+	//Write(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	Write(&regaddr, 1, &d, 1);
 
 	d = 0;
-	Read(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	//Read(AK09940_I2C_7BITS_DEVADDR0, &regaddr, 1, &d, 1);
+	Read(&regaddr, 1, &d, 1);
 
 	return MagSensor::SamplingFrequency(Freq);
 }
@@ -172,7 +206,18 @@ void MagAk09940::PowerOff()
 
 bool MagAk09940::Enable()
 {
-	SamplingFrequency(Sensor::vSampFreq);
+	//UpdateData();
+	if (vOpMode == SENSOR_OPMODE_CONTINUOUS)
+	{
+		//SamplingFrequency(Sensor::vSampFreq);
+	}
+	else
+	{
+		uint8_t regaddr = AK09940_CTRL3_REG;
+		uint8_t d = AK09940_CTRL3_MODE_SINGLE;
+
+		Write(&regaddr, 1, &d, 1);
+	}
 
 	return true;
 }
@@ -206,7 +251,7 @@ bool MagAk09940::UpdateData()
 	if (d & AK09940_ST1_DRDY)
 	{
 		regaddr = AK09940_HXL_REG;
-		Read(&regaddr, 1, (uint8_t*)vData.Val, 6);
+		Read(&regaddr, 1, (uint8_t*)vData.Val, 9);
 
 		if (vpTimer)
 		{
@@ -221,3 +266,27 @@ bool MagAk09940::UpdateData()
 
 	return false;
 }
+
+/**
+ * @brief	Interrupt handler (optional)
+ *
+ * Sensor that supports interrupt can implement this to handle interrupt.
+ * Use generic DEVEVTCB callback and DEV_EVT to send event to user application
+ */
+void MagAk09940::IntHandler(void)
+{
+	uint8_t regaddr = AK09940_ST_REG;
+	uint8_t st1, st2;
+	uint64_t t = 0;
+
+	if (vpTimer)
+	{
+		t = vpTimer->uSecond();
+	}
+
+	Read(&regaddr, 1, &st1, 1);
+	//Read(&regaddr, 1, &st2, 1);
+
+	UpdateData();
+}
+

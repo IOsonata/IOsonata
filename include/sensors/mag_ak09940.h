@@ -139,20 +139,28 @@ SOFTWARE.
 
 class MagAk09940 : public MagSensor {
 public:
-  virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-  virtual uint32_t SamplingFrequency(uint32_t Freq);
+	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	virtual uint32_t SamplingFrequency(uint32_t Freq);
 
-  /**
-   * @brief Power off the device completely.
-   *
-   * If supported, this will put the device in complete power down.
-   * Full re-initialization is required to re-enable the device.
-   */
-  virtual void PowerOff();
-  virtual bool Enable();
-  virtual void Disable();
-  virtual void Reset();
-  virtual bool UpdateData();
+	/**
+	 * @brief Power off the device completely.
+	 *
+	 * If supported, this will put the device in complete power down.
+	 * Full re-initialization is required to re-enable the device.
+	 */
+	virtual void PowerOff();
+	virtual bool Enable();
+	virtual void Disable();
+	virtual void Reset();
+	virtual bool UpdateData();
+
+	/**
+	 * @brief	Interrupt handler (optional)
+	 *
+	 * Sensor that supports interrupt can implement this to handle interrupt.
+	 * Use generic DEVEVTCB callback and DEV_EVT to send event to user application
+	 */
+	virtual void IntHandler(void);
 
 private:
   virtual bool StartSampling(void) { return false; };
