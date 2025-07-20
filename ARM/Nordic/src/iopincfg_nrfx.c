@@ -45,6 +45,9 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
+NRF_GPIO_Type *nRFGpioGetReg(int PortNo);
+void __WEAK GPIOTE_IRQHandler(void);
+
 #if defined(NRF54L15_XXAA)
 #define IOPIN_MAX_INT			(GPIOTE20_GPIOTE_NCHANNELS_SIZE + GPIOTE30_GPIOTE_NCHANNELS_SIZE)
 #define GPIO_PIN_CNF_DRIVE_Pos (8UL)              //!< Position of DRIVE0 field.
@@ -152,7 +155,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 	return reg;
 }
 
-NRF_GPIOTE_Type *nRFGpioteGetReg(int PortNo)
+static NRF_GPIOTE_Type *nRFGpioteGetReg(int PortNo)
 {
 	NRF_GPIOTE_Type *reg = NULL;
 
@@ -643,7 +646,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     return true;
 }
 
-int IOPinFindAvailInterrupt(void)
+static int IOPinFindAvailInterrupt(void)
 {
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
 	{
