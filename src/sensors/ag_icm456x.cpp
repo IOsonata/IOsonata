@@ -1335,12 +1335,12 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 
 	// Execute
 	regaddr = ICM456X_I2CM_CONTROL_REG;
-	d = ICM456X_I2CM_CONTROL_I2CM_GO;
+	d = ICM456X_I2CM_CONTROL_I2CM_GO | ICM456X_I2CM_CONTROL_I2CM_SPEED_STD;
 	icm->Write(regaddr, &d, 1);
 
 	int timout = 1000;
 
-	while (timout > 0)
+	while (timout-- > 0)
 	{
 		regaddr = ICM456X_I2CM_STATUS_REG;
 		icm->Read(regaddr, &d, 1);
@@ -1399,12 +1399,12 @@ int AuxIntrfIcm456x::Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint
 
 	// Execute
 	regaddr = ICM456X_I2CM_CONTROL_REG;
-	d = ICM456X_I2CM_CONTROL_I2CM_GO;
+	d = ICM456X_I2CM_CONTROL_I2CM_GO | ICM456X_I2CM_CONTROL_I2CM_SPEED_STD;
 	icm->Write(regaddr, &d, 1);
 
 	int timout = 1000;
 
-	while (timout > 0)
+	while (timout-- > 0)
 	{
 		regaddr = ICM456X_I2CM_STATUS_REG;
 		icm->Read(regaddr, &d, 1);

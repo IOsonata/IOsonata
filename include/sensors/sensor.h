@@ -337,8 +337,8 @@ public:
 	 */
 	virtual uint32_t Range(uint32_t Value) { vRange = Value; return vRange; }
 
-	bool DataReadySet(void) { return vbDataRdy.test_and_set(memory_order_acquire); }
-
+	bool isDataReady(void) { return atomic_flag_test(&vbDataRdy); }//.test(memory_order_consume); }
+	bool DataReadySet(void) { return atomic_flag_test_and_set(&vbDataRdy); }//.test_and_set(memory_order_acquire); }
 	void DataReadyClear(void) { atomic_flag_clear(&vbDataRdy); }
 
 protected:

@@ -128,7 +128,7 @@ SOFTWARE.
 
 #define AK09940_ADC_RANGE			131070
 #define AK09940_FLUX_DENSITY        1310700	//!< Max flux density in nT
-#define AK09940_SENSITIVITY			10	//!< Sensitivity in nT
+#define AK09940_SENSITIVITY			10		//!< Sensitivity in nT
 
 #pragma pack(push, 1)
 
@@ -164,6 +164,7 @@ public:
 
 private:
   virtual bool StartSampling(void) { return false; };
+  uint8_t vCtrl3Val;
 };
 
 
