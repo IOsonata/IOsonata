@@ -36,6 +36,12 @@ SOFTWARE.
 #include "idelay.h"
 #include "sensors/mag_ak09940.h"
 
+#include "nrf_cli.h"
+
+#define cli_printf(Format, ...) nrf_cli_fprintf(&s_Cli, NRF_CLI_DEFAULT, Format, ##__VA_ARGS__)
+
+extern nrf_cli_t const s_Cli;
+
 bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint8_t regaddr = AK09940_WIA1_REG;
@@ -97,7 +103,7 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 
 	ClearCalibration();
 
-	vCtrl3Val = AK09940_CTRL3_FIFO_EN;
+	vCtrl3Val = 0;//AK09940_CTRL3_FIFO_EN;
 	vOpMode = Cfg.OpMode;
 
 	if (Cfg.OpMode == SENSOR_OPMODE_SINGLE || Cfg.OpMode == SENSOR_OPMODE_TIMER)
@@ -109,7 +115,7 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 	}
 	else
 	{
-		vCtrl3Val = AK09940_CTRL3_FIFO_EN;
+		//vCtrl3Val = AK09940_CTRL3_FIFO_EN;
 
 		if (Cfg.OpMode == SENSOR_OPMODE_LOW_POWER)
 		{
@@ -161,11 +167,11 @@ uint32_t MagAk09940::SamplingFrequency(uint32_t Freq)
 	uint8_t regaddr = AK09940_CTRL3_REG;
 	uint8_t d = 0;
 
-	Read(&regaddr, 1, &vCtrl3Val, 1);
+	//Read(&regaddr, 1, &vCtrl3Val, 1);
 
 	vCtrl3Val &= ~AK09940_CTRL3_MODE_MASK;
 
-	Write(&regaddr, 1, &vCtrl3Val, 1);
+	Write(&regaddr, 1, &d, 1);
 
 	usDelay(100);
 
@@ -269,6 +275,7 @@ bool MagAk09940::Enable()
 	regaddr = AK09940_CTRL3_REG;
 	Write(&regaddr, 1, &vCtrl3Val, 1);
 	Read(&regaddr, 1, (uint8_t*)&d, 1);
+	printf("vCtrl3Val %x, %x\n", vCtrl3Val, d);
 /*
 	regaddr = AK09940_ST_REG;
 	Read(&regaddr, 1, (uint8_t*)&d, 2);
@@ -278,6 +285,13 @@ bool MagAk09940::Enable()
 	d = 0;
 	Write(&regaddr, 1, (uint8_t*)&d, 1);
 */
+	regaddr = AK09940_ST1_REG;
+	Read(&regaddr, 1, (uint8_t*)&d, 1);
+	regaddr = AK09940_ST2_REG;
+	Read(&regaddr, 1, (uint8_t*)&d, 1);
+
+	State(SENSOR_STATE_SAMPLING);
+
 	return true;
 }
 
@@ -302,14 +316,22 @@ void MagAk09940::Reset()
 
 bool MagAk09940::UpdateData()
 {
-	uint8_t regaddr = AK09940_ST1_REG;
+	uint8_t regaddr = AK09940_ST_REG;
 	uint8_t d[2];
 
-	//Read(&regaddr, 1, d, 1);
+	Read(&regaddr, 1, d, 2);
 
-	//if (d[0] & AK09940_ST_DRDY)
+cli_printf("st %x\n", d[0]);
+
+	if (d[0] & AK09940_ST_DRDY)
 	//if (isDataReady())
 	{
+		//regaddr = AK09940_ST1_REG;
+		//Read(&regaddr, 1, &d[1], 1);
+
+		int nb = (d[1] & AK09940_ST1_FNUM_MASK) >> 1;
+		cli_printf("%x nb %d\n", d[1], nb);
+
 		if (vpTimer)
 		{
 			vData.Timestamp = vpTimer->nSecond() * 1000ULL;
@@ -320,16 +342,23 @@ bool MagAk09940::UpdateData()
 
 		uint8_t dd[16];
 
-		regaddr = AK09940_HXL_REG;
-		Read(&regaddr, 1, (uint8_t*)dd, 9);
-		vData.X = dd[0] | (dd[1] << 8) | ((int8_t)dd[2] << 16);
-		vData.Y = dd[3] | (dd[4] << 8) | ((int8_t)dd[5] << 16);
-		vData.Z = dd[6] | (dd[7] << 8) | ((int8_t)dd[8] << 16);
+		//for (int i = 0; i < 10; i++)
+		{
+			regaddr = AK09940_HXL_REG;
+			Read(&regaddr, 1, (uint8_t*)dd, 11);
+		}
+//		regaddr = AK09940_ST2_REG;
+//		Read(&regaddr, 1, (uint8_t*)d, 1);
+		cli_printf("st2 %x \n", dd[10]);
 
-		regaddr = AK09940_ST2_REG;
-		Read(&regaddr, 1, (uint8_t*)d, 1);
+		//if ((dd[10] & AK09940_ST1_FNUM_MASK) == 0)
+		{
+			vData.X = dd[0] | (dd[1] << 8) | ((int8_t)dd[2] << 16);
+			vData.Y = dd[3] | (dd[4] << 8) | ((int8_t)dd[5] << 16);
+			vData.Z = dd[6] | (dd[7] << 8) | ((int8_t)dd[8] << 16);
+		}
 
-		//DataReadyClear();
+		DataReadyClear();
 
 		return true;
 	}
@@ -346,12 +375,16 @@ bool MagAk09940::UpdateData()
 void MagAk09940::IntHandler(void)
 {
 	uint8_t regaddr = AK09940_ST_REG;
-	uint8_t st, d[2];
+	uint8_t st, st1, d[2];
 
-//	Read(&regaddr, 1, &st, 1);
-	Read(&regaddr, 1, d, 2);
+	cli_printf("MagAk09940::IntHandler\n");
+	//Read(&regaddr, 1, &st, 1);
 
-	if (st & AK09940_ST_DRDY)
+	//regaddr = AK09940_ST1_REG;
+	//Read(&regaddr, 1, &st1, 1);
+//	Read(&regaddr, 1, d, 2);
+
+	//if (st & AK09940_ST_DRDY)
 	{
 		DataReadySet();
 		UpdateData();
