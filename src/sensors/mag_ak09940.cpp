@@ -115,18 +115,22 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 	}
 	else
 	{
-		//vCtrl3Val = AK09940_CTRL3_FIFO_EN;
+		vCtrl3Val = AK09940_CTRL3_FIFO_EN;
 
 		if (Cfg.OpMode == SENSOR_OPMODE_LOW_POWER)
 		{
 			regaddr = AK09940_CTRL1_REG;
-			d = AK09940_CTRL1_MT2_EN;
+			d = AK09940_CTRL1_MT2_EN | 2;
 			Write(&regaddr, 1, (uint8_t*)&d, 1);
 		}
 		else
 		{
 			vCtrl3Val |= AK09940_CTRL3_MT_LN1;
+			regaddr = AK09940_CTRL1_REG;
+			d = 2;
+			Write(&regaddr, 1, (uint8_t*)&d, 1);
 		}
+
 
 		SamplingFrequency(Cfg.Freq);
 	}
@@ -342,13 +346,13 @@ cli_printf("st %x\n", d[0]);
 
 		uint8_t dd[16];
 
-		//for (int i = 0; i < 10; i++)
+		for (int i = 0; i < nb; i++)
 		{
 			regaddr = AK09940_HXL_REG;
-			Read(&regaddr, 1, (uint8_t*)dd, 11);
+			Read(&regaddr, 1, (uint8_t*)dd, 10);
 		}
-//		regaddr = AK09940_ST2_REG;
-//		Read(&regaddr, 1, (uint8_t*)d, 1);
+		regaddr = AK09940_ST2_REG;
+		Read(&regaddr, 1, (uint8_t*)d, 1);
 		cli_printf("st2 %x \n", dd[10]);
 
 		//if ((dd[10] & AK09940_ST1_FNUM_MASK) == 0)
