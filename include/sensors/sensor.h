@@ -337,6 +337,18 @@ public:
 	 */
 	virtual uint32_t Range(uint32_t Value) { vRange = Value; return vRange; }
 
+	/**
+	 * @brief	Flush any data stuck in queue or fifo
+	 *
+	 * This function is implementation specific to allow flushing of sensor data that may
+	 * stuck in the queue or fifo that could prevent interrupt to trigger. Some sensors start
+	 * steaming data as soon as the sampling frequency is set. It could cause the data ready to trigger
+	 * before the application could finish setting up the interrupt handler. Therefore
+	 * this function is called to clear all data & interrupt flags so interrupt could resume.
+	 * Not all sensors need this so the default is do nothing.
+	 */
+	virtual void Flush(void) {}
+
 	bool isDataReady(void) { return atomic_flag_test(&vbDataRdy); }//.test(memory_order_consume); }
 	bool DataReadySet(void) { return atomic_flag_test_and_set(&vbDataRdy); }//.test_and_set(memory_order_acquire); }
 	void DataReadyClear(void) { atomic_flag_clear(&vbDataRdy); }
@@ -353,7 +365,7 @@ protected:
 	uint64_t vSampleTime;		//!< Time stamp when sampling is started
 	uint32_t vDropCnt;			//!< Count the number of sample that was dropped
 	uint32_t vFilterrFreq;		//!< Filter frequency in mHz, many sensors can set a filter cutoff frequency
-	int vTimerTrigId;			//!< Timer interrupt trigger id (implementation dependent
+	int vTimerTrigId;			//!< Timer interrupt trigger id (implementation dependent)
 	uint32_t vRange;            //!< ADC range of the sensor, contains max value for conversion factor
 	atomic_flag vbDataRdy;		//!< Flag to indicate raw sensor data is ready for retrieval.
 								//!< This flag is normally set by interrupt and cleared by UpdateData

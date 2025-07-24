@@ -130,6 +130,8 @@ SOFTWARE.
 #define AK09940_FLUX_DENSITY        1310700	//!< Max flux density in nT
 #define AK09940_SENSITIVITY			10		//!< Sensitivity in nT
 
+#define AK09940_FIFO_WM_LEVEL_MIN	2		//!< Minimum watermark level require for Fifo to function
+
 #pragma pack(push, 1)
 
 
@@ -155,6 +157,18 @@ public:
 	virtual bool UpdateData();
 
 	/**
+	 * @brief	Flush any data stuck in queue or fifo
+	 *
+	 * This function is implementation specific to allow flushing of sensor data that may
+	 * stuck in the queue or fifo that could prevent interrupt to trigger. Some sensors start
+	 * steaming data as soon as the sampling frequency is set. It could cause the data ready to trigger
+	 * before the application could finish setting up the interrupt handler. Therefore
+	 * this function is called to clear all data & interrupt flags so interrupt could resume.
+	 * Not all sensors need this so the default is do nothing.
+	 */
+	virtual void Flush(void);
+
+	/**
 	 * @brief	Interrupt handler (optional)
 	 *
 	 * Sensor that supports interrupt can implement this to handle interrupt.
@@ -164,6 +178,7 @@ public:
 
 private:
   virtual bool StartSampling(void) { return false; };
+  uint8_t vCtrl1Val;
   uint8_t vCtrl3Val;
 };
 
