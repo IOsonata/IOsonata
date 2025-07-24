@@ -36,12 +36,6 @@ SOFTWARE.
 #include "idelay.h"
 #include "sensors/mag_ak09940.h"
 
-#include "nrf_cli.h"
-
-#define cli_printf(Format, ...) nrf_cli_fprintf(&s_Cli, NRF_CLI_DEFAULT, Format, ##__VA_ARGS__)
-
-extern nrf_cli_t const s_Cli;
-
 bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint8_t regaddr = AK09940_WIA1_REG;
@@ -258,6 +252,17 @@ void MagAk09940::Reset()
 	Write(&regaddr, 1, (uint8_t*)&d, 1);
 }
 
+bool MagAk09940::StartSampling(void)
+{
+	uint8_t regaddr = AK09940_CTRL3_REG;
+
+	Write(&regaddr, 1, &vCtrl3Val, 1);
+
+	State(SENSOR_STATE_SAMPLING);
+
+	return true;
+}
+
 bool MagAk09940::UpdateData()
 {
 	uint8_t regaddr = AK09940_ST1_REG;
@@ -324,6 +329,10 @@ void MagAk09940::IntHandler(void)
 	{
 		DataReadySet();
 		UpdateData();
+		if (vCtrl3Val < 3)
+		{
+			State(SENSOR_STATE_IDLE);
+		}
 	}
 }
 
