@@ -177,7 +177,7 @@ public:
 	virtual void IntHandler(void);
 
 private:
-  virtual bool StartSampling(void) { return false; };
+  virtual bool StartSampling(void);
   uint8_t vCtrl1Val;
   uint8_t vCtrl3Val;
 };
