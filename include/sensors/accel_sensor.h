@@ -91,6 +91,7 @@ typedef struct __AccelSensor_Config {
 	uint8_t 		Inter;		//!< 0 - Disable, Bit0 - enable interrupt 1, Bit1 - enable interrupt 2,...
 	DEVINTR_POL		IntPol;		//!< interrupt polarity
 	AccelSensorEvtCb_t IntHandler;
+	bool			bFifoEn;		//!< Enable internal fifo (device dependent)
 } AccelSensorCfg_t;
 
 //typedef AccelSensorCfg_t	ACCELSENSOR_CFG;

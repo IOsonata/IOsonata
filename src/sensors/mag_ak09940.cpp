@@ -80,6 +80,8 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 
 	Range(AK09940_ADC_RANGE);
 
+	vbFifoEn = Cfg.bFifoEn;
+
 	vSensitivity[0] = AK09940_SENSITIVITY;
 	vSensitivity[1] = vSensitivity[0];
 	vSensitivity[2] = vSensitivity[0];
@@ -95,6 +97,12 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 	vCtrl1Val = 0;
 	vCtrl3Val = 0;
 
+#if 0
+	regaddr = AK09940_CTRL2_REG;
+	d = 0;	// Disable temp sensor
+	Write(&regaddr, 1, (uint8_t*)&d, 1);
+#endif
+
 	if (Cfg.OpMode == SENSOR_OPMODE_SINGLE || Cfg.OpMode == SENSOR_OPMODE_TIMER)
 	{
 		// No fifo in single shot
@@ -106,16 +114,20 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 	else
 	{
 		// Default fifo enable in continuous mode
-		vCtrl3Val = AK09940_CTRL3_FIFO_EN;
+
+		if (vbFifoEn)
+		{
+			vCtrl3Val = AK09940_CTRL3_FIFO_EN;
+			vCtrl1Val = AK09940_FIFO_WM_LEVEL_MIN;
+		}
 
 		if (vOpMode == SENSOR_OPMODE_LOW_POWER)
 		{
-			vCtrl1Val = AK09940_CTRL1_MT2_EN | AK09940_FIFO_WM_LEVEL_MIN;
+			vCtrl1Val |= AK09940_CTRL1_MT2_EN;
 		}
 		else
 		{
 			vCtrl3Val |= AK09940_CTRL3_MT_LN1;
-			vCtrl1Val = AK09940_FIFO_WM_LEVEL_MIN;
 		}
 
 		SamplingFrequency(Cfg.Freq);
@@ -282,12 +294,19 @@ bool MagAk09940::UpdateData()
 
 		uint8_t dd[16];
 
-		for (int i = 0; i < nb; i++)
+		if (vbFifoEn == false)
 		{
 			regaddr = AK09940_HXL_REG;
 			Read(&regaddr, 1, (uint8_t*)dd, 10);
 		}
-
+		else
+		{
+			for (int i = 0; i < nb; i++)
+			{
+				regaddr = AK09940_HXL_REG;
+				Read(&regaddr, 1, (uint8_t*)dd, 10);
+			}
+		}
 		regaddr = AK09940_ST2_REG;
 		Read(&regaddr, 1, (uint8_t*)d, 1);
 

@@ -369,6 +369,7 @@ protected:
 	uint32_t vRange;            //!< ADC range of the sensor, contains max value for conversion factor
 	atomic_flag vbDataRdy;		//!< Flag to indicate raw sensor data is ready for retrieval.
 								//!< This flag is normally set by interrupt and cleared by UpdateData
+	bool vbFifoEn;				//!< This flag indicate internal FIFO is enable
 };
 
 extern "C" {

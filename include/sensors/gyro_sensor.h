@@ -87,6 +87,7 @@ typedef struct __GyroSensor_Config {
 	uint32_t		FltrFreq;		//!< Filter cutoff frequency in mHz
 	uint8_t 		Inter;			//!< 0 - Disable, Bit0 - enable interrupt 1, Bit1 - enable interrupt 2,...
 	DEVINTR_POL		IntPol;			//!< Interrupt pin polarity
+	bool			bFifoEn;		//!< Enable internal fifo (device dependent)
 } GyroSensorCfg_t;
 
 //typedef GyroSensorCfg_t	GYROSENSOR_CFG;

@@ -88,6 +88,7 @@ typedef struct __MagSensor_Config {
 	MAGSENSOR_PRECISION	Precision;	//!< Sampling precision
 	uint8_t 		Inter;			//!< 0 - Disable, Bit0 - enable interrupt 1, Bit1 - enable interrupt 2,...
 	DEVINTR_POL		IntPol;			//!< Interrupt polarity
+	bool			bFifoEn;		//!< Enable internal fifo (device dependent)
 } MagSensorCfg_t;
 
 #pragma pack(pop)
