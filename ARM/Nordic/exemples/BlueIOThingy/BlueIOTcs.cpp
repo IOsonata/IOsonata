@@ -76,7 +76,7 @@ BtGattChar_t g_ConfChars[] = {
         .SetNotifCB = NULL,                       // Callback on set notification
         .TxCompleteCB = NULL,                       // Tx completed callback
 		.pValue = (void*)&s_ThingyVersion,                       // pointer to char default values
-        3,                          // Default value length in bytes
+        .ValueLen = 3,                          // Default value length in bytes
     },
 };
 
@@ -89,9 +89,9 @@ const BtGattSrvcCfg_t s_ConfSrvcCfg = {
     .UuidSrvc = BLE_UUID_TCS_SERVICE,       	// Service UUID
     .NbChar = sizeof(g_ConfChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
     .pCharArray = g_ConfChars,                 	// Pointer a an array of characteristic
-    NULL,                       	// pointer to user long write buffer
-    0,                           	// long write buffer size
-	NULL,							// Authentication event callback
+//    NULL,                       	// pointer to user long write buffer
+//    0,                           	// long write buffer size
+//	NULL,							// Authentication event callback
 };
 
 /// TCS instance

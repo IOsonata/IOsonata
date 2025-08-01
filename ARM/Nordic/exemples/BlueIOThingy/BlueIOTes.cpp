@@ -143,9 +143,9 @@ const BtGattSrvcCfg_t s_EnvSrvcCfg = {
     .UuidSrvc = BLE_UUID_TES_SERVICE,       // Service UUID
     .NbChar = sizeof(g_EnvChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
     .pCharArray = g_EnvChars,                 // Pointer a an array of characteristic
-    NULL,                       // pointer to user long write buffer
-    0,                          // long write buffer size
-	NULL
+   // NULL,                       // pointer to user long write buffer
+   // 0,                          // long write buffer size
+//	NULL
 };
 
 BtGattSrvc_t g_EnvSrvc;

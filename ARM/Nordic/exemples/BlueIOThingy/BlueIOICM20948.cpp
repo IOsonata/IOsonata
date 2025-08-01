@@ -21,15 +21,13 @@
 #include "Devices/Drivers/Icm20948/Icm20948Setup.h"
 #include "Devices/SensorTypes.h"
 
-#include "Fusion/Fusion.h"
-
 #include "bluetooth/bt_app.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "idelay.h"
 #include "imu/imu.h"
 
-//#define INVN
+#define INVN
 
 #ifdef INVN
 #include "imu/imu_invn_icm20948.h"
@@ -87,6 +85,8 @@ static ImuInvnIcm20948 s_Imu;
 #endif
 
 static Timer *s_pTimer = NULL;
+
+#if 0
 FusionAhrs ahrs;
 FusionAhrsSettings ahrs_settings =  {
 	.convention = FusionConventionNwu,
@@ -96,6 +96,7 @@ FusionAhrsSettings ahrs_settings =  {
 	.magneticRejection = 10.0f,
 	.recoveryTriggerPeriod = 5 * 50, /* 5 seconds */
 };
+#endif
 
 //void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 
@@ -184,15 +185,15 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 
 	if (IntNo == IMU_INT_NO)
 	{
-#if 0
+#if 1
 		s_Imu.IntHandler();
-		//ImuDataChedHandler(NULL, 0);
+		ImuDataChedHandler(NULL, 0);
 		return;
 #else
 		s_MotSensor.IntHandler();
 #endif
 		//AppEvtHandlerQue(0, 0, ImuDataChedHandler);
-#if 0
+#if 1
 		s_Imu.Read(quat);
 
 		q[0] = quat.Q[0] * (1 << 30);
@@ -204,6 +205,7 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 		s_MotSensor.Read(accdata);
 		s_MotSensor.Read(gyrodata);
 		s_MotSensor.Read(magdata);
+
         FusionVector gyroscope = {gyrodata.X, gyrodata.Y, gyrodata.Z}; // replace this with actual gyroscope data in degrees/s
         FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
         FusionVector magnetometer = {magdata.X, magdata.Y, magdata.Z};
@@ -249,13 +251,13 @@ bool ICM20948Init(DeviceIntrf * const pIntrf, Timer * const pTimer)
 	res |= s_MotSensor.Init(s_GyroCfg, pIntrf, pTimer);
 	if (res == true)
 	{
-		//res |= s_MotSensor.Init(s_MagCfg, pIntrf, pTimer);
+		res |= s_MotSensor.Init(s_MagCfg, pIntrf, pTimer);
 	}
 	if (res == true)
 	{
-//		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor, &s_MotSensor, nullptr);//&s_MotSensor);
+		res |= s_Imu.Init(s_ImuCfg, &s_MotSensor, &s_MotSensor, &s_MotSensor);
 	}
-
+#if 0
 	if (res)
 	{
 //		s_MotSensor.Enable();
@@ -273,7 +275,7 @@ bool ICM20948Init(DeviceIntrf * const pIntrf, Timer * const pTimer)
 	    ahrs_settings.gyroscopeRange = (float)((GyroSensor*)&s_MotSensor)->Sensitivity();
 	    FusionAhrsSetSettings(&ahrs, &ahrs_settings);
 	}
-
+#endif
 	msDelay(100);
 	IOPinConfig(IMU_INT_PORT, IMU_INT_PIN, IMU_INT_PINOP,
 				IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);
