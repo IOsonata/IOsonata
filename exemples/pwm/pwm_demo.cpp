@@ -51,14 +51,14 @@ static const PwmChanCfg_t s_PwmChanCfg[] = {
 	{
 		.Chan = 0,
 		.Pol = PWM_POL_HIGH,
-		.Port = 0,
-		.Pin = 18,
+		.Port = LED3_PORT,
+		.Pin = LED3_PIN,
 	},
 	{
 		.Chan = 1,
 		.Pol = PWM_POL_HIGH,
-		.Port = 0,
-		.Pin = 19,
+		.Port = LED4_PORT,
+		.Pin = LED4_PIN,
 	},
 };
 
@@ -97,7 +97,7 @@ int main()
 	g_Pwm.Stop();
 
 	// Change PWM frequency
-	g_Pwm.Frequency(3333333);
+	g_Pwm.Frequency(1000);
 	g_Pwm.DutyCycle(0, 50);
 	g_Pwm.DutyCycle(1, 25);
 
@@ -107,9 +107,10 @@ int main()
 
 	while (1)
 	{
-#if 0
+#if 1
 		// Change duty cycle
 		g_Pwm.DutyCycle(0, x);
+		g_Pwm.DutyCycle(1, 100 - x);
 		x+=1;
 		if (x > 100)
 			x = 0;

@@ -154,12 +154,12 @@ static const I2CCfg_t s_I2cCfg = {
 	.Rate = 100000,	// Rate
 	.MaxRetry = 5,			// Retry
 	.AddrType = I2CADDR_TYPE_NORMAL,
-	0,			// Number of slave addresses
-	{0,},		// Slave addresses
-	true,	// DMA
-	false,		// Use interrupt
-	7,			// Interrupt prio
-	NULL		// Event callback
+	.NbSlaveAddr = 0,			// Number of slave addresses
+	.SlaveAddr = {0,},		// Slave addresses
+	.bDmaEn = true,	// DMA
+	.bIntEn = false,		// Use interrupt
+	.IntPrio = 7,			// Interrupt prio
+	.EvtCB = NULL		// Event callback
 };
 
 I2C g_I2c;
@@ -284,8 +284,8 @@ void ImuIntHandler(int IntNo, void *pCtx)
 		g_DT = t - g_TPrev;
 		g_TPrev = t;
 
-		g_Imu.IntHandler();
-		//g_MotSensor.IntHandler();
+		//g_Imu.IntHandler();
+		g_MotSensor.IntHandler();
 		//AccelSensorData_t accdata;
 
 		//g_MotSensor.Read(accdata);
@@ -358,6 +358,7 @@ bool HardwareInit()
 
 	if (res == true)
 	{
+		IOPinSet(IMU_INT_PORT, IMU_INT_PIN);
 		IOPinConfig(IMU_INT_PORT, IMU_INT_PIN, IMU_INT_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 		IOPinEnableInterrupt(0, 6, IMU_INT_PORT, IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION, ImuIntHandler, NULL);
 
@@ -461,9 +462,9 @@ int main()
 		//if (cnt-- < 0)
 		{
 			cnt = 10;
-			printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)g_Pdt, arawdata.X, arawdata.Y, arawdata.Z);
-			//printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)g_Pdt, accdata.X, accdata.Y, accdata.Z);
-			//g_Uart.printf("Accel %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, gyrodata.X, gyrodata.Y, gyrodata.Z);
+			//printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)g_Pdt, arawdata.X, arawdata.Y, arawdata.Z);
+			printf("Accel %d %d: %0.4f %0.4f %0.4f\r\n", (uint32_t)g_DT, (uint32_t)g_Pdt, accdata.X, accdata.Y, accdata.Z);
+			//printf("Gyro %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, gyrodata.X, gyrodata.Y, gyrodata.Z);
 //	        printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
 			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
 			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, fq.element.x, fq.element.y, fq.element.z, fq.element.w);
