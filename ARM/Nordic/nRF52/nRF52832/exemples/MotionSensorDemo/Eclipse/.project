@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/Icm20948Setup.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/Icm20948Setup.c</locationURI>
+		</link>
+		<link>
 			<name>src/board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
@@ -56,9 +61,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/sensors/agm_icm20948.cpp</name>
+			<name>src/imu/imu_invn_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_invn_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/ag_icm456x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/ag_icm456x.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/agm_icm20948_old.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/agm_icm20948_old.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
