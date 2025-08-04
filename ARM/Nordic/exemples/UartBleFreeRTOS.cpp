@@ -155,7 +155,7 @@ const BtAppDevInfo_t s_UartBleDevDesc {
 	"0.0",                  // Hardware version string
 };
 
-uint32_t SD_FreeRTOS_Handler(void);
+void SD_FreeRTOS_Handler(void);
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
@@ -322,7 +322,7 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 	return cnt;
 }
 
-uint32_t SD_FreeRTOS_Handler(void)
+void SD_FreeRTOS_Handler(void)
 {
     BaseType_t yield_req = pdFALSE;
 
@@ -338,7 +338,7 @@ uint32_t SD_FreeRTOS_Handler(void)
         portYIELD_FROM_ISR(yield_req);
     }
 
-    return 0;
+   // return 0;
 }
 
 
