@@ -641,13 +641,13 @@ typedef union
   uint32_t w;                            /*!< \brief Type      used for word access */
 } ISR_Type;
 
-#define ISR_A_Pos                        13U                                    /*!< \brief ISR: A Position */
+#define ISR_A_Pos                        8U                                     /*!< \brief ISR: A Position */
 #define ISR_A_Msk                        (1UL << ISR_A_Pos)                     /*!< \brief ISR: A Mask */
 
-#define ISR_I_Pos                        12U                                    /*!< \brief ISR: I Position */
+#define ISR_I_Pos                        7U                                     /*!< \brief ISR: I Position */
 #define ISR_I_Msk                        (1UL << ISR_I_Pos)                     /*!< \brief ISR: I Mask */
 
-#define ISR_F_Pos                        11U                                    /*!< \brief ISR: F Position */
+#define ISR_F_Pos                        6U                                     /*!< \brief ISR: F Position */
 #define ISR_F_Msk                        (1UL << ISR_F_Pos)                     /*!< \brief ISR: F Mask */
 
 /* DACR Register */
@@ -666,7 +666,7 @@ typedef union
 #define _VAL2FLD(field, value)    (((uint32_t)(value) << field ## _Pos) & field ## _Msk)
 
 /**
-  \brief     Mask and shift a register value to extract a bit filed value.
+  \brief     Mask and shift a register value to extract a bit field value.
   \param [in] field  Name of the register bit field.
   \param [in] value  Value of register. This parameter is interpreted as an uint32_t type.
   \return           Masked and shifted bit field value.
@@ -918,7 +918,7 @@ typedef struct
 
 /* GICDistributor SGIR Register */
 #define GICDistributor_SGIR_INTID_Pos         0U                                                   /*!< GICDistributor SGIR: INTID Position */
-#define GICDistributor_SGIR_INTID_Msk         (0x7U /*<< GICDistributor_SGIR_INTID_Pos*/)          /*!< GICDistributor SGIR: INTID Mask */
+#define GICDistributor_SGIR_INTID_Msk         (0xFU /*<< GICDistributor_SGIR_INTID_Pos*/)          /*!< GICDistributor SGIR: INTID Mask */
 #define GICDistributor_SGIR_INTID(x)          (((uint32_t)(((uint32_t)(x)) /*<< GICDistributor_SGIR_INTID_Pos*/)) & GICDistributor_SGIR_INTID_Msk)
 
 #define GICDistributor_SGIR_NSATT_Pos         15U                                                  /*!< GICDistributor SGIR: NSATT Position */
@@ -1015,7 +1015,7 @@ typedef struct
 
 /* GICInterface HPPIR Register */
 #define GICInterface_HPPIR_INTID_Pos        0U                                               /*!< PTIM HPPIR: INTID Position */
-#define GICInterface_HPPIR_INTID_Msk        (0xFFFFFFU /*<< GICInterface_HPPIR_INTID_Pos*/)  /*!< PTIM HPPIR: INTID Mask */
+#define GICInterface_HPPIR_INTID_Msk        (0x3FFU /*<< GICInterface_HPPIR_INTID_Pos*/)  /*!< PTIM HPPIR: INTID Mask */
 #define GICInterface_HPPIR_INTID(x)         (((uint32_t)(((uint32_t)(x)) /*<< GICInterface_HPPIR_INTID_Pos*/)) & GICInterface_HPPIR_INTID_Msk)
 
 /* GICInterface ABPR Register */
@@ -1077,8 +1077,8 @@ typedef struct
 #define GICInterface_IIDR_ProductID(x)      (((uint32_t)(((uint32_t)(x)) << GICInterface_IIDR_ProductID_Pos)) & GICInterface_IIDR_ProductID_Msk)
 
 /* GICInterface DIR Register */
-#define GICInterface_DIR_INTID_Pos          0U                                              /*!< PTIM DIR: INTID Position */
-#define GICInterface_DIR_INTID_Msk          (0xFFFFFFU /*<< GICInterface_DIR_INTID_Pos*/)   /*!< PTIM DIR: INTID Mask */
+#define GICInterface_DIR_INTID_Pos          0U                                              /*!< GICInterface DIR: INTID Position */
+#define GICInterface_DIR_INTID_Msk          (0xFFFFFFU /*<< GICInterface_DIR_INTID_Pos*/)   /*!< GICInterface DIR: INTID Mask */
 #define GICInterface_DIR_INTID(x)           (((uint32_t)(((uint32_t)(x)) /*<< GICInterface_DIR_INTID_Pos*/)) & GICInterface_DIR_INTID_Msk)
 #endif /*  (__GIC_PRESENT == 1U) || defined(DOXYGEN) */
 
@@ -1645,7 +1645,7 @@ __STATIC_INLINE void GIC_SetConfiguration(IRQn_Type IRQn, uint32_t int_config)
 */
 __STATIC_INLINE uint32_t GIC_GetConfiguration(IRQn_Type IRQn)
 {
-  return (GICDistributor->ICFGR[IRQn / 16U] >> ((IRQn % 16U) >> 1U));
+  return (GICDistributor->ICFGR[IRQn / 16U] >> ((IRQn % 16U) << 1U)) & 3UL;
 }
 
 /** \brief Set the priority for the given interrupt in the GIC's IPRIORITYR register.
@@ -2700,7 +2700,7 @@ __STATIC_INLINE int MMU_MemorySection(uint32_t *descriptor_l1, mmu_memory_Type m
         *descriptor_l1 |= 1 << SECTION_TEX1_SHIFT;
         break;
       case WB_NO_WA:
-        *descriptor_l1 |= (1 << SECTION_TEX0_SHIFT) | (1 << SECTION_TEX0_SHIFT);
+        *descriptor_l1 |= (1 << SECTION_TEX1_SHIFT) | (1 << SECTION_TEX0_SHIFT);
         break;
     }
   }
@@ -2768,7 +2768,7 @@ __STATIC_INLINE int MMU_MemoryPage(uint32_t *descriptor_l2, mmu_memory_Type mem,
           *descriptor_l2 |= 1 << PAGE_4K_TEX1_SHIFT;
           break;
         case WB_NO_WA:
-          *descriptor_l2 |= (1 << PAGE_4K_TEX0_SHIFT) | (1 << PAGE_4K_TEX0_SHIFT);
+          *descriptor_l2 |= (1 << PAGE_4K_TEX1_SHIFT) | (1 << PAGE_4K_TEX0_SHIFT);
           break;
       }
     }

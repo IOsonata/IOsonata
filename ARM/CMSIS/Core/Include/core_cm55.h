@@ -1023,6 +1023,19 @@ typedef struct
   __IOM uint32_t CPPWR;                  /*!< Offset: 0x00C (R/W)  Coprocessor Power Control  Register */
 } ICB_Type;
 
+/** \brief ICB Coprocessor Power Control Register Definitions */
+#define ICB_CPPWR_SUS11_Pos             23U                                               /*!< CPPWR: SUS11 Position */
+#define ICB_CPPWR_SUS11_Msk             (1UL << ICB_CPPWR_SUS11_Pos)                      /*!< CPPWR: SUS11 Mask */
+
+#define ICB_CPPWR_SU11_Pos              22U                                               /*!< CPPWR: SU11 Position */
+#define ICB_CPPWR_SU11_Msk              (1UL << ICB_CPPWR_SU11_Pos)                       /*!< CPPWR: SU11 Mask */
+
+#define ICB_CPPWR_SUS10_Pos             21U                                               /*!< CPPWR: SUS10 Position */
+#define ICB_CPPWR_SUS10_Msk             (1UL << ICB_CPPWR_SUS10_Pos)                      /*!< CPPWR: SUS10 Mask */
+
+#define ICB_CPPWR_SU10_Pos              20U                                               /*!< CPPWR: SU10 Position */
+#define ICB_CPPWR_SU10_Msk              (1UL << ICB_CPPWR_SU10_Pos)                       /*!< CPPWR: SU10 Mask */
+
 /** \brief ICB Auxiliary Control Register Definitions */
 #define ICB_ACTLR_DISCRITAXIRUW_Pos     27U                                               /*!< ACTLR: DISCRITAXIRUW Position */
 #define ICB_ACTLR_DISCRITAXIRUW_Msk     (1UL << ICB_ACTLR_DISCRITAXIRUW_Pos)              /*!< ACTLR: DISCRITAXIRUW Mask */
@@ -3507,7 +3520,7 @@ typedef struct
 #define _VAL2FLD(field, value)    (((uint32_t)(value) << field ## _Pos) & field ## _Msk)
 
 /**
-  \brief     Mask and shift a register value to extract a bit filed value.
+  \brief     Mask and shift a register value to extract a bit field value.
   \param[in] field  Name of the register bit field.
   \param[in] value  Value of register. This parameter is interpreted as an uint32_t type.
   \return           Masked and shifted bit field value.
