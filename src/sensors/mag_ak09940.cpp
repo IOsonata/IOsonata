@@ -350,6 +350,8 @@ bool MagAk09940::UpdateData()
 
 			// T = 30 - (TMPS) / 1.7
 			MagSensor::vData.Temp = 3000 - (int8_t)dd[9] * 1000 / 17;
+			TempSensor::vData.Temperature = MagSensor::vData.Temp;
+			MagSensor::vData.Timestamp = t;
 		}
 
 		MagSensor::DataReadyClear();
