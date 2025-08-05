@@ -89,8 +89,8 @@ __attribute__((weak)) void BtAppEvtDisconnected(uint16_t ConnHdl)
 
 }
 
-__attribute__((weak)) void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
+__attribute__((weak)) bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
 {
-
+	return true;
 }
 
