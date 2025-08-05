@@ -40,6 +40,7 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 #include "sensors/mag_sensor.h"
+#include "sensors/temp_sensor.h"
 
 /** @addtogroup Sensors
   * @{
@@ -139,7 +140,46 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-class MagAk09940 : public MagSensor {
+class TempAk09940 : public TempSensor {
+public:
+	/**
+	 * @brief	Initialize sensor (require implementation).
+	 *
+	 * @param 	CfgData : Reference to configuration data
+	 * @param	pIntrf 	: Pointer to interface to the sensor.
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 * @param	pTimer	: Pointer to timer for retrieval of time stamp
+	 * 					  This pointer will be kept internally
+	 * 					  for all access to device.
+	 * 					  DONOT delete this object externally
+	 *
+	 * @return
+	 * 			- true	: Success
+	 * 			- false	: Failed
+	 */
+	virtual bool Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf = NULL, Timer * const pTimer = NULL);
+
+	/**
+	 * @brief	Power on or wake up device
+	 *
+	 * @return	true - If success
+	 */
+	virtual bool Enable();
+
+	/**
+	 * @brief	Put device in power down or power saving sleep mode
+	 *
+	 * @return	None
+	 */
+	virtual void Disable();
+
+private:
+//	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
+};
+
+class MagAk09940 : public MagSensor, public TempAk09940 {
 public:
 	virtual bool Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
@@ -154,7 +194,9 @@ public:
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
-	virtual bool UpdateData();
+
+//	virtual bool Read(MagSensorRawData_t &Data) { return MaglSensor::Read(Data); }
+//	virtual bool Read(MagSensorRawData_t &Data) { return MaglSensor::Read(Data); }
 
 	/**
 	 * @brief	Flush any data stuck in queue or fifo
@@ -175,11 +217,22 @@ public:
 	 * Use generic DEVEVTCB callback and DEV_EVT to send event to user application
 	 */
 	virtual void IntHandler(void);
+	virtual bool UpdateData();
+
+protected:
+	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
+		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	}
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+	}
 
 private:
-  virtual bool StartSampling(void);
-  uint8_t vCtrl1Val;
-  uint8_t vCtrl3Val;
+//	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
+	virtual bool StartSampling(void);
+
+	uint8_t vCtrl1Val;
+	uint8_t vCtrl3Val;
 };
 
 

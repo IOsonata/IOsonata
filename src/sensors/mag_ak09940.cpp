@@ -36,6 +36,37 @@ SOFTWARE.
 #include "idelay.h"
 #include "sensors/mag_ak09940.h"
 
+bool TempAk09940::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
+{
+	return true;
+}
+
+/**
+ * @brief	Power on or wake up device
+ *
+ * @return	true - If success
+ */
+bool TempAk09940::Enable()
+{
+	uint8_t regaddr = AK09940_CTRL2_REG;
+	uint8_t d = AK09940_CTRL2_TEM_EN;	// Disable temp sensor
+	Write(&regaddr, 1, (uint8_t*)&d, 1);
+
+	return true;
+}
+
+/**
+ * @brief	Put device in power down or power saving sleep mode
+ *
+ * @return	None
+ */
+void TempAk09940::Disable()
+{
+	uint8_t regaddr = AK09940_CTRL2_REG;
+	uint8_t d = 0;	// Disable temp sensor
+	Write(&regaddr, 1, (uint8_t*)&d, 1);
+}
+
 bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint8_t regaddr = AK09940_WIA1_REG;
@@ -74,25 +105,25 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 		return false;
 	}
 
-	DataReadyClear();
+	MagSensor::DataReadyClear();
 
 	Reset();
 
-	Range(AK09940_ADC_RANGE);
+	MagSensor::Range(AK09940_ADC_RANGE);
 
-	vbFifoEn = Cfg.bFifoEn;
+	MagSensor::vbFifoEn = Cfg.bFifoEn;
 
 	vSensitivity[0] = AK09940_SENSITIVITY;
 	vSensitivity[1] = vSensitivity[0];
 	vSensitivity[2] = vSensitivity[0];
 
-	vData.Sensitivity[0] = vSensitivity[0];
-	vData.Sensitivity[1] = vSensitivity[1];
-	vData.Sensitivity[2] = vSensitivity[2];
+	MagSensor::vData.Sensitivity[0] = vSensitivity[0];
+	MagSensor::vData.Sensitivity[1] = vSensitivity[1];
+	MagSensor::vData.Sensitivity[2] = vSensitivity[2];
 
 	ClearCalibration();
 
-	vOpMode = Cfg.OpMode;
+	MagSensor::vOpMode = Cfg.OpMode;
 
 	vCtrl1Val = 0;
 	vCtrl3Val = 0;
@@ -115,13 +146,13 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 	{
 		// Default fifo enable in continuous mode
 
-		if (vbFifoEn)
+		if (MagSensor::vbFifoEn)
 		{
 			vCtrl3Val = AK09940_CTRL3_FIFO_EN;
 			vCtrl1Val = AK09940_FIFO_WM_LEVEL_MIN;
 		}
 
-		if (vOpMode == SENSOR_OPMODE_LOW_POWER)
+		if (MagSensor::vOpMode == SENSOR_OPMODE_LOW_POWER)
 		{
 			vCtrl1Val |= AK09940_CTRL1_MT2_EN;
 		}
@@ -179,7 +210,7 @@ uint32_t MagAk09940::SamplingFrequency(uint32_t Freq)
 	else if (Freq < 1000000)
 	{
 		// Must be in one of the low power mode
-		vCtrl3Val &= AK09940_CTRL3_MT_MASK;
+		vCtrl3Val &= ~AK09940_CTRL3_MT_MASK;
 		vCtrl3Val |= AK09940_CTRL3_MODE_CONTINUOUS_400HZ;
 		Freq = 400000;
 		forcelp = true;
@@ -187,7 +218,7 @@ uint32_t MagAk09940::SamplingFrequency(uint32_t Freq)
 	else if (Freq < 2500000)
 	{
 		// Must be in one of the low power mode 1 or ultra only
-		vCtrl3Val &= AK09940_CTRL3_MT_MASK;
+		vCtrl3Val &= ~AK09940_CTRL3_MT_MASK;
 		vCtrl3Val |= AK09940_CTRL3_MODE_CONTINUOUS_1000HZ;
 		Freq = 1000000;
 		forcelp = true;
@@ -195,15 +226,15 @@ uint32_t MagAk09940::SamplingFrequency(uint32_t Freq)
 	else
 	{
 		// Must be in ultra low power only
-		vCtrl3Val &= AK09940_CTRL3_MT_MASK;
+		vCtrl3Val &= ~AK09940_CTRL3_MT_MASK;
 		vCtrl3Val |= AK09940_CTRL3_MODE_CONTINUOUS_2500HZ;
 		Freq = 2500000;
 		forcelp = true;
 	}
 
-	if (forcelp && vOpMode != SENSOR_OPMODE_LOW_POWER)
+	if (forcelp && MagSensor::vOpMode != SENSOR_OPMODE_LOW_POWER)
 	{
-		vCtrl1Val &= ~vOpMode == SENSOR_OPMODE_LOW_POWER;
+		vCtrl1Val |= AK09940_CTRL1_MT2_EN;
 		regaddr = AK09940_CTRL1_REG;
 		Write(&regaddr, 1, &vCtrl1Val, 1);
 	}
@@ -228,7 +259,7 @@ void MagAk09940::PowerOff()
 bool MagAk09940::Enable()
 {
 	uint8_t regaddr = AK09940_ST_REG;
-	uint16_t d;
+	uint8_t d;
 
 	regaddr = AK09940_CTRL3_REG;
 	Write(&regaddr, 1, &vCtrl3Val, 1);
@@ -240,7 +271,7 @@ bool MagAk09940::Enable()
 	regaddr = AK09940_ST2_REG;
 	Read(&regaddr, 1, (uint8_t*)&d, 1);
 
-	State(SENSOR_STATE_SAMPLING);
+	MagSensor::State(SENSOR_STATE_SAMPLING);
 
 	return true;
 }
@@ -270,7 +301,7 @@ bool MagAk09940::StartSampling(void)
 
 	Write(&regaddr, 1, &vCtrl3Val, 1);
 
-	State(SENSOR_STATE_SAMPLING);
+	MagSensor::State(SENSOR_STATE_SAMPLING);
 
 	return true;
 }
@@ -284,7 +315,7 @@ bool MagAk09940::UpdateData()
 	Read(&regaddr, 1, d, 1);
 
 	//if (d[0] & AK09940_ST_DRDY)
-	if (isDataReady())
+	if (MagSensor::isDataReady())
 	{
 		int nb = (d[0] & AK09940_ST1_FNUM_MASK) >> 1;
 		if (vpTimer)
@@ -294,7 +325,7 @@ bool MagAk09940::UpdateData()
 
 		uint8_t dd[16];
 
-		if (vbFifoEn == false)
+		if (MagSensor::vbFifoEn == false)
 		{
 			regaddr = AK09940_HXL_REG;
 			Read(&regaddr, 1, (uint8_t*)dd, 10);
@@ -312,13 +343,13 @@ bool MagAk09940::UpdateData()
 
 		if ((d[0] & AK09940_ST2_INV) == 0)
 		{
-			vData.Timestamp = t;
-			vData.X = dd[0] | (dd[1] << 8) | ((int8_t)dd[2] << 16);
-			vData.Y = dd[3] | (dd[4] << 8) | ((int8_t)dd[5] << 16);
-			vData.Z = dd[6] | (dd[7] << 8) | ((int8_t)dd[8] << 16);
+			MagSensor::vData.Timestamp = t;
+			MagSensor::vData.X = dd[0] | (dd[1] << 8) | ((int8_t)dd[2] << 16);
+			MagSensor::vData.Y = dd[3] | (dd[4] << 8) | ((int8_t)dd[5] << 16);
+			MagSensor::vData.Z = dd[6] | (dd[7] << 8) | ((int8_t)dd[8] << 16);
 		}
 
-		DataReadyClear();
+		MagSensor::DataReadyClear();
 
 		return true;
 	}
@@ -346,11 +377,11 @@ void MagAk09940::IntHandler(void)
 
 	if (st & AK09940_ST_DRDY)
 	{
-		DataReadySet();
+		MagSensor::DataReadySet();
 		UpdateData();
 		if (vCtrl3Val < 3)
 		{
-			State(SENSOR_STATE_IDLE);
+			MagSensor::State(SENSOR_STATE_IDLE);
 		}
 	}
 }
