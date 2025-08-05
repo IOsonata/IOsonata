@@ -93,7 +93,7 @@ uint32_t GyroSensor::Range(uint32_t Value)
 	return r;
 }
 
-void GyroSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])
+void GyroSensor::SetCalibration(const float (&Gain)[3][3], const float (&Offset)[3])
 {
 	float scale = (float)vSensitivity / (float)vRange;
 
@@ -106,7 +106,7 @@ void GyroSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])
 	}
 }
 
-void GyroSensor::SetCalibrationMatrix(float (&Gain)[3][3])
+void GyroSensor::SetCalibrationMatrix(const float (&Gain)[3][3])
 {
 	float scale = (float)vSensitivity / (float)vRange;
 
@@ -118,7 +118,7 @@ void GyroSensor::SetCalibrationMatrix(float (&Gain)[3][3])
 	}
 }
 
-void GyroSensor::SetCalibrationOffset(float (&Offset)[3])
+void GyroSensor::SetCalibrationOffset(const float (&Offset)[3])
 {
 	float scale = (float)vSensitivity / (float)vRange;
 

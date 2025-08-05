@@ -1529,27 +1529,6 @@ private:
 	 */
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL);
 	void ProcessFifo(uint8_t *pData, size_t Len);
-#if 0
-	// Aux device interface implementation
-	bool AuxIntrfInit(void);
-	static void AuxIntrfDisable(DevIntrf_t * const pDev) {}
-	static void AuxIntrfEnable(DevIntrf_t * const pDev) {}
-	static void AuxIntrfPowerOff(DevIntrf_t * const pDev) {}
-	static uint32_t AuxIntrfGetRate(DevIntrf_t * const pDev);
-	static uint32_t AuxIntrfSetRate(DevIntrf_t * const pDev, uint32_t RateHz);
-	static bool AuxIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
-	static int AuxIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen);
-	static void AuxIntrfStopRx(DevIntrf_t * const pDev);
-	static bool AuxIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr);
-	static int AuxIntrfTxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen);
-	static void AuxIntrfStopTx(DevIntrf_t * const pDev);
-	static void AuxIntrfReset(DevIntrf_t * const pDev) {}
-	static void *AuxIntrfGetHandle(DevIntrf_t * const pDev) {
-		AgIcm456x *dev = (AgIcm456x*)pDev->pDevData;
-		return dev;
-	}
-
-#endif
 
 	size_t vFifoFrameSize;	// Fifo frame size in bytes
 	uint16_t vPrevTime;

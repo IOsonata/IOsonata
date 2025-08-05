@@ -178,9 +178,9 @@ public:
 	 */
 	virtual uint32_t Range(uint32_t Value);// { vData.GFactor = (float)Scale() / Sensor::Range(Value); return vData.Range; }
 
-    virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
-    virtual void SetCalibrationMatrix(float (&Gain)[3][3]);
-	virtual void SetCalibrationOffset(float (&Offset)[3]);
+    virtual void SetCalibration(const float (&Gain)[3][3], const float (&Offset)[3]);
+    virtual void SetCalibrationMatrix(const float (&Gain)[3][3]);
+	virtual void SetCalibrationOffset(const float (&Offset)[3]);
 	virtual void ClearCalibration();
 	virtual bool StartSampling() { return true; }
 

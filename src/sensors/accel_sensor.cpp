@@ -91,7 +91,7 @@ uint32_t AccelSensor::Range(uint32_t Value)
 	return r;
 }
 
-void AccelSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])
+void AccelSensor::SetCalibration(const float (&Gain)[3][3], const float (&Offset)[3])
 {
 	float scale = (float)vScale / (float)vRange;
 
@@ -104,7 +104,7 @@ void AccelSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])
 	}
 }
 
-void AccelSensor::SetCalibrationMatrix(float (&Gain)[3][3])
+void AccelSensor::SetCalibrationMatrix(const float (&Gain)[3][3])
 {
 	float scale = (float)vScale / (float)vRange;
 
@@ -116,7 +116,7 @@ void AccelSensor::SetCalibrationMatrix(float (&Gain)[3][3])
 	}
 }
 
-void AccelSensor::SetCalibrationOffset(float (&Offset)[3])
+void AccelSensor::SetCalibrationOffset(const float (&Offset)[3])
 {
 	float scale = (float)vScale / (float)vRange;
 

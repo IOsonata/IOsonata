@@ -45,7 +45,7 @@ bool MagSensor::Read(MagSensorData_t &Data)
 	return true;
 }
 
-void MagSensor::Sensitivity(uint16_t (&Sen)[3])
+void MagSensor::Sensitivity(const uint16_t (&Sen)[3])
 {
 	for (int i = 0; i < 3; i++)
 	{
@@ -57,7 +57,7 @@ void MagSensor::Sensitivity(uint16_t (&Sen)[3])
 	}
 }
 
-void MagSensor::SetCalibration(float (&Gain)[3][3], float (&Offset)[3])
+void MagSensor::SetCalibration(const float (&Gain)[3][3], const float (&Offset)[3])
 {
 	for (int i = 0; i < 3; i++)
 	{

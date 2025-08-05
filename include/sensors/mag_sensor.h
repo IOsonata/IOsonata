@@ -129,9 +129,9 @@ public:
 
     virtual MAGSENSOR_PRECISION Precision() { return vPrecision; }
     virtual MAGSENSOR_PRECISION Precision(MAGSENSOR_PRECISION Val) { vPrecision = Val; return vPrecision; }
-    virtual void SetCalibration(float (&Gain)[3][3], float (&Offset)[3]);
+    virtual void SetCalibration(const float (&Gain)[3][3], const float (&Offset)[3]);
     virtual void ClearCalibration();
-    virtual void Sensitivity(uint16_t (&Sen)[3]);
+    virtual void Sensitivity(const uint16_t (&Sen)[3]);
     MagSensor() {
     	Type(SENSOR_TYPE_MAG);
     	ClearCalibration();
