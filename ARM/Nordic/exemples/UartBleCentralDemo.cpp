@@ -390,7 +390,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 				else
 				{
 					g_searchCnt++;
-					BtAppScan();
+					//BtAppScan();
 				}
 			}
 			break;
@@ -435,7 +435,7 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
 	g_Uart.printf("BtAppEvtDisconnected ConnHdl = %d (0x%x) \r\n", ConnHdl, ConnHdl);
 }
 
-void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
+bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
 {
 	char name[32];
 	size_t l = BtAdvDataGetDevName(pAdvData, AdvLen, name, 32);
@@ -449,7 +449,7 @@ void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 				Addr[0], Addr[1], Addr[2], Addr[3], Addr[4], Addr[5], Rssi);
 	}
 
-	if (memcmp(g_clientMacAddr, Addr, 6) == 0)
+	//if (memcmp(g_clientMacAddr, Addr, 6) == 0)
 	{
 		g_Uart.printf("Found matching device. Stop Scan\r\n");
 		BtGapScanStop();
@@ -457,7 +457,11 @@ void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 		BtGapPeerAddr_t add = {.Type = AddrType, };
 		memcpy(add.Addr, Addr, 6);
 		BtGapConnect(&add, &s_ConnParams);
+
+		return false;
 	}
+
+	return true;
 }
 
 void HardwareInit()
