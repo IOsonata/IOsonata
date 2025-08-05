@@ -347,6 +347,9 @@ bool MagAk09940::UpdateData()
 			MagSensor::vData.X = dd[0] | (dd[1] << 8) | ((int8_t)dd[2] << 16);
 			MagSensor::vData.Y = dd[3] | (dd[4] << 8) | ((int8_t)dd[5] << 16);
 			MagSensor::vData.Z = dd[6] | (dd[7] << 8) | ((int8_t)dd[8] << 16);
+
+			// T = 30 - (TMPS) / 1.7
+			MagSensor::vData.Temp = 3000 - (int8_t)dd[9] * 1000 / 17;
 		}
 
 		MagSensor::DataReadyClear();

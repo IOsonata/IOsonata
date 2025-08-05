@@ -766,7 +766,7 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 
 	uint16_t wm = ICM456X_FIFO_SIZE * 80 / 100; // 80%
 
-	printf("wm = %d\r\n", wm);
+	//printf("wm = %d\r\n", wm);
 
 	Write16(&regaddr, 1, wm);
 
@@ -797,7 +797,7 @@ bool AgIcm456x::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter
 	regaddr = ICM456X_TMST_WOM_CONFIG_REG;
 	d = Read8(&regaddr, 1);
 
-	printf("d = %x\r\n", d);
+	//printf("d = %x\r\n", d);
 
 	uint32_t intcfg = 0;
 
@@ -952,7 +952,7 @@ void AgIcm456x::ProcessFifo(uint8_t *pData, size_t Len)
 		if (hdr & ICM456X_FIFO_HDR_HIRES_EN)
 		{
 			// Fifo hires Temperature in Degrees Centigrade = (FIFO_TEMP_DATA / 128) + 25
-			TempSensor::vData.Temperature = ((int16_t)(p[0] | (p[1] << 8)) >> 7) + 25;
+			TempSensor::vData.Temperature = (((int16_t)(p[0] | (p[1] << 8)) * 100) >> 7) + 2500;
 			p += 2;
 
 			AccelSensor::vData.X <<= 4;
@@ -973,7 +973,7 @@ void AgIcm456x::ProcessFifo(uint8_t *pData, size_t Len)
 		}
 		else
 		{
-			TempSensor::vData.Temperature = (((int8_t)p[0]) >> 1) + 25;
+			TempSensor::vData.Temperature = ((((int8_t)p[0]) * 100) >> 1) + 2500;
 			p++;
 		}
 		uint16_t t1 = p[0] | (p[1] << 8);
@@ -989,7 +989,9 @@ void AgIcm456x::ProcessFifo(uint8_t *pData, size_t Len)
 		uint64_t t = t1 + vRollover;
 
 		AccelSensor::vData.Timestamp = t;
+		AccelSensor::vData.Temp = TempSensor::vData.Temperature;
 		GyroSensor::vData.Timestamp = t;
+		GyroSensor::vData.Temp = TempSensor::vData.Temperature;
 		TempSensor::vData.Timestamp = t;
 	}
 }
@@ -1201,7 +1203,7 @@ int AuxIntrfIcm456x::RxData(uint8_t *pBuff, int BuffLen)
 		regaddr = ICM456X_I2CM_STATUS_REG;
 		icm->Read(regaddr, &d, 1);
 
-		printf("Status %x\n", d);
+		//printf("Status %x\n", d);
 
 		if (d & ICM456X_I2CM_STATUS_I2CM_DONE)
 		{
@@ -1335,7 +1337,7 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 
 	// Execute
 	regaddr = ICM456X_I2CM_CONTROL_REG;
-	d = ICM456X_I2CM_CONTROL_I2CM_GO | ICM456X_I2CM_CONTROL_I2CM_SPEED_STD;
+	d = ICM456X_I2CM_CONTROL_I2CM_GO;// | ICM456X_I2CM_CONTROL_I2CM_SPEED_STD;
 	icm->Write(regaddr, &d, 1);
 
 	int timout = 1000;
@@ -1399,7 +1401,7 @@ int AuxIntrfIcm456x::Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint
 
 	// Execute
 	regaddr = ICM456X_I2CM_CONTROL_REG;
-	d = ICM456X_I2CM_CONTROL_I2CM_GO | ICM456X_I2CM_CONTROL_I2CM_SPEED_STD;
+	d = ICM456X_I2CM_CONTROL_I2CM_GO;// | ICM456X_I2CM_CONTROL_I2CM_SPEED_STD;
 	icm->Write(regaddr, &d, 1);
 
 	int timout = 1000;

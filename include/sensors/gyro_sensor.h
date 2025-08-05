@@ -50,8 +50,7 @@ SOFTWARE.
 typedef struct __GyroSensor_Raw_Data {
     uint64_t Timestamp; 	//!< Time stamp count in usec
     float ScaleFactor;		//!< GyroData = ScaleFactor * RawData;
-//    uint16_t Sensitivity;	//!< Scale in degree per second of the sensor
-//    uint16_t Range;     	//!< Sensor ADC range
+    int16_t Temp;			//!< Temperature in C x 100
     union {
         int32_t Val[3];
         struct {
@@ -67,6 +66,7 @@ typedef struct __GyroSensor_Raw_Data {
 /// Gyroscope sensor data
 typedef struct __GyroSensor_Data {
 	uint64_t Timestamp;		//!< Time stamp count in usec
+	float Temp;				//!< Temperature in degree C
 	union {
 	    float Val[3];
 		struct {

@@ -50,6 +50,7 @@ SOFTWARE.
 typedef struct __MagSensor_Raw_Data {
     uint64_t Timestamp; 		//!< Time stamp count in usec
     uint16_t Sensitivity[3];	//!< Scale factor in nanoTesla of the sensor
+    int16_t Temp;				//!< Temperature in C x 100
     union {
         int32_t Val[3];
         struct {
@@ -63,8 +64,9 @@ typedef struct __MagSensor_Raw_Data {
 /// Magnetometer sensor data
 typedef struct __MagSensor_Data {
 	uint64_t Timestamp;			//!< Time stamp count in usec
+	float Temp;					//!< Temperature in degree C
 	union {
-	    float Val[3];	//!< Mag data in uT
+	    float Val[3];			//!< Mag data in uT
 		struct {
 	        float X;			//!< X axis
 	        float Y;			//!< Y axis

@@ -41,6 +41,7 @@ bool MagSensor::Read(MagSensorData_t &Data)
 	Data.X = (float)vData.X * vCalibGain[0][0] + (float)vData.Y * vCalibGain[1][0] + (float)vData.Z * vCalibGain[2][0] + vCalibOffset[0];
 	Data.Y = (float)vData.X * vCalibGain[0][1] + (float)vData.Y * vCalibGain[1][1] + (float)vData.Z * vCalibGain[2][1] + vCalibOffset[1];
 	Data.Z = (float)vData.X * vCalibGain[0][2] + (float)vData.Y * vCalibGain[1][2] + (float)vData.Z * vCalibGain[2][2] + vCalibOffset[2];
+	Data.Temp = (float)vData.Temp / 100.0;
 
 	return true;
 }

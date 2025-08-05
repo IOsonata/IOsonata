@@ -48,10 +48,9 @@ SOFTWARE.
 
 /// Accelerometer raw sensor data
 typedef struct __AccelSensor_Raw_Data {
-	uint64_t Timestamp;	//!< Time stamp count in usec
-	float GFactor;		//!< g scale factor. Obtain g force = GFactor * RawData;
-//	uint16_t Scale;		//!< Scale in G of the sensor
-//	uint16_t Range;		//!< Sensor ADC range
+	uint64_t Timestamp;			//!< Time stamp count in usec
+	float GFactor;				//!< g scale factor. Obtain g force = GFactor * RawData;
+    int16_t Temp;				//!< Temperature in C x 100
 	union {
 		int32_t Val[3];
 		struct {
@@ -66,7 +65,8 @@ typedef struct __AccelSensor_Raw_Data {
 
 /// Accelerometer sensor data in G
 typedef struct __AccelSensor_Data {
-	uint64_t Timestamp;	//!< Time stamp count in usec
+	uint64_t Timestamp;			//!< Time stamp count in usec
+	float Temp;					//!< Temperature in degree C
 	union {
 		float Val[3];
 		struct {

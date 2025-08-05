@@ -41,6 +41,7 @@ bool GyroSensor::Read(GyroSensorData_t &Data)
 	Data.X = (float)vData.X * vCalibGain[0][0] + vData.Y * vCalibGain[1][0] + vData.Z * vCalibGain[2][0] + vCalibOffset[0];
 	Data.Y = (float)vData.X * vCalibGain[0][1] + vData.Y * vCalibGain[1][1] + vData.Z * vCalibGain[2][1] + vCalibOffset[1];
 	Data.Z = (float)vData.X * vCalibGain[0][2] + vData.Y * vCalibGain[1][2] + vData.Z * vCalibGain[2][2] + vCalibOffset[2];
+	Data.Temp = (float)vData.Temp / 100.0;
 
 	return true;
 }
