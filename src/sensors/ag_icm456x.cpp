@@ -1330,7 +1330,7 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 	}
 	else
 	{
-		d = rlen | ICM456X_I2CM_COMMAND_1_CH_SEL_ID1 |
+		d = rlen | ICM456X_I2CM_COMMAND_CH_SEL_ID1 |
 			ICM456X_I2CM_COMMAND_R_W_RD_W_AD | ICM456X_I2CM_COMMAND_ENDFLAG;
 	}
 	icm->Write(regaddr, &d, 1);
