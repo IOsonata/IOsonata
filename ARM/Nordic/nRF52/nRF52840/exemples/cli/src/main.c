@@ -437,7 +437,7 @@ int main(void)
             /* Nothing to do */
         }
 #endif
-        cli_process();
+        nrf_cli_process(&m_cli_cdc_acm);
     }
 }
 
