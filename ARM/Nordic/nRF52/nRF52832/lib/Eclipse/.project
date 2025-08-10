@@ -556,6 +556,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/utf8cvt.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/vqf</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/audio/audiodev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev.h</locationURI>
@@ -1991,6 +1996,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/vqf/cpp</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/Invn/Devices/Drivers</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -2361,6 +2371,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/ble_db_discovery</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/ble_dtm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -2392,6 +2407,11 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/nrf_ble_gatt</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/nrf_ble_gq</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -3111,6 +3131,16 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_advertising/ble_advertising.h</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/ble/ble_db_discovery/ble_db_discovery.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_db_discovery/ble_db_discovery.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/ble_db_discovery/ble_db_discovery.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_db_discovery/ble_db_discovery.h</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/ble/ble_dtm/ble_dtm.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/ble_dtm.c</locationURI>
@@ -3209,6 +3239,16 @@
 			<name>src/nRF5_SDK/ble/nrf_ble_gatt/nrf_ble_gatt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/nrf_ble_gatt/nrf_ble_gatt.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/nrf_ble_gq/nrf_ble_gq.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/nrf_ble_gq/nrf_ble_gq.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/ble/nrf_ble_gq/nrf_ble_gq.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/nrf_ble_gq/nrf_ble_gq.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/nrf_ble_qwr/nrf_ble_qwr.c</name>
