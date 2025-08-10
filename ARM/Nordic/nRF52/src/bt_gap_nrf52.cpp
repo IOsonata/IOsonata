@@ -139,7 +139,7 @@ void BtGapParamInit(const BtGapCfg_t *pCfg)
 		APP_ERROR_CHECK(err_code);
     }
 
-   // BtGapInit(pBleAppCfg->Role);
+    //BtGapInit(pCfg);
 }
 
 void BtGapSetDevName(const char* pDeviceName)
