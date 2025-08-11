@@ -882,10 +882,13 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 					// Scan data report
 					ble_gap_evt_adv_report_t * p_adv_report = (ble_gap_evt_adv_report_t*)&p_gap_evt->params.adv_report;
 
-					BtAppScanReport(p_adv_report->rssi, p_adv_report->peer_addr.addr_type,
+					bool res = BtAppScanReport(p_adv_report->rssi, p_adv_report->peer_addr.addr_type,
 							p_adv_report->peer_addr.addr, p_adv_report->data.len, p_adv_report->data.p_data);
 					// Continue scan
-					BtAppScan();
+					if (res == true)
+					{
+						BtAppScan();
+					}
 				}
     			break;
             case BLE_GAP_EVT_TIMEOUT:
