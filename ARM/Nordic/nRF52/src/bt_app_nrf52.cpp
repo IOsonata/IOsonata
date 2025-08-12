@@ -699,12 +699,14 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 				}
 				else
 				{
+#if 0
 					// The peer did not use MITM, disconnect.
 					err_code = pm_peer_id_get(s_BtAppData.ConnHdl, &g_PeerMngrIdToDelete);
 					APP_ERROR_CHECK(err_code);
 					err_code = sd_ble_gap_disconnect(s_BtAppData.ConnHdl,
 													 BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 					APP_ERROR_CHECK(err_code);
+#endif
 				}
 			}
 			break;
