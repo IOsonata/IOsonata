@@ -85,9 +85,11 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "sd_dispatch.h"
 
+#if DEBUGING
 #include "coredev/uart.h"
 
 extern UART g_Uart;
+#endif
 
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
@@ -343,8 +345,6 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 
             		for (int i = 0; i < p_prim_srvc_disc_rsp_evt->count; i++, periph->NbSrvc++)
 					{
-            			g_Uart.printf("Srvc uuid %x\r\n", p_prim_srvc_disc_rsp_evt->services[i].uuid.uuid);
-
             			periph->Services[periph->NbSrvc].char_count = 0;
 	        			periph->Services[periph->NbSrvc].srv_uuid = p_prim_srvc_disc_rsp_evt->services[i].uuid;
 	        			periph->Services[periph->NbSrvc].handle_range = p_prim_srvc_disc_rsp_evt->services[i].handle_range;
@@ -353,15 +353,10 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 					}
 
 					s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
-					//s_CurRange.start_handle++;	// the service uses 1 handle already
-
-					// Find characteristics
-//					uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
 
 					// Find more services
 					s_CurRange = periph->Services[periph->NbSrvc - 1].handle_range;
 
-					g_Uart.printf("s_CurRange %d %d\r\n", s_CurRange.start_handle, s_CurRange.end_handle);
 					uint32_t err_code = sd_ble_gattc_primary_services_discover(periph->ConnHdl, s_CurRange.end_handle + 1, NULL);
                 }
         		else
@@ -369,14 +364,9 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
         			// All service discovered
         			s_CurSrvcIdx = 0;
 					s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
-					//s_CurRange.start_handle++;	// the service uses 1 handle already
-
 					// Find characteristics
 
-					g_Uart.printf("Finding char\r\n");
 					uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
-
-        	//		BleDevDiscovered(periph);
         		}
         	}
         	break;
@@ -392,8 +382,6 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 
                 for (int i = 0; i < p_char_disc_rsp_evt->count; i++, periph->Services[s_CurSrvcIdx].char_count++)
                 {
-        			g_Uart.printf("char uuid %x\r\n", p_char_disc_rsp_evt->chars[i].uuid.uuid);
-
         			memcpy(&periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].characteristic,
                     	   &p_char_disc_rsp_evt->chars[i], sizeof(ble_gattc_char_t));
                     periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].cccd_handle = BLE_GATT_HANDLE_INVALID;
@@ -409,9 +397,9 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
             }
             else
             {
-				s_CurSrvcIdx++;
+            	// Find char for next service
 
-				g_Uart.printf("s_CurSrvcIdx %d %d\r\n", s_CurSrvcIdx, periph->NbSrvc);
+				s_CurSrvcIdx++;
 
 				if (s_CurSrvcIdx < periph->NbSrvc)
 				{
@@ -421,23 +409,19 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 				}
 				else
 				{
+					// All char found, Find descriptor
 					s_CurSrvcIdx = 0;
 					s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
 
-					g_Uart.printf("sd_ble_gattc_descriptors_discover %d\r\n", s_CurRange.end_handle);
 					uint32_t err_code = sd_ble_gattc_descriptors_discover(periph->ConnHdl, &s_CurRange);
-					g_Uart.printf("err %x\r\n", err_code);
 				}
             }
             break;
 
         case BLE_GATTC_EVT_DESC_DISC_RSP:
-    		g_Uart.printf("BLE_GATTC_EVT_DESC_DISC_RSP %x\r\n", p_ble_gattc_evt->gatt_status);
             if (p_ble_gattc_evt->gatt_status == BLE_GATT_STATUS_SUCCESS)
             {
             	const ble_gattc_evt_desc_disc_rsp_t * p_desc_disc_rsp_evt = &(p_ble_gattc_evt->params.desc_disc_rsp);
-
-            	g_Uart.printf("Desc count %d\r\n", p_desc_disc_rsp_evt->count);
 
             	for (int i = 0; i < p_desc_disc_rsp_evt->count; i++)
             	{
@@ -474,8 +458,8 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
                     }
             	}
             }
-			g_Uart.printf("Desc s_CurRange %d %d\r\n", s_CurRange.start_handle, s_CurRange.end_handle);
-			s_CurCharIdx++;
+
+            s_CurCharIdx++;
 
 			while (s_CurCharIdx >= periph->Services[s_CurSrvcIdx].char_count)
 			{

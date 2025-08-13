@@ -172,7 +172,7 @@ UARTCfg_t g_UartCfg = {
 	.DevNo = 0,									// Device number zero based
 	.pIOPinMap = s_UartPins,					// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),					// Total number of UART pins used
-	.Rate = 115200,								// Baudrate
+	.Rate = 1000000,								// Baudrate
 	.DataBits = 8,								// Data bits
 	.Parity = UART_PARITY_NONE,					// Parity
 	.StopBits = 1,								// Stop bit
@@ -354,8 +354,11 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
     char s[256];
     uint8_t len;
 
+   // g_Uart.printf("BtAppCentralEvtHandler %d (0x%x)\r\n", p_ble_evt->header.evt_id, p_ble_evt->header.evt_id);
+
     switch (p_ble_evt->header.evt_id)
     {
+#if 0
     	case BLE_GAP_EVT_CONNECTED:
     		{
 				g_ConnectedDev.ConnHdl = p_gap_evt->conn_handle;
@@ -394,6 +397,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 				}
 			}
 			break;
+#endif
         case BLE_GAP_EVT_TIMEOUT:
         	{
         	    ble_gap_evt_timeout_t const * p_timeout = &p_gap_evt->params.timeout;
@@ -421,7 +425,8 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
-	//g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
+	g_ConnectedDev.ConnHdl = ConnHdl;
+	g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
 
 	//g_Uart.printf("This device's Role = %s\r\n", s_BleAppCfg.Role == BT_GAP_ROLE_CENTRAL ? "Central" : "Peripheral");
 	if (s_BleAppCfg.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
@@ -443,14 +448,14 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 	if (l > 0)
 	{
 		name[l-1] = 0;
-		g_Uart.printf("%s, ", name);
-		g_Uart.printf(
-				"MAC Addr: %02X:%02X:%02X:%02X:%02X:%02X, RSSI = %d \r\n",
-				Addr[0], Addr[1], Addr[2], Addr[3], Addr[4], Addr[5], Rssi);
-	}
+		g_Uart.printf("%s, \r\n", name);
+		//g_Uart.printf(
+		//		"MAC Addr: %02X:%02X:%02X:%02X:%02X:%02X, RSSI = %d \r\n",
+		//		Addr[0], Addr[1], Addr[2], Addr[3], Addr[4], Addr[5], Rssi);
+	//}
 
 	//if (memcmp(g_clientMacAddr, Addr, 6) == 0)
-	{
+	//{
 		g_Uart.printf("Found matching device. Stop Scan\r\n");
 		BtGapScanStop();
 
