@@ -87,7 +87,7 @@ void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt);
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason);
 void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
-void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *DavData);
+bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *DavData);
 
 static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
