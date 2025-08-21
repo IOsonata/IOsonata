@@ -34,20 +34,12 @@ SOFTWARE.
 #ifndef __INTERRUPT_H__
 #define __INTERRUPT_H__
 
-#if 0
-#ifndef __unix__
-#ifdef __GNUC__
-#ifndef __PROGRAM_START
-#define __PROGRAM_START		// Define to fix compile bug in CMSIS 5.6
-#endif
-#endif
-//#include "cmsis_compiler.h"
-#endif
-#endif	// if 1
-
 #ifdef __unix__
+// UNIX
+
 #elif defined(__arm__) || defined(__ICCARM__)
 // ARM
+
 #ifdef __GNUC__
 #ifndef __PROGRAM_START
 #define __PROGRAM_START		// Define to fix compile bug in CMSIS 5.6
@@ -67,6 +59,7 @@ static inline void EnableInterrupt(uint32_t __primmask) {
 }
 #elif defined(__riscv)
 // RISC-V
+
 static inline uint32_t DisableInterrupt() {
 	uint32_t mstatus_val;
 	asm volatile("csrr %0, mstatus" : "=r"(mstatus_val)); // Read mstatus
@@ -77,7 +70,8 @@ static inline uint32_t DisableInterrupt() {
 
 static inline void EnableInterrupt(uint32_t mstatus_val) {
 //	mstatus_val |= (1UL << 3); // Set MIE bit (bit 3)
-	asm volatile("csrw mstatus, %0" :: "r"(mstatus_val)); // Write mstatus//    __asm__ volatile("csrrsi x0, mstatus, %0" :: "r"(1 << 3)); // MIE is bit 3
+	asm volatile("csrw mstatus, %0" :: "r"(mstatus_val)); // Write mstatus
+	//    __asm__ volatile("csrrsi x0, mstatus, %0" :: "r"(1 << 3)); // MIE is bit 3
 }
 #endif
 
