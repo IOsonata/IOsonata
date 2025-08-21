@@ -37,7 +37,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "cfifo.h"
 #include "usb/usbd_cdc_intrf.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 
 #define USBD_CDC_PACKET_SIZE			(64)
 #define USBD_CDC_CFIFO_MEMSIZE			CFIFO_MEMSIZE(4 * USBD_CDC_PACKET_SIZE)

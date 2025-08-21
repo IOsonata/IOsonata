@@ -151,11 +151,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
 		</link>
 		<link>
-			<name>include/interrupt.h</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/include/interrupt.h</locationURI>
-		</link>
-		<link>
 			<name>include/iopinctrl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
@@ -664,6 +659,11 @@
 			<name>include/coredev/i2c.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2c.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/interrupt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/interrupt.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/iopincfg.h</name>

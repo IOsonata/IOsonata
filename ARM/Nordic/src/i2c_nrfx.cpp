@@ -40,10 +40,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "istddef.h"
 #include "cfifo.h"
-#include "interrupt.h"
 #include "coredev/i2c.h"
 #include "iopinctrl.h"
 #include "idelay.h"
+#include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
 #ifdef TWIM_PRESENT
@@ -970,8 +970,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 	// Configure I/O pins
 	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
-    IOPinSet(pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo);
-    IOPinSet(pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo);
+    //IOPinSet(pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo);
+    //IOPinSet(pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo);
 
 #ifdef TWIM_PRESENT
     reg->PSEL.SCL = (pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo & 0x1f) | (pDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo << 5);

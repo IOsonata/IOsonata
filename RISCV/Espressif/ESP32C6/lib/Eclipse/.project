@@ -581,6 +581,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/include/coredev/i2s.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/interrupt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/coredev/interrupt.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/iopincfg.h</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/include/coredev/iopincfg.h</locationURI>

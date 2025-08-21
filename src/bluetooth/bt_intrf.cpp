@@ -40,7 +40,7 @@ SOFTWARE.
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 
 #define BTINTRF_PACKET_SIZE		(20)// + sizeof(BLEINTRF_PKT) - 1)
 #define BTINTRF_CFIFO_SIZE		BTINTRF_CFIFO_TOTAL_MEMSIZE(2, BTINTRF_PACKET_SIZE)

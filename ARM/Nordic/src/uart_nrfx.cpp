@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "iopinctrl.h"
 #include "coredev/uart.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
 // Defining common bitfields for both DMA & non DMA registers

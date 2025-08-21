@@ -36,7 +36,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "idelay.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 
 #include "excelitas_serlink.h"
 
