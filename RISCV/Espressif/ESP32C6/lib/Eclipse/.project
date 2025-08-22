@@ -266,6 +266,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/I-SYST_Logo320_little.c</locationURI>
 		</link>
 		<link>
+			<name>src/ResetEntry.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/ResetEntry.c</locationURI>
+		</link>
+		<link>
 			<name>src/app_evt_handler.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
