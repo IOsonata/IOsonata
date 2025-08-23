@@ -444,17 +444,17 @@ void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSe
 
 	ble_tms_raw_t raw;
 
-	raw.accel.x = AccData.X / 256;
-	raw.accel.y = AccData.Y / 256;
-	raw.accel.z = AccData.Z / 256;
+	raw.accel.x = AccData.X * 256;
+	raw.accel.y = AccData.Y * 256;
+	raw.accel.z = AccData.Z * 256;
 
-	raw.gyro.x = GyroData.X / 256;
-	raw.gyro.y = GyroData.Y / 256;
-	raw.gyro.z = GyroData.Z / 256;
+	raw.gyro.x = GyroData.X * 256;
+	raw.gyro.y = GyroData.Y * 256;
+	raw.gyro.z = GyroData.Z * 256;
 
-	raw.compass.x = MagData.X / 256;
-	raw.compass.y = MagData.Y / 256;
-	raw.compass.z = MagData.Z / 256;
+	raw.compass.x = MagData.X * 256;
+	raw.compass.y = MagData.Y * 256;
+	raw.compass.z = MagData.Z * 256;
 
 	uint32_t err = BtAppNotify(&GetImuSrvcInstance()->pCharArray[5], (uint8_t*)&raw, sizeof(ble_tms_raw_t));
 	if (err != 0)
