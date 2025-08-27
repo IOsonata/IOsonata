@@ -49,7 +49,10 @@ extern unsigned long __bss_size__;
 extern unsigned long __heap_start__;
 extern unsigned long __heap_size__;
 extern unsigned long __heap_end__;
-extern uint32_t _stack_top;
+extern uint32_t __StackTop;
+
+// Small data pointer for ABI compliance
+extern unsigned long __GlobalPointer;
 
 /* Forward declarations */
 extern void SystemInit(void);
@@ -62,7 +65,15 @@ void ResetEntry(void)
     uint32_t *src, *dst;
 
     /* Initialize stack pointer */
-    asm volatile("mv sp, %0" : : "r"(&_stack_top));
+//    asm volatile("mv sp, %0" : : "r"(&__StackTop));
+    // Initialize stack pointer ---
+    asm volatile("la sp, __StackTop");   // load address of stack top
+
+    // Initialize global pointer (ABI requirement) ---
+    asm volatile("la gp, __GlobalPointer");
+
+    // Disable virtual memory / MMU ---
+    asm volatile("csrw satp, zero");
 
   	/*
 	 * Copy the initialized data of the ".data" segment
