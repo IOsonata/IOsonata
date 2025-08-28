@@ -266,11 +266,6 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/I-SYST_Logo320_little.c</locationURI>
 		</link>
 		<link>
-			<name>src/ResetEntry.c</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ResetEntry.c</locationURI>
-		</link>
-		<link>
 			<name>src/app_evt_handler.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
@@ -369,6 +364,11 @@
 			<name>src/sbuffer.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/sbuffer.c</locationURI>
+		</link>
+		<link>
+			<name>src/sensors</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/slip_intrf.cpp</name>
@@ -1154,6 +1154,141 @@
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/accel_adxl362.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/accel_adxl362.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/accel_h3lis331dl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/accel_h3lis331dl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/accel_lisxdh.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/accel_lisxdh.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/accel_sensor.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/accel_sensor.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/ag_bmi160.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/ag_bmi160.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/ag_bmi270.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/ag_bmi270.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/ag_bmi323.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/ag_bmi323.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/ag_icm456x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/ag_icm456x.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/agm_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/agm_invn_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/agm_invn_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/agm_mpu9250.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/agm_mpu9250.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/am_fxos8700cq.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/am_fxos8700cq.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/am_lsm303agr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/am_lsm303agr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/am_lsm303c.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/am_lsm303c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/gyro_l3gd20h.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/gyro_l3gd20h.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/gyro_sensor.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/gyro_sensor.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_ak09916.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/mag_ak09916.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_ak09940.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/mag_ak09940.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_bmm150.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/mag_bmm150.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_bmm350.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/mag_bmm350.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_sensor.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/mag_sensor.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/temp_NTCS0805E3683FXT.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/temp_NTCS0805E3683FXT.c</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/temp_ntc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/temp_ntc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/tir_calipile.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/tir_calipile.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/tph_bme280.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/tph_bme280.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/tph_ms8607.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/tph_ms8607.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/tphg_bme680.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/sensors/tphg_bme680.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

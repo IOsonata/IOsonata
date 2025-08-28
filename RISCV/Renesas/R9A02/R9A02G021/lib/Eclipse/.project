@@ -1201,24 +1201,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/sensors/agm_icm20948_new.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948_new.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_icm456x_ak09940.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm456x_ak09940.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/sensors/agm_invn_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_invn_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_invn_icm20948_works.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_invn_icm20948_works.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/agm_mpu9250.cpp</name>
@@ -1356,11 +1341,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/.DS_Store</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/CREDITS</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/CREDITS</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts/FreeMono</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1374,21 +1354,6 @@
 			<name>src/display/fonts/FreeSerif</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/SIL-License.txt</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/SIL-License.txt</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/orkney24pts.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/orkney24pts.c</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/orkney8pts.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/orkney8pts.c</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/syst5x7.c</name>

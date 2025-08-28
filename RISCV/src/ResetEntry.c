@@ -116,11 +116,11 @@ caddr_t _sbrk(ptrdiff_t incr)
     uint8_t *prev_heap;
 
     if (heap_ptr == NULL)
-        heap_ptr = (uint8_t *)&_heap_start__;
+        heap_ptr = (uint8_t *)&__heap_start__;
 
     prev_heap = heap_ptr;
 
-    if ((heap_ptr + incr) > (uint8_t *)&_heap_end__) {
+    if ((heap_ptr + incr) > (uint8_t *)&__heap_end__) {
         errno = ENOMEM;
         return (caddr_t)-1;
     }
