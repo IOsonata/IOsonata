@@ -131,7 +131,7 @@ SECTIONS {
 	
 	.eh_frame : ONLY_IF_RO 
 	{ 
-		. = ALIGN(4);
+/*		. = ALIGN(4);*/
 		*(.eh_frame)
 	} > FLASH
 	
