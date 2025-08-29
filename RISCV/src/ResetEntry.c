@@ -52,7 +52,7 @@ extern unsigned long __heap_end__;
 extern uint32_t __StackTop;
 
 // Small data pointer for ABI compliance
-extern unsigned long __GlobalPointer;
+extern unsigned long __global_pointer$;
 
 /* Forward declarations */
 extern void SystemInit(void);
@@ -70,7 +70,7 @@ void ResetEntry(void)
     asm volatile("la sp, __StackTop");   // load address of stack top
 
     // Initialize global pointer (ABI requirement) ---
-    asm volatile("la gp, __GlobalPointer");
+    asm volatile("la gp, __global_pointer$");
 
     /* Only clear SATP if we KNOW we're running in S-mode on a paged system.
        By default for bare-metal MCUs (M-mode), do nothing. */

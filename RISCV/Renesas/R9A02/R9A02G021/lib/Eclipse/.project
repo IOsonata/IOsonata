@@ -396,6 +396,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus_impl.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/system_r9a02.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/system_r9a02.c</locationURI>
+		</link>
+		<link>
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
@@ -949,6 +954,11 @@
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/iopincfg_r9a02.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/iopincfg_r9a02.c</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.c</name>

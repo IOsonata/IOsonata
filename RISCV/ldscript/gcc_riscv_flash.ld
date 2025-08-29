@@ -200,11 +200,12 @@ SECTIONS {
 	.bss : ALIGN(4)
 	{
 		__bss_start__ = .;
+		__bss_start = .;
 		*(.bss*)
 		*(COMMON)
       	*(.gnu.linkonce.b.*)
 		__bss_end__ = .;
-		PROVIDE(end = .);		              
+		PROVIDE(_end = .);		              
 	} > RAM
         __bss_size__ = SIZEOF(.bss);
 	

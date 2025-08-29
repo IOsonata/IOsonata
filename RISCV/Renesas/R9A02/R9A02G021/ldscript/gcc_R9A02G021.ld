@@ -29,6 +29,6 @@ MEMORY
 	
 }
 
-__GlobalPointer = ORIGIN(RAM) + LENGTH(RAM) / 2;
+__global_pointer$ = ORIGIN(RAM) + LENGTH(RAM) / 2;
 
 INCLUDE "gcc_riscv_flash.ld"
