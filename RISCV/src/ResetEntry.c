@@ -72,8 +72,13 @@ void ResetEntry(void)
     // Initialize global pointer (ABI requirement) ---
     asm volatile("la gp, __GlobalPointer");
 
-    // Disable virtual memory / MMU ---
-    asm volatile("csrw satp, zero");
+    /* Only clear SATP if we KNOW we're running in S-mode on a paged system.
+       By default for bare-metal MCUs (M-mode), do nothing. */
+#if defined(__riscv_zicsr)// && (defined(__riscv_sv32) || defined(__riscv_sv39) || defined(__riscv_sv48) || defined(__riscv_sv57))
+	asm volatile("csrw satp, zero");
+	// Optional: flush stale translations if you were actually in S-mode
+	asm volatile("sfence.vma");
+#endif
 
   	/*
 	 * Copy the initialized data of the ".data" segment

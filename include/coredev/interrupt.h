@@ -34,6 +34,8 @@ SOFTWARE.
 #ifndef __INTERRUPT_H__
 #define __INTERRUPT_H__
 
+#include <stdint.h>
+
 #ifdef __unix__
 // UNIX
 
@@ -58,21 +60,43 @@ static inline void EnableInterrupt(uint32_t __primmask) {
 	__set_PRIMASK(__primmask);
 }
 #elif defined(__riscv)
-// RISC-V
+// ----------------------------- RISC-V (bare-metal M-mode) --------------------
 
-static inline uint32_t DisableInterrupt() {
-	uint32_t mstatus_val;
-	asm volatile("csrr %0, mstatus" : "=r"(mstatus_val)); // Read mstatus
-    __asm__ volatile("csrrc x0, mstatus, %0" :: "r"(1 << 3)); // MIE is bit 3
+#include <stdint.h>
 
-    return mstatus_val;
-}
+// Require CSR instructions. Without Zicsr you cannot touch mstatus.MIE.
+#ifndef __riscv_zicsr
+# error "Bare-metal interrupt control needs CSR ops. Build with -march=..._zicsr."
+#endif
 
-static inline void EnableInterrupt(uint32_t mstatus_val) {
-//	mstatus_val |= (1UL << 3); // Set MIE bit (bit 3)
-	asm volatile("csrw mstatus, %0" :: "r"(mstatus_val)); // Write mstatus
-	//    __asm__ volatile("csrrsi x0, mstatus, %0" :: "r"(1 << 3)); // MIE is bit 3
-}
+// If <riscv_encoding.h> is present, use its helpers; else use minimal asm.
+#if __has_include(<riscv_encoding.h>)
+  #include <riscv_encoding.h>
+  static inline uintptr_t DisableInterrupt(void) {
+    uintptr_t prev = read_csr(mstatus);
+    clear_csr(mstatus, MSTATUS_MIE);           // atomically clear global IE
+    return prev;
+  }
+  static inline void EnableInterrupt(uintptr_t prev_status) {
+    write_csr(mstatus, prev_status);           // restore full mstatus
+  }
+#else
+  // mstatus CSR = 0x300; MIE bit = 3 -> immediate 8 for csrci/csrsi
+  static inline uintptr_t DisableInterrupt(void) {
+    uintptr_t prev;
+    __asm__ volatile(
+      "csrr  %0, 0x300\n"   // read mstatus
+      "csrci 0x300, 8\n"    // clear MIE (bit 3) atomically
+      : "=r"(prev) :: "memory");
+    return prev;
+  }
+  static inline void EnableInterrupt(uintptr_t prev_status) {
+    __asm__ volatile(
+      "csrw 0x300, %0\n"    // restore whole mstatus (nestable)
+      :: "r"(prev_status) : "memory");
+  }
+#endif
+
 #endif
 
 #endif // __INTERRUPT_H__

@@ -281,11 +281,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/device_intrf_old.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf_old.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/display</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -609,11 +604,6 @@
 			<name>include/imu/imu_xiot_fusion.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_xiot_fusion.h</locationURI>
-		</link>
-		<link>
-			<name>include/imu/imux.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imux.h</locationURI>
 		</link>
 		<link>
 			<name>include/imu/mpu9250_dmpkey.h</name>
@@ -1079,11 +1069,6 @@
 			<name>src/imu/imu_xiot_fusion.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_xiot_fusion.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/imu/imux.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imux.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/button.cpp</name>
