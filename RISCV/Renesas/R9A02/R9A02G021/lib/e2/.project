@@ -371,19 +371,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
 		</link>
 		<link>
-			<name>src/sysstatus_impl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus_impl.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
-		</link>
-		<link>
-			<name>src/usb_hidhost.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb_hidhost.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>
@@ -1404,16 +1394,6 @@
 			<name>src/display/fonts/SIL-License.txt</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/SIL-License.txt</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/orkney24pts.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/orkney24pts.c</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/orkney8pts.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/orkney8pts.c</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/syst5x7.c</name>
