@@ -180,9 +180,9 @@ char *Sha1(uint8_t *pData, int DataLen, bool bLast, char *pRes)
 		t = g_LastWIdx;
 
 		// Fill up left over from previous 32bits
-		for (int j = g_LastOctet; j < 4; j++)
+		for (int k = g_LastOctet; k < 4; k++)
 		{
-			W[t] |= *p << (24 - (j << 3));
+			W[t] |= *p << (24 - (k << 3));
 			DataLen--;
 			p++;
 		}

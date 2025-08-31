@@ -1114,7 +1114,11 @@ int AgIcm456x::Write(uint16_t IRegAddr, uint8_t *pData, int DataLen)
 {
 	uint8_t reg = ICM456X_IREG_ADDR_15_8_REG;
 	uint8_t cnt = 0;
-	uint8_t d[2 + DataLen] = { (uint8_t)(IRegAddr >> 8), (uint8_t)(IRegAddr & 0xFF), };
+
+	uint8_t d[2 + DataLen];// = { (uint8_t)(IRegAddr >> 8), (uint8_t)(IRegAddr & 0xFF), };
+
+	d[0] = (IRegAddr >> 8);
+	d[1] = (IRegAddr & 0xFF);
 
 	memcpy(&d[2], pData, DataLen);
 

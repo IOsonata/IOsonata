@@ -39,6 +39,9 @@ Modified by          Date              Description
 
 void md5(uint8_t *pData, int DataLen, uint8_t *pRes)
 {
+	(void)pData;
+	(void)DataLen;
+	(void)pRes;
 }
 
 

@@ -55,6 +55,8 @@ bool DirectLinkStartRx(DevIntrf_t * const pDevIntrf, int DevAddr)
 
 int DirectLinkRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int BuffLen)
 {
+	(void)pBuff;
+	(void)BuffLen;
 	ExcelitasSerDev_t *dev = (ExcelitasSerDev_t*)pDevIntrf->pDevData;
 	uint64_t val = 0;
 	int cnt = 0;
@@ -92,6 +94,8 @@ bool ExcelitasIntrfInit(ExcelitasSerDev_t * const pDev, ExcelitasSerCfg_t * cons
 
 bool DirectLinkInit(DirectLinkDev_t *pDev, int PortNo, int PinNo, int PinOp)
 {
+	(void)PinOp;
+
 	if (pDev == NULL)
 	{
 		return false;
@@ -153,6 +157,8 @@ int DirectLinkRead(DirectLinkDev_t *pDev, int NbBits, uint8_t *pBuf)
 
 uint64_t DirectLinkRead2(DirectLinkDev_t *pDev, int NbBits)
 {
+	(void)NbBits;
+
 	uint64_t val = 0;
 
 	IOPinSet(pDev->Pin.PortNo, pDev->Pin.PinNo);
@@ -197,6 +203,8 @@ uint64_t DirectLinkRead2(DirectLinkDev_t *pDev, int NbBits)
 
 bool SerialInInit(SerialInDev_t *pDev, int PortNo, int PinNo, int PinOp)
 {
+	(void)PinOp;
+
 	if (pDev == NULL)
 	{
 		return false;

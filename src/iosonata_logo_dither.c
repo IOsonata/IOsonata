@@ -398,6 +398,9 @@ const char * const g_IOsonataPortrait[] = {
 
 void PlaceIOsonata(uint8_t *pImage, int Width, int Height)
 {
+	(void)Width;
+	(void)Height;
+
 	int l = sizeof(g_IOsonataPortrait) / sizeof(char*);
 
 	for (int i = 0; i < l; i++)
@@ -407,7 +410,7 @@ void PlaceIOsonata(uint8_t *pImage, int Width, int Height)
 		uint8_t d = 0;
 		uint8_t *p1 = &pImage[i * 280 / 8 + 280 * 5 + 5];
 
-		for (int j = 0; j < strlen(g_IOsonataPortrait[i]); j++, p++)
+		for (size_t j = 0; j < strlen(g_IOsonataPortrait[i]); j++, p++)
 		{
 			d <<= 1;
 			if (*p == '1')

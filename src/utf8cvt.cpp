@@ -37,6 +37,7 @@ codecvt_base::result codecvt_utf8::do_in(mbstate_t &state, const char *from,
                                          wchar_t *to, wchar_t *to_limit, 
                                          wchar_t *&to_next) const
 {
+	(void)state;
    int len = from_end - from;
    int destlen = to_limit - to;
    int res = utf8towcs(from, &len , to, &destlen);
@@ -60,6 +61,8 @@ codecvt_base::result codecvt_utf8::do_out(mbstate_t &state, const wchar_t *from,
                                           const wchar_t *from_end, const wchar_t *&from_next,
                                           char *to, char *to_limit, char *&to_next) const
 {
+	(void)state;
+
    int srclen = from_end - from;
    int destsize = to_limit - to;
    int res = wcstoutf8(from, &srclen, to, &destsize);

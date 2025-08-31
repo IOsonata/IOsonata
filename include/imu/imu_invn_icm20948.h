@@ -60,7 +60,7 @@ public:
 	virtual void SetAxisAlignmentMatrix(int8_t * const pMatrix) ;
 	virtual bool Compass(bool bEn);
 	virtual bool Pedometer(bool bEn);
-	virtual bool Euler(bool bEn) { return false; }
+	virtual bool Euler(bool bEn) { (void)bEn; return false; }
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 

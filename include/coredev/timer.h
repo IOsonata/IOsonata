@@ -342,7 +342,7 @@ static inline bool TimerEnableExtTrigger(TimerDev_t * const pTimerDev, int TrigD
  * @return  Counter in millisecond
  */
 static inline uint32_t TimerGetMilisecond(TimerDev_t * const pTimerDev) {
-	return pTimerDev->GetTickCount(pTimerDev) * pTimerDev->nsPeriod / 1000000ULL;
+	return (uint32_t)(pTimerDev->GetTickCount(pTimerDev) * pTimerDev->nsPeriod / 1000000ULL);
 }
 
 /**

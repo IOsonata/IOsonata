@@ -652,6 +652,8 @@ const uint8_t g_Logo1BitISYSTVert[] = {
 
 void PlaceLogo1Bit(uint8_t *pScreen, int ScrWidth, int SrcHeight, uint8_t const *pLogo, int LogoWidth, int LogoHeight)
 {
+	(void)SrcHeight;
+
 	int l = LogoWidth >> 3;
 
 	for (int i = 0; i < LogoHeight; i++)

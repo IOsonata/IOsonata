@@ -846,7 +846,7 @@ public:
 	 */
 	virtual void StopTx(void) = 0;
 
-	virtual bool RequestToSend(int NbBytes) { return true; }
+	virtual bool RequestToSend(int NbBytes) { (void)NbBytes; return true; }
 
 	/**
 	 * @brief	This function perform a reset of the interface.

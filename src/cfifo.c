@@ -55,7 +55,7 @@ static inline void atomic_store(atomic_int *pVar, sig_atomic_t NewVal) {
 
 #include "cfifo.h"
 
-HCFIFO const CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking)
+HCFIFO CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking)
 {
 	if (pMemBlk == NULL)
 		return NULL;

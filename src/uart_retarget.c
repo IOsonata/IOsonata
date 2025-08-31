@@ -105,18 +105,26 @@ void UARTRetargetDisable(UARTDev_t * const pDev, int FileNo)
 
 int UARTStdDevOpen(void * const pDevObj, const char *pDevName, int Flags, int Mode)
 {
+	(void)pDevObj;
+	(void) pDevName;
+	(void)Flags;
+	(void)Mode;
+
 	return 0;
 }
 
 int UARTStdDevClose(void * const pDevObj, int Handle)
 {
+	(void)pDevObj;
+	(void)Handle;
+
 	return 0;
 }
 
 int UARTStdDevRead(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len)
 {
 	UARTDev_t *dev = (UARTDev_t *)pDevObj;
-	int l = 0;
+	size_t l = 0;
 
 	if (Handle == dev->hStdIn)
 	{

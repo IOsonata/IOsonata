@@ -206,7 +206,7 @@ extern "C" {
 // Require implementations
 bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfgData);
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState);
-UARTDev_t * const UARTGetInstance(int DevNo);
+UARTDev_t const * UARTGetInstance(int DevNo);
 
 static inline int UARTGetRate(UARTDev_t * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
 static inline int UARTSetRate(UARTDev_t * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }

@@ -59,10 +59,10 @@ extern void SystemInit(void);
 extern void SystemCoreClockUpdate(void);
 extern void _start(void);
 
-__attribute__((section(".reset"), used, noreturn))
+__attribute__((section(".reset"), used, retain, noreturn))
 void ResetEntry(void)
 {
-    uint32_t *src, *dst;
+    unsigned long *src, *dst;
 
     /* Initialize stack pointer */
 //    asm volatile("mv sp, %0" : : "r"(&__StackTop));
@@ -134,12 +134,12 @@ caddr_t _sbrk(ptrdiff_t incr)
     return (caddr_t)prev_heap;
 }
 
-__attribute__((weak)) int _close(int fd)      { return -1; }
-__attribute__((weak)) int _fstat(int fd, struct stat *st) { st->st_mode = S_IFCHR; return 0; }
-__attribute__((weak)) int _isatty(int fd)    { return 1; }
-__attribute__((weak)) int _lseek(int fd, int offset, int whence) { return -1; }
-__attribute__((weak)) int _read(int fd, char *buf, size_t len)    { return -1; }
-__attribute__((weak)) int _write(int fd, char *buf, size_t len)   { return -1; }
-__attribute__((weak)) void _exit(int status) { while(1); }
-__attribute__((weak)) void _kill(int pid, int sig) {}
+__attribute__((weak)) int _close(int fd)      { (void)fd; return -1; }
+__attribute__((weak)) int _fstat(int fd, struct stat *st) { (void)fd; st->st_mode = S_IFCHR; return 0; }
+__attribute__((weak)) int _isatty(int fd)    { (void)fd; return 1; }
+__attribute__((weak)) int _lseek(int fd, int offset, int whence) { (void)fd; (void)offset; (void)whence; return -1; }
+__attribute__((weak)) int _read(int fd, char *buf, size_t len)    { (void)fd; (void)buf; (void)len; return -1; }
+__attribute__((weak)) int _write(int fd, char *buf, size_t len)   { (void)fd; (void)buf; (void)len; return -1; }
+__attribute__((weak)) void _exit(int status) { (void)status; while(1); }
+__attribute__((weak)) void _kill(int pid, int sig) { (void)pid; (void)sig;}
 __attribute__((weak)) int _getpid(void) { return -1; }

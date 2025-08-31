@@ -95,7 +95,7 @@ extern "C" {
  *
  * 	@return CFifo Handle
  */
-HCFIFO const CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking);
+HCFIFO CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking);
 
 /**
  * @brief	Retrieve FIFO data by returning pointer to FIFO memory block for reading.

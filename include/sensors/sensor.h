@@ -264,6 +264,8 @@ public:
 	operator SENSOR_STATE () { return vState; }
 
 	static void TimerTrigHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext) {
+		(void)pTimer;
+		(void)TrigNo;
 	    Sensor *sensor = (Sensor*)pContext;
 
 	    sensor->UpdateData();
@@ -283,7 +285,7 @@ public:
 	 * @return	true - Success
 	 * 			false - Feature not supported
 	 */
-	virtual bool WakeOnEvent(bool bEnable, int Threshold) { return false; }
+	virtual bool WakeOnEvent(bool bEnable, int Threshold) { (void)bEnable; (void)Threshold; return false; }
 
 	/**
 	 * @brief	Get type of this object.

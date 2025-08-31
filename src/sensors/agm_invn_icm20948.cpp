@@ -679,6 +679,8 @@ bool AgmInvnIcm20948::StartSampling()
 // Implement wake on motion
 bool AgmInvnIcm20948::WakeOnEvent(bool bEnable, int Threshold)
 {
+	(void)Threshold;
+
     uint16_t regaddr;
 
 	if (bEnable == true)
@@ -863,7 +865,7 @@ bool AgmInvnIcm20948::UpdateData()
 
 
 			// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
-			int16_t t = ((int16_t)d[12] << 8) | d[13];
+			//int16_t t = ((int16_t)d[12] << 8) | d[13];
 			//TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | d[13]) * 100 / 33387 + 2100;
 			//TempSensor::vData.Timestamp = t;
 

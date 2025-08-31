@@ -507,6 +507,8 @@ static const uint8_t g_IOsonataLogoPortrait[] = {
 
 void PlaceIOsonataLogoPortrait(uint8_t *pImage, int Width, int Height)
 {
+	(void)Height;
+
 	int l = sizeof(g_IOsonataLogoPortrait) / LOGO_WIDTH_BYTES;
 
 	for (int i = 0; i < l; i++)

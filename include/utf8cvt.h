@@ -42,16 +42,16 @@ namespace std {
 class codecvt_utf8 : public codecvt<wchar_t, char, mbstate_t>
 {
 protected:
-   virtual codecvt_base::result do_in(mbstate_t &state, 
+	virtual codecvt_base::result do_in(mbstate_t &state,
                                       const char *from, 
                                       const char *from_end, 
                                       const char *&from_next, 
                                       wchar_t *to, 
                                       wchar_t *to_limit, 
                                       wchar_t *&to_next) const;
-   virtual int do_length(const mbstate_t &state, const char *from, 
+	virtual int do_length(const mbstate_t &state, const char *from,
                          const char *from_end, size_t limit) const throw();
-   virtual codecvt_base::result do_out(mbstate_t &state, 
+	virtual codecvt_base::result do_out(mbstate_t &state,
                                        const wchar_t *from, 
                                        const wchar_t *from_end, 
                                        const wchar_t *&from_next,
@@ -59,21 +59,23 @@ protected:
                                        char *to_limit, 
                                        char *&to_next) const;
 
-   // This is stateless so do nothing 
-   virtual codecvt_base::result do_unshift(mbstate_t &state, 
+	// This is stateless so do nothing
+	virtual codecvt_base::result do_unshift(mbstate_t &state,
                                            char *to, 
                                            char *to_limit, 
                                            char *&to_next) const {
-      to_next = to;
-      return codecvt_base::ok;
-   }
-   virtual bool do_always_noconv() const throw() { return false; }
-   virtual int do_encoding() const throw() { 
-      return 0; // 0 for variable length 
-   } 
-   virtual int do_max_length() const throw() { 
-      return 6; // max length for UTF-8
-   }
+		(void)state;
+		(void)to_limit;
+		to_next = to;
+		return codecvt_base::ok;
+	}
+	virtual bool do_always_noconv() const throw() { return false; }
+	virtual int do_encoding() const throw() {
+		return 0; // 0 for variable length
+	}
+	virtual int do_max_length() const throw() {
+		return 6; // max length for UTF-8
+	}
 };
 
 }  // namspace std
