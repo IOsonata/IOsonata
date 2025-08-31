@@ -322,10 +322,10 @@ extern "C" {
  * @param	pDev	: Pointer to an instance of the Device Interface
  */
 static inline void DeviceIntrfDisable(DevIntrf_t * const pDev) {
-	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt - 1) < 1)	{
-//	if (--pDev->EnCnt < 1) {
+//	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt - 1) < 1)	{
+	if (atomic_fetch_sub(&pDev->EnCnt, 1) < 1) {
     	pDev->Disable(pDev);
-    	pDev->EnCnt = 0;
+    	atomic_store(&pDev->EnCnt, 0);
 	}
 }
 
@@ -335,8 +335,8 @@ static inline void DeviceIntrfDisable(DevIntrf_t * const pDev) {
  * @param	pDev	: Pointer to an instance of the Device Interface
  */
 static inline void DeviceIntrfEnable(DevIntrf_t * const pDev) {
-	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt + 1) == 1)	{
-//	if (++pDev->EnCnt == 1) {
+//	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt + 1) == 1)	{
+	if (atomic_fetch_add(&pDev->EnCnt, 1) == 0) {
     	pDev->Enable(pDev);
     }
 }
