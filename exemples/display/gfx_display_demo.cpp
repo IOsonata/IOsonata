@@ -73,7 +73,7 @@ static const SPICfg_t s_SpiCfg = {
 
 SPI g_Spi;
 
-DisplayCfg_t s_LcdCfg = {
+static const DisplayCfg_t s_LcdCfg = {
 	.DevAddr = 0,
 	.pPins = s_TFTCtrlPins,
 	.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),

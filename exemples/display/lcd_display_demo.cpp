@@ -41,6 +41,7 @@ SOFTWARE.
 #include "display/display_st77xx.h"
 #include "display/display_ili9341.h"
 #include "display/display_hx8357.h"
+#include "display/display_ssd1351.h"
 #include "iopinctrl.h"
 
 #include "board.h"
@@ -87,9 +88,10 @@ DisplayCfg_t s_LcdCfg = {
 	.Orient = DISPL_ORIENT_PORTRAIT,
 };
 
-LcdST77xx g_Lcd;
+//LcdST77xx g_Lcd;
 //LcdILI9341 g_Lcd;
 //LcdHX8357 g_Lcd;
+LcdSSD1351 g_Lcd;
 
 uint8_t g_LineBuff[480 * 4];
 

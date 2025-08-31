@@ -449,7 +449,7 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 }
 
 // Send Data only, no Start/Stop condition
-int nRFxSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
+int nRFxSPITxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t*)pDev->pDevData;
     int cnt = 0;
@@ -497,7 +497,7 @@ int nRFxSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 }
 
 // Transmit Data only, no Start/Stop condition
-int nRFxSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
+int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;

@@ -5,7 +5,7 @@
 
 This is the base class to implement all sort devices, hardware or software.
 For example a sensor device or a software audio/video decoder.
-The device can transfer data via it's DeviceIntrf object.
+The device can transfer data via its DeviceIntrf object.
 
 Important NOTE : For performance, there is no pointer or
 parameter validation at this low level layer.  It is the responsibility of
@@ -58,9 +58,9 @@ typedef enum __Dev_Interrupt_Polarity {
 	DEVINTR_POL_HIGH	//!< Interrupt pin active high
 } DEVINTR_POL;
 
-/// @brief	Device data endianess
+/// @brief	Device data endianness
 ///
-/// To indicate data byte order endianess
+/// To indicate data byte order endianness
 ///
 typedef enum __Dev_Data_Byte_Order {
 	DEV_BYTEORDER_LITTLE,		//!< Data order little endian
@@ -80,12 +80,10 @@ typedef void (*DevEvtHandler_t)(Device * const pDev, DEV_EVT Evt);
 
 /// @brief	Device base class.
 ///
-/// This is the base class to implement all sort devices, hardware or software.
-/// For example a sensor device or a software audio decoder.  The device can transfer
-/// data via it's DeviceIntrf object.
-/// Important NOTE : For performance, there is no pointer or
-/// parameter validation at this low level layer.  It is the responsibility of
-/// caller to pre-validate all access
+/// Base class for both hardware and software devices (e.g., sensors or software audio decoders).
+/// The device transfers data via its DeviceIntrf.
+/// Important NOTE: For performance, there is no pointer or parameter validation
+/// at this low-level layer. The caller must pre-validate all access.
 class Device {
 public:
 	Device();
@@ -98,21 +96,20 @@ public:
 	/**
 	 * @brief	Power on or wake up device
 	 *
-	 * @return	true - If success
+	 * @return	true on success
 	 */
 	virtual bool Enable() = 0;
 
 	/**
 	 * @brief	Put device in power down or power saving sleep mode
 	 *
-	 * This function is used to put the device in lowest power mode
-	 * possible so that the Enable function can wake up without full
-	 * initialization.
+	 * Put the device into the lowest power mode possible such that
+	 * a subsequent Enable() can wake it without a full initialization.
 	 */
 	virtual void Disable() = 0;
 
 	/**
-	 * @brief	Reset device to it initial default state
+	 * @brief	Reset device to its initial default state
 	 */
 	virtual void Reset() = 0;
 
@@ -123,54 +120,52 @@ public:
 	/**
 	 * @brief	Power off the device completely.
 	 *
-	 * If supported, this will put the device in complete power down.
-	 * Full re-initialization is required to re-enable the device.
+	 * If supported, this fully powers down the device. A full re-initialization
+	 * is required to re-enable the device.
 	 */
 	virtual void PowerOff() {}
 
 	/**
-	 * @brief	Set device's map address
+	 * @brief	Set the device's map address
 	 *
-	 * Device address is dependent of interface and device type. For I2C type it
-	 * would be the 7 bits address, SPI would be CS pin index, other memory mapped
-	 * would be a 32bit address.
+	 * The address format depends on the interface/type. For I²C this is usually
+	 * a 7-bit address; for SPI it may be a chip-select index; for MMIO, a 32-bit address.
 	 *
-	 * @param 	Addr : Device's address or zero based chip select index
+	 * @param 	Addr : Device address or zero based chip select index
 	 */
 	virtual void DeviceAddress(uint32_t Addr) { vDevAddr =  Addr; }
 
 	/**
-	 * @brief	Get device's map address
+	 * @brief	Get the device's map address
 	 *
 	 * @return	Address or chip select pin zero based index
 	 */
-	virtual uint32_t DeviceAddress() { return vDevAddr; }
+	virtual uint32_t DeviceAddress() const { return vDevAddr; }
 
 	/**
-	 * @brief	Get device id.
+	 * @brief	Get device ID.
 	 *
 	 * This device id value is implementation specific.  It can store hardware
-	 * device identifier or serial number at the discretion of the implementor
+	 * device identifier or a serial number at the implementor’s discretion.
 	 *
-	 * @return	64 Bits device id value
+	 * @return	64 Bits device ID
 	 */
-	virtual uint64_t DeviceID() { return vDevId; }
+	virtual uint64_t DeviceID() const { return vDevId; }
 
 	/**
-	 * @brief	Read device's register/memory block.
+	 * @brief	Read the device's register/memory block.
 	 *
-	 * This default implementation sets bit 7 of the Cmd/Addr byte for SPI read access as most
-	 * devices work this way on SPI interface. Overwrite this implementation if SPI access is different
+	 * Default SPI convention: set bit 7 of the first command/address byte for READ.
+	 * Override if your device uses a different SPI protocol.
 	 *
-	 * @param 	pCmdAddr 	: Buffer containing command or address to be written
-	 * 						  prior reading data back
-	 * @param	CmdAddrLen 	: Command buffer size
-	 * @param	pBuff		: Data buffer container
-	 * @param	BuffLen		: Data buffer size
+	 * @param 	pCmdAddr 	: Command/address bytes to send before reading
+	 * @param	CmdAddrLen 	: Length of @p pCmdAddr in bytes
+	 * @param	pBuff		: Destination buffer
+	 * @param	BuffLen		: Size of @p pBuff in bytes
 	 *
-	 * @return	Actual number of bytes read
+	 * @return	Number of bytes read
 	 */
-	virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
+	virtual int Read(const uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 
 	/**
 	 * @brief	Write to device's register/memory block
@@ -186,7 +181,7 @@ public:
 	 *
 	 * @return	Actual number of bytes written
 	 */
-	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	virtual int Write(const uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
 
 	/**
 	 * @brief	Read device's 8 bits register/memory
@@ -196,7 +191,7 @@ public:
 	 *
 	 * @return	Data read
 	 */
-	virtual uint8_t Read8(uint8_t *pRegAddr, int RegAddrLen) {
+	virtual uint8_t Read8(const uint8_t *pRegAddr, int RegAddrLen) {
 		uint8_t val = 0;
 		Read(pRegAddr, RegAddrLen, &val, 1);
 		return val;
@@ -210,7 +205,7 @@ public:
 	 *
 	 * @return	Data read
 	 */
-	virtual uint16_t Read16(uint8_t *pRegAddr, int RegAddrLen) {
+	virtual uint16_t Read16(const uint8_t *pRegAddr, int RegAddrLen) {
 		uint16_t val = 0;
 		Read(pRegAddr, RegAddrLen,(uint8_t*) &val, 2);
 		return val;
@@ -224,7 +219,7 @@ public:
 	 *
 	 * @return	Data read
 	 */
-	virtual uint32_t Read32(uint8_t *pRegAddr, int RegAddrLen) {
+	virtual uint32_t Read32(const uint8_t *pRegAddr, int RegAddrLen) {
 		uint32_t val = 0;
 		Read(pRegAddr, RegAddrLen, (uint8_t*)&val, 4);
 		return val;
@@ -239,7 +234,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Write8(uint8_t *pRegAddr, int RegAddrLen, uint8_t Data) {
+	virtual bool Write8(const uint8_t *pRegAddr, int RegAddrLen, uint8_t Data) {
 		return Write(pRegAddr, RegAddrLen, &Data, 1) > 0;
 	}
 
@@ -252,7 +247,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Write16(uint8_t *pRegAddr, int RegAddrLen, uint16_t Data) {
+	virtual bool Write16(const uint8_t *pRegAddr, int RegAddrLen, uint16_t Data) {
 		return Write(pRegAddr, RegAddrLen, (uint8_t*)&Data, 2) > 1;
 	}
 
@@ -265,29 +260,29 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Write32(uint8_t *pRegAddr, int RegAddrLen, uint32_t Data) {
-		return Write(pRegAddr, RegAddrLen, (uint8_t*)&Data, 1) > 3;
+	virtual bool Write32(const uint8_t *pRegAddr, int RegAddrLen, uint32_t Data) {
+		return Write(pRegAddr, RegAddrLen, (uint8_t*)&Data, 4) > 3;
 	}
 
 	/**
 	 * @brief	Return availability of the device
 	 *
-	 * This function return true if the device has been detected and ready to use.
+	 * Returns true if the device has been detected and is ready to use.
 	 *
-	 * @return	true - Device is valid.
+	 * @return	true if device is valid.
 	 */
 	bool Valid() { return vbValid; }
 
-	DEVINTRF_TYPE InterfaceType() { return vpIntrf != nullptr ? vpIntrf->Type() : DEVINTRF_TYPE_NULL; }
+	DEVINTRF_TYPE InterfaceType() const { return vpIntrf != nullptr ? vpIntrf->Type() : DEVINTRF_TYPE_NULL; }
 
 	/**
 	 * @brief	Get timer pointer used for timestamping
 	 *
 	 * @return	Pointer to Timer object.
-	 * 			Never delete the returned pointer.  This is for embedded system.
-	 * 			Normally objects are static not dynamically allocated
+	 * 			Never delete the returned pointer. In embedded systems, objects
+	 *          are typically static rather than dynamically allocated.
 	 */
-	virtual operator Timer * const () { return vpTimer; }	// Get device interface data (handle)
+	virtual operator Timer *() const { return vpTimer; }	// Get device interface data (handle)
 
 	void SetEvtHandler(DevEvtHandler_t EvtHandler) { vEvtHandler = EvtHandler; }
 	virtual void EvtHandler(DEV_EVT Evt) { if (vEvtHandler) vEvtHandler(this, Evt); }
@@ -295,13 +290,13 @@ public:
 protected:
 
 	void InterruptId(uint8_t IntId) { vIntId = IntId; }
-	uint8_t InterruptId(void) { return vIntId; }
+	uint8_t InterruptId(void) const { return vIntId; }
 
 	/**
 	 * @brief	Store device id.
 	 *
-	 * This device id value is implementation specific.  It can store hardware
-	 * device identifier or serial number at the discretion of the implementor
+	 * This value is implementation-specific. It may store a hardware identifier
+	 * or a serial number, at the implementor’s discretion.
 	 *
 	 * @param	DevId : Device id value to store
 	 */
@@ -316,38 +311,36 @@ protected:
 	void Valid(bool bVal) { vbValid = bVal; }
 
 	/**
-	 * @brief	Set device's communication interface
+	 * @brief	Set the device’s communication interface
 	 *
-	 * @param 	pIntrf : Pointer to preinitialized static interface.
+	 * @param 	pIntrf : Pointer to a pre-initialized (typically static) interface.
 	 */
 	void Interface(DeviceIntrf * const pIntrf) { vpIntrf = pIntrf; }
 
 	/**
-	 * @brief	Get device's communication interface
+	 * @brief	Get the device’s communication interface
 	 *
-	 * @return	return pointer to interface in use or NULL
+	 * @return	Pointer to the interface in use, or nullptr
 	 */
-	DeviceIntrf * const Interface() { return vpIntrf; }
+	DeviceIntrf* Interface() const { return vpIntrf; }
 
 	void InterruptEnabled(bool En) { vbIntEn = En; }
-	bool InterruptEnabled() { return vbIntEn; }
+	bool InterruptEnabled() const { return vbIntEn; }
 
 	virtual DEV_BYTEORDER ByteOrder(DEV_BYTEORDER Val) { vByteOrder = Val; return vByteOrder; }
-	virtual DEV_BYTEORDER ByteOrder(void) { return vByteOrder; }
-	operator DEV_BYTEORDER () { return vByteOrder; }
+	virtual DEV_BYTEORDER ByteOrder(void) const { return vByteOrder; }
+	operator DEV_BYTEORDER () const { return vByteOrder; }
 
 
-	bool		vbValid;		//!< Device is valid ready to use (passed detection)
-	uint32_t 	vDevAddr;		//!< Device address or chip select index
-	DeviceIntrf *vpIntrf;		//!< Device's interface
-	Timer 		*vpTimer;		//!< Timer to use for time stamping data or create a timer event
-	uint64_t	vDevId;			//!< This is implementation specific data for device identifier
-	 	 	 	 	 	 	 	//!< could be value read from hardware register or serial number
-	bool 		vbIntEn;		//!< Interrupt enabled
+	bool		vbValid;		//!< Device is detected/initialized and ready to use
+	uint32_t 	vDevAddr;		//!< Device address or chip-select index
+	DeviceIntrf *vpIntrf;		//!< Device interface
+	Timer 		*vpTimer;		//!< Timer for timestamping or timer events
+	uint64_t	vDevId;			//!< Implementation-specific device identifier (e.g., HW register or S/N)
+	bool 		vbIntEn;		//!< Interrupts enabled
 	DevEvtHandler_t	vEvtHandler;	//!< Event handler callback
-	uint8_t		vIntId;			//!< Some devices can have multiple interrupt pin. This is to indicate which
-	 	 	 	 	 	 	 	//!< interrupt pin is configured to be used. 0 - No interrupt.
-	DEV_BYTEORDER vByteOrder; 	//!< Data endianess
+	uint8_t		vIntId;			//!< If multiple interrupt pins, which one is used (0 = none)
+	DEV_BYTEORDER vByteOrder; 	//!< Data endianness
 };
 
 extern "C" {

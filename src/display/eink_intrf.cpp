@@ -158,7 +158,7 @@ static bool EInkIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-static int EInkIntrfTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
+static int EInkIntrfTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 	int cnt = 0;

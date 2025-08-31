@@ -40,13 +40,12 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/blueio_blesrvc.h"
-#include "blueio_board.h"
 #include "coredev/uart.h"
-#include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "app_evt_handler.h"
 #include "prbs.h"
 #include "coredev/system_core_clock.h"
+#include "blueio_board.h"
 
 //#define APP_SCHED		// use Nordic app scheduler
 
@@ -118,7 +117,7 @@ static uint8_t s_UartTxCharMem[PACKET_SIZE];
 
 static uint8_t s_RxCharValMem[PACKET_SIZE];
 
-BtGattChar_t g_UartChars[] = {
+static BtGattChar_t g_UartChars[] = {
 	{
 		// Read characteristic
 		.Uuid = BLE_UART_UUID_READ_CHAR,
@@ -128,9 +127,6 @@ BtGattChar_t g_UartChars[] = {
 		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
 		.SetNotifCB = ReadCharSetNotif,		// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = s_RxCharValMem,
-		//.CharVal = {PACKET_SIZE, 0, s_UartRxCharMem},						// char values
-		0,									// Default value length in bytes
 	},
 	{
 		// Write characteristic
@@ -141,8 +137,6 @@ BtGattChar_t g_UartChars[] = {
 		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		//.CharVal = {PACKET_SIZE, 0, s_UartTxCharMem},						// char values
-		0									// Default value length in bytes
 	},
 };
 
@@ -150,7 +144,7 @@ static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BtGattChar_t);
 
 uint8_t g_LWrBuffer[512];
 
-const BtGattSrvcCfg_t s_UartSrvcCfg = {
+static const BtGattSrvcCfg_t s_UartSrvcCfg = {
 	.SecType = BT_GAP_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = true,
 	.UuidBase = BLE_UART_UUID_BASE,		// Base UUID
@@ -164,7 +158,7 @@ const BtGattSrvcCfg_t s_UartSrvcCfg = {
 
 BtGattSrvc_t g_UartBleSrvc;
 
-const BtAppDevInfo_t s_UartBleDevDesc {
+static const BtAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           	// Model name
 	MANUFACTURER_NAME,      // Manufacturer name
 	"",                     // Serial number string
@@ -172,7 +166,7 @@ const BtAppDevInfo_t s_UartBleDevDesc {
 	"0.0",                  // Hardware version string
 };
 
-const BtAppCfg_t s_BleAppCfg = {
+static const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0, 				// Number of central link
 	.PeriLinkCount = 1, 				// Number of peripheral link

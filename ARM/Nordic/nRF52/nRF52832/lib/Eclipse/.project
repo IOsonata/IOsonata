@@ -781,6 +781,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/spi_nrfx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/spi_nrfx.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/system_core_clock.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>

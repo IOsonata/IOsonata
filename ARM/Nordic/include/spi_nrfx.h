@@ -81,7 +81,7 @@ typedef struct {
 	uint8_t *pRxBuff;
 	int TxDatalen;
 	int TxIdx;
-	uint8_t *pTxData;
+	const uint8_t *pTxData;
 } nRFSpiDev_t;
 
 typedef struct {

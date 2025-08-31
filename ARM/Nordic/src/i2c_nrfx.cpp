@@ -87,7 +87,7 @@ typedef struct {
 	uint8_t *pRxBuff;
 	int TxDatalen;
 	int TxIdx;
-	uint8_t *pTxData;
+	const uint8_t *pTxData;
 } nRFTwiDev_t;
 
 typedef struct {
@@ -508,7 +508,7 @@ bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 }
 
 // Send Data only, no Start/Stop condition
-int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
+int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t d;
@@ -551,7 +551,7 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 	return cnt;
 }
 
-int nRFxI2CTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
+int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t d;

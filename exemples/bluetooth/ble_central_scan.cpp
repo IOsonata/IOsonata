@@ -159,7 +159,7 @@ static BtGapScanCfg_t const g_ScanParams = {
 
 uint8_t g_ScanBuff[BT_GAP_SCAN_BUFFER_SIZE_DEFAULT];//BLE_GAP_SCAN_BUFFER_EXTENDED_MAX];
 
-void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
+bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
 {
 //	g_Uart.printf("BtAppScanReport : Rssi = %d\r\n", Rssi);
 	if (AdvLen > 0)
@@ -198,6 +198,8 @@ void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 	{
 		g_Uart.printf("(No data)\r\n");
 	}
+
+	return true;
 }
 
 void HardwareInit()

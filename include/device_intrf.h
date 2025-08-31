@@ -256,7 +256,7 @@ struct __device_intrf {
 	 *
 	 * @return	Number of bytes sent
 	 */
-	int (*TxData)(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen);
+	int (*TxData)(DevIntrf_t * const pDevIntrf, const uint8_t *pData, int DataLen);
 
 	/**
 	 * @brief	Transfer data from pData passed in parameter with re-start.
@@ -272,7 +272,7 @@ struct __device_intrf {
 	 *
 	 * @return	Number of bytes sent
 	 */
-	int (*TxSrData)(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen);
+	int (*TxSrData)(DevIntrf_t * const pDevIntrf, const uint8_t *pData, int DataLen);
 
 	/**
 	 * @brief	Completion of sending data via TxData.  Do require post processing
@@ -423,7 +423,7 @@ void DeviceIntrfTxComplete(DevIntrf_t * const pDev);
  *
  * @return	Number of bytes read
  */
-int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen,
+int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
                     uint8_t *pRxBuff, int RxLen);
 
 /**
@@ -441,8 +441,8 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, 
  *
  * @return	Number of bytes of data sent (not counting the Addr/Cmd).
  */
-int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen,
-                     uint8_t *pData, int DataLen);
+int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+                     const uint8_t *pData, int DataLen);
 
 /**
  * @brief	Prepare start condition to receive data with subsequence RxData.
@@ -550,7 +550,7 @@ static inline bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
  *
  * @return	Number of bytes sent
  */
-static inline int DeviceIntrfTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen) {
+static inline int DeviceIntrfTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen) {
 	return pDev->TxData(pDev, pData, DataLen);
 }
 
@@ -729,7 +729,7 @@ public:
 	 *
 	 * @return	Number of bytes read
 	 */
-    virtual int Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen) {
+    virtual int Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen) {
         return DeviceIntrfRead(*this, DevAddr, pAdCmd, AdCmdLen, pBuff, BuffLen);
     }
 
@@ -747,7 +747,7 @@ public:
      *
      * @return	Number of bytes of data sent (not counting the Addr/Cmd).
      */
-    virtual int Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pData, int DataLen) {
+    virtual int Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen, const uint8_t *pData, int DataLen) {
         return DeviceIntrfWrite(*this, DevAddr, pAdCmd, AdCmdLen, pData, DataLen);
     }
 

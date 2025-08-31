@@ -664,7 +664,7 @@ static bool nRFUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-static int nRFUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
+static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
     int cnt = 0;

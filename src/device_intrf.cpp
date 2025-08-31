@@ -115,8 +115,8 @@ bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout)
 	return Timeout > 0;
 }
 
-int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen,
-                 uint8_t *pRxBuff, int RxLen)
+int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+                 	uint8_t *pRxBuff, int RxLen)
 {
     int count = 0;
     int nrtry = pDev->MaxRetry;
@@ -164,8 +164,8 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, 
     return count;
 }
 
-int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen,
-                  uint8_t *pData, int DataLen)
+int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+                  	 const uint8_t *pData, int DataLen)
 {
     int count = 0, txlen = AdCmdLen;
     int nrtry = pDev->MaxRetry;

@@ -257,7 +257,7 @@ bool EsbIntrfStartTx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
  *
  * @return  Number of bytes sent
  */
-int EsbIntrfTxData(DevIntrf_t *pDevIntrf, uint8_t *pData, int DataLen)
+int EsbIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int DataLen)
 {
     ESBINTRF *intrf = (ESBINTRF*)pDevIntrf->pDevData;
     nrf_esb_payload_t *payload;

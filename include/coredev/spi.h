@@ -231,7 +231,7 @@ static inline void SPIStopRx(SPIDev_t * const pDev) { DeviceIntrfStopRx(&pDev->D
 static inline bool SPIStartTx(SPIDev_t * const pDev, int DevAddr) {
 	return DeviceIntrfStartTx(&pDev->DevIntrf, DevAddr);
 }
-static inline int SPITxData(SPIDev_t * const pDev, uint8_t *pData, int Datalen) {
+static inline int SPITxData(SPIDev_t * const pDev, const uint8_t *pData, int Datalen) {
 	return DeviceIntrfTxData(&pDev->DevIntrf, pData, Datalen);
 }
 static inline void SPIStopTx(SPIDev_t * const pDev) { DeviceIntrfStopTx(&pDev->DevIntrf); }

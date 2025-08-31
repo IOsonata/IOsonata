@@ -248,7 +248,7 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
  *
  * @return	Number of bytes sent
  */
-int BtIntrfTxData(DevIntrf_t *pDevIntrf, uint8_t *pData, int DataLen)
+int BtIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int DataLen)
 {
 	BtDevIntrf_t *intrf = (BtDevIntrf_t*)pDevIntrf->pDevData;
 	BtIntrfPkt_t *pkt;

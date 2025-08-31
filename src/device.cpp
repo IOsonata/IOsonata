@@ -62,16 +62,20 @@ Device::Device()
  *
  * @return	Actual number of bytes read
  */
-int Device::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
+int Device::Read(const uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
+	uint8_t cmd[CmdAddrLen];
+	memcpy(cmd, pCmdAddr, CmdAddrLen);
+
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		// Most sensor that supports SPI have this for reading registers
 		// overload this function if different
-		*pCmdAddr |= 0x80;
+		//*pCmdAddr |= 0x80;
+		cmd[0] |= 0x80;
 	}
 
-	return vpIntrf->Read(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	return vpIntrf->Read(vDevAddr, cmd, CmdAddrLen, pBuff, BuffLen);
 }
 
 /**
@@ -88,13 +92,13 @@ int Device::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
  *
  * @return	Actual number of bytes written
  */
-int Device::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int Device::Write(const uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		// Most sensor that supports SPI have this for writing registers
 		// overload this function if different
-		*pCmdAddr &= 0x7F;
+		//*pCmdAddr &= 0x7F;
 	}
 
 	return vpIntrf->Write(vDevAddr, pCmdAddr, CmdAddrLen, pData, DataLen);

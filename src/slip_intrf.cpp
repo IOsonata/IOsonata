@@ -405,7 +405,7 @@ int SlipIntrfTxData(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen)
 }
 #else
 
-int SlipIntrfTxData(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen)
+int SlipIntrfTxData(DevIntrf_t * const pDevIntrf, const uint8_t *pData, int DataLen)
 {
 	SlipDev_t *dev = (SlipDev_t *)pDevIntrf->pDevData;
 	int cnt = 0;
@@ -413,7 +413,7 @@ int SlipIntrfTxData(DevIntrf_t * const pDevIntrf, uint8_t *pData, int DataLen)
 
 	if (dev->pPhyIntrf)
 	{
-		uint8_t *p = pData;
+		const uint8_t *p = pData;
 		int i = 0;
 
 		while (DataLen > 0)

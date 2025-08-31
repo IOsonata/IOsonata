@@ -102,7 +102,7 @@ DisplayCfg_t s_LcdCfg = {
 	.Orient = DISPL_ORIENT_PORTRAIT,
 };
 
-//DisplST77xx g_Lcd;
+//LcdST77xx g_Lcd;
 LcdHX8357 g_Lcd;
 //LcdILI9341 g_Lcd;
 
@@ -179,8 +179,8 @@ int main()
 	//lv_example_get_started_1();
 	//DisplayInit();
 	//lv_img_set_src(&img, &logo);
-	lv_demo_stress();
-	//lv_demo_benchmark();
+	//lv_demo_stress();
+	lv_demo_benchmark();
 	//lv_example_anim_1();
 
 	uint64_t period = g_Timer.EnableTimerTrigger(0, LV_DISP_DEF_REFR_PERIOD, TIMER_TRIG_TYPE_CONTINUOUS);

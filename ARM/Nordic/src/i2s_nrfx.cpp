@@ -253,7 +253,7 @@ bool nRFxI2SStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-int nRFxI2STxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
+int nRFxI2STxData(DevIntrf_t * const pDev, const uint8_t *pBuff, int BuffLen)
 {
 
 	return 0;
