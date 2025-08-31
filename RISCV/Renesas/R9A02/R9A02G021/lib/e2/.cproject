@@ -137,7 +137,7 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="generate"/>
-						<entry excluding="CppRuntimeOverload.cpp|sysstatus.c|imu/imu_vqf.cpp" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
+						<entry excluding="display/display_epdmtrx.cpp|display/display_einkmtrx.cpp|display/display_uc8151x.cpp|CppRuntimeOverload.cpp|sysstatus.c|imu/imu_vqf.cpp" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -279,7 +279,7 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="generate"/>
-						<entry excluding="CppRuntimeOverload.cpp|sysstatus.c|imu/imu_vqf.cpp" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
+						<entry excluding="display/display_epdmtrx.cpp|display/display_einkmtrx.cpp|display/display_uc8151x.cpp|CppRuntimeOverload.cpp|sysstatus.c|imu/imu_vqf.cpp" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -421,7 +421,7 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="generate"/>
-						<entry excluding="CppRuntimeOverload.cpp|sysstatus.c|imu/imu_vqf.cpp" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
+						<entry excluding="display/display_epdmtrx.cpp|display/display_einkmtrx.cpp|display/display_uc8151x.cpp|CppRuntimeOverload.cpp|sysstatus.c|imu/imu_vqf.cpp" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -563,7 +563,7 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="generate"/>
-						<entry excluding="CppRuntimeOverload.cpp|sysstatus.c|imu/imu_vqf.cpp" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
+						<entry excluding="display/display_epdmtrx.cpp|display/display_einkmtrx.cpp|display/display_uc8151x.cpp|CppRuntimeOverload.cpp|sysstatus.c|imu/imu_vqf.cpp" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

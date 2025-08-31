@@ -1436,15 +1436,20 @@ bool ImuIcm20948::Calibrate()
 
 void ImuIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
+	(void)pMatrix;
 }
 
 bool ImuIcm20948::Compass(bool bEn)
 {
+	(void)bEn;
+
 	return true;
 }
 
 bool ImuIcm20948::Pedometer(bool bEn)
 {
+	(void)bEn;
+
 	return true;
 }
 
@@ -1472,6 +1477,8 @@ bool ImuIcm20948::Quaternion(bool bEn, int NbAxis)
 
 bool ImuIcm20948::Tap(bool bEn)
 {
+	(void)bEn;
+
 	return true;
 }
 

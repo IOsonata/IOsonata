@@ -393,6 +393,8 @@ void LCDMatrix::Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count)
 				vCurScrollLine = vHeight - Count - 1;
 			}
 			break;
+		default:
+			;
 	}
 
 	uint8_t cmd = LCDMTRX_CMD_VSCROLL_START_ADDR;

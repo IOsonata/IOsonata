@@ -49,12 +49,12 @@ static bool EInkIntrfWaitBusy(EInkIntrfDev_t * const pDev, uint32_t Timeout = 0)
 
 static void EInkIntrfDisable(DevIntrf_t * const pDev)
 {
-
+	(void)pDev;
 }
 
 static void EInkIntrfEnable(DevIntrf_t * const pDev)
 {
-
+	(void)pDev;
 }
 
 static uint32_t EInkIntrfGetRate(DevIntrf_t * const pDev)
@@ -83,6 +83,8 @@ static uint32_t EInkIntrfSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 static bool EInkIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
+	(void)DevAddr;
+
 	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 
 	EInkIntrfSetDataMode(dev, true);
@@ -144,6 +146,8 @@ static void EInkIntrfStopRx(DevIntrf_t * const pDev)
 
 static bool EInkIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
+	(void)DevAddr;
+
 	EInkIntrfDev_t *dev = (EInkIntrfDev_t*)pDev->pDevData;
 
 	if (dev->Type == EIINTRF_TYPE_BITBANG)

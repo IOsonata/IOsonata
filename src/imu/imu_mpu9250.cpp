@@ -710,6 +710,8 @@ bool ImuMpu9250::Quaternion(bool bEn, int NbAxis)
 
 bool ImuMpu9250::Tap(bool bEn)
 {
+	(void)bEn;
+
 	return true;
 }
 

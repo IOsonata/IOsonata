@@ -173,23 +173,28 @@ bool ImuXiotFusion::Calibrate()
 
 void ImuXiotFusion::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
-
+	(void)pMatrix;
 }
 
 bool ImuXiotFusion::Compass(bool bEn)
 {
+	(void)bEn;
 
 	return true;
 }
 
 bool ImuXiotFusion::Pedometer(bool bEn)
 {
+	(void)bEn;
 
 	return true;
 }
 
 bool ImuXiotFusion::Quaternion(bool bEn, int NbAxis)
 {
+	(void)bEn;
+	(void)NbAxis;
+
 	FusionQuaternion fvquat = FusionAhrsGetQuaternion(&vAhrs);
 
 	return true;
@@ -197,6 +202,7 @@ bool ImuXiotFusion::Quaternion(bool bEn, int NbAxis)
 
 bool ImuXiotFusion::Tap(bool bEn)
 {
+	(void)bEn;
 
 	return true;
 }

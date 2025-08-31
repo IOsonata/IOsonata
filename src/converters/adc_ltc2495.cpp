@@ -111,7 +111,7 @@ bool AdcLTC2495::OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan)
 
 void AdcLTC2495::CloseChannel(int Chan)
 {
-
+	(void)Chan;
 }
 
 bool AdcLTC2495::StartConversion()
@@ -172,5 +172,8 @@ int AdcLtc2495::Read(float *pBuff, int Len)
 */
 int AdcLTC2495::Read(AdcData_t *pBuff, int Len)
 {
+	(void)pBuff;
+	(void)Len;
+
 	return true;
 }

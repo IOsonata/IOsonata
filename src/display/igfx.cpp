@@ -140,7 +140,9 @@ void iGfx::Line(uint16_t StartX, uint16_t StartY, uint16_t EndX, uint16_t EndY, 
 
 void iGfx::Text(uint16_t Col, uint16_t Row, char *pStr)
 {
-
+	(void)Col;
+	(void)Row;
+	(void)pStr;
 }
 
 void iGfx::Print(char *pStr, uint32_t Color)

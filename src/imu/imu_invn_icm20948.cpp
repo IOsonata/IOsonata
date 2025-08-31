@@ -220,6 +220,9 @@ void ImuInvnIcm20948::Reset()
 
 IMU_FEATURE ImuInvnIcm20948::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
 {
+	(void)FeatureBit;
+	(void) bEnDis;
+
 	return Imu::Feature();
 }
 
@@ -230,20 +233,27 @@ bool ImuInvnIcm20948::Calibrate()
 
 void ImuInvnIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
+	(void)pMatrix;
 }
 
 bool ImuInvnIcm20948::Compass(bool bEn)
 {
+	(void)bEn;
+
 	return true;
 }
 
 bool ImuInvnIcm20948::Pedometer(bool bEn)
 {
+	(void)bEn;
+
 	return true;
 }
 
 bool ImuInvnIcm20948::Quaternion(bool bEn, int NbAxis)
 {
+	(void)bEn;
+
 	printf("ImuInvnIcm20948::Quaternion\n");
 
 	if (NbAxis < 9)
@@ -259,6 +269,8 @@ bool ImuInvnIcm20948::Quaternion(bool bEn, int NbAxis)
 
 bool ImuInvnIcm20948::Tap(bool bEn)
 {
+	(void)bEn;
+
 	return true;
 }
 

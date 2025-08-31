@@ -224,6 +224,10 @@ bool Calipile::UpdateData()
  */
 bool Calipile::Init(const TempSensorCfg_t &CfgData, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
+	(void)CfgData;
+	(void)pIntrf;
+	(void)pTimer;
+
 	return true;
 }
 

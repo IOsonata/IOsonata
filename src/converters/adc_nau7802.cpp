@@ -159,6 +159,8 @@ uint32_t AdcNau7802::Rate(uint32_t Val)
 
 uint16_t AdcNau7802::Resolution(uint16_t Val)
 {
+	(void)Val;
+
 	return AdcDevice::Resolution(24);
 }
 
@@ -293,11 +295,16 @@ void AdcNau7802::StopConversion()
 
 int AdcNau7802::Read(AdcData_t *pBuff, int Len)
 {
+	(void)pBuff;
+	(void)Len;
+
 	return 0;
 }
 
 bool AdcNau7802::Read(int Chan, AdcData_t *pBuff)
 {
+	(void)Chan;
+
 	pBuff->Chan = 0;
 	pBuff->Data = (float)vAdcVal[0];
 

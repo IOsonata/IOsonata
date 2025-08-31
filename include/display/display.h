@@ -111,7 +111,7 @@ public:
 	 *
 	 * @return	None
 	 */
-	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count) {}
+	virtual void Scroll(DISPL_SCROLL_DIR Dir, uint16_t Count) { (void)Dir; (void)Count;}
 
 	/**
 	 * @brief	print to console
@@ -302,7 +302,7 @@ private:
 /// Alpha numeric display object definition
 class DisplayAlphNum : public Display {
 public:
-	virtual void Print(char *pStr, uint32_t Color) {}
+	virtual void Print(char *pStr, uint32_t Color) { (void)pStr; (void)Color; }
 
 protected:
 private:
