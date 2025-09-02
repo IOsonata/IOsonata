@@ -1,26 +1,32 @@
 OUTPUT_ARCH( "riscv" )
 
 SEARCH_DIR(.)
+SEARCH_DIR("../../../ldscript")
 SEARCH_DIR("../../../../ldscript")
 SEARCH_DIR("../../../../../ldscript")
 SEARCH_DIR("../../../../../../ldscript")
 SEARCH_DIR("../../../../../../../ldscript")
+SEARCH_DIR("../../../../../../../../ldscript")
+SEARCH_DIR("../../IOsonata/RISCV/ldscript")
+SEARCH_DIR("../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/RISCV/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/RISCV/ldscript")
-GROUP(-lgcc -lc)
+GROUP( -lstdc++ -lgcc -lc)
 
 MEMORY
 {
   /* ROM code and data */
   IRAM (RX) : ORIGIN = 0x40300000, LENGTH = 0x10000
-  DRAM (RW) : ORIGIN = 0x3FCA0000, LENGTH = 0x30000
+  RAM (RW) : ORIGIN = 0x40800000, LENGTH = 0x80000
 
   /* External Flash Memory (Mapped into memory space) */
-  FLASH_IROM (RX) : ORIGIN = 0x42000020, LENGTH = 0x200000
+  FLASH (RX) : ORIGIN = 0x40000000, LENGTH = 0x200000
   FLASH_DROM (R)  : ORIGIN = 0x3C000020, LENGTH = 0x40000
 }
+
+RESET_VECTOR = 0x42000020;
 
 /*
  * Section Definitions
@@ -48,7 +54,7 @@ SECTIONS
     *(.dram.data.*)
     . = ALIGN(4);
     _dram_data_end = ABSOLUTE(.);
-  } > DRAM AT > FLASH_DROM
+  } > RAM AT > FLASH_DROM
 
   /* The .rodata section contains read-only data (constants). */
   .rodata :
@@ -70,7 +76,7 @@ SECTIONS
     *(.irom.text.*)
     . = ALIGN(4);
     _irom_text_end = ABSOLUTE(.);
-  } > FLASH_IROM
+  } > FLASH
 
   /* The .bss section contains uninitialized data. */
   .bss (NOLOAD) :
@@ -81,7 +87,7 @@ SECTIONS
     *(.bss.*)
     . = ALIGN(4);
     _bss_end = ABSOLUTE(.);
-  } > DRAM
+  } > RAM
 }
 
-INCLUDE "gcc_flash.ld"
+INCLUDE "gcc_riscv_flash.ld"

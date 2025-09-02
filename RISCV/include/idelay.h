@@ -57,7 +57,7 @@ extern uint64_t SystemCoreClockPeriodus;	// Microsecond period
  */
 static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
 
-	asm volatile (
+	__asm volatile (
 		// Read the current cycle count
 		"rdcycle t0\n\t"
 
@@ -89,7 +89,7 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
  * @param	cnt : nanosecond count
  */
 static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt) {
-	asm volatile (
+	__asm volatile (
 		// Read the current cycle count
 		"rdcycle t0\n\t"
 

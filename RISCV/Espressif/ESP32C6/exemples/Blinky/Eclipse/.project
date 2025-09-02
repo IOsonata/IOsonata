@@ -24,4 +24,21 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/blinky.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/exemples/misc/blinky.c</locationURI>
+		</link>
+		<link>
+			<name>src/board.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
+		</link>
+	</linkedResources>
 </projectDescription>

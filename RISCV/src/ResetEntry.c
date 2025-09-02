@@ -67,17 +67,17 @@ void ResetEntry(void)
     /* Initialize stack pointer */
 //    asm volatile("mv sp, %0" : : "r"(&__StackTop));
     // Initialize stack pointer ---
-    asm volatile("la sp, __StackTop");   // load address of stack top
+    __asm volatile("la sp, __StackTop");   // load address of stack top
 
     // Initialize global pointer (ABI requirement) ---
-    asm volatile("la gp, __global_pointer$");
+    __asm volatile("la gp, __global_pointer$");
 
     /* Only clear SATP if we KNOW we're running in S-mode on a paged system.
        By default for bare-metal MCUs (M-mode), do nothing. */
 #if defined(__riscv_zicsr) && (defined(__riscv_sv32) || defined(__riscv_sv39) || defined(__riscv_sv48) || defined(__riscv_sv57))
-	asm volatile("csrw satp, zero");
+	__asm volatile("csrw satp, zero");
 	// Optional: flush stale translations if you were actually in S-mode
-	asm volatile("sfence.vma");
+	__asm volatile("sfence.vma");
 #endif
 
   	/*
