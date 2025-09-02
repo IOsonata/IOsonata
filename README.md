@@ -29,9 +29,11 @@ For desktop PC version of the library, native compiler and IDE are used.  XCode 
 In order to compile the IOsonata target libraries these external SDK & lib are required. Follow the instructions below to download and install into appropriate folder locations and naming. 
  
  
-[nRF5_SDK](https://www.nordicsemi.com/Products/Development-software/nRF5-SDK/Download#infotabs)  : Nordic nRF5x Bluetooth Low Energy
+[nRF5_SDK](https://github.com/IOsonata/nRF5_SDK)  : Nordic nRF5x Bluetooth Low Energy
 
-[nrf5_SDK_Mesh](https://www.nordicsemi.com/Software-and-Tools/Software/nRF5-SDK-for-Mesh/Download#infotabs) : Nordic nRF5 SDK for Bluetoth Mesh
+[nRF5_SDK_Mesh](https://github.com/IOsonata/nRF5_SDK_Mesh) : Nordic nRF5 SDK for Bluetoth Mesh
+
+[nrfx](https://github.com/NordicSemiconductor/nrfx) : Nordic nrfx for nRF series MCU
 
 [ICM-20948 Motion_Driver](https://invensense.tdk.com/developers/software-downloads/) : Create a user at https://invensense.tdk.com/developers/software-downloads/. In the "Development Kits" block, download "DK-20948 SmartMotion eMD 1.1.0". Unzip the downloaded file and navigate to EMD-Core/sources. Copy the folder `Invn` to `external/Invn` as indicated in the folder tree bellow.
 
@@ -73,8 +75,7 @@ The way the IOsonata folder is structured is simple.  The deeper you go inside t
 /your_root     - Development root directory
  |-- external        - Contains downloaded SDKs from silicon vendors
  |   |-- nRF5_SDK        - Latest Nordic SDK (https://developer.nordicsemi.com)
- |   |-- nrf5_SDK_Mesh   - Latest Nordic SDK for Mesh (https://www.nordicsemi.com/eng/nordic/Products/nRF5-SDK-for-Mesh/nRF5-SDK-for-Mesh/62377)
- |   |---nRF5_SDK_12     - Last version of Nordic SDK12 for nRF51 series
+ |   |-- nRF5_SDK_Mesh   - Latest Nordic SDK for Mesh (https://www.nordicsemi.com/eng/nordic/Products/nRF5-SDK-for-Mesh/nRF5-SDK-for-Mesh/62377)
  |   |-- BSEC            - Bosch Sensortec Environmental Cluster (BSEC) Software (https://www.bosch-sensortec.com/bst/products/all_products/bsec) for #BME680
  |   |-- Invn            - Invensense SmartMotion Driver (download https://www.invensense.com/developers) 
  |   |   |-- Devices
