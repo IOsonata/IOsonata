@@ -1293,7 +1293,7 @@ public:
 	 *
 	 * @return	Number of bytes read
 	 */
-	virtual int Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen);
+	virtual int Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen);
 
     /**
      * @brief	Device write transfer.
@@ -1309,7 +1309,7 @@ public:
      *
      * @return	Number of bytes of data sent (not counting the Addr/Cmd).
      */
-    virtual int Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pData, int DataLen);
+    virtual int Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen, const uint8_t *pData, int DataLen);
 
 private:
 	DevIntrf_t vIntrfData;
