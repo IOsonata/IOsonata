@@ -1289,7 +1289,7 @@ void AuxIntrfIcm456x::StopTx(void)
 
 }
 
-int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen)
+int AuxIntrfIcm456x::Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen)
 {
 	int cnt = 0;
 
@@ -1326,7 +1326,7 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 		icm->Write(regaddr, &d, 1);
 
 		regaddr = ICM456X_I2CM_WR_DATA0_REG;
-		icm->Write(regaddr, pAdCmd, wlen);
+		icm->Write(regaddr, (uint8_t*)pAdCmd, wlen);
 
 		regaddr = ICM456X_I2CM_COMMAND_1_REG;
 		d = rlen | ICM456X_I2CM_COMMAND_CH_SEL_ID1 |
@@ -1363,7 +1363,7 @@ int AuxIntrfIcm456x::Read(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8
 	return cnt;
 }
 
-int AuxIntrfIcm456x::Write(uint32_t DevAddr, uint8_t *pAdCmd, int AdCmdLen, uint8_t *pData, int DataLen)
+int AuxIntrfIcm456x::Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen, const uint8_t *pData, int DataLen)
 {
 	int cnt = 0;
 
