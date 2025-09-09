@@ -253,7 +253,7 @@ bool nRFxQSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 }
 
 // Transmit Data only, no Start/Stop condition
-int nRFxQSPITxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
+int nRFxQSPITxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 	int cnt = 0;

@@ -162,7 +162,7 @@ static inline bool NRFX_IRQ_IS_PENDING(IRQn_Type irq_number)
 		uint8_t __CR_NESTED = 0;	\
 		(void) sd_nvic_critical_region_enter(&__CR_NESTED);
 #else
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 #define NRFX_CRITICAL_SECTION_ENTER()	\
 	{\
 		uint32_t state = DisableInterrupt();
