@@ -734,7 +734,7 @@ public:
 
 protected:
 	virtual int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) = 0;
-	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) = 0;
+	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen) = 0;
 
 	uint8_t vMagCtrl1Val;
 	int16_t vMagSenAdj[3];

@@ -135,7 +135,7 @@ public:
 		return DeviceIntrfStartTx(&vBtDevIntrf.DevIntrf, DevAddr);
 	}
 	// Transmit Data only, no Start/Stop condition
-	virtual int TxData(uint8_t *pData, int DataLen) {
+	virtual int TxData(const uint8_t *pData, int DataLen) {
 		return DeviceIntrfTxData(&vBtDevIntrf.DevIntrf, pData, DataLen);
 	}
 	// Stop transmit
