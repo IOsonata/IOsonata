@@ -139,7 +139,7 @@ int FgLc709203f::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int Buf
 	return 0;
 }
 
-int FgLc709203f::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int FgLc709203f::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
 	uint8_t buf[10];
 	int len = min(8, DataLen);

@@ -902,7 +902,7 @@ int AgmInvnIcm20948::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int
 	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 }
 
-int AgmInvnIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int AgmInvnIcm20948::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
 	if (CmdAddrLen == 2)
 	{
@@ -1525,7 +1525,7 @@ int AgmInvnIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, u
 	return retval;
 }
 
-int AgmInvnIcm20948::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int AgmInvnIcm20948::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
 	int retval = 0;
 

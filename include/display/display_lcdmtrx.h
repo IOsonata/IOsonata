@@ -296,7 +296,7 @@ public:
 	 *
 	 * @return	Actual number of bytes written
 	 */
-	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
 
 protected:
 	void SetRamWrRegion(uint16_t X, uint16_t Y, uint16_t With, uint16_t Height);

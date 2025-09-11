@@ -145,7 +145,7 @@ private:
 	 *
 	 * @return	Actual number of bytes written
 	 */
-	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen) {
 		return vpIcm->Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
 	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);

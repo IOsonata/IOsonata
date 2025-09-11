@@ -126,7 +126,7 @@ public:
 
 protected:
 	virtual int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) = 0;
-	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) = 0;
+	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen) = 0;
 
 	uint8_t vMagCtrl1Val;
 	int16_t vMagSenAdj[3];
@@ -216,7 +216,7 @@ public:
 	virtual bool Read(MagSensorData_t &Data) { return MagSensor::Read(Data); }
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
 
 	bool UpdateData();
 	virtual void IntHandler();
@@ -237,7 +237,7 @@ private:
 	// All sensor init must call this first prio to initializing itself
 	bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer);
 	virtual int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
 	bool SelectBank(uint8_t BankNo);
 	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
 

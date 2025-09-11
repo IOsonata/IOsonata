@@ -91,7 +91,7 @@ int MagSensor::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t
 	return vpIntrf->Read(DevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 }
 
-int MagSensor::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int MagSensor::Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{

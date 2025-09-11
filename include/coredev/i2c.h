@@ -306,7 +306,7 @@ public:
 		return DeviceIntrfStartTx(&vDevData.DevIntrf, DevAddr);
 	}
 	// Send Data only, no Start/Stop condition
-	virtual int TxData(uint8_t *pData, int DataLen) {
+	virtual int TxData(const uint8_t *pData, int DataLen) {
 		return DeviceIntrfTxData(&vDevData.DevIntrf, pData, DataLen);
 	}
 	virtual void StopTx(void) { DeviceIntrfStopTx(&vDevData.DevIntrf); }

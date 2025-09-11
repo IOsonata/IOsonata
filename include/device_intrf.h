@@ -397,7 +397,7 @@ int DeviceIntrfRx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int
  *
  * @return	Number of bytes read
  */
-int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pData, int DataLen);
+int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pData, int DataLen);
 
 /**
  * @brief	Signal Tx transfer completed.
@@ -711,7 +711,7 @@ public:
 	 *
 	 * @return	Number of bytes read
 	 */
-	virtual int Tx(uint32_t DevAddr, uint8_t *pData, int DataLen) {
+	virtual int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) {
 		return DeviceIntrfTx(*this, DevAddr, pData, DataLen);
 	}
 
@@ -830,7 +830,7 @@ public:
 	 *
 	 * @return	Number of bytes sent
 	 */
-	virtual int TxData(uint8_t *pData, int DataLen) = 0;
+	virtual int TxData(const uint8_t *pData, int DataLen) = 0;
 
 	// Stop transmit
 	// WARNING !!!!!

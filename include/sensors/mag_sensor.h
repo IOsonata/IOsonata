@@ -143,12 +143,12 @@ protected:
     // These functions allow override the default interface for devices that are hooked up on
     // the secondary interface.
 	virtual int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	virtual int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
 
 	virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
 		return Read(DeviceAddress(), pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 	}
-	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen) {
 		return Write(DeviceAddress(), pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
 

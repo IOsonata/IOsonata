@@ -765,7 +765,7 @@ int TphgBme680::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int Buff
 	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 }
 
-int TphgBme680::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int TphgBme680::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
 	if (vbSpi == true)
 	{

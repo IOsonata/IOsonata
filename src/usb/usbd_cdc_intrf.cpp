@@ -206,7 +206,7 @@ bool UsbdCdcIntrfStartTx(DevIntrf_t *pDevIntrf, uint32_t DevAddr)
  *
  * @return	Number of bytes sent
  */
-int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, uint8_t *pData, int Datalen)
+int UsbdCdcIntrfTxData(DevIntrf_t *pDevIntrf, const uint8_t *pData, int Datalen)
 {
 	UsbdCdcDevIntrf_t *intrf = (UsbdCdcDevIntrf_t*)pDevIntrf->pDevData;
 	int cnt = 0;

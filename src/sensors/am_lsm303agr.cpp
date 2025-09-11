@@ -545,6 +545,8 @@ bool AccelLsm303agr::UpdateData()
  */
 int AccelLsm303agr::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
+	uint8_t cmd = *pCmdAddr;
+
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		*pCmdAddr &= 0x3F;
@@ -554,7 +556,11 @@ int AccelLsm303agr::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int 
 		}
 	}
 
-	return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	int cnt =  Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+
+	*pCmdAddr = cmd;
+
+	return cnt;
 }
 
 /**
@@ -571,8 +577,10 @@ int AccelLsm303agr::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int 
  *
  * @return	Actual number of bytes written
  */
-int AccelLsm303agr::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int AccelLsm303agr::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
+	uint8_t cmd = *pCmdAddr;
+
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		*pCmdAddr &= 0x3F;
@@ -582,7 +590,11 @@ int AccelLsm303agr::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int
 		}
 	}
 
-	return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+	int cnt =  Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+
+	*pCmdAddr = cmd;
+
+	return cnt;
 }
 
 void AccelLsm303agr::IntHandler()

@@ -406,6 +406,8 @@ void AccelH3lis331dl::IntHandler()
  */
 int AccelH3lis331dl::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
+	uint8_t cmd = *pCmdAddr;
+
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		// Most sensor that supports SPI have this for reading registers
@@ -424,7 +426,11 @@ int AccelH3lis331dl::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int
 		}
 	}
 
-	return vpIntrf->Read(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	int cnt =  vpIntrf->Read(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+
+	*pCmdAddr = cmd;
+
+	return cnt;
 }
 
 /**
@@ -441,8 +447,10 @@ int AccelH3lis331dl::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int
  *
  * @return	Actual number of bytes written
  */
-int AccelH3lis331dl::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int AccelH3lis331dl::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
+	uint8_t cmd = *pCmdAddr;
+
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		*pCmdAddr &= 0x3F;
@@ -460,6 +468,10 @@ int AccelH3lis331dl::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, in
 		}
 	}
 
-	return vpIntrf->Write(vDevAddr, pCmdAddr, CmdAddrLen, pData, DataLen);
+	int cnt =  vpIntrf->Write(vDevAddr, pCmdAddr, CmdAddrLen, pData, DataLen);
+
+	*pCmdAddr = cmd;
+
+	return cnt;
 }
 

@@ -83,7 +83,7 @@ void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
 	}
 }
 
-int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, uint8_t *pBuff, int BuffLen)
+int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pBuff, int BuffLen)
 {
 	if (pBuff == NULL || BuffLen <= 0)
 		return 0;

@@ -106,7 +106,6 @@ bool AccLsm303c::Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * cons
 	// Read chip id
 	regaddr = LSM303C_WHO_AM_I_A_REG;
 	d = Read8(&regaddr, 1);
-printf("Chip Id %x\r\n", d);
 
 	if (d != LSM303C_WHO_AM_I_A_ID)
 	{
@@ -186,7 +185,7 @@ int AccLsm303c::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int Buff
  *
  * @return	Actual number of bytes written
  */
-int AccLsm303c::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int AccLsm303c::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
 	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{

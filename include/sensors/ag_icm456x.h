@@ -1277,7 +1277,7 @@ public:
 	virtual void StopRx(void);
 	virtual bool StartTx(uint32_t DevAddr);
 	// Send Data only, no Start/Stop condition
-	virtual int TxData(uint8_t *pData, int DataLen);
+	virtual int TxData(const uint8_t *pData, int DataLen);
 	virtual void StopTx(void);
 	/**
 	 * @brief	Device read transfer.
@@ -1338,7 +1338,7 @@ public:
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
 	virtual int Read(uint16_t IRegAddr, uint8_t *pBuff, int BuffLen) = 0;
-	virtual int Write(uint16_t IRegAddr, uint8_t *pData, int DataLen) = 0;
+	virtual int Write(uint16_t IRegAddr, const uint8_t *pData, int DataLen) = 0;
 };
 
 class GyroIcm456x : public GyroSensor {
@@ -1364,7 +1364,7 @@ public:
 private:
 	virtual bool Init(uint32_t DevAddr, DeviceIntrf * const pIntrf, uint8_t Inter = 0, DEVINTR_POL Pol = DEVINTR_POL_LOW, Timer * const pTimer = NULL) = 0;
 	virtual int Read(uint16_t IRegAddr, uint8_t *pBuff, int BuffLen) = 0;
-	virtual int Write(uint16_t IRegAddr, uint8_t *pData, int DataLen) = 0;
+	virtual int Write(uint16_t IRegAddr, const uint8_t *pData, int DataLen) = 0;
 };
 
 class TempIcm456x : public TempSensor {
@@ -1484,7 +1484,7 @@ public:
 	 *
 	 * @return	Number of bytes written
 	 */
-	int Write(uint16_t IRegAddr, uint8_t *pData, int DataLen);
+	int Write(uint16_t IRegAddr, const uint8_t *pData, int DataLen);
 
 	virtual void IntHandler();
 	virtual bool StartSampling() { return true; }
@@ -1497,7 +1497,7 @@ protected:
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
 		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 	}
-	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen) {
 		return Device::Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
 

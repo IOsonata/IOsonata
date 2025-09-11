@@ -48,12 +48,14 @@ SOFTWARE.
 #define BLUEPYRO_CR24S_M3225				8
 #define BLYST_MOTION						9
 #define BLUEIO_THINGY						10
+#define TACHYONTRACK						11
 
 #include "board_blueio_tag_evim.h"
 #include "board_blueio_adxl_wchrg.h"
 #include "board_blueio_thingy.h"
 #include "board_blyst_motion.h"
 #include "board_bluepyro_m3225.h"
+#include "board_tachyontrack.h"
 
 #define BLYSTNANO_PULSE_TRAIN_PINS	{ \
 	{0, 2, 0}, {0, 3, 0}, {0, 4, 0}, {0, 5, 0}, {0, 6, 0}, {0, 7, 0}, {0, 8, 0}, \

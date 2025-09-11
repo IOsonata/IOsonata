@@ -103,7 +103,7 @@ static inline int EInkIntrfRx(EInkIntrfDev_t * const pDev, uint8_t *pBuff, int B
 static inline int EInkIntrfTx(EInkIntrfDev_t * const pDev, uint8_t *pData, int DataLen) {
 	return DeviceIntrfTx(&pDev->DevIntrf, pDev->SpiCsIdx, pData, DataLen);
 }
-int EInkIntrfWrite(EInkIntrfDev_t * const pDev, uint8_t *pCmd, int CmdLen, uint8_t *pData, int DataLen);
+int EInkIntrfWrite(EInkIntrfDev_t * const pDev, uint8_t *pCmd, int CmdLen, const uint8_t *pData, int DataLen);
 
 #ifdef __cplusplus
 }
@@ -161,7 +161,7 @@ public:
 		return DeviceIntrfTxData(&vDevData.DevIntrf, pData, DataLen);
 	}
 	virtual void StopTx(void) { DeviceIntrfStopTx(&vDevData.DevIntrf); }
-	virtual int Write(uint8_t *pCmd, int CmdLen, uint8_t *pData, int DataLen) {
+	virtual int Write(uint8_t *pCmd, int CmdLen, const uint8_t *pData, int DataLen) {
 		return EInkIntrfWrite(&vDevData, pCmd, CmdLen, pData, DataLen);
 	}
 

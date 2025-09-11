@@ -134,7 +134,7 @@ protected:
 	 *
 	 * @return	Actual number of bytes written
 	 */
-	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) {
+	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen) {
 		return vpMpu->Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
 

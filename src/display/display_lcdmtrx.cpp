@@ -573,7 +573,7 @@ int LCDMatrix::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffL
  *
  * @return	Actual number of bytes written
  */
-int LCDMatrix::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen)
+int LCDMatrix::Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen)
 {
 	int cnt = 0;
 	vpIntrf->StartTx(DeviceAddress());
@@ -587,7 +587,7 @@ int LCDMatrix::Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int Data
 	if (pData != NULL && DataLen > 0)
 	{
 		IOPinSet(vCfg.pPins[DISPL_CTRL_DCX_PINIDX].PortNo, vCfg.pPins[DISPL_CTRL_DCX_PINIDX].PinNo);
-		cnt += vpIntrf->TxData(pData, DataLen);
+		cnt += vpIntrf->TxData((uint8_t*)pData, DataLen);
 	}
 	vpIntrf->StopTx();
 

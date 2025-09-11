@@ -856,14 +856,14 @@ public:
 	int Read(uint16_t RegAddr, uint8_t *pBuff, int BuffLen) {
 		return Read((uint8_t*)&RegAddr, 2, pBuff, BuffLen);
 	}
-	int Write(uint16_t RegAddr, uint8_t *pData, int DataLen) {
+	int Write(uint16_t RegAddr, const uint8_t *pData, int DataLen) {
 		return Write((uint8_t*)&RegAddr, 2, pData, DataLen);
 	}
 
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
 	int Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
-	int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	int Write(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
 
 	bool UpdateData();
 	void UpdateData(SENSOR_TYPE Type, uint64_t Timestamp, uint8_t * const pData);

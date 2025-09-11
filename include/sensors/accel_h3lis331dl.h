@@ -259,7 +259,7 @@ public:
 	 *
 	 * @return	Actual number of bytes written
 	 */
-	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen);
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
 
 private:
 };

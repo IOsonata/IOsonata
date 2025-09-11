@@ -115,7 +115,7 @@ protected:
 
 private:
 	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) { return vpIcm->Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen); }
-	int Write(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pData, int DataLen) { return vpIcm->Write(pCmdAddr, CmdAddrLen, pData, DataLen); }
+	int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen) { return vpIcm->Write(pCmdAddr, CmdAddrLen, pData, DataLen); }
 	void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
 	static void SensorEventHandler(void * context, enum inv_icm20948_sensor sensor, uint64_t timestamp, const void * data, const void *arg);
 	static int InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);

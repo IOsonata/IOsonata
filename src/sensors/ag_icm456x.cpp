@@ -1110,7 +1110,7 @@ int AgIcm456x::Read(uint16_t IRegAddr, uint8_t *pBuff, int BuffLen)
  *
  * @return	Number of bytes written
  */
-int AgIcm456x::Write(uint16_t IRegAddr, uint8_t *pData, int DataLen)
+int AgIcm456x::Write(uint16_t IRegAddr, const uint8_t *pData, int DataLen)
 {
 	uint8_t reg = ICM456X_IREG_ADDR_15_8_REG;
 	uint8_t cnt = 0;
@@ -1240,7 +1240,7 @@ bool AuxIntrfIcm456x::StartTx(uint32_t DevAddr)
 }
 
 // Send Data only, no Start/Stop condition
-int AuxIntrfIcm456x::TxData(uint8_t *pData, int DataLen)
+int AuxIntrfIcm456x::TxData(const uint8_t *pData, int DataLen)
 {
 	AgIcm456x *icm = (AgIcm456x*)vIntrfData.pDevData;
 	uint16_t regaddr = ICM456X_I2CM_DEV0_ADDRCMD_REG;

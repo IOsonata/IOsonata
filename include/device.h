@@ -165,7 +165,7 @@ public:
 	 *
 	 * @return	Number of bytes read
 	 */
-	virtual int Read(const uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
+	virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen);
 
 	/**
 	 * @brief	Write to device's register/memory block
@@ -181,7 +181,7 @@ public:
 	 *
 	 * @return	Actual number of bytes written
 	 */
-	virtual int Write(const uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
+	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen);
 
 	/**
 	 * @brief	Read device's 8 bits register/memory
@@ -191,7 +191,7 @@ public:
 	 *
 	 * @return	Data read
 	 */
-	virtual uint8_t Read8(const uint8_t *pRegAddr, int RegAddrLen) {
+	virtual uint8_t Read8(uint8_t *pRegAddr, int RegAddrLen) {
 		uint8_t val = 0;
 		Read(pRegAddr, RegAddrLen, &val, 1);
 		return val;
@@ -205,7 +205,7 @@ public:
 	 *
 	 * @return	Data read
 	 */
-	virtual uint16_t Read16(const uint8_t *pRegAddr, int RegAddrLen) {
+	virtual uint16_t Read16(uint8_t *pRegAddr, int RegAddrLen) {
 		uint16_t val = 0;
 		Read(pRegAddr, RegAddrLen,(uint8_t*) &val, 2);
 		return val;
@@ -219,7 +219,7 @@ public:
 	 *
 	 * @return	Data read
 	 */
-	virtual uint32_t Read32(const uint8_t *pRegAddr, int RegAddrLen) {
+	virtual uint32_t Read32(uint8_t *pRegAddr, int RegAddrLen) {
 		uint32_t val = 0;
 		Read(pRegAddr, RegAddrLen, (uint8_t*)&val, 4);
 		return val;
@@ -234,7 +234,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Write8(const uint8_t *pRegAddr, int RegAddrLen, uint8_t Data) {
+	virtual bool Write8(uint8_t *pRegAddr, int RegAddrLen, uint8_t Data) {
 		return Write(pRegAddr, RegAddrLen, &Data, 1) > 0;
 	}
 
@@ -247,7 +247,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Write16(const uint8_t *pRegAddr, int RegAddrLen, uint16_t Data) {
+	virtual bool Write16(uint8_t *pRegAddr, int RegAddrLen, uint16_t Data) {
 		return Write(pRegAddr, RegAddrLen, (uint8_t*)&Data, 2) > 1;
 	}
 
@@ -260,7 +260,7 @@ public:
 	 *
 	 * @return	true - Success
 	 */
-	virtual bool Write32(const uint8_t *pRegAddr, int RegAddrLen, uint32_t Data) {
+	virtual bool Write32(uint8_t *pRegAddr, int RegAddrLen, uint32_t Data) {
 		return Write(pRegAddr, RegAddrLen, (uint8_t*)&Data, 4) > 3;
 	}
 
