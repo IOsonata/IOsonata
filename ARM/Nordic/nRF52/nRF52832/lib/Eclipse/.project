@@ -71,6 +71,36 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/board_blueio_adxl_wchrg.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/board_blueio_adxl_wchrg.h</locationURI>
+		</link>
+		<link>
+			<name>include/board_blueio_tag_evim.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/board_blueio_tag_evim.h</locationURI>
+		</link>
+		<link>
+			<name>include/board_blueio_thingy.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/board_blueio_thingy.h</locationURI>
+		</link>
+		<link>
+			<name>include/board_bluepyro_m3225.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/board_bluepyro_m3225.h</locationURI>
+		</link>
+		<link>
+			<name>include/board_blyst_motion.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/board_blyst_motion.h</locationURI>
+		</link>
+		<link>
+			<name>include/board_tachyontrack.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/board_tachyontrack.h</locationURI>
+		</link>
+		<link>
 			<name>include/boards</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -716,11 +746,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_device.h</locationURI>
 		</link>
 		<link>
-			<name>include/converters/adc_hx711.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_hx711.h</locationURI>
-		</link>
-		<link>
 			<name>include/converters/adc_ltc2495.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_ltc2495.h</locationURI>
@@ -749,11 +774,6 @@
 			<name>include/coredev/i2s.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2s.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/i2s_nrfx.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/i2s_nrfx.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/interrupt.h</name>
