@@ -45,7 +45,7 @@ SOFTWARE.
   * @{
   */
 
-#define NPM2100_DEVICE_ADDR				0x74	// 7 bits device address
+#define NPM2100_I2C_DEVICE_ADDR				0x74	// 7 bits device address
 
 #define NPM2100_EVENTS_SYSTEM_SET_REG				0
 #define NPM2100_EVENTS_ADC_SET_REG					0x1
