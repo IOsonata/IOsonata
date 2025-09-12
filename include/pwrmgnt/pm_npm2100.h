@@ -48,34 +48,202 @@ SOFTWARE.
 #define NPM2100_I2C_DEVICE_ADDR				0x74	// 7 bits device address
 
 #define NPM2100_EVENTS_SYSTEM_SET_REG				0
+#define NPM2100_EVENTS_SYSTEM_SET_DIETWARN							(1<<0)	//!< Die temp warning
+#define NPM2100_EVENTS_SYSTEM_SET_SHPHLDFALL						(1<<1)	//!< SHPHLD falling edge
+#define NPM2100_EVENTS_SYSTEM_SET_SHPHDLRISE						(1<<2)	//!< SHPHLD rising edge
+#define NPM2100_EVENTS_SYSTEM_SET_PGRESETFALL						(1<<3)	//!< PG/RESET falling edge
+#define NPM2100_EVENTS_SYSTEM_SET_PGRESETRISE						(1<<4)	//!< PG/RESET rising edge
+#define NPM2100_EVENTS_SYSTEM_SET_TIMER								(1<<5)	//!< General purpose timer expired
+#define NPM2100_EVENTS_SYSTEM_SET_TIMERPREWRN						(1<<6)	//!< Prewarning event before timer expires
+#define NPM2100_EVENTS_SYSTEM_SET_TIMERFREE							(1<<7)	//!< Timer free event
+
 #define NPM2100_EVENTS_ADC_SET_REG					0x1
+#define NPM2100_EVENTS_ADC_SET_VBATRDY								(1<<0)	//!< ADC VBAT conversion ready
+#define NPM2100_EVENTS_ADC_SET_DIETRDY								(1<<1)	//!< ADC die temperature ready
+#define NPM2100_EVENTS_ADC_SET_DROOPDET								(1<<2)	//!< ADC droop detector conversion ready
+#define NPM2100_EVENTS_ADC_SET_VOUTRDY								(1<<3)	//!< ADC VOUT conversion ready
+
 #define NPM2100_EVENTS_GPIO_SET_REG					0x2
+#define NPM2100_EVENTS_GPIO_SET_GPIO0FALL							(1<<0)	//!< Falling edge on GPIO0
+#define NPM2100_EVENTS_GPIO_SET_GPIO0RISE							(1<<1)	//!< Rising edge on GPIO0
+#define NPM2100_EVENTS_GPIO_SET_GPIO1FALL							(1<<2)	//!< Falling edge on GPIO1
+#define NPM2100_EVENTS_GPIO_SET_GPIO1RISE							(1<<3)	//!< Rising edge on GPIO1
+#define NPM2100_EVENTS_GPIO_SET_GPIO2FALL							(1<<4)	//!< Falling edge on GPIO2
+#define NPM2100_EVENTS_GPIO_SET_GPIO2RISE							(1<<5)	//!< Rising edge on GPIO2
+
 #define NPM2100_EVENTS_BOOST_SET_REG				0x3
+#define NPM2100_EVENTS_BOOST_SET_VBATWRNF							(1<<0)	//!< VBAT dropped below VBATMINH threshold
+#define NPM2100_EVENTS_BOOST_SET_VBATWRNR							(1<<1)	//!< VBAT rose above VBATMINH threshold
+#define NPM2100_EVENTS_BOOST_SET_VOUTMIN							(1<<2)	//!< VOUT dropped bellow VOUTMIN threshold
+#define NPM2100_EVENTS_BOOST_SET_VOUTWRNF							(1<<3)	//!< VOUT dropped bellow VOUTWRN threshold
+#define NPM2100_EVENTS_BOOST_SET_VOUTWRNR							(1<<4)	//!< VOUT rose above VOUTWRN threshold
+#define NPM2100_EVENTS_BOOST_SET_VOUTDPSF							(1<<5)	//!< VOUT dropped bellow VOUTDPS threshold
+#define NPM2100_EVENTS_BOOST_SET_VOUTDPSR							(1<<6)	//!< VOUT rose above VOUTDPS threshold
+#define NPM2100_EVENTS_BOOST_SET_VOUTOK								(1<<7)	//!< VOUT reached target level after being low
+
 #define NPM2100_EVENTS_LDOSW_SET_REG				0x4
+#define NPM2100_EVENTS_LDOSW_SET_OCP								(1<<0)	//!< LDOSW over current
+#define NPM2100_EVENTS_LDOSW_SET_VINTFAIL							(1<<1)	//!< VINT didn't recover during LDOSW powerup using digital stepper
+
 #define NPM2100_EVENTS_SYSTEM_CLR_REG				0x5
+#define NPM2100_EVENTS_SYSTEM_CLR_DIETWARN							(1<<0)	//!< Die temperature warning
+#define NPM2100_EVENTS_SYSTEM_CLR_SHPHLDFALL						(1<<1)
+#define NPM2100_EVENTS_SYSTEM_CLR_SHPHLDRISE						(1<<2)
+#define NPM2100_EVENTS_SYSTEM_CLR_PGRESTFALL						(1<<3)
+#define NPM2100_EVENTS_SYSTEM_CLR_PGRESETRISE						(1<<4)
+#define NPM2100_EVENTS_SYSTEM_CLR_TIMER								(1<<5)
+#define NPM2100_EVENTS_SYSTEM_CLR_TIMERPREWRN						(1<<6)
+#define NPM2100_EVENTS_SYSTEM_CLR_TIMERFREE							(1<<7)
+
 #define NPM2100_EVENTS_ADC_CLR_REG					0x6
+#define NPM2100_EVENTS_ADC_CLR_VBATRDY								(1<<0)
+#define NPM2100_EVENTS_ADC_CLR_DIETRDY								(1<<1)
+#define NPM2100_EVENTS_ADC_CLR_DROOPDET								(1<<2)
+#define NPM2100_EVENTS_ADC_CLR_VOUTRDY								(1<<3)
+
 #define NPM2100_EVENTS_GPIO_CLR_REG					0x7
+#define NPM2100_EVENTS_GPIO_CLR_GPIO0FALL							(1<<0)
+#define NPM2100_EVENTS_GPIO_CLR_GPIO0RISE							(1<<1)
+#define NPM2100_EVENTS_GPIO_CLR_GPIO1FALL							(1<<2)
+#define NPM2100_EVENTS_GPIO_CLR_GPIO1RISE							(1<<3)
+#define NPM2100_EVENTS_GPIO_CLR_GPIO2FALL							(1<<4)
+#define NPM2100_EVENTS_GPIO_CLR_GPIO2RISE							(1<<5)
+
 #define NPM2100_EVENTS_BOOST_CLR_REG				0x8
+#define NPM2100_EVENTS_BOOST_CLR_VBATWRNF							(1<<0)
+#define NPM2100_EVENTS_BOOST_CLR_VBATWRNR							(1<<1)
+#define NPM2100_EVENTS_BOOST_CLR_VOUTMIN							(1<<2)
+#define NPM2100_EVENTS_BOOST_CLR_VOUTWRNF							(1<<3)
+#define NPM2100_EVENTS_BOOST_CLR_VOUTWRNR							(1<<4)
+#define NPM2100_EVENTS_BOOST_CLR_VOUTDPSF							(1<<5)
+#define NPM2100_EVENTS_BOOST_CLR_VOUTDPSR							(1<<6)
+#define NPM2100_EVENTS_BOOST_CLR_VOUTOK								(1<<7)
+
 #define NPM2100_EVENTS_LDOSW_CLR_REG				0x9
+#define NPM2100_EVENTS_LDOSW_CLR_OCP								(1<<0)
+#define NPM2100_EVENTS_LDOSW_CLR_VINTFAIL							(1<<1)
+
 #define NPM2100_INTEN_SYSTEM_SET_REG				0xA
+#define NPM2100_INTEN_SYSTEM_SET_DIETWARN							(1<<0)	//!< Die temp warning
+#define NPM2100_INTEN_SYSTEM_SET_SHPHLDFALL							(1<<1)	//!< SHPHLD falling edge
+#define NPM2100_INTEN_SYSTEM_SET_SHPHDLRISE							(1<<2)	//!< SHPHLD rising edge
+#define NPM2100_INTEN_SYSTEM_SET_PGRESETFALL						(1<<3)	//!< PG/RESET falling edge
+#define NPM2100_INTEN_SYSTEM_SET_PGRESETRISE						(1<<4)	//!< PG/RESET rising edge
+#define NPM2100_INTEN_SYSTEM_SET_TIMER								(1<<5)	//!< General purpose timer expired
+#define NPM2100_INTEN_SYSTEM_SET_TIMERPREWRN						(1<<6)	//!< Prewarning event before timer expires
+#define NPM2100_INTEN_SYSTEM_SET_TIMERFREE							(1<<7)	//!< Timer free event
+
 #define NPM2100_INTEN_ADC_SET_REG					0xB
+#define NPM2100_INTEN_ADC_SET_VBATRDY								(1<<0)	//!< ADC VBAT conversion ready
+#define NPM2100_INTEN_ADC_SET_DIETRDY								(1<<1)	//!< ADC die temperature ready
+#define NPM2100_INTEN_ADC_SET_DROOPDET								(1<<2)	//!< ADC droop detector conversion ready
+#define NPM2100_INTEN_ADC_SET_VOUTRDY								(1<<3)	//!< ADC VOUT conversion ready
+
 #define NPM2100_INTEN_GPIO_SET_REG					0xC
+#define NPM2100_INTEN_GPIO_SET_GPIO0FALL							(1<<0)	//!< Falling edge on GPIO0
+#define NPM2100_INTEN_GPIO_SET_GPIO0RISE							(1<<1)	//!< Rising edge on GPIO0
+#define NPM2100_INTEN_GPIO_SET_GPIO1FALL							(1<<2)	//!< Falling edge on GPIO1
+#define NPM2100_INTEN_GPIO_SET_GPIO1RISE							(1<<3)	//!< Rising edge on GPIO1
+#define NPM2100_INTEN_GPIO_SET_GPIO2FALL							(1<<4)	//!< Falling edge on GPIO2
+#define NPM2100_INTEN_GPIO_SET_GPIO2RISE							(1<<5)	//!< Rising edge on GPIO2
+
 #define NPM2100_INTEN_BOOST_SET_REG					0xD
+#define NPM2100_INTEN_BOOST_SET_VBATWRNF							(1<<0)	//!< VBAT dropped below VBATMINH threshold
+#define NPM2100_INTEN_BOOST_SET_VBATWRNR							(1<<1)	//!< VBAT rose above VBATMINH threshold
+#define NPM2100_INTEN_BOOST_SET_VOUTMIN								(1<<2)	//!< VOUT dropped bellow VOUTMIN threshold
+#define NPM2100_INTEN_BOOST_SET_VOUTWRNF							(1<<3)	//!< VOUT dropped bellow VOUTWRN threshold
+#define NPM2100_INTEN_BOOST_SET_VOUTWRNR							(1<<4)	//!< VOUT rose above VOUTWRN threshold
+#define NPM2100_INTEN_BOOST_SET_VOUTDPSF							(1<<5)	//!< VOUT dropped bellow VOUTDPS threshold
+#define NPM2100_INTEN_BOOST_SET_VOUTDPSR							(1<<6)	//!< VOUT rose above VOUTDPS threshold
+#define NPM2100_INTEN_BOOST_SET_VOUTOK								(1<<7)	//!< VOUT reached target level after being low
+
 #define NPM2100_INTEN_LDOSW_SET_REG					0xE
+#define NPM2100_INTEN_LDOSW_SET_OCP									(1<<0)	//!< LDOSW over current
+#define NPM2100_INTEN_LDOSW_SET_VINTFAIL							(1<<1)	//!< VINT didn't recover during LDOSW powerup using digital stepper
+
 #define NPM2100_INTEN_SYSTEM_CLR_REG				0xF
+#define NPM2100_INTEN_SYSTEM_CLR_DIETWARN							(1<<0)	//!< Die temperature warning
+#define NPM2100_INTEN_SYSTEM_CLR_SHPHLDFALL							(1<<1)
+#define NPM2100_INTEN_SYSTEM_CLR_SHPHLDRISE							(1<<2)
+#define NPM2100_INTEN_SYSTEM_CLR_PGRESTFALL							(1<<3)
+#define NPM2100_INTEN_SYSTEM_CLR_PGRESETRISE						(1<<4)
+#define NPM2100_INTEN_SYSTEM_CLR_TIMER								(1<<5)
+#define NPM2100_INTEN_SYSTEM_CLR_TIMERPREWRN						(1<<6)
+#define NPM2100_INTEN_SYSTEM_CLR_TIMERFREE							(1<<7)
+
 #define NPM2100_INTEN_ADC_CLR_REG					0x10
+#define NPM2100_INTEN_ADC_CLR_VBATRDY								(1<<0)	//!< ADC VBAT conversion ready
+#define NPM2100_INTEN_ADC_CLR_DIETRDY								(1<<1)	//!< ADC die temperature ready
+#define NPM2100_INTEN_ADC_CLR_DROOPDET								(1<<2)	//!< ADC droop detector conversion ready
+#define NPM2100_INTEN_ADC_CLR_VOUTRDY								(1<<3)	//!< ADC VOUT conversion ready
+
 #define NPM2100_INTEN_GPIO_CLR_REG					0x11
+#define NPM2100_INTEN_GPIO_CLR_GPIO0FALL							(1<<0)
+#define NPM2100_INTEN_GPIO_CLR_GPIO0RISE							(1<<1)
+#define NPM2100_INTEN_GPIO_CLR_GPIO1FALL							(1<<2)
+#define NPM2100_INTEN_GPIO_CLR_GPIO1RISE							(1<<3)
+#define NPM2100_INTEN_GPIO_CLR_GPIO2FALL							(1<<4)
+#define NPM2100_INTEN_GPIO_CLR_GPIO2RISE							(1<<5)
+
 #define NPM2100_INTEN_BOOST_CLR_REG					0x12
+#define NPM2100_INTEN_BOOST_CLR_VBATWRNF							(1<<0)
+#define NPM2100_INTEN_BOOST_CLR_VBATWRNR							(1<<1)
+#define NPM2100_INTEN_BOOST_CLR_VOUTMIN								(1<<2)
+#define NPM2100_INTEN_BOOST_CLR_VOUTWRNF							(1<<3)
+#define NPM2100_INTEN_BOOST_CLR_VOUTWRNR							(1<<4)
+#define NPM2100_INTEN_BOOST_CLR_VOUTDPSF							(1<<5)
+#define NPM2100_INTEN_BOOST_CLR_VOUTDPSR							(1<<6)
+#define NPM2100_INTEN_BOOST_CLR_VOUTOK								(1<<7)
+
 #define NPM2100_INTEN_LDOSW_CLR_REG					0x13
+#define NPM2100_INTEN_LDOSW_CLR_OCP									(1<<0)
+#define NPM2100_INTEN_LDOSW_CLR_VINTFAIL							(1<<1)
+
 #define NPM2100_REQUESTSET_REG						0x14
+#define NPM2100_REQUESTSET_DIETEMP									(1<<0)	//!< Start die temperature monitoring
+#define NPM2100_REQUESTSET_DIETEMPENA								(1<<1)	//!< Enable die temperature monitoring when BOOST is in HP mode
+
 #define NPM2100_REQUESTCLR_REG						0x15
+#define NPM2100_REQUESTCLR_DIETEMP									(1<<0)	//!< Stop die temperature monitoring
+#define NPM2100_REQUESTCLR_DIETEMPENA								(1<<1)	//!< Disable die temperature monitoring when BOOST is in HP mode
+
 #define NPM2100_STATUS_REG							0x16
+#define NPM2100_STATUS_SHPHLD										(1<<0)	//!< Status of SHPHLD pin
+#define NPM2100_STATUS_PGRESET										(1<<1)	//!< Status of PG/RESET pin
+#define NPM2100_STATUS_DIETEMP										(1<<2)	//!< Status of thermal warning
 
 #define NPM2100_BOOST_TASKS_START_REG				0x20
+#define NPM2100_BOOST_TASKS_START_PULSECNT							(1<<0)	//!< Start coil current pulse counter for DPS mode
+#define NPM2100_BOOST_TASKS_START_DPSDUR							(1<<1)	//!< Start DPS mode duration measurement
+
 #define NPM2100_BOOST_VOUT_REG						0x21
+#define NPM2100_BOOST_VOUT_MASK										(0x1F<<0)
+#define NPM2100_BOOST_VOUT_1V8										(0)
+#define NPM2100_BOOST_VOUT_3V3										(30)
+
 #define NPM2100_BOOST_VOUTSEL_REG					0x23
+#define NPM2100_BOOST_VOUTSEL_PIN									(0<<0)	//!< Output voltage set by pin VSET
+#define NPM2100_BOOST_VOUTSEL_REG									(1<<0)	//!< Output voltage set by BOOST.VOUT reg
+
 #define NPM2100_BOOST_OPER_REG						0x24
-#define NPM2100_BOOST_COUNT_REG						0x25
+#define NPM2100_BOOST_OPER_MODE_MASK								(7<<0)
+#define NPM2100_BOOST_OPER_MODE_AUTO								(0<<0)	//!< Auto (HP/LP/ULP/PT) mode
+#define NPM2100_BOOST_OPER_MODE_HP									(1<<0)	//!< Forced high power (HP) mode
+#define NPM2100_BOOST_OPER_MODE_LP									(1<<0)	//!< Forced low power (LP) mode
+#define NPM2100_BOOST_OPER_MODE_PT									(1<<0)	//!< Forced pass-through (PT) mode
+#define NPM2100_BOOST_OPER_MODE_NOHP								(1<<0)	//!< Forced prevent high power mode
+#define NPM2100_BOOST_OPER_DPS_MASK									(3<<3)
+#define NPM2100_BOOST_OPER_DPS_DIS									(0<<3)	//!< Disable DPS
+#define NPM2100_BOOST_OPER_DPS_ALLOW								(1<<3)	//!< Allow DPS mode
+#define NPM2100_BOOST_OPER_DPS_ALLOWLP								(2<<3)	//!< Allow DPS in LP mode only
+#define NPM2100_BOOST_OPER_DPSTIMER_MASK							(3<<5)
+#define NPM2100_BOOST_OPER_DPSTIMER_100US							(0<<5)
+#define NPM2100_BOOST_OPER_DPSTIMER_200US							(1<<5)
+#define NPM2100_BOOST_OPER_DPSTIMER_400US							(2<<5)
+#define NPM2100_BOOST_OPER_DPSTIMER_800US							(3<<5)
+
+#define NPM2100_BOOST_COUNT_REG						0x25	//!< Number of counted coil current pulse per refresh period in DPS
+
 #define NPM2100_BOOST_LIMIT_REG						0x26
 #define NPM2100_BOOST_DPS_REG						0x27
 #define NPM2100_BOOST_GPIO_REG						0x28
