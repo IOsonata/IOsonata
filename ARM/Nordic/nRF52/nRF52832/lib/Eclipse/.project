@@ -986,6 +986,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_npm1300.h</locationURI>
 		</link>
 		<link>
+			<name>include/pwrmgnt/pm_npm2100.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_npm2100.h</locationURI>
+		</link>
+		<link>
 			<name>include/pwrmgnt/pwrmgnt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
