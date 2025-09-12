@@ -1243,7 +1243,7 @@ void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 
 }
 
-UARTDev_t * const UARTGetInstance(int DevNo)
+UARTDev_t const * UARTGetInstance(int DevNo)
 {
 	return s_nRFxUARTDev[DevNo].pUartDev;
 }
