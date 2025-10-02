@@ -1,0 +1,1 @@
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "install_iocdevtools_win.ps1" %1 %2
