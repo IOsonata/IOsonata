@@ -138,18 +138,6 @@ Compile, flash, and run in minutes.
 
 ---
 
-## 🤝 Contributing
-We welcome contributions!  
-- Report issues → [Issues](https://github.com/IOsonata/IOsonata/issues)  
-- Add board support or drivers via PRs  
-- Share tutorials/blog posts using IOsonata  
-
----
-
-## 🛡️ License
-MIT License — free to use in open-source and commercial projects.  
-
----
 
 ## 🌍 About I-SYST
 IOsonata is maintained by **[I-SYST Inc.](https://www.i-syst.com)**, a Canadian company with 10+ years of embedded experience.  
