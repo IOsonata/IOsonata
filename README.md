@@ -76,7 +76,6 @@ int main() {
 ## 🛠️ The IOsonata Ecosystem
 
   * **Broad IDE Support:** Develop your way with pre-configured projects for Eclipse/GCC, IAR, Keil M-DK, and more.
-  * **IOcomposer Tool:** The framework is complemented by **IOcomposer**, a planned graphical tool for project configuration and code generation, designed to further accelerate development.
   * **Middleware Integration:** Comes with built-in support for popular middleware like `fatfs`, `littlefs`, and `lwip`.
 
 ## 🤝 Contributing
