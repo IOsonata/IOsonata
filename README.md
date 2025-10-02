@@ -31,6 +31,34 @@ IOsonata was designed to fill the gap between simple prototyping tools and large
 
   * ✅ **Truly Vendor-Agnostic** A single, unified framework with its own HAL for multiple MCU vendors (**Nordic, ST, NXP,** etc.) and first-class support for desktop OSes (**macOS, Linux, Windows**) for testing and native applications.
 
+
+
+## 💾 Installation
+
+Get started by running the setup script in your terminal to install the necessary toolchains and dependencies for your operating system.
+
+### macOS
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/master/Installer/install_iocdevtools_macos.sh)"
+```
+
+### Linux
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/master/Installer/install_iocdevtools_linux.sh)"
+```
+
+### Windows (PowerShell)
+
+⚠️ Important: You must run PowerShell as an Administrator. Right-click the PowerShell icon in your Start Menu and select "Run as administrator".
+
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/IOsonata/IOsonata/master/Installer/install_iocdevtools_win.ps1'))"
+```
+
+
 ## 🚀 Quick Start: The 5-Minute Blinky
 
 IOsonata can be as simple as the most intuitive beginner frameworks. Here’s all you need to blink an LED on your custom board.
@@ -128,9 +156,6 @@ IOsonata is maintained by **[I-SYST Inc.](https://www.i-syst.com)**, a Canadian 
 Our modules and software power **award-winning IoT, industrial, and health tech products** worldwide.  
 
 ---
-
-💡 **Tagline:** *IOsonata — Fast, portable, and production-ready. Your firmware foundation for the next generation of IoT.*  
-
 
 Although this library supports multiple IDE/Compilers, the preferred IDE is still Eclipse/GCC.  GCC is the de facto standard for embedded software development. Eclipse is 100% free and the most flexible IDE.  It could be little overwhelming for newbies at first (like any other IDE if you are new to it anyway).
 
