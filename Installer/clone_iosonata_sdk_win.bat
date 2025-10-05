@@ -1,0 +1,1 @@
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "clone_iosonata_sdk_win.ps1" %*

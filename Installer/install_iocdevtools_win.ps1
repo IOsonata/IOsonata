@@ -278,7 +278,7 @@ Write-Host "[OK] Eclipse preferences seeded (Build Tools, ARM, RISC-V, OpenOCD, 
 # Clone repos
 # ---------------------------------------------------------
 function Sync-Repo { param([string]$Url, [string]$Destination); if (Test-Path $Destination) { if ($MODE -eq 'force') { Write-Host "   - Force-updating repo..."; Remove-Item $Destination -Recurse -Force; git clone --depth=1 $Url $Destination } else { Write-Host "   - Pulling latest changes..."; Push-Location $Destination; try { git pull } finally { Pop-Location } } } else { Write-Host "   - Cloning repo..."; git clone --depth=1 $Url $Destination } }
-Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"; $repos = @{ "https://github.com/NordicSemiconductor/nrfx.git" = "$EXT\nrfx"; "https://github.com/nrfconnect/sdk-nrfxlib.git" = "$EXT\sdk-nrfxlib"; "https://github.com/IOsonata/nRF5_SDK.git" = "$EXT\nRF5_SDK"; "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "$EXT\nRF5_SDK_Mesh"; "https://github.com/BoschSensortec/BSEC-Arduino-library.git" = "$EXT\BSEC" }; foreach ($repo in $repos.GetEnumerator()) { Sync-Repo $repo.Name $repo.Value }
+Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"; $repos = @{ "https://github.com/NordicSemiconductor/nrfx.git" = "$EXT\nrfx"; "https://github.com/nrfconnect/sdk-nrfxlib.git" = "$EXT\sdk-nrfxlib"; "https://github.com/IOsonata/nRF5_SDK.git" = "$EXT\nRF5_SDK"; "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "$EXT\nRF5_SDK_Mesh"; "https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "$EXT\BSEC" }; foreach ($repo in $repos.GetEnumerator()) { Sync-Repo $repo.Name $repo.Value }
 
 # ---------------------------------------------------------
 # Summary

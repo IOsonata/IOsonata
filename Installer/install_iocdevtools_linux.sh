@@ -260,11 +260,11 @@ clone_repos() {
     "https://github.com/nrfconnect/sdk-nrfxlib.git"
     "https://github.com/IOsonata/nRF5_SDK.git"
     "https://github.com/IOsonata/nRF5_SDK_Mesh.git"
-    "https://github.com/BoschSensortec/BSEC-Arduino-library.git"
+    "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
   )
   for repo in "${repos[@]}"; do
     name=$(basename "$repo" .git)
-    [[ "$name" == "BSEC-Arduino-library" ]] && name="BSEC"
+    [[ "$name" == "Bosch-BSEC2-Library" ]] && name="BSEC"
     if [[ -d "$name" ]]; then
       if [[ "$MODE" == "force" ]]; then rm -rf "$name"; git clone --depth=1 "$repo" "$name"
       else (cd "$name" && git pull); fi
