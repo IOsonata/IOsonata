@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.46"
+SCRIPT_VERSION="v1.0.61"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -124,6 +124,46 @@ print(h)
 EOF
 }
 
+# Helper function to validate a download URL
+# Checks if the Content-Length is greater than 1MB (1,000,000 bytes)
+is_valid_dmg_url() {
+  local url="$1"
+  # --- DEBUG ECHO REMOVED ---
+  # echo "   Checking URL: $(basename "$url")"
+
+  local headers
+  headers=$(curl -s -L -I --max-time 10 "$url")
+
+  local length_line
+  length_line=$(echo "$headers" | grep -i '^Content-Length:' | tail -n 1)
+
+  if [[ -z "$length_line" ]]; then
+    # --- DEBUG ECHO REMOVED ---
+    # echo "   -> Failed: No Content-Length header found."
+    return 1
+  fi
+
+  local length
+  length=$(echo "$length_line" | awk '{print $2}' | tr -d '\r')
+
+  if ! [[ "$length" =~ ^[0-9]+$ ]]; then
+    # --- DEBUG ECHO REMOVED ---
+    # echo "   -> Failed: Content-Length is not a number ($length)."
+    return 1
+  fi
+
+  if (( length > 1000000 )); then
+    # --- DEBUG ECHO REMOVED ---
+    # echo "   -> Success: Found file, size ${length} bytes."
+    return 0 # Success
+  else
+    # --- DEBUG ECHO REMOVED ---
+    # echo "   -> Failed: File size ($length bytes) is too small. Likely a 404 page."
+    return 1 # Failure
+  fi
+}
+
+
 # ---------------------------------------------------------
 # Install xPack toolchain
 # ---------------------------------------------------------
@@ -191,22 +231,49 @@ fi
 echo
 echo "💻 Installing Eclipse Embedded CDT IDE..."
 MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
-LATEST=$(curl -s "$MIRROR/" | grep -oE '20[0-9]{2}-[0-9]{2}' | sort -r | head -1)
-[ -z "$LATEST" ] && { echo "❌ Could not detect Eclipse release"; exit 1; }
 
-ARCH="x86_64"; if [ "$(uname -m)" = "arm64" ]; then ARCH="aarch64"; fi
-ECLIPSE_URL="$MIRROR/$LATEST/R/eclipse-embedcdt-$LATEST-R-macosx-cocoa-$ARCH.dmg"
-if ! curl --head --silent --fail "$ECLIPSE_URL" >/dev/null; then
-  ECLIPSE_URL="$MIRROR/$LATEST/R/eclipse-embedcpp-$LATEST-R-macosx-cocoa-$ARCH.dmg"
+# --- NEW LOGIC ---
+# Loop through releases and check for the *actual DMG file* directly.
+
+RELEASES=$(curl -s "$MIRROR/" | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' | cut -d'"' -f2 | sed 's|/||g' | sort -r | uniq)
+
+ECLIPSE_URL=""
+for release in $RELEASES; do
+
+  # Define the URLs for this specific release
+  URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-macosx-cocoa-$ECLIPSE_ARCH.dmg"
+  URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-macosx-cocoa-$ECLIPSE_ARCH.dmg"
+
+  if is_valid_dmg_url "$URL_EMBEDCDT"; then
+    ECLIPSE_URL="$URL_EMBEDCDT"
+    break
+  elif is_valid_dmg_url "$URL_EMBEDCPP"; then
+    ECLIPSE_URL="$URL_EMBEDCPP"
+    break
+  fi
+  # --- DEBUG ECHO REMOVED ---
+  # echo "   No valid DMG found for $release. Trying older version."
+done
+
+# Check if we ever found a valid URL
+if [[ -z "$ECLIPSE_URL" ]]; then
+  echo "❌ Could not find a valid Eclipse Embedded CDT download URL for any release."
+  exit 1
 fi
 
 echo "⬇️ Downloading Eclipse: $ECLIPSE_URL"
 tmpdmg=$(mktemp)
 curl -L "$ECLIPSE_URL" -o "$tmpdmg"
+
 MNT=$(mktemp -d /tmp/eclipse.XXXX)
 hdiutil attach "$tmpdmg" -mountpoint "$MNT" -nobrowse -quiet
-rm -rf "$ECLIPSE_APP"
-cp -R "$MNT/Eclipse.app" "$ECLIPSE_APP"
+
+#echo ">>> Removing old Eclipse installation (if exists)..."
+sudo rm -rf "$ECLIPSE_APP"
+
+#echo ">>> Copying new Eclipse installation..."
+sudo cp -R "$MNT/Eclipse.app" "$ECLIPSE_APP"
+
 hdiutil detach "$MNT" -quiet
 rm -rf "$tmpdmg" "$MNT"
 echo "✅ Eclipse installed at $ECLIPSE_APP"
@@ -283,6 +350,7 @@ repos=(
 )
 for repo in "${repos[@]}"; do
   name=$(basename "$repo" .git)
+  # Update rename logic for BSEC2
   if [[ "$name" == "Bosch-BSEC2-Library" ]]; then name="BSEC"; fi
   if [[ -d "$name" ]]; then
     if [[ "$MODE" == "force" ]]; then rm -rf "$name"; git clone --depth=1 "$repo" "$name"
