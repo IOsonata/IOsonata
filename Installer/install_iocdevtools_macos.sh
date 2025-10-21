@@ -282,6 +282,7 @@ echo "✅ Eclipse installed at $ECLIPSE_APP"
 # ---------------------------------------------------------
 # Seed Eclipse prefs
 # ---------------------------------------------------------
+
 ECLIPSE_SETTINGS="$ECLIPSE_APP/Contents/Eclipse/configuration/.settings"
 sudo mkdir -p "$ECLIPSE_SETTINGS"
 
@@ -329,6 +330,41 @@ environment/project/BSEC_HOME/value=$EXT/BSEC
 EOF"
 
 echo "✅ Eclipse preferences seeded (ARM, RISC-V, OpenOCD, macros)."
+
+# Step 1: Ensure Eclipse has initialized its instance folder
+if [ -d "$ECLIPSE_APP" ]; then
+  echo "⏳ Initializing Eclipse to create instance configuration..."
+  "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize || true
+fi
+
+# Step 2: Find instance settings folder dynamically
+INSTANCE_CFG=$(find "$HOME/.eclipse" -type d -path "*/configuration" | head -n 1)
+
+if [ -z "$INSTANCE_CFG" ]; then
+  echo "⚠️ Could not find Eclipse instance configuration folder."
+  echo "   Eclipse may not have been started yet."
+else
+  echo "📂 Found Eclipse settings: $INSTANCE_CFG"
+
+  mkdir -p "$INSTANCE_CFG/.settings"
+  
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
+toolchain.path.$ARM_HASH=$ARM_DIR/bin
+toolchain.path.strict=true
+EOF
+
+cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
+toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
+toolchain.path.strict=true
+EOF
+
+cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
+install.folder=$OPENOCD_DIR/bin
+install.folder.strict=true
+EOF
+
+fi
+
 
 # ---------------------------------------------------------
 # Clone repos
@@ -402,3 +438,4 @@ printf "%-25s %s\n" "OpenOCD:" "$OPENOCD_VER"
 echo "=============================================="
 echo " Installation complete!"
 echo "=============================================="
+
