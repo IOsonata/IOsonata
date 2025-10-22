@@ -36,13 +36,13 @@ import logging
 import serial
 import time
 
-def prbs8(self, curval):
+def prbs8(curval):
     newbit = (((curval >> 6) ^ (curval >> 5)) & 1)
     return ((curval << 1) | newbit) & 0x7f
 
 def main():
 
-    comm = serial.Serial(port="/dev/cu.usbmodem142203", baudrate=1000000, rtscts=False)
+    comm = serial.Serial(port="/dev/cu.usbmodem40303180003282", baudrate=1000000, rtscts=True)
     comm.flushInput()
 
     curval = 0
