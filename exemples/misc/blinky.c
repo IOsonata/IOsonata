@@ -46,18 +46,19 @@ SOFTWARE.
 
 #include "board.h"
 
+// define this for your board if different oscillator than the library default
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
-#ifdef BUTTON_PINS_MAP
-static const IOPinCfg_t s_Buttons[] = BUTTON_PINS_MAP;
-static const int s_NbButtons = sizeof(s_Buttons) / sizeof(IOPinCfg_t);
+#ifndef LED_PINS_MAP
+#error "Requires GPIO pins assignment for LED defined in board.h\n"
 #endif
 
 static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
 static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
+#ifdef PULSE_TRAIN_PINS_MAP
 /// Pulse train config
 static const PulseTrainPin_t s_PulseTrainPins[] = PULSE_TRAIN_PINS_MAP;
 
@@ -67,12 +68,18 @@ PulseTrainCfg_t g_PulseTrainCfg = {
 	.Period = 1,
 	.Pol = PULSE_TRAIN_POL_HIGH
 };
+#endif	// PULSE_TRAIN_PINS_MAP
 
 volatile bool g_bBut1Pressed = false;
+
+#ifdef BUTTON_PINS_MAP
+static const IOPinCfg_t s_Buttons[] = BUTTON_PINS_MAP;
+static const int s_NbButtons = sizeof(s_Buttons) / sizeof(IOPinCfg_t);
+
 volatile bool g_bBut2Pressed = false;
 volatile bool g_bBut3Pressed = false;
 
-#ifdef BUT2_INT
+#ifdef BUT1_INT
 void But1Handler(int IntNo, void *pCtx)
 {
 	if (IntNo == BUT1_INT)
@@ -105,6 +112,8 @@ void But3Handler(int IntNo, void *pCtx)
 }
 #endif
 
+#endif	// BUTTON_PINS_MAP
+
 //
 // Print a greeting message on standard output and exit.
 //
@@ -132,14 +141,20 @@ int main()
 	// Configure buttons
 #ifdef BUTTON_PINS_MAP
 	IOPinCfg(s_Buttons, s_NbButtons);
+
+#ifdef BUT1_INT
+	IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler, NULL);
+#endif
+#ifdef BUT2_INT
+	IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler, NULL);
+#endif
+#ifdef BUT13_INT
+	IOPinEnableInterrupt(BUT3_SENSE_INT, BUT3_INT_PRIO, BUT3_PORT, BUT3_PIN, BUT3_SENSE, But3Handler, NULL);
+#endif
 #endif
 
 #if 0
-	//IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler, NULL);
-	//IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler, NULL);
-	//IOPinEnableInterrupt(BUT3_SENSE_INT, BUT3_INT_PRIO, BUT3_PORT, BUT3_PIN, BUT3_SENSE, But3Handler, NULL);
 	IOPinEnableInterrupt(-1, BUT1_INT_PRIO, BUT1_PORT, (1<<BUT1_PIN) | (1<<BUT2_PIN), BUT_SENSE, But1Handler, NULL);
-
 	while(1)
 	{
 		__WFE();
@@ -153,16 +168,23 @@ int main()
 	{
 
 #ifdef BUTTON_PINS_MAP
+#ifndef BUT1_INT
 		if (IOPinRead(s_Buttons[0].PortNo, s_Buttons[0].PinNo) == 0)
 		{
 			//printf("%d: %x\r\n", i, x);
 			g_bBut1Pressed = true;
 		}
 #endif
-		//IOPinToggle(s_Leds[i].PortNo, s_Leds[i].PinNo);
+#endif
+
+//#define USE_TOGGLE
+#ifdef USE_TOGGLE
+		IOPinToggle(s_Leds[i].PortNo, s_Leds[i].PinNo);
+#else
 		IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
 		msDelay(250);
 		IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
+#endif
 		msDelay(250);
 		i++;
 		if (i >= s_NbLeds)
@@ -171,7 +193,9 @@ int main()
 		}
 	}
 
-	PulseTrain(&g_PulseTrainCfg, 0);
+#ifdef PULSE_TRAIN_PINS_MAP
+	PulseTrain(&g_PulseTrainCfg, 0); // infinite loop
+#endif
 
 	return 0;
 }
