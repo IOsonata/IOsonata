@@ -850,8 +850,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	if (pCfg->Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
-		res = sdc_support_adv();
-		res = sdc_support_ext_adv();
+		sdc_support_adv();
+		sdc_support_ext_adv();
 		sdc_support_le_periodic_adv();
 		sdc_support_le_periodic_sync();
 		sdc_support_peripheral();
