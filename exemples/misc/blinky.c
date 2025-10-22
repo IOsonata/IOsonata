@@ -143,23 +143,31 @@ int main()
 	IOPinCfg(s_Buttons, s_NbButtons);
 
 #ifdef BUT1_INT
-	IOPinEnableInterrupt(BUT1_SENSE_INT, BUT1_INT_PRIO, BUT1_PORT, BUT1_PIN, BUT1_SENSE, But1Handler, NULL);
+	IOPinEnableInterrupt(BUT1_INT, BUT1_INT_PRIO, s_Buttons[0].PortNo, s_Buttons[0].PinNo, BUT1_SENSE, But1Handler, NULL);
 #endif
 #ifdef BUT2_INT
-	IOPinEnableInterrupt(BUT2_SENSE_INT, BUT2_INT_PRIO, BUT2_PORT, BUT2_PIN, BUT2_SENSE, But2Handler, NULL);
+	IOPinEnableInterrupt(BUT2_INT, BUT2_INT_PRIO, s_Buttons[1].PortNo, s_Buttons[1].PinNo, BUT2_SENSE, But2Handler, NULL);
 #endif
 #ifdef BUT13_INT
-	IOPinEnableInterrupt(BUT3_SENSE_INT, BUT3_INT_PRIO, BUT3_PORT, BUT3_PIN, BUT3_SENSE, But3Handler, NULL);
-#endif
+	IOPinEnableInterrupt(BUT3_INT, BUT3_INT_PRIO, s_Buttons[2].PortNo, s_Buttons[2].PinNo, BUT3_SENSE, But3Handler, NULL);
 #endif
 
 #if 0
-	IOPinEnableInterrupt(-1, BUT1_INT_PRIO, BUT1_PORT, (1<<BUT1_PIN) | (1<<BUT2_PIN), BUT_SENSE, But1Handler, NULL);
+	uint8_t but = 0;
+
+	for (int i = 0; i < s_NbButtons; i++)
+	{
+		but |= 1 << s_Buttons[i].PinNo;
+
+	}
+	IOPinEnableInterrupt(-1, BUT1_INT_PRIO, s_Buttons[0].PortNo, but, BUT_SENSE, But1Handler, NULL);
 	while(1)
 	{
 		__WFE();
 	}
 #endif
+
+#endif // BUTTON_PINS_MAP
 
 	int i = 0;
 
