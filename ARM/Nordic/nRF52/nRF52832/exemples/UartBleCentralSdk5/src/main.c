@@ -61,6 +61,7 @@
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
+#include "nrfx_uarte.h"
 
 #include "sdk_config.h"
 
@@ -102,6 +103,8 @@ static ble_uuid_t const m_nus_uuid =
     .uuid = BLE_UUID_NUS_SERVICE,
     .type = NUS_SERVICE_UUID_TYPE
 };
+
+const nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(0);
 
 
 /**@brief Function for handling asserts in the SoftDevice.
@@ -234,6 +237,7 @@ static void ble_nus_chars_received_uart_print(uint8_t * p_data, uint16_t data_le
     NRF_LOG_DEBUG("Receiving data.");
     NRF_LOG_HEXDUMP_DEBUG(p_data, data_len);
 
+#if 0
     for (uint32_t i = 0; i < data_len; i++)
     {
         do
@@ -250,6 +254,7 @@ static void ble_nus_chars_received_uart_print(uint8_t * p_data, uint16_t data_le
     {
         while (app_uart_put('\n') == NRF_ERROR_BUSY);
     }
+#endif
     if (ECHOBACK_BLE_UART_DATA)
     {
         // Send data back to the peripheral.
@@ -556,11 +561,26 @@ void bsp_event_handler(bsp_event_t event)
 }
 #endif
 
+void uart_error_handle(nrfx_uarte_event_t const * p_event, void *ctx)
+{
+//	printf("Uarte Handler\r\n");
+	switch(p_event->type)
+	{
+		case NRFX_UARTE_EVT_TX_DONE: ///< Requested TX transfer completed.
+			//s_bTxDone = true;
+			break;
+		case NRFX_UARTE_EVT_RX_DONE: ///< Requested RX transfer completed.
+		 	 break;
+		case NRFX_UARTE_EVT_ERROR:   ///< Error reported by UART peripheral.
+			break;
+	}
+}
+
 /**@brief Function for initializing the UART. */
 static void uart_init(void)
 {
     ret_code_t err_code;
-
+#if 0
     app_uart_comm_params_t const comm_params =
     {
         .rx_pin_no    = 8,
@@ -580,6 +600,24 @@ static void uart_init(void)
                        err_code);
 
     APP_ERROR_CHECK(err_code);
+#else
+    const nrfx_uarte_config_t g_UarteCfg = {
+    	.rxd_pin = 8,
+    	.txd_pin = 7,
+    	.baudrate = NRF_UARTE_BAUDRATE_1000000,
+    	.config = {
+    		.hwfc = NRF_UARTE_HWFC_DISABLED,
+    	},
+    	.interrupt_priority = 6
+    };
+
+    err_code = nrfx_uarte_init(&g_Uarte, &g_UarteCfg, uart_error_handle);
+    if (err_code != NRF_SUCCESS)
+    {
+    	//printf("Error %x\n\r", err_code);
+    }
+
+#endif
 }
 
 /**@brief Function for initializing the Nordic UART Service (NUS) client. */
