@@ -152,6 +152,38 @@ if (-not (Test-Path -Path $TOOLS)) { New-Item -Path $TOOLS -ItemType Directory -
 
 
 # ---------------------------------------------------------
+# Defender exclusion
+# ---------------------------------------------------------
+function Add-DefenderExclusion {
+    param([string]$Path)
+    
+    try {
+        $currentExclusions = (Get-MpPreference).ExclusionPath
+        if ($currentExclusions -notcontains $Path) {
+            Write-Host ">>> Adding Windows Defender exclusion for: $Path"
+            Set-MpPreference -ExclusionPath $Path
+            Write-Host "[OK] Folder added to Windows Defender exclusion list." -ForegroundColor Green
+        } else {
+            Write-Host "[OK] Windows Defender exclusion for '$Path' already exists." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "[WARN] Could not set Windows Defender exclusion for '$Path'." -ForegroundColor Yellow
+        Write-Host "[INFO] Error: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "[INFO] This is optional, but recommended for performance." -ForegroundColor Yellow
+    }
+}
+
+# --- Directory Setup ---
+if (-not (Test-Path -Path $ROOT)) { New-Item -Path $ROOT -ItemType Directory -Force | Out-Null }
+
+# --- ADD THIS LINE ---
+Add-DefenderExclusion -Path $ROOT
+# --- END OF ADDED LINE ---
+
+$EXT = "$ROOT\external"; if (-not (Test-Path -Path $EXT)) { New-Item -Path $EXT -ItemType Directory -Force | Out-Null }
+if (-not (Test-Path -Path $TOOLS)) { New-Item -Path $TOOLS -ItemType Directory -Force | Out-Null }
+
+# ---------------------------------------------------------
 # UNINSTALL
 # ---------------------------------------------------------
 if ($MODE -eq "uninstall") {
@@ -227,15 +259,59 @@ $OPENOCD_DIR = (Install-xPack "openocd-xpack" "openocd" "OpenOCD").Trim()
 Write-Host
 Write-Host ">>> Installing Eclipse Embedded CDT IDE..." -ForegroundColor Cyan
 $MIRROR = "https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
-$LATEST = (Invoke-WebRequest -Uri "$MIRROR/" -UseBasicParsing).Content -split '\r?\n' | Where-Object { $_ -match '20[0-9]{2}-[0-9]{2}' } | ForEach-Object { ([regex]::Match($_, '20[0-9]{2}-[0-9]{2}')).Value } | Sort-Object -Descending | Get-Unique | Select-Object -First 1
-if (-not $LATEST) { Write-Host "[ERROR] Could not detect latest Eclipse release." -ForegroundColor Red; exit 1 }
 
-$ECLIPSE_URL_CDT = "$MIRROR/$LATEST/R/eclipse-embedcdt-$LATEST-R-win32-x86_64.zip"
-$ECLIPSE_URL_CPP = "$MIRROR/$LATEST/R/eclipse-embedcpp-$LATEST-R-win32-x86_64.zip"
+# --- START: Modified Section ---
+# Get the top 10 most recent release names.
+# This searches older archives for the specific packages we want.
+$RECENT_RELEASES = (Invoke-WebRequest -Uri "$MIRROR/" -UseBasicParsing).Content -split '\r?\n' | Where-Object { $_ -match '20[0-9]{2}-[0-9]{2}' } | ForEach-Object { ([regex]::Match($_, '20[0-9]{2}-[0-9]{2}')).Value } | Sort-Object -Descending | Get-Unique | Select-Object -First 10
+
+if (-not $RECENT_RELEASES) { Write-Host "[ERROR] Could not detect any Eclipse release versions." -ForegroundColor Red; exit 1 }
+
 $ECLIPSE_URL = ""
-try { Write-Host ">>> Checking for primary Eclipse package..."; Invoke-WebRequest -Uri $ECLIPSE_URL_CDT -Method Head -ErrorAction Stop -UseBasicParsing | Out-Null; $ECLIPSE_URL = $ECLIPSE_URL_CDT } catch { Write-Host ">>> Primary package not found. Checking for fallback..."; try { Invoke-WebRequest -Uri $ECLIPSE_URL_CPP -Method Head -ErrorAction Stop -UseBasicParsing | Out-Null; $ECLIPSE_URL = $ECLIPSE_URL_CPP } catch {} }
-if (-not $ECLIPSE_URL) { Write-Host "[ERROR] Could not find a valid download URL for any Eclipse package for $LATEST." -ForegroundColor Red; exit 1 }
-Write-Host ">>> Downloading Eclipse from: $ECLIPSE_URL"; $zipPath = "$env:TEMP\eclipse.zip"; curl.exe -L -o $zipPath $ECLIPSE_URL
+$LATEST = "" # This will be set to the version we actually find
+
+# Loop through the recent releases until we find a valid download
+# This logic now mirrors the working macOS script
+foreach ($RELEASE_VERSION in $RECENT_RELEASES) {
+    Write-Host ">>> Checking release: $RELEASE_VERSION..."
+    
+    # --- KEY CHANGE: Use the filenames from the original script & working macOS script ---
+    $URL_EMBEDCDT = "$MIRROR/$RELEASE_VERSION/R/eclipse-embedcdt-$RELEASE_VERSION-R-win32-x86_64.zip"
+    $URL_EMBEDCPP = "$MIRROR/$RELEASE_VERSION/R/eclipse-embedcpp-$RELEASE_VERSION-R-win32-x86_64.zip"
+
+    try {
+        # --- PRIORITY 1: Check for 'eclipse-embedcdt' (no hyphen) ---
+        Write-Host "   - Checking for 'eclipse-embedcdt' package..."
+        Invoke-WebRequest -Uri $URL_EMBEDCDT -Method Head -ErrorAction Stop -UseBasicParsing | Out-Null
+        $ECLIPSE_URL = $URL_EMBEDCDT
+        $LATEST = $RELEASE_VERSION
+        Write-Host "[OK] Found 'eclipse-embedcdt' package for $LATEST." -ForegroundColor Green
+        break # Found it, exit loop
+    } catch {
+        Write-Host "   - 'eclipse-embedcdt' not found. Checking for 'eclipse-embedcpp'..."
+        try {
+            # --- PRIORITY 2: Check for 'eclipse-embedcpp' ---
+            Invoke-WebRequest -Uri $URL_EMBEDCPP -Method Head -ErrorAction Stop -UseBasicParsing | Out-Null
+            $ECLIPSE_URL = $URL_EMBEDCPP
+            $LATEST = $RELEASE_VERSION
+            Write-Host "[OK] Found 'eclipse-embedcpp' package for $LATEST." -ForegroundColor Green
+            break # Found it, exit loop
+        } catch {
+            Write-Host "   - No valid 'embed' packages found for $RELEASE_VERSION. Trying next..." -ForegroundColor Yellow
+        }
+    }
+}
+
+# Check if we ever found a URL after looping
+if (-not $ECLIPSE_URL) {
+     Write-Host "[ERROR] Could not find 'eclipse-embedcdt' or 'eclipse-embedcpp' in any of the top 10 recent Eclipse releases." -ForegroundColor Red
+     Write-Host "[INFO] Please check the mirror '$MIRROR' manually." -ForegroundColor Yellow
+     exit 1
+}
+# --- END: Modified Section ---
+
+
+Write-Host ">>> Downloading Eclipse ($LATEST) from: $ECLIPSE_URL"; $zipPath = "$env:TEMP\eclipse.zip"; curl.exe -L -o $zipPath $ECLIPSE_URL
 if (Test-Path $ECLIPSE_DIR) { Remove-Item $ECLIPSE_DIR -Recurse -Force }
 $tmpExtractDir = Join-Path $env:TEMP "eclipse-extract"; if (Test-Path $tmpExtractDir) { Remove-Item $tmpExtractDir -Recurse -Force }
 
@@ -245,7 +321,6 @@ $tmpExtractDir = Join-Path $env:TEMP "eclipse-extract"; if (Test-Path $tmpExtrac
 Move-Item -Path (Join-Path $tmpExtractDir "eclipse") -Destination $ECLIPSE_DIR
 Remove-Item $zipPath, $tmpExtractDir -Recurse -Force
 Write-Host "[OK] Eclipse installed at $ECLIPSE_DIR" -ForegroundColor Green
-
 
 # ---------------------------------------------------------
 # Create Eclipse Shortcuts
@@ -278,27 +353,28 @@ Write-Host "[OK] Eclipse preferences seeded (Build Tools, ARM, RISC-V, OpenOCD, 
 # Clone repos
 # ---------------------------------------------------------
 function Sync-Repo { 
-	param([string]$Url, [string]$Destination); 
-	if (Test-Path $Destination) { 
-		if ($MODE -eq 'force') { 
-			Write-Host "   - Force-updating repo..."; Remove-Item $Destination -Recurse -Force; git clone --depth=1 $Url $Destination 
-		} else { 
-			Write-Host "   - Pulling latest changes..."; Push-Location $Destination; try { git pull } finally { Pop-Location } 
-		} 
-	} else { 
-		Write-Host "   - Cloning repo..."; git clone --depth=1 $Url $Destination 
-	} 
+  param([string]$Url, [string]$Destination); 
+  if (Test-Path $Destination) { 
+    if ($MODE -eq 'force') { 
+      Write-Host "   - Force-updating repo..."; Remove-Item $Destination -Recurse -Force; git clone --depth=1 $Url $Destination 
+    } else { 
+      Write-Host "   - Pulling latest changes..."; Push-Location $Destination; try { git pull } finally { Pop-Location } 
+    } 
+  } else { 
+    Write-Host "   - Cloning repo..."; git clone --depth=1 $Url $Destination 
+  } 
 }
 Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"; $repos = @{ 
-	"https://github.com/NordicSemiconductor/nrfx.git" = "$EXT\nrfx"; 
-	"https://github.com/nrfconnect/sdk-nrfxlib.git" = "$EXT\sdk-nrfxlib"; 
-	"https://github.com/IOsonata/nRF5_SDK.git" = "$EXT\nRF5_SDK"; 
-	"https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "$EXT\nRF5_SDK_Mesh"; 
-	"https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "$EXT\BSEC"; 
-	"https://github.com/xioTechnologies/Fusion.git" = "$EXT\Fusion"};
-	foreach ($repo in $repos.GetEnumerator()) { 
-		Sync-Repo $repo.Name $repo.Value 
-	}
+  "https://github.com/NordicSemiconductor/nrfx.git" = "$EXT\nrfx"; 
+  "https://github.com/nrfconnect/sdk-nrfxlib.git" = "$EXT\sdk-nrfxlib"; 
+  "https://github.com/IOsonata/nRF5_SDK.git" = "$EXT\nRF5_SDK"; 
+  "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "$EXT\nRF5_SDK_Mesh"; 
+  "https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "$EXT\BSEC"; 
+  "https://github.com/xioTechnologies/Fusion.git" = "$EXT\Fusion"};
+  foreach ($repo in $repos.GetEnumerator()) { 
+    Sync-Repo $repo.Name $repo.Value 
+  }
+
 
 # ---------------------------------------------------------
 # Summary
