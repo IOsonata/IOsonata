@@ -275,6 +275,43 @@ environment/project/io.github.embedded.tools/environment/TOOLS/value=$TOOLS
 environment/project/io.github.embedded.tools/environment/WORKSPACE/value=$ROOT
 environment/project/io.github.embedded.tools/environment/EXT_LIBS/value=$EXT
 EOF
+
+echo "Eclipse preferences seeded (ARM, RISC-V, OpenOCD, macros)."
+
+# Step 1: Ensure Eclipse has initialized its instance folder
+if [ -d "$ECLIPSE_APP" ]; then
+  echo "Initializing Eclipse to create instance configuration..."
+  "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize || true
+fi
+
+# Step 2: Find instance settings folder dynamically
+INSTANCE_CFG=$(find "$HOME/.eclipse" -type d -path "*/configuration" | head -n 1)
+
+if [ -z "$INSTANCE_CFG" ]; then
+  echo "Could not find Eclipse instance configuration folder."
+  echo "Eclipse may not have been started yet."
+else
+  echo "Found Eclipse settings: $INSTANCE_CFG"
+
+  mkdir -p "$INSTANCE_CFG/.settings"
+  
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
+toolchain.path.$ARM_HASH=$ARM_DIR/bin
+toolchain.path.strict=true
+EOF
+
+cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
+toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
+toolchain.path.strict=true
+EOF
+
+cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
+install.folder=$OPENOCD_DIR/bin
+install.folder.strict=true
+EOF
+
+fi
+
 }
 
 # ---------------------------------------------------------
