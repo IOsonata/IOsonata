@@ -139,20 +139,19 @@ install_xpack() {
 # Install Eclipse Embedded CDT (latest release train, arch aware)
 # ---------------------------------------------------------
 install_eclipse_embedded() {
-  echo ">>> Installing latest Eclipse Embedded CDT package ..."
+  echo ">>> Installing Eclipse Embedded CDT package ..."
+  local MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
 
-  local release_train
-  release_train=$(curl -s https://download.eclipse.org/technology/epp/downloads/release/ \
-    | grep -Eo '[0-9]{4}-[0-9]{2}' \
-    | sort -r \
-    | head -n1)
+  # --- START: Modified Section ---
+  # Get the top 10 most recent release names
+  echo ">>> Finding available Eclipse releases..."
+  local RELEASES
+  RELEASES=$(curl -s "$MIRROR/" | grep -Eo '20[0-9]{2}-[0-9]{2}' | sort -r | uniq | head -n10)
 
-  if [[ -z "$release_train" ]]; then
-    echo "!!! ERROR: Could not determine latest Eclipse release train."
+  if [[ -z "$RELEASES" ]]; then
+    echo "!!! ERROR: Could not determine any Eclipse release trains."
     exit 1
   fi
-
-  echo "    → Latest Eclipse release train: $release_train"
 
   # Detect architecture
   local arch
@@ -162,7 +161,49 @@ install_eclipse_embedded() {
     *) echo "!!! WARNING: unknown arch $(uname -m), defaulting to x86_64"; arch="x86_64" ;;
   esac
 
-  local url="https://ftp.osuosl.org/pub/eclipse/technology/epp/downloads/release/${release_train}/R/eclipse-embedcpp-${release_train}-R-linux-gtk-${arch}.tar.gz"
+  local url=""
+  local release_train=""
+
+  # Loop through releases, newest first, until we find a valid package
+  # This logic mirrors the working Windows/macOS scripts
+  for release in $RELEASES; do
+    echo ">>> Checking release: $release..."
+
+    # --- KEY CHANGE: Use the filenames from the original script & working macOS script ---
+    local URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-linux-gtk-$arch.tar.gz"
+    local URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-linux-gtk-$arch.tar.gz"
+
+    # --- PRIORITY 1: Check for 'eclipse-embedcdt' (no hyphen) ---
+    echo "   - Checking for 'eclipse-embedcdt' package..."
+    # Use 'curl -s --head --fail' to check if the URL exists (returns 0) without downloading
+    if curl -s --head --fail "$URL_EMBEDCDT" > /dev/null; then
+        echo "[OK] Found 'eclipse-embedcdt' package for $release."
+        url="$URL_EMBEDCDT"
+        release_train="$release"
+        break # Found it, exit loop
+    else
+        echo "   - 'eclipse-embedcdt' not found. Checking for 'eclipse-embedcpp'..."
+        # --- PRIORITY 2: Check for 'eclipse-embedcpp' ---
+        if curl -s --head --fail "$URL_EMBEDCPP" > /dev/null; then
+            echo "[OK] Found 'eclipse-embedcpp' package for $release."
+            url="$URL_EMBEDCPP"
+            release_train="$release"
+            break # Found it, exit loop
+        else
+            echo "   - No valid 'embed' packages found for $release. Trying next..."
+        fi
+    fi
+  done
+
+  # Check if we ever found a URL after looping
+  if [[ -z "$url" ]]; then
+    echo "!!! ERROR: Could not find 'eclipse-embedcdt' or 'eclipse-embedcpp' in any of the top 10 recent Eclipse releases."
+    echo "[INFO] Please check the mirror '$MIRROR' manually."
+    exit 1
+  fi
+  # --- END: Modified Section ---
+
+
   local archive
   archive=$(basename "$url")
 
