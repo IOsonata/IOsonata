@@ -279,9 +279,9 @@ EOF
 echo "Eclipse preferences seeded (ARM, RISC-V, OpenOCD, macros)."
 
 # Step 1: Ensure Eclipse has initialized its instance folder
-if [ -d "$ECLIPSE_APP" ]; then
+if [ -d "$ECLIPSE_DIR" ]; then
   echo "Initializing Eclipse to create instance configuration..."
-  "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize || true
+  "$ECLIPSE_DIR/eclipse" -nosplash -initialize || true
 fi
 
 # Step 2: Find instance settings folder dynamically
