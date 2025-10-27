@@ -99,7 +99,7 @@ bool MpslInit(void)
 
 	res = mpsl_init(&lfclk, SWI00_IRQn, MpslAssert);
 	res = mpsl_clock_hfclk_latency_set(MPSL_CLOCK_HF_LATENCY_TYPICAL);
-	mpsl_pan_rfu();
+//	mpsl_pan_rfu();
 #else
 	res = mpsl_init(&lfclk, PendSV_IRQn, MpslAssert);
 #endif

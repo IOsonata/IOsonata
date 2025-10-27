@@ -1351,9 +1351,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_h3lis331dl.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/sensors/accel_lis2dh12.cpp</name>
+			<name>src/sensors/accel_lisxdh.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_lis2dh12.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/accel_lisxdh.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_sensor.cpp</name>

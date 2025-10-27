@@ -52,7 +52,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "iopinctrl.h"
 #include "coredev/uart.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
 // There is no indication in the datasheet about how many hardware fifo
@@ -459,7 +459,7 @@ static bool nRFUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-static int nRFUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
+static int nRFUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
     int cnt = 0;
@@ -828,7 +828,7 @@ void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 
 }
 
-UARTDev_t * const UARTGetInstance(int DevNo)
+UARTDev_t const  *UARTGetInstance(int DevNo)
 {
 	return s_nRFxUARTDev[DevNo].pUartDev;
 }
