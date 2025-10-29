@@ -116,7 +116,7 @@ install_xpack() {
 
   local archive
   archive=$(basename "$url")
-  local dest="$TOOLS/${archive%.tar.gz}"
+  local dest="$TOOLS/${archive%-linux-x64.tar.gz}"
 
   if [[ ! -d "$dest" || "$MODE" = "force" ]]; then
     echo "    → Downloading $url ..."
@@ -125,14 +125,14 @@ install_xpack() {
   fi
 
   local binpath
-  binpath=$(find "$TOOLS" -maxdepth 2 -type d -name "bin" | grep "$repo" | head -n1 || true)
+  binpath=$(find "$TOOLS" -maxdepth 2 -type d -name "bin" | grep "${repo%-xpack}" | head -n1 || true)
   if [[ -n "$binpath" ]]; then
     for exe in "$binpath"/*; do
       sudo ln -sf "$exe" "$BIN/$(basename "$exe")"
     done
   fi
 
-  echo "$dest"
+   eval "${3}=${dest}"
 }
 
 # ---------------------------------------------------------
@@ -295,17 +295,17 @@ else
 
   mkdir -p "$INSTANCE_CFG/.settings"
   
-  tee > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" >/dev/null <<EOF
+  tee > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.strict=true
 EOF
 
-  tee > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" >/dev/null <<EOF
+  tee > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
 toolchain.path.strict=true
 EOF
 
-  tee > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" >/dev/null <<EOF
+  tee > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
@@ -424,9 +424,13 @@ uninstall_all() {
 case "$MODE" in
   install|force)
     install_prerequisites
-    ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "GNU Arm Embedded GCC")
-    RISCV_DIR=$(install_xpack "riscv-none-elf-gcc-xpack" "GNU RISC-V Embedded GCC")
-    OPENOCD_DIR=$(install_xpack "openocd-xpack" "OpenOCD")
+    install_xpack "arm-none-eabi-gcc-xpack" "GNU Arm Embedded GCC" ret_value
+    ARM_DIR=$ret_value
+    install_xpack "riscv-none-elf-gcc-xpack" "GNU RISC-V Embedded GCC" ret_value
+    RISCV_DIR=$ret_value
+    install_xpack "openocd-xpack" "OpenOCD" ret_value
+    OPENOCD_DIR=$ret_value
+
     install_eclipse_embedded
     configure_eclipse_prefs
     clone_repos
