@@ -56,9 +56,9 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_config_common.h</locationURI>
 		</link>
 		<link>
-			<name>src/nrfx_config_nrf54l15_enga_application.h</name>
+			<name>src/nrfx_config_nrf54l15_application.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_config_nrf54l15_enga_application.h</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_config_nrf54l15_application.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx_glue.h</name>
@@ -71,7 +71,22 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_log.h</locationURI>
 		</link>
 		<link>
+			<name>src/prbs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/prbs.c</locationURI>
+		</link>
+		<link>
 			<name>src/nrfx/drivers</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/mdk</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/soc</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -81,9 +96,44 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx/mdk/gcc_startup_nrf54l15_application.S</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/mdk/gcc_startup_nrf54l15_application.S</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/mdk/system_nrf54l.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/mdk/system_nrf54l.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/soc/nrfx_atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/soc/nrfx_atomic.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.h</locationURI>
+		</link>
+		<link>
 			<name>src/nrfx/drivers/src/nrfx_uarte.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nrfx/drivers/src/nrfx_uarte.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/prs</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/prs/nrfx_prs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/drivers/src/prs/nrfx_prs.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/prs/nrfx_prs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/drivers/src/prs/nrfx_prs.h</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>
