@@ -3,6 +3,10 @@
 
 @brief  PRBS receive test
 
+
+@param  --port : Serial to use
+        --baud : Bbadrate (default 1MBaud) 
+
 @author Hoang Nguyen Hoan
 @date   July 27, 2019
 
@@ -32,27 +36,49 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------
 """
+import argparse
 import logging
-import serial
 import time
+import serial
+
+
+SLIP_END = 0xC0
+SLIP_ESC = 0xDB
+SLIP_ESC_END = 0xDC
+SLIP_ESC_ESC = 0xDD
+
 
 def prbs8(curval):
     newbit = (((curval >> 6) ^ (curval >> 5)) & 1)
     return ((curval << 1) | newbit) & 0x7f
 
-def main():
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="PRBS UART receiver (raw or SLIP-framed) with CSV/plot and STAT decoding")
+    p.add_argument("--port", required=True, help="Serial port (e.g., /dev/ttyUSB0, /dev/cu.usbserial-XXX, COM5)")
+    p.add_argument("--baud", type=int, default=1_000_000, help="Baud rate (default: 1000000)")
+    return p.parse_args()
 
-    comm = serial.Serial(port="/dev/cu.usbmodem142203", baudrate=1000000, rtscts=False)
+def main():
+    args = parse_args()
+
+    try:
+        comm = serial.Serial(port=args.port, baudrate=args.baud)
+    except Exception as e:
+        print(f"ERROR: cannot open {args.port} at {args.baud} baud: {e}", file=sys.stderr)
+        return 2
+
+#    comm = serial.Serial(port="/dev/cu.usbmodem142302", baudrate=1000000, rtscts=True)
     comm.flushInput()
 
-    curval = 0
-    d = comm.read(1)
-    curval = int.from_bytes(d, byteorder = 'little')
-    val = prbs8(curval)
+    curval = 0xff
     byteCount = 0
     dropcnt = 0
     deltatime = 0
     drop = False
+    startTime = time.time()
+    d = comm.read(1)
+    curval = int.from_bytes(d, byteorder = 'little')
+    val = prbs8(curval)
     while True:
         try:
             startTime = time.time()
