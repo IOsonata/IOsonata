@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 //#define DEMO_C	// Select demo C code
-#define BYTE_MODE
+//#define BYTE_MODE
 
 #define TEST_BUFSIZE		16
 
@@ -127,10 +127,10 @@ int main()
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &s_UartCfg);
-	UARTprintf(&g_UartDev, "UART PRBS Test\n\r");
+	//UARTprintf(&g_UartDev, "UART PRBS Test\n\r");
 #else
 	res = g_Uart.Init(s_UartCfg);
-	g_Uart.printf("UART PRBS Test\n\r");
+	//g_Uart.printf("UART PRBS Test\n\r");
 #endif
 
 	uint8_t d = 0xff;
