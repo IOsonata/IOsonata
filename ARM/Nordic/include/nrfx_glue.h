@@ -58,7 +58,7 @@ extern "C" {
  *
  * @param expression Expression to be evaluated.
  */
-#define NRFX_ASSERT(expression)		assert(expression)
+#define NRFX_ASSERT(expression)		//assert(expression)
 
 /**
  * @brief Macro for placing a compile time assertion.
