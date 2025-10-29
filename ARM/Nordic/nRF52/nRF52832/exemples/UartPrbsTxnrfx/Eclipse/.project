@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>UartPrbsTxSdk5</name>
+	<name>UartPrbsTestnrfx</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -31,9 +31,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/UartPrbsTxSdk5.c</name>
+			<name>src/UartPrbsTxnrfx.c</name>
 			<type>1</type>
-			<locationURI>$%7BPARENT-5-PROJECT_LOC%7D/exemples/UartPrbsTxSdk5.c</locationURI>
+			<locationURI>$%7BPARENT-5-PROJECT_LOC%7D/exemples/UartPrbsTxnrfx.c</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>
@@ -46,14 +46,34 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx_config.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_config.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx_config_common.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_config_common.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx_config_nrf52832.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_config_nrf52832.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx_glue.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_glue.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx_log.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_log.h</locationURI>
+		</link>
+		<link>
 			<name>src/prbs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/prbs.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk_config.h</name>
-			<type>1</type>
-			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/sdk_config.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers</name>
@@ -78,22 +98,27 @@
 		<link>
 			<name>src/nrfx/mdk/gcc_startup_nrf52.S</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/mdk/gcc_startup_nrf52.S</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/mdk/gcc_startup_nrf52.S</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/mdk/system_nrf52.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/mdk/system_nrf52.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/mdk/system_nrf52.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/soc/nrfx_atomic.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/soc/nrfx_atomic.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/soc/nrfx_atomic.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers/src/nrfx_uarte.c</name>
 			<type>1</type>
-			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uarte.c</locationURI>
+			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nrfx/drivers/src/nrfx_uarte.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers/src/prs</name>
@@ -105,6 +130,11 @@
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/drivers/src/prs/nrfx_prs.c</locationURI>
 		</link>
+		<link>
+			<name>src/nrfx/drivers/src/prs/nrfx_prs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/drivers/src/prs/nrfx_prs.h</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
@@ -113,7 +143,7 @@
 		</variable>
 		<variable>
 			<name>copy_PARENT1</name>
-			<value>$%7Bcopy_PARENT%7D/nRF52/nRF52832/exemples/UartSdkPrbsTest</value>
+			<value>$%7Bcopy_PARENT%7D/nRF52/nRF52832/exemples/UartPrbsTestnrfx</value>
 		</variable>
 		<variable>
 			<name>copy_PARENT12</name>
