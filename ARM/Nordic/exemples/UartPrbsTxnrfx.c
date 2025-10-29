@@ -40,7 +40,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <memory.h>
 
 #include "nrfx_uarte.h"
-#include "iopinctrl.h"
 
 #include "prbs.h"
 
@@ -49,9 +48,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //#define BYTE_MODE
 #define TEST_BUFSIZE		16
-
-static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
-static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
 static volatile bool s_bTxDone = false;
 
@@ -88,33 +84,6 @@ int main()
 	uint8_t d = 0xff;
 	uint8_t buff[TEST_BUFSIZE];
 
-	IOPinCfg(s_Leds, s_NbLeds);
-
-	// Clear all leds
-	for (int i = 0; i < s_NbLeds; i++)
-	{
-		IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
-	}
-
-#if 0
-	if (NRF_CLOCK->PLL.STAT == 0)
-	{
-		NRF_CLOCK->TASKS_PLLSTART = 1;
-	}
-
-	// Start HF clock if needed
-	if (NRF_CLOCK->XO.STAT == 0)
-	{
-		NRF_CLOCK->TASKS_XOSTART = 1;
-		int timout = 1000000;
-		while (timout-- > 0 && NRF_CLOCK->EVENTS_XOSTARTED == 0);
-
-		if (timout <= 0)
-			return false;
-
-		NRF_CLOCK->EVENTS_XOSTARTED = 0;
-	}
-#endif
 
     err_code = nrfx_uarte_init(&g_Uarte, &g_UarteCfg, uart_event_handler);
     if (err_code != NRFX_SUCCESS)
@@ -125,12 +94,6 @@ int main()
     //sprintf(buff, "UART PRBS Test\n\r");
     //while (nrfx_uarte_tx(&g_Uarte, buff, strlen(buff)) != NRFX_SUCCESS);
 
-	for (int i = 0; i < TEST_BUFSIZE; i++)
-	{
-		d = Prbs8(d);
-		buff[i] = d;
-	}
-
 	while(1)
 	{
 #ifdef BYTE_MODE
@@ -140,18 +103,23 @@ int main()
 			d = Prbs8(d);
 		}
 #else
+		for (int i = 0; i < TEST_BUFSIZE; i++)
+		{
+			d = Prbs8(d);
+			buff[i] = d;
+		}
+
 		s_bTxDone = false;
 		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, 0) == NRFX_SUCCESS)//NRFX_UARTE_TX_LINK) == NRFX_SUCCESS)
 		{
 			while (s_bTxDone == false);
-			for (int i = 0; i < TEST_BUFSIZE; i++)
-			{
-				d = Prbs8(d);
-				buff[i] = d;
-			}
 		}
 #endif
 	}
 	return 0;
 }
 
+void _exit()
+{
+	while(1);
+}

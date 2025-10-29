@@ -306,7 +306,9 @@ static inline bool NRFX_IRQ_IS_PENDING(IRQn_Type irq_number)
 
 //------------------------------------------------------------------------------
 
-#ifndef NRFXLIB_SDC
+//#ifndef NRFXLIB_SDC
+//#ifdef NRF52_SERIES
+#if defined(SOFTDEVICE_PRESENT)
 /**
  * @brief When set to a non-zero value, this macro specifies that the
  *        @ref nrfx_error_codes and the @ref nrfx_err_t type itself are defined

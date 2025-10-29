@@ -128,30 +128,27 @@ int main()
     //sprintf(buff, "UART PRBS Test\n\r");
     //while (nrfx_uarte_tx(&g_Uarte, buff, strlen(buff)) != NRFX_SUCCESS);
 
-	for (int i = 0; i < TEST_BUFSIZE; i++)
-	{
-		d = Prbs8(d);
-		buff[i] = d;
-	}
-
 	while(1)
 	{
+		// NOTE : NRFX_UARTE_TX_BLOCKING is extremely slow
 #ifdef BYTE_MODE
-		if (nrfx_uarte_tx(&g_Uarte, &d, 1) == NRF_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, &d, 1, NRFX_UARTE_TX_LINK/*NRFX_UARTE_TX_BLOCKING*/) == NRF_SUCCESS)
 		{
+			//while (s_bTxDone == false);
 			// If success send next code
 			d = Prbs8(d);
 		}
 #else
+		for (int i = 0; i < TEST_BUFSIZE; i++)
+		{
+			d = Prbs8(d);
+			buff[i] = d;
+		}
+
 		s_bTxDone = false;
-		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, NRFX_UARTE_TX_BLOCKING) == NRFX_SUCCESS)
+		if (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE, NRFX_UARTE_TX_LINK) == NRFX_SUCCESS)
 		{
 			while (s_bTxDone == false);
-			for (int i = 0; i < TEST_BUFSIZE; i++)
-			{
-				d = Prbs8(d);
-				buff[i] = d;
-			}
 		}
 #endif
 	}
