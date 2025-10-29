@@ -165,7 +165,8 @@ void ResetEntry (void)
 
 }
 
-#if 1
+#if !defined(__ARMCC_VERSION) && !defined(__ICCARM__)
+// fixed gcc 14 linker warning with libnano
 
 __attribute__((weak)) void _exit(int Status)
 {
