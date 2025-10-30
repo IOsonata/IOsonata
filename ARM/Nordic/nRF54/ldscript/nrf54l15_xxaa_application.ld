@@ -1,7 +1,15 @@
 /* Linker script to configure memory regions. */
 
 SEARCH_DIR(.)
-SEARCH_DIR(../../../../../../../../../external/nrfx/mdk)
+SEARCH_DIR("../../../../ldscript")
+SEARCH_DIR("../../../../../ldscript")
+SEARCH_DIR("../../../../../../ldscript")
+SEARCH_DIR("../../../../../../../ldscript")
+SEARCH_DIR("../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lgcc -lc)
 
 MEMORY
@@ -12,4 +20,4 @@ MEMORY
 }
 
 
-INCLUDE "nrf_common.ld"
+INCLUDE "gcc_arm_flash.ld"
