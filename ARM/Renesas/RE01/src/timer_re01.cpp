@@ -56,9 +56,9 @@ SOFTWARE.
 #include "timer_re01.h"
 
 RE01_TimerData_t g_Re01TimerData[RE01_TIMER_MAXCNT] = {
-	{0, {.pAgtReg = AGT0}, .IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
-	{1, {.pAgtReg1 = AGT1}, .IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
-	{2, {.pTmrReg = TMR01}, .IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
+	{.DevNo = 0, .pAgtReg = AGT0,	.IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
+	{.DevNo = 1, .pAgtReg1 = AGT1, .IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
+	{.DevNo = 2, .pTmrReg = TMR01, .IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
 };
 
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)

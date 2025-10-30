@@ -42,7 +42,7 @@ SOFTWARE.
 
 #include "re01xxx.h"
 
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 #include "interrupt_re01.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
@@ -104,7 +104,7 @@ static Re01UartDev_t s_Re01UartDev[] = {
 
 static const int s_NbRe01UartDev = sizeof(s_Re01UartDev) / sizeof(Re01UartDev_t);
 
-UARTDEV * const UARTGetInstance(int DevNo)
+UARTDEV const *UARTGetInstance(int DevNo)
 {
 	if (DevNo < 0 || DevNo >= s_NbRe01UartDev)
 	{
@@ -424,7 +424,7 @@ static inline bool Re01UARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
 	return true;
 }
 
-static int Re01UARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
+static int Re01UARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	Re01UartDev_t *dev = (Re01UartDev_t *)pDev->pDevData;
 	int cnt = 0;
@@ -689,7 +689,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->bIntMode = pCfg->bIntMode;
+	//pDev->b = pCfg->bIntMode;
 	pDev->EvtCallback = pCfg->EvtCallback;
 	pDev->DevIntrf.Disable = Re01UARTDisable;
 	pDev->DevIntrf.Enable = Re01UARTEnable;

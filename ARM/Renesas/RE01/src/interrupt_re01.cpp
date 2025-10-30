@@ -40,7 +40,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "re01xxx.h"
 
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 #include "interrupt_re01.h"
 
 #define IELS_GROUP_CNT		8
