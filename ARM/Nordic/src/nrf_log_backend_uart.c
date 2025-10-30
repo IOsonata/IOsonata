@@ -40,7 +40,7 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "nrf_log_backend_uart.h"
 
-UARTDev_t *g_pUart = NULL;
+UARTDev_t const *g_pUart = NULL;
 
 #define BACKEND_BUFFER_SIZE 255//NRF_LOG_BACKEND_UART_TEMP_BUFFER_SIZE
 
