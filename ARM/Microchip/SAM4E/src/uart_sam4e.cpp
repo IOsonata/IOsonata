@@ -38,7 +38,7 @@ SOFTWARE.
 #include "sam4e.h"
 #include "component/pdc.h"
 
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"		
 #include "coredev/uart.h"
 #include "cfifo.h"
@@ -94,7 +94,7 @@ static SAM4_UARTDEV s_Sam4UartDev[] = {
 
 static const int s_NbSam4UartDev = sizeof(s_Sam4UartDev) / sizeof(SAM4_UARTDEV);
 
-UARTDEV * const UARTGetInstance(int DevNo)
+UARTDEV const *UARTGetInstance(int DevNo)
 {
 	if (DevNo < 0 || DevNo >= s_NbSam4UartDev)
 	{
@@ -420,7 +420,7 @@ static inline bool Sam4UARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
 	return true;
 }
 
-static int Sam4UARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
+static int Sam4UARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
@@ -736,8 +736,8 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->bIntMode = pCfg->bIntMode;
 	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.Disable = Sam4UARTDisable;
 	pDev->DevIntrf.Enable = Sam4UARTEnable;
 	pDev->DevIntrf.GetRate = Sam4UARTGetRate;

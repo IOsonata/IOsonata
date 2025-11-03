@@ -82,7 +82,7 @@
 
 #include "system_sam4l.h"
 #include "coredev/system_core_clock.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 
 #define SYSTEM_CORE_CLOCK				48000000UL	// Default core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(27UL)		// Adjustment value for nanosec delay
@@ -667,7 +667,7 @@ void SystemCoreClockUpdate(void)
 	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
 	{
 		// TODO: Read back the SystemCoreClock
-		printf("SystemCoreClock = %d\n", SystemCoreClock);
+//		printf("SystemCoreClock = %d\n", SystemCoreClock);
 	}
 	else if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL)
 	{
@@ -698,11 +698,11 @@ void SystemCoreClockUpdate(void)
 	}
 	else if (g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO)
 	{
-		printf("TCXO: external oscillator\n");
+		//printf("TCXO: external oscillator\n");
 	}
 	else
 	{
-		printf("Wrong setting\n");
+		//printf("Wrong setting\n");
 		while(1);
 	}
 

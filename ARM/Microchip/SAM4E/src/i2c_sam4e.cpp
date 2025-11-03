@@ -271,7 +271,7 @@ bool Sam4eI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-int Sam4eI2CTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
+int Sam4eI2CTxData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 	uint32_t d;
@@ -293,7 +293,7 @@ int Sam4eI2CTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 	return cnt;
 }
 
-int Sam4eI2CTxSrData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
+int Sam4eI2CTxSrData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
 {
 	SAM4E_I2CDEV *dev = (SAM4E_I2CDEV*)pDev->pDevData;
 	uint32_t d = 0;
