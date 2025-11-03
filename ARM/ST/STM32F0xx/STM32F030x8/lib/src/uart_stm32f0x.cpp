@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "iopinctrl.h"
 #include "coredev/uart.h"
 #include "idelay.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 
 #define SYSCFG_CFGR1_USART3_DMA_RMP		(1<<26)
 
@@ -110,7 +110,7 @@ static STM32F0X_UARTDEV s_Stm32f03xUartDev[] = {
 
 static const int s_NbUartDev = sizeof(s_Stm32f03xUartDev) / sizeof(STM32F0X_UARTDEV);
 
-UARTDEV * const UARTGetInstance(int DevNo)
+UARTDEV const *UARTGetInstance(int DevNo)
 {
 	return s_Stm32f03xUartDev[DevNo].pUartDev;
 }
@@ -307,7 +307,7 @@ static bool STM32F03xUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
+static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
     int cnt = 0;
@@ -611,8 +611,8 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->bIntMode = pCfg->bIntMode;
 	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.Reset = STM32F03xUARTReset;
 	pDev->DevIntrf.Disable = STM32F03xUARTDisable;
 	pDev->DevIntrf.Enable = STM32F03xUARTEnable;
