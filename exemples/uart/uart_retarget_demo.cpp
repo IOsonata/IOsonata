@@ -47,14 +47,22 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
+// define this for your board if different oscillator than the library default
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
+
 //#define DEMO_C
 //#define USE_GETCHAR
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-#define FIFOSIZE			CFIFO_MEMSIZE(256)
+//#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
 
-uint8_t g_TxBuff[FIFOSIZE];
+#ifdef UARTFIFOSIZE
+uint8_t s_UartRxFifo[UARTFIFOSIZE];
+uint8_t s_UartTxFifo[UARTFIFOSIZE];
+#endif
 
 static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
@@ -64,23 +72,31 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 // UART configuration data
-const UARTCfg_t g_UartCfg = {
-	UART_DEVNO,
-	s_UartPins,
-	sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	1000000,			// Rate
-	8,
-	UART_PARITY_NONE,
-	1,					// Stop bit
-	UART_FLWCTRL_NONE,
-	true,
-	1, 					// use APP_IRQ_PRIORITY_LOW with Softdevice
-	nRFUartEvthandler,
-	true,				// fifo blocking mode
-	0,
-	NULL,
-	FIFOSIZE,
-	g_TxBuff,
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = 1000000,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 1,
+	.EvtCallback = nRFUartEvthandler,
+	.bFifoBlocking = true,
+#ifdef UARTFIFOSIZE
+	.RxMemSize = UARTFIFOSIZE,
+	.pRxMem = s_UartRxFifo,
+	.TxMemSize = UARTFIFOSIZE,//FIFOSIZE,
+	.pTxMem = s_UartTxFifo,//g_TxBuff,
+#else
+	.RxMemSize = 0,
+	.pRxMem = NULL,
+	.TxMemSize = 0,
+	.pTxMem = NULL,
+#endif
+	.bDMAMode = true,
 };
 
 #ifdef DEMO_C
@@ -119,14 +135,13 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 int main()
 {
 	bool res;
-	//SystemCoreClockSelect(OSC_TYPE_XTAL, 16000000);
 
 #ifdef DEMO_C
-	res = UARTInit(&g_UartDev, &g_UartCfg);
+	res = UARTInit(&g_UartDev, &s_UartCfg);
 	UARTRetargetEnable(&g_UartDev, STDIN_FILENO);
 	UARTRetargetEnable(&g_UartDev, STDOUT_FILENO);
 #else
-	res = g_Uart.Init(g_UartCfg);
+	res = g_Uart.Init(s_UartCfg);
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
