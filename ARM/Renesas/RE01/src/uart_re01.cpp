@@ -689,8 +689,8 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	//pDev->b = pCfg->bIntMode;
 	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.Disable = Re01UARTDisable;
 	pDev->DevIntrf.Enable = Re01UARTEnable;
 	pDev->DevIntrf.GetRate = Re01UARTGetRate;
