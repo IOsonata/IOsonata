@@ -33,6 +33,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <signal.h>
+#include <stdbool.h>
 
 #include "cmsis_compiler.h"
 
@@ -65,5 +66,17 @@ unsigned __atomic_exchange_4(volatile void *d, unsigned val, int mem)
 	*(unsigned*)d = val;
 	__set_PRIMASK(primask);
 
-	return *(unsigned*)r;
+	return r;
+}
+
+// Missing for M0
+bool __atomic_test_and_set(volatile void *d, int mem)
+{
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+	unsigned r = *(unsigned*)d;
+	*(unsigned*)d = 1;
+	__set_PRIMASK(primask);
+
+	return r;
 }
