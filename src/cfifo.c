@@ -36,26 +36,28 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
-
-#ifndef WIN32
 #include <stdatomic.h>
-#else
-#include <signal.h>
-
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-
-typedef sig_atomic_t		atomic_int;
-
-static inline void atomic_store(atomic_int *pVar, sig_atomic_t NewVal) {
-	InterlockedExchange(pVar, NewVal);
-}
-
-#endif
 
 #include "cfifo.h"
 
-HCFIFO CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking)
+/**
+ * @brief	Initialize FIFO.
+ *
+ * This function must be called first to initialize FIFO before any other functions
+ * can be used.
+ *
+ * @param	pMemBlk 		: Pointer to memory block to be used for FIFO
+ * @param	TotalMemSize	: Total memory size in byte
+ * @param	BlkSize 		: Block size in bytes
+ * @param   bBlocking  		: Behavior when FIFO is full.\n
+ *                    			false - Old data will be pushed out to make place
+ *                            			for new data. Put always succeed\n
+ *                    			true  - New data will not be pushed in. Put will
+ *                    					return fail.
+ *
+ * 	@return CFifo Handle
+ */
+hCfifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking)
 {
 	if (pMemBlk == NULL)
 		return NULL;
@@ -75,15 +77,17 @@ HCFIFO CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSiz
 
 uint8_t *CFifoGet(HCFIFO const pFifo)
 {
-	if (pFifo == NULL || pFifo->GetIdx < 0)
+	if (pFifo == NULL || atomic_load((atomic_int *)&pFifo->GetIdx) < 0)
 		return NULL;
 
-	int32_t idx = pFifo->GetIdx;
+	int32_t idx = atomic_load((atomic_int *)&pFifo->GetIdx);
 	int32_t getidx = idx + 1;
 
 	if (getidx >= pFifo->MaxIdxCnt)
 		getidx = 0;
-	if (getidx == pFifo->PutIdx)
+
+	int32_t putidx = atomic_load((atomic_int *)&pFifo->PutIdx);
+	if (getidx == putidx)
 		getidx = -1;
 
 	atomic_store((atomic_int *)&pFifo->GetIdx, getidx);
@@ -98,15 +102,15 @@ uint8_t *CFifoGetMultiple(HCFIFO const pFifo, int *pCnt)
 	if (pCnt == NULL)
 		return CFifoGet(pFifo);
 
-	if (pFifo == NULL || pFifo->GetIdx < 0 || *pCnt == 0)
+	if (pFifo == NULL || atomic_load((atomic_int *)&pFifo->GetIdx) < 0 || *pCnt == 0)
 	{
 		*pCnt = 0;
 		return NULL;
 	}
 
 	int32_t cnt = *pCnt;
-	int32_t putidx = pFifo->PutIdx;
-	int32_t idx = pFifo->GetIdx;
+	int32_t putidx = atomic_load((atomic_int *)&pFifo->PutIdx);
+	int32_t idx    = atomic_load((atomic_int *)&pFifo->GetIdx);
 	int32_t getidx = idx + cnt;
 
 	if (idx < putidx)
@@ -114,7 +118,7 @@ uint8_t *CFifoGetMultiple(HCFIFO const pFifo, int *pCnt)
 		if (getidx >= putidx)
 		{
 			getidx = -1;
-			cnt = putidx- idx;
+			cnt = putidx - idx;
 		}
 	}
 	else
@@ -139,25 +143,27 @@ uint8_t *CFifoPut(HCFIFO const pFifo)
 	if (pFifo == NULL)
 		return NULL;
 
-    if (pFifo->PutIdx == pFifo->GetIdx)
+    if (atomic_load((atomic_int *)&pFifo->PutIdx) ==
+        atomic_load((atomic_int *)&pFifo->GetIdx))
     {
         if (pFifo->bBlocking == true)
             return NULL;
         // drop data
-        int32_t gidx = pFifo->GetIdx + 1;
+        int32_t gidx = atomic_load((atomic_int *)&pFifo->GetIdx) + 1;
         if (gidx >= pFifo->MaxIdxCnt)
             gidx = 0;
         atomic_store((atomic_int *)&pFifo->GetIdx, gidx);
 
         pFifo->DropCnt++;
     }
-	int32_t idx = pFifo->PutIdx;
+
+	int32_t idx = atomic_load((atomic_int *)&pFifo->PutIdx);
 	int32_t putidx = idx + 1;
 	if (putidx >= pFifo->MaxIdxCnt)
 		putidx = 0;
 	atomic_store((atomic_int *)&pFifo->PutIdx, putidx);
 
-	if (pFifo->GetIdx < 0)
+	if (atomic_load((atomic_int *)&pFifo->GetIdx) < 0)
 	{
 		atomic_store((atomic_int *)&pFifo->GetIdx, idx);
 	}
@@ -178,7 +184,8 @@ uint8_t *CFifoPutMultiple(HCFIFO const pFifo, int *pCnt)
 		return NULL;
 	}
 
-	if (pFifo->PutIdx == pFifo->GetIdx)
+	if (atomic_load((atomic_int *)&pFifo->PutIdx) ==
+	    atomic_load((atomic_int *)&pFifo->GetIdx))
     {
 	    if (pFifo->bBlocking == true)
 	        return NULL;
@@ -187,9 +194,10 @@ uint8_t *CFifoPutMultiple(HCFIFO const pFifo, int *pCnt)
 	    CFifoGetMultiple(pFifo, &l);
         pFifo->DropCnt += l;
     }
-	int32_t cnt = *pCnt;
-	int32_t idx = pFifo->PutIdx;
-	int32_t getidx = pFifo->GetIdx;
+
+	int32_t cnt    = *pCnt;
+	int32_t idx    = atomic_load((atomic_int *)&pFifo->PutIdx);
+	int32_t getidx = atomic_load((atomic_int *)&pFifo->GetIdx);
 	int32_t putidx = idx + cnt;
 
 	if (idx > getidx)
@@ -226,7 +234,6 @@ uint8_t *CFifoPutMultiple(HCFIFO const pFifo, int *pCnt)
 void CFifoFlush(HCFIFO const pFifo)
 {
 	atomic_store((atomic_int *)&pFifo->GetIdx, -1);
-
 	atomic_store((atomic_int *)&pFifo->PutIdx, 0);
 }
 
@@ -234,16 +241,19 @@ int CFifoAvail(HCFIFO const pFifo)
 {
 	int len = 0;
 
-	if (pFifo->GetIdx < 0)
+	if (atomic_load((atomic_int *)&pFifo->GetIdx) < 0)
 		return pFifo->MaxIdxCnt;
 
-	if (pFifo->PutIdx > pFifo->GetIdx)
+	int gi = atomic_load((atomic_int *)&pFifo->GetIdx);
+	int pi = atomic_load((atomic_int *)&pFifo->PutIdx);
+
+	if (pi > gi)
 	{
-		len = pFifo->MaxIdxCnt - pFifo->PutIdx + pFifo->GetIdx;
+		len = pFifo->MaxIdxCnt - pi + gi;
 	}
-	else if (pFifo->PutIdx < pFifo->GetIdx)
+	else if (pi < gi)
 	{
-		len = pFifo->GetIdx - pFifo->PutIdx;
+		len = gi - pi;
 	}
 
 	return len;
@@ -253,16 +263,19 @@ int CFifoUsed(HCFIFO const pFifo)
 {
 	int len = 0;
 
-	if (pFifo->GetIdx < 0)
+	if (atomic_load((atomic_int *)&pFifo->GetIdx) < 0)
 		return 0;
 
-	if (pFifo->GetIdx < pFifo->PutIdx)
+	int gi = atomic_load((atomic_int *)&pFifo->GetIdx);
+	int pi = atomic_load((atomic_int *)&pFifo->PutIdx);
+
+	if (gi < pi)
 	{
-		len = pFifo->PutIdx - pFifo->GetIdx;
+		len = pi - gi;
 	}
 	else
 	{
-		len = pFifo->MaxIdxCnt - pFifo->GetIdx + pFifo->PutIdx;
+		len = pFifo->MaxIdxCnt - gi + pi;
 	}
 
 	return len;
@@ -270,7 +283,7 @@ int CFifoUsed(HCFIFO const pFifo)
 
 int CFifoRead(HCFIFO const pFifo, uint8_t *pBuff, int BuffLen)
 {
-	if (pFifo == NULL || pFifo->GetIdx < 0 || pBuff == NULL)
+	if (pFifo == NULL || atomic_load((atomic_int *)&pFifo->GetIdx) < 0 || pBuff == NULL)
 		return 0;
 
 	int cnt = 0;
@@ -313,7 +326,8 @@ int CFifoWrite(HCFIFO const pFifo, uint8_t *pData, int DataLen)
 	if (pFifo == NULL || pData == NULL)
 		return 0;
 
-    if (pFifo->PutIdx == pFifo->GetIdx)
+    if (atomic_load((atomic_int *)&pFifo->PutIdx) ==
+        atomic_load((atomic_int *)&pFifo->GetIdx))
     {
         if (pFifo->bBlocking == true)
             return 0;
@@ -356,4 +370,3 @@ int CFifoWrite(HCFIFO const pFifo, uint8_t *pData, int DataLen)
 
 	return cnt;
 }
-

@@ -61,13 +61,14 @@ typedef struct __CFIFO_Header {
 
 #pragma pack(pop)
 
-typedef CFifo_t			CFIFOHDR;
+//typedef CFifo_t			CFIFOHDR;
 
 /// @brief	CFIFO handle.
 ///
 /// This handle is used for all CFIFO function calls. It is the pointer to to CFIFO memory block.
 ///
 typedef CFifo_t* HCFIFO;
+typedef CFifo_t* hCfifo_t;
 
 /// This macro calculates total memory require in bytes including header for byte based FIFO.
 #define CFIFO_MEMSIZE(FSIZE)					((FSIZE) + sizeof(CFifo_t))
@@ -90,12 +91,13 @@ extern "C" {
  * @param	BlkSize 		: Block size in bytes
  * @param   bBlocking  		: Behavior when FIFO is full.\n
  *                    			false - Old data will be pushed out to make place
- *                            			for new data.\n
- *                    			true  - New data will not be pushed in
+ *                            			for new data. Put always succeed\n
+ *                    			true  - New data will not be pushed in. Put will
+ *                    					return fail.
  *
  * 	@return CFifo Handle
  */
-HCFIFO CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking);
+hCfifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking);
 
 /**
  * @brief	Retrieve FIFO data by returning pointer to FIFO memory block for reading.
