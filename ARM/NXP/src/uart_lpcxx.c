@@ -36,10 +36,9 @@ Modified by          Date              Description
 #include <stdbool.h>
 #include <inttypes.h>
 
-#include "cmsis_gcc.h"
 #include "istddef.h"
 #include "uart_lpcxx.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 #include "idelay.h"
 
 extern uint32_t SystemCoreClock;
@@ -275,7 +274,7 @@ int LpcUARTRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 	return cnt;
 }
 
-int LpcUARTTxData(DevIntrf_t *pDev, uint8_t *pData, int Datalen)
+int LpcUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->pDevData;
 	int cnt = 0;

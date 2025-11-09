@@ -316,11 +316,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/intelhex.c</locationURI>
 		</link>
 		<link>
-			<name>src/iopincfg.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/iopincfg.c</locationURI>
-		</link>
-		<link>
 			<name>src/isha1.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/isha1.c</locationURI>

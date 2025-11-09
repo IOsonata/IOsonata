@@ -57,6 +57,7 @@ unsigned __atomic_fetch_sub_4(volatile void *d, unsigned val, int mem)
 	return *(unsigned*)d;
 }
 
+#if 0
 // Missing for M0
 unsigned __atomic_exchange_4(volatile void *d, unsigned val, int mem)
 {
@@ -68,6 +69,7 @@ unsigned __atomic_exchange_4(volatile void *d, unsigned val, int mem)
 
 	return r;
 }
+#endif
 
 // Missing for M0
 bool __atomic_test_and_set(volatile void *d, int mem)

@@ -272,7 +272,7 @@ static inline bool LpcUARTStartRx(DevIntrf_t *pSerDev, uint32_t DevAddr) { retur
 int LpcUARTRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen);
 static inline void LpcUARTStopRx(DevIntrf_t *pSerDev) {}
 static inline bool LpcUARTStartTx(DevIntrf_t *pDev, uint32_t DevAddr) { return true; }
-int LpcUARTTxData(DevIntrf_t *pDev, uint8_t *pData, int Datalen);
+int LpcUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen);
 static inline void LpcUARTStopTx(DevIntrf_t *pDev) {}
 bool LpcUARTWaitForRxFifo(LPCUARTDEV *pDev, uint32_t Timeout);
 bool LpcUARTWaitForTxFifo(LPCUARTDEV *pDev, uint32_t Timeout);

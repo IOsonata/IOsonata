@@ -161,7 +161,7 @@ bool LpcSSPStartTx(DevIntrf_t *pDev, uint32_t DevAddr)
 }
 
 // Transmit Data only, no Start/Stop condition
-int LpcSSPTxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
+int LpcSSPTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
 	int cnt = 0;

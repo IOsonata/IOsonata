@@ -105,7 +105,7 @@ bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 	// Flush RX FIFO
 	while (LpcSSPWaitRxFifo(dev, 2))
 	{
-		uint32_t d = dev->pSspReg->DR;
+		(void)dev->pSspReg->DR;
 	}
 
 	dev->pSpiDev = pDev;

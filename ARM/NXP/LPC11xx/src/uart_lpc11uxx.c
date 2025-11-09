@@ -36,7 +36,7 @@ Modified by          Date              Description
 #include "LPC11Uxx.h"
 #include "uart_lpcxx.h"
 #include "idelay.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 
 #define LPC_SYSAHBCLKCTRL_UART0_EN		(1 << 12)
 #define LPC_SYSAHBCLKCTRL_UART1_EN		(1 << 20)
