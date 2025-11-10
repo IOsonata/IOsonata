@@ -136,6 +136,7 @@ $Repos = @(
     "https://github.com/IOsonata/nRF5_SDK_Mesh.git",
     "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
 	"https://github.com/xioTechnologies/Fusion.git"
+    "https://github.com/lvgl/lvgl.git"
 )
 
 foreach ($Repo in $Repos) {

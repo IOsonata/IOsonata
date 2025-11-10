@@ -339,7 +339,8 @@ clone_repos() {
     "https://github.com/IOsonata/nRF5_SDK.git"
     "https://github.com/IOsonata/nRF5_SDK_Mesh.git"
     "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
-	"https://github.com/xioTechnologies/Fusion.git"
+    "https://github.com/xioTechnologies/Fusion.git"
+    "https://github.com/lvgl/lvgl.git"
   )
   for repo in "${repos[@]}"; do
     name=$(basename "$repo" .git)

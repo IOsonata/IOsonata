@@ -370,7 +370,8 @@ Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"; $repos = 
   "https://github.com/IOsonata/nRF5_SDK.git" = "$EXT\nRF5_SDK"; 
   "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "$EXT\nRF5_SDK_Mesh"; 
   "https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "$EXT\BSEC"; 
-  "https://github.com/xioTechnologies/Fusion.git" = "$EXT\Fusion"};
+  "https://github.com/xioTechnologies/Fusion.git" = "$EXT\Fusion";
+  "https://github.com/lvgl/lvgl.git" = "$EXT\lvgl"};
   foreach ($repo in $repos.GetEnumerator()) { 
     Sync-Repo $repo.Name $repo.Value 
   }
