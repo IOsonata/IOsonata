@@ -75,42 +75,42 @@ hCfifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkS
 	return hdr;
 }
 
-uint8_t *CFifoGet(HCFIFO const pFifo)
+uint8_t *CFifoGet(hCfifo_t const pFifo)
 {
-	if (pFifo == NULL || atomic_load((atomic_int *)&pFifo->GetIdx) < 0)
+	if (pFifo == NULL || atomic_load(&pFifo->GetIdx) < 0)
 		return NULL;
 
-	int32_t idx = atomic_load((atomic_int *)&pFifo->GetIdx);
+	int32_t idx = atomic_load(&pFifo->GetIdx);
 	int32_t getidx = idx + 1;
 
 	if (getidx >= pFifo->MaxIdxCnt)
 		getidx = 0;
 
-	int32_t putidx = atomic_load((atomic_int *)&pFifo->PutIdx);
+	int32_t putidx = atomic_load(&pFifo->PutIdx);
 	if (getidx == putidx)
 		getidx = -1;
 
-	atomic_store((atomic_int *)&pFifo->GetIdx, getidx);
+	atomic_store(&pFifo->GetIdx, getidx);
 
 	uint8_t *p = pFifo->pMemStart + idx * pFifo->BlkSize;
 
 	return p;
 }
 
-uint8_t *CFifoGetMultiple(HCFIFO const pFifo, int *pCnt)
+uint8_t *CFifoGetMultiple(hCfifo_t const pFifo, int *pCnt)
 {
 	if (pCnt == NULL)
 		return CFifoGet(pFifo);
 
-	if (pFifo == NULL || atomic_load((atomic_int *)&pFifo->GetIdx) < 0 || *pCnt == 0)
+	if (pFifo == NULL || atomic_load(&pFifo->GetIdx) < 0 || *pCnt == 0)
 	{
 		*pCnt = 0;
 		return NULL;
 	}
 
 	int32_t cnt = *pCnt;
-	int32_t putidx = atomic_load((atomic_int *)&pFifo->PutIdx);
-	int32_t idx    = atomic_load((atomic_int *)&pFifo->GetIdx);
+	int32_t putidx = atomic_load(&pFifo->PutIdx);
+	int32_t idx    = atomic_load(&pFifo->GetIdx);
 	int32_t getidx = idx + cnt;
 
 	if (idx < putidx)
@@ -130,7 +130,7 @@ uint8_t *CFifoGetMultiple(HCFIFO const pFifo, int *pCnt)
 		}
 	}
 
-	atomic_store((atomic_int *)&pFifo->GetIdx, getidx);
+	atomic_store(&pFifo->GetIdx, getidx);
 
 	uint8_t *p = pFifo->pMemStart + idx * pFifo->BlkSize;
 	*pCnt = cnt;
@@ -138,34 +138,33 @@ uint8_t *CFifoGetMultiple(HCFIFO const pFifo, int *pCnt)
 	return p;
 }
 
-uint8_t *CFifoPut(HCFIFO const pFifo)
+uint8_t *CFifoPut(hCfifo_t const pFifo)
 {
 	if (pFifo == NULL)
 		return NULL;
 
-    if (atomic_load((atomic_int *)&pFifo->PutIdx) ==
-        atomic_load((atomic_int *)&pFifo->GetIdx))
+    if (atomic_load(&pFifo->PutIdx) == atomic_load(&pFifo->GetIdx))
     {
         if (pFifo->bBlocking == true)
             return NULL;
         // drop data
-        int32_t gidx = atomic_load((atomic_int *)&pFifo->GetIdx) + 1;
+        int32_t gidx = atomic_load(&pFifo->GetIdx) + 1;
         if (gidx >= pFifo->MaxIdxCnt)
             gidx = 0;
-        atomic_store((atomic_int *)&pFifo->GetIdx, gidx);
+        atomic_store(&pFifo->GetIdx, gidx);
 
         pFifo->DropCnt++;
     }
 
-	int32_t idx = atomic_load((atomic_int *)&pFifo->PutIdx);
+	int32_t idx = atomic_load(&pFifo->PutIdx);
 	int32_t putidx = idx + 1;
 	if (putidx >= pFifo->MaxIdxCnt)
 		putidx = 0;
-	atomic_store((atomic_int *)&pFifo->PutIdx, putidx);
+	atomic_store(&pFifo->PutIdx, putidx);
 
-	if (atomic_load((atomic_int *)&pFifo->GetIdx) < 0)
+	if (atomic_load(&pFifo->GetIdx) < 0)
 	{
-		atomic_store((atomic_int *)&pFifo->GetIdx, idx);
+		atomic_store(&pFifo->GetIdx, idx);
 	}
 
 	uint8_t *p = pFifo->pMemStart + idx * pFifo->BlkSize;
@@ -173,7 +172,7 @@ uint8_t *CFifoPut(HCFIFO const pFifo)
 	return p;
 }
 
-uint8_t *CFifoPutMultiple(HCFIFO const pFifo, int *pCnt)
+uint8_t *CFifoPutMultiple(hCfifo_t const pFifo, int *pCnt)
 {
 	if (pCnt == NULL)
 		return CFifoPut(pFifo);
@@ -184,8 +183,8 @@ uint8_t *CFifoPutMultiple(HCFIFO const pFifo, int *pCnt)
 		return NULL;
 	}
 
-	if (atomic_load((atomic_int *)&pFifo->PutIdx) ==
-	    atomic_load((atomic_int *)&pFifo->GetIdx))
+	if (atomic_load(&pFifo->PutIdx) ==
+	    atomic_load(&pFifo->GetIdx))
     {
 	    if (pFifo->bBlocking == true)
 	        return NULL;
@@ -196,8 +195,8 @@ uint8_t *CFifoPutMultiple(HCFIFO const pFifo, int *pCnt)
     }
 
 	int32_t cnt    = *pCnt;
-	int32_t idx    = atomic_load((atomic_int *)&pFifo->PutIdx);
-	int32_t getidx = atomic_load((atomic_int *)&pFifo->GetIdx);
+	int32_t idx    = atomic_load(&pFifo->PutIdx);
+	int32_t getidx = atomic_load(&pFifo->GetIdx);
 	int32_t putidx = idx + cnt;
 
 	if (idx > getidx)
@@ -217,11 +216,11 @@ uint8_t *CFifoPutMultiple(HCFIFO const pFifo, int *pCnt)
 		}
 	}
 
-	atomic_store((atomic_int *)&pFifo->PutIdx, putidx);
+	atomic_store(&pFifo->PutIdx, putidx);
 
 	if (getidx < 0)
 	{
-		atomic_store((atomic_int *)&pFifo->GetIdx, idx);
+		atomic_store(&pFifo->GetIdx, idx);
 	}
 
 	uint8_t *p = pFifo->pMemStart + idx * pFifo->BlkSize;
@@ -231,21 +230,21 @@ uint8_t *CFifoPutMultiple(HCFIFO const pFifo, int *pCnt)
 	return p;
 }
 
-void CFifoFlush(HCFIFO const pFifo)
+void CFifoFlush(hCfifo_t const pFifo)
 {
-	atomic_store((atomic_int *)&pFifo->GetIdx, -1);
-	atomic_store((atomic_int *)&pFifo->PutIdx, 0);
+	atomic_store(&pFifo->GetIdx, -1);
+	atomic_store(&pFifo->PutIdx, 0);
 }
 
-int CFifoAvail(HCFIFO const pFifo)
+int CFifoAvail(hCfifo_t const pFifo)
 {
 	int len = 0;
 
-	if (atomic_load((atomic_int *)&pFifo->GetIdx) < 0)
+	if (atomic_load(&pFifo->GetIdx) < 0)
 		return pFifo->MaxIdxCnt;
 
-	int gi = atomic_load((atomic_int *)&pFifo->GetIdx);
-	int pi = atomic_load((atomic_int *)&pFifo->PutIdx);
+	int gi = atomic_load(&pFifo->GetIdx);
+	int pi = atomic_load(&pFifo->PutIdx);
 
 	if (pi > gi)
 	{
@@ -259,7 +258,7 @@ int CFifoAvail(HCFIFO const pFifo)
 	return len;
 }
 
-int CFifoUsed(HCFIFO const pFifo)
+int CFifoUsed(hCfifo_t const pFifo)
 {
 	int len = 0;
 
@@ -281,7 +280,7 @@ int CFifoUsed(HCFIFO const pFifo)
 	return len;
 }
 
-int CFifoRead(HCFIFO const pFifo, uint8_t *pBuff, int BuffLen)
+int CFifoRead(hCfifo_t const pFifo, uint8_t *pBuff, int BuffLen)
 {
 	if (pFifo == NULL || atomic_load((atomic_int *)&pFifo->GetIdx) < 0 || pBuff == NULL)
 		return 0;
@@ -321,13 +320,12 @@ int CFifoRead(HCFIFO const pFifo, uint8_t *pBuff, int BuffLen)
 	return cnt;
 }
 
-int CFifoWrite(HCFIFO const pFifo, uint8_t *pData, int DataLen)
+int CFifoWrite(hCfifo_t const pFifo, uint8_t *pData, int DataLen)
 {
 	if (pFifo == NULL || pData == NULL)
 		return 0;
 
-    if (atomic_load((atomic_int *)&pFifo->PutIdx) ==
-        atomic_load((atomic_int *)&pFifo->GetIdx))
+    if (atomic_load(&pFifo->PutIdx) == atomic_load(&pFifo->GetIdx))
     {
         if (pFifo->bBlocking == true)
             return 0;
