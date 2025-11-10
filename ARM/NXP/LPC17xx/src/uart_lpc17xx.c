@@ -229,6 +229,7 @@ bool LpcUARTInit(UARTDEV *pDev, const UARTCFG *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
+	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.Disable = LpcUARTDisable;
 	pDev->DevIntrf.Enable = LpcUARTEnable;
 	pDev->DevIntrf.GetRate = LpcUARTGetRate;

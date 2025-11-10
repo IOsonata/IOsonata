@@ -191,7 +191,7 @@ int LpcI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
 }
 
 // Send Data only, no Start/Stop condition
-int LpcI2CTxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
+int LpcI2CTxData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
 {
 	I2CSTATUS status;
 	int tcount = 0;
