@@ -1,18 +1,200 @@
-site_name: "IOSonata Documentation"
+site_name: "IOsonata Documentation"
+site_url: https://iosonata.github.io/IOsonata/
+site_description: Cross-platform C++ HAL for embedded systems - Object-oriented, portable, and high-performance
+site_author: I-SYST inc.
+
+repo_url: https://github.com/IOsonata/IOsonata
+repo_name: IOsonata/IOsonata
+edit_uri: edit/master/docs/
+
+copyright: Copyright &copy; 2014-2025 I-SYST inc. - MIT License
 
 theme:
   name: material
+  logo: logo/iosonata_logo_400.png
+  favicon: logo/iosonata_logo_400.png
+
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - content.tooltips
+    - navigation.expand
+    - navigation.footer
+    - navigation.indexes
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+
+nav:
+  - Home: index.md
+
+  - Getting Started:
+    - Quick Start: getting-started/quick-start.md
+    - Installation: getting-started/installation.md
+    - First Project: getting-started/first-project.md
+    - Toolchain Setup: getting-started/toolchain.md
+
+  - Architecture:
+    - Overview: architecture/overview.md
+    - Design Philosophy: architecture/philosophy.md
+    - The Orchard Model: architecture/orchard.md
+    - Core Patterns: architecture/patterns.md
+
+  - API Reference:
+    - Overview: api/overview.md
+    - Core Classes:
+      - DeviceIntrf: api/device-intrf.md
+      - Device: api/device.md
+      - Sensor: api/sensor.md
+    - Communication:
+      - UART: api/uart.md
+      - I2C: api/i2c.md
+      - SPI: api/spi.md
+      - Bluetooth: api/bluetooth.md
+    - Utilities:
+      - Timer: api/timer.md
+      - CFifo: api/cfifo.md
+      - IOPin: api/iopin.md
+    - Full API: api/index.html
+
+  - Examples:
+    - Overview: examples/index.md
+    - Communication:
+      - UART Examples: examples/uart.md
+      - I2C Examples: examples/i2c.md
+      - SPI Examples: examples/spi.md
+    - Sensors:
+      - Environmental: examples/sensors-env.md
+      - Motion: examples/sensors-motion.md
+      - Multi-Sensor: examples/sensors-multi.md
+    - Display:
+      - LCD: examples/display-lcd.md
+      - Console: examples/display-console.md
+    - Storage:
+      - Flash: examples/storage-flash.md
+      - File Systems: examples/storage-fs.md
+    - Integration:
+      - BLE Bridge: examples/ble-bridge.md
+      - IMU Fusion: examples/imu-fusion.md
+
+  - Porting Guide:
+    - Overview: porting/overview.md
+    - Adding New MCU: porting/new-mcu.md
+    - Board Definition: porting/board-definition.md
+    - Platform Testing: porting/testing.md
+
+  - Contributing:
+    - Guidelines: contributing/guidelines.md
+    - Code Style: contributing/code-style.md
+    - Documentation: contributing/documentation.md
 
 plugins:
-  - search
+  - search:
+      lang: en
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+
   - mkdoxy:
       projects:
-        Device:
-          src-dirs: include/device.h include/device_intrf.h
+        IOsonata:
+          src-dirs: include src ARM/include ARM/src
           full-doc: True
           doxy-cfg:
-            FILE_PATTERNS: "*.h"
+            FILE_PATTERNS: "*.h *.hpp *.cpp *.c"
             RECURSIVE: True
-            HIDE_UNDOC_CLASSES: YES
-            HIDE_UNDOC_MEMBERS: YES
-            HIDE_UNDOC_RELATIONS: YES
+            EXTRACT_ALL: False
+            EXTRACT_PRIVATE: False
+            JAVADOC_AUTOBRIEF: True
+            GENERATE_TREEVIEW: True
+            HIDE_UNDOC_CLASSES: Yes
+            HIDE_UNDOC_MEMBERS: Yes
+
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/IOsonata/IOsonata
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/isyst
+
+  version:
+    provider: mike
+    default: latest
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js

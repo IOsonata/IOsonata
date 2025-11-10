@@ -1,0 +1,84 @@
+# Doxyfile Configuration Updates for IOsonata
+# Apply these changes to docs/Doxyfile
+
+# Line 57 - Add project description
+PROJECT_BRIEF = "Cross-platform C++ HAL for embedded systems - Object-oriented, portable, and high-performance"
+
+# Line 77 - Output to current directory (docs/)
+OUTPUT_DIRECTORY = .
+
+# Line 527 - Extract only documented entities (keeps docs clean)
+EXTRACT_ALL = NO
+
+# Line 952 - Specify input directories explicitly
+INPUT = ../include \
+        ../src \
+        ../ARM/include \
+        ../ARM/src \
+        ../RISCV/include
+
+# Line 992 - Expand file patterns to include C++ files
+FILE_PATTERNS = *.h \
+                *.hpp \
+                *.cpp \
+                *.c
+
+# Line 1049 - Keep recursive search enabled
+RECURSIVE = YES
+
+# Line 1088 - Add example paths
+EXAMPLE_PATH = ../exemples \
+               ../ARM/Nordic/nRF52/nRF52832/exemples
+
+# Line 1093 - Enable recursive example search
+EXAMPLE_RECURSIVE = YES
+
+# Line 1334 - HTML output directory
+GENERATE_HTML = YES
+HTML_OUTPUT = api
+
+# Line 1415 - Enable Javadoc-style brief descriptions
+JAVADOC_AUTOBRIEF = YES
+
+# Line 2134 - Disable LaTeX generation (we only need HTML)
+GENERATE_LATEX = NO
+
+# Line 2554 - Enable Graphviz for diagrams
+HAVE_DOT = YES
+
+# Line 2569 - Enable class diagrams
+CLASS_DIAGRAMS = YES
+
+# Line 2597 - Show collaboration graphs
+COLLABORATION_GRAPH = YES
+
+# Line 2661 - Enable call graphs
+CALL_GRAPH = YES
+
+# Line 2677 - Enable caller graphs
+CALLER_GRAPH = YES
+
+# Add exclusion patterns to skip vendor code (append after FILE_PATTERNS)
+# Around line 1010
+EXCLUDE_PATTERNS = */external/* \
+                   */nrfx/mdk/* \
+                   */CMSIS/Core/* \
+                   *_nrf51.h \
+                   *_nrf52.h \
+                   *test*
+
+# Generate tree view for better navigation
+# Around line 1568
+GENERATE_TREEVIEW = YES
+
+# Show include files in documentation
+# Around line 847
+SHOW_INCLUDE_FILES = YES
+
+# Show file list
+# Around line 832
+SHOW_FILES = YES
+
+# Sort members alphabetically
+# Around line 694
+SORT_MEMBER_DOCS = YES

@@ -1,0 +1,68 @@
+docs: add comprehensive documentation infrastructure with GitHub Pages
+
+This PR implements a complete documentation system using MkDocs Material,
+Doxygen, and GitHub Actions for automatic deployment to GitHub Pages.
+
+## What's Added
+
+### Infrastructure
+- GitHub Actions workflow for auto-deployment
+- MkDocs configuration with Material theme
+- Doxygen integration via mkdoxy plugin
+- Professional navigation structure
+
+### Documentation Content
+- Professional homepage with features and examples
+- Quick Start guide for beginners
+- Architecture overview explaining the "Orchard" model
+- Examples index with learning paths
+- Setup and deployment guides
+
+### Features
+✅ Auto-deploys on every commit to master
+✅ Searchable API reference from Doxygen
+✅ Dark/light theme toggle
+✅ Mobile-responsive design
+✅ Live reload during local development
+✅ Zero maintenance after setup
+
+## Deployment Instructions
+
+1. Enable GitHub Pages:
+   - Go to Settings → Pages
+   - Source: "Deploy from a branch"
+   - Branch: "gh-pages" / (root)
+
+2. Apply Doxyfile changes:
+   - See docs/Doxyfile.patch for required updates
+
+3. Merge and wait:
+   - Actions workflow runs automatically
+   - Site live at https://iosonata.github.io/IOsonata/
+
+## Files Created
+
+Core:
+- .github/workflows/documentation.yml (NEW)
+- mkdocs.yml (MODIFIED)
+- docs/Doxyfile.patch (NEW)
+
+Documentation:
+- docs/index.md (UPDATED)
+- docs/getting-started/quick-start.md (NEW)
+- docs/architecture/overview.md (NEW)
+- docs/examples/index.md (NEW)
+
+Guides:
+- DOCUMENTATION_SETUP.md (NEW)
+- DOCUMENTATION_PR_SUMMARY.md (NEW)
+- docs/README.md (NEW)
+
+## Next Steps (Phase 2)
+
+- Complete remaining getting-started pages
+- Add detailed API reference pages
+- Enhance Doxygen comments in headers
+- Add more example guides
+
+See DOCUMENTATION_SETUP.md for complete details.
