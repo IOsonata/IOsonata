@@ -120,7 +120,6 @@ BtGattChar_t g_UartChars[] = {
 		.TxCompleteCB = NULL,				// Tx completed callback
 		.pValue = s_RxCharValMem,
 		//.CharVal = {PACKET_SIZE, 0, s_UartRxCharMem},						// char values
-		0,									// Default value length in bytes
 	},
 	{
 		// Write characteristic
@@ -132,7 +131,6 @@ BtGattChar_t g_UartChars[] = {
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
 		//.CharVal = {PACKET_SIZE, 0, s_UartTxCharMem},						// char values
-		0									// Default value length in bytes
 	},
 };
 
