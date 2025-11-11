@@ -79,7 +79,7 @@ typedef struct __PDM_Config {
 
 struct __PDM_DevInterf {
 	PdmCfg_t CfgData;
-	HCFIFO hFifo;					//!< CFifo handle
+	hCfifo_t hFifo;					//!< CFifo handle
 	int NbSamples;
 };
 

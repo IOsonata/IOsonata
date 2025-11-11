@@ -46,7 +46,7 @@ SOFTWARE.
 
 alignas(4) static uint8_t s_AppEvtHandlerFifoMem[APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE];
 
-alignas(4) static HCFIFO s_hAppEvtHandlerFifo;
+alignas(4) static hCfifo_t s_hAppEvtHandlerFifo;
 
 /**
  * @brief	Initialize event handler que

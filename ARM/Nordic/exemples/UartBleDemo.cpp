@@ -62,7 +62,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define DEVICE_NAME                     "UARTDemo"//2 long long 1234567890"                          /**< Name of device. Will be included in the advertising data. */
 
-#define PACKET_SIZE						20
+#define PACKET_SIZE						244
 
 #define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
 
@@ -223,7 +223,8 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
-	.SDEvtHandler = NULL				// RTOS Softdevice handler
+	.SDEvtHandler = NULL,				// RTOS Softdevice handler
+	//.MaxMtu = 255,
 };
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
@@ -237,8 +238,8 @@ static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 static IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RTS
+	//{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
+	//{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RTS
 };
 
 /// UART configuration
@@ -246,7 +247,7 @@ const UARTCfg_t g_UartCfg = {
 	.DevNo = 0,							// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
-	.Rate = 115200,						// Baudrate
+	.Rate = 1000000,						// Baudrate
 	.DataBits = 8,						// Data bits
 	.Parity = UART_PARITY_NONE,			// Parity
 	.StopBits = 1,						// Stop bit

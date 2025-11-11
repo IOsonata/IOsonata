@@ -183,8 +183,8 @@ struct __Uart_Dev {
 	DevIntrf_t DevIntrf;			//!< Device interface implementation
 	UARTEvtHandler_t EvtCallback;		//!< UART event callback
 	void *pObj;					//!< Pointer to UART object instance
-	HCFIFO hRxFifo;				//!< Rx FIFO handle
-	HCFIFO hTxFifo;				//!< Tx Fifo handle
+	hCfifo_t hRxFifo;				//!< Rx FIFO handle
+	hCfifo_t hTxFifo;				//!< Tx Fifo handle
 	uint32_t LineState;			//!< Line state
 	int hStdIn;					//!< Handle to retarget stdin
 	int hStdOut;				//!< Handle to retarget stdout
@@ -206,7 +206,7 @@ extern "C" {
 // Require implementations
 bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfgData);
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState);
-UARTDev_t const * UARTGetInstance(int DevNo);
+UARTDev_t const * const UARTGetInstance(int DevNo);
 
 static inline int UARTGetRate(UARTDev_t * const pDev) { return DeviceIntrfGetRate(&pDev->DevIntrf); }
 static inline int UARTSetRate(UARTDev_t * const pDev, int Rate) { return DeviceIntrfSetRate(&pDev->DevIntrf, Rate); }

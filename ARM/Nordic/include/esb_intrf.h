@@ -70,8 +70,8 @@ typedef struct __BleDeviceInterf {
 	DevIntrf_t    DevIntrf;   // Base Device Interface
     int         PacketSize; // BLE packet size
     nrf_esb_bitrate_t Rate;
-    HCFIFO      hRxFifo;
-    HCFIFO      hTxFifo;
+    hCfifo_t      hRxFifo;
+    hCfifo_t      hTxFifo;
     nrf_esb_config_t EsbCfg;
     uint8_t BaseAddr0[4];
     uint8_t BaseAddr1[4];

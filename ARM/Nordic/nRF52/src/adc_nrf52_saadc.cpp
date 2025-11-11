@@ -60,7 +60,7 @@ typedef struct __ADC_nRF52_Data {
 	float GainFactor[SAADC_NRF52_MAX_CHAN];		// Pre-calculated factor
 	uint32_t Period;
     int16_t ResData[SAADC_NRF52_MAX_CHAN];
-    HCFIFO	hFifo[SAADC_NRF52_MAX_CHAN];
+    hCfifo_t	hFifo[SAADC_NRF52_MAX_CHAN];
     Timer *pTimer;//using a timer instance for time-stamping ADC samples
 } ADCNRF52_DATA;
 

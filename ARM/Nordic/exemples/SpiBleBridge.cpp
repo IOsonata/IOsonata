@@ -264,8 +264,8 @@ alignas(4) uint8_t g_SpiRxBuff[SPI_PKT_SIZE];
 volatile int g_SpiRxBuffLen = 0;
 alignas(4) uint8_t s_SpiRxFifo[SPI_BLEINTRF_FIFOSIZE];
 alignas(4) uint8_t s_SpiTxFifo[SPI_BLEINTRF_FIFOSIZE];
-HCFIFO g_Ble2SpiFifo;
-HCFIFO g_Spi2BleFifo;
+hCfifo_t g_Ble2SpiFifo;
+hCfifo_t g_Spi2BleFifo;
 
 /* ***************************************************************************************
  * ******************** Flash memory config section *******************************

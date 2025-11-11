@@ -113,8 +113,8 @@ typedef struct __I2S_Device {
 	DevIntrf_t DevIntrf;	//!< Device interface instance
 	const IOPinCfg_t *pIOPinMap;	//!< Define I/O pins used by I2S (standard pins : SCK, SDA, WS. Other MCU may have 5 pins)
 	int NbIOPins;			//!< Total number of I/O pins
-	HCFIFO hRxFifo;
-	HCFIFO hTxFifo;
+	hCfifo_t hRxFifo;
+	hCfifo_t hTxFifo;
 	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
 } I2SDev_t;
 
