@@ -84,12 +84,12 @@ static const I2CCfg_t s_I2cCfg = {
 	.Rate = 100000,	// Rate
 	.MaxRetry = 5,			// Retry
 	.AddrType = I2CADDR_TYPE_NORMAL,
-	0,			// Number of slave addresses
-	{0,},		// Slave addresses
-	true,	// DMA
-	false,		// Use interrupt
-	7,			// Interrupt prio
-	NULL		// Event callback
+	.NbSlaveAddr = 0,			// Number of slave addresses
+	.SlaveAddr = {0,},		// Slave addresses
+	.bDmaEn = true,	// DMA
+	.bIntEn = false,		// Use interrupt
+	.IntPrio = 7,			// Interrupt prio
+	.EvtCB = NULL		// Event callback
 };
 
 I2C g_I2c;
@@ -121,7 +121,7 @@ static const AccelSensorCfg_t s_AccelCfg = {
 	.Freq = 100000,
 	.Scale = 2,
 	.FltrFreq = 0,
-	.bInter = true,
+	.Inter = true,
 	.IntPol = DEVINTR_POL_LOW,
 };
 

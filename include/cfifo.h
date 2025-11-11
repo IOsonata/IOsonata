@@ -40,6 +40,12 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <stdbool.h>
+#ifdef __cplusplus
+#include <atomic>
+using std::atomic_int;
+#else
+#include <stdatomic.h>
+#endif
 
 /** @addtogroup FIFO
   * @{
@@ -49,8 +55,8 @@ SOFTWARE.
 
 /// Header defining a circular fifo memory block.
 typedef struct __CFIFO_Header {
-	volatile int32_t PutIdx;	//!< Index to start of empty data block
-	volatile int32_t GetIdx;	//!< Index to start of used data block
+	atomic_int PutIdx;	//!< Index to start of empty data block
+	atomic_int GetIdx;	//!< Index to start of used data block
 	int32_t MaxIdxCnt;			//!< Max block count
 	bool bBlocking;          	//!< False to push out when FIFO is full (drop)
 	uint32_t DropCnt;           //!< Count dropped block
@@ -68,7 +74,7 @@ typedef struct __CFIFO_Header {
 /// This handle is used for all CFIFO function calls. It is the pointer to to CFIFO memory block.
 ///
 typedef CFifo_t* HCFIFO;
-typedef CFifo_t* hCfifo_t;
+typedef CFifo_t* hCFifo_t;
 
 /// This macro calculates total memory require in bytes including header for byte based FIFO.
 #define CFIFO_MEMSIZE(FSIZE)					((FSIZE) + sizeof(CFifo_t))
@@ -97,7 +103,7 @@ extern "C" {
  *
  * 	@return CFifo Handle
  */
-hCfifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking);
+hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking);
 
 /**
  * @brief	Retrieve FIFO data by returning pointer to FIFO memory block for reading.
@@ -110,7 +116,7 @@ hCfifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkS
  *
  * @return	Pointer to the FIFO buffer.
  */
-uint8_t *CFifoGet(hCfifo_t const hFifo);
+uint8_t *CFifoGet(hCFifo_t const hFifo);
 
 /**
  * @brief	Retrieve FIFO data in multiple blocks by returning pointer to FIFO memory blocks
@@ -126,7 +132,7 @@ uint8_t *CFifoGet(hCfifo_t const hFifo);
  *
  * @return	Pointer to first FIFO block. Blocks are consecutive.
  */
-uint8_t *CFifoGetMultiple(hCfifo_t const hFifo, int *pCnt);
+uint8_t *CFifoGetMultiple(hCFifo_t const hFifo, int *pCnt);
 
 /**
  * @brief	Insert FIFO data by returning pointer to FIFO memory block for writing.
@@ -135,7 +141,7 @@ uint8_t *CFifoGetMultiple(hCfifo_t const hFifo, int *pCnt);
  *
  * @return pointer to the inserted FIFO buffer.
  */
-uint8_t *CFifoPut(hCfifo_t const hFifo);
+uint8_t *CFifoPut(hCFifo_t const hFifo);
 
 /**
  * @brief	Insert multiple FIFO blocks by returning pointer to memory blocks for writing.
@@ -146,7 +152,7 @@ uint8_t *CFifoPut(hCfifo_t const hFifo);
  *
  * @return	pointer to the first FIFO block. Blocks are consecutive.
  */
-uint8_t *CFifoPutMultiple(hCfifo_t const hFifo, int *pCnt);
+uint8_t *CFifoPutMultiple(hCFifo_t const hFifo, int *pCnt);
 
 /**
  * @brief	Retrieve FIFO data into provided buffer
@@ -157,7 +163,7 @@ uint8_t *CFifoPutMultiple(hCfifo_t const hFifo, int *pCnt);
  *
  * @return	Number of bytes copied into pBuff
  */
-//int CFifoPop(hCfifo_t const hFifo, uint8_t *pBuff, int BuffLen);
+//int CFifoPop(hCFifo_t const hFifo, uint8_t *pBuff, int BuffLen);
 
 /**
  * @brief	Insert FIFO data with provided data
@@ -168,14 +174,14 @@ uint8_t *CFifoPutMultiple(hCfifo_t const hFifo, int *pCnt);
  *
  * @return	Number of bytes inserted into FIFO
  */
-//int CFifoPush(hCfifo_t const hFifo, uint8_t *pData, int DataLen);
+//int CFifoPush(hCFifo_t const hFifo, uint8_t *pData, int DataLen);
 
 /**
  * @brief	Reset FIFO
  *
  * @param	hFifo : CFIFO handle
  */
-void CFifoFlush(hCfifo_t const hFifo);
+void CFifoFlush(hCFifo_t const hFifo);
 
 /**
  * @brief	Get available blocks in FIFO
@@ -184,7 +190,7 @@ void CFifoFlush(hCfifo_t const hFifo);
  *
  * @return	Number of FIFO block available for writing
  */
-int CFifoAvail(hCfifo_t const hFifo);
+int CFifoAvail(hCFifo_t const hFifo);
 
 /**
  * @brief	Get number of used blocks
@@ -193,7 +199,7 @@ int CFifoAvail(hCfifo_t const hFifo);
  *
  * @return	Number of FIFO block used
  */
-int CFifoUsed(hCfifo_t const hFifo);
+int CFifoUsed(hCFifo_t const hFifo);
 
 /**
  * @brief	Get block size
@@ -202,7 +208,7 @@ int CFifoUsed(hCfifo_t const hFifo);
  *
  * @return	Block size in bytes
  */
-static inline uint32_t CFifoBlockSize(hCfifo_t const hFifo) { return hFifo->BlkSize; }
+static inline uint32_t CFifoBlockSize(hCFifo_t const hFifo) { return hFifo->BlkSize; }
 
 #ifdef __cplusplus
 }

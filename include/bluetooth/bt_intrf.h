@@ -92,8 +92,8 @@ typedef struct __Bt_Dev_Interf {
     int			RxCharIdx;	//!< Write characteristic index (from BLE)
     int			TxCharIdx;	//!< Read characteristic index (to BLE)
     int			PacketSize;	//!< BLE packet size
-    hCfifo_t		hRxFifo;
-    hCfifo_t		hTxFifo;
+    hCFifo_t		hRxFifo;
+    hCFifo_t		hTxFifo;
     uint32_t	RxDropCnt;
     uint32_t	TxDropCnt;
     uint8_t     TransBuff[BTINTRF_TRANSBUFF_MAXLEN];  //

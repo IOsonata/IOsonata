@@ -108,7 +108,7 @@ uint8_t g_searchCnt = 0;
 // CFIFO for BleAppWrite
 alignas(4) uint8_t g_UartRx2BleBuff[BLEFIFOSIZE];//FIFO buffer for UART-to-BLE
 std::atomic<int> g_UartRx2BleBuffLen(0);//buffer counter for g_UartRx2BleBuff
-hCfifo_t g_UartRx2BleFifo;
+hCFifo_t g_UartRx2BleFifo;
 
 alignas(4) uint8_t g_UartRxExtBuff[PACKET_SIZE*2];//external buffer for Uart Rx data
 volatile int g_UartRxExtBuffLen = 0;

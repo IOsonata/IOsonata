@@ -98,7 +98,7 @@ static inline bool OsxUARTStartTx(DevIntrf_t *pDev, uint32_t DevAddr) {
     return true;
 }
 
-int OsxUARTTxData(DevIntrf_t *pDev, uint8_t *pData, int Datalen)
+int OsxUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
 {
     int cnt = 0;
     

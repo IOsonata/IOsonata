@@ -57,8 +57,8 @@ typedef struct __UsbdCdc_Interf_Config {
 // USBD CDC interf instance data
 typedef struct __UsbdCdc_Dev_Interf {
 	DevIntrf_t	DevIntrf;		//!< Base Device Interface
-    HCFIFO		hRxFifo;
-    HCFIFO		hTxFifo;
+    hCFifo_t	hRxFifo;
+    hCFifo_t	hTxFifo;
     uint32_t	RxDropCnt;
     uint32_t	TxDropCnt;
     uint8_t     TransBuff[USBD_CDC_INTRF_TRANSBUFF_MAXLEN];  //

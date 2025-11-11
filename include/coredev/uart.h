@@ -183,8 +183,8 @@ struct __Uart_Dev {
 	DevIntrf_t DevIntrf;			//!< Device interface implementation
 	UARTEvtHandler_t EvtCallback;		//!< UART event callback
 	void *pObj;					//!< Pointer to UART object instance
-	hCfifo_t hRxFifo;				//!< Rx FIFO handle
-	hCfifo_t hTxFifo;				//!< Tx Fifo handle
+	hCFifo_t hRxFifo;				//!< Rx FIFO handle
+	hCFifo_t hTxFifo;				//!< Tx Fifo handle
 	uint32_t LineState;			//!< Line state
 	int hStdIn;					//!< Handle to retarget stdin
 	int hStdOut;				//!< Handle to retarget stdout

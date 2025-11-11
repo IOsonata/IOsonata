@@ -59,7 +59,6 @@
 		406FC7C9233A00C400106BCA /* cfifo.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC730233A00C400106BCA /* cfifo.c */; };
 		406FC7CE233A00C400106BCA /* adc_ltc2495.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC736233A00C400106BCA /* adc_ltc2495.cpp */; };
 		406FC7CF233A00C400106BCA /* device.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC737233A00C400106BCA /* device.cpp */; };
-		406FC7D0233A00C400106BCA /* uart_retarget.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC738233A00C400106BCA /* uart_retarget.c */; };
 		406FC7D1233A00C400106BCA /* sbuffer.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC739233A00C400106BCA /* sbuffer.c */; };
 		406FC7D2233A00C400106BCA /* utf8.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC73A233A00C400106BCA /* utf8.c */; };
 		406FC7D3233A00C400106BCA /* stddev.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC73B233A00C400106BCA /* stddev.c */; };
@@ -133,7 +132,6 @@
 		406FC730233A00C400106BCA /* cfifo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cfifo.c; sourceTree = "<group>"; };
 		406FC736233A00C400106BCA /* adc_ltc2495.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = adc_ltc2495.cpp; sourceTree = "<group>"; };
 		406FC737233A00C400106BCA /* device.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = device.cpp; sourceTree = "<group>"; };
-		406FC738233A00C400106BCA /* uart_retarget.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = uart_retarget.c; sourceTree = "<group>"; };
 		406FC739233A00C400106BCA /* sbuffer.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sbuffer.c; sourceTree = "<group>"; };
 		406FC73A233A00C400106BCA /* utf8.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = utf8.c; sourceTree = "<group>"; };
 		406FC73B233A00C400106BCA /* stddev.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stddev.c; sourceTree = "<group>"; };
@@ -272,7 +270,6 @@
 				406FC730233A00C400106BCA /* cfifo.c */,
 				406FC735233A00C400106BCA /* converters */,
 				406FC737233A00C400106BCA /* device.cpp */,
-				406FC738233A00C400106BCA /* uart_retarget.c */,
 				406FC739233A00C400106BCA /* sbuffer.c */,
 				406FC73A233A00C400106BCA /* utf8.c */,
 				406FC73B233A00C400106BCA /* stddev.c */,
@@ -443,7 +440,6 @@
 				406FC7DD233A00C400106BCA /* base64.c in Sources */,
 				406FC7C9233A00C400106BCA /* cfifo.c in Sources */,
 				406FC7D2233A00C400106BCA /* utf8.c in Sources */,
-				406FC7D0233A00C400106BCA /* uart_retarget.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

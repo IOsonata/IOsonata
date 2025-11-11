@@ -36,7 +36,6 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
-#include <stdatomic.h>
 
 #include "cfifo.h"
 
@@ -57,7 +56,7 @@ SOFTWARE.
  *
  * 	@return CFifo Handle
  */
-hCfifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking)
+hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking)
 {
 	if (pMemBlk == NULL)
 		return NULL;
@@ -75,7 +74,7 @@ hCfifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkS
 	return hdr;
 }
 
-uint8_t *CFifoGet(hCfifo_t const pFifo)
+uint8_t *CFifoGet(hCFifo_t const pFifo)
 {
 	if (pFifo == NULL || atomic_load(&pFifo->GetIdx) < 0)
 		return NULL;
@@ -97,7 +96,7 @@ uint8_t *CFifoGet(hCfifo_t const pFifo)
 	return p;
 }
 
-uint8_t *CFifoGetMultiple(hCfifo_t const pFifo, int *pCnt)
+uint8_t *CFifoGetMultiple(hCFifo_t const pFifo, int *pCnt)
 {
 	if (pCnt == NULL)
 		return CFifoGet(pFifo);
@@ -138,7 +137,7 @@ uint8_t *CFifoGetMultiple(hCfifo_t const pFifo, int *pCnt)
 	return p;
 }
 
-uint8_t *CFifoPut(hCfifo_t const pFifo)
+uint8_t *CFifoPut(hCFifo_t const pFifo)
 {
 	if (pFifo == NULL)
 		return NULL;
@@ -172,7 +171,7 @@ uint8_t *CFifoPut(hCfifo_t const pFifo)
 	return p;
 }
 
-uint8_t *CFifoPutMultiple(hCfifo_t const pFifo, int *pCnt)
+uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 {
 	if (pCnt == NULL)
 		return CFifoPut(pFifo);
@@ -230,13 +229,13 @@ uint8_t *CFifoPutMultiple(hCfifo_t const pFifo, int *pCnt)
 	return p;
 }
 
-void CFifoFlush(hCfifo_t const pFifo)
+void CFifoFlush(hCFifo_t const pFifo)
 {
 	atomic_store(&pFifo->GetIdx, -1);
 	atomic_store(&pFifo->PutIdx, 0);
 }
 
-int CFifoAvail(hCfifo_t const pFifo)
+int CFifoAvail(hCFifo_t const pFifo)
 {
 	int len = 0;
 
@@ -258,7 +257,7 @@ int CFifoAvail(hCfifo_t const pFifo)
 	return len;
 }
 
-int CFifoUsed(hCfifo_t const pFifo)
+int CFifoUsed(hCFifo_t const pFifo)
 {
 	int len = 0;
 
@@ -280,7 +279,7 @@ int CFifoUsed(hCfifo_t const pFifo)
 	return len;
 }
 
-int CFifoRead(hCfifo_t const pFifo, uint8_t *pBuff, int BuffLen)
+int CFifoRead(hCFifo_t const pFifo, uint8_t *pBuff, int BuffLen)
 {
 	if (pFifo == NULL || atomic_load((atomic_int *)&pFifo->GetIdx) < 0 || pBuff == NULL)
 		return 0;
@@ -320,7 +319,7 @@ int CFifoRead(hCfifo_t const pFifo, uint8_t *pBuff, int BuffLen)
 	return cnt;
 }
 
-int CFifoWrite(hCfifo_t const pFifo, uint8_t *pData, int DataLen)
+int CFifoWrite(hCFifo_t const pFifo, uint8_t *pData, int DataLen)
 {
 	if (pFifo == NULL || pData == NULL)
 		return 0;
