@@ -64,7 +64,7 @@ typedef struct {
 	QOSPI_PHASE QOPhase;
 	int AdSize;
 	uint32_t CcrReg;	// used by QuadSPI only
-} STM32L4XX_SPIDEV;
+} STM32L4XX_SPIDev_t;
 #pragma pack(pop)
 
 uint32_t STM32L4xxSPIGetRate(DevIntrf_t * const pDev);

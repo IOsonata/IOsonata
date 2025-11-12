@@ -42,7 +42,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/uart.h"
 #include "idelay.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 
 #define RCC_CCIPR_USARTSEL_PCLK			(0)
 #define RCC_CCIPR_USARTSEL_SYSCLK		(1)
@@ -113,7 +113,7 @@ static STM32L4X_UARTDEV s_Stm32l4xUartDev[] = {
 
 static const int s_NbUartDev = sizeof(s_Stm32l4xUartDev) / sizeof(STM32L4X_UARTDEV);
 
-UARTDev_t * const UARTGetInstance(int DevNo)
+UARTDev_t const * const UARTGetInstance(int DevNo)
 {
 	return s_Stm32l4xUartDev[DevNo].pUartDev;
 }
@@ -333,7 +333,7 @@ static bool STM32L4xUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-static int STM32L4xUARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
+static int STM32L4xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
     int cnt = 0;
@@ -671,8 +671,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->bIrDAMode = pCfg->bIrDAMode;
 	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
 	pDev->Parity = pCfg->Parity;
-	pDev->bIntMode = pCfg->bIntMode;
 	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.Reset = STM32L4xUARTReset;
 	pDev->DevIntrf.Disable = STM32L4xUARTDisable;
 	pDev->DevIntrf.Enable = STM32L4xUARTEnable;

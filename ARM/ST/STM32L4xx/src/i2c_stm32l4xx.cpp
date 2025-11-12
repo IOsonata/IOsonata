@@ -64,17 +64,17 @@ typedef struct {
 
 static STM32L4XX_I2CDEV s_STM32L4xxI2CDev[STM32L4XX_I2C_MAXDEV] = {
 	{
-		0, NULL, .pReg = I2C1
+		0, NULL, I2C1
 	},
 	{
-		1, NULL, .pReg = I2C2
+		1, NULL, I2C2
 	},
 	{
-		2, NULL, .pReg = I2C3
+		2, NULL, I2C3
 	},
 #ifdef STM32L4S9xx
 	{
-		2, NULL, .pReg = I2C4
+		2, NULL, I2C4
 	},
 #endif
 };
@@ -407,7 +407,7 @@ static int STM32L4xxI2CTxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int Da
 }
 
 // Send Data only, no Start/Stop condition
-static int STM32L4xxI2CTxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
+static int STM32L4xxI2CTxData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
 {
 	STM32L4XX_I2CDEV *dev = (STM32L4XX_I2CDEV*)pDev->pDevData;
     int cnt = 0;

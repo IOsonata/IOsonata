@@ -38,7 +38,7 @@
 		<link>
 			<name>src/flash_memory_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/misc/flash_memory_demo.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/storage/flash_memory_demo.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

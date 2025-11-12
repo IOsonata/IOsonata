@@ -41,38 +41,38 @@ SOFTWARE.
 #include "storage/diskio_flash.h"
 
 #ifdef STM32L4S9xx
-bool STM32L4xxOctoSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData);
+bool STM32L4xxOctoSPIInit(SPIDev_t * const pDev, const SPICFG *pCfgData);
 #else
-bool STM32L4xxQuadSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData);
+bool STM32L4xxQuadSPIInit(SPIDev_t * const pDev, const SPICFG *pCfgData);
 #endif
 
-STM32L4XX_SPIDEV s_STM32L4xxSPIDev[STM32L4XX_SPI_MAXDEV] = {
+STM32L4XX_SPIDev_t s_STM32L4xxSPIDev[STM32L4XX_SPI_MAXDEV] = {
 	{
-		0, NULL, .pReg = SPI1
+		.DevNo = 0, .pSpiDev = NULL, .pReg = SPI1
 	},
 	{
-		1, NULL, .pReg = SPI2
+		.DevNo = 1, .pSpiDev = NULL, .pReg = SPI2
 	},
 	{
-		2, NULL, .pReg = SPI3
+		.DevNo = 2, .pSpiDev = NULL, .pReg = SPI3
 	},
 #ifdef STM32L4S9xx
 	{
-		3, NULL, .pOReg = OCTOSPI1
+		.DevNo = 3, .pSpiDev = NULL, .pOReg = OCTOSPI1
 	},
 	{
-		4, NULL, .pOReg = OCTOSPI2
+		.DevNo = 4, .pSpiDev = NULL, .pOReg = OCTOSPI2
 	}
 #else
 	{
-		3, NULL, .pQReg = QUADSPI
+		.DevNo = 3, .pSpiDev = NULL, .pQReg = QUADSPI
 	}
 #endif
 };
 
-const int g_NbSTM32L4xxSPIDev = sizeof(s_STM32L4xxSPIDev) / sizeof(STM32L4XX_SPIDEV);
+const int g_NbSTM32L4xxSPIDev = sizeof(s_STM32L4xxSPIDev) / sizeof(STM32L4XX_SPIDev_t);
 
-static bool STM32L4xxSPIWaitRxReady(STM32L4XX_SPIDEV * const pDev, uint32_t Timeout)
+static bool STM32L4xxSPIWaitRxReady(STM32L4XX_SPIDev_t * const pDev, uint32_t Timeout)
 {
 	do {
         if (pDev->pReg->SR & SPI_SR_RXNE)
@@ -84,7 +84,7 @@ static bool STM32L4xxSPIWaitRxReady(STM32L4XX_SPIDEV * const pDev, uint32_t Time
     return false;
 }
 
-static bool STM32L4xxSPIWaitTxFifo(STM32L4XX_SPIDEV * const pDev, uint32_t Timeout)
+static bool STM32L4xxSPIWaitTxFifo(STM32L4XX_SPIDev_t * const pDev, uint32_t Timeout)
 {
 	do {
         if ((pDev->pReg->SR & SPI_SR_FTLVL) != SPI_SR_FTLVL)
@@ -96,7 +96,7 @@ static bool STM32L4xxSPIWaitTxFifo(STM32L4XX_SPIDEV * const pDev, uint32_t Timeo
     return false;
 }
 
-static bool STM32L4xxSPIWaitTx(STM32L4XX_SPIDEV * const pDev, uint32_t Timeout)
+static bool STM32L4xxSPIWaitTx(STM32L4XX_SPIDev_t * const pDev, uint32_t Timeout)
 {
 	do {
         if (pDev->pReg->SR & SPI_SR_TXE)
@@ -108,7 +108,7 @@ static bool STM32L4xxSPIWaitTx(STM32L4XX_SPIDEV * const pDev, uint32_t Timeout)
     return false;
 }
 
-static bool STM32L4xxSPIWaitBusy(STM32L4XX_SPIDEV * const pDev, uint32_t Timeout)
+static bool STM32L4xxSPIWaitBusy(STM32L4XX_SPIDev_t * const pDev, uint32_t Timeout)
 {
 	do {
         if ((pDev->pReg->SR & SPI_SR_BSY) == 0)
@@ -125,7 +125,7 @@ uint32_t STM32L4xxSPIGetRate(DevIntrf_t * const pDev)
 	int rate = 0;
 
 	if (pDev && pDev->pDevData)
-		rate = ((STM32L4XX_SPIDEV*)pDev->pDevData)->pSpiDev->Cfg.Rate;
+		rate = ((STM32L4XX_SPIDev_t*)pDev->pDevData)->pSpiDev->Cfg.Rate;
 
 	return rate;
 }
@@ -134,7 +134,7 @@ uint32_t STM32L4xxSPIGetRate(DevIntrf_t * const pDev)
 // return actual rate
 static uint32_t STM32L4xxSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
 	uint32_t pclk;
 
@@ -197,7 +197,7 @@ static uint32_t STM32L4xxSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 
 void STM32L4xxSPIDisable(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 	int32_t timout = 100000;
 
 	while ((dev->pReg->SR & SPI_SR_FTLVL));
@@ -208,14 +208,14 @@ void STM32L4xxSPIDisable(DevIntrf_t * const pDev)
 
 static void STM32L4xxSPIEnable(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
     dev->pReg->CR1 |= SPI_CR1_SPE;
 }
 
 static void STM32L4xxSPIReset(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
 	if (dev->DevNo > 0)
 	{
@@ -235,14 +235,14 @@ static void STM32L4xxSPIReset(DevIntrf_t * const pDev)
 
 static void STM32L4xxSPIPowerOff(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
 }
 
 // Initial receive
 static bool STM32L4xxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
 	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
 		return false;
@@ -263,7 +263,7 @@ static bool STM32L4xxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Receive Data only, no Start/Stop condition
 static int STM32L4xxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
 	return cnt;
@@ -272,7 +272,7 @@ static int STM32L4xxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int Bu
 // Receive Data only, no Start/Stop condition
 static int STM32L4xxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev-> pDevData;
     int cnt = 0;
     uint16_t d = 0;
 
@@ -320,7 +320,7 @@ static int STM32L4xxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffL
 // Stop receive
 static void STM32L4xxSPIStopRx(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev-> pDevData;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_DRIVER)
 	{
@@ -332,7 +332,7 @@ static void STM32L4xxSPIStopRx(DevIntrf_t * const pDev)
 // Initiate transmit
 static bool STM32L4xxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev-> pDevData;
 
 	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
 		return false;
@@ -350,16 +350,16 @@ static bool STM32L4xxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Transmit Data only, no Start/Stop condition
 static int STM32L4xxSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
 	return cnt;
 }
 
 // Send Data only, no Start/Stop condition
-static int STM32L4xxSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
+static int STM32L4xxSPITxData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV*)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t*)pDev->pDevData;
     int cnt = 0;
     uint16_t d;
 
@@ -396,7 +396,7 @@ static int STM32L4xxSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 // Stop transmit
 static void STM32L4xxSPIStopTx(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev-> pDevData;
 
 	STM32L4xxSPIWaitBusy(dev, 100000);
 
@@ -409,7 +409,7 @@ static void STM32L4xxSPIStopTx(DevIntrf_t * const pDev)
 
 void SPIIrqHandler(int DevNo)
 {
-	STM32L4XX_SPIDEV *dev = &s_STM32L4xxSPIDev[DevNo];
+	STM32L4XX_SPIDev_t *dev = &s_STM32L4xxSPIDev[DevNo];
 	uint32_t flag = dev->pReg->SR;
 	uint16_t d;
 
@@ -605,7 +605,7 @@ SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy)
 		{
 			if (Phy == SPIPHY_QUAD_DDR)
 			{
-				STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->DevIntrf.pDevData;
+				STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->DevIntrf.pDevData;
 #ifdef STM32L4S9xx
 #else
 				dev->CcrReg = QUADSPI_CCR_DDRM;

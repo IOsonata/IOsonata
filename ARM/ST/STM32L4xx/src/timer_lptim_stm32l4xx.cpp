@@ -44,7 +44,7 @@ SOFTWARE.
 
 #include "idelay.h"
 #include "timer_stm32l4x.h"
-#include "interrupt.h"
+#include "coredev/interrupt.h"
 
 /// Low Power Timer
 #define STM32L4XX_LPTIMER_MAXFREQ			16000000

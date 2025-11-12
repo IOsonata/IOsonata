@@ -412,7 +412,7 @@ bool Stm32l4TimInit(STM32L4XX_TimerData_t * const pTimerData, const TimerCfg_t *
 }
 
 extern "C" {
-
+#if 0
 void TIM1_BRK_TIM15_IRQHandler(void)
 {
 
@@ -477,6 +477,6 @@ void TIM8_CC_IRQHandler(void)
 {
 
 }
-
+#endif
 }
 

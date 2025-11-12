@@ -40,10 +40,10 @@ SOFTWARE.
 #include "idelay.h"
 #include "storage/diskio_flash.h"
 
-extern STM32L4XX_SPIDEV s_STM32L4xxSPIDev[STM32L4XX_SPI_MAXDEV];
-extern const int g_NbSTM32L4xxSPIDev = sizeof(s_STM32L4xxSPIDev) / sizeof(STM32L4XX_SPIDEV);
+extern STM32L4XX_SPIDev_t s_STM32L4xxSPIDev[STM32L4XX_SPI_MAXDEV];
+extern const int g_NbSTM32L4xxSPIDev = sizeof(s_STM32L4xxSPIDev) / sizeof(STM32L4XX_SPIDev_t);
 
-bool STM32L4xxOSPIWaitBusy(STM32L4XX_SPIDEV *pDev, int Timeout)
+bool STM32L4xxOSPIWaitBusy(STM32L4XX_SPIDev_t *pDev, int Timeout)
 {
 	do {
 		if ((pDev->pOReg->SR & OCTOSPI_SR_BUSY) == 0)
@@ -55,7 +55,7 @@ bool STM32L4xxOSPIWaitBusy(STM32L4XX_SPIDEV *pDev, int Timeout)
 	return false;
 }
 
-bool STM32L4xxOSPIWaitTxComplete(STM32L4XX_SPIDEV *pDev, int Timeout)
+bool STM32L4xxOSPIWaitTxComplete(STM32L4XX_SPIDev_t *pDev, int Timeout)
 {
 	do {
 		if ((pDev->pOReg->SR & OCTOSPI_SR_TCF))
@@ -68,7 +68,7 @@ bool STM32L4xxOSPIWaitTxComplete(STM32L4XX_SPIDEV *pDev, int Timeout)
 	return false;
 }
 
-bool STM32L4xxOSPIWaitFifo(STM32L4XX_SPIDEV *pDev, int Timeout)
+bool STM32L4xxOSPIWaitFifo(STM32L4XX_SPIDev_t *pDev, int Timeout)
 {
 	do {
 		if ((pDev->pOReg->SR & OCTOSPI_SR_FLEVEL_Msk))
@@ -84,7 +84,7 @@ bool STM32L4xxOSPIWaitFifo(STM32L4XX_SPIDEV *pDev, int Timeout)
 // return actual rate
 static uint32_t STM32L4xxOSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
 	uint32_t hclk = tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
 
@@ -105,7 +105,7 @@ static uint32_t STM32L4xxOSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 
 void STM32L4xxOSPIDisable(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
 	STM32L4xxOSPIWaitBusy(dev, 100000);
 
@@ -114,14 +114,14 @@ void STM32L4xxOSPIDisable(DevIntrf_t * const pDev)
 
 static void STM32L4xxOSPIEnable(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
     dev->pOReg->CR |= OCTOSPI_CR_EN;
 }
 
 static void STM32L4xxOSPIReset(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
 	RCC->AHB3RSTR |= RCC_AHB3RSTR_OSPI1RST_Msk << (dev->DevNo - STM32L4XX_OSPI_DEVNO_START);
 	msDelay(1);
@@ -130,7 +130,7 @@ static void STM32L4xxOSPIReset(DevIntrf_t * const pDev)
 
 static void STM32L4xxOSPIPowerOff(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
 	STM32L4xxOSPIDisable(pDev);
 
@@ -145,7 +145,7 @@ static void STM32L4xxOSPIPowerOff(DevIntrf_t * const pDev)
 
 bool STM32L4xxOSPISendCmd(DevIntrf_t * const pDev, uint32_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
 	//dev->CcrReg &= ~(OCTOSPI_CCR_INSTRUCTION_Msk | OCTOSPI_CCR_IMODE_Msk | OCTOSPI_CCR_DMODE_Msk |
 	//				OCTOSPI_CCR_FMODE_Msk | OCTOSPI_CCR_ADMODE_Msk | OCTOSPI_CCR_DCYC_Msk);
@@ -216,7 +216,7 @@ bool STM32L4xxOSPISendCmd(DevIntrf_t * const pDev, uint32_t Cmd, uint32_t Addr, 
 // Initial receive
 static bool STM32L4xxOSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 
 	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - OSPI_CS_IOPIN_IDX)
 		return false;
@@ -240,7 +240,7 @@ static bool STM32L4xxOSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Receive Data only, no Start/Stop condition
 static int STM32L4xxOSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 	int cnt = 0;
 
 	return cnt;
@@ -249,7 +249,7 @@ static int STM32L4xxOSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int B
 // Receive Data only, no Start/Stop condition
 static int STM32L4xxOSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 	OCTOSPI_TypeDef *reg = dev->pOReg;
     int cnt = 0;
     uint16_t d = 0;
@@ -289,7 +289,7 @@ static int STM32L4xxOSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Buff
 // Stop receive
 static void STM32L4xxOSPIStopRx(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev-> pDevData;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_DRIVER)
 	{
@@ -301,7 +301,7 @@ static void STM32L4xxOSPIStopRx(DevIntrf_t * const pDev)
 // Initiate transmit
 static bool STM32L4xxOSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev-> pDevData;
 
 	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - OSPI_CS_IOPIN_IDX)
 		return false;
@@ -324,16 +324,16 @@ static bool STM32L4xxOSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 // Transmit Data only, no Start/Stop condition
 static int STM32L4xxOSPITxDataDma(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev-> pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
 	return cnt;
 }
 
 // Send Data only, no Start/Stop condition
-static int STM32L4xxOSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
+static int STM32L4xxOSPITxData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV*)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t*)pDev->pDevData;
 	OCTOSPI_TypeDef *reg = dev->pOReg;
     int cnt = 0;
     uint16_t d;
@@ -367,7 +367,7 @@ static int STM32L4xxOSPITxData(DevIntrf_t *pDev, uint8_t *pData, int DataLen)
 // Stop transmit
 static void STM32L4xxOSPIStopTx(DevIntrf_t * const pDev)
 {
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 	OCTOSPI_TypeDef *reg = dev->pOReg;
 
 	STM32L4xxOSPIWaitTxComplete(dev, 100000);
@@ -390,7 +390,7 @@ bool STM32L4xxOctoSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		return false;
 	}
 
-	STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->DevIntrf.pDevData;
+	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->DevIntrf.pDevData;
 
 	// Get the correct register map
 	reg = s_STM32L4xxSPIDev[pCfgData->DevNo].pOReg;
@@ -445,7 +445,7 @@ void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size)
 {
 	if (pDev->Cfg.DevNo == (STM32L4XX_SPI_MAXDEV - 1))
 	{
-		STM32L4XX_SPIDEV *dev = (STM32L4XX_SPIDEV *)pDev->DevIntrf.pDevData;
+		STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->DevIntrf.pDevData;
 
 		STM32L4xxOSPIWaitBusy(dev, 100000);
 

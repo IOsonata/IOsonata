@@ -2455,9 +2455,6 @@
         <group>
             <name>sensors</name>
             <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\a_adxl362.h</name>
-            </file>
-            <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\accel_sensor.h</name>
             </file>
             <file>
@@ -2694,9 +2691,6 @@
         </group>
         <group>
             <name>sensors</name>
-            <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\a_adxl362.cpp</name>
-            </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\ag_bmi160.cpp</name>
             </file>
