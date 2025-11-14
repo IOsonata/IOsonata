@@ -174,13 +174,21 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *p
         return 0;
 
 #if defined(WIN32) || defined(__ICCARM__)
-	uint8_t d[100];
+	#define WIN32_BUFFSIZE	512
+
+	uint8_t d[WIN32_BUFFSIZE];
+
+	if (AdCmdLen + DataLen > WIN32_BUFFSIZE)
+	{
+		return 0;
+	}
 #else
 	uint8_t d[AdCmdLen + DataLen];
 #endif
 
 	// NOTE : Some I2C devices that uses DMA transfer may require that the tx to be combined
     // into single tx. Because it may generate a end condition at the end of the DMA
+
     memcpy(d, pAdCmd, AdCmdLen);
     if (pData != NULL && DataLen > 0)
     {
