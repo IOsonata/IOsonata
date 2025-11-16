@@ -1381,6 +1381,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_icm456x.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sensors/ag_lsm6dsv.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/ag_lsm6dsv.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sensors/agm_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
