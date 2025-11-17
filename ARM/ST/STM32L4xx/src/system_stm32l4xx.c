@@ -52,12 +52,22 @@ SOFTWARE.
 
 #define OSC_FREQ_MAX		48000000UL		// Max oscillator freq internal or external
 
-#define SYSTEM_CORE_CLOCK_MAX			80000000UL	// TODO: Adjust value for CPU with fixed core frequency
-#define SYSTEM_NSDELAY_CORE_FACTOR		(40UL)		// TODO: Adjustment value for nanosec delay
+#if defined(STM32L4P5xx) || defined(STM32L4Q5xx) || defined(STM32L4R5xx) || defined(STM32L4S5xx) || defined(STM32L4S9xx)
+    #define SYSTEM_CORE_CLOCK_MAX		120000000UL
+    #define SYSTEM_NSDELAY_CORE_FACTOR	34UL
+    #define PLLN_MUL_MAX				128
+	#define CLK_MIN						2660000
+	#define CLK_MAX						8000000
+#else
+    #define SYSTEM_CORE_CLOCK_MAX		80000000UL
+    #define SYSTEM_NSDELAY_CORE_FACTOR	40UL
+    #define PLLN_MUL_MAX				86
+	#define CLK_MIN						4000000
+	#define CLK_MAX						48000000
+#endif
 
 #define PLLM_DIV_MAX		16
 #define PLLN_MUL_MIN		8
-#define PLLN_MUL_MAX		86
 #define PLLR_DIV_MAX		8
 #define VCO_FREQ_MIN		64000000
 #define VCO_FREQ_MAX		344000000
@@ -143,7 +153,7 @@ uint32_t FindPllCfg(uint32_t SrcFreq)
 	{
 		uint32_t clk = SrcFreq / m;
 
-		for (int n = PLLN_MUL_MIN; n <= PLLN_MUL_MAX && clk >= 4000000 && clk <= 48000000; n++)
+		for (int n = PLLN_MUL_MIN; n <= PLLN_MUL_MAX && clk >= CLK_MIN && clk <= CLK_MAX; n++)
 		{
 			uint32_t vco = clk * n;
 
@@ -198,6 +208,11 @@ void SystemCoreClockUpdate(void)
 		uint32_t n = (pllcfgr & RCC_PLLCFGR_PLLN_Msk) >> RCC_PLLCFGR_PLLN_Pos;
 		uint32_t r = (((pllcfgr & RCC_PLLCFGR_PLLR_Msk) >> RCC_PLLCFGR_PLLR_Pos) + 1) << 1;
 		SystemCoreClock = (SystemCoreClock * n / (m * r));
+	}
+
+	if (SystemCoreClock > 80000000)
+	{
+		PWR->CR5 &= ~PWR_CR5_R1MODE;
 	}
 
 	// Update Flash wait state to current core freq.
@@ -325,6 +340,15 @@ void SystemInit(void)
 			while ((PWR->CR1 & PWR_CR1_DBP) == 0);
 		}
 
+#if defined(STM32L4P5xx) || defined(STM32L4Q5xx) || defined(STM32L4R5xx) || defined(STM32L4S5xx) || defined(STM32L4S9xx)
+		RCC->BDCR |= RCC_BDCR_BDRST;
+		RCC->BDCR &= ~RCC_BDCR_BDRST;
+
+	#if defined(STM32L4P5xx) || defined(STM32L4Q5xx)
+		RCC->BDCR |= RCC_BDCR_LSESYSDIS;
+	#endif
+
+#endif
 		RCC->BDCR &= ~RCC_BDCR_RTCSEL_Msk;
 
 		RCC->BDCR |= RCC_BDCR_LSEON;
@@ -332,7 +356,16 @@ void SystemInit(void)
 		// if stuck here, board does not have 32768 Hz crystal
 		while ((RCC->BDCR & RCC_BDCR_LSERDY) == 0);
 
+#if defined(STM32L4P5xx) || defined(STM32L4Q5xx) || defined(STM32L4R5xx) || defined(STM32L4S5xx) || defined(STM32L4S9xx)
+
+	#if defined(STM32L4P5xx) || defined(STM32L4Q5xx)
+		RCC->BDCR &= ~RCC_BDCR_LSESYSDIS;
+	#endif
+
+		RCC->BDCR |= RCC_BDCR_RTCSEL_0 | RCC_BDCR_RTCEN;	// RTC source LSE
+#else
 		RCC->BDCR |= RCC_BDCR_RTCSEL_0;	// RTC source LSE
+#endif
 		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
 	}
 
