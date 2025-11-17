@@ -148,7 +148,7 @@ int main(void)
 	printf("Period = %u\r\n", (uint32_t)period);
     while (1)
     {
-        __WFI();
+        __WFE();
 #ifdef DEMO_C
         printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)TimerGetMilisecond(&g_TimerDev), g_Period[0] / 1000, g_Period[1] / 1000);
 #elif defined(DEMO_C_OBJ)

@@ -66,7 +66,7 @@ static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
 alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
-#if 1
+#ifdef UART_PINS
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
 // UART configuration data
@@ -180,9 +180,11 @@ int main()
 
 	IOPinToggle(0,4);
 
+#ifdef UART_PINS
 	bool res = g_Uart.Init(s_UartCfg);
 
 	g_Uart.printf("BleAdvertiser\n\r");
+#endif
 
 	// Clear all leds
 	for (int i = 0; i < s_NbLeds; i++)
