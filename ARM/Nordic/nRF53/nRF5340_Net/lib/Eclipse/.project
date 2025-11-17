@@ -356,11 +356,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gatt_sdc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_hci.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
