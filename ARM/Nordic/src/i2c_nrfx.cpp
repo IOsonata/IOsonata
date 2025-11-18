@@ -46,6 +46,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
+#define I2C_TIMEOUT_CNT				100000
+
 #ifdef TWIM_PRESENT
 #define NRFX_I2C_MAXDEV				TWIM_COUNT
 #else
@@ -191,7 +193,11 @@ bool nRFxI2CWaitRxComplete(nRFTwiDev_t * const pDev, int Timeout)
 	do {
         if (reg->EVENTS_ERROR)
         {
-            while ( !nRFxI2CWaitStop( pDev, Timeout ) );
+            reg->ERRORSRC = reg->ERRORSRC;
+            reg->EVENTS_ERROR = 0;
+            reg->TASKS_RESUME = 1;
+            reg->TASKS_STOP = 1;
+            while( !reg->EVENTS_STOPPED && (Timeout-- >  0));
 
             return false;
         }
@@ -234,7 +240,11 @@ bool nRFxI2CWaitTxComplete(nRFTwiDev_t * const pDev, int Timeout)
 	do {
         if (reg->EVENTS_ERROR)
         {
-            while ( !nRFxI2CWaitStop( pDev, Timeout ) );
+            reg->ERRORSRC = reg->ERRORSRC;
+            reg->EVENTS_ERROR = 0;
+            reg->TASKS_RESUME = 1;
+            reg->TASKS_STOP = 1;
+            while( !reg->EVENTS_STOPPED && (Timeout-- >  0));
 
             return false;
         }
@@ -374,6 +384,11 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
+
+	if (pBuff == nullptr)
+	{
+		return 0;
+	}
 /*
 	if (pDev->bCmdMode)
 	{
@@ -402,7 +417,7 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		{
 			return -1;
 		}
-		if (nRFxI2CWaitRxComplete(dev, 1000000) == false)
+		if (nRFxI2CWaitRxComplete(dev, I2C_TIMEOUT_CNT) == false)
 		{
 			break;
 		}
@@ -447,7 +462,7 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 
 		while (Bufflen > 0)
 		{
-			if (nRFxI2CWaitRxComplete(dev, 100000) == false)
+			if (nRFxI2CWaitRxComplete(dev, I2C_TIMEOUT_CNT) == false)
 			{
 				break;
 			}
@@ -484,7 +499,7 @@ void nRFxI2CStopRx(DevIntrf_t * const pDev)
 
 	if (pDev->bIntEn == false)
 	{
-		nRFxI2CWaitStop(dev, 1000000);
+		nRFxI2CWaitStop(dev, I2C_TIMEOUT_CNT);
 	}
 }
 
@@ -513,6 +528,11 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 	uint32_t d;
 	int cnt = 0;
+
+	if (pData == nullptr)
+	{
+		return 0;
+	}
 
 #ifdef TWIM_PRESENT
 	while (DataLen > 0)
@@ -558,6 +578,11 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 	int cnt = 0;
 	int rtry = pDev->MaxRetry;
 
+	if (pData == nullptr || Datalen <= 0)
+	{
+		return 0;
+	}
+
 	//atomic_store(&pDev->bTxComplete, false);
 #ifdef TWI_PRESENT
 	dev->pReg->SHORTS = 0;
@@ -593,7 +618,7 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 		while (Datalen > 0 && rtry > 0)
 		{
 			dev->pReg->TXD = *pData;
-			if (nRFxI2CWaitTxComplete(dev, 100000) == false)
+			if (nRFxI2CWaitTxComplete(dev, I2C_TIMEOUT_CNT) == false)
 			{
 				rtry--;
 				continue;
@@ -631,7 +656,7 @@ void nRFxI2CStopTx(DevIntrf_t * const pDev)
 
     if (pDev->bIntEn == false)
     {
-    	nRFxI2CWaitStop(dev, 1000000);
+    	nRFxI2CWaitStop(dev, I2C_TIMEOUT_CNT);
 
     }
 }
@@ -786,7 +811,9 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
             reg->EVENTS_ERROR = 0;
             reg->TASKS_RESUME = 1;
             reg->TASKS_STOP = 1;
-            while( !reg->EVENTS_STOPPED );
+
+            int timeout = 3000;
+            while( !reg->EVENTS_STOPPED && (timeout-- > 0));
         }
 
         if (reg->EVENTS_STOPPED)
