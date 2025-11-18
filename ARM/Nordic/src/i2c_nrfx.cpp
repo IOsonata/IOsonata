@@ -159,7 +159,7 @@ bool nRFxI2CWaitStop(nRFTwiDev_t * const pDev, int Timeout)
             reg->EVENTS_ERROR = 0;
             reg->TASKS_RESUME = 1;
             reg->TASKS_STOP = 1;
-            while( !reg->EVENTS_STOPPED );
+            while( !reg->EVENTS_STOPPED && (Timeout-- >  0));
 
             return false;
         }
@@ -570,10 +570,8 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 		dev->TxIdx = 0;
 		dev->pTxData = pData;
 
-		//g_Uart.printf("TxData %d\r\n", Datalen);
 		if (pDev->bTxReady == true)
 		{
-			//g_Uart.printf("iTx %x %d\r\n", dev->pTxData[dev->TxIdx], dev->pReg->EVENTS_RXDREADY);
 			pDev->bTxReady = false;
 			dev->pReg->TXD = dev->pTxData[dev->TxIdx];
 
@@ -594,11 +592,9 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 		pDev->bTxReady = false;
 		while (Datalen > 0 && rtry > 0)
 		{
-//			g_Uart.printf("Tx %d %x\r\n", Datalen, *pData);
 			dev->pReg->TXD = *pData;
 			if (nRFxI2CWaitTxComplete(dev, 100000) == false)
 			{
-				//g_Uart.printf("Tx Failed\r\n");
 				rtry--;
 				continue;
 			}
@@ -786,7 +782,6 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
         if (reg->EVENTS_ERROR)
         {
             // Abort in case error
-            printf("error %x\r\n", reg->ERRORSRC);
             reg->ERRORSRC = reg->ERRORSRC;
             reg->EVENTS_ERROR = 0;
             reg->TASKS_RESUME = 1;
@@ -890,7 +885,6 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
 					}
 					if (pDev->bNoStop == false)
 					{
-						//g_Uart.printf("TxStop\r\n");
 						DeviceIntrfStopTx(pDev);
 					}
 					atomic_store(&pDev->bTxReady, true);
@@ -920,7 +914,6 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
         		{
     				if (pDev->bNoStop == false)
     				{
-    					//g_Uart.printf("StopRx\r\n");
     					//dev->bRxReady = false;
     					DeviceIntrfStopRx(pDev);
     				}
