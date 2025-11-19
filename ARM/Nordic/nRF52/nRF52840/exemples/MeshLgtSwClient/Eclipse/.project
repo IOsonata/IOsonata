@@ -50,11 +50,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nrf_mesh_config_app.h</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/nrf_mesh_config_app.h</locationURI>
-		</link>
-		<link>
 			<name>src/micro-ecc/uECC.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
@@ -65,7 +60,22 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/external</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/examples/common</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/external/app_timer</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -73,6 +83,111 @@
 			<name>src/nRF5_SDK/examples/common/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/external/app_timer/app_timer_mesh.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/external/app_timer/app_timer_mesh.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/external/app_timer/app_timer_workaround.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/external/app_timer/app_timer_workaround.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_dtt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_dtt.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_level.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_level.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_light_ctl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_light_ctl.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_light_lc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_light_lc.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_light_lightness.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_light_lightness.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_onoff.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_onoff.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_scene.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_scene.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_sensor.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_sensor.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_sensor_utils.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_sensor_utils.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/app_transition.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/app_transition.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/ble_dfu_support.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/ble_dfu_support.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/ble_softdevice_support.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/ble_softdevice_support.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/example_common.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/example_common.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/mesh_app_utils.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/mesh_app_utils.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/mesh_provisionee.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/mesh_provisionee.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/nrf_mesh_config_examples.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/nrf_mesh_config_examples.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/pwm_utils.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/pwm_utils.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/rtt_input.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/rtt_input.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/examples/common/include/simple_hal.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/include/simple_hal.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/app_error_weak.c</name>

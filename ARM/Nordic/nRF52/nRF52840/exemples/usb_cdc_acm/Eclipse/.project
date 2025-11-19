@@ -135,6 +135,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/nrfx/lib</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/nrfx/soc</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -228,6 +233,21 @@
 			<name>src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/integration/nrfx/legacy/nrf_drv_uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/nrfx/lib/nrfx_atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/nrfx/lib/nrfx_atomic.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/nrfx/lib/nrfx_coredep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_coredep.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/nrfx/soc/nrfx_atomic.c</name>

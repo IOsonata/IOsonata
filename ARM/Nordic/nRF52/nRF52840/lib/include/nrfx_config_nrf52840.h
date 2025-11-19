@@ -1635,7 +1635,7 @@
  * Boolean. Accepted values: 0 and 1.
  */
 #ifndef NRFX_USBD_CONFIG_ISO_IN_ZLP
-#define NRFX_USBD_CONFIG_ISO_IN_ZLP 0
+#define NRFX_USBD_CONFIG_ISO_IN_ZLP 1
 #endif
 
 /**

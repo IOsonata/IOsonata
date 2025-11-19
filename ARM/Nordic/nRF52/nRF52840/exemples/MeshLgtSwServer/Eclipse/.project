@@ -50,11 +50,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nrf_mesh_config_app.h</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/nrf_mesh_config_app.h</locationURI>
-		</link>
-		<link>
 			<name>src/micro-ecc/uECC.c</name>
 			<type>1</type>
 			<location>/Users/hoan/swdev/IOsonata/micro-ecc/uECC.c</location>
@@ -75,7 +70,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/external/rtt</name>
+			<name>src/nRF5_SDK/external/app_timer</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -85,9 +80,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/external/rtt/src</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
+			<name>src/nRF5_SDK/external/app_timer/app_timer_mesh.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/external/app_timer/app_timer_mesh.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/external/app_timer/app_timer_workaround.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/external/app_timer/app_timer_workaround.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/app_error_weak.c</name>
@@ -148,16 +148,6 @@
 			<name>src/nRF5_SDK/examples/common/src/simple_hal.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/simple_hal.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/external/rtt/src/SEGGER_RTT.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/external/rtt/src/SEGGER_RTT.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/external/rtt/src/SEGGER_RTT_printf.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/external/rtt/src/SEGGER_RTT_printf.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

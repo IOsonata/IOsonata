@@ -1661,6 +1661,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx/lib</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nrfx/soc</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -2234,6 +2239,21 @@
 			<name>src/nrfx/drivers/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_atomic.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_coredep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/lib/nrfx_coredep.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/soc/nrfx_atomic.c</name>
@@ -4331,6 +4351,16 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_clock.c</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx/drivers/src/nrfx_clock_hfclk.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_clock_hfclk.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_clock_lfclk.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_clock_lfclk.c</locationURI>
+		</link>
+		<link>
 			<name>src/nrfx/drivers/src/nrfx_nvmc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_nvmc.c</locationURI>
@@ -4349,11 +4379,6 @@
 			<name>src/nrfx/drivers/src/nrfx_usbd.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_usbd.c</locationURI>
-		</link>
-		<link>
-			<name>src/nrfx/drivers/src/nrfx_usbreg.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_usbreg.c</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers/Ak0991x/Ak0991x.c</name>

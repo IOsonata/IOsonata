@@ -98,6 +98,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc/acm&quot;"/>
 								</option>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.81104760" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.826360467" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.651025614" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler"/>
@@ -145,7 +146,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c|src/nRF5_SDK/libraries/log/src/nrf_log_frontend.c|src/nRF5_SDK/libraries/log/src/nrf_log_default_backends.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_uart.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_serial.c|src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|src/nRF5_SDK/libraries/cli/uart|src/nRF5_SDK/libraries/usbd/class/dummy/app_usbd_dummy.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c|src/nRF5_SDK/libraries/log/src/nrf_log_frontend.c|src/nRF5_SDK/libraries/log/src/nrf_log_default_backends.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_uart.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_serial.c|src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|src/nRF5_SDK/libraries/cli/uart|src/nRF5_SDK/libraries/usbd/class/dummy/app_usbd_dummy.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -247,6 +248,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/usbd/class/cdc/acm&quot;"/>
 								</option>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.1485014417" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1341242676" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.359354928" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler"/>
@@ -294,7 +296,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c|src/nRF5_SDK/libraries/log/src/nrf_log_frontend.c|src/nRF5_SDK/libraries/log/src/nrf_log_default_backends.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_uart.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_serial.c|src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|src/nRF5_SDK/libraries/cli/uart|src/nRF5_SDK/libraries/usbd/class/dummy/app_usbd_dummy.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/log/src/nrf_log_str_formatter.c|src/nRF5_SDK/libraries/log/src/nrf_log_frontend.c|src/nRF5_SDK/libraries/log/src/nrf_log_default_backends.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_uart.c|src/nRF5_SDK/libraries/log/src/nrf_log_backend_serial.c|src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uarte.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|src/nRF5_SDK/libraries/cli/uart|src/nRF5_SDK/libraries/usbd/class/dummy/app_usbd_dummy.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

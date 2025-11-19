@@ -395,7 +395,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 }
 #endif
 
-void BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
+bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
 {
 //	g_Uart.printf("BtAppScanReport : Rssi = %d\r\n", Rssi);
 	g_Uart.printf("%02x %02x %02x %02x %02x %02x : RSSI = %d, ",

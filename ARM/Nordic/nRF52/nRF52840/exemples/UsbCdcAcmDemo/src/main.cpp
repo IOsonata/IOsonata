@@ -189,7 +189,7 @@ alignas(4) uint8_t g_UsbRxBuff[PACKET_SIZE];
 alignas(4) uint8_t g_UsbTxBuff[PACKET_SIZE];//NRF_DRV_USBD_EPSIZE
 
 alignas(4) uint8_t g_UsbRxFifoMem[USBFIFOSIZE];
-HCFIFO g_UsbRxFifo;
+hCFifo_t g_UsbRxFifo;
 
 uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
 uint8_t g_extern_usbd_product_string[15 + 1] = { "UsbCdcAcmDemo" };

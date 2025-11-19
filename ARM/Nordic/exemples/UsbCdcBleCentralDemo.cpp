@@ -324,10 +324,10 @@ alignas(4) uint8_t g_UsbTxBuff[PACKET_SIZE];//NRF_DRV_USBD_EPSIZE
 volatile uint32_t g_UsbTxBuffLen = 0;
 
 alignas(4) uint8_t g_UsbRxFifoMem[USBFIFOSIZE];
-HCFIFO g_UsbRxFifo;
+hCFifo_t g_UsbRxFifo;
 
 alignas(4) uint8_t g_UsbTxFifoMem[USBFIFOSIZE];
-HCFIFO g_UsbTxFifo;
+hCFifo_t g_UsbTxFifo;
 
 uint8_t g_extern_usbd_serial_number[12 + 1] = { "23062022"};
 uint8_t g_extern_usbd_product_string[12 + 1] = { "BLE Central" };
@@ -489,7 +489,7 @@ UART g_Uart;
  ************************************************************/
 
 const BtAppCfg_t s_BleAppCfg = {
-	.Role = BTAPP_ROLE_CENTRAL,
+	BTAPP_ROLE_CENTRAL,
 	1,//1, 						// Number of central link
 	0, 							// Number of peripheral link
 	DEVICE_NAME,                 // Device name
@@ -518,7 +518,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	0,
 	0,							// Tx power
 	NULL,						// RTOS Softdevice handler
-	.MaxMtu = BLE_MTU_SIZE,		// BLE MTU packet size
+	BLE_MTU_SIZE,		// BLE MTU packet size
 };
 
 

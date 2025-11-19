@@ -151,8 +151,8 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
         case NRF_DFU_EVT_DFU_INITIALIZED:
         {
            // bsp_board_init(BSP_INIT_LEDS);
-
-            if (!nrf_clock_lf_is_running(NRF_CLOCK))
+        	nrf_clock_lfclk_t clksrc;
+            if (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, &clksrc))
             {
                 nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
             }
