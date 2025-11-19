@@ -39,7 +39,6 @@ SOFTWARE.
 
 #include "coredev/i2c.h"
 #include "coredev/iopincfg.h"
-#include "iopinctrl.h"
 #include "idelay.h"
 #include "storage/seep.h"
 
