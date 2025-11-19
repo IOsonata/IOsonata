@@ -64,7 +64,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.425070041" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.395287602" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -83,7 +83,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.2090282576" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.712103962" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -209,7 +209,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.20413302" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.194918113" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -226,7 +228,9 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/hal&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1838107269" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1439621830" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>

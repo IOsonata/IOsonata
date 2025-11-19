@@ -75,11 +75,11 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/mdk"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 								</option>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.41236970" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.41236970" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.514323037" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.346890615" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
@@ -102,11 +102,11 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/mdk"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 								</option>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1774111874" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1774111874" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.289898634" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.49693375" name="GNU ARM Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
@@ -210,11 +210,11 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/mdk"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 								</option>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.488433914" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.488433914" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.246804536" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.2095064420" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
@@ -237,11 +237,11 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/mdk"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/hal"/>
 								</option>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1967362145" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1967362145" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.969861879" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.1864492648" name="GNU ARM Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
