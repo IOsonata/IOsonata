@@ -10,7 +10,7 @@ SEARCH_DIR("../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
-SEARCH_DIR("../../../../../../../../../external/nrfx/mdk")
+SEARCH_DIR("../../../../../../../../../external/nrfx/bsp/stable/mdk")
 GROUP(-lgcc -lc)
 
 MEMORY

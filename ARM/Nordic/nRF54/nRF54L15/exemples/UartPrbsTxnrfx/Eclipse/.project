@@ -56,6 +56,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx/lib</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nrfx/mdk</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -71,14 +76,29 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx/lib/nrfx_atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_atomic.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_coredep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_coredep.h</locationURI>
+		</link>
+		<link>
 			<name>src/nrfx/mdk/gcc_startup_nrf54l15_application.S</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/mdk/gcc_startup_nrf54l15_application.S</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/bsp/stable/mdk/gcc_startup_nrf54l15_application.S</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/mdk/system_nrf54l.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/mdk/system_nrf54l.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/bsp/stable/mdk/system_nrf54l.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/soc/nrfx_atomic.c</name>

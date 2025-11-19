@@ -119,7 +119,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	0,
 	0,							// Tx power
 	NULL,						// RTOS Softdevice handler
-	.MaxMtu = BLE_MTU_SIZE,
+	BLE_MTU_SIZE,
 	//.PeriphDevCnt = 1,			//Max number of peripheral connection
 };
 
