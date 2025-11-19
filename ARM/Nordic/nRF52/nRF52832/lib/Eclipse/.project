@@ -251,6 +251,26 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/nrfthingy.h</locationURI>
 		</link>
 		<link>
+			<name>include/nrfx_config.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrfx_config.h</locationURI>
+		</link>
+		<link>
+			<name>include/nrfx_config_common.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrfx_config_common.h</locationURI>
+		</link>
+		<link>
+			<name>include/nrfx_glue.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrfx_glue.h</locationURI>
+		</link>
+		<link>
+			<name>include/nrfx_log.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nrfx_log.h</locationURI>
+		</link>
+		<link>
 			<name>include/prbs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
@@ -1816,7 +1836,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nrfx/soc</name>
+			<name>src/nrfx/lib</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -2816,9 +2836,24 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nrfx/soc/nrfx_atomic.c</name>
+			<name>src/nrfx/lib/nrfx_atomic.c</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.c</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_atomic.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_atomic_internal.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/lib/nrfx_atomic_internal.h</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_coredep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/lib/nrfx_coredep.h</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices/Drivers/Ak0991x</name>
@@ -5579,6 +5614,16 @@
 			<name>src/nrfx/drivers/src/nrfx_clock.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_clock.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_clock_hfclk.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_clock_hfclk.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_clock_lfclk.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_clock_lfclk.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers/src/nrfx_nvmc.c</name>
