@@ -53,7 +53,7 @@
 #include "drv_sx1509.h"
 #include "sx150x_led_drv_regs.h"
 #include "sx150x_led_drv_calc.h"
-//#include "app_timer.h"
+#include "app_timer.h"
 
 #define DRV_EXT_LIGHT_INTENSITY_MAX ((uint8_t)(0xFF))   ///< Maximum light intensity value.
 #define DRV_EXT_LIGHT_INTENSITY_OFF (0)                 ///< Minimum light intensity value (off).

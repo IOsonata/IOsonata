@@ -52,7 +52,7 @@
 #include "ble_advdata.h"
 #include "ble_advertising.h"
 #include "ble_conn_params.h"
-#include "softdevice_handler.h"
+//#include "softdevice_handler.h"
 #include "app_scheduler.h"
 #include "app_button.h"
 #include "app_util_platform.h"

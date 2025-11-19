@@ -146,7 +146,8 @@ void clocks_start( void )
 #else
     ret_code_t err_code = nrfx_clock_init(nrfx_clock_irq_handler);
     nrfx_clock_hfclk_start();
-    while (nrfx_clock_hfclk_is_running() == false);
+    nrf_clock_hfclk_t clksrc;
+    while (nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_HFCLK, &clksrc) == false);
 #endif
 }
 

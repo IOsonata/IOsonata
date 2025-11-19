@@ -64,7 +64,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NRFX_I2C_TRBUFF_SIZE	4
 
-// Default fifo size if one is not provided is not provided in the config.
+// Default fifo size if one is not provided in the config.
 #define NRFX_I2C_BUFF_SIZE			8
 
 #define NRFX_I2C_CFIFO_SIZE			CFIFO_MEMSIZE(NRFX_I2C_BUFF_SIZE)
@@ -556,7 +556,7 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 
 		if (pDev->bIntEn == false || pDev->bNoStop)
 		{
-			if (nRFxI2CWaitTxComplete(dev, 100000) == false)
+			if (nRFxI2CWaitTxComplete(dev, I2C_TIMEOUT_CNT) == false)
 				break;
 		}
 		else

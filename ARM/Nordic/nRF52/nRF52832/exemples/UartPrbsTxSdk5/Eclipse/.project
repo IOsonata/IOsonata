@@ -61,12 +61,12 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nrfx/mdk</name>
+			<name>src/nrfx/lib</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nrfx/soc</name>
+			<name>src/nrfx/mdk</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -74,6 +74,16 @@
 			<name>src/nrfx/drivers/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/lib/nrfx_atomic.h</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/mdk/gcc_startup_nrf52.S</name>
@@ -84,11 +94,6 @@
 			<name>src/nrfx/mdk/system_nrf52.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/mdk/system_nrf52.c</locationURI>
-		</link>
-		<link>
-			<name>src/nrfx/soc/nrfx_atomic.c</name>
-			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/soc/nrfx_atomic.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers/src/nrfx_uarte.c</name>
