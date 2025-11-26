@@ -46,6 +46,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "spi_nrfx.h"
 
+#define NRFSPI_TIMEOUT			100000
+
 bool nRFxQSPIInit(SPIDev_t * const pDev);
 //void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev);
 
@@ -293,7 +295,7 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
 
-	if (DevCs < 0 || DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
+	if (DevCs >= dev->pSpiDev->Cfg.NbIOPins - SPI_CS_IOPIN_IDX)
 		return false;
 
 	dev->pSpiDev->CurDevCs = DevCs;
@@ -339,7 +341,7 @@ int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		{
 			dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
 
-			if (nRFxSPIWaitReady(dev, 100000) == false)
+			if (nRFxSPIWaitReady(dev, NRFSPI_TIMEOUT) == false)
 				break;
 
 			*pBuff = dev->pReg->RXD;
@@ -394,7 +396,7 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		dev->pDmaReg->EVENTS_ENDRX = 0;
 		dev->pDmaReg->TASKS_START = 1;
 
-		if (nRFxSPIWaitRX(dev, 100000) == false)
+		if (nRFxSPIWaitRX(dev, NRFSPI_TIMEOUT) == false)
 			break;
 
 		size_t l = dev->pDmaReg->RXD.AMOUNT;
@@ -479,7 +481,7 @@ int nRFxSPITxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 		{
 			dev->pReg->TXD = *pData;
 
-			if (nRFxSPIWaitReady(dev, 10000) == false)
+			if (nRFxSPIWaitReady(dev, NRFSPI_TIMEOUT) == false)
 			{
 				break;
 			}
@@ -539,7 +541,7 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		dev->pDmaReg->EVENTS_ENDTX = 0;
 		dev->pDmaReg->TASKS_START = 1;
 
-		if (nRFxSPIWaitDMA(dev, 100000) == false)
+		if (nRFxSPIWaitDMA(dev, NRFSPI_TIMEOUT) == false)
 		{
 			break;
 		}
@@ -795,7 +797,7 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 #else
 		cfgreg |= (SPI_CONFIG_CPOL_ActiveLow << SPI_CONFIG_CPOL_Pos);
 #endif
-		IOPinSet(0, pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo);
+		IOPinSet(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo);
 	}
 	else
 	{
@@ -804,7 +806,7 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 #else
 		cfgreg |= (SPI_CONFIG_CPOL_ActiveHigh << SPI_CONFIG_CPOL_Pos);
 #endif
-		IOPinClear(0, pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo);
+		IOPinClear(pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo, pDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo);
 	}
 
 	reg->CONFIG = cfgreg;
