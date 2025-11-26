@@ -236,7 +236,14 @@ The way the IOsonata folder is structured is simple.  The deeper you go inside t
  |   |   |-- sensors     - Generic source for all sort of sensors (environmental, motion, etc...)
  |   |   |-- usb         - Generic source for USB
  |   |   |...
- |   |    
+ |   |-- exemples    - Generic examples
+ |   |   |-- bluetooth   - Generic bluetooth examples    
+ |   |   |-- display     - Generic display examples
+ |   |   |-- i2c         - Generic I2C examplles
+ |   |   |-- misc        - Generic miscillenous examples
+ |   |   |-- pwm         - Generic PWM examples
+ |   |   |-- sensor      - Generic sensor examples
+ |   |   |...
  |   |-- ARM         - ARM series based MCU
  |   |   |-- include     - Common include for all ARM platform
  |   |   |-- src         - Common source for all ARM platform
