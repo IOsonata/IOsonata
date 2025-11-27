@@ -80,6 +80,8 @@ static uint32_t g_Sha256KValue[] = {
 	0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 };
 
+static char g_Sha256Digest[66] = { 0,};
+
 inline uint32_t ROTR(uint32_t x, uint32_t n) 
 {
     return (x >> n) | (x << (32-n));
@@ -165,14 +167,6 @@ void Sha256Compute(uint32_t *W, uint32_t *H)
 	H[7] = (H[7] + h);
 }
 
-static int g_LastWIdx = 0;
-static int g_LastOctet = 0;
-static uint64_t g_TotalBitLen = 0;
-static char g_Sha256Digest[66] = { 0,};
-static uint32_t H[8] = { H0, H1, H2, H3, H4, H5, H6, H7 };
-static uint32_t W[64];
-
-
 /*
  * Generate SHA digest code.  Call this function until all data are processed.
  * set bLast parameter to true for last data packet to process.
@@ -191,6 +185,11 @@ static uint32_t W[64];
  */
 char *Sha256(uint8_t *pData, int DataLen, bool bLast, char *pRes)
 {
+	static int g_LastWIdx = 0;
+	static int g_LastOctet = 0;
+	static uint64_t g_TotalBitLen = 0;
+	static uint32_t H[8] = { H0, H1, H2, H3, H4, H5, H6, H7 };
+	static uint32_t W[64];
 	uint8_t *p = pData;
 	int t = 0, j = 0;
 	char *digest = g_Sha256Digest;
@@ -286,7 +285,7 @@ char *Sha256(uint8_t *pData, int DataLen, bool bLast, char *pRes)
 		if (pRes)
 			digest = pRes;
 
-		//sprintf(digest, "%08lX%08lX%08lX%08lX%08lX%08lX%08lX%08lX", H[0], H[1], H[2], H[3], H[4], H[5], H[6], H[7]);
+		sprintf(digest, "%08lX%08lX%08lX%08lX%08lX%08lX%08lX%08lX", H[0], H[1], H[2], H[3], H[4], H[5], H[6], H[7]);
 
 		// Reset memory, ready for new processing
 

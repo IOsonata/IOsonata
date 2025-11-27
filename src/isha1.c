@@ -68,6 +68,8 @@ SOFTWARE.
 #define H3	0x10325476
 #define H4	0xc3d2e1f0
 
+static char g_Sha1Digest[34] = { 0,};
+
 inline uint32_t ROTR(uint32_t x, uint32_t n)
 {
     return (x >> n) | (x << (32-n));
@@ -143,13 +145,6 @@ static void Sha1Compute(uint32_t *W, uint32_t *H)
 	H[4] = (H[4] + e);
 }
 
-static int g_LastWIdx = 0;
-static int g_LastOctet = 0;
-static uint64_t g_TotalBitLen = 0;
-static char g_Sha1Digest[34] = { 0,};
-static uint32_t W[80];
-static uint32_t H[5] = { H0, H1, H2, H3, H4 };
-
 /*
  * Generate SHA digest code.  Call this function until all data are processed.
  * set bLast parameter to true for last data packet to process.
@@ -168,6 +163,11 @@ static uint32_t H[5] = { H0, H1, H2, H3, H4 };
  */
 char *Sha1(uint8_t *pData, int DataLen, bool bLast, char *pRes)
 {
+	static int g_LastWIdx = 0;
+	static int g_LastOctet = 0;
+	static uint64_t g_TotalBitLen = 0;
+	static uint32_t W[80];
+	static uint32_t H[5] = { H0, H1, H2, H3, H4 };
 	uint8_t *p = pData;
 	int t = 0, j = 0;
 	char *digest = g_Sha1Digest;
