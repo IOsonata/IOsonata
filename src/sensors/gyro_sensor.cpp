@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	gyro_sensor.cpp
 
-@brief	Generic accelerometer sensor abstraction
+@brief	Generic gyroscope sensor abstraction
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 18, 2017

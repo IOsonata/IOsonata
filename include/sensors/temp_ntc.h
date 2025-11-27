@@ -95,7 +95,7 @@ public:
 	 *
 	 * @return	Temperature in C * 100
 	 */
-	int32_t UdpateData(int32_t mVoltSrc, int32_t mVoltNtc);
+	int32_t UpdateData(int32_t mVoltSrc, int32_t mVoltNtc);
 
 	/**
 	 * @brief	Update sensor data with measured NTC resistor

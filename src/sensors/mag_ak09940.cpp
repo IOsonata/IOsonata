@@ -83,7 +83,7 @@ bool MagAk09940::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Tim
 	{
 		for (uint32_t ad = AK09940_I2C_7BITS_DEVADDR0; ad <= AK09940_I2C_7BITS_DEVADDR3; ad++)
 		{
-			DeviceAddress(AK09940_I2C_7BITS_DEVADDR0);
+			DeviceAddress(ad);
 			Read(&regaddr, 1, (uint8_t*)&d, 2);
 
 			if (d == AK09940_COMPANY_DEVICE_ID)

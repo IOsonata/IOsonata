@@ -89,11 +89,11 @@ int32_t LookupNtcTemp(uint32_t Res, const NtcTempRes_t *pNtcTbl, const size_t Ta
 	do {
 		if (pNtcTbl[idx].Res >= Res)
 		{
-			l = idx;
+			h = idx;
 		}
 		else
 		{
-			h = idx;
+			l = idx;
 		}
 		idx = ((h + l) >> 1);
 	} while (idx != l && idx != h);
@@ -151,7 +151,7 @@ void TempNtc::Init(uint32_t LoadR, const NtcTempRes_t *pTable, size_t TblSize, T
  *
  * @return	Temperature in C * 100
  */
-int32_t TempNtc::UdpateData(int32_t mVoltSrc, int32_t mVoltNtc)
+int32_t TempNtc::UpdateData(int32_t mVoltSrc, int32_t mVoltNtc)
 {
 	uint32_t r;
 

@@ -118,7 +118,7 @@ public:
     /**
 	 * @brief	Read last updated sensor data
 	 *
-	 * This function read the currently stored data last updated by UdateData().
+	 * This function read the currently stored data last updated by UpdateData().
 	 * Device implementation can add validation if needed and return true or false
 	 * in the case of data valid or not.  This default implementation only returns
 	 * the stored data with success.
