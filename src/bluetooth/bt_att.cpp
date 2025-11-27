@@ -123,7 +123,7 @@ BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, voi
 
 BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl)
 {
-	if (Hdl >= s_LastHdl)
+	if (Hdl > s_LastHdl)
 	{
 		return nullptr;
 	}
@@ -638,7 +638,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				int nhdl = (ReqLen - 1) >> 1;
 				uint8_t *p = pRspAtt->ReadMultipleRsp.Data;
 				retval = 1;
-				for (int i = 0; i < nhdl && (s_AttMtu - retval) < BT_ATT_MTU_MIN; i++)
+				for (int i = 0; i < nhdl && (s_AttMtu - retval) >= BT_ATT_MTU_MIN; i++)
 				{
 					BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->ReadMultipleReq.Hdl[i]);
 					if (entry == nullptr)
