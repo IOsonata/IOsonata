@@ -84,7 +84,7 @@ void RemoveBlkDev(int Idx)
 int _open(const char * const pPathName, int Flags, int Mode)
 {
 //	return g_FatFS.Open((char*)pPathName, Flags, Mode);
-	if (pPathName == NULL)
+	if (pPathName == NULL || g_DevTable[STDFS_FILENO] == NULL)
 		return -1;
 
 	char *p;

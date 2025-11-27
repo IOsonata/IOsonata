@@ -49,6 +49,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 void PulseTrain(PulseTrainCfg_t *pCfg, uint32_t Loop)
 {
+	if (pCfg == NULL)
+	{
+		return;
+	}
+
 	// Configure pins as output and reset all pins to zero
 	for (int i = 0; i < pCfg->NbPins; i++ )
 	{
