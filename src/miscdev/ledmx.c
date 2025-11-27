@@ -346,19 +346,10 @@ void LedMxInit(LEDMXDEV *pDev, LEDMXCFG *pCfg)
 	// Initialize platform specific I/O
 	LedMxIOInit(pDev, pCfg);
 
-	pDev->NbPanel = pCfg->NbPanel;
-	memcpy(pDev->PanelAddr, pCfg->PanelAddr, sizeof(pDev->PanelAddr));
+	pDev->NbPanel = min(pCfg->NbPanel, LEDMX_MAX_PANEL);
+	memcpy(pDev->PanelAddr, pCfg->PanelAddr, sizeof(pDev->PanelAddr[0]) * pDev->NbPanel);
 
-	// This loop is a patch for now.  Revise this code is required
-/*	for (i = 0; i < LEDMX_MAX_PANEL; i++) //pDev->NbPanel; i++)
-	{
-        LedMxCmd(pDev, LEDMX_CMD_SYSDIS, pCfg->PanelAddr[i]);
-		// NOTE : 	Put all display in slave mode. By default master will generate clock
-		//			it could conflict with unused display is in system
-		LedMxCmd(pDev, LEDMX_CMD_SLAVE_MODE, pCfg->PanelAddr[i]);
-	}*/
-
-	for (i = 0; i < /*LEDMX_MAX_PANEL; i++) */ pDev->NbPanel; i++)
+	for (i = 0; i < pDev->NbPanel; i++)
 	{
 		panelno = pCfg->PanelAddr[i];
 		LedMxCmd(pDev, LEDMX_CMD_SYSDIS, panelno);
