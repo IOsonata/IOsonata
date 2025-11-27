@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	pulse_train.c
+@example	pulse_train_test.c
 
 @brief	Pulse train example
 
@@ -50,7 +50,7 @@ static const PulseTrainPin_t s_PulseTrainPins[] = PULSE_TRAIN_PINS_MAP;
 PulseTrainCfg_t g_PulseTrainCfg = {
 	.pPins = (PulseTrainPin_t *)s_PulseTrainPins,
 	.NbPins = sizeof(s_PulseTrainPins) / sizeof(PulseTrainPin_t),
-	.Period = 1,
+	.Period = 500,
 	.Pol = PULSE_TRAIN_POL_HIGH
 };
 
