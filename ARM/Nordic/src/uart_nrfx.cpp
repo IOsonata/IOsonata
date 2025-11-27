@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	uart_nrf5x.c
+@file	uart_nrfx.cpp
 
 @brief	nRF5x UART implementation
 
@@ -76,7 +76,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NRFX_UART_MAXDEV			UARTE_COUNT
 #define NRFX_UART_DMA_MAXCNT		((1<<UARTE0_EASYDMA_MAXCNT_SIZE)-1)
 
-// Default fifo size if one is not provided is not provided in the config.
+// Default fifo size if one is not provided in the config.
 #define NRFX_UART_RXDMA_SIZE		(NRFX_UART_HWFIFO_SIZE)
 #define NRFX_UART_TXDMA_SIZE		(4 * NRFX_UART_HWFIFO_SIZE)
 
@@ -293,7 +293,7 @@ bool nRFUARTWaitForTxReady(nRFUartDev_t * const pDev, uint32_t Timeout)
 //static void UartIrqHandler(nRFUartDev_t * const pDev)
 static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
-	nRFUartDev_t *dev = (nRFUartDev_t *)pDev-> pDevData;
+	nRFUartDev_t *dev = (nRFUartDev_t *)pDev->pDevData;
 	int len = 0;
 	int cnt = 0;
 
@@ -366,12 +366,6 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 				*d = reg->RXD;
 				cnt++;
 			} while (reg->EVENTS_RXDRDY && cnt < NRFX_UART_HWFIFO_SIZE) ;
-
-			if (dev->pUartDev->EvtCallback)
-			{
-				len = CFifoUsed(dev->pUartDev->hRxFifo);
-				cnt = dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA, NULL, len);
-			}
 		}
 		else
 #endif
@@ -434,7 +428,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			// Transfer to tx cache before sending as CFifo will immediately make the memory
 			// block available for reuse in the Put request. This could cause an overwrite
 			// if uart tx has not completed in time.
-			memcpy(&dev->TxDmaMem, p, l);
+			memcpy(dev->TxDmaMem, p, l);
 
 			dev->pDmaReg->TXD.MAXCNT = l;
 			dev->pDmaReg->TXD.PTR = (uint32_t)dev->TxDmaMem;
@@ -731,7 +725,7 @@ static int nRFUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 
     if (rtry <= 0)
     {
-    	dev->pUartDev->TxDropCnt += Datalen- cnt;
+    	dev->pUartDev->TxDropCnt += Datalen - cnt;
     }
 
     return cnt;
@@ -943,10 +937,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	IOPinSet(pincfg[UARTPIN_TX_IDX].PortNo, pincfg[UARTPIN_TX_IDX].PinNo);
 	IOPinCfg(pincfg, pCfg->NbIOPins);
 
-	for (int i = 0; i < pCfg->NbIOPins; i++)
-	{
-		IOPinSetStrength(pincfg[UARTPIN_TX_IDX].PortNo, pincfg[UARTPIN_TX_IDX].PinNo, IOPINSTRENGTH_STRONG);
-	}
+	IOPinSetStrength(pincfg[UARTPIN_TX_IDX].PortNo, pincfg[UARTPIN_TX_IDX].PinNo, IOPINSTRENGTH_STRONG);
 
 	pDev->DevIntrf.pDevData = &s_nRFxUARTDev[devno];
 	s_nRFxUARTDev[devno].pUartDev = pDev;
