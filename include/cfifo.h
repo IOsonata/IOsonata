@@ -93,6 +93,7 @@ extern "C" {
  * can be used.
  *
  * @param	pMemBlk 		: Pointer to memory block to be used for FIFO
+ * 							  NOTE : This memory block must be word aligned
  * @param	TotalMemSize	: Total memory size in byte
  * @param	BlkSize 		: Block size in bytes
  * @param   bBlocking  		: Behavior when FIFO is full.\n
