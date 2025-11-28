@@ -1,0 +1,140 @@
+# Example Makefile demonstrating how to use makefile_path.mk
+# This file shows how to include and use the auto-generated makefile_path.mk
+# for building IOsonata-based projects
+
+# ============================================
+# Include the auto-generated path configuration
+# ============================================
+# Option 1: If IOSONATA_ROOT is set as environment variable
+# include $(IOSONATA_ROOT)/makefile_path.mk
+
+# Option 2: Set IOSONATA_ROOT manually (adjust path as needed)
+IOSONATA_ROOT ?= $(HOME)/IOcomposer/IOsonata
+include $(IOSONATA_ROOT)/makefile_path.mk
+
+# ============================================
+# Project Configuration
+# ============================================
+PROJECT_NAME = my_iosonata_project
+BUILD_DIR = build
+TARGET = $(BUILD_DIR)/$(PROJECT_NAME)
+
+# Select architecture: ARM or RISCV
+ARCH = ARM
+
+# ============================================
+# Compiler and Tools Setup
+# ============================================
+ifeq ($(ARCH),ARM)
+    CC = $(ARM_GCC)
+    CXX = $(ARM_GPP)
+    AS = $(ARM_AS)
+    LD = $(ARM_LD)
+    AR = $(ARM_AR)
+    OBJCOPY = $(ARM_OBJCOPY)
+    SIZE = $(ARM_SIZE)
+    ARCH_INCLUDES = $(ARM_INCLUDES)
+    ARCH_SRC_DIR = $(ARM_SRC)
+else ifeq ($(ARCH),RISCV)
+    CC = $(RISCV_GCC)
+    CXX = $(RISCV_GPP)
+    AS = $(RISCV_AS)
+    LD = $(RISCV_LD)
+    AR = $(RISCV_AR)
+    OBJCOPY = $(RISCV_OBJCOPY)
+    SIZE = $(RISCV_SIZE)
+    ARCH_INCLUDES = $(RISCV_INCLUDES)
+    ARCH_SRC_DIR = $(RISCV_SRC)
+endif
+
+# ============================================
+# Include Paths
+# ============================================
+INCLUDES = $(IOSONATA_INCLUDES) \
+           $(ARCH_INCLUDES) \
+           -I./include
+
+# Add external library includes as needed
+# INCLUDES += -I$(NRFX_ROOT) -I$(LVGL_ROOT)
+
+# ============================================
+# Source Files
+# ============================================
+# Add your project source files here
+SRCS = main.c \
+       $(wildcard src/*.c)
+
+# Add IOsonata library sources as needed
+# SRCS += $(IOSONATA_SRC)/uart_impl.cpp
+# SRCS += $(IOSONATA_SRC)/i2c_impl.cpp
+
+# ============================================
+# Compiler Flags
+# ============================================
+CFLAGS = -Wall -O2 -g
+CFLAGS += $(INCLUDES)
+
+# Add architecture-specific flags
+# For ARM Cortex-M4:
+# CFLAGS += -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
+
+# ============================================
+# Build Rules
+# ============================================
+OBJS = $(SRCS:%.c=$(BUILD_DIR)/%.o)
+
+all: $(TARGET).elf $(TARGET).hex $(TARGET).bin
+	@echo "Build complete!"
+	$(SIZE) $(TARGET).elf
+
+$(BUILD_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET).elf: $(OBJS)
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(OBJS) -o $@
+
+$(TARGET).hex: $(TARGET).elf
+	$(OBJCOPY) -O ihex $< $@
+
+$(TARGET).bin: $(TARGET).elf
+	$(OBJCOPY) -O binary $< $@
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+# ============================================
+# Flash using OpenOCD (example)
+# ============================================
+flash: $(TARGET).hex
+	$(OPENOCD) -f interface/jlink.cfg -f target/nrf52.cfg \
+	           -c "program $(TARGET).hex verify reset exit"
+
+.PHONY: all clean flash
+
+# ============================================
+# Available Macros from makefile_path.mk
+# ============================================
+# Toolchains:
+#   ARM_GCC, ARM_GPP, ARM_AS, ARM_LD, ARM_AR, ARM_OBJCOPY, ARM_SIZE, ARM_GDB
+#   RISCV_GCC, RISCV_GPP, RISCV_AS, RISCV_LD, RISCV_AR, RISCV_OBJCOPY, RISCV_SIZE, RISCV_GDB
+#
+# Paths:
+#   IOSONATA_ROOT, IOSONATA_INCLUDE, IOSONATA_SRC
+#   ARM_ROOT, ARM_CMSIS_INCLUDE, ARM_INCLUDE, ARM_SRC, ARM_LDSCRIPT
+#   RISCV_ROOT, RISCV_INCLUDE, RISCV_SRC, RISCV_LDSCRIPT
+#
+# Vendor-specific:
+#   ARM_NORDIC, ARM_NXP, ARM_ST, ARM_MICROCHIP, ARM_RENESAS
+#   RISCV_ESPRESSIF, RISCV_NORDIC, RISCV_RENESAS
+#
+# External libraries:
+#   NRFX_ROOT, SDK_NRFXLIB_ROOT, NRF5_SDK_ROOT, NRF5_SDK_MESH_ROOT
+#   BSEC_ROOT, FUSION_ROOT, LVGL_ROOT
+#
+# Modules:
+#   FATFS_ROOT, LITTLEFS_ROOT, MICRO_ECC_ROOT
+#
+# Prebuilt includes:
+#   IOSONATA_INCLUDES, ARM_INCLUDES, RISCV_INCLUDES
