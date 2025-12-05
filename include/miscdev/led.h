@@ -101,7 +101,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "device.h"
 #include "device_intrf.h"
-#include "pwm.h"
+#include "coredev/pwm.h"
 
 /** @addtogroup MiscDev
   * @{

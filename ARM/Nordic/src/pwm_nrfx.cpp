@@ -36,7 +36,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "nrf.h"
 #include "nrf_peripherals.h"
 
-#include "pwm.h"
+#include "coredev/pwm.h"
 
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #define NRF_PWM0		NRF_PWM0_S

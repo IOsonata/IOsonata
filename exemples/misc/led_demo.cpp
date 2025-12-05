@@ -33,14 +33,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include <string.h>
-#include "pwm.h"
+
+#include "coredev/pwm.h"
 #include "idelay.h"
-//#include "blueio_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "miscdev/led.h"
-
-//#define BLUEIO_TAG
 
 #include "board.h"
 

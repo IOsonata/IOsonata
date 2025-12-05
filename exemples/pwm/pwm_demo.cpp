@@ -33,7 +33,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "pwm.h"
+#include "coredev/pwm.h"
 #include "idelay.h"
 
 #include "board.h"

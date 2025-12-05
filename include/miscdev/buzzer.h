@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BUZZER_H__
 #define __BUZZER_H__
 
-#include "pwm.h"
+#include "coredev/pwm.h"
 
 /** @addtogroup MiscDev
   * @{
