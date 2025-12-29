@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.11"
+SCRIPT_VERSION="v1.0.12"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -389,18 +389,18 @@ clone_repos() {
     fi
   done
   
-  # Clone FreeRTOS with submodules
-  echo ">>> Cloning FreeRTOS (with submodules)..."
-  if [[ -d "FreeRTOS" ]]; then
+  # Clone FreeRTOS-Kernel
+  echo ">>> Cloning FreeRTOS-Kernel..."
+  if [[ -d "FreeRTOS-Kernel" ]]; then
     if [[ "$MODE" == "force" ]]; then
-      rm -rf "FreeRTOS"
-      git clone --depth=1 --recurse-submodules https://github.com/FreeRTOS/FreeRTOS.git FreeRTOS
+      rm -rf "FreeRTOS-Kernel"
+      git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
     else
-      (cd FreeRTOS && git pull && git submodule update --init --recursive)
+      (cd FreeRTOS-Kernel && git pull)
     fi
   else
-    git clone --depth=1 --recurse-submodules https://github.com/FreeRTOS/FreeRTOS.git FreeRTOS
-    echo "✅ FreeRTOS submodules initialized"
+    git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
+    echo "✅ FreeRTOS-Kernel cloned"
   fi
 }
 
@@ -474,7 +474,7 @@ BSEC_ROOT = $(EXTERNAL_ROOT)/BSEC
 FUSION_ROOT = $(EXTERNAL_ROOT)/Fusion
 LVGL_ROOT = $(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = $(EXTERNAL_ROOT)/lwip
-FREERTOS_ROOT = $(EXTERNAL_ROOT)/FreeRTOS
+FREERTOS_KERNEL_ROOT = $(EXTERNAL_ROOT)/FreeRTOS-Kernel
 
 # ============================================
 # Additional IOsonata Modules

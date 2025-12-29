@@ -9,7 +9,7 @@
 
 set -e  # Exit on first error
 
-SCRIPT_VERSION="v1.1.1"
+SCRIPT_VERSION="v1.2.0"
 
 # --- Define colors ---
 RED="\033[0;31m"
@@ -54,7 +54,7 @@ print_help() {
   echo "  • xioTechnologies Fusion"
   echo "  • LVGL graphics library"
   echo "  • lwIP TCP/IP stack"
-  echo "  • FreeRTOS (with submodules)"
+  echo "  • FreeRTOS-Kernel"
   echo ""
   exit 0
 }
@@ -172,11 +172,11 @@ for repo in "${repos[@]}"; do
 done
 
 # ---------------------------------------------------------
-# Clone FreeRTOS with submodules
+# Clone FreeRTOS-Kernel
 # ---------------------------------------------------------
 echo ""
-echo "${BOLD}${BLUE}📦 Cloning FreeRTOS (with submodules)...${RESET}"
-clone_or_update_repo "https://github.com/FreeRTOS/FreeRTOS.git" "$EXT/FreeRTOS" true
+echo "${BOLD}${BLUE}📦 Cloning FreeRTOS-Kernel...${RESET}"
+clone_or_update_repo "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" "$EXT/FreeRTOS-Kernel" false
 
 echo ""
 echo "${GREEN}✅ All repositories cloned successfully!${RESET}"
@@ -245,7 +245,7 @@ BSEC_ROOT = $(EXTERNAL_ROOT)/BSEC
 FUSION_ROOT = $(EXTERNAL_ROOT)/Fusion
 LVGL_ROOT = $(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = $(EXTERNAL_ROOT)/lwip
-FREERTOS_ROOT = $(EXTERNAL_ROOT)/FreeRTOS
+FREERTOS_KERNEL_ROOT = $(EXTERNAL_ROOT)/FreeRTOS-Kernel
 
 # ============================================
 # Additional IOsonata Modules
@@ -371,7 +371,7 @@ echo "  • BSEC"
 echo "  • Fusion"
 echo "  • lvgl"
 echo "  • lwip"
-echo "  • FreeRTOS ${GREEN}(with submodules)${RESET}"
+echo "  • FreeRTOS-Kernel"
 echo ""
 
 if [[ "$CONFIGURE_ECLIPSE" == "true" && -f "$ECLIPSE_INI" ]]; then

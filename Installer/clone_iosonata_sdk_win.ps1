@@ -15,7 +15,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v1.1.1"
+$SCRIPT_VERSION = "v1.2.0"
 
 # --- Banner ---
 function Show-Banner {
@@ -52,7 +52,7 @@ function Show-Help {
     Write-Host "  • xioTechnologies Fusion"
     Write-Host "  • LVGL graphics library"
     Write-Host "  • lwIP TCP/IP stack"
-    Write-Host "  • FreeRTOS (with submodules)"
+    Write-Host "  • FreeRTOS-Kernel"
     Write-Host ""
     exit 0
 }
@@ -150,11 +150,11 @@ foreach ($repo in $repos.GetEnumerator()) {
 }
 
 # ---------------------------------------------------------
-# Clone FreeRTOS with submodules
+# Clone FreeRTOS-Kernel
 # ---------------------------------------------------------
 Write-Host ""
-Write-Host "📦 Cloning FreeRTOS (with submodules)..." -ForegroundColor Blue
-Sync-Repository -Url "https://github.com/FreeRTOS/FreeRTOS.git" -Target "$EXT\FreeRTOS" -RecurseSubmodules $true
+Write-Host "📦 Cloning FreeRTOS-Kernel..." -ForegroundColor Blue
+Sync-Repository -Url "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" -Target "$EXT\FreeRTOS-Kernel" -RecurseSubmodules $false
 
 Write-Host ""
 Write-Host "✅ All repositories cloned successfully!" -ForegroundColor Green
@@ -227,7 +227,7 @@ BSEC_ROOT = `$(EXTERNAL_ROOT)/BSEC
 FUSION_ROOT = `$(EXTERNAL_ROOT)/Fusion
 LVGL_ROOT = `$(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = `$(EXTERNAL_ROOT)/lwip
-FREERTOS_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS
+FREERTOS_KERNEL_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS-Kernel
 
 # ============================================
 # Additional IOsonata Modules
@@ -385,8 +385,7 @@ Write-Host "  • BSEC"
 Write-Host "  • Fusion"
 Write-Host "  • lvgl"
 Write-Host "  • lwip"
-Write-Host "  • FreeRTOS " -NoNewline
-Write-Host "(with submodules)" -ForegroundColor Green
+Write-Host "  • FreeRTOS-Kernel"
 Write-Host ""
 
 if ($Eclipse -and (Test-Path "$env:ProgramFiles\Eclipse Embedded CDT\eclipse.ini")) {

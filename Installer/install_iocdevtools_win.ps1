@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 
 # --- Script Configuration ---
 $SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.78-win" # Variable-based paths in makefile_path.mk
+$SCRIPT_VERSION = "v1.0.79-win" # FreeRTOS-Kernel only (not full repo)
 
 # --- CLI Option Handling ---
 function Show-Help {
@@ -454,9 +454,9 @@ Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"; $repos = 
     Sync-Repo $repo.Name $repo.Value 
   }
 
-# Clone FreeRTOS with submodules
-Write-Host ">>> Cloning FreeRTOS (with submodules)..." -ForegroundColor Cyan
-Sync-Repo "https://github.com/FreeRTOS/FreeRTOS.git" "$EXT\FreeRTOS" $true
+# Clone FreeRTOS-Kernel
+Write-Host ">>> Cloning FreeRTOS-Kernel..." -ForegroundColor Cyan
+Sync-Repo "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" "$EXT\FreeRTOS-Kernel" $false
 
 # ---------------------------------------------------------
 # Generate makefile_path.mk
@@ -532,7 +532,7 @@ BSEC_ROOT = `$(EXTERNAL_ROOT)/BSEC
 FUSION_ROOT = `$(EXTERNAL_ROOT)/Fusion
 LVGL_ROOT = `$(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = `$(EXTERNAL_ROOT)/lwip
-FREERTOS_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS
+FREERTOS_KERNEL_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS-Kernel
 
 # ============================================
 # Additional IOsonata Modules
