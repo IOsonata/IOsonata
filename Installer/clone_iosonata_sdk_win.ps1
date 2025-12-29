@@ -15,7 +15,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v1.2.0"
+$SCRIPT_VERSION = "v1.2.1"
 
 # --- Banner ---
 function Show-Banner {
@@ -53,6 +53,7 @@ function Show-Help {
     Write-Host "  • LVGL graphics library"
     Write-Host "  • lwIP TCP/IP stack"
     Write-Host "  • FreeRTOS-Kernel"
+    Write-Host "  • TinyUSB"
     Write-Host ""
     exit 0
 }
@@ -142,6 +143,7 @@ $repos = @{
     "https://github.com/xioTechnologies/Fusion.git" = "Fusion"
     "https://github.com/lvgl/lvgl.git" = "lvgl"
     "https://github.com/lwip-tcpip/lwip.git" = "lwip"
+    "https://github.com/hathach/tinyusb.git" = "tinyusb"
 }
 
 foreach ($repo in $repos.GetEnumerator()) {
@@ -228,6 +230,7 @@ FUSION_ROOT = `$(EXTERNAL_ROOT)/Fusion
 LVGL_ROOT = `$(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = `$(EXTERNAL_ROOT)/lwip
 FREERTOS_KERNEL_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS-Kernel
+TINYUSB_ROOT = `$(EXTERNAL_ROOT)/tinyusb
 
 # ============================================
 # Additional IOsonata Modules
@@ -386,6 +389,7 @@ Write-Host "  • Fusion"
 Write-Host "  • lvgl"
 Write-Host "  • lwip"
 Write-Host "  • FreeRTOS-Kernel"
+Write-Host "  • tinyusb"
 Write-Host ""
 
 if ($Eclipse -and (Test-Path "$env:ProgramFiles\Eclipse Embedded CDT\eclipse.ini")) {

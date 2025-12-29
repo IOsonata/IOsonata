@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.72"
+SCRIPT_VERSION="v1.0.73"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -422,6 +422,7 @@ repos=(
   "https://github.com/xioTechnologies/Fusion.git"
   "https://github.com/lvgl/lvgl.git"
   "https://github.com/lwip-tcpip/lwip.git"
+  "https://github.com/hathach/tinyusb.git"
 )
 for repo in "${repos[@]}"; do
   name=$(basename "$repo" .git)
@@ -549,6 +550,7 @@ FUSION_ROOT = \$(EXTERNAL_ROOT)/Fusion
 LVGL_ROOT = \$(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = \$(EXTERNAL_ROOT)/lwip
 FREERTOS_KERNEL_ROOT = \$(EXTERNAL_ROOT)/FreeRTOS-Kernel
+TINYUSB_ROOT = \$(EXTERNAL_ROOT)/tinyusb
 
 # ============================================
 # Additional IOsonata Modules

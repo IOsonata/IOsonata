@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 
 # --- Script Configuration ---
 $SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.79-win" # FreeRTOS-Kernel only (not full repo)
+$SCRIPT_VERSION = "v1.0.80-win" # Added TinyUSB
 
 # --- CLI Option Handling ---
 function Show-Help {
@@ -449,7 +449,8 @@ Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"; $repos = 
   "https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "$EXT\BSEC"; 
   "https://github.com/xioTechnologies/Fusion.git" = "$EXT\Fusion";
   "https://github.com/lvgl/lvgl.git" = "$EXT\lvgl";
-  "https://github.com/lwip-tcpip/lwip.git" = "$EXT\lwip"};
+  "https://github.com/lwip-tcpip/lwip.git" = "$EXT\lwip";
+  "https://github.com/hathach/tinyusb.git" = "$EXT\tinyusb"};
   foreach ($repo in $repos.GetEnumerator()) { 
     Sync-Repo $repo.Name $repo.Value 
   }
@@ -533,6 +534,7 @@ FUSION_ROOT = `$(EXTERNAL_ROOT)/Fusion
 LVGL_ROOT = `$(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = `$(EXTERNAL_ROOT)/lwip
 FREERTOS_KERNEL_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS-Kernel
+TINYUSB_ROOT = `$(EXTERNAL_ROOT)/tinyusb
 
 # ============================================
 # Additional IOsonata Modules

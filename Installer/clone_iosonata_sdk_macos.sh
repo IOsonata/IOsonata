@@ -9,7 +9,7 @@
 
 set -e  # Exit on first error
 
-SCRIPT_VERSION="v1.2.0"
+SCRIPT_VERSION="v1.2.1"
 
 # --- Define colors ---
 RED="\033[0;31m"
@@ -55,6 +55,7 @@ print_help() {
   echo "  • LVGL graphics library"
   echo "  • lwIP TCP/IP stack"
   echo "  • FreeRTOS-Kernel"
+  echo "  • TinyUSB"
   echo ""
   exit 0
 }
@@ -162,6 +163,7 @@ repos=(
   "https://github.com/xioTechnologies/Fusion.git"
   "https://github.com/lvgl/lvgl.git"
   "https://github.com/lwip-tcpip/lwip.git"
+  "https://github.com/hathach/tinyusb.git"
 )
 
 for repo in "${repos[@]}"; do
@@ -246,6 +248,7 @@ FUSION_ROOT = $(EXTERNAL_ROOT)/Fusion
 LVGL_ROOT = $(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = $(EXTERNAL_ROOT)/lwip
 FREERTOS_KERNEL_ROOT = $(EXTERNAL_ROOT)/FreeRTOS-Kernel
+TINYUSB_ROOT = $(EXTERNAL_ROOT)/tinyusb
 
 # ============================================
 # Additional IOsonata Modules
@@ -372,6 +375,7 @@ echo "  • Fusion"
 echo "  • lvgl"
 echo "  • lwip"
 echo "  • FreeRTOS-Kernel"
+echo "  • tinyusb"
 echo ""
 
 if [[ "$CONFIGURE_ECLIPSE" == "true" && -f "$ECLIPSE_INI" ]]; then
