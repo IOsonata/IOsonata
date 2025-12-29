@@ -1,155 +1,282 @@
-<#
-=========================================================
- clone_iosonata_sdk_win.ps1
----------------------------------------------------------
- Purpose: Clone IOsonata SDK and dependencies for Windows
- Platform: Windows PowerShell 5+ / PowerShell 7+
-=========================================================
-#>
+# clone_iosonata_sdk_windows.ps1
+# =========================================================
+#  clone_iosonata_sdk_windows
+# ---------------------------------------------------------
+#  Purpose: Clone IOsonata SDK and dependencies
+#  Platform: Windows (PowerShell)
+#  Version: v1.1.0
+# =========================================================
 
-# --- Default values ---
-$homePath = "$env:USERPROFILE\IOcomposer"
-$mode = "normal"
-$help = $false
+param(
+    [string]$Home = "$env:USERPROFILE\IOcomposer",
+    [string]$Mode = "normal",
+    [switch]$Eclipse,
+    [switch]$Help
+)
 
-# --- Parse CLI-style arguments (like macOS/Linux) ---
-for ($i = 0; $i -lt $args.Count; $i++) {
-    switch ($args[$i]) {
-        '--home' {
-            if ($i + 1 -lt $args.Count) {
-                $homePath = $args[$i + 1]
-                $i++
-            } else {
-                Write-Host "Missing value for --home" -ForegroundColor Red
-                exit 1
-            }
-        }
-        '--mode' {
-            if ($i + 1 -lt $args.Count) {
-                $mode = $args[$i + 1]
-                $i++
-            } else {
-                Write-Host "Missing value for --mode" -ForegroundColor Red
-                exit 1
-            }
-        }
-        '--help' {
-            $help = $true
-        }
-        default {
-            Write-Host " Unknown argument: $($args[$i])" -ForegroundColor Red
-            Write-Host "Use '--help' for usage information." -ForegroundColor Yellow
-            exit 1
-        }
-    }
-}
+$ErrorActionPreference = 'Stop'
+$SCRIPT_VERSION = "v1.1.0"
 
-# --- Functions ---
+# --- Banner ---
 function Show-Banner {
     Write-Host ""
     Write-Host "=========================================================" -ForegroundColor Blue
-    Write-Host "      IOsonata SDK Cloning Utility for Windows 🪟" -ForegroundColor Cyan
+    Write-Host "     IOsonata SDK Cloning Utility for Windows" -ForegroundColor White
+    Write-Host "     Version: $SCRIPT_VERSION" -ForegroundColor White
     Write-Host "=========================================================" -ForegroundColor Blue
 }
 
+# --- Help Menu ---
 function Show-Help {
     Show-Banner
-    Write-Host "Usage: clone_iosonata_sdk_win.ps1 [--home <path>] [--mode <normal|force>] [--help]" -ForegroundColor White
+    Write-Host "Usage: .\clone_iosonata_sdk_windows.ps1 [options]" -ForegroundColor White
     Write-Host ""
-    Write-Host "Options:" -ForegroundColor Yellow
-    Write-Host "  --home <path>     Set custom root directory (default: $env:USERPROFILE\IOcomposer)"
-    Write-Host "  --mode <mode>     Clone mode: 'normal' (default) or 'force'"
-    Write-Host "  --help            Show this help message and exit"
+    Write-Host "Options:" -ForegroundColor White
+    Write-Host "  -Home <path>        Set custom root directory (default: ~\IOcomposer)"
+    Write-Host "  -Mode <mode>        Clone mode: 'normal' (default) or 'force'"
+    Write-Host "  -Eclipse            Configure Eclipse system properties"
+    Write-Host "  -Help               Show this help message and exit"
     Write-Host ""
-    Write-Host "Examples:" -ForegroundColor Yellow
-    Write-Host "  ./clone_iosonata_sdk_win.ps1"
-    Write-Host "  ./clone_iosonata_sdk_win.ps1 --home 'D:\Projects\IOcomposer'"
-    Write-Host "  ./clone_iosonata_sdk_win.ps1 --mode force"
+    Write-Host "Examples:" -ForegroundColor White
+    Write-Host "  .\clone_iosonata_sdk_windows.ps1                     # Clone into ~\IOcomposer"
+    Write-Host "  .\clone_iosonata_sdk_windows.ps1 -Home C:\Dev       # Custom directory"
+    Write-Host "  .\clone_iosonata_sdk_windows.ps1 -Mode force        # Force re-clone all repos"
+    Write-Host "  .\clone_iosonata_sdk_windows.ps1 -Eclipse           # Also configure Eclipse"
     Write-Host ""
-    Write-Host "Repositories cloned (during normal operation):"
-    Write-Host "  - IOsonata main repository"
-    Write-Host "  - Nordic Semiconductor nrfx"
-    Write-Host "  - nrfconnect SDKs (sdk-nrf-bm, sdk-nrfxlib)"
-    Write-Host "  - IOsonata nRF5 SDK & Mesh"
-    Write-Host "  - Bosch BSEC2 library"
+    Write-Host "Repositories cloned:" -ForegroundColor White
+    Write-Host "  • IOsonata main repository"
+    Write-Host "  • Nordic Semiconductor nrfx"
+    Write-Host "  • nrfconnect SDKs (sdk-nrf-bm, sdk-nrfxlib)"
+    Write-Host "  • IOsonata nRF5 SDK & Mesh"
+    Write-Host "  • Bosch BSEC2 library"
+    Write-Host "  • xioTechnologies Fusion"
+    Write-Host "  • LVGL graphics library"
+    Write-Host "  • lwIP TCP/IP stack"
+    Write-Host "  • FreeRTOS (with submodules)"
     Write-Host ""
-    exit
+    exit 0
 }
 
-if ($help) { Show-Help }
+if ($Help) { Show-Help }
 
-# --- Prepare directories safely ---
-if (!(Test-Path -LiteralPath $homePath)) {
-    New-Item -ItemType Directory -Force -Path $homePath | Out-Null
+# --- Prepare directories ---
+$ROOT = $Home
+if (-not (Test-Path $ROOT)) {
+    New-Item -Path $ROOT -ItemType Directory -Force | Out-Null
 }
-$homePath = (Resolve-Path -LiteralPath $homePath).Path
-$externalPath = Join-Path $homePath "external"
-if (!(Test-Path -LiteralPath $externalPath)) {
-    New-Item -ItemType Directory -Force -Path $externalPath | Out-Null
+$ROOT = (Resolve-Path $ROOT).Path
+$EXT = Join-Path $ROOT "external"
+if (-not (Test-Path $EXT)) {
+    New-Item -Path $EXT -ItemType Directory -Force | Out-Null
 }
 
 Show-Banner
-Write-Host "Root directory : $homePath" -ForegroundColor White
-Write-Host "Mode           : $mode" -ForegroundColor White
-Write-Host "External path  : $externalPath" -ForegroundColor White
+Write-Host "Root directory:       $ROOT" -ForegroundColor White
+Write-Host "Mode:                 $Mode" -ForegroundColor White
+Write-Host "External path:        $EXT" -ForegroundColor White
+Write-Host "Configure Eclipse:    $Eclipse" -ForegroundColor White
 Write-Host "---------------------------------------------------------" -ForegroundColor Blue
 Write-Host ""
 
 # --- Function: Clone or update repo ---
-function Clone-Or-UpdateRepo([string]$RepoUrl, [string]$TargetDir) {
-    if (Test-Path -LiteralPath $TargetDir) {
-        if ($mode -eq "force") {
-            Write-Host "  Re-cloning $TargetDir (force mode)..." -ForegroundColor Yellow
-            Remove-Item -Recurse -Force -LiteralPath $TargetDir
-            git clone --depth=1 "$RepoUrl" "$TargetDir"
+function Sync-Repository {
+    param(
+        [string]$Url,
+        [string]$Target,
+        [bool]$RecurseSubmodules = $false
+    )
+    
+    if (Test-Path $Target) {
+        if ($Mode -eq "force") {
+            Write-Host "⚠️  Re-cloning $Target ..." -ForegroundColor Yellow
+            Remove-Item -Path $Target -Recurse -Force
+            if ($RecurseSubmodules) {
+                git clone --depth=1 --recurse-submodules $Url $Target
+            } else {
+                git clone --depth=1 $Url $Target
+            }
         } else {
-            Write-Host " Updating $TargetDir..." -ForegroundColor Yellow
-            Push-Location -LiteralPath $TargetDir
-            git pull --rebase
-            Pop-Location
+            Write-Host "🔄 Updating $Target ..." -ForegroundColor Yellow
+            Push-Location $Target
+            try {
+                git pull --rebase
+                if ($RecurseSubmodules) {
+                    Write-Host "   ↳ Updating submodules..." -ForegroundColor Blue
+                    git submodule update --init --recursive
+                }
+            } finally {
+                Pop-Location
+            }
         }
     } else {
-        Write-Host "  Cloning $TargetDir..." -ForegroundColor Cyan
-        git clone --depth=1 "$RepoUrl" "$TargetDir"
+        Write-Host "⬇️  Cloning $Target ..." -ForegroundColor Blue
+        if ($RecurseSubmodules) {
+            git clone --depth=1 --recurse-submodules $Url $Target
+            Write-Host "   ✓ Submodules initialized" -ForegroundColor Green
+        } else {
+            git clone --depth=1 $Url $Target
+        }
     }
 }
 
 # ---------------------------------------------------------
 # Clone IOsonata
 # ---------------------------------------------------------
-Write-Host " Cloning IOsonata..." -ForegroundColor Green
-$IOsonataDir = Join-Path $homePath "IOsonata"
-Clone-Or-UpdateRepo "https://github.com/IOsonata/IOsonata.git" "$IOsonataDir"
+Write-Host "🚀 Cloning IOsonata..." -ForegroundColor Green
+Sync-Repository -Url "https://github.com/IOsonata/IOsonata.git" -Target "$ROOT\IOsonata"
 
 # ---------------------------------------------------------
 # Clone External Repos
 # ---------------------------------------------------------
 Write-Host ""
-Write-Host " Cloning dependencies into: $externalPath" -ForegroundColor Blue
+Write-Host "📦 Cloning dependencies into: $EXT" -ForegroundColor Blue
 Write-Host ""
 
-$Repos = @(
-    "https://github.com/NordicSemiconductor/nrfx.git",
-    "https://github.com/nrfconnect/sdk-nrf-bm.git",
-    "https://github.com/nrfconnect/sdk-nrfxlib.git",
-    "https://github.com/IOsonata/nRF5_SDK.git",
-    "https://github.com/IOsonata/nRF5_SDK_Mesh.git",
-    "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
-	"https://github.com/xioTechnologies/Fusion.git"
-    "https://github.com/lvgl/lvgl.git"
-)
-
-foreach ($Repo in $Repos) {
-    $Name = [System.IO.Path]::GetFileNameWithoutExtension($Repo)
-    if ($Name -eq "Bosch-BSEC2-Library") { $Name = "BSEC" }
-    $Target = Join-Path $externalPath $Name
-    Clone-Or-UpdateRepo "$Repo" "$Target"
+$repos = @{
+    "https://github.com/NordicSemiconductor/nrfx.git" = "nrfx"
+    "https://github.com/nrfconnect/sdk-nrf-bm.git" = "sdk-nrf-bm"
+    "https://github.com/nrfconnect/sdk-nrfxlib.git" = "sdk-nrfxlib"
+    "https://github.com/IOsonata/nRF5_SDK.git" = "nRF5_SDK"
+    "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "nRF5_SDK_Mesh"
+    "https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "BSEC"
+    "https://github.com/xioTechnologies/Fusion.git" = "Fusion"
+    "https://github.com/lvgl/lvgl.git" = "lvgl"
+    "https://github.com/lwip-tcpip/lwip.git" = "lwip"
 }
 
+foreach ($repo in $repos.GetEnumerator()) {
+    $target = Join-Path $EXT $repo.Value
+    Sync-Repository -Url $repo.Key -Target $target -RecurseSubmodules $false
+}
+
+# ---------------------------------------------------------
+# Clone FreeRTOS with submodules
+# ---------------------------------------------------------
 Write-Host ""
-Write-Host " All repositories cloned successfully!" -ForegroundColor Green
-Write-Host "SDK Root      : $homePath" -ForegroundColor White
-Write-Host "External Repos: $externalPath" -ForegroundColor White
+Write-Host "📦 Cloning FreeRTOS (with submodules)..." -ForegroundColor Blue
+Sync-Repository -Url "https://github.com/FreeRTOS/FreeRTOS.git" -Target "$EXT\FreeRTOS" -RecurseSubmodules $true
+
+Write-Host ""
+Write-Host "✅ All repositories cloned successfully!" -ForegroundColor Green
+
+# ---------------------------------------------------------
+# Configure Eclipse (if requested)
+# ---------------------------------------------------------
+if ($Eclipse) {
+    Write-Host ""
+    Write-Host "=========================================================" -ForegroundColor Blue
+    Write-Host "Configuring Eclipse System Properties" -ForegroundColor White
+    Write-Host "=========================================================" -ForegroundColor Blue
+    Write-Host ""
+    
+    $ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
+    $ECLIPSE_INI = Join-Path $ECLIPSE_DIR "eclipse.ini"
+    
+    if (-not (Test-Path $ECLIPSE_INI)) {
+        Write-Host "✗ Eclipse not found at: $ECLIPSE_DIR" -ForegroundColor Red
+        Write-Host "  Please install Eclipse first or skip Eclipse configuration." -ForegroundColor Yellow
+    } else {
+        Write-Host "✓ Eclipse found" -ForegroundColor Green
+        Write-Host ""
+        Write-Host ">>> Configuring IOsonata and IOcomposer system properties..."
+        
+        #$IOSONATA_PATH = Join-Path $ROOT "IOsonata"
+        
+        # Convert Windows paths to forward slashes for Java
+        #$IOSONATA_PATH_JAVA = $IOSONATA_PATH -replace '\\', '/'
+        $ROOT_JAVA = $ROOT -replace '\\', '/'
+        $IOSONATA_PATH_JAVA = $ROOT_JAVA
+
+        # Read eclipse.ini content
+        $iniContent = Get-Content $ECLIPSE_INI
+        
+        # Remove old properties if they exist
+        $iniContent = $iniContent | Where-Object { 
+            $_ -notmatch '^-Diosonata\.home=' -and 
+            $_ -notmatch '^-Diosonata_loc=' -and 
+            $_ -notmatch '^-Diocomposer_home=' 
+        }
+        
+        # Find -vmargs line index
+        $vmArgsIndex = -1
+        for ($i = 0; $i -lt $iniContent.Count; $i++) {
+            if ($iniContent[$i] -eq '-vmargs') {
+                $vmArgsIndex = $i
+                break
+            }
+        }
+        
+        if ($vmArgsIndex -ge 0) {
+            # Insert after -vmargs
+            $newContent = @()
+            $newContent += $iniContent[0..$vmArgsIndex]
+            $newContent += "-Diosonata_loc=$IOSONATA_PATH_JAVA"
+            $newContent += "-Diocomposer_home=$ROOT_JAVA"
+            if ($vmArgsIndex + 1 -lt $iniContent.Count) {
+                $newContent += $iniContent[($vmArgsIndex + 1)..($iniContent.Count - 1)]
+            }
+            $iniContent = $newContent
+        } else {
+            # No -vmargs section, add it at the end
+            $iniContent += "-vmargs"
+            $iniContent += "-Diosonata_loc=$IOSONATA_PATH_JAVA"
+            $iniContent += "-Diocomposer_home=$ROOT_JAVA"
+        }
+        
+        # Write back to eclipse.ini (requires admin if in Program Files)
+        try {
+            Set-Content -Path $ECLIPSE_INI -Value $iniContent
+            
+            Write-Host "✅ Eclipse system properties configured:" -ForegroundColor Green
+            Write-Host "   iosonata_loc = $IOSONATA_PATH_JAVA" -ForegroundColor White
+            Write-Host "   iocomposer_home = $ROOT_JAVA" -ForegroundColor White
+            Write-Host ""
+            Write-Host "ℹ️  Usage in CDT projects:" -ForegroundColor Yellow
+            Write-Host "   `${system_property:iosonata_loc}/include"
+            Write-Host "   `${system_property:iocomposer_home}/external/nrfx"
+            Write-Host ""
+            Write-Host "⚠️  Restart Eclipse for changes to take effect." -ForegroundColor Yellow
+        } catch {
+            Write-Host "✗ Failed to write eclipse.ini. Try running as Administrator." -ForegroundColor Red
+            Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+}
+
+# ---------------------------------------------------------
+# Summary
+# ---------------------------------------------------------
+Write-Host ""
+Write-Host "=========================================================" -ForegroundColor Blue
+Write-Host "Summary" -ForegroundColor White
+Write-Host "=========================================================" -ForegroundColor Blue
+Write-Host "IOsonata Root:        $ROOT" -ForegroundColor White
+Write-Host "IOsonata Framework:   $ROOT\IOsonata" -ForegroundColor White
+Write-Host "External Repos:       $EXT" -ForegroundColor White
+Write-Host ""
+Write-Host "Cloned repositories:" -ForegroundColor White
+Write-Host "  • IOsonata"
+Write-Host "  • nrfx"
+Write-Host "  • sdk-nrf-bm"
+Write-Host "  • sdk-nrfxlib"
+Write-Host "  • nRF5_SDK"
+Write-Host "  • nRF5_SDK_Mesh"
+Write-Host "  • BSEC"
+Write-Host "  • Fusion"
+Write-Host "  • lvgl"
+Write-Host "  • lwip"
+Write-Host "  • FreeRTOS " -NoNewline
+Write-Host "(with submodules)" -ForegroundColor Green
+Write-Host ""
+
+if ($Eclipse -and (Test-Path "$env:ProgramFiles\Eclipse Embedded CDT\eclipse.ini")) {
+    Write-Host "Eclipse Configuration:" -ForegroundColor White
+    Write-Host "  ✓ System properties configured"
+    Write-Host "  ✓ iosonata_loc = $ROOT\IOsonata"
+    Write-Host "  ✓ iocomposer_home = $ROOT"
+    Write-Host ""
+}
+
 Write-Host "---------------------------------------------------------" -ForegroundColor Blue
-Write-Host "Done. Happy building" -ForegroundColor Green
+Write-Host "Done. Happy building! 🔧" -ForegroundColor Green
 Write-Host ""

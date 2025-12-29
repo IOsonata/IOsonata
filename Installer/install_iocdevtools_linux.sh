@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.9"
+SCRIPT_VERSION="v1.0.10"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -376,6 +376,7 @@ clone_repos() {
     "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
     "https://github.com/xioTechnologies/Fusion.git"
     "https://github.com/lvgl/lvgl.git"
+    "https://github.com/lwip-tcpip/lwip.git"
   )
   for repo in "${repos[@]}"; do
     name=$(basename "$repo" .git)
@@ -387,6 +388,20 @@ clone_repos() {
       git clone --depth=1 "$repo" "$name"
     fi
   done
+  
+  # Clone FreeRTOS with submodules
+  echo ">>> Cloning FreeRTOS (with submodules)..."
+  if [[ -d "FreeRTOS" ]]; then
+    if [[ "$MODE" == "force" ]]; then
+      rm -rf "FreeRTOS"
+      git clone --depth=1 --recurse-submodules https://github.com/FreeRTOS/FreeRTOS.git FreeRTOS
+    else
+      (cd FreeRTOS && git pull && git submodule update --init --recursive)
+    fi
+  else
+    git clone --depth=1 --recurse-submodules https://github.com/FreeRTOS/FreeRTOS.git FreeRTOS
+    echo "✅ FreeRTOS submodules initialized"
+  fi
 }
 
 # ---------------------------------------------------------
@@ -438,9 +453,6 @@ display_report() {
   echo "  nRF5_SDK_Mesh    : $EXT/nRF5_SDK_Mesh"
   echo "  BSEC             : $EXT/BSEC"
   echo
-  echo "=============================================="
-  echo ">>> Installation complete. You can start Eclipse by running: eclipse"
-  echo "=============================================="
   echo "iosonata_loc is configured in Eclipse installation"
   echo
   echo "Usage in .cproject files:"
@@ -449,7 +461,8 @@ display_report() {
   echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
   echo
   echo "The variable is available in ALL workspaces."
-  echo "No macOS reboot required!"
+  echo "=============================================="
+  echo ">>> Installation complete. You can start Eclipse by running: eclipse"
   echo "=============================================="
 }
 

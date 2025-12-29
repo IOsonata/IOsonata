@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 
 # --- Script Configuration ---
 $SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.76-win" # Added iosonata_loc and iocomposer_home system properties
+$SCRIPT_VERSION = "v1.0.77-win" # Added lwip, sdk-nrf-bm, FreeRTOS with submodules
 
 # --- CLI Option Handling ---
 function Show-Help {
@@ -359,7 +359,7 @@ $ECLIPSE_INI = Join-Path $ECLIPSE_DIR "eclipse.ini"
 #$IOSONATA_PATH = Join-Path $ROOT "IOsonata"
 
 # Convert Windows paths to forward slashes for Java
-$IOSONATA_PATH_JAVA = $IOSONATA_PATH -replace '\\', '/'
+#$IOSONATA_PATH_JAVA = $IOSONATA_PATH -replace '\\', '/'
 $ROOT_JAVA = $ROOT -replace '\\', '/'
 $IOSONATA_PATH_JAVA = $ROOT_JAVA
 
@@ -411,28 +411,52 @@ Write-Host
 # Clone repos
 # ---------------------------------------------------------
 function Sync-Repo { 
-  param([string]$Url, [string]$Destination); 
+  param([string]$Url, [string]$Destination, [bool]$RecurseSubmodules = $false); 
   if (Test-Path $Destination) { 
     if ($MODE -eq 'force') { 
-      Write-Host "   - Force-updating repo..."; Remove-Item $Destination -Recurse -Force; git clone --depth=1 $Url $Destination 
+      Write-Host "   - Force-updating repo..."; Remove-Item $Destination -Recurse -Force
+      if ($RecurseSubmodules) {
+        git clone --depth=1 --recurse-submodules $Url $Destination
+      } else {
+        git clone --depth=1 $Url $Destination
+      }
     } else { 
-      Write-Host "   - Pulling latest changes..."; Push-Location $Destination; try { git pull } finally { Pop-Location } 
+      Write-Host "   - Pulling latest changes..."; Push-Location $Destination
+      try { 
+        git pull
+        if ($RecurseSubmodules) {
+          Write-Host "      - Updating submodules..."
+          git submodule update --init --recursive
+        }
+      } finally { Pop-Location } 
     } 
   } else { 
-    Write-Host "   - Cloning repo..."; git clone --depth=1 $Url $Destination 
+    Write-Host "   - Cloning repo..."
+    if ($RecurseSubmodules) {
+      git clone --depth=1 --recurse-submodules $Url $Destination
+      Write-Host "      ✓ Submodules initialized" -ForegroundColor Green
+    } else {
+      git clone --depth=1 $Url $Destination
+    }
   } 
 }
 Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"; $repos = @{ 
   "https://github.com/NordicSemiconductor/nrfx.git" = "$EXT\nrfx"; 
+  "https://github.com/nrfconnect/sdk-nrf-bm.git" = "$EXT\sdk-nrf-bm";
   "https://github.com/nrfconnect/sdk-nrfxlib.git" = "$EXT\sdk-nrfxlib"; 
   "https://github.com/IOsonata/nRF5_SDK.git" = "$EXT\nRF5_SDK"; 
   "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "$EXT\nRF5_SDK_Mesh"; 
   "https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "$EXT\BSEC"; 
   "https://github.com/xioTechnologies/Fusion.git" = "$EXT\Fusion";
-  "https://github.com/lvgl/lvgl.git" = "$EXT\lvgl"};
+  "https://github.com/lvgl/lvgl.git" = "$EXT\lvgl";
+  "https://github.com/lwip-tcpip/lwip.git" = "$EXT\lwip"};
   foreach ($repo in $repos.GetEnumerator()) { 
     Sync-Repo $repo.Name $repo.Value 
   }
+
+# Clone FreeRTOS with submodules
+Write-Host ">>> Cloning FreeRTOS (with submodules)..." -ForegroundColor Cyan
+Sync-Repo "https://github.com/FreeRTOS/FreeRTOS.git" "$EXT\FreeRTOS" $true
 
 
 # ---------------------------------------------------------
