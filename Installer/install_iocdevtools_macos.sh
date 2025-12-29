@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.61"
+SCRIPT_VERSION="v1.0.68"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -331,6 +331,34 @@ EOF"
 
 echo "✅ Eclipse preferences seeded (ARM, RISC-V, OpenOCD, macros)."
 
+# ---------------------------------------------------------
+# Configure iosonata_loc as Java System Property
+# ---------------------------------------------------------
+echo
+echo ">>> Configuring iosonata_loc as Java system property in eclipse.ini..."
+
+ECLIPSE_INI="$ECLIPSE_APP/Contents/Eclipse/eclipse.ini"
+
+# Remove old iosonata_loc system property if exists
+sudo sed -i.bak '/^-Diosonata_loc=/d' "$ECLIPSE_INI"
+
+# Find the -vmargs line and insert after it
+# If no -vmargs, create it first
+if grep -q "^-vmargs" "$ECLIPSE_INI"; then
+    # Insert after -vmargs line
+    sudo sed -i '' '/^-vmargs$/a\
+-Diosonata_loc='"$ROOT"'
+' "$ECLIPSE_INI"
+else
+    # No -vmargs section, add it at the end with our property
+    echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+    echo "-Diosonata_loc=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+fi
+
+echo "✅ iosonata_loc system property configured in eclipse.ini"
+echo "   Value: $ROOT"
+echo
+
 # Step 1: Ensure Eclipse has initialized its instance folder
 if [ -d "$ECLIPSE_APP" ]; then
   echo "⏳ Initializing Eclipse to create instance configuration..."
@@ -435,8 +463,20 @@ printf "%-25s %s\n" "Eclipse Embedded CDT:" "$ECLIPSE_VER"
 printf "%-25s %s\n" "ARM GCC:" "$ARM_VER"
 printf "%-25s %s\n" "RISC-V GCC:" "$RISCV_VER"
 printf "%-25s %s\n" "OpenOCD:" "$OPENOCD_VER"
+echo ""
+printf "%-25s %s\n" "iosonata_loc:" "$ROOT"
 
 echo "=============================================="
 echo " Installation complete!"
 echo "=============================================="
+echo
+echo "✅ iosonata_loc is configured in Eclipse installation"
+echo
+echo "Usage in .cproject files:"
+echo "  \${system_property:iosonata_loc}/IOsonata/include"
+echo "  \${system_property:iosonata_loc}/IOsonata/ARM/include"
+echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
+echo
+echo "=============================================="
+echo
 
