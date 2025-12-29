@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.68"
+SCRIPT_VERSION="v1.0.69"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -332,15 +332,17 @@ EOF"
 echo "✅ Eclipse preferences seeded (ARM, RISC-V, OpenOCD, macros)."
 
 # ---------------------------------------------------------
-# Configure iosonata_loc as Java System Property
+# Configure iosonata_loc and iocomposer_home as Java System Properties
 # ---------------------------------------------------------
 echo
-echo ">>> Configuring iosonata_loc as Java system property in eclipse.ini..."
+echo ">>> Configuring IOsonata and IOcomposer system properties in eclipse.ini..."
 
 ECLIPSE_INI="$ECLIPSE_APP/Contents/Eclipse/eclipse.ini"
 
-# Remove old iosonata_loc system property if exists
-sudo sed -i.bak '/^-Diosonata_loc=/d' "$ECLIPSE_INI"
+# Remove old properties if they exist
+sudo sed -i.bak '/^-Diosonata\.home=/d' "$ECLIPSE_INI"
+sudo sed -i '' '/^-Diosonata_loc=/d' "$ECLIPSE_INI"
+sudo sed -i '' '/^-Diocomposer_home=/d' "$ECLIPSE_INI"
 
 # Find the -vmargs line and insert after it
 # If no -vmargs, create it first
@@ -349,14 +351,19 @@ if grep -q "^-vmargs" "$ECLIPSE_INI"; then
     sudo sed -i '' '/^-vmargs$/a\
 -Diosonata_loc='"$ROOT"'
 ' "$ECLIPSE_INI"
+    sudo sed -i '' '/^-Diosonata_loc=/a\
+-Diocomposer_home='"$ROOT"'
+' "$ECLIPSE_INI"
 else
-    # No -vmargs section, add it at the end with our property
+    # No -vmargs section, add it at the end with our properties
     echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
     echo "-Diosonata_loc=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+    echo "-Diocomposer_home=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
 fi
 
-echo "✅ iosonata_loc system property configured in eclipse.ini"
-echo "   Value: $ROOT"
+echo "✅ System properties configured in eclipse.ini:"
+echo "   iosonata_loc=$ROOT"
+echo "   iocomposer_home=$ROOT"
 echo
 
 # Step 1: Ensure Eclipse has initialized its instance folder
@@ -464,6 +471,7 @@ printf "%-25s %s\n" "ARM GCC:" "$ARM_VER"
 printf "%-25s %s\n" "RISC-V GCC:" "$RISCV_VER"
 printf "%-25s %s\n" "OpenOCD:" "$OPENOCD_VER"
 echo ""
+printf "%-25s %s\n" "iocomposer_home:" "$ROOT"
 printf "%-25s %s\n" "iosonata_loc:" "$ROOT"
 
 echo "=============================================="
@@ -477,6 +485,8 @@ echo "  \${system_property:iosonata_loc}/IOsonata/include"
 echo "  \${system_property:iosonata_loc}/IOsonata/ARM/include"
 echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
 echo
+echo "The variable is available in ALL workspaces."
+echo "No macOS reboot required!"
 echo "=============================================="
 echo
 

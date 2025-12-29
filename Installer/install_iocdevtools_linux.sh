@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.8"
+SCRIPT_VERSION="v1.0.9"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -278,6 +278,41 @@ EOF
 
 echo "Eclipse preferences seeded (ARM, RISC-V, OpenOCD, macros)."
 
+# ---------------------------------------------------------
+# Configure eclipse.ini with System Properties
+# ---------------------------------------------------------
+echo
+echo ">>> Configuring IOsonata and IOcomposer system properties in eclipse.ini..."
+
+ECLIPSE_INI="$ECLIPSE_DIR/eclipse.ini"
+
+# Remove old properties if they exist
+sudo sed -i.bak '/^-Diosonata\.home=/d' "$ECLIPSE_INI" 2>/dev/null || true
+sudo sed -i '' '/^-Diosonata_loc=/d' "$ECLIPSE_INI" 2>/dev/null || true
+sudo sed -i '' '/^-Diocomposer_home=/d' "$ECLIPSE_INI" 2>/dev/null || true
+
+# Find the -vmargs line and insert after it
+# If no -vmargs, create it first
+if grep -q "^-vmargs" "$ECLIPSE_INI"; then
+    # Insert after -vmargs line
+    sudo sed -i '' '/^-vmargs$/a\
+-Diosonata_loc='"$ROOT"'
+' "$ECLIPSE_INI"
+    sudo sed -i '' '/^-Diosonata_loc=/a\
+-Diocomposer_home='"$ROOT"'
+' "$ECLIPSE_INI"
+else
+    # No -vmargs section, add it at the end with our properties
+    echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+    echo "-Diosonata_loc=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+    echo "-Diocomposer_home=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+fi
+
+echo "✅ System properties configured in eclipse.ini:"
+echo "   iosonata_loc=$ROOT"
+echo "   iocomposer_home=$ROOT"
+echo
+
 # Step 1: Ensure Eclipse has initialized its instance folder
 if [ -d "$ECLIPSE_DIR" ]; then
   echo "Initializing Eclipse to create instance configuration..."
@@ -405,6 +440,16 @@ display_report() {
   echo
   echo "=============================================="
   echo ">>> Installation complete. You can start Eclipse by running: eclipse"
+  echo "=============================================="
+  echo "iosonata_loc is configured in Eclipse installation"
+  echo
+  echo "Usage in .cproject files:"
+  echo "  \${system_property:iosonata_loc}/IOsonata/include"
+  echo "  \${system_property:iosonata_loc}/IOsonata/ARM/include"
+  echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
+  echo
+  echo "The variable is available in ALL workspaces."
+  echo "No macOS reboot required!"
   echo "=============================================="
 }
 

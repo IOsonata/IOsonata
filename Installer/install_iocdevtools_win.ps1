@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 
 # --- Script Configuration ---
 $SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.75-win" # Perf: Use 7-Zip for faster Eclipse extraction
+$SCRIPT_VERSION = "v1.0.76-win" # Added iosonata_loc and iocomposer_home system properties
 
 # --- CLI Option Handling ---
 function Show-Help {
@@ -348,6 +348,64 @@ Set-Content -Path "$ECLIPSE_SETTINGS\org.eclipse.embedcdt.debug.gdbjtag.openocd.
 $BuildToolsBinPath = Join-Path $BUILDTOOLS_DIR "bin"; $BuildToolsPrefsPath = $BuildToolsBinPath.Replace('\', '\\'); Set-Content -Path "$ECLIPSE_SETTINGS\org.eclipse.embedcdt.managedbuild.cross.core.prefs" -Value "buildTools.path=$BuildToolsPrefsPath`neclipse.preferences.version=1"
 Set-Content -Path "$ECLIPSE_SETTINGS\org.eclipse.core.runtime.prefs" -Value "eclipse.preferences.version=1`nenvironment/project/IOCOMPOSER_HOME/value=$ROOT_ECLIPSE`nenvironment/project/ARM_GCC_HOME/value=$ARM_DIR_ECLIPSE/bin`nenvironment/project/RISCV_GCC_HOME/value=$RISCV_DIR_ECLIPSE/bin`nenvironment/project/OPENOCD_HOME/value=$OPENOCD_DIR_ECLIPSE/bin`nenvironment/project/NRFX_HOME/value=$EXT_ECLIPSE/nrfx`nenvironment/project/NRFXLIB_HOME/value=$EXT_ECLIPSE/sdk-nrfxlib`nenvironment/project/NRF5_SDK_HOME/value=$EXT_ECLIPSE/nRF5_SDK`nenvironment/project/NRF5_SDK_MESH_HOME/value=$EXT_ECLIPSE/nRF5_SDK_Mesh`nenvironment/project/BSEC_HOME/value=$EXT_ECLIPSE/BSEC"
 Write-Host "[OK] Eclipse preferences seeded (Build Tools, ARM, RISC-V, OpenOCD, macros)." -ForegroundColor Green
+
+# ---------------------------------------------------------
+# Configure eclipse.ini with System Properties
+# ---------------------------------------------------------
+Write-Host
+Write-Host ">>> Configuring IOsonata and IOcomposer system properties in eclipse.ini..." -ForegroundColor Cyan
+
+$ECLIPSE_INI = Join-Path $ECLIPSE_DIR "eclipse.ini"
+#$IOSONATA_PATH = Join-Path $ROOT "IOsonata"
+
+# Convert Windows paths to forward slashes for Java
+$IOSONATA_PATH_JAVA = $IOSONATA_PATH -replace '\\', '/'
+$ROOT_JAVA = $ROOT -replace '\\', '/'
+$IOSONATA_PATH_JAVA = $ROOT_JAVA
+
+# Read eclipse.ini content
+$iniContent = Get-Content $ECLIPSE_INI
+
+# Remove old properties if they exist
+$iniContent = $iniContent | Where-Object { 
+    $_ -notmatch '^-Diosonata\.home=' -and 
+    $_ -notmatch '^-Diosonata_loc=' -and 
+    $_ -notmatch '^-Diocomposer_home=' 
+}
+
+# Find -vmargs line index
+$vmArgsIndex = -1
+for ($i = 0; $i -lt $iniContent.Count; $i++) {
+    if ($iniContent[$i] -eq '-vmargs') {
+        $vmArgsIndex = $i
+        break
+    }
+}
+
+if ($vmArgsIndex -ge 0) {
+    # Insert after -vmargs
+    $newContent = @()
+    $newContent += $iniContent[0..$vmArgsIndex]
+    $newContent += "-Diosonata_loc=$IOSONATA_PATH_JAVA"
+    $newContent += "-Diocomposer_home=$ROOT_JAVA"
+    if ($vmArgsIndex + 1 -lt $iniContent.Count) {
+        $newContent += $iniContent[($vmArgsIndex + 1)..($iniContent.Count - 1)]
+    }
+    $iniContent = $newContent
+} else {
+    # No -vmargs section, add it at the end
+    $iniContent += "-vmargs"
+    $iniContent += "-Diosonata_loc=$IOSONATA_PATH_JAVA"
+    $iniContent += "-Diocomposer_home=$ROOT_JAVA"
+}
+
+# Write back to eclipse.ini
+Set-Content -Path $ECLIPSE_INI -Value $iniContent
+
+Write-Host "[OK] System properties configured in eclipse.ini:" -ForegroundColor Green
+Write-Host "   iosonata_loc=$IOSONATA_PATH_JAVA" -ForegroundColor Green
+Write-Host "   iocomposer_home=$ROOT_JAVA" -ForegroundColor Green
+Write-Host
 
 # ---------------------------------------------------------
 # Clone repos
