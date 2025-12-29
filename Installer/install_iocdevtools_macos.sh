@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.70"
+SCRIPT_VERSION="v1.0.71"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -496,7 +496,12 @@ OPENOCD = $OPENOCD_DIR/bin/openocd
 # ============================================
 # IOsonata Paths
 # ============================================
-IOSONATA_ROOT = $ROOT/IOsonata
+# IOCOMPOSER_HOME must be set to your IOcomposer root directory
+ifndef IOCOMPOSER_HOME
+\$(error IOCOMPOSER_HOME is not set. Please set it to your IOcomposer root directory)
+endif
+
+IOSONATA_ROOT = \$(IOCOMPOSER_HOME)/IOsonata
 IOSONATA_INCLUDE = \$(IOSONATA_ROOT)/include
 IOSONATA_SRC = \$(IOSONATA_ROOT)/src
 
@@ -533,14 +538,17 @@ RISCV_RENESAS = \$(RISCV_ROOT)/Renesas
 # ============================================
 # External Libraries
 # ============================================
-EXTERNAL_ROOT = $EXT
+EXTERNAL_ROOT = \$(IOCOMPOSER_HOME)/external
 NRFX_ROOT = \$(EXTERNAL_ROOT)/nrfx
+SDK_NRF_BM_ROOT = \$(EXTERNAL_ROOT)/sdk-nrf-bm
 SDK_NRFXLIB_ROOT = \$(EXTERNAL_ROOT)/sdk-nrfxlib
 NRF5_SDK_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK
 NRF5_SDK_MESH_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK_Mesh
 BSEC_ROOT = \$(EXTERNAL_ROOT)/BSEC
 FUSION_ROOT = \$(EXTERNAL_ROOT)/Fusion
 LVGL_ROOT = \$(EXTERNAL_ROOT)/lvgl
+LWIP_ROOT = \$(EXTERNAL_ROOT)/lwip
+FREERTOS_ROOT = \$(EXTERNAL_ROOT)/FreeRTOS
 
 # ============================================
 # Additional IOsonata Modules
@@ -574,7 +582,6 @@ RISCV_INCLUDES = -I\$(RISCV_INCLUDE)
 # ============================================
 # Environment Variables (optional)
 # ============================================
-export IOCOMPOSER_HOME := $ROOT
 export ARM_GCC_HOME := $ARM_DIR/bin
 export RISCV_GCC_HOME := $RISCV_DIR/bin
 export OPENOCD_HOME := $OPENOCD_DIR/bin
