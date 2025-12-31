@@ -1256,6 +1256,16 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAxes.h</locationURI>
 		</link>
 		<link>
+			<name>src/Fusion/FusionBias.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.c</locationURI>
+		</link>
+		<link>
+			<name>src/Fusion/FusionBias.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.h</locationURI>
+		</link>
+		<link>
 			<name>src/Fusion/FusionCalibration.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCalibration.h</locationURI>
@@ -1279,16 +1289,6 @@
 			<name>src/Fusion/FusionMath.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionMath.h</locationURI>
-		</link>
-		<link>
-			<name>src/Fusion/FusionOffset.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionOffset.c</locationURI>
-		</link>
-		<link>
-			<name>src/Fusion/FusionOffset.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionOffset.h</locationURI>
 		</link>
 		<link>
 			<name>src/Invn/Devices</name>
