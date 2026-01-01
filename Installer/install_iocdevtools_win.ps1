@@ -342,7 +342,7 @@ $ARM_HASH = [long](Java-Hash "xPack GNU Arm Embedded GCC"); if ($ARM_HASH -lt 0)
 $RISCV_HASH = [long](Java-Hash "xPack GNU RISC-V Embedded GCC"); if ($RISCV_HASH -lt 0) { $RISCV_HASH += 4294967296 }; $RISCV_HASH += 1
 $ARM_DIR_ECLIPSE = $ARM_DIR -replace '\\', '/'; $RISCV_DIR_ECLIPSE = $RISCV_DIR -replace '\\', '/'; $OPENOCD_DIR_ECLIPSE = $OPENOCD_DIR -replace '\\', '/'; $ROOT_ECLIPSE = $ROOT -replace '\\', '/'; $EXT_ECLIPSE = $EXT -replace '\\', '/'
 Set-Content -Path "$ECLIPSE_SETTINGS\org.eclipse.embedcdt.core.prefs" -Value "eclipse.preferences.version=1`nxpack.arm.toolchain.path=$ARM_DIR_ECLIPSE/bin`nxpack.riscv.toolchain.path=$RISCV_DIR_ECLIPSE/bin`nxpack.openocd.path=$OPENOCD_DIR_ECLIPSE/bin`nxpack.strict=true"
-Set-Content -Path "$ECLIPSE_SETTINGS\org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" -Value "toolchain.path.$ARM_HASH=$ARM_DIR_ECLIPSE/bin`ntoolchain.path.strict=true"
+Set-Content -Path "$ECLIPSE_SETTINGS\org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" -Value "toolchain.path.$ARM_HASH=$ARM_DIR_ECLIPSE/bin`toolchain.path.1287942917=$ARM_DIR/bin`ntoolchain.path.strict=true"
 Set-Content -Path "$ECLIPSE_SETTINGS\org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" -Value "toolchain.path.$RISCV_HASH=$RISCV_DIR_ECLIPSE/bin`ntoolchain.path.strict=true"
 Set-Content -Path "$ECLIPSE_SETTINGS\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" -Value "install.folder=$OPENOCD_DIR_ECLIPSE/bin`ninstall.folder.strict=true"
 $BuildToolsBinPath = Join-Path $BUILDTOOLS_DIR "bin"; $BuildToolsPrefsPath = $BuildToolsBinPath.Replace('\', '\\'); Set-Content -Path "$ECLIPSE_SETTINGS\org.eclipse.embedcdt.managedbuild.cross.core.prefs" -Value "buildTools.path=$BuildToolsPrefsPath`neclipse.preferences.version=1"

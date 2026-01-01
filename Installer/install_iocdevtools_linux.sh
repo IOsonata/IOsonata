@@ -242,6 +242,7 @@ configure_eclipse_prefs() {
   sudo tee "$prefs_root/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" >/dev/null <<EOF
 eclipse.preferences.version=1
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
+toolchain.path.1287942917=$ARM_DIR/bin
 EOF
 
   # RISC-V toolchain

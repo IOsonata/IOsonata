@@ -385,6 +385,7 @@ else
   
   cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
+toolchain.path.1287942917=$ARM_DIR/bin
 toolchain.path.strict=true
 EOF
 
