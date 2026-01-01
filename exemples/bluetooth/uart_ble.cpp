@@ -43,7 +43,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
-//#include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
@@ -56,16 +55,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define PACKET_SIZE						20
 
-#define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
+#define MANUFACTURER_NAME               "I-SYST inc."
+#define MODEL_NAME                      "Generic"
 
-#ifdef NRF52
-#define MODEL_NAME                      "IMM-NRF52x"                        /**< Model number. Will be passed to Device Information Service. */
-#else
-#define MODEL_NAME                      "IMM-NRF51x"                        /**< Model number. Will be passed to Device Information Service. */
-#endif
-
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                  /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                  /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID
+#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID
 
 #define APP_ADV_INTERVAL                64	// in msec
 
@@ -74,29 +68,17 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MIN_CONN_INTERVAL               10	// in msec
 #define MAX_CONN_INTERVAL               40	// in msec
 
-#ifdef NORDIC_NUS_SERVICE
-#define BLE_UART_UUID_BASE			NUS_BASE_UUID
-
-#define BLE_UART_UUID_SERVICE		BLE_UUID_NUS_SERVICE			/**< The UUID of the Nordic UART Service. */
-#define BLE_UART_UUID_TX_CHAR		BLE_UUID_NUS_RX_CHARACTERISTIC	/**< The UUID of the TX Characteristic. */
-#define BLE_UART_UUID_RX_CHAR		BLE_UUID_NUS_TX_CHARACTERISTIC	/**< The UUID of the RX Characteristic. */
-#elif defined(HM_10)
-// 0000FFE0-0000-1000-8000-00805F9B34FB
-#define BLE_UART_UUID_BASE			{ 0xFB, 0x34, 0x9B, 0x5F, 0x80, 0x00, 0x00, 0x80, \
-									  0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
-
-#define BLE_UART_UUID_SERVICE		0xFFE0					//!< HM-10 custom service
-#define BLE_UART_UUID_RX_CHAR		0xFFE1					//!< HM-10 custom characteristic
-#else
 #define BLE_UART_UUID_BASE			BLUEIO_UUID_BASE
 
 #define BLE_UART_UUID_SERVICE		BLUEIO_UUID_UART_SERVICE		//!< BlueIO default service
 #define BLE_UART_UUID_TX_CHAR		BLUEIO_UUID_UART_TX_CHAR		//!< Data characteristic
 #define BLE_UART_UUID_RX_CHAR		BLUEIO_UUID_UART_RX_CHAR		//!< Command control characteristic
-#endif
 
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
-size_t UartTxCharWrHandler(uint16_t Hdl, void *pBuff, size_t Len, void *pCtx);
+
+#ifdef MCU_OSC
+McuOsc_t g_McuOsc = MCU_OSC;
+#endif
 
 static const BtUuidArr_t s_AdvUuid = {
 	.BaseIdx = 1,
@@ -131,9 +113,6 @@ BtGattChar_t g_UartChars[] = {
 		.TxCompleteCB = NULL,				// Tx completed callback
 		.pValue = s_RxCharValMem,
 		.ValueLen = 0,						// Default value length in bytes
-		//.RdHandler = NULL,
-		//.WrHandler = NULL,
-		//.CharVal = {PACKET_SIZE, 0, s_RxCharValMem},					// pointer to char default values
 	},
 	{
 		// Write characteristic
@@ -144,9 +123,6 @@ BtGattChar_t g_UartChars[] = {
 		.WrCB = UartTxSrvcCallback,			// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		//.RdHandler = NULL,
-		//.WrHandler = UartTxCharWrHandler,
-		//.CharVal = {PACKET_SIZE, 0, s_TxCharValMem},					// pointer to char default values
 	},
 };
 
@@ -159,7 +135,6 @@ const BtGattSrvcCfg_t s_UartSrvcCfg = {
 	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = true,
 	.UuidBase = BLE_UART_UUID_BASE,		// Base UUID
-//	1,
 	.UuidSrvc = BLE_UART_UUID_SERVICE,		// Service UUID
 	.NbChar = s_BleUartNbChar,				// Total number of characteristics for the service
 	.pCharArray = g_UartChars,				// Pointer a an array of characteristic
@@ -198,7 +173,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
 	.bCompleteUuidList = false,
 	.pAdvUuid = &s_AdvUuid,      			// Service uuids to advertise
-	//.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(BleUuid_t), 					// Total number of uuids
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
 	.AdvTimeout = APP_ADV_TIMEOUT,		// Advertising timeout in sec
 	.AdvSlowInterval = 0,				// Slow advertising interval, if > 0, fallback to
@@ -211,7 +185,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	.SDEvtHandler = NULL				// RTOS Softdevice handler
 };
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
 
@@ -238,7 +212,7 @@ const UARTCfg_t g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
 	.bIntMode = true,					// Interrupt mode
 	.IntPrio = APP_IRQ_PRIORITY_LOW,	// Interrupt priority
-	.EvtCallback = nRFUartEvthandler,	// UART event handler
+	.EvtCallback = UartEvthandler,	// UART event handler
 	.bFifoBlocking = true,				// Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
@@ -266,13 +240,6 @@ static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
 
 int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
-
-size_t UartTxCharWrHandler(uint16_t Hdl, void *pBuff, size_t Len, void *pCtx)
-{
-	g_Uart.printf("UartTxCharWrHandler %x %p %d\r\n", Hdl, pBuff, Len);
-
-	return Len;
-}
 
 
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
@@ -376,7 +343,7 @@ uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_
 }
 #endif
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];

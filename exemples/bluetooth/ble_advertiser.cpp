@@ -52,10 +52,10 @@ SOFTWARE.
 
 // Uncomment this to set custom board oscillator
 // Default library setting is :
-// #define MCUOSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
+// #define MCU_OSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
 
-#ifdef MCUOSC
-McuOsc_t g_McuOsc = MCUOSC;
+#ifdef MCU_OSC
+McuOsc_t g_McuOsc = MCU_OSC;
 #endif
 
 static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;

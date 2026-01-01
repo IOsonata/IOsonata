@@ -41,6 +41,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blueio_board.h"
 
+// Uncomment this to set custom board oscillator
+// Default library setting is :
+// #define MCU_OSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
+
 //#define NORDIC_DK
 
 #ifdef NORDIC_DK
