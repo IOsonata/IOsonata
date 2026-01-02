@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 
 # --- Script Configuration ---
 $SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.80-win" # Added TinyUSB
+$SCRIPT_VERSION = "v1.0.81-win" # Added IOsonata plugin installation
 
 # --- CLI Option Handling ---
 function Show-Help {
@@ -408,6 +408,59 @@ Write-Host "   iocomposer_home=$ROOT_JAVA" -ForegroundColor Green
 Write-Host
 
 # ---------------------------------------------------------
+# Install IOsonata Eclipse Plugin
+# ---------------------------------------------------------
+function Install-IosonataPlugin {
+    Write-Host ">>> Installing IOsonata Eclipse Plugin..." -ForegroundColor Cyan
+    
+    $pluginDir = "$ROOT\IOsonata\Installer\eclipse_plugin"
+    $dropinsDir = "$ECLIPSE_DIR\dropins"
+    
+    # Check if plugin directory exists
+    if (-not (Test-Path $pluginDir)) {
+        Write-Host "[WARN] Plugin directory not found at $pluginDir" -ForegroundColor Yellow
+        Write-Host "       Skipping plugin installation."
+        return
+    }
+    
+    # Find the latest plugin jar file
+    $pluginFiles = Get-ChildItem -Path $pluginDir -Filter "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue
+    
+    if (-not $pluginFiles -or $pluginFiles.Count -eq 0) {
+        Write-Host "[WARN] No IOsonata plugin jar file found in $pluginDir" -ForegroundColor Yellow
+        Write-Host "       Skipping plugin installation."
+        return
+    }
+    
+    # Sort by version and get the latest
+    $latestPlugin = $pluginFiles | Sort-Object Name -Descending | Select-Object -First 1
+    
+    Write-Host "   -> Found plugin: $($latestPlugin.Name)" -ForegroundColor Green
+    
+    # Create dropins directory if it doesn't exist
+    if (-not (Test-Path $dropinsDir)) {
+        New-Item -Path $dropinsDir -ItemType Directory -Force | Out-Null
+    }
+    
+    # Remove old versions of the plugin
+    $oldPlugins = Get-ChildItem -Path $dropinsDir -Filter "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue
+    
+    if ($oldPlugins) {
+        Write-Host "   -> Removing old plugin versions..." -ForegroundColor Yellow
+        foreach ($oldPlugin in $oldPlugins) {
+            Write-Host "      - Removing: $($oldPlugin.Name)"
+            Remove-Item -Path $oldPlugin.FullName -Force
+        }
+    }
+    
+    # Copy the latest plugin to dropins
+    Write-Host "   -> Installing plugin to $dropinsDir" -ForegroundColor Cyan
+    Copy-Item -Path $latestPlugin.FullName -Destination $dropinsDir -Force
+    
+    Write-Host "[OK] IOsonata Eclipse Plugin installed: $($latestPlugin.Name)" -ForegroundColor Green
+}
+
+# ---------------------------------------------------------
 # Clone repos
 # ---------------------------------------------------------
 function Sync-Repo { 
@@ -610,6 +663,13 @@ Set-Content -Path $MAKEFILE_PATH_MK -Value $makefileContent
 Write-Host "[OK] makefile_path.mk created at: $MAKEFILE_PATH_MK" -ForegroundColor Green
 Write-Host "   Projects can include it with: include `$(IOSONATA_ROOT)/makefile_path.mk"
 Write-Host ""
+
+# ---------------------------------------------------------
+# Install IOsonata Eclipse Plugin
+# ---------------------------------------------------------
+Write-Host
+Install-IosonataPlugin
+Write-Host
 
 # ---------------------------------------------------------
 # Summary

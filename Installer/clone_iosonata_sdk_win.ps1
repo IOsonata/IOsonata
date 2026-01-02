@@ -15,7 +15,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v1.2.1"
+$SCRIPT_VERSION = "v1.2.2"
 
 # --- Banner ---
 function Show-Banner {
@@ -283,6 +283,62 @@ Write-Host "   Make sure to set IOCOMPOSER_HOME=$ROOT_UNIX in your environment o
 Write-Host ""
 
 # ---------------------------------------------------------
+# Install IOsonata Eclipse Plugin (helper function)
+# ---------------------------------------------------------
+function Install-IosonataPlugin {
+    param([string]$EclipseDir)
+    
+    Write-Host ""
+    Write-Host ">>> Installing IOsonata Eclipse Plugin..." -ForegroundColor Cyan
+    
+    $pluginDir = "$ROOT\IOsonata\Installer\eclipse_plugin"
+    $dropinsDir = "$EclipseDir\dropins"
+    
+    # Check if plugin directory exists
+    if (-not (Test-Path $pluginDir)) {
+        Write-Host "⚠️  Plugin directory not found at $pluginDir" -ForegroundColor Yellow
+        Write-Host "    Skipping plugin installation."
+        return
+    }
+    
+    # Find the latest plugin jar file
+    $pluginFiles = Get-ChildItem -Path $pluginDir -Filter "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue
+    
+    if (-not $pluginFiles -or $pluginFiles.Count -eq 0) {
+        Write-Host "⚠️  No IOsonata plugin jar file found in $pluginDir" -ForegroundColor Yellow
+        Write-Host "    Skipping plugin installation."
+        return
+    }
+    
+    # Sort by version and get the latest
+    $latestPlugin = $pluginFiles | Sort-Object Name -Descending | Select-Object -First 1
+    
+    Write-Host "   → Found plugin: $($latestPlugin.Name)" -ForegroundColor Green
+    
+    # Create dropins directory if it doesn't exist
+    if (-not (Test-Path $dropinsDir)) {
+        New-Item -Path $dropinsDir -ItemType Directory -Force | Out-Null
+    }
+    
+    # Remove old versions of the plugin
+    $oldPlugins = Get-ChildItem -Path $dropinsDir -Filter "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue
+    
+    if ($oldPlugins) {
+        Write-Host "   → Removing old plugin versions..." -ForegroundColor Yellow
+        foreach ($oldPlugin in $oldPlugins) {
+            Write-Host "      - Removing: $($oldPlugin.Name)"
+            Remove-Item -Path $oldPlugin.FullName -Force
+        }
+    }
+    
+    # Copy the latest plugin to dropins
+    Write-Host "   → Installing plugin to $dropinsDir" -ForegroundColor Cyan
+    Copy-Item -Path $latestPlugin.FullName -Destination $dropinsDir -Force
+    
+    Write-Host "✅ IOsonata Eclipse Plugin installed: $($latestPlugin.Name)" -ForegroundColor Green
+}
+
+# ---------------------------------------------------------
 # Configure Eclipse (if requested)
 # ---------------------------------------------------------
 if ($Eclipse) {
@@ -358,6 +414,11 @@ if ($Eclipse) {
             Write-Host "   `${system_property:iosonata_loc}/include"
             Write-Host "   `${system_property:iocomposer_home}/external/nrfx"
             Write-Host ""
+            
+            # Install Eclipse plugin
+            Install-IosonataPlugin -EclipseDir $ECLIPSE_DIR
+            Write-Host ""
+            
             Write-Host "⚠️  Restart Eclipse for changes to take effect." -ForegroundColor Yellow
         } catch {
             Write-Host "✗ Failed to write eclipse.ini. Try running as Administrator." -ForegroundColor Red

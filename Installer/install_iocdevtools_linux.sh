@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.13"
+SCRIPT_VERSION="v1.0.14"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -222,6 +222,61 @@ install_eclipse_embedded() {
 }
 
 # ---------------------------------------------------------
+# Install IOsonata Eclipse Plugin
+# ---------------------------------------------------------
+install_iosonata_plugin() {
+  echo ">>> Installing IOsonata Eclipse Plugin..."
+  
+  local plugin_dir="$ROOT/IOsonata/Installer/eclipse_plugin"
+  local dropins_dir="$ECLIPSE_DIR/dropins"
+  
+  # Check if plugin directory exists
+  if [[ ! -d "$plugin_dir" ]]; then
+    echo "!!! WARNING: Plugin directory not found at $plugin_dir"
+    echo "    Skipping plugin installation."
+    return
+  fi
+  
+  # Find the latest plugin jar file
+  local latest_plugin
+  latest_plugin=$(ls -1 "$plugin_dir"/org.iosonata.embedcdt.templates.firmware_*.jar 2>/dev/null | sort -V | tail -n1)
+  
+  if [[ -z "$latest_plugin" ]]; then
+    echo "!!! WARNING: No IOsonata plugin jar file found in $plugin_dir"
+    echo "    Skipping plugin installation."
+    return
+  fi
+  
+  echo "    → Found plugin: $(basename "$latest_plugin")"
+  
+  # Create dropins directory if it doesn't exist
+  sudo mkdir -p "$dropins_dir"
+  
+  # Remove old versions of the plugin
+  local old_plugins
+  old_plugins=$(sudo find "$dropins_dir" -name "org.iosonata.embedcdt.templates.firmware_*.jar" 2>/dev/null || true)
+  
+  if [[ -n "$old_plugins" ]]; then
+    echo "    → Removing old plugin versions..."
+    echo "$old_plugins" | while read -r old_plugin; do
+      if [[ -f "$old_plugin" ]]; then
+        echo "      - Removing: $(basename "$old_plugin")"
+        sudo rm -f "$old_plugin"
+      fi
+    done
+  fi
+  
+  # Copy the latest plugin to dropins
+  echo "    → Installing plugin to $dropins_dir"
+  sudo cp "$latest_plugin" "$dropins_dir/"
+  
+  # Set proper permissions
+  sudo chmod 644 "$dropins_dir/$(basename "$latest_plugin")"
+  
+  echo "✅ IOsonata Eclipse Plugin installed: $(basename "$latest_plugin")"
+}
+
+# ---------------------------------------------------------
 # Configure Eclipse Preferences (with hash-based keys)
 # ---------------------------------------------------------
 configure_eclipse_prefs() {
@@ -233,142 +288,107 @@ configure_eclipse_prefs() {
   # Compute hashes
   ARM_HASH=$(java_hash "xPack GNU Arm Embedded GCC")
   (( ARM_HASH < 0 )) && ARM_HASH=$((ARM_HASH + 4294967296))
-
   RISCV_HASH=$(java_hash "xPack GNU RISC-V Embedded GCC")
   (( RISCV_HASH < 0 )) && RISCV_HASH=$((RISCV_HASH + 4294967296))
-  RISCV_HASH=$((RISCV_HASH + 1))
+  (( RISCV_HASH++ ))
 
-  # ARM toolchain
-  sudo tee "$prefs_root/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" >/dev/null <<EOF
+  # Write toolchain path preferences
+  sudo tee "$prefs_root/org.eclipse.embedcdt.core.prefs" >/dev/null <<EOF
 eclipse.preferences.version=1
+xpack.arm.toolchain.path=$ARM_DIR/bin
+xpack.riscv.toolchain.path=$RISCV_DIR/bin
+xpack.openocd.path=$OPENOCD_DIR/bin
+xpack.strict=true
+EOF
+
+  sudo tee "$prefs_root/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" >/dev/null <<EOF
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.1287942917=$ARM_DIR/bin
+toolchain.path.strict=true
 EOF
 
-  # RISC-V toolchain
   sudo tee "$prefs_root/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" >/dev/null <<EOF
-eclipse.preferences.version=1
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
+toolchain.path.strict=true
 EOF
 
-  # OpenOCD
   sudo tee "$prefs_root/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" >/dev/null <<EOF
-eclipse.preferences.version=1
-install.folder=$OPENOCD_DIR/bin
-EOF
-
-  # Environment macros
-  sudo tee "$prefs_root/org.eclipse.core.runtime.prefs" >/dev/null <<EOF
-# Repo paths
-environment/project/io.github.embedded.tools/environment/IOSONATA/value=$ROOT/IOsonata
-environment/project/io.github.embedded.tools/environment/NRFX/value=$EXT/nrfx
-environment/project/io.github.embedded.tools/environment/SDK_NRF_BM/value=$EXT/sdk-nrf-bm
-environment/project/io.github.embedded.tools/environment/SDK_NRFXLIB/value=$EXT/sdk-nrfxlib
-environment/project/io.github.embedded.tools/environment/NRF5_SDK/value=$EXT/nRF5_SDK
-environment/project/io.github.embedded.tools/environment/NRF5_SDK_MESH/value=$EXT/nRF5_SDK_Mesh
-environment/project/io.github.embedded.tools/environment/BSEC/value=$EXT/BSEC
-
-# Toolchains + global paths
-environment/project/io.github.embedded.tools/environment/ARM_GCC/value=$ARM_DIR
-environment/project/io.github.embedded.tools/environment/RISCV_GCC/value=$RISCV_DIR
-environment/project/io.github.embedded.tools/environment/OPENOCD/value=$OPENOCD_DIR
-environment/project/io.github.embedded.tools/environment/TOOLS/value=$TOOLS
-environment/project/io.github.embedded.tools/environment/WORKSPACE/value=$ROOT
-environment/project/io.github.embedded.tools/environment/EXT_LIBS/value=$EXT
-EOF
-
-echo "Eclipse preferences seeded (ARM, RISC-V, OpenOCD, macros)."
-
-# ---------------------------------------------------------
-# Configure eclipse.ini with System Properties
-# ---------------------------------------------------------
-echo
-echo ">>> Configuring IOsonata and IOcomposer system properties in eclipse.ini..."
-
-ECLIPSE_INI="$ECLIPSE_DIR/eclipse.ini"
-
-# Remove old properties if they exist
-sudo sed -i.bak '/^-Diosonata\.home=/d' "$ECLIPSE_INI" 2>/dev/null || true
-sudo sed -i '' '/^-Diosonata_loc=/d' "$ECLIPSE_INI" 2>/dev/null || true
-sudo sed -i '' '/^-Diocomposer_home=/d' "$ECLIPSE_INI" 2>/dev/null || true
-
-# Find the -vmargs line and insert after it
-# If no -vmargs, create it first
-if grep -q "^-vmargs" "$ECLIPSE_INI"; then
-    # Insert after -vmargs line
-    sudo sed -i '' '/^-vmargs$/a\
--Diosonata_loc='"$ROOT"'
-' "$ECLIPSE_INI"
-    sudo sed -i '' '/^-Diosonata_loc=/a\
--Diocomposer_home='"$ROOT"'
-' "$ECLIPSE_INI"
-else
-    # No -vmargs section, add it at the end with our properties
-    echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
-    echo "-Diosonata_loc=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
-    echo "-Diocomposer_home=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
-fi
-
-echo "✅ System properties configured in eclipse.ini:"
-echo "   iosonata_loc=$ROOT"
-echo "   iocomposer_home=$ROOT"
-echo
-
-# Step 1: Ensure Eclipse has initialized its instance folder
-if [ -d "$ECLIPSE_DIR" ]; then
-  echo "Initializing Eclipse to create instance configuration..."
-  "$ECLIPSE_DIR/eclipse" -nosplash -initialize || true
-fi
-
-# Step 2: Find instance settings folder dynamically
-INSTANCE_CFG=$(find "$HOME/.eclipse" -type d -path "*/configuration" | head -n 1)
-
-if [ -z "$INSTANCE_CFG" ]; then
-  echo "Could not find Eclipse instance configuration folder."
-  echo "Eclipse may not have been started yet."
-else
-  echo "Found Eclipse settings: $INSTANCE_CFG"
-
-  mkdir -p "$INSTANCE_CFG/.settings"
-  
-  tee > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
-toolchain.path.$ARM_HASH=$ARM_DIR/bin
-toolchain.path.strict=true
-EOF
-
-  tee > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
-toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
-toolchain.path.strict=true
-EOF
-
-  tee > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
 
-fi
+  # Configure core.runtime with environment variables
+  sudo tee "$prefs_root/org.eclipse.core.runtime.prefs" >/dev/null <<EOF
+eclipse.preferences.version=1
+environment/project/IOCOMPOSER_HOME/value=$ROOT
+environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
+environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
+environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
+environment/project/NRFX_HOME/value=$EXT/nrfx
+environment/project/NRFXLIB_HOME/value=$EXT/sdk-nrfxlib
+environment/project/NRF5_SDK_HOME/value=$EXT/nRF5_SDK
+environment/project/NRF5_SDK_MESH_HOME/value=$EXT/nRF5_SDK_Mesh
+environment/project/BSEC_HOME/value=$EXT/BSEC
+EOF
 
+  echo "✅ Eclipse preferences seeded."
+
+  # Add iosonata_loc system property to eclipse.ini
+  echo ">>> Configuring IOsonata system properties in eclipse.ini..."
+  
+  local eclipse_ini="$ECLIPSE_DIR/eclipse.ini"
+  
+  # Check if eclipse.ini exists
+  if [[ ! -f "$eclipse_ini" ]]; then
+    echo "!!! WARNING: eclipse.ini not found at $eclipse_ini"
+    return
+  fi
+  
+  # Remove old properties if they exist
+  sudo sed -i '/^-Diosonata\.home=/d' "$eclipse_ini"
+  sudo sed -i '/^-Diosonata_loc=/d' "$eclipse_ini"
+  sudo sed -i '/^-Diocomposer_home=/d' "$eclipse_ini"
+  
+  # Find -vmargs line and insert after it, or add at end if not found
+  if sudo grep -q "^-vmargs" "$eclipse_ini"; then
+    # Insert after -vmargs
+    sudo sed -i "/^-vmargs/a -Diosonata_loc=$ROOT\n-Diocomposer_home=$ROOT" "$eclipse_ini"
+  else
+    # Add -vmargs section at the end
+    echo "-vmargs" | sudo tee -a "$eclipse_ini" >/dev/null
+    echo "-Diosonata_loc=$ROOT" | sudo tee -a "$eclipse_ini" >/dev/null
+    echo "-Diocomposer_home=$ROOT" | sudo tee -a "$eclipse_ini" >/dev/null
+  fi
+  
+  echo "✅ System properties configured in eclipse.ini:"
+  echo "   iosonata_loc=$ROOT"
+  echo "   iocomposer_home=$ROOT"
 }
 
 # ---------------------------------------------------------
-# Clone repositories
+# Clone repos
 # ---------------------------------------------------------
 clone_repos() {
-  echo ">>> Cloning/updating IOcomposer repositories ..."
-  mkdir -p "$ROOT"
+  echo ">>> Cloning/updating repositories ..."
+  cd "$ROOT"
 
-  # IOsonata
-  if [[ -d "$ROOT/IOsonata" ]]; then
-    if [[ "$MODE" == "force" ]]; then rm -rf "$ROOT/IOsonata"; git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
-    else (cd "$ROOT/IOsonata" && git pull); fi
+  # Clone IOsonata repo
+  if [[ -d "IOsonata" ]]; then
+    if [[ "$MODE" = "force" ]]; then
+      echo ">>> Force-updating IOsonata repository..."
+      rm -rf "IOsonata"
+      git clone --depth=1 https://github.com/IOsonata/IOsonata.git IOsonata
+    else
+      echo ">>> Updating IOsonata repository..."
+      (cd IOsonata && git pull)
+    fi
   else
-    git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
+    echo ">>> Cloning IOsonata repository..."
+    git clone --depth=1 https://github.com/IOsonata/IOsonata.git IOsonata
   fi
 
-  # External repos
-  mkdir -p "$EXT"
   cd "$EXT"
-  repos=(
+  local repos=(
     "https://github.com/NordicSemiconductor/nrfx.git"
     "https://github.com/nrfconnect/sdk-nrf-bm.git"
     "https://github.com/nrfconnect/sdk-nrfxlib.git"
@@ -381,20 +401,26 @@ clone_repos() {
     "https://github.com/hathach/tinyusb.git"
   )
   for repo in "${repos[@]}"; do
+    local name
     name=$(basename "$repo" .git)
-    [[ "$name" == "Bosch-BSEC2-Library" ]] && name="BSEC"
+    # Rename BSEC
+    if [[ "$name" == "Bosch-BSEC2-Library" ]]; then name="BSEC"; fi
     if [[ -d "$name" ]]; then
-      if [[ "$MODE" == "force" ]]; then rm -rf "$name"; git clone --depth=1 "$repo" "$name"
-      else (cd "$name" && git pull); fi
+      if [[ "$MODE" = "force" ]]; then
+        rm -rf "$name"
+        git clone --depth=1 "$repo" "$name"
+      else
+        (cd "$name" && git pull)
+      fi
     else
       git clone --depth=1 "$repo" "$name"
     fi
   done
-  
+
   # Clone FreeRTOS-Kernel
-  echo ">>> Cloning FreeRTOS-Kernel..."
+  echo "📦 Cloning/updating FreeRTOS-Kernel..."
   if [[ -d "FreeRTOS-Kernel" ]]; then
-    if [[ "$MODE" == "force" ]]; then
+    if [[ "$MODE" = "force" ]]; then
       rm -rf "FreeRTOS-Kernel"
       git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
     else
@@ -402,7 +428,6 @@ clone_repos() {
     fi
   else
     git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
-    echo "✅ FreeRTOS-Kernel cloned"
   fi
 }
 
@@ -411,111 +436,111 @@ clone_repos() {
 # ---------------------------------------------------------
 generate_makefile_paths() {
   echo
-  echo ">>> Generating makefile_path.mk for Makefile-based builds..."
+  echo "📝 Generating makefile_path.mk for Makefile-based builds..."
   
   local MAKEFILE_PATH_MK="$ROOT/IOsonata/makefile_path.mk"
   
-  cat > "$MAKEFILE_PATH_MK" <<'EOF'
+  cat > "$MAKEFILE_PATH_MK" <<EOF
 # makefile_path.mk
-# Auto-generated by install_iocdevtools_linux.sh
+# Auto-generated by install_iocdevtools_linux.sh $SCRIPT_VERSION
 # This file contains all path macros required to compile IOsonata projects using Makefiles
-# Include this file in your project Makefile: include $(IOSONATA_ROOT)/makefile_path.mk
+# Include this file in your project Makefile: include \$(IOSONATA_ROOT)/makefile_path.mk
 
 # ============================================
 # IOsonata Paths
 # ============================================
 # IOCOMPOSER_HOME must be set to your IOcomposer root directory
 ifndef IOCOMPOSER_HOME
-$(error IOCOMPOSER_HOME is not set. Please set it to your IOcomposer root directory)
+\$(error IOCOMPOSER_HOME is not set. Please set it to your IOcomposer root directory)
 endif
 
-IOSONATA_ROOT = $(IOCOMPOSER_HOME)/IOsonata
-IOSONATA_INCLUDE = $(IOSONATA_ROOT)/include
-IOSONATA_SRC = $(IOSONATA_ROOT)/src
+IOSONATA_ROOT = \$(IOCOMPOSER_HOME)/IOsonata
+IOSONATA_INCLUDE = \$(IOSONATA_ROOT)/include
+IOSONATA_SRC = \$(IOSONATA_ROOT)/src
 
 # ============================================
 # ARM-specific Paths
 # ============================================
-ARM_ROOT = $(IOSONATA_ROOT)/ARM
-ARM_CMSIS = $(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = $(ARM_CMSIS)/Include
-ARM_INCLUDE = $(ARM_ROOT)/include
-ARM_SRC = $(ARM_ROOT)/src
-ARM_LDSCRIPT = $(ARM_ROOT)/ldscript
+ARM_ROOT = \$(IOSONATA_ROOT)/ARM
+ARM_CMSIS = \$(ARM_ROOT)/CMSIS
+ARM_CMSIS_INCLUDE = \$(ARM_CMSIS)/Include
+ARM_INCLUDE = \$(ARM_ROOT)/include
+ARM_SRC = \$(ARM_ROOT)/src
+ARM_LDSCRIPT = \$(ARM_ROOT)/ldscript
 
 # Vendor-specific paths
-ARM_NORDIC = $(ARM_ROOT)/Nordic
-ARM_NXP = $(ARM_ROOT)/NXP
-ARM_ST = $(ARM_ROOT)/ST
-ARM_MICROCHIP = $(ARM_ROOT)/Microchip
-ARM_RENESAS = $(ARM_ROOT)/Renesas
+ARM_NORDIC = \$(ARM_ROOT)/Nordic
+ARM_NXP = \$(ARM_ROOT)/NXP
+ARM_ST = \$(ARM_ROOT)/ST
+ARM_MICROCHIP = \$(ARM_ROOT)/Microchip
+ARM_RENESAS = \$(ARM_ROOT)/Renesas
 
 # ============================================
 # RISC-V-specific Paths
 # ============================================
-RISCV_ROOT = $(IOSONATA_ROOT)/RISCV
-RISCV_INCLUDE = $(RISCV_ROOT)/include
-RISCV_SRC = $(RISCV_ROOT)/src
-RISCV_LDSCRIPT = $(RISCV_ROOT)/ldscript
+RISCV_ROOT = \$(IOSONATA_ROOT)/RISCV
+RISCV_INCLUDE = \$(RISCV_ROOT)/include
+RISCV_SRC = \$(RISCV_ROOT)/src
+RISCV_LDSCRIPT = \$(RISCV_ROOT)/ldscript
 
 # Vendor-specific paths
-RISCV_ESPRESSIF = $(RISCV_ROOT)/Espressif
-RISCV_NORDIC = $(RISCV_ROOT)/Nordic
-RISCV_RENESAS = $(RISCV_ROOT)/Renesas
+RISCV_ESPRESSIF = \$(RISCV_ROOT)/Espressif
+RISCV_NORDIC = \$(RISCV_ROOT)/Nordic
+RISCV_RENESAS = \$(RISCV_ROOT)/Renesas
 
 # ============================================
 # External Libraries
 # ============================================
-EXTERNAL_ROOT = $(IOCOMPOSER_HOME)/external
-NRFX_ROOT = $(EXTERNAL_ROOT)/nrfx
-SDK_NRF_BM_ROOT = $(EXTERNAL_ROOT)/sdk-nrf-bm
-SDK_NRFXLIB_ROOT = $(EXTERNAL_ROOT)/sdk-nrfxlib
-NRF5_SDK_ROOT = $(EXTERNAL_ROOT)/nRF5_SDK
-NRF5_SDK_MESH_ROOT = $(EXTERNAL_ROOT)/nRF5_SDK_Mesh
-BSEC_ROOT = $(EXTERNAL_ROOT)/BSEC
-FUSION_ROOT = $(EXTERNAL_ROOT)/Fusion
-LVGL_ROOT = $(EXTERNAL_ROOT)/lvgl
-LWIP_ROOT = $(EXTERNAL_ROOT)/lwip
-FREERTOS_KERNEL_ROOT = $(EXTERNAL_ROOT)/FreeRTOS-Kernel
-TINYUSB_ROOT = $(EXTERNAL_ROOT)/tinyusb
+EXTERNAL_ROOT = \$(IOCOMPOSER_HOME)/external
+NRFX_ROOT = \$(EXTERNAL_ROOT)/nrfx
+SDK_NRF_BM_ROOT = \$(EXTERNAL_ROOT)/sdk-nrf-bm
+SDK_NRFXLIB_ROOT = \$(EXTERNAL_ROOT)/sdk-nrfxlib
+NRF5_SDK_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK
+NRF5_SDK_MESH_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK_Mesh
+BSEC_ROOT = \$(EXTERNAL_ROOT)/BSEC
+FUSION_ROOT = \$(EXTERNAL_ROOT)/Fusion
+LVGL_ROOT = \$(EXTERNAL_ROOT)/lvgl
+LWIP_ROOT = \$(EXTERNAL_ROOT)/lwip
+FREERTOS_KERNEL_ROOT = \$(EXTERNAL_ROOT)/FreeRTOS-Kernel
+TINYUSB_ROOT = \$(EXTERNAL_ROOT)/tinyusb
 
 # ============================================
 # Additional IOsonata Modules
 # ============================================
-FATFS_ROOT = $(IOSONATA_ROOT)/fatfs
-LITTLEFS_ROOT = $(IOSONATA_ROOT)/littlefs
-MICRO_ECC_ROOT = $(IOSONATA_ROOT)/micro-ecc
+FATFS_ROOT = \$(IOSONATA_ROOT)/fatfs
+LITTLEFS_ROOT = \$(IOSONATA_ROOT)/littlefs
+MICRO_ECC_ROOT = \$(IOSONATA_ROOT)/micro-ecc
 
 # ============================================
 # Common Include Paths (for -I flags)
 # ============================================
-IOSONATA_INCLUDES = -I$(IOSONATA_INCLUDE) \
-                    -I$(IOSONATA_INCLUDE)/bluetooth \
-                    -I$(IOSONATA_INCLUDE)/audio \
-                    -I$(IOSONATA_INCLUDE)/converters \
-                    -I$(IOSONATA_INCLUDE)/coredev \
-                    -I$(IOSONATA_INCLUDE)/display \
-                    -I$(IOSONATA_INCLUDE)/imu \
-                    -I$(IOSONATA_INCLUDE)/miscdev \
-                    -I$(IOSONATA_INCLUDE)/pwrmgnt \
-                    -I$(IOSONATA_INCLUDE)/sensors \
-                    -I$(IOSONATA_INCLUDE)/storage \
-                    -I$(IOSONATA_INCLUDE)/sys \
-                    -I$(IOSONATA_INCLUDE)/usb
+IOSONATA_INCLUDES = -I\$(IOSONATA_INCLUDE) \\
+                    -I\$(IOSONATA_INCLUDE)/bluetooth \\
+                    -I\$(IOSONATA_INCLUDE)/audio \\
+                    -I\$(IOSONATA_INCLUDE)/converters \\
+                    -I\$(IOSONATA_INCLUDE)/coredev \\
+                    -I\$(IOSONATA_INCLUDE)/display \\
+                    -I\$(IOSONATA_INCLUDE)/imu \\
+                    -I\$(IOSONATA_INCLUDE)/miscdev \\
+                    -I\$(IOSONATA_INCLUDE)/pwrmgnt \\
+                    -I\$(IOSONATA_INCLUDE)/sensors \\
+                    -I\$(IOSONATA_INCLUDE)/storage \\
+                    -I\$(IOSONATA_INCLUDE)/sys \\
+                    -I\$(IOSONATA_INCLUDE)/usb
 
-ARM_INCLUDES = -I$(ARM_INCLUDE) \
-               -I$(ARM_CMSIS_INCLUDE)
+ARM_INCLUDES = -I\$(ARM_INCLUDE) \\
+               -I\$(ARM_CMSIS_INCLUDE)
 
-RISCV_INCLUDES = -I$(RISCV_INCLUDE)
+RISCV_INCLUDES = -I\$(RISCV_INCLUDE)
 
 # ============================================
 # Environment Variables (optional)
 # ============================================
-export NRFX_HOME := $(NRFX_ROOT)
-export NRFXLIB_HOME := $(SDK_NRFXLIB_ROOT)
-export NRF5_SDK_HOME := $(NRF5_SDK_ROOT)
-export NRF5_SDK_MESH_HOME := $(NRF5_SDK_MESH_ROOT)
-export BSEC_HOME := $(BSEC_ROOT)
+export NRFX_HOME := \$(NRFX_ROOT)
+export NRFXLIB_HOME := \$(SDK_NRFXLIB_ROOT)
+export NRF5_SDK_HOME := \$(NRF5_SDK_ROOT)
+export NRF5_SDK_MESH_HOME := \$(NRF5_SDK_MESH_ROOT)
+export BSEC_HOME := \$(BSEC_ROOT)
 EOF
 
   # Add toolchain paths with absolute locations
@@ -645,6 +670,7 @@ case "$MODE" in
     install_eclipse_embedded
     configure_eclipse_prefs
     clone_repos
+    install_iosonata_plugin
     generate_makefile_paths
     display_report
     ;;

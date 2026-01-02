@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.73"
+SCRIPT_VERSION="v1.0.74"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -161,6 +161,62 @@ is_valid_dmg_url() {
     # echo "   -> Failed: File size ($length bytes) is too small. Likely a 404 page."
     return 1 # Failure
   fi
+}
+
+
+# ---------------------------------------------------------
+# Install IOsonata Eclipse Plugin
+# ---------------------------------------------------------
+install_iosonata_plugin() {
+  echo ">>> Installing IOsonata Eclipse Plugin..."
+  
+  local plugin_dir="$ROOT/IOsonata/Installer/eclipse_plugin"
+  local dropins_dir="$ECLIPSE_APP/Contents/Eclipse/dropins"
+  
+  # Check if plugin directory exists
+  if [[ ! -d "$plugin_dir" ]]; then
+    echo "⚠️ Plugin directory not found at $plugin_dir"
+    echo "   Skipping plugin installation."
+    return
+  fi
+  
+  # Find the latest plugin jar file
+  local latest_plugin
+  latest_plugin=$(ls -1 "$plugin_dir"/org.iosonata.embedcdt.templates.firmware_*.jar 2>/dev/null | sort -V | tail -n1)
+  
+  if [[ -z "$latest_plugin" ]]; then
+    echo "⚠️ No IOsonata plugin jar file found in $plugin_dir"
+    echo "   Skipping plugin installation."
+    return
+  fi
+  
+  echo "   → Found plugin: $(basename "$latest_plugin")"
+  
+  # Create dropins directory if it doesn't exist
+  sudo mkdir -p "$dropins_dir"
+  
+  # Remove old versions of the plugin
+  local old_plugins
+  old_plugins=$(sudo find "$dropins_dir" -name "org.iosonata.embedcdt.templates.firmware_*.jar" 2>/dev/null || true)
+  
+  if [[ -n "$old_plugins" ]]; then
+    echo "   → Removing old plugin versions..."
+    echo "$old_plugins" | while read -r old_plugin; do
+      if [[ -f "$old_plugin" ]]; then
+        echo "     - Removing: $(basename "$old_plugin")"
+        sudo rm -f "$old_plugin"
+      fi
+    done
+  fi
+  
+  # Copy the latest plugin to dropins
+  echo "   → Installing plugin to $dropins_dir"
+  sudo cp "$latest_plugin" "$dropins_dir/"
+  
+  # Set proper permissions
+  sudo chmod 644 "$dropins_dir/$(basename "$latest_plugin")"
+  
+  echo "✅ IOsonata Eclipse Plugin installed: $(basename "$latest_plugin")"
 }
 
 
@@ -450,6 +506,12 @@ else
   git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
   echo "✅ FreeRTOS-Kernel cloned"
 fi
+
+# ---------------------------------------------------------
+# Install IOsonata Eclipse Plugin
+# ---------------------------------------------------------
+echo
+install_iosonata_plugin
 
 # ---------------------------------------------------------
 # Generate makefile_path.mk
