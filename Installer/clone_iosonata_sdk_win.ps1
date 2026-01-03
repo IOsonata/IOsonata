@@ -476,33 +476,24 @@ Write-Host "---------------------------------------------------------" -Foregrou
 
 # --- Auto-Build IOsonata Libraries (if Eclipse detected) ---
 if ($ECLIPSE_INSTALLED) {
-    Write-Host ""
-    Write-Host "=========================================================" -ForegroundColor Blue
-    Write-Host "   IOsonata Library Auto-Build" -ForegroundColor White
-    Write-Host "=========================================================" -ForegroundColor Blue
-    Write-Host ""
-    Write-Host "Eclipse was detected. You can now build IOsonata libraries"
-    Write-Host "for your target MCU using Eclipse headless build."
-    Write-Host ""
-
-# =========================================================
-# Build IOsonata Libraries (using standalone script)
-# =========================================================
-$BUILD_SCRIPT = "$ROOT\IOsonata\tools\build_iosonata_lib_win.ps1"
-
-if (Test-Path $BUILD_SCRIPT) {
-    Write-Host ""
-    Write-Host "=========================================================" -ForegroundColor Blue
-    Write-Host "  IOsonata Library Build" -ForegroundColor White
-    Write-Host "=========================================================" -ForegroundColor Blue
-    Write-Host ""
-    & $BUILD_SCRIPT -SdkHome $ROOT
-} else {
-    Write-Host ""
-    Write-Host "ℹ️  To build IOsonata libraries:" -ForegroundColor Cyan
-    Write-Host "   .\build_iosonata_lib_win.ps1 -SdkHome $ROOT"
-    Write-Host ""
-}
+    $BUILD_SCRIPT = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
+    
+    if (Test-Path $BUILD_SCRIPT) {
+        Write-Host ""
+        Write-Host "=========================================================" -ForegroundColor Blue
+        Write-Host "   IOsonata Library Auto-Build" -ForegroundColor White
+        Write-Host "=========================================================" -ForegroundColor Blue
+        Write-Host ""
+        & $BUILD_SCRIPT -SdkHome $ROOT
+    } else {
+        Write-Host ""
+        Write-Host "Note: Build script not found at:" -ForegroundColor Yellow
+        Write-Host "      $BUILD_SCRIPT"
+        Write-Host ""
+        Write-Host "To build libraries, download build script from:"
+        Write-Host "  https://github.com/IOsonata/IOsonata"
+        Write-Host ""
+    }
 } else {
     Write-Host ""
     Write-Host "Note: Eclipse not detected." -ForegroundColor Yellow

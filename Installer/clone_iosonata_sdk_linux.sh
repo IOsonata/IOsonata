@@ -39,13 +39,8 @@ print_help() {
   echo "  --eclipse           Configure Eclipse system properties"
   echo "  --help, -h          Show this help message and exit"
 
-# --- Detect Eclipse Installation ---
-ECLIPSE_DIR="/opt/eclipse"
-ECLIPSE_INSTALLED=false
-if [[ -d "$ECLIPSE_DIR" ]] && [[ -x "$ECLIPSE_DIR/eclipse" ]]; then
-  ECLIPSE_INSTALLED=true
-  echo "${GREEN}✓ Eclipse detected at $ECLIPSE_DIR${RESET}"
-  echo "${BLUE}---------------------------------------------------------${RESET}"
+  echo ""
+  echo "${BOLD}Examples:${RESET}"
   echo ""
 fi
 
@@ -465,37 +460,34 @@ fi
 
 echo "${BLUE}---------------------------------------------------------${RESET}"
 
+# --- Detect Eclipse Installation ---
+ECLIPSE_DIR="/opt/eclipse"
+ECLIPSE_INSTALLED=false
+if [[ -d "$ECLIPSE_DIR" ]]; then
+  ECLIPSE_INSTALLED=true
+  echo ""
+  echo "${GREEN}✓ Eclipse detected at $ECLIPSE_DIR${RESET}"
+fi
+
 # --- Auto-Build IOsonata Libraries (if Eclipse detected) ---
 if [[ "$ECLIPSE_INSTALLED" == "true" ]]; then
-  BUILD_SCRIPT="$ROOT/IOsonata/tools/build_iosonata_lib_linux.sh"
+  BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
   if [[ -f "$BUILD_SCRIPT" ]]; then
     echo ""
-    echo "========================================================="
-    echo "   IOsonata Library Auto-Build"
-    echo "========================================================="
+    echo "${BLUE}=========================================================${RESET}"
+    echo "${BOLD}   IOsonata Library Auto-Build${RESET}"
+    echo "${BLUE}=========================================================${RESET}"
     echo ""
     "$BUILD_SCRIPT" --home "$ROOT" || true
   else
     echo ""
-    echo "Build script not found. Download from:"
+    echo "${YELLOW}Note: Build script not found at:${RESET}"
+    echo "      $BUILD_SCRIPT"
+    echo ""
+    echo "To build libraries, download build script from:"
     echo "  https://github.com/IOsonata/IOsonata"
+    echo ""
   fi
-else
-  echo ""
-  echo "${YELLOW}Note: Eclipse not detected.${RESET}"
-  echo "      To build IOsonata libraries, install Eclipse and run:"
-  echo "      ${BOLD}./install_iocdevtools_linux.sh${RESET}"
-  echo ""
-fi
-  echo ""
-  echo "${BLUE}=========================================================${RESET}"
-  echo "${BOLD}   IOsonata Library Auto-Build${RESET}"
-  echo "${BLUE}=========================================================${RESET}"
-  echo ""
-  echo "Eclipse was detected. You can now build IOsonata libraries"
-  echo "for your target MCU using Eclipse headless build."
-  echo ""
-  build_iosonata_lib || true
 else
   echo ""
   echo "${YELLOW}Note: Eclipse not detected.${RESET}"
