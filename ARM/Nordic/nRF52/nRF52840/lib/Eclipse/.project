@@ -1741,11 +1741,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/sensors/agm_icm456x_ak09940.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm456x_ak09940.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/sensors/agm_invn_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_invn_icm20948.cpp</locationURI>
