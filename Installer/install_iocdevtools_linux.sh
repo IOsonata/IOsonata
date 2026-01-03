@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.14"
+SCRIPT_VERSION="v1.0.87"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -10,9 +10,9 @@ BIN="/usr/local/bin"
 ECLIPSE_DIR="/opt/eclipse"
 
 echo "=============================================="
-echo "  IOcomposer Dev Tools Installer (Linux) "
-echo "  Script: $SCRIPT_NAME"
-echo "  Version: $SCRIPT_VERSION"
+echo "   IOcomposer MCU Dev Tools Installer (Linux) "
+echo "   Script: $SCRIPT_NAME"
+echo "   Version: $SCRIPT_VERSION"
 echo "=============================================="
 echo
 
@@ -21,533 +21,665 @@ echo
 # ---------------------------------------------------------
 show_help() {
   cat <<EOF
-Usage: $SCRIPT_NAME [OPTION]
+Usage: ./$SCRIPT_NAME.sh [OPTION]
 
 Options:
   --help           Show help and exit
   --version        Show version and exit
-  --home <path>    Set custom IOcomposer root (default: ~/IOcomposer)
-  --force-update   Force reinstallation
+  --home <path>    Set custom SDK installation root (default: ~/IOcomposer)
+  --force-update   Force reinstall
   --uninstall      Remove toolchains + Eclipse (keep repos/workspaces)
+  (no option)      Install/update (skip if already installed)
 EOF
 }
 
 MODE="install"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --help) show_help; exit 0 ;;
     --version) echo "$SCRIPT_NAME $SCRIPT_VERSION"; exit 0 ;;
-    --home) ROOT="$2"; shift 2 ;;
-    --force-update) MODE="force"; shift ;;
-    --uninstall) MODE="uninstall"; shift ;;
-    *) echo "Unknown option: $1"; show_help; exit 1 ;;
+    --force-update) MODE="force"; echo ">>> Force update mode enabled" ;;
+    --uninstall) MODE="uninstall"; echo ">>> Uninstall mode enabled" ;;
+    --home)
+      shift
+      if [[ -z "${1:-}" ]]; then
+        echo "❌ Missing path after --home"; exit 1
+      fi
+      ROOT="$1"
+      echo ">>> Using custom home folder: $ROOT"
+      ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
   esac
+  shift
 done
 
-# EXT must follow ROOT
 EXT="$ROOT/external"
+mkdir -p "$ROOT" "$EXT"
+sudo mkdir -p "$TOOLS" "$BIN"
 
 # ---------------------------------------------------------
-# Prerequisites
+# UNINSTALL
 # ---------------------------------------------------------
-install_prerequisites() {
-  echo ">>> Installing prerequisites..."
-  if command -v apt &>/dev/null; then
-    sudo apt update
-    sudo apt install -y wget curl tar unzip openjdk-17-jdk build-essential git
-  elif command -v dnf &>/dev/null; then
-    sudo dnf install -y wget curl tar unzip java-17-openjdk gcc make git
-  elif command -v yum &>/dev/null; then
-    sudo yum install -y wget curl tar unzip java-17-openjdk gcc make git
-  elif command -v pacman &>/dev/null; then
-    sudo pacman -Syu --noconfirm wget curl tar unzip jdk17-openjdk base-devel git
-  else
-    echo "Unsupported package manager. Please install wget, curl, tar, unzip, Java 17+, gcc, make, git manually."
-  fi
+if [[ "$MODE" == "uninstall" ]]; then
+  echo "⚠️  Removing toolchains + Eclipse (repos and workspace kept)..."
+  read -r -p "Proceed? (y/N) " c; [[ "$c" =~ ^[Yy]$ ]] || exit 0
+
+  echo ">>> Checking xPacks in $TOOLS..."
+  for dir in "$TOOLS"/*; do
+    [ -d "$dir" ] || continue
+    base=$(basename "$dir")
+    echo "   Checking $base..."
+    case "$base" in
+      xpack-arm-none-eabi-*|xpack-riscv-none-elf-*|xpack-openocd-*)
+        echo "   - Removing $dir"
+        sudo rm -rf "$dir"
+        ;;
+      *) echo "   - Skipping $dir";;
+    esac
+  done
+
+  echo ">>> Removing symlinks..."
+  sudo rm -f "$BIN/arm-none-eabi-gcc" "$BIN/riscv-none-elf-gcc" "$BIN/openocd" || true
+
+  echo ">>> Removing Eclipse installation..."
+  sudo rm -rf "$ECLIPSE_DIR" || true
+
+  echo ">>> Removing Eclipse user settings (~/.eclipse)..."
+  rm -rf "$HOME/.eclipse" || true
+
+  echo ">>> Repositories under $ROOT and workspace dirs were kept."
+  echo ">>> Uninstall complete!"
+  exit 0
+fi
+
+# ---------------------------------------------------------
+# Arch detect
+# ---------------------------------------------------------
+ARCH=$(uname -m)
+case "$ARCH" in
+  aarch64|arm64) PLATFORM="linux-aarch64"; ECLIPSE_ARCH="aarch64" ;;
+  x86_64|amd64) PLATFORM="linux-x86_64"; ECLIPSE_ARCH="x86_64" ;;
+  *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+echo ">>> Detected architecture: $ARCH -> Eclipse arch=$ECLIPSE_ARCH"
+
+# ---------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------
+resolve_path() {
+  python3 - "$1" <<'PY'
+import os, sys
+print(os.path.realpath(sys.argv[1]))
+PY
 }
 
-# ---------------------------------------------------------
-# Java String.hashCode in Bash
-# ---------------------------------------------------------
 java_hash() {
-  local s="$1"
-  local h=0
-  local c
-  for (( i=0; i<${#s}; i++ )); do
-    c=$(printf "%d" "'${s:$i:1}")
-    h=$(( (h * 31 + c) & 0xFFFFFFFF ))
-  done
-  if (( h > 2147483647 )); then
-    h=$((h - 4294967296))
-  fi
-  echo $h
+  python3 - "$1" <<'EOF'
+import sys
+s = sys.argv[1]; h = 0
+for c in s: h = (31*h + ord(c)) & 0xFFFFFFFF
+if h >= 2**31: h -= 2**32
+print(h)
+EOF
 }
 
+# Checks if the Content-Length is greater than 1MB (1,000,000 bytes)
+
 # ---------------------------------------------------------
-# Install xPack Toolchain (arch aware)
+# Cleanup (DMG mount/temp)
 # ---------------------------------------------------------
-install_xpack() {
-  local repo="$1"
-  local label="$2"
+TMP_ECLIPSE_DMG=""
+ECLIPSE_MNT=""
 
-  echo ">>> Installing $label ..."
-  sudo mkdir -p "$TOOLS"
-  sudo chown -R "$USER":"$USER" "$TOOLS"
-
-  # Detect architecture
-  local arch
-  case "$(uname -m)" in
-    x86_64) arch="linux-x64" ;;
-    aarch64|arm64) arch="linux-arm64" ;;
-    *) echo "!!! WARNING: unknown arch $(uname -m), defaulting to linux-x64"
-       arch="linux-x64" ;;
-  esac
-
-  local latest_json
-  latest_json=$(curl -s "https://api.github.com/repos/xpack-dev-tools/${repo}/releases/latest")
-
-  local url
-  url=$(echo "$latest_json" | grep "browser_download_url" | grep "${arch}.tar.gz" | cut -d '"' -f 4 | head -n1)
-
-  if [[ -z "$url" ]]; then
-    echo "!!! WARNING: no ${arch} release found for $repo, skipping."
-    return
+cleanup() {
+  if [[ -n "${ECLIPSE_MNT:-}" ]] && mount | grep -q " ${ECLIPSE_MNT} "; then
+    hdiutil detach "$ECLIPSE_MNT" -quiet || true
   fi
-
-  local archive
-  archive=$(basename "$url")
-  local dest="$TOOLS/${archive%-linux-x64.tar.gz}"
-
-  if [[ ! -d "$dest" || "$MODE" = "force" ]]; then
-    echo "    → Downloading $url ..."
-    wget -q "$url" -O "/tmp/$archive"
-    tar -xf "/tmp/$archive" -C "$TOOLS"
+  if [[ -n "${TMP_ECLIPSE_DMG:-}" ]]; then
+    rm -f "$TMP_ECLIPSE_DMG" || true
   fi
-
-  local binpath
-  binpath=$(find "$TOOLS" -maxdepth 2 -type d -name "bin" | grep "${repo%-xpack}" | head -n1 || true)
-  if [[ -n "$binpath" ]]; then
-    for exe in "$binpath"/*; do
-      sudo ln -sf "$exe" "$BIN/$(basename "$exe")"
-    done
+  if [[ -n "${ECLIPSE_MNT:-}" ]]; then
+    rm -rf "$ECLIPSE_MNT" || true
   fi
-
-   eval "${3}=${dest}"
 }
-
-# ---------------------------------------------------------
-# Install Eclipse Embedded CDT (latest release train, arch aware)
-# ---------------------------------------------------------
-install_eclipse_embedded() {
-  echo ">>> Installing Eclipse Embedded CDT package ..."
-  local MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
-
-  # --- START: Modified Section ---
-  # Get the top 10 most recent release names
-  echo ">>> Finding available Eclipse releases..."
-  local RELEASES
-  RELEASES=$(curl -s "$MIRROR/" | grep -Eo '20[0-9]{2}-[0-9]{2}' | sort -r | uniq | head -n10)
-
-  if [[ -z "$RELEASES" ]]; then
-    echo "!!! ERROR: Could not determine any Eclipse release trains."
-    exit 1
-  fi
-
-  # Detect architecture
-  local arch
-  case "$(uname -m)" in
-    x86_64) arch="x86_64" ;;
-    aarch64|arm64) arch="aarch64" ;;
-    *) echo "!!! WARNING: unknown arch $(uname -m), defaulting to x86_64"; arch="x86_64" ;;
-  esac
-
-  local url=""
-  local release_train=""
-
-  # Loop through releases, newest first, until we find a valid package
-  # This logic mirrors the working Windows/macOS scripts
-  for release in $RELEASES; do
-    echo ">>> Checking release: $release..."
-
-    # --- KEY CHANGE: Use the filenames from the original script & working macOS script ---
-    local URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-linux-gtk-$arch.tar.gz"
-    local URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-linux-gtk-$arch.tar.gz"
-
-    # --- PRIORITY 1: Check for 'eclipse-embedcdt' (no hyphen) ---
-    echo "   - Checking for 'eclipse-embedcdt' package..."
-    # Use 'curl -s --head --fail' to check if the URL exists (returns 0) without downloading
-    if curl -s --head --fail "$URL_EMBEDCDT" > /dev/null; then
-        echo "[OK] Found 'eclipse-embedcdt' package for $release."
-        url="$URL_EMBEDCDT"
-        release_train="$release"
-        break # Found it, exit loop
-    else
-        echo "   - 'eclipse-embedcdt' not found. Checking for 'eclipse-embedcpp'..."
-        # --- PRIORITY 2: Check for 'eclipse-embedcpp' ---
-        if curl -s --head --fail "$URL_EMBEDCPP" > /dev/null; then
-            echo "[OK] Found 'eclipse-embedcpp' package for $release."
-            url="$URL_EMBEDCPP"
-            release_train="$release"
-            break # Found it, exit loop
-        else
-            echo "   - No valid 'embed' packages found for $release. Trying next..."
-        fi
-    fi
-  done
-
-  # Check if we ever found a URL after looping
-  if [[ -z "$url" ]]; then
-    echo "!!! ERROR: Could not find 'eclipse-embedcdt' or 'eclipse-embedcpp' in any of the top 10 recent Eclipse releases."
-    echo "[INFO] Please check the mirror '$MIRROR' manually."
-    exit 1
-  fi
-  # --- END: Modified Section ---
-
-
-  local archive
-  archive=$(basename "$url")
-
-  if [[ ! -d "$ECLIPSE_DIR" || "$MODE" = "force" ]]; then
-    echo "    → Downloading $url ..."
-    wget -q "$url" -O "/tmp/$archive"
-
-    if [[ "$MODE" = "force" && -d "$ECLIPSE_DIR" ]]; then
-      sudo rm -rf "$ECLIPSE_DIR"
-    fi
-
-    sudo tar -xf "/tmp/$archive" -C /opt
-  fi
-
-  sudo ln -sf "$ECLIPSE_DIR/eclipse" "$BIN/eclipse"
-}
+trap cleanup EXIT
 
 # ---------------------------------------------------------
 # Install IOsonata Eclipse Plugin
 # ---------------------------------------------------------
 install_iosonata_plugin() {
   echo ">>> Installing IOsonata Eclipse Plugin..."
-  
+
   local plugin_dir="$ROOT/IOsonata/Installer/eclipse_plugin"
   local dropins_dir="$ECLIPSE_DIR/dropins"
-  
-  # Check if plugin directory exists
+
   if [[ ! -d "$plugin_dir" ]]; then
-    echo "!!! WARNING: Plugin directory not found at $plugin_dir"
-    echo "    Skipping plugin installation."
-    return
+    echo "⚠️ Plugin directory not found at $plugin_dir"
+    echo "   Skipping plugin installation."
+    return 0
   fi
-  
-  # Find the latest plugin jar file
+
   local latest_plugin
   latest_plugin=$(ls -1 "$plugin_dir"/org.iosonata.embedcdt.templates.firmware_*.jar 2>/dev/null | sort -V | tail -n1)
-  
+
   if [[ -z "$latest_plugin" ]]; then
-    echo "!!! WARNING: No IOsonata plugin jar file found in $plugin_dir"
-    echo "    Skipping plugin installation."
-    return
+    echo "⚠️ No IOsonata plugin jar file found in $plugin_dir"
+    echo "   Skipping plugin installation."
+    return 0
   fi
-  
-  echo "    → Found plugin: $(basename "$latest_plugin")"
-  
-  # Create dropins directory if it doesn't exist
+
+  echo "   → Found plugin: $(basename "$latest_plugin")"
+
   sudo mkdir -p "$dropins_dir"
-  
-  # Remove old versions of the plugin
+
   local old_plugins
   old_plugins=$(sudo find "$dropins_dir" -name "org.iosonata.embedcdt.templates.firmware_*.jar" 2>/dev/null || true)
-  
+
   if [[ -n "$old_plugins" ]]; then
-    echo "    → Removing old plugin versions..."
+    echo "   → Removing old plugin versions..."
     echo "$old_plugins" | while read -r old_plugin; do
       if [[ -f "$old_plugin" ]]; then
-        echo "      - Removing: $(basename "$old_plugin")"
+        echo "     - Removing: $(basename "$old_plugin")"
         sudo rm -f "$old_plugin"
       fi
     done
   fi
-  
-  # Copy the latest plugin to dropins
-  echo "    → Installing plugin to $dropins_dir"
+
+  echo "   → Installing plugin to $dropins_dir"
   sudo cp "$latest_plugin" "$dropins_dir/"
-  
-  # Set proper permissions
   sudo chmod 644 "$dropins_dir/$(basename "$latest_plugin")"
-  
+
   echo "✅ IOsonata Eclipse Plugin installed: $(basename "$latest_plugin")"
 }
 
 # ---------------------------------------------------------
-# Configure Eclipse Preferences (with hash-based keys)
+# Build IOsonata Library for Selected MCU (headless, no-indexer)
 # ---------------------------------------------------------
-configure_eclipse_prefs() {
-  echo ">>> Writing Eclipse Embedded CDT default preferences ..."
+build_iosonata_lib() {
+  echo
+  echo "========================================================="
+  echo "  IOsonata Library Auto-Build (Headless)"
+  echo "========================================================="
+  echo
+  echo "This will build the IOsonata library for your target MCU."
+  echo "Note: Headless build imports the project into a temp workspace"
+  echo "and disables indexing (-no-indexer) to avoid CDT PDOM stalls."
+  echo
 
-  local prefs_root="$ECLIPSE_DIR/configuration/.settings"
-  sudo mkdir -p "$prefs_root"
+  if [[ ! -d "$ROOT/IOsonata" ]]; then
+    echo "❌ ERROR: IOsonata directory not found at $ROOT/IOsonata"
+    return 0
+  fi
 
-  # Compute hashes
-  ARM_HASH=$(java_hash "xPack GNU Arm Embedded GCC")
-  (( ARM_HASH < 0 )) && ARM_HASH=$((ARM_HASH + 4294967296))
-  RISCV_HASH=$(java_hash "xPack GNU RISC-V Embedded GCC")
-  (( RISCV_HASH < 0 )) && RISCV_HASH=$((RISCV_HASH + 4294967296))
-  (( RISCV_HASH++ ))
+  local mcu_families=()
+  local mcu_paths=()
 
-  # Write toolchain path preferences
-  sudo tee "$prefs_root/org.eclipse.embedcdt.core.prefs" >/dev/null <<EOF
+  # Discover projects by locating .project files under lib/Eclipse directories.
+  while IFS= read -r proj_file; do
+    local proj_root
+    proj_root=$(dirname "$proj_file")
+    local rel_path="${proj_root#$ROOT/IOsonata/}"
+    mcu_families+=("$rel_path")
+    mcu_paths+=("$proj_root")
+  done < <(find "$ROOT/IOsonata" -type f -path "*/lib/Eclipse/.project" 2>/dev/null | sort)
+
+  if [[ ${#mcu_families[@]} -eq 0 ]]; then
+    echo "⚠️  WARNING: No IOsonata Eclipse library projects found (expected */lib/Eclipse/.project)."
+    return 0
+  fi
+
+  echo "Available IOsonata library projects:"
+  echo
+  for i in "${!mcu_families[@]}"; do
+    printf "  %2d) %s\n" $((i+1)) "${mcu_families[$i]}"
+  done
+  echo "   0) Skip library build"
+  echo
+
+  local selection
+  while true; do
+    read -r -p "Select project to build (0-${#mcu_families[@]}): " selection
+    if [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 0 ]] && [[ "$selection" -le ${#mcu_families[@]} ]]; then
+      break
+    fi
+    echo "Invalid selection. Please try again."
+  done
+
+  if [[ "$selection" -eq 0 ]]; then
+    echo "Skipping library build."
+    return 0
+  fi
+
+  local selected_idx=$((selection - 1))
+  local selected_family="${mcu_families[$selected_idx]}"
+  local selected_path="${mcu_paths[$selected_idx]}"
+
+  if [[ ! -f "$selected_path/.project" || ! -f "$selected_path/.cproject" ]]; then
+    echo "❌ ERROR: Selected path is not a valid Eclipse CDT project:"
+    echo "   $selected_path"
+    echo "   (missing .project or .cproject)"
+    return 1
+  fi
+
+  local proj_name
+  proj_name=$(grep -m1 -oE '<name>[^<]+' "$selected_path/.project" | sed 's/<name>//' || true)
+  if [[ -z "${proj_name:-}" ]]; then
+    echo "❌ ERROR: Could not determine project name from:"
+    echo "   $selected_path/.project"
+    return 1
+  fi
+
+  echo
+  echo ">>> Building IOsonata libraries for: $selected_family"
+  echo "    Project: $proj_name"
+  echo "    Path:    $selected_path"
+  echo
+
+  local WS
+  WS=$(mktemp -d /tmp/iosonata_build_ws.XXXX)
+  echo ">>> Using temp workspace: $WS"
+  echo ">>> Running Eclipse headless build (indexing disabled)..."
+  echo
+
+  # Prefer the console launcher (no macOS GUI dialogs).
+  local ECL_BIN="$ECLIPSE_DIR/eclipsec"
+  if [[ ! -x "$ECL_BIN" ]]; then
+    ECL_BIN="$ECLIPSE_DIR/eclipse"
+  fi
+
+  local LOGFILE="/tmp/build_iosonata_lib.log"
+  rm -f "$LOGFILE" || true
+
+  # Run headless build and stream output live, while filtering the macOS launcher
+  # "Java was started but returned exit code=1" dump. Full output is saved in $LOGFILE.
+  set +e
+  "$ECL_BIN" \
+    --launcher.suppressErrors \
+    -nosplash \
+    -application org.eclipse.cdt.managedbuilder.core.headlessbuild \
+    -data "$WS" \
+    -no-indexer \
+    -import "$selected_path" \
+    -cleanBuild "${proj_name}/.*" \
+    -printErrorMarkers \
+    2>&1 \
+    | tee "$LOGFILE" \
+    | awk 'BEGIN{drop=0} /^Java was started but returned exit code=/{drop=1} drop==0{print}'
+  BUILD_EXIT=${PIPESTATUS[0]}
+  set -e
+
+  if [[ "$BUILD_EXIT" -ne 0 ]]; then
+    echo
+    echo "❌ IOsonata library build failed for $selected_family (exit=$BUILD_EXIT)"
+    echo "   Log: /tmp/build_iosonata_lib.log"
+    echo "   Temp workspace kept at: $WS"
+    echo
+    echo "Tip: The printed error markers above are the real compiler/linker failures."
+    return 1
+  fi
+
+  echo
+  echo "✅ IOsonata library build completed for $selected_family"
+  rm -rf "$WS" || true
+  echo
+}
+
+# ---------------------------------------------------------
+# Install xPack toolchain
+# ---------------------------------------------------------
+install_xpack() {
+  local repo=$1 tool=$2 name=$3
+
+  echo ">>> Checking $name..." >&2
+
+  local latest_json
+  if ! latest_json=$(curl -fsSL "https://api.github.com/repos/xpack-dev-tools/${repo}/releases/latest"); then
+    echo "❌ Failed to query GitHub API for ${repo}. This may be a network issue or GitHub API rate limiting." >&2
+    exit 1
+  fi
+
+  local latest_tag latest_url
+  read -r latest_tag latest_url < <(
+    printf '%s' "$latest_json" | python3 -c '
+import json, sys
+platform = sys.argv[1]
+j = json.load(sys.stdin)
+tag = j.get("tag_name", "") or ""
+url = ""
+for a in (j.get("assets") or []):
+  u = a.get("browser_download_url", "") or ""
+  if platform in u:
+    url = u
+    break
+print(tag, url)
+' "$PLATFORM"
+  )
+
+  if [[ -z "${latest_tag:-}" || -z "${latest_url:-}" ]]; then
+    echo "❌ Could not resolve latest release tag or download URL for $name (repo=$repo, platform=$PLATFORM)." >&2
+    exit 1
+  fi
+
+  local latest_norm latest_base
+  latest_norm=$(echo "$latest_tag" | sed 's/^v//')
+  latest_base=$(echo "$latest_norm" | cut -d- -f1)
+
+  local installed_ver=""
+  if command -v "$tool" >/dev/null 2>&1; then
+    installed_ver=$($tool --version 2>&1 | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
+  fi
+
+  echo ">>> Installed: ${installed_ver:-none} | Latest: $latest_base" >&2
+
+  if [[ "$MODE" != "force" && -n "$installed_ver" && "$installed_ver" == "$latest_base" ]]; then
+    echo "✅ $name already up-to-date ($installed_ver)" >&2
+    local bin_path real_bin instdir
+    bin_path=$(command -v "$tool")
+    real_bin=$(resolve_path "$bin_path")
+    instdir=$(dirname "$(dirname "$real_bin")")
+    echo "$instdir"
+    return 0
+  fi
+
+  echo "⬇️ Installing $name $latest_norm..." >&2
+
+  local tmpxz
+  tmpxz=$(mktemp)
+  if ! curl -fL "$latest_url" -o "$tmpxz"; then
+    echo "❌ Failed to download $name from: $latest_url" >&2
+    rm -f "$tmpxz" || true
+    exit 1
+  fi
+
+  sudo tar -xJ -C "$TOOLS" -f "$tmpxz"
+  rm -f "$tmpxz" || true
+
+  local origdir
+  origdir=$(ls -d "$TOOLS"/${repo}-* "$TOOLS"/xpack-${repo/-xpack/}-* 2>/dev/null | grep "$latest_norm" | head -n1 || true)
+  if [[ -z "$origdir" ]]; then
+    echo "❌ Could not find extracted folder for $name ($latest_norm) under $TOOLS" >&2
+    exit 1
+  fi
+
+  local basever prefix targetdir
+  basever=$(echo "$latest_norm" | cut -d- -f1)
+
+  case "$tool" in
+    arm-none-eabi-gcc)   prefix="xpack-arm-none-eabi-gcc" ;;
+    riscv-none-elf-gcc)  prefix="xpack-riscv-none-elf-gcc" ;;
+    openocd)             prefix="xpack-openocd" ;;
+    *)                   prefix="xpack-$tool" ;;
+  esac
+
+  targetdir="$TOOLS/$prefix-$basever"
+
+  if [[ "$origdir" != "$targetdir" ]]; then
+    sudo rm -rf "$targetdir" || true
+    sudo mv "$origdir" "$targetdir"
+  fi
+
+  sudo ln -sf "$targetdir/bin/$tool" "$BIN/$tool"
+
+  echo "✅ $name installed at $targetdir" >&2
+  echo "$targetdir"
+}
+
+ARM_DIR=""
+RISCV_DIR=""
+OPENOCD_DIR=""
+
+# ---------------------------------------------------------
+# Toolchains
+# ---------------------------------------------------------
+echo
+ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
+RISCV_DIR=$(install_xpack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC")
+OPENOCD_DIR=$(install_xpack "openocd-xpack" "openocd" "OpenOCD")
+
+echo "✅ Toolchains installed:"
+echo "   ARM:    $ARM_DIR"
+echo "   RISC-V: $RISCV_DIR"
+echo "   OpenOCD:$OPENOCD_DIR"
+
+# ---------------------------------------------------------
+# Install Eclipse Embedded CDT
+# ---------------------------------------------------------
+echo
+
+if [[ "$MODE" != "force" && -d "$ECLIPSE_DIR" ]]; then
+  echo "✅ Eclipse already installed at $ECLIPSE_DIR (skipping; use --force-update to reinstall)."
+else
+  echo "💻 Installing Eclipse Embedded CDT IDE..."
+  MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
+
+  RELEASES=$(curl -fsSL "$MIRROR/" | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' | cut -d'"' -f2 | sed 's|/||g' | sort -r | uniq || true)
+  if [[ -z "${RELEASES:-}" ]]; then
+    echo "❌ Failed to enumerate Eclipse releases from mirror: $MIRROR" >&2
+    exit 1
+  fi
+
+  ECLIPSE_URL=""
+  for release in $RELEASES; do
+    URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-linux-gtk-$ECLIPSE_ARCH.tar.gz"
+    URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-linux-gtk-$ECLIPSE_ARCH.tar.gz"
+
+    if curl --head --silent --fail "$URL_EMBEDCDT" >/dev/null 2>&1; then
+      ECLIPSE_URL="$URL_EMBEDCDT"
+      break
+    elif curl --head --silent --fail "$URL_EMBEDCPP" >/dev/null 2>&1; then
+      ECLIPSE_URL="$URL_EMBEDCPP"
+      break
+    fi
+  done
+
+  if [[ -z "$ECLIPSE_URL" ]]; then
+    echo "❌ Could not find a valid Eclipse Embedded CDT download URL for any release." >&2
+    exit 1
+  fi
+
+  echo "⬇️ Downloading Eclipse: $ECLIPSE_URL"
+
+  TMP_ECLIPSE_TAR=$(mktemp)
+  if ! curl -fL "$ECLIPSE_URL" -o "$TMP_ECLIPSE_TAR"; then
+    echo "❌ Eclipse download failed." >&2
+    exit 1
+  fi
+
+  echo "📦 Extracting Eclipse..."
+  sudo rm -rf "$ECLIPSE_DIR"
+  sudo mkdir -p "$ECLIPSE_DIR"
+  sudo tar -xzf "$TMP_ECLIPSE_TAR" -C /opt
+  # tar creates /opt/eclipse, which is what we want
+
+  rm -f "$TMP_ECLIPSE_TAR" || true
+
+  echo "✅ Eclipse installed at $ECLIPSE_DIR"
+fi
+
+# ---------------------------------------------------------
+# Seed preferences (user) — no sudo under ~/.eclipse
+# ---------------------------------------------------------
+seed_eclipse_prefs() {
+  echo
+  echo ">>> Seeding Eclipse preferences in ~/.eclipse..."
+
+  local base="$HOME/.eclipse"
+  mkdir -p "$base"
+
+  # If a previous run created ~/.eclipse as root, fix it.
+  if [[ "$(stat -f '%u' "$base")" == "0" ]]; then
+    echo "⚠️  $base is owned by root (likely from a previous installer run). Fixing ownership..."
+    sudo chown -R "$USER":staff "$base" || true
+  fi
+
+  local instance_cfg
+  instance_cfg=$(ls -d "$base"/org.eclipse.platform_*/configuration 2>/dev/null | sort -r | head -n1 || true)
+
+  if [[ -z "${instance_cfg:-}" ]]; then
+    echo "⚠️  Eclipse user configuration directory not found under $base."
+    echo "   Run Eclipse once (it will create ~/.eclipse/org.eclipse.platform_*/configuration), then re-run this installer to seed prefs."
+    echo "   Continuing without seeding preferences."
+    return 0
+  fi
+
+  mkdir -p "$instance_cfg/.settings"
+
+  if [[ ! -w "$instance_cfg/.settings" ]]; then
+    echo "⚠️  $instance_cfg/.settings is not writable. Fixing ownership..."
+    sudo chown -R "$USER":staff "$instance_cfg" || true
+  fi
+
+  local JRE
+  JRE=$(which java 2>/dev/null || echo "")
+  if [[ -z "$JRE" ]]; then
+    echo "❌ No JDK found. Please install Temurin 17+."
+    exit 1
+  fi
+
+  local ARM_HASH RISCV_HASH
+  ARM_HASH=$(java_hash "$ARM_DIR/bin")
+  RISCV_HASH=$(java_hash "$RISCV_DIR/bin")
+
+  cat > "$instance_cfg/.settings/org.eclipse.core.runtime.prefs" <<EOF
 eclipse.preferences.version=1
-xpack.arm.toolchain.path=$ARM_DIR/bin
-xpack.riscv.toolchain.path=$RISCV_DIR/bin
-xpack.openocd.path=$OPENOCD_DIR/bin
-xpack.strict=true
+org.eclipse.jdt.core.classpathVariable.JRE_LIB=$JRE
+org.eclipse.jdt.core.classpathVariable.JRE_SRC=$JRE/Contents/Home/src.zip
+org.eclipse.jdt.core.classpathVariable.JRE_SRCROOT=
 EOF
 
-  sudo tee "$prefs_root/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" >/dev/null <<EOF
+  cat > "$instance_cfg/.settings/org.eclipse.cdt.core.prefs" <<EOF
+eclipse.preferences.version=1
+environment/buildEnvironmentInclude=true
+org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
+EOF
+
+  cat > "$instance_cfg/.settings/org.eclipse.embedcdt.core.prefs" <<EOF
+eclipse.preferences.version=1
+buildtools.path.$ARM_HASH=$ARM_DIR/bin
+buildtools.path.$RISCV_HASH=$RISCV_DIR/bin
+buildtools.path.strict=true
+EOF
+
+  cat > "$instance_cfg/.settings/org.eclipse.embedcdt.managedbuild.core.prefs" <<EOF
+eclipse.preferences.version=1
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
-toolchain.path.1287942917=$ARM_DIR/bin
-toolchain.path.strict=true
-EOF
-
-  sudo tee "$prefs_root/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" >/dev/null <<EOF
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
 toolchain.path.strict=true
 EOF
 
-  sudo tee "$prefs_root/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" >/dev/null <<EOF
+  cat > "$instance_cfg/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
 
-  # Configure core.runtime with environment variables
-  sudo tee "$prefs_root/org.eclipse.core.runtime.prefs" >/dev/null <<EOF
-eclipse.preferences.version=1
-environment/project/IOCOMPOSER_HOME/value=$ROOT
-environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
-environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
-environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
-environment/project/NRFX_HOME/value=$EXT/nrfx
-environment/project/NRFXLIB_HOME/value=$EXT/sdk-nrfxlib
-environment/project/NRF5_SDK_HOME/value=$EXT/nRF5_SDK
-environment/project/NRF5_SDK_MESH_HOME/value=$EXT/nRF5_SDK_Mesh
-environment/project/BSEC_HOME/value=$EXT/BSEC
-EOF
-
-  echo "✅ Eclipse preferences seeded."
-
-  # Add iosonata_loc system property to eclipse.ini
-  echo ">>> Configuring IOsonata system properties in eclipse.ini..."
-  
-  local eclipse_ini="$ECLIPSE_DIR/eclipse.ini"
-  
-  # Check if eclipse.ini exists
-  if [[ ! -f "$eclipse_ini" ]]; then
-    echo "!!! WARNING: eclipse.ini not found at $eclipse_ini"
-    return
-  fi
-  
-  # Remove old properties if they exist
-  sudo sed -i '/^-Diosonata\.home=/d' "$eclipse_ini"
-  sudo sed -i '/^-Diosonata_loc=/d' "$eclipse_ini"
-  sudo sed -i '/^-Diocomposer_home=/d' "$eclipse_ini"
-  
-  # Find -vmargs line and insert after it, or add at end if not found
-  if sudo grep -q "^-vmargs" "$eclipse_ini"; then
-    # Insert after -vmargs
-    sudo sed -i "/^-vmargs/a -Diosonata_loc=$ROOT\n-Diocomposer_home=$ROOT" "$eclipse_ini"
-  else
-    # Add -vmargs section at the end
-    echo "-vmargs" | sudo tee -a "$eclipse_ini" >/dev/null
-    echo "-Diosonata_loc=$ROOT" | sudo tee -a "$eclipse_ini" >/dev/null
-    echo "-Diocomposer_home=$ROOT" | sudo tee -a "$eclipse_ini" >/dev/null
-  fi
-  
-  echo "✅ System properties configured in eclipse.ini:"
-  echo "   iosonata_loc=$ROOT"
-  echo "   iocomposer_home=$ROOT"
+  echo "✅ Eclipse preferences seeded in:"
+  echo "   $instance_cfg/.settings"
 }
+
+seed_eclipse_prefs
+
+# ---------------------------------------------------------
+# Set global iosonata_loc system property in eclipse.ini
+# ---------------------------------------------------------
+echo
+echo ">>> Setting iosonata_loc system property in Eclipse installation..."
+
+ECLIPSE_INI="$ECLIPSE_DIR/eclipse.ini"
+IOSONATA_LOC_PROP="-Diosonata_loc=$ROOT"
+
+sudo sed -i.bak '/^-Diosonata\.home=/d' "$ECLIPSE_INI" || true
+sudo sed -i '' '/^-Diosonata_loc=/d' "$ECLIPSE_INI"
+
+if grep -q '^-vmargs$' "$ECLIPSE_INI"; then
+  sudo sed -i '' '/^-vmargs$/a\
+'"$IOSONATA_LOC_PROP"'
+' "$ECLIPSE_INI"
+else
+  echo "$IOSONATA_LOC_PROP" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+fi
+
+echo "✅ iosonata_loc set in eclipse.ini:"
+grep "^-Diosonata_loc=" "$ECLIPSE_INI" || true
 
 # ---------------------------------------------------------
 # Clone repos
 # ---------------------------------------------------------
-clone_repos() {
-  echo ">>> Cloning/updating repositories ..."
-  cd "$ROOT"
-
-  # Clone IOsonata repo
-  if [[ -d "IOsonata" ]]; then
-    if [[ "$MODE" = "force" ]]; then
-      echo ">>> Force-updating IOsonata repository..."
-      rm -rf "IOsonata"
-      git clone --depth=1 https://github.com/IOsonata/IOsonata.git IOsonata
-    else
-      echo ">>> Updating IOsonata repository..."
-      (cd IOsonata && git pull)
-    fi
+if [[ -d "$ROOT/IOsonata" ]]; then
+  if [[ "$MODE" == "force" ]]; then
+    rm -rf "$ROOT/IOsonata"
+    git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
   else
-    echo ">>> Cloning IOsonata repository..."
-    git clone --depth=1 https://github.com/IOsonata/IOsonata.git IOsonata
+    (cd "$ROOT/IOsonata" && git pull --ff-only)
   fi
+else
+  git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
+fi
 
-  cd "$EXT"
-  local repos=(
-    "https://github.com/NordicSemiconductor/nrfx.git"
-    "https://github.com/nrfconnect/sdk-nrf-bm.git"
-    "https://github.com/nrfconnect/sdk-nrfxlib.git"
-    "https://github.com/IOsonata/nRF5_SDK.git"
-    "https://github.com/IOsonata/nRF5_SDK_Mesh.git"
-    "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
-    "https://github.com/xioTechnologies/Fusion.git"
-    "https://github.com/lvgl/lvgl.git"
-    "https://github.com/lwip-tcpip/lwip.git"
-    "https://github.com/hathach/tinyusb.git"
-  )
-  for repo in "${repos[@]}"; do
-    local name
-    name=$(basename "$repo" .git)
-    # Rename BSEC
-    if [[ "$name" == "Bosch-BSEC2-Library" ]]; then name="BSEC"; fi
-    if [[ -d "$name" ]]; then
-      if [[ "$MODE" = "force" ]]; then
-        rm -rf "$name"
-        git clone --depth=1 "$repo" "$name"
-      else
-        (cd "$name" && git pull)
-      fi
-    else
+cd "$EXT"
+repos=(
+  "https://github.com/NordicSemiconductor/nrfx.git"
+  "https://github.com/nrfconnect/sdk-nrf-bm.git"
+  "https://github.com/nrfconnect/sdk-nrfxlib.git"
+  "https://github.com/IOsonata/nRF5_SDK.git"
+  "https://github.com/IOsonata/nRF5_SDK_Mesh.git"
+  "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
+  "https://github.com/xioTechnologies/Fusion.git"
+  "https://github.com/dlaidig/vqf.git"
+  "https://github.com/lvgl/lvgl.git"
+  "https://github.com/lwip-tcpip/lwip.git"
+  "https://github.com/hathach/tinyusb.git"
+)
+for repo in "${repos[@]}"; do
+  name=$(basename "$repo" .git)
+  if [[ "$name" == "Bosch-BSEC2-Library" ]]; then name="BSEC"; fi
+  if [[ -d "$name" ]]; then
+    if [[ "$MODE" == "force" ]]; then
+      rm -rf "$name"
       git clone --depth=1 "$repo" "$name"
-    fi
-  done
-
-  # Clone FreeRTOS-Kernel
-  echo "📦 Cloning/updating FreeRTOS-Kernel..."
-  if [[ -d "FreeRTOS-Kernel" ]]; then
-    if [[ "$MODE" = "force" ]]; then
-      rm -rf "FreeRTOS-Kernel"
-      git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
     else
-      (cd FreeRTOS-Kernel && git pull)
+      (cd "$name" && git pull --ff-only)
     fi
   else
-    git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
+    git clone --depth=1 "$repo" "$name"
   fi
-}
+done
+
+echo "📦 Cloning FreeRTOS-Kernel..."
+if [[ -d "FreeRTOS-Kernel" ]]; then
+  if [[ "$MODE" == "force" ]]; then
+    rm -rf "FreeRTOS-Kernel"
+    git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
+  else
+    (cd FreeRTOS-Kernel && git pull --ff-only)
+  fi
+else
+  git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
+  echo "✅ FreeRTOS-Kernel cloned"
+fi
+
+# ---------------------------------------------------------
+# Install IOsonata Eclipse Plugin
+# ---------------------------------------------------------
+echo
+install_iosonata_plugin
 
 # ---------------------------------------------------------
 # Generate makefile_path.mk
 # ---------------------------------------------------------
-generate_makefile_paths() {
-  echo
-  echo "📝 Generating makefile_path.mk for Makefile-based builds..."
-  
-  local MAKEFILE_PATH_MK="$ROOT/IOsonata/makefile_path.mk"
-  
-  cat > "$MAKEFILE_PATH_MK" <<EOF
+echo
+echo "📝 Generating makefile_path.mk for Makefile-based builds..."
+
+MAKEFILE_PATH_MK="$ROOT/IOsonata/makefile_path.mk"
+
+cat > "$MAKEFILE_PATH_MK" <<EOF
 # makefile_path.mk
-# Auto-generated by install_iocdevtools_linux.sh $SCRIPT_VERSION
+# Auto-generated by install_iocdevtools_macos.sh $SCRIPT_VERSION
 # This file contains all path macros required to compile IOsonata projects using Makefiles
 # Include this file in your project Makefile: include \$(IOSONATA_ROOT)/makefile_path.mk
 
 # ============================================
-# IOsonata Paths
-# ============================================
-# IOCOMPOSER_HOME must be set to your IOcomposer root directory
-ifndef IOCOMPOSER_HOME
-\$(error IOCOMPOSER_HOME is not set. Please set it to your IOcomposer root directory)
-endif
-
-IOSONATA_ROOT = \$(IOCOMPOSER_HOME)/IOsonata
-IOSONATA_INCLUDE = \$(IOSONATA_ROOT)/include
-IOSONATA_SRC = \$(IOSONATA_ROOT)/src
-
-# ============================================
-# ARM-specific Paths
-# ============================================
-ARM_ROOT = \$(IOSONATA_ROOT)/ARM
-ARM_CMSIS = \$(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = \$(ARM_CMSIS)/Include
-ARM_INCLUDE = \$(ARM_ROOT)/include
-ARM_SRC = \$(ARM_ROOT)/src
-ARM_LDSCRIPT = \$(ARM_ROOT)/ldscript
-
-# Vendor-specific paths
-ARM_NORDIC = \$(ARM_ROOT)/Nordic
-ARM_NXP = \$(ARM_ROOT)/NXP
-ARM_ST = \$(ARM_ROOT)/ST
-ARM_MICROCHIP = \$(ARM_ROOT)/Microchip
-ARM_RENESAS = \$(ARM_ROOT)/Renesas
-
-# ============================================
-# RISC-V-specific Paths
-# ============================================
-RISCV_ROOT = \$(IOSONATA_ROOT)/RISCV
-RISCV_INCLUDE = \$(RISCV_ROOT)/include
-RISCV_SRC = \$(RISCV_ROOT)/src
-RISCV_LDSCRIPT = \$(RISCV_ROOT)/ldscript
-
-# Vendor-specific paths
-RISCV_ESPRESSIF = \$(RISCV_ROOT)/Espressif
-RISCV_NORDIC = \$(RISCV_ROOT)/Nordic
-RISCV_RENESAS = \$(RISCV_ROOT)/Renesas
-
-# ============================================
-# External Libraries
-# ============================================
-EXTERNAL_ROOT = \$(IOCOMPOSER_HOME)/external
-NRFX_ROOT = \$(EXTERNAL_ROOT)/nrfx
-SDK_NRF_BM_ROOT = \$(EXTERNAL_ROOT)/sdk-nrf-bm
-SDK_NRFXLIB_ROOT = \$(EXTERNAL_ROOT)/sdk-nrfxlib
-NRF5_SDK_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK
-NRF5_SDK_MESH_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK_Mesh
-BSEC_ROOT = \$(EXTERNAL_ROOT)/BSEC
-FUSION_ROOT = \$(EXTERNAL_ROOT)/Fusion
-LVGL_ROOT = \$(EXTERNAL_ROOT)/lvgl
-LWIP_ROOT = \$(EXTERNAL_ROOT)/lwip
-FREERTOS_KERNEL_ROOT = \$(EXTERNAL_ROOT)/FreeRTOS-Kernel
-TINYUSB_ROOT = \$(EXTERNAL_ROOT)/tinyusb
-
-# ============================================
-# Additional IOsonata Modules
-# ============================================
-FATFS_ROOT = \$(IOSONATA_ROOT)/fatfs
-LITTLEFS_ROOT = \$(IOSONATA_ROOT)/littlefs
-MICRO_ECC_ROOT = \$(IOSONATA_ROOT)/micro-ecc
-
-# ============================================
-# Common Include Paths (for -I flags)
-# ============================================
-IOSONATA_INCLUDES = -I\$(IOSONATA_INCLUDE) \\
-                    -I\$(IOSONATA_INCLUDE)/bluetooth \\
-                    -I\$(IOSONATA_INCLUDE)/audio \\
-                    -I\$(IOSONATA_INCLUDE)/converters \\
-                    -I\$(IOSONATA_INCLUDE)/coredev \\
-                    -I\$(IOSONATA_INCLUDE)/display \\
-                    -I\$(IOSONATA_INCLUDE)/imu \\
-                    -I\$(IOSONATA_INCLUDE)/miscdev \\
-                    -I\$(IOSONATA_INCLUDE)/pwrmgnt \\
-                    -I\$(IOSONATA_INCLUDE)/sensors \\
-                    -I\$(IOSONATA_INCLUDE)/storage \\
-                    -I\$(IOSONATA_INCLUDE)/sys \\
-                    -I\$(IOSONATA_INCLUDE)/usb
-
-ARM_INCLUDES = -I\$(ARM_INCLUDE) \\
-               -I\$(ARM_CMSIS_INCLUDE)
-
-RISCV_INCLUDES = -I\$(RISCV_INCLUDE)
-
-# ============================================
-# Environment Variables (optional)
-# ============================================
-export NRFX_HOME := \$(NRFX_ROOT)
-export NRFXLIB_HOME := \$(SDK_NRFXLIB_ROOT)
-export NRF5_SDK_HOME := \$(NRF5_SDK_ROOT)
-export NRF5_SDK_MESH_HOME := \$(NRF5_SDK_MESH_ROOT)
-export BSEC_HOME := \$(BSEC_ROOT)
-EOF
-
-  # Add toolchain paths with absolute locations
-  cat >> "$MAKEFILE_PATH_MK" <<EOF
-
-# ============================================
-# Toolchain Paths (installed in fixed location)
+# Toolchain Paths
 # ============================================
 ARM_GCC_ROOT = $ARM_DIR
 ARM_GCC_BIN = $ARM_DIR/bin
@@ -575,106 +707,95 @@ RISCV_GDB = \$(RISCV_GCC_BIN)/riscv-none-elf-gdb
 
 OPENOCD_ROOT = $OPENOCD_DIR
 OPENOCD = $OPENOCD_DIR/bin/openocd
+
+# ============================================
+# IOsonata Paths
+# ============================================
+ifndef IOCOMPOSER_HOME
+\$(error IOCOMPOSER_HOME is not set. Please set it to your IOcomposer root directory)
+endif
+
+IOSONATA_ROOT = \$(IOCOMPOSER_HOME)/IOsonata
+IOSONATA_INCLUDE = \$(IOSONATA_ROOT)/include
+IOSONATA_SRC = \$(IOSONATA_ROOT)/src
+
+ARM_ROOT = \$(IOSONATA_ROOT)/ARM
+ARM_CMSIS = \$(ARM_ROOT)/CMSIS
+ARM_CMSIS_INCLUDE = \$(ARM_CMSIS)/Include
+ARM_INCLUDE = \$(ARM_ROOT)/include
+ARM_SRC = \$(ARM_ROOT)/src
+ARM_LDSCRIPT = \$(ARM_ROOT)/ldscript
+
+RISCV_ROOT = \$(IOSONATA_ROOT)/RISCV
+RISCV_INCLUDE = \$(RISCV_ROOT)/include
+RISCV_SRC = \$(RISCV_ROOT)/src
+RISCV_LDSCRIPT = \$(RISCV_ROOT)/ldscript
+
+EXTERNAL_ROOT = \$(IOCOMPOSER_HOME)/external
+NRFX_ROOT = \$(EXTERNAL_ROOT)/nrfx
+SDK_NRF_BM_ROOT = \$(EXTERNAL_ROOT)/sdk-nrf-bm
+SDK_NRFXLIB_ROOT = \$(EXTERNAL_ROOT)/sdk-nrfxlib
+NRF5_SDK_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK
+NRF5_SDK_MESH_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK_Mesh
+BSEC_ROOT = \$(EXTERNAL_ROOT)/BSEC
+FUSION_ROOT = \$(EXTERNAL_ROOT)/Fusion
+LVGL_ROOT = \$(EXTERNAL_ROOT)/lvgl
+LWIP_ROOT = \$(EXTERNAL_ROOT)/lwip
+FREERTOS_KERNEL_ROOT = \$(EXTERNAL_ROOT)/FreeRTOS-Kernel
+TINYUSB_ROOT = \$(EXTERNAL_ROOT)/tinyusb
 EOF
-  
-  echo "✅ makefile_path.mk created at: $MAKEFILE_PATH_MK"
-  echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.mk"
-}
+
+echo "✅ makefile_path.mk created at: $MAKEFILE_PATH_MK"
 
 # ---------------------------------------------------------
-# Display installation report
+# Build IOsonata Library
 # ---------------------------------------------------------
-display_report() {
-  echo
-  echo "=============================================="
-  echo "  IOcomposer Dev Tools Installation Report"
-  echo "=============================================="
-  echo "Script version     : $SCRIPT_VERSION"
-  echo "Install mode       : $MODE"
-  echo
-  echo "Root directory     : $ROOT"
-  echo "External repos dir : $EXT"
-  echo
-  echo "Eclipse IDE        : $ECLIPSE_DIR"
-  if command -v eclipse &>/dev/null; then
-    echo "  Version          : $(eclipse -version 2>&1 | head -n1)"
-    echo "  Symlink          : $BIN/eclipse"
-  else
-    echo "  Not installed"
-  fi
-  echo
-  echo "Toolchains (xPack):"
-  if command -v arm-none-eabi-gcc &>/dev/null; then
-    echo "  ARM GCC          : ${ARM_DIR:-unknown} ($(arm-none-eabi-gcc --version | head -n1))"
-  else
-    echo "  ARM GCC          : not installed"
-  fi
-  if command -v riscv-none-elf-gcc &>/dev/null; then
-    echo "  RISC-V GCC       : ${RISCV_DIR:-unknown} ($(riscv-none-elf-gcc --version | head -n1))"
-  else
-    echo "  RISC-V GCC       : not installed"
-  fi
-  if command -v openocd &>/dev/null; then
-    echo "  OpenOCD          : ${OPENOCD_DIR:-unknown} ($(openocd --version | head -n1))"
-  else
-    echo "  OpenOCD          : not installed"
-  fi
-  echo "  Symlinks         : /usr/local/bin/*"
-  echo
-  echo "Repositories cloned:"
-  echo "  IOsonata         : $ROOT/IOsonata"
-  echo "  nrfx             : $EXT/nrfx"
-  echo "  sdk-nrf-bm       : $EXT/sdk-nrf-bm"
-  echo "  sdk-nrfxlib      : $EXT/sdk-nrfxlib"
-  echo "  nRF5_SDK         : $EXT/nRF5_SDK"
-  echo "  nRF5_SDK_Mesh    : $EXT/nRF5_SDK_Mesh"
-  echo "  BSEC             : $EXT/BSEC"
-  echo
-  echo "iosonata_loc is configured in Eclipse installation"
-  echo
-  echo "Usage in .cproject files:"
-  echo "  \${system_property:iosonata_loc}/IOsonata/include"
-  echo "  \${system_property:iosonata_loc}/IOsonata/ARM/include"
-  echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
-  echo
-  echo "The variable is available in ALL workspaces."
-  echo "=============================================="
-  echo ">>> Installation complete. You can start Eclipse by running: eclipse"
-  echo "=============================================="
-}
+build_iosonata_lib || true
 
 # ---------------------------------------------------------
-# Uninstall
+# Summary
 # ---------------------------------------------------------
-uninstall_all() {
-  echo ">>> Uninstalling IOcomposer Dev Tools ..."
-  sudo rm -rf "$TOOLS"
-  sudo rm -rf "$ECLIPSE_DIR"
-  sudo rm -f "$BIN/arm-none-eabi-gcc" "$BIN/riscv-none-elf-gcc" "$BIN/openocd" "$BIN/eclipse"
-  echo ">>> Uninstall completed."
-}
+echo
+echo "=============================================="
+echo " IOcomposer MCU Dev Tools Installation Summary"
+echo "=============================================="
 
-# ---------------------------------------------------------
-# Main
-# ---------------------------------------------------------
-case "$MODE" in
-  install|force)
-    install_prerequisites
-    install_xpack "arm-none-eabi-gcc-xpack" "GNU Arm Embedded GCC" ret_value
-    ARM_DIR=$ret_value
-    install_xpack "riscv-none-elf-gcc-xpack" "GNU RISC-V Embedded GCC" ret_value
-    RISCV_DIR=$ret_value
-    install_xpack "openocd-xpack" "OpenOCD" ret_value
-    OPENOCD_DIR=$ret_value
+ECLIPSE_VER="Not installed"
+if [[ -f "$ECLIPSE_DIR/.eclipseproduct" ]]; then
+  ECLIPSE_VER=$(grep -m1 "^-Declipse.buildId=" "$ECLIPSE_DIR/eclipse.ini" 2>/dev/null | cut -d'=' -f2 || echo "Unknown")
+fi
 
-    install_eclipse_embedded
-    configure_eclipse_prefs
-    clone_repos
-    install_iosonata_plugin
-    generate_makefile_paths
-    display_report
-    ;;
-  uninstall)
-    uninstall_all
-    ;;
-esac
+ARM_VER="Not found"
+if [[ -n "${ARM_DIR:-}" && -x "$ARM_DIR/bin/arm-none-eabi-gcc" ]]; then
+  ARM_VER=$("$ARM_DIR/bin/arm-none-eabi-gcc" --version | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || echo "Unknown")
+fi
+
+RISCV_VER="Not found"
+if [[ -n "${RISCV_DIR:-}" && -x "$RISCV_DIR/bin/riscv-none-elf-gcc" ]]; then
+  RISCV_VER=$("$RISCV_DIR/bin/riscv-none-elf-gcc" --version | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || echo "Unknown")
+fi
+
+OPENOCD_VER="Not found"
+if [[ -n "${OPENOCD_DIR:-}" && -x "$OPENOCD_DIR/bin/openocd" ]]; then
+  OPENOCD_VER=$("$OPENOCD_DIR/bin/openocd" --version 2>&1 | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || echo "Unknown")
+fi
+
+printf "%-25s %s\n" "Eclipse Embedded CDT:" "$ECLIPSE_VER"
+printf "%-25s %s\n" "ARM GCC:" "$ARM_VER"
+printf "%-25s %s\n" "RISC-V GCC:" "$RISCV_VER"
+printf "%-25s %s\n" "OpenOCD:" "$OPENOCD_VER"
+printf "%-25s %s\n" "iosonata_loc:" "$ROOT"
+
+echo "=============================================="
+echo " Installation complete!"
+echo "=============================================="
+echo
+echo "✅ iosonata_loc is configured in Eclipse installation"
+echo
+echo "Usage in .cproject files:"
+echo "  \${system_property:iosonata_loc}/IOsonata/include"
+echo "  \${system_property:iosonata_loc}/IOsonata/ARM/include"
+echo "  \${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
+echo
+echo "If prefs seeding was skipped, run Eclipse once, then re-run this script to seed Embedded CDT toolchain paths."
+echo

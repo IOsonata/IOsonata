@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 
 # --- Script Configuration ---
 $SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.81-win" # Added IOsonata plugin installation
+$SCRIPT_VERSION = "v1.0.87-win" # Added VQF repository
 
 # --- CLI Option Handling ---
 function Show-Help {
@@ -461,6 +461,153 @@ function Install-IosonataPlugin {
 }
 
 # ---------------------------------------------------------
+# Build IOsonata Library for Selected MCU
+# ---------------------------------------------------------
+function Build-IosonataLib {
+    Write-Host ""
+    Write-Host "==============================================" -ForegroundColor Blue
+    Write-Host "  IOsonata Library Auto-Build" -ForegroundColor White
+    Write-Host "==============================================" -ForegroundColor Blue
+    Write-Host ""
+    Write-Host "This will build the IOsonata library for your target MCU."
+    Write-Host "Pre-built libraries allow you to immediately link IOsonata"
+    Write-Host "with your firmware projects."
+    Write-Host ""
+    
+    # Check if IOsonata exists
+    if (-not (Test-Path "$ROOT\IOsonata")) {
+        Write-Host "ERROR: IOsonata directory not found at $ROOT\IOsonata" -ForegroundColor Red
+        return
+    }
+    
+    # Discover available MCU families
+    $mcuFamilies = @()
+    $mcuPaths = @()
+    
+    # Check ARM vendors - scan deeper for actual lib\Eclipse locations
+    if (Test-Path "$ROOT\IOsonata\ARM") {
+        # Find all lib\Eclipse directories under ARM
+        Get-ChildItem -Path "$ROOT\IOsonata\ARM" -Recurse -Directory -Filter "Eclipse" -ErrorAction SilentlyContinue | Where-Object {
+            $_.Parent.Name -eq "lib"
+        } | ForEach-Object {
+            $libPath = $_.FullName
+            # Extract meaningful name from path
+            # e.g., C:\IOcomposer\IOsonata\ARM\Nordic\nRF52\nRF52832\lib\Eclipse
+            # -> ARM/Nordic/nRF52/nRF52832
+            $relPath = $libPath -replace [regex]::Escape("$ROOT\IOsonata\"), ""
+            $relPath = $relPath -replace "\\lib\\Eclipse$", ""
+            $relPath = $relPath -replace "\\", "/"
+            $mcuFamilies += $relPath
+            $mcuPaths += $libPath
+        }
+    }
+    
+    # Check RISC-V vendors
+    if (Test-Path "$ROOT\IOsonata\RISCV") {
+        Get-ChildItem -Path "$ROOT\IOsonata\RISCV" -Recurse -Directory -Filter "Eclipse" -ErrorAction SilentlyContinue | Where-Object {
+            $_.Parent.Name -eq "lib"
+        } | ForEach-Object {
+            $libPath = $_.FullName
+            $relPath = $libPath -replace [regex]::Escape("$ROOT\IOsonata\"), ""
+            $relPath = $relPath -replace "\\lib\\Eclipse$", ""
+            $relPath = $relPath -replace "\\", "/"
+            $mcuFamilies += $relPath
+            $mcuPaths += $libPath
+        }
+    }
+    
+    if ($mcuFamilies.Count -eq 0) {
+        Write-Host "WARNING: No MCU library projects found in IOsonata" -ForegroundColor Yellow
+        return
+    }
+    
+    # Display menu
+    Write-Host "Available MCU families:" -ForegroundColor White
+    Write-Host ""
+    for ($i = 0; $i -lt $mcuFamilies.Count; $i++) {
+        Write-Host ("{0,3}) {1}" -f ($i + 1), $mcuFamilies[$i])
+    }
+    Write-Host "   0) Skip library build"
+    Write-Host ""
+    
+    # Get user selection
+    $selection = -1
+    while ($true) {
+        $input = Read-Host "Select MCU family to build (0-$($mcuFamilies.Count))"
+        if ($input -match '^\d+$' -and [int]$input -ge 0 -and [int]$input -le $mcuFamilies.Count) {
+            $selection = [int]$input
+            break
+        }
+        Write-Host "Invalid selection. Please try again." -ForegroundColor Yellow
+    }
+    
+    # Skip if user selected 0
+    if ($selection -eq 0) {
+        Write-Host "Skipping library build."
+        return
+    }
+    
+    # Get selected MCU info
+    $selectedIdx = $selection - 1
+    $selectedFamily = $mcuFamilies[$selectedIdx]
+    $selectedPath = $mcuPaths[$selectedIdx]
+    
+    Write-Host ""
+    Write-Host ">>> Building IOsonata libraries for: $selectedFamily" -ForegroundColor Cyan
+    Write-Host "    Library path: $selectedPath"
+    Write-Host ""
+    Write-Host ">>> Building project directly (no workspace import)..." -ForegroundColor Cyan
+    Write-Host ""
+    
+    # Build the project - Eclipse will read project name from .project file
+    $buildSuccess = 0
+    $buildFail = 0
+    $eclipseExe = Join-Path $ECLIPSE_DIR "eclipse.exe"
+    
+    # Build directly using project directory as workspace - NO IMPORT, NO TEMP WORKSPACE
+    # This avoids workspace save issues that can cause crashes
+    $buildLog = "$env:TEMP\build_iosonata_lib.log"
+    $buildOutput = & $eclipseExe -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild `
+        -data $selectedPath `
+        -cleanBuild all `
+        2>&1
+    
+    $buildOutput | Out-File -FilePath $buildLog
+    $buildOutput | Write-Host
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host ""
+        Write-Host "[OK] Build completed successfully" -ForegroundColor Green
+        $buildSuccess = 1
+    } else {
+        Write-Host ""
+        Write-Host "[FAIL] Build failed with exit code $LASTEXITCODE (check $buildLog for details)" -ForegroundColor Red
+        $buildFail = 1
+    }
+    Write-Host ""
+    
+    # Summary
+    Write-Host "==============================================" -ForegroundColor Blue
+    Write-Host "  Build Summary" -ForegroundColor White
+    Write-Host "==============================================" -ForegroundColor Blue
+    Write-Host "Successful builds: $buildSuccess" -ForegroundColor $(if ($buildSuccess -gt 0) { "Green" } else { "White" })
+    Write-Host "Failed builds:     $buildFail" -ForegroundColor $(if ($buildFail -gt 0) { "Red" } else { "White" })
+    Write-Host ""
+    
+    if ($buildSuccess -gt 0) {
+        Write-Host "[OK] IOsonata libraries are ready to use!" -ForegroundColor Green
+        Write-Host "   Libraries are located in: $selectedPath\Debug and Release"
+        Write-Host "   You can now link these libraries in your firmware projects."
+    }
+    
+    if ($buildFail -gt 0) {
+        Write-Host "WARNING: Some builds failed. Check the log files in $env:TEMP for details." -ForegroundColor Yellow
+    }
+    
+    Write-Host ""
+}
+
+# ---------------------------------------------------------
 # Clone repos
 # ---------------------------------------------------------
 function Sync-Repo { 
@@ -501,6 +648,7 @@ Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"; $repos = 
   "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "$EXT\nRF5_SDK_Mesh"; 
   "https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "$EXT\BSEC"; 
   "https://github.com/xioTechnologies/Fusion.git" = "$EXT\Fusion";
+  "https://github.com/dlaidig/vqf.git" = "$EXT\vqf";
   "https://github.com/lvgl/lvgl.git" = "$EXT\lvgl";
   "https://github.com/lwip-tcpip/lwip.git" = "$EXT\lwip";
   "https://github.com/hathach/tinyusb.git" = "$EXT\tinyusb"};
@@ -670,6 +818,11 @@ Write-Host ""
 Write-Host
 Install-IosonataPlugin
 Write-Host
+
+# ---------------------------------------------------------
+# Build IOsonata Library
+# ---------------------------------------------------------
+Build-IosonataLib
 
 # ---------------------------------------------------------
 # Summary
