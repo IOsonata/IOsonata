@@ -626,7 +626,7 @@ echo "✅ makefile_path.mk created at: $MAKEFILE_PATH_MK"
 # =========================================================
 # Build IOsonata Libraries (using standalone script)
 # =========================================================
-BUILD_SCRIPT="$ROOT/IOsonata/tools/build_iosonata_lib_linux.sh"
+BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
 
 if [[ -f "$BUILD_SCRIPT" ]]; then
   echo ""

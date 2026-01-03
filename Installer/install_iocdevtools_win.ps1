@@ -683,7 +683,7 @@ Write-Host
 # =========================================================
 # Build IOsonata Libraries (using standalone script)
 # =========================================================
-$BUILD_SCRIPT = "$ROOT\IOsonata\tools\build_iosonata_lib_win.ps1"
+$BUILD_SCRIPT = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
 
 if (Test-Path $BUILD_SCRIPT) {
     Write-Host ""
