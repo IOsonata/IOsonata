@@ -1,0 +1,1 @@
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "build_iosonata_lib_win.ps1" %*

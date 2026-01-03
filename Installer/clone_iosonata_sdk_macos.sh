@@ -151,134 +151,6 @@ clone_or_update_repo() {
 }
 
 # --- IOsonata Library Build Function ---
-build_iosonata_lib() {
-  echo
-  echo "========================================================="
-  echo "  IOsonata Library Auto-Build (Headless)"
-  echo "========================================================="
-  echo
-  echo "This will build the IOsonata library for your target MCU."
-  echo "Note: Headless build imports the project into a temp workspace"
-  echo "and disables indexing (-no-indexer) to avoid CDT PDOM stalls."
-  echo
-
-  if [[ ! -d "$ROOT/IOsonata" ]]; then
-    echo "❌ ERROR: IOsonata directory not found at $ROOT/IOsonata"
-    return 0
-  fi
-
-  local mcu_families=()
-  local mcu_paths=()
-
-  # Discover projects by locating .project files under lib/Eclipse directories.
-  while IFS= read -r proj_file; do
-    local proj_root
-    proj_root=$(dirname "$proj_file")
-    local rel_path="${proj_root#$ROOT/IOsonata/}"
-    mcu_families+=("$rel_path")
-    mcu_paths+=("$proj_root")
-  done < <(find "$ROOT/IOsonata" -type f -path "*/lib/Eclipse/.project" 2>/dev/null | sort)
-
-  if [[ ${#mcu_families[@]} -eq 0 ]]; then
-    echo "⚠️  WARNING: No IOsonata Eclipse library projects found (expected */lib/Eclipse/.project)."
-    return 0
-  fi
-
-  echo "Available IOsonata library projects:"
-  echo
-  for i in "${!mcu_families[@]}"; do
-    printf "  %2d) %s\n" $((i+1)) "${mcu_families[$i]}"
-  done
-  echo "   0) Skip library build"
-  echo
-
-  local selection
-  while true; do
-    read -r -p "Select project to build (0-${#mcu_families[@]}): " selection
-    if [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 0 ]] && [[ "$selection" -le ${#mcu_families[@]} ]]; then
-      break
-    fi
-    echo "Invalid selection. Please try again."
-  done
-
-  if [[ "$selection" -eq 0 ]]; then
-    echo "Skipping library build."
-    return 0
-  fi
-
-  local selected_idx=$((selection - 1))
-  local selected_family="${mcu_families[$selected_idx]}"
-  local selected_path="${mcu_paths[$selected_idx]}"
-
-  if [[ ! -f "$selected_path/.project" || ! -f "$selected_path/.cproject" ]]; then
-    echo "❌ ERROR: Selected path is not a valid Eclipse CDT project:"
-    echo "   $selected_path"
-    echo "   (missing .project or .cproject)"
-    return 1
-  fi
-
-  local proj_name
-  proj_name=$(grep -m1 -oE '<name>[^<]+' "$selected_path/.project" | sed 's/<name>//' || true)
-  if [[ -z "${proj_name:-}" ]]; then
-    echo "❌ ERROR: Could not determine project name from:"
-    echo "   $selected_path/.project"
-    return 1
-  fi
-
-  echo
-  echo ">>> Building IOsonata libraries for: $selected_family"
-  echo "    Project: $proj_name"
-  echo "    Path:    $selected_path"
-  echo
-
-  local WS
-  WS=$(mktemp -d /tmp/iosonata_build_ws.XXXX)
-  echo ">>> Using temp workspace: $WS"
-  echo ">>> Running Eclipse headless build (indexing disabled)..."
-  echo
-
-  # Prefer the console launcher (no macOS GUI dialogs).
-  local ECL_BIN="$ECLIPSE_APP/Contents/MacOS/eclipsec"
-  if [[ ! -x "$ECL_BIN" ]]; then
-    ECL_BIN="$ECLIPSE_APP/Contents/MacOS/eclipse"
-  fi
-
-  local LOGFILE="/tmp/build_iosonata_lib.log"
-  rm -f "$LOGFILE" || true
-
-  # Run headless build and stream output live, while filtering the macOS launcher
-  # "Java was started but returned exit code=1" dump. Full output is saved in $LOGFILE.
-  set +e
-  "$ECL_BIN" \
-    --launcher.suppressErrors \
-    -nosplash \
-    -application org.eclipse.cdt.managedbuilder.core.headlessbuild \
-    -data "$WS" \
-    -no-indexer \
-    -import "$selected_path" \
-    -cleanBuild "${proj_name}/.*" \
-    -printErrorMarkers \
-    2>&1 \
-    | tee "$LOGFILE" \
-    | awk 'BEGIN{drop=0} /^Java was started but returned exit code=/{drop=1} drop==0{print}'
-  BUILD_EXIT=${PIPESTATUS[0]}
-  set -e
-
-  if [[ "$BUILD_EXIT" -ne 0 ]]; then
-    echo
-    echo "❌ IOsonata library build failed for $selected_family (exit=$BUILD_EXIT)"
-    echo "   Log: /tmp/build_iosonata_lib.log"
-    echo "   Temp workspace kept at: $WS"
-    echo
-    echo "Tip: The printed error markers above are the real compiler/linker failures."
-    return 1
-  fi
-
-  echo
-  echo "✅ IOsonata library build completed for $selected_family"
-  rm -rf "$WS" || true
-  echo
-}
 
 # ---------------------------------------------------------
 # Clone IOsonata
@@ -595,6 +467,26 @@ echo "${BLUE}---------------------------------------------------------${RESET}"
 
 # --- Auto-Build IOsonata Libraries (if Eclipse detected) ---
 if [[ "$ECLIPSE_INSTALLED" == "true" ]]; then
+  BUILD_SCRIPT="$ROOT/IOsonata/tools/build_iosonata_lib_macos.sh"
+  if [[ -f "$BUILD_SCRIPT" ]]; then
+    echo ""
+    echo "========================================================="
+    echo "   IOsonata Library Auto-Build"
+    echo "========================================================="
+    echo ""
+    "$BUILD_SCRIPT" --home "$ROOT" || true
+  else
+    echo ""
+    echo "Build script not found. Download from:"
+    echo "  https://github.com/IOsonata/IOsonata"
+  fi
+else
+  echo ""
+  echo "${YELLOW}Note: Eclipse not detected.${RESET}"
+  echo "      To build IOsonata libraries, install Eclipse and run:"
+  echo "      ${BOLD}./install_iocdevtools_macos.sh${RESET}"
+  echo ""
+fi
   echo ""
   echo "${BLUE}=========================================================${RESET}"
   echo "${BOLD}   IOsonata Library Auto-Build${RESET}"
