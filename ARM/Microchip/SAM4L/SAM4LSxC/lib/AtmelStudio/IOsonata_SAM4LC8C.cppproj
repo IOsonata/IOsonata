@@ -1,0 +1,473 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="14.0">
+  <PropertyGroup>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectVersion>7.0</ProjectVersion>
+    <ToolchainName>com.Atmel.ARMGCC.CPP</ToolchainName>
+    <ProjectGuid>dce6c7e3-ee26-4d79-826b-08594b9ad897</ProjectGuid>
+    <avrdevice>ATSAM4LC8C</avrdevice>
+    <avrdeviceseries>none</avrdeviceseries>
+    <OutputType>StaticLibrary</OutputType>
+    <Language>CPP</Language>
+    <OutputFileName>lib$(MSBuildProjectName)</OutputFileName>
+    <OutputFileExtension>.a</OutputFileExtension>
+    <OutputDirectory>$(MSBuildProjectDirectory)\$(Configuration)</OutputDirectory>
+    <AvrGccProjectExtensions>
+    </AvrGccProjectExtensions>
+    <AssemblyName>IOsonata_SAM4LC8C</AssemblyName>
+    <Name>IOsonata_SAM4LC8C</Name>
+    <RootNamespace>IOsonata_SAM4LC8C</RootNamespace>
+    <ToolchainFlavour>Native</ToolchainFlavour>
+    <KeepTimersRunning>true</KeepTimersRunning>
+    <OverrideVtor>false</OverrideVtor>
+    <CacheFlash>true</CacheFlash>
+    <ProgFlashFromRam>true</ProgFlashFromRam>
+    <RamSnippetAddress>0x20000000</RamSnippetAddress>
+    <UncachedRange />
+    <preserveEEPROM>true</preserveEEPROM>
+    <OverrideVtorValue>exception_table</OverrideVtorValue>
+    <BootSegment>2</BootSegment>
+    <ResetRule>0</ResetRule>
+    <eraseonlaunchrule>0</eraseonlaunchrule>
+    <EraseKey />
+    <AsfFrameworkConfig>
+      <framework-data xmlns="">
+        <options />
+        <configurations />
+        <files />
+        <documentation help="" />
+        <offline-documentation help="" />
+        <dependencies>
+          <content-extension eid="atmel.asf" uuidref="Atmel.ASF" version="3.49.1" />
+        </dependencies>
+      </framework-data>
+    </AsfFrameworkConfig>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <ToolchainSettings>
+      <ArmGccCpp>
+        <armgcc.common.outputfiles.hex>True</armgcc.common.outputfiles.hex>
+        <armgcc.common.outputfiles.lss>True</armgcc.common.outputfiles.lss>
+        <armgcc.common.outputfiles.eep>True</armgcc.common.outputfiles.eep>
+        <armgcc.common.outputfiles.bin>True</armgcc.common.outputfiles.bin>
+        <armgcc.common.outputfiles.srec>True</armgcc.common.outputfiles.srec>
+        <armgcc.compiler.symbols.DefSymbols>
+          <ListValues>
+            <Value>__PROGRAM_START</Value>
+            <Value>__SAM4LC8C__</Value>
+            <Value>NDEBUG</Value>
+          </ListValues>
+        </armgcc.compiler.symbols.DefSymbols>
+        <armgcc.compiler.directories.IncludePaths>
+          <ListValues>
+            <Value>../../../../include</Value>
+            <Value>../../../../../../include</Value>
+            <Value>../../../../../../CMSIS/Core/Include</Value>
+            <Value>../../../../../../../include</Value>
+            <Value>C:/Program Files (x86)\Atmel\Studio\7.0\Packs\arm\CMSIS\5.4.0\CMSIS\Core\Include\</Value>
+            <Value>C:/Program Files (x86)\Atmel\Studio\7.0\Packs\atmel\SAM4L_DFP\1.1.61\sam4l8\include</Value>
+          </ListValues>
+        </armgcc.compiler.directories.IncludePaths>
+        <armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>True</armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>
+        <armgcc.compiler.warnings.AllWarnings>True</armgcc.compiler.warnings.AllWarnings>
+        <armgcccpp.compiler.symbols.DefSymbols>
+          <ListValues>
+            <Value>__PROGRAM_START</Value>
+            <Value>__SAM4LC8C__</Value>
+            <Value>NDEBUG</Value>
+          </ListValues>
+        </armgcccpp.compiler.symbols.DefSymbols>
+        <armgcccpp.compiler.directories.IncludePaths>
+          <ListValues>
+            <Value>../../../../include</Value>
+            <Value>../../../../../../include</Value>
+            <Value>../../../../../../CMSIS/Core/Include</Value>
+            <Value>../../../../../../../include</Value>
+          </ListValues>
+        </armgcccpp.compiler.directories.IncludePaths>
+        <armgcccpp.compiler.optimization.PrepareFunctionsForGarbageCollection>True</armgcccpp.compiler.optimization.PrepareFunctionsForGarbageCollection>
+        <armgcccpp.compiler.warnings.AllWarnings>True</armgcccpp.compiler.warnings.AllWarnings>
+        <armgcccpp.linker.libraries.Libraries>
+          <ListValues>
+            <Value>libm</Value>
+          </ListValues>
+        </armgcccpp.linker.libraries.Libraries>
+        <armgcccpp.linker.optimization.GarbageCollectUnusedSections>True</armgcccpp.linker.optimization.GarbageCollectUnusedSections>
+        <armgcccpp.linker.memorysettings.ExternalRAM>False</armgcccpp.linker.memorysettings.ExternalRAM>
+        <armgcccpp.assembler.general.IncludePaths>
+          <ListValues>
+            <Value>%24(PackRepoDir)\arm\CMSIS\5.4.0\CMSIS\Core\Include\</Value>
+            <Value>%24(PackRepoDir)\atmel\SAM4L_DFP\1.1.61\sam4l8\include</Value>
+          </ListValues>
+        </armgcccpp.assembler.general.IncludePaths>
+        <armgcccpp.preprocessingassembler.general.IncludePaths>
+          <ListValues>
+            <Value>%24(PackRepoDir)\arm\CMSIS\5.4.0\CMSIS\Core\Include\</Value>
+            <Value>%24(PackRepoDir)\atmel\SAM4L_DFP\1.1.61\sam4l8\include</Value>
+          </ListValues>
+        </armgcccpp.preprocessingassembler.general.IncludePaths>
+        <armgcc.compiler.optimization.level>Optimize for size (-Os)</armgcc.compiler.optimization.level>
+        <armgcccpp.compiler.optimization.level>Optimize for size (-Os)</armgcccpp.compiler.optimization.level>
+      </ArmGccCpp>
+    </ToolchainSettings>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <ToolchainSettings>
+      <ArmGccCpp>
+        <armgcc.common.outputfiles.hex>True</armgcc.common.outputfiles.hex>
+        <armgcc.common.outputfiles.lss>True</armgcc.common.outputfiles.lss>
+        <armgcc.common.outputfiles.eep>True</armgcc.common.outputfiles.eep>
+        <armgcc.common.outputfiles.bin>True</armgcc.common.outputfiles.bin>
+        <armgcc.common.outputfiles.srec>True</armgcc.common.outputfiles.srec>
+        <armgcc.compiler.symbols.DefSymbols>
+          <ListValues>
+            <Value>__PROGRAM_START</Value>
+            <Value>__SAM4LC8C__</Value>
+            <Value>DEBUG</Value>
+          </ListValues>
+        </armgcc.compiler.symbols.DefSymbols>
+        <armgcc.compiler.directories.IncludePaths>
+          <ListValues>
+            <Value>../../../../include</Value>
+            <Value>../../../../../../include</Value>
+            <Value>../../../../../../CMSIS/Core/Include</Value>
+            <Value>../../../../../../../include</Value>
+          </ListValues>
+        </armgcc.compiler.directories.IncludePaths>
+        <armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>True</armgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>
+        <armgcc.compiler.warnings.AllWarnings>True</armgcc.compiler.warnings.AllWarnings>
+        <armgcccpp.compiler.symbols.DefSymbols>
+          <ListValues>
+            <Value>__PROGRAM_START</Value>
+            <Value>__SAM4LC8C__</Value>
+            <Value>DEBUG</Value>
+          </ListValues>
+        </armgcccpp.compiler.symbols.DefSymbols>
+        <armgcccpp.compiler.directories.IncludePaths>
+          <ListValues>
+            <Value>../../../../include</Value>
+            <Value>../../../../../../include</Value>
+            <Value>../../../../../../CMSIS/Core/Include</Value>
+            <Value>../../../../../../../include</Value>
+          </ListValues>
+        </armgcccpp.compiler.directories.IncludePaths>
+        <armgcccpp.compiler.optimization.PrepareFunctionsForGarbageCollection>True</armgcccpp.compiler.optimization.PrepareFunctionsForGarbageCollection>
+        <armgcccpp.compiler.warnings.AllWarnings>True</armgcccpp.compiler.warnings.AllWarnings>
+        <armgcccpp.linker.libraries.Libraries>
+          <ListValues>
+            <Value>libm</Value>
+          </ListValues>
+        </armgcccpp.linker.libraries.Libraries>
+        <armgcccpp.linker.optimization.GarbageCollectUnusedSections>True</armgcccpp.linker.optimization.GarbageCollectUnusedSections>
+        <armgcccpp.linker.memorysettings.ExternalRAM>
+        </armgcccpp.linker.memorysettings.ExternalRAM>
+        <armgcccpp.assembler.general.IncludePaths>
+          <ListValues>
+            <Value>%24(PackRepoDir)\arm\CMSIS\5.4.0\CMSIS\Core\Include\</Value>
+            <Value>%24(PackRepoDir)\atmel\SAM4L_DFP\1.1.61\sam4l8\include</Value>
+          </ListValues>
+        </armgcccpp.assembler.general.IncludePaths>
+        <armgcccpp.preprocessingassembler.general.IncludePaths>
+          <ListValues>
+            <Value>%24(PackRepoDir)\arm\CMSIS\5.4.0\CMSIS\Core\Include\</Value>
+            <Value>%24(PackRepoDir)\atmel\SAM4L_DFP\1.1.61\sam4l8\include</Value>
+          </ListValues>
+        </armgcccpp.preprocessingassembler.general.IncludePaths>
+        <armgcc.compiler.optimization.level>Optimize debugging experience (-Og)</armgcc.compiler.optimization.level>
+        <armgcc.compiler.optimization.DebugLevel>Maximum (-g3)</armgcc.compiler.optimization.DebugLevel>
+        <armgcccpp.compiler.optimization.level>Optimize debugging experience (-Og)</armgcccpp.compiler.optimization.level>
+        <armgcccpp.compiler.optimization.DebugLevel>Maximum (-g3)</armgcccpp.compiler.optimization.DebugLevel>
+        <armgcccpp.assembler.debugging.DebugLevel>Default (-g)</armgcccpp.assembler.debugging.DebugLevel>
+        <armgcccpp.preprocessingassembler.debugging.DebugLevel>Default (-Wa,-g)</armgcccpp.preprocessingassembler.debugging.DebugLevel>
+      </ArmGccCpp>
+    </ToolchainSettings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Folder Include="include" />
+    <Folder Include="src" />
+    <Folder Include="src\coredev" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\..\..\..\..\include\base64.h">
+      <SubType>compile</SubType>
+      <Link>include\base64.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\blueio_types.h">
+      <SubType>compile</SubType>
+      <Link>include\blueio_types.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\cfifo.h">
+      <SubType>compile</SubType>
+      <Link>include\cfifo.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\convutil.h">
+      <SubType>compile</SubType>
+      <Link>include\convutil.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\crc.h">
+      <SubType>compile</SubType>
+      <Link>include\crc.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\device bridge.h">
+      <SubType>compile</SubType>
+      <Link>include\device bridge.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\device.h">
+      <SubType>compile</SubType>
+      <Link>include\device.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\device_intrf.h">
+      <SubType>compile</SubType>
+      <Link>include\device_intrf.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\diskio.h">
+      <SubType>compile</SubType>
+      <Link>include\diskio.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\diskio_flash.h">
+      <SubType>compile</SubType>
+      <Link>include\diskio_flash.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\excelitas_serlink.h">
+      <SubType>compile</SubType>
+      <Link>include\excelitas_serlink.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\fatfs.h">
+      <SubType>compile</SubType>
+      <Link>include\fatfs.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\iatomic.h">
+      <SubType>compile</SubType>
+      <Link>include\iatomic.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\intelhex.h">
+      <SubType>compile</SubType>
+      <Link>include\intelhex.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\isha1.h">
+      <SubType>compile</SubType>
+      <Link>include\isha1.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\isha256.h">
+      <SubType>compile</SubType>
+      <Link>include\isha256.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\istddef.h">
+      <SubType>compile</SubType>
+      <Link>include\istddef.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\md5.h">
+      <SubType>compile</SubType>
+      <Link>include\md5.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\prbs.h">
+      <SubType>compile</SubType>
+      <Link>include\prbs.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\pulse_train.h">
+      <SubType>compile</SubType>
+      <Link>include\pulse_train.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\pwm.h">
+      <SubType>compile</SubType>
+      <Link>include\pwm.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\sdcard.h">
+      <SubType>compile</SubType>
+      <Link>include\sdcard.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\seep.h">
+      <SubType>compile</SubType>
+      <Link>include\seep.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\slip_intrf.h">
+      <SubType>compile</SubType>
+      <Link>include\slip_intrf.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\stddev.h">
+      <SubType>compile</SubType>
+      <Link>include\stddev.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\sysstatus.h">
+      <SubType>compile</SubType>
+      <Link>include\sysstatus.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\sysstatusdef.h">
+      <SubType>compile</SubType>
+      <Link>include\sysstatusdef.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\utf8.h">
+      <SubType>compile</SubType>
+      <Link>include\utf8.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\include\utf8cvt.h">
+      <SubType>compile</SubType>
+      <Link>include\utf8cvt.h</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\base64.c">
+      <SubType>compile</SubType>
+      <Link>src\base64.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\cfifo.c">
+      <SubType>compile</SubType>
+      <Link>src\cfifo.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\coredev\i2c.cpp">
+      <SubType>compile</SubType>
+      <Link>src\coredev\i2c.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\coredev\spi.cpp">
+      <SubType>compile</SubType>
+      <Link>src\coredev\spi.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\coredev\timer.cpp">
+      <SubType>compile</SubType>
+      <Link>src\coredev\timer.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\coredev\uart.c">
+      <SubType>compile</SubType>
+      <Link>src\coredev\uart.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\CppRuntimeOverload.cpp">
+      <SubType>compile</SubType>
+      <Link>src\CppRuntimeOverload.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\crc.c">
+      <SubType>compile</SubType>
+      <Link>src\crc.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\device.cpp">
+      <SubType>compile</SubType>
+      <Link>src\device.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\device_intrf.cpp">
+      <SubType>compile</SubType>
+      <Link>src\device_intrf.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\diskio_flash.cpp">
+      <SubType>compile</SubType>
+      <Link>src\diskio_flash.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\diskio_impl.cpp">
+      <SubType>compile</SubType>
+      <Link>src\diskio_impl.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\excelitas_serlink.cpp">
+      <SubType>compile</SubType>
+      <Link>src\excelitas_serlink.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\fatfs.cpp">
+      <SubType>compile</SubType>
+      <Link>src\fatfs.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\fatfs_vdisk.cpp">
+      <SubType>compile</SubType>
+      <Link>src\fatfs_vdisk.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\intelhex.c">
+      <SubType>compile</SubType>
+      <Link>src\intelhex.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\iosonata_logo.c">
+      <SubType>compile</SubType>
+      <Link>src\iosonata_logo.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\iosonata_logo_dither.c">
+      <SubType>compile</SubType>
+      <Link>src\iosonata_logo_dither.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\isha1.c">
+      <SubType>compile</SubType>
+      <Link>src\isha1.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\isha256.c">
+      <SubType>compile</SubType>
+      <Link>src\isha256.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\logo.c">
+      <SubType>compile</SubType>
+      <Link>src\logo.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\md5.c">
+      <SubType>compile</SubType>
+      <Link>src\md5.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\prbs.c">
+      <SubType>compile</SubType>
+      <Link>src\prbs.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\pulse_train.c">
+      <SubType>compile</SubType>
+      <Link>src\pulse_train.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\sbuffer.c">
+      <SubType>compile</SubType>
+      <Link>src\sbuffer.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\sdcard_impl.cpp">
+      <SubType>compile</SubType>
+      <Link>src\sdcard_impl.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\seep_impl.cpp">
+      <SubType>compile</SubType>
+      <Link>src\seep_impl.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\slip_intrf.cpp">
+      <SubType>compile</SubType>
+      <Link>src\slip_intrf.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\stddev.c">
+      <SubType>compile</SubType>
+      <Link>src\stddev.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\sysstatus.c">
+      <SubType>compile</SubType>
+      <Link>src\sysstatus.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\sysstatus_impl.cpp">
+      <SubType>compile</SubType>
+      <Link>src\sysstatus_impl.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\uart_retarget.c">
+      <SubType>compile</SubType>
+      <Link>src\uart_retarget.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\usb_hidhost.cpp">
+      <SubType>compile</SubType>
+      <Link>src\usb_hidhost.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\utf8.c">
+      <SubType>compile</SubType>
+      <Link>src\utf8.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\..\src\utf8cvt.cpp">
+      <SubType>compile</SubType>
+      <Link>src\utf8cvt.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\..\..\src\ResetEntry.c">
+      <SubType>compile</SubType>
+      <Link>src\ResetEntry.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\src\i2c_sam4l.cpp">
+      <SubType>compile</SubType>
+      <Link>src\coredev\i2c_sam4l.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\src\iopincfg_sam4l.c">
+      <SubType>compile</SubType>
+      <Link>src\coredev\iopincfg_sam4l.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\src\system_sam4l.c">
+      <SubType>compile</SubType>
+      <Link>src\system_sam4l.c</Link>
+    </Compile>
+    <Compile Include="..\..\..\src\uart_sam4l.cpp">
+      <SubType>compile</SubType>
+      <Link>src\coredev\uart_sam4l.cpp</Link>
+    </Compile>
+    <Compile Include="..\..\..\src\vectors_sam4l.c">
+      <SubType>compile</SubType>
+      <Link>src\vectors_sam4l.c</Link>
+    </Compile>
+  </ItemGroup>
+  <Import Project="$(AVRSTUDIO_EXE_PATH)\\Vs\\Compiler.targets" />
+</Project>
