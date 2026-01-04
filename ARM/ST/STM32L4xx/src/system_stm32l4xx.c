@@ -210,10 +210,12 @@ void SystemCoreClockUpdate(void)
 		SystemCoreClock = (SystemCoreClock * n / (m * r));
 	}
 
+#ifdef STM32L4S9xx
 	if (SystemCoreClock > 80000000)
 	{
 		PWR->CR5 &= ~PWR_CR5_R1MODE;
 	}
+#endif
 
 	// Update Flash wait state to current core freq.
 	SetFlashWaitState(SystemCoreClock);
