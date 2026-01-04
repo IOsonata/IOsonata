@@ -836,11 +836,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp.new</locationURI>
 		</link>
 		<link>
-			<name>src/display/eink_vb3300.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
