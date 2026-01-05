@@ -2,7 +2,7 @@
 
 # IOsonata — Make your IO sing!
 
-#Start like Arduino. Scale like a pro. Stay vendor-agnostic.
+# Start like Arduino. Scale like a pro. Stay vendor-agnostic.
 
 IOsonata is an embedded C++ framework built for the moment your “working prototype” meets production reality:
 board variants, multiple MCU options, sensors, BLE, power constraints, and long-term maintenance.
