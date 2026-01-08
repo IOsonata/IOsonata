@@ -40,17 +40,17 @@ You can run the installation scripts directly from GitHub without cloning the re
 
 **macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_macos.sh | bash
 ```
 
 **Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_linux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_linux.sh | bash
 ```
 
 **Windows (PowerShell as Administrator):**
 ```powershell
-iwr -useb https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_win.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_win.ps1 | iex
 ```
 
 ### Recommended: Download Then Run
@@ -60,7 +60,7 @@ For better security, download and review the script first:
 **macOS/Linux:**
 ```bash
 # Download
-curl -O https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_macos.sh
+curl -O https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_macos.sh
 
 # Review (IMPORTANT!)
 cat install_iocdevtools_macos.sh | less
@@ -69,11 +69,22 @@ cat install_iocdevtools_macos.sh | less
 chmod +x install_iocdevtools_macos.sh
 ./install_iocdevtools_macos.sh
 ```
+**Linux:**
+```bash
+# Download
+curl -O https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_linux.sh
+
+# Review (IMPORTANT!)
+cat install_iocdevtools_linux.sh | less
+
+# Run
+chmod +x install_iocdevtools_linux.sh
+./install_iocdevtools_linux.sh
 
 **Windows:**
 ```powershell
 # Download
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/IOsonata/IOsonata/main/Installer/install_iocdevtools_win.ps1 -OutFile install_iocdevtools_win.ps1
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/install_iocdevtools_win.ps1 -OutFile install_iocdevtools_win.ps1
 
 # Review (IMPORTANT!)
 notepad install_iocdevtools_win.ps1
