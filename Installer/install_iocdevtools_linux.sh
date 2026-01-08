@@ -98,11 +98,26 @@ fi
 # ---------------------------------------------------------
 ARCH=$(uname -m)
 case "$ARCH" in
-  aarch64|arm64) PLATFORM="linux-aarch64"; ECLIPSE_ARCH="aarch64" ;;
-  x86_64|amd64) PLATFORM="linux-x86_64"; ECLIPSE_ARCH="x86_64" ;;
-  *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+  aarch64|arm64)
+    # Eclipse EPP uses "aarch64" for Linux ARM64.
+    ECLIPSE_ARCH="aarch64"
+    # xPack release assets typically use "linux-arm64" (sometimes "linux-aarch64").
+    XPACK_PLATFORM_CANDIDATES=("linux-arm64" "linux-aarch64")
+    ;;
+  x86_64|amd64)
+    # Eclipse EPP uses "x86_64" for Linux x86_64.
+    ECLIPSE_ARCH="x86_64"
+    # xPack release assets typically use "linux-x64" (sometimes "linux-x86_64").
+    XPACK_PLATFORM_CANDIDATES=("linux-x64" "linux-x86_64")
+    ;;
+  *)
+    echo "Unsupported architecture: $ARCH"
+    exit 1
+    ;;
 esac
-echo ">>> Detected architecture: $ARCH -> Eclipse arch=$ECLIPSE_ARCH"
+
+XPACK_PLATFORM_CSV=$(IFS=,; echo "${XPACK_PLATFORM_CANDIDATES[*]}")
+echo ">>> Detected architecture: $ARCH -> Eclipse arch=$ECLIPSE_ARCH | xPack platforms=$XPACK_PLATFORM_CSV"
 
 # ---------------------------------------------------------
 # Helpers
@@ -215,21 +230,41 @@ install_xpack() {
   read -r latest_tag latest_url < <(
     printf '%s' "$latest_json" | python3 -c '
 import json, sys
-platform = sys.argv[1]
+
+platforms = [p.strip() for p in (sys.argv[1] or "").split(",") if p.strip()]
 j = json.load(sys.stdin)
+
 tag = j.get("tag_name", "") or ""
 url = ""
-for a in (j.get("assets") or []):
+
+# Pick an actual archive (ignore .sha/.sig/.txt) for one of the platform tokens.
+assets = (j.get("assets") or [])
+preferred_exts = (".tar.gz", ".tgz", ".tar.xz", ".txz", ".zip")
+
+def is_archive(u: str) -> bool:
+  return u.endswith(preferred_exts)
+
+# First pass: platform match + archive extension.
+for a in assets:
   u = a.get("browser_download_url", "") or ""
-  if platform in u:
+  if any(p in u for p in platforms) and is_archive(u):
     url = u
     break
+
+# Second pass: platform match (anything), as a last resort.
+if not url:
+  for a in assets:
+    u = a.get("browser_download_url", "") or ""
+    if any(p in u for p in platforms):
+      url = u
+      break
+
 print(tag, url)
-' "$PLATFORM"
+' "$XPACK_PLATFORM_CSV"
   )
 
   if [[ -z "${latest_tag:-}" || -z "${latest_url:-}" ]]; then
-    echo "❌ Could not resolve latest release tag or download URL for $name (repo=$repo, platform=$PLATFORM)." >&2
+    echo "❌ Could not resolve latest release tag or download URL for $name (repo=$repo, platforms=$XPACK_PLATFORM_CSV)." >&2
     exit 1
   fi
 
@@ -255,17 +290,37 @@ print(tag, url)
   fi
 
   echo "⬇️ Installing $name $latest_norm..." >&2
+  local suffix tmpfile
+  case "$latest_url" in
+    *.tar.gz|*.tgz) suffix=".tar.gz" ;;
+    *.tar.xz|*.txz) suffix=".tar.xz" ;;
+    *.zip)          suffix=".zip" ;;
+    *)              suffix="" ;;
+  esac
 
-  local tmpxz
-  tmpxz=$(mktemp)
-  if ! curl -fL "$latest_url" -o "$tmpxz"; then
+  tmpfile=$(mktemp ${suffix:+--suffix="$suffix"})
+
+  if ! curl -fL "$latest_url" -o "$tmpfile"; then
     echo "❌ Failed to download $name from: $latest_url" >&2
-    rm -f "$tmpxz" || true
+    rm -f "$tmpfile" || true
     exit 1
   fi
 
-  sudo tar -xJ -C "$TOOLS" -f "$tmpxz"
-  rm -f "$tmpxz" || true
+  # Extract (format-aware)
+  if [[ "$latest_url" == *.zip ]]; then
+    sudo unzip -q "$tmpfile" -d "$TOOLS"
+  elif [[ "$latest_url" == *.tar.gz || "$latest_url" == *.tgz ]]; then
+    sudo tar -xzf "$tmpfile" -C "$TOOLS"
+  elif [[ "$latest_url" == *.tar.xz || "$latest_url" == *.txz ]]; then
+    sudo tar -xJf "$tmpfile" -C "$TOOLS"
+  else
+    # Last-resort: attempt gzip first, then xz.
+    if ! sudo tar -xzf "$tmpfile" -C "$TOOLS" 2>/dev/null; then
+      sudo tar -xJf "$tmpfile" -C "$TOOLS"
+    fi
+  fi
+
+  rm -f "$tmpfile" || true
 
   local origdir
   origdir=$(ls -d "$TOOLS"/${repo}-* "$TOOLS"/xpack-${repo/-xpack/}-* 2>/dev/null | grep "$latest_norm" | head -n1 || true)
@@ -325,9 +380,28 @@ else
   echo "💻 Installing Eclipse Embedded CDT IDE..."
   MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
 
-  RELEASES=$(curl -fsSL "$MIRROR/" | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' | cut -d'"' -f2 | sed 's|/||g' | sort -r | uniq || true)
+  # Prefer GA release trains from the official EPP release list to avoid selecting
+  # future/milestone directories that may appear on mirrors.
+  RELEASES=$(curl -fsSL "https://www.eclipse.org/downloads/packages/release" \
+    | grep -oE '20[0-9]{2}-[0-9]{2} R' \
+    | awk '{print $1}' \
+    | head -n 8 \
+    | tr '\n' ' ' \
+    || true)
+
+  if [[ -z "${RELEASES// }" ]]; then
+    # Fallback: enumerate mirror directories (less reliable).
+    RELEASES=$(curl -fsSL "$MIRROR/" \
+      | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' \
+      | cut -d'"' -f2 \
+      | sed 's|/||g' \
+      | sort -r \
+      | uniq \
+      || true)
+  fi
+
   if [[ -z "${RELEASES:-}" ]]; then
-    echo "❌ Failed to enumerate Eclipse releases from mirror: $MIRROR" >&2
+    echo "❌ Failed to enumerate Eclipse releases (official list + mirror fallback failed)." >&2
     exit 1
   fi
 
@@ -379,10 +453,13 @@ seed_eclipse_prefs() {
   local base="$HOME/.eclipse"
   mkdir -p "$base"
 
-  # If a previous run created ~/.eclipse as root, fix it.
-  if [[ "$(stat -f '%u' "$base")" == "0" ]]; then
+  # If a previous run created ~/.eclipse as root, fix it (cross-distro).
+  local base_uid user_group
+  base_uid=$(stat -c '%u' "$base" 2>/dev/null || stat -f '%u' "$base" 2>/dev/null || echo "")
+  user_group=$(id -gn "$USER" 2>/dev/null || echo "$USER")
+  if [[ "${base_uid:-}" == "0" ]]; then
     echo "⚠️  $base is owned by root (likely from a previous installer run). Fixing ownership..."
-    sudo chown -R "$USER":staff "$base" || true
+    sudo chown -R "$USER":"$user_group" "$base" || true
   fi
 
   local instance_cfg
@@ -399,26 +476,12 @@ seed_eclipse_prefs() {
 
   if [[ ! -w "$instance_cfg/.settings" ]]; then
     echo "⚠️  $instance_cfg/.settings is not writable. Fixing ownership..."
-    sudo chown -R "$USER":staff "$instance_cfg" || true
-  fi
-
-  local JRE
-  JRE=$(which java 2>/dev/null || echo "")
-  if [[ -z "$JRE" ]]; then
-    echo "❌ No JDK found. Please install Temurin 17+."
-    exit 1
+    sudo chown -R "$USER":"$user_group" "$instance_cfg" || true
   fi
 
   local ARM_HASH RISCV_HASH
   ARM_HASH=$(java_hash "$ARM_DIR/bin")
   RISCV_HASH=$(java_hash "$RISCV_DIR/bin")
-
-  cat > "$instance_cfg/.settings/org.eclipse.core.runtime.prefs" <<EOF
-eclipse.preferences.version=1
-org.eclipse.jdt.core.classpathVariable.JRE_LIB=$JRE
-org.eclipse.jdt.core.classpathVariable.JRE_SRC=$JRE/Contents/Home/src.zip
-org.eclipse.jdt.core.classpathVariable.JRE_SRCROOT=
-EOF
 
   cat > "$instance_cfg/.settings/org.eclipse.cdt.core.prefs" <<EOF
 eclipse.preferences.version=1
@@ -460,16 +523,35 @@ echo ">>> Setting iosonata_loc system property in Eclipse installation..."
 ECLIPSE_INI="$ECLIPSE_DIR/eclipse.ini"
 IOSONATA_LOC_PROP="-Diosonata_loc=$ROOT"
 
-sudo sed -i.bak '/^-Diosonata\.home=/d' "$ECLIPSE_INI" || true
-sudo sed -i '' '/^-Diosonata_loc=/d' "$ECLIPSE_INI"
+# Keep a backup for recovery/debug
+sudo cp -f "$ECLIPSE_INI" "$ECLIPSE_INI.bak" 2>/dev/null || true
 
-if grep -q '^-vmargs$' "$ECLIPSE_INI"; then
-  sudo sed -i '' '/^-vmargs$/a\
-'"$IOSONATA_LOC_PROP"'
-' "$ECLIPSE_INI"
-else
-  echo "$IOSONATA_LOC_PROP" | sudo tee -a "$ECLIPSE_INI" > /dev/null
-fi
+# Use python to avoid GNU/BSD sed differences.
+sudo python3 - "$ECLIPSE_INI" "$IOSONATA_LOC_PROP" <<'PY'
+import sys
+ini = sys.argv[1]
+prop = sys.argv[2].strip()
+
+with open(ini, "r", encoding="utf-8", errors="replace") as f:
+    lines = f.read().splitlines()
+
+# Remove any existing values (idempotent).
+lines = [ln for ln in lines if not ln.startswith("-Diosonata_loc=") and not ln.startswith("-Diosonata.home=")]
+
+out = []
+inserted = False
+for ln in lines:
+    out.append(ln)
+    if (ln.strip() == "-vmargs") and (not inserted):
+        out.append(prop)
+        inserted = True
+
+if not inserted:
+    out.append(prop)
+
+with open(ini, "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")
+PY
 
 echo "✅ iosonata_loc set in eclipse.ini:"
 grep "^-Diosonata_loc=" "$ECLIPSE_INI" || true
@@ -546,7 +628,7 @@ MAKEFILE_PATH_MK="$ROOT/IOsonata/makefile_path.mk"
 
 cat > "$MAKEFILE_PATH_MK" <<EOF
 # makefile_path.mk
-# Auto-generated by install_iocdevtools_macos.sh $SCRIPT_VERSION
+# Auto-generated by install_iocdevtools_linux.sh $SCRIPT_VERSION
 # This file contains all path macros required to compile IOsonata projects using Makefiles
 # Include this file in your project Makefile: include \$(IOSONATA_ROOT)/makefile_path.mk
 
