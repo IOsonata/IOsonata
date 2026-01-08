@@ -570,6 +570,11 @@ else
   git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
 fi
 
+if [[ -d "$ROOT/IOsonata/Installer" ]]; then
+    echo ">>> Fixing execution permissions for IOsonata scripts..."
+    chmod +x "$ROOT/IOsonata/Installer/"*.sh 2>/dev/null || true
+fi
+
 cd "$EXT"
 repos=(
   "https://github.com/NordicSemiconductor/nrfx.git"
@@ -716,6 +721,7 @@ if [[ -f "$BUILD_SCRIPT" ]]; then
   echo "  IOsonata Library Build"
   echo "========================================================="
   echo ""
+  chmod +x "$BUILD_SCRIPT"
   "$BUILD_SCRIPT" --home "$ROOT" || true
 else
   echo ""

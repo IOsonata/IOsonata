@@ -41,11 +41,6 @@ print_help() {
 
   echo ""
   echo "${BOLD}Examples:${RESET}"
-  echo ""
-fi
-
-  echo ""
-  echo "${BOLD}Examples:${RESET}"
   echo "  ./clone_iosonata_sdk_linux                      # Clone into ~/IOcomposer"
   echo "  ./clone_iosonata_sdk_linux --home ~/DevEnv      # Custom directory"
   echo "  ./clone_iosonata_sdk_linux --mode force         # Force re-clone all repos"
@@ -478,6 +473,7 @@ if [[ "$ECLIPSE_INSTALLED" == "true" ]]; then
     echo "${BOLD}   IOsonata Library Auto-Build${RESET}"
     echo "${BLUE}=========================================================${RESET}"
     echo ""
+    chmod +x "$BUILD_SCRIPT"
     "$BUILD_SCRIPT" --home "$ROOT" || true
   else
     echo ""
