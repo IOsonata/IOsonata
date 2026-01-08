@@ -80,6 +80,7 @@ cat install_iocdevtools_linux.sh | less
 # Run
 chmod +x install_iocdevtools_linux.sh
 ./install_iocdevtools_linux.sh
+```
 
 **Windows:**
 ```powershell
