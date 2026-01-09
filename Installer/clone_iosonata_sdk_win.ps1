@@ -1,21 +1,21 @@
-# clone_iosonata_sdk_windows.ps1
+# clone_iosonata_sdk_win.ps1
 # =========================================================
-#  clone_iosonata_sdk_windows
+#  clone_iosonata_sdk_win
 # ---------------------------------------------------------
 #  Purpose: Clone IOsonata SDK and dependencies
 #  Platform: Windows (PowerShell)
-#  Version: v1.1.1
+#  Version: v1.1.3
 # =========================================================
 
 param(
-    [string]$Home = "$env:USERPROFILE\IOcomposer",
+    [string]$SdkHome = "$env:USERPROFILE\IOcomposer",
     [string]$Mode = "normal",
     [switch]$Eclipse,
     [switch]$Help
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v1.3.0"
+$SCRIPT_VERSION = "v1.1.3"
 
 # --- Banner ---
 function Show-Banner {
@@ -29,31 +29,19 @@ function Show-Banner {
 # --- Help Menu ---
 function Show-Help {
     Show-Banner
-    Write-Host "Usage: .\clone_iosonata_sdk_windows.ps1 [options]" -ForegroundColor White
+    Write-Host "Usage: .\clone_iosonata_sdk_win.ps1 [options]" -ForegroundColor White
     Write-Host ""
     Write-Host "Options:" -ForegroundColor White
-    Write-Host "  -Home <path>        Set custom root directory (default: ~\IOcomposer)"
+    Write-Host "  -SdkHome <path>     Set custom root directory (default: ~\IOcomposer)"
     Write-Host "  -Mode <mode>        Clone mode: 'normal' (default) or 'force'"
     Write-Host "  -Eclipse            Configure Eclipse system properties"
     Write-Host "  -Help               Show this help message and exit"
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor White
-    Write-Host "  .\clone_iosonata_sdk_windows.ps1                     # Clone into ~\IOcomposer"
-    Write-Host "  .\clone_iosonata_sdk_windows.ps1 -Home C:\Dev       # Custom directory"
-    Write-Host "  .\clone_iosonata_sdk_windows.ps1 -Mode force        # Force re-clone all repos"
-    Write-Host "  .\clone_iosonata_sdk_windows.ps1 -Eclipse           # Also configure Eclipse"
-    Write-Host ""
-    Write-Host "Repositories cloned:" -ForegroundColor White
-    Write-Host "  • IOsonata main repository"
-    Write-Host "  • Nordic Semiconductor nrfx"
-    Write-Host "  • nrfconnect SDKs (sdk-nrf-bm, sdk-nrfxlib)"
-    Write-Host "  • IOsonata nRF5 SDK & Mesh"
-    Write-Host "  • Bosch BSEC2 library"
-    Write-Host "  • xioTechnologies Fusion"
-    Write-Host "  • LVGL graphics library"
-    Write-Host "  • lwIP TCP/IP stack"
-    Write-Host "  • FreeRTOS-Kernel"
-    Write-Host "  • TinyUSB"
+    Write-Host "  .\clone_iosonata_sdk_win.ps1                     # Clone into ~\IOcomposer"
+    Write-Host "  .\clone_iosonata_sdk_win.ps1 -SdkHome C:\Dev    # Custom directory"
+    Write-Host "  .\clone_iosonata_sdk_win.ps1 -Mode force         # Force re-clone all repos"
+    Write-Host "  .\clone_iosonata_sdk_win.ps1 -Eclipse            # Also configure Eclipse"
     Write-Host ""
     exit 0
 }
@@ -61,7 +49,7 @@ function Show-Help {
 if ($Help) { Show-Help }
 
 # --- Prepare directories ---
-$ROOT = $Home
+$ROOT = $SdkHome
 if (-not (Test-Path $ROOT)) {
     New-Item -Path $ROOT -ItemType Directory -Force | Out-Null
 }
@@ -81,7 +69,7 @@ $ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
 $ECLIPSE_INSTALLED = $false
 if (Test-Path "$ECLIPSE_DIR\eclipse.exe") {
     $ECLIPSE_INSTALLED = $true
-    Write-Host "✓ Eclipse detected at $ECLIPSE_DIR" -ForegroundColor Green
+    Write-Host "   `[OK`] Eclipse detected at $ECLIPSE_DIR" -ForegroundColor Green
     Write-Host "=========================================================`n" -ForegroundColor Blue
 }
 Write-Host "Configure Eclipse:    $Eclipse" -ForegroundColor White
@@ -98,7 +86,7 @@ function Sync-Repository {
     
     if (Test-Path $Target) {
         if ($Mode -eq "force") {
-            Write-Host "⚠️  Re-cloning $Target ..." -ForegroundColor Yellow
+            Write-Host "   `[WARN`] Re-cloning $Target ..." -ForegroundColor Yellow
             Remove-Item -Path $Target -Recurse -Force
             if ($RecurseSubmodules) {
                 git clone --depth=1 --recurse-submodules $Url $Target
@@ -106,12 +94,12 @@ function Sync-Repository {
                 git clone --depth=1 $Url $Target
             }
         } else {
-            Write-Host "🔄 Updating $Target ..." -ForegroundColor Yellow
+            Write-Host "   `[INFO`] Updating $Target ..." -ForegroundColor Yellow
             Push-Location $Target
             try {
                 git pull --rebase
                 if ($RecurseSubmodules) {
-                    Write-Host "   ↳ Updating submodules..." -ForegroundColor Blue
+                    Write-Host "      -> Updating submodules..." -ForegroundColor Blue
                     git submodule update --init --recursive
                 }
             } finally {
@@ -119,10 +107,10 @@ function Sync-Repository {
             }
         }
     } else {
-        Write-Host "⬇️  Cloning $Target ..." -ForegroundColor Blue
+        Write-Host "   `[INFO`] Cloning $Target ..." -ForegroundColor Blue
         if ($RecurseSubmodules) {
             git clone --depth=1 --recurse-submodules $Url $Target
-            Write-Host "   ✓ Submodules initialized" -ForegroundColor Green
+            Write-Host "      `[OK`] Submodules initialized" -ForegroundColor Green
         } else {
             git clone --depth=1 $Url $Target
         }
@@ -134,14 +122,14 @@ function Sync-Repository {
 # ---------------------------------------------------------
 # Clone IOsonata
 # ---------------------------------------------------------
-Write-Host "🚀 Cloning IOsonata..." -ForegroundColor Green
+Write-Host ">>> Cloning IOsonata..." -ForegroundColor Green
 Sync-Repository -Url "https://github.com/IOsonata/IOsonata.git" -Target "$ROOT\IOsonata"
 
 # ---------------------------------------------------------
 # Clone External Repos
 # ---------------------------------------------------------
 Write-Host ""
-Write-Host "📦 Cloning dependencies into: $EXT" -ForegroundColor Blue
+Write-Host ">>> Cloning dependencies into: $EXT" -ForegroundColor Blue
 Write-Host ""
 
 $repos = @{
@@ -166,17 +154,17 @@ foreach ($repo in $repos.GetEnumerator()) {
 # Clone FreeRTOS-Kernel
 # ---------------------------------------------------------
 Write-Host ""
-Write-Host "📦 Cloning FreeRTOS-Kernel..." -ForegroundColor Blue
+Write-Host ">>> Cloning FreeRTOS-Kernel..." -ForegroundColor Blue
 Sync-Repository -Url "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" -Target "$EXT\FreeRTOS-Kernel" -RecurseSubmodules $false
 
 Write-Host ""
-Write-Host "✅ All repositories cloned successfully!" -ForegroundColor Green
+Write-Host "   `[OK`] All repositories cloned successfully!" -ForegroundColor Green
 
 # ---------------------------------------------------------
 # Generate makefile_path.mk
 # ---------------------------------------------------------
 Write-Host ""
-Write-Host "📝 Generating makefile_path.mk for Makefile-based builds..." -ForegroundColor Cyan
+Write-Host ">>> Generating makefile_path.mk for Makefile-based builds..." -ForegroundColor Cyan
 
 $MAKEFILE_PATH_MK = Join-Path $ROOT "IOsonata\makefile_path.mk"
 
@@ -288,7 +276,7 @@ export BSEC_HOME := `$(BSEC_ROOT)
 
 Set-Content -Path $MAKEFILE_PATH_MK -Value $makefileContent
 
-Write-Host "[OK] makefile_path.mk created at: $MAKEFILE_PATH_MK" -ForegroundColor Green
+Write-Host "   `[OK`] makefile_path.mk created at: $MAKEFILE_PATH_MK" -ForegroundColor Green
 Write-Host "   Projects can include it with: include `$(IOSONATA_ROOT)/makefile_path.mk"
 Write-Host "   Make sure to set IOCOMPOSER_HOME=$ROOT_UNIX in your environment or Makefile"
 Write-Host ""
@@ -307,7 +295,7 @@ function Install-IosonataPlugin {
     
     # Check if plugin directory exists
     if (-not (Test-Path $pluginDir)) {
-        Write-Host "⚠️  Plugin directory not found at $pluginDir" -ForegroundColor Yellow
+        Write-Host "   `[WARN`] Plugin directory not found at $pluginDir" -ForegroundColor Yellow
         Write-Host "    Skipping plugin installation."
         return
     }
@@ -316,7 +304,7 @@ function Install-IosonataPlugin {
     $pluginFiles = Get-ChildItem -Path $pluginDir -Filter "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue
     
     if (-not $pluginFiles -or $pluginFiles.Count -eq 0) {
-        Write-Host "⚠️  No IOsonata plugin jar file found in $pluginDir" -ForegroundColor Yellow
+        Write-Host "   `[WARN`] No IOsonata plugin jar file found in $pluginDir" -ForegroundColor Yellow
         Write-Host "    Skipping plugin installation."
         return
     }
@@ -324,7 +312,7 @@ function Install-IosonataPlugin {
     # Sort by version and get the latest
     $latestPlugin = $pluginFiles | Sort-Object Name -Descending | Select-Object -First 1
     
-    Write-Host "   → Found plugin: $($latestPlugin.Name)" -ForegroundColor Green
+    Write-Host "   -> Found plugin: $($latestPlugin.Name)" -ForegroundColor Green
     
     # Create dropins directory if it doesn't exist
     if (-not (Test-Path $dropinsDir)) {
@@ -335,7 +323,7 @@ function Install-IosonataPlugin {
     $oldPlugins = Get-ChildItem -Path $dropinsDir -Filter "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue
     
     if ($oldPlugins) {
-        Write-Host "   → Removing old plugin versions..." -ForegroundColor Yellow
+        Write-Host "   -> Removing old plugin versions..." -ForegroundColor Yellow
         foreach ($oldPlugin in $oldPlugins) {
             Write-Host "      - Removing: $($oldPlugin.Name)"
             Remove-Item -Path $oldPlugin.FullName -Force
@@ -343,10 +331,10 @@ function Install-IosonataPlugin {
     }
     
     # Copy the latest plugin to dropins
-    Write-Host "   → Installing plugin to $dropinsDir" -ForegroundColor Cyan
+    Write-Host "   -> Installing plugin to $dropinsDir" -ForegroundColor Cyan
     Copy-Item -Path $latestPlugin.FullName -Destination $dropinsDir -Force
     
-    Write-Host "✅ IOsonata Eclipse Plugin installed: $($latestPlugin.Name)" -ForegroundColor Green
+    Write-Host "   `[OK`] IOsonata Eclipse Plugin installed: $($latestPlugin.Name)" -ForegroundColor Green
 }
 
 # ---------------------------------------------------------
@@ -363,17 +351,14 @@ if ($Eclipse) {
     $ECLIPSE_INI = Join-Path $ECLIPSE_DIR "eclipse.ini"
     
     if (-not (Test-Path $ECLIPSE_INI)) {
-        Write-Host "✗ Eclipse not found at: $ECLIPSE_DIR" -ForegroundColor Red
-        Write-Host "  Please install Eclipse first or skip Eclipse configuration." -ForegroundColor Yellow
+        Write-Host "   `[ERR`] Eclipse not found at: $ECLIPSE_DIR" -ForegroundColor Red
+        Write-Host "   Please install Eclipse first or skip Eclipse configuration." -ForegroundColor Yellow
     } else {
-        Write-Host "✓ Eclipse found" -ForegroundColor Green
+        Write-Host "   `[OK`] Eclipse found" -ForegroundColor Green
         Write-Host ""
         Write-Host ">>> Configuring IOsonata and IOcomposer system properties..."
         
-        #$IOSONATA_PATH = Join-Path $ROOT "IOsonata"
-        
         # Convert Windows paths to forward slashes for Java
-        #$IOSONATA_PATH_JAVA = $IOSONATA_PATH -replace '\\', '/'
         $ROOT_JAVA = $ROOT -replace '\\', '/'
         $IOSONATA_PATH_JAVA = $ROOT_JAVA
 
@@ -417,11 +402,11 @@ if ($Eclipse) {
         try {
             Set-Content -Path $ECLIPSE_INI -Value $iniContent
             
-            Write-Host "✅ Eclipse system properties configured:" -ForegroundColor Green
+            Write-Host "   `[OK`] Eclipse system properties configured:" -ForegroundColor Green
             Write-Host "   iosonata_loc = $IOSONATA_PATH_JAVA" -ForegroundColor White
             Write-Host "   iocomposer_home = $ROOT_JAVA" -ForegroundColor White
             Write-Host ""
-            Write-Host "ℹ️  Usage in CDT projects:" -ForegroundColor Yellow
+            Write-Host "   `[INFO`] Usage in CDT projects:" -ForegroundColor Yellow
             Write-Host "   `${system_property:iosonata_loc}/include"
             Write-Host "   `${system_property:iocomposer_home}/external/nrfx"
             Write-Host ""
@@ -430,10 +415,10 @@ if ($Eclipse) {
             Install-IosonataPlugin -EclipseDir $ECLIPSE_DIR
             Write-Host ""
             
-            Write-Host "⚠️  Restart Eclipse for changes to take effect." -ForegroundColor Yellow
+            Write-Host "   `[WARN`] Restart Eclipse for changes to take effect." -ForegroundColor Yellow
         } catch {
-            Write-Host "✗ Failed to write eclipse.ini. Try running as Administrator." -ForegroundColor Red
-            Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "   `[ERR`] Failed to write eclipse.ini. Try running as Administrator." -ForegroundColor Red
+            Write-Host "   Error: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
 }
@@ -450,25 +435,25 @@ Write-Host "IOsonata Framework:   $ROOT\IOsonata" -ForegroundColor White
 Write-Host "External Repos:       $EXT" -ForegroundColor White
 Write-Host ""
 Write-Host "Cloned repositories:" -ForegroundColor White
-Write-Host "  • IOsonata"
-Write-Host "  • nrfx"
-Write-Host "  • sdk-nrf-bm"
-Write-Host "  • sdk-nrfxlib"
-Write-Host "  • nRF5_SDK"
-Write-Host "  • nRF5_SDK_Mesh"
-Write-Host "  • BSEC"
-Write-Host "  • Fusion"
-Write-Host "  • lvgl"
-Write-Host "  • lwip"
-Write-Host "  • FreeRTOS-Kernel"
-Write-Host "  • tinyusb"
+Write-Host "  - IOsonata"
+Write-Host "  - nrfx"
+Write-Host "  - sdk-nrf-bm"
+Write-Host "  - sdk-nrfxlib"
+Write-Host "  - nRF5_SDK"
+Write-Host "  - nRF5_SDK_Mesh"
+Write-Host "  - BSEC"
+Write-Host "  - Fusion"
+Write-Host "  - lvgl"
+Write-Host "  - lwip"
+Write-Host "  - FreeRTOS-Kernel"
+Write-Host "  - tinyusb"
 Write-Host ""
 
 if ($Eclipse -and (Test-Path "$env:ProgramFiles\Eclipse Embedded CDT\eclipse.ini")) {
     Write-Host "Eclipse Configuration:" -ForegroundColor White
-    Write-Host "  ✓ System properties configured"
-    Write-Host "  ✓ iosonata_loc = $ROOT\IOsonata"
-    Write-Host "  ✓ iocomposer_home = $ROOT"
+    Write-Host "  - System properties configured"
+    Write-Host "  - iosonata_loc = $ROOT\IOsonata"
+    Write-Host "  - iocomposer_home = $ROOT"
     Write-Host ""
 }
 
@@ -502,5 +487,5 @@ if ($ECLIPSE_INSTALLED) {
     Write-Host ""
 }
 
-Write-Host "Done. Happy building! 🔧" -ForegroundColor Green
+Write-Host "Done. Happy building!" -ForegroundColor Green
 Write-Host ""

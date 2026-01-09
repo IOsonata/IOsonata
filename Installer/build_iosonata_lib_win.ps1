@@ -16,12 +16,8 @@
     .\build_iosonata_lib_win.ps1
     Build with default path
 
-.EXAMPLE
-    .\build_iosonata_lib_win.ps1 -SdkHome C:\Dev\IOcomposer
-    Build with custom path
-
 .NOTES
-    Version: v2.2.0
+    Version: v2.2.3
     Platform: Windows
 #>
 
@@ -30,53 +26,58 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v2.2.0"
+$SCRIPT_VERSION = "v2.2.3"
 
-Write-Host "=========================================================" -ForegroundColor Blue
-Write-Host "  IOsonata Library Builder (Windows)" -ForegroundColor White
-Write-Host "  Version: $SCRIPT_VERSION" -ForegroundColor White
-Write-Host "=========================================================" -ForegroundColor Blue
-Write-Host ""
+# --- Helper: Print Banner ---
+function Show-Banner {
+    Write-Host ""
+    Write-Host "=========================================================" -ForegroundColor Blue
+    Write-Host "  IOsonata Library Builder (Windows)" -ForegroundColor White
+    Write-Host "  Version: $SCRIPT_VERSION" -ForegroundColor White
+    Write-Host "=========================================================" -ForegroundColor Blue
+    Write-Host ""
+}
+
+Show-Banner
 
 $ROOT = $SdkHome
 $ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
 
-# Check Eclipse
+# --- Check Eclipse Installation ---
 if (-not (Test-Path "$ECLIPSE_DIR\eclipse.exe")) {
-    Write-Host "❌ ERROR: Eclipse not found at $ECLIPSE_DIR" -ForegroundColor Red
+    Write-Host "ERROR: Eclipse not found at $ECLIPSE_DIR" -ForegroundColor Red
     Write-Host ""
     Write-Host "Please install Eclipse: .\install_iocdevtools_win.ps1"
     exit 1
 }
 
-Write-Host "✓ Eclipse found at: $ECLIPSE_DIR" -ForegroundColor Green
+Write-Host "Eclipse found at: $ECLIPSE_DIR" -ForegroundColor Green
 Write-Host ""
 
-# Check IOsonata
+# --- Check IOsonata SDK ---
 if (-not (Test-Path "$ROOT\IOsonata")) {
-    Write-Host "❌ ERROR: IOsonata not found at $ROOT\IOsonata" -ForegroundColor Red
+    Write-Host "ERROR: IOsonata not found at $ROOT\IOsonata" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Please clone: .\clone_iosonata_sdk_win.ps1 -Home $ROOT"
+    Write-Host "Please clone: .\clone_iosonata_sdk_win.ps1 -SdkHome $ROOT"
     exit 1
 }
 
-Write-Host "✓ IOsonata SDK found at: $ROOT\IOsonata" -ForegroundColor Green
+Write-Host "IOsonata SDK found at: $ROOT\IOsonata" -ForegroundColor Green
 Write-Host ""
 
-# Discover projects (filter platform-specific)
+# --- Discover Projects ---
 $mcuFamilies = @()
 $mcuPaths = @()
 
 Get-ChildItem -Path "$ROOT\IOsonata" -Recurse -Filter ".project" -ErrorAction SilentlyContinue | ForEach-Object {
+    # Look for projects inside 'lib\Eclipse' folders
     if ($_.DirectoryName -match "\\lib\\Eclipse$") {
         $projRoot = $_.DirectoryName
+        # Get relative path for display (e.g., "Nordic\nRF52840\lib\Eclipse")
         $relPath = $projRoot.Replace("$ROOT\IOsonata\", "")
         
-        # Filter out macOS/Linux specific lib projects
-        if ($relPath -match "^macOS\\lib\\Eclipse$" -or 
-            $relPath -match "\\macOS\\lib\\Eclipse$" -or
-            $relPath -match "^Linux\\lib\\Eclipse$" -or
-            $relPath -match "\\Linux\\lib\\Eclipse$") {
+        # Filter out non-Windows projects if any exist
+        if ($relPath -match "^macOS" -or $relPath -match "^Linux") {
             return
         }
         
@@ -86,7 +87,7 @@ Get-ChildItem -Path "$ROOT\IOsonata" -Recurse -Filter ".project" -ErrorAction Si
 }
 
 if ($mcuFamilies.Count -eq 0) {
-    Write-Host "⚠️  No IOsonata Eclipse projects found" -ForegroundColor Yellow
+    Write-Host "No IOsonata Eclipse projects found." -ForegroundColor Yellow
     exit 1
 }
 
@@ -99,7 +100,7 @@ Write-Host "   A) Build All"
 Write-Host "   0) Exit"
 Write-Host ""
 
-# User selection
+# --- User Selection ---
 do {
     $selection = Read-Host "Select project to build (0-$($mcuFamilies.Count) or A)"
     $selectionUpper = $selection.ToUpper()
@@ -108,23 +109,21 @@ do {
     (($selection -match '^\d+$') -and ([int]$selection -ge 0) -and ([int]$selection -le $mcuFamilies.Count))
 ))
 
-if ($selectionUpper -eq "A") {
-    # Build All selected, continue to build loop
-} elseif ($selectionUpper -eq "0") {
+if ($selectionUpper -eq "0") {
     Write-Host "Exiting."
     exit 0
 }
 
-# Function to build a single project
+# --- Function: Build Single Project ---
 function Build-Project {
     param(
         [string]$ProjectPath,
         [string]$ProjectFamily
     )
     
-    # Validate
+    # Validate project files exist
     if (-not (Test-Path "$ProjectPath\.project") -or -not (Test-Path "$ProjectPath\.cproject")) {
-        Write-Host "❌ ERROR: Not a valid Eclipse CDT project" -ForegroundColor Red
+        Write-Host "ERROR: Not a valid Eclipse CDT project at $ProjectPath" -ForegroundColor Red
         return $false
     }
     
@@ -133,7 +132,7 @@ function Build-Project {
     Write-Host "    Path: $ProjectPath"
     Write-Host ""
     
-    # Create workspace
+    # Create temporary workspace
     $WS = "$env:TEMP\iosonata_build_ws_$PID"
     New-Item -Path $WS -ItemType Directory -Force | Out-Null
     Write-Host ">>> Workspace: $WS" -ForegroundColor Gray
@@ -144,7 +143,7 @@ function Build-Project {
     $logFile = "$env:TEMP\build_iosonata_lib_$PID.log"
     if (Test-Path $logFile) { Remove-Item $logFile -Force }
     
-    # Build
+    # Run Eclipse Headless Build
     try {
         $buildOutput = & $eclipseExe `
             --launcher.suppressErrors `
@@ -157,21 +156,24 @@ function Build-Project {
             -printErrorMarkers `
             2>&1
         
+        # Output handling
         $buildOutput | Out-File -FilePath $logFile
         $buildOutput | Write-Host
         
+        # Cleanup Workspace
         Remove-Item -Path $WS -Recurse -Force -ErrorAction SilentlyContinue
         
         if ($LASTEXITCODE -ne 0) {
             Write-Host ""
-            Write-Host "❌ Build failed for $ProjectFamily (exit code $LASTEXITCODE)" -ForegroundColor Red
+            Write-Host "Build failed for $ProjectFamily (exit code $LASTEXITCODE)" -ForegroundColor Red
             Write-Host "   Log: $logFile"
             return $false
         }
         
         Write-Host ""
-        Write-Host "✅ Build completed for $ProjectFamily" -ForegroundColor Green
-        Write-Host ""
+        Write-Host "Build completed for $ProjectFamily" -ForegroundColor Green
+        
+        # Show produced libraries
         Write-Host "Libraries:" -ForegroundColor White
         Get-ChildItem "$ProjectPath\Debug\libIOsonata*.a" -ErrorAction SilentlyContinue | ForEach-Object { 
             Write-Host "  $($_.FullName) ($([math]::Round($_.Length/1KB, 1)) KB)"
@@ -185,31 +187,29 @@ function Build-Project {
         
     } catch {
         Write-Host ""
-        Write-Host "❌ Build exception for $ProjectFamily" -ForegroundColor Red
+        Write-Host "Build exception for $ProjectFamily" -ForegroundColor Red
         Write-Host $_.Exception.Message -ForegroundColor Red
         Remove-Item -Path $WS -Recurse -Force -ErrorAction SilentlyContinue
         return $false
     }
 }
 
-# Build All or Single
+# --- Execution Logic ---
+
 if ($selectionUpper -eq "A") {
+    # --- BUILD ALL ---
     Write-Host ""
     Write-Host "=========================================================" -ForegroundColor Blue
     Write-Host "Building ALL projects ($($mcuFamilies.Count) total)" -ForegroundColor White
     Write-Host "=========================================================" -ForegroundColor Blue
     
-    # Set up Ctrl-C handler
+    # Handle Ctrl-C gracefully
     $interrupted = $false
     $handler = {
         $script:interrupted = $true
         Write-Host ""
-        Write-Host "=========================================================" -ForegroundColor Yellow
-        Write-Host "Build interrupted by user (Ctrl-C)" -ForegroundColor Yellow
-        Write-Host "=========================================================" -ForegroundColor Yellow
+        Write-Host "!!! Build interrupted by user (Ctrl-C) !!!" -ForegroundColor Yellow
     }
-    
-    # Register the event handler
     $null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action $handler
     
     $failedBuilds = @()
@@ -217,15 +217,12 @@ if ($selectionUpper -eq "A") {
     
     try {
         for ($i = 0; $i -lt $mcuFamilies.Count; $i++) {
-            # Check if interrupted
-            if ($interrupted) {
-                break
-            }
+            if ($interrupted) { break }
             
             Write-Host ""
-            Write-Host "─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+            Write-Host "---------------------------------------------------------" -ForegroundColor DarkGray
             Write-Host "Building [$($i+1)/$($mcuFamilies.Count)]: $($mcuFamilies[$i])" -ForegroundColor White
-            Write-Host "─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+            Write-Host "---------------------------------------------------------" -ForegroundColor DarkGray
             
             if (Build-Project -ProjectPath $mcuPaths[$i] -ProjectFamily $mcuFamilies[$i]) {
                 $successfulBuilds += $mcuFamilies[$i]
@@ -234,13 +231,12 @@ if ($selectionUpper -eq "A") {
             }
         }
     } catch {
-        # Catch Ctrl-C or other interruptions
         $interrupted = $true
     } finally {
-        # Unregister the event handler
         Unregister-Event -SourceIdentifier PowerShell.Exiting -ErrorAction SilentlyContinue
     }
     
+    # Summary
     Write-Host ""
     Write-Host "=========================================================" -ForegroundColor Blue
     if ($interrupted) {
@@ -249,33 +245,27 @@ if ($selectionUpper -eq "A") {
         Write-Host "Build All Summary" -ForegroundColor White
     }
     Write-Host "=========================================================" -ForegroundColor Blue
-    Write-Host "✅ Successful: $($successfulBuilds.Count)/$($mcuFamilies.Count)" -ForegroundColor Green
+    
+    Write-Host "Successful: $($successfulBuilds.Count)/$($mcuFamilies.Count)" -ForegroundColor Green
     foreach ($proj in $successfulBuilds) {
-        Write-Host "   ✓ $proj" -ForegroundColor Green
+        Write-Host "   + $proj" -ForegroundColor Green
     }
     
     if ($failedBuilds.Count -gt 0) {
         Write-Host ""
-        Write-Host "❌ Failed: $($failedBuilds.Count)/$($mcuFamilies.Count)" -ForegroundColor Red
+        Write-Host "Failed: $($failedBuilds.Count)/$($mcuFamilies.Count)" -ForegroundColor Red
         foreach ($proj in $failedBuilds) {
-            Write-Host "   ✗ $proj" -ForegroundColor Red
+            Write-Host "   - $proj" -ForegroundColor Red
         }
         Write-Host ""
         Write-Host "Check individual log files in $env:TEMP" -ForegroundColor Yellow
-    }
-    
-    if ($interrupted) {
-        Write-Host ""
-        Write-Host "Build process was interrupted by user." -ForegroundColor Yellow
-        exit 130  # Standard exit code for Ctrl-C
-    }
-    
-    if ($failedBuilds.Count -gt 0) {
         exit 1
     }
     
+    if ($interrupted) { exit 130 }
+
 } else {
-    # Build single project
+    # --- BUILD SINGLE ---
     $selectedIdx = [int]$selection - 1
     $selectedFamily = $mcuFamilies[$selectedIdx]
     $selectedPath = $mcuPaths[$selectedIdx]
