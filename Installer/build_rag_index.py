@@ -42,7 +42,7 @@ except Exception:
     requests = None  # pragma: no cover
 
 
-SCHEMA_VERSION = "3.2"
+SCHEMA_VERSION = "3.3"
 INDEXER_NAME = "build_rag_index.py"
 
 
@@ -818,6 +818,7 @@ class IndexBuilder:
         conn.execute("""
             CREATE TABLE chunks (
                 id INTEGER PRIMARY KEY,
+                uid TEXT NOT NULL,
                 entity_type TEXT,
                 entity_id INTEGER,
                 title TEXT,
@@ -831,16 +832,21 @@ class IndexBuilder:
             )
         """)
         conn.execute("CREATE INDEX idx_chunks_entity ON chunks(entity_type, entity_id);")
+        conn.execute("CREATE UNIQUE INDEX idx_chunks_uid ON chunks(uid);")
 
         conn.execute("""
             CREATE TABLE embeddings (
-                id INTEGER PRIMARY KEY,
-                chunk_id INTEGER,
-                embedding BLOB,
-                FOREIGN KEY (chunk_id) REFERENCES chunks(id)
+                chunk_uid TEXT NOT NULL,
+                provider  TEXT NOT NULL,
+                model     TEXT NOT NULL,
+                dim       INTEGER NOT NULL,
+                embedding BLOB NOT NULL,
+                updated_utc INTEGER NOT NULL,
+                PRIMARY KEY (chunk_uid, provider, model),
+                FOREIGN KEY (chunk_uid) REFERENCES chunks(uid)
             )
         """)
-        conn.execute("CREATE INDEX idx_embeddings_chunk ON embeddings(chunk_id);")
+        conn.execute("CREATE INDEX idx_embeddings_chunk_uid ON embeddings(chunk_uid);")
 
         conn.execute("""
             CREATE TABLE module_schemas (
@@ -1033,78 +1039,80 @@ class IndexBuilder:
     # Examples as chunks
     # ----------------------------
 
-def _index_examples_as_chunks(self, conn: sqlite3.Connection, sources: List[Path]) -> int:
-    """
-    Index example-like source files as chunks.
+    def _index_examples_as_chunks(self, conn: sqlite3.Connection, sources: List[Path]) -> int:
+        """
+        Index example-like source files as chunks.
 
-    Performance notes:
-    - Reuses the already-discovered `sources` list (no second filesystem walk).
-    - Caps the number of example files to keep CI runtimes bounded.
-    """
-    default_markers = ["example", "examples", "demo", "sample", "samples", "tutorial"]
-    markers = []
-    if self.examples_markers:
-        markers = [m.strip().lower() for m in self.examples_markers.split(",") if m.strip()]
-    if not markers:
-        markers = default_markers
+        Performance notes:
+        - Reuses the already-discovered `sources` list (no second filesystem walk).
+        - Caps the number of example files to keep CI runtimes bounded.
+        """
+        default_markers = ["example", "examples", "demo", "sample", "samples", "tutorial"]
+        markers = []
+        if self.examples_markers:
+            markers = [m.strip().lower() for m in self.examples_markers.split(",") if m.strip()]
+        if not markers:
+            markers = default_markers
 
-    files: List[Path] = []
-    for f in sources:
-        try:
+        files: List[Path] = []
+        for f in sources:
+            try:
+                rel = str(f.relative_to(self.source_dir)).replace("\\", "/")
+            except Exception:
+                continue
+            rel_l = rel.lower()
+            name_l = f.name.lower()
+            if any(f"/{mk}/" in rel_l for mk in markers) or any(name_l.startswith(mk) for mk in markers):
+                files.append(f)
+
+        files.sort(key=lambda x: str(x.relative_to(self.source_dir)).replace("\\", "/"))
+
+        if self.examples_max_files > 0 and len(files) > self.examples_max_files:
+            files = files[: self.examples_max_files]
+
+        step = max(40, int(self.examples_step_lines))
+        rows = []
+        count = 0
+
+        for f in files:
+            try:
+                if f.stat().st_size > self.max_file_kb * 1024:
+                    continue
+                content = f.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+
             rel = str(f.relative_to(self.source_dir)).replace("\\", "/")
-        except Exception:
-            continue
-        rel_l = rel.lower()
-        name_l = f.name.lower()
-        if any(f"/{mk}/" in rel_l for mk in markers) or any(name_l.startswith(mk) for mk in markers):
-            files.append(f)
+            module = self._detect_module(f)
 
-    files.sort(key=lambda x: str(x.relative_to(self.source_dir)).replace("\\", "/"))
+            lines = content.splitlines()
+            for i in range(0, len(lines), step):
+                chunk_lines = lines[i : i + step]
+                if not chunk_lines:
+                    continue
+                start_line = i + 1
+                end_line = i + len(chunk_lines)
+                chunk_text = "\n".join(chunk_lines)
+                if not chunk_text.strip():
+                    continue
+                title = f"{rel}:{start_line}-{end_line}"
+                h = hashlib.sha1(chunk_text.encode('utf-8', errors='ignore')).hexdigest()
+                uid = hashlib.sha1(f"{rel}|example|{start_line}|{end_line}|{h}".encode("utf-8", errors="ignore")).hexdigest()
+                rows.append((
+                    uid,
+                    "example_file", None, title, module, rel,
+                    start_line, end_line, "example",
+                    chunk_text[: self.max_chunk_chars], h
+                ))
+                count += 1
 
-    if self.examples_max_files > 0 and len(files) > self.examples_max_files:
-        files = files[: self.examples_max_files]
-
-    step = max(40, int(self.examples_step_lines))
-    rows = []
-    count = 0
-
-    for f in files:
-        try:
-            if f.stat().st_size > self.max_file_kb * 1024:
-                continue
-            content = f.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            continue
-
-        rel = str(f.relative_to(self.source_dir)).replace("\\", "/")
-        module = self._detect_module(f)
-
-        lines = content.splitlines()
-        for i in range(0, len(lines), step):
-            chunk_lines = lines[i : i + step]
-            if not chunk_lines:
-                continue
-            start_line = i + 1
-            end_line = i + len(chunk_lines)
-            chunk_text = "\n".join(chunk_lines)
-            if not chunk_text.strip():
-                continue
-            title = f"{rel}:{start_line}-{end_line}"
-            h = _short_hash(chunk_text, 12)
-            rows.append((
-                "example_file", None, title, module, rel,
-                start_line, end_line, "example",
-                chunk_text[: self.max_chunk_chars], h
-            ))
-            count += 1
-
-    if rows:
-        conn.executemany(
-            """INSERT INTO chunks(entity_type, entity_id, title, module, file, start_line, end_line, kind, content, content_hash)
-               VALUES(?,?,?,?,?,?,?,?,?,?)""",
-            rows,
-        )
-    return count
+        if rows:
+            conn.executemany(
+                """INSERT INTO chunks(uid, entity_type, entity_id, title, module, file, start_line, end_line, kind, content, content_hash)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                rows,
+            )
+        return count
 
     # ----------------------------
     # Code graph
@@ -1152,50 +1160,54 @@ def _index_examples_as_chunks(self, conn: sqlite3.Connection, sources: List[Path
     # Chunks
     # ----------------------------
 
-def _create_chunks(self, conn: sqlite3.Connection) -> int:
-    rows = []
-    count = 0
+    def _create_chunks(self, conn: sqlite3.Connection) -> int:
+        rows = []
+        count = 0
 
-    for fid, fi in self.functions_by_id.items():
-        if not fi.body and not fi.description:
-            continue
-        content = fi.signature
-        if fi.body:
-            content = fi.signature + "\n{\n" + fi.body.strip() + "\n}"
-        content = content.strip()
-        if not content:
-            continue
-        h = _short_hash(content, 12)
-        start_line = fi.line
-        end_line = fi.line + max(0, content.count("\n"))
-        rows.append((
-            "function", fid, fi.signature, fi.module, fi.file,
-            start_line, end_line, "function",
-            content[: self.max_chunk_chars], h
-        ))
-        count += 1
+        for fid, fi in self.functions_by_id.items():
+            if not fi.body and not fi.description:
+                continue
+            content = fi.signature
+            if fi.body:
+                content = fi.signature + "\n{\n" + fi.body.strip() + "\n}"
+            content = content.strip()
+            if not content:
+                continue
+            h = hashlib.sha1(content.encode('utf-8', errors='ignore')).hexdigest()
+            start_line = fi.line
+            end_line = fi.line + max(0, content.count("\n"))
+            uid = hashlib.sha1(f"{fi.file}|function|{start_line}|{end_line}|{h}".encode("utf-8", errors="ignore")).hexdigest()
+            rows.append((
+                uid,
+                "function", fid, fi.signature, fi.module, fi.file,
+                start_line, end_line, "function",
+                content[: self.max_chunk_chars], h
+            ))
+            count += 1
 
-    for tid, ti in self.types_by_id.items():
-        content = ti.body.strip()
-        if not content:
-            continue
-        h = _short_hash(content, 12)
-        start_line = ti.line
-        end_line = ti.line + max(0, content.count("\n"))
-        rows.append((
-            "type", tid, f"{ti.kind} {ti.name}", ti.module, ti.file,
-            start_line, end_line, "type",
-            content[: self.max_chunk_chars], h
-        ))
-        count += 1
+        for tid, ti in self.types_by_id.items():
+            content = ti.body.strip()
+            if not content:
+                continue
+            h = hashlib.sha1(content.encode('utf-8', errors='ignore')).hexdigest()
+            start_line = ti.line
+            end_line = ti.line + max(0, content.count("\n"))
+            uid = hashlib.sha1(f"{ti.file}|type|{start_line}|{end_line}|{h}".encode("utf-8", errors="ignore")).hexdigest()
+            rows.append((
+                uid,
+                "type", tid, f"{ti.kind} {ti.name}", ti.module, ti.file,
+                start_line, end_line, "type",
+                content[: self.max_chunk_chars], h
+            ))
+            count += 1
 
-    if rows:
-        conn.executemany(
-            """INSERT INTO chunks(entity_type, entity_id, title, module, file, start_line, end_line, kind, content, content_hash)
-               VALUES(?,?,?,?,?,?,?,?,?,?)""",
-            rows,
-        )
-    return count
+        if rows:
+            conn.executemany(
+                """INSERT INTO chunks(uid, entity_type, entity_id, title, module, file, start_line, end_line, kind, content, content_hash)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                rows,
+            )
+        return count
 
 
     # ----------------------------
@@ -1222,16 +1234,31 @@ def _create_chunks(self, conn: sqlite3.Connection) -> int:
     # ----------------------------
 
     def _build_embeddings(self, conn: sqlite3.Connection) -> Optional[int]:
+        """Populate (or incrementally update) the embeddings table for the configured provider/model."""
         assert self.embedding_client is not None
-        conn.execute("DELETE FROM embeddings;")
 
-        cur = conn.execute("SELECT id, title, content FROM chunks ORDER BY id;")
+        provider = self.embedding_client.provider
+        model = self.embedding_client.model
+        now = int(time.time())
+
+        cur = conn.execute(
+            """SELECT c.uid, c.title, c.content
+                   FROM chunks c
+              LEFT JOIN embeddings e
+                     ON e.chunk_uid = c.uid
+                    AND e.provider = ?
+                    AND e.model = ?
+                  WHERE e.chunk_uid IS NULL
+               ORDER BY c.id;""",
+            (provider, model),
+        )
         rows = cur.fetchall()
+
         inserted = 0
         emb_dim: Optional[int] = None
 
-        for cid, title, content in rows:
-            text = (title + "\n\n" + content).strip()
+        for uid, title, content in rows:
+            text = (str(title or "") + "\n\n" + str(content or "")).strip()
             if len(text) > 9000:
                 text = text[:9000]
             vec = self.embedding_client.embed(text)
@@ -1239,12 +1266,18 @@ def _create_chunks(self, conn: sqlite3.Connection) -> int:
                 continue
             if emb_dim is None:
                 emb_dim = len(vec)
-            conn.execute("INSERT INTO embeddings(chunk_id, embedding) VALUES(?,?)", (cid, pack_embedding(vec)))
+
+            conn.execute(
+                """INSERT OR REPLACE INTO embeddings(chunk_uid, provider, model, dim, embedding, updated_utc)
+                       VALUES(?,?,?,?,?,?)""",
+                (uid, provider, model, len(vec), pack_embedding(vec), now),
+            )
             inserted += 1
 
         conn.commit()
         print(f"  embeddings stored: {inserted}")
         return emb_dim
+
 
     # ----------------------------
     # Module schemas
