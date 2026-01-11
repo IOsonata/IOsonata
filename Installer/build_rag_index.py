@@ -302,6 +302,12 @@ class EmbeddingClient:
                 except Exception:
                     self._hash_dim = 512
 
+    @property
+    def batch_size(self) -> int:
+        """Batch sizes for API providers."""
+        sizes = {"voyage": 64, "openai": 100, "fastembed": 32, "hash": 1000}
+        return sizes.get(self.provider, 32)
+
     def embed(self, text: str) -> Optional[List[float]]:
         if not text:
             return None
@@ -321,8 +327,70 @@ class EmbeddingClient:
             if vec:
                 self._cache[key] = vec
             return vec
-        except Exception:
+        except Exception as e:
+            print(f"[warn] embed failed: {e}", file=sys.stderr)
             return None
+
+    def embed_batch(self, texts: List[str]) -> List[Optional[List[float]]]:
+        """Batch embedding - much faster for API providers."""
+        if not texts:
+            return []
+        
+        results: List[Optional[List[float]]] = [None] * len(texts)
+        uncached = [(i, t) for i, t in enumerate(texts) if t and _md5(f"{self.provider}:{self.model}:{t}") not in self._cache]
+        
+        # Return cached results
+        for i, t in enumerate(texts):
+            if t:
+                key = _md5(f"{self.provider}:{self.model}:{t}")
+                if key in self._cache:
+                    results[i] = self._cache[key]
+        
+        if not uncached:
+            return results
+        
+        # Batch API call for uncached
+        uncached_texts = [t for _, t in uncached]
+        try:
+            if self.provider == "voyage":
+                vecs = self._embed_voyage_batch(uncached_texts)
+            elif self.provider == "openai":
+                vecs = self._embed_openai_batch(uncached_texts)
+            else:
+                # Fall back to one-at-a-time for local providers
+                vecs = [self.embed(t) for t in uncached_texts]
+            
+            for (orig_idx, text), vec in zip(uncached, vecs or []):
+                results[orig_idx] = vec
+                if vec:
+                    key = _md5(f"{self.provider}:{self.model}:{text}")
+                    self._cache[key] = vec
+        except Exception as e:
+            print(f"[warn] batch embed failed: {e}", file=sys.stderr)
+        
+        return results
+
+    def _embed_voyage_batch(self, texts: List[str]) -> List[Optional[List[float]]]:
+        """Batch embedding via Voyage API."""
+        url = "https://api.voyageai.com/v1/embeddings"
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        payload = {"model": self.model, "input": texts}
+        r = requests.post(url, headers=headers, json=payload, timeout=self.timeout_s)
+        r.raise_for_status()
+        data = r.json()
+        embeddings = sorted(data.get("data", []), key=lambda x: x.get("index", 0))
+        return [e.get("embedding") for e in embeddings]
+
+    def _embed_openai_batch(self, texts: List[str]) -> List[Optional[List[float]]]:
+        """Batch embedding via OpenAI API."""
+        url = "https://api.openai.com/v1/embeddings"
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        payload = {"model": self.model, "input": texts}
+        r = requests.post(url, headers=headers, json=payload, timeout=self.timeout_s)
+        r.raise_for_status()
+        data = r.json()
+        embeddings = sorted(data.get("data", []), key=lambda x: x.get("index", 0))
+        return [e.get("embedding") for e in embeddings]
 
     def _embed_voyage(self, text: str) -> Optional[List[float]]:
         url = "https://api.voyageai.com/v1/embeddings"
@@ -444,7 +512,12 @@ class IndexBuilder:
         ".git", ".svn", ".hg",
         ".iosonata", ".metadata", ".vscode", ".idea", "__pycache__", "node_modules",
         "build", ".build", "out", "dist", "debug", "release",
-        "cmake", "docs", "doc", "generated", "gen", "third_party", "vendor"
+        "cmake", "docs", "doc", "generated", "gen", "third_party", "vendor",
+        # Platform-specific
+        "OSC", "OSX", "linux", "win32", "win", "freertos", "zephyr",
+        # Vendor SDKs (index separately or skip - causes regex backtracking)
+        "ARM", "CMSIS", "external", "nrfx", "nrf_sdk", "sdk_components", "softdevice",
+        "STM32", "stm32", "hal_driver", "Drivers",
     ]
 
     SOURCE_EXTS = {".c", ".h", ".hpp", ".cpp", ".cc", ".cxx", ".inc"}
@@ -464,6 +537,7 @@ class IndexBuilder:
         examples_max_files: int = 300,
         examples_step_lines: int = 220,
         examples_markers: Optional[str] = None,
+        extra_skip_dirs: Optional[str] = None,
         deterministic: bool = False,
         vacuum: bool = False,
         skip_if_unchanged: bool = False,
@@ -487,6 +561,7 @@ class IndexBuilder:
         self.examples_max_files = int(examples_max_files)
         self.examples_step_lines = int(examples_step_lines)
         self.examples_markers = (examples_markers or '').strip()
+        self.extra_skip_dirs = (extra_skip_dirs or '').strip()
 
         self.deterministic = deterministic
         self.vacuum = bool(vacuum)
@@ -869,6 +944,13 @@ class IndexBuilder:
         """
         files: List[Path] = []
         skip = {x.lower() for x in self.SKIP_DIR_PATTERNS}
+        
+        # Add user-specified skip dirs
+        if self.extra_skip_dirs:
+            for d in self.extra_skip_dirs.split(","):
+                d = d.strip().lower()
+                if d:
+                    skip.add(d)
 
         scanned_files = 0
         kept = 0
@@ -923,15 +1005,18 @@ class IndexBuilder:
     # ----------------------------
 
     def _parse_types(self, conn: sqlite3.Connection, content: str, filepath: str, module: str) -> int:
+        # Skip files that are too large (causes regex backtracking)
+        if len(content) > 150_000:
+            return 0
         masked = self._masked(content)
         count = 0
 
-        type_re = re.compile(r"\b(class|struct|union|enum(?:\s+class)?)\s+(?P<name>[A-Za-z_]\w*)[^{;]*\{")
+        type_re = re.compile(r"\b(class|struct|union|enum(?:\s+class)?)\s+([A-Za-z_]\w*)\s*[:{]")
         for m in type_re.finditer(masked):
             kind = m.group(1).replace("  ", " ").strip()
-            name = m.group("name")
+            name = m.group(2)
 
-            open_idx = masked.find("{", m.end() - 1)
+            open_idx = masked.find("{", m.start())
             if open_idx == -1:
                 continue
             close_idx = find_matching_brace(masked, open_idx)
@@ -969,6 +1054,9 @@ class IndexBuilder:
     # ----------------------------
 
     def _parse_functions(self, conn: sqlite3.Connection, content: str, filepath: str, module: str) -> int:
+        # Skip files that are too large (causes regex backtracking)
+        if len(content) > 150_000:
+            return 0
         masked = self._masked(content)
         spans = sorted(self._type_spans.get(filepath, []))
 
@@ -979,46 +1067,45 @@ class IndexBuilder:
                     return True
             return False
 
+        # FAST regex - no backtracking patterns
         header_re = re.compile(
-            r'(?P<comment>/\*\*[\s\S]*?\*/\s*)?'
-            r'(?P<prefix>(?:^|[\n;{}]))\s*'
-            r'(?:template\s*<[^>]*>\s*)?'
-            r'(?:extern\s+|static\s+|inline\s+|constexpr\s+|virtual\s+|__attribute__\s*\(\([^)]*\)\)\s+)*'
-            r'(?P<ret>[\w:\<\>\s\*&]+?)\s+'
-            r'(?P<name>[A-Za-z_~]\w*(?:::[A-Za-z_~]\w*)*)\s*'
-            r'\((?P<params>[^)]*)\)\s*'
-            r'(?P<trailer>(?:const\s+)?(?:noexcept\s+)?(?:override\s+)?(?:final\s+)?)(?P<end>[{;])'
+            r'(?:^|[\n;{}])\s*'
+            r'(?:(?:extern|static|inline|const|volatile|unsigned|signed|struct|enum|union)\s+)*'
+            r'([A-Za-z_]\w*(?:\s*\*)*)\s+'  # return type
+            r'([A-Za-z_]\w*)\s*'  # function name
+            r'\(([^)]*)\)\s*'  # params
+            r'([{;])'  # end
         )
 
         count = 0
         for m in header_re.finditer(masked):
-            if _in_type_span(m.start('name')):
-                continue
+            ret_type = (m.group(1) or "").strip()
+            qname = m.group(2)
+            params = (m.group(3) or "").strip()
+            end_ch = m.group(4)
 
-            qname = m.group("name")
+            if _in_type_span(m.start(2)):
+                continue
             if qname.startswith("_"):
                 continue
-            if qname in {"if", "for", "while", "switch", "return", "sizeof", "alignof", "catch", "static_assert"}:
+            if qname in {"if", "for", "while", "switch", "return", "sizeof", "alignof", "catch", "static_assert", "defined"}:
+                continue
+            if qname.isupper() and len(qname) > 2:
                 continue
 
-            end_ch = m.group("end")
             body = ""
             kind = "declaration"
-
             if end_ch == "{":
-                open_idx = m.end("end") - 1
+                open_idx = m.end() - 1
                 close_idx = find_matching_brace(masked, open_idx)
                 if close_idx is None:
                     continue
                 body = content[open_idx + 1 : close_idx]
                 kind = "definition"
 
-            ret = " ".join(content[m.start("ret") : m.end("ret")].split())
-            params = " ".join(content[m.start("params") : m.end("params")].split())
-            sig = f"{ret} {qname}({params})"
-
+            sig = f"{ret_type} {qname}({params})"
             line = content[: m.start()].count("\n") + 1
-            comment = m.group("comment") or extract_doc_block_before(content, m.start())
+            comment = extract_doc_block_before(content, m.start())
             desc = brief_from_comment(comment)
             body_hash = _short_hash(body, 12) if body else ""
 
@@ -1234,11 +1321,12 @@ class IndexBuilder:
     # ----------------------------
 
     def _build_embeddings(self, conn: sqlite3.Connection) -> Optional[int]:
-        """Populate (or incrementally update) the embeddings table for the configured provider/model."""
+        """Populate (or incrementally update) the embeddings table using batched API calls."""
         assert self.embedding_client is not None
 
         provider = self.embedding_client.provider
         model = self.embedding_client.model
+        batch_size = self.embedding_client.batch_size
         now = int(time.time())
 
         cur = conn.execute(
@@ -1254,27 +1342,54 @@ class IndexBuilder:
         )
         rows = cur.fetchall()
 
+        if not rows:
+            print(f"  embeddings: 0 new chunks")
+            return None
+
+        total = len(rows)
+        print(f"  embedding {total} chunks (batch_size={batch_size})")
+
         inserted = 0
         emb_dim: Optional[int] = None
 
+        # Prepare texts
+        chunk_data = []
         for uid, title, content in rows:
             text = (str(title or "") + "\n\n" + str(content or "")).strip()
             if len(text) > 9000:
                 text = text[:9000]
-            vec = self.embedding_client.embed(text)
-            if not vec:
-                continue
-            if emb_dim is None:
-                emb_dim = len(vec)
+            chunk_data.append((uid, text))
 
-            conn.execute(
-                """INSERT OR REPLACE INTO embeddings(chunk_uid, provider, model, dim, embedding, updated_utc)
-                       VALUES(?,?,?,?,?,?)""",
-                (uid, provider, model, len(vec), pack_embedding(vec), now),
-            )
-            inserted += 1
+        # Process in batches
+        for batch_start in range(0, len(chunk_data), batch_size):
+            batch = chunk_data[batch_start:batch_start + batch_size]
+            uids = [u for u, _ in batch]
+            texts = [t for _, t in batch]
+            
+            if self._log:
+                pct = int(100 * min(batch_start + batch_size, total) / total)
+                self._log(f"embeddings: {min(batch_start + batch_size, total)}/{total} ({pct}%)")
+            
+            vecs = self.embedding_client.embed_batch(texts)
+            
+            for uid, vec in zip(uids, vecs):
+                if not vec:
+                    continue
+                if emb_dim is None:
+                    emb_dim = len(vec)
+                conn.execute(
+                    """INSERT OR REPLACE INTO embeddings(chunk_uid, provider, model, dim, embedding, updated_utc)
+                           VALUES(?,?,?,?,?,?)""",
+                    (uid, provider, model, len(vec), pack_embedding(vec), now),
+                )
+                inserted += 1
+            
+            conn.commit()  # Commit each batch
+            
+            # Small delay between batches to avoid rate limits
+            if batch_start + batch_size < total and provider in ("voyage", "openai"):
+                time.sleep(0.3)
 
-        conn.commit()
         print(f"  embeddings stored: {inserted}")
         return emb_dim
 
@@ -1356,6 +1471,8 @@ def main() -> None:
     p.add_argument("--examples-step-lines", type=int, default=220, help="Lines per example chunk block")
     p.add_argument("--examples-markers", default="",
                    help="Comma-separated directory/name markers treated as examples (default: example,examples,demo,sample,samples,tutorial)")
+    p.add_argument("--skip-dirs", default="",
+                   help="Comma-separated additional directory names to skip (e.g., 'myplatform,myvendor')")
 
     args = p.parse_args()
 
@@ -1398,6 +1515,7 @@ def main() -> None:
         examples_max_files=examples_max_files,
         examples_step_lines=args.examples_step_lines,
         examples_markers=args.examples_markers,
+        extra_skip_dirs=args.skip_dirs,
         deterministic=args.deterministic,
         vacuum=args.vacuum,
         skip_if_unchanged=args.skip_if_unchanged,
