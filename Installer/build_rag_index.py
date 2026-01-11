@@ -24,11 +24,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import struct
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,8 +42,8 @@ except Exception:
     requests = None  # pragma: no cover
 
 
-SCHEMA_VERSION = "3.0"
-INDEXER_NAME = "build_rag_index_v3.py"
+SCHEMA_VERSION = "3.2"
+INDEXER_NAME = "build_rag_index.py"
 
 
 # ----------------------------
@@ -439,7 +441,9 @@ class IndexBuilder:
     }
 
     SKIP_DIR_PATTERNS = [
-        ".git", ".svn", "build", ".build", "out", "dist", "debug", "release",
+        ".git", ".svn", ".hg",
+        ".iosonata", ".metadata", ".vscode", ".idea", "__pycache__", "node_modules",
+        "build", ".build", "out", "dist", "debug", "release",
         "cmake", "docs", "doc", "generated", "gen", "third_party", "vendor"
     ]
 
@@ -457,9 +461,19 @@ class IndexBuilder:
         max_file_kb: int = 1024,
         max_chunk_chars: int = 7000,
         include_examples: bool = True,
+        examples_max_files: int = 300,
+        examples_step_lines: int = 220,
+        examples_markers: Optional[str] = None,
         deterministic: bool = False,
+        vacuum: bool = False,
         skip_if_unchanged: bool = False,
         journal_mode: str = "WAL",
+        progress_every: int = 250,
+        verbose: bool = False,
+        quiet: bool = False,
+        compute_callgraph: bool = False,
+        compute_type_usage: bool = False,
+        wal_checkpoint: bool = True,
     ):
         self.source_dir = Path(source_dir).resolve()
         self.output_dir = Path(output_dir).resolve()
@@ -470,30 +484,74 @@ class IndexBuilder:
         self.max_file_kb = max_file_kb
         self.max_chunk_chars = max_chunk_chars
         self.include_examples = include_examples
+        self.examples_max_files = int(examples_max_files)
+        self.examples_step_lines = int(examples_step_lines)
+        self.examples_markers = (examples_markers or '').strip()
 
         self.deterministic = deterministic
+        self.vacuum = bool(vacuum)
         self.skip_if_unchanged = skip_if_unchanged
         self.journal_mode = "DELETE" if deterministic else journal_mode.upper()
 
+        self.progress_every = max(1, int(progress_every))
+        self.verbose = bool(verbose)
+        self.quiet = bool(quiet)
+        self.compute_callgraph = bool(compute_callgraph)
+        self.compute_type_usage = bool(compute_type_usage)
+        self.wal_checkpoint = bool(wal_checkpoint)
+        self._log = None  # will be set in build()
+
         self.embedding_client: Optional[EmbeddingClient] = None
-        self.embedding_provider = embedding_provider
+        # Normalize provider name early for consistent metadata + behavior.
+        self.embedding_provider = (embedding_provider or "voyage").lower().strip()
         self.embedding_model = embedding_model
 
-        if enable_embeddings:
-            if not api_key:
-                raise ValueError("API key required when --embeddings is enabled")
-            self.embedding_client = EmbeddingClient(embedding_provider, api_key, model=embedding_model)
+        if self.enable_embeddings:
+            # API providers require keys; local providers do not.
+            provider = self.embedding_provider
+            if provider in ("voyage", "openai"):
+                if not api_key:
+                    raise ValueError(
+                        "API key required for provider '%s' when --embeddings is enabled" % provider
+                    )
+                self.embedding_client = EmbeddingClient(provider, api_key, model=embedding_model)
+            elif provider in ("hash", "fastembed"):
+                # Local embedding backends (offline)
+                self.embedding_client = EmbeddingClient(provider, api_key, model=embedding_model)
+            else:
+                raise ValueError("Unknown embedding provider: %s" % provider)
 
         self.functions_by_id: Dict[int, FunctionInfo] = {}
         self.types_by_id: Dict[int, TypeInfo] = {}
         self._type_spans: Dict[str, List[Tuple[int, int]]] = {}
         self._masked_cache: Dict[str, str] = {}
 
+
     def build(self, version: str) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+        t0 = time.monotonic()
+
+        def _fmt_elapsed() -> str:
+            s = int(time.monotonic() - t0)
+            mm = s // 60
+            ss = s % 60
+            return f"{mm:02d}:{ss:02d}"
+
+        def log(msg: str) -> None:
+            if self.quiet:
+                return
+            print(f"[{_fmt_elapsed()}] {msg}", flush=True)
+
+        self._log = log
+        log(f"index build start (schema={SCHEMA_VERSION})")
+
         git_commit = try_git_commit(self.source_dir)
         git_time = try_git_commit_time_iso(self.source_dir)
+        if git_commit:
+            log(f"git commit: {git_commit}")
+        else:
+            log("git commit: <none> (non-git environment)")
 
         config = {
             "schema_version": SCHEMA_VERSION,
@@ -504,6 +562,10 @@ class IndexBuilder:
             "max_file_kb": int(self.max_file_kb),
             "max_chunk_chars": int(self.max_chunk_chars),
             "include_examples": bool(self.include_examples),
+            "vacuum": bool(self.vacuum),
+            "examples_max_files": int(self.examples_max_files),
+            "examples_step_lines": int(self.examples_step_lines),
+            "examples_markers": self.examples_markers,
         }
         cfg_hash = _config_hash(config)
 
@@ -564,7 +626,9 @@ class IndexBuilder:
         conn.execute("INSERT INTO metadata_kv(k, v) VALUES(?,?)", ("config_json", json.dumps(config, sort_keys=True)))
         conn.commit()
 
+        log("scanning source files...")
         sources = self._find_sources()
+        log(f"source files: {len(sources)}")
 
         if not git_commit:
             conn.execute("INSERT OR REPLACE INTO metadata_kv(k, v) VALUES(?,?)", ("tree_fingerprint", _tree_fingerprint(self.source_dir, sources)))
@@ -573,6 +637,8 @@ class IndexBuilder:
         conn.execute("BEGIN;")
         func_count = type_count = 0
 
+        parsed_files = 0
+        last_parse_log = time.monotonic()
         for fp in sources:
             try:
                 if fp.stat().st_size > self.max_file_kb * 1024:
@@ -583,6 +649,13 @@ class IndexBuilder:
 
             rel = str(fp.relative_to(self.source_dir)).replace("\\", "/")
             module = self._detect_module(fp)
+            parsed_files += 1
+            if (parsed_files % self.progress_every == 0) or (time.monotonic() - last_parse_log) > 8.0:
+                last_parse_log = time.monotonic()
+                if self.verbose:
+                    log(f"parse: {parsed_files}/{len(sources)} files (last: {rel})")
+                else:
+                    log(f"parse: {parsed_files}/{len(sources)} files")
 
             type_count += self._parse_types(conn, content, rel, module)
             func_count += self._parse_functions(conn, content, rel, module)
@@ -591,25 +664,40 @@ class IndexBuilder:
 
         # Example chunks (optional)
         chunk_count = 0
+        if self.include_examples:
+            log("indexing examples as chunks...")
         conn.execute("BEGIN;")
         if self.include_examples:
-            chunk_count += self._index_examples_as_chunks(conn)
+            chunk_count += self._index_examples_as_chunks(conn, sources)
         conn.execute("COMMIT;")
+        if self.include_examples:
+            log(f"example chunks: {chunk_count}")
 
         # Code graph
-        conn.execute("BEGIN;")
-        self._build_call_graph(conn)
-        self._build_type_usage(conn)
-        conn.execute("COMMIT;")
+        if self.compute_callgraph or self.compute_type_usage:
+            log("building code graph...")
+            conn.execute("BEGIN;")
+            if self.compute_callgraph:
+                self._build_call_graph(conn)
+            if self.compute_type_usage:
+                self._build_type_usage(conn)
+            conn.execute("COMMIT;")
+            log("code graph: done")
+        else:
+            log("code graph: skipped")
 
         # Chunks for functions/types
+        log("creating chunks (functions/types)...")
         conn.execute("BEGIN;")
         chunk_count += self._create_chunks(conn)
         conn.execute("COMMIT;")
+        log(f"chunks total: {chunk_count}")
 
         # FTS
         if self.enable_fts:
+            log("building FTS5 index...")
             self._build_fts(conn)
+            log("FTS5: done")
 
         # Embeddings (optional)
         if self.embedding_client:
@@ -617,17 +705,28 @@ class IndexBuilder:
             conn.execute("UPDATE metadata SET embedding_dim=? WHERE rowid=1;", (emb_dim,))
             conn.commit()
 
+        log("building module schemas...")
         self._build_module_schemas(conn)
+        log("module schemas: done")
 
-        if self.deterministic:
-            # compact into a stable single-file form
+        if self.vacuum:
+            # compact into a stable single-file form (can be expensive)
             try:
                 conn.execute("VACUUM;")
             except Exception:
                 pass
 
         conn.commit()
+        try:
+            if self.wal_checkpoint and self.journal_mode.upper() == "WAL":
+                log("checkpointing WAL...")
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+                conn.commit()
+        except Exception:
+            pass
         conn.close()
+        log("index build complete")
+
 
         print(f"Built repo index: {self.output_db}")
         print(f"  functions: {func_count}")
@@ -757,19 +856,47 @@ class IndexBuilder:
     # ----------------------------
 
     def _find_sources(self) -> List[Path]:
+        """
+        Discover source files quickly.
+
+        Uses os.walk with directory pruning (much faster than Path.rglob on large repos).
+        """
         files: List[Path] = []
-        for f in self.source_dir.rglob("*"):
-            if not f.is_file():
-                continue
-            if f.suffix.lower() not in self.SOURCE_EXTS:
-                continue
-            p = str(f).replace("\\", "/").lower()
-            if any(x in p for x in self.SKIP_DIR_PATTERNS):
-                continue
-            files.append(f)
-        # deterministic order across OS/filesystems
+        skip = {x.lower() for x in self.SKIP_DIR_PATTERNS}
+
+        scanned_files = 0
+        kept = 0
+        last_log = time.monotonic()
+
+        for root, dirs, filenames in os.walk(self.source_dir, topdown=True):
+            # Prune directories early
+            dirs[:] = [d for d in dirs if d.lower() not in skip]
+
+            for fn in filenames:
+                scanned_files += 1
+                ext = Path(fn).suffix.lower()
+                if ext not in self.SOURCE_EXTS:
+                    continue
+                p = Path(root) / fn
+
+                # Safety net: skip any file whose relative path contains a skipped component
+                try:
+                    rel_parts = [part.lower() for part in p.relative_to(self.source_dir).parts]
+                except Exception:
+                    continue
+                if any(part in skip for part in rel_parts):
+                    continue
+
+                files.append(p)
+                kept += 1
+
+                if self._log and (kept % self.progress_every == 0 or (time.monotonic() - last_log) > 5.0):
+                    last_log = time.monotonic()
+                    self._log(f"scan: kept {kept} source files (scanned {scanned_files})")
+
         files.sort(key=lambda x: str(x.relative_to(self.source_dir)).replace("\\", "/"))
         return files
+
 
     def _detect_module(self, filepath: Path) -> str:
         name = filepath.name.lower()
@@ -906,56 +1033,78 @@ class IndexBuilder:
     # Examples as chunks
     # ----------------------------
 
-    def _index_examples_as_chunks(self, conn: sqlite3.Connection) -> int:
-        patterns = ("example", "examples", "demo", "sample", "samples", "tutorial", "test", "tests", "app", "apps")
-        exts = self.SOURCE_EXTS
-        count = 0
+def _index_examples_as_chunks(self, conn: sqlite3.Connection, sources: List[Path]) -> int:
+    """
+    Index example-like source files as chunks.
 
-        files: List[Path] = []
-        for f in self.source_dir.rglob("*"):
-            if not f.is_file():
-                continue
-            if f.suffix.lower() not in exts:
-                continue
-            p = str(f).replace("\\", "/").lower()
-            if any(x in p for x in self.SKIP_DIR_PATTERNS):
-                continue
-            if not any(f"/{pat}/" in p or f.name.lower().startswith(pat) for pat in patterns):
-                continue
+    Performance notes:
+    - Reuses the already-discovered `sources` list (no second filesystem walk).
+    - Caps the number of example files to keep CI runtimes bounded.
+    """
+    default_markers = ["example", "examples", "demo", "sample", "samples", "tutorial"]
+    markers = []
+    if self.examples_markers:
+        markers = [m.strip().lower() for m in self.examples_markers.split(",") if m.strip()]
+    if not markers:
+        markers = default_markers
+
+    files: List[Path] = []
+    for f in sources:
+        try:
+            rel = str(f.relative_to(self.source_dir)).replace("\\", "/")
+        except Exception:
+            continue
+        rel_l = rel.lower()
+        name_l = f.name.lower()
+        if any(f"/{mk}/" in rel_l for mk in markers) or any(name_l.startswith(mk) for mk in markers):
             files.append(f)
 
-        files.sort(key=lambda x: str(x.relative_to(self.source_dir)).replace("\\", "/"))
+    files.sort(key=lambda x: str(x.relative_to(self.source_dir)).replace("\\", "/"))
 
-        step = 220
-        for f in files:
-            try:
-                if f.stat().st_size > self.max_file_kb * 1024:
-                    continue
-                content = f.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
+    if self.examples_max_files > 0 and len(files) > self.examples_max_files:
+        files = files[: self.examples_max_files]
+
+    step = max(40, int(self.examples_step_lines))
+    rows = []
+    count = 0
+
+    for f in files:
+        try:
+            if f.stat().st_size > self.max_file_kb * 1024:
                 continue
+            content = f.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
 
-            rel = str(f.relative_to(self.source_dir)).replace("\\", "/")
-            module = self._detect_module(f)
+        rel = str(f.relative_to(self.source_dir)).replace("\\", "/")
+        module = self._detect_module(f)
 
-            lines = content.splitlines()
-            for i in range(0, len(lines), step):
-                chunk_lines = lines[i : i + step]
-                if not chunk_lines:
-                    continue
-                start_line = i + 1
-                end_line = i + len(chunk_lines)
-                chunk_text = "\n".join(chunk_lines)
-                title = f"{rel}:{start_line}-{end_line}"
-                h = _short_hash(chunk_text, 12)
-                conn.execute(
-                    """INSERT INTO chunks(entity_type, entity_id, title, module, file, start_line, end_line, kind, content, content_hash)
-                       VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                    ("example_file", None, title, module, rel, start_line, end_line, "example", chunk_text[: self.max_chunk_chars], h),
-                )
-                count += 1
+        lines = content.splitlines()
+        for i in range(0, len(lines), step):
+            chunk_lines = lines[i : i + step]
+            if not chunk_lines:
+                continue
+            start_line = i + 1
+            end_line = i + len(chunk_lines)
+            chunk_text = "\n".join(chunk_lines)
+            if not chunk_text.strip():
+                continue
+            title = f"{rel}:{start_line}-{end_line}"
+            h = _short_hash(chunk_text, 12)
+            rows.append((
+                "example_file", None, title, module, rel,
+                start_line, end_line, "example",
+                chunk_text[: self.max_chunk_chars], h
+            ))
+            count += 1
 
-        return count
+    if rows:
+        conn.executemany(
+            """INSERT INTO chunks(entity_type, entity_id, title, module, file, start_line, end_line, kind, content, content_hash)
+               VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            rows,
+        )
+    return count
 
     # ----------------------------
     # Code graph
@@ -976,8 +1125,9 @@ class IndexBuilder:
             masked_body = mask_comments_and_strings(fi.body)
             calls = set(call_re.findall(masked_body)) | set(member_re.findall(masked_body))
             calls = {c for c in calls if c not in keywords and c != fi.name}
-            for c in sorted(calls):
-                conn.execute("INSERT INTO call_graph VALUES(?,?,?)", (fid, c, "call"))
+            rows = [(fid, c, "call") for c in sorted(calls)]
+            if rows:
+                conn.executemany("INSERT INTO call_graph VALUES(?,?,?)", rows)
 
     def _build_type_usage(self, conn: sqlite3.Connection) -> None:
         conn.execute("DELETE FROM type_usage;")
@@ -994,48 +1144,59 @@ class IndexBuilder:
             masked_body = mask_comments_and_strings(fi.body)
             types = set(t_typedef.findall(masked_body)) | set(t_camel.findall(masked_body))
             types = {t for t in types if t not in blacklist}
-            for t in sorted(types):
-                conn.execute("INSERT INTO type_usage VALUES(?,?)", (fid, t))
+            rows = [(fid, t) for t in sorted(types)]
+            if rows:
+                conn.executemany("INSERT INTO type_usage VALUES(?,?)", rows)
 
     # ----------------------------
     # Chunks
     # ----------------------------
 
-    def _create_chunks(self, conn: sqlite3.Connection) -> int:
-        count = 0
+def _create_chunks(self, conn: sqlite3.Connection) -> int:
+    rows = []
+    count = 0
 
-        for fid, fi in self.functions_by_id.items():
-            if not fi.body and not fi.description:
-                continue
-            content = fi.signature
-            if fi.body:
-                content = fi.signature + "\n{\n" + fi.body.strip() + "\n}"
-            content = content.strip()
-            h = _short_hash(content, 12)
-            start_line = fi.line
-            end_line = fi.line + max(0, content.count("\n"))
-            conn.execute(
-                """INSERT INTO chunks(entity_type, entity_id, title, module, file, start_line, end_line, kind, content, content_hash)
-                   VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                ("function", fid, fi.signature, fi.module, fi.file, start_line, end_line, "function", content[: self.max_chunk_chars], h),
-            )
-            count += 1
+    for fid, fi in self.functions_by_id.items():
+        if not fi.body and not fi.description:
+            continue
+        content = fi.signature
+        if fi.body:
+            content = fi.signature + "\n{\n" + fi.body.strip() + "\n}"
+        content = content.strip()
+        if not content:
+            continue
+        h = _short_hash(content, 12)
+        start_line = fi.line
+        end_line = fi.line + max(0, content.count("\n"))
+        rows.append((
+            "function", fid, fi.signature, fi.module, fi.file,
+            start_line, end_line, "function",
+            content[: self.max_chunk_chars], h
+        ))
+        count += 1
 
-        for tid, ti in self.types_by_id.items():
-            content = ti.body.strip()
-            if not content:
-                continue
-            h = _short_hash(content, 12)
-            start_line = ti.line
-            end_line = ti.line + max(0, content.count("\n"))
-            conn.execute(
-                """INSERT INTO chunks(entity_type, entity_id, title, module, file, start_line, end_line, kind, content, content_hash)
-                   VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                ("type", tid, f"{ti.kind} {ti.name}", ti.module, ti.file, start_line, end_line, "type", content[: self.max_chunk_chars], h),
-            )
-            count += 1
+    for tid, ti in self.types_by_id.items():
+        content = ti.body.strip()
+        if not content:
+            continue
+        h = _short_hash(content, 12)
+        start_line = ti.line
+        end_line = ti.line + max(0, content.count("\n"))
+        rows.append((
+            "type", tid, f"{ti.kind} {ti.name}", ti.module, ti.file,
+            start_line, end_line, "type",
+            content[: self.max_chunk_chars], h
+        ))
+        count += 1
 
-        return count
+    if rows:
+        conn.executemany(
+            """INSERT INTO chunks(entity_type, entity_id, title, module, file, start_line, end_line, kind, content, content_hash)
+               VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            rows,
+        )
+    return count
+
 
     # ----------------------------
     # FTS
@@ -1123,39 +1284,97 @@ def main() -> None:
     p.add_argument("--output-dir", default=".iosonata", help="Output directory (index.db will be created here)")
     p.add_argument("--version", default="0.0.0", help="Index version string")
 
+    p.add_argument("--profile", default="ci", choices=["ci", "deep"],
+                   help="Index profile: 'ci' (fast defaults for GitHub) or 'deep' (slower: graphs + unlimited examples)")
+
     p.add_argument("--deterministic", action="store_true",
-                   help="Make output stable for a given commit/config (built timestamp from git, sorted inputs, VACUUM, journal=DELETE)")
+                   help="Prefer stable output for a given commit/config (built timestamp from git, sorted inputs, journal=DELETE).")
+    p.add_argument("--vacuum", action="store_true",
+                   help="Run VACUUM at end (slow). Enable only if you commit index.db and want minimal diffs.")
     p.add_argument("--skip-if-unchanged", action="store_true",
                    help="No-op if existing index matches current git commit + config hash")
+    p.add_argument("--verbose", action="store_true", help="Verbose progress logging (prints last processed file)")
+    p.add_argument("--quiet", action="store_true", help="Suppress progress logging")
+    p.add_argument("--progress-every", type=int, default=250, help="Progress log interval (files/chunks)")
+
+    # Deep analysis knobs
+    p.add_argument("--callgraph", action="store_true", help="Enable call graph extraction (slow)")
+    p.add_argument("--type-usage", action="store_true", help="Enable type-usage extraction (slow)")
+    p.add_argument("--no-callgraph", action="store_true", help="Force-disable call graph extraction (faster)")
+    p.add_argument("--no-type-usage", action="store_true", help="Force-disable type-usage extraction (faster)")
+
+    p.add_argument("--no-checkpoint", action="store_true", help="Do not WAL-checkpoint at end (leave -wal/-shm)")
     p.add_argument("--journal", default="WAL", choices=["WAL", "DELETE"],
                    help="SQLite journal mode (ignored when --deterministic; deterministic forces DELETE)")
 
+    # Hybrid retrieval
     p.add_argument("--embeddings", action="store_true", help="Enable vector embeddings (hybrid search)")
-    p.add_argument("--provider", default="voyage", choices=["voyage","openai","hash","fastembed"], help="Embedding backend (API: voyage/openai; local: hash/fastembed)")
+    p.add_argument("--provider", default="hash", choices=["voyage", "openai", "hash", "fastembed"],
+                   help="Embedding backend (API: voyage/openai; local: hash/fastembed). Default is 'hash' (offline).")
     p.add_argument("--embedding-model", default=None, help="Embedding model name (provider-specific)")
-    p.add_argument("--api-key", default="", help="API key for embedding provider (or set VOYAGE_API_KEY / OPENAI_API_KEY in CI and pass it here)")
+    p.add_argument("--api-key", default="", help="API key for embedding provider (voyage/openai)")
 
+    # Chunking / search
     p.add_argument("--no-fts", action="store_true", help="Disable SQLite FTS5 index (BM25)")
     p.add_argument("--max-file-kb", type=int, default=1024, help="Skip files larger than this size (KB)")
     p.add_argument("--max-chunk-chars", type=int, default=7000, help="Max chars stored per chunk")
     p.add_argument("--no-examples", action="store_true", help="Disable example chunk indexing")
+    p.add_argument("--examples-max-files", type=int, default=300, help="Max number of example files to chunk (0=unlimited)")
+    p.add_argument("--examples-step-lines", type=int, default=220, help="Lines per example chunk block")
+    p.add_argument("--examples-markers", default="",
+                   help="Comma-separated directory/name markers treated as examples (default: example,examples,demo,sample,samples,tutorial)")
 
     args = p.parse_args()
+
+    # Resolve API key from environment for convenience (CI/installer).
+    api_key = args.api_key or ""
+    if not api_key:
+        if args.provider == "voyage":
+            api_key = os.getenv("VOYAGE_API_KEY", "")
+        elif args.provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY", "")
+
+    # Profile-driven defaults (important for speed in CI).
+    callgraph = (args.profile == "deep") or bool(args.callgraph)
+    type_usage = (args.profile == "deep") or bool(args.type_usage)
+    if args.no_callgraph:
+        callgraph = False
+    if args.no_type_usage:
+        type_usage = False
+
+    examples_max_files = int(args.examples_max_files)
+    # In deep mode, default to unlimited examples unless explicitly capped.
+    if args.profile == "deep" and args.examples_max_files == 300:
+        examples_max_files = 0
+
+    # In GitHub Actions CI, it's usually safe to skip rebuild when commit/config is unchanged.
+    if os.getenv("GITHUB_ACTIONS") == "true" and not args.skip_if_unchanged:
+        args.skip_if_unchanged = True
 
     builder = IndexBuilder(
         source_dir=args.source_dir,
         output_dir=args.output_dir,
         enable_embeddings=args.embeddings,
-        api_key=args.api_key,
+        api_key=api_key,
         embedding_provider=args.provider,
         embedding_model=args.embedding_model,
         enable_fts=(not args.no_fts),
         max_file_kb=args.max_file_kb,
         max_chunk_chars=args.max_chunk_chars,
         include_examples=(not args.no_examples),
+        examples_max_files=examples_max_files,
+        examples_step_lines=args.examples_step_lines,
+        examples_markers=args.examples_markers,
         deterministic=args.deterministic,
+        vacuum=args.vacuum,
         skip_if_unchanged=args.skip_if_unchanged,
         journal_mode=args.journal,
+        progress_every=args.progress_every,
+        verbose=args.verbose,
+        quiet=args.quiet,
+        compute_callgraph=callgraph,
+        compute_type_usage=type_usage,
+        wal_checkpoint=(not args.no_checkpoint),
     )
     builder.build(args.version)
 
