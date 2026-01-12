@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -40,6 +41,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
+# Force unbuffered output for better progress feedback
+print = functools.partial(print, flush=True)
+
 
 # -----------------------------
 # Config
@@ -47,15 +51,24 @@ from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
 SCHEMA_VERSION = "3.4"
 
+# Directories to ignore completely
 DEFAULT_IGNORE_DIRS = {
-    ".git", ".github", ".iosonata", ".metadata", ".settings",
-    "build", "cmake-build-debug", "cmake-build-release", "out", "dist",
+    # Git/IDE
+    ".git", ".github", ".iosonata", ".metadata", ".settings", ".vscode", ".idea",
+    # Build artifacts
+    "build", "out", "dist",
+    # Non-embedded platforms (not relevant for IOsonata embedded)
+    "OSX", "linux", "win32", "OSC",
+    # Python/Node
     "node_modules", "__pycache__", ".pytest_cache",
 }
 
+# Directory name prefixes to ignore (Debug*, Release*, cmake-build-*, etc.)
+IGNORE_DIR_PREFIXES = ("Debug", "Release", "cmake-build-")
+
 SOURCE_SUFFIXES = {".h", ".hpp", ".hh", ".c", ".cc", ".cpp", ".cxx", ".inc", ".inl"}
 
-EXAMPLE_DIR_HINTS = ("example", "examples", "sample", "samples", "demo", "demos", "test", "tests")
+EXAMPLE_DIR_HINTS = ("example", "examples", "sample", "samples", "demo", "demos", "test", "tests", "exemples")
 
 
 # -----------------------------
@@ -545,10 +558,12 @@ def _has_fts(conn: sqlite3.Connection) -> bool:
 # -----------------------------
 
 def _infer_module(rel_path: str) -> str:
+    """Infer module from file path - uses first meaningful directory."""
     parts = rel_path.split("/")
     if len(parts) >= 2:
+        # Skip common prefixes, return meaningful module
         return parts[0]
-    return "root"
+    return "core"
 
 
 def _is_example_path(rel_path: str) -> bool:
@@ -639,6 +654,17 @@ def _fmt_time(seconds: float) -> str:
     return f"{m:02d}:{s:02d}"
 
 
+def _should_ignore_dir(dirname: str, ignore_dirs: set, ignore_prefixes: tuple) -> bool:
+    """Check if directory should be ignored."""
+    if dirname in ignore_dirs:
+        return True
+    if dirname.startswith("."):
+        return True
+    if dirname.startswith(ignore_prefixes):
+        return True
+    return False
+
+
 # -----------------------------
 # Builder
 # -----------------------------
@@ -669,6 +695,7 @@ class IndexBuilder:
         self.output_dir = output_dir
         self.enable_fts = enable_fts
         self.ignore_dirs = set(DEFAULT_IGNORE_DIRS) | set(ignore_dirs)
+        self.ignore_prefixes = IGNORE_DIR_PREFIXES
         self.max_file_bytes = max(64 * 1024, max_file_kb * 1024)
         self.max_chunk_chars = max(1000, max_chunk_chars)
         self.example_cap = max(0, example_cap)
@@ -677,7 +704,11 @@ class IndexBuilder:
     def _iter_source_files(self) -> Iterator[Path]:
         root = self.source_dir
         for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if d not in self.ignore_dirs and not d.startswith(".")]
+            # Prune directories - modifies dirnames in-place
+            dirnames[:] = [
+                d for d in dirnames 
+                if not _should_ignore_dir(d, self.ignore_dirs, self.ignore_prefixes)
+            ]
             for fn in filenames:
                 p = Path(dirpath) / fn
                 if p.suffix.lower() in SOURCE_SUFFIXES:
@@ -709,11 +740,18 @@ class IndexBuilder:
         stats = BuildStats()
 
         print(f"[{_fmt_time(0)}] scanning source files...")
+        last_progress = time.time()
+        
         for path in self._iter_source_files():
             stats.files += 1
             rel = _relpath(path, self.source_dir)
-            if self.verbose and stats.files % 200 == 0:
-                print(f"  ... files={stats.files} (last={rel})")
+            
+            # Progress every 100 files or every 5 seconds
+            now = time.time()
+            if stats.files % 100 == 0 or (now - last_progress) > 5:
+                elapsed = now - t0
+                print(f"[{_fmt_time(elapsed)}] files={stats.files} chunks={stats.chunks} (last={rel})")
+                last_progress = now
 
             try:
                 src = _safe_read_text(path, self.max_file_bytes)
@@ -783,7 +821,8 @@ class IndexBuilder:
         conn.commit()
 
         if self.enable_fts:
-            print(f"[{_fmt_time(time.time() - t0)}] building FTS index...")
+            elapsed = time.time() - t0
+            print(f"[{_fmt_time(elapsed)}] building FTS index...")
             _fts_rebuild(conn)
 
         # final metadata
@@ -897,10 +936,8 @@ class IndexBuilder:
             # Progress
             elapsed = time.time() - t0
             pct = 100 * batch_end / total
-            print(f"[{_fmt_time(elapsed)}] embedded {batch_end}/{total} ({pct:.0f}%)", end="\r")
+            print(f"[{_fmt_time(elapsed)}] embedded {batch_end}/{total} ({pct:.0f}%)")
 
-        print()  # newline after progress
-        
         _set_kv(conn, f"embeddings_{provider}_{model}_updated_utc", str(int(time.time())))
         conn.commit()
         conn.close()
