@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -39,6 +40,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
+# Force unbuffered output for better progress feedback
+print = functools.partial(print, flush=True)
+
 
 # -----------------------------
 # Config
@@ -47,15 +51,25 @@ from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 SCHEMA_VERSION = "3.4"
 
 DEFAULT_IGNORE_DIRS = {
-    ".git", ".github", ".iosonata", ".metadata", ".settings",
-    "build", "cmake-build-debug", "cmake-build-release", "out", "dist",
+    # Git/IDE
+    ".git", ".github", ".iosonata", ".metadata", ".settings", ".vscode", ".idea",
+    # Build artifacts
+    "build", "out", "dist",
+    # Non-embedded platforms
+    "OSX", "linux", "win32", "OSC",
+    # Python/Node
     "node_modules", "__pycache__", ".pytest_cache",
+    # Documentation (large, not code)
+    "doc", "docs", "documentation", "doxygen",
 }
 
-# Include assembly for SDK indexing (headers often reference it)
+# Directory name prefixes to ignore
+IGNORE_DIR_PREFIXES = ("Debug", "Release", "cmake-build-")
+
+# Include assembly for SDK indexing
 SOURCE_SUFFIXES = {".h", ".hpp", ".hh", ".c", ".cc", ".cpp", ".cxx", ".inc", ".inl", ".s", ".S"}
 
-EXAMPLE_DIR_HINTS = ("example", "examples", "sample", "samples", "demo", "demos", "test", "tests")
+EXAMPLE_DIR_HINTS = ("example", "examples", "sample", "samples", "demo", "demos", "test", "tests", "exemples")
 
 
 # -----------------------------
@@ -113,11 +127,6 @@ class EmbeddingClient:
         return results[0] if results else []
 
     def embed_batch(self, texts: List[str], max_retries: int = 3) -> List[List[float]]:
-        """
-        Embed multiple texts in batched API calls.
-        Returns list of embeddings in same order as input texts.
-        Failed embeddings return empty lists.
-        """
         if not texts:
             return []
 
@@ -350,7 +359,18 @@ def _is_example_path(rel_path: str) -> bool:
 
 
 def _is_assembly_file(path: Path) -> bool:
-    return path.suffix.lower() in (".s", ".S")
+    return path.suffix.lower() in (".s",)
+
+
+def _should_ignore_dir(dirname: str, ignore_dirs: set, ignore_prefixes: tuple) -> bool:
+    """Check if directory should be ignored."""
+    if dirname in ignore_dirs:
+        return True
+    if dirname.startswith("."):
+        return True
+    if dirname.startswith(ignore_prefixes):
+        return True
+    return False
 
 
 def _mask_comments_and_strings(src: str) -> str:
@@ -487,14 +507,14 @@ def _relpath(path: Path, root: Path) -> str:
         return str(path).replace("\\", "/")
 
 
-def _sdk_fingerprint(root: Path) -> str:
+def _sdk_fingerprint(root: Path, ignore_dirs: set, ignore_prefixes: tuple) -> str:
     """Fast fingerprint for skip-if-unchanged check."""
     h = hashlib.sha1()
     h.update(str(root.resolve()).encode())
     count = 0
     newest = 0
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in DEFAULT_IGNORE_DIRS and not d.startswith(".")]
+        dirnames[:] = [d for d in dirnames if not _should_ignore_dir(d, ignore_dirs, ignore_prefixes)]
         for fn in filenames:
             p = Path(dirpath) / fn
             if p.suffix.lower() in SOURCE_SUFFIXES:
@@ -510,6 +530,11 @@ def _sdk_fingerprint(root: Path) -> str:
     h.update(str(count).encode())
     h.update(str(newest).encode())
     return h.hexdigest()
+
+
+def _fmt_time(seconds: float) -> str:
+    m, s = divmod(int(seconds), 60)
+    return f"{m:02d}:{s:02d}"
 
 
 # -----------------------------
@@ -576,11 +601,6 @@ def _insert_chunk(
     )
 
 
-def _fmt_time(seconds: float) -> str:
-    m, s = divmod(int(seconds), 60)
-    return f"{m:02d}:{s:02d}"
-
-
 # -----------------------------
 # SDK Indexer
 # -----------------------------
@@ -610,6 +630,7 @@ class SDKIndexer:
         self.sdk_root = sdk_root
         self.enable_fts = enable_fts
         self.ignore_dirs = set(DEFAULT_IGNORE_DIRS) | set(ignore_dirs)
+        self.ignore_prefixes = IGNORE_DIR_PREFIXES
         self.max_file_bytes = max(64 * 1024, max_file_kb * 1024)
         self.max_chunk_chars = max(1000, max_chunk_chars)
         self.example_cap = max(0, example_cap)
@@ -617,7 +638,7 @@ class SDKIndexer:
 
     def _iter_source_files(self, root: Path) -> Iterator[Path]:
         for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if d not in self.ignore_dirs and not d.startswith(".")]
+            dirnames[:] = [d for d in dirnames if not _should_ignore_dir(d, self.ignore_dirs, self.ignore_prefixes)]
             for fn in filenames:
                 p = Path(dirpath) / fn
                 if p.suffix.lower() in SOURCE_SUFFIXES:
@@ -626,7 +647,7 @@ class SDKIndexer:
     def build_sdk_db(self, sdk_path: Path, name: str, out_db: Path, version: str, skip_if_unchanged: bool) -> Path:
         out_db.parent.mkdir(parents=True, exist_ok=True)
 
-        fingerprint = _sdk_fingerprint(sdk_path)
+        fingerprint = _sdk_fingerprint(sdk_path, self.ignore_dirs, self.ignore_prefixes)
         cfg = {
             "schema_version": SCHEMA_VERSION,
             "sdk_name": name,
@@ -670,18 +691,26 @@ class SDKIndexer:
         _set_kv(conn, "config_json", json.dumps(cfg, sort_keys=True))
 
         stats = BuildStats()
+        last_progress = time.time()
 
         for path in self._iter_source_files(sdk_path):
             stats.files += 1
             rel = _relpath(path, sdk_path)
             module = _infer_module(rel)
 
+            # Progress every 50 files or every 3 seconds
+            now = time.time()
+            if stats.files % 50 == 0 or (now - last_progress) > 3:
+                elapsed = now - t0
+                print(f"    [{_fmt_time(elapsed)}] {name}: files={stats.files} chunks={stats.chunks}")
+                last_progress = now
+
             try:
                 src = _safe_read_text(path, self.max_file_bytes)
             except Exception:
                 continue
 
-            # Handle assembly files separately (just store for search, no parsing)
+            # Handle assembly files separately
             if _is_assembly_file(path):
                 content = _truncate(_asm_chunk_text(rel, src), self.max_chunk_chars)
                 chash = hashlib.sha1(content.encode("utf-8", errors="ignore")).hexdigest()
@@ -732,7 +761,7 @@ class SDKIndexer:
                 stats.functions += 1
                 stats.chunks += 1
 
-            if stats.files % 300 == 0:
+            if stats.files % 100 == 0:
                 conn.commit()
 
         conn.commit()
@@ -864,9 +893,7 @@ def update_embeddings_db(
 
         elapsed = time.time() - t0
         pct = 100 * batch_end / total
-        print(f"  [{_fmt_time(elapsed)}] {db_path.name}: {batch_end}/{total} ({pct:.0f}%)", end="\r")
-
-    print()
+        print(f"  [{_fmt_time(elapsed)}] {db_path.name}: {batch_end}/{total} ({pct:.0f}%)")
 
     _set_kv(conn, f"embeddings_{provider}_{model}_updated_utc", str(int(time.time())))
     conn.commit()
@@ -942,7 +969,7 @@ def main() -> None:
     p.add_argument("--output", default="", help="Output DB path (single SDK mode)")
 
     p.add_argument("--sdk-root", default=_default_sdk_root() or "", help="Root folder containing SDK folders (multi-SDK mode)")
-    p.add_argument("--output-dir", default=_default_index_dir() or "sdk_indexes", help="Output directory for per-SDK .db files (multi-SDK mode)")
+    p.add_argument("--output-dir", default="", help="Output directory for per-SDK .db files (default: <sdk-root>/.extsdk)")
     p.add_argument("--include", action="append", default=[], help="Regex filter for SDK names to include (repeatable)")
     p.add_argument("--exclude", action="append", default=[], help="Regex filter for SDK names to exclude (repeatable)")
     p.add_argument("--skip-if-unchanged", action="store_true", help="Skip indexing if fingerprint/config unchanged")
@@ -993,7 +1020,7 @@ def main() -> None:
             print(f"✓ updated embeddings: {done}")
             return
 
-        out_dir = Path(args.output_dir)
+        out_dir = Path(args.output_dir) if args.output_dir else (Path(args.sdk_root) / ".extsdk" if args.sdk_root else Path("sdk_indexes"))
         done = indexer.update_embeddings_all(
             output_dir=out_dir,
             provider=args.provider,
@@ -1011,7 +1038,13 @@ def main() -> None:
     if args.sdk:
         sdk_path = Path(args.sdk)
         name = args.name or sanitize_name(sdk_path.name)
-        out_db = Path(args.output) if args.output else (Path(args.output_dir) / f"{name}.db")
+        if args.output:
+            out_db = Path(args.output)
+        elif args.output_dir:
+            out_db = Path(args.output_dir) / f"{name}.db"
+        else:
+            out_db = sdk_path.parent / ".extsdk" / f"{name}.db"
+        out_db.parent.mkdir(parents=True, exist_ok=True)
         indexer.build_sdk_db(sdk_path, name, out_db, args.version, args.skip_if_unchanged)
         return
 
@@ -1021,7 +1054,7 @@ def main() -> None:
         sys.exit(2)
 
     sdk_root = Path(args.sdk_root)
-    out_dir = Path(args.output_dir)
+    out_dir = Path(args.output_dir) if args.output_dir else (sdk_root / ".extsdk")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     sdks = discover_sdks(sdk_root, include=args.include, exclude=args.exclude)
