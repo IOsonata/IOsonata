@@ -7,7 +7,7 @@ Design intent:
 - Application startup (has API key) runs *embedding update* against the existing DB.
 
 This script supports both:
-1) Build base index: parses repo, creates searchable chunks + FTS.
+1) Build base index: parses repo, creates searchable chunks + FTS (functions, types, examples).
 2) Update embeddings only: embeds any chunks missing embeddings for (provider, model).
 
 DB contract (shared with SDK indexer):
@@ -16,11 +16,17 @@ DB contract (shared with SDK indexer):
 - optional FTS5: fts_chunks(rowid=chunks.id, title, content, file_path, kind, module)
 
 Usage:
-  # Base build (GitHub)
-  python3 build_rag_index.py --source-dir . --output-dir .iosonata --version 1.0.0
+  # Build full index (auto-detect IOsonata repo, no embeddings)
+  python3 build_rag_index.py
 
-  # Embedding update at app start
-  python3 build_rag_index.py --update-embeddings --db .iosonata/index.db --provider voyage --api-key $VOYAGE_API_KEY
+  # Build index for specific directory
+  python3 build_rag_index.py --source-dir /path/to/IOsonata
+
+  # Build with version tag
+  python3 build_rag_index.py --version 1.0.0
+
+  # Update embeddings later (requires API key)
+  python3 build_rag_index.py --update-embeddings --api-key $VOYAGE_API_KEY
 """
 
 from __future__ import annotations
@@ -954,22 +960,54 @@ class IndexBuilder:
 # CLI
 # -----------------------------
 
+def _detect_iosonata_root() -> Optional[Path]:
+    """Auto-detect IOsonata repo root by looking for characteristic files."""
+    # Check current directory first
+    cwd = Path.cwd()
+    markers = ["include/iopinctrl.h", "include/coredev/uart.h", "src/coredev"]
+    
+    # Check if we're in IOsonata root
+    if all((cwd / m).exists() for m in markers[:2]):
+        return cwd
+    
+    # Check if we're in a subdirectory of IOsonata
+    for parent in [cwd] + list(cwd.parents)[:3]:
+        if all((parent / m).exists() for m in markers[:2]):
+            return parent
+    
+    return None
+
+
 def main() -> None:
-    p = argparse.ArgumentParser(description="Build IOsonata base index (GitHub) and/or update embeddings (startup).")
-    p.add_argument("--source-dir", default=".", help="IOsonata repo root")
-    p.add_argument("--output-dir", default=".iosonata", help="Output directory containing index.db")
+    p = argparse.ArgumentParser(
+        description="Build IOsonata RAG index (base index without embeddings).",
+        epilog="""
+Examples:
+  # Build index in current IOsonata repo (auto-detect)
+  python3 build_rag_index.py
+
+  # Build index for specific directory
+  python3 build_rag_index.py --source-dir /path/to/IOsonata
+
+  # Update embeddings later (requires API key)
+  python3 build_rag_index.py --update-embeddings --api-key $VOYAGE_API_KEY
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument("--source-dir", default="", help="IOsonata repo root (auto-detect if not specified)")
+    p.add_argument("--output-dir", default="", help="Output directory (default: <source-dir>/.iosonata)")
     p.add_argument("--db", default="", help="Explicit path to index.db (for --update-embeddings)")
     p.add_argument("--version", default="dev", help="Version string")
     p.add_argument("--no-fts", action="store_true", help="Disable FTS5 index")
     p.add_argument("--ignore-dir", action="append", default=[], help="Additional directory name to ignore (repeatable)")
-    p.add_argument("--max-file-kb", type=int, default=1024, help="Max bytes per file to index (KB)")
-    p.add_argument("--max-chunk-chars", type=int, default=8000, help="Max chars per chunk")
-    p.add_argument("--example-cap", type=int, default=400, help="Max example files to index (0 disables examples)")
+    p.add_argument("--max-file-kb", type=int, default=1024, help="Max KB per file to index (default: 1024)")
+    p.add_argument("--max-chunk-chars", type=int, default=8000, help="Max chars per chunk (default: 8000)")
+    p.add_argument("--example-cap", type=int, default=400, help="Max example files to index, 0=disable (default: 400)")
     p.add_argument("--verbose", action="store_true", help="Verbose progress")
 
-    # embedding update mode
-    p.add_argument("--update-embeddings", action="store_true", help="Do not rebuild; only update embeddings in existing DB")
-    p.add_argument("--provider", default="voyage", help="Embedding provider: voyage|openai|hash")
+    # embedding update mode (separate operation, requires API key)
+    p.add_argument("--update-embeddings", action="store_true", help="Update embeddings in existing DB (requires --api-key)")
+    p.add_argument("--provider", default="voyage", help="Embedding provider: voyage|openai|hash (default: voyage)")
     p.add_argument("--api-key", default=os.environ.get("VOYAGE_API_KEY") or os.environ.get("OPENAI_API_KEY") or "", help="API key for provider")
     p.add_argument("--model", default="", help="Embedding model (provider default if empty)")
     p.add_argument("--batch-size", type=int, default=0, help="Embedding batch size (0=provider default)")
@@ -977,9 +1015,27 @@ def main() -> None:
     p.add_argument("--kinds", default="function,type,example", help="Comma list of chunk kinds to embed")
     args = p.parse_args()
 
+    # Auto-detect source directory if not specified
+    if args.source_dir:
+        source_dir = Path(args.source_dir)
+    else:
+        detected = _detect_iosonata_root()
+        if detected:
+            source_dir = detected
+            print(f"[auto-detect] Found IOsonata repo: {source_dir}")
+        else:
+            source_dir = Path(".")
+            print(f"[info] Using current directory: {source_dir.resolve()}")
+
+    # Default output directory
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+    else:
+        output_dir = source_dir / ".iosonata"
+
     builder = IndexBuilder(
-        source_dir=Path(args.source_dir),
-        output_dir=Path(args.output_dir),
+        source_dir=source_dir,
+        output_dir=output_dir,
         enable_fts=not args.no_fts,
         ignore_dirs=args.ignore_dir,
         max_file_kb=args.max_file_kb,
@@ -989,7 +1045,7 @@ def main() -> None:
     )
 
     if args.update_embeddings:
-        db_path = Path(args.db) if args.db else (Path(args.output_dir) / "index.db")
+        db_path = Path(args.db) if args.db else (output_dir / "index.db")
         kinds = [k.strip() for k in args.kinds.split(",") if k.strip()]
         builder.update_embeddings(
             db_path=db_path,
@@ -1002,6 +1058,15 @@ def main() -> None:
             verbose=args.verbose,
         )
         return
+
+    # Print what will be indexed
+    print(f"Building IOsonata RAG index:")
+    print(f"  Source:    {source_dir.resolve()}")
+    print(f"  Output:    {output_dir.resolve()}")
+    print(f"  FTS5:      {'enabled' if not args.no_fts else 'disabled'}")
+    print(f"  Examples:  {args.example_cap if args.example_cap > 0 else 'disabled'}")
+    print(f"  Embedding: skipped (use --update-embeddings with --api-key to add later)")
+    print()
 
     builder.build_base(args.version)
 

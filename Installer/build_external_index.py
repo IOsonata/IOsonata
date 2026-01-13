@@ -12,15 +12,17 @@ One DB per SDK (traceable), with the same DB contract as the IOsonata repo index
 - optional FTS5: fts_chunks(rowid=chunks.id, title, content, file_path, kind, module)
 
 Usage:
+  # Index all SDKs under auto-detected external/ folder (no embeddings)
+  python3 build_external_index.py
 
-  # Installer: index all SDKs under a root (one DB per SDK)
-  python3 build_external_index.py --sdk-root /path/to/sdks --output-dir /path/to/indexes --skip-if-unchanged
+  # Index all SDKs under a specific root
+  python3 build_external_index.py --sdk-root /path/to/external
 
-  # Installer: index a single SDK
-  python3 build_external_index.py --sdk /path/to/nrfx --name nrfx --output /path/to/indexes/nrfx.db
+  # Index a single SDK
+  python3 build_external_index.py --sdk /path/to/nrfx
 
-  # App start: update embeddings for all SDK DBs
-  python3 build_external_index.py --update-embeddings --output-dir /path/to/indexes --provider voyage --api-key $VOYAGE_API_KEY
+  # Update embeddings later (requires API key)
+  python3 build_external_index.py --update-embeddings --api-key $VOYAGE_API_KEY
 """
 
 from __future__ import annotations
@@ -960,43 +962,113 @@ def discover_sdks(sdk_root: Path, include: Sequence[str], exclude: Sequence[str]
 # CLI
 # -----------------------------
 
+def _detect_external_sdk_root() -> Optional[Path]:
+    """Auto-detect external SDK root by looking for common patterns."""
+    cwd = Path.cwd()
+    
+    # Check if current directory is named 'external' and contains SDK-like subdirs
+    if cwd.name == "external":
+        subdirs = [d for d in cwd.iterdir() if d.is_dir() and not d.name.startswith(".")]
+        if subdirs:
+            return cwd
+    
+    # Check for IOcomposer/external pattern
+    for parent in [cwd] + list(cwd.parents)[:4]:
+        external_dir = parent / "external"
+        if external_dir.exists() and external_dir.is_dir():
+            subdirs = [d for d in external_dir.iterdir() if d.is_dir() and not d.name.startswith(".")]
+            if subdirs:
+                return external_dir
+        
+        # Also check if parent is IOcomposer-like (has IOsonata sibling)
+        iosonata_dir = parent / "IOsonata"
+        if iosonata_dir.exists() and external_dir.exists():
+            return external_dir
+    
+    # Check current directory for SDK-like subdirectories
+    subdirs = [d for d in cwd.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    sdk_hints = ["nrf", "sdk", "hal", "driver", "cmsis", "freertos", "stm"]
+    if any(any(hint in d.name.lower() for hint in sdk_hints) for d in subdirs):
+        return cwd
+    
+    return None
+
+
 def main() -> None:
-    p = argparse.ArgumentParser(description="Build per-SDK baseline indexes (installer) and/or update embeddings (startup).")
+    p = argparse.ArgumentParser(
+        description="Build per-SDK RAG indexes (base index without embeddings).",
+        epilog="""
+Examples:
+  # Index all SDKs under auto-detected external/ folder
+  python3 build_external_index.py
+
+  # Index all SDKs under a specific root
+  python3 build_external_index.py --sdk-root /path/to/external
+
+  # Index a single SDK
+  python3 build_external_index.py --sdk /path/to/nrfx
+
+  # Update embeddings later (requires API key)
+  python3 build_external_index.py --update-embeddings --api-key $VOYAGE_API_KEY
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
 
     # Build mode: one SDK or all SDKs
-    p.add_argument("--sdk", default="", help="Path to a single SDK")
-    p.add_argument("--name", default="", help="SDK name (single SDK mode)")
+    p.add_argument("--sdk", default="", help="Path to a single SDK to index")
+    p.add_argument("--name", default="", help="SDK name (auto-detect from folder name if not specified)")
     p.add_argument("--output", default="", help="Output DB path (single SDK mode)")
 
-    p.add_argument("--sdk-root", default=_default_sdk_root() or "", help="Root folder containing SDK folders (multi-SDK mode)")
-    p.add_argument("--output-dir", default="", help="Output directory for per-SDK .db files (default: <sdk-root>/.extsdk)")
+    p.add_argument("--sdk-root", default="", help="Root folder containing SDK folders (auto-detect if not specified)")
+    p.add_argument("--output-dir", default="", help="Output directory for .db files (default: <sdk-root>/.extsdk)")
     p.add_argument("--include", action="append", default=[], help="Regex filter for SDK names to include (repeatable)")
     p.add_argument("--exclude", action="append", default=[], help="Regex filter for SDK names to exclude (repeatable)")
-    p.add_argument("--skip-if-unchanged", action="store_true", help="Skip indexing if fingerprint/config unchanged")
+    p.add_argument("--skip-if-unchanged", action="store_true", help="Skip indexing if fingerprint unchanged")
 
-    # Shared
+    # Shared options
     p.add_argument("--version", default="dev", help="Version string")
-    p.add_argument("--no-fts", action="store_true", help="Disable FTS5")
+    p.add_argument("--no-fts", action="store_true", help="Disable FTS5 index")
     p.add_argument("--ignore-dir", action="append", default=[], help="Additional directory name to ignore (repeatable)")
-    p.add_argument("--max-file-kb", type=int, default=1024, help="Max KB per file to index")
-    p.add_argument("--max-chunk-chars", type=int, default=8000, help="Max chars per chunk")
-    p.add_argument("--example-cap", type=int, default=250, help="Max example files per SDK (0 disables examples)")
+    p.add_argument("--max-file-kb", type=int, default=1024, help="Max KB per file to index (default: 1024)")
+    p.add_argument("--max-chunk-chars", type=int, default=8000, help="Max chars per chunk (default: 8000)")
+    p.add_argument("--example-cap", type=int, default=250, help="Max example files per SDK, 0=disable (default: 250)")
     p.add_argument("--verbose", action="store_true", help="Verbose logs")
 
-    # Embedding update mode
-    p.add_argument("--update-embeddings", action="store_true", help="Update embeddings for existing DB(s)")
-    p.add_argument("--provider", default="voyage", help="Embedding provider: voyage|openai|hash")
-    p.add_argument("--api-key", default=os.environ.get("VOYAGE_API_KEY") or os.environ.get("OPENAI_API_KEY") or "", help="API key")
-    p.add_argument("--model", default="", help="Embedding model (default per provider)")
+    # Embedding update mode (separate operation, requires API key)
+    p.add_argument("--update-embeddings", action="store_true", help="Update embeddings in existing DB(s) (requires --api-key)")
+    p.add_argument("--provider", default="voyage", help="Embedding provider: voyage|openai|hash (default: voyage)")
+    p.add_argument("--api-key", default=os.environ.get("VOYAGE_API_KEY") or os.environ.get("OPENAI_API_KEY") or "", help="API key for provider")
+    p.add_argument("--model", default="", help="Embedding model (provider default if empty)")
     p.add_argument("--batch-size", type=int, default=0, help="Embedding batch size (0=provider default)")
     p.add_argument("--max-new", type=int, default=0, help="Max new embeddings per DB (0=all)")
     p.add_argument("--kinds", default="function,type,example", help="Comma list of chunk kinds to embed")
 
     args = p.parse_args()
 
+    # Auto-detect SDK root if not specified and not in single-SDK mode
+    if not args.sdk and not args.sdk_root:
+        detected = _detect_external_sdk_root()
+        if detected:
+            sdk_root = detected
+            print(f"[auto-detect] Found external SDK root: {sdk_root}")
+        else:
+            # Check environment variable as fallback
+            env_root = _default_sdk_root()
+            if env_root:
+                sdk_root = Path(env_root)
+                print(f"[env] Using SDK root from environment: {sdk_root}")
+            else:
+                print("ERROR: Could not auto-detect SDK root.", file=sys.stderr)
+                print("  Specify --sdk-root or --sdk, or set IOCOMPOSER_SDK_ROOT environment variable.", file=sys.stderr)
+                sys.exit(2)
+    elif args.sdk_root:
+        sdk_root = Path(args.sdk_root)
+    else:
+        sdk_root = Path(".")  # Will be overridden in single-SDK mode
+
     enable_fts = not args.no_fts
     indexer = SDKIndexer(
-        sdk_root=Path(args.sdk_root) if args.sdk_root else Path("."),
+        sdk_root=sdk_root,
         enable_fts=enable_fts,
         ignore_dirs=args.ignore_dir,
         max_file_kb=args.max_file_kb,
@@ -1005,6 +1077,7 @@ def main() -> None:
         verbose=args.verbose,
     )
 
+    # Handle embedding update mode
     if args.update_embeddings:
         kinds = [k.strip() for k in args.kinds.split(",") if k.strip()]
         if args.output:
@@ -1020,7 +1093,7 @@ def main() -> None:
             print(f"✓ updated embeddings: {done}")
             return
 
-        out_dir = Path(args.output_dir) if args.output_dir else (Path(args.sdk_root) / ".extsdk" if args.sdk_root else Path("sdk_indexes"))
+        out_dir = Path(args.output_dir) if args.output_dir else (sdk_root / ".extsdk")
         done = indexer.update_embeddings_all(
             output_dir=out_dir,
             provider=args.provider,
@@ -1034,7 +1107,7 @@ def main() -> None:
         print(f"✓ updated embeddings across SDK DBs: {done}")
         return
 
-    # Build
+    # Single SDK build mode
     if args.sdk:
         sdk_path = Path(args.sdk)
         name = args.name or sanitize_name(sdk_path.name)
@@ -1045,15 +1118,20 @@ def main() -> None:
         else:
             out_db = sdk_path.parent / ".extsdk" / f"{name}.db"
         out_db.parent.mkdir(parents=True, exist_ok=True)
+        
+        print(f"Building external SDK index:")
+        print(f"  SDK:       {sdk_path.resolve()}")
+        print(f"  Name:      {name}")
+        print(f"  Output:    {out_db.resolve()}")
+        print(f"  FTS5:      {'enabled' if enable_fts else 'disabled'}")
+        print(f"  Examples:  {args.example_cap if args.example_cap > 0 else 'disabled'}")
+        print(f"  Embedding: skipped (use --update-embeddings with --api-key to add later)")
+        print()
+        
         indexer.build_sdk_db(sdk_path, name, out_db, args.version, args.skip_if_unchanged)
         return
 
-    # Multi-SDK build
-    if not args.sdk_root:
-        print("ERROR: --sdk-root is required for multi-SDK mode (or set IOCOMPOSER_SDK_ROOT).", file=sys.stderr)
-        sys.exit(2)
-
-    sdk_root = Path(args.sdk_root)
+    # Multi-SDK build mode
     out_dir = Path(args.output_dir) if args.output_dir else (sdk_root / ".extsdk")
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1062,8 +1140,15 @@ def main() -> None:
         print(f"No SDK folders found under: {sdk_root}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Indexing SDKs under: {sdk_root}")
-    print(f"Output dir: {out_dir}")
+    print(f"Building external SDK indexes:")
+    print(f"  SDK root:  {sdk_root.resolve()}")
+    print(f"  Output:    {out_dir.resolve()}")
+    print(f"  SDKs:      {len(sdks)} found ({', '.join(name for name, _ in sdks)})")
+    print(f"  FTS5:      {'enabled' if enable_fts else 'disabled'}")
+    print(f"  Examples:  {args.example_cap if args.example_cap > 0 else 'disabled'} per SDK")
+    print(f"  Embedding: skipped (use --update-embeddings with --api-key to add later)")
+    print()
+
     for name, path in sdks:
         out_db = out_dir / f"{name}.db"
         indexer.build_sdk_db(path, name, out_db, args.version, args.skip_if_unchanged)
