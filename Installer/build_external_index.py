@@ -7,9 +7,9 @@ Intent:
 - Application startup (has API key) updates embeddings in those DBs.
 
 One DB per SDK (traceable), with the same DB contract as the IOsonata repo indexer:
-- chunks(uid TEXT UNIQUE, title, content, kind, module, file, start_line, end_line, content_hash)
+- chunks(uid TEXT UNIQUE, title, content, kind, module, file_path, start_line, end_line, content_hash)
 - embeddings(chunk_uid, provider, model, dim, embedding, updated_utc) PK(chunk_uid, provider, model)
-- optional FTS5: fts_chunks(rowid=chunks.id, title, content, file, kind, module)
+- optional FTS5: fts_chunks(rowid=chunks.id, title, content, file_path, kind, module)
 
 Usage:
 
@@ -253,8 +253,8 @@ def _db_connect(db_path: Path) -> sqlite3.Connection:
 def _ensure_schema(conn: sqlite3.Connection, enable_fts: bool) -> None:
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS metadata_kv (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
+      k TEXT PRIMARY KEY,
+      v TEXT
     );
 
     CREATE TABLE IF NOT EXISTS chunks (
@@ -264,7 +264,7 @@ def _ensure_schema(conn: sqlite3.Connection, enable_fts: bool) -> None:
       title TEXT,
       signature TEXT,
       module TEXT,
-      file TEXT,
+      file_path TEXT,
       start_line INTEGER,
       end_line INTEGER,
       content TEXT NOT NULL,
@@ -272,7 +272,7 @@ def _ensure_schema(conn: sqlite3.Connection, enable_fts: bool) -> None:
     );
 
     CREATE INDEX IF NOT EXISTS idx_chunks_kind ON chunks(kind);
-    CREATE INDEX IF NOT EXISTS idx_chunks_file ON chunks(file);
+    CREATE INDEX IF NOT EXISTS idx_chunks_file_path ON chunks(file_path);
     CREATE INDEX IF NOT EXISTS idx_chunks_module ON chunks(module);
 
     CREATE TABLE IF NOT EXISTS embeddings (
@@ -290,18 +290,18 @@ def _ensure_schema(conn: sqlite3.Connection, enable_fts: bool) -> None:
     if enable_fts:
         conn.executescript("""
         CREATE VIRTUAL TABLE IF NOT EXISTS fts_chunks USING fts5(
-          title, content, file, kind, module
+          title, content, file_path, kind, module
         );
         """)
     conn.commit()
 
 
 def _set_kv(conn: sqlite3.Connection, key: str, value: str) -> None:
-    conn.execute("INSERT OR REPLACE INTO metadata_kv(key,value) VALUES (?,?)", (key, value))
+    conn.execute("INSERT OR REPLACE INTO metadata_kv(k,v) VALUES (?,?)", (key, value))
 
 
 def _get_kv(conn: sqlite3.Connection, key: str) -> str:
-    row = conn.execute("SELECT value FROM metadata_kv WHERE key=?", (key,)).fetchone()
+    row = conn.execute("SELECT v FROM metadata_kv WHERE k=?", (key,)).fetchone()
     return row[0] if row else ""
 
 
@@ -313,8 +313,8 @@ def _has_fts(conn: sqlite3.Connection) -> bool:
 def _fts_rebuild(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM fts_chunks;")
     conn.execute("""
-      INSERT INTO fts_chunks(rowid, title, content, file, kind, module)
-      SELECT id, COALESCE(title,''), content, COALESCE(file,''), COALESCE(kind,''), COALESCE(module,'')
+      INSERT INTO fts_chunks(rowid, title, content, file_path, kind, module)
+      SELECT id, COALESCE(title,''), content, COALESCE(file_path,''), COALESCE(kind,''), COALESCE(module,'')
       FROM chunks;
     """)
     conn.commit()
@@ -587,7 +587,7 @@ def _insert_chunk(
     title: str,
     signature: str,
     module: str,
-    file: str,
+    file_path: str,
     start_line: int,
     end_line: int,
     content: str,
@@ -595,9 +595,9 @@ def _insert_chunk(
 ) -> None:
     conn.execute(
         """INSERT OR REPLACE INTO chunks
-           (uid,kind,title,signature,module,file,start_line,end_line,content,content_hash)
+           (uid,kind,title,signature,module,file_path,start_line,end_line,content,content_hash)
            VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (uid, kind, title, signature, module, file, start_line, end_line, content, content_hash),
+        (uid, kind, title, signature, module, file_path, start_line, end_line, content, content_hash),
     )
 
 
@@ -838,7 +838,7 @@ def update_embeddings_db(
     kind_placeholders = ",".join("?" for _ in kinds)
     limit_clause = f"LIMIT {int(max_new)}" if max_new and max_new > 0 else ""
     sql = f"""
-      SELECT uid, COALESCE(title,''), COALESCE(signature,''), COALESCE(module,''), COALESCE(file,''), content
+      SELECT uid, COALESCE(title,''), COALESCE(signature,''), COALESCE(module,''), COALESCE(file_path,''), content
       FROM chunks
       WHERE kind IN ({kind_placeholders})
         AND uid NOT IN (SELECT chunk_uid FROM embeddings WHERE provider=? AND model=?)
@@ -853,14 +853,14 @@ def update_embeddings_db(
 
     print(f"[embed] {db_path.name}: {total} missing")
 
-    def build_text(title: str, sig: str, module: str, file: str, content: str) -> str:
+    def build_text(title: str, sig: str, module: str, file_path: str, content: str) -> str:
         parts = []
         if title:
             parts.append(title)
         if sig:
             parts.append(sig)
-        if module or file:
-            parts.append(f"Module: {module}  File: {file}")
+        if module or file_path:
+            parts.append(f"Module: {module}  File: {file_path}")
         parts.append(content)
         return "\n".join(parts)[:8000]
 
