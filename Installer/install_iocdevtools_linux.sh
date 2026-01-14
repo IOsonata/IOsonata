@@ -438,9 +438,15 @@ buildtools.path.$RISCV_HASH=$RISCV_DIR/bin
 buildtools.path.strict=true
 EOF
 
-  sudo tee "$install_cfg/org.eclipse.embedcdt.managedbuild.core.prefs" > /dev/null <<EOF
+  sudo tee "$install_cfg/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" > /dev/null <<EOF
 eclipse.preferences.version=1
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
+toolchain.path.1287942917=$ARM_DIR/bin
+toolchain.path.strict=true
+EOF
+
+  sudo tee "$install_cfg/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
 toolchain.path.strict=true
 EOF
@@ -515,16 +521,15 @@ environment/buildEnvironmentInclude=true
 org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
 EOF
 
-  cat > "$instance_cfg/.settings/org.eclipse.embedcdt.core.prefs" <<EOF
-eclipse.preferences.version=1
-buildtools.path.$ARM_HASH=$ARM_DIR/bin
-buildtools.path.$RISCV_HASH=$RISCV_DIR/bin
-buildtools.path.strict=true
-EOF
-
-  cat > "$instance_cfg/.settings/org.eclipse.embedcdt.managedbuild.core.prefs" <<EOF
+  cat > "$instance_cfg/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
 eclipse.preferences.version=1
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
+toolchain.path.1287942917=$ARM_DIR/bin
+toolchain.path.strict=true
+EOF
+
+  cat > "$instance_cfg/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
+eclipse.preferences.version=1
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
 toolchain.path.strict=true
 EOF
@@ -542,33 +547,62 @@ EOF
 seed_eclipse_user_prefs
 
 # ---------------------------------------------------------
-# Set global iosonata_loc system property in eclipse.ini
+# Set global iosonata_loc and iocomposer_home system property in eclipse.ini
 # ---------------------------------------------------------
 echo
 echo ">>> Setting iosonata_loc system property in Eclipse installation..."
 
 ECLIPSE_INI="$ECLIPSE_DIR/eclipse.ini"
 IOSONATA_LOC_PROP="-Diosonata_loc=$ROOT"
+IOCOMPOSER_HOME_PROP="-Diocomposer_home=$ROOT"
 
 # Backup before modifying
 sudo cp -f "$ECLIPSE_INI" "$ECLIPSE_INI.bak"
 
-sudo python3 - "$ECLIPSE_INI" "$IOSONATA_LOC_PROP" <<'PY'
-import sys
-ini = sys.argv[1]; prop = sys.argv[2].strip()
-with open(ini, "r") as f: lines = f.read().splitlines()
-lines = [ln for ln in lines if not ln.startswith("-Diosonata_loc=") and not ln.startswith("-Diosonata.home=")]
-out = []; inserted = False
-for ln in lines:
-    out.append(ln)
-    if ln.strip() == "-vmargs" and not inserted:
-        out.append(prop); inserted = True
-if not inserted: out.append(prop)
-with open(ini, "w") as f: f.write("\n".join(out) + "\n")
-PY
+#sudo python3 - "$ECLIPSE_INI" "$IOSONATA_LOC_PROP" <<'PY'
+#import sys
+#ini = sys.argv[1]; prop = sys.argv[2].strip()
+#with open(ini, "r") as f: lines = f.read().splitlines()
+#lines = [ln for ln in lines if not ln.startswith("-Diosonata_loc=") and not ln.startswith("-Diosonata.home=")]
+#out = []; inserted = False
+#for ln in lines:
+#    out.append(ln)
+#    if ln.strip() == "-vmargs" and not inserted:
+#        out.append(prop); inserted = True
+#if not inserted: out.append(prop)
+#with open(ini, "w") as f: f.write("\n".join(out) + "\n")
+#PY
 
-echo "✅ iosonata_loc set in eclipse.ini:"
-grep "^-Diosonata_loc=" "$ECLIPSE_INI" || true
+# Remove old properties if they exist
+sudo sed -i.bak '/^-Diosonata\.home=/d' "$ECLIPSE_INI"
+sudo sed -i '' '/^-Diosonata_loc=/d' "$ECLIPSE_INI"
+sudo sed -i '' '/^-Diocomposer_home=/d' "$ECLIPSE_INI"
+
+# Find the -vmargs line and insert after it
+# If no -vmargs, create it first
+if grep -q "^-vmargs" "$ECLIPSE_INI"; then
+    # Insert after -vmargs line
+    sudo sed -i '' '/^-vmargs$/a\
+-Diosonata_loc='"$ROOT"'
+' "$ECLIPSE_INI"
+    sudo sed -i '' '/^-Diosonata_loc=/a\
+-Diocomposer_home='"$ROOT"'
+' "$ECLIPSE_INI"
+else
+    # No -vmargs section, add it at the end with our properties
+    echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+    echo "-Diosonata_loc=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+    echo "-Diocomposer_home=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+fi
+
+echo "✅ System properties configured in eclipse.ini:"
+echo "   iosonata_loc=$ROOT"
+echo "   iocomposer_home=$ROOT"
+echo
+
+#echo "✅ iosonata_loc set in eclipse.ini:"
+#grep "^-Diosonata_loc=" "$ECLIPSE_INI" || true
+
 
 # ---------------------------------------------------------
 # Clone repos
@@ -804,6 +838,7 @@ printf "%-25s %s\n" "Eclipse Embedded CDT:" "$ECLIPSE_VER"
 printf "%-25s %s\n" "ARM GCC:" "$ARM_VER"
 printf "%-25s %s\n" "RISC-V GCC:" "$RISCV_VER"
 printf "%-25s %s\n" "OpenOCD:" "$OPENOCD_VER"
+printf "%-25s %s\n" "iocomposer_home:" "$ROOT"
 printf "%-25s %s\n" "iosonata_loc:" "$ROOT"
 
 echo "=============================================="

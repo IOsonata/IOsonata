@@ -15,7 +15,7 @@ set -euo pipefail
 
 SCRIPT_VERSION="v2.2.0"
 ROOT="${HOME}/IOcomposer"
-ECLIPSE_DIR="${HOME}/eclipse/embedcdt"
+ECLIPSE_DIR="/opt/eclipse"
 
 # ---------------------------------------------------------
 # ARGUMENT PARSING
