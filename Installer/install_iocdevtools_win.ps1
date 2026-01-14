@@ -17,7 +17,7 @@ param (
 
 $ErrorActionPreference = 'Stop'
 $SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.96-win"
+$SCRIPT_VERSION = "v1.0.97-win"
 
 function Show-Help {
 @"
@@ -499,21 +499,39 @@ function Install-Plugin {
 # --- Repos ---
 function Sync-Repo { 
     param([string]$U, [string]$D)
+    $repoName = Split-Path $D -Leaf
+    
     if (Test-Path $D) {
         if ($MODE -eq 'force') { 
+            Write-Host "   Removing and re-cloning $repoName..."
             Remove-Item $D -Recurse -Force
             git clone --depth=1 $U $D 
         } else { 
+            Write-Host "   Updating $repoName..."
             Push-Location $D
-            # Use --ff-only to match macOS/Linux behavior
-            git pull --ff-only 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "   [WARN] git pull --ff-only failed for $D, trying regular pull" -ForegroundColor Yellow
-                git pull
+            try {
+                # For shallow clones, fetch + reset is more reliable than pull
+                $branch = (git rev-parse --abbrev-ref HEAD 2>$null)
+                if (-not $branch) { $branch = "master" }
+                
+                git fetch --depth=1 origin $branch 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    git reset --hard "origin/$branch" 2>$null
+                    if ($LASTEXITCODE -ne 0) {
+                        # Fallback: try regular pull
+                        git pull 2>$null
+                    }
+                } else {
+                    # Fetch failed, try regular pull as fallback
+                    git pull 2>$null
+                }
+            } catch {
+                Write-Host "   [WARN] Update failed for $repoName" -ForegroundColor Yellow
             }
             Pop-Location 
         }
     } else { 
+        Write-Host "   Cloning $repoName..."
         git clone --depth=1 $U $D 
     }
 }

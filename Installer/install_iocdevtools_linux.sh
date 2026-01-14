@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.91"
+SCRIPT_VERSION="v1.0.92"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -573,14 +573,39 @@ grep "^-Diosonata_loc=" "$ECLIPSE_INI" || true
 # ---------------------------------------------------------
 # Clone repos
 # ---------------------------------------------------------
+
+# Helper function for updating shallow clones
+update_shallow_repo() {
+  local dir="$1"
+  local name=$(basename "$dir")
+  echo "   Updating $name..."
+  
+  pushd "$dir" > /dev/null
+  
+  local branch
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+  
+  # For shallow clones, fetch + reset is more reliable than pull
+  if git fetch --depth=1 origin "$branch" 2>/dev/null; then
+    git reset --hard "origin/$branch" 2>/dev/null || git pull --ff-only 2>/dev/null || true
+  else
+    # Fallback to regular pull
+    git pull --ff-only 2>/dev/null || git pull 2>/dev/null || true
+  fi
+  
+  popd > /dev/null
+}
+
 if [[ -d "$ROOT/IOsonata" ]]; then
   if [[ "$MODE" == "force" ]]; then
     rm -rf "$ROOT/IOsonata"
+    echo "   Cloning IOsonata..."
     git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
   else
-    (cd "$ROOT/IOsonata" && git pull --ff-only) || true
+    update_shallow_repo "$ROOT/IOsonata"
   fi
 else
+  echo "   Cloning IOsonata..."
   git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
 fi
 
@@ -589,6 +614,7 @@ if [[ -d "$ROOT/IOsonata/Installer" ]]; then
 fi
 
 cd "$EXT"
+
 repos=(
   "https://github.com/NordicSemiconductor/nrfx.git"
   "https://github.com/nrfconnect/sdk-nrf-bm.git"
@@ -608,11 +634,13 @@ for repo in "${repos[@]}"; do
   if [[ -d "$name" ]]; then
     if [[ "$MODE" == "force" ]]; then
       rm -rf "$name"
+      echo "   Cloning $name..."
       git clone --depth=1 "$repo" "$name"
     else
-      (cd "$name" && git pull --ff-only) || true
+      update_shallow_repo "$name"
     fi
   else
+    echo "   Cloning $name..."
     git clone --depth=1 "$repo" "$name"
   fi
 done
@@ -623,7 +651,7 @@ if [[ -d "FreeRTOS-Kernel" ]]; then
     rm -rf "FreeRTOS-Kernel"
     git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
   else
-    (cd FreeRTOS-Kernel && git pull --ff-only) || true
+    update_shallow_repo "FreeRTOS-Kernel"
   fi
 else
   git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
