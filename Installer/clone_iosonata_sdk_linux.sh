@@ -1,79 +1,61 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
 # =========================================================
 #  clone_iosonata_sdk_linux
 # ---------------------------------------------------------
 #  Purpose: Clone IOsonata SDK and dependencies with colors
-#  Platform: macOS (bash)
-#  Version: v1.1.0
+#  Platform: linux (bash)
+#  Version: v1.3.0
 # =========================================================
-
-set -e  # Exit on first error
 
 SCRIPT_VERSION="v1.3.0"
 
-# --- Define colors ---
-RED="\033[0;31m"
-GREEN="\033[0;32m"
-YELLOW="\033[1;33m"
-BLUE="\033[0;34m"
-BOLD="\033[1m"
-RESET="\033[0m"
+# ---------------------------------------------------------
+# COLOR DEFINITIONS
+# ---------------------------------------------------------
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+RESET='\033[0m'
 
-# --- Banner ---
-print_banner() {
-  echo ""
-  echo "${BLUE}=========================================================${RESET}"
-  echo "${BOLD}     IOsonata SDK Cloning Utility for macOS${RESET}"
-  echo "${BOLD}     Version: $SCRIPT_VERSION${RESET}"
-  echo "${BLUE}=========================================================${RESET}"
-}
+# ---------------------------------------------------------
+# BANNER
+# ---------------------------------------------------------
+echo ""
+echo -e "${BLUE}=========================================================${RESET}"
+echo -e "${BOLD}     IOsonata SDK Cloning Utility for Linux${RESET}"
+echo -e "${BOLD}     Version: $SCRIPT_VERSION${RESET}"
+echo -e "${BLUE}=========================================================${RESET}"
 
-# --- Help Menu ---
-print_help() {
-  print_banner
-  echo "${BOLD}Usage:${RESET} clone_iosonata_sdk_linux [options]"
-  echo ""
-  echo "${BOLD}Options:${RESET}"
-  echo "  --home <path>       Set custom root directory (default: ~/IOcomposer)"
-  echo "  --mode <mode>       Clone mode: 'normal' (default) or 'force'"
-  echo "  --eclipse           Configure Eclipse system properties"
-  echo "  --help, -h          Show this help message and exit"
-
-  echo ""
-  echo "${BOLD}Examples:${RESET}"
-  echo "  ./clone_iosonata_sdk_linux                      # Clone into ~/IOcomposer"
-  echo "  ./clone_iosonata_sdk_linux --home ~/DevEnv      # Custom directory"
-  echo "  ./clone_iosonata_sdk_linux --mode force         # Force re-clone all repos"
-  echo "  ./clone_iosonata_sdk_linux --eclipse            # Also configure Eclipse"
-  echo ""
-  echo "${BOLD}Repositories cloned (during normal execution):${RESET}"
-  echo "  • IOsonata main repository"
-  echo "  • Nordic Semiconductor nrfx"
-  echo "  • nrfconnect SDKs (sdk-nrf-bm, sdk-nrfxlib)"
-  echo "  • IOsonata nRF5 SDK & Mesh"
-  echo "  • Bosch BSEC2 library"
-  echo "  • xioTechnologies Fusion"
-  echo "  • LVGL graphics library"
-  echo "  • lwIP TCP/IP stack"
-  echo "  • FreeRTOS-Kernel"
-  echo "  • TinyUSB"
-  echo ""
-  exit 0
-}
-
-# --- Default values ---
+# ---------------------------------------------------------
+# DEFAULT CONFIGURATION VALUES
+# ---------------------------------------------------------
 ROOT="$HOME/IOcomposer"
 MODE="normal"
 CONFIGURE_ECLIPSE=false
 
-# --- Parse Arguments ---
+# ------------------------------------------------------------------------------
+# ARGUMENT PARSING (Added validation similar to build_iosonata_lib_linux.sh)
+# ------------------------------------------------------------------------------
+
 while [[ $# -gt 0 ]]; do
-  case $1 in
+  case "$1" in
     --home)
+      if [[ -z "${2:-}" ]]; then
+        echo -e "${RED}✗ Missing path after --home${RESET}"
+        exit 1
+      fi
       ROOT="$2"
       shift 2
       ;;
     --mode)
+      if [[ -z "${2:-}" ]]; then
+        echo -e "${RED}✗ Missing mode after --mode${RESET}"
+        exit 1
+      fi
       MODE="$2"
       shift 2
       ;;
@@ -82,77 +64,120 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --help|-h)
-      print_help
+      echo -e "${BOLD}Usage:${RESET} clone_iosonata_sdk_linux.sh [options]"
+      echo ""
+      echo -e "${BOLD}Options:${RESET}"
+      echo "  --home <path>       Set custom root directory (default: ~/IOcomposer)"
+      echo "  --mode <mode>       Clone mode: 'normal' (default) or 'force'"
+      echo "  --eclipse           Configure Eclipse system properties"
+      echo "  --help, -h          Show this help message and exit"
+      echo ""
+      echo -e "${BOLD}Examples:${RESET}"
+      echo "  ./clone_iosonata_sdk_linux.sh                      # Clone into ~/IOcomposer"
+      echo "  ./clone_iosonata_sdk_linux.sh --home ~/DevEnv      # Custom directory"
+      echo "  ./clone_iosonata_sdk_linux.sh --mode force         # Force re-clone all repos"
+      echo "  ./clone_iosonata_sdk_linux.sh --eclipse            # Also configure Eclipse"
+      echo ""
+      echo -e "${BOLD}Repositories cloned:${RESET}"
+      echo "  • IOsonata main repository"
+      echo "  • Nordic Semiconductor nrfx"
+      echo "  • nrfconnect SDKs (sdk-nrf-bm, sdk-nrfxlib)"
+      echo "  • IOsonata nRF5 SDK & Mesh"
+      echo "  • Bosch BSEC2 library"
+      echo "  • xioTechnologies Fusion"
+      echo "  • VQF orientation library"
+      echo "  • LVGL graphics library"
+      echo "  • lwIP TCP/IP stack"
+      echo "  • FreeRTOS-Kernel"
+      echo "  • TinyUSB"
+      echo ""
+      exit 0
       ;;
     *)
-      echo "${RED}✗ Unknown argument:${RESET} $1"
-      echo "Use '${YELLOW}--help${RESET}' for usage information."
+      echo -e "${RED}✗ Unknown argument:${RESET} $1"
+      echo -e "Use '${YELLOW}--help${RESET}' for usage information."
       exit 1
       ;;
   esac
 done
 
-# --- Prepare directories safely ---
+# ---------------------------------------------------------
+# DIRECTORY PREPARATION AND DISPLAY
+# ---------------------------------------------------------
+
 mkdir -p "$ROOT"
 ROOT=$(cd "$ROOT" && pwd)
 EXT="$ROOT/external"
 mkdir -p "$EXT"
 
-print_banner
-echo "${BOLD}Root directory:${RESET} $ROOT"
-echo "${BOLD}Mode:${RESET} $MODE"
-echo "${BOLD}External path:${RESET} $EXT"
-echo "${BOLD}Configure Eclipse:${RESET} $CONFIGURE_ECLIPSE"
-echo "${BLUE}---------------------------------------------------------${RESET}"
+echo -e "${BOLD}Root directory:${RESET} $ROOT"
+echo -e "${BOLD}Mode:${RESET} $MODE"
+echo -e "${BOLD}External path:${RESET} $EXT"
+echo -e "${BOLD}Configure Eclipse:${RESET} $CONFIGURE_ECLIPSE"
+echo -e "${BLUE}---------------------------------------------------------${RESET}"
 echo ""
 
-# --- Function: clone or update repo ---
+# ---------------------------------------------------------
+# CLONE / UPDATE REPOSITORY
+# ---------------------------------------------------------
+
 clone_or_update_repo() {
   local repo_url="$1"
   local target_dir="$2"
   local recurse_submodules="${3:-false}"
 
+  # Target directory found
   if [[ -d "$target_dir" ]]; then
+
+    # When forced, delete and re-clone the repository
     if [[ "$MODE" == "force" ]]; then
-      echo "${YELLOW}⚠️  Re-cloning${RESET} $target_dir ..."
+      echo -e "${YELLOW}⚠️  Re-cloning${RESET} $target_dir ..."
       rm -rf "$target_dir"
+      
       if [[ "$recurse_submodules" == "true" ]]; then
         git clone --depth=1 --recurse-submodules "$repo_url" "$target_dir"
       else
         git clone --depth=1 "$repo_url" "$target_dir"
       fi
+
+    # Otherwise update (git pull)
     else
-      echo "${YELLOW}🔄 Updating${RESET} $target_dir ..."
-      (cd "$target_dir" && git pull --rebase)
+      echo -e "${YELLOW}🔄 Updating${RESET} $target_dir ..."
+      # Added fallback logic for failed updates
+      (cd "$target_dir" && git pull --rebase) || {
+        echo -e "${RED}   ✗ Update failed, trying fresh clone...${RESET}"
+        rm -rf "$target_dir"
+        git clone --depth=1 "$repo_url" "$target_dir"
+      }
       if [[ "$recurse_submodules" == "true" ]]; then
-        echo "${BLUE}   ↳ Updating submodules...${RESET}"
+        echo -e "${BLUE}   ↳ Updating submodules...${RESET}"
         (cd "$target_dir" && git submodule update --init --recursive)
       fi
     fi
+
+  # If target directory not found, create fresh clone
   else
-    echo "${BLUE}⬇️  Cloning${RESET} $target_dir ..."
+    echo -e "${BLUE}⬇️  Cloning${RESET} $target_dir ..."
     if [[ "$recurse_submodules" == "true" ]]; then
       git clone --depth=1 --recurse-submodules "$repo_url" "$target_dir"
-      echo "${GREEN}   ✓ Submodules initialized${RESET}"
+      echo -e "${GREEN}   ✓ Submodules initialized${RESET}"
     else
       git clone --depth=1 "$repo_url" "$target_dir"
     fi
   fi
 }
 
-# --- IOsonata Library Build Function ---
+# ---------------------------------------------------------
+# IOSONATA LIBRARY BUILD FUNCTION
+# ---------------------------------------------------------
 
-# ---------------------------------------------------------
 # Clone IOsonata
-# ---------------------------------------------------------
-echo "${GREEN}🚀 Cloning IOsonata...${RESET}"
+echo -e "${GREEN}🚀 Cloning IOsonata...${RESET}"
 clone_or_update_repo "https://github.com/IOsonata/IOsonata.git" "$ROOT/IOsonata"
 
-# ---------------------------------------------------------
 # Clone External Repos
-# ---------------------------------------------------------
 echo ""
-echo "${BLUE}📦 Cloning dependencies into:${RESET} $EXT"
+echo -e "${BLUE}📦 Cloning dependencies into:${RESET} $EXT"
 echo ""
 
 # Standard repos (no submodules)
@@ -177,19 +202,15 @@ for repo in "${repos[@]}"; do
   clone_or_update_repo "$repo" "$target" false
 done
 
-# ---------------------------------------------------------
 # Clone FreeRTOS-Kernel
-# ---------------------------------------------------------
 echo ""
-echo "${BOLD}${BLUE}📦 Cloning FreeRTOS-Kernel...${RESET}"
+echo -e "${BOLD}${BLUE}📦 Cloning FreeRTOS-Kernel...${RESET}"
 clone_or_update_repo "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" "$EXT/FreeRTOS-Kernel" false
 
 echo ""
-echo "${GREEN}✅ All repositories cloned successfully!${RESET}"
+echo -e "${GREEN}✅ All repositories cloned successfully!${RESET}"
 
-# ---------------------------------------------------------
 # Generate makefile_path.mk
-# ---------------------------------------------------------
 echo ""
 echo "📝 Generating makefile_path.mk for Makefile-based builds..."
 
@@ -197,7 +218,7 @@ MAKEFILE_PATH_MK="$ROOT/IOsonata/makefile_path.mk"
 
 cat > "$MAKEFILE_PATH_MK" <<'EOF'
 # makefile_path.mk
-# Auto-generated by clone_iosonata_sdk_linux.zsh
+# Auto-generated by clone_iosonata_sdk_macos.zsh
 # This file contains path macros for IOsonata projects
 # Include this file in your project Makefile: include $(IOSONATA_ROOT)/makefile_path.mk
 
@@ -297,26 +318,27 @@ export NRF5_SDK_MESH_HOME := $(NRF5_SDK_MESH_ROOT)
 export BSEC_HOME := $(BSEC_ROOT)
 EOF
 
-echo "${GREEN}✅ makefile_path.mk created at: $MAKEFILE_PATH_MK${RESET}"
+echo -e "${GREEN}✅ makefile_path.mk created at: $MAKEFILE_PATH_MK${RESET}"
 echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.mk"
 echo "   Make sure to set IOCOMPOSER_HOME=$ROOT in your environment or Makefile"
 echo ""
 
 # ---------------------------------------------------------
-# Install IOsonata Eclipse Plugin (helper function)
+# INSTALL IOSONATA ECLIPSE PLUGIN (HELPER FUNCTION)
 # ---------------------------------------------------------
+
 install_iosonata_plugin() {
-  local eclipse_app="$1"
+  local eclipse_dir="$1"
   
   echo ""
-  echo "${BLUE}>>> Installing IOsonata Eclipse Plugin...${RESET}"
+  echo -e "${BLUE}>>> Installing IOsonata Eclipse Plugin...${RESET}"
   
   local plugin_dir="$ROOT/IOsonata/Installer/eclipse_plugin"
-  local dropins_dir="$eclipse_app/Contents/Eclipse/dropins"
+  local dropins_dir="$eclipse_dir/dropins"
   
   # Check if plugin directory exists
   if [[ ! -d "$plugin_dir" ]]; then
-    echo "${YELLOW}⚠️  Plugin directory not found at $plugin_dir${RESET}"
+    echo -e "${YELLOW}⚠️  Plugin directory not found at $plugin_dir${RESET}"
     echo "    Skipping plugin installation."
     return
   fi
@@ -326,111 +348,163 @@ install_iosonata_plugin() {
   latest_plugin=$(ls -1 "$plugin_dir"/org.iosonata.embedcdt.templates.firmware_*.jar 2>/dev/null | sort -V | tail -n1)
   
   if [[ -z "$latest_plugin" ]]; then
-    echo "${YELLOW}⚠️  No IOsonata plugin jar file found in $plugin_dir${RESET}"
+    echo -e "${YELLOW}⚠️  No IOsonata plugin jar file found in $plugin_dir${RESET}"
     echo "    Skipping plugin installation."
     return
   fi
   
-  echo "${GREEN}   → Found plugin: $(basename "$latest_plugin")${RESET}"
+  echo -e "${GREEN}   → Found plugin: $(basename "$latest_plugin")${RESET}"
   
   # Create dropins directory if it doesn't exist
-  sudo mkdir -p "$dropins_dir"
+  # Try without sudo first, fall back to sudo if needed
+  if [[ -w "$eclipse_dir" ]]; then
+    mkdir -p "$dropins_dir"
+  else
+    sudo mkdir -p "$dropins_dir"
+  fi
   
   # Remove old versions of the plugin
   local old_plugins
-  old_plugins=$(sudo find "$dropins_dir" -name "org.iosonata.embedcdt.templates.firmware_*.jar" 2>/dev/null || true)
+  if [[ -w "$dropins_dir" ]]; then
+    old_plugins=$(find "$dropins_dir" -name "org.iosonata.embedcdt.templates.firmware_*.jar" 2>/dev/null || true)
+  else
+    old_plugins=$(sudo find "$dropins_dir" -name "org.iosonata.embedcdt.templates.firmware_*.jar" 2>/dev/null || true)
+  fi
   
   if [[ -n "$old_plugins" ]]; then
-    echo "${YELLOW}   → Removing old plugin versions...${RESET}"
+    echo -e "${YELLOW}   → Removing old plugin versions...${RESET}"
     echo "$old_plugins" | while read -r old_plugin; do
       if [[ -f "$old_plugin" ]]; then
         echo "      - Removing: $(basename "$old_plugin")"
-        sudo rm -f "$old_plugin"
+        if [[ -w "$old_plugin" ]]; then
+          rm -f "$old_plugin"
+        else
+          sudo rm -f "$old_plugin"
+        fi
       fi
     done
   fi
   
   # Copy the latest plugin to dropins
   echo "   → Installing plugin to $dropins_dir"
-  sudo cp "$latest_plugin" "$dropins_dir/"
+  if [[ -w "$dropins_dir" ]]; then
+    cp "$latest_plugin" "$dropins_dir/"
+    chmod 644 "$dropins_dir/$(basename "$latest_plugin")"
+  else
+    sudo cp "$latest_plugin" "$dropins_dir/"
+    sudo chmod 644 "$dropins_dir/$(basename "$latest_plugin")"
+  fi
   
-  # Set proper permissions
-  sudo chmod 644 "$dropins_dir/$(basename "$latest_plugin")"
-  
-  echo "${GREEN}✅ IOsonata Eclipse Plugin installed: $(basename "$latest_plugin")${RESET}"
+  echo -e "${GREEN}✅ IOsonata Eclipse Plugin installed: $(basename "$latest_plugin")${RESET}"
 }
 
 # ---------------------------------------------------------
-# Configure Eclipse (if requested)
+# ECLIPSE CONFIGURATIONS
 # ---------------------------------------------------------
+
 if [[ "$CONFIGURE_ECLIPSE" == "true" ]]; then
   echo ""
-  echo "${BLUE}=========================================================${RESET}"
-  echo "${BOLD}Configuring Eclipse System Properties${RESET}"
-  echo "${BLUE}=========================================================${RESET}"
+  echo -e "${BLUE}=========================================================${RESET}"
+  echo -e "${BOLD}Configuring Eclipse System Properties${RESET}"
+  echo -e "${BLUE}=========================================================${RESET}"
   echo ""
   
-  ECLIPSE_DIR="/opt/eclipse"
-  ECLIPSE_INI="$ECLIPSE_DIR/Contents/Eclipse/eclipse.ini"
+  # Find Eclipse installation
+  ECLIPSE_DIR=""
+  ECLIPSE_INI=""
   
-  if [[ ! -f "$ECLIPSE_INI" ]]; then
-    echo "${RED}✗ Eclipse not found at: $ECLIPSE_DIR${RESET}"
-    echo "${YELLOW}  Please install Eclipse first or skip Eclipse configuration.${RESET}"
+  # Search common locations
+  for candidate in \
+    "${HOME}/eclipse/embedcdt" \
+    "${HOME}/eclipse/cpp" \
+    "${HOME}/eclipse" \
+    "/opt/eclipse" \
+    "/usr/local/eclipse" \
+    "/snap/eclipse/current"
+  do
+    if [[ -f "$candidate/eclipse.ini" ]]; then
+      ECLIPSE_DIR="$candidate"
+      ECLIPSE_INI="$candidate/eclipse.ini"
+      break
+    fi
+  done
+  
+  if [[ -z "$ECLIPSE_INI" ]]; then
+    echo -e "${RED}✗ Eclipse not found${RESET}"
+    echo -e "${YELLOW}  Searched: ~/eclipse/*, /opt/eclipse, /usr/local/eclipse${RESET}"
+    echo -e "${YELLOW}  Please install Eclipse first or skip Eclipse configuration.${RESET}"
   else
-    echo "${GREEN}✓ Eclipse found${RESET}"
+    echo -e "${GREEN}✓ Eclipse found at: $ECLIPSE_DIR${RESET}"
     echo ""
     echo ">>> Configuring IOsonata and IOcomposer system properties..."
     
-    # Remove old properties if they exist
-    sudo sed -i.bak '/^-Diosonata\.home=/d' "$ECLIPSE_INI" 2>/dev/null || true
-    sudo sed -i '' '/^-Diosonata_loc=/d' "$ECLIPSE_INI" 2>/dev/null || true
-    sudo sed -i '' '/^-Diocomposer_home=/d' "$ECLIPSE_INI" 2>/dev/null || true
+    # Create backup
+    cp "$ECLIPSE_INI" "$ECLIPSE_INI.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || \
+      sudo cp "$ECLIPSE_INI" "$ECLIPSE_INI.bak.$(date +%Y%m%d%H%M%S)"
     
-    # Find the -vmargs line and insert after it
-    if grep -q "^-vmargs" "$ECLIPSE_INI"; then
-      # Insert after -vmargs line
-      sudo sed -i '' '/^-vmargs$/a\
--Diosonata_loc='"$ROOT"'
-' "$ECLIPSE_INI"
-      sudo sed -i '' '/^-Diosonata_loc=/a\
--Diocomposer_home='"$ROOT"'
-' "$ECLIPSE_INI"
+    # Remove old properties if they exist (GNU sed syntax)
+    if [[ -w "$ECLIPSE_INI" ]]; then
+      sed -i '/^-Diosonata\.home=/d' "$ECLIPSE_INI" 2>/dev/null || true
+      sed -i '/^-Diosonata_loc=/d' "$ECLIPSE_INI" 2>/dev/null || true
+      sed -i '/^-Diocomposer_home=/d' "$ECLIPSE_INI" 2>/dev/null || true
     else
-      # No -vmargs section, add it at the end with our properties
-      echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
-      echo "-Diosonata_loc=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
-      echo "-Diocomposer_home=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+      sudo sed -i '/^-Diosonata\.home=/d' "$ECLIPSE_INI" 2>/dev/null || true
+      sudo sed -i '/^-Diosonata_loc=/d' "$ECLIPSE_INI" 2>/dev/null || true
+      sudo sed -i '/^-Diocomposer_home=/d' "$ECLIPSE_INI" 2>/dev/null || true
     fi
     
-    echo "${GREEN}✅ Eclipse system properties configured:${RESET}"
-    echo "   ${BOLD}iosonata_loc${RESET} = $ROOT"
-    echo "   ${BOLD}iocomposer_home${RESET} = $ROOT"
+    # Add new properties after -vmargs
+    if grep -q "^-vmargs" "$ECLIPSE_INI"; then
+      # Insert after -vmargs line (GNU sed syntax)
+      if [[ -w "$ECLIPSE_INI" ]]; then
+        sed -i '/^-vmargs$/a -Diosonata_loc='"$ROOT" "$ECLIPSE_INI"
+        sed -i '/^-Diosonata_loc=/a -Diocomposer_home='"$ROOT" "$ECLIPSE_INI"
+      else
+        sudo sed -i '/^-vmargs$/a -Diosonata_loc='"$ROOT" "$ECLIPSE_INI"
+        sudo sed -i '/^-Diosonata_loc=/a -Diocomposer_home='"$ROOT" "$ECLIPSE_INI"
+      fi
+    else
+      # No -vmargs section, add it at the end
+      if [[ -w "$ECLIPSE_INI" ]]; then
+        echo "-vmargs" >> "$ECLIPSE_INI"
+        echo "-Diosonata_loc=$ROOT" >> "$ECLIPSE_INI"
+        echo "-Diocomposer_home=$ROOT" >> "$ECLIPSE_INI"
+      else
+        echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+        echo "-Diosonata_loc=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+        echo "-Diocomposer_home=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+      fi
+    fi
+    
+    echo -e "${GREEN}✅ Eclipse system properties configured:${RESET}"
+    echo -e "   ${BOLD}iosonata_loc${RESET} = $ROOT"
+    echo -e "   ${BOLD}iocomposer_home${RESET} = $ROOT"
     echo ""
-    echo "${YELLOW}ℹ️  Usage in CDT projects:${RESET}"
-    echo "   \${system_property:iosonata_loc}/IOsonata/include"
-    echo "   \${system_property:iosonata_loc}/external/nrfx"
+    echo -e "${YELLOW}ℹ️  Usage in CDT projects:${RESET}"
+    echo '   ${system_property:iosonata_loc}/IOsonata/include'
+    echo '   ${system_property:iosonata_loc}/external/nrfx'
     echo ""
     
     # Install Eclipse plugin
     install_iosonata_plugin "$ECLIPSE_DIR"
     echo ""
     
-    echo "${YELLOW}⚠️  Restart Eclipse for changes to take effect.${RESET}"
+    echo -e "${YELLOW}⚠️  Restart Eclipse for changes to take effect.${RESET}"
   fi
 fi
 
 # ---------------------------------------------------------
-# Summary
+# SUMMARY DISPLAY
 # ---------------------------------------------------------
 echo ""
-echo "${BLUE}=========================================================${RESET}"
-echo "${BOLD}Summary${RESET}"
-echo "${BLUE}=========================================================${RESET}"
-echo "${BOLD}IOsonata Root:${RESET}       $ROOT"
-echo "${BOLD}IOsonata Framework:${RESET}  $ROOT/IOsonata"
-echo "${BOLD}External Repos:${RESET}      $EXT"
+echo -e "${BLUE}=========================================================${RESET}"
+echo -e "${BOLD}Summary${RESET}"
+echo -e "${BLUE}=========================================================${RESET}"
+echo -e "${BOLD}IOsonata Root:${RESET}       $ROOT"
+echo -e "${BOLD}IOsonata Framework:${RESET}  $ROOT/IOsonata"
+echo -e "${BOLD}External Repos:${RESET}      $EXT"
 echo ""
-echo "${BOLD}Cloned repositories:${RESET}"
+echo -e "${BOLD}Cloned repositories:${RESET}"
 echo "  • IOsonata"
 echo "  • nrfx"
 echo "  • sdk-nrf-bm"
@@ -439,29 +513,48 @@ echo "  • nRF5_SDK"
 echo "  • nRF5_SDK_Mesh"
 echo "  • BSEC"
 echo "  • Fusion"
+echo "  • vqf"
 echo "  • lvgl"
 echo "  • lwip"
 echo "  • FreeRTOS-Kernel"
 echo "  • tinyusb"
 echo ""
 
-if [[ "$CONFIGURE_ECLIPSE" == "true" && -f "$ECLIPSE_INI" ]]; then
-  echo "${BOLD}Eclipse Configuration:${RESET}"
+if [[ "$CONFIGURE_ECLIPSE" == "true" && -n "$ECLIPSE_INI" && -f "$ECLIPSE_INI" ]]; then
+  echo -e "${BOLD}Eclipse Configuration:${RESET}"
   echo "  ✓ System properties configured"
   echo "  ✓ iosonata_loc = $ROOT"
   echo "  ✓ iocomposer_home = $ROOT"
   echo ""
 fi
 
-echo "${BLUE}---------------------------------------------------------${RESET}"
+echo -e "${BLUE}---------------------------------------------------------${RESET}"
+
+# ---------------------------------------------------------
+# AUTO BUILD TRIGGER
+# ---------------------------------------------------------
 
 # --- Detect Eclipse Installation ---
-ECLIPSE_DIR="/opt/eclipse"
 ECLIPSE_INSTALLED=false
-if [[ -d "$ECLIPSE_DIR" ]]; then
-  ECLIPSE_INSTALLED=true
+ECLIPSE_BIN=""
+
+for candidate in \
+  "${HOME}/eclipse/embedcdt/eclipse" \
+  "${HOME}/eclipse/cpp/eclipse" \
+  "${HOME}/eclipse/eclipse" \
+  "/opt/eclipse/eclipse" \
+  "/usr/local/eclipse/eclipse"
+do
+  if [[ -x "$candidate" ]]; then
+    ECLIPSE_INSTALLED=true
+    ECLIPSE_BIN="$candidate"
+    break
+  fi
+done
+
+if [[ "$ECLIPSE_INSTALLED" == "true" ]]; then
   echo ""
-  echo "${GREEN}✓ Eclipse detected at $ECLIPSE_DIR${RESET}"
+  echo -e "${GREEN}✓ Eclipse detected at $(dirname "$ECLIPSE_BIN")${RESET}"
 fi
 
 # --- Auto-Build IOsonata Libraries (if Eclipse detected) ---
@@ -469,15 +562,15 @@ if [[ "$ECLIPSE_INSTALLED" == "true" ]]; then
   BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
   if [[ -f "$BUILD_SCRIPT" ]]; then
     echo ""
-    echo "${BLUE}=========================================================${RESET}"
-    echo "${BOLD}   IOsonata Library Auto-Build${RESET}"
-    echo "${BLUE}=========================================================${RESET}"
+    echo -e "${BLUE}=========================================================${RESET}"
+    echo -e "${BOLD}   IOsonata Library Auto-Build${RESET}"
+    echo -e "${BLUE}=========================================================${RESET}"
     echo ""
-    chmod +x "$BUILD_SCRIPT"
+    chmod +x "$BUILD_SCRIPT" 2>/dev/null || true
     "$BUILD_SCRIPT" --home "$ROOT" || true
   else
     echo ""
-    echo "${YELLOW}Note: Build script not found at:${RESET}"
+    echo -e "${YELLOW}Note: Build script not found at:${RESET}"
     echo "      $BUILD_SCRIPT"
     echo ""
     echo "To build libraries, download build script from:"
@@ -486,11 +579,11 @@ if [[ "$ECLIPSE_INSTALLED" == "true" ]]; then
   fi
 else
   echo ""
-  echo "${YELLOW}Note: Eclipse not detected.${RESET}"
+  echo -e "${YELLOW}Note: Eclipse not detected.${RESET}"
   echo "      To build IOsonata libraries, install Eclipse and run:"
-  echo "      ${BOLD}./install_iocdevtools_linux.sh${RESET}"
+  echo -e "      ${BOLD}./install_iocdevtools_linux.sh${RESET}"
   echo ""
 fi
 
-echo "${GREEN}Done. Happy building! 🔧${RESET}"
+echo -e "${GREEN}Done. Happy building! 🔧${RESET}"
 echo ""

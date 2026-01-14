@@ -9,12 +9,18 @@ set -euo pipefail
 #  Version: v2.2.0
 # =========================================================
 
+# ---------------------------------------------------------
 # CONFIGURATION VARIABLES
+# ---------------------------------------------------------
+
 SCRIPT_VERSION="v2.2.0"
 ROOT="${HOME}/IOcomposer"
 ECLIPSE_DIR="${HOME}/eclipse/embedcdt"
 
+# ---------------------------------------------------------
 # ARGUMENT PARSING
+# ---------------------------------------------------------
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --home)
@@ -61,14 +67,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# ---------------------------------------------------------
 # BANNER DISPLAY
+# ---------------------------------------------------------
+
 echo "========================================================="
 echo "  IOsonata Library Builder (Linux)"
 echo "  Version: $SCRIPT_VERSION"
 echo "========================================================="
 echo
 
+# ------------------------------------------------------------
 # ECLIPSE VALIDATION (Finding where the Eclipse executable is)
+# ------------------------------------------------------------
 # Linux doesn't have a standard Eclipse install location, so we test it in common locations
 
 ECLIPSE_BIN=""
@@ -109,7 +120,10 @@ fi
 echo "✓ Eclipse found at: $ECLIPSE_BIN"
 echo
 
+# ---------------------------------------------------------
 # IOSONATA SDK VALIDATION
+# ---------------------------------------------------------
+
 if [[ ! -d "$ROOT/IOsonata" ]]; then
   echo "❌ ERROR: IOsonata directory not found at $ROOT/IOsonata"
   echo ""
@@ -121,7 +135,10 @@ fi
 echo "✓ IOsonata SDK found at: $ROOT/IOsonata"
 echo
 
+# ---------------------------------------------------------
 # PROJECT DISCOVERY
+# ---------------------------------------------------------
+
 mcu_families=()
 mcu_paths=()
 
@@ -147,7 +164,10 @@ while IFS= read -r proj_file; do
 
 done < <(find "$ROOT/IOsonata" -type -f -path "*/lib/Eclipse/.project" 2>/dev/null | sort)
 
+# ---------------------------------------------------------
 # EMPTY RESULTS CHECK
+# ---------------------------------------------------------
+
 if [[ ${#mcu_families[@]} -eq 0 ]]; then
   echo "⚠️  WARNING: No IOsonata Eclipse library projects found."
   echo ""
@@ -156,7 +176,10 @@ if [[ ${#mcu_families[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# ---------------------------------------------------------
 # MENU DISPLAY
+# ---------------------------------------------------------
+
 echo "Available IOsonata library projects:"
 echo
 for i in "${!mcu_families[@]}"; do
@@ -166,7 +189,10 @@ echo "   A) Build All"
 echo "   0) Exit"
 echo
 
+# ---------------------------------------------------------
 # USER INPUT HANDLING
+# ---------------------------------------------------------
+
 selection=""
 while true; do
   read -r -p "Select project to build (0-${#mcu_families[@]} or A): " selection
@@ -188,7 +214,10 @@ elif [[ "$selection" -eq 0 ]]; then
   exit 0
 fi
 
+# ---------------------------------------------------------
 # BUILD FUNCTION
+# ---------------------------------------------------------
+
 build_project() {
   local proj_path="$1"
   local proj_family="$2"
@@ -265,7 +294,10 @@ build_project() {
   return 0
 }
 
+# ---------------------------------------------------------
 # BUILD ALL LOGIC
+# ---------------------------------------------------------
+
 if [[ "$selection" == "A"]]; then
   # Banner
   echo
@@ -346,7 +378,10 @@ if [[ "$selection" == "A"]]; then
   fi
 fi
 
+# ---------------------------------------------------------
 # SINGLE BUILD EXECUTION
+# ---------------------------------------------------------
+
 else
   selected_idx=$((selection - 1))
   selected_family="${mcu_families[$selected_idx]}"
@@ -357,7 +392,10 @@ else
   fi
 fi
 
+# ---------------------------------------------------------
 # COMPLETION MESSAGE
+# ---------------------------------------------------------
+
 echo "========================================================="
 echo "Build complete! You can now use these libraries in your"
 echo "firmware projects."
