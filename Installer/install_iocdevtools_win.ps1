@@ -17,7 +17,7 @@ param (
 
 $ErrorActionPreference = 'Stop'
 $SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.95-win"
+$SCRIPT_VERSION = "v1.0.96-win"
 
 function Show-Help {
 @"
@@ -350,13 +350,9 @@ $sc.TargetPath = "$ECLIPSE_DIR\eclipse.exe"; $sc.Save()
 $sc = $WshShell.CreateShortcut("$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Eclipse Embedded.lnk")
 $sc.TargetPath = "$ECLIPSE_DIR\eclipse.exe"; $sc.Save()
 
-# --- Seed Prefs (Installation-level for Windows, matching Eclipse's expected location) ---
-# Note: On Windows, we seed to the Eclipse installation's configuration folder.
-# This differs from macOS/Linux which use ~/.eclipse after first run.
-# This approach ensures prefs are available immediately without requiring Eclipse to run first.
-Write-Host; Write-Host ">>> Seeding Eclipse preferences..." -ForegroundColor Cyan
-$SET = "$ECLIPSE_DIR\configuration\.settings"
-New-Item $SET -ItemType Directory -Force | Out-Null
+# --- Seed Prefs to BOTH locations (required for Eclipse version compatibility) ---
+# Location 1: Eclipse installation directory (works immediately)
+# Location 2: User directory ~/.eclipse (required by some Eclipse versions)
 
 # IMPORTANT: Windows paths must be forward-slashed for Eclipse prefs
 $AD = $ARM_DIR -replace '\\','/'
@@ -375,56 +371,89 @@ if ($BUILDTOOLS_DIR) {
 $AH = Java-Hash "$AD/bin"
 $RH = Java-Hash "$RD/bin"
 
-# 1. org.eclipse.core.runtime.prefs
-$runtime_prefs = @"
+# Function to write all preference files to a given directory
+function Write-EclipsePrefs {
+    param([string]$SettingsDir)
+    
+    New-Item $SettingsDir -ItemType Directory -Force | Out-Null
+
+    # 1. org.eclipse.core.runtime.prefs
+    $runtime_prefs = @"
 eclipse.preferences.version=1
 "@
-Set-Content "$SET\org.eclipse.core.runtime.prefs" $runtime_prefs -Encoding UTF8
+    Set-Content "$SettingsDir\org.eclipse.core.runtime.prefs" $runtime_prefs -Encoding UTF8
 
-# 2. org.eclipse.cdt.core.prefs
-$cdt_prefs = @"
+    # 2. org.eclipse.cdt.core.prefs
+    $cdt_prefs = @"
 eclipse.preferences.version=1
 environment/buildEnvironmentInclude=true
 org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
 "@
-Set-Content "$SET\org.eclipse.cdt.core.prefs" $cdt_prefs -Encoding UTF8
+    Set-Content "$SettingsDir\org.eclipse.cdt.core.prefs" $cdt_prefs -Encoding UTF8
 
-# 3. org.eclipse.embedcdt.core.prefs
-$embed_prefs = @"
+    # 3. org.eclipse.embedcdt.core.prefs
+    $embed_prefs = @"
 eclipse.preferences.version=1
 buildtools.path.$AH=$AD/bin
 buildtools.path.$RH=$RD/bin
 buildtools.path.strict=true
 "@
-Set-Content "$SET\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
 
-# 4. org.eclipse.embedcdt.managedbuild.core.prefs
-$build_prefs = @"
+    # 4. org.eclipse.embedcdt.managedbuild.core.prefs
+    $build_prefs = @"
 eclipse.preferences.version=1
 toolchain.path.$AH=$AD/bin
 toolchain.path.$RH=$RD/bin
 toolchain.path.strict=true
 "@
-Set-Content "$SET\org.eclipse.embedcdt.managedbuild.core.prefs" $build_prefs -Encoding UTF8
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.core.prefs" $build_prefs -Encoding UTF8
 
-# 5. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
-$ocd_prefs = @"
+    # 5. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
+    $ocd_prefs = @"
 eclipse.preferences.version=1
 install.folder=$OD/bin
 install.folder.strict=true
 "@
-Set-Content "$SET\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
 
-# 6. org.eclipse.embedcdt.managedbuild.cross.core.prefs (Windows specific: needs Build Tools for make)
-if ($BT) {
-    $cross_prefs = @"
+    # 6. org.eclipse.embedcdt.managedbuild.cross.core.prefs (Windows specific: needs Build Tools for make)
+    if ($BT) {
+        $cross_prefs = @"
 eclipse.preferences.version=1
 buildTools.path=$BT
 "@
-    Set-Content "$SET\org.eclipse.embedcdt.managedbuild.cross.core.prefs" $cross_prefs -Encoding UTF8
+        Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.core.prefs" $cross_prefs -Encoding UTF8
+    }
 }
 
-Write-Host "   [OK] Preferences seeded in $SET" -ForegroundColor Green
+# --- Location 1: Eclipse Installation Directory ---
+Write-Host; Write-Host ">>> Seeding Eclipse MCU preferences (installation directory)..." -ForegroundColor Cyan
+$INSTALL_SET = "$ECLIPSE_DIR\configuration\.settings"
+Write-EclipsePrefs $INSTALL_SET
+Write-Host "   [OK] Preferences seeded in $INSTALL_SET" -ForegroundColor Green
+
+# --- Location 2: User Directory (~/.eclipse) ---
+Write-Host; Write-Host ">>> Seeding Eclipse MCU preferences (user directory)..." -ForegroundColor Cyan
+$USER_ECLIPSE = "$env:USERPROFILE\.eclipse"
+
+# Find existing Eclipse platform configuration directories
+$userConfigs = @()
+if (Test-Path $USER_ECLIPSE) {
+    $userConfigs = Get-ChildItem $USER_ECLIPSE -Directory -Filter "org.eclipse.platform_*" -ErrorAction SilentlyContinue |
+                   Sort-Object Name -Descending
+}
+
+if ($userConfigs.Count -gt 0) {
+    foreach ($cfg in $userConfigs) {
+        $userSet = Join-Path $cfg.FullName "configuration\.settings"
+        Write-EclipsePrefs $userSet
+        Write-Host "   [OK] Preferences seeded in $userSet" -ForegroundColor Green
+    }
+} else {
+    Write-Host "   [INFO] User Eclipse config not found (Eclipse not yet run)." -ForegroundColor Yellow
+    Write-Host "   [INFO] Installation-level prefs are set; user prefs will be created on next run." -ForegroundColor Yellow
+}
 
 # --- eclipse.ini ---
 Write-Host; Write-Host ">>> Configuring eclipse.ini..." -ForegroundColor Cyan

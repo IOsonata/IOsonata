@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.90"
+SCRIPT_VERSION="v1.0.91"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -407,11 +407,63 @@ else
 fi
 
 # ---------------------------------------------------------
-# Seed preferences (user) — matching macOS behavior
+# Seed preferences to Eclipse INSTALLATION directory
+# (Works immediately without needing to run Eclipse first)
 # ---------------------------------------------------------
-seed_eclipse_prefs() {
+seed_eclipse_install_prefs() {
   echo
-  echo ">>> Seeding Eclipse preferences in ~/.eclipse..."
+  echo ">>> Seeding Eclipse MCU preferences in installation directory..."
+
+  local install_cfg="$ECLIPSE_DIR/configuration/.settings"
+  sudo mkdir -p "$install_cfg"
+
+  local ARM_HASH RISCV_HASH
+  ARM_HASH=$(java_hash "$ARM_DIR/bin")
+  RISCV_HASH=$(java_hash "$RISCV_DIR/bin")
+
+  sudo tee "$install_cfg/org.eclipse.core.runtime.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+EOF
+
+  sudo tee "$install_cfg/org.eclipse.cdt.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+environment/buildEnvironmentInclude=true
+org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
+EOF
+
+  sudo tee "$install_cfg/org.eclipse.embedcdt.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+buildtools.path.$ARM_HASH=$ARM_DIR/bin
+buildtools.path.$RISCV_HASH=$RISCV_DIR/bin
+buildtools.path.strict=true
+EOF
+
+  sudo tee "$install_cfg/org.eclipse.embedcdt.managedbuild.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+toolchain.path.$ARM_HASH=$ARM_DIR/bin
+toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
+toolchain.path.strict=true
+EOF
+
+  sudo tee "$install_cfg/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+install.folder=$OPENOCD_DIR/bin
+install.folder.strict=true
+EOF
+
+  echo "✅ Eclipse MCU preferences seeded in:"
+  echo "   $install_cfg"
+}
+
+seed_eclipse_install_prefs
+
+# ---------------------------------------------------------
+# Seed preferences to user directory (~/.eclipse)
+# (Only works if Eclipse has been run at least once)
+# ---------------------------------------------------------
+seed_eclipse_user_prefs() {
+  echo
+  echo ">>> Checking for user Eclipse preferences in ~/.eclipse..."
 
   local base="$HOME/.eclipse"
   mkdir -p "$base"
@@ -428,9 +480,8 @@ seed_eclipse_prefs() {
   instance_cfg=$(ls -d "$base"/org.eclipse.platform_*/configuration 2>/dev/null | sort -r | head -n1 || true)
 
   if [[ -z "${instance_cfg:-}" ]]; then
-    echo "⚠️  Eclipse user configuration directory not found under $base."
-    echo "   Run Eclipse once (it will create ~/.eclipse/org.eclipse.platform_*/configuration), then re-run this installer to seed prefs."
-    echo "   Continuing without seeding preferences."
+    echo "   User config directory not found (Eclipse not yet run). Skipping user prefs."
+    echo "   Installation-level prefs are already set above."
     return 0
   fi
 
@@ -479,15 +530,16 @@ toolchain.path.strict=true
 EOF
 
   cat > "$instance_cfg/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
+eclipse.preferences.version=1
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
 
-  echo "✅ Eclipse preferences seeded in:"
+  echo "✅ Eclipse user preferences also seeded in:"
   echo "   $instance_cfg/.settings"
 }
 
-seed_eclipse_prefs
+seed_eclipse_user_prefs
 
 # ---------------------------------------------------------
 # Set global iosonata_loc system property in eclipse.ini
