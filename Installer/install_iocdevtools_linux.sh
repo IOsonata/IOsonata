@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.87"
+SCRIPT_VERSION="v1.0.92"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -99,15 +99,11 @@ fi
 ARCH=$(uname -m)
 case "$ARCH" in
   aarch64|arm64)
-    # Eclipse EPP uses "aarch64" for Linux ARM64.
     ECLIPSE_ARCH="aarch64"
-    # xPack release assets typically use "linux-arm64" (sometimes "linux-aarch64").
     XPACK_PLATFORM_CANDIDATES=("linux-arm64" "linux-aarch64")
     ;;
   x86_64|amd64)
-    # Eclipse EPP uses "x86_64" for Linux x86_64.
     ECLIPSE_ARCH="x86_64"
-    # xPack release assets typically use "linux-x64" (sometimes "linux-x86_64").
     XPACK_PLATFORM_CANDIDATES=("linux-x64" "linux-x86_64")
     ;;
   *)
@@ -115,9 +111,8 @@ case "$ARCH" in
     exit 1
     ;;
 esac
-
 XPACK_PLATFORM_CSV=$(IFS=,; echo "${XPACK_PLATFORM_CANDIDATES[*]}")
-echo ">>> Detected architecture: $ARCH -> Eclipse arch=$ECLIPSE_ARCH | xPack platforms=$XPACK_PLATFORM_CSV"
+echo ">>> Detected architecture: $ARCH -> Eclipse arch=$ECLIPSE_ARCH"
 
 # ---------------------------------------------------------
 # Helpers
@@ -140,23 +135,38 @@ EOF
 }
 
 # Checks if the Content-Length is greater than 1MB (1,000,000 bytes)
+is_valid_archive_url() {
+  local url="$1"
+  local headers
+  headers=$(curl -fsSLI --max-time 10 "$url" 2>/dev/null || true)
+
+  local length_line
+  length_line=$(echo "$headers" | grep -i '^Content-Length:' | tail -n 1)
+
+  if [[ -z "$length_line" ]]; then
+    return 1
+  fi
+
+  local length
+  length=$(echo "$length_line" | awk '{print $2}' | tr -d '\r')
+
+  if ! [[ "$length" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+
+  if (( length > 1000000 )); then
+    return 0
+  else
+    return 1
+  fi
+}
 
 # ---------------------------------------------------------
-# Cleanup (DMG mount/temp)
+# Cleanup
 # ---------------------------------------------------------
-TMP_ECLIPSE_DMG=""
-ECLIPSE_MNT=""
-
+TMP_ECLIPSE_ARCHIVE=""
 cleanup() {
-  if [[ -n "${ECLIPSE_MNT:-}" ]] && mount | grep -q " ${ECLIPSE_MNT} "; then
-    hdiutil detach "$ECLIPSE_MNT" -quiet || true
-  fi
-  if [[ -n "${TMP_ECLIPSE_DMG:-}" ]]; then
-    rm -f "$TMP_ECLIPSE_DMG" || true
-  fi
-  if [[ -n "${ECLIPSE_MNT:-}" ]]; then
-    rm -rf "$ECLIPSE_MNT" || true
-  fi
+  if [[ -n "${TMP_ECLIPSE_ARCHIVE:-}" ]]; then rm -f "$TMP_ECLIPSE_ARCHIVE" || true; fi
 }
 trap cleanup EXIT
 
@@ -209,15 +219,10 @@ install_iosonata_plugin() {
 }
 
 # ---------------------------------------------------------
-# Build IOsonata Library for Selected MCU (headless, no-indexer)
-# ---------------------------------------------------------
-
-# ---------------------------------------------------------
 # Install xPack toolchain
 # ---------------------------------------------------------
 install_xpack() {
   local repo=$1 tool=$2 name=$3
-
   echo ">>> Checking $name..." >&2
 
   local latest_json
@@ -230,41 +235,29 @@ install_xpack() {
   read -r latest_tag latest_url < <(
     printf '%s' "$latest_json" | python3 -c '
 import json, sys
-
 platforms = [p.strip() for p in (sys.argv[1] or "").split(",") if p.strip()]
 j = json.load(sys.stdin)
-
 tag = j.get("tag_name", "") or ""
 url = ""
-
-# Pick an actual archive (ignore .sha/.sig/.txt) for one of the platform tokens.
 assets = (j.get("assets") or [])
 preferred_exts = (".tar.gz", ".tgz", ".tar.xz", ".txz", ".zip")
-
-def is_archive(u: str) -> bool:
-  return u.endswith(preferred_exts)
-
-# First pass: platform match + archive extension.
 for a in assets:
   u = a.get("browser_download_url", "") or ""
-  if any(p in u for p in platforms) and is_archive(u):
+  if any(p in u for p in platforms) and any(u.endswith(ext) for ext in preferred_exts):
     url = u
     break
-
-# Second pass: platform match (anything), as a last resort.
 if not url:
   for a in assets:
     u = a.get("browser_download_url", "") or ""
     if any(p in u for p in platforms):
       url = u
       break
-
 print(tag, url)
 ' "$XPACK_PLATFORM_CSV"
   )
 
   if [[ -z "${latest_tag:-}" || -z "${latest_url:-}" ]]; then
-    echo "❌ Could not resolve latest release tag or download URL for $name (repo=$repo, platforms=$XPACK_PLATFORM_CSV)." >&2
+    echo "❌ Could not resolve latest release tag or download URL for $name (repo=$repo)." >&2
     exit 1
   fi
 
@@ -290,40 +283,27 @@ print(tag, url)
   fi
 
   echo "⬇️ Installing $name $latest_norm..." >&2
-  local suffix tmpfile
-  case "$latest_url" in
-    *.tar.gz|*.tgz) suffix=".tar.gz" ;;
-    *.tar.xz|*.txz) suffix=".tar.xz" ;;
-    *.zip)          suffix=".zip" ;;
-    *)              suffix="" ;;
-  esac
 
-  tmpfile=$(mktemp ${suffix:+--suffix="$suffix"})
-
+  local tmpfile
+  tmpfile=$(mktemp)
   if ! curl -fL "$latest_url" -o "$tmpfile"; then
     echo "❌ Failed to download $name from: $latest_url" >&2
     rm -f "$tmpfile" || true
     exit 1
   fi
 
-  # Extract (format-aware)
   if [[ "$latest_url" == *.zip ]]; then
     sudo unzip -q "$tmpfile" -d "$TOOLS"
-  elif [[ "$latest_url" == *.tar.gz || "$latest_url" == *.tgz ]]; then
-    sudo tar -xzf "$tmpfile" -C "$TOOLS"
   elif [[ "$latest_url" == *.tar.xz || "$latest_url" == *.txz ]]; then
     sudo tar -xJf "$tmpfile" -C "$TOOLS"
   else
-    # Last-resort: attempt gzip first, then xz.
-    if ! sudo tar -xzf "$tmpfile" -C "$TOOLS" 2>/dev/null; then
-      sudo tar -xJf "$tmpfile" -C "$TOOLS"
-    fi
+    sudo tar -xzf "$tmpfile" -C "$TOOLS"
   fi
-
-  rm -f "$tmpfile" || true
+  rm -f "$tmpfile"
 
   local origdir
   origdir=$(ls -d "$TOOLS"/${repo}-* "$TOOLS"/xpack-${repo/-xpack/}-* 2>/dev/null | grep "$latest_norm" | head -n1 || true)
+
   if [[ -z "$origdir" ]]; then
     echo "❌ Could not find extracted folder for $name ($latest_norm) under $TOOLS" >&2
     exit 1
@@ -380,28 +360,9 @@ else
   echo "💻 Installing Eclipse Embedded CDT IDE..."
   MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
 
-  # Prefer GA release trains from the official EPP release list to avoid selecting
-  # future/milestone directories that may appear on mirrors.
-  RELEASES=$(curl -fsSL "https://www.eclipse.org/downloads/packages/release" \
-    | grep -oE '20[0-9]{2}-[0-9]{2} R' \
-    | awk '{print $1}' \
-    | head -n 8 \
-    | tr '\n' ' ' \
-    || true)
-
-  if [[ -z "${RELEASES// }" ]]; then
-    # Fallback: enumerate mirror directories (less reliable).
-    RELEASES=$(curl -fsSL "$MIRROR/" \
-      | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' \
-      | cut -d'"' -f2 \
-      | sed 's|/||g' \
-      | sort -r \
-      | uniq \
-      || true)
-  fi
-
+  RELEASES=$(curl -fsSL "$MIRROR/" | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' | cut -d'"' -f2 | sed 's|/||g' | sort -r | uniq || true)
   if [[ -z "${RELEASES:-}" ]]; then
-    echo "❌ Failed to enumerate Eclipse releases (official list + mirror fallback failed)." >&2
+    echo "❌ Failed to enumerate Eclipse releases from mirror: $MIRROR" >&2
     exit 1
   fi
 
@@ -410,10 +371,10 @@ else
     URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-linux-gtk-$ECLIPSE_ARCH.tar.gz"
     URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-linux-gtk-$ECLIPSE_ARCH.tar.gz"
 
-    if curl --head --silent --fail "$URL_EMBEDCDT" >/dev/null 2>&1; then
+    if is_valid_archive_url "$URL_EMBEDCDT"; then
       ECLIPSE_URL="$URL_EMBEDCDT"
       break
-    elif curl --head --silent --fail "$URL_EMBEDCPP" >/dev/null 2>&1; then
+    elif is_valid_archive_url "$URL_EMBEDCPP"; then
       ECLIPSE_URL="$URL_EMBEDCPP"
       break
     fi
@@ -426,49 +387,101 @@ else
 
   echo "⬇️ Downloading Eclipse: $ECLIPSE_URL"
 
-  TMP_ECLIPSE_TAR=$(mktemp)
-  if ! curl -fL "$ECLIPSE_URL" -o "$TMP_ECLIPSE_TAR"; then
+  TMP_ECLIPSE_ARCHIVE=$(mktemp)
+  if ! curl -fL "$ECLIPSE_URL" -o "$TMP_ECLIPSE_ARCHIVE"; then
     echo "❌ Eclipse download failed." >&2
     exit 1
   fi
 
-  echo "📦 Extracting Eclipse..."
-  sudo rm -rf "$ECLIPSE_DIR"
-  sudo mkdir -p "$ECLIPSE_DIR"
-  sudo tar -xzf "$TMP_ECLIPSE_TAR" -C /opt
-  # tar creates /opt/eclipse, which is what we want
+  # Extract to temp dir first, then move (safer approach)
+  TMP_EXTRACT=$(mktemp -d)
+  tar -xzf "$TMP_ECLIPSE_ARCHIVE" -C "$TMP_EXTRACT"
 
-  rm -f "$TMP_ECLIPSE_TAR" || true
+  sudo rm -rf "$ECLIPSE_DIR"
+  sudo mv "$TMP_EXTRACT/eclipse" "$ECLIPSE_DIR"
+  rm -rf "$TMP_EXTRACT"
+  rm -f "$TMP_ECLIPSE_ARCHIVE"
+  TMP_ECLIPSE_ARCHIVE=""
 
   echo "✅ Eclipse installed at $ECLIPSE_DIR"
 fi
 
 # ---------------------------------------------------------
-# Seed preferences (user) — no sudo under ~/.eclipse
+# Seed preferences to Eclipse INSTALLATION directory
+# (Works immediately without needing to run Eclipse first)
 # ---------------------------------------------------------
-seed_eclipse_prefs() {
+seed_eclipse_install_prefs() {
   echo
-  echo ">>> Seeding Eclipse preferences in ~/.eclipse..."
+  echo ">>> Seeding Eclipse MCU preferences in installation directory..."
+
+  local install_cfg="$ECLIPSE_DIR/configuration/.settings"
+  sudo mkdir -p "$install_cfg"
+
+  local ARM_HASH RISCV_HASH
+  ARM_HASH=$(java_hash "$ARM_DIR/bin")
+  RISCV_HASH=$(java_hash "$RISCV_DIR/bin")
+
+  sudo tee "$install_cfg/org.eclipse.core.runtime.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+EOF
+
+  sudo tee "$install_cfg/org.eclipse.cdt.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+environment/buildEnvironmentInclude=true
+org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
+EOF
+
+  sudo tee "$install_cfg/org.eclipse.embedcdt.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+buildtools.path.$ARM_HASH=$ARM_DIR/bin
+buildtools.path.$RISCV_HASH=$RISCV_DIR/bin
+buildtools.path.strict=true
+EOF
+
+  sudo tee "$install_cfg/org.eclipse.embedcdt.managedbuild.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+toolchain.path.$ARM_HASH=$ARM_DIR/bin
+toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
+toolchain.path.strict=true
+EOF
+
+  sudo tee "$install_cfg/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" > /dev/null <<EOF
+eclipse.preferences.version=1
+install.folder=$OPENOCD_DIR/bin
+install.folder.strict=true
+EOF
+
+  echo "✅ Eclipse MCU preferences seeded in:"
+  echo "   $install_cfg"
+}
+
+seed_eclipse_install_prefs
+
+# ---------------------------------------------------------
+# Seed preferences to user directory (~/.eclipse)
+# (Only works if Eclipse has been run at least once)
+# ---------------------------------------------------------
+seed_eclipse_user_prefs() {
+  echo
+  echo ">>> Checking for user Eclipse preferences in ~/.eclipse..."
 
   local base="$HOME/.eclipse"
   mkdir -p "$base"
 
-  # If a previous run created ~/.eclipse as root, fix it (cross-distro).
-  local base_uid user_group
+  # If a previous run created ~/.eclipse as root, fix it.
+  local base_uid
   base_uid=$(stat -c '%u' "$base" 2>/dev/null || stat -f '%u' "$base" 2>/dev/null || echo "")
-  user_group=$(id -gn "$USER" 2>/dev/null || echo "$USER")
-  if [[ "${base_uid:-}" == "0" ]]; then
+  if [[ "$base_uid" == "0" ]]; then
     echo "⚠️  $base is owned by root (likely from a previous installer run). Fixing ownership..."
-    sudo chown -R "$USER":"$user_group" "$base" || true
+    sudo chown -R "$USER":$(id -gn) "$base" || true
   fi
 
   local instance_cfg
   instance_cfg=$(ls -d "$base"/org.eclipse.platform_*/configuration 2>/dev/null | sort -r | head -n1 || true)
 
   if [[ -z "${instance_cfg:-}" ]]; then
-    echo "⚠️  Eclipse user configuration directory not found under $base."
-    echo "   Run Eclipse once (it will create ~/.eclipse/org.eclipse.platform_*/configuration), then re-run this installer to seed prefs."
-    echo "   Continuing without seeding preferences."
+    echo "   User config directory not found (Eclipse not yet run). Skipping user prefs."
+    echo "   Installation-level prefs are already set above."
     return 0
   fi
 
@@ -476,12 +489,25 @@ seed_eclipse_prefs() {
 
   if [[ ! -w "$instance_cfg/.settings" ]]; then
     echo "⚠️  $instance_cfg/.settings is not writable. Fixing ownership..."
-    sudo chown -R "$USER":"$user_group" "$instance_cfg" || true
+    sudo chown -R "$USER":$(id -gn) "$instance_cfg" || true
+  fi
+
+  # Check for Java (informational, not fatal on Linux)
+  local JRE=""
+  if command -v java >/dev/null 2>&1; then
+    JRE=$(dirname "$(dirname "$(readlink -f "$(command -v java)")")" 2>/dev/null || true)
+  fi
+  if [[ -z "$JRE" ]]; then
+    echo "⚠️  No JDK found in PATH. Eclipse requires Java 17+. Please install a JDK."
   fi
 
   local ARM_HASH RISCV_HASH
   ARM_HASH=$(java_hash "$ARM_DIR/bin")
   RISCV_HASH=$(java_hash "$RISCV_DIR/bin")
+
+  cat > "$instance_cfg/.settings/org.eclipse.core.runtime.prefs" <<EOF
+eclipse.preferences.version=1
+EOF
 
   cat > "$instance_cfg/.settings/org.eclipse.cdt.core.prefs" <<EOF
 eclipse.preferences.version=1
@@ -504,15 +530,16 @@ toolchain.path.strict=true
 EOF
 
   cat > "$instance_cfg/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
+eclipse.preferences.version=1
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
 
-  echo "✅ Eclipse preferences seeded in:"
+  echo "✅ Eclipse user preferences also seeded in:"
   echo "   $instance_cfg/.settings"
 }
 
-seed_eclipse_prefs
+seed_eclipse_user_prefs
 
 # ---------------------------------------------------------
 # Set global iosonata_loc system property in eclipse.ini
@@ -523,34 +550,21 @@ echo ">>> Setting iosonata_loc system property in Eclipse installation..."
 ECLIPSE_INI="$ECLIPSE_DIR/eclipse.ini"
 IOSONATA_LOC_PROP="-Diosonata_loc=$ROOT"
 
-# Keep a backup for recovery/debug
-sudo cp -f "$ECLIPSE_INI" "$ECLIPSE_INI.bak" 2>/dev/null || true
+# Backup before modifying
+sudo cp -f "$ECLIPSE_INI" "$ECLIPSE_INI.bak"
 
-# Use python to avoid GNU/BSD sed differences.
 sudo python3 - "$ECLIPSE_INI" "$IOSONATA_LOC_PROP" <<'PY'
 import sys
-ini = sys.argv[1]
-prop = sys.argv[2].strip()
-
-with open(ini, "r", encoding="utf-8", errors="replace") as f:
-    lines = f.read().splitlines()
-
-# Remove any existing values (idempotent).
+ini = sys.argv[1]; prop = sys.argv[2].strip()
+with open(ini, "r") as f: lines = f.read().splitlines()
 lines = [ln for ln in lines if not ln.startswith("-Diosonata_loc=") and not ln.startswith("-Diosonata.home=")]
-
-out = []
-inserted = False
+out = []; inserted = False
 for ln in lines:
     out.append(ln)
-    if (ln.strip() == "-vmargs") and (not inserted):
-        out.append(prop)
-        inserted = True
-
-if not inserted:
-    out.append(prop)
-
-with open(ini, "w", encoding="utf-8") as f:
-    f.write("\n".join(out) + "\n")
+    if ln.strip() == "-vmargs" and not inserted:
+        out.append(prop); inserted = True
+if not inserted: out.append(prop)
+with open(ini, "w") as f: f.write("\n".join(out) + "\n")
 PY
 
 echo "✅ iosonata_loc set in eclipse.ini:"
@@ -559,23 +573,48 @@ grep "^-Diosonata_loc=" "$ECLIPSE_INI" || true
 # ---------------------------------------------------------
 # Clone repos
 # ---------------------------------------------------------
+
+# Helper function for updating shallow clones
+update_shallow_repo() {
+  local dir="$1"
+  local name=$(basename "$dir")
+  echo "   Updating $name..."
+  
+  pushd "$dir" > /dev/null
+  
+  local branch
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+  
+  # For shallow clones, fetch + reset is more reliable than pull
+  if git fetch --depth=1 origin "$branch" 2>/dev/null; then
+    git reset --hard "origin/$branch" 2>/dev/null || git pull --ff-only 2>/dev/null || true
+  else
+    # Fallback to regular pull
+    git pull --ff-only 2>/dev/null || git pull 2>/dev/null || true
+  fi
+  
+  popd > /dev/null
+}
+
 if [[ -d "$ROOT/IOsonata" ]]; then
   if [[ "$MODE" == "force" ]]; then
     rm -rf "$ROOT/IOsonata"
+    echo "   Cloning IOsonata..."
     git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
   else
-    (cd "$ROOT/IOsonata" && git pull --ff-only)
+    update_shallow_repo "$ROOT/IOsonata"
   fi
 else
+  echo "   Cloning IOsonata..."
   git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
 fi
 
 if [[ -d "$ROOT/IOsonata/Installer" ]]; then
-    echo ">>> Fixing execution permissions for IOsonata scripts..."
-    chmod +x "$ROOT/IOsonata/Installer/"*.sh 2>/dev/null || true
+  chmod +x "$ROOT/IOsonata/Installer/"*.sh 2>/dev/null || true
 fi
 
 cd "$EXT"
+
 repos=(
   "https://github.com/NordicSemiconductor/nrfx.git"
   "https://github.com/nrfconnect/sdk-nrf-bm.git"
@@ -595,11 +634,13 @@ for repo in "${repos[@]}"; do
   if [[ -d "$name" ]]; then
     if [[ "$MODE" == "force" ]]; then
       rm -rf "$name"
+      echo "   Cloning $name..."
       git clone --depth=1 "$repo" "$name"
     else
-      (cd "$name" && git pull --ff-only)
+      update_shallow_repo "$name"
     fi
   else
+    echo "   Cloning $name..."
     git clone --depth=1 "$repo" "$name"
   fi
 done
@@ -610,7 +651,7 @@ if [[ -d "FreeRTOS-Kernel" ]]; then
     rm -rf "FreeRTOS-Kernel"
     git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
   else
-    (cd FreeRTOS-Kernel && git pull --ff-only)
+    update_shallow_repo "FreeRTOS-Kernel"
   fi
 else
   git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
@@ -698,6 +739,7 @@ NRF5_SDK_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK
 NRF5_SDK_MESH_ROOT = \$(EXTERNAL_ROOT)/nRF5_SDK_Mesh
 BSEC_ROOT = \$(EXTERNAL_ROOT)/BSEC
 FUSION_ROOT = \$(EXTERNAL_ROOT)/Fusion
+VQF_ROOT = \$(EXTERNAL_ROOT)/vqf
 LVGL_ROOT = \$(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = \$(EXTERNAL_ROOT)/lwip
 FREERTOS_KERNEL_ROOT = \$(EXTERNAL_ROOT)/FreeRTOS-Kernel
@@ -740,7 +782,7 @@ echo "=============================================="
 
 ECLIPSE_VER="Not installed"
 if [[ -f "$ECLIPSE_DIR/.eclipseproduct" ]]; then
-  ECLIPSE_VER=$(grep -m1 "^-Declipse.buildId=" "$ECLIPSE_DIR/eclipse.ini" 2>/dev/null | cut -d'=' -f2 || echo "Unknown")
+  ECLIPSE_VER=$(grep '^version=' "$ECLIPSE_DIR/.eclipseproduct" 2>/dev/null | cut -d= -f2 || echo "Unknown")
 fi
 
 ARM_VER="Not found"
