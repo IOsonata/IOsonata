@@ -17,7 +17,7 @@ param (
 
 $ErrorActionPreference = 'Stop'
 $SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.94-win"
+$SCRIPT_VERSION = "v1.0.95-win"
 
 function Show-Help {
 @"
@@ -116,8 +116,18 @@ function Find-7Zip {
 
 function Java-Hash {
     param([string]$InputString)
-    # Python script must mirror the exact Java String.hashCode() logic used by macOS script
-    $script = 'import sys; s=sys.argv[1]; h=0; [h := (31*h + ord(c)) & 0xFFFFFFFF for c in s]; print(h - 2**32 if h >= 2**31 else h)'
+    # Python script mirrors the exact Java String.hashCode() logic used by macOS script
+    # Returns signed 32-bit integer (can be negative) - DO NOT adjust afterward
+    $script = @'
+import sys
+s = sys.argv[1]
+h = 0
+for c in s:
+    h = (31 * h + ord(c)) & 0xFFFFFFFF
+if h >= 2**31:
+    h -= 2**32
+print(h)
+'@
     return (& $PythonExecutablePath -c $script $InputString).Trim()
 }
 
@@ -127,7 +137,9 @@ if ($MODE -ne "uninstall") {
     if (-not $PythonExecutablePath) {
         Write-Host "[INFO] Python not found. Installing..." -ForegroundColor Yellow
         try {
-            $url = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
+            # Detect architecture for Python installer
+            $pyArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
+            $url = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-$pyArch.exe"
             $inst = Join-Path $env:TEMP "python-installer.exe"
             curl.exe -L -o $inst $url
             Start-Process -FilePath $inst -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
@@ -140,7 +152,9 @@ if ($MODE -ne "uninstall") {
     if (-not $SEVENZIP_EXE) {
         Write-Host "[INFO] 7-Zip not found. Installing..." -ForegroundColor Yellow
         try {
-            $7zUrl = "https://www.7-zip.org/a/7z2407-x64.exe"
+            # Detect architecture for 7-Zip installer
+            $7zArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+            $7zUrl = "https://www.7-zip.org/a/7z2407-$7zArch.exe"
             $7zInst = Join-Path $env:TEMP "7z-installer.exe"
             curl.exe -L -o $7zInst $7zUrl
             Start-Process -FilePath $7zInst -ArgumentList "/S" -Wait
@@ -182,9 +196,11 @@ if ($MODE -eq "uninstall") {
     exit 0
 }
 
-# --- Arch ---
+# --- Arch Detection ---
 $ARCH = $env:PROCESSOR_ARCHITECTURE
-$PLATFORM = if ($ARCH -eq "ARM64") { "win32-arm64" } else { "win32-x64" }
+$XPACK_PLATFORM = if ($ARCH -eq "ARM64") { "win32-arm64" } else { "win32-x64" }
+$ECLIPSE_ARCH = if ($ARCH -eq "ARM64") { "aarch64" } else { "x86_64" }
+Write-Host ">>> Detected architecture: $ARCH -> Eclipse arch=$ECLIPSE_ARCH"
 
 # --- Install xPack ---
 function Add-ToSystemPath {
@@ -199,32 +215,53 @@ function Add-ToSystemPath {
 function Install-xPack {
     param([string]$Repo, [string]$Tool, [string]$Name)
     Write-Host ">>> Checking $Name..."
-    try { $json = Invoke-RestMethod -Uri "https://api.github.com/repos/xpack-dev-tools/$Repo/releases/latest" } catch { exit 1 }
-    $tag = $json.tag_name; $ver = $tag.TrimStart('v'); $base = ($ver -split '-')[0]
+    try { $json = Invoke-RestMethod -Uri "https://api.github.com/repos/xpack-dev-tools/$Repo/releases/latest" } 
+    catch { 
+        Write-Host "[ERROR] Failed to query GitHub API for $Name" -ForegroundColor Red
+        exit 1 
+    }
+    $tag = $json.tag_name
+    $ver = $tag.TrimStart('v')
+    $base = ($ver -split '-')[0]
     
     $toolExe = Get-Command "$Tool.exe" -ErrorAction SilentlyContinue
     if ($toolExe) {
-        $currVer = (& $toolExe.Source --version 2>&1 | Select-Object -First 1)
-        if ($currVer -match $base -and $MODE -ne "force") {
-            Write-Host "   [OK] $Name up-to-date." -ForegroundColor Green
-            return (Split-Path (Split-Path $toolExe.Source -Parent) -Parent)
+        $currVerOutput = (& $toolExe.Source --version 2>&1 | Select-Object -First 1)
+        # Extract version number for exact comparison
+        if ($currVerOutput -match '(\d+\.\d+\.\d+)') {
+            $currVer = $Matches[1]
+            if ($currVer -eq $base -and $MODE -ne "force") {
+                Write-Host "   [OK] $Name up-to-date ($currVer)." -ForegroundColor Green
+                return (Split-Path (Split-Path $toolExe.Source -Parent) -Parent)
+            }
         }
     }
 
-    $url = ($json.assets | Where-Object { $_.name -like "*$PLATFORM.zip" }).browser_download_url
-    if (-not $url) { Write-Host "[ERROR] No URL for $Name" -ForegroundColor Red; return $null }
+    # Find asset URL matching our platform
+    $url = ($json.assets | Where-Object { $_.name -like "*$XPACK_PLATFORM.zip" }).browser_download_url
+    if (-not $url) { 
+        Write-Host "[ERROR] No download URL found for $Name ($XPACK_PLATFORM)" -ForegroundColor Red
+        return $null 
+    }
 
     Write-Host ">>> Installing $Name $ver..."
-    $zip = Join-Path $env:TEMP "$Name.zip"; curl.exe -L -o $zip $url
-    $tmp = Join-Path $env:TEMP "xp-extract"; if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+    $zip = Join-Path $env:TEMP "$Name.zip"
+    curl.exe -L -o $zip $url
+    $tmp = Join-Path $env:TEMP "xp-extract"
+    if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     & $SEVENZIP_EXE x $zip -o"$tmp" -y | Out-Null
     
     $root = Get-ChildItem $tmp -Directory | Select-Object -First 1
+    if (-not $root) {
+        Write-Host "[ERROR] Failed to extract $Name" -ForegroundColor Red
+        return $null
+    }
     $target = Join-Path $TOOLS $root.Name
     if (Test-Path $target) { Remove-Item $target -Recurse -Force }
     Move-Item $root.FullName $target
     Remove-Item $zip, $tmp -Recurse -Force
     Add-ToSystemPath "$target\bin"
+    Write-Host "   [OK] Installed at $target" -ForegroundColor Green
     return $target
 }
 
@@ -233,37 +270,78 @@ $ARM_DIR = Install-xPack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC"
 $RISCV_DIR = Install-xPack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC"
 $OPENOCD_DIR = Install-xPack "openocd-xpack" "openocd" "OpenOCD"
 
+# Validate critical tools were installed
+if (-not $ARM_DIR) { Write-Host "[ERROR] ARM GCC installation failed" -ForegroundColor Red; exit 1 }
+if (-not $RISCV_DIR) { Write-Host "[ERROR] RISC-V GCC installation failed" -ForegroundColor Red; exit 1 }
+if (-not $OPENOCD_DIR) { Write-Host "[ERROR] OpenOCD installation failed" -ForegroundColor Red; exit 1 }
+
 # --- Install Eclipse ---
 Write-Host; Write-Host ">>> Checking Eclipse..." -ForegroundColor Cyan
 $MIRROR = "https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
-$years = 0..3 | ForEach-Object { (Get-Date).Year - $_ }
-$months = "12", "09", "06", "03"
-$ECLIPSE_URL = ""; $LATEST = ""
 
+# Enumerate available releases from mirror
 Write-Host "   Probing for latest Eclipse release..." -NoNewline
-foreach ($y in $years) {
-    if ($ECLIPSE_URL) { break }
-    foreach ($m in $months) {
-        $REL = "$y-$m"
-        $U1 = "$MIRROR/$REL/R/eclipse-embedcdt-$REL-R-win32-x86_64.zip"
-        $U2 = "$MIRROR/$REL/R/eclipse-embedcpp-$REL-R-win32-x86_64.zip"
-        try { if ((Invoke-WebRequest $U1 -Method Head -EA SilentlyContinue).StatusCode -eq 200) { $ECLIPSE_URL=$U1; $LATEST=$REL; break } } catch {}
-        try { if ((Invoke-WebRequest $U2 -Method Head -EA SilentlyContinue).StatusCode -eq 200) { $ECLIPSE_URL=$U2; $LATEST=$REL; break } } catch {}
+$ECLIPSE_URL = ""
+$LATEST = ""
+
+try {
+    $releasePage = Invoke-WebRequest -Uri "$MIRROR/" -UseBasicParsing -TimeoutSec 30
+    $releases = [regex]::Matches($releasePage.Content, 'href="(20\d{2}-\d{2})/"') | 
+                ForEach-Object { $_.Groups[1].Value } | 
+                Sort-Object -Descending -Unique
+    
+    foreach ($rel in $releases) {
+        if ($ECLIPSE_URL) { break }
+        # Use architecture-appropriate URL
+        $U1 = "$MIRROR/$rel/R/eclipse-embedcdt-$rel-R-win32-$ECLIPSE_ARCH.zip"
+        $U2 = "$MIRROR/$rel/R/eclipse-embedcpp-$rel-R-win32-$ECLIPSE_ARCH.zip"
+        
+        try {
+            $resp = Invoke-WebRequest $U1 -Method Head -UseBasicParsing -TimeoutSec 10
+            if ($resp.StatusCode -eq 200) { $ECLIPSE_URL = $U1; $LATEST = $rel; break }
+        } catch {}
+        try {
+            $resp = Invoke-WebRequest $U2 -Method Head -UseBasicParsing -TimeoutSec 10
+            if ($resp.StatusCode -eq 200) { $ECLIPSE_URL = $U2; $LATEST = $rel; break }
+        } catch {}
+    }
+} catch {
+    Write-Host " Failed to enumerate releases." -ForegroundColor Yellow
+}
+
+# Fallback to year/month probing if enumeration failed
+if (-not $ECLIPSE_URL) {
+    $years = 0..3 | ForEach-Object { (Get-Date).Year - $_ }
+    $months = "12", "09", "06", "03"
+    foreach ($y in $years) {
+        if ($ECLIPSE_URL) { break }
+        foreach ($m in $months) {
+            $REL = "$y-$m"
+            $U1 = "$MIRROR/$REL/R/eclipse-embedcdt-$REL-R-win32-$ECLIPSE_ARCH.zip"
+            $U2 = "$MIRROR/$REL/R/eclipse-embedcpp-$REL-R-win32-$ECLIPSE_ARCH.zip"
+            try { if ((Invoke-WebRequest $U1 -Method Head -UseBasicParsing -EA SilentlyContinue).StatusCode -eq 200) { $ECLIPSE_URL=$U1; $LATEST=$REL; break } } catch {}
+            try { if ((Invoke-WebRequest $U2 -Method Head -UseBasicParsing -EA SilentlyContinue).StatusCode -eq 200) { $ECLIPSE_URL=$U2; $LATEST=$REL; break } } catch {}
+        }
     }
 }
 Write-Host " Done."
 
-if (-not $ECLIPSE_URL) { Write-Host "`n[ERROR] No Eclipse download found." -ForegroundColor Red; exit 1 }
+if (-not $ECLIPSE_URL) { Write-Host "`n[ERROR] No Eclipse download found for architecture $ECLIPSE_ARCH." -ForegroundColor Red; exit 1 }
 
 if ($MODE -eq "force" -or -not (Test-Path $ECLIPSE_DIR)) {
     Write-Host ">>> Installing Eclipse $LATEST..."
-    $zip = "$env:TEMP\eclipse.zip"; curl.exe -L -o $zip $ECLIPSE_URL
+    $zip = "$env:TEMP\eclipse.zip"
+    curl.exe -L -o $zip $ECLIPSE_URL
     if (Test-Path $ECLIPSE_DIR) { Remove-Item $ECLIPSE_DIR -Recurse -Force }
-    $tmp = "$env:TEMP\ec-extract"; & $SEVENZIP_EXE x $zip -o"$tmp" -y | Out-Null
+    $tmp = "$env:TEMP\ec-extract"
+    if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+    & $SEVENZIP_EXE x $zip -o"$tmp" -y | Out-Null
     Move-Item "$tmp\eclipse" $ECLIPSE_DIR
     Remove-Item $zip, $tmp -Recurse -Force
     Write-Host "   [OK] Installed at $ECLIPSE_DIR" -ForegroundColor Green
-} else { Write-Host "   [OK] Eclipse already installed." -ForegroundColor Green }
+} else { 
+    Write-Host "   [OK] Eclipse already installed (use -ForceUpdate to reinstall)." -ForegroundColor Green 
+}
 
 # --- Eclipse Shortcuts ---
 $WshShell = New-Object -ComObject WScript.Shell
@@ -272,20 +350,38 @@ $sc.TargetPath = "$ECLIPSE_DIR\eclipse.exe"; $sc.Save()
 $sc = $WshShell.CreateShortcut("$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Eclipse Embedded.lnk")
 $sc.TargetPath = "$ECLIPSE_DIR\eclipse.exe"; $sc.Save()
 
-# --- Seed Prefs (Parity with macOS) ---
+# --- Seed Prefs (Installation-level for Windows, matching Eclipse's expected location) ---
+# Note: On Windows, we seed to the Eclipse installation's configuration folder.
+# This differs from macOS/Linux which use ~/.eclipse after first run.
+# This approach ensures prefs are available immediately without requiring Eclipse to run first.
 Write-Host; Write-Host ">>> Seeding Eclipse preferences..." -ForegroundColor Cyan
-$SET = "$ECLIPSE_DIR\configuration\.settings"; New-Item $SET -ItemType Directory -Force | Out-Null
+$SET = "$ECLIPSE_DIR\configuration\.settings"
+New-Item $SET -ItemType Directory -Force | Out-Null
 
 # IMPORTANT: Windows paths must be forward-slashed for Eclipse prefs
-$AD = $ARM_DIR -replace '\\','/'; $RD = $RISCV_DIR -replace '\\','/'; $OD = $OPENOCD_DIR -replace '\\','/'
-$RT = $ROOT -replace '\\','/'; $EX = $EXT -replace '\\','/'
-$BT = (Join-Path $BUILDTOOLS_DIR "bin") -replace '\\','/'
+$AD = $ARM_DIR -replace '\\','/'
+$RD = $RISCV_DIR -replace '\\','/'
+$OD = $OPENOCD_DIR -replace '\\','/'
+$RT = $ROOT -replace '\\','/'
 
-# Hashing must be done on the PATH string, matching macOS logic
-$AH = [long](Java-Hash "$AD/bin"); if ($AH -lt 0) { $AH += 4294967296 }
-$RH = [long](Java-Hash "$RD/bin"); if ($RH -lt 0) { $RH += 4294967296 }
+# Build tools path (may be null if not installed)
+$BT = ""
+if ($BUILDTOOLS_DIR) {
+    $BT = (Join-Path $BUILDTOOLS_DIR "bin") -replace '\\','/'
+}
 
-# 1. org.eclipse.cdt.core.prefs
+# Hash calculation - use the path string exactly as macOS does
+# The Java-Hash function already returns the correct signed integer
+$AH = Java-Hash "$AD/bin"
+$RH = Java-Hash "$RD/bin"
+
+# 1. org.eclipse.core.runtime.prefs
+$runtime_prefs = @"
+eclipse.preferences.version=1
+"@
+Set-Content "$SET\org.eclipse.core.runtime.prefs" $runtime_prefs -Encoding UTF8
+
+# 2. org.eclipse.cdt.core.prefs
 $cdt_prefs = @"
 eclipse.preferences.version=1
 environment/buildEnvironmentInclude=true
@@ -293,7 +389,7 @@ org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
 "@
 Set-Content "$SET\org.eclipse.cdt.core.prefs" $cdt_prefs -Encoding UTF8
 
-# 2. org.eclipse.embedcdt.core.prefs
+# 3. org.eclipse.embedcdt.core.prefs
 $embed_prefs = @"
 eclipse.preferences.version=1
 buildtools.path.$AH=$AD/bin
@@ -302,7 +398,7 @@ buildtools.path.strict=true
 "@
 Set-Content "$SET\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
 
-# 3. org.eclipse.embedcdt.managedbuild.core.prefs
+# 4. org.eclipse.embedcdt.managedbuild.core.prefs
 $build_prefs = @"
 eclipse.preferences.version=1
 toolchain.path.$AH=$AD/bin
@@ -311,117 +407,121 @@ toolchain.path.strict=true
 "@
 Set-Content "$SET\org.eclipse.embedcdt.managedbuild.core.prefs" $build_prefs -Encoding UTF8
 
-# 4. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
+# 5. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
 $ocd_prefs = @"
+eclipse.preferences.version=1
 install.folder=$OD/bin
 install.folder.strict=true
 "@
 Set-Content "$SET\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
 
-# 5. org.eclipse.embedcdt.managedbuild.cross.core.prefs (Windows specific: needs Build Tools)
-# We add this because Windows doesn't have native 'make'. MacOS/Linux don't strictly need it in prefs if in path.
-Set-Content "$SET\org.eclipse.embedcdt.managedbuild.cross.core.prefs" "buildTools.path=$BT`neclipse.preferences.version=1"
+# 6. org.eclipse.embedcdt.managedbuild.cross.core.prefs (Windows specific: needs Build Tools for make)
+if ($BT) {
+    $cross_prefs = @"
+eclipse.preferences.version=1
+buildTools.path=$BT
+"@
+    Set-Content "$SET\org.eclipse.embedcdt.managedbuild.cross.core.prefs" $cross_prefs -Encoding UTF8
+}
+
+Write-Host "   [OK] Preferences seeded in $SET" -ForegroundColor Green
 
 # --- eclipse.ini ---
-$INI = "$ECLIPSE_DIR\eclipse.ini"; $TXT = Get-Content $INI
+Write-Host; Write-Host ">>> Configuring eclipse.ini..." -ForegroundColor Cyan
+$INI = "$ECLIPSE_DIR\eclipse.ini"
+
+# Backup before modifying
+Copy-Item $INI "$INI.bak" -Force
+
+$TXT = Get-Content $INI
 $TXT = $TXT | Where-Object { $_ -notmatch '^-Diosonata' -and $_ -notmatch '^-Diocomposer' }
-$IDX = $TXT.IndexOf('-vmargs')
+$IDX = [array]::IndexOf($TXT, '-vmargs')
 if ($IDX -ge 0) {
-    $NEW = $TXT[0..$IDX] + "-Diosonata_loc=$RT" + $TXT[($IDX+1)..($TXT.Count-1)]
+    $before = $TXT[0..$IDX]
+    $after = if ($IDX -lt $TXT.Count - 1) { $TXT[($IDX+1)..($TXT.Count-1)] } else { @() }
+    $NEW = $before + "-Diosonata_loc=$RT" + $after
 } else {
     $NEW = $TXT + "-vmargs" + "-Diosonata_loc=$RT"
 }
 Set-Content $INI $NEW
-Write-Host "   [OK] eclipse.ini configured (iosonata_loc)." -ForegroundColor Green
+Write-Host "   [OK] eclipse.ini configured (iosonata_loc=$RT)." -ForegroundColor Green
 
 # --- Plugin ---
 function Install-Plugin {
+    Write-Host; Write-Host ">>> Installing IOsonata Eclipse Plugin..." -ForegroundColor Cyan
     $PDIR = "$ROOT\IOsonata\Installer\eclipse_plugin"
-    if (-not (Test-Path $PDIR)) { return }
-    $JAR = Get-ChildItem $PDIR "org.iosonata.embedcdt.templates.firmware_*.jar" | Sort Name -Desc | Select -First 1
+    if (-not (Test-Path $PDIR)) { 
+        Write-Host "   [WARN] Plugin directory not found at $PDIR" -ForegroundColor Yellow
+        return 
+    }
+    $JAR = Get-ChildItem $PDIR "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
     if ($JAR) {
         $DEST = "$ECLIPSE_DIR\dropins"
         New-Item $DEST -ItemType Directory -Force | Out-Null
-        Remove-Item "$DEST\org.iosonata.embedcdt.templates.firmware_*.jar" -Force -ErrorAction SilentlyContinue
+        # Remove old versions
+        Get-ChildItem "$DEST\org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue | Remove-Item -Force
         Copy-Item $JAR.FullName $DEST -Force
         Write-Host "   [OK] Plugin installed: $($JAR.Name)" -ForegroundColor Green
+    } else {
+        Write-Host "   [WARN] No plugin jar found in $PDIR" -ForegroundColor Yellow
     }
 }
 
 # --- Repos ---
 function Sync-Repo { 
-    param([string]$U, [string]$D, [bool]$R=$false)
+    param([string]$U, [string]$D)
     if (Test-Path $D) {
-        if ($MODE -eq 'force') { Remove-Item $D -Recurse -Force; git clone --depth=1 $U $D } 
-        else { Push-Location $D; git pull; Pop-Location }
-    } else { git clone --depth=1 $U $D }
-    if ($R -and (Test-Path $D)) { Push-Location $D; git submodule update --init --recursive; Pop-Location }
+        if ($MODE -eq 'force') { 
+            Remove-Item $D -Recurse -Force
+            git clone --depth=1 $U $D 
+        } else { 
+            Push-Location $D
+            # Use --ff-only to match macOS/Linux behavior
+            git pull --ff-only 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "   [WARN] git pull --ff-only failed for $D, trying regular pull" -ForegroundColor Yellow
+                git pull
+            }
+            Pop-Location 
+        }
+    } else { 
+        git clone --depth=1 $U $D 
+    }
 }
 
 Write-Host; Write-Host ">>> Syncing Repos..." -ForegroundColor Cyan
 Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"
-$REPOS = @{ 
-    "https://github.com/NordicSemiconductor/nrfx.git"="$EXT\nrfx"; 
-    "https://github.com/nrfconnect/sdk-nrf-bm.git"="$EXT\sdk-nrf-bm";
-    "https://github.com/nrfconnect/sdk-nrfxlib.git"="$EXT\sdk-nrfxlib"; 
-    "https://github.com/IOsonata/nRF5_SDK.git"="$EXT\nRF5_SDK"; 
-    "https://github.com/IOsonata/nRF5_SDK_Mesh.git"="$EXT\nRF5_SDK_Mesh"; 
-    "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"="$EXT\BSEC"; 
-    "https://github.com/xioTechnologies/Fusion.git"="$EXT\Fusion";
-    "https://github.com/dlaidig/vqf.git"="$EXT\vqf";
-    "https://github.com/lvgl/lvgl.git"="$EXT\lvgl";
-    "https://github.com/lwip-tcpip/lwip.git"="$EXT\lwip";
-    "https://github.com/hathach/tinyusb.git"="$EXT\tinyusb"
-}
-foreach ($k in $REPOS.Keys) { Sync-Repo $k $REPOS[$k] }
+
+$REPOS = @(
+    @{ url = "https://github.com/NordicSemiconductor/nrfx.git"; dest = "$EXT\nrfx" }
+    @{ url = "https://github.com/nrfconnect/sdk-nrf-bm.git"; dest = "$EXT\sdk-nrf-bm" }
+    @{ url = "https://github.com/nrfconnect/sdk-nrfxlib.git"; dest = "$EXT\sdk-nrfxlib" }
+    @{ url = "https://github.com/IOsonata/nRF5_SDK.git"; dest = "$EXT\nRF5_SDK" }
+    @{ url = "https://github.com/IOsonata/nRF5_SDK_Mesh.git"; dest = "$EXT\nRF5_SDK_Mesh" }
+    @{ url = "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"; dest = "$EXT\BSEC" }
+    @{ url = "https://github.com/xioTechnologies/Fusion.git"; dest = "$EXT\Fusion" }
+    @{ url = "https://github.com/dlaidig/vqf.git"; dest = "$EXT\vqf" }
+    @{ url = "https://github.com/lvgl/lvgl.git"; dest = "$EXT\lvgl" }
+    @{ url = "https://github.com/lwip-tcpip/lwip.git"; dest = "$EXT\lwip" }
+    @{ url = "https://github.com/hathach/tinyusb.git"; dest = "$EXT\tinyusb" }
+)
+foreach ($repo in $REPOS) { Sync-Repo $repo.url $repo.dest }
 Sync-Repo "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" "$EXT\FreeRTOS-Kernel"
 
 Install-Plugin
 
-# --- Makefile ---
+# --- Makefile (aligned with macOS/Linux) ---
+Write-Host; Write-Host ">>> Generating makefile_path.mk..." -ForegroundColor Cyan
 $MK = "$ROOT\IOsonata\makefile_path.mk"
 $MK_CONTENT = @"
 # makefile_path.mk
-# Generated by install_iocdevtools_win.ps1
-ifndef IOCOMPOSER_HOME
-`$(error IOCOMPOSER_HOME is not set)
-endif
-IOSONATA_ROOT = `$(IOCOMPOSER_HOME)/IOsonata
-IOSONATA_INCLUDE = `$(IOSONATA_ROOT)/include
-IOSONATA_SRC = `$(IOSONATA_ROOT)/src
-ARM_ROOT = `$(IOSONATA_ROOT)/ARM
-ARM_CMSIS = `$(ARM_ROOT)/CMSIS
-ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Include
-ARM_INCLUDE = `$(ARM_ROOT)/include
-ARM_SRC = `$(ARM_ROOT)/src
-ARM_LDSCRIPT = `$(ARM_ROOT)/ldscript
-RISCV_ROOT = `$(IOSONATA_ROOT)/RISCV
-RISCV_INCLUDE = `$(RISCV_ROOT)/include
-RISCV_SRC = `$(RISCV_ROOT)/src
-RISCV_LDSCRIPT = `$(RISCV_ROOT)/ldscript
-EXTERNAL_ROOT = `$(IOCOMPOSER_HOME)/external
-NRFX_ROOT = `$(EXTERNAL_ROOT)/nrfx
-SDK_NRF_BM_ROOT = `$(EXTERNAL_ROOT)/sdk-nrf-bm
-SDK_NRFXLIB_ROOT = `$(EXTERNAL_ROOT)/sdk-nrfxlib
-NRF5_SDK_ROOT = `$(EXTERNAL_ROOT)/nRF5_SDK
-NRF5_SDK_MESH_ROOT = `$(EXTERNAL_ROOT)/nRF5_SDK_Mesh
-BSEC_ROOT = `$(EXTERNAL_ROOT)/BSEC
-FUSION_ROOT = `$(EXTERNAL_ROOT)/Fusion
-LVGL_ROOT = `$(EXTERNAL_ROOT)/lvgl
-LWIP_ROOT = `$(EXTERNAL_ROOT)/lwip
-FREERTOS_KERNEL_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS-Kernel
-TINYUSB_ROOT = `$(EXTERNAL_ROOT)/tinyusb
-FATFS_ROOT = `$(IOSONATA_ROOT)/fatfs
-LITTLEFS_ROOT = `$(IOSONATA_ROOT)/littlefs
-MICRO_ECC_ROOT = `$(IOSONATA_ROOT)/micro-ecc
-IOSONATA_INCLUDES = -I`$(IOSONATA_INCLUDE) -I`$(IOSONATA_INCLUDE)/bluetooth -I`$(IOSONATA_INCLUDE)/audio -I`$(IOSONATA_INCLUDE)/converters -I`$(IOSONATA_INCLUDE)/coredev -I`$(IOSONATA_INCLUDE)/display -I`$(IOSONATA_INCLUDE)/imu -I`$(IOSONATA_INCLUDE)/miscdev -I`$(IOSONATA_INCLUDE)/pwrmgnt -I`$(IOSONATA_INCLUDE)/sensors -I`$(IOSONATA_INCLUDE)/storage -I`$(IOSONATA_INCLUDE)/sys -I`$(IOSONATA_INCLUDE)/usb
-ARM_INCLUDES = -I`$(ARM_INCLUDE) -I`$(ARM_CMSIS_INCLUDE)
-RISCV_INCLUDES = -I`$(RISCV_INCLUDE)
-export NRFX_HOME := `$(NRFX_ROOT)
-export NRFXLIB_HOME := `$(SDK_NRFXLIB_ROOT)
-export NRF5_SDK_HOME := `$(NRF5_SDK_ROOT)
-export NRF5_SDK_MESH_HOME := `$(NRF5_SDK_MESH_ROOT)
-export BSEC_HOME := `$(BSEC_ROOT)
+# Auto-generated by install_iocdevtools_win.ps1 $SCRIPT_VERSION
+# This file contains all path macros required to compile IOsonata projects using Makefiles
+# Include this file in your project Makefile: include `$(IOSONATA_ROOT)/makefile_path.mk
+
+# ============================================
+# Toolchain Paths
+# ============================================
 ARM_GCC_ROOT = $AD
 ARM_GCC_BIN = $AD/bin
 ARM_GCC = `$(ARM_GCC_BIN)/arm-none-eabi-gcc
@@ -433,6 +533,7 @@ ARM_OBJCOPY = `$(ARM_GCC_BIN)/arm-none-eabi-objcopy
 ARM_OBJDUMP = `$(ARM_GCC_BIN)/arm-none-eabi-objdump
 ARM_SIZE = `$(ARM_GCC_BIN)/arm-none-eabi-size
 ARM_GDB = `$(ARM_GCC_BIN)/arm-none-eabi-gdb
+
 RISCV_GCC_ROOT = $RD
 RISCV_GCC_BIN = $RD/bin
 RISCV_GCC = `$(RISCV_GCC_BIN)/riscv-none-elf-gcc
@@ -444,10 +545,48 @@ RISCV_OBJCOPY = `$(RISCV_GCC_BIN)/riscv-none-elf-objcopy
 RISCV_OBJDUMP = `$(RISCV_GCC_BIN)/riscv-none-elf-objdump
 RISCV_SIZE = `$(RISCV_GCC_BIN)/riscv-none-elf-size
 RISCV_GDB = `$(RISCV_GCC_BIN)/riscv-none-elf-gdb
+
 OPENOCD_ROOT = $OD
 OPENOCD = $OD/bin/openocd
+
+# ============================================
+# IOsonata Paths
+# ============================================
+ifndef IOCOMPOSER_HOME
+`$(error IOCOMPOSER_HOME is not set. Please set it to your IOcomposer root directory)
+endif
+
+IOSONATA_ROOT = `$(IOCOMPOSER_HOME)/IOsonata
+IOSONATA_INCLUDE = `$(IOSONATA_ROOT)/include
+IOSONATA_SRC = `$(IOSONATA_ROOT)/src
+
+ARM_ROOT = `$(IOSONATA_ROOT)/ARM
+ARM_CMSIS = `$(ARM_ROOT)/CMSIS
+ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Include
+ARM_INCLUDE = `$(ARM_ROOT)/include
+ARM_SRC = `$(ARM_ROOT)/src
+ARM_LDSCRIPT = `$(ARM_ROOT)/ldscript
+
+RISCV_ROOT = `$(IOSONATA_ROOT)/RISCV
+RISCV_INCLUDE = `$(RISCV_ROOT)/include
+RISCV_SRC = `$(RISCV_ROOT)/src
+RISCV_LDSCRIPT = `$(RISCV_ROOT)/ldscript
+
+EXTERNAL_ROOT = `$(IOCOMPOSER_HOME)/external
+NRFX_ROOT = `$(EXTERNAL_ROOT)/nrfx
+SDK_NRF_BM_ROOT = `$(EXTERNAL_ROOT)/sdk-nrf-bm
+SDK_NRFXLIB_ROOT = `$(EXTERNAL_ROOT)/sdk-nrfxlib
+NRF5_SDK_ROOT = `$(EXTERNAL_ROOT)/nRF5_SDK
+NRF5_SDK_MESH_ROOT = `$(EXTERNAL_ROOT)/nRF5_SDK_Mesh
+BSEC_ROOT = `$(EXTERNAL_ROOT)/BSEC
+FUSION_ROOT = `$(EXTERNAL_ROOT)/Fusion
+VQF_ROOT = `$(EXTERNAL_ROOT)/vqf
+LVGL_ROOT = `$(EXTERNAL_ROOT)/lvgl
+LWIP_ROOT = `$(EXTERNAL_ROOT)/lwip
+FREERTOS_KERNEL_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS-Kernel
+TINYUSB_ROOT = `$(EXTERNAL_ROOT)/tinyusb
 "@
-Set-Content $MK $MK_CONTENT
+Set-Content $MK $MK_CONTENT -Encoding UTF8
 Write-Host "   [OK] makefile_path.mk generated." -ForegroundColor Green
 
 # --- Build ---
@@ -455,8 +594,53 @@ $BS = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
 if (Test-Path $BS) {
     Write-Host; Write-Host ">>> Building IOsonata Libs..." -ForegroundColor Cyan
     & $BS -SdkHome $ROOT
-} else { Write-Host "   [INFO] Build script not found (will be available after full sync)." }
+} else { 
+    Write-Host; Write-Host "   [INFO] Build script not found (will be available after full sync)." -ForegroundColor Yellow 
+}
 
-Write-Host; Write-Host "==============================================" -ForegroundColor Green
-Write-Host " Installation Complete" -ForegroundColor Green
+# --- Summary ---
+Write-Host
 Write-Host "==============================================" -ForegroundColor Green
+Write-Host " IOcomposer MCU Dev Tools Installation Summary" -ForegroundColor Green
+Write-Host "==============================================" -ForegroundColor Green
+
+$ECLIPSE_VER = "Not installed"
+$eclipseProduct = "$ECLIPSE_DIR\.eclipseproduct"
+if (Test-Path $eclipseProduct) {
+    $prodContent = Get-Content $eclipseProduct -Raw
+    if ($prodContent -match 'version=(.+)') { $ECLIPSE_VER = $Matches[1].Trim() }
+}
+
+$ARM_VER = "Not found"
+if ($ARM_DIR -and (Test-Path "$ARM_DIR\bin\arm-none-eabi-gcc.exe")) {
+    $verOut = & "$ARM_DIR\bin\arm-none-eabi-gcc.exe" --version 2>&1 | Select-Object -First 1
+    if ($verOut -match '(\d+\.\d+\.\d+)') { $ARM_VER = $Matches[1] }
+}
+
+$RISCV_VER = "Not found"
+if ($RISCV_DIR -and (Test-Path "$RISCV_DIR\bin\riscv-none-elf-gcc.exe")) {
+    $verOut = & "$RISCV_DIR\bin\riscv-none-elf-gcc.exe" --version 2>&1 | Select-Object -First 1
+    if ($verOut -match '(\d+\.\d+\.\d+)') { $RISCV_VER = $Matches[1] }
+}
+
+$OPENOCD_VER = "Not found"
+if ($OPENOCD_DIR -and (Test-Path "$OPENOCD_DIR\bin\openocd.exe")) {
+    $verOut = & "$OPENOCD_DIR\bin\openocd.exe" --version 2>&1 | Select-Object -First 1
+    if ($verOut -match '(\d+\.\d+\.\d+)') { $OPENOCD_VER = $Matches[1] }
+}
+
+Write-Host ("{0,-25} {1}" -f "Eclipse Embedded CDT:", $ECLIPSE_VER)
+Write-Host ("{0,-25} {1}" -f "ARM GCC:", $ARM_VER)
+Write-Host ("{0,-25} {1}" -f "RISC-V GCC:", $RISCV_VER)
+Write-Host ("{0,-25} {1}" -f "OpenOCD:", $OPENOCD_VER)
+Write-Host ("{0,-25} {1}" -f "iosonata_loc:", $RT)
+
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host " Installation complete!" -ForegroundColor Green
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host
+Write-Host "Usage in .cproject files:"
+Write-Host "  `${system_property:iosonata_loc}/IOsonata/include"
+Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/include"
+Write-Host "  `${system_property:iosonata_loc}/IOsonata/ARM/CMSIS/Include"
+Write-Host
