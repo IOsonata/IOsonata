@@ -226,8 +226,8 @@ function Install-xPack {
     
     $toolExe = Get-Command "$Tool.exe" -ErrorAction SilentlyContinue
     if ($toolExe) {
-        $currVerOutput = (& $toolExe.Source --version 2>&1 | Select-Object -First 1)
-        # Extract version number for exact comparison
+        # Fix: Added try-catch to avoid $ErrorActionPreference = 'Stop' from being triggered
+        $currVerOutput = try { (& $toolExe.Source --version 2>&1) | Out-String -Stream | Select-Object -First 1 } catch { "" }        # Extract version number for exact comparison
         if ($currVerOutput -match '(\d+\.\d+\.\d+)') {
             $currVer = $Matches[1]
             if ($currVer -eq $base -and $MODE -ne "force") {
@@ -367,9 +367,13 @@ if ($BUILDTOOLS_DIR) {
 }
 
 # Hash calculation - use the path string exactly as macOS does
-# The Java-Hash function already returns the correct signed integer
+# The Java-Hash function already returns the correct signed integer (A)
 $AH = Java-Hash "$AD/bin"
 $RH = Java-Hash "$RD/bin"
+$BTH = ""
+if ($BT) {
+    $BTH = Java-Hash $BT
+}
 
 # Function to write all preference files to a given directory
 function Write-EclipsePrefs {
@@ -391,25 +395,33 @@ org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
 "@
     Set-Content "$SettingsDir\org.eclipse.cdt.core.prefs" $cdt_prefs -Encoding UTF8
 
-    # 3. org.eclipse.embedcdt.core.prefs
-    $embed_prefs = @"
+    # 3. org.eclipse.embedcdt.core.prefs - Build Tools path (make, rm) - (A)
+    if ($BT) {
+        $embed_prefs = @"
 eclipse.preferences.version=1
-buildtools.path.$AH=$AD/bin
-buildtools.path.$RH=$RD/bin
+buildtools.path=$BT
 buildtools.path.strict=true
 "@
-    Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
+        Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
+    }
 
-    # 4. org.eclipse.embedcdt.managedbuild.core.prefs
-    $build_prefs = @"
+    # 4. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs - ARM Toolchain (B)
+    $arm_prefs = @"
 eclipse.preferences.version=1
 toolchain.path.$AH=$AD/bin
+toolchain.path.strict=true
+"@
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" $arm_prefs -Encoding UTF8
+
+    # 5. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs - RISC-V Toolchain
+    # Per markdown: toolchain.path.<HASH>=<PATH>
+    $riscv_prefs = @"
+eclipse.preferences.version=1
 toolchain.path.$RH=$RD/bin
 toolchain.path.strict=true
 "@
-    Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.core.prefs" $build_prefs -Encoding UTF8
-
-    # 5. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" $riscv_prefs -Encoding UTF8
+    # 6. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs (C)
     $ocd_prefs = @"
 eclipse.preferences.version=1
 install.folder=$OD/bin
@@ -417,7 +429,7 @@ install.folder.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
 
-    # 6. org.eclipse.embedcdt.managedbuild.cross.core.prefs (Windows specific: needs Build Tools for make)
+    # 7. org.eclipse.embedcdt.managedbuild.cross.core.prefs (Windows specific: needs Build Tools for make)
     if ($BT) {
         $cross_prefs = @"
 eclipse.preferences.version=1
@@ -660,20 +672,42 @@ if (Test-Path $eclipseProduct) {
 
 $ARM_VER = "Not found"
 if ($ARM_DIR -and (Test-Path "$ARM_DIR\bin\arm-none-eabi-gcc.exe")) {
-    $verOut = & "$ARM_DIR\bin\arm-none-eabi-gcc.exe" --version 2>&1 | Select-Object -First 1
-    if ($verOut -match '(\d+\.\d+\.\d+)') { $ARM_VER = $Matches[1] }
+    try {
+        $verOut = (& "$ARM_DIR\bin\arm-none-eabi-gcc.exe" --version 2>&1) | Out-String -Stream | Select-Object -First 1
+        if ($verOut -match '(\d+\.\d+\.\d+)') { $ARM_VER = $Matches[1] }
+    } catch {
+        $ARM_VER = "Installed"
+    }
 }
 
 $RISCV_VER = "Not found"
 if ($RISCV_DIR -and (Test-Path "$RISCV_DIR\bin\riscv-none-elf-gcc.exe")) {
-    $verOut = & "$RISCV_DIR\bin\riscv-none-elf-gcc.exe" --version 2>&1 | Select-Object -First 1
-    if ($verOut -match '(\d+\.\d+\.\d+)') { $RISCV_VER = $Matches[1] }
+    try {
+        $verOut = (& "$RISCV_DIR\bin\riscv-none-elf-gcc.exe" --version 2>&1) | Out-String -Stream | Select-Object -First 1
+        if ($verOut -match '(\d+\.\d+\.\d+)') { $RISCV_VER = $Matches[1] }
+    } catch {
+        $RISCV_VER = "Installed"
+    }
 }
 
 $OPENOCD_VER = "Not found"
 if ($OPENOCD_DIR -and (Test-Path "$OPENOCD_DIR\bin\openocd.exe")) {
-    $verOut = & "$OPENOCD_DIR\bin\openocd.exe" --version 2>&1 | Select-Object -First 1
-    if ($verOut -match '(\d+\.\d+\.\d+)') { $OPENOCD_VER = $Matches[1] }
+    try {
+        $verOut = (& "$OPENOCD_DIR\bin\openocd.exe" --version 2>&1) | Out-String -Stream | Select-Object -First 1
+        if ($verOut -match '(\d+\.\d+\.\d+)') { $OPENOCD_VER = $Matches[1] }
+    } catch {
+        $OPENOCD_VER = "Installed"
+    }
+}
+
+$OPENOCD_VER = "Not found"
+if ($OPENOCD_DIR -and (Test-Path "$OPENOCD_DIR\bin\openocd.exe")) {
+    try {
+        $verOut = (& "$OPENOCD_DIR\bin\openocd.exe" --version 2>&1) | Out-String -Stream | Select-Object -First 1
+        if ($verOut -match '(\d+\.\d+\.\d+)') { $OPENOCD_VER = $Matches[1] }
+    } catch {
+        $OPENOCD_VER = "Installed"
+    }
 }
 
 Write-Host ("{0,-25} {1}" -f "Eclipse Embedded CDT:", $ECLIPSE_VER)
