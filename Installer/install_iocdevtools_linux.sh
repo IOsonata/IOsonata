@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.93"
+SCRIPT_VERSION="v1.0.94"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -417,42 +417,60 @@ seed_eclipse_install_prefs() {
   local install_cfg="$ECLIPSE_DIR/configuration/.settings"
   sudo mkdir -p "$install_cfg"
 
+  # Hash calculation - use toolchain NAME strings like macOS (not paths)
   local ARM_HASH RISCV_HASH
-  ARM_HASH=$(java_hash "$ARM_DIR/bin")
-  RISCV_HASH=$(java_hash "$RISCV_DIR/bin")
+  ARM_HASH=$(java_hash "xPack GNU Arm Embedded GCC")
+  if (( ARM_HASH < 0 )); then ARM_HASH=$((ARM_HASH + 4294967296)); fi
+  
+  RISCV_HASH=$(java_hash "xPack GNU RISC-V Embedded GCC")
+  if (( RISCV_HASH < 0 )); then RISCV_HASH=$((RISCV_HASH + 4294967296)); fi
+  RISCV_HASH=$((RISCV_HASH + 1))  # +1 matches macOS behavior
 
+  # 1. org.eclipse.core.runtime.prefs (with environment variables like macOS)
   sudo tee "$install_cfg/org.eclipse.core.runtime.prefs" > /dev/null <<EOF
 eclipse.preferences.version=1
+environment/project/IOCOMPOSER_HOME/value=$ROOT
+environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
+environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
+environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
+environment/project/NRFX_HOME/value=$EXT/nrfx
+environment/project/NRFXLIB_HOME/value=$EXT/sdk-nrfxlib
+environment/project/NRF5_SDK_HOME/value=$EXT/nRF5_SDK
+environment/project/NRF5_SDK_MESH_HOME/value=$EXT/nRF5_SDK_Mesh
+environment/project/BSEC_HOME/value=$EXT/BSEC
 EOF
 
+  # 2. org.eclipse.cdt.core.prefs
   sudo tee "$install_cfg/org.eclipse.cdt.core.prefs" > /dev/null <<EOF
 eclipse.preferences.version=1
 environment/buildEnvironmentInclude=true
 org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
 EOF
 
+  # 3. org.eclipse.embedcdt.core.prefs (xPack paths - matching macOS format)
   sudo tee "$install_cfg/org.eclipse.embedcdt.core.prefs" > /dev/null <<EOF
 eclipse.preferences.version=1
-buildtools.path.$ARM_HASH=$ARM_DIR/bin
-buildtools.path.$RISCV_HASH=$RISCV_DIR/bin
-buildtools.path.strict=true
+xpack.arm.toolchain.path=$ARM_DIR/bin
+xpack.riscv.toolchain.path=$RISCV_DIR/bin
+xpack.openocd.path=$OPENOCD_DIR/bin
+xpack.strict=true
 EOF
 
+  # 4. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs
   sudo tee "$install_cfg/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" > /dev/null <<EOF
-eclipse.preferences.version=1
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.1287942917=$ARM_DIR/bin
 toolchain.path.strict=true
 EOF
 
+  # 5. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs
   sudo tee "$install_cfg/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" > /dev/null <<EOF
-eclipse.preferences.version=1
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
 toolchain.path.strict=true
 EOF
 
+  # 6. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
   sudo tee "$install_cfg/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" > /dev/null <<EOF
-eclipse.preferences.version=1
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
@@ -482,6 +500,12 @@ seed_eclipse_user_prefs() {
     sudo chown -R "$USER":$(id -gn) "$base" || true
   fi
 
+  # Initialize Eclipse to create user configuration directory (like macOS)
+  echo "⏳ Initializing Eclipse to create instance configuration..."
+  if [[ -x "$ECLIPSE_DIR/eclipse" ]]; then
+    "$ECLIPSE_DIR/eclipse" -nosplash -initialize 2>/dev/null || true
+  fi
+
   local instance_cfg
   instance_cfg=$(ls -d "$base"/org.eclipse.platform_*/configuration 2>/dev/null | sort -r | head -n1 || true)
 
@@ -490,6 +514,8 @@ seed_eclipse_user_prefs() {
     echo "   Installation-level prefs are already set above."
     return 0
   fi
+
+  echo "📂 Found Eclipse settings: $instance_cfg"
 
   mkdir -p "$instance_cfg/.settings"
 
@@ -507,40 +533,37 @@ seed_eclipse_user_prefs() {
     echo "⚠️  No JDK found in PATH. Eclipse requires Java 17+. Please install a JDK."
   fi
 
+  # Hash calculation - use toolchain NAME strings like macOS (not paths)
   local ARM_HASH RISCV_HASH
-  ARM_HASH=$(java_hash "$ARM_DIR/bin")
-  RISCV_HASH=$(java_hash "$RISCV_DIR/bin")
+  ARM_HASH=$(java_hash "xPack GNU Arm Embedded GCC")
+  if (( ARM_HASH < 0 )); then ARM_HASH=$((ARM_HASH + 4294967296)); fi
+  
+  RISCV_HASH=$(java_hash "xPack GNU RISC-V Embedded GCC")
+  if (( RISCV_HASH < 0 )); then RISCV_HASH=$((RISCV_HASH + 4294967296)); fi
+  RISCV_HASH=$((RISCV_HASH + 1))  # +1 matches macOS behavior
 
-  cat > "$instance_cfg/.settings/org.eclipse.core.runtime.prefs" <<EOF
-eclipse.preferences.version=1
-EOF
+  # Only 3 files for user directory (same as macOS)
 
-  cat > "$instance_cfg/.settings/org.eclipse.cdt.core.prefs" <<EOF
-eclipse.preferences.version=1
-environment/buildEnvironmentInclude=true
-org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
-EOF
-
+  # 1. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs
   cat > "$instance_cfg/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
-eclipse.preferences.version=1
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.1287942917=$ARM_DIR/bin
 toolchain.path.strict=true
 EOF
 
+  # 2. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs
   cat > "$instance_cfg/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
-eclipse.preferences.version=1
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
 toolchain.path.strict=true
 EOF
 
+  # 3. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
   cat > "$instance_cfg/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
-eclipse.preferences.version=1
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
 
-  echo "✅ Eclipse user preferences also seeded in:"
+  echo "✅ Eclipse user preferences seeded in:"
   echo "   $instance_cfg/.settings"
 }
 
