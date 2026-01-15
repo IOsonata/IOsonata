@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.92"
+SCRIPT_VERSION="v1.0.93"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -573,21 +573,17 @@ sudo cp -f "$ECLIPSE_INI" "$ECLIPSE_INI.bak"
 #with open(ini, "w") as f: f.write("\n".join(out) + "\n")
 #PY
 
-# Remove old properties if they exist
-sudo sed -i.bak '/^-Diosonata\.home=/d' "$ECLIPSE_INI"
-sudo sed -i '' '/^-Diosonata_loc=/d' "$ECLIPSE_INI"
-sudo sed -i '' '/^-Diocomposer_home=/d' "$ECLIPSE_INI"
+# Remove old properties if they exist (GNU sed syntax for Linux)
+sudo sed -i '/^-Diosonata\.home=/d' "$ECLIPSE_INI"
+sudo sed -i '/^-Diosonata_loc=/d' "$ECLIPSE_INI"
+sudo sed -i '/^-Diocomposer_home=/d' "$ECLIPSE_INI"
 
 # Find the -vmargs line and insert after it
 # If no -vmargs, create it first
 if grep -q "^-vmargs" "$ECLIPSE_INI"; then
-    # Insert after -vmargs line
-    sudo sed -i '' '/^-vmargs$/a\
--Diosonata_loc='"$ROOT"'
-' "$ECLIPSE_INI"
-    sudo sed -i '' '/^-Diosonata_loc=/a\
--Diocomposer_home='"$ROOT"'
-' "$ECLIPSE_INI"
+    # Insert after -vmargs line (GNU sed syntax)
+    sudo sed -i "/^-vmargs$/a -Diosonata_loc=$ROOT" "$ECLIPSE_INI"
+    sudo sed -i "/^-Diosonata_loc=/a -Diocomposer_home=$ROOT" "$ECLIPSE_INI"
 else
     # No -vmargs section, add it at the end with our properties
     echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
