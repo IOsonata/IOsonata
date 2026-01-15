@@ -16,8 +16,8 @@ param (
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_NAME = "install_iocdevtools_windows.ps1"
-$SCRIPT_VERSION = "v1.0.97-win"
+$SCRIPT_NAME = "install_iocdevtools_win.ps1"
+$SCRIPT_VERSION = "v1.0.100-win"
 
 function Show-Help {
 @"
@@ -366,20 +366,30 @@ if ($BUILDTOOLS_DIR) {
     $BT = (Join-Path $BUILDTOOLS_DIR "bin") -replace '\\','/'
 }
 
-# Hash calculation - use the path string exactly as macOS does
-# The Java-Hash function already returns the correct signed integer
-$AH = Java-Hash "$AD/bin"
-$RH = Java-Hash "$RD/bin"
+# Hash calculation - use toolchain NAME strings like macOS does (not paths)
+# The Java-Hash function returns signed 32-bit integer
+# Convert negative to unsigned for Eclipse prefs
+$ARM_HASH_RAW = [long](Java-Hash "xPack GNU Arm Embedded GCC")
+if ($ARM_HASH_RAW -lt 0) { $ARM_HASH_RAW = $ARM_HASH_RAW + 4294967296 }
+$AH = $ARM_HASH_RAW
 
-# Function to write all preference files to a given directory
-function Write-EclipsePrefs {
+$RISCV_HASH_RAW = [long](Java-Hash "xPack GNU RISC-V Embedded GCC")
+if ($RISCV_HASH_RAW -lt 0) { $RISCV_HASH_RAW = $RISCV_HASH_RAW + 4294967296 }
+$RH = $RISCV_HASH_RAW + 1  # +1 matches macOS behavior
+
+# Function to write ALL preference files to installation directory
+function Write-EclipseInstallPrefs {
     param([string]$SettingsDir)
     
     New-Item $SettingsDir -ItemType Directory -Force | Out-Null
 
-    # 1. org.eclipse.core.runtime.prefs
+    # 1. org.eclipse.core.runtime.prefs (with environment variables like macOS)
     $runtime_prefs = @"
 eclipse.preferences.version=1
+environment/project/IOCOMPOSER_HOME/value=$RT
+environment/project/ARM_GCC_HOME/value=$AD/bin
+environment/project/RISCV_GCC_HOME/value=$RD/bin
+environment/project/OPENOCD_HOME/value=$OD/bin
 "@
     Set-Content "$SettingsDir\org.eclipse.core.runtime.prefs" $runtime_prefs -Encoding UTF8
 
@@ -391,27 +401,33 @@ org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
 "@
     Set-Content "$SettingsDir\org.eclipse.cdt.core.prefs" $cdt_prefs -Encoding UTF8
 
-    # 3. org.eclipse.embedcdt.core.prefs
+    # 3. org.eclipse.embedcdt.core.prefs (xPack paths)
     $embed_prefs = @"
 eclipse.preferences.version=1
-buildtools.path.$AH=$AD/bin
-buildtools.path.$RH=$RD/bin
-buildtools.path.strict=true
+xpack.arm.toolchain.path=$AD/bin
+xpack.riscv.toolchain.path=$RD/bin
+xpack.openocd.path=$OD/bin
+xpack.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
 
-    # 4. org.eclipse.embedcdt.managedbuild.core.prefs
-    $build_prefs = @"
-eclipse.preferences.version=1
+    # 4a. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs (ARM-specific)
+    $arm_prefs = @"
 toolchain.path.$AH=$AD/bin
+toolchain.path.1287942917=$AD/bin
+toolchain.path.strict=true
+"@
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" $arm_prefs -Encoding UTF8
+
+    # 4b. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs (RISC-V-specific)
+    $riscv_prefs = @"
 toolchain.path.$RH=$RD/bin
 toolchain.path.strict=true
 "@
-    Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.core.prefs" $build_prefs -Encoding UTF8
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" $riscv_prefs -Encoding UTF8
 
     # 5. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
     $ocd_prefs = @"
-eclipse.preferences.version=1
 install.folder=$OD/bin
 install.folder.strict=true
 "@
@@ -427,13 +443,60 @@ buildTools.path=$BT
     }
 }
 
+# Function to write ONLY toolchain prefs to user directory (matching macOS behavior)
+function Write-EclipseUserPrefs {
+    param([string]$SettingsDir)
+    
+    New-Item $SettingsDir -ItemType Directory -Force | Out-Null
+
+    # Only 3 files for user directory (same as macOS)
+    
+    # 1. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs
+    $arm_prefs = @"
+toolchain.path.$AH=$AD/bin
+toolchain.path.1287942917=$AD/bin
+toolchain.path.strict=true
+"@
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" $arm_prefs -Encoding UTF8
+
+    # 2. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs
+    $riscv_prefs = @"
+toolchain.path.$RH=$RD/bin
+toolchain.path.strict=true
+"@
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" $riscv_prefs -Encoding UTF8
+
+    # 3. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
+    $ocd_prefs = @"
+install.folder=$OD/bin
+install.folder.strict=true
+"@
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
+}
+
 # --- Location 1: Eclipse Installation Directory ---
 Write-Host; Write-Host ">>> Seeding Eclipse MCU preferences (installation directory)..." -ForegroundColor Cyan
 $INSTALL_SET = "$ECLIPSE_DIR\configuration\.settings"
-Write-EclipsePrefs $INSTALL_SET
+Write-EclipseInstallPrefs $INSTALL_SET
 Write-Host "   [OK] Preferences seeded in $INSTALL_SET" -ForegroundColor Green
 
 # --- Location 2: User Directory (~/.eclipse) ---
+# First, initialize Eclipse to create the user configuration directory (like macOS)
+Write-Host; Write-Host ">>> Initializing Eclipse to create instance configuration..." -ForegroundColor Cyan
+$eclipseExe = "$ECLIPSE_DIR\eclipse.exe"
+if (Test-Path $eclipseExe) {
+    try {
+        $initProcess = Start-Process -FilePath $eclipseExe -ArgumentList "-nosplash", "-initialize" -Wait -PassThru -WindowStyle Hidden
+        if ($initProcess.ExitCode -eq 0) {
+            Write-Host "   [OK] Eclipse initialized." -ForegroundColor Green
+        } else {
+            Write-Host "   [WARN] Eclipse initialization returned exit code $($initProcess.ExitCode)" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "   [WARN] Eclipse initialization failed: $_" -ForegroundColor Yellow
+    }
+}
+
 Write-Host; Write-Host ">>> Seeding Eclipse MCU preferences (user directory)..." -ForegroundColor Cyan
 $USER_ECLIPSE = "$env:USERPROFILE\.eclipse"
 
@@ -447,7 +510,7 @@ if (Test-Path $USER_ECLIPSE) {
 if ($userConfigs.Count -gt 0) {
     foreach ($cfg in $userConfigs) {
         $userSet = Join-Path $cfg.FullName "configuration\.settings"
-        Write-EclipsePrefs $userSet
+        Write-EclipseUserPrefs $userSet
         Write-Host "   [OK] Preferences seeded in $userSet" -ForegroundColor Green
     }
 } else {
@@ -463,17 +526,22 @@ $INI = "$ECLIPSE_DIR\eclipse.ini"
 Copy-Item $INI "$INI.bak" -Force
 
 $TXT = Get-Content $INI
+# Remove old properties if they exist (match macOS behavior)
 $TXT = $TXT | Where-Object { $_ -notmatch '^-Diosonata' -and $_ -notmatch '^-Diocomposer' }
 $IDX = [array]::IndexOf($TXT, '-vmargs')
 if ($IDX -ge 0) {
     $before = $TXT[0..$IDX]
     $after = if ($IDX -lt $TXT.Count - 1) { $TXT[($IDX+1)..($TXT.Count-1)] } else { @() }
-    $NEW = $before + "-Diosonata_loc=$RT" + $after
+    # Add both properties like macOS does
+    $NEW = $before + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT" + $after
 } else {
-    $NEW = $TXT + "-vmargs" + "-Diosonata_loc=$RT"
+    # No -vmargs section, add it at the end with our properties
+    $NEW = $TXT + "-vmargs" + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT"
 }
 Set-Content $INI $NEW
-Write-Host "   [OK] eclipse.ini configured (iosonata_loc=$RT)." -ForegroundColor Green
+Write-Host "   [OK] eclipse.ini configured:" -ForegroundColor Green
+Write-Host "        iosonata_loc=$RT"
+Write-Host "        iocomposer_home=$RT"
 
 # --- Plugin ---
 function Install-Plugin {
@@ -680,6 +748,8 @@ Write-Host ("{0,-25} {1}" -f "Eclipse Embedded CDT:", $ECLIPSE_VER)
 Write-Host ("{0,-25} {1}" -f "ARM GCC:", $ARM_VER)
 Write-Host ("{0,-25} {1}" -f "RISC-V GCC:", $RISCV_VER)
 Write-Host ("{0,-25} {1}" -f "OpenOCD:", $OPENOCD_VER)
+Write-Host
+Write-Host ("{0,-25} {1}" -f "iocomposer_home:", $RT)
 Write-Host ("{0,-25} {1}" -f "iosonata_loc:", $RT)
 
 Write-Host "==============================================" -ForegroundColor Green
