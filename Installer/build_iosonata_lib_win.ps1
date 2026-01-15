@@ -154,6 +154,7 @@ function Build-Project {
             -import $ProjectPath `
             -cleanBuild all `
             -printErrorMarkers `
+            -vmargs "-Dorg.eclipse.equinox.p2.reconciler.dropins.directory=" `
             2>&1
         
         # Output handling

@@ -366,23 +366,12 @@ if ($BUILDTOOLS_DIR) {
     $BT = (Join-Path $BUILDTOOLS_DIR "bin") -replace '\\','/'
 }
 
-<<<<<<< HEAD
-# Hash calculation - use the path string exactly as macOS does
-# The Java-Hash function already returns the correct signed integer (A)
-$AH = Java-Hash "$AD/bin"
-$RH = Java-Hash "$RD/bin"
-$BTH = ""
-if ($BT) {
-    $BTH = Java-Hash $BT
-}
-=======
 # Hash calculation - use toolchain NAME strings like macOS does (not paths)
 # The Java-Hash function returns signed 32-bit integer
 # Convert negative to unsigned for Eclipse prefs
 $ARM_HASH_RAW = [long](Java-Hash "xPack GNU Arm Embedded GCC")
 if ($ARM_HASH_RAW -lt 0) { $ARM_HASH_RAW = $ARM_HASH_RAW + 4294967296 }
 $AH = $ARM_HASH_RAW
->>>>>>> 9153053cd514c9217f4ce816b2f28ce1e387a87d
 
 $RISCV_HASH_RAW = [long](Java-Hash "xPack GNU RISC-V Embedded GCC")
 if ($RISCV_HASH_RAW -lt 0) { $RISCV_HASH_RAW = $RISCV_HASH_RAW + 4294967296 }
@@ -412,14 +401,6 @@ org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
 "@
     Set-Content "$SettingsDir\org.eclipse.cdt.core.prefs" $cdt_prefs -Encoding UTF8
 
-<<<<<<< HEAD
-    # 3. org.eclipse.embedcdt.core.prefs - Build Tools path (make, rm) - (A)
-    if ($BT) {
-        $embed_prefs = @"
-eclipse.preferences.version=1
-buildtools.path=$BT
-buildtools.path.strict=true
-=======
     # 3. org.eclipse.embedcdt.core.prefs (xPack paths)
     $embed_prefs = @"
 eclipse.preferences.version=1
@@ -427,45 +408,25 @@ xpack.arm.toolchain.path=$AD/bin
 xpack.riscv.toolchain.path=$RD/bin
 xpack.openocd.path=$OD/bin
 xpack.strict=true
->>>>>>> 9153053cd514c9217f4ce816b2f28ce1e387a87d
 "@
-        Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
-    }
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
 
-<<<<<<< HEAD
-    # 4. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs - ARM Toolchain (B)
-    $arm_prefs = @"
-eclipse.preferences.version=1
-toolchain.path.$AH=$AD/bin
-=======
     # 4a. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs (ARM-specific)
     $arm_prefs = @"
 toolchain.path.$AH=$AD/bin
 toolchain.path.1287942917=$AD/bin
->>>>>>> 9153053cd514c9217f4ce816b2f28ce1e387a87d
 toolchain.path.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" $arm_prefs -Encoding UTF8
 
-<<<<<<< HEAD
-    # 5. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs - RISC-V Toolchain
-    # Per markdown: toolchain.path.<HASH>=<PATH>
-    $riscv_prefs = @"
-eclipse.preferences.version=1
-=======
     # 4b. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs (RISC-V-specific)
     $riscv_prefs = @"
->>>>>>> 9153053cd514c9217f4ce816b2f28ce1e387a87d
 toolchain.path.$RH=$RD/bin
 toolchain.path.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" $riscv_prefs -Encoding UTF8
-<<<<<<< HEAD
-    # 6. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs (C)
-=======
 
     # 5. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
->>>>>>> 9153053cd514c9217f4ce816b2f28ce1e387a87d
     $ocd_prefs = @"
 install.folder=$OD/bin
 install.folder.strict=true
