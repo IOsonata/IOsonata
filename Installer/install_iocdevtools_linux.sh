@@ -666,6 +666,16 @@ if [[ -d "$ROOT/IOsonata/Installer" ]]; then
   chmod +x "$ROOT/IOsonata/Installer/"*.sh 2>/dev/null || true
 fi
 
+echo ">>> Fixing Eclipse project paths for Linux compatibility..."
+
+# Fix nrfx MDK path (nrfx repo restructured: mdk moved to bsp/stable/mdk)
+find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|nrfx/mdk|nrfx/bsp/stable/mdk|g' {} \; 2>/dev/null || true
+
+# Fix Fusion case sensitivity (Linux filesystems are case-sensitive)
+find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|external/fusion|external/Fusion|g' {} \; 2>/dev/null || true
+
+echo "✅ Eclipse project paths fixed for Linux"
+
 cd "$EXT"
 
 repos=(
