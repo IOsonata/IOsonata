@@ -162,7 +162,7 @@ while IFS= read -r proj_file; do
   mcu_families+=("$rel_path")
   mcu_paths+=("$proj_root")
 
-done < <(find "$ROOT/IOsonata" -type f -ipath "*/lib/Eclipse/.project" 2>/dev/null | sort)
+done < <(find "$ROOT/IOsonata" -type f -ipath "*lib/eclipse/.project" 2>/dev/null | sort)
 
 # ---------------------------------------------------------
 # EMPTY RESULTS CHECK
