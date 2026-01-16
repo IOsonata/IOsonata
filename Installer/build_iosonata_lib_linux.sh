@@ -162,7 +162,7 @@ while IFS= read -r proj_file; do
   mcu_families+=("$rel_path")
   mcu_paths+=("$proj_root")
 
-done < <(find "$ROOT/IOsonata" -type -f -path "*/lib/Eclipse/.project" 2>/dev/null | sort)
+done < <(find "$ROOT/IOsonata" -type f -ipath "*/lib/Eclipse/.project" 2>/dev/null | sort)
 
 # ---------------------------------------------------------
 # EMPTY RESULTS CHECK
@@ -298,7 +298,7 @@ build_project() {
 # BUILD ALL LOGIC
 # ---------------------------------------------------------
 
-if [[ "$selection" == "A"]]; then
+if [[ "$selection" == "A" ]]; then
   # Banner
   echo
   echo "========================================================="
@@ -376,7 +376,6 @@ if [[ "$selection" == "A"]]; then
   if [[ ${#failed_builds[@]} -gt 0 ]]; then
     exit 1
   fi
-fi
 
 # ---------------------------------------------------------
 # SINGLE BUILD EXECUTION
