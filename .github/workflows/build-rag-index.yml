@@ -1,450 +1,67 @@
 # .github/workflows/build-rag-index.yml
-#
-# Automatic RAG Index Builder for IOsonata
-# Runs on push to main/develop or manually, creates index.db artifact
-#
 name: Build RAG Index
 
 on:
   push:
     branches: [main, develop, master]
-    paths:
-      - 'include/**'
-      - 'src/**'
-      - 'ARM/**'
-      - 'RISCV/**'
-      - 'exemples/**'
-      - 'Installer/build_rag_index.py'
-  pull_request:
-    branches: [main, develop, master]
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
   schedule:
-    - cron: '0 2 * * 0'  # Weekly on Sunday 2AM UTC
+    - cron: '0 2 * * 0'
 
 jobs:
   build-index:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout IOsonata
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          
+        
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           
-      - name: Copy build_rag_index.py
+      - name: Debug - Show directory structure
         run: |
-          cp Installer/build_rag_index.py . 2>/dev/null \
-            || echo "Installer/build_rag_index.py not found, using embedded script"
+          echo "=== Current directory ==="
+          pwd
+          echo "=== Top level files ==="
+          ls -la
+          echo "=== Check for IOsonata markers ==="
+          ls -la include/ 2>/dev/null || echo "No include/ directory"
+          ls include/iopinctrl.h 2>/dev/null || echo "No iopinctrl.h"
+          echo "=== Check Installer ==="
+          ls -la Installer/ 2>/dev/null || echo "No Installer/ directory"
           
-      - name: Create build_rag_index.py if not exists
+      - name: Run build_rag_index.py
         run: |
-          if [ ! -f build_rag_index.py ]; then
-            cat > build_rag_index.py << 'SCRIPT'
-          #!/usr/bin/env python3
-          """
-          IOsonata RAG Index Builder v3 - Binary Optimized
-          
-          Creates index.db with:
-          - Integer IDs for enums (peripheral, kind)
-          - zlib compressed content
-          - MCU support matrix from Eclipse projects
-          - FTS5 for full-text search
-          """
-          
-          from __future__ import annotations
-          import argparse, functools, glob, hashlib, os, re, sqlite3, struct
-          import subprocess, sys, time, zlib, xml.etree.ElementTree as ET
-          from pathlib import Path
-          from typing import Dict, Iterator, List, Optional, Tuple
-          
-          print = functools.partial(print, flush=True)
-          
-          SCHEMA_VERSION = 5
-          COMPRESS_LEVEL = 6
-          
-          DEFAULT_IGNORE_DIRS = {
-              ".git", ".github", ".iosonata", ".metadata", ".settings", ".vscode", ".idea",
-              "build", "out", "dist", "Debug", "Release", "OSX", "linux", "win32", "OSC",
-              "node_modules", "__pycache__", ".pytest_cache",
-          }
-          IGNORE_DIR_PREFIXES = ("Debug", "Release", "cmake-build-")
-          SOURCE_SUFFIXES = {".h", ".hpp", ".hh", ".c", ".cc", ".cpp", ".cxx", ".inc", ".inl"}
-          EXAMPLE_DIR_HINTS = frozenset(("example", "examples", "sample", "samples", "demo", "demos", "test", "tests", "exemples"))
-          
-          # Enum mappings
-          KIND_FUNCTION, KIND_TYPE, KIND_EXAMPLE, KIND_ASSEMBLY, KIND_HEADER = 1, 2, 3, 4, 5
-          PERIPH_NONE, PERIPH_BLE, PERIPH_UART, PERIPH_SPI, PERIPH_I2C = 0, 1, 2, 3, 4
-          PERIPH_USB, PERIPH_TIMER, PERIPH_PWM, PERIPH_ADC, PERIPH_GPIO = 5, 6, 7, 8, 9
-          PERIPH_FLASH, PERIPH_I2S, PERIPH_PDM, PERIPH_QSPI, PERIPH_ESB, PERIPH_SENSOR = 10, 11, 12, 13, 14, 15
-          
-          PERIPH_MAP = {
-              "ble": PERIPH_BLE, "bluetooth": PERIPH_BLE, "uart": PERIPH_UART, "serial": PERIPH_UART,
-              "spi": PERIPH_SPI, "i2c": PERIPH_I2C, "twi": PERIPH_I2C, "usb": PERIPH_USB,
-              "timer": PERIPH_TIMER, "pwm": PERIPH_PWM, "adc": PERIPH_ADC, "saadc": PERIPH_ADC,
-              "gpio": PERIPH_GPIO, "iopin": PERIPH_GPIO, "flash": PERIPH_FLASH, "nvmc": PERIPH_FLASH,
-              "i2s": PERIPH_I2S, "pdm": PERIPH_PDM, "qspi": PERIPH_QSPI, "esb": PERIPH_ESB,
-              "sensor": PERIPH_SENSOR, "imu": PERIPH_SENSOR,
-          }
-          PERIPH_NAMES = {v: k for k, v in PERIPH_MAP.items() if k == k.lower()}
-          
-          IMPL_PATTERNS = [
-              # Nordic ARM
-              (r'bt_app_nrf52\.cpp$', PERIPH_BLE, 1), (r'bt_gap_nrf52\.cpp$', PERIPH_BLE, 1),
-              (r'bt_gatt_nrf52\.cpp$', PERIPH_BLE, 1), (r'bt_app_sdc\.cpp$', PERIPH_BLE, 2),
-              (r'bt_gap_sdc\.cpp$', PERIPH_BLE, 2), (r'bt_gatt_sdc\.cpp$', PERIPH_BLE, 2),
-              (r'uart_nrf.*\.cpp$', PERIPH_UART, 0), (r'spi_nrf.*\.cpp$', PERIPH_SPI, 0),
-              (r'i2c_nrf.*\.cpp$', PERIPH_I2C, 0), (r'usbd?_nrf.*\.cpp$', PERIPH_USB, 0),
-              (r'timer_.*nrf.*\.cpp$', PERIPH_TIMER, 0), (r'pwm_nrf.*\.cpp$', PERIPH_PWM, 0),
-              (r'adc_nrf.*\.cpp$', PERIPH_ADC, 0),
-              # RISC-V - ESP32-C, CH32V, GD32VF
-              (r'uart_esp32c.*\.cpp$', PERIPH_UART, 0), (r'spi_esp32c.*\.cpp$', PERIPH_SPI, 0),
-              (r'i2c_esp32c.*\.cpp$', PERIPH_I2C, 0), (r'timer_esp32c.*\.cpp$', PERIPH_TIMER, 0),
-              (r'uart_ch32v.*\.cpp$', PERIPH_UART, 0), (r'spi_ch32v.*\.cpp$', PERIPH_SPI, 0),
-              (r'i2c_ch32v.*\.cpp$', PERIPH_I2C, 0), (r'uart_gd32vf.*\.cpp$', PERIPH_UART, 0),
-          ]
-          
-          def detect_peripheral_from_impl(filename: str) -> Tuple[int, int]:
-              for pattern, periph, impl in IMPL_PATTERNS:
-                  if re.search(pattern, filename, re.I): return (periph, impl)
-              return (PERIPH_NONE, 0)
-          
-          def detect_peripheral_from_path(path: str) -> int:
-              p = path.lower()
-              if 'bluetooth' in p or '/bt_' in p or 'ble' in p: return PERIPH_BLE
-              for kw, pid in PERIPH_MAP.items():
-                  if kw in p: return pid
-              return PERIPH_NONE
-          
-          def _db_connect(path: Path) -> sqlite3.Connection:
-              conn = sqlite3.connect(str(path), timeout=30)
-              conn.execute("PRAGMA journal_mode=WAL")
-              conn.execute("PRAGMA synchronous=NORMAL")
-              conn.execute("PRAGMA cache_size=-65536")
-              return conn
-          
-          def _ensure_schema(conn: sqlite3.Connection, enable_fts: bool) -> None:
-              conn.executescript("""
-              CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB);
-              CREATE TABLE IF NOT EXISTS modules (id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL);
-              CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY, path TEXT UNIQUE NOT NULL);
-              CREATE TABLE IF NOT EXISTS chunks (
-                  id INTEGER PRIMARY KEY, kind INTEGER NOT NULL, periph INTEGER DEFAULT 0,
-                  file_id INTEGER NOT NULL, module_id INTEGER NOT NULL,
-                  line_start INTEGER, line_end INTEGER, title TEXT NOT NULL,
-                  signature BLOB, content BLOB NOT NULL, hash BLOB NOT NULL
-              );
-              CREATE INDEX IF NOT EXISTS idx_c_kind ON chunks(kind);
-              CREATE INDEX IF NOT EXISTS idx_c_periph ON chunks(periph);
-              CREATE INDEX IF NOT EXISTS idx_c_title ON chunks(title);
-              CREATE TABLE IF NOT EXISTS mcu_support (
-                  id INTEGER PRIMARY KEY, mcu TEXT NOT NULL, periph INTEGER NOT NULL,
-                  impl_type INTEGER DEFAULT 0, file_id INTEGER, UNIQUE(mcu, periph, impl_type)
-              );
-              CREATE INDEX IF NOT EXISTS idx_mcu ON mcu_support(mcu);
-              CREATE TABLE IF NOT EXISTS api (
-                  id INTEGER PRIMARY KEY, name TEXT NOT NULL, periph INTEGER DEFAULT 0,
-                  file_id INTEGER, line INTEGER, signature BLOB, ret_type BLOB
-              );
-              CREATE INDEX IF NOT EXISTS idx_api_name ON api(name);
-              """)
-              if enable_fts:
-                  conn.executescript("""
-                  CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(title, content, content='chunks', content_rowid='id', tokenize='porter unicode61');
-                  CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN INSERT INTO fts(rowid, title, content) VALUES (new.id, new.title, ''); END;
-                  CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN INSERT INTO fts(fts, rowid, title, content) VALUES('delete', old.id, old.title, ''); END;
-                  """)
-              conn.commit()
-          
-          def compress(text: str) -> bytes:
-              return zlib.compress(text.encode('utf-8', errors='replace'), COMPRESS_LEVEL) if text else b''
-          
-          def sha1_bytes(text: str) -> bytes:
-              return hashlib.sha1(text.encode('utf-8', errors='ignore')).digest()
-          
-          class StringCache:
-              def __init__(self, conn, table):
-                  self.conn, self.table, self._cache = conn, table, {}
-                  cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
-                  self._col = "name" if "name" in cols else ("path" if "path" in cols else cols[1] if len(cols) > 1 else "name")
-                  for row in conn.execute(f"SELECT id, {self._col} FROM {table}"): self._cache[row[1]] = row[0]
-              def get_id(self, val: str) -> int:
-                  if val in self._cache: return self._cache[val]
-                  cursor = self.conn.execute(f"INSERT INTO {self.table}({self._col}) VALUES(?) ON CONFLICT({self._col}) DO UPDATE SET {self._col}={self._col} RETURNING id", (val,))
-                  self._cache[val] = cursor.fetchone()[0]
-                  return self._cache[val]
-          
-          def parse_eclipse_project(project_file: Path) -> List[str]:
-              sources = []
-              try:
-                  tree = ET.parse(project_file)
-                  for link in tree.getroot().findall('.//linkedResources/link'):
-                      name_elem, type_elem = link.find('n') or link.find('name'), link.find('type')
-                      if name_elem is None or type_elem is None or type_elem.text != '1': continue
-                      name = name_elem.text or ''
-                      if any(name.endswith(ext) for ext in ['.c', '.cpp', '.cc']): sources.append(os.path.basename(name))
-              except: pass
-              return sources
-          
-          def build_mcu_support(conn, root: Path, file_cache, verbose: bool) -> int:
-              projects = []
-              for arch in ['ARM', 'RISCV']:
-                  projects.extend(Path(p) for p in glob.glob(str(root / arch / '**' / 'lib' / 'Eclipse' / '.project'), recursive=True))
-              projects = sorted(projects)
-              count = 0
-              conn.execute("DELETE FROM mcu_support")
-              for pf in projects:
-                  parts = pf.parts
-                  mcu = None
-                  for i, part in enumerate(parts):
-                      if part.lower() == 'lib' and i > 0: mcu = parts[i-1].upper().replace('-','').replace('_',''); break
-                  if not mcu: continue
-                  sources, seen = parse_eclipse_project(pf), set()
-                  for fn in sources:
-                      periph, impl = detect_peripheral_from_impl(fn)
-                      if periph == PERIPH_NONE: continue
-                      key = (mcu, periph, impl)
-                      if key in seen: continue
-                      seen.add(key)
-                      fid = file_cache.get_id(fn)
-                      conn.execute("INSERT OR REPLACE INTO mcu_support(mcu, periph, impl_type, file_id) VALUES(?,?,?,?)", (mcu, periph, impl, fid))
-                      count += 1
-                  if verbose and seen:
-                      print(f"  {mcu}: {', '.join(PERIPH_NAMES.get(p, str(p)) for _, p, _ in seen)}")
-              conn.commit()
-              return count
-          
-          def _safe_read(path: Path, max_bytes: int) -> str:
-              try:
-                  raw = path.read_bytes()[:max_bytes]
-                  for enc in ("utf-8", "latin-1"):
-                      try: return raw.decode(enc)
-                      except: continue
-                  return raw.decode("utf-8", errors="replace")
-              except: return ""
-          
-          def _mask_comments(src: str) -> str:
-              out, n, i = list(src), len(src), 0
-              def repl(s, e):
-                  for k in range(s, min(e, n)):
-                      if out[k] not in "\n\r": out[k] = " "
-              while i < n:
-                  c = src[i]
-                  if c == "/" and i + 1 < n:
-                      if src[i+1] == "/":
-                          j = i
-                          while i < n and src[i] != "\n": i += 1
-                          repl(j, i); continue
-                      if src[i+1] == "*":
-                          j, i = i, i + 2
-                          while i + 1 < n and not (src[i] == "*" and src[i+1] == "/"): i += 1
-                          i = min(n, i + 2); repl(j, i); continue
-                  if c in "\"'":
-                      q, j, i = c, i, i + 1
-                      while i < n:
-                          if out[i] == "\\": i += 2; continue
-                          if out[i] == q: i += 1; break
-                          i += 1
-                      repl(j, i); continue
-                  i += 1
-              return "".join(out)
-          
-          def _find_brace(masked: str, start: int) -> Optional[int]:
-              depth = 0
-              for i in range(start, len(masked)):
-                  if masked[i] == "{": depth += 1
-                  elif masked[i] == "}":
-                      depth -= 1
-                      if depth == 0: return i
-              return None
-          
-          _TYPE_RE = re.compile(r"\b(class|struct|enum)\s+([A-Za-z_]\w*)[^;{]*\{", re.M)
-          _FUNC_RE = re.compile(r"^[ \t]*(?:static\s+|inline\s+|extern\s+|virtual\s+|__STATIC_INLINE\s+)*([A-Za-z_][\w:<>\s\*&]+?)\s+([A-Za-z_]\w*)\s*\(([^;\)]{0,400})\)\s*([{;])", re.M)
-          
-          def iter_types(src: str):
-              masked = _mask_comments(src)
-              for m in _TYPE_RE.finditer(masked):
-                  kind, name = m.group(1), m.group(2)
-                  brace = masked.find("{", m.start())
-                  if brace < 0: continue
-                  end = _find_brace(masked, brace)
-                  if end is None: continue
-                  yield kind, name, m.start(), end
-          
-          def iter_funcs(src: str):
-              masked = _mask_comments(src)
-              for m in _FUNC_RE.finditer(masked):
-                  ret, name, params, tail = m.group(1), m.group(2), m.group(3), m.group(4)
-                  if name.startswith("_"): continue
-                  sig = f"{' '.join(ret.split())} {name}({' '.join(params.split())})"
-                  yield name, sig, ret.strip(), m.start(), m.end(), tail == "{"
-          
-          def _brief_comment(src: str, idx: int) -> str:
-              window = src[max(0, idx - 2000):idx]
-              m = re.search(r"/\*\*([\s\S]*?)\*/\s*$", window)
-              if m: return re.sub(r"\s+", " ", re.sub(r"^\s*\*\s?", "", m.group(1), flags=re.M).strip())[:400]
-              return ""
-          
-          class IndexBuilder:
-              def __init__(self, source: Path, output: Path, enable_fts=True, max_file_kb=1024, max_chunk=8000, example_cap=400, verbose=False):
-                  self.source, self.output, self.enable_fts = source, output, enable_fts
-                  self.max_bytes, self.max_chunk, self.example_cap, self.verbose = max(64*1024, max_file_kb*1024), max(1000, max_chunk), example_cap, verbose
-          
-              def _should_ignore(self, d: str) -> bool:
-                  return d in DEFAULT_IGNORE_DIRS or d.startswith(".") or d.startswith(IGNORE_DIR_PREFIXES)
-          
-              def _iter_files(self):
-                  for dp, dn, fn in os.walk(self.source):
-                      dn[:] = [d for d in dn if not self._should_ignore(d)]
-                      for f in fn:
-                          p = Path(dp) / f
-                          if p.suffix.lower() in SOURCE_SUFFIXES: yield p
-          
-              def _relpath(self, p: Path) -> str:
-                  try: return str(p.resolve().relative_to(self.source.resolve())).replace("\\", "/")
-                  except: return str(p).replace("\\", "/")
-          
-              def _git_commit(self) -> Optional[bytes]:
-                  try:
-                      r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(self.source), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                      if r.returncode == 0: return bytes.fromhex(r.stdout.decode().strip())
-                  except: pass
-                  return None
-          
-              def build(self, version: str) -> Path:
-                  self.output.mkdir(parents=True, exist_ok=True)
-                  db_path = self.output / "index.db"
-                  if db_path.exists(): db_path.unlink()
-                  t0 = time.time()
-                  print(f"[00:00] Building index v{SCHEMA_VERSION}")
-                  conn = _db_connect(db_path)
-                  _ensure_schema(conn, self.enable_fts)
-                  conn.execute("INSERT INTO meta VALUES('schema', ?)", (struct.pack("<I", SCHEMA_VERSION),))
-                  conn.execute("INSERT INTO meta VALUES('version', ?)", (version.encode(),))
-                  conn.execute("INSERT INTO meta VALUES('built', ?)", (struct.pack("<Q", int(time.time())),))
-                  commit = self._git_commit()
-                  if commit: conn.execute("INSERT INTO meta VALUES('commit', ?)", (commit,))
-                  file_cache, module_cache = StringCache(conn, "files"), StringCache(conn, "modules")
-                  print(f"[{_fmt(time.time()-t0)}] Building MCU support matrix...")
-                  mcu_count = build_mcu_support(conn, self.source, file_cache, self.verbose)
-                  print(f"[{_fmt(time.time()-t0)}] MCU: {mcu_count} entries")
-                  print(f"[{_fmt(time.time()-t0)}] Scanning files...")
-                  stats = {"files": 0, "chunks": 0, "functions": 0, "types": 0, "examples": 0}
-                  last_prog = time.time()
-                  for path in self._iter_files():
-                      stats["files"] += 1
-                      rel = self._relpath(path)
-                      file_id = file_cache.get_id(rel)
-                      module_id = module_cache.get_id(rel.split("/")[0] if "/" in rel else "core")
-                      periph = detect_peripheral_from_path(rel)
-                      if stats["files"] % 100 == 0 or time.time() - last_prog > 5:
-                          print(f"[{_fmt(time.time()-t0)}] files={stats['files']} chunks={stats['chunks']}")
-                          last_prog = time.time()
-                      try: src = _safe_read(path, self.max_bytes)
-                      except: continue
-                      is_example = any(h in rel.lower().split("/") for h in EXAMPLE_DIR_HINTS)
-                      if self.example_cap and is_example and stats["examples"] < self.example_cap:
-                          lines = src.splitlines()
-                          src_chunk = "\n".join(lines[:180]) + "\n/* snip */\n" + "\n".join(lines[-40:]) if len(lines) > 240 else src
-                          content = src_chunk[:self.max_chunk]
-                          conn.execute("INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,content,hash) VALUES(?,?,?,?,?,?,?,?,?)",
-                              (KIND_EXAMPLE, periph, file_id, module_id, 1, len(lines), f"Example: {path.stem}", compress(content), sha1_bytes(content)))
-                          stats["examples"] += 1; stats["chunks"] += 1
-                      for kind, name, s_idx, e_idx in iter_types(src):
-                          block = src[s_idx:e_idx+1]
-                          line = src[:s_idx].count("\n") + 1
-                          desc = _brief_comment(src, s_idx)
-                          content = f"{kind} {name}\n{desc}\n{block}"[:self.max_chunk]
-                          conn.execute("INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,content,hash) VALUES(?,?,?,?,?,?,?,?,?)",
-                              (KIND_TYPE, periph, file_id, module_id, line, line + block.count("\n"), f"{kind} {name}", compress(content), sha1_bytes(content)))
-                          stats["types"] += 1; stats["chunks"] += 1
-                      for fname, sig, ret, s_idx, e_idx, has_body in iter_funcs(src):
-                          line = src[:s_idx].count("\n") + 1
-                          desc = _brief_comment(src, s_idx)
-                          body = ""
-                          if has_body:
-                              masked = _mask_comments(src)
-                              brace = masked.find("{", s_idx)
-                              if brace >= 0:
-                                  end = _find_brace(masked, brace)
-                                  if end: body = src[brace:end+1]
-                          content = f"{sig}\n{desc}\n{body}"[:self.max_chunk]
-                          conn.execute("INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,signature,content,hash) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                              (KIND_FUNCTION, periph, file_id, module_id, line, line + content.count("\n"), fname, compress(sig), compress(content), sha1_bytes(content)))
-                          conn.execute("INSERT INTO api(name,periph,file_id,line,signature,ret_type) VALUES(?,?,?,?,?,?)",
-                              (fname, periph, file_id, line, compress(sig), compress(ret) if ret else None))
-                          stats["functions"] += 1; stats["chunks"] += 1
-                  conn.commit()
-                  if self.enable_fts:
-                      print(f"[{_fmt(time.time()-t0)}] Building FTS...")
-                      conn.execute("INSERT INTO fts(fts) VALUES('rebuild')")
-                      conn.commit()
-                  conn.execute("VACUUM")
-                  conn.close()
-                  elapsed, size_kb = time.time() - t0, db_path.stat().st_size / 1024
-                  print(f"\n[{_fmt(elapsed)}] ✓ Complete")
-                  print(f"  Files:     {stats['files']}")
-                  print(f"  Chunks:    {stats['chunks']}")
-                  print(f"  Functions: {stats['functions']}")
-                  print(f"  Types:     {stats['types']}")
-                  print(f"  Examples:  {stats['examples']}")
-                  print(f"  MCU:       {mcu_count}")
-                  print(f"  DB size:   {size_kb:.1f} KB")
-                  return db_path
-          
-          def _fmt(s: float) -> str:
-              m, s = divmod(int(s), 60)
-              return f"{m:02d}:{s:02d}"
-          
-          def _detect_root() -> Optional[Path]:
-              cwd = Path.cwd()
-              for p in [cwd] + list(cwd.parents)[:3]:
-                  if (p / "include/iopinctrl.h").exists(): return p
-              return None
-          
-          def main():
-              p = argparse.ArgumentParser(description="Build IOsonata RAG index v3")
-              p.add_argument("--source-dir", default="")
-              p.add_argument("--output-dir", default="")
-              p.add_argument("--version", default="dev")
-              p.add_argument("--no-fts", action="store_true")
-              p.add_argument("--verbose", action="store_true")
-              args = p.parse_args()
-              source = Path(args.source_dir) if args.source_dir else (_detect_root() or Path("."))
-              output = Path(args.output_dir) if args.output_dir else (source / ".iosonata")
-              builder = IndexBuilder(source, output, enable_fts=not args.no_fts, verbose=args.verbose)
-              print(f"Source: {source.resolve()}\nOutput: {output.resolve()}\n")
-              builder.build(args.version)
-          
-          if __name__ == "__main__":
-              main()
-          SCRIPT
+          # Use Installer version if exists, otherwise error
+          if [ -f Installer/build_rag_index.py ]; then
+            echo "Using Installer/build_rag_index.py"
+            python3 Installer/build_rag_index.py --source-dir . --output-dir .iosonata --verbose
+          else
+            echo "ERROR: Installer/build_rag_index.py not found!"
+            echo "Please add build_rag_index.py to the Installer/ directory"
+            exit 1
           fi
           
-      - name: Build RAG Index
-        run: |
-          python3 build_rag_index.py \
-            --source-dir . \
-            --output-dir .iosonata \
-            --version "${{ github.sha }}" \
-            --verbose
-            
       - name: Show Index Stats
         run: |
-          echo "=== Index Stats ==="
-          ls -lh .iosonata/
-          sqlite3 .iosonata/index.db "SELECT 'Schema:', hex(v) FROM meta WHERE k='schema'"
-          sqlite3 .iosonata/index.db "SELECT 'Chunks:', COUNT(*) FROM chunks"
-          sqlite3 .iosonata/index.db "SELECT 'Functions:', COUNT(*) FROM chunks WHERE kind=1"
-          sqlite3 .iosonata/index.db "SELECT 'Types:', COUNT(*) FROM chunks WHERE kind=2"
-          sqlite3 .iosonata/index.db "SELECT 'Examples:', COUNT(*) FROM chunks WHERE kind=3"
-          sqlite3 .iosonata/index.db "SELECT 'MCU Support:', COUNT(*) FROM mcu_support"
-          echo "=== MCU Matrix ==="
-          sqlite3 .iosonata/index.db "SELECT mcu, GROUP_CONCAT(CASE periph WHEN 1 THEN 'BLE' WHEN 2 THEN 'UART' WHEN 3 THEN 'SPI' WHEN 4 THEN 'I2C' WHEN 5 THEN 'USB' WHEN 6 THEN 'TIMER' WHEN 7 THEN 'PWM' WHEN 8 THEN 'ADC' ELSE periph END) FROM mcu_support GROUP BY mcu"
+          echo "=== Output directory ==="
+          ls -la .iosonata/ 2>/dev/null || echo "No .iosonata directory created!"
+          
+          if [ -f .iosonata/index.db ]; then
+            echo "=== Database Stats ==="
+            sqlite3 .iosonata/index.db "SELECT 'Chunks:', COUNT(*) FROM chunks"
+            sqlite3 .iosonata/index.db "SELECT 'Functions:', COUNT(*) FROM chunks WHERE kind=1"
+            sqlite3 .iosonata/index.db "SELECT 'Types:', COUNT(*) FROM chunks WHERE kind=2"
+            sqlite3 .iosonata/index.db "SELECT 'MCU Support:', COUNT(*) FROM mcu_support"
+          else
+            echo "ERROR: index.db was not created!"
+            exit 1
+          fi
           
       - name: Upload Index Artifact
         uses: actions/upload-artifact@v4
@@ -452,11 +69,13 @@ jobs:
           name: iosonata-rag-index
           path: .iosonata/index.db
           retention-days: 90
+          if-no-files-found: error
           
-      - name: Upload Index to Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: .iosonata/index.db
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit index.db to repo
+        if: github.event_name != 'pull_request'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .iosonata/index.db
+          git diff --staged --quiet || git commit -m "Update RAG index.db [skip ci]"
+          git push
