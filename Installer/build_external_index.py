@@ -659,7 +659,10 @@ class SDKIndexer:
             "max_chunk_chars": self.max_chunk_chars,
             "example_cap": self.example_cap,
         }
-        cfg_hash = hashlib.sha1(json.dumps(cfg, sort_keys=True).encode("utf-8")).hexdigest()
+        # Persist config in a minimal, diff-friendly key=value form (no JSON stored in DB).
+        # JSON is still used internally for embedding API payloads where required.
+        cfg_kv = "\n".join(f"{k}={cfg[k]}" for k in sorted(cfg.keys()))
+        cfg_hash = hashlib.sha1(cfg_kv.encode("utf-8")).hexdigest()
 
         if skip_if_unchanged and out_db.exists():
             try:
@@ -690,7 +693,7 @@ class SDKIndexer:
         _set_kv(conn, "sdk_path", str(sdk_path.resolve()))
         _set_kv(conn, "sdk_fingerprint", fingerprint)
         _set_kv(conn, "config_hash", cfg_hash)
-        _set_kv(conn, "config_json", json.dumps(cfg, sort_keys=True))
+        _set_kv(conn, "config_kv", cfg_kv)
 
         stats = BuildStats()
         last_progress = time.time()
