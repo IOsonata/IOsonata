@@ -344,44 +344,47 @@ def sha1_bytes(text: str) -> bytes:
 # =============================================================================
 
 class StringCache:
-    """Cache for string interning (modules, files).
+    """Intern strings into a table with a UNIQUE text column.
 
-    Schema uses modules.name and files.path. This class auto-detects the key
-    column so fresh DBs do not fail.
+    Compatibility note: macOS/Python can ship SQLite versions that
+    do not support `RETURNING` (SQLite < 3.35). We therefore use
+    INSERT OR IGNORE + SELECT, which works broadly.
     """
 
     def __init__(self, conn: sqlite3.Connection, table: str):
         self.conn = conn
         self.table = table
+        self.value_col = self._detect_value_column(conn, table)
         self._cache: Dict[str, int] = {}
-        self._col = self._detect_key_column()
-        self._load()
-
-    def _detect_key_column(self) -> str:
-        cols = [r[1] for r in self.conn.execute(f"PRAGMA table_info({self.table})")]
-        if "name" in cols:
-            return "name"
-        if "path" in cols:
-            return "path"
-        for c in cols:
-            if c != "id":
-                return c
-        return "name"
-
-    def _load(self) -> None:
-        for row in self.conn.execute(f"SELECT id, {self._col} FROM {self.table}"):
+        for row in conn.execute(f"SELECT id, {self.value_col} FROM {table}"): 
             self._cache[row[1]] = row[0]
+
+    @staticmethod
+    def _detect_value_column(conn: sqlite3.Connection, table: str) -> str:
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+        if 'name' in cols:
+            return 'name'
+        if 'path' in cols:
+            return 'path'
+        for c in cols:
+            if c != 'id':
+                return c
+        raise RuntimeError(f"Cannot detect value column for table {table}")
 
     def get_id(self, value: str) -> int:
         if value in self._cache:
             return self._cache[value]
-        cursor = self.conn.execute(
-            f"INSERT INTO {self.table}({self._col}) VALUES(?) "
-            f"ON CONFLICT({self._col}) DO UPDATE SET {self._col}={self._col} "
-            f"RETURNING id",
+        self.conn.execute(
+            f"INSERT OR IGNORE INTO {self.table}({self.value_col}) VALUES(?)",
             (value,)
         )
-        id_ = cursor.fetchone()[0]
+        row = self.conn.execute(
+            f"SELECT id FROM {self.table} WHERE {self.value_col}=?",
+            (value,)
+        ).fetchone()
+        if not row:
+            raise RuntimeError(f"Failed to intern value into {self.table}: {value!r}")
+        id_ = int(row[0])
         self._cache[value] = id_
         return id_
 
@@ -461,10 +464,9 @@ def build_mcu_support(conn: sqlite3.Connection, root: Path, file_cache: StringCa
             )
             count += 1
         
-        if verbose:
-            peripherals = sorted(set(p for _, p, _ in seen))
-            periph_names = [PERIPH_NAMES.get(p, str(p)) for p in peripherals]
-            print(f"  {mcu}: {', '.join(periph_names)}")
+        if verbose and seen:
+            periphs = ', '.join(PERIPH_NAMES.get(p, str(p)) for _, p, _ in sorted(seen))
+            print(f"  {mcu}: {periphs}")
     
     conn.commit()
     return count
@@ -717,7 +719,8 @@ class IndexBuilder:
         for dp, dn, fn in os.walk(self.source):
             dn[:] = [d for d in dn if not self._should_ignore(d)]
             dn.sort()
-            for f in sorted(fn):
+            fn.sort()
+            for f in fn:
                 p = Path(dp) / f
                 if p.suffix.lower() in SOURCE_SUFFIXES:
                     yield p
@@ -879,8 +882,11 @@ class IndexBuilder:
         conn = _db_connect(db_path)
         
         # Get or create model ID
-        cursor = conn.execute("INSERT INTO models(name) VALUES(?) ON CONFLICT(name) DO UPDATE SET name=name RETURNING id", (embedder.model,))
-        model_id = cursor.fetchone()[0]
+        conn.execute("INSERT OR IGNORE INTO models(name) VALUES(?)", (embedder.model,))
+        row = conn.execute("SELECT id FROM models WHERE name=?", (embedder.model,)).fetchone()
+        if not row:
+            raise RuntimeError(f"Failed to resolve model id for {embedder.model!r}")
+        model_id = int(row[0])
 
         # Find chunks needing embeddings
         placeholders = ",".join("?" * len(kinds))
@@ -948,20 +954,20 @@ def main():
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--update-embeddings", action="store_true")
     p.add_argument("--provider", default="voyage")
-    p.add_argument("--api-key", default="")
+    p.add_argument("--api-key", default=os.environ.get("VOYAGE_API_KEY", ""))
     p.add_argument("--model", default="")
     p.add_argument("--batch-size", type=int, default=0)
     p.add_argument("--max-new", type=int, default=0)
     args = p.parse_args()
 
-    # Resolve API key from environment based on provider (unless explicitly provided)
-    if not args.api_key:
-        prov = (args.provider or "").lower()
-        if prov == "openai":
-            args.api_key = os.environ.get("OPENAI_API_KEY", "")
-        elif prov == "voyage":
-            args.api_key = os.environ.get("VOYAGE_API_KEY", "")
 
+    # Provider-aware default API key
+    if not args.api_key:
+        prov = (args.provider or '').strip().lower()
+        if prov == 'openai':
+            args.api_key = os.environ.get('OPENAI_API_KEY', '')
+        elif prov == 'voyage':
+            args.api_key = os.environ.get('VOYAGE_API_KEY', '')
     source = Path(args.source_dir) if args.source_dir else (_detect_root() or Path("."))
     if not args.source_dir and source != Path("."):
         print(f"[auto] IOsonata: {source}")
