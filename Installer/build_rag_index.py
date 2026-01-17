@@ -124,6 +124,7 @@ BLE_IMPL_MAP = {"softdevice": BLE_IMPL_SOFTDEVICE, "sdc": BLE_IMPL_SDC}
 
 # (pattern, peripheral_id, ble_impl_type)
 IMPL_PATTERNS = [
+    # Nordic ARM (nRF52/53/54)
     (r'bt_app_nrf52\.cpp$', PERIPH_BLE, BLE_IMPL_SOFTDEVICE),
     (r'bt_gap_nrf52\.cpp$', PERIPH_BLE, BLE_IMPL_SOFTDEVICE),
     (r'bt_gatt_nrf52\.cpp$', PERIPH_BLE, BLE_IMPL_SOFTDEVICE),
@@ -143,6 +144,30 @@ IMPL_PATTERNS = [
     (r'pdm_nrf.*\.cpp$', PERIPH_PDM, 0),
     (r'qspi_nrf.*\.cpp$', PERIPH_QSPI, 0),
     (r'esb_.*\.cpp$', PERIPH_ESB, 0),
+    # RISC-V - ESP32-C (Espressif)
+    (r'uart_esp32c.*\.cpp$', PERIPH_UART, 0),
+    (r'spi_esp32c.*\.cpp$', PERIPH_SPI, 0),
+    (r'i2c_esp32c.*\.cpp$', PERIPH_I2C, 0),
+    (r'timer_esp32c.*\.cpp$', PERIPH_TIMER, 0),
+    (r'adc_esp32c.*\.cpp$', PERIPH_ADC, 0),
+    (r'gpio_esp32c.*\.cpp$', PERIPH_GPIO, 0),
+    # RISC-V - WCH CH32V
+    (r'uart_ch32v.*\.cpp$', PERIPH_UART, 0),
+    (r'spi_ch32v.*\.cpp$', PERIPH_SPI, 0),
+    (r'i2c_ch32v.*\.cpp$', PERIPH_I2C, 0),
+    (r'timer_ch32v.*\.cpp$', PERIPH_TIMER, 0),
+    (r'adc_ch32v.*\.cpp$', PERIPH_ADC, 0),
+    (r'usb_ch32v.*\.cpp$', PERIPH_USB, 0),
+    # RISC-V - GigaDevice GD32VF
+    (r'uart_gd32vf.*\.cpp$', PERIPH_UART, 0),
+    (r'spi_gd32vf.*\.cpp$', PERIPH_SPI, 0),
+    (r'i2c_gd32vf.*\.cpp$', PERIPH_I2C, 0),
+    (r'timer_gd32vf.*\.cpp$', PERIPH_TIMER, 0),
+    (r'adc_gd32vf.*\.cpp$', PERIPH_ADC, 0),
+    # Generic RISC-V patterns (catch-all)
+    (r'uart_rv.*\.cpp$', PERIPH_UART, 0),
+    (r'spi_rv.*\.cpp$', PERIPH_SPI, 0),
+    (r'i2c_rv.*\.cpp$', PERIPH_I2C, 0),
 ]
 
 
@@ -373,8 +398,12 @@ def parse_eclipse_project(project_file: Path) -> List[str]:
 
 
 def find_eclipse_lib_projects(root: Path) -> List[Path]:
-    pattern = str(root / 'ARM' / '**' / 'lib' / 'Eclipse' / '.project')
-    return sorted(Path(p) for p in glob.glob(pattern, recursive=True))
+    """Find Eclipse .project files in ARM and RISCV directories."""
+    projects = []
+    for arch_dir in ['ARM', 'RISCV']:
+        pattern = str(root / arch_dir / '**' / 'lib' / 'Eclipse' / '.project')
+        projects.extend(Path(p) for p in glob.glob(pattern, recursive=True))
+    return sorted(projects)
 
 
 def extract_mcu(project_path: Path) -> Optional[str]:
