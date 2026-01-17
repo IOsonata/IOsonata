@@ -36,78 +36,57 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
-#include "bluetooth/bt_gap.h"
+//#include "bluetooth/bt_gap.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "stddev.h"
 #include "board.h"
-//#include "ble_gattc.h"
-//#include "ble_db_discovery.h"
-//#include "ble_nus_c.h"
-//#include "nrf_sdh_ble.h"
 
 //#define DUMP_MAN_SPEC_DATA
 
 // BLE
-#define DEVICE_NAME             "UARTCentral"                   		/**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME             "UARTCentral"
 
-#define MANUFACTURER_NAME       "I-SYST inc."                   		/**< Manufacturer. Will be passed to Device Information Service. */
-#define MODEL_NAME              "IMM-NRF5x"                     		/**< Model number. Will be passed to Device Information Service. */
-#define MANUFACTURER_ID         ISYST_BLUETOOTH_ID              		/**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID              		/**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+#define MANUFACTURER_NAME       "I-SYST inc."
+#define MODEL_NAME              "IMM-NRF5x"
+#define MANUFACTURER_ID         ISYST_BLUETOOTH_ID
+#define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID
 
-#define MIN_CONN_INTERVAL       10 //MSEC_TO_UNITS(10, UNIT_1_25_MS) 		/**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
-#define MAX_CONN_INTERVAL       40 //MSEC_TO_UNITS(40, UNIT_1_25_MS) 		/**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
+#define MIN_CONN_INTERVAL       10 // in msec
+#define MAX_CONN_INTERVAL       40 // in msec
 
-#define SCAN_INTERVAL           1000 //MSEC_TO_UNITS(1000, UNIT_0_625_MS)      /**< Determines scan interval in units of 0.625 millisecond. */
-#define SCAN_WINDOW             100 //MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
-#define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
+#define SCAN_INTERVAL           1000	// in msec
+#define SCAN_WINDOW             100 	// in msec
+#define SCAN_TIMEOUT            0		// 0 = never
 
-#define TARGET_BRIDGE_DEV_NAME	"BlueIO832Mini"							/**< Name of BLE bridge/client device to be scanned */
+#define TARGET_BRIDGE_DEV_NAME	"BlueIO832Mini"
 
 // UART
-#define BLE_MTU_SIZE			512//byte
+#define BLE_MTU_SIZE			512		// in bytes
 #define PACKET_SIZE				256
 #define UART_MAX_DATA_LEN  		(PACKET_SIZE*4)
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
 
 const BtAppCfg_t s_BleAppCfg = {
-	BTAPP_ROLE_CENTRAL,
-	1, 							// Number of central link
-	0, 							// Number of peripheral link
-	DEVICE_NAME,                // Device name
-	ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
-	1,                      	// PnP Product ID
-	0,							// Pnp prod version
-	0,							// Appearance
-	NULL,//&s_UartBleDevDesc,
-	false,
-	NULL,//g_ManData,              // Manufacture specific data to advertise
-	0,//sizeof(g_ManData),      // Length of manufacture specific data
-	NULL,
-	0,
-	BTGAP_SECTYPE_NONE,    	// Secure connection type
-	BTAPP_SECEXCHG_NONE,   	// Security key exchange
-	NULL,      					// Service uuids to advertise
-	0, 							// Total number of uuids
-	0,       					// Advertising interval in msec
-	0,							// Advertising timeout in sec
-	0,                          // Slow advertising interval, if > 0, fallback to
-								// slow interval on adv timeout and advertise until connected
-	MIN_CONN_INTERVAL,
-	MAX_CONN_INTERVAL,
-	BLUEIO_CONNECT_LED_PORT,    // Led port nuber
-	BLUEIO_CONNECT_LED_PIN,     // Led pin number
-	0,
-	0,							// Tx power
-	NULL,						// RTOS Softdevice handler
+	.Role = BTAPP_ROLE_CENTRAL,
+	.CentLinkCount = 1, 							// Number of central link
+	.PeriLinkCount = 0, 							// Number of peripheral link
+	.pDevName = DEVICE_NAME,                // Device name
+	.VendorId = ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
+	.ProductId = 1,                      	// PnP Product ID
+	.ProductVer = 0,							// Pnp prod version
+	.ConnIntervalMin = MIN_CONN_INTERVAL,
+	.ConnIntervalMax = MAX_CONN_INTERVAL,
+	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,    // Led port nuber
+	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,     // Led pin number
+	.ConnLedActLevel = 0,
+	.TxPower = 0,							// Tx power
 	.MaxMtu = BLE_MTU_SIZE,
-	//.PeriphDevCnt = 1,			//Max number of peripheral connection
 };
 
 static IOPinCfg_t s_UartPins[] = {
@@ -132,7 +111,7 @@ UARTCfg_t g_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
 	.bIntMode = true,							// Interrupt mode
 	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,			// Interrupt priority
-	.EvtCallback = nRFUartEvthandler,			// UART event handler
+	.EvtCallback = UartEvthandler,			// UART event handler
 	.bFifoBlocking = true,						// Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
@@ -233,7 +212,7 @@ void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 	}
 }
 
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 //	uint8_t buff[20];
