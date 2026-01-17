@@ -164,10 +164,6 @@ IMPL_PATTERNS = [
     (r'i2c_gd32vf.*\.cpp$', PERIPH_I2C, 0),
     (r'timer_gd32vf.*\.cpp$', PERIPH_TIMER, 0),
     (r'adc_gd32vf.*\.cpp$', PERIPH_ADC, 0),
-    # Generic RISC-V patterns (catch-all)
-    (r'uart_rv.*\.cpp$', PERIPH_UART, 0),
-    (r'spi_rv.*\.cpp$', PERIPH_SPI, 0),
-    (r'i2c_rv.*\.cpp$', PERIPH_I2C, 0),
 ]
 
 
@@ -348,28 +344,45 @@ def sha1_bytes(text: str) -> bytes:
 # =============================================================================
 
 class StringCache:
-    """Cache for string interning (modules, files)."""
-    
+    """Cache for string interning (modules, files).
+
+    Schema uses modules.name and files.path. This class auto-detects the key
+    column so fresh DBs do not fail.
+    """
+
     def __init__(self, conn: sqlite3.Connection, table: str):
         self.conn = conn
         self.table = table
         self._cache: Dict[str, int] = {}
+        self._col = self._detect_key_column()
         self._load()
-    
-    def _load(self):
-        for row in self.conn.execute(f"SELECT id, name FROM {self.table}"):
+
+    def _detect_key_column(self) -> str:
+        cols = [r[1] for r in self.conn.execute(f"PRAGMA table_info({self.table})")]
+        if "name" in cols:
+            return "name"
+        if "path" in cols:
+            return "path"
+        for c in cols:
+            if c != "id":
+                return c
+        return "name"
+
+    def _load(self) -> None:
+        for row in self.conn.execute(f"SELECT id, {self._col} FROM {self.table}"):
             self._cache[row[1]] = row[0]
-    
-    def get_id(self, name: str) -> int:
-        if name in self._cache:
-            return self._cache[name]
+
+    def get_id(self, value: str) -> int:
+        if value in self._cache:
+            return self._cache[value]
         cursor = self.conn.execute(
-            f"INSERT INTO {self.table}(name) VALUES(?) ON CONFLICT(name) DO UPDATE SET name=name RETURNING id",
-            (name,)
+            f"INSERT INTO {self.table}({self._col}) VALUES(?) "
+            f"ON CONFLICT({self._col}) DO UPDATE SET {self._col}={self._col} "
+            f"RETURNING id",
+            (value,)
         )
-        row = cursor.fetchone()
-        id_ = row[0]
-        self._cache[name] = id_
+        id_ = cursor.fetchone()[0]
+        self._cache[value] = id_
         return id_
 
 
@@ -703,7 +716,8 @@ class IndexBuilder:
     def _iter_files(self):
         for dp, dn, fn in os.walk(self.source):
             dn[:] = [d for d in dn if not self._should_ignore(d)]
-            for f in fn:
+            dn.sort()
+            for f in sorted(fn):
                 p = Path(dp) / f
                 if p.suffix.lower() in SOURCE_SUFFIXES:
                     yield p
@@ -934,11 +948,19 @@ def main():
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--update-embeddings", action="store_true")
     p.add_argument("--provider", default="voyage")
-    p.add_argument("--api-key", default=os.environ.get("VOYAGE_API_KEY", ""))
+    p.add_argument("--api-key", default="")
     p.add_argument("--model", default="")
     p.add_argument("--batch-size", type=int, default=0)
     p.add_argument("--max-new", type=int, default=0)
     args = p.parse_args()
+
+    # Resolve API key from environment based on provider (unless explicitly provided)
+    if not args.api_key:
+        prov = (args.provider or "").lower()
+        if prov == "openai":
+            args.api_key = os.environ.get("OPENAI_API_KEY", "")
+        elif prov == "voyage":
+            args.api_key = os.environ.get("VOYAGE_API_KEY", "")
 
     source = Path(args.source_dir) if args.source_dir else (_detect_root() or Path("."))
     if not args.source_dir and source != Path("."):

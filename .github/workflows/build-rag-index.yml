@@ -169,12 +169,14 @@ jobs:
           class StringCache:
               def __init__(self, conn, table):
                   self.conn, self.table, self._cache = conn, table, {}
-                  for row in conn.execute(f"SELECT id, name FROM {table}"): self._cache[row[1]] = row[0]
-              def get_id(self, name: str) -> int:
-                  if name in self._cache: return self._cache[name]
-                  cursor = self.conn.execute(f"INSERT INTO {self.table}(name) VALUES(?) ON CONFLICT(name) DO UPDATE SET name=name RETURNING id", (name,))
-                  self._cache[name] = cursor.fetchone()[0]
-                  return self._cache[name]
+                  cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+                  self._col = "name" if "name" in cols else ("path" if "path" in cols else cols[1] if len(cols) > 1 else "name")
+                  for row in conn.execute(f"SELECT id, {self._col} FROM {table}"): self._cache[row[1]] = row[0]
+              def get_id(self, val: str) -> int:
+                  if val in self._cache: return self._cache[val]
+                  cursor = self.conn.execute(f"INSERT INTO {self.table}({self._col}) VALUES(?) ON CONFLICT({self._col}) DO UPDATE SET {self._col}={self._col} RETURNING id", (val,))
+                  self._cache[val] = cursor.fetchone()[0]
+                  return self._cache[val]
           
           def parse_eclipse_project(project_file: Path) -> List[str]:
               sources = []
