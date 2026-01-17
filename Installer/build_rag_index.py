@@ -119,6 +119,71 @@ BLE_IMPL_SDC = 2
 BLE_IMPL_MAP = {"softdevice": BLE_IMPL_SOFTDEVICE, "sdc": BLE_IMPL_SDC}
 
 # =============================================================================
+# DEVICE CATEGORIES (External devices like sensors, displays, PMICs)
+# =============================================================================
+
+DEVCAT_NONE = 0
+DEVCAT_SENSOR = 1
+DEVCAT_DISPLAY = 2
+DEVCAT_MISCDEV = 3
+DEVCAT_PMIC = 4
+DEVCAT_IMU = 5
+DEVCAT_AUDIO = 6
+DEVCAT_STORAGE = 7
+DEVCAT_CONVERTER = 8
+
+DEVCAT_MAP = {
+    "sensors": DEVCAT_SENSOR,
+    "display": DEVCAT_DISPLAY,
+    "miscdev": DEVCAT_MISCDEV,
+    "pwrmgnt": DEVCAT_PMIC,
+    "imu": DEVCAT_IMU,
+    "audio": DEVCAT_AUDIO,
+    "storage": DEVCAT_STORAGE,
+    "converters": DEVCAT_CONVERTER,
+}
+DEVCAT_NAMES = {v: k for k, v in DEVCAT_MAP.items()}
+
+# Known device name patterns to extract from filenames
+# (regex_pattern, replacement_or_canonical_name)
+DEVICE_NAME_FIXES = {
+    # Sensors - Environmental
+    "bme280": "BME280", "bme680": "BME680", "bme688": "BME688",
+    "bmp280": "BMP280", "bmp388": "BMP388", "bmp390": "BMP390",
+    "sht31": "SHT31", "sht40": "SHT40", "sht45": "SHT45",
+    "hdc1080": "HDC1080", "hdc2010": "HDC2010",
+    "lps22hb": "LPS22HB", "lps25hb": "LPS25HB",
+    "veml7700": "VEML7700", "veml6075": "VEML6075",
+    "tsl2561": "TSL2561", "tsl2591": "TSL2591",
+    "opt3001": "OPT3001",
+    # Sensors - Motion/IMU
+    "mpu6050": "MPU6050", "mpu9250": "MPU9250",
+    "icm20948": "ICM20948", "icm42688": "ICM42688",
+    "lis2dh": "LIS2DH", "lis3dh": "LIS3DH", "lis2dh12": "LIS2DH12",
+    "lsm6dso": "LSM6DSO", "lsm6dsox": "LSM6DSOX", "lsm9ds1": "LSM9DS1",
+    "bmi160": "BMI160", "bmi270": "BMI270",
+    "bno055": "BNO055", "bno080": "BNO080",
+    "ak09916": "AK09916", "ak8963": "AK8963",
+    # Displays
+    "ssd1306": "SSD1306", "ssd1351": "SSD1351", "ssd1327": "SSD1327",
+    "ili9341": "ILI9341", "ili9488": "ILI9488",
+    "st7735": "ST7735", "st7789": "ST7789",
+    "sh1106": "SH1106", "sh1107": "SH1107",
+    # PMICs / Power
+    "bq24295": "BQ24295", "bq25120": "BQ25120",
+    "max17048": "MAX17048", "max17055": "MAX17055",
+    "ltc2941": "LTC2941", "ltc2942": "LTC2942",
+    "tps62740": "TPS62740",
+    # LED drivers
+    "apa102": "APA102", "ws2812": "WS2812", "sk6812": "SK6812",
+    "ncp5623b": "NCP5623B",
+    "tca6424a": "TCA6424A",
+    # Audio
+    "vs1053": "VS1053",
+    "wm8904": "WM8904",
+}
+
+# =============================================================================
 # PERIPHERAL DETECTION
 # =============================================================================
 
@@ -310,6 +375,19 @@ def _ensure_schema(conn: sqlite3.Connection, enable_fts: bool) -> None:
         id INTEGER PRIMARY KEY,
         name TEXT UNIQUE NOT NULL
     );
+
+    -- External device support (sensors, displays, PMICs, etc.)
+    CREATE TABLE IF NOT EXISTS devices (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,             -- Canonical name: 'BME280', 'SSD1306'
+        category INTEGER NOT NULL,      -- Device category (DEVCAT_*)
+        file_id INTEGER,                -- FK to header file
+        class_name TEXT,                -- C++ class name if found
+        description TEXT,               -- Brief description from comments
+        UNIQUE(name, category)
+    );
+    CREATE INDEX IF NOT EXISTS idx_dev_name ON devices(name);
+    CREATE INDEX IF NOT EXISTS idx_dev_cat ON devices(category);
     """)
 
     if enable_fts:
@@ -498,6 +576,167 @@ def build_mcu_support(conn: sqlite3.Connection, root: Path, file_cache: StringCa
         if verbose and seen:
             periphs = ', '.join(PERIPH_NAMES.get(p, str(p)) for _, p, _ in sorted(seen))
             print(f"  {mcu}: {periphs}")
+    
+    conn.commit()
+    return count
+
+
+# =============================================================================
+# EXTERNAL DEVICE SUPPORT (sensors, displays, PMICs, etc.)
+# =============================================================================
+
+def extract_device_name(filename: str) -> Optional[str]:
+    """Extract canonical device name from filename.
+    
+    Examples:
+        'tphg_bme680.h' -> 'BME680'
+        'agm_mpu9250.cpp' -> 'MPU9250'
+        'ssd1306.h' -> 'SSD1306'
+        'led_apa102.h' -> 'APA102'
+    """
+    stem = Path(filename).stem.lower()
+    
+    # Remove common prefixes
+    for prefix in ('tph_', 'tphg_', 'agm_', 'ag_', 'accel_', 'gyro_', 'mag_', 
+                   'temp_', 'press_', 'humi_', 'light_', 'prox_', 'gas_',
+                   'led_', 'lcd_', 'oled_', 'disp_', 'display_',
+                   'pmic_', 'charger_', 'gauge_', 'bat_', 'battery_',
+                   'audio_', 'codec_', 'flash_', 'eeprom_'):
+        if stem.startswith(prefix):
+            stem = stem[len(prefix):]
+            break
+    
+    # Check exact matches in known devices
+    if stem in DEVICE_NAME_FIXES:
+        return DEVICE_NAME_FIXES[stem]
+    
+    # Try to extract device part number pattern (letters followed by numbers)
+    match = re.search(r'([a-z]{2,})[-_]?(\d{2,}[a-z]*)', stem)
+    if match:
+        candidate = (match.group(1) + match.group(2)).lower()
+        if candidate in DEVICE_NAME_FIXES:
+            return DEVICE_NAME_FIXES[candidate]
+        # Return uppercase if it looks like a device (has numbers)
+        return candidate.upper()
+    
+    return None
+
+
+def extract_class_name(content: str, device_name: str) -> Optional[str]:
+    """Extract C++ class name from file content that matches device.
+    
+    Looks for patterns like:
+        class TphBme680 : public TphSensor
+        class AgmMpu9250 : public AccelSensor
+    """
+    device_lower = device_name.lower()
+    # Look for class definitions containing the device name
+    pattern = rf'\bclass\s+([A-Za-z_]\w*{device_lower}\w*)\b'
+    match = re.search(pattern, content, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+
+def extract_brief_description(content: str) -> Optional[str]:
+    """Extract brief description from file header comment."""
+    # Look for @brief in doxygen style
+    match = re.search(r'@brief\s+(.+?)(?:\n\s*\n|\n\s*@|\*/)', content, re.DOTALL)
+    if match:
+        desc = match.group(1).strip()
+        # Clean up and limit length
+        desc = re.sub(r'\s+', ' ', desc)
+        return desc[:200] if len(desc) > 200 else desc
+    return None
+
+
+def detect_device_category(filepath: str) -> int:
+    """Detect device category from file path."""
+    path_lower = filepath.lower()
+    for folder, cat_id in DEVCAT_MAP.items():
+        if f'/{folder}/' in path_lower or f'\\{folder}\\' in path_lower:
+            return cat_id
+        if path_lower.startswith(f'{folder}/') or path_lower.startswith(f'{folder}\\'):
+            return cat_id
+    return DEVCAT_NONE
+
+
+def find_device_files(root: Path) -> Iterator[Tuple[Path, int]]:
+    """Find device driver files and their categories.
+    
+    Scans:
+        include/sensors/
+        include/display/
+        include/miscdev/
+        include/pwrmgnt/
+        include/imu/
+        include/audio/
+        include/storage/
+        include/converters/
+        src/sensors/
+        src/display/
+        etc.
+    """
+    device_dirs = ['sensors', 'display', 'miscdev', 'pwrmgnt', 'imu', 
+                   'audio', 'storage', 'converters']
+    
+    for base in ['include', 'src']:
+        for dev_dir in device_dirs:
+            dir_path = root / base / dev_dir
+            if not dir_path.exists():
+                continue
+            
+            category = DEVCAT_MAP.get(dev_dir, DEVCAT_NONE)
+            
+            for ext in ['.h', '.hpp', '.cpp', '.c']:
+                for filepath in dir_path.glob(f'*{ext}'):
+                    if filepath.is_file():
+                        yield filepath, category
+
+
+def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: StringCache, 
+                         verbose: bool, max_bytes: int = 64*1024) -> int:
+    """Build external device support table by scanning IOsonata device directories."""
+    count = 0
+    seen_devices = set()  # (name, category) pairs already added
+    
+    conn.execute("DELETE FROM devices")
+    
+    for filepath, category in find_device_files(root):
+        if category == DEVCAT_NONE:
+            continue
+        
+        device_name = extract_device_name(filepath.name)
+        if not device_name:
+            continue
+        
+        # Skip duplicates (same device may have .h and .cpp)
+        key = (device_name, category)
+        if key in seen_devices:
+            continue
+        seen_devices.add(key)
+        
+        # Read file for additional info
+        try:
+            content = _safe_read(filepath, max_bytes)
+        except:
+            content = ""
+        
+        rel_path = filepath.relative_to(root) if filepath.is_relative_to(root) else filepath
+        file_id = file_cache.get_id(str(rel_path))
+        
+        class_name = extract_class_name(content, device_name) if content else None
+        description = extract_brief_description(content) if content else None
+        
+        conn.execute(
+            "INSERT OR REPLACE INTO devices(name, category, file_id, class_name, description) VALUES(?,?,?,?,?)",
+            (device_name, category, file_id, class_name, description)
+        )
+        count += 1
+        
+        if verbose:
+            cat_name = DEVCAT_NAMES.get(category, str(category))
+            print(f"  {device_name} ({cat_name}): {rel_path}")
     
     conn.commit()
     return count
@@ -801,6 +1040,11 @@ class IndexBuilder:
         mcu_count = build_mcu_support(conn, self.source, file_cache, self.verbose)
         print(f"[{_fmt(time.time()-t0)}] MCU: {mcu_count} entries")
 
+        # Device support (sensors, displays, PMICs, etc.)
+        print(f"[{_fmt(time.time()-t0)}] Building device support matrix...")
+        device_count = build_device_support(conn, self.source, file_cache, self.verbose)
+        print(f"[{_fmt(time.time()-t0)}] Devices: {device_count} entries")
+
         # Index files
         print(f"[{_fmt(time.time()-t0)}] Scanning files...")
         
@@ -899,6 +1143,7 @@ class IndexBuilder:
         print(f"  Types:     {stats['types']}")
         print(f"  Examples:  {stats['examples']}")
         print(f"  MCU:       {mcu_count}")
+        print(f"  Devices:   {device_count}")
         print(f"  DB size:   {size_kb:.1f} KB")
         return db_path
 
