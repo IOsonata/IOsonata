@@ -66,7 +66,7 @@ Options:
   --home <path>       Set custom SDK installation root (default: ~/IOcomposer)
   --force-update      Force reinstall
   --uninstall         Remove toolchains + Eclipse (keep repos/workspaces)
-  (no option)         Install/update (skip if already installed) <-- Sudo permissions no longer required
+  (no option)         Install/update (skip if already installed)
 EOF
 }
 
@@ -720,6 +720,9 @@ find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|nrfx/mdk|nrfx/bsp/stable
 
 # Fix Fusion case sensitivity (Linux filesystems are case-sensitive)
 find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|external/fusion|external/Fusion|g' {} \; 2>/dev/null || true
+
+# Fix CMSIS case sensitivity (folder is "Include" not "include")
+find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|CMSIS/Core/include|CMSIS/Core/Include|g' {} \; 2>/dev/null || true
 
 echo "✅ Eclipse project paths fixed for Linux"
 
