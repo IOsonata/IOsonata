@@ -10,7 +10,7 @@ This module defines the common schema used by all three indexers:
 Design principles:
 1. Binary-first: Integer enums, compressed BLOBs, binary hashes
 2. Consistent: Same table names, column names, types across all DBs
-3. Machine-optimized: No JSON stored, FTS5 external content
+3. Machine-optimized: No JSON stored, FTS5 title-only (contentless)
 4. Simple: Java only needs one schema handler
 
 All DBs output to:
@@ -19,12 +19,15 @@ All DBs output to:
 - Knowledge: .iosonata/knowledge.db
 """
 
+import bisect
 import hashlib
+import os
 import sqlite3
 import struct
+import time
 import zlib
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Iterator, Optional
 
 # =============================================================================
 # CONSTANTS
@@ -32,6 +35,14 @@ from typing import Dict, Optional
 
 SCHEMA_VERSION = 6
 COMPRESS_LEVEL = 6
+
+# =============================================================================
+# SOURCE FILE SUFFIXES
+# =============================================================================
+
+SOURCE_SUFFIXES_CODE = {".h", ".hpp", ".hh", ".c", ".cc", ".cpp", ".cxx", ".inc", ".inl"}
+SOURCE_SUFFIXES_ASM = {".s", ".S"}
+SOURCE_SUFFIXES_ALL = SOURCE_SUFFIXES_CODE | SOURCE_SUFFIXES_ASM
 
 # =============================================================================
 # CHUNK KINDS (unified across all indexers)
@@ -261,26 +272,27 @@ CREATE INDEX IF NOT EXISTS idx_dev_name ON devices(name);
 CREATE INDEX IF NOT EXISTS idx_dev_cat ON devices(category);
 """
 
-# FTS5 virtual table
+# FTS5 virtual table - title-only, contentless
+# Design: indexes chunk titles for fast keyword search without duplicating content
+# Content stays compressed in chunks.content (binary-first principle)
 FTS_SQL = """
 CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
-    title, content,
-    content='chunks',
-    content_rowid='id',
+    title,
+    content='',
     tokenize='porter unicode61'
 );
 
 CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
-    INSERT INTO fts(rowid, title, content) VALUES (new.id, new.title, '');
+    INSERT INTO fts(rowid, title) VALUES (new.id, new.title);
 END;
 
 CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
-    INSERT INTO fts(fts, rowid, title, content) VALUES('delete', old.id, old.title, '');
+    INSERT INTO fts(fts, rowid, title) VALUES('delete', old.id, old.title);
 END;
 
 CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
-    INSERT INTO fts(fts, rowid, title, content) VALUES('delete', old.id, old.title, '');
-    INSERT INTO fts(rowid, title, content) VALUES (new.id, new.title, '');
+    INSERT INTO fts(fts, rowid, title) VALUES('delete', old.id, old.title);
+    INSERT INTO fts(rowid, title) VALUES (new.id, new.title);
 END;
 """
 
@@ -310,8 +322,41 @@ def ensure_schema(conn: sqlite3.Connection, enable_fts: bool = True,
 
 
 def fts_rebuild(conn: sqlite3.Connection) -> None:
-    """Rebuild FTS index from chunks."""
-    conn.execute("INSERT INTO fts(fts) VALUES('rebuild')")
+    """Rebuild FTS index from chunks (title-only, contentless)."""
+    # For contentless FTS5, use 'delete-all' command then repopulate
+    conn.execute("INSERT INTO fts(fts) VALUES('delete-all')")
+    conn.execute("INSERT INTO fts(rowid, title) SELECT id, title FROM chunks")
+    conn.commit()
+
+
+# =============================================================================
+# STANDARDIZED METADATA CONTRACT
+# =============================================================================
+# All DBs must have these meta keys:
+#   schema     - u32 schema version
+#   built      - i64 unix timestamp
+#   type       - bytes: b'code', b'external', or b'knowledge'
+#   version    - bytes: user-provided version string
+# Optional:
+#   commit     - 20-byte git SHA1 (if in git repo)
+#   fingerprint - 32-byte SHA256 of source content (for skip-if-unchanged)
+
+DB_TYPE_CODE = b'code'
+DB_TYPE_EXTERNAL = b'external'
+DB_TYPE_KNOWLEDGE = b'knowledge'
+
+
+def set_standard_meta(conn: sqlite3.Connection, db_type: bytes, version: str,
+                      commit: Optional[bytes] = None, fingerprint: Optional[bytes] = None) -> None:
+    """Set standardized metadata for all DB types."""
+    set_meta(conn, 'schema', pack_u32(SCHEMA_VERSION))
+    set_meta(conn, 'built', pack_i64(int(time.time())))
+    set_meta(conn, 'type', db_type)
+    set_meta(conn, 'version', version.encode('utf-8'))
+    if commit:
+        set_meta(conn, 'commit', commit)
+    if fingerprint:
+        set_meta(conn, 'fingerprint', fingerprint)
     conn.commit()
 
 
@@ -411,3 +456,66 @@ def unpack_u32(data: bytes) -> int:
 
 def unpack_i64(data: bytes) -> int:
     return struct.unpack("<q", data)[0]
+
+
+# =============================================================================
+# SOURCE FINGERPRINTING (for skip-if-unchanged)
+# =============================================================================
+
+def compute_source_fingerprint(root: Path, suffixes: set, ignore_dirs: set,
+                               ignore_prefixes: tuple = ()) -> bytes:
+    """Compute SHA256 fingerprint from file stats (path + size + mtime_ns).
+    
+    Deterministic and properly prunes ignored directories.
+    
+    Args:
+        root: Directory to fingerprint
+        suffixes: File extensions to include (e.g. {'.c', '.h'})
+        ignore_dirs: Exact directory names to skip
+        ignore_prefixes: Directory name prefixes to skip (e.g. ('Debug', 'cmake-build-'))
+    """
+    h = hashlib.sha256()
+
+    def should_ignore_dir(name: str) -> bool:
+        if name in ignore_dirs or name.startswith('.'):
+            return True
+        if ignore_prefixes and name.startswith(ignore_prefixes):
+            return True
+        return False
+
+    for dp, dn, fn in os.walk(root):
+        # Prune + deterministic traversal (must modify dn in-place, not wrap os.walk)
+        dn[:] = sorted(d for d in dn if not should_ignore_dir(d))
+        fn = sorted(fn)
+
+        for f in fn:
+            p = Path(dp) / f
+            if p.suffix.lower() not in suffixes:
+                continue
+            try:
+                st = p.stat()
+                rel = p.relative_to(root).as_posix()  # stable across OS
+                h.update(rel.encode('utf-8'))
+                h.update(struct.pack('<QQ', st.st_size, st.st_mtime_ns))
+            except OSError:
+                continue
+
+    return h.digest()
+
+
+# =============================================================================
+# LINE NUMBER HELPERS (O(n) instead of O(n²))
+# =============================================================================
+
+
+def build_line_index(src: str) -> list:
+    """Build newline index for O(1) line lookups.
+    
+    Returns list of newline positions. Use with idx_to_line().
+    """
+    return [i for i, c in enumerate(src) if c == '\n']
+
+
+def idx_to_line(nl_index: list, char_idx: int) -> int:
+    """Convert character index to 1-based line number using precomputed index."""
+    return bisect.bisect_right(nl_index, char_idx) + 1

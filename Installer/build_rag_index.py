@@ -34,10 +34,10 @@ from rag_schema import (
     PERIPH_TIMER, PERIPH_PWM, PERIPH_ADC, PERIPH_GPIO, PERIPH_FLASH,
     PERIPH_I2S, PERIPH_PDM, PERIPH_QSPI, PERIPH_ESB, PERIPH_SENSOR,
     PERIPH_RTC, PERIPH_WDT, PERIPH_DMA, PERIPH_CRYPTO, PERIPH_MAP,
-    PROVIDER_MAP,
-    db_connect, ensure_schema, fts_rebuild,
+    PROVIDER_MAP, DB_TYPE_CODE,
+    db_connect, ensure_schema, fts_rebuild, set_standard_meta,
     compress, decompress, sha256, StringCache,
-    set_meta, pack_u32, pack_i64,
+    build_line_index, idx_to_line,
 )
 
 print = functools.partial(print, flush=True)
@@ -558,14 +558,9 @@ class IndexBuilder:
         conn = db_connect(db_path, baseline=True)
         ensure_schema(conn, enable_fts=self.enable_fts, include_mcu=True, include_devices=True)
 
-        # Metadata
-        set_meta(conn, 'schema', pack_u32(SCHEMA_VERSION))
-        set_meta(conn, 'version', version.encode())
-        set_meta(conn, 'built', pack_i64(int(time.time())))
+        # Standardized metadata
         commit = self._git_commit()
-        if commit:
-            set_meta(conn, 'commit', commit)
-        conn.commit()
+        set_standard_meta(conn, DB_TYPE_CODE, version, commit=commit)
 
         # String caches
         file_cache = StringCache(conn, "files")
@@ -595,6 +590,9 @@ class IndexBuilder:
             except:
                 continue
 
+            # Precompute line index for O(1) line lookups
+            nl_idx = build_line_index(src)
+
             # Examples
             is_example = any(h in rel.lower().split("/") for h in EXAMPLE_DIR_HINTS)
             if self.example_cap and is_example and stats["examples"] < self.example_cap:
@@ -615,7 +613,7 @@ class IndexBuilder:
             # Types
             for kind, name, s_idx, e_idx in iter_types(src):
                 block = src[s_idx:e_idx+1]
-                line = src[:s_idx].count("\n") + 1
+                line = idx_to_line(nl_idx, s_idx)
                 desc = _brief_comment(src, s_idx)
                 content = f"{kind} {name}\n{desc}\n{block}"[:self.max_chunk]
                 conn.execute(
@@ -628,7 +626,7 @@ class IndexBuilder:
 
             # Functions
             for fname, sig, ret, s_idx, e_idx, has_body in iter_funcs(src):
-                line = src[:s_idx].count("\n") + 1
+                line = idx_to_line(nl_idx, s_idx)
                 desc = _brief_comment(src, s_idx)
                 body = ""
                 if has_body:

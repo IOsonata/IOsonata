@@ -28,9 +28,11 @@ from rag_schema import (
     SCHEMA_VERSION, COMPRESS_LEVEL,
     KIND_FUNCTION, KIND_TYPE, KIND_EXAMPLE, KIND_ASSEMBLY,
     PERIPH_NONE, PERIPH_MAP, PROVIDER_MAP,
-    db_connect, ensure_schema, fts_rebuild,
+    DB_TYPE_EXTERNAL, SOURCE_SUFFIXES_ALL,
+    db_connect, ensure_schema, fts_rebuild, set_standard_meta,
     compress, decompress, sha256, StringCache,
-    set_meta, pack_u32, pack_i64,
+    compute_source_fingerprint, build_line_index, idx_to_line,
+    get_meta,
 )
 
 print = functools.partial(print, flush=True)
@@ -46,7 +48,6 @@ DEFAULT_IGNORE_DIRS = {
     "doc", "docs", "documentation", "doxygen",
 }
 IGNORE_DIR_PREFIXES = ("Debug", "Release", "cmake-build-")
-SOURCE_SUFFIXES = {".h", ".hpp", ".hh", ".c", ".cc", ".cpp", ".cxx", ".inc", ".inl", ".s", ".S"}
 EXAMPLE_DIR_HINTS = frozenset(("example", "examples", "sample", "samples", "demo", "demos", "test", "tests"))
 
 
@@ -263,17 +264,26 @@ class SDKIndexer:
             fn.sort()
             for f in fn:
                 p = Path(dp) / f
-                if p.suffix.lower() in SOURCE_SUFFIXES:
+                if p.suffix.lower() in SOURCE_SUFFIXES_ALL:
                     yield p
 
     def build_sdk_db(self, sdk_path: Path, name: str, out_db: Path, version: str, skip_unchanged: bool) -> Optional[Path]:
         out_db.parent.mkdir(parents=True, exist_ok=True)
         
+        # Compute source fingerprint for reliable skip-if-unchanged
+        current_fp = compute_source_fingerprint(sdk_path, SOURCE_SUFFIXES_ALL, DEFAULT_IGNORE_DIRS, IGNORE_DIR_PREFIXES)
+        
         if skip_unchanged and out_db.exists():
-            # Simple check - if output exists and SDK dir wasn't modified, skip
-            if out_db.stat().st_mtime > sdk_path.stat().st_mtime:
-                print(f"  [skip] {name} (unchanged)")
-                return out_db
+            try:
+                # Read-only check to avoid creating WAL sidecar files
+                conn = sqlite3.connect(f"file:{out_db}?mode=ro", uri=True, timeout=5)
+                stored_fp = get_meta(conn, 'fingerprint')
+                conn.close()
+                if stored_fp == current_fp:
+                    print(f"  [skip] {name} (unchanged)")
+                    return out_db
+            except:
+                pass  # DB corrupt or no fingerprint, rebuild
 
         if out_db.exists():
             out_db.unlink()
@@ -282,12 +292,8 @@ class SDKIndexer:
         conn = db_connect(out_db, baseline=True)
         ensure_schema(conn, enable_fts=self.enable_fts, include_mcu=False, include_devices=False)
 
-        # Metadata
-        set_meta(conn, 'schema', pack_u32(SCHEMA_VERSION))
-        set_meta(conn, 'version', version.encode())
-        set_meta(conn, 'built', pack_i64(int(time.time())))
-        set_meta(conn, 'sdk_name', name.encode())
-        conn.commit()
+        # Standardized metadata
+        set_standard_meta(conn, DB_TYPE_EXTERNAL, version, fingerprint=current_fp)
 
         file_cache = StringCache(conn, "files")
         module_cache = StringCache(conn, "modules")
@@ -310,6 +316,9 @@ class SDKIndexer:
             except:
                 continue
 
+            # Precompute line index for O(1) line lookups
+            nl_idx = build_line_index(src)
+
             # Examples
             is_example = any(h in rel.lower().split("/") for h in EXAMPLE_DIR_HINTS)
             if self.example_cap and is_example and stats["examples"] < self.example_cap:
@@ -330,7 +339,7 @@ class SDKIndexer:
             # Types
             for kind, name_, s_idx, e_idx in iter_types(src):
                 block = src[s_idx:e_idx+1]
-                line = src[:s_idx].count("\n") + 1
+                line = idx_to_line(nl_idx, s_idx)
                 content = f"{kind} {name_}\n{block}"[:self.max_chunk]
                 conn.execute(
                     "INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,content,hash) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -342,7 +351,7 @@ class SDKIndexer:
 
             # Functions
             for fname, sig, ret, s_idx, e_idx, has_body in iter_funcs(src):
-                line = src[:s_idx].count("\n") + 1
+                line = idx_to_line(nl_idx, s_idx)
                 body = ""
                 if has_body:
                     masked = _mask_comments(src)
