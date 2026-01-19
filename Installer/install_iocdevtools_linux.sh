@@ -17,6 +17,43 @@ echo "=============================================="
 echo
 
 # ---------------------------------------------------------
+# DEPENDENCY CHECK AND INSTALL
+# ---------------------------------------------------------
+check_and_install_dependencies() {
+  local missing_dependencies=()
+  
+  command -v git &>/dev/null || missing_dependencies+=("git")
+  command -v make &>/dev/null || missing_dependencies+=("make")
+  
+  if [[ ${#missing_dependencies[@]} -eq 0 ]]; then
+    echo "✓ All required dependencies are installed"
+    return 0
+  fi
+  
+  echo "⚠️  Missing dependencies: ${missing_dependencies[*]}"
+  
+  if command -v apt-get &>/dev/null; then
+    echo ">>> Installing via apt-get..."
+    sudo apt-get update && sudo apt-get install -y "${missing_dependencies[@]}"
+  elif command -v dnf &>/dev/null; then
+    sudo dnf install -y "${missing_dependencies[@]}"
+  elif command -v yum &>/dev/null; then
+    sudo yum install -y "${missing_dependencies[@]}"
+  elif command -v pacman &>/dev/null; then
+    sudo pacman -S --noconfirm "${missing_dependencies[@]}"
+  elif command -v zypper &>/dev/null; then
+    sudo zypper install -y "${missing_dependencies[@]}"
+  else
+    echo "❌ Could not detect package manager. Please install: ${missing_dependencies[*]}"
+    exit 1
+  fi
+  
+  echo "✓ Dependencies installed successfully"
+}
+
+check_and_install_dependencies
+
+# ---------------------------------------------------------
 # CLI
 # ---------------------------------------------------------
 show_help() {

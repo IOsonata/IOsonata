@@ -31,6 +31,45 @@ echo -e "${BOLD}     Version: $SCRIPT_VERSION${RESET}"
 echo -e "${BLUE}=========================================================${RESET}"
 
 # ---------------------------------------------------------
+# DEPENDENCY CHECK AND INSTALL
+# ---------------------------------------------------------
+check_and_install_dependencies() {
+  local missing_dependencies=()
+
+  # Check for git and make
+  command -v git &>/dev/null || missing_dependencies+=("git")
+  command -v make &>/dev/null || missing_dependencies+=("make")
+
+  # No missing dependencies (So end function)
+  if [[ ${#missing_dependencies[@]} -eq 0 ]]; then
+    echo -e "${GREEN}✓ All required dependencies are installed${RESET}"
+    return 0;
+  fi
+
+  echo -e "${YELLOW}⚠️  Missing dependencies, installing: ${missing_dependencies[*]}${RESET}"
+
+  # Detect package manager and install
+  if command -v apt-get &>/dev/null; then
+    sudo apt-get update && sudo apt-get install -y "${missing_dependencies[@]}"
+  elif command -v dnf &>/dev/null; then
+    sudo dnf install -y "${missing_dependencies[@]}"
+  elif command -v yum &>/dev/null; then
+    sudo yum install -y "${missing_dependencies[@]}"
+  elif command -v pacman &>/dev/null; then
+    sudo pacman -S --noconfirm "${missing_dependencies[@]}"  
+  elif command -v zypper &>/dev/null; then
+    sudo zypper install -y "${missing_dependencies[@]}"
+  else
+    echo -e "${RED}❌ Could not detect package manager. Please install manually: ${missing_dependencies[*]}${RESET}"
+    exit 1
+  fi
+
+  echo "✓ Dependencies installed successfully"
+}
+
+check_and_install_dependencies
+
+# ---------------------------------------------------------
 # DEFAULT CONFIGURATION VALUES
 # ---------------------------------------------------------
 ROOT="$HOME/IOcomposer"
