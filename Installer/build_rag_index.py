@@ -1,21 +1,13 @@
 #!/usr/bin/env python3
 """
-IOsonata RAG Index Builder v3 - Binary Optimized
+IOsonata RAG Index Builder v6 - Unified Schema
 
-Optimizations for machine reading:
-1. Integer IDs for enums (peripheral, kind, module) - no string comparisons
-2. zlib compressed content - smaller DB, faster I/O
-3. Lookup tables for repeated strings
-4. FTS5 with external content - no duplication
-5. Packed binary embeddings (already optimal)
-6. No JSON/XML/YAML anywhere
-
-DB size reduction: ~60% smaller than v2
-Query speed: ~3-5x faster (integer comparisons vs string)
+Indexes IOsonata source code into a SQLite database for RAG retrieval.
+Uses unified schema shared with build_external_index.py and build_knowledge_db.py.
 
 Usage:
   python3 build_rag_index.py                    # Build index
-  python3 build_rag_index.py --update-embeddings --api-key $KEY
+  python3 build_rag_index.py --update-embeddings --provider openai --api-key $KEY
 """
 
 from __future__ import annotations
@@ -29,18 +21,30 @@ import re
 import sqlite3
 import struct
 import subprocess
-import sys
 import time
-import zlib
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
+
+# Import unified schema
+from rag_schema import (
+    SCHEMA_VERSION, COMPRESS_LEVEL,
+    KIND_FUNCTION, KIND_TYPE, KIND_EXAMPLE, KIND_ASSEMBLY, KIND_HEADER,
+    PERIPH_NONE, PERIPH_BLE, PERIPH_UART, PERIPH_SPI, PERIPH_I2C, PERIPH_USB,
+    PERIPH_TIMER, PERIPH_PWM, PERIPH_ADC, PERIPH_GPIO, PERIPH_FLASH,
+    PERIPH_I2S, PERIPH_PDM, PERIPH_QSPI, PERIPH_ESB, PERIPH_SENSOR,
+    PERIPH_RTC, PERIPH_WDT, PERIPH_DMA, PERIPH_CRYPTO, PERIPH_MAP,
+    PROVIDER_MAP,
+    db_connect, ensure_schema, fts_rebuild,
+    compress, decompress, sha256, StringCache,
+    set_meta, pack_u32, pack_i64,
+)
 
 print = functools.partial(print, flush=True)
 
-SCHEMA_VERSION = 5
-COMPRESS_LEVEL = 6  # zlib compression (1-9, 6 is good balance)
+# =============================================================================
+# CONFIG
+# =============================================================================
 
 DEFAULT_IGNORE_DIRS = {
     ".git", ".github", ".iosonata", ".metadata", ".settings", ".vscode", ".idea",
@@ -52,74 +56,15 @@ SOURCE_SUFFIXES = {".h", ".hpp", ".hh", ".c", ".cc", ".cpp", ".cxx", ".inc", ".i
 EXAMPLE_DIR_HINTS = frozenset(("example", "examples", "sample", "samples", "demo", "demos", "test", "tests", "exemples"))
 
 # =============================================================================
-# ENUM MAPPINGS (Integer IDs for fast comparison)
+# BLE IMPLEMENTATION TYPES
 # =============================================================================
 
-# Chunk kinds: 1-byte integer
-KIND_FUNCTION = 1
-KIND_TYPE = 2
-KIND_EXAMPLE = 3
-KIND_ASSEMBLY = 4
-KIND_HEADER = 5
-
-KIND_MAP = {"function": KIND_FUNCTION, "type": KIND_TYPE, "example": KIND_EXAMPLE, 
-            "assembly": KIND_ASSEMBLY, "header": KIND_HEADER}
-KIND_NAMES = {v: k for k, v in KIND_MAP.items()}
-
-# Peripherals: 1-byte integer
-PERIPH_NONE = 0
-PERIPH_BLE = 1
-PERIPH_UART = 2
-PERIPH_SPI = 3
-PERIPH_I2C = 4
-PERIPH_USB = 5
-PERIPH_TIMER = 6
-PERIPH_PWM = 7
-PERIPH_ADC = 8
-PERIPH_GPIO = 9
-PERIPH_FLASH = 10
-PERIPH_I2S = 11
-PERIPH_PDM = 12
-PERIPH_QSPI = 13
-PERIPH_ESB = 14
-PERIPH_SENSOR = 15
-PERIPH_RTC = 16
-PERIPH_WDT = 17
-PERIPH_DMA = 18
-PERIPH_CRYPTO = 19
-
-PERIPH_MAP = {
-    "ble": PERIPH_BLE, "bluetooth": PERIPH_BLE,
-    "uart": PERIPH_UART, "serial": PERIPH_UART,
-    "spi": PERIPH_SPI,
-    "i2c": PERIPH_I2C, "twi": PERIPH_I2C,
-    "usb": PERIPH_USB,
-    "timer": PERIPH_TIMER,
-    "pwm": PERIPH_PWM,
-    "adc": PERIPH_ADC, "saadc": PERIPH_ADC,
-    "gpio": PERIPH_GPIO, "iopin": PERIPH_GPIO,
-    "flash": PERIPH_FLASH, "nvmc": PERIPH_FLASH,
-    "i2s": PERIPH_I2S,
-    "pdm": PERIPH_PDM,
-    "qspi": PERIPH_QSPI,
-    "esb": PERIPH_ESB,
-    "sensor": PERIPH_SENSOR, "imu": PERIPH_SENSOR, "accel": PERIPH_SENSOR,
-    "rtc": PERIPH_RTC,
-    "wdt": PERIPH_WDT, "watchdog": PERIPH_WDT,
-    "dma": PERIPH_DMA,
-    "crypto": PERIPH_CRYPTO, "aes": PERIPH_CRYPTO, "sha": PERIPH_CRYPTO,
-}
-PERIPH_NAMES = {v: k for k, v in PERIPH_MAP.items() if k == k.lower()}
-
-# BLE implementation types: 1-byte integer
 BLE_IMPL_NONE = 0
 BLE_IMPL_SOFTDEVICE = 1
 BLE_IMPL_SDC = 2
 
-BLE_IMPL_MAP = {"softdevice": BLE_IMPL_SOFTDEVICE, "sdc": BLE_IMPL_SDC}
-
 # =============================================================================
-# DEVICE CATEGORIES (External devices like sensors, displays, PMICs)
+# DEVICE CATEGORIES
 # =============================================================================
 
 DEVCAT_NONE = 0
@@ -133,63 +78,17 @@ DEVCAT_STORAGE = 7
 DEVCAT_CONVERTER = 8
 
 DEVCAT_MAP = {
-    "sensors": DEVCAT_SENSOR,
-    "display": DEVCAT_DISPLAY,
-    "miscdev": DEVCAT_MISCDEV,
-    "pwrmgnt": DEVCAT_PMIC,
-    "imu": DEVCAT_IMU,
-    "audio": DEVCAT_AUDIO,
-    "storage": DEVCAT_STORAGE,
-    "converters": DEVCAT_CONVERTER,
-}
-DEVCAT_NAMES = {v: k for k, v in DEVCAT_MAP.items()}
-
-# Known device name patterns to extract from filenames
-# (regex_pattern, replacement_or_canonical_name)
-DEVICE_NAME_FIXES = {
-    # Sensors - Environmental
-    "bme280": "BME280", "bme680": "BME680", "bme688": "BME688",
-    "bmp280": "BMP280", "bmp388": "BMP388", "bmp390": "BMP390",
-    "sht31": "SHT31", "sht40": "SHT40", "sht45": "SHT45",
-    "hdc1080": "HDC1080", "hdc2010": "HDC2010",
-    "lps22hb": "LPS22HB", "lps25hb": "LPS25HB",
-    "veml7700": "VEML7700", "veml6075": "VEML6075",
-    "tsl2561": "TSL2561", "tsl2591": "TSL2591",
-    "opt3001": "OPT3001",
-    # Sensors - Motion/IMU
-    "mpu6050": "MPU6050", "mpu9250": "MPU9250",
-    "icm20948": "ICM20948", "icm42688": "ICM42688",
-    "lis2dh": "LIS2DH", "lis3dh": "LIS3DH", "lis2dh12": "LIS2DH12",
-    "lsm6dso": "LSM6DSO", "lsm6dsox": "LSM6DSOX", "lsm9ds1": "LSM9DS1",
-    "bmi160": "BMI160", "bmi270": "BMI270",
-    "bno055": "BNO055", "bno080": "BNO080",
-    "ak09916": "AK09916", "ak8963": "AK8963",
-    # Displays
-    "ssd1306": "SSD1306", "ssd1351": "SSD1351", "ssd1327": "SSD1327",
-    "ili9341": "ILI9341", "ili9488": "ILI9488",
-    "st7735": "ST7735", "st7789": "ST7789",
-    "sh1106": "SH1106", "sh1107": "SH1107",
-    # PMICs / Power
-    "bq24295": "BQ24295", "bq25120": "BQ25120",
-    "max17048": "MAX17048", "max17055": "MAX17055",
-    "ltc2941": "LTC2941", "ltc2942": "LTC2942",
-    "tps62740": "TPS62740",
-    # LED drivers
-    "apa102": "APA102", "ws2812": "WS2812", "sk6812": "SK6812",
-    "ncp5623b": "NCP5623B",
-    "tca6424a": "TCA6424A",
-    # Audio
-    "vs1053": "VS1053",
-    "wm8904": "WM8904",
+    "sensors": DEVCAT_SENSOR, "display": DEVCAT_DISPLAY, "miscdev": DEVCAT_MISCDEV,
+    "pwrmgnt": DEVCAT_PMIC, "imu": DEVCAT_IMU, "audio": DEVCAT_AUDIO,
+    "storage": DEVCAT_STORAGE, "converters": DEVCAT_CONVERTER,
 }
 
 # =============================================================================
-# PERIPHERAL DETECTION
+# PERIPHERAL DETECTION PATTERNS
 # =============================================================================
 
-# (pattern, peripheral_id, ble_impl_type)
 IMPL_PATTERNS = [
-    # Nordic ARM (nRF52/53/54)
+    # Nordic BLE
     (r'bt_app_nrf52\.cpp$', PERIPH_BLE, BLE_IMPL_SOFTDEVICE),
     (r'bt_gap_nrf52\.cpp$', PERIPH_BLE, BLE_IMPL_SOFTDEVICE),
     (r'bt_gatt_nrf52\.cpp$', PERIPH_BLE, BLE_IMPL_SOFTDEVICE),
@@ -197,6 +96,7 @@ IMPL_PATTERNS = [
     (r'bt_gap_sdc\.cpp$', PERIPH_BLE, BLE_IMPL_SDC),
     (r'bt_gatt_sdc\.cpp$', PERIPH_BLE, BLE_IMPL_SDC),
     (r'ble_dev\.cpp$', PERIPH_BLE, BLE_IMPL_NONE),
+    # Nordic peripherals
     (r'uart_nrf.*\.cpp$', PERIPH_UART, 0),
     (r'spi_nrf.*\.cpp$', PERIPH_SPI, 0),
     (r'i2c_nrf.*\.cpp$', PERIPH_I2C, 0),
@@ -216,50 +116,21 @@ IMPL_PATTERNS = [
     (r'timer_stm32.*\.cpp$', PERIPH_TIMER, 0),
     (r'pwm_stm32.*\.cpp$', PERIPH_PWM, 0),
     (r'adc_stm32.*\.cpp$', PERIPH_ADC, 0),
-    # Microchip SAM
+    # SAM
     (r'uart_sam.*\.cpp$', PERIPH_UART, 0),
     (r'spi_sam.*\.cpp$', PERIPH_SPI, 0),
     (r'i2c_sam.*\.cpp$', PERIPH_I2C, 0),
-    (r'usb_sam.*\.cpp$', PERIPH_USB, 0),
-    (r'timer_sam.*\.cpp$', PERIPH_TIMER, 0),
-    (r'pwm_sam.*\.cpp$', PERIPH_PWM, 0),
-    (r'adc_sam.*\.cpp$', PERIPH_ADC, 0),
-    # NXP LPC
+    # LPC
     (r'uart_lpc.*\.cpp$', PERIPH_UART, 0),
     (r'spi_lpc.*\.cpp$', PERIPH_SPI, 0),
     (r'i2c_lpc.*\.cpp$', PERIPH_I2C, 0),
-    (r'usb_lpc.*\.cpp$', PERIPH_USB, 0),
-    (r'timer_lpc.*\.cpp$', PERIPH_TIMER, 0),
-    (r'pwm_lpc.*\.cpp$', PERIPH_PWM, 0),
-    (r'adc_lpc.*\.cpp$', PERIPH_ADC, 0),
-    # Renesas RE/RA
-    (r'uart_re.*\.cpp$', PERIPH_UART, 0),
-    (r'spi_re.*\.cpp$', PERIPH_SPI, 0),
-    (r'i2c_re.*\.cpp$', PERIPH_I2C, 0),
-    (r'usb_re.*\.cpp$', PERIPH_USB, 0),
-    (r'timer_re.*\.cpp$', PERIPH_TIMER, 0),
-    (r'pwm_re.*\.cpp$', PERIPH_PWM, 0),
-    (r'adc_re.*\.cpp$', PERIPH_ADC, 0),
-    # RISC-V - ESP32-C (Espressif)
+    # RISC-V
     (r'uart_esp32c.*\.cpp$', PERIPH_UART, 0),
     (r'spi_esp32c.*\.cpp$', PERIPH_SPI, 0),
     (r'i2c_esp32c.*\.cpp$', PERIPH_I2C, 0),
-    (r'timer_esp32c.*\.cpp$', PERIPH_TIMER, 0),
-    (r'adc_esp32c.*\.cpp$', PERIPH_ADC, 0),
-    (r'gpio_esp32c.*\.cpp$', PERIPH_GPIO, 0),
-    # RISC-V - WCH CH32V
     (r'uart_ch32v.*\.cpp$', PERIPH_UART, 0),
     (r'spi_ch32v.*\.cpp$', PERIPH_SPI, 0),
     (r'i2c_ch32v.*\.cpp$', PERIPH_I2C, 0),
-    (r'timer_ch32v.*\.cpp$', PERIPH_TIMER, 0),
-    (r'adc_ch32v.*\.cpp$', PERIPH_ADC, 0),
-    (r'usb_ch32v.*\.cpp$', PERIPH_USB, 0),
-    # RISC-V - GigaDevice GD32VF
-    (r'uart_gd32vf.*\.cpp$', PERIPH_UART, 0),
-    (r'spi_gd32vf.*\.cpp$', PERIPH_SPI, 0),
-    (r'i2c_gd32vf.*\.cpp$', PERIPH_I2C, 0),
-    (r'timer_gd32vf.*\.cpp$', PERIPH_TIMER, 0),
-    (r'adc_gd32vf.*\.cpp$', PERIPH_ADC, 0),
 ]
 
 
@@ -280,466 +151,6 @@ def detect_peripheral_from_path(path: str) -> int:
         if keyword in p:
             return periph_id
     return PERIPH_NONE
-
-
-# =============================================================================
-# DATABASE SCHEMA v5 (Binary Optimized)
-# =============================================================================
-
-def _db_connect(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path), timeout=30)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA cache_size=-65536")  # 64MB
-    conn.execute("PRAGMA page_size=4096")
-    conn.execute("PRAGMA temp_store=MEMORY")
-    return conn
-
-
-def _ensure_schema(conn: sqlite3.Connection, enable_fts: bool) -> None:
-    conn.executescript("""
-    -- Metadata (key-value, minimal)
-    CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB);
-
-    -- Module lookup (string interning)
-    CREATE TABLE IF NOT EXISTS modules (
-        id INTEGER PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL
-    );
-
-    -- File path lookup (string interning) 
-    CREATE TABLE IF NOT EXISTS files (
-        id INTEGER PRIMARY KEY,
-        path TEXT UNIQUE NOT NULL
-    );
-
-    -- Main chunks table (binary optimized)
-    CREATE TABLE IF NOT EXISTS chunks (
-        id INTEGER PRIMARY KEY,
-        kind INTEGER NOT NULL,         -- 1=function, 2=type, 3=example, 4=asm
-        periph INTEGER DEFAULT 0,      -- peripheral ID
-        file_id INTEGER NOT NULL,      -- FK to files
-        module_id INTEGER NOT NULL,    -- FK to modules  
-        line_start INTEGER,
-        line_end INTEGER,
-        title TEXT NOT NULL,           -- function/type name (for FTS)
-        signature BLOB,                -- compressed signature (nullable)
-        content BLOB NOT NULL,         -- zlib compressed content
-        hash BLOB NOT NULL,            -- 20-byte SHA1
-        FOREIGN KEY (file_id) REFERENCES files(id),
-        FOREIGN KEY (module_id) REFERENCES modules(id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_c_kind ON chunks(kind);
-    CREATE INDEX IF NOT EXISTS idx_c_periph ON chunks(periph);
-    CREATE INDEX IF NOT EXISTS idx_c_file ON chunks(file_id);
-    CREATE INDEX IF NOT EXISTS idx_c_module ON chunks(module_id);
-    CREATE INDEX IF NOT EXISTS idx_c_title ON chunks(title);
-
-    -- MCU-Peripheral support (binary)
-    CREATE TABLE IF NOT EXISTS mcu_support (
-        id INTEGER PRIMARY KEY,
-        mcu TEXT NOT NULL,             -- 'NRF52832'
-        periph INTEGER NOT NULL,       -- peripheral ID
-        impl_type INTEGER DEFAULT 0,   -- BLE impl type (SDC/SOFTDEVICE)
-        file_id INTEGER,               -- FK to impl file
-        UNIQUE(mcu, periph, impl_type)
-    );
-    CREATE INDEX IF NOT EXISTS idx_mcu ON mcu_support(mcu);
-    CREATE INDEX IF NOT EXISTS idx_mcu_periph ON mcu_support(mcu, periph);
-
-    -- API functions (for code completion)
-    CREATE TABLE IF NOT EXISTS api (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        periph INTEGER DEFAULT 0,
-        file_id INTEGER,
-        line INTEGER,
-        signature BLOB,                -- compressed
-        ret_type BLOB                  -- compressed (nullable)
-    );
-    CREATE INDEX IF NOT EXISTS idx_api_name ON api(name);
-    CREATE INDEX IF NOT EXISTS idx_api_periph ON api(periph);
-
-    -- Embeddings (binary, unchanged)
-    CREATE TABLE IF NOT EXISTS embeddings (
-        chunk_id INTEGER NOT NULL,
-        provider INTEGER NOT NULL,     -- 1=voyage, 2=openai, 3=hash
-        model_id INTEGER NOT NULL,
-        embedding BLOB NOT NULL,       -- packed float32
-        updated INTEGER NOT NULL,      -- unix timestamp
-        PRIMARY KEY (chunk_id, provider, model_id)
-    );
-
-    -- Model lookup
-    CREATE TABLE IF NOT EXISTS models (
-        id INTEGER PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL
-    );
-
-    -- External device support (sensors, displays, PMICs, etc.)
-    CREATE TABLE IF NOT EXISTS devices (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,             -- Canonical name: 'BME280', 'SSD1306'
-        category INTEGER NOT NULL,      -- Device category (DEVCAT_*)
-        file_id INTEGER,                -- FK to header file
-        class_name TEXT,                -- C++ class name if found
-        description TEXT,               -- Brief description from comments
-        UNIQUE(name, category)
-    );
-    CREATE INDEX IF NOT EXISTS idx_dev_name ON devices(name);
-    CREATE INDEX IF NOT EXISTS idx_dev_cat ON devices(category);
-    """)
-
-    if enable_fts:
-        # FTS5 with external content (no duplication)
-        conn.executescript("""
-        CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
-            title, content,
-            content='chunks',
-            content_rowid='id',
-            tokenize='porter unicode61'
-        );
-        
-        -- Triggers to keep FTS in sync
-        CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
-            INSERT INTO fts(rowid, title, content) 
-            VALUES (new.id, new.title, '');
-        END;
-        CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
-            INSERT INTO fts(fts, rowid, title, content) 
-            VALUES('delete', old.id, old.title, '');
-        END;
-        CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
-            INSERT INTO fts(fts, rowid, title, content) 
-            VALUES('delete', old.id, old.title, '');
-            INSERT INTO fts(rowid, title, content) 
-            VALUES (new.id, new.title, '');
-        END;
-        """)
-    conn.commit()
-
-
-def _fts_rebuild(conn: sqlite3.Connection) -> None:
-    """Rebuild FTS index from chunks."""
-    conn.execute("INSERT INTO fts(fts) VALUES('rebuild')")
-    conn.commit()
-
-
-# =============================================================================
-# COMPRESSION HELPERS
-# =============================================================================
-
-def compress(text: str) -> bytes:
-    """Compress text to bytes."""
-    if not text:
-        return b''
-    return zlib.compress(text.encode('utf-8', errors='replace'), COMPRESS_LEVEL)
-
-
-def decompress(data: bytes) -> str:
-    """Decompress bytes to text."""
-    if not data:
-        return ''
-    return zlib.decompress(data).decode('utf-8', errors='replace')
-
-
-def sha1_bytes(text: str) -> bytes:
-    """Return 20-byte SHA1 hash."""
-    return hashlib.sha1(text.encode('utf-8', errors='ignore')).digest()
-
-
-# =============================================================================
-# STRING INTERNING (Lookup Tables)
-# =============================================================================
-
-class StringCache:
-    """Intern strings into a table with a UNIQUE text column.
-
-    Compatibility note: macOS/Python can ship SQLite versions that
-    do not support `RETURNING` (SQLite < 3.35). We therefore use
-    INSERT OR IGNORE + SELECT, which works broadly.
-    """
-
-    def __init__(self, conn: sqlite3.Connection, table: str):
-        self.conn = conn
-        self.table = table
-        self.value_col = self._detect_value_column(conn, table)
-        self._cache: Dict[str, int] = {}
-        for row in conn.execute(f"SELECT id, {self.value_col} FROM {table}"): 
-            self._cache[row[1]] = row[0]
-
-    @staticmethod
-    def _detect_value_column(conn: sqlite3.Connection, table: str) -> str:
-        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
-        if 'name' in cols:
-            return 'name'
-        if 'path' in cols:
-            return 'path'
-        for c in cols:
-            if c != 'id':
-                return c
-        raise RuntimeError(f"Cannot detect value column for table {table}")
-
-    def get_id(self, value: str) -> int:
-        if value in self._cache:
-            return self._cache[value]
-        self.conn.execute(
-            f"INSERT OR IGNORE INTO {self.table}({self.value_col}) VALUES(?)",
-            (value,)
-        )
-        row = self.conn.execute(
-            f"SELECT id FROM {self.table} WHERE {self.value_col}=?",
-            (value,)
-        ).fetchone()
-        if not row:
-            raise RuntimeError(f"Failed to intern value into {self.table}: {value!r}")
-        id_ = int(row[0])
-        self._cache[value] = id_
-        return id_
-
-
-# =============================================================================
-# MCU SUPPORT MATRIX
-# =============================================================================
-
-def parse_eclipse_project(project_file: Path) -> List[str]:
-    """Parse Eclipse .project to extract linked source filenames."""
-    sources = []
-    try:
-        tree = ET.parse(project_file)
-        for link in tree.getroot().findall('.//linkedResources/link'):
-            name_elem = link.find('n') or link.find('name')
-            type_elem = link.find('type')
-            if name_elem is None or type_elem is None:
-                continue
-            if type_elem.text != '1':
-                continue
-            name = name_elem.text or ''
-            if any(name.endswith(ext) for ext in ['.c', '.cpp', '.cc']):
-                sources.append(os.path.basename(name))
-    except Exception:
-        pass
-    return sources
-
-
-def find_eclipse_lib_projects(root: Path) -> List[Path]:
-    """Find Eclipse .project files in ARM and RISCV directories."""
-    projects = []
-    for arch_dir in ['ARM', 'RISCV']:
-        pattern = str(root / arch_dir / '**' / 'lib' / 'Eclipse' / '.project')
-        projects.extend(Path(p) for p in glob.glob(pattern, recursive=True))
-    return sorted(projects)
-
-
-def extract_mcu(project_path: Path) -> Optional[str]:
-    parts = project_path.parts
-    for i, part in enumerate(parts):
-        if part.lower() == 'lib' and i > 0:
-            return parts[i - 1].upper().replace('-', '').replace('_', '')
-    return None
-
-
-def build_mcu_support(conn: sqlite3.Connection, root: Path, file_cache: StringCache, verbose: bool) -> int:
-    """Build MCU support matrix from Eclipse projects."""
-    projects = find_eclipse_lib_projects(root)
-    count = 0
-    
-    conn.execute("DELETE FROM mcu_support")
-    
-    for project_file in projects:
-        mcu = extract_mcu(project_file)
-        if not mcu:
-            continue
-        
-        sources = parse_eclipse_project(project_file)
-        seen = set()
-        
-        for filename in sources:
-            periph, impl_type = detect_peripheral_from_impl(filename)
-            if periph == PERIPH_NONE:
-                continue
-            
-            key = (mcu, periph, impl_type)
-            if key in seen:
-                continue
-            seen.add(key)
-            
-            # Get or create file entry
-            file_id = file_cache.get_id(filename)
-            
-            conn.execute(
-                "INSERT OR REPLACE INTO mcu_support(mcu, periph, impl_type, file_id) VALUES(?,?,?,?)",
-                (mcu, periph, impl_type, file_id)
-            )
-            count += 1
-        
-        if verbose and seen:
-            periphs = ', '.join(PERIPH_NAMES.get(p, str(p)) for _, p, _ in sorted(seen))
-            print(f"  {mcu}: {periphs}")
-    
-    conn.commit()
-    return count
-
-
-# =============================================================================
-# EXTERNAL DEVICE SUPPORT (sensors, displays, PMICs, etc.)
-# =============================================================================
-
-def extract_device_name(filename: str) -> Optional[str]:
-    """Extract canonical device name from filename.
-    
-    Examples:
-        'tphg_bme680.h' -> 'BME680'
-        'agm_mpu9250.cpp' -> 'MPU9250'
-        'ssd1306.h' -> 'SSD1306'
-        'led_apa102.h' -> 'APA102'
-    """
-    stem = Path(filename).stem.lower()
-    
-    # Remove common prefixes
-    for prefix in ('tph_', 'tphg_', 'agm_', 'ag_', 'accel_', 'gyro_', 'mag_', 
-                   'temp_', 'press_', 'humi_', 'light_', 'prox_', 'gas_',
-                   'led_', 'lcd_', 'oled_', 'disp_', 'display_',
-                   'pmic_', 'charger_', 'gauge_', 'bat_', 'battery_',
-                   'audio_', 'codec_', 'flash_', 'eeprom_'):
-        if stem.startswith(prefix):
-            stem = stem[len(prefix):]
-            break
-    
-    # Check exact matches in known devices
-    if stem in DEVICE_NAME_FIXES:
-        return DEVICE_NAME_FIXES[stem]
-    
-    # Try to extract device part number pattern (letters followed by numbers)
-    match = re.search(r'([a-z]{2,})[-_]?(\d{2,}[a-z]*)', stem)
-    if match:
-        candidate = (match.group(1) + match.group(2)).lower()
-        if candidate in DEVICE_NAME_FIXES:
-            return DEVICE_NAME_FIXES[candidate]
-        # Return uppercase if it looks like a device (has numbers)
-        return candidate.upper()
-    
-    return None
-
-
-def extract_class_name(content: str, device_name: str) -> Optional[str]:
-    """Extract C++ class name from file content that matches device.
-    
-    Looks for patterns like:
-        class TphBme680 : public TphSensor
-        class AgmMpu9250 : public AccelSensor
-    """
-    device_lower = device_name.lower()
-    # Look for class definitions containing the device name
-    pattern = rf'\bclass\s+([A-Za-z_]\w*{device_lower}\w*)\b'
-    match = re.search(pattern, content, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    return None
-
-
-def extract_brief_description(content: str) -> Optional[str]:
-    """Extract brief description from file header comment."""
-    # Look for @brief in doxygen style
-    match = re.search(r'@brief\s+(.+?)(?:\n\s*\n|\n\s*@|\*/)', content, re.DOTALL)
-    if match:
-        desc = match.group(1).strip()
-        # Clean up and limit length
-        desc = re.sub(r'\s+', ' ', desc)
-        return desc[:200] if len(desc) > 200 else desc
-    return None
-
-
-def detect_device_category(filepath: str) -> int:
-    """Detect device category from file path."""
-    path_lower = filepath.lower()
-    for folder, cat_id in DEVCAT_MAP.items():
-        if f'/{folder}/' in path_lower or f'\\{folder}\\' in path_lower:
-            return cat_id
-        if path_lower.startswith(f'{folder}/') or path_lower.startswith(f'{folder}\\'):
-            return cat_id
-    return DEVCAT_NONE
-
-
-def find_device_files(root: Path) -> Iterator[Tuple[Path, int]]:
-    """Find device driver files and their categories.
-    
-    Scans:
-        include/sensors/
-        include/display/
-        include/miscdev/
-        include/pwrmgnt/
-        include/imu/
-        include/audio/
-        include/storage/
-        include/converters/
-        src/sensors/
-        src/display/
-        etc.
-    """
-    device_dirs = ['sensors', 'display', 'miscdev', 'pwrmgnt', 'imu', 
-                   'audio', 'storage', 'converters']
-    
-    for base in ['include', 'src']:
-        for dev_dir in device_dirs:
-            dir_path = root / base / dev_dir
-            if not dir_path.exists():
-                continue
-            
-            category = DEVCAT_MAP.get(dev_dir, DEVCAT_NONE)
-            
-            for ext in ['.h', '.hpp', '.cpp', '.c']:
-                for filepath in dir_path.glob(f'*{ext}'):
-                    if filepath.is_file():
-                        yield filepath, category
-
-
-def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: StringCache, 
-                         verbose: bool, max_bytes: int = 64*1024) -> int:
-    """Build external device support table by scanning IOsonata device directories."""
-    count = 0
-    seen_devices = set()  # (name, category) pairs already added
-    
-    conn.execute("DELETE FROM devices")
-    
-    for filepath, category in find_device_files(root):
-        if category == DEVCAT_NONE:
-            continue
-        
-        device_name = extract_device_name(filepath.name)
-        if not device_name:
-            continue
-        
-        # Skip duplicates (same device may have .h and .cpp)
-        key = (device_name, category)
-        if key in seen_devices:
-            continue
-        seen_devices.add(key)
-        
-        # Read file for additional info
-        try:
-            content = _safe_read(filepath, max_bytes)
-        except:
-            content = ""
-        
-        rel_path = filepath.relative_to(root) if filepath.is_relative_to(root) else filepath
-        file_id = file_cache.get_id(str(rel_path))
-        
-        class_name = extract_class_name(content, device_name) if content else None
-        description = extract_brief_description(content) if content else None
-        
-        conn.execute(
-            "INSERT OR REPLACE INTO devices(name, category, file_id, class_name, description) VALUES(?,?,?,?,?)",
-            (device_name, category, file_id, class_name, description)
-        )
-        count += 1
-        
-        if verbose:
-            cat_name = DEVCAT_NAMES.get(category, str(category))
-            print(f"  {device_name} ({cat_name}): {rel_path}")
-    
-    conn.commit()
-    return count
 
 
 # =============================================================================
@@ -875,15 +286,145 @@ def _brief_comment(src: str, idx: int) -> str:
 
 
 # =============================================================================
-# EMBEDDING
+# MCU SUPPORT MATRIX
 # =============================================================================
 
-PROVIDER_VOYAGE = 1
-PROVIDER_OPENAI = 2
-PROVIDER_HASH = 3
+def parse_eclipse_project(project_file: Path) -> List[str]:
+    sources = []
+    try:
+        tree = ET.parse(project_file)
+        for link in tree.getroot().findall('.//linkedResources/link'):
+            name_elem = link.find('n') or link.find('name')
+            type_elem = link.find('type')
+            if name_elem is None or type_elem is None:
+                continue
+            if type_elem.text != '1':
+                continue
+            name = name_elem.text or ''
+            if any(name.endswith(ext) for ext in ['.c', '.cpp', '.cc']):
+                sources.append(os.path.basename(name))
+    except Exception:
+        pass
+    return sources
 
-PROVIDER_MAP = {"voyage": PROVIDER_VOYAGE, "openai": PROVIDER_OPENAI, "hash": PROVIDER_HASH}
 
+def find_eclipse_lib_projects(root: Path) -> List[Path]:
+    projects = []
+    for arch_dir in ['ARM', 'RISCV']:
+        pattern = str(root / arch_dir / '**' / 'lib' / 'Eclipse' / '.project')
+        projects.extend(Path(p) for p in glob.glob(pattern, recursive=True))
+    return sorted(projects)
+
+
+def extract_mcu(project_path: Path) -> Optional[str]:
+    parts = project_path.parts
+    for i, part in enumerate(parts):
+        if part.lower() == 'lib' and i > 0:
+            return parts[i - 1].upper().replace('-', '').replace('_', '')
+    return None
+
+
+def build_mcu_support(conn: sqlite3.Connection, root: Path, file_cache: StringCache, verbose: bool) -> int:
+    projects = find_eclipse_lib_projects(root)
+    count = 0
+    conn.execute("DELETE FROM mcu_support")
+    
+    for project_file in projects:
+        mcu = extract_mcu(project_file)
+        if not mcu:
+            continue
+        sources = parse_eclipse_project(project_file)
+        seen = set()
+        for filename in sources:
+            periph, impl_type = detect_peripheral_from_impl(filename)
+            if periph == PERIPH_NONE:
+                continue
+            key = (mcu, periph, impl_type)
+            if key in seen:
+                continue
+            seen.add(key)
+            file_id = file_cache.get_id(filename)
+            conn.execute(
+                "INSERT OR REPLACE INTO mcu_support(mcu, periph, impl_type, file_id) VALUES(?,?,?,?)",
+                (mcu, periph, impl_type, file_id)
+            )
+            count += 1
+    conn.commit()
+    return count
+
+
+# =============================================================================
+# DEVICE SUPPORT
+# =============================================================================
+
+DEVICE_NAME_FIXES = {
+    "bme280": "BME280", "bme680": "BME680", "bme688": "BME688",
+    "bmp280": "BMP280", "bmp388": "BMP388", "sht31": "SHT31", "sht40": "SHT40",
+    "mpu6050": "MPU6050", "mpu9250": "MPU9250", "icm20948": "ICM20948",
+    "lis2dh": "LIS2DH", "lis3dh": "LIS3DH", "lsm6dso": "LSM6DSO",
+    "bmi160": "BMI160", "bmi270": "BMI270", "bno055": "BNO055",
+    "ssd1306": "SSD1306", "ssd1351": "SSD1351", "ili9341": "ILI9341",
+    "st7735": "ST7735", "st7789": "ST7789", "sh1106": "SH1106",
+    "bq24295": "BQ24295", "max17048": "MAX17048", "apa102": "APA102",
+    "ws2812": "WS2812", "vs1053": "VS1053",
+}
+
+
+def extract_device_name(filename: str) -> Optional[str]:
+    stem = Path(filename).stem.lower()
+    for prefix in ('tph_', 'tphg_', 'agm_', 'ag_', 'accel_', 'gyro_', 'mag_',
+                   'led_', 'lcd_', 'oled_', 'disp_', 'pmic_', 'charger_'):
+        if stem.startswith(prefix):
+            stem = stem[len(prefix):]
+            break
+    if stem in DEVICE_NAME_FIXES:
+        return DEVICE_NAME_FIXES[stem]
+    match = re.search(r'([a-z]{2,})[-_]?(\d{2,}[a-z]*)', stem)
+    if match:
+        candidate = (match.group(1) + match.group(2)).lower()
+        if candidate in DEVICE_NAME_FIXES:
+            return DEVICE_NAME_FIXES[candidate]
+        return candidate.upper()
+    return None
+
+
+def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: StringCache, verbose: bool) -> int:
+    count = 0
+    seen = set()
+    conn.execute("DELETE FROM devices")
+    
+    device_dirs = ['sensors', 'display', 'miscdev', 'pwrmgnt', 'imu', 'audio', 'storage', 'converters']
+    for base in ['include', 'src']:
+        for dev_dir in device_dirs:
+            dir_path = root / base / dev_dir
+            if not dir_path.exists():
+                continue
+            category = DEVCAT_MAP.get(dev_dir, DEVCAT_NONE)
+            for ext in ['.h', '.hpp', '.cpp', '.c']:
+                for filepath in dir_path.glob(f'*{ext}'):
+                    if not filepath.is_file():
+                        continue
+                    device_name = extract_device_name(filepath.name)
+                    if not device_name:
+                        continue
+                    key = (device_name, category)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    rel_path = filepath.relative_to(root) if filepath.is_relative_to(root) else filepath
+                    file_id = file_cache.get_id(str(rel_path))
+                    conn.execute(
+                        "INSERT OR REPLACE INTO devices(name, category, file_id) VALUES(?,?,?)",
+                        (device_name, category, file_id)
+                    )
+                    count += 1
+    conn.commit()
+    return count
+
+
+# =============================================================================
+# EMBEDDING
+# =============================================================================
 
 class Embedder:
     BATCH = {"voyage": 72, "openai": 100, "hash": 500}
@@ -891,7 +432,7 @@ class Embedder:
 
     def __init__(self, provider: str, api_key: Optional[str], model: str):
         self.provider = provider.lower()
-        self.provider_id = PROVIDER_MAP.get(self.provider, PROVIDER_HASH)
+        self.provider_id = PROVIDER_MAP.get(self.provider, 3)
         self.api_key = api_key
         self.model = model or {"voyage": "voyage-code-2", "openai": "text-embedding-3-small", "hash": "hash-512"}.get(self.provider, "hash-512")
         self._last = 0.0
@@ -911,8 +452,14 @@ class Embedder:
             time.sleep(interval - elapsed)
         self._last = time.time()
 
+    def _post_json(self, url: str, headers: dict, payload: dict) -> dict:
+        import urllib.request
+        import json
+        req = urllib.request.Request(url, json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+
     def embed_batch(self, texts: List[str]) -> List[bytes]:
-        """Returns list of packed float32 embeddings."""
         if not texts:
             return []
         if self.provider == "hash":
@@ -937,34 +484,22 @@ class Embedder:
         return struct.pack(f"<{dim}f", *vec)
 
     def _voyage(self, texts: List[str]) -> List[bytes]:
-        import urllib.request
-        import json
-        url = "https://api.voyageai.com/v1/embeddings"
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        payload = {"model": self.model, "input": [t[:8000] for t in texts], "input_type": "document"}
-        req = urllib.request.Request(url, json.dumps(payload).encode(), headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            result = json.loads(resp.read().decode())
-        results = []
-        for item in sorted(result.get("data", []), key=lambda x: x.get("index", 0)):
-            emb = item.get("embedding", [])
-            results.append(struct.pack(f"<{len(emb)}f", *emb) if emb else b'')
-        return results
+        result = self._post_json(
+            "https://api.voyageai.com/v1/embeddings",
+            {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            {"model": self.model, "input": [t[:8000] for t in texts], "input_type": "document"}
+        )
+        return [struct.pack(f"<{len(e)}f", *e) if e else b'' 
+                for e in [item.get("embedding", []) for item in sorted(result.get("data", []), key=lambda x: x.get("index", 0))]]
 
     def _openai(self, texts: List[str]) -> List[bytes]:
-        import urllib.request
-        import json
-        url = "https://api.openai.com/v1/embeddings"
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        payload = {"model": self.model, "input": [t[:8000] for t in texts]}
-        req = urllib.request.Request(url, json.dumps(payload).encode(), headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            result = json.loads(resp.read().decode())
-        results = []
-        for item in sorted(result.get("data", []), key=lambda x: x.get("index", 0)):
-            emb = item.get("embedding", [])
-            results.append(struct.pack(f"<{len(emb)}f", *emb) if emb else b'')
-        return results
+        result = self._post_json(
+            "https://api.openai.com/v1/embeddings",
+            {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            {"model": self.model, "input": [t[:8000] for t in texts]}
+        )
+        return [struct.pack(f"<{len(e)}f", *e) if e else b''
+                for e in [item.get("embedding", []) for item in sorted(result.get("data", []), key=lambda x: x.get("index", 0))]]
 
 
 # =============================================================================
@@ -1020,16 +555,17 @@ class IndexBuilder:
         t0 = time.time()
         print(f"[00:00] Building index v{SCHEMA_VERSION}")
 
-        conn = _db_connect(db_path)
-        _ensure_schema(conn, self.enable_fts)
+        conn = db_connect(db_path, baseline=True)
+        ensure_schema(conn, enable_fts=self.enable_fts, include_mcu=True, include_devices=True)
 
-        # Metadata (binary)
-        conn.execute("INSERT INTO meta VALUES('schema', ?)", (struct.pack("<I", SCHEMA_VERSION),))
-        conn.execute("INSERT INTO meta VALUES('version', ?)", (version.encode(),))
-        conn.execute("INSERT INTO meta VALUES('built', ?)", (struct.pack("<Q", int(time.time())),))
+        # Metadata
+        set_meta(conn, 'schema', pack_u32(SCHEMA_VERSION))
+        set_meta(conn, 'version', version.encode())
+        set_meta(conn, 'built', pack_i64(int(time.time())))
         commit = self._git_commit()
         if commit:
-            conn.execute("INSERT INTO meta VALUES('commit', ?)", (commit,))
+            set_meta(conn, 'commit', commit)
+        conn.commit()
 
         # String caches
         file_cache = StringCache(conn, "files")
@@ -1038,18 +574,14 @@ class IndexBuilder:
         # MCU support
         print(f"[{_fmt(time.time()-t0)}] Building MCU support matrix...")
         mcu_count = build_mcu_support(conn, self.source, file_cache, self.verbose)
-        print(f"[{_fmt(time.time()-t0)}] MCU: {mcu_count} entries")
 
-        # Device support (sensors, displays, PMICs, etc.)
+        # Device support
         print(f"[{_fmt(time.time()-t0)}] Building device support matrix...")
         device_count = build_device_support(conn, self.source, file_cache, self.verbose)
-        print(f"[{_fmt(time.time()-t0)}] Devices: {device_count} entries")
 
         # Index files
         print(f"[{_fmt(time.time()-t0)}] Scanning files...")
-        
         stats = {"files": 0, "chunks": 0, "functions": 0, "types": 0, "examples": 0}
-        last_prog = time.time()
 
         for path in self._iter_files():
             stats["files"] += 1
@@ -1057,10 +589,6 @@ class IndexBuilder:
             file_id = file_cache.get_id(rel)
             module_id = module_cache.get_id(rel.split("/")[0] if "/" in rel else "core")
             periph = detect_peripheral_from_path(rel)
-
-            if stats["files"] % 100 == 0 or time.time() - last_prog > 5:
-                print(f"[{_fmt(time.time()-t0)}] files={stats['files']} chunks={stats['chunks']}")
-                last_prog = time.time()
 
             try:
                 src = _safe_read(path, self.max_bytes)
@@ -1079,7 +607,7 @@ class IndexBuilder:
                 conn.execute(
                     "INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,content,hash) VALUES(?,?,?,?,?,?,?,?,?)",
                     (KIND_EXAMPLE, periph, file_id, module_id, 1, len(lines), f"Example: {path.stem}",
-                     compress(content), sha1_bytes(content))
+                     compress(content), sha256(content))
                 )
                 stats["examples"] += 1
                 stats["chunks"] += 1
@@ -1093,7 +621,7 @@ class IndexBuilder:
                 conn.execute(
                     "INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,content,hash) VALUES(?,?,?,?,?,?,?,?,?)",
                     (KIND_TYPE, periph, file_id, module_id, line, line + block.count("\n"),
-                     f"{kind} {name}", compress(content), sha1_bytes(content))
+                     f"{kind} {name}", compress(content), sha256(content))
                 )
                 stats["types"] += 1
                 stats["chunks"] += 1
@@ -1114,7 +642,7 @@ class IndexBuilder:
                 conn.execute(
                     "INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,signature,content,hash) VALUES(?,?,?,?,?,?,?,?,?,?)",
                     (KIND_FUNCTION, periph, file_id, module_id, line, line + content.count("\n"),
-                     fname, compress(sig), compress(content), sha1_bytes(content))
+                     fname, compress(sig), compress(content), sha256(content))
                 )
                 conn.execute(
                     "INSERT INTO api(name,periph,file_id,line,signature,ret_type) VALUES(?,?,?,?,?,?)",
@@ -1125,12 +653,10 @@ class IndexBuilder:
 
         conn.commit()
 
-        # FTS
         if self.enable_fts:
             print(f"[{_fmt(time.time()-t0)}] Building FTS...")
-            _fts_rebuild(conn)
+            fts_rebuild(conn)
 
-        # Vacuum
         conn.execute("VACUUM")
         conn.close()
 
@@ -1148,30 +674,24 @@ class IndexBuilder:
         return db_path
 
     def update_embeddings(self, db_path: Path, provider: str, api_key: Optional[str],
-                          model: str, batch_size: int = 0, kinds: List[int] = None,
-                          max_new: int = 0) -> int:
-        kinds = kinds or [KIND_FUNCTION, KIND_TYPE, KIND_EXAMPLE]
+                          model: str, batch_size: int = 0, max_new: int = 0) -> int:
+        kinds = [KIND_FUNCTION, KIND_TYPE, KIND_EXAMPLE]
         embedder = Embedder(provider, api_key, model)
         if batch_size <= 0:
             batch_size = embedder.batch_size
 
-        conn = _db_connect(db_path)
-        
-        # Get or create model ID
+        conn = db_connect(db_path, baseline=False)
         conn.execute("INSERT OR IGNORE INTO models(name) VALUES(?)", (embedder.model,))
         row = conn.execute("SELECT id FROM models WHERE name=?", (embedder.model,)).fetchone()
-        if not row:
-            raise RuntimeError(f"Failed to resolve model id for {embedder.model!r}")
         model_id = int(row[0])
 
-        # Find chunks needing embeddings
         placeholders = ",".join("?" * len(kinds))
-        cursor = conn.execute(f"""
+        rows = conn.execute(f"""
             SELECT c.id, c.content FROM chunks c
             WHERE c.kind IN ({placeholders})
             AND NOT EXISTS (SELECT 1 FROM embeddings e WHERE e.chunk_id=c.id AND e.provider=? AND e.model_id=?)
-        """, (*kinds, embedder.provider_id, model_id))
-        rows = cursor.fetchall()
+        """, (*kinds, embedder.provider_id, model_id)).fetchall()
+        
         if max_new > 0:
             rows = rows[:max_new]
 
@@ -1181,22 +701,17 @@ class IndexBuilder:
             conn.close()
             return 0
 
-        t0, done = time.time(), 0
-        now = int(time.time())
-
+        t0, done, now = time.time(), 0, int(time.time())
         for i in range(0, total, batch_size):
             batch = rows[i:i + batch_size]
             ids = [r[0] for r in batch]
-            texts = [decompress(r[1]) for r in batch]  # Decompress for embedding
-
+            texts = [decompress(r[1]) for r in batch]
             try:
                 embeddings = embedder.embed_batch(texts)
                 for chunk_id, emb in zip(ids, embeddings):
                     if emb:
-                        conn.execute(
-                            "INSERT OR REPLACE INTO embeddings(chunk_id,provider,model_id,embedding,updated) VALUES(?,?,?,?,?)",
-                            (chunk_id, embedder.provider_id, model_id, emb, now)
-                        )
+                        conn.execute("INSERT OR REPLACE INTO embeddings VALUES(?,?,?,?,?)",
+                                     (chunk_id, embedder.provider_id, model_id, emb, now))
                         done += 1
                 conn.commit()
                 print(f"  [{_fmt(time.time()-t0)}] {done}/{total}")
@@ -1222,38 +737,30 @@ def _detect_root() -> Optional[Path]:
 
 
 def main():
-    p = argparse.ArgumentParser(description="Build IOsonata RAG index v3 (binary optimized)")
+    p = argparse.ArgumentParser(description="Build IOsonata RAG index v6 (unified schema)")
     p.add_argument("--source-dir", default="")
     p.add_argument("--output-dir", default="")
     p.add_argument("--version", default="dev")
     p.add_argument("--no-fts", action="store_true")
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--update-embeddings", action="store_true")
-    p.add_argument("--provider", default="voyage")
-    p.add_argument("--api-key", default=os.environ.get("VOYAGE_API_KEY", ""))
+    p.add_argument("--provider", default="openai")
+    p.add_argument("--api-key", default="")
     p.add_argument("--model", default="")
     p.add_argument("--batch-size", type=int, default=0)
     p.add_argument("--max-new", type=int, default=0)
     args = p.parse_args()
 
-
-    # Provider-aware default API key
     if not args.api_key:
-        prov = (args.provider or '').strip().lower()
-        if prov == 'openai':
-            args.api_key = os.environ.get('OPENAI_API_KEY', '')
-        elif prov == 'voyage':
-            args.api_key = os.environ.get('VOYAGE_API_KEY', '')
+        args.api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('VOYAGE_API_KEY', '')
+
     source = Path(args.source_dir) if args.source_dir else (_detect_root() or Path("."))
-    if not args.source_dir and source != Path("."):
-        print(f"[auto] IOsonata: {source}")
     output = Path(args.output_dir) if args.output_dir else (source / ".iosonata")
 
     builder = IndexBuilder(source, output, enable_fts=not args.no_fts, verbose=args.verbose)
 
     if args.update_embeddings:
-        db = output / "index.db"
-        builder.update_embeddings(db, args.provider, args.api_key or None, args.model, args.batch_size, max_new=args.max_new)
+        builder.update_embeddings(output / "index.db", args.provider, args.api_key or None, args.model, args.batch_size, args.max_new)
     else:
         print(f"Source: {source.resolve()}\nOutput: {output.resolve()}\n")
         builder.build(args.version)
