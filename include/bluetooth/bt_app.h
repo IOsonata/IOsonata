@@ -202,6 +202,7 @@ typedef struct __Bt_Dev_Data {
 
 #ifdef __cplusplus
 
+#if 0
 class BtApp {
 public:
 	virtual bool Init(BtAppCfg_t &CfgData);
@@ -217,6 +218,7 @@ public:
 	virtual ~BtApp() {}
 private:
 };
+#endif
 
 extern "C" {
 #endif

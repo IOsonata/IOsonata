@@ -1,80 +1,81 @@
+# .github/workflows/build-rag-index.yml
 name: Build RAG Index
 
 on:
   push:
-    branches: [main, master, develop]
-    paths:
-      # Trigger on source code changes
-      - 'include/**'
-      - 'src/**'
-      - 'ARM/**'
-      - 'exemples/**'
-      # Also rebuild if the script itself changes
-      - 'Installer/build_rag_index.py'
-      - '.github/workflows/build-rag-index.yml'
-  
-  # Allow manual trigger
+    branches: [main, develop, master]
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 0'
 
 jobs:
   build-index:
     runs-on: ubuntu-latest
-    
     permissions:
-      contents: write  # Required to push commits
+      contents: write
     
     steps:
-      - name: Checkout repository
+      - name: Checkout IOsonata
         uses: actions/checkout@v4
-        with:
-          # Fetch full history for accurate change detection
-          fetch-depth: 0
-          # Use a token that can push (default GITHUB_TOKEN works)
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+        
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          # Add any dependencies your script needs here
-          # pip install -r requirements.txt
-
-      - name: Build RAG index
-        run: |
-          # Create output directory if it doesn't exist
-          mkdir -p .iosonata
           
-          # Run the indexer
-          python Installer/build_rag_index.py \
-            --source-dir . \
-            --output-dir .iosonata \
-            --version "${{ github.sha }}"
-
-      - name: Check for changes
-        id: check_changes
+      - name: Debug - Show directory structure
         run: |
-          git add .iosonata/index.db
-          if git diff --staged --quiet; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "No changes to index.db"
+          echo "=== Current directory ==="
+          pwd
+          echo "=== Top level files ==="
+          ls -la
+          echo "=== Check for IOsonata markers ==="
+          ls -la include/ 2>/dev/null || echo "No include/ directory"
+          ls include/iopinctrl.h 2>/dev/null || echo "No iopinctrl.h"
+          echo "=== Check Installer ==="
+          ls -la Installer/ 2>/dev/null || echo "No Installer/ directory"
+          
+      - name: Run build_rag_index.py
+        run: |
+          # Use Installer version if exists, otherwise error
+          if [ -f Installer/build_rag_index.py ]; then
+            echo "Using Installer/build_rag_index.py"
+            python3 Installer/build_rag_index.py --source-dir . --output-dir .iosonata --verbose
           else
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "Index.db has changed"
+            echo "ERROR: Installer/build_rag_index.py not found!"
+            echo "Please add build_rag_index.py to the Installer/ directory"
+            exit 1
           fi
-
-      - name: Commit and push index
-        if: steps.check_changes.outputs.changed == 'true'
+          
+      - name: Show Index Stats
+        run: |
+          echo "=== Output directory ==="
+          ls -la .iosonata/ 2>/dev/null || echo "No .iosonata directory created!"
+          
+          if [ -f .iosonata/index.db ]; then
+            echo "=== Database Stats ==="
+            sqlite3 .iosonata/index.db "SELECT 'Chunks:', COUNT(*) FROM chunks"
+            sqlite3 .iosonata/index.db "SELECT 'Functions:', COUNT(*) FROM chunks WHERE kind=1"
+            sqlite3 .iosonata/index.db "SELECT 'Types:', COUNT(*) FROM chunks WHERE kind=2"
+            sqlite3 .iosonata/index.db "SELECT 'MCU Support:', COUNT(*) FROM mcu_support"
+          else
+            echo "ERROR: index.db was not created!"
+            exit 1
+          fi
+          
+      - name: Upload Index Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iosonata-rag-index
+          path: .iosonata/index.db
+          retention-days: 90
+          if-no-files-found: error
+          
+      - name: Commit index.db to repo
+        if: github.event_name != 'pull_request'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git commit -m "chore: update RAG index [skip ci]
-          
-          Auto-generated from commit ${{ github.sha }}
-          Triggered by: ${{ github.event_name }}"
-          
+          git add .iosonata/index.db
+          git diff --staged --quiet || git commit -m "Update RAG index.db [skip ci]"
           git push
