@@ -7,7 +7,7 @@ SCRIPT_VERSION="v1.0.94"
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
 BIN="/usr/local/bin"
-ECLIPSE_DIR="/opt/eclipse"
+ECLIPSE_DIR="$HOME/eclipse"
 
 echo "=============================================="
 echo "   IOcomposer MCU Dev Tools Installer (Linux) "
@@ -61,12 +61,12 @@ show_help() {
 Usage: ./$SCRIPT_NAME.sh [OPTION]
 
 Options:
-  --help           Show help and exit
-  --version        Show version and exit
-  --home <path>    Set custom SDK installation root (default: ~/IOcomposer)
-  --force-update   Force reinstall
-  --uninstall      Remove toolchains + Eclipse (keep repos/workspaces)
-  (no option)      Install/update (skip if already installed)
+  --help              Show help and exit
+  --version           Show version and exit
+  --home <path>       Set custom SDK installation root (default: ~/IOcomposer)
+  --force-update      Force reinstall
+  --uninstall         Remove toolchains + Eclipse (keep repos/workspaces)
+  (no option)         Install/update (skip if already installed) <-- Sudo permissions no longer required
 EOF
 }
 
@@ -86,12 +86,22 @@ while [[ $# -gt 0 ]]; do
       ROOT="$1"
       echo ">>> Using custom home folder: $ROOT"
       ;;
+    --eclipse)
+      shift
+      if [[ -z "${1:-}" ]]; then
+        echo "❌ Missing path after --eclipse"; exit 1
+      fi
+      ECLIPSE_DIR="$1"
+      echo ">>> Using custom Eclipse folder: $ECLIPSE_DIR"
+      ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
   shift
 done
 
 EXT="$ROOT/external"
+
+# Create directories
 mkdir -p "$ROOT" "$EXT"
 sudo mkdir -p "$TOOLS" "$BIN"
 
@@ -236,7 +246,7 @@ install_iosonata_plugin() {
   sudo mkdir -p "$dropins_dir"
 
   local old_plugins
-  old_plugins=$(sudo find "$dropins_dir" -name "org.iosonata.embedcdt.templates.firmware_*.jar" 2>/dev/null || true)
+  old_plugins=$(find "$dropins_dir" -name "org.iosonata.embedcdt.templates.firmware_*.jar" 2>/dev/null || true)
 
   if [[ -n "$old_plugins" ]]; then
     echo "   → Removing old plugin versions..."
@@ -900,13 +910,20 @@ if [[ -n "${OPENOCD_DIR:-}" && -x "$OPENOCD_DIR/bin/openocd" ]]; then
   OPENOCD_VER=$("$OPENOCD_DIR/bin/openocd" --version 2>&1 | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || echo "Unknown")
 fi
 
-printf "%-25s %s\n" "Eclipse Embedded CDT:" "$ECLIPSE_VER"
-printf "%-25s %s\n" "ARM GCC:" "$ARM_VER"
-printf "%-25s %s\n" "RISC-V GCC:" "$RISCV_VER"
-printf "%-25s %s\n" "OpenOCD:" "$OPENOCD_VER"
-printf "%-25s %s\n" "iocomposer_home:" "$ROOT"
-printf "%-25s %s\n" "iosonata_loc:" "$ROOT"
-
+echo ""
+echo "┌──────────────────────────┬────────────────┬──────────────────────────────────┐"
+echo "│ Component                │ Version        │ Location                         │"
+echo "├──────────────────────────┼────────────────┼──────────────────────────────────┤"
+printf "│ %-24s │ %-14s │ %-32s │\n" "Eclipse Embedded CDT" "$ECLIPSE_VER" "$ECLIPSE_DIR"
+printf "│ %-24s │ %-14s │ %-32s │\n" "ARM GCC" "$ARM_VER" "${ARM_DIR:-N/A}"
+printf "│ %-24s │ %-14s │ %-32s │\n" "RISC-V GCC" "$RISCV_VER" "${RISCV_DIR:-N/A}"
+printf "│ %-24s │ %-14s │ %-32s │\n" "OpenOCD" "$OPENOCD_VER" "${OPENOCD_DIR:-N/A}"
+echo "├──────────────────────────┴────────────────┴──────────────────────────────────┤"
+printf "│ %-24s   %-49s │\n" "IOcomposer Home:" "$ROOT"
+printf "│ %-24s   %-49s │\n" "xPacks Directory:" "$TOOLS"
+printf "│ %-24s   %-49s │\n" "Symlinks Directory:" "$BIN"
+echo "└─────────────────────────────────────────────────────────────────────────────┘"
+echo ""
 echo "=============================================="
 echo " Installation complete!"
 echo "=============================================="
