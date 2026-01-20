@@ -1286,11 +1286,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/imu/imu_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_invn_icm20948.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/imu/imu_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_mpu9250.cpp</locationURI>
@@ -1409,11 +1404,6 @@
 			<name>src/sensors/agm_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/agm_mpu9250.cpp</name>
