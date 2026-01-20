@@ -251,15 +251,19 @@ def iter_types(src: str):
 
 
 def iter_funcs(src: str):
+    """Iterate over function definitions (with body only, skip declarations)."""
     masked = _mask_comments(src)
     for m in _FUNC_RE.finditer(masked):
         ret, name, params, tail = m.group(1), m.group(2), m.group(3), m.group(4)
         if name.startswith("_"):
             continue
+        # Skip declarations (no body) - only index definitions
+        has_body = tail == "{"
+        if not has_body:
+            continue
         ret = " ".join(ret.split())
         params = " ".join(params.split())
         sig = f"{ret} {name}({params})"
-        has_body = tail == "{"
         yield name, sig, ret, m.start(), m.end(), has_body
 
 
@@ -508,7 +512,7 @@ class Embedder:
 
 class IndexBuilder:
     def __init__(self, source: Path, output: Path, enable_fts: bool = True,
-                 max_file_kb: int = 1024, max_chunk: int = 8000, example_cap: int = 400, verbose: bool = False):
+                 max_file_kb: int = 1024, max_chunk: int = 8000, example_cap: int = 2000, verbose: bool = False):
         self.source = source
         self.output = output
         self.enable_fts = enable_fts
@@ -624,19 +628,13 @@ class IndexBuilder:
                 stats["types"] += 1
                 stats["chunks"] += 1
 
-            # Functions
+            # Functions - index signature + description only (no body needed for API reference)
             for fname, sig, ret, s_idx, e_idx, has_body in iter_funcs(src):
                 line = idx_to_line(nl_idx, s_idx)
                 desc = _brief_comment(src, s_idx)
-                body = ""
-                if has_body:
-                    masked = _mask_comments(src)
-                    brace = masked.find("{", s_idx)
-                    if brace >= 0:
-                        end = _find_brace(masked, brace)
-                        if end:
-                            body = src[brace:end+1]
-                content = f"{sig}\n{desc}\n{body}"[:self.max_chunk]
+                # API functions: signature + description is enough for RAG
+                # Implementation details are in examples
+                content = f"{sig}\n{desc}"[:self.max_chunk]
                 conn.execute(
                     "INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,signature,content,hash) VALUES(?,?,?,?,?,?,?,?,?,?)",
                     (KIND_FUNCTION, periph, file_id, module_id, line, line + content.count("\n"),
