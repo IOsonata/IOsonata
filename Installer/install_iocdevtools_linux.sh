@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.94"
+SCRIPT_VERSION="v1.0.95"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -134,6 +134,14 @@ if [[ "$MODE" == "uninstall" ]]; then
 
   echo ">>> Removing Eclipse user settings (~/.eclipse)..."
   rm -rf "$HOME/.eclipse" || true
+
+  echo ">>> Removing udev rules..."
+  sudo rm -f /etc/udev/rules.d/99-idap-link-hid.rules || true  # ✅ Correct filename
+  sudo udevadm control --reload-rules 2>/dev/null || true
+  sudo udevadm trigger 2>/dev/null || true
+
+  echo ">>> Removing desktop entry..."
+  rm -f "$HOME/.local/share/applications/eclipse-embedcdt.desktop" || true
 
   echo ">>> Repositories under $ROOT and workspace dirs were kept."
   echo ">>> Uninstall complete!"
@@ -397,6 +405,27 @@ echo "   RISC-V: $RISCV_DIR"
 echo "   OpenOCD:$OPENOCD_DIR"
 
 # ---------------------------------------------------------
+# Install udev rules for IDAP-Link
+# ---------------------------------------------------------
+UDEV_FILE="/etc/udev/rules.d/99-idap-link-hid.rules"
+if [[ ! -f "$UDEV_FILE" || "$MODE" == "force" ]]; then
+  echo
+  echo ">>> Installing IDAP-Link udev rules..."
+  sudo tee "$UDEV_FILE" > /dev/null <<'EOF'
+# IDAP-Link for Linux
+# Copyright (c) 2018 I-SYST inc. All rights reserved.
+# https://www.i-syst.com
+KERNEL=="hidraw*", ATTRS{idVendor}=="1fc9", ATTRS{idProduct}=="80d1", MODE="0666", GROUP="wheel"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1fc9", ATTRS{idProduct}=="80d1", MODE="0666", GROUP="wheel"
+EOF
+  sudo udevadm control --reload-rules
+  sudo udevadm trigger
+  echo "✅ udev rules installed at $UDEV_FILE"
+else
+  echo "✅ udev rules already installed (skipping)"
+fi
+
+# ---------------------------------------------------------
 # Install Eclipse Embedded CDT
 # ---------------------------------------------------------
 echo
@@ -452,6 +481,28 @@ else
 
   echo "✅ Eclipse installed at $ECLIPSE_DIR"
 fi
+
+
+# ---------------------------------------------------------
+# Create desktop entry for Eclipse
+# ---------------------------------------------------------
+DESKTOP_FILE="$HOME/.local/share/applications/eclipse-embedcdt.desktop"
+mkdir -p "$HOME/.local/share/applications"
+
+cat > "$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Name=Eclipse Embedded CDT
+Comment=Eclipse IDE for Embedded C/C++ Development
+Exec=$ECLIPSE_DIR/eclipse
+Icon=$ECLIPSE_DIR/icon.xpm
+Terminal=false
+Type=Application
+Categories=Development;IDE;
+StartupNotify=true
+StartupWMClass=Eclipse
+EOF
+
+echo "✅ Desktop entry created at $DESKTOP_FILE"
 
 # ---------------------------------------------------------
 # Seed preferences to Eclipse INSTALLATION directory
