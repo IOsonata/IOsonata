@@ -551,12 +551,12 @@ function Install-Plugin {
         Write-Host "   [WARN] Plugin directory not found at $PDIR" -ForegroundColor Yellow
         return 
     }
-    $JAR = Get-ChildItem $PDIR "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+    $JAR = Get-ChildItem $PDIR "org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
     if ($JAR) {
         $DEST = "$ECLIPSE_DIR\dropins"
         New-Item $DEST -ItemType Directory -Force | Out-Null
         # Remove old versions
-        Get-ChildItem "$DEST\org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue | Remove-Item -Force
+        Get-ChildItem "$DEST\org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue | Remove-Item -Force
         Copy-Item $JAR.FullName $DEST -Force
         Write-Host "   [OK] Plugin installed: $($JAR.Name)" -ForegroundColor Green
     } else {

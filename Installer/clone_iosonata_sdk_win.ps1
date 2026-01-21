@@ -301,7 +301,7 @@ function Install-IosonataPlugin {
     }
     
     # Find the latest plugin jar file
-    $pluginFiles = Get-ChildItem -Path $pluginDir -Filter "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue
+    $pluginFiles = Get-ChildItem -Path $pluginDir -Filter "org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue
     
     if (-not $pluginFiles -or $pluginFiles.Count -eq 0) {
         Write-Host "   `[WARN`] No IOsonata plugin jar file found in $pluginDir" -ForegroundColor Yellow
@@ -320,7 +320,7 @@ function Install-IosonataPlugin {
     }
     
     # Remove old versions of the plugin
-    $oldPlugins = Get-ChildItem -Path $dropinsDir -Filter "org.iosonata.embedcdt.templates.firmware_*.jar" -ErrorAction SilentlyContinue
+    $oldPlugins = Get-ChildItem -Path $dropinsDir -Filter "org.iosonata.embedcdt.templates.wizard_*.jar" -ErrorAction SilentlyContinue
     
     if ($oldPlugins) {
         Write-Host "   -> Removing old plugin versions..." -ForegroundColor Yellow

@@ -323,7 +323,7 @@ install_iosonata_plugin() {
   
   # Find the latest plugin jar file
   local latest_plugin
-  latest_plugin=$(ls -1 "$plugin_dir"/org.iosonata.embedcdt.templates.firmware_*.jar 2>/dev/null | sort -V | tail -n1)
+  latest_plugin=$(ls -1 "$plugin_dir"/org.iosonata.embedcdt.templates.wizard_*.jar 2>/dev/null | sort -V | tail -n1)
   
   if [[ -z "$latest_plugin" ]]; then
     echo "${YELLOW}⚠️  No IOsonata plugin jar file found in $plugin_dir${RESET}"
@@ -338,7 +338,7 @@ install_iosonata_plugin() {
   
   # Remove old versions of the plugin
   local old_plugins
-  old_plugins=$(sudo find "$dropins_dir" -name "org.iosonata.embedcdt.templates.firmware_*.jar" 2>/dev/null || true)
+  old_plugins=$(sudo find "$dropins_dir" -name "org.iosonata.embedcdt.templates.wizard_*.jar" 2>/dev/null || true)
   
   if [[ -n "$old_plugins" ]]; then
     echo "${YELLOW}   → Removing old plugin versions...${RESET}"
