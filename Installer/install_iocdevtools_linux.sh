@@ -144,6 +144,24 @@ if [[ "$MODE" == "uninstall" ]]; then
   echo ">>> Removing desktop entry..."
   rm -f "$HOME/.local/share/applications/eclipse-embedcdt.desktop" || true
 
+  echo
+  echo ">>> Repository Cleanup"
+  echo "   The IOsonata repository and external SDKs are located in: $ROOT"
+  read -r -p "   ⚠️  Do you also want to DELETE the IOsonata repo and external SDKs? (y/N) " del_repos
+  
+  if [[ "$del_repos" =~ ^[Yy]$ ]]; then
+    echo "   Removing $ROOT/IOsonata..."
+    rm -rf "$ROOT/IOsonata" || true
+    
+    echo "   Removing $ROOT/external..."
+    rm -rf "$ROOT/external" || true
+    
+    rmdir "$ROOT" 2>/dev/null || true
+    echo "✅ IOsonata and SDKs deleted."
+  else
+    echo ">>> Repositories preserved in $ROOT."
+  fi
+
   echo ">>> Repositories under $ROOT and workspace dirs were kept."
   echo ">>> Uninstall complete!"
   exit 0
@@ -958,10 +976,6 @@ echo "✅ makefile_path.mk created at: $MAKEFILE_PATH_MK"
 # ---------------------------------------------------------
 # Build IOsonata Library
 # ---------------------------------------------------------
-
-# =========================================================
-# Build IOsonata Libraries (using standalone script)
-# =========================================================
 BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
 
 if [[ -f "$BUILD_SCRIPT" ]]; then
