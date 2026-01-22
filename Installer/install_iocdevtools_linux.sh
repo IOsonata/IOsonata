@@ -136,9 +136,10 @@ if [[ "$MODE" == "uninstall" ]]; then
   rm -rf "$HOME/.eclipse" || true
 
   echo ">>> Removing udev rules..."
-  sudo rm -f /etc/udev/rules.d/99-idap-link-hid.rules || true  # ✅ Correct filename
+  sudo rm -f /etc/udev/rules.d/99-idap-link-hid.rules || true
+  rm -rf "$ROOT/udev" || true
   sudo udevadm control --reload-rules 2>/dev/null || true
-  sudo udevadm trigger 2>/dev/null || true
+  sudo udevadm trigger 2>/dev/null || true  # NEW: Added trigger
 
   echo ">>> Removing desktop entry..."
   rm -f "$HOME/.local/share/applications/eclipse-embedcdt.desktop" || true
@@ -407,22 +408,43 @@ echo "   OpenOCD:$OPENOCD_DIR"
 # ---------------------------------------------------------
 # Install udev rules for IDAP-Link
 # ---------------------------------------------------------
-UDEV_FILE="/etc/udev/rules.d/99-idap-link-hid.rules"
-if [[ ! -f "$UDEV_FILE" || "$MODE" == "force" ]]; then
-  echo
-  echo ">>> Installing IDAP-Link udev rules..."
-  sudo tee "$UDEV_FILE" > /dev/null <<'EOF'
+UDEV_DIR="$ROOT/udev"
+UDEV_SRC="$UDEV_DIR/99-idap-link-hid.rules"
+UDEV_DEST="/etc/udev/rules.d/99-idap-link-hid.rules"
+
+mkdir -p "$UDEV_DIR"
+
+# Always create/update the rules file in IOcomposer/udev
+cat > "$UDEV_SRC" <<'EOF'
 # IDAP-Link for Linux
 # Copyright (c) 2018 I-SYST inc. All rights reserved.
 # https://www.i-syst.com
 KERNEL=="hidraw*", ATTRS{idVendor}=="1fc9", ATTRS{idProduct}=="80d1", MODE="0666", GROUP="wheel"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="1fc9", ATTRS{idProduct}=="80d1", MODE="0666", GROUP="wheel"
 EOF
-  sudo udevadm control --reload-rules
-  sudo udevadm trigger
-  echo "✅ udev rules installed at $UDEV_FILE"
+
+echo
+echo ">>> udev rules file created at: $UDEV_SRC"
+
+# Check if already installed in system
+if [[ -f "$UDEV_DEST" ]]; then
+  echo "✅ udev rules already installed in system (skipping)"
 else
-  echo "✅ udev rules already installed (skipping)"
+  echo
+  echo "To use the IDAP-Link debugger without sudo, udev rules need to be installed."
+  read -r -p "Install udev rules to $UDEV_DEST now? (Y/n) " response
+  response=${response:-Y}
+  if [[ "$response" =~ ^[Yy]$ ]]; then
+    sudo cp "$UDEV_SRC" "$UDEV_DEST"
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+    echo "✅ udev rules installed to $UDEV_DEST"
+    echo "   Unplug and replug your debugger for changes to take effect."
+  else
+    echo "⏭️  Skipped. You can install manually later with:"
+    echo "   sudo cp $UDEV_SRC $UDEV_DEST"
+    echo "   sudo udevadm control --reload-rules"
+  fi
 fi
 
 # ---------------------------------------------------------
