@@ -185,13 +185,61 @@ function Add-DefenderExclusion {
 }
 Add-DefenderExclusion -Path $ROOT
 
-# --- Uninstall ---
 if ($MODE -eq "uninstall") {
     $ans = Read-Host "Remove toolchains + Eclipse? (y/N)"
     if ($ans -ne 'y') { exit 0 }
-    if (Test-Path $TOOLS) { Remove-Item $TOOLS -Recurse -Force }
-    if (Test-Path $ECLIPSE_DIR) { Remove-Item $ECLIPSE_DIR -Recurse -Force }
+    
+    # Remove xPacks toolchains
+    if (Test-Path $TOOLS) {
+        Write-Host ">>> Removing toolchains from $TOOLS..."
+        try {
+            # Try to stop any processes that might be locking files
+            Get-Process | Where-Object { $_.Path -like "$TOOLS*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Milliseconds 500
+            Remove-Item $TOOLS -Recurse -Force -ErrorAction Stop
+            Write-Host "   [OK] Toolchains removed." -ForegroundColor Green
+        } catch {
+            Write-Host "   [WARN] Could not fully remove $TOOLS - some files may be in use." -ForegroundColor Yellow
+            Write-Host "   Try closing any applications using these tools and run uninstall again." -ForegroundColor Yellow
+        }
+    }
+    
+    # Remove Eclipse
+    if (Test-Path $ECLIPSE_DIR) {
+        Write-Host ">>> Removing Eclipse from $ECLIPSE_DIR..."
+        try {
+            Get-Process eclipse -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Milliseconds 500
+            Remove-Item $ECLIPSE_DIR -Recurse -Force -ErrorAction Stop
+            Write-Host "   [OK] Eclipse removed." -ForegroundColor Green
+        } catch {
+            Write-Host "   [WARN] Could not fully remove Eclipse - it may be running." -ForegroundColor Yellow
+        }
+    }
+    
+    # Remove Eclipse user data
     Remove-Item "$env:USERPROFILE\.p2", "$env:USERPROFILE\.eclipse" -Recurse -Force -ErrorAction SilentlyContinue
+    
+    # Remove IDAP tools
+    $IDAP_DIR = "$ROOT\IDAP"
+    if (Test-Path $IDAP_DIR) {
+        Remove-Item $IDAP_DIR -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "   [OK] IDAP tools removed." -ForegroundColor Green
+    }
+    
+    # Prompt for IOsonata and external SDK removal
+    $ans2 = Read-Host "Also remove IOsonata and external SDK folders? (y/N)"
+    if ($ans2 -eq 'y') {
+        if (Test-Path "$ROOT\IOsonata") { 
+            Remove-Item "$ROOT\IOsonata" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "   [OK] IOsonata removed." -ForegroundColor Green
+        }
+        if (Test-Path "$ROOT\external") { 
+            Remove-Item "$ROOT\external" -Recurse -Force -ErrorAction SilentlyContinue 
+            Write-Host "   [OK] External SDK removed." -ForegroundColor Green
+        }
+    }
+    
     Write-Host ">>> Uninstall complete!" -ForegroundColor Green
     exit 0
 }
@@ -622,6 +670,42 @@ $REPOS = @(
 )
 foreach ($repo in $REPOS) { Sync-Repo $repo.url $repo.dest }
 Sync-Repo "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" "$EXT\FreeRTOS-Kernel"
+
+
+# --- Install IDAP Tools ---
+$IDAP_DIR = "$ROOT\IDAP"
+$IDAP_PROG = "$IDAP_DIR\IDAPnRFProg.exe"
+New-Item -Path $IDAP_DIR -ItemType Directory -Force | Out-Null
+
+if (-not (Test-Path $IDAP_PROG) -or $MODE -eq "force") {
+    Write-Host
+    Write-Host ">>> Downloading IDAPnRFProg tool..."
+    $IDAP_URL = "https://sourceforge.net/projects/idaplinkfirmware/files/Windows/IDAPnRFProg_Win_2_1_240807.zip/download"
+    $IDAP_TMP = Join-Path $env:TEMP "IDAPnRFProg.zip"
+    
+    $curlExitCode = 0
+    try {
+        $ErrorActionPreference = 'Continue'
+        curl.exe -fL $IDAP_URL -o $IDAP_TMP --silent --show-error
+        $curlExitCode = $LASTEXITCODE
+        $ErrorActionPreference = 'Stop'
+    } catch {
+        $curlExitCode = 1
+        $ErrorActionPreference = 'Stop'
+    }
+    
+    if ($curlExitCode -eq 0 -and (Test-Path $IDAP_TMP)) {
+        & $SEVENZIP_EXE e $IDAP_TMP -o"$IDAP_DIR" -y | Out-Null
+        Remove-Item $IDAP_TMP -Force -ErrorAction SilentlyContinue
+        Write-Host "   [OK] IDAPnRFProg installed at: $IDAP_PROG" -ForegroundColor Green
+    } else {
+        Write-Host "   [WARN] Failed to download IDAPnRFProg. You can download manually from:" -ForegroundColor Yellow
+        Write-Host "         https://sourceforge.net/projects/idaplinkfirmware/files/Windows/" -ForegroundColor Yellow
+        Remove-Item $IDAP_TMP -Force -ErrorAction SilentlyContinue
+    }
+} else {
+    Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
+}
 
 Install-Plugin
 
