@@ -137,9 +137,9 @@ if [[ "$MODE" == "uninstall" ]]; then
 
   echo ">>> Removing udev rules..."
   sudo rm -f /etc/udev/rules.d/99-idap-link-hid.rules || true
-  rm -rf "$ROOT/udev" || true
+  rm -rf "$ROOT/IDAP" || true
   sudo udevadm control --reload-rules 2>/dev/null || true
-  sudo udevadm trigger 2>/dev/null || true  # NEW: Added trigger
+  sudo udevadm trigger 2>/dev/null || true
 
   echo ">>> Removing desktop entry..."
   rm -f "$HOME/.local/share/applications/eclipse-embedcdt.desktop" || true
@@ -406,15 +406,15 @@ echo "   RISC-V: $RISCV_DIR"
 echo "   OpenOCD:$OPENOCD_DIR"
 
 # ---------------------------------------------------------
-# Install udev rules for IDAP-Link
+# Install udev rules and IDAP tools
 # ---------------------------------------------------------
-UDEV_DIR="$ROOT/udev"
-UDEV_SRC="$UDEV_DIR/99-idap-link-hid.rules"
+TOOLS_DIR="$ROOT/IDAP"
+UDEV_SRC="$TOOLS_DIR/99-idap-link-hid.rules"
 UDEV_DEST="/etc/udev/rules.d/99-idap-link-hid.rules"
 
-mkdir -p "$UDEV_DIR"
+mkdir -p "$TOOLS_DIR"
 
-# Always create/update the rules file in IOcomposer/udev
+# Always create/update the rules file in IOcomposer/tools
 cat > "$UDEV_SRC" <<'EOF'
 # IDAP-Link for Linux
 # Copyright (c) 2018 I-SYST inc. All rights reserved.
@@ -426,7 +426,28 @@ EOF
 echo
 echo ">>> udev rules file created at: $UDEV_SRC"
 
-# Check if already installed in system
+# Download IDAPnRFProg if not present
+IDAP_PROG="$TOOLS_DIR/IDAPnRFProg"
+if [[ ! -f "$IDAP_PROG" || "$MODE" == "force" ]]; then
+  echo
+  echo ">>> Downloading IDAPnRFProg tool..."
+  IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/Linux/IDAPnRFProg_Linux_2_1_240807.zip/download"
+  IDAP_TMP=$(mktemp)
+  if curl -fL "$IDAP_URL" -o "$IDAP_TMP"; then
+    unzip -o -j "$IDAP_TMP" -d "$TOOLS_DIR" 2>/dev/null || true
+    chmod +x "$TOOLS_DIR/IDAPnRFProg" 2>/dev/null || true
+    rm -f "$IDAP_TMP"
+    echo "✅ IDAPnRFProg installed at: $IDAP_PROG"
+  else
+    echo "⚠️  Failed to download IDAPnRFProg. You can download manually from:"
+    echo "   https://sourceforge.net/projects/idaplinkfirmware/files/Linux/"
+    rm -f "$IDAP_TMP"
+  fi
+else
+  echo "✅ IDAPnRFProg already installed (skipping)"
+fi
+
+# Check if udev rules already installed in system
 if [[ -f "$UDEV_DEST" ]]; then
   echo "✅ udev rules already installed in system (skipping)"
 else
