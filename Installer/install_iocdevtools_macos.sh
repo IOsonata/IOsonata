@@ -87,6 +87,9 @@ if [[ "$MODE" == "uninstall" ]]; then
   echo ">>> Removing Eclipse user settings (~/.eclipse)..."
   rm -rf "$HOME/.eclipse" || true
 
+  echo ">>> Removing IDAP tools..."
+  rm -rf "$ROOT/IDAP" || true
+
   echo ">>> Repositories under $ROOT and workspace dirs were kept."
   echo ">>> Uninstall complete!"
   exit 0
@@ -298,6 +301,32 @@ OPENOCD_DIR=$(install_xpack "openocd-xpack" "openocd" "OpenOCD")
 if [[ -n "$RISCV_DIR" && ! -f "$RISCV_DIR/bin/riscv-none-elf-gcc" && -f "$RISCV_DIR/bin/riscv64-unknown-elf-gcc" ]]; then
   sudo ln -sf "$RISCV_DIR/bin/riscv64-unknown-elf-gcc" "$RISCV_DIR/bin/riscv-none-elf-gcc"
   sudo ln -sf "$RISCV_DIR/bin/riscv-none-elf-gcc" "$BIN/riscv-none-elf-gcc"
+fi
+
+# ---------------------------------------------------------
+# Install IDAP tools
+# ---------------------------------------------------------
+IDAP_DIR="$ROOT/IDAP"
+mkdir -p "$IDAP_DIR"
+
+IDAP_PROG="$IDAP_DIR/IDAPnRFProg"
+if [[ ! -f "$IDAP_PROG" || "$MODE" == "force" ]]; then
+  echo
+  echo ">>> Downloading IDAPnRFProg tool..."
+  IDAP_URL="https://sourceforge.net/projects/idaplinkfirmware/files/OSX/IDAPnRFProg_OSX_2_1_240807.zip/download"
+  IDAP_TMP=$(mktemp)
+  if curl -fL "$IDAP_URL" -o "$IDAP_TMP"; then
+    unzip -o -j "$IDAP_TMP" -d "$IDAP_DIR" 2>/dev/null || true
+    chmod +x "$IDAP_DIR/IDAPnRFProg" 2>/dev/null || true
+    rm -f "$IDAP_TMP"
+    echo "✅ IDAPnRFProg installed at: $IDAP_PROG"
+  else
+    echo "⚠️  Failed to download IDAPnRFProg. You can download manually from:"
+    echo "   https://sourceforge.net/projects/idaplinkfirmware/files/OSX/"
+    rm -f "$IDAP_TMP"
+  fi
+else
+  echo "✅ IDAPnRFProg already installed (skipping)"
 fi
 
 # ---------------------------------------------------------
