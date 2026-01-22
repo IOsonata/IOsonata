@@ -90,7 +90,22 @@ if [[ "$MODE" == "uninstall" ]]; then
   echo ">>> Removing IDAP tools..."
   rm -rf "$ROOT/IDAP" || true
 
-  echo ">>> Repositories under $ROOT and workspace dirs were kept."
+  # Prompt for IOsonata and external SDK removal
+  echo
+  read -r -p "Also remove IOsonata and external SDK folders? (y/N) " ans2
+  if [[ "$ans2" =~ ^[Yy]$ ]]; then
+    if [[ -d "$ROOT/IOsonata" ]]; then
+      rm -rf "$ROOT/IOsonata"
+      echo "   ✅ IOsonata removed."
+    fi
+    if [[ -d "$ROOT/external" ]]; then
+      rm -rf "$ROOT/external"
+      echo "   ✅ External SDK removed."
+    fi
+  else
+    echo ">>> Repositories under $ROOT and workspace dirs were kept."
+  fi
+
   echo ">>> Uninstall complete!"
   exit 0
 fi
