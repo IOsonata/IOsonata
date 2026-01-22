@@ -185,6 +185,7 @@ function Add-DefenderExclusion {
 }
 Add-DefenderExclusion -Path $ROOT
 
+# --- Uninstall ---
 if ($MODE -eq "uninstall") {
     $ans = Read-Host "Remove toolchains + Eclipse? (y/N)"
     if ($ans -ne 'y') { exit 0 }
@@ -670,7 +671,6 @@ $REPOS = @(
 )
 foreach ($repo in $REPOS) { Sync-Repo $repo.url $repo.dest }
 Sync-Repo "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" "$EXT\FreeRTOS-Kernel"
-
 
 # --- Install IDAP Tools ---
 $IDAP_DIR = "$ROOT\IDAP"
