@@ -627,8 +627,15 @@ if [[ "$ECLIPSE_INSTALLED" == "true" ]]; then
   echo -e "${GREEN}✓ Eclipse detected at $(dirname "$ECLIPSE_BIN")${RESET}"
 fi
 
+# --- Detect Toolchain Installation ---
+TOOLCHAIN_INSTALLED=false
+if command -v arm-none-eabi-gcc &>/dev/null; then
+  TOOLCHAIN_INSTALLED=true
+  echo -e "${GREEN}✓ ARM toolchain detected${RESET}"
+fi
+
 # --- Auto-Build IOsonata Libraries (if Eclipse detected) ---
-if [[ "$ECLIPSE_INSTALLED" == "true" ]]; then
+if [[ "$ECLIPSE_INSTALLED" == "true" && "$TOOLCHAIN_INSTALLED" == "true" ]]; then
   BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
   if [[ -f "$BUILD_SCRIPT" ]]; then
     echo ""
@@ -647,10 +654,16 @@ if [[ "$ECLIPSE_INSTALLED" == "true" ]]; then
     echo "  https://github.com/IOsonata/IOsonata"
     echo ""
   fi
-else
+elif [[ "$ECLIPSE_INSTALLED" != "true" ]]; then
   echo ""
   echo -e "${YELLOW}Note: Eclipse not detected.${RESET}"
   echo "      To build IOsonata libraries, install Eclipse and run:"
+  echo -e "      ${BOLD}./install_iocdevtools_linux.sh${RESET}"
+  echo ""
+elif [[ "$TOOLCHAIN_INSTALLED" != "true" ]]; then
+  echo ""
+  echo -e "${YELLOW}Note: ARM toolchain not detected.${RESET}"
+  echo "      To build IOsonata libraries, install toolchains first by running:"
   echo -e "      ${BOLD}./install_iocdevtools_linux.sh${RESET}"
   echo ""
 fi

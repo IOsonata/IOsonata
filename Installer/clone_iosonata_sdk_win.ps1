@@ -514,8 +514,16 @@ if ($Eclipse -and (Test-Path "$env:ProgramFiles\Eclipse Embedded CDT\eclipse.ini
 
 Write-Host "---------------------------------------------------------" -ForegroundColor Blue
 
+# --- Detect Toolchain Installation ---
+$TOOLCHAIN_INSTALLED = $false
+$armGcc = Get-Command "arm-none-eabi-gcc" -ErrorAction SilentlyContinue
+if ($armGcc) {
+    $TOOLCHAIN_INSTALLED = $true
+    Write-Host "   [OK] ARM toolchain detected" -ForegroundColor Green
+}
+
 # --- Auto-Build IOsonata Libraries (if Eclipse detected) ---
-if ($ECLIPSE_INSTALLED) {
+if ($ECLIPSE_INSTALLED -and $TOOLCHAIN_INSTALLED) {
     $BUILD_SCRIPT = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
     
     if (Test-Path $BUILD_SCRIPT) {
@@ -534,10 +542,16 @@ if ($ECLIPSE_INSTALLED) {
         Write-Host "  https://github.com/IOsonata/IOsonata"
         Write-Host ""
     }
-} else {
+} elseif (-not $ECLIPSE_INSTALLED) {
     Write-Host ""
     Write-Host "Note: Eclipse not detected." -ForegroundColor Yellow
     Write-Host "      To build IOsonata libraries, install Eclipse and run:"
+    Write-Host "      .\install_iocdevtools_win.ps1"
+    Write-Host ""
+} elseif (-not $TOOLCHAIN_INSTALLED) {
+    Write-Host ""
+    Write-Host "Note: ARM toolchain not detected." -ForegroundColor Yellow
+    Write-Host "      To build IOsonata libraries, install toolchains first by running:"
     Write-Host "      .\install_iocdevtools_win.ps1"
     Write-Host ""
 }
