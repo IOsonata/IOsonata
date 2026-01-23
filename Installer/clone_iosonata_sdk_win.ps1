@@ -161,6 +161,60 @@ Write-Host ""
 Write-Host "   `[OK`] All repositories cloned successfully!" -ForegroundColor Green
 
 # ---------------------------------------------------------
+# Install IDAP Tools
+# ---------------------------------------------------------
+Write-Host ""
+Write-Host ">>> Installing IDAP Tools..." -ForegroundColor Cyan
+$IDAP_DIR = "$ROOT\IDAP"
+$IDAP_PROG = "$IDAP_DIR\IDAPnRFProg.exe"
+
+if (-not (Test-Path $IDAP_DIR)) {
+    New-Item -Path $IDAP_DIR -ItemType Directory -Force | Out-Null
+}
+
+# Find 7-Zip for extraction
+$SEVENZIP_EXE = $null
+$candidates = @("$env:ProgramFiles\7-Zip\7z.exe", "${env:ProgramFiles(x86)}\7-Zip\7z.exe", "C:\Program Files\7-Zip\7z.exe")
+foreach ($c in $candidates) { if (Test-Path $c) { $SEVENZIP_EXE = $c; break } }
+
+if (-not (Test-Path $IDAP_PROG) -or $Mode -eq "force") {
+    Write-Host "   Downloading IDAPnRFProg tool..."
+    $IDAP_URL = "https://sourceforge.net/projects/idaplinkfirmware/files/Windows/IDAPnRFProg_Win_2_1_240807.zip/download"
+    $IDAP_TMP = Join-Path $env:TEMP "IDAPnRFProg.zip"
+    
+    $curlExitCode = 0
+    try {
+        $ErrorActionPreference = 'Continue'
+        curl.exe -fL $IDAP_URL -o $IDAP_TMP --silent --show-error
+        $curlExitCode = $LASTEXITCODE
+        $ErrorActionPreference = 'Stop'
+    } catch {
+        $curlExitCode = 1
+        $ErrorActionPreference = 'Stop'
+    }
+    
+    if ($curlExitCode -eq 0 -and (Test-Path $IDAP_TMP)) {
+        if ($SEVENZIP_EXE) {
+            & $SEVENZIP_EXE e $IDAP_TMP -o"$IDAP_DIR" -y | Out-Null
+        } else {
+            # Fallback to Expand-Archive
+            Expand-Archive -Path $IDAP_TMP -DestinationPath $IDAP_DIR -Force
+        }
+        Remove-Item $IDAP_TMP -Force -ErrorAction SilentlyContinue
+        Write-Host "   [OK] IDAPnRFProg installed at: $IDAP_PROG" -ForegroundColor Green
+    } else {
+        Write-Host "   [WARN] Failed to download IDAPnRFProg. You can download manually from:" -ForegroundColor Yellow
+        Write-Host "         https://sourceforge.net/projects/idaplinkfirmware/files/Windows/" -ForegroundColor Yellow
+        Remove-Item $IDAP_TMP -Force -ErrorAction SilentlyContinue
+    }
+} else {
+    Write-Host "   [OK] IDAPnRFProg already installed (skipping)" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "   `[OK`] All repositories cloned successfully!" -ForegroundColor Green
+
+# ---------------------------------------------------------
 # Generate makefile_path.mk
 # ---------------------------------------------------------
 Write-Host ""
@@ -433,6 +487,7 @@ Write-Host "=========================================================" -Foregrou
 Write-Host "IOsonata Root:        $ROOT" -ForegroundColor White
 Write-Host "IOsonata Framework:   $ROOT\IOsonata" -ForegroundColor White
 Write-Host "External Repos:       $EXT" -ForegroundColor White
+Write-Host "IDAP Tools:           $ROOT\IDAP" -ForegroundColor White
 Write-Host ""
 Write-Host "Cloned repositories:" -ForegroundColor White
 Write-Host "  - IOsonata"
