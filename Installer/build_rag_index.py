@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-IOsonata RAG Index Builder v6 - Unified Schema
+IOsonata RAG Index Builder v7 - With Manifest Support
 
 Indexes IOsonata source code into a SQLite database for RAG retrieval.
 Uses unified schema shared with build_external_index.py and build_knowledge_db.py.
+
+v7: Adds manifest building for static system prompt data (MCU list, device list).
 
 Usage:
   python3 build_rag_index.py                    # Build index
@@ -26,7 +28,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
-# Import unified schema
+# Import unified schema (v7 with manifest support)
 from rag_schema import (
     SCHEMA_VERSION, COMPRESS_LEVEL,
     KIND_FUNCTION, KIND_TYPE, KIND_EXAMPLE, KIND_ASSEMBLY, KIND_HEADER,
@@ -38,6 +40,8 @@ from rag_schema import (
     db_connect, ensure_schema, fts_rebuild, set_standard_meta,
     compress, decompress, sha256, StringCache,
     build_line_index, idx_to_line,
+    # v7: Manifest function
+    build_manifest,
 )
 
 print = functools.partial(print, flush=True)
@@ -560,7 +564,8 @@ class IndexBuilder:
         print(f"[00:00] Building index v{SCHEMA_VERSION}")
 
         conn = db_connect(db_path, baseline=True)
-        ensure_schema(conn, enable_fts=self.enable_fts, include_mcu=True, include_devices=True)
+        # v7: Added include_manifest=True
+        ensure_schema(conn, enable_fts=self.enable_fts, include_mcu=True, include_devices=True, include_manifest=True)
 
         # Standardized metadata
         commit = self._git_commit()
@@ -577,6 +582,10 @@ class IndexBuilder:
         # Device support
         print(f"[{_fmt(time.time()-t0)}] Building device support matrix...")
         device_count = build_device_support(conn, self.source, file_cache, self.verbose)
+
+        # v7: Build manifest (pre-computed static data for system prompt)
+        print(f"[{_fmt(time.time()-t0)}] Building manifest...")
+        manifest_count = build_manifest(conn)
 
         # Index files
         print(f"[{_fmt(time.time()-t0)}] Scanning files...")
@@ -666,6 +675,7 @@ class IndexBuilder:
         print(f"  Examples:  {stats['examples']}")
         print(f"  MCU:       {mcu_count}")
         print(f"  Devices:   {device_count}")
+        print(f"  Manifest:  {manifest_count} entries")  # v7: Added
         print(f"  DB size:   {size_kb:.1f} KB")
         return db_path
 
@@ -733,7 +743,7 @@ def _detect_root() -> Optional[Path]:
 
 
 def main():
-    p = argparse.ArgumentParser(description="Build IOsonata RAG index v6 (unified schema)")
+    p = argparse.ArgumentParser(description="Build IOsonata RAG index v7 (with manifest)")
     p.add_argument("--source-dir", default="")
     p.add_argument("--output-dir", default="")
     p.add_argument("--version", default="dev")

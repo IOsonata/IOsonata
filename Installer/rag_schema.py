@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IOcomposer RAG Unified Schema v6
+IOcomposer RAG Unified Schema v7
 
 This module defines the common schema used by all three indexers:
 - build_rag_index.py (IOsonata code)
@@ -13,6 +13,11 @@ Design principles:
 3. Machine-optimized: No JSON stored, FTS5 title-only (contentless)
 4. Simple: Java only needs one schema handler
 
+v7 additions:
+- Manifest table for static data (MCU list, device list)
+- Pre-computed JSON for system prompt injection
+- build_manifest() and generate_manifest_context() functions
+
 All DBs output to:
 - IOsonata: .iosonata/index.db
 - External: external/.extsdk/{sdk}.db
@@ -21,6 +26,7 @@ All DBs output to:
 
 import bisect
 import hashlib
+import json
 import os
 import sqlite3
 import struct
@@ -33,7 +39,7 @@ from typing import Dict, Iterator, Optional
 # CONSTANTS
 # =============================================================================
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7  # Bumped for manifest support
 COMPRESS_LEVEL = 6
 
 # =============================================================================
@@ -121,6 +127,43 @@ PERIPH_MAP = {
     "wdt": PERIPH_WDT, "watchdog": PERIPH_WDT,
     "dma": PERIPH_DMA,
     "crypto": PERIPH_CRYPTO, "aes": PERIPH_CRYPTO,
+}
+
+# Reverse mapping for manifest generation (v7)
+PERIPHERAL_NAMES = {
+    PERIPH_NONE: "none",
+    PERIPH_BLE: "ble",
+    PERIPH_UART: "uart",
+    PERIPH_SPI: "spi",
+    PERIPH_I2C: "i2c",
+    PERIPH_USB: "usb",
+    PERIPH_TIMER: "timer",
+    PERIPH_PWM: "pwm",
+    PERIPH_ADC: "adc",
+    PERIPH_GPIO: "gpio",
+    PERIPH_FLASH: "flash",
+    PERIPH_I2S: "i2s",
+    PERIPH_PDM: "pdm",
+    PERIPH_QSPI: "qspi",
+    PERIPH_ESB: "esb",
+    PERIPH_SENSOR: "sensor",
+    PERIPH_RTC: "rtc",
+    PERIPH_WDT: "wdt",
+    PERIPH_DMA: "dma",
+    PERIPH_CRYPTO: "crypto",
+}
+
+# Device category names for manifest (v7)
+DEVICE_CATEGORY_NAMES = {
+    0: "unknown",
+    1: "sensor",
+    2: "display",
+    3: "miscdev",
+    4: "pmic",
+    5: "imu",
+    6: "audio",
+    7: "storage",
+    8: "converter",
 }
 
 # =============================================================================
@@ -272,6 +315,15 @@ CREATE INDEX IF NOT EXISTS idx_dev_name ON devices(name);
 CREATE INDEX IF NOT EXISTS idx_dev_cat ON devices(category);
 """
 
+# Manifest table (IOsonata only) - pre-computed static data for system prompt (v7)
+MANIFEST_SQL = """
+CREATE TABLE IF NOT EXISTS manifest (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated INTEGER NOT NULL
+);
+"""
+
 # FTS5 virtual table - title-only, contentless
 # Design: indexes chunk titles for fast keyword search without duplicating content
 # Content stays compressed in chunks.content (binary-first principle)
@@ -298,7 +350,8 @@ END;
 
 
 def ensure_schema(conn: sqlite3.Connection, enable_fts: bool = True,
-                  include_mcu: bool = False, include_devices: bool = False) -> None:
+                  include_mcu: bool = False, include_devices: bool = False,
+                  include_manifest: bool = False) -> None:
     """Create unified schema.
     
     Args:
@@ -306,6 +359,7 @@ def ensure_schema(conn: sqlite3.Connection, enable_fts: bool = True,
         enable_fts: Create FTS5 virtual table
         include_mcu: Create mcu_support table (IOsonata only)
         include_devices: Create devices table (IOsonata only)
+        include_manifest: Create manifest table (IOsonata only) - v7
     """
     conn.executescript(SCHEMA_SQL)
     
@@ -314,6 +368,9 @@ def ensure_schema(conn: sqlite3.Connection, enable_fts: bool = True,
     
     if include_devices:
         conn.executescript(DEVICES_SQL)
+    
+    if include_manifest:
+        conn.executescript(MANIFEST_SQL)
     
     if enable_fts:
         conn.executescript(FTS_SQL)
@@ -519,3 +576,130 @@ def build_line_index(src: str) -> list:
 def idx_to_line(nl_index: list, char_idx: int) -> int:
     """Convert character index to 1-based line number using precomputed index."""
     return bisect.bisect_right(nl_index, char_idx) + 1
+
+
+# =============================================================================
+# MANIFEST FUNCTIONS (v7)
+# =============================================================================
+
+def detect_mcu_family(mcu: str) -> str:
+    """Detect MCU family from name."""
+    u = mcu.upper()
+    if u.startswith("NRF52"): return "nrf52"
+    if u.startswith("NRF53"): return "nrf53"
+    if u.startswith("NRF54"): return "nrf54"
+    if u.startswith("NRF91"): return "nrf91"
+    if u.startswith("STM32"): return "stm32"
+    if u.startswith("SAM"): return "sam"
+    if u.startswith("LPC"): return "lpc"
+    if u.startswith("ESP32"): return "esp32"
+    if u.startswith("CH32"): return "ch32"
+    return "other"
+
+
+def build_manifest(conn: sqlite3.Connection) -> int:
+    """Build manifest table from mcu_support and devices tables.
+    
+    Call this AFTER build_mcu_support() and build_device_support().
+    Returns number of manifest entries created.
+    """
+    now = int(time.time())
+    count = 0
+    
+    # === MCU MANIFEST ===
+    rows = conn.execute("""
+        SELECT DISTINCT mcu, periph FROM mcu_support ORDER BY mcu, periph
+    """).fetchall()
+    
+    mcus = set()
+    mcu_by_family = {}
+    mcu_peripherals = {}
+    
+    for mcu, periph in rows:
+        mcus.add(mcu)
+        periph_name = PERIPHERAL_NAMES.get(periph, f"periph_{periph}")
+        
+        if mcu not in mcu_peripherals:
+            mcu_peripherals[mcu] = []
+        if periph_name != "none" and periph_name not in mcu_peripherals[mcu]:
+            mcu_peripherals[mcu].append(periph_name)
+        
+        family = detect_mcu_family(mcu)
+        if family not in mcu_by_family:
+            mcu_by_family[family] = []
+        if mcu not in mcu_by_family[family]:
+            mcu_by_family[family].append(mcu)
+    
+    conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                 ("mcu_list", json.dumps(sorted(mcus)), now))
+    count += 1
+    
+    conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                 ("mcu_by_family", json.dumps({k: sorted(v) for k, v in sorted(mcu_by_family.items())}), now))
+    count += 1
+    
+    conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                 ("mcu_periph_matrix", json.dumps({k: sorted(v) for k, v in mcu_peripherals.items()}), now))
+    count += 1
+    
+    # === DEVICE MANIFEST ===
+    rows = conn.execute("SELECT name, category FROM devices ORDER BY category, name").fetchall()
+    
+    devices = []
+    device_by_category = {}
+    
+    for name, category in rows:
+        devices.append(name)
+        cat_name = DEVICE_CATEGORY_NAMES.get(category, "unknown")
+        if cat_name not in device_by_category:
+            device_by_category[cat_name] = []
+        if name not in device_by_category[cat_name]:
+            device_by_category[cat_name].append(name)
+    
+    conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                 ("device_list", json.dumps(sorted(set(devices))), now))
+    count += 1
+    
+    conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                 ("device_by_category", json.dumps({k: sorted(v) for k, v in sorted(device_by_category.items())}), now))
+    count += 1
+    
+    conn.commit()
+    return count
+
+
+def get_manifest_json(conn: sqlite3.Connection, key: str):
+    """Get manifest value as parsed JSON."""
+    row = conn.execute("SELECT value FROM manifest WHERE key=?", (key,)).fetchone()
+    return json.loads(row[0]) if row and row[0] else None
+
+
+def generate_manifest_context(conn: sqlite3.Connection) -> str:
+    """Generate static context fragment for system prompt injection.
+    
+    This should be loaded ONCE at startup and cached in the system prompt.
+    """
+    mcu_by_family = get_manifest_json(conn, "mcu_by_family") or {}
+    device_by_cat = get_manifest_json(conn, "device_by_category") or {}
+    
+    lines = []
+    lines.append("=== IOsonata Supported Hardware (Authoritative) ===")
+    lines.append("")
+    lines.append("## Supported MCUs")
+    for family, mcus in sorted(mcu_by_family.items()):
+        if mcus:
+            lines.append(f"- **{family.upper()}**: {', '.join(mcus)}")
+    lines.append("")
+    lines.append("## Supported Device Drivers")
+    for category, devices in sorted(device_by_cat.items()):
+        if devices and category != "unknown":
+            lines.append(f"### {category.title()}")
+            lines.append(", ".join(devices))
+            lines.append("")
+    
+    lines.append("---")
+    lines.append("⚠️ AUTHORITATIVE LIST: If a device/MCU is NOT listed above, IOsonata does NOT support it.")
+    lines.append("Do NOT fabricate driver names. Ask user for part number if needed.")
+    lines.append("")
+    
+    return "\n".join(lines)
