@@ -20,6 +20,7 @@ import re
 import sqlite3
 import struct
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -36,6 +37,82 @@ from rag_schema import (
 )
 
 print = functools.partial(print, flush=True)
+
+# =============================================================================
+# BENCHMARK DATA
+# =============================================================================
+
+@dataclass
+class BuildStats:
+    """Statistics for a single SDK build."""
+    name: str
+    elapsed: float = 0.0
+    files: int = 0
+    chunks: int = 0
+    funcs: int = 0
+    types: int = 0
+    examples: int = 0
+    size_kb: float = 0.0
+    skipped: bool = False
+    error: str = ""
+
+
+@dataclass 
+class BenchmarkReport:
+    """Collects timing and stats across all SDK builds."""
+    start_time: float = field(default_factory=time.time)
+    sdk_stats: List[BuildStats] = field(default_factory=list)
+    
+    def add(self, stats: BuildStats):
+        self.sdk_stats.append(stats)
+    
+    def total_elapsed(self) -> float:
+        return time.time() - self.start_time
+    
+    def print_summary(self):
+        """Print a formatted benchmark summary."""
+        print("\n" + "=" * 70)
+        print("BENCHMARK SUMMARY")
+        print("=" * 70)
+        
+        # Header
+        print(f"{'SDK':<25} {'Time':>8} {'Files':>7} {'Chunks':>8} {'Size':>10} {'Status':<10}")
+        print("-" * 70)
+        
+        total_files = 0
+        total_chunks = 0
+        total_size = 0.0
+        build_time = 0.0
+        
+        for s in self.sdk_stats:
+            if s.skipped:
+                status = "skipped"
+                time_str = "-"
+            elif s.error:
+                status = "ERROR"
+                time_str = "-"
+            else:
+                status = "OK"
+                time_str = f"{s.elapsed:.1f}s"
+                build_time += s.elapsed
+                total_files += s.files
+                total_chunks += s.chunks
+                total_size += s.size_kb
+            
+            size_str = f"{s.size_kb:.0f} KB" if s.size_kb > 0 else "-"
+            print(f"{s.name:<25} {time_str:>8} {s.files:>7} {s.chunks:>8} {size_str:>10} {status:<10}")
+        
+        print("-" * 70)
+        
+        # Totals
+        built = sum(1 for s in self.sdk_stats if not s.skipped and not s.error)
+        skipped = sum(1 for s in self.sdk_stats if s.skipped)
+        errors = sum(1 for s in self.sdk_stats if s.error)
+        
+        print(f"{'TOTAL':<25} {build_time:>7.1f}s {total_files:>7} {total_chunks:>8} {total_size:>7.0f} KB")
+        print(f"\nSDKs: {len(self.sdk_stats)} total, {built} built, {skipped} skipped, {errors} errors")
+        print(f"Wall time: {self.total_elapsed():.1f}s (build time: {build_time:.1f}s)")
+        print("=" * 70)
 
 # =============================================================================
 # CONFIG
@@ -272,8 +349,12 @@ class SDKIndexer:
                 if p.suffix.lower() in SOURCE_SUFFIXES_ALL:
                     yield p
 
-    def build_sdk_db(self, sdk_path: Path, name: str, out_db: Path, version: str, skip_unchanged: bool) -> Optional[Path]:
+    def build_sdk_db(self, sdk_path: Path, name: str, out_db: Path, version: str, skip_unchanged: bool) -> BuildStats:
+        """Build SDK database and return build statistics."""
         out_db.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize stats
+        build_stats = BuildStats(name=name)
         
         # Compute source fingerprint for reliable skip-if-unchanged
         current_fp = compute_source_fingerprint(sdk_path, SOURCE_SUFFIXES_ALL, DEFAULT_IGNORE_DIRS, IGNORE_DIR_PREFIXES)
@@ -286,7 +367,9 @@ class SDKIndexer:
                 conn.close()
                 if stored_fp == current_fp:
                     print(f"  [skip] {name} (unchanged)")
-                    return out_db
+                    build_stats.skipped = True
+                    build_stats.size_kb = out_db.stat().st_size / 1024
+                    return build_stats
             except:
                 pass  # DB corrupt or no fingerprint, rebuild
 
@@ -380,9 +463,20 @@ class SDKIndexer:
         conn.execute("VACUUM")
         conn.close()
 
+        elapsed = time.time() - t0
         size_kb = out_db.stat().st_size / 1024
-        print(f"    [{_fmt(time.time()-t0)}] {name}: {stats['files']} files, {stats['chunks']} chunks ({size_kb:.0f}KB)")
-        return out_db
+        
+        # Update build stats
+        build_stats.elapsed = elapsed
+        build_stats.files = stats["files"]
+        build_stats.chunks = stats["chunks"]
+        build_stats.funcs = stats["funcs"]
+        build_stats.types = stats["types"]
+        build_stats.examples = stats["examples"]
+        build_stats.size_kb = size_kb
+        
+        print(f"    [{_fmt(elapsed)}] {name}: {stats['files']} files, {stats['chunks']} chunks ({size_kb:.0f}KB)")
+        return build_stats
 
 
 def update_embeddings(db_path: Path, provider: str, api_key: Optional[str], model: str,
@@ -490,6 +584,7 @@ def main():
     p.add_argument("--model", default="")
     p.add_argument("--batch-size", type=int, default=0)
     p.add_argument("--max-new", type=int, default=0)
+    p.add_argument("--no-benchmark", action="store_true", help="Disable benchmark summary")
     args = p.parse_args()
 
     if not args.api_key:
@@ -497,6 +592,7 @@ def main():
 
     indexer = SDKIndexer(enable_fts=not args.no_fts, verbose=args.verbose)
 
+    # Single SDK mode
     if args.sdk:
         sdk_path = Path(args.sdk)
         name = args.name or sanitize(sdk_path.name)
@@ -505,9 +601,14 @@ def main():
             n = update_embeddings(out_db, args.provider, args.api_key or None, args.model, args.batch_size, args.max_new)
             print(f"✓ {name}: {n} embeddings")
         else:
-            indexer.build_sdk_db(sdk_path, name, out_db, args.version, args.skip_if_unchanged)
+            report = BenchmarkReport()
+            stats = indexer.build_sdk_db(sdk_path, name, out_db, args.version, args.skip_if_unchanged)
+            report.add(stats)
+            if not args.no_benchmark:
+                report.print_summary()
         return
 
+    # Multi-SDK mode
     sdk_root = Path(args.sdk_root) if args.sdk_root else _detect_root()
     if not sdk_root:
         print("Error: SDK root not found. Use --sdk-root")
@@ -532,9 +633,20 @@ def main():
                 total += n
         print(f"\n✓ Total: {total} embeddings")
     else:
+        report = BenchmarkReport()
         for name, sdk_path in sdks:
-            indexer.build_sdk_db(sdk_path, name, output_dir / f"{name}.db", args.version, args.skip_if_unchanged)
-        print(f"\n✓ Indexed {len(sdks)} SDKs")
+            try:
+                stats = indexer.build_sdk_db(sdk_path, name, output_dir / f"{name}.db", args.version, args.skip_if_unchanged)
+                report.add(stats)
+            except Exception as e:
+                print(f"    [ERROR] {name}: {e}")
+                error_stats = BuildStats(name=name, error=str(e))
+                report.add(error_stats)
+        
+        if not args.no_benchmark:
+            report.print_summary()
+        else:
+            print(f"\n✓ Indexed {len(sdks)} SDKs")
 
 
 if __name__ == "__main__":
