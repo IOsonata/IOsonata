@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IOcomposer RAG Unified Schema v7
+IOcomposer RAG Unified Schema v8
 
 This module defines the common schema used by all three indexers:
 - build_rag_index.py (IOsonata code)
@@ -17,6 +17,11 @@ v7 additions:
 - Manifest table for static data (MCU list, device list)
 - Pre-computed JSON for system prompt injection
 - build_manifest() and generate_manifest_context() functions
+
+v8 additions:
+- Base class hierarchy scanning (sensor types, device types, interfaces)
+- base_classes table for inheritance tracking
+- base_classes_by_category and base_class_details in manifest
 
 All DBs output to:
 - IOsonata: .iosonata/index.db
@@ -39,7 +44,7 @@ from typing import Dict, Iterator, Optional
 # CONSTANTS
 # =============================================================================
 
-SCHEMA_VERSION = 7  # Bumped for manifest support
+SCHEMA_VERSION = 8  # Bumped for base class hierarchy support
 COMPRESS_LEVEL = 6
 
 # =============================================================================
@@ -598,9 +603,9 @@ def detect_mcu_family(mcu: str) -> str:
 
 
 def build_manifest(conn: sqlite3.Connection) -> int:
-    """Build manifest table from mcu_support and devices tables.
+    """Build manifest table from mcu_support, devices, and base_classes tables.
     
-    Call this AFTER build_mcu_support() and build_device_support().
+    Call this AFTER build_mcu_support(), build_device_support(), and build_base_class_hierarchy().
     Returns number of manifest entries created.
     """
     now = int(time.time())
@@ -664,6 +669,42 @@ def build_manifest(conn: sqlite3.Connection) -> int:
                  ("device_by_category", json.dumps({k: sorted(v) for k, v in sorted(device_by_category.items())}), now))
     count += 1
     
+    # === BASE CLASS HIERARCHY (v8) ===
+    try:
+        rows = conn.execute("""
+            SELECT name, category, header, parent, config_struct 
+            FROM base_classes 
+            ORDER BY category, name
+        """).fetchall()
+        
+        base_classes_by_category = {}
+        base_class_details = {}
+        
+        for name, category, header, parent, config_struct in rows:
+            # Group by category
+            if category not in base_classes_by_category:
+                base_classes_by_category[category] = []
+            base_classes_by_category[category].append(name)
+            
+            # Store details for each base class
+            base_class_details[name] = {
+                'header': header,
+                'parent': parent,
+                'config_struct': config_struct,
+                'category': category
+            }
+        
+        conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                     ("base_classes_by_category", json.dumps({k: sorted(v) for k, v in sorted(base_classes_by_category.items())}), now))
+        count += 1
+        
+        conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                     ("base_class_details", json.dumps(base_class_details), now))
+        count += 1
+    except sqlite3.OperationalError:
+        # base_classes table doesn't exist yet (older index)
+        pass
+    
     conn.commit()
     return count
 
@@ -681,6 +722,8 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
     """
     mcu_by_family = get_manifest_json(conn, "mcu_by_family") or {}
     device_by_cat = get_manifest_json(conn, "device_by_category") or {}
+    base_classes_by_cat = get_manifest_json(conn, "base_classes_by_category") or {}
+    base_class_details = get_manifest_json(conn, "base_class_details") or {}
     
     lines = []
     lines.append("=== IOsonata Supported Hardware (Authoritative) ===")
@@ -697,9 +740,62 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
             lines.append(", ".join(devices))
             lines.append("")
     
+    # === BASE CLASS HIERARCHY (v8) ===
+    if base_classes_by_cat:
+        lines.append("## Base Class Hierarchy (for implementing new drivers)")
+        lines.append("")
+        
+        # Sensor base classes
+        sensor_bases = base_classes_by_cat.get('sensor', [])
+        if sensor_bases:
+            lines.append("### Sensor Base Classes")
+            lines.append("Use these when implementing sensor drivers:")
+            lines.append("")
+            lines.append("| Sensor Type | Base Class | Header | Config Struct |")
+            lines.append("|-------------|------------|--------|---------------|")
+            for name in sorted(sensor_bases):
+                info = base_class_details.get(name, {})
+                header = info.get('header', '')
+                config = info.get('config_struct', '') or '—'
+                lines.append(f"| {name.replace('Sensor', '')} | {name} | `{header}` | {config} |")
+            lines.append("")
+            lines.append("**If sensor type NOT listed above:** inherit directly from `Sensor` (sensors/sensor.h)")
+            lines.append("")
+        
+        # Core base classes
+        core_bases = base_classes_by_cat.get('core', [])
+        if core_bases:
+            lines.append("### Core Base Classes")
+            for name in sorted(core_bases):
+                info = base_class_details.get(name, {})
+                header = info.get('header', '')
+                lines.append(f"- **{name}**: `{header}`")
+            lines.append("")
+        
+        # Interface base classes
+        iface_bases = base_classes_by_cat.get('interface', [])
+        if iface_bases:
+            lines.append("### Interface Base Classes")
+            for name in sorted(iface_bases):
+                info = base_class_details.get(name, {})
+                header = info.get('header', '')
+                lines.append(f"- **{name}**: `{header}`")
+            lines.append("")
+        
+        # Display base classes
+        display_bases = base_classes_by_cat.get('display', [])
+        if display_bases:
+            lines.append("### Display Base Classes")
+            for name in sorted(display_bases):
+                info = base_class_details.get(name, {})
+                header = info.get('header', '')
+                lines.append(f"- **{name}**: `{header}`")
+            lines.append("")
+    
     lines.append("---")
     lines.append("⚠️ AUTHORITATIVE LIST: If a device/MCU is NOT listed above, IOsonata does NOT support it.")
-    lines.append("Do NOT fabricate driver names. Ask user for part number if needed.")
+    lines.append("⚠️ BASE CLASSES: If a sensor type is NOT listed, inherit from Sensor directly.")
+    lines.append("Do NOT fabricate driver names or base class names. Ask user for part number if needed.")
     lines.append("")
     
     return "\n".join(lines)

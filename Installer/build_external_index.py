@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-External SDK Index Builder v6 - Unified Schema
+External SDK Index Builder v8 - Unified Schema
 
 Indexes external SDKs (nRF5_SDK, FreeRTOS, LVGL, etc.) into SQLite databases.
 Uses unified schema shared with build_rag_index.py and build_knowledge_db.py.
+
+v6: Initial unified schema
+v7: Manifest support (not used by external SDKs)
+v8: Base class hierarchy support (not used by external SDKs, but schema compatible)
 
 Usage:
   python3 build_external_index.py              # Index all SDKs
@@ -566,7 +570,7 @@ def _detect_root() -> Optional[Path]:
 
 
 def main():
-    p = argparse.ArgumentParser(description="Build SDK indexes v6 (unified schema)")
+    p = argparse.ArgumentParser(description="Build SDK indexes v8 (unified schema)")
     p.add_argument("--sdk", default="")
     p.add_argument("--name", default="")
     p.add_argument("--output", default="")

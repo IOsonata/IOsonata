@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-IOsonata RAG Index Builder v7 - With Manifest Support
+IOsonata RAG Index Builder v8 - With Base Class Hierarchy Support
 
 Indexes IOsonata source code into a SQLite database for RAG retrieval.
 Uses unified schema shared with build_external_index.py and build_knowledge_db.py.
 
 v7: Adds manifest building for static system prompt data (MCU list, device list).
+v8: Adds base class hierarchy scanning for sensor/device/interface types.
 
 Usage:
   python3 build_rag_index.py                    # Build index
@@ -419,13 +420,187 @@ def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: Strin
                     if key in seen:
                         continue
                     seen.add(key)
-                    rel_path = filepath.relative_to(root) if filepath.is_relative_to(root) else filepath
+                    try:
+                        rel_path = filepath.relative_to(root)
+                    except ValueError:
+                        rel_path = filepath
                     file_id = file_cache.get_id(str(rel_path))
                     conn.execute(
                         "INSERT OR REPLACE INTO devices(name, category, file_id) VALUES(?,?,?)",
                         (device_name, category, file_id)
                     )
                     count += 1
+    conn.commit()
+    return count
+
+
+# =============================================================================
+# BASE CLASS HIERARCHY (v8)
+# =============================================================================
+
+# Pattern to match class definitions with inheritance
+# Matches: class ClassName : public Base1, public Base2 { ... }
+_CLASS_INHERIT_RE = re.compile(
+    r'\bclass\s+(\w+)\s*:\s*((?:(?:public|protected|private)\s+\w+(?:\s*,\s*(?:public|protected|private)\s+\w+)*)?)\s*\{',
+    re.MULTILINE
+)
+
+# Pattern to extract base classes from inheritance list
+_BASE_CLASS_RE = re.compile(r'(?:public|protected|private)\s+(\w+)')
+
+# Base class category mapping
+BASECLASS_CATEGORY = {
+    # Core base classes
+    'Device': 'core',
+    'DeviceIntrf': 'core',
+    'Sensor': 'core',
+    
+    # Sensor specializations
+    'TempSensor': 'sensor',
+    'PressSensor': 'sensor',
+    'HumiSensor': 'sensor',
+    'TphSensor': 'sensor',
+    'GasSensor': 'sensor',
+    'AccelSensor': 'sensor',
+    'GyroSensor': 'sensor',
+    'MagSensor': 'sensor',
+    'AgmSensor': 'sensor',
+    'LightSensor': 'sensor',
+    'ProxSensor': 'sensor',
+    
+    # Interface types
+    'Uart': 'interface',
+    'Spi': 'interface',
+    'I2C': 'interface',
+    
+    # Device types
+    'Display': 'display',
+    'DisplayDotMatrix': 'display',
+}
+
+
+def extract_class_inheritance(filepath: Path) -> List[Tuple[str, List[str]]]:
+    """Extract class names and their base classes from a header file.
+    
+    Returns list of (class_name, [base_classes])
+    """
+    results = []
+    try:
+        src = filepath.read_text(encoding='utf-8', errors='replace')
+        # Mask comments to avoid false matches
+        masked = _mask_comments(src)
+        
+        for m in _CLASS_INHERIT_RE.finditer(masked):
+            class_name = m.group(1)
+            inherit_list = m.group(2)
+            
+            if not inherit_list:
+                continue
+                
+            # Extract base class names
+            bases = _BASE_CLASS_RE.findall(inherit_list)
+            if bases:
+                results.append((class_name, bases))
+    except Exception:
+        pass
+    return results
+
+
+def build_base_class_hierarchy(conn: sqlite3.Connection, root: Path, file_cache: StringCache, verbose: bool) -> int:
+    """Build base class hierarchy from IOsonata headers.
+    
+    Scans include/ directory for class definitions and their inheritance.
+    Stores in base_classes table and adds to manifest.
+    """
+    count = 0
+    
+    # Ensure table exists
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS base_classes (
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            category TEXT NOT NULL,
+            header TEXT NOT NULL,
+            parent TEXT,
+            config_struct TEXT
+        )
+    """)
+    conn.execute("DELETE FROM base_classes")
+    
+    # Track all classes and their inheritance
+    all_classes = {}  # class_name -> {header, bases, category}
+    
+    # Scan directories for headers
+    scan_dirs = [
+        ('include/sensors', 'sensor'),
+        ('include/coredev', 'interface'),
+        ('include/display', 'display'),
+        ('include/miscdev', 'miscdev'),
+        ('include/storage', 'storage'),
+        ('include', 'core'),  # Root include for Device, Sensor base classes
+    ]
+    
+    for rel_dir, default_category in scan_dirs:
+        dir_path = root / rel_dir
+        if not dir_path.exists():
+            continue
+            
+        for filepath in dir_path.glob('*.h'):
+            if not filepath.is_file():
+                continue
+            
+            rel_path = filepath.relative_to(root)
+            header_path = str(rel_path)
+            
+            # Extract class definitions
+            classes = extract_class_inheritance(filepath)
+            
+            for class_name, bases in classes:
+                # Determine category
+                category = BASECLASS_CATEGORY.get(class_name, default_category)
+                
+                # Look for config struct (ClassName + Cfg_t or ClassNameCfg_t pattern)
+                config_struct = None
+                try:
+                    src = filepath.read_text(encoding='utf-8', errors='replace')
+                    # Match patterns like TempSensorCfg_t, AccelSensorCfg_t, etc.
+                    cfg_patterns = [
+                        rf'\btypedef\s+struct\s+\w*\s*\{{\s*[^}}]*\}}\s*({class_name}Cfg_t)\s*;',
+                        rf'\btypedef\s+struct\s+__\w+\s*\{{\s*[^}}]*\}}\s*({class_name}Cfg_t)\s*;',
+                        rf'({class_name}Cfg_t)',
+                    ]
+                    for pattern in cfg_patterns:
+                        cfg_match = re.search(pattern, src, re.DOTALL)
+                        if cfg_match:
+                            config_struct = cfg_match.group(1)
+                            break
+                except:
+                    pass
+                
+                # Store class info
+                if class_name not in all_classes:
+                    all_classes[class_name] = {
+                        'header': header_path,
+                        'bases': bases,
+                        'category': category,
+                        'config_struct': config_struct
+                    }
+    
+    # Insert into database
+    for class_name, info in all_classes.items():
+        # Get primary parent (first base class)
+        parent = info['bases'][0] if info['bases'] else None
+        
+        conn.execute(
+            "INSERT OR REPLACE INTO base_classes(name, category, header, parent, config_struct) VALUES(?,?,?,?,?)",
+            (class_name, info['category'], info['header'], parent, info['config_struct'])
+        )
+        count += 1
+        
+        if verbose:
+            bases_str = ', '.join(info['bases']) if info['bases'] else 'none'
+            print(f"  {class_name} : {bases_str} ({info['header']})")
+    
     conn.commit()
     return count
 
@@ -583,6 +758,10 @@ class IndexBuilder:
         print(f"[{_fmt(time.time()-t0)}] Building device support matrix...")
         device_count = build_device_support(conn, self.source, file_cache, self.verbose)
 
+        # v8: Base class hierarchy
+        print(f"[{_fmt(time.time()-t0)}] Building base class hierarchy...")
+        baseclass_count = build_base_class_hierarchy(conn, self.source, file_cache, self.verbose)
+
         # v7: Build manifest (pre-computed static data for system prompt)
         print(f"[{_fmt(time.time()-t0)}] Building manifest...")
         manifest_count = build_manifest(conn)
@@ -675,7 +854,8 @@ class IndexBuilder:
         print(f"  Examples:  {stats['examples']}")
         print(f"  MCU:       {mcu_count}")
         print(f"  Devices:   {device_count}")
-        print(f"  Manifest:  {manifest_count} entries")  # v7: Added
+        print(f"  BaseClass: {baseclass_count}")  # v8: Added
+        print(f"  Manifest:  {manifest_count} entries")
         print(f"  DB size:   {size_kb:.1f} KB")
         return db_path
 
@@ -743,7 +923,7 @@ def _detect_root() -> Optional[Path]:
 
 
 def main():
-    p = argparse.ArgumentParser(description="Build IOsonata RAG index v7 (with manifest)")
+    p = argparse.ArgumentParser(description="Build IOsonata RAG index v8 (with base class hierarchy)")
     p.add_argument("--source-dir", default="")
     p.add_argument("--output-dir", default="")
     p.add_argument("--version", default="dev")
