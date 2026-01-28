@@ -762,6 +762,20 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
             lines.append("**If sensor type NOT listed above:** inherit directly from `Sensor` (sensors/sensor.h)")
             lines.append("")
         
+        # Converter base classes (ADC/DAC)
+        converter_bases = base_classes_by_cat.get('converter', [])
+        if converter_bases:
+            lines.append("### Converter Base Classes (ADC/DAC)")
+            lines.append("Use these for analog-to-digital and digital-to-analog converters:")
+            lines.append("")
+            for name in sorted(converter_bases):
+                info = base_class_details.get(name, {})
+                header = info.get('header', '')
+                config = info.get('config_struct', '') or ''
+                config_str = f" (Config: {config})" if config else ""
+                lines.append(f"- **{name}**: `{header}`{config_str}")
+            lines.append("")
+        
         # Core base classes
         core_bases = base_classes_by_cat.get('core', [])
         if core_bases:
@@ -787,6 +801,26 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
         if display_bases:
             lines.append("### Display Base Classes")
             for name in sorted(display_bases):
+                info = base_class_details.get(name, {})
+                header = info.get('header', '')
+                lines.append(f"- **{name}**: `{header}`")
+            lines.append("")
+        
+        # PMIC/Power management base classes
+        pmic_bases = base_classes_by_cat.get('pmic', [])
+        if pmic_bases:
+            lines.append("### Power Management Base Classes")
+            for name in sorted(pmic_bases):
+                info = base_class_details.get(name, {})
+                header = info.get('header', '')
+                lines.append(f"- **{name}**: `{header}`")
+            lines.append("")
+        
+        # Audio base classes
+        audio_bases = base_classes_by_cat.get('audio', [])
+        if audio_bases:
+            lines.append("### Audio Base Classes")
+            for name in sorted(audio_bases):
                 info = base_class_details.get(name, {})
                 header = info.get('header', '')
                 lines.append(f"- **{name}**: `{header}`")

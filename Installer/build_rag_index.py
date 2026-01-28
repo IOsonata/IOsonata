@@ -402,6 +402,7 @@ def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: Strin
     seen = set()
     conn.execute("DELETE FROM devices")
     
+    # === EXTERNAL DEVICES (root device directories) ===
     device_dirs = ['sensors', 'display', 'miscdev', 'pwrmgnt', 'imu', 'audio', 'storage', 'converters']
     for base in ['include', 'src']:
         for dev_dir in device_dirs:
@@ -430,6 +431,68 @@ def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: Strin
                         (device_name, category, file_id)
                     )
                     count += 1
+    
+    # === INTERNAL MCU DEVICES (ADC, DAC in ARM/RISCV vendor paths) ===
+    # These are MCU-internal peripherals that have IOsonata implementations
+    mcu_device_patterns = [
+        # ARM vendors
+        ('ARM/*/src/adc_*.cpp', DEVCAT_CONVERTER, 'adc'),
+        ('ARM/*/src/dac_*.cpp', DEVCAT_CONVERTER, 'dac'),
+        ('ARM/*/*/src/adc_*.cpp', DEVCAT_CONVERTER, 'adc'),  # Deeper nesting
+        ('ARM/*/*/src/dac_*.cpp', DEVCAT_CONVERTER, 'dac'),
+        # RISC-V vendors
+        ('RISCV/*/src/adc_*.cpp', DEVCAT_CONVERTER, 'adc'),
+        ('RISCV/*/src/dac_*.cpp', DEVCAT_CONVERTER, 'dac'),
+        ('RISCV/*/*/src/adc_*.cpp', DEVCAT_CONVERTER, 'adc'),
+        ('RISCV/*/*/src/dac_*.cpp', DEVCAT_CONVERTER, 'dac'),
+    ]
+    
+    for pattern, category, periph_type in mcu_device_patterns:
+        for filepath in root.glob(pattern):
+            if not filepath.is_file():
+                continue
+            # Extract MCU-specific device name from path
+            # e.g., ARM/Nordic/nRF52/src/adc_nrf52_saadc.cpp -> nRF52_SAADC
+            parts = filepath.relative_to(root).parts
+            # Find vendor and MCU from path
+            mcu_name = None
+            for i, part in enumerate(parts):
+                if part in ('ARM', 'RISCV') and i + 2 < len(parts):
+                    # ARM/Nordic/nRF52/... or ARM/Nordic/...
+                    vendor = parts[i + 1]
+                    # Check if next part looks like MCU name (starts with lowercase letter or is a known pattern)
+                    next_part = parts[i + 2] if i + 2 < len(parts) else None
+                    if next_part and (next_part.startswith('nRF') or next_part.startswith('STM') or 
+                                      next_part.startswith('SAM') or next_part.startswith('LPC') or
+                                      next_part.startswith('ESP') or next_part.startswith('CH32') or
+                                      next_part == 'src'):
+                        if next_part != 'src':
+                            mcu_name = next_part
+                        else:
+                            mcu_name = vendor
+                    else:
+                        mcu_name = vendor
+                    break
+            
+            if mcu_name:
+                # Create device name like "nRF52_ADC" or "STM32_ADC"
+                device_name = f"{mcu_name}_{periph_type.upper()}"
+                key = (device_name, category)
+                if key not in seen:
+                    seen.add(key)
+                    try:
+                        rel_path = filepath.relative_to(root)
+                    except ValueError:
+                        rel_path = filepath
+                    file_id = file_cache.get_id(str(rel_path))
+                    conn.execute(
+                        "INSERT OR REPLACE INTO devices(name, category, file_id) VALUES(?,?,?)",
+                        (device_name, category, file_id)
+                    )
+                    count += 1
+                    if verbose:
+                        print(f"  MCU device: {device_name} from {rel_path}")
+    
     conn.commit()
     return count
 
@@ -467,15 +530,49 @@ BASECLASS_CATEGORY = {
     'AgmSensor': 'sensor',
     'LightSensor': 'sensor',
     'ProxSensor': 'sensor',
+    'AlsSensor': 'sensor',
+    'ProximitySensor': 'sensor',
+    'DistSensor': 'sensor',
+    'RangeSensor': 'sensor',
+    'BioSensor': 'sensor',
+    'EcgSensor': 'sensor',
+    'PpgSensor': 'sensor',
     
     # Interface types
     'Uart': 'interface',
     'Spi': 'interface',
     'I2C': 'interface',
+    'I2c': 'interface',
+    'Usb': 'interface',
+    'UsbDev': 'interface',
+    
+    # Converter types
+    'AdcDevice': 'converter',
+    'DacDevice': 'converter',
+    'Adc': 'converter',
+    'Dac': 'converter',
     
     # Device types
     'Display': 'display',
     'DisplayDotMatrix': 'display',
+    'DisplayLcd': 'display',
+    'DisplayOled': 'display',
+    
+    # Power management
+    'Pmic': 'pmic',
+    'Charger': 'pmic',
+    'FuelGauge': 'pmic',
+    'BatteryMonitor': 'pmic',
+    
+    # Audio
+    'AudioDevice': 'audio',
+    'Codec': 'audio',
+    'I2s': 'audio',
+    'Pdm': 'audio',
+    
+    # Storage
+    'FlashDev': 'storage',
+    'Eeprom': 'storage',
 }
 
 
@@ -530,14 +627,19 @@ def build_base_class_hierarchy(conn: sqlite3.Connection, root: Path, file_cache:
     # Track all classes and their inheritance
     all_classes = {}  # class_name -> {header, bases, category}
     
-    # Scan directories for headers
+    # Scan directories for headers - ALL include subdirectories
+    # Must match device_dirs in build_device_support() plus coredev
     scan_dirs = [
         ('include/sensors', 'sensor'),
         ('include/coredev', 'interface'),
         ('include/display', 'display'),
         ('include/miscdev', 'miscdev'),
         ('include/storage', 'storage'),
-        ('include', 'core'),  # Root include for Device, Sensor base classes
+        ('include/converters', 'converter'),  # ADC, DAC base classes
+        ('include/pwrmgnt', 'pmic'),          # Power management base classes
+        ('include/imu', 'sensor'),            # IMU is a sensor type
+        ('include/audio', 'audio'),           # Audio device base classes
+        ('include', 'core'),                  # Root include for Device, Sensor base classes
     ]
     
     for rel_dir, default_category in scan_dirs:
