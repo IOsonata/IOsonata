@@ -124,6 +124,51 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define IOPINOP_PERIPHY		IOPINOP_FUNC24
 #define IOPINOP_PERIPHZ		IOPINOP_FUNC25
 
+
+/**
+ * @brief Pin capabilities (32-bit bitmask)
+ *
+ * Each bit indicates whether a pin supports a particular function.
+ * For RAG parsing: look for PINCAPS_ prefix defines.
+ */
+typedef enum __Pin_Capabilities {
+    PINCAPS_GPIO        = (1 << 0),		//!< General purpose I/O
+    PINCAPS_ADC         = (1 << 1),  	//!< Analog-to-digital
+    PINCAPS_CAN			= (1 << 2),		//!< CAN bus
+    PINCAPS_CLOCK_OUT	= (1 << 3),		//!< Clock output
+    PINCAPS_COMP_IN     = (1 << 4),		//!< Comparator input
+    PINCAPS_DAC         = (1 << 5),  	//!< Digital-to-analog
+    PINCAPS_I2C			= (1 << 6),   	//!< I2C/TWI
+    PINCAPS_I2S			= (1 << 7),  	//!< I2S
+    PINCAPS_NFC         = (1 << 8),  	//!< NFC antenna
+    PINCAPS_PDM			= (1 << 9),  	//!< PDM
+    PINCAPS_PWM         = (1 << 10),	//!< PWM output
+	PINCAPS_SPI			= (1 << 11),	//!< SPI
+    PINCAPS_DSPI		= (1 << 12),  	//!< Dual SPI
+    PINCAPS_QSPI		= (1 << 13),  	//!< Quad SPI
+    PINCAPS_OSPI     	= (1 << 14),  	//!< Octo SPI
+    PINCAPS_RESET       = (1 << 15),	//!< Reset
+    PINCAPS_TIMER_CAP   = (1 << 16),  	//!< Timer capture input
+    PINCAPS_TRACE       = (1 << 17),	//!< Debug trace
+	PINCAPS_UART      	= (1 << 18),   	//!< UART
+    PINCAPS_USB         = (1 << 19),  	//!< USB
+} PINCAPS;
+
+/**
+ * @brief Pin capability entry - one per physical pin
+ *
+ * For RAG: Parse arrays of this struct to build pin capability database.
+ */
+typedef struct __Pin_Capability_Entry {
+    int8_t   PortNo;		//!< Port number (-1 = entry unused)
+    int8_t   PinNo;       	//!< Pin number within port
+    int8_t   Reserved[2];  	//!< Alignment padding
+    uint32_t Caps;        	//!< Capability bitmask (PINCAP flags)
+} PinCapEntry_t;
+
+// Number of entries macro for array sizing
+#define PIN_CAP_COUNT(arr) (sizeof(arr) / sizeof(PinCapEntry_t))
+
 /// I/O pin resistor configuration
 typedef enum __iopin_resistor {
 	IOPINRES_NONE,				//!< No pullup or pulldown
@@ -335,6 +380,18 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength);
  * @param	Speed	: Pin speed
  */
 void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed);
+
+/**
+ * @brief	Get pin capability
+ *
+ * This function return the capability (function) of a pin.
+ *
+ * @param	PortNo 	: Port number (up to 32 ports)
+ * @param	PinNo  	: Pin number (up to 32 pins)
+ *
+ * @return	PINCAPS - orable bit field of the capability list.
+ */
+PINCAPS IOPinGetCaps(int PortNo, int PinNo);
 
 #ifdef __cplusplus
 }
