@@ -458,7 +458,7 @@
 		<link>
 			<name>src/system_nrf54l.c</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/system_nrf54l.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/system_nrf54l.c</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>
@@ -1893,7 +1893,7 @@
 		<link>
 			<name>src/nrfx/drivers/src/nrfx_power.c</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/nrfx_power.c</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_power.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
