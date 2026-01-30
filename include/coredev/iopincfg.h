@@ -129,45 +129,53 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * @brief Pin capabilities (32-bit bitmask)
  *
  * Each bit indicates whether a pin supports a particular function.
- * For RAG parsing: look for PINCAPS_ prefix defines.
+ * For RAG parsing: look for PINMUX_ prefix defines.
  */
-typedef enum __Pin_Capabilities {
-    PINCAPS_GPIO        = (1 << 0),		//!< General purpose I/O
-    PINCAPS_ADC         = (1 << 1),  	//!< Analog-to-digital
-    PINCAPS_CAN			= (1 << 2),		//!< CAN bus
-    PINCAPS_CLOCK_OUT	= (1 << 3),		//!< Clock output
-    PINCAPS_COMP_IN     = (1 << 4),		//!< Comparator input
-    PINCAPS_DAC         = (1 << 5),  	//!< Digital-to-analog
-    PINCAPS_I2C			= (1 << 6),   	//!< I2C/TWI
-    PINCAPS_I2S			= (1 << 7),  	//!< I2S
-    PINCAPS_NFC         = (1 << 8),  	//!< NFC antenna
-    PINCAPS_PDM			= (1 << 9),  	//!< PDM
-    PINCAPS_PWM         = (1 << 10),	//!< PWM output
-	PINCAPS_SPI			= (1 << 11),	//!< SPI
-    PINCAPS_DSPI		= (1 << 12),  	//!< Dual SPI
-    PINCAPS_QSPI		= (1 << 13),  	//!< Quad SPI
-    PINCAPS_OSPI     	= (1 << 14),  	//!< Octo SPI
-    PINCAPS_RESET       = (1 << 15),	//!< Reset
-    PINCAPS_TIMER_CAP   = (1 << 16),  	//!< Timer capture input
-    PINCAPS_TRACE       = (1 << 17),	//!< Debug trace
-	PINCAPS_UART      	= (1 << 18),   	//!< UART
-    PINCAPS_USB         = (1 << 19),  	//!< USB
-} PINCAPS;
+typedef enum __IOPin_Mux_Function {
+    IOPINMUX_GPIO			= (1 << 0),		//!< General purpose I/O
+    IOPINMUX_ADC			= (1 << 1),  	//!< Analog-to-digital
+    IOPINMUX_CAN			= (1 << 2),		//!< CAN bus
+    IOPINMUX_CLOCK_OUT		= (1 << 3),		//!< Clock output
+    IOPINMUX_COMP_IN		= (1 << 4),		//!< Comparator input
+    IOPINMUX_DAC			= (1 << 5),  	//!< Digital-to-analog
+    IOPINMUX_EXTREF			= (1 << 6),		//!< ADC External reference
+    IOPINMUX_I2C			= (1 << 7),   	//!< I2C/TWI
+    IOPINMUX_I2S			= (1 << 8),  	//!< I2S
+    IOPINMUX_I3C			= (1 << 9),   	//!< I3C
+    IOPINMUX_NFC			= (1 << 10),  	//!< NFC antenna
+    IOPINMUX_PDM			= (1 << 11),  	//!< PDM
+    IOPINMUX_PWM			= (1 << 12),	//!< PWM output
+    IOPINMUX_QDEC			= (1 << 13),	//!< Quadrature decoder
+    IOPINMUX_RESET			= (1 << 14),	//!< Reset
+	IOPINMUX_SPI			= (1 << 15),	//!< SPI
+    IOPINMUX_DSPI			= (1 << 16),  	//!< Dual SPI
+    IOPINMUX_QSPI			= (1 << 17),  	//!< Quad SPI
+    IOPINMUX_OSPI			= (1 << 18),  	//!< Octo SPI
+    IOPINMUX_TIMER_CAP		= (1 << 19),  	//!< Timer capture input
+    IOPINMUX_TRACE			= (1 << 20),	//!< Debug trace
+	IOPINMUX_UART			= (1 << 21),   	//!< UART
+    IOPINMUX_USB			= (1 << 22),  	//!< USB
+    IOPINMUX_XTAL			= (1 << 23),	//!< Xtal oscillator
+} IOPINMUX;
 
+#pragma pack(push,1)
 /**
- * @brief Pin capability entry - one per physical pin
+ * @brief Pin map entry - one per physical pin
  *
  * For RAG: Parse arrays of this struct to build pin capability database.
+ * Flag serves to indicate indicate whether the pin has been assigned or not
  */
-typedef struct __Pin_Capability_Entry {
+typedef struct __Pin_Map_Entry {
     int8_t   PortNo;		//!< Port number (-1 = entry unused)
     int8_t   PinNo;       	//!< Pin number within port
     int8_t   Reserved[2];  	//!< Alignment padding
-    uint32_t Caps;        	//!< Capability bitmask (PINCAP flags)
-} PinCapEntry_t;
+    IOPINMUX Caps;        	//!< Capability bitmask (PINMUX)
+    IOPINMUX Conn;			//!< Pin connected to PINMUX function, 0 - unused
+} PinMapEntry_t;
+#pragma pack(pop)
 
-// Number of entries macro for array sizing
-#define PIN_CAP_COUNT(arr) (sizeof(arr) / sizeof(PinCapEntry_t))
+// Number of entries macro for pin map array sizing
+#define IOPIN_MAP_COUNT(x) (sizeof(x) / sizeof(PinMapEntry_t))
 
 /// I/O pin resistor configuration
 typedef enum __iopin_resistor {
@@ -389,9 +397,26 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed);
  * @param	PortNo 	: Port number (up to 32 ports)
  * @param	PinNo  	: Pin number (up to 32 pins)
  *
- * @return	PINCAPS - orable bit field of the capability list.
+ * @return	PINMUX - orable bit field of the capability list.
  */
-PINCAPS IOPinGetCaps(int PortNo, int PinNo);
+IOPINMUX IOPinGetCaps(uint8_t PortNo, uint8_t PinNo);
+
+/**
+ * @brief	Allocate pin usage
+ *
+ * Allocate pin for assignment to a function
+ *
+ * @param	PortNo 	: Port number (up to 32 ports)
+ * @param	PinNo  	: Pin number (up to 32 pins)
+ * @param 	Fct		: Pin mux selected
+ * @param	Id		: Pin identifier specific to each function
+ *
+ * @return	-1 - Pin in use by other function
+ * 			index value in the pin assignment array.
+ */
+int IOPinAlloc(uint8_t PortNo, uint8_t PinNo, IOPINMUX Fct, uint8_t Id);
+void IOPinRelease(uint8_t PortNo, uint8_t PinNo);
+int IOPinFind(IOPINMUX Fct);
 
 #ifdef __cplusplus
 }

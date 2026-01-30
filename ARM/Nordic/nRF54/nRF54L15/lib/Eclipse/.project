@@ -1171,6 +1171,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/iopinmap_nrf54l15.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/iopinmap_nrf54l15.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/pwm_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-4-PROJECT_LOC%7D/src/pwm_nrfx.cpp</locationURI>

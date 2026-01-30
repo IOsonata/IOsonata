@@ -186,11 +186,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
 		</link>
 		<link>
-			<name>include/iopinctrl.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
-		</link>
-		<link>
 			<name>include/iosonata_types.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/iosonata_types.h</locationURI>
@@ -799,6 +794,11 @@
 			<name>include/coredev/iopincfg.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/iopincfg.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/iopinctrl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/pdm.h</name>
@@ -1474,6 +1474,11 @@
 			<name>src/coredev/iopincfg_nrfx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/iopinmap_nrf52832.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/iopinmap_nrf52832.c</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/pdm_nrfx.cpp</name>

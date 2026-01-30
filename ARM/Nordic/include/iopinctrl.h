@@ -51,6 +51,29 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
+
+///
+#define IOPIN_PORT_MAXCOUNT		GPIO_COUNT
+
+#ifdef NRF52832_XXAA
+#define IOPIN_P0_MAXCOUNT		P0_PIN_NUM
+#define IOPIN_MAX_COUNT			(P0_PIN_NUM)
+#elif defined(NRF52840_XXAA)
+#define IOPIN_P0_MAXCOUNT		P0_PIN_NUM
+#define IOPIN_P1_MAXCOUNT		P1_PIN_NUM
+#define IOPIN_MAX_COUNT			(P0_PIN_NUM + P1_PIN_NUM)
+#elif defined(NRF54L15_XXAA)
+//
+// Package		QFN40	QFN48	QFN52	CSP47
+// Max GPIO		24		31		35		32
+#define IOPIN_P0_MAXCOUNT		7
+#define IOPIN_P1_MAXCOUNT		17
+#define IOPIN_P2_MAXCOUNT		11
+
+#define IOPIN_MAX_COUNT			(IOPIN_P0_MAXCOUNT + IOPIN_P1_MAXCOUNT + IOPIN_P2_MAXCOUNT)	// Define max gpio
+#endif
+
+
 #ifdef 	__cplusplus
 extern "C" {
 #endif
