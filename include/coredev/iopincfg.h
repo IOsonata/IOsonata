@@ -138,24 +138,32 @@ typedef enum __IOPin_Mux_Function {
     IOPINMUX_CLOCK_OUT		= (1 << 3),		//!< Clock output
     IOPINMUX_COMP_IN		= (1 << 4),		//!< Comparator input
     IOPINMUX_DAC			= (1 << 5),  	//!< Digital-to-analog
-    IOPINMUX_EXTREF			= (1 << 6),		//!< ADC External reference
-    IOPINMUX_I2C			= (1 << 7),   	//!< I2C/TWI
-    IOPINMUX_I2S			= (1 << 8),  	//!< I2S
-    IOPINMUX_I3C			= (1 << 9),   	//!< I3C
-    IOPINMUX_NFC			= (1 << 10),  	//!< NFC antenna
-    IOPINMUX_PDM			= (1 << 11),  	//!< PDM
-    IOPINMUX_PWM			= (1 << 12),	//!< PWM output
-    IOPINMUX_QDEC			= (1 << 13),	//!< Quadrature decoder
-    IOPINMUX_RESET			= (1 << 14),	//!< Reset
-	IOPINMUX_SPI			= (1 << 15),	//!< SPI
-    IOPINMUX_DSPI			= (1 << 16),  	//!< Dual SPI
-    IOPINMUX_QSPI			= (1 << 17),  	//!< Quad SPI
-    IOPINMUX_OSPI			= (1 << 18),  	//!< Octo SPI
-    IOPINMUX_TIMER_CAP		= (1 << 19),  	//!< Timer capture input
-    IOPINMUX_TRACE			= (1 << 20),	//!< Debug trace
-	IOPINMUX_UART			= (1 << 21),   	//!< UART
-    IOPINMUX_USB			= (1 << 22),  	//!< USB
-    IOPINMUX_XTAL			= (1 << 23),	//!< Xtal oscillator
+	IOPINMUX_DCMI			= (1 << 6),  	//!< Digital camera interface
+	IOPINMUX_DISPLAY		= (1 << 7),		//!< Display interface (lcd, segmented,...)
+	IOPINMUX_ETH			= (1 << 8),  	//!< Ethernet (RMII/MII/RGMII)
+    IOPINMUX_EXTREF			= (1 << 9),		//!< ADC External reference
+	IOPINMUX_FMC			= (1 << 10),  	//!< External memory controller
+    IOPINMUX_I2C			= (1 << 11),   	//!< I2C/TWI
+    IOPINMUX_I2S			= (1 << 12),  	//!< I2S
+    IOPINMUX_I3C			= (1 << 13),   	//!< I3C
+	IOPINMUX_JTAG_SWD       = (1 << 14),  	//!< JTAG/SWD debug
+    IOPINMUX_NFC			= (1 << 15),  	//!< NFC antenna
+    IOPINMUX_PDM			= (1 << 16),  	//!< PDM
+    IOPINMUX_PWM			= (1 << 17),	//!< PWM output
+    IOPINMUX_QDEC			= (1 << 18),	//!< Quadrature decoder
+    IOPINMUX_RESET			= (1 << 19),	//!< Reset
+	IOPINMUX_SPI			= (1 << 20),	//!< SPI
+    IOPINMUX_DSPI			= (1 << 21),  	//!< Dual SPI
+    IOPINMUX_QSPI			= (1 << 22),  	//!< Quad SPI
+    IOPINMUX_OSPI			= (1 << 23),  	//!< Octo SPI
+	IOPINMUX_SAI			= (1 << 24),	//!< Serial Audio Interface
+	IOPINMUX_SDMMC			= (1 << 25),	//!< SD/MMC/SDIO
+    IOPINMUX_TDM			= (1 << 26),	//!< Time division multiplex
+    IOPINMUX_TIMER_CAP		= (1 << 27),  	//!< Timer capture input
+    IOPINMUX_TRACE			= (1 << 28),	//!< Debug trace
+	IOPINMUX_UART			= (1 << 29),   	//!< UART
+    IOPINMUX_USB			= (1 << 30),  	//!< USB
+    IOPINMUX_XTAL			= (1 << 31)		//!< Xtal oscillator
 } IOPINMUX;
 
 #pragma pack(push,1)
@@ -171,6 +179,7 @@ typedef struct __Pin_Map_Entry {
     int8_t   Reserved[2];  	//!< Alignment padding
     IOPINMUX Caps;        	//!< Capability bitmask (PINMUX)
     IOPINMUX Conn;			//!< Pin connected to PINMUX function, 0 - unused
+    uint32_t Id;			//!< Pin id, device dependent
 } PinMapEntry_t;
 #pragma pack(pop)
 

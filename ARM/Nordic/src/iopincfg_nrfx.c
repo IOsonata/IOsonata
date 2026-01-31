@@ -1021,6 +1021,7 @@ int IOPinAlloc(uint8_t PortNo, uint8_t PinNo, IOPINMUX Fct, uint8_t Id)
 	}
 
 	g_IOPinMap[idx].Conn = Fct;
+	g_IOPinMap[idx].Id = Id;
 
 	return idx;
 }
