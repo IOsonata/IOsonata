@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-IOsonata RAG Index Builder v8 - With Base Class Hierarchy Support
+IOsonata RAG Index Builder v9 - With C-style Typedef Support
 
 Indexes IOsonata source code into a SQLite database for RAG retrieval.
 Uses unified schema shared with build_external_index.py and build_knowledge_db.py.
 
 v7: Adds manifest building for static system prompt data (MCU list, device list).
 v8: Adds base class hierarchy scanning for sensor/device/interface types.
+v9: Fixes critical bug - adds C-style typedef struct/enum parsing.
+    Previously only C++ style types were indexed (struct Name {...};).
+    Now also indexes typedef struct {...} Name_t; which IOsonata uses throughout.
 
 Usage:
   python3 build_rag_index.py                    # Build index
@@ -229,6 +232,8 @@ def _find_brace(masked: str, start: int) -> Optional[int]:
     return None
 
 
+# Original regex - only captures named struct/class/enum (C++ style)
+# e.g., struct AdcCfg { ... };  class MyClass { ... };
 _TYPE_RE = re.compile(r"\b(class|struct|enum)\s+([A-Za-z_]\w*)[^;{]*\{", re.M)
 _FUNC_RE = re.compile(
     r"^[ \t]*(?:static\s+|inline\s+|extern\s+|virtual\s+|__STATIC_INLINE\s+)*"
@@ -237,7 +242,51 @@ _FUNC_RE = re.compile(
 )
 
 
+def iter_typedef_types(src: str):
+    """
+    Iterate over C-style typedef struct/enum patterns.
+    
+    v9: This function is critical for IOsonata which uses C-style typedefs:
+      typedef struct { ... } AdcCfg_t;
+      typedef struct __Internal { ... } UartCfg_t;
+      typedef enum { ... } ADC_CONV_MODE;
+    
+    Without this, NONE of IOsonata's configuration structs would be indexed!
+    
+    Yields: (kind, name, start_idx, end_idx)
+    """
+    masked = _mask_comments(src)
+    pattern = re.compile(r'\btypedef\s+(struct|enum)\s*(\w*)\s*\{', re.M)
+    
+    for m in pattern.finditer(masked):
+        kind = m.group(1)  # 'struct' or 'enum'
+        internal_name = m.group(2)  # May be empty for anonymous structs
+        brace_start = m.end() - 1
+        
+        # Find matching }
+        end = _find_brace(masked, brace_start)
+        if end is None:
+            continue
+        
+        # Find typedef name after }
+        rest = masked[end+1:]
+        name_match = re.match(r'\s*(\w+)\s*;', rest)
+        if not name_match:
+            continue
+            
+        typedef_name = name_match.group(1)
+        
+        # Skip if we already captured this via internal name that doesn't start with _
+        # (to avoid duplicates when both patterns match the same struct)
+        if internal_name and not internal_name.startswith('_'):
+            continue
+            
+        end_pos = end + name_match.end()
+        yield kind, typedef_name, m.start(), end_pos
+
+
 def iter_types(src: str):
+    """Iterate over C++ style named types (class/struct/enum with name before brace)."""
     masked = _mask_comments(src)
     for m in _TYPE_RE.finditer(masked):
         kind, name = m.group(1), m.group(2)
@@ -870,7 +919,7 @@ class IndexBuilder:
 
         # Index files
         print(f"[{_fmt(time.time()-t0)}] Scanning files...")
-        stats = {"files": 0, "chunks": 0, "functions": 0, "types": 0, "examples": 0}
+        stats = {"files": 0, "chunks": 0, "functions": 0, "types": 0, "typedef_types": 0, "examples": 0}
 
         for path in self._iter_files():
             stats["files"] += 1
@@ -904,7 +953,23 @@ class IndexBuilder:
                 stats["examples"] += 1
                 stats["chunks"] += 1
 
-            # Types
+            # v9: Typedef types (C-style: typedef struct {...} Name_t;)
+            # This is CRITICAL for IOsonata - all config structs use this pattern!
+            for kind, name, s_idx, e_idx in iter_typedef_types(src):
+                block = src[s_idx:e_idx+1]
+                line = idx_to_line(nl_idx, s_idx)
+                desc = _brief_comment(src, s_idx)
+                content = f"{kind} {name}\n{desc}\n{block}"[:self.max_chunk]
+                conn.execute(
+                    "INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,content,hash) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (KIND_TYPE, periph, file_id, module_id, line, line + block.count("\n"),
+                     f"{kind} {name}", compress(content), sha256(content))
+                )
+                stats["typedef_types"] += 1
+                stats["types"] += 1
+                stats["chunks"] += 1
+
+            # Named types (C++ style: struct Name {...};  class Name {...};)
             for kind, name, s_idx, e_idx in iter_types(src):
                 block = src[s_idx:e_idx+1]
                 line = idx_to_line(nl_idx, s_idx)
@@ -952,7 +1017,7 @@ class IndexBuilder:
         print(f"  Files:     {stats['files']}")
         print(f"  Chunks:    {stats['chunks']}")
         print(f"  Functions: {stats['functions']}")
-        print(f"  Types:     {stats['types']}")
+        print(f"  Types:     {stats['types']} (typedef: {stats['typedef_types']})")
         print(f"  Examples:  {stats['examples']}")
         print(f"  MCU:       {mcu_count}")
         print(f"  Devices:   {device_count}")
@@ -1025,7 +1090,7 @@ def _detect_root() -> Optional[Path]:
 
 
 def main():
-    p = argparse.ArgumentParser(description="Build IOsonata RAG index v8 (with base class hierarchy)")
+    p = argparse.ArgumentParser(description="Build IOsonata RAG index v9 (with typedef support)")
     p.add_argument("--source-dir", default="")
     p.add_argument("--output-dir", default="")
     p.add_argument("--version", default="dev")
