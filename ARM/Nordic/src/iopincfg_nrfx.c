@@ -40,8 +40,6 @@ SOFTWARE.
 
 #include "iopinctrl.h"
 
-extern PinMapEntry_t g_IOPinMap[IOPIN_MAX_COUNT];
-
 NRF_GPIO_Type *nRFGpioGetReg(int PortNo);
 void __WEAK GPIOTE_IRQHandler(void);
 
@@ -71,24 +69,6 @@ typedef struct {
 #pragma pack(pop)
 
 __ALIGN(4) static PinSenseEvtHook_t s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
-
-static const uint32_t s_IOPinMapPortIdx[IOPIN_PORT_MAXCOUNT + 1] = {
-	0,
-#if IOPIN_PORT_MAXCOUNT > 1
-	IOPIN_P0_MAXCOUNT,
-#endif
-#if IOPIN_PORT_MAXCOUNT > 2
-	IOPIN_P0_MAXCOUNT + IOPIN_P1_MAXCOUNT,
-#endif
-#if IOPIN_PORT_MAXCOUNT > 3
-	IOPIN_P0_MAXCOUNT + IOPIN_P1_MAXCOUNT + IOPIN_P2_MAXCOUNT,
-#endif
-#if IOPIN_PORT_MAXCOUNT > 4
-	IOPIN_P0_MAXCOUNT + IOPIN_P1_MAXCOUNT + IOPIN_P2_MAXCOUNT + IOPIN_P3_MAXCOUNT,
-#endif
-
-	IOPIN_MAX_COUNT
-};
 
 NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 {
@@ -964,93 +944,4 @@ void __WEAK GPIOTE_IRQHandler(void)
 	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
 }
 #endif
-
-
-/**
- * @brief	Get pin capability
- *
- * This function return the capability (function) of a pin.
- *
- * @param	PortNo 	: Port number (up to 32 ports)
- * @param	PinNo  	: Pin number (up to 32 pins)
- *
- * @return	PINMUX - orable bit field of the capability list.
- */
-IOPINMUX IOPinGetCaps(uint8_t PortNo, uint8_t PinNo)
-{
-	if (PortNo >= IOPIN_PORT_MAXCOUNT)
-	{
-		return -1;
-	}
-
-	uint8_t idx = s_IOPinMapPortIdx[PortNo] + PinNo;
-
-	if (idx >= s_IOPinMapPortIdx[PortNo + 1])
-	{
-		return 0;
-	}
-
-	return g_IOPinMap[idx].Caps;
-}
-
-/**
- * @brief	Allocate pin usage
- *
- * Allocate pin for assignment to a function
- *
- * @param	PortNo 	: Port number (up to 32 ports)
- * @param	PinNo  	: Pin number (up to 32 pins)
- * @param 	Fct		: Pin mux selected
- * @param	Id		: Pin identifier specific to each function
- *
- * @return	-1 - Pin in use by other function
- * 			index value in the pin assignment array.
- */
-int IOPinAlloc(uint8_t PortNo, uint8_t PinNo, IOPINMUX Fct, uint8_t Id)
-{
-	if (PortNo >= IOPIN_PORT_MAXCOUNT)
-	{
-		return -1;
-	}
-
-	uint8_t idx = s_IOPinMapPortIdx[PortNo] + PinNo;
-
-	if (idx >= s_IOPinMapPortIdx[PortNo + 1] || (g_IOPinMap[idx].Conn != 0 && g_IOPinMap[idx].Conn != Fct))
-	{
-		return -1;
-	}
-
-	g_IOPinMap[idx].Conn = Fct;
-	g_IOPinMap[idx].Id = Id;
-
-	return idx;
-}
-
-void IOPinRelease(uint8_t PortNo, uint8_t PinNo)
-{
-	if (PortNo >= IOPIN_PORT_MAXCOUNT)
-	{
-		return;
-	}
-
-	uint8_t idx = s_IOPinMapPortIdx[PortNo] + PinNo;
-
-	if (idx < s_IOPinMapPortIdx[PortNo + 1])
-	{
-		g_IOPinMap[idx].Conn = 0;
-	}
-}
-
-int IOPinFind(IOPINMUX Fct)
-{
-	for (int i = 0; i < IOPIN_MAX_COUNT; i++)
-	{
-		if (g_IOPinMap[i].Caps & Fct)
-		{
-			return i;
-		}
-	}
-
-	return -1;
-}
 
