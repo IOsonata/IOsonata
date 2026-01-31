@@ -36,7 +36,7 @@ SOFTWARE.
 
 #define IOPIN_MUX_COMMON	(IOPINMUX_GPIO | IOPINMUX_CLOCK_OUT | IOPINMUX_COMP_IN | \
 							 IOPINMUX_I2C | IOPINMUX_I2S | IOPINMUX_PDM | IOPINMUX_PWM | \
-							 IOPINMUX_QDEC | IOPINMUX_SPI | IOPINMUX_TIMER_CAP | IOPINMUX_UART)
+							 IOPINMUX_QDEC | IOPINMUX_SPI | IOPINMUX_QSPI | IOPINMUX_TIMER_CAP | IOPINMUX_UART)
 
 __attribute__((weak)) PinMapEntry_t g_IOPinMap[IOPIN_MAX_COUNT] = {
 	{0,  0, 0, 0, IOPIN_MUX_COMMON | IOPINMUX_XTAL, IOPINMUX_XTAL},
@@ -88,7 +88,7 @@ __attribute__((weak)) PinMapEntry_t g_IOPinMap[IOPIN_MAX_COUNT] = {
 	{1, 14, 0, 0, IOPIN_MUX_COMMON, 0},
 	{1, 15, 0, 0, IOPIN_MUX_COMMON, 0},
 };
-
+#if 0
 /**
  * @brief	Get pin capability
  *
@@ -161,7 +161,7 @@ int IOPinFind(IOPINMUX Fct)
 	return -1;
 }
 
-
+#endif
 
 
 

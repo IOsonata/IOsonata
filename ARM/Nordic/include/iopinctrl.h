@@ -71,8 +71,16 @@ SOFTWARE.
 #define IOPIN_P2_MAXCOUNT		11
 
 #define IOPIN_MAX_COUNT			(IOPIN_P0_MAXCOUNT + IOPIN_P1_MAXCOUNT + IOPIN_P2_MAXCOUNT)	// Define max gpio
-#endif
+#elif defined(NRF54LM20A)
 
+#define IOPIN_P0_MAXCOUNT		10
+#define IOPIN_P1_MAXCOUNT		32
+#define IOPIN_P2_MAXCOUNT		11
+#define IOPIN_P3_MAXCOUNT		13
+
+#define IOPIN_MAX_COUNT			(IOPIN_P0_MAXCOUNT + IOPIN_P1_MAXCOUNT + IOPIN_P2_MAXCOUNT + IOPIN_P3_MAXCOUNT)	// Define max gpio
+
+#endif
 
 #ifdef 	__cplusplus
 extern "C" {

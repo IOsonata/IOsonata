@@ -72,7 +72,7 @@ __attribute__((weak)) PinMapEntry_t g_IOPinMap[IOPIN_MAX_COUNT] = {
 	{0, 30, 0, 0, IOPIN_MUX_COMMON | IOPINMUX_ADC| IOPINMUX_EXTREF, 0},
 	{0, 31, 0, 0, IOPIN_MUX_COMMON | IOPINMUX_ADC| IOPINMUX_EXTREF, 0}
 };
-
+#if 0
 /**
  * @brief	Get pin capability
  *
@@ -138,7 +138,7 @@ int IOPinFind(IOPINMUX Fct)
 
 	return -1;
 }
-
+#endif
 
 
 

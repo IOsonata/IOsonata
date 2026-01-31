@@ -75,8 +75,7 @@ __attribute__((weak)) PinMapEntry_t g_IOPinMap[IOPIN_MAX_COUNT] = {
 	{2, 10, 0, 0, IOPIN_MUX_COMMON, 0},
 };
 
-static const uint32_t s_IOPinMapPortIdx[GPIO_COUNT + 1] = {	0, IOPIN_P0_MAXCOUNT, IOPIN_P0_MAXCOUNT + IOPIN_P1_MAXCOUNT, IOPIN_MAX_COUNT};
-
+#if 0
 /**
  * @brief	Get pin capability
  *
@@ -164,6 +163,7 @@ int IOPinFind(IOPINMUX Fct)
 	return -1;
 }
 
+#endif
 
 
 
