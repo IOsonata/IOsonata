@@ -658,20 +658,12 @@ def build_base_class_hierarchy(conn: sqlite3.Connection, root: Path, file_cache:
     
     Scans include/ directory for class definitions and their inheritance.
     Stores in base_classes table and adds to manifest.
+    
+    Note: base_classes table is created by ensure_schema(include_base_classes=True)
     """
     count = 0
     
-    # Ensure table exists
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS base_classes (
-            id INTEGER PRIMARY KEY,
-            name TEXT UNIQUE NOT NULL,
-            category TEXT NOT NULL,
-            header TEXT NOT NULL,
-            parent TEXT,
-            config_struct TEXT
-        )
-    """)
+    # Clear existing data (table created by ensure_schema)
     conn.execute("DELETE FROM base_classes")
     
     # Track all classes and their inheritance
@@ -891,8 +883,9 @@ class IndexBuilder:
         print(f"[00:00] Building index v{SCHEMA_VERSION}")
 
         conn = db_connect(db_path, baseline=True)
-        # v7: Added include_manifest=True
-        ensure_schema(conn, enable_fts=self.enable_fts, include_mcu=True, include_devices=True, include_manifest=True)
+        # v7: Added include_manifest=True, v8: Added include_base_classes=True
+        ensure_schema(conn, enable_fts=self.enable_fts, include_mcu=True, include_devices=True, 
+                      include_manifest=True, include_base_classes=True)
 
         # Standardized metadata
         commit = self._git_commit()

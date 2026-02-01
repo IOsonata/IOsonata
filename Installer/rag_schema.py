@@ -20,8 +20,12 @@ v7 additions:
 
 v8 additions:
 - Base class hierarchy scanning (sensor types, device types, interfaces)
-- base_classes table for inheritance tracking
+- BASE_CLASSES_SQL table definition in unified schema
 - base_classes_by_category and base_class_details in manifest
+
+Schema tables (controlled by ensure_schema flags):
+- Core: meta, files, modules, chunks, models, embeddings, api, fts
+- IOsonata only: mcu_support, devices, manifest, base_classes
 
 All DBs output to:
 - IOsonata: .iosonata/index.db
@@ -329,6 +333,20 @@ CREATE TABLE IF NOT EXISTS manifest (
 );
 """
 
+# Base class hierarchy table (IOsonata only) - for sensor/device/interface inheritance (v8)
+BASE_CLASSES_SQL = """
+CREATE TABLE IF NOT EXISTS base_classes (
+    id INTEGER PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,      -- e.g., "TempSensor", "AccelSensor"
+    category TEXT NOT NULL,         -- "sensor", "interface", "converter", etc.
+    header TEXT NOT NULL,           -- relative path: "include/sensors/temp_sensor.h"
+    parent TEXT,                    -- parent class name or NULL
+    config_struct TEXT              -- e.g., "TempSensorCfg_t" or NULL
+);
+CREATE INDEX IF NOT EXISTS idx_baseclass_name ON base_classes(name);
+CREATE INDEX IF NOT EXISTS idx_baseclass_cat ON base_classes(category);
+"""
+
 # FTS5 virtual table - title-only, contentless
 # Design: indexes chunk titles for fast keyword search without duplicating content
 # Content stays compressed in chunks.content (binary-first principle)
@@ -356,7 +374,7 @@ END;
 
 def ensure_schema(conn: sqlite3.Connection, enable_fts: bool = True,
                   include_mcu: bool = False, include_devices: bool = False,
-                  include_manifest: bool = False) -> None:
+                  include_manifest: bool = False, include_base_classes: bool = False) -> None:
     """Create unified schema.
     
     Args:
@@ -365,6 +383,7 @@ def ensure_schema(conn: sqlite3.Connection, enable_fts: bool = True,
         include_mcu: Create mcu_support table (IOsonata only)
         include_devices: Create devices table (IOsonata only)
         include_manifest: Create manifest table (IOsonata only) - v7
+        include_base_classes: Create base_classes table (IOsonata only) - v8
     """
     conn.executescript(SCHEMA_SQL)
     
@@ -376,6 +395,9 @@ def ensure_schema(conn: sqlite3.Connection, enable_fts: bool = True,
     
     if include_manifest:
         conn.executescript(MANIFEST_SQL)
+    
+    if include_base_classes:
+        conn.executescript(BASE_CLASSES_SQL)
     
     if enable_fts:
         conn.executescript(FTS_SQL)
