@@ -13,6 +13,14 @@ Design principles:
 3. Machine-optimized: No JSON stored, FTS5 title-only (contentless)
 4. Simple: Java only needs one schema handler
 
+Exported constants:
+- SCHEMA_VERSION: Current schema version (8)
+- KIND_*: Chunk type constants (0-14)
+- PERIPH_*: Peripheral type constants (0-19)
+- DEVCAT_*: Device category constants (0-8)
+- PROVIDER_*: Embedding provider constants (1-3)
+- DB_TYPE_*: Database type identifiers
+
 v7 additions:
 - Manifest table for static data (MCU list, device list)
 - Pre-computed JSON for system prompt injection
@@ -21,6 +29,7 @@ v7 additions:
 v8 additions:
 - Base class hierarchy scanning (sensor types, device types, interfaces)
 - BASE_CLASSES_SQL table definition in unified schema
+- DEVCAT_* constants moved here from build_rag_index.py
 - base_classes_by_category and base_class_details in manifest
 
 Schema tables (controlled by ensure_schema flags):
@@ -162,18 +171,47 @@ PERIPHERAL_NAMES = {
     PERIPH_CRYPTO: "crypto",
 }
 
-# Device category names for manifest (v7)
-DEVICE_CATEGORY_NAMES = {
-    0: "unknown",
-    1: "sensor",
-    2: "display",
-    3: "miscdev",
-    4: "pmic",
-    5: "imu",
-    6: "audio",
-    7: "storage",
-    8: "converter",
+# =============================================================================
+# DEVICE CATEGORY IDS
+# =============================================================================
+
+DEVCAT_NONE = 0
+DEVCAT_SENSOR = 1
+DEVCAT_DISPLAY = 2
+DEVCAT_MISCDEV = 3
+DEVCAT_PMIC = 4
+DEVCAT_IMU = 5
+DEVCAT_AUDIO = 6
+DEVCAT_STORAGE = 7
+DEVCAT_CONVERTER = 8
+
+# Directory name -> category ID mapping (for indexer)
+DEVCAT_MAP = {
+    "sensors": DEVCAT_SENSOR,
+    "display": DEVCAT_DISPLAY,
+    "miscdev": DEVCAT_MISCDEV,
+    "pwrmgnt": DEVCAT_PMIC,
+    "imu": DEVCAT_IMU,
+    "audio": DEVCAT_AUDIO,
+    "storage": DEVCAT_STORAGE,
+    "converters": DEVCAT_CONVERTER,
 }
+
+# Category ID -> name mapping (for manifest)
+DEVCAT_NAMES = {
+    DEVCAT_NONE: "unknown",
+    DEVCAT_SENSOR: "sensor",
+    DEVCAT_DISPLAY: "display",
+    DEVCAT_MISCDEV: "miscdev",
+    DEVCAT_PMIC: "pmic",
+    DEVCAT_IMU: "imu",
+    DEVCAT_AUDIO: "audio",
+    DEVCAT_STORAGE: "storage",
+    DEVCAT_CONVERTER: "converter",
+}
+
+# Alias for backward compatibility
+DEVICE_CATEGORY_NAMES = DEVCAT_NAMES
 
 # =============================================================================
 # PROVIDER IDS

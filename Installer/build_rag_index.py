@@ -32,7 +32,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
-# Import unified schema (v7 with manifest support)
+# Import unified schema (v7 with manifest support, v8 with DEVCAT constants)
 from rag_schema import (
     SCHEMA_VERSION, COMPRESS_LEVEL,
     KIND_FUNCTION, KIND_TYPE, KIND_EXAMPLE, KIND_ASSEMBLY, KIND_HEADER,
@@ -40,6 +40,9 @@ from rag_schema import (
     PERIPH_TIMER, PERIPH_PWM, PERIPH_ADC, PERIPH_GPIO, PERIPH_FLASH,
     PERIPH_I2S, PERIPH_PDM, PERIPH_QSPI, PERIPH_ESB, PERIPH_SENSOR,
     PERIPH_RTC, PERIPH_WDT, PERIPH_DMA, PERIPH_CRYPTO, PERIPH_MAP,
+    DEVCAT_NONE, DEVCAT_SENSOR, DEVCAT_DISPLAY, DEVCAT_MISCDEV,
+    DEVCAT_PMIC, DEVCAT_IMU, DEVCAT_AUDIO, DEVCAT_STORAGE, DEVCAT_CONVERTER,
+    DEVCAT_MAP,
     PROVIDER_MAP, DB_TYPE_CODE,
     db_connect, ensure_schema, fts_rebuild, set_standard_meta,
     compress, decompress, sha256, StringCache,
@@ -71,26 +74,6 @@ EXAMPLE_DIR_HINTS = frozenset(("example", "examples", "sample", "samples", "demo
 BLE_IMPL_NONE = 0
 BLE_IMPL_SOFTDEVICE = 1
 BLE_IMPL_SDC = 2
-
-# =============================================================================
-# DEVICE CATEGORIES
-# =============================================================================
-
-DEVCAT_NONE = 0
-DEVCAT_SENSOR = 1
-DEVCAT_DISPLAY = 2
-DEVCAT_MISCDEV = 3
-DEVCAT_PMIC = 4
-DEVCAT_IMU = 5
-DEVCAT_AUDIO = 6
-DEVCAT_STORAGE = 7
-DEVCAT_CONVERTER = 8
-
-DEVCAT_MAP = {
-    "sensors": DEVCAT_SENSOR, "display": DEVCAT_DISPLAY, "miscdev": DEVCAT_MISCDEV,
-    "pwrmgnt": DEVCAT_PMIC, "imu": DEVCAT_IMU, "audio": DEVCAT_AUDIO,
-    "storage": DEVCAT_STORAGE, "converters": DEVCAT_CONVERTER,
-}
 
 # =============================================================================
 # PERIPHERAL DETECTION PATTERNS
