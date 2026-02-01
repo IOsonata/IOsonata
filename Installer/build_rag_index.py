@@ -44,6 +44,7 @@ from rag_schema import (
     db_connect, ensure_schema, fts_rebuild, set_standard_meta,
     compress, decompress, sha256, StringCache,
     build_line_index, idx_to_line,
+    compute_source_fingerprint,
     # v7: Manifest function
     build_manifest,
 )
@@ -895,7 +896,8 @@ class IndexBuilder:
 
         # Standardized metadata
         commit = self._git_commit()
-        set_standard_meta(conn, DB_TYPE_CODE, version, commit=commit)
+        fingerprint = compute_source_fingerprint(self.source, SOURCE_SUFFIXES, DEFAULT_IGNORE_DIRS, IGNORE_DIR_PREFIXES)
+        set_standard_meta(conn, DB_TYPE_CODE, version, commit=commit, fingerprint=fingerprint)
 
         # String caches
         file_cache = StringCache(conn, "files")
