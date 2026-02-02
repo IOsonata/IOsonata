@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IOcomposer RAG Unified Schema v8
+IOcomposer RAG Unified Schema v9
 
 This module defines the common schema used by all three indexers:
 - build_rag_index.py (IOsonata code)
@@ -14,7 +14,7 @@ Design principles:
 4. Simple: Java only needs one schema handler
 
 Exported constants:
-- SCHEMA_VERSION: Current schema version (8)
+- SCHEMA_VERSION: Current schema version (9)
 - KIND_*: Chunk type constants (0-14)
 - PERIPH_*: Peripheral type constants (0-19)
 - DEVCAT_*: Device category constants (0-8)
@@ -31,6 +31,11 @@ v8 additions:
 - BASE_CLASSES_SQL table definition in unified schema
 - DEVCAT_* constants moved here from build_rag_index.py
 - base_classes_by_category and base_class_details in manifest
+
+v9 additions:
+- Added 'header' column to devices table for header file paths
+- Manifest includes device_details with header paths for LLM tool fetching
+- generate_manifest_context() outputs device headers for fetch_iosonata_header tool
 
 Schema tables (controlled by ensure_schema flags):
 - Core: meta, files, modules, chunks, models, embeddings, api, fts
@@ -57,7 +62,7 @@ from typing import Dict, Iterator, Optional
 # CONSTANTS
 # =============================================================================
 
-SCHEMA_VERSION = 8  # Bumped for base class hierarchy support
+SCHEMA_VERSION = 9  # Bumped for device header path support
 COMPRESS_LEVEL = 6
 
 # =============================================================================
@@ -347,13 +352,14 @@ CREATE INDEX IF NOT EXISTS idx_mcu ON mcu_support(mcu);
 CREATE INDEX IF NOT EXISTS idx_mcu_periph ON mcu_support(mcu, periph);
 """
 
-# Device support table (IOsonata only)
+# Device support table (IOsonata only) - v9: added header column
 DEVICES_SQL = """
 CREATE TABLE IF NOT EXISTS devices (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     category INTEGER NOT NULL,
     file_id INTEGER,
+    header TEXT,                    -- v9: relative path to header file for LLM fetching
     class_name TEXT,
     description TEXT,
     UNIQUE(name, category)
@@ -707,19 +713,26 @@ def build_manifest(conn: sqlite3.Connection) -> int:
                  ("mcu_periph_matrix", json.dumps({k: sorted(v) for k, v in mcu_peripherals.items()}), now))
     count += 1
     
-    # === DEVICE MANIFEST ===
-    rows = conn.execute("SELECT name, category FROM devices ORDER BY category, name").fetchall()
+    # === DEVICE MANIFEST (v9: now includes header paths) ===
+    rows = conn.execute("SELECT name, category, header FROM devices ORDER BY category, name").fetchall()
     
     devices = []
     device_by_category = {}
+    device_details = {}  # v9: Store device details including header path
     
-    for name, category in rows:
+    for name, category, header in rows:
         devices.append(name)
         cat_name = DEVICE_CATEGORY_NAMES.get(category, "unknown")
         if cat_name not in device_by_category:
             device_by_category[cat_name] = []
         if name not in device_by_category[cat_name]:
             device_by_category[cat_name].append(name)
+        
+        # v9: Store device details with header path
+        device_details[name] = {
+            'category': cat_name,
+            'header': header or ''
+        }
     
     conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
                  ("device_list", json.dumps(sorted(set(devices))), now))
@@ -727,6 +740,11 @@ def build_manifest(conn: sqlite3.Connection) -> int:
     
     conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
                  ("device_by_category", json.dumps({k: sorted(v) for k, v in sorted(device_by_category.items())}), now))
+    count += 1
+    
+    # v9: Store device details with header paths
+    conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                 ("device_details", json.dumps(device_details), now))
     count += 1
     
     # === BASE CLASS HIERARCHY (v8) ===
@@ -779,9 +797,11 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
     """Generate static context fragment for system prompt injection.
     
     This should be loaded ONCE at startup and cached in the system prompt.
+    v9: Now includes device header paths for LLM tool fetching.
     """
     mcu_by_family = get_manifest_json(conn, "mcu_by_family") or {}
     device_by_cat = get_manifest_json(conn, "device_by_category") or {}
+    device_details = get_manifest_json(conn, "device_details") or {}  # v9
     base_classes_by_cat = get_manifest_json(conn, "base_classes_by_category") or {}
     base_class_details = get_manifest_json(conn, "base_class_details") or {}
     
@@ -793,11 +813,21 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
         if mcus:
             lines.append(f"- **{family.upper()}**: {', '.join(mcus)}")
     lines.append("")
+    
+    # v9: Device drivers with header paths for LLM tool fetching
     lines.append("## Supported Device Drivers")
+    lines.append("Use `fetch_iosonata_header` tool with the header path to get struct definitions.")
+    lines.append("")
     for category, devices in sorted(device_by_cat.items()):
         if devices and category != "unknown":
             lines.append(f"### {category.title()}")
-            lines.append(", ".join(devices))
+            for dev_name in sorted(devices):
+                info = device_details.get(dev_name, {})
+                header = info.get('header', '')
+                if header:
+                    lines.append(f"- **{dev_name}**: `{header}`")
+                else:
+                    lines.append(f"- {dev_name}")
             lines.append("")
     
     # === BASE CLASS HIERARCHY (v8) ===
@@ -889,6 +919,7 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
     lines.append("---")
     lines.append("⚠️ AUTHORITATIVE LIST: If a device/MCU is NOT listed above, IOsonata does NOT support it.")
     lines.append("⚠️ BASE CLASSES: If a sensor type is NOT listed, inherit from Sensor directly.")
+    lines.append("⚠️ HEADER PATHS: Use the paths shown above with fetch_iosonata_header tool.")
     lines.append("Do NOT fabricate driver names or base class names. Ask user for part number if needed.")
     lines.append("")
     

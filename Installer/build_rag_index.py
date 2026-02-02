@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IOsonata RAG Index Builder v9 - With C-style Typedef Support
+IOsonata RAG Index Builder v10 - With Device Header Path Support
 
 Indexes IOsonata source code into a SQLite database for RAG retrieval.
 Uses unified schema shared with build_external_index.py and build_knowledge_db.py.
@@ -10,6 +10,10 @@ v8: Adds base class hierarchy scanning for sensor/device/interface types.
 v9: Fixes critical bug - adds C-style typedef struct/enum parsing.
     Previously only C++ style types were indexed (struct Name {...};).
     Now also indexes typedef struct {...} Name_t; which IOsonata uses throughout.
+v10: Adds device header path support for LLM tool fetching.
+    - devices table now has 'header' column with relative path to .h file
+    - Manifest includes device_details with header paths
+    - LLM can now fetch correct header paths from manifest context
 
 Usage:
   python3 build_rag_index.py                    # Build index
@@ -431,6 +435,15 @@ def extract_device_name(filename: str) -> Optional[str]:
 
 
 def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: StringCache, verbose: bool) -> int:
+    """Build device support table with header paths (v9).
+    
+    For external devices (sensors, display, etc.):
+      - Header is in include/<dev_dir>/<name>.h
+    
+    For MCU devices (ADC, DAC):
+      - Implementation: ARM/<vendor>/<mcu>/src/<name>.cpp
+      - Header: ARM/<vendor>/include/<name>.h
+    """
     count = 0
     seen = set()
     conn.execute("DELETE FROM devices")
@@ -459,14 +472,32 @@ def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: Strin
                     except ValueError:
                         rel_path = filepath
                     file_id = file_cache.get_id(str(rel_path))
+                    
+                    # v9: Find header path
+                    header_path = None
+                    if ext in ['.h', '.hpp']:
+                        # This is already a header
+                        header_path = str(rel_path)
+                    else:
+                        # Look for corresponding header in include/<dev_dir>/
+                        for hext in ['.h', '.hpp']:
+                            header_name = filepath.stem + hext
+                            header_file = root / 'include' / dev_dir / header_name
+                            if header_file.exists():
+                                header_path = f"include/{dev_dir}/{header_name}"
+                                break
+                    
                     conn.execute(
-                        "INSERT OR REPLACE INTO devices(name, category, file_id) VALUES(?,?,?)",
-                        (device_name, category, file_id)
+                        "INSERT OR REPLACE INTO devices(name, category, file_id, header) VALUES(?,?,?,?)",
+                        (device_name, category, file_id, header_path)
                     )
                     count += 1
+                    if verbose and header_path:
+                        print(f"  Device: {device_name} -> {header_path}")
     
     # === INTERNAL MCU DEVICES (ADC, DAC in ARM/RISCV vendor paths) ===
     # These are MCU-internal peripherals that have IOsonata implementations
+    # v9: Now finds corresponding header files in ARM/<vendor>/include/
     mcu_device_patterns = [
         # ARM vendors
         ('ARM/*/src/adc_*.cpp', DEVCAT_CONVERTER, 'adc'),
@@ -485,12 +516,15 @@ def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: Strin
             if not filepath.is_file():
                 continue
             # Extract MCU-specific device name from path
-            # e.g., ARM/Nordic/nRF52/src/adc_nrf52_saadc.cpp -> nRF52_SAADC
+            # e.g., ARM/Nordic/nRF52/src/adc_nrf52_saadc.cpp -> nRF52_ADC
             parts = filepath.relative_to(root).parts
             # Find vendor and MCU from path
             mcu_name = None
+            vendor = None
+            arch = None
             for i, part in enumerate(parts):
                 if part in ('ARM', 'RISCV') and i + 2 < len(parts):
+                    arch = part
                     # ARM/Nordic/nRF52/... or ARM/Nordic/...
                     vendor = parts[i + 1]
                     # Check if next part looks like MCU name (starts with lowercase letter or is a known pattern)
@@ -518,13 +552,26 @@ def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: Strin
                     except ValueError:
                         rel_path = filepath
                     file_id = file_cache.get_id(str(rel_path))
+                    
+                    # v9: Find corresponding header file
+                    # Pattern: ARM/Nordic/nRF52/src/adc_nrf52_saadc.cpp -> ARM/Nordic/include/adc_nrf52_saadc.h
+                    header_path = None
+                    if arch and vendor:
+                        for hext in ['.h', '.hpp']:
+                            header_name = filepath.stem + hext
+                            header_file = root / arch / vendor / 'include' / header_name
+                            if header_file.exists():
+                                header_path = f"{arch}/{vendor}/include/{header_name}"
+                                break
+                    
                     conn.execute(
-                        "INSERT OR REPLACE INTO devices(name, category, file_id) VALUES(?,?,?)",
-                        (device_name, category, file_id)
+                        "INSERT OR REPLACE INTO devices(name, category, file_id, header) VALUES(?,?,?,?)",
+                        (device_name, category, file_id, header_path)
                     )
                     count += 1
                     if verbose:
-                        print(f"  MCU device: {device_name} from {rel_path}")
+                        header_info = f" -> {header_path}" if header_path else " (no header found)"
+                        print(f"  MCU device: {device_name}{header_info}")
     
     conn.commit()
     return count
@@ -1068,7 +1115,7 @@ def _detect_root() -> Optional[Path]:
 
 
 def main():
-    p = argparse.ArgumentParser(description="Build IOsonata RAG index v9 (with typedef support)")
+    p = argparse.ArgumentParser(description="Build IOsonata RAG index v10 (with device header paths)")
     p.add_argument("--source-dir", default="")
     p.add_argument("--output-dir", default="")
     p.add_argument("--version", default="dev")
