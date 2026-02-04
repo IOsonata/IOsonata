@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.74"
+SCRIPT_VERSION="v1.0.75"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -55,7 +55,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 EXT="$ROOT/external"
-mkdir -p "$ROOT" "$EXT"; sudo mkdir -p "$TOOLS" "$BIN"
 
 # ---------------------------------------------------------
 # UNINSTALL
@@ -102,6 +101,10 @@ if [[ "$MODE" == "uninstall" ]]; then
       rm -rf "$ROOT/external"
       echo "   ✅ External SDK removed."
     fi
+    if [[ -d "$ROOT/.iocomposer" ]]; then
+      rm -rf "$ROOT/.iocomposer"
+      echo "   ✅ .iocomposer removed."
+    fi
   else
     echo ">>> Repositories under $ROOT and workspace dirs were kept."
   fi
@@ -109,6 +112,12 @@ if [[ "$MODE" == "uninstall" ]]; then
   echo ">>> Uninstall complete!"
   exit 0
 fi
+
+# ---------------------------------------------------------
+# Ensure required folders exist (install/update modes only)
+# ---------------------------------------------------------
+mkdir -p "$ROOT" "$EXT"
+sudo mkdir -p "$TOOLS" "$BIN"
 
 # ---------------------------------------------------------
 # Arch detect
