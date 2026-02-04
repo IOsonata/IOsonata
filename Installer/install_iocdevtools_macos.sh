@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.78"
+SCRIPT_VERSION="v1.0.77"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -593,6 +593,7 @@ echo "📦 Syncing IOsonata + external SDKs..."
 
 CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/clone_iosonata_sdk_macos.sh"
 TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.sh)
+CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.log)
 
 if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
   echo "❌ Failed to download clone script:"
@@ -602,14 +603,39 @@ fi
 
 chmod +x "$TMP_CLONE"
 
-CLONE_ARGS=(--home "$ROOT")
+# Prefer --no-build if supported by the clone script (newer versions). If not supported,
+# retry without it. We capture output so we can detect whether the builder ran.
+CLONE_ARGS=(--home "$ROOT" --no-build)
 if [[ "$MODE" == "force" ]]; then
-  CLONE_ARGS+=(--force-update)
+  CLONE_ARGS+=(--mode force)
 fi
 
-bash "$TMP_CLONE" "${CLONE_ARGS[@]}"
+run_clone() {
+  # shellcheck disable=SC2068
+  zsh "$TMP_CLONE" "$@" 2>&1 | tee -a "$CLONE_LOG"
+}
+
+if run_clone "${CLONE_ARGS[@]}"; then
+  :
+else
+  echo "⚠️  Clone script does not support --no-build yet. Retrying without it..."
+  CLONE_ARGS_NO_BUILD=()
+  for a in "${CLONE_ARGS[@]}"; do
+    [[ "$a" == "--no-build" ]] && continue
+    CLONE_ARGS_NO_BUILD+=("$a")
+  done
+  run_clone "${CLONE_ARGS_NO_BUILD[@]}"
+fi
 
 rm -f "$TMP_CLONE" || true
+
+# Detect whether the clone script already invoked the IOsonata library builder.
+CLONE_INVOKED_BUILD=0
+if grep -qE "IOsonata Library (Auto-)?Build|IOsonata Library Builder|Available IOsonata library projects|Select project to build" "$CLONE_LOG"; then
+  CLONE_INVOKED_BUILD=1
+fi
+
+rm -f "$CLONE_LOG" || true
 
 # ---------------------------------------------------------
 # Install IOsonata Eclipse Plugin
@@ -765,30 +791,36 @@ echo "✅ makefile_path.mk created at: $MAKEFILE_PATH_MK"
 echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.mk"
 
 # ---------------------------------------------------------
-# Build IOsonata Library
 # ---------------------------------------------------------
-
-# =========================================================
-# Build IOsonata Libraries (using standalone script)
-# =========================================================
-BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_macos.sh"
-
-if [[ -f "$BUILD_SCRIPT" ]]; then
-  echo ""
-  echo "========================================================="
-  echo "  IOsonata Library Build"
-  echo "========================================================="
-  echo ""
-  "$BUILD_SCRIPT" --home "$ROOT" || true
+# IOsonata Library Build (run exactly once)
+# ---------------------------------------------------------
+# If the clone script already invoked the builder, do NOT run it again.
+# If it did NOT invoke the builder (e.g., clone supports --no-build), run it here.
+if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
+  BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_macos.sh"
+  if [[ -f "$BUILD_SCRIPT" ]]; then
+    echo ""
+    echo "========================================================="
+    echo "  IOsonata Library Build"
+    echo "========================================================="
+    echo ""
+    bash "$BUILD_SCRIPT" --home "$ROOT" || true
+  else
+    echo ""
+    echo "ℹ️  IOsonata library builder not found:"
+    echo "   $BUILD_SCRIPT"
+    echo "   (Skipping library build)"
+    echo ""
+  fi
 else
   echo ""
-  echo "ℹ️  To build IOsonata libraries:"
-  echo "   ./build_iosonata_lib_macos.sh --home $ROOT"
+  echo "ℹ️  IOsonata libraries were already handled by the clone step (skipping rebuild)."
   echo ""
 fi
 
 # ---------------------------------------------------------
 # Summary
+
 # ---------------------------------------------------------
 echo
 echo "=============================================="
