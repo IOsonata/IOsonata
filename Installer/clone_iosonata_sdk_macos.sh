@@ -9,7 +9,7 @@
 
 set -e  # Exit on first error
 
-SCRIPT_VERSION="v1.3.0"
+SCRIPT_VERSION="v1.3.1"
 
 # --- Define colors ---
 RED="\033[0;31m"
@@ -36,7 +36,8 @@ print_help() {
   echo "${BOLD}Options:${RESET}"
   echo "  --home <path>       Set custom root directory (default: ~/IOcomposer)"
   echo "  --mode <mode>       Clone mode: 'normal' (default) or 'force'"
-  echo "  --eclipse           Configure Eclipse system properties"
+  echo "  --eclipse           Configure Eclipse system properties
+  --no-build          Skip IOsonata library auto-build step"
   echo "  --help, -h          Show this help message and exit"
 
   echo ""
@@ -65,6 +66,7 @@ print_help() {
 ROOT="$HOME/IOcomposer"
 MODE="normal"
 CONFIGURE_ECLIPSE=false
+NO_BUILD=false
 
 # --- Parse Arguments ---
 while [[ $# -gt 0 ]]; do
@@ -79,6 +81,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --eclipse)
       CONFIGURE_ECLIPSE=true
+      shift
+      ;;
+    --no-build)
+      NO_BUILD=true
       shift
       ;;
     --help|-h)
@@ -103,6 +109,7 @@ echo "${BOLD}Root directory:${RESET} $ROOT"
 echo "${BOLD}Mode:${RESET} $MODE"
 echo "${BOLD}External path:${RESET} $EXT"
 echo "${BOLD}Configure Eclipse:${RESET} $CONFIGURE_ECLIPSE"
+echo "${BOLD}Skip auto-build:${RESET} $NO_BUILD"
 echo "${BLUE}---------------------------------------------------------${RESET}"
 echo ""
 
@@ -510,7 +517,7 @@ if command -v arm-none-eabi-gcc &>/dev/null; then
 fi
 
 # --- Auto-Build IOsonata Libraries (if Eclipse detected) ---
-if [[ "$ECLIPSE_INSTALLED" == "true" && "$TOOLCHAIN_INSTALLED" == "true" ]]; then
+if [[ "$NO_BUILD" != "true" && "$ECLIPSE_INSTALLED" == "true" && "$TOOLCHAIN_INSTALLED" == "true" ]]; then
   BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_macos.sh"
   if [[ -f "$BUILD_SCRIPT" ]]; then
     echo ""

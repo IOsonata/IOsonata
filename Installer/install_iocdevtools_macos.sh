@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.75"
+SCRIPT_VERSION="v1.0.78"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -109,13 +109,20 @@ if [[ "$MODE" == "uninstall" ]]; then
     echo ">>> Repositories under $ROOT and workspace dirs were kept."
   fi
 
+
+  # If the ROOT folder is now empty, remove it (otherwise keep it).
+  if [[ -d "$ROOT" ]]; then
+    if [[ -z "$(find "$ROOT" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+      rmdir "$ROOT" && echo "   ✅ Removed empty root folder: $ROOT" || true
+    else
+      echo "   ℹ️  Keeping root folder (not empty): $ROOT"
+    fi
+  fi
+
   echo ">>> Uninstall complete!"
   exit 0
 fi
 
-# ---------------------------------------------------------
-# Ensure required folders exist (install/update modes only)
-# ---------------------------------------------------------
 mkdir -p "$ROOT" "$EXT"
 sudo mkdir -p "$TOOLS" "$BIN"
 
@@ -501,89 +508,108 @@ echo "   iocomposer_home=$ROOT"
 echo
 
 # Step 1: Ensure Eclipse has initialized its instance folder
-if [ -d "$ECLIPSE_APP" ]; then
+if [[ -d "$ECLIPSE_APP" ]]; then
   echo "⏳ Initializing Eclipse to create instance configuration..."
   "$ECLIPSE_APP/Contents/MacOS/eclipse" -nosplash -initialize || true
 fi
 
-# Step 2: Find instance settings folder dynamically
-INSTANCE_CFG=$(find "$HOME/.eclipse" -type d -path "*/configuration" | head -n 1)
+# Step 2: Find the newest instance configuration folder under ~/.eclipse
+INSTANCE_CFG=""
+if command -v python3 >/dev/null 2>&1; then
+  INSTANCE_CFG=$(python3 - <<'PY'
+import os, sys
+base = os.path.expanduser("~/.eclipse")
+cands = []
+if os.path.isdir(base):
+  for root, dirs, _ in os.walk(base):
+    for d in dirs:
+      if d == "configuration":
+        p = os.path.join(root, d)
+        try:
+          cands.append((os.path.getmtime(p), p))
+        except OSError:
+          pass
+if not cands:
+  sys.exit(1)
+cands.sort(reverse=True)
+print(cands[0][1])
+PY
+) || INSTANCE_CFG=""
+fi
 
-if [ -z "$INSTANCE_CFG" ]; then
-  echo "⚠️ Could not find Eclipse instance configuration folder."
+if [[ -z "$INSTANCE_CFG" ]]; then
+  echo "⚠️ Could not find Eclipse instance configuration folder under ~/.eclipse."
   echo "   Eclipse may not have been started yet."
 else
   echo "📂 Found Eclipse settings: $INSTANCE_CFG"
-
   mkdir -p "$INSTANCE_CFG/.settings"
-  
+
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.core.prefs" <<EOF
+eclipse.preferences.version=1
+xpack.arm.toolchain.path=$ARM_DIR/bin
+xpack.riscv.toolchain.path=$RISCV_DIR/bin
+xpack.openocd.path=$OPENOCD_DIR/bin
+xpack.strict=true
+EOF
+
   cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
+eclipse.preferences.version=1
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.1287942917=$ARM_DIR/bin
 toolchain.path.strict=true
 EOF
 
-cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
+eclipse.preferences.version=1
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
 toolchain.path.strict=true
 EOF
 
-cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
+eclipse.preferences.version=1
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
 EOF
 
+  cat > "$INSTANCE_CFG/.settings/org.eclipse.core.runtime.prefs" <<EOF
+eclipse.preferences.version=1
+environment/project/IOCOMPOSER_HOME/value=$ROOT
+environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
+environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
+environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
+environment/project/NRFX_HOME/value=$EXT/nrfx
+environment/project/NRFXLIB_HOME/value=$EXT/sdk-nrfxlib
+environment/project/NRF5_SDK_HOME/value=$EXT/nRF5_SDK
+environment/project/NRF5_SDK_MESH_HOME/value=$EXT/nRF5_SDK_Mesh
+environment/project/BSEC_HOME/value=$EXT/BSEC
+EOF
 fi
-
 
 # ---------------------------------------------------------
-# Clone repos
+# Sync IOsonata + external SDKs (single source of truth)
 # ---------------------------------------------------------
-if [[ -d "$ROOT/IOsonata" ]]; then
-  if [[ "$MODE" == "force" ]]; then rm -rf "$ROOT/IOsonata"; git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
-  else (cd "$ROOT/IOsonata" && git pull); fi
-else
-  git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
+echo
+echo "📦 Syncing IOsonata + external SDKs..."
+
+CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/clone_iosonata_sdk_macos.sh"
+TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_macos.XXXXXX.sh)
+
+if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
+  echo "❌ Failed to download clone script:"
+  echo "   $CLONE_URL"
+  exit 1
 fi
 
-cd "$EXT"
-repos=(
-  "https://github.com/NordicSemiconductor/nrfx.git"
-  "https://github.com/nrfconnect/sdk-nrf-bm.git"
-  "https://github.com/nrfconnect/sdk-nrfxlib.git"
-  "https://github.com/IOsonata/nRF5_SDK.git"
-  "https://github.com/IOsonata/nRF5_SDK_Mesh.git"
-  "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
-  "https://github.com/xioTechnologies/Fusion.git"
-  "https://github.com/lvgl/lvgl.git"
-  "https://github.com/lwip-tcpip/lwip.git"
-  "https://github.com/hathach/tinyusb.git"
-)
-for repo in "${repos[@]}"; do
-  name=$(basename "$repo" .git)
-  # Update rename logic for BSEC2
-  if [[ "$name" == "Bosch-BSEC2-Library" ]]; then name="BSEC"; fi
-  if [[ -d "$name" ]]; then
-    if [[ "$MODE" == "force" ]]; then rm -rf "$name"; git clone --depth=1 "$repo" "$name"
-    else (cd "$name" && git pull); fi
-  else
-    git clone --depth=1 "$repo" "$name"
-  fi
-done
+chmod +x "$TMP_CLONE"
 
-# Clone FreeRTOS-Kernel
-echo "📦 Cloning FreeRTOS-Kernel..."
-if [[ -d "FreeRTOS-Kernel" ]]; then
-  if [[ "$MODE" == "force" ]]; then
-    rm -rf "FreeRTOS-Kernel"
-    git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
-  else
-    (cd FreeRTOS-Kernel && git pull)
-  fi
-else
-  git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
-  echo "✅ FreeRTOS-Kernel cloned"
+CLONE_ARGS=(--home "$ROOT")
+if [[ "$MODE" == "force" ]]; then
+  CLONE_ARGS+=(--force-update)
 fi
+
+bash "$TMP_CLONE" "${CLONE_ARGS[@]}"
+
+rm -f "$TMP_CLONE" || true
 
 # ---------------------------------------------------------
 # Install IOsonata Eclipse Plugin
