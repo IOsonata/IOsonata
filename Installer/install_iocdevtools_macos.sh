@@ -119,6 +119,22 @@ if [[ "$MODE" == "uninstall" ]]; then
     fi
   fi
 
+  # ---------------------------------------------------------
+  # If root folder is empty after uninstall, remove it.
+  # ---------------------------------------------------------
+  if [[ -d "$ROOT" ]]; then
+    # If we cannot enumerate, play safe and keep it.
+    if find "$ROOT" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .; then
+      echo "   ℹ️  Keeping $ROOT (not empty)."
+    else
+      if rmdir "$ROOT" 2>/dev/null; then
+        echo "   ✅ Removed empty root folder: $ROOT"
+      else
+        echo "   ⚠️  Root folder is empty but could not be removed: $ROOT"
+      fi
+    fi
+  fi
+
   echo ">>> Uninstall complete!"
   exit 0
 fi
