@@ -131,6 +131,13 @@ print(h)
     return (& $PythonExecutablePath -c $script $InputString).Trim()
 }
 
+function Set-ContentNoBom {
+    param([string]$Path, [string]$Value)
+    # Write UTF-8 without Byte Order Mark (BOM) compatible with Eclipse
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Value, $enc)
+}
+
 # --- Pre-flight Checks ---
 if ($MODE -ne "uninstall") {
     $PythonExecutablePath = Find-PythonExecutable
@@ -460,7 +467,7 @@ environment/project/ARM_GCC_HOME/value=$AD/bin
 environment/project/RISCV_GCC_HOME/value=$RD/bin
 environment/project/OPENOCD_HOME/value=$OD/bin
 "@
-    Set-Content "$SettingsDir\org.eclipse.core.runtime.prefs" $runtime_prefs -Encoding UTF8
+    Set-ContentNoBom -Path "$SettingsDir\org.eclipse.core.runtime.prefs" -Value $runtime_prefs
 
     # 2. org.eclipse.cdt.core.prefs
     $cdt_prefs = @"
@@ -568,7 +575,7 @@ environment/project/NRF5_SDK_HOME/value=$RT/external/nRF5_SDK
 environment/project/NRF5_SDK_MESH_HOME/value=$RT/external/nRF5_SDK_Mesh
 environment/project/BSEC_HOME/value=$RT/external/BSEC
 "@
-    Set-Content "$SettingsDir\org.eclipse.core.runtime.prefs" $runtime_prefs -Encoding UTF8
+    Set-ContentNoBom -Path "$SettingsDir\org.eclipse.core.runtime.prefs" -Value $runtime_prefs
 }
 
 # --- Location 1: Eclipse Installation Directory ---
