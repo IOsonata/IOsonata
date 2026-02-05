@@ -4,18 +4,19 @@
 # ---------------------------------------------------------
 #  Purpose: Clone IOsonata SDK and dependencies
 #  Platform: Windows (PowerShell)
-#  Version: v1.1.3
+#  Version: v1.1.4
 # =========================================================
 
 param(
     [string]$SdkHome = "$env:USERPROFILE\IOcomposer",
     [string]$Mode = "normal",
     [switch]$Eclipse,
+    [switch]$NoBuild,
     [switch]$Help
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v1.1.3"
+$SCRIPT_VERSION = "v1.1.4"
 
 # --- Banner ---
 function Show-Banner {
@@ -35,6 +36,7 @@ function Show-Help {
     Write-Host "  -SdkHome <path>     Set custom root directory (default: ~\IOcomposer)"
     Write-Host "  -Mode <mode>        Clone mode: 'normal' (default) or 'force'"
     Write-Host "  -Eclipse            Configure Eclipse system properties"
+    Write-Host "  -NoBuild            Skip IOsonata library auto-build step"
     Write-Host "  -Help               Show this help message and exit"
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor White
@@ -73,6 +75,7 @@ if (Test-Path "$ECLIPSE_DIR\eclipse.exe") {
     Write-Host "=========================================================`n" -ForegroundColor Blue
 }
 Write-Host "Configure Eclipse:    $Eclipse" -ForegroundColor White
+Write-Host "Skip auto-build:      $NoBuild" -ForegroundColor White
 Write-Host "---------------------------------------------------------" -ForegroundColor Blue
 Write-Host ""
 
@@ -140,6 +143,7 @@ $repos = @{
     "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "nRF5_SDK_Mesh"
     "https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "BSEC"
     "https://github.com/xioTechnologies/Fusion.git" = "Fusion"
+    "https://github.com/dlaidig/vqf.git" = "vqf"
     "https://github.com/lvgl/lvgl.git" = "lvgl"
     "https://github.com/lwip-tcpip/lwip.git" = "lwip"
     "https://github.com/hathach/tinyusb.git" = "tinyusb"
@@ -280,6 +284,7 @@ NRF5_SDK_ROOT = `$(EXTERNAL_ROOT)/nRF5_SDK
 NRF5_SDK_MESH_ROOT = `$(EXTERNAL_ROOT)/nRF5_SDK_Mesh
 BSEC_ROOT = `$(EXTERNAL_ROOT)/BSEC
 FUSION_ROOT = `$(EXTERNAL_ROOT)/Fusion
+VQF_ROOT = `$(EXTERNAL_ROOT)/vqf
 LVGL_ROOT = `$(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = `$(EXTERNAL_ROOT)/lwip
 FREERTOS_KERNEL_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS-Kernel
@@ -498,6 +503,7 @@ Write-Host "  - nRF5_SDK"
 Write-Host "  - nRF5_SDK_Mesh"
 Write-Host "  - BSEC"
 Write-Host "  - Fusion"
+Write-Host "  - vqf"
 Write-Host "  - lvgl"
 Write-Host "  - lwip"
 Write-Host "  - FreeRTOS-Kernel"
@@ -523,7 +529,7 @@ if ($armGcc) {
 }
 
 # --- Auto-Build IOsonata Libraries (if Eclipse detected) ---
-if ($ECLIPSE_INSTALLED -and $TOOLCHAIN_INSTALLED) {
+if (-not $NoBuild -and $ECLIPSE_INSTALLED -and $TOOLCHAIN_INSTALLED) {
     $BUILD_SCRIPT = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
     
     if (Test-Path $BUILD_SCRIPT) {

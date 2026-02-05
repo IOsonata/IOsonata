@@ -6,10 +6,10 @@ set -euo pipefail
 # ---------------------------------------------------------
 #  Purpose: Clone IOsonata SDK and dependencies with colors
 #  Platform: linux (bash)
-#  Version: v1.3.0
+#  Version: v1.3.1
 # =========================================================
 
-SCRIPT_VERSION="v1.3.0"
+SCRIPT_VERSION="v1.3.1"
 
 # ---------------------------------------------------------
 # COLOR DEFINITIONS
@@ -75,6 +75,7 @@ check_and_install_dependencies
 ROOT="$HOME/IOcomposer"
 MODE="normal"
 CONFIGURE_ECLIPSE=false
+NO_BUILD=false
 
 # ------------------------------------------------------------------------------
 # ARGUMENT PARSING (Added validation similar to build_iosonata_lib_linux.sh)
@@ -102,6 +103,10 @@ while [[ $# -gt 0 ]]; do
       CONFIGURE_ECLIPSE=true
       shift
       ;;
+    --no-build)
+      NO_BUILD=true
+      shift
+      ;;
     --help|-h)
       echo -e "${BOLD}Usage:${RESET} clone_iosonata_sdk_linux.sh [options]"
       echo ""
@@ -109,6 +114,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --home <path>       Set custom root directory (default: ~/IOcomposer)"
       echo "  --mode <mode>       Clone mode: 'normal' (default) or 'force'"
       echo "  --eclipse           Configure Eclipse system properties"
+      echo "  --no-build          Skip IOsonata library auto-build step"
       echo "  --help, -h          Show this help message and exit"
       echo ""
       echo -e "${BOLD}Examples:${RESET}"
@@ -153,6 +159,7 @@ echo -e "${BOLD}Root directory:${RESET} $ROOT"
 echo -e "${BOLD}Mode:${RESET} $MODE"
 echo -e "${BOLD}External path:${RESET} $EXT"
 echo -e "${BOLD}Configure Eclipse:${RESET} $CONFIGURE_ECLIPSE"
+echo -e "${BOLD}Skip auto-build:${RESET} $NO_BUILD"
 echo -e "${BLUE}---------------------------------------------------------${RESET}"
 echo ""
 
@@ -339,6 +346,7 @@ NRF5_SDK_ROOT = $(EXTERNAL_ROOT)/nRF5_SDK
 NRF5_SDK_MESH_ROOT = $(EXTERNAL_ROOT)/nRF5_SDK_Mesh
 BSEC_ROOT = $(EXTERNAL_ROOT)/BSEC
 FUSION_ROOT = $(EXTERNAL_ROOT)/Fusion
+VQF_ROOT = $(EXTERNAL_ROOT)/vqf
 LVGL_ROOT = $(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = $(EXTERNAL_ROOT)/lwip
 FREERTOS_KERNEL_ROOT = $(EXTERNAL_ROOT)/FreeRTOS-Kernel
@@ -635,7 +643,7 @@ if command -v arm-none-eabi-gcc &>/dev/null; then
 fi
 
 # --- Auto-Build IOsonata Libraries (if Eclipse detected) ---
-if [[ "$ECLIPSE_INSTALLED" == "true" && "$TOOLCHAIN_INSTALLED" == "true" ]]; then
+if [[ "$NO_BUILD" != "true" && "$ECLIPSE_INSTALLED" == "true" && "$TOOLCHAIN_INSTALLED" == "true" ]]; then
   BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
   if [[ -f "$BUILD_SCRIPT" ]]; then
     echo ""
