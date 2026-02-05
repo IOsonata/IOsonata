@@ -2,9 +2,9 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_linux"
-SCRIPT_VERSION="v1.0.95"
+SCRIPT_VERSION="v1.0.96"
 
-ROOT="$HOME/IOcomposer"
+ROOT="${ROOT:-$HOME/IOcomposer}"
 TOOLS="/opt/xPacks"
 BIN="/usr/local/bin"
 ECLIPSE_DIR="$HOME/eclipse"
@@ -137,32 +137,44 @@ if [[ "$MODE" == "uninstall" ]]; then
 
   echo ">>> Removing udev rules..."
   sudo rm -f /etc/udev/rules.d/99-idap-link-hid.rules || true
-  rm -rf "$ROOT/IDAP" || true
   sudo udevadm control --reload-rules 2>/dev/null || true
   sudo udevadm trigger 2>/dev/null || true
+
+  echo ">>> Removing IDAP tools..."
+  rm -rf "$ROOT/IDAP" || true
 
   echo ">>> Removing desktop entry..."
   rm -f "$HOME/.local/share/applications/eclipse-embedcdt.desktop" || true
 
+  # Prompt for IOsonata and external SDK removal
   echo
-  echo ">>> Repository Cleanup"
-  echo "   The IOsonata repository and external SDKs are located in: $ROOT"
-  read -r -p "   ⚠️  Do you also want to DELETE the IOsonata repo and external SDKs? (y/N) " del_repos
-  
-  if [[ "$del_repos" =~ ^[Yy]$ ]]; then
-    echo "   Removing $ROOT/IOsonata..."
-    rm -rf "$ROOT/IOsonata" || true
-    
-    echo "   Removing $ROOT/external..."
-    rm -rf "$ROOT/external" || true
-    
-    rmdir "$ROOT" 2>/dev/null || true
-    echo "✅ IOsonata and SDKs deleted."
+  read -r -p "Also remove IOsonata and external SDK folders? (y/N) " ans2
+  if [[ "$ans2" =~ ^[Yy]$ ]]; then
+    if [[ -d "$ROOT/IOsonata" ]]; then
+      rm -rf "$ROOT/IOsonata"
+      echo "   ✅ IOsonata removed."
+    fi
+    if [[ -d "$ROOT/external" ]]; then
+      rm -rf "$ROOT/external"
+      echo "   ✅ External SDK removed."
+    fi
+    if [[ -d "$ROOT/.iocomposer" ]]; then
+      rm -rf "$ROOT/.iocomposer"
+      echo "   ✅ .iocomposer removed."
+    fi
   else
-    echo ">>> Repositories preserved in $ROOT."
+    echo ">>> Repositories under $ROOT and workspace dirs were kept."
   fi
 
-  echo ">>> Repositories under $ROOT and workspace dirs were kept."
+  # If the ROOT folder is now empty, remove it (otherwise keep it).
+  if [[ -d "$ROOT" ]]; then
+    if [[ -z "$(find "$ROOT" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+      rmdir "$ROOT" && echo "   ✅ Removed empty root folder: $ROOT" || true
+    else
+      echo "   ℹ️  Keeping root folder (not empty): $ROOT"
+    fi
+  fi
+
   echo ">>> Uninstall complete!"
   exit 0
 fi
@@ -701,25 +713,51 @@ seed_eclipse_user_prefs() {
   if (( RISCV_HASH < 0 )); then RISCV_HASH=$((RISCV_HASH + 4294967296)); fi
   RISCV_HASH=$((RISCV_HASH + 1))  # +1 matches macOS behavior
 
-  # Only 3 files for user directory (same as macOS)
+  # User prefs files (matching macOS behavior)
 
-  # 1. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs
+  # 1. org.eclipse.embedcdt.core.prefs
+  cat > "$instance_cfg/.settings/org.eclipse.embedcdt.core.prefs" <<EOF
+eclipse.preferences.version=1
+xpack.arm.toolchain.path=$ARM_DIR/bin
+xpack.riscv.toolchain.path=$RISCV_DIR/bin
+xpack.openocd.path=$OPENOCD_DIR/bin
+xpack.strict=true
+EOF
+
+  # 2. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs
   cat > "$instance_cfg/.settings/org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" <<EOF
+eclipse.preferences.version=1
 toolchain.path.$ARM_HASH=$ARM_DIR/bin
 toolchain.path.1287942917=$ARM_DIR/bin
 toolchain.path.strict=true
 EOF
 
-  # 2. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs
+  # 3. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs
   cat > "$instance_cfg/.settings/org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" <<EOF
+eclipse.preferences.version=1
 toolchain.path.$RISCV_HASH=$RISCV_DIR/bin
 toolchain.path.strict=true
 EOF
 
-  # 3. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
+  # 4. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
   cat > "$instance_cfg/.settings/org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" <<EOF
+eclipse.preferences.version=1
 install.folder=$OPENOCD_DIR/bin
 install.folder.strict=true
+EOF
+
+  # 5. org.eclipse.core.runtime.prefs
+  cat > "$instance_cfg/.settings/org.eclipse.core.runtime.prefs" <<EOF
+eclipse.preferences.version=1
+environment/project/IOCOMPOSER_HOME/value=$ROOT
+environment/project/ARM_GCC_HOME/value=$ARM_DIR/bin
+environment/project/RISCV_GCC_HOME/value=$RISCV_DIR/bin
+environment/project/OPENOCD_HOME/value=$OPENOCD_DIR/bin
+environment/project/NRFX_HOME/value=$EXT/nrfx
+environment/project/NRFXLIB_HOME/value=$EXT/sdk-nrfxlib
+environment/project/NRF5_SDK_HOME/value=$EXT/nRF5_SDK
+environment/project/NRF5_SDK_MESH_HOME/value=$EXT/nRF5_SDK_Mesh
+environment/project/BSEC_HOME/value=$EXT/BSEC
 EOF
 
   echo "✅ Eclipse user preferences seeded in:"
@@ -783,47 +821,56 @@ echo
 
 
 # ---------------------------------------------------------
-# Clone repos
+# Sync IOsonata + external SDKs (single source of truth)
 # ---------------------------------------------------------
+echo
+echo "📦 Syncing IOsonata + external SDKs..."
 
-# Helper function for updating shallow clones
-update_shallow_repo() {
-  local dir="$1"
-  local name=$(basename "$dir")
-  echo "   Updating $name..."
-  
-  pushd "$dir" > /dev/null
-  
-  local branch
-  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
-  
-  # For shallow clones, fetch + reset is more reliable than pull
-  if git fetch --depth=1 origin "$branch" 2>/dev/null; then
-    git reset --hard "origin/$branch" 2>/dev/null || git pull --ff-only 2>/dev/null || true
-  else
-    # Fallback to regular pull
-    git pull --ff-only 2>/dev/null || git pull 2>/dev/null || true
-  fi
-  
-  popd > /dev/null
+CLONE_URL="https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/clone_iosonata_sdk_linux.sh"
+TMP_CLONE=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.sh)
+CLONE_LOG=$(mktemp /tmp/clone_iosonata_sdk_linux.XXXXXX.log)
+
+if ! curl -fsSL "$CLONE_URL" -o "$TMP_CLONE"; then
+  echo "❌ Failed to download clone script:"
+  echo "   $CLONE_URL"
+  exit 1
+fi
+
+chmod +x "$TMP_CLONE"
+
+# Prefer --no-build if supported by the clone script (newer versions). If not supported,
+# retry without it. We capture output so we can detect whether the builder ran.
+CLONE_ARGS=(--home "$ROOT" --no-build)
+if [[ "$MODE" == "force" ]]; then
+  CLONE_ARGS+=(--mode force)
+fi
+
+run_clone() {
+  # shellcheck disable=SC2068
+  bash "$TMP_CLONE" "$@" 2>&1 | tee -a "$CLONE_LOG"
 }
 
-if [[ -d "$ROOT/IOsonata" ]]; then
-  if [[ "$MODE" == "force" ]]; then
-    rm -rf "$ROOT/IOsonata"
-    echo "   Cloning IOsonata..."
-    git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
-  else
-    update_shallow_repo "$ROOT/IOsonata"
-  fi
+if run_clone "${CLONE_ARGS[@]}"; then
+  :
 else
-  echo "   Cloning IOsonata..."
-  git clone --depth=1 https://github.com/IOsonata/IOsonata.git "$ROOT/IOsonata"
+  echo "⚠️  Clone script does not support --no-build yet. Retrying without it..."
+  CLONE_ARGS_NO_BUILD=()
+  for a in "${CLONE_ARGS[@]}"; do
+    [[ "$a" == "--no-build" ]] && continue
+    CLONE_ARGS_NO_BUILD+=("$a")
+  done
+  run_clone "${CLONE_ARGS_NO_BUILD[@]}"
 fi
 
-if [[ -d "$ROOT/IOsonata/Installer" ]]; then
-  chmod +x "$ROOT/IOsonata/Installer/"*.sh 2>/dev/null || true
+rm -f "$TMP_CLONE" || true
+
+# Detect whether the clone script already invoked the IOsonata library builder.
+CLONE_INVOKED_BUILD=0
+if grep -qE "IOsonata Library (Auto-)?Build|IOsonata Library Builder|Available IOsonata library projects|Select project to build" "$CLONE_LOG"; then
+  CLONE_INVOKED_BUILD=1
 fi
+
+rm -f "$CLONE_LOG" || true
 
 echo ">>> Fixing Eclipse project paths for Linux compatibility..."
 
@@ -837,51 +884,6 @@ find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|external/fusion|external
 find "$ROOT/IOsonata" -name ".cproject" -exec sed -i 's|CMSIS/Core/include|CMSIS/Core/Include|g' {} \; 2>/dev/null || true
 
 echo "✅ Eclipse project paths fixed for Linux"
-
-cd "$EXT"
-
-repos=(
-  "https://github.com/NordicSemiconductor/nrfx.git"
-  "https://github.com/nrfconnect/sdk-nrf-bm.git"
-  "https://github.com/nrfconnect/sdk-nrfxlib.git"
-  "https://github.com/IOsonata/nRF5_SDK.git"
-  "https://github.com/IOsonata/nRF5_SDK_Mesh.git"
-  "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
-  "https://github.com/xioTechnologies/Fusion.git"
-  "https://github.com/dlaidig/vqf.git"
-  "https://github.com/lvgl/lvgl.git"
-  "https://github.com/lwip-tcpip/lwip.git"
-  "https://github.com/hathach/tinyusb.git"
-)
-for repo in "${repos[@]}"; do
-  name=$(basename "$repo" .git)
-  if [[ "$name" == "Bosch-BSEC2-Library" ]]; then name="BSEC"; fi
-  if [[ -d "$name" ]]; then
-    if [[ "$MODE" == "force" ]]; then
-      rm -rf "$name"
-      echo "   Cloning $name..."
-      git clone --depth=1 "$repo" "$name"
-    else
-      update_shallow_repo "$name"
-    fi
-  else
-    echo "   Cloning $name..."
-    git clone --depth=1 "$repo" "$name"
-  fi
-done
-
-echo "📦 Cloning FreeRTOS-Kernel..."
-if [[ -d "FreeRTOS-Kernel" ]]; then
-  if [[ "$MODE" == "force" ]]; then
-    rm -rf "FreeRTOS-Kernel"
-    git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
-  else
-    update_shallow_repo "FreeRTOS-Kernel"
-  fi
-else
-  git clone --depth=1 https://github.com/FreeRTOS/FreeRTOS-Kernel.git FreeRTOS-Kernel
-  echo "✅ FreeRTOS-Kernel cloned"
-fi
 
 # ---------------------------------------------------------
 # Install IOsonata Eclipse Plugin
@@ -936,6 +938,7 @@ OPENOCD = $OPENOCD_DIR/bin/openocd
 # ============================================
 # IOsonata Paths
 # ============================================
+# IOCOMPOSER_HOME must be set to your IOcomposer root directory
 ifndef IOCOMPOSER_HOME
 \$(error IOCOMPOSER_HOME is not set. Please set it to your IOcomposer root directory)
 endif
@@ -944,6 +947,9 @@ IOSONATA_ROOT = \$(IOCOMPOSER_HOME)/IOsonata
 IOSONATA_INCLUDE = \$(IOSONATA_ROOT)/include
 IOSONATA_SRC = \$(IOSONATA_ROOT)/src
 
+# ============================================
+# ARM-specific Paths
+# ============================================
 ARM_ROOT = \$(IOSONATA_ROOT)/ARM
 ARM_CMSIS = \$(ARM_ROOT)/CMSIS
 ARM_CMSIS_INCLUDE = \$(ARM_CMSIS)/Include
@@ -951,11 +957,29 @@ ARM_INCLUDE = \$(ARM_ROOT)/include
 ARM_SRC = \$(ARM_ROOT)/src
 ARM_LDSCRIPT = \$(ARM_ROOT)/ldscript
 
+# Vendor-specific paths
+ARM_NORDIC = \$(ARM_ROOT)/Nordic
+ARM_NXP = \$(ARM_ROOT)/NXP
+ARM_ST = \$(ARM_ROOT)/ST
+ARM_MICROCHIP = \$(ARM_ROOT)/Microchip
+ARM_RENESAS = \$(ARM_ROOT)/Renesas
+
+# ============================================
+# RISC-V-specific Paths
+# ============================================
 RISCV_ROOT = \$(IOSONATA_ROOT)/RISCV
 RISCV_INCLUDE = \$(RISCV_ROOT)/include
 RISCV_SRC = \$(RISCV_ROOT)/src
 RISCV_LDSCRIPT = \$(RISCV_ROOT)/ldscript
 
+# Vendor-specific paths
+RISCV_ESPRESSIF = \$(RISCV_ROOT)/Espressif
+RISCV_NORDIC = \$(RISCV_ROOT)/Nordic
+RISCV_RENESAS = \$(RISCV_ROOT)/Renesas
+
+# ============================================
+# External Libraries
+# ============================================
 EXTERNAL_ROOT = \$(IOCOMPOSER_HOME)/external
 NRFX_ROOT = \$(EXTERNAL_ROOT)/nrfx
 SDK_NRF_BM_ROOT = \$(EXTERNAL_ROOT)/sdk-nrf-bm
@@ -969,27 +993,77 @@ LVGL_ROOT = \$(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = \$(EXTERNAL_ROOT)/lwip
 FREERTOS_KERNEL_ROOT = \$(EXTERNAL_ROOT)/FreeRTOS-Kernel
 TINYUSB_ROOT = \$(EXTERNAL_ROOT)/tinyusb
+
+# ============================================
+# Additional IOsonata Modules
+# ============================================
+FATFS_ROOT = \$(IOSONATA_ROOT)/fatfs
+LITTLEFS_ROOT = \$(IOSONATA_ROOT)/littlefs
+MICRO_ECC_ROOT = \$(IOSONATA_ROOT)/micro-ecc
+
+# ============================================
+# Common Include Paths (for -I flags)
+# ============================================
+IOSONATA_INCLUDES = -I\$(IOSONATA_INCLUDE) \\
+                    -I\$(IOSONATA_INCLUDE)/bluetooth \\
+                    -I\$(IOSONATA_INCLUDE)/audio \\
+                    -I\$(IOSONATA_INCLUDE)/converters \\
+                    -I\$(IOSONATA_INCLUDE)/coredev \\
+                    -I\$(IOSONATA_INCLUDE)/display \\
+                    -I\$(IOSONATA_INCLUDE)/imu \\
+                    -I\$(IOSONATA_INCLUDE)/miscdev \\
+                    -I\$(IOSONATA_INCLUDE)/pwrmgnt \\
+                    -I\$(IOSONATA_INCLUDE)/sensors \\
+                    -I\$(IOSONATA_INCLUDE)/storage \\
+                    -I\$(IOSONATA_INCLUDE)/sys \\
+                    -I\$(IOSONATA_INCLUDE)/usb
+
+ARM_INCLUDES = -I\$(ARM_INCLUDE) \\
+               -I\$(ARM_CMSIS_INCLUDE)
+
+RISCV_INCLUDES = -I\$(RISCV_INCLUDE)
+
+# ============================================
+# Environment Variables (optional)
+# ============================================
+export ARM_GCC_HOME := $ARM_DIR/bin
+export RISCV_GCC_HOME := $RISCV_DIR/bin
+export OPENOCD_HOME := $OPENOCD_DIR/bin
+export NRFX_HOME := \$(NRFX_ROOT)
+export NRFXLIB_HOME := \$(SDK_NRFXLIB_ROOT)
+export NRF5_SDK_HOME := \$(NRF5_SDK_ROOT)
+export NRF5_SDK_MESH_HOME := \$(NRF5_SDK_MESH_ROOT)
+export BSEC_HOME := \$(BSEC_ROOT)
 EOF
 
 echo "✅ makefile_path.mk created at: $MAKEFILE_PATH_MK"
+echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.mk"
 
 # ---------------------------------------------------------
-# Build IOsonata Library
+# IOsonata Library Build (run exactly once)
 # ---------------------------------------------------------
-BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
-
-if [[ -f "$BUILD_SCRIPT" ]]; then
-  echo ""
-  echo "========================================================="
-  echo "  IOsonata Library Build"
-  echo "========================================================="
-  echo ""
-  chmod +x "$BUILD_SCRIPT"
-  "$BUILD_SCRIPT" --home "$ROOT" || true
+# If the clone script already invoked the builder, do NOT run it again.
+# If it did NOT invoke the builder (e.g., clone supports --no-build), run it here.
+if [[ "${CLONE_INVOKED_BUILD:-0}" -eq 0 ]]; then
+  BUILD_SCRIPT="$ROOT/IOsonata/Installer/build_iosonata_lib_linux.sh"
+  if [[ -f "$BUILD_SCRIPT" ]]; then
+    echo ""
+    echo "========================================================="
+    echo "  IOsonata Library Build"
+    echo "========================================================="
+    echo ""
+    chmod +x "$BUILD_SCRIPT"
+    "$BUILD_SCRIPT" --home "$ROOT" || true
+  else
+    echo ""
+    echo "ℹ️  IOsonata library builder not found:"
+    echo "   $BUILD_SCRIPT"
+    echo "   (Skipping library build)"
+    echo ""
+  fi
 else
   echo ""
-  echo "ℹ️  To build IOsonata libraries:"
-  echo "   ./build_iosonata_lib_linux.sh --home $ROOT"
+  echo "ℹ️  IOsonata libraries were already handled by the clone step (skipping rebuild)."
   echo ""
 fi
 

@@ -807,7 +807,6 @@ echo "✅ makefile_path.mk created at: $MAKEFILE_PATH_MK"
 echo "   Projects can include it with: include \$(IOSONATA_ROOT)/makefile_path.mk"
 
 # ---------------------------------------------------------
-# ---------------------------------------------------------
 # IOsonata Library Build (run exactly once)
 # ---------------------------------------------------------
 # If the clone script already invoked the builder, do NOT run it again.

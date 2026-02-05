@@ -219,9 +219,12 @@ if ($MODE -eq "uninstall") {
     }
     
     # Remove Eclipse user data
+    Write-Host ">>> Removing Eclipse user settings..."
     Remove-Item "$env:USERPROFILE\.p2", "$env:USERPROFILE\.eclipse" -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "   [OK] Eclipse user settings removed." -ForegroundColor Green
     
     # Remove IDAP tools
+    Write-Host ">>> Removing IDAP tools..."
     $IDAP_DIR = "$ROOT\IDAP"
     if (Test-Path $IDAP_DIR) {
         Remove-Item $IDAP_DIR -Recurse -Force -ErrorAction SilentlyContinue
@@ -238,6 +241,23 @@ if ($MODE -eq "uninstall") {
         if (Test-Path "$ROOT\external") { 
             Remove-Item "$ROOT\external" -Recurse -Force -ErrorAction SilentlyContinue 
             Write-Host "   [OK] External SDK removed." -ForegroundColor Green
+        }
+        if (Test-Path "$ROOT\.iocomposer") { 
+            Remove-Item "$ROOT\.iocomposer" -Recurse -Force -ErrorAction SilentlyContinue 
+            Write-Host "   [OK] .iocomposer removed." -ForegroundColor Green
+        }
+    } else {
+        Write-Host ">>> Repositories under $ROOT and workspace dirs were kept."
+    }
+    
+    # If the ROOT folder is now empty, remove it (otherwise keep it).
+    if (Test-Path $ROOT) {
+        $items = Get-ChildItem $ROOT -Force -ErrorAction SilentlyContinue
+        if ($items.Count -eq 0) {
+            Remove-Item $ROOT -Force -ErrorAction SilentlyContinue
+            Write-Host "   [OK] Removed empty root folder: $ROOT" -ForegroundColor Green
+        } else {
+            Write-Host "   [INFO] Keeping root folder (not empty): $ROOT" -ForegroundColor Yellow
         }
     }
     
@@ -492,35 +512,63 @@ buildTools.path=$BT
     }
 }
 
-# Function to write ONLY toolchain prefs to user directory (matching macOS behavior)
+# Function to write user prefs to user directory (matching macOS behavior)
 function Write-EclipseUserPrefs {
     param([string]$SettingsDir)
     
     New-Item $SettingsDir -ItemType Directory -Force | Out-Null
 
-    # Only 3 files for user directory (same as macOS)
-    
-    # 1. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs
+    # User prefs files (matching macOS behavior)
+
+    # 1. org.eclipse.embedcdt.core.prefs
+    $embed_prefs = @"
+eclipse.preferences.version=1
+xpack.arm.toolchain.path=$AD/bin
+xpack.riscv.toolchain.path=$RD/bin
+xpack.openocd.path=$OD/bin
+xpack.strict=true
+"@
+    Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
+
+    # 2. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs
     $arm_prefs = @"
+eclipse.preferences.version=1
 toolchain.path.$AH=$AD/bin
 toolchain.path.1287942917=$AD/bin
 toolchain.path.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" $arm_prefs -Encoding UTF8
 
-    # 2. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs
+    # 3. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs
     $riscv_prefs = @"
+eclipse.preferences.version=1
 toolchain.path.$RH=$RD/bin
 toolchain.path.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" $riscv_prefs -Encoding UTF8
 
-    # 3. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
+    # 4. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
     $ocd_prefs = @"
+eclipse.preferences.version=1
 install.folder=$OD/bin
 install.folder.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
+
+    # 5. org.eclipse.core.runtime.prefs
+    $runtime_prefs = @"
+eclipse.preferences.version=1
+environment/project/IOCOMPOSER_HOME/value=$RT
+environment/project/ARM_GCC_HOME/value=$AD/bin
+environment/project/RISCV_GCC_HOME/value=$RD/bin
+environment/project/OPENOCD_HOME/value=$OD/bin
+environment/project/NRFX_HOME/value=$RT/external/nrfx
+environment/project/NRFXLIB_HOME/value=$RT/external/sdk-nrfxlib
+environment/project/NRF5_SDK_HOME/value=$RT/external/nRF5_SDK
+environment/project/NRF5_SDK_MESH_HOME/value=$RT/external/nRF5_SDK_Mesh
+environment/project/BSEC_HOME/value=$RT/external/BSEC
+"@
+    Set-Content "$SettingsDir\org.eclipse.core.runtime.prefs" $runtime_prefs -Encoding UTF8
 }
 
 # --- Location 1: Eclipse Installation Directory ---
@@ -613,64 +661,57 @@ function Install-Plugin {
     }
 }
 
-# --- Repos ---
-function Sync-Repo { 
-    param([string]$U, [string]$D)
-    $repoName = Split-Path $D -Leaf
-    
-    if (Test-Path $D) {
-        if ($MODE -eq 'force') { 
-            Write-Host "   Removing and re-cloning $repoName..."
-            Remove-Item $D -Recurse -Force
-            git clone --depth=1 $U $D 
-        } else { 
-            Write-Host "   Updating $repoName..."
-            Push-Location $D
-            try {
-                # For shallow clones, fetch + reset is more reliable than pull
-                $branch = (git rev-parse --abbrev-ref HEAD 2>$null)
-                if (-not $branch) { $branch = "master" }
-                
-                git fetch --depth=1 origin $branch 2>$null
-                if ($LASTEXITCODE -eq 0) {
-                    git reset --hard "origin/$branch" 2>$null
-                    if ($LASTEXITCODE -ne 0) {
-                        # Fallback: try regular pull
-                        git pull 2>$null
-                    }
-                } else {
-                    # Fetch failed, try regular pull as fallback
-                    git pull 2>$null
-                }
-            } catch {
-                Write-Host "   [WARN] Update failed for $repoName" -ForegroundColor Yellow
-            }
-            Pop-Location 
-        }
-    } else { 
-        Write-Host "   Cloning $repoName..."
-        git clone --depth=1 $U $D 
-    }
+# ---------------------------------------------------------
+# Sync IOsonata + external SDKs (single source of truth)
+# ---------------------------------------------------------
+Write-Host; Write-Host ">>> Syncing IOsonata + external SDKs..." -ForegroundColor Cyan
+
+$CLONE_URL = "https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/clone_iosonata_sdk_win.ps1"
+$TMP_CLONE = Join-Path $env:TEMP "clone_iosonata_sdk_win.ps1"
+$CLONE_LOG = Join-Path $env:TEMP "clone_iosonata_sdk_win.log"
+
+try {
+    curl.exe -fsSL $CLONE_URL -o $TMP_CLONE
+    if ($LASTEXITCODE -ne 0) { throw "Download failed" }
+} catch {
+    Write-Host "[ERROR] Failed to download clone script:" -ForegroundColor Red
+    Write-Host "   $CLONE_URL" -ForegroundColor Red
+    exit 1
 }
 
-Write-Host; Write-Host ">>> Syncing Repos..." -ForegroundColor Cyan
-Sync-Repo "https://github.com/IOsonata/IOsonata.git" "$ROOT\IOsonata"
+# Prefer -NoBuild if supported by the clone script (newer versions). If not supported,
+# retry without it. We capture output so we can detect whether the builder ran.
+$CLONE_INVOKED_BUILD = $false
 
-$REPOS = @(
-    @{ url = "https://github.com/NordicSemiconductor/nrfx.git"; dest = "$EXT\nrfx" }
-    @{ url = "https://github.com/nrfconnect/sdk-nrf-bm.git"; dest = "$EXT\sdk-nrf-bm" }
-    @{ url = "https://github.com/nrfconnect/sdk-nrfxlib.git"; dest = "$EXT\sdk-nrfxlib" }
-    @{ url = "https://github.com/IOsonata/nRF5_SDK.git"; dest = "$EXT\nRF5_SDK" }
-    @{ url = "https://github.com/IOsonata/nRF5_SDK_Mesh.git"; dest = "$EXT\nRF5_SDK_Mesh" }
-    @{ url = "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"; dest = "$EXT\BSEC" }
-    @{ url = "https://github.com/xioTechnologies/Fusion.git"; dest = "$EXT\Fusion" }
-    @{ url = "https://github.com/dlaidig/vqf.git"; dest = "$EXT\vqf" }
-    @{ url = "https://github.com/lvgl/lvgl.git"; dest = "$EXT\lvgl" }
-    @{ url = "https://github.com/lwip-tcpip/lwip.git"; dest = "$EXT\lwip" }
-    @{ url = "https://github.com/hathach/tinyusb.git"; dest = "$EXT\tinyusb" }
-)
-foreach ($repo in $REPOS) { Sync-Repo $repo.url $repo.dest }
-Sync-Repo "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" "$EXT\FreeRTOS-Kernel"
+$cloneArgs = @("-SdkHome", $ROOT, "-NoBuild")
+if ($MODE -eq "force") {
+    $cloneArgs += "-ForceUpdate"
+}
+
+# Run clone script and capture output
+try {
+    $cloneOutput = & powershell.exe -ExecutionPolicy Bypass -File $TMP_CLONE @cloneArgs 2>&1 | Tee-Object -FilePath $CLONE_LOG
+    $cloneOutput | Write-Host
+} catch {
+    Write-Host "   [WARN] Clone script does not support -NoBuild yet. Retrying without it..." -ForegroundColor Yellow
+    $cloneArgs = @("-SdkHome", $ROOT)
+    if ($MODE -eq "force") {
+        $cloneArgs += "-ForceUpdate"
+    }
+    $cloneOutput = & powershell.exe -ExecutionPolicy Bypass -File $TMP_CLONE @cloneArgs 2>&1 | Tee-Object -FilePath $CLONE_LOG
+    $cloneOutput | Write-Host
+}
+
+Remove-Item $TMP_CLONE -Force -ErrorAction SilentlyContinue
+
+# Detect whether the clone script already invoked the IOsonata library builder.
+if (Test-Path $CLONE_LOG) {
+    $logContent = Get-Content $CLONE_LOG -Raw -ErrorAction SilentlyContinue
+    if ($logContent -match "IOsonata Library (Auto-)?Build|IOsonata Library Builder|Available IOsonata library projects|Select project to build") {
+        $CLONE_INVOKED_BUILD = $true
+    }
+    Remove-Item $CLONE_LOG -Force -ErrorAction SilentlyContinue
+}
 
 # --- Install IDAP Tools ---
 $IDAP_DIR = "$ROOT\IDAP"
@@ -751,6 +792,7 @@ OPENOCD = $OD/bin/openocd
 # ============================================
 # IOsonata Paths
 # ============================================
+# IOCOMPOSER_HOME must be set to your IOcomposer root directory
 ifndef IOCOMPOSER_HOME
 `$(error IOCOMPOSER_HOME is not set. Please set it to your IOcomposer root directory)
 endif
@@ -759,6 +801,9 @@ IOSONATA_ROOT = `$(IOCOMPOSER_HOME)/IOsonata
 IOSONATA_INCLUDE = `$(IOSONATA_ROOT)/include
 IOSONATA_SRC = `$(IOSONATA_ROOT)/src
 
+# ============================================
+# ARM-specific Paths
+# ============================================
 ARM_ROOT = `$(IOSONATA_ROOT)/ARM
 ARM_CMSIS = `$(ARM_ROOT)/CMSIS
 ARM_CMSIS_INCLUDE = `$(ARM_CMSIS)/Include
@@ -766,11 +811,29 @@ ARM_INCLUDE = `$(ARM_ROOT)/include
 ARM_SRC = `$(ARM_ROOT)/src
 ARM_LDSCRIPT = `$(ARM_ROOT)/ldscript
 
+# Vendor-specific paths
+ARM_NORDIC = `$(ARM_ROOT)/Nordic
+ARM_NXP = `$(ARM_ROOT)/NXP
+ARM_ST = `$(ARM_ROOT)/ST
+ARM_MICROCHIP = `$(ARM_ROOT)/Microchip
+ARM_RENESAS = `$(ARM_ROOT)/Renesas
+
+# ============================================
+# RISC-V-specific Paths
+# ============================================
 RISCV_ROOT = `$(IOSONATA_ROOT)/RISCV
 RISCV_INCLUDE = `$(RISCV_ROOT)/include
 RISCV_SRC = `$(RISCV_ROOT)/src
 RISCV_LDSCRIPT = `$(RISCV_ROOT)/ldscript
 
+# Vendor-specific paths
+RISCV_ESPRESSIF = `$(RISCV_ROOT)/Espressif
+RISCV_NORDIC = `$(RISCV_ROOT)/Nordic
+RISCV_RENESAS = `$(RISCV_ROOT)/Renesas
+
+# ============================================
+# External Libraries
+# ============================================
 EXTERNAL_ROOT = `$(IOCOMPOSER_HOME)/external
 NRFX_ROOT = `$(EXTERNAL_ROOT)/nrfx
 SDK_NRF_BM_ROOT = `$(EXTERNAL_ROOT)/sdk-nrf-bm
@@ -784,17 +847,77 @@ LVGL_ROOT = `$(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = `$(EXTERNAL_ROOT)/lwip
 FREERTOS_KERNEL_ROOT = `$(EXTERNAL_ROOT)/FreeRTOS-Kernel
 TINYUSB_ROOT = `$(EXTERNAL_ROOT)/tinyusb
+
+# ============================================
+# Additional IOsonata Modules
+# ============================================
+FATFS_ROOT = `$(IOSONATA_ROOT)/fatfs
+LITTLEFS_ROOT = `$(IOSONATA_ROOT)/littlefs
+MICRO_ECC_ROOT = `$(IOSONATA_ROOT)/micro-ecc
+
+# ============================================
+# Common Include Paths (for -I flags)
+# ============================================
+IOSONATA_INCLUDES = -I`$(IOSONATA_INCLUDE) \
+                    -I`$(IOSONATA_INCLUDE)/bluetooth \
+                    -I`$(IOSONATA_INCLUDE)/audio \
+                    -I`$(IOSONATA_INCLUDE)/converters \
+                    -I`$(IOSONATA_INCLUDE)/coredev \
+                    -I`$(IOSONATA_INCLUDE)/display \
+                    -I`$(IOSONATA_INCLUDE)/imu \
+                    -I`$(IOSONATA_INCLUDE)/miscdev \
+                    -I`$(IOSONATA_INCLUDE)/pwrmgnt \
+                    -I`$(IOSONATA_INCLUDE)/sensors \
+                    -I`$(IOSONATA_INCLUDE)/storage \
+                    -I`$(IOSONATA_INCLUDE)/sys \
+                    -I`$(IOSONATA_INCLUDE)/usb
+
+ARM_INCLUDES = -I`$(ARM_INCLUDE) \
+               -I`$(ARM_CMSIS_INCLUDE)
+
+RISCV_INCLUDES = -I`$(RISCV_INCLUDE)
+
+# ============================================
+# Environment Variables (optional)
+# ============================================
+export ARM_GCC_HOME := $AD/bin
+export RISCV_GCC_HOME := $RD/bin
+export OPENOCD_HOME := $OD/bin
+export NRFX_HOME := `$(NRFX_ROOT)
+export NRFXLIB_HOME := `$(SDK_NRFXLIB_ROOT)
+export NRF5_SDK_HOME := `$(NRF5_SDK_ROOT)
+export NRF5_SDK_MESH_HOME := `$(NRF5_SDK_MESH_ROOT)
+export BSEC_HOME := `$(BSEC_ROOT)
 "@
 Set-Content $MK $MK_CONTENT -Encoding UTF8
 Write-Host "   [OK] makefile_path.mk generated." -ForegroundColor Green
+Write-Host "   Projects can include it with: include `$(IOSONATA_ROOT)/makefile_path.mk" -ForegroundColor Green
 
-# --- Build ---
-$BS = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
-if (Test-Path $BS) {
-    Write-Host; Write-Host ">>> Building IOsonata Libs..." -ForegroundColor Cyan
-    & $BS -SdkHome $ROOT
-} else { 
-    Write-Host; Write-Host "   [INFO] Build script not found (will be available after full sync)." -ForegroundColor Yellow 
+# ---------------------------------------------------------
+# IOsonata Library Build (run exactly once)
+# ---------------------------------------------------------
+# If the clone script already invoked the builder, do NOT run it again.
+# If it did NOT invoke the builder (e.g., clone supports -NoBuild), run it here.
+if (-not $CLONE_INVOKED_BUILD) {
+    $BS = "$ROOT\IOsonata\Installer\build_iosonata_lib_win.ps1"
+    if (Test-Path $BS) {
+        Write-Host
+        Write-Host "=========================================================" -ForegroundColor Cyan
+        Write-Host "  IOsonata Library Build" -ForegroundColor Cyan
+        Write-Host "=========================================================" -ForegroundColor Cyan
+        Write-Host
+        & $BS -SdkHome $ROOT
+    } else { 
+        Write-Host
+        Write-Host "   [INFO] IOsonata library builder not found:" -ForegroundColor Yellow
+        Write-Host "   $BS" -ForegroundColor Yellow
+        Write-Host "   (Skipping library build)" -ForegroundColor Yellow
+        Write-Host
+    }
+} else {
+    Write-Host
+    Write-Host "   [INFO] IOsonata libraries were already handled by the clone step (skipping rebuild)." -ForegroundColor Yellow
+    Write-Host
 }
 
 # --- Summary ---
