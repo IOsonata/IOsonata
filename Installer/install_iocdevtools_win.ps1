@@ -666,7 +666,7 @@ function Install-Plugin {
 # ---------------------------------------------------------
 Write-Host; Write-Host ">>> Syncing IOsonata + external SDKs..." -ForegroundColor Cyan
 
-$CLONE_URL = "https://raw.githubusercontent.com/IOsonata/IOsonata/refs/heads/master/Installer/clone_iosonata_sdk_win.ps1"
+$CLONE_URL = "https://raw.githubusercontent.com/IOsonata/IOsonata/master/Installer/clone_iosonata_sdk_win.ps1"
 $TMP_CLONE = Join-Path $env:TEMP "clone_iosonata_sdk_win.ps1"
 $CLONE_LOG = Join-Path $env:TEMP "clone_iosonata_sdk_win.log"
 
@@ -683,23 +683,36 @@ try {
 # retry without it. We capture output so we can detect whether the builder ran.
 $CLONE_INVOKED_BUILD = $false
 
-$cloneArgs = @("-SdkHome", $ROOT, "-NoBuild")
+# First, check if the clone script supports -NoBuild by examining its content
+$cloneScriptContent = Get-Content $TMP_CLONE -Raw -ErrorAction SilentlyContinue
+$supportsNoBuild = $cloneScriptContent -match '\$NoBuild|\-NoBuild'
+
+$cloneArgs = @("-SdkHome", $ROOT)
+if ($supportsNoBuild) {
+    $cloneArgs += "-NoBuild"
+}
 if ($MODE -eq "force") {
     $cloneArgs += "-ForceUpdate"
 }
 
 # Run clone script and capture output
-try {
-    $cloneOutput = & powershell.exe -ExecutionPolicy Bypass -File $TMP_CLONE @cloneArgs 2>&1 | Tee-Object -FilePath $CLONE_LOG
-    $cloneOutput | Write-Host
-} catch {
-    Write-Host "   [WARN] Clone script does not support -NoBuild yet. Retrying without it..." -ForegroundColor Yellow
+$ErrorActionPreference = 'Continue'
+$cloneOutput = & powershell.exe -ExecutionPolicy Bypass -File $TMP_CLONE @cloneArgs 2>&1 | Tee-Object -FilePath $CLONE_LOG
+$cloneExitCode = $LASTEXITCODE
+$cloneOutput | Write-Host
+$ErrorActionPreference = 'Stop'
+
+# If clone failed and we tried -NoBuild, retry without it
+if ($cloneExitCode -ne 0 -and $supportsNoBuild) {
+    Write-Host "   [WARN] Clone script may not support -NoBuild yet. Retrying without it..." -ForegroundColor Yellow
     $cloneArgs = @("-SdkHome", $ROOT)
     if ($MODE -eq "force") {
         $cloneArgs += "-ForceUpdate"
     }
+    $ErrorActionPreference = 'Continue'
     $cloneOutput = & powershell.exe -ExecutionPolicy Bypass -File $TMP_CLONE @cloneArgs 2>&1 | Tee-Object -FilePath $CLONE_LOG
     $cloneOutput | Write-Host
+    $ErrorActionPreference = 'Stop'
 }
 
 Remove-Item $TMP_CLONE -Force -ErrorAction SilentlyContinue
