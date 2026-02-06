@@ -480,31 +480,35 @@ org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
     # 3. org.eclipse.embedcdt.core.prefs (xPack paths)
     $embed_prefs = @"
 eclipse.preferences.version=1
-xpack.arm.toolchain.path=$AD/bin
-xpack.riscv.toolchain.path=$RD/bin
-xpack.openocd.path=$OD/bin
+xpack.arm.toolchain.path=$AD
+xpack.riscv.toolchain.path=$RD
+xpack.openocd.path=$OD
 xpack.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
 
     # 4a. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs (ARM-specific)
     $arm_prefs = @"
-toolchain.path.$AH=$AD/bin
-toolchain.path.1287942917=$AD/bin
+eclipse.preferences.version=1
+toolchain.path.$AH=$AD
+toolchain.path.1287942917=$AD
 toolchain.path.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" $arm_prefs -Encoding UTF8
 
     # 4b. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs (RISC-V-specific)
     $riscv_prefs = @"
-toolchain.path.$RH=$RD/bin
+eclipse.preferences.version=1
+toolchain.path.$RH=$RD
 toolchain.path.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" $riscv_prefs -Encoding UTF8
 
     # 5. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
     $ocd_prefs = @"
-install.folder=$OD/bin
+eclipse.preferences.version=1
+executable=openocd.exe
+install.folder=$OD
 install.folder.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
@@ -530,9 +534,9 @@ function Write-EclipseUserPrefs {
     # 1. org.eclipse.embedcdt.core.prefs
     $embed_prefs = @"
 eclipse.preferences.version=1
-xpack.arm.toolchain.path=$AD/bin
-xpack.riscv.toolchain.path=$RD/bin
-xpack.openocd.path=$OD/bin
+xpack.arm.toolchain.path=$AD
+xpack.riscv.toolchain.path=$RD
+xpack.openocd.path=$OD
 xpack.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
@@ -540,8 +544,8 @@ xpack.strict=true
     # 2. org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs
     $arm_prefs = @"
 eclipse.preferences.version=1
-toolchain.path.$AH=$AD/bin
-toolchain.path.1287942917=$AD/bin
+toolchain.path.$AH=$AD
+toolchain.path.1287942917=$AD
 toolchain.path.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.arm.core.prefs" $arm_prefs -Encoding UTF8
@@ -549,7 +553,7 @@ toolchain.path.strict=true
     # 3. org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs
     $riscv_prefs = @"
 eclipse.preferences.version=1
-toolchain.path.$RH=$RD/bin
+toolchain.path.$RH=$RD
 toolchain.path.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.managedbuild.cross.riscv.core.prefs" $riscv_prefs -Encoding UTF8
@@ -557,7 +561,8 @@ toolchain.path.strict=true
     # 4. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
     $ocd_prefs = @"
 eclipse.preferences.version=1
-install.folder=$OD/bin
+executable=openocd.exe
+install.folder=$OD
 install.folder.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
