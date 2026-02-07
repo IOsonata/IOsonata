@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.77"
+SCRIPT_VERSION="v1.0.78"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -110,28 +110,26 @@ if [[ "$MODE" == "uninstall" ]]; then
   fi
 
 
-  # If the ROOT folder is now empty, remove it (otherwise keep it).
+  # ---------------------------------------------------------
+  # Remove $ROOT if it is truly empty (no files/dirs).
+  # Uses Bash globbing (more reliable than 'find' across environments)
+  # and prints the first entry if not empty for easy debugging.
+  # ---------------------------------------------------------
   if [[ -d "$ROOT" ]]; then
-    if [[ -z "$(find "$ROOT" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
-      rmdir "$ROOT" && echo "   ✅ Removed empty root folder: $ROOT" || true
-    else
-      echo "   ℹ️  Keeping root folder (not empty): $ROOT"
-    fi
-  fi
+    # Include dotfiles in the check; treat missing matches as empty.
+    shopt -s nullglob dotglob
+    entries=( "$ROOT"/* )
+    shopt -u nullglob dotglob
 
-  # ---------------------------------------------------------
-  # If root folder is empty after uninstall, remove it.
-  # ---------------------------------------------------------
-  if [[ -d "$ROOT" ]]; then
-    # If we cannot enumerate, play safe and keep it.
-    if find "$ROOT" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .; then
-      echo "   ℹ️  Keeping $ROOT (not empty)."
-    else
-      if rmdir "$ROOT" 2>/dev/null; then
+    if (( ${#entries[@]} == 0 )); then
+      # Avoid "directory busy" if caller happens to be inside $ROOT.
+      if ( cd "$HOME" && rmdir "$ROOT" 2>/dev/null ); then
         echo "   ✅ Removed empty root folder: $ROOT"
       else
         echo "   ⚠️  Root folder is empty but could not be removed: $ROOT"
       fi
+    else
+      echo "   ℹ️  Keeping $ROOT (not empty). First entry: ${entries[0]}"
     fi
   fi
 
