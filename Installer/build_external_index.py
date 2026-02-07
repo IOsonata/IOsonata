@@ -694,8 +694,8 @@ def _fmt(s: float) -> str:
 
 
 def sanitize(name: str) -> str:
-    s = re.sub(r"[^a-z0-9]+", "_", name.strip().lower())
-    return re.sub(r"_+", "_", s).strip("_") or "sdk"
+    """Return directory name as-is. No renaming — DB name must match folder name."""
+    return name.strip()
 
 
 def discover_sdks(root: Path, include: List[str], exclude: List[str]) -> List[Tuple[str, Path]]:
