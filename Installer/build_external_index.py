@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import functools
 import hashlib
+import json
 import os
 import re
 import sqlite3
@@ -130,6 +131,63 @@ DEFAULT_IGNORE_DIRS = {
 }
 IGNORE_DIR_PREFIXES = ("Debug", "Release", "cmake-build-")
 EXAMPLE_DIR_HINTS = frozenset(("example", "examples", "sample", "samples", "demo", "demos", "test", "tests", "exemples"))
+
+# Path segments to strip from example titles (noise, not topic keywords)
+_TITLE_NOISE = frozenset(("src", "source", "lib", "main", "app", "core", "common", "include"))
+
+
+def _example_title(rel: str) -> str:
+    """Build a searchable example title from relative path.
+    
+    'samples/bluetooth/ble_peripheral/src/main.c'
+    → 'samples/bluetooth/ble_peripheral/main'
+    
+    Strips noise segments (src, source, lib) and file extension,
+    keeps topic-bearing directory names for FTS5 indexing.
+    """
+    parts = rel.replace("\\", "/").split("/")
+    # Remove extension from filename
+    if parts:
+        stem = parts[-1].rsplit(".", 1)[0] if "." in parts[-1] else parts[-1]
+        parts[-1] = stem
+    # Strip noise segments but keep topic-bearing names
+    filtered = [p for p in parts if p.lower() not in _TITLE_NOISE]
+    return "/".join(filtered) if filtered else rel.rsplit(".", 1)[0]
+
+
+def _extract_readme_summary(sdk_path: Path, max_lines: int = 5) -> str:
+    """Extract first meaningful paragraph from README for SDK description."""
+    for name in ("README.md", "README.rst", "README.txt", "README"):
+        readme = sdk_path / name
+        if readme.exists():
+            try:
+                text = readme.read_text(encoding="utf-8", errors="replace")
+                lines = text.splitlines()
+                summary_lines = []
+                in_content = False
+                for line in lines:
+                    stripped = line.strip()
+                    # Skip headers, badges, blank lines at start
+                    if not in_content:
+                        if stripped and not stripped.startswith("#") and not stripped.startswith("!") \
+                                and not stripped.startswith("[") and not stripped.startswith("```"):
+                            in_content = True
+                        else:
+                            continue
+                    if in_content:
+                        if not stripped:
+                            if summary_lines:
+                                break  # End of first paragraph
+                            continue
+                        if stripped.startswith("#") or stripped.startswith("```"):
+                            break  # Next section
+                        summary_lines.append(stripped)
+                        if len(summary_lines) >= max_lines:
+                            break
+                return " ".join(summary_lines)[:300] if summary_lines else ""
+            except Exception:
+                pass
+    return ""
 
 
 def detect_peripheral(path: str) -> int:
@@ -382,7 +440,8 @@ class SDKIndexer:
 
         t0 = time.time()
         conn = db_connect(out_db, baseline=True)
-        ensure_schema(conn, enable_fts=self.enable_fts, include_mcu=False, include_devices=False)
+        ensure_schema(conn, enable_fts=self.enable_fts, include_mcu=False,
+                      include_devices=False, include_manifest=True)
 
         # Standardized metadata
         set_standard_meta(conn, DB_TYPE_EXTERNAL, version, fingerprint=current_fp)
@@ -391,6 +450,7 @@ class SDKIndexer:
         module_cache = StringCache(conn, "modules")
 
         stats = {"files": 0, "chunks": 0, "funcs": 0, "types": 0, "examples": 0}
+        example_paths = []  # Track for manifest generation
 
         for path in self._iter_files(sdk_path):
             stats["files"] += 1
@@ -420,13 +480,18 @@ class SDKIndexer:
                 else:
                     src_chunk = src
                 content = src_chunk[:self.max_chunk]
+                # Title includes path for FTS5 discoverability:
+                # "Example:samples/bluetooth/ble_peripheral/main" is searchable
+                # by "bluetooth", "ble", "peripheral" — unlike "Example:main"
+                example_title = f"Example:{_example_title(rel)}"
                 conn.execute(
                     "INSERT INTO chunks(kind,periph,file_id,module_id,line_start,line_end,title,content,hash) VALUES(?,?,?,?,?,?,?,?,?)",
-                    (KIND_EXAMPLE, periph, file_id, module_id, 1, len(lines), f"Example:{path.stem}",
+                    (KIND_EXAMPLE, periph, file_id, module_id, 1, len(lines), example_title,
                      compress(content), sha256(content))
                 )
                 stats["examples"] += 1
                 stats["chunks"] += 1
+                example_paths.append(rel)
 
             # Types
             for kind, name_, s_idx, e_idx in iter_types(src):
@@ -461,6 +526,9 @@ class SDKIndexer:
 
         conn.commit()
 
+        # Generate manifest for LLM knowledge base
+        _build_external_manifest(conn, name, sdk_path, stats, example_paths)
+
         if self.enable_fts:
             fts_rebuild(conn)
 
@@ -481,6 +549,96 @@ class SDKIndexer:
         
         print(f"    [{_fmt(elapsed)}] {name}: {stats['files']} files, {stats['chunks']} chunks ({size_kb:.0f}KB)")
         return build_stats
+
+
+def _build_external_manifest(conn: sqlite3.Connection, sdk_name: str,
+                             sdk_path: Path, stats: dict,
+                             example_paths: List[str]) -> None:
+    """Auto-generate manifest entries for LLM knowledge base.
+    
+    Writes to manifest table so Java getExternalManifestContext() can
+    inject SDK descriptions, topics, and example paths into the system prompt.
+    This lets the LLM pick the right SDK and craft better search queries.
+    
+    Keys written (namespaced by sdk_name in combined external.db):
+      sdk_info:      {function: N, type: N, example: N}
+      sdk_topics:    ["bluetooth", "spi", "dfu", ...]
+      sdk_examples:  ["samples/bluetooth/ble_peripheral/main.c", ...]
+      sdk_description: "Nordic's bare-metal SDK for nRF series..."
+    """
+    now = int(time.time())
+    
+    def _put(key: str, value: str):
+        conn.execute(
+            "INSERT OR REPLACE INTO manifest(key, value, updated) VALUES(?, ?, ?)",
+            (key, value, now))
+    
+    # 1) sdk_info: chunk stats
+    info = {"function": stats.get("funcs", 0),
+            "type": stats.get("types", 0),
+            "example": stats.get("examples", 0)}
+    _put("sdk_info", json.dumps(info))
+    
+    # 2) sdk_topics: auto-extract from example paths + module directories
+    topics = _extract_topics(example_paths, conn)
+    if topics:
+        _put("sdk_topics", json.dumps(topics[:30]))  # cap at 30
+    
+    # 3) sdk_examples: example file paths (capped)
+    if example_paths:
+        _put("sdk_examples", json.dumps(example_paths[:50]))
+    
+    # 4) sdk_description: from README.md
+    desc = _extract_readme_summary(sdk_path)
+    if desc:
+        _put("sdk_description", desc)
+    
+    conn.commit()
+    topic_count = len(topics) if topics else 0
+    print(f"    [manifest] {sdk_name}: {topic_count} topics, {len(example_paths)} examples" +
+          (f", description ({len(desc)} chars)" if desc else ""))
+
+
+def _extract_topics(example_paths: List[str], conn: sqlite3.Connection) -> List[str]:
+    """Auto-extract topic keywords from example paths and module directories.
+    
+    Collects meaningful directory names from example paths and top-level
+    module names, filters noise, and returns sorted by frequency.
+    """
+    # Noise words that appear everywhere but carry no topic signal
+    noise = {"src", "source", "lib", "main", "app", "core", "common", "include",
+             "example", "examples", "sample", "samples", "demo", "demos",
+             "test", "tests", "boards", "board", "config", "configs",
+             "integration", "components", "component", "modules", "module",
+             "drivers", "driver", "platform", "platforms", "third_party",
+             "experimental", "legacy", "deprecated", "internal", "external",
+             "utils", "util", "tools", "tool", "scripts", "build"}
+    
+    freq: Dict[str, int] = {}
+    
+    # Extract from example path segments
+    for rel in example_paths:
+        parts = rel.lower().replace("\\", "/").split("/")
+        for part in parts[:-1]:  # skip filename
+            # Split on underscores/hyphens for compound names like "ble_peripheral"
+            tokens = re.split(r"[_\-]+", part)
+            for token in tokens:
+                if len(token) >= 2 and token not in noise:
+                    freq[token] = freq.get(token, 0) + 1
+    
+    # Extract from top-level module directories
+    try:
+        rows = conn.execute("SELECT name FROM modules").fetchall()
+        for (mod,) in rows:
+            mod_lower = mod.lower()
+            if mod_lower not in noise and len(mod_lower) >= 2:
+                freq[mod_lower] = freq.get(mod_lower, 0) + 1
+    except Exception:
+        pass
+    
+    # Sort by frequency (most common topics first), then alphabetically
+    sorted_topics = sorted(freq.keys(), key=lambda t: (-freq[t], t))
+    return sorted_topics
 
 
 def update_embeddings(db_path: Path, provider: str, api_key: Optional[str], model: str,
