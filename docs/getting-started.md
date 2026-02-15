@@ -11,7 +11,40 @@ This guide walks you through creating your first IOsonata project using the offi
 
 ### Step 1: Install the Development Environment
 
-Run the installer script for your platform:
+You have two installation paths. Both produce the same Eclipse CDT managed project workflow — the same build system, the same wizard, the same project model. The only difference is AI assistance.
+
+#### Option A — IOcomposer (Recommended)
+
+IOcomposer runs the standard IOsonata installer and then adds two things on top:
+
+- **IOcomposer AI plugin** — installed into Eclipse's `dropins/` directory for design-time AI assistance
+- **External SDK index** — builds a searchable index over your installed vendor SDKs for context-aware AI queries
+
+👉 https://iocomposer.io
+
+**macOS:**
+```bash
+/bin/bash -c "$(curl -fsSL https://iocomposer.io/install_ioc_macos.sh)"
+```
+
+**Linux:**
+```bash
+/bin/bash -c "$(curl -fsSL https://iocomposer.io/install_ioc_linux.sh)"
+```
+
+**Windows (PowerShell as Administrator):**
+```powershell
+$u   = "https://iocomposer.io/install_ioc_win.ps1"
+$dst = "$env:TEMP\install_ioc_win.ps1"
+irm $u -OutFile $dst
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $dst
+```
+
+The default installation root is `~/IOcomposer`. Override with `--home <path>`.
+
+#### Option B — IOsonata Installer (Foundation Only)
+
+If you prefer the development environment without the AI layer:
 
 **macOS:**
 ```bash
@@ -31,7 +64,8 @@ irm $u -OutFile $dst
 powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File $dst
 ```
 
-**What this installs:**
+#### What both options install
+
 - Eclipse Embedded CDT
 - ARM/RISC-V toolchains
 - OpenOCD debugger
