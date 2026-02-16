@@ -98,7 +98,10 @@ uint16_t crc16_ansi(uint8_t *pData, int Len, uint16_t SeedVal);
  * @brief	Calculate 16 bits CRC value.
  *
  * Polynomial : x16 + x12 + x5 + 1 (CRC-16-CCITT)\n
- * 				0x1021 (MSBF/normal)
+ * 				0x1021 (MSBF/normal)\n
+ * Standard CRC-16/CCITT-FALSE (RefIn=false, RefOut=false).\n
+ * With SeedVal=0xFFFF: "123456789" → 0x29B1 (CRC-16/CCITT-FALSE).\n
+ * With SeedVal=0x0000: "123456789" → 0x31C3 (CRC-16/XMODEM).
  *
  * @param	pData 	: Pointer to data buffer to calculate
  * @param	Len		: Data length in bytes

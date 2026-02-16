@@ -97,20 +97,19 @@ uint8_t crc8(uint16_t Poly, uint8_t *pData, int Len, uint8_t SeedVal)
 }
 
 /**
- * @brief   Calculate 16 bits CRC value
- *          Polynomial : x16 + x15 + x2 + 1 (CRC-16-ANSI/ARC)\n
- *          0xA001 (reflected), init 0x0000, no final XOR.\n
- *          Nibble table-driven (16-entry, 32 bytes), 2 lookups per byte.
+ * @brief	Calculate 16 bits CRC value.
  *
- * Standard CRC-16-ANSI uses reflected I/O (RefIn=true, RefOut=true).
+ * Polynomial : x16 + x15 + x2 + 1 (CRC-16-ANSI/ARC)\n
+ *          	0xA001 (reflected), RefIn=true, RefOut=true.\n
+ * Nibble table-driven (16-entry, 32 bytes), 2 lookups per byte.\n
  * With SeedVal=0x0000: "123456789" → 0xBB3D (CRC-16/ARC).\n
  * With SeedVal=0xFFFF: "123456789" → 0x4B37 (CRC-16/MODBUS).
  *
  * @param   pData   : Pointer to data buffer to calculate
- *          Len     : Data length in bytes
- *          SeedVal : Initial CRC seed value
+ * @param   Len     : Data length in bytes
+ * @param   SeedVal : Initial CRC seed value
  *
- * @return 16 bits CRC value
+ * @return	16 bits CRC value
  */
 
 static const uint16_t s_Crc16AnsiNibble[16] = {
@@ -134,13 +133,17 @@ uint16_t crc16_ansi(uint8_t *pData, int Len, uint16_t SeedVal)
 }
 
 /**
- * @brief   Calculate 16 bits CRC value
- *          Polynomial : x16 + x12 + x5 + 1 (CRC-16-CCITT)
- *          0x1021 (MSBF/normal)
+ * @brief	Calculate 16 bits CRC value.
+ *
+ * Polynomial : x16 + x12 + x5 + 1 (CRC-16-CCITT)\n
+ * 				0x1021 (MSBF/normal)\n
+ * Standard CRC-16/CCITT-FALSE (RefIn=false, RefOut=false).\n
+ * With SeedVal=0xFFFF: "123456789" → 0x29B1 (CRC-16/CCITT-FALSE).\n
+ * With SeedVal=0x0000: "123456789" → 0x31C3 (CRC-16/XMODEM).
  *
  * @param	pData 	: Pointer to data buffer to calculate
- * 			Len		: Data length in bytes
- *          SeedVal : Initial CRC seed value
+ * @param	Len		: Data length in bytes
+ * @param	SeedVal : Initial CRC seed value
  *
  * @return	16 bits CRC value
  */
