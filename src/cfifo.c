@@ -77,24 +77,28 @@ hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkS
 
 uint8_t *CFifoGet(hCFifo_t const pFifo)
 {
-	if (pFifo == NULL || atomic_load(&pFifo->GetIdx) < 0)
+	if (pFifo == NULL)
 		return NULL;
 
-	int32_t idx = atomic_load(&pFifo->GetIdx);
-	int32_t getidx = idx + 1;
+	int32_t idx, getidx;
 
-	if (getidx >= pFifo->MaxIdxCnt)
-		getidx = 0;
+	do {
+		idx = atomic_load(&pFifo->GetIdx);
 
-	int32_t putidx = atomic_load(&pFifo->PutIdx);
-	if (getidx == putidx)
-		getidx = -1;
+		if (idx < 0)
+			return NULL;
 
-	atomic_store(&pFifo->GetIdx, getidx);
+		getidx = idx + 1;
 
-	uint8_t *p = pFifo->pMemStart + idx * pFifo->BlkSize;
+		if (getidx >= pFifo->MaxIdxCnt)
+			getidx = 0;
 
-	return p;
+		if (getidx == atomic_load(&pFifo->PutIdx))
+			getidx = -1;
+
+	} while (!atomic_compare_exchange_weak(&pFifo->GetIdx, &idx, getidx));
+
+	return pFifo->pMemStart + idx * pFifo->BlkSize;
 }
 
 uint8_t *CFifoGetMultiple(hCFifo_t const pFifo, int *pCnt)
@@ -102,40 +106,51 @@ uint8_t *CFifoGetMultiple(hCFifo_t const pFifo, int *pCnt)
 	if (pCnt == NULL)
 		return CFifoGet(pFifo);
 
-	if (pFifo == NULL || atomic_load(&pFifo->GetIdx) < 0 || *pCnt == 0)
+	if (pFifo == NULL || *pCnt == 0)
 	{
-		*pCnt = 0;
+		if (pCnt)
+			*pCnt = 0;
 		return NULL;
 	}
 
 	int32_t cnt = *pCnt;
-	int32_t putidx = atomic_load(&pFifo->PutIdx);
-	int32_t idx    = atomic_load(&pFifo->GetIdx);
-	int32_t getidx = idx + cnt;
+	int32_t idx, getidx;
 
-	if (idx < putidx)
-	{
-		if (getidx >= putidx)
+	do {
+		idx = atomic_load(&pFifo->GetIdx);
+
+		if (idx < 0)
 		{
-			getidx = -1;
-			cnt = putidx - idx;
+			*pCnt = 0;
+			return NULL;
 		}
-	}
-	else
-	{
-		if (getidx >= pFifo->MaxIdxCnt)
+
+		int32_t putidx = atomic_load(&pFifo->PutIdx);
+
+		cnt = *pCnt;
+		getidx = idx + cnt;
+
+		if (idx < putidx)
 		{
-			getidx = putidx == 0 ? -1 : 0;
-			cnt = pFifo->MaxIdxCnt - idx;
+			if (getidx >= putidx)
+			{
+				getidx = -1;
+				cnt = putidx - idx;
+			}
 		}
-	}
+		else
+		{
+			if (getidx >= pFifo->MaxIdxCnt)
+			{
+				getidx = putidx == 0 ? -1 : 0;
+				cnt = pFifo->MaxIdxCnt - idx;
+			}
+		}
+	} while (!atomic_compare_exchange_weak(&pFifo->GetIdx, &idx, getidx));
 
-	atomic_store(&pFifo->GetIdx, getidx);
-
-	uint8_t *p = pFifo->pMemStart + idx * pFifo->BlkSize;
 	*pCnt = cnt;
 
-	return p;
+	return pFifo->pMemStart + idx * pFifo->BlkSize;
 }
 
 uint8_t *CFifoPut(hCFifo_t const pFifo)
@@ -147,11 +162,15 @@ uint8_t *CFifoPut(hCFifo_t const pFifo)
     {
         if (pFifo->bBlocking == true)
             return NULL;
-        // drop data
-        int32_t gidx = atomic_load(&pFifo->GetIdx) + 1;
-        if (gidx >= pFifo->MaxIdxCnt)
-            gidx = 0;
-        atomic_store(&pFifo->GetIdx, gidx);
+
+        // drop oldest data — advance GetIdx by 1
+        int32_t gidx;
+
+        do {
+            gidx = atomic_load(&pFifo->GetIdx);
+        } while (gidx >= 0 &&
+                 !atomic_compare_exchange_weak(&pFifo->GetIdx, &gidx,
+                     (gidx + 1 >= pFifo->MaxIdxCnt) ? 0 : gidx + 1));
 
         pFifo->DropCnt++;
     }
@@ -162,14 +181,13 @@ uint8_t *CFifoPut(hCFifo_t const pFifo)
 		putidx = 0;
 	atomic_store(&pFifo->PutIdx, putidx);
 
-	if (atomic_load(&pFifo->GetIdx) < 0)
-	{
-		atomic_store(&pFifo->GetIdx, idx);
-	}
+	// If FIFO was empty, set GetIdx to point at the slot we just wrote.
+	// CAS ensures we only write if still -1 (empty).  If Get already
+	// moved it, the CAS fails harmlessly.
+	int32_t expected = -1;
+	atomic_compare_exchange_strong(&pFifo->GetIdx, &expected, idx);
 
-	uint8_t *p = pFifo->pMemStart + idx * pFifo->BlkSize;
-
-	return p;
+	return pFifo->pMemStart + idx * pFifo->BlkSize;
 }
 
 uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
@@ -179,7 +197,8 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 
 	if (pFifo == NULL || *pCnt == 0)
 	{
-		*pCnt = 0;
+		if (pCnt)
+			*pCnt = 0;
 		return NULL;
 	}
 
@@ -218,10 +237,9 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 
 	atomic_store(&pFifo->PutIdx, putidx);
 
-	if (getidx < 0)
-	{
-		atomic_store(&pFifo->GetIdx, idx);
-	}
+	// If FIFO was empty, set GetIdx.  CAS: only if still -1.
+	int32_t expected = -1;
+	atomic_compare_exchange_strong(&pFifo->GetIdx, &expected, idx);
 
 	uint8_t *p = pFifo->pMemStart + idx * pFifo->BlkSize;
 
@@ -240,10 +258,11 @@ int CFifoAvail(hCFifo_t const pFifo)
 {
 	int len = 0;
 
-	if (atomic_load(&pFifo->GetIdx) < 0)
+	int gi = atomic_load(&pFifo->GetIdx);
+
+	if (gi < 0)
 		return pFifo->MaxIdxCnt;
 
-	int gi = atomic_load(&pFifo->GetIdx);
 	int pi = atomic_load(&pFifo->PutIdx);
 
 	if (pi > gi)
@@ -262,11 +281,12 @@ int CFifoUsed(hCFifo_t const pFifo)
 {
 	int len = 0;
 
-	if (atomic_load((atomic_int *)&pFifo->GetIdx) < 0)
+	int gi = atomic_load(&pFifo->GetIdx);
+
+	if (gi < 0)
 		return 0;
 
-	int gi = atomic_load((atomic_int *)&pFifo->GetIdx);
-	int pi = atomic_load((atomic_int *)&pFifo->PutIdx);
+	int pi = atomic_load(&pFifo->PutIdx);
 
 	if (gi < pi)
 	{
@@ -282,7 +302,7 @@ int CFifoUsed(hCFifo_t const pFifo)
 
 int CFifoRead(hCFifo_t const pFifo, uint8_t *pBuff, int BuffLen)
 {
-	if (pFifo == NULL || atomic_load((atomic_int *)&pFifo->GetIdx) < 0 || pBuff == NULL)
+	if (pFifo == NULL || atomic_load(&pFifo->GetIdx) < 0 || pBuff == NULL)
 		return 0;
 
 	int cnt = 0;
