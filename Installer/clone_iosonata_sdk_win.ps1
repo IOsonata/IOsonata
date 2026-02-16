@@ -137,8 +137,9 @@ Write-Host ""
 
 $repos = @{
     "https://github.com/NordicSemiconductor/nrfx.git" = "nrfx"
-    "https://github.com/nrfconnect/sdk-nrf-bm.git" = "sdk-nrf-bm"
+    "https://github.com/IOsonata/sdk-nrf-bm.git" = "sdk-nrf-bm"
     "https://github.com/nrfconnect/sdk-nrfxlib.git" = "sdk-nrfxlib"
+    "https://github.com/Mbed-TLS/mbedtls.git" = "mbedtls"
     "https://github.com/IOsonata/nRF5_SDK.git" = "nRF5_SDK"
     "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "nRF5_SDK_Mesh"
     "https://github.com/boschsensortec/Bosch-BSEC2-Library.git" = "BSEC"

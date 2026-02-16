@@ -165,8 +165,9 @@ echo ""
 # Standard repos (no submodules)
 repos=(
   "https://github.com/NordicSemiconductor/nrfx.git"
-  "https://github.com/nrfconnect/sdk-nrf-bm.git"
+  "https://github.com/IOsonata/sdk-nrf-bm.git"
   "https://github.com/nrfconnect/sdk-nrfxlib.git"
+  "https://github.com/Mbed-TLS/mbedtls.git"
   "https://github.com/IOsonata/nRF5_SDK.git"
   "https://github.com/IOsonata/nRF5_SDK_Mesh.git"
   "https://github.com/boschsensortec/Bosch-BSEC2-Library.git"
