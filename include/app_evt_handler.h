@@ -40,6 +40,10 @@ SOFTWARE.
 #ifndef __APP_EVT_HANDLER_H__
 #define __APP_EVT_HANDLER_H__
 
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
+
 #ifndef APPEVT_HANDLER_QUE_DEFAULT_SIZE
 #define APPEVT_HANDLER_QUE_DEFAULT_SIZE	4
 #endif
