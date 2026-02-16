@@ -44,6 +44,10 @@ SOFTWARE.
 #define APPEVT_HANDLER_QUE_DEFAULT_SIZE	4
 #endif
 
+#ifndef APPEVT_HANDLER_EXEC_MAX_COUNT
+#define APPEVT_HANDLER_EXEC_MAX_COUNT	30	//!< Max events per AppEvtHandlerExec call
+#endif
+
 #define APPEVT_HANDLER_QUE_MEMSIZE(Count)		CFIFO_TOTAL_MEMSIZE(Count, sizeof(AppEvtHandlerQue_t))
 
 typedef void (*AppEvtHandler_t)(uint32_t Evt, void *pCtx);

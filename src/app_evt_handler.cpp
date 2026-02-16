@@ -46,7 +46,7 @@ SOFTWARE.
 
 alignas(4) static uint8_t s_AppEvtHandlerFifoMem[APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE];
 
-alignas(4) static hCFifo_t s_hAppEvtHandlerFifo;
+static hCFifo_t s_hAppEvtHandlerFifo;
 
 /**
  * @brief	Initialize event handler que
@@ -78,7 +78,9 @@ bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 {
 	if (pFifoMem == nullptr)
 	{
-    	s_hAppEvtHandlerFifo = CFifoInit(s_AppEvtHandlerFifoMem, APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE, sizeof(AppEvtHandlerQue_t), true);
+		s_hAppEvtHandlerFifo = CFifoInit(s_AppEvtHandlerFifoMem,
+										 APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE,
+										 sizeof(AppEvtHandlerQue_t), true);
 	}
 	else if (Size < APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE)
 	{
@@ -86,10 +88,11 @@ bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 	}
 	else
 	{
-    	s_hAppEvtHandlerFifo = CFifoInit(pFifoMem, Size, sizeof(AppEvtHandlerQue_t), true);
+		s_hAppEvtHandlerFifo = CFifoInit(pFifoMem, Size,
+										 sizeof(AppEvtHandlerQue_t), true);
 	}
 
-	return true;
+	return s_hAppEvtHandlerFifo != nullptr;
 }
 
 /**
@@ -135,7 +138,10 @@ void AppEvtHandlerDispatch()
 }
 
 /**
- * @brief	Execute all event
+ * @brief	Execute all events
+ *
+ * Drains the queue up to APPEVT_HANDLER_EXEC_MAX_COUNT events per call,
+ * then relinquishes runtime for other processing.
  *
  * @param	None
  *
@@ -143,14 +149,15 @@ void AppEvtHandlerDispatch()
  */
 void AppEvtHandlerExec()
 {
-	int cnt = 30;
+	int cnt = APPEVT_HANDLER_EXEC_MAX_COUNT;
 
-	do
+	while (cnt-- > 0)
 	{
 		AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t*)CFifoGet(s_hAppEvtHandlerFifo);
 
 		if (p == nullptr)
 			break;
+
 		p->Handler(p->EvtId, p->pCtx);
-	} while(--cnt > 0);
+	}
 }
