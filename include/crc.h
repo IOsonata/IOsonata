@@ -80,8 +80,11 @@ uint8_t crc8(uint16_t Poly, uint8_t *pData, int Len, uint8_t SeedVal);
 /**
  * @brief	Calculate 16 bits CRC value.
  *
- * Polynomial : x16 + x15 + x2 + 1 (CRC-16-ANSI)\n
- *          	0x8005 (MSBF/normal)
+ * Polynomial : x16 + x15 + x2 + 1 (CRC-16-ANSI/ARC)\n
+ *          	0xA001 (reflected), RefIn=true, RefOut=true.\n
+ * Nibble table-driven (16-entry, 32 bytes), 2 lookups per byte.\n
+ * With SeedVal=0x0000: "123456789" → 0xBB3D (CRC-16/ARC).\n
+ * With SeedVal=0xFFFF: "123456789" → 0x4B37 (CRC-16/MODBUS).
  *
  * @param   pData   : Pointer to data buffer to calculate
  * @param   Len     : Data length in bytes
@@ -106,7 +109,9 @@ uint16_t crc16_ansi(uint8_t *pData, int Len, uint16_t SeedVal);
 uint16_t crc16_ccitt(uint8_t *pData, int Len, uint16_t SeedVal);
 
 /**
- * @brief	Calculate 8 bits CRC value.
+ * @brief	Calculate 32 bits CRC value.
+ *
+ * Polynomial : 0x04C11DB7 (MSBF/normal), init 0xFFFFFFFF, no final XOR.
  *
  * @param	pData 	: Pointer to data buffer to calculate
  * @param	Len		: Data length in bytes
@@ -114,6 +119,20 @@ uint16_t crc16_ccitt(uint8_t *pData, int Len, uint16_t SeedVal);
  * @return	32 bits CRC value
  */
 uint32_t crc32(uint8_t *pData, int Len);
+
+/**
+ * @brief	Calculate 32 bits CRC value, IEEE 802.3.
+ *
+ * Standard CRC-32 used in Ethernet, ZIP, PNG, gzip, etc.\n
+ * Polynomial : 0xEDB88320 (reflected), init 0xFFFFFFFF, final XOR 0xFFFFFFFF.\n
+ * Nibble table-driven (16-entry, 64 bytes), 2 lookups per byte.
+ *
+ * @param	pData 	: Pointer to data buffer to calculate
+ * @param	Len		: Data length in bytes
+ *
+ * @return	32 bits CRC value
+ */
+uint32_t crc32_ieee(uint8_t *pData, int Len);
 
 #ifdef __cplusplus
 }
