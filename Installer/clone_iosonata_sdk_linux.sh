@@ -231,6 +231,7 @@ repos=(
   "https://github.com/NordicSemiconductor/nrfx.git"
   "https://github.com/IOsonata/sdk-nrf-bm.git"
   "https://github.com/nrfconnect/sdk-nrfxlib.git"
+  "https://github.com/nrfconnect/sdk-oberon-psa-crypto.git"
   "https://github.com/Mbed-TLS/mbedtls.git"
   "https://github.com/IOsonata/nRF5_SDK.git"
   "https://github.com/IOsonata/nRF5_SDK_Mesh.git"

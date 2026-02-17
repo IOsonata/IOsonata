@@ -139,6 +139,7 @@ $repos = @{
     "https://github.com/NordicSemiconductor/nrfx.git" = "nrfx"
     "https://github.com/IOsonata/sdk-nrf-bm.git" = "sdk-nrf-bm"
     "https://github.com/nrfconnect/sdk-nrfxlib.git" = "sdk-nrfxlib"
+    "https://github.com/nrfconnect/sdk-oberon-psa-crypto.git" = "sdk-oberon-psa-crypto"
     "https://github.com/Mbed-TLS/mbedtls.git" = "mbedtls"
     "https://github.com/IOsonata/nRF5_SDK.git" = "nRF5_SDK"
     "https://github.com/IOsonata/nRF5_SDK_Mesh.git" = "nRF5_SDK_Mesh"
