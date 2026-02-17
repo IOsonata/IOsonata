@@ -29,54 +29,61 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-	FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 0x156C00  /* slot0 only, before storage partition */
+	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x156C00  /* slot0 only, before storage partition */
 	RAM   (rwx) : ORIGIN = 0x20004780, LENGTH = 0x3B880   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
 }
 
+/* Default symbols for observer sections that may be empty.
+ * PROVIDE only takes effect if nothing else defines the symbol.
+ * When a section has entries, the in-section definitions override these.
+ * When empty, start == stop so the iteration loop is a no-op. */
+PROVIDE(__start_nrf_sdh_stack_evt_observers = 0);
+PROVIDE(__stop_nrf_sdh_stack_evt_observers = 0);
+PROVIDE(__start_nrf_sdh_soc_evt_observers = 0);
+PROVIDE(__stop_nrf_sdh_soc_evt_observers = 0);
+PROVIDE(__start_nrf_sdh_ble_evt_observers = 0);
+PROVIDE(__stop_nrf_sdh_ble_evt_observers = 0);
+PROVIDE(__start_nrf_sdh_state_evt_observers = 0);
+PROVIDE(__stop_nrf_sdh_state_evt_observers = 0);
 
+/* === FLASH observer sections ===
+ *
+ * Output section names match the C identifiers used by TYPE_SECTION_FOREACH
+ * so the GNU linker auto-generates __start_<name> / __stop_<name> symbols.
+ * Input sections are SORTed by priority suffix (.0 HIGHEST … .4 LOWEST).
+ */
 SECTIONS
 {
-	/* === ROM observer sections — placed in FLASH === */
-
-	.sdh_observers : ALIGN(4)
+	nrf_sdh_stack_evt_observers : ALIGN(4)
 	{
-		__start_nrf_sdh_stack_evt_observers = .;
 		KEEP(*(SORT(nrf_sdh_stack_evt_observers.*)))
-		__stop_nrf_sdh_stack_evt_observers = .;
-
-		. = ALIGN(4);
-		__start_nrf_sdh_soc_evt_observers = .;
-		KEEP(*(SORT(nrf_sdh_soc_evt_observers.*)))
-		__stop_nrf_sdh_soc_evt_observers = .;
-
-		. = ALIGN(4);
-		__start_nrf_sdh_ble_evt_observers = .;
-		KEEP(*(SORT(nrf_sdh_ble_evt_observers.*)))
-		__stop_nrf_sdh_ble_evt_observers = .;
 	} > FLASH
 
-	/* === RAM observer section — initialized data, loaded from FLASH ===
-	 *
-	 * nrf_sdh_state_evt_observers contains is_busy field written at runtime
-	 * plus handler/context pointers that need initialization from flash.
-	 *
-	 * Startup code must copy this section from flash to RAM:
-	 *   memcpy(&__sdh_state_obs_start, &__sdh_state_obs_load,
-	 *          &__sdh_state_obs_end - &__sdh_state_obs_start);
-	 *
-	 * If gcc_arm_flash.ld's data copy loop uses the full RAM range
-	 * (e.g. __data_start__ to __data_end__), this section will be
-	 * covered automatically since it precedes .data in the RAM region.
-	 */
-	.sdh_state_observers : ALIGN(4)
+	nrf_sdh_soc_evt_observers : ALIGN(4)
 	{
-		__sdh_state_obs_start = .;
-		__start_nrf_sdh_state_evt_observers = .;
+		KEEP(*(SORT(nrf_sdh_soc_evt_observers.*)))
+	} > FLASH
+
+	nrf_sdh_ble_evt_observers : ALIGN(4)
+	{
+		KEEP(*(SORT(nrf_sdh_ble_evt_observers.*)))
+	} > FLASH
+} INSERT AFTER .rodata;
+
+/* === RAM observer section ===
+ *
+ * nrf_sdh_state_evt_observers has a mutable is_busy field so it lives
+ * in RAM with initial values loaded from FLASH.
+ *
+ * Placed between .data and .bss so gcc_arm_flash.ld's startup copy
+ * covers it:  __data_size__ = __bss_start__ - __data_start__
+ */
+SECTIONS
+{
+	nrf_sdh_state_evt_observers : ALIGN(4)
+	{
 		KEEP(*(SORT(nrf_sdh_state_evt_observers.*)))
-		__stop_nrf_sdh_state_evt_observers = .;
-		__sdh_state_obs_end = .;
 	} > RAM AT> FLASH
-	__sdh_state_obs_load = LOADADDR(.sdh_state_observers);
-}
+} INSERT BEFORE .bss;
 
 INCLUDE "gcc_arm_flash.ld"

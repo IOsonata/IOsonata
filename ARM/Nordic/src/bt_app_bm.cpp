@@ -373,10 +373,8 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 // Register as BLE event observer
 NRF_SDH_BLE_OBSERVER(s_BtAppBleObserver, ble_evt_dispatch, NULL, USER);
 
-// Ensure the SoC event poller is linked in (needed for FDS / peer manager)
-extern "C" void nrf_sdh_soc_evts_poll(void *p_context);
-
-NRF_SDH_STACK_EVT_OBSERVER(s_SocEvtsPollObserver, nrf_sdh_soc_evts_poll, NULL, HIGH);
+// Note: SoC event polling is handled internally by nrf_sdh_soc.c
+// which registers its own NRF_SDH_STACK_EVT_OBSERVER.
 
 // --- Advertising ---
 
