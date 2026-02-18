@@ -702,6 +702,10 @@ static void BtDisInit(const BtAppCfg_t *pCfg)
 
 // --- Stack Init ---
 
+/* SVC/IRQ forwarding init from irq_connect.c — must be called
+ * before the first SoftDevice SVCALL (sd_softdevice_is_enabled). */
+extern "C" int sd_irq_init(void);
+
 /**
  * @brief Initialize the SoftDevice BLE stack.
  *
@@ -713,6 +717,11 @@ static void BtDisInit(const BtAppCfg_t *pCfg)
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {
 	int err;
+
+	/* Set up SVC/HardFault forwarding to SoftDevice, patch the vector
+	 * table, connect SD-owned peripheral IRQs, and run the SD reset
+	 * handler.  This MUST happen before any SVCALL macro fires. */
+	sd_irq_init();
 
 	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_enable_request\r\n");
 

@@ -1956,6 +1956,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
 		</link>
 		<link>
+			<name>src/nrfx/drivers/src/nrfx_cracen.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_cracen.c</locationURI>
+		</link>
+		<link>
 			<name>src/nrfx/drivers/src/nrfx_power.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_power.c</locationURI>
