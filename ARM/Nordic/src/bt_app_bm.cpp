@@ -156,21 +156,6 @@ static ble_gap_adv_data_t s_BtAppAdvData = {
 	.scan_rsp_data = { s_BtAppSrBuff, 0 }
 };
 
-// --- Forward declarations of weak application callbacks ---
-
-extern "C" {
-__attribute__((weak)) void BtAppEvtConnected(uint16_t ConnHdl) {}
-__attribute__((weak)) void BtAppEvtDisconnected(uint16_t ConnHdl) {}
-__attribute__((weak)) void BtAppInitUserServices(void) {}
-__attribute__((weak)) void BtAppInitUserData(void) {}
-__attribute__((weak)) void BtAppAdvTimeoutHandler(void) {}
-__attribute__((weak)) void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx) {}
-__attribute__((weak)) void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx) {}
-__attribute__((weak)) void BtAppRtosWaitEvt(void) { __WFE(); }
-__attribute__((weak)) bool BtAppScanReport(int8_t Rssi, uint8_t AddrType,
-	uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData) { return true; }
-}
-
 // --- Helper functions ---
 
 bool BtInitialized()
