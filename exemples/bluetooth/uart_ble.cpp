@@ -231,10 +231,10 @@ static const IOPinCfg_t s_LedPins[] = {
 
 static int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPinCfg_t);
 
-static const IOPinCfg_t s_ButPins[] = {
-	{BUTTON1_PORT, BUTTON1_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 1
-	{BUTTON2_PORT, BUTTON2_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 2
-};
+static const IOPinCfg_t s_ButPins[] = UART_PINS;//{
+//	{BUTTON1_PORT, BUTTON1_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 1
+//	{BUTTON2_PORT, BUTTON2_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 2
+//};
 
 static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
 
