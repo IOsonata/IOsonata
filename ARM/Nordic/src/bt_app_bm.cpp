@@ -107,6 +107,8 @@ extern UART g_Uart;
 #define SEC_PARAM_MIN_KEY_SIZE			7			/**< Minimum encryption key size. */
 #define SEC_PARAM_MAX_KEY_SIZE			16			/**< Maximum encryption key size. */
 
+uint32_t softdevice_vector_forward_address;
+
 // S145 tx_power values (nRF54L15)
 static const int8_t s_TxPowerdBm[] = {
 	-40, -20, -16, -12, -8, -4, 0, 2, 3, 4, 5, 6, 7, 8
@@ -706,7 +708,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	/* Set up SVC/HardFault forwarding to SoftDevice, patch the vector
 	 * table, connect SD-owned peripheral IRQs, and run the SD reset
 	 * handler.  This MUST happen before any SVCALL macro fires. */
-	sd_irq_init();
+	//sd_irq_init();
 
 	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_enable_request\r\n");
 
@@ -743,6 +745,28 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	uint32_t err_code;
+
+	/* 0. Move the vector table from RRAM to SRAM so that all
+	 *    subsequent writes (system vector patches, NVIC_SetVector)
+	 *    target writable memory. */
+	//sd_relocate_vectors_to_ram();
+
+	/* 1. Patch SVC_Handler and HardFault_Handler into the vector table.
+	 *    Guarantees the forwarding handlers are active regardless of
+	 *    how the linker resolved weak vs strong symbols at link time. */
+	//sd_patch_system_vectors();
+
+	/* 2. Set SD base address so SVC forwarding knows where to jump.
+	 *    Do NOT call CallSoftDeviceResetHandler() here — it makes
+	 *    sd_softdevice_is_enabled() return true, which causes
+	 *    nrf_sdh_enable_request() to skip sd_softdevice_enable().
+	 *    The reset handler is called in nrf_sdh_enable() instead. */
+	softdevice_vector_forward_address = FIXED_PARTITION_OFFSET(softdevice_partition);
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+	softdevice_vector_forward_address += CONFIG_ROM_START_OFFSET;
+#endif
+
+
 
 	// Populate internal app data from config
 	s_BtAppData.Role = pCfg->Role;
@@ -889,3 +913,143 @@ void BtAppRun()
 		__WFE();
 	}
 }
+
+/**
+ * @defgroup nrf_sd_isr_vectors SoftDevice Interrupt Vector Table Offsets
+ * @{
+ *
+ *  @brief SoftDevice interrupt vector table offsets.
+ *         The SoftDevice interrupt vector table contains only the addresses of the interrupt handlers
+ *         required by the SoftDevice. The table is located at the SoftDevice base address. When the SoftDevice
+ *         is enabled, the application must forward the interrupts corresponding to the defined offsets
+ *         to the SoftDevice. The address of the interrupt handler is located at the SoftDevice base address plus the offset.
+ *
+ *         An example of how to forward an interrupt to the SoftDevice is shown below:
+ *
+ *         @code
+ *         SVC_Handler:
+ *           LDR   R0, =NRF_SD_ISR_OFFSET_SVC
+ *           LDR   R1, =SOFTDEVICE_BASE_ADDRESS
+ *           LDR   R1, [R1, R0]
+ *           BX    R1
+ *         @endcode
+ */
+#define NRF_SD_ISR_OFFSET_RESET          (0x0000) /**< SoftDevice Reset Handler address offset */
+#define NRF_SD_ISR_OFFSET_HARDFAULT      (0x0004) /**< SoftDevice HardFault Handler address offset */
+#define NRF_SD_ISR_OFFSET_SVC            (0x0008) /**< SoftDevice SVC Handler address offset */
+#define NRF_SD_ISR_OFFSET_SWI00          (0x000c) /**< SoftDevice SWI00 Handler address offset */
+#define NRF_SD_ISR_OFFSET_AAR00_CCM00    (0x0010) /**< SoftDevice AAR00_CCM00 Handler address offset */
+#define NRF_SD_ISR_OFFSET_ECB00          (0x0014) /**< SoftDevice ECB00 Handler address offset */
+#define NRF_SD_ISR_OFFSET_TIMER10        (0x0018) /**< SoftDevice TIMER10 Handler address offset */
+#define NRF_SD_ISR_OFFSET_RADIO_0        (0x001c) /**< SoftDevice RADIO_0 Handler address offset */
+#define NRF_SD_ISR_OFFSET_GRTC_3         (0x0020) /**< SoftDevice GRTC_3 Handler address offset */
+#define NRF_SD_ISR_OFFSET_CLOCK_POWER    (0x0024) /**< SoftDevice CLOCK_POWER Handler address offset */
+
+/* Stringify helpers — expand macro value THEN stringify */
+#define _SD_XSTR(x) #x
+#define SD_XSTR(x)  _SD_XSTR(x)
+
+extern "C" {
+
+/* ------------------------------------------------------------------
+ * SVC_Handler — always forwards to SoftDevice.
+ * (SVCs with SD numbers only issued after sd_softdevice_enable)
+ * ------------------------------------------------------------------ */
+__attribute__((naked))
+void SVC_Handler(void)
+{
+	__asm volatile(
+		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_SVC) "        \n"
+		"LDR  R1, =softdevice_vector_forward_address          \n"
+		"LDR  R1, [R1]                                        \n"
+		"LDR  R1, [R1, R0]                                    \n"
+		"BX   R1                                              \n"
+	);
+}
+
+__attribute__((naked))
+void CLOCK_POWER_IRQHandler(void)
+{
+	__asm volatile(
+		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_CLOCK_POWER) "        \n"
+		"LDR  R1, =softdevice_vector_forward_address          \n"
+		"LDR  R1, [R1]                                        \n"
+		"LDR  R1, [R1, R0]                                    \n"
+		"BX   R1                                              \n"
+	);
+}
+
+__attribute__((naked))
+void SWI00_IRQHandler(void)
+{
+	__asm volatile(
+		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_SWI00) "        \n"
+		"LDR  R1, =softdevice_vector_forward_address          \n"
+		"LDR  R1, [R1]                                        \n"
+		"LDR  R1, [R1, R0]                                    \n"
+		"BX   R1                                              \n"
+	);
+}
+
+__attribute__((naked))
+void RADIO_0_IRQHandler(void)
+{
+	__asm volatile(
+		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_RADIO_0) "        \n"
+		"LDR  R1, =softdevice_vector_forward_address          \n"
+		"LDR  R1, [R1]                                        \n"
+		"LDR  R1, [R1, R0]                                    \n"
+		"BX   R1                                              \n"
+	);
+}
+
+__attribute__((naked))
+void TIMER10_IRQHandler(void)
+{
+	__asm volatile(
+		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_TIMER10) "        \n"
+		"LDR  R1, =softdevice_vector_forward_address          \n"
+		"LDR  R1, [R1]                                        \n"
+		"LDR  R1, [R1, R0]                                    \n"
+		"BX   R1                                              \n"
+	);
+}
+
+__attribute__((naked))
+void GRTC_3_IRQHandler(void)
+{
+	__asm volatile(
+		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_GRTC_3) "        \n"
+		"LDR  R1, =softdevice_vector_forward_address          \n"
+		"LDR  R1, [R1]                                        \n"
+		"LDR  R1, [R1, R0]                                    \n"
+		"BX   R1                                              \n"
+	);
+}
+
+__attribute__((naked))
+void ECB00_IRQHandler(void)
+{
+	__asm volatile(
+		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_ECB00) "        \n"
+		"LDR  R1, =softdevice_vector_forward_address          \n"
+		"LDR  R1, [R1]                                        \n"
+		"LDR  R1, [R1, R0]                                    \n"
+		"BX   R1                                              \n"
+	);
+}
+
+__attribute__((naked))
+void AAR00_CCM00_IRQHandler(void)
+{
+	__asm volatile(
+		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_AAR00_CCM00) "        \n"
+		"LDR  R1, =softdevice_vector_forward_address          \n"
+		"LDR  R1, [R1]                                        \n"
+		"LDR  R1, [R1, R0]                                    \n"
+		"BX   R1                                              \n"
+	);
+}
+
+}
+
