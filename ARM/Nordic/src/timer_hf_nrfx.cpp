@@ -86,21 +86,21 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER0,
-		.MaxNbTrigEvt = TIMER0_CC_NUM,
+		.MaxNbTrigEvt = TIMER0_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER0_CC_NUM - 1,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 1,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER1,
-		.MaxNbTrigEvt = TIMER1_CC_NUM,
+		.MaxNbTrigEvt = TIMER1_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER1_CC_NUM - 1,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 2,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER2,
-		.MaxNbTrigEvt = TIMER2_CC_NUM,
+		.MaxNbTrigEvt = TIMER2_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER2_CC_NUM - 1,
 	},
 #if TIMER_NRFX_HF_MAX > 3
@@ -108,14 +108,14 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 3,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER3,
-		.MaxNbTrigEvt = TIMER3_CC_NUM,
+		.MaxNbTrigEvt = TIMER3_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER3_CC_NUM - 1,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 4,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER4,
-		.MaxNbTrigEvt = TIMER4_CC_NUM,
+		.MaxNbTrigEvt = TIMER4_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER4_CC_NUM - 1,
 	},
 #endif
@@ -124,14 +124,14 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.DevNo = TIMER_NRFX_RTC_MAX + 5,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER5,
-		.MaxNbTrigEvt = TIMER5_CC_NUM,
+		.MaxNbTrigEvt = TIMER5_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER5_CC_NUM - 1,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 6,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER6,
-		.MaxNbTrigEvt = TIMER6_CC_NUM,
+		.MaxNbTrigEvt = TIMER6_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER6_CC_NUM - 1,
 	},
 #endif
@@ -478,7 +478,7 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
     // Pre-calculate periods for faster timer counter to time conversion use later
     // for precision this value is x10 (in 100 psec)
-    pTimer->nsPeriod = 1000000000ULL / pTimer->Freq;     // Period in x10 nsec
+    pTimer->nsPeriod = 1000000000ULL / pTimer->Freq;
 
     reg->TASKS_START = 1;
 
@@ -697,8 +697,12 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
 	}
 #endif
-
-	s_nRfxHFClockSem++;
+	else
+	{
+		// Clock source already enabled externally.
+		// This is to ensure we don't disable it when all timers are disabled
+		s_nRfxHFClockSem++;
+	}
 
 	// Init interrupt for TIMERs
 	switch (devno)

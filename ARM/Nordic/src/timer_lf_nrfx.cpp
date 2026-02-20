@@ -409,8 +409,12 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
     }
-
-	s_nRfxLFClockSem++;
+    else
+    {
+		// Clock source already enabled externally.
+		// This is to ensure we don't disable it when all timers are disabled
+    	s_nRfxLFClockSem++;
+    }
 
 	// Init interrupt for RTC
 	switch (pCfg->DevNo)
