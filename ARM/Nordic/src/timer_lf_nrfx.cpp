@@ -393,7 +393,6 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	#endif
 		}
 
-		s_nRfxLFClockSem++;
 		NRF_CLOCK->TASKS_LFCLKSTART = 1;
 
 		int timout = 1000000;
@@ -411,7 +410,9 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
     }
 
-    // Init interrupt for RTC
+	s_nRfxLFClockSem++;
+
+	// Init interrupt for RTC
 	switch (pCfg->DevNo)
 	{
 		case 0:

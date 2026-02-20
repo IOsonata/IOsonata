@@ -544,7 +544,7 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
     if (count < pTimer->LastCount)
     {
         // Counter wrap around
-        pTimer->Rollover += 0x100000000ULL;;
+        pTimer->Rollover += 0x100000000ULL;
     }
 
     pTimer->LastCount = count;
@@ -660,7 +660,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	if (!(NRF_CLOCK->XO.STAT & CLOCK_XO_STAT_STATE_Msk))
 	{
 		// Clock source not available.  Only 32MHz XTAL
-		s_nRfxHFClockSem++;
+//		s_nRfxHFClockSem++;
 		NRF_CLOCK->TASKS_XOSTART = 1;
 
 		// Check if HFCLK is running or not
@@ -678,7 +678,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		NRF_CLOCK->TASKS_HFCLKSTOP = 1;
 
 		// Clock source not available.  Only 64MHz XTAL
-		s_nRfxHFClockSem++;
+//		s_nRfxHFClockSem++;
 		NRF_CLOCK->TASKS_HFCLKSTART = 1;
 
 		// Check if HFCLK is running or not
@@ -697,6 +697,8 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
 	}
 #endif
+
+	s_nRfxHFClockSem++;
 
 	// Init interrupt for TIMERs
 	switch (devno)
