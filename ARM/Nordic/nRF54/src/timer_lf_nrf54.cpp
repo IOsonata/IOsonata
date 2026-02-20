@@ -149,9 +149,6 @@ static void nRFxGrtcDisable(TimerDev_t * const pTimer)
             NVIC_ClearPendingIRQ(GRTC_3_IRQn);
             break;
     }
-
-
-    NRF_GRTC->TASKS_STOP = 1;
 }
 
 static void nRFxGrtcReset(TimerDev_t * const pTimer)
@@ -377,8 +374,8 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     pTimer->DisableExtTrigger = nRFxGrtcDisableExtTrigger;
     pTimer->EnableExtTrigger = nRFxGrtcEnableExtTrigger;
 
-    NRF_GRTC->TASKS_STOP = 1;
-    NRF_GRTC->TASKS_CLEAR = 1;
+    //NRF_GRTC->TASKS_STOP = 1;
+    //NRF_GRTC->TASKS_CLEAR = 1;
 
 
     // Init interrupt for RTC
@@ -408,13 +405,17 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
     nRFxGrtcSetFrequency(pTimer, pCfg->Freq);
 
-    if (s_nRfxGrtcSem == 0)
+    if (NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk)
+    {
+		// Clock source already enabled externally.
+		// This is to ensure we don't disable it when all timers are disabled
+    	s_nRfxGrtcSem++;
+    }
+    else
     {
 		NRF_GRTC->MODE |= GRTC_MODE_SYSCOUNTEREN_Enabled;
 		NRF_GRTC->TASKS_START = 1;
     }
-
-    s_nRfxGrtcSem++;
 
     return true;
 }
