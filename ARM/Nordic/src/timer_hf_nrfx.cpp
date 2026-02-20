@@ -292,8 +292,9 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 
 		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
 #endif
-		s_nRfxHFClockSem++;
 	}
+
+	s_nRfxHFClockSem++;
 
     reg->TASKS_START = 1;
 
