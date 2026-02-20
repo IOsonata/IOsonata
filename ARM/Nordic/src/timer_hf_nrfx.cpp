@@ -158,7 +158,7 @@ static void TimerIRQHandler(int DevNo)
     {
         // Counter wrap arround
         evt |= TIMER_EVT_COUNTER_OVR;
-        timer->Rollover += 100000000ULL;
+        timer->Rollover += 0x100000000ULL;
     }
 
     timer->LastCount = count;
