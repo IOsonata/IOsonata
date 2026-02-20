@@ -158,6 +158,17 @@ static ble_gap_adv_data_t s_BtAppAdvData = {
 	.scan_rsp_data = { s_BtAppSrBuff, 0 }
 };
 
+
+const static TimerCfg_t s_BtAppSdTimerCfg = {
+    .DevNo = 3,	// GRTC3 needed for Softdevice
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,			// 0 => Default frequency
+	.IntPrio = 0,
+	.EvtHandler = nullptr
+};
+
+static Timer s_BtAppSdGrtc3;
+
 // --- Helper functions ---
 
 bool BtInitialized()
@@ -766,8 +777,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	softdevice_vector_forward_address += CONFIG_ROM_START_OFFSET;
 #endif
 
-
-
 	// Populate internal app data from config
 	s_BtAppData.Role = pCfg->Role;
 	s_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
@@ -800,6 +809,40 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		DEBUG_PRINTF("BtAppStackInit failed\r\n");
 		return false;
 	}
+
+	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
+
+	NVIC_SetPriority(RADIO_0_IRQn, 0);
+	NVIC_ClearPendingIRQ(RADIO_0_IRQn);
+	NVIC_EnableIRQ(RADIO_0_IRQn);
+
+	NVIC_SetPriority(GRTC_3_IRQn, 0);
+	NVIC_ClearPendingIRQ(GRTC_3_IRQn);
+	NVIC_EnableIRQ(GRTC_3_IRQn);
+
+	NVIC_SetPriority(TIMER10_IRQn, 0);
+	NVIC_ClearPendingIRQ(TIMER10_IRQn);
+	NVIC_EnableIRQ(TIMER10_IRQn);
+
+	NVIC_SetPriority(AAR00_CCM00_IRQn, 4);
+	NVIC_ClearPendingIRQ(AAR00_CCM00_IRQn);
+	NVIC_EnableIRQ(AAR00_CCM00_IRQn);
+
+	NVIC_SetPriority(CLOCK_POWER_IRQn, 4);
+	NVIC_ClearPendingIRQ(CLOCK_POWER_IRQn);
+	NVIC_EnableIRQ(CLOCK_POWER_IRQn);
+
+	NVIC_SetPriority(ECB00_IRQn, 4);
+	NVIC_ClearPendingIRQ(ECB00_IRQn);
+	NVIC_EnableIRQ(ECB00_IRQn);
+
+	NVIC_SetPriority(SWI00_IRQn, 4);
+	NVIC_ClearPendingIRQ(SWI00_IRQn);
+	NVIC_EnableIRQ(SWI00_IRQn);
+
+	NVIC_SetPriority(SVCall_IRQn, 4);
+	NVIC_ClearPendingIRQ(SVCall_IRQn);
+	NVIC_EnableIRQ(SVCall_IRQn);
 
 	// Set GAP appearance
 	err_code = sd_ble_gap_appearance_set(pCfg->Appearance);

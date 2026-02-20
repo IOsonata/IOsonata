@@ -413,7 +413,7 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     }
     else
     {
-		NRF_GRTC->MODE |= GRTC_MODE_SYSCOUNTEREN_Enabled;
+		NRF_GRTC->MODE |= GRTC_MODE_SYSCOUNTEREN_Msk | GRTC_MODE_AUTOEN_CpuActive;
 		NRF_GRTC->TASKS_START = 1;
     }
 
