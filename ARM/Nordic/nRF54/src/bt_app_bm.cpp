@@ -52,16 +52,19 @@ SOFTWARE.
 #include "ble_gatts.h"
 #include "ble_gattc.h"
 
-#include "bm/softdevice_handler/nrf_sdh.h"
+#include "nrf_sdm.h"
 #include "bm/softdevice_handler/nrf_sdh_ble.h"
 #include "bm/softdevice_handler/nrf_sdh_soc.h"
 #include "bm/bluetooth/ble_conn_state.h"
 #include "bm/bluetooth/ble_conn_params.h"
 #include "bm/bluetooth/services/ble_dis.h"
+#include "nrfx_cracen.h"
 
 #include "nrf_soc.h"
+#include "mpsl.h"
 
 #include "istddef.h"
+#include "idelay.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
@@ -74,7 +77,7 @@ SOFTWARE.
 #include "app_evt_handler.h"
 
 /******** For DEBUG ************/
-//#define UART_DEBUG_ENABLE
+#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"
@@ -106,8 +109,6 @@ extern UART g_Uart;
 
 #define SEC_PARAM_MIN_KEY_SIZE			7			/**< Minimum encryption key size. */
 #define SEC_PARAM_MAX_KEY_SIZE			16			/**< Maximum encryption key size. */
-
-uint32_t softdevice_vector_forward_address;
 
 // S145 tx_power values (nRF54L15)
 static const int8_t s_TxPowerdBm[] = {
@@ -164,7 +165,7 @@ const static TimerCfg_t s_BtAppSdTimerCfg = {
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default frequency
 	.IntPrio = 0,
-	.EvtHandler = nullptr
+	.EvtHandler = nullptr,
 };
 
 static Timer s_BtAppSdGrtc3;
@@ -700,9 +701,49 @@ static void BtDisInit(const BtAppCfg_t *pCfg)
 
 // --- Stack Init ---
 
-/* SVC/IRQ forwarding init from irq_connect.c — must be called
- * before the first SoftDevice SVCALL (sd_softdevice_is_enabled). */
-extern "C" int sd_irq_init(void);
+
+__attribute__((weak)) void SoftdeviceFaultHandler(uint32_t id, uint32_t pc, uint32_t info)
+{
+	DEBUG_PRINTF("SoftDevice fault! ID %#x, PC %#x, Info %#x", id, pc, info);
+
+	switch (id) {
+	case NRF_FAULT_ID_SD_ASSERT:
+		DEBUG_PRINTF("NRF_FAULT_ID_SD_ASSERT: SoftDevice assert");
+		break;
+	case NRF_FAULT_ID_APP_MEMACC:
+		DEBUG_PRINTF("NRF_FAULT_ID_APP_MEMACC: Application bad memory access");
+		if (info == 0x00) {
+			DEBUG_PRINTF("Application tried to access SoftDevice RAM");
+		} else {
+			DEBUG_PRINTF("Application tried to access SoftDevice peripheral at %#x", info);
+		}
+		break;
+	}
+
+	for (;;) {
+		/* loop */
+	}
+}
+
+/* Extern in nrf_sdh.c (called directly at enable time for scheduler model) */
+void BtAppSDRandSeed(uint32_t evt, void *ctx)
+{
+	uint32_t nrf_err;
+	uint8_t seed[SD_RAND_SEED_SIZE];
+
+	(void)ctx;
+
+	if (evt == NRF_EVT_RAND_SEED_REQUEST)
+	{
+		if (nrfx_cracen_entropy_get(seed, sizeof(seed)) != 0)
+		{
+			return;
+		}
+
+		nrf_err = sd_rand_seed_set(seed);
+		(void)nrf_err;
+	}
+}
 
 /**
  * @brief Initialize the SoftDevice BLE stack.
@@ -715,21 +756,20 @@ extern "C" int sd_irq_init(void);
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {
 	int err;
-
-	/* Set up SVC/HardFault forwarding to SoftDevice, patch the vector
-	 * table, connect SD-owned peripheral IRQs, and run the SD reset
-	 * handler.  This MUST happen before any SVCALL macro fires. */
-	//sd_irq_init();
-
 	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_enable_request\r\n");
 
-	// Enable SoftDevice (clock config from g_McuOsc, handled in nrf_sdh.c)
+	// Enable SoftDevice
 	err = nrf_sdh_enable_request();
 	if (err && err != -EALREADY)
 	{
 		DEBUG_PRINTF("nrf_sdh_enable_request failed: %d\r\n", err);
 		return false;
 	}
+
+	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
+
+	// Require before call to nrf_sdh_ble_enable
+	BtAppSDRandSeed(NRF_EVT_RAND_SEED_REQUEST, NULL);
 
 	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_ble_enable\r\n");
 
@@ -756,26 +796,6 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	uint32_t err_code;
-
-	/* 0. Move the vector table from RRAM to SRAM so that all
-	 *    subsequent writes (system vector patches, NVIC_SetVector)
-	 *    target writable memory. */
-	//sd_relocate_vectors_to_ram();
-
-	/* 1. Patch SVC_Handler and HardFault_Handler into the vector table.
-	 *    Guarantees the forwarding handlers are active regardless of
-	 *    how the linker resolved weak vs strong symbols at link time. */
-	//sd_patch_system_vectors();
-
-	/* 2. Set SD base address so SVC forwarding knows where to jump.
-	 *    Do NOT call CallSoftDeviceResetHandler() here — it makes
-	 *    sd_softdevice_is_enabled() return true, which causes
-	 *    nrf_sdh_enable_request() to skip sd_softdevice_enable().
-	 *    The reset handler is called in nrf_sdh_enable() instead. */
-	softdevice_vector_forward_address = FIXED_PARTITION_OFFSET(softdevice_partition);
-#ifdef CONFIG_BOOTLOADER_MCUBOOT
-	softdevice_vector_forward_address += CONFIG_ROM_START_OFFSET;
-#endif
 
 	// Populate internal app data from config
 	s_BtAppData.Role = pCfg->Role;
@@ -810,39 +830,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
-
-	NVIC_SetPriority(RADIO_0_IRQn, 0);
-	NVIC_ClearPendingIRQ(RADIO_0_IRQn);
-	NVIC_EnableIRQ(RADIO_0_IRQn);
-
-	NVIC_SetPriority(GRTC_3_IRQn, 0);
-	NVIC_ClearPendingIRQ(GRTC_3_IRQn);
-	NVIC_EnableIRQ(GRTC_3_IRQn);
-
-	NVIC_SetPriority(TIMER10_IRQn, 0);
-	NVIC_ClearPendingIRQ(TIMER10_IRQn);
-	NVIC_EnableIRQ(TIMER10_IRQn);
-
-	NVIC_SetPriority(AAR00_CCM00_IRQn, 4);
-	NVIC_ClearPendingIRQ(AAR00_CCM00_IRQn);
-	NVIC_EnableIRQ(AAR00_CCM00_IRQn);
-
-	NVIC_SetPriority(CLOCK_POWER_IRQn, 4);
-	NVIC_ClearPendingIRQ(CLOCK_POWER_IRQn);
-	NVIC_EnableIRQ(CLOCK_POWER_IRQn);
-
-	NVIC_SetPriority(ECB00_IRQn, 4);
-	NVIC_ClearPendingIRQ(ECB00_IRQn);
-	NVIC_EnableIRQ(ECB00_IRQn);
-
-	NVIC_SetPriority(SWI00_IRQn, 4);
-	NVIC_ClearPendingIRQ(SWI00_IRQn);
-	NVIC_EnableIRQ(SWI00_IRQn);
-
-	NVIC_SetPriority(SVCall_IRQn, 4);
-	NVIC_ClearPendingIRQ(SVCall_IRQn);
-	NVIC_EnableIRQ(SVCall_IRQn);
 
 	// Set GAP appearance
 	err_code = sd_ble_gap_appearance_set(pCfg->Appearance);
@@ -957,142 +944,30 @@ void BtAppRun()
 	}
 }
 
-/**
- * @defgroup nrf_sd_isr_vectors SoftDevice Interrupt Vector Table Offsets
- * @{
- *
- *  @brief SoftDevice interrupt vector table offsets.
- *         The SoftDevice interrupt vector table contains only the addresses of the interrupt handlers
- *         required by the SoftDevice. The table is located at the SoftDevice base address. When the SoftDevice
- *         is enabled, the application must forward the interrupts corresponding to the defined offsets
- *         to the SoftDevice. The address of the interrupt handler is located at the SoftDevice base address plus the offset.
- *
- *         An example of how to forward an interrupt to the SoftDevice is shown below:
- *
- *         @code
- *         SVC_Handler:
- *           LDR   R0, =NRF_SD_ISR_OFFSET_SVC
- *           LDR   R1, =SOFTDEVICE_BASE_ADDRESS
- *           LDR   R1, [R1, R0]
- *           BX    R1
- *         @endcode
- */
-#define NRF_SD_ISR_OFFSET_RESET          (0x0000) /**< SoftDevice Reset Handler address offset */
-#define NRF_SD_ISR_OFFSET_HARDFAULT      (0x0004) /**< SoftDevice HardFault Handler address offset */
-#define NRF_SD_ISR_OFFSET_SVC            (0x0008) /**< SoftDevice SVC Handler address offset */
-#define NRF_SD_ISR_OFFSET_SWI00          (0x000c) /**< SoftDevice SWI00 Handler address offset */
-#define NRF_SD_ISR_OFFSET_AAR00_CCM00    (0x0010) /**< SoftDevice AAR00_CCM00 Handler address offset */
-#define NRF_SD_ISR_OFFSET_ECB00          (0x0014) /**< SoftDevice ECB00 Handler address offset */
-#define NRF_SD_ISR_OFFSET_TIMER10        (0x0018) /**< SoftDevice TIMER10 Handler address offset */
-#define NRF_SD_ISR_OFFSET_RADIO_0        (0x001c) /**< SoftDevice RADIO_0 Handler address offset */
-#define NRF_SD_ISR_OFFSET_GRTC_3         (0x0020) /**< SoftDevice GRTC_3 Handler address offset */
-#define NRF_SD_ISR_OFFSET_CLOCK_POWER    (0x0024) /**< SoftDevice CLOCK_POWER Handler address offset */
-
-/* Stringify helpers — expand macro value THEN stringify */
-#define _SD_XSTR(x) #x
-#define SD_XSTR(x)  _SD_XSTR(x)
-
-extern "C" {
-
-/* ------------------------------------------------------------------
- * SVC_Handler — always forwards to SoftDevice.
- * (SVCs with SD numbers only issued after sd_softdevice_enable)
- * ------------------------------------------------------------------ */
-__attribute__((naked))
-void SVC_Handler(void)
+static void soc_evt_poll(void *context)
 {
-	__asm volatile(
-		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_SVC) "        \n"
-		"LDR  R1, =softdevice_vector_forward_address          \n"
-		"LDR  R1, [R1]                                        \n"
-		"LDR  R1, [R1, R0]                                    \n"
-		"BX   R1                                              \n"
-	);
+	uint32_t nrf_err;
+	uint32_t evt_id;
+
+	while (true) {
+		nrf_err = sd_evt_get(&evt_id);
+		if (nrf_err) {
+			break;
+		}
+
+		/* Forward the event to SoC observers. */
+		TYPE_SECTION_FOREACH(
+			struct nrf_sdh_soc_evt_observer, nrf_sdh_soc_evt_observers, obs) {
+			obs->handler(evt_id, obs->context);
+		}
+	}
+
+	__ASSERT(nrf_err == NRF_ERROR_NOT_FOUND,
+		 "Failed to receive SoftDevice SoC event, nrf_error %#x", nrf_err);
 }
 
-__attribute__((naked))
-void CLOCK_POWER_IRQHandler(void)
-{
-	__asm volatile(
-		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_CLOCK_POWER) "        \n"
-		"LDR  R1, =softdevice_vector_forward_address          \n"
-		"LDR  R1, [R1]                                        \n"
-		"LDR  R1, [R1, R0]                                    \n"
-		"BX   R1                                              \n"
-	);
-}
-
-__attribute__((naked))
-void SWI00_IRQHandler(void)
-{
-	__asm volatile(
-		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_SWI00) "        \n"
-		"LDR  R1, =softdevice_vector_forward_address          \n"
-		"LDR  R1, [R1]                                        \n"
-		"LDR  R1, [R1, R0]                                    \n"
-		"BX   R1                                              \n"
-	);
-}
-
-__attribute__((naked))
-void RADIO_0_IRQHandler(void)
-{
-	__asm volatile(
-		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_RADIO_0) "        \n"
-		"LDR  R1, =softdevice_vector_forward_address          \n"
-		"LDR  R1, [R1]                                        \n"
-		"LDR  R1, [R1, R0]                                    \n"
-		"BX   R1                                              \n"
-	);
-}
-
-__attribute__((naked))
-void TIMER10_IRQHandler(void)
-{
-	__asm volatile(
-		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_TIMER10) "        \n"
-		"LDR  R1, =softdevice_vector_forward_address          \n"
-		"LDR  R1, [R1]                                        \n"
-		"LDR  R1, [R1, R0]                                    \n"
-		"BX   R1                                              \n"
-	);
-}
-
-__attribute__((naked))
-void GRTC_3_IRQHandler(void)
-{
-	__asm volatile(
-		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_GRTC_3) "        \n"
-		"LDR  R1, =softdevice_vector_forward_address          \n"
-		"LDR  R1, [R1]                                        \n"
-		"LDR  R1, [R1, R0]                                    \n"
-		"BX   R1                                              \n"
-	);
-}
-
-__attribute__((naked))
-void ECB00_IRQHandler(void)
-{
-	__asm volatile(
-		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_ECB00) "        \n"
-		"LDR  R1, =softdevice_vector_forward_address          \n"
-		"LDR  R1, [R1]                                        \n"
-		"LDR  R1, [R1, R0]                                    \n"
-		"BX   R1                                              \n"
-	);
-}
-
-__attribute__((naked))
-void AAR00_CCM00_IRQHandler(void)
-{
-	__asm volatile(
-		"LDR  R0, =" SD_XSTR(NRF_SD_ISR_OFFSET_AAR00_CCM00) "        \n"
-		"LDR  R1, =softdevice_vector_forward_address          \n"
-		"LDR  R1, [R1]                                        \n"
-		"LDR  R1, [R1, R0]                                    \n"
-		"BX   R1                                              \n"
-	);
-}
-
-}
+/* Auto-handle seed requests as a SoC event observer */
+NRF_SDH_SOC_OBSERVER(rand_seed, BtAppSDRandSeed, NULL, HIGH);
+/* Listen to SoftDevice events */
+NRF_SDH_STACK_EVT_OBSERVER(soc_evt_obs, soc_evt_poll, NULL, HIGHEST);
 
