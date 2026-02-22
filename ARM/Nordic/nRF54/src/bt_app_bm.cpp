@@ -131,6 +131,7 @@ typedef struct __Bt_App_Data {
 	uint16_t ProductVer;
 	uint16_t Appearance;
 	ble_gap_adv_params_t AdvParam;
+	void (*SDEvtHandler)(void) ;
 	int MaxMtu;
 	bool bSecure;
 	bool bExtAdv;
@@ -797,6 +798,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	uint32_t err_code;
 
+	// Initialize application event handler
+	if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
+	{
+		return false;
+	}
+
 	// Populate internal app data from config
 	s_BtAppData.Role = pCfg->Role;
 	s_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
@@ -898,12 +905,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		(void)err_code;
 	}
 
-	// Initialize application event handler
-	if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
-	{
-		return false;
-	}
-
 	s_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
 	DEBUG_PRINTF("BtAppInit: success\r\n");
@@ -934,13 +935,21 @@ void BtAppRun()
 
 	while (1)
 	{
-		AppEvtHandlerExec();
+    	if (s_BtAppData.SDEvtHandler != NULL)
+		{
+    		// TODO
+			//BtAppRtosWaitEvt();
+		}
+		else
+		{
+			AppEvtHandlerExec();
 
-		// Wait for event (low power sleep)
-		// bm framework uses __WFE() directly, not sd_app_evt_wait()
-		__WFE();
-		__SEV();
-		__WFE();
+			// Wait for event (low power sleep)
+			// bm framework uses __WFE() directly, not sd_app_evt_wait()
+			__WFE();
+			__SEV();
+			__WFE();
+		}
 	}
 }
 

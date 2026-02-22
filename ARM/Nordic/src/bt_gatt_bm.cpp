@@ -82,7 +82,9 @@ static inline bool IsNotificationEnabled(const uint8_t *pData)
 
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	if (s_ConnHandle == BLE_CONN_HANDLE_INVALID)
+	uint16_t ch = (ConnHdl != BLE_CONN_HANDLE_INVALID) ? ConnHdl : s_ConnHandle;
+
+	if (ch == BLE_CONN_HANDLE_INVALID)
 	{
 		return false;
 	}
@@ -93,14 +95,16 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 	}
 
 	ble_gatts_hvx_params_t params;
-
 	memset(&params, 0, sizeof(params));
-	params.type = BLE_GATT_HVX_NOTIFICATION;
+	params.type   = BLE_GATT_HVX_NOTIFICATION;
 	params.handle = pChar->ValHdl;
 	params.p_data = (uint8_t*)pVal;
-	params.p_len = (uint16_t*)&Len;
 
-	uint32_t err_code = sd_ble_gatts_hvx(s_ConnHandle, &params);
+	// SoftDevice expects p_len to point to a uint16_t (it may modify it)
+	uint16_t l = (uint16_t)Len;
+	params.p_len = &l;
+
+	uint32_t err_code = sd_ble_gatts_hvx(ch, &params);
 
 	return err_code == NRF_SUCCESS;
 }
@@ -217,12 +221,18 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 				}
 			}
 			break;
+		case BLE_GATTS_EVT_RW_AUTHORIZE_REQUEST:
+			if (pSrvc->AuthReqCB)
+			{
+				pSrvc->AuthReqCB(pSrvc, pBleEvt);
+			}
+			break;
 
 		case BLE_GATTS_EVT_HVN_TX_COMPLETE:
 			{
 				for (int i = 0; i < pSrvc->NbChar; i++)
 				{
-					if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].ValHdl &&
+					if (pBleEvt->evt.gatts_evt.params.hvn_tx_complete.handle == pSrvc->pCharArray[i].ValHdl &&
 						pSrvc->pCharArray[i].TxCompleteCB != NULL)
 					{
 						pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
