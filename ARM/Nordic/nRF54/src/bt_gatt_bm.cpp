@@ -169,12 +169,19 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 					if (p_evt_write->op == BLE_GATTS_OP_EXEC_WRITE_REQ_NOW)
 					{
 						// Long write execution
-						GATLWRHDR *hdr = (GATLWRHDR *)pSrvc->pLongWrBuff;
-						uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
-						if (hdr->Handle == pSrvc->pCharArray[i].ValHdl)
+						if (pSrvc->pLongWrBuff != NULL)
 						{
-							GatherLongWrBuff(hdr);
-							pSrvc->pCharArray[i].WrCB(&pSrvc->pCharArray[i], p, hdr->Offset, hdr->Len);
+							GATLWRHDR *hdr = (GATLWRHDR *)pSrvc->pLongWrBuff;
+							uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
+
+							if (hdr->Handle == pSrvc->pCharArray[i].ValHdl)
+							{
+								GatherLongWrBuff(hdr);
+								if (pSrvc->pCharArray[i].WrCB)
+								{
+									pSrvc->pCharArray[i].WrCB(&pSrvc->pCharArray[i], p, hdr->Offset, hdr->Len);
+								}
+							}
 						}
 					}
 					else
@@ -224,7 +231,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 		case BLE_GATTS_EVT_RW_AUTHORIZE_REQUEST:
 			if (pSrvc->AuthReqCB)
 			{
-				pSrvc->AuthReqCB(pSrvc, pBleEvt);
+				//pSrvc->AuthReqCB(pSrvc, pBleEvt);
 			}
 			break;
 
@@ -232,8 +239,8 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 			{
 				for (int i = 0; i < pSrvc->NbChar; i++)
 				{
-					if (pBleEvt->evt.gatts_evt.params.hvn_tx_complete.handle == pSrvc->pCharArray[i].ValHdl &&
-						pSrvc->pCharArray[i].TxCompleteCB != NULL)
+					//if (pBleEvt->evt.gatts_evt.params.hvn_tx_complete.handle == pSrvc->pCharArray[i].ValHdl &&
+					//	pSrvc->pCharArray[i].TxCompleteCB != NULL)
 					{
 						pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
 					}

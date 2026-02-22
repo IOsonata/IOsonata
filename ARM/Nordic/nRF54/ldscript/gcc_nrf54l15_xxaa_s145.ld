@@ -30,8 +30,9 @@ GROUP(-lgcc -lc)
 MEMORY
 {
 	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x156C00  /* slot0 only, before storage partition */
-	RAM   (rwx) : ORIGIN = 0x20004780, LENGTH = 0x3B880   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
+	RAM   (rwx) : ORIGIN = 0x20004900, LENGTH = 0x3B700   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
 }
+
 
 /* Default symbols for observer sections that may be empty.
  * PROVIDE only takes effect if nothing else defines the symbol.

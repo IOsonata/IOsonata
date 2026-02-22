@@ -1133,7 +1133,7 @@
 		<link>
 			<name>src/bluetooth/bt_gatt_bm.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gatt_bm.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_gatt_bm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gatt_sdc.cpp</name>
