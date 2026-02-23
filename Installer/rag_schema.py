@@ -800,6 +800,7 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
     v9: Now includes device header paths for LLM tool fetching.
     """
     mcu_by_family = get_manifest_json(conn, "mcu_by_family") or {}
+    mcu_periph_matrix = get_manifest_json(conn, "mcu_periph_matrix") or {}
     device_by_cat = get_manifest_json(conn, "device_by_category") or {}
     device_details = get_manifest_json(conn, "device_details") or {}  # v9
     base_classes_by_cat = get_manifest_json(conn, "base_classes_by_category") or {}
@@ -813,6 +814,17 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
         if mcus:
             lines.append(f"- **{family.upper()}**: {', '.join(mcus)}")
     lines.append("")
+    
+    # MCU Peripheral Support Matrix — only peripherals IOsonata has implemented
+    if mcu_periph_matrix:
+        lines.append("## IOsonata Peripheral Implementation by MCU")
+        lines.append("Peripherals listed below have IOsonata implementations. Use IOsonata API for these.")
+        lines.append("For peripherals NOT listed, use vendor SDK directly.")
+        lines.append("")
+        for mcu, periphs in sorted(mcu_periph_matrix.items()):
+            if periphs:
+                lines.append(f"**{mcu}**: {', '.join(sorted(periphs))}")
+        lines.append("")
     
     # v9: Device drivers with header paths for LLM tool fetching
     lines.append("## Supported Device Drivers")
