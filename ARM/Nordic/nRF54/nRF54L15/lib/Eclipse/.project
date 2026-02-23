@@ -1121,6 +1121,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_gap_bm.cpp</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/bt_gap_bm.cpp</location>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_gap_sdc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gap_sdc.cpp</locationURI>
