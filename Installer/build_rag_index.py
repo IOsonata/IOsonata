@@ -54,6 +54,8 @@ from rag_schema import (
     compute_source_fingerprint,
     # v7: Manifest function
     build_manifest,
+    # v10: Examples manifest
+    build_examples_manifest,
 )
 
 print = functools.partial(print, flush=True)
@@ -938,13 +940,16 @@ class IndexBuilder:
         print(f"[{_fmt(time.time()-t0)}] Building base class hierarchy...")
         baseclass_count = build_base_class_hierarchy(conn, self.source, file_cache, self.verbose)
 
-        # v7: Build manifest (pre-computed static data for system prompt)
+        # v7: Build manifest from structured tables (MCU, devices, base classes)
+        # NOTE: This runs before file scan because it reads from tables populated above.
+        # Examples manifest runs AFTER scan (needs example_paths from scanning).
         print(f"[{_fmt(time.time()-t0)}] Building manifest...")
         manifest_count = build_manifest(conn)
 
         # Index files
         print(f"[{_fmt(time.time()-t0)}] Scanning files...")
         stats = {"files": 0, "chunks": 0, "functions": 0, "types": 0, "typedef_types": 0, "examples": 0}
+        example_paths = []  # v10: Track for examples manifest
 
         for path in self._iter_files():
             stats["files"] += 1
@@ -977,6 +982,7 @@ class IndexBuilder:
                 )
                 stats["examples"] += 1
                 stats["chunks"] += 1
+                example_paths.append(rel)
 
             # v9: Typedef types (C-style: typedef struct {...} Name_t;)
             # This is CRITICAL for IOsonata - all config structs use this pattern!
@@ -1028,6 +1034,11 @@ class IndexBuilder:
                 stats["chunks"] += 1
 
         conn.commit()
+
+        # v10: Build examples manifest (must run AFTER scan to have example_paths)
+        print(f"[{_fmt(time.time()-t0)}] Building examples manifest...")
+        examples_manifest_count = build_examples_manifest(conn, example_paths)
+        manifest_count += examples_manifest_count
 
         if self.enable_fts:
             print(f"[{_fmt(time.time()-t0)}] Building FTS...")

@@ -787,6 +787,71 @@ def build_manifest(conn: sqlite3.Connection) -> int:
     return count
 
 
+def build_examples_manifest(conn: sqlite3.Connection, example_paths: list) -> int:
+    """Build examples manifest from collected example file paths.
+    
+    Groups examples by peripheral (detected from path) and writes to manifest.
+    Call this AFTER the file scan loop, since examples are discovered during scanning.
+    
+    Writes:
+      example_paths:          flat list of all example file paths
+      examples_by_peripheral: {"ble": [...], "uart": [...], ...}
+    
+    Returns number of manifest entries created.
+    """
+    if not example_paths:
+        return 0
+    
+    now = int(time.time())
+    count = 0
+    
+    # Group by peripheral using path-based detection
+    by_periph = {}
+    for rel in example_paths:
+        p = rel.lower()
+        periph_name = "general"
+        if 'bluetooth' in p or '/bt_' in p or 'ble' in p:
+            periph_name = "ble"
+        elif 'uart' in p or 'serial' in p:
+            periph_name = "uart"
+        elif '/spi' in p:
+            periph_name = "spi"
+        elif 'i2c' in p or 'twi' in p:
+            periph_name = "i2c"
+        elif 'usb' in p:
+            periph_name = "usb"
+        elif 'timer' in p or 'pwm' in p:
+            periph_name = "timer"
+        elif 'adc' in p or 'saadc' in p:
+            periph_name = "adc"
+        elif 'i2s' in p:
+            periph_name = "i2s"
+        elif 'flash' in p or 'nvmc' in p:
+            periph_name = "flash"
+        elif 'sensor' in p or 'imu' in p:
+            periph_name = "sensor"
+        elif 'dfu' in p or 'bootloader' in p:
+            periph_name = "dfu"
+        
+        if periph_name not in by_periph:
+            by_periph[periph_name] = []
+        by_periph[periph_name].append(rel)
+    
+    # Write flat list
+    conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                 ("example_paths", json.dumps(sorted(example_paths)), now))
+    count += 1
+    
+    # Write grouped by peripheral
+    conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
+                 ("examples_by_peripheral",
+                  json.dumps({k: sorted(v) for k, v in sorted(by_periph.items())}), now))
+    count += 1
+    
+    conn.commit()
+    return count
+
+
 def get_manifest_json(conn: sqlite3.Connection, key: str):
     """Get manifest value as parsed JSON."""
     row = conn.execute("SELECT value FROM manifest WHERE key=?", (key,)).fetchone()
@@ -800,7 +865,6 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
     v9: Now includes device header paths for LLM tool fetching.
     """
     mcu_by_family = get_manifest_json(conn, "mcu_by_family") or {}
-    mcu_periph_matrix = get_manifest_json(conn, "mcu_periph_matrix") or {}
     device_by_cat = get_manifest_json(conn, "device_by_category") or {}
     device_details = get_manifest_json(conn, "device_details") or {}  # v9
     base_classes_by_cat = get_manifest_json(conn, "base_classes_by_category") or {}
@@ -814,17 +878,6 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
         if mcus:
             lines.append(f"- **{family.upper()}**: {', '.join(mcus)}")
     lines.append("")
-    
-    # MCU Peripheral Support Matrix — only peripherals IOsonata has implemented
-    if mcu_periph_matrix:
-        lines.append("## IOsonata Peripheral Implementation by MCU")
-        lines.append("Peripherals listed below have IOsonata implementations. Use IOsonata API for these.")
-        lines.append("For peripherals NOT listed, use vendor SDK directly.")
-        lines.append("")
-        for mcu, periphs in sorted(mcu_periph_matrix.items()):
-            if periphs:
-                lines.append(f"**{mcu}**: {', '.join(sorted(periphs))}")
-        lines.append("")
     
     # v9: Device drivers with header paths for LLM tool fetching
     lines.append("## Supported Device Drivers")
@@ -933,6 +986,22 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
     lines.append("⚠️ BASE CLASSES: If a sensor type is NOT listed, inherit from Sensor directly.")
     lines.append("⚠️ HEADER PATHS: Use the paths shown above with fetch_iosonata_header tool.")
     lines.append("Do NOT fabricate driver names or base class names. Ask user for part number if needed.")
+    
+    # === IOsonata CODE EXAMPLES (v10) ===
+    examples_by_periph = get_manifest_json(conn, "examples_by_peripheral") or {}
+    if examples_by_periph:
+        lines.append("")
+        lines.append("## IOsonata Code Examples")
+        lines.append("Use `fetch_sdk_file` to read these example files for reference code.")
+        lines.append("")
+        for periph, paths in sorted(examples_by_periph.items()):
+            if paths:
+                lines.append(f"**{periph}** ({len(paths)} examples): " +
+                             ", ".join(f"`{p}`" for p in paths[:5]))
+                if len(paths) > 5:
+                    lines.append(f"  ... and {len(paths) - 5} more")
+        lines.append("")
+    
     lines.append("")
     
     return "\n".join(lines)
