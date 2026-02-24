@@ -352,7 +352,7 @@ CREATE INDEX IF NOT EXISTS idx_mcu ON mcu_support(mcu);
 CREATE INDEX IF NOT EXISTS idx_mcu_periph ON mcu_support(mcu, periph);
 """
 
-# Device support table (IOsonata only) - v9: added header column
+# Device support table (IOsonata only) - v10: added mcu_family column
 DEVICES_SQL = """
 CREATE TABLE IF NOT EXISTS devices (
     id INTEGER PRIMARY KEY,
@@ -360,6 +360,7 @@ CREATE TABLE IF NOT EXISTS devices (
     category INTEGER NOT NULL,
     file_id INTEGER,
     header TEXT,                    -- v9: relative path to header file for LLM fetching
+    mcu_family TEXT,                -- v10: NULL=external (any MCU), "nrf52"/"stm32"/...=MCU-internal
     class_name TEXT,
     description TEXT,
     UNIQUE(name, category)
@@ -713,14 +714,14 @@ def build_manifest(conn: sqlite3.Connection) -> int:
                  ("mcu_periph_matrix", json.dumps({k: sorted(v) for k, v in mcu_peripherals.items()}), now))
     count += 1
     
-    # === DEVICE MANIFEST (v9: now includes header paths) ===
-    rows = conn.execute("SELECT name, category, header FROM devices ORDER BY category, name").fetchall()
+    # === DEVICE MANIFEST (v10: includes mcu_family for internal vs external) ===
+    rows = conn.execute("SELECT name, category, header, mcu_family FROM devices ORDER BY category, name").fetchall()
     
     devices = []
     device_by_category = {}
-    device_details = {}  # v9: Store device details including header path
+    device_details = {}
     
-    for name, category, header in rows:
+    for name, category, header, mcu_family in rows:
         devices.append(name)
         cat_name = DEVICE_CATEGORY_NAMES.get(category, "unknown")
         if cat_name not in device_by_category:
@@ -728,10 +729,11 @@ def build_manifest(conn: sqlite3.Connection) -> int:
         if name not in device_by_category[cat_name]:
             device_by_category[cat_name].append(name)
         
-        # v9: Store device details with header path
+        # v10: mcu_family: empty=external (any MCU), "nrf52"/"stm32"/...=MCU-internal
         device_details[name] = {
             'category': cat_name,
-            'header': header or ''
+            'header': header or '',
+            'mcu_family': mcu_family or ''
         }
     
     conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
@@ -790,12 +792,13 @@ def build_manifest(conn: sqlite3.Connection) -> int:
 def build_examples_manifest(conn: sqlite3.Connection, example_paths: list) -> int:
     """Build examples manifest from collected example file paths.
     
-    Groups examples by peripheral (detected from path) and writes to manifest.
-    Call this AFTER the file scan loop, since examples are discovered during scanning.
+    Groups examples by MCU family detected from path.
+    Examples under ARM/Nordic/nRF52/ → "nrf52", under ARM/ST/STM32L4xx/ → "stm32", etc.
+    Examples not under any MCU path → "generic" (MCU-agnostic).
     
     Writes:
-      example_paths:          flat list of all example file paths
-      examples_by_peripheral: {"ble": [...], "uart": [...], ...}
+      example_paths:     flat list of all example file paths
+      examples_by_mcu:   {"nrf52": [...], "stm32": [...], "generic": [...]}
     
     Returns number of manifest entries created.
     """
@@ -805,47 +808,39 @@ def build_examples_manifest(conn: sqlite3.Connection, example_paths: list) -> in
     now = int(time.time())
     count = 0
     
-    # Group by peripheral using path-based detection
-    by_periph = {}
-    for rel in example_paths:
-        p = rel.lower()
-        periph_name = "general"
-        if 'bluetooth' in p or '/bt_' in p or 'ble' in p:
-            periph_name = "ble"
-        elif 'uart' in p or 'serial' in p:
-            periph_name = "uart"
-        elif '/spi' in p:
-            periph_name = "spi"
-        elif 'i2c' in p or 'twi' in p:
-            periph_name = "i2c"
-        elif 'usb' in p:
-            periph_name = "usb"
-        elif 'timer' in p or 'pwm' in p:
-            periph_name = "timer"
-        elif 'adc' in p or 'saadc' in p:
-            periph_name = "adc"
-        elif 'i2s' in p:
-            periph_name = "i2s"
-        elif 'flash' in p or 'nvmc' in p:
-            periph_name = "flash"
-        elif 'sensor' in p or 'imu' in p:
-            periph_name = "sensor"
-        elif 'dfu' in p or 'bootloader' in p:
-            periph_name = "dfu"
-        
-        if periph_name not in by_periph:
-            by_periph[periph_name] = []
-        by_periph[periph_name].append(rel)
+    _MCU_PATTERNS = [
+        ("nrf52", ["nrf52"]),
+        ("nrf53", ["nrf53"]),
+        ("nrf54", ["nrf54"]),
+        ("stm32", ["stm32"]),
+        ("sam",   ["samd", "same", "samg"]),
+        ("lpc",   ["lpc"]),
+        ("esp32", ["esp32"]),
+        ("ch32",  ["ch32"]),
+        ("rp2",   ["rp2", "rp2040"]),
+    ]
     
-    # Write flat list
+    def _detect_mcu(path_lower):
+        for family, keywords in _MCU_PATTERNS:
+            for kw in keywords:
+                if kw in path_lower:
+                    return family
+        return "generic"
+    
+    by_mcu = {}
+    for rel in example_paths:
+        mcu = _detect_mcu(rel.lower())
+        if mcu not in by_mcu:
+            by_mcu[mcu] = []
+        by_mcu[mcu].append(rel)
+    
     conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
                  ("example_paths", json.dumps(sorted(example_paths)), now))
     count += 1
     
-    # Write grouped by peripheral
     conn.execute("INSERT OR REPLACE INTO manifest(key,value,updated) VALUES(?,?,?)",
-                 ("examples_by_peripheral",
-                  json.dumps({k: sorted(v) for k, v in sorted(by_periph.items())}), now))
+                 ("examples_by_mcu",
+                  json.dumps({k: sorted(v) for k, v in sorted(by_mcu.items())}), now))
     count += 1
     
     conn.commit()
@@ -882,6 +877,7 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
     # v9: Device drivers with header paths for LLM tool fetching
     lines.append("## Supported Device Drivers")
     lines.append("Use `fetch_iosonata_header` tool with the header path to get struct definitions.")
+    lines.append("Devices with mcu_family are MCU-internal — only usable with that vendor's MCUs.")
     lines.append("")
     for category, devices in sorted(device_by_cat.items()):
         if devices and category != "unknown":
@@ -889,10 +885,12 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
             for dev_name in sorted(devices):
                 info = device_details.get(dev_name, {})
                 header = info.get('header', '')
+                mcu_family = info.get('mcu_family', '')
+                suffix = f" ({mcu_family} only)" if mcu_family else ""
                 if header:
-                    lines.append(f"- **{dev_name}**: `{header}`")
+                    lines.append(f"- **{dev_name}**: `{header}`{suffix}")
                 else:
-                    lines.append(f"- {dev_name}")
+                    lines.append(f"- {dev_name}{suffix}")
             lines.append("")
     
     # === BASE CLASS HIERARCHY (v8) ===
@@ -988,18 +986,19 @@ def generate_manifest_context(conn: sqlite3.Connection) -> str:
     lines.append("Do NOT fabricate driver names or base class names. Ask user for part number if needed.")
     
     # === IOsonata CODE EXAMPLES (v10) ===
-    examples_by_periph = get_manifest_json(conn, "examples_by_peripheral") or {}
-    if examples_by_periph:
+    examples_by_mcu = get_manifest_json(conn, "examples_by_mcu") or {}
+    if examples_by_mcu:
         lines.append("")
         lines.append("## IOsonata Code Examples")
-        lines.append("Use `fetch_sdk_file` to read these example files for reference code.")
+        lines.append("Use `fetch_sdk_file` to read these for reference code.")
         lines.append("")
-        for periph, paths in sorted(examples_by_periph.items()):
-            if paths:
-                lines.append(f"**{periph}** ({len(paths)} examples): " +
-                             ", ".join(f"`{p}`" for p in paths[:5]))
-                if len(paths) > 5:
-                    lines.append(f"  ... and {len(paths) - 5} more")
+        for mcu, paths in sorted(examples_by_mcu.items()):
+            if not paths:
+                continue
+            label = mcu.upper() if mcu != "generic" else "Generic (MCU-agnostic)"
+            shown = ", ".join(f"`{p}`" for p in paths[:5])
+            more = f" +{len(paths) - 5} more" if len(paths) > 5 else ""
+            lines.append(f"**{label}** ({len(paths)}): {shown}{more}")
         lines.append("")
     
     lines.append("")

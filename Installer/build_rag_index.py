@@ -490,8 +490,8 @@ def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: Strin
                                 break
                     
                     conn.execute(
-                        "INSERT OR REPLACE INTO devices(name, category, file_id, header) VALUES(?,?,?,?)",
-                        (device_name, category, file_id, header_path)
+                        "INSERT OR REPLACE INTO devices(name, category, file_id, header, mcu_family) VALUES(?,?,?,?,?)",
+                        (device_name, category, file_id, header_path, None)
                     )
                     count += 1
                     if verbose and header_path:
@@ -555,6 +555,10 @@ def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: Strin
                         rel_path = filepath
                     file_id = file_cache.get_id(str(rel_path))
                     
+                    # v10: mcu_family = vendor (Nordic, ST, etc.)
+                    # Header is at ARM/<vendor>/include/, shared across all MCUs from this vendor.
+                    mcu_family = vendor.lower() if vendor else ""
+                    
                     # v9: Find corresponding header file
                     # Pattern: ARM/Nordic/nRF52/src/adc_nrf52_saadc.cpp -> ARM/Nordic/include/adc_nrf52_saadc.h
                     header_path = None
@@ -567,13 +571,13 @@ def build_device_support(conn: sqlite3.Connection, root: Path, file_cache: Strin
                                 break
                     
                     conn.execute(
-                        "INSERT OR REPLACE INTO devices(name, category, file_id, header) VALUES(?,?,?,?)",
-                        (device_name, category, file_id, header_path)
+                        "INSERT OR REPLACE INTO devices(name, category, file_id, header, mcu_family) VALUES(?,?,?,?,?)",
+                        (device_name, category, file_id, header_path, mcu_family)
                     )
                     count += 1
                     if verbose:
                         header_info = f" -> {header_path}" if header_path else " (no header found)"
-                        print(f"  MCU device: {device_name}{header_info}")
+                        print(f"  MCU device: {device_name} [{mcu_family}]{header_info}")
     
     conn.commit()
     return count
