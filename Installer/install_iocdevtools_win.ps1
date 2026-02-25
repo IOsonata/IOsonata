@@ -507,8 +507,8 @@ toolchain.path.strict=true
     # 5. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
     $ocd_prefs = @"
 eclipse.preferences.version=1
-executable=bin\\openocd.exe
-install.folder=$OD
+executable=openocd.exe
+install.folder=$OD/bin
 install.folder.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
@@ -561,8 +561,8 @@ toolchain.path.strict=true
     # 4. org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs
     $ocd_prefs = @"
 eclipse.preferences.version=1
-executable=bin\\openocd.exe
-install.folder=$OD
+executable=openocd.exe
+install.folder=$OD/bin
 install.folder.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.debug.gdbjtag.openocd.core.prefs" $ocd_prefs -Encoding UTF8
