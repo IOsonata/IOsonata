@@ -482,7 +482,7 @@ org.eclipse.cdt.core.parser.taskTags=TODO,FIXME,XXX
 eclipse.preferences.version=1
 xpack.arm.toolchain.path=$AD
 xpack.riscv.toolchain.path=$RD
-xpack.openocd.path=$OD
+xpack.openocd.path=$OD/bin
 xpack.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
@@ -536,7 +536,7 @@ function Write-EclipseUserPrefs {
 eclipse.preferences.version=1
 xpack.arm.toolchain.path=$AD
 xpack.riscv.toolchain.path=$RD
-xpack.openocd.path=$OD
+xpack.openocd.path=$OD/bin
 xpack.strict=true
 "@
     Set-Content "$SettingsDir\org.eclipse.embedcdt.core.prefs" $embed_prefs -Encoding UTF8
