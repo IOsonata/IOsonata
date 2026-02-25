@@ -123,6 +123,29 @@ class BenchmarkReport:
 # CONFIG
 # =============================================================================
 
+# ── Vendor-dependent SDK → MCU family prefix mapping ──────────────────────
+# Only SDKs targeting specific MCU families are listed here.
+# Any SDK NOT listed is treated as MCU-agnostic (never filtered out).
+# Prefix match: "nRF52" matches nRF52832, nRF52840, nRF52833, etc.
+#
+# Written to manifest as "target_mcus" JSON array per SDK.
+# Plugin reads it to filter pre-fetch RAG results by project MCU.
+# ──────────────────────────────────────────────────────────────────────────
+SDK_MCU_TARGETS: Dict[str, List[str]] = {
+    # Nordic – nRF52 series (legacy SoftDevice)
+    "nRF5_SDK":              ["nRF52"],
+    "nRF5_SDK_Mesh":         ["nRF52"],
+    # Nordic – nRF54L series (bare-metal)
+    "sdk-nrf-bm":            ["nRF54L"],
+    # Nordic – all families
+    "nrfx":                  ["nRF"],
+    "sdk-nrfxlib":           ["nRF"],
+    "sdk-oberon-psa-crypto": ["nRF"],
+    "sdk-mbedtls":           ["nRF"],
+}
+# Unlisted SDKs (tinyusb, lvgl, lwip, FreeRTOS-Kernel, BSEC,
+# Fusion, vqf, etc.) are MCU-agnostic → no target_mcus key written.
+
 DEFAULT_IGNORE_DIRS = {
     ".git", ".github", ".metadata", ".settings", ".vscode", ".idea",
     "build", "out", "dist", "Debug", "Release", "OSX", "linux", "win32",
@@ -565,6 +588,7 @@ def _build_external_manifest(conn: sqlite3.Connection, sdk_name: str,
       sdk_topics:    ["bluetooth", "spi", "dfu", ...]
       sdk_examples:  ["samples/bluetooth/ble_peripheral/main.c", ...]
       sdk_description: "Nordic's bare-metal SDK for nRF series..."
+      target_mcus:   ["nRF52"] (only for vendor-dependent SDKs)
     """
     now = int(time.time())
     
@@ -593,10 +617,17 @@ def _build_external_manifest(conn: sqlite3.Connection, sdk_name: str,
     if desc:
         _put("sdk_description", desc)
     
+    # 5) target_mcus: MCU family prefixes (vendor-dependent SDKs only)
+    #    Unlisted SDKs → no key written → plugin treats as MCU-agnostic
+    mcus = SDK_MCU_TARGETS.get(sdk_name)
+    if mcus is not None:
+        _put("target_mcus", json.dumps(mcus))
+    
     conn.commit()
     topic_count = len(topics) if topics else 0
+    mcu_tag = f", mcus={mcus}" if mcus else ", agnostic"
     print(f"    [manifest] {sdk_name}: {topic_count} topics, {len(example_paths)} examples" +
-          (f", description ({len(desc)} chars)" if desc else ""))
+          (f", description ({len(desc)} chars)" if desc else "") + mcu_tag)
 
 
 def _extract_topics(example_paths: List[str], conn: sqlite3.Connection) -> List[str]:
