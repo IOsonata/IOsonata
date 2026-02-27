@@ -167,6 +167,7 @@ const static TimerCfg_t s_BtAppSdTimerCfg = {
 	.Freq = 0,			// 0 => Default frequency
 	.IntPrio = 0,
 	.EvtHandler = nullptr,
+	.bTickInt = false,
 };
 
 static Timer s_BtAppSdGrtc3;
@@ -759,6 +760,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	int err;
 	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_enable_request\r\n");
 
+	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
+
 	// Enable SoftDevice
 	err = nrf_sdh_enable_request();
 	if (err && err != -EALREADY)
@@ -767,7 +770,6 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
 
 	// Require before call to nrf_sdh_ble_enable
 	BtAppSDRandSeed(NRF_EVT_RAND_SEED_REQUEST, NULL);

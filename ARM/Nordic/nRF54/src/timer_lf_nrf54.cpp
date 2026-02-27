@@ -379,29 +379,54 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 
     // Init interrupt for RTC
-	switch (pCfg->DevNo)
-	{
-		case 0:
-			NVIC_ClearPendingIRQ(GRTC_0_IRQn);
-			NVIC_SetPriority(GRTC_0_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(GRTC_0_IRQn);
-			break;
-		case 1:
-			NVIC_ClearPendingIRQ(GRTC_1_IRQn);
-			NVIC_SetPriority(GRTC_1_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(GRTC_1_IRQn);
-			break;
-		case 2:
-			NVIC_ClearPendingIRQ(GRTC_2_IRQn);
-			NVIC_SetPriority(GRTC_2_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(GRTC_2_IRQn);
-			break;
-		case 3:
-			NVIC_ClearPendingIRQ(GRTC_3_IRQn);
-			NVIC_SetPriority(GRTC_3_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(GRTC_3_IRQn);
-			break;
-	}
+    if (pCfg->bTickInt == true)
+    {
+		switch (pCfg->DevNo)
+		{
+			case 0:
+				NVIC_ClearPendingIRQ(GRTC_0_IRQn);
+				NVIC_SetPriority(GRTC_0_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(GRTC_0_IRQn);
+				break;
+			case 1:
+				NVIC_ClearPendingIRQ(GRTC_1_IRQn);
+				NVIC_SetPriority(GRTC_1_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(GRTC_1_IRQn);
+				break;
+			case 2:
+				NVIC_ClearPendingIRQ(GRTC_2_IRQn);
+				NVIC_SetPriority(GRTC_2_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(GRTC_2_IRQn);
+				break;
+			case 3:
+				NVIC_ClearPendingIRQ(GRTC_3_IRQn);
+				NVIC_SetPriority(GRTC_3_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(GRTC_3_IRQn);
+				break;
+		}
+    }
+    else
+    {
+		switch (pCfg->DevNo)
+		{
+			case 0:
+				NVIC_DisableIRQ(GRTC_0_IRQn);
+				NVIC_ClearPendingIRQ(GRTC_0_IRQn);
+				break;
+			case 1:
+				NVIC_DisableIRQ(GRTC_1_IRQn);
+				NVIC_ClearPendingIRQ(GRTC_1_IRQn);
+				break;
+			case 2:
+				NVIC_DisableIRQ(GRTC_2_IRQn);
+				NVIC_ClearPendingIRQ(GRTC_2_IRQn);
+				break;
+			case 3:
+				NVIC_DisableIRQ(GRTC_3_IRQn);
+				NVIC_ClearPendingIRQ(GRTC_3_IRQn);
+				break;
+		}
+    }
 
     nRFxGrtcSetFrequency(pTimer, pCfg->Freq);
 
