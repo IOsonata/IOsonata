@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "mcu": "RE01_1500KB",
+  "cpu": "cortex-m0plus",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [],
+  "includes": [
+    "${iosonata}/ARM/Renesas/include",
+    "${iosonata}/ARM/Renesas/RE01/include"
+  ],
+  "linker_script": "${iosonata}/ARM/Renesas/RE01/ldscript/gcc_re01_1500kb.ld",
+  "lib_path": "${iosonata}/ARM/Renesas/RE01/RE01_1500KB/lib/Eclipse/${config}",
+  "lib": "IOsonata_RE01"
+}

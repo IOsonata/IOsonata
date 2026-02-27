@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "mcu": "NRF54L15",
+  "cpu": "cortex-m33",
+  "fpu": true,
+  "fpu_unit": "fpv5spd16",
+  "defines": [],
+  "includes": [
+    "${iosonata}/ARM/Nordic/include",
+    "${iosonata}/ARM/Nordic/nRF54/include",
+    "${iosonata}/ARM/Nordic/nRF54/nRF54L15/lib/include",
+    "${external}/nrfx",
+    "${external}/nrfx/drivers/include",
+    "${external}/nrfx/bsp/stable",
+    "${external}/nrfx/bsp/stable/mdk",
+    "${external}/nrfx/hal",
+    "${external}/Invn",
+    "${external}/Fusion"
+  ],
+  "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54l15_xxaa.ld",
+  "lib_path": "${iosonata}/ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/${config}",
+  "lib": "IOsonata_nRF54L15",
+  "features": {
+    "ble": {
+      "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54l15_xxaa_s145.ld",
+      "defines": [
+        "NRF_APPLICATION",
+        "S145"
+      ],
+      "extra_includes": [
+        "${external}/sdk-nrf-bm/include",
+        "${external}/sdk-nrf-bm/components/softdevice/s145l/s145_API/include"
+      ]
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "mcu": "NRF52805",
+  "cpu": "cortex-m4",
+  "fpu": true,
+  "fpu_unit": "fpv4spd16",
+  "defines": [
+    "FDS_BACKEND=NRF_FSTORAGE_NVMC"
+  ],
+  "includes": [
+    "${iosonata}/ARM/Nordic/include",
+    "${iosonata}/ARM/Nordic/nRF52/include",
+    "${iosonata}/ARM/Nordic/nRF52/nRF52805/lib/include",
+    "${external}/nrfx",
+    "${external}/nrfx/drivers/include",
+    "${external}/nrfx/bsp/stable",
+    "${external}/nrfx/bsp/stable/mdk",
+    "${external}/nrfx/hal",
+    "${external}/Invn",
+    "${external}/Fusion"
+  ],
+  "linker_script": "${iosonata}/ARM/Nordic/nRF52/ldscript/gcc_nrf52805.ld",
+  "lib_path": "${iosonata}/ARM/Nordic/nRF52/nRF52805/lib/Eclipse/${config}",
+  "lib": "IOsonata_nRF52805",
+  "features": {
+    "ble": {
+      "linker_script": "${iosonata}/ARM/Nordic/nRF52/ldscript/gcc_nrf52805_s112.ld",
+      "defines": [
+        "FDS_BACKEND=NRF_FSTORAGE_SD",
+        "NRF_SD_BLE_API_VERSION=7",
+        "SOFTDEVICE_PRESENT",
+        "BLE_STACK_SUPPORT_REQD",
+        "S112",
+        "NRF52"
+      ],
+      "extra_includes": [
+        "${external}/nRF5_SDK/external/fprintf",
+        "${external}/nRF5_SDK/integration/nrfx/legacy",
+        "${external}/nRF5_SDK/components/libraries/atomic",
+        "${external}/nRF5_SDK/components/libraries/balloc",
+        "${external}/nRF5_SDK/components/libraries/cli",
+        "${external}/nRF5_SDK/components/libraries/delay",
+        "${external}/nRF5_SDK/components/libraries/experimental_section_vars",
+        "${external}/nRF5_SDK/components/libraries/fds",
+        "${external}/nRF5_SDK/components/libraries/fstorage",
+        "${external}/nRF5_SDK/components/libraries/log",
+        "${external}/nRF5_SDK/components/libraries/log/src",
+        "${external}/nRF5_SDK/components/libraries/memobj",
+        "${external}/nRF5_SDK/components/libraries/mutex",
+        "${external}/nRF5_SDK/components/libraries/pwr_mgmt",
+        "${external}/nRF5_SDK/components/libraries/queue",
+        "${external}/nRF5_SDK/components/libraries/ringbuf",
+        "${external}/nRF5_SDK/components/libraries/timer",
+        "${external}/nRF5_SDK/components/libraries/util",
+        "${external}/nRF5_SDK/components/ble/common",
+        "${external}/nRF5_SDK/components/softdevice/common",
+        "${external}/nRF5_SDK/components/softdevice/s112/headers"
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "mcu": "STM32F030X8",
+  "cpu": "cortex-m0",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [
+    "STM32F030x8"
+  ],
+  "includes": [
+    "${iosonata}/ARM/ST/STM32F0xx/include",
+    "${iosonata}/ARM/ST/STM32F0xx/STM32F030x8/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/ST/STM32F0xx/ldscript/gcc_stm32f030x8.ld",
+  "lib_path": "${iosonata}/ARM/ST/STM32F0xx/STM32F030x8/lib/Eclipse/${config}",
+  "lib": "IOsonata_STM32F030x8"
+}

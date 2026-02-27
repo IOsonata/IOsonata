@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "mcu": "LPC11U35",
+  "cpu": "cortex-m0",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [],
+  "includes": [
+    "${iosonata}/ARM/NXP/LPC11xx/include",
+    "${iosonata}/ARM/NXP/LPC11xx/LPC11U35/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/NXP/LPC11xx/LPC11U35/ldscript/gcc_lpc11u35.ld",
+  "lib_path": "${iosonata}/ARM/NXP/LPC11xx/LPC11U35/lib/Eclipse/${config}",
+  "lib": "IOsonata_LPC11U35"
+}

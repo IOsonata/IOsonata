@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "mcu": "SAM4LCXC",
+  "cpu": "cortex-m4",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [],
+  "includes": [
+    "${iosonata}/ARM/Microchip/SAM4L/include",
+    "${iosonata}/ARM/Microchip/SAM4L/SAM4LCXC/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/Microchip/SAM4L/SAM4LCXC/ldscript/gcc_sam4lcxc.ld",
+  "lib_path": "${iosonata}/ARM/Microchip/SAM4L/SAM4LCXC/lib/Eclipse/${config}",
+  "lib": "IOsonata_SAM4LCXC"
+}

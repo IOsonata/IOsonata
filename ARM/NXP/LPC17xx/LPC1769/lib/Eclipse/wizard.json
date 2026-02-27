@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "mcu": "LPC1769",
+  "cpu": "cortex-m3",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [],
+  "includes": [
+    "${iosonata}/ARM/NXP/LPC17xx/include",
+    "${iosonata}/ARM/NXP/LPC17xx/LPC1769/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/NXP/LPC17xx/LPC1769/ldscript/gcc_lpc1769.ld",
+  "lib_path": "${iosonata}/ARM/NXP/LPC17xx/LPC1769/lib/Eclipse/${config}",
+  "lib": "IOsonata_LPC1769"
+}

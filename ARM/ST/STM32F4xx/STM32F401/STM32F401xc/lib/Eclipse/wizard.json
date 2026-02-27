@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "mcu": "STM32F401XC",
+  "cpu": "cortex-m4",
+  "fpu": true,
+  "fpu_unit": "fpv4spd16",
+  "defines": [
+    "STM32F401xC"
+  ],
+  "includes": [
+    "${iosonata}/ARM/ST/STM32F4xx/include",
+    "${iosonata}/ARM/ST/STM32F4xx/STM32F401/STM32F401xc/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/ST/STM32F4xx/ldscript/gcc_stm32f401xc.ld",
+  "lib_path": "${iosonata}/ARM/ST/STM32F4xx/STM32F401/STM32F401xc/lib/Eclipse/${config}",
+  "lib": "IOsonata_STM32F401xc"
+}

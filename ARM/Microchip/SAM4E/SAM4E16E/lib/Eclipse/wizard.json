@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "mcu": "SAM4E16E",
+  "cpu": "cortex-m4",
+  "fpu": true,
+  "fpu_unit": "fpv4spd16",
+  "defines": [],
+  "includes": [
+    "${iosonata}/ARM/Microchip/SAM4E/include",
+    "${iosonata}/ARM/Microchip/SAM4E/SAM4E16E/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/Microchip/SAM4E/SAM4E16E/ldscript/gcc_sam4e16e.ld",
+  "lib_path": "${iosonata}/ARM/Microchip/SAM4E/SAM4E16E/lib/Eclipse/${config}",
+  "lib": "IOsonata_SAM4E16E"
+}

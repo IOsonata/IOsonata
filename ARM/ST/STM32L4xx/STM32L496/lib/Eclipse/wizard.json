@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "mcu": "STM32L496",
+  "cpu": "cortex-m4",
+  "fpu": true,
+  "fpu_unit": "fpv4spd16",
+  "defines": [
+    "STM32L496xx"
+  ],
+  "includes": [
+    "${iosonata}/ARM/ST/STM32L4xx/include",
+    "${iosonata}/ARM/ST/STM32L4xx/STM32L496/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/ST/STM32L4xx/ldscript/gcc_stm32l496xx.ld",
+  "lib_path": "${iosonata}/ARM/ST/STM32L4xx/STM32L496/lib/Eclipse/${config}",
+  "lib": "IOsonata_STM32L496"
+}
