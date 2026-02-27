@@ -141,9 +141,6 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
-					<fileInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1632300667.2048520735" name="bt_app_bm.cpp" rcbsApplicability="disable" resourcePath="src/bluetooth/bt_app_bm.cpp" toolsToInvoke="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.1062647654.1064661767">
-						<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.1062647654.1064661767" name="GNU Arm Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.1062647654"/>
-					</fileInfo>
 					<sourceEntries>
 						<entry excluding="src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh_soc.c|src/sdk-nrf-bm/subsys/softdevice_handler/rand_seed.c|src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh.c|src/sdk-nrf-bm/subsys/softdevice_handler/irq_connect.c|src/nrf_mpsl.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/sysstatus_impl.cpp|src/bluetooth/bt_ctlr_att.cpp|src/bluetooth/bt_ctlr.cpp|src/bluetooth/bt_app.cpp|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
@@ -180,8 +177,8 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.datasections.2025446449" name="Data sections (-fdata-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.datasections" value="true" valueType="boolean"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level.276152445" name="Debug level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format.832521937" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id.1683534130" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id" value="1287942917" valueType="string"/>
-							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.316608991" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id.1683534130" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id" value="435435382" valueType="string"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name.316608991" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="xPack GNU Arm Embedded GCC" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.1249597609" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family.187819580" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m33" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.1814681278" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
