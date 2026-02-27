@@ -1,10 +1,12 @@
 {
   "schema_version": 1,
-  "mcu": "NRF54L15",
+  "mcu": "NRF54L15_XXAA",
   "cpu": "cortex-m33",
   "fpu": true,
   "fpu_unit": "fpv5spd16",
-  "defines": [],
+  "defines": [
+	"NRF_APPLICATION"
+  ],
   "includes": [
     "${iosonata}/ARM/Nordic/include",
     "${iosonata}/ARM/Nordic/nRF54/include",
@@ -14,8 +16,6 @@
     "${external}/nrfx/bsp/stable",
     "${external}/nrfx/bsp/stable/mdk",
     "${external}/nrfx/hal",
-    "${external}/Invn",
-    "${external}/Fusion"
   ],
   "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54l15_xxaa.ld",
   "lib_path": "${iosonata}/ARM/Nordic/nRF54/nRF54L15/lib/Eclipse/${config}",
@@ -24,7 +24,6 @@
     "ble": {
       "linker_script": "${iosonata}/ARM/Nordic/nRF54/ldscript/gcc_nrf54l15_xxaa_s145.ld",
       "defines": [
-        "NRF_APPLICATION",
         "S145"
       ],
       "extra_includes": [
