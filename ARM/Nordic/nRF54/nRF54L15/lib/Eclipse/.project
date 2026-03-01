@@ -1126,6 +1126,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/bm_scheduler.c</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bm_timer.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bm_timer.c</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_adv.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
