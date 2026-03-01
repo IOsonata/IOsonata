@@ -79,6 +79,16 @@ __attribute__ ((used)) static uint32_t s_StackPtr = (uint32_t)__Vectors;
 uint32_t SystemMicroSecLoopCnt = 1;
 
 /**
+ * @brief	Get RAM start address
+ *
+ * @return	Pointer to start of RAM
+ */
+void * const SystemRamStart(void)
+{
+	return &__data_start__;
+}
+
+/**
  *	This is entry point after reset
  */
 #if defined ( __ARMCC_VERSION )

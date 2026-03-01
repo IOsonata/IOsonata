@@ -239,6 +239,13 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq);
  */
 void SystemOscInit(void);
 
+/**
+ * @brief	Get RAM start address
+ *
+ * @return	Pointer to start of RAM
+ */
+void * const SystemRamStart(void);
+
 #ifdef __cplusplus
 }
 #endif
