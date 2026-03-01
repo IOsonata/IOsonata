@@ -1178,7 +1178,7 @@
 		<link>
 			<name>src/bluetooth/bt_gap_bm.cpp</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/src/bluetooth/bt_gap_bm.cpp</location>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_gap_bm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gap_sdc.cpp</name>
