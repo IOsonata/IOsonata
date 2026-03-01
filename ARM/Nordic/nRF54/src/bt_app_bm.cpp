@@ -1144,6 +1144,6 @@ NRF_SDH_SOC_OBSERVER(rand_seed, SDBleRandSeed, NULL, HIGH);
 NRF_SDH_STACK_EVT_OBSERVER(soc_evt_obs, soc_evt_poll, NULL, HIGHEST);
 NRF_SDH_STACK_EVT_OBSERVER(ble_evt_obs, ble_evt_poll, NULL, HIGH);
 // Register as BLE event observer
-NRF_SDH_BLE_OBSERVER(s_BtAppBleObserver, ble_evt_dispatch, NULL, USER);
+//NRF_SDH_BLE_OBSERVER(s_BtAppBleObserver, ble_evt_dispatch, NULL, USER);
 
 
