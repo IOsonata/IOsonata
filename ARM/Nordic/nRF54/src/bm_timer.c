@@ -19,7 +19,7 @@
 
 #include "nrf.h"
 #include "timer_nrfx.h"
-#include "bm_timer.h"
+#include "bm/bm_timer.h"
 
 /*--------------------------------------------------------------------------
  * Shared IOsonata timer device
