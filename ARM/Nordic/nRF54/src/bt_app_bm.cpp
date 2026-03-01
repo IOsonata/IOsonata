@@ -51,7 +51,6 @@ SOFTWARE.
 #include "ble_gatt.h"
 #include "ble_gatts.h"
 #include "ble_gattc.h"
-
 #include "nrf_sdm.h"
 #include "bm/softdevice_handler/nrf_sdh.h"
 #include "bm/softdevice_handler/nrf_sdh_ble.h"
@@ -60,9 +59,7 @@ SOFTWARE.
 #include "bm/bluetooth/ble_conn_params.h"
 #include "bm/bluetooth/services/ble_dis.h"
 #include "nrfx_cracen.h"
-
 #include "nrf_soc.h"
-//#include "mpsl.h"
 
 #include "istddef.h"
 #include "idelay.h"

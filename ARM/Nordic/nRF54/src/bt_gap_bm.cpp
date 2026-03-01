@@ -46,16 +46,17 @@ SOFTWARE.
 
 #include "convutil.h"
 #include "bluetooth/bt_gap.h"
+#include "bm_compat.h"
 
 #define BT_GAP_CONN_CFG_TAG			CONFIG_NRF_SDH_BLE_CONN_TAG
 
 static ble_gap_scan_params_t s_ScanParams = {
 	.active = 1,
+	.filter_policy = BLE_GAP_SCAN_FP_ACCEPT_ALL,
+	.scan_phys = BLE_GAP_PHY_1MBPS,
 	.interval = MSEC_TO_0_625(BT_GAP_SCAN_INTERVAL),
 	.window = MSEC_TO_0_625(BT_GAP_SCAN_WINDOW),
 	.timeout = BT_GAP_SCAN_TIMEOUT,
-	.filter_policy = BLE_GAP_SCAN_FP_ACCEPT_ALL,
-	.scan_phys = BLE_GAP_PHY_1MBPS,
 };
 
 static ble_gap_conn_sec_mode_t s_GapConnMode;

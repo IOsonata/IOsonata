@@ -38,6 +38,14 @@ Usage:
 
 #include "bm_config_defaults.h"
 
+/* ======================================================================
+ * Atomic  —  replaces <zephyr/sys/atomic.h>
+ * ====================================================================== */
+#ifndef BM_ATOMIC_H__
+#include "bm_atomic.h"
+#endif
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -477,14 +485,6 @@ static inline uint32_t sys_cpu_to_be32(uint32_t val) { return __builtin_bswap32(
 	(uint8_t)(((val) >> 48) & 0xFF),        \
 	(uint8_t)(((val) >> 56) & 0xFF),        \
 }
-#endif
-
-
-/* ======================================================================
- * Atomic  —  replaces <zephyr/sys/atomic.h>
- * ====================================================================== */
-#ifndef BM_ATOMIC_H__
-#include "bm_atomic.h"
 #endif
 
 
