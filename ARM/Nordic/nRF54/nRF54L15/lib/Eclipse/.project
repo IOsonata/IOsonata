@@ -36,6 +36,51 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>docs/README_docs_generation_note.md</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/README_docs_generation_note.md</location>
+		</link>
+		<link>
+			<name>docs/REQUEST_CLARIFICATION.md</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/REQUEST_CLARIFICATION.md</location>
+		</link>
+		<link>
+			<name>docs/ack.md</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/ack.md</location>
+		</link>
+		<link>
+			<name>docs/ble_conn_cfg_t.md</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/src/bluetooth/ble_conn_cfg_t.md</location>
+		</link>
+		<link>
+			<name>docs/ble_event_polling_iosonata.md</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/ble_event_polling_iosonata.md</location>
+		</link>
+		<link>
+			<name>docs/central_sec_count.md</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/src/bluetooth/central_sec_count.md</location>
+		</link>
+		<link>
+			<name>docs/create_project_file_usage.md</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/create_project_file_usage.md</location>
+		</link>
+		<link>
+			<name>docs/iosonata_ble_evt_poll_replacement.md</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/iosonata_ble_evt_poll_replacement.md</location>
+		</link>
+		<link>
+			<name>docs/tooling_acknowledgement.md</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/tooling_acknowledgement.md</location>
+		</link>
+		<link>
 			<name>include/app_evt_handler.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
@@ -1076,6 +1121,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bm_scheduler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bm_scheduler.c</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_adv.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
@@ -1123,7 +1173,7 @@
 		<link>
 			<name>src/bluetooth/bt_gap_bm.cpp</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/bt_gap_bm.cpp</location>
+			<location>/Users/hoan/swdev/IOsonata/src/bluetooth/bt_gap_bm.cpp</location>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gap_sdc.cpp</name>
@@ -1624,11 +1674,6 @@
 			<name>src/sdk-nrf-bm/include/bm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm_atomic.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm_atomic.h</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/include/nrf_error.h</name>

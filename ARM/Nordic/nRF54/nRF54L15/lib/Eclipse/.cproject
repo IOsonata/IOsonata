@@ -142,7 +142,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh_soc.c|src/sdk-nrf-bm/subsys/softdevice_handler/rand_seed.c|src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh.c|src/sdk-nrf-bm/subsys/softdevice_handler/irq_connect.c|src/nrf_mpsl.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/sysstatus_impl.cpp|src/bluetooth/bt_ctlr_att.cpp|src/bluetooth/bt_ctlr.cpp|src/bluetooth/bt_app.cpp|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sdk-nrf-bm/lib/bm_scheduler/bm_scheduler.c|src/sdk-nrf-bm/lib/bluetooth/ble_conn_state/ble_conn_state.c|src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh_ble.c|src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh_soc.c|src/sdk-nrf-bm/subsys/softdevice_handler/rand_seed.c|src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh.c|src/sdk-nrf-bm/subsys/softdevice_handler/irq_connect.c|src/nrf_mpsl.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/sysstatus_impl.cpp|src/bluetooth/bt_ctlr_att.cpp|src/bluetooth/bt_ctlr.cpp|src/bluetooth/bt_app.cpp|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -289,7 +289,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh_soc.c|src/sdk-nrf-bm/subsys/softdevice_handler/rand_seed.c|src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh.c|src/sdk-nrf-bm/subsys/softdevice_handler/irq_connect.c|src/nrf_mpsl.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/sysstatus_impl.cpp|src/bluetooth/bt_ctlr_att.cpp|src/bluetooth/bt_ctlr.cpp|src/bluetooth/bt_app.cpp|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sdk-nrf-bm/lib/bm_scheduler/bm_scheduler.c|src/sdk-nrf-bm/lib/bluetooth/ble_conn_state/ble_conn_state.c|src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh_ble.c|src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh_soc.c|src/sdk-nrf-bm/subsys/softdevice_handler/rand_seed.c|src/sdk-nrf-bm/subsys/softdevice_handler/nrf_sdh.c|src/sdk-nrf-bm/subsys/softdevice_handler/irq_connect.c|src/nrf_mpsl.cpp|src/bluetooth/bt_gatt_sdc.cpp|src/bluetooth/bt_gap_sdc.cpp|src/bluetooth/bt_app_sdc.cpp|src/sysstatus_impl.cpp|src/bluetooth/bt_ctlr_att.cpp|src/bluetooth/bt_ctlr.cpp|src/bluetooth/bt_app.cpp|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

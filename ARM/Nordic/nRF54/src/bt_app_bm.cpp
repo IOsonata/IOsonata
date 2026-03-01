@@ -53,6 +53,7 @@ SOFTWARE.
 #include "ble_gattc.h"
 
 #include "nrf_sdm.h"
+#include "bm/softdevice_handler/nrf_sdh.h"
 #include "bm/softdevice_handler/nrf_sdh_ble.h"
 #include "bm/softdevice_handler/nrf_sdh_soc.h"
 #include "bm/bluetooth/ble_conn_state.h"
@@ -61,7 +62,7 @@ SOFTWARE.
 #include "nrfx_cracen.h"
 
 #include "nrf_soc.h"
-#include "mpsl.h"
+//#include "mpsl.h"
 
 #include "istddef.h"
 #include "idelay.h"
@@ -76,15 +77,21 @@ SOFTWARE.
 #include "bluetooth/bt_dev.h"
 #include "app_evt_handler.h"
 
+extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
+
 /******** For DEBUG ************/
-//#define UART_DEBUG_ENABLE
+#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"
 extern UART g_Uart;
 #define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
 #else
+#ifdef NDEBUG
 #define DEBUG_PRINTF(...)
+#else
+#define DEBUG_PRINTF(...)		printf(__VA_ARGS__)
+#endif
 #endif
 /*******************************/
 
@@ -249,7 +256,8 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 {
 	uint32_t err_code;
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
-	uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
+	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
+	uint8_t role = s_BtAppData.Role;
 
 	switch (p_ble_evt->header.evt_id)
 	{
@@ -370,9 +378,6 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 		BtAppPeriphEvtHandler((uint32_t)p_ble_evt->header.evt_id, (void *)p_ble_evt);
 	}
 }
-
-// Register as BLE event observer
-NRF_SDH_BLE_OBSERVER(s_BtAppBleObserver, ble_evt_dispatch, NULL, USER);
 
 // Note: SoC event polling is handled internally by nrf_sdh_soc.c
 // which registers its own NRF_SDH_STACK_EVT_OBSERVER.
@@ -728,7 +733,7 @@ __attribute__((weak)) void SoftdeviceFaultHandler(uint32_t id, uint32_t pc, uint
 }
 
 /* Extern in nrf_sdh.c (called directly at enable time for scheduler model) */
-void BtAppSDRandSeed(uint32_t evt, void *ctx)
+void SDBleRandSeed(uint32_t evt, void *ctx)
 {
 	uint32_t nrf_err;
 	uint8_t seed[SD_RAND_SEED_SIZE];
@@ -747,6 +752,96 @@ void BtAppSDRandSeed(uint32_t evt, void *ctx)
 	}
 }
 
+static uint32_t SDBleDefaultCfgSet(const BtAppCfg_t *pCfg, uint32_t ConnCfgTag, uint32_t RamStart)
+{
+	uint32_t err = 0;
+	ble_cfg_t ble_cfg;
+
+	memset(&ble_cfg, 0, sizeof(ble_cfg));
+	ble_cfg.conn_cfg.conn_cfg_tag = ConnCfgTag;
+	ble_cfg.conn_cfg.params.gap_conn_cfg.conn_count = pCfg->PeriLinkCount + pCfg->CentLinkCount; //CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT;
+	ble_cfg.conn_cfg.params.gap_conn_cfg.event_length = CONFIG_NRF_SDH_BLE_GAP_EVENT_LENGTH;
+
+	err = sd_ble_cfg_set(BLE_CONN_CFG_GAP, &ble_cfg, RamStart);
+	if (err)
+	{
+		DEBUG_PRINTF("Failed to set BLE_CONN_CFG_GAP, nrf_error %#x", err);
+
+		return err;
+	}
+
+	memset(&ble_cfg, 0, sizeof(ble_cfg));
+	ble_cfg.gap_cfg.role_count_cfg.periph_role_count = pCfg->PeriLinkCount;
+
+	// TODO: make this configurable
+	ble_cfg.gap_cfg.role_count_cfg.adv_set_count = BLE_GAP_ADV_SET_COUNT_DEFAULT;
+
+	ble_cfg.gap_cfg.role_count_cfg.central_role_count = pCfg->CentLinkCount;
+	ble_cfg.gap_cfg.role_count_cfg.central_sec_count =
+		MIN(pCfg->CentLinkCount, BLE_GAP_ROLE_COUNT_CENTRAL_SEC_DEFAULT);
+
+	err = sd_ble_cfg_set(BLE_GAP_CFG_ROLE_COUNT, &ble_cfg, RamStart);
+	if (err)
+	{
+		DEBUG_PRINTF("Failed to set BLE_GAP_CFG_ROLE_COUNT, nrf_error %#x", err);
+
+		return err;
+	}
+
+	// Max MTU
+	memset(&ble_cfg, 0, sizeof(ble_cfg));
+	ble_cfg.conn_cfg.conn_cfg_tag = ConnCfgTag;
+	ble_cfg.conn_cfg.params.gatt_conn_cfg.att_mtu = pCfg->MaxMtu > 0 ? pCfg->MaxMtu : CONFIG_NRF_SDH_BLE_GATT_MAX_MTU_SIZE;
+
+	err = sd_ble_cfg_set(BLE_CONN_CFG_GATT, &ble_cfg, RamStart);
+	if (err)
+	{
+		DEBUG_PRINTF("Failed to set BLE_CONN_CFG_GATT, nrf_error %#x", err);
+
+		return err;
+	}
+
+	// Custom UUID
+	memset(&ble_cfg, 0, sizeof(ble_cfg));
+	ble_cfg.common_cfg.vs_uuid_cfg.vs_uuid_count = 2;//CONFIG_NRF_SDH_BLE_VS_UUID_COUNT;
+
+	err = sd_ble_cfg_set(BLE_COMMON_CFG_VS_UUID, &ble_cfg, RamStart);
+	if (err)
+	{
+		DEBUG_PRINTF("Failed to set BLE_COMMON_CFG_VS_UUID, nrf_error %#x", err);
+
+		return err;
+	}
+
+	// Configure the GATTS attribute table.
+	memset(&ble_cfg, 0, sizeof(ble_cfg));
+	ble_cfg.gatts_cfg.attr_tab_size.attr_tab_size = CONFIG_NRF_SDH_BLE_GATTS_ATTR_TAB_SIZE;
+
+	err = sd_ble_cfg_set(BLE_GATTS_CFG_ATTR_TAB_SIZE, &ble_cfg, RamStart);
+	if (err)
+	{
+		DEBUG_PRINTF("Failed to set BLE_GATTS_CFG_ATTR_TAB_SIZE, nrf_error %#x", err);
+
+		return err;
+	}
+
+	// Configure Service Changed characteristic.
+	memset(&ble_cfg, 0x00, sizeof(ble_cfg));
+	ble_cfg.gatts_cfg.service_changed.service_changed =
+		IS_ENABLED(CONFIG_NRF_SDH_BLE_SERVICE_CHANGED);
+
+	err = sd_ble_cfg_set(BLE_GATTS_CFG_SERVICE_CHANGED, &ble_cfg, RamStart);
+	if (err)
+	{
+		DEBUG_PRINTF("Failed to set BLE_GATTS_CFG_SERVICE_CHANGED, nrf_error %#x", err);
+
+		return err;
+	}
+
+
+	return err;
+}
+
 /**
  * @brief Initialize the SoftDevice BLE stack.
  *
@@ -757,9 +852,11 @@ void BtAppSDRandSeed(uint32_t evt, void *ctx)
  */
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {
-	int err;
+	uint32_t err;
+
 	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_enable_request\r\n");
 
+	// GRTC3 must be enabled with interrupt disbled before calling nrf_sdh_enable_request
 	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
 
 	// Enable SoftDevice
@@ -770,22 +867,41 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	uint32_t ramstart = (uint32_t)SystemRamStart();
 
-	// Require before call to nrf_sdh_ble_enable
-	BtAppSDRandSeed(NRF_EVT_RAND_SEED_REQUEST, NULL);
+	err = SDBleDefaultCfgSet(pCfg, BTAPP_CONN_CFG_TAG, ramstart);
 
-	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_ble_enable\r\n");
-
-	// Enable BLE stack (cfg_set from CONFIG_ defaults, handled in nrf_sdh_ble.c)
-	err = nrf_sdh_ble_enable(BTAPP_CONN_CFG_TAG);
-	if (err)
+	if (err != NRF_SUCCESS)
 	{
-		DEBUG_PRINTF("nrf_sdh_ble_enable failed: %d\r\n", err);
 		return false;
 	}
 
+	// Require before call to nrf_sdh_ble_enable
+	SDBleRandSeed(NRF_EVT_RAND_SEED_REQUEST, NULL);
+
+	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_ble_enable\r\n");
+
+	uint32_t ramreq = ramstart;
+
+	err = sd_ble_enable(&ramreq);
+
+	if (ramreq > ramstart)
+	{
+		DEBUG_PRINTF("%x - Insufficient RAM allocated for the SoftDevice need %x", err, ramreq);
+	}
+
+	(void)sdh_state_evt_observer_notify(NRF_SDH_STATE_EVT_BLE_ENABLED);
+
+	// Enable BLE stack (cfg_set from CONFIG_ defaults, handled in nrf_sdh_ble.c)
+	//err = nrf_sdh_ble_enable(BTAPP_CONN_CFG_TAG);
+	//if (err)
+	//{
+//		DEBUG_PRINTF("nrf_sdh_ble_enable failed: %d\r\n", err);
+//		return false;
+//	}
+
 	// Initialize connection state tracking
-	ble_conn_state_init();
+	//ble_conn_state_init();
 
 	return true;
 }
@@ -949,8 +1065,8 @@ void BtAppRun()
 			// Wait for event (low power sleep)
 			// bm framework uses __WFE() directly, not sd_app_evt_wait()
 			__WFE();
-			__SEV();
-			__WFE();
+			//__SEV();
+			//__WFE();
 		}
 	}
 }
@@ -960,6 +1076,7 @@ static void soc_evt_poll(void *context)
 	uint32_t nrf_err;
 	uint32_t evt_id;
 
+	DEBUG_PRINTF("soc_evt_poll\r\n");
 	while (true) {
 		nrf_err = sd_evt_get(&evt_id);
 		if (nrf_err) {
@@ -977,8 +1094,56 @@ static void soc_evt_poll(void *context)
 		 "Failed to receive SoftDevice SoC event, nrf_error %#x", nrf_err);
 }
 
+static void ble_evt_poll(void *context)
+{
+	int err;
+
+	__aligned(4) static uint8_t evt_buffer[NRF_SDH_BLE_EVT_BUF_SIZE];
+	ble_evt_t * const ble_evt = (ble_evt_t *)evt_buffer;
+
+	DEBUG_PRINTF("ble_evt_poll evt %x\r\n", ble_evt->header.evt_id);
+
+	while (true) {
+		uint16_t evt_len = (uint16_t)sizeof(evt_buffer);
+
+		err = sd_ble_evt_get(evt_buffer, &evt_len);
+		if (err) {
+			break;
+		}
+
+
+		//DEBUG_PRINTF()("%s", nrf_sdh_ble_evt_to_str(ble_evt->header.evt_id));
+
+		ble_evt_dispatch(ble_evt, context);
+
+#if 0
+		if (ble_evt->header.evt_id == BLE_GAP_EVT_CONNECTED) {
+			idx_assign(ble_evt->evt.gap_evt.conn_handle);
+		}
+
+		/* Forward the event to BLE observers. */
+		TYPE_SECTION_FOREACH(
+			struct nrf_sdh_ble_evt_observer, nrf_sdh_ble_evt_observers, obs) {
+			obs->handler(ble_evt, obs->context);
+		}
+
+		if (ble_evt->header.evt_id == BLE_GAP_EVT_DISCONNECTED) {
+			idx_unassign(ble_evt->evt.gap_evt.conn_handle);
+		}
+#endif
+	}
+
+	/* An SoC event may have triggered this round of polling, and BLE may not be enabled */
+//	__ASSERT((err == NRF_ERROR_NOT_FOUND) || (err == BLE_ERROR_NOT_ENABLED),
+//		 "Failed to receive SoftDevice BLE event, nrf_error %#x", err);
+}
+
 /* Auto-handle seed requests as a SoC event observer */
-NRF_SDH_SOC_OBSERVER(rand_seed, BtAppSDRandSeed, NULL, HIGH);
+NRF_SDH_SOC_OBSERVER(rand_seed, SDBleRandSeed, NULL, HIGH);
 /* Listen to SoftDevice events */
 NRF_SDH_STACK_EVT_OBSERVER(soc_evt_obs, soc_evt_poll, NULL, HIGHEST);
+NRF_SDH_STACK_EVT_OBSERVER(ble_evt_obs, ble_evt_poll, NULL, HIGH);
+// Register as BLE event observer
+NRF_SDH_BLE_OBSERVER(s_BtAppBleObserver, ble_evt_dispatch, NULL, USER);
+
 

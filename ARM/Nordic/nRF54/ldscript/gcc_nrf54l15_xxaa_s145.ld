@@ -33,20 +33,6 @@ MEMORY
 	RAM   (rwx) : ORIGIN = 0x20004900, LENGTH = 0x3B700   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
 }
 
-
-/* Default symbols for observer sections that may be empty.
- * PROVIDE only takes effect if nothing else defines the symbol.
- * When a section has entries, the in-section definitions override these.
- * When empty, start == stop so the iteration loop is a no-op. */
-PROVIDE(__start_nrf_sdh_stack_evt_observers = 0);
-PROVIDE(__stop_nrf_sdh_stack_evt_observers = 0);
-PROVIDE(__start_nrf_sdh_soc_evt_observers = 0);
-PROVIDE(__stop_nrf_sdh_soc_evt_observers = 0);
-PROVIDE(__start_nrf_sdh_ble_evt_observers = 0);
-PROVIDE(__stop_nrf_sdh_ble_evt_observers = 0);
-PROVIDE(__start_nrf_sdh_state_evt_observers = 0);
-PROVIDE(__stop_nrf_sdh_state_evt_observers = 0);
-
 /* === FLASH observer sections ===
  *
  * Output section names match the C identifiers used by TYPE_SECTION_FOREACH
@@ -57,17 +43,30 @@ SECTIONS
 {
 	nrf_sdh_stack_evt_observers : ALIGN(4)
 	{
+		__start_nrf_sdh_stack_evt_observers = .;
 		KEEP(*(SORT(nrf_sdh_stack_evt_observers.*)))
+		__stop_nrf_sdh_stack_evt_observers = .;
 	} > FLASH
 
 	nrf_sdh_soc_evt_observers : ALIGN(4)
 	{
+		__start_nrf_sdh_soc_evt_observers = .;
 		KEEP(*(SORT(nrf_sdh_soc_evt_observers.*)))
+		__stop_nrf_sdh_soc_evt_observers = .;
 	} > FLASH
 
 	nrf_sdh_ble_evt_observers : ALIGN(4)
 	{
+		__start_nrf_sdh_ble_evt_observers = .;
 		KEEP(*(SORT(nrf_sdh_ble_evt_observers.*)))
+		__stop_nrf_sdh_ble_evt_observers = .;
+	} > FLASH
+
+	nrf_sdh_state_evt_observers : ALIGN(4)
+	{
+		__start_nrf_sdh_state_evt_observers = .;
+		KEEP(*(SORT(nrf_sdh_state_evt_observers.*)))
+		__stop_nrf_sdh_state_evt_observers = .;
 	} > FLASH
 } INSERT AFTER .rodata;
 
