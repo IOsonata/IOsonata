@@ -169,20 +169,32 @@ static uint64_t nRFxGrtcGetTickCount(TimerDev_t * const pTimer)
 {
 	uint32_t cl;
 	uint32_t ch;
+	uint64_t cnt;
 
 	do {
 		cl = NRF_GRTC->SYSCOUNTER[pTimer->DevNo].SYSCOUNTERL;
 		ch = NRF_GRTC->SYSCOUNTER[pTimer->DevNo].SYSCOUNTERH;
 	} while (ch & GRTC_SYSCOUNTER_SYSCOUNTERH_BUSY_Msk);
 
+#if 0
 	if (ch & GRTC_SYSCOUNTER_SYSCOUNTERH_OVERFLOW_Msk)
 	{
 		// counter overflow
 		pTimer->Rollover += 0x10000000000000ULL;
 	}
+#endif
+
 	ch &= GRTC_SYSCOUNTER_SYSCOUNTERH_VALUE_Msk;
 
-	return (((uint64_t)ch << 32ULL) | (cl & GRTC_SYSCOUNTER_SYSCOUNTERL_VALUE_Msk)) + pTimer->Rollover;
+	cnt = (((uint64_t)ch << 32ULL) | (cl & GRTC_SYSCOUNTER_SYSCOUNTERL_VALUE_Msk)) + pTimer->Rollover;
+
+	if (cnt < pTimer->LastCount)
+	{
+		// counter overflow
+		pTimer->Rollover += 0x10000000000000ULL;
+	}
+
+	return cnt;
 }
 
 static int nRFxGrtcGetMaxTrigger(TimerDev_t * const pTimer)
