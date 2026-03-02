@@ -41,9 +41,9 @@ SOFTWARE.
 // GRTC IRQ_3 and CC 7-11 are reserved by MPSL
 #define MPSL_RESERVED_NB_CC		5	// 7-11 are reserved for MPSL
 
-#define NRF_CLOCK		NRF_CLOCK_S
-#define NRF_RTC0		NRF_RTC10_S
-#define NRF_RTC1		NRF_RTC30_S
+#define NRF_CLOCK			NRF_CLOCK_S
+#define NRF_RTC0			NRF_RTC10_S
+#define NRF_RTC1			NRF_RTC30_S
 #define GRTC0_CC_NUM		GRTC_CC_NUM_SIZE
 #define GRTC1_CC_NUM		RTC30_CC_NUM_SIZE
 
@@ -159,7 +159,7 @@ static void nRFxGrtcReset(TimerDev_t * const pTimer)
 // GRTC is fixed at 16MHz.
 static uint32_t nRFxGrtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
-	pTimer->Freq = 16000000;
+	pTimer->Freq = TIMER_NRFX_RTC_BASE_FREQ;
 
     // Pre-calculate periods for faster timer counter to time conversion use later
     pTimer->nsPeriod = (1000000000ULL + (pTimer->Freq >> 1))/ (uint64_t)pTimer->Freq;     // Period in nsec

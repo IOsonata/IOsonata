@@ -348,7 +348,7 @@ static inline void irq_unlock(unsigned int key)
 
 /* Tick frequency and conversion macros — replaces <zephyr/sys/time_units.h> */
 #ifndef TIMER_NRFX_RTC_BASE_FREQ
-#define TIMER_NRFX_RTC_BASE_FREQ  32768
+#define TIMER_NRFX_RTC_BASE_FREQ  1000000
 #endif
 
 #ifndef CONFIG_SYS_CLOCK_TICKS_PER_SEC
