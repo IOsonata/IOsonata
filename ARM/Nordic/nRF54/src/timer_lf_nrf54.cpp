@@ -177,6 +177,8 @@ static uint64_t nRFxGrtcGetTickCount(TimerDev_t * const pTimer)
 	} while (ch & GRTC_SYSCOUNTER_SYSCOUNTERH_BUSY_Msk);
 
 #if 0
+	// The overflow flag indicate low count register overflow, not high count
+	// So cannot use it for rollover
 	if (ch & GRTC_SYSCOUNTER_SYSCOUNTERH_OVERFLOW_Msk)
 	{
 		// counter overflow
@@ -194,7 +196,7 @@ static uint64_t nRFxGrtcGetTickCount(TimerDev_t * const pTimer)
 		pTimer->Rollover += 0x10000000000000ULL;
 	}
 
-	return cnt;
+	return cnt + pTimer->Rollover;
 }
 
 static int nRFxGrtcGetMaxTrigger(TimerDev_t * const pTimer)
