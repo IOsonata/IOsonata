@@ -77,7 +77,7 @@ SOFTWARE.
 extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
 
 /******** For DEBUG ************/
-#define UART_DEBUG_ENABLE
+//#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"

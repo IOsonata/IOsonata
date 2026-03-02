@@ -47,7 +47,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 
 /******** For DEBUG ************/
-#define UART_DEBUG_ENABLE
+//#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"
@@ -57,6 +57,7 @@ extern UART g_Uart;
 #ifdef NDEBUG
 #define DEBUG_PRINTF(...)
 #else
+#include <stdio.h>
 #define DEBUG_PRINTF(...)		printf(__VA_ARGS__)
 #endif
 #endif
