@@ -188,13 +188,15 @@ static uint64_t nRFxGrtcGetTickCount(TimerDev_t * const pTimer)
 
 	ch &= GRTC_SYSCOUNTER_SYSCOUNTERH_VALUE_Msk;
 
-	cnt = (((uint64_t)ch << 32ULL) | (cl & GRTC_SYSCOUNTER_SYSCOUNTERL_VALUE_Msk)) + pTimer->Rollover;
+	cnt = (((uint64_t)ch << 32ULL) | (cl & GRTC_SYSCOUNTER_SYSCOUNTERL_VALUE_Msk));// + pTimer->Rollover;
 
-	if (cnt < pTimer->LastCount)
+	if (ch < pTimer->LastCount)
 	{
 		// counter overflow
 		pTimer->Rollover += 0x10000000000000ULL;
 	}
+
+	pTimer->LastCount = ch;
 
 	return cnt + pTimer->Rollover;
 }
@@ -481,8 +483,6 @@ static void GrtcIRQHandler(int DevNo)
     uint32_t evt = 0;
     uint64_t count = nRFxGrtcGetTickCount(timer);
     int idx = rtc.StartCCIdx;
-
-    timer->LastCount = count;
 
     for (int i = 0; i < rtc.MaxNbTrigEvt; i++, idx++)
     {
