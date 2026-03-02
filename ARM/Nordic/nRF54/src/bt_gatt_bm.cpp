@@ -46,6 +46,22 @@ SOFTWARE.
 
 #include "bluetooth/bt_gatt.h"
 
+/******** For DEBUG ************/
+#define UART_DEBUG_ENABLE
+
+#ifdef UART_DEBUG_ENABLE
+#include "coredev/uart.h"
+extern UART g_Uart;
+#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#else
+#ifdef NDEBUG
+#define DEBUG_PRINTF(...)
+#else
+#define DEBUG_PRINTF(...)		printf(__VA_ARGS__)
+#endif
+#endif
+/*******************************/
+
 #pragma pack(push, 1)
 
 // Service connection security types
@@ -144,7 +160,9 @@ static void GatherLongWrBuff(GATLWRHDR *pHdr)
 
 void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const pCtx)
 {
-	ble_evt_t *pBleEvt = (ble_evt_t *)Evt;
+	ble_evt_t *pBleEvt = (ble_evt_t *)pCtx;
+
+	DEBUG_PRINTF("BtGattSrvcEvtHandler: 0x%x, 0x%x\r\n", Evt, pBleEvt->header.evt_id);
 
 	switch (pBleEvt->header.evt_id)
 	{
@@ -239,8 +257,8 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 			{
 				for (int i = 0; i < pSrvc->NbChar; i++)
 				{
-					//if (pBleEvt->evt.gatts_evt.params.hvn_tx_complete.handle == pSrvc->pCharArray[i].ValHdl &&
-					//	pSrvc->pCharArray[i].TxCompleteCB != NULL)
+					if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].ValHdl &&
+						pSrvc->pCharArray[i].TxCompleteCB != nullptr)
 					{
 						pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
 					}

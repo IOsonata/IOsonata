@@ -168,22 +168,6 @@ static BtGattSrvcCfg_t s_BtGattSrvcCfg = {
 };
 
 static BtGattSrvc_t s_BtGattSrvc;
-#if 0
-alignas(4) static uint8_t s_BleAppAdvBuff[260];
-alignas(4) static sdc_hci_cmd_le_set_adv_data_t &s_BleAppAdvData = *(sdc_hci_cmd_le_set_adv_data_t*)s_BleAppAdvBuff;
-alignas(4) static BleAdvPacket_t s_BleAppAdvPkt = { sizeof(s_BleAppAdvData.adv_data), 0, s_BleAppAdvData.adv_data};
-
-alignas(4) static sdc_hci_cmd_le_set_ext_adv_data_t &s_BleAppExtAdvData = *(sdc_hci_cmd_le_set_ext_adv_data_t*)s_BleAppAdvBuff;
-alignas(4) static BleAdvPacket_t s_BleAppExtAdvPkt = { 255, 0, s_BleAppExtAdvData.adv_data};
-
-alignas(4) static uint8_t s_BleAppSrBuff[260];
-
-alignas(4) static sdc_hci_cmd_le_set_scan_response_data_t &s_BleAppSrData = *(sdc_hci_cmd_le_set_scan_response_data_t*)s_BleAppSrBuff;
-alignas(4) static BleAdvPacket_t s_BleAppSrPkt = { sizeof(s_BleAppSrData.scan_response_data), 0, s_BleAppSrData.scan_response_data};
-
-alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BleAppExtSrData = *(sdc_hci_cmd_le_set_ext_scan_response_data_t*)s_BleAppSrBuff;
-alignas(4) static BleAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppExtSrData.scan_response_data};
-#endif
 
 __attribute__((weak)) void BtGapSetDevName(const char *pName)
 {
