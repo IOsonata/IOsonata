@@ -58,7 +58,7 @@ typedef struct {
 } nRFGrtcData_t;
 #pragma pack(pop)
 
-static uint32_t s_GrtcMaxFreq = 0;
+//static uint32_t s_GrtcMaxFreq = TIMER_NRFX_RTC_BASE_FREQ;
 
 // There are a total of GRTC_NCC_SIZE (12) CC sharing 4 IRQ.  We are splitting into 4 devices
 alignas(4) static nRFGrtcData_t s_nRfxGrtcData[TIMER_NRFX_RTC_MAX] = {
@@ -109,13 +109,11 @@ static bool nRFxGrtcEnable(TimerDev_t * const pTimer)
             break;
     }
 
-    if (s_nRfxGrtcSem == 0)
+    if (s_nRfxGrtcSem++ == 0)
     {
 		NRF_GRTC->MODE |= GRTC_MODE_SYSCOUNTEREN_Enabled;
 		NRF_GRTC->TASKS_START = 1;
     }
-
-    s_nRfxGrtcSem++;
 
     return true;
 }
@@ -156,7 +154,7 @@ static void nRFxGrtcReset(TimerDev_t * const pTimer)
 	NRF_GRTC->TASKS_CLEAR = 1;
 }
 
-// GRTC is fixed at 16MHz.
+// GRTC is fixed at 1MHz.
 static uint32_t nRFxGrtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
 	pTimer->Freq = TIMER_NRFX_RTC_BASE_FREQ;
@@ -279,23 +277,36 @@ static void nRFxGrtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
     {
 		case 0:
 			NRF_GRTC->INTENCLR0 = (1<<idx);
-			NVIC_ClearPendingIRQ(GRTC_0_IRQn);
-			NVIC_DisableIRQ(GRTC_0_IRQn);
+
+			if (NRF_GRTC->INTEN0 == 0)
+			{
+				NVIC_ClearPendingIRQ(GRTC_0_IRQn);
+				NVIC_DisableIRQ(GRTC_0_IRQn);
+			}
 			break;
 		case 1:
 			NRF_GRTC->INTENCLR1 = (1<<idx);
-			NVIC_ClearPendingIRQ(GRTC_1_IRQn);
-			NVIC_DisableIRQ(GRTC_1_IRQn);
+			if (NRF_GRTC->INTEN1 == 0)
+			{
+				NVIC_ClearPendingIRQ(GRTC_1_IRQn);
+				NVIC_DisableIRQ(GRTC_1_IRQn);
+			}
 			break;
 		case 2:
 			NRF_GRTC->INTENCLR2 = (1<<idx);
-			NVIC_ClearPendingIRQ(GRTC_2_IRQn);
-			NVIC_DisableIRQ(GRTC_2_IRQn);
+			if (NRF_GRTC->INTEN2 == 0)
+			{
+				NVIC_ClearPendingIRQ(GRTC_2_IRQn);
+				NVIC_DisableIRQ(GRTC_2_IRQn);
+			}
 			break;
 		case 3:
 			NRF_GRTC->INTENCLR3 = (1<<idx);
-			NVIC_ClearPendingIRQ(GRTC_3_IRQn);
-			NVIC_DisableIRQ(GRTC_3_IRQn);
+			if (NRF_GRTC->INTEN3 == 0)
+			{
+				NVIC_ClearPendingIRQ(GRTC_3_IRQn);
+				NVIC_DisableIRQ(GRTC_3_IRQn);
+			}
 			break;
     }
 
