@@ -162,7 +162,7 @@ static uint32_t nRFxGrtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	pTimer->Freq = 16000000;
 
     // Pre-calculate periods for faster timer counter to time conversion use later
-    pTimer->nsPeriod = 1000000000ULL / (uint64_t)pTimer->Freq;     // Period in nsec
+    pTimer->nsPeriod = (1000000000ULL + (pTimer->Freq >> 1))/ (uint64_t)pTimer->Freq;     // Period in nsec
 
     return pTimer->Freq;
 }
@@ -412,18 +412,22 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			case 0:
 				NVIC_DisableIRQ(GRTC_0_IRQn);
 				NVIC_ClearPendingIRQ(GRTC_0_IRQn);
+				NVIC_SetPriority(GRTC_0_IRQn, pCfg->IntPrio);
 				break;
 			case 1:
 				NVIC_DisableIRQ(GRTC_1_IRQn);
 				NVIC_ClearPendingIRQ(GRTC_1_IRQn);
+				NVIC_SetPriority(GRTC_1_IRQn, pCfg->IntPrio);
 				break;
 			case 2:
 				NVIC_DisableIRQ(GRTC_2_IRQn);
 				NVIC_ClearPendingIRQ(GRTC_2_IRQn);
+				NVIC_SetPriority(GRTC_2_IRQn, pCfg->IntPrio);
 				break;
 			case 3:
 				NVIC_DisableIRQ(GRTC_3_IRQn);
 				NVIC_ClearPendingIRQ(GRTC_3_IRQn);
+				NVIC_SetPriority(GRTC_3_IRQn, pCfg->IntPrio);
 				break;
 		}
     }
