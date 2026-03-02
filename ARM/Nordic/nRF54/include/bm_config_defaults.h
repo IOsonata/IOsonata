@@ -27,7 +27,7 @@ in your project's build configuration.
 #endif
 
 #ifndef CONFIG_NRF_SDH_BLE_CENTRAL_LINK_COUNT
-#define CONFIG_NRF_SDH_BLE_CENTRAL_LINK_COUNT     0
+#define CONFIG_NRF_SDH_BLE_CENTRAL_LINK_COUNT     1
 #endif
 
 #ifndef CONFIG_NRF_SDH_BLE_GATT_MAX_MTU_SIZE
@@ -100,7 +100,7 @@ in your project's build configuration.
 #endif
 
 #ifndef CONFIG_NRF_SDH_BLE_SERVICE_CHANGED
-#define CONFIG_NRF_SDH_BLE_SERVICE_CHANGED        0
+#define CONFIG_NRF_SDH_BLE_SERVICE_CHANGED        1
 #endif
 
 /* BLE role enables — IOsonata supports both peripheral and central
