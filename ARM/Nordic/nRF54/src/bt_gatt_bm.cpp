@@ -54,12 +54,7 @@ SOFTWARE.
 extern UART g_Uart;
 #define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
 #else
-#ifdef NDEBUG
 #define DEBUG_PRINTF(...)
-#else
-#include <stdio.h>
-#define DEBUG_PRINTF(...)		printf(__VA_ARGS__)
-#endif
 #endif
 /*******************************/
 

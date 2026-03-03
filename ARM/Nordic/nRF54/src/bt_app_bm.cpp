@@ -84,11 +84,7 @@ extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
 extern UART g_Uart;
 #define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
 #else
-#ifdef NDEBUG
 #define DEBUG_PRINTF(...)
-#else
-#define DEBUG_PRINTF(...)		printf(__VA_ARGS__)
-#endif
 #endif
 /*******************************/
 
