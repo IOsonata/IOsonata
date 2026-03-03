@@ -854,6 +854,10 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	DEBUG_PRINTF("BtAppStackInit: nrf_sdh_enable_request\r\n");
 
+	uint32_t ramstart = (uint32_t)SystemRamStart();
+
+	memset((void *)0x20000000, 0, ramstart);
+
 	// GRTC3 must be enabled with interrupt disbled before calling nrf_sdh_enable_request
 	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
 
@@ -864,8 +868,6 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		DEBUG_PRINTF("nrf_sdh_enable_request failed: %d\r\n", err);
 		return false;
 	}
-
-	uint32_t ramstart = (uint32_t)SystemRamStart();
 
 	err = SDBleDefaultCfgSet(pCfg, BTAPP_CONN_CFG_TAG, ramstart);
 

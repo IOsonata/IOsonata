@@ -270,7 +270,7 @@ int nrf_sdh_enable_request(void)
 	 *   Static:  0x20000000 - 0x2000177F  (6K)
 	 *   Dynamic: 0x20001780 - 0x2000477F  (12K)
 	 */
-	memset((void *)0x20000000, 0, 0x4780);
+	//memset((void *)0x20000000, 0, 0x4780);
 
 	/* 2. Set SD base address so SVC forwarding knows where to jump.
 	 *    Do NOT call CallSoftDeviceResetHandler() here — it makes
