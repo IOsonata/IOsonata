@@ -856,7 +856,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	uint32_t ramstart = (uint32_t)SystemRamStart();
 
-	memset((void *)0x20000000, 0, ramstart);
+	memset((void *)0x20000000, 0, ramstart - 0x20000000);
 
 	// GRTC3 must be enabled with interrupt disbled before calling nrf_sdh_enable_request
 	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);

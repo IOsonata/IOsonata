@@ -40,7 +40,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blueio_board.h"
 
-//#define NORDIC_DK
+#define NORDIC_DK
 
 #define UART_DEVNO			0
 
