@@ -4,7 +4,7 @@
 @brief	I/O pin map nRF54L15
 
 @author	Hoang Nguyen Hoan
-@date	Jan. 30, 2036
+@date	Jan. 30, 2026
 
 @license
 
