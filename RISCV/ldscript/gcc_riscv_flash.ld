@@ -218,7 +218,7 @@ SECTIONS {
 		_pvHeapStart = .;
 		KEEP(*(.heap*))
 
-		__heap_size__ = 	(ORIGIN(RAM) + LENGTH(RAM)) * 2 / 3;
+		__heap_size__ = LENGTH(RAM) * 2 / 3;
 		__HeapSize = __heap_size__;
 		__heap_end__ = __heap_start__ + __heap_size__;
 		__HeapLimit = __HeapBase + __HeapSize;
