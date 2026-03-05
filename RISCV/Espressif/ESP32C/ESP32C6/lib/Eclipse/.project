@@ -246,6 +246,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/Vectors_esp32_clic.c</locationURI>
 		</link>
 		<link>
+			<name>src/Vectors_esp32c6.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_esp32c6.c</locationURI>
+		</link>
+		<link>
 			<name>src/app_evt_handler.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
@@ -424,6 +429,11 @@
 			<name>src/system_esp32_pcr.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/system_esp32_pcr.c</locationURI>
+		</link>
+		<link>
+			<name>src/system_esp32c6.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/system_esp32c6.c</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>
