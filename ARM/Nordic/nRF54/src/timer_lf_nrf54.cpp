@@ -111,7 +111,7 @@ static bool nRFxGrtcEnable(TimerDev_t * const pTimer)
 
     if (s_nRfxGrtcSem++ == 0)
     {
-		NRF_GRTC->MODE |= GRTC_MODE_SYSCOUNTEREN_Enabled;
+		NRF_GRTC->MODE |= GRTC_MODE_SYSCOUNTEREN_Msk | GRTC_MODE_AUTOEN_CpuActive;
 		NRF_GRTC->TASKS_START = 1;
     }
 
