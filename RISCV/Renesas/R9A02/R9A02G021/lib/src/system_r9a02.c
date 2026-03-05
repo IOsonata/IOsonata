@@ -37,8 +37,8 @@ SOFTWARE.
 #include <stdint.h>
 
 uint32_t SystemCoreClock = 16000000;
-uint64_t SystemCoreClockPeriodns = 60;	// Nanosecond period
-uint64_t SystemCoreClockPeriodus = 60000;	// Microsecond period
+uint64_t SystemCoreClockPeriodns = 62;	// Nanosecond period
+uint64_t SystemCoreClockPeriodus = 62500;	// Microsecond period
 
 void SystemInit(void)
 {
