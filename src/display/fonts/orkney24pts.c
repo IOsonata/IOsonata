@@ -4724,7 +4724,7 @@ static const CharDesc_t s_Orkney24ptChar[] = {
 };
 
 const FontDesc_t g_Orkney24ptDesc = {
-	.Flag = 0,	// Variable length, horizontal
+	.Prop = 0,	// Variable length, horizontal
 	.Width = 44,
 	.Height = 45,
 	.pCharDesc = s_Orkney24ptChar

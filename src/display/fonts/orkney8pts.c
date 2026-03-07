@@ -1809,7 +1809,7 @@ static const CharDesc_t s_Orkney8ptChar[] = {
 };
 
 const FontDesc_t g_Orkney8ptDesc = {
-	.Flag = 0,	// Variable length, horizontal
+	.Prop = 0,	// Variable length, horizontal
 	.Width = 14,
 	.Height = 15,
 	.pCharDesc = s_Orkney8ptChar

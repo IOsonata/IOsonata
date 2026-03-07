@@ -53,7 +53,7 @@ typedef struct __Char_Desc {
 } CharDesc_t;
 
 typedef struct __Font_Descriptor {
-	uint8_t Prop;			//!< Font property see defines abouve
+	uint8_t Prop;			//!< Font property see defines above
 	uint8_t Width;			//!< Width of biggest character in pixels
 	uint8_t Height;			//!< Font height in pixels
 	union {

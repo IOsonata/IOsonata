@@ -58,13 +58,13 @@ typedef enum {
 	DEVINTRF_EVT_RX_TIMEOUT,    //!< Rx timeout.
 	DEVINTRF_EVT_RX_DATA,       //!< Data received
 	DEVINTRF_EVT_RX_FIFO_FULL,  //!< Receive FIFO full, FIFO will be pushed out
-                                //!< if handler does not process FIFO (returns 0)
+								//!< if handler does not process FIFO (returns 0)
 	DEVINTRF_EVT_TX_TIMEOUT,    //!< Tx timeout
 	DEVINTRF_EVT_TX_READY,      //!< Ready to transmit
-	DEVINTRF_EVT_TX_FIFO_EMPTY, //!< Transmit FIFO empty, all data are transmitted
+	DEVINTRF_EVT_TX_FIFO_EMPTY,	//!< Transmit FIFO empty, all data are transmitted
 	DEVINTRF_EVT_STATECHG,      //!< State changed. State data is device dependent.
-                                //!< To be interpreted by implementation
-    DEVINTRF_EVT_READ_RQST,     //!< Receive a read request from host
+								//!< To be interpreted by implementation
+    DEVINTRF_EVT_READ_RQST,		//!< Receive a read request from host
 	DEVINTRF_EVT_WRITE_RQST,	//!< Received a write request from host
 	DEVINTRF_EVT_COMPLETED,		//!< Transfer completed
 } DEVINTRF_EVT;
@@ -72,20 +72,20 @@ typedef enum {
 /// Enumerating interface types
 typedef enum __Dev_Intrf_Type {
 	DEVINTRF_TYPE_NULL,			//!< No interface
-    DEVINTRF_TYPE_UNKOWN,       //!< Software or unknown type interface
-    DEVINTRF_TYPE_BT,          	//!< Bluetooth
-    DEVINTRF_TYPE_ETH,          //!< Ethernet
-    DEVINTRF_TYPE_I2C,          //!< I2C (TWI)
-    DEVINTRF_TYPE_CEL,          //!< Cellular (GSM, LTE,...)
-    DEVINTRF_TYPE_SPI,          //!< SPI
+    DEVINTRF_TYPE_UNKOWN,     	//!< Software or unknown type interface
+    DEVINTRF_TYPE_BT,         	//!< Bluetooth
+    DEVINTRF_TYPE_ETH,        	//!< Ethernet
+    DEVINTRF_TYPE_I2C,        	//!< I2C (TWI)
+    DEVINTRF_TYPE_CEL,        	//!< Cellular (GSM, LTE,...)
+    DEVINTRF_TYPE_SPI,        	//!< SPI
 	DEVINTRF_TYPE_QSPI,			//!< Quad SPI
-    DEVINTRF_TYPE_UART,         //!< UART or Serial port
-    DEVINTRF_TYPE_USB,          //!< USB
-    DEVINTRF_TYPE_WIFI,         //!< Wifi
+    DEVINTRF_TYPE_UART,       	//!< UART or Serial port
+    DEVINTRF_TYPE_USB,        	//!< USB
+    DEVINTRF_TYPE_WIFI,       	//!< Wifi
 	DEVINTRF_TYPE_I2S,			//!< I2S
 	DEVINTRF_TYPE_PDM,			//!< PDM
 	DEVINTRF_TYPE_OSPI,			//!< Octo SPI
-    DEVINTRF_TYPE_I3C,          //!< I3C
+    DEVINTRF_TYPE_I3C,         	//!< I3C
 } DEVINTRF_TYPE;
 
 /// @brief	Device Interface forward data structure type definition.
