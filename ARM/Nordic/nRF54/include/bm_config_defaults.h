@@ -170,6 +170,10 @@ in your project's build configuration.
  * #define CONFIG_PM_LESC_PRIVATE_KEY_EXPORT  1
  */
 
+/* sdk-nrf-bm Kconfig default for peer manager user flag pool */
+#ifndef CONFIG_PM_CONN_STATE_USER_FLAG_COUNT
+#define CONFIG_PM_CONN_STATE_USER_FLAG_COUNT  24
+#endif
 
 /* === BLE GATT Queue === */
 
@@ -333,6 +337,9 @@ in your project's build configuration.
 #define CONFIG_BLE_DB_DISCOVERY_SRV_DISC_START_HANDLE  0x0001
 #endif
 
+#ifndef CONFIG_BLE_GATT_DB_MAX_CHARS
+#define CONFIG_BLE_GATT_DB_MAX_CHARS 10
+#endif
 
 /* === BLE Scan === */
 

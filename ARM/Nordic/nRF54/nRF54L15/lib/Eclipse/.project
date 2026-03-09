@@ -106,11 +106,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/bm_compat.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/bm_compat.h</locationURI>
-		</link>
-		<link>
 			<name>include/cfifo.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/cfifo.h</locationURI>
@@ -564,6 +559,31 @@
 			<name>include/bluetooth/blueio_blesrvc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bm_atomic.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/bm_atomic.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bm_compat.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/bm_compat.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bm_compat_ds.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/bm_compat_ds.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bm_config_defaults.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/bm_config_defaults.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bm_scheduler.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/bm_scheduler.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_adv.h</name>
