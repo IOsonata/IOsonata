@@ -51,10 +51,12 @@ bool ImuXiotFusion::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSe
 	{
 		// Init fusion lib
 	    // Initialise algorithms
-	    FusionBias offset;
+	    FusionBias bias = {
+	    	.settings = { pAccel->SamplingFrequency() / 1000, },
+	    };
 	    //FusionAhrs ahrs;
 
-	    FusionBiasInitialise(&offset, pAccel->SamplingFrequency() / 1000);
+	    FusionBiasInitialise(&bias);
 	    FusionAhrsInitialise(&vAhrs);
 
 	    // Set AHRS algorithm settings
