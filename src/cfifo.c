@@ -59,7 +59,7 @@ SOFTWARE.
  */
 hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkSize, bool bBlocking)
 {
-	if (pMemBlk == NULL)
+	if (pMemBlk == NULL || BlkSize == 0 || TotalMemSize <= sizeof(CFifo_t))
 		return NULL;
 
 	CFifo_t *hdr = (CFifo_t *)pMemBlk;

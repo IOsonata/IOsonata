@@ -1,7 +1,7 @@
 /**--------------------------------------------------------------------------
 @file 	cfifo.h
 
-@brief	Implementation of an overly simple circular FIFO buffer.
+@brief	Implementation of a simple circular FIFO buffer.
 
 There is no queuing implementation and non blocking to be able to be use in
 interrupt. User must ensure thread safety when used in a threaded environment.
@@ -40,6 +40,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <stdbool.h>
+
 #ifdef __cplusplus
 #include <atomic>
 using std::atomic_int;
@@ -55,13 +56,13 @@ using std::atomic_int;
 
 /// Header defining a circular fifo memory block.
 typedef struct __CFIFO_Header {
-	atomic_int PutIdx;	//!< Index to start of empty data block
-	atomic_int GetIdx;	//!< Index to start of used data block
+	atomic_int PutIdx;			//!< Index to start of empty data block
+	atomic_int GetIdx;			//!< Index to start of used data block
 	int32_t MaxIdxCnt;			//!< Max block count
 	bool bBlocking;          	//!< False to push out when FIFO is full (drop)
 	uint32_t DropCnt;           //!< Count dropped block
-	uint32_t BlkSize;			//!< Block size in bytes
 	uint32_t MemSize;			//!< Total FIFO memory size allocated
+	uint32_t BlkSize;			//!< Block size in bytes. Note: This must be adjacent to pMemStart for compiler optimization
 	uint8_t *pMemStart;			//!< Start of FIFO data memory
 } CFifo_t;
 
