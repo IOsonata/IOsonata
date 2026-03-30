@@ -43,7 +43,7 @@ SOFTWARE.
 
 #ifdef __cplusplus
 #include <atomic>
-using std::atomic_int;
+using std::atomic_uint;
 #else
 #include <stdatomic.h>
 #endif
@@ -56,14 +56,14 @@ using std::atomic_int;
 
 /// Header defining a circular fifo memory block.
 typedef struct __CFIFO_Header {
-	atomic_int PutIdx;			//!< Index to start of empty data block
-	atomic_int GetIdx;			//!< Index to start of used data block
-	int32_t MaxIdxCnt;			//!< Max block count
-	bool bBlocking;          	//!< False to push out when FIFO is full (drop)
-	uint32_t DropCnt;           //!< Count dropped block
-	uint32_t MemSize;			//!< Total FIFO memory size allocated
+	atomic_uint PutIdx;			//!< Index to start of empty data block
+	atomic_uint GetIdx;			//!< Index to start of used data block
 	uint32_t BlkSize;			//!< Block size in bytes. Note: This must be adjacent to pMemStart for compiler optimization
 	uint8_t *pMemStart;			//!< Start of FIFO data memory
+	int32_t MaxIdxCnt;			//!< Max block count
+	uint32_t Mask;				//!< NbBlk-1 (pow2) or 0 (non-pow2)
+	bool bBlocking;          	//!< False to push out when FIFO is full (drop)
+	atomic_uint DropCnt;           //!< Count dropped block
 } CFifo_t;
 
 #pragma pack(pop)
@@ -74,7 +74,7 @@ typedef struct __CFIFO_Header {
 ///
 /// This handle is used for all CFIFO function calls. It is the pointer to to CFIFO memory block.
 ///
-typedef CFifo_t* HCFIFO;
+//typedef CFifo_t* HCFIFO;
 typedef CFifo_t* hCFifo_t;
 
 /// This macro calculates total memory require in bytes including header for byte based FIFO.
@@ -211,6 +211,10 @@ int CFifoUsed(hCFifo_t const hFifo);
  * @return	Block size in bytes
  */
 static inline uint32_t CFifoBlockSize(hCFifo_t const hFifo) { return hFifo->BlkSize; }
+
+int CFifoRead(hCFifo_t const pFifo, uint8_t *pBuff, int BuffLen);
+int CFifoWrite(hCFifo_t const pFifo, uint8_t *pData, int DataLen);
+
 
 #ifdef __cplusplus
 }
