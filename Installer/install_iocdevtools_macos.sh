@@ -511,11 +511,11 @@ sudo sed -i '' '\|plugin_customization\.ini|d' "$ECLIPSE_INI"
 
 # 3. Inject configurations into eclipse.ini
 if grep -q "^-vmargs" "$ECLIPSE_INI"; then
-    # Safely insert -pluginCustomization BEFORE -vmargs using awk
-    sudo awk -v custom="$CUSTOM_INI" '
+    # Safely insert -pluginCustomization BEFORE -vmargs using awk and RELATIVE path
+    sudo awk '
     /^-vmargs/ {
         print "-pluginCustomization"
-        print custom
+        print "plugin_customization.ini"
     }
     { print }
     ' "$ECLIPSE_INI" > "/tmp/eclipse_ini.tmp"
@@ -531,7 +531,7 @@ if grep -q "^-vmargs" "$ECLIPSE_INI"; then
 else
     # No -vmargs section found, append everything to the bottom
     echo "-pluginCustomization" | sudo tee -a "$ECLIPSE_INI" > /dev/null
-    echo "$CUSTOM_INI" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+    echo "plugin_customization.ini" | sudo tee -a "$ECLIPSE_INI" > /dev/null
     echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
     echo "-Diosonata_loc=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
     echo "-Diocomposer_home=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
