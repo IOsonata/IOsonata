@@ -487,22 +487,41 @@ EOF"
 echo "✅ Eclipse preferences seeded (ARM, RISC-V, OpenOCD, macros)."
 
 # ---------------------------------------------------------
-# Configure iosonata_loc and iocomposer_home as Java System Properties
+# Configure iosonata_loc and iocomposer_home (Java & Eclipse Core)
 # ---------------------------------------------------------
 echo
-echo ">>> Configuring IOsonata and IOcomposer system properties in eclipse.ini..."
+echo ">>> Configuring IOsonata and IOcomposer properties in eclipse.ini..."
 
 ECLIPSE_INI="$ECLIPSE_APP/Contents/Eclipse/eclipse.ini"
+CUSTOM_INI="$ECLIPSE_APP/Contents/Eclipse/plugin_customization.ini"
 
-# Remove old properties if they exist
+# 1. Create the plugin_customization.ini file for Eclipse Core (Linked Folders)
+echo "⚙️  Generating plugin_customization.ini for Workspace Path Variables..."
+sudo sh -c "cat > '$CUSTOM_INI' <<EOF
+org.eclipse.core.resources/pathvariable.IOSONATA_LOC=$ROOT
+org.eclipse.core.resources/pathvariable.IOCOMPOSER_HOME=$ROOT
+EOF"
+
+# 2. Clean up old properties from eclipse.ini if they exist
 sudo sed -i.bak '/^-Diosonata\.home=/d' "$ECLIPSE_INI"
 sudo sed -i '' '/^-Diosonata_loc=/d' "$ECLIPSE_INI"
 sudo sed -i '' '/^-Diocomposer_home=/d' "$ECLIPSE_INI"
+sudo sed -i '' '/^-pluginCustomization/d' "$ECLIPSE_INI"
+sudo sed -i '' '\|plugin_customization\.ini|d' "$ECLIPSE_INI"
 
-# Find the -vmargs line and insert after it
-# If no -vmargs, create it first
+# 3. Inject configurations into eclipse.ini
 if grep -q "^-vmargs" "$ECLIPSE_INI"; then
-    # Insert after -vmargs line
+    # Safely insert -pluginCustomization BEFORE -vmargs using awk
+    sudo awk -v custom="$CUSTOM_INI" '
+    /^-vmargs/ {
+        print "-pluginCustomization"
+        print custom
+    }
+    { print }
+    ' "$ECLIPSE_INI" > "/tmp/eclipse_ini.tmp"
+    sudo mv "/tmp/eclipse_ini.tmp" "$ECLIPSE_INI"
+
+    # Insert Java System Properties AFTER -vmargs using sed
     sudo sed -i '' '/^-vmargs$/a\
 -Diosonata_loc='"$ROOT"'
 ' "$ECLIPSE_INI"
@@ -510,7 +529,9 @@ if grep -q "^-vmargs" "$ECLIPSE_INI"; then
 -Diocomposer_home='"$ROOT"'
 ' "$ECLIPSE_INI"
 else
-    # No -vmargs section, add it at the end with our properties
+    # No -vmargs section found, append everything to the bottom
+    echo "-pluginCustomization" | sudo tee -a "$ECLIPSE_INI" > /dev/null
+    echo "$CUSTOM_INI" | sudo tee -a "$ECLIPSE_INI" > /dev/null
     echo "-vmargs" | sudo tee -a "$ECLIPSE_INI" > /dev/null
     echo "-Diosonata_loc=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
     echo "-Diocomposer_home=$ROOT" | sudo tee -a "$ECLIPSE_INI" > /dev/null
@@ -519,6 +540,8 @@ fi
 echo "✅ System properties configured in eclipse.ini:"
 echo "   iosonata_loc=$ROOT"
 echo "   iocomposer_home=$ROOT"
+echo "✅ Eclipse Path Variables configured in plugin_customization.ini:"
+echo "   IOSONATA_LOC=$ROOT"
 echo
 
 # Step 1: Ensure Eclipse has initialized its instance folder

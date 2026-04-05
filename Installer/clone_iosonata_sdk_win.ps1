@@ -127,6 +127,7 @@ function Sync-Repository {
 # ---------------------------------------------------------
 Write-Host ">>> Cloning IOsonata..." -ForegroundColor Green
 Sync-Repository -Url "https://github.com/IOsonata/IOsonata.git" -Target "$ROOT\IOsonata"
+Sync-Repository -Url "https://github.com/IOsonata/TaktOS.git" -Target "$ROOT\TaktOS"
 
 # ---------------------------------------------------------
 # Clone External Repos

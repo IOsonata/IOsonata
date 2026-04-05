@@ -627,30 +627,55 @@ if ($userConfigs.Count -gt 0) {
     Write-Host "   [INFO] Installation-level prefs are set; user prefs will be created on next run." -ForegroundColor Yellow
 }
 
-# --- eclipse.ini ---
-Write-Host; Write-Host ">>> Configuring eclipse.ini..." -ForegroundColor Cyan
+# --- eclipse.ini and Path Variables ---
+Write-Host; Write-Host ">>> Configuring eclipse.ini and Path Variables..." -ForegroundColor Cyan
 $INI = "$ECLIPSE_DIR\eclipse.ini"
+$CUSTOM_INI = "$ECLIPSE_DIR\plugin_customization.ini"
+$CUSTOM_INI_JAVA = $CUSTOM_INI -replace '\\', '/'
 
 # Backup before modifying
 Copy-Item $INI "$INI.bak" -Force
 
+Write-Host "   ⚙️  Generating plugin_customization.ini for Workspace Path Variables..." -ForegroundColor Cyan
+
+# 1. Create plugin_customization.ini content
+$customIniContent = @"
+org.eclipse.core.resources/pathvariable.IOSONATA_LOC=$RT
+org.eclipse.core.resources/pathvariable.IOCOMPOSER_HOME=$RT
+"@
+Set-Content -Path $CUSTOM_INI -Value $customIniContent
+
+# Read eclipse.ini content
 $TXT = Get-Content $INI
-# Remove old properties if they exist (match macOS behavior)
-$TXT = $TXT | Where-Object { $_ -notmatch '^-Diosonata' -and $_ -notmatch '^-Diocomposer' }
-$IDX = [array]::IndexOf($TXT, '-vmargs')
-if ($IDX -ge 0) {
-    $before = $TXT[0..$IDX]
-    $after = if ($IDX -lt $TXT.Count - 1) { $TXT[($IDX+1)..($TXT.Count-1)] } else { @() }
-    # Add both properties like macOS does
-    $NEW = $before + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT" + $after
-} else {
-    # No -vmargs section, add it at the end with our properties
-    $NEW = $TXT + "-vmargs" + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT"
+
+# 2. Remove old properties and hooks if they exist
+$TXT = $TXT | Where-Object { 
+    $_ -notmatch '^-Diosonata\.home=' -and 
+    $_ -notmatch '^-Diosonata_loc=' -and 
+    $_ -notmatch '^-Diocomposer_home=' -and
+    $_ -notmatch '^-pluginCustomization' -and
+    $_ -notmatch 'plugin_customization\.ini'
 }
+
+$IDX = [array]::IndexOf($TXT, '-vmargs')
+
+# 3. Inject new properties
+if ($IDX -ge 0) {
+    # Insert BEFORE and AFTER -vmargs
+    $before = if ($IDX -gt 0) { $TXT[0..($IDX - 1)] } else { @() }
+    $after = if ($IDX -lt $TXT.Count - 1) { $TXT[($IDX+1)..($TXT.Count-1)] } else { @() }
+    
+    $NEW = $before + "-pluginCustomization" + $CUSTOM_INI_JAVA + "-vmargs" + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT" + $after
+} else {
+    # No -vmargs section, add it at the end
+    $NEW = $TXT + "-pluginCustomization" + $CUSTOM_INI_JAVA + "-vmargs" + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT"
+}
+
 Set-Content $INI $NEW
-Write-Host "   [OK] eclipse.ini configured:" -ForegroundColor Green
-Write-Host "        iosonata_loc=$RT"
-Write-Host "        iocomposer_home=$RT"
+Write-Host "   [OK] eclipse.ini and Path Variables configured:" -ForegroundColor Green
+Write-Host "        iosonata_loc = $RT" -ForegroundColor White
+Write-Host "        iocomposer_home = $RT" -ForegroundColor White
+Write-Host "        IOSONATA_LOC = $RT" -ForegroundColor White
 
 # --- Plugin ---
 function Install-Plugin {

@@ -220,6 +220,7 @@ clone_or_update_repo() {
 # Clone IOsonata
 echo -e "${GREEN}🚀 Cloning IOsonata...${RESET}"
 clone_or_update_repo "https://github.com/IOsonata/IOsonata.git" "$ROOT/IOsonata"
+clone_or_update_repo "https://github.com/IOsonata/TaktOS.git" "$ROOT/TaktOS"
 
 # Clone External Repos
 echo ""
