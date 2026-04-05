@@ -665,10 +665,10 @@ if ($IDX -ge 0) {
     $before = if ($IDX -gt 0) { $TXT[0..($IDX - 1)] } else { @() }
     $after = if ($IDX -lt $TXT.Count - 1) { $TXT[($IDX+1)..($TXT.Count-1)] } else { @() }
     
-    $NEW = $before + "-pluginCustomization" + $CUSTOM_INI_JAVA + "-vmargs" + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT" + $after
+    $NEW = $before + "-pluginCustomization" + "plugin_customization.ini" + "-vmargs" + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT" + $after
 } else {
     # No -vmargs section, add it at the end
-    $NEW = $TXT + "-pluginCustomization" + $CUSTOM_INI_JAVA + "-vmargs" + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT"
+    $NEW = $TXT + "-pluginCustomization" + "plugin_customization.ini" + "-vmargs" + "-Diosonata_loc=$RT" + "-Diocomposer_home=$RT"
 }
 
 Set-Content $INI $NEW
