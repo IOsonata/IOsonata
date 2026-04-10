@@ -109,6 +109,16 @@ void SystemInit(void)
             #else
                 NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
             #endif
+
+            /* PLL.FREQ selects the target — start HSFLL and wait for lock.
+             * Without this the CPU stays on the 64 MHz boot clock.
+             * Same omission exists in the nrfx MDK version; there it is
+             * handled by the Zephyr clock driver which is absent here. */
+            NRF_CLOCK_S->EVENTS_HSFLLSTARTED = 0UL;
+            NRF_CLOCK_S->TASKS_HSFLLSTART    = 1UL;
+            while (NRF_CLOCK_S->EVENTS_HSFLLSTARTED == 0UL) {}
+
+            SystemCoreClockUpdate();
         #endif
 
         #if !defined(NRF_TRUSTZONE_NONSECURE) && defined(__ARM_FEATURE_CMSE)
