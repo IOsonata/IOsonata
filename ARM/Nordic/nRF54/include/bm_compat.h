@@ -86,9 +86,9 @@ extern "C" {
 #define ROUND_UP(x, align)  (((x) + ((align) - 1)) & ~((align) - 1))
 #endif
 
-#ifndef BYTES_TO_WORDS
-#define BYTES_TO_WORDS(bytes)  (((bytes) + 3) / 4)
-#endif
+//#ifndef BYTES_TO_WORDS
+//#define BYTES_TO_WORDS(bytes)  (((bytes) + 3) / 4)
+//#endif
 
 #ifndef DIV_ROUND_UP
 #define DIV_ROUND_UP(n, d)  (((n) + (d) - 1) / (d))
@@ -204,6 +204,10 @@ extern "C" {
 #define _CC1_TEST(tok, if1, el)             _CC1_PICK(tok if1, el)
 #define _CC1_EXPAND(flag, if1, el)          _CC1_TEST(_CC1_##flag, if1, el)
 #define COND_CODE_1(flag, if1, el)          _CC1_EXPAND(flag, if1, el)
+#endif
+
+#ifndef IF_ENABLED
+#define IF_ENABLED(_flag, _code)            COND_CODE_1(_flag, _code, ())
 #endif
 
 /**
