@@ -114,9 +114,9 @@ void SystemInit(void)
              * Without this the CPU stays on the 64 MHz boot clock.
              * Same omission exists in the nrfx MDK version; there it is
              * handled by the Zephyr clock driver which is absent here. */
-            NRF_CLOCK_S->EVENTS_HSFLLSTARTED = 0UL;
-            NRF_CLOCK_S->TASKS_HSFLLSTART    = 1UL;
-            while (NRF_CLOCK_S->EVENTS_HSFLLSTARTED == 0UL) {}
+            NRF_CLOCK_S->EVENTS_PLLSTARTED = 0UL;
+            NRF_CLOCK_S->TASKS_PLLSTART    = 1UL;
+            while (NRF_CLOCK_S->EVENTS_PLLSTARTED == 0UL) {}
 
             SystemCoreClockUpdate();
         #endif
