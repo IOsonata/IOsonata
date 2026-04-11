@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2009-2025 ARM Limited. All rights reserved.
+Copyright (c) 2009-2026 ARM Limited. All rights reserved.
 
     SPDX-License-Identifier: Apache-2.0
 
@@ -39,7 +39,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #define __SYSTEM_CLOCK_DEFAULT      (64000000ul)
 
 /* Trace configuration */
-#if (defined(NRF54L05_XXAA) || defined(NRF54L10_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_ENGA_XXAA))
+#if (defined(NRF54L05_XXAA) || defined(NRF54L10_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA))
     #define TRACE_PORT                  NRF_P2_S
     #define TRACE_TRACECLK_PIN          (6ul)
     #define TRACE_TRACEDATA0_PIN        (7ul)
@@ -49,7 +49,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
     #define TRACE_PIN_CONFIG            ((GPIO_PIN_CNF_DRIVE0_E0 << GPIO_PIN_CNF_DRIVE0_Pos) \
                                         | (GPIO_PIN_CNF_DRIVE1_E1 << GPIO_PIN_CNF_DRIVE1_Pos) \
                                         | (GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos))
-#elif defined(NRF54LV10A_ENGA_XXAA)
+#elif defined(NRF54LV10A_XXAA)
     #define TRACE_PORT                  NRF_P1_S
     #define TRACE_TRACECLK_PIN          (10ul)
     #define TRACE_TRACEDATA0_PIN        (11ul)
@@ -81,7 +81,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_DEFAULT;
 #elif defined ( __ICCARM__ )
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-#endif    
+#endif
 
 void SystemCoreClockUpdate(void)
 {
@@ -110,19 +110,23 @@ void SystemInit(void)
                 NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
             #endif
 
-            /* PLL.FREQ selects the target — start HSFLL and wait for lock.
-             * Without this the CPU stays on the 64 MHz boot clock.
-             * Same omission exists in the nrfx MDK version; there it is
-             * handled by the Zephyr clock driver which is absent here. */
+            /* PLL.FREQ selects the target — start the PLL and wait for lock.
+             * Without TASKS_PLLSTART the CPU stays on the 64 MHz HFOSC boot
+             * clock regardless of what PLL.FREQ is set to. */
             NRF_CLOCK_S->EVENTS_PLLSTARTED = 0UL;
             NRF_CLOCK_S->TASKS_PLLSTART    = 1UL;
             while (NRF_CLOCK_S->EVENTS_PLLSTARTED == 0UL) {}
 
             SystemCoreClockUpdate();
+
+            /* Enable instruction cache — mandatory at 128 MHz.
+             * RRAM has ~3 wait states at 128 MHz; without cache every fetch
+             * stalls and 128 MHz ends up slower than 64 MHz HFOSC. */
+            NRF_ICACHE->ENABLE = CACHE_ENABLE_ENABLE_Enabled;
         #endif
 
         #if !defined(NRF_TRUSTZONE_NONSECURE) && defined(__ARM_FEATURE_CMSE)
-            #if defined (NRF54LM20A_ENGA_XXAA) || defined (NRF54LV10A_ENGA_XXAA)
+            #if defined (NRF54LM20A_XXAA) || defined (NRF54LM20B_XXAA) || defined (NRF54LV10A_XXAA)
                 /* Dummy-read KMU to starts its boot preparations. This operation should be at
                    the beginning of SystemInit to allow KMU to run to completion during the function call */
                 NRF_KMU->STATUS;
@@ -132,7 +136,7 @@ void SystemInit(void)
                 /* Workaround for Errata 37 */
                 if (nrf54l_errata_37())
                 {
-                    *((volatile uint32_t *)0x5005340C) = 1ul;
+                    *((volatile uint32_t *)(((uint32_t)NRF_TAD) + 0x40C)) = 1ul;
                 }
             #endif
 
@@ -145,16 +149,16 @@ void SystemInit(void)
                 SCB->NSACR |= (3UL << 10ul);
             #endif
 
-            #ifndef NRF_SKIP_SAU_CONFIGURATION   
+            #ifndef NRF_SKIP_SAU_CONFIGURATION
                 configure_default_sau();
-            #endif          
+            #endif
 
             #if !defined (NRF_DISABLE_FICR_TRIMCNF)
                 /* Trimming of the device. Copy all the trimming values from FICR into the target addresses. Trim
                 until one ADDR is not initialized. */
                 uint32_t index = 0ul;
 
-                #if defined (NRF54LS05B_ENGA_XXAA)
+                #if defined (NRF54LS05A_XXAA) || defined (NRF54LS05B_XXAA)
 
                     for (index = 0ul; index < FICR_TRIMCNF_MaxCount && NRF_FICR->TRIMCNF[index].ADDR != 0xFFFFFFFFul && NRF_FICR->TRIMCNF[index].ADDR != 0x00000000ul; index++) {
                     #if defined ( __ICCARM__ )
@@ -172,7 +176,7 @@ void SystemInit(void)
                     #endif
                     * ((volatile uint32_t*)NRF_FICR_NS->TRIMCNF[index].ADDR) = NRF_FICR_NS->TRIMCNF[index].DATA;
 
-                #endif  //NRF54LS05B_ENGA_XXAA
+                #endif  //NRF54LS05A_XXAA || NRF54LS05B_XXAA
 
                 #if defined ( __ICCARM__ )
                     #pragma diag_default=Pa082
@@ -222,7 +226,8 @@ void SystemInit(void)
 
             #ifndef NRF_DISABLE_RRAM_POWER_OFF
                 /* Allow RRAMC to go into poweroff mode during System on idle for lower power consumption at a penalty of 9us extra RRAM ready time */
-                NRF_RRAMC->POWER.LOWPOWERCONFIG = (RRAMC_POWER_LOWPOWERCONFIG_MODE_PowerOff << RRAMC_POWER_LOWPOWERCONFIG_MODE_Pos);
+                NRF_RRAMC->POWER.LOWPOWERCONFIG &= ~RRAMC_POWER_LOWPOWERCONFIG_MODE_Msk;
+                NRF_RRAMC->POWER.LOWPOWERCONFIG |= (RRAMC_POWER_LOWPOWERCONFIG_MODE_PowerOff << RRAMC_POWER_LOWPOWERCONFIG_MODE_Pos);
             #endif
 
             #if defined (DEVELOP_IN_NRF54L15) && defined(NRF54L10_XXAA)
@@ -242,7 +247,7 @@ void SystemInit(void)
         /* Enable the FPU if the compiler used floating point unit instructions. __FPU_USED is a MACRO defined by the
         * compiler. Since the FPU consumes energy, remember to disable FPU use in the compiler if floating point unit
         * operations are not used in your code. */
-        
+
         /* Allow Non-Secure code to run FPU instructions.
          * If only the secure code should control FPU power state these registers should be configured accordingly in the secure application code. */
         SCB->NSACR |= (3UL << 10ul);
@@ -260,7 +265,7 @@ void SystemInit(void)
         #endif
 
         #if !defined(NRF_TRUSTZONE_NONSECURE) && defined(__ARM_FEATURE_CMSE)
-            #if !defined (NRF54LV10A_ENGA_XXAA)
+            #if !defined (NRF54LV10A_XXAA)
                 #if defined(NRF_CONFIG_NFCT_PINS_AS_GPIOS)
                     NRF_NFCT_S->PADCONFIG = (NFCT_PADCONFIG_ENABLE_Disabled << NFCT_PADCONFIG_ENABLE_Pos);
                 #endif
@@ -327,7 +332,7 @@ void SystemInit(void)
         #endif
 
         #if !defined(NRF_TRUSTZONE_NONSECURE) && defined(__ARM_FEATURE_CMSE) && !defined (NRF_SKIP_KMU_WAIT_FOR_READY)
-            #if defined (NRF54LM20A_ENGA_XXAA) || defined (NRF54LV10A_ENGA_XXAA)
+            #if defined (NRF54LM20A_XXAA) || defined (NRF54LM20B_XXAA) || defined (NRF54LC10A_XXAA) || defined (NRF54LV10A_XXAA)
                 /* KMU is ready by now, but to be sure allow it to run to completion */
                 while(NRF_KMU->STATUS == KMU_STATUS_STATUS_Busy)
                 {
