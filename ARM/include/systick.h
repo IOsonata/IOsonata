@@ -91,8 +91,7 @@ extern "C" {
  */
 __STATIC_FORCEINLINE void SysTickStart(void)
 {
-    *((volatile uint32_t*)SYSTICK_BASE) |=
-        SYSTICK_CTRL_CLKSOURCE | SYSTICK_CTRL_ENABLE;
+    *((volatile uint32_t*)SYSTICK_BASE) |= SYSTICK_CTRL_ENABLE;
     __DSB();
 }
 
@@ -162,19 +161,14 @@ __STATIC_FORCEINLINE uint32_t SysTickSetFrequency(uint32_t ClkSrc, uint32_t ClkH
     bool was_enabled = (*ctrl & SYSTICK_CTRL_ENABLE) != 0UL;
 
     // Stop, update, clear, restart
-    *ctrl &= ~SYSTICK_CTRL_ENABLE;
+    *ctrl &= ~(SYSTICK_CTRL_ENABLE | SYSTICK_CTRL_CLKSOURCE);
+    *ctrl |= ClkSrc == SYSTICK_CLOCK_SRC_MCU ? SYSTICK_CTRL_CLKSOURCE : 0;
+
     *((volatile uint32_t*)(SYSTICK_BASE + 4UL)) = load;
     *((volatile uint32_t*)(SYSTICK_BASE + 8UL)) = 0UL;
 
     if (was_enabled) {
-    	if (ClkSrc == SYSTICK_CLOCK_SRC_MCU)
-        {
-    		*ctrl |= SYSTICK_CTRL_CLKSOURCE | SYSTICK_CTRL_ENABLE;
-        }
-    	else
-    	{
-    		*ctrl = (*ctrl & ~SYSTICK_CTRL_CLKSOURCE) | SYSTICK_CTRL_ENABLE;
-    	}
+   		*ctrl |= SYSTICK_CTRL_ENABLE;
     }
 
     return ClkHz / (load + 1UL);
