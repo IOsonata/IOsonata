@@ -59,6 +59,10 @@ SOFTWARE.
 
 #include "cmsis_compiler.h"
 
+// ── SysTick Clock Source Select ────────────────────────────────────────────────────
+#define SYSTICK_CLOCK_SRC_EXT	  0			  ///< External clock source
+#define SYSTICK_CLOCK_SRC_MCU	  1			  ///< Processor clock source
+
 // ── SysTick CTRL bit masks ────────────────────────────────────────────────────
 #define SYSTICK_CTRL_ENABLE       (1UL << 0)  ///< Counter enable
 #define SYSTICK_CTRL_TICKINT      (1UL << 1)  ///< Exception enable on wrap
@@ -135,19 +139,20 @@ __STATIC_FORCEINLINE void SysTickSetReload(uint32_t Load)
  * Computes LOAD = CoreClkHz / TickHz - 1 and applies it.
  * Stops and restarts the counter around the reload write.
  *
- * @param  CoreClkHz  Processor core clock in Hz (e.g. SystemCoreClock).
- * @param  TickHz     Desired interrupt rate in Hz (e.g. 1000 for 1 ms tick).
+ * @param  ClkSrc	1 - MCU Core clock, 0 - external source
+ * @param  ClkHz  	Clock in Hz (e.g. SystemCoreClock).
+ * @param  TickHz   Desired interrupt rate in Hz (e.g. 1000 for 1 ms tick).
  *
  * @return Achieved tick frequency in Hz (may differ from TickHz due to
  *         integer division). Returns 0 if TickHz is 0 or LOAD overflows.
  */
-__STATIC_FORCEINLINE uint32_t SysTickSetFrequency(uint32_t CoreClkHz, uint32_t TickHz)
+__STATIC_FORCEINLINE uint32_t SysTickSetFrequency(uint32_t ClkSrc, uint32_t ClkHz, uint32_t TickHz)
 {
     if (TickHz == 0UL) {
         return 0UL;
     }
 
-    uint32_t load = (CoreClkHz / TickHz) - 1UL;
+    uint32_t load = (ClkHz / TickHz) - 1UL;
 
     if (load > 0x00FFFFFFul) {
         return 0UL;  // requested frequency too low for 24-bit counter
@@ -162,10 +167,17 @@ __STATIC_FORCEINLINE uint32_t SysTickSetFrequency(uint32_t CoreClkHz, uint32_t T
     *((volatile uint32_t*)(SYSTICK_BASE + 8UL)) = 0UL;
 
     if (was_enabled) {
-        *ctrl |= SYSTICK_CTRL_CLKSOURCE | SYSTICK_CTRL_ENABLE;
+    	if (ClkSrc == SYSTICK_CLOCK_SRC_MCU)
+        {
+    		*ctrl |= SYSTICK_CTRL_CLKSOURCE | SYSTICK_CTRL_ENABLE;
+        }
+    	else
+    	{
+    		*ctrl = (*ctrl & ~SYSTICK_CTRL_CLKSOURCE) | SYSTICK_CTRL_ENABLE;
+    	}
     }
 
-    return CoreClkHz / (load + 1UL);
+    return ClkHz / (load + 1UL);
 }
 
 /**
