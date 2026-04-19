@@ -187,36 +187,8 @@ void Sam4lUsartIrqHandler(SAM4L_UARTDEV *pDev)
 
 	if (pDev->pUartDev->DevIntrf.bDma == true)
 	{
-		// TX DMA uses the dedicated PDCA channel; "transfer complete" is
-		// signalled by channel transfer-counter-reached-zero (TRC).
-		PdcaChannel *chan = &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_PDCA_TX_CHAN(pDev->DevNo)];
-
-		if (chan->PDCA_ISR & PDCA_ISR_TRC)
-		{
-			int l = SAM4L_UART_CFIFO_SIZE;
-			uint8_t *p = CFifoGetMultiple(pDev->pUartDev->hTxFifo, &l);
-
-			if (p)
-			{
-				memcpy(pDev->PdcTxBuff, p, l);
-				chan->PDCA_MAR = (uint32_t)pDev->PdcTxBuff;
-				chan->PDCA_TCR = l;
-				chan->PDCA_CR  = PDCA_CR_TEN;
-			}
-			else
-			{
-				// Nothing to send; disable TX DMA, disable its interrupt,
-				// drop back to TXEMPTY polling on the next push.
-				chan->PDCA_CR = PDCA_CR_TDIS;
-				chan->PDCA_IDR = PDCA_IER_TRC;	// disable transfer-complete interrupt
-				pDev->pUartDev->bTxReady = true;
-			}
-
-			if (pDev->pUartDev->EvtCallback)
-			{
-				pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
-			}
-		}
+		// TX transfer-complete is signalled on PDCA_N_IRQn, not on USARTn_IRQn.
+		// See Sam4lPdcaTxIrqHandler below.  Nothing to do here for TX in DMA mode.
 	}
 	else if ((csr & US_CSR_TXRDY) && (imr & US_IER_TXRDY))
 	{
@@ -279,6 +251,72 @@ extern "C" void USART2_Handler(void)
 extern "C" void USART3_Handler(void)
 {
 	Sam4lUsartIrqHandler(&s_Sam4lUartDev[3]);
+}
+
+/**
+ * @brief TX DMA transfer-complete handler (runs on PDCA_N_IRQn).
+ *
+ * Called from the PDCA channel ISR when the current DMA burst has fully
+ * drained into the USART.  Refills the channel from the TX CFIFO; if the
+ * CFIFO is empty, disables the channel and marks the device tx-ready so the
+ * next Sam4lUartTxData() call can kick off a new burst.
+ */
+static void Sam4lPdcaTxIrqHandler(SAM4L_UARTDEV *pDev)
+{
+	PdcaChannel *chan = &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_PDCA_TX_CHAN(pDev->DevNo)];
+
+	// TRC is sticky-via-mask; reading ISR clears the latched flag
+	if ((chan->PDCA_ISR & PDCA_ISR_TRC) == 0)
+	{
+		return;
+	}
+
+	int l = SAM4L_UART_CFIFO_SIZE;
+	uint8_t *p = CFifoGetMultiple(pDev->pUartDev->hTxFifo, &l);
+
+	if (p)
+	{
+		memcpy(pDev->PdcTxBuff, p, l);
+		chan->PDCA_MAR = (uint32_t)pDev->PdcTxBuff;
+		chan->PDCA_TCR = l;
+		chan->PDCA_CR  = PDCA_CR_TEN;
+		// TRC interrupt remains enabled for the next completion
+	}
+	else
+	{
+		// CFIFO empty: stop the channel and mask its interrupt.  The next
+		// Sam4lUartTxData() call will re-enable TEN + TRC when data arrives.
+		chan->PDCA_CR  = PDCA_CR_TDIS;
+		chan->PDCA_IDR = PDCA_IER_TRC;
+		pDev->pUartDev->bTxReady = true;
+	}
+
+	if (pDev->pUartDev->EvtCallback)
+	{
+		pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+	}
+}
+
+// One PDCA channel per USART TX (channel N for USART N), so the PDCA channel
+// handler trivially maps to the USART device record.
+extern "C" void PDCA_0_Handler(void)
+{
+	Sam4lPdcaTxIrqHandler(&s_Sam4lUartDev[0]);
+}
+
+extern "C" void PDCA_1_Handler(void)
+{
+	Sam4lPdcaTxIrqHandler(&s_Sam4lUartDev[1]);
+}
+
+extern "C" void PDCA_2_Handler(void)
+{
+	Sam4lPdcaTxIrqHandler(&s_Sam4lUartDev[2]);
+}
+
+extern "C" void PDCA_3_Handler(void)
+{
+	Sam4lPdcaTxIrqHandler(&s_Sam4lUartDev[3]);
 }
 
 static inline uint32_t Sam4lUartGetRate(DevIntrf_t * const pDev)
@@ -643,6 +681,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCFG *pCfg)
 		Sam4lPdcaClockEnable();
 		Sam4lPdcaTxChannelInit(devno);
 		pDev->DevIntrf.bDma = true;
+
+		// Channel N is assigned to USART N TX.  PDCA_0_IRQn..PDCA_15_IRQn are
+		// contiguous, so PDCA_N_IRQn = PDCA_0_IRQn + channel.
+		IRQn_Type pdca_irq = (IRQn_Type)(PDCA_0_IRQn + SAM4L_PDCA_TX_CHAN(devno));
+		NVIC_ClearPendingIRQ(pdca_irq);
+		NVIC_SetPriority(pdca_irq, pCfg->IntPrio);
+		NVIC_EnableIRQ(pdca_irq);
 	}
 	else
 	{
