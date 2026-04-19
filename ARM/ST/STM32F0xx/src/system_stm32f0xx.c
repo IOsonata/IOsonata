@@ -39,7 +39,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stm32f0xx.h"
 #include "coredev/system_core_clock.h"
 
-#define SYSTEM_CORE_CLOCK				48000000UL		// nRF52 has fixed core frequency
+#define SYSTEM_CORE_CLOCK				48000000UL		// STM32F0 max core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(93UL)
 
 #define STM32F0XX_HSE_XTAL_EN			false
@@ -71,8 +71,8 @@ void SystemCoreClockUpdate (void)
 
 		if (cfgr & RCC_CFGR_PLLSRC_HSE_PREDIV)
 		{
-			// Crystal
-			sysclk = s_XtlFreq / ((RCC->CFGR2 & 4) + 1);
+			// Crystal / external clock, divided by full 4-bit PREDIV field
+			sysclk = s_XtlFreq / ((RCC->CFGR2 & RCC_CFGR2_PREDIV_Msk) + 1);
 		}
 		else
 		{
@@ -92,43 +92,40 @@ void SystemCoreClockUpdate (void)
 	}
 	else
 	{
-		// HSI 8MHz
+		// HSI 8 MHz
 		SystemCoreClock = 8000000;
 	}
 }
 
 //
-// ClkFreq = Crystal frequency
+// ClkFreq = Crystal frequency (ignored when bCrystal == false)
 //
-uint32_t SystemCoreClockSet(bool bCrystal, uint32_t ClkFreq)
+void SystemCoreClockSet(bool bCrystal, uint32_t ClkFreq)
 {
 	uint32_t cfgr = 0;
 	uint32_t cfgr2 = 0;
 
+	// Make sure we are running from HSI while we reconfigure PLL.
 	RCC->CR |= RCC_CR_HSION;
-
 	while ((RCC->CR & RCC_CR_HSIRDY) == 0);
-
-	RCC->CR |= RCC_CR_CSSON;
-
-	// Always select PLL for max core frequency
-	cfgr |= RCC_CFGR_SW_PLL;
 
 	if (bCrystal)
 	{
-		// Save crystal frequency
 		s_XtlFreq = ClkFreq;
 
 		RCC->CR |= RCC_CR_HSEON;
-
 		while ((RCC->CR & RCC_CR_HSERDY) == 0);
 
+		// HSE is now running; enable Clock Security System to monitor it.
+		RCC->CR |= RCC_CR_CSSON;
+
 		cfgr |= RCC_CFGR_PLLSRC_HSE_PREDIV;
+
 		uint32_t div = 1;
-		int32_t cdiff = SYSTEM_CORE_CLOCK;
+		int32_t  cdiff = SYSTEM_CORE_CLOCK;
 		uint32_t mul = 2;
 
-		// find matching clock div/mul
+		// find best-fit div/mul for target core clock
 		for (int i = 1; i <= 16; i++)
 		{
 			uint32_t clk = ClkFreq / i;
@@ -155,17 +152,30 @@ uint32_t SystemCoreClockSet(bool bCrystal, uint32_t ClkFreq)
 	}
 	else
 	{
-		// internal 8MHz RC
+		// HSI/2 x 12 = 48 MHz. PREDIV not used on the HSI path.
 		s_XtlFreq = 0;
-
 		cfgr |= RCC_CFGR_PLLSRC_HSI_DIV2 | RCC_CFGR_PLLMUL12;
 	}
 
+	// 1. Write PLL source/multiplier. SW stays at HSI (bits = 0) so the
+	//    core keeps running while PLL spins up.
 	RCC->CFGR = cfgr;
-	RCC->CIR = 0x00000000U;
-	RCC->CR |= RCC_CR_PLLON;
 
+	// 2. Start PLL and wait for lock.
+	RCC->CR |= RCC_CR_PLLON;
 	while ((RCC->CR & RCC_CR_PLLRDY) == 0);
+
+	// 3. Flash MUST have >=1 wait state before SYSCLK exceeds 24 MHz.
+	FLASH->ACR = FLASH_ACR_PRFTBE | FLASH_ACR_LATENCY;
+
+	// 4. Bus prescalers: HCLK = SYSCLK, PCLK = HCLK (F0 has a single APB).
+	RCC->CFGR &= ~(RCC_CFGR_HPRE_Msk | RCC_CFGR_PPRE_Msk);
+
+	// 5. Switch SYSCLK to PLL and confirm the switch happened.
+	RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW_Msk) | RCC_CFGR_SW_PLL;
+	while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != RCC_CFGR_SWS_PLL);
+
+	RCC->CIR = 0x00000000U;
 
 	SystemCoreClockUpdate();
 }

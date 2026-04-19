@@ -129,73 +129,77 @@ bool STM32F03xUARTWaitForTxReady(STM32F0X_UARTDEV * const pDev, uint32_t Timeout
 static void UART_IRQHandler(STM32F0X_UARTDEV * const pDev)
 {
 	UARTDEV *dev = (UARTDEV *)pDev->pUartDev;
-	int len = 0;
-	int cnt = 0;
 	uint32_t iflag = pDev->pReg->ISR;
 
-	if ((iflag & (USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE)) == 0)
+	// RX errors: clear only the error flags in ICR, then drain RDR to
+	// release RXNE and let the line recover.
+	if (iflag & (USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE))
 	{
-		// no error
-		if (iflag & USART_ISR_RXNE)
-		{
-			uint8_t *p = CFifoPut(dev->hRxFifo);
-			if (p != NULL)
-			{
-				*p = pDev->pReg->RDR;
-				dev->bRxReady = true;
-				pDev->pReg->ICR = USART_ISR_RXNE;
-			}
-			if (dev->EvtCallback)
-			{
-				dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
-			}
-		}
-		if (iflag & (USART_ISR_TXE | USART_ISR_TC))
-		{
-			uint8_t *p = CFifoGet(dev->hTxFifo);
-			if (p != NULL)
-			{
-				pDev->pReg->TDR = *p;
-				dev->bTxReady = false;
-				pDev->pReg->ICR = USART_ISR_TXE;
-			}
-			else
-			{
-				dev->bTxReady = true;
-			}
-			if (dev->EvtCallback)
-			{
-				dev->EvtCallback(dev, UART_EVT_TXREADY, NULL, CFifoUsed(dev->hRxFifo));
-			}
-		}
-		if (iflag & USART_ISR_RTOF)
-		{
-			if (dev->EvtCallback)
-			{
-				dev->EvtCallback(dev, UART_EVT_RXTIMEOUT, NULL, CFifoUsed(dev->hRxFifo));
-			}
-		}
-	}
-	else
-	{
-		// error
 		pDev->ErrCnt++;
-		//pDev->pReg->ICR = (USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE);
+		pDev->pReg->ICR = iflag & (USART_ICR_PECF | USART_ICR_FECF |
+		                           USART_ICR_ORECF | USART_ICR_NCF);
+		(void)pDev->pReg->RDR;
 	}
-	pDev->pReg->ICR = iflag;
+
+	if (iflag & USART_ISR_RXNE)
+	{
+		uint8_t c = (uint8_t)pDev->pReg->RDR;    // read clears RXNE
+		uint8_t *p = CFifoPut(dev->hRxFifo);
+		if (p != NULL)
+		{
+			*p = c;
+			dev->bRxReady = true;
+		}
+		else
+		{
+			pDev->RxDropCnt++;
+		}
+		if (dev->EvtCallback)
+		{
+			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
+		}
+	}
+
+	if (iflag & USART_ISR_TXE)
+	{
+		uint8_t *p = CFifoGet(dev->hTxFifo);
+		if (p != NULL)
+		{
+			pDev->pReg->TDR = *p;             // write clears TXE
+		}
+		else
+		{
+			// FIFO empty: mask TXEIE so we don't storm on TXE.
+			pDev->pReg->CR1 &= ~USART_CR1_TXEIE;
+			dev->bTxReady = true;
+			if (dev->EvtCallback)
+			{
+				dev->EvtCallback(dev, UART_EVT_TXREADY, NULL, 0);
+			}
+		}
+	}
+
+	if (iflag & USART_ISR_RTOF)
+	{
+		pDev->pReg->ICR = USART_ICR_RTOCF;
+		if (dev->EvtCallback)
+		{
+			dev->EvtCallback(dev, UART_EVT_RXTIMEOUT, NULL, CFifoUsed(dev->hRxFifo));
+		}
+	}
+
+	// Note: TXE and RXNE are not ICR-clearable. No blanket "ICR = iflag".
 }
 
 extern "C" void USART1_IRQHandler()
 {
 	UART_IRQHandler(&s_Stm32f03xUartDev[0]);
-	NVIC_ClearPendingIRQ(USART2_IRQn);
 }
 
 #if !defined(STM32F030x4) && !defined(STM32F030x6)
 extern "C" void USART2_IRQHandler()
 {
 	UART_IRQHandler(&s_Stm32f03xUartDev[1]);
-	NVIC_ClearPendingIRQ(USART2_IRQn);
 }
 #endif
 
@@ -203,13 +207,11 @@ extern "C" void USART2_IRQHandler()
 extern "C" void UART3_IRQHandler()
 {
 	UART_IRQHandler(&s_Stm32f03xUartDev[2]);
-	NVIC_ClearPendingIRQ(USART3_IRQn);
 }
 
 extern "C" void UART4_IRQHandler()
 {
 	UART_IRQHandler(&s_Stm32f03xUartDev[3]);
-	NVIC_ClearPendingIRQ(USART4_IRQn);
 }
 #endif
 
@@ -217,13 +219,11 @@ extern "C" void UART4_IRQHandler()
 extern "C" void UART5_IRQHandler()
 {
 	UART_IRQHandler(&s_Stm32f03xUartDev[4]);
-	NVIC_ClearPendingIRQ(USART5_IRQn);
 }
 
 extern "C" void UART6_IRQHandler()
 {
 	UART_IRQHandler(&s_Stm32f03xUartDev[5]);
-	NVIC_ClearPendingIRQ(USART6_IRQn);
 }
 #endif
 
@@ -236,28 +236,17 @@ static uint32_t STM32F03xUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 	uint32_t fclkfreq = SystemCoreClockGet();
-	uint32_t fclk2 = fclkfreq << 1;
-	uint32_t rem8 = fclk2 % Rate;
-	uint32_t rem16 = fclkfreq % Rate;
 
-	if (rem8 < rem16)
-	{
-		// /8 better
-		s_Stm32f03xUartDev[dev->DevNo].pReg->CR1 |= USART_CR1_OVER8;
+	// OVER16 handles every baud from 300 to 3 Mbaud on F0 at 48 MHz with
+	// ample accuracy. OVER8 offers no benefit here and its BRR bit-packing
+	// is a common source of bugs.
+	dev->pReg->CR1 &= ~USART_CR1_OVER8;
 
-		uint32_t div = (fclk2 + (Rate >> 1)) / Rate;
-		dev->pUartDev->Rate = (fclk2 + (div >> 1)) / div;
-		s_Stm32f03xUartDev[dev->DevNo].pReg->BRR = ((div & 0xf) >> 1) | (div & 0xFFFFFFF0);
-	}
-	else
-	{
-		// /16 better
-		s_Stm32f03xUartDev[dev->DevNo].pReg->CR1 &= ~USART_CR1_OVER8;
+	uint32_t div = (fclkfreq + (Rate >> 1)) / Rate;
+	if (div < 16) div = 16;            // hard minimum per RM0360
 
-		uint32_t div = (fclkfreq + (Rate >> 1)) / Rate;
-		dev->pUartDev->Rate = (fclkfreq + (div >> 1))/ div;
-		s_Stm32f03xUartDev[dev->DevNo].pReg->BRR = div;
-	}
+	dev->pReg->BRR = div;
+	dev->pUartDev->Rate = fclkfreq / div;
 
 	return dev->pUartDev->Rate;
 }
@@ -328,17 +317,21 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
             pData += l;
             cnt += l;
         }
-        EnableInterrupt(state);
 
+        // Kick off TX from inside the critical section so the ISR cannot
+        // double-fetch the same byte we just queued and overwrite TDR.
         if (dev->pUartDev->bTxReady)
         {
-        	uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
-        	if (p != NULL)
-        	{
-        		dev->pUartDev->bTxReady = false;
-        		dev->pReg->TDR = *p;
-        	}
+            uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
+            if (p != NULL)
+            {
+                dev->pUartDev->bTxReady = false;
+                dev->pReg->TDR = *p;
+                dev->pReg->CR1 |= USART_CR1_TXEIE;
+            }
         }
+
+        EnableInterrupt(state);
     }
     return cnt;
 }
@@ -482,12 +475,8 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->DevIntrf.pDevData = &s_Stm32f03xUartDev[devno];
 	s_Stm32f03xUartDev[devno].pUartDev = pDev;
 
-	STM32F03xUARTReset(&pDev->DevIntrf);
-
-	// Disable UART first because some field can't be set is it is already enabled
-	reg->CR1 &= ~USART_CR1_UE;
-
-	// Enable clock
+	// Enable peripheral clock FIRST. Any register access before this is
+	// silently dropped by the bus matrix.
 	switch (devno)
 	{
 		case 0:
@@ -516,14 +505,22 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 #endif
 	}
 
-	reg->CR2 |= USART_CR2_CLKEN;
+	// USART1 has a per-peripheral kernel-clock mux; leave USART2+ on PCLK.
+	if (devno == 0)
+	{
+		RCC->CFGR3 = (RCC->CFGR3 & ~RCC_CFGR3_USART1SW_Msk) |
+		             RCC_CFGR3_USART1SW_SYSCLK;
+	}
 
-	msDelay(1);
+	STM32F03xUARTReset(&pDev->DevIntrf);
 
-	RCC->CFGR3 &= ~RCC_CFGR3_USART1SW_Msk;
-	RCC->CFGR3 |= RCC_CFGR3_USART1SW_SYSCLK;
+	// Disable UART so OVER8/M/parity/stop-bit fields are writable.
+	reg->CR1 &= ~USART_CR1_UE;
 
-	//s_FclkFreq = SYSTEM_CORE_CLOCK;
+	// Do NOT set CR2.CLKEN here — that would enable the synchronous CK
+	// output on PA8 (AF1) for smartcard/sync modes. Async UART uses no
+	// clock pin.
+
 	uint32_t fclkfreq = SystemCoreClockGet();
 
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
@@ -671,18 +668,24 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 
 	uint32_t tmp = reg->CR1;
 
-	// Disable all interrupts
-	tmp &= ~(USART_CR1_PEIE | USART_CR1_TXEIE | USART_CR1_RTOIE | USART_CR1_TCIE | USART_CR1_RXNEIE | USART_CR1_IDLEIE);
+	// Disable all USART interrupts while we configure.
+	tmp &= ~(USART_CR1_PEIE | USART_CR1_TXEIE | USART_CR1_TCIE |
+	         USART_CR1_RXNEIE | USART_CR1_IDLEIE | USART_CR1_RTOIE);
 
 	if (pCfg->bIntMode)
 	{
-		tmp |= (USART_CR1_PEIE | USART_CR1_TXEIE | USART_CR1_RTOIE | USART_CR1_TCIE | USART_CR1_RXNEIE | USART_CR1_IDLEIE);
+		// Enable only the interrupts the ISR handles. TXEIE is armed on
+		// demand by STM32F03xUARTTxData, not here, so the ISR doesn't
+		// fire on a permanently-empty FIFO at boot. TCIE, IDLEIE and
+		// RTOIE are NOT enabled — their flags don't auto-clear and would
+		// cause an interrupt storm.
+		tmp |= USART_CR1_RXNEIE | USART_CR1_PEIE;
 
 		if (pCfg->FlowControl == UART_FLWCTRL_HW)
 	    {
 			reg->CR3 |= USART_CR3_CTSIE;
 	    }
-		reg->CR3 |= USART_CR3_EIE;
+		reg->CR3 |= USART_CR3_EIE;   // FE, NE, ORE error IRQ via CR3
 
 		switch (devno)
 		{
@@ -731,7 +734,8 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	tmp |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
 
 	reg->CR1 = tmp;
-	reg->CR2 |= USART_CR2_RTOEN;
+	// Note: RTOEN intentionally not set. Receiver timeout needs RTOR
+	// programmed with a sensible bit count; the demo doesn't use it.
 
 	return true;
 }

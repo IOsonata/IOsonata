@@ -57,6 +57,26 @@ unsigned __atomic_fetch_sub_4(volatile void *d, unsigned val, int mem)
 	return *(unsigned*)d;
 }
 
+bool __atomic_compare_exchange_4(volatile void *mptr, void *eptr,
+                                 unsigned newval, bool weak,
+                                 int smodel, int fmodel)
+{
+	(void)weak;   /* always strong under PRIMASK mask */
+	(void)smodel;
+	(void)fmodel;
+
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+	unsigned cur = *(unsigned*)mptr;
+	bool ok = (cur == *(unsigned*)eptr);
+	if (ok)
+		*(unsigned*)mptr = newval;
+	else
+		*(unsigned*)eptr = cur;
+	__set_PRIMASK(primask);
+	return ok;
+}
+
 #if 0
 // Missing for M0
 unsigned __atomic_exchange_4(volatile void *d, unsigned val, int mem)

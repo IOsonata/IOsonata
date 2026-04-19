@@ -718,7 +718,7 @@
 		<link>
 			<name>src/coredev/iopincfg_stm32f0x.c</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/iopincfg_stm32f0x.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/iopincfg_stm32f0x.c</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>
@@ -738,7 +738,7 @@
 		<link>
 			<name>src/coredev/uart_stm32f0x.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/uart_stm32f0x.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_stm32f0x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu.cpp</name>

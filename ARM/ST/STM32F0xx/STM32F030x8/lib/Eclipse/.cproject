@@ -116,6 +116,9 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<fileInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1639603458.1625517530" name="uart_stm32f0x.cpp" rcbsApplicability="disable" resourcePath="src/coredev/uart_stm32f0x.cpp" toolsToInvoke="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.444837793.1096932098">
+						<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.444837793.1096932098" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.444837793"/>
+					</fileInfo>
 					<sourceEntries>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>

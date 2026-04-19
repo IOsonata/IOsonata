@@ -77,8 +77,13 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void USART2_IRQHandler(void);
  * overloaded by application function
  *
  */
-__attribute__ ((section(".intvect"), used))
-void (* const g_Vectors[])(void) = {
+#ifdef __ICCARM__
+__attribute__ ((section(".intvec"), used))
+void (* const __vector_table[])(void) = {
+#else
+__attribute__ ((section(".vectors"), used))
+void (* const __Vectors[])(void) = {
+#endif
 	(void (*) )((int32_t)&__StackTop),
 	ResetEntry,
 	NMI_Handler,
@@ -128,7 +133,11 @@ void (* const g_Vectors[])(void) = {
 	0
 };
 
-const uint32_t g_iVectorSize = sizeof(g_Vectors) + 4;
+#ifdef __ICCARM__
+const uint32_t g_iVectorSize = sizeof(__vector_table) + 4;
+#else
+const uint32_t g_iVectorSize = sizeof(__Vectors) + 4;
+#endif
 
 
 
