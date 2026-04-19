@@ -36,7 +36,8 @@ SOFTWARE.
 #include <string.h>
 
 #include "sam4lxxx.h"
-#include "component/pdc.h"
+#include "component/component_pdca.h"
+#include "component/component_usart.h"
 
 #include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"		
@@ -51,12 +52,12 @@ SOFTWARE.
 typedef struct _Sam_Uart_Dev {
 	int DevNo;				// UART interface number
 	uint32_t SamDevId;
-	union {
-		Sam4eUart *pUartReg;
-		Sam4eUsart *pUSartReg;
-	};
-	Sam4ePdc *pPdc;
-	UARTDEV	*pUartDev;		// Pointer to generic UART dev. data
+	//union {
+		Usart *pUartReg;
+//		Usart *pUSartReg;
+	//};
+	Pdca *pPdc;
+	UARTDev_t *pUartDev;		// Pointer to generic UART dev. data
 	uint8_t RxFifoMem[SAM4_UART_CFIFO_MEMSIZE];
 	uint8_t TxFifoMem[SAM4_UART_CFIFO_MEMSIZE];
 	uint8_t PdcRxByte;
@@ -68,33 +69,33 @@ typedef struct _Sam_Uart_Dev {
 static SAM4_UARTDEV s_Sam4UartDev[] = {
 	{
 		.DevNo = 0,
-		.SamDevId = ID_UART0,
-		.pUartReg = SAM4E_UART0,
-		.pPdc = SAM4E_PDC_UART0,
+		.SamDevId = ID_USART0,
+		.pUartReg = SAM4L_USART0,
+		.pPdc = SAM4L_PDC_USART0,
 	},
 	{
 		.DevNo = 1,
-		.SamDevId = ID_UART1,
-		.pUartReg = SAM4E_UART1,
-		.pPdc = SAM4E_PDC_UART1,
+		.SamDevId = ID_USART1,
+		.pUartReg = SAM4L_USART1,
+		.pPdc = SAM4L_PDC_UART1,
 	},
 	{
 		.DevNo = 2,
-		.SamDevId = ID_USART0,
-		.pUSartReg = SAM4E_USART0,
+		.SamDevId = ID_USART2,
+		.pUartReg = SAM4L_USART2,
 		.pPdc = SAM4E_PDC_USART0,
 	},
 	{
 		.DevNo = 3,
-		.SamDevId = ID_USART1,
-		.pUSartReg = SAM4E_USART1,
+		.SamDevId = ID_USART3,
+		.pUartReg = SAM4L_USART3,
 		.pPdc = SAM4E_PDC_USART1,
 	},
 };
 
 static const int s_NbSam4UartDev = sizeof(s_Sam4UartDev) / sizeof(SAM4_UARTDEV);
 
-UARTDEV * const UARTGetInstance(int DevNo)
+UARTDev_t * const UARTGetInstance(int DevNo)
 {
 	if (DevNo < 0 || DevNo >= s_NbSam4UartDev)
 	{
@@ -314,11 +315,11 @@ void USART1_Handler( void )
 	Sam4USartIntHandler(&s_Sam4UartDev[3]);
 }
 
-static inline uint32_t Sam4UARTGetRate(DEVINTRF * const pDev) {
+static inline uint32_t Sam4UARTGetRate(DevIntrf_t * const pDev) {
 	return ((SAM4_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
 }
 
-static uint32_t Sam4UARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
+static uint32_t Sam4UARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
 	uint32_t cd = 0;
@@ -355,11 +356,11 @@ static uint32_t Sam4UARTSetRate(DEVINTRF * const pDev, uint32_t Rate)
 	return Rate;
 }
 
-static inline bool Sam4UARTStartRx(DEVINTRF * const pSerDev, uint32_t DevAddr) {
+static inline bool Sam4UARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr) {
 	return true;
 }
 
-static int Sam4UARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
+static int Sam4UARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
 	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
@@ -413,14 +414,16 @@ static int Sam4UARTRxData(DEVINTRF * const pDev, uint8_t *pBuff, int Bufflen)
 	return cnt;
 }
 
-static inline void Sam4UARTStopRx(DEVINTRF * const pDev) {
+static inline void Sam4UARTStopRx(DevIntrf_t * const pDev)
+{
 }
 
-static inline bool Sam4UARTStartTx(DEVINTRF * const pDev, uint32_t DevAddr) {
+static inline bool Sam4UARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
+{
 	return true;
 }
 
-static int Sam4UARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
+static int Sam4UARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 {
 	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
@@ -508,16 +511,16 @@ static int Sam4UARTTxData(DEVINTRF * const pDev, uint8_t *pData, int Datalen)
 	return cnt;
 }
 
-void Sam4UARTStopTx(DEVINTRF * const pDev) 
+void Sam4UARTStopTx(DevIntrf_t * const pDev)
 {
 }
 
-void Sam4UARTDisable(DEVINTRF * const pDev)
+void Sam4UARTDisable(DevIntrf_t * const pDev)
 {
 	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
 }
 
-void Sam4UARTEnable(DEVINTRF * const pDev)
+void Sam4UARTEnable(DevIntrf_t * const pDev)
 {
 	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
 
@@ -526,16 +529,16 @@ void Sam4UARTEnable(DEVINTRF * const pDev)
 	dev->pUartDev->bTxReady = true;
 }
 
-void Sam4UARTPowerOff(DEVINTRF * const pDev)
+void Sam4UARTPowerOff(DevIntrf_t * const pDev)
 {
 }
 
-void UARTSetCtrlLineState(UARTDEV * const pDev, uint32_t LineState)
+void UARTSetCtrlLineState(UARTTDev_t * const pDev, uint32_t LineState)
 {
 
 }
 
-bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
+bool UARTInit(UARTTDev_t * const pDev, const UARTCFG *pCfg)
 {
 	if (pDev == NULL || pCfg == NULL)
 	{

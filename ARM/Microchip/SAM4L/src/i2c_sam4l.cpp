@@ -33,7 +33,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <math.h>
 
-#include "sam4l.h"
+#include "sam4lxxx.h"
 
 #include "istddef.h"
 #include "coredev/i2c.h"
