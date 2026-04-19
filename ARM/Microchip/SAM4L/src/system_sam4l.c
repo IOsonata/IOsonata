@@ -144,16 +144,65 @@
 //	32000
 //};
 
-// Flash waitstate
+// Default oscillator configuration matches the SAM4L8 Xplained Pro eval kit —
+// the official development board for this MCU family.  It carries a 12 MHz
+// crystal on OSC0 and a 32.768 kHz crystal on OSC32K (per the SAM4L8 Xplained
+// Pro User Guide, feature list).  Custom-board firmware should override this
+// __WEAK symbol with its own g_McuOsc matching its hardware.
+//
+// OscDesc_t fields : {Type, Freq Hz, Accuracy PPM, LoadCap x10 pF}
 __WEAK McuOsc_t g_McuOsc = {
-	{OSC_TYPE_RC, 1000000, 20},
-	{OSC_TYPE_RC, 32000, 20},
-	false
+	{OSC_TYPE_XTAL, 12000000, 20, 180},		// 12 MHz main crystal, ~18 pF
+	{OSC_TYPE_XTAL,    32768, 20, 125},		// 32.768 kHz LF crystal, ~12.5 pF
+	false									// USB clock not enabled by default
 };
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 static uint32_t s_PllFreq = SYSTEM_CORE_CLOCK;
+
+// f_main : the clock feeding the PM CPU/HSB/PBx dividers.  On reset this is
+// RCSYS (~115 kHz), but SystemInit reconfigures it; each init branch updates
+// this variable to reflect the new main clock source.  All of f_CPU,
+// f_HSB, f_PBA..f_PBD are derived from this.
+static uint32_t s_MainClock = SYSTEM_CORE_CLOCK;
+
+// Apply a PM clock divider register (CPUSEL/HSBSEL/PBASEL/PBBSEL/PBCSEL/PBDSEL)
+// to a source frequency.  All six registers have the same bit layout:
+//   bit 7 : xxxDIV - 0 = no division (out = fin), 1 = divide enabled
+//   bits 2:0 : xxxSEL - divider exponent; out = fin >> (xxxSEL + 1)
+static inline uint32_t Sam4lApplyClkDiv(uint32_t fin, uint32_t selreg)
+{
+	if (selreg & PM_CPUSEL_CPUDIV)
+	{
+		return fin >> ((selreg & PM_CPUSEL_CPUSEL_Msk) + 1u);
+	}
+	return fin;
+}
+
+// Program all synchronous clock dividers (CPU/HSB share CPUSEL; PBA/PBB/PBC/PBD
+// have separate registers with identical bit layout) to the same value.  SAM4L
+// max f_CPU = f_HSB = f_PBx = 48 MHz at PS0 with HSEN - any f_main > 48 MHz must
+// be divided down BEFORE the main clock switch, otherwise buses run out of spec.
+static void Sam4lSetSyncClkDividers(uint32_t sel_val)
+{
+	volatile uint32_t * const regs[] = {
+		&SAM4L_PM->PM_CPUSEL,
+		&SAM4L_PM->PM_PBASEL,
+		&SAM4L_PM->PM_PBBSEL,
+		&SAM4L_PM->PM_PBCSEL,
+		&SAM4L_PM->PM_PBDSEL,
+	};
+
+	for (unsigned i = 0; i < sizeof(regs) / sizeof(regs[0]); i++)
+	{
+		while ((SAM4L_PM->PM_SR & PM_SR_CKRDY) == 0)
+			{};
+		SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
+				| PM_UNLOCK_ADDR((uint32_t)regs[i] - (uint32_t)SAM4L_PM);
+		*regs[i] = sel_val;
+	}
+}
 
 static const uint32_t s_Fvco[] =
 { 192000000UL, 96000000UL, 48000000UL };
@@ -459,19 +508,19 @@ void SystemInit()
 			/* Configure DFLL at 96MHz */
 			ConfigDFLL0Freq(96);
 
-			// Select DFLL as Main_Clk_Source in PM module
+			// Pre-configure ALL synchronous clock dividers /2 BEFORE switching
+			// main clock to DFLL.  f_main will be 96 MHz; everything needs /2
+			// to stay within the 48 MHz spec max.
+			Sam4lSetSyncClkDividers(PM_CPUSEL_CPUDIV | PM_CPUSEL_CPUSEL(0));
+
+			// Now switch main clock to DFLL.  f_CPU = f_HSB = f_PBx = 48 MHz.
 			SAM4L_PM->PM_UNLOCK =
 					PM_UNLOCK_KEY(0xAAu)
 					| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_MCCTRL - (uint32_t)SAM4L_PM);
-			SAM4L_PM->PM_MCCTRL |= PM_MCCTRL_MCSEL_DFLL0;
+			SAM4L_PM->PM_MCCTRL = PM_MCCTRL_MCSEL_DFLL0;
 
-			// CPU_Clk_Select Register Set Divider
-			SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
-					| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_CPUSEL - (uint32_t)SAM4L_PM);
-			// wait until PM_SR.CKRDY is high
-			while ((SAM4L_PM->PM_SR & PM_SR_CKRDY) == 0)
-				{};
-			SAM4L_PM->PM_CPUSEL = PM_CPUSEL_CPUDIV | PM_CPUSEL_CPUSEL(0);// f_cpu = f_ref / 2 = 48 MHz
+			s_MainClock = 96000000UL;
+			SystemCoreClock = Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_CPUSEL);
 			break;
 
 		/** 4/8/12 MHz RC Osc (RCFAST) as main source clk **/
@@ -531,19 +580,18 @@ void SystemInit()
 			ConfigDFLL0Freq(96);
 
 			/* Configure PM module */
-			// Select DFLL as Main_Clk_Source in PM module
+			// Pre-configure ALL synchronous clock dividers /2 BEFORE switching
+			// to DFLL.  f_main will be 96 MHz; every bus needs /2 for 48 MHz.
+			Sam4lSetSyncClkDividers(PM_CPUSEL_CPUDIV | PM_CPUSEL_CPUSEL(0));
+
+			// Now switch main clock to DFLL
 			SAM4L_PM->PM_UNLOCK =
 					PM_UNLOCK_KEY(0xAAu)
 					| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_MCCTRL - (uint32_t)SAM4L_PM);
-			SAM4L_PM->PM_MCCTRL |= PM_MCCTRL_MCSEL_DFLL0;
+			SAM4L_PM->PM_MCCTRL = PM_MCCTRL_MCSEL_DFLL0;
 
-			// CPU_Clk_Select Register Set Divider
-			SAM4L_PM->PM_UNLOCK =
-					PM_UNLOCK_KEY(0xAAu)
-					| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_CPUSEL - (uint32_t)SAM4L_PM);
-			while ((SAM4L_PM->PM_SR & PM_SR_CKRDY) == 0)
-				{};	// wait until PM_SR.CKRDY is high
-			SAM4L_PM->PM_CPUSEL = PM_CPUSEL_CPUDIV | PM_CPUSEL_CPUSEL(0);// f_cpu = f_ref / 2 = 48 MHz
+			s_MainClock = 96000000UL;
+			SystemCoreClock = Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_CPUSEL);
 			break;
 
 		/** RC80M RC Osc as main source clk **/
@@ -560,17 +608,18 @@ void SystemInit()
 			while ((SAM4L_SCIF->SCIF_RC80MCR & SCIF_RC80MCR_EN) == 0)
 				{};
 
-			// Select RC80M as Main_Clk_Source in PM module
+			// Pre-configure ALL synchronous clock dividers /2 BEFORE switching
+			// main clock to RC80M.  f_main will be 80 MHz; every bus needs /2
+			// to stay within 48 MHz spec (result = 40 MHz).
+			Sam4lSetSyncClkDividers(PM_CPUSEL_CPUDIV | PM_CPUSEL_CPUSEL(0));
+
+			// Now switch main clock to RC80M
 			SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
 					| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_MCCTRL - (uint32_t)SAM4L_PM);
-			SAM4L_PM->PM_MCCTRL |= PM_MCCTRL_MCSEL_RC80M;
+			SAM4L_PM->PM_MCCTRL = PM_MCCTRL_MCSEL_RC80M;
 
-			// CPU_Clk_Select Register Set Divider
-			SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
-					| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_CPUSEL - (uint32_t)SAM4L_PM);
-			while ((SAM4L_PM->PM_SR & PM_SR_CKRDY) == 0)
-				{};// wait until PM_SR.CKRDY is high
-			SAM4L_PM->PM_CPUSEL = PM_CPUSEL_CPUDIV | PM_CPUSEL_CPUSEL(0);// f_cpu = RC80M_clk / 2^(0+1) = 40MHz
+			s_MainClock = 80000000UL;
+			SystemCoreClock = Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_CPUSEL);
 			break;
 		}
 	}
@@ -597,28 +646,30 @@ void SystemInit()
 		// TODO: Use GenClk9 as input ref_clk as well
 		SystemSetPLL();
 
-		// PLL reg = 0x3f030109
-		uint32_t cpudiv = SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL;
+		// Pre-configure ALL synchronous clock dividers so every bus stays
+		// within 48 MHz after the MCCTRL switch.  If PLL is already <= 48 MHz,
+		// no division is needed; otherwise pick the smallest power-of-2 divider.
+		uint32_t sel_val = 0;	// no division
 
 		if (s_PllFreq > SYSTEM_CORE_CLOCK)
 		{
-//			cpudiv = s_PllFreq / 48000000;
-//			SystemCoreClock = s_PllFreq / cpudiv;
-
-			cpudiv = 30 - __CLZ(s_PllFreq / SYSTEM_CORE_CLOCK);
-
-			SystemCoreClock = s_PllFreq / (1 << (cpudiv + 1));
-
-			SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
-					| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_CPUSEL - (uint32_t)SAM4L_PM);
-			SAM4L_PM->PM_CPUSEL = cpudiv | PM_CPUSEL_CPUDIV;
+			uint32_t div_exp = 30 - __CLZ(s_PllFreq / SYSTEM_CORE_CLOCK);
+			sel_val = PM_CPUSEL_CPUSEL(div_exp) | PM_CPUSEL_CPUDIV;
 		}
 
+		Sam4lSetSyncClkDividers(sel_val);
+
+		// Only switch main clock once the PLL has actually locked.  If it did
+		// not lock, main clock stays on the previous source and SystemCoreClock
+		// is left alone (reported value will be stale but matches nothing dangerous).
 		if (SAM4L_SCIF->SCIF_PCLKSR & SCIF_PCLKSR_PLL0LOCK)
 		{
 			SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
 					| PM_UNLOCK_ADDR((uint32_t)&SAM4L_PM->PM_MCCTRL - (uint32_t)SAM4L_PM);
 			SAM4L_PM->PM_MCCTRL = PM_MCCTRL_MCSEL_PLL0;
+
+			s_MainClock = s_PllFreq;
+			SystemCoreClock = Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_CPUSEL);
 		}
 	}
 
@@ -663,48 +714,9 @@ void SystemInit()
 
 void SystemCoreClockUpdate(void)
 {
-
-	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
-	{
-		// TODO: Read back the SystemCoreClock
-//		printf("SystemCoreClock = %d\n", SystemCoreClock);
-	}
-	else if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL)
-	{
-		// XTAL
-		uint32_t pll = SAM4L_SCIF->SCIF_PLL[0].SCIF_PLL;
-		uint32_t mul = (pll & SCIF_PLL_PLLMUL_Msk) >> SCIF_PLL_PLLMUL_Pos;
-		uint32_t div = (pll & SCIF_PLL_PLLDIV_Msk) >> SCIF_PLL_PLLDIV_Pos;
-		uint32_t fvco =
-				div > 0 ?
-						(mul + 1) * g_McuOsc.CoreOsc.Freq / div :
-						((mul + 1) << 1) * g_McuOsc.CoreOsc.Freq;
-		uint32_t cpusel = SAM4L_PM->PM_CPUSEL;
-
-		if (pll & SCIF_PLL_PLLOPT(2))
-		{
-			fvco >>= 1;
-		}
-
-		if (cpusel & PM_CPUSEL_CPUDIV)
-		{
-			SystemCoreClock = fvco
-					/ (1 << ((cpusel & PM_CPUSEL_CPUSEL_Msk) + 1));
-		}
-		else
-		{
-			SystemCoreClock = fvco;
-		}
-	}
-	else if (g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO)
-	{
-		//printf("TCXO: external oscillator\n");
-	}
-	else
-	{
-		//printf("Wrong setting\n");
-		while(1);
-	}
+	// All main-clock sources ultimately route through PM_CPUSEL.  Recompute
+	// f_CPU from whatever s_MainClock currently holds plus the live CPUSEL.
+	SystemCoreClock = Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_CPUSEL);
 
 	SetFlashWaitState(SystemCoreClock);
 }
@@ -717,34 +729,40 @@ uint32_t SystemCoreClockGet()
 /**
  * @brief	Get peripheral clock frequency
  *
- * Peripheral clock on the SAM4E is the same as MCK which is the core clock
+ * Returns the clock of the selected peripheral bus on SAM4L:
+ *   Idx 0 -> PBA (USART, SPI, TWIM, ADC...)
+ *   Idx 1 -> PBB (PDCA, HRAMC1, USBC, CRCCU, HMATRIX...)
+ *   Idx 2 -> PBC (CHIPID, FREQM, GPIO, PM, SCIF...)
+ *   Idx 3 -> PBD (AST, WDT, EIC, PICOUART, BPM, BSCIF...)
  *
- * @param	Idx : Zero based peripheral clock number. Many processors can
- * 				  have more than 1 peripheral clock settings.
- *
- * @return	Peripheral clock frequency in Hz.
+ * Each PBx bus has its own divider off f_main (independent of f_CPU).
  */
 uint32_t SystemPeriphClockGet(int Idx)
 {
-	// TODO: Get the clock of the peripheral APBx
-	return SystemCoreClock;
+	switch (Idx)
+	{
+		case 0:  return Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_PBASEL);
+		case 1:  return Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_PBBSEL);
+		case 2:  return Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_PBCSEL);
+		case 3:  return Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_PBDSEL);
+		default: return 0;
+	}
 }
 
 /**
  * @brief	Set peripheral clock (PCLK) frequency
  *
- * Peripheral clock on the SAM4E is the same as MCK which is the core clock
- * there is no settings to change freq.
+ * Not implemented.  Peripheral bus dividers are set by SystemInit; changing
+ * them at runtime requires re-applying flash waitstates and coordinating with
+ * every active peripheral.
  *
- * @param	Idx  : Zero based peripheral clock number. Many processors can
- * 				   have more than 1 peripheral clock settings.
+ * @param	Idx  : Zero based peripheral clock number.
  * @param	Freq : Clock frequency in Hz.
  *
  * @return	Actual frequency set in Hz.
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-	// TODO: Configure the clock for peripherals APBx
 	return SystemPeriphClockGet(Idx);
 }
 

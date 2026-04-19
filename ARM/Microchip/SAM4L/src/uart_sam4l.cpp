@@ -298,7 +298,7 @@ static inline uint32_t Sam4lUartGetRate(DevIntrf_t * const pDev)
 static uint32_t Sam4lUartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	SAM4L_UARTDEV *dev = (SAM4L_UARTDEV *)pDev->pDevData;
-	uint32_t pclk = SystemPeriphClockGet(0);
+	uint32_t pclk = SystemPeriphClockGet(0);	// PBA clock
 	uint32_t over = 0;
 	uint32_t cd, fp;
 
