@@ -105,9 +105,42 @@ void SystemCoreClockSet(bool bCrystal, uint32_t ClkFreq)
 	uint32_t cfgr = 0;
 	uint32_t cfgr2 = 0;
 
-	// Make sure we are running from HSI while we reconfigure PLL.
+	// -------- Warm-reset sanitation --------
+	// RCC registers are NOT cleared by a system reset (only by POR). If a
+	// previous firmware left PLL running, switched SYSCLK to PLL, enabled
+	// HSE, or programmed USART1SW/CFGR3, we must undo all of that before
+	// touching PLLCFG — those bits are read-only while PLL is locked.
+
+	// 1. HSI on and stable (safe fallback clock).
 	RCC->CR |= RCC_CR_HSION;
 	while ((RCC->CR & RCC_CR_HSIRDY) == 0);
+
+	// 2. Switch SYSCLK to HSI. If we were on PLL, the core drops to 8 MHz.
+	RCC->CFGR &= ~RCC_CFGR_SW_Msk;
+	while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != 0);
+
+	// 3. Core is on HSI now — safe to relax flash to 0 WS.
+	FLASH->ACR = FLASH_ACR_PRFTBE;
+
+	// 4. Turn PLL off and wait until PLLRDY actually clears. Required
+	//    before any PLLSRC/PLLMUL/PREDIV write will take effect.
+	RCC->CR &= ~RCC_CR_PLLON;
+	while ((RCC->CR & RCC_CR_PLLRDY) != 0);
+
+	// 5. HSE off (in case previous firmware had it on). Clear HSEBYP too.
+	RCC->CR &= ~(RCC_CR_CSSON | RCC_CR_HSEON);
+	while ((RCC->CR & RCC_CR_HSERDY) != 0);
+	RCC->CR &= ~RCC_CR_HSEBYP;
+
+	// 6. Zero CFGR/CFGR2/CFGR3 so no stale PLLMUL/PREDIV/USART1SW.
+	RCC->CFGR  = 0;
+	RCC->CFGR2 = 0;
+	RCC->CFGR3 = 0;
+
+	// 7. Clear all RCC interrupts.
+	RCC->CIR = 0x00FF0000U;
+
+	// -------- From here: known state — HSI 8 MHz, PLL off, HSE off --------
 
 	if (bCrystal)
 	{
@@ -157,25 +190,20 @@ void SystemCoreClockSet(bool bCrystal, uint32_t ClkFreq)
 		cfgr |= RCC_CFGR_PLLSRC_HSI_DIV2 | RCC_CFGR_PLLMUL12;
 	}
 
-	// 1. Write PLL source/multiplier. SW stays at HSI (bits = 0) so the
-	//    core keeps running while PLL spins up.
+	// 8. Write PLL source/multiplier. SW stays at HSI (bits 0 in cfgr)
+	//    so the core keeps running on HSI while PLL spins up.
 	RCC->CFGR = cfgr;
 
-	// 2. Start PLL and wait for lock.
+	// 9. Start PLL and wait for lock.
 	RCC->CR |= RCC_CR_PLLON;
 	while ((RCC->CR & RCC_CR_PLLRDY) == 0);
 
-	// 3. Flash MUST have >=1 wait state before SYSCLK exceeds 24 MHz.
+	// 10. Flash MUST have >=1 wait state before SYSCLK exceeds 24 MHz.
 	FLASH->ACR = FLASH_ACR_PRFTBE | FLASH_ACR_LATENCY;
 
-	// 4. Bus prescalers: HCLK = SYSCLK, PCLK = HCLK (F0 has a single APB).
-	RCC->CFGR &= ~(RCC_CFGR_HPRE_Msk | RCC_CFGR_PPRE_Msk);
-
-	// 5. Switch SYSCLK to PLL and confirm the switch happened.
+	// 11. Switch SYSCLK to PLL and confirm the switch happened.
 	RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW_Msk) | RCC_CFGR_SW_PLL;
 	while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != RCC_CFGR_SWS_PLL);
-
-	RCC->CIR = 0x00000000U;
 
 	SystemCoreClockUpdate();
 }
