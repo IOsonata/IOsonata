@@ -1,8 +1,20 @@
 /**-------------------------------------------------------------------------
-@file	uart_sam4e.cpp
+@file	uart_sam4l.cpp
 
-@brief	SAM4E UART implementation
+@brief	SAM4L USART implementation
 
+All four SAM4L serial ports are USART instances (USART0..USART3).  There is
+no separate UART peripheral as on the SAM4E.  DMA is driven by the single
+PDCA (Peripheral DMA Controller A) selected via a per-channel peripheral id,
+not by a dedicated PDC block per USART.
+
+Channel allocation for optional TX DMA:
+  USART0 TX -> PDCA channel 0, PID 18
+  USART1 TX -> PDCA channel 1, PID 19
+  USART2 TX -> PDCA channel 2, PID 20
+  USART3 TX -> PDCA channel 3, PID 21
+
+RX is always interrupt driven.
 
 @author Hoang Nguyen Hoan
 @date	July. 7, 2020
@@ -38,225 +50,166 @@ SOFTWARE.
 #include "sam4lxxx.h"
 #include "component/component_pdca.h"
 #include "component/component_usart.h"
+#include "component/component_pm.h"
 
 #include "coredev/interrupt.h"
-#include "coredev/iopincfg.h"		
+#include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "coredev/system_core_clock.h"
 #include "cfifo.h"
 
-#define SAM4_UART_CFIFO_SIZE		16
-#define SAM4_UART_CFIFO_MEMSIZE		CFIFO_MEMSIZE(SAM4_UART_CFIFO_SIZE)
+#define SAM4L_UART_CFIFO_SIZE		16
+#define SAM4L_UART_CFIFO_MEMSIZE	CFIFO_MEMSIZE(SAM4L_UART_CFIFO_SIZE)
+
+// USART WPMR key - "USA" in ASCII (0x55 0x53 0x41)
+#define SAM4L_US_WPKEY			0x555341u
+
+// PDCA peripheral ids for USART TX (datasheet Table 16-2)
+#define SAM4L_PDCA_PID_USART_TX(n)	(18u + (n))
+// PDCA channel assignment : TX channel N for USART N
+#define SAM4L_PDCA_TX_CHAN(n)		(n)
 
 #pragma pack(push, 4)
 
 typedef struct _Sam_Uart_Dev {
-	int DevNo;				// UART interface number
-	uint32_t SamDevId;
-	//union {
-		Usart *pUartReg;
-//		Usart *pUSartReg;
-	//};
-	Pdca *pPdc;
-	UARTDev_t *pUartDev;		// Pointer to generic UART dev. data
-	uint8_t RxFifoMem[SAM4_UART_CFIFO_MEMSIZE];
-	uint8_t TxFifoMem[SAM4_UART_CFIFO_MEMSIZE];
-	uint8_t PdcRxByte;
-	uint8_t PdcTxBuff[SAM4_UART_CFIFO_SIZE];
-} SAM4_UARTDEV;
+	int DevNo;			//!< UART device index 0..3
+	uint32_t PbaMask;		//!< PM_PBAMASK_USARTn bit
+	IRQn_Type IrqNo;		//!< USARTn_IRQn
+	Usart *pReg;			//!< USART register block
+	UARTDev_t *pUartDev;		//!< Generic UART device data
+	uint8_t RxFifoMem[SAM4L_UART_CFIFO_MEMSIZE];
+	uint8_t TxFifoMem[SAM4L_UART_CFIFO_MEMSIZE];
+	uint8_t PdcTxBuff[SAM4L_UART_CFIFO_SIZE];
+} SAM4L_UARTDEV;
 
 #pragma pack(pop)
 
-static SAM4_UARTDEV s_Sam4UartDev[] = {
+static SAM4L_UARTDEV s_Sam4lUartDev[] = {
 	{
-		.DevNo = 0,
-		.SamDevId = ID_USART0,
-		.pUartReg = SAM4L_USART0,
-		.pPdc = SAM4L_PDC_USART0,
+		.DevNo    = 0,
+		.PbaMask  = PM_PBAMASK_USART0,
+		.IrqNo    = USART0_IRQn,
+		.pReg     = SAM4L_USART0,
 	},
 	{
-		.DevNo = 1,
-		.SamDevId = ID_USART1,
-		.pUartReg = SAM4L_USART1,
-		.pPdc = SAM4L_PDC_UART1,
+		.DevNo    = 1,
+		.PbaMask  = PM_PBAMASK_USART1,
+		.IrqNo    = USART1_IRQn,
+		.pReg     = SAM4L_USART1,
 	},
 	{
-		.DevNo = 2,
-		.SamDevId = ID_USART2,
-		.pUartReg = SAM4L_USART2,
-		.pPdc = SAM4E_PDC_USART0,
+		.DevNo    = 2,
+		.PbaMask  = PM_PBAMASK_USART2,
+		.IrqNo    = USART2_IRQn,
+		.pReg     = SAM4L_USART2,
 	},
 	{
-		.DevNo = 3,
-		.SamDevId = ID_USART3,
-		.pUartReg = SAM4L_USART3,
-		.pPdc = SAM4E_PDC_USART1,
+		.DevNo    = 3,
+		.PbaMask  = PM_PBAMASK_USART3,
+		.IrqNo    = USART3_IRQn,
+		.pReg     = SAM4L_USART3,
 	},
 };
 
-static const int s_NbSam4UartDev = sizeof(s_Sam4UartDev) / sizeof(SAM4_UARTDEV);
+static const int s_NbSam4lUartDev = sizeof(s_Sam4lUartDev) / sizeof(SAM4L_UARTDEV);
 
-UARTDev_t * const UARTGetInstance(int DevNo)
+UARTDev_t const * const UARTGetInstance(int DevNo)
 {
-	if (DevNo < 0 || DevNo >= s_NbSam4UartDev)
+	if (DevNo < 0 || DevNo >= s_NbSam4lUartDev)
 	{
 		return NULL;
 	}
 
-	return s_Sam4UartDev[DevNo].pUartDev;
+	return s_Sam4lUartDev[DevNo].pUartDev;
 }
 
-void Sam4UartIntHandler(SAM4_UARTDEV *pDev)
+/**
+ * @brief Unlock and write a PM register.
+ *
+ * The PM block requires an unlock key to be written to PM_UNLOCK immediately
+ * before any write to a protected register.
+ */
+static inline void Sam4lPmWrite(volatile uint32_t *pReg, uint32_t Value)
 {
-	uint32_t status = pDev->pUartReg->UART_SR;
+	uint32_t offs = (uint32_t)pReg - (uint32_t)SAM4L_PM;
+	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu) | PM_UNLOCK_ADDR(offs);
+	*pReg = Value;
+}
+
+static void Sam4lUartClockEnable(SAM4L_UARTDEV *pDev)
+{
+	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK | pDev->PbaMask);
+}
+
+static void Sam4lPdcaClockEnable(void)
+{
+	// PDCA is clocked on HSB (bus master side) and PBB (register side)
+	Sam4lPmWrite(&SAM4L_PM->PM_HSBMASK, SAM4L_PM->PM_HSBMASK | PM_HSBMASK_PDCA);
+	Sam4lPmWrite(&SAM4L_PM->PM_PBBMASK, SAM4L_PM->PM_PBBMASK | PM_PBBMASK_PDCA);
+}
+
+static inline void Sam4lUsartUnlockWpmr(Usart *pReg)
+{
+	pReg->US_WPMR = US_WPMR_WPKEY(SAM4L_US_WPKEY);
+}
+
+void Sam4lUsartIrqHandler(SAM4L_UARTDEV *pDev)
+{
+	Usart *reg = pDev->pReg;
+	uint32_t csr = reg->US_CSR;
+	uint32_t imr = reg->US_IMR;
 	bool err = false;
 	int cnt = 10;
 
-	if (status & UART_SR_RXRDY)
+	if ((csr & US_CSR_RXRDY) && (imr & US_IER_RXRDY))
 	{
 		do
 		{
 			uint8_t *p = CFifoPut(pDev->pUartDev->hRxFifo);
 			if (p == NULL)
 			{
+				pDev->pUartDev->RxDropCnt++;
+				// discard to clear RXRDY
+				(void)reg->US_RHR;
 				break;
 			}
 
-			*p = pDev->pUartReg->UART_RHR;
-			status = pDev->pUartReg->UART_SR;
+			*p = reg->US_RHR & 0xFFu;
+			csr = reg->US_CSR;
 
-		} while ((status & UART_SR_RXRDY) && (cnt-- > 0));
+		} while ((csr & US_CSR_RXRDY) && (cnt-- > 0));
 
 		if (pDev->pUartDev->EvtCallback)
 		{
 			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_RXDATA, NULL, 0);
 		}
 	}
-	cnt = 10;
 
 	if (pDev->pUartDev->DevIntrf.bDma == true)
 	{
-		if (status & UART_IER_ENDTX)
+		// TX DMA uses the dedicated PDCA channel; "transfer complete" is
+		// signalled by channel transfer-counter-reached-zero (TRC).
+		PdcaChannel *chan = &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_PDCA_TX_CHAN(pDev->DevNo)];
+
+		if (chan->PDCA_ISR & PDCA_ISR_TRC)
 		{
-			int l = SAM4_UART_CFIFO_SIZE;
+			int l = SAM4L_UART_CFIFO_SIZE;
 			uint8_t *p = CFifoGetMultiple(pDev->pUartDev->hTxFifo, &l);
+
 			if (p)
 			{
 				memcpy(pDev->PdcTxBuff, p, l);
-				pDev->pPdc->PERIPH_TPR = (uint32_t)pDev->PdcTxBuff;
-				pDev->pPdc->PERIPH_TCR = l;
-				pDev->pPdc->PERIPH_PTCR = PERIPH_PTCR_TXTEN;
+				chan->PDCA_MAR = (uint32_t)pDev->PdcTxBuff;
+				chan->PDCA_TCR = l;
+				chan->PDCA_CR  = PDCA_CR_TEN;
 			}
 			else
 			{
-				pDev->pPdc->PERIPH_TCR = 0;
-				pDev->pPdc->PERIPH_PTCR = PERIPH_PTCR_TXTDIS;
-				pDev->pUartReg->UART_IDR = UART_IER_ENDTX;
-			}
-
-			if (pDev->pUartDev->EvtCallback)
-			{
-				pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
-			}
-		}
-	}
-	else if (status & UART_SR_TXRDY)
-	{
-		do
-		{
-			uint8_t *p = CFifoGet(pDev->pUartDev->hTxFifo);
-			if (p == NULL)
-			{
+				// Nothing to send; disable TX DMA, disable its interrupt,
+				// drop back to TXEMPTY polling on the next push.
+				chan->PDCA_CR = PDCA_CR_TDIS;
+				chan->PDCA_IDR = PDCA_IER_TRC;	// disable transfer-complete interrupt
 				pDev->pUartDev->bTxReady = true;
-				pDev->pUartReg->UART_IDR = UART_IER_TXEMPTY;//UART_IER_TXRDY;
-				break;
-			}
-			pDev->pUartReg->UART_THR = *p;
-			status = pDev->pUartReg->UART_SR;
-		} while ((status & UART_SR_TXRDY) && (cnt-- > 0));
-
-		if (pDev->pUartDev->EvtCallback)
-		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
-		}
-	}
-
-	if (status & UART_SR_OVRE)
-	{
-		// Overrun
-		pDev->pUartDev->RxOvrErrCnt++;
-		//uart_reset_status(pDev->pUartReg);
-		err = true;
-	}
-	if (status & UART_SR_FRAME)
-	{
-		// Framing error
-		err = true;
-	}
-	if ( status & UART_SR_RXBUFF )
-	{
-		//pdc_rx_init( g_p_uart_pdc, &g_pdc_uart_packet, NULL );
-		//pdc_tx_init( g_p_uart_pdc, &g_pdc_uart_packet, NULL );
-	}
-	if (err)
-	{
-		// Reset status
-		pDev->pUartReg->UART_CR = UART_CR_RSTSTA;
-	}
-}
-
-void UART0_Handler(void)
-{
-	Sam4UartIntHandler(&s_Sam4UartDev[0]);
-}
-
-void UART1_Handler( void )
-{
-	Sam4UartIntHandler(&s_Sam4UartDev[1]);
-}
-
-void Sam4USartIntHandler(SAM4_UARTDEV *pDev)
-{
-	uint32_t status = pDev->pUSartReg->US_CSR;
-	bool err = false;
-	int cnt = 10;
-
-	if (status & UART_SR_RXRDY)
-	{
-		do
-		{
-			uint8_t *p = CFifoPut(pDev->pUartDev->hRxFifo);
-			if (p == NULL)
-			{
-				break;
-			}
-			*p = pDev->pUSartReg->US_RHR & US_RHR_RXCHR_Msk;
-			status = pDev->pUSartReg->US_CSR;
-		} while ((status & US_CSR_RXRDY) && cnt-- > 0);
-
-		if (pDev->pUartDev->EvtCallback)
-		{
-			pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_RXDATA, NULL, 0);
-		}
-	}
-	
-	if (pDev->pUartDev->DevIntrf.bDma == true)
-	{
-		if (status & US_IER_ENDTX)
-		{
-			int l = SAM4_UART_CFIFO_SIZE;
-			uint8_t *p = CFifoGetMultiple(pDev->pUartDev->hTxFifo, &l);
-			if (p)
-			{
-				memcpy(pDev->PdcTxBuff, p, l);
-				pDev->pPdc->PERIPH_TPR = (uint32_t)pDev->PdcTxBuff;
-				pDev->pPdc->PERIPH_TCR = l;
-				pDev->pPdc->PERIPH_PTCR = PERIPH_PTCR_TXTEN;
-			}
-			else
-			{
-				pDev->pPdc->PERIPH_TCR = 0;
-				pDev->pPdc->PERIPH_PTCR = PERIPH_PTCR_TXTDIS;
-				pDev->pUartReg->UART_IDR = US_IER_ENDTX;
 			}
 
 			if (pDev->pUartDev->EvtCallback)
@@ -265,22 +218,21 @@ void Sam4USartIntHandler(SAM4_UARTDEV *pDev)
 			}
 		}
 	}
-	else if (status & US_CSR_TXRDY)
+	else if ((csr & US_CSR_TXRDY) && (imr & US_IER_TXRDY))
 	{
 		cnt = 10;
-
 		do
 		{
 			uint8_t *p = CFifoGet(pDev->pUartDev->hTxFifo);
 			if (p == NULL)
 			{
 				pDev->pUartDev->bTxReady = true;
-				pDev->pUSartReg->US_IDR = US_IER_TXRDY;
+				reg->US_IDR = US_IER_TXRDY;
 				break;
 			}
-			pDev->pUSartReg->US_THR = US_THR_TXCHR(*p);
-			status = pDev->pUSartReg->US_CSR;
-		} while (status & US_CSR_TXRDY && cnt-- > 0);
+			reg->US_THR = US_THR_TXCHR(*p);
+			csr = reg->US_CSR;
+		} while ((csr & US_CSR_TXRDY) && (cnt-- > 0));
 
 		if (pDev->pUartDev->EvtCallback)
 		{
@@ -288,87 +240,130 @@ void Sam4USartIntHandler(SAM4_UARTDEV *pDev)
 		}
 	}
 
-	if (status & UART_SR_OVRE)
+	if (csr & US_CSR_OVRE)
 	{
-		// Overrun
-		err = true;
 		pDev->pUartDev->RxOvrErrCnt++;
+		err = true;
 	}
-
-	if (status & UART_SR_FRAME)
+	if (csr & US_CSR_FRAME)
 	{
+		pDev->pUartDev->FramErrCnt++;
+		err = true;
+	}
+	if (csr & US_CSR_PARE)
+	{
+		pDev->pUartDev->ParErrCnt++;
 		err = true;
 	}
 	if (err)
 	{
-		pDev->pUSartReg->US_CR = US_CR_RSTSTA;
+		reg->US_CR = US_CR_RSTSTA;
 	}
 }
 
-void USART0_Handler( void )
+extern "C" void USART0_Handler(void)
 {
-	Sam4USartIntHandler(&s_Sam4UartDev[2]);
+	Sam4lUsartIrqHandler(&s_Sam4lUartDev[0]);
 }
 
-void USART1_Handler( void )
+extern "C" void USART1_Handler(void)
 {
-	Sam4USartIntHandler(&s_Sam4UartDev[3]);
+	Sam4lUsartIrqHandler(&s_Sam4lUartDev[1]);
 }
 
-static inline uint32_t Sam4UARTGetRate(DevIntrf_t * const pDev) {
-	return ((SAM4_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
+extern "C" void USART2_Handler(void)
+{
+	Sam4lUsartIrqHandler(&s_Sam4lUartDev[2]);
 }
 
-static uint32_t Sam4UARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
+extern "C" void USART3_Handler(void)
 {
-	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
-	uint32_t cd = 0;
+	Sam4lUsartIrqHandler(&s_Sam4lUartDev[3]);
+}
+
+static inline uint32_t Sam4lUartGetRate(DevIntrf_t * const pDev)
+{
+	return ((SAM4L_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
+}
+
+/**
+ * @brief  Configure the USART baud rate generator.
+ *
+ * Async mode formula (SAM4L datasheet 24.7.1):
+ *   OVER = 0  :  baud = f_PBA / (16 * (CD + FP/8))
+ *   OVER = 1  :  baud = f_PBA / ( 8 * (CD + FP/8))
+ *
+ * Picks OVER=0 when the divisor permits, otherwise OVER=1 for low ratios.
+ */
+static uint32_t Sam4lUartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
+{
+	SAM4L_UARTDEV *dev = (SAM4L_UARTDEV *)pDev->pDevData;
 	uint32_t pclk = SystemPeriphClockGet(0);
+	uint32_t over = 0;
+	uint32_t cd, fp;
 
-	if (dev->DevNo < 2)
+	if (Rate == 0)
 	{
-		// UART
-		// baud = periphclk / (16 * CD)
-		// CD = periphclk / (baud * 16)
-		dev->pUartReg->UART_BRGR = ((pclk + (Rate << 3UL))/ (Rate << 4UL)) & 0xFFFF;
+		return 0;
+	}
+
+	// Try OVER = 0 (16x) first.  cd_x8 = pclk * 8 / (16 * baud) = pclk / (2 * baud)
+	uint32_t cd_x8 = (pclk + Rate) / (Rate << 1);	// rounded
+
+	if (cd_x8 < 8)
+	{
+		// Too small for 16x; switch to 8x oversampling.
+		over = US_MR_OVER;
+		cd_x8 = (pclk + (Rate >> 1)) / Rate;		// cd_x8 = pclk * 8 / (8 * baud)
+	}
+
+	cd = cd_x8 >> 3;
+	fp = cd_x8 & 0x7u;
+
+	if (cd == 0)
+	{
+		return 0;	// clock too low for requested baud
+	}
+	if (cd > 0xFFFFu)
+	{
+		cd = 0xFFFFu;
+		fp = 0;
+	}
+
+	Sam4lUsartUnlockWpmr(dev->pReg);
+	if (over)
+	{
+		dev->pReg->US_MR |= US_MR_OVER;
 	}
 	else
 	{
-		// USART
-		uint32_t fp = (pclk << 3UL);
-		Rate <<= 4UL;
-
-		if (pclk > Rate)
-		{
-			dev->pUSartReg->US_MR &= ~US_MR_OVER;
-			fp /= Rate;
-		}
-		else
-		{
-			dev->pUSartReg->US_MR |= US_MR_OVER;
-			fp /= (Rate >> 1UL);
-		}
-		cd = fp >> 3UL;
-		fp &= 0x7;
-		dev->pUSartReg->US_BRGR = cd | (fp << US_BRGR_FP_Pos);
+		dev->pReg->US_MR &= ~US_MR_OVER;
 	}
 
-	return Rate;
+	dev->pReg->US_BRGR = US_BRGR_CD(cd) | US_BRGR_FP(fp);
+
+	// Actual rate achieved, rounded.
+	uint32_t divisor = (over ? 8u : 16u) * ((cd << 3) + fp);
+	uint32_t actual = (divisor == 0) ? 0 : ((pclk << 3) / divisor);
+
+	dev->pUartDev->Rate = actual;
+	return actual;
 }
 
-static inline bool Sam4UARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr) {
+static inline bool Sam4lUartStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
+{
 	return true;
 }
 
-static int Sam4UARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
+static int Sam4lUartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
-	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
+	SAM4L_UARTDEV *dev = (SAM4L_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
 
 	uint32_t state = DisableInterrupt();
 	while (Bufflen)
 	{
-		int l  = Bufflen;
+		int l = Bufflen;
 		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &l);
 		if (p == NULL)
 		{
@@ -381,31 +376,16 @@ static int Sam4UARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	}
 	EnableInterrupt(state);
 
+	// If the ISR drained nothing since last call and a byte is sitting in RHR,
+	// pull it directly so tight polling loops can make progress.
 	if (dev->pUartDev->bRxReady)
 	{
-		bool rdy = false;
-		if (dev->DevNo < 2)
-		{
-			rdy = dev->pUartReg->UART_SR & UART_SR_RXRDY;
-		}
-		else
-		{
-			rdy = dev->pUSartReg->US_CSR & US_CSR_RXRDY;
-		}
-		
-		if (rdy == true)
+		if (dev->pReg->US_CSR & US_CSR_RXRDY)
 		{
 			uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
 			if (p)
 			{
-				if (dev->DevNo < 2)
-				{
-					*p = dev->pUartReg->UART_RHR;
-				}
-				else
-				{
-					*p = dev->pUSartReg->US_RHR & US_RHR_RXCHR_Msk;
-				}
+				*p = dev->pReg->US_RHR & 0xFFu;
 				dev->pUartDev->bRxReady = false;
 			}
 		}
@@ -414,18 +394,18 @@ static int Sam4UARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	return cnt;
 }
 
-static inline void Sam4UARTStopRx(DevIntrf_t * const pDev)
+static inline void Sam4lUartStopRx(DevIntrf_t * const pDev)
 {
 }
 
-static inline bool Sam4UARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
+static inline bool Sam4lUartStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	return true;
 }
 
-static int Sam4UARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
+static int Sam4lUartTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
-	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
+	SAM4L_UARTDEV *dev = (SAM4L_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
 	int rtry = pDev->MaxRetry > 0 ? pDev->MaxRetry : 5;
 
@@ -450,59 +430,35 @@ static int Sam4UARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 
 		if (dev->pUartDev->bTxReady)
 		{
-			bool rdy = false;
-			
-			if (dev->DevNo < 2)
+			if (dev->pUartDev->DevIntrf.bDma == true)
 			{
-				rdy = dev->pUartDev->DevIntrf.bDma == true ?
-					  dev->pUartReg->UART_SR & UART_SR_ENDTX :
-					  dev->pUartReg->UART_SR & UART_SR_TXRDY;
+				// Kick off a new PDCA TX burst only when the previous burst
+				// has completed (bTxReady set by the ISR).
+				PdcaChannel *chan = &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_PDCA_TX_CHAN(dev->DevNo)];
+
+				int l = SAM4L_UART_CFIFO_SIZE;
+				uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
+				if (p)
+				{
+					dev->pUartDev->bTxReady = false;
+					memcpy(dev->PdcTxBuff, p, l);
+
+					chan->PDCA_MAR = (uint32_t)dev->PdcTxBuff;
+					chan->PDCA_TCR = l;
+					chan->PDCA_CR  = PDCA_CR_TEN;
+					chan->PDCA_IER = PDCA_IER_TRC;	// fire IRQ on transfer complete
+				}
 			}
 			else
 			{
-				rdy = dev->pUartDev->DevIntrf.bDma == true ?
-					  dev->pUSartReg->US_CSR & US_CSR_ENDTX :
-					  dev->pUSartReg->US_CSR & US_CSR_TXRDY;
-			}
-			if (rdy == true)
-			{
-				if (dev->pUartDev->DevIntrf.bDma == true)
-				{
-					int l = SAM4_UART_CFIFO_SIZE;
-					uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &l);
-					if (p)
-					{
-						memcpy(dev->PdcTxBuff, p, l);
-						dev->pPdc->PERIPH_TPR = (uint32_t)dev->PdcTxBuff;
-						dev->pPdc->PERIPH_TCR = l;
-						dev->pPdc->PERIPH_PTCR = PERIPH_PTCR_TXTEN;
-						if (dev->DevNo < 2)
-						{
-							dev->pUartReg->UART_IER = UART_IER_ENDTX;
-						}
-						else
-						{
-							dev->pUSartReg->US_IER = US_IER_ENDTX;
-						}
-					}
-				}
-				else
+				if (dev->pReg->US_CSR & US_CSR_TXRDY)
 				{
 					uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
 					if (p)
 					{
 						dev->pUartDev->bTxReady = false;
-
-						if (dev->DevNo < 2)
-						{
-							dev->pUartReg->UART_THR = *p;
-							dev->pUartReg->UART_IER = UART_IER_TXEMPTY;//UART_IER_TXRDY;
-						}
-						else
-						{
-							dev->pUSartReg->US_THR = US_THR_TXCHR(*p);
-							dev->pUSartReg->US_IER = US_IER_TXRDY;
-						}
+						dev->pReg->US_THR = US_THR_TXCHR(*p);
+						dev->pReg->US_IER = US_IER_TXRDY;
 					}
 				}
 			}
@@ -511,34 +467,69 @@ static int Sam4UARTTxData(DevIntrf_t * const pDev, uint8_t *pData, int Datalen)
 	return cnt;
 }
 
-void Sam4UARTStopTx(DevIntrf_t * const pDev)
+void Sam4lUartStopTx(DevIntrf_t * const pDev)
 {
 }
 
-void Sam4UARTDisable(DevIntrf_t * const pDev)
+void Sam4lUartDisable(DevIntrf_t * const pDev)
 {
-	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
+	SAM4L_UARTDEV *dev = (SAM4L_UARTDEV *)pDev->pDevData;
+
+	dev->pReg->US_IDR = 0xFFFFFFFFu;
+	dev->pReg->US_CR  = US_CR_RXDIS | US_CR_TXDIS;
+
+	if (dev->pUartDev->DevIntrf.bDma)
+	{
+		PdcaChannel *chan = &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_PDCA_TX_CHAN(dev->DevNo)];
+		chan->PDCA_CR = PDCA_CR_TDIS;
+		chan->PDCA_IDR = 0xFFFFFFFFu;
+	}
+
+	// Gate the peripheral clock off.
+	Sam4lPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~dev->PbaMask);
 }
 
-void Sam4UARTEnable(DevIntrf_t * const pDev)
+void Sam4lUartEnable(DevIntrf_t * const pDev)
 {
-	SAM4_UARTDEV *dev = (SAM4_UARTDEV *)pDev->pDevData;
+	SAM4L_UARTDEV *dev = (SAM4L_UARTDEV *)pDev->pDevData;
+
+	Sam4lUartClockEnable(dev);
 
 	CFifoFlush(dev->pUartDev->hTxFifo);
+	CFifoFlush(dev->pUartDev->hRxFifo);
 
+	dev->pReg->US_CR  = US_CR_RSTSTA | US_CR_RSTRX | US_CR_RSTTX;
+	dev->pReg->US_CR  = US_CR_RXEN | US_CR_TXEN;
+	dev->pReg->US_IER = US_IER_RXRDY;
+
+	dev->pUartDev->bRxReady = false;
 	dev->pUartDev->bTxReady = true;
 }
 
-void Sam4UARTPowerOff(DevIntrf_t * const pDev)
+void Sam4lUartPowerOff(DevIntrf_t * const pDev)
 {
+	Sam4lUartDisable(pDev);
 }
 
-void UARTSetCtrlLineState(UARTTDev_t * const pDev, uint32_t LineState)
+void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 {
-
+	// SAM4L USART has no modem control lines mapped to generic line state.
+	pDev->LineState = LineState;
 }
 
-bool UARTInit(UARTTDev_t * const pDev, const UARTCFG *pCfg)
+static void Sam4lPdcaTxChannelInit(int DevNo)
+{
+	PdcaChannel *chan = &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_PDCA_TX_CHAN(DevNo)];
+
+	chan->PDCA_CR  = PDCA_CR_TDIS | PDCA_CR_ECLR;
+	chan->PDCA_PSR = PDCA_PSR_PID(SAM4L_PDCA_PID_USART_TX(DevNo));
+	chan->PDCA_MR  = PDCA_MR_SIZE_BYTE;
+	chan->PDCA_MAR = 0;
+	chan->PDCA_TCR = 0;
+	chan->PDCA_IDR = 0xFFFFFFFFu;
+}
+
+bool UARTInit(UARTDev_t * const pDev, const UARTCFG *pCfg)
 {
 	if (pDev == NULL || pCfg == NULL)
 	{
@@ -550,29 +541,23 @@ bool UARTInit(UARTTDev_t * const pDev, const UARTCFG *pCfg)
 		return false;
 	}
 
-	if (pCfg->DevNo < 0 || pCfg->DevNo >= s_NbSam4UartDev)
+	if (pCfg->DevNo < 0 || pCfg->DevNo >= s_NbSam4lUartDev)
 	{
 		return false;
 	}
 
 	int devno = pCfg->DevNo;
-	
-	if (s_Sam4UartDev[devno].SamDevId < 32)
-	{
-		SAM4E_PMC->PMC_PCER0 |= 1 << s_Sam4UartDev[devno].SamDevId;
-	}
-	else
-	{
-		SAM4E_PMC->PMC_PCER1 |= 1 << (s_Sam4UartDev[devno].SamDevId - 32);
-	}
-	
+	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[devno];
+
+	Sam4lUartClockEnable(dev);
+
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
 	{
 		pDev->hRxFifo = CFifoInit(pCfg->pRxMem, pCfg->RxMemSize, 1, pCfg->bFifoBlocking);
 	}
 	else
 	{
-		pDev->hRxFifo = CFifoInit(s_Sam4UartDev[devno].RxFifoMem, SAM4_UART_CFIFO_MEMSIZE, 1, pCfg->bFifoBlocking);
+		pDev->hRxFifo = CFifoInit(dev->RxFifoMem, SAM4L_UART_CFIFO_MEMSIZE, 1, pCfg->bFifoBlocking);
 	}
 
 	if (pCfg->pTxMem && pCfg->TxMemSize > 0)
@@ -581,14 +566,13 @@ bool UARTInit(UARTTDev_t * const pDev, const UARTCFG *pCfg)
 	}
 	else
 	{
-		pDev->hTxFifo = CFifoInit(s_Sam4UartDev[devno].TxFifoMem, SAM4_UART_CFIFO_MEMSIZE, 1, pCfg->bFifoBlocking);
+		pDev->hTxFifo = CFifoInit(dev->TxFifoMem, SAM4L_UART_CFIFO_MEMSIZE, 1, pCfg->bFifoBlocking);
 	}
 
-	pDev->DevIntrf.pDevData = &s_Sam4UartDev[devno];
-	s_Sam4UartDev[devno].pUartDev = pDev;
+	pDev->DevIntrf.pDevData = dev;
+	dev->pUartDev = pDev;
 
-	IOPINCFG *iopins = (IOPINCFG*)pCfg->pIOPinMap;
-	
+	// Pin muxing.  Caller supplies RX, TX, and optionally RTS/CTS.
 	if (pCfg->NbIOPins > 2 && pCfg->FlowControl == UART_FLWCTRL_HW)
 	{
 		IOPinCfg((IOPINCFG*)pCfg->pIOPinMap, pCfg->NbIOPins);
@@ -598,187 +582,108 @@ bool UARTInit(UARTTDev_t * const pDev, const UARTCFG *pCfg)
 		IOPinCfg((IOPINCFG*)pCfg->pIOPinMap, 2);
 	}
 
-	pDev->Rate = Sam4UARTSetRate(&pDev->DevIntrf, pCfg->Rate);
+	Usart *reg = dev->pReg;
 
-	if (devno < 2)
+	// Disable and reset the USART before reconfiguring.
+	Sam4lUsartUnlockWpmr(reg);
+	reg->US_IDR = 0xFFFFFFFFu;
+	reg->US_CR  = US_CR_RSTRX | US_CR_RSTTX | US_CR_RXDIS | US_CR_TXDIS | US_CR_RSTSTA;
+	reg->US_RTOR = 0;
+	reg->US_TTGR = 0;
+
+	// Build mode register.
+	uint32_t mr = US_MR_CHMODE_NORMAL;
+
+	switch (pCfg->Parity)
 	{
-		// UART
-		s_Sam4UartDev[devno].pUartReg->UART_CR = UART_CR_RSTRX | UART_CR_RSTTX
-				| UART_CR_RXDIS | UART_CR_TXDIS;
+		case UART_PARITY_ODD:
+			mr |= US_MR_PAR_ODD;
+			break;
+		case UART_PARITY_EVEN:
+			mr |= US_MR_PAR_EVEN;
+			break;
+		case UART_PARITY_MARK:
+			mr |= US_MR_PAR_MARK;
+			break;
+		case UART_PARITY_SPACE:
+			mr |= US_MR_PAR_SPACE;
+			break;
+		case UART_PARITY_NONE:
+		default:
+			mr |= US_MR_PAR_NONE;
+			break;
+	}
 
-		uint32_t mode = UART_MR_CHMODE_NORMAL;
-		
-		switch (pCfg->Parity)
-		{
-			case UART_PARITY_ODD:
-				mode |= UART_MR_PAR_ODD;
-				break;
-			case UART_PARITY_EVEN:
-				mode |= UART_MR_PAR_EVEN;
-				break;
-			case UART_PARITY_MARK:
-				mode |= UART_MR_PAR_MARK;
-				break;
-			case UART_PARITY_SPACE:
-				mode |= UART_MR_PAR_SPACE;
-				break;
-			case UART_PARITY_NONE:
-			default:
-				mode |= UART_MR_PAR_NO;
-				break;
-		}
-
-		if (pCfg->bDMAMode == true)
-		{
-			s_Sam4UartDev[devno].pUartDev->DevIntrf.bDma = true;
-			s_Sam4UartDev[devno].pUartReg->UART_PTCR = UART_PTCR_TXTEN;
-			s_Sam4UartDev[devno].pUartReg->UART_IER = UART_IER_RXRDY;// | UART_IER_ENDTX;//UART_IER_TXBUFE;
-			s_Sam4UartDev[devno].pPdc->PERIPH_TPR = (uint32_t)s_Sam4UartDev[devno].PdcTxBuff;
-			s_Sam4UartDev[devno].pPdc->PERIPH_TCR = 0;
-			s_Sam4UartDev[devno].pPdc->PERIPH_PTCR = PERIPH_PTCR_TXTDIS;
-		}
-		else
-		{
-			s_Sam4UartDev[devno].pUartDev->DevIntrf.bDma = false;
-			s_Sam4UartDev[devno].pUartReg->UART_PTCR = UART_PTCR_RXTDIS | UART_PTCR_TXTDIS;
-			s_Sam4UartDev[devno].pUartReg->UART_IER = UART_IER_RXRDY;// | UART_IER_TXEMPTY;//UART_IER_TXRDY;
-		}
-		s_Sam4UartDev[devno].pUartReg->UART_MR = mode;
-		s_Sam4UartDev[devno].pUartReg->UART_CR = UART_CR_RXEN | UART_CR_TXEN;
-		s_Sam4UartDev[devno].pUartReg->UART_CR = UART_CR_RSTSTA;
+	if (pCfg->StopBits == 2)
+	{
+		mr |= US_MR_NBSTOP_2;
 	}
 	else
 	{
-		// USART
-		s_Sam4UartDev[devno].pUSartReg->US_WPMR = US_WPMR_WPKEY_PASSWD;
-		s_Sam4UartDev[devno].pUSartReg->US_MR = 0;
-		s_Sam4UartDev[devno].pUSartReg->US_RTOR = 0;
-		s_Sam4UartDev[devno].pUSartReg->US_TTGR = 0;
-		s_Sam4UartDev[devno].pUSartReg->US_CR = US_CR_RSTTX | US_CR_TXDIS;
-		s_Sam4UartDev[devno].pUSartReg->US_CR = US_CR_RSTRX | US_CR_RXDIS;
-		s_Sam4UartDev[devno].pUSartReg->US_CR = US_CR_RSTRX | US_CR_RXDIS;
-		s_Sam4UartDev[devno].pUSartReg->US_CR = US_CR_RTSDIS;
-		s_Sam4UartDev[devno].pUSartReg->US_CR = US_CR_DTRDIS;
-
-		uint32_t mode = US_MR_CHMODE_NORMAL;
-
-		switch (pCfg->Parity)
-		{
-			case UART_PARITY_ODD:
-				mode |= US_MR_PAR_ODD;
-				break;
-			case UART_PARITY_EVEN:
-				mode |= US_MR_PAR_EVEN;
-				break;
-			case UART_PARITY_MARK:
-				mode |= US_MR_PAR_MARK;
-				break;
-			case UART_PARITY_SPACE:
-				mode |= US_MR_PAR_SPACE;
-				break;
-			case UART_PARITY_NONE:
-			default:
-				mode |= US_MR_PAR_NO;
-				break;
-		}
-		
-		if (pCfg->StopBits == 2)
-		{
-			mode |= US_MR_NBSTOP_2_BIT;
-		}
-		else
-		{
-			mode |= US_MR_NBSTOP_1_BIT;
-		}
-
-		switch (pCfg->DataBits)
-		{
-			case 5:
-				mode |= US_MR_CHRL_5_BIT;
-				break;
-			case 6:
-				mode |= US_MR_CHRL_6_BIT;
-				break;
-			case 7:
-				mode |= US_MR_CHRL_7_BIT;
-				break;
-			default:
-				mode |= US_MR_CHRL_8_BIT;
-				break;
-		}
-		
-		s_Sam4UartDev[devno].pUSartReg->US_MR = mode;
-
-		if (pCfg->bDMAMode == true)
-		{
-			s_Sam4UartDev[devno].pUartDev->DevIntrf.bDma = true;
-			s_Sam4UartDev[devno].pUSartReg->US_PTCR = US_PTCR_TXTEN;
-			s_Sam4UartDev[devno].pPdc->PERIPH_TPR = (uint32_t)s_Sam4UartDev[devno].PdcTxBuff;
-			s_Sam4UartDev[devno].pPdc->PERIPH_TCR = 0;
-			s_Sam4UartDev[devno].pPdc->PERIPH_PTCR = PERIPH_PTCR_TXTDIS;
-		}
-		else
-		{
-			s_Sam4UartDev[devno].pUartDev->DevIntrf.bDma = false;
-			s_Sam4UartDev[devno].pUSartReg->US_PTCR = US_PTCR_RXTDIS | US_PTCR_TXTDIS;
-		}
-		s_Sam4UartDev[devno].pUSartReg->US_CR = US_CR_TXEN | US_CR_RXEN;
-		s_Sam4UartDev[devno].pUSartReg->US_IER = US_IER_RXRDY;
-		s_Sam4UartDev[devno].pUSartReg->US_CR = US_CR_RSTSTA;
+		mr |= US_MR_NBSTOP_1;
 	}
 
-	s_Sam4UartDev[devno].pUartDev->bRxReady = false;
-	s_Sam4UartDev[devno].pUartDev->bTxReady = true;
+	switch (pCfg->DataBits)
+	{
+		case 5:  mr |= US_MR_CHRL_5; break;
+		case 6:  mr |= US_MR_CHRL_6; break;
+		case 7:  mr |= US_MR_CHRL_7; break;
+		default: mr |= US_MR_CHRL_8; break;
+	}
 
-	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
-	pDev->DataBits = pCfg->DataBits;
-	pDev->FlowControl = pCfg->FlowControl;
-	pDev->StopBits = pCfg->StopBits;
-	pDev->bIrDAFixPulse = pCfg->bIrDAFixPulse;
-	pDev->bIrDAInvert = pCfg->bIrDAInvert;
-	pDev->bIrDAMode = pCfg->bIrDAMode;
-	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
-	pDev->Parity = pCfg->Parity;
-	pDev->bIntMode = pCfg->bIntMode;
-	pDev->EvtCallback = pCfg->EvtCallback;
-	pDev->DevIntrf.Disable = Sam4UARTDisable;
-	pDev->DevIntrf.Enable = Sam4UARTEnable;
-	pDev->DevIntrf.GetRate = Sam4UARTGetRate;
-	pDev->DevIntrf.SetRate = Sam4UARTSetRate;
-	pDev->DevIntrf.StartRx = Sam4UARTStartRx;
-	pDev->DevIntrf.RxData = Sam4UARTRxData;
-	pDev->DevIntrf.StopRx = Sam4UARTStopRx;
-	pDev->DevIntrf.StartTx = Sam4UARTStartTx;
-	pDev->DevIntrf.TxData = Sam4UARTTxData;
-	pDev->DevIntrf.StopTx = Sam4UARTStopTx;
+	Sam4lUsartUnlockWpmr(reg);
+	reg->US_MR = mr;
+
+	// Baud rate generator (also unlocks WPMR internally).
+	pDev->Rate = Sam4lUartSetRate(&pDev->DevIntrf, pCfg->Rate);
+
+	// DMA (PDCA) setup for TX.  RX is always interrupt driven.
+	if (pCfg->bDMAMode)
+	{
+		Sam4lPdcaClockEnable();
+		Sam4lPdcaTxChannelInit(devno);
+		pDev->DevIntrf.bDma = true;
+	}
+	else
+	{
+		pDev->DevIntrf.bDma = false;
+	}
+
+	reg->US_CR  = US_CR_RXEN | US_CR_TXEN;
+	reg->US_IER = US_IER_RXRDY;
+	reg->US_CR  = US_CR_RSTSTA;
+
+	pDev->bRxReady = false;
+	pDev->bTxReady = true;
+
+	pDev->DevIntrf.Type     = DEVINTRF_TYPE_UART;
+	pDev->DataBits          = pCfg->DataBits;
+	pDev->FlowControl       = pCfg->FlowControl;
+	pDev->StopBits          = pCfg->StopBits;
+	pDev->bIrDAFixPulse     = pCfg->bIrDAFixPulse;
+	pDev->bIrDAInvert       = pCfg->bIrDAInvert;
+	pDev->bIrDAMode         = pCfg->bIrDAMode;
+	pDev->IrDAPulseDiv      = pCfg->IrDAPulseDiv;
+	pDev->Parity            = pCfg->Parity;
+	pDev->EvtCallback       = pCfg->EvtCallback;
+	pDev->DevIntrf.Disable  = Sam4lUartDisable;
+	pDev->DevIntrf.Enable   = Sam4lUartEnable;
+	pDev->DevIntrf.GetRate  = Sam4lUartGetRate;
+	pDev->DevIntrf.SetRate  = Sam4lUartSetRate;
+	pDev->DevIntrf.StartRx  = Sam4lUartStartRx;
+	pDev->DevIntrf.RxData   = Sam4lUartRxData;
+	pDev->DevIntrf.StopRx   = Sam4lUartStopRx;
+	pDev->DevIntrf.StartTx  = Sam4lUartStartTx;
+	pDev->DevIntrf.TxData   = Sam4lUartTxData;
+	pDev->DevIntrf.StopTx   = Sam4lUartStopTx;
 	pDev->DevIntrf.MaxRetry = UART_RETRY_MAX;
-	pDev->DevIntrf.PowerOff = Sam4UARTPowerOff;
-	pDev->DevIntrf.EnCnt = 1;
+	pDev->DevIntrf.PowerOff = Sam4lUartPowerOff;
+	pDev->DevIntrf.EnCnt    = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	switch (devno)
-	{
-		case 0:
-			NVIC_ClearPendingIRQ(UART0_IRQn);
-			NVIC_SetPriority(UART0_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(UART0_IRQn);
-			break;
-		case 1:
-			NVIC_ClearPendingIRQ(UART1_IRQn);
-			NVIC_SetPriority(UART1_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(UART1_IRQn);
-			break;
-		case 2:
-			NVIC_ClearPendingIRQ(USART0_IRQn);
-			NVIC_SetPriority(USART0_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(USART0_IRQn);
-			break;
-		case 3:
-			NVIC_ClearPendingIRQ(USART1_IRQn);
-			NVIC_SetPriority(USART1_IRQn, pCfg->IntPrio);
-			NVIC_EnableIRQ(USART1_IRQn);
-			break;
-	}
-		
+	NVIC_ClearPendingIRQ(dev->IrqNo);
+	NVIC_SetPriority(dev->IrqNo, pCfg->IntPrio);
+	NVIC_EnableIRQ(dev->IrqNo);
+
 	return true;
 }
