@@ -868,6 +868,10 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 					{
 						BtAppScan();
 					}
+					else
+					{
+						BtAppScanStop();
+					}
 				}
     			break;
             case BLE_GAP_EVT_TIMEOUT:
@@ -2093,7 +2097,7 @@ void BtAppRun()
 	*/
 }
 
-void BtAppScan()
+void BtAppScan(void)
 {
 	if (s_BtAppData.bScan == true)
 	{
@@ -2107,6 +2111,13 @@ void BtAppScan()
 //		err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
 		BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
 	}
+}
+
+void BtAppScanStop(void)
+{
+	BtGapScanStop();
+
+	s_BtAppData.bScan = false;
 }
 
 bool BtAppScanInit(BtGapScanCfg_t *pCfg)
@@ -2141,7 +2152,9 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 //uint32_t BtAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam)
 bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
 {
-	return BtGapConnect(pPeerAddr, pConnParam);
+    s_BtAppData.bScan = false;
+
+    return BtGapConnect(pPeerAddr, pConnParam);
 
 #if 0
 	ret_code_t err_code = sd_ble_gap_connect(pDevAddr, &s_BleScanParams,
