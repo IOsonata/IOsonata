@@ -6,15 +6,20 @@ set -euo pipefail
 # ---------------------------------------------------------
 #  Purpose: Build IOsonata libraries for selected MCU
 #  Platform: Linux
-#  Version: v2.2.0
+#  Version: v2.3.0
+#
+#  v2.3.0: Prefer IOcomposer; fall back to Eclipse if not
+#          found. IOcomposer is Eclipse-based, so the same
+#          headless build application is used regardless.
 # =========================================================
 
 # ---------------------------------------------------------
 # CONFIGURATION VARIABLES
 # ---------------------------------------------------------
 
-SCRIPT_VERSION="v2.2.0"
+SCRIPT_VERSION="v2.3.0"
 ROOT="${HOME}/IOcomposer"
+IOCOMPOSER_DIR="/opt/iocomposer"
 ECLIPSE_DIR="/opt/eclipse"
 
 # ---------------------------------------------------------
@@ -32,7 +37,17 @@ while [[ $# -gt 0 ]]; do
         ROOT="$1"
       shift
       ;;
-    # Added this to specify directory for eclipse installation
+    # Explicit IOcomposer install dir
+    --iocomposer)
+      shift
+        if [[ -z "${1:-}" ]]; then
+          echo "❌ Missing path after --iocomposer"
+          exit 1
+        fi
+        IOCOMPOSER_DIR="$1"
+      shift
+      ;;
+    # Explicit Eclipse install dir (fallback when IOcomposer absent)
     --eclipse)
       shift
         if [[ -z "${1:-}" ]]; then
@@ -43,20 +58,22 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --help|-h)
-      echo "Usage: $0 [--home <path>] [--eclipse <path>]"
+      echo "Usage: $0 [--home <path>] [--iocomposer <path>] [--eclipse <path>]"
       echo ""
       echo "Build IOsonata libraries for selected MCU target."
       echo ""
       echo "Options:"
-      echo "  --home <path>      Set IOsonata SDK root (default: ~/IOcomposer)"
-      echo "  --eclipse <path>   Set Eclipse install dir (default: ~/eclipse/embedcdt)"
-      echo "  --help, -h         Show this help"
+      echo "  --home <path>         Set IOsonata SDK root (default: ~/IOcomposer)"
+      echo "  --iocomposer <path>   Set IOcomposer install dir (default: /opt/iocomposer)"
+      echo "  --eclipse <path>      Set Eclipse install dir (fallback) (default: /opt/eclipse)"
+      echo "  --help, -h            Show this help"
       echo ""
       echo "This script will:"
-      echo "  1. Discover available IOsonata Eclipse library projects"
-      echo "  2. Present an interactive menu"
-      echo "  3. Build Debug and Release configurations"
-      echo "  4. Output libraries to project's Debug/Release directories"
+      echo "  1. Locate IOcomposer (preferred) or Eclipse Embedded CDT"
+      echo "  2. Discover available IOsonata Eclipse library projects"
+      echo "  3. Present an interactive menu"
+      echo "  4. Build Debug and Release configurations"
+      echo "  5. Output libraries to project's Debug/Release directories"
       exit 0
       ;;
     *)
@@ -78,46 +95,101 @@ echo "========================================================="
 echo
 
 # ------------------------------------------------------------
-# ECLIPSE VALIDATION (Finding where the Eclipse executable is)
+# IDE DETECTION (prefer IOcomposer, fall back to Eclipse)
 # ------------------------------------------------------------
-# Linux doesn't have a standard Eclipse install location, so we test it in common locations
+# IOcomposer is Eclipse-based, so its launcher may be named
+# 'iocomposer'/'iocomposerc' or still 'eclipse'/'eclipsec'.
+# We try both. The headless build application is the same
+# either way.
 
-ECLIPSE_BIN=""
-if [[ -x "$ECLIPSE_DIR/eclipse" ]]; then
-  ECLIPSE_BIN="$ECLIPSE_DIR/eclipse"
-elif [[ -x "$ECLIPSE_DIR/eclipsec" ]]; then
-  ECLIPSE_BIN="$ECLIPSE_DIR/eclipsec"
-elif command -v eclipse &>/dev/null; then
-  ECLIPSE_BIN=$(command -v eclipse)
-  ECLIPSE_DIR=$(dirname "$ECLIPSE_BIN")
-elif [[ -x "/opt/eclipse/eclipse" ]]; then
-  ECLIPSE_BIN="/opt/eclipse/eclipse"
-  ECLIPSE_DIR="/opt/eclipse"
-elif [[ -x "/usr/local/eclipse/eclipse" ]]; then
-  ECLIPSE_BIN="/usr/local/eclipse/eclipse"
-  ECLIPSE_DIR="/usr/local/eclipse"
-elif [[ -x "/snap/eclipse/current/eclipse" ]]; then
-  ECLIPSE_BIN="/snap/eclipse/current/eclipse"
-  ECLIPSE_DIR="/snap/eclipse/current"
+IDE_BIN=""
+IDE_DIR=""
+IDE_NAME=""
+
+# Candidate IOcomposer install directories
+iocomposer_candidates=(
+  "$IOCOMPOSER_DIR"
+  "$ROOT/iocomposer"
+  "$HOME/iocomposer"
+  "$HOME/IOcomposer/iocomposer"
+  "/opt/iocomposer"
+  "/opt/IOcomposer"
+  "/usr/local/iocomposer"
+)
+# Launcher names to try inside an IOcomposer dir
+iocomposer_exes=("iocomposer" "iocomposerc" "eclipse" "eclipsec")
+
+for dir in "${iocomposer_candidates[@]}"; do
+  for exe in "${iocomposer_exes[@]}"; do
+    if [[ -x "$dir/$exe" ]]; then
+      IDE_BIN="$dir/$exe"
+      IDE_DIR="$dir"
+      IDE_NAME="IOcomposer"
+      break 2
+    fi
+  done
+done
+
+# Try iocomposer on PATH
+if [[ -z "$IDE_BIN" ]] && command -v iocomposer &>/dev/null; then
+  IDE_BIN=$(command -v iocomposer)
+  IDE_DIR=$(dirname "$IDE_BIN")
+  IDE_NAME="IOcomposer"
 fi
 
-if [[ -z "$ECLIPSE_BIN" ]]; then
-  echo "❌ ERROR: Eclipse not found"
+# Fall back to standalone Eclipse
+if [[ -z "$IDE_BIN" ]]; then
+  if [[ -x "$ECLIPSE_DIR/eclipse" ]]; then
+    IDE_BIN="$ECLIPSE_DIR/eclipse"
+    IDE_DIR="$ECLIPSE_DIR"
+    IDE_NAME="Eclipse"
+  elif [[ -x "$ECLIPSE_DIR/eclipsec" ]]; then
+    IDE_BIN="$ECLIPSE_DIR/eclipsec"
+    IDE_DIR="$ECLIPSE_DIR"
+    IDE_NAME="Eclipse"
+  elif command -v eclipse &>/dev/null; then
+    IDE_BIN=$(command -v eclipse)
+    IDE_DIR=$(dirname "$IDE_BIN")
+    IDE_NAME="Eclipse"
+  elif [[ -x "/opt/eclipse/eclipse" ]]; then
+    IDE_BIN="/opt/eclipse/eclipse"
+    IDE_DIR="/opt/eclipse"
+    IDE_NAME="Eclipse"
+  elif [[ -x "/usr/local/eclipse/eclipse" ]]; then
+    IDE_BIN="/usr/local/eclipse/eclipse"
+    IDE_DIR="/usr/local/eclipse"
+    IDE_NAME="Eclipse"
+  elif [[ -x "/snap/eclipse/current/eclipse" ]]; then
+    IDE_BIN="/snap/eclipse/current/eclipse"
+    IDE_DIR="/snap/eclipse/current"
+    IDE_NAME="Eclipse"
+  fi
+fi
+
+if [[ -z "$IDE_BIN" ]]; then
+  echo "❌ ERROR: Neither IOcomposer nor Eclipse found"
   echo ""
-  echo "Searched locations:"
-  echo "  - $ECLIPSE_DIR/eclipse"
-  echo "  - /opt/eclipse/eclipse"
-  echo "  - /usr/local/eclipse/eclipse"
-  echo "  - System PATH"
+  echo "Searched IOcomposer locations:"
+  for dir in "${iocomposer_candidates[@]}"; do
+    echo "  - $dir"
+  done
+  echo "  - iocomposer on PATH"
   echo ""
-  echo "Please install Eclipse Embedded CDT:"
+  echo "Searched Eclipse locations:"
+  echo "  - $ECLIPSE_DIR"
+  echo "  - /opt/eclipse"
+  echo "  - /usr/local/eclipse"
+  echo "  - /snap/eclipse/current"
+  echo "  - eclipse on PATH"
+  echo ""
+  echo "Please install IOcomposer (preferred) or Eclipse Embedded CDT:"
   echo "  1. Run: ./install_iocdevtools_linux.sh"
-  echo "  2. Or download from: https://eclipse.org/downloads/"
-  echo "  3. Or specify location: $0 --eclipse /path/to/eclipse"
+  echo "  2. Or specify location: $0 --iocomposer /path/to/iocomposer"
+  echo "  3. Or:                  $0 --eclipse     /path/to/eclipse"
   exit 1
 fi
 
-echo "✓ Eclipse found at: $ECLIPSE_BIN"
+echo "✓ $IDE_NAME found at: $IDE_BIN"
 echo
 
 # ---------------------------------------------------------
@@ -239,14 +311,8 @@ build_project() {
   local WS
   WS=$(mktemp -d /tmp/iosonata_build_ws.XXXX)
   echo ">>> Workspace: $WS"
-  echo ">>> Running Eclipse headless build..."
+  echo ">>> Running $IDE_NAME headless build..."
   echo
-
-  # Prefer console launcher
-  local ECL_BIN="$ECLIPSE_DIR/eclipsec"
-  if [[ ! -x "$ECL_BIN" ]]; then
-    ECL_BIN="$ECLIPSE_DIR/eclipse"
-  fi
 
   # Log File Setup
   local LOGFILE="/tmp/build_iosonata_lib_$$.log"
@@ -254,7 +320,7 @@ build_project() {
 
   # Run headless build with AWK filter
   set +e
-  "$ECLIPSE_BIN" \
+  "$IDE_BIN" \
     --launcher.suppressErrors \
     -nosplash \
     -application org.eclipse.cdt.managedbuilder.core.headlessbuild \

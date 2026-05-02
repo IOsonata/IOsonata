@@ -6,14 +6,18 @@ set -euo pipefail
 # ---------------------------------------------------------
 #  Purpose: Build IOsonata libraries for selected MCU
 #  Platform: macOS
-#  Version: v2.2.0
+#  Version: v2.3.0
+#
+#  v2.3.0: Prefer IOcomposer; fall back to Eclipse if not
+#          found. IOcomposer is Eclipse-based, so the same
+#          headless build application is used regardless.
 # =========================================================
 #
 # This script can be run standalone or called by installer/clone scripts.
 # It will prompt for MCU selection and build the IOsonata library.
 #
 # Usage:
-#   ./build_iosonata_lib_macos.sh [--home <path>]
+#   ./build_iosonata_lib_macos.sh [--home <path>] [--iocomposer <path>] [--eclipse <path>]
 #
 # Examples:
 #   ./build_iosonata_lib_macos.sh                    # Use default ~/IOcomposer
@@ -21,8 +25,9 @@ set -euo pipefail
 #
 # =========================================================
 
-SCRIPT_VERSION="v2.2.0"
+SCRIPT_VERSION="v2.3.0"
 ROOT="${HOME}/IOcomposer"
+IOCOMPOSER_APP="/Applications/IOcomposer.app"
 ECLIPSE_APP="/Applications/Eclipse.app"
 
 # Parse arguments
@@ -37,20 +42,41 @@ while [[ $# -gt 0 ]]; do
       ROOT="$1"
       shift
       ;;
+    --iocomposer)
+      shift
+      if [[ -z "${1:-}" ]]; then
+        echo "❌ Missing path after --iocomposer"
+        exit 1
+      fi
+      IOCOMPOSER_APP="$1"
+      shift
+      ;;
+    --eclipse)
+      shift
+      if [[ -z "${1:-}" ]]; then
+        echo "❌ Missing path after --eclipse"
+        exit 1
+      fi
+      ECLIPSE_APP="$1"
+      shift
+      ;;
     --help|-h)
-      echo "Usage: $0 [--home <path>]"
+      echo "Usage: $0 [--home <path>] [--iocomposer <path>] [--eclipse <path>]"
       echo ""
       echo "Build IOsonata libraries for selected MCU target."
       echo ""
       echo "Options:"
-      echo "  --home <path>    Set IOsonata SDK root (default: ~/IOcomposer)"
-      echo "  --help, -h       Show this help"
+      echo "  --home <path>         Set IOsonata SDK root (default: ~/IOcomposer)"
+      echo "  --iocomposer <path>   Set IOcomposer.app path (default: /Applications/IOcomposer.app)"
+      echo "  --eclipse <path>      Set Eclipse.app path (fallback) (default: /Applications/Eclipse.app)"
+      echo "  --help, -h            Show this help"
       echo ""
       echo "This script will:"
-      echo "  1. Discover available IOsonata Eclipse library projects"
-      echo "  2. Present an interactive menu"
-      echo "  3. Build Debug and Release configurations"
-      echo "  4. Output libraries to project's Debug/Release directories"
+      echo "  1. Locate IOcomposer (preferred) or Eclipse Embedded CDT"
+      echo "  2. Discover available IOsonata Eclipse library projects"
+      echo "  3. Present an interactive menu"
+      echo "  4. Build Debug and Release configurations"
+      echo "  5. Output libraries to project's Debug/Release directories"
       exit 0
       ;;
     *)
@@ -67,22 +93,87 @@ echo "  Version: $SCRIPT_VERSION"
 echo "========================================================="
 echo
 
-# Check Eclipse installation
-if [[ ! -d "$ECLIPSE_APP" ]]; then
-  echo "❌ ERROR: Eclipse not found at $ECLIPSE_APP"
+# ---------------------------------------------------------
+# IDE DETECTION (prefer IOcomposer, fall back to Eclipse)
+# ---------------------------------------------------------
+# IOcomposer is Eclipse-based. Inside the .app bundle the
+# launcher may be named 'iocomposer'/'iocomposerc' or still
+# 'eclipse'/'eclipsec'. Try both.
+
+IDE_BIN=""
+IDE_APP=""
+IDE_NAME=""
+
+# Helper: try to locate a usable launcher inside an .app bundle.
+# Sets IDE_BIN/IDE_APP/IDE_NAME on success.
+find_launcher_in_app() {
+  local app="$1"
+  local name="$2"
+  local exe
+  if [[ ! -d "$app" ]]; then
+    return 1
+  fi
+  for exe in iocomposerc iocomposer eclipsec eclipse; do
+    if [[ -x "$app/Contents/MacOS/$exe" ]]; then
+      IDE_BIN="$app/Contents/MacOS/$exe"
+      IDE_APP="$app"
+      IDE_NAME="$name"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# IOcomposer candidate locations
+iocomposer_candidates=(
+  "$IOCOMPOSER_APP"
+  "$ROOT/IOcomposer.app"
+  "$HOME/Applications/IOcomposer.app"
+  "/Applications/IOcomposer.app"
+)
+
+for app in "${iocomposer_candidates[@]}"; do
+  if find_launcher_in_app "$app" "IOcomposer"; then
+    break
+  fi
+done
+
+# Fall back to Eclipse
+if [[ -z "$IDE_BIN" ]]; then
+  eclipse_candidates=(
+    "$ECLIPSE_APP"
+    "$HOME/Applications/Eclipse.app"
+    "/Applications/Eclipse.app"
+  )
+  for app in "${eclipse_candidates[@]}"; do
+    if find_launcher_in_app "$app" "Eclipse"; then
+      break
+    fi
+  done
+fi
+
+if [[ -z "$IDE_BIN" ]]; then
+  echo "❌ ERROR: Neither IOcomposer nor Eclipse found"
   echo ""
-  echo "Please install Eclipse Embedded CDT:"
+  echo "Searched IOcomposer locations:"
+  for app in "${iocomposer_candidates[@]}"; do
+    echo "  - $app"
+  done
+  echo ""
+  echo "Searched Eclipse locations:"
+  echo "  - $ECLIPSE_APP"
+  echo "  - $HOME/Applications/Eclipse.app"
+  echo "  - /Applications/Eclipse.app"
+  echo ""
+  echo "Please install IOcomposer (preferred) or Eclipse Embedded CDT:"
   echo "  1. Run: ./install_iocdevtools_macos.sh"
-  echo "  2. Or download from: https://eclipse.org/downloads/"
+  echo "  2. Or specify location: $0 --iocomposer /path/to/IOcomposer.app"
+  echo "  3. Or:                  $0 --eclipse     /path/to/Eclipse.app"
   exit 1
 fi
 
-if [[ ! -x "$ECLIPSE_APP/Contents/MacOS/eclipse" ]]; then
-  echo "❌ ERROR: Eclipse executable not found or not executable"
-  exit 1
-fi
-
-echo "✓ Eclipse found at: $ECLIPSE_APP"
+echo "✓ $IDE_NAME found at: $IDE_APP"
+echo "  Launcher: $IDE_BIN"
 echo
 
 # Check IOsonata installation
@@ -181,21 +272,15 @@ build_project() {
   local WS
   WS=$(mktemp -d /tmp/iosonata_build_ws.XXXX)
   echo ">>> Using temp workspace: $WS"
-  echo ">>> Running Eclipse headless build (indexing disabled)..."
+  echo ">>> Running $IDE_NAME headless build (indexing disabled)..."
   echo
-  
-  # Prefer console launcher
-  local ECL_BIN="$ECLIPSE_APP/Contents/MacOS/eclipsec"
-  if [[ ! -x "$ECL_BIN" ]]; then
-    ECL_BIN="$ECLIPSE_APP/Contents/MacOS/eclipse"
-  fi
   
   local LOGFILE="/tmp/build_iosonata_lib_$$.log"
   rm -f "$LOGFILE" || true
   
   # Run headless build with AWK filter to remove Java verbosity
   set +e
-  "$ECL_BIN" \
+  "$IDE_BIN" \
     --launcher.suppressErrors \
     -nosplash \
     -application org.eclipse.cdt.managedbuilder.core.headlessbuild \

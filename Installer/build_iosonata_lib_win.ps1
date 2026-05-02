@@ -5,28 +5,46 @@
     Build IOsonata libraries for selected MCU target.
 
 .DESCRIPTION
-    Standalone script to build IOsonata libraries using Eclipse headless build.
+    Standalone script to build IOsonata libraries using a headless build.
+    Prefers IOcomposer (the new IOsonata installer); falls back to Eclipse
+    Embedded CDT if IOcomposer is not found. IOcomposer is Eclipse-based,
+    so the same headless build application is used regardless.
     Can be run multiple times to build for different MCU targets.
-    Now supports building all projects at once.
+    Supports building all projects at once.
 
 .PARAMETER SdkHome
     Path to IOsonata SDK root (default: ~\IOcomposer)
 
+.PARAMETER IocomposerDir
+    Path to IOcomposer install dir (default: %ProgramFiles%\IOcomposer)
+
+.PARAMETER EclipseDir
+    Path to Eclipse Embedded CDT install dir, used as fallback
+    (default: %ProgramFiles%\Eclipse Embedded CDT)
+
 .EXAMPLE
     .\build_iosonata_lib_win.ps1
-    Build with default path
+    Build with default paths
+
+.EXAMPLE
+    .\build_iosonata_lib_win.ps1 -IocomposerDir "C:\Tools\IOcomposer"
+    Build with custom IOcomposer location
 
 .NOTES
-    Version: v2.2.3
+    Version: v2.3.0
     Platform: Windows
+
+    v2.3.0: Prefer IOcomposer; fall back to Eclipse if not found.
 #>
 
 param(
-    [string]$SdkHome = "$env:USERPROFILE\IOcomposer"
+    [string]$SdkHome        = "$env:USERPROFILE\IOcomposer",
+    [string]$IocomposerDir  = "$env:ProgramFiles\IOcomposer",
+    [string]$EclipseDir     = "$env:ProgramFiles\Eclipse Embedded CDT"
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v2.2.3"
+$SCRIPT_VERSION = "v2.3.0"
 
 # --- Helper: Print Banner ---
 function Show-Banner {
@@ -38,20 +56,100 @@ function Show-Banner {
     Write-Host ""
 }
 
+# --- Helper: Find a usable launcher inside an install dir ---
+# IOcomposer is Eclipse-based, so its launcher may be named
+# 'iocomposer.exe' / 'iocomposerc.exe' or still 'eclipse.exe' / 'eclipsec.exe'.
+function Find-IdeLauncher {
+    param(
+        [string]$InstallDir
+    )
+    if (-not (Test-Path $InstallDir)) { return $null }
+    $candidates = @(
+        'iocomposerc.exe',
+        'iocomposer.exe',
+        'IOcomposer.exe',
+        'eclipsec.exe',
+        'eclipse.exe'
+    )
+    foreach ($exe in $candidates) {
+        $full = Join-Path $InstallDir $exe
+        if (Test-Path $full) { return $full }
+    }
+    return $null
+}
+
 Show-Banner
 
 $ROOT = $SdkHome
-$ECLIPSE_DIR = "$env:ProgramFiles\Eclipse Embedded CDT"
 
-# --- Check Eclipse Installation ---
-if (-not (Test-Path "$ECLIPSE_DIR\eclipse.exe")) {
-    Write-Host "ERROR: Eclipse not found at $ECLIPSE_DIR" -ForegroundColor Red
+# --- IDE Detection (prefer IOcomposer, fall back to Eclipse) ---
+$IDE_BIN  = $null
+$IDE_DIR  = $null
+$IDE_NAME = $null
+
+# Candidate IOcomposer install directories
+$iocomposerCandidates = @(
+    $IocomposerDir,
+    "$env:ProgramFiles\IOcomposer",
+    "${env:ProgramFiles(x86)}\IOcomposer",
+    "$env:LOCALAPPDATA\IOcomposer",
+    "$env:USERPROFILE\IOcomposer\iocomposer",
+    "$ROOT\iocomposer"
+) | Where-Object { $_ -and ($_ -ne '') } | Select-Object -Unique
+
+foreach ($dir in $iocomposerCandidates) {
+    $launcher = Find-IdeLauncher -InstallDir $dir
+    if ($launcher) {
+        $IDE_BIN  = $launcher
+        $IDE_DIR  = $dir
+        $IDE_NAME = "IOcomposer"
+        break
+    }
+}
+
+# Fall back to Eclipse
+if (-not $IDE_BIN) {
+    $eclipseCandidates = @(
+        $EclipseDir,
+        "$env:ProgramFiles\Eclipse Embedded CDT",
+        "${env:ProgramFiles(x86)}\Eclipse Embedded CDT",
+        "$env:ProgramFiles\Eclipse",
+        "$env:LOCALAPPDATA\Eclipse Embedded CDT"
+    ) | Where-Object { $_ -and ($_ -ne '') } | Select-Object -Unique
+
+    foreach ($dir in $eclipseCandidates) {
+        $launcher = Find-IdeLauncher -InstallDir $dir
+        if ($launcher) {
+            $IDE_BIN  = $launcher
+            $IDE_DIR  = $dir
+            $IDE_NAME = "Eclipse"
+            break
+        }
+    }
+}
+
+if (-not $IDE_BIN) {
+    Write-Host "ERROR: Neither IOcomposer nor Eclipse found" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Please install Eclipse: .\install_iocdevtools_win.ps1"
+    Write-Host "Searched IOcomposer locations:" -ForegroundColor Yellow
+    foreach ($d in $iocomposerCandidates) { Write-Host "  - $d" }
+    Write-Host ""
+    Write-Host "Searched Eclipse locations:" -ForegroundColor Yellow
+    Write-Host "  - $EclipseDir"
+    Write-Host "  - $env:ProgramFiles\Eclipse Embedded CDT"
+    Write-Host "  - ${env:ProgramFiles(x86)}\Eclipse Embedded CDT"
+    Write-Host "  - $env:ProgramFiles\Eclipse"
+    Write-Host "  - $env:LOCALAPPDATA\Eclipse Embedded CDT"
+    Write-Host ""
+    Write-Host "Please install IOcomposer (preferred) or Eclipse Embedded CDT:"
+    Write-Host "  1. Run: .\install_iocdevtools_win.ps1"
+    Write-Host "  2. Or specify location: .\build_iosonata_lib_win.ps1 -IocomposerDir <path>"
+    Write-Host "  3. Or:                  .\build_iosonata_lib_win.ps1 -EclipseDir     <path>"
     exit 1
 }
 
-Write-Host "Eclipse found at: $ECLIPSE_DIR" -ForegroundColor Green
+Write-Host "$IDE_NAME found at: $IDE_DIR" -ForegroundColor Green
+Write-Host "  Launcher: $IDE_BIN" -ForegroundColor Green
 Write-Host ""
 
 # --- Check IOsonata SDK ---
@@ -136,16 +234,15 @@ function Build-Project {
     $WS = "$env:TEMP\iosonata_build_ws_$PID"
     New-Item -Path $WS -ItemType Directory -Force | Out-Null
     Write-Host ">>> Workspace: $WS" -ForegroundColor Gray
-    Write-Host ">>> Running Eclipse headless build..." -ForegroundColor Cyan
+    Write-Host ">>> Running $IDE_NAME headless build..." -ForegroundColor Cyan
     Write-Host ""
     
-    $eclipseExe = "$ECLIPSE_DIR\eclipse.exe"
     $logFile = "$env:TEMP\build_iosonata_lib_$PID.log"
     if (Test-Path $logFile) { Remove-Item $logFile -Force }
     
-    # Run Eclipse Headless Build
+    # Run Headless Build
     try {
-        $buildOutput = & $eclipseExe `
+        $buildOutput = & $IDE_BIN `
             --launcher.suppressErrors `
             -nosplash `
             -application org.eclipse.cdt.managedbuilder.core.headlessbuild `
