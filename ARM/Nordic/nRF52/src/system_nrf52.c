@@ -133,6 +133,17 @@ void nvmc_config(uint32_t mode)
     nvmc_wait();
 }
 
+/**
+ * @brief	Get core clock frequency
+ *
+ * @return	Core frequency in Hz.
+ */
+uint32_t SystemCoreClockGet(void)
+{
+	return SystemCoreClock;
+}
+
+
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;

@@ -331,6 +331,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/system_nrf.h</locationURI>
 		</link>
 		<link>
+			<name>include/systick.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/systick.h</locationURI>
+		</link>
+		<link>
 			<name>include/temp_nrf5x.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/temp_nrf5x.h</locationURI>
