@@ -197,17 +197,20 @@ SECTIONS {
    	   were inserted in between from outside of this file */
    	__data_size__ = __bss_start__ - __data_start__ ; /* SIZEOF(.data);*/
 	
+
 	.bss : ALIGN(4)
 	{
 		__bss_start__ = .;
 		__bss_start = .;
 		*(.bss*)
+    	*(.sbss*)        /* <-- add */
 		*(COMMON)
       	*(.gnu.linkonce.b.*)
 		__bss_end__ = .;
 		PROVIDE(_end = .);		              
 	} > RAM
-        __bss_size__ = SIZEOF(.bss);
+	
+   __bss_size__ = SIZEOF(.bss);
 	
 	.heap : ALIGN(4)
 	{

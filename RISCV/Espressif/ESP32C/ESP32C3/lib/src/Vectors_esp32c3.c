@@ -333,7 +333,9 @@ static void Esp32C3ExtIRQDispatch(void)
  *
  * Placed in IRAM so it is reachable even when the Flash XIP cache is off.
  *---------------------------------------------------------------------------*/
-__attribute__((interrupt("machine"), section(".iram.text"), used))
+//__attribute__((interrupt("machine"), section(".iram.text"), used))
+//void RISCV_TrapHandler(void)
+__attribute__((interrupt("machine"), aligned(4), section(".iram.text"), used))
 void RISCV_TrapHandler(void)
 {
 	uint32_t mcause;
