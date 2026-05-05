@@ -130,6 +130,10 @@ SOFTWARE.
  *---------------------------------------------------------------------------*/
 uint32_t SystemCoreClock __attribute__((used)) = 80000000UL;
 
+/* idelay.h rdcycle path: Periodus = cycles/us, Periodns = ns/cycle */
+uint64_t SystemCoreClockPeriodus __attribute__((used)) = 80ULL;        /* 80 MHz default */
+uint64_t SystemCoreClockPeriodns __attribute__((used)) = 13ULL;        /* ~12.5 ns @ 80 MHz */
+
 __attribute__((weak))
 McuOsc_t g_McuOsc = {
 	.CoreOsc = {
@@ -240,6 +244,11 @@ void SystemCoreClockUpdate(void)
 			SystemCoreClock = 80000000UL;
 			break;
 	}
+
+	/* Update idelay period variables for the rdcycle path. */
+	SystemCoreClockPeriodus = (SystemCoreClock + 500000U) / 1000000U;
+	SystemCoreClockPeriodns = (1000000000ULL + (uint64_t)(SystemCoreClock / 2))
+	                          / SystemCoreClock;
 }
 
 /*---------------------------------------------------------------------------
