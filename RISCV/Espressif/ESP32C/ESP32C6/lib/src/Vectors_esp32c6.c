@@ -55,15 +55,14 @@ SOFTWARE.
  * Local weak DEF_IRQHandler — required for the alias attribute below.
  * Vectors_clic.c also defines this weak; the linker keeps one copy.
  *---------------------------------------------------------------------------*/
-__attribute__((weak, section(".iram.text"), used))
+__attribute__((weak, used))
 void DEF_IRQHandler(void)
 {
-	while (1)
-	{
-		__asm volatile("nop");
-	}
+    while (1)
+    {
+        __asm volatile("nop");
+    }
 }
-
 /*---------------------------------------------------------------------------
  * RISC-V exception cause handlers — defined in Vectors_clic.c (shared).
  *---------------------------------------------------------------------------*/

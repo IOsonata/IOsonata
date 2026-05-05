@@ -271,11 +271,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/cfifo.c</locationURI>
 		</link>
 		<link>
-			<name>src/cli</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/converters</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -301,11 +296,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/device_intrf_old.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf_old.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/display</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -324,11 +314,6 @@
 			<name>src/i-syst_logo_color_320x153_big.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153_big.c</locationURI>
-		</link>
-		<link>
-			<name>src/i2c_esp32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_esp32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu</name>
@@ -1126,19 +1111,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/ble_conn.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/ble_conn.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_adv.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_app.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_app_handler.c</name>
@@ -1151,39 +1126,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_att_new.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att_new.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_att_works.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att_works.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_attreq.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attreq.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_attreqx.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attreqx.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_attrsp.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_ctlr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ctlr.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_ctlr_att.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ctlr_att.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_dev.cpp</name>
@@ -1234,11 +1184,6 @@
 			<name>src/bluetooth/bt_uuid.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/cli/icli.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/cli/icli.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
@@ -1369,11 +1314,6 @@
 			<name>src/imu/imu_xiot_fusion.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_xiot_fusion.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/imu/imux.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imux.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/button.cpp</name>

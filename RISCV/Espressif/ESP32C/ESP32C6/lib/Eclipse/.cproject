@@ -63,7 +63,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_hw_support/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_timer/include&quot;"/>
@@ -84,7 +84,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_hw_support/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_timer/include&quot;"/>
@@ -186,7 +186,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_hw_support/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_timer/include&quot;"/>
@@ -207,7 +207,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/Invn&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_hw_support/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_common/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../external/esp-idf/components/esp_timer/include&quot;"/>

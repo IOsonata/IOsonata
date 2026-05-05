@@ -79,17 +79,6 @@ SECTIONS
     _dram_data_end = ABSOLUTE(.);
   } > RAM AT > FLASH_DROM
 
-  /* The .rodata section contains read-only data (constants). */
-  .rodata :
-  {
-    . = ALIGN(4);
-    _rodata_start = ABSOLUTE(.);
-    *(.rodata)
-    *(.rodata.*)
-    . = ALIGN(4);
-    _rodata_end = ABSOLUTE(.);
-  } > FLASH_DROM
-
   /* The .irom.text section contains the main program code executed from Flash. */
   .irom.text :
   {
@@ -101,17 +90,6 @@ SECTIONS
     _irom_text_end = ABSOLUTE(.);
   } > FLASH
 
-  /* The .bss section contains uninitialized data. */
-  .bss (NOLOAD) :
-  {
-    . = ALIGN(4);
-    _bss_start = ABSOLUTE(.);
-    *(.bss)
-    *(.bss.*)
-    *(COMMON)
-    . = ALIGN(4);
-    _bss_end = ABSOLUTE(.);
-  } > RAM
 }
 
 /* Stack top: referenced by ResetEntry.c */
