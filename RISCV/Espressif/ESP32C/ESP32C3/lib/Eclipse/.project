@@ -236,6 +236,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/I-SYST_Logo320_little.c</locationURI>
 		</link>
 		<link>
+			<name>src/ResetEntry.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
+		</link>
+		<link>
 			<name>src/Vectors_esp32_intmtx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/Vectors_esp32_intmtx.c</locationURI>
@@ -1159,6 +1164,11 @@
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/iopincfg_esp32.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_esp32.c</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.c</name>
