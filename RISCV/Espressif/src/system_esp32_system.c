@@ -106,24 +106,37 @@ SOFTWARE.
 
 #define TIMG_WDT_WPROTECT_MAGIC     0x50D83AA1UL
 #define TIMG_WDT_EN                 (1UL << 31)
-#define TIMG_WDT_FLASHBOOT_MOD_EN   (1UL << 10)
+#define TIMG_WDT_FLASHBOOT_MOD_EN   (1UL << 14)   /* C3 TRM: bitpos [14], default 1 at reset */
 
 /*---------------------------------------------------------------------------
  * RTC_CNTL — RTC watchdog and super watchdog
  * ESP32-C3 TRM, §8  Base: 0x60008000
  * NOTE: C3 uses RTC_CNTL instead of the LP_WDT found on PCR-based chips.
- *---------------------------------------------------------------------------*/
+ *
+ * Register offsets verified against ESP-IDF C3 register file
+ * (components/soc/esp32c3/register/soc/rtc_cntl_reg.h).  The previous
+ * revision of this file had all five RTC CNTL offsets shifted, the
+ * SWD using the wrong write-protect key, and SWD_DISABLE on the wrong
+ * bit (31 vs 30).  Net effect was that the RTC WDT and the Super WDT
+ * were never actually disabled — both fired at their default timeouts
+ * (~9 s and ~3 s respectively) and reset the chip in a loop.  Symptom
+ * was masked when a) the chip didn't reach user code anyway because of
+ * an upstream IOcomposer wrap bug, or b) the WS2812 LED happened to
+ * latch its last colour through each reset, looking like continuous
+ * dim flicker rather than a 9-second reset cycle.
+ *---------------------------------------------------------------------*/
 #define RTC_CNTL_BASE               0x60008000UL
-#define RTC_CNTL_WDTCONFIG0_REG    (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x0094U))
-#define RTC_CNTL_WDTFEED_REG       (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x009CU))
-#define RTC_CNTL_WDTWPROTECT_REG   (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00A4U))
-#define RTC_CNTL_SWD_CONF_REG      (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00B0U))
-#define RTC_CNTL_SWD_WPROTECT_REG  (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00BCU))
+#define RTC_CNTL_WDTCONFIG0_REG    (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x0090U))
+#define RTC_CNTL_WDTFEED_REG       (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00A4U))
+#define RTC_CNTL_WDTWPROTECT_REG   (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00A8U))
+#define RTC_CNTL_SWD_CONF_REG      (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00ACU))
+#define RTC_CNTL_SWD_WPROTECT_REG  (*(volatile uint32_t *)(RTC_CNTL_BASE + 0x00B0U))
 
-#define RTC_WDT_WPROTECT_MAGIC      0x50D83AA1UL
+#define RTC_WDT_WPROTECT_MAGIC      0x50D83AA1UL    /* RTC_CNTL_WDT_WKEY */
+#define RTC_SWD_WPROTECT_MAGIC      0x8F1D312AUL    /* RTC_CNTL_SWD_WKEY — different! */
 #define RTC_WDT_EN                  (1UL << 31)
 #define RTC_WDT_FLASHBOOT_EN        (1UL << 12)
-#define RTC_SWD_DISABLE             (1UL << 31)
+#define RTC_SWD_DISABLE             (1UL << 30)     /* bit 30 — bit 31 is SWD_AUTO_FEED_EN */
 
 /*---------------------------------------------------------------------------
  * IOsonata global clock state
@@ -180,7 +193,7 @@ static void DisableRtcWdt(void)
 
 static void DisableSuperWdt(void)
 {
-	RTC_CNTL_SWD_WPROTECT_REG = RTC_WDT_WPROTECT_MAGIC;
+	RTC_CNTL_SWD_WPROTECT_REG = RTC_SWD_WPROTECT_MAGIC;
 	RTC_CNTL_SWD_CONF_REG    |= RTC_SWD_DISABLE;
 	RTC_CNTL_SWD_WPROTECT_REG = 0U;
 }

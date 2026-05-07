@@ -56,12 +56,24 @@ SOFTWARE.
  * INTMTX — Interrupt Matrix
  * ESP32-C3 TRM Rev 0.4, §9.3   Base: 0x600C2000
  *
- * INTMTX_CORE0_INT_STATUS_REG_0: bits [31:0]  → peripheral IRQs 0..31
- * INTMTX_CORE0_INT_STATUS_REG_1: bits [29:0]  → peripheral IRQs 32..61
+ * Each peripheral source has an INTR_MAP_REG at base + 4*source.  Writing a
+ * non-zero CPU interrupt number (1..31) into a source's MAP register routes
+ * that source to that CPU interrupt line.  All CPU interrupt lines feed
+ * the RISC-V machine external interrupt input — i.e. mcause = 0x8000000B
+ * fires for ANY enabled peripheral, regardless of which CPU interrupt
+ * number it was mapped to internally.
+ *
+ * INTERRUPT_CORE0_INTR_STATUS_0_REG @ 0x0F8: bits [31:0]  → peripheral IRQs 0..31
+ * INTERRUPT_CORE0_INTR_STATUS_1_REG @ 0x0FC: bits [29:0]  → peripheral IRQs 32..61
+ *
+ * NOTE: Earlier revisions of this file used 0x0F0 / 0x0F4 — those are the
+ * INTR_MAP_REGs for sources 60 and 61 (BAK_PMS_VIOLATE / CACHE_CORE0_ACS),
+ * not the status registers.  Reading them returns the configured CPU
+ * interrupt number for those sources, not the pending-IRQ bitmap.
  *---------------------------------------------------------------------------*/
 #define INTMTX_BASE                       0x600C2000UL
-#define INTMTX_CORE0_INT_STATUS_REG_0     (*(volatile uint32_t *)(INTMTX_BASE + 0x0F0U))
-#define INTMTX_CORE0_INT_STATUS_REG_1     (*(volatile uint32_t *)(INTMTX_BASE + 0x0F4U))
+#define INTMTX_CORE0_INT_STATUS_REG_0     (*(volatile uint32_t *)(INTMTX_BASE + 0x0F8U))
+#define INTMTX_CORE0_INT_STATUS_REG_1     (*(volatile uint32_t *)(INTMTX_BASE + 0x0FCU))
 
 /*---------------------------------------------------------------------------
  * Local weak DEF_IRQHandler — required for alias attribute.

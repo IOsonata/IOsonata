@@ -112,6 +112,28 @@ SECTIONS {
 		*(.rodata .rodata.* .rodata1)
 	} > FLASH
 
+	/* Optional RISC-V RAM-executed code.  ESP32-C targets place trap/vector
+	 * code here so it runs out of fast SRAM rather than IROM cache.
+	 *
+	 * VMA goes in the IRAM region (executable SRAM, distinct from data RAM)
+	 * so the resulting LOAD segment is RX, not RWX — separate from .data /
+	 * .bss which share the RAM region.  Chips without a distinct executable
+	 * SRAM (e.g. Renesas R9A02 where RAM is already RWX) should add
+	 *     REGION_ALIAS("IRAM", RAM);
+	 * before INCLUDEing this script.  Chips that already define IRAM in
+	 * their MEMORY block (Espressif C3 / C6 …) need no alias. */
+	.iram.text : ALIGN(4)
+	{
+		PROVIDE(__iram_start__ = .);
+		KEEP(*(.iram.text))
+		*(.iram.text.*)
+		. = ALIGN(4);
+		PROVIDE(__iram_end__ = .);
+	} > IRAM AT > FLASH
+
+	PROVIDE(__iram_loc__ = LOADADDR(.iram.text));
+	PROVIDE(__iram_size__ = __iram_end__ - __iram_start__);
+
 	.ARM.extab : ALIGN(4)
 	{
 		*(.ARM.extab* .gnu.linkonce.armextab.*)

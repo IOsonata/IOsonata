@@ -1,0 +1,3 @@
+CompileFlags:
+  CompilationDatabase: /Users/hoan/swdev/IOsonata/RISCV/Espressif/ESP32C6/exemples/Test/Eclipse/build
+  Remove: [-m*, -f*]

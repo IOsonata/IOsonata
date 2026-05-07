@@ -85,7 +85,8 @@ SOFTWARE.
  *
  * SIG_GPIO_OUT_IDX = 128 makes a pad a "simple GPIO output" -- driven
  * directly from GPIO_OUT_REG instead of a peripheral signal.  Same
- * value across the supported RISC-V chips.
+ * value across the supported RISC-V chips (C3/C5/C6/H2/H4).  The
+ * original Xtensa ESP32 used 256; do NOT use that here.
  *---------------------------------------------------------------------------*/
 #define ESP32_GPIO_BASE         0x60004000UL
 #define GPIO_FUNC_OUT_SEL(n)    (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x554U + ((unsigned)(n) * 4U)))
@@ -93,13 +94,18 @@ SOFTWARE.
 #define GPIO_ENABLE_W1TS_REG    (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x024U))
 #define GPIO_ENABLE_W1TC_REG    (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x028U))
 
-#define GPIO_OUT_SEL_Msk        0xFFUL
+#define GPIO_OUT_SEL_Msk        0xFFUL    /* OUT_SEL is bits [7:0] on RISC-V ESP32 */
 #define GPIO_OEN_SEL_Pos        9
 #define GPIO_OEN_INV_SEL_Pos    10
 #define GPIO_OUT_INV_SEL_Pos    11
 
 #define GPIO_PAD_DRIVER_Pos     2   /* GPIO_PINn_REG: 1 = open-drain output */
 
+/* Signal index that means "drive this pad directly from GPIO_OUT_REG"
+ * (instead of routing a peripheral signal through the GPIO matrix).
+ * RISC-V ESP32 family has 128 peripheral output signals; index 128 is
+ * the simple-GPIO-output magic.  The original Xtensa ESP32 used 256
+ * because it has more signals — DO NOT use 256 here. */
 #define SIG_GPIO_OUT_IDX        128U
 
 /*---------------------------------------------------------------------------

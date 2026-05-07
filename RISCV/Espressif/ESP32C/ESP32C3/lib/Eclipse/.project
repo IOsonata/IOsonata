@@ -1191,6 +1191,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/uart_esp32c3.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/uart_esp32c3.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/display/display.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display.cpp</locationURI>

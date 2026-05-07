@@ -1,0 +1,70 @@
+{
+  "name": "SiFiveTest",
+  "version": "0.0.1",
+  "description": "An xPack with a blinky application running on HiFive1",
+  "main": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "xmake build -- all",
+    "clean": "xmake build -- clean"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/<user-id>/SiFiveTest.git"
+  },
+  "bugs": {
+    "url": "https://github.com/<user-id>/SiFiveTest/issues"
+  },
+  "homepage": "https://github.com/<user-id>/SiFiveTest",
+  "keywords": [
+    "xpack",
+    "c",
+    "c++",
+    "micro-os-plus",
+    "risc-v",
+    "sifive",
+    "corecomplex"
+  ],
+  "author": {
+    "name": "",
+    "email": "",
+    "url": ""
+  },
+  "contributors": [
+    {
+      "name": "Liviu Ionescu",
+      "email": "ilg@livius.net",
+      "url": "https://github.com/ilg-ul"
+    }
+  ],
+  "license": "MIT",
+  "config": {
+    "xcdl": {
+      "device": {
+        "id": "fe310",
+        "supplier": {
+          "displayName": "SiFive",
+          "id": "1"
+        }
+      },
+      "board": {
+        "id": "hifive1",
+        "supplier": {
+          "displayName": "SiFive",
+          "id": "1"
+        }
+      }
+    }
+  },
+  "dependencies": {
+      "@micro-os-plus/diag-trace": "~1.0.7"
+,"@sifive/hifive1-board": "~1.0.4"
+},
+  "devDependencies": {
+    "xmake": "~0.3.10",
+    "@xpack-dev-tools/riscv-none-embed-gcc": "8.3.0-1.2.1",
+    "@xpack-dev-tools/openocd": "0.10.0-14.3",
+    "@xpack-dev-tools/windows-build-tools": "2.12.2-2"
+  },
+  "xpack": {}
+}

@@ -69,41 +69,34 @@ extern uint64_t SystemCoreClockPeriodus;	// Microsecond period
  *
  * @param	cnt : microsecond delay count
  */
-static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
+static inline __attribute__((always_inline)) uint32_t IOsonataRiscvCycle32(void)
+{
+	uint32_t v;
+	__asm volatile ("rdcycle %0" : "=r"(v));
+	return v;
+}
 
+static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
+{
 #if defined(__riscv_zicntr) || \
     (defined(__riscv) && !defined(__riscv_32e) && defined(__riscv_zicsr))
-	// rdcycle available.
-	// SystemCoreClockPeriodus = CPU MHz (cycles per µs)
-	__asm volatile (
-		// Read the current cycle count
-		"rdcycle t0\n\t"
+	uint32_t start = IOsonataRiscvCycle32();
+	uint32_t wait = cnt * (uint32_t)SystemCoreClockPeriodus;
+	if (wait == 0U)
+	{
+		wait = 1U;
+	}
 
-		// Load 'SystemCoreClockPeriodus' from the global variable.
-		"lui t1, %%hi(SystemCoreClockPeriodus)\n\t"
-		"lw t1, %%lo(SystemCoreClockPeriodus)(t1)\n\t"
-
-		// t2 = cnt * SystemCoreClockPeriodus
-		"mul t2, %0, t1\n\t"
-
-		// t1 = ending cycle count
-		"add t1, t0, t2\n\t"
-
-		// Loop
-		"1:\n\t"
-		"rdcycle t0\n\t"
-		"bltu t0, t1, 1b"
-
-		: // No output operands
-		: "r"(cnt) // Input: cnt
-		: "t0", "t1", "t2" // Clobbered registers: t0, t1, t2
-	);
+	while ((uint32_t)(IOsonataRiscvCycle32() - start) < wait)
+	{
+		__asm volatile("nop");
+	}
 #else
-	// No cycle counter (e.g. Nordic VPR / RV32E).
-	// Pure 2-instruction NOP loop — compiler independent.
-	// SystemCoreClockPeriodus = CPU_MHz / 2  (loop iterations per µs)
 	uint32_t n = cnt * (uint32_t)SystemCoreClockPeriodus;
-	if (n == 0) n = 1;
+	if (n == 0U)
+	{
+		n = 1U;
+	}
 	__asm volatile (
 		"1: addi %0, %0, -1\n\t"
 		"   bne  %0, zero, 1b"
@@ -118,41 +111,29 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt) {
  *
  * @param	cnt : nanosecond count
  */
-static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt) {
-
+static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
+{
 #if defined(__riscv_zicntr) || \
     (defined(__riscv) && !defined(__riscv_32e) && defined(__riscv_zicsr))
-	// rdcycle available.
-	// SystemCoreClockPeriodns = nanoseconds per cycle (rounded integer)
-	__asm volatile (
-		// Read the current cycle count
-		"rdcycle t0\n\t"
+	/* cycles = ns * Hz / 1e9.  Use MHz to keep this RV32-friendly. */
+	uint32_t cycles_per_us = (uint32_t)SystemCoreClockPeriodus;
+	uint32_t wait = (uint32_t)(((uint64_t)cnt * cycles_per_us + 999ULL) / 1000ULL);
+	if (wait == 0U)
+	{
+		wait = 1U;
+	}
 
-		// Load 'SystemCoreClockPeriodns' from the global variable.
-		"lui t1, %%hi(SystemCoreClockPeriodns)\n\t"
-		"lw t1, %%lo(SystemCoreClockPeriodns)(t1)\n\t"
-
-		// t2 = cnt * SystemCoreClockPeriodns
-		"mul t2, %0, t1\n\t"
-
-		// t1 = ending cycle count
-		"add t1, t0, t2\n\t"
-
-		// Loop
-		"1:\n\t"
-		"rdcycle t0\n\t"
-		"bltu t0, t1, 1b"
-
-		: // No output operands
-		: "r"(cnt) // Input: cnt
-		: "t0", "t1", "t2" // Clobbered registers: t0, t1, t2
-	);
+	uint32_t start = IOsonataRiscvCycle32();
+	while ((uint32_t)(IOsonataRiscvCycle32() - start) < wait)
+	{
+		__asm volatile("nop");
+	}
 #else
-	// No cycle counter — NOP loop.
-	// SystemCoreClockPeriodns = CPU_MHz / 2000  (loop iterations per ns)
-	// Minimum 1 iteration to guarantee a non-zero delay.
 	uint32_t n = cnt * (uint32_t)SystemCoreClockPeriodns;
-	if (n == 0) n = 1;
+	if (n == 0U)
+	{
+		n = 1U;
+	}
 	__asm volatile (
 		"1: addi %0, %0, -1\n\t"
 		"   bne  %0, zero, 1b"

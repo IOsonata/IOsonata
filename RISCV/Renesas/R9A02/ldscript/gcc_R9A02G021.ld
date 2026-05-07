@@ -33,4 +33,9 @@ MEMORY
 
 __global_pointer$ = ORIGIN(RAM) + LENGTH(RAM) / 2;
 
+/* R9A02 has no separate executable SRAM — RAM is already (rwx).  The
+ * shared gcc_riscv_flash.ld places .iram.text in IRAM; alias it here
+ * so the section lands in the regular RAM region. */
+REGION_ALIAS("IRAM", RAM);
+
 INCLUDE "gcc_riscv_flash.ld"

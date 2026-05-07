@@ -55,7 +55,7 @@ extern void (* const g_Esp32C6Vectors[])(void);
 /**
  * @brief   System initialisation — called by ResetEntry.c before _start().
  *
- * Stack is valid; .data/.bss are NOT yet initialised.
+ * Stack is valid; .data/.bss/.iram.text are already initialised by ResetEntry.
  */
 void SystemInit(void)
 {

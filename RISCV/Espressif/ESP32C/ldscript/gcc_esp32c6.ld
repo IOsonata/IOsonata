@@ -61,12 +61,17 @@ SECTIONS
   .iram.text :
   {
     . = ALIGN(512);
+    __iram_start__ = .;
     _iram_text_start = ABSOLUTE(.);
-    *(.iram.text)
+    KEEP(*(.iram.text))
     *(.iram.text.*)
     . = ALIGN(4);
     _iram_text_end = ABSOLUTE(.);
-  } > IRAM
+    __iram_end__ = .;
+  } > IRAM AT > FLASH
+
+  __iram_loc__ = LOADADDR(.iram.text);
+  __iram_size__ = __iram_end__ - __iram_start__;
 
   /* The .dram.data section contains initialized data variables. */
   .dram.data :

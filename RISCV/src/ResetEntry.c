@@ -46,6 +46,9 @@ extern unsigned long __data_end__;
 extern unsigned long __bss_start__;
 extern unsigned long __bss_end__;
 extern unsigned long __bss_size__;
+extern unsigned long __iram_loc__;     // LMA: source of .iram.text in flash
+extern unsigned long __iram_start__;   // VMA: dest of .iram.text in IRAM
+extern unsigned long __iram_end__;
 extern unsigned long __heap_start__;
 extern unsigned long __heap_size__;
 extern unsigned long __heap_end__;
@@ -79,6 +82,20 @@ void ResetEntry(void)
 	// Optional: flush stale translations if you were actually in S-mode
 	__asm volatile("sfence.vma");
 #endif
+
+	/*
+	 * Copy .iram.text from flash LMA to its IRAM VMA.  Required when the
+	 * linker script places .iram.text VMA in a separate executable SRAM
+	 * region (e.g. ESP32-C3 IRAM at 0x4037C000).  Without this, the trap
+	 * handler that SystemInit installs via mtvec points to uninitialized
+	 * SRAM.  No-op on chips where __iram_start__ == __iram_end__.
+	 */
+    src = &__iram_loc__;
+    dst = &__iram_start__;
+    while (dst < &__iram_end__)
+    {
+        *dst++ = *src++;
+    }
 
   	/*
 	 * Copy the initialized data of the ".data" segment
