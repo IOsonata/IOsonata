@@ -9,22 +9,28 @@ peripheral for clock and reset control:
 
     ESP32-C3
 
-Clock architecture (ESP32-C3 TRM Rev 0.4 §7):
+Clock architecture (ESP32-C3 TRM Rev 0.4 §7, verified against ESP-IDF
+v5.3 hal/esp32c3 clk_tree_ll.h):
   XTAL  :  40 MHz
-  PLL   : 480 MHz  →  /6 = 80 MHz (PLL_F80M),  /3 = 160 MHz (PLL_F160M)
-  FOSC  :  ~17.5 MHz internal RC
+  PLL   : 480 MHz raw, divided to 80 MHz or 160 MHz at the CPU mux
+  FOSC  :  ~17.5 MHz internal RC ("RC_FAST")
 
-SYSTEM_SOC_CLK_SEL selects the CPU clock source directly:
-  0 = XTAL (40 MHz)
-  1 = PLL_F80M (80 MHz)    ← ROM bootloader default
-  2 = PLL_F160M (160 MHz)
-  3 = FOSC (~17.5 MHz)
+CPU clock is selected by TWO independent register fields:
 
-Unlike PCR-based chips, there is no divisor register — speed is chosen
-by selecting the appropriate PLL tap.
+  SYSCLK_CONF.SOC_CLK_SEL    (offset 0x058, bits [11:10]) — source family
+       0 = XTAL       1 = PLL       2 = RC_FAST       3 = (invalid)
+
+  CPU_PER_CONF.CPUPERIOD_SEL (offset 0x008, bits  [1:0])  — PLL tap
+       0 = 80 MHz     1 = 160 MHz   (only meaningful when SOC_CLK_SEL = 1)
+
+Writing SOC_CLK_SEL = 1 alone does NOT pin the CPU to a specific MHz —
+it leaves the divider at whatever value the previous owner of the field
+left.  Since the C3 ROM bootloader can hand off with CPUPERIOD_SEL at
+either 0 or 1 (depending on flash-speed / boot path), this code MUST
+program both fields.
 
 Define ESP32C3_CPU_160MHZ to run at 160 MHz.
-Default (no define): stay at ROM bootloader default (80 MHz PLL_F80M).
+Default (no define): 80 MHz from PLL.
 
 Chip-specific system_espXXXX.c files call Esp32SystemInit() then install
 the trap handler into mtvec.
@@ -71,14 +77,26 @@ SOFTWARE.
  * Base address: 0x600C0000
  *---------------------------------------------------------------------------*/
 #define SYSTEM_BASE                 0x600C0000UL
+#define SYSTEM_CPU_PER_CONF_REG     (*(volatile uint32_t *)(SYSTEM_BASE + 0x008U))
 #define SYSTEM_SYSCLK_CONF_REG      (*(volatile uint32_t *)(SYSTEM_BASE + 0x058U))
 
+/* SYSCLK_CONF.SOC_CLK_SEL [11:10] — clock SOURCE FAMILY only (verified
+ * against ESP-IDF v5.3 components/hal/esp32c3/include/hal/clk_tree_ll.h
+ * clk_ll_cpu_set_src).  Value 2 is RC_FAST (~17.5 MHz), NOT 160 MHz PLL.
+ * Value 3 is reserved/invalid. */
 #define SYSTEM_SOC_CLK_SEL_Pos      (10U)
 #define SYSTEM_SOC_CLK_SEL_Msk      (0x3UL << SYSTEM_SOC_CLK_SEL_Pos)
-#define SYSTEM_SOC_CLK_XTAL         (0x0UL << SYSTEM_SOC_CLK_SEL_Pos)  /* 40 MHz XTAL      */
-#define SYSTEM_SOC_CLK_PLL_F80M     (0x1UL << SYSTEM_SOC_CLK_SEL_Pos)  /* 80 MHz PLL tap   */
-#define SYSTEM_SOC_CLK_PLL_F160M    (0x2UL << SYSTEM_SOC_CLK_SEL_Pos)  /* 160 MHz PLL tap  */
-#define SYSTEM_SOC_CLK_FOSC         (0x3UL << SYSTEM_SOC_CLK_SEL_Pos)  /* ~17.5 MHz RC     */
+#define SYSTEM_SOC_CLK_SEL_XTAL     (0x0UL << SYSTEM_SOC_CLK_SEL_Pos)  /* 40 MHz XTAL      */
+#define SYSTEM_SOC_CLK_SEL_PLL      (0x1UL << SYSTEM_SOC_CLK_SEL_Pos)  /* PLL (80 or 160) */
+#define SYSTEM_SOC_CLK_SEL_RC_FAST  (0x2UL << SYSTEM_SOC_CLK_SEL_Pos)  /* ~17.5 MHz RC     */
+
+/* CPU_PER_CONF.CPUPERIOD_SEL [1:0] — selects the PLL tap when source is PLL.
+ * 0 → 80 MHz, 1 → 160 MHz.  Independent of SOC_CLK_SEL.  Per IDF
+ * clk_ll_cpu_set_freq_mhz_from_pll. */
+#define SYSTEM_CPUPERIOD_SEL_Pos    (0U)
+#define SYSTEM_CPUPERIOD_SEL_Msk    (0x3UL << SYSTEM_CPUPERIOD_SEL_Pos)
+#define SYSTEM_CPUPERIOD_SEL_80M    (0x0UL << SYSTEM_CPUPERIOD_SEL_Pos)
+#define SYSTEM_CPUPERIOD_SEL_160M   (0x1UL << SYSTEM_CPUPERIOD_SEL_Pos)
 
 /*---------------------------------------------------------------------------
  * SYSTIMER — 16 MHz free-running counter
@@ -204,6 +222,28 @@ static void EnableSysTimer(void)
 }
 
 /*---------------------------------------------------------------------------
+ * Enable the Espressif RISC-V Machine Performance Counter so that the
+ * MPCCR (CSR 0x7E2) increments once per CPU cycle.  IOsonataRiscvCycle32()
+ * in idelay.h reads this CSR — without this setup, MPCCR stays at 0 and
+ * usDelay/nsDelay's rdcycle path spins forever.
+ *
+ * The C3/C6/H2 do NOT implement the standard `cycle` / `mcycle` CSRs
+ * (0xC00 / 0xB00).  Reading those raises an illegal-instruction trap.
+ * Espressif provides this custom mpcer/mpcmr/mpccr trio at 0x7E0..0x7E2
+ * in the user-reserved CSR range instead.
+ *
+ *   mpcer (0x7E0): event selector — bit 0 (CYCLE) selects per-cycle increment
+ *   mpcmr (0x7E1): bit 0 (COUNT_EN) starts the counter
+ *   mpccr (0x7E2): the running 32-bit count (R/W)
+ *---------------------------------------------------------------------------*/
+static void Esp32EnablePerfCounter(void)
+{
+	__asm volatile ("csrw 0x7E0, %0" :: "r"(1U));   /* mpcer = CYCLE event   */
+	__asm volatile ("csrw 0x7E2, %0" :: "r"(0U));   /* mpccr = 0 (clear)     */
+	__asm volatile ("csrw 0x7E1, %0" :: "r"(1U));   /* mpcmr = COUNT_EN      */
+}
+
+/*---------------------------------------------------------------------------
  * Esp32SystemInit
  *
  * Shared boot sequence for SYSTEM-peripheral chips:
@@ -220,28 +260,32 @@ void Esp32SystemInit(void)
 	DisableRtcWdt();
 	DisableSuperWdt();
 
-	/*
-	 * Switch CPU to PLL.  ROM Direct Boot does NOT always do this — on
-	 * many cold-boot paths the CPU stays clocked from XTAL (40 MHz)
-	 * even though the flash-cache window is already running off PLL.
-	 * Without an explicit switch here, SystemCoreClock and any
-	 * timing-sensitive code (bit-bang protocols, calibrated busy-wait
-	 * delays) would be off by 2x.
-	 *
-	 * The PLL is started by ROM during Direct Boot for flash cache, so
-	 * its taps (PLL_F80M / PLL_F160M) are already valid; we only need
-	 * to flip SOC_CLK_SEL to the desired tap.
-	 */
-	uint32_t r = SYSTEM_SYSCLK_CONF_REG & ~SYSTEM_SOC_CLK_SEL_Msk;
 #if defined(ESP32C3_CPU_160MHZ)
-	SYSTEM_SYSCLK_CONF_REG = r | SYSTEM_SOC_CLK_PLL_F160M;
+	/* 160 MHz from PLL: program CPUPERIOD_SEL = 1 (160) BEFORE switching
+	 * SOC_CLK_SEL to PLL, so we never briefly see an unsupported tap. */
+	uint32_t pc = SYSTEM_CPU_PER_CONF_REG & ~SYSTEM_CPUPERIOD_SEL_Msk;
+	SYSTEM_CPU_PER_CONF_REG = pc | SYSTEM_CPUPERIOD_SEL_160M;
+	uint32_t r = SYSTEM_SYSCLK_CONF_REG & ~SYSTEM_SOC_CLK_SEL_Msk;
+	SYSTEM_SYSCLK_CONF_REG = r | SYSTEM_SOC_CLK_SEL_PLL;
 	SystemCoreClock = 160000000UL;
 #else
-	SYSTEM_SYSCLK_CONF_REG = r | SYSTEM_SOC_CLK_PLL_F80M;
-	SystemCoreClock =  80000000UL;
+	/* 80 MHz from PLL.  The C3 ROM bootloader does NOT pin CPUPERIOD_SEL
+	 * to any specific value — depending on flash speed config and ROM
+	 * path it can land at 0 (80) or 1 (160).  Writing SOC_CLK_SEL=PLL
+	 * alone (as the previous version of this file did) leaves the PLL
+	 * tap at whatever ROM left it, so the CPU may end up at 160 MHz
+	 * even though SystemCoreClock says 80 MHz.  WS2812 NOP timing,
+	 * msDelay() via mpccr, and any other cycle-calibrated code then
+	 * runs at 2x.  Force CPUPERIOD_SEL=0 here to actually pin 80 MHz. */
+	uint32_t pc = SYSTEM_CPU_PER_CONF_REG & ~SYSTEM_CPUPERIOD_SEL_Msk;
+	SYSTEM_CPU_PER_CONF_REG = pc | SYSTEM_CPUPERIOD_SEL_80M;
+	uint32_t r = SYSTEM_SYSCLK_CONF_REG & ~SYSTEM_SOC_CLK_SEL_Msk;
+	SYSTEM_SYSCLK_CONF_REG = r | SYSTEM_SOC_CLK_SEL_PLL;
+	SystemCoreClock = 80000000UL;
 #endif
 
 	EnableSysTimer();
+	Esp32EnablePerfCounter();
 }
 
 /*---------------------------------------------------------------------------
@@ -257,16 +301,17 @@ void SystemCoreClockUpdate(void)
 		case 0U: /* XTAL */
 			SystemCoreClock = g_McuOsc.CoreOsc.Freq;
 			break;
-		case 1U: /* PLL_F80M */
-			SystemCoreClock = 80000000UL;
+		case 1U: /* PLL — actual freq depends on CPUPERIOD_SEL */
+		{
+			uint32_t per = (SYSTEM_CPU_PER_CONF_REG & SYSTEM_CPUPERIOD_SEL_Msk)
+			               >> SYSTEM_CPUPERIOD_SEL_Pos;
+			SystemCoreClock = (per == 1U) ? 160000000UL : 80000000UL;
 			break;
-		case 2U: /* PLL_F160M */
-			SystemCoreClock = 160000000UL;
-			break;
-		case 3U: /* FOSC internal RC ~17.5 MHz */
+		}
+		case 2U: /* RC_FAST ~17.5 MHz */
 			SystemCoreClock = 17500000UL;
 			break;
-		default:
+		default: /* 3 = invalid on C3, treat as PLL_F80M default */
 			SystemCoreClock = 80000000UL;
 			break;
 	}

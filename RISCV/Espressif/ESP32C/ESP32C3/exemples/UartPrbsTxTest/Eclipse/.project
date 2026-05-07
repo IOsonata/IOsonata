@@ -36,6 +36,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
+			<name>src/main.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/uart_prbs_tx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/uart/uart_prbs_tx.cpp</locationURI>

@@ -6,17 +6,22 @@
 Implementation on RISC-V.
 
 If the target supports the Zicntr extension (rdcycle available), delays are
-implemented using the CPU cycle counter for maximum accuracy.
+implemented using the CPU cycle counter for accurate, pipeline-independent
+timing.  This is the recommended path for any RISC-V chip that needs
+correct delay semantics — build examples with -march=...zicsr_zicntr to
+enable it (the lib is already built with zicsr).
 
-If rdcycle is not available, a calibrated 2-instruction NOP loop is used
-instead. The loop path is selected automatically using compiler-defined
-RISC-V feature macros.
+If rdcycle is not available, a simple 2-instruction NOP loop is used as a
+fallback.  Its accuracy depends on the core's pipeline behavior — taken-
+branch latency in particular — so it is *not* expected to give accurate
+delays on cores without branch prediction (e.g. ESP32-C3, Nordic VPR).
 
-Variable meaning per path:
-  rdcycle path : SystemCoreClockPeriodus = CPU MHz  (cycles per us)
-                 SystemCoreClockPeriodns = ns per cycle (integer, e.g. 6 @ 160MHz)
-  NOP loop path: SystemCoreClockPeriodus = CPU_MHz / 2  (loop iters per us)
-                 SystemCoreClockPeriodns = CPU_MHz / 2000  (loop iters per ns, min 1)
+Path selection is automatic via __riscv_zicntr / __riscv_zicsr / __riscv_32e
+compiler-defined macros — no manual configuration needed.
+
+Globals (set by SystemCoreClockUpdate, in their natural physical units):
+  SystemCoreClockPeriodus = cycles per µs   (= CPU MHz, e.g. 80 @ 80MHz)
+  SystemCoreClockPeriodns = ns per cycle    (e.g. 13 @ 80MHz)
 
 @author Hoang Nguyen Hoan
 @date	Aug. 16, 2025
@@ -68,10 +73,23 @@ extern uint64_t SystemCoreClockPeriodus;	// Microsecond period
  *
  * @param	cnt : microsecond delay count
  */
+/* Mark which RISC-V family-specific cycle-counter CSR to read.  The standard
+ * RISC-V `cycle` user CSR (0xC00) is implemented by most cores, but Espressif
+ * RISC-V parts (ESP32-C3, C6, H2) do NOT implement it — accessing 0xC00 raises
+ * an illegal-instruction trap.  They provide a custom Machine Performance
+ * Counter Counter at CSR 0x7E2 instead, which must be enabled at boot via
+ * mpcer/mpcmr (see system_esp32_system.c: Esp32EnablePerfCounter). */
+#if defined(ESP32C3) || defined(ESP32C6) || defined(ESP32H2)
+#define IOSONATA_RISCV_CYCLE_CSR        0x7E2U      /* mpccr */
+#else
+#define IOSONATA_RISCV_CYCLE_CSR        0xC00U      /* standard cycle */
+#endif
+
 static inline __attribute__((always_inline)) uint32_t IOsonataRiscvCycle32(void)
 {
 	uint32_t v;
-	__asm volatile ("rdcycle %0" : "=r"(v));
+	__asm volatile ("csrr %0, %1"
+	                : "=r"(v) : "i"(IOSONATA_RISCV_CYCLE_CSR));
 	return v;
 }
 
@@ -91,6 +109,11 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 		__asm volatile("nop");
 	}
 #else
+	/* Fallback NOP loop. Inaccurate by design — actual cycles per
+	 * iteration depends on whether the core has branch prediction.
+	 * On the ESP32-C3 (no prediction, branch-taken = 3 cycles) one
+	 * iteration is ~4 cycles, not 2.  Use Zicsr+Zicntr in -march to
+	 * get the rdcycle path above for accurate timing. */
 	uint32_t n = cnt * (uint32_t)SystemCoreClockPeriodus;
 	if (n == 0U)
 	{
@@ -128,6 +151,8 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 		__asm volatile("nop");
 	}
 #else
+	/* Fallback NOP loop — see usDelay for accuracy notes.  Use rdcycle
+	 * (Zicsr+Zicntr in -march) for accurate ns-resolution timing. */
 	uint32_t n = cnt * (uint32_t)SystemCoreClockPeriodns;
 	if (n == 0U)
 	{

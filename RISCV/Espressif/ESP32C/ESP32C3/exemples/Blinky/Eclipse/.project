@@ -46,6 +46,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.c</locationURI>
 		</link>
 		<link>
+			<name>src/main_diag.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/main_diag.c</locationURI>
+		</link>
+		<link>
 			<name>src/ws2812_blinky.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/ws2812_blinky.c</locationURI>

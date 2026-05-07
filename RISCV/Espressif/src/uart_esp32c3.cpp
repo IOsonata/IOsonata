@@ -26,7 +26,8 @@ Per-UART register offsets used here:
 
 Clock source choice: SCLK_SEL = 3 (XTAL, 40 MHz) keeps baud independent of
 CPU/PLL changes (Esp32SystemInit may switch CPU between 80 MHz and 160 MHz).
-With SCLK_DIV_NUM = 1 the UART core clock is XTAL = 40 MHz directly.
+With SCLK_DIV_NUM = 0 the UART core clock is XTAL = 40 MHz directly
+(C3 formula: SCLK = source / (SCLK_DIV_NUM + 1)).
 
 Baud divider: baud = 40 MHz / (CLKDIV + CLKDIV_FRAG / 16)
   e.g. 115200 baud →  CLKDIV = 347, CLKDIV_FRAG = 4 → 115273 baud (+0.06%).
@@ -274,7 +275,8 @@ static void Esp32c3UartFifoReset(uint32_t base)
 
 static void Esp32c3UartSetBaud(uint32_t base, uint32_t baud)
 {
-    /* Source = XTAL / SCLK_DIV_NUM (we use 1) = 40 MHz */
+    /* Source = SCLK = XTAL / (SCLK_DIV_NUM + 1).  We program
+     * SCLK_DIV_NUM = 0 in UARTInit, so SCLK = XTAL = 40 MHz. */
     uint32_t src_hz = UART_XTAL_HZ;
 
     /* CLKDIV is 12.4 fixed-point: divisor = src/baud, scaled by 16 */
@@ -300,14 +302,12 @@ static void Esp32c3UartIntMtxEnable(uint32_t source)
     INTC_CPU_INT_THRESH_REG = 0U;     /* threshold below all priorities */
     INTC_CPU_INT_ENABLE_REG |= (1UL << UART_CPU_INT_LEVEL);
 
-    /* Enable RISC-V machine external interrupt + global mstatus.MIE.
-     * mie.MEIE = bit 11 = 0x800.  mstatus.MIE = bit 3.   */
-    __asm volatile (
-        "li   t0, 0x800\n\t"
-        "csrs mie, t0\n\t"
-        "csrsi mstatus, 8\n\t"
-        ::: "t0", "memory"
-    );
+    /* Enable global mstatus.MIE.  The C3 does NOT implement the standard
+     * `mie` CSR (0x304) — writes raise illegal-instruction.  Instead the
+     * per-source CPU-INT enable lives in INTC_CPU_INT_ENABLE_REG, which
+     * was set above; only the hart-level mstatus.MIE remains.
+     * mstatus.MIE = bit 3, set via csrsi mstatus, 8. */
+    __asm volatile ("csrsi mstatus, 8" ::: "memory");
 }
 
 /*---------------------------------------------------------------------------
@@ -588,9 +588,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
     UART_INT_ENA(base) = 0U;
     UART_INT_CLR(base) = 0xFFFFFFFFUL;
 
-    /* 3. Clock source = XTAL @ 40 MHz, divider 1, both TX/RX clocks on */
+    /* 3. Clock source = XTAL @ 40 MHz, no division (SCLK_DIV_NUM = 0
+     *    → divisor = 0+1 = 1), both TX/RX clocks on. */
     UART_CLK_CONF(base) = UART_CLKCONF_SCLK_SEL_XTAL
-                        | (1UL << UART_CLKCONF_SCLK_DIV_NUM_Pos)
                         | UART_CLKCONF_SCLK_EN
                         | UART_CLKCONF_TX_SCLK_EN
                         | UART_CLKCONF_RX_SCLK_EN;

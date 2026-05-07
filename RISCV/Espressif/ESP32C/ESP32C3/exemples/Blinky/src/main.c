@@ -38,6 +38,7 @@ re-enables IRQs later.
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "idelay.h"
 #include "coredev/iopincfg.h"
 
 /*--- ESP32-C3 GPIO output set/clear (TRM Rev 0.4 §6) ---*/
@@ -152,21 +153,27 @@ int main(void)
     /* Force the line low long enough for the WS2812 to see a clean
      * reset before the first pixel. */
     GPIO_OUT_W1TC_REG = WS2812_MASK;
-    delay_ms(1);
+    msDelay(1);
 
     while (1)
     {
         ws2812_send_pixel(32,  0,  0);   /* dim red    */
-        delay_ms(500);
-
-        ws2812_send_pixel( 0, 32,  0);   /* dim green  */
-        delay_ms(500);
-
-        ws2812_send_pixel( 0,  0, 32);   /* dim blue   */
-        delay_ms(500);
+        msDelay(500);
 
         ws2812_send_pixel( 0,  0,  0);   /* off        */
-        delay_ms(500);
+        msDelay(500);
+
+        ws2812_send_pixel( 0, 32,  0);   /* dim green  */
+        msDelay(500);
+
+        ws2812_send_pixel( 0,  0,  0);   /* off        */
+        msDelay(500);
+
+        ws2812_send_pixel( 0,  0, 32);   /* dim blue   */
+        msDelay(500);
+
+        ws2812_send_pixel( 0,  0,  0);   /* off        */
+        msDelay(500);
     }
 
     return 0;
