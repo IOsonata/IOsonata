@@ -3,14 +3,16 @@ File   : gcc_riscv_flash.ld
 
 Author : Hoang Nguyen Hoan          Jan. 19, 2012
 
-Desc   : Generic common linker script sections.  General sections
-         definitions for of GCC compiler.  This file is to be inlcuded
-	 	in the device specific linker script.
+Desc   : Generic common linker script sections for RISC-V GCC builds.
+         This file is included by device-specific linker scripts.
 
-	 	Require memory region name definition as follow
-		 
-	        FLASH : Read only code memory region
-	        RAM : Ram memory region for data  
+         Required memory region names:
+
+         FLASH : read-only code memory region
+         RAM   : RAM memory region for data
+         IRAM  : executable RAM memory region. If the target does not have
+                 a separate executable RAM region, define
+                 REGION_ALIAS("IRAM", RAM) before including this file.
 
 Copyright (c) 2012, I-SYST, all rights reserved
 
@@ -39,14 +41,13 @@ Modified by        	Date        	Description
 Hoan				July 3, 2015	Add Freescale Flash security config area	
 ----------------------------------------------------------------------------*/
 
-/* 
-Require custom section definitions
-   .vectors - ARM interrupt vector
-   .Version - Firmware version data 
+/*
+Required custom section definitions:
+   .vectors - target reset/trap/vector table, when used
+   .Version - firmware version data
 */
 
 ENTRY(ResetEntry)
-
 
 __CheckSum = 0;
 __StackTop = ORIGIN(RAM) + LENGTH(RAM);
@@ -55,18 +56,13 @@ __GlobalPointer = ORIGIN(RAM) + 0x1000; /* middle of small data area */
 SECTIONS {
     .reset RESET_VECTOR : { KEEP(*(.reset)) } > FLASH
 
-    /* Require ARM vectors located at begining of FLASH region at address 0*/
-	/* Reseve 1K for the vector */
+	/* Optional target reset/trap/vector table. */
 	.ivector : ALIGN(4)
 	{
 		__text_start__ = .;
 		__isr_vector = .;
-		/* At addr zero is the stack pointer */
-		/*LONG(__StackTop);*/
-
-		/* interrupt vector */
 		KEEP(*(.vectors*))
-	} > FLASH 
+	} > FLASH
 	
 	/* This is where the firmware informaton is stored. Usefull for bootloader */
 
@@ -112,16 +108,10 @@ SECTIONS {
 		*(.rodata .rodata.* .rodata1)
 	} > FLASH
 
-	/* Optional RISC-V RAM-executed code.  ESP32-C targets place trap/vector
-	 * code here so it runs out of fast SRAM rather than IROM cache.
-	 *
-	 * VMA goes in the IRAM region (executable SRAM, distinct from data RAM)
-	 * so the resulting LOAD segment is RX, not RWX — separate from .data /
-	 * .bss which share the RAM region.  Chips without a distinct executable
-	 * SRAM (e.g. Renesas R9A02 where RAM is already RWX) should add
-	 *     REGION_ALIAS("IRAM", RAM);
-	 * before INCLUDEing this script.  Chips that already define IRAM in
-	 * their MEMORY block (Espressif C3 / C6 …) need no alias. */
+	/* Optional executable-RAM code section.
+	 * Target-specific linker scripts decide whether IRAM maps to a distinct
+	 * executable SRAM region or aliases regular RAM.
+	 */
 	.iram.text : ALIGN(4)
 	{
 		PROVIDE(__iram_start__ = .);
@@ -133,18 +123,6 @@ SECTIONS {
 
 	PROVIDE(__iram_loc__ = LOADADDR(.iram.text));
 	PROVIDE(__iram_size__ = __iram_end__ - __iram_start__);
-
-	.ARM.extab : ALIGN(4)
-	{
-		*(.ARM.extab* .gnu.linkonce.armextab.*)
-	} > FLASH
-
-	PROVIDE (__exidx_start = .);
-	.ARM.exidx : ALIGN(4)
-	{
-		*(.ARM.exidx* .gnu.linkonce.armexidx.*)
-	} > FLASH
-	PROVIDE (__exidx_end = .);
 
 	.eh_frame_hdr : ALIGN(4)
 	{ 

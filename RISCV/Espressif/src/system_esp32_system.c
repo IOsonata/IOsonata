@@ -220,12 +220,25 @@ void Esp32SystemInit(void)
 	DisableRtcWdt();
 	DisableSuperWdt();
 
-#if defined(ESP32C3_CPU_160MHZ)
+	/*
+	 * Switch CPU to PLL.  ROM Direct Boot does NOT always do this — on
+	 * many cold-boot paths the CPU stays clocked from XTAL (40 MHz)
+	 * even though the flash-cache window is already running off PLL.
+	 * Without an explicit switch here, SystemCoreClock and any
+	 * timing-sensitive code (bit-bang protocols, calibrated busy-wait
+	 * delays) would be off by 2x.
+	 *
+	 * The PLL is started by ROM during Direct Boot for flash cache, so
+	 * its taps (PLL_F80M / PLL_F160M) are already valid; we only need
+	 * to flip SOC_CLK_SEL to the desired tap.
+	 */
 	uint32_t r = SYSTEM_SYSCLK_CONF_REG & ~SYSTEM_SOC_CLK_SEL_Msk;
+#if defined(ESP32C3_CPU_160MHZ)
 	SYSTEM_SYSCLK_CONF_REG = r | SYSTEM_SOC_CLK_PLL_F160M;
 	SystemCoreClock = 160000000UL;
 #else
-	SystemCoreClock = 80000000UL;   /* PLL_F80M — ROM bootloader default */
+	SYSTEM_SYSCLK_CONF_REG = r | SYSTEM_SOC_CLK_PLL_F80M;
+	SystemCoreClock =  80000000UL;
 #endif
 
 	EnableSysTimer();

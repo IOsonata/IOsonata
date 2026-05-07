@@ -791,6 +791,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/led_ncp5623b.h</locationURI>
 		</link>
 		<link>
+			<name>include/miscdev/led_ws2812.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/led_ws2812.h</locationURI>
+		</link>
+		<link>
 			<name>include/miscdev/ledmx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/ledmx.h</locationURI>
@@ -1319,6 +1324,11 @@
 			<name>src/miscdev/led_pwm.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/led_pwm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/led_ws2812.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/led_ws2812.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/ledmx.c</name>

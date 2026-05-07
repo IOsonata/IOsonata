@@ -8,15 +8,14 @@ Implementation on RISC-V.
 If the target supports the Zicntr extension (rdcycle available), delays are
 implemented using the CPU cycle counter for maximum accuracy.
 
-If rdcycle is not available (e.g. Nordic VPR / RV32E cores that omit
-performance counters), a calibrated 2-instruction NOP loop is used instead.
-The loop path is selected automatically via __riscv_zicntr / __riscv_32e
-compiler-defined macros — no manual configuration needed.
+If rdcycle is not available, a calibrated 2-instruction NOP loop is used
+instead. The loop path is selected automatically using compiler-defined
+RISC-V feature macros.
 
 Variable meaning per path:
-  rdcycle path : SystemCoreClockPeriodus = CPU MHz  (cycles per µs)
+  rdcycle path : SystemCoreClockPeriodus = CPU MHz  (cycles per us)
                  SystemCoreClockPeriodns = ns per cycle (integer, e.g. 6 @ 160MHz)
-  NOP loop path: SystemCoreClockPeriodus = CPU_MHz / 2  (loop iters per µs)
+  NOP loop path: SystemCoreClockPeriodus = CPU_MHz / 2  (loop iters per us)
                  SystemCoreClockPeriodns = CPU_MHz / 2000  (loop iters per ns, min 1)
 
 @author Hoang Nguyen Hoan

@@ -47,7 +47,7 @@ extern unsigned long __bss_start__;
 extern unsigned long __bss_end__;
 extern unsigned long __bss_size__;
 extern unsigned long __iram_loc__;     // LMA: source of .iram.text in flash
-extern unsigned long __iram_start__;   // VMA: dest of .iram.text in IRAM
+extern unsigned long __iram_start__;   // VMA: dest of .iram.text in executable RAM
 extern unsigned long __iram_end__;
 extern unsigned long __heap_start__;
 extern unsigned long __heap_size__;
@@ -84,11 +84,10 @@ void ResetEntry(void)
 #endif
 
 	/*
-	 * Copy .iram.text from flash LMA to its IRAM VMA.  Required when the
-	 * linker script places .iram.text VMA in a separate executable SRAM
-	 * region (e.g. ESP32-C3 IRAM at 0x4037C000).  Without this, the trap
-	 * handler that SystemInit installs via mtvec points to uninitialized
-	 * SRAM.  No-op on chips where __iram_start__ == __iram_end__.
+	 * Copy optional executable-RAM code from flash LMA to its runtime VMA.
+	 * Target linker scripts may place early trap/vector handlers or other
+	 * timing-sensitive routines in this section. No-op when the section is
+	 * empty or when start and end resolve to the same address.
 	 */
     src = &__iram_loc__;
     dst = &__iram_start__;
