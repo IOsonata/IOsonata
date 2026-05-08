@@ -454,6 +454,50 @@ static int Esp32c3UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int 
     UARTDev_t *udev = dev->pUartDev;
     int cnt = 0;
 
+    /* ---------------------------------------------------------------
+     * DIAGNOSTIC (TEMPORARY): on every entry, dump driver state via
+     * direct register pokes to UART0 FIFO — bypassing whatever state
+     * the driver itself might be in.  Stage B has already proven the
+     * UART core works at this point, so this output is reliable.
+     *
+     * Wire format: E0 <BASE byte 0> <BASE 1> <BASE 2> <BASE 3> E0
+     *              <bIntEn?00:11> <TxFree value> <STATUS hi byte> E0
+     *
+     * Expected:    E0 60 00 00 00 E0 00 80 00 E0
+     *              ^-- dev->Base = 0x60000000 (big-endian)
+     *                              ^-- bIntEn = 0 (polled mode)
+     *                                 ^-- TxFree = 128 (FIFO empty)
+     *                                    ^-- STATUS[31:24] = 0
+     * --------------------------------------------------------------- */
+    {
+        volatile uint32_t *FIFO_DBG   = (volatile uint32_t *)0x60000000UL;
+        volatile uint32_t *STATUS_DBG = (volatile uint32_t *)0x6000001CUL;
+        uint32_t base_val = dev->Base;
+        uint32_t status_val = *STATUS_DBG;
+        uint32_t txfree = 128U - ((status_val >> 16) & 0x3FFU);
+
+        #define DBG_PUSH(b)  do { \
+            uint32_t g = 0; \
+            while ((((*STATUS_DBG) >> 16) & 0x3FFU) >= 128U) { \
+                if (++g >= 1000000U) break; \
+            } \
+            *FIFO_DBG = (uint32_t)(b); \
+        } while (0)
+
+        DBG_PUSH(0xE0U);
+        DBG_PUSH((base_val >> 24) & 0xFFU);
+        DBG_PUSH((base_val >> 16) & 0xFFU);
+        DBG_PUSH((base_val >>  8) & 0xFFU);
+        DBG_PUSH( base_val        & 0xFFU);
+        DBG_PUSH(0xE0U);
+        DBG_PUSH(pDev->bIntEn ? 0x11U : 0x00U);
+        DBG_PUSH(txfree & 0xFFU);
+        DBG_PUSH((status_val >> 24) & 0xFFU);
+        DBG_PUSH(0xE0U);
+
+        #undef DBG_PUSH
+    }
+
     if (pDev->bIntEn)
     {
         int rtry = pDev->MaxRetry;
