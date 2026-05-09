@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/Vectors_esp32c3.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/lib/src/Vectors_esp32c3.c</locationURI>
+		</link>
+		<link>
 			<name>src/board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
@@ -39,6 +44,11 @@
 			<name>src/main.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/main.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/uart_esp32c3.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/uart_esp32c3.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_prbs_tx.cpp</name>

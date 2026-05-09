@@ -46,8 +46,9 @@ extern unsigned long __data_end__;
 extern unsigned long __bss_start__;
 extern unsigned long __bss_end__;
 extern unsigned long __bss_size__;
-extern unsigned long __iram_loc__;     // LMA: source of .iram.text in flash
-extern unsigned long __iram_start__;   // VMA: dest of .iram.text in executable RAM
+extern unsigned long __iram_loc__;       // LMA: source of .iram.text in flash
+extern unsigned long __iram_start__;     // VMA: executable address of .iram.text
+extern unsigned long __iram_data_start__;// write alias for .iram.text init
 extern unsigned long __iram_end__;
 extern unsigned long __heap_start__;
 extern unsigned long __heap_size__;
@@ -90,11 +91,19 @@ void ResetEntry(void)
 	 * empty or when start and end resolve to the same address.
 	 */
     src = &__iram_loc__;
-    dst = &__iram_start__;
-    while (dst < &__iram_end__)
+    dst = &__iram_data_start__;
+    unsigned long *iram_end = (unsigned long *)((uintptr_t)&__iram_data_start__ +
+                                               ((uintptr_t)&__iram_end__ - (uintptr_t)&__iram_start__));
+    while (dst < iram_end)
     {
         *dst++ = *src++;
     }
+#if defined(__riscv_zifencei)
+    __asm volatile("fence.i" ::: "memory");
+#else
+    /* Encoding for FENCE.I. Some toolchains require -march=...zifencei before accepting the mnemonic. */
+    __asm volatile(".word 0x0000100f" ::: "memory");
+#endif
 
   	/*
 	 * Copy the initialized data of the ".data" segment

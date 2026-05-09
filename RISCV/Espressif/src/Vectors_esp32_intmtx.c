@@ -47,6 +47,38 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <stdbool.h>
+
+/*=====================================================================
+ * Direct register poke helper.  Writes `count` bytes of `value` to the
+ * UART0 FIFO at 0x60000000, polling TXFIFO_CNT in STATUS to wait for
+ * FIFO space and then for full drain.  Returns true on success, false
+ * if either the inner spin or the drain spin times out (FIFO never
+ * drained → UART core not transmitting).
+ *====================================================================*/
+static bool direct_poke(uint8_t value, int count)
+{
+    volatile uint32_t *FIFO   = (volatile uint32_t *)0x60000000UL;
+    volatile uint32_t *STATUS = (volatile uint32_t *)0x6000001CUL;
+
+    for (int i = 0; i < count; i++)
+    {
+        uint32_t guard = 0;
+        while ((((*STATUS) >> 16) & 0x3FFU) >= 128U)
+        {
+            if (++guard >= 1000000U) return false;
+        }
+        *FIFO = (uint32_t)value;
+    }
+
+    /* Drain check */
+    uint32_t guard = 0;
+    while ((((*STATUS) >> 16) & 0x3FFU) > 0U)
+    {
+        if (++guard >= 5000000U) return false;
+    }
+    return true;
+}
 
 /*---------------------------------------------------------------------------
  * Default handler — spins so a debugger can catch unhandled interrupts.
@@ -57,8 +89,10 @@ SOFTWARE.
  * Declared weak so the application can override it.
  *---------------------------------------------------------------------------*/
 __attribute__((weak, section(".iram.text"), used))
-void DEF_IRQHandler(void)
+void DEF_IRQHandler1(void)
 {
+	direct_poke('Y', 6);
+
 	while (1)
 	{
 		__asm volatile("nop");
@@ -77,54 +111,54 @@ void DEF_IRQHandler(void)
  *---------------------------------------------------------------------------*/
 
 /* cause 0  — Instruction address misaligned */
-__attribute__((weak, alias("DEF_IRQHandler"))) void InstrAddrMisalign_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void InstrAddrMisalign_Handler(void);
 /* cause 1  — Instruction access fault */
-__attribute__((weak, alias("DEF_IRQHandler"))) void InstrAccessFault_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void InstrAccessFault_Handler(void);
 /* cause 2  — Illegal instruction */
-__attribute__((weak, alias("DEF_IRQHandler"))) void IllegalInstr_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void IllegalInstr_Handler(void);
 /* cause 3  — Breakpoint */
-__attribute__((weak, alias("DEF_IRQHandler"))) void Breakpoint_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Breakpoint_Handler(void);
 /* cause 4  — Load address misaligned */
-__attribute__((weak, alias("DEF_IRQHandler"))) void LoadAddrMisalign_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void LoadAddrMisalign_Handler(void);
 /* cause 5  — Load access fault */
-__attribute__((weak, alias("DEF_IRQHandler"))) void LoadAccessFault_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void LoadAccessFault_Handler(void);
 /* cause 6  — Store/AMO address misaligned */
-__attribute__((weak, alias("DEF_IRQHandler"))) void StoreAddrMisalign_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void StoreAddrMisalign_Handler(void);
 /* cause 7  — Store/AMO access fault */
-__attribute__((weak, alias("DEF_IRQHandler"))) void StoreAccessFault_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void StoreAccessFault_Handler(void);
 /* cause 8  — Environment call from U-mode */
-__attribute__((weak, alias("DEF_IRQHandler"))) void ECallU_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void ECallU_Handler(void);
 /* cause 9  — Environment call from S-mode */
-__attribute__((weak, alias("DEF_IRQHandler"))) void ECallS_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void ECallS_Handler(void);
 /* cause 10 — Reserved */
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved10_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved10_Handler(void);
 /* cause 11 — Environment call from M-mode */
-__attribute__((weak, alias("DEF_IRQHandler"))) void ECallM_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void ECallM_Handler(void);
 /* cause 12 — Instruction page fault */
-__attribute__((weak, alias("DEF_IRQHandler"))) void InstrPageFault_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void InstrPageFault_Handler(void);
 /* cause 13 — Load page fault */
-__attribute__((weak, alias("DEF_IRQHandler"))) void LoadPageFault_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void LoadPageFault_Handler(void);
 /* cause 14 — Reserved */
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved14_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved14_Handler(void);
 /* cause 15 — Store/AMO page fault */
-__attribute__((weak, alias("DEF_IRQHandler"))) void StorePageFault_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void StorePageFault_Handler(void);
 /* cause 16..31 — Reserved */
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved16_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved17_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved18_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved19_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved20_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved21_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved22_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved23_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved24_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved25_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved26_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved27_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved28_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved29_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved30_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved31_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved16_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved17_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved18_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved19_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved20_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved21_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved22_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved23_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved24_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved25_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved26_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved27_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved28_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved29_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved30_Handler(void);
+__attribute__((weak, alias("DEF_IRQHandler1"))) void Reserved31_Handler(void);
 
 /*---------------------------------------------------------------------------
  * Exception dispatch table — indexed by mcause (interrupt bit = 0).

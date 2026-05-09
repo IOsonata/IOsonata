@@ -55,14 +55,22 @@ MEMORY
      * objcopy -O binary outputs from the lowest LMA in this region. */
     FLASH  (RX)  : ORIGIN = 0x42000000, LENGTH = 0x400000
 
-    /* IRAM — fast SRAM accessed from the instruction bus.  Reserved for
-     * trap handlers and other I-side code.  Not used directly here:
-     * shared script's .iram.text uses RAM, which aliases the same
-     * physical SRAM via the data bus. */
-    IRAM   (RWX) : ORIGIN = 0x4037C000, LENGTH = 0x13C00
+    /* IRAM — use SRAM1 instruction alias, not SRAM0.
+     *
+     * 0x4037C000..0x4037FFFF is SRAM0.  On ESP32-C3 direct-boot/XIP
+     * builds SRAM0 is not a safe software-loaded vector/ISR target: it is
+     * the cache-side block and has no matching DRAM alias for the generic
+     * startup copy loop.  Put the trap table in SRAM1 instead.
+     *
+     * SRAM1 has paired aliases:
+     *   DRAM write alias : 0x3FC80000
+     *   IRAM exec alias  : 0x40380000
+     * ResetEntry copies .iram.text through __iram_data_start__ and mtvec
+     * points at the executable alias. */
+    IRAM   (RWX) : ORIGIN = 0x40380000, LENGTH = 0x4000
 
-    /* Main SRAM — .data, .bss, heap, stack. */
-    RAM    (RW)  : ORIGIN = 0x3FC80000, LENGTH = 0x50000
+    /* Main SRAM — leave the first 16 KiB for .iram.text above. */
+    RAM    (RW)  : ORIGIN = 0x3FC84000, LENGTH = 0x4C000
 }
 
 /* RESET_VECTOR: where ResetEntry must live.  Direct Boot magic occupies

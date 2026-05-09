@@ -37,12 +37,11 @@ Pin routing: TX uses GPIO_FUNC_OUT_SEL on the TX pin to drive UART TXD signal
 read from the chosen GPIO via the matrix.  Pads are first put in MCU_SEL =
 GPIO mode by IOPinCfg() so the matrix is in charge.
 
-Interrupt routing: peripheral source (UART0 = 21, UART1 = 22) is mapped to
-CPU interrupt 1 in INT_MTX, the CPU INT 1 is enabled at priority 1, and
-machine external interrupts are turned on (mie.MEIE, mstatus.MIE).  Any
-peripheral routed to CPU INT 1 will fire mcause = 0x8000000B; the trap
-handler in Vectors_esp32c3.c reads INTMTX status and dispatches by source
-bit.  Multiple peripherals can share the same CPU INT line.
+Interrupt routing: peripheral source UART0 = 21, UART1 = 22. ESP-IDF's
+non-shared interrupt path maps one peripheral source to one CPU interrupt
+input and installs the UART ISR directly on that CPU input.  This driver uses
+CPU input 2 for UART0 and CPU input 3 for UART1, avoiding ESP32-C3's reserved
+CPU input 1 and permanently disabled CPU input 6.
 
 @author	Hoang Nguyen Hoan
 @date	Mar. 2026
@@ -206,18 +205,32 @@ SOFTWARE.
 /* CPU-side interrupt control (same peripheral, register file alias INTERRUPT_CORE0) */
 #define INTC_CPU_INT_ENABLE_REG         (*(volatile uint32_t *)(INTMTX_BASE + 0x104U))
 #define INTC_CPU_INT_TYPE_REG           (*(volatile uint32_t *)(INTMTX_BASE + 0x108U))
+#define INTC_CPU_INT_CLEAR_REG          (*(volatile uint32_t *)(INTMTX_BASE + 0x10CU))
+/* CPU priority registers start at PRI_1 = 0x118.  Therefore
+ * PRI_n = 0x114 + 4*n for n = 1..31. */
 #define INTC_CPU_INT_PRI_REG(n)         (*(volatile uint32_t *)(INTMTX_BASE + 0x114U + ((unsigned)(n) * 4U)))
+#define INTC_CPU_INT_EIP_STATUS_REG     (*(volatile uint32_t *)(INTMTX_BASE + 0x110U))
+#define INTMTX_INTR_STATUS_0_REG        (*(volatile uint32_t *)(INTMTX_BASE + 0x0F8U))
+#define INTMTX_INTR_STATUS_1_REG        (*(volatile uint32_t *)(INTMTX_BASE + 0x0FCU))
 #define INTC_CPU_INT_THRESH_REG         (*(volatile uint32_t *)(INTMTX_BASE + 0x194U))
+#define INTC_CLOCK_GATE_REG             (*(volatile uint32_t *)(INTMTX_BASE + 0x100U))
+#define INTC_CLOCK_GATE_EN              (1UL << 0)
 
-/* Peripheral source numbers (TRM Rev 0.4, Table 9-2) */
+typedef void (*Esp32C3CpuIrqHandler)(void);
+extern "C" void Esp32C3SetCpuIrqHandler(uint32_t cpu_int_id, Esp32C3CpuIrqHandler handler);
+extern "C" void Esp32C3SetSourceIrqHandler(uint32_t source_id, Esp32C3CpuIrqHandler handler);
+extern "C" void Esp32C3IntMtxDispatch(void);
+extern "C" volatile uint32_t g_Esp32C3Uart0IrqCount;
+extern "C" volatile uint32_t g_Esp32C3Uart1IrqCount;
+
+/* Peripheral source numbers: ESP32-C3 interrupt source table. */
 #define INTSRC_UART0                    21U
 #define INTSRC_UART1                    22U
 
-/* All UART interrupts share CPU INT 1 here.  The single trap handler in
- * Vectors_esp32c3.c reads INTMTX status and dispatches by source bit, so
- * the choice of CPU INT level doesn't change which C handler runs — only
- * priority arbitration.  */
-#define UART_CPU_INT_LEVEL              1U
+/* CPU interrupt IDs. ID 1 is reserved by ESP-IDF for Wi-Fi and ID 6 is the
+ * permanently disabled interrupt input. Use normal free level-1 inputs. */
+#define UART0_CPU_INT_LEVEL             2U
+#define UART1_CPU_INT_LEVEL             3U
 #define UART_CPU_INT_PRIO               1U          /* 1..15, > THRESH */
 
 /*---------------------------------------------------------------------------
@@ -240,6 +253,47 @@ static ESP32C3_UARTDEV s_Esp32c3UartDev[] = {
     { .DevNo = 1, .Base = UART1_BASE, .pUartDev = nullptr },
 };
 static const int s_NbUartDev = sizeof(s_Esp32c3UartDev) / sizeof(s_Esp32c3UartDev[0]);
+
+extern "C" {
+volatile uint32_t g_Esp32C3UartFix9BuildMarker = 0x26050809UL;
+const char g_Esp32C3UartFix9BuildString[] = "ESP32C3_UART_IRQ_FIX9_SRAM1_VECTOR_260508";
+volatile uint32_t g_Esp32C3UartDbgUart0Map;
+volatile uint32_t g_Esp32C3UartDbgUart1Map;
+volatile uint32_t g_Esp32C3UartDbgCpuEnable;
+volatile uint32_t g_Esp32C3UartDbgCpuType;
+volatile uint32_t g_Esp32C3UartDbgCpuEip;
+volatile uint32_t g_Esp32C3UartDbgCpuPri2;
+volatile uint32_t g_Esp32C3UartDbgCpuPri3;
+volatile uint32_t g_Esp32C3UartDbgCpuThresh;
+volatile uint32_t g_Esp32C3UartDbgSrcStatus0;
+volatile uint32_t g_Esp32C3UartDbgSrcStatus1;
+volatile uint32_t g_Esp32C3UartDbgUart0Raw;
+volatile uint32_t g_Esp32C3UartDbgUart0Ena;
+volatile uint32_t g_Esp32C3UartDbgUart0St;
+volatile uint32_t g_Esp32C3UartDbgUart1Raw;
+volatile uint32_t g_Esp32C3UartDbgUart1Ena;
+volatile uint32_t g_Esp32C3UartDbgUart1St;
+
+void Esp32C3UartDebugSnapshot(void)
+{
+    g_Esp32C3UartDbgUart0Map   = INTMTX_SOURCE_MAP_REG(INTSRC_UART0);
+    g_Esp32C3UartDbgUart1Map   = INTMTX_SOURCE_MAP_REG(INTSRC_UART1);
+    g_Esp32C3UartDbgCpuEnable  = INTC_CPU_INT_ENABLE_REG;
+    g_Esp32C3UartDbgCpuType    = INTC_CPU_INT_TYPE_REG;
+    g_Esp32C3UartDbgCpuEip     = INTC_CPU_INT_EIP_STATUS_REG;
+    g_Esp32C3UartDbgCpuPri2    = INTC_CPU_INT_PRI_REG(UART0_CPU_INT_LEVEL);
+    g_Esp32C3UartDbgCpuPri3    = INTC_CPU_INT_PRI_REG(UART1_CPU_INT_LEVEL);
+    g_Esp32C3UartDbgCpuThresh  = INTC_CPU_INT_THRESH_REG;
+    g_Esp32C3UartDbgSrcStatus0 = INTMTX_INTR_STATUS_0_REG;
+    g_Esp32C3UartDbgSrcStatus1 = INTMTX_INTR_STATUS_1_REG;
+    g_Esp32C3UartDbgUart0Raw   = UART_INT_RAW(UART0_BASE);
+    g_Esp32C3UartDbgUart0Ena   = UART_INT_ENA(UART0_BASE);
+    g_Esp32C3UartDbgUart0St    = UART_INT_ST(UART0_BASE);
+    g_Esp32C3UartDbgUart1Raw   = UART_INT_RAW(UART1_BASE);
+    g_Esp32C3UartDbgUart1Ena   = UART_INT_ENA(UART1_BASE);
+    g_Esp32C3UartDbgUart1St    = UART_INT_ST(UART1_BASE);
+}
+}
 
 UARTDev_t const * const UARTGetInstance(int DevNo)
 {
@@ -298,27 +352,44 @@ static void Esp32c3UartSetBaud(uint32_t base, uint32_t baud)
                       | ((frag << UART_CLKDIV_FRAG_Pos) & UART_CLKDIV_FRAG_Msk);
 }
 
-static void Esp32c3UartIntMtxEnable(uint32_t source)
+static void Esp32c3UartIntMtxEnable(uint32_t source, uint32_t cpu_int_id, Esp32C3CpuIrqHandler handler)
 {
-    /* Map source -> CPU INT 1 */
-    INTMTX_SOURCE_MAP_REG(source) = UART_CPU_INT_LEVEL;
+    uint32_t mstatus_save;
 
-    /* CPU INT 1: level-triggered (TYPE bit 0), priority 1 */
-    INTC_CPU_INT_TYPE_REG &= ~(1UL << UART_CPU_INT_LEVEL);
-    INTC_CPU_INT_PRI_REG(UART_CPU_INT_LEVEL) = UART_CPU_INT_PRIO;
-    INTC_CPU_INT_THRESH_REG = 0U;     /* threshold below all priorities */
-    INTC_CPU_INT_ENABLE_REG |= (1UL << UART_CPU_INT_LEVEL);
+    __asm volatile("csrr %0, mstatus" : "=r"(mstatus_save));
+    __asm volatile("csrci mstatus, 0x8" ::: "memory");
 
-    /* Enable global mstatus.MIE.  The C3 does NOT implement the standard
-     * `mie` CSR (0x304) — writes raise illegal-instruction.  Instead the
-     * per-source CPU-INT enable lives in INTC_CPU_INT_ENABLE_REG, which
-     * was set above; only the hart-level mstatus.MIE remains.
-     * mstatus.MIE = bit 3, set via csrsi mstatus, 8. */
-    __asm volatile ("csrsi mstatus, 8" ::: "memory");
+    /* Match ESP-IDF's non-shared allocation path: install the ISR directly
+     * on the selected CPU interrupt input, then route the peripheral source
+     * through the interrupt matrix to that input. */
+    Esp32C3SetCpuIrqHandler(cpu_int_id, handler);
+    Esp32C3SetSourceIrqHandler(source, handler);
+
+    INTC_CLOCK_GATE_REG |= INTC_CLOCK_GATE_EN;
+
+    INTC_CPU_INT_ENABLE_REG &= ~(1UL << cpu_int_id);
+    INTC_CPU_INT_CLEAR_REG = (1UL << cpu_int_id);
+    INTC_CPU_INT_CLEAR_REG = 0U;
+    __asm volatile ("fence iorw, iorw" ::: "memory");
+
+    INTMTX_SOURCE_MAP_REG(source) = cpu_int_id;
+
+    INTC_CPU_INT_TYPE_REG &= ~(1UL << cpu_int_id);      /* level */
+    INTC_CPU_INT_PRI_REG(cpu_int_id) = UART_CPU_INT_PRIO;
+    INTC_CPU_INT_THRESH_REG = 0U;
+    INTC_CPU_INT_CLEAR_REG = (1UL << cpu_int_id);
+    INTC_CPU_INT_CLEAR_REG = 0U;
+    INTC_CPU_INT_ENABLE_REG |= (1UL << cpu_int_id);
+
+    __asm volatile ("fence iorw, iorw" ::: "memory");
+    Esp32C3UartDebugSnapshot();
+
+    (void)mstatus_save;
+    __asm volatile("csrsi mstatus, 0x8" ::: "memory");
 }
 
 /*---------------------------------------------------------------------------
- * IRQ handler — invoked from Esp32C3ExtIRQDispatch (Vectors_esp32c3.c)
+ * IRQ handler - invoked from the ESP32-C3 CPU interrupt input
  *---------------------------------------------------------------------------*/
 static void Esp32c3UartIRQHandler(ESP32C3_UARTDEV *pDev)
 {
@@ -375,13 +446,29 @@ static void Esp32c3UartIRQHandler(ESP32C3_UARTDEV *pDev)
     }
 }
 
-extern "C" void UART0_IRQHandler(void)
+/*---------------------------------------------------------------------------
+ * IRQ entry points.  These override the weak `alias("DEF_IRQHandler")`
+ * declarations in Vectors_esp32c3.c.
+ *
+ * `__attribute__((used))` keeps the compiler from discarding the symbol
+ * even if it appears statically unreachable in the current TU; combined
+ * with the strong definition this guarantees that the linker resolves
+ * the [21]/[22] entries in s_Esp32C3PeriphVectors[] to OUR functions
+ * rather than the weak DEF_IRQHandler infinite loop, regardless of
+ * archive member ordering.
+ *
+ *---------------------------------------------------------------------------*/
+extern "C" __attribute__((used))
+void UART0_IRQHandler(void)
 {
+    g_Esp32C3Uart0IrqCount++;
     Esp32c3UartIRQHandler(&s_Esp32c3UartDev[0]);
 }
 
-extern "C" void UART1_IRQHandler(void)
+extern "C" __attribute__((used))
+void UART1_IRQHandler(void)
 {
+    g_Esp32C3Uart1IrqCount++;
     Esp32c3UartIRQHandler(&s_Esp32c3UartDev[1]);
 }
 
@@ -819,7 +906,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
     /* 6. CONF1: RX FIFO full threshold + RX timeout.
      *    Affects RX-side interrupts only; safe to write any time. */
     UART_CONF1(base) = (64U << 0)            /* RXFIFO_FULL_THRHD */
-                     | (96U << 9)            /* TXFIFO_EMPTY_THRHD */
+                     | (16U << 9)            /* TXFIFO_EMPTY_THRHD */
                      | (1UL << 21);          /* RX_TOUT_EN */
 
     /* 6a. IDLE_CONF: clear tx_idle_num so there's no inter-byte gap.
@@ -910,7 +997,14 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
                            | UART_INT_RXFIFO_OVF;
         /* TXFIFO_EMPTY is enabled on demand by Esp32c3UartTxData. */
 
-        Esp32c3UartIntMtxEnable(devno == 0 ? INTSRC_UART0 : INTSRC_UART1);
+        if (devno == 0)
+        {
+            Esp32c3UartIntMtxEnable(INTSRC_UART0, UART0_CPU_INT_LEVEL, UART0_IRQHandler);
+        }
+        else
+        {
+            Esp32c3UartIntMtxEnable(INTSRC_UART1, UART1_CPU_INT_LEVEL, UART1_IRQHandler);
+        }
     }
 
     return true;

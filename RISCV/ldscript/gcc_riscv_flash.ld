@@ -112,9 +112,14 @@ SECTIONS {
 	 * Target-specific linker scripts decide whether IRAM maps to a distinct
 	 * executable SRAM region or aliases regular RAM.
 	 */
-	.iram.text : ALIGN(4)
+	.iram.text : ALIGN(256)
 	{
 		PROVIDE(__iram_start__ = .);
+
+		. = ALIGN(256);
+		KEEP(*(.iram.text.vectors))
+
+		. = ALIGN(4);
 		KEEP(*(.iram.text))
 		*(.iram.text.*)
 		. = ALIGN(4);
@@ -123,6 +128,9 @@ SECTIONS {
 
 	PROVIDE(__iram_loc__ = LOADADDR(.iram.text));
 	PROVIDE(__iram_size__ = __iram_end__ - __iram_start__);
+	/* Most MCUs can initialize executable RAM through the same address used
+	 * for execution. ESP32-C3 overrides this with a DRAM alias. */
+	PROVIDE(__iram_data_start__ = __iram_start__);
 
 	.eh_frame_hdr : ALIGN(4)
 	{ 
