@@ -18,17 +18,17 @@ ESP32-C6 GPIO peripheral notes (TRM Rev 0.6, Section 5):
 
   - Single port -- PortNo is always 0.  PinNo in [0, 29] (30 usable GPIOs).
   - Two atomically-safe register pairs for output:
-      GPIO_OUT_W1TS_REG  (0x60004008) -- write 1-to-set,  no RMW needed
-      GPIO_OUT_W1TC_REG  (0x6000400C) -- write 1-to-clear, no RMW needed
+      ESP32_GPIO_OUT_W1TS_REG32  (0x60004008) -- write 1-to-set,  no RMW needed
+      ESP32_GPIO_OUT_W1TC_REG32  (0x6000400C) -- write 1-to-clear, no RMW needed
   - Output enable:
-      GPIO_ENABLE_W1TS_REG (0x60004024)
-      GPIO_ENABLE_W1TC_REG (0x60004028)
+      ESP32_GPIO_ENABLE_W1TS_REG32 (0x60004024)
+      ESP32_GPIO_ENABLE_W1TC_REG32 (0x60004028)
   - Input read:
-      GPIO_IN_REG (0x6000403C) -- current sampled pad state
+      ESP32_GPIO_IN_REG32 (0x6000403C) -- current sampled pad state
   - Current output latch (readable shadow):
-      GPIO_OUT_REG (0x60004004)
+      ESP32_GPIO_OUT_REG32 (0x60004004)
 
-IOPinToggle reads GPIO_OUT_REG to determine current driven level, then
+IOPinToggle reads ESP32_GPIO_OUT_REG32 to determine current driven level, then
 writes to W1TS or W1TC -- avoiding a non-atomic RMW on the output register.
 
 @author	Hoang Nguyen Hoan
@@ -64,34 +64,9 @@ SOFTWARE.
 
 #include <stdint.h>
 
+#include "esp32xx.h"
+#include "esp32xx_gpio.h"
 #include "coredev/iopincfg.h"
-
-/*---------------------------------------------------------------------------
- * Espressif RISC-V GPIO register map (base 0x60004000)
- * Reference: ESP32-C6 TRM / ESP32-C3 TRM / ESP32-H2 TRM — Section "GPIO Register Summary" "Register Summary"
- *---------------------------------------------------------------------------*/
-#define ESP32_GPIO_BASE           0x60004000UL
-
-/** Output latch shadow (readable -- reflects what we are driving). */
-#define GPIO_OUT_REG                (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x004U))
-
-/** Atomic write-1-to-set: drives selected pins high. */
-#define GPIO_OUT_W1TS_REG           (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x008U))
-
-/** Atomic write-1-to-clear: drives selected pins low. */
-#define GPIO_OUT_W1TC_REG           (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x00CU))
-
-/** Output-enable register: bit n = 1 means GPIO n is an output. */
-#define GPIO_ENABLE_REG             (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x020U))
-
-/** Write-1-to-set output-enable (enable output driver). */
-#define GPIO_ENABLE_W1TS_REG        (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x024U))
-
-/** Write-1-to-clear output-enable (tri-state / input mode). */
-#define GPIO_ENABLE_W1TC_REG        (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x028U))
-
-/** Input register: current sampled pad level for all GPIOs. */
-#define GPIO_IN_REG                 (*(volatile uint32_t *)(ESP32_GPIO_BASE + 0x03CU))
 
 #ifdef __cplusplus
 extern "C" {
@@ -115,18 +90,18 @@ void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir)
 
 	if (Dir == IOPINDIR_OUTPUT)
 	{
-		GPIO_ENABLE_W1TS_REG = mask;
+		ESP32_GPIO_ENABLE_W1TS_REG32 = mask;
 	}
 	else
 	{
-		GPIO_ENABLE_W1TC_REG = mask;
+		ESP32_GPIO_ENABLE_W1TC_REG32 = mask;
 	}
 }
 
 /**
  * @brief	Read current pin state.
  *
- * Reads GPIO_IN_REG which reflects the actual pad level.  For output pins
+ * Reads ESP32_GPIO_IN_REG32 which reflects the actual pad level.  For output pins
  * this normally matches the driven value; for input pins it reflects the
  * externally applied signal.
  *
@@ -139,13 +114,13 @@ static inline __attribute__((always_inline))
 int IOPinRead(int PortNo, int PinNo)
 {
 	(void)PortNo;
-	return (int)((GPIO_IN_REG >> (unsigned)PinNo) & 1UL);
+	return (int)((ESP32_GPIO_IN_REG32 >> (unsigned)PinNo) & 1UL);
 }
 
 /**
  * @brief	Drive pin to logic 1 (high).
  *
- * Uses GPIO_OUT_W1TS_REG -- fully atomic, safe from ISR context.
+ * Uses ESP32_GPIO_OUT_W1TS_REG32 -- fully atomic, safe from ISR context.
  *
  * @param	PortNo  : Port number (always 0 on ESP32-C6, ignored)
  * @param	PinNo   : GPIO pin number [0..29]
@@ -154,13 +129,13 @@ static inline __attribute__((always_inline))
 void IOPinSet(int PortNo, int PinNo)
 {
 	(void)PortNo;
-	GPIO_OUT_W1TS_REG = 1UL << (unsigned)PinNo;
+	ESP32_GPIO_OUT_W1TS_REG32 = 1UL << (unsigned)PinNo;
 }
 
 /**
  * @brief	Drive pin to logic 0 (low).
  *
- * Uses GPIO_OUT_W1TC_REG -- fully atomic, safe from ISR context.
+ * Uses ESP32_GPIO_OUT_W1TC_REG32 -- fully atomic, safe from ISR context.
  *
  * @param	PortNo  : Port number (always 0 on ESP32-C6, ignored)
  * @param	PinNo   : GPIO pin number [0..29]
@@ -169,13 +144,13 @@ static inline __attribute__((always_inline))
 void IOPinClear(int PortNo, int PinNo)
 {
 	(void)PortNo;
-	GPIO_OUT_W1TC_REG = 1UL << (unsigned)PinNo;
+	ESP32_GPIO_OUT_W1TC_REG32 = 1UL << (unsigned)PinNo;
 }
 
 /**
  * @brief	Toggle pin output state.
  *
- * Reads GPIO_OUT_REG (output latch, not input pad) to determine what is
+ * Reads ESP32_GPIO_OUT_REG32 (output latch, not input pad) to determine what is
  * currently being driven, then issues a single atomic W1TS or W1TC write.
  * Only the one bit for PinNo is touched, so concurrent access to other pins
  * from interrupt context is safe.
@@ -189,20 +164,20 @@ void IOPinToggle(int PortNo, int PinNo)
 	(void)PortNo;
 	uint32_t mask = 1UL << (unsigned)PinNo;
 
-	if (GPIO_OUT_REG & mask)
+	if (ESP32_GPIO_OUT_REG32 & mask)
 	{
-		GPIO_OUT_W1TC_REG = mask;	/* currently high -- drive low */
+		ESP32_GPIO_OUT_W1TC_REG32 = mask;	/* currently high -- drive low */
 	}
 	else
 	{
-		GPIO_OUT_W1TS_REG = mask;	/* currently low  -- drive high */
+		ESP32_GPIO_OUT_W1TS_REG32 = mask;	/* currently low  -- drive high */
 	}
 }
 
 /**
  * @brief	Read all GPIO pins simultaneously.
  *
- * Returns GPIO_IN_REG (bits [29:0]); upper bits are reserved and read as 0.
+ * Returns ESP32_GPIO_IN_REG32 (bits [29:0]); upper bits are reserved and read as 0.
  *
  * @param	PortNo  : Port number (always 0 on ESP32-C6, ignored)
  *
@@ -212,7 +187,7 @@ static inline __attribute__((always_inline))
 uint32_t IOPinReadPort(int PortNo)
 {
 	(void)PortNo;
-	return GPIO_IN_REG;
+	return ESP32_GPIO_IN_REG32;
 }
 
 /**
@@ -222,7 +197,7 @@ uint32_t IOPinReadPort(int PortNo)
  * are 0 in Data.  Both writes happen in two instructions -- as close to
  * atomic as possible without a hardware shadow-write register.
  *
- * Input-only pins (GPIO_ENABLE_REG bit = 0) are unaffected at the pad.
+ * Input-only pins (ESP32_GPIO_ENABLE_REG32 bit = 0) are unaffected at the pad.
  *
  * @param	PortNo  : Port number (always 0 on ESP32-C6, ignored)
  * @param	Data    : Desired pin state bit-field (bit n = desired GPIO n level)
@@ -231,9 +206,10 @@ static inline __attribute__((always_inline))
 void IOPinWritePort(int PortNo, uint32_t Data)
 {
 	(void)PortNo;
-	Data &= 0x3FFFFFFFUL;			/* mask to valid GPIO[29:0] range */
-	GPIO_OUT_W1TS_REG = Data;
-	GPIO_OUT_W1TC_REG = (~Data) & 0x3FFFFFFFUL;
+	uint32_t validMask = (ESP32_GPIO_PIN_COUNT >= 32U) ? 0xFFFFFFFFUL : ((1UL << ESP32_GPIO_PIN_COUNT) - 1UL);
+	Data &= validMask;
+	ESP32_GPIO_OUT_W1TS_REG32 = Data;
+	ESP32_GPIO_OUT_W1TC_REG32 = (~Data) & validMask;
 }
 
 #ifdef __cplusplus

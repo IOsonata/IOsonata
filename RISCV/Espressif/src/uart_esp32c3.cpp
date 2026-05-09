@@ -219,7 +219,7 @@ SOFTWARE.
 typedef void (*Esp32C3CpuIrqHandler)(void);
 extern "C" void Esp32C3SetCpuIrqHandler(uint32_t cpu_int_id, Esp32C3CpuIrqHandler handler);
 extern "C" void Esp32C3SetSourceIrqHandler(uint32_t source_id, Esp32C3CpuIrqHandler handler);
-extern "C" void Esp32C3IntMtxDispatch(void);
+//extern "C" void Esp32C3IntMtxDispatch(void);
 extern "C" volatile uint32_t g_Esp32C3Uart0IrqCount;
 extern "C" volatile uint32_t g_Esp32C3Uart1IrqCount;
 
@@ -639,7 +639,7 @@ static int Esp32c3UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int 
  *---------------------------------------------------------------------------*/
 
 /* IOMUX register access (must match iopincfg_esp32.c constants). */
-#define ESP32_IOMUX_BASE                0x60009000UL
+//#define ESP32_IOMUX_BASE                0x60009000UL
 #define IOMUX_PAD_REG_DRV(n)            (*(volatile uint32_t *)(ESP32_IOMUX_BASE + 0x04U + ((unsigned)(n) * 4U)))
 
 /* On the C3, IOMUX_PAD_REG fields are (per soc/io_mux_reg.h):

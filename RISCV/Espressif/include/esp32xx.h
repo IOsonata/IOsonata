@@ -41,8 +41,8 @@ SOFTWARE.
 #include "esp32c5.h"
 #elif defined(ESP32C6)
 #include "esp32c6.h"
-#elif
-#error "Unsupported device. See esp32.h"
+#else
+#error "Unsupported device. See esp32xx.h"
 #endif
 
 #endif // __ESP32XX_H__
