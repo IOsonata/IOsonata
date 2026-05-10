@@ -158,21 +158,18 @@ void Esp32DisableSourceIrq(uint32_t source_id, uint32_t cpu_int_id)
 // C5: CLIC-based install.
 //
 // Steps:
-//   1. Save MIE, clear MIE
-//   2. Compute CLIC slot = source_id + CLIC_EXT_INTR_NUM_OFFSET
-//   3. ATTR  : MODE = machine, TRIG = level, SHV = 0 (non-vectored;
-//              dispatch goes through DEF_IRQHandler in
-//              Vectors_esp32_clic.c, which then jumps to the bound
-//              handler)
-//   4. CTL   : level << (8 - NLBITS) i.e. (prio << 5) for NLBITS = 3
-//   5. IP    : write 1 to clear any pending bit
-//   6. IE    : 1 to enable
-//   7. Fence
-//   8. Restore MIE
+//   1. Map source_id -> CLIC slot (peripheral sources start at the chip's
+//      CLIC_EXT_INTR_NUM_OFFSET, slot 16 on C5).
+//   2. Save MIE, clear MIE.
+//   3. Hand off to the generic CLIC helper, which writes ATTR (M-mode,
+//      level-high, SHV = 0), CTL (level << (8 - NLBITS) with sub-prio
+//      filled to 1s), clears any stale IP, and sets IE.
+//   4. Fence, then unconditionally enable MIE.
 //
-// `cpu_int_id` is unused on C5; CLIC has per-source slots, not shared
-// CPU INT lines.  `handler` is unused unless a ROM-hook installer
-// equivalent is later added for C5.
+// `cpu_int_id` is unused on C5 (CLIC has per-source slots, not shared
+// CPU INT lines).  `handler` is unused — dispatch is via DEF_IRQHandler
+// in Vectors_esp32_clic.c, which the linker resolves to the bound
+// driver handler symbol.
 // ===========================================================================
 #if defined(ESP32C5)
 
@@ -185,37 +182,38 @@ bool Esp32EnableSourceIrq(uint32_t source_id,
     (void)handler;
 
     uint32_t slot = source_id + ESP32_CLIC_EXT_INTR_NUM_OFFSET;
-    if (slot >= ESP32_CLIC_INT_COUNT)
-    {
-        return false;
-    }
-    if (prio == 0U) prio = 1U;
-    if (prio > 7U)  prio = 7U;
+
+    // Clamp the level into the chip's NLBITS range.  Levels run
+    // 1..((1 << NLBITS) - 1); 0 is reserved (interrupt cannot fire).
+    uint32_t lvl_max = (1U << ESP32_CLIC_NLBITS) - 1U;
+    if (prio == 0U)        prio = 1U;
+    if (prio > lvl_max)    prio = lvl_max;
 
     uint32_t mstatus = Esp32IrqSaveAndDisableMie();
 
-    ESP32_CLIC_INT_ATTR_REG(slot) = (uint8_t)(ESP32_CLIC_INT_ATTR_MODE_MACHINE
-                                              | ESP32_CLIC_INT_ATTR_TRIG_LEVEL);
-    ESP32_CLIC_INT_CTL_REG(slot)  = ESP32_CLIC_INT_CTL_FROM_LEVEL(prio);
-    ESP32_CLIC_INT_IP_REG(slot)   = 0U;     // clear stale pending
-    ESP32_CLIC_INT_IE_REG(slot)   = 1U;
+    bool ok = ClicEnableSlot((uintptr_t)ESP32_CLIC_CTRL_BASE,
+                             slot,
+                             ESP32_CLIC_INT_COUNT,
+                             CLIC_TRIG_LEVEL_HIGH,
+                             (uint8_t)prio,
+                             (uint8_t)ESP32_CLIC_NLBITS);
 
     Esp32IrqFenceIo();
     Esp32IrqEnableMie(mstatus);
 
-    return true;
+    return ok;
 }
 
 void Esp32DisableSourceIrq(uint32_t source_id, uint32_t cpu_int_id)
 {
     (void)cpu_int_id;
+
     uint32_t slot = source_id + ESP32_CLIC_EXT_INTR_NUM_OFFSET;
-    if (slot >= ESP32_CLIC_INT_COUNT)
-    {
-        return;
-    }
+
     uint32_t mstatus = Esp32IrqSaveAndDisableMie();
-    ESP32_CLIC_INT_IE_REG(slot) = 0U;
+    (void)ClicDisableSlot((uintptr_t)ESP32_CLIC_CTRL_BASE,
+                          slot,
+                          ESP32_CLIC_INT_COUNT);
     Esp32IrqFenceIo();
     Esp32IrqEnableMie(mstatus);
 }
