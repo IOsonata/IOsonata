@@ -3,6 +3,31 @@
 
 @brief	Generic ResetEntry code for RISC-V with GCC compiler
 
+Boot sequence:
+
+  1. The CPU starts execution at the address of the .reset section
+     (placed at flash 0x00000000 by the device-specific linker script).
+     ResetEntry is the only function in that section.
+
+  2. ResetEntry sets up sp from __StackTop and gp from __global_pointer$.
+     The gp load MUST be wrapped in .option norelax — otherwise the
+     linker can relax la gp,__global_pointer$ into a gp-relative form
+     that uses gp before it is set, corrupting it.  This is a known
+     RISC-V startup gotcha (the GCC RISC-V manual calls it out under
+     "Linker relaxation").
+
+  3. Optional executable-RAM (.iram.text) is copied from flash LMA to
+     its runtime VMA, then a fence.i ensures any cached instruction
+     fetches see the new copy before they execute.
+
+  4. .data is copied from flash LMA to RAM.  .bss is zeroed.
+
+  5. SystemInit() runs (chip-specific clock + trap setup).
+
+  6. SystemCoreClockUpdate() recomputes the global clock periods.
+
+  7. _start (libc) runs constructors and calls main().
+
 @author	Hoang Nguyen Hoan
 @date	Aug. 20, 2025
 
@@ -38,9 +63,9 @@ SOFTWARE.
 #include <sys/stat.h>
 #include <sys/types.h>
 
-extern unsigned long __etext;	// Begin of data in FLASH location
+extern unsigned long __etext;       // Begin of data in FLASH location
 extern unsigned long __data_loc__;
-extern unsigned long __data_start__;	// RAM data start
+extern unsigned long __data_start__;    // RAM data start
 extern unsigned long __data_size__;
 extern unsigned long __data_end__;
 extern unsigned long __bss_start__;
@@ -68,32 +93,42 @@ void ResetEntry(void)
 {
     unsigned long *src, *dst;
 
-    /* Initialize stack pointer */
-//    asm volatile("mv sp, %0" : : "r"(&__StackTop));
-    // Initialize stack pointer ---
-    __asm volatile("la sp, __StackTop");   // load address of stack top
+    // Initialize stack pointer.
+    __asm volatile("la sp, __StackTop");
 
-    // Initialize global pointer (ABI requirement) ---
-    __asm volatile("la gp, __global_pointer$");
+    // Initialize global pointer (ABI requirement).
+    //
+    // .option norelax is REQUIRED here.  Without it, the linker can relax
+    // the la (auipc + addi) into a gp-relative form, which uses gp before
+    // it is set and produces a wrong gp value.  Symptoms range from "small
+    // global accesses through gp return garbage" to "boots fine, then any
+    // function that uses %gprel addressing crashes" — both consistent with
+    // intermittent reset issues.
+    __asm volatile(
+        ".option push           \n"
+        ".option norelax        \n"
+        "la gp, __global_pointer$ \n"
+        ".option pop            \n"
+        ::: "memory");
 
     /* Only clear SATP if we KNOW we're running in S-mode on a paged system.
        By default for bare-metal MCUs (M-mode), do nothing. */
 #if defined(__riscv_zicsr) && (defined(__riscv_sv32) || defined(__riscv_sv39) || defined(__riscv_sv48) || defined(__riscv_sv57))
-	__asm volatile("csrw satp, zero");
-	// Optional: flush stale translations if you were actually in S-mode
-	__asm volatile("sfence.vma");
+    __asm volatile("csrw satp, zero");
+    // Optional: flush stale translations if you were actually in S-mode
+    __asm volatile("sfence.vma");
 #endif
 
-	/*
-	 * Copy optional executable-RAM code from flash LMA to its runtime VMA.
-	 * Target linker scripts may place early trap/vector handlers or other
-	 * timing-sensitive routines in this section. No-op when the section is
-	 * empty or when start and end resolve to the same address.
-	 */
+    /*
+     * Copy optional executable-RAM code from flash LMA to its runtime VMA.
+     * Target linker scripts may place early trap/vector handlers or other
+     * timing-sensitive routines in this section.  No-op when the section
+     * is empty or when start and end resolve to the same address.
+     */
     src = &__iram_loc__;
     dst = &__iram_data_start__;
     unsigned long *iram_end = (unsigned long *)((uintptr_t)&__iram_data_start__ +
-                                               ((uintptr_t)&__iram_end__ - (uintptr_t)&__iram_start__));
+                                                ((uintptr_t)&__iram_end__ - (uintptr_t)&__iram_start__));
     while (dst < iram_end)
     {
         *dst++ = *src++;
@@ -101,14 +136,14 @@ void ResetEntry(void)
 #if defined(__riscv_zifencei)
     __asm volatile("fence.i" ::: "memory");
 #else
-    /* Encoding for FENCE.I. Some toolchains require -march=...zifencei before accepting the mnemonic. */
+    /* Encoding for FENCE.I.  Some toolchains require -march=...zifencei
+     * before accepting the mnemonic. */
     __asm volatile(".word 0x0000100f" ::: "memory");
 #endif
 
-  	/*
-	 * Copy the initialized data of the ".data" segment
-	 * from the flash to ram.
-	 */
+    /*
+     * Copy the initialized data of the ".data" segment from flash to RAM.
+     */
     src = &__data_loc__;
     dst = &__data_start__;
     while (dst < &__data_end__)
@@ -116,26 +151,27 @@ void ResetEntry(void)
         *dst++ = *src++;
     }
 
-	/*
-	 * Clear the ".bss" segment.
-	 */
+    /*
+     * Clear the ".bss" segment.
+     */
     dst = &__bss_start__;
     while (dst < &__bss_end__)
     {
         *dst++ = 0;
     }
 
-	/*
-	 * Now memory has been initialized
-	 * Update core clock data
-	 */
+    /*
+     * Now memory has been initialized.
+     * Run chip-specific bring-up (clock tree, mtvec, ...) then update the
+     * core-clock period globals.
+     */
     SystemInit();
     SystemCoreClockUpdate();
 
     _start();
 
     /* Loop forever if main returns */
-    while(1) { }
+    while (1) { }
 }
 
 /* --- Minimal heap (_sbrk) implementation --- */
@@ -159,12 +195,12 @@ caddr_t _sbrk(ptrdiff_t incr)
     return (caddr_t)prev_heap;
 }
 
-__attribute__((weak)) int _close(int fd)      { (void)fd; return -1; }
-__attribute__((weak)) int _fstat(int fd, struct stat *st) { (void)fd; st->st_mode = S_IFCHR; return 0; }
-__attribute__((weak)) int _isatty(int fd)    { (void)fd; return 1; }
-__attribute__((weak)) int _lseek(int fd, int offset, int whence) { (void)fd; (void)offset; (void)whence; return -1; }
-__attribute__((weak)) int _read(int fd, char *buf, size_t len)    { (void)fd; (void)buf; (void)len; return -1; }
-__attribute__((weak)) int _write(int fd, char *buf, size_t len)   { (void)fd; (void)buf; (void)len; return -1; }
-__attribute__((weak)) void _exit(int status) { (void)status; while(1); }
-__attribute__((weak)) void _kill(int pid, int sig) { (void)pid; (void)sig;}
-__attribute__((weak)) int _getpid(void) { return -1; }
+__attribute__((weak)) int  _close(int fd)                              { (void)fd; return -1; }
+__attribute__((weak)) int  _fstat(int fd, struct stat *st)             { (void)fd; st->st_mode = S_IFCHR; return 0; }
+__attribute__((weak)) int  _isatty(int fd)                             { (void)fd; return 1; }
+__attribute__((weak)) int  _lseek(int fd, int offset, int whence)      { (void)fd; (void)offset; (void)whence; return -1; }
+__attribute__((weak)) int  _read(int fd, char *buf, size_t len)        { (void)fd; (void)buf; (void)len; return -1; }
+__attribute__((weak)) int  _write(int fd, char *buf, size_t len)       { (void)fd; (void)buf; (void)len; return -1; }
+__attribute__((weak)) void _exit(int status)                           { (void)status; while (1); }
+__attribute__((weak)) void _kill(int pid, int sig)                     { (void)pid; (void)sig; }
+__attribute__((weak)) int  _getpid(void)                               { return -1; }

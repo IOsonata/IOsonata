@@ -173,6 +173,52 @@ SOFTWARE.
 #endif
 
 /*---------------------------------------------------------------------------
+ * Option-Setting Memory contents (placed by the linker at 0x0100A150).
+ *
+ * Six 32-bit slots, each in its own input section so a project can
+ * override any single slot without touching the rest by providing its
+ * own non-weak g_R9A02_Ofs0 (etc.) in user code.  Defaults below leave
+ * every option feature in its safe / disabled state (0xFFFFFFFF):
+ *
+ *    OFS0 = 0xFFFFFFFF  IWDT not auto-started, all WDT options disabled.
+ *    OFS1 = 0xFFFFFFFF  LVD0 disabled, HOCO not auto-started by ROM.
+ *                       SystemInit() starts HOCO explicitly later.
+ *    BPS0..BPS3 = 0xFFFFFFFF  No block protection (development default).
+ *
+ * Note these are 'const' but DELIBERATELY NOT 'static' so they survive
+ * link-time gc-sections.  The 'used' attribute pins them.  The KEEP() in
+ * the linker script is the belt-and-braces.
+ *---------------------------------------------------------------------------*/
+__attribute__((section(".ofs.0"),    used, retain, weak)) const uint32_t g_R9A02_Ofs0 = 0xFFFFFFFFU;
+__attribute__((section(".ofs.1"),    used, retain, weak)) const uint32_t g_R9A02_Ofs1 = 0xFFFFFFFFU;
+__attribute__((section(".ofs.bps0"), used, retain, weak)) const uint32_t g_R9A02_Bps0 = 0xFFFFFFFFU;
+__attribute__((section(".ofs.bps1"), used, retain, weak)) const uint32_t g_R9A02_Bps1 = 0xFFFFFFFFU;
+__attribute__((section(".ofs.bps2"), used, retain, weak)) const uint32_t g_R9A02_Bps2 = 0xFFFFFFFFU;
+__attribute__((section(".ofs.bps3"), used, retain, weak)) const uint32_t g_R9A02_Bps3 = 0xFFFFFFFFU;
+
+/*---------------------------------------------------------------------------
+ * Default machine-mode trap handler.
+ *
+ * mtvec is undefined out of reset on the Andes N22 in R9A02G021 — in
+ * practice it reads back as 0, which means any trap before user code
+ * installs a handler jumps back to ResetEntry and the chip silently
+ * re-runs init.  Symptom: unexplained reset bursts.  SystemInit()
+ * below points mtvec here so a real trap halts in a recognisable place
+ * instead of bouncing through reset.
+ *
+ * Declared weak so an application can override it with a diagnostic
+ * handler that logs mcause / mepc / mtval before halting.
+ *---------------------------------------------------------------------------*/
+__attribute__((interrupt("machine"), aligned(4), weak, used))
+void RISCV_TrapHandler(void)
+{
+    while (1)
+    {
+        __asm volatile("nop");
+    }
+}
+
+/*---------------------------------------------------------------------------
  * IOsonata global clock state
  * Initialised to MOCO (8 MHz) safe defaults; overwritten by SystemInit().
  *---------------------------------------------------------------------------*/
@@ -318,6 +364,17 @@ void SystemCoreClockUpdate(void)
  *---------------------------------------------------------------------------*/
 void SystemInit(void)
 {
+    // Install the trap handler before doing anything else, so any fault
+    // during the rest of init (misaligned access, illegal instruction,
+    // ECALL from accidentally-emitted libc constructor code, ...) lands
+    // at RISCV_TrapHandler instead of bouncing back to ResetEntry.
+    //
+    // Direct mode: mtvec[1:0] = 0b00, base = handler address.
+    {
+        uintptr_t tvec = (uintptr_t)&RISCV_TrapHandler;
+        __asm volatile("csrw mtvec, %0" : : "r"(tvec) : "memory");
+    }
+
     /* 1. Unlock clock generation and low-power mode registers */
     SYSC_PRCR = PRCR_KEY | PRCR_PRC0 | PRCR_PRC1 | PRCR_PRC3;
 
