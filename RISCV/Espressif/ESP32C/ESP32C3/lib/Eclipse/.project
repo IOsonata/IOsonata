@@ -1196,6 +1196,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_nau7802.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/esp32xx_irq.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/esp32xx_irq.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
@@ -1214,6 +1219,11 @@
 			<name>src/coredev/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/system_esp32_uart_clock.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/system_esp32_uart_clock.c</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer.cpp</name>

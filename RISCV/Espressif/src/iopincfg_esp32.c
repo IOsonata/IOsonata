@@ -72,12 +72,6 @@ volatile uint32_t g_Esp32GpioIrqCount;
 volatile uint32_t g_Esp32GpioLastPending;
 volatile uint32_t g_Esp32GpioUnhandledPending;
 
-#if defined(ESP32C3)
-typedef void (*Esp32IrqHandler)(void);
-extern void Esp32C3SetCpuIrqHandler(uint32_t cpu_int_id, Esp32IrqHandler handler) __attribute__((weak));
-extern void Esp32C3SetSourceIrqHandler(uint32_t source_id, Esp32IrqHandler handler) __attribute__((weak));
-#endif
-
 static inline bool ESP32IsValidGpioPin(int PinNo)
 {
     return (PinNo >= 0) && ((uint32_t)PinNo < ESP32_GPIO_PIN_COUNT);
@@ -172,40 +166,6 @@ static void ESP32GpioDisablePinInterrupt(uint32_t PinNo)
     ESP32_GPIO_STATUS_W1TC_REG32 = ESP32PinMask(PinNo);
 }
 
-#if defined(ESP32_INTMTX_BASE)
-static uint32_t ESP32SaveAndDisableMie(void)
-{
-#if defined(__riscv)
-    uint32_t mstatus;
-    __asm volatile("csrrc %0, mstatus, %1" : "=r"(mstatus) : "r"(0x8UL) : "memory");
-    return mstatus;
-#else
-    return 0U;
-#endif
-}
-
-static void ESP32RestoreMie(uint32_t SavedMstatus)
-{
-#if defined(__riscv)
-    if ((SavedMstatus & 0x8UL) != 0U)
-    {
-        __asm volatile("csrsi mstatus, 0x8" ::: "memory");
-    }
-#else
-    (void)SavedMstatus;
-#endif
-}
-
-static inline void ESP32FenceIo(void)
-{
-#if defined(__riscv_zifencei)
-    __asm volatile("fence iorw, iorw" ::: "memory");
-#else
-    __asm volatile("" ::: "memory");
-#endif
-}
-#endif
-
 __attribute__((section(".iram.text"), used))
 void ESP32_GPIO_IRQHandler(void)
 {
@@ -243,50 +203,16 @@ void ESP32_GPIO_IRQHandler(void)
 
 static bool ESP32InstallGpioInterrupt(int IntPrio)
 {
-#if defined(ESP32_INTMTX_BASE) && defined(ESP32_GPIO_INTR_SOURCE_ID)
-    uint32_t cpuInt = ESP32_GPIO_INTR_CPU_INT_ID;
+#if defined(ESP32_GPIO_INTR_SOURCE_ID)
     uint32_t prio = (IntPrio > 0) ? (uint32_t)IntPrio : ESP32_GPIO_INTR_CPU_INT_PRIO;
 
-    if (cpuInt == 0U || cpuInt >= 32U)
+    if (!Esp32EnableSourceIrq(ESP32_GPIO_INTR_SOURCE_ID,
+                              ESP32_GPIO_INTR_CPU_INT_ID,
+                              prio,
+                              ESP32_GPIO_IRQHandler))
     {
         return false;
     }
-
-    if (prio > 15U)
-    {
-        prio = 15U;
-    }
-    if (prio == 0U)
-    {
-        prio = ESP32_GPIO_INTR_CPU_INT_PRIO;
-    }
-
-    uint32_t mstatus = ESP32SaveAndDisableMie();
-
-    ESP32_INTMTX_CLOCK_GATE_REG = 1U;
-
-#if defined(ESP32C3)
-    if (Esp32C3SetCpuIrqHandler != 0)
-    {
-        Esp32C3SetCpuIrqHandler(cpuInt, ESP32_GPIO_IRQHandler);
-    }
-    if (Esp32C3SetSourceIrqHandler != 0)
-    {
-        Esp32C3SetSourceIrqHandler(ESP32_GPIO_INTR_SOURCE_ID, ESP32_GPIO_IRQHandler);
-    }
-#endif
-
-    ESP32_INTMTX_SOURCE_MAP_REG(ESP32_GPIO_INTR_SOURCE_ID) = cpuInt;
-
-    ESP32_CPU_INT_CLEAR_REG = (1UL << cpuInt);
-    ESP32_CPU_INT_CLEAR_REG = 0U;
-    ESP32_CPU_INT_TYPE_REG &= ~(1UL << cpuInt);          // GPIO is level-type at matrix output.
-    ESP32_CPU_INT_PRI_REG(cpuInt) = prio;
-    ESP32_CPU_INT_THRESH_REG = 0U;
-    ESP32_CPU_INT_ENABLE_REG |= (1UL << cpuInt);
-
-    ESP32FenceIo();
-    ESP32RestoreMie(mstatus);
 
     s_GpioIntInstalled = true;
     return true;

@@ -123,18 +123,16 @@ SOFTWARE.
  * Verified against IDF interrupts.h periph_interrupt_t enum:
  *   C3:  ETS_GPIO_INTR_SOURCE = 16
  *   C6:  ETS_GPIO_INTR_SOURCE = 30
- *   C5:  ETS_GPIO_INTR_SOURCE = 31  (CLIC; intentionally omitted here)
- *
- * Defined ONLY for chips this header can actually wire up an interrupt
- * for (C3/C6).  Leaving it undefined on C5 keeps any caller's
- *   #if defined(ESP32_INTMTX_BASE) && defined(ESP32_GPIO_INTR_SOURCE_ID)
- * guard correctly closed on C5.  The numeric source value (31) is real
- * and will be exposed by the future esp32xx_clic.h, alongside the
- * CLIC-side configuration helpers.
+ *   C5:  ETS_GPIO_INTR_SOURCE = 31  (used by the CLIC install path
+ *                                    in esp32xx_irq.c, which adds the
+ *                                    CLIC_EXT_INTR_NUM_OFFSET to obtain
+ *                                    the actual CLIC slot).
  *---------------------------------------------------------------------------*/
 #ifndef ESP32_GPIO_INTR_SOURCE_ID
 #  if   defined(ESP32C3)
 #    define ESP32_GPIO_INTR_SOURCE_ID       16U
+#  elif defined(ESP32C5)
+#    define ESP32_GPIO_INTR_SOURCE_ID       31U
 #  elif defined(ESP32C6)
 #    define ESP32_GPIO_INTR_SOURCE_ID       30U
 #  endif

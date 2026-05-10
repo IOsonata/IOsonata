@@ -354,4 +354,50 @@ SOFTWARE.
 #  define ESP32_UART_ID_HIGH_SPEED_Msk      (1UL << ESP32_UART_ID_HIGH_SPEED_Pos)
 #endif
 
+/*---------------------------------------------------------------------------
+ * GPIO matrix signal indices for UART signals.
+ *
+ * These are the "function index" values written into GPIO_FUNC_OUT_SEL_CFG
+ * (for outputs) and GPIO_FUNC_IN_SEL_CFG (for inputs) when routing through
+ * the GPIO matrix.  Identical on C5 and C6.  Values verified against
+ * IDF gpio_sig_map.h.
+ *---------------------------------------------------------------------------*/
+#if defined(ESP32C3)
+#define ESP32_U0RXD_IN_IDX                  6U
+#define ESP32_U0TXD_OUT_IDX                 6U
+#define ESP32_U0CTS_IN_IDX                  7U
+#define ESP32_U0RTS_OUT_IDX                 7U
+#define ESP32_U1RXD_IN_IDX                  9U
+#define ESP32_U1TXD_OUT_IDX                 9U
+#define ESP32_U1CTS_IN_IDX                  10U
+#define ESP32_U1RTS_OUT_IDX                 10U
+#elif defined(ESP32C5) || defined(ESP32C6)
+#define ESP32_U0RXD_IN_IDX                  6U
+#define ESP32_U0TXD_OUT_IDX                 6U
+#define ESP32_U0CTS_IN_IDX                  7U
+#define ESP32_U0RTS_OUT_IDX                 7U
+#define ESP32_U1RXD_IN_IDX                  9U
+#define ESP32_U1TXD_OUT_IDX                 9U
+#define ESP32_U1CTS_IN_IDX                  10U
+#define ESP32_U1RTS_OUT_IDX                 10U
+#endif
+
+/*---------------------------------------------------------------------------
+ * Per-chip UART peripheral clock-gating helpers.
+ *
+ * Defined in system_esp32_uart_clock.c (or, equivalently, in the matching
+ * system_esp32_system.c / system_esp32_pcr.c if the user prefers to
+ * merge the helper bodies into their existing system files).
+ *---------------------------------------------------------------------------*/
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void Esp32UartClockEnable(int devno);
+void Esp32UartReset(int devno);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif // __ESP32XX_UART_H__
