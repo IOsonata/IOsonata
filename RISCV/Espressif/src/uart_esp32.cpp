@@ -129,8 +129,6 @@ static ESP32_UARTDEV s_Esp32UartDev[] = {
 static const int s_NbUartDev = sizeof(s_Esp32UartDev) / sizeof(s_Esp32UartDev[0]);
 
 extern "C" {
-volatile uint32_t g_Esp32C3UartFix9BuildMarker = 0x26050809UL;
-const char g_Esp32C3UartFix9BuildString[] = "ESP32C3_UART_IRQ_FIX9_SRAM1_VECTOR_260508";
 volatile uint32_t g_Esp32C3UartDbgUart0Map;
 volatile uint32_t g_Esp32C3UartDbgUart1Map;
 volatile uint32_t g_Esp32C3UartDbgCpuEnable;

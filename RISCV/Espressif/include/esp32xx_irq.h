@@ -4,39 +4,50 @@
 @brief	Cross-chip peripheral interrupt install helpers for the IOsonata
         ESP32 RISC-V family.
 
-Routes a peripheral interrupt source to a CPU interrupt and configures
-trigger type, priority, and enable.  Hides the C3/C6 (INTMTX + global
-CPU INT controller) vs C5 (CLIC, per-interrupt control) split behind
-a single API.
+API split:
 
-Two functions:
+  Esp32RouteSourceIrq()  - configure the controller (matrix routing on
+                           C3/C6, CLIC slot on C5).  Does not touch
+                           mstatus.MIE, does not install handlers.
+                           Safe to call on multiple sources before
+                           interrupts are globally enabled.
 
-  Esp32EnableSourceIrq(source_id, cpu_int_id, prio, handler)
-    Routes peripheral source `source_id` so it can fire at the CPU and
-    enables it.  Returns true on success.
+  Esp32InstallIrqHandler() - install a handler with explicit ownership
+                           of the CPU interrupt input:
+                             ESP32_IRQ_DIRECT  (only this source uses
+                                                cpu_int_id)
+                             ESP32_IRQ_SHARED  (multiple sources share
+                                                cpu_int_id; the source-
+                                                status dispatcher is
+                                                installed at the CPU-
+                                                level slot, the actual
+                                                handler at the source-
+                                                level slot)
+                           No-op on C5 (CLIC has per-source slots).
 
-      C3, C6 (INTC):
-        - Writes ESP32_INTMTX_SOURCE_MAP_REG[source_id] = cpu_int_id
-        - Configures CPU INT line `cpu_int_id`: TYPE = level, PRI = prio,
-          ENABLE = 1, THRESH = 0
-        - Optionally calls `handler` through the ROM-table install hooks
-          (Esp32C3SetCpuIrqHandler / SetSourceIrqHandler) when those are
-          available.
-        - `prio` valid range: 1..15.
-        - `cpu_int_id` valid range: 1..31.
+  Esp32GlobalIrqEnable() - set mstatus.MIE = 1.  Caller-controlled, so
+                           startup code can decide when interrupts go
+                           live.
 
-      C5 (CLIC):
-        - Computes CLIC slot = source_id + ESP32_CLIC_EXT_INTR_NUM_OFFSET
-        - Sets ATTR (mode = M, trigger = level, SHV from chosen vectoring),
-          CTL (priority byte), IE = 1.
-        - `cpu_int_id` is ignored (CLIC does not use a separate CPU INT
-          line numbering).
-        - `prio` valid range: 1..7 with NLBITS = 3 (IDF default), or
-          0..255 if directly programming the CTL byte.
+  Esp32EnableSourceIrq() - convenience wrapper preserving the existing
+                           one-shot semantics: Route + Install (DIRECT)
+                           + GlobalEnable in one call.  Returns true on
+                           success.
 
-  Esp32DisableSourceIrq(source_id, cpu_int_id)
-    Disables the source.  On C3/C6 clears the CPU INT line's enable
-    bit.  On C5 clears CLIC IE for the corresponding slot.
+  Esp32DisableSourceIrq() - reverse of Esp32EnableSourceIrq:
+                             - clears the source map (C3/C6) or CLIC IE (C5)
+                             - clears the source-level handler ref
+                             - if no other source still maps to cpu_int_id,
+                               also clears the CPU-INT enable bit and
+                               the CPU-level handler ref
+
+C3/C6 (INTMTX) parameter ranges:
+    cpu_int_id : 1..31  (0 reserved for "disabled" per TRM)
+    prio       : 1..15
+
+C5 (CLIC) parameter ranges:
+    cpu_int_id : ignored (CLIC slot derived from source_id)
+    prio       : 1..(2^NLBITS - 1)  -- 1..7 with the IDF default NLBITS = 3
 
 @author	Nguyen Hoan Hoang
 @date	May 9, 2026
@@ -54,8 +65,8 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -82,36 +93,95 @@ SOFTWARE.
 extern "C" {
 #endif
 
-// Optional ROM-hook installer callback type.  Used on C3 to seed the
-// ROM dispatcher; pass NULL if not using that path.
+// Handler signature for the C3/C6 ROM-table dispatch tables.  Each
+// stored handler is a no-arg function; the wrapper that calls it is
+// expected to capture any per-source state (e.g. UART0 / UART1).
 typedef void (*Esp32IrqHandler)(void);
 
-// Forward declarations for the ROM-hook installers (defined in
-// Vectors_esp32_intmtx.c on chips that support it; left as weak so
-// the call is a no-op when the file is not linked in).
-extern void Esp32C3SetCpuIrqHandler(uint32_t cpu_int_id, Esp32IrqHandler handler) __attribute__((weak));
-extern void Esp32C3SetSourceIrqHandler(uint32_t source_id, Esp32IrqHandler handler) __attribute__((weak));
+// Ownership mode for Esp32InstallIrqHandler() on C3/C6.  Ignored on C5.
+typedef enum {
+    ESP32_IRQ_DIRECT = 0,   //!< exclusive owner of cpu_int_id
+    ESP32_IRQ_SHARED = 1,   //!< multiple sources share cpu_int_id; dispatcher routes
+} Esp32IrqMode;
 
-// Route a peripheral source through the interrupt controller, configure
-// it as a level interrupt with the given priority, and enable it.
-//
-//   source_id  : INTMTX source number (e.g. ESP32_GPIO_INTR_SOURCE_ID)
-//   cpu_int_id : C3/C6 only -- which CPU INT line (1..31) to use.  On
-//                C5 this is ignored (CLIC has per-interrupt slots).
-//   prio       : priority.  C3/C6: 1..15.  C5: 1..7 (NLBITS = 3) or
-//                a direct CTL byte if larger.
-//   handler    : optional ROM-table hook.  May be NULL.
-//
-// Returns true on success.
-bool Esp32EnableSourceIrq(uint32_t source_id,
-                          uint32_t cpu_int_id,
-                          uint32_t prio,
-                          Esp32IrqHandler handler);
+// Forward declarations for the ROM-table handler installers in
+// Vectors_esp32c3.c (C3) and Vectors_esp32c6.c (C6).  Declared weak
+// so the call sites compile even when the vector file is not linked
+// in, in which case the address-test in the .c file makes them no-ops.
+extern void Esp32C3SetCpuIrqHandler   (uint32_t cpu_int_id, Esp32IrqHandler handler) __attribute__((weak));
+extern void Esp32C3SetSourceIrqHandler(uint32_t source_id,  Esp32IrqHandler handler) __attribute__((weak));
+extern void Esp32C3ClearCpuIrqHandler   (uint32_t cpu_int_id) __attribute__((weak));
+extern void Esp32C3ClearSourceIrqHandler(uint32_t source_id)  __attribute__((weak));
+extern void Esp32C3IntMtxDispatch       (void)                __attribute__((weak));
 
-// Disable a peripheral source's interrupt routing.
-//
-//   source_id  : INTMTX source number (used on C5 to compute CLIC slot)
-//   cpu_int_id : C3/C6 only -- which CPU INT line to clear.  Ignored on C5.
+/**
+ * Configure the interrupt controller for `source_id` so it can fire at
+ * the CPU.  Does NOT install per-source/per-CPU handlers and does NOT
+ * touch mstatus.MIE.
+ *
+ * C3/C6 (INTMTX): writes ESP32_INTMTX_SOURCE_MAP_REG[source_id] = cpu_int_id,
+ *                 sets CPU INT line `cpu_int_id` to level type, priority
+ *                 = prio, threshold = 0, and enables it.
+ *
+ * C5 (CLIC):      configures CLIC slot = source_id + ESP32_CLIC_EXT_INTR_NUM_OFFSET
+ *                 with mode = M, trigger = level-high, level = prio,
+ *                 SHV = 0, IE = 1.
+ */
+bool Esp32RouteSourceIrq(uint32_t source_id, uint32_t cpu_int_id, uint32_t prio);
+
+/**
+ * Install a handler with explicit ownership of cpu_int_id.
+ *
+ * ESP32_IRQ_DIRECT (C3/C6):
+ *   CpuHandler[cpu_int_id]  = handler
+ *   The CPU dispatcher in RISCV_TrapHandler calls handler() directly.
+ *   Use when the source has exclusive ownership of cpu_int_id.
+ *
+ * ESP32_IRQ_SHARED (C3/C6):
+ *   CpuHandler[cpu_int_id]  = Esp32C3IntMtxDispatch  (matrix dispatcher)
+ *   SourceHandler[source_id] = handler
+ *   The CPU dispatcher routes to the source-status dispatcher, which
+ *   reads INTMTX status and calls the per-source handler.  Use when
+ *   multiple sources share cpu_int_id.
+ *
+ * On C5 this is a no-op (CLIC slots are per-source).
+ *
+ * Caller is responsible for not mixing modes on the same cpu_int_id;
+ * a later DIRECT install on a CPU INT that is already in SHARED use
+ * silently overwrites the dispatcher pointer and breaks dispatch for
+ * the other sources.
+ */
+void Esp32InstallIrqHandler(uint32_t source_id, uint32_t cpu_int_id,
+                            Esp32IrqHandler handler, Esp32IrqMode mode);
+
+/**
+ * Globally enable interrupts (set mstatus.MIE = 1).  No-op on non-RISC-V
+ * builds.  Separated from the install path so startup code can decide
+ * when interrupts go live.
+ */
+void Esp32GlobalIrqEnable(void);
+
+/**
+ * Convenience: Esp32RouteSourceIrq + Esp32InstallIrqHandler(DIRECT) +
+ * Esp32GlobalIrqEnable, in that order.  Preserves the prior one-shot
+ * semantics for existing call sites.  Returns the result of the
+ * routing step (false if cpu_int_id or source_id is out of range).
+ */
+bool Esp32EnableSourceIrq(uint32_t source_id, uint32_t cpu_int_id,
+                          uint32_t prio, Esp32IrqHandler handler);
+
+/**
+ * Reverse of Esp32EnableSourceIrq.
+ *
+ * C3/C6:
+ *   - Clears ESP32_INTMTX_SOURCE_MAP_REG[source_id]    (= 0, "disabled")
+ *   - Clears the source-level handler ref.
+ *   - If no remaining source maps to cpu_int_id, also clears the
+ *     CPU INT enable bit and the CPU-level handler ref.
+ *
+ * C5: clears CLIC IE for the slot derived from source_id.  cpu_int_id
+ *     is ignored.
+ */
 void Esp32DisableSourceIrq(uint32_t source_id, uint32_t cpu_int_id);
 
 #ifdef __cplusplus

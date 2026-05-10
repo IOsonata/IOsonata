@@ -63,9 +63,6 @@ typedef void (*Esp32C3IrqHandler)(void);
 static volatile Esp32C3IrqHandler s_Esp32C3CpuIrqHandlers[32];
 static volatile Esp32C3IrqHandler s_Esp32C3SourceIrqHandlers[ESP32C3_INTMTX_MAX_SOURCE];
 
-volatile uint32_t g_Esp32C3IrqFix9BuildMarker = 0x26050809UL;
-const char g_Esp32C3IrqFix9BuildString[] = "ESP32C3_IRQ_FIX9_SRAM1_VECTOR_260508";
-
 volatile uint32_t g_Esp32C3TrapCount;
 volatile uint32_t g_Esp32C3MtxDispatchCount;
 volatile uint32_t g_Esp32C3UnhandledTrapCount;
@@ -188,7 +185,6 @@ void RISCV_TrapHandler(void)
     __asm volatile("csrr %0, mepc" : "=r"(mepc));
     __asm volatile("csrr %0, mtval" : "=r"(mtval));
 
-    (void)g_Esp32C3IrqFix9BuildMarker;
     g_Esp32C3TrapCount++;
     g_Esp32C3LastMcause = mcause;
     g_Esp32C3LastMepc = mepc;
