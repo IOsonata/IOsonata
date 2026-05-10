@@ -46,15 +46,19 @@ static inline uint32_t Esp32IrqSaveAndDisableMie(void)
 #endif
 }
 
-static inline void Esp32IrqRestoreMie(uint32_t saved_mstatus)
+// Unconditionally enable MIE.  Matches the IOsonata install contract:
+// after Esp32EnableSourceIrq() returns, peripheral interrupts are live.
+// The earlier save-and-restore variant was wrong: at the typical call
+// site (UARTInit() from early main() with MIE = 0), restoring the prior
+// state left MIE = 0, so the CPU never actually took the interrupt
+// despite the source being routed.  Drivers that called Tx successfully
+// once via the kick path saw nothing afterwards because the ISR drain
+// path never ran.
+static inline void Esp32IrqEnableMie(uint32_t saved_mstatus)
 {
-#if defined(__riscv)
-    if ((saved_mstatus & 0x8UL) != 0U)
-    {
-        __asm volatile("csrsi mstatus, 0x8" ::: "memory");
-    }
-#else
     (void)saved_mstatus;
+#if defined(__riscv)
+    __asm volatile("csrsi mstatus, 0x8" ::: "memory");
 #endif
 }
 
@@ -129,7 +133,7 @@ bool Esp32EnableSourceIrq(uint32_t source_id,
     ESP32_CPU_INT_ENABLE_REG |= (1UL << cpu_int_id);
 
     Esp32IrqFenceIo();
-    Esp32IrqRestoreMie(mstatus);
+    Esp32IrqEnableMie(mstatus);
 
     return true;
 }
@@ -144,7 +148,7 @@ void Esp32DisableSourceIrq(uint32_t source_id, uint32_t cpu_int_id)
     uint32_t mstatus = Esp32IrqSaveAndDisableMie();
     ESP32_CPU_INT_ENABLE_REG &= ~(1UL << cpu_int_id);
     Esp32IrqFenceIo();
-    Esp32IrqRestoreMie(mstatus);
+    Esp32IrqEnableMie(mstatus);
 }
 
 #endif // C3 || C6
@@ -197,7 +201,7 @@ bool Esp32EnableSourceIrq(uint32_t source_id,
     ESP32_CLIC_INT_IE_REG(slot)   = 1U;
 
     Esp32IrqFenceIo();
-    Esp32IrqRestoreMie(mstatus);
+    Esp32IrqEnableMie(mstatus);
 
     return true;
 }
@@ -213,7 +217,7 @@ void Esp32DisableSourceIrq(uint32_t source_id, uint32_t cpu_int_id)
     uint32_t mstatus = Esp32IrqSaveAndDisableMie();
     ESP32_CLIC_INT_IE_REG(slot) = 0U;
     Esp32IrqFenceIo();
-    Esp32IrqRestoreMie(mstatus);
+    Esp32IrqEnableMie(mstatus);
 }
 
 #endif // C5

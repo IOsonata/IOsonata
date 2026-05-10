@@ -96,24 +96,22 @@ static inline uint32_t ESP32PadDriveFromStrength(IOPINSTRENGTH Strength)
     return (Strength == IOPINSTRENGTH_STRONG) ? 3UL : 2UL;
 }
 
-/* IOsonata uses IOPINOP_GPIO = 0 for plain GPIO.  Existing ESP32 board
- * files also used PinOp = 1 for the GPIO-matrix function.  Treat both as
- * GPIO/matrix mode.  Values 2..7 are passed through as direct IO_MUX
- * function selects for targets/pins that support them.
+/* PinOp interpretation on ESP32:
+ *
+ *   IOPINOP_GPIO (0)        : plain GPIO, controlled via GPIO_OUT/IN_REG
+ *   IOPINOP_FUNCn (1..N)    : matrix-routed peripheral signal index n
+ *
+ * Both cases use IOMUX MCU_SEL = 1 (GPIO matrix mode).  The IOMUX direct
+ * path option (MCU_SEL = 0 or 2..7 on chips that support it) is
+ * deliberately not exposed here -- matrix routing covers every signal
+ * with one fewer corner case.  If a user later needs the direct path
+ * for a high-baud-rate signal, that's an orthogonal flag, not a
+ * different MCU_SEL value here.
  */
 static inline uint32_t ESP32IomuxMcuSelFromPinOp(int PinOp)
 {
-    if (PinOp <= IOPINOP_FUNC0)
-    {
-        return 1U;
-    }
-
-    if (PinOp > 7)
-    {
-        return 1U;
-    }
-
-    return (uint32_t)PinOp;
+    (void)PinOp;
+    return 1U;
 }
 
 static uint32_t ESP32SenseToIntType(IOPINSENSE Sense)
@@ -222,7 +220,7 @@ static bool ESP32InstallGpioInterrupt(int IntPrio)
 #endif
 }
 
-bool ESP32GPIOConnectInput(uint32_t SignalIdx, int PinNo, bool Invert)
+static bool ESP32GPIOConnectInput(uint32_t SignalIdx, int PinNo, bool Invert)
 {
     if (SignalIdx >= ESP32_GPIO_FUNC_IN_COUNT)
     {
@@ -253,7 +251,7 @@ bool ESP32GPIOConnectInput(uint32_t SignalIdx, int PinNo, bool Invert)
     return true;
 }
 
-bool ESP32GPIOConnectOutput(int PinNo, uint32_t SignalIdx, bool Invert, bool OenInvert)
+static bool ESP32GPIOConnectOutput(int PinNo, uint32_t SignalIdx, bool Invert, bool OenInvert)
 {
     if (!ESP32IsValidGpioPin(PinNo))
     {
@@ -275,7 +273,7 @@ bool ESP32GPIOConnectOutput(int PinNo, uint32_t SignalIdx, bool Invert, bool Oen
     return true;
 }
 
-void ESP32GPIODisconnectOutput(int PinNo)
+static void ESP32GPIODisconnectOutput(int PinNo)
 {
     if (ESP32IsValidGpioPin(PinNo))
     {
@@ -321,10 +319,44 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp,
         iomux |= (1UL << ESP32_IOMUX_FUN_WPD_Pos);
     }
 
+    // Force pad output disabled (hi-Z) BEFORE touching IOMUX or matrix
+    // routing.  If we change MCU_SEL from "IOMUX direct" (e.g. ROM left
+    // GPIO 21 driving U0TXD) to "matrix mode" while GPIO_ENABLE was
+    // already set, the pad would briefly drive whatever FUNC_OUT_SEL
+    // pointed to (typically SIG_GPIO_OUT_IDX -> GPIO_OUT_REG = 0).
+    // That LOW pulse is decoded by the receiver as a stream of 0x00
+    // start bits.  Hi-Z holds the line at its idle level (UART idle =
+    // HIGH via external pull-up or the receiver's bias), avoiding any
+    // spurious bytes.
+    ESP32_GPIO_ENABLE_W1TC_REG32 = mask;
+
     ESP32_IOMUX_PAD_REG(pin) = iomux;
 
-    if (mcuSel == 1U)
+    // Matrix routing (must be in place before GPIO_ENABLE is asserted):
+    //
+    //   PinOp == IOPINOP_GPIO    : pin reads/writes through GPIO_OUT/IN.
+    //                              FUNC_OUT_SEL = SIG_GPIO_OUT_IDX.
+    //   PinOp >= IOPINOP_FUNC0   : matrix signal index = PinOp - IOPINOP_FUNC0.
+    //                              Output side: FUNC_OUT_SEL[pin] = sig.
+    //                              Input  side: FUNC_IN_SEL[sig]  = pin.
+    //
+    // U0RXD_IN_IDX and U0TXD_OUT_IDX share the same numeric value (6 on
+    // all C-series chips); PinDir disambiguates the side.
+    if (PinOp >= IOPINOP_FUNC0)
     {
+        uint32_t sig = (uint32_t)PinOp - (uint32_t)IOPINOP_FUNC0;
+        if ((Dir == IOPINDIR_OUTPUT) || (Dir == IOPINDIR_BI))
+        {
+            ESP32GPIOConnectOutput(PinNo, sig, false, false);
+        }
+        if ((Dir == IOPINDIR_INPUT) || (Dir == IOPINDIR_BI))
+        {
+            ESP32GPIOConnectInput(sig, PinNo, false);
+        }
+    }
+    else
+    {
+        // Plain GPIO: pin output is driven by GPIO_OUT_REG.
         ESP32_GPIO_FUNC_OUT_REG32(pin) = ESP32_GPIO_FUNC_OUT_GPIO_VALUE;
     }
 
@@ -339,13 +371,12 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp,
     }
     ESP32_GPIO_PIN_REG32(pin) = pincfg;
 
+    // Output enable goes last.  By this point IOMUX, FUNC_OUT_SEL, and
+    // PAD_DRIVER are all consistent with the requested direction and
+    // matrix routing.  For input-only pins the pad stays hi-Z.
     if ((Dir == IOPINDIR_OUTPUT) || (Dir == IOPINDIR_BI))
     {
         ESP32_GPIO_ENABLE_W1TS_REG32 = mask;
-    }
-    else
-    {
-        ESP32_GPIO_ENABLE_W1TC_REG32 = mask;
     }
 }
 

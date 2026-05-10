@@ -383,6 +383,34 @@ SOFTWARE.
 #endif
 
 /*---------------------------------------------------------------------------
+ * PinOp convenience macros for IOPinCfg_t pin maps.
+ *
+ * Application code building a UART pin map writes:
+ *
+ *     static IOPinCfg_t s_uart0_pins[] = {
+ *         { 0, 21, ESP32_PINOP_U0TXD, IOPINDIR_OUTPUT, IOPINRES_NONE,   IOPINTYPE_NORMAL },
+ *         { 0, 20, ESP32_PINOP_U0RXD, IOPINDIR_INPUT,  IOPINRES_PULLUP, IOPINTYPE_NORMAL },
+ *     };
+ *
+ * IOPinCfg() walks the array and IOPinConfig() interprets PinOp as the
+ * matrix signal index.  PinDir picks the input vs output side of the
+ * routing (a single signal index like 6 is U0TXD on the output side and
+ * U0RXD on the input side).
+ *
+ * Encoding follows the canonical IOsonata convention:
+ *     IOPINOP_GPIO  = 0          plain GPIO, no matrix routing
+ *     IOPINOP_FUNC0 = 1, ...     matrix signal index N is IOPINOP_FUNC{N}
+ *---------------------------------------------------------------------------*/
+#define ESP32_PINOP_U0RXD                   (IOPINOP_FUNC0 + ESP32_U0RXD_IN_IDX)
+#define ESP32_PINOP_U0TXD                   (IOPINOP_FUNC0 + ESP32_U0TXD_OUT_IDX)
+#define ESP32_PINOP_U0CTS                   (IOPINOP_FUNC0 + ESP32_U0CTS_IN_IDX)
+#define ESP32_PINOP_U0RTS                   (IOPINOP_FUNC0 + ESP32_U0RTS_OUT_IDX)
+#define ESP32_PINOP_U1RXD                   (IOPINOP_FUNC0 + ESP32_U1RXD_IN_IDX)
+#define ESP32_PINOP_U1TXD                   (IOPINOP_FUNC0 + ESP32_U1TXD_OUT_IDX)
+#define ESP32_PINOP_U1CTS                   (IOPINOP_FUNC0 + ESP32_U1CTS_IN_IDX)
+#define ESP32_PINOP_U1RTS                   (IOPINOP_FUNC0 + ESP32_U1RTS_OUT_IDX)
+
+/*---------------------------------------------------------------------------
  * Per-chip UART peripheral clock-gating helpers.
  *
  * Defined in system_esp32_uart_clock.c (or, equivalently, in the matching

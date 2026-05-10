@@ -4,20 +4,26 @@
 @brief	IOsonata UART driver for ESP32 RISC-V (UART0, UART1)
 
 Cross-chip driver supporting ESP32-C3, ESP32-C5, and ESP32-C6 in a
-single source file.  Per-chip differences (interrupt controller
-architecture, peripheral clock-gating, default IOMUX pins, UART
-register layout) are isolated to small `#if defined(...)` blocks; the
+single source file.  Driver scope: UART peripheral registers only --
+FIFO, INT_*, CONF, CLKDIV, CLK_CONF.  Everything else is delegated:
+
+  Pin and matrix routing : IOPinCfg() in iopincfg_esp32.c.  The
+                           application's pin map carries the matrix
+                           signal index in IOPinCfg_t.PinOp; this
+                           driver does not touch IOMUX or matrix
+                           registers.  See ESP32_PINOP_U0TXD / U0RXD
+                           etc. in esp32xx_uart.h.
+
+  Peripheral clock gate  : Esp32UartClockEnable() and Esp32UartReset()
+                           in system_esp32_uart_clock.c.
+
+  Interrupt install      : Esp32EnableSourceIrq() in esp32xx_irq.{h,c}.
+
+Per-chip differences inside the UART register space itself
+(REG_UPDATE mechanism on C3 vs C5/C6, interrupt-controller debug
+snapshot path) are isolated to small `#if defined(...)` blocks.  The
 data plane (interrupt handler, FIFO drain, polled and interrupt-driven
 Rx/Tx paths) is identical on all three.
-
-Register access goes through the cross-chip macros in
-esp32xx_uart.h (UART), esp32xx_intmtx.h / esp32xx_clic.h (interrupt
-controllers), esp32xx_irq.h (cross-chip IRQ install helper),
-esp32xx_pcr.h (C5/C6 peripheral clock-gating) and esp32xx_gpio.h
-(IOMUX and GPIO matrix).  The C3-vs-C5/C6 UART layout differences
-(CLK_CONF moved 0x78 -> 0x88, separate REG_UPDATE register on C5/C6,
-etc.) are hidden by those headers; this file uses the same names
-regardless of target.
 
 C3 register layout reference: ESP32-C3 TRM Rev 0.4, section 17.
 C5/C6 register layout reference: ESP-IDF master / v5.3 register
@@ -35,14 +41,9 @@ Baud divider: baud = 40 MHz / (CLKDIV + CLKDIV_FRAG / 16)
   e.g. 115200 baud -> CLKDIV = 347, CLKDIV_FRAG = 4 -> 115273 baud
   (+0.06 %).
 
-Pin routing: TX writes the UART TXD signal index to GPIO_FUNC_OUT_SEL
-on the chosen TX pin.  RX writes the RX pin index to GPIO_FUNC_IN_SEL
-of the RXD signal.  IOPinConfig() puts both pads into MCU_SEL = GPIO
-mode beforehand so the matrix is in charge.
-
 Interrupt routing: matrix source IDs come from esp32xx_uart.h
-(ESP32_UART_INTR_SOURCE_UART0/1).  Each peripheral source is routed to
-one CPU INT input and the ISR is installed directly on that input.
+(ESP32_UART_INTR_SOURCE_UART0/1).  Esp32EnableSourceIrq() routes each
+peripheral source to a CPU INT line (C3/C6 INTC) or a CLIC slot (C5).
 This driver uses CPU INT 2 for UART0 and CPU INT 3 for UART1, avoiding
 the ESP32-C3 reserved CPU INT 1 and the permanently disabled CPU INT 6.
 
@@ -89,10 +90,6 @@ SOFTWARE.
 #include "esp32xx_intmtx.h"
 #include "esp32xx_irq.h"
 #include "esp32xx_uart.h"
-
-// Signal indices for U0RXD/U0TXD/U0CTS/U0RTS and U1 equivalents are
-// defined in esp32xx_uart.h (ESP32_U0RXD_IN_IDX etc.) for all three
-// chips.
 
 // ===========================================================================
 // External IRQ-count counters (provided elsewhere -- Vectors file or test
@@ -462,53 +459,6 @@ static int Esp32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
     return cnt;
 }
 
-#if 0
-/*---------------------------------------------------------------------------
- * Pin configuration
- *
- * Pad-level setup (direction, pull, type) is done by IOPinCfg() in
- * iopincfg_esp32.c.  Matrix routing of UART signals to those pads is
- * done by ESP32GPIOConnectInput() / ESP32GPIOConnectOutput(), also in
- * iopincfg_esp32.c.  The UART driver itself does no IOMUX or matrix
- * register writes.
- *
- * Signal indices come from esp32xx_uart.h (ESP32_U0RXD_IN_IDX etc.) and
- * are identical across C3 / C5 / C6 (verified against IDF gpio_sig_map).
- *---------------------------------------------------------------------------*/
-static void Esp32UartConnectSignals(int DevNo, const IOPinCfg_t *pCfg, int NbPins,
-                                     UART_FLWCTRL FlowCtrl)
-{
-    uint32_t rxd_sig, txd_sig, cts_sig, rts_sig;
-    if (DevNo == 0)
-    {
-        rxd_sig = ESP32_U0RXD_IN_IDX;
-        txd_sig = ESP32_U0TXD_OUT_IDX;
-        cts_sig = ESP32_U0CTS_IN_IDX;
-        rts_sig = ESP32_U0RTS_OUT_IDX;
-    }
-    else
-    {
-        rxd_sig = ESP32_U1RXD_IN_IDX;
-        txd_sig = ESP32_U1TXD_OUT_IDX;
-        cts_sig = ESP32_U1CTS_IN_IDX;
-        rts_sig = ESP32_U1RTS_OUT_IDX;
-    }
-
-    int rx_pin = pCfg[UARTPIN_RX_IDX].PinNo;
-    int tx_pin = pCfg[UARTPIN_TX_IDX].PinNo;
-
-    if (tx_pin >= 0) ESP32GPIOConnectOutput(tx_pin, txd_sig, false, false);
-    if (rx_pin >= 0) ESP32GPIOConnectInput (rxd_sig, rx_pin, false);
-
-    if (FlowCtrl == UART_FLWCTRL_HW && NbPins >= 4)
-    {
-        int cts_pin = pCfg[UARTPIN_CTS_IDX].PinNo;
-        int rts_pin = pCfg[UARTPIN_RTS_IDX].PinNo;
-        if (cts_pin >= 0) ESP32GPIOConnectInput (cts_sig, cts_pin, false);
-        if (rts_pin >= 0) ESP32GPIOConnectOutput(rts_pin, rts_sig, false, false);
-    }
-}
-#endif
 
 /*---------------------------------------------------------------------------
  * UARTInit — top-level driver init
@@ -669,8 +619,6 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
     // 8. Pin/matrix routing
     IOPinCfg((IOPinCfg_t *)pCfg->pIOPinMap, pCfg->NbIOPins);
-//    Esp32UartConnectSignals(devno, (const IOPinCfg_t *)pCfg->pIOPinMap,
-//                              pCfg->NbIOPins, pCfg->FlowControl);
 
     // 10. Software FIFOs
     if (pCfg->pRxMem && pCfg->RxMemSize > 0)

@@ -9,15 +9,23 @@ modified to suit the need for the application use case.
 
 ESP32-C3-DevKitM-1 hardware:
   - On-board WS2812B RGB LED on GPIO 8
-  - USB ↔ UART bridge (CP2102N) wired to UART0:
-      TXD0 = GPIO 21 (C3 → host)
-      RXD0 = GPIO 20 (host → C3)
+  - USB <-> UART bridge (CP2102N) wired to UART0:
+      TXD0 = GPIO 21 (C3 -> host)
+      RXD0 = GPIO 20 (host -> C3)
     The same UART0 path the ROM bootloader uses for the boot banner.
 
-PINOP on the C3 is the IOMUX function selector.  Setting it to 1 puts
-the pad in MCU_SEL = GPIO mode and lets the GPIO matrix route the
-UART signal to/from the pad.  This is what `iopincfg_esp32.c` programs
-when IOPinConfig() is called with PinOp = 1.
+PinOp on ESP32 follows the canonical IOsonata convention: a pin's
+alternate function is selected by IOPINOP_FUNCn macros (or equivalent
+chip-specific aliases).  For ESP32 the IOPinConfig() in
+iopincfg_esp32.c interprets the value as a GPIO matrix signal index:
+
+    IOPINOP_GPIO        : plain GPIO, controlled via GPIO_OUT/IN_REG
+    IOPINOP_FUNC0 + n   : route matrix signal n to/from this pin
+
+Direction (IOPinDir_INPUT vs IOPINDIR_OUTPUT) selects which side of the
+matrix is programmed.  esp32xx_uart.h exposes ready-made aliases
+(ESP32_PINOP_U0TXD / U0RXD / U1TXD / etc.) so board files don't have
+to know the raw signal index.
 
 @author	Hoang Nguyen Hoan
 @date	May 2026
@@ -51,24 +59,27 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
+#include "coredev/iopincfg.h"
+#include "esp32xx_uart.h"
+
 // *** ESP32-C3-DevKitM-1
 #define UART_DEVNO          0
 
 #define UART_RX_PORT        0
 #define UART_RX_PIN         20
-#define UART_RX_PINOP       1
+#define UART_RX_PINOP       ESP32_PINOP_U0RXD
 
 #define UART_TX_PORT        0
 #define UART_TX_PIN         21
-#define UART_TX_PINOP       1
+#define UART_TX_PINOP       ESP32_PINOP_U0TXD
 
 #define UART_CTS_PORT       -1
 #define UART_CTS_PIN        -1
-#define UART_CTS_PINOP      0
+#define UART_CTS_PINOP      IOPINOP_GPIO
 
 #define UART_RTS_PORT       -1
 #define UART_RTS_PIN        -1
-#define UART_RTS_PINOP      0
+#define UART_RTS_PINOP      IOPINOP_GPIO
 
 #define UART_PINS           { \
     { UART_RX_PORT,  UART_RX_PIN,  UART_RX_PINOP,  IOPINDIR_INPUT,  IOPINRES_NONE, IOPINTYPE_NORMAL }, \
