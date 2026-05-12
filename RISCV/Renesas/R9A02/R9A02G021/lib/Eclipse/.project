@@ -181,6 +181,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/r9a02g021.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/r9a02g021.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
