@@ -6,18 +6,27 @@ Author : Hoang Nguyen Hoan          Aug. 2025
 Desc   : Renesas R9A02G021 (RISC-V Andes N22) linker script.
          Includes the shared gcc_riscv_flash.ld for the standard sections.
 
-Memory map:
-    FLASH         0x00000000  1.5 MiB    code + rodata + .data LMA
+Memory map (matches R9A02G021 datasheet max-resource part):
+    FLASH         0x00000000  256 KiB    code + rodata + .data LMA + .vectors
     OFS           0x0100A150  24 B       option-setting memory (read at every
                                          reset by the BSC ROM): OFS0, OFS1,
                                          BPS0..BPS3
+    DATA_FLASH    0x40100000  4 KiB      on-chip data flash
     E2S_TRACE_BUF 0x20000000  1 KiB      e2studio trace buffer (SAU window)
-    RAM           0x20000400  255 KiB    .data + .bss + heap + stack
+    RAM           0x20000400  31 KiB     .data + .bss + heap + stack
     QSPI_FLASH    0x60000000  128 MiB    external XIP, unused unless app maps it
+
+R9A02G021 part-number sizing -- the entry above shows the maximum.  Lower
+part-number variants ship with less flash and/or SRAM; adjust the FLASH
+and RAM LENGTH values to match the specific part when needed.  Common
+configurations (per datasheet R01DS0426EJ):
+
+    R9A02G0214CFP    128 KB flash, 16 KB SRAM
+    R9A02G0214GFL    256 KB flash, 32 KB SRAM   <- assumed default below
 
 The OFS section MUST be populated.  Renesas tooling and most JLink/OpenOCD
 profiles erase OFS along with the rest of flash, so a missing section reads
-back as 0xFFFFFFFF and the chip boots with all option features disabled —
+back as 0xFFFFFFFF and the chip boots with all option features disabled --
 fine.  But some flash workflows (incremental flashing, sector-mask erase)
 leave OFS untouched.  If a previous program wrote OFS0.IWDTSTRT = 0 (IWDT
 auto-start), every reset re-arms the IWDT and the chip resets again ~2 s
@@ -51,8 +60,9 @@ RESET_VECTOR = 0;
 
 MEMORY
 {
-    FLASH         (rx)  : ORIGIN = 0x00000000, LENGTH = 0x00180000   /* 1.5 MiB */
+    FLASH         (rx)  : ORIGIN = 0x00000000, LENGTH = 0x00040000   /* 256 KiB */
     OFS           (r)   : ORIGIN = 0x0100A150, LENGTH = 0x00000018   /* 24 B    */
+    DATA_FLASH    (r)   : ORIGIN = 0x40100000, LENGTH = 0x00001000   /* 4 KiB   */
     E2S_TRACE_BUF (rw)  : ORIGIN = 0x20000000, LENGTH = 0x00000400   /* 1 KiB   */
 
     /* The e2studio trace buffer requires 0x400 bytes of RAM starting at
@@ -61,13 +71,13 @@ MEMORY
      * the RAM ORIGIN below to 0x20000000, increasing LENGTH by 0x400, and
      * removing the E2S_TRACE_BUF definition above.
      */
-    RAM           (rwx) : ORIGIN = 0x20000400, LENGTH = 0x0003FC00   /* 255 KiB */
+    RAM           (rwx) : ORIGIN = 0x20000400, LENGTH = 0x00007C00   /* 31 KiB  */
     QSPI_FLASH    (rx)  : ORIGIN = 0x60000000, LENGTH = 0x08000000   /* 128 MiB */
 }
 
 __global_pointer$ = ORIGIN(RAM) + LENGTH(RAM) / 2;
 
-/* R9A02 has no separate executable SRAM — RAM is already (rwx).  The
+/* R9A02 has no separate executable SRAM -- RAM is already (rwx).  The
  * shared gcc_riscv_flash.ld places .iram.text in IRAM; alias it here
  * so the section lands in the regular RAM region. */
 REGION_ALIAS("IRAM", RAM);
