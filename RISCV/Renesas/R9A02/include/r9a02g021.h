@@ -284,6 +284,11 @@ typedef struct {
 #define R9A02_PORT7                 ((R9A02_PORT_Type *) R9A02_PORT7_BASE)
 #define R9A02_PORT8                 ((R9A02_PORT_Type *) R9A02_PORT8_BASE)
 
+/* Indexed accessor: R9A02_PORT(n) returns the same pointer as R9A02_PORT<n>.
+ * Used by iopinctrl.h for variable-port-index GPIO calls (IOPinSetDir, etc.).
+ * Each PORT instance occupies 0x20 bytes; the spacing is RA2-family standard. */
+#define R9A02_PORT(n)               ((R9A02_PORT_Type *)(R9A02_PORT_BASE + ((uint32_t)(n) * 0x20UL)))
+
 /*===========================================================================
  *                      PFS - Port Function Select
  *
@@ -345,6 +350,47 @@ typedef struct {
 #define PFS_PSEL_ACMPLP             (0x13UL << PFS_PSEL_Pos)
 #define PFS_PSEL_TRACE              (0x18UL << PFS_PSEL_Pos)
 
+/* R9A02_-prefixed aliases for the PFS bitfield positions and masks.
+ * These match the naming convention used in iopincfg_r9a02.c and other
+ * IOsonata Renesas drivers.  The non-prefixed PFS_* names above are kept
+ * for backward compatibility. */
+#define R9A02_PFS_PODR_Pos          PFS_PODR_Pos
+#define R9A02_PFS_PODR_Msk          PFS_PODR_Msk
+#define R9A02_PFS_PIDR_Pos          PFS_PIDR_Pos
+#define R9A02_PFS_PIDR_Msk          PFS_PIDR_Msk
+#define R9A02_PFS_PDR_Pos           PFS_PDR_Pos
+#define R9A02_PFS_PDR_Msk           PFS_PDR_Msk
+#define R9A02_PFS_PCR_Pos           PFS_PCR_Pos
+#define R9A02_PFS_PCR_Msk           PFS_PCR_Msk
+#define R9A02_PFS_NCODR_Pos         PFS_NCODR_Pos
+#define R9A02_PFS_NCODR_Msk         PFS_NCODR_Msk
+#define R9A02_PFS_DSCR_Pos          PFS_DSCR_Pos
+#define R9A02_PFS_DSCR_Msk          PFS_DSCR_Msk
+#define R9A02_PFS_DSCR_LOW          PFS_DSCR_LOW
+#define R9A02_PFS_DSCR_MID          PFS_DSCR_MID
+#define R9A02_PFS_DSCR_HIGH         PFS_DSCR_HIGH
+#define R9A02_PFS_EOFR_Pos          PFS_EOFR_Pos
+#define R9A02_PFS_EOFR_Msk          PFS_EOFR_Msk
+#define R9A02_PFS_EOFR_RISING       PFS_EOFR_RISING
+#define R9A02_PFS_EOFR_FALLING      PFS_EOFR_FALLING
+#define R9A02_PFS_EOFR_BOTH         PFS_EOFR_BOTH
+#define R9A02_PFS_ISEL_Pos          PFS_ISEL_Pos
+#define R9A02_PFS_ISEL_Msk          PFS_ISEL_Msk
+#define R9A02_PFS_ASEL_Pos          PFS_ASEL_Pos
+#define R9A02_PFS_ASEL_Msk          PFS_ASEL_Msk
+#define R9A02_PFS_PMR_Pos           PFS_PMR_Pos
+#define R9A02_PFS_PMR_Msk           PFS_PMR_Msk
+#define R9A02_PFS_PSEL_Pos          PFS_PSEL_Pos
+#define R9A02_PFS_PSEL_Msk          PFS_PSEL_Msk
+
+/* PFS register addressing helper.
+ * Each pin has a 32-bit PFS register at offset (port * 16 + pin) * 4 from
+ * the PFS array base.  Used by drivers that need per-pin access by
+ * port/pin index. */
+#define R9A02_PFS_REG_ADDR(port, pin) \
+    ((volatile uint32_t *)(R9A02_PFS_BASE + \
+     (((uint32_t)(port) * 16U + (uint32_t)(pin)) * 4U)))
+
 /*===========================================================================
  *                      PMISC - Port Misc registers (PWPR)
  *
@@ -368,11 +414,18 @@ typedef struct {
 } R9A02_PMISC_Type;
 
 #define R9A02_PMISC                 ((R9A02_PMISC_Type *) R9A02_PMISC_BASE)
+#define PMISC                       R9A02_PMISC     //!< Short alias matching IOsonata RA driver naming
 
 #define PFS_PWPR_PFSWE_Pos          6U
 #define PFS_PWPR_PFSWE              (1UL << PFS_PWPR_PFSWE_Pos)
 #define PFS_PWPR_B0WI_Pos           7U
 #define PFS_PWPR_B0WI               (1UL << PFS_PWPR_B0WI_Pos)
+
+/* R9A02_-prefixed aliases for the PMISC PWPR fields, matching driver naming. */
+#define R9A02_PMISC_PWPR_PFSWE_Pos  PFS_PWPR_PFSWE_Pos
+#define R9A02_PMISC_PWPR_PFSWE_Msk  PFS_PWPR_PFSWE
+#define R9A02_PMISC_PWPR_B0WI_Pos   PFS_PWPR_B0WI_Pos
+#define R9A02_PMISC_PWPR_B0WI_Msk   PFS_PWPR_B0WI
 
 /*===========================================================================
  *                      ICU - Interrupt Controller Unit
@@ -611,6 +664,10 @@ typedef struct {
 #define R9A02_PORT_COUNT            9U      //!< PORT0..PORT8 (max)
 #define R9A02_GPIO_PIN_PER_PORT     16U
 #define R9A02_GPIO_PIN_COUNT_MAX    (R9A02_PORT_COUNT * R9A02_GPIO_PIN_PER_PORT)
+
+/* Driver-facing aliases used by iopincfg_r9a02.c and friends. */
+#define R9A02_MAX_PORT              R9A02_PORT_COUNT
+#define R9A02_PINS_PER_PORT         R9A02_GPIO_PIN_PER_PORT
 #define R9A02_EXTERNAL_IRQ_COUNT    8U      //!< IRQ0..IRQ7
 #define R9A02_SCI_COUNT             4U      //!< SCI0/1/2/9 populated
 #define R9A02_SPI_COUNT             2U      //!< SPI0/1

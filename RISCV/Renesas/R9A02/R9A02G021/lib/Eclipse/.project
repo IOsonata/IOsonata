@@ -241,6 +241,16 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
 		</link>
 		<link>
+			<name>src/Vectors_R9A02.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_R9A02.c</locationURI>
+		</link>
+		<link>
+			<name>src/agt_tick_r9a02.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/agt_tick_r9a02.c</locationURI>
+		</link>
+		<link>
 			<name>src/app_evt_handler.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
@@ -349,6 +359,11 @@
 			<name>src/miscdev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/mstpcr_r9a02.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/mstpcr_r9a02.c</locationURI>
 		</link>
 		<link>
 			<name>src/prbs.c</name>
@@ -984,6 +999,11 @@
 			<name>src/coredev/uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_r9a02.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>

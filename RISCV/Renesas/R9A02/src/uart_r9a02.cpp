@@ -229,7 +229,7 @@ static bool SetBaud(R9A02_SCI_Type *p, uint32_t Baud)
  *==========================================================================*/
 
 static int  UARTRxData (DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int Bufflen);
-static int  UARTTxData (DevIntrf_t * const pDevIntrf, uint8_t *pData, int Datalen);
+static int  UARTTxData (DevIntrf_t * const pDevIntrf, const uint8_t *pData, int Datalen);
 static bool UARTStartRx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr);
 static void UARTStopRx (DevIntrf_t * const pDevIntrf);
 static bool UARTStartTx(DevIntrf_t * const pDevIntrf, uint32_t DevAddr);
@@ -255,7 +255,7 @@ static int UARTRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuff, int Bufflen)
     return n;
 }
 
-static int UARTTxData(DevIntrf_t * const pDevIntrf, uint8_t *pData, int Datalen)
+static int UARTTxData(DevIntrf_t * const pDevIntrf, const uint8_t *pData, int Datalen)
 {
     UARTDev_t *pDev = (UARTDev_t *)pDevIntrf->pDevData;
     R9A02_SCI_Type *p = ((SciInfo_t *)pDev->pObj)->pReg;
