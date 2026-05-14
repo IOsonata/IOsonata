@@ -186,6 +186,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/sys</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -681,6 +686,41 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tphg_bme680.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/diskio.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/diskio_flash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/fatfs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/flash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/sdcard.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/sdcard.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/seep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/stdfs_littlefs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/stdfs_littlefs.h</locationURI>
+		</link>
+		<link>
 			<name>include/sys/dirent.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
@@ -1019,6 +1059,16 @@
 			<name>src/storage/flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/lfs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs.c</locationURI>
+		</link>
+		<link>
+			<name>src/storage/lfs_util.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs_util.c</locationURI>
 		</link>
 		<link>
 			<name>src/storage/sdcard_impl.cpp</name>

@@ -33,5 +33,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 
+#include "storage/diskio.h"
+
 bool StdFSInit(DiskIO * const pDiskIO);
 
