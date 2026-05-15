@@ -701,6 +701,21 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/ff.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ff.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/ff_diskio.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ff_diskio.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/ffconf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ffconf.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage/flash.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/storage/flash.h</locationURI>
@@ -1051,24 +1066,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/fatfs_vdisk.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/ff.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ff.c</locationURI>
+		</link>
+		<link>
 			<name>src/storage/ff_diskio.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/ff_diskio.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/storage/ffsystem.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ffsystem.c</locationURI>
+		</link>
+		<link>
+			<name>src/storage/ffunicode.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ffunicode.c</locationURI>
+		</link>
+		<link>
 			<name>src/storage/flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/storage/lfs.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs.c</locationURI>
-		</link>
-		<link>
-			<name>src/storage/lfs_util.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs_util.c</locationURI>
 		</link>
 		<link>
 			<name>src/storage/sdcard_impl.cpp</name>
