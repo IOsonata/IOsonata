@@ -179,7 +179,7 @@ int UsbHidDevice_Impl::ReadInputReport(int RepNo, uint8_t *pBuf, uint32_t BufSiz
 		res = HidD_GetInputReport(vhDevice, vpTempBuf, vCaps.InputReportByteLength);
 		if (res)
 		{
-			memcpy(pBuf, vpTempBuf + 1, std::min<int>(BufSize, vTempBufSize));
+			memcpy(pBuf, vpTempBuf + 1, std::min<int>(BufSize, vTempBufSize - 1));
 			retval = vCaps.InputReportByteLength - 1;
 		}
 	}
@@ -229,7 +229,7 @@ bool UsbHidDevice_Impl::WriteOutputReport(int RepNo, uint8_t *pBuf, uint32_t Buf
 	//The first byte is the report number.
 	vpTempBuf[0] = RepNo;
 	int len = BufSize;//std::min<int>(BufSize, vCaps.OutputReportByteLength);
-	memcpy(vpTempBuf + 1, pBuf, len);
+	memcpy(vpTempBuf + 1, pBuf, std::min<uint32_t>(len, (uint32_t)(vTempBufSize - 1)));
 
 	if (CtrlTrans)
 	{
@@ -291,7 +291,7 @@ int UsbHidDevice_Impl::ReadFeatureReport(int RepNo, uint8_t *pBuf, uint32_t BufS
       res = HidD_GetFeature(vhDevice, vpTempBuf, vCaps.FeatureReportByteLength);
    if (res)
    {
-		memcpy(pBuf, vpTempBuf + 1, min(vCaps.FeatureReportByteLength, (unsigned short)BufSize));
+		memcpy(pBuf, vpTempBuf + 1, min((unsigned short)(vCaps.FeatureReportByteLength - 1), (unsigned short)BufSize));
       retval = vCaps.FeatureReportByteLength;
    }
    else
@@ -315,7 +315,7 @@ bool UsbHidDevice_Impl::WriteFeatureReport(int RepNo, uint8_t *pBuf, uint32_t Bu
    memset(vpTempBuf, 0, vTempBufSize);
 	vpTempBuf[0] = RepNo;
 
-   memcpy(&vpTempBuf[1], pBuf, min(BufSize, (uint32_t)vCaps.FeatureReportByteLength));
+   memcpy(&vpTempBuf[1], pBuf, min(BufSize, (uint32_t)(vCaps.FeatureReportByteLength - 1)));
 
 	//Send a report to the device.
 
