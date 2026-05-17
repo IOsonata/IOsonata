@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2009-2023 ARM Limited. All rights reserved.
+Copyright (c) 2009-2026 ARM Limited. All rights reserved.
 
     SPDX-License-Identifier: Apache-2.0
 
@@ -118,6 +118,7 @@ __WEAK McuOsc_t g_McuOsc = {
 	.bUSBClk = false
 };
 
+
 /* -- NVMC utility functions -- */
 /* Waits until NVMC is done with the current pending action */
 void nvmc_wait(void)
@@ -142,7 +143,6 @@ uint32_t SystemCoreClockGet(void)
 {
 	return SystemCoreClock;
 }
-
 
 void SystemCoreClockUpdate(void)
 {
@@ -199,7 +199,7 @@ void SystemInit(void)
         /* Workaround for Errata 32 "DIF: Debug session automatically enables TracePort pins" found at the Errata document
            for your device located at https://infocenter.nordicsemi.com/index.jsp */
         if (nrf52_errata_32()){
-            DCB->DEMCR &= ~DCB_DEMCR_TRCENA_Msk;
+            CoreDebug->DEMCR &= ~CoreDebug_DEMCR_TRCENA_Msk;
         }
     #endif
 
@@ -331,8 +331,17 @@ void SystemInit(void)
         __ISB();
     #endif
 
-    nrf52_handle_approtect();
+    /* Enable NVMC instruction cache (if supported by target). */
+    #if defined(NVMC_ICACHECNF_CACHEEN_Pos) && defined(NVMC_ICACHECNF_CACHEEN_Enabled)
+        NRF_NVMC->ICACHECNF = (NVMC_ICACHECNF_CACHEEN_Enabled << NVMC_ICACHECNF_CACHEEN_Pos);
+        #if defined(NVMC_ICACHECNF_CACHEPROFEN_Msk)
+            NRF_NVMC->ICACHECNF &= ~NVMC_ICACHECNF_CACHEPROFEN_Msk; // Disable profiling
+        #endif
+        __DSB();
+        __ISB();
+    #endif
 
+    nrf52_handle_approtect();
     #if NRF52_CONFIGURATION_249_ENABLE && (defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || defined(NRF52811_XXAA))
         if (nrf52_configuration_249() && (NRF_UICR->NRFMDK[0] == 0xFFFFFFFFul || NRF_UICR->NRFMDK[1] == 0xFFFFFFFFul))
         {
@@ -348,7 +357,7 @@ void SystemInit(void)
     /* Configure NFCT pins as GPIOs if NFCT is not to be used in your code. If CONFIG_NFCT_PINS_AS_GPIOS is not defined,
        two GPIOs (see Product Specification to see which ones) will be reserved for NFC and will not be available as
        normal GPIOs. */
-    #if defined (CONFIG_NFCT_PINS_AS_GPIOS) && defined(NFCT_PRESENT)
+    #if (defined(CONFIG_NFCT_PINS_AS_GPIOS) || defined(NRF_CONFIG_NFCT_PINS_AS_GPIOS)) && defined(NFCT_PRESENT)
         if ((NRF_UICR->NFCPINS & UICR_NFCPINS_PROTECT_Msk) == (UICR_NFCPINS_PROTECT_NFC << UICR_NFCPINS_PROTECT_Pos)){
             nvmc_config(NVMC_CONFIG_WEN_Wen);
             NRF_UICR->NFCPINS &= ~UICR_NFCPINS_PROTECT_Msk;
@@ -361,7 +370,7 @@ void SystemInit(void)
     /* Configure GPIO pads as pPin Reset pin if Pin Reset capabilities desired. If CONFIG_GPIO_AS_PINRESET is not
       defined, pin reset will not be available. One GPIO (see Product Specification to see which one) will then be
       reserved for PinReset and not available as normal GPIO. */
-    #if defined (CONFIG_GPIO_AS_PINRESET)
+    #if (defined(CONFIG_GPIO_AS_PINRESET) || defined(NRF_CONFIG_GPIO_AS_PINRESET))
         if (((NRF_UICR->PSELRESET[0] & UICR_PSELRESET_CONNECT_Msk) != (UICR_PSELRESET_CONNECT_Connected << UICR_PSELRESET_CONNECT_Pos)) ||
             ((NRF_UICR->PSELRESET[1] & UICR_PSELRESET_CONNECT_Msk) != (UICR_PSELRESET_CONNECT_Connected << UICR_PSELRESET_CONNECT_Pos))){
             nvmc_config(NVMC_CONFIG_WEN_Wen);
