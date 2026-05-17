@@ -1,7 +1,9 @@
 /* Linker script to configure memory regions. */
 
 SEARCH_DIR(.)
-SEARCH_DIR("../../../../../../../../../external/nrfx/mdk")
+SEARCH_DIR("../../../../../../../../external/nrfx/bsp/stable/mdk")
+SEARCH_DIR("../../../../../../../../../external/nrfx/bsp/stable/mdk")
+SEARCH_DIR("../../../../../../../../../../external/nrfx/bsp/stable/mdk")
 
 GROUP(-lgcc -lc)
 
