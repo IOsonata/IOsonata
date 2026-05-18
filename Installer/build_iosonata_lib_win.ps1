@@ -2,18 +2,19 @@
 
 <#
 .SYNOPSIS
-    Build IOsonata libraries for selected MCU target.
+    Build IOsonata libraries for selected MCU target, then build
+    all TaktOS ARM + RISCV libraries.
 
 .DESCRIPTION
-    Standalone script to build IOsonata libraries using a headless build.
+    Standalone script to build IOsonata libraries using a headless build,
+    then automatically build every TaktOS ARM and RISCV library project.
+    Lib projects only, Benchmark/KVB/test projects are skipped.
     Prefers IOcomposer (the new IOsonata installer); falls back to Eclipse
     Embedded CDT if IOcomposer is not found. IOcomposer is Eclipse-based,
     so the same headless build application is used regardless.
-    Can be run multiple times to build for different MCU targets.
-    Supports building all projects at once.
 
 .PARAMETER SdkHome
-    Path to IOsonata SDK root (default: ~\IOcomposer)
+    Path to SDK root (default: ~\IOcomposer)
 
 .PARAMETER IocomposerDir
     Path to IOcomposer install dir (default: %ProgramFiles%\IOcomposer)
@@ -21,6 +22,12 @@
 .PARAMETER EclipseDir
     Path to Eclipse Embedded CDT install dir, used as fallback
     (default: %ProgramFiles%\Eclipse Embedded CDT)
+
+.PARAMETER TaktosDir
+    Path to TaktOS source dir (default: <SdkHome>\TaktOS)
+
+.PARAMETER NoTaktos
+    Do not build TaktOS, IOsonata only
 
 .EXAMPLE
     .\build_iosonata_lib_win.ps1
@@ -31,26 +38,30 @@
     Build with custom IOcomposer location
 
 .NOTES
-    Version: v2.3.0
+    Version: v2.4.0
     Platform: Windows
 
+    v2.4.0: Build all TaktOS lib projects (ARM + RISCV) by default
+            after the IOsonata build. Added -TaktosDir and -NoTaktos.
     v2.3.0: Prefer IOcomposer; fall back to Eclipse if not found.
 #>
 
 param(
     [string]$SdkHome        = "$env:USERPROFILE\IOcomposer",
     [string]$IocomposerDir  = "$env:ProgramFiles\IOcomposer",
-    [string]$EclipseDir     = "$env:ProgramFiles\Eclipse Embedded CDT"
+    [string]$EclipseDir     = "$env:ProgramFiles\Eclipse Embedded CDT",
+    [string]$TaktosDir      = "",
+    [switch]$NoTaktos
 )
 
 $ErrorActionPreference = 'Stop'
-$SCRIPT_VERSION = "v2.3.0"
+$SCRIPT_VERSION = "v2.4.0"
 
 # --- Helper: Print Banner ---
 function Show-Banner {
     Write-Host ""
     Write-Host "=========================================================" -ForegroundColor Blue
-    Write-Host "  IOsonata Library Builder (Windows)" -ForegroundColor White
+    Write-Host "  IOsonata + TaktOS Library Builder (Windows)" -ForegroundColor White
     Write-Host "  Version: $SCRIPT_VERSION" -ForegroundColor White
     Write-Host "=========================================================" -ForegroundColor Blue
     Write-Host ""
@@ -81,6 +92,11 @@ function Find-IdeLauncher {
 Show-Banner
 
 $ROOT = $SdkHome
+
+# Derive TaktOS dir from SdkHome unless set explicitly
+if (-not $TaktosDir -or $TaktosDir -eq '') {
+    $TaktosDir = Join-Path $ROOT "TaktOS"
+}
 
 # --- IDE Detection (prefer IOcomposer, fall back to Eclipse) ---
 $IDE_BIN  = $null
@@ -163,7 +179,7 @@ if (-not (Test-Path "$ROOT\IOsonata")) {
 Write-Host "IOsonata SDK found at: $ROOT\IOsonata" -ForegroundColor Green
 Write-Host ""
 
-# --- Discover Projects ---
+# --- Discover IOsonata Projects ---
 $mcuFamilies = @()
 $mcuPaths = @()
 
@@ -173,12 +189,12 @@ Get-ChildItem -Path "$ROOT\IOsonata" -Recurse -Filter ".project" -ErrorAction Si
         $projRoot = $_.DirectoryName
         # Get relative path for display (e.g., "Nordic\nRF52840\lib\Eclipse")
         $relPath = $projRoot.Replace("$ROOT\IOsonata\", "")
-        
+
         # Filter out non-Windows projects if any exist
         if ($relPath -match "^macOS" -or $relPath -match "^Linux") {
             return
         }
-        
+
         $mcuFamilies += $relPath
         $mcuPaths += $projRoot
     }
@@ -189,7 +205,44 @@ if ($mcuFamilies.Count -eq 0) {
     exit 1
 }
 
-Write-Host "Available projects:" -ForegroundColor White
+# --- Discover TaktOS Projects (lib only: ARM + RISCV) ---
+# TaktOS library projects live at:
+#   <TaktOS>\ARM\<core>\Eclipse
+#   <TaktOS>\RISCV\<core>\Eclipse
+# Everything under Benchmark\, KVB\ and test\ is skipped because
+# those relative paths do not match the predicate.
+$taktosFamilies = @()
+$taktosPaths = @()
+
+if ($NoTaktos) {
+    Write-Host "TaktOS build disabled (-NoTaktos)" -ForegroundColor Yellow
+    Write-Host ""
+} elseif (-not (Test-Path $TaktosDir)) {
+    Write-Host "WARNING: TaktOS not found at $TaktosDir" -ForegroundColor Yellow
+    Write-Host "   IOsonata will still be built. Use -TaktosDir <path> to set it," -ForegroundColor Yellow
+    Write-Host "   or -NoTaktos to silence this warning." -ForegroundColor Yellow
+    Write-Host ""
+} else {
+    Get-ChildItem -Path $TaktosDir -Recurse -Filter ".project" -ErrorAction SilentlyContinue | ForEach-Object {
+        $projRoot = $_.DirectoryName
+        $rel = $projRoot.Replace("$TaktosDir\", "")
+        # Keep only top level ARM\<core>\Eclipse or RISCV\<core>\Eclipse
+        if ($rel -match '^(ARM|RISCV)\\[^\\]+\\Eclipse$') {
+            $taktosFamilies += $rel
+            $taktosPaths += $projRoot
+        }
+    }
+
+    if ($taktosFamilies.Count -eq 0) {
+        Write-Host "WARNING: No TaktOS ARM/RISCV library projects found in $TaktosDir" -ForegroundColor Yellow
+        Write-Host ""
+    } else {
+        Write-Host "TaktOS found at: $TaktosDir ($($taktosFamilies.Count) lib projects)" -ForegroundColor Green
+        Write-Host ""
+    }
+}
+
+Write-Host "Available IOsonata library projects:" -ForegroundColor White
 Write-Host ""
 for ($i = 0; $i -lt $mcuFamilies.Count; $i++) {
     Write-Host ("  {0,2}) {1}" -f ($i + 1), $mcuFamilies[$i])
@@ -197,17 +250,21 @@ for ($i = 0; $i -lt $mcuFamilies.Count; $i++) {
 Write-Host "   A) Build All"
 Write-Host "   0) Exit"
 Write-Host ""
+if ($taktosFamilies.Count -gt 0) {
+    Write-Host "Note: all $($taktosFamilies.Count) TaktOS ARM/RISCV libraries are built automatically." -ForegroundColor White
+    Write-Host ""
+}
 
 # --- User Selection ---
 do {
-    $selection = Read-Host "Select project to build (0-$($mcuFamilies.Count) or A)"
+    $selection = Read-Host "Select IOsonata project to build (0-$($mcuFamilies.Count) or A)"
     $selectionUpper = $selection.ToUpper()
 } while (-not (
     ($selectionUpper -eq "A") -or
     (($selection -match '^\d+$') -and ([int]$selection -ge 0) -and ([int]$selection -le $mcuFamilies.Count))
 ))
 
-if ($selectionUpper -eq "0") {
+if ($selectionUpper -ne "A" -and $selection -eq "0") {
     Write-Host "Exiting."
     exit 0
 }
@@ -216,30 +273,31 @@ if ($selectionUpper -eq "0") {
 function Build-Project {
     param(
         [string]$ProjectPath,
-        [string]$ProjectFamily
+        [string]$ProjectFamily,
+        [string]$LibGlob = "libIOsonata*.a"
     )
-    
+
     # Validate project files exist
     if (-not (Test-Path "$ProjectPath\.project") -or -not (Test-Path "$ProjectPath\.cproject")) {
         Write-Host "ERROR: Not a valid Eclipse CDT project at $ProjectPath" -ForegroundColor Red
         return $false
     }
-    
+
     Write-Host ""
     Write-Host ">>> Building: $ProjectFamily" -ForegroundColor Cyan
     Write-Host "    Path: $ProjectPath"
     Write-Host ""
-    
+
     # Create temporary workspace
     $WS = "$env:TEMP\iosonata_build_ws_$PID"
     New-Item -Path $WS -ItemType Directory -Force | Out-Null
     Write-Host ">>> Workspace: $WS" -ForegroundColor Gray
     Write-Host ">>> Running $IDE_NAME headless build..." -ForegroundColor Cyan
     Write-Host ""
-    
-    $logFile = "$env:TEMP\build_iosonata_lib_$PID.log"
+
+    $logFile = "$env:TEMP\build_lib_$PID.log"
     if (Test-Path $logFile) { Remove-Item $logFile -Force }
-    
+
     # Run Headless Build
     try {
         $buildOutput = & $IDE_BIN `
@@ -253,36 +311,36 @@ function Build-Project {
             -printErrorMarkers `
             -vmargs "-Dorg.eclipse.equinox.p2.reconciler.dropins.directory=" `
             2>&1
-        
+
         # Output handling
         $buildOutput | Out-File -FilePath $logFile
         $buildOutput | Write-Host
-        
+
         # Cleanup Workspace
         Remove-Item -Path $WS -Recurse -Force -ErrorAction SilentlyContinue
-        
+
         if ($LASTEXITCODE -ne 0) {
             Write-Host ""
             Write-Host "Build failed for $ProjectFamily (exit code $LASTEXITCODE)" -ForegroundColor Red
             Write-Host "   Log: $logFile"
             return $false
         }
-        
+
         Write-Host ""
         Write-Host "Build completed for $ProjectFamily" -ForegroundColor Green
-        
+
         # Show produced libraries
         Write-Host "Libraries:" -ForegroundColor White
-        Get-ChildItem "$ProjectPath\Debug\libIOsonata*.a" -ErrorAction SilentlyContinue | ForEach-Object { 
+        Get-ChildItem "$ProjectPath\Debug\$LibGlob" -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "  $($_.FullName) ($([math]::Round($_.Length/1KB, 1)) KB)"
         }
-        Get-ChildItem "$ProjectPath\Release\libIOsonata*.a" -ErrorAction SilentlyContinue | ForEach-Object { 
+        Get-ChildItem "$ProjectPath\Release\$LibGlob" -ErrorAction SilentlyContinue | ForEach-Object {
             Write-Host "  $($_.FullName) ($([math]::Round($_.Length/1KB, 1)) KB)"
         }
         Write-Host ""
-        
+
         return $true
-        
+
     } catch {
         Write-Host ""
         Write-Host "Build exception for $ProjectFamily" -ForegroundColor Red
@@ -292,87 +350,100 @@ function Build-Project {
     }
 }
 
-# --- Execution Logic ---
+# --- Build Work List ---
+# IOsonata selection (single or all) followed by every
+# TaktOS ARM/RISCV library project.
+$workNames = @()
+$workPaths = @()
+$workGlobs = @()
 
 if ($selectionUpper -eq "A") {
-    # --- BUILD ALL ---
-    Write-Host ""
-    Write-Host "=========================================================" -ForegroundColor Blue
-    Write-Host "Building ALL projects ($($mcuFamilies.Count) total)" -ForegroundColor White
-    Write-Host "=========================================================" -ForegroundColor Blue
-    
-    # Handle Ctrl-C gracefully
-    $interrupted = $false
-    $handler = {
-        $script:interrupted = $true
-        Write-Host ""
-        Write-Host "!!! Build interrupted by user (Ctrl-C) !!!" -ForegroundColor Yellow
+    for ($i = 0; $i -lt $mcuFamilies.Count; $i++) {
+        $workNames += "IOsonata\$($mcuFamilies[$i])"
+        $workPaths += $mcuPaths[$i]
+        $workGlobs += "libIOsonata*.a"
     }
-    $null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action $handler
-    
-    $failedBuilds = @()
-    $successfulBuilds = @()
-    
-    try {
-        for ($i = 0; $i -lt $mcuFamilies.Count; $i++) {
-            if ($interrupted) { break }
-            
-            Write-Host ""
-            Write-Host "---------------------------------------------------------" -ForegroundColor DarkGray
-            Write-Host "Building [$($i+1)/$($mcuFamilies.Count)]: $($mcuFamilies[$i])" -ForegroundColor White
-            Write-Host "---------------------------------------------------------" -ForegroundColor DarkGray
-            
-            if (Build-Project -ProjectPath $mcuPaths[$i] -ProjectFamily $mcuFamilies[$i]) {
-                $successfulBuilds += $mcuFamilies[$i]
-            } else {
-                $failedBuilds += $mcuFamilies[$i]
-            }
-        }
-    } catch {
-        $interrupted = $true
-    } finally {
-        Unregister-Event -SourceIdentifier PowerShell.Exiting -ErrorAction SilentlyContinue
-    }
-    
-    # Summary
-    Write-Host ""
-    Write-Host "=========================================================" -ForegroundColor Blue
-    if ($interrupted) {
-        Write-Host "Build All Summary (INTERRUPTED)" -ForegroundColor Yellow
-    } else {
-        Write-Host "Build All Summary" -ForegroundColor White
-    }
-    Write-Host "=========================================================" -ForegroundColor Blue
-    
-    Write-Host "Successful: $($successfulBuilds.Count)/$($mcuFamilies.Count)" -ForegroundColor Green
-    foreach ($proj in $successfulBuilds) {
-        Write-Host "   + $proj" -ForegroundColor Green
-    }
-    
-    if ($failedBuilds.Count -gt 0) {
-        Write-Host ""
-        Write-Host "Failed: $($failedBuilds.Count)/$($mcuFamilies.Count)" -ForegroundColor Red
-        foreach ($proj in $failedBuilds) {
-            Write-Host "   - $proj" -ForegroundColor Red
-        }
-        Write-Host ""
-        Write-Host "Check individual log files in $env:TEMP" -ForegroundColor Yellow
-        exit 1
-    }
-    
-    if ($interrupted) { exit 130 }
-
 } else {
-    # --- BUILD SINGLE ---
-    $selectedIdx = [int]$selection - 1
-    $selectedFamily = $mcuFamilies[$selectedIdx]
-    $selectedPath = $mcuPaths[$selectedIdx]
-    
-    if (-not (Build-Project -ProjectPath $selectedPath -ProjectFamily $selectedFamily)) {
-        exit 1
-    }
+    $selIdx = [int]$selection - 1
+    $workNames += "IOsonata\$($mcuFamilies[$selIdx])"
+    $workPaths += $mcuPaths[$selIdx]
+    $workGlobs += "libIOsonata*.a"
 }
 
+for ($i = 0; $i -lt $taktosFamilies.Count; $i++) {
+    $workNames += "TaktOS\$($taktosFamilies[$i])"
+    $workPaths += $taktosPaths[$i]
+    $workGlobs += "libTaktOS*.a"
+}
+
+# --- Build Execution ---
+Write-Host ""
+Write-Host "=========================================================" -ForegroundColor Blue
+Write-Host "Building $($workNames.Count) project(s)" -ForegroundColor White
+Write-Host "=========================================================" -ForegroundColor Blue
+
+# Handle Ctrl-C gracefully
+$interrupted = $false
+$handler = {
+    $script:interrupted = $true
+    Write-Host ""
+    Write-Host "!!! Build interrupted by user (Ctrl-C) !!!" -ForegroundColor Yellow
+}
+$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action $handler
+
+$failedBuilds = @()
+$successfulBuilds = @()
+
+try {
+    for ($i = 0; $i -lt $workNames.Count; $i++) {
+        if ($interrupted) { break }
+
+        Write-Host ""
+        Write-Host "---------------------------------------------------------" -ForegroundColor DarkGray
+        Write-Host "Building [$($i+1)/$($workNames.Count)]: $($workNames[$i])" -ForegroundColor White
+        Write-Host "---------------------------------------------------------" -ForegroundColor DarkGray
+
+        if (Build-Project -ProjectPath $workPaths[$i] -ProjectFamily $workNames[$i] -LibGlob $workGlobs[$i]) {
+            $successfulBuilds += $workNames[$i]
+        } else {
+            $failedBuilds += $workNames[$i]
+        }
+    }
+} catch {
+    $interrupted = $true
+} finally {
+    Unregister-Event -SourceIdentifier PowerShell.Exiting -ErrorAction SilentlyContinue
+}
+
+# Summary
+Write-Host ""
+Write-Host "=========================================================" -ForegroundColor Blue
+if ($interrupted) {
+    Write-Host "Build Summary (INTERRUPTED)" -ForegroundColor Yellow
+} else {
+    Write-Host "Build Summary" -ForegroundColor White
+}
+Write-Host "=========================================================" -ForegroundColor Blue
+
+Write-Host "Successful: $($successfulBuilds.Count)/$($workNames.Count)" -ForegroundColor Green
+foreach ($proj in $successfulBuilds) {
+    Write-Host "   + $proj" -ForegroundColor Green
+}
+
+if ($failedBuilds.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Failed: $($failedBuilds.Count)/$($workNames.Count)" -ForegroundColor Red
+    foreach ($proj in $failedBuilds) {
+        Write-Host "   - $proj" -ForegroundColor Red
+    }
+    Write-Host ""
+    Write-Host "Check the build log in $env:TEMP" -ForegroundColor Yellow
+    exit 1
+}
+
+if ($interrupted) { exit 130 }
+
+Write-Host ""
 Write-Host "=========================================================" -ForegroundColor Blue
 Write-Host "Build complete!" -ForegroundColor Green
 Write-Host "=========================================================" -ForegroundColor Blue
