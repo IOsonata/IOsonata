@@ -2389,6 +2389,13 @@ bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint1
     return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
 }
 #endif
+
+void BtAppEvtDispatch()
+{
+    nrf_sdh_evts_poll();                    /* let the handlers run first, incase the EVENT occured before creating this task */
+}
+
+#if 0
 /**@brief   Function for polling SoftDevice events.
  *
  * @note    This function is compatible with @ref app_sched_event_handler_t.
@@ -2403,7 +2410,7 @@ static void appsh_events_poll(void * p_event_data, uint16_t event_size)
     UNUSED_PARAMETER(p_event_data);
     UNUSED_PARAMETER(event_size);
 }
-#if 0
+
 extern "C" void SD_EVT_IRQHandler(void)
 {
 #if 0

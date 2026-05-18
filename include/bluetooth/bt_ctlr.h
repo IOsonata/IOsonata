@@ -78,7 +78,7 @@ struct __Bt_Ctlr_Dev {
 	void *pObj;
 	uint16_t ConnHdl;				//<! Connection handle
 	uint16_t ValHdl;				//<! Characteristic value handle
-	HCFIFO hRxFifo;
+	hCFifo_t hRxFifo;
 	AttDataHandler_t AttHandler;
 	SmpDataHandler_t SmpHandler;
 	size_t (*Send)(BtCtlrDev_t * const pDev, void * const pData, size_t Len);

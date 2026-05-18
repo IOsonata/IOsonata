@@ -351,9 +351,9 @@ public:
 	 */
 	virtual void Flush(void) {}
 
-	bool isDataReady(void) { return atomic_flag_test(&vbDataRdy); }//.test(memory_order_consume); }
-	bool DataReadySet(void) { return atomic_flag_test_and_set(&vbDataRdy); }//.test_and_set(memory_order_acquire); }
-	void DataReadyClear(void) { atomic_flag_clear(&vbDataRdy); }
+	bool isDataReady(void) { return atomic_load_explicit(&vbDataRdy, memory_order_acquire); }
+	bool DataReadySet(void) { return atomic_exchange_explicit(&vbDataRdy, true, memory_order_acq_rel); }
+	void DataReadyClear(void) { atomic_store_explicit(&vbDataRdy, false, memory_order_release); }
 
 protected:
 
@@ -369,7 +369,7 @@ protected:
 	uint32_t vFilterrFreq;		//!< Filter frequency in mHz, many sensors can set a filter cutoff frequency
 	int vTimerTrigId;			//!< Timer interrupt trigger id (implementation dependent)
 	uint32_t vRange;            //!< ADC range of the sensor, contains max value for conversion factor
-	atomic_flag vbDataRdy;		//!< Flag to indicate raw sensor data is ready for retrieval.
+	atomic_bool vbDataRdy;		//!< Flag to indicate raw sensor data is ready for retrieval.
 								//!< This flag is normally set by interrupt and cleared by UpdateData
 	bool vbFifoEn;				//!< This flag indicate internal FIFO is enable
 };

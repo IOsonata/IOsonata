@@ -253,6 +253,7 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 // This function should normal wait for RTOS to signal an event on sent by
 // Softdevice
 void BtAppRtosWaitEvt(void);
+void BtAppEvtDispatch();
 
 /**
  * @brief	BLE main App initialization
