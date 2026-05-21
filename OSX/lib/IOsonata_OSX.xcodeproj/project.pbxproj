@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4028DD092FBE7C2500450A9D /* uart_osx.h in Headers */ = {isa = PBXBuildFile; fileRef = 4028DD062FBE7C2400450A9D /* uart_osx.h */; };
+		4028DD0A2FBE7C2500450A9D /* idelay.h in Headers */ = {isa = PBXBuildFile; fileRef = 4028DD072FBE7C2500450A9D /* idelay.h */; };
+		4028DD0B2FBE7C2500450A9D /* usb_hidhost_impl.h in Headers */ = {isa = PBXBuildFile; fileRef = 4028DD082FBE7C2500450A9D /* usb_hidhost_impl.h */; };
 		406FC775233A00C400106BCA /* sysstatus.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D2233A00C400106BCA /* sysstatus.h */; };
 		406FC776233A00C400106BCA /* blueio_types.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D3233A00C400106BCA /* blueio_types.h */; };
 		406FC777233A00C400106BCA /* device.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC6D4233A00C400106BCA /* device.h */; };
@@ -72,13 +75,14 @@
 		406FC7EC233A00C400106BCA /* slip_intrf.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC757233A00C400106BCA /* slip_intrf.cpp */; };
 		406FC7ED233A00C400106BCA /* crc.c in Sources */ = {isa = PBXBuildFile; fileRef = 406FC758233A00C400106BCA /* crc.c */; };
 		406FC7F0233A00C400106BCA /* utf8cvt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC75C233A00C400106BCA /* utf8cvt.cpp */; };
-		406FC7FD233A013E00106BCA /* usb_hidhost_impl.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC7FB233A013E00106BCA /* usb_hidhost_impl.h */; };
-		406FC7FE233A013E00106BCA /* uart_osx.h in Headers */ = {isa = PBXBuildFile; fileRef = 406FC7FC233A013E00106BCA /* uart_osx.h */; };
 		406FC801233A016300106BCA /* usb_hidhost_impl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC7FF233A016300106BCA /* usb_hidhost_impl.cpp */; };
 		406FC802233A016300106BCA /* uart_osx.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 406FC800233A016300106BCA /* uart_osx.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4028DD062FBE7C2400450A9D /* uart_osx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = uart_osx.h; path = ../OSX/include/uart_osx.h; sourceTree = "<group>"; };
+		4028DD072FBE7C2500450A9D /* idelay.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = idelay.h; path = ../OSX/include/idelay.h; sourceTree = "<group>"; };
+		4028DD082FBE7C2500450A9D /* usb_hidhost_impl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = usb_hidhost_impl.h; path = ../OSX/include/usb_hidhost_impl.h; sourceTree = "<group>"; };
 		406FC66D2339FDA800106BCA /* libIOsonata_OSX.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libIOsonata_OSX.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		406FC6D2233A00C400106BCA /* sysstatus.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sysstatus.h; sourceTree = "<group>"; };
 		406FC6D3233A00C400106BCA /* blueio_types.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = blueio_types.h; sourceTree = "<group>"; };
@@ -145,8 +149,6 @@
 		406FC757233A00C400106BCA /* slip_intrf.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = slip_intrf.cpp; sourceTree = "<group>"; };
 		406FC758233A00C400106BCA /* crc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = crc.c; sourceTree = "<group>"; };
 		406FC75C233A00C400106BCA /* utf8cvt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = utf8cvt.cpp; sourceTree = "<group>"; };
-		406FC7FB233A013E00106BCA /* usb_hidhost_impl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = usb_hidhost_impl.h; path = include/usb_hidhost_impl.h; sourceTree = SOURCE_ROOT; };
-		406FC7FC233A013E00106BCA /* uart_osx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = uart_osx.h; path = include/uart_osx.h; sourceTree = SOURCE_ROOT; };
 		406FC7FF233A016300106BCA /* usb_hidhost_impl.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = usb_hidhost_impl.cpp; path = src/usb_hidhost_impl.cpp; sourceTree = SOURCE_ROOT; };
 		406FC800233A016300106BCA /* uart_osx.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = uart_osx.cpp; path = src/uart_osx.cpp; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -182,8 +184,9 @@
 		406FC6B8233A00C400106BCA /* include */ = {
 			isa = PBXGroup;
 			children = (
-				406FC7FC233A013E00106BCA /* uart_osx.h */,
-				406FC7FB233A013E00106BCA /* usb_hidhost_impl.h */,
+				4028DD072FBE7C2500450A9D /* idelay.h */,
+				4028DD062FBE7C2400450A9D /* uart_osx.h */,
+				4028DD082FBE7C2500450A9D /* usb_hidhost_impl.h */,
 				406FC6D2233A00C400106BCA /* sysstatus.h */,
 				406FC6D3233A00C400106BCA /* blueio_types.h */,
 				406FC6D4233A00C400106BCA /* device.h */,
@@ -311,8 +314,10 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4028DD0A2FBE7C2500450A9D /* idelay.h in Headers */,
 				406FC7AB233A00C400106BCA /* buzzer.h in Headers */,
 				406FC7B0233A00C400106BCA /* intelhex.h in Headers */,
+				4028DD092FBE7C2500450A9D /* uart_osx.h in Headers */,
 				406FC78A233A00C400106BCA /* usb_def.h in Headers */,
 				406FC7A8233A00C400106BCA /* ledmx.h in Headers */,
 				406FC781233A00C400106BCA /* fatfs.h in Headers */,
@@ -320,6 +325,7 @@
 				406FC77A233A00C400106BCA /* base64.h in Headers */,
 				406FC777233A00C400106BCA /* device.h in Headers */,
 				406FC79F233A00C400106BCA /* timer.h in Headers */,
+				4028DD0B2FBE7C2500450A9D /* usb_hidhost_impl.h in Headers */,
 				406FC798233A00C400106BCA /* isha256.h in Headers */,
 				406FC775233A00C400106BCA /* sysstatus.h in Headers */,
 				406FC7A5233A00C400106BCA /* ledmxfont.h in Headers */,
@@ -327,7 +333,6 @@
 				406FC7A2233A00C400106BCA /* i2c.h in Headers */,
 				406FC78D233A00C400106BCA /* usb_hidhost.h in Headers */,
 				406FC78C233A00C400106BCA /* usb_hiddef.h in Headers */,
-				406FC7FE233A013E00106BCA /* uart_osx.h in Headers */,
 				406FC789233A00C400106BCA /* sdcard.h in Headers */,
 				406FC7A3233A00C400106BCA /* diskio_flash.h in Headers */,
 				406FC7A6233A00C400106BCA /* modem.h in Headers */,
@@ -357,7 +362,6 @@
 				406FC776233A00C400106BCA /* blueio_types.h in Headers */,
 				406FC77D233A00C400106BCA /* prbs.h in Headers */,
 				406FC7A4233A00C400106BCA /* convutil.h in Headers */,
-				406FC7FD233A013E00106BCA /* usb_hidhost_impl.h in Headers */,
 				406FC782233A00C400106BCA /* md5.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

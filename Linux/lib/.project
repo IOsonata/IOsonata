@@ -101,6 +101,11 @@
 			<locationURI>PARENT-2-PROJECT_LOC/include/i2c.h</locationURI>
 		</link>
 		<link>
+			<name>include/idelay.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/include/idelay.h</locationURI>
+		</link>
+		<link>
 			<name>include/intelhex.h</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/include/intelhex.h</locationURI>
@@ -494,6 +499,11 @@
 			<name>include/usb/usb_hidhost.h</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/include/usb/usb_hidhost.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb_hidhost_impl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/include/usb_hidhost_impl.h</locationURI>
 		</link>
 		<link>
 			<name>include/usb/usb_mscdef.h</name>
