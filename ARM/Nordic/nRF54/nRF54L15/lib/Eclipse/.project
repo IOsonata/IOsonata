@@ -576,6 +576,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/bm_compat_ds.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bm_compat_phy_shim.h</name>
+			<type>1</type>
+			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/include/bm_compat_phy_shim.h</location>
+		</link>
+		<link>
 			<name>include/bluetooth/bm_config_defaults.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/bm_config_defaults.h</locationURI>
@@ -659,6 +664,11 @@
 			<name>include/bluetooth/bt_uuid.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_uuid.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/crypto_values_lms.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_values_lms.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_device.h</name>

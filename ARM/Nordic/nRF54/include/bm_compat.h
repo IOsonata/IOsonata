@@ -37,6 +37,9 @@ Usage:
 #endif
 
 #include "bm_config_defaults.h"
+#ifndef BM_COMPAT_PHY_SHIM_H__
+#include "bm_compat_phy_shim.h"
+#endif
 
 /* ======================================================================
  * Atomic  —  replaces <zephyr/sys/atomic.h>
@@ -119,7 +122,8 @@ extern "C" {
 #endif
 
 #ifndef IS_ALIGNED
-#define IS_ALIGNED(x, align)  (((x) & ((align) - 1)) == 0)
+#define IS_ALIGNED(x, align)  ((((uintptr_t)(x)) & ((align) - 1)) == 0)
+//#define IS_ALIGNED(x, align)  (((x) & ((align) - 1)) == 0)
 #endif
 
 #ifndef CONTAINER_OF
