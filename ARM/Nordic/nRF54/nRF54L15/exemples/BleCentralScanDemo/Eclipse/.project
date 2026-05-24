@@ -31,11 +31,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/BleCentralScanDemo.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/exemples/BleCentralScanDemo.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/ble_central_scan.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/ble_central_scan.cpp</locationURI>
