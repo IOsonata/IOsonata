@@ -74,6 +74,10 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/nordic_nrf/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/nordic_nrf/drivers&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/demo/drivers&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
@@ -108,6 +112,10 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/nordic_nrf/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/nordic_nrf/drivers&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/demo/drivers&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
@@ -223,6 +231,10 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/nordic_nrf/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/nordic_nrf/drivers&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/demo/drivers&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
@@ -257,6 +269,10 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/mpsl/fem/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/nordic_nrf/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/nordic_nrf/drivers&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/platforms/demo/drivers&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
