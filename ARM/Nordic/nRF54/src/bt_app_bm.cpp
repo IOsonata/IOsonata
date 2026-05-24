@@ -160,6 +160,11 @@ static ble_gap_adv_data_t s_BtAppAdvData = {
 	.scan_rsp_data = { s_BtAppSrBuff, 0 }
 };
 
+// --- Scan buffer for central / observer mode ---
+// S145 on nRF54L15 caps extended-adv data at BLE_GAP_SCAN_BUFFER_EXTENDED_MAX_SUPPORTED (255).
+// Same buffer covers legacy 31-byte scans too.
+alignas(4) static uint8_t s_BleScanBuff[BLE_GAP_SCAN_BUFFER_EXTENDED_MAX_SUPPORTED];
+
 
 const static TimerCfg_t s_BtAppSdTimerCfg = {
     .DevNo = 3,	// GRTC3 needed for Softdevice
@@ -340,11 +345,21 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			{
 				const ble_gap_evt_adv_report_t *p_adv_report =
 					&p_gap_evt->params.adv_report;
-				BtAppScanReport(p_adv_report->rssi,
+				bool keep_going = BtAppScanReport(p_adv_report->rssi,
 								p_adv_report->peer_addr.addr_type,
 								(uint8_t *)p_adv_report->peer_addr.addr,
 								p_adv_report->data.len,
 								p_adv_report->data.p_data);
+				// S145 stops reporting after each adv packet; the app must
+				// re-arm the scan or explicitly stop it.
+				if (keep_going)
+				{
+					BtAppScan();
+				}
+				else
+				{
+					BtAppScanStop();
+				}
 			}
 			break;
 
@@ -1141,5 +1156,108 @@ NRF_SDH_STACK_EVT_OBSERVER(soc_evt_obs, soc_evt_poll, NULL, HIGHEST);
 NRF_SDH_STACK_EVT_OBSERVER(ble_evt_obs, ble_evt_poll, NULL, HIGH);
 // Register as BLE event observer
 //NRF_SDH_BLE_OBSERVER(s_BtAppBleObserver, ble_evt_dispatch, NULL, USER);
+
+
+
+// =====================================================================
+// Central / Observer role
+// ---------------------------------------------------------------------
+// BtAppScanInit programs the scan parameters and arms the first scan.
+// BtAppScan continues an in-flight scan (after each ADV_REPORT) or
+// starts a fresh one if scanning was idle.
+// BtAppScanStop halts scanning.
+// BtAppConnect issues a GAP connect request using the parameters that
+// were set up by the most recent BtAppScanInit call.
+// =====================================================================
+
+bool BtAppScanInit(BtGapScanCfg_t *pCfg)
+{
+	if (pCfg == nullptr)
+	{
+		return false;
+	}
+
+	if (BtGapScanInit(pCfg) == false)
+	{
+		return false;
+	}
+
+	s_BtAppData.bScan = true;
+	return BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
+}
+
+void BtAppScan(void)
+{
+	if (s_BtAppData.bScan)
+	{
+		// Re-arm the scan with the same parameters (SD requirement after
+		// every adv report when reporting is one-shot).
+		BtGapScanNext(s_BleScanBuff, sizeof(s_BleScanBuff));
+	}
+	else
+	{
+		s_BtAppData.bScan = true;
+		BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
+	}
+}
+
+void BtAppScanStop(void)
+{
+	BtGapScanStop();
+	s_BtAppData.bScan = false;
+}
+
+bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
+{
+	// SD requires scanning to be stopped before issuing a connect.
+	s_BtAppData.bScan = false;
+
+	return BtGapConnect(pPeerAddr, pConnParam);
+}
+
+bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
+{
+	if (ConnHandle == BLE_CONN_HANDLE_INVALID ||
+	    CharHandle == BLE_CONN_HANDLE_INVALID ||
+	    pData == nullptr || DataLen == 0)
+	{
+		return false;
+	}
+
+	ble_gattc_write_params_t const write_params = {
+		.write_op = BLE_GATT_OP_WRITE_CMD,
+		.flags    = BLE_GATT_EXEC_WRITE_FLAG_PREPARED_WRITE,
+		.handle   = CharHandle,
+		.offset   = 0,
+		.len      = DataLen,
+		.p_value  = pData,
+	};
+
+	return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
+}
+
+bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CccdHandle)
+{
+	if (ConnHandle == BLE_CONN_HANDLE_INVALID ||
+	    CccdHandle == BLE_CONN_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	// CCCD = 16-bit little endian, bit 0 = notify, bit 1 = indicate.
+	// CCCD value length is fixed at 2 bytes by the Bluetooth GATT spec.
+	uint8_t buf[2] = { BLE_GATT_HVX_NOTIFICATION, 0 };
+
+	ble_gattc_write_params_t const write_params = {
+		.write_op = BLE_GATT_OP_WRITE_REQ,    // CCCD writes are write-with-response per spec
+		.flags    = BLE_GATT_EXEC_WRITE_FLAG_PREPARED_WRITE,
+		.handle   = CccdHandle,
+		.offset   = 0,
+		.len      = sizeof(buf),
+		.p_value  = buf,
+	};
+
+	return sd_ble_gattc_write(ConnHandle, &write_params) == NRF_SUCCESS;
+}
 
 
