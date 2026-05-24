@@ -624,7 +624,7 @@ in your project's build configuration.
 #endif
 
 #ifndef CONFIG_PM_PARTITION_OFFSET
-#define CONFIG_PM_PARTITION_OFFSET        0x156c00UL
+#define CONFIG_PM_PARTITION_OFFSET        0x15a800UL//0x156c00UL
 #endif
 
 #ifndef CONFIG_PM_PARTITION_SIZE
@@ -632,7 +632,7 @@ in your project's build configuration.
 #endif
 
 #ifndef CONFIG_STORAGE0_PARTITION_OFFSET
-#define CONFIG_STORAGE0_PARTITION_OFFSET  0x157c00UL
+#define CONFIG_STORAGE0_PARTITION_OFFSET  0x15b800UL //0x157c00UL
 #endif
 
 #ifndef CONFIG_STORAGE0_PARTITION_SIZE
@@ -705,7 +705,7 @@ in your project's build configuration.
  */
 #ifndef CONFIG_SOFTDEVICE_BASE_ADDRESS
 #if defined(NRF54L15_XXAA)
-#define CONFIG_SOFTDEVICE_BASE_ADDRESS  0x158C00
+#define CONFIG_SOFTDEVICE_BASE_ADDRESS  0x15a800UL//0x158C00
 #elif defined(NRF54L05_XXAA)
 #define CONFIG_SOFTDEVICE_BASE_ADDRESS  0x62000
 #else

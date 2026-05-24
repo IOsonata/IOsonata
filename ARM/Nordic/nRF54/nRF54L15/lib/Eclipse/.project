@@ -36,51 +36,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>docs/README_docs_generation_note.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/README_docs_generation_note.md</location>
-		</link>
-		<link>
-			<name>docs/REQUEST_CLARIFICATION.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/REQUEST_CLARIFICATION.md</location>
-		</link>
-		<link>
-			<name>docs/ack.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/ack.md</location>
-		</link>
-		<link>
-			<name>docs/ble_conn_cfg_t.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/src/bluetooth/ble_conn_cfg_t.md</location>
-		</link>
-		<link>
-			<name>docs/ble_event_polling_iosonata.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/ble_event_polling_iosonata.md</location>
-		</link>
-		<link>
-			<name>docs/central_sec_count.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/src/bluetooth/central_sec_count.md</location>
-		</link>
-		<link>
-			<name>docs/create_project_file_usage.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/create_project_file_usage.md</location>
-		</link>
-		<link>
-			<name>docs/iosonata_ble_evt_poll_replacement.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/iosonata_ble_evt_poll_replacement.md</location>
-		</link>
-		<link>
-			<name>docs/tooling_acknowledgement.md</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/src/tooling_acknowledgement.md</location>
-		</link>
-		<link>
 			<name>include/app_evt_handler.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
@@ -576,11 +531,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/bm_compat_ds.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bm_compat_phy_shim.h</name>
-			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF54/include/bm_compat_phy_shim.h</location>
-		</link>
-		<link>
 			<name>include/bluetooth/bm_config_defaults.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/bm_config_defaults.h</locationURI>
@@ -664,11 +614,6 @@
 			<name>include/bluetooth/bt_uuid.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_uuid.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/crypto_values_lms.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_values_lms.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_device.h</name>
