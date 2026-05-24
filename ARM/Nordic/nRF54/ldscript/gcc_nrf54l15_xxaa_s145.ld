@@ -3,11 +3,11 @@
  * nRF54L15 with SoftDevice S145
  *
  * RRAM layout:
- *   0x000000 - 0x156BFF  slot0_partition (app) — 1371K
- *   0x156C00 - 0x158BFF  storage_partition     — 8K
- *     0x156C00 - 0x157BFF  peer_manager_partition — 4K
- *     0x157C00 - 0x158BFF  storage0_partition     — 4K
- *   0x158C00 - 0x17CBFF  softdevice_partition  — 144K
+ *   0x000000 - 0x1587FF  slot0_partition (app) — 1371K
+ *   0x158800 - 0x15a7FF  storage_partition     — 8K
+ *     0x158800 - 0x1597FF  peer_manager_partition — 4K
+ *     0x159800 - 0x15a7FF  storage0_partition     — 4K
+ *   0x15a800 - 0x17CBFF  softdevice_partition  — 137K
  *
  * SRAM layout (128K at 0x20000000):
  *   0x20000000 - 0x200017FF  softdevice_static_ram  — 6K
@@ -29,7 +29,7 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x15a800  /* slot0 only, before storage partition */
+	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x158800  /* slot0 only, before storage partition */
 	RAM   (rwx) : ORIGIN = 0x20004900, LENGTH = 0x3B700   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
 }
 
