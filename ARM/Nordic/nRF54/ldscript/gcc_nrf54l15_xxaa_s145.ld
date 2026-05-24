@@ -29,7 +29,7 @@ GROUP(-lgcc -lc)
 
 MEMORY
 {
-	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x156C00  /* slot0 only, before storage partition */
+	FLASH (rx)  : ORIGIN = 0x000000, LENGTH = 0x15a800  /* slot0 only, before storage partition */
 	RAM   (rwx) : ORIGIN = 0x20004900, LENGTH = 0x3B700   /* after S145 reserved (0x4780), spans RAM0+RAM1 */
 }
 
