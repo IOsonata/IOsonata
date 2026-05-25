@@ -199,7 +199,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
-	.SDEvtHandler = NULL				// RTOS Softdevice handler
 };
 
 #define BLEINTRF_FIFOSIZE			BTINTRF_CFIFO_TOTAL_MEMSIZE(10, PACKET_SIZE)

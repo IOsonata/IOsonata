@@ -144,11 +144,11 @@ int main()
 		}
 #else
 		s_bTxDone = false;
-		while (nrfx_uarte_rx(&g_Uarte, buff, TEST_BUFSIZE) != NRFX_SUCCESS);
+		while (nrfx_uarte_rx((nrfx_uarte_t*)&g_Uarte, buff, TEST_BUFSIZE, 0) != NRFX_SUCCESS);
 		while (s_bRxDone == false);
 		s_bRxDone = false;
 		s_bTxDone = false;
-		while (nrfx_uarte_tx(&g_Uarte, buff, TEST_BUFSIZE) != NRFX_SUCCESS);
+		while (nrfx_uarte_tx((nrfx_uarte_t*)&g_Uarte, buff, TEST_BUFSIZE, 0) != NRFX_SUCCESS);
 		while (s_bTxDone == false);
 
 #endif

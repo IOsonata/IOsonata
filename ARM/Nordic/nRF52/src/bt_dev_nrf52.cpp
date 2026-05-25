@@ -145,7 +145,6 @@ typedef struct __Bt_Dev_Data_nRF5 {
 	//ble_gap_adv_data_t AdvData;
 	int PeriphDevCnt;
 //	BLEAPP_PERIPH *pPeriphDev;
-	uint32_t (*SDEvtHandler)(void) ;
 	//ble_advdata_t AdvData;
 	//ble_advdata_t SrData;
     //ble_advdata_manuf_data_t ManufData;
@@ -1745,11 +1744,6 @@ bool BtDevConnectable(const BtDevCfg_t *pCfg, bool bEraseBond)
 }
 
 
-static void ble_rtos_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
-{
-    s_BtDevDatanRF5.SDEvtHandler();
-}
-
 int8_t GetValidTxPower(int TxPwr)
 {
 	int8_t retval = s_TxPowerdBm[0];
@@ -1885,11 +1879,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 				;
     }
 #endif
-	s_BtDevDatanRF5.SDEvtHandler = pCfg->SDEvtHandler;
-    if (pCfg->SDEvtHandler == NULL)
-    {
-		APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
-    }
+	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
 
 //    nrf_ble_lesc_init();
 #if 0

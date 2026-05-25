@@ -155,7 +155,7 @@ const BtAppDevInfo_t s_UartBleDevDesc {
 	"0.0",                  // Hardware version string
 };
 
-void SD_FreeRTOS_Handler(void);
+void BtAppEvtNotify(void);
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
@@ -184,7 +184,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
-	.SDEvtHandler = SD_FreeRTOS_Handler,		// RTOS Softdevice handler
 };
 
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
@@ -322,7 +321,7 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 	return cnt;
 }
 
-void SD_FreeRTOS_Handler(void)
+void BtAppEvtNotify(void)
 {
     BaseType_t yield_req = pdFALSE;
 
@@ -342,7 +341,7 @@ void SD_FreeRTOS_Handler(void)
 }
 
 
-void BtAppRtosWaitEvt(void)
+void BtAppEvtWait(void)
 {
 
     nrf_sdh_evts_poll();                    /* let the handlers run first, incase the EVENT occured before creating this task */

@@ -152,7 +152,6 @@ const BtAppCfg_t s_BleAppCfg = {
 		.ConnLedPin = LED_BLUE_PIN,				// Led pin number
 		.ConnLedActLevel = 0,					// Connection LED ON logic level (0: Logic low, 1: Logic high)
 		.TxPower = 0,							// Tx power
-		.SDEvtHandler = NULL,					// RTOS Softdevice handler
 		.MaxMtu = BLE_MTU_SIZE,
 };
 

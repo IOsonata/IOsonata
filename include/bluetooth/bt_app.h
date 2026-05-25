@@ -155,7 +155,6 @@ typedef struct __Bt_App_Cfg {
 	int8_t ConnLedPin;				//!< Connection LED pin number
 	uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
 	int TxPower;					//!< Tx power in dBm, -20 to +4 dBm TX power, configurable in 4 dB steps
-	void (*SDEvtHandler)(void); //!< Require for BLEAPP_MODE_RTOS
 	uint16_t MaxMtu;				//!< Max MTU size or 0 for default
 	BTAPP_COEXMODE CoexMode;		//!< Enable support for CoEx
 	int PeriphDevCnt;				//!< Max number of peripheral connection
@@ -287,10 +286,14 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 
 //void BleDevServiceDiscovered(uint16_t ConnHdl, uint16_t Count, ble_gattc_service_t * const pServices);
 
-//*** Require implementation if app operating mode is BLEAPP_MODE_RTOS
-// This function should normal wait for RTOS to signal an event on sent by
-// Softdevice
-void BtAppRtosWaitEvt(void);
+//*** RTOS integration hooks.
+// BtAppEvtNotify is called from port IRQ handlers. Weak default is empty.
+// Apps using an RTOS provide strong overrides:
+//   BtAppEvtWait    - block until BtAppEvtNotify signals (typically a semaphore take)
+//   BtAppEvtNotify  - signal from IRQ (typically semaphore give from ISR)
+// Bare-metal polling apps don't override; the port's BtAppRun handles polling.
+void BtAppEvtWait(void);
+void BtAppEvtNotify(void);
 void BtAppEvtDispatch();
 
 /**

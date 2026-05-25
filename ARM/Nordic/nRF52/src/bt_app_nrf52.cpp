@@ -158,7 +158,6 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 // that has no meaning outside this port.
 typedef struct __Bt_App_Nrf52_Data {
 	ble_gap_adv_params_t AdvParam;		//!< SoftDevice adv params
-	void (*SDEvtHandler)(void);			//!< Legacy RTOS hook, removed in later step
 } BtAppNrf52Data_t;
 
 #pragma pack(pop)
@@ -183,7 +182,7 @@ static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 
 NRF_BLE_GATT_DEF(s_Gatt);
 
-static BtAppNrf52Data_t s_Nrf52Data = { {0}, NULL };
+static BtAppNrf52Data_t s_Nrf52Data = { {0} };
 
 // g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
 // BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
@@ -1696,10 +1695,6 @@ bool BtAppStackInit(int MaxMtu, int CentLinkCount, int PeriLinkCount, bool bConn
     return true;
 }
 
-static void ble_rtos_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
-{
-	s_Nrf52Data.SDEvtHandler();
-}
 #if 1
 int8_t GetValidTxPower(int TxPwr)
 {
@@ -1778,6 +1773,8 @@ uint32_t GetLFAccuracy(uint32_t AccPpm)
  *
  * @details This function initializes the SoftDevice and the BLE event interrupt.
  */
+static void BtAppSDDispatch(void);
+
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
@@ -1842,11 +1839,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 				;
     }
 #endif
-    s_Nrf52Data.SDEvtHandler = pCfg->SDEvtHandler;
-    if (s_Nrf52Data.SDEvtHandler == NULL)
-    {
-		APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
-    }
+	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
 
     if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
     {
@@ -1859,14 +1852,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     	0
     };
 
-    if (s_Nrf52Data.SDEvtHandler)
-    {
-    	SetSoftdeviceDispatch(s_Nrf52Data.SDEvtHandler);
-    }
-    else
-    {
-    	SetSoftdeviceDispatch(nrf_sdh_evts_poll);
-    }
+    SetSoftdeviceDispatch(BtAppSDDispatch);
 
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
 	if (lfosc->Type == OSC_TYPE_RC)
@@ -1992,22 +1978,10 @@ void BtAppRun()
 
 	while (1)
     {
-//		if (g_BleAppData.AppMode == BLEAPP_MODE_RTOS)
-    	if (s_Nrf52Data.SDEvtHandler != NULL)
-		{
-			BtAppRtosWaitEvt();
-		}
-		else
-		{
-//			if (g_BleAppData.AppMode == BLEAPP_MODE_APPSCHED)
-			{
-				app_sched_execute();
-//				AppEvtHandlerDispatch();
-				AppEvtHandlerExec();
-			}
-			nrf_ble_lesc_request_handler();
-			sd_app_evt_wait();
-		}
+		app_sched_execute();
+		AppEvtHandlerExec();
+		nrf_ble_lesc_request_handler();
+		BtAppEvtWait();
     }
 
 	/*	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
@@ -2325,64 +2299,22 @@ void BtAppEvtDispatch()
     nrf_sdh_evts_poll();                    /* let the handlers run first, incase the EVENT occured before creating this task */
 }
 
-#if 0
-/**@brief   Function for polling SoftDevice events.
- *
- * @note    This function is compatible with @ref app_sched_event_handler_t.
- *
- * @param[in]   p_event_data Pointer to the event data.
- * @param[in]   event_size   Size of the event data.
- */
-static void appsh_events_poll(void * p_event_data, uint16_t event_size)
+// Port-level weak default for BtAppEvtWait. Bare-metal polling apps use this.
+// RTOS apps provide a strong override (e.g. ulTaskNotifyTake / TaktOSSemTake)
+// in their bridge code, which beats this weak.
+__attribute__((weak)) void BtAppEvtWait(void)
 {
-    nrf_sdh_evts_poll();
-
-    UNUSED_PARAMETER(p_event_data);
-    UNUSED_PARAMETER(event_size);
+	sd_app_evt_wait();
 }
 
-extern "C" void SD_EVT_IRQHandler(void)
+// Trampoline called from sd_dispatch.cpp's SD_EVT_IRQHandler.
+// Notifies any RTOS waiter then drains SoftDevice events so NRF_SDH observers run.
+static void BtAppSDDispatch(void)
 {
-#if 0
-	switch (g_BleAppData.AppMode)
-	{
-		case BLEAPP_MODE_LOOP:
-		case BLEAPP_MODE_NOCONNECT:
-			nrf_sdh_evts_poll();
-			break;
-		case BLEAPP_MODE_APPSCHED:
-			{
-				ret_code_t ret_code = app_sched_event_put(NULL, 0, appsh_events_poll);
-
-				APP_ERROR_CHECK(ret_code);
-			}
-			break;
-		case BLEAPP_MODE_RTOS:
-			if (g_BleAppData.SDEvtHandler)
-			{
-				g_BleAppData.SDEvtHandler();
-			}
-			break;
-		default:
-			;
-	}
-#endif
-	if (s_Nrf52Data.SDEvtHandler != NULL)
-	{
-		s_Nrf52Data.SDEvtHandler();
-	}
-	else
-	{
-#if 0
-		ret_code_t ret_code = app_sched_event_put(NULL, 0, appsh_events_poll);
-
-		APP_ERROR_CHECK(ret_code);
-#else
-		nrf_sdh_evts_poll();
-#endif
-	}
+	BtAppEvtNotify();
+	nrf_sdh_evts_poll();
 }
-#endif
+
 #if 1
 // We need this here in order for the Linker to keep the nrf_sdh_soc.c
 // which is require for Softdevice to function properly

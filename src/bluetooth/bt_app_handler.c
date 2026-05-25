@@ -74,7 +74,7 @@ __attribute__((weak))  void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 
 }
 
-__attribute__((weak)) void BtAppRtosWaitEvt(void)
+__attribute__((weak)) void BtAppEvtNotify(void)
 {
 
 }

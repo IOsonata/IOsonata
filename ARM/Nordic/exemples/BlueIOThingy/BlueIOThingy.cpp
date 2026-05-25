@@ -185,7 +185,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPin = CONNECT_LED_PIN,// Led pin number
 	.ConnLedActLevel = CONNECT_LED_LOGIC,
 	.TxPower = 0,						// Tx power
-	.SDEvtHandler = NULL,				// RTOS Softdevice handler
 	.MaxMtu = 247,
 	.AttDBMemSize = BT_ATT_DB_MEMSIZE,
 };

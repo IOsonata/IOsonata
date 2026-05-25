@@ -354,7 +354,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 4,						// Tx power
-	.SDEvtHandler = NULL,				// RTOS Softdevice handler
 	.MaxMtu = BLE_MTU_SIZE,
 };
 

@@ -123,12 +123,11 @@ static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 // that has no meaning outside this port.
 typedef struct __Bt_App_Bm_Data {
 	ble_gap_adv_params_t AdvParam;		//!< sdk-nrf-bm adv params
-	void (*SDEvtHandler)(void);			//!< Legacy RTOS hook, removed in later step
 } BtAppBmData_t;
 
 #pragma pack(pop)
 
-static BtAppBmData_t s_BmData = { {0}, NULL };
+static BtAppBmData_t s_BmData = { {0} };
 
 // g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
 // BtAppGetConnHandle, BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
@@ -1008,22 +1007,16 @@ void BtAppRun()
 
 	while (1)
 	{
-    	if (s_BmData.SDEvtHandler != NULL)
-		{
-    		// TODO
-			//BtAppRtosWaitEvt();
-		}
-		else
-		{
-			AppEvtHandlerExec();
-
-			// Wait for event (low power sleep)
-			// bm framework uses __WFE() directly, not sd_app_evt_wait()
-			__WFE();
-			//__SEV();
-			//__WFE();
-		}
+		AppEvtHandlerExec();
+		BtAppEvtWait();
 	}
+}
+
+// Port-level weak default for BtAppEvtWait. Bare-metal apps use __WFE.
+// RTOS apps override with sem take in their bridge code.
+__attribute__((weak)) void BtAppEvtWait(void)
+{
+	__WFE();
 }
 
 static void soc_evt_poll(void *context)
