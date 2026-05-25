@@ -1316,11 +1316,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/pdm_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/ble_dev.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/ble_dev.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/blueio_blesrvc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/blueio_blesrvc.cpp</locationURI>

@@ -160,7 +160,7 @@ static void on_conn_params_evt(const struct ble_conn_params_evt *p_evt)
 {
 	if (p_evt->evt_type == BLE_CONN_PARAMS_EVT_ERROR)
 	{
-		sd_ble_gap_disconnect(g_BtAppData.ConnHdl,
+		sd_ble_gap_disconnect(BtAppGetConnHandle(),
 							  BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
 	}
 }
@@ -172,7 +172,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	uint32_t err_code;
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
 	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
-	uint8_t role = g_BtAppData.Role;
+	uint8_t role = g_BtAppData.AppDevice.Role;
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
 	switch (p_ble_evt->header.evt_id)
@@ -182,17 +182,17 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			BtGapAddConnection(p_gap_evt->conn_handle, role,
 							   p_gap_evt->params.connected.peer_addr.addr_type,
 							   (uint8_t *)p_gap_evt->params.connected.peer_addr.addr);
-			g_BtAppData.ConnHdl = p_ble_evt->evt.gap_evt.conn_handle;
+			BtAppPeerAlloc(p_ble_evt->evt.gap_evt.conn_handle);
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 			break;
 
 		case BLE_GAP_EVT_DISCONNECTED:
 			BtAppConnLedOff();
-			g_BtAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
+			BtAppPeerPoolInit();
 			g_BtAppData.State = BTAPP_STATE_IDLE;
 			BtAppEvtDisconnected(p_ble_evt->evt.gap_evt.conn_handle);
-			if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+			if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 			{
 				BtAdvStart();
 			}
@@ -225,7 +225,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 		case BLE_GATTS_EVT_SYS_ATTR_MISSING:
 			err_code = sd_ble_gatts_sys_attr_set(
-				g_BtAppData.ConnHdl, NULL, 0, 0);
+				BtAppGetConnHandle(), NULL, 0, 0);
 			(void)err_code;
 			break;
 
@@ -241,7 +241,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 		case BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST:
 		{
-			uint16_t mtu = g_BtAppData.MaxMtu;
+			uint16_t mtu = g_BtAppData.AppDevice.MaxMtu;
 			err_code = sd_ble_gatts_exchange_mtu_reply(
 				p_ble_evt->evt.gatts_evt.conn_handle, mtu);
 			(void)err_code;
@@ -254,7 +254,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 	// Forward to central/observer handlers
 	if ((role == BLE_GAP_ROLE_CENTRAL) ||
-		(g_BtAppData.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
+		(g_BtAppData.AppDevice.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
 	{
 		switch (p_ble_evt->header.evt_id)
 		{
@@ -298,7 +298,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	}
 
 	// Forward to peripheral handlers
-	if (g_BtAppData.Role & BTAPP_ROLE_PERIPHERAL)
+	if (g_BtAppData.AppDevice.Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		BtGattEvtHandler((uint32_t)p_ble_evt->header.evt_id, (void *)p_ble_evt);
 		BtAppPeriphEvtHandler((uint32_t)p_ble_evt->header.evt_id, (void *)p_ble_evt);
@@ -320,7 +320,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	if (g_BtAppData.ConnHdl == BLE_CONN_HANDLE_INVALID)
+	if (BtAppGetConnHandle() == BLE_CONN_HANDLE_INVALID)
 		return false;
 
 	BtGattCharSetValue(pChar, pData, DataLen);
@@ -335,7 +335,7 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	params.p_data = pData;
 	params.p_len = &DataLen;
 
-	sd_ble_gatts_hvx(g_BtAppData.ConnHdl, &params);
+	sd_ble_gatts_hvx(BtAppGetConnHandle(), &params);
 
 	return true;
 }
@@ -344,14 +344,14 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 
 void BtAppDisconnect()
 {
-	if (g_BtAppData.ConnHdl != BLE_CONN_HANDLE_INVALID)
+	if (BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
 	{
 		uint32_t err_code = sd_ble_gap_disconnect(
-			g_BtAppData.ConnHdl,
+			BtAppGetConnHandle(),
 			BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 		if (err_code == NRF_ERROR_INVALID_STATE)
 		{
-			g_BtAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
+			BtAppPeerPoolInit();
 		}
 	}
 }
@@ -615,22 +615,22 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	// Populate internal app data from config
-	g_BtAppData.Role = pCfg->Role;
+	g_BtAppData.AppDevice.Role = pCfg->Role;
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
-	g_BtAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
+	BtAppPeerPoolInit();
 	g_BtAppData.bExtAdv = pCfg->bExtAdv;
 	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
 	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
 	g_BtAppData.bScan = false;
-	g_BtAppData.VendorId = pCfg->VendorId;
-	g_BtAppData.ProductId = pCfg->ProductId;
-	g_BtAppData.ProductVer = pCfg->ProductVer;
-	g_BtAppData.Appearance = pCfg->Appearance;
+	g_BtAppData.AppDevice.VendorId = pCfg->VendorId;
+	g_BtAppData.AppDevice.ProductId = pCfg->ProductId;
+	g_BtAppData.AppDevice.ProductVer = pCfg->ProductVer;
+	g_BtAppData.AppDevice.Appearance = pCfg->Appearance;
 
-	g_BtAppData.MaxMtu = GATT_MTU_SIZE_DEFAULT;
+	g_BtAppData.AppDevice.MaxMtu = GATT_MTU_SIZE_DEFAULT;
 	if (pCfg->MaxMtu > GATT_MTU_SIZE_DEFAULT)
-		g_BtAppData.MaxMtu = pCfg->MaxMtu;
+		g_BtAppData.AppDevice.MaxMtu = pCfg->MaxMtu;
 
 	// Setup connection LED
 	if (pCfg->ConnLedPort != -1 && pCfg->ConnLedPin != -1)
@@ -689,10 +689,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Initialize user data
 	BtAppInitUserData();
 
-	g_BtAppData.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
+	g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
 
 	// Initialize advertising
-	if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		if (BtAppAdvInit(pCfg) == false)
 		{
@@ -736,7 +736,7 @@ void BtAppRun()
 		return;
 	}
 
-	if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		BtAdvStart();
 	}

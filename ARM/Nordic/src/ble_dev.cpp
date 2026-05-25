@@ -84,7 +84,7 @@ int BleDevFindService(BtDev_t * const pDev, uint16_t Uuid)
 {
     for (int i = 0; i < pDev->NbSrvc; i++)
     {
-    	if (pDev->Services[i].srv_uuid.uuid == Uuid)
+    	if (pDev->Services[i].srv_uuid.Uuid == Uuid)
     	{
     		return i;
     	}
@@ -97,7 +97,7 @@ int BleDevFindCharacteristic(BtDev_t * const pDev, int SrvcIdx, uint16_t Uuid)
 {
     for (int i = 0; i < pDev->Services[SrvcIdx].char_count; i++)
     {
-    	if (pDev->Services[SrvcIdx].charateristics[i].characteristic.uuid.uuid == Uuid)
+    	if (pDev->Services[SrvcIdx].charateristics[i].characteristic.uuid.Uuid == Uuid)
     	{
     		return i;
     	}

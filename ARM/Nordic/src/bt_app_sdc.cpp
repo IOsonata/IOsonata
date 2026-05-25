@@ -218,7 +218,7 @@ void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
 
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_t PeerAddr[6])
 {
-	g_BtAppData.ConnHdl = ConnHdl;
+	BtAppPeerAlloc(ConnHdl);
 
 	BtGapAddConnection(ConnHdl, Role, PeerAddrType, PeerAddr);
 
@@ -229,8 +229,8 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	g_BtDevSdc.pHciDev = (BtHciDevice_t*) &s_BtHciDev;
 	s_BtHciDev.pBtDev = (void*) &g_BtDevSdc;
 
-	//DEBUG_PRINTF("This device's Role = %d\r\n", g_BtAppData.Role);
-	if (g_BtAppData.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+	//DEBUG_PRINTF("This device's Role = %d\r\n", g_BtAppData.AppDevice.Role);
+	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
 		// TODO: obtain the connected peripheral device's name and store to g_BtDevSdc.Name;
 		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
@@ -275,9 +275,9 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 		BtAppEvtDisconnected(ConnHdl);
 	}
 
-	g_BtAppData.ConnHdl = BtGapGetConnection();
+	BtAppPeerAlloc(BtGapGetConnection());
 
-	if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		g_BtAppData.State = BTAPP_STATE_IDLE;
 		BtAppAdvStart();
@@ -336,7 +336,7 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 uint16_t BleAppGetConnHandle()
 {
-	return g_BtAppData.ConnHdl;
+	return BtAppGetConnHandle();
 }
 
 static uint8_t BtStackRandPrioLowGet(uint8_t *pBuff, uint8_t Len)
@@ -647,16 +647,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		//mpsl_coex_support_802152_3wire_gpiote_if();
 	}
 
-	g_BtAppData.Role = pCfg->Role;
-	DEBUG_PRINTF("g_BtAppData.Role = %d\r\n", g_BtAppData.Role);
+	g_BtAppData.AppDevice.Role = pCfg->Role;
+	DEBUG_PRINTF("g_BtAppData.AppDevice.Role = %d\r\n", g_BtAppData.AppDevice.Role);
 
 	g_BtAppData.bExtAdv = pCfg->bExtAdv;
 	g_BtAppData.bScan = false;
 //	g_BtAppData.bAdvertising = false;
-	g_BtAppData.VendorId = pCfg->VendorId;
-	g_BtAppData.ProductId = pCfg->ProductId;
-	g_BtAppData.ProductVer = pCfg->ProductVer;
-	g_BtAppData.Appearance = pCfg->Appearance;
+	g_BtAppData.AppDevice.VendorId = pCfg->VendorId;
+	g_BtAppData.AppDevice.ProductId = pCfg->ProductId;
+	g_BtAppData.AppDevice.ProductVer = pCfg->ProductVer;
+	g_BtAppData.AppDevice.Appearance = pCfg->Appearance;
 	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
 	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
@@ -849,7 +849,7 @@ void BtAppRun()
 		return;
 	}
 
-	if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		BtAppAdvStart();
 	}

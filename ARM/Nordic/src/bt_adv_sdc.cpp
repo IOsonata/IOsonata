@@ -97,7 +97,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.VendorId;
+		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 		memcpy(&p->Data[2], pAdvData, AdvLen);
 
     	if (g_BtAppData.bExtAdv == true)
@@ -134,7 +134,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.VendorId;
+		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 		memcpy(&p->Data[2], pAdvData, AdvLen);
 
     	if (g_BtAppData.bExtAdv == false)

@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
 @file	bt_dev.h
 
-@brief	Implementation allow the creation of generic BLE peripheral device class.
-
-This BLE device class is used by BLE Central application to connect and communicate
-with it.
+@brief	Bluetooth device representation. Same struct for local stack
+		identity and for tracked remote peers. Operations differ by who
+		drives them, factored into separate function namespaces
+		(BtApp*() for app driven, BtDevice*() for shared queries).
 
 @author	Hoang Nguyen Hoan
 @date	Jan. 17, 2019
@@ -38,81 +38,124 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BT_DEV_H__
 #define __BT_DEV_H__
 
+#include <stdint.h>
+#include <stdbool.h>
+
+// "device.h" is included for compatibility - the old bt_dev.h pulled it in,
+// and several ports (notably the BM nRF54 backend) rely on the transitive
+// inclusion of coredev/timer.h, coredev/iopincfg.h, and device_intrf.h
+// that comes from this header. Removing it would force every dependent
+// port to add explicit includes.
 #include "device.h"
 
-#ifdef SOFTDEVICE_PRESENT
-#include "ble_gatt_db.h"
-#else
 #include "bluetooth/bt_gatt.h"
-#endif
+#include "bluetooth/bt_hci.h"
 
 /** @addtogroup Bluetooth
   * @{
   */
 
-#define BLEDEV_NAME_MAXLEN			20
+#define BT_DEV_NAME_MAXLEN			30
+#define BT_DEV_SERVICE_MAXCNT		10
 
+/// Bluetooth device representation. One instance for the local stack's
+/// own identity, one instance per tracked remote peer. Same structure
+/// in both cases. Role asymmetry lives in the operations (BtApp*() for
+/// app driven, BtDevice*() for shared queries), not in the type.
+///
+/// Field occupancy by role:
+///   local  : Name = own GAP name, Addr = own BD_ADDR, Role = bitmask of
+///            GAP roles this stack takes, Services = exposed GATT DB,
+///            ConnHdl = unused, pHciDev = the controller in use.
+///   remote : Name = peer's reported name, Addr = peer's BD_ADDR,
+///            Role = LL role peer plays on the active link,
+///            Services = discovered GATT DB, ConnHdl = active link handle,
+///            pHciDev = the local controller managing this link.
+typedef struct __Bt_Device {
+	char			Name[BT_DEV_NAME_MAXLEN];	//!< Device name
+	uint8_t			Addr[6];					//!< BD_ADDR
+	uint8_t			AddrType;					//!< Address type (public, random static, ...)
+	uint8_t			Role;						//!< GAP role bitmask: BT_GAP_ROLE_*
+	uint16_t		Appearance;					//!< GAP appearance value
+	uint16_t		ConnHdl;					//!< Active link handle (BT_CONN_HDL_INVALID if none)
+	uint16_t		MaxMtu;						//!< Negotiated MTU
+	uint16_t		VendorId;					//!< PnP vendor ID
+	uint16_t		ProductId;					//!< PnP product ID
+	uint16_t		ProductVer;					//!< PnP product version
+	bool			bIsLocal;					//!< true for the local stack instance, false for tracked remotes
+	bool			bSecure;					//!< true if link is encrypted or device is bonded
+	BtHciDevice_t	*pHciDev;					//!< Associated HCI device
+	int				NbSrvc;						//!< Number of services in the Services array
+	BtGattDBSrvc_t	Services[BT_DEV_SERVICE_MAXCNT];	//!< Services: exposed if local, discovered if remote
+} BtDevice_t;
 
-typedef struct __Ble_Dev_Cfg {
-	char Name[BLEDEV_NAME_MAXLEN];			//!< Device name
-	uint8_t Addr[6];						//!< Device MAC address
-} BleDevCfg_t;
-
-typedef BleDevCfg_t	BLEDEV_CFG;
-
-#define BLEPERIPH_DEV_SERVICE_MAXCNT	10
-#define BLEPERIPH_DEV_NAME_MAXLEN		30
-
-typedef struct __Bt_Dev_Data {
-	char Name[BLEPERIPH_DEV_NAME_MAXLEN];
-	uint8_t Addr[6];
-	uint16_t ConnHdl;
-	int NbSrvc;
-#ifdef SOFTDEVICE_PRESENT
-	ble_gatt_db_srv_t Services[BLEPERIPH_DEV_SERVICE_MAXCNT];
-#else
-	BtHciDevice_t *pHciDev;
-	BtGattDBSrvc_t Services[BLEPERIPH_DEV_SERVICE_MAXCNT];
-#endif
-} BtDev_t;
-
-//typedef BleDev_t	BLEPERIPH_DEV;
+// --- Legacy aliases (pre-Voci rename) ---
+//
+// The previous public type was BtDev_t with BLEPERIPH_* constants. These
+// aliases let the existing ARM/Nordic/src/ble_dev.cpp, bt_dev_sdc.cpp, and
+// bt_attrsp.cpp keep compiling against the renamed type. Step 7's lift of
+// the discovery state machine will remove the dependents and these
+// aliases can then be deleted.
+typedef BtDevice_t BtDev_t;
+#define BLEPERIPH_DEV_NAME_MAXLEN	BT_DEV_NAME_MAXLEN
+#define BLEPERIPH_DEV_SERVICE_MAXCNT	BT_DEV_SERVICE_MAXCNT
 
 #ifdef __cplusplus
-
-class BleDev : public Device {
-public:
-	virtual bool Init(BleDevCfg_t &Cfg, DeviceIntrf * const pIntrf);
-	virtual bool Connect();
-	virtual void Disconnect();
-	virtual int BleSend(uint8_t * const pData, int DataLen);
-	virtual int BleReceive(uint8_t * const pBuff, int BuffLen);
-
-protected:
-private:
-	BtDev_t Dev;
-};
-
 extern "C" {
 #endif
 
-//bool BleAppDiscoverDevice(BleDev_t * const pDev);
-//uint32_t BleAppDiscoverDevice(BtDev_t * const pDev);
 /**
- * @brief	Peripheral discovered callback.
+ * @brief	Weak callback invoked when GATT discovery on a peer completes.
  *
- * This function is called in central mode when all services of the
- * device is fully discovered for the connected peripheral device.
+ * Backend's discovery flow populates pDev->Services with the discovered
+ * GATT DB and then calls this. Applications override to handle the
+ * completion (typically by calling BtDeviceFindService and
+ * BtDeviceFindCharacteristic to navigate the result).
  *
- * Application firmware should keep a copy of the peripheral data passed
- * for communication with the device.  The pointer is temporary and will be
- * destroyed upon return
+ * The pointer references stack managed memory. Applications that need
+ * to retain values across return should copy what they need.
  *
- * @param	pDev :	Pointer to peripheral device data
+ * @param	pDev	Pointer to the BtDevice_t whose discovery completed.
  */
-void BleDevDiscovered(BtDev_t *pDev);
-int BleDevFindService(BtDev_t * const pDev, uint16_t Uuid);
-int BleDevFindCharacteristic(BtDev_t * const pDev, int SrvcIdx, uint16_t Uuid);
+void BtDeviceDiscovered(BtDevice_t *pDev);
+
+/**
+ * @brief	Find a service in a device's Services array by 16 bit UUID.
+ *
+ * Works on any BtDevice_t (the Services array may be locally exposed
+ * or remotely discovered, the walk is the same).
+ *
+ * @param	pDev	Pointer to the BtDevice_t.
+ * @param	Uuid	16 bit service UUID.
+ *
+ * @return	Index of the matching service in pDev->Services,
+ *			or -1 if not found.
+ */
+int BtDeviceFindService(BtDevice_t * const pDev, uint16_t Uuid);
+
+/**
+ * @brief	Find a characteristic within a service by 16 bit UUID.
+ *
+ * @param	pDev		Pointer to the BtDevice_t.
+ * @param	SrvcIdx		Service index in pDev->Services (from BtDeviceFindService).
+ * @param	Uuid		16 bit characteristic UUID.
+ *
+ * @return	Index of the matching characteristic, or -1 if not found.
+ */
+int BtDeviceFindCharacteristic(BtDevice_t * const pDev, int SrvcIdx, uint16_t Uuid);
+
+// Legacy name forwarders. The three central-mode example apps still call
+// these. Step 7 updates the apps to the BtDevice* names; remove these
+// inlines at that point.
+static inline int BleDevFindService(BtDev_t * const pDev, uint16_t Uuid)
+{
+	return BtDeviceFindService(pDev, Uuid);
+}
+
+static inline int BleDevFindCharacteristic(BtDev_t * const pDev, int SrvcIdx, uint16_t Uuid)
+{
+	return BtDeviceFindCharacteristic(pDev, SrvcIdx, Uuid);
+}
 
 #ifdef __cplusplus
 }
@@ -121,4 +164,3 @@ int BleDevFindCharacteristic(BtDev_t * const pDev, int SrvcIdx, uint16_t Uuid);
 /** @} end group Bluetooth */
 
 #endif // __BT_DEV_H__
-

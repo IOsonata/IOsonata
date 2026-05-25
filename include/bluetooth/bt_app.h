@@ -232,28 +232,47 @@ extern "C" {
 
 typedef struct __Bt_App_Data {
 	BTAPP_STATE     State;          //!< Current app state
-	BTAPP_ROLE      Role;           //!< Configured role
 	uint8_t         AdvHdl;         //!< Advertising set handle, SDK-defined value
-	uint16_t        ConnHdl;        //!< Active connection handle, BT_CONN_HDL_INVALID when none
 	int8_t          ConnLedPort;    //!< Connection LED port, -1 if not used
 	int8_t          ConnLedPin;     //!< Connection LED pin, -1 if not used
 	uint8_t         ConnLedActLevel;//!< Connection LED active level
-	uint16_t        VendorId;       //!< PnP vendor id
-	uint16_t        ProductId;      //!< PnP product id
-	uint16_t        ProductVer;     //!< PnP product version
-	uint16_t        Appearance;     //!< GAP appearance
-	uint16_t        MaxMtu;         //!< Negotiated or configured max MTU
 	int             PeriphDevCnt;   //!< Peripheral connection count when in central role
 	BTAPP_COEXMODE  CoexMode;       //!< CoEx mode in effect
-	bool            bSecure;        //!< Secure connection enabled
 	bool            bExtAdv;        //!< Extended advertising enabled
 	bool            bScan;          //!< Scan currently enabled
 	bool            bInitialized;   //!< BtAppInit completed
+	BtDevice_t      AppDevice;      //!< Local device identity (bIsLocal = true). Holds Role,
+	                                //!< Appearance, VendorId, ProductId, ProductVer, MaxMtu,
+	                                //!< bSecure, Name, Addr, Services, etc.
 } BtAppData_t;
 
 #pragma pack(pop)
 
 extern BtAppData_t g_BtAppData;
+
+//-----------------------------------------------------------------------------
+// Tracked peer devices.
+//
+// Each active link populates one slot. A free slot has ConnHdl ==
+// BT_CONN_HDL_INVALID. The pool size is set by CFG_BT_PEER_MAX; default 4
+// covers most apps (most peripheral firmware allows only 1 active link, but
+// central / multilink apps can raise the cap).
+#ifndef CFG_BT_PEER_MAX
+#define CFG_BT_PEER_MAX     4
+#endif
+
+extern BtDevice_t g_BtPeerDevice[CFG_BT_PEER_MAX];
+
+// Peer pool helpers - all defined in src/bluetooth/bt_app.cpp.
+// Return NULL if no free slot / no match.
+void         BtAppPeerPoolInit(void);
+BtDevice_t * BtAppPeerAlloc(uint16_t ConnHdl);
+BtDevice_t * BtAppPeerFindByHdl(uint16_t ConnHdl);
+void         BtAppPeerFree(BtDevice_t *pPeer);
+
+// First peer with a valid ConnHdl, or NULL. Common shortcut for
+// single-link apps that just want "the active peer".
+BtDevice_t * BtAppGetActivePeer(void);
 
 // Internal helpers, defined in src/bluetooth/bt_app.cpp.
 // Called from port event handlers, not from app code.

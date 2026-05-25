@@ -34,20 +34,67 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
+#include <string.h>
+
 #include "iopinctrl.h"
 #include "bluetooth/bt_app.h"
 
 // Cross-arch app state. Port-specific state lives in port-private structs
 // inside each ARM/<vendor>/<chip>/src/bt_app_<port>.cpp.
 BtAppData_t g_BtAppData = {
-	BTAPP_STATE_UNKNOWN,			// State
-	BTAPP_ROLE_PERIPHERAL,			// Role
-	0xFF,							// AdvHdl - port overrides during init
-	BT_CONN_HDL_INVALID,			// ConnHdl
-	-1,								// ConnLedPort
-	-1,								// ConnLedPin
-	0,								// ConnLedActLevel
+	.State           = BTAPP_STATE_UNKNOWN,
+	.AdvHdl          = 0xFF,		// port overrides during init
+	.ConnLedPort     = -1,
+	.ConnLedPin      = -1,
+	.ConnLedActLevel = 0,
+	.PeriphDevCnt    = 0,
+	.CoexMode        = BTAPP_COEXMODE_NONE,
+	.bExtAdv         = false,
+	.bScan           = false,
+	.bInitialized    = false,
+	.AppDevice = {
+		// Local device identity. Filled in by BtAppInit from BtAppCfg_t.
+		.Name       = {0,},
+		.Addr       = {0,},
+		.AddrType   = 0,
+		.Role       = BTAPP_ROLE_PERIPHERAL,
+		.Appearance = 0,
+		.ConnHdl    = BT_CONN_HDL_INVALID,	// unused for local
+		.MaxMtu     = 0,
+		.VendorId   = 0,
+		.ProductId  = 0,
+		.ProductVer = 0,
+		.bIsLocal   = true,
+		.bSecure    = false,
+		.pHciDev    = NULL,
+		.NbSrvc     = 0,
+	},
 };
+
+// Peer device pool. Slots are free when ConnHdl == BT_CONN_HDL_INVALID.
+// Initialized lazily by BtAppPeerAlloc / BtAppGetActivePeer below; ports may
+// also call BtAppPeerPoolInit explicitly from BtAppInit for clarity.
+BtDevice_t g_BtPeerDevice[CFG_BT_PEER_MAX];
+static bool s_PeerPoolReady = false;
+
+void BtAppPeerPoolInit(void)
+{
+	for (int i = 0; i < CFG_BT_PEER_MAX; i++)
+	{
+		memset(&g_BtPeerDevice[i], 0, sizeof(g_BtPeerDevice[i]));
+		g_BtPeerDevice[i].ConnHdl  = BT_CONN_HDL_INVALID;
+		g_BtPeerDevice[i].bIsLocal = false;
+	}
+	s_PeerPoolReady = true;
+}
+
+static inline void EnsurePeerPool(void)
+{
+	if (!s_PeerPoolReady)
+	{
+		BtAppPeerPoolInit();
+	}
+}
 
 bool BtInitialized(void)
 {
@@ -56,17 +103,126 @@ bool BtInitialized(void)
 
 bool BtConnected(void)
 {
-	return g_BtAppData.ConnHdl != BT_CONN_HDL_INVALID;
+	return BtAppGetActivePeer() != NULL;
 }
 
 bool isConnected(void)
 {
-	return g_BtAppData.ConnHdl != BT_CONN_HDL_INVALID;
+	return BtAppGetActivePeer() != NULL;
 }
 
 uint16_t BtAppGetConnHandle(void)
 {
-	return g_BtAppData.ConnHdl;
+	BtDevice_t *p = BtAppGetActivePeer();
+	return p ? p->ConnHdl : BT_CONN_HDL_INVALID;
+}
+
+// --- Peer pool helpers ---
+
+BtDevice_t * BtAppPeerAlloc(uint16_t ConnHdl)
+{
+	if (ConnHdl == BT_CONN_HDL_INVALID)
+	{
+		return NULL;
+	}
+	EnsurePeerPool();
+
+	for (int i = 0; i < CFG_BT_PEER_MAX; i++)
+	{
+		if (g_BtPeerDevice[i].ConnHdl == BT_CONN_HDL_INVALID)
+		{
+			BtDevice_t *p = &g_BtPeerDevice[i];
+			memset(p, 0, sizeof(*p));
+			p->ConnHdl  = ConnHdl;
+			p->bIsLocal = false;
+			return p;
+		}
+	}
+	return NULL;
+}
+
+BtDevice_t * BtAppPeerFindByHdl(uint16_t ConnHdl)
+{
+	if (ConnHdl == BT_CONN_HDL_INVALID)
+	{
+		return NULL;
+	}
+	EnsurePeerPool();
+
+	for (int i = 0; i < CFG_BT_PEER_MAX; i++)
+	{
+		if (g_BtPeerDevice[i].ConnHdl == ConnHdl)
+		{
+			return &g_BtPeerDevice[i];
+		}
+	}
+	return NULL;
+}
+
+void BtAppPeerFree(BtDevice_t *pPeer)
+{
+	if (pPeer == NULL)
+	{
+		return;
+	}
+	pPeer->ConnHdl = BT_CONN_HDL_INVALID;
+}
+
+BtDevice_t * BtAppGetActivePeer(void)
+{
+	EnsurePeerPool();
+
+	for (int i = 0; i < CFG_BT_PEER_MAX; i++)
+	{
+		if (g_BtPeerDevice[i].ConnHdl != BT_CONN_HDL_INVALID)
+		{
+			return &g_BtPeerDevice[i];
+		}
+	}
+	return NULL;
+}
+
+// --- BtDevice queries (work on any BtDevice_t, local or remote) ---
+
+int BtDeviceFindService(BtDevice_t * const pDev, uint16_t Uuid)
+{
+	if (pDev == NULL)
+	{
+		return -1;
+	}
+
+	for (int i = 0; i < pDev->NbSrvc; i++)
+	{
+		if (pDev->Services[i].srv_uuid.Uuid == Uuid)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+int BtDeviceFindCharacteristic(BtDevice_t * const pDev, int SrvcIdx, uint16_t Uuid)
+{
+	if (pDev == NULL || SrvcIdx < 0 || SrvcIdx >= pDev->NbSrvc)
+	{
+		return -1;
+	}
+
+	BtGattDBSrvc_t *pSrvc = &pDev->Services[SrvcIdx];
+	for (int i = 0; i < pSrvc->char_count; i++)
+	{
+		if (pSrvc->charateristics[i].characteristic.uuid.Uuid == Uuid)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+// Weak default for the discovery-complete callback. App overrides.
+__attribute__((weak)) void BtDeviceDiscovered(BtDevice_t *pDev)
+{
+	(void)pDev;
 }
 
 void BtAppConnLedOff(void)

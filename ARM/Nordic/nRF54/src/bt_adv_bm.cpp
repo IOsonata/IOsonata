@@ -86,7 +86,7 @@ static ble_gap_adv_data_t s_BtAppAdvData = {
 void BtAdvStart()
 {
 	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING ||
-		g_BtAppData.ConnHdl != BLE_CONN_HANDLE_INVALID)
+		BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
 	{
 		return;
 	}
@@ -198,7 +198,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 		if (p == NULL)
 			return false;
-		*(uint16_t *)p->Data = g_BtAppData.VendorId;
+		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 		memcpy(&p->Data[2], pAdvData, AdvLen);
 		s_BtAppAdvData.adv_data.len = advpkt->Len;
 	}
@@ -210,7 +210,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
 		if (p == NULL)
 			return false;
-		*(uint16_t *)p->Data = g_BtAppData.VendorId;
+		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 		memcpy(&p->Data[2], pSrData, SrLen);
 		s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
 	}

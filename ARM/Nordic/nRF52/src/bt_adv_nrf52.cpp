@@ -73,7 +73,7 @@ static ble_gap_adv_data_t s_BtAppAdvData = {
 
 void BtAdvStart()//BLEAPP_ADVMODE AdvMode)
 {
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING || g_BtAppData.ConnHdl != BLE_CONN_HANDLE_INVALID)
+	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING || BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
 		return;
 
 //	g_BleAppData.bAdvertising = true;
@@ -141,7 +141,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 			{
 				return false;
 			}
-			*(uint16_t *)p->Data = g_BtAppData.VendorId;
+			*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 			memcpy(&p->Data[2], pAdvData, AdvLen);
 
 			s_BtAppAdvData.adv_data.len = advpkt->Len;
@@ -156,7 +156,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 			{
 				return false;
 			}
-			*(uint16_t *)p->Data = g_BtAppData.VendorId;
+			*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 			memcpy(&p->Data[2], pAdvData, AdvLen);
 
 			s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
@@ -185,7 +185,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 			{
 				return false;
 			}
-			*(uint16_t *)p->Data = g_BtAppData.VendorId;
+			*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 			memcpy(&p->Data[2], pAdvData, AdvLen);
 			memcpy(&p->Data[2 + AdvLen], pSrData, SrLen);
 			s_BtAppAdvData.adv_data.len = advpkt->Len;
