@@ -1326,6 +1326,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_adv_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_adv_nrf52.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_adv_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_adv_sdc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_app.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app.cpp</locationURI>

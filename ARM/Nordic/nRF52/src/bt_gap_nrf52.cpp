@@ -171,7 +171,7 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 											 BT_GAP_CONN_CFG_TAG);
     //APP_ERROR_CHECK(err_code);
 
-//    s_BtAppData.bScan = false;
+//    g_BtAppData.bScan = false;
 
     return err_code == NRF_SUCCESS;
 }
