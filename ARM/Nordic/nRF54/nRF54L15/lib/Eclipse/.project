@@ -1111,6 +1111,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_app.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_app_bm.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/nRF54/src/bt_app_bm.cpp</locationURI>
