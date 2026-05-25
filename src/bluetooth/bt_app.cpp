@@ -1,7 +1,8 @@
 /**-------------------------------------------------------------------------
 @file	bt_app.cpp
 
-@brief	Generic Bluetooth application firmware type.
+@brief	Generic Bluetooth application code shared across all ports.
+		Holds cross-arch state and helpers that have no SDK dependency.
 
 
 @author	Hoang Nguyen Hoan
@@ -33,34 +34,67 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
-#include "bluetooth/bt_host.h"
+#include "iopinctrl.h"
 #include "bluetooth/bt_app.h"
 
-// g_BtAppData is defined in each port's bt_app_<port>.cpp.
-// This file is kept as a stub; once it's added to all port builds and the
-// duplicate BtAppInit/BtAppRun stubs are reconciled, the definition can move
-// here. For step 1 the definition lives in the port file that's actually
-// compiled into the binary.
+// Cross-arch app state. Port-specific state lives in port-private structs
+// inside each ARM/<vendor>/<chip>/src/bt_app_<port>.cpp.
+BtAppData_t g_BtAppData = {
+	BTAPP_STATE_UNKNOWN,			// State
+	BTAPP_ROLE_PERIPHERAL,			// Role
+	0xFF,							// AdvHdl - port overrides during init
+	BT_CONN_HDL_INVALID,			// ConnHdl
+	-1,								// ConnLedPort
+	-1,								// ConnLedPin
+	0,								// ConnLedActLevel
+};
 
-static BtHostDev_t s_BtHostDev;
-
-bool BtAppInit(const BtHostCfg_t *pCfg)
+bool BtInitialized(void)
 {
-	BtHostInit(&s_BtHostDev, pCfg);
-
-	return true;
+	return g_BtAppData.State != BTAPP_STATE_UNKNOWN;
 }
 
-void BtAppRun()
+bool BtConnected(void)
 {
-	if (g_BtAppData.bInitialized == false)
-	{
+	return g_BtAppData.ConnHdl != BT_CONN_HDL_INVALID;
+}
+
+bool isConnected(void)
+{
+	return g_BtAppData.ConnHdl != BT_CONN_HDL_INVALID;
+}
+
+uint16_t BtAppGetConnHandle(void)
+{
+	return g_BtAppData.ConnHdl;
+}
+
+void BtAppConnLedOff(void)
+{
+	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
 		return;
-	}
 
-	if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.ConnLedActLevel)
 	{
-		BtDevAdvStart();
+		IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
 	}
+	else
+	{
+		IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
+	}
+}
 
+void BtAppConnLedOn(void)
+{
+	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
+		return;
+
+	if (g_BtAppData.ConnLedActLevel)
+	{
+		IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
+	}
+	else
+	{
+		IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
+	}
 }

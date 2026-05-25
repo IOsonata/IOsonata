@@ -130,18 +130,8 @@ typedef struct __Bt_App_Bm_Data {
 
 static BtAppBmData_t s_BmData = { {0}, NULL };
 
-// g_BtAppData is declared extern in bluetooth/bt_app.h.
-// Each port defines its own; only one port .o is linked per binary so no
-// duplicate symbol issue.
-BtAppData_t g_BtAppData = {
-	BTAPP_STATE_UNKNOWN,				// State
-	BTAPP_ROLE_PERIPHERAL,				// Role
-	BLE_GAP_ADV_SET_HANDLE_NOT_SET,		// AdvHdl
-	BLE_CONN_HANDLE_INVALID,			// ConnHdl
-	-1,									// ConnLedPort
-	-1,									// ConnLedPin
-	0,									// ConnLedActLevel
-};
+// g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
+// BtAppGetConnHandle, BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
 
 // --- Advertisement packet buffers ---
 
@@ -177,26 +167,6 @@ static Timer s_BtAppSdGrtc3;
 
 // --- Helper functions ---
 
-bool BtInitialized()
-{
-	return g_BtAppData.State != BTAPP_STATE_UNKNOWN;
-}
-
-bool BtConnected()
-{
-	return g_BtAppData.ConnHdl != BLE_CONN_HANDLE_INVALID;
-}
-
-bool isConnected()
-{
-	return g_BtAppData.ConnHdl != BLE_CONN_HANDLE_INVALID;
-}
-
-uint16_t BtAppGetConnHandle()
-{
-	return g_BtAppData.ConnHdl;
-}
-
 int8_t GetValidTxPower(int TxPwr)
 {
 	int8_t retval = s_TxPowerdBm[0];
@@ -209,30 +179,6 @@ int8_t GetValidTxPower(int TxPwr)
 	}
 
 	return retval;
-}
-
-// --- Connection LED helpers ---
-
-static void BtAppConnLedOff()
-{
-	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
-		return;
-
-	if (g_BtAppData.ConnLedActLevel)
-		IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	else
-		IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-}
-
-static void BtAppConnLedOn()
-{
-	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
-		return;
-
-	if (g_BtAppData.ConnLedActLevel)
-		IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	else
-		IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
 }
 
 // --- Conn params event handler ---

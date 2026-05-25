@@ -256,6 +256,11 @@ typedef struct __Bt_App_Data {
 
 extern BtAppData_t g_BtAppData;
 
+// Internal helpers, defined in src/bluetooth/bt_app.cpp.
+// Called from port event handlers, not from app code.
+void BtAppConnLedOff(void);
+void BtAppConnLedOn(void);
+
 
 // ***
 // Require implementations per app
@@ -299,6 +304,7 @@ void BtAppEvtDispatch();
 bool BtAppInit(const BtAppCfg_t * const pCfg);
 void BtAppEnterDfu(void);
 void BtAppRun(void);
+uint16_t BtAppGetConnHandle(void);
 uint16_t BleAppGetConnHandle(void);
 void BtAppGapDeviceNameSet(const char* ppDeviceName);
 

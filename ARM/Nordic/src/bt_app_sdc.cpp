@@ -96,18 +96,8 @@ static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 // SDC port has no SDK-specific state in BtAppData_t scope; everything that
 // remains here is already in the cross-arch struct.
 
-// g_BtAppData is declared extern in bluetooth/bt_app.h.
-// Each port defines its own; only one port .o is linked per binary so no
-// duplicate symbol issue.
-BtAppData_t g_BtAppData = {
-	BTAPP_STATE_UNKNOWN,				// State
-	BTAPP_ROLE_PERIPHERAL,				// Role
-	0xFF,								// AdvHdl
-	0xFFFF,								// ConnHdl
-	-1,									// ConnLedPort
-	-1,									// ConnLedPin
-	0,									// ConnLedActLevel
-};
+// g_BtAppData definition and helpers (isConnected, BtAppConnLedOff/On) moved to
+// src/bluetooth/bt_app.cpp.
 
 static BtHciDevice_t s_BtHciDev = {
 	.pCtx = (void*)&g_BtAppData,
@@ -236,40 +226,6 @@ char * const BleAppGetDevName()
 }
 
 */
-bool isConnected()
-{
-	return g_BtAppData.ConnHdl != 0;
-}
-
-static void BtAppConnLedOff()
-{
-	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
-		return;
-
-	if (g_BtAppData.ConnLedActLevel)
-	{
-	    IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	}
-	else
-	{
-	    IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	}
-}
-
-static void BtAppConnLedOn()
-{
-	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
-		return;
-
-    if (g_BtAppData.ConnLedActLevel)
-    {
-        IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-    }
-    else
-    {
-        IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-    }
-}
 
 void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
 {

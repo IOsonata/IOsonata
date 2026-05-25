@@ -185,18 +185,8 @@ NRF_BLE_GATT_DEF(s_Gatt);
 
 static BtAppNrf52Data_t s_Nrf52Data = { {0}, NULL };
 
-// g_BtAppData is declared extern in bluetooth/bt_app.h.
-// Each port defines its own; only one port .o is linked per binary so no
-// duplicate symbol issue.
-BtAppData_t g_BtAppData = {
-	BTAPP_STATE_UNKNOWN,				// State
-	BTAPP_ROLE_PERIPHERAL,				// Role
-	BLE_GAP_ADV_SET_HANDLE_NOT_SET,		// AdvHdl
-	BLE_CONN_HANDLE_INVALID,			// ConnHdl
-	-1,									// ConnLedPort
-	-1,									// ConnLedPin
-	0,									// ConnLedActLevel
-};
+// g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
+// BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
 
 //BtDev_t g_BtDevnRF5;
 
@@ -271,51 +261,6 @@ static ble_gatt_db_srv_t s_CurSrvcDisc;
 static int s_CurSrvcIdx = 0;
 static int s_CurCharIdx = 0;
 static ble_gattc_handle_range_t s_CurRange;
-
-bool BtInitialized()
-{
-	return g_BtAppData.State != BTAPP_STATE_UNKNOWN;
-}
-
-bool BtConnected()
-{
-	return g_BtAppData.ConnHdl != BLE_CONN_HANDLE_INVALID;
-}
-
-bool isConnected()
-{
-	return g_BtAppData.ConnHdl != BLE_CONN_HANDLE_INVALID;
-}
-
-static void BtAppConnLedOff()
-{
-	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
-		return;
-
-	if (g_BtAppData.ConnLedActLevel)
-	{
-	    IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	}
-	else
-	{
-	    IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	}
-}
-
-static void BtAppConnLedOn()
-{
-	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
-		return;
-
-    if (g_BtAppData.ConnLedActLevel)
-    {
-        IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-    }
-    else
-    {
-        IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-    }
-}
 
 void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 {
@@ -1132,11 +1077,6 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     // Generate the ECDH key pair and set public key in the peer-manager.
     //err_code = ble_lesc_ecc_keypair_generate_and_set();
     //APP_ERROR_CHECK(err_code);
-}
-
-uint16_t BtAppGetConnHandle()
-{
-	return g_BtAppData.ConnHdl;
 }
 
 /**@brief Function for handling events from the GATT library. */
