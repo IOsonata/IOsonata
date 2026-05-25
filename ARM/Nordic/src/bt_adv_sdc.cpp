@@ -238,8 +238,8 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		extprop |= BTADV_EXTADV_EVT_PROP_CONNECTABLE;
 	}
 
-	// Generic AD payload assembly.
-	if (BtAdvAssembleFromCfg(pCfg, advpkt, srpkt) == false)
+	// Generic AD payload encode.
+	if (BtAdvEncode(pCfg, advpkt, srpkt) == false)
 	{
 		return false;
 	}

@@ -295,7 +295,7 @@ size_t BtAdvDataGetManData(uint8_t *pAdvData, size_t AdvLen, uint8_t *pBuff, siz
 	return retval;
 }
 
-bool BtAdvAssembleFromCfg(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt)
+bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt)
 {
 	if (pCfg == nullptr || pAdvPkt == nullptr)
 	{

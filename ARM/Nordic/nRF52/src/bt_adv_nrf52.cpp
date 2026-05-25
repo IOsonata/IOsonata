@@ -250,8 +250,8 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 			BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED;
 	}
 
-	// Generic AD payload assembly.
-	if (BtAdvAssembleFromCfg(pCfg, advpkt, srpkt) == false)
+	// Generic AD payload encode.
+	if (BtAdvEncode(pCfg, advpkt, srpkt) == false)
 	{
 		return false;
 	}
