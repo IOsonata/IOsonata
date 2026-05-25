@@ -36,28 +36,11 @@ SOFTWARE.
 #include "bluetooth/bt_host.h"
 #include "bluetooth/bt_app.h"
 
-#pragma pack(push, 4)
-
-typedef struct __Bt_App_Data {
-	BTDEV_ROLE Role;
-	uint16_t ConnHdl;	// BLE connection handle
-	int ConnLedPort;
-	int ConnLedPin;
-	uint8_t ConnLedActLevel;
-	int PeriphDevCnt;
-	uint32_t (*SDEvtHandler)(void) ;
-	int MaxMtu;
-	bool bSecure;
-	bool bScan;
-    bool bInitialized;
-	BTDEV_COEXMODE CoexMode;
-} BtAppData_t;
-
-#pragma pack(pop)
-
-static BtAppData_t s_BtAppData = {
-	BTDEV_ROLE_PERIPHERAL, 0xFFFF, -1, -1, 0,
-};
+// g_BtAppData is defined in each port's bt_app_<port>.cpp.
+// This file is kept as a stub; once it's added to all port builds and the
+// duplicate BtAppInit/BtAppRun stubs are reconciled, the definition can move
+// here. For step 1 the definition lives in the port file that's actually
+// compiled into the binary.
 
 static BtHostDev_t s_BtHostDev;
 
@@ -70,12 +53,12 @@ bool BtAppInit(const BtHostCfg_t *pCfg)
 
 void BtAppRun()
 {
-	if (s_BtAppData.bInitialized == false)
+	if (g_BtAppData.bInitialized == false)
 	{
 		return;
 	}
 
-	if (s_BtAppData.Role & (BTDEV_ROLE_PERIPHERAL | BTDEV_ROLE_BROADCASTER))
+	if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		BtDevAdvStart();
 	}

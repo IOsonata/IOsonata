@@ -223,6 +223,39 @@ private:
 extern "C" {
 #endif
 
+// ===== Internal Voci state =====
+// BtAppData_t and g_BtAppData are for cross-arch sharing between Voci's own
+// source files (the generic bt_app.cpp and the per-port bt_app_<port>.cpp).
+// Apps must not bind to fields here; use accessor functions (isConnected,
+// BtAppGetConnHandle, BtInitialized, ...) declared further below.
+
+#pragma pack(push, 4)
+
+typedef struct __Bt_App_Data {
+	BTAPP_STATE     State;          //!< Current app state
+	BTAPP_ROLE      Role;           //!< Configured role
+	uint8_t         AdvHdl;         //!< Advertising set handle, SDK-defined value
+	uint16_t        ConnHdl;        //!< Active connection handle, BT_CONN_HDL_INVALID when none
+	int8_t          ConnLedPort;    //!< Connection LED port, -1 if not used
+	int8_t          ConnLedPin;     //!< Connection LED pin, -1 if not used
+	uint8_t         ConnLedActLevel;//!< Connection LED active level
+	uint16_t        VendorId;       //!< PnP vendor id
+	uint16_t        ProductId;      //!< PnP product id
+	uint16_t        ProductVer;     //!< PnP product version
+	uint16_t        Appearance;     //!< GAP appearance
+	uint16_t        MaxMtu;         //!< Negotiated or configured max MTU
+	int             PeriphDevCnt;   //!< Peripheral connection count when in central role
+	BTAPP_COEXMODE  CoexMode;       //!< CoEx mode in effect
+	bool            bSecure;        //!< Secure connection enabled
+	bool            bExtAdv;        //!< Extended advertising enabled
+	bool            bScan;          //!< Scan currently enabled
+	bool            bInitialized;   //!< BtAppInit completed
+} BtAppData_t;
+
+#pragma pack(pop)
+
+extern BtAppData_t g_BtAppData;
+
 
 // ***
 // Require implementations per app
