@@ -324,6 +324,12 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 void BtAppAdvTimeoutHandler(void);
 void BtAppAdvStart(void);
 void BtAppAdvStop(void);
+
+/**
+ * @brief Advertising initialization. Weak default in the port's bt_adv_<port>.cpp;
+ *        apps can override to install custom adv data.
+ */
+bool BtAppAdvInit(const BtAppCfg_t *pCfg);
 void BtAppDisconnect(void);
 
 //bool BleAppScanInit(BleAppScanCfg_t *pCfg);

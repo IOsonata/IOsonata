@@ -125,7 +125,6 @@ static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 // --- Scan buffer for central / observer mode ---
 // S145 on nRF54L15 caps extended-adv data at BLE_GAP_SCAN_BUFFER_EXTENDED_MAX_SUPPORTED (255).
 // Same buffer covers legacy 31-byte scans too.
-alignas(4) static uint8_t s_BleScanBuff[BLE_GAP_SCAN_BUFFER_EXTENDED_MAX_SUPPORTED];
 
 
 const static TimerCfg_t s_BtAppSdTimerCfg = {
@@ -846,42 +845,6 @@ NRF_SDH_STACK_EVT_OBSERVER(ble_evt_obs, ble_evt_poll, NULL, HIGH);
 // were set up by the most recent BtAppScanInit call.
 // =====================================================================
 
-bool BtAppScanInit(BtGapScanCfg_t *pCfg)
-{
-	if (pCfg == nullptr)
-	{
-		return false;
-	}
-
-	if (BtGapScanInit(pCfg) == false)
-	{
-		return false;
-	}
-
-	g_BtAppData.bScan = true;
-	return BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
-}
-
-void BtAppScan(void)
-{
-	if (g_BtAppData.bScan)
-	{
-		// Re-arm the scan with the same parameters (SD requirement after
-		// every adv report when reporting is one-shot).
-		BtGapScanNext(s_BleScanBuff, sizeof(s_BleScanBuff));
-	}
-	else
-	{
-		g_BtAppData.bScan = true;
-		BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
-	}
-}
-
-void BtAppScanStop(void)
-{
-	BtGapScanStop();
-	g_BtAppData.bScan = false;
-}
 
 bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
 {
