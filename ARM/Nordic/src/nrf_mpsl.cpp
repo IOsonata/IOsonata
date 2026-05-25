@@ -44,7 +44,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 
 /******** For DEBUG ************/
-#define UART_DEBUG_ENABLE
+//#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"

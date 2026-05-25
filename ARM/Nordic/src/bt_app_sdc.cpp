@@ -69,7 +69,7 @@ SOFTWARE.
 //BleConn_t g_BleConn = {0,};
 
 /******** For DEBUG ************/
-#define UART_DEBUG_ENABLE
+//#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"
