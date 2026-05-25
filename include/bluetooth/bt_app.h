@@ -330,6 +330,24 @@ void BtAppAdvStop(void);
  *        apps can override to install custom adv data.
  */
 bool BtAppAdvInit(const BtAppCfg_t *pCfg);
+
+/**
+ * @brief Assemble the AD payload from a BtAppCfg_t into the given packet pair.
+ *
+ *        Populates flags, optional appearance, manufacturer-specific data,
+ *        device name, and service UUIDs based on Role and bExtAdv. In legacy
+ *        mode the scan-response packet gets its own manuf-data record; in
+ *        extended mode adv-manuf and sr-manuf are merged into one record on
+ *        the adv packet.
+ *
+ *        Does not push to the controller - that step is port-specific.
+ *
+ * @param pCfg     Application config.
+ * @param pAdvPkt  Adv packet (filled).
+ * @param pSrPkt   Scan-response packet (may be filled in legacy mode).
+ * @return  true on success; false if any required item overflows.
+ */
+bool BtAdvAssembleFromCfg(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt);
 void BtAppDisconnect(void);
 
 //bool BleAppScanInit(BleAppScanCfg_t *pCfg);

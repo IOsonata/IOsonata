@@ -36,7 +36,9 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_adv.h"
+#include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_appearance.h"
 
 static int BtAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 {
@@ -291,4 +293,126 @@ size_t BtAdvDataGetManData(uint8_t *pAdvData, size_t AdvLen, uint8_t *pBuff, siz
 	}
 
 	return retval;
+}
+
+bool BtAdvAssembleFromCfg(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt)
+{
+	if (pCfg == nullptr || pAdvPkt == nullptr)
+	{
+		return false;
+	}
+
+	// Flags: BR/EDR not supported; limited or general discoverable
+	// based on whether the app set a timeout (limited mode).
+	uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
+
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
+	{
+		if (pCfg->AdvTimeout != 0)
+		{
+			flags |= BT_GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
+		}
+		else
+		{
+			flags |= BT_GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
+		}
+	}
+
+	if (BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
+	{
+		return false;
+	}
+
+	// Appearance is optional; ignore overflow.
+	if (pCfg->Appearance != BT_APPEAR_UNKNOWN_GENERIC)
+	{
+		BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_APPEARANCE,
+		             (uint8_t *)&pCfg->Appearance, 2);
+	}
+
+	// Manufacturer specific data.
+	// Legacy: separate records on adv and sr.
+	// Extended: merge adv+sr into a single record on the adv packet
+	// (extended adv has no scan response in the same sense).
+	if (pCfg->bExtAdv == false)
+	{
+		if (pCfg->pAdvManData != NULL)
+		{
+			int l = pCfg->AdvManDataLen + 2;
+			BtAdvData_t *p = BtAdvDataAllocate(pAdvPkt,
+				BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+			if (p == NULL)
+			{
+				return false;
+			}
+			*(uint16_t *)p->Data = pCfg->VendorId;
+			memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
+		}
+
+		if (pCfg->pSrManData != NULL && pSrPkt != nullptr)
+		{
+			int l = pCfg->SrManDataLen + 2;
+			BtAdvData_t *p = BtAdvDataAllocate(pSrPkt,
+				BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+			if (p == NULL)
+			{
+				return false;
+			}
+			*(uint16_t *)p->Data = pCfg->VendorId;
+			memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
+		}
+	}
+	else
+	{
+		int l = 2;
+		if (pCfg->pAdvManData != NULL) l += pCfg->AdvManDataLen;
+		if (pCfg->pSrManData  != NULL) l += pCfg->SrManDataLen;
+
+		if (l > 2)
+		{
+			BtAdvData_t *p = BtAdvDataAllocate(pAdvPkt,
+				BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+			if (p == NULL)
+			{
+				return false;
+			}
+			*(uint16_t *)p->Data = pCfg->VendorId;
+			int off = 2;
+			if (pCfg->pAdvManData != NULL)
+			{
+				memcpy(&p->Data[off], pCfg->pAdvManData, pCfg->AdvManDataLen);
+				off += pCfg->AdvManDataLen;
+			}
+			if (pCfg->pSrManData != NULL)
+			{
+				memcpy(&p->Data[off], pCfg->pSrManData, pCfg->SrManDataLen);
+			}
+		}
+	}
+
+	// Device name: full or short, BtAdvDataSetDevName picks based on space.
+	// Always lives on the adv packet. UUIDs go on the scan response in legacy
+	// mode (frees room in the 31-byte adv payload) or the adv packet in extended.
+	BtAdvPacket_t *uidadvpkt;
+	if (pCfg->pDevName != NULL)
+	{
+		if (BtAdvDataSetDevName(pAdvPkt, pCfg->pDevName) == false)
+		{
+			return false;
+		}
+		uidadvpkt = pCfg->bExtAdv ? pAdvPkt : pSrPkt;
+	}
+	else
+	{
+		uidadvpkt = pAdvPkt;
+	}
+
+	// Service UUIDs (peripheral role only).
+	if (pCfg->pAdvUuid != NULL && (pCfg->Role & BTAPP_ROLE_PERIPHERAL) && uidadvpkt != nullptr)
+	{
+		// Optional - ignore overflow.
+		BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList);
+	}
+
+	return true;
 }

@@ -110,7 +110,6 @@ void BtAdvStop()
 
 __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 {
-	uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
 	BtAdvPacket_t *advpkt;
 	BtAdvPacket_t *srpkt;
 
@@ -119,21 +118,17 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	if (g_BtAppData.bExtAdv)
 	{
 		advpkt = &s_BtAppExtAdvPkt;
-		srpkt = &s_BtAppExtSrPkt;
+		srpkt  = &s_BtAppExtSrPkt;
 	}
 	else
 	{
 		advpkt = &s_BtAppAdvPkt;
-		srpkt = &s_BtAppSrPkt;
+		srpkt  = &s_BtAppSrPkt;
 	}
 
+	// sdk-nrf-bm adv-type enum based on role.
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
-		if (pCfg->AdvTimeout != 0)
-			flags |= BT_GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
-		else
-			flags |= BT_GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
-
 		s_BmData.AdvParam.properties.type = pCfg->bExtAdv ?
 			BLE_GAP_ADV_TYPE_EXTENDED_CONNECTABLE_NONSCANNABLE_UNDIRECTED :
 			BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
@@ -145,106 +140,21 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 			BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED;
 	}
 
-	if (BtAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
+	// Generic AD payload assembly.
+	if (BtAdvAssembleFromCfg(pCfg, advpkt, srpkt) == false)
 	{
 		return false;
 	}
 
-	if (pCfg->Appearance != BT_APPEAR_UNKNOWN_GENERIC)
-	{
-		// Appearance is optional - don't fail if it doesn't fit
-		BtAdvDataAdd(advpkt, BT_GAP_DATA_TYPE_APPEARANCE,
-					 (uint8_t *)&pCfg->Appearance, 2);
-	}
+	// sdk-nrf-bm adv params + push to controller.
+	s_BmData.AdvParam.p_peer_addr   = NULL;
+	s_BmData.AdvParam.interval      = MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
+	s_BmData.AdvParam.duration      = MSEC_TO_UNITS(pCfg->AdvTimeout,  UNIT_10_MS);
+	s_BmData.AdvParam.filter_policy = BLE_GAP_ADV_FP_ANY;
+	s_BmData.AdvParam.primary_phy   = BLE_GAP_PHY_1MBPS;
+	s_BmData.AdvParam.secondary_phy = BLE_GAP_PHY_2MBPS;
 
-	// Manufacturer specific data in adv packet
-	if (pCfg->bExtAdv == false)
-	{
-		if (pCfg->pAdvManData != NULL)
-		{
-			int l = pCfg->AdvManDataLen + 2;
-			BtAdvData_t *p = BtAdvDataAllocate(advpkt,
-				BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-			if (p)
-			{
-				*(uint16_t *)p->Data = pCfg->VendorId;
-				memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
-			}
-		}
-
-		if (pCfg->pSrManData != NULL)
-		{
-			int l = pCfg->SrManDataLen + 2;
-			BtAdvData_t *p = BtAdvDataAllocate(srpkt,
-				BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-			if (p)
-			{
-				*(uint16_t *)p->Data = pCfg->VendorId;
-				memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
-			}
-		}
-	}
-	else
-	{
-		// Extended advertising: combine manuf data into single adv packet
-		int l = 2;
-		if (pCfg->pAdvManData)
-			l += pCfg->AdvManDataLen;
-		if (pCfg->pSrManData)
-			l += pCfg->SrManDataLen;
-
-		if (l > 2)
-		{
-			BtAdvData_t *p = BtAdvDataAllocate(advpkt,
-				BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-			if (p)
-			{
-				*(uint16_t *)p->Data = pCfg->VendorId;
-				int off = 2;
-				if (pCfg->pAdvManData)
-				{
-					memcpy(&p->Data[off], pCfg->pAdvManData, pCfg->AdvManDataLen);
-					off += pCfg->AdvManDataLen;
-				}
-				if (pCfg->pSrManData)
-				{
-					memcpy(&p->Data[off], pCfg->pSrManData, pCfg->SrManDataLen);
-				}
-			}
-		}
-	}
-
-	BtAdvPacket_t *uidadvpkt;
-
-	// Device name
-	if (pCfg->pDevName != NULL)
-	{
-		if (BtAdvDataSetDevName(advpkt, pCfg->pDevName) == false)
-		{
-			return false;
-		}
-		uidadvpkt = pCfg->bExtAdv ? advpkt : srpkt;
-	}
-	else
-	{
-		uidadvpkt = advpkt;
-	}
-
-	// Service UUIDs
-	if (pCfg->pAdvUuid != NULL && (pCfg->Role & BTAPP_ROLE_PERIPHERAL))
-	{
-		BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList);
-	}
-
-	// Configure adv params
-	s_BmData.AdvParam.p_peer_addr	= NULL;
-	s_BmData.AdvParam.interval		= MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
-	s_BmData.AdvParam.duration		= MSEC_TO_UNITS(pCfg->AdvTimeout, UNIT_10_MS);
-	s_BmData.AdvParam.filter_policy	= BLE_GAP_ADV_FP_ANY;
-	s_BmData.AdvParam.primary_phy	= BLE_GAP_PHY_1MBPS;
-	s_BmData.AdvParam.secondary_phy	= BLE_GAP_PHY_2MBPS;
-
-	s_BtAppAdvData.adv_data.len = advpkt->Len;
+	s_BtAppAdvData.adv_data.len      = advpkt->Len;
 	s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
 
 	uint32_t err_code = sd_ble_gap_adv_set_configure(
