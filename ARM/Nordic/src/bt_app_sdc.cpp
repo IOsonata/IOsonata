@@ -110,11 +110,6 @@ static BtHciDevice_t s_BtHciDev = {
 	//.DiscoverDevice = BtAppDiscoverDevice,
 };
 
-// Struct containing the connected peripheral device's connection information
-BtDev_t g_BtDevSdc = {
-	.ConnHdl = BT_CONN_HDL_INVALID,
-};
-
 /**@brief Bluetooth SIG debug mode Private Key */
 __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
     0xbd,0x1a,0x3c,0xcd,0xa6,0xb8,0x99,0x58,0x99,0xb7,0x40,0xeb,0x7b,0x60,0xff,0x4a,
@@ -218,21 +213,24 @@ void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
 
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_t PeerAddr[6])
 {
-	BtAppPeerAlloc(ConnHdl);
+	// Allocate and populate the peer record. The state machine in
+	// bt_attrsp.cpp looks the peer up by ConnHdl when responses arrive.
+	BtDevice_t *pPeer = BtAppPeerAlloc(ConnHdl);
+	if (pPeer != NULL)
+	{
+		memcpy(pPeer->Addr, PeerAddr, 6);
+		pPeer->pHciDev = (BtHciDevice_t*) &s_BtHciDev;
+		s_BtHciDev.pBtDev = (void*) pPeer;
+	}
 
 	BtGapAddConnection(ConnHdl, Role, PeerAddrType, PeerAddr);
 
 	BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
 
-	g_BtDevSdc.ConnHdl = ConnHdl;
-	memcpy(g_BtDevSdc.Addr, PeerAddr, 6);
-	g_BtDevSdc.pHciDev = (BtHciDevice_t*) &s_BtHciDev;
-	s_BtHciDev.pBtDev = (void*) &g_BtDevSdc;
-
 	//DEBUG_PRINTF("This device's Role = %d\r\n", g_BtAppData.AppDevice.Role);
 	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
-		// TODO: obtain the connected peripheral device's name and store to g_BtDevSdc.Name;
+		// TODO: obtain the connected peripheral device's name and store to pPeer->Name;
 		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
 	}
 
