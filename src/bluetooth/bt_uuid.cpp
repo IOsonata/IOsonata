@@ -54,7 +54,6 @@ typedef struct __Bt_Base_Uuid_Tbl_Entry {
 #endif
 
 alignas(4) static BtBaseUuidTblEntry_t s_BtBaseUuidTbl[BT_BASE_UUID_ENTRY_MAX_COUNT] = {{BLUETOOTH_SIG_BASE_UUID, true}, {0, false},};
-alignas(4) static int s_NbUuidEntry = 1;
 
 /**
  * @brief	Find index of stored base UUID 128 bits
@@ -65,7 +64,7 @@ alignas(4) static int s_NbUuidEntry = 1;
  *
  * @return	The index in the internal UUID table
  * 			-1 : Not found
-\ */
+ */
 int BtUuidFindBase(uint8_t const Uuid[16])
 {
 	for (int i = 0; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
@@ -94,7 +93,7 @@ int BtUuidFindBase(uint8_t const Uuid[16])
  */
 int BtUuidAddBase(uint8_t const Uuid[16])
 {
-	int8_t idx = BtUuidFindBase(Uuid);
+	int idx = BtUuidFindBase(Uuid);
 
 	if (idx >= 0)
 	{
@@ -107,11 +106,6 @@ int BtUuidAddBase(uint8_t const Uuid[16])
 		{
 			s_BtBaseUuidTbl[i].bValid = true;
 			memcpy(s_BtBaseUuidTbl[i].Uuid, Uuid, 16);
-
-			if (s_NbUuidEntry < i)
-			{
-				s_NbUuidEntry = i;
-			}
 			return i;
 		}
 	}
@@ -226,33 +220,37 @@ bool BtUuid32To128(BtUuid32_t * const pUuid, uint8_t Uuid128[16])
 }
 
 /**
- * 	Check if the base UUID128 of a given 128-bit UUID was already in the internal UUID table
- * 	If not, add the base UUID128 of this 128-bit UUID into the the table
- * 	Extract the 16-bit UUID (byte 12 and 13) from the given 128-bit UUID
+ * 	Extract the 16-bit short identifier (bytes 12-13) from a 128-bit UUID and
+ * 	find the base 128-bit UUID in the internal table. If the base is not yet
+ * 	present, add it.
  *
- * @param pUuid16		: Pointer to the 16-bit UUID
+ * 	The input Uuid128 is not modified.
+ *
+ * @param pUuid16		: Pointer to the BtUuid16_t to populate
  * @param Uuid128		: The input 128-bit UUID
  *
- * @return
- * 		The index of the base UUID128 in the internal UUID table
+ * @return	The index of the base UUID128 in the internal UUID table,
+ * 			or -1 if the table is full and the base could not be added.
  */
 int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t Uuid128[16])
 {
+	// Work on a local copy so the caller's buffer is left intact.
+	uint8_t base[16];
+	memcpy(base, Uuid128, 16);
+
+	// The short identifier lives in bytes 12-13 of the 128-bit UUID
+	// (little-endian on the wire). Pull it out then zero those bytes so
+	// the remainder of base matches a base UUID in the table.
+	uint16_t shortUuid = (uint16_t)base[12] | ((uint16_t)base[13] << 8);
+	base[12] = 0;
+	base[13] = 0;
+
 	int idx = -1;
-
-	// Extract 16-bit UUID from Uuid128
-	//pUuid16->BaseIdx = idx;
-	pUuid16->Type = BT_UUID_TYPE_128;
-	memcpy(&pUuid16->Uuid, &Uuid128[12], 2);
-
-	Uuid128[12] = 0;
-	Uuid128[13] = 0;
-
 	for (int i = 0; i < BT_BASE_UUID_ENTRY_MAX_COUNT; i++)
 	{
 		if (s_BtBaseUuidTbl[i].bValid == true)
 		{
-			if (memcmp(s_BtBaseUuidTbl[i].Uuid, Uuid128, 16) == 0)
+			if (memcmp(s_BtBaseUuidTbl[i].Uuid, base, 16) == 0)
 			{
 				idx = i;
 				break;
@@ -260,12 +258,14 @@ int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t Uuid128[16])
 		}
 	}
 
-	// This Uuid128 was not found - Add this Uuid128 into the table
 	if (idx == -1)
 	{
-		idx = BtUuidAddBase(Uuid128);
+		idx = BtUuidAddBase(base);
 	}
-	pUuid16->BaseIdx = idx;
+
+	pUuid16->Type    = BT_UUID_TYPE_16;
+	pUuid16->BaseIdx = (idx >= 0) ? (uint8_t)idx : 0;
+	pUuid16->Uuid    = shortUuid;
 
 	return idx;
 }

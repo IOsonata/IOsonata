@@ -67,13 +67,23 @@ static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDB
 static BtAttDBEntry_t *s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
 static uint16_t s_LastHdl = 0;
 
+// Set the negotiated ATT MTU from a peer's offered Rx MTU. The negotiated
+// value is min(peer_offered, BT_ATT_MTU_MAX). Offers below BT_ATT_MTU_MIN
+// are rejected (BT Core spec mandates 23 as the absolute floor).
+//
+// NOTE: s_AttMtu is currently a single global. Multi-link operation needs
+// per-connection MTU; that refactor is tracked separately.
 uint16_t BtAttSetMtu(uint16_t Mtu)
 {
-	if (Mtu >= BT_ATT_MTU_MIN && Mtu <= BT_ATT_MTU_MAX)
+	if (Mtu < BT_ATT_MTU_MIN)
 	{
-		s_AttMtu = Mtu;
+		return s_AttMtu;
 	}
-
+	if (Mtu > BT_ATT_MTU_MAX)
+	{
+		Mtu = BT_ATT_MTU_MAX;
+	}
+	s_AttMtu = Mtu;
 	return s_AttMtu;
 }
 
@@ -365,6 +375,7 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 					{
 						p->pChar->SetNotifCB(p->pChar, p->pChar->bNotify);
 					}
+					len = 2;
 //					DEBUG_PRINTF("CccdHdl : %x\r\n", p->pChar->CccdHdl);
 				}
 				break;
@@ -376,6 +387,7 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 
 					p->pChar->ValueLen = min(Len, p->pChar->MaxDataLen);// - sizeof(BtGattCharValue_t));
 					memcpy(p->Data, pData, p->pChar->ValueLen);
+					len = p->pChar->ValueLen;
 
 					if (p->pChar->WrCB)
 					{
@@ -392,6 +404,7 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 
 		p->pChar->ValueLen = min(Len,  p->pChar->MaxDataLen);//- sizeof(BtGattCharValue_t));
 		memcpy(p->Data, pData, p->pChar->ValueLen);
+		len = p->pChar->ValueLen;
 
 		if (p->pChar->WrCB)
 		{
@@ -592,7 +605,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				// The ATT_READ_REQ PDU is used to request the server to read the value
 				// of an attribute and return its value in an ATT_READ_RSP PDU.
 				BtAttReadReq_t *req = (BtAttReadReq_t*)&pReqAtt->ReadReq;
-\
+
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_RSP;
 
 				BtAttDBEntry_t *entry = BtAttDBFindHandle(req->Hdl);
@@ -828,7 +841,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				}
 				else
 				{
-					retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleVarReq.Hdl[0], BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
+					retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleVarReq.Hdl[0], BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
 				}
 			}
 			break;

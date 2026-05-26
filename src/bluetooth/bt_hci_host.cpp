@@ -86,7 +86,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				BtHciLeEvtConnComplete_t *p = (BtHciLeEvtConnComplete_t*)pLeEvtPkt->Data;
 				if (p->Status == 0)
 				{
-					pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
+					if (pDev->Connected)
+					{
+						pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
+					}
 					//BLEAPP_ROLE role = p->Role == 1 ? BLEAPP_ROLE_PERIPHERAL : BLEAPP_ROLE_CENTRAL;
 					DEBUG_PRINTF("BT_HCI_EVT_LE_CONN_COMPLETE \r\n");
 					DEBUG_PRINTF("Target device Role = %d \n", p->Role);
@@ -98,14 +101,22 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_ADV_REPORT:
 			{
 				BtHciLeEvtAdvReport_t *report = (BtHciLeEvtAdvReport_t*)pLeEvtPkt->Data;
-				BtAdvReport_t *p = (BtAdvReport_t*)report->Report;
+				// Each BtAdvReport_t is variable-length: 9-byte fixed header
+				// (EvtType, AddrType, Addr[6], DataLen) + Data[DataLen] +
+				// 1 byte trailing RSSI. Walk by stride, do not index as
+				// fixed-size array.
+				uint8_t *cur = (uint8_t*)report->Report;
 
 				for (int i = 0; i < report->NbReport; i++)
 				{
-					int8_t rssi = (int8_t)p[i].Data[p[i].DataLen];
-					pDev->ScanReport(rssi, p[i].AddrType, p[i].Addr, p[i].DataLen, p[i].Data);
+					BtAdvReport_t *r = (BtAdvReport_t*)cur;
+					int8_t rssi = (int8_t)r->Data[r->DataLen];
+					if (pDev->ScanReport)
+					{
+						pDev->ScanReport(rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
+					}
+					cur += 9 + r->DataLen + 1;
 				}
-				//BtScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
 			}
 			break;
 		case BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE:
@@ -136,7 +147,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				pDev->RxDataLen = p->MaxRxLen;
 				pDev->TxDataLen = p->MaxTxLen;
 
-				DEBUG_PRINTF("BT_HCI_EVT_LE_DATA_LEN_CHANGE:\r\n", p->ConnHdl, p->MaxRxLen);
+				DEBUG_PRINTF("BT_HCI_EVT_LE_DATA_LEN_CHANGE: ConnHdl=%d, MaxRxLen=%d\r\n", p->ConnHdl, p->MaxRxLen);
 				DEBUG_PRINTF(
 						"MaxRxLen = %d, MaxRxTime = %d \r\n"
 						"MaxTxLen = %d, MaxTxTime = %d \r\n",
@@ -158,7 +169,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				{
 					DEBUG_PRINTF("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V1/V2\r\n");
 					DEBUG_PRINTF("Target device Role = %d\r\n", p->Role);
-					pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
+					if (pDev->Connected)
+					{
+						pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
+					}
 
 					//s_ConnHdl = p->ConnHdl;
 
@@ -193,22 +207,20 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_EXT_ADV_REPORT:
 			{
-				//DEBUG_PRINTF("BT_HCI_EVT_LE_EXT_ADV_REPORT:\r\n");
 				BtHciLeEvtExtAdvReport_t *report = (BtHciLeEvtExtAdvReport_t*)pLeEvtPkt->Data;
-				BtExtAdvReport_t *p = (BtExtAdvReport_t*)report->Report;
+				// Each BtExtAdvReport_t is variable-length: 24-byte fixed
+				// header + Data[DataLen]. Walk by stride.
+				uint8_t *cur = (uint8_t*)report->Report;
 
-				//DEBUG_PRINTF("BT_HCI_EVT_LE_EXT_ADV_REPORT\r\n");
-				//DEBUG_PRINTF("Nb reports : %d\r\n", report->NbReport);
 				for (int i = 0; i < report->NbReport; i++)
 				{
-//					DEBUG_PRINTF("%02x %02x %02x %02x %02x %02x, Datlen = %d\r\n",
-//								p[i].Addr[0], p[i].Addr[1], p[i].Addr[2],
-//								p[i].Addr[3], p[i].Addr[4], p[i].Addr[5],
-//								p[i].DataLen);
-					pDev->ScanReport(p[i].Rssi, p[i].AddrType, p[i].Addr, p[i].DataLen, p[i].Data);
+					BtExtAdvReport_t *r = (BtExtAdvReport_t*)cur;
+					if (pDev->ScanReport)
+					{
+						pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
+					}
+					cur += 24 + r->DataLen;
 				}
-
-				//BtScanReport(pLeEvtPkt->Evt, p->NbReport, p->Report);
 			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V1:
@@ -299,7 +311,10 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				DEBUG_PRINTF("BtHciProcessEvent: Disconnected, Status = %d (0x%x) \r\n",
 						p->Status, p->Status);
 
-				pDev->Disconnected(p->ConnHdl, p->Reason);
+				if (pDev->Disconnected)
+				{
+					pDev->Disconnected(p->ConnHdl, p->Reason);
+				}
 			}
 			break;
 		case BT_HCI_EVT_AUTHEN_COMPLETE:

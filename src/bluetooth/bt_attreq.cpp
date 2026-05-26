@@ -274,19 +274,19 @@ bool BtAttReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 	l2pdu->Hdr.Len = 5;// 1-byte OpCode + 2-byte StartHdl + 2-byte EndHdl
 	if (pUuid->BaseIdx > 0)
 	{
-		BtUuidTo128(pUuid, l2pdu->Att.ReadByTypeReq.Uuid.Uuid128);
+		BtUuidTo128(pUuid, l2pdu->Att.ReadByGroupTypeReq.Uuid.Uuid128);
 		l2pdu->Hdr.Len += 16;
 	}
 	else
 	{
 		if (pUuid->Type == BT_UUID_TYPE_32)
 		{
-			l2pdu->Att.ReadByTypeReq.Uuid.Uuid32 = pUuid->Uuid32;
+			l2pdu->Att.ReadByGroupTypeReq.Uuid.Uuid32 = pUuid->Uuid32;
 			l2pdu->Hdr.Len += 4;
 		}
 		else
 		{
-			l2pdu->Att.ReadByTypeReq.Uuid.Uuid16 = pUuid->Uuid16;
+			l2pdu->Att.ReadByGroupTypeReq.Uuid.Uuid16 = pUuid->Uuid16;
 			l2pdu->Hdr.Len += 2;
 		}
 	}
