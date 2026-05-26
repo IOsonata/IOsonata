@@ -46,11 +46,8 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <memory.h>
 
-#include "convutil.h"
-#include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
-#include "bluetooth/bt_adv.h"
 
 #ifndef BT_GAP_DEVNAME_MAX_LEN
 #define BT_GAP_DEVNAME_MAX_LEN			64
@@ -60,16 +57,9 @@ SOFTWARE.
 #define BT_GAP_CONN_MAX_COUNT			10
 #endif
 
-alignas(4) static BtGapConnection_t s_BtGapConnection[BT_GAP_CONN_MAX_COUNT] = {
-	{.Hdl = BT_ATT_HANDLE_INVALID,},
-};
-
-#if 1
-//static uint16_t s_BtGapCharApperance = 0;
-//static char s_BtGapCharDevName[BT_GAP_DEVNAME_MAX_LEN];
-//static BtGattPreferedConnParams_t s_BtGapCharPerferedConnParams = {
-//	USEC_TO_1250(7500), MSEC_TO_1_25(40), 0, 400
-//};
+// Connection table. BSS-zero at startup; BtGapInit is responsible for
+// invalidating all slots before any other API is used.
+alignas(4) static BtGapConnection_t s_BtGapConnection[BT_GAP_CONN_MAX_COUNT];
 
 static BtGattChar_t s_BtGapChar[] = {
 	{
@@ -81,8 +71,6 @@ static BtGattChar_t s_BtGapChar[] = {
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		//.pValue = s_BtGapCharDevName,
-		//.ValueLen = 0,
 		.Hdl = BT_ATT_HANDLE_INVALID,
 		.ValHdl = BT_ATT_HANDLE_INVALID,
 		.DescHdl = BT_ATT_HANDLE_INVALID,
@@ -98,8 +86,6 @@ static BtGattChar_t s_BtGapChar[] = {
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		//.pValue = &s_BtGapCharApperance,
-		//.ValueLen = 2,
 		.Hdl = BT_ATT_HANDLE_INVALID,
 		.ValHdl = BT_ATT_HANDLE_INVALID,
 		.DescHdl = BT_ATT_HANDLE_INVALID,
@@ -115,8 +101,6 @@ static BtGattChar_t s_BtGapChar[] = {
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-//		.pValue = &s_BtGapCharPerferedConnParams,
-//		.ValueLen = sizeof(BtGattPreferedConnParams_t),
 		.Hdl = BT_ATT_HANDLE_INVALID,
 		.ValHdl = BT_ATT_HANDLE_INVALID,
 		.DescHdl = BT_ATT_HANDLE_INVALID,
@@ -126,7 +110,6 @@ static BtGattChar_t s_BtGapChar[] = {
 };
 
 static const BtGattSrvcCfg_t s_BtGapSrvcCfg = {
-	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = false,
 	.UuidBase = {0,},						// Base UUID
 	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ACCESS,	// Service UUID
@@ -136,11 +119,9 @@ static const BtGattSrvcCfg_t s_BtGapSrvcCfg = {
 
 static BtGattSrvc_t s_BtGapSrvc;
 
-static BtGattCharSrvcChanged_t s_BtGattCharSrvcChanged = {0,};
-
 static BtGattChar_t s_BtGattChar[] = {
 	{
-		// Read characteristic
+		// Service Changed characteristic (GATT service)
 		.Uuid = BT_UUID_CHARACTERISTIC_SERVICE_CHANGED,
 		.MaxDataLen = sizeof(BtGattCharSrvcChanged_t),
 		.Property =	BT_GATT_CHAR_PROP_INDICATE,
@@ -148,8 +129,6 @@ static BtGattChar_t s_BtGattChar[] = {
 		.WrCB = NULL,						// Callback for write char, set to NULL for read char
 		.SetNotifCB = NULL,					// Callback on set notification
 		.TxCompleteCB = NULL,				// Tx completed callback
-		//.pValue = &s_BtGattCharSrvcChanged,
-		//.ValueLen = 0,
 		.Hdl = BT_ATT_HANDLE_INVALID,
 		.ValHdl = BT_ATT_HANDLE_INVALID,
 		.DescHdl = BT_ATT_HANDLE_INVALID,
@@ -159,7 +138,6 @@ static BtGattChar_t s_BtGattChar[] = {
 };
 
 static BtGattSrvcCfg_t s_BtGattSrvcCfg = {
-	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
 	.bCustom = false,
 	.UuidBase = {0,},		// Base UUID
 	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE,		// Service UUID
@@ -176,49 +154,56 @@ __attribute__((weak)) void BtGapSetDevName(const char *pName)
 		return;
 	}
 
-	// Update name in GAP characteristic
-
 	BtGattCharSetValue(&s_BtGapChar[0], (void*)pName, strlen(pName));
 }
 
-__attribute__((weak)) char * const BtGapGetDevName()
+__attribute__((weak)) const char *BtGapGetDevName()
 {
-	return (char*)s_BtGapChar[0].pValue;
+	return (const char*)s_BtGapChar[0].pValue;
 }
 
 __attribute__((weak)) void BtGapSetAppearance(uint16_t Val)
 {
-	BtGattCharSetValue(&s_BtGapChar[1], &Val, 2);
+	// BLE wire format is little-endian; assemble byte-by-byte instead of
+	// passing &Val so the value is not host-byte-order dependent.
+	uint8_t buf[2];
+	buf[0] = (uint8_t)(Val & 0xFF);
+	buf[1] = (uint8_t)(Val >> 8);
+	BtGattCharSetValue(&s_BtGapChar[1], buf, 2);
 }
 
 __attribute__((weak)) void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal)
 {
+	if (pVal == nullptr)
+	{
+		return;
+	}
+
 	BtGattCharSetValue(&s_BtGapChar[2], pVal, sizeof(BtGattPreferedConnParams_t));
 }
-#if 0
-__attribute__((weak)) void BtGapServiceInit()//BtGattSrvc_t * const pSrvc)
-{
-	//BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
-	//BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
-//	BtGattSrvcAdd(pSrvc, &s_BtGapSrvcCfg);
-
-	//BtAttSetHandler(BtGattReadAttValue, BtGattWriteAttValue);
-	//BtGattPreferedConnParams_t connparm = {
-//		USEC_TO_1250(7500), MSEC_TO_1_25(40), 0, 400
-//	};
-
-//	BtGattCharSetValue(&s_BtGapChar[2], &connparm, sizeof(BtGattPreferedConnParams_t));
-}
-#endif
-#endif
 
 __attribute__((weak)) void BtGapParamInit(const BtGapCfg_t *pCfg)
 {
 }
 
+// Invalidate all connection slots. Sets Hdl to invalid; leaves other fields
+// untouched (they get overwritten on the next BtGapAddConnection).
+static void BtGapConnInvalidateAll(void)
+{
+	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
+	{
+		s_BtGapConnection[i].Hdl = BT_ATT_HANDLE_INVALID;
+	}
+}
+
 void BtGapInit(const BtGapCfg_t *pCfg)
 {
-	memset(s_BtGapConnection, 0xFF, sizeof(s_BtGapConnection));
+	BtGapConnInvalidateAll();
+
+	if (pCfg == nullptr)
+	{
+		return;
+	}
 
 	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
 	{
@@ -262,7 +247,12 @@ size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 {
 	size_t count = 0;
 
-	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
+	if (pHdl == nullptr || MaxCount == 0)
+	{
+		return 0;
+	}
+
+	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT && count < MaxCount; i++)
 	{
 		if (s_BtGapConnection[i].Hdl != BT_ATT_HANDLE_INVALID)
 		{
@@ -275,6 +265,31 @@ size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 
 bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6])
 {
+	if (ConnHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
+	{
+		if (s_BtGapConnection[i].Hdl == ConnHdl)
+		{
+			s_BtGapConnection[i].Role = Role;
+			s_BtGapConnection[i].PeerAddrType = AddrType;
+
+			if (PeerAddr != nullptr)
+			{
+				memcpy(s_BtGapConnection[i].PeerAddr, PeerAddr, 6);
+			}
+			else
+			{
+				memset(s_BtGapConnection[i].PeerAddr, 0, sizeof(s_BtGapConnection[i].PeerAddr));
+			}
+
+			return true;
+		}
+	}
+
 	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
 	{
 		if (s_BtGapConnection[i].Hdl == BT_ATT_HANDLE_INVALID)
@@ -282,7 +297,15 @@ bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_
 			s_BtGapConnection[i].Hdl = ConnHdl;
 			s_BtGapConnection[i].Role = Role;
 			s_BtGapConnection[i].PeerAddrType = AddrType;
-			memcpy(s_BtGapConnection[i].PeerAddr, PeerAddr, 6);
+
+			if (PeerAddr != nullptr)
+			{
+				memcpy(s_BtGapConnection[i].PeerAddr, PeerAddr, 6);
+			}
+			else
+			{
+				memset(s_BtGapConnection[i].PeerAddr, 0, sizeof(s_BtGapConnection[i].PeerAddr));
+			}
 
 			return true;
 		}
@@ -293,15 +316,25 @@ bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_
 
 void BtGapDeleteConnection(uint16_t Hdl)
 {
+	bool bRemoved = false;
+
+	if (Hdl == BT_ATT_HANDLE_INVALID)
+	{
+		return;
+	}
+
 	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
 	{
 		if (s_BtGapConnection[i].Hdl == Hdl)
 		{
-			memset(&s_BtGapConnection[i], 0xFF, sizeof(BtGapConnection_t));
+			// Only the handle needs to be invalidated; remaining fields are
+			// overwritten on the next BtGapAddConnection.
+			s_BtGapConnection[i].Hdl = BT_ATT_HANDLE_INVALID;
+			bRemoved = true;
 		}
 	}
 
-	if (isBtGapConnected() == false)
+	if (bRemoved && isBtGapConnected() == false)
 	{
 		BtGattSrvcDisconnected(&s_BtGapSrvc);
 		BtGattSrvcDisconnected(&s_BtGattSrvc);

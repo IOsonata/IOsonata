@@ -40,22 +40,58 @@ SOFTWARE.
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_appearance.h"
 
+/******** For DEBUG ************/
+//#define UART_DEBUG_ENABLE
+
+#ifdef UART_DEBUG_ENABLE
+#include "coredev/uart.h"
+extern UART g_Uart;
+#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
+#endif
+/*******************************/
+
+// Cap used when the full local name does not fit in the adv payload.
+// Per BT Core spec the split between complete and shortened name is
+// implementation defined ("as much as fits"); this is the upper bound.
+#ifndef BT_ADV_SHORT_NAME_MAX
+#define BT_ADV_SHORT_NAME_MAX		30
+#endif
+
+static void BtAdvWriteU16Le(uint8_t *pData, uint16_t Val)
+{
+	pData[0] = (uint8_t)(Val & 0xFF);
+	pData[1] = (uint8_t)(Val >> 8);
+}
+
 static int BtAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
 {
 	int retval = -1;
-	BtAdvDataHdr_t *hdr = (BtAdvDataHdr_t*)pData;
 	int idx = 0;
+
+	if (pData == NULL || Len <= 0)
+	{
+		return -1;
+	}
 
 	while (Len > 0)
 	{
+		BtAdvDataHdr_t *hdr = (BtAdvDataHdr_t*)&pData[idx];
+		int recLen = hdr->Len + 1;
+
+		if (hdr->Len == 0 || recLen > Len)
+		{
+			break;
+		}
+
 		if (hdr->Type == Tag)
 		{
 			retval = idx;
 			break;
 		}
-		idx += hdr->Len + 1;
-		Len -= hdr->Len + 1;
-		hdr = (BtAdvDataHdr_t*)&pData[idx];
+		idx += recLen;
+		Len -= recLen;
 	}
 
 	return retval;
@@ -78,23 +114,38 @@ static int BtAdvDataFindAdvTag(uint8_t Tag, uint8_t *pData, int Len)
  */
 BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
 {
+	if (pAdvPkt == nullptr || pAdvPkt->pData == nullptr || Len < 0)
+	{
+		return nullptr;
+	}
+
+	// Cap Len to the packet capacity. A record cannot be larger than the
+	// packet, and this also bounds Len + 2 against signed overflow when
+	// computing recLen below.
+	if (Len > pAdvPkt->MaxLen)
+	{
+		return nullptr;
+	}
+
+	int recLen = Len + 2;
 	int idx = BtAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
 
 	if (idx >= 0)
 	{
 		// Tag already exists, remove it first
 		BtAdvData_t *p = (BtAdvData_t*)&pAdvPkt->pData[idx];
-		int l = pAdvPkt->Len - p->Hdr.Len - 1;
+		int oldRecLen = p->Hdr.Len + 1;
+		int l = pAdvPkt->Len - oldRecLen;
 
-		if (Len > (pAdvPkt->MaxLen - l))
+		if (recLen > (pAdvPkt->MaxLen - l))
 		{
 			return nullptr;
 		}
 
-		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + p->Hdr.Len + 1], l - idx);
+		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + oldRecLen], l - idx);
 		pAdvPkt->Len = l;
 	}
-	else if (Len > (pAdvPkt->MaxLen - pAdvPkt->Len))
+	else if (recLen > (pAdvPkt->MaxLen - pAdvPkt->Len))
 	{
 		return nullptr;
 	}
@@ -102,7 +153,7 @@ BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
 	BtAdvData_t *p = (BtAdvData_t*)&pAdvPkt->pData[pAdvPkt->Len];
 	p->Hdr.Len = Len + 1;
 	p->Hdr.Type = Type;
-	pAdvPkt->Len += Len + 2;
+	pAdvPkt->Len += recLen;
 
 	return p;
 }
@@ -119,40 +170,12 @@ BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
  */
 bool BtAdvDataAdd(BtAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
 {
-#if 0
-	int idx = BleAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
-
-	if (idx >= 0)
-	{
-		// Tag already exists, remove it first
-		BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[idx];
-		int l = pAdvPkt->Len - p->Hdr.Len - 1;
-
-		if (Len > (pAdvPkt->MaxLen - l))
-		{
-			return false;
-		}
-
-		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + p->Hdr.Len + 1], l - idx);
-		pAdvPkt->Len = l;
-	}
-	else if (Len > (pAdvPkt->MaxLen - pAdvPkt->Len))
-	{
-		return false;
-	}
-
-	//int l = min(pAdvPkt->MaxLen - pAdvPkt->Len, Len + 2);
-	BleAdvData_t *p = (BleAdvData_t*)&pAdvPkt->pData[pAdvPkt->Len];
-	p->Hdr.Len = Len + 1;
-	p->Hdr.Type = Type;
-#else
 	BtAdvData_t *p = BtAdvDataAllocate(pAdvPkt, Type, Len);
 
 	if (p == nullptr)
 	{
 		return false;
 	}
-#endif
 
 	if (pData != NULL && Len > 0)
 	{
@@ -172,7 +195,7 @@ bool BtAdvDataAdd(BtAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData, i
  */
 void BtAdvDataRemove(BtAdvPacket_t * const pAdvPkt, uint8_t Type)
 {
-	if (pAdvPkt->Len <= 0)
+	if (pAdvPkt == nullptr || pAdvPkt->pData == nullptr || pAdvPkt->Len <= 0)
 		return;
 
 	int idx = BtAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
@@ -180,15 +203,27 @@ void BtAdvDataRemove(BtAdvPacket_t * const pAdvPkt, uint8_t Type)
 	if (idx >= 0)
 	{
 		BtAdvData_t *p = (BtAdvData_t*)&pAdvPkt->pData[idx];
-		int l = p->Hdr.Len + 1;
+		int recLen = p->Hdr.Len + 1;
+		int tailLen = pAdvPkt->Len - idx - recLen;
 
-		memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + l], l);
-		pAdvPkt->Len -= l;
+		if (tailLen > 0)
+		{
+			memmove(&pAdvPkt->pData[idx], &pAdvPkt->pData[idx + recLen], tailLen);
+		}
+		pAdvPkt->Len -= recLen;
 	}
 }
 
 /**
  * @brief	Add UUID list to the advertising data
+ *
+ * When BaseIdx > 0 the array carries short identifiers (uuid16 or uuid32)
+ * on top of a 128-bit base UUID. The output AD record is always uuid128:
+ * each entry is expanded to a full 128-bit UUID by combining the base
+ * with the short.
+ *
+ * When BaseIdx == 0 the array is emitted as-is in the format matching
+ * Type (uuid16, uuid32 or uuid128).
  *
  * @param 	pAdvPkt	: Pointer to Adv packet to add data into
  * @param 	pUid	: Pointer to UUID array list
@@ -200,70 +235,123 @@ bool BtAdvDataAddUuid(BtAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bo
 {
 	int l = 0;
 	uint8_t gaptype = 0;
-	bool retval;
-	uint8_t uid[pUid->Count][16];
+
+	if (pAdvPkt == nullptr || pUid == nullptr || pUid->Count <= 0)
+	{
+		return false;
+	}
 
 	if (pUid->BaseIdx > 0)
 	{
-		uint8_t id[16];
-
-		BtUuidGetBase(pUid->BaseIdx, id);
-
-		for (int i = 0; i < pUid->Count; i++)
+		// Custom-base UUID. Only uuid16 and uuid32 shorthand make sense
+		// here; a full uuid128 array with a base is not a meaningful
+		// combination.
+		if (pUid->Type != BT_UUID_TYPE_16 && pUid->Type != BT_UUID_TYPE_32)
 		{
-			id[12] = pUid->Uuid16[i] & 0xFF;
-			id[13] = pUid->Uuid16[i] >> 8;
-			memcpy(uid[i], id, 16);
+			return false;
+		}
 
+		uint8_t base[16];
+
+		if (BtUuidGetBase(pUid->BaseIdx, base) == false)
+		{
+			return false;
 		}
 
 		l = 16 * pUid->Count;
 		gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
-		return BtAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)uid, l);
-	}
-	else
-	{
-		switch (pUid->Type)
+
+		// Allocate the record in the packet and write the expanded UUIDs
+		// straight into it. No temp buffer needed.
+		BtAdvData_t *p = BtAdvDataAllocate(pAdvPkt, gaptype, l);
+		if (p == nullptr)
 		{
-			case BT_UUID_TYPE_16:
-				gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
-				l = pUid->Count * 2;
-				break;
-			case BT_UUID_TYPE_32:
-				gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
-				l = pUid->Count * 4;
-				break;
-			case BT_UUID_TYPE_128:
-				gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
-				l = pUid->Count * 16;
-				break;
-			default:
-				retval = false;
+			return false;
 		}
+
+		for (int i = 0; i < pUid->Count; i++)
+		{
+			uint8_t *slot = &p->Data[i * 16];
+			memcpy(slot, base, 16);
+
+			if (pUid->Type == BT_UUID_TYPE_16)
+			{
+				slot[12] = (uint8_t)(pUid->Uuid16[i] & 0xFF);
+				slot[13] = (uint8_t)(pUid->Uuid16[i] >> 8);
+			}
+			else // BT_UUID_TYPE_32
+			{
+				slot[12] = (uint8_t)(pUid->Uuid32[i] & 0xFF);
+				slot[13] = (uint8_t)((pUid->Uuid32[i] >> 8) & 0xFF);
+				slot[14] = (uint8_t)((pUid->Uuid32[i] >> 16) & 0xFF);
+				slot[15] = (uint8_t)((pUid->Uuid32[i] >> 24) & 0xFF);
+			}
+		}
+
+		return true;
 	}
+
+	switch (pUid->Type)
+	{
+		case BT_UUID_TYPE_16:
+			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
+			l = pUid->Count * 2;
+			break;
+		case BT_UUID_TYPE_32:
+			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
+			l = pUid->Count * 4;
+			break;
+		case BT_UUID_TYPE_128:
+			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
+			l = pUid->Count * 16;
+			break;
+		default:
+			return false;
+	}
+
 	return BtAdvDataAdd(pAdvPkt, gaptype, (uint8_t*)pUid->Uuid16, l);
 }
 
 bool BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName)
 {
-	size_t l = strlen(pName);
-	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
-	size_t mxl = pAdvPkt->MaxLen - pAdvPkt->Len - 2;
-
-	if (l > 30 || l > mxl)
+	if (pAdvPkt == nullptr || pName == nullptr)
 	{
-		// Short name
-		type = BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME;
-		l = min((size_t)30, mxl);
+		return false;
 	}
 
-	// Update name in advertisement packet
+	// Need at least 3 bytes free: length byte + type byte + 1 name byte.
+	if (pAdvPkt->MaxLen <= pAdvPkt->Len + 2)
+	{
+		return false;
+	}
+
+	size_t l = strlen(pName);
+	size_t mxl = (size_t)(pAdvPkt->MaxLen - pAdvPkt->Len - 2);
+	uint8_t type = BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME;
+
+	if (l > BT_ADV_SHORT_NAME_MAX || l > mxl)
+	{
+		type = BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME;
+		l = min((size_t)BT_ADV_SHORT_NAME_MAX, mxl);
+	}
+
+	if (l == 0)
+	{
+		return false;
+	}
+
 	return BtAdvDataAdd(pAdvPkt, type, (uint8_t*)pName, l);
 }
 
 size_t BtAdvDataGetDevName(uint8_t *pAdvData, size_t AdvLen, char *pName, size_t NameLen)
 {
 	size_t retval = 0;
+
+	if (pAdvData == NULL || pName == NULL || NameLen == 0)
+	{
+		return 0;
+	}
+
 	int idx = BtAdvDataFindAdvTag(BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME, pAdvData, AdvLen);
 
 	if (idx < 0)
@@ -273,8 +361,14 @@ size_t BtAdvDataGetDevName(uint8_t *pAdvData, size_t AdvLen, char *pName, size_t
 	if (idx >= 0)
 	{
 		BtAdvData_t *p = (BtAdvData_t*)&pAdvData[idx];
-		retval = min(NameLen, (size_t)p->Hdr.Len);
+		size_t payloadLen = (p->Hdr.Len > 0) ? (size_t)(p->Hdr.Len - 1) : 0;
+		retval = min(NameLen - 1, payloadLen);
 		memcpy(pName, p->Data, retval);
+		pName[retval] = '\0';
+	}
+	else
+	{
+		pName[0] = '\0';
 	}
 
 	return retval;
@@ -283,12 +377,19 @@ size_t BtAdvDataGetDevName(uint8_t *pAdvData, size_t AdvLen, char *pName, size_t
 size_t BtAdvDataGetManData(uint8_t *pAdvData, size_t AdvLen, uint8_t *pBuff, size_t BuffLen)
 {
 	size_t retval = 0;
+
+	if (pAdvData == NULL || pBuff == NULL || BuffLen == 0)
+	{
+		return 0;
+	}
+
 	int idx = BtAdvDataFindAdvTag(BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, pAdvData, AdvLen);
 
 	if (idx >= 0)
 	{
 		BtAdvData_t *p = (BtAdvData_t*)&pAdvData[idx];
-		retval = min(BuffLen, (size_t)p->Hdr.Len);
+		size_t payloadLen = (p->Hdr.Len > 0) ? (size_t)(p->Hdr.Len - 1) : 0;
+		retval = min(BuffLen, payloadLen);
 		memcpy(pBuff, p->Data, retval);
 	}
 
@@ -302,8 +403,8 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		return false;
 	}
 
-	// Flags: BR/EDR not supported; limited or general discoverable
-	// based on whether the app set a timeout (limited mode).
+	// Flags: BR/EDR not supported; limited or general discoverable based on
+	// whether the app set a timeout (limited mode).
 	uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
 
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
@@ -323,11 +424,15 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		return false;
 	}
 
-	// Appearance is optional; ignore overflow.
+	// Appearance is optional; log if dropped for lack of room.
 	if (pCfg->Appearance != BT_APPEAR_UNKNOWN_GENERIC)
 	{
-		BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_APPEARANCE,
-		             (uint8_t *)&pCfg->Appearance, 2);
+		uint8_t appBuf[2];
+		BtAdvWriteU16Le(appBuf, pCfg->Appearance);
+		if (BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_APPEARANCE, appBuf, 2) == false)
+		{
+			DEBUG_PRINTF("BtAdvEncode: appearance dropped, no room\r\n");
+		}
 	}
 
 	// Manufacturer specific data.
@@ -345,21 +450,28 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 			{
 				return false;
 			}
-			*(uint16_t *)p->Data = pCfg->VendorId;
+			BtAdvWriteU16Le(p->Data, pCfg->VendorId);
 			memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
 		}
 
-		if (pCfg->pSrManData != NULL && pSrPkt != nullptr)
+		if (pCfg->pSrManData != NULL)
 		{
-			int l = pCfg->SrManDataLen + 2;
-			BtAdvData_t *p = BtAdvDataAllocate(pSrPkt,
-				BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-			if (p == NULL)
+			if (pSrPkt == nullptr)
 			{
-				return false;
+				DEBUG_PRINTF("BtAdvEncode: sr man data set but no sr packet\r\n");
 			}
-			*(uint16_t *)p->Data = pCfg->VendorId;
-			memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
+			else
+			{
+				int l = pCfg->SrManDataLen + 2;
+				BtAdvData_t *p = BtAdvDataAllocate(pSrPkt,
+					BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+				if (p == NULL)
+				{
+					return false;
+				}
+				BtAdvWriteU16Le(p->Data, pCfg->VendorId);
+				memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
+			}
 		}
 	}
 	else
@@ -376,7 +488,7 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 			{
 				return false;
 			}
-			*(uint16_t *)p->Data = pCfg->VendorId;
+			BtAdvWriteU16Le(p->Data, pCfg->VendorId);
 			int off = 2;
 			if (pCfg->pAdvManData != NULL)
 			{
@@ -390,9 +502,9 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		}
 	}
 
-	// Device name: full or short, BtAdvDataSetDevName picks based on space.
-	// Always lives on the adv packet. UUIDs go on the scan response in legacy
-	// mode (frees room in the 31-byte adv payload) or the adv packet in extended.
+	// Device name. BtAdvDataSetDevName picks full or short based on space and
+	// adds it to the adv packet. UUIDs go on the scan response in legacy mode
+	// to free room in the 31-byte adv payload, or on the adv packet in extended.
 	BtAdvPacket_t *uidadvpkt;
 	if (pCfg->pDevName != NULL)
 	{
@@ -407,11 +519,13 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		uidadvpkt = pAdvPkt;
 	}
 
-	// Service UUIDs (peripheral role only).
+	// Service UUIDs (peripheral role only). Optional; log if dropped for lack of room.
 	if (pCfg->pAdvUuid != NULL && (pCfg->Role & BTAPP_ROLE_PERIPHERAL) && uidadvpkt != nullptr)
 	{
-		// Optional - ignore overflow.
-		BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList);
+		if (BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
+		{
+			DEBUG_PRINTF("BtAdvEncode: service UUIDs dropped, no room\r\n");
+		}
 	}
 
 	return true;
