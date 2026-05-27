@@ -481,14 +481,10 @@ void BtAppDisconnect()
 	if (BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
     {
 		uint32_t err_code = sd_ble_gap_disconnect(BtAppGetConnHandle(), BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
-        if (err_code == NRF_ERROR_INVALID_STATE)
-        {
-        	BtAppPeerPoolInit();
-        }
-        else
-        {
-            APP_ERROR_CHECK(err_code);
-        }
+		if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
+		{
+			APP_ERROR_CHECK(err_code);
+		}
     }
 }
 
@@ -709,14 +705,25 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 
         	break;
         case BLE_GAP_EVT_DISCONNECTED:
-        	BtAppConnLedOff();
-        	BtAppPeerPoolInit();
-        	g_BtAppData.State = BTAPP_STATE_IDLE;
-        	BtAppEvtDisconnected(p_ble_evt->evt.gap_evt.conn_handle);
-			if (g_BtAppData.AppDevice.Role == BTAPP_ROLE_PERIPHERAL
-					|| g_BtAppData.AppDevice.Role == BTAPP_ROLE_BROADCASTER)
 			{
-				BtAdvStart();
+				uint16_t connHdl = p_ble_evt->evt.gap_evt.conn_handle;
+				BtDevice_t *pPeer = BtAppPeerFindByHdl(connHdl);
+
+				BtAppConnLedOff();
+				BtAppPeerFree(pPeer);
+				BtGapDeleteConnection(connHdl);
+
+				if (isBtGapConnected() == false)
+				{
+					g_BtAppData.State = BTAPP_STATE_IDLE;
+				}
+
+				BtAppEvtDisconnected(connHdl);
+
+				if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+				{
+					BtAdvStart();
+				}
 			}
         	break;
         case BLE_GAP_EVT_ADV_SET_TERMINATED:

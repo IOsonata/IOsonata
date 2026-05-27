@@ -263,21 +263,26 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 	DEBUG_PRINTF("BtAppDisconnected: ConnHdl= %d (0x%x); Reason = %d (0x%x)\r\n",
 			ConnHdl, ConnHdl, Reason, Reason);
 
+	BtDevice_t *pPeer = BtAppPeerFindByHdl(ConnHdl);
+	BtAppPeerFree(pPeer);
+
 	BtGapDeleteConnection(ConnHdl);
 
-	if (isBtGapConnected() == false)
+	bool bConnected = isBtGapConnected();
+
+	if (bConnected == false)
 	{
 //		BtGattSrvcDisconnected(&s_BtGapSrvc);
 //		BtGattSrvcDisconnected(&s_BtGattSrvc);
 
-		BtAppEvtDisconnected(ConnHdl);
+		g_BtAppData.State = BTAPP_STATE_IDLE;
 	}
 
-	BtAppPeerAlloc(BtGapGetConnection());
+	BtAppEvtDisconnected(ConnHdl);
 
-	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (bConnected == false &&
+		(g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
 	{
-		g_BtAppData.State = BTAPP_STATE_IDLE;
 		BtAppAdvStart();
 	}
 }
