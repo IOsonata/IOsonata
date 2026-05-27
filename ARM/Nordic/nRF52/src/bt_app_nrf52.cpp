@@ -1280,28 +1280,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     	g_BtAppData.AppDevice.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
 
     app_timer_init();
-#if 0
-    switch (g_BleAppData.AppMode)
-    {
-		case BLEAPP_MODE_LOOP:
-		case BLEAPP_MODE_NOCONNECT:
-			// app_timer_init();
-			break;
-		case BLEAPP_MODE_APPSCHED:
-			// app_timer_init();
-			APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
-			break;
-		case BLEAPP_MODE_RTOS:
-			if (pBleAppCfg->SDEvtHandler == NULL)
-				return false;
-
-			g_BleAppData.SDEvtHandler = pBleAppCfg->SDEvtHandler;
-
-			break;
-			default:
-				;
-    }
-#endif
 	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
 
     if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)

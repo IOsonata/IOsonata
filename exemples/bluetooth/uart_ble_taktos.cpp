@@ -59,11 +59,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
 
-#ifdef NRF52
-#define MODEL_NAME                      "IMM-NRF52x"                            /**< Model number. Will be passed to Device Information Service. */
-#else
-#define MODEL_NAME                      "IMM-NRF51x"                            /**< Model number. Will be passed to Device Information Service. */
-#endif
+#define MODEL_NAME                      "I-SYST-BLE"                            /**< Model number. Will be passed to Device Information Service. */
 
 #define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                               /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
 #define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                               /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
@@ -74,18 +70,17 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MIN_CONN_INTERVAL               10//MSEC_TO_UNITS(10, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               40//MSEC_TO_UNITS(40, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
-#define NRF_BLE_TAKTOS_THREAD_STACK 512u
+#define BLE_TAKTOS_THREAD_STACK         512u
 
 #ifndef TAKTOS_APP_TICK_HZ
 #define TAKTOS_APP_TICK_HZ              1000u
 #endif
 
 #ifndef TAKTOS_APP_CORE_CLOCK_HZ
-#ifdef NRF52
-#define TAKTOS_APP_CORE_CLOCK_HZ        64000000u
-#else
-#define TAKTOS_APP_CORE_CLOCK_HZ        16000000u
-#endif
+// Default to the CMSIS-standard runtime value populated by SystemInit().
+// Override at build time (-DTAKTOS_APP_CORE_CLOCK_HZ=<Hz>) when a compile-time
+// constant is preferred.
+#define TAKTOS_APP_CORE_CLOCK_HZ        SystemCoreClock
 #endif
 
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
@@ -96,8 +91,8 @@ static hTaktOSThread_t g_RxTask = NULL;
 static TaktOSSem_t g_BleEvtSem;
 static TaktOSSem_t g_RxEvtSem;
 
-static uint8_t g_BleTaskMem[TAKTOS_THREAD_MEM_SIZE(NRF_BLE_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
-static uint8_t g_RxTaskMem[TAKTOS_THREAD_MEM_SIZE(NRF_BLE_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
+static uint8_t g_BleTaskMem[TAKTOS_THREAD_MEM_SIZE(BLE_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
+static uint8_t g_RxTaskMem[TAKTOS_THREAD_MEM_SIZE(BLE_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
 
 //static const ble_uuid_t s_AdvUuids[] = {
 //	{BLUEIO_UUID_UART_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
@@ -141,7 +136,7 @@ const BtAppDevInfo_t s_UartBleDevDesc {
 	"0.0",                  // Hardware version string
 };
 
-void SD_TaktOS_Handler(void);
+void BtAppEvtNotify(void);
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
@@ -170,10 +165,9 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
-	.SDEvtHandler = SD_TaktOS_Handler,		// RTOS Softdevice handler
-	.SDEvtHandler = SD_TaktOS_Handler,		// RTOS Softdevice handler
+};
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
+int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 // UART configuration data
 
@@ -194,8 +188,8 @@ const UARTCfg_t g_UartCfg = {
 	.StopBits = 1,					// Stop bit
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
-	.IntPrio = TAKTOS_PRIORITY_NORMAL, 					// use APP_IRQ_PRIORITY_LOW with Softdevice
-	.EvtCallback = nRFUartEvthandler,
+	.IntPrio = TAKTOS_PRIORITY_NORMAL,
+	.EvtCallback = UartEvtHandler,
 	.bFifoBlocking = true,				// fifo blocking mode
 	.RxMemSize = 0,
 	.pRxMem = NULL,
@@ -291,7 +285,7 @@ void HardwareInit()
     IOPinEnableInterrupt(0, TAKTOS_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
-int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
 	uint8_t buff[20];
@@ -310,17 +304,22 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 	return cnt;
 }
 
-void SD_TaktOS_Handler(void)
+// RTOS bridge: TaktOS-specific implementations of the generic event hooks
+// declared in bluetooth/bt_app.h. The BLE stack's IRQ glue calls
+// BtAppEvtNotify() from interrupt context; the BLE task blocks in
+// BtAppEvtWait() until the semaphore is signalled, then drains pending
+// events via BtAppEvtDispatch(). Both functions are strong overrides of
+// the weak defaults shipped with the stack and port.
+
+void BtAppEvtNotify(void)
 {
-    (void)TaktOSSemGive(&g_BleEvtSem, false);
+	(void)TaktOSSemGive(&g_BleEvtSem, false);
 }
 
-
-void BtAppRtosWaitEvt(void)
+void BtAppEvtWait(void)
 {
-    // Generic RTOS wait: Bt stack callback (SDEvtHandler) gives this semaphore.
-    (void)TaktOSSemTake(&g_BleEvtSem, true, TAKTOS_WAIT_FOREVER);
-    BtAppEvtDispatch();
+	(void)TaktOSSemTake(&g_BleEvtSem, true, TAKTOS_WAIT_FOREVER);
+	BtAppEvtDispatch();
 }
 
 static void RxTask(void * pvParameter)
@@ -345,32 +344,28 @@ void BtAppInitUserData()
 }
 
 
-/* This function gets events from the SoftDevice and processes them. */
+// BLE task: runs the stack's main loop. BtAppRun() blocks on BtAppEvtWait()
+// until events arrive, then dispatches them; loops forever.
 static void BleTask(void * pvParameter)
 {
-	//g_Uart.printf("UART over BLE with TaktOS\r\n");
-
     BtAppRun();
 }
 
 
-// Local error codes (avoid Nordic SDK dependency for NRF_ERROR_* macros)
-#ifndef NRF_ERROR_INVALID_PARAM
-#define NRF_ERROR_INVALID_PARAM  (-1)
-#endif
-#ifndef NRF_ERROR_NO_MEM
-#define NRF_ERROR_NO_MEM         (-2)
-#endif
+// Local error codes for fatal traps
+#define APP_ERR_INVALID_PARAM    (-1)
+#define APP_ERR_NO_MEM           (-2)
+
 void TaktOSAppInit()
 {
     if (TaktOSSemInit(&g_BleEvtSem, 0u, 1u) != TAKTOS_OK)
     {
-        AppFatalError(NRF_ERROR_INVALID_PARAM);
+        AppFatalError(APP_ERR_INVALID_PARAM);
     }
 
     if (TaktOSSemInit(&g_RxEvtSem, 0u, 1u) != TAKTOS_OK)
     {
-        AppFatalError(NRF_ERROR_INVALID_PARAM);
+        AppFatalError(APP_ERR_INVALID_PARAM);
     }
 
     TaktOSCfg_t cfg = {
@@ -380,7 +375,7 @@ void TaktOSAppInit()
 
     if (TaktOSInit(&cfg) != TAKTOS_OK)
     {
-        AppFatalError(NRF_ERROR_INVALID_PARAM);
+        AppFatalError(APP_ERR_INVALID_PARAM);
     }
 
     g_BleTask = TaktOSThreadCreate(g_BleTaskMem,
@@ -390,7 +385,7 @@ void TaktOSAppInit()
                                    TAKTOS_PRIORITY_HIGH);
     if (g_BleTask == NULL)
     {
-        AppFatalError(NRF_ERROR_NO_MEM);
+        AppFatalError(APP_ERR_NO_MEM);
     }
 
     g_RxTask = TaktOSThreadCreate(g_RxTaskMem,
@@ -400,7 +395,7 @@ void TaktOSAppInit()
                                   TAKTOS_PRIORITY_NORMAL);
     if (g_RxTask == NULL)
     {
-        AppFatalError(NRF_ERROR_NO_MEM);
+        AppFatalError(APP_ERR_NO_MEM);
     }
 }
 

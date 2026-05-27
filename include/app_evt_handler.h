@@ -40,6 +40,9 @@ SOFTWARE.
 #ifndef __APP_EVT_HANDLER_H__
 #define __APP_EVT_HANDLER_H__
 
+#include <stdint.h>
+#include <stddef.h>
+
 #ifndef __cplusplus
 #include <stdbool.h>
 #endif

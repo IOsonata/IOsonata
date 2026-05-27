@@ -158,7 +158,6 @@ const BtAppCfg_t s_BtDevCfg = {
 	BLUEIO_LED1_PIN,     // Led pin number
 	0,
 	0, 		// Tx power
-	NULL						// RTOS Softdevice handler
 };
 
 // Motsai Neblina V2 module uses SPI interface

@@ -164,7 +164,11 @@ static void BtStackSdcAssert(const char * file, const uint32_t line)
 
 static void BtStackSdcCB()
 {
-	//printf("BtHciSdcCB\n");
+	// SDC invokes this from the low-priority SWI when HCI messages are
+	// queued. Wake any RTOS waiter so deferred work runs promptly; the
+	// weak BtAppEvtNotify default is empty so bare-metal apps see no
+	// effect. Then drain whatever is available right here.
+	BtAppEvtNotify();
 
 	uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
 	int32_t res = 0;
@@ -861,7 +865,7 @@ DEBUG_PRINTF("Loop\r\n");
 
 	while (1)
 	{
-		__WFE();
+		BtAppEvtWait();
 		AppEvtHandlerExec();
 
 #if 1
@@ -884,6 +888,13 @@ DEBUG_PRINTF("Loop\r\n");
 		}
 #endif
 	}
+}
+
+// Port-level weak default for BtAppEvtWait. Bare-metal apps fall through to
+// __WFE; RTOS apps provide a strong override that does a semaphore take.
+__attribute__((weak)) void BtAppEvtWait(void)
+{
+	__WFE();
 }
 
 #if 0

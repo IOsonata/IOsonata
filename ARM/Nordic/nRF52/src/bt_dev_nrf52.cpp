@@ -1857,28 +1857,6 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
     	s_BtDevnRF5.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
     app_timer_init();
 
-#if 0
-    switch (g_BleAppData.AppMode)
-    {
-		case BLEAPP_MODE_LOOP:
-		case BLEAPP_MODE_NOCONNECT:
-			// app_timer_init();
-			break;
-		case BLEAPP_MODE_APPSCHED:
-			// app_timer_init();
-			APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
-			break;
-		case BLEAPP_MODE_RTOS:
-			if (pBleAppCfg->SDEvtHandler == NULL)
-				return false;
-
-			g_BleAppData.SDEvtHandler = pBleAppCfg->SDEvtHandler;
-
-			break;
-			default:
-				;
-    }
-#endif
 	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
 
 //    nrf_ble_lesc_init();
@@ -2175,40 +2153,11 @@ static void appsh_events_poll(void * p_event_data, uint16_t event_size)
 
 extern "C" void SD_EVT_IRQHandler(void)
 {
-#if 0
-	switch (g_BleAppData.AppMode)
-	{
-		case BLEAPP_MODE_LOOP:
-		case BLEAPP_MODE_NOCONNECT:
-			nrf_sdh_evts_poll();
-			break;
-		case BLEAPP_MODE_APPSCHED:
-			{
-				ret_code_t ret_code = app_sched_event_put(NULL, 0, appsh_events_poll);
-
-				APP_ERROR_CHECK(ret_code);
-			}
-			break;
-		case BLEAPP_MODE_RTOS:
-			if (g_BleAppData.SDEvtHandler)
-			{
-				g_BleAppData.SDEvtHandler();
-			}
-			break;
-		default:
-			;
-	}
-#endif
-	if (g_BleAppData.SDEvtHandler != NULL)
-	{
-		g_BleAppData.SDEvtHandler();
-	}
-	else
-	{
-		ret_code_t ret_code = app_sched_event_put(NULL, 0, appsh_events_poll);
-
-		APP_ERROR_CHECK(ret_code);
-	}
+	// Notify any RTOS waiter then drain SoftDevice events so NRF_SDH observers run.
+	// RTOS apps provide a strong BtAppEvtNotify() that wakes their BLE task; the
+	// weak default is empty so bare-metal apps simply fall through to the poll.
+	BtAppEvtNotify();
+	nrf_sdh_evts_poll();
 }
 
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)

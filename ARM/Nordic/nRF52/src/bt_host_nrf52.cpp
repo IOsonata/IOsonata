@@ -129,7 +129,6 @@ typedef struct __Bt_Host_Data {
 	uint8_t ConnLedActLevel;
 	int PeriphDevCnt;
 //	BLEAPP_PERIPH *pPeriphDev;
-	uint32_t (*SDEvtHandler)(void) ;
 //	ble_advdata_t AdvData;
 //	ble_advdata_t SrData;
   //  ble_advdata_manuf_data_t ManufData;
@@ -1473,7 +1472,9 @@ bool BleAppStackInit(int CentLinkCount, int PeriLinkCount, bool bConnectable)
 
 static void ble_rtos_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 {
-    s_BtHostData.SDEvtHandler();
+	// Wake any RTOS waiter. The weak BtAppEvtNotify default is empty so
+	// bare-metal apps see no effect; RTOS apps provide a strong override.
+	BtAppEvtNotify();
 }
 
 int8_t GetValidTxPower(int TxPwr)
@@ -1536,11 +1537,9 @@ bool BleAppInit(const BleAppCfg_t *pBleAppCfg, bool bEraseBond)
 			APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
 			break;
 		case BLEAPP_MODE_RTOS:
-			if (pBleAppCfg->SDEvtHandler == NULL)
-				return false;
-
-			s_BtHostData.SDEvtHandler = pBleAppCfg->SDEvtHandler;
-
+			// RTOS hook-up has moved out of cfg storage. Apps using an RTOS
+			// provide strong overrides of BtAppEvtWait/BtAppEvtNotify; no
+			// per-mode storage is required here.
 			break;
 			default:
 				;
@@ -1871,10 +1870,7 @@ extern "C" void SD_EVT_IRQHandler(void)
              }
              break;
          case BLEAPP_MODE_RTOS:
-             if (s_BtHostData.SDEvtHandler)
-             {
-                 s_BtHostData.SDEvtHandler();
-             }
+             BtAppEvtNotify();
              break;
 				 default:
 					 ;

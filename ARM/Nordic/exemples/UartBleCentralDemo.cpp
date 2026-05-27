@@ -38,7 +38,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #ifndef NRFXLIB_SDC
 #include "app_util_platform.h"
-#include "app_scheduler.h"
 #include "ble_gap.h"
 #include "ble_advdata.h"
 #include "nrf_ble_scan.h"
@@ -47,6 +46,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 #include "istddef.h"
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 //#include "ble_app_nrf5.h"
 //#include "ble_service.h"
@@ -117,7 +117,7 @@ volatile uint32_t g_DropCnt = 0;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 //void BleCentralEvtUserHandler(ble_evt_t * p_ble_evt);
-void BleTxSchedHandler(void * p_event_data, uint16_t event_size);
+void BleTxSchedHandler(uint32_t Evt, void *pCtx);
 
 IOPinCfg_t s_Leds[] = LED_PIN_MAP;
 static int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
@@ -518,7 +518,7 @@ void BleAppInitUserData()
 //	}
 //}
 
-void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
+void BleTxSchedHandler(uint32_t Evt, void *pCtx)
 {
 	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
 
@@ -534,7 +534,7 @@ void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
 		}
 
 		// Schedule this func again if g_UartRx2BleFifo is not empty
-		app_sched_event_put(NULL, 0, BleTxSchedHandler);
+		AppEvtHandlerQue(0, NULL, BleTxSchedHandler);
 #endif
 	}
 
@@ -542,7 +542,7 @@ void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
 }
 
 
-void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
+void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 {
 	bool flush = false;
 	uint8_t *p = NULL;
@@ -590,13 +590,13 @@ void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
 		}
 
 		// Schedule the BleTxSchedHandler for sending data via BLE
-		app_sched_event_put(NULL, 0, BleTxSchedHandler);
+		AppEvtHandlerQue(0, NULL, BleTxSchedHandler);
 	}
 
 	// Schedule the UartRxSchedHandler if ExternalUartRxBuffer still has data
 	if (g_UartRxExtBuffLen > 0)
 	{
-		app_sched_event_put(NULL,  0,  UartRxSchedHandler);
+		AppEvtHandlerQue(0, NULL, UartRxSchedHandler);
 	}
 
 }
@@ -611,7 +611,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 		case UART_EVT_RXDATA:
 			if (g_UartRxExtBuffLen <= 0)
 			{
-				app_sched_event_put(NULL, 0, UartRxSchedHandler);
+				AppEvtHandlerQue(0, NULL, UartRxSchedHandler);
 			}
 
 			break;

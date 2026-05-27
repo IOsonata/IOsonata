@@ -792,6 +792,11 @@ static void soc_evt_poll(void *context)
 	uint32_t nrf_err;
 	uint32_t evt_id;
 
+	// Wake any RTOS waiter; weak BtAppEvtNotify is empty so bare-metal apps
+	// see no effect. SoC events themselves are processed in this dispatch
+	// context regardless.
+	BtAppEvtNotify();
+
 	DEBUG_PRINTF("soc_evt_poll\r\n");
 	while (true) {
 		nrf_err = sd_evt_get(&evt_id);
@@ -816,6 +821,11 @@ static void ble_evt_poll(void *context)
 
 	__aligned(4) static uint8_t evt_buffer[NRF_SDH_BLE_EVT_BUF_SIZE];
 	ble_evt_t * const ble_evt = (ble_evt_t *)evt_buffer;
+
+	// Wake any RTOS waiter; weak BtAppEvtNotify is empty so bare-metal apps
+	// see no effect. BLE events themselves are processed in this dispatch
+	// context regardless.
+	BtAppEvtNotify();
 
 	DEBUG_PRINTF("ble_evt_poll evt %x\r\n", ble_evt->header.evt_id);
 
