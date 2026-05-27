@@ -274,26 +274,32 @@ void ImuConfCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int L
 
 void ImuTapCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	g_ImuChars[IMUCHAR_IDX_TAP].bNotify = true;
-	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_TAP);
+	if (bEnable)
+	{
+		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_TAP);
+	}
 }
 
 void ImuOrientCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	g_ImuChars[IMUCHAR_IDX_ORIENT].bNotify = true;
-	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_ORIENTATION);
+	if (bEnable)
+	{
+		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_ORIENTATION);
+	}
 }
 
 void ImuQuaternionCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	g_ImuChars[IMUCHAR_IDX_QUAT].bNotify = true;
-	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_QUAT);
-	ICM20948EnableFeature(MPU9250_MOTION_FEATURE_QUAT);
+	if (bEnable)
+	{
+		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_QUAT);
+		ICM20948EnableFeature(MPU9250_MOTION_FEATURE_QUAT);
+	}
 }
 
 void ImuQuatDataSend(long Quat[4])
 {
-	if (g_ImuChars[IMUCHAR_IDX_QUAT].bNotify == false)
+	if (g_ImuChars[IMUCHAR_IDX_QUAT].Runtime.bNotify == false)
 		return;
 
 	if (isConnected() == false)
@@ -323,14 +329,18 @@ void ImuQuatDataSend(long Quat[4])
 
 void ImuPedometerCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	g_ImuChars[IMUCHAR_IDX_PEDO].bNotify = true;
-	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_PEDOMETER);
+	if (bEnable)
+	{
+		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_PEDOMETER);
+	}
 }
 
 void ImuRawCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	g_ImuChars[IMUCHAR_IDX_RAW].bNotify = true;
-	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_RAW);
+	if (bEnable)
+	{
+		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_RAW);
+	}
 }
 
 void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSensorData_t &MagData)
@@ -363,24 +373,32 @@ void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSe
 
 void ImuEulerCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	g_ImuChars[IMUCHAR_IDX_EULER].bNotify = true;
-	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_EULER);
+	if (bEnable)
+	{
+		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_EULER);
+	}
 }
 
 void ImuRotMatCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	g_ImuChars[IMUCHAR_IDX_ROTMAT].bNotify = true;
-	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_ROT_MAT);
+	if (bEnable)
+	{
+		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_ROT_MAT);
+	}
 }
 void ImuHeadingCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	g_ImuChars[IMUCHAR_IDX_HEADING].bNotify = true;
-	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_HEADING);
+	if (bEnable)
+	{
+		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_HEADING);
+	}
 }
 
 void ImuGravityCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	g_ImuChars[IMUCHAR_IDX_GRAVITY].bNotify = true;
-	MPU9250EnableFeature(MPU9250_MOTION_FEATURE_GRAVITY_VECTOR);
+	if (bEnable)
+	{
+		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_GRAVITY_VECTOR);
+	}
 }
 

@@ -170,7 +170,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 			s_ConnHandle = BLE_CONN_HANDLE_INVALID;
 			for (int i = 0; i < pSrvc->NbChar; i++)
 			{
-				pSrvc->pCharArray[i].bNotify = false;
+				pSrvc->pCharArray[i].Runtime.bNotify = false;
 			}
 			break;
 
@@ -188,7 +188,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 							GATLWRHDR *hdr = (GATLWRHDR *)pSrvc->pLongWrBuff;
 							uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
 
-							if (hdr->Handle == pSrvc->pCharArray[i].ValHdl)
+							if (hdr->Handle == pSrvc->pCharArray[i].Runtime.ValHdl)
 							{
 								GatherLongWrBuff(hdr);
 								if (pSrvc->pCharArray[i].WrCB)
@@ -200,25 +200,25 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 					}
 					else
 					{
-						if ((p_evt_write->handle == pSrvc->pCharArray[i].CccdHdl) &&
+						if ((p_evt_write->handle == pSrvc->pCharArray[i].Runtime.CccdHdl) &&
 							(p_evt_write->len == 2))
 						{
 							// CCCD write - enable/disable notification
 							if (IsNotificationEnabled(p_evt_write->data))
 							{
-								pSrvc->pCharArray[i].bNotify = true;
+								pSrvc->pCharArray[i].Runtime.bNotify = true;
 							}
 							else
 							{
-								pSrvc->pCharArray[i].bNotify = false;
+								pSrvc->pCharArray[i].Runtime.bNotify = false;
 							}
 							// Set notify callback
 							if (pSrvc->pCharArray[i].SetNotifCB)
 							{
-								pSrvc->pCharArray[i].SetNotifCB(&pSrvc->pCharArray[i], pSrvc->pCharArray[i].bNotify);
+								pSrvc->pCharArray[i].SetNotifCB(&pSrvc->pCharArray[i], pSrvc->pCharArray[i].Runtime.bNotify);
 							}
 						}
-						else if ((p_evt_write->handle == pSrvc->pCharArray[i].ValHdl) &&
+						else if ((p_evt_write->handle == pSrvc->pCharArray[i].Runtime.ValHdl) &&
 								 (pSrvc->pCharArray[i].WrCB != NULL))
 						{
 							// Value write
@@ -253,7 +253,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 			{
 				for (int i = 0; i < pSrvc->NbChar; i++)
 				{
-					if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].ValHdl &&
+					if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].Runtime.ValHdl &&
 						pSrvc->pCharArray[i].TxCompleteCB != nullptr)
 					{
 						pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
