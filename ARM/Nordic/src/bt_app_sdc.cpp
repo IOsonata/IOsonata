@@ -397,7 +397,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	int32_t res = sdc_init(BtStackSdcAssert);
 
-	sdc_hci_cmd_cb_reset();
+	//sdc_hci_cmd_cb_reset();
 
 	sdc_rand_source_t rand_functions = {
 		//.rand_prio_low_get = BtStackRandPrioLowGet,
