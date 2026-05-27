@@ -73,6 +73,7 @@ bool BtAttExchangeMtuRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint1
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
 	DEBUG_PRINTF("BtAttExchangeMtuRequest : %d, %d\r\n", n, Mtu);
+	(void)n;  // suppress -Wunused-variable when DEBUG_PRINTF is empty
 
 //	BtHciSendAtt(BtAttReqRsp_t req, 2);
 	return true;
@@ -99,6 +100,7 @@ bool BtAttFindInformationRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
 	DEBUG_PRINTF("BtAttFindInformationRequest (%s): %d, %d\r\n", n == 0 ? "FAILED" : "SUCCESS", StartHdl, EndHdl);
+	(void)n;  // suppress -Wunused-variable when DEBUG_PRINTF is empty
 
 //	BtHciSendAtt(BtAttReqRsp_t req, 2);
 	return true;
@@ -126,7 +128,7 @@ bool BtAttFindByTypeValueRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 
 	DEBUG_PRINTF("BtAttFindByTypeValueRequest : %d, %d %d\r\n", StartHdl, EndHdl, AttType);
 
-	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
 	return true;
 }
@@ -167,7 +169,7 @@ bool BtAttReadByTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16
 
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
 	//DEBUG_PRINTF("BtAttReadByTypeRequest : %d, %d %d\r\n", StartHdl, EndHdl, pUuid->BaseIdx);
 
@@ -191,7 +193,7 @@ bool BtAttReadRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl
 
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
 	//DEBUG_PRINTF("BtAttReadRequest Hdl: %d\r\n", Hdl);
 
@@ -216,7 +218,7 @@ bool BtAttReadBlobRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t
 
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
 	DEBUG_PRINTF("BtAttReadBlobRequest : %d %x\r\n", Hdl, Offset);
 
@@ -240,7 +242,7 @@ bool BtAttReadMultipleRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint
 
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 
 	DEBUG_PRINTF("BtAttReadMultipleRequest : %x %d\r\n", pHdl[0], NbHdl);
 
@@ -296,7 +298,7 @@ bool BtAttReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-	uint32_t n = pDev->SendData((uint8_t*) acl,
+	pDev->SendData((uint8_t*) acl,
 			acl->Hdr.Len + sizeof(acl->Hdr));
 
 //	DEBUG_PRINTF("BtAttReadByGroupTypeRequest : StartHdl %d, EndHdl %d, BaseIdx %d\r\n", StartHdl,

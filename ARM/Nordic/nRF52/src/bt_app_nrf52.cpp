@@ -290,12 +290,12 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 
                 for (int i = 0; i < p_char_disc_rsp_evt->count; i++, periph->Services[s_CurSrvcIdx].char_count++)
                 {
-        			memcpy(&periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].characteristic,
+        			memcpy(&periph->Services[s_CurSrvcIdx].characteristics[periph->Services[s_CurSrvcIdx].char_count].characteristic,
                     	   &p_char_disc_rsp_evt->chars[i], sizeof(ble_gattc_char_t));
-                    periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].cccd_handle = BLE_GATT_HANDLE_INVALID;
-                    periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].ext_prop_handle = BLE_GATT_HANDLE_INVALID;
-                    periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].user_desc_handle = BLE_GATT_HANDLE_INVALID;
-                    periph->Services[s_CurSrvcIdx].charateristics[periph->Services[s_CurSrvcIdx].char_count].report_ref_handle = BLE_GATT_HANDLE_INVALID;
+                    periph->Services[s_CurSrvcIdx].characteristics[periph->Services[s_CurSrvcIdx].char_count].cccd_handle = BLE_GATT_HANDLE_INVALID;
+                    periph->Services[s_CurSrvcIdx].characteristics[periph->Services[s_CurSrvcIdx].char_count].ext_prop_handle = BLE_GATT_HANDLE_INVALID;
+                    periph->Services[s_CurSrvcIdx].characteristics[periph->Services[s_CurSrvcIdx].char_count].user_desc_handle = BLE_GATT_HANDLE_INVALID;
+                    periph->Services[s_CurSrvcIdx].characteristics[periph->Services[s_CurSrvcIdx].char_count].report_ref_handle = BLE_GATT_HANDLE_INVALID;
 
                     s_CurRange.start_handle = p_char_disc_rsp_evt->chars[i].handle_value + 1;
                 }
@@ -337,22 +337,22 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
                     switch (p_desc_disc_rsp_evt->descs[i].uuid.uuid)
                     {
                         case BLE_UUID_DESCRIPTOR_CLIENT_CHAR_CONFIG:
-                            periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].cccd_handle = p_desc_disc_rsp_evt->descs[i].handle;
+                            periph->Services[s_CurSrvcIdx].characteristics[s_CurCharIdx].cccd_handle = p_desc_disc_rsp_evt->descs[i].handle;
                             s_CurRange.start_handle++;
                             break;
 
                         case BLE_UUID_DESCRIPTOR_CHAR_EXT_PROP:
-                            periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].ext_prop_handle = p_desc_disc_rsp_evt->descs[i].handle;
+                            periph->Services[s_CurSrvcIdx].characteristics[s_CurCharIdx].ext_prop_handle = p_desc_disc_rsp_evt->descs[i].handle;
                             s_CurRange.start_handle++;
                             break;
 
                         case BLE_UUID_DESCRIPTOR_CHAR_USER_DESC:
-                            periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].user_desc_handle = p_desc_disc_rsp_evt->descs[i].handle;
+                            periph->Services[s_CurSrvcIdx].characteristics[s_CurCharIdx].user_desc_handle = p_desc_disc_rsp_evt->descs[i].handle;
                             s_CurRange.start_handle++;
                             break;
 
                         case BLE_UUID_REPORT_REF_DESCR:
-                            periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].report_ref_handle = p_desc_disc_rsp_evt->descs[i].handle;
+                            periph->Services[s_CurSrvcIdx].characteristics[s_CurCharIdx].report_ref_handle = p_desc_disc_rsp_evt->descs[i].handle;
                             s_CurRange.start_handle++;
                             break;
 
@@ -381,7 +381,7 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 			}
 			{
 				s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
-				s_CurRange.start_handle = periph->Services[s_CurSrvcIdx].charateristics[s_CurCharIdx].characteristic.handle_value + 1;
+				s_CurRange.start_handle = periph->Services[s_CurSrvcIdx].characteristics[s_CurCharIdx].characteristic.handle_value + 1;
 				uint32_t err = sd_ble_gattc_descriptors_discover(periph->ConnHdl, &s_CurRange);
 			}
             break;

@@ -107,11 +107,11 @@ typedef struct __Bt_Device {
 
 // --- Legacy aliases (pre-Voci rename) ---
 //
-// The previous public type was BtDev_t with BLEPERIPH_* constants. These
-// aliases let the existing ARM/Nordic/src/ble_dev.cpp, bt_dev_sdc.cpp, and
-// bt_attrsp.cpp keep compiling against the renamed type. Step 7's lift of
-// the discovery state machine will remove the dependents and these
-// aliases can then be deleted.
+// The previous public type was BtDev_t with BLEPERIPH_* constants. The
+// aliases below let bt_dev_sdc.cpp keep compiling against the renamed type.
+// bt_attrsp.cpp was lifted off these in the discovery-state refactor;
+// ble_dev.cpp was deleted. Once bt_dev_sdc.cpp is updated the aliases can
+// be dropped.
 typedef BtDevice_t BtDev_t;
 #define BLEPERIPH_DEV_NAME_MAXLEN	BT_DEV_NAME_MAXLEN
 #define BLEPERIPH_DEV_SERVICE_MAXCNT	BT_DEV_SERVICE_MAXCNT

@@ -308,7 +308,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 				// Bound the per-service char index against the static array
 				// in BtGattDBSrvc_t. Without this, a peer advertising more
 				// than BT_GATT_DB_MAX_CHARS chars in a single service would
-				// overrun pPeer->Services[].charateristics[].
+				// overrun pPeer->Services[].characteristics[].
 				if (pPeer->Discovery.CharIdx >= BT_GATT_DB_MAX_CHARS)
 				{
 					DEBUG_PRINTF("Char table full for SrvcIdx %d (cap %d), dropping rest\r\n",
@@ -322,7 +322,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 
 				BtGattDBChar_t *pChar =
 					&pPeer->Services[pPeer->Discovery.SrvIdx]
-					     .charateristics[pPeer->Discovery.CharIdx];
+					     .characteristics[pPeer->Discovery.CharIdx];
 				memcpy((uint8_t*) &pChar->characteristic.char_props, &CharProp,
 				       sizeof(BtGattCharProps_t));
 				pChar->characteristic.handle_value = CharHdlVal;
@@ -400,7 +400,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 				uint16_t Hdl = p->Data[off+0] | (p->Data[off+1] << 8);
 				BtGattDBChar_t *pChar =
 					&pPeer->Services[pPeer->Discovery.SrvIdx]
-					     .charateristics[pPeer->Discovery.CharIdx];
+					     .characteristics[pPeer->Discovery.CharIdx];
 				if (pChar->characteristic.char_props.notify
 				 || pChar->characteristic.char_props.indicate)
 				{

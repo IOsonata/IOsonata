@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	bt_app_handler.cpp
+@file	bt_app_handler.c
 
 @brief	Bluetooth application firmware event callback
 

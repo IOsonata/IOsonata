@@ -129,7 +129,7 @@ typedef struct __Bt_Adv_Data {
 typedef struct __Bt_Adv_Data_Flags {
 	BtAdvDataHdr_t Hdr;					//!< Advertisement data header
 	uint8_t Flags;						//!< GAP Flags
-} BtdvDataFlags_t;
+} BtAdvDataFlags_t;
 
 typedef struct __Bt_Adv_Packet {
 	int MaxLen;							//!< Max adv data length

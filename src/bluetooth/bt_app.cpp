@@ -211,7 +211,7 @@ int BtDeviceFindCharacteristic(BtDevice_t * const pDev, int SrvcIdx, uint16_t Uu
 	BtGattDBSrvc_t *pSrvc = &pDev->Services[SrvcIdx];
 	for (int i = 0; i < pSrvc->char_count; i++)
 	{
-		if (pSrvc->charateristics[i].characteristic.uuid.Uuid == Uuid)
+		if (pSrvc->characteristics[i].characteristic.uuid.Uuid == Uuid)
 		{
 			return i;
 		}

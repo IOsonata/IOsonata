@@ -501,7 +501,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			{
 				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-				uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+				pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 			}
 			else
 			{
@@ -569,8 +569,8 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 //	DEBUG_PRINTF("Len : %d, %d, %d\r\n", Len, l2pdu->Hdr.Len, acl->Hdr.Len);
-	uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
 	s_NbPktSent++;
-//	DEBUG_PRINTF("n=%d\r\n", n);
+//	DEBUG_PRINTF("... \r\n");
 }
 */

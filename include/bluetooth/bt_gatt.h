@@ -182,7 +182,7 @@ typedef struct
 	BtUuid16_t			srv_uuid;
     uint8_t             char_count;                                /**< Number of characteristics present in the service. */
     BtGattcHdlRange_t	handle_range;                              /**< Service Handle Range. */
-    BtGattDBChar_t      charateristics[BT_GATT_DB_MAX_CHARS];     /**< Array of information related to the characteristics present in the service. This list can extend further than one. */
+    BtGattDBChar_t      characteristics[BT_GATT_DB_MAX_CHARS];     /**< Array of information related to the characteristics present in the service. This list can extend further than one. */
 } BtGattDBSrvc_t;//ble_gatt_db_srv_t;
 
 #pragma pack(pop)

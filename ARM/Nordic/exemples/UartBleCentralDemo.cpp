@@ -267,7 +267,7 @@ void BleDevDiscovered(BtDev_t *pDev)
     	for (int j = 0; j < g_ConnectedDev.Services[i].char_count; j++)
     	{
     		g_Uart.printf("	Char_ID %d: 0x%x\r\n",
-    				j, g_ConnectedDev.Services[i].charateristics[j].characteristic.uuid.uuid);
+    				j, g_ConnectedDev.Services[i].characteristics[j].characteristic.uuid.uuid);
     	}
     }
     // Find the desired UART-BLE Service
@@ -287,14 +287,14 @@ void BleDevDiscovered(BtDev_t *pDev)
 #ifdef DEBUG_PRINT
     	g_Uart.printf("Find UART_RX_CHAR idx = 0x%x (%d)...", dcharidx, dcharidx);
 #endif
-    	if (dcharidx >= 0 && pDev->Services[idx].charateristics[dcharidx].characteristic.char_props.notify)
+    	if (dcharidx >= 0 && pDev->Services[idx].characteristics[dcharidx].characteristic.char_props.notify)
     	{
     		flag--;
     		// Enable Notify
         	//g_Uart.printf("Enable notify\r\n");
-        	uint32_t ec = BtAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].charateristics[dcharidx].cccd_handle);
+        	uint32_t ec = BtAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].characteristics[dcharidx].cccd_handle);
 
-        	g_BleRxCharHdl = pDev->Services[idx].charateristics[dcharidx].characteristic.handle_value;
+        	g_BleRxCharHdl = pDev->Services[idx].characteristics[dcharidx].characteristic.handle_value;
 #ifdef DEBUG_PRINT
         	g_Uart.printf("Found!\r\n");
 #endif
@@ -314,7 +314,7 @@ void BleDevDiscovered(BtDev_t *pDev)
     	if (dcharidx >= 0)
     	{
     		flag--;
-    		g_BleTxCharHdl = pDev->Services[idx].charateristics[dcharidx].characteristic.handle_value;
+    		g_BleTxCharHdl = pDev->Services[idx].characteristics[dcharidx].characteristic.handle_value;
 #ifdef DEBUG_PRINT
     		g_Uart.printf("Found!\r\n");
 #endif
