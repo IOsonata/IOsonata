@@ -443,14 +443,14 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 
 	BtGattCharSetValue(pChar, pData, DataLen);
 
-	if (pChar->bNotify == false)
+	if (pChar->Runtime.bNotify == false)
 		return false;
 
     ble_gatts_hvx_params_t params;
 
     memset(&params, 0, sizeof(params));
     params.type = BLE_GATT_HVX_NOTIFICATION;
-    params.handle = pChar->ValHdl;//.value_handle;
+    params.handle = pChar->Runtime.ValHdl;//.value_handle;
     params.p_data = pData;
     params.p_len = &DataLen;
 

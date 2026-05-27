@@ -62,90 +62,30 @@ SOFTWARE.
 alignas(4) static BtGapConnection_t s_BtGapConnection[BT_GAP_CONN_MAX_COUNT];
 
 static BtGattChar_t s_BtGapChar[] = {
-	{
-		// Device name characteristic
-		.Uuid = BT_UUID_CHARACTERISTIC_DEVICE_NAME,
-		.MaxDataLen = BT_GAP_DEVNAME_MAX_LEN,
-		.Property =	BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = NULL,						// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
-	{
-		// Appearance characteristic
-		.Uuid = BT_UUID_CHARACTERISTIC_APPEARANCE,
-		.MaxDataLen = 2,
-		.Property =	BT_GATT_CHAR_PROP_READ,
-		.pDesc = NULL,						// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
-	{
-		// Prefered connection parameter characteristic
-		.Uuid = BT_UUID_CHARACTERISTIC_PERIPH_PREFERRED_CONN_PARAM,
-		.MaxDataLen = sizeof(BtGattPreferedConnParams_t),
-		.Property =	BT_GATT_CHAR_PROP_READ,
-		.pDesc = NULL,						// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
+	BT_CHAR(BT_UUID_CHARACTERISTIC_DEVICE_NAME,
+	        BT_GAP_DEVNAME_MAX_LEN,
+	        BT_GATT_CHAR_PROP_READ,
+	        NULL),
+	BT_CHAR(BT_UUID_CHARACTERISTIC_APPEARANCE,
+	        2,
+	        BT_GATT_CHAR_PROP_READ,
+	        NULL),
+	BT_CHAR(BT_UUID_CHARACTERISTIC_PERIPH_PREFERRED_CONN_PARAM,
+	        sizeof(BtGattPreferedConnParams_t),
+	        BT_GATT_CHAR_PROP_READ,
+	        NULL),
 };
 
-static const BtGattSrvcCfg_t s_BtGapSrvcCfg = {
-	.bCustom = false,
-	.UuidBase = {0,},						// Base UUID
-	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ACCESS,	// Service UUID
-	.NbChar = sizeof(s_BtGapChar) / sizeof(BtGattChar_t),// Total number of characteristics for the service
-	.pCharArray = s_BtGapChar,				// Pointer a an array of characteristic
-};
-
-static BtGattSrvc_t s_BtGapSrvc;
+static BtGattSrvc_t s_BtGapSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_GENERIC_ACCESS, s_BtGapChar);
 
 static BtGattChar_t s_BtGattChar[] = {
-	{
-		// Service Changed characteristic (GATT service)
-		.Uuid = BT_UUID_CHARACTERISTIC_SERVICE_CHANGED,
-		.MaxDataLen = sizeof(BtGattCharSrvcChanged_t),
-		.Property =	BT_GATT_CHAR_PROP_INDICATE,
-		.pDesc = NULL,						// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
+	BT_CHAR(BT_UUID_CHARACTERISTIC_SERVICE_CHANGED,
+	        sizeof(BtGattCharSrvcChanged_t),
+	        BT_GATT_CHAR_PROP_INDICATE,
+	        NULL),
 };
 
-static BtGattSrvcCfg_t s_BtGattSrvcCfg = {
-	.bCustom = false,
-	.UuidBase = {0,},		// Base UUID
-	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE,		// Service UUID
-	.NbChar = sizeof(s_BtGattChar) / sizeof(BtGattChar_t),				// Total number of characteristics for the service
-	.pCharArray = s_BtGattChar,				// Pointer a an array of characteristic
-};
-
-static BtGattSrvc_t s_BtGattSrvc;
+static BtGattSrvc_t s_BtGattSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE, s_BtGattChar);
 
 __attribute__((weak)) void BtGapSetDevName(const char *pName)
 {
@@ -159,7 +99,7 @@ __attribute__((weak)) void BtGapSetDevName(const char *pName)
 
 __attribute__((weak)) const char *BtGapGetDevName()
 {
-	return (const char*)s_BtGapChar[0].pValue;
+	return (const char*)s_BtGapChar[0].Runtime.pValue;
 }
 
 __attribute__((weak)) void BtGapSetAppearance(uint16_t Val)
@@ -207,8 +147,8 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 
 	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
 	{
-		BtGattSrvcAdd(&s_BtGattSrvc, &s_BtGattSrvcCfg);
-		BtGattSrvcAdd(&s_BtGapSrvc, &s_BtGapSrvcCfg);
+		BtGattSrvcAdd(&s_BtGattSrvc);
+		BtGattSrvcAdd(&s_BtGapSrvc);
 	}
 
 	if (pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL))

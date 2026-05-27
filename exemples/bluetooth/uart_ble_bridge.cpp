@@ -103,54 +103,24 @@ uint8_t g_ManData[8];
 #define BLESRV_READ_CHAR_IDX		0
 #define BLESRV_WRITE_CHAR_IDX		1
 
-static uint8_t s_UartRxCharMem[PACKET_SIZE];
-static uint8_t s_UartTxCharMem[PACKET_SIZE];
-
-static uint8_t s_RxCharValMem[PACKET_SIZE];
-
 BtGattChar_t g_UartChars[] = {
-	{
-		// Read characteristic
-		.Uuid = BLE_UART_UUID_READ_CHAR,
-		.MaxDataLen = PACKET_SIZE,
-		.Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = s_RxCharDescString,		// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = s_RxCharValMem,
-		//.CharVal = {PACKET_SIZE, 0, s_UartRxCharMem},						// char values
-	},
-	{
-		// Write characteristic
-		.Uuid = BLE_UART_UUID_WRITE_CHAR,	// char UUID
-		.MaxDataLen = PACKET_SIZE,
-		.Property = BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP | BT_GATT_CHAR_PROP_VALEN,	// char properties define by BLUEIOSVC_CHAR_PROP_...
-		.pDesc = s_TxCharDescString,		// char UTF-8 description string
-		.WrCB = NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		//.CharVal = {PACKET_SIZE, 0, s_UartTxCharMem},						// char values
-	},
+	// Read + Notify (server-pushed)
+	BT_CHAR(BLE_UART_UUID_READ_CHAR, PACKET_SIZE,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_RxCharDescString),
+	// Write + Write Without Response (peer sink; BtIntrf handles writes)
+	BT_CHAR(BLE_UART_UUID_WRITE_CHAR, PACKET_SIZE,
+	        BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP,
+	        s_TxCharDescString),
 };
-
-static const int s_BleUartNbChar = sizeof(g_UartChars) / sizeof(BtGattChar_t);
 
 uint8_t g_LWrBuffer[512];
 
-const BtGattSrvcCfg_t s_UartSrvcCfg = {
-	.SecType = BT_GAP_SECTYPE_NONE,			// Secure or Open service/char
-	.bCustom = true,
-	.UuidBase = BLE_UART_UUID_BASE,			// Base UUID
-	//1,
-	.UuidSrvc = BLE_UART_UUID_SERVICE,		// Service UUID
-	.NbChar = s_BleUartNbChar,				// Total number of characteristics for the service
-	.pCharArray = g_UartChars,				// Pointer a an array of characteristic
-	.pLongWrBuff = g_LWrBuffer,				// pointer to user long write buffer
-	.LongWrBuffSize = sizeof(g_LWrBuffer)	// long write buffer size
-};
-
-BtGattSrvc_t g_UartBleSrvc;
+BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLE_UART_UUID_BASE,
+                                            BLE_UART_UUID_SERVICE,
+                                            g_UartChars,
+                                            .pLongWrBuff    = g_LWrBuffer,
+                                            .LongWrBuffSize = sizeof(g_LWrBuffer));
 
 const BtAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           	// Model name
@@ -187,7 +157,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
-	.SDEvtHandler = NULL,				// RTOS Softdevice handler
 	.MaxMtu = 244,
 };
 
@@ -281,7 +250,7 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 void BtAppInitUserServices()
 {
     bool res;
-    res = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
+    res = BtGattSrvcAdd(&g_UartBleSrvc);
 }
 
 void BtAppInitUserData()

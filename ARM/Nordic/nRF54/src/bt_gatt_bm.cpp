@@ -101,7 +101,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 		return false;
 	}
 
-	if (pChar->bNotify == false)
+	if (pChar->Runtime.bNotify == false)
 	{
 		return false;
 	}
@@ -109,7 +109,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 	ble_gatts_hvx_params_t params;
 	memset(&params, 0, sizeof(params));
 	params.type   = BLE_GATT_HVX_NOTIFICATION;
-	params.handle = pChar->ValHdl;
+	params.handle = pChar->Runtime.ValHdl;
 	params.p_data = (uint8_t*)pVal;
 
 	// SoftDevice expects p_len to point to a uint16_t (it may modify it)
@@ -132,7 +132,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 	value.p_value = (uint8_t*)pVal;
 
 	uint32_t err_code = sd_ble_gatts_value_set(s_ConnHandle,
-											   pChar->ValHdl,
+											   pChar->Runtime.ValHdl,
 											   &value);
 	return err_code == NRF_SUCCESS;
 }
@@ -203,7 +203,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 						if ((p_evt_write->handle == pSrvc->pCharArray[i].CccdHdl) &&
 							(p_evt_write->len == 2))
 						{
-							// CCCD write — enable/disable notification
+							// CCCD write - enable/disable notification
 							if (IsNotificationEnabled(p_evt_write->data))
 							{
 								pSrvc->pCharArray[i].bNotify = true;
@@ -282,7 +282,7 @@ static void BtSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode, BTSRVC_SECTYPE SecTy
 			break;
 		case BTSRVC_SECTYPE_SIGNED_NO_MITM:
 		case BTSRVC_SECTYPE_SIGNED_MITM:
-			// S145 does not support signed writes — fall through to open
+			// S145 does not support signed writes - fall through to open
 		case BTSRVC_SECTYPE_NONE:
 		default:
 			BLE_GAP_CONN_SEC_MODE_SET_OPEN(pSecMode);
@@ -372,14 +372,10 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 		attr_md.wr_auth = 0;
 	}
 
-	if (pChar->Property & BT_GATT_CHAR_PROP_VALEN)
-	{
-		attr_md.vlen = 1;
-	}
-	else
-	{
-		attr_md.vlen = 0;
-	}
+	// Variable-length attribute values are the default. attr_md.vlen is a
+	// SoftDevice-internal switch (not in the BT spec); set unconditionally
+	// so user declarations don't have to know it exists.
+	attr_md.vlen = 1;
 
 	memset(&attr_char_value, 0, sizeof(attr_char_value));
 
@@ -387,17 +383,17 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 	attr_char_value.p_attr_md = &attr_md;
 	attr_char_value.init_offs = 0;
 	attr_char_value.max_len   = pChar->MaxDataLen;
-	attr_char_value.init_len  = pChar->ValueLen;
-	attr_char_value.p_value   = (uint8_t*)pChar->pValue;
+	attr_char_value.init_len  = pChar->Runtime.ValueLen;
+	attr_char_value.p_value   = (uint8_t*)pChar->Runtime.pValue;
 
 	ble_gatts_char_handles_t hdl;
 	uint32_t res = sd_ble_gatts_characteristic_add(pSrvc->Hdl, &char_md, &attr_char_value, &hdl);
-	pChar->Hdl = hdl.value_handle;
-	pChar->ValHdl = hdl.value_handle;
-	pChar->DescHdl = hdl.user_desc_handle;
-	pChar->CccdHdl = hdl.cccd_handle;
-	pChar->SccdHdl = hdl.sccd_handle;
-	pChar->pSrvc = pSrvc;
+	pChar->Runtime.Hdl     = hdl.value_handle;
+	pChar->Runtime.ValHdl  = hdl.value_handle;
+	pChar->Runtime.DescHdl = hdl.user_desc_handle;
+	pChar->Runtime.CccdHdl = hdl.cccd_handle;
+	pChar->Runtime.SccdHdl = hdl.sccd_handle;
+	pChar->Runtime.pSrvc   = pSrvc;
 
 	return res;
 }
@@ -405,18 +401,23 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 /**
  * @brief Create BLE GATT service
  */
-bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
+bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	uint32_t err;
 	ble_uuid_t ble_uuid;
 
-	// Add base UUID for custom services
-	if (pCfg->bCustom == true)
+	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr || pSrvc->NbChar <= 0)
 	{
-		pSrvc->Uuid.BaseIdx = BtUuidAddBase(pCfg->UuidBase);
+		return false;
+	}
+
+	// Add base UUID for custom services
+	if (pSrvc->bCustom == true)
+	{
+		pSrvc->Uuid.BaseIdx = BtUuidAddBase(pSrvc->UuidBase);
 
 		uint8_t type;
-		err = sd_ble_uuid_vs_add((ble_uuid128_t*)pCfg->UuidBase, &type);
+		err = sd_ble_uuid_vs_add((ble_uuid128_t*)pSrvc->UuidBase, &type);
 		if (err != NRF_SUCCESS)
 		{
 			return false;
@@ -425,7 +426,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
 	}
 
 	ble_uuid.type = pSrvc->Uuid.BaseIdx;
-	ble_uuid.uuid = pCfg->UuidSrvc;
+	ble_uuid.uuid = pSrvc->UuidSrvc;
 
 	err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->Hdl);
 	if (err != NRF_SUCCESS)
@@ -433,22 +434,16 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, const BtGattSrvcCfg_t *pCfg)
 		return false;
 	}
 
-	pSrvc->NbChar = pCfg->NbChar;
-	pSrvc->pCharArray = pCfg->pCharArray;
-
-	for (int i = 0; i < pCfg->NbChar; i++)
+	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
 		err = BtGattCharAdd(pSrvc, &pSrvc->pCharArray[i], BTSRVC_SECTYPE_NONE);
 		if (err != NRF_SUCCESS)
 		{
 			return false;
 		}
-		pSrvc->pCharArray[i].bNotify = false;
+		pSrvc->pCharArray[i].Runtime.bNotify = false;
+		pSrvc->pCharArray[i].Runtime.bIndic  = false;
 	}
-
-	pSrvc->pLongWrBuff = pCfg->pLongWrBuff;
-	pSrvc->LongWrBuffSize = pCfg->LongWrBuffSize;
-	pSrvc->AuthReqCB = pCfg->AuthReqCB;
 
 	BtGattInsertSrvcList(pSrvc);
 

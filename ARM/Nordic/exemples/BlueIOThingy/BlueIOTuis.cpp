@@ -93,62 +93,26 @@ static uint8_t s_UiCharButData;
 static uint8_t s_UiCharPinData[BLE_TUIS_MAX_DATA_LEN];
 
 static BtGattChar_t s_UIChars[] = {
-    {
-        // Version characteristic.  This is the minimum required for Thingy App to work
-    	.Uuid 			= BLE_UUID_TUIS_LED_CHAR,
-        .MaxDataLen 	= sizeof(BLE_TUIS_LED),
-		.Property 		= BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_READ,
-        .pDesc 			= NULL,    					// char UTF-8 description string
-		.WrCB 			= LedCharWrhandler,           // Callback for write char, set to NULL for read char
-        .SetNotifCB 	= NULL,                       // Callback on set notification
-		.SetIndCB 		= NULL,
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_UiCharLedData,                       // pointer to char default values
-//        0,                          // Default value length in bytes
-    },
-    {
-        // Version characteristic.  This is the minimum required for Thingy App to work
-    	.Uuid 			= BLE_UUID_TUIS_BUTTON_CHAR,
-        .MaxDataLen 	= 1,							// Max data len
-		.Property 		= BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_READ,
-        .pDesc 			= NULL,    					// char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ButtonCharSetNotify,                       // Callback on set notification
-		.SetIndCB 		= NULL,
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		&s_UiCharButData,                       // pointer to char default values
-//        0,                          // Default value length in bytes
-    },
-    {
-        // Version characteristic.  This is the minimum required for Thingy App to work
-    	.Uuid 			= BLE_UUID_TUIS_PIN_CHAR,
-        .MaxDataLen 	= BLE_TUIS_MAX_DATA_LEN,
-		.Property 		= BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
-        .pDesc 			= NULL,    					// char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-        .SetNotifCB 	= NULL,                       // Callback on set notification
-		.SetIndCB 		= NULL,
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_UiCharPinData,                       // pointer to char default values
-//        0,                          // Default value length in bytes
-    },
-};
-
-/// Service definition
-const BtGattSrvcCfg_t s_UISrvcCfg = {
-    0,//BTDEV_SECTYPE_NONE,       	// Secure or Open service/char
-	true,
-    THINGY_BASE_UUID,           	// Base UUID
-    BLE_UUID_TUIS_SERVICE,       	// Service UUID
-    sizeof(s_UIChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
-    s_UIChars,                 		// Pointer a an array of characteristic
-    NULL,                       	// pointer to user long write buffer
-    0,                           	// long write buffer size
-	NULL,							// Authentication event callback
+	// LED control: Read + Write
+	BT_CHAR(BLE_UUID_TUIS_LED_CHAR, sizeof(BLE_TUIS_LED),
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE,
+	        NULL,
+	        .WrCB = LedCharWrhandler),
+	// Button state: Read + Notify
+	BT_CHAR(BLE_UUID_TUIS_BUTTON_CHAR, 1,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        NULL,
+	        .SetNotifCB = ButtonCharSetNotify),
+	// Pin state: Read + Write + Notify
+	BT_CHAR(BLE_UUID_TUIS_PIN_CHAR, BLE_TUIS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_NOTIFY,
+	        NULL),
 };
 
 /// TUIS instance
-BtGattSrvc_t g_UISrvc;
+BtGattSrvc_t g_UISrvc = BT_SRVC_CUSTOM(THINGY_BASE_UUID,
+                                       BLE_UUID_TUIS_SERVICE,
+                                       s_UIChars);
 
 BtGattSrvc_t *GetUISrvcInstance()
 {
@@ -157,7 +121,7 @@ BtGattSrvc_t *GetUISrvcInstance()
 
 uint32_t UISrvcInit()
 {
-	return BtGattSrvcAdd(&g_UISrvc, &s_UISrvcCfg);
+	return BtGattSrvcAdd(&g_UISrvc);
 }
 
 void LedCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
@@ -185,6 +149,10 @@ void LedCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 
 void ButtonCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
-	s_UIChars[UICHAR_IDX_BUTTON].bNotify = true;
+	// Peer subscribed (bEnable == true) or unsubscribed (false).
+	// The stack already records subscription state on pChar->Runtime.bNotify;
+	// this callback is the place to start or stop pushing values.
+	(void)pChar;
+	(void)bEnable;
 }
 

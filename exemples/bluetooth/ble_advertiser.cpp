@@ -101,7 +101,7 @@ UART g_Uart;
 #endif
 
 #define APP_ADV_INTERVAL_MSEC       50
-#define APP_ADV_TIMEOUT_MSEC      	0
+#define APP_ADV_TIMEOUT_MSEC      	1000
 
 uint32_t g_AdvCnt = 0;
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";

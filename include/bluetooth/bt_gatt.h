@@ -73,7 +73,6 @@ SOFTWARE.
 #define BT_GATT_CHAR_PROP_INDICATE			BT_CHAR_PROP_INDICATE
 #define BT_GATT_CHAR_PROP_AUTH_SIGNED		BT_CHAR_PROP_AUTH_SIGNED
 #define BT_GATT_CHAR_PROP_EXT_PROP			BT_CHAR_PROP_EXT_PROP
-#define BT_GATT_CHAR_PROP_VALEN				BT_CHAR_PROP_VALEN
 
 
 #ifndef BT_GATT_DB_MAX_CHARS
@@ -98,20 +97,8 @@ typedef struct __Bt_Gatt_Char_Prefered_Conn_Params {
 #pragma pack(pop)
 
 
-#pragma pack(push,4)
-typedef struct __Bt_Gatt_Service_Config {
-	uint8_t SecType;					//!< Secure or Open service/char
-	bool bCustom;						//!< True - for custom service Base UUID, false - Bluetooth SIG standard
-	uint8_t UuidBase[16];				//!< 128 bits custom base UUID
-	uint16_t UuidSrvc;					//!< Service UUID
-	int NbChar;							//!< Total number of characteristics for the service
-	BtChar_t *pCharArray;          	//!< Pointer a an array of characteristic
-    uint8_t *pLongWrBuff;				//!< pointer to user long write buffer
-    int	LongWrBuffSize;					//!< long write buffer size
-    BtSrvcAuthRqst_t AuthReqCB;			//!< Authorization request callback
-} BtGattSrvcCfg_t;
-
-#pragma pack(pop)
+// BtGattSrvcCfg_t was retired: its fields are now part of BtGattSrvc_t
+// itself (see bt_att.h). Service declaration is a single struct now.
 
 
 /* Struct analogous to ble_gatt_db.h of SoftDevice lib for central device*/
@@ -197,7 +184,7 @@ bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len);
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
-bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg);
+bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 //void BtGattServiceInit(BtGattSrvc_t * const pSrvc);
 void BtGattEvtHandler(uint32_t Evt, void * const pCtx);
@@ -207,6 +194,53 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 #ifdef __cplusplus
 }
 #endif
+
+//
+// --- Declaration macros ---
+//
+// Pure textual substitution. Each macro expands to a brace-enclosed
+// aggregate initializer for the corresponding stack struct; no statements,
+// no helper functions, no code generation. Callers fill in user-supplied
+// fields by name; the variadic tail accepts any additional designated
+// initializers (e.g. .WrCB, .SetNotifCB, .pStaticVal).
+//
+// Spec terms used:
+//   - Property bits are BT_GATT_CHAR_PROP_* from this header, matching the
+//     Characteristic Properties field in Core Vol 3 Part G 3.3.1.1.
+//   - bCustom distinguishes a vendor-defined 128-bit UUID (true) from a
+//     Bluetooth SIG adopted 16-bit UUID (false).
+//
+// Example usage:
+//
+//   static BtGattChar_t s_UartChars[] = {
+//       BT_CHAR(BLE_UART_UUID_RX_CHAR, PACKET_SIZE,
+//               BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY, "UART Rx"),
+//       BT_CHAR(BLE_UART_UUID_TX_CHAR, PACKET_SIZE,
+//               BT_GATT_CHAR_PROP_WRITE_WORESP, "UART Tx", .WrCB = OnTxWrite),
+//   };
+//
+//   BtGattSrvc_t g_UartSrvc = BT_SRVC_CUSTOM(BLE_UART_UUID_BASE,
+//                                            BLE_UART_UUID_SERVICE,
+//                                            s_UartChars);
+//
+//   // For a read-only static-backed characteristic:
+//   //   BtGattChar_t s_FwVer = BT_CHAR(FW_VER_UUID, sizeof(s_FwVersion),
+//   //                                  BT_GATT_CHAR_PROP_READ, "FW Version",
+//   //                                  .pStaticVal = &s_FwVersion);
+
+#define BT_CHAR(uuid, maxlen, props, desc, ...) \
+	{ .Uuid = (uuid), .MaxDataLen = (maxlen), .Property = (props), \
+	  .pDesc = (desc), __VA_ARGS__ }
+
+#define BT_SRVC_STD(uuid_srvc, chars_array, ...) \
+	{ .bCustom = false, .UuidSrvc = (uuid_srvc), \
+	  .NbChar = sizeof(chars_array) / sizeof((chars_array)[0]), \
+	  .pCharArray = (chars_array), __VA_ARGS__ }
+
+#define BT_SRVC_CUSTOM(uuid_base, uuid_srvc, chars_array, ...) \
+	{ .bCustom = true, .UuidBase = uuid_base, .UuidSrvc = (uuid_srvc), \
+	  .NbChar = sizeof(chars_array) / sizeof((chars_array)[0]), \
+	  .pCharArray = (chars_array), __VA_ARGS__ }
 
 #endif // __BT_GATT_H__
 

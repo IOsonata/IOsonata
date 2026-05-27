@@ -66,36 +66,17 @@ const ble_tcs_fw_version_t s_ThingyVersion {
 };
 
 BtGattChar_t g_ConfChars[] = {
-    {
-        // Version characteristic.  This is the minimum required for Thingy App to work
-		.Uuid = BLE_UUID_TCS_FW_VERSION_CHAR,
-        .MaxDataLen = BLE_TCS_MAX_DATA_LEN,
-        .Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
-        .pDesc = NULL,    					// char UTF-8 description string
-        .WrCB = NULL,                       // Callback for write char, set to NULL for read char
-        .SetNotifCB = NULL,                       // Callback on set notification
-        .TxCompleteCB = NULL,                       // Tx completed callback
-		.pValue = (void*)&s_ThingyVersion,                       // pointer to char default values
-        .ValueLen = 3,                          // Default value length in bytes
-    },
-};
-
-/// Service definition
-const BtGattSrvcCfg_t s_ConfSrvcCfg = {
-   // BLESRVC_SECTYPE_NONE,       	// Secure or Open service/char
-	.bCustom = true,
-    .UuidBase = THINGY_BASE_UUID,           	// Base UUID
-//	1,
-    .UuidSrvc = BLE_UUID_TCS_SERVICE,       	// Service UUID
-    .NbChar = sizeof(g_ConfChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
-    .pCharArray = g_ConfChars,                 	// Pointer a an array of characteristic
-//    NULL,                       	// pointer to user long write buffer
-//    0,                           	// long write buffer size
-//	NULL,							// Authentication event callback
+	// FW Version - read-only static value served directly from .rodata
+	BT_CHAR(BLE_UUID_TCS_FW_VERSION_CHAR, sizeof(s_ThingyVersion),
+	        BT_GATT_CHAR_PROP_READ,
+	        NULL,
+	        .pStaticVal = &s_ThingyVersion),
 };
 
 /// TCS instance
-BtGattSrvc_t g_ConfSrvc;
+BtGattSrvc_t g_ConfSrvc = BT_SRVC_CUSTOM(THINGY_BASE_UUID,
+                                         BLE_UUID_TCS_SERVICE,
+                                         g_ConfChars);
 
 BtGattSrvc_t *GetConfSrvcInstance()
 {
@@ -104,13 +85,7 @@ BtGattSrvc_t *GetConfSrvcInstance()
 
 uint32_t ConfSrvcInit()
 {
-	bool res = BtGattSrvcAdd(&g_ConfSrvc, &s_ConfSrvcCfg);
-
-	if (res)
-	{
-		BtGattCharSetValue(g_ConfChars, (uint8_t*)&s_ThingyVersion, 3);
-	}
-
+	BtGattSrvcAdd(&g_ConfSrvc);
 	return 0;
 }
 

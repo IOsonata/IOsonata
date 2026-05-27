@@ -124,14 +124,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BLE_SPI_UUID_RX_CHAR			BLUEIO_UUID_SPI_RX_CHAR			// SPI Rx characteristic
 #define BLE_SPI_UUID_RX_CHAR_PROP		(BT_GATT_CHAR_PROP_READ | \
-											BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN) // Property of Tx characteristic
+											BT_GATT_CHAR_PROP_NOTIFY) // Property of Tx characteristic
 
 #define BLE_SPI_UUID_TX_CHAR			BLUEIO_UUID_SPI_TX_CHAR			// SPI Tx characteristic
 #define BLE_SPI_UUID_TX_CHAR_PROP		(BT_GATT_CHAR_PROP_WRITE | \
-											BT_GATT_CHAR_PROP_WRITE_WORESP | BT_GATT_CHAR_PROP_VALEN) // Property of Tx characteristic
+											BT_GATT_CHAR_PROP_WRITE_WORESP) // Property of Tx characteristic
 
 #define BLE_SPI_UUID_CONFIG_CHAR		BLUEIO_UUID_SPI_CONFIG_CHAR 	// SPI configuration characteristic
-#define BLE_SPI_UUID_CONFIG_CHAR_PROP	(BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP | BT_GATT_CHAR_PROP_VALEN | \
+#define BLE_SPI_UUID_CONFIG_CHAR_PROP	(BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP | \
 										 BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY ) // Property of SPI config. char.
 #endif
 
@@ -173,47 +173,18 @@ alignas(4) static uint8_t s_SpiMasCharData[SPI_PKT_SIZE];
 
 /* SPI characteristic definitions */
 static BtGattChar_t g_SpiMasChars[] = {
-	{
-		// Read characteristic
-		.Uuid = BLE_SPI_UUID_RX_CHAR,
-		.MaxDataLen = SPI_BLEINTRF_PKTSIZE,
-		.Property = BLE_SPI_UUID_RX_CHAR_PROP,
-		.pDesc = s_SpiRxCharDescStr,			// char UTF-8 description string
-		.WrCB = NULL,							// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,						// Callback on set notification
-		.TxCompleteCB = NULL,					// Tx completed callback
-		.pValue = NULL, //s_SpiMasCharData,				// pointer to char default values
-		.ValueLen = 0,							// Default value length in bytes
-	},
-	{
-		// Write characteristic
-		.Uuid = BLE_SPI_UUID_TX_CHAR,			// char UUID
-		.MaxDataLen = SPI_BLEINTRF_PKTSIZE,		// char max data length
-		.Property = BLE_SPI_UUID_TX_CHAR_PROP,	// char properties define by BLUEIOSVC_CHAR_PROP_...
-		.pDesc = s_SpiTxCharDescStr,			// char UTF-8 description string
-		.WrCB = NULL,//SpiTxSrvcCallback,		// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,						// Callback on set notification
-		.TxCompleteCB = NULL,					// Tx completed callback
-		.pValue = NULL,							// pointer to char default values
-		.ValueLen = 0							// Default value length in bytes
-	},
+	BT_CHAR(BLE_SPI_UUID_RX_CHAR, SPI_BLEINTRF_PKTSIZE,
+	        BLE_SPI_UUID_RX_CHAR_PROP,
+	        s_SpiRxCharDescStr),
+	BT_CHAR(BLE_SPI_UUID_TX_CHAR, SPI_BLEINTRF_PKTSIZE,
+	        BLE_SPI_UUID_TX_CHAR_PROP,
+	        s_SpiTxCharDescStr),
 };
-
-static const int s_BleSpiNbChar = sizeof(g_SpiMasChars) / sizeof(BtGattChar_t);
 
 /* BlueIO SPI service definition */
-BtGattSrvcCfg_t s_SpiSrvcCfg = {
-	.SecType = BT_GAP_SECTYPE_NONE,		// Secure or Open service/char
-	.bCustom = true,						// True - for custom service Base UUID, false - Bluetooth SIG standard
-	.UuidBase = BLE_SPI_UUID_BASE,			// Base UUID
-	.UuidSrvc = BLE_SPI_UUID_SERVICE,		// Service UUID
-	.NbChar = s_BleSpiNbChar,				// Total number of characteristics for the service
-	.pCharArray = g_SpiMasChars,			// Pointer a an array of characteristic
-	.pLongWrBuff = NULL,					// Pointer to user long write buffer
-	.LongWrBuffSize = 0,					// long write buffer size
-};
-
-BtGattSrvc_t g_SpiBleSrvc;
+BtGattSrvc_t g_SpiBleSrvc = BT_SRVC_CUSTOM(BLE_SPI_UUID_BASE,
+                                           BLE_SPI_UUID_SERVICE,
+                                           g_SpiMasChars);
 
 alignas(4) static uint8_t s_BleSpiIntrfRxFifo[SPI_BLEINTRF_FIFOSIZE];
 alignas(4) static uint8_t s_BleSpiIntrfTxFifo[SPI_BLEINTRF_FIFOSIZE];
@@ -446,7 +417,7 @@ void HardwareInit()
 
 bool SpiBleInit()
 {
-	bool res = BtGattSrvcAdd(&g_SpiBleSrvc, &s_SpiSrvcCfg);
+	bool res = BtGattSrvcAdd(&g_SpiBleSrvc);
 	if (res == true)
 	{
 		res = g_SpiMaster.Init(s_SpiMasCfg);

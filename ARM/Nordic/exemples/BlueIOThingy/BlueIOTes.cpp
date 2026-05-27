@@ -87,68 +87,25 @@ static const char s_EnvHumCharDescString[] = {
         "Humidity characteristic",
 };
 
-static uint8_t s_EnvCharTemp[BLE_TES_MAX_DATA_LEN];
-static uint8_t s_EnvCharPres[BLE_TES_MAX_DATA_LEN];
-static uint8_t s_EnvCharHumi[BLE_TES_MAX_DATA_LEN];
-
 /// Characteristic definitions
 BtGattChar_t g_EnvChars[] = {
-    {
-        // Temperature characteristic
-        .Uuid 			= BLE_UUID_TES_TEMPERATURE_CHAR,
-        .MaxDataLen 	= BLE_TES_MAX_DATA_LEN,
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-        .pDesc 			= s_EnvTempCharDescString,    // char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-        .SetNotifCB 	= NULL,                       // Callback on set notification
-        .SetIndCB 		= NULL,                       // Tx completed callback
-		.TxCompleteCB	= NULL,
-		.pValue			= s_EnvCharTemp,                       // pointer to char default values
-		.ValueLen		= 0,                          // Default value length in bytes
-    },
-    {
-        // Pressure characteristic
-		.Uuid 			= BLE_UUID_TES_PRESSURE_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TES_MAX_DATA_LEN,       // char max data length
-		.Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_EnvPresCharDescString,    // char UTF-8 description string
-		.WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= NULL,                       // Callback on set notification
-		.SetIndCB 		= NULL,                       // Tx completed callback
-		.TxCompleteCB	= NULL,
-//		s_EnvCharPres,                       // pointer to char default values
-//        0                           // Default value length in bytes
-    },
-    {
-        // Humidity characteristic
-		.Uuid 			= BLE_UUID_TES_HUMIDITY_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TES_MAX_DATA_LEN,       // char max data length
-		.Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_EnvHumCharDescString,     // char UTF-8 description string
-		.WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= NULL,                       // Callback on set notification
-		.SetIndCB 		= NULL,                       // Tx completed callback
-		.TxCompleteCB	= NULL,
-//		s_EnvCharHumi,                       // pointer to char default values
-//       0                           // Default value length in bytes
-    },
+	// Temperature
+	BT_CHAR(BLE_UUID_TES_TEMPERATURE_CHAR, BLE_TES_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_EnvTempCharDescString),
+	// Pressure
+	BT_CHAR(BLE_UUID_TES_PRESSURE_CHAR, BLE_TES_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_EnvPresCharDescString),
+	// Humidity
+	BT_CHAR(BLE_UUID_TES_HUMIDITY_CHAR, BLE_TES_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_EnvHumCharDescString),
 };
 
-/// Service definition
-const BtGattSrvcCfg_t s_EnvSrvcCfg = {
-    //BLESRVC_SECTYPE_NONE,       // Secure or Open service/char
-	.SecType = 0,
-	.bCustom = true,
-    .UuidBase = THINGY_BASE_UUID,        // Base UUID
-    .UuidSrvc = BLE_UUID_TES_SERVICE,       // Service UUID
-    .NbChar = sizeof(g_EnvChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
-    .pCharArray = g_EnvChars,                 // Pointer a an array of characteristic
-   // NULL,                       // pointer to user long write buffer
-   // 0,                          // long write buffer size
-//	NULL
-};
-
-BtGattSrvc_t g_EnvSrvc;
+BtGattSrvc_t g_EnvSrvc = BT_SRVC_CUSTOM(THINGY_BASE_UUID,
+                                        BLE_UUID_TES_SERVICE,
+                                        g_EnvChars);
 
 BtGattSrvc_t *GetEnvSrvcInstance()
 {
@@ -157,7 +114,7 @@ BtGattSrvc_t *GetEnvSrvcInstance()
 
 uint32_t EnvSrvcInit()
 {
-	return BtGattSrvcAdd(&g_EnvSrvc, &s_EnvSrvcCfg);
+	return BtGattSrvcAdd(&g_EnvSrvc);
 }
 
 void EnvSrvcNotifTemp(float Temp)

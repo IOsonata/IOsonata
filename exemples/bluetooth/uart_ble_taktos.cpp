@@ -113,52 +113,25 @@ static const char s_TxCharDescString[] = {
 
 uint8_t g_ManData[8];
 
-static uint8_t s_UartCharRxData[20];
-
 BtGattChar_t g_UartChars[] = {
-	{
-		// Read characteristic
-		BLUEIO_UUID_UART_RX_CHAR,
-		20,
-		BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		s_RxCharDescString,         // char UTF-8 description string
-		NULL,                       // Callback for write char, set to NULL for read char
-		NULL,						// Callback on set notification
-		NULL,						// Callback on set ind
-		NULL,						// Tx completed callback
-		s_UartCharRxData,			// pointer to char default values
-		0,							// Default value length in bytes
-	},
-	{
-		// Write characteristic
-		BLUEIO_UUID_UART_TX_CHAR,	// char UUID
-		20,                         // char max data length
-		BT_GATT_CHAR_PROP_WRITE_WORESP,	// char properties define by BLUEIOSVC_CHAR_PROP_...
-		s_TxCharDescString,			// char UTF-8 description string
-		UartTxSrvcCallback,         // Callback for write char, set to NULL for read char
-		NULL,						// Callback on set notification
-		NULL,						// Callback on set ind
-		NULL,						// Tx completed callback
-		NULL,						// pointer to char default values
-		0							// Default value length in bytes
-	},
+	// Read + Notify (server-pushed)
+	BT_CHAR(BLUEIO_UUID_UART_RX_CHAR, 20,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_RxCharDescString),
+	// Write Without Response (peer sink, callback consumes)
+	BT_CHAR(BLUEIO_UUID_UART_TX_CHAR, 20,
+	        BT_GATT_CHAR_PROP_WRITE_WORESP,
+	        s_TxCharDescString,
+	        .WrCB = UartTxSrvcCallback),
 };
 
 uint8_t g_LWrBuffer[512];
 
-const BtGattSrvcCfg_t s_UartSrvcCfg = {
-	//BTDEV_SECTYPE_NONE,	    // Secure or Open service/char
-	0,
-	true,
-	BLUEIO_UUID_BASE,        // Base UUID
-	BLUEIO_UUID_UART_SERVICE,   // Service UUID
-	2,                          // Total number of characteristics for the service
-	g_UartChars,                // Pointer a an array of characteristic
-	g_LWrBuffer,                // pointer to user long write buffer
-	sizeof(g_LWrBuffer)         // long write buffer size
-};
-
-BtGattSrvc_t g_UartBleSrvc;
+BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLUEIO_UUID_BASE,
+                                            BLUEIO_UUID_UART_SERVICE,
+                                            g_UartChars,
+                                            .pLongWrBuff    = g_LWrBuffer,
+                                            .LongWrBuffSize = sizeof(g_LWrBuffer));
 
 const BtAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           // Model name
@@ -198,7 +171,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
 	.SDEvtHandler = SD_TaktOS_Handler,		// RTOS Softdevice handler
-};
+	.SDEvtHandler = SD_TaktOS_Handler,		// RTOS Softdevice handler
 
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
@@ -275,7 +248,7 @@ void BtAppInitUserServices()
 {
    // uint32_t       err_code;
 
-	bool res = BtGattSrvcAdd(&g_UartBleSrvc, &s_UartSrvcCfg);
+	bool res = BtGattSrvcAdd(&g_UartBleSrvc);
 	if (res == false)
 	{
 		while(1);
@@ -381,6 +354,13 @@ static void BleTask(void * pvParameter)
 }
 
 
+// Local error codes (avoid Nordic SDK dependency for NRF_ERROR_* macros)
+#ifndef NRF_ERROR_INVALID_PARAM
+#define NRF_ERROR_INVALID_PARAM  (-1)
+#endif
+#ifndef NRF_ERROR_NO_MEM
+#define NRF_ERROR_NO_MEM         (-2)
+#endif
 void TaktOSAppInit()
 {
     if (TaktOSSemInit(&g_BleEvtSem, 0u, 1u) != TAKTOS_OK)

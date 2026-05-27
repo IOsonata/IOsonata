@@ -222,9 +222,20 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		break;
 	case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP:
 	{
+		// Client side: server's response carries the server's RxMtu (its
+		// full receive capability). Compute negotiated = min(local_mtu,
+		// server_RxMtu) and stash on the peer record.
+		//
+		// Note: BtAttGetDefaultMtu() no longer exists; BtAttGetMtu() returns
+		// the current local ATT MTU setting (set via BtAttSetMtu()).
 		uint16_t mtu = min(BtAttGetMtu(), pRspAtt->ExchgMtuReqRsp.RxMtu);
 		DEBUG_PRINTF("BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP (0x03): %d %d\r\n", pRspAtt->ExchgMtuReqRsp.RxMtu, mtu);
+
+		// BtAttSetMtu takes a single argument (global/local stack setting).
 		BtAttSetMtu(mtu);
+
+		// Keep per-peer negotiated MTU as well (used by higher layers).
+		pPeer->MaxMtu = mtu;
 	}
 		break;
 	case BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP:

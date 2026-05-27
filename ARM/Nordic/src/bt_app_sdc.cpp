@@ -954,8 +954,8 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	BtHciMotify(&s_HciDevice, g_BleAppData.ConnHdl, pChar->ValHdl, pData, DataLen);
-//	BtHciMotify(g_BleAppData.ConnHdl, pChar->ValHdl, pData, DataLen);
+	BtHciMotify(&s_HciDevice, g_BleAppData.ConnHdl, pChar->Runtime.ValHdl, pData, DataLen);
+//	BtHciMotify(g_BleAppData.ConnHdl, pChar->Runtime.ValHdl, pData, DataLen);
 
 	return true;*/
 }

@@ -1326,7 +1326,7 @@ bool BtDevNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	BtHciNotify(&s_BtDevSdc, s_BtDevSdc.ConnHdl, pChar->ValHdl, pData, DataLen);
+	BtHciNotify(&s_BtDevSdc, s_BtDevSdc.ConnHdl, pChar->Runtime.ValHdl, pData, DataLen);
 
 	return true;
 }

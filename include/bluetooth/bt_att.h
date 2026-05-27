@@ -462,7 +462,6 @@ typedef struct __Bt_Att_Srvc_Include {
 #define BT_CHAR_PROP_INDICATE			0x20
 #define BT_CHAR_PROP_AUTH_SIGNED		0x40
 #define BT_CHAR_PROP_EXT_PROP			0x80
-#define BT_CHAR_PROP_VALEN				0x8000
 
 // Characteristic declaration attribute : type UUID 0x2803
 typedef struct __Bt_Att_Char_Declar {
@@ -505,48 +504,67 @@ struct __Bt_Att_DB_Entry {
 	uint8_t Data[1];					//!< Variable length attribute data
 };
 
+// Runtime state filled in by the stack at BtGattSrvcAdd time and updated
+// during operation. Users do not initialize these fields and should not
+// modify them directly; reads from port code go through the Runtime path
+// (e.g. pChar->Runtime.ValHdl).
+typedef struct __Bt_Char_Runtime {
+	void *pValue;						//!< Backing storage for the value (allocated from ATT DB, or aliased to pStaticVal)
+	uint16_t ValueLen;					//!< Current length in bytes of data value
+	uint16_t Hdl;						//!< Characteristic handle
+	uint16_t ValHdl;					//!< Characteristic value handle
+	uint16_t DescHdl;					//!< User description descriptor handle
+	uint16_t CccdHdl;					//!< Client characteristic configuration descriptor handle
+	uint16_t SccdHdl;					//!< Server characteristic configuration descriptor handle
+	bool bNotify;						//!< Notification subscription state
+	bool bIndic;						//!< Indication subscription state
+	uint8_t BaseUuidIdx;				//!< Index of base UUID used for this characteristic
+	BtSrvc_t *pSrvc;					//!< Pointer to the service instance which this char belongs to
+} BtCharRuntime_t;
+
 struct __Bt_Characteristic {
+	// --- User-supplied (set at declaration time) ---
 	uint16_t Uuid;						//!< Characteristic UUID
 	uint16_t MaxDataLen;				//!< Characteristic max data length in bytes
-	uint32_t Property;              	//!< char properties defined by orable BT_GATT_CHAR_PROP_...
-	const char *pDesc;                  //!< char UTF-8 description string
-	BtCharWrCb_t WrCB;              	//!< Callback for write char, set to NULL for read char
-	BtCharSetNotifCb_t SetNotifCB;		//!< Callback on set notification
-	BtCharSetIndCb_t SetIndCB;			//!< Callback on set indication
-	BtCharTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
-	void *pValue;						//!< Characteristic data value
-	uint16_t ValueLen;					//!< Current length in bytes of data value
-	// Bellow are private data. Do not modify
-	bool bNotify;                       //!< Notify enable flag for read characteristic
-	bool bIndic;						//!< Indication enable flag
-	uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
-	uint16_t Hdl;       				//!< char handle
-	uint16_t ValHdl;					//!< char value handle
-	uint16_t DescHdl;					//!< descriptor handle
-	uint16_t CccdHdl;					//!< client char configuration descriptor handle
-	uint16_t SccdHdl;					//!< Server char configuration value
-	BtSrvc_t *pSrvc;					//!< Pointer to the service instance which this char belongs to.
-	//BtGattCharValue_t *pData;
+	uint32_t Property;					//!< Property bits, OR of BT_GATT_CHAR_PROP_* (Core spec Vol 3 Part G 3.3.1.1)
+	const char *pDesc;					//!< UTF-8 description string (NULL for none)
+	BtCharWrCb_t WrCB;					//!< Callback on peer write (NULL if not handled)
+	BtCharSetNotifCb_t SetNotifCB;		//!< Callback on subscribe/unsubscribe (NULL if not interested)
+	BtCharSetIndCb_t SetIndCB;			//!< Callback on indication subscribe/unsubscribe (NULL if not interested)
+	BtCharTxComplete_t TxCompleteCB;	//!< Callback after a notification or indication has been transmitted
+	const void *pStaticVal;				//!< Optional pointer to user-owned read-only static value (.rodata).
+										//!< When non-NULL the ATT layer serves reads from this memory and
+										//!< no ATT DB allocation happens for the value. Properties must be
+										//!< read-only; mixing with WRITE / NOTIFY / INDICATE is rejected at
+										//!< BtGattSrvcAdd time.
+
+	// --- Runtime state (managed by the stack; do not modify) ---
+	BtCharRuntime_t Runtime;
 };
 
 /*
- * Bluetooth service private data to be passed when calling service related functions.
- * The data is filled by BleSrvcInit function.
- * Pointer to this structure is often referred as Service Handle
- *
+ * Bluetooth service descriptor. Holds both the user-supplied configuration
+ * (UUID, char array, optional long-write buffer) and the stack-managed
+ * runtime state (assigned handle, list links). One declaration per service;
+ * BtGattSrvcAdd() takes a single pointer to this struct.
  */
 struct __Bt_Service {
-    int NbChar;							//!< Number of characteristic defined for this service
-    BtGattChar_t *pCharArray;			//!< Pointer to array of characteristics
-    uint16_t Hdl;            			//!< Service handle
-//    uint16_t ConnHdl;					//!< Connection handle
-    BtUuid_t Uuid;						//!< Service UUID
-    uint8_t	*pLongWrBuff;				//!< pointer to user long write buffer
-    int	LongWrBuffSize;					//!< long write buffer size
-    void *pContext;
-    BtSrvcAuthRqst_t AuthReqCB;			//!< Authorization request callback
-    BtSrvc_t *pPrev;
-    BtSrvc_t *pNext;
+	// --- User-supplied ---
+	bool bCustom;						//!< true: 128-bit base UUID is custom; false: Bluetooth SIG adopted
+	uint8_t UuidBase[16];				//!< 128-bit base UUID (used when bCustom == true)
+	uint16_t UuidSrvc;					//!< 16-bit service UUID
+	int NbChar;							//!< Number of characteristics in pCharArray
+	BtGattChar_t *pCharArray;			//!< Pointer to array of characteristics
+	uint8_t *pLongWrBuff;				//!< Optional long-write reassembly buffer (NULL if not used)
+	int LongWrBuffSize;					//!< Size in bytes of pLongWrBuff
+	BtSrvcAuthRqst_t AuthReqCB;			//!< Authorization request callback (NULL if not used)
+	void *pContext;						//!< Opaque pointer for the user (e.g. BtIntrf back-pointer)
+
+	// --- Runtime state (managed by the stack) ---
+	uint16_t Hdl;						//!< Service handle
+	BtUuid_t Uuid;						//!< Full service UUID (base + service combined at registration)
+	BtSrvc_t *pPrev;
+	BtSrvc_t *pNext;
 };
 
 #pragma pack(pop)

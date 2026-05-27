@@ -132,51 +132,24 @@ static uint8_t s_PdmWrChar = 0;
 
 /// Characteristic definitions
 BtGattChar_t g_PdmChars[] = {
-	{
-		// Write characteristic
-		.Uuid = BLE_PDM_CFG_UUID_CHAR,		// char UUID
-		.MaxDataLen = 1,					// char max data length
-		.Property = BT_GATT_CHAR_PROP_WRITE ,	// char properties define by BLUEIOSVC_CHAR_PROP_...
-		.pDesc = s_CfgCharDescString,	// char UTF-8 description string
-		.WrCB = CfgSrvcCallback,	// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = &s_PdmWrChar,					// pointer to char default values
-		.ValueLen = 0						// Default value length in bytes
-	},
-	{
-		// Read characteristic
-		.Uuid = BLE_PDM_DATA_UUID_CHAR,
-		.MaxDataLen = sizeof(PdmPacket_t),
-		.Property =
-				BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = s_DataCharDescString,		// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = MicCharSetNotify,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = NULL,					// pointer to char default values
-		.ValueLen = 0,						// Default value length in bytes
-	},
+	BT_CHAR(BLE_PDM_CFG_UUID_CHAR, 1,
+	        BT_GATT_CHAR_PROP_WRITE,
+	        s_CfgCharDescString,
+	        .WrCB = CfgSrvcCallback),
+	BT_CHAR(BLE_PDM_DATA_UUID_CHAR, sizeof(PdmPacket_t),
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_DataCharDescString,
+	        .SetNotifCB = MicCharSetNotify),
 };
-
-static const int s_BlePdmNbChar = sizeof(g_PdmChars) / sizeof(BtGattChar_t);
 
 uint8_t g_LWrBuffer[512];
 
 /// Service definition
-const BtGattSrvcCfg_t s_PdmSrvcCfg = {
-	//.SecType = BT_GATT_SRVC_SECTYPE_NONE,		// Secure or Open service/char
-	.bCustom = true,
-	.UuidBase = BLE_PDM_UUID_BASE,		// Base UUID
-//	1,
-	.UuidSrvc = BLE_PDM_UUID_SERVICE,		// Service UUID
-	.NbChar = s_BlePdmNbChar,				// Total number of characteristics for the service
-	.pCharArray = g_PdmChars,				// Pointer a an array of characteristic
-	.pLongWrBuff = g_LWrBuffer,				// pointer to user long write buffer
-	.LongWrBuffSize = sizeof(g_LWrBuffer),	// long write buffer size
-};
-
-BtGattSrvc_t g_BlePdmSrvc;
+BtGattSrvc_t g_BlePdmSrvc = BT_SRVC_CUSTOM(BLE_PDM_UUID_BASE,
+                                           BLE_PDM_UUID_SERVICE,
+                                           g_PdmChars,
+                                           .pLongWrBuff    = g_LWrBuffer,
+                                           .LongWrBuffSize = sizeof(g_LWrBuffer));
 
 const BtAppDevInfo_t s_BlePdmDevDesc = {
 	MODEL_NAME,       		// Model name
@@ -332,7 +305,7 @@ void BtAppInitUserServices()
 {
     uint32_t       err_code;
 
-    err_code = BtGattSrvcAdd(&g_BlePdmSrvc, &s_PdmSrvcCfg);
+    err_code = BtGattSrvcAdd(&g_BlePdmSrvc);
     APP_ERROR_CHECK(err_code);
 }
 

@@ -272,8 +272,8 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 			//len = pEntry->DataLen;
 			//memcpy(pBuff, pEntry->Data, len);
 			pBuff[0] = p->pChar->Property;
-			pBuff[1] = p->pChar->ValHdl & 0xFF;
-			pBuff[2] = (p->pChar->ValHdl >> 8) & 0xFF;
+			pBuff[1] = p->pChar->Runtime.ValHdl & 0xFF;
+			pBuff[2] = (p->pChar->Runtime.ValHdl >> 8) & 0xFF;
 			BtUuidVal_t *u = (BtUuidVal_t*) &pBuff[3];
 			if (p->Uuid.BaseIdx > 0)
 			{
@@ -326,10 +326,10 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 		default:
 		{
 			BtAttCharValue_t *p = (BtAttCharValue_t*) pEntry->Data;
-			DEBUG_PRINTF("UUID unknown : Type 0x%x, Len %d\r\n", pEntry->TypeUuid.Uuid, p->pChar->ValueLen);
+			DEBUG_PRINTF("UUID unknown : Type 0x%x, Len %d\r\n", pEntry->TypeUuid.Uuid, p->pChar->Runtime.ValueLen);
 
-			size_t l = p->pChar->ValueLen;//min(p->pChar->ValueLen - Offset, BtAttGetMtu());
-			memcpy(pBuff, p->Data + Offset, l);
+			size_t l = p->pChar->Runtime.ValueLen;//min(p->pChar->Runtime.ValueLen - Offset, BtAttGetMtu());
+			memcpy(pBuff, (uint8_t*)p->pChar->Runtime.pValue + Offset, l);
 			len = l;
 		}
 
@@ -338,10 +338,10 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 	else
 	{
 		BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
-		DEBUG_PRINTF("Read Req UUID custom: %d: %x, %d\r\n", pEntry->TypeUuid.BaseIdx, pEntry->TypeUuid.Uuid, p->pChar->ValueLen);
+		DEBUG_PRINTF("Read Req UUID custom: %d: %x, %d\r\n", pEntry->TypeUuid.BaseIdx, pEntry->TypeUuid.Uuid, p->pChar->Runtime.ValueLen);
 
-		size_t l = p->pChar->ValueLen;//min(p->pChar->ValueLen - Offset, BtAttGetMtu());
-		memcpy(pBuff, p->Data + Offset, l);
+		size_t l = p->pChar->Runtime.ValueLen;//min(p->pChar->Runtime.ValueLen - Offset, BtAttGetMtu());
+		memcpy(pBuff, (uint8_t*)p->pChar->Runtime.pValue + Offset, l);
 		len = l;
 	}
 
@@ -377,13 +377,13 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 					BtDescClientCharConfig_t *p = (BtDescClientCharConfig_t*)pEntry->Data;
 
 					p->CccVal = *(uint16_t*)pData;
-					p->pChar->bNotify = p->CccVal & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION ? true: false;
+					p->pChar->Runtime.bNotify = p->CccVal & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION ? true: false;
 					if (p->pChar->SetNotifCB)
 					{
-						p->pChar->SetNotifCB(p->pChar, p->pChar->bNotify);
+						p->pChar->SetNotifCB(p->pChar, p->pChar->Runtime.bNotify);
 					}
 					len = 2;
-//					DEBUG_PRINTF("CccdHdl : %x\r\n", p->pChar->CccdHdl);
+//					DEBUG_PRINTF("CccdHdl : %x\r\n", p->pChar->Runtime.CccdHdl);
 				}
 				break;
 			case BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
@@ -392,9 +392,9 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 				{
 					BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
 
-					p->pChar->ValueLen = min(Len, p->pChar->MaxDataLen);// - sizeof(BtGattCharValue_t));
-					memcpy(p->Data, pData, p->pChar->ValueLen);
-					len = p->pChar->ValueLen;
+					p->pChar->Runtime.ValueLen = min(Len, p->pChar->MaxDataLen);// - sizeof(BtGattCharValue_t));
+					memcpy(p->pChar->Runtime.pValue, pData, p->pChar->Runtime.ValueLen);
+					len = p->pChar->Runtime.ValueLen;
 
 					if (p->pChar->WrCB)
 					{
@@ -409,9 +409,9 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 	{
 		BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
 
-		p->pChar->ValueLen = min(Len,  p->pChar->MaxDataLen);//- sizeof(BtGattCharValue_t));
-		memcpy(p->Data, pData, p->pChar->ValueLen);
-		len = p->pChar->ValueLen;
+		p->pChar->Runtime.ValueLen = min(Len,  p->pChar->MaxDataLen);//- sizeof(BtGattCharValue_t));
+		memcpy(p->pChar->Runtime.pValue, pData, p->pChar->Runtime.ValueLen);
+		len = p->pChar->Runtime.ValueLen;
 
 		if (p->pChar->WrCB)
 		{

@@ -195,165 +195,63 @@ static const char s_ImuGravCharDescString[] = {
         "Gravity vector characteristic",
 };
 
-static uint8_t s_ImuCharCfgData[BLE_TMS_MAX_DATA_LEN];
-static uint8_t s_ImuCharTapData[BLE_TMS_MAX_DATA_LEN];
-static uint8_t s_ImuCharOriData[BLE_TMS_MAX_DATA_LEN];
-static uint8_t s_ImuCharQuatData[BLE_TMS_MAX_DATA_LEN];
-static uint8_t s_ImuCharPedData[BLE_TMS_MAX_DATA_LEN];
-static uint8_t s_ImuCharRawData[BLE_TMS_MAX_DATA_LEN];
-static uint8_t s_ImuCharEuData[BLE_TMS_MAX_DATA_LEN];
-static uint8_t s_ImuCharRotData[BLE_TMS_MAX_DATA_LEN];
-static uint8_t s_ImuCharHeadData[BLE_TMS_MAX_DATA_LEN];
-static uint8_t s_ImuCharGravData[BLE_TMS_MAX_DATA_LEN];
-
 /// Characteristic definitions
 BtGattChar_t g_ImuChars[] = {
-    {
-        // Config characteristic
-    	.Uuid 			= BLE_UUID_TMS_CONFIG_CHAR,
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuConfigCharDescString,  // char UTF-8 description string
-		.WrCB 			= ImuConfCharWrhandler,       // Callback for write char, set to NULL for read char
-        .SetNotifCB 	= NULL,                       // Callback on set notification
-		.SetIndCB 		= NULL,
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharCfgData,           // pointer to char default values
-//        0,                          // Default value length in bytes
-    },
-    {
-        // TAP characteristic
-		.Uuid 			= BLE_UUID_TMS_TAP_CHAR, 		// char UUID
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,       // char max data length
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuTapCharDescString,    // char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ImuTapCharSetNotify,        // Callback on set notification
-		.SetIndCB 		= NULL,						// Set indication
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharTapData,           // pointer to char default values
-//        0                           // Default value length in bytes
-    },
-    {
-        // Orientation characteristic
-		.Uuid 			= BLE_UUID_TMS_ORIENTATION_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,       // char max data length
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuOrientCharDescString,  // char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ImuOrientCharSetNotify,		// Callback on set notification
-		.SetIndCB 		= NULL,						// Set indication
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharOriData,			// pointer to char default values
-//        0                           // Default value length in bytes
-    },
-    {
-        // Quaternion characteristic
-		.Uuid 			= BLE_UUID_TMS_QUATERNION_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,       // char max data length
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuQuatCharDescString,    // char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ImuQuaternionCharSetNotify,	// Callback on set notification
-		.SetIndCB 		= NULL,						// Set indication
-		.TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharQuatData,			// pointer to char default values
-//        0                           // Default value length in bytes
-    },
-    {
-        // Pedometer characteristic
-		.Uuid 			= BLE_UUID_TMS_PEDOMETER_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,       // char max data length
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuPedoCharDescString,    // char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ImuPedometerCharSetNotify,	// Callback on set notification
-		.SetIndCB 		= NULL,						// Set indication
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharPedData,			// pointer to char default values
-//        0                           // Default value length in bytes
-    },
-    {
-        // Raw characteristic
-		.Uuid 			= BLE_UUID_TMS_RAW_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,       // char max data length
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuRawCharDescString,    	// char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ImuRawCharSetNotify,		// Callback on set notification
-		.SetIndCB 		= NULL,						// Set indication
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharRawData,			// pointer to char default values
-//        0                           // Default value length in bytes
-    },
-    {
-        // Euler characteristic
-		.Uuid 			= BLE_UUID_TMS_EULER_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,       // char max data length
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuEulerCharDescString,    // char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ImuEulerCharSetNotify,      // Callback on set notification
-		.SetIndCB 		= NULL,						// Set indication
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharEuData,            // pointer to char default values
-//        0                           // Default value length in bytes
-    },
-    {
-        // Rot matrix characteristic
-		.Uuid 			= BLE_UUID_TMS_ROT_MAT_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,       // char max data length
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuRotCharDescString,    // char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ImuRotMatCharSetNotify,     // Callback on set notification
-		.SetIndCB 		= NULL,						// Set indication
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharRotData,           // pointer to char default values
-//        0                           // Default value length in bytes
-    },
-    {
-        // Heading characteristic
-		.Uuid 			= BLE_UUID_TMS_HEADING_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,       // char max data length
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuHeadCharDescString,    // char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ImuHeadingCharSetNotify,	// Callback on set notification
-		.SetIndCB 		= NULL,						// Set indication
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharHeadData,          // pointer to char default values
-//        0                           // Default value length in bytes
-    },
-    {
-        // Gravity characteristic
-		.Uuid 			= BLE_UUID_TMS_GRAVITY_CHAR, // char UUID
-		.MaxDataLen 	= BLE_TMS_MAX_DATA_LEN,       // char max data length
-        .Property 		= BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc 			= s_ImuGravCharDescString,    // char UTF-8 description string
-        .WrCB 			= NULL,                       // Callback for write char, set to NULL for read char
-		.SetNotifCB 	= ImuGravityCharSetNotify,	// Callback on set notification
-		.SetIndCB 		= NULL,						// Set indication
-        .TxCompleteCB	= NULL,                       // Tx completed callback
-//		s_ImuCharGravData,          // pointer to char default values
-//        0                           // Default value length in bytes
-    },
+	// Config: Read + Write
+	BT_CHAR(BLE_UUID_TMS_CONFIG_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE,
+	        s_ImuConfigCharDescString,
+	        .WrCB = ImuConfCharWrhandler),
+	// Tap: Read + Notify
+	BT_CHAR(BLE_UUID_TMS_TAP_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_ImuTapCharDescString,
+	        .SetNotifCB = ImuTapCharSetNotify),
+	// Orientation: Read + Notify
+	BT_CHAR(BLE_UUID_TMS_ORIENTATION_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_ImuOrientCharDescString,
+	        .SetNotifCB = ImuOrientCharSetNotify),
+	// Quaternion: Read + Notify
+	BT_CHAR(BLE_UUID_TMS_QUATERNION_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_ImuQuatCharDescString,
+	        .SetNotifCB = ImuQuaternionCharSetNotify),
+	// Pedometer: Read + Notify
+	BT_CHAR(BLE_UUID_TMS_PEDOMETER_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_ImuPedoCharDescString,
+	        .SetNotifCB = ImuPedometerCharSetNotify),
+	// Raw: Read + Notify
+	BT_CHAR(BLE_UUID_TMS_RAW_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_ImuRawCharDescString,
+	        .SetNotifCB = ImuRawCharSetNotify),
+	// Euler: Read + Notify
+	BT_CHAR(BLE_UUID_TMS_EULER_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_ImuEulerCharDescString,
+	        .SetNotifCB = ImuEulerCharSetNotify),
+	// Rotation matrix: Read + Notify
+	BT_CHAR(BLE_UUID_TMS_ROT_MAT_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_ImuRotCharDescString,
+	        .SetNotifCB = ImuRotMatCharSetNotify),
+	// Heading: Read + Notify
+	BT_CHAR(BLE_UUID_TMS_HEADING_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_ImuHeadCharDescString,
+	        .SetNotifCB = ImuHeadingCharSetNotify),
+	// Gravity: Read + Notify
+	BT_CHAR(BLE_UUID_TMS_GRAVITY_CHAR, BLE_TMS_MAX_DATA_LEN,
+	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+	        s_ImuGravCharDescString,
+	        .SetNotifCB = ImuGravityCharSetNotify),
 };
 
-/// Service definition
-const BtGattSrvcCfg_t s_ImuSrvcCfg = {
-    0,       // Secure or Open service/char
-	true,
-    THINGY_BASE_UUID,        // Base UUID
-	BLE_UUID_TMS_SERVICE,       // Service UUID
-    sizeof(g_ImuChars) / sizeof(BtGattChar_t),  // Total number of characteristics for the service
-    g_ImuChars,                 // Pointer a an array of characteristic
-    NULL,                       // pointer to user long write buffer
-    0,                          // long write buffer size
-	NULL
-};
-
-BtGattSrvc_t g_ImuSrvc;
+BtGattSrvc_t g_ImuSrvc = BT_SRVC_CUSTOM(THINGY_BASE_UUID,
+                                        BLE_UUID_TMS_SERVICE,
+                                        g_ImuChars);
 
 static const BtIntrfCfg_t s_ImuQuatIntrfCfg = {
 	&g_ImuSrvc,
@@ -366,7 +264,7 @@ BtGattSrvc_t *GetImuSrvcInstance()
 
 uint32_t ImuSrvcInit()
 {
-	return BtGattSrvcAdd(&g_ImuSrvc, &s_ImuSrvcCfg);
+	return BtGattSrvcAdd(&g_ImuSrvc);
 }
 
 void ImuConfCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)

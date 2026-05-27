@@ -50,122 +50,31 @@ enum {
 
 static BtGattChar_t s_BtDisChar[] = {
 	// Manufacturer Name String (0x2A29)
-	{
-		.Uuid = BT_UUID_CHARACTERISTIC_MANUFACTURER_NAME_STRING,
-		.MaxDataLen = BT_DIS_STR_MAX_LEN,
-		.Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = NULL,
-		.WrCB = NULL,
-		.SetNotifCB = NULL,
-		.TxCompleteCB = NULL,
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
+	BT_CHAR(BT_UUID_CHARACTERISTIC_MANUFACTURER_NAME_STRING,
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
 	// Model Number String (0x2A24)
-	{
-		.Uuid = BT_UUID_CHARACTERISTIC_MODEL_NUMBER_STRING,
-		.MaxDataLen = BT_DIS_STR_MAX_LEN,
-		.Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = NULL,
-		.WrCB = NULL,
-		.SetNotifCB = NULL,
-		.TxCompleteCB = NULL,
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
+	BT_CHAR(BT_UUID_CHARACTERISTIC_MODEL_NUMBER_STRING,
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
 	// Serial Number String (0x2A25)
-	{
-		.Uuid = BT_UUID_CHARACTERISTIC_SERIAL_NUMBER_STRING,
-		.MaxDataLen = BT_DIS_STR_MAX_LEN,
-		.Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = NULL,
-		.WrCB = NULL,
-		.SetNotifCB = NULL,
-		.TxCompleteCB = NULL,
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
+	BT_CHAR(BT_UUID_CHARACTERISTIC_SERIAL_NUMBER_STRING,
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
 	// Firmware Revision String (0x2A26)
-	{
-		.Uuid = BT_UUID_CHARACTERISTIC_FIRMWARE_REVISION_STRING,
-		.MaxDataLen = BT_DIS_STR_MAX_LEN,
-		.Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = NULL,
-		.WrCB = NULL,
-		.SetNotifCB = NULL,
-		.TxCompleteCB = NULL,
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
+	BT_CHAR(BT_UUID_CHARACTERISTIC_FIRMWARE_REVISION_STRING,
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
 	// Hardware Revision String (0x2A27)
-	{
-		.Uuid = BT_UUID_CHARACTERISTIC_HARDWARE_REVISION_STRING,
-		.MaxDataLen = BT_DIS_STR_MAX_LEN,
-		.Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = NULL,
-		.WrCB = NULL,
-		.SetNotifCB = NULL,
-		.TxCompleteCB = NULL,
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
+	BT_CHAR(BT_UUID_CHARACTERISTIC_HARDWARE_REVISION_STRING,
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
 	// Software Revision String (0x2A28). BtAppDevInfo_t does not yet carry a
 	// software revision field; this char is reserved here for future use.
-	{
-		.Uuid = BT_UUID_CHARACTERISTIC_SOFTWARE_REVISION_STRING,
-		.MaxDataLen = BT_DIS_STR_MAX_LEN,
-		.Property = BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_VALEN,
-		.pDesc = NULL,
-		.WrCB = NULL,
-		.SetNotifCB = NULL,
-		.TxCompleteCB = NULL,
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
+	BT_CHAR(BT_UUID_CHARACTERISTIC_SOFTWARE_REVISION_STRING,
+	        BT_DIS_STR_MAX_LEN, BT_GATT_CHAR_PROP_READ, NULL),
 	// PnP ID (0x2A50) - fixed 7 bytes.
-	{
-		.Uuid = BT_UUID_CHARACTERISTIC_PNP_ID,
-		.MaxDataLen = sizeof(BtDisPnpId_t),
-		.Property = BT_GATT_CHAR_PROP_READ,
-		.pDesc = NULL,
-		.WrCB = NULL,
-		.SetNotifCB = NULL,
-		.TxCompleteCB = NULL,
-		.Hdl = BT_ATT_HANDLE_INVALID,
-		.ValHdl = BT_ATT_HANDLE_INVALID,
-		.DescHdl = BT_ATT_HANDLE_INVALID,
-		.CccdHdl = BT_ATT_HANDLE_INVALID,
-		.SccdHdl = BT_ATT_HANDLE_INVALID,
-	},
+	BT_CHAR(BT_UUID_CHARACTERISTIC_PNP_ID,
+	        sizeof(BtDisPnpId_t), BT_GATT_CHAR_PROP_READ, NULL),
 };
 
-static const BtGattSrvcCfg_t s_BtDisSrvcCfg = {
-	.bCustom = false,
-	.UuidBase = { 0, },
-	.UuidSrvc = BT_UUID_GATT_SERVICE_DEVICE_INFORMATION,
-	.NbChar = BT_DIS_CHAR_COUNT,
-	.pCharArray = s_BtDisChar,
-};
-
-static BtGattSrvc_t s_BtDisSrvc;
+static BtGattSrvc_t s_BtDisSrvc = BT_SRVC_STD(BT_UUID_GATT_SERVICE_DEVICE_INFORMATION,
+                                              s_BtDisChar);
 
 // Set a string characteristic value if the source string is non-NULL and
 // non-empty. Length is bounded by BT_DIS_STR_MAX_LEN.
@@ -193,7 +102,7 @@ __attribute__((weak)) bool BtDisInit(const struct __Bt_App_Cfg *pCfgIn)
 		return false;
 	}
 
-	if (BtGattSrvcAdd(&s_BtDisSrvc, &s_BtDisSrvcCfg) == false)
+	if (BtGattSrvcAdd(&s_BtDisSrvc) == false)
 	{
 		return false;
 	}
