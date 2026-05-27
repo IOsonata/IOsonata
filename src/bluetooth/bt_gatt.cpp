@@ -40,73 +40,8 @@ SOFTWARE.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gatt.h"
 
-//#include "coredev/uart.h"
-//extern UART g_Uart;
-/*
-#ifndef BT_GATT_ENTRY_MAX_COUNT
-#define BT_GATT_ENTRY_MAX_COUNT		100
-#endif
-
-#define BT_GATT_SRVC_MAX_COUNT		((BT_GATT_ENTRY_MAX_COUNT) >> 1)
-
-#if 0
-#pragma pack(push,4)
-typedef struct {
-	bool bValid;
-	BtGattSrvc_t *pSrvc;
-} BtGattSrvcEntry_t;
-#pragma pack(pop)
-#endif
-/*
-static BtGattCharSrvcChanged_t s_BtGattCharSrvcChanged = {0,};
-
-static BtGattChar_t s_BtGattDftlChar[] = {
-	{
-		// Read characteristic
-		.Uuid = BT_UUID_GATT_CHAR_SERVICE_CHANGED,
-		.MaxDataLen = sizeof(BtGattCharSrvcChanged_t),
-		.Property =	BT_GATT_CHAR_PROP_INDICATE,
-		.pDesc = NULL,						// char UTF-8 description string
-		.WrCB = NULL,						// Callback for write char, set to NULL for read char
-		.SetNotifCB = NULL,					// Callback on set notification
-		.TxCompleteCB = NULL,				// Tx completed callback
-		.pValue = &s_BtGattCharSrvcChanged,
-		.ValueLen = 0,
-	},
-};
-
-static BtGattSrvcCfg_t s_BtGattDftlSrvcCfg = {
-	//.SecType = BLESRVC_SECTYPE_NONE,		// Secure or Open service/char
-	.bCustom = false,
-	.UuidBase = {0,},		// Base UUID
-	.UuidSrvc = BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE,		// Service UUID
-	.NbChar = sizeof(s_BtGattDftlChar) / sizeof(BtGattChar_t),				// Total number of characteristics for the service
-	.pCharArray = s_BtGattDftlChar,				// Pointer a an array of characteristic
-};
-*/
-//alignas(4) static BtGattListEntry_t s_BtGattEntryTbl[BT_GATT_ENTRY_MAX_COUNT] = {0,};
-//static int s_NbGattListEntry = 0;
-//alignas(4) static BtGattSrvcEntry_t s_BtGattSrvcTbl[BT_GATT_SRVC_MAX_COUNT] = {{0,}, };
-//static int s_NbGattSrvcEntry = 0;
 static BtGattSrvc_t *s_pBtGattSrvcList = nullptr;
-//static BtGattSrvc_t *s_pBtGattSrvcTail = nullptr;
-/*static uint16_t s_GattMaxMtu = 247;
 
-uint16_t BtGttGetMaxMtu(uint16_t MaxMtu)
-{
-	return s_GattMaxMtu;
-}
-
-uint16_t BtGattSetMaxMtu(uint16_t MaxMtu)
-{
-	if (MaxMtu > 27)
-	{
-		s_GattMaxMtu = MaxMtu;
-	}
-
-	return s_GattMaxMtu;
-}
-*/
 BtGattSrvc_t * const BtGattGetSrvcList()
 {
 	return s_pBtGattSrvcList;
@@ -153,7 +88,6 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t const * const pCfg)
 {
-	bool retval = false;
 	uint8_t baseidx = 0;
 
 	// Add base UUID to internal list.
@@ -163,13 +97,21 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 	}
 
 	pSrvc->Uuid = { baseidx, BT_UUID_TYPE_16, pCfg->UuidSrvc };
+	pSrvc->Hdl  = BT_ATT_HANDLE_INVALID;
 
 	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_PRIMARY_SERVICE };
 
-	int l = sizeof(BtAttSrvcDeclar_t);// + (pCfg->NbChar - 1) * sizeof(BtAttDBEntry_t*);
+	int l = sizeof(BtAttSrvcDeclar_t);
 
 	BtAttDBEntry_t *srvcentry = BtAttDBAddEntry(&typeuuid, l);
 
+	// Note: BtAttDBAddEntry has no rollback. Once any sub-entry succeeds
+	// the bump-pointer and handle counter have advanced; on a later failure
+	// inside this function the partial entries are leaked from the DB. The
+	// service object itself is left with Hdl = BT_ATT_HANDLE_INVALID and
+	// NOT inserted into s_pBtGattSrvcList, so callers walking the list see
+	// only fully-registered services. A proper fix needs a BtAttDBUnwind
+	// API; tracked separately.
 	if (srvcentry == nullptr)
 	{
 		return false;
@@ -179,133 +121,93 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc, BtGattSrvcCfg_t co
 
 	srvcdec->Uuid = pSrvc->Uuid;
 	srvcdec->pSrvc = pSrvc;
-	//srvcdec->NbChar = pCfg->NbChar;
 
 	pSrvc->Hdl = srvcentry->Hdl;
 	pSrvc->NbChar = pCfg->NbChar;
-    pSrvc->pCharArray = pCfg->pCharArray;
+	pSrvc->pCharArray = pCfg->pCharArray;
 
-    BtGattChar_t *c = pSrvc->pCharArray;
+	BtGattChar_t *c = pSrvc->pCharArray;
 
 	BtAttDBEntry_t *entry = nullptr;
 
-    for (int i = 0; i < pCfg->NbChar; i++, c++)
-    {
-    	typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_CHARACTERISTIC };
-    	l = sizeof(BtAttCharDeclar_t);
+	for (int i = 0; i < pCfg->NbChar; i++, c++)
+	{
+		typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_CHARACTERISTIC };
+		l = sizeof(BtAttCharDeclar_t);
 
-    	entry = BtAttDBAddEntry(&typeuuid, l);
-    	if (entry == nullptr)
-    	{
-    		return false;
-    	}
-
-    	//srvcdec->pCharEntry[i] = entry;
-
-    	BtAttCharDeclar_t *chardec = (BtAttCharDeclar_t*)entry->Data;
-
-    	//chardec->Prop = (uint8_t)c->Property;
-    	chardec->Uuid = {baseidx, BT_UUID_TYPE_16, c->Uuid};
-    	chardec->pChar = c;
-
-
-/*		if (c->BaseUuidIdx > 0)
+		entry = BtAttDBAddEntry(&typeuuid, l);
+		if (entry == nullptr)
 		{
-			BtUuidGetBase(c->BaseUuidIdx, chardec->Uuid.Uuid128);
-
-			chardec->Uuid.Uuid128[12] = chardec->Uuid.Uuid16 & 0xFF;
-			chardec->Uuid.Uuid128[13] = chardec->Uuid.Uuid16 >> 8;
-
-			entry->DataLen = 19;
+			pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
+			return false;
 		}
-		else
-		{
-			chardec->Uuid.Uuid16 = c->Uuid;
-			entry->DataLen = 5;
-		}
-*/
-    	c->ValHdl = BT_ATT_HANDLE_INVALID;
+
+		BtAttCharDeclar_t *chardec = (BtAttCharDeclar_t*)entry->Data;
+
+		chardec->Uuid  = {baseidx, BT_UUID_TYPE_16, c->Uuid};
+		chardec->pChar = c;
+
+		c->ValHdl  = BT_ATT_HANDLE_INVALID;
 		c->DescHdl = BT_ATT_HANDLE_INVALID;
 		c->CccdHdl = BT_ATT_HANDLE_INVALID;
 		c->SccdHdl = BT_ATT_HANDLE_INVALID;
-        c->pSrvc = pSrvc;
-    	c->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
+		c->pSrvc       = pSrvc;
+		c->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
 
-    	// Characteristic value
-    	typeuuid = {baseidx, BT_UUID_TYPE_16, c->Uuid };
-    	entry = BtAttDBAddEntry(&typeuuid, c->MaxDataLen + sizeof(BtAttCharValue_t));
-    	if (entry == nullptr)
-    	{
-    		return false;
-    	}
-    	BtAttCharValue_t *charval = (BtAttCharValue_t*)entry->Data;
+		// Characteristic value
+		typeuuid = {baseidx, BT_UUID_TYPE_16, c->Uuid };
+		entry = BtAttDBAddEntry(&typeuuid, c->MaxDataLen + sizeof(BtAttCharValue_t));
+		if (entry == nullptr)
+		{
+			pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
+			return false;
+		}
+		BtAttCharValue_t *charval = (BtAttCharValue_t*)entry->Data;
 
-    	charval->pChar = c;
-    	//chardec->pChar->ValHdl = entry->Hdl;
-    	c->ValHdl = entry->Hdl;//chardec->ValHdl;
-    	//c->pData = charval;
-    	c->pValue = charval->Data;
+		charval->pChar = c;
+		c->ValHdl = entry->Hdl;
+		c->pValue = charval->Data;
 
-    	//charval->MaxDataLen = c->MaxDataLen;
-    	//charval->DataLen = 0;
-    	//charval->WrCB = c->WrCB;
-    	//charval->TxCompleteCB = c->TxCompleteCB;
+		c->bNotify = false;
+		if (c->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
+		{
+			// Characteristic Descriptor CCC
+			typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
+			l = sizeof(BtDescClientCharConfig_t);
+			entry = BtAttDBAddEntry(&typeuuid, l);
+			if (entry == nullptr)
+			{
+				pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
+				return false;
+			}
 
-    	c->bNotify = false;
-        if (c->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
-        {
-            // Characteristic Descriptor CCC
-            typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION };
-            l = sizeof(BtDescClientCharConfig_t);
-        	entry = BtAttDBAddEntry(&typeuuid, l);
-        	if (entry == nullptr)
-        	{
-        		return false;
-        	}
+			BtDescClientCharConfig_t *ccc = (BtDescClientCharConfig_t*)entry->Data;
 
-        	BtDescClientCharConfig_t *ccc = (BtDescClientCharConfig_t*)entry->Data;
+			ccc->pChar  = c;
+			ccc->CccVal = 0;
+			c->CccdHdl  = entry->Hdl;
+		}
 
-        	ccc->pChar = c;
-        	ccc->CccVal = 0;
-        	//ccc->SetIndCB = c->SetIndCB;
-        	//ccc->SetNtfCB = c->SetNotifCB;
-    		c->CccdHdl = entry->Hdl;
+		if (c->pDesc)
+		{
+			// Characteristic Description
+			typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION };
+			size_t dl = sizeof(BtDescCharUserDesc_t);
+			entry = BtAttDBAddEntry(&typeuuid, dl);
+			if (entry == nullptr)
+			{
+				pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
+				return false;
+			}
 
-        }
+			BtDescCharUserDesc_t *dcud = (BtDescCharUserDesc_t*)entry->Data;
 
-        if (c->pDesc)
-        {
-        	// Characteristic Description
-        	typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION };
-        	size_t l = sizeof(BtDescCharUserDesc_t);
-        	entry = BtAttDBAddEntry(&typeuuid, l);
-        	if (entry == nullptr)
-        	{
-        		return false;
-        	}
+			dcud->pChar = c;
+			c->DescHdl  = entry->Hdl;
+		}
+	}
 
-        	BtDescCharUserDesc_t *dcud = (BtDescCharUserDesc_t*)entry->Data;
-
-        	dcud->pChar = c;
-        	//dcud->pDescStr = c->pDesc;
-        	c->DescHdl = entry->Hdl;
-        }
-    }
-
-    BtGattInsertSrvcList(pSrvc);
-
-
-/*
-    for (int i = 0; i < BT_GATT_SRVC_MAX_COUNT; i++)
-    {
-    	if (s_BtGattSrvcTbl[i].bValid == false)
-    	{
-    		s_BtGattSrvcTbl[i].bValid = true;
-    		s_BtGattSrvcTbl[i].pSrvc = pSrvc;
-    		break;
-    	}
-    }
-*/
+	BtGattInsertSrvcList(pSrvc);
 
 	return true;
 }
@@ -344,23 +246,38 @@ __attribute__((weak)) void BtGattEvtHandler(uint32_t Evt, void * const pCtx)
 	}
 }
 
+// HCI Number-Of-Completed-Packets event hook. The HCI controller reports
+// per-connection packet completions but does not say which characteristic
+// produced them. Without per-connection bookkeeping of the last enqueued
+// char, the best we can do here is fire TxCompleteCB only on chars where
+// a notification or indication could be in flight (i.e. the peer has
+// subscribed). Chars with neither bNotify nor bIndic cannot have produced
+// a notify packet and are skipped.
+//
+// A precise fix needs the notify path (BtGattCharNotify) to record the
+// originating char per ConnHdl, which we then dequeue here. That refactor
+// crosses port boundaries and is tracked separately.
 void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 {
-	if (s_pBtGattSrvcList)
+	if (NbPktSent == 0)
 	{
-		BtGattSrvc_t *p = s_pBtGattSrvcList;
+		return;
+	}
 
-		while (p)
+	for (BtGattSrvc_t *p = s_pBtGattSrvcList; p != nullptr; p = p->pNext)
+	{
+		for (int i = 0; i < p->NbChar; i++)
 		{
-			for (int i = 0 ; i < p->NbChar; i++)
+			BtGattChar_t *c = &p->pCharArray[i];
+			if (c->TxCompleteCB == nullptr)
 			{
-				if (p->pCharArray[i].TxCompleteCB)
-				{
-					p->pCharArray[i].TxCompleteCB(&p->pCharArray[i], i);
-				}
+				continue;
 			}
-
-			p = p->pNext;
+			if (c->bNotify == false && c->bIndic == false)
+			{
+				continue;
+			}
+			c->TxCompleteCB(c, i);
 		}
 	}
 }

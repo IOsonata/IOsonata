@@ -112,9 +112,16 @@ BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, voi
 	uint32_t l = sizeof(BtAttDBEntry_t) + MaxDataLen;
 
 	l = (l + 3) & 0xFFFFFFFC;
-	if ((uint32_t)entry + l > s_BtAttDBMemEnd)
+
+	// We will write pNext/pPrev into the slot at (entry + l) below to seed
+	// the next tail entry. That seed write touches the first few bytes of
+	// a BtAttDBEntry_t at (entry + l), so the bound check must reserve
+	// sizeof(BtAttDBEntry_t) past the end of this entry, not just l bytes.
+	// Without the pad, the seed writes spill past s_BtAttDBMemEnd when the
+	// DB is exactly full.
+	if ((uint32_t)entry + l + sizeof(BtAttDBEntry_t) > s_BtAttDBMemEnd)
 	{
-		//DEBUG_PRINTF("Out mem. Required %d, Reserved : %d\r\n", ((uint32_t)entry + l) - (uint32_t)s_BtAttDBMem, s_BtAttDBMemEnd - (uint32_t)s_BtAttDBMem);
+		//DEBUG_PRINTF("Out mem. Required %d, Reserved : %d\r\n", ((uint32_t)entry + l + sizeof(BtAttDBEntry_t)) - (uint32_t)s_BtAttDBMem, s_BtAttDBMemEnd - (uint32_t)s_BtAttDBMem);
 		return nullptr;
 	}
 
@@ -796,13 +803,17 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			{
 				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_CMD (0x52):\r\n");
 
-				BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->SignedWriteCmd.Hdl);
+				// Write Command (opcode 0x52) uses BtAttWriteCmd_t (handle + data).
+				// SignedWriteCmd is opcode 0xD2 (handle + data + 12B signature).
+				// Both union members overlay so the data offset is identical,
+				// but the field name should match the opcode being handled.
+				BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->WriteCmd.Hdl);
 
 				if (entry)
 				{
-					size_t l = ReqLen;
-
-					l = BtAttWriteValue(entry, 0, pReqAtt->SignedWriteCmd.Data, l - 3);
+					// ReqLen counts opcode + handle + data, so the data length
+					// is ReqLen - 1 (opcode) - 2 (handle) = ReqLen - 3.
+					BtAttWriteValue(entry, 0, pReqAtt->WriteCmd.Data, ReqLen - 3);
 
 					retval = 0;
 				}
