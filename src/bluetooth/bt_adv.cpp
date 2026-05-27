@@ -170,6 +170,11 @@ BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
  */
 bool BtAdvDataAdd(BtAdvPacket_t * const pAdvPkt, uint8_t Type, uint8_t *pData, int Len)
 {
+	if (Len > 0 && pData == nullptr)
+	{
+		return false;
+	}
+
 	BtAdvData_t *p = BtAdvDataAllocate(pAdvPkt, Type, Len);
 
 	if (p == nullptr)
@@ -241,6 +246,12 @@ bool BtAdvDataAddUuid(BtAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bo
 		return false;
 	}
 
+	int maxPayload = pAdvPkt->MaxLen - 2;
+	if (pAdvPkt->pData == nullptr || maxPayload <= 0)
+	{
+		return false;
+	}
+
 	if (pUid->BaseIdx > 0)
 	{
 		// Custom-base UUID. Only uuid16 and uuid32 shorthand make sense
@@ -254,6 +265,11 @@ bool BtAdvDataAddUuid(BtAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bo
 		uint8_t base[16];
 
 		if (BtUuidGetBase(pUid->BaseIdx, base) == false)
+		{
+			return false;
+		}
+
+		if (pUid->Count > maxPayload / 16)
 		{
 			return false;
 		}
@@ -295,14 +311,26 @@ bool BtAdvDataAddUuid(BtAdvPacket_t * const pAdvPkt, const BtUuidArr_t *pUid, bo
 	{
 		case BT_UUID_TYPE_16:
 			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID16 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID16;
+			if (pUid->Count > maxPayload / 2)
+			{
+				return false;
+			}
 			l = pUid->Count * 2;
 			break;
 		case BT_UUID_TYPE_32:
 			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID32 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID32;
+			if (pUid->Count > maxPayload / 4)
+			{
+				return false;
+			}
 			l = pUid->Count * 4;
 			break;
 		case BT_UUID_TYPE_128:
 			gaptype = bComplete ? BT_GAP_DATA_TYPE_COMPLETE_SRVC_UUID128 : BT_GAP_DATA_TYPE_INCOMPLETE_SRVC_UUID128;
+			if (pUid->Count > maxPayload / 16)
+			{
+				return false;
+			}
 			l = pUid->Count * 16;
 			break;
 		default:
@@ -318,6 +346,10 @@ bool BtAdvDataSetDevName(BtAdvPacket_t * const pAdvPkt, const char *pName)
 	{
 		return false;
 	}
+
+	// Ensure switching between complete and shortened names cannot leave both records.
+	BtAdvDataRemove(pAdvPkt, BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME);
+	BtAdvDataRemove(pAdvPkt, BT_GAP_DATA_TYPE_SHORT_LOCAL_NAME);
 
 	// Need at least 3 bytes free: length byte + type byte + 1 name byte.
 	if (pAdvPkt->MaxLen <= pAdvPkt->Len + 2)
@@ -403,6 +435,39 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		return false;
 	}
 
+	if (pAdvPkt->pData == nullptr || pAdvPkt->MaxLen <= 0)
+	{
+		return false;
+	}
+
+	if (pSrPkt != nullptr && (pSrPkt->pData == nullptr || pSrPkt->MaxLen <= 0))
+	{
+		return false;
+	}
+
+	if (pCfg->AdvManDataLen < 0 || pCfg->SrManDataLen < 0)
+	{
+		return false;
+	}
+
+	if (pCfg->pAdvManData == nullptr && pCfg->AdvManDataLen > 0)
+	{
+		return false;
+	}
+
+	if (pCfg->pSrManData == nullptr && pCfg->SrManDataLen > 0)
+	{
+		return false;
+	}
+
+	pAdvPkt->Len = 0;
+	memset(pAdvPkt->pData, 0, pAdvPkt->MaxLen);
+	if (pSrPkt != nullptr)
+	{
+		pSrPkt->Len = 0;
+		memset(pSrPkt->pData, 0, pSrPkt->MaxLen);
+	}
+
 	// Flags: BR/EDR not supported; limited or general discoverable based on
 	// whether the app set a timeout (limited mode).
 	uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
@@ -451,7 +516,10 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 				return false;
 			}
 			BtAdvWriteU16Le(p->Data, pCfg->VendorId);
-			memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
+			if (pCfg->AdvManDataLen > 0)
+			{
+				memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
+			}
 		}
 
 		if (pCfg->pSrManData != NULL)
@@ -459,6 +527,7 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 			if (pSrPkt == nullptr)
 			{
 				DEBUG_PRINTF("BtAdvEncode: sr man data set but no sr packet\r\n");
+				return false;
 			}
 			else
 			{
@@ -470,7 +539,10 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 					return false;
 				}
 				BtAdvWriteU16Le(p->Data, pCfg->VendorId);
-				memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
+				if (pCfg->SrManDataLen > 0)
+				{
+					memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
+				}
 			}
 		}
 	}
@@ -490,12 +562,12 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 			}
 			BtAdvWriteU16Le(p->Data, pCfg->VendorId);
 			int off = 2;
-			if (pCfg->pAdvManData != NULL)
+			if (pCfg->pAdvManData != NULL && pCfg->AdvManDataLen > 0)
 			{
 				memcpy(&p->Data[off], pCfg->pAdvManData, pCfg->AdvManDataLen);
 				off += pCfg->AdvManDataLen;
 			}
-			if (pCfg->pSrManData != NULL)
+			if (pCfg->pSrManData != NULL && pCfg->SrManDataLen > 0)
 			{
 				memcpy(&p->Data[off], pCfg->pSrManData, pCfg->SrManDataLen);
 			}
