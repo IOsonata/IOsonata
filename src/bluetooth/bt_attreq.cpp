@@ -38,6 +38,8 @@ SOFTWARE.
 
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
+#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_app.h"
 
 /******** For DEBUG ************/
 //#define UART_DEBUG_ENABLE
@@ -303,16 +305,23 @@ bool BtAttReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, u
 	return true;
 }
 
-// Current UUID type to be search
-BtUuid_t g_UuidType = {0, BT_UUID_TYPE_16, (uint16_t) BT_UUID_DECLARATIONS_CHARACTERISTIC };
-
+// Discovery kickoff. Stashes the UUID type to scan for in the peer's
+// per-connection Discovery state, then issues the actual ATT request.
+// Previously this used a file-scope g_UuidType global; with multiple
+// concurrent central links the global got clobbered.
 bool BtAttStartReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t StartHdl, uint16_t EndHdl, BtUuid_t *pUuid)
 {
 	if (pDev == NULL || pUuid == NULL)
 		return false;
 
-	memcpy((uint8_t*)&g_UuidType, (uint8_t*)pUuid, sizeof(BtUuid_t));
-	return BtAttReadByGroupTypeRequest(pDev, ConnHdl, StartHdl, EndHdl, &g_UuidType);
+	BtDevice_t *pPeer = BtAppPeerFindByHdl(ConnHdl);
+	if (pPeer == NULL)
+	{
+		return false;
+	}
+
+	pPeer->Discovery.UuidType = *pUuid;
+	return BtAttReadByGroupTypeRequest(pDev, ConnHdl, StartHdl, EndHdl, &pPeer->Discovery.UuidType);
 }
 
 

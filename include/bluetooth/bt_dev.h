@@ -58,6 +58,21 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BT_DEV_NAME_MAXLEN			30
 #define BT_DEV_SERVICE_MAXCNT		10
 
+/// Per-peer discovery state. Used by the central while walking the peer's
+/// GATT table. Previously held as file-scope globals (g_CurIdx, g_UuidType)
+/// in bt_attrsp.cpp / bt_attreq.cpp, which broke multi-link discovery: the
+/// cursor for one connection's response would clobber another connection's
+/// in-flight state.
+///
+/// Hdl is uint16_t because ATT handles are 16-bit; the prior CurParseInf_t
+/// typedef stored it as uint8_t and silently truncated peer handles >= 256.
+typedef struct __Bt_Dev_Disc_State {
+	uint8_t			SrvIdx;			//!< Index into Services[] currently being parsed
+	uint8_t			CharIdx;		//!< Index into the current service's char array
+	uint16_t		Hdl;			//!< Current ATT handle being read/queried
+	BtUuid_t		UuidType;		//!< UUID type the state machine is scanning for
+} BtDevDiscState_t;
+
 /// Bluetooth device representation. One instance for the local stack's
 /// own identity, one instance per tracked remote peer. Same structure
 /// in both cases. Role asymmetry lives in the operations (BtApp*() for
@@ -87,6 +102,7 @@ typedef struct __Bt_Device {
 	BtHciDevice_t	*pHciDev;					//!< Associated HCI device
 	int				NbSrvc;						//!< Number of services in the Services array
 	BtGattDBSrvc_t	Services[BT_DEV_SERVICE_MAXCNT];	//!< Services: exposed if local, discovered if remote
+	BtDevDiscState_t Discovery;					//!< Per-peer discovery cursor (remote role only)
 } BtDevice_t;
 
 // --- Legacy aliases (pre-Voci rename) ---

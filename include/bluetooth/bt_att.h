@@ -551,17 +551,9 @@ struct __Bt_Service {
 
 #pragma pack(pop)
 
-#pragma pack(push,1)
-/**
- * Struct to keep track of the current Service index, Characteristic index,
- * and attribute handle being parsed
- */
-typedef struct {
-	uint8_t	SrvIdx;		// Current Service Idx
-	uint8_t Hdl;		// Current handle
-	uint8_t CharIdx;	// Current Characteristic Idx
-} CurParseInf_t;
-#pragma pack(pop)
+// CurParseInf_t was a process-wide discovery cursor; it has been moved
+// onto BtDevice_t as the Discovery field (see bt_dev.h) so multi-link
+// central discovery does not clobber per-connection state.
 
 #ifdef __cplusplus
 extern "C" {

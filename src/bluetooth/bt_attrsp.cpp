@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	bt_attresp.cpp
+@file	bt_attrsp.cpp
 
 @brief	Generic Bluetooth ATT protocol
 Implementation of ATT command response
@@ -11,7 +11,7 @@ Implementation of ATT command response
 
 MIT License
 
-Copyright (c) 2024, I-SYST, all rights reserved
+Copyright (c) 2024, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include <inttypes.h>
 #include <stddef.h>
 #include <memory.h>
 
@@ -58,16 +57,14 @@ extern UART g_Uart;
 #endif
 /*******************************/
 
-extern BtUuid_t g_UuidType;
-CurParseInf_t g_CurIdx;
-
 uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen)
 {
 	uint32_t retval = 0;
 
-	// Database lookup: find the peer record for this connection. The
-	// state machine writes services/chars into pPeer->Services and
-	// fires next requests via pPeer->pHciDev / pPeer->ConnHdl.
+	// Find the peer record for this connection. The state machine writes
+	// services/chars into pPeer->Services and fires next requests via
+	// pPeer->pHciDev / pPeer->ConnHdl. The discovery cursor lives on
+	// pPeer->Discovery so concurrent links do not clobber each other.
 	BtDevice_t *pPeer = BtAppPeerFindByHdl(ConnHdl);
 	if (pPeer == NULL)
 	{
@@ -86,33 +83,41 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 			for (int i=0; i < pPeer->NbSrvc; i++)
 			{
 				DEBUG_PRINTF("Service #%d: ", i);
-				BtGattDBSrvc_t *p = (BtGattDBSrvc_t *) &pPeer->Services[i];
+				BtGattDBSrvc_t *p = &pPeer->Services[i];
 				DEBUG_PRINTF("StartHdl = %d, EndHdl = %d\r\n", p->handle_range.StartHdl, p->handle_range.EndHdl);
 			}
 
-			// Look into the first BLE Srvc
-			g_CurIdx.SrvIdx = 0;
-			BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &pPeer->Services[g_CurIdx.SrvIdx];
-			g_CurIdx.CharIdx = 0;
-			g_CurIdx.Hdl = pSrvc->handle_range.StartHdl;
-			if (g_CurIdx.Hdl > pSrvc->handle_range.EndHdl)
+			if (pPeer->NbSrvc == 0)
 			{
-				DEBUG_PRINTF("Parsing Hdl (%d) larger than EndHdl (%d)\r\n", g_CurIdx.Hdl, pSrvc->handle_range.EndHdl);
+				DEBUG_PRINTF("No services discovered, nothing to scan\r\n");
+				break;
+			}
+
+			// Look into the first BLE Srvc
+			pPeer->Discovery.SrvIdx = 0;
+			BtGattDBSrvc_t *pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
+			pPeer->Discovery.CharIdx = 0;
+			pPeer->Discovery.Hdl = pSrvc->handle_range.StartHdl;
+			if (pPeer->Discovery.Hdl > pSrvc->handle_range.EndHdl)
+			{
+				DEBUG_PRINTF("Parsing Hdl (%d) larger than EndHdl (%d)\r\n", pPeer->Discovery.Hdl, pSrvc->handle_range.EndHdl);
 			}
 			else
 			{
 				uint16_t sHdl = pSrvc->handle_range.StartHdl;
 				uint16_t eHdl = pSrvc->handle_range.EndHdl;
 
-				//g_UuidType.BaseIdx = 0;
-				//g_UuidType.Type = BT_UUID_TYPE_16;
-				g_UuidType.Uuid16 = BT_UUID_DECLARATIONS_CHARACTERISTIC;
+				pPeer->Discovery.UuidType.BaseIdx = 0;
+				pPeer->Discovery.UuidType.Type    = BT_UUID_TYPE_16;
+				pPeer->Discovery.UuidType.Uuid16  = BT_UUID_DECLARATIONS_CHARACTERISTIC;
 
 				DEBUG_PRINTF(
 						"Parse the characteristic of the first service ConnHdl %d, sHdl %d, eHdl %d, uuid 0x%X, baseIdx %d\r\n",
-						pPeer->ConnHdl, sHdl, eHdl, g_UuidType.Uuid16, g_UuidType.BaseIdx);
+						pPeer->ConnHdl, sHdl, eHdl,
+						pPeer->Discovery.UuidType.Uuid16,
+						pPeer->Discovery.UuidType.BaseIdx);
 
-				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->ConnHdl, sHdl, eHdl, &g_UuidType);
+				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->ConnHdl, sHdl, eHdl, &pPeer->Discovery.UuidType);
 			}
 		}
 	}
@@ -121,22 +126,19 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 	{
 		if (pRspAtt->ErrorRsp.Error == BT_ATT_ERROR_ATT_NOT_FOUND)
 		{
-			DEBUG_PRINTF("ATT with sHdl %d of SrvcIdx %d not found \r\n", g_CurIdx.Hdl, g_CurIdx.SrvIdx);
+			DEBUG_PRINTF("ATT with sHdl %d of SrvcIdx %d not found \r\n", pPeer->Discovery.Hdl, pPeer->Discovery.SrvIdx);
 
-			if (g_CurIdx.SrvIdx >= pPeer->NbSrvc - 1)
+			if (pPeer->Discovery.SrvIdx >= pPeer->NbSrvc - 1)
 			{
 				DEBUG_PRINTF("Out of number of services. Restart to scan for different Uuid16 Type\r\n");
-				g_CurIdx.SrvIdx = 0;
-				g_CurIdx.CharIdx = 0;
-				BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &pPeer->Services[g_CurIdx.SrvIdx];
-				g_CurIdx.Hdl = pSrvc->handle_range.StartHdl;
+				pPeer->Discovery.SrvIdx = 0;
+				pPeer->Discovery.CharIdx = 0;
+				BtGattDBSrvc_t *pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
+				pPeer->Discovery.Hdl = pSrvc->handle_range.StartHdl;
 				uint16_t sHdl = pSrvc->handle_range.StartHdl;
 				uint16_t eHdl = pSrvc->handle_range.EndHdl;
 
-				//g_UuidType.BaseIdx = 0;
-				//g_UuidType.Type = BT_UUID_TYPE_16;
-
-				switch (g_UuidType.Uuid16)
+				switch (pPeer->Discovery.UuidType.Uuid16)
 				{
 				case BT_UUID_DECLARATIONS_CHARACTERISTIC:
 				{
@@ -145,36 +147,34 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 						DEBUG_PRINTF("    SrvcIdx %d has %d characteristics\r\n", i, pPeer->Services[i].char_count);
 
 					DEBUG_PRINTF("Start Scanning for BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION 0x2902\r\n");
-					g_UuidType.Uuid16 = BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
+					pPeer->Discovery.UuidType.Uuid16 = BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION;
 				}
 					break;
 				case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
 				{
 					DEBUG_PRINTF("Start Scanning for BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION 0x2901\r\n");
-					g_UuidType.Uuid16 = BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION;
+					pPeer->Discovery.UuidType.Uuid16 = BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION;
 				}
 					break;
 				default:
-					DEBUG_PRINTF("Unprocess Uuid16 Type (code 0x%X)\r\n", g_UuidType.Uuid16);
+					DEBUG_PRINTF("Unprocess Uuid16 Type (code 0x%X)\r\n", pPeer->Discovery.UuidType.Uuid16);
 				}
 
-				DEBUG_PRINTF("SrvcIdx %d, CharIdx %d, sHdl %d, eHdl %d \r\n", g_CurIdx.SrvIdx, g_CurIdx.CharIdx, sHdl, eHdl);
-				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->ConnHdl, sHdl, eHdl, &g_UuidType);
+				DEBUG_PRINTF("SrvcIdx %d, CharIdx %d, sHdl %d, eHdl %d \r\n", pPeer->Discovery.SrvIdx, pPeer->Discovery.CharIdx, sHdl, eHdl);
+				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->ConnHdl, sHdl, eHdl, &pPeer->Discovery.UuidType);
 			}
 			else
 			{
-				DEBUG_PRINTF("Parse the next BLE SrvcIdx %d\r\n", g_CurIdx.CharIdx + 1);
-				g_CurIdx.SrvIdx++;
-				g_CurIdx.CharIdx = 0;
-				BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &pPeer->Services[g_CurIdx.SrvIdx];
-				g_CurIdx.Hdl = pSrvc->handle_range.StartHdl;
+				DEBUG_PRINTF("Parse the next BLE SrvcIdx %d\r\n", pPeer->Discovery.SrvIdx + 1);
+				pPeer->Discovery.SrvIdx++;
+				pPeer->Discovery.CharIdx = 0;
+				BtGattDBSrvc_t *pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
+				pPeer->Discovery.Hdl = pSrvc->handle_range.StartHdl;
 				uint16_t sHdl = pSrvc->handle_range.StartHdl;
 				uint16_t eHdl = pSrvc->handle_range.EndHdl;
 				DEBUG_PRINTF("sHdl %d, eHdl %d \r\n", sHdl, eHdl);
 
-				//g_UuidType.BaseIdx = 0;
-				//g_UuidType.Type = BT_UUID_TYPE_16;
-				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->ConnHdl, sHdl, eHdl, &g_UuidType);
+				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->ConnHdl, sHdl, eHdl, &pPeer->Discovery.UuidType);
 			}
 		}
 	}
@@ -199,9 +199,9 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 //	DEBUG_PRINTF("BtAttProcessRsp: Opcode 0x%x, RspLen = %d \r\n",
 //			pRspAtt->OpCode, RspLen);
 
-	// Database lookup: route the response to the connected peer's
-	// record. The state machine reads/writes pPeer->Services and
-	// fires next requests via pPeer->pHciDev / pPeer->ConnHdl.
+	// Route the response to the connected peer's record. The state machine
+	// reads/writes pPeer->Services and fires next requests via pPeer->pHciDev
+	// / pPeer->ConnHdl. The cursor lives on pPeer->Discovery.
 	BtDevice_t *pPeer = BtAppPeerFindByHdl(ConnHdl);
 	if (pPeer == NULL)
 	{
@@ -292,12 +292,12 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		}
 
 		// Cache the cursor for state-machine advancement after the loop.
-		// We advance the start handle past the LAST tuple's decl handle,
+		// Advance the start handle past the LAST tuple's decl handle,
 		// not the first - a previous bug here meant repeat-queries on the
 		// same range whenever multiple tuples were returned.
 		uint16_t lastDeclHdl = 0;
 
-		switch (g_UuidType.Uuid16)
+		switch (pPeer->Discovery.UuidType.Uuid16)
 		{
 		case BT_UUID_DECLARATIONS_CHARACTERISTIC:
 		{
@@ -305,13 +305,24 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 
 			for (int off = 0; off + p->Len <= payloadLen; off += p->Len)
 			{
+				// Bound the per-service char index against the static array
+				// in BtGattDBSrvc_t. Without this, a peer advertising more
+				// than BT_GATT_DB_MAX_CHARS chars in a single service would
+				// overrun pPeer->Services[].charateristics[].
+				if (pPeer->Discovery.CharIdx >= BT_GATT_DB_MAX_CHARS)
+				{
+					DEBUG_PRINTF("Char table full for SrvcIdx %d (cap %d), dropping rest\r\n",
+					             pPeer->Discovery.SrvIdx, BT_GATT_DB_MAX_CHARS);
+					break;
+				}
+
 				uint16_t Hdl        = p->Data[off+0] | (p->Data[off+1] << 8);
 				uint8_t  CharProp   = p->Data[off+2];
 				uint16_t CharHdlVal = p->Data[off+3] | (p->Data[off+4] << 8);
 
 				BtGattDBChar_t *pChar =
-					(BtGattDBChar_t*) &pPeer->Services[g_CurIdx.SrvIdx]
-					                    .charateristics[g_CurIdx.CharIdx];
+					&pPeer->Services[pPeer->Discovery.SrvIdx]
+					     .charateristics[pPeer->Discovery.CharIdx];
 				memcpy((uint8_t*) &pChar->characteristic.char_props, &CharProp,
 				       sizeof(BtGattCharProps_t));
 				pChar->characteristic.handle_value = CharHdlVal;
@@ -328,25 +339,27 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 				}
 				else // 128-bit UUID tuple: 5 fixed + 16 uuid = 21
 				{
-					uint8_t *pUuid128 = (uint8_t*) &p->Data[off+5];
-					uint16_t CharUuid16 = pUuid128[12] | (pUuid128[13] << 8);
+					// Work on a copy so the wire buffer is not mutated.
+					uint8_t base[16];
+					memcpy(base, &p->Data[off+5], 16);
+					uint16_t CharUuid16 = base[12] | (base[13] << 8);
 					DEBUG_PRINTF("128-bit UUID with UUID16 0x%X\r\n", CharUuid16);
-					pUuid128[12] = 0;
-					pUuid128[13] = 0;
-					int idx = BtUuidFindBase(pUuid128);
-					pChar->characteristic.uuid.BaseIdx = idx;
-					pChar->characteristic.uuid.Uuid   = CharUuid16;
-					pChar->characteristic.uuid.Type   = BT_UUID_TYPE_128;
+					base[12] = 0;
+					base[13] = 0;
+					int idx = BtUuidFindBase(base);
+					pChar->characteristic.uuid.BaseIdx = (idx >= 0) ? (uint8_t)idx : 0;
+					pChar->characteristic.uuid.Uuid    = CharUuid16;
+					pChar->characteristic.uuid.Type    = BT_UUID_TYPE_16;
 				}
 
 				DEBUG_PRINTF("SrvcIdx %d CharIdx %d: Hdl %d Prop 0x%X ValHdl %d Uuid16 0x%X\r\n",
-				             g_CurIdx.SrvIdx, g_CurIdx.CharIdx, Hdl,
+				             pPeer->Discovery.SrvIdx, pPeer->Discovery.CharIdx, Hdl,
 				             pChar->characteristic.char_props,
 				             pChar->characteristic.handle_value,
 				             pChar->characteristic.uuid.Uuid);
 
-				g_CurIdx.CharIdx++;
-				pPeer->Services[g_CurIdx.SrvIdx].char_count++;
+				pPeer->Discovery.CharIdx++;
+				pPeer->Services[pPeer->Discovery.SrvIdx].char_count++;
 				lastDeclHdl = Hdl;
 			}
 
@@ -354,15 +367,15 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 			// there's room in the service handle range, fire another
 			// READ_BY_TYPE request to get more characteristics.
 			uint16_t eHdl =
-				pPeer->Services[g_CurIdx.SrvIdx].handle_range.EndHdl;
+				pPeer->Services[pPeer->Discovery.SrvIdx].handle_range.EndHdl;
 			if (lastDeclHdl != 0 && (uint32_t)lastDeclHdl + 1 <= eHdl)
 			{
-				g_CurIdx.Hdl = lastDeclHdl + 1;
-				g_UuidType.BaseIdx = 0;
-				g_UuidType.Type    = BT_UUID_TYPE_16;
+				pPeer->Discovery.Hdl = lastDeclHdl + 1;
+				pPeer->Discovery.UuidType.BaseIdx = 0;
+				pPeer->Discovery.UuidType.Type    = BT_UUID_TYPE_16;
 				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev,
-				                       pPeer->ConnHdl, g_CurIdx.Hdl,
-				                       eHdl, &g_UuidType);
+				                       pPeer->ConnHdl, pPeer->Discovery.Hdl,
+				                       eHdl, &pPeer->Discovery.UuidType);
 			}
 		}
 			break;
@@ -370,7 +383,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		{
 			DEBUG_PRINTF("Response BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION 0x2902\r\n");
 			DEBUG_PRINTF("SrvcIdx %d CharIdx %d CurHdl %d\r\n",
-			             g_CurIdx.SrvIdx, g_CurIdx.CharIdx, g_CurIdx.Hdl);
+			             pPeer->Discovery.SrvIdx, pPeer->Discovery.CharIdx, pPeer->Discovery.Hdl);
 
 			// One CCCD tuple per response is the common case but the
 			// spec permits multiple - iterate. CCCDs are uuid16 only so
@@ -378,16 +391,22 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 			uint16_t lastCccdHdl = 0;
 			for (int off = 0; off + p->Len <= payloadLen; off += p->Len)
 			{
+				if (pPeer->Discovery.CharIdx >= BT_GATT_DB_MAX_CHARS)
+				{
+					DEBUG_PRINTF("CCCD scan past char cap for SrvcIdx %d\r\n",
+					             pPeer->Discovery.SrvIdx);
+					break;
+				}
 				uint16_t Hdl = p->Data[off+0] | (p->Data[off+1] << 8);
 				BtGattDBChar_t *pChar =
-					(BtGattDBChar_t*) &pPeer->Services[g_CurIdx.SrvIdx]
-					                    .charateristics[g_CurIdx.CharIdx];
+					&pPeer->Services[pPeer->Discovery.SrvIdx]
+					     .charateristics[pPeer->Discovery.CharIdx];
 				if (pChar->characteristic.char_props.notify
 				 || pChar->characteristic.char_props.indicate)
 				{
 					pChar->cccd_handle = Hdl;
 					DEBUG_PRINTF("SrvcIdx %d CharIdx %d ValHdl %d CccdHdl %d\r\n",
-					             g_CurIdx.SrvIdx, g_CurIdx.CharIdx,
+					             pPeer->Discovery.SrvIdx, pPeer->Discovery.CharIdx,
 					             pChar->characteristic.handle_value,
 					             pChar->cccd_handle);
 				}
@@ -395,18 +414,18 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 			}
 
 			bool bNextSrvc = false;
-			g_CurIdx.CharIdx++;
-			if (g_CurIdx.CharIdx < pPeer->Services[g_CurIdx.SrvIdx].char_count)
+			pPeer->Discovery.CharIdx++;
+			if (pPeer->Discovery.CharIdx < pPeer->Services[pPeer->Discovery.SrvIdx].char_count)
 			{
-				DEBUG_PRINTF("Scan Next CharIdx %d\r\n", g_CurIdx.CharIdx);
+				DEBUG_PRINTF("Scan Next CharIdx %d\r\n", pPeer->Discovery.CharIdx);
 				uint16_t eHdl =
-					pPeer->Services[g_CurIdx.SrvIdx].handle_range.EndHdl;
+					pPeer->Services[pPeer->Discovery.SrvIdx].handle_range.EndHdl;
 				if (lastCccdHdl != 0 && (uint32_t)lastCccdHdl + 1 <= eHdl)
 				{
-					g_CurIdx.Hdl = lastCccdHdl + 1;
+					pPeer->Discovery.Hdl = lastCccdHdl + 1;
 					BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev,
-					                       pPeer->ConnHdl, g_CurIdx.Hdl,
-					                       eHdl, &g_UuidType);
+					                       pPeer->ConnHdl, pPeer->Discovery.Hdl,
+					                       eHdl, &pPeer->Discovery.UuidType);
 				}
 				else
 				{
@@ -421,17 +440,17 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 			// Look into the next BLE service
 			if (bNextSrvc)
 			{
-				g_CurIdx.SrvIdx++;
-				if (g_CurIdx.SrvIdx < pPeer->NbSrvc)
+				pPeer->Discovery.SrvIdx++;
+				if (pPeer->Discovery.SrvIdx < pPeer->NbSrvc)
 				{
-					DEBUG_PRINTF("Scan Next SrvcIdx %d\r\n", g_CurIdx.SrvIdx);
-					g_CurIdx.Hdl =
-						pPeer->Services[g_CurIdx.SrvIdx].handle_range.StartHdl;
+					DEBUG_PRINTF("Scan Next SrvcIdx %d\r\n", pPeer->Discovery.SrvIdx);
+					pPeer->Discovery.Hdl =
+						pPeer->Services[pPeer->Discovery.SrvIdx].handle_range.StartHdl;
 					uint16_t eHdl =
-						pPeer->Services[g_CurIdx.SrvIdx].handle_range.EndHdl;
+						pPeer->Services[pPeer->Discovery.SrvIdx].handle_range.EndHdl;
 					BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev,
-					                       pPeer->ConnHdl, g_CurIdx.Hdl,
-					                       eHdl, &g_UuidType);
+					                       pPeer->ConnHdl, pPeer->Discovery.Hdl,
+					                       eHdl, &pPeer->Discovery.UuidType);
 				}
 				else
 				{
@@ -452,7 +471,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		}
 			break;
 		default:
-			DEBUG_PRINTF("Unprocess Uuid16 Type (code 0x%X)\r\n", g_UuidType.Uuid16);
+			DEBUG_PRINTF("Unprocess Uuid16 Type (code 0x%X)\r\n", pPeer->Discovery.UuidType.Uuid16);
 		}
 	}
 	break;
@@ -468,22 +487,22 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		}
 		DEBUG_PRINTF("\r\n");
 
-		BtGattDBSrvc_t *pSrvc = (BtGattDBSrvc_t*) &pPeer->Services[g_CurIdx.SrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
 
 		// Parse the next handle
-		g_CurIdx.Hdl++;
-		if (g_CurIdx.Hdl > pSrvc->handle_range.EndHdl)
+		pPeer->Discovery.Hdl++;
+		if (pPeer->Discovery.Hdl > pSrvc->handle_range.EndHdl)
 		{
 			// Jump to the next BLE service handle range
-			if (g_CurIdx.SrvIdx < (pPeer->NbSrvc - 1))
+			if (pPeer->Discovery.SrvIdx < (pPeer->NbSrvc - 1))
 			{
-				g_CurIdx.SrvIdx++;
+				pPeer->Discovery.SrvIdx++;
 				DEBUG_PRINTF("Next service idx = %d, UUID16 = 0x%X\r\n",
-						g_CurIdx.SrvIdx, pSrvc->srv_uuid.Uuid);
-				pSrvc = (BtGattDBSrvc_t*) &pPeer->Services[g_CurIdx.SrvIdx];
-				g_CurIdx.Hdl = pSrvc->handle_range.StartHdl + 1; // ignore the first handle, which corresponds to service handle
+						pPeer->Discovery.SrvIdx, pSrvc->srv_uuid.Uuid);
+				pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
+				pPeer->Discovery.Hdl = pSrvc->handle_range.StartHdl + 1; // ignore the first handle, which corresponds to service handle
 
-				BtAttReadRequest((BtHciDevice_t *)pPeer->pHciDev, pPeer->ConnHdl, g_CurIdx.Hdl);
+				BtAttReadRequest((BtHciDevice_t *)pPeer->pHciDev, pPeer->ConnHdl, pPeer->Discovery.Hdl);
 			}
 			else
 			{
@@ -492,8 +511,8 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		}
 		else
 		{
-			DEBUG_PRINTF("Next g_CurIdx.Hdl = %d \r\n", g_CurIdx.Hdl);
-			BtAttReadRequest((BtHciDevice_t *)pPeer->pHciDev, pPeer->ConnHdl, g_CurIdx.Hdl);
+			DEBUG_PRINTF("Next Discovery.Hdl = %d \r\n", pPeer->Discovery.Hdl);
+			BtAttReadRequest((BtHciDevice_t *)pPeer->pHciDev, pPeer->ConnHdl, pPeer->Discovery.Hdl);
 		}
 	}
 		break;
@@ -529,15 +548,14 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		// p->Len discriminates UUID width: 6 = uuid16 tuple, 20 = uuid128.
 		for (int off = 0; off + p->Len <= payloadLen; off += p->Len)
 		{
-			if (pPeer->NbSrvc >= BLEPERIPH_DEV_SERVICE_MAXCNT)
+			if (pPeer->NbSrvc >= BT_DEV_SERVICE_MAXCNT)
 			{
 				DEBUG_PRINTF("Service table full (cap %d), dropping rest\r\n",
-				             BLEPERIPH_DEV_SERVICE_MAXCNT);
+				             BT_DEV_SERVICE_MAXCNT);
 				break;
 			}
 			uint8_t SrvcIdx = pPeer->NbSrvc++;
-			BtGattDBSrvc_t *pSrvc =
-				(BtGattDBSrvc_t*) &pPeer->Services[SrvcIdx];
+			BtGattDBSrvc_t *pSrvc = &pPeer->Services[SrvcIdx];
 
 			if (p->Len <= 6) // UUID16 tuple: 2+2+2 = 6
 			{
@@ -561,9 +579,10 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 
 				pSrvc->handle_range.StartHdl = g->HdlStart;
 				pSrvc->handle_range.EndHdl   = g->HdlEnd;
+				// BtUuid128To16 no longer mutates its input (see bt_uuid.cpp),
+				// so the previous g->Uuid[12]=0; g->Uuid[13]=0; belt-and-suspenders
+				// is gone.
 				int idx = BtUuid128To16(&pSrvc->srv_uuid, g->Uuid);
-				g->Uuid[12] = 0;
-				g->Uuid[13] = 0;
 				lastEndHdl = g->HdlEnd;
 
 				DEBUG_PRINTF("Srvc[%d] uuid128 (base idx %d) uuid16 0x%X hdl %d..%d\r\n",
