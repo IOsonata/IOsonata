@@ -332,13 +332,31 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	if (BtAppGetConnHandle() == BLE_CONN_HANDLE_INVALID)
+	uint16_t connHdl = BtAppGetConnHandle();
+	uint8_t emptyData = 0;
+
+	if (pChar == nullptr)
 		return false;
 
-	BtGattCharSetValue(pChar, pData, DataLen);
+	if (DataLen > 0 && pData == nullptr)
+		return false;
+
+	if (connHdl == BLE_CONN_HANDLE_INVALID)
+		return false;
+
+	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
+		return false;
 
 	if (pChar->Runtime.bNotify == false)
 		return false;
+
+	if (pChar->Runtime.ValHdl == BT_ATT_HANDLE_INVALID)
+		return false;
+
+	if (pData == nullptr)
+	{
+		pData = &emptyData;
+	}
 
 	ble_gatts_hvx_params_t params;
 	memset(&params, 0, sizeof(params));
@@ -347,9 +365,9 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	params.p_data = pData;
 	params.p_len = &DataLen;
 
-	sd_ble_gatts_hvx(BtAppGetConnHandle(), &params);
+	uint32_t err_code = sd_ble_gatts_hvx(connHdl, &params);
 
-	return true;
+	return err_code == NRF_SUCCESS;
 }
 
 // --- Disconnect ---
