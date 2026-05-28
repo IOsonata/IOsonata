@@ -149,8 +149,8 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 
 	memcpy(addr.addr,  pPeerAddr->Addr, 6);
 
-	cparam.min_conn_interval = MSEC_TO_UNITS(pConnParam->IntervalMin, UNIT_1_25_MS);
-	cparam.max_conn_interval = MSEC_TO_UNITS(pConnParam->IntervalMax, UNIT_1_25_MS);
+	cparam.min_conn_interval = (uint16_t)(pConnParam->IntervalMin / 1.25f);
+	cparam.max_conn_interval = (uint16_t)(pConnParam->IntervalMax / 1.25f);
 	cparam.slave_latency = pConnParam->Latency;
 	cparam.conn_sup_timeout = MSEC_TO_UNITS(pConnParam->Timeout, UNIT_10_MS);
 

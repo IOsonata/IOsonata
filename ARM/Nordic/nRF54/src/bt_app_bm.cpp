@@ -182,7 +182,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			BtGapAddConnection(p_gap_evt->conn_handle, role,
 							   p_gap_evt->params.connected.peer_addr.addr_type,
 							   (uint8_t *)p_gap_evt->params.connected.peer_addr.addr);
-			BtAppPeerAlloc(p_ble_evt->evt.gap_evt.conn_handle);
+			BtPeerAlloc(p_ble_evt->evt.gap_evt.conn_handle);
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 			break;
@@ -190,10 +190,10 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 		case BLE_GAP_EVT_DISCONNECTED:
 		{
 			uint16_t connHdl = p_ble_evt->evt.gap_evt.conn_handle;
-			BtDevice_t *pPeer = BtAppPeerFindByHdl(connHdl);
+			BtDevice_t *pPeer = BtPeerFindByHdl(connHdl);
 
 			BtAppConnLedOff();
-			BtAppPeerFree(pPeer);
+			BtPeerFree(pPeer);
 			BtGapDeleteConnection(connHdl);
 
 			if (isBtGapConnected() == false)
@@ -647,7 +647,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Populate internal app data from config
 	g_BtAppData.AppDevice.Role = pCfg->Role;
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
-	BtAppPeerPoolInit();
+	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
+	{
+		return false;
+	}
+
+	if (!BtGapConnPoolInit(pCfg->pGapConnPoolMem, pCfg->GapConnPoolMemSize))
+	{
+		return false;
+	}
 	g_BtAppData.bExtAdv = pCfg->bExtAdv;
 	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;

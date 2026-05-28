@@ -53,13 +53,72 @@ SOFTWARE.
 #define BT_GAP_DEVNAME_MAX_LEN			64
 #endif
 
-#ifndef BT_GAP_CONN_MAX_COUNT
-#define BT_GAP_CONN_MAX_COUNT			10
+// Connection pool: app-sized via BtGapConnPoolInit. Layout in the buffer:
+//
+//   [ BtGapConnPoolHdr_t | BtGapConnection_t[0] | ... | BtGapConnection_t[N-1] ]
+//
+// SlotSize is stamped with the library's sizeof(BtGapConnection_t); init
+// refuses buffers whose payload doesn't divide evenly by that size, which
+// catches lib/app ABI drift at runtime. Free slot has Hdl == BT_ATT_HANDLE_INVALID.
+#ifndef BT_GAP_CONN_POOL_DEFAULT_COUNT
+#define BT_GAP_CONN_POOL_DEFAULT_COUNT	4
 #endif
 
-// Connection table. BSS-zero at startup; BtGapInit is responsible for
-// invalidating all slots before any other API is used.
-alignas(4) static BtGapConnection_t s_BtGapConnection[BT_GAP_CONN_MAX_COUNT];
+alignas(4) static uint8_t s_DefaultGapConnPoolMem[BT_GAP_CONN_POOL_MEMSIZE(BT_GAP_CONN_POOL_DEFAULT_COUNT)];
+static BtGapConnPoolHdr_t *s_pGapConnPool = nullptr;
+
+static inline BtGapConnection_t * GapConnSlots(void)
+{
+	return s_pGapConnPool ? (BtGapConnection_t*)(s_pGapConnPool + 1) : nullptr;
+}
+
+bool BtGapConnPoolInit(uint8_t *pMem, size_t MemSize)
+{
+	uint8_t *mem;
+	size_t  size;
+
+	if (pMem == nullptr || MemSize == 0)
+	{
+		mem  = s_DefaultGapConnPoolMem;
+		size = sizeof(s_DefaultGapConnPoolMem);
+	}
+	else
+	{
+		mem  = pMem;
+		size = MemSize;
+	}
+
+	if (size < BT_GAP_CONN_POOL_MEMSIZE(1))
+	{
+		return false;
+	}
+
+	size_t payload = size - sizeof(BtGapConnPoolHdr_t);
+	if (payload % sizeof(BtGapConnection_t) != 0)
+	{
+		return false;
+	}
+
+	uint16_t count = (uint16_t)(payload / sizeof(BtGapConnection_t));
+	if (count == 0)
+	{
+		return false;
+	}
+
+	BtGapConnPoolHdr_t *hdr = (BtGapConnPoolHdr_t*)mem;
+	hdr->SlotSize = (uint16_t)sizeof(BtGapConnection_t);
+	hdr->Count    = count;
+
+	BtGapConnection_t *slots = (BtGapConnection_t*)(hdr + 1);
+	for (uint16_t i = 0; i < count; i++)
+	{
+		memset(&slots[i], 0, sizeof(BtGapConnection_t));
+		slots[i].Hdl = BT_ATT_HANDLE_INVALID;
+	}
+
+	s_pGapConnPool = hdr;
+	return true;
+}
 
 static BtGattChar_t s_BtGapChar[] = {
 	BT_CHAR(BT_UUID_CHARACTERISTIC_DEVICE_NAME,
@@ -126,19 +185,12 @@ __attribute__((weak)) void BtGapParamInit(const BtGapCfg_t *pCfg)
 {
 }
 
-// Invalidate all connection slots. Sets Hdl to invalid; leaves other fields
-// untouched (they get overwritten on the next BtGapAddConnection).
-static void BtGapConnInvalidateAll(void)
-{
-	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
-	{
-		s_BtGapConnection[i].Hdl = BT_ATT_HANDLE_INVALID;
-	}
-}
-
 void BtGapInit(const BtGapCfg_t *pCfg)
 {
-	BtGapConnInvalidateAll();
+	// Slot reset is BtGapConnPoolInit's job; the port calls it from
+	// BtAppInit before reaching here. If a port omits that call, the
+	// lazy fallback below kicks in on the first access using the small
+	// library default buffer.
 
 	if (pCfg == nullptr)
 	{
@@ -159,9 +211,15 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 
 bool isBtGapConnected()
 {
-	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
+	if (s_pGapConnPool == nullptr)
 	{
-		if (s_BtGapConnection[i].Hdl != BT_ATT_HANDLE_INVALID)
+		return false;
+	}
+
+	BtGapConnection_t *slots = GapConnSlots();
+	for (uint16_t i = 0; i < s_pGapConnPool->Count; i++)
+	{
+		if (slots[i].Hdl != BT_ATT_HANDLE_INVALID)
 		{
 			return true;
 		}
@@ -172,11 +230,17 @@ bool isBtGapConnected()
 
 uint16_t BtGapGetConnection()
 {
-	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
+	if (s_pGapConnPool == nullptr)
 	{
-		if (s_BtGapConnection[i].Hdl != BT_ATT_HANDLE_INVALID)
+		return BT_ATT_HANDLE_INVALID;
+	}
+
+	BtGapConnection_t *slots = GapConnSlots();
+	for (uint16_t i = 0; i < s_pGapConnPool->Count; i++)
+	{
+		if (slots[i].Hdl != BT_ATT_HANDLE_INVALID)
 		{
-			return s_BtGapConnection[i].Hdl;
+			return slots[i].Hdl;
 		}
 	}
 
@@ -187,16 +251,17 @@ size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 {
 	size_t count = 0;
 
-	if (pHdl == nullptr || MaxCount == 0)
+	if (pHdl == nullptr || MaxCount == 0 || s_pGapConnPool == nullptr)
 	{
 		return 0;
 	}
 
-	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT && count < MaxCount; i++)
+	BtGapConnection_t *slots = GapConnSlots();
+	for (uint16_t i = 0; i < s_pGapConnPool->Count && count < MaxCount; i++)
 	{
-		if (s_BtGapConnection[i].Hdl != BT_ATT_HANDLE_INVALID)
+		if (slots[i].Hdl != BT_ATT_HANDLE_INVALID)
 		{
-			pHdl[count++] = s_BtGapConnection[i].Hdl;
+			pHdl[count++] = slots[i].Hdl;
 		}
 	}
 
@@ -205,46 +270,50 @@ size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 
 bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6])
 {
-	if (ConnHdl == BT_ATT_HANDLE_INVALID)
+	if (ConnHdl == BT_ATT_HANDLE_INVALID || s_pGapConnPool == nullptr)
 	{
 		return false;
 	}
 
-	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
+	BtGapConnection_t *slots = GapConnSlots();
+
+	// Idempotent: if the handle is already tracked, refresh its fields.
+	for (uint16_t i = 0; i < s_pGapConnPool->Count; i++)
 	{
-		if (s_BtGapConnection[i].Hdl == ConnHdl)
+		if (slots[i].Hdl == ConnHdl)
 		{
-			s_BtGapConnection[i].Role = Role;
-			s_BtGapConnection[i].PeerAddrType = AddrType;
+			slots[i].Role         = Role;
+			slots[i].PeerAddrType = AddrType;
 
 			if (PeerAddr != nullptr)
 			{
-				memcpy(s_BtGapConnection[i].PeerAddr, PeerAddr, 6);
+				memcpy(slots[i].PeerAddr, PeerAddr, 6);
 			}
 			else
 			{
-				memset(s_BtGapConnection[i].PeerAddr, 0, sizeof(s_BtGapConnection[i].PeerAddr));
+				memset(slots[i].PeerAddr, 0, sizeof(slots[i].PeerAddr));
 			}
 
 			return true;
 		}
 	}
 
-	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
+	// Otherwise, take the first free slot.
+	for (uint16_t i = 0; i < s_pGapConnPool->Count; i++)
 	{
-		if (s_BtGapConnection[i].Hdl == BT_ATT_HANDLE_INVALID)
+		if (slots[i].Hdl == BT_ATT_HANDLE_INVALID)
 		{
-			s_BtGapConnection[i].Hdl = ConnHdl;
-			s_BtGapConnection[i].Role = Role;
-			s_BtGapConnection[i].PeerAddrType = AddrType;
+			slots[i].Hdl          = ConnHdl;
+			slots[i].Role         = Role;
+			slots[i].PeerAddrType = AddrType;
 
 			if (PeerAddr != nullptr)
 			{
-				memcpy(s_BtGapConnection[i].PeerAddr, PeerAddr, 6);
+				memcpy(slots[i].PeerAddr, PeerAddr, 6);
 			}
 			else
 			{
-				memset(s_BtGapConnection[i].PeerAddr, 0, sizeof(s_BtGapConnection[i].PeerAddr));
+				memset(slots[i].PeerAddr, 0, sizeof(slots[i].PeerAddr));
 			}
 
 			return true;
@@ -258,18 +327,17 @@ void BtGapDeleteConnection(uint16_t Hdl)
 {
 	bool bRemoved = false;
 
-	if (Hdl == BT_ATT_HANDLE_INVALID)
+	if (Hdl == BT_ATT_HANDLE_INVALID || s_pGapConnPool == nullptr)
 	{
 		return;
 	}
 
-	for (int i = 0; i < BT_GAP_CONN_MAX_COUNT; i++)
+	BtGapConnection_t *slots = GapConnSlots();
+	for (uint16_t i = 0; i < s_pGapConnPool->Count; i++)
 	{
-		if (s_BtGapConnection[i].Hdl == Hdl)
+		if (slots[i].Hdl == Hdl)
 		{
-			// Only the handle needs to be invalidated; remaining fields are
-			// overwritten on the next BtGapAddConnection.
-			s_BtGapConnection[i].Hdl = BT_ATT_HANDLE_INVALID;
+			slots[i].Hdl = BT_ATT_HANDLE_INVALID;
 			bRemoved = true;
 		}
 	}

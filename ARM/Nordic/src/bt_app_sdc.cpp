@@ -219,7 +219,7 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 {
 	// Allocate and populate the peer record. The state machine in
 	// bt_attrsp.cpp looks the peer up by ConnHdl when responses arrive.
-	BtDevice_t *pPeer = BtAppPeerAlloc(ConnHdl);
+	BtDevice_t *pPeer = BtPeerAlloc(ConnHdl);
 	if (pPeer != NULL)
 	{
 		memcpy(pPeer->Addr, PeerAddr, 6);
@@ -267,8 +267,8 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 	DEBUG_PRINTF("BtAppDisconnected: ConnHdl= %d (0x%x); Reason = %d (0x%x)\r\n",
 			ConnHdl, ConnHdl, Reason, Reason);
 
-	BtDevice_t *pPeer = BtAppPeerFindByHdl(ConnHdl);
-	BtAppPeerFree(pPeer);
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	BtPeerFree(pPeer);
 
 	BtGapDeleteConnection(ConnHdl);
 
@@ -837,6 +837,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 #endif
 
     if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
+    {
+    	return false;
+    }
+
+    if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
+    {
+    	return false;
+    }
+
+    if (!BtGapConnPoolInit(pCfg->pGapConnPoolMem, pCfg->GapConnPoolMemSize))
     {
     	return false;
     }

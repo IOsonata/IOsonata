@@ -65,7 +65,7 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 	// services/chars into pPeer->Services and fires next requests via
 	// pPeer->pHciDev / pPeer->ConnHdl. The discovery cursor lives on
 	// pPeer->Discovery so concurrent links do not clobber each other.
-	BtDevice_t *pPeer = BtAppPeerFindByHdl(ConnHdl);
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == NULL)
 	{
 		return retval;
@@ -202,7 +202,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 	// Route the response to the connected peer's record. The state machine
 	// reads/writes pPeer->Services and fires next requests via pPeer->pHciDev
 	// / pPeer->ConnHdl. The cursor lives on pPeer->Discovery.
-	BtDevice_t *pPeer = BtAppPeerFindByHdl(ConnHdl);
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == NULL)
 	{
 		return;

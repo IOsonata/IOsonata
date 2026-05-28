@@ -172,6 +172,17 @@ typedef struct __Bt_Gap_Connection {
 	uint8_t PeerAddr[6];
 } BtGapConnection_t;
 
+// Header at the start of the GAP connection pool buffer. Written by
+// BtGapConnPoolInit; SlotSize stamps the library's sizeof(BtGapConnection_t)
+// so a runtime check catches ABI drift between a precompiled library and
+// the app's view of this header.
+typedef struct __Bt_Gap_Conn_Pool_Hdr {
+	uint16_t SlotSize;			//!< sizeof(BtGapConnection_t) at library build time
+	uint16_t Count;				//!< Number of slots in the pool
+} BtGapConnPoolHdr_t;
+
+#define BT_GAP_CONN_POOL_MEMSIZE(N)		(sizeof(BtGapConnPoolHdr_t) + (N) * sizeof(BtGapConnection_t))
+
 typedef enum __Bt_Scan_Type {
 	BTSCAN_TYPE_PASSIVE,		//!< without scan/response data
 	BTSCAN_TYPE_PASSIVE_EXT,		//!< without scan/response data
@@ -209,6 +220,13 @@ typedef struct __Bt_Gap_Config {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Initialise the GAP connection pool. Each port's BtAppInit calls this
+// with the cfg's pGapConnPoolMem / GapConnPoolMemSize before BtGapInit.
+// Passing {NULL, 0} selects a small library default. Returns false if
+// the buffer is undersized or sizeof(BtGapConnection_t) disagrees between
+// library and app.
+bool BtGapConnPoolInit(uint8_t *pMem, size_t MemSize);
 
 void BtGapInit(const BtGapCfg_t *pCfg);
 void BtGapParamInit(const BtGapCfg_t *pCfg);

@@ -114,8 +114,11 @@ void BtGapParamInit(const BtGapCfg_t *pCfg)
 
 	if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
 	{
-		gap_conn_params.min_conn_interval = MSEC_TO_UNITS(pCfg->ConnIntervalMin, UNIT_1_25_MS);
-		gap_conn_params.max_conn_interval = MSEC_TO_UNITS(pCfg->ConnIntervalMax, UNIT_1_25_MS);
+		// Connection interval is float msec; divide by the 1.25ms BLE unit
+		// directly. Avoids C++23 warning about MSEC_TO_UNITS macro mixing
+		// float with the Nordic SDK's unnamed enum for UNIT_1_25_MS.
+		gap_conn_params.min_conn_interval = (uint16_t)(pCfg->ConnIntervalMin / 1.25f);
+		gap_conn_params.max_conn_interval = (uint16_t)(pCfg->ConnIntervalMax / 1.25f);
 		gap_conn_params.slave_latency     = BT_GAP_CONN_SLAVE_LATENCY;
 		gap_conn_params.conn_sup_timeout  = MSEC_TO_UNITS(BT_GAP_CONN_SUP_TIMEOUT, UNIT_10_MS);
 
@@ -141,8 +144,8 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 
 	memcpy(addr.addr, pPeerAddr->Addr, 6);
 
-	cparam.min_conn_interval = MSEC_TO_UNITS(pConnParam->IntervalMin, UNIT_1_25_MS);
-	cparam.max_conn_interval = MSEC_TO_UNITS(pConnParam->IntervalMax, UNIT_1_25_MS);
+	cparam.min_conn_interval = (uint16_t)(pConnParam->IntervalMin / 1.25f);
+	cparam.max_conn_interval = (uint16_t)(pConnParam->IntervalMax / 1.25f);
 	cparam.slave_latency     = pConnParam->Latency;
 	cparam.conn_sup_timeout  = MSEC_TO_UNITS(pConnParam->Timeout, UNIT_10_MS);
 

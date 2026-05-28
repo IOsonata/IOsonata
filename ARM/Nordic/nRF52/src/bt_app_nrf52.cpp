@@ -212,7 +212,7 @@ __ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC EC
 // =====================================================================
 // LEGACY DISCOVERY STATE MACHINE - disabled.
 // Step 7 lifts the discovery state machine to src/bluetooth/bt_dev.cpp
-// (generic) and consumes the g_BtPeerDevice[] pool. The Nordic-specific
+// (generic) and consumes the peer pool via BtPeer* helpers. The Nordic-specific
 // state machine below was tightly coupled to ble_uuid_t / ble_gattc_*
 // types and can't coexist with the Voci-unified BtDevice_t struct that
 // uses BtUuid16_t / BtGattcHdlRange_t. Keeping it here as a reference
@@ -727,7 +727,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         	BtGapAddConnection(p_gap_evt->conn_handle, role,
         					   p_gap_evt->params.connected.peer_addr.addr_type,
         					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
-        	BtAppPeerAlloc(p_ble_evt->evt.gap_evt.conn_handle);
+        	BtPeerAlloc(p_ble_evt->evt.gap_evt.conn_handle);
         	g_BtAppData.State = BTAPP_STATE_CONNECTED;
         	BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
@@ -735,10 +735,10 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         case BLE_GAP_EVT_DISCONNECTED:
 			{
 				uint16_t connHdl = p_ble_evt->evt.gap_evt.conn_handle;
-				BtDevice_t *pPeer = BtAppPeerFindByHdl(connHdl);
+				BtDevice_t *pPeer = BtPeerFindByHdl(connHdl);
 
 				BtAppConnLedOff();
-				BtAppPeerFree(pPeer);
+				BtPeerFree(pPeer);
 				BtGapDeleteConnection(connHdl);
 
 				if (isBtGapConnected() == false)
@@ -1249,7 +1249,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	//g_BleAppData.VendorId = pBleAppCfg->VendorID;
 	g_BtAppData.AppDevice.Role = pCfg->Role;
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
-	BtAppPeerPoolInit();
+	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
+	{
+		return false;
+	}
+
+	if (!BtGapConnPoolInit(pCfg->pGapConnPoolMem, pCfg->GapConnPoolMemSize))
+	{
+		return false;
+	}
 	g_BtAppData.bExtAdv = pCfg->bExtAdv;
 	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;

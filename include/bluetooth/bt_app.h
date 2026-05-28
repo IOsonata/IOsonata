@@ -44,6 +44,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bleadv_mandata.h"
 #include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_peer.h"
 
 /** @addtogroup Bluetooth
   * @{
@@ -64,7 +65,8 @@ SOFTWARE.
 #define BTAPP_DEFAULT_MAX_MTU			515
 #endif
 
-#define BT_CONN_HDL_INVALID				0xFFFF	// Invalid Connection Handle
+// BT_CONN_HDL_INVALID is defined in bt_peer.h (as alias of BT_ATT_HANDLE_INVALID).
+// It reaches us through the #include "bluetooth/bt_peer.h" above.
 #define BT_CONN_HDL_ALL					0xFFFE	// Applies to all Connection Handles
 
 typedef enum __Bt_App_Role {
@@ -160,6 +162,10 @@ typedef struct __Bt_App_Cfg {
 	int PeriphDevCnt;				//!< Max number of peripheral connection
 	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler
 	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
+	uint8_t *pPeerPoolMem;			//!< Peer pool storage; NULL -> library default. Size with BT_PEER_POOL_MEMSIZE(N).
+	size_t PeerPoolMemSize;			//!< Total pPeerPoolMem length in bytes
+	uint8_t *pGapConnPoolMem;		//!< GAP connection table storage; NULL -> library default. Size with BT_GAP_CONN_POOL_MEMSIZE(N).
+	size_t GapConnPoolMemSize;		//!< Total pGapConnPoolMem length in bytes
 	size_t AttDBMemSize;			//!< User overload mem size for stack usage, set to 0 if not overloading default.
 } BtAppCfg_t;
 
@@ -249,30 +255,6 @@ typedef struct __Bt_App_Data {
 #pragma pack(pop)
 
 extern BtAppData_t g_BtAppData;
-
-//-----------------------------------------------------------------------------
-// Tracked peer devices.
-//
-// Each active link populates one slot. A free slot has ConnHdl ==
-// BT_CONN_HDL_INVALID. The pool size is set by CFG_BT_PEER_MAX; default 4
-// covers most apps (most peripheral firmware allows only 1 active link, but
-// central / multilink apps can raise the cap).
-#ifndef CFG_BT_PEER_MAX
-#define CFG_BT_PEER_MAX     4
-#endif
-
-extern BtDevice_t g_BtPeerDevice[CFG_BT_PEER_MAX];
-
-// Peer pool helpers - all defined in src/bluetooth/bt_app.cpp.
-// Return NULL if no free slot / no match.
-void         BtAppPeerPoolInit(void);
-BtDevice_t * BtAppPeerAlloc(uint16_t ConnHdl);
-BtDevice_t * BtAppPeerFindByHdl(uint16_t ConnHdl);
-void         BtAppPeerFree(BtDevice_t *pPeer);
-
-// First peer with a valid ConnHdl, or NULL. Common shortcut for
-// single-link apps that just want "the active peer".
-BtDevice_t * BtAppGetActivePeer(void);
 
 // Internal helpers, defined in src/bluetooth/bt_app.cpp.
 // Called from port event handlers, not from app code.

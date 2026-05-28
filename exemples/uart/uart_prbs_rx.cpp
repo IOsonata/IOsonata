@@ -39,11 +39,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 #include <string.h>
 #include <chrono>
-#include <time.h>
-
+//#include <time.h>
+#include "istddef.h"
 #include "coredev/uart.h"
 #include "prbs.h"
 #include "board.h"
+
+#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
+
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
 // This defines the s_UartPortPins map and pin count.
 // See board.h for target device specific definitions
@@ -59,14 +64,14 @@ const UARTCfg_t g_UartCfg = {
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = true,
-	.IntPrio = 1,
-	.EvtCallback = nullptr,//nRFUartEvthandler,
-	.bFifoBlocking = true,
-	.RxMemSize = 0,
-	.pRxMem = nullptr,
-	.TxMemSize = 0,
-	.pTxMem = nullptr,
+	.bIntMode = false,					// Interrupt mode
+	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,	// Interrupt priority
+	.EvtCallback = NULL,//nRFUartEvthandler,	// UART event handler
+	.bFifoBlocking = true,				// Blocking FIFO
+	.RxMemSize = UARTFIFOSIZE,
+	.pRxMem = s_UartRxFifo,
+	.TxMemSize = UARTFIFOSIZE,
+	.pTxMem = s_UartTxFifo,
 	.bDMAMode = true,
 };
 
@@ -83,6 +88,13 @@ UART g_Uart;
 int main()
 {
 	bool res;
+    int a = -1, b = 3;
+    int c = llmin(a, b);
+    int f = llmax(a, b);
+    
+    printf("%d %d\n", c, f);
+    
+    
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &g_UartCfg);
@@ -100,7 +112,7 @@ int main()
     std::chrono::duration<float> elapse = std::chrono::duration<float>(0);
     t_start = std::chrono::high_resolution_clock::now();
 
-    time_t t;
+   // time_t t;
     double e = 0.0;
     bool isOK = false;
 //    do {
@@ -116,30 +128,30 @@ int main()
     
 	while(1)
 	{
-       // t_start = std::chrono::high_resolution_clock::now();
-        t = time(NULL);
+        t_start = std::chrono::high_resolution_clock::now();
+        //t = time(NULL);
 #ifdef DEMO_C
         while (UARTRx(&g_UartDev, &d, 1) <= 0);
 #else
         while (g_Uart.Rx(&d, 1) <= 0);
 #endif
 		{
-            e += difftime(time(NULL), t);
-          //  t_end = std::chrono::high_resolution_clock::now();
-            //elapse += std::chrono::duration<float>(t_end-t_start);
+           // e += difftime(time(NULL), t);
+            t_end = std::chrono::high_resolution_clock::now();
+            elapse += std::chrono::duration<float>(t_end-t_start);
             cnt++;
             
 			// If success send next code
-            //printf("%x\n", d);
-            UARTTx(&g_UartDev, &d, 1);
+            printf("%x\n", d);
+           // UARTTx(&g_UartDev, &d, 1);
             if (val != d)
             {
                 errcnt++;
-               // printf("PRBS %u errors %x %x\n", errcnt, val, d);
+               printf("PRBS %u errors %x %x\n", errcnt, val, d);
             }
             else if ((cnt & 0x7fff) == 0)
             {
-                printf("PRBS rate %.3f B/s, err : %u\n", cnt / e, errcnt);
+               // printf("PRBS rate %.3f B/s, err : %u\n", cnt / e, errcnt);
 //                printf("PRBS rate %.3f B/s, err : %u\n", cnt / elapse.count(), errcnt);
 
             }
@@ -148,3 +160,8 @@ int main()
 	}
 	return 0;
 }
+
+//extern "C" int _gettimeofday( struct timeval *tv, void *tzvp )
+//{
+//	return 0;  // return non-zero for error
+//}

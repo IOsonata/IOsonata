@@ -71,31 +71,6 @@ BtAppData_t g_BtAppData = {
 	},
 };
 
-// Peer device pool. Slots are free when ConnHdl == BT_CONN_HDL_INVALID.
-// Initialized lazily by BtAppPeerAlloc / BtAppGetActivePeer below; ports may
-// also call BtAppPeerPoolInit explicitly from BtAppInit for clarity.
-BtDevice_t g_BtPeerDevice[CFG_BT_PEER_MAX];
-static bool s_PeerPoolReady = false;
-
-void BtAppPeerPoolInit(void)
-{
-	for (int i = 0; i < CFG_BT_PEER_MAX; i++)
-	{
-		memset(&g_BtPeerDevice[i], 0, sizeof(g_BtPeerDevice[i]));
-		g_BtPeerDevice[i].ConnHdl  = BT_CONN_HDL_INVALID;
-		g_BtPeerDevice[i].bIsLocal = false;
-	}
-	s_PeerPoolReady = true;
-}
-
-static inline void EnsurePeerPool(void)
-{
-	if (!s_PeerPoolReady)
-	{
-		BtAppPeerPoolInit();
-	}
-}
-
 bool BtInitialized(void)
 {
 	return g_BtAppData.State != BTAPP_STATE_UNKNOWN;
@@ -103,83 +78,18 @@ bool BtInitialized(void)
 
 bool BtConnected(void)
 {
-	return BtAppGetActivePeer() != NULL;
+	return BtPeerGetActive() != NULL;
 }
 
 bool isConnected(void)
 {
-	return BtAppGetActivePeer() != NULL;
+	return BtPeerGetActive() != NULL;
 }
 
 uint16_t BtAppGetConnHandle(void)
 {
-	BtDevice_t *p = BtAppGetActivePeer();
+	BtDevice_t *p = BtPeerGetActive();
 	return p ? p->ConnHdl : BT_CONN_HDL_INVALID;
-}
-
-// --- Peer pool helpers ---
-
-BtDevice_t * BtAppPeerAlloc(uint16_t ConnHdl)
-{
-	if (ConnHdl == BT_CONN_HDL_INVALID)
-	{
-		return NULL;
-	}
-	EnsurePeerPool();
-
-	for (int i = 0; i < CFG_BT_PEER_MAX; i++)
-	{
-		if (g_BtPeerDevice[i].ConnHdl == BT_CONN_HDL_INVALID)
-		{
-			BtDevice_t *p = &g_BtPeerDevice[i];
-			memset(p, 0, sizeof(*p));
-			p->ConnHdl  = ConnHdl;
-			p->bIsLocal = false;
-			return p;
-		}
-	}
-	return NULL;
-}
-
-BtDevice_t * BtAppPeerFindByHdl(uint16_t ConnHdl)
-{
-	if (ConnHdl == BT_CONN_HDL_INVALID)
-	{
-		return NULL;
-	}
-	EnsurePeerPool();
-
-	for (int i = 0; i < CFG_BT_PEER_MAX; i++)
-	{
-		if (g_BtPeerDevice[i].ConnHdl == ConnHdl)
-		{
-			return &g_BtPeerDevice[i];
-		}
-	}
-	return NULL;
-}
-
-void BtAppPeerFree(BtDevice_t *pPeer)
-{
-	if (pPeer == NULL)
-	{
-		return;
-	}
-	pPeer->ConnHdl = BT_CONN_HDL_INVALID;
-}
-
-BtDevice_t * BtAppGetActivePeer(void)
-{
-	EnsurePeerPool();
-
-	for (int i = 0; i < CFG_BT_PEER_MAX; i++)
-	{
-		if (g_BtPeerDevice[i].ConnHdl != BT_CONN_HDL_INVALID)
-		{
-			return &g_BtPeerDevice[i];
-		}
-	}
-	return NULL;
 }
 
 // --- BtDevice queries (work on any BtDevice_t, local or remote) ---

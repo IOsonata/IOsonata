@@ -316,7 +316,7 @@ bool BtAttStartReadByGroupTypeRequest(BtHciDevice_t * const pDev, uint16_t ConnH
 	if (pDev == NULL || pUuid == NULL)
 		return false;
 
-	BtDevice_t *pPeer = BtAppPeerFindByHdl(ConnHdl);
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == NULL)
 	{
 		return false;
