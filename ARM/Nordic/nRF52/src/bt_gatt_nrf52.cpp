@@ -44,6 +44,8 @@ SOFTWARE.
 
 //#include "bluetooth/ble_srvc.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_peer.h"
 
 #pragma pack(push, 1)
 // Service connection security types
@@ -163,6 +165,11 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 			{
 				ble_gatts_evt_write_t * p_evt_write = &pBleEvt->evt.gatts_evt.params.write;
 
+				// Long write reassembly reads this link's per-connection buffer
+				// (the memory handed to the SoftDevice at USER_MEM_REQUEST).
+				BtDevice_t *pLwConn = BtPeerFindByHdl(pBleEvt->evt.gatts_evt.conn_handle);
+				uint8_t *pLongWr = (pLwConn != nullptr) ? pLwConn->Conn.pLongWrBuff : nullptr;
+
 				//g_Uart.printf("BLE_GATTS_EVT_WRITE: %d\r\n", pSrvc->NbChar);
 
 				for (int i = 0; i < pSrvc->NbChar; i++)
@@ -171,8 +178,12 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 					//if (p_evt_write->handle == 0)
 					{
 						//g_Uart.printf("Long Write\r\n");
-						GATLWRHDR *hdr = (GATLWRHDR *)pSrvc->pLongWrBuff;
-					    uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
+						if (pLongWr == nullptr)
+						{
+							continue;
+						}
+						GATLWRHDR *hdr = (GATLWRHDR *)pLongWr;
+					    uint8_t *p = (uint8_t*)pLongWr + sizeof(GATLWRHDR);
 						if (hdr->Handle == pSrvc->pCharArray[i].ValHdl)//.value_handle)
 					    {
 #if 1
@@ -231,21 +242,8 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 			}
             break;
 
-        case BLE_EVT_USER_MEM_REQUEST:
-        	{
-        		//uint16_t hdl = BtGapGetConnection();
-        		if (pSrvc->pLongWrBuff != NULL)// && hdl == pBleEvt->evt.gatts_evt.conn_handle)
-        		{
-					ble_user_mem_block_t mblk;
-					memset(&mblk, 0, sizeof(ble_user_mem_block_t));
-					mblk.p_mem = pSrvc->pLongWrBuff;
-					mblk.len = pSrvc->LongWrBuffSize;
-					memset(pSrvc->pLongWrBuff, 0, pSrvc->LongWrBuffSize);
-					uint32_t err_code = sd_ble_user_mem_reply(pBleEvt->evt.gatts_evt.conn_handle, &mblk);
-					APP_ERROR_CHECK(err_code);
-        		}
-        	}
-        	break;
+        // BLE_EVT_USER_MEM_REQUEST is now handled once per connection in
+        // ble_evt_dispatch (bt_app_nrf52), using Conn.pLongWrBuff.
 
         case BLE_GATTS_EVT_RW_AUTHORIZE_REQUEST:
         	if (pSrvc->AuthReqCB)

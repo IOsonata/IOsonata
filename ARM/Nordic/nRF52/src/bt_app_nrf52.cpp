@@ -782,6 +782,25 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
             err_code = sd_ble_gatts_sys_attr_set(BtAppGetConnHandle(), NULL, 0, 0);
             APP_ERROR_CHECK(err_code);
             break; // BLE_GATTS_EVT_SYS_ATTR_MISSING
+        case BLE_EVT_USER_MEM_REQUEST:
+            {
+                // Long write: hand the SoftDevice this link's reassembly buffer
+                // so it can queue the prepared writes. Replied once per
+                // connection here (not per service) to avoid multiple
+                // sd_ble_user_mem_reply calls on the same request.
+                BtDevice_t *pConn = BtPeerFindByHdl(p_ble_evt->evt.common_evt.conn_handle);
+                if (pConn != nullptr && pConn->Conn.pLongWrBuff != nullptr)
+                {
+                    ble_user_mem_block_t mblk;
+                    memset(&mblk, 0, sizeof(mblk));
+                    mblk.p_mem = pConn->Conn.pLongWrBuff;
+                    mblk.len   = pConn->Conn.LongWrBuffSize;
+                    memset(pConn->Conn.pLongWrBuff, 0, pConn->Conn.LongWrBuffSize);
+                    err_code = sd_ble_user_mem_reply(p_ble_evt->evt.common_evt.conn_handle, &mblk);
+                    APP_ERROR_CHECK(err_code);
+                }
+            }
+            break;
         case BLE_GATTC_EVT_TIMEOUT:
             // Disconnect on GATT Client timeout event.
             err_code = sd_ble_gap_disconnect(p_ble_evt->evt.gattc_evt.conn_handle,

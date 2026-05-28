@@ -45,6 +45,8 @@ SOFTWARE.
 #include <ble_gatts.h>
 
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_peer.h"
 
 /******** For DEBUG ************/
 //#define UART_DEBUG_ENABLE
@@ -178,15 +180,20 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 			{
 				ble_gatts_evt_write_t *p_evt_write = &pBleEvt->evt.gatts_evt.params.write;
 
+				// Long write reassembly reads this link's per-connection buffer
+				// (the memory handed to the SoftDevice at USER_MEM_REQUEST).
+				BtDevice_t *pLwConn = BtPeerFindByHdl(pBleEvt->evt.gatts_evt.conn_handle);
+				uint8_t *pLongWr = (pLwConn != nullptr) ? pLwConn->Conn.pLongWrBuff : nullptr;
+
 				for (int i = 0; i < pSrvc->NbChar; i++)
 				{
 					if (p_evt_write->op == BLE_GATTS_OP_EXEC_WRITE_REQ_NOW)
 					{
 						// Long write execution
-						if (pSrvc->pLongWrBuff != NULL)
+						if (pLongWr != NULL)
 						{
-							GATLWRHDR *hdr = (GATLWRHDR *)pSrvc->pLongWrBuff;
-							uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
+							GATLWRHDR *hdr = (GATLWRHDR *)pLongWr;
+							uint8_t *p = (uint8_t*)pLongWr + sizeof(GATLWRHDR);
 
 							if (hdr->Handle == pSrvc->pCharArray[i].ValHdl)
 							{
@@ -229,19 +236,8 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 			}
 			break;
 
-		case BLE_EVT_USER_MEM_REQUEST:
-			{
-				if (pSrvc->pLongWrBuff != NULL)
-				{
-					ble_user_mem_block_t mblk;
-					memset(&mblk, 0, sizeof(ble_user_mem_block_t));
-					mblk.p_mem = pSrvc->pLongWrBuff;
-					mblk.len = pSrvc->LongWrBuffSize;
-					memset(pSrvc->pLongWrBuff, 0, pSrvc->LongWrBuffSize);
-					sd_ble_user_mem_reply(pBleEvt->evt.gatts_evt.conn_handle, &mblk);
-				}
-			}
-			break;
+		// BLE_EVT_USER_MEM_REQUEST is now handled once per connection in
+		// ble_evt_dispatch (bt_app_bm), using Conn.pLongWrBuff.
 		case BLE_GATTS_EVT_RW_AUTHORIZE_REQUEST:
 			if (pSrvc->AuthReqCB)
 			{

@@ -239,6 +239,25 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			(void)err_code;
 			break;
 
+		case BLE_EVT_USER_MEM_REQUEST:
+			{
+				// Long write: hand the SoftDevice this link's reassembly buffer.
+				// Replied once per connection (not per service) to avoid
+				// multiple sd_ble_user_mem_reply calls on the same request.
+				BtDevice_t *pConn = BtPeerFindByHdl(p_ble_evt->evt.common_evt.conn_handle);
+				if (pConn != nullptr && pConn->Conn.pLongWrBuff != nullptr)
+				{
+					ble_user_mem_block_t mblk;
+					memset(&mblk, 0, sizeof(mblk));
+					mblk.p_mem = pConn->Conn.pLongWrBuff;
+					mblk.len   = pConn->Conn.LongWrBuffSize;
+					memset(pConn->Conn.pLongWrBuff, 0, pConn->Conn.LongWrBuffSize);
+					err_code = sd_ble_user_mem_reply(p_ble_evt->evt.common_evt.conn_handle, &mblk);
+					(void)err_code;
+				}
+			}
+			break;
+
 		case BLE_GATTC_EVT_TIMEOUT:
 			sd_ble_gap_disconnect(p_ble_evt->evt.gattc_evt.conn_handle,
 								  BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
