@@ -221,17 +221,17 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	BtDevice_t *pPeer = BtPeerAlloc(ConnHdl);
 	if (pPeer != NULL)
 	{
-		memcpy(pPeer->Addr, PeerAddr, 6);
+		memcpy(pPeer->Conn.PeerAddr, PeerAddr, 6);
 		pPeer->pHciDev = (BtHciDevice_t*) &s_BtHciDev;
 		s_BtHciDev.pBtDev = (void*) pPeer;
 	}
 
-	BtGapAddConnection(ConnHdl, Role, PeerAddrType, PeerAddr);
+	BtPeerConnected(ConnHdl, Role, PeerAddrType, PeerAddr);
 
 	BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
 
-	//DEBUG_PRINTF("This device's Role = %d\r\n", g_BtAppData.AppDevice.Role);
-	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+	//DEBUG_PRINTF("This device's Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
 		// TODO: obtain the connected peripheral device's name and store to pPeer->Name;
 		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
@@ -255,7 +255,7 @@ bool BtAppDiscoverDevice(BtDev_t * const pDev)
 			.Uuid16 = BT_UUID_DECLARATIONS_PRIMARY_SERVICE,
 	};
 
-	return BtAttStartReadByGroupTypeRequest(pDev->pHciDev, pDev->ConnHdl, 1, 0xFFFF, &Uuid);
+	return BtAttStartReadByGroupTypeRequest(pDev->pHciDev, pDev->Conn.Hdl, 1, 0xFFFF, &Uuid);
 }
 
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
@@ -269,9 +269,7 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	BtPeerFree(pPeer);
 
-	BtGapDeleteConnection(ConnHdl);
-
-	bool bConnected = isBtGapConnected();
+	bool bConnected = BtPeerIsConnected();
 
 	if (bConnected == false)
 	{
@@ -284,7 +282,7 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 	BtAppEvtDisconnected(ConnHdl);
 
 	if (bConnected == false &&
-		(g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
+		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
 	{
 		BtAppAdvStart();
 	}
@@ -653,8 +651,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		//mpsl_coex_support_802152_3wire_gpiote_if();
 	}
 
-	g_BtAppData.AppDevice.Role = pCfg->Role;
-	DEBUG_PRINTF("g_BtAppData.AppDevice.Role = %d\r\n", g_BtAppData.AppDevice.Role);
+	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
+	DEBUG_PRINTF("g_BtAppData.AppDevice.Conn.Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
 
 	g_BtAppData.bExtAdv = pCfg->bExtAdv;
 	g_BtAppData.bScan = false;
@@ -845,11 +843,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
     	return false;
     }
 
-    if (!BtGapConnPoolInit(pCfg->pGapConnPoolMem, pCfg->GapConnPoolMemSize))
-    {
-    	return false;
-    }
-
+	// Connection pool removed: the peer manager (BtPeerInit above) owns
+	// the single connection table now.
 	//BtHciInit(&s_BtDevCfg);
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
@@ -865,7 +860,7 @@ void BtAppRun()
 		return;
 	}
 
-	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		BtAppAdvStart();
 	}
@@ -967,7 +962,7 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * c
 
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	return BtGattCharNotify(BtGapGetConnection(), pChar, pData, DataLen);
+	return BtGattCharNotify(BtPeerActiveHdl(), pChar, pData, DataLen);
 	/*
 	if (BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{

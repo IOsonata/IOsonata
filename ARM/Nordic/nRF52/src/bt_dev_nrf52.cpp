@@ -296,7 +296,7 @@ static void BtDevConnLedOn()
 #endif
 bool BtDevNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	if (s_BtDevnRF5.ConnHdl == BT_GATT_HANDLE_INVALID)
+	if (s_BtDevnRF5.Conn.Hdl == BT_GATT_HANDLE_INVALID)
 	{
 		return false;
 	}
@@ -312,7 +312,7 @@ bool BtDevNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
     params.p_data = pData;
     params.p_len = &DataLen;
 
-    uint32_t err_code = sd_ble_gatts_hvx(s_BtDevnRF5.ConnHdl, &params);
+    uint32_t err_code = sd_ble_gatts_hvx(s_BtDevnRF5.Conn.Hdl, &params);
 
     return err_code == NRF_SUCCESS;
 }
@@ -335,12 +335,12 @@ bool BtDevNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 
 void BtDevDisconnect()
 {
-	if (s_BtDevnRF5.ConnHdl != BLE_CONN_HANDLE_INVALID)
+	if (s_BtDevnRF5.Conn.Hdl != BLE_CONN_HANDLE_INVALID)
     {
-		uint32_t err_code = sd_ble_gap_disconnect(s_BtDevnRF5.ConnHdl, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+		uint32_t err_code = sd_ble_gap_disconnect(s_BtDevnRF5.Conn.Hdl, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
         if (err_code == NRF_ERROR_INVALID_STATE)
         {
-        	s_BtDevnRF5.ConnHdl = BLE_CONN_HANDLE_INVALID;
+        	s_BtDevnRF5.Conn.Hdl = BLE_CONN_HANDLE_INVALID;
         }
         else
         {
@@ -439,7 +439,7 @@ static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
 
     if (p_evt->evt_type == BLE_CONN_PARAMS_EVT_FAILED)
     {
-        err_code = sd_ble_gap_disconnect(s_BtDevnRF5.ConnHdl, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
+        err_code = sd_ble_gap_disconnect(s_BtDevnRF5.Conn.Hdl, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
         //APP_ERROR_CHECK(err_code);
     }
 }
@@ -528,20 +528,20 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
     {
         case BLE_GAP_EVT_CONNECTED:
 
-        	BtGapAddConnection(p_gap_evt->conn_handle, role,
+        	BtPeerConnected(p_gap_evt->conn_handle, role,
         					   p_gap_evt->params.connected.peer_addr.addr_type,
         					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
 
         	//BleConnLedOn();
-        	s_BtDevnRF5.ConnHdl = p_ble_evt->evt.gap_evt.conn_handle;
+        	s_BtDevnRF5.Conn.Hdl = p_ble_evt->evt.gap_evt.conn_handle;
         	//g_BleAppData.bScan = false;
         	s_BtDevnRF5.State = BTDEV_STATE_CONNECTED;
             break;
 
         case BLE_GAP_EVT_DISCONNECTED:
         	//BleConnLedOff();
-        	BtGapDeleteConnection(p_gap_evt->conn_handle);
-        	s_BtDevnRF5.ConnHdl = BLE_CONN_HANDLE_INVALID;
+        	BtPeerFreeByHdl(p_gap_evt->conn_handle);
+        	s_BtDevnRF5.Conn.Hdl = BLE_CONN_HANDLE_INVALID;
         	s_BtDevnRF5.State = BTDEV_STATE_IDLE;
         	BtDevAdvStart();
 
@@ -609,7 +609,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
 
         case BLE_GATTS_EVT_SYS_ATTR_MISSING:
             // No system attributes have been stored.
-            err_code = sd_ble_gatts_sys_attr_set(s_BtDevnRF5.ConnHdl, NULL, 0, 0);
+            err_code = sd_ble_gatts_sys_attr_set(s_BtDevnRF5.Conn.Hdl, NULL, 0, 0);
             APP_ERROR_CHECK(err_code);
             break; // BLE_GATTS_EVT_SYS_ATTR_MISSING
 
@@ -726,7 +726,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
             APP_ERROR_CHECK(err_code);
 #endif
 #endif
-            err_code = sd_ble_gap_lesc_dhkey_reply(s_BtDevnRF5.ConnHdl, &s_lesc_dh_key);
+            err_code = sd_ble_gap_lesc_dhkey_reply(s_BtDevnRF5.Conn.Hdl, &s_lesc_dh_key);
             APP_ERROR_CHECK(err_code);
             break;
 
@@ -758,7 +758,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt)
         	if (role == BLE_GAP_ROLE_CENTRAL)
         		break;
             err_code = sd_ble_gatts_exchange_mtu_reply(p_ble_evt->evt.gatts_evt.conn_handle,
-            										   s_BtDevnRF5.MaxMtu);
+            										   s_BtDevnRF5.Conn.MaxMtu);
             										   //NRF_BLE_MAX_MTU_SIZE);
             APP_ERROR_CHECK(err_code);
             break; // BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST
@@ -813,9 +813,9 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 				else
 				{
 					// The peer did not use MITM, disconnect.
-					err_code = pm_peer_id_get(s_BtDevnRF5.ConnHdl, &g_PeerMngrIdToDelete);
+					err_code = pm_peer_id_get(s_BtDevnRF5.Conn.Hdl, &g_PeerMngrIdToDelete);
 					APP_ERROR_CHECK(err_code);
-					err_code = sd_ble_gap_disconnect(s_BtDevnRF5.ConnHdl,
+					err_code = sd_ble_gap_disconnect(s_BtDevnRF5.Conn.Hdl,
 													 BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 					APP_ERROR_CHECK(err_code);
 				}
@@ -823,9 +823,9 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 			break;
 
         case PM_EVT_CONN_SEC_FAILED:
-            if (s_BtDevnRF5.bSecure && s_BtDevnRF5.ConnHdl != BLE_CONN_HANDLE_INVALID)
+            if (s_BtDevnRF5.bSecure && s_BtDevnRF5.Conn.Hdl != BLE_CONN_HANDLE_INVALID)
             {
-                err_code = sd_ble_gap_disconnect(s_BtDevnRF5.ConnHdl,
+                err_code = sd_ble_gap_disconnect(s_BtDevnRF5.Conn.Hdl,
                                                  BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
                 APP_ERROR_CHECK(err_code);
             }
@@ -911,7 +911,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 {
     uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
-    if (s_BtDevnRF5.Role & BTDEV_ROLE_PERIPHERAL)
+    if (s_BtDevnRF5.Conn.Role & BTDEV_ROLE_PERIPHERAL)
     {
 //    	BtGattSrvc_t *p = s_BtDevnRF5.pSrvc;
 
@@ -923,7 +923,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     	}
     }
     on_ble_evt(p_ble_evt);
-    if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtDevnRF5.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
+    if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtDevnRF5.Conn.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
     {
 #if 0
     	switch (p_ble_evt->header.evt_id)
@@ -1046,11 +1046,11 @@ static void sec_req_timeout_handler(void * p_context)
 {
     uint32_t err_code;
 
-    if (s_BtDevnRF5.ConnHdl != BLE_CONN_HANDLE_INVALID)
+    if (s_BtDevnRF5.Conn.Hdl != BLE_CONN_HANDLE_INVALID)
     {
         // Initiate bonding.
         //NRF_LOG_DEBUG("Start encryption\r\n");
-        err_code = pm_conn_secure(s_BtDevnRF5.ConnHdl, false);
+        err_code = pm_conn_secure(s_BtDevnRF5.Conn.Hdl, false);
         if (err_code != NRF_ERROR_INVALID_STATE)
         {
             APP_ERROR_CHECK(err_code);
@@ -1136,7 +1136,7 @@ bool BtDevAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 
 void BtDevAdvStart()//BLEAPP_ADVMODE AdvMode)
 {
-	if (s_BtDevnRF5.State == BTDEV_STATE_ADVERTISING || s_BtDevnRF5.ConnHdl != BLE_CONN_HANDLE_INVALID)
+	if (s_BtDevnRF5.State == BTDEV_STATE_ADVERTISING || s_BtDevnRF5.Conn.Hdl != BLE_CONN_HANDLE_INVALID)
 		return;
 
 //	g_BleAppData.bAdvertising = true;
@@ -1654,13 +1654,13 @@ void BtDevDisInit(const BtDevCfg_t *pCfg)
 
 uint16_t BleAppGetConnHandle()
 {
-	return s_BtDevnRF5.ConnHdl;
+	return s_BtDevnRF5.Conn.Hdl;
 }
 
 /**@brief Function for handling events from the GATT library. */
 void BleGattEvtHandler(nrf_ble_gatt_t * p_gatt, const nrf_ble_gatt_evt_t * p_evt)
 {
-    if ((s_BtDevnRF5.ConnHdl == p_evt->conn_handle) && (p_evt->evt_id == NRF_BLE_GATT_EVT_ATT_MTU_UPDATED))
+    if ((s_BtDevnRF5.Conn.Hdl == p_evt->conn_handle) && (p_evt->evt_id == NRF_BLE_GATT_EVT_ATT_MTU_UPDATED))
     {
     	//g_BleAppData.MaxMtu = p_evt->params.att_mtu_effective - 3;//OPCODE_LENGTH - HANDLE_LENGTH;
        // m_ble_nus_max_data_len = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH;
@@ -1677,16 +1677,16 @@ void BtDevGattInit(void)
     err_code = nrf_ble_gatt_init(&s_Gatt, BleGattEvtHandler);
     APP_ERROR_CHECK(err_code);
 
-    if (s_BtDevnRF5.Role & BTDEV_ROLE_PERIPHERAL)
+    if (s_BtDevnRF5.Conn.Role & BTDEV_ROLE_PERIPHERAL)
     {
-    	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, s_BtDevnRF5.MaxMtu);
+    	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, s_BtDevnRF5.Conn.MaxMtu);
     	APP_ERROR_CHECK(err_code);
 
-    	if (s_BtDevnRF5.MaxMtu >= 27)
+    	if (s_BtDevnRF5.Conn.MaxMtu >= 27)
     	{
     		// 251 bytes is max dat length as per Bluetooth core spec 5, vol 6, part b, section 4.5.10
     		// 27 - 251 bytes is hardcoded in nrf_ble_gat of the SDK.
-    		uint8_t dlen = s_BtDevnRF5.MaxMtu > 254 ? 251: s_BtDevnRF5.MaxMtu - 3;
+    		uint8_t dlen = s_BtDevnRF5.Conn.MaxMtu > 254 ? 251: s_BtDevnRF5.Conn.MaxMtu - 3;
     		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
     		APP_ERROR_CHECK(err_code);
     	}
@@ -1699,9 +1699,9 @@ void BtDevGattInit(void)
       	APP_ERROR_CHECK(err_code);
     }
 
-    if (s_BtDevnRF5.Role & BTDEV_ROLE_CENTRAL)
+    if (s_BtDevnRF5.Conn.Role & BTDEV_ROLE_CENTRAL)
     {
-    	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, s_BtDevnRF5.MaxMtu);
+    	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, s_BtDevnRF5.Conn.MaxMtu);
     	APP_ERROR_CHECK(err_code);
     }
 }
@@ -1825,9 +1825,9 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 	ret_code_t err_code;
 
 	s_BtDevnRF5.State = BTDEV_STATE_UNKNOWN;
-	s_BtDevnRF5.Role = pCfg->Role;
+	s_BtDevnRF5.Conn.Role = pCfg->Role;
 	s_BtDevnRF5.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
-    s_BtDevnRF5.ConnHdl = BLE_CONN_HANDLE_INVALID;
+    s_BtDevnRF5.Conn.Hdl = BLE_CONN_HANDLE_INVALID;
 	s_BtDevnRF5.bExtAdv = pCfg->bExtAdv;
 	s_BtDevnRF5.bScan = false;
 	//s_BtDevnRF5.bAdvertising = false;
@@ -1852,9 +1852,9 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 #endif
 
     if (pCfg->MaxMtu > NRF_BLE_MAX_MTU_SIZE)
-    	s_BtDevnRF5.MaxMtu = pCfg->MaxMtu;
+    	s_BtDevnRF5.Conn.MaxMtu = pCfg->MaxMtu;
     else
-    	s_BtDevnRF5.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
+    	s_BtDevnRF5.Conn.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
     app_timer_init();
 
 	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
@@ -1943,7 +1943,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
     //err_code = ble_lesc_ecc_keypair_generate_and_set();
     //APP_ERROR_CHECK(err_code);
 
-    if (s_BtDevnRF5.Role & (BTDEV_ROLE_PERIPHERAL | BTDEV_ROLE_BROADCASTER))
+    if (s_BtDevnRF5.Conn.Role & (BTDEV_ROLE_PERIPHERAL | BTDEV_ROLE_BROADCASTER))
     {
         if (BtDevAdvInit(pCfg) == false)
         {
@@ -1952,7 +1952,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)//, bool bEraseBond)
 
         err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, s_BtDevnRF5.AdvHdl, GetValidTxPower(pCfg->TxPower));
         APP_ERROR_CHECK(err_code);
-        BtGapInit(s_BtDevnRF5.Role);
+        BtGapInit(s_BtDevnRF5.Conn.Role);
     }
     else
     {

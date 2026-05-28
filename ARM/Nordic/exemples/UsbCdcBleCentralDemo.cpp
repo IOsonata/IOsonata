@@ -577,7 +577,7 @@ static const BtGapScanCfg_t s_bleScanInitCfg = {
 };
 
 BtDev_t g_ConnectedDev = {
-	.ConnHdl = BT_CONN_HDL_INVALID,
+	.Conn = { .Hdl = BT_CONN_HDL_INVALID },
 };
 
 uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
@@ -622,7 +622,7 @@ void BleDevDiscovered(BtDev_t *pDev)
     	if (dcharidx >= 0 && pDev->Services[idx].characteristics[dcharidx].characteristic.char_props.notify)
     	{
     		// Enable Notify
-        	BtAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].characteristics[dcharidx].cccd_handle);
+        	BtAppEnableNotify(pDev->Conn.Hdl, pDev->Services[idx].characteristics[dcharidx].cccd_handle);
         	g_BleRxCharHdl = pDev->Services[idx].characteristics[dcharidx].characteristic.handle_value;
         	l = sprintf(s, "Found!\r\n");
         	PRINT_DEBUG(s,l);
@@ -672,7 +672,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
     {
     	case BLE_GAP_EVT_CONNECTED:
     		{
-				g_ConnectedDev.ConnHdl = p_gap_evt->conn_handle;
+				g_ConnectedDev.Conn.Hdl = p_gap_evt->conn_handle;
 				err_code = BtAppDiscoverDevice(&g_ConnectedDev);
     		}
     		break;
@@ -927,9 +927,9 @@ void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
 	// Transfer data from global buffer to Ble interface
 	if (flush)
 	{
-		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
+		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
-			g_TxSuccess = BtAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, g_UsbRxBuff, g_UsbRxBuffLen);
+			g_TxSuccess = BtAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, g_UsbRxBuff, g_UsbRxBuffLen);
 		}
 	}
 
@@ -954,9 +954,9 @@ void UsbRxSchedHandler(void * p_event_data, uint16_t event_size)
 	// Send to BLE interface
 	if (g_UsbRxBuffLen > 0)
 	{
-		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
+		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
-			BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, g_UsbRxBuff, g_UsbRxBuffLen);
+			BleAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, g_UsbRxBuff, g_UsbRxBuffLen);
 		}
 	}
 	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
@@ -971,9 +971,9 @@ void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
 
 	if (p !=NULL)
 	{
-		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
+		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
-			BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, p, len);
+			BleAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, p, len);
 		}
 
 		app_sched_event_put(NULL, 0, BleTxSchedHandler);
@@ -1130,9 +1130,9 @@ void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
 	int l = g_Uart.Rx(buff, PACKET_SIZE);
 	if (l > 0)
 	{
-		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
+		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
-//			BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, l);
+//			BleAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, buff, l);
 		}
 	}
 }

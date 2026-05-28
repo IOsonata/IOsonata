@@ -172,14 +172,14 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	uint32_t err_code;
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
 	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
-	uint8_t role = g_BtAppData.AppDevice.Role;
+	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
 	switch (p_ble_evt->header.evt_id)
 	{
 		case BLE_GAP_EVT_CONNECTED:
 			BtAppConnLedOn();
-			BtGapAddConnection(p_gap_evt->conn_handle, role,
+			BtPeerConnected(p_gap_evt->conn_handle, role,
 							   p_gap_evt->params.connected.peer_addr.addr_type,
 							   (uint8_t *)p_gap_evt->params.connected.peer_addr.addr);
 			BtPeerAlloc(p_ble_evt->evt.gap_evt.conn_handle);
@@ -194,16 +194,15 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 			BtAppConnLedOff();
 			BtPeerFree(pPeer);
-			BtGapDeleteConnection(connHdl);
 
-			if (isBtGapConnected() == false)
+			if (BtPeerIsConnected() == false)
 			{
 				g_BtAppData.State = BTAPP_STATE_IDLE;
 			}
 
 			BtAppEvtDisconnected(connHdl);
 
-			if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+			if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 			{
 				BtAdvStart();
 			}
@@ -253,7 +252,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 		case BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST:
 		{
-			uint16_t mtu = g_BtAppData.AppDevice.MaxMtu;
+			uint16_t mtu = g_BtAppData.AppDevice.Conn.MaxMtu;
 			err_code = sd_ble_gatts_exchange_mtu_reply(
 				p_ble_evt->evt.gatts_evt.conn_handle, mtu);
 			(void)err_code;
@@ -266,7 +265,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 	// Forward to central/observer handlers
 	if ((role == BLE_GAP_ROLE_CENTRAL) ||
-		(g_BtAppData.AppDevice.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
+		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
 	{
 		switch (p_ble_evt->header.evt_id)
 		{
@@ -310,7 +309,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	}
 
 	// Forward to peripheral handlers
-	if (g_BtAppData.AppDevice.Role & BTAPP_ROLE_PERIPHERAL)
+	if (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		BtGattEvtHandler((uint32_t)p_ble_evt->header.evt_id, (void *)p_ble_evt);
 		BtAppPeriphEvtHandler((uint32_t)p_ble_evt->header.evt_id, (void *)p_ble_evt);
@@ -645,17 +644,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	// Populate internal app data from config
-	g_BtAppData.AppDevice.Role = pCfg->Role;
+	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
 	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
 	{
 		return false;
 	}
 
-	if (!BtGapConnPoolInit(pCfg->pGapConnPoolMem, pCfg->GapConnPoolMemSize))
-	{
-		return false;
-	}
+	// Connection pool removed: the peer manager (BtPeerInit above) owns
+	// the single connection table now.
 	g_BtAppData.bExtAdv = pCfg->bExtAdv;
 	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
@@ -666,9 +663,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	g_BtAppData.AppDevice.ProductVer = pCfg->ProductVer;
 	g_BtAppData.AppDevice.Appearance = pCfg->Appearance;
 
-	g_BtAppData.AppDevice.MaxMtu = GATT_MTU_SIZE_DEFAULT;
+	g_BtAppData.AppDevice.Conn.MaxMtu = GATT_MTU_SIZE_DEFAULT;
 	if (pCfg->MaxMtu > GATT_MTU_SIZE_DEFAULT)
-		g_BtAppData.AppDevice.MaxMtu = pCfg->MaxMtu;
+		g_BtAppData.AppDevice.Conn.MaxMtu = pCfg->MaxMtu;
 
 	// Setup connection LED
 	if (pCfg->ConnLedPort != -1 && pCfg->ConnLedPin != -1)
@@ -730,7 +727,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
 
 	// Initialize advertising
-	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		if (BtAppAdvInit(pCfg) == false)
 		{
@@ -774,7 +771,7 @@ void BtAppRun()
 		return;
 	}
 
-	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		BtAdvStart();
 	}

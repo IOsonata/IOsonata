@@ -208,7 +208,7 @@ static void BtCtlrDispatch(ble_evt_t const * p_ble_evt, void *p_context)
 #if 0
  //   uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
-    if (s_BtDevnRF5.Role & BTDEV_ROLE_PERIPHERAL)
+    if (s_BtDevnRF5.Conn.Role & BTDEV_ROLE_PERIPHERAL)
     {
 //    	BtGattSrvc_t *p = s_BtDevnRF5.pSrvc;
 
@@ -220,7 +220,7 @@ static void BtCtlrDispatch(ble_evt_t const * p_ble_evt, void *p_context)
     	}
     }
     on_ble_evt(p_ble_evt);
-    if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtDevnRF5.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
+    if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtDevnRF5.Conn.Role & (BTDEV_ROLE_CENTRAL | BTDEV_ROLE_OBSERVER))
     {
 #if 0
     	switch (p_ble_evt->header.evt_id)

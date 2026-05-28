@@ -210,7 +210,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 				g_BtAppData.ConnHdl = BT_STM32WBA_CONN_HDL_INVALID;
 				g_BtAppData.State   = BTAPP_DISCONNECTED;
 				BtAppConnLedOff();
-				BtGapDeleteConnection(p->Connection_Handle);
+				BtPeerFreeByHdl(p->Connection_Handle);
 				// Re-arm advertising for peripheral/broadcaster apps.
 				if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 				{
@@ -234,7 +234,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						g_BtAppData.ConnHdl = p->Connection_Handle;
 						g_BtAppData.State   = BTAPP_CONNECTED;
 						BtAppConnLedOn();
-						BtGapAddConnection(p->Connection_Handle,
+						BtPeerConnected(p->Connection_Handle,
 						                   p->Role,
 						                   p->Peer_Address_Type,
 						                   p->Peer_Address);
@@ -336,11 +336,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	if (!BtGapConnPoolInit(pCfg->pGapConnPoolMem, pCfg->GapConnPoolMemSize))
-	{
-		return false;
-	}
-
+	// Connection pool removed: the peer manager (BtPeerInit above) owns
+	// the single connection table now.
 	// Populate generic app data from cfg.
 	g_BtAppData.Role            = pCfg->Role;
 	g_BtAppData.AdvHdl          = 0;	// WBA stack manages adv internally

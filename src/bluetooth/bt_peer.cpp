@@ -265,3 +265,24 @@ void BtPeerFreeByHdl(uint16_t Hdl)
 {
 	BtPeerFree(BtPeerFindByHdl(Hdl));
 }
+
+BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, const uint8_t *pAddr)
+{
+	BtDevice_t *p = BtPeerAlloc(ConnHdl);
+	if (p != nullptr)
+	{
+		p->Conn.Role = Role;
+		p->Conn.PeerAddrType = AddrType;
+		if (pAddr != nullptr)
+		{
+			memcpy(p->Conn.PeerAddr, pAddr, sizeof(p->Conn.PeerAddr));
+		}
+	}
+	return p;
+}
+
+uint16_t BtPeerActiveHdl(void)
+{
+	BtDevice_t *p = BtPeerGetActive();
+	return p != nullptr ? p->Conn.Hdl : BT_CONN_HDL_INVALID;
+}

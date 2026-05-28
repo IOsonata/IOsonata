@@ -136,6 +136,15 @@ bool         BtPeerIsConnected(void);
 size_t       BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
 void         BtPeerFreeByHdl(uint16_t Hdl);
 
+// Allocate (or reuse) a record for a new link and fill its base connection
+// fields. 1:1 replacement for the old BtGapAddConnection. Returns the record
+// or NULL when the pool is full.
+BtDevice_t * BtPeerConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, const uint8_t *pAddr);
+
+// Handle of the first live link, or BT_CONN_HDL_INVALID. Convenience for
+// single-link senders (replaces the old BtGapGetConnection).
+uint16_t     BtPeerActiveHdl(void);
+
 #ifdef __cplusplus
 }
 #endif

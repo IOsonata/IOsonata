@@ -233,7 +233,7 @@ char * const BleAppGetDevName()
 #if 0
 bool isBtDevConnected()
 {
-	return s_pBtDevSdc->ConnHdl != 0;
+	return s_pBtDevSdc->Conn.Hdl != 0;
 }
 
 static void BtDevConnLedOff()
@@ -274,9 +274,9 @@ void BtDevEvtHandler(uint32_t Evt, void * const pCtx)
 
 void BtDevConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_t PeerAddr[6])
 {
-	s_BtDevSdc.ConnHdl = ConnHdl;
+	s_BtDevSdc.Conn.Hdl = ConnHdl;
 
-	BtGapAddConnection(ConnHdl, Role, PeerAddrType, PeerAddr);
+	BtPeerConnected(ConnHdl, Role, PeerAddrType, PeerAddr);
 //	s_BtGapSrvc.ConnHdl = ConnHdl;
 //	s_BtGattSrvc.ConnHdl = ConnHdl;
 
@@ -288,9 +288,9 @@ void BtDevDisconnected(uint16_t ConnHdl, uint8_t Reason)
 //	s_BtGapSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
 //	s_BtGattSrvc.ConnHdl = BT_GATT_HANDLE_INVALID;
 
-	BtGapDeleteConnection(ConnHdl);
+	BtPeerFreeByHdl(ConnHdl);
 
-	if (isBtGapConnected() == false)
+	if (BtPeerIsConnected() == false)
 	{
 //		BtGattSrvcDisconnected(&s_BtGapSrvc);
 //		BtGattSrvcDisconnected(&s_BtGattSrvc);
@@ -298,7 +298,7 @@ void BtDevDisconnected(uint16_t ConnHdl, uint8_t Reason)
 		//BtAppEvtDisconnected(ConnHdl);
 	}
 
-	s_BtDevSdc.ConnHdl = BtGapGetConnection();
+	s_BtDevSdc.Conn.Hdl = BtPeerActiveHdl();
 
 }
 
@@ -766,7 +766,7 @@ void BtDevDisInit(BtDev_t * const pDev, const BtDevCfg_t *pCfg)
 #if 0
 uint16_t BtDevGetConnHandle()
 {
-	return s_pBtDevSdc->ConnHdl;
+	return s_pBtDevSdc->Conn.Hdl;
 }
 /**@brief Function for handling events from the GATT library. */
 void BleGattEvtHandler(nrf_ble_gatt_t * p_gatt, const nrf_ble_gatt_evt_t * p_evt)
@@ -1094,7 +1094,7 @@ bool BtDevInit(const BtDevCfg_t *pCfg)
 	}
 #endif
 	s_BtDevSdc.State = BTDEV_STATE_UNKNOWN;
-    s_BtDevSdc.Role = pCfg->Role;
+    s_BtDevSdc.Conn.Role = pCfg->Role;
 	s_BtDevSdc.bExtAdv = pCfg->bExtAdv;
 	s_BtDevSdc.VendorId = pCfg->VendorId;
 	s_BtDevSdc.ProductId = pCfg->ProductId;
@@ -1300,7 +1300,7 @@ bool BtDevNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	BtHciNotify(&s_BtDevSdc, s_BtDevSdc.ConnHdl, pChar->ValHdl, pData, DataLen);
+	BtHciNotify(&s_BtDevSdc, s_BtDevSdc.Conn.Hdl, pChar->ValHdl, pData, DataLen);
 
 	return true;
 }

@@ -40,6 +40,7 @@ SOFTWARE.
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_peer.h"
 #include "coredev/interrupt.h"
 
 #define BTINTRF_PACKET_SIZE		(20)// + sizeof(BLEINTRF_PKT) - 1)
@@ -201,7 +202,7 @@ bool BtIntrfNotify(BtDevIntrf_t *pIntrf)
 {
 	BtIntrfPkt_t *pkt = NULL;
     bool res = true;
-    uint16_t connhdl = BtGapGetConnection();
+    uint16_t connhdl = BtPeerActiveHdl();
 
     if (pIntrf->TxCharIdx < 0)
     {

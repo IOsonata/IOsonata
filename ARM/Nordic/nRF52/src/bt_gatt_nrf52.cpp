@@ -76,11 +76,11 @@ static BtGattSrvc_t *s_pBtGattSrvcTail = nullptr;
 //uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-/*	if (pSrvc->ConnHdl == BLE_CONN_HANDLE_INVALID)
-		return NRF_ERROR_INVALID_STATE;*/
-	//uint16_t hdl = BtGapGetConnection();
+	// Use the caller-supplied link when valid; fall back to the last
+	// connected handle for single-link callers. Matches the nRF54 pattern.
+	uint16_t hdl = (ConnHdl != BLE_CONN_HANDLE_INVALID) ? ConnHdl : s_ConnHandle;
 
-	if (s_ConnHandle == BLE_CONN_HANDLE_INVALID)
+	if (hdl == BLE_CONN_HANDLE_INVALID)
 	{
 		return false;//NRF_ERROR_INVALID_STATE;
 	}
@@ -101,7 +101,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
     params.p_data = (uint8_t*)pVal;
     params.p_len = (uint16_t*)&Len;
 
-    uint32_t err_code = sd_ble_gatts_hvx(s_ConnHandle, &params);
+    uint32_t err_code = sd_ble_gatts_hvx(hdl, &params);
 
     return err_code == NRF_SUCCESS;
 }

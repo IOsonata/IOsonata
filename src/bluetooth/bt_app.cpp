@@ -54,13 +54,15 @@ BtAppData_t g_BtAppData = {
 	.bInitialized    = false,
 	.AppDevice = {
 		// Local device identity. Filled in by BtAppInit from BtAppCfg_t.
+		.Conn = {
+			.Hdl          = BT_CONN_HDL_INVALID,	// unused for local
+			.Role         = BTAPP_ROLE_PERIPHERAL,
+			.PeerAddrType = 0,
+			.PeerAddr     = {0,},
+			.MaxMtu       = 0,
+		},
 		.Name       = {0,},
-		.Addr       = {0,},
-		.AddrType   = 0,
-		.Role       = BTAPP_ROLE_PERIPHERAL,
 		.Appearance = 0,
-		.ConnHdl    = BT_CONN_HDL_INVALID,	// unused for local
-		.MaxMtu     = 0,
 		.VendorId   = 0,
 		.ProductId  = 0,
 		.ProductVer = 0,
@@ -89,7 +91,7 @@ bool isConnected(void)
 uint16_t BtAppGetConnHandle(void)
 {
 	BtDevice_t *p = BtPeerGetActive();
-	return p ? p->ConnHdl : BT_CONN_HDL_INVALID;
+	return p ? p->Conn.Hdl : BT_CONN_HDL_INVALID;
 }
 
 // --- BtDevice queries (work on any BtDevice_t, local or remote) ---

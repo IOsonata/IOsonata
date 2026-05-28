@@ -63,7 +63,7 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 
 	// Find the peer record for this connection. The state machine writes
 	// services/chars into pPeer->Services and fires next requests via
-	// pPeer->pHciDev / pPeer->ConnHdl. The discovery cursor lives on
+	// pPeer->pHciDev / pPeer->Conn.Hdl. The discovery cursor lives on
 	// pPeer->Discovery so concurrent links do not clobber each other.
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == NULL)
@@ -113,11 +113,11 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 
 				DEBUG_PRINTF(
 						"Parse the characteristic of the first service ConnHdl %d, sHdl %d, eHdl %d, uuid 0x%X, baseIdx %d\r\n",
-						pPeer->ConnHdl, sHdl, eHdl,
+						pPeer->Conn.Hdl, sHdl, eHdl,
 						pPeer->Discovery.UuidType.Uuid16,
 						pPeer->Discovery.UuidType.BaseIdx);
 
-				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->ConnHdl, sHdl, eHdl, &pPeer->Discovery.UuidType);
+				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->Conn.Hdl, sHdl, eHdl, &pPeer->Discovery.UuidType);
 			}
 		}
 	}
@@ -161,7 +161,7 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 				}
 
 				DEBUG_PRINTF("SrvcIdx %d, CharIdx %d, sHdl %d, eHdl %d \r\n", pPeer->Discovery.SrvIdx, pPeer->Discovery.CharIdx, sHdl, eHdl);
-				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->ConnHdl, sHdl, eHdl, &pPeer->Discovery.UuidType);
+				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->Conn.Hdl, sHdl, eHdl, &pPeer->Discovery.UuidType);
 			}
 			else
 			{
@@ -174,7 +174,7 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 				uint16_t eHdl = pSrvc->handle_range.EndHdl;
 				DEBUG_PRINTF("sHdl %d, eHdl %d \r\n", sHdl, eHdl);
 
-				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->ConnHdl, sHdl, eHdl, &pPeer->Discovery.UuidType);
+				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev, pPeer->Conn.Hdl, sHdl, eHdl, &pPeer->Discovery.UuidType);
 			}
 		}
 	}
@@ -201,7 +201,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 
 	// Route the response to the connected peer's record. The state machine
 	// reads/writes pPeer->Services and fires next requests via pPeer->pHciDev
-	// / pPeer->ConnHdl. The cursor lives on pPeer->Discovery.
+	// / pPeer->Conn.Hdl. The cursor lives on pPeer->Discovery.
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == NULL)
 	{
@@ -235,7 +235,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		BtAttSetMtu(mtu);
 
 		// Keep per-peer negotiated MTU as well (used by higher layers).
-		pPeer->MaxMtu = mtu;
+		pPeer->Conn.MaxMtu = mtu;
 	}
 		break;
 	case BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP:
@@ -385,7 +385,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 				pPeer->Discovery.UuidType.BaseIdx = 0;
 				pPeer->Discovery.UuidType.Type    = BT_UUID_TYPE_16;
 				BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev,
-				                       pPeer->ConnHdl, pPeer->Discovery.Hdl,
+				                       pPeer->Conn.Hdl, pPeer->Discovery.Hdl,
 				                       eHdl, &pPeer->Discovery.UuidType);
 			}
 		}
@@ -435,7 +435,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 				{
 					pPeer->Discovery.Hdl = lastCccdHdl + 1;
 					BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev,
-					                       pPeer->ConnHdl, pPeer->Discovery.Hdl,
+					                       pPeer->Conn.Hdl, pPeer->Discovery.Hdl,
 					                       eHdl, &pPeer->Discovery.UuidType);
 				}
 				else
@@ -460,7 +460,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 					uint16_t eHdl =
 						pPeer->Services[pPeer->Discovery.SrvIdx].handle_range.EndHdl;
 					BtAttReadByTypeRequest((BtHciDevice_t*) pPeer->pHciDev,
-					                       pPeer->ConnHdl, pPeer->Discovery.Hdl,
+					                       pPeer->Conn.Hdl, pPeer->Discovery.Hdl,
 					                       eHdl, &pPeer->Discovery.UuidType);
 				}
 				else
@@ -513,7 +513,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 				pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
 				pPeer->Discovery.Hdl = pSrvc->handle_range.StartHdl + 1; // ignore the first handle, which corresponds to service handle
 
-				BtAttReadRequest((BtHciDevice_t *)pPeer->pHciDev, pPeer->ConnHdl, pPeer->Discovery.Hdl);
+				BtAttReadRequest((BtHciDevice_t *)pPeer->pHciDev, pPeer->Conn.Hdl, pPeer->Discovery.Hdl);
 			}
 			else
 			{
@@ -523,7 +523,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		else
 		{
 			DEBUG_PRINTF("Next Discovery.Hdl = %d \r\n", pPeer->Discovery.Hdl);
-			BtAttReadRequest((BtHciDevice_t *)pPeer->pHciDev, pPeer->ConnHdl, pPeer->Discovery.Hdl);
+			BtAttReadRequest((BtHciDevice_t *)pPeer->pHciDev, pPeer->Conn.Hdl, pPeer->Discovery.Hdl);
 		}
 	}
 		break;
@@ -616,7 +616,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 				.Uuid16  = BT_UUID_DECLARATIONS_PRIMARY_SERVICE,
 			};
 			BtAttReadByGroupTypeRequest((BtHciDevice_t*) pPeer->pHciDev,
-			                            pPeer->ConnHdl, NextStartHdl,
+			                            pPeer->Conn.Hdl, NextStartHdl,
 			                            0xFFFF, &Uuid);
 		}
 	}

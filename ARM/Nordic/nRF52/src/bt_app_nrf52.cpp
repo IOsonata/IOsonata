@@ -265,7 +265,7 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 					// Find more services
 					s_CurRange = periph->Services[periph->NbSrvc - 1].handle_range;
 
-					uint32_t err_code = sd_ble_gattc_primary_services_discover(periph->ConnHdl, s_CurRange.end_handle + 1, NULL);
+					uint32_t err_code = sd_ble_gattc_primary_services_discover(periph->Conn.Hdl, s_CurRange.end_handle + 1, NULL);
                 }
         		else
         		{
@@ -274,7 +274,7 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 					s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
 					// Find characteristics
 
-					uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
+					uint32_t err = sd_ble_gattc_characteristics_discover(periph->Conn.Hdl, &s_CurRange);
         		}
         	}
         	break;
@@ -301,7 +301,7 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
                 }
 
                 // Find more characteristics
-				uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
+				uint32_t err = sd_ble_gattc_characteristics_discover(periph->Conn.Hdl, &s_CurRange);
             }
             else
             {
@@ -313,7 +313,7 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 				{
 					s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
 					s_CurRange.start_handle++;	// the service uses 1 handle already
-					uint32_t err = sd_ble_gattc_characteristics_discover(periph->ConnHdl, &s_CurRange);
+					uint32_t err = sd_ble_gattc_characteristics_discover(periph->Conn.Hdl, &s_CurRange);
 				}
 				else
 				{
@@ -321,7 +321,7 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 					s_CurSrvcIdx = 0;
 					s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
 
-					uint32_t err_code = sd_ble_gattc_descriptors_discover(periph->ConnHdl, &s_CurRange);
+					uint32_t err_code = sd_ble_gattc_descriptors_discover(periph->Conn.Hdl, &s_CurRange);
 				}
             }
             break;
@@ -382,7 +382,7 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 			{
 				s_CurRange = periph->Services[s_CurSrvcIdx].handle_range;
 				s_CurRange.start_handle = periph->Services[s_CurSrvcIdx].characteristics[s_CurCharIdx].characteristic.handle_value + 1;
-				uint32_t err = sd_ble_gattc_descriptors_discover(periph->ConnHdl, &s_CurRange);
+				uint32_t err = sd_ble_gattc_descriptors_discover(periph->Conn.Hdl, &s_CurRange);
 			}
             break;
 
@@ -398,7 +398,7 @@ bool BtAppDiscoverDevice(BtDev_t * const pDev)
 	s_CurSrvcIdx = 0;
 	s_CurCharIdx = 0;
 
-    uint32_t err_code = sd_ble_gattc_primary_services_discover(pDev->ConnHdl, 1, NULL);
+    uint32_t err_code = sd_ble_gattc_primary_services_discover(pDev->Conn.Hdl, 1, NULL);
 
     return err_code == NRF_SUCCESS;
     //return err_code;
@@ -724,7 +724,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     {
         case BLE_GAP_EVT_CONNECTED:
         	BtAppConnLedOn();
-        	BtGapAddConnection(p_gap_evt->conn_handle, role,
+        	BtPeerConnected(p_gap_evt->conn_handle, role,
         					   p_gap_evt->params.connected.peer_addr.addr_type,
         					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
         	BtPeerAlloc(p_ble_evt->evt.gap_evt.conn_handle);
@@ -739,16 +739,15 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 
 				BtAppConnLedOff();
 				BtPeerFree(pPeer);
-				BtGapDeleteConnection(connHdl);
 
-				if (isBtGapConnected() == false)
+				if (BtPeerIsConnected() == false)
 				{
 					g_BtAppData.State = BTAPP_STATE_IDLE;
 				}
 
 				BtAppEvtDisconnected(connHdl);
 
-				if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+				if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 				{
 					BtAdvStart();
 				}
@@ -804,7 +803,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
    }
    // on_ble_evt(p_ble_evt);
 #if 1
-    if ((role == BLE_GAP_ROLE_CENTRAL) || g_BtAppData.AppDevice.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+    if ((role == BLE_GAP_ROLE_CENTRAL) || g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
     {
     	switch (p_ble_evt->header.evt_id)
         {
@@ -854,7 +853,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         }
     	BtAppCentralEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
     }
-    if (g_BtAppData.AppDevice.Role & BTAPP_ROLE_PERIPHERAL)
+    if (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)
     {
     	BtGattEvtHandler((uint32_t)p_ble_evt, p_context);
     	BtAppPeriphEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
@@ -973,18 +972,18 @@ void BtGattInit(void)
     err_code = nrf_ble_gatt_init(&s_Gatt, BtGattEvtHandler);
     APP_ERROR_CHECK(err_code);
 
-    if (g_BtAppData.AppDevice.Role & BT_GAP_ROLE_PERIPHERAL)
+    if (g_BtAppData.AppDevice.Conn.Role & BT_GAP_ROLE_PERIPHERAL)
     {
-    	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, g_BtAppData.AppDevice.MaxMtu);
+    	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, g_BtAppData.AppDevice.Conn.MaxMtu);
     	APP_ERROR_CHECK(err_code);
 
-    	if (g_BtAppData.AppDevice.MaxMtu >= 27)
+    	if (g_BtAppData.AppDevice.Conn.MaxMtu >= 27)
     	{
     		// 251 bytes is max dat length as per Bluetooth core spec 5, vol 6, part b, section 4.5.10
     		// 27 - 251 bytes is hardcoded in nrf_ble_gat of the SDK.
     		// It is very confusing in the SDK. According to the Specs, it should be ATT MTU + 4
     		// where Max length cannot be more than 251. Which means ATT MTU max is no more than 247.
-    		uint8_t dlen = g_BtAppData.AppDevice.MaxMtu + 4;//> 254 ? 251: g_BtAppData.AppDevice.MaxMtu - 3;
+    		uint8_t dlen = g_BtAppData.AppDevice.Conn.MaxMtu + 4;//> 254 ? 251: g_BtAppData.AppDevice.Conn.MaxMtu - 3;
     		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
     		APP_ERROR_CHECK(err_code);
     	}
@@ -997,9 +996,9 @@ void BtGattInit(void)
       	APP_ERROR_CHECK(err_code);
     }
 
-    if (g_BtAppData.AppDevice.Role & BT_GAP_ROLE_CENTRAL)
+    if (g_BtAppData.AppDevice.Conn.Role & BT_GAP_ROLE_CENTRAL)
     {
-    	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, g_BtAppData.AppDevice.MaxMtu);
+    	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, g_BtAppData.AppDevice.Conn.MaxMtu);
     	APP_ERROR_CHECK(err_code);
 
     	ble_opt_t opt;
@@ -1247,17 +1246,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	//g_BleAppData.bScan = false;
 	//g_BleAppData.bAdvertising = false;
 	//g_BleAppData.VendorId = pBleAppCfg->VendorID;
-	g_BtAppData.AppDevice.Role = pCfg->Role;
+	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
 	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
 	{
 		return false;
 	}
 
-	if (!BtGapConnPoolInit(pCfg->pGapConnPoolMem, pCfg->GapConnPoolMemSize))
-	{
-		return false;
-	}
+	// Connection pool removed: the peer manager (BtPeerInit above) owns
+	// the single connection table now.
 	g_BtAppData.bExtAdv = pCfg->bExtAdv;
 	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
@@ -1280,12 +1277,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	//g_BleAppData.Role = pBleAppCfg->Role;
 	//g_BleAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
     //g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
-	g_BtAppData.AppDevice.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
+	g_BtAppData.AppDevice.Conn.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
 
     if (pCfg->MaxMtu > NRF_BLE_MAX_MTU_SIZE)
-    	g_BtAppData.AppDevice.MaxMtu = pCfg->MaxMtu;
+    	g_BtAppData.AppDevice.Conn.MaxMtu = pCfg->MaxMtu;
     else
-    	g_BtAppData.AppDevice.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
+    	g_BtAppData.AppDevice.Conn.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
 
     app_timer_init();
 	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
@@ -1320,7 +1317,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     APP_ERROR_CHECK(err_code);
 
     // Initialize SoftDevice.
-    BtAppStackInit(g_BtAppData.AppDevice.MaxMtu, pCfg->CentLinkCount, pCfg->PeriLinkCount,
+    BtAppStackInit(g_BtAppData.AppDevice.Conn.MaxMtu, pCfg->CentLinkCount, pCfg->PeriLinkCount,
     				pCfg->Role & BTAPP_ROLE_PERIPHERAL);
     				//pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND);
 //    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
@@ -1379,7 +1376,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
 
-    if (g_BtAppData.AppDevice.Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_BROADCASTER))
+    if (g_BtAppData.AppDevice.Conn.Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_BROADCASTER))
     {
         if (BtAppAdvInit(pCfg) == false)
         {
@@ -1388,7 +1385,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
         err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, g_BtAppData.AdvHdl, GetValidTxPower(pCfg->TxPower));
         APP_ERROR_CHECK(err_code);
-       // BtGapInit(g_BtAppData.AppDevice.Role);
+       // BtGapInit(g_BtAppData.AppDevice.Conn.Role);
     }
     else
     {
@@ -1420,7 +1417,7 @@ void BtAppRun()
 	//g_BleAppData.bAdvertising = false;
 	//g_BleAppData.State = BLEAPP_STATE_IDLE;
 
-	if (g_BtAppData.AppDevice.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))// != BLEAPP_ROLE_CENTRAL)
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))// != BLEAPP_ROLE_CENTRAL)
 	{
 		BtAdvStart();//BLEAPP_ADVMODE_FAST);
 	}

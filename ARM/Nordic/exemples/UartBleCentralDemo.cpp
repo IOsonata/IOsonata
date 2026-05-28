@@ -210,7 +210,7 @@ static BtGapConnParams_t s_ConnParams = {
 };
 
 BtDev_t g_ConnectedDev = {
-	.ConnHdl = BT_CONN_HDL_INVALID,
+	.Conn = { .Hdl = BT_CONN_HDL_INVALID },
 };
 
 #ifndef NRFXLIB_SDC
@@ -292,7 +292,7 @@ void BleDevDiscovered(BtDev_t *pDev)
     		flag--;
     		// Enable Notify
         	//g_Uart.printf("Enable notify\r\n");
-        	uint32_t ec = BtAppEnableNotify(pDev->ConnHdl, pDev->Services[idx].characteristics[dcharidx].cccd_handle);
+        	uint32_t ec = BtAppEnableNotify(pDev->Conn.Hdl, pDev->Services[idx].characteristics[dcharidx].cccd_handle);
 
         	g_BleRxCharHdl = pDev->Services[idx].characteristics[dcharidx].characteristic.handle_value;
 #ifdef DEBUG_PRINT
@@ -360,7 +360,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 #if 0
     	case BLE_GAP_EVT_CONNECTED:
     		{
-				g_ConnectedDev.ConnHdl = p_gap_evt->conn_handle;
+				g_ConnectedDev.Conn.Hdl = p_gap_evt->conn_handle;
 				BtAppDiscoverDevice(&g_ConnectedDev);
     		}
     		break;
@@ -424,7 +424,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
-	g_ConnectedDev.ConnHdl = ConnHdl;
+	g_ConnectedDev.Conn.Hdl = ConnHdl;
 	g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
 
 	//g_Uart.printf("This device's Role = %s\r\n", s_BleAppCfg.Role == BT_GAP_ROLE_CENTRAL ? "Central" : "Peripheral");
@@ -510,9 +510,9 @@ void BleAppInitUserData()
 //	int l = g_Uart.Rx(buff, PACKET_SIZE);
 //	if (l > 0)
 //	{
-//		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
+//		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 //		{
-//			BleAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, l);
+//			BleAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, buff, l);
 //			g_Uart.Tx(buff, l);
 //		}
 //	}
@@ -528,9 +528,9 @@ void BleTxSchedHandler(uint32_t Evt, void *pCtx)
 	if (p !=NULL)
 	{
 #ifndef NRFXLIB_SDC
-		if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
+		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
 		{
-			BtAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, p, len);
+			BtAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, p, len);
 		}
 
 		// Schedule this func again if g_UartRx2BleFifo is not empty
