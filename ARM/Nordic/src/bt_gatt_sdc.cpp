@@ -57,8 +57,8 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 	//		return false;
 	//	}
 
-	memcpy(pChar->Runtime.pValue, pData, Len);
-	pChar->Runtime.ValueLen = Len;
+	memcpy(pChar->pValue, pData, Len);
+	pChar->ValueLen = Len;
 
 	if (isBtGattCharNotifyEnabled(pChar))
 	{
@@ -74,7 +74,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 
 		l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF;
 
-		l2pdu->Att.HandleValueNtf.ValHdl = pChar->Runtime.ValHdl;
+		l2pdu->Att.HandleValueNtf.ValHdl = pChar->ValHdl;
 		memcpy(l2pdu->Att.HandleValueNtf.Data, pData, Len);
 		l2pdu->Hdr.Len = sizeof(BtAttHandleValueNtf_t) + Len;
 		acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);

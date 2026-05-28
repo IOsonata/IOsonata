@@ -150,7 +150,7 @@ void LedCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 void ButtonCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 {
 	// Peer subscribed (bEnable == true) or unsubscribed (false).
-	// The stack already records subscription state on pChar->Runtime.bNotify;
+	// The stack already records subscription state on pChar->bNotify;
 	// this callback is the place to start or stop pushing values.
 	(void)pChar;
 	(void)bEnable;

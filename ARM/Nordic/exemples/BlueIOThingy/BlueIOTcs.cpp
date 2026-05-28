@@ -66,11 +66,10 @@ const ble_tcs_fw_version_t s_ThingyVersion {
 };
 
 BtGattChar_t g_ConfChars[] = {
-	// FW Version - read-only static value served directly from .rodata
+	// FW Version - read-only; value pushed into the DB after registration
 	BT_CHAR(BLE_UUID_TCS_FW_VERSION_CHAR, sizeof(s_ThingyVersion),
 	        BT_GATT_CHAR_PROP_READ,
-	        NULL,
-	        .pStaticVal = &s_ThingyVersion),
+	        NULL),
 };
 
 /// TCS instance
@@ -86,6 +85,7 @@ BtGattSrvc_t *GetConfSrvcInstance()
 uint32_t ConfSrvcInit()
 {
 	BtGattSrvcAdd(&g_ConfSrvc);
+	BtGattCharSetValue(&g_ConfChars[0], (void*)&s_ThingyVersion, sizeof(s_ThingyVersion));
 	return 0;
 }
 

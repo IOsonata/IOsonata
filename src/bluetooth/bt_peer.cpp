@@ -56,6 +56,13 @@ SOFTWARE.
 alignas(4) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_PEER_POOL_DEFAULT_COUNT)];
 static BtPeerPoolHdr_t *s_pPeerPool = nullptr;
 
+// Long-write reassembly pool. The app provides one big block via
+// BtAppCfg_t.pLongWrPoolMem; the library splits it equally across peer
+// slots. BtPeerAlloc re-applies the slice pointer on each allocation
+// (so reset-on-free doesn't lose the slot identity).
+static uint8_t *s_pLongWrPool   = nullptr;
+static size_t   s_LongWrPerPeer = 0;
+
 static inline BtDevice_t * PeerSlots(void)
 {
 	return s_pPeerPool ? (BtDevice_t*)(s_pPeerPool + 1) : nullptr;
@@ -114,6 +121,35 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 	return true;
 }
 
+bool BtPeerInitLongWrite(uint8_t *pMem, size_t MemSize)
+{
+	if (s_pPeerPool == nullptr)
+	{
+		// BtPeerInit must run first; we need to know the slot count to
+		// partition the pool.
+		return false;
+	}
+
+	if (pMem == nullptr || MemSize == 0)
+	{
+		// Explicit "no long-write pool" - valid, peers keep pLongWrBuff == NULL.
+		s_pLongWrPool   = nullptr;
+		s_LongWrPerPeer = 0;
+		return true;
+	}
+
+	size_t per_peer = MemSize / s_pPeerPool->Count;
+	if (per_peer == 0)
+	{
+		// Pool too small to give every slot at least one byte.
+		return false;
+	}
+
+	s_pLongWrPool   = pMem;
+	s_LongWrPerPeer = per_peer;
+	return true;
+}
+
 uint16_t BtPeerCount(void)
 {
 	return s_pPeerPool ? s_pPeerPool->Count : 0;
@@ -144,6 +180,16 @@ BtDevice_t * BtPeerAlloc(uint16_t ConnHdl)
 			memset(p, 0, sizeof(*p));
 			p->ConnHdl  = ConnHdl;
 			p->bIsLocal = false;
+
+			// Re-apply the per-peer long-write slice; the memset just
+			// cleared it. Slot index is the position in the pool, so the
+			// same physical slice is re-assigned every alloc/free cycle.
+			if (s_pLongWrPool != nullptr)
+			{
+				p->pLongWrBuff    = s_pLongWrPool + i * s_LongWrPerPeer;
+				p->LongWrBuffSize = (uint16_t)s_LongWrPerPeer;
+			}
+
 			return p;
 		}
 	}

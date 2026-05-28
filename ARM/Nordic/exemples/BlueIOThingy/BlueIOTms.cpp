@@ -299,7 +299,7 @@ void ImuQuaternionCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 
 void ImuQuatDataSend(long Quat[4])
 {
-	if (g_ImuChars[IMUCHAR_IDX_QUAT].Runtime.bNotify == false)
+	if (g_ImuChars[IMUCHAR_IDX_QUAT].bNotify == false)
 		return;
 
 	if (isConnected() == false)

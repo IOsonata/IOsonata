@@ -147,9 +147,7 @@ uint8_t g_LWrBuffer[512];
 /// Service definition
 BtGattSrvc_t g_BlePdmSrvc = BT_SRVC_CUSTOM(BLE_PDM_UUID_BASE,
                                            BLE_PDM_UUID_SERVICE,
-                                           g_PdmChars,
-                                           .pLongWrBuff    = g_LWrBuffer,
-                                           .LongWrBuffSize = sizeof(g_LWrBuffer));
+                                           g_PdmChars);
 
 const BtAppDevInfo_t s_BlePdmDevDesc = {
 	MODEL_NAME,       		// Model name
@@ -189,6 +187,8 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
 	.MaxMtu = MAX_MTU,
+	.pLongWrPoolMem = g_LWrBuffer,		// Long-write reassembly pool (split across peer slots)
+	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
 };
 
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);

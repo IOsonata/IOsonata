@@ -94,6 +94,8 @@ typedef struct __Bt_Device {
 	uint16_t		Appearance;					//!< GAP appearance value
 	uint16_t		ConnHdl;					//!< Active link handle (BT_CONN_HDL_INVALID if none)
 	uint16_t		MaxMtu;						//!< Negotiated MTU
+	uint8_t			*pLongWrBuff;				//!< Per-peer long-write reassembly buffer slice (NULL if pool not configured)
+	uint16_t		LongWrBuffSize;				//!< Size of pLongWrBuff slice in bytes
 	uint16_t		VendorId;					//!< PnP vendor ID
 	uint16_t		ProductId;					//!< PnP product ID
 	uint16_t		ProductVer;					//!< PnP product version

@@ -88,7 +88,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 //	if (pSrvc->pCharArray[Idx].bNotify == false)
 //		return NRF_ERROR_INVALID_STATE;
 
-	if (pChar->Runtime.bNotify == false)
+	if (pChar->bNotify == false)
 	{
 		return false;
 	}
@@ -97,7 +97,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 
     memset(&params, 0, sizeof(params));
     params.type = BLE_GATT_HVX_NOTIFICATION;
-    params.handle = pChar->Runtime.ValHdl;//pSrvc->pCharArray[Idx].Runtime.ValHdl;//.value_handle;
+    params.handle = pChar->ValHdl;//pSrvc->pCharArray[Idx].ValHdl;//.value_handle;
     params.p_data = (uint8_t*)pVal;
     params.p_len = (uint16_t*)&Len;
 
@@ -118,7 +118,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
     value.p_value = (uint8_t*)pVal;
 
     uint32_t err_code = sd_ble_gatts_value_set(s_ConnHandle,
-    										   pChar->Runtime.ValHdl,//.value_handle,
+    										   pChar->ValHdl,//.value_handle,
 											   &value);
     return err_code == NRF_SUCCESS;
 }
@@ -154,8 +154,8 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
         	s_ConnHandle = BLE_CONN_HANDLE_INVALID;
         	for (int i = 0; i < pSrvc->NbChar; i++)
         	{
-        		pSrvc->pCharArray[i].Runtime.bNotify = false;
-        		pSrvc->pCharArray[i].Runtime.bIndic  = false;
+        		pSrvc->pCharArray[i].bNotify = false;
+        		pSrvc->pCharArray[i].bIndic  = false;
         	}
             break;
 
@@ -173,7 +173,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 						//g_Uart.printf("Long Write\r\n");
 						GATLWRHDR *hdr = (GATLWRHDR *)pSrvc->pLongWrBuff;
 					    uint8_t *p = (uint8_t*)pSrvc->pLongWrBuff + sizeof(GATLWRHDR);
-						if (hdr->Handle == pSrvc->pCharArray[i].Runtime.ValHdl)//.value_handle)
+						if (hdr->Handle == pSrvc->pCharArray[i].ValHdl)//.value_handle)
 					    {
 #if 1
 							GatherLongWrBuff(hdr);
@@ -198,25 +198,25 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 					}
 					else
 					{
-						if ((p_evt_write->handle == pSrvc->pCharArray[i].Runtime.CccdHdl) && //cccd_handle) &&
+						if ((p_evt_write->handle == pSrvc->pCharArray[i].CccdHdl) && //cccd_handle) &&
 							(p_evt_write->len == 2))
 						{
 							//g_Uart.printf("CCCD\r\n");
 							if (ble_srv_is_notification_enabled(p_evt_write->data))
 							{
-								pSrvc->pCharArray[i].Runtime.bNotify = true;
+								pSrvc->pCharArray[i].bNotify = true;
 							}
 							else
 							{
-								pSrvc->pCharArray[i].Runtime.bNotify = false;
+								pSrvc->pCharArray[i].bNotify = false;
 							}
 							// Set notify callback
 							if (pSrvc->pCharArray[i].SetNotifCB)
 							{
-								pSrvc->pCharArray[i].SetNotifCB(&pSrvc->pCharArray[i], pSrvc->pCharArray[i].Runtime.bNotify);
+								pSrvc->pCharArray[i].SetNotifCB(&pSrvc->pCharArray[i], pSrvc->pCharArray[i].bNotify);
 							}
 						}
-						else if ((p_evt_write->handle == pSrvc->pCharArray[i].Runtime.ValHdl) &&//.value_handle) &&
+						else if ((p_evt_write->handle == pSrvc->pCharArray[i].ValHdl) &&//.value_handle) &&
 								 (pSrvc->pCharArray[i].WrCB != NULL))
 						{
 							//g_Uart.printf("Write value handle\r\n");
@@ -267,7 +267,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 				{
 					for (int i = 0; i < pSrvc->NbChar; i++)
 					{
-						if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].Runtime.ValHdl &&
+						if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].ValHdl &&
 							pSrvc->pCharArray[i].TxCompleteCB != NULL)
 						{
 							pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
@@ -423,17 +423,17 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
     attr_char_value.p_attr_md    = &attr_md;
     attr_char_value.init_offs    = 0;
     attr_char_value.max_len      = pChar->MaxDataLen;//CharVal.MaxLen;
-    attr_char_value.init_len     = pChar->Runtime.ValueLen;
-    attr_char_value.p_value      = (uint8_t*)pChar->Runtime.pValue;
+    attr_char_value.init_len     = pChar->ValueLen;
+    attr_char_value.p_value      = (uint8_t*)pChar->pValue;
 
     ble_gatts_char_handles_t hdl;
     uint32_t res = sd_ble_gatts_characteristic_add(pSrvc->Hdl, &char_md, &attr_char_value, &hdl);
-    pChar->Runtime.Hdl     = hdl.value_handle;
-    pChar->Runtime.ValHdl  = hdl.value_handle;
-    pChar->Runtime.DescHdl = hdl.user_desc_handle;
-    pChar->Runtime.CccdHdl = hdl.cccd_handle;
-    pChar->Runtime.SccdHdl = hdl.sccd_handle;
-    pChar->Runtime.pSrvc   = pSrvc;
+    pChar->Hdl     = hdl.value_handle;
+    pChar->ValHdl  = hdl.value_handle;
+    pChar->DescHdl = hdl.user_desc_handle;
+    pChar->CccdHdl = hdl.cccd_handle;
+    pChar->SccdHdl = hdl.sccd_handle;
+    pChar->pSrvc   = pSrvc;
 
     return res;
 }
@@ -484,8 +484,8 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
         {
             return false;
         }
-        pSrvc->pCharArray[i].Runtime.bNotify = false;
-        pSrvc->pCharArray[i].Runtime.bIndic  = false;
+        pSrvc->pCharArray[i].bNotify = false;
+        pSrvc->pCharArray[i].bIndic  = false;
     }
 
     BtGattInsertSrvcList(pSrvc);

@@ -110,6 +110,15 @@ extern "C" {
 // library and app.
 bool         BtPeerInit(uint8_t *pMem, size_t MemSize);
 
+// Optional companion init: set up the per-peer long-write reassembly
+// pool. Library splits MemSize equally across peer slots; each peer's
+// pLongWrBuff/LongWrBuffSize fields point to its slice. Apps that never
+// long-write call this with {NULL, 0} or skip the call - peers then have
+// pLongWrBuff == NULL and the port's Prepare/Execute Write paths NACK.
+// Must be called AFTER BtPeerInit; returns false if BtPeerInit hasn't run
+// or if MemSize / peer count is zero.
+bool         BtPeerInitLongWrite(uint8_t *pMem, size_t MemSize);
+
 // Pool ops. Each returns NULL when no free slot is available (Alloc) or
 // no matching record exists (FindByHdl, GetActive).
 BtDevice_t * BtPeerAlloc(uint16_t ConnHdl);

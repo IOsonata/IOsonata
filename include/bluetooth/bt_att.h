@@ -504,42 +504,27 @@ struct __Bt_Att_DB_Entry {
 	uint8_t Data[1];					//!< Variable length attribute data
 };
 
-// Runtime state filled in by the stack at BtGattSrvcAdd time and updated
-// during operation. Users do not initialize these fields and should not
-// modify them directly; reads from port code go through the Runtime path
-// (e.g. pChar->Runtime.ValHdl).
-typedef struct __Bt_Char_Runtime {
-	void *pValue;						//!< Backing storage for the value (allocated from ATT DB, or aliased to pStaticVal)
-	uint16_t ValueLen;					//!< Current length in bytes of data value
-	uint16_t Hdl;						//!< Characteristic handle
-	uint16_t ValHdl;					//!< Characteristic value handle
-	uint16_t DescHdl;					//!< User description descriptor handle
-	uint16_t CccdHdl;					//!< Client characteristic configuration descriptor handle
-	uint16_t SccdHdl;					//!< Server characteristic configuration descriptor handle
-	bool bNotify;						//!< Notification subscription state
-	bool bIndic;						//!< Indication subscription state
-	uint8_t BaseUuidIdx;				//!< Index of base UUID used for this characteristic
-	BtSrvc_t *pSrvc;					//!< Pointer to the service instance which this char belongs to
-} BtCharRuntime_t;
-
 struct __Bt_Characteristic {
-	// --- User-supplied (set at declaration time) ---
 	uint16_t Uuid;						//!< Characteristic UUID
 	uint16_t MaxDataLen;				//!< Characteristic max data length in bytes
-	uint32_t Property;					//!< Property bits, OR of BT_GATT_CHAR_PROP_* (Core spec Vol 3 Part G 3.3.1.1)
-	const char *pDesc;					//!< UTF-8 description string (NULL for none)
-	BtCharWrCb_t WrCB;					//!< Callback on peer write (NULL if not handled)
-	BtCharSetNotifCb_t SetNotifCB;		//!< Callback on subscribe/unsubscribe (NULL if not interested)
-	BtCharSetIndCb_t SetIndCB;			//!< Callback on indication subscribe/unsubscribe (NULL if not interested)
-	BtCharTxComplete_t TxCompleteCB;	//!< Callback after a notification or indication has been transmitted
-	const void *pStaticVal;				//!< Optional pointer to user-owned read-only static value (.rodata).
-										//!< When non-NULL the ATT layer serves reads from this memory and
-										//!< no ATT DB allocation happens for the value. Properties must be
-										//!< read-only; mixing with WRITE / NOTIFY / INDICATE is rejected at
-										//!< BtGattSrvcAdd time.
-
-	// --- Runtime state (managed by the stack; do not modify) ---
-	BtCharRuntime_t Runtime;
+	uint32_t Property;              	//!< char properties defined by orable BT_GATT_CHAR_PROP_...
+	const char *pDesc;                  //!< char UTF-8 description string
+	BtCharWrCb_t WrCB;              	//!< Callback for write char, set to NULL for read char
+	BtCharSetNotifCb_t SetNotifCB;		//!< Callback on set notification
+	BtCharSetIndCb_t SetIndCB;			//!< Callback on set indication
+	BtCharTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
+	void *pValue;						//!< Characteristic data value
+	uint16_t ValueLen;					//!< Current length in bytes of data value
+	// Bellow are private data. Do not modify
+	bool bNotify;                       //!< Notify enable flag for read characteristic
+	bool bIndic;						//!< Indication enable flag
+	uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
+	uint16_t Hdl;       				//!< char handle
+	uint16_t ValHdl;					//!< char value handle
+	uint16_t DescHdl;					//!< descriptor handle
+	uint16_t CccdHdl;					//!< client char configuration descriptor handle
+	uint16_t SccdHdl;					//!< Server char configuration value
+	BtSrvc_t *pSrvc;					//!< Pointer to the service instance which this char belongs to.
 };
 
 /*

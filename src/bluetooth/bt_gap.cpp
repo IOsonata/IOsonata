@@ -158,7 +158,7 @@ __attribute__((weak)) void BtGapSetDevName(const char *pName)
 
 __attribute__((weak)) const char *BtGapGetDevName()
 {
-	return (const char*)s_BtGapChar[0].Runtime.pValue;
+	return (const char*)s_BtGapChar[0].pValue;
 }
 
 __attribute__((weak)) void BtGapSetAppearance(uint16_t Val)

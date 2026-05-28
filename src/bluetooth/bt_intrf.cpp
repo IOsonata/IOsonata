@@ -315,12 +315,12 @@ void BtIntrfReset(DevIntrf_t *pDevIntrf)
  */
 void BtIntrfTxComplete(BtGattChar_t *pChar, int CharIdx)
 {
-    BtIntrfNotify((BtDevIntrf_t*)pChar->Runtime.pSrvc->pContext);
+    BtIntrfNotify((BtDevIntrf_t*)pChar->pSrvc->pContext);
 }
 
 void BtIntrfRxWrCB(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
-	BtDevIntrf_t *intrf = (BtDevIntrf_t*)pChar->Runtime.pSrvc->pContext;
+	BtDevIntrf_t *intrf = (BtDevIntrf_t*)pChar->pSrvc->pContext;
 	BtIntrfPkt_t *pkt;
     //int maxlen = intrf->hTxFifo->BlkSize - sizeof(pkt->Len);
 

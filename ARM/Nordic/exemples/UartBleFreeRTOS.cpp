@@ -114,9 +114,7 @@ uint8_t g_LWrBuffer[512];
 
 BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLUEIO_UUID_BASE,
                                             BLUEIO_UUID_UART_SERVICE,
-                                            g_UartChars,
-                                            .pLongWrBuff    = g_LWrBuffer,
-                                            .LongWrBuffSize = sizeof(g_LWrBuffer));
+                                            g_UartChars);
 
 const BtAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           // Model name
@@ -155,6 +153,8 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
+	.pLongWrPoolMem = g_LWrBuffer,		// Long-write reassembly pool (split across peer slots)
+	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
 };
 
 int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);

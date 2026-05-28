@@ -554,7 +554,7 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	// aci_gatt_update_char_value pushes the value to the attribute table;
 	// if the CCCD has notifications enabled the stack sends the notify
 	// PDU automatically.
-	uint8_t ret = aci_gatt_update_char_value(pChar->Runtime.Hdl, pChar->Runtime.ValHdl,
+	uint8_t ret = aci_gatt_update_char_value(pChar->Hdl, pChar->ValHdl,
 	                                         0, (uint8_t)DataLen, pData);
 	return ret == BLE_STATUS_SUCCESS;
 }

@@ -347,10 +347,10 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
 		return false;
 
-	if (pChar->Runtime.bNotify == false)
+	if (pChar->bNotify == false)
 		return false;
 
-	if (pChar->Runtime.ValHdl == BT_ATT_HANDLE_INVALID)
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
 		return false;
 
 	if (pData == nullptr)
@@ -361,7 +361,7 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	ble_gatts_hvx_params_t params;
 	memset(&params, 0, sizeof(params));
 	params.type = BLE_GATT_HVX_NOTIFICATION;
-	params.handle = pChar->Runtime.ValHdl;
+	params.handle = pChar->ValHdl;
 	params.p_data = pData;
 	params.p_len = &DataLen;
 

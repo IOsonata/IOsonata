@@ -94,8 +94,6 @@ const BleSrvcCfg_t s_NUSSrvcCfg = {
 	.UuidSrvc = BLE_UUID_NUS_SERVICE,		// Service UUID
 	.NbChar = s_NbNUSChar,					// Total number of characteristics for the service
 	.pCharArray = g_NUSChars,				// Pointer a an array of characteristic
-	.pLongWrBuff = NULL,//g_LWrBuffer,		// pointer to user long write buffer
-	.LongWrBuffSize = 0,//sizeof(g_LWrBuffer),	// long write buffer size
 };
 
 BleSrvc_t g_NUSBleSrvc;
@@ -150,8 +148,6 @@ const BleSrvcCfg_t s_UartSrvcCfg = {
 	.UuidSrvc = BLUEIO_UUID_UART_SERVICE,	// Service UUID
 	.NbChar = s_NbUartChar,					// Total number of characteristics for the service
 	.pCharArray = g_UartChars,				// Pointer a an array of characteristic
-	.pLongWrBuff = NULL,//g_LWrBuffer,		// pointer to user long write buffer
-	.LongWrBuffSize = 0,//sizeof(g_LWrBuffer),	// long write buffer size
 };
 
 BleSrvc_t g_UartBleSrvc;
@@ -207,8 +203,6 @@ const BleSrvcCfg_t s_BlueIOCtrlSrvcCfg = {
 	.UuidSrvc = BLUEIO_UUID_CTRL_SERVICE,			// Service UUID
 	.NbChar = s_NbBlueIOCtrlChar,				// Total number of characteristics for the service
 	.pCharArray = g_BlueIOCtrlChars,			// Pointer a an array of characteristic
-	.pLongWrBuff = g_LWrBuffer,				// pointer to user long write buffer
-	.LongWrBuffSize = sizeof(g_LWrBuffer),	// long write buffer size
 };
 
 BleSrvc_t g_BlueIOCtrlSrvc;
@@ -275,8 +269,6 @@ const BleSrvcCfg_t s_BlueIOIoSrvcCfg = {
 	.UuidSrvc = BLUEIO_UUID_IO_SERVICE,			// Service UUID
 	.NbChar = s_NbBlueIOCtrlChar,				// Total number of characteristics for the service
 	.pCharArray = g_BlueIOCtrlChars,			// Pointer a an array of characteristic
-	.pLongWrBuff = NULL,				// pointer to user long write buffer
-	.LongWrBuffSize = 0,	// long write buffer size
 };
 
 BleSrvc_t g_BlueIOIoSrvc;

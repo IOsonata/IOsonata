@@ -115,9 +115,7 @@ uint8_t g_LWrBuffer[512];
 /// Service definition
 BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLE_UART_UUID_BASE,
                                             BLE_UART_UUID_SERVICE,
-                                            g_UartChars,
-                                            .pLongWrBuff    = g_LWrBuffer,
-                                            .LongWrBuffSize = sizeof(g_LWrBuffer));
+                                            g_UartChars);
 
 const BtAppDevInfo_t s_UartBleDevDesc = {
 	MODEL_NAME,       		// Model name
@@ -158,6 +156,8 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
 	.TxPower = 0,						// Tx power
 	// .SDEvtHandler removed for compatibility with older BtAppCfg_t definitions
+	.pLongWrPoolMem = g_LWrBuffer,		// Long-write reassembly pool (split across peer slots)
+	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
 };
 
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);

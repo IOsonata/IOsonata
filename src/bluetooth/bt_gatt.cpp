@@ -63,35 +63,27 @@ void BtGattInsertSrvcList(BtGattSrvc_t * const pSrvc)
 
 __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	if (pChar->Runtime.ValHdl == BT_ATT_HANDLE_INVALID)
-	{
-		return false;
-	}
-
-	// Static-backed characteristics serve reads directly from user .rodata
-	// and reject runtime updates. Callers that need to push values should
-	// use a DB-backed characteristic (pStaticVal left NULL at declaration).
-	if (pChar->pStaticVal != nullptr)
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
 	{
 		return false;
 	}
 
 	int l = min((uint16_t)Len, pChar->MaxDataLen);
 
-	memcpy(pChar->Runtime.pValue, pVal, l);
-	pChar->Runtime.ValueLen = l;
+	memcpy(pChar->pValue, pVal, l);
+	pChar->ValueLen = l;
 
 	return true;
 }
 
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 {
-	if (pChar->Runtime.CccdHdl == BT_ATT_HANDLE_INVALID)
+	if (pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
 	{
 		return false;
 	}
 
-	return pChar->Runtime.bNotify;
+	return pChar->bNotify;
 }
 
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
@@ -111,26 +103,6 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 	pSrvc->Uuid = { baseidx, BT_UUID_TYPE_16, pSrvc->UuidSrvc };
 	pSrvc->Hdl  = BT_ATT_HANDLE_INVALID;
-
-	// Validate every static-backed characteristic up front. A pStaticVal
-	// points to read-only user memory, so mixing it with WRITE / NOTIFY /
-	// INDICATE makes no sense; fail loudly before allocating any DB entry.
-	for (int i = 0; i < pSrvc->NbChar; i++)
-	{
-		BtGattChar_t *c = &pSrvc->pCharArray[i];
-		if (c->pStaticVal == nullptr)
-		{
-			continue;
-		}
-		if (c->Property & (BT_GATT_CHAR_PROP_WRITE
-		                  | BT_GATT_CHAR_PROP_WRITE_WORESP
-		                  | BT_GATT_CHAR_PROP_NOTIFY
-		                  | BT_GATT_CHAR_PROP_INDICATE
-		                  | BT_GATT_CHAR_PROP_AUTH_SIGNED))
-		{
-			return false;
-		}
-	}
 
 	BtUuid16_t typeuuid = {0, BT_UUID_TYPE_16, BT_UUID_DECLARATIONS_PRIMARY_SERVICE };
 
@@ -178,24 +150,16 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		chardec->Uuid  = {baseidx, BT_UUID_TYPE_16, c->Uuid};
 		chardec->pChar = c;
 
-		c->Runtime.ValHdl      = BT_ATT_HANDLE_INVALID;
-		c->Runtime.DescHdl     = BT_ATT_HANDLE_INVALID;
-		c->Runtime.CccdHdl     = BT_ATT_HANDLE_INVALID;
-		c->Runtime.SccdHdl     = BT_ATT_HANDLE_INVALID;
-		c->Runtime.pSrvc       = pSrvc;
-		c->Runtime.BaseUuidIdx = pSrvc->Uuid.BaseIdx;
+		c->ValHdl      = BT_ATT_HANDLE_INVALID;
+		c->DescHdl     = BT_ATT_HANDLE_INVALID;
+		c->CccdHdl     = BT_ATT_HANDLE_INVALID;
+		c->SccdHdl     = BT_ATT_HANDLE_INVALID;
+		c->pSrvc       = pSrvc;
+		c->BaseUuidIdx = pSrvc->Uuid.BaseIdx;
 
-		// Characteristic value. For static-backed chars allocate only the
-		// header (handle slot + back-pointer); the actual bytes stay in the
-		// user-supplied .rodata pointed to by pStaticVal. For DB-backed
-		// chars allocate header + MaxDataLen bytes as before.
+		// Characteristic value
 		typeuuid = {baseidx, BT_UUID_TYPE_16, c->Uuid };
-		size_t valsize = sizeof(BtAttCharValue_t);
-		if (c->pStaticVal == nullptr)
-		{
-			valsize += c->MaxDataLen;
-		}
-		entry = BtAttDBAddEntry(&typeuuid, valsize);
+		entry = BtAttDBAddEntry(&typeuuid, c->MaxDataLen + sizeof(BtAttCharValue_t));
 		if (entry == nullptr)
 		{
 			pSrvc->Hdl = BT_ATT_HANDLE_INVALID;
@@ -204,21 +168,11 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		BtAttCharValue_t *charval = (BtAttCharValue_t*)entry->Data;
 
 		charval->pChar = c;
-		c->Runtime.ValHdl = entry->Hdl;
+		c->ValHdl = entry->Hdl;
+		c->pValue = charval->Data;
 
-		if (c->pStaticVal != nullptr)
-		{
-			c->Runtime.pValue   = (void*)c->pStaticVal;
-			c->Runtime.ValueLen = c->MaxDataLen;
-		}
-		else
-		{
-			c->Runtime.pValue   = charval->Data;
-			c->Runtime.ValueLen = 0;
-		}
-
-		c->Runtime.bNotify = false;
-		c->Runtime.bIndic  = false;
+		c->bNotify = false;
+		c->bIndic  = false;
 		if (c->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))
 		{
 			// Characteristic Descriptor CCC
@@ -235,7 +189,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 			ccc->pChar  = c;
 			ccc->CccVal = 0;
-			c->Runtime.CccdHdl = entry->Hdl;
+			c->CccdHdl = entry->Hdl;
 		}
 
 		if (c->pDesc)
@@ -253,7 +207,7 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 			BtDescCharUserDesc_t *dcud = (BtDescCharUserDesc_t*)entry->Data;
 
 			dcud->pChar = c;
-			c->Runtime.DescHdl = entry->Hdl;
+			c->DescHdl = entry->Hdl;
 		}
 	}
 
@@ -266,12 +220,12 @@ __attribute__((weak)) void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 {
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
-		if (pSrvc->pCharArray[i].Runtime.CccdHdl != BT_ATT_HANDLE_INVALID)
+		if (pSrvc->pCharArray[i].CccdHdl != BT_ATT_HANDLE_INVALID)
 		{
-			pSrvc->pCharArray[i].Runtime.bNotify = false;
-			pSrvc->pCharArray[i].Runtime.bIndic  = false;
+			pSrvc->pCharArray[i].bNotify = false;
+			pSrvc->pCharArray[i].bIndic  = false;
 
-			BtAttDBEntry_t *entry = BtAttDBFindHandle(pSrvc->pCharArray[i].Runtime.CccdHdl);
+			BtAttDBEntry_t *entry = BtAttDBFindHandle(pSrvc->pCharArray[i].CccdHdl);
 			if (entry)
 			{
 				BtDescClientCharConfig_t *p = (BtDescClientCharConfig_t*)entry->Data;
@@ -326,7 +280,7 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 			{
 				continue;
 			}
-			if (c->Runtime.bNotify == false && c->Runtime.bIndic == false)
+			if (c->bNotify == false && c->bIndic == false)
 			{
 				continue;
 			}

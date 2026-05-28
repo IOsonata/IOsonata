@@ -202,7 +202,7 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 // aggregate initializer for the corresponding stack struct; no statements,
 // no helper functions, no code generation. Callers fill in user-supplied
 // fields by name; the variadic tail accepts any additional designated
-// initializers (e.g. .WrCB, .SetNotifCB, .pStaticVal).
+// initializers (e.g. .WrCB, .SetNotifCB).
 //
 // Spec terms used:
 //   - Property bits are BT_GATT_CHAR_PROP_* from this header, matching the
@@ -226,7 +226,7 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 //   // For a read-only static-backed characteristic:
 //   //   BtGattChar_t s_FwVer = BT_CHAR(FW_VER_UUID, sizeof(s_FwVersion),
 //   //                                  BT_GATT_CHAR_PROP_READ, "FW Version",
-//   //                                  .pStaticVal = &s_FwVersion);
+//   //                                  .WrCB = MyWriteCb);
 
 #define BT_CHAR(uuid, maxlen, props, desc, ...) \
 	{ .Uuid = (uuid), .MaxDataLen = (maxlen), .Property = (props), \
