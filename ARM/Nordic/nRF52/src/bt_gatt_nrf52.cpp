@@ -186,7 +186,7 @@ void GatherLongWrBuff(GATLWRHDR *pHdr)
 
 void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const pCtx)
 {
-	ble_evt_t *pBleEvt = (ble_evt_t *)Evt;
+	ble_evt_t *pBleEvt = (ble_evt_t *)pCtx;
 
     switch (pBleEvt->header.evt_id)
     {

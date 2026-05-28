@@ -289,7 +289,7 @@ void MicCharSetNotify(BtGattChar_t *pBleSvc, bool bEnable)
 void BtPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
 	/*
-	ble_evt_t *p_ble_evt = (ble_evt_t*)Evt;
+	ble_evt_t *p_ble_evt = (ble_evt_t*)pCtx;
 
     switch (p_ble_evt->header.evt_id)
     {

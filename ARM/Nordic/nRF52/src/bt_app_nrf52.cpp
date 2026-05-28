@@ -869,12 +869,12 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
             	break;
 #endif
         }
-    	BtAppCentralEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
+    	BtAppCentralEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);
     }
     if (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)
     {
-    	BtGattEvtHandler((uint32_t)p_ble_evt, p_context);
-    	BtAppPeriphEvtHandler((uint32_t)p_ble_evt, (void*)p_ble_evt);
+    	BtGattEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);
+    	BtAppPeriphEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);
     }
 #endif
 }

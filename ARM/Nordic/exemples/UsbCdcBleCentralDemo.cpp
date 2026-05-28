@@ -660,7 +660,7 @@ void BleDevDiscovered(BtDev_t *pDev)
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 {
     ret_code_t err_code;
-	ble_evt_t * p_ble_evt = (ble_evt_t*)Evt;
+	ble_evt_t * p_ble_evt = (ble_evt_t*)pCtx;
     const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
     const ble_common_evt_t *p_common_evt = &p_ble_evt->evt.common_evt;
     const ble_gattc_evt_t *p_gattc_evt = &p_ble_evt->evt.gattc_evt;
