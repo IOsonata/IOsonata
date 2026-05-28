@@ -186,25 +186,8 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 					    uint8_t *p = (uint8_t*)pLongWr + sizeof(GATLWRHDR);
 						if (hdr->Handle == pSrvc->pCharArray[i].ValHdl)//.value_handle)
 					    {
-#if 1
 							GatherLongWrBuff(hdr);
 							pSrvc->pCharArray[i].WrCB(&pSrvc->pCharArray[i], p, hdr->Offset, hdr->Len);
-#else
-							bool done = false;
-							GATLWRHDR hdr1;
-							uint8_t *p1 = p + hdr->Len;
-							memcpy(&hdr1, p1, sizeof(GATLWRHDR));
-
-							while (hdr1.Handle == hdr->Handle)
-							{
-								p1 += sizeof(GATLWRHDR);
-								memcpy(&p[hdr->Len], p1, pSrvc->LongWrBuffSize - hdr->Len - sizeof(GATLWRHDR));
-								hdr->Len += hdr1.Len;
-								p1 = p + hdr->Len;
-								memcpy(&hdr1, p1, sizeof(GATLWRHDR));
-							}
-							pSrvc->pCharArray[i].WrCB(pSrvc, p, hdr->Offset, hdr->Len);
-#endif
 					    }
 					}
 					else

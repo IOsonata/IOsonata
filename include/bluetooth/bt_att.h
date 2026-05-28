@@ -531,7 +531,7 @@ struct __Bt_Characteristic {
 
 /*
  * Bluetooth service descriptor. Holds both the user-supplied configuration
- * (UUID, char array, optional long-write buffer) and the stack-managed
+ * (UUID, char array) and the stack-managed
  * runtime state (assigned handle, list links). One declaration per service;
  * BtGattSrvcAdd() takes a single pointer to this struct.
  */
@@ -542,8 +542,6 @@ struct __Bt_Service {
 	uint16_t UuidSrvc;					//!< 16-bit service UUID
 	int NbChar;							//!< Number of characteristics in pCharArray
 	BtGattChar_t *pCharArray;			//!< Pointer to array of characteristics
-	uint8_t *pLongWrBuff;				//!< Optional long-write reassembly buffer (NULL if not used)
-	int LongWrBuffSize;					//!< Size in bytes of pLongWrBuff
 	BtSrvcAuthRqst_t AuthReqCB;			//!< Authorization request callback (NULL if not used)
 	void *pContext;						//!< Opaque pointer for the user (e.g. BtIntrf back-pointer)
 
