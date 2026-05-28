@@ -178,6 +178,7 @@ typedef struct __Bt_Gap_Connection {
 	uint16_t MaxMtu;			//!< Negotiated ATT MTU for this link
 	uint8_t *pLongWrBuff;		//!< Per-link long-write reassembly buffer (NULL if none)
 	uint16_t LongWrBuffSize;	//!< Size of pLongWrBuff in bytes
+	uint16_t LongWrLen;			//!< Bytes currently queued in pLongWrBuff (prepare-write queue fill)
 } BtGapConnection_t;
 
 typedef enum __Bt_Scan_Type {

@@ -39,6 +39,8 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_att.h"
+#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_peer.h"
 
 /******** For DEBUG ************/
 //#define UART_DEBUG_ENABLE
@@ -433,6 +435,63 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
 	return sizeof(BtAttErrorRsp_t) + 1;
 }
 
+// Execute a queued long write for one connection: walk the prepare queue,
+// compact consecutive chunks that target the same handle into one contiguous
+// value, then apply it through BtAttWriteValue (which fires the char WrCB once
+// with the full value, same as a normal write). Queue records are laid out as
+// { uint16 Hdl, uint16 Offset, uint16 Len, uint8 Data[Len] } in arrival order;
+// clients send chunks in ascending offset, so concatenation rebuilds the value.
+static void BtAttExecLongWrite(BtDevice_t *pConn)
+{
+	if (pConn == nullptr || pConn->Conn.pLongWrBuff == nullptr)
+	{
+		return;
+	}
+
+	uint8_t  *buf   = pConn->Conn.pLongWrBuff;
+	uint16_t  total = pConn->Conn.LongWrLen;
+	uint16_t  pos   = 0;
+
+	while (pos + 6 <= total)
+	{
+		uint16_t hdl, off, len;
+		memcpy(&hdl, buf + pos, 2);
+		memcpy(&off, buf + pos + 2, 2);
+		memcpy(&len, buf + pos + 4, 2);
+
+		// Pull any following same-handle chunks up against this chunk's data,
+		// dropping their 6-byte record headers, to form one contiguous value.
+		uint8_t  *dst    = buf + pos + 6 + len;
+		uint16_t  totLen = len;
+		uint16_t  next   = pos + 6 + len;
+
+		while (next + 6 <= total)
+		{
+			uint16_t nhdl, nlen;
+			memcpy(&nhdl, buf + next, 2);
+			if (nhdl != hdl)
+			{
+				break;
+			}
+			memcpy(&nlen, buf + next + 4, 2);
+			memmove(dst, buf + next + 6, nlen);
+			dst    += nlen;
+			totLen += nlen;
+			next   += 6 + nlen;
+		}
+
+		BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
+		if (entry != nullptr)
+		{
+			BtAttWriteValue(entry, off, buf + pos + 6, totLen);
+		}
+
+		pos = next;
+	}
+
+	pConn->Conn.LongWrLen = 0;
+}
+
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int ReqLen, BtAttReqRsp_t * const pRspAtt)
 {
 	uint32_t retval = 0;
@@ -820,6 +879,72 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:
+			{
+				BtAttPrepareWriteReq_t *req = &pReqAtt->PrepareWriteReq;
+				BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+
+				// Value bytes = total PDU - opcode(1) - handle(2) - offset(2).
+				int vlen = ReqLen - 5;
+				if (vlen < 0)
+				{
+					vlen = 0;
+				}
+
+				if (pConn == nullptr || pConn->Conn.pLongWrBuff == nullptr)
+				{
+					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ, BT_ATT_ERROR_PREPARE_QUE_FULL);
+					break;
+				}
+				if (BtAttDBFindHandle(req->Hdl) == nullptr)
+				{
+					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
+					break;
+				}
+
+				// Append a { Hdl, Offset, Len, Data } record to the per-link
+				// prepare queue. The 6-byte header keeps it self-describing so
+				// the execute step can walk and reassemble it.
+				uint16_t vl   = (uint16_t)vlen;
+				uint32_t need = 6 + (uint32_t)vl;
+				if ((uint32_t)pConn->Conn.LongWrLen + need > pConn->Conn.LongWrBuffSize)
+				{
+					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ, BT_ATT_ERROR_PREPARE_QUE_FULL);
+					break;
+				}
+
+				uint8_t *q = pConn->Conn.pLongWrBuff + pConn->Conn.LongWrLen;
+				memcpy(q,     &req->Hdl,    2);
+				memcpy(q + 2, &req->Offset, 2);
+				memcpy(q + 4, &vl,          2);
+				memcpy(q + 6, req->Data,    vl);
+				pConn->Conn.LongWrLen += (uint16_t)need;
+
+				// Echo the request back as the Prepare Write Response.
+				pRspAtt->OpCode               = BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP;
+				pRspAtt->PrepareWriteRsp.Hdl    = req->Hdl;
+				pRspAtt->PrepareWriteRsp.Offset = req->Offset;
+				memcpy(pRspAtt->PrepareWriteRsp.Data, req->Data, vl);
+				retval = 1 + 2 + 2 + vl;	// opcode + handle + offset + value
+			}
+			break;
+		case BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ:
+			{
+				BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+
+				if (pReqAtt->ExecuteWriteReq.Flag != 0)
+				{
+					// Execute: apply the queued writes, firing each char WrCB.
+					BtAttExecLongWrite(pConn);
+				}
+				else if (pConn != nullptr)
+				{
+					// Cancel: discard the queue without applying it.
+					pConn->Conn.LongWrLen = 0;
+				}
+
+				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_EXECUTE_WRITE_RSP;
+				retval = 1;	// opcode only
+			}
 			break;
 		case BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ:
 			{

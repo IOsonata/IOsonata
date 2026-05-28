@@ -1252,6 +1252,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 		return false;
 	}
 
+	// Split the long-write reassembly pool across the peer slots so each
+	// link gets its own buffer (per Conn.pLongWrBuff).
+	BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);
+
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
 	g_BtAppData.bExtAdv = pCfg->bExtAdv;

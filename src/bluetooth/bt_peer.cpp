@@ -57,6 +57,12 @@ SOFTWARE.
 alignas(4) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_PEER_POOL_DEFAULT_COUNT)];
 static BtPeerPoolHdr_t *s_pPeerPool = nullptr;
 
+// Long-write reassembly pool. Split evenly across the peer slots by
+// BtPeerLongWrInit; each slot's slice is re-assigned in BtPeerAlloc because
+// the slot is memset on every connect. NULL/0 means long-write is disabled.
+static uint8_t *s_pLongWrPool     = nullptr;
+static uint16_t s_LongWrSlotSize  = 0;
+
 static inline BtDevice_t * PeerSlots(void)
 {
 	return s_pPeerPool ? (BtDevice_t*)(s_pPeerPool + 1) : nullptr;
@@ -115,6 +121,25 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 	return true;
 }
 
+void BtPeerLongWrInit(uint8_t *pMem, size_t MemSize)
+{
+	if (pMem == nullptr || MemSize == 0 || s_pPeerPool == nullptr ||
+		s_pPeerPool->Count == 0)
+	{
+		// No pool, or called before BtPeerInit: disable long-write.
+		s_pLongWrPool    = nullptr;
+		s_LongWrSlotSize = 0;
+		return;
+	}
+
+	// Split the pool evenly across the peer slots. Each connected peer gets
+	// its own slice via BtPeerAlloc, so concurrent links never share a
+	// reassembly buffer. Any remainder (MemSize not divisible by Count) is
+	// left unused.
+	s_pLongWrPool    = pMem;
+	s_LongWrSlotSize = (uint16_t)(MemSize / s_pPeerPool->Count);
+}
+
 uint16_t BtPeerCount(void)
 {
 	return s_pPeerPool ? s_pPeerPool->Count : 0;
@@ -154,6 +179,13 @@ BtDevice_t * BtPeerAlloc(uint16_t ConnHdl)
 			memset(p, 0, sizeof(*p));
 			p->Conn.Hdl = ConnHdl;
 			p->bIsLocal = false;
+			// Re-attach this slot's long-write slice (the memset above
+			// cleared it). Slot i always maps to the same slice.
+			if (s_pLongWrPool != nullptr && s_LongWrSlotSize > 0)
+			{
+				p->Conn.pLongWrBuff    = s_pLongWrPool + (size_t)i * s_LongWrSlotSize;
+				p->Conn.LongWrBuffSize = s_LongWrSlotSize;
+			}
 			return p;
 		}
 	}

@@ -66,7 +66,9 @@ SOFTWARE.
 #define BT_ATT_OPCODE_ATT_WRITE_REQ						0x12	//!< Attribute Handle, Attribute Value
 #define BT_ATT_OPCODE_ATT_WRITE_RSP						0x13	//!<
 #define BT_ATT_OPCODE_ATT_CMD							0x52	//!< Attribute handle, attribute value.
-#define BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ				0x18	//!<
+#define BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ				0x16	//!< Attribute Handle, Value Offset, Part Attribute Value
+#define BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP				0x17	//!< Attribute Handle, Value Offset, Part Attribute Value
+#define BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ				0x18	//!< Flags (0: cancel all prepared writes, 1: write all)
 #define BT_ATT_OPCODE_ATT_EXECUTE_WRITE_RSP				0x19
 #define BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ	0x20	//!< Set of handle
 #define BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP	0x21	//!< Length of value tuple list
