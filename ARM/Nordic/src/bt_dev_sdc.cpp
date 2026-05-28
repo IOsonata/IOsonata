@@ -63,7 +63,6 @@ SOFTWARE.
 #include "bluetooth/bt_app.h"
 #include "app_evt_handler.h"
 
-//BleConn_t g_BleConn = {0,};
 extern UART g_Uart;
 
 //void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
@@ -74,31 +73,6 @@ static inline uint32_t BtDevSendData(void *pData, uint32_t Len) {
 void BtDevEvtHandler(uint32_t Evt, void * const pCtx);
 void BtDevConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
 void BtDevDisconnected(uint16_t ConnHdl, uint8_t Reason);
-
-#pragma pack(push, 4)
-
-/*
-typedef struct _BleAppData {
-	BLEAPP_STATE State;
-	BLEAPP_ROLE Role;
-	uint8_t AdvHdl;		// Advertisement handle
-	uint16_t ConnHdl;	// BLE connection handle
-	int ConnLedPort;
-	int ConnLedPin;
-	uint8_t ConnLedActLevel;
-	uint16_t VendorId;
-	int PeriphDevCnt;
-	uint32_t (*SDEvtHandler)(void) ;
-	int MaxMtu;
-	bool bSecure;
-	bool bAdvertising;
-	bool bExtAdv;
-	bool bScan;
-//    bool BleInitialized;
-	BLEAPP_COEXMODE CoexMode;
-} BleAppData_t;
-*/
-#pragma pack(pop)
 
 // S132 tx_power values: -40dBm, -20dBm, -16dBm, -12dBm, -8dBm, -4dBm, 0dBm, +3dBm and +4dBm
 // S140 tx_power values: -40dBm, -20dBm, -16dBm, -12dBm, -8dBm, -4dBm, 0dBm, +2dBm, +3dBm, +4dBm, +5dBm, +6dBm, +7dBm and +8dBm.
@@ -1354,27 +1328,3 @@ bool BtDevWrite(BtGattChar_t * const pChar, uint8_t * const pData, uint16_t Data
 #endif
 }
 
-#if 0
-bool BtDevAddSrvc(BtGattSrvc_t * const pSrvc, const BtGattSrvcCfg_t *pSrvcCfg)
-{
-	if (pSrvcCfg == nullptr)
-	{
-		return false;
-	}
-
-	bool res = BtGattSrvcAdd(pSrvc, pSrvcCfg);
-
-	if (res == true)
-	{
-		pSrvc->pPrev = nullptr;
-		pSrvc->pNext = s_BtDevSdc.pSrvc;
-		if (s_BtDevSdc.pSrvc)
-		{
-			s_BtDevSdc.pSrvc->pPrev = pSrvc;
-		}
-		s_BtDevSdc.pSrvc = pSrvc;
-	}
-
-	return res;
-}
-#endif

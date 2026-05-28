@@ -330,6 +330,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	// Initialize peer manager.
+	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
+	{
+		return false;
+	}
+
+	if (!BtGapConnPoolInit(pCfg->pGapConnPoolMem, pCfg->GapConnPoolMemSize))
+	{
+		return false;
+	}
+
 	// Populate generic app data from cfg.
 	g_BtAppData.Role            = pCfg->Role;
 	g_BtAppData.AdvHdl          = 0;	// WBA stack manages adv internally

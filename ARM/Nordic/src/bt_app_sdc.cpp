@@ -66,7 +66,6 @@ SOFTWARE.
 #define BT_SDC_RX_MAX_PACKET_COUNT			2
 #define BT_SDC_TX_MAX_PACKET_COUNT			3
 
-//BleConn_t g_BleConn = {0,};
 
 /******** For DEBUG ************/
 //#define UART_DEBUG_ENABLE

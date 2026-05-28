@@ -172,6 +172,13 @@ void BtPeerFree(BtDevice_t *pPeer)
 {
 	if (pPeer != nullptr)
 	{
+		// Zero the slot - prevents stale MaxMtu, Role, Addr, Services and
+		// any future per-link fields from surviving into the next peer
+		// that lands on this slot. BtPeerAlloc memsets on allocation too,
+		// but doing it here as well lets BtPeerFindByHdl never see partial
+		// half-freed state if a port reads a slot between disconnect
+		// and the next connect.
+		memset(pPeer, 0, sizeof(*pPeer));
 		pPeer->ConnHdl = BT_CONN_HDL_INVALID;
 	}
 }

@@ -304,9 +304,12 @@ __attribute__((weak)) void BtGattEvtHandler(uint32_t Evt, void * const pCtx)
 // subscribed). Chars with neither bNotify nor bIndic cannot have produced
 // a notify packet and are skipped.
 //
-// A precise fix needs the notify path (BtGattCharNotify) to record the
-// originating char per ConnHdl, which we then dequeue here. That refactor
-// crosses port boundaries and is tracked separately.
+// TODO(per-conn-tx-complete): with the unified peer pool now in place,
+// the precise fix is to add a small per-peer TX-pending tracking ring
+// (BtDevice_t.TxPendingChar[]) populated by BtGattCharNotify on each
+// outgoing notification/indication, then dequeue by ConnHdl here and
+// call TxCompleteCB on the actual originating char. Cross-port work -
+// scheduled as a separate round.
 void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 {
 	if (NbPktSent == 0)
