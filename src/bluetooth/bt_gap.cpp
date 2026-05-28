@@ -91,7 +91,22 @@ __attribute__((weak)) void BtGapSetDevName(const char *pName)
 		return;
 	}
 
-	BtGattCharSetValue(&s_BtGapChar[0], (void*)pName, strlen(pName));
+	BtGattChar_t *p = &s_BtGapChar[0];
+	size_t l = strlen(pName);
+
+	// Reserve one byte so the stored value stays a valid C string for
+	// BtGapGetDevName(); the GATT value length still excludes the terminator.
+	if (p->MaxDataLen > 0 && l > (size_t)(p->MaxDataLen - 1))
+	{
+		l = p->MaxDataLen - 1;
+	}
+
+	BtGattCharSetValue(p, (void*)pName, l);
+
+	if (p->pValue != nullptr)
+	{
+		((uint8_t*)p->pValue)[p->ValueLen] = '\0';
+	}
 }
 
 __attribute__((weak)) const char *BtGapGetDevName()

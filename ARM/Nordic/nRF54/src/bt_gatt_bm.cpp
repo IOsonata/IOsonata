@@ -96,6 +96,26 @@ static inline bool IsNotificationEnabled(const uint8_t *pData)
 
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
+	if (pChar == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > 0 && pVal == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > UINT16_MAX || Len > pChar->MaxDataLen)
+	{
+		return false;
+	}
+
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
 	uint16_t ch = (ConnHdl != BLE_CONN_HANDLE_INVALID) ? ConnHdl : s_ConnHandle;
 
 	if (ch == BLE_CONN_HANDLE_INVALID)
@@ -125,6 +145,26 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
+	if (pChar == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > 0 && pVal == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > UINT16_MAX || Len > pChar->MaxDataLen)
+	{
+		return false;
+	}
+
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
 	ble_gatts_value_t value;
 
 	memset(&value, 0, sizeof(ble_gatts_value_t));

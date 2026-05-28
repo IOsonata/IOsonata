@@ -581,6 +581,15 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	int32_t res = 0;
+
+	// Initialize the peer/connection table (and its long-write pool) before
+	// the stack can produce any connection or data event. Matches the
+	// nRF52/BM ordering and avoids an event-before-peer-table window.
+	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
+	{
+		return false;
+	}
+	BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);
 #if 0
 	mpsl_clock_lfclk_cfg_t lfclk = {MPSL_CLOCK_LF_SRC_RC, 0,};
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
@@ -835,15 +844,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
     {
     	return false;
     }
-
-    if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
-    {
-    	return false;
-    }
-
-    // Split the long-write reassembly pool across the peer slots so each
-    // link gets its own buffer (per Conn.pLongWrBuff).
-    BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);
 
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.

@@ -78,6 +78,26 @@ static BtGattSrvc_t *s_pBtGattSrvcTail = nullptr;
 //uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
+	if (pChar == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > 0 && pVal == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > UINT16_MAX || Len > pChar->MaxDataLen)
+	{
+		return false;
+	}
+
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
 	// Use the caller-supplied link when valid; fall back to the last
 	// connected handle for single-link callers. Matches the nRF54 pattern.
 	uint16_t hdl = (ConnHdl != BLE_CONN_HANDLE_INVALID) ? ConnHdl : s_ConnHandle;
@@ -101,7 +121,9 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
     params.type = BLE_GATT_HVX_NOTIFICATION;
     params.handle = pChar->ValHdl;//pSrvc->pCharArray[Idx].ValHdl;//.value_handle;
     params.p_data = (uint8_t*)pVal;
-    params.p_len = (uint16_t*)&Len;
+    // SoftDevice expects p_len to point to a uint16_t (it may modify it).
+    uint16_t l = (uint16_t)Len;
+    params.p_len = &l;
 
     uint32_t err_code = sd_ble_gatts_hvx(hdl, &params);
 
@@ -111,6 +133,26 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 //uint32_t BleSrvcCharSetValue(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
+	if (pChar == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > 0 && pVal == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > UINT16_MAX || Len > pChar->MaxDataLen)
+	{
+		return false;
+	}
+
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
 	ble_gatts_value_t value;
 
     memset(&value, 0, sizeof(ble_gatts_value_t));
