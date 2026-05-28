@@ -49,6 +49,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "device.h"
 
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_hci.h"
 
 /** @addtogroup Bluetooth
@@ -79,23 +80,17 @@ typedef struct __Bt_Dev_Disc_State {
 /// app driven, BtDevice*() for shared queries), not in the type.
 ///
 /// Field occupancy by role:
-///   local  : Name = own GAP name, Addr = own BD_ADDR, Role = bitmask of
-///            GAP roles this stack takes, Services = exposed GATT DB,
-///            ConnHdl = unused, pHciDev = the controller in use.
-///   remote : Name = peer's reported name, Addr = peer's BD_ADDR,
-///            Role = LL role peer plays on the active link,
-///            Services = discovered GATT DB, ConnHdl = active link handle,
+///   local  : Name = own GAP name, Conn.PeerAddr = own BD_ADDR, Conn.Role =
+///            bitmask of GAP roles this stack takes, Services = exposed GATT
+///            DB, Conn.Hdl = unused, pHciDev = the controller in use.
+///   remote : Name = peer's reported name, Conn.PeerAddr = peer's BD_ADDR,
+///            Conn.Role = LL role peer plays on the active link,
+///            Services = discovered GATT DB, Conn.Hdl = active link handle,
 ///            pHciDev = the local controller managing this link.
 typedef struct __Bt_Device {
+	BtGapConnection_t Conn;						//!< Per-link state (base). bt_dev owns it; &Conn is passed down to GATT/GAP. Holds Hdl/Role/PeerAddr/MaxMtu/long-write.
 	char			Name[BT_DEV_NAME_MAXLEN];	//!< Device name
-	uint8_t			Addr[6];					//!< BD_ADDR
-	uint8_t			AddrType;					//!< Address type (public, random static, ...)
-	uint8_t			Role;						//!< GAP role bitmask: BT_GAP_ROLE_*
 	uint16_t		Appearance;					//!< GAP appearance value
-	uint16_t		ConnHdl;					//!< Active link handle (BT_CONN_HDL_INVALID if none)
-	uint16_t		MaxMtu;						//!< Negotiated MTU
-	uint8_t			*pLongWrBuff;				//!< Per-peer long-write reassembly buffer slice (NULL if pool not configured)
-	uint16_t		LongWrBuffSize;				//!< Size of pLongWrBuff slice in bytes
 	uint16_t		VendorId;					//!< PnP vendor ID
 	uint16_t		ProductId;					//!< PnP product ID
 	uint16_t		ProductVer;					//!< PnP product version

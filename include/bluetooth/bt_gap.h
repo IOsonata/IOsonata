@@ -165,23 +165,20 @@ typedef struct __Bt_Gap_Conn_Params {
 	uint16_t Timeout;			//!< Supervision timeout in 10ms count
 } BtGapConnParams_t;
 
+// Per-connection (per-link) state. This is the canonical link record and
+// the BASE that BtDevice_t embeds as its first member (see bt_dev.h): the
+// high layer owns the storage and passes &pPeer->Conn down to GATT/GAP code
+// that needs link context. The low layer operates on the pointer it is
+// handed; it never owns a pool nor looks up by handle.
 typedef struct __Bt_Gap_Connection {
-	uint16_t Hdl;				//!< Connection handle
-	uint8_t Role;
-	uint8_t PeerAddrType;
-	uint8_t PeerAddr[6];
+	uint16_t Hdl;				//!< Connection handle (BT_ATT_HANDLE_INVALID when slot is free)
+	uint8_t Role;				//!< LL role on this link
+	uint8_t PeerAddrType;		//!< Peer address type
+	uint8_t PeerAddr[6];		//!< Peer BD_ADDR
+	uint16_t MaxMtu;			//!< Negotiated ATT MTU for this link
+	uint8_t *pLongWrBuff;		//!< Per-link long-write reassembly buffer (NULL if none)
+	uint16_t LongWrBuffSize;	//!< Size of pLongWrBuff in bytes
 } BtGapConnection_t;
-
-// Header at the start of the GAP connection pool buffer. Written by
-// BtGapConnPoolInit; SlotSize stamps the library's sizeof(BtGapConnection_t)
-// so a runtime check catches ABI drift between a precompiled library and
-// the app's view of this header.
-typedef struct __Bt_Gap_Conn_Pool_Hdr {
-	uint16_t SlotSize;			//!< sizeof(BtGapConnection_t) at library build time
-	uint16_t Count;				//!< Number of slots in the pool
-} BtGapConnPoolHdr_t;
-
-#define BT_GAP_CONN_POOL_MEMSIZE(N)		(sizeof(BtGapConnPoolHdr_t) + (N) * sizeof(BtGapConnection_t))
 
 typedef enum __Bt_Scan_Type {
 	BTSCAN_TYPE_PASSIVE,		//!< without scan/response data
@@ -226,19 +223,12 @@ extern "C" {
 // Passing {NULL, 0} selects a small library default. Returns false if
 // the buffer is undersized or sizeof(BtGapConnection_t) disagrees between
 // library and app.
-bool BtGapConnPoolInit(uint8_t *pMem, size_t MemSize);
-
 void BtGapInit(const BtGapCfg_t *pCfg);
 void BtGapParamInit(const BtGapCfg_t *pCfg);
 void BtGapServiceInit(void);//BtGattSrvc_t * const pSrvc);
-bool isBtGapConnected(void);
 void BtGapSetDevName(const char *pName);
 void BtGapSetAppearance(uint16_t Val);
 void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal);
-uint16_t BtGapGetConnection(void);
-size_t BtGapGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
-bool BtGapAddConnection(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);
-void BtGapDeleteConnection(uint16_t Hdl);
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);//, BtGapScanParam_t * const pScanParam);
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg);
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len);

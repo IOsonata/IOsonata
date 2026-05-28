@@ -110,15 +110,6 @@ extern "C" {
 // library and app.
 bool         BtPeerInit(uint8_t *pMem, size_t MemSize);
 
-// Optional companion init: set up the per-peer long-write reassembly
-// pool. Library splits MemSize equally across peer slots; each peer's
-// pLongWrBuff/LongWrBuffSize fields point to its slice. Apps that never
-// long-write call this with {NULL, 0} or skip the call - peers then have
-// pLongWrBuff == NULL and the port's Prepare/Execute Write paths NACK.
-// Must be called AFTER BtPeerInit; returns false if BtPeerInit hasn't run
-// or if MemSize / peer count is zero.
-bool         BtPeerInitLongWrite(uint8_t *pMem, size_t MemSize);
-
 // Pool ops. Each returns NULL when no free slot is available (Alloc) or
 // no matching record exists (FindByHdl, GetActive).
 BtDevice_t * BtPeerAlloc(uint16_t ConnHdl);
@@ -129,11 +120,21 @@ void         BtPeerFree(BtDevice_t *pPeer);
 // single-link apps that just want "the active peer".
 BtDevice_t * BtPeerGetActive(void);
 
-// Iteration accessors for code that walks every slot (bt_gap connection
-// table queries, debug introspection). Return 0 / NULL before BtPeerInit
+// Iteration accessors for code that walks every slot (connection table
+// queries, debug introspection). Return 0 / NULL before BtPeerInit
 // has succeeded.
 uint16_t     BtPeerCount(void);
 BtDevice_t * BtPeerSlot(uint16_t Idx);
+
+// Connection-table queries. These own the link state now (the separate GAP
+// connection pool is gone); GAP/GATT receive a borrowed &pPeer->Conn rather
+// than querying a pool of their own.
+//   BtPeerIsConnected       - true if any slot holds a live link
+//   BtPeerGetConnectedHandles - copy up to MaxCount live handles, return count
+//   BtPeerFreeByHdl         - free the slot matching Hdl (disconnect convenience)
+bool         BtPeerIsConnected(void);
+size_t       BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount);
+void         BtPeerFreeByHdl(uint16_t Hdl);
 
 #ifdef __cplusplus
 }

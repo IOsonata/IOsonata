@@ -63,7 +63,17 @@ void BtGattInsertSrvcList(BtGattSrvc_t * const pSrvc)
 
 __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	if (pChar == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > 0 && pVal == nullptr)
+	{
+		return false;
+	}
+
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID || pChar->pValue == nullptr)
 	{
 		return false;
 	}
@@ -93,6 +103,17 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr || pSrvc->NbChar <= 0)
 	{
 		return false;
+	}
+
+	// Already registered? Scan the service list; if this exact service is
+	// present, no-op. Guards against duplicate ATT DB entries and a list
+	// cycle if BtGattSrvcAdd (e.g. via BtGapInit) runs more than once.
+	for (BtGattSrvc_t *p = BtGattGetSrvcList(); p != nullptr; p = p->pNext)
+	{
+		if (p == pSrvc)
+		{
+			return true;
+		}
 	}
 
 	// Add base UUID to internal list for custom 128-bit services.

@@ -8,7 +8,7 @@ Pool layout in the user-provided buffer:
 	[ BtPeerPoolHdr_t | BtDevice_t[0] | BtDevice_t[1] | ... | BtDevice_t[N-1] ]
 
 BtPeerInit stamps the header with the library's sizeof(BtDevice_t) and
-zeroes every slot to "free" (ConnHdl == BT_CONN_HDL_INVALID). All other
+zeroes every slot to "free" (Conn.Hdl == BT_CONN_HDL_INVALID). All other
 ops walk the slot array via the header's Count field.
 
 @author	Hoang Nguyen Hoan
@@ -44,6 +44,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_uuid.h"
 
 // Default pool size used when the app passes {NULL, 0}. Matches the
@@ -55,13 +56,6 @@ SOFTWARE.
 
 alignas(4) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_PEER_POOL_DEFAULT_COUNT)];
 static BtPeerPoolHdr_t *s_pPeerPool = nullptr;
-
-// Long-write reassembly pool. The app provides one big block via
-// BtAppCfg_t.pLongWrPoolMem; the library splits it equally across peer
-// slots. BtPeerAlloc re-applies the slice pointer on each allocation
-// (so reset-on-free doesn't lose the slot identity).
-static uint8_t *s_pLongWrPool   = nullptr;
-static size_t   s_LongWrPerPeer = 0;
 
 static inline BtDevice_t * PeerSlots(void)
 {
@@ -113,40 +107,11 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 	for (uint16_t i = 0; i < count; i++)
 	{
 		memset(&slots[i], 0, sizeof(BtDevice_t));
-		slots[i].ConnHdl  = BT_CONN_HDL_INVALID;
+		slots[i].Conn.Hdl  = BT_CONN_HDL_INVALID;
 		slots[i].bIsLocal = false;
 	}
 
 	s_pPeerPool = hdr;
-	return true;
-}
-
-bool BtPeerInitLongWrite(uint8_t *pMem, size_t MemSize)
-{
-	if (s_pPeerPool == nullptr)
-	{
-		// BtPeerInit must run first; we need to know the slot count to
-		// partition the pool.
-		return false;
-	}
-
-	if (pMem == nullptr || MemSize == 0)
-	{
-		// Explicit "no long-write pool" - valid, peers keep pLongWrBuff == NULL.
-		s_pLongWrPool   = nullptr;
-		s_LongWrPerPeer = 0;
-		return true;
-	}
-
-	size_t per_peer = MemSize / s_pPeerPool->Count;
-	if (per_peer == 0)
-	{
-		// Pool too small to give every slot at least one byte.
-		return false;
-	}
-
-	s_pLongWrPool   = pMem;
-	s_LongWrPerPeer = per_peer;
 	return true;
 }
 
@@ -171,25 +136,24 @@ BtDevice_t * BtPeerAlloc(uint16_t ConnHdl)
 		return nullptr;
 	}
 
+	// Reuse an existing record for this handle rather than allocating a
+	// second slot. Repeated connect processing for the same link must not
+	// create two active peers with the same Conn.Hdl.
+	BtDevice_t *existing = BtPeerFindByHdl(ConnHdl);
+	if (existing != nullptr)
+	{
+		return existing;
+	}
+
 	BtDevice_t *slots = PeerSlots();
 	for (uint16_t i = 0; i < s_pPeerPool->Count; i++)
 	{
-		if (slots[i].ConnHdl == BT_CONN_HDL_INVALID)
+		if (slots[i].Conn.Hdl == BT_CONN_HDL_INVALID)
 		{
 			BtDevice_t *p = &slots[i];
 			memset(p, 0, sizeof(*p));
-			p->ConnHdl  = ConnHdl;
+			p->Conn.Hdl = ConnHdl;
 			p->bIsLocal = false;
-
-			// Re-apply the per-peer long-write slice; the memset just
-			// cleared it. Slot index is the position in the pool, so the
-			// same physical slice is re-assigned every alloc/free cycle.
-			if (s_pLongWrPool != nullptr)
-			{
-				p->pLongWrBuff    = s_pLongWrPool + i * s_LongWrPerPeer;
-				p->LongWrBuffSize = (uint16_t)s_LongWrPerPeer;
-			}
-
 			return p;
 		}
 	}
@@ -206,7 +170,7 @@ BtDevice_t * BtPeerFindByHdl(uint16_t ConnHdl)
 	BtDevice_t *slots = PeerSlots();
 	for (uint16_t i = 0; i < s_pPeerPool->Count; i++)
 	{
-		if (slots[i].ConnHdl == ConnHdl)
+		if (slots[i].Conn.Hdl == ConnHdl)
 		{
 			return &slots[i];
 		}
@@ -225,7 +189,20 @@ void BtPeerFree(BtDevice_t *pPeer)
 		// half-freed state if a port reads a slot between disconnect
 		// and the next connect.
 		memset(pPeer, 0, sizeof(*pPeer));
-		pPeer->ConnHdl = BT_CONN_HDL_INVALID;
+		pPeer->Conn.Hdl = BT_CONN_HDL_INVALID;
+	}
+
+	// Last link out: clear per-connection GATT state (CCCD notify/indicate
+	// flags) on every registered service. This used to live in
+	// BtGapDeleteConnection and only covered the two internal GAP services;
+	// owning the pool here lets it cover the whole service list. bt_peer is
+	// above bt_gatt, so calling down is within the layering.
+	if (BtPeerIsConnected() == false)
+	{
+		for (BtGattSrvc_t *p = BtGattGetSrvcList(); p != nullptr; p = p->pNext)
+		{
+			BtGattSrvcDisconnected(p);
+		}
 	}
 }
 
@@ -239,10 +216,52 @@ BtDevice_t * BtPeerGetActive(void)
 	BtDevice_t *slots = PeerSlots();
 	for (uint16_t i = 0; i < s_pPeerPool->Count; i++)
 	{
-		if (slots[i].ConnHdl != BT_CONN_HDL_INVALID)
+		if (slots[i].Conn.Hdl != BT_CONN_HDL_INVALID)
 		{
 			return &slots[i];
 		}
 	}
 	return nullptr;
+}
+
+bool BtPeerIsConnected(void)
+{
+	if (s_pPeerPool == nullptr)
+	{
+		return false;
+	}
+
+	BtDevice_t *slots = PeerSlots();
+	for (uint16_t i = 0; i < s_pPeerPool->Count; i++)
+	{
+		if (slots[i].Conn.Hdl != BT_CONN_HDL_INVALID)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
+{
+	if (pHdl == nullptr || MaxCount == 0 || s_pPeerPool == nullptr)
+	{
+		return 0;
+	}
+
+	size_t n = 0;
+	BtDevice_t *slots = PeerSlots();
+	for (uint16_t i = 0; i < s_pPeerPool->Count && n < MaxCount; i++)
+	{
+		if (slots[i].Conn.Hdl != BT_CONN_HDL_INVALID)
+		{
+			pHdl[n++] = slots[i].Conn.Hdl;
+		}
+	}
+	return n;
+}
+
+void BtPeerFreeByHdl(uint16_t Hdl)
+{
+	BtPeerFree(BtPeerFindByHdl(Hdl));
 }
