@@ -216,17 +216,15 @@ void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt)
 
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_t PeerAddr[6])
 {
-	// Allocate and populate the peer record. The state machine in
-	// bt_attrsp.cpp looks the peer up by ConnHdl when responses arrive.
-	BtDevice_t *pPeer = BtPeerAlloc(ConnHdl);
+	// Allocate and populate the peer record in one step. BtPeerConnected
+	// allocs (or reuses) the slot for ConnHdl and fills Role/PeerAddr.
+	// The state machine in bt_attrsp.cpp looks the peer up by ConnHdl.
+	BtDevice_t *pPeer = BtPeerConnected(ConnHdl, Role, PeerAddrType, PeerAddr);
 	if (pPeer != NULL)
 	{
-		memcpy(pPeer->Conn.PeerAddr, PeerAddr, 6);
 		pPeer->pHciDev = (BtHciDevice_t*) &s_BtHciDev;
 		s_BtHciDev.pBtDev = (void*) pPeer;
 	}
-
-	BtPeerConnected(ConnHdl, Role, PeerAddrType, PeerAddr);
 
 	BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
 

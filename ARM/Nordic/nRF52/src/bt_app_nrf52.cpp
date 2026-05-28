@@ -727,7 +727,6 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         	BtPeerConnected(p_gap_evt->conn_handle, role,
         					   p_gap_evt->params.connected.peer_addr.addr_type,
         					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
-        	BtPeerAlloc(p_ble_evt->evt.gap_evt.conn_handle);
         	g_BtAppData.State = BTAPP_STATE_CONNECTED;
         	BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
