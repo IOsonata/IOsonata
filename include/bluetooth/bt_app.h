@@ -164,8 +164,6 @@ typedef struct __Bt_App_Cfg {
 	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
 	uint8_t *pPeerPoolMem;			//!< Peer pool storage; NULL -> library default. Size with BT_PEER_POOL_MEMSIZE(N).
 	size_t PeerPoolMemSize;			//!< Total pPeerPoolMem length in bytes
-	uint8_t *pGapConnPoolMem;		//!< GAP connection table storage; NULL -> library default. Size with BT_GAP_CONN_POOL_MEMSIZE(N).
-	size_t GapConnPoolMemSize;		//!< Total pGapConnPoolMem length in bytes
 	uint8_t *pLongWrPoolMem;		//!< Long-write reassembly pool; library splits evenly across peer slots. NULL = no long-write support.
 	size_t LongWrPoolMemSize;		//!< Total pLongWrPoolMem length in bytes
 	size_t AttDBMemSize;			//!< User overload mem size for stack usage, set to 0 if not overloading default.

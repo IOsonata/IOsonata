@@ -218,11 +218,9 @@ typedef struct __Bt_Gap_Config {
 extern "C" {
 #endif
 
-// Initialise the GAP connection pool. Each port's BtAppInit calls this
-// with the cfg's pGapConnPoolMem / GapConnPoolMemSize before BtGapInit.
-// Passing {NULL, 0} selects a small library default. Returns false if
-// the buffer is undersized or sizeof(BtGapConnection_t) disagrees between
-// library and app.
+// Initialise the GAP layer: registers the GAP and GATT services for the
+// peripheral role and configures GAP for peripheral/central per pCfg->Role.
+// Per-link connection state is owned by bt_peer (see BtPeerInit), not here.
 void BtGapInit(const BtGapCfg_t *pCfg);
 void BtGapParamInit(const BtGapCfg_t *pCfg);
 void BtGapServiceInit(void);//BtGattSrvc_t * const pSrvc);
