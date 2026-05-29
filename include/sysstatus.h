@@ -1,164 +1,175 @@
-/*--------------------------------------------------------------------------
-File   : sysstatus.h
+/**-------------------------------------------------------------------------
+@file	sysstatus.h
 
-Author : Hoang Nguyen Hoan          Oct. 16, 1996
+@brief	System status standard.
 
-Desc   : System status class.
-		 The system status contains many different types
-		 Runtime state which serve as state machine states is stored separately
-		 from other statuses. See SYSSTATUS_TYPE for type definitions
+ Stateless, header only encode / decode for the 32 bit status word
+ defined in sysstatusdef.h. This file defines how to build and read
+ a status value and how to classify its severity. It holds no state.
 
-Copyright (c) 1996-2008, I-SYST, All rights reserved
+ How a subsystem stores, queues or reacts to a status is the user
+ implementation and is intentionally not part of this standard.
 
-Permission to use, copy, modify, and distribute this software for any purpose 
-with or without fee is hereby granted, provided that the above copyright 
-notice and this permission notice appear in all copies, and none of the 
-names : I-SYST or its contributors may be used to endorse or 
-promote products derived from this software without specific prior written 
-permission.
+ Usage rules :
+   - The subsystem that first detects a failure encodes the full
+	 word with its own module ID, a type and a site specific code.
+   - Upper layers propagate the word verbatim unless they have a
+	 more specific status to report. The module ID always points at
+	 the originating subsystem.
+   - A plain bool return drives control flow. The status word
+	 carries diagnosis and is set only at the originating site.
 
-For info or contributing contact : hnhoan at i-syst dot com
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY 
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF 
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+@author	Hoang Nguyen Hoan
+@date	Oct. 16, 1996
+
+@license
+
+Copyright (c) 1996-2026, I-SYST, All rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------
-Modified by         Date           	Description
-Hoan                Mar. 18, 2005	namespace TS
-Hoan				Nov. 18, 2014	Reimplementing for new EHAL C based
+Modified by         Date            Description
+Hoan                Mar. 18, 2005   namespace TS
+Hoan                Nov. 18, 2014   Reimplementing for new EHAL C based
+Hoan                May. 28, 2026   Reworked as stateless header only standard.
+                                    Storage and queue removed, now user code.
 ----------------------------------------------------------------------------*/
 #ifndef __SYSSTATUS_H__
 #define __SYSSTATUS_H__
 
+#include <stdbool.h>
+
 #include "sysstatusdef.h"
-
-// Max number of status code queued in system
-#define SYSSTATUS_MAXQUE      2
-
-// Max string len for status description
-#define SYSSTATUS_DESC_MAX    128
-
-#pragma pack(push, 4)
-
-typedef struct __Sys_Status {
-   STATUS Code;   // Status code
-   char Desc[SYSSTATUS_DESC_MAX];   // Description string
-} SYSSTATUS;
-
-#pragma pack(pop)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// C implementation
+/**
+ * Encode a status word from its three fields.
+ *
+ * @param   Type  : Severity class, a SYSSTATUS_TYPE value (pre shifted).
+ * @param   ModId : Module ID, unshifted (e.g. SYSSTATUS_MODID_USB).
+ * @param   Code  : Module code, 16 bits.
+ *
+ * @return  Encoded 32 bit status word.
+ */
+static inline SysStatus_t StatusEncode(SYSSTATUS_TYPE Type, uint32_t ModId, uint32_t Code) {
+   return ((uint32_t)Type & SYSSTATUS_TYPE_MASK) |
+          ((ModId << SYSSTATUS_MODID_POS) & SYSSTATUS_MODID_MASK) |
+          (Code & SYSSTATUS_CODE_MASK);
+}
 
-// Get current status
-STATUS SysStateGet(void);
-const SYSSTATUS *SysStatusGet(void);
-STATUS SysStatusGetCode(void);
-const char *SysStatusGetDesc(void);
+/**
+ * Get the type field, returned pre shifted so it compares directly against
+ * the SYSSTATUS_TYPE values.
+ */
+static inline uint32_t StatusType(SysStatus_t Status) {
+   return Status & SYSSTATUS_TYPE_MASK;
+}
 
-// Get previous STATUS from the Que
-const SYSSTATUS *SysStatusGetPrev(void);
-STATUS SysStatusGetPrevCode(void);
+/**
+ * Get the module ID field, returned unshifted so it compares directly
+ * against the SYSSTATUS_MODID_xxx values.
+ */
+static inline uint32_t StatusModId(SysStatus_t Status) {
+   return (Status & SYSSTATUS_MODID_MASK) >> SYSSTATUS_MODID_POS;
+}
 
-// Set current STATUS
-STATUS SysStatusSet(STATUS Code, char *pDesc);
-STATUS SysStateSet(uint32_t State);
+/**
+ * Get the code field.
+ */
+static inline uint32_t StatusCode(SysStatus_t Status) {
+   return Status & SYSSTATUS_CODE_MASK;
+}
+
+/**
+ * True when the word carries no error, the Ready / No error resting value.
+ */
+static inline bool StatusIsOk(SysStatus_t Status) {
+   return Status == SYSSTATUS_OK;
+}
+
+/**
+ * True for runtime state words, which are state machine values, not errors.
+ */
+static inline bool StatusIsRuntime(SysStatus_t Status) {
+   return StatusType(Status) == SYSSTATUS_TYPE_RNT;
+}
+
+/**
+ * True for warning class words.
+ */
+static inline bool StatusIsWarning(SysStatus_t Status) {
+   return StatusType(Status) == SYSSTATUS_TYPE_WRN;
+}
+
+/**
+ * True for any error, non fatal or fatal.
+ */
+static inline bool StatusIsError(SysStatus_t Status) {
+   uint32_t t = StatusType(Status);
+   return t == SYSSTATUS_TYPE_ERR || t == SYSSTATUS_TYPE_FERR;
+}
+
+/**
+ * True only for fatal error words.
+ */
+static inline bool StatusIsFatal(SysStatus_t Status) {
+   return StatusType(Status) == SYSSTATUS_TYPE_FERR;
+}
 
 #ifdef __cplusplus
 }
 
 //
-// C++ class implementation
+// C++ convenience wrapper. Thin inline pass through over the C inlines,
+// also stateless.
 //
 class SysStatus {
 public:
-   SysStatus() {}
-   virtual ~SysStatus() {}
+   SysStatus() : vStatus(SYSSTATUS_OK) {}
+   SysStatus(SysStatus_t Status) : vStatus(Status) {}
 
-   /**
-    * Set system status with encoded value and reset cursor to current.
-    * Special case : Runtime (RNT) type code will also be stored in the State
-    * variable for later retrieval.
-    */
-   void operator = (STATUS Code) { SysStatusSet(Code, NULL); }
+   static SysStatus_t Encode(SYSSTATUS_TYPE Type, uint32_t ModId, uint32_t Code) {
+      return StatusEncode(Type, ModId, Code);
+   }
 
-   // Conversion operator : Get encoded current status
-   operator uint32_t () { return SysStatusGetCode(); }
+   SysStatus & operator = (STATUS Status) { vStatus = Status; return *this; }
+   operator STATUS () const { return vStatus; }
 
-   /**
-    * Get current status code
-    * 
-    * @Return  Pointer to system status structure
-    */
-   const SYSSTATUS *GetStatus(void) { return SysStatusGet(); }
+   uint32_t Type(void) const   { return StatusType(vStatus); }
+   uint32_t ModId(void) const  { return StatusModId(vStatus); }
+   uint32_t Code(void) const   { return StatusCode(vStatus); }
 
-   /**
-    * Get previous system status
-    * 
-    * @Return  Pointer to system status structure
-    */
-   const SYSSTATUS *GetPrevStatus(void) { return SysStatusGetPrev(); }
-
-   /**
-    * Get current system status code
-    * 
-    * @Return  Status code
-    */
-   STATUS GetStatusCode(void) { return SysStatusGetCode(); }
-
-   /**
-    * Get previous system status code
-    * 
-   * @Return  Pointer to system status structure
-    */ 
-   STATUS GetPrevStatusCode(void) { return SysStatusGetPrevCode(); }
-
-   /**
-    * Get system state code
-    * 
-    * @Return  Status code
-    */
-   STATUS GetState(void) { return SysStateGet(); }
-
-   /**
-    * Set system status with encoded value and reset cursor to current.
-    * Special case : Runtime (RNT) type code will also be stored in the State
-    * variable for later retreival.
-    * 
-    * @Param   Code : Status value
-    * @Param   Desc : Status description string
-    */
-   STATUS SetStatus(STATUS Code, char *pDesc = NULL) { return SysStatusSet(Code, pDesc); }
-
-   /**
-    * Set system state code
-    * 
-    * @Param   State : State code.
-    * 
-    * @Return  State code
-    */
-   STATUS SetState(STATUS Code) { return SysStatusSet(Code, NULL); }
+   bool IsOk(void) const       { return StatusIsOk(vStatus); }
+   bool IsRuntime(void) const  { return StatusIsRuntime(vStatus); }
+   bool IsWarning(void) const  { return StatusIsWarning(vStatus); }
+   bool IsError(void) const    { return StatusIsError(vStatus); }
+   bool IsFatal(void) const    { return StatusIsFatal(vStatus); }
 
 private:
-//   uint32_t		vHead;
-//   uint32_t		vTail;
-//   uint32_t		vLastAccess;        // Last que position accessed
-   //SYSSTATUS	vStatusQue[SYSSTATUS_MAXQUE];
-   //STATUS		vState;
+   SysStatus_t vStatus;
 };
-#endif
 
-
+#endif // __cplusplus
 
 #endif // __SYSSTATUS_H__
