@@ -37,8 +37,16 @@ SOFTWARE.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
 
-#include "coredev/uart.h"
-extern UART g_Uart;
+/******** For DEBUG ************/
+//#define DEBUG_ENABLE
+
+#ifdef DEBUG_ENABLE
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
+#endif
+/*******************************/
 
 void BtParseAdvReport(BtAdvReport_t *pReport)
 {

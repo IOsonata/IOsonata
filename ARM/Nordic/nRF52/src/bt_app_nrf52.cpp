@@ -85,11 +85,16 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "sd_dispatch.h"
 
-#if DEBUGING
-#include "coredev/uart.h"
+/******** For DEBUG ************/
+//#define DEBUG_ENABLE
 
-extern UART g_Uart;
+#ifdef DEBUG_ENABLE
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
 #endif
+/*******************************/
 
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);

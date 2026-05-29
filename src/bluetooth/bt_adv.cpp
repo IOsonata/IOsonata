@@ -41,9 +41,9 @@ SOFTWARE.
 #include "bluetooth/bt_appearance.h"
 
 /******** For DEBUG ************/
-//#define UART_DEBUG_ENABLE
+//#define DEBUG_ENABLE
 
-#ifdef UART_DEBUG_ENABLE
+#ifdef DEBUG_ENABLE
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else

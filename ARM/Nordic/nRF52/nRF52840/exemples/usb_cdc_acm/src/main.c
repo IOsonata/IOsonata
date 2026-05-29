@@ -68,6 +68,8 @@
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
+#define  NRF_CLI_ENABLED	1
+
 #if NRF_CLI_ENABLED
 NRF_CLI_CDC_ACM_DEF(m_cli_cdc_acm_transport);
 NRF_CLI_DEF(m_cli_cdc_acm,

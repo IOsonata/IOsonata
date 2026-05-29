@@ -41,11 +41,6 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/ED037TC1.h</locationURI>
 		</link>
 		<link>
-			<name>src/ED037TC2nRF52.c</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/ED037TC2nRF52.c</locationURI>
-		</link>
-		<link>
 			<name>src/ED037TC2nRF52.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/ED037TC2nRF52.h</locationURI>
@@ -54,11 +49,6 @@
 			<name>src/LUT.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/LUT.h</locationURI>
-		</link>
-		<link>
-			<name>src/LUTnRF52.c</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/LUTnRF52.c</locationURI>
 		</link>
 		<link>
 			<name>src/LUTnRF52.h</name>
