@@ -48,9 +48,8 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 #if 0
 /******** For DEBUG ************/
-#include "coredev/uart.h"
-extern UART g_Uart;
-#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 /*******************************/
 #else
 #define DEBUG_PRINTF(...)

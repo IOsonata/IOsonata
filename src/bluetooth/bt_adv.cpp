@@ -44,9 +44,8 @@ SOFTWARE.
 //#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
-#include "coredev/uart.h"
-extern UART g_Uart;
-#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define DEBUG_PRINTF(...)
 #endif
