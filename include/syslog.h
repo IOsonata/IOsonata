@@ -67,6 +67,12 @@ SOFTWARE.
 #define SYSLOG_LINE_MAX     128
 #endif
 
+// Marker written by SysLogInit. Used to detect an uninitialized instance.
+// An instance without this marker is treated as dormant and all API calls
+// are no-ops, so a SysLog_t embedded in a driver stays inert until
+// SysLogInit is called.
+#define SYSLOG_INIT_MARKER  0x474f4c53UL    // 'SLOG'
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -75,6 +81,7 @@ extern "C" {
  * Logger instance. Holds configuration only.
  */
 typedef struct __Sys_Log {
+	uint32_t	Marker;		//!< SYSLOG_INIT_MARKER when initialized, else dormant
 	DevIntrf_t	*pSink;		//!< Output interface. NULL disables output.
 	uint32_t	SinkAddr;	//!< Device select id passed to DeviceIntrfTx, 0 for UART
 	TimerDev_t	*pTimer;	//!< Timestamp tick source. NULL disables timestamp.
@@ -95,15 +102,25 @@ void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
 
 /**
  * Format and emit one status record.
- * Returns without output when the type field is below MinType or pSink is NULL.
+ * No-op when the instance is not initialized (no SYSLOG_INIT_MARKER), when
+ * pSink is NULL, or when the type field is below MinType.
  *
  * @param	pLog	: Logger instance.
  * @param	Status	: Status word to emit.
  * @param	pDetail	: Detail string, NULL for none.
  *
- * @return	Byte count written to the output. 0 when filtered or no output.
+ * @return	Byte count written to the output. 0 when dormant, filtered, or no output.
  */
 int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail);
+
+/**
+ * Get the library global logger handle for use with the C API.
+ * The global instance is dormant until configured (SysLogInit or, in C++,
+ * SysLogGetInstance()->Init). Calls on a dormant instance are no-ops.
+ *
+ * @return	Handle to the global logger.
+ */
+SysLog_t * const SysLogGet(void);
 
 #ifdef __cplusplus
 }
@@ -113,11 +130,14 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 //
 class SysLog {
 public:
-	SysLog() { SysLogInit(&vLog, (DevIntrf_t *)0, 0, (TimerDev_t *)0, 0); }
+	// Construct dormant. The instance stays inert until Init is called.
+	SysLog() { vLog.Marker = 0; vLog.pSink = (DevIntrf_t *)0; }
 
-	void Init(DevIntrf_t * const pSink, uint32_t SinkAddr = 0,
-			  TimerDev_t * const pTimer = (TimerDev_t *)0, uint32_t MinType = 0) {
-		SysLogInit(&vLog, pSink, SinkAddr, pTimer, MinType);
+	void Init(DeviceIntrf &Sink, uint32_t SinkAddr = 0,
+			  Timer *pTimer = (Timer *)0, uint32_t MinType = 0) {
+		SysLogInit(&vLog, Sink, SinkAddr,
+				   pTimer ? (TimerDev_t * const)*pTimer : (TimerDev_t *)0,
+				   MinType);
 	}
 
 	int Log(SysStatus_t Status, const char *pDetail = (const char *)0) {
@@ -134,6 +154,14 @@ public:
 private:
 	SysLog_t vLog;
 };
+
+/**
+ * Get the library global logger object for direct C++ configuration, e.g.
+ * SysLogGetInstance()->Init(uart, 0, timer, SYSSTATUS_TYPE_WRN);
+ *
+ * @return	Const pointer to the global SysLog instance.
+ */
+SysLog * const SysLogGetInstance(void);
 
 #endif // __cplusplus
 

@@ -64,6 +64,7 @@ void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
 	pLog->SinkAddr = SinkAddr;
 	pLog->pTimer = pTimer;
 	pLog->MinType = MinType;
+	pLog->Marker = SYSLOG_INIT_MARKER;
 }
 
 int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
@@ -71,7 +72,7 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	char line[SYSLOG_LINE_MAX];
 	int len = 0;
 
-	if (pLog == 0 || pLog->pSink == 0)
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)
 	{
 		return 0;
 	}
@@ -111,4 +112,22 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	}
 
 	return DeviceIntrfTx(pLog->pSink, pLog->SinkAddr, (const uint8_t *)line, len);
+}
+
+//
+// Library global logger instance. File static, one per image. Constructed
+// dormant, stays inert until configured.
+//
+static SysLog g_SysLog;
+
+// C++ direct access to the global object.
+SysLog * const SysLogGetInstance(void)
+{
+	return &g_SysLog;
+}
+
+// C handle access to the same global object.
+extern "C" SysLog_t * const SysLogGet(void)
+{
+	return g_SysLog;
 }
