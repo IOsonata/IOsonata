@@ -57,6 +57,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdarg.h>
 
 #include "sysstatus.h"
 #include "device_intrf.h"
@@ -112,6 +113,35 @@ void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
  * @return	Byte count written to the output. 0 when dormant, filtered, or no output.
  */
 int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail);
+
+/**
+ * Format and emit free form trace text. No record prefix is added, the
+ * output is the formatted text as given. For developer trace that has no
+ * status meaning.
+ * No-op when the instance is not initialized or pSink is NULL. Not subject
+ * to the MinType filter, which applies to status records only.
+ *
+ * @param	pLog	: Logger instance.
+ * @param	pFormat	: printf style format string.
+ *
+ * @return	Byte count written to the output. 0 when dormant or no output.
+ */
+int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)
+#if defined(__GNUC__) || defined(__clang__)
+	__attribute__((format(printf, 2, 3)))
+#endif
+	;
+
+/**
+ * va_list form of SysLogPrintf.
+ *
+ * @param	pLog	: Logger instance.
+ * @param	pFormat	: printf style format string.
+ * @param	Args	: Variable argument list.
+ *
+ * @return	Byte count written to the output. 0 when dormant or no output.
+ */
+int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args);
 
 /**
  * Get the library global logger handle for use with the C API.
@@ -251,6 +281,12 @@ public:
 	int Log(SysStatus_t Status, const char *pDetail = (const char *)0) {
 		return SysLogStatus(&vLog, Status, pDetail);
 	}
+
+	int Printf(const char *pFormat, ...)
+#if defined(__GNUC__) || defined(__clang__)
+		__attribute__((format(printf, 2, 3)))
+#endif
+		;
 
 	// Return the underlying C handle for use with the C API.
 	operator SysLog_t * const () { return &vLog; }

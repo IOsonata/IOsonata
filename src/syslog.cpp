@@ -114,6 +114,55 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	return DeviceIntrfTx(pLog->pSink, pLog->SinkAddr, (const uint8_t *)line, len);
 }
 
+int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
+{
+	char line[SYSLOG_LINE_MAX];
+	int len;
+
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)
+	{
+		return 0;
+	}
+
+	len = vsnprintf(line, sizeof(line), pFormat, Args);
+
+	// vsnprintf returns the untruncated length, clamp to buffer size.
+	if (len < 0)
+	{
+		return 0;
+	}
+	if (len > (int)sizeof(line))
+	{
+		len = (int)sizeof(line);
+	}
+
+	return DeviceIntrfTx(pLog->pSink, pLog->SinkAddr, (const uint8_t *)line, len);
+}
+
+int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)
+{
+	va_list args;
+	int len;
+
+	va_start(args, pFormat);
+	len = SysLogVPrintf(pLog, pFormat, args);
+	va_end(args);
+
+	return len;
+}
+
+int SysLog::Printf(const char *pFormat, ...)
+{
+	va_list args;
+	int len;
+
+	va_start(args, pFormat);
+	len = SysLogVPrintf(&vLog, pFormat, args);
+	va_end(args);
+
+	return len;
+}
+
 //
 // Library global logger instance. File static, one per image. Constructed
 // dormant, stays inert until configured.
