@@ -16,8 +16,8 @@
    - Upper layers propagate the word verbatim unless they have a
 	 more specific status to report. The module ID always points at
 	 the originating subsystem.
-   - A plain bool return drives control flow. The status word
-	 carries diagnosis and is set only at the originating site.
+   - A bool return value is used for control flow. The status word holds
+	 the diagnostic value and is set at the originating site.
 
 
 @author	Hoang Nguyen Hoan
@@ -102,7 +102,7 @@ static inline uint32_t StatusCode(SysStatus_t Status) {
 }
 
 /**
- * True when the word carries no error, the Ready / No error resting value.
+ * Return true when the word equals the Ready / No error value.
  */
 static inline bool StatusIsOk(SysStatus_t Status) {
    return Status == SYSSTATUS_OK;

@@ -22,7 +22,7 @@
 			symptom. 16 bits give 65536 codes per module.
 
  The encoded value 0 is reserved for Ready / No error. It is the
- resting value returned when nothing is wrong.
+ default value returned when no error is present.
 
  Type values (top nibble) :
 		0000b  Runtime state  (state machine value, not an error)
@@ -213,7 +213,7 @@ typedef enum _System_Status_Type {
  * clean. Error codes carry SYSSTATUS_TYPE_ERR.
  */
 
-// Ready / No error, the resting value
+// Ready / No error
 #define STATUS_OK                   0
 #define SYSSTATUS_OK                0       //!< System status normal
 #define SYSSTATUS_NOERROR           0
