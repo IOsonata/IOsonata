@@ -153,8 +153,8 @@ public:
       return StatusEncode(Type, ModId, Code);
    }
 
-   SysStatus & operator = (STATUS Status) { vStatus = Status; return *this; }
-   operator STATUS () const { return vStatus; }
+   SysStatus & operator = (SysStatus_t Status) { vStatus = Status; return *this; }
+   operator SysStatus_t () const { return vStatus; }
 
    uint32_t Type(void) const   { return StatusType(vStatus); }
    uint32_t ModId(void) const  { return StatusModId(vStatus); }
