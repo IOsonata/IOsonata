@@ -192,7 +192,7 @@ void BtGapParamInit(const BtGapCfg_t *pCfg)
 	aci_gap_set_io_capability(BT_GAP_DEFAULT_IO_CAPABILITY);
 
 	// Push appearance into the GAP service char.
-	uint16_t appearance = g_BtAppData.Appearance;
+	uint16_t appearance = g_BtAppData.AppDevice.Appearance;
 	aci_gatt_update_char_value(s_GapWba.GapSrvcHdl,
 	                           s_GapWba.AppearanceCharHdl,
 	                           0, sizeof(appearance),

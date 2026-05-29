@@ -102,10 +102,6 @@ extern UART g_Uart;
 #define BLE_STATUS_SUCCESS				0x00
 #endif
 
-#ifndef BT_STM32WBA_CONN_HDL_INVALID
-#define BT_STM32WBA_CONN_HDL_INVALID	0xFFFF
-#endif
-
 // ATT MTU. Default per BT spec is 23. The stack negotiates higher via
 // aci_gatt_exchange_config. Apps that set BtAppCfg_t::MaxMtu request a
 // higher value; the cap depends on the stack configuration buffer sizes.
@@ -205,14 +201,13 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_disconnection_complete_event_rp0 *p =
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
-			if (p->Connection_Handle == g_BtAppData.ConnHdl)
+			if (BtPeerIsConnected() && p->Connection_Handle == BtPeerActiveHdl())
 			{
-				g_BtAppData.ConnHdl = BT_STM32WBA_CONN_HDL_INVALID;
-				g_BtAppData.State   = BTAPP_DISCONNECTED;
+				g_BtAppData.State = BTAPP_DISCONNECTED;
 				BtAppConnLedOff();
 				BtPeerFreeByHdl(p->Connection_Handle);
 				// Re-arm advertising for peripheral/broadcaster apps.
-				if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+				if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 				{
 					BtAdvStart();
 				}
@@ -231,8 +226,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						(hci_le_connection_complete_event_rp0 *)pMeta->data;
 					if (p->Status == BLE_STATUS_SUCCESS)
 					{
-						g_BtAppData.ConnHdl = p->Connection_Handle;
-						g_BtAppData.State   = BTAPP_CONNECTED;
+						g_BtAppData.State = BTAPP_CONNECTED;
 						BtAppConnLedOn();
 						BtPeerConnected(p->Connection_Handle,
 						                   p->Role,
@@ -339,23 +333,22 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
 	// Populate generic app data from cfg.
-	g_BtAppData.Role            = pCfg->Role;
+	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AdvHdl          = 0;	// WBA stack manages adv internally
-	g_BtAppData.ConnHdl         = BT_STM32WBA_CONN_HDL_INVALID;
 	g_BtAppData.bExtAdv         = pCfg->bExtAdv;
 	g_BtAppData.ConnLedPort     = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin      = pCfg->ConnLedPin;
 	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
 	g_BtAppData.bScan           = false;
-	g_BtAppData.VendorId        = pCfg->VendorId;
-	g_BtAppData.ProductId       = pCfg->ProductId;
-	g_BtAppData.ProductVer      = pCfg->ProductVer;
-	g_BtAppData.Appearance      = pCfg->Appearance;
+	g_BtAppData.AppDevice.VendorId   = pCfg->VendorId;
+	g_BtAppData.AppDevice.ProductId  = pCfg->ProductId;
+	g_BtAppData.AppDevice.ProductVer = pCfg->ProductVer;
+	g_BtAppData.AppDevice.Appearance = pCfg->Appearance;
 
-	g_BtAppData.MaxMtu = GATT_MTU_SIZE_DEFAULT;
+	g_BtAppData.AppDevice.Conn.MaxMtu = GATT_MTU_SIZE_DEFAULT;
 	if (pCfg->MaxMtu > GATT_MTU_SIZE_DEFAULT)
 	{
-		g_BtAppData.MaxMtu = pCfg->MaxMtu;
+		g_BtAppData.AppDevice.Conn.MaxMtu = pCfg->MaxMtu;
 	}
 
 	// Connection LED.
@@ -478,10 +471,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	BtAppInitUserData();
 
-	g_BtAppData.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
+	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
 
 	// Advertising init - actual ACI calls live in bt_adv_stm32wba.cpp.
-	if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		if (BtAppAdvInit(pCfg) == false)
 		{
@@ -502,7 +495,7 @@ void BtAppRun(void)
 		return;
 	}
 
-	if (g_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		BtAdvStart();
 	}
@@ -543,7 +536,7 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	if (g_BtAppData.ConnHdl == BT_STM32WBA_CONN_HDL_INVALID)
+	if (BtPeerIsConnected() == false)
 	{
 		return false;
 	}
@@ -558,9 +551,9 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 
 void BtAppDisconnect(void)
 {
-	if (g_BtAppData.ConnHdl != BT_STM32WBA_CONN_HDL_INVALID)
+	if (BtPeerIsConnected())
 	{
-		aci_gap_terminate(g_BtAppData.ConnHdl, 0x13);	// remote user term
+		aci_gap_terminate(BtPeerActiveHdl(), 0x13);	// remote user term
 	}
 }
 
@@ -590,7 +583,7 @@ void BtAppEnterDfu(void)
 bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle,
                 uint8_t *pData, uint16_t DataLen)
 {
-	if (ConnHandle == BT_STM32WBA_CONN_HDL_INVALID || pData == NULL)
+	if (ConnHandle == BT_CONN_HDL_INVALID || pData == NULL)
 	{
 		return false;
 	}
@@ -602,7 +595,7 @@ bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle,
 
 bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CccdHandle)
 {
-	if (ConnHandle == BT_STM32WBA_CONN_HDL_INVALID)
+	if (ConnHandle == BT_CONN_HDL_INVALID)
 	{
 		return false;
 	}

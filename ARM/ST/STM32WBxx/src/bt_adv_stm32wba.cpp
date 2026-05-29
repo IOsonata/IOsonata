@@ -145,7 +145,7 @@ static uint16_t MapExtAdvEvtProps(uint8_t Role)
 void BtAdvStart(void)
 {
 	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING ||
-	    g_BtAppData.ConnHdl != 0xFFFFU)
+	    BtPeerIsConnected())
 	{
 		return;
 	}
@@ -340,7 +340,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.VendorId;
+		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 		memcpy(&p->Data[2], pAdvData, AdvLen);
 	}
 
@@ -355,7 +355,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.VendorId;
+		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 		memcpy(&p->Data[2], pSrData, SrLen);
 	}
 
