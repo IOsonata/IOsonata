@@ -122,6 +122,114 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
  */
 SysLog_t * const SysLogGet(void);
 
+//
+// Status stack. IOsonata default storage for status provenance. A fixed
+// depth LIFO of SysStatus_t values recording the chain of status producing
+// sites as an operation unwinds. The application reads the most recent
+// entry first and pops down the chain for more detail.
+//
+// Independent of the logger. Pushing a status and recording it to an output
+// are separate operations.
+//
+// Policy :
+//   - Push records a status. Pushes occur at status producing sites only.
+//   - Read returns the most recent entry (LIFO).
+//   - Pop returns and removes the most recent entry. Pop on empty returns
+//     SYSSTATUS_OK.
+//   - When full, a push is rejected, preserving the originating cause.
+//   - The first push after any pop clears the stack, then stores, starting
+//     a new chain once the previous one has been read.
+//
+
+// Stack depth.
+#ifndef SYSSTATUS_STACK_DEPTH
+#define SYSSTATUS_STACK_DEPTH   4
+#endif
+
+/**
+ * Status stack instance.
+ */
+typedef struct __Sys_Status_Stack {
+	SysStatus_t	Entry[SYSSTATUS_STACK_DEPTH];	//!< Storage, index 0 is oldest
+	int			Count;							//!< Number of stored entries
+	bool		PoppedSincePush;				//!< Set by a pop, clears on next push
+} SysStatusStack_t;
+
+/**
+ * Reset a stack to empty.
+ *
+ * @param	pStack : Stack instance.
+ */
+void SysStatusStackReset(SysStatusStack_t * const pStack);
+
+/**
+ * Push a status onto a stack. Clears first if a pop has occurred since the
+ * last push. Rejected if the stack is full.
+ *
+ * @param	pStack	: Stack instance.
+ * @param	Status	: Status word to store.
+ *
+ * @return	true if stored, false if rejected.
+ */
+bool SysStatusStackPush(SysStatusStack_t * const pStack, SysStatus_t Status);
+
+/**
+ * Pop the most recent status.
+ *
+ * @param	pStack : Stack instance.
+ *
+ * @return	Most recent status, or SYSSTATUS_OK if empty.
+ */
+SysStatus_t SysStatusStackPop(SysStatusStack_t * const pStack);
+
+/**
+ * Read the most recent status without removing it.
+ *
+ * @param	pStack : Stack instance.
+ *
+ * @return	Most recent status, or SYSSTATUS_OK if empty.
+ */
+SysStatus_t SysStatusStackPeek(SysStatusStack_t * const pStack);
+
+/**
+ * Number of stored entries.
+ *
+ * @param	pStack : Stack instance.
+ *
+ * @return	Entry count.
+ */
+int SysStatusStackCount(SysStatusStack_t * const pStack);
+
+/**
+ * Get the IOsonata global status stack handle.
+ *
+ * @return	Handle to the global stack.
+ */
+SysStatusStack_t * const SysStatusStackGet(void);
+
+/**
+ * Push a status onto the global stack.
+ *
+ * @param	Status : Status word to store.
+ *
+ * @return	true if stored, false if rejected.
+ */
+bool SysStatusPush(SysStatus_t Status);
+
+/**
+ * Pop the most recent status from the global stack.
+ *
+ * @return	Most recent status, or SYSSTATUS_OK if empty.
+ */
+SysStatus_t SysStatusPop(void);
+
+/**
+ * Read the most recent status on the global stack without removing it.
+ *
+ * @return	Most recent status, or SYSSTATUS_OK if empty.
+ */
+SysStatus_t SysStatusPeek(void);
+
 #ifdef __cplusplus
 }
 

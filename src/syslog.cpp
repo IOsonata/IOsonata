@@ -131,3 +131,111 @@ extern "C" SysLog_t * const SysLogGet(void)
 {
 	return g_SysLog;
 }
+
+//
+// Status stack. IOsonata default storage for status provenance.
+// Independent of the logger above.
+//
+
+// Weak linkage for override of the global accessors.
+#ifndef SYSSTATUS_WEAK
+#if defined(__GNUC__) || defined(__clang__)
+#define SYSSTATUS_WEAK  __attribute__((weak))
+#else
+#define SYSSTATUS_WEAK
+#endif
+#endif
+
+void SysStatusStackReset(SysStatusStack_t * const pStack)
+{
+	if (pStack == 0)
+	{
+		return;
+	}
+
+	pStack->Count = 0;
+	pStack->PoppedSincePush = false;
+}
+
+bool SysStatusStackPush(SysStatusStack_t * const pStack, SysStatus_t Status)
+{
+	if (pStack == 0)
+	{
+		return false;
+	}
+
+	// Start a new chain if a read cycle has begun.
+	if (pStack->PoppedSincePush)
+	{
+		pStack->Count = 0;
+		pStack->PoppedSincePush = false;
+	}
+
+	// Reject when full, preserves the originating cause.
+	if (pStack->Count >= SYSSTATUS_STACK_DEPTH)
+	{
+		return false;
+	}
+
+	pStack->Entry[pStack->Count] = Status;
+	pStack->Count++;
+
+	return true;
+}
+
+SysStatus_t SysStatusStackPop(SysStatusStack_t * const pStack)
+{
+	if (pStack == 0 || pStack->Count <= 0)
+	{
+		return SYSSTATUS_OK;
+	}
+
+	pStack->Count--;
+	pStack->PoppedSincePush = true;
+
+	return pStack->Entry[pStack->Count];
+}
+
+SysStatus_t SysStatusStackPeek(SysStatusStack_t * const pStack)
+{
+	if (pStack == 0 || pStack->Count <= 0)
+	{
+		return SYSSTATUS_OK;
+	}
+
+	return pStack->Entry[pStack->Count - 1];
+}
+
+int SysStatusStackCount(SysStatusStack_t * const pStack)
+{
+	if (pStack == 0)
+	{
+		return 0;
+	}
+
+	return pStack->Count;
+}
+
+// IOsonata global instance. Zero initialized, so Count is 0 (empty) at
+// startup with no explicit init required.
+static SysStatusStack_t g_SysStatusStack;
+
+SYSSTATUS_WEAK SysStatusStack_t * const SysStatusStackGet(void)
+{
+	return &g_SysStatusStack;
+}
+
+SYSSTATUS_WEAK bool SysStatusPush(SysStatus_t Status)
+{
+	return SysStatusStackPush(&g_SysStatusStack, Status);
+}
+
+SYSSTATUS_WEAK SysStatus_t SysStatusPop(void)
+{
+	return SysStatusStackPop(&g_SysStatusStack);
+}
+
+SYSSTATUS_WEAK SysStatus_t SysStatusPeek(void)
+{
+	return SysStatusStackPeek(&g_SysStatusStack);
+}
