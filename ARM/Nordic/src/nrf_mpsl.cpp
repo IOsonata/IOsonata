@@ -34,7 +34,18 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "nrf.h"
+
+// MPSL rev 40edf29 added mpsl_memcpy() declared with the C99 'restrict'
+// keyword inside the extern "C" block of mpsl.h. 'restrict' is not a C++
+// keyword, so map it to the GCC/Clang __restrict extension across the
+// mpsl.h include, then restore it.
+#if defined(__cplusplus) && !defined(restrict)
+#define restrict __restrict
 #include "mpsl.h"
+#undef restrict
+#else
+#include "mpsl.h"
+#endif
 
 #include "nrf_mpsl.h"
 #include "mpsl_fem_init.h"
