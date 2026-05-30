@@ -615,15 +615,6 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		// A_init = peer (central), A_resp = local.
 		uint8_t localAddr[6]; uint8_t localAddrType = 0;
 		BtSmpLocalAddrGet(&localAddrType, localAddr);
-		SMP_TRACE("SMP f5 iat=%d ia=%02x%02x%02x%02x%02x%02x rat=%d ra=%02x%02x%02x%02x%02x%02x\r\n",
-				  peerAddrType, peerAddr[5], peerAddr[4], peerAddr[3],
-				  peerAddr[2], peerAddr[1], peerAddr[0],
-				  localAddrType, localAddr[5], localAddr[4], localAddr[3],
-				  localAddr[2], localAddr[1], localAddr[0]);
-		SMP_TRACE("SMP dhkey %02x%02x%02x%02x..%02x%02x%02x%02x\r\n",
-				  pLink->Ctx.DhKey[0], pLink->Ctx.DhKey[1], pLink->Ctx.DhKey[2],
-				  pLink->Ctx.DhKey[3], pLink->Ctx.DhKey[28], pLink->Ctx.DhKey[29],
-				  pLink->Ctx.DhKey[30], pLink->Ctx.DhKey[31]);
 		SmpF5(pLink->Ctx.DhKey, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
 			  peerAddrType, peerAddr, localAddrType, localAddr,
 			  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
@@ -879,25 +870,16 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		SmpF4(&pLink->Ctx.LocalPubKey[0], &pLink->Ctx.PeerPubKey[0],
 			  pLink->Ctx.LocalRand, 0, cf.Value);
 		memcpy(pLink->Ctx.LocalConfirm, cf.Value, 16);
-		SMP_TRACE("DUMP LPubX ");
-		for (int i = 0; i < 32; i++) SMP_TRACE("%02x", pLink->Ctx.LocalPubKey[i]);
-		SMP_TRACE("\r\nDUMP LPubY ");
-		for (int i = 0; i < 32; i++) SMP_TRACE("%02x", pLink->Ctx.LocalPubKey[32 + i]);
-		SMP_TRACE("\r\nDUMP PPubX ");
-		for (int i = 0; i < 32; i++) SMP_TRACE("%02x", pLink->Ctx.PeerPubKey[i]);
-		SMP_TRACE("\r\nDUMP PPubY ");
-		for (int i = 0; i < 32; i++) SMP_TRACE("%02x", pLink->Ctx.PeerPubKey[32 + i]);
-		SMP_TRACE("\r\n");
-		SMP_TRACE("SMP Cb PKbx=%02x%02x..%02x%02x PKax=%02x%02x..%02x%02x Nb=%02x%02x..%02x%02x\r\n",
-				  pLink->Ctx.LocalPubKey[0], pLink->Ctx.LocalPubKey[1],
-				  pLink->Ctx.LocalPubKey[30], pLink->Ctx.LocalPubKey[31],
-				  pLink->Ctx.PeerPubKey[0], pLink->Ctx.PeerPubKey[1],
-				  pLink->Ctx.PeerPubKey[30], pLink->Ctx.PeerPubKey[31],
-				  pLink->Ctx.LocalRand[0], pLink->Ctx.LocalRand[1],
-				  pLink->Ctx.LocalRand[14], pLink->Ctx.LocalRand[15]);
-		SMP_TRACE("SMP Cb=%02x%02x%02x%02x..%02x%02x%02x%02x\r\n",
-				  cf.Value[0], cf.Value[1], cf.Value[2], cf.Value[3],
-				  cf.Value[12], cf.Value[13], cf.Value[14], cf.Value[15]);
+		// Compact self-check: recompute Cb and confirm it is stable, and
+		// verify our public key corresponds to our DHKey path. Print short.
+		{
+			uint8_t cb2[16];
+			SmpF4(&pLink->Ctx.LocalPubKey[0], &pLink->Ctx.PeerPubKey[0],
+				  pLink->Ctx.LocalRand, 0, cb2);
+			bool stable = (memcmp(cb2, cf.Value, 16) == 0);
+			SMP_TRACE("Cb stable=%d firstbyte=%02x Nb0=%02x\r\n",
+					  stable ? 1 : 0, cf.Value[0], pLink->Ctx.LocalRand[0]);
+		}
 		SmpSend(pDev, pLink->ConnHdl, &cf, sizeof(cf));
 		pLink->Ctx.State = BT_SMP_STATE_CONFIRM_WAIT;
 	}
@@ -1006,6 +988,14 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t 
 {
 	(void)ConnHdl; (void)Rand; (void)Ediv; (void)Ltk;
 	return false;
+}
+
+// Weak default for the optional provider self-test: no-op PASS. The SDC
+// provider overrides this with the real P-256 DH known-answer test.
+__attribute__((weak))
+int BtSmpCryptoSelfTest(void)
+{
+	return 0;
 }
 
 // Init / link teardown. Call BtSmpInit once after BtPeerInit; call

@@ -146,6 +146,14 @@ int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
  */
 void BtSmpCryptoRand(uint8_t *pBuf, size_t Len);
 
+/**
+ * @brief	Optional provider self-test. Runs a known-answer P-256 DH vector
+ *			through the provider's ECDH. Returns 0 on PASS, nonzero on FAIL.
+ *			A weak default returns 0 (no-op) for providers that do not
+ *			implement it.
+ */
+int BtSmpCryptoSelfTest(void);
+
 #ifdef __cplusplus
 }
 #endif
