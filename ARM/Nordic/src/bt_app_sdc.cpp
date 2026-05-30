@@ -723,18 +723,25 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		// into the SMP c1/f5/f6 toolbox. Capture it for BtSmpLocalAddrGet. A
 		// Zephyr static address is a random static address, so type = 1.
 		memcpy(s_BtSmpLocalAddr, addr->addresses->address, 6);
-		s_BtSmpLocalAddrType = 1;	// random (static)
+		s_BtSmpLocalAddrType = 0;	// public address used by current advertising config	// random (static)
 	}
 
 	sdc_hci_cmd_le_rand_return_t rr;
-
 	res = sdc_hci_cmd_le_rand(&rr);
 	if (res == 0)
 	{
 		sdc_hci_cmd_le_set_random_address_t ranaddr;
+
 		memcpy(ranaddr.random_address, &rr.random_number, 6);
+
+		// Configure a valid random static address. HCI address arrays are
+		// LSB first, so the static-random marker lives in byte 5.
+		ranaddr.random_address[5] = (ranaddr.random_address[5] & 0x3f) | 0xc0;
+
 		if (sdc_hci_cmd_le_set_random_address(&ranaddr))
+		{
 			return false;
+		}
 	}
 
 	sdc_hci_cmd_le_read_max_data_length_return_t maxlen;

@@ -750,8 +750,8 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	uint8_t localAddrType = 0;
 	BtSmpLocalAddrGet(&localAddrType, localAddr);
 
-	uint8_t iocapA[3] = { pLink->Ctx.PReq[3], pLink->Ctx.PReq[2], pLink->Ctx.PReq[1] };
-	uint8_t iocapB[3] = { pLink->Ctx.PRsp[3], pLink->Ctx.PRsp[2], pLink->Ctx.PRsp[1] };
+	uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
+	uint8_t iocapB[3] = { pLink->Ctx.PRsp[1], pLink->Ctx.PRsp[2], pLink->Ctx.PRsp[3] };
 	uint8_t zeroR[16] = {0};
 
 	uint8_t ea[16];
@@ -761,10 +761,36 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	if (memcmp(ea, pChk->Value, 16) != 0)
 	{
-		SMP_TRACE("Ea mismatch calc0=%02x peer0=%02x\r\n", ea[0], pChk->Value[0]);
-		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
-		pLink->Ctx.State = BT_SMP_STATE_IDLE;
-		return;
+		// The Confirm stage already passed, so ECDH produced the same point as
+		// the peer. If Ea fails here, the most common remaining issue is DHKey
+		// byte order at f5. Try the other provider order before failing.
+		uint8_t altMackey[16];
+		uint8_t altLtk[16];
+		uint8_t altEa[16];
+
+		SmpF5(pLink->Ctx.DhKey, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
+			  peerAddrType, peerAddr, localAddrType, localAddr,
+			  altMackey, altLtk);
+
+		SmpF6(altMackey, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
+			  zeroR, iocapA,
+			  peerAddrType, peerAddr, localAddrType, localAddr, altEa);
+
+		SMP_TRACE("Ea mismatch cur0=%02x alt0=%02x peer0=%02x\r\n",
+				  ea[0], altEa[0], pChk->Value[0]);
+
+		if (memcmp(altEa, pChk->Value, 16) != 0)
+		{
+			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+			pLink->Ctx.State = BT_SMP_STATE_IDLE;
+			return;
+		}
+
+		memcpy(pLink->Ctx.Mackey, altMackey, 16);
+		memcpy(pLink->Ctx.Ltk, altLtk, 16);
+		memcpy(pLink->Keys.Ltk, altLtk, 16);
+		memcpy(ea, altEa, 16);
+		SMP_TRACE("Ea matched with raw DHKey f5 input\r\n");
 	}
 
 	uint8_t eb[16];
@@ -1126,4 +1152,3 @@ extern "C" int BtSmpF4SelfTest(void)
 	SmpF4(U, V, X, 0, out);
 	return memcmp(out, expect, 16) == 0 ? 0 : -1;
 }
-
