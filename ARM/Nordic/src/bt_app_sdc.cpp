@@ -53,6 +53,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/timer.h"
 #include "bluetooth/bt_app.h"
+#include "bluetooth/bt_smp.h"		// BtSmpLocalAddrGet override
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
 #include "bluetooth/bt_l2cap.h"
@@ -97,6 +98,18 @@ static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 // g_BtAppData definition and helpers (isConnected, BtAppConnLedOff/On) moved to
 // src/bluetooth/bt_app.cpp.
+
+// On-air local address SMP needs for c1/f5/f6 (set when we configure the
+// random static address below). Defaults to public/zero until then.
+static uint8_t s_BtSmpLocalAddr[6] = {0};
+static uint8_t s_BtSmpLocalAddrType = 0;
+
+// Override the weak SMP accessor so the toolbox uses our real address.
+extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
+{
+	*pType = s_BtSmpLocalAddrType;
+	memcpy(pAddr, s_BtSmpLocalAddr, 6);
+}
 
 static BtHciDevice_t s_BtHciDev = {
 	.pCtx = (void*)&g_BtAppData,
@@ -377,6 +390,7 @@ static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 
 	reg->CONFIG = RNG_CONFIG_DERCEN_Enabled;
 
+	reg->EVENTS_VALRDY = 0;
 	reg->TASKS_START = 1;
 
 	for (int i = 0; i < Len; i++)
@@ -384,6 +398,7 @@ static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 		while (reg->EVENTS_VALRDY == 0);
 
 		pBuff[i] = reg->VALUE;
+		reg->EVENTS_VALRDY = 0;		// clear so the next VALUE is fresh entropy
 	}
 
 	reg->TASKS_STOP = 1;
@@ -703,6 +718,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 		memcpy(bdaddr.bd_addr, addr->addresses->address, 6);
 		sdc_hci_cmd_vs_zephyr_write_bd_addr(&bdaddr);
+
+		// This static address is what the peer sees on air and what it feeds
+		// into the SMP c1/f5/f6 toolbox. Capture it for BtSmpLocalAddrGet. A
+		// Zephyr static address is a random static address, so type = 1.
+		memcpy(s_BtSmpLocalAddr, addr->addresses->address, 6);
+		s_BtSmpLocalAddrType = 1;	// random (static)
 	}
 
 	sdc_hci_cmd_le_rand_return_t rr;

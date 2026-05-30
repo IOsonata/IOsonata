@@ -132,6 +132,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			}
 			break;
 		case BT_HCI_EVT_LE_LONGTERM_KEY_RQST:
+			{
+				BtHciLeEvtLongtermKeyReq_t *p = (BtHciLeEvtLongtermKeyReq_t*)pLeEvtPkt->Data;
+				BtSmpProcessLtkRequest(pDev, p->ConnHdl, p->RandNumber, p->EncryptDivers);
+			}
 			break;
 		case BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST:
 			{
@@ -154,8 +158,18 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			}
 			break;
 		case BT_HCI_EVT_LE_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE:
+			{
+				BtHciLeEvtReadLocalP256PubKeyComplete_t *p =
+						(BtHciLeEvtReadLocalP256PubKeyComplete_t*)pLeEvtPkt->Data;
+				BtSmpLocalPubKeyReady(pDev, p->Status, p->KeyXCoord, p->KeyYCoord);
+			}
 			break;
 		case BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE:
+			{
+				BtHciLeEvtGenerateDHKeyComplete_t *p =
+						(BtHciLeEvtGenerateDHKeyComplete_t*)pLeEvtPkt->Data;
+				BtSmpDhKeyReady(pDev, p->Status, p->DHKey);
+			}
 			break;
 		case BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V1:
 		case BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V2:
@@ -321,8 +335,13 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_REMOTE_NAME_RQST_COMPLETE:
 			break;
 		case BT_HCI_EVT_ENCRYPTION_CHANGE_V1:
-			break;
 		case BT_HCI_EVT_ENCRYPTION_CHANGE_V2:
+			{
+				uint8_t  status  = pEvtPkt->Data[0];
+				uint16_t connHdl = pEvtPkt->Data[1] | (pEvtPkt->Data[2] << 8);
+				uint8_t  enabled = pEvtPkt->Data[3];
+				BtSmpEncryptionChanged(pDev, connHdl, status, enabled);
+			}
 			break;
 		case BT_HCI_EVT_CHANGE_CONN_LINK_KEY_COMPLETE:
 			break;
@@ -512,7 +531,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		case BT_L2CAP_CID_SIGNAL:
 			break;
 		case BT_L2CAP_CID_SEC_MNGR:
-			BtProcessSmpData(pDev, l2rcv);
+			BtProcessSmpData(pDev, pPkt->Hdr.ConnHdl, &l2rcv->Smp, l2rcv->Hdr.Len);
 			break;
 	}
 //	DEBUG_PRINTF("-----\r\n");

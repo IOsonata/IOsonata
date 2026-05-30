@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	bt_smp.h
 
-@brief	Bluetooth Security Manger Protocol (SMP)  
+@brief	Bluetooth Security Manager Protocol (SMP)
 
 Generic implementation & definitions of Bluetooth Security Manager Protocol
 
@@ -42,6 +42,11 @@ SOFTWARE.
 #include <stddef.h>
 
 #include "bluetooth/bt_l2cap.h"
+#include "bluetooth/bt_hci.h"
+
+/** @addtogroup Bluetooth
+  * @{
+  */
 
 #define BT_SMP_CODE_PAIRING_REQ						1
 #define BT_SMP_CODE_PAIRING_RSP						2
@@ -54,11 +59,11 @@ SOFTWARE.
 #define BT_SMP_CODE_PAIRING_ID_ADDR_INFO			9
 #define BT_SMP_CODE_PAIRING_SIGNING_INFO			0xA
 #define BT_SMP_CODE_PAIRING_SECURITY_REQ			0xB
-#define BT_SMP_CODE_PAIRING_PAIRING_PUBLIC_KEY		0xC
-#define BT_SMP_CODE_PAIRING_PAIRING_DHKEY_CHECK		0xD
-#define BT_SMP_CODE_PAIRING_PAIRING_KEYPRESS_NOTIF	0xE
+#define BT_SMP_CODE_PAIRING_PUBLIC_KEY				0xC
+#define BT_SMP_CODE_PAIRING_DHKEY_CHECK				0xD
+#define BT_SMP_CODE_PAIRING_KEYPRESS_NOTIF			0xE
 
-
+// IO capability values (Vol 3, Part H, 3.5.1).
 #define BT_SMP_IOCAPS_DISPLAY_ONLY					0
 #define BT_SMP_IOCAPS_DISPLAY_YESNO					1
 #define BT_SMP_IOCAPS_KEYBOARD_ONLY					2
@@ -68,15 +73,99 @@ SOFTWARE.
 #define BT_SMP_OOB_AUTH_NOT_PRESENT					0	//!< OOB Authentication data not present
 #define BT_SMP_OOB_AUTH_PRESENT 					1	//!< OOB Authentication data from remote device present
 
+// AuthReq flags (Vol 3, Part H, 3.5.1, Figure 3.3).
 #define BT_SMP_AUTHREQ_BONDING_FLAG_MASK			(3<<0)
 #define BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING		(0<<0)	//!< No bonding
-#define BT_SMP_AUTHREQ_BONDING_FLAG_BONDING			(1<<1)
-#define BT_SMP_AUTHREQ_MITM							(1<<2)
-#define BT_SMP_AUTHREQ_SC							(1<<3)	//!< LE secure connection
-#define BT_SMP_AUTHREQ_KEYPRESS						(1<<4)	//!<
-#define BT_SMP_AUTHREQ_CT2							(1<<5)	//!<
-#define BT_SMP_AUTHREQ_RFU_MASK						(3<<6)	//!<
+#define BT_SMP_AUTHREQ_BONDING_FLAG_BONDING			(1<<0)	//!< Bonding requested
+#define BT_SMP_AUTHREQ_MITM							(1<<2)	//!< MITM protection requested
+#define BT_SMP_AUTHREQ_SC							(1<<3)	//!< LE Secure Connections supported
+#define BT_SMP_AUTHREQ_KEYPRESS						(1<<4)	//!< Keypress notifications
+#define BT_SMP_AUTHREQ_CT2							(1<<5)	//!< h7 key derivation supported
+#define BT_SMP_AUTHREQ_RFU_MASK						(3<<6)
 
+// Key distribution flags (Vol 3, Part H, 3.6.1).
+#define BT_SMP_KEYDIST_ENCKEY						(1<<0)	//!< Distribute LTK (legacy) / not used in SC
+#define BT_SMP_KEYDIST_IDKEY						(1<<1)	//!< Distribute IRK + identity address
+#define BT_SMP_KEYDIST_SIGNKEY						(1<<2)	//!< Distribute CSRK
+#define BT_SMP_KEYDIST_LINKKEY						(1<<3)	//!< Derive BR/EDR link key
+
+// Pairing Failed reason codes (Vol 3, Part H, 3.5.5, Table 3.7).
+#define BT_SMP_ERR_PASSKEY_ENTRY_FAILED				0x01
+#define BT_SMP_ERR_OOB_NOT_AVAILABLE				0x02
+#define BT_SMP_ERR_AUTHEN_REQUIREMENTS				0x03
+#define BT_SMP_ERR_CONFIRM_VALUE_FAILED				0x04
+#define BT_SMP_ERR_PAIRING_NOT_SUPPORTED			0x05
+#define BT_SMP_ERR_ENC_KEY_SIZE						0x06
+#define BT_SMP_ERR_CMD_NOT_SUPPORTED				0x07
+#define BT_SMP_ERR_UNSPECIFIED						0x08
+#define BT_SMP_ERR_REPEATED_ATTEMPTS				0x09
+#define BT_SMP_ERR_INVALID_PARAMS					0x0A
+#define BT_SMP_ERR_DHKEY_CHECK_FAILED				0x0B
+#define BT_SMP_ERR_NUMERIC_COMPARISON_FAILED		0x0C
+#define BT_SMP_ERR_BREDR_PAIRING_IN_PROGRESS		0x0D
+#define BT_SMP_ERR_CROSS_TRANSP_NOT_ALLOWED			0x0E
+#define BT_SMP_ERR_KEY_REJECTED						0x0F
+
+#define BT_SMP_MAX_ENC_KEY_SIZE						16
+#define BT_SMP_MIN_ENC_KEY_SIZE						7
+
+/// SMP pairing phase. Drives the per-link state machine in bt_smp.cpp.
+/// The responder (peripheral) path is implemented end to end; the
+/// initiator (central) path reuses the same states with the roles of the
+/// confirm/random exchange swapped.
+typedef enum __Bt_Smp_State {
+	BT_SMP_STATE_IDLE = 0,			//!< No pairing in progress
+	BT_SMP_STATE_PAIR_RSP_SENT,		//!< Sent Pairing Response, waiting for peer
+	BT_SMP_STATE_PUBKEY_WAIT,		//!< SC: waiting for peer public key
+	BT_SMP_STATE_PUBKEY_LOCAL_WAIT,	//!< SC: waiting for local P-256 key from controller
+	BT_SMP_STATE_DHKEY_WAIT,		//!< SC: waiting for DHKey from controller
+	BT_SMP_STATE_CONFIRM_WAIT,		//!< Waiting for peer Pairing Confirm
+	BT_SMP_STATE_RANDOM_WAIT,		//!< Waiting for peer Pairing Random
+	BT_SMP_STATE_DHKEY_CHECK_WAIT,	//!< SC: waiting for peer DHKey Check
+	BT_SMP_STATE_LTK_WAIT,			//!< Waiting for controller LTK request (enc start)
+	BT_SMP_STATE_KEYDIST,			//!< Distributing / receiving transport keys
+	BT_SMP_STATE_DONE				//!< Pairing complete, link encrypted
+} BtSmpState_t;
+
+/// Per-link security key material. For bonded peers it is the record the
+/// application persists and reloads on reconnect.
+typedef struct __Bt_Smp_Keys {
+	uint8_t  Ltk[16];				//!< Long Term Key
+	uint8_t  Irk[16];				//!< Identity Resolving Key (peer)
+	uint8_t  Csrk[16];				//!< Connection Signature Resolving Key (peer)
+	uint64_t Rand;					//!< LTK Rand (legacy; 0 for SC)
+	uint16_t Ediv;					//!< LTK EDIV (legacy; 0 for SC)
+	uint8_t  EncKeySize;			//!< Negotiated encryption key size, bytes
+	uint8_t  IdAddrType;			//!< Peer identity address type
+	uint8_t  IdAddr[6];				//!< Peer identity address
+	bool     bAuthenticated;		//!< true if MITM-protected (passkey/numeric/OOB)
+	bool     bSc;					//!< true if produced by LE Secure Connections
+	bool     bValid;				//!< true once the key set is populated
+} BtSmpKeys_t;
+
+/// Per-link SMP context. Held inside the peer record; allocated/freed with
+/// the link. Holds transient pairing state that must not leak across
+/// connections (the pre-refactor globals did exactly that).
+typedef struct __Bt_Smp_Ctx {
+	BtSmpState_t State;				//!< Current pairing state
+	uint8_t  PReq[7];				//!< Cached Pairing Request PDU (for confirm calc)
+	uint8_t  PRsp[7];				//!< Cached Pairing Response PDU (for confirm calc)
+	uint8_t  IoCaps;				//!< Local IO capability in use
+	uint8_t  AuthReq;				//!< Negotiated AuthReq
+	uint8_t  PeerAuthReq;			//!< Peer-requested AuthReq
+	bool     bSc;					//!< true if SC negotiated for this pairing
+	bool     bInitiator;			//!< true if local device is the SMP initiator (central)
+	uint8_t  Tk[16];				//!< Temporary Key (legacy) / 0 for Just Works
+	uint8_t  LocalRand[16];			//!< Local random (Mrand / Srand)
+	uint8_t  PeerRand[16];			//!< Peer random
+	uint8_t  LocalConfirm[16];		//!< Local confirm value
+	uint8_t  PeerConfirm[16];		//!< Peer confirm value
+	uint8_t  LocalPubKey[64];		//!< SC: local P-256 public key (X||Y)
+	uint8_t  PeerPubKey[64];		//!< SC: peer P-256 public key (X||Y)
+	uint8_t  DhKey[32];				//!< SC: computed DHKey
+	uint8_t  Mackey[16];			//!< SC: MacKey from f5
+	uint8_t  Ltk[16];				//!< Derived/working LTK
+} BtSmpCtx_t;
 
 #pragma pack(push, 1)
 
@@ -89,38 +178,155 @@ typedef struct __Bt_Smp_Paring_Req {
 	uint8_t Code;				//!< SMP code
 	uint8_t IOCaps;				//!< IO capability
 	uint8_t OOBFlag;			//!< OOB data flag
-	uint8_t AuthReq;			//!<
+	uint8_t AuthReq;			//!< Authentication requirements
 	uint8_t MaxKeySize;			//!< Max encryption key size in bytes
 	uint8_t InitiatorKeyDist;	//!< Initiator key distribution
 	uint8_t ResponderKeyDist;	//!< Responder key distribution
 } BtSmpPairingReq_t;
 
-typedef struct __Bt_Smp_Paring_Rsp {
-	uint8_t Code;				//!< SMP code
-	uint8_t IOCaps;				//!< IO capability
-	uint8_t OOBFlag;			//!< OOB data flag
-	uint8_t AuthReq;			//!<
-	uint8_t MaxKeySize;			//!< Max encryption key size in bytes
-	uint8_t InitiatorKeyDist;	//!< Initiator key distribution
-	uint8_t ResponderKeyDist;	//!< Responder key distribution
-} BtSmpPairingRsp_t;
+typedef BtSmpPairingReq_t BtSmpPairingRsp_t;
 
 typedef struct __Bt_Smp_Pairing_Confirm {
-	uint8_t Code;			//!< SMP code
+	uint8_t Code;				//!< SMP code
 	uint8_t Value[16];
 } BtSmpPairingConfirm_t;
 
-#pragma pack(pop)
+typedef struct __Bt_Smp_Pairing_Random {
+	uint8_t Code;				//!< SMP code
+	uint8_t Value[16];
+} BtSmpPairingRandom_t;
 
+typedef struct __Bt_Smp_Pairing_Failed {
+	uint8_t Code;				//!< SMP code
+	uint8_t Reason;				//!< Pairing Failed reason
+} BtSmpPairingFailed_t;
+
+typedef struct __Bt_Smp_Public_Key {
+	uint8_t Code;				//!< SMP code
+	uint8_t KeyX[32];			//!< P-256 public key X coordinate
+	uint8_t KeyY[32];			//!< P-256 public key Y coordinate
+} BtSmpPublicKey_t;
+
+typedef struct __Bt_Smp_DHKey_Check {
+	uint8_t Code;				//!< SMP code
+	uint8_t Value[16];			//!< Ea / Eb
+} BtSmpDhKeyCheck_t;
+
+typedef struct __Bt_Smp_Encrypt_Info {
+	uint8_t Code;				//!< SMP code
+	uint8_t Ltk[16];			//!< Long Term Key (legacy distribution)
+} BtSmpEncryptInfo_t;
+
+typedef struct __Bt_Smp_Central_Id {
+	uint8_t  Code;				//!< SMP code
+	uint16_t Ediv;				//!< EDIV
+	uint64_t Rand;				//!< Rand
+} BtSmpCentralId_t;
+
+typedef struct __Bt_Smp_Id_Info {
+	uint8_t Code;				//!< SMP code
+	uint8_t Irk[16];			//!< Identity Resolving Key
+} BtSmpIdInfo_t;
+
+typedef struct __Bt_Smp_Id_Addr_Info {
+	uint8_t Code;				//!< SMP code
+	uint8_t AddrType;			//!< Identity address type
+	uint8_t Addr[6];			//!< Identity address
+} BtSmpIdAddrInfo_t;
+
+typedef struct __Bt_Smp_Signing_Info {
+	uint8_t Code;				//!< SMP code
+	uint8_t Csrk[16];			//!< Connection Signature Resolving Key
+} BtSmpSigningInfo_t;
+
+typedef struct __Bt_Smp_Security_Req {
+	uint8_t Code;				//!< SMP code
+	uint8_t AuthReq;			//!< Authentication requirements
+} BtSmpSecurityReq_t;
+
+#pragma pack(pop)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void BtProcessSmpData(BtHciDevice_t * const pDev, BtL2CapPdu_t * const pRcvPdu);
+/**
+ * @brief	Process an inbound SMP PDU (L2CAP CID 6).
+ *
+ * Now takes the connection handle: every reply this function emits, and the
+ * LTK reply it ultimately triggers, are addressed by handle. The previous
+ * signature dropped it, which made any response impossible on a multi-link
+ * stack.
+ *
+ * @param	pDev		HCI device the link belongs to.
+ * @param	ConnHdl		Connection handle the PDU arrived on.
+ * @param	pSmp		SMP payload (points at L2CAP Smp field, not the header).
+ * @param	Len			SMP payload length in bytes (L2CAP Hdr.Len).
+ */
+void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+					  BtL2CapSmp_t * const pSmp, size_t Len);
+
+/**
+ * @brief	Controller LE Long Term Key Request handler.
+ *
+ * Called from the HCI LE event path on BT_HCI_EVT_LE_LONGTERM_KEY_RQST.
+ * Looks up the peer's stored/just-derived LTK and issues the positive or
+ * negative LTK reply. This is the step that actually starts link
+ * encryption; without it the peripheral never encrypts and the central
+ * times out.
+ */
+void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+							uint64_t Rand, uint16_t Ediv);
+
+/**
+ * @brief	Notify SMP that the controller produced the local P-256 key.
+ *			Forwarded from BT_HCI_EVT_LE_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE.
+ */
+void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
+						   const uint8_t *pKeyX, const uint8_t *pKeyY);
+
+/**
+ * @brief	Notify SMP that the controller produced the DHKey.
+ *			Forwarded from BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE.
+ */
+void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
+					 const uint8_t *pDhKey);
+
+/**
+ * @brief	Notify SMP that the link encryption state changed.
+ *			Forwarded from BT_HCI_EVT_ENCRYPTION_CHANGE_V1/V2. Marks the peer
+ *			bSecure and, on a fresh pairing, advances to key distribution.
+ */
+void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+							uint8_t Status, uint8_t Enabled);
+
+/**
+ * @brief	Weak application hook: pairing completed on a link.
+ *			Override to persist BtSmpKeys_t for bonding. Default does nothing.
+ */
+void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKeys);
+
+/**
+ * @brief	Get the local device address and type used on air.
+ *
+ * The SMP toolbox (c1 for legacy, f5/f6 for SC) needs the responder's own
+ * address exactly as the peer sees it, including the address TYPE
+ * (0 = public, 1 = random). A wrong address or type makes every confirm /
+ * check value mismatch and pairing fails with CONFIRM_VALUE / DHKEY_CHECK.
+ *
+ * Weak default returns public, all-zero - which is almost never correct, so
+ * the active backend MUST override this. The SDC backend reports the random
+ * static address it set at init.
+ *
+ * @param	pType	out: address type (0 public, 1 random).
+ * @param	pAddr	out: 6-byte address, little-endian as on air.
+ */
+void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6]);
 
 #ifdef __cplusplus
 }
 #endif
+
+/** @} end group Bluetooth */
 
 #endif // __BT_SMP_H__
