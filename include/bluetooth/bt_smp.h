@@ -323,6 +323,12 @@ void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKe
  */
 void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6]);
 
+/**
+ * @brief	f4 self-test against the BLE spec worked example. Returns 0 on PASS.
+ *			For bring-up verification that the on-target f4/AES-CMAC are correct.
+ */
+int BtSmpF4SelfTest(void);
+
 #ifdef __cplusplus
 }
 #endif
