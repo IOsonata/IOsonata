@@ -111,6 +111,29 @@ extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 	memcpy(pAddr, s_BtSmpLocalAddr, 6);
 }
 
+// Answer the controller LE Long Term Key Request via the real SDC HCI command
+// function. The generic SMP path would push this through the ACL data channel
+// (sdc_hci_data_put), which the controller ignores - encryption then stalls.
+extern "C" void BtSmpHciLtkReply(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+								 const uint8_t Ltk[16])
+{
+	(void)pDev;
+	sdc_hci_cmd_le_long_term_key_request_reply_t cmd;
+	sdc_hci_cmd_le_long_term_key_request_reply_return_t ret;
+	cmd.conn_handle = ConnHdl;
+	memcpy(cmd.long_term_key, Ltk, 16);
+	sdc_hci_cmd_le_long_term_key_request_reply(&cmd, &ret);
+}
+
+extern "C" void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl)
+{
+	(void)pDev;
+	sdc_hci_cmd_le_long_term_key_request_negative_reply_t cmd;
+	sdc_hci_cmd_le_long_term_key_request_negative_reply_return_t ret;
+	cmd.conn_handle = ConnHdl;
+	sdc_hci_cmd_le_long_term_key_request_negative_reply(&cmd, &ret);
+}
+
 static BtHciDevice_t s_BtHciDev = {
 	.pCtx = (void*)&g_BtAppData,
 	.SendData = BtAppSendData,
@@ -179,20 +202,20 @@ static void BtStackSdcCB()
 	// SDC invokes this from the low-priority SWI when HCI messages are
 	// queued. Wake any RTOS waiter so deferred work runs promptly; the
 	// weak BtAppEvtNotify default is empty so bare-metal apps see no
-	// effect. Then drain whatever is available right here.
+	// effect. Then drain EVERYTHING available - the SDC can queue several
+	// messages (e.g. a command completion followed by an Encryption Change
+	// event during pairing). Draining only one per callback can strand the
+	// later events (encryption never completes, pairing hangs).
 	BtAppEvtNotify();
 
 	uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
-	int32_t res = 0;
 	sdc_hci_msg_type_t mtype;
 
-	res = sdc_hci_get(buf, (uint8_t*)&mtype);
-	if (res == 0)
+	while (sdc_hci_get(buf, (uint8_t*)&mtype) == 0)
 	{
 		switch (mtype)
 		{
 			case SDC_HCI_MSG_TYPE_EVT:
-				// Event available
 				BtHciProcessEvent(&s_BtHciDev, (BtHciEvtPacket_t*)buf);
 				break;
 			case SDC_HCI_MSG_TYPE_DATA:
@@ -904,15 +927,16 @@ DEBUG_PRINTF("Loop\r\n");
 
 #if 1
 		uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
-		int32_t res = 0;
 		sdc_hci_msg_type_t mtype;
-		res = sdc_hci_get(buf, (uint8_t*)&mtype);
-		if (res == 0)
+		// Drain ALL queued HCI messages, not just one. The SDC can queue
+		// several at once (command completion + Encryption Change event during
+		// pairing); processing one per wake can strand the later ones and hang
+		// encryption/pairing completion.
+		while (sdc_hci_get(buf, (uint8_t*)&mtype) == 0)
 		{
 			switch (mtype)
 			{
 				case SDC_HCI_MSG_TYPE_EVT:
-					// Event available
 					BtHciProcessEvent(&s_BtHciDev, (BtHciEvtPacket_t*)buf);
 					break;
 				case SDC_HCI_MSG_TYPE_DATA:

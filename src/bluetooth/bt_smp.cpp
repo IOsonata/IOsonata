@@ -510,6 +510,10 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 
 	pRsp->InitiatorKeyDist = reqInitKeyDist & wantKeyDist;
 	pRsp->ResponderKeyDist = reqRespKeyDist & wantKeyDist;
+	SMP_TRACE("SMP keydist req ik=%02x rk=%02x -> rsp ik=%02x rk=%02x sc=%d\r\n",
+			  reqInitKeyDist, reqRespKeyDist,
+			  pRsp->InitiatorKeyDist, pRsp->ResponderKeyDist,
+			  pLink->Ctx.bSc ? 1 : 0);
 
 	pLink->Ctx.IoCaps = pRsp->IOCaps;
 	pLink->Ctx.AuthReq = pRsp->AuthReq;
@@ -1040,25 +1044,27 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 	if (have)
 	{
-		uint8_t param[18];
-		param[0] = (uint8_t)(ConnHdl & 0xFF);
-		param[1] = (uint8_t)(ConnHdl >> 8);
-		memcpy(&param[2], key, 16);
-		SmpSendHciCmd(pDev, BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_REPLY, param, sizeof(param));
+		SMP_TRACE("SMP LTK rqst -> reply (ediv=%u rand=%llu)\r\n",
+				  (unsigned)Ediv, (unsigned long long)Rand);
+		SMP_TRACE("SMP LTK %02x%02x%02x%02x..%02x%02x%02x%02x\r\n",
+				  key[0], key[1], key[2], key[3],
+				  key[12], key[13], key[14], key[15]);
+		// The LTK Request Reply is an HCI COMMAND, not ACL data. On the SDC
+		// backend it must go through sdc_hci_cmd_le_long_term_key_request_reply,
+		// not the ACL data path. Route via the provider hook.
+		BtSmpHciLtkReply(pDev, ConnHdl, key);
 	}
 	else
 	{
-		uint8_t param[2];
-		param[0] = (uint8_t)(ConnHdl & 0xFF);
-		param[1] = (uint8_t)(ConnHdl >> 8);
-		SmpSendHciCmd(pDev, BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY, param, sizeof(param));
+		SMP_TRACE("SMP LTK rqst -> NEG reply (no key)\r\n");
+		BtSmpHciLtkNegReply(pDev, ConnHdl);
 	}
 }
 
 void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 							uint8_t Status, uint8_t Enabled)
 {
-	(void)pDev;
+	SMP_TRACE("SMP EncChange status=%d enabled=%d\r\n", Status, Enabled);
 
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer != nullptr)
@@ -1081,6 +1087,43 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 	if (pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT)
 	{
+		// Encrypted. Run the key distribution phase the peer negotiated
+		// (ResponderKeyDist = PRsp[6]). For SC the LTK is derived (EncKey is
+		// never distributed); we send IRK + identity address (IDKEY) and/or
+		// CSRK (SIGNKEY) only if negotiated. The peer's pairing procedure does
+		// not complete until it has received the responder keys it expects.
+		uint8_t respKeyDist = pLink->Ctx.PRsp[6] &
+							  (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
+		SMP_TRACE("SMP encrypted, distribute rk=%02x\r\n", respKeyDist);
+
+		if (respKeyDist & BT_SMP_KEYDIST_IDKEY)
+		{
+			uint8_t irk[16];
+			BtSmpCryptoRand(irk, 16);
+			BtSmpIdInfo_t idi;
+			idi.Code = BT_SMP_CODE_PAIRING_ID_INFO;
+			memcpy(idi.Irk, irk, 16);
+			SmpSend(pDev, ConnHdl, &idi, sizeof(idi));
+
+			uint8_t localAddr[6]; uint8_t localAddrType = 0;
+			BtSmpLocalAddrGet(&localAddrType, localAddr);
+			BtSmpIdAddrInfo_t iai;
+			iai.Code = BT_SMP_CODE_PAIRING_ID_ADDR_INFO;
+			iai.AddrType = localAddrType;
+			memcpy(iai.Addr, localAddr, 6);
+			SmpSend(pDev, ConnHdl, &iai, sizeof(iai));
+		}
+
+		if (respKeyDist & BT_SMP_KEYDIST_SIGNKEY)
+		{
+			uint8_t csrk[16];
+			BtSmpCryptoRand(csrk, 16);
+			BtSmpSigningInfo_t si;
+			si.Code = BT_SMP_CODE_PAIRING_SIGNING_INFO;
+			memcpy(si.Csrk, csrk, 16);
+			SmpSend(pDev, ConnHdl, &si, sizeof(si));
+		}
+
 		pLink->Ctx.State = BT_SMP_STATE_DONE;
 		BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
 	}
@@ -1121,6 +1164,30 @@ int BtSmpCryptoSelfTest(void)
 	return 0;
 }
 
+// LTK Request Reply hooks. The active backend overrides these to route the
+// reply through its real HCI command channel (e.g. the SDC command function).
+// The weak default uses the generic HCI command builder, which is correct for
+// transports where the HCI command and ACL data share one sink.
+__attribute__((weak))
+void BtSmpHciLtkReply(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+					  const uint8_t Ltk[16])
+{
+	uint8_t param[18];
+	param[0] = (uint8_t)(ConnHdl & 0xFF);
+	param[1] = (uint8_t)(ConnHdl >> 8);
+	memcpy(&param[2], Ltk, 16);
+	SmpSendHciCmd(pDev, BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_REPLY, param, sizeof(param));
+}
+
+__attribute__((weak))
+void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl)
+{
+	uint8_t param[2];
+	param[0] = (uint8_t)(ConnHdl & 0xFF);
+	param[1] = (uint8_t)(ConnHdl >> 8);
+	SmpSendHciCmd(pDev, BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY, param, sizeof(param));
+}
+
 extern "C" void BtSmpInit(void)
 {
 	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
@@ -1138,16 +1205,20 @@ extern "C" void BtSmpDisconnected(uint16_t ConnHdl)
 // Verifies SmpF4 + AES-CMAC + AES are correct on the target. Returns 0 on PASS.
 extern "C" int BtSmpF4SelfTest(void)
 {
-	static const uint8_t U[32] = {
-		0x20,0xb0,0x03,0xd2,0xf2,0x97,0xbe,0x2c,0x5e,0x2c,0x83,0xa7,0xe9,0xf9,0xa5,0xb9,
-		0xef,0xf4,0x91,0x11,0xac,0xf4,0xfd,0xdb,0xcc,0x03,0x01,0x48,0x0e,0x35,0x9d,0xe6 };
-	static const uint8_t V[32] = {
-		0x55,0x18,0x8b,0x3d,0x32,0xf6,0xbb,0x9a,0x90,0x0a,0xfc,0xfb,0xee,0xd4,0xe7,0x2a,
-		0x59,0xcb,0x9a,0xc2,0xf1,0x9d,0x7c,0xfb,0x6b,0x4f,0xdd,0x49,0xf4,0x7f,0xc5,0xfd };
-	static const uint8_t X[16] = {
-		0xd5,0xcb,0x84,0x54,0xd1,0x77,0x73,0x3e,0xff,0xff,0xb2,0xec,0x71,0x2b,0xae,0xab };
-	static const uint8_t expect[16] = {
-		0xf2,0xc9,0x16,0xf1,0x07,0xa9,0xbd,0x1c,0xf1,0xed,0xa1,0xbe,0xa9,0x74,0x87,0x2d };
+	// BLE spec worked example (Vol 3 Part H, D.2). The toolbox f4 takes its
+	// inputs and returns its output in little-endian (wire) order, swapping to
+	// big-endian internally for AES-CMAC. The spec states these values
+	// big-endian, so feed them reversed and expect the reversed output.
+	static const uint8_t U[32] = {	// reversed spec U
+		0xe6,0x9d,0x35,0x0e,0x48,0x01,0x03,0xcc,0xdb,0xfd,0xf4,0xac,0x11,0x91,0xf4,0xef,
+		0xb9,0xa5,0xf9,0xe9,0xa7,0x83,0x2c,0x5e,0x2c,0xbe,0x97,0xf2,0xd2,0x03,0xb0,0x20 };
+	static const uint8_t V[32] = {	// reversed spec V
+		0xfd,0xc5,0x7f,0xf4,0x49,0xdd,0x4f,0x6b,0xfb,0x7c,0x9d,0xf1,0xc2,0x9a,0xcb,0x59,
+		0x2a,0xe7,0xd4,0xee,0xfb,0xfc,0x0a,0x90,0x9a,0xbb,0xf6,0x32,0x3d,0x8b,0x18,0x55 };
+	static const uint8_t X[16] = {	// reversed spec X
+		0xab,0xae,0x2b,0x71,0xec,0xb2,0xff,0xff,0x3e,0x73,0x77,0xd1,0x54,0x84,0xcb,0xd5 };
+	static const uint8_t expect[16] = {	// reversed spec result
+		0x2d,0x87,0x74,0xa9,0xbe,0xa1,0xed,0xf1,0x1c,0xbd,0xa9,0x07,0xf1,0x16,0xc9,0xf2 };
 	uint8_t out[16];
 	SmpF4(U, V, X, 0, out);
 	return memcmp(out, expect, 16) == 0 ? 0 : -1;

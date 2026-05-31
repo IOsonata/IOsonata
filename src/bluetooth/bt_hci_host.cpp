@@ -43,6 +43,7 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_scan.h"
 #include "istddef.h"
+#include "syslog.h"
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
@@ -336,6 +337,8 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 			break;
 		case BT_HCI_EVT_ENCRYPTION_CHANGE_V1:
 		case BT_HCI_EVT_ENCRYPTION_CHANGE_V2:
+		case 0x5a:	// Encryption Change [v2] as emitted by the SDC controller
+					// (payload: status, conn_handle, enabled[, key_size]).
 			{
 				uint8_t  status  = pEvtPkt->Data[0];
 				uint16_t connHdl = pEvtPkt->Data[1] | (pEvtPkt->Data[2] << 8);

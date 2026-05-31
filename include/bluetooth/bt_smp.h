@@ -279,6 +279,16 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 							uint64_t Rand, uint16_t Ediv);
 
 /**
+ * @brief	Backend hooks to answer the controller LE Long Term Key Request.
+ *			These send HCI COMMANDS (not ACL data); the active backend
+ *			overrides them to use its real HCI command channel (e.g. the SDC
+ *			sdc_hci_cmd_le_long_term_key_request_reply function).
+ */
+void BtSmpHciLtkReply(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+					  const uint8_t Ltk[16]);
+void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl);
+
+/**
  * @brief	Notify SMP that the controller produced the local P-256 key.
  *			Forwarded from BT_HCI_EVT_LE_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE.
  */
