@@ -46,7 +46,7 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
-#include "bluetooth/bt_smp_crypto.h"
+#include "crypto/crypto.h"
 
 // SMP handshake trace. Set to 1 to print every SMP PDU in/out and the link
 // state over SysLog. Leave at 0 for release builds.
@@ -1220,10 +1220,80 @@ void BtSmpBondClearAll(void)
 {
 }
 
-__attribute__((weak))
-int BtSmpCryptoSelfTest(void)
+//-----------------------------------------------------------------------------
+// Crypto composition (three capability slots: ECDH, AES, RNG)
+//
+// SMP needs three primitives. Following the Imu model (accel/gyro/mag slots
+// filled by whatever chips a board has), bt_smp holds three CryptoDev_t slots
+// and routes each operation to the engine in that slot. The application fills
+// the slots via BtSmpInit from whatever engines its target provides: one engine
+// may fill all three (mbedtls / CC310), or they compose from several (uECC for
+// ECDH + controller for AES + hardware RNG on a BLE-only part with no
+// CryptoCell). Each engine advertises only the capabilities it has; BtSmpInit
+// validates each slot before use. The five BtSmpCrypto* wrappers keep their
+// existing signatures so the state machine is unchanged; they translate
+// CRYPTO_STATUS to the BT_SMP_CRYPTO_* codes the state machine expects.
+//-----------------------------------------------------------------------------
+
+static CryptoDev_t *s_pCryptoEcdh = nullptr;	// CRYPTO_CAP_ECDH_P256
+static CryptoDev_t *s_pCryptoAes  = nullptr;	// CRYPTO_CAP_AES128_ECB
+static CryptoDev_t *s_pCryptoRng  = nullptr;	// CRYPTO_CAP_RNG
+
+static int CryptoStatusToSmp(CRYPTO_STATUS st)
 {
-	return 0;
+	switch (st)
+	{
+	case CRYPTO_STATUS_OK:      return BT_SMP_CRYPTO_OK;
+	case CRYPTO_STATUS_PENDING: return BT_SMP_CRYPTO_PENDING;
+	default:                    return BT_SMP_CRYPTO_FAIL;
+	}
+}
+
+extern "C" void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
+								  const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16])
+{
+	(void)pDev;		// the engine holds whatever handle it needs in pDevData
+	if (CryptoAes128Ecb(s_pCryptoAes, Key, In, Out, nullptr) != CRYPTO_STATUS_OK)
+	{
+		memset(Out, 0, 16);		// fail loud: confirm check will mismatch
+	}
+}
+
+extern "C" int BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64])
+{
+	(void)pDev;
+	return CryptoStatusToSmp(CryptoEcdhP256KeyGen(s_pCryptoEcdh, pPubKey, nullptr));
+}
+
+extern "C" int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
+							   const uint8_t pPeerPubKey[64], uint8_t pDhKey[32])
+{
+	(void)pDev;
+	return CryptoStatusToSmp(CryptoEcdhP256(s_pCryptoEcdh, pPeerPubKey, pDhKey, nullptr));
+}
+
+extern "C" void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
+{
+	if (s_pCryptoRng != nullptr && CryptoIsCapable(s_pCryptoRng, CRYPTO_CAP_RNG))
+	{
+		CryptoRand(s_pCryptoRng, pBuf, Len);
+	}
+	else
+	{
+		// Fail-loud filler if no RNG engine installed (misconfiguration).
+		for (size_t i = 0; i < Len; i++)
+		{
+			pBuf[i] = (uint8_t)(0xA5 ^ i);
+		}
+	}
+}
+
+extern "C" int BtSmpCryptoSelfTest(void)
+{
+	// Run the ECDH engine's self-test (the security-critical path). AES/RNG
+	// engines may have their own; the ECDH known-answer vector is the one that
+	// matters for SC pairing.
+	return CryptoSelfTest(s_pCryptoEcdh);
 }
 
 // LTK Request Reply hooks. The active backend overrides these to route the
@@ -1250,8 +1320,16 @@ void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl)
 	SmpSendHciCmd(pDev, BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY, param, sizeof(param));
 }
 
-extern "C" void BtSmpInit(void)
+extern "C" void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes, CryptoDev_t *pRng)
 {
+	// Compose the crypto from the engines the target provides. Each slot must
+	// advertise the capability it is being used for; a mismatch leaves the slot
+	// null so the corresponding BtSmpCrypto* wrapper fails loud rather than
+	// pairing under absent crypto.
+	s_pCryptoEcdh = CryptoIsCapable(pEcdh, CRYPTO_CAP_ECDH_P256) ? pEcdh : nullptr;
+	s_pCryptoAes  = CryptoIsCapable(pAes,  CRYPTO_CAP_AES128_ECB) ? pAes  : nullptr;
+	s_pCryptoRng  = CryptoIsCapable(pRng,  CRYPTO_CAP_RNG)        ? pRng  : nullptr;
+
 	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
 	{
 		s_SmpLink[i].ConnHdl = BT_CONN_HDL_INVALID;

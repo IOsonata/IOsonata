@@ -45,6 +45,8 @@ SOFTWARE.
 #include "bluetooth/bleadv_mandata.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
+#include "crypto/crypto.h"			// CryptoDev_t for the SMP crypto slots
+
 
 /** @addtogroup Bluetooth
   * @{
@@ -145,6 +147,9 @@ typedef struct __Bt_App_Cfg {
 	int SrManDataLen;				//!< Length of manufacture specific data in scan response
 	BTGAP_SECTYPE SecType;			//!< Secure connection type
 	uint8_t SecExchg;				//!< Sec key exchange
+	CryptoDev_t *pCryptoEcdh;		//!< SMP crypto: P-256 ECDH engine (App instance from CryptoUeccInit or CryptoMbedtlsInit). NULL where the stack owns SMP.
+	CryptoDev_t *pCryptoAes;		//!< SMP crypto: AES-128 ECB engine (App instance from CryptoCtlrSdcInit or CryptoMbedtlsInit).
+	CryptoDev_t *pCryptoRng;		//!< SMP crypto: RNG engine (App instance from CryptoRngHwInit or CryptoMbedtlsInit).
 	bool bCompleteUuidList;			//!< true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
 	const BtUuidArr_t *pAdvUuid;
 	uint32_t AdvInterval;			//!< In msec

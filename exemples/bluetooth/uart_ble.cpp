@@ -65,8 +65,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #if BLE_SECURE_CONNECTION
 #include "bluetooth/bt_smp.h"
+#include "crypto/crypto.h"
 #define BLE_SEC_TYPE		BTGAP_SECTYPE_STATICKEY_NO_MITM	// Just Works + bonding
 #define BLE_SEC_EXCHG		BTAPP_SECEXCHG_KEYBOARD			// distribute IRK/CSRK
+
+// App-owned crypto engine instances. The App declares them and brings them up
+// (CryptoXxxInit in HardwareInit), then injects their pointers via the app
+// config - the same ownership model as an SPI/I2C object passed to a sensor.
+CryptoDev_t g_CryptoEcdh;	// ECDH P-256
+CryptoDev_t g_CryptoAes;	// AES-128 ECB
+CryptoDev_t g_CryptoRng;	// RNG
 #else
 #define BLE_SEC_TYPE		BTGAP_SECTYPE_NONE
 #define BLE_SEC_EXCHG		BTAPP_SECEXCHG_NONE
@@ -172,6 +180,18 @@ const BtAppCfg_t s_BleAppCfg = {
 	.SrManDataLen = 0,
 	.SecType = BLE_SEC_TYPE,			// Secure connection type (see BLE_SECURE_CONNECTION)
 	.SecExchg = BLE_SEC_EXCHG,			// Security key exchange
+#if BLE_SECURE_CONNECTION
+	// App-owned crypto engine instances, composed for an SDC target with no
+	// CryptoCell: ECDH from uECC, AES from the BLE controller, RNG from the
+	// hardware RNG peripheral. Brought up in HardwareInit, injected via config.
+	.pCryptoEcdh = &g_CryptoEcdh,
+	.pCryptoAes  = &g_CryptoAes,
+	.pCryptoRng  = &g_CryptoRng,
+#else
+	.pCryptoEcdh = nullptr,			// open link: crypto unused
+	.pCryptoAes  = nullptr,
+	.pCryptoRng  = nullptr,
+#endif
 	.bCompleteUuidList = false,
 	.pAdvUuid = &s_AdvUuid,      			// Service uuids to advertise
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -323,6 +343,14 @@ void HardwareInit()
 	// DEBUG_PRINTF) appear here alongside the application output. Without this
 	// the stack pairs/runs silently and no trace is seen.
 	SysLogInit(SysLogGet(), (DevIntrf_t*)g_Uart, 0, nullptr, 0);
+
+#if BLE_SECURE_CONNECTION
+	// Bring up the crypto engines the App owns, then they are injected into SMP
+	// via the app config (.pCryptoEcdh/.pCryptoAes/.pCryptoRng).
+	CryptoUeccInit(&g_CryptoEcdh);		// ECDH via software uECC
+	CryptoCtlrSdcInit(&g_CryptoAes);	// AES via BLE controller LE Encrypt
+	CryptoRngHwInit(&g_CryptoRng);		// RNG via hardware peripheral
+#endif
 
 	IOPinCfg(s_LedPins, s_NbLedPins);
 	IOPinSet(BLUEIO_LED_BLUE_PORT, BLUEIO_LED_BLUE_PIN);

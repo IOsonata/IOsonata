@@ -68,6 +68,10 @@ SOFTWARE.
 #define SYSLOG_LINE_MAX     128
 #endif
 
+#if (SYSLOG_LINE_MAX < 2)
+#error "SYSLOG_LINE_MAX must be at least 2"
+#endif
+
 // Marker written by SysLogInit. Used to detect an uninitialized instance.
 // An instance without this marker is treated as dormant and all API calls
 // are no-ops, so a SysLog_t embedded in a driver stays inert until
@@ -97,6 +101,7 @@ typedef struct __Sys_Log {
  * @param	SinkAddr : Device select id for the output, 0 for UART.
  * @param	pTimer	 : Timer for timestamps, NULL disables timestamp.
  * @param	MinType	 : Minimum type field emitted, SYSSTATUS_TYPE_*. 0 emits all.
+ *                    The value is masked with SYSSTATUS_TYPE_MASK.
  */
 void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
 				uint32_t SinkAddr, TimerDev_t * const pTimer, uint32_t MinType);
@@ -118,8 +123,8 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
  * Format and emit free form trace text. No record prefix is added, the
  * output is the formatted text as given. For developer trace that has no
  * status meaning.
- * No-op when the instance is not initialized or pSink is NULL. Not subject
- * to the MinType filter, which applies to status records only.
+ * No-op when the instance is not initialized, pSink is NULL, or pFormat is NULL.
+ * Not subject to the MinType filter, which applies to status records only.
  *
  * @param	pLog	: Logger instance.
  * @param	pFormat	: printf style format string.
@@ -169,6 +174,10 @@ SysLog_t * const SysLogGet(void);
 //   - When full, a push is rejected, preserving the originating cause.
 //   - The first push after any pop clears the stack, then stores, starting
 //     a new chain once the previous one has been read.
+//
+// The default implementation guards stack mutation with the IOsonata
+// interrupt mask helpers when they are available for the target. Hosted
+// builds use no interrupt mask by default.
 //
 
 // Stack depth.

@@ -11,19 +11,27 @@ itself in a zero-overhead embedded subset:
   - P-256 ECDH: a local key pair and the DH shared secret (LE Secure
     Connections)
 
-These are declared here as weak C hooks. The generic bt_smp.cpp links
-against the hooks only; it never names a provider. Each target links in
-exactly one provider implementation file, which overrides the weak
-default:
+These are exposed two ways: as a BtSmpCrypto_t vtable (a provider), and as
+five C wrapper functions (BtSmpCryptoAes128/P256KeyGen/Ecdh/Rand/SelfTest)
+that dispatch through the active provider. bt_smp.cpp calls the wrappers;
+the application chooses a provider at init.
 
-  bt_smp_crypto_sdc.cpp     - controller offload (LE Encrypt + LE Generate
-                              DHKey / LE Read Local P-256). Default on the
-                              SDC / nrfxlib path. No extra library.
-  bt_smp_crypto_mbedtls.cpp - mbedTLS (mbedtls_aes + mbedtls_ecdh). Portable
-                              fallback for controllers without the crypto
-                              HCI commands, and the natural choice where
-                              nRF Connect SDK already pulls in nrf_security /
-                              PSA over CC3xx (nRF52840, nRF54).
+The crypto backend is a runtime-selectable FEATURE, not a build-time arch
+choice. Every provider is compiled into the lib; the application installs
+exactly one via BtSmpInit() (forwarded from BtAppCfg_t.pSmpCrypto), so the
+IOsonata lib never needs recompiling to switch backend. This follows the
+generic/targeted pattern used across the stack (bt_xx.cpp + bt_xx_<plat>.cpp):
+
+  bt_smp.cpp        - generic SMP state machine + provider dispatch.
+  bt_smp_sdc.cpp    - SDC target: controller LE Encrypt/LE Rand + uECC ECDH.
+                      Exports g_BtSmpCryptoSdc.
+  bt_smp_mbedtls.cpp- portable software provider (mbedtls_aes + mbedtls_ecdh).
+                      Exports g_BtSmpCryptoMbedtls. The natural choice where
+                      NCS links nrf_security / PSA over CC3xx (nRF52840,
+                      nRF54), so the same source uses hardware where present.
+  bt_smp_nrf52.cpp  - legacy SoftDevice target (provisioned).
+  bt_smp_bm.cpp     - sdk-nrf-bm / nRF54 target (provisioned).
+  bt_smp_stm32wba.cpp - STM32WB target (provisioned).
 
 The AES hook is synchronous by contract: callers (AES-CMAC, the f-funcs)
 treat it as a pure function. A provider whose backend is asynchronous must
@@ -31,7 +39,9 @@ serialise internally before returning.
 
 The ECDH hooks are split so the controller-offload provider can map them
 onto the two-step HCI exchange (Read Local P-256 Public Key, then Generate
-DHKey on the peer key) while a software provider does both locally.
+DHKey on the peer key) while a software provider does both locally. A
+provider that offloads to the controller returns BT_SMP_CRYPTO_PENDING and
+completes via BtSmpLocalPubKeyReady / BtSmpDhKeyReady.
 
 @author	Hoang Nguyen Hoan
 @date	May 2026
@@ -90,13 +100,78 @@ extern "C" {
 #endif
 
 /**
+ * @brief	SMP crypto provider (vtable).
+ *
+ * The crypto backend is a runtime-selectable FEATURE, not a build-time arch
+ * choice: every provider is compiled into the lib as a const instance, and
+ * the application installs exactly one with BtSmpInit() - no recompile of the
+ * IOsonata lib to switch. This mirrors the generic/targeted split used by the
+ * rest of the stack: bt_smp.cpp is the generic layer; each platform supplies
+ * a targeted bt_smp_<plat>.cpp exporting its g_BtSmpCrypto<Plat> instance
+ * (bt_smp_sdc.cpp -> g_BtSmpCryptoSdc, etc.), plus the portable software
+ * provider bt_smp_mbedtls.cpp -> g_BtSmpCryptoMbedtls usable on any target.
+ *
+ * Function-pointer contract matches the free-function wrappers below.
+ */
+typedef struct __Bt_Smp_Crypto {
+	const char *pName;		//!< Provider name, for trace/self-test ("sdc", "mbedtls", ...)
+
+	//! AES-128 single block ECB encrypt (synchronous). See BtSmpCryptoAes128.
+	void (*Aes128)(BtHciDevice_t * const pDev,
+				   const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16]);
+
+	//! Generate local P-256 key pair, return public key. See BtSmpCryptoP256KeyGen.
+	int (*P256KeyGen)(BtHciDevice_t * const pDev, uint8_t pPubKey[64]);
+
+	//! ECDH shared secret from peer public key. See BtSmpCryptoEcdh.
+	int (*Ecdh)(BtHciDevice_t * const pDev,
+				const uint8_t pPeerPubKey[64], uint8_t pDhKey[32]);
+
+	//! Cryptographically strong random bytes. See BtSmpCryptoRand.
+	void (*Rand)(uint8_t *pBuf, size_t Len);
+
+	//! Optional known-answer self-test, 0 = PASS. May be NULL. See BtSmpCryptoSelfTest.
+	int (*SelfTest)(void);
+} BtSmpCrypto_t;
+
+/**
+ * @brief	Install the active SMP crypto provider.
+ *
+ * Called once at init (from BtAppInit, which forwards BtAppCfg_t.pSmpCrypto).
+ * Passing NULL installs a fail-loud default whose AES zeros its output so the
+ * confirm check fails rather than pairing under a null cipher. The five
+ * BtSmpCrypto* wrappers below dispatch through whatever is installed here.
+ *
+ * @param	pCrypto		Provider instance, e.g. &g_BtSmpCryptoSdc. NULL =
+ *						fail-loud default.
+ */
+void BtSmpInit(const BtSmpCrypto_t *pCrypto);
+
+/**
+ * @brief	The currently installed provider (never NULL; the fail-loud
+ *			default before BtSmpInit). Mainly for trace and self-test.
+ */
+const BtSmpCrypto_t * BtSmpCryptoActive(void);
+
+//-----------------------------------------------------------------------------
+// Provider instances. Each targeted bt_smp_<plat>.cpp / bt_smp_mbedtls.cpp
+// exports its instance; the application points BtAppCfg_t.pSmpCrypto at the
+// one its target provides. Declared here so the app can name them without
+// pulling in platform headers. A given lib defines only the instances its
+// platform compiles; referencing one not built is a link error by design.
+//-----------------------------------------------------------------------------
+extern const BtSmpCrypto_t g_BtSmpCryptoSdc;		//!< SDC: controller AES/rand + uECC ECDH
+extern const BtSmpCrypto_t g_BtSmpCryptoMbedtls;	//!< Portable software (HW-accel via platform mbedTLS)
+
+/**
  * @brief	AES-128 single block ECB encrypt. Synchronous.
  *
  * Out = AES-128(Key, In). All buffers are 16 bytes, big-endian as the SMP
  * toolbox specifies (the providers handle any controller byte-order quirk).
  *
- * Weak default zeros Out so a target with no provider linked fails the
- * confirm check loudly instead of pairing under a null cipher.
+ * Dispatches through the active provider (BtSmpInit). The default provider
+ * zeros Out so a target with no provider installed fails the confirm check
+ * loudly instead of pairing under a null cipher.
  *
  * @param	pDev	HCI device (needed by the controller-offload provider;
  *					ignored by software providers).

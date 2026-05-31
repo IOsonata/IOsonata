@@ -43,6 +43,14 @@ SOFTWARE.
 
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_hci.h"
+#include "crypto/crypto.h"
+
+// SMP-internal crypto return codes used by the state machine. Mapped from the
+// generic CRYPTO_STATUS by the dispatch wrappers in bt_smp.cpp. PENDING parks
+// the state machine for a controller/secure async completion.
+#define BT_SMP_CRYPTO_OK		0
+#define BT_SMP_CRYPTO_PENDING	1
+#define BT_SMP_CRYPTO_FAIL		(-1)
 
 /** @addtogroup Bluetooth
   * @{
@@ -285,6 +293,36 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
  *			when the peripheral wants a secure/bonded link.
  */
 void BtSmpRequestSecurity(uint16_t ConnHdl);
+
+/**
+ * @brief	Initialise the SMP layer and compose its crypto from engines.
+ *
+ * SMP needs three primitives - ECDH (P-256), AES-128 ECB, and RNG - each
+ * supplied by a CryptoDev_t engine (crypto/crypto.h). Following the Imu model,
+ * the application passes the engine that fills each slot from whatever its
+ * target provides: one engine may fill all three (mbedtls, CC310), or they
+ * compose from several (e.g. uECC for ECDH, the BLE controller for AES, and the
+ * hardware RNG, on a part with no CryptoCell). Each slot is validated against
+ * the required capability; an engine lacking it leaves that slot disabled and
+ * the corresponding operation fails loud rather than pairing under absent
+ * crypto. The same engine pointer may be passed for several slots.
+ *
+ * @param	pEcdh	Engine providing CRYPTO_CAP_ECDH_P256.
+ * @param	pAes	Engine providing CRYPTO_CAP_AES128_ECB.
+ * @param	pRng	Engine providing CRYPTO_CAP_RNG.
+ */
+void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes, CryptoDev_t *pRng);
+
+// SMP crypto entry points used by the state machine (dispatch to the composed
+// engines). Kept as functions so the toolbox (c1/f4/f5/f6, AES-CMAC) calls a
+// stable signature regardless of which engine backs each slot.
+void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
+					   const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16]);
+int  BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64]);
+int  BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
+					 const uint8_t pPeerPubKey[64], uint8_t pDhKey[32]);
+void BtSmpCryptoRand(uint8_t *pBuf, size_t Len);
+int  BtSmpCryptoSelfTest(void);
 
 /**
  * @brief	Backend hooks to answer the controller LE Long Term Key Request.

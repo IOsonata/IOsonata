@@ -836,6 +836,13 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	DEBUG_PRINTF("BtGapInit\r\n");
 
 	BtGapInit(&gapcfg);
+
+	// Compose the SMP crypto from the engines the application selected for this
+	// target (ECDH / AES / RNG slots). On a part with no CryptoCell these may
+	// be three different engines (uECC + controller AES + hardware RNG); on a
+	// CC310/mbedtls part one engine can fill all three.
+	BtSmpInit(pCfg->pCryptoEcdh, pCfg->pCryptoAes, pCfg->pCryptoRng);
+
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		//BtGapServiceInit();//&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
