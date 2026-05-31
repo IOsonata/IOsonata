@@ -322,6 +322,8 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_DISCONN_COMPLETE:
 			{
 				BtHciEvtDisconComplete_t *p = (BtHciEvtDisconComplete_t*)pEvtPkt->Data;
+				SysLogPrintf(SysLogGet(), "HCI disconnect hdl=%d reason=0x%02x\r\n",
+							 p->ConnHdl, p->Reason);
 				DEBUG_PRINTF("BtHciProcessEvent: Disconnected, Status = %d (0x%x) \r\n",
 						p->Status, p->Status);
 
@@ -489,6 +491,11 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt)
 {
 	BtL2CapPdu_t *l2rcv = (BtL2CapPdu_t*)pPkt->Data;
+
+	SysLogPrintf(SysLogGet(), "L2 RX cid=0x%04x len=%d d=%02x%02x%02x%02x%02x%02x\r\n",
+				 l2rcv->Hdr.Cid, l2rcv->Hdr.Len,
+				 pPkt->Data[4], pPkt->Data[5], pPkt->Data[6],
+				 pPkt->Data[7], pPkt->Data[8], pPkt->Data[9]);
 /*
 	DEBUG_PRINTF("** BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
 	for (int i = 0; i < pPkt->Hdr.Len; i++)

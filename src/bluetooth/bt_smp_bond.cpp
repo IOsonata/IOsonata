@@ -89,33 +89,21 @@ extern "C" void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 		return;
 	}
 
-	// The address to match on reconnection is the one used on this link. If
-	// the peer distributed an identity address, prefer that; otherwise use the
-	// connection address.
+	// The match key on reconnection must be the address the lookup uses,
+	// which is the connection address of the link (see BtSmpBondLtkLookup).
+	// The distributed identity address is kept inside Keys as data only - it
+	// must NOT become the slot key, or a peer that connects with a resolvable
+	// private address (e.g. iOS) will never match its bond on reconnect.
 	uint8_t addrType;
 	uint8_t addr[6];
 
-	bool haveId = false;
-	for (int i = 0; i < 6; i++)
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr)
 	{
-		if (pKeys->IdAddr[i] != 0) { haveId = true; break; }
+		return;
 	}
-
-	if (haveId)
-	{
-		addrType = pKeys->IdAddrType;
-		memcpy(addr, pKeys->IdAddr, 6);
-	}
-	else
-	{
-		BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-		if (pPeer == nullptr)
-		{
-			return;
-		}
-		addrType = pPeer->Conn.PeerAddrType;
-		memcpy(addr, pPeer->Conn.PeerAddr, 6);
-	}
+	addrType = pPeer->Conn.PeerAddrType;
+	memcpy(addr, pPeer->Conn.PeerAddr, 6);
 
 	int slot = BtSmpBondFindByAddr(addrType, addr);
 	if (slot < 0)

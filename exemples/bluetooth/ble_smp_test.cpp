@@ -247,7 +247,11 @@ void BtAppInitUserServices()
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
-	g_Uart.printf("CONNECTED hdl=%d - waiting for central to start pairing\r\n", ConnHdl);
+	g_Uart.printf("CONNECTED hdl=%d - requesting security\r\n", ConnHdl);
+	// Peripheral-initiated security: prompt the central to encrypt with an
+	// existing bond or start pairing. Without this a central has no signal to
+	// secure the link.
+	BtSmpRequestSecurity(ConnHdl);
 }
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)

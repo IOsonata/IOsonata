@@ -41,9 +41,8 @@ Copyright (c) 2022, I-SYST inc., all rights reserved
 // Debug printf: mirrors the guard in bt_app_sdc.cpp.
 //#define UART_DEBUG_ENABLE
 #ifdef UART_DEBUG_ENABLE
-#include "coredev/uart.h"
-extern UART g_Uart;
-#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define DEBUG_PRINTF(...)
 #endif
@@ -251,7 +250,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 			.adv_interval_min  = mSecTo0_625(pCfg->AdvInterval),
 			.adv_interval_max  = mSecTo0_625(pCfg->AdvInterval + 50),
 			.adv_type          = BTADV_TYPE_ADV_NONCONN_IND,
-			.own_address_type  = BTADDR_TYPE_PUBLIC,
+			.own_address_type  = BTADDR_TYPE_RAND,
 			.peer_address_type = 0,
 			.peer_address      = {0,},
 			.adv_channel_map   = 7,
@@ -292,7 +291,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 			.PrimIntervalMin = mSecTo0_625(pCfg->AdvInterval),
 			.PrimIntervalMax = mSecTo0_625(pCfg->AdvInterval + 50),
 			.PrimChanMap     = 7,
-			.OwnAddrType     = BTADDR_TYPE_PUBLIC,
+			.OwnAddrType     = BTADDR_TYPE_RAND,
 			.PrimPhy         = BTADV_EXTADV_PHY_1M,
 			.SecondPhy       = BTADV_EXTADV_PHY_2M,
 			.ScanNotifEnable = 0,

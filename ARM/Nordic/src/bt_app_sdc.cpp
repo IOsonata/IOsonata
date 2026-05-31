@@ -49,6 +49,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "convutil.h"
+#include "nrf_mac.h"
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "coredev/system_core_clock.h"
@@ -73,9 +74,8 @@ SOFTWARE.
 //#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
-#include "coredev/uart.h"
-extern UART g_Uart;
-#define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define DEBUG_PRINTF(...)
 #endif
@@ -744,45 +744,34 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
     	return false;
     }
 
-	uint8_t abuf[100];
+	// Device address: read the factory-unique value from FICR (NRF_FICR->
+	// DEVICEADDR) and use it as a RANDOM STATIC address. This is the proper
+	// nRF mechanism and avoids the Zephyr-specific vendor HCI commands
+	// (sdc_hci_cmd_vs_zephyr_*). The top two bits of the MSO must be 1 for a
+	// static random address; nrf_get_mac_address() already sets them.
+	uint64_t mac = nrf_get_mac_address();
 
-	memset(abuf, 0, 100);
-
-	sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *addr = (sdc_hci_cmd_vs_zephyr_read_static_addresses_return_t *)abuf;
-
-	DEBUG_PRINTF("sdc_hci_cmd_vs_zephyr_read_static_addresses %p\r\n", *addr);
-
-	res = sdc_hci_cmd_vs_zephyr_read_static_addresses(addr);
-	if (res == 0)
+	sdc_hci_cmd_le_set_random_address_t ranaddr;
+	for (int i = 0; i < 6; i++)
 	{
-		sdc_hci_cmd_vs_zephyr_write_bd_addr_t bdaddr;
+		ranaddr.random_address[i] = (uint8_t)(mac >> (8 * i));	// LSB first
+	}
+	// Ensure the static-random marker even if the FICR value changes.
+	ranaddr.random_address[5] = (ranaddr.random_address[5] & 0x3f) | 0xc0;
 
-		memcpy(bdaddr.bd_addr, addr->addresses->address, 6);
-		sdc_hci_cmd_vs_zephyr_write_bd_addr(&bdaddr);
-
-		// The SDC advertising path currently uses BTADDR_TYPE_PUBLIC.
-		// SMP f5/f6 must use the same local address/type seen by the peer.
-		memcpy(s_BtSmpLocalAddr, addr->addresses->address, 6);
-		s_BtSmpLocalAddrType = 0;
+	if (sdc_hci_cmd_le_set_random_address(&ranaddr) != 0)
+	{
+		return false;
 	}
 
-	sdc_hci_cmd_le_rand_return_t rr;
-	res = sdc_hci_cmd_le_rand(&rr);
-	if (res == 0)
-	{
-		sdc_hci_cmd_le_set_random_address_t ranaddr;
+	// SMP f5/f6 must use the same local address/type the peer sees.
+	memcpy(s_BtSmpLocalAddr, ranaddr.random_address, 6);
+	s_BtSmpLocalAddrType = 1;	// random
 
-		memcpy(ranaddr.random_address, &rr.random_number, 6);
-
-		// Configure a valid random static address. HCI address arrays are
-		// LSB first, so the static-random marker lives in byte 5.
-		ranaddr.random_address[5] = (ranaddr.random_address[5] & 0x3f) | 0xc0;
-
-		if (sdc_hci_cmd_le_set_random_address(&ranaddr))
-		{
-			return false;
-		}
-	}
+	DEBUG_PRINTF("local addr %02x:%02x:%02x:%02x:%02x:%02x type=1\r\n",
+				 ranaddr.random_address[5], ranaddr.random_address[4],
+				 ranaddr.random_address[3], ranaddr.random_address[2],
+				 ranaddr.random_address[1], ranaddr.random_address[0]);
 
 	sdc_hci_cmd_le_read_max_data_length_return_t maxlen;
 
@@ -803,9 +792,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	sdc_hci_cmd_le_set_event_mask_t evmask = {0, };
 
-	//evmask.params.le_remote_connection_parameter_request_event = 1;
-
+	// Enable all LE meta events EXCEPT the Remote Connection Parameter Request
+	// event. When that event is unmasked the controller defers every peer
+	// connection-parameter-update to the host and waits for an explicit
+	// LE Remote Connection Parameter Request Reply. The SDC HCI app layer does
+	// not issue that reply, so leaving the event enabled stalls the link-layer
+	// parameter update a central runs right after connecting/pairing - the
+	// procedure never completes and the link drops on supervision timeout.
+	// Masking the event off lets the controller accept the update autonomously.
 	memset(evmask.raw, 0xff, sizeof(evmask.raw));
+	evmask.params.le_remote_connection_parameter_request_event = 0;
 	if (sdc_hci_cmd_le_set_event_mask(&evmask))
 	{
 		return false;

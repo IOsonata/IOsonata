@@ -279,6 +279,14 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 							uint64_t Rand, uint16_t Ediv);
 
 /**
+ * @brief	Peripheral-initiated security. Sends an SMP Security Request on the
+ *			given connection to prompt the central to encrypt (with an existing
+ *			bond) or start pairing. Call from the connection-established hook
+ *			when the peripheral wants a secure/bonded link.
+ */
+void BtSmpRequestSecurity(uint16_t ConnHdl);
+
+/**
  * @brief	Backend hooks to answer the controller LE Long Term Key Request.
  *			These send HCI COMMANDS (not ACL data); the active backend
  *			overrides them to use its real HCI command channel (e.g. the SDC

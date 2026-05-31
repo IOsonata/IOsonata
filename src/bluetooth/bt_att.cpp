@@ -995,7 +995,30 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			break;
 		default:
 			//DEBUG_PRINTF("OpCode : %x\r\n", pReqAtt->OpCode);
-			;
+			// ATT spec: a server that receives a Request it does not support
+			// MUST answer with an Error Response (Request Not Supported).
+			// Staying silent leaves the client waiting and the link idles out.
+			// Commands (bit6=0x40), notifications/indications/confirmations and
+			// responses do not get a reply. A request is anything else with an
+			// even-ish method that expects a response; treat unknown opcodes
+			// that are not command/notify/confirm/response as requests.
+			{
+				uint8_t op = pReqAtt->OpCode;
+				bool isCommand = (op & 0x40) != 0;	// Write Command, Signed Write
+				bool noRsp = isCommand ||
+							 op == BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF ||
+							 op == BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND ||
+							 op == BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM ||
+							 op == BT_ATT_OPCODE_ATT_MULTIPLE_HANDLE_VALUE_NTF ||
+							 op == BT_ATT_OPCODE_ATT_ERROR_RSP ||
+							 (op & 0x01);	// odd opcodes in 1..0x1B are responses
+				if (!noRsp)
+				{
+					retval = BtAttError(pRspAtt, 0x0000, op,
+										 BT_ATT_ERROR_REQUEST_NOT_SUPP);
+				}
+			}
+			break;
 	}
 
 	return retval;

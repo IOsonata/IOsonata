@@ -543,6 +543,22 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	pLink->Ctx.bInitiator = false;
 	pLink->Ctx.bSc = (pReq->AuthReq & BT_SMP_AUTHREQ_SC) &&
 					 (BT_SMP_LOCAL_AUTHREQ & BT_SMP_AUTHREQ_SC);
+
+	// This build requires LE Secure Connections. If the peer requests legacy
+	// pairing (no SC bit), reject with Authentication Requirements rather than
+	// entering the legacy flow. A central that opens with legacy (e.g. nRF
+	// Connect Desktop) then retries with SC. Accepting legacy here and failing
+	// later at the confirm/random step leaves such a central wedged.
+	if ((BT_SMP_LOCAL_AUTHREQ & BT_SMP_AUTHREQ_SC) &&
+		!(pReq->AuthReq & BT_SMP_AUTHREQ_SC))
+	{
+		SMP_TRACE("SMP reject legacy (peer auth=0x%02x), require SC\r\n",
+				  pReq->AuthReq);
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
+
 	pLink->Keys.EncKeySize = pReq->MaxKeySize < BT_SMP_MAX_ENC_KEY_SIZE ?
 							 pReq->MaxKeySize : BT_SMP_MAX_ENC_KEY_SIZE;
 
@@ -833,11 +849,23 @@ static void SmpHandleIdAddrInfo(BtSmpLink_t *pLink, const BtSmpIdAddrInfo_t *pIn
 {
 	pLink->Keys.IdAddrType = pInfo->AddrType;
 	memcpy(pLink->Keys.IdAddr, pInfo->Addr, 6);
+	// Peer identity now known. Refresh the stored bond so it carries the peer
+	// IRK. BtSmpBondAdd keys the slot by the connection address (not this
+	// identity address), so the refresh updates the same slot the lookup will
+	// match on reconnect.
+	if (pLink->Keys.bValid)
+	{
+		BtSmpBondAdd(pLink->ConnHdl, &pLink->Keys);
+	}
 }
 
 static void SmpHandleSigningInfo(BtSmpLink_t *pLink, const BtSmpSigningInfo_t *pInfo)
 {
 	memcpy(pLink->Keys.Csrk, pInfo->Csrk, 16);
+	if (pLink->Keys.bValid)
+	{
+		BtSmpBondAdd(pLink->ConnHdl, &pLink->Keys);
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -1047,8 +1075,9 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 	if (have)
 	{
-		SMP_TRACE("SMP LTK rqst -> reply (ediv=%u rand=%llu)\r\n",
-				  (unsigned)Ediv, (unsigned long long)Rand);
+		SMP_TRACE("SMP LTK rqst -> reply (ediv=0x%04x rand=%08x%08x)\r\n",
+				  (unsigned)Ediv,
+				  (unsigned)(Rand >> 32), (unsigned)(Rand & 0xFFFFFFFF));
 		SMP_TRACE("SMP LTK %02x%02x%02x%02x..%02x%02x%02x%02x\r\n",
 				  key[0], key[1], key[2], key[3],
 				  key[12], key[13], key[14], key[15]);
@@ -1210,6 +1239,40 @@ extern "C" void BtSmpInit(void)
 	{
 		s_SmpLink[i].ConnHdl = BT_CONN_HDL_INVALID;
 	}
+}
+
+// Peripheral-initiated security. Sends an SMP Security Request to prompt the
+// central to either encrypt with an existing bond or start pairing. This is
+// the standard way a peripheral signals that it wants a secure/bonded link;
+// without it a central has no indication to pair (and apps like nRF Connect
+// show no security/bond action), and any pairing the user forces has no
+// natural begin/end in the central security flow.
+extern "C" void BtSmpRequestSecurity(uint16_t ConnHdl)
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
+	{
+		return;
+	}
+	BtHciDevice_t *pDev = (BtHciDevice_t*)pPeer->pHciDev;
+	s_pSmpActiveDev = pDev;
+
+	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
+	if (pLink == nullptr)
+	{
+		pLink = SmpLinkAlloc(ConnHdl);
+		if (pLink == nullptr)
+		{
+			return;
+		}
+		pLink->ConnHdl = ConnHdl;
+	}
+
+	BtSmpSecurityReq_t req;
+	req.Code = BT_SMP_CODE_PAIRING_SECURITY_REQ;
+	req.AuthReq = (uint8_t)(BT_SMP_LOCAL_AUTHREQ & ~BT_SMP_AUTHREQ_KEYPRESS);
+	SMP_TRACE("SMP TX SecurityReq auth=0x%02x\r\n", req.AuthReq);
+	SmpSend(pDev, ConnHdl, &req, sizeof(req));
 }
 
 extern "C" void BtSmpDisconnected(uint16_t ConnHdl)
