@@ -45,6 +45,7 @@ SOFTWARE.
 #include "sdc_hci.h"
 #include "sdc_hci_vs.h"
 #include "sdc_hci_cmd_controller_baseband.h"
+#include "sdc_hci_cmd_link_control.h"
 
 #include "istddef.h"
 #include "convutil.h"
@@ -262,7 +263,8 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 		s_BtHciDev.pBtDev = (void*) pPeer;
 	}
 
-	BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
+	// Defer MTU exchange until after encryption/service discovery.
+	// BtAttExchangeMtuRequest(&s_BtHciDev, ConnHdl, BtAttGetMtu());
 
 	//DEBUG_PRINTF("This device's Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
 	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
@@ -336,7 +338,23 @@ void BtAppEnterDfu()
 
 void BtAppDisconnect()
 {
-	/* TODO: implement */
+	uint16_t connHdl = BtPeerActiveHdl();
+
+	if (connHdl == BT_CONN_HDL_INVALID)
+	{
+		DEBUG_PRINTF("BtAppDisconnect: no active connection\r\n");
+		return;
+	}
+
+	// HCI Disconnect, Link Control OGF=0x01/OCF=0x0006.
+	// Reason 0x13 = Remote User Terminated Connection.
+	sdc_hci_cmd_lc_disconnect_t cmd;
+
+	cmd.conn_handle = connHdl;
+	cmd.reason = 0x13;
+
+	uint8_t rc = sdc_hci_cmd_lc_disconnect(&cmd);
+	DEBUG_PRINTF("BtAppDisconnect: hdl=%u rc=%u\r\n", connHdl, rc);
 }
 /*
 void BleAppGapDeviceNameSet(const char* pDeviceName)
@@ -742,11 +760,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		memcpy(bdaddr.bd_addr, addr->addresses->address, 6);
 		sdc_hci_cmd_vs_zephyr_write_bd_addr(&bdaddr);
 
-		// This static address is what the peer sees on air and what it feeds
-		// into the SMP c1/f5/f6 toolbox. Capture it for BtSmpLocalAddrGet. A
-		// Zephyr static address is a random static address, so type = 1.
+		// The SDC advertising path currently uses BTADDR_TYPE_PUBLIC.
+		// SMP f5/f6 must use the same local address/type seen by the peer.
 		memcpy(s_BtSmpLocalAddr, addr->addresses->address, 6);
-		s_BtSmpLocalAddrType = 0;	// public address used by current advertising config	// random (static)
+		s_BtSmpLocalAddrType = 0;
 	}
 
 	sdc_hci_cmd_le_rand_return_t rr;

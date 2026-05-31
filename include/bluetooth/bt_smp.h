@@ -317,6 +317,17 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKeys);
 
 /**
+ * @brief	Bond store. BtSmpBondAdd persists a key set after a successful
+ *			pairing; the SMP core calls it automatically. BtSmpBondLtkLookup is
+ *			used by the LTK request handler on reconnection. BtSmpBondClearAll
+ *			removes all stored bonds. The default store is RAM-backed; a
+ *			flash-backed port overrides BtSmpBondSave / BtSmpBondLoad.
+ */
+void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys);
+bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t Ltk[16]);
+void BtSmpBondClearAll(void);
+
+/**
  * @brief	Get the local device address and type used on air.
  *
  * The SMP toolbox (c1 for legacy, f5/f6 for SC) needs the responder's own

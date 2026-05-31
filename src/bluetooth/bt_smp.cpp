@@ -502,6 +502,9 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 	uint8_t reqInitKeyDist = pReq->InitiatorKeyDist;
 	uint8_t reqRespKeyDist = pReq->ResponderKeyDist;
 
+	// Key distribution: the responder must not set a bit the initiator did
+	// not request. In SC the LTK is derived, not distributed, so EncKey is
+	// stripped from both sets (matching Zephyr RECV_KEYS_SC / SEND_KEYS_SC).
 	uint8_t wantKeyDist = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
 	if (!pLink->Ctx.bSc)
 	{
@@ -1125,6 +1128,7 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		}
 
 		pLink->Ctx.State = BT_SMP_STATE_DONE;
+		BtSmpBondAdd(ConnHdl, &pLink->Keys);
 		BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
 	}
 }
@@ -1156,6 +1160,18 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t 
 	(void)Ediv;
 	(void)Ltk;
 	return false;
+}
+
+__attribute__((weak))
+void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
+{
+	(void)ConnHdl;
+	(void)pKeys;
+}
+
+__attribute__((weak))
+void BtSmpBondClearAll(void)
+{
 }
 
 __attribute__((weak))

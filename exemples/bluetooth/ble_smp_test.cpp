@@ -24,7 +24,8 @@ Request, it reacts when the central starts pairing. To test:
 What each provider does here:
   - SDC build links bt_smp_crypto_sdc.cpp: AES via LE Encrypt, P-256/DHKey
     offloaded to the controller, randomness from LE Rand.
-  - The generic bt_smp.cpp drives the state machine; this app only observes.
+  - The generic bt_smp.cpp drives the state machine; this app observes and
+    stores one bond in RAM for reconnect testing.
 
 @author	Hoang Nguyen Hoan
 @date	May 2026
@@ -110,6 +111,11 @@ UART g_Uart;
 
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
+	(void)pDev;
+	(void)EvtId;
+	(void)pBuffer;
+	(void)BufferLen;
+
 	return 0;
 }
 
@@ -159,6 +165,38 @@ static const BtAppDevInfo_t s_SmpDevInfo = {
 };
 
 uint8_t g_ManData[4] = { 0 };
+
+//-----------------------------------------------------------------------------
+// RAM bond store for this test app.
+//
+// This is intentionally small: one central, one generated LTK. It proves the
+// bonding path without pulling in a flash settings layer yet. It survives
+// disconnect/reconnect while the board remains powered. It does not survive
+// reset, reflash, or power-cycle.
+//-----------------------------------------------------------------------------
+
+static BtSmpKeys_t s_SmpBondKeys;
+static bool s_SmpBondValid = false;
+
+extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
+								   uint16_t Ediv, uint8_t Ltk[16])
+{
+	(void)ConnHdl;
+
+	// LE Secure Connections uses EDIV=0 and Rand=0 for the generated LTK.
+	// This SMP test is single-peer, so one cached bond record is enough.
+	if (s_SmpBondValid && s_SmpBondKeys.bValid &&
+		s_SmpBondKeys.bSc && Ediv == 0 && Rand == 0)
+	{
+		memcpy(Ltk, s_SmpBondKeys.Ltk, 16);
+		g_Uart.printf("SMP bond lookup: found SC LTK\r\n");
+		return true;
+	}
+
+	g_Uart.printf("SMP bond lookup: no key (ediv=%u rand=%llu)\r\n",
+				  (unsigned)Ediv, (unsigned long long)Rand);
+	return false;
+}
 
 //-----------------------------------------------------------------------------
 // App configuration. SecType requests Just Works (no MITM). Switch to
@@ -219,10 +257,11 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 {
+	(void)Evt;
+	(void)pCtx;
 }
 
 // SMP completion hook (weak default lives in bt_smp.cpp; this overrides it).
-// This is where a real app would persist BtSmpKeys_t for bonding.
 extern "C" void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKeys)
 {
 	if (!Success || pKeys == nullptr)
@@ -230,6 +269,9 @@ extern "C" void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmp
 		g_Uart.printf("\r\n*** PAIRING FAILED on hdl=%d ***\r\n", ConnHdl);
 		return;
 	}
+
+	memcpy(&s_SmpBondKeys, pKeys, sizeof(s_SmpBondKeys));
+	s_SmpBondValid = true;
 
 	g_Uart.printf("\r\n*** PAIRING COMPLETE on hdl=%d ***\r\n", ConnHdl);
 	g_Uart.printf("  mode      : %s\r\n", pKeys->bSc ? "LE Secure Connections" : "Legacy");
@@ -244,9 +286,8 @@ extern "C" void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmp
 		for (int i = 5; i >= 0; i--) g_Uart.printf("%02x", pKeys->IdAddr[i]);
 		g_Uart.printf("\r\n");
 	}
+	g_Uart.printf("  bond      : saved in RAM for reconnect\r\n");
 	g_Uart.printf("  link is now encrypted\r\n\r\n");
-	// A production peripheral would now write these keys to NVM keyed by the
-	// peer identity address, and load them in BtSmpBondLtkLookup on reconnect.
 }
 
 //-----------------------------------------------------------------------------

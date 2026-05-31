@@ -522,7 +522,12 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			{
 				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-				pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+				uint32_t sent = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+				if (sent == 0)
+				{
+					DEBUG_PRINTF("ATT TX failed opcode=0x%02x rsp=0x%02x len=%u\r\n",
+								 l2rcv->Att.OpCode, l2pdu->Att.OpCode, acl->Hdr.Len);
+				}
 			}
 			else
 			{
