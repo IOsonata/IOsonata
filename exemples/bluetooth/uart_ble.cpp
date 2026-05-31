@@ -46,10 +46,31 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
+#include "syslog.h"
 
 #include "board.h"
 
 #define APP_IRQ_PRIORITY_LOW	6
+
+#define BLE_SECURE_CONNECTION	1
+// Secure connection toggle. Define BLE_SECURE_CONNECTION=1 (e.g. as a build
+// symbol or before this line) to enable LE Secure Connections + bonding
+// (Just Works, no MITM). Leave it 0 (default) for an open, unencrypted link.
+// When enabled the peripheral issues an SMP Security Request on connect so the
+// central is prompted to pair/encrypt; the GATT service is identical either
+// way, so the same example exercises both paths.
+#ifndef BLE_SECURE_CONNECTION
+#define BLE_SECURE_CONNECTION	0
+#endif
+
+#if BLE_SECURE_CONNECTION
+#include "bluetooth/bt_smp.h"
+#define BLE_SEC_TYPE		BTGAP_SECTYPE_STATICKEY_NO_MITM	// Just Works + bonding
+#define BLE_SEC_EXCHG		BTAPP_SECEXCHG_KEYBOARD			// distribute IRK/CSRK
+#else
+#define BLE_SEC_TYPE		BTGAP_SECTYPE_NONE
+#define BLE_SEC_EXCHG		BTAPP_SECEXCHG_NONE
+#endif
 
 #define DEVICE_NAME                     "UARTDemo"
 
@@ -97,6 +118,13 @@ static const char s_TxCharDescString[] = {
 
 uint8_t g_ManData[8];
 
+#if BLE_SECURE_CONNECTION
+// Single-peer RAM bond: stores the generated LTK so a reconnect re-encrypts
+// without pairing again. Survives disconnect/reconnect while powered, not reset.
+static BtSmpKeys_t s_BondKeys;
+static bool s_BondValid = false;
+#endif
+
 /// Characteristic definitions
 BtGattChar_t g_UartChars[] = {
 	// Read + Notify (server-pushed value, peer can also subscribe)
@@ -142,8 +170,8 @@ const BtAppCfg_t s_BleAppCfg = {
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BTGAP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
+	.SecType = BLE_SEC_TYPE,			// Secure connection type (see BLE_SECURE_CONNECTION)
+	.SecExchg = BLE_SEC_EXCHG,			// Security key exchange
 	.bCompleteUuidList = false,
 	.pAdvUuid = &s_AdvUuid,      			// Service uuids to advertise
 	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
@@ -233,6 +261,43 @@ void BtAppInitUserServices()
     res = BtGattSrvcAdd(&g_UartBleSrvc);
 }
 
+#if BLE_SECURE_CONNECTION
+void BtAppEvtConnected(uint16_t ConnHdl)
+{
+	// Peripheral-initiated security: prompt the central to encrypt with an
+	// existing bond or start pairing. Without it a central has no signal to
+	// secure the link.
+	g_Uart.printf("CONNECTED hdl=%d - requesting security\r\n", ConnHdl);
+	BtSmpRequestSecurity(ConnHdl);
+}
+
+// Capture the key set on a successful pairing (SMP core calls this).
+extern "C" void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
+{
+	(void)ConnHdl;
+	if (pKeys != nullptr && pKeys->bValid)
+	{
+		memcpy(&s_BondKeys, pKeys, sizeof(s_BondKeys));
+		s_BondValid = true;
+	}
+}
+
+// Supply the stored LTK on a reconnect encryption request. SC uses EDIV=0,
+// Rand=0; single-peer test, so one cached record is enough.
+extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
+								   uint16_t Ediv, uint8_t Ltk[16])
+{
+	(void)ConnHdl;
+	if (s_BondValid && s_BondKeys.bValid && s_BondKeys.bSc &&
+		Ediv == 0 && Rand == 0)
+	{
+		memcpy(Ltk, s_BondKeys.Ltk, 16);
+		return true;
+	}
+	return false;
+}
+#endif
+
 void ButEvent(int IntNo, void *pCtx)
 {
 	if (IntNo == 0)
@@ -253,6 +318,11 @@ void ButEvent(int IntNo, void *pCtx)
 void HardwareInit()
 {
 	g_Uart.Init(g_UartCfg);
+
+	// Route SysLog to the same UART so the SMP/ATT stack traces (SMP_TRACE,
+	// DEBUG_PRINTF) appear here alongside the application output. Without this
+	// the stack pairs/runs silently and no trace is seen.
+	SysLogInit(SysLogGet(), (DevIntrf_t*)g_Uart, 0, nullptr, 0);
 
 	IOPinCfg(s_LedPins, s_NbLedPins);
 	IOPinSet(BLUEIO_LED_BLUE_PORT, BLUEIO_LED_BLUE_PIN);
@@ -358,6 +428,11 @@ int main()
 	HardwareInit();
 
     g_Uart.printf("UART over BLE Demo\r\n");
+#if BLE_SECURE_CONNECTION
+    g_Uart.printf("security    : LE Secure Connections + bonding (Just Works)\r\n");
+#else
+    g_Uart.printf("security    : NONE (open link)\r\n");
+#endif
 
     //g_Uart.Disable();
 

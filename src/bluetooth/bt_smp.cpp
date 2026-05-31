@@ -502,17 +502,19 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 	uint8_t reqInitKeyDist = pReq->InitiatorKeyDist;
 	uint8_t reqRespKeyDist = pReq->ResponderKeyDist;
 
-	// Key distribution: the responder must not set a bit the initiator did
-	// not request. In SC the LTK is derived, not distributed, so EncKey is
-	// stripped from both sets (matching Zephyr RECV_KEYS_SC / SEND_KEYS_SC).
-	uint8_t wantKeyDist = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
-	if (!pLink->Ctx.bSc)
-	{
-		wantKeyDist |= BT_SMP_KEYDIST_ENCKEY;
-	}
+	// Key distribution. Mirror back the keys the initiator offered, masked to
+	// what we support. Crucially, in SC the EncKey bit is LEFT SET even though
+	// the LTK is derived and never transmitted: the Nordic SoftDevice host
+	// (and nRF Connect Desktop on pc-ble-driver) keeps EncKey in the negotiated
+	// keydist and marks it satisfied by the SC-derived LTK. Stripping EncKey in
+	// SC leaves the central's phase 3 open and its bond popup spins forever.
+	// We simply skip sending the EncryptInfo/CentralId PDUs for SC (see
+	// BtSmpEncryptionChanged); the advertised bit is what closes the central.
+	uint8_t supported = BT_SMP_KEYDIST_ENCKEY | BT_SMP_KEYDIST_IDKEY |
+						BT_SMP_KEYDIST_SIGNKEY;
 
-	pRsp->InitiatorKeyDist = reqInitKeyDist & wantKeyDist;
-	pRsp->ResponderKeyDist = reqRespKeyDist & wantKeyDist;
+	pRsp->InitiatorKeyDist = reqInitKeyDist & supported;
+	pRsp->ResponderKeyDist = reqRespKeyDist & supported;
 	SMP_TRACE("SMP keydist req ik=%02x rk=%02x -> rsp ik=%02x rk=%02x sc=%d\r\n",
 			  reqInitKeyDist, reqRespKeyDist,
 			  pRsp->InitiatorKeyDist, pRsp->ResponderKeyDist,
@@ -530,6 +532,21 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 								uint16_t ConnHdl, const BtSmpPairingReq_t *pReq)
 {
+	// A central that has already completed SC pairing on this link must not
+	// silently restart it. nRF Connect Desktop re-issues PairingReq after a
+	// successful encrypt; without this guard each retry derives a fresh LTK,
+	// overwrites the bond, and the central retries again in a loop. Reject so
+	// the loop terminates and the existing encrypted link stands.
+	BtDevice_t *pAlready = BtPeerFindByHdl(ConnHdl);
+	if (pLink->Ctx.State == BT_SMP_STATE_DONE ||
+		(pAlready != nullptr && pAlready->bSecure))
+	{
+		SMP_TRACE("SMP reject re-pair (state=%d already encrypted)\r\n",
+				  pLink->Ctx.State);
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+		return;
+	}
+
 	if (pReq->MaxKeySize < BT_SMP_MIN_ENC_KEY_SIZE ||
 		pReq->MaxKeySize > BT_SMP_MAX_ENC_KEY_SIZE)
 	{

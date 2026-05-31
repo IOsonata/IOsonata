@@ -842,9 +842,17 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				if (entry)
 				{
-					size_t l = ReqLen;
+					// ReqLen counts opcode(1) + handle(2) + data, so the data
+					// length is ReqLen - 3. Passing ReqLen directly overruns the
+					// value buffer by 3 bytes (handle + opcode worth of trailing
+					// memory), corrupting the stored value.
+					int dlen = ReqLen - 3;
+					if (dlen < 0)
+					{
+						dlen = 0;
+					}
 
-					l = BtAttWriteValue(entry, 0, req->Data, l);
+					BtAttWriteValue(entry, 0, req->Data, (size_t)dlen);
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 

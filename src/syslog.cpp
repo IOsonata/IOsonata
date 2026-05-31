@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	syslog.c
+@file	syslog.cpp
 
 @brief	System logger implementation.
 
@@ -40,6 +40,11 @@ SOFTWARE.
 
 #include "syslog.h"
 
+#if defined(__arm__) || defined(__ICCARM__) || (defined(__riscv) && defined(__riscv_zicsr))
+#include "coredev/interrupt.h"
+#define SYSSTATUS_STACK_USE_IRQ_LOCK    1
+#endif
+
 // Return one character tag for the status type field.
 static char SysLogTypeTag(SysStatus_t Status)
 {
@@ -50,6 +55,76 @@ static char SysLogTypeTag(SysStatus_t Status)
 	case SYSSTATUS_TYPE_FERR:	return 'F';
 	default:					return 'R';		// Runtime
 	}
+}
+
+// Append formatted text without ever advancing beyond the usable buffer.
+// Return value is the byte count to transmit, excluding the trailing NUL.
+static int SysLogAppendV(char *pLine, int LineSize, int Pos,
+						 const char *pFormat, va_list Args)
+{
+	if (pLine == 0 || pFormat == 0 || LineSize <= 1)
+	{
+		return 0;
+	}
+
+	if (Pos < 0)
+	{
+		Pos = 0;
+	}
+
+	if (Pos >= LineSize)
+	{
+		return LineSize - 1;
+	}
+
+	int n = vsnprintf(&pLine[Pos], (size_t)(LineSize - Pos), pFormat, Args);
+
+	if (n < 0)
+	{
+		return Pos;
+	}
+
+	if (n >= (LineSize - Pos))
+	{
+		return LineSize - 1;
+	}
+
+	return Pos + n;
+}
+
+static int SysLogAppend(char *pLine, int LineSize, int Pos,
+						const char *pFormat, ...)
+{
+	va_list args;
+	int len;
+
+	va_start(args, pFormat);
+	len = SysLogAppendV(pLine, LineSize, Pos, pFormat, args);
+	va_end(args);
+
+	return len;
+}
+
+static uintptr_t SysStatusStackLock(void)
+{
+#if defined(SYSSTATUS_STACK_USE_IRQ_LOCK)
+	return (uintptr_t)DisableInterrupt();
+#else
+	return 0;
+#endif
+}
+
+static void SysStatusStackUnlock(uintptr_t State)
+{
+#if defined(SYSSTATUS_STACK_USE_IRQ_LOCK)
+#if defined(__arm__) || defined(__ICCARM__)
+	EnableInterrupt((uint32_t)State);
+#else
+	EnableInterrupt(State);
+#endif
+#else
+	(void)State;
+#endif
 }
 
 void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
@@ -63,7 +138,7 @@ void SysLogInit(SysLog_t * const pLog, DevIntrf_t * const pSink,
 	pLog->pSink = pSink;
 	pLog->SinkAddr = SinkAddr;
 	pLog->pTimer = pTimer;
-	pLog->MinType = MinType;
+	pLog->MinType = MinType & SYSSTATUS_TYPE_MASK;
 	pLog->Marker = SYSLOG_INIT_MARKER;
 }
 
@@ -87,29 +162,23 @@ int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
 	if (pLog->pTimer != 0)
 	{
 		uint64_t tick = TimerGetTickCount(pLog->pTimer);
-		len += snprintf(line + len, sizeof(line) - len, "[%lu] ",
-						(unsigned long)tick);
+		len = SysLogAppend(line, sizeof(line), len, "[%llu] ",
+						   (unsigned long long)tick);
 	}
 
 	// Type tag, module id, code.
-	len += snprintf(line + len, sizeof(line) - len, "%c:%03lX:%04lX",
-					SysLogTypeTag(Status),
-					(unsigned long)StatusModId(Status),
-					(unsigned long)StatusCode(Status));
+	len = SysLogAppend(line, sizeof(line), len, "%c:%03lX:%04lX",
+					   SysLogTypeTag(Status),
+					   (unsigned long)StatusModId(Status),
+					   (unsigned long)StatusCode(Status));
 
 	// Detail string when supplied.
 	if (pDetail != 0)
 	{
-		len += snprintf(line + len, sizeof(line) - len, " %s", pDetail);
+		len = SysLogAppend(line, sizeof(line), len, " %s", pDetail);
 	}
 
-	len += snprintf(line + len, sizeof(line) - len, "\r\n");
-
-	// snprintf returns the untruncated length, clamp to buffer size.
-	if (len > (int)sizeof(line))
-	{
-		len = (int)sizeof(line);
-	}
+	len = SysLogAppend(line, sizeof(line), len, "\r\n");
 
 	return DeviceIntrfTx(pLog->pSink, pLog->SinkAddr, (const uint8_t *)line, len);
 }
@@ -119,21 +188,23 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 	char line[SYSLOG_LINE_MAX];
 	int len;
 
-	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER || pLog->pSink == 0)
+	if (pLog == 0 || pLog->Marker != SYSLOG_INIT_MARKER ||
+		pLog->pSink == 0 || pFormat == 0)
 	{
 		return 0;
 	}
 
 	len = vsnprintf(line, sizeof(line), pFormat, Args);
 
-	// vsnprintf returns the untruncated length, clamp to buffer size.
 	if (len < 0)
 	{
 		return 0;
 	}
-	if (len > (int)sizeof(line))
+
+	// vsnprintf returns the untruncated length. Transmit only stored text.
+	if (len >= (int)sizeof(line))
 	{
-		len = (int)sizeof(line);
+		len = (int)sizeof(line) - 1;
 	}
 
 	return DeviceIntrfTx(pLog->pSink, pLog->SinkAddr, (const uint8_t *)line, len);
@@ -143,6 +214,11 @@ int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)
 {
 	va_list args;
 	int len;
+
+	if (pFormat == 0)
+	{
+		return 0;
+	}
 
 	va_start(args, pFormat);
 	len = SysLogVPrintf(pLog, pFormat, args);
@@ -155,6 +231,11 @@ int SysLog::Printf(const char *pFormat, ...)
 {
 	va_list args;
 	int len;
+
+	if (pFormat == 0)
+	{
+		return 0;
+	}
 
 	va_start(args, pFormat);
 	len = SysLogVPrintf(&vLog, pFormat, args);
@@ -178,7 +259,7 @@ SysLog * const SysLogGetInstance(void)
 // C handle access to the same global object.
 extern "C" SysLog_t * const SysLogGet(void)
 {
-	return g_SysLog;
+	return (SysLog_t * const)g_SysLog;
 }
 
 //
@@ -202,16 +283,24 @@ void SysStatusStackReset(SysStatusStack_t * const pStack)
 		return;
 	}
 
+	uintptr_t state = SysStatusStackLock();
+
 	pStack->Count = 0;
 	pStack->PoppedSincePush = false;
+
+	SysStatusStackUnlock(state);
 }
 
 bool SysStatusStackPush(SysStatusStack_t * const pStack, SysStatus_t Status)
 {
+	bool retval = false;
+
 	if (pStack == 0)
 	{
 		return false;
 	}
+
+	uintptr_t state = SysStatusStackLock();
 
 	// Start a new chain if a read cycle has begun.
 	if (pStack->PoppedSincePush)
@@ -221,48 +310,78 @@ bool SysStatusStackPush(SysStatusStack_t * const pStack, SysStatus_t Status)
 	}
 
 	// Reject when full, preserves the originating cause.
-	if (pStack->Count >= SYSSTATUS_STACK_DEPTH)
+	if (pStack->Count < SYSSTATUS_STACK_DEPTH)
 	{
-		return false;
+		pStack->Entry[pStack->Count] = Status;
+		pStack->Count++;
+		retval = true;
 	}
 
-	pStack->Entry[pStack->Count] = Status;
-	pStack->Count++;
+	SysStatusStackUnlock(state);
 
-	return true;
+	return retval;
 }
 
 SysStatus_t SysStatusStackPop(SysStatusStack_t * const pStack)
 {
-	if (pStack == 0 || pStack->Count <= 0)
+	SysStatus_t retval = SYSSTATUS_OK;
+
+	if (pStack == 0)
 	{
 		return SYSSTATUS_OK;
 	}
 
-	pStack->Count--;
-	pStack->PoppedSincePush = true;
+	uintptr_t state = SysStatusStackLock();
 
-	return pStack->Entry[pStack->Count];
+	if (pStack->Count > 0)
+	{
+		pStack->Count--;
+		pStack->PoppedSincePush = true;
+		retval = pStack->Entry[pStack->Count];
+	}
+
+	SysStatusStackUnlock(state);
+
+	return retval;
 }
 
 SysStatus_t SysStatusStackPeek(SysStatusStack_t * const pStack)
 {
-	if (pStack == 0 || pStack->Count <= 0)
+	SysStatus_t retval = SYSSTATUS_OK;
+
+	if (pStack == 0)
 	{
 		return SYSSTATUS_OK;
 	}
 
-	return pStack->Entry[pStack->Count - 1];
+	uintptr_t state = SysStatusStackLock();
+
+	if (pStack->Count > 0)
+	{
+		retval = pStack->Entry[pStack->Count - 1];
+	}
+
+	SysStatusStackUnlock(state);
+
+	return retval;
 }
 
 int SysStatusStackCount(SysStatusStack_t * const pStack)
 {
+	int retval = 0;
+
 	if (pStack == 0)
 	{
 		return 0;
 	}
 
-	return pStack->Count;
+	uintptr_t state = SysStatusStackLock();
+
+	retval = pStack->Count;
+
+	SysStatusStackUnlock(state);
+
+	return retval;
 }
 
 // IOsonata global instance. Zero initialized, so Count is 0 (empty) at
@@ -276,15 +395,15 @@ SYSSTATUS_WEAK SysStatusStack_t * const SysStatusStackGet(void)
 
 SYSSTATUS_WEAK bool SysStatusPush(SysStatus_t Status)
 {
-	return SysStatusStackPush(&g_SysStatusStack, Status);
+	return SysStatusStackPush(SysStatusStackGet(), Status);
 }
 
 SYSSTATUS_WEAK SysStatus_t SysStatusPop(void)
 {
-	return SysStatusStackPop(&g_SysStatusStack);
+	return SysStatusStackPop(SysStatusStackGet());
 }
 
 SYSSTATUS_WEAK SysStatus_t SysStatusPeek(void)
 {
-	return SysStatusStackPeek(&g_SysStatusStack);
+	return SysStatusStackPeek(SysStatusStackGet());
 }

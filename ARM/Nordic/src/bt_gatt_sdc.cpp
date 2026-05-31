@@ -67,7 +67,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
 
 		acl->Hdr.ConnHdl = ConnHdl;
-		acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;/*BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU |*/ BT_HCI_PBFLAG_START_FLUSHABLE;
+		acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
 		acl->Hdr.BCFlag = 0;
 
 		l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;

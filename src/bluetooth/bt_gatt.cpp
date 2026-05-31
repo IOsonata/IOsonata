@@ -192,6 +192,18 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 		c->ValHdl = entry->Hdl;
 		c->pValue = charval->Data;
 
+		// ValueLen is read back by BtAttReadValue for every Read Request. It is
+		// not set anywhere else until the first write or an explicit
+		// BtGattCharSetValue, so without this a discovery-time read returns an
+		// empty (or garbage) value and the central shows the characteristic as
+		// unreadable. If the app did not preset a value, default to the full
+		// fixed size with a zeroed buffer; otherwise leave the preset value.
+		if (c->ValueLen == 0 || c->ValueLen > c->MaxDataLen)
+		{
+			memset(c->pValue, 0, c->MaxDataLen);
+			c->ValueLen = c->MaxDataLen;
+		}
+
 		c->bNotify = false;
 		c->bIndic  = false;
 		if (c->Property & (BT_GATT_CHAR_PROP_NOTIFY | BT_GATT_CHAR_PROP_INDICATE))

@@ -142,19 +142,40 @@ extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 
 	// SC bond (EDIV/Rand zero): match on the peer address of this link.
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-	if (pPeer == nullptr)
+	if (pPeer != nullptr)
 	{
-		return false;
+		int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType,
+									   pPeer->Conn.PeerAddr);
+		if (slot >= 0)
+		{
+			memcpy(Ltk, s_BtSmpBondTable[slot].Keys.Ltk, 16);
+			return true;
+		}
 	}
 
-	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr);
-	if (slot < 0)
+	// No address match. A central that reconnects with a rotating resolvable
+	// private address (nRF Connect Desktop, iOS) presents a different address
+	// each time, and its IRK was not distributed (peer IRK is zero), so the
+	// RPA cannot be resolved. For a single-bond peripheral, fall back to the
+	// sole stored SC bond. If more than one SC bond exists the address is the
+	// only discriminator, so no fallback is made.
+	int scSlot = -1;
+	int scCount = 0;
+	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 	{
-		return false;
+		if (s_BtSmpBondTable[i].bValid && s_BtSmpBondTable[i].Keys.bSc)
+		{
+			scSlot = i;
+			scCount++;
+		}
+	}
+	if (scCount == 1)
+	{
+		memcpy(Ltk, s_BtSmpBondTable[scSlot].Keys.Ltk, 16);
+		return true;
 	}
 
-	memcpy(Ltk, s_BtSmpBondTable[slot].Keys.Ltk, 16);
-	return true;
+	return false;
 }
 
 // Remove all stored bonds.
