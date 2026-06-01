@@ -29,7 +29,7 @@ static void RngHwRand(CryptoDev_t * const pDev, uint8_t *pBuf, size_t Len)
 	RngGet(pBuf, Len);
 }
 
-bool CryptoRngHwInit(CryptoDev_t * const pDev)
+extern "C" bool CryptoRngHwInit(CryptoDev_t * const pDev)
 {
 	if (pDev == nullptr)
 	{

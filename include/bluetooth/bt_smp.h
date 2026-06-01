@@ -297,36 +297,37 @@ void BtSmpRequestSecurity(uint16_t ConnHdl);
 /**
  * @brief	Initialise the SMP layer and compose its crypto from engines.
  *
- * SMP needs three primitives - ECDH (P-256), AES-128 ECB, and RNG - each
+ * SMP needs two composed primitives - ECDH (P-256) and AES-128 ECB - each
  * supplied by a CryptoDev_t engine (crypto/crypto.h). Following the Imu model,
  * the application passes the engine that fills each slot from whatever its
- * target provides: one engine may fill all three (mbedtls, CC310), or they
- * compose from several (e.g. uECC for ECDH, the BLE controller for AES, and the
- * hardware RNG, on a part with no CryptoCell). Each slot is validated against
- * the required capability; an engine lacking it leaves that slot disabled and
- * the corresponding operation fails loud rather than pairing under absent
- * crypto. The same engine pointer may be passed for several slots.
+ * target provides: one engine may fill both (mbedtls, CC310), or they compose
+ * from two (e.g. uECC for ECDH, the BLE controller for AES, on a part with no
+ * CryptoCell). Each slot is validated against the required capability; an
+ * engine lacking it leaves that slot disabled and the corresponding operation
+ * fails loud. The same engine pointer may be passed for both slots.
+ *
+ * Randomness is NOT a slot: it comes from the target RngGet utility
+ * (coredev/rng.h) - hardware where the MCU has an RNG peripheral, weak software
+ * default otherwise - which SMP calls directly.
  *
  * @param	pEcdh	Engine providing CRYPTO_CAP_ECDH_P256.
  * @param	pAes	Engine providing CRYPTO_CAP_AES128_ECB.
- * @param	pRng	Engine providing CRYPTO_CAP_RNG.
  */
-void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes, CryptoDev_t *pRng);
+void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes);
 
 /**
  * @brief	Bring up the Bluetooth-owned controller CryptoDev_t (SDC).
  *
- * Populates a caller-owned CryptoDev_t whose AES-128 ECB and RNG are served by
- * the BLE SoftDevice Controller's HCI LE Encrypt / LE Rand. This is a Bluetooth
- * helper, NOT a generic crypto engine - it requires a running BLE controller
- * and is only valid for the SMP AES (and optionally RNG) slot. On a part with
- * no CryptoCell, compose it with a software ECDH engine and the hardware RNG:
+ * Populates a caller-owned CryptoDev_t whose AES-128 ECB is served by the BLE
+ * SoftDevice Controller's HCI LE Encrypt. This is a Bluetooth helper, NOT a
+ * generic crypto engine - it requires a running BLE controller and is only
+ * valid for the SMP AES slot. On a part with no CryptoCell, compose it with a
+ * software ECDH engine (randomness comes from the RngGet utility):
  *
- *   CryptoDev_t ecdh, aes, rng;
+ *   CryptoDev_t ecdh, aes;
  *   CryptoUeccInit(&ecdh);
  *   BtCryptoCtlrSdcInit(&aes);   // controller AES
- *   CryptoRngHwInit(&rng);
- *   BtSmpInit(&ecdh, &aes, &rng);
+ *   BtSmpInit(&ecdh, &aes);
  *
  * @return	true on success, false if the SDC HCI is not present in this build.
  */

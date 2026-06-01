@@ -244,7 +244,7 @@ static int MbedSelfTest(CryptoDev_t * const pDev)
 // Exported provider instance
 //-----------------------------------------------------------------------------
 
-bool CryptoMbedtlsInit(CryptoDev_t * const pDev)
+extern "C" bool CryptoMbedtlsInit(CryptoDev_t * const pDev)
 {
 	if (pDev == nullptr)
 	{
@@ -264,7 +264,7 @@ bool CryptoMbedtlsInit(CryptoDev_t * const pDev)
 
 #else  // mbedTLS not available on this target
 
-bool CryptoMbedtlsInit(CryptoDev_t * const pDev)
+extern "C" bool CryptoMbedtlsInit(CryptoDev_t * const pDev)
 {
 	(void)pDev;
 	return false;	// mbedTLS not present in this build

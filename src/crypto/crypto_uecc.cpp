@@ -100,7 +100,7 @@ static int UeccSelfTest(CryptoDev_t * const pDev)
 	return memcmp(dh, dhExpect, 32) == 0 ? 0 : -2;
 }
 
-bool CryptoUeccInit(CryptoDev_t * const pDev)
+extern "C" bool CryptoUeccInit(CryptoDev_t * const pDev)
 {
 	if (pDev == nullptr)
 	{
@@ -120,7 +120,7 @@ bool CryptoUeccInit(CryptoDev_t * const pDev)
 
 #else  // uECC not available on this target
 
-bool CryptoUeccInit(CryptoDev_t * const pDev)
+extern "C" bool CryptoUeccInit(CryptoDev_t * const pDev)
 {
 	(void)pDev;
 	return false;	// micro-ecc not present in this build

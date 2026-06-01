@@ -273,6 +273,14 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
 	}
 
+	// If a secure SecType was configured, the SDC backend requests security on
+	// the link itself (host-driven SMP). Backend-internal so the application
+	// stays SDK-neutral - it does not call any backend-specific function.
+	if (g_BtAppData.AppDevice.bSecure)
+	{
+		BtSmpRequestSecurity(ConnHdl);
+	}
+
 	BtAppEvtConnected(ConnHdl);
 }
 
@@ -837,11 +845,19 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	BtGapInit(&gapcfg);
 
-	// Compose the SMP crypto from the engines the application selected for this
-	// target (ECDH / AES / RNG slots). On a part with no CryptoCell these may
-	// be three different engines (uECC + controller AES + hardware RNG); on a
-	// CC310/mbedtls part one engine can fill all three.
-	BtSmpInit(pCfg->pCryptoEcdh, pCfg->pCryptoAes, pCfg->pCryptoRng);
+	// The SDC backend owns its SMP crypto: software uECC for ECDH and the BLE
+	// controller (HCI LE Encrypt) for AES. These are backend-internal - the
+	// application does not supply or see them; it only requests security via
+	// SecType. Randomness comes from the RngGet utility.
+	static CryptoDev_t s_CryptoEcdh;
+	static CryptoDev_t s_CryptoAes;
+	CryptoUeccInit(&s_CryptoEcdh);
+	BtCryptoCtlrSdcInit(&s_CryptoAes);
+	BtSmpInit(&s_CryptoEcdh, &s_CryptoAes);
+
+	// Record whether security was requested, so the connected handler can
+	// initiate it. Backend-internal - mirrors the SoftDevice backend.
+	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
 
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{

@@ -86,7 +86,7 @@ SOFTWARE.
 #include "sd_dispatch.h"
 
 /******** For DEBUG ************/
-//#define DEBUG_ENABLE
+#define DEBUG_ENABLE
 
 #ifdef DEBUG_ENABLE
 #include "syslog.h"
@@ -204,15 +204,6 @@ NRF_SDH_BLE_OBSERVER(s_DbDiscovery_obs,
 
 
 //#endif
-
-/**@brief Bluetooth SIG debug mode Private Key */
-__ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
-    0xbd,0x1a,0x3c,0xcd,0xa6,0xb8,0x99,0x58,0x99,0xb7,0x40,0xeb,0x7b,0x60,0xff,0x4a,
-    0x50,0x3f,0x10,0xd2,0xe3,0xb3,0xc9,0x74,0x38,0x5f,0xc5,0xa3,0xd4,0xf6,0x49,0x3f,
-};
-
-__ALIGN(4) static ble_gap_lesc_p256_pk_t    s_lesc_public_key;      /**< LESC ECC Public Key */
-__ALIGN(4) static ble_gap_lesc_dhkey_t      s_lesc_dh_key;          /**< LESC ECC DH Key*/
 
 // =====================================================================
 // LEGACY DISCOVERY STATE MACHINE - disabled.
@@ -617,6 +608,12 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 				err_code = pm_conn_sec_status_get(p_evt->conn_handle, &conn_sec_status);
 				APP_ERROR_CHECK(err_code);
 
+				DEBUG_PRINTF("SEC: CONN_SEC_SUCCEEDED hdl=%d encrypted=%d mitm=%d bonded=%d lesc=%d proc=%d\r\n",
+						p_evt->conn_handle,
+						conn_sec_status.encrypted, conn_sec_status.mitm_protected,
+						conn_sec_status.bonded, conn_sec_status.lesc,
+						p_evt->params.conn_sec_succeeded.procedure);
+
 				if (conn_sec_status.mitm_protected)
 				{
 				}
@@ -635,6 +632,10 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 			break;
 
         case PM_EVT_CONN_SEC_FAILED:
+            DEBUG_PRINTF("SEC: CONN_SEC_FAILED hdl=%d procedure=%d error=0x%X\r\n",
+            		p_evt->conn_handle,
+            		p_evt->params.conn_sec_failed.procedure,
+            		p_evt->params.conn_sec_failed.error);
             if (g_BtAppData.AppDevice.bSecure && BtAppGetConnHandle() != BLE_CONN_HANDLE_INVALID)
             {
                 err_code = sd_ble_gap_disconnect(BtAppGetConnHandle(),
@@ -645,6 +646,7 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 
         case PM_EVT_CONN_SEC_CONFIG_REQ:
 			{
+				DEBUG_PRINTF("SEC: CONN_SEC_CONFIG_REQ hdl=%d (allow repairing)\r\n", p_evt->conn_handle);
 				// Accept pairing request from an already bonded peer.
 				pm_conn_sec_config_t conn_sec_config = {.allow_repairing = true};
 				pm_conn_sec_config_reply(p_evt->conn_handle, &conn_sec_config);
@@ -725,6 +727,38 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 	ble_gap_evt_t const * p_gap_evt = &p_ble_evt->evt.gap_evt;
 	uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
+	// Let the LESC module observe events (it handles the DHKey request and
+	// replies to the SoftDevice; the heavy ECDH runs in nrf_ble_lesc_request_handler).
+	nrf_ble_lesc_on_ble_evt(p_ble_evt);
+
+	// Trace security-relevant GAP events to diagnose the pairing flow.
+	switch (p_ble_evt->header.evt_id)
+	{
+		case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
+			DEBUG_PRINTF("SEC: EVT_SEC_PARAMS_REQUEST (pairing started by peer/PM)\r\n");
+			break;
+		case BLE_GAP_EVT_LESC_DHKEY_REQUEST:
+			DEBUG_PRINTF("SEC: EVT_LESC_DHKEY_REQUEST (LESC in progress)\r\n");
+			break;
+		case BLE_GAP_EVT_AUTH_KEY_REQUEST:
+			DEBUG_PRINTF("SEC: EVT_AUTH_KEY_REQUEST type=%d (passkey/oob needed)\r\n",
+					p_ble_evt->evt.gap_evt.params.auth_key_request.key_type);
+			break;
+		case BLE_GAP_EVT_AUTH_STATUS:
+			DEBUG_PRINTF("SEC: EVT_AUTH_STATUS status=0x%X lesc=%d bonded=%d\r\n",
+					p_ble_evt->evt.gap_evt.params.auth_status.auth_status,
+					p_ble_evt->evt.gap_evt.params.auth_status.lesc,
+					p_ble_evt->evt.gap_evt.params.auth_status.bonded);
+			break;
+		case BLE_GAP_EVT_CONN_SEC_UPDATE:
+			DEBUG_PRINTF("SEC: EVT_CONN_SEC_UPDATE sm=%d lv=%d\r\n",
+					p_ble_evt->evt.gap_evt.params.conn_sec_update.conn_sec.sec_mode.sm,
+					p_ble_evt->evt.gap_evt.params.conn_sec_update.conn_sec.sec_mode.lv);
+			break;
+		default:
+			break;
+	}
+
     switch (p_ble_evt->header.evt_id)
     {
         case BLE_GAP_EVT_CONNECTED:
@@ -733,6 +767,27 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         					   p_gap_evt->params.connected.peer_addr.addr_type,
         					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
         	g_BtAppData.State = BTAPP_STATE_CONNECTED;
+
+        	// If a secure SecType was configured, the SoftDevice backend requests
+        	// security on the link itself (pm_conn_secure -> sd_ble_gap_authenticate).
+        	// This is backend-internal so the application stays SDK-neutral - it
+        	// does not call any backend-specific security-request function.
+        	if (g_BtAppData.AppDevice.bSecure)
+        	{
+        		err_code = pm_conn_secure(p_gap_evt->conn_handle, false);
+        		DEBUG_PRINTF("SEC: connect hdl=%d bSecure=1 pm_conn_secure=0x%X\r\n",
+        				p_gap_evt->conn_handle, err_code);
+        		if (err_code != NRF_ERROR_INVALID_STATE && err_code != NRF_ERROR_BUSY)
+        		{
+        			APP_ERROR_CHECK(err_code);
+        		}
+        	}
+        	else
+        	{
+        		DEBUG_PRINTF("SEC: connect hdl=%d bSecure=0 (no security requested)\r\n",
+        				p_gap_evt->conn_handle);
+        	}
+
         	BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
         	break;
@@ -819,10 +874,6 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
                                              BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
             APP_ERROR_CHECK(err_code);
             break; // BLE_GATTS_EVT_TIMEOUT
-        case BLE_GAP_EVT_LESC_DHKEY_REQUEST:
-            err_code = sd_ble_gap_lesc_dhkey_reply(BtAppGetConnHandle(), &s_lesc_dh_key);
-            APP_ERROR_CHECK(err_code);
-            break;
    }
    // on_ble_evt(p_ble_evt);
 #if 1
@@ -965,14 +1016,22 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     }
 
     err_code = pm_sec_params_set(&sec_param);
+    DEBUG_PRINTF("SEC: pm_sec_params_set=0x%X lesc=%d mitm=%d bond=%d io=%d\r\n",
+    		err_code, sec_param.lesc, sec_param.mitm, sec_param.bond, sec_param.io_caps);
     APP_ERROR_CHECK(err_code);
 
     err_code = pm_register(pm_evt_handler);
+    DEBUG_PRINTF("SEC: pm_register=0x%X\r\n", err_code);
     APP_ERROR_CHECK(err_code);
 
-    // Generate the ECDH key pair and set public key in the peer-manager.
-    //err_code = ble_lesc_ecc_keypair_generate_and_set();
-    //APP_ERROR_CHECK(err_code);
+    // Initialise the LESC module. This sets up nrf_crypto (mbedTLS backend on
+    // this target provides the secp256r1 ECDH) and generates the local ECDH key
+    // pair. The module owns the key pair, handles the LESC DHKey request, and
+    // replies to the SoftDevice; the app only routes BLE events to
+    // nrf_ble_lesc_on_ble_evt and pumps nrf_ble_lesc_request_handler in the loop.
+    err_code = nrf_ble_lesc_init();
+    DEBUG_PRINTF("SEC: nrf_ble_lesc_init=0x%X\r\n", err_code);
+    APP_ERROR_CHECK(err_code);
 }
 
 /**@brief Function for handling events from the GATT library. */
@@ -1318,8 +1377,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     {
     	return false;
     }
-
-//    nrf_ble_lesc_init();
 
     nrf_clock_lf_cfg_t lfclk = {
     	0

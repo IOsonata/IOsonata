@@ -32,13 +32,12 @@ SDC-platform only: guarded on the sdc_hci_cmd_le.h header.
 #include <string.h>
 
 #include "crypto/crypto.h"
+#include "bluetooth/bt_smp.h"		// declares BtCryptoCtlrSdcInit (C linkage)
 
 #if defined(CRYPTO_HAS_SDC) || \
 	(defined(__has_include) && __has_include("sdc_hci_cmd_le.h"))
 
-extern "C" {
 #include "sdc_hci_cmd_le.h"
-}
 
 static void ReverseCopy(uint8_t *pDst, const uint8_t *pSrc, size_t Len)
 {
