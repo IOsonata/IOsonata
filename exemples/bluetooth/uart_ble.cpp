@@ -348,7 +348,7 @@ void HardwareInit()
 	// Bring up the crypto engines the App owns, then they are injected into SMP
 	// via the app config (.pCryptoEcdh/.pCryptoAes/.pCryptoRng).
 	CryptoUeccInit(&g_CryptoEcdh);		// ECDH via software uECC
-	CryptoCtlrSdcInit(&g_CryptoAes);	// AES via BLE controller LE Encrypt
+	BtCryptoCtlrSdcInit(&g_CryptoAes);	// AES via BLE controller LE Encrypt
 	CryptoRngHwInit(&g_CryptoRng);		// RNG via hardware peripheral
 #endif
 

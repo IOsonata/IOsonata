@@ -313,6 +313,25 @@ void BtSmpRequestSecurity(uint16_t ConnHdl);
  */
 void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes, CryptoDev_t *pRng);
 
+/**
+ * @brief	Bring up the Bluetooth-owned controller CryptoDev_t (SDC).
+ *
+ * Populates a caller-owned CryptoDev_t whose AES-128 ECB and RNG are served by
+ * the BLE SoftDevice Controller's HCI LE Encrypt / LE Rand. This is a Bluetooth
+ * helper, NOT a generic crypto engine - it requires a running BLE controller
+ * and is only valid for the SMP AES (and optionally RNG) slot. On a part with
+ * no CryptoCell, compose it with a software ECDH engine and the hardware RNG:
+ *
+ *   CryptoDev_t ecdh, aes, rng;
+ *   CryptoUeccInit(&ecdh);
+ *   BtCryptoCtlrSdcInit(&aes);   // controller AES
+ *   CryptoRngHwInit(&rng);
+ *   BtSmpInit(&ecdh, &aes, &rng);
+ *
+ * @return	true on success, false if the SDC HCI is not present in this build.
+ */
+bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev);
+
 // SMP crypto entry points used by the state machine (dispatch to the composed
 // engines). Kept as functions so the toolbox (c1/f4/f5/f6, AES-CMAC) calls a
 // stable signature regardless of which engine backs each slot.

@@ -148,7 +148,7 @@ typedef struct __Bt_App_Cfg {
 	BTGAP_SECTYPE SecType;			//!< Secure connection type
 	uint8_t SecExchg;				//!< Sec key exchange
 	CryptoDev_t *pCryptoEcdh;		//!< SMP crypto: P-256 ECDH engine (App instance from CryptoUeccInit or CryptoMbedtlsInit). NULL where the stack owns SMP.
-	CryptoDev_t *pCryptoAes;		//!< SMP crypto: AES-128 ECB engine (App instance from CryptoCtlrSdcInit or CryptoMbedtlsInit).
+	CryptoDev_t *pCryptoAes;		//!< SMP crypto: AES-128 ECB engine (App instance from BtCryptoCtlrSdcInit or CryptoMbedtlsInit).
 	CryptoDev_t *pCryptoRng;		//!< SMP crypto: RNG engine (App instance from CryptoRngHwInit or CryptoMbedtlsInit).
 	bool bCompleteUuidList;			//!< true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
 	const BtUuidArr_t *pAdvUuid;

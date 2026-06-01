@@ -215,7 +215,6 @@ extern "C" {
 bool CryptoUeccInit(CryptoDev_t * const pDev);		//!< Software ECDH P-256 (micro-ecc)
 bool CryptoMbedtlsInit(CryptoDev_t * const pDev);	//!< Software AES+ECDH+RNG (mbedTLS); HW-accel via platform mbedTLS
 bool CryptoRngHwInit(CryptoDev_t * const pDev);		//!< Hardware RNG (platform RngGet)
-bool CryptoCtlrSdcInit(CryptoDev_t * const pDev);	//!< BLE controller AES+RNG via SDC HCI
 
 #ifdef __cplusplus
 }

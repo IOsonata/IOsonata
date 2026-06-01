@@ -1,20 +1,28 @@
 /**-------------------------------------------------------------------------
-@file	crypto_ctlr_sdc.cpp
+@file	bt_crypto_ctlr_sdc.cpp
 
-@brief	Crypto engine: AES-128 / RNG via the BLE SoftDevice Controller HCI.
+@brief	Bluetooth-owned CryptoDev_t: AES-128 / RNG via the BLE SoftDevice
+		Controller HCI.
 
-This is NOT a dedicated crypto accelerator. It taps the BLE link-layer
-controller's mandatory HCI primitives - LE Encrypt (AES-128 ECB) and LE Rand -
-to supply the AES and RNG capabilities on a target that has a BLE controller
-but no CryptoCell. It advertises CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_RNG.
+This is NOT a generic crypto engine and does NOT belong in the crypto layer
+(src/crypto). It cannot function without a running BLE controller, so it is
+owned by the Bluetooth layer (bt_ prefix) and only a Bluetooth consumer (SMP)
+may use it. It implements the CryptoDev_t interface purely so SMP can compose
+it into its AES slot uniformly alongside real crypto engines - but it is never
+advertised in crypto.h and a non-Bluetooth consumer (TLS, DFU) must never use
+it.
 
-It supplies no ECDH (the controller has no LE ECDH commands on the SDC API), so
-it composes with an ECDH engine (CryptoUeccInit) - the way a gyro-only chip pairs
-with an accel chip in an IMU. On parts with a hardware RNG peripheral, prefer
-the hardware RNG engine for the RNG slot and use this only for AES.
+It taps the BLE link-layer controller's mandatory HCI primitives - LE Encrypt
+(AES-128 ECB) and LE Rand - which the Bluetooth Core Spec guarantees every LE
+controller implements. The synchronous call form is the Nordic SDC library's
+API (sdc_hci_cmd_le_*), matching how the rest of the SDC backend issues HCI
+commands. It advertises CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_RNG; no ECDH (the
+controller has no LE ECDH commands), so it composes with an ECDH engine
+(CryptoUeccInit) - the way a gyro-only chip pairs with an accel chip in an IMU.
+On parts with a hardware RNG peripheral, prefer the generic hardware RNG engine
+for the RNG slot and use this only for AES.
 
-SDC-platform only: guarded on the sdc_hci_cmd_le.h header so the shared source
-tree stays buildable on non-SDC Nordic backends.
+SDC-platform only: guarded on the sdc_hci_cmd_le.h header.
 
 @author	Hoang Nguyen Hoan
 @date	May 2026
@@ -81,7 +89,7 @@ static void CtlrRand(CryptoDev_t * const pDev, uint8_t *pBuf, size_t Len)
 	}
 }
 
-bool CryptoCtlrSdcInit(CryptoDev_t * const pDev)
+bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev)
 {
 	if (pDev == nullptr)
 	{
@@ -101,7 +109,7 @@ bool CryptoCtlrSdcInit(CryptoDev_t * const pDev)
 
 #else  // SDC HCI not available on this target
 
-bool CryptoCtlrSdcInit(CryptoDev_t * const pDev)
+bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev)
 {
 	(void)pDev;
 	return false;	// SDC controller not present in this build

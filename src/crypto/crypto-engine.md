@@ -52,10 +52,27 @@ false (so the App can probe engines at runtime without link errors).
 |---|---|---|---|
 | `CryptoUeccInit` | ECDH P-256 | `src/crypto/crypto_uecc.cpp` | Software (micro-ecc). ECDH only. |
 | `CryptoMbedtlsInit` | AES + ECDH + RNG | `src/crypto/crypto_mbedtls.cpp` | Software; HW-accelerated where the platform's mbedTLS sits over CC3xx/CRACEN/PKA (nRF52840, nRF54, nRF91). Also serves TLS/DFU. |
-| `CryptoRngHwInit` | RNG | `src/crypto/crypto_rng.cpp` | Hardware RNG peripheral via `RngGet`. Independent of any radio. |
-| `CryptoCtlrSdcInit` | AES + RNG | `ARM/Nordic/src/crypto_ctlr_sdc.cpp` | NOT an accelerator - taps the BLE controller's HCI LE Encrypt / LE Rand. No ECDH. |
+| `CryptoRngHwInit` | RNG | `ARM/Nordic/src/crypto_rng.cpp` | Hardware RNG peripheral via `RngGet`. Independent of any radio. |
 | (future) `CryptoCc3xxInit` | per CC310/CC312 | per-MCU lib (`IOsonata_nRF52840.a`, `nRF9151.a`) | MCU-conditioned hardware engine. |
 | (future) `CryptoStm32Init` | per PKA/CRYP | `ARM/ST/...` | Native STM32 hardware engine, when STM32 TLS is implemented. |
+
+### Generic engines vs. subsystem-owned adapters
+
+The engines above are **generic**: real, reusable crypto facilities (software or
+hardware) that any subsystem - SMP, TLS, DFU - may use. They live in the crypto
+layer (`src/crypto/`, or `ARM/Nordic/src/` for the Nordic hardware RNG) and are
+declared in `crypto.h`.
+
+Some `CryptoDev_t` providers are **subsystem-owned adapters**, NOT generic
+engines, and deliberately do not appear in `crypto.h`:
+
+| Provider | Owner | Notes |
+|---|---|---|
+| `BtCryptoCtlrSdcInit` | Bluetooth (`ARM/Nordic/src/bt_crypto_ctlr_sdc.cpp`, declared in `bt_smp.h`) | AES-128 + RNG via the BLE controller's HCI LE Encrypt / LE Rand. Cannot function without a running BLE controller, so only a Bluetooth consumer (SMP) may use it. It implements `CryptoDev_t` purely so SMP composes it into its AES slot uniformly - it is not a reusable crypto engine and is never advertised in the crypto layer. |
+
+The distinction matters: a non-Bluetooth consumer browsing `crypto.h` sees only
+facilities it can actually use. The BLE-controller AES is invisible there
+because no non-Bluetooth code can call it.
 
 ## Composition (the IMU model)
 
@@ -67,7 +84,7 @@ an App-owned instance.
 Bluetooth SMP needs ECDH + AES + RNG, so `BtSmpInit(pEcdh, pAes, pRng)` takes
 three slots. The application brings up the engines and fills the slots:
 
-- **nRF52832 (no CryptoCell):** `CryptoUeccInit` + `CryptoCtlrSdcInit` +
+- **nRF52832 (no CryptoCell):** `CryptoUeccInit` + `BtCryptoCtlrSdcInit` +
   `CryptoRngHwInit`, then `BtSmpInit(&ecdh, &aes, &rng)` - ECDH from software
   uECC, AES from the BLE controller, RNG from the hardware peripheral.
 - **nRF52840 / nRF91 (CC310):** one `CryptoMbedtlsInit` instance fills all three

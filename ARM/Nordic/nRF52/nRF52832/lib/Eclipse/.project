@@ -1491,9 +1491,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/crypto_ctlr_sdc.cpp</name>
+			<name>src/bluetooth/bt_crypto_ctlr_sdc.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_ctlr_sdc.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_crypto_ctlr_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/nrf_mpsl.cpp</name>
