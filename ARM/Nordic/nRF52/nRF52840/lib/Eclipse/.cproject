@@ -235,6 +235,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/CMSIS-DSP/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
@@ -660,6 +661,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/CMSIS-DSP/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
@@ -917,6 +919,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/CMSIS-DSP/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
@@ -977,6 +980,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/CMSIS-DSP/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
@@ -1119,6 +1123,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/CMSIS-DSP/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
@@ -1179,6 +1184,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/CMSIS-DSP/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Invn&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
