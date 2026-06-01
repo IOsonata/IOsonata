@@ -641,11 +641,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_smp.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_smp_crypto.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_smp_crypto.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_uuid.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_uuid.h</locationURI>
@@ -1331,19 +1326,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_smp_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_smp_sdc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/crypto_ctlr_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_ctlr_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/nrf_mpsl.cpp</name>
