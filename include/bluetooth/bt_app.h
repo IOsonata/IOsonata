@@ -324,6 +324,7 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
  */
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen);
 void BtAppAdvTimeoutHandler(void);
+void BtAppScanTimeoutHandler(void);
 void BtAppAdvStart(void);
 void BtAppAdvStop(void);
 

@@ -161,9 +161,13 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 		return false;
 	}
 
-	s_ScanParams.timeout  = pCfg->Param.Timeout;
-	s_ScanParams.window   = pCfg->Param.Duration;
-	s_ScanParams.interval = pCfg->Param.Interval;
+	// Convert from the documented API units to SoftDevice units:
+	// Interval/Duration are msec -> 0.625 ms units; Timeout is sec -> 10 ms
+	// units. These were previously assigned raw, which made the scan run
+	// 100x too short (e.g. a 120 s timeout became 1.2 s).
+	s_ScanParams.timeout  = MSEC_TO_UNITS(pCfg->Param.Timeout * 1000, UNIT_10_MS);
+	s_ScanParams.window   = MSEC_TO_UNITS(pCfg->Param.Duration, UNIT_0_625_MS);
+	s_ScanParams.interval = MSEC_TO_UNITS(pCfg->Param.Interval, UNIT_0_625_MS);
 
 	uint8_t uidtype = BLE_UUID_TYPE_VENDOR_BEGIN;
 

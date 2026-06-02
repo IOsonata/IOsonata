@@ -908,6 +908,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 					if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
 					{
 						g_BtAppData.bScan = false;
+						BtAppScanTimeoutHandler();
 					}
 				}
             break;

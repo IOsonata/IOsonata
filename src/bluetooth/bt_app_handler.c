@@ -64,6 +64,11 @@ __attribute__((weak)) void BtAppAdvTimeoutHandler()
 
 }
 
+__attribute__((weak)) void BtAppScanTimeoutHandler()
+{
+
+}
+
 __attribute__((weak))  void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 {
 
