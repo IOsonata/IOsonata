@@ -30,15 +30,18 @@ Copyright (c) 2022, I-SYST inc., all rights reserved
 #include "sdc_hci_cmd_controller_baseband.h"
 
 #include "istddef.h"
+#include "idelay.h"
 #include "convutil.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_appearance.h"
 
-// Debug printf: mirrors the guard in bt_app_sdc.cpp.
+// Debug printf via SysLog. Enable UART_DEBUG_ENABLE and call
+// SysLogGetInstance()->Init(g_Uart) in the application to see output.
 //#define UART_DEBUG_ENABLE
 #ifdef UART_DEBUG_ENABLE
 #include "syslog.h"
@@ -66,6 +69,13 @@ alignas(4) static sdc_hci_cmd_le_set_ext_scan_response_data_t &s_BtDevExtSrData 
 alignas(4) static BtAdvPacket_t s_BtDevExtSrPkt = { 255, 0, s_BtDevExtSrData.scan_response_data};
 #endif
 
+// Advertising duration in 10 ms units, cached at init for the enable command.
+// 0 means no timeout.
+static uint16_t s_BtDevAdvDuration = 0;
+
+static int BtAppAdvEnable(void);
+static int BtAppAdvDisable(void);
+
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
 	if (g_BtAppData.State != BTAPP_STATE_ADVERTISING && g_BtAppData.State != BTAPP_STATE_IDLE)
@@ -73,19 +83,8 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		return false;
 	}
 
-	BtAdvPacket_t *advpkt;
-	BtAdvPacket_t *srpkt;
-
-	if (g_BtAppData.bExtAdv == true)
-	{
-		advpkt = &s_BtDevExtAdvPkt;
-		srpkt = &s_BtDevExtSrPkt;
-	}
-	else
-	{
-		advpkt = &s_BtDevAdvPkt;
-		srpkt = &s_BtDevSrPkt;
-	}
+	BtAdvPacket_t *advpkt = &s_BtDevExtAdvPkt;
+	BtAdvPacket_t *srpkt  = &s_BtDevExtSrPkt;
 
 	if (pAdvData)
 	{
@@ -99,29 +98,15 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 		memcpy(&p->Data[2], pAdvData, AdvLen);
 
-    	if (g_BtAppData.bExtAdv == true)
-    	{
-    		s_BtDevExtAdvData.adv_handle = 0;
-    		s_BtDevExtAdvData.operation = 3;
-    		s_BtDevExtAdvData.fragment_preference = 1;
-    		s_BtDevExtAdvData.adv_data_length = advpkt->Len;
+		s_BtDevExtAdvData.adv_handle          = 0;
+		s_BtDevExtAdvData.operation           = 3;
+		s_BtDevExtAdvData.fragment_preference = 1;
+		s_BtDevExtAdvData.adv_data_length     = advpkt->Len;
 
-    		int res = sdc_hci_cmd_le_set_ext_adv_data(&s_BtDevExtAdvData);
-    		if (res != 0)
-    		{
-    			return false;
-    		}
-    	}
-    	else
-    	{
-			s_BtDevAdvData.adv_data_length = s_BtDevAdvPkt.Len;
-
-			int res = sdc_hci_cmd_le_set_adv_data(&s_BtDevAdvData);
-    		if (res != 0)
-    		{
-    			return false;
-    		}
-    	}
+		if (sdc_hci_cmd_le_set_ext_adv_data(&s_BtDevExtAdvData) != 0)
+		{
+			return false;
+		}
 	}
 
 	if (pSrData)
@@ -134,198 +119,208 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 			return false;
 		}
 		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
-		memcpy(&p->Data[2], pAdvData, AdvLen);
+		memcpy(&p->Data[2], pSrData, SrLen);
 
-    	if (g_BtAppData.bExtAdv == false)
-    	{
-			s_BtDevSrData.scan_response_data_length = s_BtDevSrPkt.Len;
+		s_BtDevExtSrData.adv_handle               = 0;
+		s_BtDevExtSrData.operation                = 3;
+		s_BtDevExtSrData.fragment_preference      = 1;
+		s_BtDevExtSrData.scan_response_data_length = srpkt->Len;
 
-			int res = sdc_hci_cmd_le_set_scan_response_data(&s_BtDevSrData);
-    		if (res != 0)
-    		{
-    			return false;
-    		}
-    	}
+		if (sdc_hci_cmd_le_set_ext_scan_response_data(&s_BtDevExtSrData) != 0)
+		{
+			return false;
+		}
+	}
+
+	// Re-enable advertising with the updated data. Disable first so the enable
+	// is not rejected with Command Disallowed (0x0C) when the set is still
+	// considered enabled. Mirrors the nRF52 stop-then-start on data update.
+	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
+	{
+		BtAppAdvDisable();
+		BtAppAdvEnable();
 	}
 
 	return true;
 }
 
+// Issue the extended advertising enable command for adv set 0 with the cached
+// duration. Safe to call whether the set is currently enabled (the controller
+// resets the duration timer) or stopped (it restarts). Returns 0 on success.
+static int BtAppAdvEnable(void)
+{
+	uint8_t buff[sizeof(sdc_hci_cmd_le_set_ext_adv_enable_t) + sizeof(sdc_hci_le_set_ext_adv_enable_array_params_t)];
+
+	sdc_hci_cmd_le_set_ext_adv_enable_t *x = (sdc_hci_cmd_le_set_ext_adv_enable_t*)buff;
+
+	x->enable = 1;
+	x->num_sets = 1;
+	x->array_params[0].adv_handle = 0;
+	x->array_params[0].duration = s_BtDevAdvDuration;
+	x->array_params[0].max_ext_adv_events = 0;
+
+	return sdc_hci_cmd_le_set_ext_adv_enable(x);
+}
+
+// Disable advertising for adv set 0 (controller command only, does not change
+// app State). Disabling an already-disabled set has no effect.
+static int BtAppAdvDisable(void)
+{
+	uint8_t buff[sizeof(sdc_hci_cmd_le_set_ext_adv_enable_t) + sizeof(sdc_hci_le_set_ext_adv_enable_array_params_t)];
+
+	sdc_hci_cmd_le_set_ext_adv_enable_t *x = (sdc_hci_cmd_le_set_ext_adv_enable_t*)buff;
+
+	x->enable = 0;
+	x->num_sets = 1;
+	x->array_params[0].adv_handle = 0;
+	x->array_params[0].duration = 0;
+	x->array_params[0].max_ext_adv_events = 0;
+
+	return sdc_hci_cmd_le_set_ext_adv_enable(x);
+}
+
 void BtAppAdvStart()
 {
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)// || g_BleAppData.ConnHdl != BLE_CONN_HANDLE_INVALID)
+	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
 		return;
 
-	int res = 0;
-
-	if (g_BtAppData.bExtAdv == true)
+	if (BtAppAdvEnable() == 0)
 	{
-		uint8_t buff[100];
-
-		sdc_hci_cmd_le_set_ext_adv_enable_t *x = (sdc_hci_cmd_le_set_ext_adv_enable_t*)buff;
-
-		x->enable = 1;
-		x->num_sets = 1;
-		x->array_params[0].adv_handle = 0;
-		x->array_params[0].duration = 0;
-		x->array_params[0].max_ext_adv_events = 0;
-
-		res = sdc_hci_cmd_le_set_ext_adv_enable(x);
-	}
-	else
-	{
-		sdc_hci_cmd_le_set_adv_enable_t x = { 1 };
-
-		res = sdc_hci_cmd_le_set_adv_enable(&x);
-	}
-
-	if (res == 0)
-	{
-		//g_BleAppData.bAdvertising = true;
 		g_BtAppData.State = BTAPP_STATE_ADVERTISING;
 	}
 }
 
 void BtAppAdvStop()
 {
-	int res = 0;
+	uint8_t buff[sizeof(sdc_hci_cmd_le_set_ext_adv_enable_t) + sizeof(sdc_hci_le_set_ext_adv_enable_array_params_t)];
 
-	if (g_BtAppData.bExtAdv == true)
-	{
-		uint8_t buff[100];
+	sdc_hci_cmd_le_set_ext_adv_enable_t *x = (sdc_hci_cmd_le_set_ext_adv_enable_t*)buff;
 
-		sdc_hci_cmd_le_set_ext_adv_enable_t *x = (sdc_hci_cmd_le_set_ext_adv_enable_t*)buff;
+	x->enable = 0;
+	x->num_sets = 1;
+	x->array_params[0].adv_handle = 0;
+	x->array_params[0].duration = 0;
+	x->array_params[0].max_ext_adv_events = 0;
 
-		x->enable = 0;
-		x->num_sets = 1;
-		x->array_params[0].adv_handle = 0;
-		x->array_params[0].duration = 0;
-		x->array_params[0].max_ext_adv_events = 0;
-
-		res = sdc_hci_cmd_le_set_ext_adv_enable(x);
-	}
-	else
-	{
-		sdc_hci_cmd_le_set_adv_enable_t x = { 0 };
-
-		res = sdc_hci_cmd_le_set_adv_enable(&x);
-	}
+	sdc_hci_cmd_le_set_ext_adv_enable(x);
 
 	g_BtAppData.State = BTAPP_STATE_IDLE;
 }
 
 bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 {
+	BtAdvPacket_t *advpkt = &s_BtDevExtAdvPkt;
+	BtAdvPacket_t *srpkt  = &s_BtDevExtSrPkt;
+
+	// Encode the AD payload. BtAdvEncode decides legacy vs extended from how the
+	// records pack, and reports it via bExtAdv/scannable.
+	bool scannable = false;
+
+	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv, &scannable) == false)
+	{
+		return false;
+	}
+
+	// The SDC reaches both legacy and extended advertising through the extended
+	// HCI commands. Legacy advertising PDUs (so older centrals can see the set)
+	// are selected with the legacy event-property bit; this also makes the
+	// advertising duration / timeout available, which the old legacy enable
+	// command does not provide.
 	uint16_t extprop = 0;
-	BtAdvPacket_t *advpkt;
-	BtAdvPacket_t *srpkt;
 
-	if (g_BtAppData.bExtAdv)
+	if (g_BtAppData.bExtAdv == false)
 	{
-		advpkt = &s_BtDevExtAdvPkt;
-		srpkt  = &s_BtDevExtSrPkt;
-	}
-	else
-	{
-		advpkt = &s_BtDevAdvPkt;
-		srpkt  = &s_BtDevSrPkt;
+		extprop |= BTADV_EXTADV_EVT_PROP_LEGACY;
 	}
 
-	// SDC-specific extended-adv event-prop flags based on role.
+	// Role dictates connectable / scannable per the validated mapping:
+	//   peripheral legacy   -> connectable + scannable (ADV_IND)
+	//   peripheral extended -> connectable only (extended cannot be scannable)
+	//   broadcaster         -> neither (non-connectable non-scannable)
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		extprop |= BTADV_EXTADV_EVT_PROP_CONNECTABLE;
 	}
 
-	// Generic AD payload encode.
-	if (BtAdvEncode(pCfg, advpkt, srpkt) == false)
+	if (scannable)
+	{
+		extprop |= BTADV_EXTADV_EVT_PROP_SCANNABLE;
+	}
+
+	// Populate the SDC extended advertising parameters struct directly. Casting
+	// BtExtAdvParam_t onto it does not work: the bitfield layout differs from
+	// the packed HCI struct, which misaligns the PHY and trailing fields.
+	sdc_hci_cmd_le_set_ext_adv_params_t exadvparm;
+	memset(&exadvparm, 0, sizeof(exadvparm));
+	exadvparm.adv_handle = 0;
+	exadvparm.adv_event_properties.raw[0] = (uint8_t)(extprop & 0xFF);
+	exadvparm.adv_event_properties.raw[1] = (uint8_t)((extprop >> 8) & 0xFF);
+	exadvparm.primary_adv_interval_min = mSecTo0_625(pCfg->AdvInterval);
+	exadvparm.primary_adv_interval_max = mSecTo0_625(pCfg->AdvInterval + 50);
+	exadvparm.primary_adv_channel_map  = 7;
+	exadvparm.own_address_type         = BTADDR_TYPE_RAND;
+	exadvparm.peer_address_type        = 0;
+	exadvparm.adv_filter_policy        = 0;
+	exadvparm.adv_tx_power             = 0;
+	exadvparm.primary_adv_phy          = BTADV_EXTADV_PHY_1M;
+	exadvparm.secondary_adv_max_skip   = 0;
+	exadvparm.secondary_adv_phy        = BTADV_EXTADV_PHY_2M;
+	exadvparm.adv_sid                  = 0;
+	exadvparm.scan_request_notification_enable = 0;
+
+	sdc_hci_cmd_le_set_ext_adv_params_return_t rexadvparm;
+	int res = sdc_hci_cmd_le_set_ext_adv_params(&exadvparm, &rexadvparm);
+	DEBUG_PRINTF("set_ext_adv_params: res=%d extprop=%x\r\n", res, extprop);
+	if (res != 0)
 	{
 		return false;
 	}
 
-	// SDC-specific: push to controller via HCI commands.
-	if (g_BtAppData.bExtAdv == false)
+	// Extended advertising with a random own-address type requires the random
+	// address to be set per advertising set; the legacy LE Set Random Address
+	// command does not configure it. Use the device's configured random address.
 	{
-		sdc_hci_cmd_le_set_adv_params_t advparam = {
-			.adv_interval_min  = mSecTo0_625(pCfg->AdvInterval),
-			.adv_interval_max  = mSecTo0_625(pCfg->AdvInterval + 50),
-			.adv_type          = BTADV_TYPE_ADV_NONCONN_IND,
-			.own_address_type  = BTADDR_TYPE_RAND,
-			.peer_address_type = 0,
-			.peer_address      = {0,},
-			.adv_channel_map   = 7,
-			.adv_filter_policy = 0
-		};
-
-		if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
-		{
-			advparam.adv_type = BTADV_TYPE_ADV_IND;
-		}
-
-		if (sdc_hci_cmd_le_set_adv_params(&advparam) != 0)
+		uint8_t atype = 0;
+		sdc_hci_cmd_le_set_adv_set_random_address_t ranaddr;
+		ranaddr.adv_handle = 0;
+		BtSmpLocalAddrGet(&atype, ranaddr.random_address);
+		res = sdc_hci_cmd_le_set_adv_set_random_address(&ranaddr);
+		DEBUG_PRINTF("set_adv_set_rand_addr: res=%d\r\n", res);
+		if (res != 0)
 		{
 			return false;
-		}
-
-		s_BtDevAdvData.adv_data_length = advpkt->Len;
-		if (sdc_hci_cmd_le_set_adv_data(&s_BtDevAdvData) != 0)
-		{
-			return false;
-		}
-
-		if (srpkt->Len > 0)
-		{
-			s_BtDevSrData.scan_response_data_length = srpkt->Len;
-			if (sdc_hci_cmd_le_set_scan_response_data(&s_BtDevSrData) != 0)
-			{
-				return false;
-			}
 		}
 	}
-	else
+
+	s_BtDevExtAdvData.adv_handle          = 0;
+	s_BtDevExtAdvData.operation           = 3;
+	s_BtDevExtAdvData.fragment_preference = 1;
+	s_BtDevExtAdvData.adv_data_length     = advpkt->Len;
+	res = sdc_hci_cmd_le_set_ext_adv_data(&s_BtDevExtAdvData);
+	DEBUG_PRINTF("set_ext_adv_data: res=%d len=%d\r\n", res, advpkt->Len);
+	if (res != 0)
 	{
-		// Extended advertising path.
-		BtExtAdvParam_t extparam = {
-			.AdvHdl          = 0,
-			.EvtProp         = extprop,
-			.PrimIntervalMin = mSecTo0_625(pCfg->AdvInterval),
-			.PrimIntervalMax = mSecTo0_625(pCfg->AdvInterval + 50),
-			.PrimChanMap     = 7,
-			.OwnAddrType     = BTADDR_TYPE_RAND,
-			.PrimPhy         = BTADV_EXTADV_PHY_1M,
-			.SecondPhy       = BTADV_EXTADV_PHY_2M,
-			.ScanNotifEnable = 0,
-		};
+		return false;
+	}
 
-		sdc_hci_cmd_le_set_ext_adv_params_t &exadvparm =
-			*(sdc_hci_cmd_le_set_ext_adv_params_t*)&extparam;
-		sdc_hci_cmd_le_set_ext_adv_params_return_t rexadvparm;
-		if (sdc_hci_cmd_le_set_ext_adv_params(&exadvparm, &rexadvparm) != 0)
+	// Scan response data only exists for a scannable set; setting it on a
+	// non-scannable set is rejected by the controller.
+	if (scannable && srpkt->Len > 0)
+	{
+		s_BtDevExtSrData.adv_handle               = 0;
+		s_BtDevExtSrData.operation                = 3;
+		s_BtDevExtSrData.fragment_preference      = 1;
+		s_BtDevExtSrData.scan_response_data_length = srpkt->Len;
+		res = sdc_hci_cmd_le_set_ext_scan_response_data(&s_BtDevExtSrData);
+		DEBUG_PRINTF("set_ext_scan_resp: res=%d len=%d\r\n", res, srpkt->Len);
+		if (res != 0)
 		{
 			return false;
-		}
-
-		s_BtDevExtAdvData.adv_handle         = 0;
-		s_BtDevExtAdvData.operation          = 3;
-		s_BtDevExtAdvData.fragment_preference = 1;
-		s_BtDevExtAdvData.adv_data_length    = advpkt->Len;
-		if (sdc_hci_cmd_le_set_ext_adv_data(&s_BtDevExtAdvData) != 0)
-		{
-			return false;
-		}
-
-		if (srpkt->Len > 0)
-		{
-			s_BtDevExtSrData.adv_handle              = 0;
-			s_BtDevExtSrData.operation               = 3;
-			s_BtDevExtSrData.fragment_preference     = 1;
-			s_BtDevExtSrData.scan_response_data_length = advpkt->Len;
-			if (sdc_hci_cmd_le_set_ext_scan_response_data(&s_BtDevExtSrData) != 0)
-			{
-				return false;
-			}
 		}
 	}
+
+	// Cache the advertising duration (10 ms units) for the enable command.
+	s_BtDevAdvDuration = mSecTo10Ms(pCfg->AdvTimeout);
 
 	DEBUG_PRINTF("BtAppAdvInit returns true\r\n");
 	return true;

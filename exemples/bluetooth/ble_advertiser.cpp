@@ -48,6 +48,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/uart.h"
+#include "syslog.h"
 #include "board.h"
 
 // Uncomment this to set custom board oscillator
@@ -184,6 +185,9 @@ int main()
 	bool res = g_Uart.Init(s_UartCfg);
 
 	g_Uart.printf("BleAdvertiser\n\r");
+
+	// Enable SysLog output through the UART so library DEBUG_PRINTF appears.
+	SysLogGetInstance()->Init(g_Uart);
 #endif
 
 	// Clear all leds

@@ -71,7 +71,7 @@ SOFTWARE.
 
 
 /******** For DEBUG ************/
-//#define UART_DEBUG_ENABLE
+#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "syslog.h"
@@ -143,6 +143,7 @@ static BtHciDevice_t s_BtHciDev = {
 	.Disconnected = BtAppDisconnected,
 	.SendCompleted = BtAppSendCompleted,
 	.ScanReport = BtAppScanReport,
+	.AdvTimeout = BtAppAdvTimeoutHandler,
 	//.DiscoverDevice = BtAppDiscoverDevice,
 };
 
@@ -725,7 +726,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	DEBUG_PRINTF("g_BtAppData.AppDevice.Conn.Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
 
-	g_BtAppData.bExtAdv = pCfg->bExtAdv;
 	g_BtAppData.bScan = false;
 //	g_BtAppData.bAdvertising = false;
 	g_BtAppData.AppDevice.VendorId = pCfg->VendorId;

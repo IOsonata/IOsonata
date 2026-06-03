@@ -248,6 +248,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_SCAN_TIMEOUT:
 			break;
 		case BT_HCI_EVT_LE_ADV_SET_TERMINATED:
+			if (pDev->AdvTimeout)
+			{
+				pDev->AdvTimeout();
+			}
 			break;
 		case BT_HCI_EVT_LE_SCAN_RQST_RECEIVED:
 			break;

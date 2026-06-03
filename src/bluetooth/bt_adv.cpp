@@ -41,7 +41,7 @@ SOFTWARE.
 #include "bluetooth/bt_appearance.h"
 
 /******** For DEBUG ************/
-//#define DEBUG_ENABLE
+#define DEBUG_ENABLE
 
 #ifdef DEBUG_ENABLE
 #include "syslog.h"
@@ -527,20 +527,25 @@ static uint8_t BtAdvFlagsValue(const BtAppCfg_t *pCfg)
 	return flags;
 }
 
-// Encode the AD payload, deciding legacy vs extended advertising from how the
-// records pack. Legacy advertising uses two BT_ADV_LEGACY_DATA_MAX (31) octet
-// packets: the advertising packet and the scan response. Records that belong on
-// the scan response (additional manufacturer data, service UUIDs) spill there,
-// which makes the set scannable. The device name is always on the advertising
-// packet and is never spilled or truncated; if the full name does not fit the
-// legacy advertising packet, extended advertising is used so the complete name
-// is preserved. Extended advertising is also used if any spillable record fits
-// neither the advertising packet nor the scan response. In extended mode all
-// data is placed on the advertising packet and there is no scan response.
+// Encode the AD payload following a role-driven model. The role dictates the
+// advertising type, which dictates whether a scan response is permitted:
+//
+//   PERIPHERAL  -> connectable. Legacy form is ADV_IND (scan response allowed);
+//                  extended connectable is non-scannable (no scan response).
+//   BROADCASTER -> non-connectable non-scannable. No scan response in either
+//                  legacy (ADV_NONCONN_IND) or extended form.
+//
+// Advertising data is always placed in the advertising packet. Scan-response
+// data is placed in the scan response only when the type permits it (legacy
+// peripheral); otherwise it is merged into the advertising packet. Legacy uses
+// two BT_ADV_LEGACY_DATA_MAX (31) octet packets; if content overflows a 31
+// octet packet, extended advertising (single packet, up to 255 octets) is used.
+// The device name is always on the advertising packet and is never truncated;
+// if it does not fit the legacy packet, extended advertising preserves it.
 //
 // pExtAdv   : out, set true if extended advertising is required.
-// pScannable: out, set true if the legacy set is scannable (has a scan
-//             response). Always false in extended mode.
+// pScannable: out, set true if the set is scannable (legacy peripheral with a
+//             scan response). False otherwise.
 bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt,
 		bool *pExtAdv, bool *pScannable)
 {
@@ -581,6 +586,11 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 	bool hasUuid  = (pCfg->pAdvUuid != nullptr) && (pCfg->Role & BTAPP_ROLE_PERIPHERAL);
 	int  nameLen  = (pCfg->pDevName != nullptr) ? (int)strlen(pCfg->pDevName) : 0;
 
+	// Role dictates whether a scan response is permitted. Only legacy
+	// connectable peripheral (ADV_IND) has a scan response. Broadcaster is
+	// non-scannable; extended connectable is non-scannable.
+	bool srAllowed = (pCfg->Role & BTAPP_ROLE_PERIPHERAL) != 0;
+
 	// --- Legacy attempt: adv and scan response each capped at 31 octets. ---
 	// The packets may have a larger physical buffer (for the extended
 	// fallback), so cap MaxLen for the legacy attempt and restore afterwards.
@@ -604,13 +614,13 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 	bool needExt = false;
 	bool scannable = false;
 
-	// Flags: mandatory, on adv packet. Cannot fail at 3 bytes, but guard.
+	// Flags: mandatory, on adv packet.
 	if (BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
 	{
 		needExt = true;
 	}
 
-	// Manufacturer data on adv packet.
+	// Advertising manufacturer data on adv packet.
 	if (needExt == false && pCfg->pAdvManData != nullptr)
 	{
 		if (BtAdvAddManData(pAdvPkt, pCfg->VendorId, pCfg->pAdvManData, pCfg->AdvManDataLen) == false)
@@ -631,8 +641,8 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		}
 	}
 
-	// Device name: always on adv packet, full name, never truncated or
-	// spilled. If it does not fit, fall back to extended to preserve it.
+	// Device name: always on adv packet, full name, never truncated. If it does
+	// not fit, fall back to extended to preserve it.
 	if (needExt == false && nameLen > 0)
 	{
 		if (BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME,
@@ -642,30 +652,41 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		}
 	}
 
-	// Scan-response manufacturer data: on scan response, makes the set
-	// scannable. If it does not fit, fall back to extended.
+	// Scan-response manufacturer data. Placed in the scan response if the role
+	// permits one (legacy peripheral); otherwise placed in the adv packet. If
+	// it does not fit its target packet, fall back to extended.
 	if (needExt == false && pCfg->pSrManData != nullptr)
 	{
-		if (pSrPkt == nullptr ||
-			BtAdvAddManData(pSrPkt, pCfg->VendorId, pCfg->pSrManData, pCfg->SrManDataLen) == false)
+		if (srAllowed && pSrPkt != nullptr)
 		{
-			needExt = true;
+			if (BtAdvAddManData(pSrPkt, pCfg->VendorId, pCfg->pSrManData, pCfg->SrManDataLen) == false)
+			{
+				needExt = true;
+			}
+			else
+			{
+				scannable = true;
+			}
 		}
 		else
 		{
-			scannable = true;
+			if (BtAdvAddManData(pAdvPkt, pCfg->VendorId, pCfg->pSrManData, pCfg->SrManDataLen) == false)
+			{
+				needExt = true;
+			}
 		}
 	}
 
-	// Service UUIDs: prefer adv packet, spill to scan response if no room. If
-	// neither fits, fall back to extended.
+	// Service UUIDs (peripheral only). Prefer the adv packet; if the role
+	// permits a scan response, spill there. If neither fits, fall back to
+	// extended.
 	if (needExt == false && hasUuid)
 	{
 		if (BtAdvDataAddUuid(pAdvPkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList))
 		{
 			// placed on adv packet
 		}
-		else if (pSrPkt != nullptr &&
+		else if (srAllowed && pSrPkt != nullptr &&
 				 BtAdvDataAddUuid(pSrPkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList))
 		{
 			scannable = true;

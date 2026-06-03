@@ -712,6 +712,7 @@ struct __Bt_Hci_Device {
 	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
 	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
 	bool (*ScanReport)(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *AdvData);
+	void (*AdvTimeout)(void);	//!< Advertising set terminated (duration/events elapsed)
 	//BtAdvSCanReport_t *pAdvReport);//uint8_t Type, uint8_t NbReport, void *pReport);
 	void *pBtDev;// Pointer to the connected peripheral device's info
 };
