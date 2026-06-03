@@ -84,6 +84,15 @@ static inline uint16_t mSecTo0_625(float Val) {
 };
 
 /**
+ * @brief	Conversion mSec to 10ms unit (advertising/scan duration).
+ */
+#define MSEC_TO_10MS(Val)	((uint16_t)(((Val) + 5UL) / 10UL))
+
+static inline uint16_t mSecTo10Ms(uint32_t Val) {
+	return (uint16_t)((Val + 5UL) / 10UL);
+};
+
+/**
  * @brief 16 bits endianess conversion.
  *
  * @param x : 16 bits number to covert.
