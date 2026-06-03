@@ -427,9 +427,124 @@ size_t BtAdvDataGetManData(uint8_t *pAdvData, size_t AdvLen, uint8_t *pBuff, siz
 	return retval;
 }
 
-bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt)
+// Compute the total length (2-byte AD header + data) of the service UUID
+// record for the given UUID array, matching BtAdvDataAddUuid's sizing. Returns
+// 0 if there is no UUID record to add.
+static int BtAdvUuidRecordLen(const BtUuidArr_t *pUid)
 {
-	if (pCfg == nullptr || pAdvPkt == nullptr)
+	if (pUid == nullptr || pUid->Count <= 0)
+	{
+		return 0;
+	}
+
+	int unit;
+
+	if (pUid->BaseIdx > 0)
+	{
+		// Custom base: 16/32-bit shorthands are expanded to full 128-bit.
+		unit = 16;
+	}
+	else
+	{
+		switch (pUid->Type)
+		{
+			case BT_UUID_TYPE_16:  unit = 2;  break;
+			case BT_UUID_TYPE_32:  unit = 4;  break;
+			case BT_UUID_TYPE_128: unit = 16; break;
+			default: return 0;
+		}
+	}
+
+	return 2 + unit * pUid->Count;
+}
+
+// Place the manufacturer-specific data record (company id + payload) into the
+// target packet. Returns true on success, false if it does not fit.
+static bool BtAdvAddManData(BtAdvPacket_t *pPkt, uint16_t VendorId,
+		const uint8_t *pData, int Len)
+{
+	BtAdvData_t *p = BtAdvDataAllocate(pPkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, Len + 2);
+	if (p == nullptr)
+	{
+		return false;
+	}
+	BtAdvWriteU16Le(p->Data, VendorId);
+	if (Len > 0)
+	{
+		memcpy(&p->Data[2], pData, Len);
+	}
+	return true;
+}
+
+// Place the merged adv+sr manufacturer data into a single record on the adv
+// packet (used in extended mode, which has no separate scan response).
+static bool BtAdvAddManDataMerged(BtAdvPacket_t *pPkt, const BtAppCfg_t *pCfg)
+{
+	int l = 2;
+	if (pCfg->pAdvManData != nullptr) l += pCfg->AdvManDataLen;
+	if (pCfg->pSrManData  != nullptr) l += pCfg->SrManDataLen;
+
+	if (l <= 2)
+	{
+		return true;	// nothing to add
+	}
+
+	BtAdvData_t *p = BtAdvDataAllocate(pPkt, BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+	if (p == nullptr)
+	{
+		return false;
+	}
+	BtAdvWriteU16Le(p->Data, pCfg->VendorId);
+	int off = 2;
+	if (pCfg->pAdvManData != nullptr && pCfg->AdvManDataLen > 0)
+	{
+		memcpy(&p->Data[off], pCfg->pAdvManData, pCfg->AdvManDataLen);
+		off += pCfg->AdvManDataLen;
+	}
+	if (pCfg->pSrManData != nullptr && pCfg->SrManDataLen > 0)
+	{
+		memcpy(&p->Data[off], pCfg->pSrManData, pCfg->SrManDataLen);
+	}
+	return true;
+}
+
+// Compute the flags AD value from role and timeout.
+static uint8_t BtAdvFlagsValue(const BtAppCfg_t *pCfg)
+{
+	uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
+
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
+	{
+		if (pCfg->AdvTimeout != 0)
+		{
+			flags |= BT_GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
+		}
+		else
+		{
+			flags |= BT_GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
+		}
+	}
+	return flags;
+}
+
+// Encode the AD payload, deciding legacy vs extended advertising from how the
+// records pack. Legacy advertising uses two BT_ADV_LEGACY_DATA_MAX (31) octet
+// packets: the advertising packet and the scan response. Records that belong on
+// the scan response (additional manufacturer data, service UUIDs) spill there,
+// which makes the set scannable. The device name is always on the advertising
+// packet and is never spilled or truncated; if the full name does not fit the
+// legacy advertising packet, extended advertising is used so the complete name
+// is preserved. Extended advertising is also used if any spillable record fits
+// neither the advertising packet nor the scan response. In extended mode all
+// data is placed on the advertising packet and there is no scan response.
+//
+// pExtAdv   : out, set true if extended advertising is required.
+// pScannable: out, set true if the legacy set is scannable (has a scan
+//             response). Always false in extended mode.
+bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt,
+		bool *pExtAdv, bool *pScannable)
+{
+	if (pCfg == nullptr || pAdvPkt == nullptr || pExtAdv == nullptr || pScannable == nullptr)
 	{
 		return false;
 	}
@@ -459,6 +574,123 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		return false;
 	}
 
+	*pExtAdv = false;
+	*pScannable = false;
+
+	uint8_t flags = BtAdvFlagsValue(pCfg);
+	bool hasUuid  = (pCfg->pAdvUuid != nullptr) && (pCfg->Role & BTAPP_ROLE_PERIPHERAL);
+	int  nameLen  = (pCfg->pDevName != nullptr) ? (int)strlen(pCfg->pDevName) : 0;
+
+	// --- Legacy attempt: adv and scan response each capped at 31 octets. ---
+	// The packets may have a larger physical buffer (for the extended
+	// fallback), so cap MaxLen for the legacy attempt and restore afterwards.
+	int advMax = pAdvPkt->MaxLen;
+	int srMax  = (pSrPkt != nullptr) ? pSrPkt->MaxLen : 0;
+
+	pAdvPkt->Len = 0;
+	memset(pAdvPkt->pData, 0, advMax);
+	if (pSrPkt != nullptr)
+	{
+		pSrPkt->Len = 0;
+		memset(pSrPkt->pData, 0, srMax);
+	}
+
+	pAdvPkt->MaxLen = (advMax < BT_ADV_LEGACY_DATA_MAX) ? advMax : BT_ADV_LEGACY_DATA_MAX;
+	if (pSrPkt != nullptr)
+	{
+		pSrPkt->MaxLen = (srMax < BT_ADV_LEGACY_DATA_MAX) ? srMax : BT_ADV_LEGACY_DATA_MAX;
+	}
+
+	bool needExt = false;
+	bool scannable = false;
+
+	// Flags: mandatory, on adv packet. Cannot fail at 3 bytes, but guard.
+	if (BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
+	{
+		needExt = true;
+	}
+
+	// Manufacturer data on adv packet.
+	if (needExt == false && pCfg->pAdvManData != nullptr)
+	{
+		if (BtAdvAddManData(pAdvPkt, pCfg->VendorId, pCfg->pAdvManData, pCfg->AdvManDataLen) == false)
+		{
+			needExt = true;
+		}
+	}
+
+	// Appearance on adv packet: optional, dropped if no room (does not force
+	// extended).
+	if (needExt == false && pCfg->Appearance != BT_APPEAR_UNKNOWN_GENERIC)
+	{
+		uint8_t appBuf[2];
+		BtAdvWriteU16Le(appBuf, pCfg->Appearance);
+		if (BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_APPEARANCE, appBuf, 2) == false)
+		{
+			DEBUG_PRINTF("BtAdvEncode: appearance dropped, no room\r\n");
+		}
+	}
+
+	// Device name: always on adv packet, full name, never truncated or
+	// spilled. If it does not fit, fall back to extended to preserve it.
+	if (needExt == false && nameLen > 0)
+	{
+		if (BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME,
+				(uint8_t*)pCfg->pDevName, nameLen) == false)
+		{
+			needExt = true;
+		}
+	}
+
+	// Scan-response manufacturer data: on scan response, makes the set
+	// scannable. If it does not fit, fall back to extended.
+	if (needExt == false && pCfg->pSrManData != nullptr)
+	{
+		if (pSrPkt == nullptr ||
+			BtAdvAddManData(pSrPkt, pCfg->VendorId, pCfg->pSrManData, pCfg->SrManDataLen) == false)
+		{
+			needExt = true;
+		}
+		else
+		{
+			scannable = true;
+		}
+	}
+
+	// Service UUIDs: prefer adv packet, spill to scan response if no room. If
+	// neither fits, fall back to extended.
+	if (needExt == false && hasUuid)
+	{
+		if (BtAdvDataAddUuid(pAdvPkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList))
+		{
+			// placed on adv packet
+		}
+		else if (pSrPkt != nullptr &&
+				 BtAdvDataAddUuid(pSrPkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList))
+		{
+			scannable = true;
+		}
+		else
+		{
+			needExt = true;
+		}
+	}
+
+	// Restore physical capacities.
+	pAdvPkt->MaxLen = advMax;
+	if (pSrPkt != nullptr)
+	{
+		pSrPkt->MaxLen = srMax;
+	}
+
+	if (needExt == false)
+	{
+		*pExtAdv = false;
+		*pScannable = scannable;
+		return true;
+	}
+
+	// --- Extended fallback: everything on the adv packet, no scan response. ---
 	pAdvPkt->Len = 0;
 	memset(pAdvPkt->pData, 0, pAdvPkt->MaxLen);
 	if (pSrPkt != nullptr)
@@ -467,28 +699,16 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		memset(pSrPkt->pData, 0, pSrPkt->MaxLen);
 	}
 
-	// Flags: BR/EDR not supported; limited or general discoverable based on
-	// whether the app set a timeout (limited mode).
-	uint8_t flags = BT_GAP_DATA_TYPE_FLAGS_NO_BREDR;
-
-	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
-	{
-		if (pCfg->AdvTimeout != 0)
-		{
-			flags |= BT_GAP_DATA_TYPE_FLAGS_LIMITED_DISCOVERABLE;
-		}
-		else
-		{
-			flags |= BT_GAP_DATA_TYPE_FLAGS_GENERAL_DISCOVERABLE;
-		}
-	}
-
 	if (BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_FLAGS, &flags, 1) == false)
 	{
 		return false;
 	}
 
-	// Appearance is optional; log if dropped for lack of room.
+	if (BtAdvAddManDataMerged(pAdvPkt, pCfg) == false)
+	{
+		return false;
+	}
+
 	if (pCfg->Appearance != BT_APPEAR_UNKNOWN_GENERIC)
 	{
 		uint8_t appBuf[2];
@@ -499,105 +719,24 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		}
 	}
 
-	// Manufacturer specific data.
-	// Legacy: separate records on adv and sr.
-	// Extended: merge adv+sr into a single record on the adv packet
-	// (extended adv has no scan response in the same sense).
-	if (pCfg->bExtAdv == false)
+	if (nameLen > 0)
 	{
-		if (pCfg->pAdvManData != NULL)
-		{
-			int l = pCfg->AdvManDataLen + 2;
-			BtAdvData_t *p = BtAdvDataAllocate(pAdvPkt,
-				BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-			if (p == NULL)
-			{
-				return false;
-			}
-			BtAdvWriteU16Le(p->Data, pCfg->VendorId);
-			if (pCfg->AdvManDataLen > 0)
-			{
-				memcpy(&p->Data[2], pCfg->pAdvManData, pCfg->AdvManDataLen);
-			}
-		}
-
-		if (pCfg->pSrManData != NULL)
-		{
-			if (pSrPkt == nullptr)
-			{
-				DEBUG_PRINTF("BtAdvEncode: sr man data set but no sr packet\r\n");
-				return false;
-			}
-			else
-			{
-				int l = pCfg->SrManDataLen + 2;
-				BtAdvData_t *p = BtAdvDataAllocate(pSrPkt,
-					BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-				if (p == NULL)
-				{
-					return false;
-				}
-				BtAdvWriteU16Le(p->Data, pCfg->VendorId);
-				if (pCfg->SrManDataLen > 0)
-				{
-					memcpy(&p->Data[2], pCfg->pSrManData, pCfg->SrManDataLen);
-				}
-			}
-		}
-	}
-	else
-	{
-		int l = 2;
-		if (pCfg->pAdvManData != NULL) l += pCfg->AdvManDataLen;
-		if (pCfg->pSrManData  != NULL) l += pCfg->SrManDataLen;
-
-		if (l > 2)
-		{
-			BtAdvData_t *p = BtAdvDataAllocate(pAdvPkt,
-				BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
-			if (p == NULL)
-			{
-				return false;
-			}
-			BtAdvWriteU16Le(p->Data, pCfg->VendorId);
-			int off = 2;
-			if (pCfg->pAdvManData != NULL && pCfg->AdvManDataLen > 0)
-			{
-				memcpy(&p->Data[off], pCfg->pAdvManData, pCfg->AdvManDataLen);
-				off += pCfg->AdvManDataLen;
-			}
-			if (pCfg->pSrManData != NULL && pCfg->SrManDataLen > 0)
-			{
-				memcpy(&p->Data[off], pCfg->pSrManData, pCfg->SrManDataLen);
-			}
-		}
-	}
-
-	// Device name. BtAdvDataSetDevName picks full or short based on space and
-	// adds it to the adv packet. UUIDs go on the scan response in legacy mode
-	// to free room in the 31-byte adv payload, or on the adv packet in extended.
-	BtAdvPacket_t *uidadvpkt;
-	if (pCfg->pDevName != NULL)
-	{
-		if (BtAdvDataSetDevName(pAdvPkt, pCfg->pDevName) == false)
+		if (BtAdvDataAdd(pAdvPkt, BT_GAP_DATA_TYPE_COMPLETE_LOCAL_NAME,
+				(uint8_t*)pCfg->pDevName, nameLen) == false)
 		{
 			return false;
 		}
-		uidadvpkt = pCfg->bExtAdv ? pAdvPkt : pSrPkt;
-	}
-	else
-	{
-		uidadvpkt = pAdvPkt;
 	}
 
-	// Service UUIDs (peripheral role only). Optional; log if dropped for lack of room.
-	if (pCfg->pAdvUuid != NULL && (pCfg->Role & BTAPP_ROLE_PERIPHERAL) && uidadvpkt != nullptr)
+	if (hasUuid)
 	{
-		if (BtAdvDataAddUuid(uidadvpkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
+		if (BtAdvDataAddUuid(pAdvPkt, pCfg->pAdvUuid, pCfg->bCompleteUuidList) == false)
 		{
 			DEBUG_PRINTF("BtAdvEncode: service UUIDs dropped, no room\r\n");
 		}
 	}
 
+	*pExtAdv = true;
+	*pScannable = false;
 	return true;
 }

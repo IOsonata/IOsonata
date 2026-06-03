@@ -139,7 +139,6 @@ typedef struct __Bt_App_Cfg {
 	uint16_t ProductVer;			//!< PnP product version
 	uint16_t Appearance;			//!< 16 bits Bluetooth appearance value
 	const BtAppDevInfo_t *pDevInfo;	//!< Pointer device info descriptor DIS
-	bool bExtAdv;					//!< Extended advertisement true : enable
 	const uint8_t *pAdvManData;		//!< Manufacture specific data to advertise
 	int AdvManDataLen;				//!< Length of manufacture specific data
 	const uint8_t *pSrManData;		//!< Addition Manufacture specific data to advertise in scan response
@@ -341,19 +340,29 @@ bool BtAppAdvInit(const BtAppCfg_t *pCfg);
         building the packet is a true encode operation.
  *
  *        Populates flags, optional appearance, manufacturer-specific data,
- *        device name, and service UUIDs based on Role and bExtAdv. In legacy
- *        mode the scan-response packet gets its own manuf-data record; in
- *        extended mode adv-manuf and sr-manuf are merged into one record on
- *        the adv packet.
+ *        device name, and service UUIDs. Decides legacy vs extended
+ *        advertising from how the records pack into the legacy packets, and
+ *        reports the decision via pExtAdv/pScannable. The device name is always
+ *        on the adv packet and never truncated; if the full name does not fit a
+ *        legacy packet, extended advertising is used. Spillable records
+ *        (sr-manuf data, service UUIDs) go to the scan response, making the set
+ *        scannable; if they fit neither legacy packet, extended is used. In
+ *        extended mode all data is on the adv packet and there is no scan
+ *        response.
  *
  *        Does not push to the controller - that step is port-specific.
  *
- * @param pCfg     Application config.
- * @param pAdvPkt  Adv packet (filled).
- * @param pSrPkt   Scan-response packet (may be filled in legacy mode).
+ * @param pCfg        Application config.
+ * @param pAdvPkt     Adv packet (filled). Must have capacity for the extended
+ *                    payload (up to 255 octets) so the extended fallback fits.
+ * @param pSrPkt      Scan-response packet (filled in legacy scannable mode).
+ * @param pExtAdv     Out: true if extended advertising is required.
+ * @param pScannable  Out: true if the legacy set is scannable. False in
+ *                    extended mode.
  * @return  true on success; false if any required item overflows.
  */
-bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt);
+bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *pSrPkt,
+		bool *pExtAdv, bool *pScannable);
 void BtAppDisconnect(void);
 
 //bool BleAppScanInit(BleAppScanCfg_t *pCfg);

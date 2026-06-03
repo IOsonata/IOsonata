@@ -1199,6 +1199,19 @@ bool BtAppStackInit(int MaxMtu, int CentLinkCount, int PeriLinkCount, bool bConn
 	err_code = sd_ble_cfg_set(BLE_GAP_CFG_ROLE_COUNT, &ble_cfg, ram_start);
 	APP_ERROR_CHECK(err_code);
 
+	// Configure the GAP device name attribute. The default storage is only
+	// BLE_GAP_DEVNAME_DEFAULT_LEN (31) octets; without this, a device name
+	// longer than 31 octets makes sd_ble_gap_device_name_set fail. Stack-
+	// located, open write permission, sized to the protocol maximum (248).
+	memset(&ble_cfg, 0, sizeof(ble_cfg));
+	BLE_GAP_CONN_SEC_MODE_SET_OPEN(&ble_cfg.gap_cfg.device_name_cfg.write_perm);
+	ble_cfg.gap_cfg.device_name_cfg.vloc        = BLE_GATTS_VLOC_STACK;
+	ble_cfg.gap_cfg.device_name_cfg.p_value     = NULL;
+	ble_cfg.gap_cfg.device_name_cfg.current_len = 0;
+	ble_cfg.gap_cfg.device_name_cfg.max_len     = BLE_GAP_DEVNAME_MAX_LEN;
+	err_code = sd_ble_cfg_set(BLE_GAP_CFG_DEVICE_NAME, &ble_cfg, ram_start);
+	APP_ERROR_CHECK(err_code);
+
 	// Configure the maximum ATT MTU.
 	memset(&ble_cfg, 0x00, sizeof(ble_cfg));
 	ble_cfg.conn_cfg.conn_cfg_tag                 = BTAPP_CONN_CFG_TAG;
@@ -1342,7 +1355,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
-	g_BtAppData.bExtAdv = pCfg->bExtAdv;
 	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
 	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;

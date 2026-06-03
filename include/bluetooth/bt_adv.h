@@ -39,6 +39,10 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 
+/// Maximum advertising or scan-response data payload (in octets) that fits in
+/// legacy advertising PDUs. Above this, extended advertising PDUs are required.
+#define BT_ADV_LEGACY_DATA_MAX		31
+
 #pragma pack(push, 1)
 
 typedef enum __Bt_Addr_Type {
@@ -213,6 +217,24 @@ size_t BtAdvDataGetManData(uint8_t *pAdvData, size_t AdvLen, uint8_t *pBuff, siz
 
 void BtAdvStart(void);
 void BtAdvStop(void);
+
+/**
+ * @brief	Decide whether extended advertising PDUs are required.
+ *
+ * Legacy advertising PDUs cap both the advertising data and the scan response
+ * data at BT_ADV_LEGACY_DATA_MAX (31) octets each. When either assembled
+ * payload exceeds that, extended PDUs must be used. This is the single source
+ * of truth for the legacy/extended selection; each backend measures its
+ * assembled packets and applies the result to its native advertising type or
+ * event-property fields.
+ *
+ * @param	AdvLen	Assembled advertising data length in octets.
+ * @param	SrLen	Assembled scan-response data length in octets.
+ *
+ * @return	true if extended advertising PDUs are required, false if the
+ * 			payloads fit in legacy advertising PDUs.
+ */
+bool BtAdvUseExtended(size_t AdvLen, size_t SrLen);
 
 #ifdef __cplusplus
 }

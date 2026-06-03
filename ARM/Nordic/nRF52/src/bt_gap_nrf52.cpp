@@ -78,7 +78,11 @@ static ble_gap_scan_params_t s_ScanParams =
 	BT_GAP_SCAN_TIMEOUT,	// Scan timeout
 };
 
-static ble_gap_conn_sec_mode_t s_gap_conn_mode;
+// Device-name write permission. Default to OPEN (sm=1, lv=1) so it is valid
+// for roles that do not run BtGapParamInit (e.g. broadcaster). BtGapParamInit
+// overrides it for secured peripheral/central. A zeroed value is NO_ACCESS,
+// which makes sd_ble_gap_device_name_set fail.
+static ble_gap_conn_sec_mode_t s_gap_conn_mode = { 1, 1 };
 
 void BtGapParamInit(const BtGapCfg_t *pCfg)
 {

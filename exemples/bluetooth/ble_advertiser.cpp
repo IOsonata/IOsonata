@@ -92,7 +92,7 @@ static const UARTCfg_t s_UartCfg = {
 
 UART g_Uart;
 #endif
-//#define EXTADV		// Uncomment to enable extended advertisement
+#define EXTADV		// Uncomment to enable extended advertisement
 
 #ifdef EXTADV
 #define DEVICE_NAME                     "Advertising extra long long name"
@@ -114,11 +114,11 @@ const BtAppCfg_t s_BtAppCfg = {
 	.VendorId = ISYST_BLUETOOTH_ID,			// PnP Bluetooth/USB vendor id
 	.Appearance = BT_APPEAR_COMPUTER_WEARABLE,
 #ifdef EXTADV
-	.bExtAdv = true,						// Enable extended advertising
+//	.bExtAdv = true,						// Enable extended advertising
 	.pAdvManData  = (uint8_t*)&g_AdvLong,   // Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_AdvLong),     // Length of manufacture specific data
 #else
-	.bExtAdv = false,						// Legacy advertising
+//	.bExtAdv = false,						// Legacy advertising
 	.pAdvManData  = (uint8_t*)&g_AdvCnt,   	// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_AdvCnt),      // Length of manufacture specific data
 #endif

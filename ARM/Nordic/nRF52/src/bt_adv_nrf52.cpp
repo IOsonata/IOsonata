@@ -59,12 +59,10 @@ typedef struct __Bt_App_Nrf52_Data {
 static BtAppNrf52Data_t s_Nrf52Data = { {0} };
 
 alignas(4) static uint8_t s_BleAppAdvBuff[256];
-alignas(4) static BtAdvPacket_t s_BleAppAdvPkt    = { 31, 0, s_BleAppAdvBuff };
-alignas(4) static BtAdvPacket_t s_BleAppExtAdvPkt = { 255, 0, s_BleAppAdvBuff };
+alignas(4) static BtAdvPacket_t s_BleAppAdvPkt = { 255, 0, s_BleAppAdvBuff };
 
 alignas(4) static uint8_t s_BleAppSrBuff[256];
-alignas(4) static BtAdvPacket_t s_BleAppSrPkt    = { 31, 0, s_BleAppSrBuff };
-alignas(4) static BtAdvPacket_t s_BleAppExtSrPkt = { 255, 0, s_BleAppSrBuff };
+alignas(4) static BtAdvPacket_t s_BleAppSrPkt = { BT_ADV_LEGACY_DATA_MAX, 0, s_BleAppSrBuff };
 
 static ble_gap_adv_data_t s_BtAppAdvData = {
 	.adv_data      = { s_BleAppAdvBuff, 0 },
@@ -116,19 +114,8 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		return false;
 	}
 
-	BtAdvPacket_t *advpkt;
-	BtAdvPacket_t *srpkt;
-
-	if (g_BtAppData.bExtAdv == true)
-	{
-		advpkt = &s_BleAppExtAdvPkt;
-		srpkt = &s_BleAppExtSrPkt;
-	}
-	else
-	{
-		advpkt = &s_BleAppAdvPkt;
-		srpkt = &s_BleAppSrPkt;
-	}
+	BtAdvPacket_t *advpkt = &s_BleAppAdvPkt;
+	BtAdvPacket_t *srpkt  = &s_BleAppSrPkt;
 
 	if (g_BtAppData.bExtAdv == false)
 	{
@@ -220,40 +207,46 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
  */
 __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 {
-	BtAdvPacket_t *advpkt;
-	BtAdvPacket_t *srpkt;
+	BtAdvPacket_t *advpkt = &s_BleAppAdvPkt;
+	BtAdvPacket_t *srpkt  = &s_BleAppSrPkt;
 
 	memset(&s_Nrf52Data.AdvParam, 0, sizeof(ble_gap_adv_params_t));
 
-	if (g_BtAppData.bExtAdv)
+	// Encode the AD payload. BtAdvEncode decides legacy vs extended from how the
+	// records pack, and reports it via bExtAdv/scannable.
+	bool scannable = false;
+
+	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv, &scannable) == false)
 	{
-		advpkt = &s_BleAppExtAdvPkt;
-		srpkt  = &s_BleAppExtSrPkt;
-	}
-	else
-	{
-		advpkt = &s_BleAppAdvPkt;
-		srpkt  = &s_BleAppSrPkt;
+		return false;
 	}
 
-	// SoftDevice-specific adv-type enum based on role.
+	// SoftDevice adv-type enum from role + decided mode + scannable.
+	// The SoftDevice expresses legacy vs extended PDUs through the type enum;
+	// the legacy enums emit classic ADV_* PDUs that older centrals can see.
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
-		s_Nrf52Data.AdvParam.properties.type = pCfg->bExtAdv ?
+		// Connectable. Legacy ADV_IND is scannable; extended connectable is
+		// non-scannable (spec forbids connectable + scannable in extended).
+		s_Nrf52Data.AdvParam.properties.type = g_BtAppData.bExtAdv ?
 			BLE_GAP_ADV_TYPE_EXTENDED_CONNECTABLE_NONSCANNABLE_UNDIRECTED :
 			BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
 	}
 	else if (pCfg->Role & BTAPP_ROLE_BROADCASTER)
 	{
-		s_Nrf52Data.AdvParam.properties.type = pCfg->bExtAdv ?
-			BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED :
-			BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED;
-	}
-
-	// Generic AD payload encode.
-	if (BtAdvEncode(pCfg, advpkt, srpkt) == false)
-	{
-		return false;
+		// Non-connectable. Scannable only if the encode placed data on the scan
+		// response; otherwise non-scannable (no scan response).
+		if (g_BtAppData.bExtAdv)
+		{
+			s_Nrf52Data.AdvParam.properties.type =
+				BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
+		}
+		else
+		{
+			s_Nrf52Data.AdvParam.properties.type = scannable ?
+				BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED :
+				BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
+		}
 	}
 
 	// SoftDevice adv params + push to controller.
@@ -264,8 +257,19 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	s_Nrf52Data.AdvParam.primary_phy   = BLE_GAP_PHY_1MBPS;
 	s_Nrf52Data.AdvParam.secondary_phy = BLE_GAP_PHY_2MBPS;
 
-	s_BtAppAdvData.adv_data.len      = advpkt->Len;
-	s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
+	s_BtAppAdvData.adv_data.len = advpkt->Len;
+
+	// Scan response only exists for a scannable set; leave it null otherwise.
+	if (scannable)
+	{
+		s_BtAppAdvData.scan_rsp_data.p_data = s_BleAppSrBuff;
+		s_BtAppAdvData.scan_rsp_data.len    = srpkt->Len;
+	}
+	else
+	{
+		s_BtAppAdvData.scan_rsp_data.p_data = NULL;
+		s_BtAppAdvData.scan_rsp_data.len    = 0;
+	}
 
 	uint32_t err_code = sd_ble_gap_adv_set_configure(
 		&g_BtAppData.AdvHdl, &s_BtAppAdvData, &s_Nrf52Data.AdvParam);
