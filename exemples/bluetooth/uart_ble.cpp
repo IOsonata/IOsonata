@@ -165,7 +165,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ProductVer = 0,					// Pnp prod version
 	.Appearance = 0,
 	.pDevInfo = &s_UartBleDevDesc,
-	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,

@@ -57,6 +57,9 @@ SOFTWARE.
 #include "bm/softdevice_handler/nrf_sdh_soc.h"
 #include "bm/bluetooth/ble_conn_state.h"
 #include "bm/bluetooth/ble_conn_params.h"
+#include "bm/bluetooth/peer_manager/peer_manager.h"
+#include "bm/bluetooth/peer_manager/peer_manager_handler.h"
+#include "bm/bluetooth/peer_manager/nrf_ble_lesc.h"
 #include "bm/bluetooth/services/ble_dis.h"
 #include "nrfx_cracen.h"
 #include "nrf_soc.h"
@@ -184,6 +187,14 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 							   (uint8_t *)p_gap_evt->params.connected.peer_addr.addr);
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
+
+			// Initiate link security if the app is configured secure. For an
+			// already-bonded peer this encrypts with the stored LTK; otherwise
+			// it starts pairing. peer_manager drives the procedure.
+			if (g_BtAppData.AppDevice.bSecure)
+			{
+				(void)pm_conn_secure(p_gap_evt->conn_handle, false);
+			}
 			break;
 
 		case BLE_GAP_EVT_DISCONNECTED:
@@ -645,6 +656,166 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Secure Connections: peer_manager + nrf_ble_lesc, mirroring the nRF52
+// SoftDevice port. The S145 SoftDevice owns the SMP state machine; peer_manager
+// drives it and persists bonds (through the IOsonata bt_pds store), and
+// nrf_ble_lesc performs the LESC ECDH. The application observes link security
+// through these peer_manager events; no key material is surfaced to the app on
+// this path (peer_manager is the source of truth), matching nRF52.
+// ---------------------------------------------------------------------------
+
+#define BT_APP_SEC_PARAM_MIN_KEY_SIZE	7
+#define BT_APP_SEC_PARAM_MAX_KEY_SIZE	16
+
+static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
+{
+	// Standard peer_manager housekeeping: applies the event to internal state,
+	// disconnects on security failure, and cleans flash on data update.
+	pm_handler_on_pm_evt(p_evt);
+	pm_handler_disconnect_on_sec_failure(p_evt);
+	pm_handler_flash_clean(p_evt);
+
+	switch (p_evt->evt_id)
+	{
+		case PM_EVT_CONN_SEC_SUCCEEDED:
+			// Link is encrypted. peer_manager holds the bond. Nothing further
+			// required here; the app sees the secured link via its connected
+			// state. (nRF52 optionally enforces MITM here; left permissive.)
+			break;
+
+		case PM_EVT_CONN_SEC_FAILED:
+			// Security setup failed. pm_handler_disconnect_on_sec_failure above
+			// already tears the link down when required.
+			break;
+
+		case PM_EVT_CONN_SEC_CONFIG_REQ:
+		{
+			// Allow an already-bonded peer to re-pair.
+			struct pm_conn_sec_config cfg = { .allow_repairing = true };
+			pm_conn_sec_config_reply(p_evt->conn_handle, &cfg);
+		}
+			break;
+
+		case PM_EVT_STORAGE_FULL:
+			// The IOsonata bt_pds store compacts itself on write, so unlike the
+			// nRF52 fds_gc() path there is nothing to trigger here.
+			break;
+
+		case PM_EVT_PEERS_DELETE_SUCCEEDED:
+			// Bonds cleared. Resume advertising if we are a peripheral.
+			if (g_BtAppData.AppDevice.Conn.Role &
+				(BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+			{
+				BtAdvStart();
+			}
+			break;
+
+		default:
+			break;
+	}
+}
+
+// Initialize peer_manager and LESC. Maps the app SecType / key-exchange config
+// onto ble_gap_sec_params_t exactly as the nRF52 port does (the BTAPP_SECTYPE_*
+// values alias the same BT_GAP_SECTYPE_* the nRF52 BLEAPP_SECTYPE_* use).
+static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool bEraseBond)
+{
+	ble_gap_sec_params_t sec_param;
+	uint32_t err_code;
+
+	err_code = pm_init();
+	if (err_code != NRF_SUCCESS)
+	{
+		DEBUG_PRINTF("pm_init failed: 0x%x\r\n", err_code);
+		return err_code;
+	}
+
+	if (bEraseBond)
+	{
+		(void)pm_peers_delete();
+	}
+
+	memset(&sec_param, 0, sizeof(sec_param));
+
+	sec_param.bond           = 1;
+	sec_param.min_key_size   = BT_APP_SEC_PARAM_MIN_KEY_SIZE;
+	sec_param.max_key_size   = BT_APP_SEC_PARAM_MAX_KEY_SIZE;
+	sec_param.kdist_own.enc  = 1;
+	sec_param.kdist_own.id   = 1;
+	sec_param.kdist_peer.enc = 1;
+	sec_param.kdist_peer.id  = 1;
+
+	switch (SecType)
+	{
+		case BTGAP_SECTYPE_NONE:
+		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
+			break;
+		case BTGAP_SECTYPE_STATICKEY_MITM:
+			sec_param.mitm = 1;
+			break;
+		case BTGAP_SECTYPE_LESC_MITM:
+			sec_param.mitm = 1;
+			sec_param.lesc = 1;
+			break;
+		case BTGAP_SECTYPE_SIGNED_NO_MITM:
+			sec_param.lesc = 1;
+			break;
+		case BTGAP_SECTYPE_SIGNED_MITM:
+			sec_param.mitm = 1;
+			sec_param.lesc = 1;
+			break;
+		default:
+			break;
+	}
+
+	int exchg = SecKeyExchg & (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY);
+	switch (exchg)
+	{
+		case BTAPP_SECEXCHG_KEYBOARD:
+			sec_param.keypress = 1;
+			sec_param.io_caps  = BLE_GAP_IO_CAPS_KEYBOARD_ONLY;
+			break;
+		case BTAPP_SECEXCHG_DISPLAY:
+			sec_param.io_caps  = BLE_GAP_IO_CAPS_DISPLAY_ONLY;
+			break;
+		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY):
+			sec_param.keypress = 1;
+			sec_param.io_caps  = BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY;
+			break;
+		default:
+			break;
+	}
+
+	if (SecKeyExchg & BTAPP_SECEXCHG_OOB)
+	{
+		sec_param.oob = 1;
+	}
+
+	err_code = pm_sec_params_set(&sec_param);
+	if (err_code != NRF_SUCCESS)
+	{
+		DEBUG_PRINTF("pm_sec_params_set failed: 0x%x\r\n", err_code);
+		return err_code;
+	}
+
+	err_code = pm_register(BtAppPmEvtHandler);
+	if (err_code != NRF_SUCCESS)
+	{
+		DEBUG_PRINTF("pm_register failed: 0x%x\r\n", err_code);
+		return err_code;
+	}
+
+	err_code = nrf_ble_lesc_init();
+	if (err_code != NRF_SUCCESS)
+	{
+		DEBUG_PRINTF("nrf_ble_lesc_init failed: 0x%x\r\n", err_code);
+		return err_code;
+	}
+
+	return NRF_SUCCESS;
+}
+
 /**
  * @brief Initialize the Bluetooth application.
  *
@@ -750,6 +921,20 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
 
+	// Initialize Secure Connections (peer_manager + LESC) when the app
+	// requests security. Bonds persist through the IOsonata bt_pds store.
+	if (g_BtAppData.AppDevice.bSecure)
+	{
+		// No erase-bond flag in BtAppCfg_t; bonds are preserved across init.
+		// A dedicated clear (pm_peers_delete / BtSmpBondClearAll) can be added
+		// as a separate API if forced re-bonding is needed.
+		if (BtAppPeerMngrInit(pCfg->SecType, pCfg->SecExchg, false) != NRF_SUCCESS)
+		{
+			DEBUG_PRINTF("BtAppPeerMngrInit failed\r\n");
+			return false;
+		}
+	}
+
 	// Initialize advertising
 	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
@@ -804,6 +989,14 @@ void BtAppRun()
 
 	while (1)
 	{
+		// Process any pending LESC DHKey computation. Required for LE Secure
+		// Connections: nrf_ble_lesc defers the ECDH to be run from the main
+		// loop rather than the BLE event context.
+		if (g_BtAppData.AppDevice.bSecure)
+		{
+			(void)nrf_ble_lesc_request_handler();
+		}
+
 		AppEvtHandlerExec();
 		BtAppEvtWait();
 	}
@@ -869,23 +1062,18 @@ static void ble_evt_poll(void *context)
 
 		//DEBUG_PRINTF()("%s", nrf_sdh_ble_evt_to_str(ble_evt->header.evt_id));
 
+		// IOsonata's own GAP/GATT handling.
 		ble_evt_dispatch(ble_evt, context);
 
-#if 0
-		if (ble_evt->header.evt_id == BLE_GAP_EVT_CONNECTED) {
-			idx_assign(ble_evt->evt.gap_evt.conn_handle);
-		}
-
-		/* Forward the event to BLE observers. */
+		// Forward the event to all registered BLE observers. This is required
+		// for Secure Connections: peer_manager (and its ble_conn_state and
+		// nrf_ble_lesc dependencies) self-register as BLE observers and drive
+		// the pairing flow from here. Without this fan-out the SoftDevice
+		// security events never reach peer_manager and pairing cannot complete.
 		TYPE_SECTION_FOREACH(
 			struct nrf_sdh_ble_evt_observer, nrf_sdh_ble_evt_observers, obs) {
 			obs->handler(ble_evt, obs->context);
 		}
-
-		if (ble_evt->header.evt_id == BLE_GAP_EVT_DISCONNECTED) {
-			idx_unassign(ble_evt->evt.gap_evt.conn_handle);
-		}
-#endif
 	}
 
 	/* An SoC event may have triggered this round of polling, and BLE may not be enabled */

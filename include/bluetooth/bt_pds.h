@@ -39,10 +39,6 @@ Copyright (c) 2016, I-SYST inc., all rights reserved
 #include <stddef.h>
 #include <sys/types.h>		// ssize_t
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // Largest value the store must hold. Matches PM_PEER_DATA_MAX_SIZE
 // (PM_PEER_DATA_LOCAL_GATT_DB_MAX_SIZE = 128) in the peer manager.
 #define BT_PDS_RECORD_DATA_MAX		128
@@ -81,6 +77,11 @@ typedef struct __Bt_Pds_Nvm {
 	// success. May overwrite with the erased pattern on RRAM.
 	int (*Erase)(uint32_t Off);
 } BtPdsNvm_t;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 /**
  * @brief	Initialize the store on the given backend.

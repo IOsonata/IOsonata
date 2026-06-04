@@ -321,6 +321,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crc.c</locationURI>
 		</link>
 		<link>
+			<name>src/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/device.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/device.cpp</locationURI>
@@ -629,6 +634,11 @@
 			<name>include/bluetooth/bt_peer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_peer.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_scan.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_scan.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_smp.h</name>
@@ -1261,9 +1271,19 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_scan_sdc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_sdp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sdp.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_smp.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_smp_bond.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>
@@ -1311,6 +1331,11 @@
 			<locationURI>$%7BPARENT-4-PROJECT_LOC%7D/src/pwm_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/rng_nrfx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/shared_intrf.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.c</locationURI>
@@ -1354,6 +1379,21 @@
 			<name>src/coredev/uart_nrf54x.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/uart_nrf54x.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_mbedtls.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_mbedtls.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_rng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_rng.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_uecc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>
@@ -2579,6 +2619,11 @@
 			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/auth_status_tracker.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/auth_status_tracker.c</locationURI>
+		</link>
+		<link>
+			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/conn_state.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/conn_state.c</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/gatt_cache_manager.c</name>

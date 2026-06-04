@@ -181,7 +181,9 @@ static const BtPdsNvm_t s_BtPdsBmNvm = {
 };
 
 // Convenience init the platform calls instead of building the backend itself.
-int BtPdsBmInit(void)
+// extern "C" so peer_data_storage.c (compiled as C) links to the unmangled
+// symbol it declares and calls.
+extern "C" int BtPdsBmInit(void)
 {
 	return BtPdsInit(&s_BtPdsBmNvm);
 }

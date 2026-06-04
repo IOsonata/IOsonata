@@ -1,9 +1,20 @@
 /**-------------------------------------------------------------------------
 @file	rng_nrfx.c
 
-@brief	Random number generator implementation on Nordic nRF series
+@brief	Random number generator implementation on Nordic nRF series.
 
-This file implement Random Number Generator using Nordic nRF harwdare engine
+		Provides the strong (hardware-backed) RngInit/RngGet that overrides the
+		__weak software default in coredev/rng.c. Any code that calls RngGet
+		(crypto engines for key generation, SMP, etc.) gets hardware entropy
+		through this implementation, with no knowledge of the underlying engine.
+
+		Two hardware paths:
+		- nRF54L / nRF54H: CRACEN. Random is taken from the NIST SP800-90A
+		  CTR-DRBG that nrfx seeds from the CRACEN TRNG. This is the correct
+		  cryptographic construction (conditioned, reseeding) rather than raw
+		  TRNG bytes, and it is the supported nrfx entry point.
+		- nRF51/52/53/91: the legacy RNG peripheral with bias correction
+		  (DERCEN) enabled.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 9, 2024
@@ -38,45 +49,76 @@ SOFTWARE.
 
 #include "nrf.h"
 
-bool RngInit()
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
+#include "nrfx_cracen.h"
+#define RNG_USE_CRACEN		1
+#endif
+
+static bool s_RngReady;
+
+bool RngInit(void)
 {
-	
+#if defined(RNG_USE_CRACEN)
+	// Bring up the CRACEN CTR-DRBG (this also initializes the underlying TRNG
+	// that seeds it). Idempotent enough to call once at startup.
+	if (nrfx_cracen_init() != 0)
+	{
+		s_RngReady = false;
+		return false;
+	}
+	s_RngReady = true;
+	return true;
+#else
+	// Legacy RNG peripheral needs no persistent init; RngGet drives it per call.
+	s_RngReady = true;
+	return true;
+#endif
 }
 
 bool RngGet(uint8_t *pBuff, size_t Len)
 {
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
-	NRF_CRACEN_Type *reg = NRF_CRACEN_S;
-	NRF_CRACENCORE_Type *regcore = NRF_CRACENCORE_S
-	
-	reg->ENABLE |= CRACEN_ENABLE_RNG_Enabled;
+	if (pBuff == NULL || Len == 0)
+	{
+		return false;
+	}
 
-	while (reg->EVENTS_RNG == 0);
+#if defined(RNG_USE_CRACEN)
+	if (!s_RngReady)
+	{
+		if (!RngInit())
+		{
+			return false;
+		}
+	}
 
+	// CTR-DRBG output, seeded/reseeded from the CRACEN hardware TRNG. Returns
+	// 0 on success.
+	return nrfx_cracen_ctr_drbg_random_get(pBuff, Len) == 0;
 #else
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-#ifdef NRF5340_XXAA_NETWORK
+ #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+  #ifdef NRF5340_XXAA_NETWORK
 	NRF_RNG_Type *reg = NRF_RNG_NS;
-#else
+  #else
 	NRF_RNG_Type *reg = NRF_RNG_S;
-#endif
-#else
+  #endif
+ #else
 	NRF_RNG_Type *reg = NRF_RNG;
-#endif
+ #endif
 
+	// Enable bias correction so the byte stream is unbiased.
 	reg->CONFIG = RNG_CONFIG_DERCEN_Enabled;
-
 	reg->TASKS_START = 1;
 
-	for (int i = 0; i < Len; i++)
+	for (size_t i = 0; i < Len; i++)
 	{
+		reg->EVENTS_VALRDY = 0;
 		while (reg->EVENTS_VALRDY == 0);
-
-		pBuff[i] = reg->VALUE;
+		pBuff[i] = (uint8_t)reg->VALUE;
 	}
 
 	reg->TASKS_STOP = 1;
-
 	reg->CONFIG = RNG_CONFIG_DERCEN_Disabled;
+
+	return true;
 #endif
 }
