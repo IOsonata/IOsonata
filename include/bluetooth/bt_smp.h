@@ -387,11 +387,41 @@ void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKe
  *			pairing; the SMP core calls it automatically. BtSmpBondLtkLookup is
  *			used by the LTK request handler on reconnection. BtSmpBondClearAll
  *			removes all stored bonds. The default store is RAM-backed; a
- *			flash-backed port overrides BtSmpBondSave / BtSmpBondLoad.
+ *			flash-backed port overrides BtSmpBondSave / BtSmpBondLoad /
+ *			BtSmpBondErase and uses the access functions below to move records
+ *			between its non-volatile storage and the generic RAM table.
  */
 void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys);
 bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t Ltk[16]);
 void BtSmpBondClearAll(void);
+
+/**
+ * @brief	Platform persistence seam (weak, RAM-only by default).
+ *
+ * BtSmpBondSave   : generic layer calls this when slot Slot changes; the
+ *					 platform writes the Len-byte blob at pBond to NVM.
+ * BtSmpBondLoad   : generic layer calls this once at BtSmpInit; the platform
+ *					 reads NVM and calls BtSmpBondRestore for each saved slot.
+ * BtSmpBondErase  : generic layer calls this from BtSmpBondClearAll; the
+ *					 platform wipes the NVM copy.
+ */
+void BtSmpBondSave(int Slot, const void *pBond, size_t Len);
+void BtSmpBondLoad(void);
+void BtSmpBondErase(void);
+
+/**
+ * @brief	Access functions for a platform persistence backend.
+ *
+ * BtSmpBondSlotCount  : number of slots in the table (NVM region sizing).
+ * BtSmpBondRecordSize : size of one saved/loaded blob, in bytes.
+ * BtSmpBondRestore    : write one loaded blob into table slot Slot. Called by a
+ *					     BtSmpBondLoad override; records with bValid false are
+ *					     ignored. The platform treats the blob as opaque and need
+ *					     not know the record layout.
+ */
+int    BtSmpBondSlotCount(void);
+size_t BtSmpBondRecordSize(void);
+void   BtSmpBondRestore(int Slot, const void *pBond, size_t Len);
 
 /**
  * @brief	Get the local device address and type used on air.

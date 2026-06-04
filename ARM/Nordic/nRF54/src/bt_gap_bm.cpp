@@ -61,11 +61,6 @@ static ble_gap_scan_params_t s_ScanParams = {
 
 static ble_gap_conn_sec_mode_t s_GapConnMode;
 
-static inline uint16_t mSecTo10Ms(uint32_t t)
-{
-	return (uint16_t)((t + 5U) / 10U);
-}
-
 static void BtGapSetSecMode(ble_gap_conn_sec_mode_t *pSecMode, BTGAP_SECTYPE SecType)
 {
 	switch (SecType)

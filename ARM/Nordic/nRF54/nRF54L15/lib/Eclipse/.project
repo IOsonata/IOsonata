@@ -621,6 +621,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_l2cap.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_pds.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_pds.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_peer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_peer.h</locationURI>
@@ -1226,6 +1231,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_pds.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_pds.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_pds_nvm_bm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_pds_nvm_bm.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_peer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
@@ -1264,6 +1279,11 @@
 			<name>src/bluetooth/nrf_sdh.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh.c</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/peer_data_storage.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/peer_data_storage.c</locationURI>
 		</link>
 		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
@@ -2579,11 +2599,6 @@
 			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/nrf_ble_lesc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/nrf_ble_lesc.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_data_storage.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_data_storage.c</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_database.c</name>

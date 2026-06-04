@@ -40,6 +40,14 @@ static BtSmpBond_t s_BtSmpBondTable[BT_SMP_BOND_MAX];
 
 // Weak persistence hooks. Default is RAM only. A flash-backed port overrides
 // these to mirror the table to non-volatile storage.
+//
+// BtSmpBondSave  : called by the generic layer whenever a slot changes, so the
+//                  platform can write that one slot to NVM.
+// BtSmpBondLoad  : called once by the generic layer at init (BtSmpBondInit), so
+//                  the platform can read NVM back and repopulate the RAM table
+//                  through BtSmpBondRestore.
+// BtSmpBondErase : called by BtSmpBondClearAll, so the platform can wipe NVM and
+//                  stale bonds do not reappear on the next BtSmpBondLoad.
 __attribute__((weak)) void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 {
 	(void)Slot;
@@ -49,6 +57,45 @@ __attribute__((weak)) void BtSmpBondSave(int Slot, const void *pBond, size_t Len
 
 __attribute__((weak)) void BtSmpBondLoad(void)
 {
+}
+
+__attribute__((weak)) void BtSmpBondErase(void)
+{
+}
+
+// Number of bond slots the table holds. Lets a platform size its NVM region and
+// iterate slots without knowing BT_SMP_BOND_MAX at compile time.
+extern "C" int BtSmpBondSlotCount(void)
+{
+	return BT_SMP_BOND_MAX;
+}
+
+// Size of one stored bond record. The platform persists/loads opaque blobs of
+// this size; it does not need the BtSmpBond_t layout.
+extern "C" size_t BtSmpBondRecordSize(void)
+{
+	return sizeof(BtSmpBond_t);
+}
+
+// Restore one slot from a previously saved blob. Called by a platform
+// BtSmpBondLoad override for each persisted slot. pBond must point at Len bytes
+// previously produced by BtSmpBondSave for that slot. A record whose bValid is
+// false is ignored, so erased slots stay empty.
+extern "C" void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
+{
+	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBond == nullptr ||
+		Len != sizeof(BtSmpBond_t))
+	{
+		return;
+	}
+
+	const BtSmpBond_t *p = (const BtSmpBond_t *)pBond;
+	if (!p->bValid)
+	{
+		return;
+	}
+
+	memcpy(&s_BtSmpBondTable[Slot], p, sizeof(BtSmpBond_t));
 }
 
 // Find a bond slot matching the peer address, or -1.
@@ -178,8 +225,9 @@ extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 	return false;
 }
 
-// Remove all stored bonds.
+// Remove all stored bonds, RAM table and non-volatile copy.
 extern "C" void BtSmpBondClearAll(void)
 {
 	memset(s_BtSmpBondTable, 0, sizeof(s_BtSmpBondTable));
+	BtSmpBondErase();
 }

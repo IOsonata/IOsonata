@@ -675,7 +675,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
-	g_BtAppData.bExtAdv = pCfg->bExtAdv;
+	// bExtAdv is no longer a config field; BtAdvEncode determines extended vs
+	// legacy from the encoded payload and sets g_BtAppData.bExtAdv during
+	// BtAppAdvInit.
 	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
 	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;

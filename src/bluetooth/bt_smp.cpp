@@ -1324,6 +1324,11 @@ extern "C" void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes)
 	{
 		s_SmpLink[i].ConnHdl = BT_CONN_HDL_INVALID;
 	}
+
+	// Repopulate the RAM bond table from non-volatile storage. The default
+	// BtSmpBondLoad is a weak no-op (RAM-only); a flash-backed platform
+	// overrides it and calls BtSmpBondRestore for each persisted slot.
+	BtSmpBondLoad();
 }
 
 // Peripheral-initiated security. Sends an SMP Security Request to prompt the

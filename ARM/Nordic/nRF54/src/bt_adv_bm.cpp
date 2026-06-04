@@ -71,12 +71,10 @@ typedef struct __Bt_App_Bm_Data {
 static BtAppBmData_t s_BmData = { {0} };
 
 alignas(4) static uint8_t s_BtAppAdvBuff[256];
-alignas(4) static BtAdvPacket_t s_BtAppAdvPkt    = { 31, 0, s_BtAppAdvBuff };
-alignas(4) static BtAdvPacket_t s_BtAppExtAdvPkt = { 255, 0, s_BtAppAdvBuff };
+alignas(4) static BtAdvPacket_t s_BtAppAdvPkt = { 255, 0, s_BtAppAdvBuff };
 
 alignas(4) static uint8_t s_BtAppSrBuff[256];
-alignas(4) static BtAdvPacket_t s_BtAppSrPkt    = { 31, 0, s_BtAppSrBuff };
-alignas(4) static BtAdvPacket_t s_BtAppExtSrPkt = { 255, 0, s_BtAppSrBuff };
+alignas(4) static BtAdvPacket_t s_BtAppSrPkt = { BT_ADV_LEGACY_DATA_MAX, 0, s_BtAppSrBuff };
 
 static ble_gap_adv_data_t s_BtAppAdvData = {
 	.adv_data      = { s_BtAppAdvBuff, 0 },
@@ -110,43 +108,49 @@ void BtAdvStop()
 
 __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 {
-	BtAdvPacket_t *advpkt;
-	BtAdvPacket_t *srpkt;
+	BtAdvPacket_t *advpkt = &s_BtAppAdvPkt;
+	BtAdvPacket_t *srpkt  = &s_BtAppSrPkt;
 
 	memset(&s_BmData.AdvParam, 0, sizeof(ble_gap_adv_params_t));
 
-	if (g_BtAppData.bExtAdv)
+	// Encode the AD payload. BtAdvEncode decides legacy vs extended from how the
+	// records pack, and reports it via bExtAdv/scannable.
+	bool scannable = false;
+
+	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv, &scannable) == false)
 	{
-		advpkt = &s_BtAppExtAdvPkt;
-		srpkt  = &s_BtAppExtSrPkt;
-	}
-	else
-	{
-		advpkt = &s_BtAppAdvPkt;
-		srpkt  = &s_BtAppSrPkt;
+		return false;
 	}
 
-	// sdk-nrf-bm adv-type enum based on role.
+	// SoftDevice adv-type enum from role + decided mode + scannable.
+	// The SoftDevice expresses legacy vs extended PDUs through the type enum;
+	// the legacy enums emit classic ADV_* PDUs that older centrals can see.
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
-		s_BmData.AdvParam.properties.type = pCfg->bExtAdv ?
+		// Connectable. Legacy ADV_IND is scannable; extended connectable is
+		// non-scannable (spec forbids connectable + scannable in extended).
+		s_BmData.AdvParam.properties.type = g_BtAppData.bExtAdv ?
 			BLE_GAP_ADV_TYPE_EXTENDED_CONNECTABLE_NONSCANNABLE_UNDIRECTED :
 			BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
 	}
 	else if (pCfg->Role & BTAPP_ROLE_BROADCASTER)
 	{
-		s_BmData.AdvParam.properties.type = pCfg->bExtAdv ?
-			BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED :
-			BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED;
+		// Non-connectable. Scannable only if the encode placed data on the scan
+		// response; otherwise non-scannable (no scan response).
+		if (g_BtAppData.bExtAdv)
+		{
+			s_BmData.AdvParam.properties.type =
+				BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
+		}
+		else
+		{
+			s_BmData.AdvParam.properties.type = scannable ?
+				BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED :
+				BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
+		}
 	}
 
-	// Generic AD payload encode.
-	if (BtAdvEncode(pCfg, advpkt, srpkt) == false)
-	{
-		return false;
-	}
-
-	// sdk-nrf-bm adv params + push to controller.
+	// SoftDevice adv params + push to controller.
 	s_BmData.AdvParam.p_peer_addr   = NULL;
 	s_BmData.AdvParam.interval      = MSEC_TO_UNITS(pCfg->AdvInterval, UNIT_0_625_MS);
 	s_BmData.AdvParam.duration      = MSEC_TO_UNITS(pCfg->AdvTimeout,  UNIT_10_MS);
@@ -154,8 +158,19 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	s_BmData.AdvParam.primary_phy   = BLE_GAP_PHY_1MBPS;
 	s_BmData.AdvParam.secondary_phy = BLE_GAP_PHY_2MBPS;
 
-	s_BtAppAdvData.adv_data.len      = advpkt->Len;
-	s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
+	s_BtAppAdvData.adv_data.len = advpkt->Len;
+
+	// Scan response only exists for a scannable set; leave it null otherwise.
+	if (scannable)
+	{
+		s_BtAppAdvData.scan_rsp_data.p_data = s_BtAppSrBuff;
+		s_BtAppAdvData.scan_rsp_data.len    = srpkt->Len;
+	}
+	else
+	{
+		s_BtAppAdvData.scan_rsp_data.p_data = NULL;
+		s_BtAppAdvData.scan_rsp_data.len    = 0;
+	}
 
 	uint32_t err_code = sd_ble_gap_adv_set_configure(
 		&g_BtAppData.AdvHdl, &s_BtAppAdvData, &s_BmData.AdvParam);
@@ -177,29 +192,22 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		return false;
 	}
 
-	BtAdvPacket_t *advpkt;
-	BtAdvPacket_t *srpkt;
-
-	if (g_BtAppData.bExtAdv)
-	{
-		advpkt = &s_BtAppExtAdvPkt;
-		srpkt = &s_BtAppExtSrPkt;
-	}
-	else
-	{
-		advpkt = &s_BtAppAdvPkt;
-		srpkt = &s_BtAppSrPkt;
-	}
+	BtAdvPacket_t *advpkt = &s_BtAppAdvPkt;
+	BtAdvPacket_t *srpkt  = &s_BtAppSrPkt;
 
 	if (pAdvData)
 	{
 		int l = AdvLen + 2;
 		BtAdvData_t *p = BtAdvDataAllocate(advpkt,
 			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
 		if (p == NULL)
+		{
 			return false;
+		}
 		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 		memcpy(&p->Data[2], pAdvData, AdvLen);
+
 		s_BtAppAdvData.adv_data.len = advpkt->Len;
 	}
 
@@ -208,14 +216,19 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		int l = SrLen + 2;
 		BtAdvData_t *p = BtAdvDataAllocate(srpkt,
 			BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA, l);
+
 		if (p == NULL)
+		{
 			return false;
+		}
 		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
 		memcpy(&p->Data[2], pSrData, SrLen);
+
 		s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
 	}
 
-	// SDK15+ doesn't allow dynamic adv data update: stop and reconfigure
+	// The SoftDevice does not allow a data update while the set is running:
+	// stop, reconfigure, restart. Mirrors the SDC disable/enable on update.
 	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
 	{
 		sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);

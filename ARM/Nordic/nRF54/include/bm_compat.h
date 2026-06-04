@@ -746,6 +746,9 @@ static inline void sys_memcpy_swap(void *dst, const void *src, size_t length)
 /* Zephyr kernel data structures: k_mem_slab, k_heap, ring_buf */
 #include "bm_compat_ds.h"
 
+/* Devicetree partition macros for the peer_manager storage layer */
+#include "bm_dt_shim.h"
+
 /* SWI handlers used by SoftDevice S145 */
 void SWI01_IRQHandler(void);
 void SWI02_IRQHandler(void);
