@@ -742,6 +742,18 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	ble_gap_sec_params_t sec_param;
 	uint32_t err_code;
 
+	// Provide the LESC layer its crypto engine BEFORE pm_init. With CONFIG_PM_LESC
+	// defined, pm_init -> sm_init calls nrf_ble_lesc_init, which checks the engine
+	// via CryptoIsCapable. The engine must already be injected at that point, else
+	// nrf_ble_lesc_init runs with a null engine. The App owns the CryptoDev_t and
+	// injects it, mirroring the BtSmpInit model on the SDC port. Software P-256
+	// today (CryptoUeccInit); a hardware-backed engine can be injected here later
+	// with no change to the LESC code. RNG underneath comes from the CRACEN-backed
+	// RngGet via crypto_uecc.
+	static CryptoDev_t s_LescEcdh;
+	CryptoUeccInit(&s_LescEcdh);
+	BtLescSetCryptoEngine(&s_LescEcdh);
+
 	err_code = pm_init();
 	if (err_code != NRF_SUCCESS)
 	{
@@ -824,21 +836,17 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 		return err_code;
 	}
 
-	// Provide the LESC layer its crypto engine. The App owns the CryptoDev_t
-	// instance and injects it, mirroring the BtSmpInit model on the SDC port.
-	// Software P-256 today (CryptoUeccInit); a hardware-backed engine can be
-	// injected here later with no change to the LESC code. RNG underneath comes
-	// from the CRACEN-backed RngGet via crypto_uecc.
-	static CryptoDev_t s_LescEcdh;
-	CryptoUeccInit(&s_LescEcdh);
-	BtLescSetCryptoEngine(&s_LescEcdh);
-
+	// When CONFIG_PM_LESC is defined, pm_init -> sm_init already called
+	// nrf_ble_lesc_init (engine was injected above). Only call it here for the
+	// case where the SDK LESC path is not compiled in.
+#if !defined(CONFIG_PM_LESC)
 	err_code = nrf_ble_lesc_init();
 	if (err_code != NRF_SUCCESS)
 	{
 		DEBUG_PRINTF("nrf_ble_lesc_init failed: 0x%x\r\n", err_code);
 		return err_code;
 	}
+#endif
 
 	return NRF_SUCCESS;
 }

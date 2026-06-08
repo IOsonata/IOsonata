@@ -165,10 +165,12 @@ in your project's build configuration.
 /* Define to enable: #define CONFIG_PM_SERVICE_CHANGED 1 */
 
 /* Define to enable LESC (undefined = disabled):
- * #define CONFIG_PM_LESC                     1
  * #define CONFIG_PM_LESC_GENERATE_NEW_KEYS   1
  * #define CONFIG_PM_LESC_PRIVATE_KEY_EXPORT  1
  */
+#ifndef CONFIG_PM_LESC
+#define CONFIG_PM_LESC                     1
+#endif
 
 /* sdk-nrf-bm Kconfig default for peer manager user flag pool */
 #ifndef CONFIG_PM_CONN_STATE_USER_FLAG_COUNT
