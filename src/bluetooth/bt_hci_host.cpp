@@ -194,20 +194,6 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 					//g_BleConn.PeerAddrType = p->PeerAddrType;
 					//memcpy(g_BleConn.PeerAddr, p->PeerAddr, 6);
 					//BLEAPP_ROLE role = p->Role == 1 ? BLEAPP_ROLE_PERIPHERAL : BLEAPP_ROLE_CENTRAL;
-
-					//sdc_hci_cmd_le_read_remote_features_t rrf;
-					//rrf.conn_handle = g_BleConn.Handle;
-					//sdc_hci_cmd_le_read_remote_features(&rrf);
-/*
-					uint8_t buf[255];
-					BtHciCmd_Packet_t *c = (BtHciCmd_Packet_t*)buf;
-
-					c->Hdr.OpCode = BT_HCI_CMD_LINKCTRL_ACCEPT_CONN_RQST;
-					c->Hdr.ParamLen = 7;
-					memcpy(c->Param, p->PeerAddr, 6);
-					c->Param[6] = 1;// staty Periph
-					int res = sdc_hci_cmd_put(buf);
-					DEBUG_PRINTF("sdc_hci_cmd_put : res %d\r\n", res);*/
 				}
 			}
 			break;
@@ -260,14 +246,6 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				BtHciLeEvtChanSelAlgo_t *p = (BtHciLeEvtChanSelAlgo_t *)pLeEvtPkt->Data;
 
 //				DEBUG_PRINTF("BT_HCI_EVT_LE_CHAN_SELECTION_ALGO : hdl:%x %d\r\n", p->ConnHdl, p->ChanSelAlgo);
-
-				//sdc_hci_cmd_le_read_channel_map_t cmc;
-				//sdc_hci_cmd_le_read_channel_map_return_t cmr;
-
-				//cmc.conn_handle = g_BleConn.Handle;
-				//sdc_hci_cmd_le_read_channel_map(&cmc, &cmr);
-
-				//DEBUG_PRINTF("  %d %d %d %d %d\r\n", cmr.conn_handle, cmr.channel_map[0], cmr.channel_map[1], cmr.channel_map[2], cmr.channel_map[4]);
 			}
 			break;
 		case BT_HCI_EVT_LE_CONNLESS_IQ_REPORT:
