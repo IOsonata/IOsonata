@@ -39,7 +39,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_appearance.h"
 
 // Debug printf: mirrors the guard in bt_app_bm.cpp.
-#ifdef UART_DEBUG_ENABLE
+#ifdef BM_DEBUG_ENABLE
 #include "coredev/uart.h"
 extern UART g_Uart;
 #define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)

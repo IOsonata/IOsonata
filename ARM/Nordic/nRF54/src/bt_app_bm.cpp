@@ -63,11 +63,6 @@ SOFTWARE.
 #include "bm/bluetooth/services/ble_dis.h"
 
 #include "crypto/crypto.h"
-#include "syslog.h"
-
-// SysLog-based trace for pairing/security diagnosis. Uses the standard
-// SysLogPrintf(SysLogGet(), ...) path, independent of UART_DEBUG_ENABLE.
-#define SEC_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
 // Injection point for the LESC crypto engine (defined in the IOsonata
 // nrf_ble_lesc replacement). The App owns the CryptoDev_t and passes it in.
@@ -91,9 +86,9 @@ extern "C" void BtLescSetCryptoEngine(CryptoDev_t *pDev);
 extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
 
 /******** For DEBUG ************/
-#define UART_DEBUG_ENABLE
+#define BM_DEBUG_ENABLE
 
-#ifdef UART_DEBUG_ENABLE
+#ifdef BM_DEBUG_ENABLE
 #include "coredev/uart.h"
 extern UART g_Uart;
 #define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)
@@ -681,8 +676,6 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 {
-	SEC_TRACE("PM evt=%d conn=%d\r\n", p_evt->evt_id, p_evt->conn_handle);
-
 	// Standard peer_manager housekeeping: applies the event to internal state,
 	// disconnects on security failure, and cleans flash on data update.
 	pm_handler_on_pm_evt(p_evt);
@@ -692,7 +685,6 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 	switch (p_evt->evt_id)
 	{
 		case PM_EVT_CONN_SEC_SUCCEEDED:
-			SEC_TRACE("PM: CONN_SEC_SUCCEEDED\r\n");
 			// Link is encrypted. peer_manager holds the bond. Nothing further
 			// required here; the app sees the secured link via its connected
 			// state. (nRF52 optionally enforces MITM here; left permissive.)
@@ -701,10 +693,6 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 		case PM_EVT_CONN_SEC_FAILED:
 			// Security setup failed. pm_handler_disconnect_on_sec_failure above
 			// already tears the link down when required.
-			SEC_TRACE("PM: CONN_SEC_FAILED proc=%d error=0x%x src=%d\r\n",
-				p_evt->conn_sec_failed.procedure,
-				p_evt->conn_sec_failed.error,
-				p_evt->conn_sec_failed.error_src);
 			break;
 
 		case PM_EVT_CONN_SEC_CONFIG_REQ:
@@ -745,11 +733,11 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	// Provide the LESC layer its crypto engine BEFORE pm_init. With CONFIG_PM_LESC
 	// defined, pm_init -> sm_init calls nrf_ble_lesc_init, which checks the engine
 	// via CryptoIsCapable. The engine must already be injected at that point, else
-	// nrf_ble_lesc_init runs with a null engine. The App owns the CryptoDev_t and
-	// injects it, mirroring the BtSmpInit model on the SDC port. Software P-256
-	// today (CryptoUeccInit); a hardware-backed engine can be injected here later
-	// with no change to the LESC code. RNG underneath comes from the CRACEN-backed
-	// RngGet via crypto_uecc.
+	// nrf_ble_lesc_init fails and pm_init returns an error. The App owns the
+	// CryptoDev_t and injects it, mirroring the BtSmpInit model on the SDC port.
+	// Software P-256 today (CryptoUeccInit); a hardware-backed engine can be
+	// injected here later with no change to the LESC code. RNG underneath comes
+	// from the CRACEN-backed RngGet via crypto_uecc.
 	static CryptoDev_t s_LescEcdh;
 	CryptoUeccInit(&s_LescEcdh);
 	BtLescSetCryptoEngine(&s_LescEcdh);
@@ -837,8 +825,8 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	}
 
 	// When CONFIG_PM_LESC is defined, pm_init -> sm_init already called
-	// nrf_ble_lesc_init (engine was injected above). Only call it here for the
-	// case where the SDK LESC path is not compiled in.
+	// nrf_ble_lesc_init (the engine was injected before pm_init above). Only
+	// call it explicitly when the SDK LESC path is not compiled in.
 #if !defined(CONFIG_PM_LESC)
 	err_code = nrf_ble_lesc_init();
 	if (err_code != NRF_SUCCESS)

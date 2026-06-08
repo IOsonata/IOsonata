@@ -85,6 +85,23 @@ NRF_SDH_SOC_OBSERVER(s_BtPdsBmSocObs, BtPdsBmSocEvtHandler, NULL, HIGH);
 
 // Issue one sd_flash_write and pump SoC events until it completes. p_dst/p_src
 // are word aligned, size is in 32-bit words. Returns 0 on success.
+//
+// This can be called from within the BLE event handler context (gcm writes
+// CENTRAL_ADDR_RES during connection setup, which runs inside nrf_sdh_evts_poll).
+// In that case the normal soc_evt_poll cannot run re-entrantly to deliver the
+// flash completion, so a bare __WFE would deadlock. Drain the SoC event queue
+// directly here via sd_evt_get and feed the same handler, so the flash
+// completion is processed regardless of call context.
+static void PumpSocEvents(void)
+{
+	uint32_t evt_id;
+
+	while (sd_evt_get(&evt_id) == NRF_SUCCESS)
+	{
+		BtPdsBmSocEvtHandler(evt_id, NULL);
+	}
+}
+
 static int FlashWriteWords(uint32_t *p_dst, const uint32_t *p_src, uint32_t words)
 {
 	uint32_t err;
@@ -98,8 +115,8 @@ static int FlashWriteWords(uint32_t *p_dst, const uint32_t *p_src, uint32_t word
 
 		if (err == NRF_ERROR_BUSY)
 		{
-			// Controller owns flash this moment; let events run and retry.
-			__WFE();
+			// Controller owns flash this moment; drain SoC events and retry.
+			PumpSocEvents();
 			continue;
 		}
 		if (err != NRF_SUCCESS)
@@ -107,10 +124,17 @@ static int FlashWriteWords(uint32_t *p_dst, const uint32_t *p_src, uint32_t word
 			return -EIO;
 		}
 
-		// Wait for the async completion event.
+		// Wait for the completion event. Drain SoC events directly rather than
+		// relying on soc_evt_poll, which cannot run if this call is nested
+		// inside the BLE event pump. __WFE between drains avoids a busy spin;
+		// the flash completion interrupt wakes it.
 		while (!s_FlashOpDone)
 		{
-			__WFE();
+			PumpSocEvents();
+			if (!s_FlashOpDone)
+			{
+				__WFE();
+			}
 		}
 
 		if (!s_FlashOpOk)

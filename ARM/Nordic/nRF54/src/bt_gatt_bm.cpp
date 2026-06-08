@@ -49,9 +49,9 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 
 /******** For DEBUG ************/
-#define UART_DEBUG_ENABLE
+#define BM_DEBUG_ENABLE
 
-#ifdef UART_DEBUG_ENABLE
+#ifdef BM_DEBUG_ENABLE
 #include "coredev/uart.h"
 extern UART g_Uart;
 #define DEBUG_PRINTF(...)		g_Uart.printf(__VA_ARGS__)

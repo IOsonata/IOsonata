@@ -64,10 +64,9 @@ extern "C" {
  * logs through SysLog so the SC pairing flow is visible. These were no-ops.
  * Revert to ((void)0) once pairing is verified. DBG stays off to limit noise.
  */
-#include "syslog.h"
-#define LOG_ERR(...)    SysLogPrintf(SysLogGet(), "[E] " __VA_ARGS__)
-#define LOG_WRN(...)    SysLogPrintf(SysLogGet(), "[W] " __VA_ARGS__)
-#define LOG_INF(...)    SysLogPrintf(SysLogGet(), "[I] " __VA_ARGS__)
+#define LOG_ERR(...)    ((void)0)
+#define LOG_WRN(...)    ((void)0)
+#define LOG_INF(...)    ((void)0)
 #define LOG_DBG(...)    ((void)0)
 
 #define LOG_HEXDUMP_ERR(...)  ((void)0)
