@@ -59,9 +59,15 @@ extern "C" {
 #define LOG_MODULE_REGISTER(...)
 #define LOG_MODULE_DECLARE(...)
 
-#define LOG_ERR(...)    ((void)0)
-#define LOG_WRN(...)    ((void)0)
-#define LOG_INF(...)    ((void)0)
+/*
+ * Temporary diagnostic routing: surface peer_manager / nrf_ble_lesc internal
+ * logs through SysLog so the SC pairing flow is visible. These were no-ops.
+ * Revert to ((void)0) once pairing is verified. DBG stays off to limit noise.
+ */
+#include "syslog.h"
+#define LOG_ERR(...)    SysLogPrintf(SysLogGet(), "[E] " __VA_ARGS__)
+#define LOG_WRN(...)    SysLogPrintf(SysLogGet(), "[W] " __VA_ARGS__)
+#define LOG_INF(...)    SysLogPrintf(SysLogGet(), "[I] " __VA_ARGS__)
 #define LOG_DBG(...)    ((void)0)
 
 #define LOG_HEXDUMP_ERR(...)  ((void)0)
@@ -345,15 +351,7 @@ static inline void irq_unlock(unsigned int key)
  * ====================================================================== */
 
 #ifdef __arm__
-/*
- * Race-free idle. A bare __WFE can sleep through a SoftDevice event: the event
- * register may already be consumed, and without SEVONPEND a pending interrupt
- * does not set it. Use __WFI, which wakes on any pending interrupt regardless
- * of PRIMASK, so the SoftDevice event IRQ (SD_EVT_IRQHandler -> nrf_sdh_evts_poll)
- * always wakes the main loop. Without this, connection setup and the main-loop
- * LESC DHKey computation lag badly or miss their window.
- */
-#define k_cpu_idle()  __WFI()
+#define k_cpu_idle()  __WFE()
 #else
 #define k_cpu_idle()  do {} while (0)
 #endif

@@ -46,6 +46,9 @@
 #include <bm/bluetooth/peer_manager/nrf_ble_lesc.h>
 
 #include "crypto/crypto.h"
+#include "syslog.h"
+
+#define LESC_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
@@ -141,6 +144,8 @@ uint32_t nrf_ble_lesc_keypair_generate(void)
 
 	keypair_generated = true;
 
+	LESC_TRACE("lesc: keypair generated ok\r\n");
+
 	return NRF_SUCCESS;
 }
 
@@ -222,7 +227,10 @@ static uint32_t compute_and_give_dhkey(struct lesc_peer_pub_key *peer_public_key
 	LOG_INF("sd_ble_gap_lesc_dhkey_reply(sec_status: %#x) conn_handle: %d",
 		sec_status, peer_public_key->conn_handle);
 
-	return sd_ble_gap_lesc_dhkey_reply(peer_public_key->conn_handle, sec_status, p_dh_key);
+	uint32_t reply_ret = sd_ble_gap_lesc_dhkey_reply(peer_public_key->conn_handle,
+							 sec_status, p_dh_key);
+	LESC_TRACE("lesc: dhkey_reply sec=%#x ret=%#x\r\n", sec_status, reply_ret);
+	return reply_ret;
 }
 
 uint32_t nrf_ble_lesc_request_handler(void)
@@ -235,6 +243,7 @@ uint32_t nrf_ble_lesc_request_handler(void)
 
 	for (uint16_t i = 0; i < NRF_BLE_LESC_LINK_COUNT; i++) {
 		if (peer_keys[i].is_requested) {
+			LESC_TRACE("lesc: handler computing idx=%d\r\n", i);
 			nrf_err = compute_and_give_dhkey(&peer_keys[i]);
 			peer_keys[i].is_requested = false;
 
@@ -277,6 +286,9 @@ void nrf_ble_lesc_on_ble_evt(const ble_evt_t *ble_evt)
 	const uint16_t conn_handle = ble_evt->evt.gap_evt.conn_handle;
 	const int idx = nrf_sdh_ble_idx_get(conn_handle);
 
+	LESC_TRACE("lesc: on_ble_evt id=%#x conn=%d idx=%d\r\n",
+		ble_evt->header.evt_id, conn_handle, idx);
+
 	__ASSERT(idx >= 0, "Invalid idx %d for conn_handle %#x, evt_id %#x",
 		 idx, conn_handle, ble_evt->header.evt_id);
 
@@ -296,6 +308,7 @@ void nrf_ble_lesc_on_ble_evt(const ble_evt_t *ble_evt)
 
 		on_dhkey_request(conn_handle, idx,
 				 &ble_evt->evt.gap_evt.params.lesc_dhkey_request);
+		LESC_TRACE("lesc: dhkey_req queued idx=%d\r\n", idx);
 		break;
 
 #if defined(CONFIG_PM_LESC_GENERATE_NEW_KEYS)

@@ -188,15 +188,6 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
 
-	// Feed the LESC module every BLE event so it can capture
-	// BLE_GAP_EVT_LESC_DHKEY_REQUEST and queue the DHKey computation, which is
-	// then run from nrf_ble_lesc_request_handler in the main loop. peer_manager
-	// does not call this internally; the app must, same as the nRF52 port.
-	if (g_BtAppData.AppDevice.bSecure)
-	{
-		nrf_ble_lesc_on_ble_evt(p_ble_evt);
-	}
-
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
 	switch (p_ble_evt->header.evt_id)
 	{
@@ -1041,17 +1032,11 @@ void BtAppRun()
 	}
 }
 
-// Port-level weak default for BtAppEvtWait. Bare-metal apps idle here.
+// Port-level weak default for BtAppEvtWait. Bare-metal apps use __WFE.
 // RTOS apps override with sem take in their bridge code.
 __attribute__((weak)) void BtAppEvtWait(void)
 {
-	// Use __WFI, not __WFE. The SoftDevice event IRQ (SD_EVT_IRQHandler ->
-	// nrf_sdh_evts_poll) drives all BLE event processing. __WFI wakes on any
-	// pending interrupt regardless of the event register, so the loop resumes
-	// promptly after each SoftDevice event and runs nrf_ble_lesc_request_handler
-	// in time. A bare __WFE can sleep through the event and stalls connection
-	// setup and the LESC DHKey computation.
-	__WFI();
+	__WFE();
 }
 
 static void soc_evt_poll(void *context)
