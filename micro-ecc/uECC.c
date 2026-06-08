@@ -14,7 +14,7 @@
 #endif
 
 #define CONCATX(a, ...) a ## __VA_ARGS__
-#define CONCAT(a, ...) CONCATX(a, __VA_ARGS__)
+#define ECC_CONCAT(a, ...) CONCATX(a, __VA_ARGS__)
 
 #define STRX(a) #a
 #define STR(a) STRX(a)
@@ -58,12 +58,12 @@
 #define DEC_31 30
 #define DEC_32 31
 
-#define DEC(N) CONCAT(DEC_, N)
+#define DEC(N) ECC_CONCAT(DEC_, N)
 
 #define SECOND_ARG(_, val, ...) val
 #define SOME_CHECK_0 ~, 0
 #define GET_SECOND_ARG(...) SECOND_ARG(__VA_ARGS__, SOME,)
-#define SOME_OR_0(N) GET_SECOND_ARG(CONCAT(SOME_CHECK_, N))
+#define SOME_OR_0(N) GET_SECOND_ARG(ECC_CONCAT(SOME_CHECK_, N))
 
 #define EMPTY(...)
 #define DEFER(...) __VA_ARGS__ EMPTY()
@@ -71,14 +71,14 @@
 #define REPEAT_NAME_0() REPEAT_0
 #define REPEAT_NAME_SOME() REPEAT_SOME
 #define REPEAT_0(...)
-#define REPEAT_SOME(N, stuff) DEFER(CONCAT(REPEAT_NAME_, SOME_OR_0(DEC(N))))()(DEC(N), stuff) stuff
+#define REPEAT_SOME(N, stuff) DEFER(ECC_CONCAT(REPEAT_NAME_, SOME_OR_0(DEC(N))))()(DEC(N), stuff) stuff
 #define REPEAT(N, stuff) EVAL(REPEAT_SOME(N, stuff))
 
 #define REPEATM_NAME_0() REPEATM_0
 #define REPEATM_NAME_SOME() REPEATM_SOME
 #define REPEATM_0(...)
 #define REPEATM_SOME(N, macro) macro(N) \
-    DEFER(CONCAT(REPEATM_NAME_, SOME_OR_0(DEC(N))))()(DEC(N), macro)
+    DEFER(ECC_CONCAT(REPEATM_NAME_, SOME_OR_0(DEC(N))))()(DEC(N), macro)
 #define REPEATM(N, macro) EVAL(REPEATM_SOME(N, macro))
 
 #include "platform-specific.inc"
@@ -158,7 +158,7 @@ struct uECC_Curve_t {
 };
 
 #if uECC_VLI_NATIVE_LITTLE_ENDIAN
-static void bcopy(uint8_t *dst,
+static void ecc_bcopy(uint8_t *dst,
                   const uint8_t *src,
                   unsigned num_bytes) {
     while (0 != num_bytes) {
@@ -1046,8 +1046,8 @@ int uECC_shared_secret(const uint8_t *public_key,
     wordcount_t num_bytes = curve->num_bytes;
 
 #if uECC_VLI_NATIVE_LITTLE_ENDIAN
-    bcopy((uint8_t *) _private, private_key, num_bytes);
-    bcopy((uint8_t *) _public, public_key, num_bytes*2);
+    ecc_bcopy((uint8_t *) _private, private_key, num_bytes);
+    ecc_bcopy((uint8_t *) _public, public_key, num_bytes*2);
 #else
     uECC_vli_bytesToNative(_private, private_key, BITS_TO_BYTES(curve->num_n_bits));
     uECC_vli_bytesToNative(_public, public_key, num_bytes);
@@ -1069,7 +1069,7 @@ int uECC_shared_secret(const uint8_t *public_key,
 
     EccPoint_mult(_public, _public, p2[!carry], initial_Z, curve->num_n_bits + 1, curve);
 #if uECC_VLI_NATIVE_LITTLE_ENDIAN
-    bcopy((uint8_t *) secret, (uint8_t *) _public, num_bytes);
+    ecc_bcopy((uint8_t *) secret, (uint8_t *) _public, num_bytes);
 #else
     uECC_vli_nativeToBytes(secret, num_bytes, _public);
 #endif
@@ -1207,7 +1207,7 @@ static void bits2int(uECC_word_t *native,
 
     uECC_vli_clear(native, num_n_words);
 #if uECC_VLI_NATIVE_LITTLE_ENDIAN
-    bcopy((uint8_t *) native, bits, bits_size);
+    ecc_bcopy((uint8_t *) native, bits, bits_size);
 #else
     uECC_vli_bytesToNative(native, bits, bits_size);
 #endif    
@@ -1280,7 +1280,7 @@ static int uECC_sign_with_k(const uint8_t *private_key,
 #endif
 
 #if uECC_VLI_NATIVE_LITTLE_ENDIAN
-    bcopy((uint8_t *) tmp, private_key, BITS_TO_BYTES(curve->num_n_bits));
+    ecc_bcopy((uint8_t *) tmp, private_key, BITS_TO_BYTES(curve->num_n_bits));
 #else
     uECC_vli_bytesToNative(tmp, private_key, BITS_TO_BYTES(curve->num_n_bits)); /* tmp = d */
 #endif
@@ -1296,7 +1296,7 @@ static int uECC_sign_with_k(const uint8_t *private_key,
         return 0;
     }
 #if uECC_VLI_NATIVE_LITTLE_ENDIAN
-    bcopy((uint8_t *) signature + curve->num_bytes, (uint8_t *) s, curve->num_bytes);
+    ecc_bcopy((uint8_t *) signature + curve->num_bytes, (uint8_t *) s, curve->num_bytes);
 #else
     uECC_vli_nativeToBytes(signature + curve->num_bytes, curve->num_bytes, s);
 #endif    
@@ -1482,8 +1482,8 @@ int uECC_verify(const uint8_t *public_key,
     s[num_n_words - 1] = 0;
 
 #if uECC_VLI_NATIVE_LITTLE_ENDIAN
-    bcopy((uint8_t *) r, signature, curve->num_bytes);
-    bcopy((uint8_t *) s, signature + curve->num_bytes, curve->num_bytes);
+    ecc_bcopy((uint8_t *) r, signature, curve->num_bytes);
+    ecc_bcopy((uint8_t *) s, signature + curve->num_bytes, curve->num_bytes);
 #else
     uECC_vli_bytesToNative(_public, public_key, curve->num_bytes);
     uECC_vli_bytesToNative(

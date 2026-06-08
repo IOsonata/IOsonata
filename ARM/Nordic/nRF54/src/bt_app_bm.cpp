@@ -61,6 +61,17 @@ SOFTWARE.
 #include "bm/bluetooth/peer_manager/peer_manager_handler.h"
 #include "bm/bluetooth/peer_manager/nrf_ble_lesc.h"
 #include "bm/bluetooth/services/ble_dis.h"
+
+#include "crypto/crypto.h"
+#include "syslog.h"
+
+// SysLog-based trace for pairing/security diagnosis. Uses the standard
+// SysLogPrintf(SysLogGet(), ...) path, independent of UART_DEBUG_ENABLE.
+#define SEC_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+
+// Injection point for the LESC crypto engine (defined in the IOsonata
+// nrf_ble_lesc replacement). The App owns the CryptoDev_t and passes it in.
+extern "C" void BtLescSetCryptoEngine(CryptoDev_t *pDev);
 #include "nrfx_cracen.h"
 #include "nrf_soc.h"
 
@@ -80,7 +91,7 @@ SOFTWARE.
 extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
 
 /******** For DEBUG ************/
-//#define UART_DEBUG_ENABLE
+#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"
@@ -176,6 +187,15 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
 	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
+
+	// Feed the LESC module every BLE event so it can capture
+	// BLE_GAP_EVT_LESC_DHKEY_REQUEST and queue the DHKey computation, which is
+	// then run from nrf_ble_lesc_request_handler in the main loop. peer_manager
+	// does not call this internally; the app must, same as the nRF52 port.
+	if (g_BtAppData.AppDevice.bSecure)
+	{
+		nrf_ble_lesc_on_ble_evt(p_ble_evt);
+	}
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
 	switch (p_ble_evt->header.evt_id)
@@ -670,6 +690,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 {
+	SEC_TRACE("PM evt=%d conn=%d\r\n", p_evt->evt_id, p_evt->conn_handle);
+
 	// Standard peer_manager housekeeping: applies the event to internal state,
 	// disconnects on security failure, and cleans flash on data update.
 	pm_handler_on_pm_evt(p_evt);
@@ -679,6 +701,7 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 	switch (p_evt->evt_id)
 	{
 		case PM_EVT_CONN_SEC_SUCCEEDED:
+			SEC_TRACE("PM: CONN_SEC_SUCCEEDED\r\n");
 			// Link is encrypted. peer_manager holds the bond. Nothing further
 			// required here; the app sees the secured link via its connected
 			// state. (nRF52 optionally enforces MITM here; left permissive.)
@@ -687,6 +710,10 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 		case PM_EVT_CONN_SEC_FAILED:
 			// Security setup failed. pm_handler_disconnect_on_sec_failure above
 			// already tears the link down when required.
+			SEC_TRACE("PM: CONN_SEC_FAILED proc=%d error=0x%x src=%d\r\n",
+				p_evt->conn_sec_failed.procedure,
+				p_evt->conn_sec_failed.error,
+				p_evt->conn_sec_failed.error_src);
 			break;
 
 		case PM_EVT_CONN_SEC_CONFIG_REQ:
@@ -806,6 +833,15 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 		return err_code;
 	}
 
+	// Provide the LESC layer its crypto engine. The App owns the CryptoDev_t
+	// instance and injects it, mirroring the BtSmpInit model on the SDC port.
+	// Software P-256 today (CryptoUeccInit); a hardware-backed engine can be
+	// injected here later with no change to the LESC code. RNG underneath comes
+	// from the CRACEN-backed RngGet via crypto_uecc.
+	static CryptoDev_t s_LescEcdh;
+	CryptoUeccInit(&s_LescEcdh);
+	BtLescSetCryptoEngine(&s_LescEcdh);
+
 	err_code = nrf_ble_lesc_init();
 	if (err_code != NRF_SUCCESS)
 	{
@@ -905,8 +941,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	ble_conn_params_evt_handler_set(on_conn_params_evt);
 
 	// Initialize user services
+	DEBUG_PRINTF("BtAppInit: Role=0x%x PERIPHERAL=%d\r\n",
+		pCfg->Role, (pCfg->Role & BTAPP_ROLE_PERIPHERAL) ? 1 : 0);
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
+		DEBUG_PRINTF("BtAppInit: calling BtAppInitUserServices\r\n");
 		BtAppInitUserServices();
 	}
 
@@ -1002,11 +1041,17 @@ void BtAppRun()
 	}
 }
 
-// Port-level weak default for BtAppEvtWait. Bare-metal apps use __WFE.
+// Port-level weak default for BtAppEvtWait. Bare-metal apps idle here.
 // RTOS apps override with sem take in their bridge code.
 __attribute__((weak)) void BtAppEvtWait(void)
 {
-	__WFE();
+	// Use __WFI, not __WFE. The SoftDevice event IRQ (SD_EVT_IRQHandler ->
+	// nrf_sdh_evts_poll) drives all BLE event processing. __WFI wakes on any
+	// pending interrupt regardless of the event register, so the loop resumes
+	// promptly after each SoftDevice event and runs nrf_ble_lesc_request_handler
+	// in time. A bare __WFE can sleep through the event and stalls connection
+	// setup and the LESC DHKey computation.
+	__WFI();
 }
 
 static void soc_evt_poll(void *context)
@@ -1037,57 +1082,24 @@ static void soc_evt_poll(void *context)
 		 "Failed to receive SoftDevice SoC event, nrf_error %#x", nrf_err);
 }
 
-static void ble_evt_poll(void *context)
-{
-	int err;
-
-	__aligned(4) static uint8_t evt_buffer[NRF_SDH_BLE_EVT_BUF_SIZE];
-	ble_evt_t * const ble_evt = (ble_evt_t *)evt_buffer;
-
-	// Wake any RTOS waiter; weak BtAppEvtNotify is empty so bare-metal apps
-	// see no effect. BLE events themselves are processed in this dispatch
-	// context regardless.
-	BtAppEvtNotify();
-
-	DEBUG_PRINTF("ble_evt_poll evt %x\r\n", ble_evt->header.evt_id);
-
-	while (true) {
-		uint16_t evt_len = (uint16_t)sizeof(evt_buffer);
-
-		err = sd_ble_evt_get(evt_buffer, &evt_len);
-		if (err) {
-			break;
-		}
-
-
-		//DEBUG_PRINTF()("%s", nrf_sdh_ble_evt_to_str(ble_evt->header.evt_id));
-
-		// IOsonata's own GAP/GATT handling.
-		ble_evt_dispatch(ble_evt, context);
-
-		// Forward the event to all registered BLE observers. This is required
-		// for Secure Connections: peer_manager (and its ble_conn_state and
-		// nrf_ble_lesc dependencies) self-register as BLE observers and drive
-		// the pairing flow from here. Without this fan-out the SoftDevice
-		// security events never reach peer_manager and pairing cannot complete.
-		TYPE_SECTION_FOREACH(
-			struct nrf_sdh_ble_evt_observer, nrf_sdh_ble_evt_observers, obs) {
-			obs->handler(ble_evt, obs->context);
-		}
-	}
-
-	/* An SoC event may have triggered this round of polling, and BLE may not be enabled */
-//	__ASSERT((err == NRF_ERROR_NOT_FOUND) || (err == BLE_ERROR_NOT_ENABLED),
-//		 "Failed to receive SoftDevice BLE event, nrf_error %#x", err);
-}
+/*
+ * BLE event pumping is handled by the SDK nrf_sdh_ble.c ble_evt_poll, which is
+ * registered as NRF_SDH_STACK_EVT_OBSERVER(ble_evt_obs, ...). That function
+ * maintains the connection-handle index table (idx_assign on CONNECTED,
+ * idx_unassign on DISCONNECTED) that nrf_sdh_ble_idx_get / peer_manager
+ * conn_state rely on, then fans the event out to all NRF_SDH_BLE_OBSERVERs.
+ * IOsonata's own GAP/GATT handling is one such observer (ble_evt_dispatch,
+ * registered below). A second pump here would also drain sd_ble_evt_get and
+ * fan out without the idx tracking, leaving nrf_sdh_ble_idx_get returning -1,
+ * so it is intentionally not defined.
+ */
 
 /* Auto-handle seed requests as a SoC event observer */
 NRF_SDH_SOC_OBSERVER(rand_seed, SDBleRandSeed, NULL, HIGH);
-/* Listen to SoftDevice events */
+/* SoftDevice SoC event pump (BLE pump is the SDK nrf_sdh_ble.c one) */
 NRF_SDH_STACK_EVT_OBSERVER(soc_evt_obs, soc_evt_poll, NULL, HIGHEST);
-NRF_SDH_STACK_EVT_OBSERVER(ble_evt_obs, ble_evt_poll, NULL, HIGH);
-// Register as BLE event observer
-//NRF_SDH_BLE_OBSERVER(s_BtAppBleObserver, ble_evt_dispatch, NULL, USER);
+/* IOsonata GAP/GATT handling, driven by the SDK BLE event fan-out */
+NRF_SDH_BLE_OBSERVER(s_BtAppBleObserver, ble_evt_dispatch, NULL, USER);
 
 
 

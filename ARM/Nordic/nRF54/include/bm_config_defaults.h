@@ -718,5 +718,32 @@ in your project's build configuration.
 #define FIXED_PARTITION_OFFSET(label)   CONFIG_SOFTDEVICE_BASE_ADDRESS
 #endif
 
+/*
+ * Compatibility shim for the Zephyr devicetree macros used in
+ * subsys/softdevice_handler/nrf_sdh_ble.c:
+ *
+ *   #define APP_RAM_START DT_REG_ADDR(DT_CHOSEN(zephyr_sram))
+ *   #define SD_RAM_START  DT_REG_ADDR(DT_NODELABEL(cpuapp_sram))
+ *
+ * The functions that consume these (nrf_sdh_ble_enable,
+ * nrf_sdh_ble_sd_ram_usage_get) are not used here: bt_app_bm.cpp performs its
+ * own sd_ble_cfg_set / sd_ble_enable with an explicit RAM start. Only
+ * nrf_sdh_ble_idx_get / nrf_sdh_ble_conn_handle_get and the connection-handle
+ * tracking in that file are used. The macros resolve to:
+ *   zephyr_sram  -> application RAM start (CONFIG_APP_RAM_START)
+ *   cpuapp_sram  -> SRAM physical base (0x20000000)
+ */
+#ifndef DT_CHOSEN
+#define DT_CHOSEN(node)         BM_DT_NODE_##node
+#endif
+#ifndef DT_NODELABEL
+#define DT_NODELABEL(node)      BM_DT_NODE_##node
+#endif
+#ifndef DT_REG_ADDR
+#define DT_REG_ADDR(tok)        tok
+#endif
+#define BM_DT_NODE_zephyr_sram  CONFIG_APP_RAM_START
+#define BM_DT_NODE_cpuapp_sram  0x20000000UL
+
 
 #endif /* BM_CONFIG_DEFAULTS_H__ */

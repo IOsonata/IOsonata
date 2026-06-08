@@ -49,7 +49,7 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 
 /******** For DEBUG ************/
-//#define UART_DEBUG_ENABLE
+#define UART_DEBUG_ENABLE
 
 #ifdef UART_DEBUG_ENABLE
 #include "coredev/uart.h"
@@ -442,9 +442,28 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	uint32_t err;
 	ble_uuid_t ble_uuid;
 
+	DEBUG_PRINTF("BtGattSrvcAdd[bm]: enter pSrvc=%p\r\n", (void*)pSrvc);
+
 	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr || pSrvc->NbChar <= 0)
 	{
+		DEBUG_PRINTF("BtGattSrvcAdd[bm]: bad args (pCharArray=%p NbChar=%d)\r\n",
+			pSrvc ? (void*)pSrvc->pCharArray : nullptr, pSrvc ? pSrvc->NbChar : -1);
 		return false;
+	}
+
+	// The GAP (0x1800) and GATT (0x1801) services are built into the S145
+	// SoftDevice and cannot be added with sd_ble_gatts_service_add (it returns
+	// NRF_ERROR_INVALID_PARAM). The SoftDevice exposes them automatically;
+	// device name and appearance are set via sd_ble_gap_device_name_set and
+	// sd_ble_gap_appearance_set. Treat a request to add them as a no-op success
+	// so shared BtGapInit stays portable across the SDC (software DB) and
+	// SoftDevice backends.
+	if (pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ACCESS ||
+		pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE)
+	{
+		DEBUG_PRINTF("BtGattSrvcAdd[bm]: skip SoftDevice-reserved uuid=0x%x\r\n",
+			pSrvc->UuidSrvc);
+		return true;
 	}
 
 	// Add base UUID for custom services
@@ -454,6 +473,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 		uint8_t type;
 		err = sd_ble_uuid_vs_add((ble_uuid128_t*)pSrvc->UuidBase, &type);
+		DEBUG_PRINTF("BtGattSrvcAdd[bm]: vs_add err=0x%x type=%d\r\n", err, type);
 		if (err != NRF_SUCCESS)
 		{
 			return false;
@@ -465,6 +485,8 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	ble_uuid.uuid = pSrvc->UuidSrvc;
 
 	err = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &ble_uuid, &pSrvc->Hdl);
+	DEBUG_PRINTF("BtGattSrvcAdd[bm]: service_add uuid=0x%x type=%d err=0x%x Hdl=%d\r\n",
+		ble_uuid.uuid, ble_uuid.type, err, pSrvc->Hdl);
 	if (err != NRF_SUCCESS)
 	{
 		return false;
@@ -473,6 +495,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	for (int i = 0; i < pSrvc->NbChar; i++)
 	{
 		err = BtGattCharAdd(pSrvc, &pSrvc->pCharArray[i], BTSRVC_SECTYPE_NONE);
+		DEBUG_PRINTF("BtGattSrvcAdd[bm]: charAdd[%d] err=0x%x\r\n", i, err);
 		if (err != NRF_SUCCESS)
 		{
 			return false;
@@ -483,5 +506,6 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 	BtGattInsertSrvcList(pSrvc);
 
+	DEBUG_PRINTF("BtGattSrvcAdd[bm]: OK Hdl=%d NbChar=%d\r\n", pSrvc->Hdl, pSrvc->NbChar);
 	return true;
 }

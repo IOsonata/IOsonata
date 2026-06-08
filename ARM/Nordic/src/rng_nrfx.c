@@ -46,6 +46,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdbool.h>
 #include <stddef.h>
+#include <errno.h>
 
 #include "nrf.h"
 
@@ -60,8 +61,11 @@ bool RngInit(void)
 {
 #if defined(RNG_USE_CRACEN)
 	// Bring up the CRACEN CTR-DRBG (this also initializes the underlying TRNG
-	// that seeds it). Idempotent enough to call once at startup.
-	if (nrfx_cracen_init() != 0)
+	// that seeds it). nrfx_cracen_init returns 0 on success or -EALREADY if it
+	// was already brought up (by the SoftDevice or an earlier caller); both
+	// mean CRACEN is usable, so treat -EALREADY as success.
+	int r = nrfx_cracen_init();
+	if (r != 0 && r != -EALREADY)
 	{
 		s_RngReady = false;
 		return false;

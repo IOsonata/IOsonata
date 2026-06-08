@@ -345,7 +345,15 @@ static inline void irq_unlock(unsigned int key)
  * ====================================================================== */
 
 #ifdef __arm__
-#define k_cpu_idle()  __WFE()
+/*
+ * Race-free idle. A bare __WFE can sleep through a SoftDevice event: the event
+ * register may already be consumed, and without SEVONPEND a pending interrupt
+ * does not set it. Use __WFI, which wakes on any pending interrupt regardless
+ * of PRIMASK, so the SoftDevice event IRQ (SD_EVT_IRQHandler -> nrf_sdh_evts_poll)
+ * always wakes the main loop. Without this, connection setup and the main-loop
+ * LESC DHKey computation lag badly or miss their window.
+ */
+#define k_cpu_idle()  __WFI()
 #else
 #define k_cpu_idle()  do {} while (0)
 #endif
@@ -745,9 +753,6 @@ static inline void sys_memcpy_swap(void *dst, const void *src, size_t length)
 
 /* Zephyr kernel data structures: k_mem_slab, k_heap, ring_buf */
 #include "bm_compat_ds.h"
-
-/* Devicetree partition macros for the peer_manager storage layer */
-#include "bm_dt_shim.h"
 
 /* SWI handlers used by SoftDevice S145 */
 void SWI01_IRQHandler(void);
