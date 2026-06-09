@@ -118,13 +118,6 @@ static const char s_TxCharDescString[] = {
 
 uint8_t g_ManData[8];
 
-#if BLE_SECURE_CONNECTION
-// Single-peer RAM bond: stores the generated LTK so a reconnect re-encrypts
-// without pairing again. Survives disconnect/reconnect while powered, not reset.
-static BtSmpKeys_t s_BondKeys;
-static bool s_BondValid = false;
-#endif
-
 /// Characteristic definitions
 BtGattChar_t g_UartChars[] = {
 	// Read + Notify (server-pushed value, peer can also subscribe)
@@ -268,31 +261,9 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	g_Uart.printf("CONNECTED hdl=%d\r\n", ConnHdl);
 }
 
-// Capture the key set on a successful pairing (SMP core calls this).
-extern "C" void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
-{
-	(void)ConnHdl;
-	if (pKeys != nullptr && pKeys->bValid)
-	{
-		memcpy(&s_BondKeys, pKeys, sizeof(s_BondKeys));
-		s_BondValid = true;
-	}
-}
-
-// Supply the stored LTK on a reconnect encryption request. SC uses EDIV=0,
-// Rand=0; single-peer test, so one cached record is enough.
-extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
-								   uint16_t Ediv, uint8_t Ltk[16])
-{
-	(void)ConnHdl;
-	if (s_BondValid && s_BondKeys.bValid && s_BondKeys.bSc &&
-		Ediv == 0 && Rand == 0)
-	{
-		memcpy(Ltk, s_BondKeys.Ltk, 16);
-		return true;
-	}
-	return false;
-}
+// Bond capture (BtSmpBondAdd) and LTK lookup (BtSmpBondLtkLookup) are provided
+// by the library (src/bluetooth/bt_smp_bond.cpp): a multi-slot bond table with
+// persistence hooks. The example does not redefine them.
 #endif
 
 void ButEvent(int IntNo, void *pCtx)

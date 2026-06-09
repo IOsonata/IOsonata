@@ -716,6 +716,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_l2cap.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_pds_nvm_mpsl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/bt_pds_nvm_mpsl.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_peer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_peer.h</locationURI>
@@ -1401,6 +1406,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_crypto_ctlr_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_crypto_ctlr_sdc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_dev.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
@@ -1451,6 +1461,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_pds_nvm_mpsl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_pds_nvm_mpsl.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_peer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
@@ -1489,11 +1504,6 @@
 			<name>src/bluetooth/bt_uuid.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_uuid.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_crypto_ctlr_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_crypto_ctlr_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/nrf_mpsl.cpp</name>
@@ -1566,6 +1576,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_nrfx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/rng.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/rng.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/shared_intrf.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.c</locationURI>
@@ -1624,11 +1639,6 @@
 			<name>src/crypto/crypto_mbedtls.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_mbedtls.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/rng.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/rng.c</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>
