@@ -27,14 +27,6 @@
 // here; defined by the target's bt_pds_nvm_*.c.
 extern int BtPdsBmInit(void);
 
-// TEMP reconnect-timing diagnosis. Direct SysLog (safe from event context),
-// no LOG reroute, no g_Uart.printf. Read the UART terminal's own line
-// timestamps: the gap between a "store beg" and its "store end" line is the
-// blocking arbitrated-write duration. Remove once the slow reconnect is found.
-#include "syslog.h"
-extern uint32_t BtDbgUs(void);
-#define PDS_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
-
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
 /* The number of registered event handlers. */
@@ -281,9 +273,7 @@ uint32_t pds_peer_data_read(uint16_t peer_id, enum pm_peer_data_id data_id,
 
 	uint32_t entry_id = peer_id_peer_data_id_to_entry_id(peer_id, data_id);
 
-	PDS_TRACE("[%u] pds_read beg peer=%d data_id=%d\r\n", (unsigned)BtDbgUs(), peer_id, data_id);
 	ret = BtPdsRead(entry_id, data->all_data, *buf_len);
-	PDS_TRACE("[%u] pds_read end ret=%d\r\n", (unsigned)BtDbgUs(), (int)ret);
 	if (ret == -ENOENT) {
 		LOG_DBG("Could not read entry %d. bm_zms_read() returned %d. "
 			"peer_id: %d, data_id: %d", entry_id,
@@ -317,10 +307,7 @@ uint32_t pds_peer_data_store(uint16_t peer_id, const struct pm_peer_data_const *
 
 	uint32_t entry_id = peer_id_peer_data_id_to_entry_id(peer_id, peer_data->data_id);
 
-	PDS_TRACE("[%u] pds_store beg peer=%d data_id=%d len=%d\r\n",
-		(unsigned)BtDbgUs(), peer_id, peer_data->data_id, (int)peer_data->length);
 	ret = BtPdsWrite(entry_id, peer_data->all_data, peer_data->length);
-	PDS_TRACE("[%u] pds_store end ret=%d\r\n", (unsigned)BtDbgUs(), (int)ret);
 	if (ret < 0) {
 		LOG_ERR("Could not write data to NVM. BtPdsWrite() returned %d. "
 			"peer_id: %d",

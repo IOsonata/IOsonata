@@ -96,21 +96,6 @@ extern UART g_Uart;
 #define DEBUG_PRINTF(...)
 #endif
 
-// TEMP latency tracing. Read the free-running GRTC SYSCOUNTER (1 MHz, 1 us
-// ticks). Safe from any context (plain register read). DevNo 3 matches the
-// SoftDevice GRTC. Returns a 32-bit microsecond timestamp (wraps ~71 min,
-// fine for measuring gaps). Remove with the traces once latency is found.
-static inline uint32_t DbgUs(void)
-{
-	uint32_t cl, ch;
-	do {
-		cl = NRF_GRTC->SYSCOUNTER[3].SYSCOUNTERL;
-		ch = NRF_GRTC->SYSCOUNTER[3].SYSCOUNTERH;
-	} while (ch & GRTC_SYSCOUNTER_SYSCOUNTERH_BUSY_Msk);
-	return cl & GRTC_SYSCOUNTER_SYSCOUNTERL_VALUE_Msk;
-}
-// Exposed so peer_data_storage.c traces can share the same time base.
-extern "C" uint32_t BtDbgUs(void) { return DbgUs(); }
 /*******************************/
 
 /// Unit conversion macros (same as old nRF5_SDK definitions)
@@ -199,7 +184,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	//uint8_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
 
-	DEBUG_PRINTF("[%u] evt: 0x%x\r\n", (unsigned)DbgUs(), p_ble_evt->header.evt_id);
+	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
 	switch (p_ble_evt->header.evt_id)
 	{
 		case BLE_GAP_EVT_CONNECTED:
@@ -1005,20 +990,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	DEBUG_PRINTF("BtAppInit: success\r\n");
 
-	// TEMP diagnosis: print the advertised GAP address at boot. Reset and
-	// compare across runs. If the address differs after reset, the bonded
-	// central does not recognize the peer and reconnect is slow. Remove once
-	// the slow-reconnect cause is confirmed.
-	{
-		ble_gap_addr_t dbgaddr;
-		memset(&dbgaddr, 0, sizeof(dbgaddr));
-		uint32_t e = sd_ble_gap_addr_get(&dbgaddr);
-		DEBUG_PRINTF("GAP addr type=%d %02x:%02x:%02x:%02x:%02x:%02x get=0x%x\r\n",
-			dbgaddr.addr_type,
-			dbgaddr.addr[5], dbgaddr.addr[4], dbgaddr.addr[3],
-			dbgaddr.addr[2], dbgaddr.addr[1], dbgaddr.addr[0], e);
-	}
-
 	return true;
 }
 
@@ -1075,7 +1046,7 @@ static void soc_evt_poll(void *context)
 	// context regardless.
 	BtAppEvtNotify();
 
-	DEBUG_PRINTF("[%u] soc_evt_poll\r\n", (unsigned)DbgUs());
+	DEBUG_PRINTF("soc_evt_poll\r\n");
 	while (true) {
 		nrf_err = sd_evt_get(&evt_id);
 		if (nrf_err) {
