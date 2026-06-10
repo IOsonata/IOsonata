@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	bt_pds_nvm_mpsl.cpp
+@file	bt_pds_sdc.cpp
 
 @brief	MPSL timeslot flash arbitration core for SDC builds. See
 		bt_pds_nvm_mpsl.h for the design rationale.
@@ -25,7 +25,7 @@
 #include "nrf.h"					// __WFE, __SEV
 #include "mpsl_timeslot.h"
 
-#include "bluetooth/bt_pds_nvm_mpsl.h"
+#include "bt_pds_sdc.h"
 
 // Timeslot session memory. MPSL_TIMESLOT_CONTEXT_SIZE bytes per session, one
 // session. Word aligned as MPSL requires.

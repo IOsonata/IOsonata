@@ -641,6 +641,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/include/bt_pds_nvm_mpsl.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_pds_sdc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/bt_pds_sdc.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_peer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_peer.h</locationURI>
@@ -1201,9 +1206,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_crypto_ctlr_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_crypto_ctlr_sdc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_ctlr_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_ctlr_sdc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_dev.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_dev_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_dev_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_dis.cpp</name>
@@ -1266,6 +1286,16 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_pds_nvm_rramc_sdc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_pds_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_pds_sdc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_pds_sdc_nrf54.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_pds_sdc_nrf54.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_peer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_peer.cpp</locationURI>
@@ -1299,6 +1329,11 @@
 			<name>src/bluetooth/bt_smp_bond.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_smp_bond_sdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/bt_smp_bond_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>
