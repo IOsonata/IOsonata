@@ -69,13 +69,20 @@
 
 #define BT_PDS_NVMC_REGION_SIZE		(BT_PDS_NVMC_PAGE_SIZE * BT_PDS_NVMC_REGION_PAGES)
 
-// Region base address. Default reserves the pages an FDS product would use:
-// the top of application flash. Override from the linker layout so the region
-// does not overlap the application, SDC, or bootloader. MUST be page aligned.
-// 0xFE000 suits an nRF52840 (1 MB) reserving the last pages below the MBR
-// params; set the correct value for the target part and map.
+// Region base address: two flash pages reserved for the bond store, just below
+// the bootloader settings page. The default is part aware so it lands inside
+// the part's flash; the nRF52840 default 0xFE000 is past the end of the 512 KB
+// nRF52832 and would fault on access. Override from the linker layout if the
+// app reserves a different location. MUST be page aligned. The app linker FLASH
+// region must be reduced so it does not overlap this region.
 #ifndef BT_PDS_NVMC_REGION_ADDR
-#define BT_PDS_NVMC_REGION_ADDR		0x000FE000UL
+  #if defined(NRF52832_XXAA) || defined(NRF52832_XXAB)
+    // 512 KB part (0x80000). Bond store 0x7D000..0x7EFFF, bootloader 0x7F000.
+    #define BT_PDS_NVMC_REGION_ADDR		0x0007D000UL
+  #else
+    // 1 MB part (nRF52840). Bond store 0xFD000..0xFEFFF, MBR params 0xFF000.
+    #define BT_PDS_NVMC_REGION_ADDR		0x000FD000UL
+  #endif
 #endif
 
 // NVMC writes are 32-bit word based.

@@ -117,3 +117,24 @@ extern "C" void BtSmpBondErase(void)
 	}
 	(void)BtPdsClear();
 }
+
+// Explicit init entry. The application MUST call this once during setup (after
+// BtSmpInit). Its purpose is twofold:
+//   1. Force the linker to pull this object from the static library. The bond
+//      hooks above are strong overrides of the weak BtSmpBondSave/Load/Erase in
+//      bt_smp_bond.cpp; in an archive, the linker only extracts this object if
+//      something references a symbol it defines. Without this referenced entry,
+//      the already-linked weak no-ops win and bonds are never persisted.
+//   2. Bring up the NVM backend and load any stored bonds into the RAM table
+//      now, so a reconnect right after boot finds its LTK.
+// Returns 0 on success, negative errno on backend init failure.
+extern "C" int BtSmpBondSdcInit(void)
+{
+	int r = PdsEnsureReady();
+	if (r != 0)
+	{
+		return r;
+	}
+	BtSmpBondLoad();
+	return 0;
+}

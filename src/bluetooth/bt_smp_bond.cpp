@@ -25,10 +25,6 @@ distributed EDIV/Rand and are matched on those first.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
 
-// TEMP persistence-seam diagnosis. Same SysLog path as bt_smp.cpp SMP_TRACE.
-#include "syslog.h"
-#define BOND_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
-
 #ifndef BT_SMP_BOND_MAX
 #define BT_SMP_BOND_MAX		8
 #endif
@@ -57,14 +53,10 @@ __attribute__((weak)) void BtSmpBondSave(int Slot, const void *pBond, size_t Len
 	(void)Slot;
 	(void)pBond;
 	(void)Len;
-	// If this WEAK no-op runs, the persistence glue (bt_smp_bond_sdc.cpp) is
-	// NOT linked, so nothing is written to flash.
-	BOND_TRACE("BondSave: WEAK no-op (glue not linked) slot=%d\r\n", Slot);
 }
 
 __attribute__((weak)) void BtSmpBondLoad(void)
 {
-	BOND_TRACE("BondLoad: WEAK no-op (glue not linked)\r\n");
 }
 
 __attribute__((weak)) void BtSmpBondErase(void)
@@ -139,8 +131,6 @@ static int BtSmpBondAllocSlot(void)
 // regardless of whether the application overrides that callback.
 extern "C" void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 {
-	BOND_TRACE("BondAdd: enter hdl=%d valid=%d\r\n",
-		ConnHdl, (pKeys != nullptr) ? pKeys->bValid : -1);
 	if (pKeys == nullptr || !pKeys->bValid)
 	{
 		return;
@@ -157,7 +147,6 @@ extern "C" void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr)
 	{
-		BOND_TRACE("BondAdd: peer NOT found hdl=%d -> NO SAVE\r\n", ConnHdl);
 		return;
 	}
 	addrType = pPeer->Conn.PeerAddrType;
@@ -174,8 +163,6 @@ extern "C" void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	memcpy(s_BtSmpBondTable[slot].PeerAddr, addr, 6);
 	memcpy(&s_BtSmpBondTable[slot].Keys, pKeys, sizeof(BtSmpKeys_t));
 
-	BOND_TRACE("BondAdd: slot=%d -> BtSmpBondSave len=%d\r\n",
-		slot, (int)sizeof(BtSmpBond_t));
 	BtSmpBondSave(slot, &s_BtSmpBondTable[slot], sizeof(BtSmpBond_t));
 }
 

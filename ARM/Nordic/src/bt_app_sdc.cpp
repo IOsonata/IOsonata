@@ -62,6 +62,7 @@ SOFTWARE.
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_appearance.h"
+#include "bt_pds_sdc.h"				// BtSmpBondSdcInit (flash-backed bond persistence)
 #include "nrf_mpsl.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
@@ -858,6 +859,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Record whether security was requested, so the connected handler can
 	// initiate it. Backend-internal - mirrors the SoftDevice backend.
 	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
+
+	// Bring up flash-backed bond persistence when security is enabled. This is
+	// backend-internal: it loads any stored bonds into the SMP bond table and
+	// links the strong BtSmpBondSave/Load/Erase overrides. The application does
+	// not call it - persistence follows from the configured SecType.
+	if (g_BtAppData.AppDevice.bSecure)
+	{
+		BtSmpBondSdcInit();
+	}
 
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
