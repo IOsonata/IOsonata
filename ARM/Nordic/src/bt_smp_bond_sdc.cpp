@@ -37,11 +37,7 @@
 
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_pds.h"
-
-// Backend init, defined by the linked per-target BtPdsNvm_t backend
-// (bt_pds_nvm_rramc_sdc.cpp or bt_pds_nvm_nvmc_sdc.cpp). Calls BtPdsInit with
-// that backend. Idempotent: safe to call more than once.
-extern "C" int BtPdsSdcNvmInit(void);
+#include "bt_pds_sdc.h"
 
 // bt_pds key for bond slot N. Kept in a dedicated range so other persisted
 // items (if added later) do not collide with bond slots.
@@ -67,7 +63,7 @@ static int PdsEnsureReady(void)
 
 // Persist one bond slot. The generic layer calls this whenever slot Slot
 // changes. pBond points at Len bytes (BtSmpBondRecordSize()).
-extern "C" void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
+void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 {
 	if (pBond == NULL || Len == 0)
 	{
@@ -82,7 +78,7 @@ extern "C" void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 
 // Load all persisted bonds into the RAM table at init. Reads each slot key and
 // hands the blob to BtSmpBondRestore. Missing slots are skipped.
-extern "C" void BtSmpBondLoad(void)
+void BtSmpBondLoad(void)
 {
 	if (PdsEnsureReady() != 0)
 	{
@@ -109,7 +105,7 @@ extern "C" void BtSmpBondLoad(void)
 
 // Wipe all persisted bonds. Called from BtSmpBondClearAll so stale records do
 // not reappear on the next BtSmpBondLoad.
-extern "C" void BtSmpBondErase(void)
+void BtSmpBondErase(void)
 {
 	if (PdsEnsureReady() != 0)
 	{
@@ -128,7 +124,7 @@ extern "C" void BtSmpBondErase(void)
 //   2. Bring up the NVM backend and load any stored bonds into the RAM table
 //      now, so a reconnect right after boot finds its LTK.
 // Returns 0 on success, negative errno on backend init failure.
-extern "C" int BtSmpBondSdcInit(void)
+int BtSmpBondSdcInit(void)
 {
 	int r = PdsEnsureReady();
 	if (r != 0)

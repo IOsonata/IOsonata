@@ -65,14 +65,14 @@ __attribute__((weak)) void BtSmpBondErase(void)
 
 // Number of bond slots the table holds. Lets a platform size its NVM region and
 // iterate slots without knowing BT_SMP_BOND_MAX at compile time.
-extern "C" int BtSmpBondSlotCount(void)
+int BtSmpBondSlotCount(void)
 {
 	return BT_SMP_BOND_MAX;
 }
 
 // Size of one stored bond record. The platform persists/loads opaque blobs of
 // this size; it does not need the BtSmpBond_t layout.
-extern "C" size_t BtSmpBondRecordSize(void)
+size_t BtSmpBondRecordSize(void)
 {
 	return sizeof(BtSmpBond_t);
 }
@@ -81,7 +81,7 @@ extern "C" size_t BtSmpBondRecordSize(void)
 // BtSmpBondLoad override for each persisted slot. pBond must point at Len bytes
 // previously produced by BtSmpBondSave for that slot. A record whose bValid is
 // false is ignored, so erased slots stay empty.
-extern "C" void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
+void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 {
 	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBond == nullptr ||
 		Len != sizeof(BtSmpBond_t))
@@ -129,7 +129,7 @@ static int BtSmpBondAllocSlot(void)
 // Capture keys on a successful pairing. Called from the SMP core right before
 // the application BtSmpPairingComplete notification, so bonding works
 // regardless of whether the application overrides that callback.
-extern "C" void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
+void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 {
 	if (pKeys == nullptr || !pKeys->bValid)
 	{
@@ -167,7 +167,7 @@ extern "C" void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 }
 
 // Override: look up an LTK for an incoming controller LTK request.
-extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
+bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 								   uint16_t Ediv, uint8_t Ltk[16])
 {
 	// Legacy bond: match on the distributed EDIV/Rand first.
@@ -226,7 +226,7 @@ extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 }
 
 // Remove all stored bonds, RAM table and non-volatile copy.
-extern "C" void BtSmpBondClearAll(void)
+void BtSmpBondClearAll(void)
 {
 	memset(s_BtSmpBondTable, 0, sizeof(s_BtSmpBondTable));
 	BtSmpBondErase();

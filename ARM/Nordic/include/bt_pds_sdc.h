@@ -72,6 +72,17 @@ int BtPdsMpslRun(BtPdsMpslOp_t *pOp);
 // the first BtPdsMpslRun, typically from the target backend's init.
 int BtPdsMpslInit(void);
 
+// Per-target NVM backend init. Brings up the timeslot session and mounts the
+// bt_pds store over the target medium (NVMC on nRF52, RRAMC on nRF54L). One
+// backend is linked per build; all expose this same name.
+int BtPdsSdcNvmInit(void);
+
+// SDC bond persistence init. Called internally by the SDC app init when a
+// secure SecType is configured (not by the application). Initializes the NVM
+// backend, loads stored bonds into the SMP bond table, and pulls in the strong
+// BtSmpBondSave/Load/Erase overrides that persist bonds. Returns 0 on success.
+int BtSmpBondSdcInit(void);
+
 #ifdef __cplusplus
 }
 #endif

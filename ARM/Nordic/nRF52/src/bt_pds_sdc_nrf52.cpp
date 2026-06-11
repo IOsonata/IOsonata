@@ -228,7 +228,7 @@ static const BtPdsNvm_t s_BtPdsNvmcSdcNvm = {
 // Init entry: bring up the MPSL timeslot session, then mount the store. Name
 // matches the bond glue (bt_smp_bond_sdc.cpp) so the same glue serves this and
 // the nRF54L RRAMC backend.
-extern "C" int BtPdsSdcNvmInit(void)
+int BtPdsSdcNvmInit(void)
 {
 	int r = BtPdsMpslInit();
 	if (r != 0)

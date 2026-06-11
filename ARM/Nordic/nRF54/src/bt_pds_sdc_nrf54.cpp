@@ -29,7 +29,7 @@
 #include "hal/nrf_rramc.h"
 
 #include "bluetooth/bt_pds.h"
-#include "bluetooth/bt_pds_nvm_mpsl.h"
+#include "bt_pds_sdc.h"
 
 // RRAM region reserved for the persistent store on the SDC build. Keep this in
 // sync with the SDC linker script's reserved storage partition. Defaults match
@@ -179,7 +179,7 @@ static const BtPdsNvm_t s_BtPdsRramcSdcNvm = {
 };
 
 // Init entry: bring up the MPSL timeslot session, then mount the store.
-extern "C" int BtPdsRramcSdcInit(void)
+int BtPdsSdcNvmInit(void)
 {
 	int r = BtPdsMpslInit();
 	if (r != 0)
