@@ -1371,8 +1371,15 @@ bool ImuIcm20948::Enable()
 	dout = ICM20948_DMP_DATA_OUT_CTL1_ACCEL_SET | ICM20948_DMP_DATA_OUT_CTL1_GYRO_SET | ICM20948_DMP_DATA_OUT_CTL1_CPASS_SET;
 	SetSensorCtrl(dout, true);
 
+	// The DMP owns the FIFO packet format. Raw hardware FIFO streams must stay
+	// off, otherwise raw register dumps interleave with DMP packets and
+	// desync the packet parser (bad headers, fill, overflow). The vendor sets
+	// both REG_FIFO_EN and REG_FIFO_EN_2 to 0 for the same reason.
+	regaddr = ICM20948_FIFO_EN_1_REG;
+	Write8((uint8_t*)&regaddr, 2, 0);
+
 	regaddr = ICM20948_FIFO_EN_2_REG;
-	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_2_FIFO_EN_ALL);
+	Write8((uint8_t*)&regaddr, 2, 0);
 
 #if 0
 	int i = INV_ICM20948_SENSOR_MAX + 1;//INV_SENSOR_TYPE_MAX;
@@ -1753,7 +1760,7 @@ size_t ImuIcm20948::ProcessFifoPackets(uint64_t t)
 			s_DbgHdrRing[s_DbgHdrRingIdx & 15] = vFifoHdr;
 			s_DbgHdrRingIdx++;
 
-			if ((vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
+			if (vFifoHdr == 0 || (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
 			{
 				s_BadHdrCnt++;
 				ResetFifo();
@@ -2016,7 +2023,7 @@ void ImuIcm20948::IntHandler()
 			// new packet
 			vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
 
-			if ((vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
+			if (vFifoHdr == 0 || (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
 			{
 				ResetFifo();
 				vFifoDataLen = 0;
@@ -2687,7 +2694,9 @@ bool ImuIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
 		l = min(len, ICM20948_FIFO_PAGE_SIZE);
 	}
 
-	// Restore power state
+	// Restore power state. regaddr was left pointing at a DMP memory register
+	// by the upload loop, so set it back to PWR_MGMT_1 before restoring.
+	regaddr = ICM20948_PWR_MGMT_1_REG;
 	Write8((uint8_t*)&regaddr, 2, pwrstate);
 
 	return true;

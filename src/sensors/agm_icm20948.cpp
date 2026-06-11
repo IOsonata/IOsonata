@@ -266,10 +266,10 @@ uint32_t AccelIcm20948::SamplingFrequency(uint32_t Freq)
 	// ODR = 1.125 kHz/(1+ACCEL_SMPLRT_DIV[11:0])
 
 	uint16_t div = (1125000 + (Freq >> 1))/ Freq - 1;
-	div = EndianCvt16(div);
+	uint16_t div_be = EndianCvt16(div);
 
 	uint16_t regaddr = ICM20948_ACCEL_SMPLRT_DIV_1_REG;
-	Write16((uint8_t*)&regaddr, 2, (uint16_t)div);
+	Write16((uint8_t*)&regaddr, 2, div_be);
 
 	return AccelSensor::SamplingFrequency(1125000 / (1 + div));
 }
