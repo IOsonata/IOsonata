@@ -683,7 +683,7 @@ bool AgmIcm20948::UpdateData()
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
 	uint8_t status[4];
 	uint8_t d[20];
-	uint64_t t;
+	uint64_t t = 0;
 	bool res = false;
 
 	Read((uint8_t*)&regaddr, 2, status, 2);
@@ -725,7 +725,7 @@ bool AgmIcm20948::UpdateData()
 
 		TempSensor::vData.Timestamp = t;
 
-		// TEMP_degC = ((TEMP_OUT – RoomTemp_Offset)/Temp_Sensitivity) + 21degC
+		// TEMP_degC = ((TEMP_OUT - RoomTemp_Offset)/Temp_Sensitivity) + 21degC
 		TempSensor::vData.Temperature =  (((int16_t)d[12] << 8) | ((int16_t)d[13] & 0xFF)) * 100 / 33387 + 2100;
 
 		res = true;

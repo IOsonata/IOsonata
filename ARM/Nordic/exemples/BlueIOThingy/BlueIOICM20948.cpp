@@ -27,13 +27,13 @@
 #include "idelay.h"
 #include "imu/imu.h"
 
-#define INVN
+//#define INVN
 
 #ifdef INVN
 #include "imu/imu_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 #else
-//#include "imu/imu_icm20948.h"
+#include "imu/imu_icm20948.h"
 #include "sensors/agm_icm20948.h"
 #endif
 
@@ -81,7 +81,7 @@ static const ImuCfg_t s_ImuCfg = {
 #ifdef INVN
 static ImuInvnIcm20948 s_Imu;
 #else
-//static ImuIcm20948 s_Imu;
+static ImuIcm20948 s_Imu;
 #endif
 
 static Timer *s_pTimer = NULL;
@@ -98,9 +98,9 @@ FusionAhrsSettings ahrs_settings =  {
 };
 #endif
 
-//void ImuDataChedHandler(uint32_t Evt, void *pCtx)
+//void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 
-void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
+void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 {
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
@@ -108,7 +108,7 @@ void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 	ImuQuat_t quat;
 	long q[4];
 
-#ifdef INVN
+#if 1// INVN
 		s_Imu.Read(accdata);
 		s_Imu.Read(gyrodata);
 		s_Imu.Read(magdata);
@@ -152,9 +152,10 @@ static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 	switch (Evt)
 	{
 		case DEV_EVT_DATA_RDY:
-			//app_sched_event_put(NULL, 0, ImuDataChedHandler);
-			ImuDataChedHandler(NULL, 0);
-			//g_MotSensor.Read(accdata);
+			// Defer the read and BLE send to the main loop. The FIFO drain
+			// runs in the GPIOTE ISR; doing the send here too races vQuat
+			// against the next sample and ties up the connection interval.
+			AppEvtHandlerQue(0, 0, ImuDataChedHandler);
 			break;
 	}
 }
@@ -186,8 +187,7 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 	if (IntNo == IMU_INT_NO)
 	{
 #if 1
-		s_Imu.IntHandler();
-		ImuDataChedHandler(NULL, 0);
+		s_Imu.IntHandler();	// Drives ImuEvtHandler -> ImuDataChedHandler once
 		return;
 #else
 		s_MotSensor.IntHandler();
@@ -276,6 +276,12 @@ bool ICM20948Init(DeviceIntrf * const pIntrf, Timer * const pTimer)
 	    FusionAhrsSetSettings(&ahrs, &ahrs_settings);
 	}
 #endif
+	if (res)
+	{
+		s_Imu.Enable();
+		s_Imu.Quaternion(true, 6);	// TEST: 6-axis, no compass, to compare bad/fill rate
+	}
+
 	msDelay(100);
 	IOPinConfig(IMU_INT_PORT, IMU_INT_PIN, IMU_INT_PINOP,
 				IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL);

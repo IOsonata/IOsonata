@@ -103,6 +103,9 @@ SOFTWARE.
 2: accel samples available
 8: secondary samples available	*/
 #define ICM20948_DMP_DATA_RDY_STATUS_REG				(8 * 16 + 10)
+#define ICM20948_DMP_DATA_RDY_GYRO_AVAILABLE			(0x0001)	//!< gyro samples available
+#define ICM20948_DMP_DATA_RDY_ACCEL_AVAILABLE			(0x0002)	//!< accel samples available
+#define ICM20948_DMP_DATA_RDY_SECONDARY_AVAILABLE		(0x0008)	//!< secondary (compass) samples available
 
 // batch mode
 #define ICM20948_DMP_BM_BATCH_CNTR						(27 * 16)

@@ -104,6 +104,8 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 
 	vpIcm = pIcm;
 
+	vQuatSeq = 0;	// seqlock starts even (stable)
+
 	// Disable DMP & FIFO before FIFO can be reseted and DMP firmware loaded
 	uint16_t regaddr = ICM20948_USER_CTRL;
 	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
@@ -174,8 +176,11 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 
 	ResetDMPCtrlReg();
 
-	// Fifo watermark 80%
-	uint16_t val = EndianCvt16(800);
+	// FIFO watermark set to about one DMP packet so the interrupt fires once
+	// per sample, draining the FIFO as each sample arrives the way the INVN
+	// per-sample DMP interrupt does. A high watermark lets the FIFO accumulate
+	// many packets between services and overflow.
+	uint16_t val = EndianCvt16(64);
 	WriteDMP(ICM20948_DMP_FIFO_WATERMARK_REG, (uint8_t*)&val, 2);
 
 	regaddr = ICM20948_FIFO_CFG_REG;
@@ -193,8 +198,10 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	WriteDMP(ICM20948_DMP_BAC_RATE, (uint8_t*)&d, 1);
 	WriteDMP(ICM20948_DMP_B2S_RATE, (uint8_t*)&d, 1);
 
-	uint32_t freq = vpGyro->SamplingFrequency();
-	uint16_t div = 1125000 / freq - 1;
+	// DMP ODR dividers are relative to the hardware sample rate, so 0 means
+	// every hardware sample. The hardware rate is set by the accel/gyro
+	// SMPLRT_DIV during sensor init.
+	uint16_t div = EndianCvt16(0);
 
 	regaddr = ICM20948_DMP_ODR_ACCEL;
 	WriteDMP(regaddr, (uint8_t*)&div, 2);
@@ -233,30 +240,67 @@ void ImuIcm20948::ResetDMPCtrlReg()
 	WriteDMP(ICM20948_DMP_DATA_INTR_CTL_REG, d, 2);
 	WriteDMP(ICM20948_DMP_MOTION_EVENT_CTL_REG, d, 2);
 	WriteDMP(ICM20948_DMP_DATA_RDY_STATUS_REG, d, 2);
+
+	vSensorCtrl = 0;
+}
+
+void ImuIcm20948::SetSensorCtrl(uint16_t Bits, bool bEnable)
+{
+	if (bEnable)
+	{
+		vSensorCtrl |= Bits;
+	}
+	else
+	{
+		vSensorCtrl &= ~Bits;
+	}
+
+	// DMP memory is big-endian
+	uint16_t v = EndianCvt16(vSensorCtrl);
+	WriteDMP(ICM20948_DMP_DATA_OUT_CTL1_REG, (uint8_t*)&v, 2);
+
+	if (vbIntEn)
+	{
+		WriteDMP(ICM20948_DMP_DATA_INTR_CTL_REG, (uint8_t*)&v, 2);
+	}
 }
 
 void ImuIcm20948::ResetFifo()
 {
 	uint16_t regaddr;
 	uint16_t cnt;
+	int tries = 0;
 
+	// Stop the data source so the FIFO does not refill during reset.
 	regaddr = ICM20948_USER_CTRL_REG;
 	uint8_t d = Read8((uint8_t*)&regaddr, 2);
-	Write8((uint8_t*)&regaddr, 2, d & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN));
+	uint8_t uc = d & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
 
+	// ICM20948 (Diamond) FIFO reset: assert all five reset bits (0x1F) then
+	// release to 0x1E, preserving the upper 3 bits of FIFO_RST. The released
+	// state is 0x1E, not 0x00. Loop until the length reads zero, bounded, with
+	// no delay so this is safe to call from the service path. Matches the INVN
+	// dmp_reset_fifo sequence.
 	do {
+		Write8((uint8_t*)&regaddr, 2, uc);	// USER_CTRL: FIFO/DMP off
+
+		uint8_t rst;
 		regaddr = ICM20948_FIFO_RST_REG;
-		Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_RST_FIFO_RESET_MASK);
-		Write8((uint8_t*)&regaddr, 2, ~ICM20948_FIFO_RST_FIFO_RESET_MASK);//0x1e);
-		msDelay(1);
+		rst = Read8((uint8_t*)&regaddr, 2) & 0xE0;
+		Write8((uint8_t*)&regaddr, 2, rst | 0x1F);	// assert
+		Write8((uint8_t*)&regaddr, 2, rst | 0x1E);	// release
 
 		regaddr = ICM20948_FIFO_COUNTH_REG;
 		cnt = EndianCvt16(Read16((uint8_t*)&regaddr, 2)) & 0x1FFF;
-	} while (cnt != 0);
+
+		regaddr = ICM20948_USER_CTRL_REG;
+		tries++;
+	} while (cnt != 0 && tries < 6);
 
 	regaddr = ICM20948_INT_STATUS_2_REG;
 	Write16((uint8_t*)&regaddr, 2, 0);
 
+	// Re-enable FIFO and DMP.
 	regaddr = ICM20948_USER_CTRL_REG;
 	Write8((uint8_t*)&regaddr, 2, d);
 }
@@ -284,6 +328,10 @@ bool ImuIcm20948::SetDMPAccelScale()
 		case 16:
 			scale = (1 << 28);  // 268435456L
 			scale2 = (1 << 16);	// 65536L
+			break;
+		default:
+			scale = (1 << 25);
+			scale2 = (1 << 19);
 			break;
 	}
 
@@ -335,6 +383,9 @@ bool ImuIcm20948::SetDMPGyroScale()
 			break;
 		case 2000:
 			scale = (1 << 28);
+			break;
+		default:
+			scale = (1 << 25);
 			break;
 	}
 	/**
@@ -1318,9 +1369,7 @@ bool ImuIcm20948::Enable()
 	vpIcm->Write8((uint8_t*)&regaddr, 2, d);
 
 	dout = ICM20948_DMP_DATA_OUT_CTL1_ACCEL_SET | ICM20948_DMP_DATA_OUT_CTL1_GYRO_SET | ICM20948_DMP_DATA_OUT_CTL1_CPASS_SET;
-	dout = EndianCvt16(dout);
-	regaddr = ICM20948_DMP_DATA_OUT_CTL1_REG;
-	WriteDMP(regaddr, (uint8_t*)&dout, 2);
+	SetSensorCtrl(dout, true);
 
 	regaddr = ICM20948_FIFO_EN_2_REG;
 	Write8((uint8_t*)&regaddr, 2, ICM20948_FIFO_EN_2_FIFO_EN_ALL);
@@ -1381,9 +1430,7 @@ IMU_FEATURE ImuIcm20948::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
 
 	if (FeatureBit & IMU_FEATURE_QUATERNION)
 	{
-		uint16_t f = ICM20948_DMP_QUAT9_SET;
-		uint16_t m = ICM20948_DMP_DATA_OUT_CTL1_REG;
-		WriteDMP(m, (uint8_t*)&f, 2);
+		SetSensorCtrl(ICM20948_DMP_DATA_OUT_CTL1_QUAT9_SET, bEnDis);
 	}
 
 	if (FeatureBit & IMU_FEATURE_COMPASS)
@@ -1456,21 +1503,72 @@ bool ImuIcm20948::Pedometer(bool bEn)
 bool ImuIcm20948::Quaternion(bool bEn, int NbAxis)
 {
 	Imu::Feature(IMU_FEATURE_QUATERNION, bEn);
-	uint16_t f = ICM20948_DMP_QUAT9_SET;
-	uint16_t m = ICM20948_DMP_DATA_OUT_CTL1_REG;
 
-	if (NbAxis <9)
+	uint16_t regaddr;
+
+	if (bEn)
 	{
-		f = ICM20948_DMP_QUAT6_SET;
+		// DMP output ODR divider is relative to the hardware sample rate
+		// (set by the gyro/accel SMPLRT_DIV), not the raw 1125 kHz base. The
+		// quaternion runs at the sensor rate, so the divider is 0 (every
+		// hardware sample). Writing the full 1125k/freq-1 here double-divides
+		// and makes the DMP emit stale fill between fusion updates.
+		uint16_t div = EndianCvt16(0);
+
+		regaddr = (NbAxis < 9) ? ICM20948_DMP_ODR_QUAT6 : ICM20948_DMP_ODR_QUAT9;
+		WriteDMP(regaddr, (uint8_t*)&div, 2);
+
+		// Accuracy outputs go through data output control 2 and require the
+		// HEADER2 bit in control 1. This matches inv_enable_sensor_internal:
+		// game RV control word is 0x0808, rotation vector is 0x0408, both with
+		// the low 0x0008 HEADER2 bit set.
+		uint16_t ctrl2;
+		uint16_t mevt;
+		uint16_t drdy;
+		if (NbAxis < 9)
+		{
+			ctrl2 = ICM20948_DMP_DATA_OUT_CTL2_ACCEL_ACCURACY_SET | ICM20948_DMP_DATA_OUT_CTL2_GYRO_ACCURACY_SET;
+			mevt = ICM20948_DMP_MOTION_EVENT_CTL_ACCEL_CAL_EN | ICM20948_DMP_MOTION_EVENT_CTL_GYRO_CAL_EN;
+			drdy = ICM20948_DMP_DATA_RDY_GYRO_AVAILABLE | ICM20948_DMP_DATA_RDY_ACCEL_AVAILABLE;
+		}
+		else
+		{
+			ctrl2 = ICM20948_DMP_DATA_OUT_CTL2_ACCEL_ACCURACY_SET | ICM20948_DMP_DATA_OUT_CTL2_GYRO_ACCURACY_SET |
+					ICM20948_DMP_DATA_OUT_CTL2_CPASS_ACCURACY_SET;
+			mevt = ICM20948_DMP_MOTION_EVENT_CTL_NINE_AXIS_EN | ICM20948_DMP_MOTION_EVENT_CTL_ACCEL_CAL_EN |
+				   ICM20948_DMP_MOTION_EVENT_CTL_GYRO_CAL_EN | ICM20948_DMP_MOTION_EVENT_CTL_COMPASS_CAL_EN;
+			drdy = ICM20948_DMP_DATA_RDY_GYRO_AVAILABLE | ICM20948_DMP_DATA_RDY_ACCEL_AVAILABLE |
+				   ICM20948_DMP_DATA_RDY_SECONDARY_AVAILABLE;
+		}
+
+		// Data output control 2 (accuracy fields, carried in the header2 word).
+		uint16_t v = EndianCvt16(ctrl2);
+		regaddr = ICM20948_DMP_DATA_OUT_CTL2_REG;
+		WriteDMP(regaddr, (uint8_t*)&v, 2);
+
+		v = EndianCvt16(mevt);
+		regaddr = ICM20948_DMP_MOTION_EVENT_CTL_REG;
+		WriteDMP(regaddr, (uint8_t*)&v, 2);
+
+		v = EndianCvt16(drdy);
+		regaddr = ICM20948_DMP_DATA_RDY_STATUS_REG;
+		WriteDMP(regaddr, (uint8_t*)&v, 2);
+	}
+	else
+	{
+		uint16_t v = 0;
+		regaddr = ICM20948_DMP_DATA_OUT_CTL2_REG;
+		WriteDMP(regaddr, (uint8_t*)&v, 2);
+		regaddr = ICM20948_DMP_MOTION_EVENT_CTL_REG;
+		WriteDMP(regaddr, (uint8_t*)&v, 2);
 	}
 
-	WriteDMP(m, (uint8_t*)&f, 2);
+	// Control 1: quaternion output bit plus the HEADER2 bit, since accuracy
+	// data is emitted via the header2 word.
+	uint16_t f = (NbAxis < 9) ? ICM20948_DMP_DATA_OUT_CTL1_QUAT6_SET : ICM20948_DMP_DATA_OUT_CTL1_QUAT9_SET;
+	f |= ICM20948_DMP_DATA_OUT_CTL1_HEADER2_SET;
 
-	if (vbIntEn)
-	{
-		m = ICM20948_DMP_DATA_INTR_CTL_REG;
-		WriteDMP(m, (uint8_t*)&f, 2);
-	}
+	SetSensorCtrl(f, bEn);
 
 	return true;
 }
@@ -1484,13 +1582,37 @@ bool ImuIcm20948::Tap(bool bEn)
 
 static size_t s_FifoProcessCnt = 0;
 static size_t s_BadHdrCnt = 0;
+static volatile size_t s_OverflowCnt = 0;	// Inspect via debugger; no UART on test board
+// Quaternion debug snapshots, inspect via debugger (no UART on test board).
+static volatile uint16_t s_DbgQuatHdr = 0;		// Header bits seen when a quat record was parsed
+static volatile int32_t s_DbgQuatRaw[3] = {0, 0, 0};	// Last raw Q30 ints
+static volatile float s_DbgQuatWXYZ[4] = {0, 0, 0, 0};	// Last W,X,Y,Z floats
+// Easy-to-watch scalars: header of the packet and the three raw Q30 ints
+// and the first quat data byte offset reached, captured on each QUAT9 parse.
+static volatile uint16_t s_DbgHdrIn = 0;
+static volatile uint16_t s_DbgHdrRing[16] = {0};
+static volatile uint32_t s_DbgHdrRingIdx = 0;
+static volatile uint32_t s_DbgQuatValidCnt = 0;		// quaternions with magnitude near 1
+static volatile uint32_t s_DbgQuatBadCnt = 0;		// quaternions with vector part sumsq >= 1
+static volatile uint32_t s_DbgQuatFillCnt = 0;		// fill samples: q0==q1==q2 (DMP did not write)
+static volatile uint32_t s_DbgConsumeMismatchCnt = 0;	// packets where consumed != required
+static volatile uint16_t s_DbgFirstMismatchReq = 0;	// req of first mismatched packet
+static volatile uint16_t s_DbgFirstMismatchCnt = 0;	// cnt of first mismatched packet
+static volatile uint16_t s_DbgFirstMismatchHdr = 0;	// header of first mismatched packet
+static volatile uint16_t s_DbgFillHdr = 0;			// header of first fill sample seen
+static volatile uint16_t s_DbgFillHdr2 = 0;			// header2 of first fill sample seen
+static volatile int32_t s_DbgFillQ0 = 0;			// raw q0 of first fill sample
+static volatile int32_t s_DbgQ0 = 0;
+static volatile int32_t s_DbgQ1 = 0;
+static volatile int32_t s_DbgQ2 = 0;
+static volatile uint8_t s_DbgQuatBytes[14] = {0};	// raw 14 bytes the quat9 decode saw
 
 bool ImuIcm20948::UpdateData()
 {
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
 	uint8_t status[4];
 	uint8_t d[20];
-	uint64_t t;
+	uint64_t t = 0;
 	bool res = false;
 
 	Read((uint8_t*)&regaddr, 2, status, 4);
@@ -1511,7 +1633,6 @@ bool ImuIcm20948::UpdateData()
 	}
 	if (status[0] & ICM20948_INT_STATUS_I2C_MIST_INT)
 	{
-		printf("ICM20948_INT_STATUS_I2C_MIST_INT\n");
 	}
 	if (status[0] & ICM20948_INT_STATUS_DMP_INT1 || status[3])
 	{
@@ -1531,7 +1652,7 @@ bool ImuIcm20948::UpdateData()
 
 	if (status[2])
 	{
-		printf("Fifo overflow\r\n");
+		s_OverflowCnt++;
 		ResetFifo();
 		vFifoDataLen = 0;
 		vFifoHdr = vFifoHdr2 = 0;
@@ -1541,96 +1662,151 @@ bool ImuIcm20948::UpdateData()
 	{
 		s_FifoProcessCnt++;
 
+		// Read the controller FIFO byte count (13 bits).
 		regaddr = ICM20948_FIFO_COUNTH_REG;
-		size_t cnt = Read16((uint8_t*)&regaddr, 2);
-		cnt = EndianCvt16(cnt);
+		size_t cnt = EndianCvt16(Read16((uint8_t*)&regaddr, 2)) & 0x1FFF;
 
-		regaddr = ICM20948_FIFO_R_W_REG;
-		uint8_t *p = &vFifo[vFifoDataLen];
-
-		while (cnt > 0)//ICM20948_FIFO_PAGE_SIZE)
+		// If the controller holds more than the hardware FIFO can store along
+		// with what is already cached, the FIFO has overflowed and its bytes
+		// are corrupt. Discard everything and reset, the same way the INVN
+		// library bails when in_fifo exceeds the mirror buffer. Reading through
+		// an overflowed FIFO is what produced the intermittent bad and fill
+		// quaternion samples.
+		if (cnt + vFifoDataLen > 1024)
 		{
-			int l = min((size_t)ICM20948_FIFO_PAGE_SIZE, min(cnt, sizeof(vFifo) - vFifoDataLen));
+			s_OverflowCnt++;
+			ResetFifo();
+			vFifoDataLen = 0;
+			vFifoHdr = vFifoHdr2 = 0;
+			return true;
+		}
 
-			if (l == 0)
+		// Drain exactly cnt bytes from the controller into vFifo, then parse
+		// whole packets. Bound each read so vFifo never overflows; parse to
+		// free space when it fills. Do not re-read the count mid-drain: the
+		// count read above is the amount the controller had at int time, and
+		// reading a fresh count mid-packet is what desyncs the byte stream.
+		regaddr = ICM20948_FIFO_R_W_REG;
+		while (cnt > 0)
+		{
+			size_t space = sizeof(vFifo) - vFifoDataLen;
+			if (space == 0)
+			{
+				// Buffer full. Parse to free space. If parsing cannot make
+				// progress (a single packet larger than the buffer), bail to
+				// avoid an infinite loop.
+				size_t before = vFifoDataLen;
+				ProcessFifoPackets(t);
+				if (vFifoDataLen == before)
+				{
+					ResetFifo();
+					vFifoDataLen = 0;
+					vFifoHdr = vFifoHdr2 = 0;
+					break;
+				}
+				continue;
+			}
+
+			size_t chunk = min(cnt, space);
+			if (chunk > ICM20948_FIFO_PAGE_SIZE)
+			{
+				chunk = ICM20948_FIFO_PAGE_SIZE;
+			}
+
+			int got = Read((uint8_t*)&regaddr, 2, &vFifo[vFifoDataLen], chunk);
+			if (got <= 0)
 			{
 				break;
 			}
-			l = Read((uint8_t*)&regaddr, 2, p, l);
-			p += l;
-			vFifoDataLen += l;
-			cnt -= l;
+			vFifoDataLen += got;
+			cnt -= got;
+
+			ProcessFifoPackets(t);
 		}
 
-		p = vFifo;
-
-		while (vFifoDataLen > 0)
-		{
-			if (vFifoHdr == 0 && vFifoHdr2 == 0)
-			{
-				int l = 0;
-
-				// new packet
-				vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
-
-				if ((vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
-				{
-					s_BadHdrCnt++;
-					printf("Bad hdr %x %d %d %d\r\n", vFifoHdr, s_BadHdrCnt, s_FifoProcessCnt, vFifoDataLen);
-					ResetFifo();
-					vFifoDataLen = 0;
-					vFifoHdr = 0;
-					cnt = 0;
-					return false;
-				}
-
-				//vFifoHdr |= ICM20948_FIFO_HEADER_FOOTER;
-				l = 2;
-
-				if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
-				{
-					if (vFifoDataLen < 4)
-					{
-						vFifoHdr = 0;
-						return false;
-					}
-					vFifoHdr2 = ((uint16_t)p[2] << 8U) | ((uint16_t)p[3] & 0xFF);
-
-					if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
-					{
-						s_BadHdrCnt++;
-						printf("Bad hdr2 %x %d %d\r\n", vFifoHdr2, s_BadHdrCnt, s_FifoProcessCnt);
-						ResetFifo();
-						vFifoDataLen = 0;
-						vFifoHdr = vFifoHdr2 = 0;
-						cnt = 0;
-						return false;
-					}
-
-					l += 2;
-					vFifoHdr &= ~ICM20948_FIFO_HEADER_HEADER2;
-				}
-				vFifoDataLen -= l;
-
-				p += l;
-
-			}
-			int l = ProcessDMPFifo(p, vFifoDataLen, t);
-			if (l == 0)
-			{
-				break;//return false;
-			}
-			vFifoDataLen -= l;
-			p += l;
-		}
-		if (vFifoDataLen > 0 && p != vFifo)
-		{
-			memmove(vFifo, p, vFifoDataLen);
-		}
-
+		// Parse any whole packets still cached after the controller is drained.
+		ProcessFifoPackets(t);
 	}
 
 	return true;
+}
+
+// Parses whole DMP packets currently cached in vFifo. Returns the number of
+// bytes consumed from vFifo. Leftover partial-packet bytes are moved to the
+// front of vFifo and vFifoDataLen is updated. vFifoHdr/vFifoHdr2 retain the
+// pending packet header across calls when a packet is split across reads.
+size_t ImuIcm20948::ProcessFifoPackets(uint64_t t)
+{
+	uint8_t *p = vFifo;
+	size_t start = vFifoDataLen;
+
+	while (vFifoDataLen > 0)
+	{
+		if (vFifoHdr == 0 && vFifoHdr2 == 0)
+		{
+			int l = 0;
+
+			// new packet
+			vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
+
+			// DIAG: record every packet header read into a ring
+			s_DbgHdrRing[s_DbgHdrRingIdx & 15] = vFifoHdr;
+			s_DbgHdrRingIdx++;
+
+			if ((vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
+			{
+				s_BadHdrCnt++;
+				ResetFifo();
+				vFifoDataLen = 0;
+				vFifoHdr = 0;
+				return start;
+			}
+
+			l = 2;
+
+			if (vFifoHdr & ICM20948_FIFO_HEADER_HEADER2)
+			{
+				if (vFifoDataLen < 4)
+				{
+					// Header2 word not fully cached. Restore the header bit
+					// state and wait for more data.
+					vFifoHdr = 0;
+					break;
+				}
+				vFifoHdr2 = ((uint16_t)p[2] << 8U) | ((uint16_t)p[3] & 0xFF);
+
+				if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
+				{
+					s_BadHdrCnt++;
+					ResetFifo();
+					vFifoDataLen = 0;
+					vFifoHdr = vFifoHdr2 = 0;
+					return start;
+				}
+
+				l += 2;
+				vFifoHdr &= ~ICM20948_FIFO_HEADER_HEADER2;
+			}
+			vFifoDataLen -= l;
+
+			p += l;
+		}
+
+		int l = ProcessDMPFifo(p, vFifoDataLen, t);
+		if (l == 0)
+		{
+			break;
+		}
+		vFifoDataLen -= l;
+		p += l;
+	}
+
+	if (vFifoDataLen > 0 && p != vFifo)
+	{
+		memmove(vFifo, p, vFifoDataLen);
+	}
+
+	return start - vFifoDataLen;
 }
 #if 0
 void ImuIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
@@ -1948,6 +2124,43 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 	size_t cnt = 0;
 	uint8_t *d = pFifo;//[ICM20948_FIFO_PAGE_SIZE];
 
+	uint16_t dbgHdrIn = vFifoHdr;	// header before any bits are cleared
+
+	// Compute total bytes required for all records flagged in the current
+	// header. If the cached data does not yet hold a full packet, consume
+	// nothing and return 0 so the caller tops up the buffer. This keeps the
+	// parser all-or-nothing and prevents header bits from being half-cleared
+	// across calls, which drifts the read pointer.
+	size_t req = 0;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_ACCEL)  req += ICM20948_FIFO_HEADER_ACCEL_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_GYRO)   req += ICM20948_FIFO_HEADER_GYRO_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_CPASS)  req += ICM20948_FIFO_HEADER_CPASS_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_ALS)    req += ICM20948_FIFO_HEADER_ALS_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_QUAT6)  req += ICM20948_FIFO_HEADER_QUAT6_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_QUAT9)  req += ICM20948_FIFO_HEADER_QUAT9_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_PEDO_QUAT6) req += ICM20948_FIFO_HEADER_PEDO_QUAT6_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_GEOMAG) req += ICM20948_FIFO_HEADER_GEOMAG_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_PRESS_TEMP) req += ICM20948_FIFO_HEADER_PRESS_TEMP_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_GYRO) req += ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_CPASS) req += ICM20948_FIFO_HEADER_CALIB_CPASS_SIZE;
+	if (vFifoHdr & ICM20948_FIFO_HEADER_STEP_DETECTOR) req += ICM20948_FIFO_HEADER_STEP_DETECTOR_SIZE;
+
+	if (vFifoHdr2 & ICM20948_FIFO_HEADER2_ACCEL_ACCUR) req += ICM20948_FIFO_HEADER2_ACCEL_ACCUR_SIZE;
+	if (vFifoHdr2 & ICM20948_FIFO_HEADER2_GYRO_ACCUR)  req += ICM20948_FIFO_HEADER2_GYRO_ACCUR_SIZE;
+	if (vFifoHdr2 & ICM20948_FIFO_HEADER2_CPASS_ACCUR) req += ICM20948_FIFO_HEADER2_CPASS_ACCUR_SIZE;
+	if (vFifoHdr2 & ICM20948_FIFO_HEADER2_FSYNC)       req += ICM20948_FIFO_HEADER2_FSYNC_SIZE;
+	if (vFifoHdr2 & ICM20948_FIFO_HEADER2_PICKUP)      req += ICM20948_FIFO_HEADER2_PICKUP_SIZE;
+	if (vFifoHdr2 & ICM20948_FIFO_HEADER2_ACTI_RECOG)  req += ICM20948_FIFO_HEADER2_ACTI_RECOG_SIZE;
+	if (vFifoHdr2 & ICM20948_FIFO_HEADER2_SECOND_ONOFF) req += ICM20948_FIFO_HEADER2_SECOND_ONOFF_SIZE;
+
+	// Footer is always present at the end of a packet.
+	req += ICM20948_FIFO_FOOTER_SIZE;
+
+	if (Len < req)
+	{
+		return 0;
+	}
+
 	if (vFifoHdr & ICM20948_FIFO_HEADER_ACCEL)
 	{
 		if (Len < ICM20948_FIFO_HEADER_ACCEL_SIZE)
@@ -2043,6 +2256,48 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 			return cnt;
 		}
 
+		// 3 x int32 big-endian, Q30 fixed point. W is reconstructed.
+		int32_t q[3];
+		for (int i = 0; i < 3; i++)
+		{
+			q[i] = ((int32_t)d[i * 4] << 24) | ((int32_t)d[i * 4 + 1] << 16) |
+				   ((int32_t)d[i * 4 + 2] << 8) | ((int32_t)d[i * 4 + 3] & 0xFF);
+		}
+
+		float x = (float)q[0] / (float)(1UL << 30);
+		float y = (float)q[1] / (float)(1UL << 30);
+		float z = (float)q[2] / (float)(1UL << 30);
+		float sumsq = x * x + y * y + z * z;
+		float w = sumsq < 1.0f ? sqrtf(1.0f - sumsq) : 0.0f;
+		if (sumsq < 1.0f) s_DbgQuatValidCnt++; else s_DbgQuatBadCnt++;
+		if (q[0] == q[1] && q[1] == q[2]) { if (s_DbgQuatFillCnt == 0) { s_DbgFillHdr = dbgHdrIn; s_DbgFillHdr2 = vFifoHdr2; s_DbgFillQ0 = q[0]; } s_DbgQuatFillCnt++; }
+
+		// Only propagate physically valid, non-fill quaternions. Invalid
+		// (magnitude > 1) and fill (all three raw equal) samples keep the last
+		// good orientation rather than jumping the output.
+		if (sumsq < 1.0f && !(q[0] == q[1] && q[1] == q[2]))
+		{
+			if (w < 0.0f)
+			{
+				w = -w; x = -x; y = -y; z = -z;
+			}
+
+			// INVN delivers ref_quat as W,X,Y,Z to the app handler. Bracket
+			// the multi-field write with an odd/even seq bump so a concurrent
+			// Read retries instead of seeing a torn quaternion.
+			vQuatSeq++;			// odd: write in progress
+			vQuat.Q1 = w;
+			vQuat.Q2 = x;
+			vQuat.Q3 = y;
+			vQuat.Q4 = z;
+			vQuat.Timestamp = Timestamp;
+			vQuatSeq++;			// even: stable
+		}
+
+		s_DbgQuatHdr = ICM20948_FIFO_HEADER_QUAT6;
+		s_DbgQuatRaw[0] = q[0]; s_DbgQuatRaw[1] = q[1]; s_DbgQuatRaw[2] = q[2];
+		s_DbgQuatWXYZ[0] = w; s_DbgQuatWXYZ[1] = x; s_DbgQuatWXYZ[2] = y; s_DbgQuatWXYZ[3] = z;
+
 		d += ICM20948_FIFO_HEADER_QUAT6_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
 		Len -= ICM20948_FIFO_HEADER_QUAT6_SIZE;
@@ -2055,6 +2310,52 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 		{
 			return cnt;
 		}
+
+		// 3 x int32 big-endian Q30, followed by 2-byte heading accuracy.
+		// W (scalar part) is reconstructed. Matches the InvenSense
+		// inv_icm20948_convert_rotation_vector with identity chip-to-body:
+		// sign-normalize so W >= 0, output Android order X,Y,Z,W.
+		int32_t q[3];
+		for (int i = 0; i < 3; i++)
+		{
+			q[i] = ((int32_t)d[i * 4] << 24) | ((int32_t)d[i * 4 + 1] << 16) |
+				   ((int32_t)d[i * 4 + 2] << 8) | ((int32_t)d[i * 4 + 3] & 0xFF);
+		}
+
+		float x = (float)q[0] / (float)(1UL << 30);
+		float y = (float)q[1] / (float)(1UL << 30);
+		float z = (float)q[2] / (float)(1UL << 30);
+		float sumsq = x * x + y * y + z * z;
+		float w = sumsq < 1.0f ? sqrtf(1.0f - sumsq) : 0.0f;
+		if (sumsq < 1.0f) s_DbgQuatValidCnt++; else s_DbgQuatBadCnt++;
+		if (q[0] == q[1] && q[1] == q[2]) { if (s_DbgQuatFillCnt == 0) { s_DbgFillHdr = dbgHdrIn; s_DbgFillHdr2 = vFifoHdr2; s_DbgFillQ0 = q[0]; } s_DbgQuatFillCnt++; }
+
+		// Only propagate physically valid, non-fill quaternions.
+		if (sumsq < 1.0f && !(q[0] == q[1] && q[1] == q[2]))
+		{
+			if (w < 0.0f)
+			{
+				w = -w; x = -x; y = -y; z = -z;
+			}
+
+			// INVN delivers ref_quat as W,X,Y,Z to the app handler. Bracket
+			// the multi-field write with an odd/even seq bump so a concurrent
+			// Read retries instead of seeing a torn quaternion.
+			vQuatSeq++;			// odd: write in progress
+			vQuat.Q1 = w;
+			vQuat.Q2 = x;
+			vQuat.Q3 = y;
+			vQuat.Q4 = z;
+			vQuat.Timestamp = Timestamp;
+			vQuatSeq++;			// even: stable
+		}
+
+		s_DbgQuatHdr = ICM20948_FIFO_HEADER_QUAT9;
+		s_DbgQuatRaw[0] = q[0]; s_DbgQuatRaw[1] = q[1]; s_DbgQuatRaw[2] = q[2];
+		s_DbgQuatWXYZ[0] = w; s_DbgQuatWXYZ[1] = x; s_DbgQuatWXYZ[2] = y; s_DbgQuatWXYZ[3] = z;
+		s_DbgHdrIn = dbgHdrIn;
+		s_DbgQ0 = q[0]; s_DbgQ1 = q[1]; s_DbgQ2 = q[2];
+		for (int i = 0; i < 14; i++) s_DbgQuatBytes[i] = d[i];
 
 		d += ICM20948_FIFO_HEADER_QUAT9_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT9_SIZE;
@@ -2103,18 +2404,11 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 
 	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_GYRO)
 	{
-		// Hardware unit scaled by 2^15
-		// Although bit is set but no data, try to read data will corrupt fifo
-#if 0
-		if (Len < ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE)
-		{
-			return cnt;
-		}
-
+		// Calibrated gyro record is present in the stream and counted in req.
+		// Advance past it to keep the read pointer aligned. Data not used here.
 		d += ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
 		cnt += ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
 		Len -= ICM20948_FIFO_HEADER_CALIB_GYRO_SIZE;
-#endif
 		vFifoHdr &= ~ICM20948_FIFO_HEADER_CALIB_GYRO; // Clear bit
 	}
 	if (vFifoHdr & ICM20948_FIFO_HEADER_CALIB_CPASS)
@@ -2248,6 +2542,19 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 	cnt += ICM20948_FIFO_FOOTER_SIZE;
 	Len -= ICM20948_FIFO_FOOTER_SIZE;
 	vFifoHdr &= ~ICM20948_FIFO_HEADER_FOOTER; // Clear bit
+
+	// DIAG: cnt consumed must equal req computed at entry. A mismatch is a
+	// per-packet desync of exactly (req - cnt) bytes.
+	if (cnt != req)
+	{
+		s_DbgConsumeMismatchCnt++;
+		if (s_DbgFirstMismatchReq == 0)
+		{
+			s_DbgFirstMismatchReq = req;
+			s_DbgFirstMismatchCnt = cnt;
+			s_DbgFirstMismatchHdr = dbgHdrIn;
+		}
+	}
 
 	vFifoHdr = vFifoHdr2 = 0;
 

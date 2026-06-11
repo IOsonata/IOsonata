@@ -65,7 +65,21 @@ public:
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 
-	virtual bool Read(ImuQuat_t &Data) { return Imu::Read(Data); }
+	virtual bool Read(ImuQuat_t &Data) {
+		// Seqlock read. The parser bumps vQuatSeq to odd before writing vQuat
+		// and to even after. Retry until a stable even count brackets the copy,
+		// so Data never mixes fields from two different samples (a torn read
+		// passes the magnitude gate and shows as an orientation jump).
+		for (int tries = 0; tries < 8; tries++) {
+			uint32_t s0 = vQuatSeq;
+			Data = vQuat;
+			uint32_t s1 = vQuatSeq;
+			if ((s0 & 1) == 0 && s0 == s1) {
+				break;
+			}
+		}
+		return true;
+	}
 	virtual bool Read(ImuEuler_t &Data) { return Imu::Read(Data); }
 
 	/**
@@ -149,12 +163,18 @@ private:
 		return vpIcm->Write(pCmdAddr, CmdAddrLen, pData, DataLen);
 	}
 	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
+	// Parses whole DMP packets cached in vFifo, returns bytes consumed.
+	size_t ProcessFifoPackets(uint64_t Timestamp);
 
 	static int InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
 	static int InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
 	//static void SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
 	void ResetDMPCtrlReg();
 	void ResetFifo();
+	// Sets bits in the cached DMP DATA_OUT_CTL1 word when bEnable is true, clears
+	// them otherwise, then writes the word to DMP memory in big-endian order.
+	// Also mirrors the value to DATA_INTR_CTL when interrupts are enabled.
+	void SetSensorCtrl(uint16_t Bits, bool bEnable);
 	bool InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len);
 	bool UploadDMPImage(const uint8_t * const pDmpImage, int Len);//, uint16_t MemAddr);
 
@@ -162,12 +182,13 @@ private:
 //	inv_icm20948_t vInvnDev;	//!< Invn driver instance. To use with invn function calls
 	uint16_t vFifoHdr;			//!< DMP FIFO header
 	uint16_t vFifoHdr2;			//!< DMP FIFO header
-	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE * 2]; //!< FIFO cache
-//	uint8_t vFifo[ICM20948_FIFO_SIZE_MAX];
+	uint16_t vSensorCtrl;		//!< Cached DMP DATA_OUT_CTL1 value, host byte order
+	uint8_t vFifo[1024 + ICM20948_FIFO_MAX_PKT_SIZE]; //!< FIFO cache sized to mirror the 1024-byte hardware FIFO plus one packet of carryover
+	volatile uint32_t vQuatSeq;	//!< Sequence counter for tear-free vQuat reads. Odd while the parser writes vQuat, even when stable.
 	size_t vFifoDataLen;		//!< Data length currently in fifo
 	bool vbDmpEnabled;
 };
 
 /** @} end group IMU */
 
-#endif // __IMU_INVN_ICM20948_H__
+#endif // __IMU_ICM20948_H__
