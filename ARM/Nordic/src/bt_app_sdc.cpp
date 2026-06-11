@@ -61,6 +61,7 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
 #include "bt_pds_sdc.h"				// BtSmpBondSdcInit (flash-backed bond persistence)
 #include "nrf_mpsl.h"
@@ -871,8 +872,14 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
-		//BtGapServiceInit();//&s_BtDevSdc.Srvc[s_BtDevSdc.NbSrvc]);
 		BtAppInitUserServices();
+
+		// Register Device Information Service when the app supplies device
+		// info. Generic bt_dis adds it to the same ATT DB as user services.
+		if (pCfg->pDevInfo != NULL)
+		{
+			BtDisInit(pCfg);
+		}
 
 		BtGapSetAppearance(pCfg->Appearance);
 
