@@ -34,7 +34,7 @@ Hoan Hoang           Nov. 10, 2006     For codecvt_utf8 which requires
 
 #include "utf8.h"
 
-int uft8towcs_octetcount(char c)
+static int uft8towcs_octetcount(char c)
 {
    char mask = (char)0xfc;
    int retval = 6; 
@@ -52,7 +52,7 @@ int uft8towcs_octetcount(char c)
    return retval;
 }
 
-int wcstoutf8_octetcount(int c)
+static int wcstoutf8_octetcount(int c)
 {
    if (c < 0x80)
       return 1;
