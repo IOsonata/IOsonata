@@ -59,6 +59,7 @@ static const GyroSensorCfg_t s_GyroCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
+	.FltrFreq = 50000,	// enable gyro DLPF so GYRO_SMPLRT_DIV takes effect; without it the gyro free-runs at 9kHz and the DMP over-integrates
 };
 
 static const MagSensorCfg_t s_MagCfg = {
