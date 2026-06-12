@@ -65,21 +65,7 @@ public:
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 
-	virtual bool Read(ImuQuat_t &Data) {
-		// Seqlock read. The parser bumps vQuatSeq to odd before writing vQuat
-		// and to even after. Retry until a stable even count brackets the copy,
-		// so Data never mixes fields from two different samples (a torn read
-		// passes the magnitude gate and shows as an orientation jump).
-		for (int tries = 0; tries < 8; tries++) {
-			uint32_t s0 = vQuatSeq;
-			Data = vQuat;
-			uint32_t s1 = vQuatSeq;
-			if ((s0 & 1) == 0 && s0 == s1) {
-				break;
-			}
-		}
-		return true;
-	}
+	virtual bool Read(ImuQuat_t &Data) { return Imu::Read(Data); }
 	virtual bool Read(ImuEuler_t &Data) { return Imu::Read(Data); }
 
 	/**
@@ -123,7 +109,6 @@ public:
 	 * @return	True - Success.
 	 */
 	virtual bool Read(MagSensorData_t &Data) { return Imu::Read(Data); }
-	//void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
 
 
 protected:
@@ -184,7 +169,7 @@ private:
 	uint16_t vFifoHdr2;			//!< DMP FIFO header
 	uint16_t vSensorCtrl;		//!< Cached DMP DATA_OUT_CTL1 value, host byte order
 	uint8_t vFifo[1024 + ICM20948_FIFO_MAX_PKT_SIZE]; //!< FIFO cache sized to mirror the 1024-byte hardware FIFO plus one packet of carryover
-	volatile uint32_t vQuatSeq;	//!< Sequence counter for tear-free vQuat reads. Odd while the parser writes vQuat, even when stable.
+//	volatile uint32_t vQuatSeq;	//!< Sequence counter for tear-free vQuat reads. Odd while the parser writes vQuat, even when stable.
 	size_t vFifoDataLen;		//!< Data length currently in fifo
 	bool vbDmpEnabled;
 };

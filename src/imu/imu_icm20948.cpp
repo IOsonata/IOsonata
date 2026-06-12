@@ -33,18 +33,6 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <math.h>
 
-/*
-#include "Devices/Drivers/Icm20948/Icm20948.h"
-#include "Devices/Drivers/Icm20948/Icm20948Defs.h"
-#include "Devices/Drivers/Icm20948/Icm20948Dmp3Driver.h"
-#include "Devices/Drivers/Icm20948/Icm20948DataBaseDriver.h"
-#include "Devices/Drivers/Icm20948/Icm20948DataBaseControl.h"
-#include "Devices/Drivers/Icm20948/Icm20948AuxTransport.h"
-#include "Devices/Drivers/Icm20948/Icm20948MPUFifoControl.h"
-#include "Devices/Drivers/Icm20948/Icm20948Setup.h"
-#include "Devices/SensorTypes.h"
-*/
-
 #include "idelay.h"
 #include "istddef.h"
 #include "convutil.h"
@@ -52,8 +40,6 @@ SOFTWARE.
 #include "sensors/agm_icm20948.h"
 #include "sensors/agm_icm20948DMP.h"
 #include "coredev/uart.h"
-
-extern UART g_Uart;
 
 static const uint8_t s_Dmp3Image[] = {
 #include "imu/icm20948_img_dmp3a.h"
@@ -1587,35 +1573,6 @@ bool ImuIcm20948::Tap(bool bEn)
 	return true;
 }
 
-#if 0
-static size_t s_FifoProcessCnt = 0;
-static size_t s_BadHdrCnt = 0;
-static volatile size_t s_OverflowCnt = 0;	// Inspect via debugger; no UART on test board
-// Quaternion debug snapshots, inspect via debugger (no UART on test board).
-static volatile uint16_t s_DbgQuatHdr = 0;		// Header bits seen when a quat record was parsed
-static volatile int32_t s_DbgQuatRaw[3] = {0, 0, 0};	// Last raw Q30 ints
-static volatile float s_DbgQuatWXYZ[4] = {0, 0, 0, 0};	// Last W,X,Y,Z floats
-// Easy-to-watch scalars: header of the packet and the three raw Q30 ints
-// and the first quat data byte offset reached, captured on each QUAT9 parse.
-static volatile uint16_t s_DbgHdrIn = 0;
-static volatile uint16_t s_DbgHdrRing[16] = {0};
-static volatile uint32_t s_DbgHdrRingIdx = 0;
-static volatile uint32_t s_DbgQuatValidCnt = 0;		// quaternions with magnitude near 1
-static volatile uint32_t s_DbgQuatBadCnt = 0;		// quaternions with vector part sumsq >= 1
-static volatile uint32_t s_DbgQuatFillCnt = 0;		// fill samples: q0==q1==q2 (DMP did not write)
-static volatile uint32_t s_DbgConsumeMismatchCnt = 0;	// packets where consumed != required
-static volatile uint16_t s_DbgFirstMismatchReq = 0;	// req of first mismatched packet
-static volatile uint16_t s_DbgFirstMismatchCnt = 0;	// cnt of first mismatched packet
-static volatile uint16_t s_DbgFirstMismatchHdr = 0;	// header of first mismatched packet
-static volatile uint16_t s_DbgFillHdr = 0;			// header of first fill sample seen
-static volatile uint16_t s_DbgFillHdr2 = 0;			// header2 of first fill sample seen
-static volatile int32_t s_DbgFillQ0 = 0;			// raw q0 of first fill sample
-static volatile int32_t s_DbgQ0 = 0;
-static volatile int32_t s_DbgQ1 = 0;
-static volatile int32_t s_DbgQ2 = 0;
-static volatile uint8_t s_DbgQuatBytes[14] = {0};	// raw 14 bytes the quat9 decode saw
-#endif
-
 bool ImuIcm20948::UpdateData()
 {
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
@@ -1649,9 +1606,6 @@ bool ImuIcm20948::UpdateData()
 		uint16_t distatus;
 		Read((uint8_t*)&regaddr, 2, (uint8_t*)&distatus, 1);
 
-		//g_Uart.printf("DMP int %x\r\n", distatus);
-	//		Write16((uint8_t*)&regaddr, 2, distatus);
-
 		if (distatus)// & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
 		{
 			// DMP msg
@@ -1661,7 +1615,6 @@ bool ImuIcm20948::UpdateData()
 
 	if (status[2])
 	{
-//		s_OverflowCnt++;
 		ResetFifo();
 		vFifoDataLen = 0;
 		vFifoHdr = vFifoHdr2 = 0;
@@ -1669,8 +1622,6 @@ bool ImuIcm20948::UpdateData()
 
 //	if (vbDmpEnabled)
 	{
-//		s_FifoProcessCnt++;
-
 		// Read the controller FIFO byte count (13 bits).
 		regaddr = ICM20948_FIFO_COUNTH_REG;
 		size_t cnt = EndianCvt16(Read16((uint8_t*)&regaddr, 2)) & 0x1FFF;
@@ -1683,7 +1634,6 @@ bool ImuIcm20948::UpdateData()
 		// quaternion samples.
 		if (cnt + vFifoDataLen > 1024)
 		{
-//			s_OverflowCnt++;
 			ResetFifo();
 			vFifoDataLen = 0;
 			vFifoHdr = vFifoHdr2 = 0;
@@ -1758,13 +1708,8 @@ size_t ImuIcm20948::ProcessFifoPackets(uint64_t t)
 			// new packet
 			vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
 
-			// DIAG: record every packet header read into a ring
-//			s_DbgHdrRing[s_DbgHdrRingIdx & 15] = vFifoHdr;
-//			s_DbgHdrRingIdx++;
-
 			if (vFifoHdr == 0 || (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
 			{
-//				s_BadHdrCnt++;
 				ResetFifo();
 				vFifoDataLen = 0;
 				vFifoHdr = 0;
@@ -1786,7 +1731,6 @@ size_t ImuIcm20948::ProcessFifoPackets(uint64_t t)
 
 				if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
 				{
-//					s_BadHdrCnt++;
 					ResetFifo();
 					vFifoDataLen = 0;
 					vFifoHdr = vFifoHdr2 = 0;
@@ -1817,134 +1761,7 @@ size_t ImuIcm20948::ProcessFifoPackets(uint64_t t)
 
 	return start - vFifoDataLen;
 }
-#if 0
-void ImuIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
-{
-	float raw_bias_data[6];
-	inv_sensor_event_t event;
-	//uint8_t sensor_id = convert_to_generic_ids[sensortype];
 
-	memset((void *)&event, 0, sizeof(event));
-	event.sensor = sensortype;
-	event.timestamp = timestamp;
-	switch (sensortype)
-	{
-	case INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED:
-		memcpy(raw_bias_data, data, sizeof(raw_bias_data));
-		memcpy(event.data.gyr.vect, &raw_bias_data[0], sizeof(event.data.gyr.vect));
-		memcpy(event.data.gyr.bias, &raw_bias_data[3], sizeof(event.data.gyr.bias));
-		memcpy(&(event.data.gyr.accuracy_flag), arg, sizeof(event.data.gyr.accuracy_flag));
-		break;
-	case INV_ICM20948_SENSOR_MAGNETIC_FIELD_UNCALIBRATED:
-		memcpy(raw_bias_data, data, sizeof(raw_bias_data));
-		memcpy(event.data.mag.vect, &raw_bias_data[0], sizeof(event.data.mag.vect));
-		memcpy(event.data.mag.bias, &raw_bias_data[3], sizeof(event.data.mag.bias));
-		memcpy(&(event.data.gyr.accuracy_flag), arg, sizeof(event.data.gyr.accuracy_flag));
-		break;
-	case INV_ICM20948_SENSOR_GYROSCOPE:
-		memcpy(event.data.gyr.vect, data, sizeof(event.data.gyr.vect));
-		memcpy(&(event.data.gyr.accuracy_flag), arg, sizeof(event.data.gyr.accuracy_flag));
-		break;
-	case INV_ICM20948_SENSOR_GRAVITY:
-		memcpy(event.data.acc.vect, data, sizeof(event.data.acc.vect));
-		event.data.acc.accuracy_flag = inv_icm20948_get_accel_accuracy();
-		break;
-	case INV_ICM20948_SENSOR_LINEAR_ACCELERATION:
-	case INV_ICM20948_SENSOR_ACCELEROMETER:
-		memcpy(event.data.acc.vect, data, sizeof(event.data.acc.vect));
-		memcpy(&(event.data.acc.accuracy_flag), arg, sizeof(event.data.acc.accuracy_flag));
-		//vAccData.X = event.data.acc.vect[0] * 256.0;
-		//vAccData.Y = event.data.acc.vect[1] * 256.0;
-		//vAccData.Z = event.data.acc.vect[2] * 256.0;
-		//vAccData.Timestamp = timestamp;
-		//printf("a %d : %d %d %d\r\n", vAccData.Timestamp, vAccData.X, vAccData.Y, vAccData.Z);
-		break;
-	case INV_ICM20948_SENSOR_GEOMAGNETIC_FIELD:
-		memcpy(event.data.mag.vect, data, sizeof(event.data.mag.vect));
-		memcpy(&(event.data.mag.accuracy_flag), arg, sizeof(event.data.mag.accuracy_flag));
-		break;
-	case INV_ICM20948_SENSOR_GEOMAGNETIC_ROTATION_VECTOR:
-		break;
-	case INV_ICM20948_SENSOR_ROTATION_VECTOR:
-		memcpy(&(event.data.quaternion.accuracy), arg, sizeof(event.data.quaternion.accuracy));
-		memcpy(event.data.quaternion.quat, data, sizeof(event.data.quaternion.quat));
-
-#if 0
-		vQuat.Q1 = event.data.quaternion.quat[0] * 16384.0;
-		vQuat.Q2 = event.data.quaternion.quat[1] * 16384.0;
-		vQuat.Q3 = event.data.quaternion.quat[2] * 16384.0;
-		vQuat.Q4 = event.data.quaternion.quat[3] * 16384.0;
-#else
-		{
-		float *d = (float*)data;
-		float a = *(float*)arg;
-		vQuat.Q1 = d[0];
-		vQuat.Q2 = d[1];
-		vQuat.Q3 = d[2];
-		vQuat.Q4 = d[3];
-
-		}
-#endif
-		vQuat.Timestamp = timestamp;
-		break;
-	case INV_ICM20948_SENSOR_GAME_ROTATION_VECTOR:
-	{
-		uint8_t accel_accuracy;
-		uint8_t gyro_accuracy;
-
-		memcpy(event.data.quaternion.quat, data, sizeof(event.data.quaternion.quat));
-
-		accel_accuracy = (uint8_t)inv_icm20948_get_accel_accuracy();
-		gyro_accuracy = (uint8_t)inv_icm20948_get_gyro_accuracy();
-#if 0
-		event.data.quaternion.accuracy_flag = min(accel_accuracy, gyro_accuracy);
-		vQuat.Q1 = event.data.quaternion.quat[0];// * 32768.0;
-		vQuat.Q2 = event.data.quaternion.quat[1];// * 32768.0;
-		vQuat.Q3 = event.data.quaternion.quat[2];// * 32768.0;
-		vQuat.Q4 = event.data.quaternion.quat[3];// * 32768.0;
-		vQuat.Timestamp = timestamp;
-#endif
-	}
-		break;
-	case INV_ICM20948_SENSOR_ACTIVITY_CLASSIFICATON:
-		memcpy(&(event.data.bac.event), data, sizeof(event.data.bac.event));
-		break;
-	case INV_ICM20948_SENSOR_FLIP_PICKUP:
-	case INV_ICM20948_SENSOR_WAKEUP_TILT_DETECTOR:
-	case INV_ICM20948_SENSOR_STEP_DETECTOR:
-	case INV_ICM20948_SENSOR_WAKEUP_SIGNIFICANT_MOTION:
-		event.data.event = true;
-		break;
-	case INV_ICM20948_SENSOR_B2S:
-		event.data.event = true;
-		memcpy(&(event.data.b2s.direction), data, sizeof(event.data.b2s.direction));
-		break;
-	case INV_ICM20948_SENSOR_STEP_COUNTER:
-		memcpy(&(event.data.step.count), data, sizeof(event.data.step.count));
-		break;
-	case INV_ICM20948_SENSOR_ORIENTATION:
-		//we just want to copy x,y,z from orientation data
-		memcpy(&(event.data.orientation), data, 3*sizeof(float));
-		break;
-/*	case INV_ICM20948_SENSOR_RAW_ACCELEROMETER:
-	case INV_ICM20948_SENSOR_RAW_GYROSCOPE:
-		memcpy(event.data.raw3d.vect, data, sizeof(event.data.raw3d.vect));
-		break;*/
-	default:
-		//((AgmInvnIcm20948*)vpAccel)->UpdateData(sensortype, timestamp, data, arg);
-		//vpIcm->UpdateData(sensortype, timestamp, data, arg);
-//		return;
-		;
-	}
-
-	//vpIcm->UpdateData(sensortype, timestamp, data, arg);
-
-	if (vEvtHandler != NULL)
-	{
-		vEvtHandler(this, DEV_EVT_DATA_RDY);
-	}
-}
-#endif
 void ImuIcm20948::IntHandler()
 {
 	UpdateData();
@@ -1973,9 +1790,6 @@ void ImuIcm20948::IntHandler()
 		regaddr = ICM20948_DMP_INT_STATUS_REG;
 		uint16_t distatus;
 		Read((uint8_t*)&regaddr, 2, (uint8_t*)&distatus, 1);
-
-		//g_Uart.printf("DMP int %x\r\n", distatus);
-	//		Write16((uint8_t*)&regaddr, 2, distatus);
 
 		if (distatus)// & (ICM20948_DMP_INT_STATUS_MSG_DMP_INT | ICM20948_DMP_INT_STATUS_MSG_DMP_INT_0))
 		{
@@ -2278,8 +2092,6 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 		float z = (float)q[2] / (float)(1UL << 30);
 		float sumsq = x * x + y * y + z * z;
 		float w = sumsq < 1.0f ? sqrtf(1.0f - sumsq) : 0.0f;
-		//if (sumsq < 1.0f) s_DbgQuatValidCnt++; else s_DbgQuatBadCnt++;
-		//if (q[0] == q[1] && q[1] == q[2]) { if (s_DbgQuatFillCnt == 0) { s_DbgFillHdr = dbgHdrIn; s_DbgFillHdr2 = vFifoHdr2; s_DbgFillQ0 = q[0]; } s_DbgQuatFillCnt++; }
 
 		// Only propagate physically valid, non-fill quaternions. Invalid
 		// (magnitude > 1) and fill (all three raw equal) samples keep the last
@@ -2291,21 +2103,12 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 				w = -w; x = -x; y = -y; z = -z;
 			}
 
-			// INVN delivers ref_quat as W,X,Y,Z to the app handler. Bracket
-			// the multi-field write with an odd/even seq bump so a concurrent
-			// Read retries instead of seeing a torn quaternion.
-			vQuatSeq++;			// odd: write in progress
 			vQuat.Q1 = w;
 			vQuat.Q2 = x;
 			vQuat.Q3 = y;
 			vQuat.Q4 = z;
 			vQuat.Timestamp = Timestamp;
-			vQuatSeq++;			// even: stable
 		}
-
-		//s_DbgQuatHdr = ICM20948_FIFO_HEADER_QUAT6;
-		//s_DbgQuatRaw[0] = q[0]; s_DbgQuatRaw[1] = q[1]; s_DbgQuatRaw[2] = q[2];
-		//s_DbgQuatWXYZ[0] = w; s_DbgQuatWXYZ[1] = x; s_DbgQuatWXYZ[2] = y; s_DbgQuatWXYZ[3] = z;
 
 		d += ICM20948_FIFO_HEADER_QUAT6_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
@@ -2336,8 +2139,6 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 		float z = (float)q[2] / (float)(1UL << 30);
 		float sumsq = x * x + y * y + z * z;
 		float w = sumsq < 1.0f ? sqrtf(1.0f - sumsq) : 0.0f;
-//		if (sumsq < 1.0f) s_DbgQuatValidCnt++; else s_DbgQuatBadCnt++;
-//		if (q[0] == q[1] && q[1] == q[2]) { if (s_DbgQuatFillCnt == 0) { s_DbgFillHdr = dbgHdrIn; s_DbgFillHdr2 = vFifoHdr2; s_DbgFillQ0 = q[0]; } s_DbgQuatFillCnt++; }
 
 		// Only propagate physically valid, non-fill quaternions.
 		if (sumsq < 1.0f && !(q[0] == q[1] && q[1] == q[2]))
@@ -2347,24 +2148,12 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 				w = -w; x = -x; y = -y; z = -z;
 			}
 
-			// INVN delivers ref_quat as W,X,Y,Z to the app handler. Bracket
-			// the multi-field write with an odd/even seq bump so a concurrent
-			// Read retries instead of seeing a torn quaternion.
-			vQuatSeq++;			// odd: write in progress
 			vQuat.Q1 = w;
 			vQuat.Q2 = x;
 			vQuat.Q3 = y;
 			vQuat.Q4 = z;
 			vQuat.Timestamp = Timestamp;
-			vQuatSeq++;			// even: stable
 		}
-
-		//s_DbgQuatHdr = ICM20948_FIFO_HEADER_QUAT9;
-		//s_DbgQuatRaw[0] = q[0]; s_DbgQuatRaw[1] = q[1]; s_DbgQuatRaw[2] = q[2];
-		//s_DbgQuatWXYZ[0] = w; s_DbgQuatWXYZ[1] = x; s_DbgQuatWXYZ[2] = y; s_DbgQuatWXYZ[3] = z;
-		//s_DbgHdrIn = dbgHdrIn;
-		//s_DbgQ0 = q[0]; s_DbgQ1 = q[1]; s_DbgQ2 = q[2];
-		//for (int i = 0; i < 14; i++) s_DbgQuatBytes[i] = d[i];
 
 		d += ICM20948_FIFO_HEADER_QUAT9_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT9_SIZE;
@@ -2556,13 +2345,6 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 	// per-packet desync of exactly (req - cnt) bytes.
 	if (cnt != req)
 	{
-		//s_DbgConsumeMismatchCnt++;
-		//if (s_DbgFirstMismatchReq == 0)
-		//{
-		//	s_DbgFirstMismatchReq = req;
-		//	s_DbgFirstMismatchCnt = cnt;
-		//	s_DbgFirstMismatchHdr = dbgHdrIn;
-		//}
 	}
 
 	vFifoHdr = vFifoHdr2 = 0;
