@@ -1587,6 +1587,7 @@ bool ImuIcm20948::Tap(bool bEn)
 	return true;
 }
 
+#if 0
 static size_t s_FifoProcessCnt = 0;
 static size_t s_BadHdrCnt = 0;
 static volatile size_t s_OverflowCnt = 0;	// Inspect via debugger; no UART on test board
@@ -1613,6 +1614,7 @@ static volatile int32_t s_DbgQ0 = 0;
 static volatile int32_t s_DbgQ1 = 0;
 static volatile int32_t s_DbgQ2 = 0;
 static volatile uint8_t s_DbgQuatBytes[14] = {0};	// raw 14 bytes the quat9 decode saw
+#endif
 
 bool ImuIcm20948::UpdateData()
 {
@@ -1659,7 +1661,7 @@ bool ImuIcm20948::UpdateData()
 
 	if (status[2])
 	{
-		s_OverflowCnt++;
+//		s_OverflowCnt++;
 		ResetFifo();
 		vFifoDataLen = 0;
 		vFifoHdr = vFifoHdr2 = 0;
@@ -1667,7 +1669,7 @@ bool ImuIcm20948::UpdateData()
 
 //	if (vbDmpEnabled)
 	{
-		s_FifoProcessCnt++;
+//		s_FifoProcessCnt++;
 
 		// Read the controller FIFO byte count (13 bits).
 		regaddr = ICM20948_FIFO_COUNTH_REG;
@@ -1681,7 +1683,7 @@ bool ImuIcm20948::UpdateData()
 		// quaternion samples.
 		if (cnt + vFifoDataLen > 1024)
 		{
-			s_OverflowCnt++;
+//			s_OverflowCnt++;
 			ResetFifo();
 			vFifoDataLen = 0;
 			vFifoHdr = vFifoHdr2 = 0;
@@ -1757,12 +1759,12 @@ size_t ImuIcm20948::ProcessFifoPackets(uint64_t t)
 			vFifoHdr = ((uint16_t)p[0] << 8U) | ((uint16_t)p[1] & 0xFF);
 
 			// DIAG: record every packet header read into a ring
-			s_DbgHdrRing[s_DbgHdrRingIdx & 15] = vFifoHdr;
-			s_DbgHdrRingIdx++;
+//			s_DbgHdrRing[s_DbgHdrRingIdx & 15] = vFifoHdr;
+//			s_DbgHdrRingIdx++;
 
 			if (vFifoHdr == 0 || (vFifoHdr & ~ICM20948_FIFO_HEADER_MASK))
 			{
-				s_BadHdrCnt++;
+//				s_BadHdrCnt++;
 				ResetFifo();
 				vFifoDataLen = 0;
 				vFifoHdr = 0;
@@ -1784,7 +1786,7 @@ size_t ImuIcm20948::ProcessFifoPackets(uint64_t t)
 
 				if (vFifoHdr2 & ~ICM20948_FIFO_HEADER2_MASK)
 				{
-					s_BadHdrCnt++;
+//					s_BadHdrCnt++;
 					ResetFifo();
 					vFifoDataLen = 0;
 					vFifoHdr = vFifoHdr2 = 0;
@@ -2276,8 +2278,8 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 		float z = (float)q[2] / (float)(1UL << 30);
 		float sumsq = x * x + y * y + z * z;
 		float w = sumsq < 1.0f ? sqrtf(1.0f - sumsq) : 0.0f;
-		if (sumsq < 1.0f) s_DbgQuatValidCnt++; else s_DbgQuatBadCnt++;
-		if (q[0] == q[1] && q[1] == q[2]) { if (s_DbgQuatFillCnt == 0) { s_DbgFillHdr = dbgHdrIn; s_DbgFillHdr2 = vFifoHdr2; s_DbgFillQ0 = q[0]; } s_DbgQuatFillCnt++; }
+		//if (sumsq < 1.0f) s_DbgQuatValidCnt++; else s_DbgQuatBadCnt++;
+		//if (q[0] == q[1] && q[1] == q[2]) { if (s_DbgQuatFillCnt == 0) { s_DbgFillHdr = dbgHdrIn; s_DbgFillHdr2 = vFifoHdr2; s_DbgFillQ0 = q[0]; } s_DbgQuatFillCnt++; }
 
 		// Only propagate physically valid, non-fill quaternions. Invalid
 		// (magnitude > 1) and fill (all three raw equal) samples keep the last
@@ -2301,9 +2303,9 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 			vQuatSeq++;			// even: stable
 		}
 
-		s_DbgQuatHdr = ICM20948_FIFO_HEADER_QUAT6;
-		s_DbgQuatRaw[0] = q[0]; s_DbgQuatRaw[1] = q[1]; s_DbgQuatRaw[2] = q[2];
-		s_DbgQuatWXYZ[0] = w; s_DbgQuatWXYZ[1] = x; s_DbgQuatWXYZ[2] = y; s_DbgQuatWXYZ[3] = z;
+		//s_DbgQuatHdr = ICM20948_FIFO_HEADER_QUAT6;
+		//s_DbgQuatRaw[0] = q[0]; s_DbgQuatRaw[1] = q[1]; s_DbgQuatRaw[2] = q[2];
+		//s_DbgQuatWXYZ[0] = w; s_DbgQuatWXYZ[1] = x; s_DbgQuatWXYZ[2] = y; s_DbgQuatWXYZ[3] = z;
 
 		d += ICM20948_FIFO_HEADER_QUAT6_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT6_SIZE;
@@ -2334,8 +2336,8 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 		float z = (float)q[2] / (float)(1UL << 30);
 		float sumsq = x * x + y * y + z * z;
 		float w = sumsq < 1.0f ? sqrtf(1.0f - sumsq) : 0.0f;
-		if (sumsq < 1.0f) s_DbgQuatValidCnt++; else s_DbgQuatBadCnt++;
-		if (q[0] == q[1] && q[1] == q[2]) { if (s_DbgQuatFillCnt == 0) { s_DbgFillHdr = dbgHdrIn; s_DbgFillHdr2 = vFifoHdr2; s_DbgFillQ0 = q[0]; } s_DbgQuatFillCnt++; }
+//		if (sumsq < 1.0f) s_DbgQuatValidCnt++; else s_DbgQuatBadCnt++;
+//		if (q[0] == q[1] && q[1] == q[2]) { if (s_DbgQuatFillCnt == 0) { s_DbgFillHdr = dbgHdrIn; s_DbgFillHdr2 = vFifoHdr2; s_DbgFillQ0 = q[0]; } s_DbgQuatFillCnt++; }
 
 		// Only propagate physically valid, non-fill quaternions.
 		if (sumsq < 1.0f && !(q[0] == q[1] && q[1] == q[2]))
@@ -2357,12 +2359,12 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 			vQuatSeq++;			// even: stable
 		}
 
-		s_DbgQuatHdr = ICM20948_FIFO_HEADER_QUAT9;
-		s_DbgQuatRaw[0] = q[0]; s_DbgQuatRaw[1] = q[1]; s_DbgQuatRaw[2] = q[2];
-		s_DbgQuatWXYZ[0] = w; s_DbgQuatWXYZ[1] = x; s_DbgQuatWXYZ[2] = y; s_DbgQuatWXYZ[3] = z;
-		s_DbgHdrIn = dbgHdrIn;
-		s_DbgQ0 = q[0]; s_DbgQ1 = q[1]; s_DbgQ2 = q[2];
-		for (int i = 0; i < 14; i++) s_DbgQuatBytes[i] = d[i];
+		//s_DbgQuatHdr = ICM20948_FIFO_HEADER_QUAT9;
+		//s_DbgQuatRaw[0] = q[0]; s_DbgQuatRaw[1] = q[1]; s_DbgQuatRaw[2] = q[2];
+		//s_DbgQuatWXYZ[0] = w; s_DbgQuatWXYZ[1] = x; s_DbgQuatWXYZ[2] = y; s_DbgQuatWXYZ[3] = z;
+		//s_DbgHdrIn = dbgHdrIn;
+		//s_DbgQ0 = q[0]; s_DbgQ1 = q[1]; s_DbgQ2 = q[2];
+		//for (int i = 0; i < 14; i++) s_DbgQuatBytes[i] = d[i];
 
 		d += ICM20948_FIFO_HEADER_QUAT9_SIZE;
 		cnt += ICM20948_FIFO_HEADER_QUAT9_SIZE;
@@ -2554,13 +2556,13 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 	// per-packet desync of exactly (req - cnt) bytes.
 	if (cnt != req)
 	{
-		s_DbgConsumeMismatchCnt++;
-		if (s_DbgFirstMismatchReq == 0)
-		{
-			s_DbgFirstMismatchReq = req;
-			s_DbgFirstMismatchCnt = cnt;
-			s_DbgFirstMismatchHdr = dbgHdrIn;
-		}
+		//s_DbgConsumeMismatchCnt++;
+		//if (s_DbgFirstMismatchReq == 0)
+		//{
+		//	s_DbgFirstMismatchReq = req;
+		//	s_DbgFirstMismatchCnt = cnt;
+		//	s_DbgFirstMismatchHdr = dbgHdrIn;
+		//}
 	}
 
 	vFifoHdr = vFifoHdr2 = 0;
