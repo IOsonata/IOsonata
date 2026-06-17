@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	bt_pds_nvm_bm.c
+@file	bt_pds_bm.cpp
 
 @brief	BtPds NVM backend for the nRF54L bm (sdk-nrf-bm / S145) port.
 
