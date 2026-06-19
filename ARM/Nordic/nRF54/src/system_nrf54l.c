@@ -83,6 +83,16 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 #endif
 
+/**
+ * @brief	Get core clock frequency
+ *
+ * @return	Core frequency in Hz.
+ */
+uint32_t SystemCoreClockGet(void)
+{
+	return SystemCoreClock;
+}
+
 void SystemCoreClockUpdate(void)
 {
     switch(NRF_OSCILLATORS->PLL.CURRENTFREQ)
