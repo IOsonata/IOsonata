@@ -59,6 +59,33 @@ static inline uint32_t DisableInterrupt() {
 static inline void EnableInterrupt(uint32_t __primmask) {
 	__set_PRIMASK(__primmask);
 }
+
+// Application interrupt priority. NVIC: lower number is more urgent, 0 is the
+// most urgent level the part implements. Same tier names as the scheduler
+// priorities but a separate set; pass these to IntPrio fields, never a task
+// priority. MCU-generic defaults across vendors. A vendor or RTOS layer that
+// must reserve levels (for example a radio stack that reserves the top
+// priorities, or a kernel that bounds the maskable range) redefines any of
+// these before this header is reached.
+#ifndef IRQ_PRIO_CRITICAL
+#define IRQ_PRIO_CRITICAL   0
+#endif
+#ifndef IRQ_PRIO_HIGHEST
+#define IRQ_PRIO_HIGHEST    1
+#endif
+#ifndef IRQ_PRIO_HIGH
+#define IRQ_PRIO_HIGH       2
+#endif
+#ifndef IRQ_PRIO_NORMAL
+#define IRQ_PRIO_NORMAL     3
+#endif
+#ifndef IRQ_PRIO_LOW
+#define IRQ_PRIO_LOW        5
+#endif
+#ifndef IRQ_PRIO_LOWEST
+#define IRQ_PRIO_LOWEST     7
+#endif
+
 #elif defined(__riscv)
 // ----------------------------- RISC-V (bare-metal M-mode) --------------------
 
@@ -95,6 +122,31 @@ static inline void EnableInterrupt(uint32_t __primmask) {
       "csrw 0x300, %0\n"    // restore whole mstatus (nestable)
       :: "r"(prev_status) : "memory");
   }
+#endif
+
+// Application interrupt priority. RISC-V orders the opposite way from Cortex-M:
+// higher number is more urgent. Generic defaults; the ESP32-C3/C5/C6 interrupt
+// matrix and the Renesas N22 CLIC have different usable ranges, so each vendor
+// header defines these before including this file and the values below stand in
+// only when it does not. Same tier names as the scheduler priorities; pass
+// these to IntPrio fields, never a task priority.
+#ifndef IRQ_PRIO_LOWEST
+#define IRQ_PRIO_LOWEST     1
+#endif
+#ifndef IRQ_PRIO_LOW
+#define IRQ_PRIO_LOW        2
+#endif
+#ifndef IRQ_PRIO_NORMAL
+#define IRQ_PRIO_NORMAL     3
+#endif
+#ifndef IRQ_PRIO_HIGH
+#define IRQ_PRIO_HIGH       5
+#endif
+#ifndef IRQ_PRIO_HIGHEST
+#define IRQ_PRIO_HIGHEST    6
+#endif
+#ifndef IRQ_PRIO_CRITICAL
+#define IRQ_PRIO_CRITICAL   7
 #endif
 
 #endif

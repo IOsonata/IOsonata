@@ -42,6 +42,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdbool.h>
 
+#include "coredev/interrupt.h"
+
 /// Defining port name
 /// Many MCU name its GPIO port by letter starting from A instead of numerical
 #define IOPORTA				0
