@@ -103,12 +103,12 @@
 		<link>
 			<name>src/nrfx/soc/nrfx_atomic.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/soc/nrfx_atomic.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/soc/nrfx_atomic.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/lib/nrfx_atomic.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers/src/nrfx_uarte.c</name>

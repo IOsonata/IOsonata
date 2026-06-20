@@ -142,7 +142,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/soc" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -292,8 +292,11 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<fileInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.elf.release.1466835111.1627732413" name="nrfx_atomic.c" rcbsApplicability="disable" resourcePath="src/nrfx/soc/nrfx_atomic.c" toolsToInvoke="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.749666012.773187261">
+						<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.749666012.773187261" name="Cross ARM C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.749666012"/>
+					</fileInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/soc" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
