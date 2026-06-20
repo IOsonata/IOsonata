@@ -1036,15 +1036,19 @@ __attribute__((weak)) void BtAppEvtWait(void)
 	__WFE();
 }
 
+// Drains queued SoftDevice stack events by running the registered observers.
+// Effect: pending stack events are delivered to their handlers. Precondition:
+// SoftDevice enabled. Called from an RTOS BtAppEvtWait override after the
+// waiter unblocks, so observers run in task context. Returns void.
+void BtAppEvtDispatch()
+{
+	nrf_sdh_evts_poll();
+}
+
 static void soc_evt_poll(void *context)
 {
 	uint32_t nrf_err;
 	uint32_t evt_id;
-
-	// Wake any RTOS waiter; weak BtAppEvtNotify is empty so bare-metal apps
-	// see no effect. SoC events themselves are processed in this dispatch
-	// context regardless.
-	BtAppEvtNotify();
 
 	DEBUG_PRINTF("soc_evt_poll\r\n");
 	while (true) {

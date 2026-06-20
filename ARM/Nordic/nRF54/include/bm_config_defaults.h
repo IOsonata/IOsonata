@@ -50,9 +50,8 @@ in your project's build configuration.
 #define CONFIG_NRF_SDH_BLE_CONN_TAG               99
 #endif
 
-#ifndef CONFIG_NRF_SDH_DISPATCH_MODEL
-#define CONFIG_NRF_SDH_DISPATCH_MODEL             0
-#endif
+// No SoftDevice event dispatch model. SD_EVT_IRQHandler in nrf_sdh.c
+// wakes the RTOS waiter then drains the stack observers directly.
 
 #ifndef CONFIG_NRF_SDH_CLOCK_LF_SRC
 #define CONFIG_NRF_SDH_CLOCK_LF_SRC               1  /* 0=RC, 1=LFXO (fallback only, runtime uses g_McuOsc) */
@@ -79,20 +78,6 @@ in your project's build configuration.
 
 #ifndef CONFIG_NRF_SDH_CLOCK_HFINT_CALIBRATION_INTERVAL
 #define CONFIG_NRF_SDH_CLOCK_HFINT_CALIBRATION_INTERVAL  60
-#endif
-
-//#ifndef CONFIG_NRF_SDH_DISPATCH_MODEL_IRQ
-//#define CONFIG_NRF_SDH_DISPATCH_MODEL_IRQ         0
-//#endif
-
-/* SDH dispatch model — define ONE:
- * CONFIG_NRF_SDH_DISPATCH_MODEL_IRQ is default (defined below).
- * To use scheduler: #define CONFIG_NRF_SDH_DISPATCH_MODEL_SCHED 1
- * To use polling:   #define CONFIG_NRF_SDH_DISPATCH_MODEL_POLL  1
- */
-
-#ifndef CONFIG_NRF_SDH_DISPATCH_MODEL_SCHED
-#define CONFIG_NRF_SDH_DISPATCH_MODEL_SCHED		1
 #endif
 
 #ifndef CONFIG_NRF_SDH_CLOCK_LF_SRC_XO

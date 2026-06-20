@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 //#define DEMO_C	// Select demo C code
-//#define BYTE_MODE
+#define BYTE_MODE
 
 #define TEST_BUFSIZE		16
 
@@ -73,13 +73,13 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 1000000,
+	.Rate = 115200,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = true,
-	.IntPrio = 1,
+	.bIntMode = false,
+	.IntPrio = IRQ_PRIO_NORMAL,
 	.EvtCallback = nRFUartEvthandler,
 	.bFifoBlocking = true,
 #ifdef UARTFIFOSIZE

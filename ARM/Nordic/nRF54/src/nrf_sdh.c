@@ -228,7 +228,11 @@ static int nrf_sdh_enable(void)
 #endif /* CONFIG_NRF_SDH_DISPATCH_MODEL_SCHED */
 #endif
 
-	/* Enable event interrupt, the priority has already been set by the stack. */
+	/* Set the event IRQ to application priority LOW so an RTOS BASEPRI
+	 * critical section can mask it. The bm SDK sets this in irq_connect.c,
+	 * which this port does not build, so without it the reset value of 0
+	 * stands and an RTOS kernel call from the handler corrupts the scheduler. */
+	NVIC_SetPriority((IRQn_Type)SD_EVT_IRQn, SD_EVT_IRQ_PRI);
 	NVIC_EnableIRQ((IRQn_Type)SD_EVT_IRQn);
 
 	(void)sdh_state_evt_observer_notify(NRF_SDH_STATE_EVT_ENABLED);
@@ -435,36 +439,16 @@ void nrf_sdh_evts_poll(void)
 	}
 }
 
-#if defined(CONFIG_NRF_SDH_DISPATCH_MODEL_IRQ)
+// SoftDevice event handler. Wakes any RTOS waiter, then drains the stack
+// event observers. Runs in SD_EVT_IRQn context. Bare-metal builds link the
+// empty weak BtAppEvtNotify, so only the poll has effect. No dispatch model.
+extern void BtAppEvtNotify(void);
 
 void SD_EVT_IRQHandler(void)
 {
+	BtAppEvtNotify();
 	nrf_sdh_evts_poll();
 }
-
-#elif defined(CONFIG_NRF_SDH_DISPATCH_MODEL_SCHED)
-
-static void sdh_events_poll(void *data, size_t len)
-{
-	(void)data;
-	(void)len;
-
-	nrf_sdh_evts_poll();
-}
-
-void SD_EVT_IRQHandler(void)
-{
-	int err;
-
-	err = bm_scheduler_defer(sdh_events_poll, NULL, 0);
-	if (err) {
-		LOG_WRN("Unable to schedule SoftDevice event, err %d", err);
-	}
-}
-
-#elif defined(CONFIG_NRF_SDH_DISPATCH_MODEL_POLL)
-
-#endif /* NRF_SDH_DISPATCH_MODEL */
 
 /* ------------------------------------------------------------------
  * SVC_Handler — always forwards to SoftDevice.

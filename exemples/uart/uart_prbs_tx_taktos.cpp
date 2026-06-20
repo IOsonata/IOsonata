@@ -88,7 +88,7 @@ static const UARTCfg_t s_UartCfg = {
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
-	.IntPrio = 1,
+	.IntPrio = IRQ_PRIO_NORMAL,
 	.EvtCallback = nRFUartEvthandler,
 	.bFifoBlocking = true,
 #ifdef UARTFIFOSIZE

@@ -96,7 +96,7 @@ UART g_Uart;
 #define EXTADV		// Uncomment to enable extended advertisement
 
 #ifdef EXTADV
-#define DEVICE_NAME                     "Advertising extra long long name"
+#define DEVICE_NAME                     "Advertising extra long name"
 #else
 #define DEVICE_NAME                     "Advertising"
 #endif

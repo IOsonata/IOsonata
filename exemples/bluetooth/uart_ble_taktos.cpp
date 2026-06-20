@@ -47,9 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/blueio_blesrvc.h"
-#include "blueio_board.h"
 #include "coredev/uart.h"
-#include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 
@@ -99,11 +97,11 @@ static uint8_t g_RxTaskMem[TAKTOS_THREAD_MEM_SIZE(BLE_TAKTOS_THREAD_STACK)] TAKT
 //};
 
 static const char s_RxCharDescString[] = {
-		"UART Rx characteristic",
+	"UART Rx characteristic",
 };
 
 static const char s_TxCharDescString[] = {
-		"UART Tx characteristic",
+	"UART Tx characteristic",
 };
 
 uint8_t g_ManData[8];
@@ -145,7 +143,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
 	.pDevInfo = &s_UartBleDevDesc,
-	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
@@ -160,8 +157,9 @@ const BtAppCfg_t s_BleAppCfg = {
 										// slow interval on adv timeout and advertise until connected
 	.ConnIntervalMin = MIN_CONN_INTERVAL,
 	.ConnIntervalMax = MAX_CONN_INTERVAL,
-	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,// Led port nuber
-	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,// Led pin number
+	.ConnLedPort = CONNECT_LED_PORT,// Led port nuber
+	.ConnLedPin = CONNECT_LED_PIN,// Led pin number
+	.ConnLedActLevel = CONNECT_LED_LOGIC,
 	.TxPower = 0,						// Tx power
 	.pLongWrPoolMem = g_LWrBuffer,		// Long-write reassembly pool (split across peer slots)
 	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
@@ -171,12 +169,7 @@ int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLe
 
 // UART configuration data
 
-static IOPinCfg_t s_UartPins[] = {
-    {UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},    // RX
-    {UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},   // TX
-    {UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, // CTS
-    {UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
-};
+static IOPinCfg_t s_UartPins[] = UART_PINS;
 
 const UARTCfg_t g_UartCfg = {
 	.DevNo = 0,
@@ -188,7 +181,7 @@ const UARTCfg_t g_UartCfg = {
 	.StopBits = 1,					// Stop bit
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
-	.IntPrio = TAKTOS_PRIORITY_NORMAL,
+	.IntPrio = IRQ_PRIO_NORMAL,//TAKTOS_PRIORITY_NORMAL,
 	.EvtCallback = UartEvtHandler,
 	.bFifoBlocking = true,				// fifo blocking mode
 	.RxMemSize = 0,
@@ -201,18 +194,11 @@ const UARTCfg_t g_UartCfg = {
 // UART object instance
 UART g_Uart;
 
-static const IOPINCFG s_LedPins[] = {
-	{BLUEIO_LED_BLUE_PORT, BLUEIO_LED_BLUE_PIN, BLUEIO_LED_BLUE_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// LED1 (Blue)
-	{BLUEIO_LED_GREEN_PORT, BLUEIO_LED_GREEN_PIN, BLUEIO_LED_GREEN_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// LED2 (Green)
-	{BLUEIO_LED_RED_PORT, BLUEIO_LED_RED_PIN, BLUEIO_LED_RED_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// LED3 (Red)
-};
+static const IOPINCFG s_LedPins[] = LED_PINS;
 
 static int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPINCFG);
 
-static const IOPINCFG s_ButPins[] = {
-    {BUTTON1_PORT, BUTTON1_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 1
-    {BUTTON2_PORT, BUTTON2_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 2
-};
+static const IOPINCFG s_ButPins[] = BUTTON_PINS;
 
 static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPINCFG);
 
@@ -276,13 +262,15 @@ void HardwareInit()
     IOPinCfg(s_ButPins, s_NbButPins);
 
     IOPinCfg(s_LedPins, s_NbLedPins);
-	IOPinSet(BLUEIO_LED_BLUE_PORT, BLUEIO_LED_BLUE_PIN);
-	IOPinSet(BLUEIO_LED_GREEN_PORT, BLUEIO_LED_GREEN_PIN);
-	IOPinSet(BLUEIO_LED_RED_PORT, BLUEIO_LED_RED_PIN);
+
+    for (int i = 0; i < s_NbLedPins; i++)
+	{
+		IOPinSet(s_LedPins[i].PortNo, s_LedPins[i].PinNo);
+	}
 
 	IOPinCfg(s_ButPins, s_NbButPins);
 
-    IOPinEnableInterrupt(0, TAKTOS_PRIORITY_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
+	IOPinEnableInterrupt(0, IRQ_PRIO_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
 int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
