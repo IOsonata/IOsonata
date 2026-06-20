@@ -61,7 +61,7 @@ static uint8_t s_CacheBuff[TEST_BUFSIZE];
  * nRF52832 has one UARTE peripheral: NRF_UARTE0.
  * NRFX_UARTE_INSTANCE() now takes the peripheral register pointer.
  */
-static nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(NRF_UARTE0);
+static nrfx_uarte_t g_Uarte = NRFX_UARTE_INSTANCE(NRFX_UART_INST);
 
 static void uart_event_handler(nrfx_uarte_event_t const *p_event, void *ctx)
 {
