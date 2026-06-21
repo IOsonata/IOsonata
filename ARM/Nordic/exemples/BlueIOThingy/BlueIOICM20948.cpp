@@ -28,6 +28,12 @@
 #include "imu/imu.h"
 
 //#define INVN
+#define IMU_FUSION_VQF
+
+// Fusion backend test selector. Define IMU_FUSION_VQF to run the software VQF
+// fusion (ImuVqf) instead of the ICM20948 on-chip DMP. VQF reads raw data from
+// the IOsonata AGM driver, so do not define INVN at the same time.
+//#define IMU_FUSION_VQF
 
 #ifdef INVN
 #include "imu/imu_invn_icm20948.h"
@@ -35,6 +41,10 @@
 #else
 #include "imu/imu_icm20948.h"
 #include "sensors/agm_icm20948.h"
+#endif
+
+#ifdef IMU_FUSION_VQF
+#include "imu/imu_vqf.h"
 #endif
 
 #include "BlueIOICM20948.h"
@@ -59,6 +69,7 @@ static const GyroSensorCfg_t s_GyroCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
+	.Sensitivity = 2000,	// +/-2000 dps full scale; 250 default saturates on fast motion
 	.FltrFreq = 50000,	// enable gyro DLPF so GYRO_SMPLRT_DIV takes effect; without it the gyro free-runs at 9kHz and the DMP over-integrates
 };
 
@@ -79,7 +90,9 @@ static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
-#ifdef INVN
+#if defined(IMU_FUSION_VQF)
+static ImuVqf s_Imu;
+#elif defined(INVN)
 static ImuInvnIcm20948 s_Imu;
 #else
 static ImuIcm20948 s_Imu;
@@ -187,7 +200,15 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 
 	if (IntNo == IMU_INT_NO)
 	{
-#if 1
+#if defined(IMU_FUSION_VQF)
+		// Software VQF test path. Refresh raw accel/gyro/mag from the sensor
+		// FIFO, run the software fusion, then defer the BLE send to the main
+		// loop. The on-chip DMP is not used here; s_Imu is ImuVqf.
+		s_MotSensor.UpdateData();
+		s_Imu.UpdateData();
+		AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+		return;
+#elif 1
 		s_Imu.IntHandler();	// Drives ImuEvtHandler -> ImuDataChedHandler once
 		return;
 #else
