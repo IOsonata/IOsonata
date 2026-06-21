@@ -256,11 +256,6 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
 		</link>
 		<link>
-			<name>src/iatomic.c</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/iatomic.c</locationURI>
-		</link>
-		<link>
 			<name>src/audio</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -309,6 +304,11 @@
 			<name>src/excelitas_serlink.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/excelitas_serlink.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/iatomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/iatomic.c</locationURI>
 		</link>
 		<link>
 			<name>src/imu</name>
@@ -391,14 +391,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/sysstatus.c</name>
+			<name>src/syslog.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
-		</link>
-		<link>
-			<name>src/sysstatus_impl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus_impl.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/system_re01.c</name>
@@ -409,11 +404,6 @@
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
-		</link>
-		<link>
-			<name>src/usb_hidhost.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb_hidhost.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>

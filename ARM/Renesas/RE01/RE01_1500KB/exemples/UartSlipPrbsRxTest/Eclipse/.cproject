@@ -56,7 +56,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.287171595" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -74,7 +74,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1308271309" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -193,7 +193,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1928659739" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -211,7 +211,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../Core/Include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.923313420" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1584227628" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
