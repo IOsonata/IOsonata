@@ -936,6 +936,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu.h</locationURI>
 		</link>
 		<link>
+			<name>include/imu/imu_eqf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_eqf.h</locationURI>
+		</link>
+		<link>
 			<name>include/imu/imu_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_icm20948.h</locationURI>
@@ -1764,6 +1769,11 @@
 			<name>src/imu/imu.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/imu/imu_eqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_eqf.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/imu/imu_icm20948.cpp</name>

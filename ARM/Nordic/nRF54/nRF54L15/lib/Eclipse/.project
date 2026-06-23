@@ -836,19 +836,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu.h</locationURI>
 		</link>
 		<link>
+			<name>include/imu/imu_eqf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_eqf.h</locationURI>
+		</link>
+		<link>
 			<name>include/imu/imu_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>include/imu/imu_invn_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_invn_icm20948.h</locationURI>
-		</link>
-		<link>
 			<name>include/imu/imu_mpu9250.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_mpu9250.h</locationURI>
+		</link>
+		<link>
+			<name>include/imu/imu_vqf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_vqf.h</locationURI>
+		</link>
+		<link>
+			<name>include/imu/imu_xiot_fusion.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/imu/imu_xiot_fusion.h</locationURI>
 		</link>
 		<link>
 			<name>include/imu/mpu9250_dmpkey.h</name>
@@ -1511,6 +1521,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/imu/imu_eqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_eqf.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/imu/imu_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_icm20948.cpp</locationURI>
@@ -1519,6 +1534,16 @@
 			<name>src/imu/imu_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_mpu9250.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/imu/imu_vqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_vqf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/imu/imu_xiot_fusion.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/imu/imu_xiot_fusion.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/micro-ecc/uECC.c</name>

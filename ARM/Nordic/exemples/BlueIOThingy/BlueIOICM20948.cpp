@@ -28,12 +28,15 @@
 #include "imu/imu.h"
 
 //#define INVN
-#define IMU_FUSION_VQF
-
-// Fusion backend test selector. Define IMU_FUSION_VQF to run the software VQF
-// fusion (ImuVqf) instead of the ICM20948 on-chip DMP. VQF reads raw data from
-// the IOsonata AGM driver, so do not define INVN at the same time.
 //#define IMU_FUSION_VQF
+//#define IMU_FUSION_EQF
+
+// Fusion backend test selector. Define one of:
+//   IMU_FUSION_VQF - software VQF fusion (ImuVqf)
+//   IMU_FUSION_EQF - software EqF fusion (ImuEqf), 6-axis, FPU targets only
+// to run software fusion instead of the ICM20948 on-chip DMP. Both read raw
+// data from the IOsonata AGM driver, so do not define INVN at the same time,
+// and do not define both VQF and EqF together.
 
 #ifdef INVN
 #include "imu/imu_invn_icm20948.h"
@@ -45,6 +48,10 @@
 
 #ifdef IMU_FUSION_VQF
 #include "imu/imu_vqf.h"
+#endif
+
+#ifdef IMU_FUSION_EQF
+#include "imu/imu_eqf.h"
 #endif
 
 #include "BlueIOICM20948.h"
@@ -92,6 +99,8 @@ static const ImuCfg_t s_ImuCfg = {
 
 #if defined(IMU_FUSION_VQF)
 static ImuVqf s_Imu;
+#elif defined(IMU_FUSION_EQF)
+static ImuEqf s_Imu;
 #elif defined(INVN)
 static ImuInvnIcm20948 s_Imu;
 #else
@@ -200,10 +209,10 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 
 	if (IntNo == IMU_INT_NO)
 	{
-#if defined(IMU_FUSION_VQF)
-		// Software VQF test path. Refresh raw accel/gyro/mag from the sensor
-		// FIFO, run the software fusion, then defer the BLE send to the main
-		// loop. The on-chip DMP is not used here; s_Imu is ImuVqf.
+#if defined(IMU_FUSION_VQF) || defined(IMU_FUSION_EQF)
+		// Software fusion test path (VQF or EqF). Refresh raw accel/gyro/mag
+		// from the sensor FIFO, run the software fusion, then defer the BLE
+		// send to the main loop. The on-chip DMP is not used here.
 		s_MotSensor.UpdateData();
 		s_Imu.UpdateData();
 		AppEvtHandlerQue(0, 0, ImuDataChedHandler);
