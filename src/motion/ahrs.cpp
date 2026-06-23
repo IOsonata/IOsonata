@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
-@file	imu.cpp
+@file	ahrs.cpp
 
-@brief	Implementation of an Inertial Measurement Unit
+@brief	Generic AHRS (attitude and heading reference system)
 
-This a generic abstraction layer for IMU sensor fusion.  It is a mean to
+This a generic abstraction layer for AHRS sensor fusion.  It is a mean to
 provide a common interface to different sensor fusion library out there.
 
 @author	Hoang Nguyen Hoan
@@ -35,9 +35,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
-#include "imu/imu.h"
+#include "motion/ahrs.h"
 /*
-bool Imu::Init(const IMU_CFG &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool Ahrs::Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	SetEvtHandler(Cfg.EvtHandler);
 	vpTimer = pTimer;
@@ -47,7 +47,7 @@ bool Imu::Init(const IMU_CFG &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf,
 	return true;
 }
 */
-bool Imu::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool Ahrs::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	vpAccel = pAccel;
 	vpGyro = pGyro;
@@ -57,7 +57,7 @@ bool Imu::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * con
 	return true;
 }
 
-IMU_FEATURE Imu::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
+AHRS_FEATURE Ahrs::Feature(AHRS_FEATURE FeatureBit, bool bEnDis)
 {
 	uint32_t bit = 0x8000;
 
@@ -65,29 +65,29 @@ IMU_FEATURE Imu::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
 	{
 		switch (FeatureBit & bit)
 		{
-			case IMU_FEATURE_EULER:
+			case AHRS_FEATURE_EULER:
 				Euler(bEnDis);
 				break;
-			case IMU_FEATURE_QUATERNION:
+			case AHRS_FEATURE_QUATERNION:
 				//Quaternion(bEnDis);
 				break;
-			case IMU_FEATURE_COMPASS:
+			case AHRS_FEATURE_COMPASS:
 				Compass(bEnDis);
 				break;
-			case IMU_FEATURE_GRAVITY:
+			case AHRS_FEATURE_GRAVITY:
 				//Gravity(bEnDis);
 				break;
-			case IMU_FEATURE_EXTERNAL_ACCEL:
+			case AHRS_FEATURE_EXTERNAL_ACCEL:
 				break;
-			case IMU_FEATURE_TAP:
+			case AHRS_FEATURE_TAP:
 				break;
-			case IMU_FEATURE_ROTATION:
+			case AHRS_FEATURE_ROTATION:
 				break;
-			case IMU_FEATURE_VIBRATION:
+			case AHRS_FEATURE_VIBRATION:
 				break;
-			case IMU_FEATURE_PEDOMETER:
+			case AHRS_FEATURE_PEDOMETER:
 				break;
-			case IMU_FEATURE_CYCLING:
+			case AHRS_FEATURE_CYCLING:
 				break;
 		}
 

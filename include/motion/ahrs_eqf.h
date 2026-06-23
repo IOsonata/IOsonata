@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_eqf.h
+@file	ahrs_eqf.h
 
-@brief	Implementation of software imu class using EqF fusion
+@brief	Implementation of the Ahrs class using EqF fusion
 
 Self contained port of the ABC-EqF n=0 (Attitude-Bias Equivariant Filter).
 No external source and no CMSIS-DSP dependency. The estimator is a geometric
@@ -48,12 +48,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __IMU_EQF_H__
-#define __IMU_EQF_H__
+#ifndef __AHRS_EQF_H__
+#define __AHRS_EQF_H__
 
-#include "imu/imu.h"
+#include "motion/ahrs.h"
 
-/** @addtogroup IMU
+/** @addtogroup AHRS
   * @{
   */
 
@@ -96,11 +96,11 @@ typedef struct __Eqf_State {
 	int mode;		//!< 0 = init accumulate, 1 = running
 } EqfState_t;
 
-class ImuEqf : public Imu {
+class AhrsEqf : public Ahrs {
 public:
-	ImuEqf();
-	virtual ~ImuEqf() {}
-	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	AhrsEqf();
+	virtual ~AhrsEqf() {}
+	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	void SetParam(EqfParam_t &Param) { memcpy(&vParams, &Param, sizeof(EqfParam_t)); }
 	virtual bool Enable();
 	virtual void Disable();
@@ -122,8 +122,8 @@ public:
 	virtual bool Read(GyroSensorData_t &Data) { return vpGyro->Read(Data); }
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
-	virtual bool Read(ImuQuat_t &Data);
-	virtual bool Read(ImuEuler_t &Data) { Data = vEuler; return true; }
+	virtual bool Read(AhrsQuat_t &Data);
+	virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
 
@@ -150,4 +150,4 @@ private:
 
 /** @} */
 
-#endif // __IMU_EQF_H__
+#endif // __AHRS_EQF_H__

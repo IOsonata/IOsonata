@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_mpu9250.cpp
+@file	ahrs_mpu9250.cpp
 
-@brief	Implementation of an Inertial Measurement Unit of InvenSense MPU-9250
+@brief	Generic AHRS (attitude and heading reference system) of InvenSense MPU-9250
 
 Implements the DMP (Digital Motion Processor) driver portion of the MPU-9250
 
@@ -36,9 +36,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "convutil.h"
 #include "sensors/agm_mpu9250.h"
-#include "imu/imu_mpu9250.h"
-#include "imu/mpu9250_dmpkey.h"
-#include "imu/mpu9250_dmpmap.h"
+#include "motion/ahrs_mpu9250.h"
+#include "motion/mpu9250_dmpkey.h"
+#include "motion/mpu9250_dmpmap.h"
 
 /* These defines are copied from example of MPL ver 6.12.
  * These defines may change for each DMP image, so be sure to modify
@@ -490,7 +490,7 @@ static bool ValidateQuat(int32_t Q[4])
 	return true;
 }
 
-bool ImuMpu9250::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AhrsMpu9250::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == NULL)
 	{
@@ -504,7 +504,7 @@ bool ImuMpu9250::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSenso
 
     if (res == true)
     {
-    	res = Imu::Init(Cfg, pAccel, pGyro, pMag);
+    	res = Ahrs::Init(Cfg, pAccel, pGyro, pMag);
 
     	vEvtHandler = Cfg.EvtHandler;
 
@@ -535,7 +535,7 @@ bool ImuMpu9250::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSenso
 }
 
 
-bool ImuMpu9250::UpdateData()
+bool AhrsMpu9250::UpdateData()
 {
 	//uint8_t buf[32];
 	int32_t q[4];
@@ -549,8 +549,8 @@ bool ImuMpu9250::UpdateData()
 		len = vpMpu->ReadFifo((uint8_t*)q, 16);
 		if (len > 0)
 		{
-			IMU_FEATURE feat = Feature();
-			if (feat & IMU_FEATURE_QUATERNION)
+			AHRS_FEATURE feat = Feature();
+			if (feat & AHRS_FEATURE_QUATERNION)
 			{
 	//			int32_t q[4];
 	/*
@@ -589,22 +589,22 @@ bool ImuMpu9250::UpdateData()
 	return false;
 }
 
-bool ImuMpu9250::Enable()
+bool AhrsMpu9250::Enable()
 {
 	return true;
 }
 
-void ImuMpu9250::Disable()
+void AhrsMpu9250::Disable()
 {
 
 }
 
-void ImuMpu9250::Reset()
+void AhrsMpu9250::Reset()
 {
 
 }
 
-uint32_t ImuMpu9250::Rate(uint32_t DataRate)
+uint32_t AhrsMpu9250::Rate(uint32_t DataRate)
 {
     const uint8_t cfg[12] = { DINAFE, DINAF2, DINAAB, 0xc4, DINAAA, DINAF1, DINADF, DINADF, 0xBB, 0xAF, DINADF, DINADF };
 	uint8_t d[2];
@@ -626,15 +626,15 @@ uint32_t ImuMpu9250::Rate(uint32_t DataRate)
 	Write(D_0_22, d, 2);
 	Write(CFG_6, (uint8_t*)cfg, sizeof(cfg));
 
-	return Imu::Rate(DataRate * 1000);
+	return Ahrs::Rate(DataRate * 1000);
 }
 
-bool ImuMpu9250::Calibrate()
+bool AhrsMpu9250::Calibrate()
 {
 	return true;
 }
 
-bool ImuMpu9250::Compass(bool bEn)
+bool AhrsMpu9250::Compass(bool bEn)
 {
 //	return true;
 	uint8_t d;
@@ -650,21 +650,21 @@ bool ImuMpu9250::Compass(bool bEn)
 
 	Write(CFG_ANDROID_ORIENT_INT, &d, 1);
 
-	Imu::Feature(IMU_FEATURE_COMPASS, bEn);
+	Ahrs::Feature(AHRS_FEATURE_COMPASS, bEn);
 
 	//vDmpFifoLen += 4;
 
 	return true;
 }
 
-bool ImuMpu9250::Pedometer(bool bEn)
+bool AhrsMpu9250::Pedometer(bool bEn)
 {
-	Imu::Feature(IMU_FEATURE_PEDOMETER, bEn);
+	Ahrs::Feature(AHRS_FEATURE_PEDOMETER, bEn);
 
 	return true;
 }
 
-bool ImuMpu9250::Quaternion(bool bEn, int NbAxis)
+bool AhrsMpu9250::Quaternion(bool bEn, int NbAxis)
 {
 	uint8_t regs[4];
 
@@ -703,19 +703,19 @@ bool ImuMpu9250::Quaternion(bool bEn, int NbAxis)
 
 	vDmpFifoLen += 16;
 
-	Imu::Feature(IMU_FEATURE_QUATERNION, bEn);
+	Ahrs::Feature(AHRS_FEATURE_QUATERNION, bEn);
 
 	return true;
 }
 
-bool ImuMpu9250::Tap(bool bEn)
+bool AhrsMpu9250::Tap(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-void ImuMpu9250::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AhrsMpu9250::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
     const unsigned char gaxes[3] = {DINA4C, DINACD, DINA6C};
     const unsigned char aaxes[3] = {DINA0C, DINAC9, DINA2C};
@@ -756,7 +756,7 @@ void ImuMpu9250::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 	Write(FCFG_3, gsign, 3);
 }
 
-void ImuMpu9250::IntHandler()
+void AhrsMpu9250::IntHandler()
 {
 	if (UpdateData())
 	{
@@ -769,7 +769,7 @@ void ImuMpu9250::IntHandler()
 	}
 }
 
-int ImuMpu9250::Read(uint16_t Addr, uint8_t *pBuff, int Len)
+int AhrsMpu9250::Read(uint16_t Addr, uint8_t *pBuff, int Len)
 {
 	uint8_t regaddr;
 	uint8_t d[2];
@@ -800,7 +800,7 @@ int ImuMpu9250::Read(uint16_t Addr, uint8_t *pBuff, int Len)
 	return cnt;
 }
 
-int ImuMpu9250::Write(uint16_t Addr, uint8_t *pData, int Len)
+int AhrsMpu9250::Write(uint16_t Addr, uint8_t *pData, int Len)
 {
 	uint8_t regaddr;
 	uint8_t d[2];

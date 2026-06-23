@@ -3,8 +3,8 @@
 
 @brief	Bosch BMI323 accel gyro implementation
 
-This file implements only accel & gyro part of the BMI323. IMU features are
-implemented in imu implementation file.
+This file implements only accel & gyro part of the BMI323. AHRS features are
+implemented in ahrs implementation file.
 
 NOTE: BMI323 read always send a dummy byte first.  Se datasheet for detail.
 

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_vqf.h
+@file	ahrs_vqf.h
 
-@brief	Implementation of software imu class using vqf fusion
+@brief	Implementation of the Ahrs class using vqf fusion
 
 Self contained port of Daniel Laidig VQF orientation estimation algorithm.
 No external vqf source and no CMSIS-DSP dependency. The full algorithm is
@@ -41,12 +41,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __IMU_VQF_H__
-#define __IMU_VQF_H__
+#ifndef __AHRS_VQF_H__
+#define __AHRS_VQF_H__
 
-#include "imu/imu.h"
+#include "motion/ahrs.h"
 
-/** @addtogroup IMU
+/** @addtogroup AHRS
   * @{
   */
 
@@ -140,11 +140,11 @@ typedef struct __Vqf_Coeff {
 	double magNormDipLpA[2];
 } VqfCoeff_t;
 
-class ImuVqf : public Imu {
+class AhrsVqf : public Ahrs {
 public:
-	ImuVqf();
-	virtual ~ImuVqf() {}
-	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	AhrsVqf();
+	virtual ~AhrsVqf() {}
+	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	void SetParam(VqfParam_t &Param) { memcpy(&vParams, &Param, sizeof(VqfParam_t)); }
 	virtual bool Enable();
 	virtual void Disable();
@@ -166,8 +166,8 @@ public:
 	virtual bool Read(GyroSensorData_t &Data) { return vpGyro->Read(Data); }
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
-	virtual bool Read(ImuQuat_t &Data);
-	virtual bool Read(ImuEuler_t &Data) { Data = vEuler; return true; }
+	virtual bool Read(AhrsQuat_t &Data);
+	virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
 
@@ -195,4 +195,4 @@ private:
 
 /** @} */
 
-#endif // __IMU_VQF_H__
+#endif // __AHRS_VQF_H__

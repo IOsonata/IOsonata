@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_invn_icm20948.cpp
+@file	ahrs_invn_icm20948.cpp
 
-@brief	Implementation of an Inertial Measurement Unit for Invensense ICM-20948
+@brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-20948
 
 This is an implementation wrapper over Invensense SmartMotion for the ICM-20948
 9 axis motion sensor
@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "idelay.h"
 #include "convutil.h"
-#include "imu/imu_invn_icm20948.h"
+#include "motion/ahrs_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 
 //#define ICM20948_WHO_AM_I_ID		0xEA
@@ -57,7 +57,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define AK0991x_SECONDARY_I2C_ADDR  0x0E	/* The secondary I2C address for AK0991x Magnetometers */
 
 static const uint8_t s_Dmp3Image[] = {
-#include "imu/icm20948_img_dmp3a.h"
+#include "motion/icm20948_img_dmp3a.h"
 };
 
 static const float s_CfgMountingMatrix[9]= {
@@ -66,7 +66,7 @@ static const float s_CfgMountingMatrix[9]= {
 	0, 0, 1.f
 };
 
-ImuInvnIcm20948::ImuInvnIcm20948()
+AhrsInvnIcm20948::AhrsInvnIcm20948()
 {
 	vpIcm = nullptr;
 	vpIcmDevice = nullptr;
@@ -75,9 +75,9 @@ ImuInvnIcm20948::ImuInvnIcm20948()
 }
 
 #if 0
-int ImuInvnIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
+int AhrsInvnIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
 {
-	ImuInvnIcm20948 *dev = (ImuInvnIcm20948*)context;
+	AhrsInvnIcm20948 *dev = (AhrsInvnIcm20948*)context;
 //	return spi_master_transfer_rx(NULL, reg, rbuffer, rlen);
 //	reg |= 0x80;
 	int cnt = dev->Read(&reg, 1, rbuffer, (int)rlen);
@@ -85,9 +85,9 @@ int ImuInvnIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer,
 	return cnt > 0 ? 0 : 1;
 }
 
-int ImuInvnIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
+int AhrsInvnIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
 {
-	ImuInvnIcm20948 *dev = (ImuInvnIcm20948*)context;
+	AhrsInvnIcm20948 *dev = (AhrsInvnIcm20948*)context;
 //	return spi_master_transfer_tx(NULL, reg, wbuffer, wlen);
 
 	int cnt = dev->Write(&reg, 1, (uint8_t*)wbuffer, (int)wlen);
@@ -95,7 +95,7 @@ int ImuInvnIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * w
 	return cnt > 0 ? 0 : 1;
 }
 
-bool ImuInvnIcm20948::Init(const IMU_CFG &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool AhrsInvnIcm20948::Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Valid())
 		return true;;
@@ -103,7 +103,7 @@ bool ImuInvnIcm20948::Init(const IMU_CFG &Cfg, uint32_t DevAddr, DeviceIntrf * c
 	if (pIntrf == NULL)
 		return false;
 
-	Imu::Init(Cfg, DevAddr, pIntrf, pTimer);
+	Ahrs::Init(Cfg, DevAddr, pIntrf, pTimer);
 	//Interface(pIntrf);
 	//DeviceAddess(DevAddr);
 
@@ -172,14 +172,14 @@ bool ImuInvnIcm20948::Init(const IMU_CFG &Cfg, uint32_t DevAddr, DeviceIntrf * c
 }
 #endif
 
-bool ImuInvnIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AhrsInvnIcm20948::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == NULL)
 	{
 		return false;
 	}
 
-	Imu::Init(Cfg, pAccel, pGyro, pMag);
+	Ahrs::Init(Cfg, pAccel, pGyro, pMag);
 
 	vpIcm = (AgmInvnIcm20948*)pAccel;
 	//vpSensorDev = (AgmInvnIcm20948*)pAccel;
@@ -189,7 +189,7 @@ bool ImuInvnIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, Gyro
 	return true;
 }
 
-bool ImuInvnIcm20948::Enable()
+bool AhrsInvnIcm20948::Enable()
 {
 	int i = INV_SENSOR_TYPE_MAX;
 
@@ -202,7 +202,7 @@ bool ImuInvnIcm20948::Enable()
 	return true;
 }
 
-void ImuInvnIcm20948::Disable()
+void AhrsInvnIcm20948::Disable()
 {
 	int i = INV_SENSOR_TYPE_MAX;
 
@@ -213,48 +213,48 @@ void ImuInvnIcm20948::Disable()
 	inv_icm20948_set_chip_power_state(vpIcmDevice, CHIP_AWAKE, 0);
 }
 
-void ImuInvnIcm20948::Reset()
+void AhrsInvnIcm20948::Reset()
 {
 	inv_icm20948_soft_reset(vpIcmDevice);
 }
 
-IMU_FEATURE ImuInvnIcm20948::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
+AHRS_FEATURE AhrsInvnIcm20948::Feature(AHRS_FEATURE FeatureBit, bool bEnDis)
 {
 	(void)FeatureBit;
 	(void) bEnDis;
 
-	return Imu::Feature();
+	return Ahrs::Feature();
 }
 
-bool ImuInvnIcm20948::Calibrate()
+bool AhrsInvnIcm20948::Calibrate()
 {
 	return true;
 }
 
-void ImuInvnIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AhrsInvnIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 	(void)pMatrix;
 }
 
-bool ImuInvnIcm20948::Compass(bool bEn)
+bool AhrsInvnIcm20948::Compass(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool ImuInvnIcm20948::Pedometer(bool bEn)
+bool AhrsInvnIcm20948::Pedometer(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool ImuInvnIcm20948::Quaternion(bool bEn, int NbAxis)
+bool AhrsInvnIcm20948::Quaternion(bool bEn, int NbAxis)
 {
 	(void)bEn;
 
-	printf("ImuInvnIcm20948::Quaternion\n");
+	printf("AhrsInvnIcm20948::Quaternion\n");
 
 	if (NbAxis < 9)
 	{
@@ -267,19 +267,19 @@ bool ImuInvnIcm20948::Quaternion(bool bEn, int NbAxis)
 	return true;
 }
 
-bool ImuInvnIcm20948::Tap(bool bEn)
+bool AhrsInvnIcm20948::Tap(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool ImuInvnIcm20948::UpdateData()
+bool AhrsInvnIcm20948::UpdateData()
 {
 	return true;
 }
 /*
-void ImuInvnIcm20948::IntHandler()
+void AhrsInvnIcm20948::IntHandler()
 {
 	//if (vpIcmDev)
 	{
@@ -293,15 +293,15 @@ void ImuInvnIcm20948::IntHandler()
 }
 */
 #if 1
-void ImuInvnIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
+void AhrsInvnIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
-	ImuInvnIcm20948 *dev = (ImuInvnIcm20948*)context;
+	AhrsInvnIcm20948 *dev = (AhrsInvnIcm20948*)context;
 
 	dev->UpdateData(sensortype, timestamp, data, arg);
 }
 #endif
 
-void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
+void AhrsInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
 	float raw_bias_data[6];
 	inv_sensor_event_t event;
@@ -427,7 +427,7 @@ void ImuInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t t
 	}
 }
 
-void ImuInvnIcm20948::IntHandler()
+void AhrsInvnIcm20948::IntHandler()
 {
 #if 1
 	inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);
@@ -514,7 +514,7 @@ void ImuInvnIcm20948::IntHandler()
 #endif
 }
 
-size_t ImuInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)
+size_t AhrsInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)
 {
 	bool retval = false;
 	size_t cnt = 0;

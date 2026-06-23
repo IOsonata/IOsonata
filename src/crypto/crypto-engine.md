@@ -74,9 +74,9 @@ The distinction matters: a non-Bluetooth consumer browsing `crypto.h` sees only
 facilities it can actually use. The BLE-controller AES is invisible there
 because no non-Bluetooth code can call it.
 
-## Composition (the IMU model)
+## Composition (the Ahrs model)
 
-A consumer needs a set of primitives. Like `Imu::Init(Cfg, pAccel, pGyro,
+A consumer needs a set of primitives. Like `Ahrs::Init(Cfg, pAccel, pGyro,
 pMag)` - where one chip may supply all three sensors or several chips combine -
 a crypto consumer is composed from whatever engines its target provides, each
 an App-owned instance.

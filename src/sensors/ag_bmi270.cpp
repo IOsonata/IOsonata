@@ -3,8 +3,8 @@
 
 @brief	Bosch BMI270 accel gyro implementation
 
-This file implements only accel & gyro part of the BMI270. IMU features are
-implemented in imu implementation file.
+This file implements only accel & gyro part of the BMI270. AHRS features are
+implemented in ahrs implementation file.
 
 
 @author	Hoang Nguyen Hoan

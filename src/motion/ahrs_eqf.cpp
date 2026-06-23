@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_eqf.cpp
+@file	ahrs_eqf.cpp
 
-@brief	Implementation of software imu class using EqF fusion
+@brief	Implementation of the Ahrs class using EqF fusion
 
 Self contained, single precision port of the ABC-EqF n=0 (Attitude-Bias
 Equivariant Filter). No external source and no CMSIS-DSP dependency.
@@ -54,278 +54,15 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "imu/imu_eqf.h"
+#include "motion/ahrs_eqf.h"
+#include "motion/imu_math.h"
 
 #define EQF_DEG2RAD	0.01745329251994329577f
 
-namespace {
 
-inline float Dot3(const float a[3], const float b[3])
-{
-	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
+using namespace ImuMath;
 
-inline float Norm3(const float v[3])
-{
-	return sqrtf(Dot3(v, v));
-}
-
-inline void Cross3(const float a[3], const float b[3], float out[3])
-{
-	float x = a[1] * b[2] - a[2] * b[1];
-	float y = a[2] * b[0] - a[0] * b[2];
-	float z = a[0] * b[1] - a[1] * b[0];
-	out[0] = x; out[1] = y; out[2] = z;
-}
-
-inline void Normalize3(float v[3])
-{
-	float n = Norm3(v);
-	if (n > 1.0e-10f) {
-		float inv = 1.0f / n;
-		v[0] *= inv; v[1] *= inv; v[2] *= inv;
-	}
-}
-
-inline void Mat3Eye(float M[9])
-{
-	M[0] = 1; M[1] = 0; M[2] = 0;
-	M[3] = 0; M[4] = 1; M[5] = 0;
-	M[6] = 0; M[7] = 0; M[8] = 1;
-}
-
-inline void Mat3Copy(float dst[9], const float src[9])
-{
-	memcpy(dst, src, 9 * sizeof(float));
-}
-
-// C = A * B
-void Mat3Mul(const float A[9], const float B[9], float C[9])
-{
-	float t[9];
-	t[0] = A[0] * B[0] + A[1] * B[3] + A[2] * B[6];
-	t[1] = A[0] * B[1] + A[1] * B[4] + A[2] * B[7];
-	t[2] = A[0] * B[2] + A[1] * B[5] + A[2] * B[8];
-	t[3] = A[3] * B[0] + A[4] * B[3] + A[5] * B[6];
-	t[4] = A[3] * B[1] + A[4] * B[4] + A[5] * B[7];
-	t[5] = A[3] * B[2] + A[4] * B[5] + A[5] * B[8];
-	t[6] = A[6] * B[0] + A[7] * B[3] + A[8] * B[6];
-	t[7] = A[6] * B[1] + A[7] * B[4] + A[8] * B[7];
-	t[8] = A[6] * B[2] + A[7] * B[5] + A[8] * B[8];
-	memcpy(C, t, sizeof(t));
-}
-
-// C = A * B^T
-void Mat3MulBT(const float A[9], const float B[9], float C[9])
-{
-	float t[9];
-	t[0] = A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
-	t[1] = A[0] * B[3] + A[1] * B[4] + A[2] * B[5];
-	t[2] = A[0] * B[6] + A[1] * B[7] + A[2] * B[8];
-	t[3] = A[3] * B[0] + A[4] * B[1] + A[5] * B[2];
-	t[4] = A[3] * B[3] + A[4] * B[4] + A[5] * B[5];
-	t[5] = A[3] * B[6] + A[4] * B[7] + A[5] * B[8];
-	t[6] = A[6] * B[0] + A[7] * B[1] + A[8] * B[2];
-	t[7] = A[6] * B[3] + A[7] * B[4] + A[8] * B[5];
-	t[8] = A[6] * B[6] + A[7] * B[7] + A[8] * B[8];
-	memcpy(C, t, sizeof(t));
-}
-
-void Mat3Transpose(const float A[9], float out[9])
-{
-	float t[9];
-	t[0] = A[0]; t[1] = A[3]; t[2] = A[6];
-	t[3] = A[1]; t[4] = A[4]; t[5] = A[7];
-	t[6] = A[2]; t[7] = A[5]; t[8] = A[8];
-	memcpy(out, t, sizeof(t));
-}
-
-// out = M * v
-inline void Mat3Vec(const float M[9], const float v[3], float out[3])
-{
-	float x = M[0] * v[0] + M[1] * v[1] + M[2] * v[2];
-	float y = M[3] * v[0] + M[4] * v[1] + M[5] * v[2];
-	float z = M[6] * v[0] + M[7] * v[1] + M[8] * v[2];
-	out[0] = x; out[1] = y; out[2] = z;
-}
-
-// out = M^T * v
-inline void Mat3TVec(const float M[9], const float v[3], float out[3])
-{
-	float x = M[0] * v[0] + M[3] * v[1] + M[6] * v[2];
-	float y = M[1] * v[0] + M[4] * v[1] + M[7] * v[2];
-	float z = M[2] * v[0] + M[5] * v[1] + M[8] * v[2];
-	out[0] = x; out[1] = y; out[2] = z;
-}
-
-// Skew symmetric matrix of v (wedge).
-inline void Skew3(const float v[3], float M[9])
-{
-	M[0] = 0;     M[1] = -v[2]; M[2] = v[1];
-	M[3] = v[2];  M[4] = 0;     M[5] = -v[0];
-	M[6] = -v[1]; M[7] = v[0];  M[8] = 0;
-}
-
-// Square of the skew of a unit direction: skew(d)^2 = d d^T - I.
-inline void Skew3Sq(const float d[3], float M[9])
-{
-	M[0] = d[0] * d[0] - 1.0f; M[1] = d[0] * d[1];        M[2] = d[0] * d[2];
-	M[3] = d[1] * d[0];        M[4] = d[1] * d[1] - 1.0f; M[5] = d[1] * d[2];
-	M[6] = d[2] * d[0];        M[7] = d[2] * d[1];        M[8] = d[2] * d[2] - 1.0f;
-}
-
-inline void Mat3Sym(float M[9])
-{
-	float a;
-	a = 0.5f * (M[1] + M[3]); M[1] = M[3] = a;
-	a = 0.5f * (M[2] + M[6]); M[2] = M[6] = a;
-	a = 0.5f * (M[5] + M[7]); M[5] = M[7] = a;
-}
-
-// SO(3) exponential. v = angle * axis -> rotation matrix R.
-void Rodrigues(const float v[3], float R[9])
-{
-	float angle = Norm3(v);
-	if (angle < 1.0e-8f) {
-		Mat3Eye(R);
-		R[1] -= v[2]; R[2] += v[1];
-		R[3] += v[2]; R[5] -= v[0];
-		R[6] -= v[1]; R[7] += v[0];
-		return;
-	}
-	float c = cosf(angle), s = sinf(angle), t = 1.0f - c;
-	float ia = 1.0f / angle;
-	float x = v[0] * ia, y = v[1] * ia, z = v[2] * ia;
-	R[0] = c + t * x * x;     R[1] = t * x * y - s * z; R[2] = t * x * z + s * y;
-	R[3] = t * y * x + s * z; R[4] = c + t * y * y;     R[5] = t * y * z - s * x;
-	R[6] = t * z * x - s * y; R[7] = t * z * y + s * x; R[8] = c + t * z * z;
-}
-
-// SO(3) left Jacobian.
-void So3LeftJ(const float v[3], float J[9])
-{
-	float angle = Norm3(v);
-	if (angle < 1.0e-6f) {
-		Mat3Eye(J);
-		float h = 0.5f;
-		J[1] -= h * v[2]; J[2] += h * v[1];
-		J[3] += h * v[2]; J[5] -= h * v[0];
-		J[6] -= h * v[1]; J[7] += h * v[0];
-		return;
-	}
-	float s = sinf(angle), c = cosf(angle), ia = 1.0f / angle;
-	float x = v[0] * ia, y = v[1] * ia, z = v[2] * ia;
-	float sa = s * ia;
-	float ms = 1.0f - sa;
-	float mc = (1.0f - c) * ia;
-	J[0] = sa + ms * x * x;     J[1] = ms * x * y - mc * z; J[2] = ms * x * z + mc * y;
-	J[3] = ms * y * x + mc * z; J[4] = sa + ms * y * y;     J[5] = ms * y * z - mc * x;
-	J[6] = ms * z * x - mc * y; J[7] = ms * z * y + mc * x; J[8] = sa + ms * z * z;
-}
-
-// Gram-Schmidt re-orthonormalise a row-major rotation matrix.
-void Reortho(float A[9])
-{
-	float r0[3] = { A[0], A[1], A[2] };
-	float r1[3] = { A[3], A[4], A[5] };
-	float r2[3];
-	Normalize3(r0);
-	float d = Dot3(r1, r0);
-	r1[0] -= d * r0[0]; r1[1] -= d * r0[1]; r1[2] -= d * r0[2];
-	Normalize3(r1);
-	Cross3(r0, r1, r2);
-	A[0] = r0[0]; A[1] = r0[1]; A[2] = r0[2];
-	A[3] = r1[0]; A[4] = r1[1]; A[5] = r1[2];
-	A[6] = r2[0]; A[7] = r2[1]; A[8] = r2[2];
-}
-
-// 3x3 inverse with a scale-aware determinant guard. Returns false if singular.
-bool Mat3Inv(const float M[9], float out[9])
-{
-	float det = M[0] * (M[4] * M[8] - M[5] * M[7])
-		  - M[1] * (M[3] * M[8] - M[5] * M[6])
-		  + M[2] * (M[3] * M[7] - M[4] * M[6]);
-	float dmax = fabsf(M[0]);
-	if (fabsf(M[4]) > dmax) dmax = fabsf(M[4]);
-	if (fabsf(M[8]) > dmax) dmax = fabsf(M[8]);
-	float thr = 1.0e-8f * dmax * dmax * dmax;
-	if (thr < 1.0e-20f) thr = 1.0e-20f;
-	if (fabsf(det) < thr) {
-		return false;
-	}
-	float id = 1.0f / det;
-	out[0] = (M[4] * M[8] - M[5] * M[7]) * id;
-	out[1] = (M[2] * M[7] - M[1] * M[8]) * id;
-	out[2] = (M[1] * M[5] - M[2] * M[4]) * id;
-	out[3] = (M[5] * M[6] - M[3] * M[8]) * id;
-	out[4] = (M[0] * M[8] - M[2] * M[6]) * id;
-	out[5] = (M[2] * M[3] - M[0] * M[5]) * id;
-	out[6] = (M[3] * M[7] - M[4] * M[6]) * id;
-	out[7] = (M[1] * M[6] - M[0] * M[7]) * id;
-	out[8] = (M[0] * M[4] - M[1] * M[3]) * id;
-	return true;
-}
-
-// Rotation matrix to quaternion [w, x, y, z], Shepperd's method, positive w.
-void MatToQuat(const float R[9], float q[4])
-{
-	float tr = R[0] + R[4] + R[8];
-	if (tr > 0.0f) {
-		float s = 0.5f / sqrtf(tr + 1.0f);
-		q[0] = 0.25f / s;
-		q[1] = (R[7] - R[5]) * s;
-		q[2] = (R[2] - R[6]) * s;
-		q[3] = (R[3] - R[1]) * s;
-	} else if (R[0] > R[4] && R[0] > R[8]) {
-		float s = 2.0f * sqrtf(1.0f + R[0] - R[4] - R[8]);
-		q[0] = (R[7] - R[5]) / s;
-		q[1] = 0.25f * s;
-		q[2] = (R[1] + R[3]) / s;
-		q[3] = (R[2] + R[6]) / s;
-	} else if (R[4] > R[8]) {
-		float s = 2.0f * sqrtf(1.0f + R[4] - R[0] - R[8]);
-		q[0] = (R[2] - R[6]) / s;
-		q[1] = (R[1] + R[3]) / s;
-		q[2] = 0.25f * s;
-		q[3] = (R[5] + R[7]) / s;
-	} else {
-		float s = 2.0f * sqrtf(1.0f + R[8] - R[0] - R[4]);
-		q[0] = (R[3] - R[1]) / s;
-		q[1] = (R[2] + R[6]) / s;
-		q[2] = (R[5] + R[7]) / s;
-		q[3] = 0.25f * s;
-	}
-	if (q[0] < 0.0f) {
-		q[0] = -q[0]; q[1] = -q[1]; q[2] = -q[2]; q[3] = -q[3];
-	}
-}
-
-// 6x6 covariance is stored row-major as P[36]; access 3x3 blocks (bi,bj).
-inline void PGet(const float P[36], int bi, int bj, float B[9])
-{
-	int r = bi * 3, c = bj * 3;
-	for (int i = 0; i < 3; i++) {
-		const float *row = P + (r + i) * 6 + c;
-		B[i * 3 + 0] = row[0];
-		B[i * 3 + 1] = row[1];
-		B[i * 3 + 2] = row[2];
-	}
-}
-
-inline void PSet(float P[36], int bi, int bj, const float B[9])
-{
-	int r = bi * 3, c = bj * 3;
-	for (int i = 0; i < 3; i++) {
-		float *row = P + (r + i) * 6 + c;
-		row[0] = B[i * 3 + 0];
-		row[1] = B[i * 3 + 1];
-		row[2] = B[i * 3 + 2];
-	}
-}
-
-} // anonymous namespace
-
-ImuEqf::ImuEqf()
+AhrsEqf::AhrsEqf()
 {
 	vNbAxis = 6;
 	vbInitialized = false;
@@ -351,13 +88,13 @@ ImuEqf::ImuEqf()
 	vParams.restAccNormTh = 0.1f;
 }
 
-bool ImuEqf::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AhrsEqf::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == nullptr || pGyro == nullptr) {
 		return false;
 	}
 
-	if (Imu::Init(Cfg, pAccel, pGyro, pMag) == false) {
+	if (Ahrs::Init(Cfg, pAccel, pGyro, pMag) == false) {
 		return false;
 	}
 
@@ -377,20 +114,20 @@ bool ImuEqf::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * 
 	return true;
 }
 
-void ImuEqf::Setup(void)
+void AhrsEqf::Setup(void)
 {
 	// All EqF coefficients are static; nothing to precompute beyond the
 	// sample periods captured in Init. Kept for symmetry with the interface.
 }
 
-void ImuEqf::Reset(void)
+void AhrsEqf::Reset(void)
 {
 	memset(&vState, 0, sizeof(vState));
 	Mat3Eye(vState.A);
 	vState.mode = 0;	// init accumulate
 }
 
-bool ImuEqf::Enable()
+bool AhrsEqf::Enable()
 {
 	if (vpAccel) vpAccel->Enable();
 	if (vpGyro) vpGyro->Enable();
@@ -398,41 +135,16 @@ bool ImuEqf::Enable()
 	return true;
 }
 
-void ImuEqf::Disable()
+void AhrsEqf::Disable()
 {
 	if (vpMag) vpMag->Disable();
 	if (vpGyro) vpGyro->Disable();
 	if (vpAccel) vpAccel->Disable();
 }
 
-void ImuEqf::GravityInit(const float accAvg[3])
+void AhrsEqf::GravityInit(const float accAvg[3])
 {
-	float gn = Norm3(accAvg);
-	if (gn < 1.0e-6f) {
-		Mat3Eye(vState.A);
-	} else {
-		float inv = 1.0f / gn;
-		float b1[3] = { accAvg[0] * inv, accAvg[1] * inv, accAvg[2] * inv };
-
-		float ref[3] = { 1.0f, 0.0f, 0.0f };
-		if (fabsf(Dot3(b1, ref)) > 0.9f) {
-			ref[0] = 0.0f; ref[1] = 1.0f; ref[2] = 0.0f;
-		}
-		float b2[3];
-		Cross3(b1, ref, b2);
-		float b2n = Norm3(b2);
-		if (b2n < 1.0e-6f) {
-			Mat3Eye(vState.A);
-		} else {
-			inv = 1.0f / b2n;
-			b2[0] *= inv; b2[1] *= inv; b2[2] *= inv;
-			float b3[3];
-			Cross3(b1, b2, b3);
-			vState.A[0] = -b3[0]; vState.A[1] = -b3[1]; vState.A[2] = -b3[2];
-			vState.A[3] =  b2[0]; vState.A[4] =  b2[1]; vState.A[5] =  b2[2];
-			vState.A[6] =  b1[0]; vState.A[7] =  b1[1]; vState.A[8] =  b1[2];
-		}
-	}
+	DcmFromGravity(accAvg, vState.A);
 
 	memset(vState.aVec, 0, sizeof(vState.aVec));
 	memset(vState.P, 0, sizeof(vState.P));
@@ -445,7 +157,7 @@ void ImuEqf::GravityInit(const float accAvg[3])
 	}
 }
 
-void ImuEqf::Propagate(const float w[3], float dt)
+void AhrsEqf::Propagate(const float w[3], float dt)
 {
 	// b = -A^T aVec
 	float bh[3];
@@ -568,7 +280,7 @@ void ImuEqf::Propagate(const float w[3], float dt)
 	}
 }
 
-void ImuEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool suppressYaw)
+void AhrsEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool suppressYaw)
 {
 	float y[3] = { yRaw[0], yRaw[1], yRaw[2] };
 	float n = Norm3(y);
@@ -712,7 +424,7 @@ void ImuEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool 
 	}
 }
 
-void ImuEqf::RestBiasUpdate(void)
+void AhrsEqf::RestBiasUpdate(void)
 {
 	// b = -A^T aVec
 	float bh[3];
@@ -835,7 +547,7 @@ void ImuEqf::RestBiasUpdate(void)
 	}
 }
 
-bool ImuEqf::UpdateData()
+bool AhrsEqf::UpdateData()
 {
 	if (vbInitialized == false) {
 		return false;
@@ -947,16 +659,15 @@ bool ImuEqf::UpdateData()
 	return true;
 }
 
-bool ImuEqf::Read(ImuQuat_t &Data)
+bool AhrsEqf::Read(AhrsQuat_t &Data)
 {
 	Data = vQuat;
 	return true;
 }
 
-void ImuEqf::IntHandler()
+void AhrsEqf::IntHandler()
 {
-	// Refresh the bound sensors then fuse, so this object works as a drop-in
-	// pImuDev whose IntHandler is the data-ready entry point. When the caller
+	// Refresh the bound sensors then fuse. IntHandler is the data-ready entry point. When the caller
 	// refreshes the sensors itself and calls UpdateData() directly, do not
 	// call this.
 	if (vpAccel) vpAccel->IntHandler();
@@ -965,33 +676,33 @@ void ImuEqf::IntHandler()
 	UpdateData();
 }
 
-bool ImuEqf::Quaternion(bool bEn, int NbAxis)
+bool AhrsEqf::Quaternion(bool bEn, int NbAxis)
 {
 	// Mag path not yet enabled; EqF runs 6-axis.
 	vNbAxis = 6;
 	return true;
 }
 
-bool ImuEqf::Compass(bool bEn)
+bool AhrsEqf::Compass(bool bEn)
 {
 	return false;
 }
 
-bool ImuEqf::Calibrate()
+bool AhrsEqf::Calibrate()
 {
 	return false;
 }
 
-void ImuEqf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AhrsEqf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 }
 
-bool ImuEqf::Pedometer(bool bEn)
+bool AhrsEqf::Pedometer(bool bEn)
 {
 	return false;
 }
 
-bool ImuEqf::Tap(bool bEn)
+bool AhrsEqf::Tap(bool bEn)
 {
 	return false;
 }

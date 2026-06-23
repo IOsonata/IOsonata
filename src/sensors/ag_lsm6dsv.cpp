@@ -3,8 +3,8 @@
 
 @brief	ST LSM6DSV accel gyro implementation
 
-This file implements only accel & gyro part of the LSM6DSV. IMU features are
-implemented in imu implementation file.
+This file implements only accel & gyro part of the LSM6DSV. AHRS features are
+implemented in ahrs implementation file.
 
 
 @author	Hoang Nguyen Hoan

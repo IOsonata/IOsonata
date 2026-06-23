@@ -7,8 +7,8 @@ Generic RNG-only crypto engine. Wraps the platform hardware random number
 generator (RngGet, e.g. rng_nrfx.c driving the Nordic RNG / CRACEN peripheral,
 including its secure/non-secure variants). Advertises only CRYPTO_CAP_RNG, so
 it composes as the RNG slot for a consumer (SMP, TLS) whose other slots are
-filled by an ECDH/AES engine - the way an IMU pairs a single-function chip
-with others.
+filled by an ECDH/AES engine, so single-capability engines combine
+into a full set.
 
 This is independent of any BLE controller: the entropy comes from the MCU's
 dedicated RNG hardware, available whether or not a radio is running.

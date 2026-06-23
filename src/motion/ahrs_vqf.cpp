@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_vqf.cpp
+@file	ahrs_vqf.cpp
 
-@brief	Implementation of software imu class using vqf fusion
+@brief	Implementation of the Ahrs class using vqf fusion
 
 Self contained, single precision optimized port of the Daniel Laidig VQF
 orientation estimation algorithm. No external vqf source and no CMSIS-DSP
@@ -53,7 +53,7 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "imu/imu_vqf.h"
+#include "motion/ahrs_vqf.h"
 
 // Constants. Double precision constants are used where the low pass filter
 // math runs in double.
@@ -266,7 +266,7 @@ float FilterStep(float x, const double b[3], const double a[2], double state[2])
 
 } // anonymous namespace
 
-ImuVqf::ImuVqf()
+AhrsVqf::AhrsVqf()
 {
 	vNbAxis = 9;
 	vbInitialized = false;
@@ -301,13 +301,13 @@ ImuVqf::ImuVqf()
 	vParams.magRejectionFactor = 2.0f;
 }
 
-bool ImuVqf::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AhrsVqf::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == nullptr || pGyro == nullptr) {
 		return false;
 	}
 
-	if (Imu::Init(Cfg, pAccel, pGyro, pMag) == false) {
+	if (Ahrs::Init(Cfg, pAccel, pGyro, pMag) == false) {
 		return false;
 	}
 
@@ -331,7 +331,7 @@ bool ImuVqf::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * 
 	return true;
 }
 
-void ImuVqf::Setup(void)
+void AhrsVqf::Setup(void)
 {
 	FilterCoeffs(vParams.tauAcc, vCoeffs.accTs, vCoeffs.accLpB, vCoeffs.accLpA);
 
@@ -363,7 +363,7 @@ void ImuVqf::Setup(void)
 	}
 }
 
-void ImuVqf::Reset(void)
+void AhrsVqf::Reset(void)
 {
 	QuatSetIdentity(vState.gyrQuat);
 	QuatSetIdentity(vState.accQuat);
@@ -404,7 +404,7 @@ void ImuVqf::Reset(void)
 	for (size_t i = 0; i < 2 * 2; i++) { vState.magNormDipLpState[i] = NAN; }
 }
 
-bool ImuVqf::Enable()
+bool AhrsVqf::Enable()
 {
 	if (vpAccel) vpAccel->Enable();
 	if (vpGyro) vpGyro->Enable();
@@ -412,14 +412,14 @@ bool ImuVqf::Enable()
 	return true;
 }
 
-void ImuVqf::Disable()
+void AhrsVqf::Disable()
 {
 	if (vpMag) vpMag->Disable();
 	if (vpGyro) vpGyro->Disable();
 	if (vpAccel) vpAccel->Disable();
 }
 
-void ImuVqf::FilterVec(const float vec[], size_t n, float tau, float Ts, const double b[3],
+void AhrsVqf::FilterVec(const float vec[], size_t n, float tau, float Ts, const double b[3],
                        const double a[2], double state[], float out[])
 {
 	// During the first tau seconds, average the samples and seed the filter
@@ -450,7 +450,7 @@ void ImuVqf::FilterVec(const float vec[], size_t n, float tau, float Ts, const d
 	}
 }
 
-void ImuVqf::UpdateGyr(const float gyr[3])
+void AhrsVqf::UpdateGyr(const float gyr[3])
 {
 	// Rest detection low pass and threshold check.
 	if (vParams.restBiasEstEnabled || vParams.magDistRejectionEnabled) {
@@ -483,7 +483,7 @@ void ImuVqf::UpdateGyr(const float gyr[3])
 	}
 }
 
-void ImuVqf::UpdateAcc(const float acc[3])
+void AhrsVqf::UpdateAcc(const float acc[3])
 {
 	if (acc[0] == 0.0f && acc[1] == 0.0f && acc[2] == 0.0f) {
 		return;
@@ -620,7 +620,7 @@ void ImuVqf::UpdateAcc(const float acc[3])
 	}
 }
 
-void ImuVqf::UpdateMag(const float mag[3])
+void AhrsVqf::UpdateMag(const float mag[3])
 {
 	if (mag[0] == 0.0f && mag[1] == 0.0f && mag[2] == 0.0f) {
 		return;
@@ -721,18 +721,18 @@ void ImuVqf::UpdateMag(const float mag[3])
 	}
 }
 
-void ImuVqf::GetQuat6D(float out[4]) const
+void AhrsVqf::GetQuat6D(float out[4]) const
 {
 	QuatMultiply(vState.accQuat, vState.gyrQuat, out);
 }
 
-void ImuVqf::GetQuat9D(float out[4]) const
+void AhrsVqf::GetQuat9D(float out[4]) const
 {
 	QuatMultiply(vState.accQuat, vState.gyrQuat, out);
 	QuatApplyDelta(out, vState.delta, out);
 }
 
-bool ImuVqf::UpdateData()
+bool AhrsVqf::UpdateData()
 {
 	if (vbInitialized == false) {
 		return false;
@@ -778,16 +778,15 @@ bool ImuVqf::UpdateData()
 	return true;
 }
 
-bool ImuVqf::Read(ImuQuat_t &Data)
+bool AhrsVqf::Read(AhrsQuat_t &Data)
 {
 	Data = vQuat;
 	return true;
 }
 
-void ImuVqf::IntHandler()
+void AhrsVqf::IntHandler()
 {
-	// Refresh the bound sensors then fuse, so this object works as a drop-in
-	// pImuDev whose IntHandler is the data-ready entry point. When the caller
+	// Refresh the bound sensors then fuse. IntHandler is the data-ready entry point. When the caller
 	// refreshes the sensors itself and calls UpdateData() directly, do not
 	// call this.
 	if (vpAccel) vpAccel->IntHandler();
@@ -796,7 +795,7 @@ void ImuVqf::IntHandler()
 	UpdateData();
 }
 
-bool ImuVqf::Quaternion(bool bEn, int NbAxis)
+bool AhrsVqf::Quaternion(bool bEn, int NbAxis)
 {
 	if (NbAxis == 9 && vpMag != nullptr) {
 		vNbAxis = 9;
@@ -806,7 +805,7 @@ bool ImuVqf::Quaternion(bool bEn, int NbAxis)
 	return true;
 }
 
-bool ImuVqf::Compass(bool bEn)
+bool AhrsVqf::Compass(bool bEn)
 {
 	if (bEn && vpMag == nullptr) {
 		return false;
@@ -815,22 +814,22 @@ bool ImuVqf::Compass(bool bEn)
 	return true;
 }
 
-bool ImuVqf::Calibrate()
+bool AhrsVqf::Calibrate()
 {
 	return false;
 }
 
-void ImuVqf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AhrsVqf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 	// Axis alignment is applied at the sensor driver level in IOsonata.
 }
 
-bool ImuVqf::Pedometer(bool bEn)
+bool AhrsVqf::Pedometer(bool bEn)
 {
 	return false;
 }
 
-bool ImuVqf::Tap(bool bEn)
+bool AhrsVqf::Tap(bool bEn)
 {
 	return false;
 }

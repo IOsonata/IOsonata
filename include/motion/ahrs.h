@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
-@file	imu.h
+@file	ahrs.h
 
-@brief	Implementation of an Inertial Measurement Unit
+@brief	Generic AHRS (attitude and heading reference system)
 
-This a generic abstraction layer for IMU sensor fusion.  It is a mean to
+This a generic abstraction layer for AHRS sensor fusion.  It is a mean to
 provide a common interface to different sensor fusion library out there.
 
 
@@ -35,63 +35,38 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __IMU_H__
-#define __IMU_H__
+#ifndef __AHRS_H__
+#define __AHRS_H__
 
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
 #include "sensors/mag_sensor.h"
 
-/** @addtogroup IMU
+/** @addtogroup AHRS
   * @{
   */
 
-/// IMU processing features
-//#define IMU_FEATURE_RAW_ACCEL				(1<<0)		//!< Raw accel sensor data, relevant for when sensor is known
-//#define IMU_FEATURE_RAW_GYRO				(1<<1)		//!< Raw gyr sensor data, relevant for when sensor is known
-//#define IMU_FEATURE_RAW_MAG					(1<<2)		//!< Raw mag sensor data, relevant for when sensor is known
-//#define IMU_FEATURE_ACCEL					(1<<3)		//!< Converted accel data
-//#define IMU_FEATURE_GYRO					(1<<4)		//!< Converted gyro data
-//#define IMU_FEATURE_MAG						(1<<5)		//!< Converted mag data
-#define IMU_FEATURE_EULER					(1<<0)		//!< Euler angles data
-#define IMU_FEATURE_QUATERNION				(1<<1)		//!< Quaternion data
-#define IMU_FEATURE_COMPASS					(1<<2)		//!< Compasss
-#define IMU_FEATURE_GRAVITY					(1<<3)		//!< Gravity vector
-#define IMU_FEATURE_EXTERNAL_ACCEL			(1<<4)		//!< External acceleration vector
-#define IMU_FEATURE_TAP						(1<<5)		//!< Tap sensing
-#define IMU_FEATURE_ROTATION				(1<<6)		//!< Rotation data
-#define IMU_FEATURE_VIBRATION				(1<<7)		//!< Vibration data
-#define IMU_FEATURE_PEDOMETER				(1<<8)		//!< Pedometer
-#define IMU_FEATURE_CYCLING					(1<<9)		//!< Cycling
+/// AHRS processing features
+//#define AHRS_FEATURE_RAW_ACCEL				(1<<0)		//!< Raw accel sensor data, relevant for when sensor is known
+//#define AHRS_FEATURE_RAW_GYRO				(1<<1)		//!< Raw gyr sensor data, relevant for when sensor is known
+//#define AHRS_FEATURE_RAW_MAG					(1<<2)		//!< Raw mag sensor data, relevant for when sensor is known
+//#define AHRS_FEATURE_ACCEL					(1<<3)		//!< Converted accel data
+//#define AHRS_FEATURE_GYRO					(1<<4)		//!< Converted gyro data
+//#define AHRS_FEATURE_MAG						(1<<5)		//!< Converted mag data
+#define AHRS_FEATURE_EULER					(1<<0)		//!< Euler angles data
+#define AHRS_FEATURE_QUATERNION				(1<<1)		//!< Quaternion data
+#define AHRS_FEATURE_COMPASS					(1<<2)		//!< Compasss
+#define AHRS_FEATURE_GRAVITY					(1<<3)		//!< Gravity vector
+#define AHRS_FEATURE_EXTERNAL_ACCEL			(1<<4)		//!< External acceleration vector
+#define AHRS_FEATURE_TAP						(1<<5)		//!< Tap sensing
+#define AHRS_FEATURE_ROTATION				(1<<6)		//!< Rotation data
+#define AHRS_FEATURE_VIBRATION				(1<<7)		//!< Vibration data
+#define AHRS_FEATURE_PEDOMETER				(1<<8)		//!< Pedometer
+#define AHRS_FEATURE_CYCLING					(1<<9)		//!< Cycling
 
-typedef uint32_t	IMU_FEATURE;
+typedef uint32_t	AHRS_FEATURE;
 
-#if 0
-/// Quaternion data
-/// The quaternion is a normalized number.  For more compact structure
-/// convert it to 16 bits fixed point by multiplying with (1<<15) = 32768
-typedef struct __Imu_Quat {
-	uint32_t Timestamp;	//!< Time stamp count in usec
-	union {
-		int16_t	Q[4];
-		struct {
-			int16_t Q1;
-			int16_t Q2;
-			int16_t Q3;
-			int16_t Q4;
-		};
-	};
-} IMU_QUAT;
-
-typedef struct __Imu_Euler {
-	uint32_t Timestamp;	//!< Time stamp count in usec
-	int16_t Yaw;
-	int16_t Pitch;
-	int16_t Roll;
-} IMU_EULER;
-#endif
-
-typedef struct __Imu_Quat {
+typedef struct __Ahrs_Quat {
 	uint64_t Timestamp;	//!< Time stamp count in usec
 	union {
 		float Q[4];
@@ -102,20 +77,18 @@ typedef struct __Imu_Quat {
 			float Q4;
 		};
 	};
-} ImuQuat_t;
+} AhrsQuat_t;
 
-//typedef ImuQuat_t IMU_QUAT;
 
-typedef struct __Imu_Euler {
+typedef struct __Ahrs_Euler {
 	uint64_t Timestamp;	//!< Time stamp count in usec
 	float Yaw;
 	float Pitch;
 	float Roll;
-} ImuEuler_t;
+} AhrsEuler_t;
 
-//typedef ImuEuler_t	IMU_EULER;
 
-typedef struct __Imu_Gravity {
+typedef struct __Ahrs_Gravity {
 	uint64_t Timestamp;	//!< Time stamp count in usec
 	union {
 		float Val[3];
@@ -125,12 +98,11 @@ typedef struct __Imu_Gravity {
 			float Z;
 		};
 	};
-} ImuGravity_t;
+} AhrsGravity_t;
 
-//typedef ImuGravity_t	IMU_GRAVITY;
 
 /// External acceleration vector
-typedef struct __Imu_Extrn_Accel {
+typedef struct __Ahrs_Extrn_Accel {
 	uint64_t Timestamp;	//!< Time stamp count in usec
 	union {
 		float Val[3];
@@ -140,12 +112,11 @@ typedef struct __Imu_Extrn_Accel {
 			float Z;
 		};
 	};
-} ImuExtAccel_t;
+} AhrsExtAccel_t;
 
-//typedef ImuExtAccel_t	IMU_EXT_ACCEL;
 
 /// Pedometer
-typedef struct __Imu_Pedometer {
+typedef struct __Ahrs_Pedometer {
 	uint32_t Timestamp;		//!< Time stamp count in msec
     uint16_t StepCount;		//!< Number of step taken
     uint8_t Cadence; 		//!< in steps per minute
@@ -154,32 +125,29 @@ typedef struct __Imu_Pedometer {
     uint16_t DownCount; 	//!< Number of downstairs taken
     uint8_t StrideLength;	//!< in cm
     uint16_t TotalDistance;	//!< in dm
-} ImuPedometer_t;
+} AhrsPedometer_t;
 
-//typedef ImuPedometer_t	IMU_PEDOMETER;
 
 /// Rotation data
-typedef struct __Imu_Rotation_Data {
+typedef struct __Ahrs_Rotation_Data {
 	uint64_t Timestamp;		//!< Time stamp count in usec
     uint32_t Count; 		//!< Number of rotations
     uint16_t Rpm; 			//!< Revolutions per minute
-} ImuRotation_t;
-
-//typedef ImuRotation_t	IMU_ROTATION;
+} AhrsRotation_t;
 
 
-typedef struct __Imu_Config {
+
+typedef struct __Ahrs_Config {
 	DevEvtHandler_t EvtHandler;
-} ImuCfg_t;
+} AhrsCfg_t;
 
-//typedef ImuCfg_t	IMU_CFG;
 
 #ifdef __cplusplus
 
-class Imu : virtual public Device {
+class Ahrs : virtual public Device {
 public:
 
-	virtual bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	virtual bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool UpdateData() = 0;
 	virtual void IntHandler() = 0;
 	virtual bool Calibrate() = 0;
@@ -191,8 +159,8 @@ public:
 	virtual bool Pedometer(bool bEn) = 0;
 	virtual bool Quaternion(bool bEn, int NbAxis) = 0;
 	virtual bool Tap(bool bEn) = 0;
-	virtual bool Read(ImuQuat_t &Data) { Data = vQuat; return true; }
-	virtual bool Read(ImuEuler_t &Data) { Data = vEuler; return true; }
+	virtual bool Read(AhrsQuat_t &Data) { Data = vQuat; return true; }
+	virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -239,8 +207,8 @@ public:
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
 
-	virtual IMU_FEATURE Feature() { return vActiveFeature; }
-	virtual IMU_FEATURE Feature(IMU_FEATURE FeatureBit, bool bEnDis);
+	virtual AHRS_FEATURE Feature() { return vActiveFeature; }
+	virtual AHRS_FEATURE Feature(AHRS_FEATURE FeatureBit, bool bEnDis);
 
 	/**
 	 * @brief	Set data rate in miliHz
@@ -263,14 +231,14 @@ protected:
 	AccelSensor *vpAccel;	//!< Pointer to accelerometer sensor
 	GyroSensor *vpGyro;		//!< Pointer to gyro sensor
 	MagSensor *vpMag;		//!< Pointer to magnetometer Sensor
-	IMU_FEATURE vActiveFeature;	//!< Orable feature enabled bits - Bit set to 1 : Enabled, 0 : Disabled
-	ImuQuat_t vQuat;			//!< Last updated quaternion values
-	ImuEuler_t vEuler;		//!< Last updated euler value
+	AHRS_FEATURE vActiveFeature;	//!< Orable feature enabled bits - Bit set to 1 : Enabled, 0 : Disabled
+	AhrsQuat_t vQuat;			//!< Last updated quaternion values
+	AhrsEuler_t vEuler;		//!< Last updated euler value
 	uint32_t vRate;			//!< Data rate in mHz (mili-Hz)
 };
 
 #endif // __cplusplus
 
-/** @} end group IMU */
+/** @} end group AHRS */
 
-#endif // __IMU_H__
+#endif // __AHRS_H__

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_icm20948.h
+@file	ahrs_icm20948.h
 
-@brief	Implementation of an Inertial Measurement Unit for Invensense ICM-20948
+@brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-20948
 
 @author	Hoang Nguyen Hoan
 @date	Sept. 9, 2019
@@ -31,24 +31,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __IMU_ICM20948_H__
-#define __IMU_ICM20948_H__
+#ifndef __AHRS_ICM20948_H__
+#define __AHRS_ICM20948_H__
 
 //#include "Devices/Drivers/Icm20948/Icm20948.h"
 
 #include "device_intrf.h"
-#include "imu/imu.h"
+#include "motion/ahrs.h"
 #include "sensors/agm_icm20948.h"
 
-/** @addtogroup IMU
+/** @addtogroup AHRS
   * @{
   */
 
-class ImuIcm20948 : public Imu {
+class AhrsIcm20948 : public Ahrs {
 public:
 
-	//bool Init(const ImuCfg_t &Cfg, AgmIcm20948 *pIcm);
-	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	//bool Init(const AhrsCfg_t &Cfg, AgmIcm20948 *pIcm);
+	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	bool SetDMPAccelScale();
 	bool SetDMPGyroScale();
 	virtual bool Enable();
@@ -56,7 +56,7 @@ public:
 	virtual void Reset();
 	virtual bool UpdateData();
 	virtual void IntHandler();
-	virtual IMU_FEATURE Feature(IMU_FEATURE FeatureBit, bool bEnDis);
+	virtual AHRS_FEATURE Feature(AHRS_FEATURE FeatureBit, bool bEnDis);
 	virtual bool Calibrate();
 	virtual void SetAxisAlignmentMatrix(int8_t * const pMatrix);
 	virtual bool Euler(bool bEn) { (void)bEn; return false; }
@@ -65,8 +65,8 @@ public:
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 
-	virtual bool Read(ImuQuat_t &Data) { return Imu::Read(Data); }
-	virtual bool Read(ImuEuler_t &Data) { return Imu::Read(Data); }
+	virtual bool Read(AhrsQuat_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(AhrsEuler_t &Data) { return Ahrs::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -80,7 +80,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(AccelSensorData_t &Data) { return Imu::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return Ahrs::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -94,7 +94,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(GyroSensorData_t &Data) { return Imu::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return Ahrs::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -108,7 +108,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(MagSensorData_t &Data) { return Imu::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return Ahrs::Read(Data); }
 
 
 protected:
@@ -174,6 +174,6 @@ private:
 	bool vbDmpEnabled;
 };
 
-/** @} end group IMU */
+/** @} end group AHRS */
 
-#endif // __IMU_ICM20948_H__
+#endif // __AHRS_ICM20948_H__

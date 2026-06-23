@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_xiot_fusion.h
+@file	ahrs_xiot_fusion.h
 
-@brief	Implementation of software imu class using x-iot Fusion
+@brief	Implementation of the Ahrs class using x-iot Fusion
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 20, 2024
@@ -31,22 +31,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __IMU_XIOT_FUSION_H__
-#define __IMU_XIOT_FUSION_H__
+#ifndef __AHRS_XIOT_FUSION_H__
+#define __AHRS_XIOT_FUSION_H__
 
 #include "Fusion/Fusion.h"
 
-#include "imu/imu.h"
+#include "motion/ahrs.h"
 
-/** @addtogroup IMU
+/** @addtogroup AHRS
   * @{
   */
 
 #ifdef __cplusplus
 
-class ImuXiotFusion : public Imu {
+class AhrsXiotFusion : public Ahrs {
 public:
-	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -104,8 +104,8 @@ public:
 	 */
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
-    virtual bool Read(ImuQuat_t &Data) { Data = vQuat; return true; }
-    virtual bool Read(ImuEuler_t &Data) { Data = vEuler; return true; }
+    virtual bool Read(AhrsQuat_t &Data) { Data = vQuat; return true; }
+    virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
 
@@ -124,6 +124,6 @@ extern "C" {
 }
 #endif
 
-/** @} end group IMU */
+/** @} end group AHRS */
 
-#endif // __IMU_XIOT_FUSION_H__
+#endif // __AHRS_XIOT_FUSION_H__

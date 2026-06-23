@@ -3,8 +3,8 @@
 
 @brief	TDK Invensen ICM456x series accel gyro implementation
 
-This file implements only accel & gyro part of the ICM456x. IMU features are
-implemented in imu implementation file.
+This file implements only accel & gyro part of the ICM456x. AHRS features are
+implemented in ahrs implementation file.
 
 
 @author	Hoang Nguyen Hoan

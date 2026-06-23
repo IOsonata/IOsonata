@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_icm20948.cpp
+@file	ahrs_icm20948.cpp
 
-@brief	Implementation of an Inertial Measurement Unit for Invensense ICM-20948
+@brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-20948
 
 @author	Hoang Nguyen Hoan
 @date	Sept. 9, 2019
@@ -36,13 +36,13 @@ SOFTWARE.
 #include "idelay.h"
 #include "istddef.h"
 #include "convutil.h"
-#include "imu/imu_icm20948.h"
+#include "motion/ahrs_icm20948.h"
 #include "sensors/agm_icm20948.h"
 #include "sensors/agm_icm20948DMP.h"
 #include "coredev/uart.h"
 
 static const uint8_t s_Dmp3Image[] = {
-#include "imu/icm20948_img_dmp3a.h"
+#include "motion/icm20948_img_dmp3a.h"
 };
 
 static const int s_DmpImageSize = sizeof(s_Dmp3Image);
@@ -53,7 +53,7 @@ static const float s_CfgMountingMatrix[9]= {
 	0, 0, 1.f
 };
 
-int ImuIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
+int AhrsIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
 {
 	AgmIcm20948 *dev = (AgmIcm20948*)context;
 //	return spi_master_transfer_rx(NULL, reg, rbuffer, rlen);
@@ -63,7 +63,7 @@ int ImuIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uin
 	return cnt > 0 ? 0 : 1;
 }
 
-int ImuIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
+int AhrsIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
 {
 	AgmIcm20948 *dev = (AgmIcm20948*)context;
 //	return spi_master_transfer_tx(NULL, reg, wbuffer, wlen);
@@ -74,14 +74,14 @@ int ImuIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuff
 }
 
 #if 0
-void ImuIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
+void AhrsIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
-	ImuIcm20948 *dev = (ImuIcm20948*)context;
+	AhrsIcm20948 *dev = (AhrsIcm20948*)context;
 
 	dev->UpdateData(sensortype, timestamp, data, arg);
 }
 
-bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
+bool AhrsIcm20948::Init(const AhrsCfg_t &Cfg, AgmIcm20948 * const pIcm)
 {
 	if (pIcm == NULL)
 	{
@@ -128,9 +128,9 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AgmIcm20948 * const pIcm)
 }
 #endif
 
-bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AhrsIcm20948::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
-	// Min require for IMU are accel & gyro, must be combo device
+	// Min required sensors are accel & gyro, must be combo device
 	if (pAccel == nullptr || pGyro == nullptr || (AgmIcm20948*)pAccel != (AgmIcm20948*)pGyro)
 	{
 		return false;
@@ -157,7 +157,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 		return false;
 	}
 
-	Imu::Init(Cfg, pAccel, pGyro, pMag);
+	Ahrs::Init(Cfg, pAccel, pGyro, pMag);
 	vEvtHandler = Cfg.EvtHandler;
 
 	ResetDMPCtrlReg();
@@ -217,7 +217,7 @@ bool ImuIcm20948::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	return true;
 }
 
-void ImuIcm20948::ResetDMPCtrlReg()
+void AhrsIcm20948::ResetDMPCtrlReg()
 {
 	uint8_t d[2] = {0, 0};
 
@@ -230,7 +230,7 @@ void ImuIcm20948::ResetDMPCtrlReg()
 	vSensorCtrl = 0;
 }
 
-void ImuIcm20948::SetSensorCtrl(uint16_t Bits, bool bEnable)
+void AhrsIcm20948::SetSensorCtrl(uint16_t Bits, bool bEnable)
 {
 	if (bEnable)
 	{
@@ -251,7 +251,7 @@ void ImuIcm20948::SetSensorCtrl(uint16_t Bits, bool bEnable)
 	}
 }
 
-void ImuIcm20948::ResetFifo()
+void AhrsIcm20948::ResetFifo()
 {
 	uint16_t regaddr;
 	uint16_t cnt;
@@ -291,7 +291,7 @@ void ImuIcm20948::ResetFifo()
 	Write8((uint8_t*)&regaddr, 2, d);
 }
 
-bool ImuIcm20948::SetDMPAccelScale()
+bool AhrsIcm20948::SetDMPAccelScale()
 {
 	int32_t scale, scale2;
 
@@ -352,7 +352,7 @@ bool ImuIcm20948::SetDMPAccelScale()
 	return true;
 }
 
-bool ImuIcm20948::SetDMPGyroScale()
+bool AhrsIcm20948::SetDMPGyroScale()
 {
 	int32_t scale = ((GyroSensor*)vpIcm)->Sensitivity();
 
@@ -1343,7 +1343,7 @@ int inv_icm20948_ctrl_enable_sensorx(struct inv_icm20948 * s, unsigned char andr
 	return result;
 }
 #endif
-bool ImuIcm20948::Enable()
+bool AhrsIcm20948::Enable()
 {
 	uint8_t d, userctrl;
 	uint16_t dout;
@@ -1399,7 +1399,7 @@ bool ImuIcm20948::Enable()
 	return res;
 }
 
-void ImuIcm20948::Disable()
+void AhrsIcm20948::Disable()
 {
 	uint16_t regaddr = ICM20948_USER_CTRL_REG;
 	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
@@ -1409,93 +1409,93 @@ void ImuIcm20948::Disable()
 	vpIcm->Disable();
 }
 
-void ImuIcm20948::Reset()
+void AhrsIcm20948::Reset()
 {
 	vpIcm->Reset();
 }
 
-IMU_FEATURE ImuIcm20948::Feature(IMU_FEATURE FeatureBit, bool bEnDis)
+AHRS_FEATURE AhrsIcm20948::Feature(AHRS_FEATURE FeatureBit, bool bEnDis)
 {
-	if (FeatureBit & IMU_FEATURE_EULER)
+	if (FeatureBit & AHRS_FEATURE_EULER)
 	{
 
 	}
 
-	if (FeatureBit & IMU_FEATURE_QUATERNION)
+	if (FeatureBit & AHRS_FEATURE_QUATERNION)
 	{
 		SetSensorCtrl(ICM20948_DMP_DATA_OUT_CTL1_QUAT9_SET, bEnDis);
 	}
 
-	if (FeatureBit & IMU_FEATURE_COMPASS)
+	if (FeatureBit & AHRS_FEATURE_COMPASS)
 	{
 
 	}
 
-	if (FeatureBit & IMU_FEATURE_GRAVITY)
+	if (FeatureBit & AHRS_FEATURE_GRAVITY)
 	{
 
 	}
 
-	if (FeatureBit & IMU_FEATURE_EXTERNAL_ACCEL)
+	if (FeatureBit & AHRS_FEATURE_EXTERNAL_ACCEL)
 	{
 
 	}
 
-	if (FeatureBit & IMU_FEATURE_TAP)
+	if (FeatureBit & AHRS_FEATURE_TAP)
 	{
 
 	}
 
-	if (FeatureBit & IMU_FEATURE_ROTATION)
+	if (FeatureBit & AHRS_FEATURE_ROTATION)
 	{
 
 	}
 
-	if (FeatureBit & IMU_FEATURE_VIBRATION)
+	if (FeatureBit & AHRS_FEATURE_VIBRATION)
 	{
 
 	}
 
-	if (FeatureBit & IMU_FEATURE_PEDOMETER)
+	if (FeatureBit & AHRS_FEATURE_PEDOMETER)
 	{
 
 	}
 
-	if (FeatureBit & IMU_FEATURE_CYCLING)
+	if (FeatureBit & AHRS_FEATURE_CYCLING)
 	{
 
 	}
 
-	return Imu::Feature(FeatureBit, bEnDis);
+	return Ahrs::Feature(FeatureBit, bEnDis);
 }
 
-bool ImuIcm20948::Calibrate()
+bool AhrsIcm20948::Calibrate()
 {
 	return true;
 }
 
-void ImuIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AhrsIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 	(void)pMatrix;
 }
 
-bool ImuIcm20948::Compass(bool bEn)
+bool AhrsIcm20948::Compass(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool ImuIcm20948::Pedometer(bool bEn)
+bool AhrsIcm20948::Pedometer(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool ImuIcm20948::Quaternion(bool bEn, int NbAxis)
+bool AhrsIcm20948::Quaternion(bool bEn, int NbAxis)
 {
-	Imu::Feature(IMU_FEATURE_QUATERNION, bEn);
+	Ahrs::Feature(AHRS_FEATURE_QUATERNION, bEn);
 
 	uint16_t regaddr;
 
@@ -1566,14 +1566,14 @@ bool ImuIcm20948::Quaternion(bool bEn, int NbAxis)
 	return true;
 }
 
-bool ImuIcm20948::Tap(bool bEn)
+bool AhrsIcm20948::Tap(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool ImuIcm20948::UpdateData()
+bool AhrsIcm20948::UpdateData()
 {
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
 	uint8_t status[4];
@@ -1694,7 +1694,7 @@ bool ImuIcm20948::UpdateData()
 // bytes consumed from vFifo. Leftover partial-packet bytes are moved to the
 // front of vFifo and vFifoDataLen is updated. vFifoHdr/vFifoHdr2 retain the
 // pending packet header across calls when a packet is split across reads.
-size_t ImuIcm20948::ProcessFifoPackets(uint64_t t)
+size_t AhrsIcm20948::ProcessFifoPackets(uint64_t t)
 {
 	uint8_t *p = vFifo;
 	size_t start = vFifoDataLen;
@@ -1762,7 +1762,7 @@ size_t ImuIcm20948::ProcessFifoPackets(uint64_t t)
 	return start - vFifoDataLen;
 }
 
-void ImuIcm20948::IntHandler()
+void AhrsIcm20948::IntHandler()
 {
 	UpdateData();
 
@@ -1891,7 +1891,7 @@ void ImuIcm20948::IntHandler()
 	}
 }
 
-int ImuIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
+int AhrsIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
 {
 	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 
@@ -1916,7 +1916,7 @@ int ImuIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
 	return Len;
 }
 
-int ImuIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
+int AhrsIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
 {
 	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 
@@ -1942,7 +1942,7 @@ int ImuIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
 	return Len;
 }
 
-size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)
+size_t AhrsIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)
 {
 	size_t cnt = 0;
 	uint8_t *d = pFifo;//[ICM20948_FIFO_PAGE_SIZE];
@@ -2352,7 +2352,7 @@ size_t ImuIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestam
 	return cnt;
 }
 
-bool ImuIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len)
+bool AhrsIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len)
 {
 	if (pDmpImage == NULL || Len == 0)
 		return false;
@@ -2393,7 +2393,7 @@ bool ImuIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage
 	return false;
 }
 
-bool ImuIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
+bool AhrsIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
 {
 	int len = Len, l = 0;
 	uint8_t *p = (uint8_t*)pDmpImage;

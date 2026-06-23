@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_xiot_fusion.cpp
+@file	ahrs_xiot_fusion.cpp
 
-@brief	Implementation of software imu class using fusion ahrs
+@brief	Implementation of the Ahrs class using fusion ahrs
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 20, 2024
@@ -34,18 +34,18 @@ SOFTWARE.
 
 #include "Fusion/Fusion.h"
 
-#include "imu/imu_xiot_fusion.h"
+#include "motion/ahrs_xiot_fusion.h"
 
 #define SAMPLE_RATE		50
 
-bool ImuXiotFusion::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AhrsXiotFusion::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == nullptr || pGyro == nullptr)
 	{
 		return false;
 	}
 
-	bool res = Imu::Init(Cfg, pAccel, pGyro, pMag);
+	bool res = Ahrs::Init(Cfg, pAccel, pGyro, pMag);
 
 	if (res == true)
 	{
@@ -76,7 +76,7 @@ bool ImuXiotFusion::Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSe
 	return res;
 }
 
-bool ImuXiotFusion::Enable()
+bool AhrsXiotFusion::Enable()
 {
 	bool res = vpAccel->Enable();
 
@@ -93,17 +93,17 @@ bool ImuXiotFusion::Enable()
 	return res;
 }
 
-void ImuXiotFusion::Disable()
+void AhrsXiotFusion::Disable()
 {
 
 }
 
-void ImuXiotFusion::Reset()
+void AhrsXiotFusion::Reset()
 {
 
 }
 
-bool ImuXiotFusion::UpdateData()
+bool AhrsXiotFusion::UpdateData()
 {
 	AccelSensorData_t acc;
 	GyroSensorData_t gyro;
@@ -150,7 +150,7 @@ bool ImuXiotFusion::UpdateData()
 	return true;
 }
 
-void ImuXiotFusion::IntHandler()
+void AhrsXiotFusion::IntHandler()
 {
 	vpAccel->IntHandler();
 	vpGyro->IntHandler();
@@ -162,37 +162,37 @@ void ImuXiotFusion::IntHandler()
 	UpdateData();
 }
 
-uint32_t ImuXiotFusion::Rate(uint32_t DataRate)
+uint32_t AhrsXiotFusion::Rate(uint32_t DataRate)
 {
-	return Imu::Rate(DataRate);
+	return Ahrs::Rate(DataRate);
 }
 
-bool ImuXiotFusion::Calibrate()
+bool AhrsXiotFusion::Calibrate()
 {
 
 	return true;
 }
 
-void ImuXiotFusion::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AhrsXiotFusion::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 	(void)pMatrix;
 }
 
-bool ImuXiotFusion::Compass(bool bEn)
+bool AhrsXiotFusion::Compass(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool ImuXiotFusion::Pedometer(bool bEn)
+bool AhrsXiotFusion::Pedometer(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool ImuXiotFusion::Quaternion(bool bEn, int NbAxis)
+bool AhrsXiotFusion::Quaternion(bool bEn, int NbAxis)
 {
 	(void)bEn;
 	(void)NbAxis;
@@ -202,7 +202,7 @@ bool ImuXiotFusion::Quaternion(bool bEn, int NbAxis)
 	return true;
 }
 
-bool ImuXiotFusion::Tap(bool bEn)
+bool AhrsXiotFusion::Tap(bool bEn)
 {
 	(void)bEn;
 

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	imu_mpl_mpu9250.h
+@file	ahrs_mpu9250.h
 
-@brief	Implementation of an Inertial Measurement Unit of InvenSense MPU-9250
+@brief	Generic AHRS (attitude and heading reference system) of InvenSense MPU-9250
 
 Implements the DMP (Digital Motion Processor) driver portion of the MPU-9250
 
@@ -34,19 +34,19 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
-#ifndef __IMU_MPU9250_H__
-#define __IMU_MPU9250_H__
+#ifndef __AHRS_MPU9250_H__
+#define __AHRS_MPU9250_H__
 
-#include "imu/imu.h"
+#include "motion/ahrs.h"
 #include "sensors/agm_mpu9250.h"
 
-/** @addtogroup IMU
+/** @addtogroup AHRS
   * @{
   */
 
-class ImuMpu9250 : public Imu {
+class AhrsMpu9250 : public Ahrs {
 public:
-	bool Init(const ImuCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -104,8 +104,8 @@ public:
 	 */
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
-    virtual bool Read(ImuQuat_t &Data) { Data = vQuat; return true; }
-    virtual bool Read(ImuEuler_t &Data) { Data = vEuler; return true; }
+    virtual bool Read(AhrsQuat_t &Data) { Data = vQuat; return true; }
+    virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
 	/**
@@ -147,6 +147,6 @@ private:
 	int vDmpFifoLen;
 };
 
-/** @} end group IMU */
+/** @} end group AHRS */
 
-#endif // __IMU_MPU9250_H__
+#endif // __AHRS_MPU9250_H__

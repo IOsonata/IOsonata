@@ -7,7 +7,7 @@ Generic software crypto engine implementing the ECDH capability of CryptoDev_t
 via micro-ecc. ECDH only - no symmetric cipher, no RNG of its own: uECC needs
 an RNG registered, which this engine borrows from the platform via the RNG
 function passed at registration (CryptoUeccSetRng), so it composes with a
-separate RNG engine the way an IMU pairs a gyro-only chip with a separate accel.
+separate RNG engine to cover the RNG capability it does not provide itself.
 
 Like a sensor that supports only one axis-type, this engine advertises only
 CRYPTO_CAP_ECDH_P256. A consumer needing AES or RNG composes it with another

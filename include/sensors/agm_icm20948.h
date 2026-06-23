@@ -749,7 +749,7 @@ private:
 };
 
 class AgmIcm20948 : public AccelIcm20948, public GyroIcm20948, public MagIcm20948, public TempSensor {
-	friend class ImuIcm20948;
+	friend class AhrsIcm20948;
 	friend class AccelIcm20948;
 	friend class GyroIcm20948;
 	friend class MagIcm20948;
