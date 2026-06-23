@@ -37,7 +37,7 @@ SOFTWARE.
 //#include "Devices/Drivers/Icm20948/Icm20948.h"
 
 #include "device_intrf.h"
-#include "motion/ahrs.h"
+#include "fusion/ahrs.h"
 #include "sensors/agm_icm20948.h"
 
 /** @addtogroup AHRS

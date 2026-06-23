@@ -11,7 +11,7 @@ gyro rate, and integrates the quaternion.
 
 The correction direction matches the MEKF gravity update geometry, so the
 filter aligns roll and pitch to gravity and leaves heading unobservable in
-6-axis. Shared math comes from imu_math.h.
+6-axis. Shared math comes from fusion_math.h.
 
 @author	Hoang Nguyen Hoan
 @date	Jun. 23, 2026
@@ -44,12 +44,12 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "motion/ahrs_mahony.h"
-#include "motion/imu_math.h"
+#include "fusion/ahrs_mahony.h"
+#include "fusion/fusion_math.h"
 
 #define MAHONY_DEG2RAD	0.01745329251994329577f
 
-using namespace ImuMath;
+using namespace FusionMath;
 
 AhrsMahony::AhrsMahony()
 {

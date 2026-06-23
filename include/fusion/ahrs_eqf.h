@@ -1,26 +1,24 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_mekf.h
+@file	ahrs_eqf.h
 
-@brief	Implementation of the Ahrs class using MEKF fusion
+@brief	Implementation of the Ahrs class using EqF fusion
 
-Self contained Multiplicative Extended Kalman Filter for attitude and gyro
-bias estimation. No external source and no CMSIS-DSP dependency. The state is
-a unit quaternion plus a 3 axis gyro bias. The error state is a 6 vector of a
-small angle attitude error and a bias error, propagated with a 6x6 covariance
-and reset into the quaternion after every update (the multiplicative reset).
+Self contained port of the ABC-EqF n=0 (Attitude-Bias Equivariant Filter).
+No external source and no CMSIS-DSP dependency. The estimator is a geometric
+EKF on the symmetry group: SO(3) attitude plus gyro bias, with a 6x6 error
+covariance propagated by a state transition matrix and a Riccati update, and
+corrections applied through the group exponential.
 
-This is the 6-axis variant (accel + gyro). The accel supplies the gravity
-direction measurement. Roll and pitch gyro bias become observable through the
-gravity update and the error state coupling; yaw and yaw bias stay unobservable
-without a heading source. The mag direction update (9-axis) uses the same
-vector update path and can be added later.
+This is the 6-axis variant (accel + gyro). The accel provides the gravity
+direction measurement; gyro bias is estimated during detected rest. The mag
+direction update (9-axis) uses the same direction-update path and can be added
+later.
 
-The filter linearises the error dynamics at the current estimate each step,
-unlike the EqF which linearises at a fixed origin. Use MEKF when an error-state
-EKF baseline is wanted; use EqF for stronger transient and reset behaviour.
+Reference: Fornasier et al., "Overcoming Bias: Equivariant Filter Design for
+Biased Attitude Estimation with Online Calibration", RA-L 2022.
 
-The matrix work (6x6 covariance, quaternion and 3x3 ops per sample) needs an
-FPU. Use this backend on FPU targets; on soft-float parts prefer VQF.
+The matrix work (6x6 covariance, SO(3) exp/log per sample) needs an FPU. Use
+this backend on FPU targets; on soft-float parts prefer VQF.
 
 @author	Hoang Nguyen Hoan
 @date	Jun. 23, 2026
@@ -50,47 +48,60 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __AHRS_MEKF_H__
-#define __AHRS_MEKF_H__
+#ifndef __AHRS_EQF_H__
+#define __AHRS_EQF_H__
 
-#include "motion/ahrs.h"
+#include "fusion/ahrs.h"
 
 /** @addtogroup AHRS
   * @{
   */
 
-/// MEKF tuning parameters. Noise terms follow the Farrenkopf attitude and bias
-/// model. Defaults are reasonable starting values for a consumer MEMS IMU.
-typedef struct __Mekf_Param {
-	float sigmaV;		//!< Gyro white noise, rad/s/sqrt(Hz)
-	float sigmaU;		//!< Gyro bias random walk, rad/s^2/sqrt(Hz)
+/// EqF tuning parameters. Defaults match the reference n=0 tuning.
+typedef struct __Eqf_Param {
+	float sigmaW;		//!< Gyro noise PSD, rad/s/sqrt(Hz)
+	float sigmaB;		//!< Bias random walk PSD, rad/s^2/sqrt(Hz)
 	float sigmaAcc;		//!< Accel measurement noise, unit vector
-	float accAdaptK;	//!< Accel adaptive noise gain vs norm deviation
+	float accAdaptK;	//!< Accel adaptive noise gain
+	float sixAxisAccScale;	//!< Extra accel noise scale in 6-axis mode
 	int initSamples;	//!< Accel samples averaged for initial attitude
+	int orthoInterval;	//!< Re-orthonormalise R every N propagations
 	float pInitAtt;		//!< Initial attitude variance, rad^2
 	float pInitBias;	//!< Initial bias variance, (rad/s)^2
-	float accGateLo;	//!< Reject accel update below this norm, g
-	float accGateHi;	//!< Reject accel update above this norm, g
-} MekfParam_t;
+	float restTau;		//!< Rest detection low pass time constant, sec
+	float restThGyr;	//!< Rest gyro deviation threshold, deg/s
+	float restThAcc;	//!< Rest accel deviation threshold, g
+	float restMinT;		//!< Min rest duration to trigger, sec
+	float restSigma;	//!< Bias measurement noise during rest
+	float restMaxBias;	//!< Max plausible bias, deg/s
+	float restAccNormTh;	//!< Accel norm deviation from 1g for rest
+} EqfParam_t;
 
-/// MEKF runtime state. The quaternion maps body to earth and matches the EqF
-/// output convention. The covariance is symmetrised after each step to control
-/// float32 drift.
-typedef struct __Mekf_State {
-	float q[4];		//!< Attitude quaternion, body to earth, [w x y z]
-	float b[3];		//!< Gyro bias, rad/s
+/// EqF runtime state. All single precision; the covariance is symmetrised and
+/// the attitude re-orthonormalised periodically to control float32 drift.
+typedef struct __Eqf_State {
+	float A[9];		//!< SO(3) attitude matrix, row-major
+	float aVec[3];		//!< Bias in the group Lie algebra; bias = -A^T aVec
 	float P[36];		//!< 6x6 error covariance, row-major
+	float restGyrLp[3];	//!< Low pass gyro, rad/s
+	float restAccLp[3];	//!< Low pass accel, g
+	float restGyrDev;	//!< Last gyro squared deviation
+	float restT;		//!< Accumulated rest time, sec
 	float accSum[3];	//!< Accel accumulator during init
 	int accInitCount;	//!< Accel sample count during init
+	int orthoCounter;	//!< Propagations since last re-orthonormalise
+	bool restDetected;
+	bool restGyrLpInit;
+	bool restAccLpInit;
 	int mode;		//!< 0 = init accumulate, 1 = running
-} MekfState_t;
+} EqfState_t;
 
-class AhrsMekf : public Ahrs {
+class AhrsEqf : public Ahrs {
 public:
-	AhrsMekf();
-	virtual ~AhrsMekf() {}
+	AhrsEqf();
+	virtual ~AhrsEqf() {}
 	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
-	void SetParam(MekfParam_t &Param) { memcpy(&vParams, &Param, sizeof(MekfParam_t)); }
+	void SetParam(EqfParam_t &Param) { memcpy(&vParams, &Param, sizeof(EqfParam_t)); }
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -120,14 +131,17 @@ private:
 	void Setup(void);
 	/// One propagation step from a gyro sample (rad/s) over dt seconds.
 	void Propagate(const float w[3], float dt);
-	/// Vector measurement update. meas is the raw body-frame vector, ref is the
+	/// Direction measurement update. y is the raw body-frame vector, d is the
 	/// known unit direction in the earth frame, sigma the measurement std-dev.
-	void VecUpdate(const float meas[3], const float ref[3], float sigma);
-	/// Build the initial attitude quaternion from an averaged gravity vector.
+	/// suppressYaw zeroes the heading and bias gains (6-axis accel update).
+	void DirUpdate(const float y[3], const float d[3], float sigma, bool suppressYaw);
+	/// Gyro bias Kalman update applied while at rest.
+	void RestBiasUpdate(void);
+	/// Build the initial attitude from an averaged gravity vector.
 	void GravityInit(const float accAvg[3]);
 
-	MekfParam_t vParams;
-	MekfState_t vState;
+	EqfParam_t vParams;
+	EqfState_t vState;
 	float vGyrDt;		//!< Gyro sample period, sec
 	float vAccDt;		//!< Accel sample period, sec
 	int vNbAxis;		//!< 6 for accel/gyro (mag path not yet enabled)
@@ -136,4 +150,4 @@ private:
 
 /** @} */
 
-#endif // __AHRS_MEKF_H__
+#endif // __AHRS_EQF_H__

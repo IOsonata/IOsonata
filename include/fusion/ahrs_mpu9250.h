@@ -1,13 +1,12 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_invn_icm20948.h
+@file	ahrs_mpu9250.h
 
-@brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-20948
+@brief	Generic AHRS (attitude and heading reference system) of InvenSense MPU-9250
 
-This is an implementation wrapper over Invensense SmartMotion for the ICM-20948
-9 axis motion sensor
+Implements the DMP (Digital Motion Processor) driver portion of the MPU-9250
 
 @author	Hoang Nguyen Hoan
-@date	Dec. 26, 2018
+@date	Aug. 1, 2018
 
 @license
 
@@ -34,38 +33,47 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __AHRS_INVN_ICM20948_H__
-#define __AHRS_INVN_ICM20948_H__
 
-#include "device_intrf.h"
-#include "motion/ahrs.h"
-#include "sensors/agm_invn_icm20948.h"
+#ifndef __AHRS_MPU9250_H__
+#define __AHRS_MPU9250_H__
+
+#include "fusion/ahrs.h"
+#include "sensors/agm_mpu9250.h"
 
 /** @addtogroup AHRS
   * @{
   */
 
-class AhrsInvnIcm20948 : public Ahrs {
+class AhrsMpu9250 : public Ahrs {
 public:
-
-	//bool Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
 	virtual bool UpdateData();
-	virtual void IntHandler();// { /*vpIcm->IntHandler(); } /*/inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);}
-	virtual AHRS_FEATURE Feature(AHRS_FEATURE FeatureBit, bool bEnDis);
-	virtual bool Calibrate();
-	virtual void SetAxisAlignmentMatrix(int8_t * const pMatrix) ;
+	virtual void IntHandler();
+	uint32_t Rate(uint32_t DataRate);
+	bool Calibrate();
+	void SetAxisAlignmentMatrix(int8_t * const pMatrix);
 	virtual bool Compass(bool bEn);
 	virtual bool Pedometer(bool bEn);
 	virtual bool Euler(bool bEn) { (void)bEn; return false; }
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
-
-	virtual bool Read(AhrsQuat_t &Data) { return Ahrs::Read(Data); }
-	virtual bool Read(AhrsEuler_t &Data) { return Ahrs::Read(Data); }
+	/**
+	 * @brief	Read last updated sensor data
+	 *
+	 * This function read the currently stored data last updated by UdateData().
+	 * Device implementation can add validation if needed and return true or false
+	 * in the case of data valid or not.  This default implementation only returns
+	 * the stored data with success.
+	 *
+	 * @param 	Data : Reference to data storage for the returned data
+	 *
+	 * @return	True - Success.
+	 */
+	virtual bool Read(AccelSensorRawData_t &Data) { return vpAccel->Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return vpAccel->Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -79,7 +87,8 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(AccelSensorData_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(GyroSensorRawData_t &Data) { return vpGyro->Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return vpGyro->Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -93,48 +102,51 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(GyroSensorData_t &Data) { return Ahrs::Read(Data); }
-
-	/**
-	 * @brief	Read last updated sensor data
-	 *
-	 * This function read the currently stored data last updated by UdateData().
-	 * Device implementation can add validation if needed and return true or false
-	 * in the case of data valid or not.  This default implementation only returns
-	 * the stored data with success.
-	 *
-	 * @param 	Data : Reference to data storage for the returned data
-	 *
-	 * @return	True - Success.
-	 */
-	virtual bool Read(MagSensorData_t &Data) { return Ahrs::Read(Data); }
-
-	AhrsInvnIcm20948();
+	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
+    virtual bool Read(AhrsQuat_t &Data) { Data = vQuat; return true; }
+    virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
+	/**
+	 * @brief	Read device's register/memory block
+	 *
+	 * @param 	pCmdAddr 	: Buffer containing command or address to be written
+	 * 						  prior reading data back
+	 * @param	CmdAddrLen 	: Command buffer size
+	 * @param	pBuff		: Data buffer container
+	 * @param	BuffLen		: Data buffer size
+	 *
+	 * @return	Actual number of bytes read
+	 */
+	virtual int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) {
+		return vpMpu->Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+	}
+
+	/**
+	 * @brief	Write to device's register/memory block
+	 *
+	 * @param 	pCmdAddr 	: Buffer containing command or address to be written
+	 * 						  prior writing data back
+	 * @param	CmdAddrLen 	: Command buffer size
+	 * @param	pData		: Data buffer to be written to the device
+	 * @param	DataLen		: Size of data
+	 *
+	 * @return	Actual number of bytes written
+	 */
+	virtual int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen) {
+		return vpMpu->Write(pCmdAddr, CmdAddrLen, pData, DataLen);
+	}
+
+	virtual int Read(uint16_t Addr, uint8_t *pBuff, int Len);
+	virtual int Write(uint16_t Addr, uint8_t *pData, int Len);
 
 private:
-	int Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen) { return vpIcm->Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen); }
-	int Write(uint8_t *pCmdAddr, int CmdAddrLen, const uint8_t *pData, int DataLen) { return vpIcm->Write(pCmdAddr, CmdAddrLen, pData, DataLen); }
-	void UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg);
-	static void SensorEventHandler(void * context, enum inv_icm20948_sensor sensor, uint64_t timestamp, const void * data, const void *arg);
-	static int InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
-	static int InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
-	size_t ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp);
 
-	AgmInvnIcm20948 *vpIcm;
-	inv_icm20948_t *vpIcmDevice;
-	//inv_icm20948_t vIcmDevice;
-//	int32_t vCfgAccFsr; // Default = +/- 4g. Valid ranges: 2, 4, 8, 16
-//	int32_t vCfgGyroFsr; // Default = +/- 2000dps. Valid ranges: 250, 500, 1000, 2000
-	uint16_t vFifoHdr;	//!< DMP FIFO header
-	uint16_t vFifoHdr2;	//!< DMP FIFO header
-//	uint8_t vFifo[ICM20948_FIFO_PAGE_SIZE]; //!< FIFO cache
-	uint8_t vFifo[ICM20948_FIFO_SIZE_MAX];
-	size_t vFifoDataLen;	//!< Data length currently in fifo
+	AgmMpu9250 *vpMpu;
+	int vDmpFifoLen;
 };
 
 /** @} end group AHRS */
 
-
-#endif // __AHRS_INVN_ICM20948_H__
+#endif // __AHRS_MPU9250_H__

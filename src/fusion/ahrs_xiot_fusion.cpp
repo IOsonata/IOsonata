@@ -34,7 +34,7 @@ SOFTWARE.
 
 #include "Fusion/Fusion.h"
 
-#include "motion/ahrs_xiot_fusion.h"
+#include "fusion/ahrs_xiot_fusion.h"
 
 #define SAMPLE_RATE		50
 

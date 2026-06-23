@@ -50,7 +50,7 @@ SOFTWARE.
 #ifndef __AHRS_MAHONY_H__
 #define __AHRS_MAHONY_H__
 
-#include "motion/ahrs.h"
+#include "fusion/ahrs.h"
 
 /** @addtogroup AHRS
   * @{

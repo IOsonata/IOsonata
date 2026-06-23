@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "idelay.h"
 #include "convutil.h"
-#include "motion/ahrs_invn_icm20948.h"
+#include "fusion/ahrs_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 
 //#define ICM20948_WHO_AM_I_ID		0xEA
@@ -57,7 +57,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define AK0991x_SECONDARY_I2C_ADDR  0x0E	/* The secondary I2C address for AK0991x Magnetometers */
 
 static const uint8_t s_Dmp3Image[] = {
-#include "motion/icm20948_img_dmp3a.h"
+#include "fusion/icm20948_img_dmp3a.h"
 };
 
 static const float s_CfgMountingMatrix[9]= {

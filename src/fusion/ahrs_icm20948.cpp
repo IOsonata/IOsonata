@@ -36,13 +36,13 @@ SOFTWARE.
 #include "idelay.h"
 #include "istddef.h"
 #include "convutil.h"
-#include "motion/ahrs_icm20948.h"
+#include "fusion/ahrs_icm20948.h"
 #include "sensors/agm_icm20948.h"
 #include "sensors/agm_icm20948DMP.h"
 #include "coredev/uart.h"
 
 static const uint8_t s_Dmp3Image[] = {
-#include "motion/icm20948_img_dmp3a.h"
+#include "fusion/icm20948_img_dmp3a.h"
 };
 
 static const int s_DmpImageSize = sizeof(s_Dmp3Image);

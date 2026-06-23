@@ -44,13 +44,13 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "motion/ahrs_mekf.h"
-#include "motion/imu_math.h"
+#include "fusion/ahrs_mekf.h"
+#include "fusion/fusion_math.h"
 
 #define MEKF_DEG2RAD	0.01745329251994329577f
 
 
-using namespace ImuMath;
+using namespace FusionMath;
 
 AhrsMekf::AhrsMekf()
 {

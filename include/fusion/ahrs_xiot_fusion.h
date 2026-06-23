@@ -36,7 +36,7 @@ SOFTWARE.
 
 #include "Fusion/Fusion.h"
 
-#include "motion/ahrs.h"
+#include "fusion/ahrs.h"
 
 /** @addtogroup AHRS
   * @{

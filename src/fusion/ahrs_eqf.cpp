@@ -54,13 +54,13 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "motion/ahrs_eqf.h"
-#include "motion/imu_math.h"
+#include "fusion/ahrs_eqf.h"
+#include "fusion/fusion_math.h"
 
 #define EQF_DEG2RAD	0.01745329251994329577f
 
 
-using namespace ImuMath;
+using namespace FusionMath;
 
 AhrsEqf::AhrsEqf()
 {

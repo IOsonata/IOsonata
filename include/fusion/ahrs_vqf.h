@@ -44,7 +44,7 @@ SOFTWARE.
 #ifndef __AHRS_VQF_H__
 #define __AHRS_VQF_H__
 
-#include "motion/ahrs.h"
+#include "fusion/ahrs.h"
 
 /** @addtogroup AHRS
   * @{

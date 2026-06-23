@@ -54,7 +54,7 @@ SOFTWARE.
 
 #include <string.h>
 
-#include "imu/inertial_nav.h"
+#include "fusion/inertial_nav.h"
 
 /** @addtogroup AHRS
   * @{
