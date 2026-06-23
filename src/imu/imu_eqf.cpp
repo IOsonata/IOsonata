@@ -955,6 +955,13 @@ bool ImuEqf::Read(ImuQuat_t &Data)
 
 void ImuEqf::IntHandler()
 {
+	// Refresh the bound sensors then fuse, so this object works as a drop-in
+	// pImuDev whose IntHandler is the data-ready entry point. When the caller
+	// refreshes the sensors itself and calls UpdateData() directly, do not
+	// call this.
+	if (vpAccel) vpAccel->IntHandler();
+	if (vpGyro) vpGyro->IntHandler();
+	if (vpMag) vpMag->IntHandler();
 	UpdateData();
 }
 

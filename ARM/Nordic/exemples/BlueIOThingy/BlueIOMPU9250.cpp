@@ -18,6 +18,21 @@
 #include "coredev/timer.h"
 #include "sensors/agm_mpu9250.h"
 #include "imu/imu_mpu9250.h"
+
+// Fusion backend test selector. Define one of:
+//   IMU_FUSION_VQF - software VQF fusion (ImuVqf)
+//   IMU_FUSION_EQF - software EqF fusion (ImuEqf), 6-axis, FPU targets only
+// to run software fusion instead of the MPU9250 on-chip DMP. Both read raw
+// data from the IOsonata AGM driver. Do not define both VQF and EqF together.
+//#define IMU_FUSION_VQF
+//#define IMU_FUSION_EQF
+
+#ifdef IMU_FUSION_VQF
+#include "imu/imu_vqf.h"
+#endif
+#ifdef IMU_FUSION_EQF
+#include "imu/imu_eqf.h"
+#endif
 #include "idelay.h"
 #include "board.h"
 #include "BlueIOThingy.h"
@@ -37,7 +52,7 @@ static const GyroSensorCfg_t s_GyroCfg = {
 	.DevAddr = 0,
 	.OpMode = SENSOR_OPMODE_CONTINUOUS,
 	.Freq = 50000,
-	.Sensitivity = 10,
+	.Sensitivity = 2000,	// +/-2000 dps full scale; 10 maps to 250 dps which saturates on fast motion
 	.FltrFreq = 200,
 };
 
@@ -56,7 +71,13 @@ static const ImuCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
+#if defined(IMU_FUSION_VQF)
+static ImuVqf s_Imu;
+#elif defined(IMU_FUSION_EQF)
+static ImuEqf s_Imu;
+#else
 static ImuMpu9250 s_Imu;
+#endif
 
 static Timer * s_pTimer;
 static uint32_t s_MotionFeature = 0;
@@ -180,9 +201,19 @@ static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 
 void MPU9250IntHandler(int IntNo, void *pCtx)
 {
+#if defined(IMU_FUSION_VQF) || defined(IMU_FUSION_EQF)
+	// Software fusion test path (VQF or EqF). Refresh raw accel/gyro/mag from
+	// the sensor, run the software fusion, then defer the BLE send to the main
+	// loop. The on-chip DMP is not used here.
+	g_Mpu9250.UpdateData();
+	s_Imu.UpdateData();
+	AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+	return;
+#else
 	s_Imu.IntHandler();
 
 	return;
+#endif
 }
 
 void mpulib_data_handler_cb()
