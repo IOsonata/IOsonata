@@ -829,10 +829,16 @@ int AgmIcm20948::Read(uint32_t DevAddr, uint8_t *pCmdAddr, int CmdAddrLen, uint8
 		msDelay(3);
 		regaddr = ICM20948_I2C_MST_STATUS_REG;
 
+		int tmout = 10;
 		do {
 			d[2] = Read8((uint8_t*)&regaddr, 2);
 
-		} while (d[2] & ICM20948_I2C_MST_STATUS_I2C_SLV0_NACK);
+		} while ((d[2] & ICM20948_I2C_MST_STATUS_I2C_SLV0_NACK) && --tmout > 0);
+
+		if (tmout == 0)
+		{
+			break;	// aux I2C slave did not ack, abort read to avoid hang
+		}
 
 		regaddr = ICM20948_EXT_SLV_SENS_DATA_00_REG;
 		cnt = Read((uint8_t*)&regaddr, 1, pBuff, cnt);
