@@ -38,17 +38,18 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "motion/att.h"
+#include "motion/act.h"
 #include "sensors/agm_icm20948.h"
 
 /** @addtogroup Motion
   * @{
   */
 
-class AhrsIcm20948 : public Ahrs {
+class MotIcm20948 : public Att, public Act {
 public:
 
-	//bool Init(const AhrsCfg_t &Cfg, AgmIcm20948 *pIcm);
-	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	//bool Init(const AttCfg_t &Cfg, AgmIcm20948 *pIcm);
+	bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	bool SetDMPAccelScale();
 	bool SetDMPGyroScale();
 	virtual bool Enable();
@@ -56,7 +57,7 @@ public:
 	virtual void Reset();
 	virtual bool UpdateData();
 	virtual void IntHandler();
-	virtual AHRS_FEATURE Feature(AHRS_FEATURE FeatureBit, bool bEnDis);
+	virtual ATT_FEATURE Feature(ATT_FEATURE FeatureBit, bool bEnDis);
 	virtual bool Calibrate();
 	virtual void SetAxisAlignmentMatrix(int8_t * const pMatrix);
 	virtual bool Euler(bool bEn) { (void)bEn; return false; }
@@ -65,8 +66,8 @@ public:
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 
-	virtual bool Read(AhrsQuat_t &Data) { return Ahrs::Read(Data); }
-	virtual bool Read(AhrsEuler_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(AttQuat_t &Data) { return Att::Read(Data); }
+	virtual bool Read(AttEuler_t &Data) { return Att::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -80,7 +81,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(AccelSensorData_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return Att::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -94,7 +95,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(GyroSensorData_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return Att::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -108,7 +109,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(MagSensorData_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return Att::Read(Data); }
 
 
 protected:

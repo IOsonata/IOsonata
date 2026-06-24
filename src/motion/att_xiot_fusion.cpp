@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	ahrs_xiot_fusion.cpp
 
-@brief	Implementation of the Ahrs class using fusion ahrs
+@brief	Implementation of the Att class using fusion ahrs
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 20, 2024
@@ -38,14 +38,14 @@ SOFTWARE.
 
 #define SAMPLE_RATE		50
 
-bool AhrsXiotFusion::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AttXiotFusion::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == nullptr || pGyro == nullptr)
 	{
 		return false;
 	}
 
-	bool res = Ahrs::Init(Cfg, pAccel, pGyro, pMag);
+	bool res = Att::Init(Cfg, pAccel, pGyro, pMag);
 
 	if (res == true)
 	{
@@ -76,7 +76,7 @@ bool AhrsXiotFusion::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, Gyro
 	return res;
 }
 
-bool AhrsXiotFusion::Enable()
+bool AttXiotFusion::Enable()
 {
 	bool res = vpAccel->Enable();
 
@@ -93,17 +93,17 @@ bool AhrsXiotFusion::Enable()
 	return res;
 }
 
-void AhrsXiotFusion::Disable()
+void AttXiotFusion::Disable()
 {
 
 }
 
-void AhrsXiotFusion::Reset()
+void AttXiotFusion::Reset()
 {
 
 }
 
-bool AhrsXiotFusion::UpdateData()
+bool AttXiotFusion::UpdateData()
 {
 	AccelSensorData_t acc;
 	GyroSensorData_t gyro;
@@ -150,7 +150,7 @@ bool AhrsXiotFusion::UpdateData()
 	return true;
 }
 
-void AhrsXiotFusion::IntHandler()
+void AttXiotFusion::IntHandler()
 {
 	vpAccel->IntHandler();
 	vpGyro->IntHandler();
@@ -162,37 +162,30 @@ void AhrsXiotFusion::IntHandler()
 	UpdateData();
 }
 
-uint32_t AhrsXiotFusion::Rate(uint32_t DataRate)
+uint32_t AttXiotFusion::Rate(uint32_t DataRate)
 {
-	return Ahrs::Rate(DataRate);
+	return Att::Rate(DataRate);
 }
 
-bool AhrsXiotFusion::Calibrate()
+bool AttXiotFusion::Calibrate()
 {
 
 	return true;
 }
 
-void AhrsXiotFusion::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AttXiotFusion::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 	(void)pMatrix;
 }
 
-bool AhrsXiotFusion::Compass(bool bEn)
+bool AttXiotFusion::Compass(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool AhrsXiotFusion::Pedometer(bool bEn)
-{
-	(void)bEn;
-
-	return true;
-}
-
-bool AhrsXiotFusion::Quaternion(bool bEn, int NbAxis)
+bool AttXiotFusion::Quaternion(bool bEn, int NbAxis)
 {
 	(void)bEn;
 	(void)NbAxis;
@@ -202,9 +195,3 @@ bool AhrsXiotFusion::Quaternion(bool bEn, int NbAxis)
 	return true;
 }
 
-bool AhrsXiotFusion::Tap(bool bEn)
-{
-	(void)bEn;
-
-	return true;
-}

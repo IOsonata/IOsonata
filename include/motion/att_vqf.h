@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	att_vqf.h
 
-@brief	Implementation of the Ahrs class using vqf fusion
+@brief	Implementation of the Att class using vqf fusion
 
 Self contained port of Daniel Laidig VQF orientation estimation algorithm.
 No external vqf source and no CMSIS-DSP dependency. The full algorithm is
@@ -140,11 +140,11 @@ typedef struct __Vqf_Coeff {
 	double magNormDipLpA[2];
 } VqfCoeff_t;
 
-class AhrsVqf : public Ahrs {
+class AttVqf : public Att {
 public:
-	AhrsVqf();
-	virtual ~AhrsVqf() {}
-	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	AttVqf();
+	virtual ~AttVqf() {}
+	bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	void SetParam(VqfParam_t &Param) { memcpy(&vParams, &Param, sizeof(VqfParam_t)); }
 	virtual bool Enable();
 	virtual void Disable();
@@ -155,10 +155,8 @@ public:
 	bool Calibrate();
 	void SetAxisAlignmentMatrix(int8_t * const pMatrix);
 	virtual bool Compass(bool bEn);
-	virtual bool Pedometer(bool bEn);
 	virtual bool Euler(bool bEn) { return false; }
 	virtual bool Quaternion(bool bEn, int NbAxis);
-	virtual bool Tap(bool bEn);
 
 	virtual bool Read(AccelSensorRawData_t &Data) { return vpAccel->Read(Data); }
 	virtual bool Read(AccelSensorData_t &Data) { return vpAccel->Read(Data); }
@@ -166,8 +164,8 @@ public:
 	virtual bool Read(GyroSensorData_t &Data) { return vpGyro->Read(Data); }
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
-	virtual bool Read(AhrsQuat_t &Data);
-	virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
+	virtual bool Read(AttQuat_t &Data);
+	virtual bool Read(AttEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
 

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	att_mahony.h
 
-@brief	Implementation of the Ahrs class using Mahony fusion
+@brief	Implementation of the Att class using Mahony fusion
 
 Self contained Mahony explicit complementary filter for attitude estimation
 with gyro bias correction. No external source and no CMSIS-DSP dependency. The
@@ -75,11 +75,11 @@ typedef struct __Mahony_State {
 	int mode;		//!< 0 = init accumulate, 1 = running
 } MahonyState_t;
 
-class AhrsMahony : public Ahrs {
+class AttMahony : public Att {
 public:
-	AhrsMahony();
-	virtual ~AhrsMahony() {}
-	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	AttMahony();
+	virtual ~AttMahony() {}
+	bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	void SetParam(MahonyParam_t &Param) { memcpy(&vParams, &Param, sizeof(MahonyParam_t)); }
 	virtual bool Enable();
 	virtual void Disable();
@@ -90,10 +90,8 @@ public:
 	bool Calibrate();
 	void SetAxisAlignmentMatrix(int8_t * const pMatrix);
 	virtual bool Compass(bool bEn);
-	virtual bool Pedometer(bool bEn);
 	virtual bool Euler(bool bEn) { return false; }
 	virtual bool Quaternion(bool bEn, int NbAxis);
-	virtual bool Tap(bool bEn);
 
 	virtual bool Read(AccelSensorRawData_t &Data) { return vpAccel->Read(Data); }
 	virtual bool Read(AccelSensorData_t &Data) { return vpAccel->Read(Data); }
@@ -101,8 +99,8 @@ public:
 	virtual bool Read(GyroSensorData_t &Data) { return vpGyro->Read(Data); }
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
-	virtual bool Read(AhrsQuat_t &Data);
-	virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
+	virtual bool Read(AttQuat_t &Data);
+	virtual bool Read(AttEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
 

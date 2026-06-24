@@ -4,7 +4,7 @@
 @brief	Implementation of TDK MPU-9250 accel, gyro, mag sensor
 
 This only implement the sensor portion of the MPU-9250.  The DMP part is
-implemented in a higher level in Ahrs class device.
+implemented in a higher level in Att class device.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 18, 2017

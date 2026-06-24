@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	ahrs_vqf.cpp
 
-@brief	Implementation of the Ahrs class using vqf fusion
+@brief	Implementation of the Att class using vqf fusion
 
 Self contained, single precision optimized port of the Daniel Laidig VQF
 orientation estimation algorithm. No external vqf source and no CMSIS-DSP
@@ -266,7 +266,7 @@ float FilterStep(float x, const double b[3], const double a[2], double state[2])
 
 } // anonymous namespace
 
-AhrsVqf::AhrsVqf()
+AttVqf::AttVqf()
 {
 	vNbAxis = 9;
 	vbInitialized = false;
@@ -301,13 +301,13 @@ AhrsVqf::AhrsVqf()
 	vParams.magRejectionFactor = 2.0f;
 }
 
-bool AhrsVqf::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AttVqf::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == nullptr || pGyro == nullptr) {
 		return false;
 	}
 
-	if (Ahrs::Init(Cfg, pAccel, pGyro, pMag) == false) {
+	if (Att::Init(Cfg, pAccel, pGyro, pMag) == false) {
 		return false;
 	}
 
@@ -331,7 +331,7 @@ bool AhrsVqf::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor 
 	return true;
 }
 
-void AhrsVqf::Setup(void)
+void AttVqf::Setup(void)
 {
 	FilterCoeffs(vParams.tauAcc, vCoeffs.accTs, vCoeffs.accLpB, vCoeffs.accLpA);
 
@@ -363,7 +363,7 @@ void AhrsVqf::Setup(void)
 	}
 }
 
-void AhrsVqf::Reset(void)
+void AttVqf::Reset(void)
 {
 	QuatSetIdentity(vState.gyrQuat);
 	QuatSetIdentity(vState.accQuat);
@@ -404,7 +404,7 @@ void AhrsVqf::Reset(void)
 	for (size_t i = 0; i < 2 * 2; i++) { vState.magNormDipLpState[i] = NAN; }
 }
 
-bool AhrsVqf::Enable()
+bool AttVqf::Enable()
 {
 	if (vpAccel) vpAccel->Enable();
 	if (vpGyro) vpGyro->Enable();
@@ -412,14 +412,14 @@ bool AhrsVqf::Enable()
 	return true;
 }
 
-void AhrsVqf::Disable()
+void AttVqf::Disable()
 {
 	if (vpMag) vpMag->Disable();
 	if (vpGyro) vpGyro->Disable();
 	if (vpAccel) vpAccel->Disable();
 }
 
-void AhrsVqf::FilterVec(const float vec[], size_t n, float tau, float Ts, const double b[3],
+void AttVqf::FilterVec(const float vec[], size_t n, float tau, float Ts, const double b[3],
                        const double a[2], double state[], float out[])
 {
 	// During the first tau seconds, average the samples and seed the filter
@@ -450,7 +450,7 @@ void AhrsVqf::FilterVec(const float vec[], size_t n, float tau, float Ts, const 
 	}
 }
 
-void AhrsVqf::UpdateGyr(const float gyr[3])
+void AttVqf::UpdateGyr(const float gyr[3])
 {
 	// Rest detection low pass and threshold check.
 	if (vParams.restBiasEstEnabled || vParams.magDistRejectionEnabled) {
@@ -483,7 +483,7 @@ void AhrsVqf::UpdateGyr(const float gyr[3])
 	}
 }
 
-void AhrsVqf::UpdateAcc(const float acc[3])
+void AttVqf::UpdateAcc(const float acc[3])
 {
 	if (acc[0] == 0.0f && acc[1] == 0.0f && acc[2] == 0.0f) {
 		return;
@@ -620,7 +620,7 @@ void AhrsVqf::UpdateAcc(const float acc[3])
 	}
 }
 
-void AhrsVqf::UpdateMag(const float mag[3])
+void AttVqf::UpdateMag(const float mag[3])
 {
 	if (mag[0] == 0.0f && mag[1] == 0.0f && mag[2] == 0.0f) {
 		return;
@@ -721,18 +721,18 @@ void AhrsVqf::UpdateMag(const float mag[3])
 	}
 }
 
-void AhrsVqf::GetQuat6D(float out[4]) const
+void AttVqf::GetQuat6D(float out[4]) const
 {
 	QuatMultiply(vState.accQuat, vState.gyrQuat, out);
 }
 
-void AhrsVqf::GetQuat9D(float out[4]) const
+void AttVqf::GetQuat9D(float out[4]) const
 {
 	QuatMultiply(vState.accQuat, vState.gyrQuat, out);
 	QuatApplyDelta(out, vState.delta, out);
 }
 
-bool AhrsVqf::UpdateData()
+bool AttVqf::UpdateData()
 {
 	if (vbInitialized == false) {
 		return false;
@@ -778,13 +778,13 @@ bool AhrsVqf::UpdateData()
 	return true;
 }
 
-bool AhrsVqf::Read(AhrsQuat_t &Data)
+bool AttVqf::Read(AttQuat_t &Data)
 {
 	Data = vQuat;
 	return true;
 }
 
-void AhrsVqf::IntHandler()
+void AttVqf::IntHandler()
 {
 	// Refresh the bound sensors then fuse. IntHandler is the data-ready entry point. When the caller
 	// refreshes the sensors itself and calls UpdateData() directly, do not
@@ -795,7 +795,7 @@ void AhrsVqf::IntHandler()
 	UpdateData();
 }
 
-bool AhrsVqf::Quaternion(bool bEn, int NbAxis)
+bool AttVqf::Quaternion(bool bEn, int NbAxis)
 {
 	if (NbAxis == 9 && vpMag != nullptr) {
 		vNbAxis = 9;
@@ -805,7 +805,7 @@ bool AhrsVqf::Quaternion(bool bEn, int NbAxis)
 	return true;
 }
 
-bool AhrsVqf::Compass(bool bEn)
+bool AttVqf::Compass(bool bEn)
 {
 	if (bEn && vpMag == nullptr) {
 		return false;
@@ -814,22 +814,13 @@ bool AhrsVqf::Compass(bool bEn)
 	return true;
 }
 
-bool AhrsVqf::Calibrate()
+bool AttVqf::Calibrate()
 {
 	return false;
 }
 
-void AhrsVqf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AttVqf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 	// Axis alignment is applied at the sensor driver level in IOsonata.
 }
 
-bool AhrsVqf::Pedometer(bool bEn)
-{
-	return false;
-}
-
-bool AhrsVqf::Tap(bool bEn)
-{
-	return false;
-}

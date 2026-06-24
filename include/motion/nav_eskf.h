@@ -92,7 +92,7 @@ typedef struct __Eskf_State {
 	int mode;		//!< 0 = level accumulate, 1 = running
 } EskfState_t;
 
-class NavEskf : public InertialNav {
+class NavEskf : public Nav {
 public:
 	NavEskf();
 	virtual ~NavEskf() {}

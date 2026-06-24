@@ -176,7 +176,7 @@ NavEskf::NavEskf()
 	memset(&vParams, 0, sizeof(vParams));
 	memset(&vState, 0, sizeof(vState));
 	memset(&vOrigin, 0, sizeof(vOrigin));
-	NavState_t &ns = InertialNav::vState;
+	NavState_t &ns = Nav::vState;
 	memset(&ns, 0, sizeof(NavState_t));
 }
 
@@ -226,7 +226,7 @@ void NavEskf::Setup(void)
 		P[(I_GB + i) * NX + (I_GB + i)] = vParams.pInitGyroBias;
 	}
 
-	NavState_t &ns = InertialNav::vState;
+	NavState_t &ns = Nav::vState;
 	memset(&ns, 0, sizeof(NavState_t));
 	ns.Q[0] = 1.0f;
 	if (vOrigin.bValid) {
@@ -473,7 +473,7 @@ bool NavEskf::InjectGnss(const NavGnssMeas_t &Meas)
 		vOrigin.Alt = Meas.Alt;
 		vOrigin.bValid = true;
 		vState.pos[0] = vState.pos[1] = vState.pos[2] = 0.0f;
-		InertialNav::vState.Flags |= NAV_FLAG_ORIGIN_SET;
+		Nav::vState.Flags |= NAV_FLAG_ORIGIN_SET;
 		return true;
 	}
 	if (vState.mode != 1) {
@@ -499,7 +499,7 @@ bool NavEskf::InjectGnss(const NavGnssMeas_t &Meas)
 		FuseVel(vi, vr);
 	}
 	if (ok) {
-		InertialNav::vState.Flags |= NAV_FLAG_GNSS_FUSED;
+		Nav::vState.Flags |= NAV_FLAG_GNSS_FUSED;
 	}
 	return ok;
 }
@@ -565,7 +565,7 @@ bool NavEskf::ZeroVelocityUpdate()
 
 void NavEskf::Publish(uint64_t timestamp)
 {
-	NavState_t &ns = InertialNav::vState;
+	NavState_t &ns = Nav::vState;
 	ns.Timestamp = timestamp;
 	for (int i = 0; i < 3; i++) {
 		ns.Pos[i] = vState.pos[i];
@@ -583,6 +583,6 @@ void NavEskf::Publish(uint64_t timestamp)
 
 bool NavEskf::Read(NavState_t &Data)
 {
-	Data = InertialNav::vState;
+	Data = Nav::vState;
 	return true;
 }

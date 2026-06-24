@@ -66,7 +66,7 @@ static const float s_CfgMountingMatrix[9]= {
 	0, 0, 1.f
 };
 
-AhrsInvnIcm20948::AhrsInvnIcm20948()
+MotInvnIcm20948::MotInvnIcm20948()
 {
 	vpIcm = nullptr;
 	vpIcmDevice = nullptr;
@@ -75,9 +75,9 @@ AhrsInvnIcm20948::AhrsInvnIcm20948()
 }
 
 #if 0
-int AhrsInvnIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
+int MotInvnIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
 {
-	AhrsInvnIcm20948 *dev = (AhrsInvnIcm20948*)context;
+	MotInvnIcm20948 *dev = (MotInvnIcm20948*)context;
 //	return spi_master_transfer_rx(NULL, reg, rbuffer, rlen);
 //	reg |= 0x80;
 	int cnt = dev->Read(&reg, 1, rbuffer, (int)rlen);
@@ -85,9 +85,9 @@ int AhrsInvnIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer
 	return cnt > 0 ? 0 : 1;
 }
 
-int AhrsInvnIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
+int MotInvnIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
 {
-	AhrsInvnIcm20948 *dev = (AhrsInvnIcm20948*)context;
+	MotInvnIcm20948 *dev = (MotInvnIcm20948*)context;
 //	return spi_master_transfer_tx(NULL, reg, wbuffer, wlen);
 
 	int cnt = dev->Write(&reg, 1, (uint8_t*)wbuffer, (int)wlen);
@@ -95,7 +95,7 @@ int AhrsInvnIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * 
 	return cnt > 0 ? 0 : 1;
 }
 
-bool AhrsInvnIcm20948::Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool MotInvnIcm20948::Init(const AttCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	if (Valid())
 		return true;;
@@ -103,7 +103,7 @@ bool AhrsInvnIcm20948::Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf 
 	if (pIntrf == NULL)
 		return false;
 
-	Ahrs::Init(Cfg, DevAddr, pIntrf, pTimer);
+	Att::Init(Cfg, DevAddr, pIntrf, pTimer);
 	//Interface(pIntrf);
 	//DeviceAddess(DevAddr);
 
@@ -172,14 +172,14 @@ bool AhrsInvnIcm20948::Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf 
 }
 #endif
 
-bool AhrsInvnIcm20948::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool MotInvnIcm20948::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == NULL)
 	{
 		return false;
 	}
 
-	Ahrs::Init(Cfg, pAccel, pGyro, pMag);
+	Att::Init(Cfg, pAccel, pGyro, pMag);
 
 	vpIcm = (AgmInvnIcm20948*)pAccel;
 	//vpSensorDev = (AgmInvnIcm20948*)pAccel;
@@ -189,7 +189,7 @@ bool AhrsInvnIcm20948::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, Gy
 	return true;
 }
 
-bool AhrsInvnIcm20948::Enable()
+bool MotInvnIcm20948::Enable()
 {
 	int i = INV_SENSOR_TYPE_MAX;
 
@@ -202,7 +202,7 @@ bool AhrsInvnIcm20948::Enable()
 	return true;
 }
 
-void AhrsInvnIcm20948::Disable()
+void MotInvnIcm20948::Disable()
 {
 	int i = INV_SENSOR_TYPE_MAX;
 
@@ -213,48 +213,48 @@ void AhrsInvnIcm20948::Disable()
 	inv_icm20948_set_chip_power_state(vpIcmDevice, CHIP_AWAKE, 0);
 }
 
-void AhrsInvnIcm20948::Reset()
+void MotInvnIcm20948::Reset()
 {
 	inv_icm20948_soft_reset(vpIcmDevice);
 }
 
-AHRS_FEATURE AhrsInvnIcm20948::Feature(AHRS_FEATURE FeatureBit, bool bEnDis)
+ATT_FEATURE MotInvnIcm20948::Feature(ATT_FEATURE FeatureBit, bool bEnDis)
 {
 	(void)FeatureBit;
 	(void) bEnDis;
 
-	return Ahrs::Feature();
+	return Att::Feature();
 }
 
-bool AhrsInvnIcm20948::Calibrate()
+bool MotInvnIcm20948::Calibrate()
 {
 	return true;
 }
 
-void AhrsInvnIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void MotInvnIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 	(void)pMatrix;
 }
 
-bool AhrsInvnIcm20948::Compass(bool bEn)
+bool MotInvnIcm20948::Compass(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool AhrsInvnIcm20948::Pedometer(bool bEn)
+bool MotInvnIcm20948::Pedometer(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool AhrsInvnIcm20948::Quaternion(bool bEn, int NbAxis)
+bool MotInvnIcm20948::Quaternion(bool bEn, int NbAxis)
 {
 	(void)bEn;
 
-	printf("AhrsInvnIcm20948::Quaternion\n");
+	printf("MotInvnIcm20948::Quaternion\n");
 
 	if (NbAxis < 9)
 	{
@@ -267,19 +267,19 @@ bool AhrsInvnIcm20948::Quaternion(bool bEn, int NbAxis)
 	return true;
 }
 
-bool AhrsInvnIcm20948::Tap(bool bEn)
+bool MotInvnIcm20948::Tap(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool AhrsInvnIcm20948::UpdateData()
+bool MotInvnIcm20948::UpdateData()
 {
 	return true;
 }
 /*
-void AhrsInvnIcm20948::IntHandler()
+void MotInvnIcm20948::IntHandler()
 {
 	//if (vpIcmDev)
 	{
@@ -293,15 +293,15 @@ void AhrsInvnIcm20948::IntHandler()
 }
 */
 #if 1
-void AhrsInvnIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
+void MotInvnIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
-	AhrsInvnIcm20948 *dev = (AhrsInvnIcm20948*)context;
+	MotInvnIcm20948 *dev = (MotInvnIcm20948*)context;
 
 	dev->UpdateData(sensortype, timestamp, data, arg);
 }
 #endif
 
-void AhrsInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
+void MotInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
 	float raw_bias_data[6];
 	inv_sensor_event_t event;
@@ -427,7 +427,7 @@ void AhrsInvnIcm20948::UpdateData(enum inv_icm20948_sensor sensortype, uint64_t 
 	}
 }
 
-void AhrsInvnIcm20948::IntHandler()
+void MotInvnIcm20948::IntHandler()
 {
 #if 1
 	inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);
@@ -514,7 +514,7 @@ void AhrsInvnIcm20948::IntHandler()
 #endif
 }
 
-size_t AhrsInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)
+size_t MotInvnIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)
 {
 	bool retval = false;
 	size_t cnt = 0;

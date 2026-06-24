@@ -5,15 +5,15 @@
 
 Common interface for inertial navigation filters that estimate full pose
 (position, velocity, attitude) plus inertial sensor biases. This is the
-navigation tier, separate from the attitude only Ahrs tier: an Ahrs backend
-outputs orientation from accel/gyro/mag, while an InertialNav backend adds
+navigation tier, separate from the attitude only Att tier: an Att backend
+outputs orientation from accel/gyro/mag, while an Nav backend adds
 position and velocity and fuses aiding sources such as GNSS, barometer and
 optical flow.
 
 State is held in a local North-East-Down (NED) tangent frame whose origin is
 set at alignment, either from the first GNSS fix or from a supplied origin.
 Position is metres from the origin, velocity is m/s in NED, attitude is a unit
-quaternion mapping body to NED, [w x y z], matching the Ahrs convention.
+quaternion mapping body to NED, [w x y z], matching the Att convention.
 
 Aiding is dependency inverted. The filter runs its own strapdown from the
 high-rate accel and gyro through UpdateData(). Aiding measurements arrive
@@ -126,7 +126,7 @@ typedef struct __Nav_Config {
 
 #ifdef __cplusplus
 
-class InertialNav : virtual public Device {
+class Nav : virtual public Device {
 public:
 
 	/**

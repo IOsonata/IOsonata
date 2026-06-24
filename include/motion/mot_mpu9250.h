@@ -38,15 +38,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __MOT_MPU9250_H__
 
 #include "motion/att.h"
+#include "motion/act.h"
 #include "sensors/agm_mpu9250.h"
 
 /** @addtogroup AHRS
   * @{
   */
 
-class AhrsMpu9250 : public Ahrs {
+class MotMpu9250 : public Att, public Act {
 public:
-	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -104,8 +105,8 @@ public:
 	 */
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
-    virtual bool Read(AhrsQuat_t &Data) { Data = vQuat; return true; }
-    virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
+    virtual bool Read(AttQuat_t &Data) { Data = vQuat; return true; }
+    virtual bool Read(AttEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
 	/**

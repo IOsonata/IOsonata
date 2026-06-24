@@ -47,26 +47,26 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   */
 
 /// AHRS processing features
-//#define AHRS_FEATURE_RAW_ACCEL				(1<<0)		//!< Raw accel sensor data, relevant for when sensor is known
-//#define AHRS_FEATURE_RAW_GYRO				(1<<1)		//!< Raw gyr sensor data, relevant for when sensor is known
-//#define AHRS_FEATURE_RAW_MAG					(1<<2)		//!< Raw mag sensor data, relevant for when sensor is known
-//#define AHRS_FEATURE_ACCEL					(1<<3)		//!< Converted accel data
-//#define AHRS_FEATURE_GYRO					(1<<4)		//!< Converted gyro data
-//#define AHRS_FEATURE_MAG						(1<<5)		//!< Converted mag data
-#define AHRS_FEATURE_EULER					(1<<0)		//!< Euler angles data
-#define AHRS_FEATURE_QUATERNION				(1<<1)		//!< Quaternion data
-#define AHRS_FEATURE_COMPASS					(1<<2)		//!< Compasss
-#define AHRS_FEATURE_GRAVITY					(1<<3)		//!< Gravity vector
-#define AHRS_FEATURE_EXTERNAL_ACCEL			(1<<4)		//!< External acceleration vector
-#define AHRS_FEATURE_TAP						(1<<5)		//!< Tap sensing
-#define AHRS_FEATURE_ROTATION				(1<<6)		//!< Rotation data
-#define AHRS_FEATURE_VIBRATION				(1<<7)		//!< Vibration data
-#define AHRS_FEATURE_PEDOMETER				(1<<8)		//!< Pedometer
-#define AHRS_FEATURE_CYCLING					(1<<9)		//!< Cycling
+//#define ATT_FEATURE_RAW_ACCEL				(1<<0)		//!< Raw accel sensor data, relevant for when sensor is known
+//#define ATT_FEATURE_RAW_GYRO				(1<<1)		//!< Raw gyr sensor data, relevant for when sensor is known
+//#define ATT_FEATURE_RAW_MAG					(1<<2)		//!< Raw mag sensor data, relevant for when sensor is known
+//#define ATT_FEATURE_ACCEL					(1<<3)		//!< Converted accel data
+//#define ATT_FEATURE_GYRO					(1<<4)		//!< Converted gyro data
+//#define ATT_FEATURE_MAG						(1<<5)		//!< Converted mag data
+#define ATT_FEATURE_EULER					(1<<0)		//!< Euler angles data
+#define ATT_FEATURE_QUATERNION				(1<<1)		//!< Quaternion data
+#define ATT_FEATURE_COMPASS					(1<<2)		//!< Compasss
+#define ATT_FEATURE_GRAVITY					(1<<3)		//!< Gravity vector
+#define ATT_FEATURE_EXTERNAL_ACCEL			(1<<4)		//!< External acceleration vector
+#define ATT_FEATURE_TAP						(1<<5)		//!< Tap sensing
+#define ATT_FEATURE_ROTATION				(1<<6)		//!< Rotation data
+#define ATT_FEATURE_VIBRATION				(1<<7)		//!< Vibration data
+#define ATT_FEATURE_PEDOMETER				(1<<8)		//!< Pedometer
+#define ATT_FEATURE_CYCLING					(1<<9)		//!< Cycling
 
-typedef uint32_t	AHRS_FEATURE;
+typedef uint32_t	ATT_FEATURE;
 
-typedef struct __Ahrs_Quat {
+typedef struct __Att_Quat {
 	uint64_t Timestamp;	//!< Time stamp count in usec
 	union {
 		float Q[4];
@@ -77,18 +77,18 @@ typedef struct __Ahrs_Quat {
 			float Q4;
 		};
 	};
-} AhrsQuat_t;
+} AttQuat_t;
 
 
-typedef struct __Ahrs_Euler {
+typedef struct __Att_Euler {
 	uint64_t Timestamp;	//!< Time stamp count in usec
 	float Yaw;
 	float Pitch;
 	float Roll;
-} AhrsEuler_t;
+} AttEuler_t;
 
 
-typedef struct __Ahrs_Gravity {
+typedef struct __Att_Gravity {
 	uint64_t Timestamp;	//!< Time stamp count in usec
 	union {
 		float Val[3];
@@ -98,11 +98,11 @@ typedef struct __Ahrs_Gravity {
 			float Z;
 		};
 	};
-} AhrsGravity_t;
+} AttGravity_t;
 
 
 /// External acceleration vector
-typedef struct __Ahrs_Extrn_Accel {
+typedef struct __Att_Extrn_Accel {
 	uint64_t Timestamp;	//!< Time stamp count in usec
 	union {
 		float Val[3];
@@ -112,42 +112,28 @@ typedef struct __Ahrs_Extrn_Accel {
 			float Z;
 		};
 	};
-} AhrsExtAccel_t;
-
-
-/// Pedometer
-typedef struct __Ahrs_Pedometer {
-	uint32_t Timestamp;		//!< Time stamp count in msec
-    uint16_t StepCount;		//!< Number of step taken
-    uint8_t Cadence; 		//!< in steps per minute
-    float Direction; 		//!< Direction of the movement (yaw angle in degrees)
-    uint16_t UpCount;		//!< Number of upstairs taken
-    uint16_t DownCount; 	//!< Number of downstairs taken
-    uint8_t StrideLength;	//!< in cm
-    uint16_t TotalDistance;	//!< in dm
-} AhrsPedometer_t;
+} AttExtAccel_t;
 
 
 /// Rotation data
-typedef struct __Ahrs_Rotation_Data {
+typedef struct __Att_Rotation_Data {
 	uint64_t Timestamp;		//!< Time stamp count in usec
     uint32_t Count; 		//!< Number of rotations
     uint16_t Rpm; 			//!< Revolutions per minute
-} AhrsRotation_t;
+} AttRotation_t;
 
 
-
-typedef struct __Ahrs_Config {
+typedef struct __Att_Config {
 	DevEvtHandler_t EvtHandler;
-} AhrsCfg_t;
+} AttCfg_t;
 
 
 #ifdef __cplusplus
 
-class Ahrs : virtual public Device {
+class Att : virtual public Device {
 public:
 
-	virtual bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	virtual bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool UpdateData() = 0;
 	virtual void IntHandler() = 0;
 	virtual bool Calibrate() = 0;
@@ -156,11 +142,9 @@ public:
 	// Features
 	virtual bool Euler(bool bEn) = 0;
 	virtual bool Compass(bool bEn) = 0;
-	virtual bool Pedometer(bool bEn) = 0;
 	virtual bool Quaternion(bool bEn, int NbAxis) = 0;
-	virtual bool Tap(bool bEn) = 0;
-	virtual bool Read(AhrsQuat_t &Data) { Data = vQuat; return true; }
-	virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
+	virtual bool Read(AttQuat_t &Data) { Data = vQuat; return true; }
+	virtual bool Read(AttEuler_t &Data) { Data = vEuler; return true; }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -207,8 +191,8 @@ public:
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
 
-	virtual AHRS_FEATURE Feature() { return vActiveFeature; }
-	virtual AHRS_FEATURE Feature(AHRS_FEATURE FeatureBit, bool bEnDis);
+	virtual ATT_FEATURE Feature() { return vActiveFeature; }
+	virtual ATT_FEATURE Feature(ATT_FEATURE FeatureBit, bool bEnDis);
 
 	/**
 	 * @brief	Set data rate in miliHz
@@ -231,9 +215,9 @@ protected:
 	AccelSensor *vpAccel;	//!< Pointer to accelerometer sensor
 	GyroSensor *vpGyro;		//!< Pointer to gyro sensor
 	MagSensor *vpMag;		//!< Pointer to magnetometer Sensor
-	AHRS_FEATURE vActiveFeature;	//!< Orable feature enabled bits - Bit set to 1 : Enabled, 0 : Disabled
-	AhrsQuat_t vQuat;			//!< Last updated quaternion values
-	AhrsEuler_t vEuler;		//!< Last updated euler value
+	ATT_FEATURE vActiveFeature;	//!< Orable feature enabled bits - Bit set to 1 : Enabled, 0 : Disabled
+	AttQuat_t vQuat;			//!< Last updated quaternion values
+	AttEuler_t vEuler;		//!< Last updated euler value
 	uint32_t vRate;			//!< Data rate in mHz (mili-Hz)
 };
 

@@ -490,7 +490,7 @@ static bool ValidateQuat(int32_t Q[4])
 	return true;
 }
 
-bool AhrsMpu9250::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool MotMpu9250::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == NULL)
 	{
@@ -504,7 +504,7 @@ bool AhrsMpu9250::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSen
 
     if (res == true)
     {
-    	res = Ahrs::Init(Cfg, pAccel, pGyro, pMag);
+    	res = Att::Init(Cfg, pAccel, pGyro, pMag);
 
     	vEvtHandler = Cfg.EvtHandler;
 
@@ -535,7 +535,7 @@ bool AhrsMpu9250::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSen
 }
 
 
-bool AhrsMpu9250::UpdateData()
+bool MotMpu9250::UpdateData()
 {
 	//uint8_t buf[32];
 	int32_t q[4];
@@ -549,8 +549,8 @@ bool AhrsMpu9250::UpdateData()
 		len = vpMpu->ReadFifo((uint8_t*)q, 16);
 		if (len > 0)
 		{
-			AHRS_FEATURE feat = Feature();
-			if (feat & AHRS_FEATURE_QUATERNION)
+			ATT_FEATURE feat = Feature();
+			if (feat & ATT_FEATURE_QUATERNION)
 			{
 	//			int32_t q[4];
 	/*
@@ -589,22 +589,22 @@ bool AhrsMpu9250::UpdateData()
 	return false;
 }
 
-bool AhrsMpu9250::Enable()
+bool MotMpu9250::Enable()
 {
 	return true;
 }
 
-void AhrsMpu9250::Disable()
+void MotMpu9250::Disable()
 {
 
 }
 
-void AhrsMpu9250::Reset()
+void MotMpu9250::Reset()
 {
 
 }
 
-uint32_t AhrsMpu9250::Rate(uint32_t DataRate)
+uint32_t MotMpu9250::Rate(uint32_t DataRate)
 {
     const uint8_t cfg[12] = { DINAFE, DINAF2, DINAAB, 0xc4, DINAAA, DINAF1, DINADF, DINADF, 0xBB, 0xAF, DINADF, DINADF };
 	uint8_t d[2];
@@ -626,15 +626,15 @@ uint32_t AhrsMpu9250::Rate(uint32_t DataRate)
 	Write(D_0_22, d, 2);
 	Write(CFG_6, (uint8_t*)cfg, sizeof(cfg));
 
-	return Ahrs::Rate(DataRate * 1000);
+	return Att::Rate(DataRate * 1000);
 }
 
-bool AhrsMpu9250::Calibrate()
+bool MotMpu9250::Calibrate()
 {
 	return true;
 }
 
-bool AhrsMpu9250::Compass(bool bEn)
+bool MotMpu9250::Compass(bool bEn)
 {
 //	return true;
 	uint8_t d;
@@ -650,21 +650,21 @@ bool AhrsMpu9250::Compass(bool bEn)
 
 	Write(CFG_ANDROID_ORIENT_INT, &d, 1);
 
-	Ahrs::Feature(AHRS_FEATURE_COMPASS, bEn);
+	Att::Feature(ATT_FEATURE_COMPASS, bEn);
 
 	//vDmpFifoLen += 4;
 
 	return true;
 }
 
-bool AhrsMpu9250::Pedometer(bool bEn)
+bool MotMpu9250::Pedometer(bool bEn)
 {
-	Ahrs::Feature(AHRS_FEATURE_PEDOMETER, bEn);
+	Att::Feature(ATT_FEATURE_PEDOMETER, bEn);
 
 	return true;
 }
 
-bool AhrsMpu9250::Quaternion(bool bEn, int NbAxis)
+bool MotMpu9250::Quaternion(bool bEn, int NbAxis)
 {
 	uint8_t regs[4];
 
@@ -703,19 +703,19 @@ bool AhrsMpu9250::Quaternion(bool bEn, int NbAxis)
 
 	vDmpFifoLen += 16;
 
-	Ahrs::Feature(AHRS_FEATURE_QUATERNION, bEn);
+	Att::Feature(ATT_FEATURE_QUATERNION, bEn);
 
 	return true;
 }
 
-bool AhrsMpu9250::Tap(bool bEn)
+bool MotMpu9250::Tap(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-void AhrsMpu9250::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void MotMpu9250::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
     const unsigned char gaxes[3] = {DINA4C, DINACD, DINA6C};
     const unsigned char aaxes[3] = {DINA0C, DINAC9, DINA2C};
@@ -756,7 +756,7 @@ void AhrsMpu9250::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 	Write(FCFG_3, gsign, 3);
 }
 
-void AhrsMpu9250::IntHandler()
+void MotMpu9250::IntHandler()
 {
 	if (UpdateData())
 	{
@@ -769,7 +769,7 @@ void AhrsMpu9250::IntHandler()
 	}
 }
 
-int AhrsMpu9250::Read(uint16_t Addr, uint8_t *pBuff, int Len)
+int MotMpu9250::Read(uint16_t Addr, uint8_t *pBuff, int Len)
 {
 	uint8_t regaddr;
 	uint8_t d[2];
@@ -800,7 +800,7 @@ int AhrsMpu9250::Read(uint16_t Addr, uint8_t *pBuff, int Len)
 	return cnt;
 }
 
-int AhrsMpu9250::Write(uint16_t Addr, uint8_t *pData, int Len)
+int MotMpu9250::Write(uint16_t Addr, uint8_t *pData, int Len)
 {
 	uint8_t regaddr;
 	uint8_t d[2];

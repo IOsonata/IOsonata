@@ -32,8 +32,8 @@
 //#define IMU_FUSION_EQF
 
 // Fusion backend test selector. Define one of:
-//   IMU_FUSION_VQF - software VQF fusion (AhrsVqf)
-//   IMU_FUSION_EQF - software EqF fusion (AhrsEqf), 6-axis, FPU targets only
+//   IMU_FUSION_VQF - software VQF fusion (AttVqf)
+//   IMU_FUSION_EQF - software EqF fusion (AttEqf), 6-axis, FPU targets only
 // to run software fusion instead of the ICM20948 on-chip DMP. Both read raw
 // data from the IOsonata AGM driver, so do not define INVN at the same time,
 // and do not define both VQF and EqF together.
@@ -93,18 +93,18 @@ static AgmInvnIcm20948 s_MotSensor;
 static AgmIcm20948 s_MotSensor;
 #endif
 
-static const AhrsCfg_t s_ImuCfg = {
+static const AttCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
 #if defined(IMU_FUSION_VQF)
-static AhrsVqf s_Imu;
+static AttVqf s_Imu;
 #elif defined(IMU_FUSION_EQF)
-static AhrsEqf s_Imu;
+static AttEqf s_Imu;
 #elif defined(INVN)
-static AhrsInvnIcm20948 s_Imu;
+static MotInvnIcm20948 s_Imu;
 #else
-static AhrsIcm20948 s_Imu;
+static MotIcm20948 s_Imu;
 #endif
 
 static Timer *s_pTimer = NULL;
@@ -128,7 +128,7 @@ void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
-	AhrsQuat_t quat;
+	AttQuat_t quat;
 	long q[4];
 
 #if 1// INVN
@@ -204,7 +204,7 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
-	AhrsQuat_t quat;
+	AttQuat_t quat;
 	long q[4];
 
 	if (IntNo == IMU_INT_NO)

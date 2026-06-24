@@ -35,6 +35,7 @@ SOFTWARE.
 #define __MOT_ICM456x_H__
 
 #include "motion/att.h"
+#include "motion/act.h"
 
 /** @addtogroup Motion
   * @{
@@ -42,9 +43,9 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-class ImuIcm456x : public Ahrs {
+class MotIcm456x : public Att, public Act {
 public:
-	virtual bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	virtual bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool UpdateData();
 	virtual void IntHandler();
 	virtual bool Calibrate();

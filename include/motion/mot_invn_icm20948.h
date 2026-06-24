@@ -39,23 +39,24 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "device_intrf.h"
 #include "motion/att.h"
+#include "motion/act.h"
 #include "sensors/agm_invn_icm20948.h"
 
 /** @addtogroup Motion
   * @{
   */
 
-class AhrsInvnIcm20948 : public Ahrs {
+class MotInvnIcm20948 : public Att, public Act {
 public:
 
-	//bool Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	//bool Init(const AttCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
+	bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
 	virtual bool UpdateData();
 	virtual void IntHandler();// { /*vpIcm->IntHandler(); } /*/inv_icm20948_poll_sensor(vpIcmDevice, (void*)this, SensorEventHandler);}
-	virtual AHRS_FEATURE Feature(AHRS_FEATURE FeatureBit, bool bEnDis);
+	virtual ATT_FEATURE Feature(ATT_FEATURE FeatureBit, bool bEnDis);
 	virtual bool Calibrate();
 	virtual void SetAxisAlignmentMatrix(int8_t * const pMatrix) ;
 	virtual bool Compass(bool bEn);
@@ -64,8 +65,8 @@ public:
 	virtual bool Quaternion(bool bEn, int NbAxis);
 	virtual bool Tap(bool bEn);
 
-	virtual bool Read(AhrsQuat_t &Data) { return Ahrs::Read(Data); }
-	virtual bool Read(AhrsEuler_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(AttQuat_t &Data) { return Att::Read(Data); }
+	virtual bool Read(AttEuler_t &Data) { return Att::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -79,7 +80,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(AccelSensorData_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(AccelSensorData_t &Data) { return Att::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -93,7 +94,7 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(GyroSensorData_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(GyroSensorData_t &Data) { return Att::Read(Data); }
 
 	/**
 	 * @brief	Read last updated sensor data
@@ -107,9 +108,9 @@ public:
 	 *
 	 * @return	True - Success.
 	 */
-	virtual bool Read(MagSensorData_t &Data) { return Ahrs::Read(Data); }
+	virtual bool Read(MagSensorData_t &Data) { return Att::Read(Data); }
 
-	AhrsInvnIcm20948();
+	MotInvnIcm20948();
 
 protected:
 

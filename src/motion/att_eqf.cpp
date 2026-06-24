@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	ahrs_eqf.cpp
 
-@brief	Implementation of the Ahrs class using EqF fusion
+@brief	Implementation of the Att class using EqF fusion
 
 Self contained, single precision port of the ABC-EqF n=0 (Attitude-Bias
 Equivariant Filter). No external source and no CMSIS-DSP dependency.
@@ -64,7 +64,7 @@ SOFTWARE.
 using namespace LinAlg;
 using namespace So3;
 
-AhrsEqf::AhrsEqf()
+AttEqf::AttEqf()
 {
 	vNbAxis = 6;
 	vbInitialized = false;
@@ -90,13 +90,13 @@ AhrsEqf::AhrsEqf()
 	vParams.restAccNormTh = 0.1f;
 }
 
-bool AhrsEqf::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AttEqf::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == nullptr || pGyro == nullptr) {
 		return false;
 	}
 
-	if (Ahrs::Init(Cfg, pAccel, pGyro, pMag) == false) {
+	if (Att::Init(Cfg, pAccel, pGyro, pMag) == false) {
 		return false;
 	}
 
@@ -116,20 +116,20 @@ bool AhrsEqf::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor 
 	return true;
 }
 
-void AhrsEqf::Setup(void)
+void AttEqf::Setup(void)
 {
 	// All EqF coefficients are static; nothing to precompute beyond the
 	// sample periods captured in Init. Kept for symmetry with the interface.
 }
 
-void AhrsEqf::Reset(void)
+void AttEqf::Reset(void)
 {
 	memset(&vState, 0, sizeof(vState));
 	Mat3Eye(vState.A);
 	vState.mode = 0;	// init accumulate
 }
 
-bool AhrsEqf::Enable()
+bool AttEqf::Enable()
 {
 	if (vpAccel) vpAccel->Enable();
 	if (vpGyro) vpGyro->Enable();
@@ -137,14 +137,14 @@ bool AhrsEqf::Enable()
 	return true;
 }
 
-void AhrsEqf::Disable()
+void AttEqf::Disable()
 {
 	if (vpMag) vpMag->Disable();
 	if (vpGyro) vpGyro->Disable();
 	if (vpAccel) vpAccel->Disable();
 }
 
-void AhrsEqf::GravityInit(const float accAvg[3])
+void AttEqf::GravityInit(const float accAvg[3])
 {
 	DcmFromGravity(accAvg, vState.A);
 
@@ -159,7 +159,7 @@ void AhrsEqf::GravityInit(const float accAvg[3])
 	}
 }
 
-void AhrsEqf::Propagate(const float w[3], float dt)
+void AttEqf::Propagate(const float w[3], float dt)
 {
 	// b = -A^T aVec
 	float bh[3];
@@ -282,7 +282,7 @@ void AhrsEqf::Propagate(const float w[3], float dt)
 	}
 }
 
-void AhrsEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool suppressYaw)
+void AttEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool suppressYaw)
 {
 	float y[3] = { yRaw[0], yRaw[1], yRaw[2] };
 	float n = Norm3(y);
@@ -426,7 +426,7 @@ void AhrsEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool
 	}
 }
 
-void AhrsEqf::RestBiasUpdate(void)
+void AttEqf::RestBiasUpdate(void)
 {
 	// b = -A^T aVec
 	float bh[3];
@@ -549,7 +549,7 @@ void AhrsEqf::RestBiasUpdate(void)
 	}
 }
 
-bool AhrsEqf::UpdateData()
+bool AttEqf::UpdateData()
 {
 	if (vbInitialized == false) {
 		return false;
@@ -661,13 +661,13 @@ bool AhrsEqf::UpdateData()
 	return true;
 }
 
-bool AhrsEqf::Read(AhrsQuat_t &Data)
+bool AttEqf::Read(AttQuat_t &Data)
 {
 	Data = vQuat;
 	return true;
 }
 
-void AhrsEqf::IntHandler()
+void AttEqf::IntHandler()
 {
 	// Refresh the bound sensors then fuse. IntHandler is the data-ready entry point. When the caller
 	// refreshes the sensors itself and calls UpdateData() directly, do not
@@ -678,33 +678,24 @@ void AhrsEqf::IntHandler()
 	UpdateData();
 }
 
-bool AhrsEqf::Quaternion(bool bEn, int NbAxis)
+bool AttEqf::Quaternion(bool bEn, int NbAxis)
 {
 	// Mag path not yet enabled; EqF runs 6-axis.
 	vNbAxis = 6;
 	return true;
 }
 
-bool AhrsEqf::Compass(bool bEn)
+bool AttEqf::Compass(bool bEn)
 {
 	return false;
 }
 
-bool AhrsEqf::Calibrate()
+bool AttEqf::Calibrate()
 {
 	return false;
 }
 
-void AhrsEqf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AttEqf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 }
 
-bool AhrsEqf::Pedometer(bool bEn)
-{
-	return false;
-}
-
-bool AhrsEqf::Tap(bool bEn)
-{
-	return false;
-}

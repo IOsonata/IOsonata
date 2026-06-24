@@ -204,7 +204,7 @@ static const MagSensorCfg_t s_MagCfg = {
 
 void ImuEvtHandler(Device * const pDev, DEV_EVT Evt);
 
-static const AhrsCfg_t s_ImuCfg = {
+static const AttCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
@@ -218,14 +218,14 @@ static const AhrsCfg_t s_ImuCfg = {
 
 #ifdef ICM20948
 #ifdef INVN
-AhrsInvnIcm20948 g_Imu;
+MotInvnIcm20948 g_Imu;
 AgmInvnIcm20948 g_MotSensor;
 #else
-AhrsIcm20948 g_Imu;
+MotIcm20948 g_Imu;
 AgmIcm20948 g_MotSensor;
 #endif
 #elif defined(MPU9250)
-AhrsMpu9250 g_Imu;
+MotMpu9250 g_Imu;
 AgmMpu9250 g_MotSensor;
 #elif defined(BMI160)
 AgBmi160 g_MotSensor;
@@ -236,7 +236,7 @@ AccelH3lis331dl g_MotSensor;
 #elif defined(BMI270)
 AgBmi270 g_MotSensor;
 #elif defined(ICM456X)
-AhrsXiotFusion g_Imu;
+AttXiotFusion g_Imu;
 AgIcm456x g_MotSensor;
 #endif
 
@@ -258,7 +258,7 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 {
 	AccelSensorData_t accdata;
-	AhrsQuat_t quat;
+	AttQuat_t quat;
 
 	switch (Evt)
 	{
@@ -408,7 +408,7 @@ int main()
 	GyroSensorRawData_t grawdata;
 	GyroSensorData_t gyrodata;
 	MagSensorRawData_t mrawdata;
-	AhrsQuat_t quat;
+	AttQuat_t quat;
 
 	memset(&arawdata, 0, sizeof(AccelSensorRawData_t));
 	memset(&accdata, 0, sizeof(AccelSensorData_t));

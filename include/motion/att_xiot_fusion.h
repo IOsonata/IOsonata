@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	att_xiot_fusion.h
 
-@brief	Implementation of the Ahrs class using x-iot Fusion
+@brief	Implementation of the Att class using x-iot Fusion
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 20, 2024
@@ -44,9 +44,9 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-class AhrsXiotFusion : public Ahrs {
+class AttXiotFusion : public Att {
 public:
-	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -56,10 +56,8 @@ public:
 	bool Calibrate();
 	void SetAxisAlignmentMatrix(int8_t * const pMatrix);
 	virtual bool Compass(bool bEn);
-	virtual bool Pedometer(bool bEn);
 	virtual bool Euler(bool bEn) { (void)bEn; return false; }
 	virtual bool Quaternion(bool bEn, int NbAxis);
-	virtual bool Tap(bool bEn);
 	/**
 	 * @brief	Read last updated sensor data
 	 *
@@ -104,8 +102,8 @@ public:
 	 */
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
-    virtual bool Read(AhrsQuat_t &Data) { Data = vQuat; return true; }
-    virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
+    virtual bool Read(AttQuat_t &Data) { Data = vQuat; return true; }
+    virtual bool Read(AttEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
 

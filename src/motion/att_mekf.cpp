@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	ahrs_mekf.cpp
 
-@brief	Implementation of the Ahrs class using MEKF fusion
+@brief	Implementation of the Att class using MEKF fusion
 
 Self contained Multiplicative Extended Kalman Filter for attitude and gyro
 bias. State is a unit quaternion (body to earth) plus a 3 axis gyro bias. The
@@ -54,7 +54,7 @@ SOFTWARE.
 using namespace LinAlg;
 using namespace So3;
 
-AhrsMekf::AhrsMekf()
+AttMekf::AttMekf()
 {
 	vNbAxis = 6;
 	vbInitialized = false;
@@ -73,13 +73,13 @@ AhrsMekf::AhrsMekf()
 	vParams.accGateHi = 5.0f;
 }
 
-bool AhrsMekf::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AttMekf::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == nullptr || pGyro == nullptr) {
 		return false;
 	}
 
-	if (Ahrs::Init(Cfg, pAccel, pGyro, pMag) == false) {
+	if (Att::Init(Cfg, pAccel, pGyro, pMag) == false) {
 		return false;
 	}
 
@@ -99,20 +99,20 @@ bool AhrsMekf::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor
 	return true;
 }
 
-void AhrsMekf::Setup(void)
+void AttMekf::Setup(void)
 {
 	// All MEKF coefficients are derived per step from vParams and the sample
 	// periods captured in Init. Kept for symmetry with the interface.
 }
 
-void AhrsMekf::Reset(void)
+void AttMekf::Reset(void)
 {
 	memset(&vState, 0, sizeof(vState));
 	vState.q[0] = 1.0f;	// identity quaternion
 	vState.mode = 0;	// init accumulate
 }
 
-bool AhrsMekf::Enable()
+bool AttMekf::Enable()
 {
 	if (vpAccel) vpAccel->Enable();
 	if (vpGyro) vpGyro->Enable();
@@ -120,14 +120,14 @@ bool AhrsMekf::Enable()
 	return true;
 }
 
-void AhrsMekf::Disable()
+void AttMekf::Disable()
 {
 	if (vpMag) vpMag->Disable();
 	if (vpGyro) vpGyro->Disable();
 	if (vpAccel) vpAccel->Disable();
 }
 
-void AhrsMekf::GravityInit(const float accAvg[3])
+void AttMekf::GravityInit(const float accAvg[3])
 {
 	float A[9];
 	DcmFromGravity(accAvg, A);
@@ -147,7 +147,7 @@ void AhrsMekf::GravityInit(const float accAvg[3])
 	}
 }
 
-void AhrsMekf::Propagate(const float w[3], float dt)
+void AttMekf::Propagate(const float w[3], float dt)
 {
 	// Bias corrected body rate.
 	float wh[3] = { w[0] - vState.b[0], w[1] - vState.b[1], w[2] - vState.b[2] };
@@ -231,7 +231,7 @@ void AhrsMekf::Propagate(const float w[3], float dt)
 	Mat3BlockSet(vState.P, 6, 1, 1, nP22);
 }
 
-void AhrsMekf::VecUpdate(const float meas[3], const float ref[3], float sigma)
+void AttMekf::VecUpdate(const float meas[3], const float ref[3], float sigma)
 {
 	float y[3] = { meas[0], meas[1], meas[2] };
 	float n = Norm3(y);
@@ -361,7 +361,7 @@ void AhrsMekf::VecUpdate(const float meas[3], const float ref[3], float sigma)
 	}
 }
 
-bool AhrsMekf::UpdateData()
+bool AttMekf::UpdateData()
 {
 	if (vbInitialized == false) {
 		return false;
@@ -422,13 +422,13 @@ bool AhrsMekf::UpdateData()
 	return true;
 }
 
-bool AhrsMekf::Read(AhrsQuat_t &Data)
+bool AttMekf::Read(AttQuat_t &Data)
 {
 	Data = vQuat;
 	return true;
 }
 
-void AhrsMekf::IntHandler()
+void AttMekf::IntHandler()
 {
 	// Refresh the bound sensors then fuse, so this object works as a drop-in
 	// pImuDev whose IntHandler is the data-ready entry point. When the caller
@@ -440,33 +440,24 @@ void AhrsMekf::IntHandler()
 	UpdateData();
 }
 
-bool AhrsMekf::Quaternion(bool bEn, int NbAxis)
+bool AttMekf::Quaternion(bool bEn, int NbAxis)
 {
 	// Mag path not yet enabled; MEKF runs 6-axis.
 	vNbAxis = 6;
 	return true;
 }
 
-bool AhrsMekf::Compass(bool bEn)
+bool AttMekf::Compass(bool bEn)
 {
 	return false;
 }
 
-bool AhrsMekf::Calibrate()
+bool AttMekf::Calibrate()
 {
 	return false;
 }
 
-void AhrsMekf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AttMekf::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 }
 
-bool AhrsMekf::Pedometer(bool bEn)
-{
-	return false;
-}
-
-bool AhrsMekf::Tap(bool bEn)
-{
-	return false;
-}

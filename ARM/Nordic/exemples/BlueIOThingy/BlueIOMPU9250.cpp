@@ -20,8 +20,8 @@
 #include "motion/mot_mpu9250.h"
 
 // Fusion backend test selector. Define one of:
-//   IMU_FUSION_VQF - software VQF fusion (AhrsVqf)
-//   IMU_FUSION_EQF - software EqF fusion (AhrsEqf), 6-axis, FPU targets only
+//   IMU_FUSION_VQF - software VQF fusion (AttVqf)
+//   IMU_FUSION_EQF - software EqF fusion (AttEqf), 6-axis, FPU targets only
 // to run software fusion instead of the MPU9250 on-chip DMP. Both read raw
 // data from the IOsonata AGM driver. Do not define both VQF and EqF together.
 //#define IMU_FUSION_VQF
@@ -67,16 +67,16 @@ AgmMpu9250 g_Mpu9250;
 
 static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt);
 
-static const AhrsCfg_t s_ImuCfg = {
+static const AttCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
 #if defined(IMU_FUSION_VQF)
-static AhrsVqf s_Imu;
+static AttVqf s_Imu;
 #elif defined(IMU_FUSION_EQF)
-static AhrsEqf s_Imu;
+static AttEqf s_Imu;
 #else
-static AhrsMpu9250 s_Imu;
+static MotMpu9250 s_Imu;
 #endif
 
 static Timer * s_pTimer;
@@ -161,7 +161,7 @@ static void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
-	AhrsQuat_t quat;
+	AttQuat_t quat;
 	long q[4];
 
 	s_Imu.Read(accdata);

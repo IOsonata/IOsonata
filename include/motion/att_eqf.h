@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	att_eqf.h
 
-@brief	Implementation of the Ahrs class using EqF fusion
+@brief	Implementation of the Att class using EqF fusion
 
 Self contained port of the ABC-EqF n=0 (Attitude-Bias Equivariant Filter).
 No external source and no CMSIS-DSP dependency. The estimator is a geometric
@@ -96,11 +96,11 @@ typedef struct __Eqf_State {
 	int mode;		//!< 0 = init accumulate, 1 = running
 } EqfState_t;
 
-class AhrsEqf : public Ahrs {
+class AttEqf : public Att {
 public:
-	AhrsEqf();
-	virtual ~AhrsEqf() {}
-	bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
+	AttEqf();
+	virtual ~AttEqf() {}
+	bool Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
 	void SetParam(EqfParam_t &Param) { memcpy(&vParams, &Param, sizeof(EqfParam_t)); }
 	virtual bool Enable();
 	virtual void Disable();
@@ -111,10 +111,8 @@ public:
 	bool Calibrate();
 	void SetAxisAlignmentMatrix(int8_t * const pMatrix);
 	virtual bool Compass(bool bEn);
-	virtual bool Pedometer(bool bEn);
 	virtual bool Euler(bool bEn) { return false; }
 	virtual bool Quaternion(bool bEn, int NbAxis);
-	virtual bool Tap(bool bEn);
 
 	virtual bool Read(AccelSensorRawData_t &Data) { return vpAccel->Read(Data); }
 	virtual bool Read(AccelSensorData_t &Data) { return vpAccel->Read(Data); }
@@ -122,8 +120,8 @@ public:
 	virtual bool Read(GyroSensorData_t &Data) { return vpGyro->Read(Data); }
 	virtual bool Read(MagSensorRawData_t &Data) { return vpMag->Read(Data); }
 	virtual bool Read(MagSensorData_t &Data) { return vpMag->Read(Data); }
-	virtual bool Read(AhrsQuat_t &Data);
-	virtual bool Read(AhrsEuler_t &Data) { Data = vEuler; return true; }
+	virtual bool Read(AttQuat_t &Data);
+	virtual bool Read(AttEuler_t &Data) { Data = vEuler; return true; }
 
 protected:
 

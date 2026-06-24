@@ -37,7 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "motion/att.h"
 /*
-bool Ahrs::Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
+bool Att::Init(const AttCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	SetEvtHandler(Cfg.EvtHandler);
 	vpTimer = pTimer;
@@ -47,7 +47,7 @@ bool Ahrs::Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pInt
 	return true;
 }
 */
-bool Ahrs::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool Att::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	vpAccel = pAccel;
 	vpGyro = pGyro;
@@ -57,7 +57,7 @@ bool Ahrs::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * c
 	return true;
 }
 
-AHRS_FEATURE Ahrs::Feature(AHRS_FEATURE FeatureBit, bool bEnDis)
+ATT_FEATURE Att::Feature(ATT_FEATURE FeatureBit, bool bEnDis)
 {
 	uint32_t bit = 0x8000;
 
@@ -65,29 +65,29 @@ AHRS_FEATURE Ahrs::Feature(AHRS_FEATURE FeatureBit, bool bEnDis)
 	{
 		switch (FeatureBit & bit)
 		{
-			case AHRS_FEATURE_EULER:
+			case ATT_FEATURE_EULER:
 				Euler(bEnDis);
 				break;
-			case AHRS_FEATURE_QUATERNION:
+			case ATT_FEATURE_QUATERNION:
 				//Quaternion(bEnDis);
 				break;
-			case AHRS_FEATURE_COMPASS:
+			case ATT_FEATURE_COMPASS:
 				Compass(bEnDis);
 				break;
-			case AHRS_FEATURE_GRAVITY:
+			case ATT_FEATURE_GRAVITY:
 				//Gravity(bEnDis);
 				break;
-			case AHRS_FEATURE_EXTERNAL_ACCEL:
+			case ATT_FEATURE_EXTERNAL_ACCEL:
 				break;
-			case AHRS_FEATURE_TAP:
+			case ATT_FEATURE_TAP:
 				break;
-			case AHRS_FEATURE_ROTATION:
+			case ATT_FEATURE_ROTATION:
 				break;
-			case AHRS_FEATURE_VIBRATION:
+			case ATT_FEATURE_VIBRATION:
 				break;
-			case AHRS_FEATURE_PEDOMETER:
+			case ATT_FEATURE_PEDOMETER:
 				break;
-			case AHRS_FEATURE_CYCLING:
+			case ATT_FEATURE_CYCLING:
 				break;
 		}
 

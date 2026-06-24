@@ -53,7 +53,7 @@ static const float s_CfgMountingMatrix[9]= {
 	0, 0, 1.f
 };
 
-int AhrsIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
+int MotIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
 {
 	AgmIcm20948 *dev = (AgmIcm20948*)context;
 //	return spi_master_transfer_rx(NULL, reg, rbuffer, rlen);
@@ -63,7 +63,7 @@ int AhrsIcm20948::InvnReadReg(void * context, uint8_t reg, uint8_t * rbuffer, ui
 	return cnt > 0 ? 0 : 1;
 }
 
-int AhrsIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
+int MotIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
 {
 	AgmIcm20948 *dev = (AgmIcm20948*)context;
 //	return spi_master_transfer_tx(NULL, reg, wbuffer, wlen);
@@ -74,14 +74,14 @@ int AhrsIcm20948::InvnWriteReg(void * context, uint8_t reg, const uint8_t * wbuf
 }
 
 #if 0
-void AhrsIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
+void MotIcm20948::SensorEventHandler(void * context, enum inv_icm20948_sensor sensortype, uint64_t timestamp, const void * data, const void *arg)
 {
-	AhrsIcm20948 *dev = (AhrsIcm20948*)context;
+	MotIcm20948 *dev = (MotIcm20948*)context;
 
 	dev->UpdateData(sensortype, timestamp, data, arg);
 }
 
-bool AhrsIcm20948::Init(const AhrsCfg_t &Cfg, AgmIcm20948 * const pIcm)
+bool MotIcm20948::Init(const AttCfg_t &Cfg, AgmIcm20948 * const pIcm)
 {
 	if (pIcm == NULL)
 	{
@@ -128,7 +128,7 @@ bool AhrsIcm20948::Init(const AhrsCfg_t &Cfg, AgmIcm20948 * const pIcm)
 }
 #endif
 
-bool AhrsIcm20948::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool MotIcm20948::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	// Min required sensors are accel & gyro, must be combo device
 	if (pAccel == nullptr || pGyro == nullptr || (AgmIcm20948*)pAccel != (AgmIcm20948*)pGyro)
@@ -157,7 +157,7 @@ bool AhrsIcm20948::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSe
 		return false;
 	}
 
-	Ahrs::Init(Cfg, pAccel, pGyro, pMag);
+	Att::Init(Cfg, pAccel, pGyro, pMag);
 	vEvtHandler = Cfg.EvtHandler;
 
 	ResetDMPCtrlReg();
@@ -217,7 +217,7 @@ bool AhrsIcm20948::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSe
 	return true;
 }
 
-void AhrsIcm20948::ResetDMPCtrlReg()
+void MotIcm20948::ResetDMPCtrlReg()
 {
 	uint8_t d[2] = {0, 0};
 
@@ -230,7 +230,7 @@ void AhrsIcm20948::ResetDMPCtrlReg()
 	vSensorCtrl = 0;
 }
 
-void AhrsIcm20948::SetSensorCtrl(uint16_t Bits, bool bEnable)
+void MotIcm20948::SetSensorCtrl(uint16_t Bits, bool bEnable)
 {
 	if (bEnable)
 	{
@@ -251,7 +251,7 @@ void AhrsIcm20948::SetSensorCtrl(uint16_t Bits, bool bEnable)
 	}
 }
 
-void AhrsIcm20948::ResetFifo()
+void MotIcm20948::ResetFifo()
 {
 	uint16_t regaddr;
 	uint16_t cnt;
@@ -291,7 +291,7 @@ void AhrsIcm20948::ResetFifo()
 	Write8((uint8_t*)&regaddr, 2, d);
 }
 
-bool AhrsIcm20948::SetDMPAccelScale()
+bool MotIcm20948::SetDMPAccelScale()
 {
 	int32_t scale, scale2;
 
@@ -352,7 +352,7 @@ bool AhrsIcm20948::SetDMPAccelScale()
 	return true;
 }
 
-bool AhrsIcm20948::SetDMPGyroScale()
+bool MotIcm20948::SetDMPGyroScale()
 {
 	int32_t scale = ((GyroSensor*)vpIcm)->Sensitivity();
 
@@ -1343,7 +1343,7 @@ int inv_icm20948_ctrl_enable_sensorx(struct inv_icm20948 * s, unsigned char andr
 	return result;
 }
 #endif
-bool AhrsIcm20948::Enable()
+bool MotIcm20948::Enable()
 {
 	uint8_t d, userctrl;
 	uint16_t dout;
@@ -1399,7 +1399,7 @@ bool AhrsIcm20948::Enable()
 	return res;
 }
 
-void AhrsIcm20948::Disable()
+void MotIcm20948::Disable()
 {
 	uint16_t regaddr = ICM20948_USER_CTRL_REG;
 	uint8_t d = vpIcm->Read8((uint8_t*)&regaddr, 2) & ~(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN);
@@ -1409,93 +1409,93 @@ void AhrsIcm20948::Disable()
 	vpIcm->Disable();
 }
 
-void AhrsIcm20948::Reset()
+void MotIcm20948::Reset()
 {
 	vpIcm->Reset();
 }
 
-AHRS_FEATURE AhrsIcm20948::Feature(AHRS_FEATURE FeatureBit, bool bEnDis)
+ATT_FEATURE MotIcm20948::Feature(ATT_FEATURE FeatureBit, bool bEnDis)
 {
-	if (FeatureBit & AHRS_FEATURE_EULER)
+	if (FeatureBit & ATT_FEATURE_EULER)
 	{
 
 	}
 
-	if (FeatureBit & AHRS_FEATURE_QUATERNION)
+	if (FeatureBit & ATT_FEATURE_QUATERNION)
 	{
 		SetSensorCtrl(ICM20948_DMP_DATA_OUT_CTL1_QUAT9_SET, bEnDis);
 	}
 
-	if (FeatureBit & AHRS_FEATURE_COMPASS)
+	if (FeatureBit & ATT_FEATURE_COMPASS)
 	{
 
 	}
 
-	if (FeatureBit & AHRS_FEATURE_GRAVITY)
+	if (FeatureBit & ATT_FEATURE_GRAVITY)
 	{
 
 	}
 
-	if (FeatureBit & AHRS_FEATURE_EXTERNAL_ACCEL)
+	if (FeatureBit & ATT_FEATURE_EXTERNAL_ACCEL)
 	{
 
 	}
 
-	if (FeatureBit & AHRS_FEATURE_TAP)
+	if (FeatureBit & ATT_FEATURE_TAP)
 	{
 
 	}
 
-	if (FeatureBit & AHRS_FEATURE_ROTATION)
+	if (FeatureBit & ATT_FEATURE_ROTATION)
 	{
 
 	}
 
-	if (FeatureBit & AHRS_FEATURE_VIBRATION)
+	if (FeatureBit & ATT_FEATURE_VIBRATION)
 	{
 
 	}
 
-	if (FeatureBit & AHRS_FEATURE_PEDOMETER)
+	if (FeatureBit & ATT_FEATURE_PEDOMETER)
 	{
 
 	}
 
-	if (FeatureBit & AHRS_FEATURE_CYCLING)
+	if (FeatureBit & ATT_FEATURE_CYCLING)
 	{
 
 	}
 
-	return Ahrs::Feature(FeatureBit, bEnDis);
+	return Att::Feature(FeatureBit, bEnDis);
 }
 
-bool AhrsIcm20948::Calibrate()
+bool MotIcm20948::Calibrate()
 {
 	return true;
 }
 
-void AhrsIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void MotIcm20948::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 	(void)pMatrix;
 }
 
-bool AhrsIcm20948::Compass(bool bEn)
+bool MotIcm20948::Compass(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool AhrsIcm20948::Pedometer(bool bEn)
+bool MotIcm20948::Pedometer(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool AhrsIcm20948::Quaternion(bool bEn, int NbAxis)
+bool MotIcm20948::Quaternion(bool bEn, int NbAxis)
 {
-	Ahrs::Feature(AHRS_FEATURE_QUATERNION, bEn);
+	Att::Feature(ATT_FEATURE_QUATERNION, bEn);
 
 	uint16_t regaddr;
 
@@ -1566,14 +1566,14 @@ bool AhrsIcm20948::Quaternion(bool bEn, int NbAxis)
 	return true;
 }
 
-bool AhrsIcm20948::Tap(bool bEn)
+bool MotIcm20948::Tap(bool bEn)
 {
 	(void)bEn;
 
 	return true;
 }
 
-bool AhrsIcm20948::UpdateData()
+bool MotIcm20948::UpdateData()
 {
 	uint16_t regaddr = ICM20948_INT_STATUS_REG;
 	uint8_t status[4];
@@ -1694,7 +1694,7 @@ bool AhrsIcm20948::UpdateData()
 // bytes consumed from vFifo. Leftover partial-packet bytes are moved to the
 // front of vFifo and vFifoDataLen is updated. vFifoHdr/vFifoHdr2 retain the
 // pending packet header across calls when a packet is split across reads.
-size_t AhrsIcm20948::ProcessFifoPackets(uint64_t t)
+size_t MotIcm20948::ProcessFifoPackets(uint64_t t)
 {
 	uint8_t *p = vFifo;
 	size_t start = vFifoDataLen;
@@ -1762,7 +1762,7 @@ size_t AhrsIcm20948::ProcessFifoPackets(uint64_t t)
 	return start - vFifoDataLen;
 }
 
-void AhrsIcm20948::IntHandler()
+void MotIcm20948::IntHandler()
 {
 	UpdateData();
 
@@ -1891,7 +1891,7 @@ void AhrsIcm20948::IntHandler()
 	}
 }
 
-int AhrsIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
+int MotIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
 {
 	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 
@@ -1916,7 +1916,7 @@ int AhrsIcm20948::ReadDMP(uint16_t MemAddr, uint8_t *pBuff, int Len)
 	return Len;
 }
 
-int AhrsIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
+int MotIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
 {
 	uint16_t regaddr = ICM20948_DMP_MEM_BANKSEL_REG;
 
@@ -1942,7 +1942,7 @@ int AhrsIcm20948::WriteDMP(uint16_t MemAddr, uint8_t *pData, int Len)
 	return Len;
 }
 
-size_t AhrsIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)
+size_t MotIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timestamp)
 {
 	size_t cnt = 0;
 	uint8_t *d = pFifo;//[ICM20948_FIFO_PAGE_SIZE];
@@ -2352,7 +2352,7 @@ size_t AhrsIcm20948::ProcessDMPFifo(uint8_t *pFifo, size_t Len, uint64_t Timesta
 	return cnt;
 }
 
-bool AhrsIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len)
+bool MotIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImage, int Len)
 {
 	if (pDmpImage == NULL || Len == 0)
 		return false;
@@ -2393,7 +2393,7 @@ bool AhrsIcm20948::InitDMP(uint16_t DmpStartAddr, const uint8_t * const pDmpImag
 	return false;
 }
 
-bool AhrsIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
+bool MotIcm20948::UploadDMPImage(const uint8_t * const pDmpImage, int Len)
 {
 	int len = Len, l = 0;
 	uint8_t *p = (uint8_t*)pDmpImage;

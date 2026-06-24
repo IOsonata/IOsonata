@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	ahrs_mahony.cpp
 
-@brief	Implementation of the Ahrs class using Mahony fusion
+@brief	Implementation of the Att class using Mahony fusion
 
 Self contained Mahony explicit complementary filter. State is a unit quaternion
 (body to earth) plus an integral feedback term that tracks the gyro bias. Each
@@ -53,7 +53,7 @@ SOFTWARE.
 using namespace LinAlg;
 using namespace So3;
 
-AhrsMahony::AhrsMahony()
+AttMahony::AttMahony()
 {
 	vNbAxis = 6;
 	vbInitialized = false;
@@ -68,13 +68,13 @@ AhrsMahony::AhrsMahony()
 	vParams.accGateHi = 5.0f;
 }
 
-bool AhrsMahony::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
+bool AttMahony::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag)
 {
 	if (pAccel == nullptr || pGyro == nullptr) {
 		return false;
 	}
 
-	if (Ahrs::Init(Cfg, pAccel, pGyro, pMag) == false) {
+	if (Att::Init(Cfg, pAccel, pGyro, pMag) == false) {
 		return false;
 	}
 
@@ -94,20 +94,20 @@ bool AhrsMahony::Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSens
 	return true;
 }
 
-void AhrsMahony::Setup(void)
+void AttMahony::Setup(void)
 {
 	// Gains are applied directly from vParams each step. Nothing to precompute
 	// beyond the sample periods captured in Init.
 }
 
-void AhrsMahony::Reset(void)
+void AttMahony::Reset(void)
 {
 	memset(&vState, 0, sizeof(vState));
 	vState.q[0] = 1.0f;	// identity quaternion
 	vState.mode = 0;	// init accumulate
 }
 
-bool AhrsMahony::Enable()
+bool AttMahony::Enable()
 {
 	if (vpAccel) vpAccel->Enable();
 	if (vpGyro) vpGyro->Enable();
@@ -115,14 +115,14 @@ bool AhrsMahony::Enable()
 	return true;
 }
 
-void AhrsMahony::Disable()
+void AttMahony::Disable()
 {
 	if (vpMag) vpMag->Disable();
 	if (vpGyro) vpGyro->Disable();
 	if (vpAccel) vpAccel->Disable();
 }
 
-void AhrsMahony::GravityInit(const float accAvg[3])
+void AttMahony::GravityInit(const float accAvg[3])
 {
 	float A[9];
 	DcmFromGravity(accAvg, A);
@@ -130,7 +130,7 @@ void AhrsMahony::GravityInit(const float accAvg[3])
 	memset(vState.integralFB, 0, sizeof(vState.integralFB));
 }
 
-bool AhrsMahony::UpdateData()
+bool AttMahony::UpdateData()
 {
 	if (vbInitialized == false) {
 		return false;
@@ -212,13 +212,13 @@ bool AhrsMahony::UpdateData()
 	return true;
 }
 
-bool AhrsMahony::Read(AhrsQuat_t &Data)
+bool AttMahony::Read(AttQuat_t &Data)
 {
 	Data = vQuat;
 	return true;
 }
 
-void AhrsMahony::IntHandler()
+void AttMahony::IntHandler()
 {
 	// Refresh the bound sensors then fuse, so this object works as a drop-in
 	// pImuDev whose IntHandler is the data-ready entry point. When the caller
@@ -230,33 +230,24 @@ void AhrsMahony::IntHandler()
 	UpdateData();
 }
 
-bool AhrsMahony::Quaternion(bool bEn, int NbAxis)
+bool AttMahony::Quaternion(bool bEn, int NbAxis)
 {
 	// Mag path not yet enabled; Mahony runs 6-axis.
 	vNbAxis = 6;
 	return true;
 }
 
-bool AhrsMahony::Compass(bool bEn)
+bool AttMahony::Compass(bool bEn)
 {
 	return false;
 }
 
-bool AhrsMahony::Calibrate()
+bool AttMahony::Calibrate()
 {
 	return false;
 }
 
-void AhrsMahony::SetAxisAlignmentMatrix(int8_t * const pMatrix)
+void AttMahony::SetAxisAlignmentMatrix(int8_t * const pMatrix)
 {
 }
 
-bool AhrsMahony::Pedometer(bool bEn)
-{
-	return false;
-}
-
-bool AhrsMahony::Tap(bool bEn)
-{
-	return false;
-}
