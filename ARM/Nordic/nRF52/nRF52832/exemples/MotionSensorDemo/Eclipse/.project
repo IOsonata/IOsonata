@@ -41,7 +41,7 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
 		<link>
-			<name>src/imu</name>
+			<name>src/fusion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -56,14 +56,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/imu/imu_icm20948.cpp</name>
+			<name>src/fusion/ahrs_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_icm20948.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/fusion/ahrs_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/imu/imu_invn_icm20948.cpp</name>
+			<name>src/fusion/ahrs_invn_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_invn_icm20948.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/fusion/ahrs_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/ag_icm456x.cpp</name>

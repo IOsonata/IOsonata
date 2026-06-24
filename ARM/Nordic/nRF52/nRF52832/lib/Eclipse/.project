@@ -171,6 +171,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/excelitas_serlink.h</locationURI>
 		</link>
 		<link>
+			<name>include/fusion</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/iatomic.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
@@ -217,11 +222,6 @@
 		</link>
 		<link>
 			<name>include/miscdev</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/motion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -366,11 +366,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/Invn</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -384,6 +379,11 @@
 			<name>src/Vectors_nRF52832.c</name>
 			<type>1</type>
 			<locationURI>copy_PARENT/src/Vectors_nRF52832.c</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/app_evt_handler.cpp</name>
@@ -466,6 +466,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/fusion</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/i-syst_logo_color_320x153.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153.c</locationURI>
@@ -517,11 +522,6 @@
 		</link>
 		<link>
 			<name>src/miscdev</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/motion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -926,6 +926,86 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/igfx.h</locationURI>
 		</link>
 		<link>
+			<name>include/fusion/MadgwickAHRS.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/MadgwickAHRS.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/ahrs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/ahrs_eqf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_eqf.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/ahrs_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/ahrs_invn_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_invn_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/ahrs_mahony.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_mahony.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/ahrs_mekf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_mekf.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/ahrs_mpu9250.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_mpu9250.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/ahrs_vqf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_vqf.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/ahrs_xiot_fusion.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_xiot_fusion.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/fusion_math.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/fusion_math.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/icm20948_img_dmp3a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/icm20948_img_dmp3a.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/inertial_nav.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/inertial_nav.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/mpu9250_dmpkey.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/mpu9250_dmpkey.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/mpu9250_dmpmap.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/mpu9250_dmpmap.h</locationURI>
+		</link>
+		<link>
+			<name>include/fusion/nav_eskf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/nav_eskf.h</locationURI>
+		</link>
+		<link>
 			<name>include/miscdev/button.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/button.h</locationURI>
@@ -969,91 +1049,6 @@
 			<name>include/miscdev/tca6424a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/MadgwickAHRS.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/MadgwickAHRS.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/ahrs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/ahrs.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/ahrs_eqf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/ahrs_eqf.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/ahrs_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/ahrs_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/ahrs_invn_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/ahrs_invn_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/ahrs_mahony.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/ahrs_mahony.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/ahrs_mekf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/ahrs_mekf.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/ahrs_mpu9250.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/ahrs_mpu9250.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/ahrs_vqf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/ahrs_vqf.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/ahrs_xiot_fusion.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/ahrs_xiot_fusion.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/icm20948_img_dmp3a.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/imu_icm456x.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/imu_icm456x.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/imu_math.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/imu_math.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/inertial_nav.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/inertial_nav.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mpu9250_dmpkey.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpkey.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mpu9250_dmpmap.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpmap.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/nav_eskf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/nav_eskf.h</locationURI>
 		</link>
 		<link>
 			<name>include/net/nrf_mac.h</name>
@@ -1316,64 +1311,64 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/Fusion.h</name>
+			<name>src/Invn/Devices</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/Fusion.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/Fusion.h</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionAhrs.c</name>
+			<name>src/Xiot/FusionAhrs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.c</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionAhrs.h</name>
+			<name>src/Xiot/FusionAhrs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.h</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionAxes.h</name>
+			<name>src/Xiot/FusionAxes.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAxes.h</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionBias.c</name>
+			<name>src/Xiot/FusionBias.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.c</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionBias.h</name>
+			<name>src/Xiot/FusionBias.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.h</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionCalibration.h</name>
+			<name>src/Xiot/FusionCalibration.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCalibration.h</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionCompass.c</name>
+			<name>src/Xiot/FusionCompass.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.c</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionCompass.h</name>
+			<name>src/Xiot/FusionCompass.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.h</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionConvention.h</name>
+			<name>src/Xiot/FusionConvention.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionConvention.h</locationURI>
 		</link>
 		<link>
-			<name>src/Fusion/FusionMath.h</name>
+			<name>src/Xiot/FusionMath.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionMath.h</locationURI>
-		</link>
-		<link>
-			<name>src/Invn/Devices</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/audio/audiodev.cpp</name>
@@ -1801,6 +1796,51 @@
 			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ffunicode.c</locationURI>
 		</link>
 		<link>
+			<name>src/fusion/ahrs.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fusion/ahrs_eqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_eqf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fusion/ahrs_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fusion/ahrs_invn_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_invn_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fusion/ahrs_mahony.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_mahony.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fusion/ahrs_mekf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_mekf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fusion/ahrs_mpu9250.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_mpu9250.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fusion/ahrs_vqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_vqf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/fusion/ahrs_xiot_fusion.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_xiot_fusion.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/littlefs/lfs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs.c</locationURI>
@@ -1874,51 +1914,6 @@
 			<name>src/miscdev/modem.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_eqf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_eqf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_invn_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_mahony.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_mahony.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_mekf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_mekf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_mpu9250.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_mpu9250.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_vqf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_vqf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/ahrs_xiot_fusion.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_xiot_fusion.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble</name>

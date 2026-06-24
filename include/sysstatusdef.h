@@ -172,7 +172,7 @@ typedef enum _System_Status_Type {
 // Subsystems, 0x200 - 0x2FF. Middleware over core drivers.
 //
 #define SYSSTATUS_MODID_SENSOR      0x200   //!< Sensor framework
-#define SYSSTATUS_MODID_IMU         0x201   //!< IMU / fusion
+#define SYSSTATUS_MODID_FUSION      0x201   //!< Sensor fusion
 #define SYSSTATUS_MODID_PWRMGNT     0x202   //!< Power management
 #define SYSSTATUS_MODID_DISPLAY     0x203   //!< Display
 #define SYSSTATUS_MODID_AUDIO       0x204   //!< Audio processor

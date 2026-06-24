@@ -111,7 +111,7 @@ extern "C" {
 }
 #endif	// __cplusplus
 
-/** @} end group IMU */
+/** @} end group MiscDev */
 
 #endif // __BUZZER_H__
 

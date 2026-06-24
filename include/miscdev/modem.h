@@ -62,7 +62,7 @@ protected:
 private:
 };
 
-/** @} end group IMU */
+/** @} end group MiscDev */
 
 #endif // __MODEM_H__
 

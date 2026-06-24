@@ -1224,7 +1224,7 @@ void BtSmpBondClearAll(void)
 //-----------------------------------------------------------------------------
 // Crypto composition (three capability slots: ECDH, AES, RNG)
 //
-// SMP needs three primitives. Following the Imu model (accel/gyro/mag slots
+// SMP needs three primitives. The slots are
 // filled by whatever chips a board has), bt_smp holds three CryptoDev_t slots
 // and routes each operation to the engine in that slot. The application fills
 // the slots via BtSmpInit from whatever engines its target provides: one engine

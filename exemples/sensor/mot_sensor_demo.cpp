@@ -50,8 +50,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/ag_bmi323.h"
 #include "sensors/ag_bmi270.h"
 #include "sensors/accel_h3lis331dl.h"
-#include "imu/imu_mpu9250.h"
-#include "imu/imu_xiot_fusion.h"
+#include "fusion/ahrs_mpu9250.h"
+#include "fusion/ahrs_xiot_fusion.h"
 #include "coredev/uart.h"
 
 #include "Fusion/Fusion.h"
@@ -60,10 +60,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef INVN
 #include "sensors/agm_invn_icm20948.h"
-#include "imu/imu_invn_icm20948.h"
+#include "fusion/ahrs_invn_icm20948.h"
 #else
 #include "sensors/agm_icm20948.h"
-#include "imu/imu_icm20948.h"
+#include "fusion/ahrs_icm20948.h"
 #endif
 //#include "bmi323.h"
 //#include "common.h"
@@ -110,7 +110,7 @@ UART g_Uart;
 //#define AK0991x_SECONDARY_I2C_ADDR  0x0E	/* The secondary I2C address for AK0991x Magnetometers */
 
 //static const uint8_t dmp3_image[] = {
-//#include "imu/icm20948_img.dmp3a.h"
+//#include "fusion/icm20948_img_dmp3a.h"
 //};
 
 //int idd_io_hal_read_reg(void * context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
@@ -204,7 +204,7 @@ static const MagSensorCfg_t s_MagCfg = {
 
 void ImuEvtHandler(Device * const pDev, DEV_EVT Evt);
 
-static const ImuCfg_t s_ImuCfg = {
+static const AhrsCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
@@ -218,14 +218,14 @@ static const ImuCfg_t s_ImuCfg = {
 
 #ifdef ICM20948
 #ifdef INVN
-ImuInvnIcm20948 g_Imu;
+AhrsInvnIcm20948 g_Imu;
 AgmInvnIcm20948 g_MotSensor;
 #else
-ImuIcm20948 g_Imu;
+AhrsIcm20948 g_Imu;
 AgmIcm20948 g_MotSensor;
 #endif
 #elif defined(MPU9250)
-ImuMpu9250 g_Imu;
+AhrsMpu9250 g_Imu;
 AgmMpu9250 g_MotSensor;
 #elif defined(BMI160)
 AgBmi160 g_MotSensor;
@@ -236,7 +236,7 @@ AccelH3lis331dl g_MotSensor;
 #elif defined(BMI270)
 AgBmi270 g_MotSensor;
 #elif defined(ICM456X)
-ImuXiotFusion g_Imu;
+AhrsXiotFusion g_Imu;
 AgIcm456x g_MotSensor;
 #endif
 
@@ -258,7 +258,7 @@ void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 {
 	AccelSensorData_t accdata;
-	ImuQuat_t quat;
+	AhrsQuat_t quat;
 
 	switch (Evt)
 	{
@@ -408,7 +408,7 @@ int main()
 	GyroSensorRawData_t grawdata;
 	GyroSensorData_t gyrodata;
 	MagSensorRawData_t mrawdata;
-	ImuQuat_t quat;
+	AhrsQuat_t quat;
 
 	memset(&arawdata, 0, sizeof(AccelSensorRawData_t));
 	memset(&accdata, 0, sizeof(AccelSensorData_t));

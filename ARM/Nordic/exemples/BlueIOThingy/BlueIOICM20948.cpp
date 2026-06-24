@@ -25,33 +25,33 @@
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "idelay.h"
-#include "imu/imu.h"
+#include "fusion/ahrs.h"
 
 //#define INVN
 //#define IMU_FUSION_VQF
 //#define IMU_FUSION_EQF
 
 // Fusion backend test selector. Define one of:
-//   IMU_FUSION_VQF - software VQF fusion (ImuVqf)
-//   IMU_FUSION_EQF - software EqF fusion (ImuEqf), 6-axis, FPU targets only
+//   IMU_FUSION_VQF - software VQF fusion (AhrsVqf)
+//   IMU_FUSION_EQF - software EqF fusion (AhrsEqf), 6-axis, FPU targets only
 // to run software fusion instead of the ICM20948 on-chip DMP. Both read raw
 // data from the IOsonata AGM driver, so do not define INVN at the same time,
 // and do not define both VQF and EqF together.
 
 #ifdef INVN
-#include "imu/imu_invn_icm20948.h"
+#include "fusion/ahrs_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 #else
-#include "imu/imu_icm20948.h"
+#include "fusion/ahrs_icm20948.h"
 #include "sensors/agm_icm20948.h"
 #endif
 
 #ifdef IMU_FUSION_VQF
-#include "imu/imu_vqf.h"
+#include "fusion/ahrs_vqf.h"
 #endif
 
 #ifdef IMU_FUSION_EQF
-#include "imu/imu_eqf.h"
+#include "fusion/ahrs_eqf.h"
 #endif
 
 #include "BlueIOICM20948.h"
@@ -93,18 +93,18 @@ static AgmInvnIcm20948 s_MotSensor;
 static AgmIcm20948 s_MotSensor;
 #endif
 
-static const ImuCfg_t s_ImuCfg = {
+static const AhrsCfg_t s_ImuCfg = {
 	.EvtHandler = ImuEvtHandler
 };
 
 #if defined(IMU_FUSION_VQF)
-static ImuVqf s_Imu;
+static AhrsVqf s_Imu;
 #elif defined(IMU_FUSION_EQF)
-static ImuEqf s_Imu;
+static AhrsEqf s_Imu;
 #elif defined(INVN)
-static ImuInvnIcm20948 s_Imu;
+static AhrsInvnIcm20948 s_Imu;
 #else
-static ImuIcm20948 s_Imu;
+static AhrsIcm20948 s_Imu;
 #endif
 
 static Timer *s_pTimer = NULL;
@@ -128,7 +128,7 @@ void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
-	ImuQuat_t quat;
+	AhrsQuat_t quat;
 	long q[4];
 
 #if 1// INVN
@@ -204,7 +204,7 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
-	ImuQuat_t quat;
+	AhrsQuat_t quat;
 	long q[4];
 
 	if (IntNo == IMU_INT_NO)

@@ -121,7 +121,7 @@
 			<locationURI>PARENT-7-PROJECT_LOC/include/icli.h</locationURI>
 		</link>
 		<link>
-			<name>include/imu</name>
+			<name>include/fusion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -311,7 +311,7 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/i-syst_logo_color_320x153_big.c</locationURI>
 		</link>
 		<link>
-			<name>src/imu</name>
+			<name>src/fusion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -701,39 +701,39 @@
 			<locationURI>PARENT-7-PROJECT_LOC/include/display/igfx.h</locationURI>
 		</link>
 		<link>
-			<name>include/imu/icm20948_img_dmp3a.h</name>
+			<name>include/fusion/icm20948_img_dmp3a.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/imu/icm20948_img_dmp3a.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/include/fusion/icm20948_img_dmp3a.h</locationURI>
 		</link>
 		<link>
-			<name>include/imu/imu.h</name>
+			<name>include/fusion/ahrs.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/imu/imu.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/include/fusion/ahrs.h</locationURI>
 		</link>
 		<link>
-			<name>include/imu/imu_icm20948.h</name>
+			<name>include/fusion/ahrs_icm20948.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/imu/imu_icm20948.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/include/fusion/ahrs_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>include/imu/imu_invn_icm20948.h</name>
+			<name>include/fusion/ahrs_invn_icm20948.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/imu/imu_invn_icm20948.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/include/fusion/ahrs_invn_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>include/imu/imu_mpu9250.h</name>
+			<name>include/fusion/ahrs_mpu9250.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/imu/imu_mpu9250.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/include/fusion/ahrs_mpu9250.h</locationURI>
 		</link>
 		<link>
-			<name>include/imu/mpu9250_dmpkey.h</name>
+			<name>include/fusion/mpu9250_dmpkey.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/imu/mpu9250_dmpkey.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/include/fusion/mpu9250_dmpkey.h</locationURI>
 		</link>
 		<link>
-			<name>include/imu/mpu9250_dmpmap.h</name>
+			<name>include/fusion/mpu9250_dmpmap.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/include/imu/mpu9250_dmpmap.h</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/include/fusion/mpu9250_dmpmap.h</locationURI>
 		</link>
 		<link>
 			<name>include/miscdev/button.h</name>
@@ -1111,6 +1111,11 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/iopincfg_nrfx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/iopincfg_nrfx.c</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/shared_intrf.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/coredev/shared_intrf.c</locationURI>
@@ -1196,24 +1201,24 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/display/igfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/imu/imu.cpp</name>
+			<name>src/fusion/ahrs.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/fusion/ahrs.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/imu/imu_icm20948.cpp</name>
+			<name>src/fusion/ahrs_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_icm20948.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/fusion/ahrs_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/imu/imu_invn_icm20948.cpp</name>
+			<name>src/fusion/ahrs_invn_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_invn_icm20948.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/fusion/ahrs_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/imu/imu_mpu9250.cpp</name>
+			<name>src/fusion/ahrs_mpu9250.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/src/imu/imu_mpu9250.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/src/fusion/ahrs_mpu9250.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/button.cpp</name>
@@ -1274,6 +1279,11 @@
 			<name>src/pwrmgnt/pm_mp2696a.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/pwrmgnt/pm_mp2696a.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_npm1300.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/pwrmgnt/pm_npm1300.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_adxl362.cpp</name>

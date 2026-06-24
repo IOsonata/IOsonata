@@ -193,7 +193,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/imu_invn_icm20948.cpp|src/agm_invn_icm20948.cpp|src/imu_icm20948.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/fusion_invn_icm20948.cpp|src/agm_invn_icm20948.cpp|src/fusion_icm20948.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

@@ -298,8 +298,8 @@ void BtSmpRequestSecurity(uint16_t ConnHdl);
  * @brief	Initialise the SMP layer and compose its crypto from engines.
  *
  * SMP needs two composed primitives - ECDH (P-256) and AES-128 ECB - each
- * supplied by a CryptoDev_t engine (crypto/crypto.h). Following the Imu model,
- * the application passes the engine that fills each slot from whatever its
+ * supplied by a CryptoDev_t engine (crypto/crypto.h).
+ * The application passes the engine that fills each slot from whatever its
  * target provides: one engine may fill both (mbedtls, CC310), or they compose
  * from two (e.g. uECC for ECDH, the BLE controller for AES, on a part with no
  * CryptoCell). Each slot is validated against the required capability; an

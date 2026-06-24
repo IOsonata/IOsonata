@@ -18,7 +18,7 @@ controller implements. The synchronous call form is the Nordic SDC library's
 API (sdc_hci_cmd_le_*), matching how the rest of the SDC backend issues HCI
 commands. It advertises CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_RNG; no ECDH (the
 controller has no LE ECDH commands), so it composes with an ECDH engine
-(CryptoUeccInit) - the way a gyro-only chip pairs with an accel chip in an IMU.
+(CryptoUeccInit) to cover the ECDH capability the controller lacks.
 On parts with a hardware RNG peripheral, prefer the generic hardware RNG engine
 for the RNG slot and use this only for AES.
 
