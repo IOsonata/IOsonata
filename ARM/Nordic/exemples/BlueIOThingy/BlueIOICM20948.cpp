@@ -25,7 +25,7 @@
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
 #include "idelay.h"
-#include "fusion/ahrs.h"
+#include "motion/att.h"
 
 //#define INVN
 //#define IMU_FUSION_VQF
@@ -39,19 +39,19 @@
 // and do not define both VQF and EqF together.
 
 #ifdef INVN
-#include "fusion/ahrs_invn_icm20948.h"
+#include "motion/fusion_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 #else
-#include "fusion/ahrs_icm20948.h"
+#include "motion/fusion_icm20948.h"
 #include "sensors/agm_icm20948.h"
 #endif
 
 #ifdef IMU_FUSION_VQF
-#include "fusion/ahrs_vqf.h"
+#include "motion/att_vqf.h"
 #endif
 
 #ifdef IMU_FUSION_EQF
-#include "fusion/ahrs_eqf.h"
+#include "motion/att_eqf.h"
 #endif
 
 #include "BlueIOICM20948.h"

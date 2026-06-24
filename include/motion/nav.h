@@ -49,8 +49,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __INERTIAL_NAV_H__
-#define __INERTIAL_NAV_H__
+#ifndef __NAV_H__
+#define __NAV_H__
 
 #include <stdint.h>
 
@@ -194,4 +194,4 @@ protected:
 
 /** @} */
 
-#endif // __INERTIAL_NAV_H__
+#endif // __NAV_H__

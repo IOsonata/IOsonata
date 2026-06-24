@@ -111,7 +111,7 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
 		</link>
 		<link>
-			<name>include/fusion</name>
+			<name>include/motion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -296,7 +296,7 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153_big.c</locationURI>
 		</link>
 		<link>
-			<name>src/fusion</name>
+			<name>src/motion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -566,44 +566,44 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/igfx.h</locationURI>
 		</link>
 		<link>
-			<name>include/fusion/icm20948_img_dmp3a.h</name>
+			<name>include/motion/icm20948_img_dmp3a.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/icm20948_img_dmp3a.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
 		</link>
 		<link>
-			<name>include/fusion/ahrs.h</name>
+			<name>include/motion/att.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att.h</locationURI>
 		</link>
 		<link>
-			<name>include/fusion/ahrs_icm20948.h</name>
+			<name>include/motion/fusion_icm20948.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_icm20948.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>include/fusion/ahrs_mpu9250.h</name>
+			<name>include/motion/fusion_mpu9250.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_mpu9250.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_mpu9250.h</locationURI>
 		</link>
 		<link>
-			<name>include/fusion/ahrs_vqf.h</name>
+			<name>include/motion/att_vqf.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_vqf.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_vqf.h</locationURI>
 		</link>
 		<link>
-			<name>include/fusion/ahrs_xiot_fusion.h</name>
+			<name>include/motion/att_xiot_fusion.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/ahrs_xiot_fusion.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_xiot_fusion.h</locationURI>
 		</link>
 		<link>
-			<name>include/fusion/mpu9250_dmpkey.h</name>
+			<name>include/motion/mpu9250_dmpkey.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/mpu9250_dmpkey.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpkey.h</locationURI>
 		</link>
 		<link>
-			<name>include/fusion/mpu9250_dmpmap.h</name>
+			<name>include/motion/mpu9250_dmpmap.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/fusion/mpu9250_dmpmap.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpmap.h</locationURI>
 		</link>
 		<link>
 			<name>include/miscdev/button.h</name>
@@ -1026,39 +1026,39 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/igfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/fusion/ahrs.cpp</name>
+			<name>src/motion/att.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/fusion/ahrs_icm20948.cpp</name>
+			<name>src/motion/fusion_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_icm20948.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/fusion/ahrs_icm20948x.cpp</name>
+			<name>src/motion/ahrs_icm20948x.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_icm20948x.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/ahrs_icm20948x.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/fusion/ahrs_invn_icm20948.cpp</name>
+			<name>src/motion/fusion_invn_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_invn_icm20948.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/fusion/ahrs_mpu9250.cpp</name>
+			<name>src/motion/fusion_mpu9250.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_mpu9250.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_mpu9250.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/fusion/ahrs_vqf.cpp</name>
+			<name>src/motion/att_vqf.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_vqf.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_vqf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/fusion/ahrs_xiot_fusion.cpp</name>
+			<name>src/motion/att_xiot_fusion.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/fusion/ahrs_xiot_fusion.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/button.cpp</name>

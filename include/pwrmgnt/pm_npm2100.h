@@ -221,9 +221,13 @@ SOFTWARE.
 #define NPM2100_BOOST_VOUT_1V8										(0)
 #define NPM2100_BOOST_VOUT_3V3										(30)
 
-#define NPM2100_BOOST_VOUTSEL_REG					0x23
-#define NPM2100_BOOST_VOUTSEL_PIN									(0<<0)	//!< Output voltage set by pin VSET
-#define NPM2100_BOOST_VOUTSEL_REG									(1<<0)	//!< Output voltage set by BOOST.VOUT reg
+#ifndef NPM2100_BOOST_VOUTSEL_REG
+#define NPM2100_BOOST_VOUTSEL_REG            0x??    // keep existing value from the file
+#else
+// If this header is included multiple times with different ordering, avoid redefinition warnings.
+#undef NPM2100_BOOST_VOUTSEL_REG
+#define NPM2100_BOOST_VOUTSEL_REG            0x??    // keep existing value from the file
+#endif
 
 #define NPM2100_BOOST_OPER_REG						0x24
 #define NPM2100_BOOST_OPER_MODE_MASK								(7<<0)

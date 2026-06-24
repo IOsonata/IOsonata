@@ -61,6 +61,8 @@ SOFTWARE.
 #define PLLR_DIV_MAX		8
 #define VCO_FREQ_MIN		64000000
 #define VCO_FREQ_MAX		344000000
+#define CLK_MIN						2660000
+#define CLK_MAX						8000000
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
@@ -147,7 +149,7 @@ uint32_t FindPllCfg(uint32_t SrcFreq)
 		}
 		uint32_t clk = SrcFreq / m;
 
-		for (int n = PLLN_MUL_MIN; n <= PLLN_MUL_MAX && clk >= 2660000 && clk <= 8000000; n++)
+		for (int n = PLLN_MUL_MIN; n <= PLLN_MUL_MAX && clk >= CLK_MIN && clk <= CLK_MAX; n++)
 		{
 			uint32_t vco = clk * n;
 

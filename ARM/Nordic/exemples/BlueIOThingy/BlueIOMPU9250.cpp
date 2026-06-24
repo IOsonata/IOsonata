@@ -17,7 +17,7 @@
 #include "coredev/spi.h"
 #include "coredev/timer.h"
 #include "sensors/agm_mpu9250.h"
-#include "fusion/ahrs_mpu9250.h"
+#include "motion/fusion_mpu9250.h"
 
 // Fusion backend test selector. Define one of:
 //   IMU_FUSION_VQF - software VQF fusion (AhrsVqf)
@@ -28,10 +28,10 @@
 //#define IMU_FUSION_EQF
 
 #ifdef IMU_FUSION_VQF
-#include "fusion/ahrs_vqf.h"
+#include "motion/att_vqf.h"
 #endif
 #ifdef IMU_FUSION_EQF
-#include "fusion/ahrs_eqf.h"
+#include "motion/att_eqf.h"
 #endif
 #include "idelay.h"
 #include "board.h"
