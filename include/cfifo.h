@@ -35,8 +35,8 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 
-#ifndef __FIFO_H__
-#define __FIFO_H__
+#ifndef __CFIFO_H__
+#define __CFIFO_H__
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -222,4 +222,4 @@ int CFifoWrite(hCFifo_t const pFifo, uint8_t *pData, int DataLen);
 
 /** @} end group FIFO */
 
-#endif // __FIFO_H__ 
+#endif // __CFIFO_H__

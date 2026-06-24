@@ -49,15 +49,15 @@ SOFTWARE.
 
 #include "cfifo.h"
 
-// Mask != 0: pow2 path — single AND, no branch.
-// Mask == 0: non-pow2 — modulo
+// Mask != 0: pow2 path - single AND, no branch.
+// Mask == 0: non-pow2 - modulo
 static inline uint32_t cfifo_slot(const CFifo_t *pFifo, uint32_t Idx)
 {
     return pFifo->Mask ? (Idx & pFifo->Mask) : (uint32_t)(Idx % (uint32_t)pFifo->MaxIdxCnt);
 }
 
 // Struct layout places BlkSize at [8] and pMemStart at [12].
-// Adjacent fields → compiler emits LDRD to load both in one cycle.
+// Adjacent fields -> compiler emits LDRD to load both in one cycle.
 static inline uint8_t *cfifo_addr(const CFifo_t *pFifo, uint32_t Slot)
 {
     return pFifo->pMemStart + Slot * pFifo->BlkSize;
@@ -117,7 +117,7 @@ uint8_t *CFifoGet(hCFifo_t const pFifo)
 
     do {
         /* gi loaded RELAXED: the CAS below revalidates it on every attempt,
-         * so a stale value is harmless — it just causes a retry.
+         * so a stale value is harmless - it just causes a retry.
          * pi loaded ACQUIRE: pairs with the RELEASE store in CFifoPut,
          * ensuring we see the data written to the slot before PutIdx advanced.
          * On Cortex-M4 load-load reordering does not occur in hardware, but
