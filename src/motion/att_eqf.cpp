@@ -55,12 +55,14 @@ SOFTWARE.
 #include <string.h>
 
 #include "motion/att_eqf.h"
-#include "motion/fusion_math.h"
+#include "math_linalg.h"
+#include "math_so3.h"
 
 #define EQF_DEG2RAD	0.01745329251994329577f
 
 
-using namespace FusionMath;
+using namespace LinAlg;
+using namespace So3;
 
 AhrsEqf::AhrsEqf()
 {
@@ -221,10 +223,10 @@ void AhrsEqf::Propagate(const float w[3], float dt)
 	}
 
 	float P11[9], P12[9], P21[9], P22[9];
-	PGet(vState.P, 0, 0, P11);
-	PGet(vState.P, 0, 1, P12);
-	PGet(vState.P, 1, 0, P21);
-	PGet(vState.P, 1, 1, P22);
+	Mat3BlockGet(vState.P, 6, 0, 0, P11);
+	Mat3BlockGet(vState.P, 6, 0, 1, P12);
+	Mat3BlockGet(vState.P, 6, 1, 0, P21);
+	Mat3BlockGet(vState.P, 6, 1, 1, P22);
 
 	// Phi = [[I, F], [0, G]]
 	float T1[9], T2[9];
@@ -269,10 +271,10 @@ void AhrsEqf::Propagate(const float w[3], float dt)
 	Mat3Sym(nP11);
 	Mat3Sym(nP22);
 
-	PSet(vState.P, 0, 0, nP11);
-	PSet(vState.P, 0, 1, nP12);
-	PSet(vState.P, 1, 0, nP21);
-	PSet(vState.P, 1, 1, nP22);
+	Mat3BlockSet(vState.P, 6, 0, 0, nP11);
+	Mat3BlockSet(vState.P, 6, 0, 1, nP12);
+	Mat3BlockSet(vState.P, 6, 1, 0, nP21);
+	Mat3BlockSet(vState.P, 6, 1, 1, nP22);
 
 	if (++vState.orthoCounter >= vParams.orthoInterval) {
 		Reortho(vState.A);
@@ -304,7 +306,7 @@ void AhrsEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool
 
 	// S = Cd P11 Cd^T + sigma^2 I
 	float P11[9];
-	PGet(vState.P, 0, 0, P11);
+	Mat3BlockGet(vState.P, 6, 0, 0, P11);
 	float CdP[9];
 	Mat3Mul(Cd, P11, CdP);
 	float S[9];
@@ -319,7 +321,7 @@ void AhrsEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool
 
 	// K = P C^T S^-1, C = [Cd | 0]
 	float P21[9];
-	PGet(vState.P, 1, 0, P21);
+	Mat3BlockGet(vState.P, 6, 1, 0, P21);
 	float CdT[9];
 	Mat3Transpose(Cd, CdT);
 	float P11Ct[9], P21Ct[9];
@@ -374,8 +376,8 @@ void AhrsEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool
 	}
 
 	float P12[9], P22[9];
-	PGet(vState.P, 0, 1, P12);
-	PGet(vState.P, 1, 1, P22);
+	Mat3BlockGet(vState.P, 6, 0, 1, P12);
+	Mat3BlockGet(vState.P, 6, 1, 1, P22);
 
 	float AP11[9], BP11[9];
 	Mat3Mul(Ai, P11, AP11);
@@ -412,10 +414,10 @@ void AhrsEqf::DirUpdate(const float yRaw[3], const float d[3], float sigma, bool
 	Mat3Sym(nP11);
 	Mat3Sym(nP22);
 
-	PSet(vState.P, 0, 0, nP11);
-	PSet(vState.P, 0, 1, nP12);
-	PSet(vState.P, 1, 0, nP21);
-	PSet(vState.P, 1, 1, nP22);
+	Mat3BlockSet(vState.P, 6, 0, 0, nP11);
+	Mat3BlockSet(vState.P, 6, 0, 1, nP12);
+	Mat3BlockSet(vState.P, 6, 1, 0, nP21);
+	Mat3BlockSet(vState.P, 6, 1, 1, nP22);
 
 	for (int i = 0; i < 6; i++) {
 		if (vState.P[i * 6 + i] < 1.0e-12f) {
@@ -437,7 +439,7 @@ void AhrsEqf::RestBiasUpdate(void)
 
 	// C = [0, Cb], Cb = -A^T. S = A^T P22 A + sigma^2 I
 	float P22[9];
-	PGet(vState.P, 1, 1, P22);
+	Mat3BlockGet(vState.P, 6, 1, 1, P22);
 	float AT[9];
 	Mat3Transpose(vState.A, AT);
 	float ATP22[9], S[9];
@@ -453,7 +455,7 @@ void AhrsEqf::RestBiasUpdate(void)
 
 	// K = P C^T S^-1, C^T = [[0], [-A]]
 	float P12[9];
-	PGet(vState.P, 0, 1, P12);
+	Mat3BlockGet(vState.P, 6, 0, 1, P12);
 	float mA[9];
 	for (int i = 0; i < 9; i++) {
 		mA[i] = -vState.A[i];
@@ -494,8 +496,8 @@ void AhrsEqf::RestBiasUpdate(void)
 	Ei[0] += 1.0f; Ei[4] += 1.0f; Ei[8] += 1.0f;
 
 	float P11[9], P21[9];
-	PGet(vState.P, 0, 0, P11);
-	PGet(vState.P, 1, 0, P21);
+	Mat3BlockGet(vState.P, 6, 0, 0, P11);
+	Mat3BlockGet(vState.P, 6, 1, 0, P21);
 
 	float nP11[9], T[9], T2[9];
 	Mat3MulBT(P12, Fi, nP11);	// P12 F_^T
@@ -535,10 +537,10 @@ void AhrsEqf::RestBiasUpdate(void)
 	Mat3Sym(nP11);
 	Mat3Sym(nP22);
 
-	PSet(vState.P, 0, 0, nP11);
-	PSet(vState.P, 0, 1, nP12);
-	PSet(vState.P, 1, 0, nP21);
-	PSet(vState.P, 1, 1, nP22);
+	Mat3BlockSet(vState.P, 6, 0, 0, nP11);
+	Mat3BlockSet(vState.P, 6, 0, 1, nP12);
+	Mat3BlockSet(vState.P, 6, 1, 0, nP21);
+	Mat3BlockSet(vState.P, 6, 1, 1, nP22);
 
 	for (int i = 0; i < 6; i++) {
 		if (vState.P[i * 6 + i] < 1.0e-12f) {

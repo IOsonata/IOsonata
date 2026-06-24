@@ -45,12 +45,14 @@ SOFTWARE.
 #include <string.h>
 
 #include "motion/att_mekf.h"
-#include "motion/fusion_math.h"
+#include "math_linalg.h"
+#include "math_so3.h"
 
 #define MEKF_DEG2RAD	0.01745329251994329577f
 
 
-using namespace FusionMath;
+using namespace LinAlg;
+using namespace So3;
 
 AhrsMekf::AhrsMekf()
 {
@@ -178,10 +180,10 @@ void AhrsMekf::Propagate(const float w[3], float dt)
 	}
 
 	float P11[9], P12[9], P21[9], P22[9];
-	PGet(vState.P, 0, 0, P11);
-	PGet(vState.P, 0, 1, P12);
-	PGet(vState.P, 1, 0, P21);
-	PGet(vState.P, 1, 1, P22);
+	Mat3BlockGet(vState.P, 6, 0, 0, P11);
+	Mat3BlockGet(vState.P, 6, 0, 1, P12);
+	Mat3BlockGet(vState.P, 6, 1, 0, P21);
+	Mat3BlockGet(vState.P, 6, 1, 1, P22);
 
 	// nP11 = Phi11 P11 Phi11^T + Phi11 P12 Phi12^T
 	//      + Phi12 P21 Phi11^T + Phi12 P22 Phi12^T
@@ -223,10 +225,10 @@ void AhrsMekf::Propagate(const float w[3], float dt)
 	Mat3Sym(nP11);
 	Mat3Sym(nP22);
 
-	PSet(vState.P, 0, 0, nP11);
-	PSet(vState.P, 0, 1, nP12);
-	PSet(vState.P, 1, 0, nP21);
-	PSet(vState.P, 1, 1, nP22);
+	Mat3BlockSet(vState.P, 6, 0, 0, nP11);
+	Mat3BlockSet(vState.P, 6, 0, 1, nP12);
+	Mat3BlockSet(vState.P, 6, 1, 0, nP21);
+	Mat3BlockSet(vState.P, 6, 1, 1, nP22);
 }
 
 void AhrsMekf::VecUpdate(const float meas[3], const float ref[3], float sigma)
@@ -254,7 +256,7 @@ void AhrsMekf::VecUpdate(const float meas[3], const float ref[3], float sigma)
 
 	// S = Hs P11 Hs^T + sigma^2 I
 	float P11[9];
-	PGet(vState.P, 0, 0, P11);
+	Mat3BlockGet(vState.P, 6, 0, 0, P11);
 	float HsP[9];
 	Mat3Mul(Hs, P11, HsP);
 	float S[9];
@@ -269,7 +271,7 @@ void AhrsMekf::VecUpdate(const float meas[3], const float ref[3], float sigma)
 
 	// K = P H^T S^-1, H^T = [Hs^T ; 0]
 	float P21[9];
-	PGet(vState.P, 1, 0, P21);
+	Mat3BlockGet(vState.P, 6, 1, 0, P21);
 	float P11Ht[9], P21Ht[9];
 	Mat3MulBT(P11, Hs, P11Ht);
 	Mat3MulBT(P21, Hs, P21Ht);
@@ -309,8 +311,8 @@ void AhrsMekf::VecUpdate(const float meas[3], const float ref[3], float sigma)
 	}
 
 	float P12[9], P22[9];
-	PGet(vState.P, 0, 1, P12);
-	PGet(vState.P, 1, 1, P22);
+	Mat3BlockGet(vState.P, 6, 0, 1, P12);
+	Mat3BlockGet(vState.P, 6, 1, 1, P22);
 
 	float AP11[9], BP11[9];
 	Mat3Mul(Ai, P11, AP11);
@@ -347,10 +349,10 @@ void AhrsMekf::VecUpdate(const float meas[3], const float ref[3], float sigma)
 	Mat3Sym(nP11);
 	Mat3Sym(nP22);
 
-	PSet(vState.P, 0, 0, nP11);
-	PSet(vState.P, 0, 1, nP12);
-	PSet(vState.P, 1, 0, nP21);
-	PSet(vState.P, 1, 1, nP22);
+	Mat3BlockSet(vState.P, 6, 0, 0, nP11);
+	Mat3BlockSet(vState.P, 6, 0, 1, nP12);
+	Mat3BlockSet(vState.P, 6, 1, 0, nP21);
+	Mat3BlockSet(vState.P, 6, 1, 1, nP22);
 
 	for (int i = 0; i < 6; i++) {
 		if (vState.P[i * 6 + i] < 1.0e-12f) {

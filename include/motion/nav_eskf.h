@@ -19,7 +19,7 @@ stacks. It is the navigation tier baseline; the invariant EKF and the SE2(3)
 equivariant filter share this interface and improve on its consistency.
 
 Needs an FPU. The 15x15 covariance work uses general matrix routines from
-nav_math.h.
+math_linalg.h.
 
 @author	Hoang Nguyen Hoan
 @date	Jun. 23, 2026

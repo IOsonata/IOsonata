@@ -50,7 +50,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/ag_bmi323.h"
 #include "sensors/ag_bmi270.h"
 #include "sensors/accel_h3lis331dl.h"
-#include "motion/fusion_mpu9250.h"
+#include "motion/mot_mpu9250.h"
 #include "motion/att_xiot_fusion.h"
 #include "coredev/uart.h"
 
@@ -60,10 +60,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef INVN
 #include "sensors/agm_invn_icm20948.h"
-#include "motion/fusion_invn_icm20948.h"
+#include "motion/mot_invn_icm20948.h"
 #else
 #include "sensors/agm_icm20948.h"
-#include "motion/fusion_icm20948.h"
+#include "motion/mot_icm20948.h"
 #endif
 //#include "bmi323.h"
 //#include "common.h"

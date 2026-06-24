@@ -52,11 +52,11 @@ SOFTWARE.
 #include <string.h>
 
 #include "motion/nav_eskf.h"
-#include "motion/fusion_math.h"
-#include "motion/nav_math.h"
+#include "math_linalg.h"
+#include "math_so3.h"
 
-using namespace FusionMath;
-using namespace NavMath;
+using namespace LinAlg;
+using namespace So3;
 
 #define NX		ESKF_NX			// 15
 #define I_POS		0

@@ -45,11 +45,13 @@ SOFTWARE.
 #include <string.h>
 
 #include "motion/att_mahony.h"
-#include "motion/fusion_math.h"
+#include "math_linalg.h"
+#include "math_so3.h"
 
 #define MAHONY_DEG2RAD	0.01745329251994329577f
 
-using namespace FusionMath;
+using namespace LinAlg;
+using namespace So3;
 
 AhrsMahony::AhrsMahony()
 {

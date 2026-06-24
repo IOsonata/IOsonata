@@ -39,10 +39,10 @@
 // and do not define both VQF and EqF together.
 
 #ifdef INVN
-#include "motion/fusion_invn_icm20948.h"
+#include "motion/mot_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 #else
-#include "motion/fusion_icm20948.h"
+#include "motion/mot_icm20948.h"
 #include "sensors/agm_icm20948.h"
 #endif
 

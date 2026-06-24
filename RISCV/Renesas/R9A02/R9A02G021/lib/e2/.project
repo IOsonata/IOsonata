@@ -651,19 +651,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att.h</locationURI>
 		</link>
 		<link>
-			<name>include/motion/fusion_icm20948.h</name>
+			<name>include/motion/mot_icm20948.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_icm20948.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>include/motion/fusion_invn_icm20948.h</name>
+			<name>include/motion/mot_invn_icm20948.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_invn_icm20948.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_invn_icm20948.h</locationURI>
 		</link>
 		<link>
-			<name>include/motion/fusion_mpu9250.h</name>
+			<name>include/motion/mot_mpu9250.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_mpu9250.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_mpu9250.h</locationURI>
 		</link>
 		<link>
 			<name>include/motion/att_vqf.h</name>
@@ -1106,19 +1106,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/fusion_icm20948.cpp</name>
+			<name>src/motion/mot_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_icm20948.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/fusion_invn_icm20948.cpp</name>
+			<name>src/motion/mot_invn_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_invn_icm20948.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/fusion_mpu9250.cpp</name>
+			<name>src/motion/mot_mpu9250.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_mpu9250.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/motion/att_vqf.cpp</name>

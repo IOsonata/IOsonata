@@ -193,7 +193,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/fusion_invn_icm20948.cpp|src/agm_invn_icm20948.cpp|src/fusion_icm20948.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/motion/mot_invn_icm20948.cpp|src/agm_invn_icm20948.cpp|src/motion/mot_icm20948.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

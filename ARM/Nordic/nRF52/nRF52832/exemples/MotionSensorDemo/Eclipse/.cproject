@@ -137,7 +137,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sensors/agm_icm20948_old.cpp|src/Icm20948Setup.c|src/fusion/ahrs_icm20948.cpp|src/fusion/ahrs_invn_icm20948.cpp|src/lsm303agr_reg.c|src/sensors/am_lsm303agr.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sensors/agm_icm20948_old.cpp|src/Icm20948Setup.c|src/motion/mot_icm20948.cpp|src/motion/mot_invn_icm20948.cpp|src/lsm303agr_reg.c|src/sensors/am_lsm303agr.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -277,7 +277,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sensors/agm_icm20948_old.cpp|src/Icm20948Setup.c|src/fusion/ahrs_icm20948.cpp|src/fusion/ahrs_invn_icm20948.cpp|src/lsm303agr_reg.c|src/sensors/am_lsm303agr.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sensors/agm_icm20948_old.cpp|src/Icm20948Setup.c|src/motion/mot_icm20948.cpp|src/motion/mot_invn_icm20948.cpp|src/lsm303agr_reg.c|src/sensors/am_lsm303agr.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
