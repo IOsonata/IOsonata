@@ -28,10 +28,10 @@
 //#define IMU_FUSION_EQF
 
 #ifdef IMU_FUSION_VQF
-#include "imu/ahrs_vqf.h"
+#include "fusion/ahrs_vqf.h"
 #endif
 #ifdef IMU_FUSION_EQF
-#include "imu/ahrs_eqf.h"
+#include "fusion/ahrs_eqf.h"
 #endif
 #include "idelay.h"
 #include "board.h"
