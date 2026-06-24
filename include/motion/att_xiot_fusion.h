@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_xiot_fusion.h
+@file	att_xiot_fusion.h
 
 @brief	Implementation of the Ahrs class using x-iot Fusion
 
@@ -31,14 +31,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __AHRS_XIOT_FUSION_H__
-#define __AHRS_XIOT_FUSION_H__
+#ifndef __ATT_XIOT_FUSION_H__
+#define __ATT_XIOT_FUSION_H__
 
 #include "Fusion/Fusion.h"
 
-#include "fusion/ahrs.h"
+#include "motion/att.h"
 
-/** @addtogroup AHRS
+/** @addtogroup Motion
   * @{
   */
 
@@ -126,4 +126,4 @@ extern "C" {
 
 /** @} end group AHRS */
 
-#endif // __AHRS_XIOT_FUSION_H__
+#endif // __ATT_XIOT_FUSION_H__

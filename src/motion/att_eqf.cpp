@@ -54,8 +54,8 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "fusion/ahrs_eqf.h"
-#include "fusion/fusion_math.h"
+#include "motion/att_eqf.h"
+#include "motion/fusion_math.h"
 
 #define EQF_DEG2RAD	0.01745329251994329577f
 

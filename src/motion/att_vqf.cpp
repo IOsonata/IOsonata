@@ -53,7 +53,7 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "fusion/ahrs_vqf.h"
+#include "motion/att_vqf.h"
 
 // Constants. Double precision constants are used where the low pass filter
 // math runs in double.

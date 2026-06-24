@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs.cpp
+@file	att.cpp
 
 @brief	Generic AHRS (attitude and heading reference system)
 
@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
-#include "fusion/ahrs.h"
+#include "motion/att.h"
 /*
 bool Ahrs::Init(const AhrsCfg_t &Cfg, uint32_t DevAddr, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {

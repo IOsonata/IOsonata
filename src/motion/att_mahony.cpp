@@ -44,8 +44,8 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "fusion/ahrs_mahony.h"
-#include "fusion/fusion_math.h"
+#include "motion/att_mahony.h"
+#include "motion/fusion_math.h"
 
 #define MAHONY_DEG2RAD	0.01745329251994329577f
 

@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs.h
+@file	att.h
 
 @brief	Generic AHRS (attitude and heading reference system)
 
@@ -35,14 +35,14 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __AHRS_H__
-#define __AHRS_H__
+#ifndef __ATT_H__
+#define __ATT_H__
 
 #include "sensors/accel_sensor.h"
 #include "sensors/gyro_sensor.h"
 #include "sensors/mag_sensor.h"
 
-/** @addtogroup AHRS
+/** @addtogroup Motion
   * @{
   */
 
@@ -239,6 +239,6 @@ protected:
 
 #endif // __cplusplus
 
-/** @} end group AHRS */
+/** @} end group Motion */
 
-#endif // __AHRS_H__
+#endif // __ATT_H__

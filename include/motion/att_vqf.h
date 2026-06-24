@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_vqf.h
+@file	att_vqf.h
 
 @brief	Implementation of the Ahrs class using vqf fusion
 
@@ -41,12 +41,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __AHRS_VQF_H__
-#define __AHRS_VQF_H__
+#ifndef __ATT_VQF_H__
+#define __ATT_VQF_H__
 
-#include "fusion/ahrs.h"
+#include "motion/att.h"
 
-/** @addtogroup AHRS
+/** @addtogroup Motion
   * @{
   */
 
@@ -195,4 +195,4 @@ private:
 
 /** @} */
 
-#endif // __AHRS_VQF_H__
+#endif // __ATT_VQF_H__

@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_mahony.h
+@file	att_mahony.h
 
 @brief	Implementation of the Ahrs class using Mahony fusion
 
@@ -47,12 +47,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __AHRS_MAHONY_H__
-#define __AHRS_MAHONY_H__
+#ifndef __ATT_MAHONY_H__
+#define __ATT_MAHONY_H__
 
-#include "fusion/ahrs.h"
+#include "motion/att.h"
 
-/** @addtogroup AHRS
+/** @addtogroup Motion
   * @{
   */
 
@@ -121,4 +121,4 @@ private:
 
 /** @} */
 
-#endif // __AHRS_MAHONY_H__
+#endif // __ATT_MAHONY_H__

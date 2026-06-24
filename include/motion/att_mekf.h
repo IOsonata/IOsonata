@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_mekf.h
+@file	att_mekf.h
 
 @brief	Implementation of the Ahrs class using MEKF fusion
 
@@ -50,12 +50,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __AHRS_MEKF_H__
-#define __AHRS_MEKF_H__
+#ifndef __ATT_MEKF_H__
+#define __ATT_MEKF_H__
 
-#include "fusion/ahrs.h"
+#include "motion/att.h"
 
-/** @addtogroup AHRS
+/** @addtogroup Motion
   * @{
   */
 
@@ -136,4 +136,4 @@ private:
 
 /** @} */
 
-#endif // __AHRS_MEKF_H__
+#endif // __ATT_MEKF_H__

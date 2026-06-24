@@ -44,8 +44,8 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "fusion/ahrs_mekf.h"
-#include "fusion/fusion_math.h"
+#include "motion/att_mekf.h"
+#include "motion/fusion_math.h"
 
 #define MEKF_DEG2RAD	0.01745329251994329577f
 

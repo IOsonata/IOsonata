@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_eqf.h
+@file	att_eqf.h
 
 @brief	Implementation of the Ahrs class using EqF fusion
 
@@ -48,12 +48,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __AHRS_EQF_H__
-#define __AHRS_EQF_H__
+#ifndef __ATT_EQF_H__
+#define __ATT_EQF_H__
 
-#include "fusion/ahrs.h"
+#include "motion/att.h"
 
-/** @addtogroup AHRS
+/** @addtogroup Motion
   * @{
   */
 
@@ -150,4 +150,4 @@ private:
 
 /** @} */
 
-#endif // __AHRS_EQF_H__
+#endif // __ATT_EQF_H__

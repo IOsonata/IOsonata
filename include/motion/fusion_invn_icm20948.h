@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_invn_icm20948.h
+@file	fusion_invn_icm20948.h
 
 @brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-20948
 
@@ -34,14 +34,14 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __AHRS_INVN_ICM20948_H__
-#define __AHRS_INVN_ICM20948_H__
+#ifndef __FUSION_INVN_ICM20948_H__
+#define __FUSION_INVN_ICM20948_H__
 
 #include "device_intrf.h"
-#include "fusion/ahrs.h"
+#include "motion/att.h"
 #include "sensors/agm_invn_icm20948.h"
 
-/** @addtogroup AHRS
+/** @addtogroup Motion
   * @{
   */
 
@@ -134,7 +134,7 @@ private:
 	size_t vFifoDataLen;	//!< Data length currently in fifo
 };
 
-/** @} end group AHRS */
+/** @} end group Motion */
 
 
-#endif // __AHRS_INVN_ICM20948_H__
+#endif // __FUSION_INVN_ICM20948_H__

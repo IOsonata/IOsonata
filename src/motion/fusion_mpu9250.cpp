@@ -36,9 +36,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "istddef.h"
 #include "convutil.h"
 #include "sensors/agm_mpu9250.h"
-#include "fusion/ahrs_mpu9250.h"
-#include "fusion/mpu9250_dmpkey.h"
-#include "fusion/mpu9250_dmpmap.h"
+#include "motion/fusion_mpu9250.h"
+#include "motion/mpu9250_dmpkey.h"
+#include "motion/mpu9250_dmpmap.h"
 
 /* These defines are copied from example of MPL ver 6.12.
  * These defines may change for each DMP image, so be sure to modify

@@ -34,10 +34,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
-#ifndef __AHRS_MPU9250_H__
-#define __AHRS_MPU9250_H__
+#ifndef __FUSION_MPU9250_H__
+#define __FUSION_MPU9250_H__
 
-#include "fusion/ahrs.h"
+#include "motion/att.h"
 #include "sensors/agm_mpu9250.h"
 
 /** @addtogroup AHRS
@@ -149,4 +149,4 @@ private:
 
 /** @} end group AHRS */
 
-#endif // __AHRS_MPU9250_H__
+#endif // __FUSION_MPU9250_H__

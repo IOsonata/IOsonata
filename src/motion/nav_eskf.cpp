@@ -51,9 +51,9 @@ SOFTWARE.
 #include <math.h>
 #include <string.h>
 
-#include "fusion/nav_eskf.h"
-#include "fusion/fusion_math.h"
-#include "fusion/nav_math.h"
+#include "motion/nav_eskf.h"
+#include "motion/fusion_math.h"
+#include "motion/nav_math.h"
 
 using namespace FusionMath;
 using namespace NavMath;
