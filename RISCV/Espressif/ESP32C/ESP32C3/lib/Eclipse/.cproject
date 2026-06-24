@@ -117,7 +117,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/Vectors_esp32_intmtx.c|src/bluetooth/bt_host.cpp|src/fusion/ahrs_icm20948.cpp|src/sensors/agm_icm20948.cpp|src/sysstatus_impl.cpp|src/I-SYST_Logo320_little.c|src/I-SYST_Logo320.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/Vectors_esp32_intmtx.c|src/bluetooth/bt_host.cpp|src/motion/fusion_icm20948.cpp|src/sensors/agm_icm20948.cpp|src/sysstatus_impl.cpp|src/I-SYST_Logo320_little.c|src/I-SYST_Logo320.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -239,7 +239,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/Vectors_esp32_intmtx.c|src/bluetooth/bt_host.cpp|src/fusion/ahrs_icm20948.cpp|src/sensors/agm_icm20948.cpp|src/sysstatus_impl.cpp|src/I-SYST_Logo320_little.c|src/I-SYST_Logo320.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/Vectors_esp32_intmtx.c|src/bluetooth/bt_host.cpp|src/motion/fusion_icm20948.cpp|src/sensors/agm_icm20948.cpp|src/sysstatus_impl.cpp|src/I-SYST_Logo320_little.c|src/I-SYST_Logo320.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

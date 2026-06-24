@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_invn_icm20948.cpp
+@file	mot_invn_icm20948.cpp
 
 @brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-20948
 
@@ -48,7 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "idelay.h"
 #include "convutil.h"
-#include "motion/fusion_invn_icm20948.h"
+#include "motion/mot_invn_icm20948.h"
 #include "sensors/agm_invn_icm20948.h"
 
 //#define ICM20948_WHO_AM_I_ID		0xEA

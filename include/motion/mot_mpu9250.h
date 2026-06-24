@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_mpu9250.h
+@file	mot_mpu9250.h
 
 @brief	Generic AHRS (attitude and heading reference system) of InvenSense MPU-9250
 
@@ -34,8 +34,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
-#ifndef __FUSION_MPU9250_H__
-#define __FUSION_MPU9250_H__
+#ifndef __MOT_MPU9250_H__
+#define __MOT_MPU9250_H__
 
 #include "motion/att.h"
 #include "sensors/agm_mpu9250.h"
@@ -149,4 +149,4 @@ private:
 
 /** @} end group AHRS */
 
-#endif // __FUSION_MPU9250_H__
+#endif // __MOT_MPU9250_H__

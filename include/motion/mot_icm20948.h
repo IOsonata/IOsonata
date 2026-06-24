@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	fusion_icm20948.h
+@file	mot_icm20948.h
 
 @brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-20948
 
@@ -31,8 +31,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __FUSION_ICM20948_H__
-#define __FUSION_ICM20948_H__
+#ifndef __MOT_ICM20948_H__
+#define __MOT_ICM20948_H__
 
 //#include "Devices/Drivers/Icm20948/Icm20948.h"
 
@@ -176,4 +176,4 @@ private:
 
 /** @} end group Motion */
 
-#endif // __FUSION_ICM20948_H__
+#endif // __MOT_ICM20948_H__

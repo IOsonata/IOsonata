@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	fusion_icm456x.cpp
+@file	mot_icm456x.cpp
 
 @brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-45686
 
@@ -31,41 +31,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __FUSION_ICM456x_H__
-#define __FUSION_ICM456x_H__
+#include <math.h>
 
-#include "motion/att.h"
+#include "motion/mot_icm456x.h"
 
-/** @addtogroup Motion
-  * @{
-  */
-
-#ifdef __cplusplus
-
-class ImuIcm456x : public Ahrs {
-public:
-	virtual bool Init(const AhrsCfg_t &Cfg, AccelSensor * const pAccel, GyroSensor * const pGyro, MagSensor * const pMag);
-	virtual bool UpdateData();
-	virtual void IntHandler();
-	virtual bool Calibrate();
-	virtual void SetAxisAlignmentMatrix(int8_t * const pMatrix);
-
-	// Features
-	virtual bool Euler(bool bEn);
-	virtual bool Compass(bool bEn);
-	virtual bool Pedometer(bool bEn);
-	virtual bool Quaternion(bool bEn, int NbAxis);
-	virtual bool Tap(bool bEn);
-private:
-};
-
-extern "C" {
-#endif
-
-#ifdef __cplusplus
-}
-#endif
-
-/** @} end group Motion */
-
-#endif // __FUSION_ICM456x_H__

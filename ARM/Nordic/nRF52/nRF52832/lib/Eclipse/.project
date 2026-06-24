@@ -1001,34 +1001,34 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_xiot_fusion.h</locationURI>
 		</link>
 		<link>
-			<name>include/motion/fusion_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/fusion_icm456x.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_icm456x.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/fusion_invn_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_invn_icm20948.h</locationURI>
-		</link>
-		<link>
 			<name>include/motion/fusion_math.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_math.h</locationURI>
 		</link>
 		<link>
-			<name>include/motion/fusion_mpu9250.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/fusion_mpu9250.h</locationURI>
-		</link>
-		<link>
 			<name>include/motion/icm20948_img_dmp3a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_icm456x.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm456x.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_invn_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_invn_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_mpu9250.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_mpu9250.h</locationURI>
 		</link>
 		<link>
 			<name>include/motion/mpu9250_dmpkey.h</name>
@@ -1906,24 +1906,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/fusion_icm20948.cpp</name>
+			<name>src/motion/mot_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_icm20948.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/fusion_icm456x.cpp</name>
+			<name>src/motion/mot_icm456x.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_icm456x.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm456x.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/fusion_invn_icm20948.cpp</name>
+			<name>src/motion/mot_invn_icm20948.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_invn_icm20948.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/fusion_mpu9250.cpp</name>
+			<name>src/motion/mot_mpu9250.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_mpu9250.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/motion/nav_eskf.cpp</name>
