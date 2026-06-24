@@ -1911,6 +1911,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_icm20948.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/motion/fusion_icm456x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_icm456x.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/motion/fusion_invn_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_invn_icm20948.cpp</locationURI>
@@ -1919,11 +1924,6 @@
 			<name>src/motion/fusion_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/fusion_mpu9250.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/imu_icm456x.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/imu_icm456x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/motion/nav_eskf.cpp</name>
