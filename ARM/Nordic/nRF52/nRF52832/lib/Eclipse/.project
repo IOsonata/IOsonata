@@ -111,6 +111,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/cfifo.h</locationURI>
 		</link>
 		<link>
+			<name>include/cli</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/converters</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -209,6 +214,16 @@
 			<name>include/ledmxio.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/ledmxio.h</locationURI>
+		</link>
+		<link>
+			<name>include/math_linalg.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/math_linalg.h</locationURI>
+		</link>
+		<link>
+			<name>include/math_so3.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/math_so3.h</locationURI>
 		</link>
 		<link>
 			<name>include/md5.h</name>
@@ -786,6 +801,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/board_blyst_motion.h</locationURI>
 		</link>
 		<link>
+			<name>include/cli/icli.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cli/icli.h</locationURI>
+		</link>
+		<link>
 			<name>include/converters/adc_device.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_device.h</locationURI>
@@ -1001,11 +1021,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_xiot_fusion.h</locationURI>
 		</link>
 		<link>
-			<name>include/math_so3.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/math_so3.h</locationURI>
-		</link>
-		<link>
 			<name>include/motion/icm20948_img_dmp3a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
@@ -1049,11 +1064,6 @@
 			<name>include/motion/nav_eskf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/nav_eskf.h</locationURI>
-		</link>
-		<link>
-			<name>include/math_linalg.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/math_linalg.h</locationURI>
 		</link>
 		<link>
 			<name>include/net/nrf_mac.h</name>
