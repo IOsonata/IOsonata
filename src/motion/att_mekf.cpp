@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_mekf.cpp
+@file	att_mekf.cpp
 
 @brief	Implementation of the Att class using MEKF fusion
 

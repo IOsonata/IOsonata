@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
 @file	att.cpp
 
-@brief	Generic AHRS (attitude and heading reference system)
+@brief	Attitude estimation capability
 
-This a generic abstraction layer for AHRS sensor fusion.  It is a mean to
+This a generic abstraction layer for attitude estimation.  It is a mean to
 provide a common interface to different sensor fusion library out there.
 
 @author	Hoang Nguyen Hoan

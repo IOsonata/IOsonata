@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	att_xiot_fusion.h
 
-@brief	Implementation of the Att class using x-iot Fusion
+@brief	Implementation of the Att class using the x-io Fusion library
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 20, 2024
@@ -122,6 +122,6 @@ extern "C" {
 }
 #endif
 
-/** @} end group AHRS */
+/** @} end group Motion */
 
 #endif // __ATT_XIOT_FUSION_H__

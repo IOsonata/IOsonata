@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	mot_icm456x.cpp
+@file	mot_icm456x.h
 
-@brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-45686
+@brief	Motion device driver (attitude and activity) for Invensense ICM-45686
 
 @author	Hoang Nguyen Hoan
 @date	May 29, 2025

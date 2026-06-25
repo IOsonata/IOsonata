@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	mot_mpu9250.cpp
 
-@brief	Generic AHRS (attitude and heading reference system) of InvenSense MPU-9250
+@brief	Motion device driver (attitude and activity) for InvenSense MPU-9250
 
 Implements the DMP (Digital Motion Processor) driver portion of the MPU-9250
 

@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_eqf.cpp
+@file	att_eqf.cpp
 
 @brief	Implementation of the Att class using EqF fusion
 

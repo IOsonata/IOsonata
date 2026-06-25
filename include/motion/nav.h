@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	inertial_nav.h
+@file	nav.h
 
 @brief	Generic inertial navigation abstraction layer
 
@@ -59,7 +59,7 @@ SOFTWARE.
 #include "sensors/gyro_sensor.h"
 #include "sensors/mag_sensor.h"
 
-/** @addtogroup AHRS
+/** @addtogroup Motion
   * @{
   */
 

@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
 @file	att.h
 
-@brief	Generic AHRS (attitude and heading reference system)
+@brief	Attitude estimation capability
 
-This a generic abstraction layer for AHRS sensor fusion.  It is a mean to
+This a generic abstraction layer for attitude estimation.  It is a mean to
 provide a common interface to different sensor fusion library out there.
 
 
@@ -46,7 +46,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   * @{
   */
 
-/// AHRS processing features
+/// Attitude features
 //#define ATT_FEATURE_RAW_ACCEL				(1<<0)		//!< Raw accel sensor data, relevant for when sensor is known
 //#define ATT_FEATURE_RAW_GYRO				(1<<1)		//!< Raw gyr sensor data, relevant for when sensor is known
 //#define ATT_FEATURE_RAW_MAG					(1<<2)		//!< Raw mag sensor data, relevant for when sensor is known

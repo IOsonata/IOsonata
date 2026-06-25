@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	mot_invn_icm20948.h
 
-@brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-20948
+@brief	Motion device driver (attitude and activity) for Invensense ICM-20948
 
 This is an implementation wrapper over Invensense SmartMotion for the ICM-20948
 9 axis motion sensor

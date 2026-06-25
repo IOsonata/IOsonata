@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	mot_icm20948.h
 
-@brief	Generic AHRS (attitude and heading reference system) for Invensense ICM-20948
+@brief	Motion device driver (attitude and activity) for Invensense ICM-20948
 
 @author	Hoang Nguyen Hoan
 @date	Sept. 9, 2019

@@ -56,7 +56,7 @@ SOFTWARE.
 
 #include "motion/nav.h"
 
-/** @addtogroup AHRS
+/** @addtogroup Motion
   * @{
   */
 

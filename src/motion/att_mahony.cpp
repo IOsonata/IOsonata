@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_mahony.cpp
+@file	att_mahony.cpp
 
 @brief	Implementation of the Att class using Mahony fusion
 

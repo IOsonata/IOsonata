@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_vqf.cpp
+@file	att_vqf.cpp
 
 @brief	Implementation of the Att class using vqf fusion
 

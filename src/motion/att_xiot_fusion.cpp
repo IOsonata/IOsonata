@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	ahrs_xiot_fusion.cpp
+@file	att_xiot_fusion.cpp
 
-@brief	Implementation of the Att class using fusion ahrs
+@brief	Implementation of the Att class using the x-io Fusion library
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 20, 2024
@@ -59,7 +59,7 @@ bool AttXiotFusion::Init(const AttCfg_t &Cfg, AccelSensor * const pAccel, GyroSe
 	    FusionBiasInitialise(&bias);
 	    FusionAhrsInitialise(&vAhrs);
 
-	    // Set AHRS algorithm settings
+	    // Set the Fusion algorithm settings
 	    /*const FusionAhrsSettings*/
 	    vSettings = {
 			.convention = FusionConventionNwu,
@@ -125,7 +125,7 @@ bool AttXiotFusion::UpdateData()
 	}
 	vPrevTimeStamp = gyro.Timestamp;
 
-    // Update gyroscope AHRS algorithm
+    // Update the Fusion algorithm
 
 	FusionVector fvgyro = { gyro.X,  gyro.Y, gyro.Z };
 	FusionVector fvacc = { acc.X,  acc.Y, acc.Z };
