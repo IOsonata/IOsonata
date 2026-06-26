@@ -132,7 +132,6 @@ const BtAppCfg_t s_BleAppCfg = {
 		.ProductVer = 0,						// Pnp prod version
 		.Appearance = 0,						// 16 bits Bluetooth appearance value
 		.pDevInfo = NULL,//&s_BleDevDesc,		// App description
-		.bExtAdv = false,						// Conventional 31-byte Advertising packet
 		.pAdvManData = NULL,//g_ManData,		// Manufacture specific data to advertise
 		.AdvManDataLen = 0,//sizeof(g_ManData),	// Length of manufacture specific data
 		.pSrManData = NULL,						// Addition Manufacture specific data to advertise in scan response

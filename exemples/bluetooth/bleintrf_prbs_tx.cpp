@@ -147,7 +147,6 @@ static const BtAppCfg_t s_BleAppCfg = {
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
 	.pDevInfo = &s_UartBleDevDesc,
-	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,

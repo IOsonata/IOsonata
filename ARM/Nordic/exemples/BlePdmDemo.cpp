@@ -35,8 +35,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include <assert.h>
 
-#include "app_scheduler.h"
+//#include "app_scheduler.h"
 
 #include "istddef.h"
 #include "convutil.h"
@@ -61,7 +62,7 @@ void CfgSrvcCallback(BtGattChar_t *pBleSvc, uint8_t *pData, int Offset, int Len)
 
 #define PACKET_SIZE						400
 
-#define MAX_MTU							NRF_SDH_BLE_GATT_MAX_MTU_SIZE
+#define MAX_MTU							512//NRF_SDH_BLE_GATT_MAX_MTU_SIZE
 
 #define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
 
@@ -168,7 +169,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ProductVer = 0,					// Pnp prod version
 	.Appearance = 0,
 	.pDevInfo = &s_BlePdmDevDesc,
-	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
@@ -306,7 +306,8 @@ void BtAppInitUserServices()
     uint32_t       err_code;
 
     err_code = BtGattSrvcAdd(&g_BlePdmSrvc);
-    APP_ERROR_CHECK(err_code);
+    assert(err_code == 0);
+    //APP_ERROR_CHECK(err_code);
 }
 
 void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)

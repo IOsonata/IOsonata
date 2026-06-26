@@ -139,7 +139,6 @@ const BtAppCfg_t s_BtDevCfg = {
 	0,						// Pnp prod version
 	0,						// Appearance
 	NULL,					// Enable device information service (DIS)
-	false,
 	(uint8_t*)&g_AdvDataBuff,   // Manufacture specific data to advertise
 	sizeof(g_AdvDataBuff),      // Length of manufacture specific data
 	NULL,

@@ -489,38 +489,53 @@ UART g_Uart;
  ************************************************************/
 
 const BtAppCfg_t s_BleAppCfg = {
-	BTAPP_ROLE_CENTRAL,
-	1,//1, 						// Number of central link
-	0, 							// Number of peripheral link
-	DEVICE_NAME,                 // Device name
-	ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
-	1,                      	// PnP Product ID
-	0,							// Pnp prod version
-	0,
-	NULL,//&s_UartBleDevDesc,
-	false,						// Enable device information service (DIS)
-	NULL,//g_ManData,           // Manufacture specific data to advertise
-	0,//sizeof(g_ManData),      // Length of manufacture specific data
-	NULL,
-	0,
-	BTGAP_SECTYPE_NONE,    	// Secure connection type
-	BTAPP_SECEXCHG_NONE,   	// Security key exchange
-	NULL,      					// Service uuids to advertise
-	0, 							// Total number of uuids
-	0,       					// Advertising interval in msec
-	0,							// Advertising timeout in sec
-	0,                          // Slow advertising interval, if > 0, fallback to
-								// slow interval on adv timeout and advertise until connected
-	MIN_CONN_INTERVAL,
-	MAX_CONN_INTERVAL,
-	LED_BLUE_PORT, //BLUEIO_CONNECT_LED_PORT,    // Led port nuber
-	LED_BLUE_PIN, //BLUEIO_CONNECT_LED_PIN,     // Led pin number
-	0,
-	0,							// Tx power
-	NULL,						// RTOS Softdevice handler
-	BLE_MTU_SIZE,		// BLE MTU packet size
-};
+    .Role = BTAPP_ROLE_CENTRAL,
+    .CentLinkCount = 1,					// Number of central link
+    .PeriphLinkCount = 0,				// Number of peripheral link
+    .pDevName = DEVICE_NAME,			// Device name
+    .VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
+    .ProductId = 1,						// PnP Product ID
+    .ProductVer = 0,					// Pnp prod version
 
+    // Optional device descriptor (leave NULL)
+    .pDevDesc = NULL,
+
+    // Device Information Service (DIS)
+    .bEnDevInfoService = false,
+
+    // Manufacturer specific advertising data
+    .pAdvManData = NULL,
+    .AdvManDataLen = 0,
+
+    // Optional raw advertising data
+    .pAdvData = NULL,
+    .AdvDataLen = 0,
+
+    .SecType = BTGAP_SECTYPE_NONE,		// Secure connection type
+    .SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
+
+    // Advertised service UUID list (not used for central role here)
+    .pAdvUuid = NULL,
+    .AdvUuidCnt = 0,
+
+    .AdvInterval = 0,					// Advertising interval in msec
+    .AdvTimeout = 0,					// Advertising timeout in sec
+    .AdvSlowInterval = 0,				// Slow advertising interval
+
+    .ConnIntervalMin = MIN_CONN_INTERVAL,
+    .ConnIntervalMax = MAX_CONN_INTERVAL,
+
+    .LedPort = LED_BLUE_PORT,
+    .LedPin = LED_BLUE_PIN,
+
+    // Optional button
+    .ButPort = 0,
+    .ButPin = 0,
+
+    .TxPower = 0,
+    .pSDEvtHandler = NULL,				// RTOS Softdevice handler
+    .Mtu = BLE_MTU_SIZE,				// BLE MTU packet size
+};
 
 /** @brief Parameters used when scanning. */
 static ble_gap_scan_params_t const g_ScanParams =

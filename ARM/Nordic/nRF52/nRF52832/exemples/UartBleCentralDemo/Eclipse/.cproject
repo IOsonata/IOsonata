@@ -69,6 +69,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/strerror&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/log&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/log/src&quot;"/>
@@ -107,6 +108,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
@@ -270,6 +272,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/strerror&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/log&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/components/libraries/log/src&quot;"/>
@@ -309,6 +312,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx/legacy&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/mbedtls/include&quot;"/>
@@ -483,6 +487,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrfx/bsp/stable/mdk/common&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/mpsl/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/softdevice_controller/include&quot;"/>
 								</option>
