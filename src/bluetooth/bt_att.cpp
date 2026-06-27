@@ -364,6 +364,176 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 	return len;
 }
 
+static bool BtAttEntryIsCharValue(BtAttDBEntry_t *pEntry)
+{
+	if (pEntry == nullptr)
+	{
+		return false;
+	}
+
+	if (pEntry->TypeUuid.BaseIdx != 0)
+	{
+		return true;
+	}
+
+	switch (pEntry->TypeUuid.Uuid)
+	{
+		case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
+		case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
+		case BT_UUID_DECLARATIONS_INCLUDE:
+		case BT_UUID_DECLARATIONS_CHARACTERISTIC:
+		case BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+		case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+		case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+		case BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+			return false;
+		default:
+			return true;
+	}
+}
+
+static BtGattChar_t *BtAttEntryChar(BtAttDBEntry_t *pEntry)
+{
+	if (pEntry == nullptr)
+	{
+		return nullptr;
+	}
+
+	if (pEntry->TypeUuid.BaseIdx == 0)
+	{
+		switch (pEntry->TypeUuid.Uuid)
+		{
+			case BT_UUID_DECLARATIONS_CHARACTERISTIC:
+				return ((BtAttCharDeclar_t*)pEntry->Data)->pChar;
+
+			case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+				return ((BtDescClientCharConfig_t*)pEntry->Data)->pChar;
+
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+				return ((BtDescCharUserDesc_t*)pEntry->Data)->pChar;
+
+			case BT_UUID_DECLARATIONS_PRIMARY_SERVICE:
+			case BT_UUID_DECLARATIONS_SECONDARY_SERVICE:
+			case BT_UUID_DECLARATIONS_INCLUDE:
+			case BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+			case BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION:
+				return nullptr;
+
+			default:
+				break;
+		}
+	}
+
+	if (BtAttEntryIsCharValue(pEntry))
+	{
+		return ((BtAttCharValue_t*)pEntry->Data)->pChar;
+	}
+
+	return nullptr;
+}
+
+// Port/application hook for security state that is not represented in the ATT
+// database yet. Return 0 to allow access, or an ATT error code such as
+// BT_ATT_ERROR_INSUF_ENCRYPT / BT_ATT_ERROR_INSUF_AUTHEN /
+// BT_ATT_ERROR_ENCRYPT_KEY_TOO_SHORT to reject it. The default keeps today's
+// open-service behaviour while property permission checks below become active.
+__attribute__((weak)) uint8_t BtAttAccessSecurityError(uint16_t ConnHdl,
+													  BtAttDBEntry_t *pEntry,
+													  bool bRead)
+{
+	(void)ConnHdl;
+	(void)pEntry;
+	(void)bRead;
+	return 0;
+}
+
+static uint8_t BtAttReadPermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry)
+{
+	if (pEntry == nullptr)
+	{
+		return BT_ATT_ERROR_INVALID_HANDLE;
+	}
+
+	if (BtAttEntryIsCharValue(pEntry))
+	{
+		BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+		if (pChar == nullptr || (pChar->Property & BT_GATT_CHAR_PROP_READ) == 0)
+		{
+			return BT_ATT_ERROR_READ_NOT_PERMITTED;
+		}
+	}
+
+	return BtAttAccessSecurityError(ConnHdl, pEntry, true);
+}
+
+static uint8_t BtAttWritePermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
+								   uint8_t OpCode, const uint8_t *pData,
+								   uint16_t Len)
+{
+	if (pEntry == nullptr)
+	{
+		return BT_ATT_ERROR_INVALID_HANDLE;
+	}
+
+	if (BtAttEntryIsCharValue(pEntry))
+	{
+		BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+		if (pChar == nullptr)
+		{
+			return BT_ATT_ERROR_WRITE_NOT_PERMITTED;
+		}
+
+		uint32_t required = BT_GATT_CHAR_PROP_WRITE;
+		if (OpCode == BT_ATT_OPCODE_ATT_CMD)
+		{
+			required = BT_GATT_CHAR_PROP_WRITE_WORESP;
+		}
+		else if (OpCode == BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD)
+		{
+			required = BT_GATT_CHAR_PROP_AUTH_SIGNED;
+		}
+
+		if ((pChar->Property & required) == 0)
+		{
+			return BT_ATT_ERROR_WRITE_NOT_PERMITTED;
+		}
+
+		return BtAttAccessSecurityError(ConnHdl, pEntry, false);
+	}
+
+	if (pEntry->TypeUuid.BaseIdx == 0 &&
+		pEntry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
+	{
+		BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+		if (pChar == nullptr)
+		{
+			return BT_ATT_ERROR_WRITE_NOT_PERMITTED;
+		}
+		if (Len >= 2 && pData != nullptr)
+		{
+			uint16_t cccd = (uint16_t)(pData[0] | (pData[1] << 8));
+			if ((cccd & ~(BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION |
+						  BT_DESC_CLIENT_CHAR_CONFIG_INDICATION)) != 0)
+			{
+				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
+			}
+			if ((cccd & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) &&
+				(pChar->Property & BT_GATT_CHAR_PROP_NOTIFY) == 0)
+			{
+				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
+			}
+			if ((cccd & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) &&
+				(pChar->Property & BT_GATT_CHAR_PROP_INDICATE) == 0)
+			{
+				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
+			}
+		}
+		return BtAttAccessSecurityError(ConnHdl, pEntry, false);
+	}
+
+	return BT_ATT_ERROR_WRITE_NOT_PERMITTED;
+}
+
 //size_t BtGattWriteValue(uint16_t Hdl, uint8_t *pBuff, size_t Len)
 size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, uint16_t Len)
 {
@@ -751,6 +921,15 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					p[1] = entry->Hdl >> 8;
 					p +=2;
 
+					uint8_t err = BtAttReadPermError(ConnHdl, entry);
+					if (err != 0)
+					{
+						retval = BtAttError(pRspAtt, entry->Hdl,
+											BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ,
+											err);
+						break;
+					}
+
 					int cnt = BtAttReadValue(entry, 0, p, s_AttMtu - l - 2) + 2;
 					if (pRspAtt->ReadByTypeRsp.Len == 0)
 					{
@@ -792,7 +971,17 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				if (entry)
 				{
 					DEBUG_PRINTF("Entry with Hdl = %d found\r\n", req->Hdl);
-					retval = BtAttReadValue(entry, 0, pRspAtt->ReadRsp.Data, s_AttMtu - 1)  + 1;
+					uint8_t err = BtAttReadPermError(ConnHdl, entry);
+					if (err != 0)
+					{
+						retval = BtAttError(pRspAtt, req->Hdl,
+											BT_ATT_OPCODE_ATT_READ_REQ, err);
+					}
+					else
+					{
+						retval = BtAttReadValue(entry, 0, pRspAtt->ReadRsp.Data,
+												s_AttMtu - 1)  + 1;
+					}
 				}
 				else
 				{
@@ -809,7 +998,17 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 				if (entry)
 				{
-					retval = BtAttReadValue(entry, pReqAtt->ReadBlobReq.Offset, pRspAtt->ReadBlobRsp.Data, s_AttMtu - 1) + 1;
+					uint8_t err = BtAttReadPermError(ConnHdl, entry);
+					if (err != 0)
+					{
+						retval = BtAttError(pRspAtt, pReqAtt->ReadBlobReq.Hdl,
+											BT_ATT_OPCODE_ATT_READ_BLOB_REQ, err);
+					}
+					else
+					{
+						retval = BtAttReadValue(entry, pReqAtt->ReadBlobReq.Offset,
+												pRspAtt->ReadBlobRsp.Data, s_AttMtu - 1) + 1;
+					}
 				}
 				else
 				{
@@ -838,6 +1037,14 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleReq.Hdl[i], BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 						break;
 					}
+					uint8_t err = BtAttReadPermError(ConnHdl, entry);
+					if (err != 0)
+					{
+						retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleReq.Hdl[i],
+											BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ, err);
+						break;
+					}
+
 					// Cap each value at the space remaining in the response
 					// buffer (MTU - bytes already written), not the full MTU,
 					// so cumulative values cannot overrun the response.
@@ -981,6 +1188,15 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						break;
 					}
 
+					uint8_t err = BtAttWritePermError(ConnHdl, entry,
+													  BT_ATT_OPCODE_ATT_WRITE_REQ,
+													  req->Data, (uint16_t)dlen);
+					if (err != 0)
+					{
+						retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, err);
+						break;
+					}
+
 					BtAttWriteValue(entry, 0, req->Data, (size_t)dlen);
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
@@ -1008,7 +1224,16 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				{
 					// ReqLen counts opcode + handle + data, so the data length
 					// is ReqLen - 1 (opcode) - 2 (handle) = ReqLen - 3.
-					BtAttWriteValue(entry, 0, pReqAtt->WriteCmd.Data, ReqLen - 3);
+					int dlen = ReqLen - 3;
+					if (dlen < 0)
+					{
+						dlen = 0;
+					}
+					if (BtAttWritePermError(ConnHdl, entry, BT_ATT_OPCODE_ATT_CMD,
+											pReqAtt->WriteCmd.Data, (uint16_t)dlen) == 0)
+					{
+						BtAttWriteValue(entry, 0, pReqAtt->WriteCmd.Data, (uint16_t)dlen);
+					}
 
 					retval = 0;
 				}
@@ -1031,9 +1256,19 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ, BT_ATT_ERROR_PREPARE_QUE_FULL);
 					break;
 				}
-				if (BtAttDBFindHandle(req->Hdl) == nullptr)
+				BtAttDBEntry_t *entry = BtAttDBFindHandle(req->Hdl);
+				if (entry == nullptr)
 				{
 					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
+					break;
+				}
+
+				uint8_t err = BtAttWritePermError(ConnHdl, entry,
+												  BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ,
+												  req->Data, (uint16_t)vlen);
+				if (err != 0)
+				{
+					retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ, err);
 					break;
 				}
 
@@ -1095,6 +1330,13 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 					if (entry == nullptr)
 					{
+						break;
+					}
+					uint8_t err = BtAttReadPermError(ConnHdl, entry);
+					if (err != 0)
+					{
+						retval = BtAttError(pRspAtt, *hdl,
+											BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ, err);
 						break;
 					}
 
