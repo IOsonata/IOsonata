@@ -530,6 +530,39 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 // Inbound SMP PDU handling
 //-----------------------------------------------------------------------------
 
+// Constant-time comparison of two 16-byte buffers. Used for authentication
+// values (Confirm, Ea/Eb MACs) which are attacker-supplied: a data-dependent
+// early-out (plain memcmp) leaks how many leading bytes matched and lets a
+// remote peer brute-force the value byte-by-byte across retries.
+static bool SmpEqualCT(const uint8_t *a, const uint8_t *b, size_t len)
+{
+	uint8_t diff = 0;
+	for (size_t i = 0; i < len; i++)
+	{
+		diff |= (uint8_t)(a[i] ^ b[i]);
+	}
+	return diff == 0;
+}
+
+// Apply the negotiated encryption key size: zero the most significant
+// (16 - EncKeySize) octets of the LTK so its effective entropy matches the
+// size both sides agreed during feature exchange (Core spec Vol 3 Part H,
+// 2.4.4). The LTK is stored little-endian (HCI order), so the most
+// significant octets are at the high indices. Without this a peer that
+// negotiated a short key would still receive a full-strength key on our side.
+static void SmpApplyKeySize(BtSmpKeys_t *pKeys)
+{
+	int ks = pKeys->EncKeySize;
+	if (ks < BT_SMP_MIN_ENC_KEY_SIZE)
+	{
+		ks = BT_SMP_MIN_ENC_KEY_SIZE;	// defensive; negotiation already enforced the floor
+	}
+	for (int i = ks; i < 16; i++)
+	{
+		pKeys->Ltk[i] = 0;
+	}
+}
+
 static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 								uint16_t ConnHdl, const BtSmpPairingReq_t *pReq)
 {
@@ -739,6 +772,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
 		pLink->Keys.bSc = true;
 		pLink->Keys.bValid = true;
+		SmpApplyKeySize(&pLink->Keys);
 		pLink->Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
 		return;
 	}
@@ -752,7 +786,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		  pLink->Ctx.PReq, pLink->Ctx.PRsp,
 		  peerAddrType, peerAddr, localAddrType, localAddr, calc);
 
-	if (memcmp(calc, pLink->Ctx.PeerConfirm, 16) != 0)
+	if (!SmpEqualCT(calc, pLink->Ctx.PeerConfirm, 16))
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
 		pLink->Ctx.State = BT_SMP_STATE_IDLE;
@@ -770,6 +804,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	pLink->Keys.Ediv = 0;
 	pLink->Keys.bSc = false;
 	pLink->Keys.bValid = true;
+	SmpApplyKeySize(&pLink->Keys);
 
 	pLink->Ctx.State = BT_SMP_STATE_LTK_WAIT;
 }
@@ -800,7 +835,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		  zeroR, iocapA,
 		  peerAddrType, peerAddr, localAddrType, localAddr, ea);
 
-	if (memcmp(ea, pChk->Value, 16) != 0)
+	if (!SmpEqualCT(ea, pChk->Value, 16))
 	{
 		// The Confirm stage already passed, so ECDH produced the same point as
 		// the peer. If Ea fails here, the most common remaining issue is DHKey
@@ -820,7 +855,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		SMP_TRACE("Ea mismatch cur0=%02x alt0=%02x peer0=%02x\r\n",
 				  ea[0], altEa[0], pChk->Value[0]);
 
-		if (memcmp(altEa, pChk->Value, 16) != 0)
+		if (!SmpEqualCT(altEa, pChk->Value, 16))
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
 			pLink->Ctx.State = BT_SMP_STATE_IDLE;
@@ -830,6 +865,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		memcpy(pLink->Ctx.Mackey, altMackey, 16);
 		memcpy(pLink->Ctx.Ltk, altLtk, 16);
 		memcpy(pLink->Keys.Ltk, altLtk, 16);
+		SmpApplyKeySize(&pLink->Keys);
 		memcpy(ea, altEa, 16);
 		SMP_TRACE("Ea matched with raw DHKey f5 input\r\n");
 	}

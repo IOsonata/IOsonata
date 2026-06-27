@@ -153,7 +153,11 @@ int BtIntrfRxData(DevIntrf_t *pDevIntrf, uint8_t *pBuff, int BuffLen)
 	BtIntrfPkt_t *pkt;
 	int cnt = 0;
 
+	// Guard the FIFO index update against the producer (BtIntrfRxWrCB), which
+	// runs from BLE stack/callback context. Matches the TX path's guarding.
+	uint32_t state = DisableInterrupt();
 	pkt = (BtIntrfPkt_t *)CFifoGet(intrf->hRxFifo);
+	EnableInterrupt(state);
 	if (pkt != NULL)
 	{
 	    cnt = min(BuffLen, pkt->Len);
@@ -326,7 +330,10 @@ void BtIntrfRxWrCB(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
     //int maxlen = intrf->hTxFifo->BlkSize - sizeof(pkt->Len);
 
 	while (Len > 0) {
+		// Guard the FIFO index update against the consumer (BtIntrfRxData).
+		uint32_t state = DisableInterrupt();
 		pkt = (BtIntrfPkt_t *)CFifoPut(intrf->hRxFifo);
+		EnableInterrupt(state);
 		if (pkt == NULL)
 		{
 			intrf->RxDropCnt++;

@@ -391,6 +391,14 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 
 					BtDescClientCharConfig_t *p = (BtDescClientCharConfig_t*)pEntry->Data;
 
+					// The CCCD value is a 2-byte field. A write shorter than 2
+					// bytes would read past the received PDU; reject it instead
+					// of dereferencing out of bounds.
+					if (Len < 2)
+					{
+						break;
+					}
+
 					p->CccVal = *(uint16_t*)pData;
 					p->pChar->bNotify = p->CccVal & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION ? true: false;
 					if (p->pChar->SetNotifCB)

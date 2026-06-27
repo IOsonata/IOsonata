@@ -503,6 +503,24 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 {
 	BtL2CapPdu_t *l2rcv = (BtL2CapPdu_t*)pPkt->Data;
 
+	// This host does not reassemble fragmented ACL data. A continuation
+	// fragment does not begin with an L2CAP header, so parsing it as a
+	// complete PDU would read garbage handles/lengths - drop it.
+	if (pPkt->Hdr.PBFlag == BT_HCI_PBFLAG_CONTINUING_FRAGMENT)
+	{
+		return;
+	}
+
+	// Validate the received ACL payload actually contains the L2CAP header and
+	// that the L2CAP length field does not claim more bytes than were
+	// received. Without this, a truncated or oversized length drives
+	// out-of-bounds reads in the ATT/SMP parsers below.
+	if (pPkt->Hdr.Len < sizeof(BtL2CapHdr_t) ||
+		(uint32_t)l2rcv->Hdr.Len + sizeof(BtL2CapHdr_t) > pPkt->Hdr.Len)
+	{
+		return;
+	}
+
 	SysLogPrintf(SysLogGet(), "L2 RX cid=0x%04x len=%d d=%02x%02x%02x%02x%02x%02x\r\n",
 				 l2rcv->Hdr.Cid, l2rcv->Hdr.Len,
 				 pPkt->Data[4], pPkt->Data[5], pPkt->Data[6],

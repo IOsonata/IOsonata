@@ -535,9 +535,15 @@ void BtCtlrProcessAttData(BtCtlrDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu
 					break;
 				}
 				BtAttWriteRsp_t *rsp = (BtAttWriteRsp_t*)&l2pdu->Att;
-				size_t l = pRcvPdu->Hdr.Len;
-
-				l = pDev->Receive(pDev, req->Hdl, req->Data, l);
+				// Hdr.Len counts opcode(1) + handle(2) + value, so the value
+				// length is Hdr.Len - 3. Passing the full Hdr.Len over-reads
+				// the value by 3 bytes (matches the ATT_CMD path below).
+				int dlen = (int)pRcvPdu->Hdr.Len - 3;
+				if (dlen < 0)
+				{
+					dlen = 0;
+				}
+				size_t l = pDev->Receive(pDev, req->Hdl, req->Data, (size_t)dlen);
 
 				rsp->OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 
