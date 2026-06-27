@@ -623,50 +623,50 @@ void BleDevDiscovered(BtDev_t *pDev)
     }
 
     // Find the desired UART-BLE Service
-    l = sprintf(s, "Looking for UART Service with UUID = 0x%x ...", BLUEIO_UUID_UART_SERVICE);
+    l = snprintf(s, sizeof(s), "Looking for UART Service with UUID = 0x%x ...", BLUEIO_UUID_UART_SERVICE);
     PRINT_DEBUG(s,l)
     int idx = BleDevFindService(pDev, BLUEIO_UUID_UART_SERVICE);
     if (idx != -1)
     {
-    	l = sprintf(s, "Found!\r\n");
+    	l = snprintf(s, sizeof(s), "Found!\r\n");
     	PRINT_DEBUG(s,l);
     	// Rx characteristic
     	int dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
-    	l = sprintf(s, "Find UART_RX_CHAR idx = 0x%x (%d)...", idx, idx);
+    	l = snprintf(s, sizeof(s), "Find UART_RX_CHAR idx = 0x%x (%d)...", idx, idx);
     	PRINT_DEBUG(s,l);
     	if (dcharidx >= 0 && pDev->Services[idx].characteristics[dcharidx].characteristic.char_props.notify)
     	{
     		// Enable Notify
         	BtAppEnableNotify(pDev->Conn.Hdl, pDev->Services[idx].characteristics[dcharidx].cccd_handle);
         	g_BleRxCharHdl = pDev->Services[idx].characteristics[dcharidx].characteristic.handle_value;
-        	l = sprintf(s, "Found!\r\n");
+        	l = snprintf(s, sizeof(s), "Found!\r\n");
         	PRINT_DEBUG(s,l);
     	}
     	else
 		{
-    		l = sprintf(s, "Not Found!\r\n");
+    		l = snprintf(s, sizeof(s), "Not Found!\r\n");
     		PRINT_DEBUG(s,l);
 		}
 
     	// Tx characteristic
     	dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
-    	l = sprintf(s, "Find UART_TX_CHAR idx = 0x%x (%d) ...", idx, idx);
+    	l = snprintf(s, sizeof(s), "Find UART_TX_CHAR idx = 0x%x (%d) ...", idx, idx);
     	PRINT_DEBUG(s,l);
     	if (dcharidx >= 0)
     	{
     		g_BleTxCharHdl = pDev->Services[idx].characteristics[dcharidx].characteristic.handle_value;
-    		l = sprintf(s, "Found!\r\n");
+    		l = snprintf(s, sizeof(s), "Found!\r\n");
     		PRINT_DEBUG(s,l);
     	}
     	else
     	{
-    		l = sprintf(s, "Not Found!\r\n");
+    		l = snprintf(s, sizeof(s), "Not Found!\r\n");
     		PRINT_DEBUG(s,l);
     	}
     }
     else
     {
-    	l = sprintf(s, "Not Found!\r\n");
+    	l = snprintf(s, sizeof(s), "Not Found!\r\n");
     	PRINT_DEBUG(s,l);
     }
 
@@ -713,13 +713,13 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 				if (memcmp(g_clientMacAddr, mac, 6) == 0)// Find device by MAC address
 #endif
 				{
-					len = sprintf(s, "Target client device FOUND!\r\n");
+					len = snprintf(s, sizeof(s), "Target client device FOUND!\r\n");
 					PRINT_DEBUG(s,len);
 					BtGapPeerAddr_t addr = {.Type = p_adv_report->peer_addr.addr_type,};
 					memcpy(addr.Addr, p_adv_report->peer_addr.addr, 6);
 
 					res = BtAppConnect(&addr, &s_ConnParams);
-					len = sprintf(s, "res = %x\r\n", res);
+					len = snprintf(s, sizeof(s), "res = %x\r\n", res);
 					PRINT_DEBUG(s,len);
 
 					msDelay(10);
@@ -727,7 +727,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 				else
 				{
 					g_searchCnt++;
-					len = sprintf(s, "Keep searching #%d\r\n", g_searchCnt);
+					len = snprintf(s, sizeof(s), "Keep searching #%d\r\n", g_searchCnt);
 					PRINT_DEBUG(s,len)
 					BtAppScan();
 				}
@@ -738,7 +738,7 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
         	    ble_gap_evt_timeout_t const * p_timeout = &p_gap_evt->params.timeout;
         	    if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
         	    {
-        	    	len = sprintf(s, "Scan time out\r\n");
+        	    	len = snprintf(s, sizeof(s), "Scan time out\r\n");
         	    	PRINT_DEBUG(s,len)
         	    }
         	}
@@ -1060,9 +1060,9 @@ void HardwareInit()
 
 	// Uart
 	g_Uart.Init(g_UartCfg);
-	len = sprintf(s, "System clock init...%s\r\n", (ret ? "Failed!" : "Done!"));
+	len = snprintf(s, sizeof(s), "System clock init...%s\r\n", (ret ? "Failed!" : "Done!"));
 	PRINT_DEBUG(s,len)
-	len = sprintf(s, "UART Configuration: %d, %d, %d\r\n",
+	len = snprintf(s, sizeof(s), "UART Configuration: %d, %d, %d\r\n",
 			g_UartCfg.Rate, g_UartCfg.FlowControl, g_UartCfg.Parity);
 	PRINT_DEBUG(s,len)
 	msDelay(100);
@@ -1080,7 +1080,7 @@ void HardwareInit()
 	// USB module
 	UsbInit();// !!! Must be executed before BLE initialization
 	msDelay(500);
-	len = sprintf(s, "USB-BLE is on\r\n");
+	len = snprintf(s, sizeof(s), "USB-BLE is on\r\n");
 	PRINT_DEBUG(s,len)
 }
 
@@ -1184,20 +1184,20 @@ int main(void)
     // BLE init
     ret = BtAppInit(&s_BleAppCfg);
     msDelay(250);
-    len = sprintf(s, "Bluetooth init...Done!\r\n");
+    len = snprintf(s, sizeof(s), "Bluetooth init...Done!\r\n");
     PRINT_DEBUG(s,len)
 
     // BLE run
 #ifdef FIND_CLIENT_BY_NAME
-    len = sprintf(s, "Searching for client with Name = %s", BLE_CLIENT_NAME);
+    len = snprintf(s, sizeof(s), "Searching for client with Name = %s", BLE_CLIENT_NAME);
     PRINT_DEBUG(s,len);
 #else
-    len = sprintf(s, "Searching for client with MAC addr = ");
+    len = snprintf(s, sizeof(s), "Searching for client with MAC addr = ");
     PRINT_DEBUG(s,len);
     len = 0;
 	for (int i=0; i<6; i++)
 	{
-		len += sprintf(&s[len], "%02X%s", g_clientMacAddr[i], i<5 ? ":" : "\r\n");
+		len += snprintf(s + len, sizeof(s) - len, "%02X%s", g_clientMacAddr[i], i<5 ? ":" : "\r\n");
 	}
 	PRINT_DEBUG(s,len)
 #endif
