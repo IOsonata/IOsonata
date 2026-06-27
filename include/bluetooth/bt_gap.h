@@ -180,6 +180,7 @@ typedef struct __Bt_Gap_Connection {
 	uint16_t LongWrBuffSize;	//!< Size of pLongWrBuff in bytes
 	uint16_t LongWrLen;			//!< Bytes currently queued in pLongWrBuff (prepare-write queue fill)
 	bool bIndCfmPending;		//!< An indication is awaiting the peer's Handle Value Confirmation
+	uint32_t IndCfmTime;		//!< BtGattMsTick() value when the outstanding indication was sent (for the 30s transaction timeout)
 } BtGapConnection_t;
 
 typedef enum __Bt_Scan_Type {

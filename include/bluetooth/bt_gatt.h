@@ -196,6 +196,24 @@ void BtGattHandleValueConfirm(uint16_t ConnHdl);
  *			matches ValHdl against the handle it discovered.
  */
 void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uint16_t Len);
+
+/**
+ * @brief	Millisecond tick source for the indication transaction timeout.
+ *			Weak default returns 0 (no clock), which disables the timeout. A port
+ *			or application that has a running millisecond counter overrides this
+ *			to return it.
+ */
+uint32_t BtGattMsTick(void);
+
+/**
+ * @brief	Read-only query for the ATT indication transaction timeout (Core
+ *			spec Vol 3 Part F, 3.3.3). Returns true when an indication has been
+ *			outstanding on ConnHdl for at least TimeoutMs without the peer's
+ *			confirmation. The spec action on timeout is to terminate the link, so
+ *			the caller disconnects ConnHdl when this returns true. Always false
+ *			unless BtGattMsTick() is overridden with a real clock.
+ */
+bool BtGattIndicationTimedOut(uint16_t ConnHdl, uint32_t TimeoutMs);
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 //void BtGattServiceInit(BtGattSrvc_t * const pSrvc);

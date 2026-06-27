@@ -545,6 +545,9 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			case BT_ATT_OPCODE_ATT_CMD:						minLen = 3; break;	// op + hdl(2) + value(>=0)
 			case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:		minLen = 5; break;	// op + hdl(2) + offset(2)
 			case BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ:		minLen = 2; break;	// op + flags(1)
+			case BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF:		minLen = 3; break;	// op + hdl(2) + value(>=0)
+			case BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND:		minLen = 3; break;	// op + hdl(2) + value(>=0)
+			case BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM:		minLen = 1; break;	// op only
 			default:										minLen = 1; break;
 		}
 
@@ -626,8 +629,62 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			break;
 		case BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ:
 			{
-				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ (0x06) \r\n");
-				DEBUG_PRINTF("TODO:");
+				BtAttFindByTypeValueReq_t *req =
+						(BtAttFindByTypeValueReq_t*)&pReqAtt->FindByTypeValueReq;
+				int valLen = ReqLen - 7; // opcode + start + end + type
+
+				if (req->StartHdl < 1 || req->EndHdl < 1 || req->StartHdl > req->EndHdl)
+				{
+					retval = BtAttError(pRspAtt, req->StartHdl,
+										BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ,
+										BT_ATT_ERROR_INVALID_HANDLE);
+					break;
+				}
+
+				BtUuid16_t uid16 = { 0, BT_UUID_TYPE_16, req->Type };
+				BtAttHdlRange_t *pOut = pRspAtt->FindByTypeValueRsp.Hdl;
+				uint16_t start = req->StartHdl;
+				int l = 0;
+
+				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_RSP;
+
+				while (start <= req->EndHdl &&
+					   (size_t)(1 + l) + sizeof(BtAttHdlRange_t) <= s_AttMtu)
+				{
+					uint16_t hdlStart = start;
+					uint16_t hdlEnd   = req->EndHdl;
+					BtAttDBEntry_t *entry = BtAttDBFindHdlRange(&uid16, &hdlStart, &hdlEnd);
+
+					if (entry == nullptr)
+						break;
+
+					if (hdlEnd > req->EndHdl)
+						hdlEnd = req->EndHdl;
+
+					uint8_t val[BT_ATT_MTU_MAX];
+					size_t rlen = BtAttReadValue(entry, 0, val, sizeof(val));
+
+					if (rlen == (size_t)valLen &&
+						(valLen == 0 || memcmp(val, req->Val, (size_t)valLen) == 0))
+					{
+						pOut->StartHdl = entry->Hdl;
+						pOut->EndHdl   = hdlEnd;
+						pOut++;
+						l += sizeof(BtAttHdlRange_t);
+					}
+
+					if (hdlEnd >= req->EndHdl || hdlEnd == 0xFFFF)
+						break;
+
+					start = hdlEnd + 1;
+				}
+
+				if (l > 0)
+					retval = 1 + l;
+				else
+					retval = BtAttError(pRspAtt, req->StartHdl,
+										BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ,
+										BT_ATT_ERROR_ATT_NOT_FOUND);
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ: // Parse UUID Type of characteristic inside a BLE service
@@ -910,6 +967,18 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					if (dlen < 0)
 					{
 						dlen = 0;
+					}
+
+					// A Client Characteristic Configuration descriptor is a fixed
+					// 2-octet field. A write of any other length is rejected with
+					// Invalid Attribute Value Length (Core spec Vol 3 Part G,
+					// 3.3.3.3), not silently truncated or accepted.
+					if (entry->TypeUuid.BaseIdx == 0 &&
+						entry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION &&
+						dlen != 2)
+					{
+						retval = BtAttError(pRspAtt, req->Hdl, BT_ATT_OPCODE_ATT_WRITE_REQ, BT_ATT_ERROR_INVALID_ATT_VALUE);
+						break;
 					}
 
 					BtAttWriteValue(entry, 0, req->Data, (size_t)dlen);

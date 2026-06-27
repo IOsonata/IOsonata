@@ -204,6 +204,7 @@ __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pC
 	}
 
 	pConn->Conn.bIndCfmPending = true;
+	pConn->Conn.IndCfmTime = BtGattMsTick();
 	return true;
 }
 
@@ -231,6 +232,28 @@ __attribute__((weak)) void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHd
 	(void)ValHdl;
 	(void)pData;
 	(void)Len;
+}
+
+// Millisecond tick for the indication transaction timeout. Weak default returns
+// 0 so the timeout is inert on ports that do not supply a clock; the elapsed
+// time is then always 0 and BtGattIndicationTimedOut never fires. An app with a
+// running millisecond counter overrides this.
+__attribute__((weak)) uint32_t BtGattMsTick(void)
+{
+	return 0;
+}
+
+bool BtGattIndicationTimedOut(uint16_t ConnHdl, uint32_t TimeoutMs)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn == nullptr || pConn->Conn.bIndCfmPending == false)
+	{
+		return false;
+	}
+
+	// Unsigned subtraction wraps cleanly, so a tick rollover during the wait
+	// does not produce a false timeout.
+	return (uint32_t)(BtGattMsTick() - pConn->Conn.IndCfmTime) >= TimeoutMs;
 }
 
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
