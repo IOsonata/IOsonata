@@ -1128,6 +1128,11 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	return true;*/
 }
 
+bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
+{
+	return BtGattCharIndicate(BtPeerActiveHdl(), pChar, pData, DataLen);
+}
+
 bool BleAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
 {
 	return false;

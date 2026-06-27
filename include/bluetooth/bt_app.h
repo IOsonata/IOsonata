@@ -322,6 +322,15 @@ char * const BtAppGetDevName(void);
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
 
 /**
+ * @brief	Send a Handle Value Indication for pChar on the active link.
+ *			Indication is the confirmed counterpart of BtAppNotify: only one may
+ *			be outstanding per link until the client returns its confirmation.
+ *			No-op (returns false) unless the client subscribed for indications
+ *			via the CCCD.
+ */
+bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen);
+
+/**
  *
  * @return	true - advertising
  * 			false - not advertising

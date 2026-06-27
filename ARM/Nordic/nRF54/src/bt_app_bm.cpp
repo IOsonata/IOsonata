@@ -356,6 +356,20 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 				BtAppDiscDescRsp(&p_ble_evt->evt.gattc_evt);
 				break;
 
+			case BLE_GATTC_EVT_HVX:
+				{
+					const ble_gattc_evt_hvx_t *p_hvx = &p_ble_evt->evt.gattc_evt.params.hvx;
+					BtGattClientNotified(p_ble_evt->evt.gattc_evt.conn_handle,
+					                     p_hvx->handle, (uint8_t *)p_hvx->data, p_hvx->len);
+					// An indication must be confirmed by the client.
+					if (p_hvx->type == BLE_GATT_HVX_INDICATION)
+					{
+						sd_ble_gattc_hv_confirm(p_ble_evt->evt.gattc_evt.conn_handle,
+						                        p_hvx->handle);
+					}
+				}
+				break;
+
 			default:
 				break;
 		}
@@ -414,6 +428,46 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	ble_gatts_hvx_params_t params;
 	memset(&params, 0, sizeof(params));
 	params.type = BLE_GATT_HVX_NOTIFICATION;
+	params.handle = pChar->ValHdl;
+	params.p_data = pData;
+	params.p_len = &DataLen;
+
+	uint32_t err_code = sd_ble_gatts_hvx(connHdl, &params);
+
+	return err_code == NRF_SUCCESS;
+}
+
+bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
+{
+	uint16_t connHdl = BtAppGetConnHandle();
+	uint8_t emptyData = 0;
+
+	if (pChar == nullptr)
+		return false;
+
+	if (DataLen > 0 && pData == nullptr)
+		return false;
+
+	if (connHdl == BLE_CONN_HANDLE_INVALID)
+		return false;
+
+	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
+		return false;
+
+	if (pChar->bIndic == false)
+		return false;
+
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+		return false;
+
+	if (pData == nullptr)
+	{
+		pData = &emptyData;
+	}
+
+	ble_gatts_hvx_params_t params;
+	memset(&params, 0, sizeof(params));
+	params.type = BLE_GATT_HVX_INDICATION;
 	params.handle = pChar->ValHdl;
 	params.p_data = pData;
 	params.p_len = &DataLen;

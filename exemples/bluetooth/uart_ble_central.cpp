@@ -333,7 +333,17 @@ void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
 	(void)pCtx;
-	// Keep for now; add BLE->UART notify forwarding here once event ctx type is exposed.
+}
+
+// Peripheral -> central data stream. Forward the notified/indicated value from
+// the BlueIO UART RX characteristic out the local UART.
+void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uint16_t Len)
+{
+	(void)ConnHdl;
+	if (ValHdl == g_BleRxCharHdl && pData != nullptr && Len > 0)
+	{
+		g_Uart.Tx(pData, Len);
+	}
 }
 
 void BtDeviceDiscovered(BtDevice_t *pDev)

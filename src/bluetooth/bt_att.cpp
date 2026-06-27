@@ -1051,8 +1051,36 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		case BT_ATT_OPCODE_ATT_MULTIPLE_HANDLE_VALUE_NTF:
 			break;
 		case BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF:
+			{
+				// Server notified us (client role). Deliver the value to the
+				// application. PDU is opcode(1) + value handle(2) + value.
+				int dlen = ReqLen - 3;
+				if (dlen < 0)
+				{
+					dlen = 0;
+				}
+				BtGattClientNotified(ConnHdl, pReqAtt->HandleValueNtf.ValHdl,
+									 pReqAtt->HandleValueNtf.Data, (uint16_t)dlen);
+			}
 			break;
 		case BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND:
+			{
+				// We are the client and the server indicated us. ATT requires a
+				// Handle Value Confirmation in reply before the server may send
+				// another indication (Core spec Vol 3 Part F, 3.4.7.2). The
+				// confirmation is the opcode alone, no parameters. Deliver the
+				// value first, then confirm.
+				int dlen = ReqLen - 3;
+				if (dlen < 0)
+				{
+					dlen = 0;
+				}
+				BtGattClientNotified(ConnHdl, pReqAtt->HandleValueInd.Hdl,
+									 pReqAtt->HandleValueInd.Data, (uint16_t)dlen);
+
+				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM;
+				retval = 1;
+			}
 			break;
 		case BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM:
 			{

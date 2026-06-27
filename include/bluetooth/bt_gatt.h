@@ -186,6 +186,16 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
+
+/**
+ * @brief	Client-role receive hook. Called when a Handle Value Notification or
+ *			Indication arrives from a peer. ValHdl is the peer characteristic
+ *			value handle; pData/Len are the received value. For an indication the
+ *			Handle Value Confirmation is sent before this runs. Weak default is
+ *			empty; the application overrides it (e.g. to forward to a UART) and
+ *			matches ValHdl against the handle it discovered.
+ */
+void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uint16_t Len);
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 //void BtGattServiceInit(BtGattSrvc_t * const pSrvc);

@@ -143,6 +143,57 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 	return err_code == NRF_SUCCESS;
 }
 
+// Native indication path. The SoftDevice enforces the single-outstanding-
+// indication rule itself (sd_ble_gatts_hvx returns NRF_ERROR_BUSY while one is
+// pending) and signals the client confirmation with BLE_GATTS_EVT_HVC.
+bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
+{
+	if (pChar == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > 0 && pVal == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > UINT16_MAX || Len > pChar->MaxDataLen)
+	{
+		return false;
+	}
+
+	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	uint16_t ch = (ConnHdl != BLE_CONN_HANDLE_INVALID) ? ConnHdl : s_ConnHandle;
+
+	if (ch == BLE_CONN_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	if (pChar->bIndic == false)
+	{
+		return false;
+	}
+
+	ble_gatts_hvx_params_t params;
+	memset(&params, 0, sizeof(params));
+	params.type   = BLE_GATT_HVX_INDICATION;
+	params.handle = pChar->ValHdl;
+	params.p_data = (uint8_t*)pVal;
+
+	uint16_t l = (uint16_t)Len;
+	params.p_len = &l;
+
+	uint32_t err_code = sd_ble_gatts_hvx(ch, &params);
+
+	return err_code == NRF_SUCCESS;
+}
+
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr)

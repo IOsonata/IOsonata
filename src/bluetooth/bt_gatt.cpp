@@ -220,6 +220,19 @@ void BtGattHandleValueConfirm(uint16_t ConnHdl)
 	}
 }
 
+// Client-role receive hook. Weak default does nothing; the application overrides
+// it to consume notified/indicated values. Called from the native-host ATT path
+// and from the vendor GATT-client event handlers, so one override serves every
+// port.
+__attribute__((weak)) void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl,
+												uint8_t *pData, uint16_t Len)
+{
+	(void)ConnHdl;
+	(void)ValHdl;
+	(void)pData;
+	(void)Len;
+}
+
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	uint8_t baseidx = 0;
