@@ -89,6 +89,9 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 			if (pPeer->NbSrvc == 0)
 			{
 				DEBUG_PRINTF("No services discovered, nothing to scan\r\n");
+				// Discovery is over with an empty result. Notify the app so it
+				// can report no service found rather than wait forever.
+				BtDeviceDiscovered(pPeer);
 				break;
 			}
 
@@ -155,6 +158,15 @@ uint32_t BtAttProcessError(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int 
 					pPeer->Discovery.UuidType.Uuid16 = BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION;
 				}
 					break;
+				case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+					// Last discovery phase (user description descriptors) is done
+					// on the final service. The peer GATT DB is fully populated.
+					// Notify the app and stop the walk. Returning here is what
+					// ends the discovery; without it the trailing request below
+					// would re-scan 0x2901 from service 0 and loop forever.
+					DEBUG_PRINTF("Discovery complete\r\n");
+					BtDeviceDiscovered(pPeer);
+					return retval;
 				default:
 					DEBUG_PRINTF("Unprocess Uuid16 Type (code 0x%X)\r\n", pPeer->Discovery.UuidType.Uuid16);
 				}

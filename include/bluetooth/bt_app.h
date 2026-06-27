@@ -279,6 +279,11 @@ void BtAppInitUserData(void);
 void BtAppInitUserServices(void);
 void BtAppEvtConnected(uint16_t ConnHdl);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
+// Called once the link is encrypted (freshly paired or re-encrypted from a
+// stored bond). Only fires when the app config requests security. Weak default
+// is empty. Apps that gate work on encryption (e.g. a central reading
+// protected characteristics) override this.
+void BtAppEvtSecured(uint16_t ConnHdl);
 void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx);
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
 

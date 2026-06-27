@@ -704,9 +704,11 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 	switch (p_evt->evt_id)
 	{
 		case PM_EVT_CONN_SEC_SUCCEEDED:
-			// Link is encrypted. peer_manager holds the bond. Nothing further
-			// required here; the app sees the secured link via its connected
-			// state. (nRF52 optionally enforces MITM here; left permissive.)
+			// Link is encrypted. peer_manager holds the bond. Notify the app so
+			// it can run work that needs an encrypted link (e.g. a central
+			// reading protected characteristics). (nRF52 optionally enforces
+			// MITM here; left permissive.)
+			BtAppEvtSecured(p_evt->conn_handle);
 			break;
 
 		case PM_EVT_CONN_SEC_FAILED:

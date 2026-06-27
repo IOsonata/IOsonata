@@ -199,6 +199,69 @@ bool BtAttReadRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl
 	return true;
 }
 
+// Write Request (opcode 0x12). The server replies with a Write Response. Use
+// for configuration writes that should be acknowledged (e.g. a CCCD).
+bool BtAttWriteRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint8_t *pData, size_t DataLen)
+{
+	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+	// Clamp so the ATT PDU (opcode + handle + value) never exceeds the buffer.
+	size_t maxData = BT_HCI_BUFFER_MAX_SIZE - sizeof(acl->Hdr) - sizeof(BtL2CapHdr_t) - 3;
+	if (DataLen > maxData)
+	{
+		DataLen = maxData;
+	}
+
+	acl->Hdr.ConnHdl = ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_WRITE_REQ;
+	l2pdu->Att.WriteReq.Hdl = Hdl;
+	memcpy(l2pdu->Att.WriteReq.Data, pData, DataLen);
+	l2pdu->Hdr.Len = 1 + 2 + DataLen;	// opcode + handle + value
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+
+	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+
+	return true;
+}
+
+// Write Command (opcode 0x52), write without response. Use for data streams
+// where per-write acknowledgement is not needed.
+bool BtAttWriteCommand(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint8_t *pData, size_t DataLen)
+{
+	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buff;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+	size_t maxData = BT_HCI_BUFFER_MAX_SIZE - sizeof(acl->Hdr) - sizeof(BtL2CapHdr_t) - 3;
+	if (DataLen > maxData)
+	{
+		DataLen = maxData;
+	}
+
+	acl->Hdr.ConnHdl = ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_CMD;	// Write without response
+	l2pdu->Att.WriteCmd.Hdl = Hdl;
+	memcpy(l2pdu->Att.WriteCmd.Data, pData, DataLen);
+	l2pdu->Hdr.Len = 1 + 2 + DataLen;	// opcode + handle + value
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+
+	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+
+	return true;
+}
+
 bool BtAttReadBlobRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t Hdl, uint16_t Offset)
 {
 	uint8_t buff[BT_HCI_BUFFER_MAX_SIZE];

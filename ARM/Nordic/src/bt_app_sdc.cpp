@@ -1041,30 +1041,31 @@ bool BleAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * cons
 }
 #endif
 
-bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * const pCharUid)
+bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CccdHandle)
 {
-//	BtGattCharNotify();
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHandle);
+	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
+	{
+		return false;
+	}
 
-	return false;
-#if 0
-    uint32_t                 err_code;
-    ble_gattc_write_params_t write_params;
-    uint8_t                  buf[BLE_CCCD_VALUE_LEN];
+	// Enable notifications by writing 0x0001 to the characteristic's CCCD.
+	// A Write Request is used so the server acknowledges the configuration.
+	uint8_t cccd[2] = { 0x01, 0x00 };
+	return BtAttWriteRequest(pPeer->pHciDev, ConnHandle, CccdHandle, cccd, sizeof(cccd));
+}
 
-    buf[0] = BLE_GATT_HVX_NOTIFICATION;
-    buf[1] = 0;
+bool BtAppWrite(uint16_t ConnHandle, uint16_t CharHandle, uint8_t *pData, uint16_t DataLen)
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHandle);
+	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
+	{
+		return false;
+	}
 
-    write_params.write_op = BLE_GATT_OP_WRITE_CMD;//BLE_GATT_OP_WRITE_REQ;
-    write_params.flags = BLE_GATT_EXEC_WRITE_FLAG_PREPARED_WRITE,
-    write_params.handle   = CharHandle;
-    write_params.offset   = 0;
-    write_params.len      = sizeof(buf);
-    write_params.p_value  = buf;
-
-    err_code = sd_ble_gattc_write(ConnHandle, &write_params);
-
-    return err_code == NRF_SUCCESS;
-#endif
+	// Write without response, matching the write-command path on the SoftDevice
+	// ports and the BlueIO UART TX characteristic (WRITE | WRITEWORESP).
+	return BtAttWriteCommand(pPeer->pHciDev, ConnHandle, CharHandle, pData, DataLen);
 }
 
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)

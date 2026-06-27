@@ -57,6 +57,22 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // BLE
 #define DEVICE_NAME             "UARTCentral"          /**< Name of device. Will be included in the advertising data. */
 
+// ---------------------------------------------------------------------------
+// Secure connection demo toggle
+// ---------------------------------------------------------------------------
+// 0 : Open link. No pairing. The central discovers the peer GATT server as
+//     soon as it connects, in BtAppEvtConnected().
+//
+// 1 : Bonded encrypted link. The stack initiates pairing on connect. The
+//     peer UART characteristics are usually encryption gated, so discovery
+//     and notify-enable are deferred until the link is encrypted, in
+//     BtAppEvtSecured(). A stored bond re-encrypts on reconnect without
+//     re-pairing.
+//
+// The pairing mode itself is chosen by .SecType / .SecExchg in s_BleAppCfg
+// below. This demo uses bonded Just Works (no passkey, no display needed).
+#define BLE_SECURE_CONN         1
+
 #define MANUFACTURER_NAME       "I-SYST inc."          /**< Manufacturer. Will be passed to Device Information Service. */
 #define MODEL_NAME              "IMM-NRF5x"            /**< Model number. Will be passed to Device Information Service. */
 #define MANUFACTURER_ID         ISYST_BLUETOOTH_ID     /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
@@ -125,8 +141,13 @@ const BtAppCfg_t s_BleAppCfg = {
 	.AdvManDataLen = 0,//sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,						// Addition Manufacture specific data to advertise in scan response
 	.SrManDataLen = 0,						// Length of manufacture specific data in scan response
-	.SecType = BTGAP_SECTYPE_NONE,			// Secure connection type
-	.SecExchg = BTAPP_SECEXCHG_NONE,		// Security key exchange
+#if BLE_SECURE_CONN
+	.SecType = BTGAP_SECTYPE_STATICKEY_NO_MITM,	// Bonded Just Works, no MITM, no IO needed
+	.SecExchg = BTAPP_SECEXCHG_NONE,			// No passkey / OOB key exchange
+#else
+	.SecType = BTGAP_SECTYPE_NONE,				// Open link, no pairing
+	.SecExchg = BTAPP_SECEXCHG_NONE,			// Security key exchange
+#endif
 	.bCompleteUuidList = false,				// true - Follow is a complete uuid list. false - incomplete list (more uuid than listed here)
 	.pAdvUuid = NULL,      					// Service uuids to advertise
 	.AdvInterval = APP_ADV_INTERVAL,		// Advertising interval in msec
@@ -203,11 +224,11 @@ BtDev_t g_ConnectedDev = {
 uint16_t g_BleTxCharHdl = BT_ATT_HANDLE_INVALID;   // BlueIO UART TX characteristic (write target)
 uint16_t g_BleRxCharHdl = BT_ATT_HANDLE_INVALID;   // BlueIO UART RX characteristic (notify source)
 
-void BtAppEvtConnected(uint16_t ConnHdl)
+// Kick off GATT discovery on the connected peer. Called from connect on an
+// open link, or from the secured event on an encrypted link, selected by
+// BLE_SECURE_CONN.
+static void StartPeerDiscovery(uint16_t ConnHdl)
 {
-	g_ConnectedDev.Conn.Hdl = ConnHdl;
-	g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
-
 	BtDev_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer)
 	{
@@ -218,6 +239,33 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 		g_Uart.printf("BtPeerFindByHdl failed for ConnHdl=%u\r\n", ConnHdl);
 	}
 }
+
+void BtAppEvtConnected(uint16_t ConnHdl)
+{
+	g_ConnectedDev.Conn.Hdl = ConnHdl;
+	g_Uart.printf("BtAppEvtConnected ConnHdl = %d (0x%x)\r\n", ConnHdl, ConnHdl);
+
+#if BLE_SECURE_CONN
+	// Secure mode: the stack starts pairing now. Do not touch the peer GATT
+	// server yet; its characteristics may be encryption gated. Discovery runs
+	// from BtAppEvtSecured() once the link is encrypted.
+	g_Uart.printf("Securing link...\r\n");
+#else
+	// Open mode: no pairing. Discover the peer GATT server immediately.
+	StartPeerDiscovery(ConnHdl);
+#endif
+}
+
+#if BLE_SECURE_CONN
+void BtAppEvtSecured(uint16_t ConnHdl)
+{
+	// Link is now encrypted: freshly paired, or re-encrypted from a stored
+	// bond on reconnect. Protected characteristics are accessible now, so
+	// discovery and the later notify-enable run from here.
+	g_Uart.printf("Link secured. Starting discovery\r\n");
+	StartPeerDiscovery(ConnHdl);
+}
+#endif
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
@@ -315,8 +363,17 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 
 	g_Uart.printf("UART service discovered: RX=0x%04X TX=0x%04X\r\n", g_BleRxCharHdl, g_BleTxCharHdl);
 
-	// Enable notify on RX characteristic (peripheral -> central stream)
-	if (!BtAppEnableNotify(pDev->Conn.Hdl, g_BleRxCharHdl))
+	// Enable notify on the RX characteristic (peripheral -> central stream).
+	// Notifications are turned on by writing to the CCCD, not the value handle.
+	// The descriptor discovery phase fills cccd_handle.
+	uint16_t rxCccd = pDev->Services[sidx].characteristics[rxidx].cccd_handle;
+	if (rxCccd == BT_ATT_HANDLE_INVALID)
+	{
+		g_Uart.printf("RX CCCD not found\r\n");
+		return;
+	}
+
+	if (!BtAppEnableNotify(pDev->Conn.Hdl, rxCccd))
 	{
 		g_Uart.printf("BtAppEnableNotify failed\r\n");
 	}

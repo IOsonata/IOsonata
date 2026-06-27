@@ -401,12 +401,264 @@ bool BtAppDiscoverDevice(BtDev_t * const pDev)
 }
 #endif // legacy discovery state machine
 
-// Stub. Step 7 wires this into the generic state machine in bt_dev.cpp.
-// Returns false until then so callers that check the result see no-go.
+// =====================================================================
+// Central GATT client discovery (nRF52 SoftDevice path)
+// ---------------------------------------------------------------------
+// The SoftDevice owns the host, so discovery runs on sd_ble_gattc_*_discover
+// and the matching BLE_GATTC_EVT_* responses (dispatched from the central
+// event switch). Sequence: all primary services, then characteristics per
+// service, then descriptors per characteristic to resolve the CCCD handle.
+// On completion BtDeviceDiscovered(pDev) is called (weak default in
+// bt_app.cpp, overridden by the app).
+//
+// The nRF52 SoftDevice ble_gattc API is identical to the S145 one used by the
+// nRF54L bm port, so this is the same state machine. Single active discovery
+// at a time; the cursor lives in file-scope statics, not per peer.
+// =====================================================================
+
+static BtDevice_t *s_pDiscDev    = NULL;    // peer under discovery
+static uint8_t     s_DiscSrvIdx  = 0;       // service cursor (char and desc phases)
+static uint8_t     s_DiscCharIdx = 0;       // characteristic cursor (desc phase)
+
+static void BtAppDiscStartChar(BtDevice_t *pDev);
+static void BtAppDiscStartDesc(BtDevice_t *pDev);
+
 bool BtAppDiscoverDevice(BtDev_t * const pDev)
 {
-	(void)pDev;
-	return false;
+	if (pDev == NULL)
+	{
+		return false;
+	}
+
+	s_pDiscDev    = pDev;
+	s_DiscSrvIdx  = 0;
+	s_DiscCharIdx = 0;
+
+	pDev->NbSrvc = 0;
+	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
+
+	// NULL uuid filter discovers every primary service from handle 1.
+	return sd_ble_gattc_primary_services_discover(pDev->Conn.Hdl, 0x0001, NULL) == NRF_SUCCESS;
+}
+
+static void BtAppDiscStartChar(BtDevice_t *pDev)
+{
+	while (s_DiscSrvIdx < pDev->NbSrvc)
+	{
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+		ble_gattc_handle_range_t range;
+
+		range.start_handle = pSrvc->handle_range.StartHdl + 1;  // skip service declaration
+		range.end_handle   = pSrvc->handle_range.EndHdl;
+
+		if (range.start_handle <= range.end_handle &&
+		    sd_ble_gattc_characteristics_discover(pDev->Conn.Hdl, &range) == NRF_SUCCESS)
+		{
+			return;     // wait for BLE_GATTC_EVT_CHAR_DISC_RSP
+		}
+		s_DiscSrvIdx++; // empty service or request rejected; advance
+	}
+
+	// All services covered for characteristics. Resolve descriptors (CCCD).
+	s_DiscSrvIdx  = 0;
+	s_DiscCharIdx = 0;
+	BtAppDiscStartDesc(pDev);
+}
+
+static void BtAppDiscStartDesc(BtDevice_t *pDev)
+{
+	while (s_DiscSrvIdx < pDev->NbSrvc)
+	{
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+
+		while (s_DiscCharIdx < pSrvc->char_count)
+		{
+			BtGattDBChar_t *pCh    = &pSrvc->characteristics[s_DiscCharIdx];
+			uint16_t        valHdl = pCh->characteristic.handle_value;
+			uint16_t        start  = valHdl + 1;
+			uint16_t        end;
+
+			if ((s_DiscCharIdx + 1) < pSrvc->char_count)
+			{
+				end = pSrvc->characteristics[s_DiscCharIdx + 1].characteristic.handle_decl - 1;
+			}
+			else
+			{
+				end = pSrvc->handle_range.EndHdl;
+			}
+
+			if (valHdl != 0xFFFF && start <= end)
+			{
+				ble_gattc_handle_range_t range;
+				range.start_handle = start;
+				range.end_handle   = end;
+				if (sd_ble_gattc_descriptors_discover(pDev->Conn.Hdl, &range) == NRF_SUCCESS)
+				{
+					return; // wait for BLE_GATTC_EVT_DESC_DISC_RSP
+				}
+			}
+			s_DiscCharIdx++; // no descriptor range or request rejected
+		}
+		s_DiscSrvIdx++;
+		s_DiscCharIdx = 0;
+	}
+
+	// Every service and characteristic processed. Discovery complete.
+	BtDeviceDiscovered(pDev);
+}
+
+static void BtAppDiscPrimSrvcRsp(const ble_gattc_evt_t *pEvt)
+{
+	BtDevice_t *pDev = s_pDiscDev;
+	if (pDev == NULL)
+	{
+		return;
+	}
+
+	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS)
+	{
+		const ble_gattc_evt_prim_srvc_disc_rsp_t *p = &pEvt->params.prim_srvc_disc_rsp;
+		uint16_t lastEnd = 0;
+
+		for (uint16_t i = 0; i < p->count; i++)
+		{
+			if (pDev->NbSrvc >= BT_DEV_SERVICE_MAXCNT)
+			{
+				break;
+			}
+
+			BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->NbSrvc];
+			pSrvc->srv_uuid.BaseIdx = 0;
+			pSrvc->srv_uuid.Type    = BT_UUID_TYPE_16;
+			pSrvc->srv_uuid.Uuid    = p->services[i].uuid.uuid;
+			pSrvc->handle_range.StartHdl = p->services[i].handle_range.start_handle;
+			pSrvc->handle_range.EndHdl   = p->services[i].handle_range.end_handle;
+			pSrvc->char_count = 0;
+			lastEnd = p->services[i].handle_range.end_handle;
+			pDev->NbSrvc++;
+		}
+
+		// Continue past the last range unless DB end or local table full.
+		if (lastEnd != 0xFFFF && pDev->NbSrvc < BT_DEV_SERVICE_MAXCNT &&
+		    sd_ble_gattc_primary_services_discover(pDev->Conn.Hdl, lastEnd + 1, NULL) == NRF_SUCCESS)
+		{
+			return;
+		}
+	}
+
+	// ATTRIBUTE_NOT_FOUND, DB end, or table full: service phase done.
+	s_DiscSrvIdx = 0;
+	BtAppDiscStartChar(pDev);
+}
+
+static void BtAppDiscCharRsp(const ble_gattc_evt_t *pEvt)
+{
+	BtDevice_t *pDev = s_pDiscDev;
+	if (pDev == NULL)
+	{
+		return;
+	}
+
+	BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+
+	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS)
+	{
+		const ble_gattc_evt_char_disc_rsp_t *p = &pEvt->params.char_disc_rsp;
+		uint16_t lastVal = 0;
+
+		for (uint16_t i = 0; i < p->count; i++)
+		{
+			if (pSrvc->char_count >= BT_GATT_DB_MAX_CHARS)
+			{
+				break;
+			}
+
+			BtGattDBChar_t         *pCh  = &pSrvc->characteristics[pSrvc->char_count];
+			const ble_gattc_char_t *pSrc = &p->chars[i];
+
+			pCh->characteristic.uuid.BaseIdx = 0;
+			pCh->characteristic.uuid.Type    = BT_UUID_TYPE_16;
+			pCh->characteristic.uuid.Uuid    = pSrc->uuid.uuid;
+
+			pCh->characteristic.char_props.broadcast      = pSrc->char_props.broadcast;
+			pCh->characteristic.char_props.read           = pSrc->char_props.read;
+			pCh->characteristic.char_props.write_wo_resp  = pSrc->char_props.write_wo_resp;
+			pCh->characteristic.char_props.write          = pSrc->char_props.write;
+			pCh->characteristic.char_props.notify         = pSrc->char_props.notify;
+			pCh->characteristic.char_props.indicate       = pSrc->char_props.indicate;
+			pCh->characteristic.char_props.auth_signed_wr = pSrc->char_props.auth_signed_wr;
+
+			pCh->characteristic.char_ext_props = pSrc->char_ext_props;
+			pCh->characteristic.handle_decl    = pSrc->handle_decl;
+			pCh->characteristic.handle_value   = pSrc->handle_value;
+
+			pCh->cccd_handle       = BLE_GATT_HANDLE_INVALID;
+			pCh->ext_prop_handle   = BLE_GATT_HANDLE_INVALID;
+			pCh->user_desc_handle  = BLE_GATT_HANDLE_INVALID;
+			pCh->report_ref_handle = BLE_GATT_HANDLE_INVALID;
+
+			lastVal = pSrc->handle_value;
+			pSrvc->char_count++;
+		}
+
+		// Continue characteristics within the same service range.
+		if (lastVal != 0 && lastVal < 0xFFFF && pSrvc->char_count < BT_GATT_DB_MAX_CHARS &&
+		    (lastVal + 1) <= pSrvc->handle_range.EndHdl)
+		{
+			ble_gattc_handle_range_t range;
+			range.start_handle = lastVal + 1;
+			range.end_handle   = pSrvc->handle_range.EndHdl;
+			if (sd_ble_gattc_characteristics_discover(pDev->Conn.Hdl, &range) == NRF_SUCCESS)
+			{
+				return;
+			}
+		}
+	}
+
+	// Service complete (ATTRIBUTE_NOT_FOUND, table full, or error). Advance.
+	s_DiscSrvIdx++;
+	BtAppDiscStartChar(pDev);
+}
+
+static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt)
+{
+	BtDevice_t *pDev = s_pDiscDev;
+	if (pDev == NULL)
+	{
+		return;
+	}
+
+	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS)
+	{
+		const ble_gattc_evt_desc_disc_rsp_t *p = &pEvt->params.desc_disc_rsp;
+		BtGattDBSrvc_t *pSrvc = &pDev->Services[s_DiscSrvIdx];
+		BtGattDBChar_t *pCh   = &pSrvc->characteristics[s_DiscCharIdx];
+
+		for (uint16_t i = 0; i < p->count; i++)
+		{
+			switch (p->descs[i].uuid.uuid)
+			{
+				case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
+					pCh->cccd_handle = p->descs[i].handle;
+					break;
+				case BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES:
+					pCh->ext_prop_handle = p->descs[i].handle;
+					break;
+				case BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION:
+					pCh->user_desc_handle = p->descs[i].handle;
+					break;
+				case BT_UUID_DESCRIPTOR_REPORT_REFERENCE:
+					pCh->report_ref_handle = p->descs[i].handle;
+					break;
+				default:
+					break;
+			}
+		}
+	}
+
+	// Advance to the next characteristic regardless of result.
+	s_DiscCharIdx++;
+	BtAppDiscStartDesc(pDev);
 }
 
 void BtAppEnterDfu()
@@ -628,6 +880,10 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 					APP_ERROR_CHECK(err_code);
 #endif
 				}
+
+				// Link is encrypted. Notify the app so it can run work that needs
+				// an encrypted link (e.g. a central reading protected chars).
+				BtAppEvtSecured(p_evt->conn_handle);
 			}
 			break;
 
@@ -912,6 +1168,18 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 					}
 				}
             break;
+
+            case BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP:
+                BtAppDiscPrimSrvcRsp(&p_ble_evt->evt.gattc_evt);
+                break;
+
+            case BLE_GATTC_EVT_CHAR_DISC_RSP:
+                BtAppDiscCharRsp(&p_ble_evt->evt.gattc_evt);
+                break;
+
+            case BLE_GATTC_EVT_DESC_DISC_RSP:
+                BtAppDiscDescRsp(&p_ble_evt->evt.gattc_evt);
+                break;
 #if 0
             case BLE_GAP_EVT_SCAN_REQ_REPORT:
             	{
