@@ -78,10 +78,13 @@ __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const 
 		return false;
 	}
 
-	int l = min((uint16_t)Len, pChar->MaxDataLen);
+	// Clamp on size_t before narrowing. Casting Len to uint16_t first would
+	// wrap a >= 64 KiB length down to a small value and silently truncate the
+	// stored value while still reporting success.
+	size_t l = min(Len, (size_t)pChar->MaxDataLen);
 
 	memcpy(pChar->pValue, pVal, l);
-	pChar->ValueLen = l;
+	pChar->ValueLen = (uint16_t)l;
 
 	return true;
 }

@@ -151,6 +151,14 @@ bool BtUuidGetBase(int Idx, uint8_t Uuid[16])
  */
 bool BtUuidTo128(BtUuid_t * const pUuid, uint8_t Uuid128[16])
 {
+	// BaseIdx is a 6-bit field (0-63) but the table holds only
+	// BT_BASE_UUID_ENTRY_MAX_COUNT entries. Reject an out-of-range index
+	// (e.g. an unresolved/stale UUID) before indexing to avoid an OOB read.
+	if (pUuid->BaseIdx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
+	{
+		return false;
+	}
+
 	BtBaseUuidTblEntry_t *p = &s_BtBaseUuidTbl[pUuid->BaseIdx];
 
 	if (p->bValid == true)
@@ -179,6 +187,11 @@ bool BtUuidTo128(BtUuid_t * const pUuid, uint8_t Uuid128[16])
  */
 bool BtUuid16To128(BtUuid16_t * const pUuid, uint8_t Uuid128[16])
 {
+	if (pUuid->BaseIdx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
+	{
+		return false;
+	}
+
 	BtBaseUuidTblEntry_t *p = &s_BtBaseUuidTbl[pUuid->BaseIdx];
 
 	if (p->bValid == true)
@@ -201,6 +214,11 @@ bool BtUuid16To128(BtUuid16_t * const pUuid, uint8_t Uuid128[16])
  */
 bool BtUuid32To128(BtUuid32_t * const pUuid, uint8_t Uuid128[16])
 {
+	if (pUuid->BaseIdx >= BT_BASE_UUID_ENTRY_MAX_COUNT)
+	{
+		return false;
+	}
+
 	BtBaseUuidTblEntry_t *p = &s_BtBaseUuidTbl[pUuid->BaseIdx];
 
 	if (p->bValid == true)
@@ -264,7 +282,12 @@ int BtUuid128To16(BtUuid16_t *pUuid16, uint8_t Uuid128[16])
 	}
 
 	pUuid16->Type    = BT_UUID_TYPE_16;
-	pUuid16->BaseIdx = (idx >= 0) ? (uint8_t)idx : 0;
+	// On table-full (idx < 0) the custom base could not be registered. Do NOT
+	// fall back to BaseIdx 0 (the Bluetooth SIG base): that would alias an
+	// unknown vendor UUID onto a standard one and address the wrong
+	// characteristic. Store an out-of-range index so BtUuidGetBase /
+	// BtUuid*To128 reject it cleanly instead of mis-resolving to the SIG base.
+	pUuid16->BaseIdx = (idx >= 0) ? (uint8_t)idx : (uint8_t)BT_BASE_UUID_ENTRY_MAX_COUNT;
 	pUuid16->Uuid    = shortUuid;
 
 	return idx;

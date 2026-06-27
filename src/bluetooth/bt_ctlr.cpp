@@ -457,6 +457,16 @@ void BtCtlrProcessAttData(BtCtlrDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu
 
 						for (int i = 0; i < c && list[i].Hdl <= req->EndHdl && baseidx == list[i].Uuid.BaseIdx; i++)
 						{
+							// Stop before the next entry can overrun buf[]. The
+							// response is built into a fixed BT_HCI_BUFFER_MAX_SIZE
+							// buffer; without this bound a service list whose
+							// (4 + value) entries exceed the buffer would write
+							// past the end of the stack buffer.
+							if ((int)(p - buf) + (int)sizeof(BtAttHdlRange_t) + BT_ATT_MTU_MIN > BT_HCI_BUFFER_MAX_SIZE)
+							{
+								break;
+							}
+
 							BtAttHdlRange_t *hu = (BtAttHdlRange_t*)p;
 							hu->StartHdl = list[i].Hdl;
 							if ((i + 1) < c)

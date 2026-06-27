@@ -329,9 +329,17 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 			BtAttCharValue_t *p = (BtAttCharValue_t*) pEntry->Data;
 			DEBUG_PRINTF("UUID unknown : Type 0x%x, Len %d\r\n", pEntry->TypeUuid.Uuid, p->pChar->ValueLen);
 
-			size_t l = p->pChar->ValueLen;//min(p->pChar->ValueLen - Offset, BtAttGetMtu());
-			memcpy(pBuff, (uint8_t*)p->pChar->pValue + Offset, l);
-			len = l;
+			// Clamp to the bytes available from Offset and to the caller's
+			// buffer/MTU cap (Len). Offset is attacker-controlled on a blob
+			// read; without the bound an oversized Offset/ValueLen reads past
+			// the value and overflows the response buffer.
+			uint16_t vlen = p->pChar->ValueLen;
+			if (Offset <= vlen)
+			{
+				size_t l = min((uint16_t)(vlen - Offset), Len);
+				memcpy(pBuff, (uint8_t*)p->pChar->pValue + Offset, l);
+				len = l;
+			}
 		}
 
 		}
@@ -341,9 +349,15 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 		BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
 		DEBUG_PRINTF("Read Req UUID custom: %d: %x, %d\r\n", pEntry->TypeUuid.BaseIdx, pEntry->TypeUuid.Uuid, p->pChar->ValueLen);
 
-		size_t l = p->pChar->ValueLen;//min(p->pChar->ValueLen - Offset, BtAttGetMtu());
-		memcpy(pBuff, (uint8_t*)p->pChar->pValue + Offset, l);
-		len = l;
+		// Clamp to bytes available from Offset and to the caller's buffer/MTU
+		// cap (Len) to avoid an out-of-bounds read / response overflow.
+		uint16_t vlen = p->pChar->ValueLen;
+		if (Offset <= vlen)
+		{
+			size_t l = min((uint16_t)(vlen - Offset), Len);
+			memcpy(pBuff, (uint8_t*)p->pChar->pValue + Offset, l);
+			len = l;
+		}
 	}
 
 	return len;
@@ -496,6 +510,35 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 	uint32_t retval = 0;
 
 	DEBUG_PRINTF("ATT OpCode %x, L2Cap len %d\n", pReqAtt->OpCode, ReqLen);
+
+	// Reject truncated request PDUs before any field is parsed. ReqLen counts
+	// the opcode byte plus all parameters; a PDU shorter than the fixed size
+	// required by its opcode would read handles/lengths past the end of the
+	// received L2CAP buffer. PDUs arrive over the air from an untrusted peer.
+	{
+		int minLen = 1;
+		switch (pReqAtt->OpCode)
+		{
+			case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ:		minLen = 3; break;	// op + RxMtu(2)
+			case BT_ATT_OPCODE_ATT_FIND_INFORMATION_REQ:	minLen = 5; break;	// op + start(2) + end(2)
+			case BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_REQ:	minLen = 7; break;	// op + start(2) + end(2) + type(2)
+			case BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ:		minLen = 7; break;	// op + start(2) + end(2) + uuid16(2)
+			case BT_ATT_OPCODE_ATT_READ_REQ:				minLen = 3; break;	// op + hdl(2)
+			case BT_ATT_OPCODE_ATT_READ_BLOB_REQ:			minLen = 5; break;	// op + hdl(2) + offset(2)
+			case BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ:		minLen = 5; break;	// op + at least 2 handles
+			case BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ:	minLen = 7; break;	// op + start(2) + end(2) + uuid16(2)
+			case BT_ATT_OPCODE_ATT_WRITE_REQ:				minLen = 3; break;	// op + hdl(2) + value(>=0)
+			case BT_ATT_OPCODE_ATT_CMD:						minLen = 3; break;	// op + hdl(2) + value(>=0)
+			case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:		minLen = 5; break;	// op + hdl(2) + offset(2)
+			case BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ:		minLen = 2; break;	// op + flags(1)
+			default:										minLen = 1; break;
+		}
+
+		if (ReqLen < minLen)
+		{
+			return BtAttError(pRspAtt, 0, pReqAtt->OpCode, BT_ATT_ERROR_INVALID_PDU);
+		}
+	}
 
 	switch (pReqAtt->OpCode)
 	{
@@ -724,7 +767,10 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleReq.Hdl[i], BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
 						break;
 					}
-					int l = BtAttReadValue(entry, 0, p, s_AttMtu);
+					// Cap each value at the space remaining in the response
+					// buffer (MTU - bytes already written), not the full MTU,
+					// so cumulative values cannot overrun the response.
+					int l = BtAttReadValue(entry, 0, p, s_AttMtu - retval);
 					p += l;
 					retval += l;
 				}

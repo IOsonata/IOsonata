@@ -36,7 +36,6 @@ SOFTWARE.
 
 #include <string.h>
 
-#include "iopinctrl.h"
 #include "bluetooth/bt_app.h"
 
 // Cross-arch app state. Port-specific state lives in port-private structs
@@ -144,11 +143,11 @@ void BtAppConnLedOff(void)
 
 	if (g_BtAppData.ConnLedActLevel)
 	{
-		IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
+		//IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
 	}
 	else
 	{
-		IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
+		//IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
 	}
 }
 
@@ -159,10 +158,10 @@ void BtAppConnLedOn(void)
 
 	if (g_BtAppData.ConnLedActLevel)
 	{
-		IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
+		//IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
 	}
 	else
 	{
-		IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
+		//IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
 	}
 }

@@ -126,6 +126,15 @@ BtAdvData_t *BtAdvDataAllocate(BtAdvPacket_t *pAdvPkt, uint8_t Type, int Len)
 		return nullptr;
 	}
 
+	// The AD record length octet stores Len + 1 in a single byte, so the
+	// payload cannot exceed 254. Without this guard an extended-advertising
+	// payload near 255 would wrap the length field and make the scanner
+	// mis-parse every following AD structure.
+	if (Len > 254)
+	{
+		return nullptr;
+	}
+
 	int recLen = Len + 2;
 	int idx = BtAdvDataFindAdvTag(Type, pAdvPkt->pData, pAdvPkt->Len);
 

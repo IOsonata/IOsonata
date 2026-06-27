@@ -139,6 +139,9 @@ static void ScanRegion(void)
 	s_WriteHead = 0;
 	s_NextSeq = 0;
 
+	bool seqFound = false;
+	uint16_t maxSeq = 0;
+
 	while (off + BT_PDS_HDR_SIZE <= s_pNvm->RegionSize)
 	{
 		BtPdsRecHdr_t hdr;
@@ -169,15 +172,25 @@ static void ScanRegion(void)
 			break;
 		}
 
-		// Valid record. Advance head and track sequence.
+		// Valid record. Advance head and track the newest sequence number.
+		// Compare wrap-aware (modular distance) so a uint16 Seq that has
+		// wrapped past 0xFFFF is still ordered correctly - the same test
+		// FindLive uses. A plain '>' magnitude compare would pick a stale
+		// pre-wrap record as newest and let it shadow a fresh write.
 		uint16_t seq = hdr.Seq;
-		if ((uint16_t)(seq + 1) > s_NextSeq || s_NextSeq == 0)
+		if (!seqFound || (uint16_t)(seq - maxSeq) < 0x8000)
 		{
-			s_NextSeq = (uint16_t)(seq + 1);
+			seqFound = true;
+			maxSeq = seq;
 		}
 
 		off += RecSize(hdr.Len);
 		s_WriteHead = off;
+	}
+
+	if (seqFound)
+	{
+		s_NextSeq = (uint16_t)(maxSeq + 1);
 	}
 }
 

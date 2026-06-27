@@ -201,27 +201,12 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 	}
 
 	// No address match. A central that reconnects with a rotating resolvable
-	// private address (nRF Connect Desktop, iOS) presents a different address
-	// each time, and its IRK was not distributed (peer IRK is zero), so the
-	// RPA cannot be resolved. For a single-bond peripheral, fall back to the
-	// sole stored SC bond. If more than one SC bond exists the address is the
-	// only discriminator, so no fallback is made.
-	int scSlot = -1;
-	int scCount = 0;
-	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
-	{
-		if (s_BtSmpBondTable[i].bValid && s_BtSmpBondTable[i].Keys.bSc)
-		{
-			scSlot = i;
-			scCount++;
-		}
-	}
-	if (scCount == 1)
-	{
-		memcpy(Ltk, s_BtSmpBondTable[scSlot].Keys.Ltk, 16);
-		return true;
-	}
-
+	// private address presents a different address each time; if its IRK was
+	// not distributed the RPA cannot be resolved and the bond cannot be
+	// associated with this link. There is NO safe fallback here: returning any
+	// stored LTK without a positive address/EDIV+Rand match would hand the
+	// bonded key to an unauthenticated peer (authentication bypass). Refuse,
+	// and let the controller report no LTK so the link stays unencrypted.
 	return false;
 }
 

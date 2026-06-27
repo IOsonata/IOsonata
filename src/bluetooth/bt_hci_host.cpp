@@ -75,8 +75,13 @@ bool BtHciInit(BtHciDevCfg_t const *pCfg)
 
 
 //void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
-void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
+// EvtLen is the HCI event parameter length (bytes of pLeEvtPkt, i.e. Evt + Data),
+// used to bound walks over variable-length, controller-supplied report lists.
+void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt, int EvtLen)
 {
+	// End of the received event payload; report parsers must not read past it.
+	const uint8_t *evtEnd = (const uint8_t*)pLeEvtPkt + (EvtLen > 0 ? EvtLen : 0);
+
 	//DEBUG_PRINTF("BtHciProcessMetaEvent : Evt %x\r\n", pLeEvtPkt->Evt);
 
 	switch (pLeEvtPkt->Evt)
@@ -110,6 +115,18 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				for (int i = 0; i < report->NbReport; i++)
 				{
 					BtAdvReport_t *r = (BtAdvReport_t*)cur;
+					// Bound every access against the received event length:
+					// the 9-byte fixed header, the DataLen payload, and the
+					// trailing RSSI byte. A malformed/hostile controller event
+					// with a bad NbReport/DataLen would otherwise read OOB.
+					if (cur + 9 > evtEnd)
+					{
+						break;
+					}
+					if (cur + 9 + r->DataLen + 1 > evtEnd)
+					{
+						break;
+					}
 					int8_t rssi = (int8_t)r->Data[r->DataLen];
 					if (pDev->ScanReport)
 					{
@@ -215,6 +232,16 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				for (int i = 0; i < report->NbReport; i++)
 				{
 					BtExtAdvReport_t *r = (BtExtAdvReport_t*)cur;
+					// Bound the 24-byte fixed header and DataLen payload against
+					// the received event length before dereferencing.
+					if (cur + 24 > evtEnd)
+					{
+						break;
+					}
+					if (cur + 24 + r->DataLen > evtEnd)
+					{
+						break;
+					}
 					if (pDev->ScanReport)
 					{
 						pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
@@ -463,7 +490,9 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 			break;
 		case BT_HCI_EVT_LE:
 			//DEBUG_PRINTF("BT_HCI_EVT_LE\r\n");
-			BtHciProcessLeEvent(pDev, (BtHciLeEvtPacket_t *)pEvtPkt->Data);
+			// Hdr.Len is the event parameter length = bytes of the LE meta
+			// event payload (Evt + Data); pass it so report walks stay bounded.
+			BtHciProcessLeEvent(pDev, (BtHciLeEvtPacket_t *)pEvtPkt->Data, pEvtPkt->Hdr.Len);
 			break;
 	}
 //	DEBUG_PRINTF("+++++\r\n");

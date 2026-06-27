@@ -913,6 +913,39 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		}
 	}
 
+	// Validate the PDU carries enough bytes for its code before any handler
+	// dereferences fixed-size key/nonce/confirm fields. Pairing PDUs are
+	// attacker-controlled; a short PDU (e.g. a 1-byte Public Key) would
+	// otherwise over-read 16-64 bytes past the received L2CAP buffer, feeding
+	// adjacent memory into the crypto exchange. Each struct includes the Code
+	// byte, so Len (total payload) must be >= sizeof(struct).
+	{
+		size_t minLen = 1;
+		switch (pSmp->Code)
+		{
+			case BT_SMP_CODE_PAIRING_REQ:
+			case BT_SMP_CODE_PAIRING_RSP:			minLen = sizeof(BtSmpPairingReq_t); break;
+			case BT_SMP_CODE_PAIRING_CONFIRM:		minLen = sizeof(BtSmpPairingConfirm_t); break;
+			case BT_SMP_CODE_PAIRING_RANDOM:		minLen = sizeof(BtSmpPairingRandom_t); break;
+			case BT_SMP_CODE_PAIRING_FAILED:		minLen = sizeof(BtSmpPairingFailed_t); break;
+			case BT_SMP_CODE_PAIRING_ENCRYP_INFO:	minLen = sizeof(BtSmpEncryptInfo_t); break;
+			case BT_SMP_CODE_PAIRING_CENTRAL_ID:	minLen = sizeof(BtSmpCentralId_t); break;
+			case BT_SMP_CODE_PAIRING_ID_INFO:		minLen = sizeof(BtSmpIdInfo_t); break;
+			case BT_SMP_CODE_PAIRING_ID_ADDR_INFO:	minLen = sizeof(BtSmpIdAddrInfo_t); break;
+			case BT_SMP_CODE_PAIRING_SIGNING_INFO:	minLen = sizeof(BtSmpSigningInfo_t); break;
+			case BT_SMP_CODE_PAIRING_PUBLIC_KEY:	minLen = sizeof(BtSmpPublicKey_t); break;
+			case BT_SMP_CODE_PAIRING_DHKEY_CHECK:	minLen = sizeof(BtSmpDhKeyCheck_t); break;
+			case BT_SMP_CODE_PAIRING_SECURITY_REQ:	minLen = sizeof(BtSmpSecurityReq_t); break;
+			default:								minLen = 1; break;
+		}
+
+		if (Len < minLen)
+		{
+			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+			return;
+		}
+	}
+
 	switch (pSmp->Code)
 	{
 		case BT_SMP_CODE_PAIRING_REQ:
