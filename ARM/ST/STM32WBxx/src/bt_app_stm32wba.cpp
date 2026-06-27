@@ -313,6 +313,26 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					WbaDiscProcComplete();
 					break;
 
+				case ACI_GATT_NOTIFICATION_VSEVT_CODE:
+				{
+					aci_gatt_notification_event_rp0 *pN =
+						(aci_gatt_notification_event_rp0 *)pAci->data;
+					BtGattClientNotified(pN->Connection_Handle, pN->Attribute_Handle,
+										 pN->Attribute_Value, pN->Attribute_Value_Length);
+					break;
+				}
+
+				case ACI_GATT_INDICATION_VSEVT_CODE:
+				{
+					aci_gatt_indication_event_rp0 *pI =
+						(aci_gatt_indication_event_rp0 *)pAci->data;
+					BtGattClientNotified(pI->Connection_Handle, pI->Attribute_Handle,
+										 pI->Attribute_Value, pI->Attribute_Value_Length);
+					// ST requires the client to confirm a received indication.
+					aci_gatt_confirm_indication(pI->Connection_Handle);
+					break;
+				}
+
 				case ACI_GAP_PAIRING_COMPLETE_VSEVT_CODE:
 				{
 					aci_gap_pairing_complete_event_rp0 *pPc =
@@ -626,6 +646,28 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	// PDU automatically.
 	uint8_t ret = aci_gatt_update_char_value(pChar->Hdl, pChar->ValHdl,
 	                                         0, (uint8_t)DataLen, pData);
+	return ret == BLE_STATUS_SUCCESS;
+}
+
+bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
+{
+	if (pChar == NULL || pData == NULL || DataLen == 0)
+	{
+		return false;
+	}
+
+	if (BtPeerIsConnected() == false)
+	{
+		return false;
+	}
+
+	// Update_Type 0x02 forces an Indication. The ST stack tracks the single
+	// outstanding indication and the client confirmation internally; it sends
+	// the PDU only if the CCCD has indications enabled.
+	uint8_t ret = aci_gatt_update_char_value_ext(BtPeerActiveHdl(),
+	                                              pChar->Hdl, pChar->ValHdl,
+	                                              0x02, (uint16_t)DataLen,
+	                                              0, (uint8_t)DataLen, pData);
 	return ret == BLE_STATUS_SUCCESS;
 }
 
