@@ -18,11 +18,7 @@
 #include "nrf.h"
 #include "nrf_esb.h"
 #include "fds.h"
-#include "nrf_cli.h"
-#include "nrf_drv_clock.h"
-#include "nrf_drv_power.h"
-//#include "nrf_cli_uart.h"
-#include "nrf_cli_cdc_acm.h"
+#include "nrfx_clock.h"
 
 #include "istddef.h"
 #include "idelay.h"
@@ -57,25 +53,6 @@ const AppInfo_t g_AppInfo = {
 };
 
 alignas(4) AppData_t g_AppData = { 0, -1, };
-
-//uint8_t g_extern_usbd_serial_number[12 + 1] = { "123456"};
-uint8_t g_extern_usbd_product_string[40 + 1] = { "SlimeNRF Receiver BLYST840 Dongle" };
-
-#if NRF_CLI_ENABLED
-//NRF_CLI_CDC_ACM_DEF(m_cli_cdc_acm_transport);
-//#define NRF_CLI_CDC_ACM_DEF(_name_)
-static nrf_cli_cdc_acm_internal_cb_t m_cli_cdc_acm_transport_cb;
-static const nrf_cli_cdc_acm_internal_t m_cli_cdc_acm_transport = {
-	.transport = {.p_api = &nrf_cli_cdc_acm_transport_api},
-	.p_cb = &m_cli_cdc_acm_transport_cb,
-};
-
-NRF_CLI_DEF(m_cli_cdc_acm,
-            "Slime:~$ ",
-            &m_cli_cdc_acm_transport.transport,
-            '\r',
-            CLI_EXAMPLE_LOG_QUEUE_SIZE);
-#endif
 
 alignas(4) static fds_record_t const g_AppDataRecord =
 {
@@ -157,7 +134,6 @@ uint16_t AddTracker(uint64_t Addr)
 	{
 		if (Addr != 0 && g_AppData.TrackerAddr[i] == Addr)
 		{
-			//LOG_INF("Found device linked to id %d with address %012llX", i, found_addr);
 			return i;
 		}
 	}
@@ -271,8 +247,6 @@ int main(void)
 	static bool pairmode = true;
     ret_code_t err_code;
 
-	ret_code_t ret;
-
 	clocks_start();
 
 	// Update default checksum
@@ -287,17 +261,9 @@ int main(void)
 
 	g_AppData.Cs = 0 - g_AppData.Cs;
 
-    ret = nrf_cli_init(&m_cli_cdc_acm, nullptr, true, true, NRF_LOG_SEVERITY_INFO);
-    APP_ERROR_CHECK(ret);
-
 	HardwareInit();
 
     msDelay(1000);
-
-    nrf_cli_print(&m_cli_cdc_acm, "\nSlimeNRF Receiver BLYST840 Dongle");
-
-    ret = nrf_cli_start(&m_cli_cdc_acm);
-    APP_ERROR_CHECK(ret);
 
     while (true)
     {
@@ -307,57 +273,13 @@ int main(void)
         err_code = esb_init();
        // APP_ERROR_CHECK(err_code);
 
-        //bsp_board_leds_init();
         err_code = nrf_esb_start_rx();
         //APP_ERROR_CHECK(err_code);
 
         do {
-        	nrf_cli_process(&m_cli_cdc_acm);
         	__WFE();
         } while (IOPinRead(BUT_PORT, BUT_PIN) == false);
 
         pairmode != pairmode;
     }
 }
-
-void cmd_info(nrf_cli_t const * p_cli, size_t argc, char ** argv)
-{
-    nrf_cli_print(&m_cli_cdc_acm, "info");
-}
-
-void cmd_list(nrf_cli_t const * p_cli, size_t argc, char ** argv)
-{
-    nrf_cli_print(&m_cli_cdc_acm, "list");
-}
-
-void cmd_reboot(nrf_cli_t const * p_cli, size_t argc, char ** argv)
-{
-    nrf_cli_print(&m_cli_cdc_acm, "reboot");
-}
-
-void cmd_pair(nrf_cli_t const * p_cli, size_t argc, char ** argv)
-{
-    nrf_cli_print(&m_cli_cdc_acm, "pair");
-}
-
-void cmd_clear(nrf_cli_t const * p_cli, size_t argc, char ** argv)
-{
-    nrf_cli_print(&m_cli_cdc_acm, "clear");
-}
-
-void cmd_help(nrf_cli_t const * p_cli, size_t argc, char ** argv)
-{
-    nrf_cli_print(&m_cli_cdc_acm, "clear");
-}
-
-NRF_CLI_CMD_REGISTER(info, NULL, "Display device information", cmd_info);
-NRF_CLI_CMD_REGISTER(list, NULL, "List paired devices", cmd_list);
-NRF_CLI_CMD_REGISTER(reboot, NULL, "Reboot", cmd_reboot);
-NRF_CLI_CMD_REGISTER(pair, NULL, "Enter pairing mode", cmd_pair);
-NRF_CLI_CMD_REGISTER(clear, NULL, "Clear paired devices list", cmd_clear);
-NRF_CLI_CMD_REGISTER(h, NULL, "Help", cmd_help);
-NRF_CLI_CMD_REGISTER(help, NULL, "Help", cmd_help);
-
-
-
-

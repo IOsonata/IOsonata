@@ -41,6 +41,30 @@ static nrf_esb_payload_t tx_payload_timer = NRF_ESB_CREATE_PAYLOADX(0, 0, 0, 0, 
 static nrf_esb_payload_t tx_payload_sync = NRF_ESB_CREATE_PAYLOADX(0, 0, 0, 0, 0);
 uint8_t pairing_buf[8] = {0};
 static uint8_t discovered_trackers[256] = {0};
+static uint8_t sequences[256] = {0};
+
+// CRC-32K/4.2 (Koopman), poly 0x93A409EB, reflect-in false, reflect-out false,
+// xor-out 0, initial value supplied by caller. Matches the Zephyr
+// crc32_k_4_2_update used to frame the tracker motion packets.
+static uint32_t crc32_k_4_2_update(uint32_t Crc, const uint8_t *pData, size_t Len)
+{
+	for (size_t i = 0; i < Len; i++)
+	{
+		Crc ^= (uint32_t)pData[i] << 24;
+		for (int b = 0; b < 8; b++)
+		{
+			if (Crc & 0x80000000U)
+			{
+				Crc = (Crc << 1) ^ 0x93A409EBU;
+			}
+			else
+			{
+				Crc <<= 1;
+			}
+		}
+	}
+	return Crc;
+}
 
 static const uint8_t discovery_base_addr_0[4] = {0x62, 0x39, 0x8A, 0xF2};
 static const uint8_t discovery_base_addr_1[4] = {0x28, 0xFF, 0x50, 0xB8};
@@ -78,18 +102,32 @@ void nrf_esb_event_handler(nrf_esb_evt_t const * p_event)
 					case 8:	// RX Pairing Packet
 						ProcessPairing(&rxpayload);
 						break;
+					case 21:	// 16-byte payload + CRC32 (16..19) + sequence (20)
+						sequences[rxpayload.data[1]] = rxpayload.data[20];
+						/* fall through */
+					case 20:	// 16-byte payload + CRC32 (16..19)
+						{
+							uint32_t crc = crc32_k_4_2_update(0x93A409EB, rxpayload.data, 16);
+							uint32_t rcv;
+							memcpy(&rcv, &rxpayload.data[16], sizeof(rcv));	// little endian on this target
+							if (crc != rcv)
+							{
+								break;	// corrupted packet, drop
+							}
+						}
+						/* fall through */
 					case 16:
 						{
 							uint8_t imu_id = rxpayload.data[1];
 							if (discovered_trackers[imu_id] < DETECTION_THRESHOLD) // garbage filtering of nonexistent tracker
 							{
 								discovered_trackers[imu_id]++;
-								return;
+								break;
 							}
 							if (rxpayload.data[0] > 223) // reserved for receiver only
 								break;
 
-							//hid_write_packet_n(rxpayload.data, rxpayload.rssi); // write to hid endpoint
+							hid_write_packet_n(rxpayload.data, rxpayload.rssi); // write to hid endpoint
 						}
 						break;
 					default:
@@ -108,7 +146,7 @@ uint32_t esb_init()
 	int err_code;
 
     nrf_esb_config_t nrf_esb_config         = NRF_ESB_DEFAULT_CONFIG;
-    nrf_esb_config.payload_length           = 2;
+    nrf_esb_config.payload_length           = 32;	// must cover the 21-byte motion frame (16 payload + 4 CRC + 1 seq); verify NRF_ESB_MAX_PAYLOAD_LENGTH >= 32
     nrf_esb_config.protocol                 = NRF_ESB_PROTOCOL_ESB_DPL;
     nrf_esb_config.bitrate                  = NRF_ESB_BITRATE_2MBPS;
     nrf_esb_config.mode                     = NRF_ESB_MODE_PRX;
@@ -191,7 +229,7 @@ void ProcessPairing(nrf_esb_payload_t *pPayload)
 	{
 		memcpy(&found_addr, pPayload->data, 8);
 
-		nrf_cli_print(&m_cli_cdc_acm, "found_addr : %08x%08x", (uint32_t)(found_addr >> 32U), (uint32_t)(found_addr & 0xFFFFFFFFUL));
+		// pairing address logged via SysLog or LED; CDC console removed in the nrfx port
 
 		found_addr >>= 16;
 
