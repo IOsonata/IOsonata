@@ -38,7 +38,10 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_peer.h"
 
 static BtGattSrvc_t *s_pBtGattSrvcList = nullptr;
 
@@ -97,6 +100,124 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 	}
 
 	return pChar->bNotify;
+}
+
+// Build and send a server-initiated Handle Value PDU - Notification (0x1B) or
+// Indication (0x1D) - to the peer on ConnHdl. The two PDUs share the same
+// {opcode, value handle, value[]} wire layout. The value is clamped to
+// ATT_MTU - 3 and to the ACL transmit buffer. Returns the number of value
+// bytes sent, or -1 if the link is unknown or the transport refused the packet.
+static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValHdl,
+								 const void *pVal, size_t Len)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn == nullptr || pConn->pHciDev == nullptr || pConn->pHciDev->SendData == nullptr)
+	{
+		return -1;
+	}
+
+	if (Len > 0 && pVal == nullptr)
+	{
+		return -1;
+	}
+
+	// A notifiable/indicatable value carries at most ATT_MTU - 3 bytes (opcode
+	// + value handle). Fall back to the default MTU if none was negotiated.
+	uint16_t mtu = pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN ? pConn->Conn.MaxMtu : BT_ATT_MTU_MIN;
+	size_t maxData = (size_t)mtu - 3;
+	size_t bufMax = BT_HCI_BUFFER_MAX_SIZE - sizeof(BtHciACLDataPacketHdr_t) - sizeof(BtL2CapHdr_t) - 3;
+	if (maxData > bufMax)
+	{
+		maxData = bufMax;
+	}
+	if (Len > maxData)
+	{
+		Len = maxData;
+	}
+
+	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
+	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+	acl->Hdr.ConnHdl = ConnHdl;
+	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+	acl->Hdr.BCFlag = 0;
+
+	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
+	l2pdu->Att.OpCode = OpCode;
+	// HandleValueNtf and HandleValueInd overlay the same handle+data layout.
+	l2pdu->Att.HandleValueNtf.ValHdl = ValHdl;
+	if (Len > 0)
+	{
+		memcpy(l2pdu->Att.HandleValueNtf.Data, pVal, Len);
+	}
+	l2pdu->Hdr.Len = 1 + 2 + Len;	// opcode + value handle + value
+	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+	uint32_t sent = pConn->pHciDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	if (sent == 0)
+	{
+		return -1;
+	}
+
+	return (int)Len;
+}
+
+// Send a Handle Value Notification for pChar to the client on ConnHdl. No-op
+// (returns false) unless the client subscribed for notifications via the CCCD.
+// Weak so a vendor backend (e.g. SoftDevice sd_ble_gatts_hvx) can override the
+// generic HCI transmit path with a native one.
+__attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
+{
+	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID || pChar->bNotify == false)
+	{
+		return false;
+	}
+
+	return BtGattSendHandleValue(ConnHdl, BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF,
+								 pChar->ValHdl, pVal, Len) >= 0;
+}
+
+// Send a Handle Value Indication for pChar to the client on ConnHdl. Only one
+// indication may be outstanding per link until the client returns a Handle
+// Value Confirmation (Core spec Vol 3 Part F, 3.4.7.2); a second indication
+// while one is pending returns false. No-op unless the client subscribed for
+// indications via the CCCD.
+// Weak so a vendor backend can override with a native indication path.
+__attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
+{
+	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID || pChar->bIndic == false)
+	{
+		return false;
+	}
+
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn == nullptr || pConn->Conn.bIndCfmPending)
+	{
+		return false;
+	}
+
+	if (BtGattSendHandleValue(ConnHdl, BT_ATT_OPCODE_ATT_HANDLE_VALUE_IND,
+							  pChar->ValHdl, pVal, Len) < 0)
+	{
+		return false;
+	}
+
+	pConn->Conn.bIndCfmPending = true;
+	return true;
+}
+
+// Clear the outstanding-indication flag for ConnHdl when the peer's Handle
+// Value Confirmation arrives, allowing the next indication to be sent. (There
+// is no transaction timeout here yet; a peer that never confirms blocks further
+// indications on that link until it disconnects.)
+void BtGattHandleValueConfirm(uint16_t ConnHdl)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn != nullptr)
+	{
+		pConn->Conn.bIndCfmPending = false;
+	}
 }
 
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)

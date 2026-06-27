@@ -179,6 +179,7 @@ typedef struct __Bt_Gap_Connection {
 	uint8_t *pLongWrBuff;		//!< Per-link long-write reassembly buffer (NULL if none)
 	uint16_t LongWrBuffSize;	//!< Size of pLongWrBuff in bytes
 	uint16_t LongWrLen;			//!< Bytes currently queued in pLongWrBuff (prepare-write queue fill)
+	bool bIndCfmPending;		//!< An indication is awaiting the peer's Handle Value Confirmation
 } BtGapConnection_t;
 
 typedef enum __Bt_Scan_Type {

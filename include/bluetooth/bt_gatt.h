@@ -184,6 +184,8 @@ bool BtGattUpdate(uint16_t Hdl, void * const pAttVal, size_t Len);
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
+bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
+void BtGattHandleValueConfirm(uint16_t ConnHdl);
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 //void BtGattServiceInit(BtGattSrvc_t * const pSrvc);

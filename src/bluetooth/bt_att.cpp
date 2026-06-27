@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_att.h"
+#include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 
@@ -404,6 +405,11 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 					if (p->pChar->SetNotifCB)
 					{
 						p->pChar->SetNotifCB(p->pChar, p->pChar->bNotify);
+					}
+					p->pChar->bIndic = p->CccVal & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION ? true: false;
+					if (p->pChar->SetIndCB)
+					{
+						p->pChar->SetIndCB(p->pChar, p->pChar->bIndic);
 					}
 					len = 2;
 //					DEBUG_PRINTF("CccdHdl : %x\r\n", p->pChar->CccdHdl);
@@ -1051,6 +1057,9 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		case BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM:
 			{
 				//DEBUG_PRINTF("BT_ATT_OPCODE_ATT_HANDLE_VALUE_CFM:\r\n");
+				// Peer confirmed our indication; release the per-link slot so
+				// the next indication on this connection can be sent.
+				BtGattHandleValueConfirm(ConnHdl);
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD:
