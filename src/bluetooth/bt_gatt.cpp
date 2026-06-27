@@ -94,12 +94,212 @@ __attribute__((weak)) bool BtGattCharSetValue(BtGattChar_t *pChar, void * const 
 
 bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar)
 {
-	if (pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
+	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
 	{
 		return false;
 	}
 
+	// Legacy aggregate view: true when at least one connected peer enabled
+	// notification. New code should use BtGattCharNotifyEnabled(ConnHdl,...).
 	return pChar->bNotify;
+}
+
+
+static BtGattCccdState_t *BtGattCccdFind(BtDevice_t *pConn, uint16_t CccdHdl, bool bAlloc)
+{
+	if (pConn == nullptr || CccdHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return nullptr;
+	}
+
+	for (uint8_t i = 0; i < pConn->Conn.NbCccd; i++)
+	{
+		if (pConn->Conn.Cccd[i].Hdl == CccdHdl)
+		{
+			return &pConn->Conn.Cccd[i];
+		}
+	}
+
+	if (bAlloc == false || pConn->Conn.NbCccd >= BT_GATT_CCCD_STATE_MAX)
+	{
+		return nullptr;
+	}
+
+	BtGattCccdState_t *pState = &pConn->Conn.Cccd[pConn->Conn.NbCccd++];
+	pState->Hdl = CccdHdl;
+	pState->Value = 0;
+
+	return pState;
+}
+
+static BtGattChar_t *BtGattFindCharByCccd(uint16_t CccdHdl)
+{
+	if (CccdHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return nullptr;
+	}
+
+	for (BtGattSrvc_t *pSrvc = BtGattGetSrvcList(); pSrvc != nullptr; pSrvc = pSrvc->pNext)
+	{
+		for (int i = 0; i < pSrvc->NbChar; i++)
+		{
+			BtGattChar_t *pChar = &pSrvc->pCharArray[i];
+			if (pChar->CccdHdl == CccdHdl)
+			{
+				return pChar;
+			}
+		}
+	}
+
+	return nullptr;
+}
+
+static void BtGattCccdUpdateMirror(BtGattChar_t *pChar)
+{
+	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return;
+	}
+
+	bool bNotify = false;
+	bool bIndic = false;
+
+	for (uint16_t i = 0; i < BtPeerCount(); i++)
+	{
+		BtDevice_t *pPeer = BtPeerSlot(i);
+		if (pPeer == nullptr || pPeer->Conn.Hdl == BT_CONN_HDL_INVALID)
+		{
+			continue;
+		}
+
+		for (uint8_t j = 0; j < pPeer->Conn.NbCccd; j++)
+		{
+			if (pPeer->Conn.Cccd[j].Hdl == pChar->CccdHdl)
+			{
+				uint16_t v = pPeer->Conn.Cccd[j].Value;
+				bNotify = bNotify || ((v & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0);
+				bIndic = bIndic || ((v & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0);
+			}
+		}
+	}
+
+	pChar->bNotify = bNotify;
+	pChar->bIndic = bIndic;
+
+	BtAttDBEntry_t *entry = BtAttDBFindHandle(pChar->CccdHdl);
+	if (entry != nullptr)
+	{
+		BtDescClientCharConfig_t *pCccd = (BtDescClientCharConfig_t*)entry->Data;
+		pCccd->CccVal = (bNotify ? BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION : 0) |
+						 (bIndic ? BT_DESC_CLIENT_CHAR_CONFIG_INDICATION : 0);
+	}
+}
+
+uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	BtGattCccdState_t *pState = BtGattCccdFind(pConn, CccdHdl, false);
+
+	return pState != nullptr ? pState->Value : 0;
+}
+
+bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	BtGattChar_t *pChar = BtGattFindCharByCccd(CccdHdl);
+
+	if (pConn == nullptr || pChar == nullptr)
+	{
+		return false;
+	}
+
+	uint16_t oldValue = BtGattCccdGet(ConnHdl, CccdHdl);
+
+	if (Value == 0)
+	{
+		for (uint8_t i = 0; i < pConn->Conn.NbCccd; i++)
+		{
+			if (pConn->Conn.Cccd[i].Hdl == CccdHdl)
+			{
+				pConn->Conn.Cccd[i] = pConn->Conn.Cccd[pConn->Conn.NbCccd - 1];
+				pConn->Conn.NbCccd--;
+				break;
+			}
+		}
+	}
+	else
+	{
+		BtGattCccdState_t *pState = BtGattCccdFind(pConn, CccdHdl, true);
+		if (pState == nullptr)
+		{
+			return false;
+		}
+		pState->Value = Value;
+	}
+
+	BtGattCccdUpdateMirror(pChar);
+
+	bool oldNotify = (oldValue & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+	bool newNotify = (Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+	if (oldNotify != newNotify && pChar->SetNotifCB != nullptr)
+	{
+		pChar->SetNotifCB(pChar, newNotify);
+	}
+
+	bool oldIndic = (oldValue & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+	bool newIndic = (Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
+	if (oldIndic != newIndic && pChar->SetIndCB != nullptr)
+	{
+		pChar->SetIndCB(pChar, newIndic);
+	}
+
+	return true;
+}
+
+void BtGattCccdClear(uint16_t ConnHdl)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn == nullptr)
+	{
+		return;
+	}
+
+	uint8_t n = pConn->Conn.NbCccd;
+	uint16_t hdl[BT_GATT_CCCD_STATE_MAX];
+
+	for (uint8_t i = 0; i < n; i++)
+	{
+		hdl[i] = pConn->Conn.Cccd[i].Hdl;
+	}
+
+	pConn->Conn.NbCccd = 0;
+
+	for (uint8_t i = 0; i < n; i++)
+	{
+		BtGattCccdUpdateMirror(BtGattFindCharByCccd(hdl[i]));
+	}
+}
+
+bool BtGattCharNotifyEnabled(uint16_t ConnHdl, BtGattChar_t *pChar)
+{
+	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	return (BtGattCccdGet(ConnHdl, pChar->CccdHdl) &
+			BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
+}
+
+bool BtGattCharIndicateEnabled(uint16_t ConnHdl, BtGattChar_t *pChar)
+{
+	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	return (BtGattCccdGet(ConnHdl, pChar->CccdHdl) &
+			BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
 }
 
 // Build and send a server-initiated Handle Value PDU - Notification (0x1B) or
@@ -169,7 +369,8 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 // generic HCI transmit path with a native one.
 __attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID || pChar->bNotify == false)
+	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID ||
+		BtGattCharNotifyEnabled(ConnHdl, pChar) == false)
 	{
 		return false;
 	}
@@ -186,7 +387,8 @@ __attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pCha
 // Weak so a vendor backend can override with a native indication path.
 __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID || pChar->bIndic == false)
+	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID ||
+		BtGattCharIndicateEnabled(ConnHdl, pChar) == false)
 	{
 		return false;
 	}

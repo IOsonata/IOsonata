@@ -187,6 +187,12 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
 
+uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl);
+bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
+void BtGattCccdClear(uint16_t ConnHdl);
+bool BtGattCharNotifyEnabled(uint16_t ConnHdl, BtGattChar_t *pChar);
+bool BtGattCharIndicateEnabled(uint16_t ConnHdl, BtGattChar_t *pChar);
+
 /**
  * @brief	Client-role receive hook. Called when a Handle Value Notification or
  *			Indication arrives from a peer. ValHdl is the peer characteristic

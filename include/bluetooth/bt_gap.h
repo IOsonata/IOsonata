@@ -141,6 +141,14 @@ SOFTWARE.
 
 #define BT_GAP_SCAN_BUFFER_SIZE_DEFAULT					(256*4)
 
+#ifndef BT_GATT_CCCD_STATE_MAX
+#define BT_GATT_CCCD_STATE_MAX						8
+#endif
+
+typedef struct __Bt_Gatt_Cccd_State {
+	uint16_t Hdl;				//!< CCCD attribute handle
+	uint16_t Value;				//!< Per-peer CCCD value for Hdl
+} BtGattCccdState_t;
 
 typedef enum __Bt_Gap_SecType {
 	BTGAP_SECTYPE_NONE = BT_GAP_SECTYPE_NONE,
@@ -181,6 +189,8 @@ typedef struct __Bt_Gap_Connection {
 	uint16_t LongWrLen;			//!< Bytes currently queued in pLongWrBuff (prepare-write queue fill)
 	bool bIndCfmPending;		//!< An indication is awaiting the peer's Handle Value Confirmation
 	uint32_t IndCfmTime;		//!< BtGattMsTick() value when the outstanding indication was sent (for the 30s transaction timeout)
+	uint8_t NbCccd;				//!< Number of active per-peer CCCD states
+	BtGattCccdState_t Cccd[BT_GATT_CCCD_STATE_MAX];	//!< Per-peer CCCD values keyed by CCCD handle
 } BtGapConnection_t;
 
 typedef enum __Bt_Scan_Type {
