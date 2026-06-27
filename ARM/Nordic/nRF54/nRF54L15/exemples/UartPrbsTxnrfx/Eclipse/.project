@@ -93,12 +93,12 @@
 		<link>
 			<name>src/nrfx/mdk/gcc_startup_nrf54l15_application.S</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/bsp/stable/mdk/gcc_startup_nrf54l15_application.S</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/bsp/stable/mdk/nrf54l/nrf54l15/gcc_startup_nrf54l15_application.S</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/mdk/system_nrf54l.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/bsp/stable/mdk/system_nrf54l.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrfx/bsp/stable/mdk/nrf54l/system_nrf54l.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/soc/nrfx_atomic.c</name>
