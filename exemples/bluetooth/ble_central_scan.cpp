@@ -36,12 +36,11 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
-//#include "bluetooth/bt_gap.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
-#include "stddev.h"
+
 #include "board.h"
 
 //#define DUMP_MAN_SPEC_DATA
