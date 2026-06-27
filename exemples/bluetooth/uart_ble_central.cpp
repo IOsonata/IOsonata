@@ -108,7 +108,7 @@ uint32_t g_DropCnt = 0;
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void BleTxSchedHandler(uint32_t Evt, void *pCtx);
 
-IOPinCfg_t s_Leds[] = LED_PIN_MAP;
+static const IOPinCfg_t s_Leds[] = LED_PINS;
 static int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
 const BtAppCfg_t s_BleAppCfg = {
@@ -135,9 +135,9 @@ const BtAppCfg_t s_BleAppCfg = {
 											// slow interval on adv timeout and advertise until connected
 	.ConnIntervalMin = MIN_CONN_INTERVAL,
 	.ConnIntervalMax = MAX_CONN_INTERVAL,
-	.ConnLedPort = LED_BLUE_PORT,			// Led port nuber
-	.ConnLedPin = LED_BLUE_PIN,				// Led pin number
-	.ConnLedActLevel = 0,					// Connection LED ON logic level (0: Logic low, 1: Logic high)
+	.ConnLedPort = CONNECT_LED_PORT,			// Led port nuber
+	.ConnLedPin = CONNECT_LED_PIN,				// Led pin number
+	.ConnLedActLevel = CONNECT_LED_LOGIC,
 	.TxPower = 0,							// Tx power
 	.MaxMtu = BLE_MTU_SIZE,
 };
@@ -259,30 +259,6 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 	return true; // keep scanning
 }
 
-void HardwareInit()
-{
-	g_Uart.Init(g_UartCfg);
-
-	IOPinCfg(s_Leds, s_NbLeds);
-	IOPinSet(LED_BLUE_PORT, LED_BLUE_PIN);
-	IOPinSet(LED_GREEN_PORT, LED_GREEN_PIN);
-	IOPinSet(LED_RED_PORT, LED_RED_PIN);
-	IOPinSet(LED4_PORT, LED4_PIN);
-
-	// Retarget printf to uart if semihosting is not used
-	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
-#ifdef DEBUG_PRINT
-	g_Uart.printf("UART BLE Central Demo\r\n");
-	msDelay(10);
-	g_Uart.printf("UART Configuration: Baudrate %d, FLow Control (%s), Parity (%s)\r\n",
-			g_UartCfg.Rate,
-			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "No" : "Yes",
-			(g_UartCfg.Parity == UART_PARITY_NONE) ? "No" : "Yes");
-#endif
-
-	// Init CFIFO instance
-	g_UartRx2BleFifo = CFifoInit(g_UartRx2BleBuff, BLEFIFOSIZE, 1, true);
-}
 
 void BleAppInitUserData()
 {
@@ -351,7 +327,7 @@ void BleTxSchedHandler(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 
-	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
+	IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
 
 	int len = PACKET_SIZE;
 	uint8_t *p = CFifoGetMultiple(g_UartRx2BleFifo, &len);
@@ -367,7 +343,7 @@ void BleTxSchedHandler(uint32_t Evt, void *pCtx)
 		AppEvtHandlerQue(0, NULL, BleTxSchedHandler);
 	}
 
-	IOPinToggle(LED_RED_PORT, LED_RED_PIN);
+	IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
 }
 
 void UartRxSchedHandler(uint32_t Evt, void *pCtx)
@@ -454,6 +430,32 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	}
 
 	return cnt;
+}
+
+void HardwareInit()
+{
+	g_Uart.Init(g_UartCfg);
+
+	IOPinCfg(s_Leds, s_NbLeds);
+
+	for (int i = 0; i < s_NbLeds; i++)
+	{
+		IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
+	}
+
+	// Retarget printf to uart if semihosting is not used
+	//UARTRetargetEnable(g_Uart, STDOUT_FILENO);
+#ifdef DEBUG_PRINT
+	g_Uart.printf("UART BLE Central Demo\r\n");
+	msDelay(10);
+	g_Uart.printf("UART Configuration: Baudrate %d, FLow Control (%s), Parity (%s)\r\n",
+			g_UartCfg.Rate,
+			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "No" : "Yes",
+			(g_UartCfg.Parity == UART_PARITY_NONE) ? "No" : "Yes");
+#endif
+
+	// Init CFIFO instance
+	g_UartRx2BleFifo = CFifoInit(g_UartRx2BleBuff, BLEFIFOSIZE, 1, true);
 }
 
 //
