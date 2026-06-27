@@ -682,6 +682,64 @@ static bool SmpTryStartDhKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	return true;
 }
 
+// Send the local SC public key PDU (coordinates little-endian on air).
+static void SmpSendLocalPubKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+							   uint16_t ConnHdl)
+{
+	BtSmpPublicKey_t pk;
+	pk.Code = BT_SMP_CODE_PAIRING_PUBLIC_KEY;
+	for (int i = 0; i < 32; i++)
+	{
+		pk.KeyX[i] = pLink->Ctx.LocalPubKey[31 - i];
+		pk.KeyY[i] = pLink->Ctx.LocalPubKey[32 + 31 - i];
+	}
+	SmpSend(pDev, ConnHdl, &pk, sizeof(pk));
+}
+
+// Initiator (central) only: handle the responder's Pairing Response. Caches the
+// negotiated parameters and, once the local public key is available, sends it.
+static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+								uint16_t ConnHdl, const BtSmpPairingRsp_t *pRsp)
+{
+	if (!pLink->Ctx.bInitiator)
+	{
+		// We are the responder; a Pairing Response is not expected.
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CMD_NOT_SUPPORTED);
+		return;
+	}
+
+	if (pRsp->MaxKeySize < BT_SMP_MIN_ENC_KEY_SIZE ||
+		pRsp->MaxKeySize > BT_SMP_MAX_ENC_KEY_SIZE)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_ENC_KEY_SIZE);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
+
+	// LE Secure Connections only build.
+	if (!(pRsp->AuthReq & BT_SMP_AUTHREQ_SC))
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
+
+	memcpy(pLink->Ctx.PRsp, pRsp, 7);
+	pLink->Ctx.PeerAuthReq = pRsp->AuthReq;
+	pLink->Ctx.bSc = true;
+	pLink->Keys.EncKeySize = pRsp->MaxKeySize < BT_SMP_MAX_ENC_KEY_SIZE ?
+							 pRsp->MaxKeySize : BT_SMP_MAX_ENC_KEY_SIZE;
+
+	// The initiator sends its public key after the Pairing Response. If the
+	// local P-256 key is not ready yet, BtSmpLocalPubKeyReady sends it.
+	if (SmpKeyPresent(pLink->Ctx.LocalPubKey, sizeof(pLink->Ctx.LocalPubKey)))
+	{
+		SmpSendLocalPubKey(pDev, pLink, ConnHdl);
+		pLink->Ctx.State = BT_SMP_STATE_PUBKEY_WAIT;
+	}
+	// else stay PUBKEY_LOCAL_WAIT; LocalPubKeyReady will send it.
+}
+
 static void SmpHandlePublicKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 							   uint16_t ConnHdl, const BtSmpPublicKey_t *pPk)
 {
@@ -691,6 +749,24 @@ static void SmpHandlePublicKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	{
 		pLink->Ctx.PeerPubKey[i]      = pPk->KeyX[31 - i];
 		pLink->Ctx.PeerPubKey[32 + i] = pPk->KeyY[31 - i];
+	}
+
+	if (pLink->Ctx.bInitiator)
+	{
+		// Initiator already sent its public key (after Pairing Response). On the
+		// responder's public key, just start ECDH; do not resend.
+		pLink->Ctx.State = BT_SMP_STATE_DHKEY_WAIT;
+		int rc = BtSmpCryptoEcdh(pDev, pLink->Ctx.PeerPubKey, pLink->Ctx.DhKey);
+		if (rc == BT_SMP_CRYPTO_OK)
+		{
+			BtSmpDhKeyReady(pDev, 0, pLink->Ctx.DhKey);
+		}
+		else if (rc == BT_SMP_CRYPTO_FAIL)
+		{
+			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+			pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		}
+		return;
 	}
 
 	if (!SmpTryStartDhKey(pDev, pLink, ConnHdl))
@@ -704,6 +780,18 @@ static void SmpHandlePairingConfirm(BtHciDevice_t * const pDev, BtSmpLink_t *pLi
 									uint16_t ConnHdl, const BtSmpPairingConfirm_t *pC)
 {
 	memcpy(pLink->Ctx.PeerConfirm, pC->Value, 16);
+
+	if (pLink->Ctx.bInitiator)
+	{
+		// Initiator (SC Just Works): received the responder Confirm Cb. Reply
+		// with our nonce Na. Cb is verified later against Nb in PairingRandom.
+		BtSmpPairingRandom_t rnd;
+		rnd.Code = BT_SMP_CODE_PAIRING_RANDOM;
+		memcpy(rnd.Value, pLink->Ctx.LocalRand, 16);
+		SmpSend(pDev, ConnHdl, &rnd, sizeof(rnd));
+		pLink->Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
+		return;
+	}
 
 	if (pLink->Ctx.bSc)
 	{
@@ -749,6 +837,58 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	{
 		memcpy(peerAddr, pPeer->Conn.PeerAddr, 6);
 		peerAddrType = pPeer->Conn.PeerAddrType;
+	}
+
+	if (pLink->Ctx.bInitiator)
+	{
+		// Initiator (SC Just Works): received responder nonce Nb. First verify
+		// the responder Confirm Cb = f4(PKbx, PKax, Nb, 0).
+		uint8_t localX[32];
+		uint8_t peerX[32];
+		SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], localX);	// PKax
+		SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], peerX);		// PKbx
+
+		uint8_t cb[16];
+		SmpF4(peerX, localX, pLink->Ctx.PeerRand, 0, cb);
+		if (!SmpEqualCT(cb, pLink->Ctx.PeerConfirm, 16))
+		{
+			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+			pLink->Ctx.State = BT_SMP_STATE_IDLE;
+			return;
+		}
+
+		uint8_t localAddr[6];
+		uint8_t localAddrType = 0;
+		BtSmpLocalAddrGet(&localAddrType, localAddr);
+
+		uint8_t dhKeySmp[32];
+		SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
+
+		// f5(DHKey, Na, Nb, A1=initiator(local), A2=responder(peer)).
+		SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+			  localAddrType, localAddr, peerAddrType, peerAddr,
+			  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+
+		memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
+		pLink->Keys.bSc = true;
+		pLink->Keys.bValid = true;
+		SmpApplyKeySize(&pLink->Keys);
+
+		// Ea = f6(MacKey, Na, Nb, 0, IOcapA, A=initiator(local), B=responder(peer)).
+		uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
+		uint8_t zeroR[16] = {0};
+		uint8_t ea[16];
+		SmpF6(pLink->Ctx.Mackey, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+			  zeroR, iocapA,
+			  localAddrType, localAddr, peerAddrType, peerAddr, ea);
+
+		BtSmpDhKeyCheck_t chk;
+		chk.Code = BT_SMP_CODE_PAIRING_DHKEY_CHECK;
+		memcpy(chk.Value, ea, 16);
+		SmpSend(pDev, ConnHdl, &chk, sizeof(chk));
+
+		pLink->Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
+		return;
 	}
 
 	if (pLink->Ctx.bSc)
@@ -825,6 +965,31 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
 	BtSmpLocalAddrGet(&localAddrType, localAddr);
+
+	if (pLink->Ctx.bInitiator)
+	{
+		// Initiator: the peer sent its DHKey Check Eb. Verify it:
+		// Eb = f6(MacKey, Nb, Na, 0, IOcapB, B=responder(peer), A=initiator(local)).
+		uint8_t iocapB[3] = { pLink->Ctx.PRsp[1], pLink->Ctx.PRsp[2], pLink->Ctx.PRsp[3] };
+		uint8_t zeroR[16] = {0};
+		uint8_t eb[16];
+		SmpF6(pLink->Ctx.Mackey, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
+			  zeroR, iocapB,
+			  peerAddrType, peerAddr, localAddrType, localAddr, eb);
+
+		if (!SmpEqualCT(eb, pChk->Value, 16))
+		{
+			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+			pLink->Ctx.State = BT_SMP_STATE_IDLE;
+			return;
+		}
+
+		// Authentication complete. As the central, start link encryption from
+		// the derived LTK (SC: Rand and EDIV are zero).
+		pLink->Ctx.State = BT_SMP_STATE_LTK_WAIT;
+		BtSmpHciEnableEncryption(pDev, ConnHdl, 0, 0, pLink->Keys.Ltk);
+		return;
+	}
 
 	uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
 	uint8_t iocapB[3] = { pLink->Ctx.PRsp[1], pLink->Ctx.PRsp[2], pLink->Ctx.PRsp[3] };
@@ -988,6 +1153,10 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			SmpHandlePairingReq(pDev, pLink, ConnHdl, (const BtSmpPairingReq_t*)pSmp);
 			break;
 
+		case BT_SMP_CODE_PAIRING_RSP:
+			SmpHandlePairingRsp(pDev, pLink, ConnHdl, (const BtSmpPairingRsp_t*)pSmp);
+			break;
+
 		case BT_SMP_CODE_PAIRING_PUBLIC_KEY:
 			SmpHandlePublicKey(pDev, pLink, ConnHdl, (const BtSmpPublicKey_t*)pSmp);
 			break;
@@ -1038,6 +1207,9 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		}
 
 		case BT_SMP_CODE_PAIRING_SECURITY_REQ:
+			// A peripheral is asking us (the central) to secure the link. Start
+			// pairing or re-encrypt from a bond. Idempotent if already running.
+			BtSmpStartPairing(ConnHdl);
 			break;
 
 		default:
@@ -1061,7 +1233,8 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 			continue;
 		}
 
-		if (pLink->Ctx.State != BT_SMP_STATE_PUBKEY_WAIT)
+		if (pLink->Ctx.State != BT_SMP_STATE_PUBKEY_WAIT &&
+			pLink->Ctx.State != BT_SMP_STATE_PUBKEY_LOCAL_WAIT)
 		{
 			continue;
 		}
@@ -1075,6 +1248,18 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 
 		memcpy(&pLink->Ctx.LocalPubKey[0],  pKeyX, 32);
 		memcpy(&pLink->Ctx.LocalPubKey[32], pKeyY, 32);
+
+		if (pLink->Ctx.bInitiator)
+		{
+			// Initiator: send our public key once the Pairing Response has
+			// arrived (PRsp cached). If not yet, SmpHandlePairingRsp sends it.
+			if (pLink->Ctx.PRsp[0] == BT_SMP_CODE_PAIRING_RSP)
+			{
+				SmpSendLocalPubKey(pDev, pLink, pLink->ConnHdl);
+				pLink->Ctx.State = BT_SMP_STATE_PUBKEY_WAIT;
+			}
+			continue;
+		}
 
 		if (!SmpTryStartDhKey(pDev, pLink, pLink->ConnHdl))
 		{
@@ -1107,6 +1292,15 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		}
 
 		memcpy(pLink->Ctx.DhKey, pDhKey, 32);
+
+		if (pLink->Ctx.bInitiator)
+		{
+			// Initiator (SC Just Works): generate our nonce Na and wait for the
+			// responder Confirm Cb. The initiator does not send a Confirm.
+			BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);
+			pLink->Ctx.State = BT_SMP_STATE_CONFIRM_WAIT;
+			continue;
+		}
 
 		// LE Secure Connections responder:
 		// Cb = f4(PKbx, PKax, Nb, 0)
@@ -1206,16 +1400,19 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 	if (pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT)
 	{
-		// Encrypted. Run the key distribution phase the peer negotiated
-		// (ResponderKeyDist = PRsp[6]). For SC the LTK is derived (EncKey is
-		// never distributed); we send IRK + identity address (IDKEY) and/or
-		// CSRK (SIGNKEY) only if negotiated. The peer's pairing procedure does
-		// not complete until it has received the responder keys it expects.
-		uint8_t respKeyDist = pLink->Ctx.PRsp[6] &
-							  (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
-		SMP_TRACE("SMP encrypted, distribute rk=%02x\r\n", respKeyDist);
+		// Encrypted via fresh pairing. Run the key distribution phase that was
+		// negotiated. The local device distributes the keys it offered:
+		// InitiatorKeyDist (PReq[6 of req = byte 5]) when we are the central,
+		// ResponderKeyDist (PRsp[6]) when we are the peripheral. For SC the LTK
+		// is derived (EncKey is never distributed); we send IRK + identity
+		// address (IDKEY) and/or CSRK (SIGNKEY) only if negotiated.
+		uint8_t localKeyDist = (pLink->Ctx.bInitiator ?
+									pLink->Ctx.PReq[5] : pLink->Ctx.PRsp[6]) &
+							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
+		SMP_TRACE("SMP encrypted, distribute lk=%02x init=%d\r\n",
+				  localKeyDist, pLink->Ctx.bInitiator ? 1 : 0);
 
-		if (respKeyDist & BT_SMP_KEYDIST_IDKEY)
+		if (localKeyDist & BT_SMP_KEYDIST_IDKEY)
 		{
 			uint8_t irk[16];
 			BtSmpCryptoRand(irk, 16);
@@ -1233,7 +1430,7 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			SmpSend(pDev, ConnHdl, &iai, sizeof(iai));
 		}
 
-		if (respKeyDist & BT_SMP_KEYDIST_SIGNKEY)
+		if (localKeyDist & BT_SMP_KEYDIST_SIGNKEY)
 		{
 			uint8_t csrk[16];
 			BtSmpCryptoRand(csrk, 16);
@@ -1245,6 +1442,12 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 		pLink->Ctx.State = BT_SMP_STATE_DONE;
 		BtSmpBondAdd(ConnHdl, &pLink->Keys);
+		BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
+	}
+	else if (pLink->Ctx.State == BT_SMP_STATE_DONE)
+	{
+		// Encrypted from an existing bond (central reconnect). No key
+		// distribution; just surface the secured link to the app.
 		BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
 	}
 }
@@ -1360,6 +1563,29 @@ extern "C" int BtSmpCryptoSelfTest(void)
 // reply through its real HCI command channel (e.g. the SDC command function).
 // The weak default uses the generic HCI command builder, which is correct for
 // transports where the HCI command and ACL data share one sink.
+
+// Central-only: start link encryption from a (just-derived or stored) LTK via
+// HCI LE Enable Encryption. The peripheral instead waits for the controller's
+// LTK request and answers BtSmpHciLtkReply. For SC the Rand/Ediv are zero. The
+// LTK is little-endian (HCI order). Weak: the active stack overrides this to use
+// its real HCI command channel (the SDC command function), same as LtkReply.
+__attribute__((weak))
+void BtSmpHciEnableEncryption(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+							 uint64_t Rand, uint16_t Ediv, const uint8_t Ltk[16])
+{
+	uint8_t param[28];
+	param[0] = (uint8_t)(ConnHdl & 0xFF);
+	param[1] = (uint8_t)(ConnHdl >> 8);
+	for (int i = 0; i < 8; i++)
+	{
+		param[2 + i] = (uint8_t)(Rand >> (8 * i));
+	}
+	param[10] = (uint8_t)(Ediv & 0xFF);
+	param[11] = (uint8_t)(Ediv >> 8);
+	memcpy(&param[12], Ltk, 16);
+	SmpSendHciCmd(pDev, BT_HCI_CMD_CTLR_ENABLE_ENCRYPTION, param, sizeof(param));
+}
+
 __attribute__((weak))
 void BtSmpHciLtkReply(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 					  const uint8_t Ltk[16])
@@ -1432,6 +1658,84 @@ extern "C" void BtSmpRequestSecurity(uint16_t ConnHdl)
 	req.AuthReq = (uint8_t)(BT_SMP_LOCAL_AUTHREQ & ~BT_SMP_AUTHREQ_KEYPRESS);
 	SMP_TRACE("SMP TX SecurityReq auth=0x%02x\r\n", req.AuthReq);
 	SmpSend(pDev, ConnHdl, &req, sizeof(req));
+}
+
+extern "C" void BtSmpStartPairing(uint16_t ConnHdl)
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
+	{
+		return;
+	}
+	BtHciDevice_t *pDev = (BtHciDevice_t*)pPeer->pHciDev;
+	s_pSmpActiveDev = pDev;
+
+	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
+	if (pLink == nullptr)
+	{
+		pLink = SmpLinkAlloc(ConnHdl);
+		if (pLink == nullptr)
+		{
+			return;
+		}
+	}
+
+	// Idempotent: if pairing/encryption already started on this link, do not
+	// restart it (e.g. a Security Request arriving after we began on connect).
+	if (pLink->Ctx.State != BT_SMP_STATE_IDLE)
+	{
+		return;
+	}
+
+	// Bonded reconnect: re-encrypt from a stored SC bond, matched by the peer
+	// address (SC bonds carry EDIV/Rand zero), instead of pairing again. No key
+	// distribution runs on reconnect, so go straight to DONE before enabling
+	// encryption; BtSmpEncryptionChanged completes it.
+	extern bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
+								   uint16_t Ediv, uint8_t Ltk[16]);
+	uint8_t ltk[16];
+	if (BtSmpBondLtkLookup(ConnHdl, 0, 0, ltk))
+	{
+		memcpy(pLink->Keys.Ltk, ltk, 16);
+		pLink->Keys.bValid = true;
+		pLink->Keys.bSc = true;
+		pLink->Ctx.bInitiator = true;
+		pLink->Ctx.State = BT_SMP_STATE_DONE;
+		SMP_TRACE("SMP central reconnect, encrypt from bond\r\n");
+		BtSmpHciEnableEncryption(pDev, ConnHdl, 0, 0, ltk);
+		return;
+	}
+
+	// Fresh pairing as initiator (central). Send Pairing Request and request the
+	// local P-256 key. The responder's Pairing Response drives the public-key
+	// send (SmpHandlePairingRsp / BtSmpLocalPubKeyReady). LE Secure Connections,
+	// Just Works only.
+	pLink->Ctx.bInitiator = true;
+	pLink->Ctx.bSc = true;
+
+	BtSmpPairingReq_t req;
+	req.Code = BT_SMP_CODE_PAIRING_REQ;
+	req.IOCaps = BT_SMP_LOCAL_IOCAPS;
+	req.OOBFlag = BT_SMP_OOB_AUTH_NOT_PRESENT;
+	req.AuthReq = (uint8_t)(BT_SMP_LOCAL_AUTHREQ & ~BT_SMP_AUTHREQ_KEYPRESS);
+	req.MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
+	req.InitiatorKeyDist = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+	req.ResponderKeyDist = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
+
+	memcpy(pLink->Ctx.PReq, &req, 7);
+	pLink->Ctx.IoCaps = req.IOCaps;
+	pLink->Ctx.AuthReq = req.AuthReq;
+
+	SMP_TRACE("SMP TX PairingReq (initiator) auth=0x%02x\r\n", req.AuthReq);
+	SmpSend(pDev, ConnHdl, &req, sizeof(req));
+
+	pLink->Ctx.State = BT_SMP_STATE_PUBKEY_LOCAL_WAIT;
+	int rc = BtSmpCryptoP256KeyGen(pDev, pLink->Ctx.LocalPubKey);
+	if (rc == BT_SMP_CRYPTO_FAIL)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+	}
 }
 
 extern "C" void BtSmpDisconnected(uint16_t ConnHdl)

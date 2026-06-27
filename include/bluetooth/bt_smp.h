@@ -295,6 +295,16 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 void BtSmpRequestSecurity(uint16_t ConnHdl);
 
 /**
+ * @brief	Central-initiated security (SMP initiator role). Call from the
+ *			connection-established hook when the local device is the central and
+ *			wants a secure/bonded link. If a Secure Connections bond already
+ *			exists for the peer address it re-encrypts from the stored LTK;
+ *			otherwise it sends a Pairing Request and runs the SC initiator
+ *			exchange. This build is LE Secure Connections, Just Works only.
+ */
+void BtSmpStartPairing(uint16_t ConnHdl);
+
+/**
  * @brief	Initialise the SMP layer and compose its crypto from engines.
  *
  * SMP needs two composed primitives - ECDH (P-256) and AES-128 ECB - each
@@ -353,6 +363,16 @@ int  BtSmpCryptoSelfTest(void);
 void BtSmpHciLtkReply(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 					  const uint8_t Ltk[16]);
 void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl);
+
+/**
+ * @brief	Backend hook to start link encryption as the central via HCI LE
+ *			Enable Encryption. Sends an HCI COMMAND (not ACL data); the active
+ *			backend overrides it to use its real HCI command channel (e.g. the
+ *			SDC sdc_hci_cmd_le_enable_encryption function). For SC, Rand and Ediv
+ *			are zero.
+ */
+void BtSmpHciEnableEncryption(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+							  uint64_t Rand, uint16_t Ediv, const uint8_t Ltk[16]);
 
 /**
  * @brief	Notify SMP that the controller produced the local P-256 key.

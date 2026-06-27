@@ -137,6 +137,38 @@ extern "C" void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl
 	sdc_hci_cmd_le_long_term_key_request_negative_reply(&cmd, &ret);
 }
 
+// Central-role link encryption. Routes HCI LE Enable Encryption through the real
+// SDC command function. LE Enable Encryption returns Command Status (no return
+// parameter struct). For SC the random number and EDIV are zero.
+extern "C" void BtSmpHciEnableEncryption(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+										 uint64_t Rand, uint16_t Ediv, const uint8_t Ltk[16])
+{
+	(void)pDev;
+	sdc_hci_cmd_le_enable_encryption_t cmd;
+	cmd.conn_handle = ConnHdl;
+	for (int i = 0; i < 8; i++)
+	{
+		cmd.random_number[i] = (uint8_t)(Rand >> (8 * i));
+	}
+	cmd.encrypted_diversifier[0] = (uint8_t)(Ediv & 0xFF);
+	cmd.encrypted_diversifier[1] = (uint8_t)(Ediv >> 8);
+	memcpy(cmd.long_term_key, Ltk, 16);
+	sdc_hci_cmd_le_enable_encryption(&cmd);
+}
+
+// Surface a secured link (fresh pairing or bonded reconnect) to the application.
+// The generic SMP engine calls this on every successful encryption; translate it
+// to the port-neutral BtAppEvtSecured hook the example gates discovery on.
+extern "C" void BtSmpPairingComplete(uint16_t ConnHdl, bool Success,
+									 const BtSmpKeys_t *pKeys)
+{
+	(void)pKeys;
+	if (Success)
+	{
+		BtAppEvtSecured(ConnHdl);
+	}
+}
+
 static BtHciDevice_t s_BtHciDev = {
 	.pCtx = (void*)&g_BtAppData,
 	.SendData = BtAppSendData,
@@ -276,12 +308,20 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
 	}
 
-	// If a secure SecType was configured, the SDC backend requests security on
-	// the link itself (host-driven SMP). Backend-internal so the application
-	// stays SDK-neutral - it does not call any backend-specific function.
+	// If a secure SecType was configured, secure the link. As the central we
+	// initiate pairing (or re-encrypt from a bond); as the peripheral we send a
+	// Security Request. Host-driven SMP, internal so the application stays
+	// SDK-neutral - it does not call any stack-specific function.
 	if (g_BtAppData.AppDevice.bSecure)
 	{
-		BtSmpRequestSecurity(ConnHdl);
+		if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+		{
+			BtSmpStartPairing(ConnHdl);
+		}
+		else
+		{
+			BtSmpRequestSecurity(ConnHdl);
+		}
 	}
 
 	BtAppEvtConnected(ConnHdl);
