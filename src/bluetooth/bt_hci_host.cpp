@@ -371,6 +371,95 @@ static void BtHciReasmReset(uint16_t ConnHdl)
 	}
 }
 
+// Configure the controller's LE ACL buffer parameters. Clamps the packet
+// length to what a single host buffer can hold.
+void BtHciSetLeAclBuffer(BtHciDevice_t * const pDev, uint16_t MaxLen, uint8_t PktCount)
+{
+	if (pDev == nullptr)
+	{
+		return;
+	}
+
+	uint16_t cap = (uint16_t)(BT_HCI_BUFFER_MAX_SIZE - sizeof(BtHciACLDataPacketHdr_t));
+	if (MaxLen > cap)
+	{
+		MaxLen = cap;
+	}
+
+	pDev->AclMaxLen = MaxLen;
+	pDev->AclCreditMax = PktCount;
+	pDev->AclCredit = (int16_t)PktCount;
+}
+
+uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pAcl)
+{
+	if (pDev == nullptr || pDev->SendData == nullptr || pAcl == nullptr)
+	{
+		return 0;
+	}
+
+	uint16_t l2Len = (uint16_t)pAcl->Hdr.Len;	// L2CAP PDU bytes (header + payload)
+
+	// Single-packet path: used when fragmentation is not configured or the PDU
+	// already fits one ACL data packet. Byte-for-byte the prior behaviour, plus
+	// a credit gate when flow control is configured.
+	if (pDev->AclMaxLen == 0 || l2Len <= pDev->AclMaxLen)
+	{
+		if (pDev->AclCreditMax > 0)
+		{
+			if (pDev->AclCredit <= 0)
+			{
+				return 0;					// no controller buffer available
+			}
+			pDev->AclCredit--;
+		}
+
+		return pDev->SendData((uint8_t*)pAcl, (uint32_t)l2Len + sizeof(pAcl->Hdr));
+	}
+
+	// Fragmentation path: split the L2CAP PDU across ACL packets of at most
+	// AclMaxLen payload bytes. The first carries a START boundary flag, the rest
+	// CONTINUING. Reserve all credits up front so a partial PDU is never left in
+	// the controller waiting for fragments that cannot be sent.
+	uint16_t nFrag = (uint16_t)((l2Len + pDev->AclMaxLen - 1) / pDev->AclMaxLen);
+
+	if (pDev->AclCreditMax > 0 && pDev->AclCredit < (int16_t)nFrag)
+	{
+		return 0;
+	}
+
+	uint8_t fbuf[BT_HCI_BUFFER_MAX_SIZE];
+	BtHciACLDataPacket_t *frag = (BtHciACLDataPacket_t*)fbuf;
+	const uint8_t *src = pAcl->Data;
+	uint16_t off = 0;
+
+	while (off < l2Len)
+	{
+		uint16_t chunk = (uint16_t)(l2Len - off);
+		if (chunk > pDev->AclMaxLen)
+		{
+			chunk = pDev->AclMaxLen;
+		}
+
+		frag->Hdr.ConnHdl = pAcl->Hdr.ConnHdl;
+		frag->Hdr.PBFlag = (off == 0) ? BT_HCI_PBFLAG_START_NONFLUSHABLE
+									  : BT_HCI_PBFLAG_CONTINUING_FRAGMENT;
+		frag->Hdr.BCFlag = 0;
+		frag->Hdr.Len = chunk;
+		memcpy(frag->Data, src + off, chunk);
+
+		if (pDev->AclCreditMax > 0)
+		{
+			pDev->AclCredit--;
+		}
+		pDev->SendData((uint8_t*)frag, (uint32_t)chunk + sizeof(frag->Hdr));
+
+		off = (uint16_t)(off + chunk);
+	}
+
+	return (uint32_t)l2Len + sizeof(pAcl->Hdr);
+}
+
 void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 {
 	//DEBUG_PRINTF("### BtHciProcessEvent %x ###\r\n", pEvtPkt->Hdr.Evt);
@@ -454,9 +543,21 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 //				{
 //					DEBUG_PRINTF("Hdl: %x - NbPkt: %d\r\n", p->Completed[i].Hdl, p->Completed[i].NbPkt);
 //				}
-				if (pDev->SendCompleted)
+				for (int i = 0; i < p->NbHdl; i++)
 				{
-					for (int i = 0; i < p->NbHdl; i++)
+					// Replenish ACL TX credits for completed packets when flow
+					// control is configured. Independent of SendCompleted so
+					// credits recover even with no completion callback wired.
+					if (pDev->AclCreditMax > 0)
+					{
+						pDev->AclCredit += p->Completed[i].NbPkt;
+						if (pDev->AclCredit > pDev->AclCreditMax)
+						{
+							pDev->AclCredit = pDev->AclCreditMax;
+						}
+					}
+
+					if (pDev->SendCompleted)
 					{
 						pDev->SendCompleted(p->Completed[i].Hdl, p->Completed[i].NbPkt);
 					}
@@ -703,7 +804,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 					"ATT TX rsp=0x%02x (req=0x%02x) len=%d\r\n",
 					l2pdu->Att.OpCode, l2rcv->Att.OpCode, l2pdu->Hdr.Len);
 
-				uint32_t sent = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+				uint32_t sent = BtHciSendAcl(pDev, acl);
 				if (sent == 0)
 				{
 					SysLogPrintf(SysLogGet(),
@@ -739,7 +840,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 				l2pdu->Hdr.Cid = BT_L2CAP_CID_SIGNAL;
 				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-				uint32_t sent = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+				uint32_t sent = BtHciSendAcl(pDev, acl);
 				if (sent == 0)
 				{
 					SysLogPrintf(SysLogGet(),
@@ -806,7 +907,7 @@ void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, 
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
 //	DEBUG_PRINTF("Len : %d, %d, %d\r\n", Len, l2pdu->Hdr.Len, acl->Hdr.Len);
-	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	BtHciSendAcl(pDev, acl);
 	s_NbPktSent++;
 //	DEBUG_PRINTF("... \r\n");
 }

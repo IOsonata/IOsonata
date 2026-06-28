@@ -706,6 +706,9 @@ struct __Bt_Hci_Device {
 	void *pCtx;
 	uint32_t RxDataLen;
 	uint32_t TxDataLen;
+	uint16_t AclMaxLen;		//!< Controller LE ACL data packet length. 0 leaves TX fragmentation and flow control disabled (single-packet pass-through).
+	uint8_t  AclCreditMax;	//!< Controller total LE ACL data buffers. 0 disables flow control.
+	int16_t  AclCredit;		//!< Available ACL TX credits (decremented per packet sent, replenished by Number-Of-Completed-Packets).
 	uint32_t (*SendData)(void *pData, uint32_t Len);
 	void (*EvtHandler)(BtHciDevice_t * const pDev, uint32_t Evt);
 	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
@@ -735,6 +738,18 @@ static inline uint16_t mSecTo1_25(float Val) {
 
 //bool BtHciInit(BtHciDevCfg_t const *pCfg);
 void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt);
+
+// Transmit a fully built ACL data packet to the controller. Fragments the L2CAP
+// PDU to the controller's ACL data length and gates on available ACL credits
+// when BtHciSetLeAclBuffer has configured them; otherwise sends a single packet
+// unchanged. Returns the byte count handed to the transport, or 0 if no
+// controller buffer was available.
+uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pAcl);
+
+// Configure the controller's LE ACL buffer parameters (from HCI LE Read Buffer
+// Size). MaxLen enables TX fragmentation, PktCount enables credit-based flow
+// control. Passing 0 for either leaves that behaviour disabled.
+void BtHciSetLeAclBuffer(BtHciDevice_t * const pDev, uint16_t MaxLen, uint8_t PktCount);
 
 static inline int BtHciSendData(BtHciDevice_t * const pDev, void * const pData, int Len) {
 	return pDev->SendData(pData, Len);

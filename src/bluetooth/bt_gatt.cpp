@@ -359,7 +359,7 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 	l2pdu->Hdr.Len = 1 + 2 + Len;	// opcode + value handle + value
 	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-	uint32_t sent = pConn->pHciDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	uint32_t sent = BtHciSendAcl(pConn->pHciDev, acl);
 	if (sent == 0)
 	{
 		return -1;
@@ -368,9 +368,30 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 	return (int)Len;
 }
 
+// Record a characteristic with a notification/indication just handed to the
+// transport, so its TxCompleteCB can be fired in send order when the controller
+// reports the packet complete. Only tracked when the char wants the callback.
+static void BtGattTxPendPush(uint16_t ConnHdl, BtGattChar_t *pChar)
+{
+	if (pChar == nullptr || pChar->TxCompleteCB == nullptr)
+	{
+		return;
+	}
+
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn == nullptr || pConn->TxPendCount >= BT_DEV_TXPEND_MAX)
+	{
+		return;
+	}
+
+	uint8_t idx = (uint8_t)((pConn->TxPendHead + pConn->TxPendCount) % BT_DEV_TXPEND_MAX);
+	pConn->TxPendCh[idx] = pChar;
+	pConn->TxPendCount++;
+}
+
 // Send a Handle Value Notification for pChar to the client on ConnHdl. No-op
 // (returns false) unless the client subscribed for notifications via the CCCD.
-// Weak so a vendor backend (e.g. SoftDevice sd_ble_gatts_hvx) can override the
+// Weak so a vendor port (e.g. SoftDevice sd_ble_gatts_hvx) can override the
 // generic HCI transmit path with a native one.
 __attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
@@ -380,8 +401,14 @@ __attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pCha
 		return false;
 	}
 
-	return BtGattSendHandleValue(ConnHdl, BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF,
-								 pChar->ValHdl, pVal, Len) >= 0;
+	bool ok = BtGattSendHandleValue(ConnHdl, BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF,
+									pChar->ValHdl, pVal, Len) >= 0;
+	if (ok)
+	{
+		BtGattTxPendPush(ConnHdl, pChar);
+	}
+
+	return ok;
 }
 
 // Send a Handle Value Indication for pChar to the client on ConnHdl. Only one
@@ -389,7 +416,7 @@ __attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pCha
 // Value Confirmation (Core spec Vol 3 Part F, 3.4.7.2); a second indication
 // while one is pending returns false. No-op unless the client subscribed for
 // indications via the CCCD.
-// Weak so a vendor backend can override with a native indication path.
+// Weak so a vendor port can override with a native indication path.
 __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr || pChar->CccdHdl == BT_ATT_HANDLE_INVALID ||
@@ -412,6 +439,7 @@ __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pC
 
 	pConn->Conn.bIndCfmPending = true;
 	pConn->Conn.IndCfmTime = BtGattMsTick();
+	BtGattTxPendPush(ConnHdl, pChar);
 	return true;
 }
 
@@ -650,20 +678,11 @@ __attribute__((weak)) void BtGattEvtHandler(uint32_t Evt, void * const pCtx)
 	}
 }
 
-// HCI Number-Of-Completed-Packets event hook. The HCI controller reports
-// per-connection packet completions but does not say which characteristic
-// produced them. Without per-connection bookkeeping of the last enqueued
-// char, the best we can do here is fire TxCompleteCB only on chars where
-// a notification or indication could be in flight (i.e. the peer has
-// subscribed). Chars with neither bNotify nor bIndic cannot have produced
-// a notify packet and are skipped.
-//
-// TODO(per-conn-tx-complete): with the unified peer pool now in place,
-// the precise fix is to add a small per-peer TX-pending tracking ring
-// (BtDevice_t.TxPendingChar[]) populated by BtGattCharNotify on each
-// outgoing notification/indication, then dequeue by ConnHdl here and
-// call TxCompleteCB on the actual originating char. Cross-port work -
-// scheduled as a separate round.
+// HCI Number-Of-Completed-Packets hook. The controller reports per-connection
+// packet completions but not which characteristic produced them, so each
+// outgoing notification/indication records its char on a per-peer ring via
+// BtGattTxPendPush. Here we dequeue in send order and fire TxCompleteCB on the
+// originating char.
 void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 {
 	if (NbPktSent == 0)
@@ -671,21 +690,41 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 		return;
 	}
 
-	for (BtGattSrvc_t *p = s_pBtGattSrvcList; p != nullptr; p = p->pNext)
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn == nullptr)
 	{
-		for (int i = 0; i < p->NbChar; i++)
+		return;
+	}
+
+	// Dequeue in send order and fire TxCompleteCB on the originating char.
+	// NbPktSent also counts response/signaling packets that were never ringed,
+	// so drain only up to what the ring holds and never over-fire.
+	uint16_t n = NbPktSent;
+	while (n > 0 && pConn->TxPendCount > 0)
+	{
+		BtGattChar_t *c = (BtGattChar_t*)pConn->TxPendCh[pConn->TxPendHead];
+		pConn->TxPendHead = (uint8_t)((pConn->TxPendHead + 1) % BT_DEV_TXPEND_MAX);
+		pConn->TxPendCount--;
+		n--;
+
+		if (c == nullptr || c->TxCompleteCB == nullptr)
 		{
-			BtGattChar_t *c = &p->pCharArray[i];
-			if (c->TxCompleteCB == nullptr)
-			{
-				continue;
-			}
-			if (c->bNotify == false && c->bIndic == false)
-			{
-				continue;
-			}
-			c->TxCompleteCB(c, i);
+			continue;
 		}
+
+		int idx = 0;
+		if (c->pSrvc != nullptr)
+		{
+			for (int k = 0; k < c->pSrvc->NbChar; k++)
+			{
+				if (&c->pSrvc->pCharArray[k] == c)
+				{
+					idx = k;
+					break;
+				}
+			}
+		}
+		c->TxCompleteCB(c, idx);
 	}
 }
 

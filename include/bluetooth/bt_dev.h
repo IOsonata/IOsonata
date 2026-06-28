@@ -58,6 +58,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define BT_DEV_NAME_MAXLEN			30
 #define BT_DEV_SERVICE_MAXCNT		10
+#define BT_DEV_TXPEND_MAX			8		//!< Depth of the per-link notify/indicate TX-complete ring
 
 /// Per-peer discovery state. Used by the central while walking the peer's
 /// GATT table. Previously held as file-scope globals (g_CurIdx, g_UuidType)
@@ -100,6 +101,9 @@ typedef struct __Bt_Device {
 	int				NbSrvc;						//!< Number of services in the Services array
 	BtGattDBSrvc_t	Services[BT_DEV_SERVICE_MAXCNT];	//!< Services: exposed if local, discovered if remote
 	BtDevDiscState_t Discovery;					//!< Per-peer discovery cursor (remote role only)
+	void			*TxPendCh[BT_DEV_TXPEND_MAX];//!< Ring of chars with a notification/indication in flight (native-host TX-complete attribution)
+	uint8_t			TxPendHead;					//!< Ring read index
+	uint8_t			TxPendCount;				//!< Ring occupancy
 } BtDevice_t;
 
 // --- Legacy aliases (pre-Voci rename) ---
