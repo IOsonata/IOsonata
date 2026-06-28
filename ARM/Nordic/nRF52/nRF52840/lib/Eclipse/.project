@@ -146,11 +146,6 @@
 			<locationURI>PARENT-5-PROJECT_LOC/include/idelay.h</locationURI>
 		</link>
 		<link>
-			<name>include/motion</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>include/intelhex.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
@@ -187,6 +182,11 @@
 		</link>
 		<link>
 			<name>include/miscdev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/motion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -416,11 +416,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153.c</locationURI>
 		</link>
 		<link>
-			<name>src/motion</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/intelhex.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/intelhex.c</locationURI>
@@ -457,6 +452,11 @@
 		</link>
 		<link>
 			<name>src/miscdev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/motion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -606,11 +606,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_dis.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dis.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_gap.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
@@ -679,6 +674,11 @@
 			<name>include/bluetooth/bt_uuid.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_uuid.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/services</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_device.h</name>
@@ -811,56 +811,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/igfx.h</locationURI>
 		</link>
 		<link>
-			<name>include/motion/icm20948_img_dmp3a.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/att.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/att_eqf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_eqf.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mot_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mot_invn_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_invn_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mot_mpu9250.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_mpu9250.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/att_vqf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_vqf.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/att_xiot_fusion.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_xiot_fusion.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mpu9250_dmpkey.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpkey.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mpu9250_dmpmap.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpmap.h</locationURI>
-		</link>
-		<link>
 			<name>include/miscdev/buzzer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/buzzer.h</locationURI>
@@ -894,6 +844,56 @@
 			<name>include/miscdev/tca6424a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/att.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/att_eqf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_eqf.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/att_vqf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_vqf.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/att_xiot_fusion.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_xiot_fusion.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/icm20948_img_dmp3a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_invn_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_invn_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_mpu9250.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_mpu9250.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mpu9250_dmpkey.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpkey.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mpu9250_dmpmap.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpmap.h</locationURI>
 		</link>
 		<link>
 			<name>include/net/nrf_mac.h</name>
@@ -1316,11 +1316,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_dis.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dis.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_gap.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
@@ -1364,6 +1359,11 @@
 			<name>src/bluetooth/bt_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_l2cap.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_l2cap.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_pds.cpp</name>
@@ -1434,6 +1434,11 @@
 			<name>src/bluetooth/sd_dispatch.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/sd_dispatch.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/services</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/cli/nrf_cli_uart.c</name>
@@ -1661,41 +1666,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/fatfs/ffunicode.c</locationURI>
 		</link>
 		<link>
-			<name>src/motion/att.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/att_eqf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_eqf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/mot_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/mot_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_invn_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/mot_mpu9250.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/att_vqf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_vqf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/att_xiot_fusion.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/littlefs/lfs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/littlefs/lfs.c</locationURI>
@@ -1769,6 +1739,41 @@
 			<name>src/miscdev/modem.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att_eqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_eqf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att_vqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_vqf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att_xiot_fusion.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/mot_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/mot_invn_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_invn_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/mot_mpu9250.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble</name>
@@ -2096,9 +2101,29 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/services/bt_bas.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/services/bt_bas.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/services/bt_dis.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/services/bt_dis.h</locationURI>
+		</link>
+		<link>
 			<name>src/Invn/Devices/Drivers</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/services/bt_bas.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_bas.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/services/bt_dis.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_dis.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/FreeMono</name>

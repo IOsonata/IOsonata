@@ -174,6 +174,19 @@ BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl)
 	return nullptr;
 }
 
+void BtAttDBEntrySetPermission(BtAttDBEntry_t *pEntry, uint32_t Permission)
+{
+	if (pEntry != nullptr)
+	{
+		pEntry->Permission = Permission;
+	}
+}
+
+uint32_t BtAttDBEntryGetPermission(BtAttDBEntry_t *pEntry)
+{
+	return pEntry != nullptr ? pEntry->Permission : 0;
+}
+
 // Strong override of the weak default in bt_gatt.cpp. On the native host the
 // ATT DB exists, so mirror the aggregate CCCD value into the descriptor entry
 // for a local CCCD read.
@@ -486,11 +499,39 @@ static BtGattChar_t *BtAttEntryChar(BtAttDBEntry_t *pEntry)
 	return nullptr;
 }
 
-// Port/application hook for security state that is not represented in the ATT
-// database yet. Return 0 to allow access, or an ATT error code such as
-// BT_ATT_ERROR_INSUF_ENCRYPT / BT_ATT_ERROR_INSUF_AUTHEN /
-// BT_ATT_ERROR_ENCRYPT_KEY_TOO_SHORT to reject it. The default keeps today's
-// open-service behaviour while property permission checks below become active.
+// Link security hooks. The generic ATT layer does not own SMP/link state, so
+// ports or the SMP module override these. The defaults preserve open-service
+// behaviour unless an attribute explicitly sets Permission bits.
+__attribute__((weak)) bool BtAttLinkEncrypted(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+	return false;
+}
+
+__attribute__((weak)) bool BtAttLinkAuthenticated(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+	return false;
+}
+
+__attribute__((weak)) bool BtAttLinkAuthorized(uint16_t ConnHdl,
+											  BtAttDBEntry_t *pEntry,
+											  bool bRead)
+{
+	(void)ConnHdl;
+	(void)pEntry;
+	(void)bRead;
+	return true;
+}
+
+__attribute__((weak)) uint8_t BtAttLinkEncryptKeySize(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+	return 0;
+}
+
+// Compatibility hook for ports/apps that already enforce security externally.
+// Return 0 to allow access, or an ATT error code such as INSUF_ENCRYPT.
 __attribute__((weak)) uint8_t BtAttAccessSecurityError(uint16_t ConnHdl,
 													  BtAttDBEntry_t *pEntry,
 													  bool bRead)
@@ -498,6 +539,65 @@ __attribute__((weak)) uint8_t BtAttAccessSecurityError(uint16_t ConnHdl,
 	(void)ConnHdl;
 	(void)pEntry;
 	(void)bRead;
+	return 0;
+}
+
+__attribute__((weak)) bool BtAttSignedWriteVerify(uint16_t ConnHdl,
+												 const BtAttSignedWriteCmd_t *pCmd,
+												 uint16_t ValueLen,
+												 const uint8_t *pSignature)
+{
+	(void)ConnHdl;
+	(void)pCmd;
+	(void)ValueLen;
+	(void)pSignature;
+
+	// Signed Write Command requires CSRK/signature verification. The generic
+	// fallback does not have CSRK state yet, so it must not write.
+	return false;
+}
+
+static uint8_t BtAttAccessPolicyError(uint16_t ConnHdl,
+									  BtAttDBEntry_t *pEntry,
+									  bool bRead)
+{
+	if (pEntry == nullptr)
+	{
+		return BT_ATT_ERROR_INVALID_HANDLE;
+	}
+
+	uint32_t perm = pEntry->Permission;
+
+	uint32_t encFlag = bRead ? BT_ATT_PERMISSION_READ_ENCRYPT :
+							   BT_ATT_PERMISSION_WRITE_ENCRYPT;
+	uint32_t authFlag = bRead ? BT_ATT_PERMISSION_READ_AUTHEN :
+								BT_ATT_PERMISSION_WRITE_AUTHEN;
+	uint32_t authorFlag = bRead ? BT_ATT_PERMISSION_READ_AUTHOR :
+								  BT_ATT_PERMISSION_WRITE_AUTHOR;
+	uint32_t keyFlag = bRead ? BT_ATT_PERMISSION_READ_KEY_SIZE :
+							   BT_ATT_PERMISSION_WRITE_KEY_SIZE;
+
+	if ((perm & encFlag) != 0 && BtAttLinkEncrypted(ConnHdl) == false)
+	{
+		return BT_ATT_ERROR_INSUF_ENCRYPT;
+	}
+
+	if ((perm & authFlag) != 0 && BtAttLinkAuthenticated(ConnHdl) == false)
+	{
+		return BT_ATT_ERROR_INSUF_AUTHEN;
+	}
+
+	if ((perm & authorFlag) != 0 &&
+		BtAttLinkAuthorized(ConnHdl, pEntry, bRead) == false)
+	{
+		return BT_ATT_ERROR_INSUF_AUTHOR;
+	}
+
+	if ((perm & keyFlag) != 0 && BtAttLinkEncryptKeySize(ConnHdl) < 16)
+	{
+		return BT_ATT_ERROR_ENCRYPT_KEY_TOO_SHORT;
+	}
+
 	return 0;
 }
 
@@ -515,6 +615,12 @@ static uint8_t BtAttReadPermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry)
 		{
 			return BT_ATT_ERROR_READ_NOT_PERMITTED;
 		}
+	}
+
+	uint8_t err = BtAttAccessPolicyError(ConnHdl, pEntry, true);
+	if (err != 0)
+	{
+		return err;
 	}
 
 	return BtAttAccessSecurityError(ConnHdl, pEntry, true);
@@ -552,6 +658,12 @@ static uint8_t BtAttWritePermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 			return BT_ATT_ERROR_WRITE_NOT_PERMITTED;
 		}
 
+		uint8_t err = BtAttAccessPolicyError(ConnHdl, pEntry, false);
+		if (err != 0)
+		{
+			return err;
+		}
+
 		return BtAttAccessSecurityError(ConnHdl, pEntry, false);
 	}
 
@@ -582,6 +694,12 @@ static uint8_t BtAttWritePermError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry,
 				return BT_ATT_ERROR_VALUE_NOT_ALLOWED;
 			}
 		}
+		uint8_t err = BtAttAccessPolicyError(ConnHdl, pEntry, false);
+		if (err != 0)
+		{
+			return err;
+		}
+
 		return BtAttAccessSecurityError(ConnHdl, pEntry, false);
 	}
 

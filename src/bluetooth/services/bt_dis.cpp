@@ -24,7 +24,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/bt_dis.h"
+#include "bluetooth/services/bt_dis.h"
 
 // Per BLE-spec DIS char value limit is 22 octets for the string chars. Apps
 // can override to allow longer model/serial strings if their ATT MTU permits.

@@ -61,7 +61,7 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
-#include "bluetooth/bt_dis.h"
+#include "bluetooth/services/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
 #include "bt_pds_sdc.h"				// BtSmpBondSdcInit (flash-backed bond persistence)
 #include "nrf_mpsl.h"

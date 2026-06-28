@@ -37,6 +37,7 @@ SOFTWARE.
 #define __BT_ATT_H__
 
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stddef.h>
 
 #include "bluetooth/bt_uuid.h"
@@ -98,8 +99,17 @@ SOFTWARE.
 #define BT_ATT_ERROR_DB_OUT_SYNC						19		//!< Database out of sync
 #define BT_ATT_ERROR_VALUE_NOT_ALLOWED					20		//!< Value not allowed
 
-#define BT_ATT_PERMISSION_READ
-#define BT_ATT_PERMISSION_WRITE
+// Attribute permission/security policy bits stored in BtAttDBEntry_t::Permission.
+#define BT_ATT_PERMISSION_READ					(1UL << 0)
+#define BT_ATT_PERMISSION_WRITE					(1UL << 1)
+#define BT_ATT_PERMISSION_READ_ENCRYPT			(1UL << 8)
+#define BT_ATT_PERMISSION_WRITE_ENCRYPT			(1UL << 9)
+#define BT_ATT_PERMISSION_READ_AUTHEN			(1UL << 10)
+#define BT_ATT_PERMISSION_WRITE_AUTHEN			(1UL << 11)
+#define BT_ATT_PERMISSION_READ_AUTHOR			(1UL << 12)
+#define BT_ATT_PERMISSION_WRITE_AUTHOR			(1UL << 13)
+#define BT_ATT_PERMISSION_READ_KEY_SIZE			(1UL << 14)
+#define BT_ATT_PERMISSION_WRITE_KEY_SIZE		(1UL << 15)
 
 #define BT_ATT_MTU_MIN				23
 #define BT_ATT_MTU_MAX				247
@@ -573,6 +583,17 @@ BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl);
 BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid);
 BtAttDBEntry_t * const BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint16_t HdlEnd);
 BtAttDBEntry_t * const BtAttDBFindHdlRange(BtUuid16_t *pUuid, uint16_t *pHdlStart, uint16_t *pHdlEnd);
+
+void BtAttDBEntrySetPermission(BtAttDBEntry_t *pEntry, uint32_t Permission);
+uint32_t BtAttDBEntryGetPermission(BtAttDBEntry_t *pEntry);
+
+uint8_t BtAttAccessSecurityError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry, bool bRead);
+bool BtAttLinkEncrypted(uint16_t ConnHdl);
+bool BtAttLinkAuthenticated(uint16_t ConnHdl);
+bool BtAttLinkAuthorized(uint16_t ConnHdl, BtAttDBEntry_t *pEntry, bool bRead);
+uint8_t BtAttLinkEncryptKeySize(uint16_t ConnHdl);
+bool BtAttSignedWriteVerify(uint16_t ConnHdl, const BtAttSignedWriteCmd_t *pCmd,
+							uint16_t ValueLen, const uint8_t *pSignature);
 
 uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode, uint8_t ErrCode);
 /**

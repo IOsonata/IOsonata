@@ -691,11 +691,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_dis.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dis.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_gap.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
@@ -769,6 +764,11 @@
 			<name>include/bluetooth/nrf_mesh_config_core.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/nrf_mesh_config_core.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/services</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/boards/blystnano_boards.h</name>
@@ -1466,11 +1466,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_dis.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dis.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_gap.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap.cpp</locationURI>
@@ -1584,6 +1579,11 @@
 			<name>src/bluetooth/sd_dispatch.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/sd_dispatch.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/services</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/uart_bleintrf.cpp</name>
@@ -2246,9 +2246,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/services/bt_bas.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/services/bt_bas.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/services/bt_dis.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/services/bt_dis.h</locationURI>
+		</link>
+		<link>
 			<name>src/Invn/Devices/Drivers</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/services/bt_bas.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_bas.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/services/bt_dis.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_dis.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/FreeMono</name>
