@@ -1387,22 +1387,26 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	}
 
 	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
-	if (pLink == nullptr)
-	{
-		return;
-	}
 
 	if (Status != 0 || Enabled == 0)
 	{
-		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		if (pLink != nullptr)
+		{
+			pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		}
 		BtSmpPairingComplete(ConnHdl, false, nullptr);
 		return;
 	}
 
 	// Link is encrypted. Restore persisted CCCD subscriptions for a bonded peer
-	// so notifications resume without re-subscription. No-op on a fresh pairing:
-	// the bond and its CCCD snapshot are created later in key distribution.
+	// even when there is no active SMP pairing context. That is the normal
+	// bonded-reconnect path when encryption starts from a stored LTK lookup.
 	BtGattCccdRestoreBonded(ConnHdl);
+
+	if (pLink == nullptr)
+	{
+		return;
+	}
 
 	if (pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT)
 	{
