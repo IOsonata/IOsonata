@@ -301,6 +301,16 @@ bool BtDevNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
+	if (pChar == nullptr || pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	if (DataLen > 0 && pData == nullptr)
+	{
+		return false;
+	}
+
 	// SoftDevice enforces the CCCD per connection on sd_ble_gatts_hvx.
 
     ble_gatts_hvx_params_t params;

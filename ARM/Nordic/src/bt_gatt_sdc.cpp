@@ -47,17 +47,37 @@ extern volatile int s_SdcAclTxPktAvail;
 
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData, size_t Len)
 {
+	if (pChar == nullptr || pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	if (Len > 0 && (pData == nullptr || pChar->pValue == nullptr))
+	{
+		return false;
+	}
+
+	if (Len > pChar->MaxDataLen)
+	{
+		return false;
+	}
+
+	size_t maxData = BT_HCI_BUFFER_MAX_SIZE - sizeof(BtHciACLDataPacketHdr_t) -
+					 sizeof(BtL2CapHdr_t) - sizeof(BtAttHandleValueNtf_t);
+	if (Len > maxData)
+	{
+		return false;
+	}
+
 	if (s_SdcAclTxPktAvail <= 0)
 	{
 		return false;
 	}
 
-	//	if (BtGattCharSetValue(pChar, pData, Len) == false)
-	//	{
-	//		return false;
-	//	}
-
-	memcpy(pChar->pValue, pData, Len);
+	if (Len > 0)
+	{
+		memcpy(pChar->pValue, pData, Len);
+	}
 	pChar->ValueLen = Len;
 
 	if (BtGattCharNotifyEnabled(ConnHdl, pChar))
@@ -75,7 +95,10 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF;
 
 		l2pdu->Att.HandleValueNtf.ValHdl = pChar->ValHdl;
-		memcpy(l2pdu->Att.HandleValueNtf.Data, pData, Len);
+		if (Len > 0)
+		{
+			memcpy(l2pdu->Att.HandleValueNtf.Data, pData, Len);
+		}
 		l2pdu->Hdr.Len = sizeof(BtAttHandleValueNtf_t) + Len;
 		acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
