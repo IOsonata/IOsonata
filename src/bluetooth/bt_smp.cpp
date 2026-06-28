@@ -1410,6 +1410,14 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 	if (pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT)
 	{
+		// Surface the freshly negotiated security level on the link so the ATT
+		// permission checks can gate secured attributes.
+		if (pPeer != nullptr)
+		{
+			pPeer->EncKeySize = pLink->Keys.EncKeySize;
+			pPeer->bAuthenticated = pLink->Keys.bAuthenticated;
+		}
+
 		// Encrypted via fresh pairing. Run the key distribution phase that was
 		// negotiated. The local device distributes the keys it offered:
 		// InitiatorKeyDist (PReq[6 of req = byte 5]) when we are the central,

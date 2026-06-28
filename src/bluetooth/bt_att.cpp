@@ -504,14 +504,14 @@ static BtGattChar_t *BtAttEntryChar(BtAttDBEntry_t *pEntry)
 // behaviour unless an attribute explicitly sets Permission bits.
 __attribute__((weak)) bool BtAttLinkEncrypted(uint16_t ConnHdl)
 {
-	(void)ConnHdl;
-	return false;
+	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
+	return p != nullptr && p->bSecure;
 }
 
 __attribute__((weak)) bool BtAttLinkAuthenticated(uint16_t ConnHdl)
 {
-	(void)ConnHdl;
-	return false;
+	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
+	return p != nullptr && p->bSecure && p->bAuthenticated;
 }
 
 __attribute__((weak)) bool BtAttLinkAuthorized(uint16_t ConnHdl,
@@ -526,8 +526,8 @@ __attribute__((weak)) bool BtAttLinkAuthorized(uint16_t ConnHdl,
 
 __attribute__((weak)) uint8_t BtAttLinkEncryptKeySize(uint16_t ConnHdl)
 {
-	(void)ConnHdl;
-	return 0;
+	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
+	return (p != nullptr && p->bSecure) ? p->EncKeySize : 0;
 }
 
 // Compatibility hook for ports/apps that already enforce security externally.
@@ -834,16 +834,42 @@ uint32_t BtAttError(BtAttReqRsp_t * const pRspAtt, uint16_t Hdl, uint8_t OpCode,
 // with the full value, same as a normal write). Queue records are laid out as
 // { uint16 Hdl, uint16 Offset, uint16 Len, uint8 Data[Len] } in arrival order;
 // clients send chunks in ascending offset, so concatenation rebuilds the value.
-static void BtAttExecLongWrite(BtDevice_t *pConn)
+// Current value length of an attribute, for offset/length validation. Char
+// values report their live ValueLen; the CCCD is 2 bytes. Other attribute types
+// are not offset-validated here (returns 0xFFFF so the caller skips the check).
+static uint16_t BtAttCurValueLen(BtAttDBEntry_t *pEntry)
+{
+	if (pEntry == nullptr)
+	{
+		return 0;
+	}
+	if (BtAttEntryIsCharValue(pEntry))
+	{
+		BtGattChar_t *pChar = BtAttEntryChar(pEntry);
+		return pChar != nullptr ? (uint16_t)pChar->ValueLen : 0;
+	}
+	if (pEntry->TypeUuid.BaseIdx == 0 &&
+		pEntry->TypeUuid.Uuid == BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
+	{
+		return 2;
+	}
+	return 0xFFFF;
+}
+
+// Apply the queued prepared writes. Returns 0 on success, or an ATT error code
+// with *pFailHdl set to the offending handle (Vol 3 Part F 3.4.6.3). The queue
+// is consumed either way.
+static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 {
 	if (pConn == nullptr || pConn->Conn.pLongWrBuff == nullptr)
 	{
-		return;
+		return 0;
 	}
 
 	uint8_t  *buf   = pConn->Conn.pLongWrBuff;
 	uint16_t  total = pConn->Conn.LongWrLen;
 	uint16_t  pos   = 0;
+	uint8_t   err   = 0;
 
 	while (pos + 6 <= total)
 	{
@@ -874,15 +900,37 @@ static void BtAttExecLongWrite(BtDevice_t *pConn)
 		}
 
 		BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
-		if (entry != nullptr)
+		if (entry == nullptr)
 		{
-			BtAttWriteValueForConn(pConn->Conn.Hdl, entry, off, buf + pos + 6, totLen);
+			*pFailHdl = hdl;
+			err = BT_ATT_ERROR_INVALID_HANDLE;
+			break;
 		}
+
+		// Offset past the current value is INVALID_OFFSET; a reassembled value
+		// beyond the characteristic maximum is INVALID_ATTRIBUTE_VALUE_LENGTH.
+		if (off > BtAttCurValueLen(entry))
+		{
+			*pFailHdl = hdl;
+			err = BT_ATT_ERROR_INVALID_OFFSET;
+			break;
+		}
+
+		BtGattChar_t *pChar = BtAttEntryChar(entry);
+		if (pChar != nullptr && (uint32_t)off + totLen > pChar->MaxDataLen)
+		{
+			*pFailHdl = hdl;
+			err = BT_ATT_ERROR_INVALID_ATT_VALUE;
+			break;
+		}
+
+		BtAttWriteValueForConn(pConn->Conn.Hdl, entry, off, buf + pos + 6, totLen);
 
 		pos = next;
 	}
 
 	pConn->Conn.LongWrLen = 0;
+	return err;
 }
 
 uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int ReqLen, BtAttReqRsp_t * const pRspAtt)
@@ -1252,6 +1300,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						retval = BtAttError(pRspAtt, pReqAtt->ReadBlobReq.Hdl,
 											BT_ATT_OPCODE_ATT_READ_BLOB_REQ, err);
 					}
+					else if (pReqAtt->ReadBlobReq.Offset > BtAttCurValueLen(entry))
+					{
+						retval = BtAttError(pRspAtt, pReqAtt->ReadBlobReq.Hdl,
+											BT_ATT_OPCODE_ATT_READ_BLOB_REQ, BT_ATT_ERROR_INVALID_OFFSET);
+					}
 					else
 					{
 						retval = BtAttReadValueForConn(ConnHdl, entry, pReqAtt->ReadBlobReq.Offset,
@@ -1589,7 +1642,15 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				if (pReqAtt->ExecuteWriteReq.Flag != 0)
 				{
 					// Execute: apply the queued writes, firing each char WrCB.
-					BtAttExecLongWrite(pConn);
+					// A queued write that fails validation aborts the execute
+					// with an Error Response carrying the offending handle.
+					uint16_t failHdl = 0;
+					uint8_t  err = BtAttExecLongWrite(pConn, &failHdl);
+					if (err != 0)
+					{
+						retval = BtAttError(pRspAtt, failHdl, BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ, err);
+						break;
+					}
 				}
 				else if (pConn != nullptr)
 				{
