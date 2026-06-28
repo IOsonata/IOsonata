@@ -42,6 +42,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_smp.h"
 
 /******** For DEBUG ************/
 //#define DEBUG_ENABLE
@@ -579,7 +580,11 @@ static uint8_t BtAttAccessPolicyError(uint16_t ConnHdl,
 
 	if ((perm & encFlag) != 0 && BtAttLinkEncrypted(ConnHdl) == false)
 	{
-		return BT_ATT_ERROR_INSUF_ENCRYPT;
+		// Link must be encrypted but isn't. A bonded peer can encrypt from the
+		// stored key (Insufficient Encryption); an unbonded peer has to pair
+		// first (Insufficient Authentication). Core spec Vol 3 Part C 10.3.
+		return BtSmpBonded(ConnHdl) ? BT_ATT_ERROR_INSUF_ENCRYPT
+									: BT_ATT_ERROR_INSUF_AUTHEN;
 	}
 
 	if ((perm & authFlag) != 0 && BtAttLinkAuthenticated(ConnHdl) == false)

@@ -415,6 +415,9 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys);
 bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t Ltk[16]);
 void BtSmpBondClearAll(void);
 
+// True if a stored bond exists for the peer on ConnHdl (matched on link address).
+bool BtSmpBonded(uint16_t ConnHdl);
+
 /**
  * @brief	Persist (BtSmpBondCccdSave) or fetch (BtSmpBondCccdGet) the CCCD set
  *			for the bonded peer on ConnHdl. Save is a no-op for unbonded peers,

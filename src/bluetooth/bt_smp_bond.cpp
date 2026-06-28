@@ -331,6 +331,20 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 	return false;
 }
 
+// True if a stored bond exists for the peer on ConnHdl, matched on its link
+// address. Lets the ATT security check tell "encrypt from the existing key"
+// (Insufficient Encryption) from "pair first" (Insufficient Authentication).
+bool BtSmpBonded(uint16_t ConnHdl)
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr)
+	{
+		return false;
+	}
+
+	return BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr) >= 0;
+}
+
 // Remove all stored bonds, RAM table and non-volatile copy.
 void BtSmpBondClearAll(void)
 {
