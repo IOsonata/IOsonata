@@ -891,17 +891,39 @@ static uint8_t BtAttExecLongWrite(BtDevice_t *pConn, uint16_t *pFailHdl)
 
 		while (next + 6 <= total)
 		{
-			uint16_t nhdl, nlen;
+			uint16_t nhdl, noff, nlen;
 			memcpy(&nhdl, buf + next, 2);
+			memcpy(&noff, buf + next + 2, 2);
+			memcpy(&nlen, buf + next + 4, 2);
+
 			if (nhdl != hdl)
 			{
 				break;
 			}
-			memcpy(&nlen, buf + next + 4, 2);
+
+			if (noff != (uint16_t)(off + totLen))
+			{
+				*pFailHdl = hdl;
+				err = BT_ATT_ERROR_INVALID_OFFSET;
+				break;
+			}
+
+			if ((uint32_t)next + 6UL + nlen > total)
+			{
+				*pFailHdl = hdl;
+				err = BT_ATT_ERROR_INVALID_PDU;
+				break;
+			}
+
 			memmove(dst, buf + next + 6, nlen);
 			dst    += nlen;
 			totLen += nlen;
 			next   += 6 + nlen;
+		}
+
+		if (err != 0)
+		{
+			break;
 		}
 
 		BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);

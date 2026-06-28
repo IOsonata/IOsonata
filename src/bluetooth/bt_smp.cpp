@@ -1384,6 +1384,11 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	if (pPeer != nullptr)
 	{
 		pPeer->bSecure = (Status == 0) && (Enabled != 0);
+		if (pPeer->bSecure == false)
+		{
+			pPeer->bAuthenticated = false;
+			pPeer->EncKeySize = 0;
+		}
 	}
 
 	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
