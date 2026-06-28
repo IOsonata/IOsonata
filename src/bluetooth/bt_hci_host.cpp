@@ -581,6 +581,25 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 //			BtProcessAttData(pDev, pPkt->Hdr.ConnHdl, l2frame);
 			break;
 		case BT_L2CAP_CID_SIGNAL:
+		{
+			uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
+			BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
+			BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+			acl->Hdr.ConnHdl = pPkt->Hdr.ConnHdl;
+			acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
+			acl->Hdr.BCFlag = 0;
+
+			l2pdu->Hdr.Len = BtL2CapProcessSignal(pDev, pPkt->Hdr.ConnHdl,
+											  l2rcv, l2rcv->Hdr.Len, l2pdu);
+
+			if (l2pdu->Hdr.Len > 0)
+			{
+				l2pdu->Hdr.Cid = BT_L2CAP_CID_SIGNAL;
+				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
+				pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+			}
+		}
 			break;
 		case BT_L2CAP_CID_SEC_MNGR:
 			BtProcessSmpData(pDev, pPkt->Hdr.ConnHdl, &l2rcv->Smp, l2rcv->Hdr.Len);

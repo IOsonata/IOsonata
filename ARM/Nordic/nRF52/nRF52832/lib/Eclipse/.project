@@ -1511,6 +1511,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_l2cap.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_l2cap.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_pds.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_pds.cpp</locationURI>

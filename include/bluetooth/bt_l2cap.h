@@ -96,6 +96,31 @@ typedef enum __Ble_L2CAP_Mode {
 #define BT_L2CAP_CODE_CREDIT_BASED_RECONFIGURE_REQ		0x19	//!< CID 1 & 5
 #define BT_L2CAP_CODE_CREDIT_BASED_RECONFIGURE_RSP		0x1A	//!< CID 1 & 5
 
+#define BT_L2CAP_CMD_REJECT_REASON_NOT_UNDERSTOOD		0x0000
+#define BT_L2CAP_CMD_REJECT_REASON_MTU_EXCEEDED			0x0001
+#define BT_L2CAP_CMD_REJECT_REASON_INVALID_CID			0x0002
+
+#define BT_L2CAP_CONN_PARAM_ACCEPTED					0x0000
+#define BT_L2CAP_CONN_PARAM_REJECTED					0x0001
+
+#define BT_L2CAP_LE_CBFC_RESULT_SUCCESS					0x0000
+#define BT_L2CAP_LE_CBFC_RESULT_SPSM_NOT_SUPPORTED		0x0002
+#define BT_L2CAP_LE_CBFC_RESULT_NO_RESOURCES			0x0004
+#define BT_L2CAP_LE_CBFC_RESULT_INSUF_AUTHEN			0x0005
+#define BT_L2CAP_LE_CBFC_RESULT_INSUF_AUTHOR			0x0006
+#define BT_L2CAP_LE_CBFC_RESULT_INSUF_KEY_SIZE			0x0007
+#define BT_L2CAP_LE_CBFC_RESULT_INSUF_ENCRYPT			0x0008
+#define BT_L2CAP_LE_CBFC_RESULT_INVALID_SCID			0x0009
+#define BT_L2CAP_LE_CBFC_RESULT_SCID_ALLOCATED			0x000A
+#define BT_L2CAP_LE_CBFC_RESULT_UNACCEPTABLE_PARAMS		0x000B
+#define BT_L2CAP_LE_CBFC_RESULT_INVALID_PARAMETERS		0x000C
+
+#define BT_L2CAP_RECONFIG_RESULT_SUCCESS				0x0000
+#define BT_L2CAP_RECONFIG_RESULT_MTU_REDUCTION			0x0001
+#define BT_L2CAP_RECONFIG_RESULT_MPS_REDUCTION			0x0002
+#define BT_L2CAP_RECONFIG_RESULT_INVALID_DCID			0x0003
+#define BT_L2CAP_RECONFIG_RESULT_UNACCEPTABLE_PARAMS	0x0004
+
 #pragma pack(push, 1)
 
 /// L2CAP PDU header
@@ -192,6 +217,60 @@ typedef struct __Bt_L2Cap_Att {
 	uint8_t Param[1];				//!< Attribute protocol parameters
 } BtL2CapAtt_t;
 #endif
+typedef struct __Bt_L2Cap_Invalid_Cid_Rej_Data {
+	uint16_t Dcid;
+	uint16_t Scid;
+} BtL2CapInvalidCidRejData_t;
+
+typedef struct __Bt_L2Cap_Conn_Param_Update_Req {
+	uint16_t IntervalMin;
+	uint16_t IntervalMax;
+	uint16_t Latency;
+	uint16_t Timeout;
+} BtL2CapConnParamUpdateReq_t;
+
+typedef struct __Bt_L2Cap_Conn_Param_Update_Rsp {
+	uint16_t Result;
+} BtL2CapConnParamUpdateRsp_t;
+
+typedef struct __Bt_L2Cap_LE_Credit_Based_Conn_Req {
+	uint16_t Spsm;
+	uint16_t Scid;
+	uint16_t Mtu;
+	uint16_t Mps;
+	uint16_t InitialCredits;
+} BtL2CapLeCreditBasedConnReq_t;
+
+typedef struct __Bt_L2Cap_LE_Credit_Based_Conn_Rsp {
+	uint16_t Dcid;
+	uint16_t Mtu;
+	uint16_t Mps;
+	uint16_t InitialCredits;
+	uint16_t Result;
+} BtL2CapLeCreditBasedConnRsp_t;
+
+typedef struct __Bt_L2Cap_Flow_Control_Credit_Ind {
+	uint16_t Cid;
+	uint16_t Credits;
+} BtL2CapFlowControlCreditInd_t;
+
+typedef struct __Bt_L2Cap_Disconn_Req {
+	uint16_t Dcid;
+	uint16_t Scid;
+} BtL2CapDisconnReq_t;
+
+typedef BtL2CapDisconnReq_t BtL2CapDisconnRsp_t;
+
+typedef struct __Bt_L2Cap_Credit_Based_Reconf_Req {
+	uint16_t Mtu;
+	uint16_t Mps;
+	uint16_t Dcid[1];
+} BtL2CapCreditBasedReconfReq_t;
+
+typedef struct __Bt_L2Cap_Credit_Based_Reconf_Rsp {
+	uint16_t Result;
+} BtL2CapCreditBasedReconfRsp_t;
+
 typedef struct __Bt_L2Cap_Smp {
 	uint8_t Code;
 	uint8_t Data[1];			//!< Max data size is 65 byte secure or 23 non secure
@@ -219,10 +298,32 @@ typedef struct __Bt_L2Cap_Pdu {
 
 #pragma pack(pop)
 
+typedef struct __Bt_Hci_Device BtHciDevice_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
+							  uint16_t ConnHdl,
+							  BtL2CapPdu_t const * const pReqPdu,
+							  uint16_t ReqLen,
+							  BtL2CapPdu_t * const pRspPdu);
+
+bool BtL2CapConnParamUpdateAccept(uint16_t ConnHdl,
+								  const BtL2CapConnParamUpdateReq_t *pReq);
+void BtL2CapConnParamUpdateRsp(uint16_t ConnHdl, uint8_t Id, uint16_t Result);
+
+uint16_t BtL2CapLeCreditBasedConnectionReq(uint16_t ConnHdl,
+										   const BtL2CapLeCreditBasedConnReq_t *pReq,
+										   BtL2CapLeCreditBasedConnRsp_t *pRsp);
+bool BtL2CapFlowControlCreditInd(uint16_t ConnHdl, uint16_t Cid, uint16_t Credits);
+bool BtL2CapDisconnectReq(uint16_t ConnHdl, uint16_t Dcid, uint16_t Scid);
+void BtL2CapDisconnectRsp(uint16_t ConnHdl, uint16_t Dcid, uint16_t Scid);
+uint16_t BtL2CapCreditBasedReconfigureReq(uint16_t ConnHdl,
+										  const BtL2CapCreditBasedReconfReq_t *pReq,
+										  uint16_t Len);
+void BtL2CapCreditBasedReconfigureRsp(uint16_t ConnHdl, uint16_t Result);
 
 #ifdef __cplusplus
 }
