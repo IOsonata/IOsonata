@@ -312,7 +312,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 							// Set notify callback
 							if (pSrvc->pCharArray[i].SetNotifCB)
 							{
-								pSrvc->pCharArray[i].SetNotifCB(&pSrvc->pCharArray[i], pSrvc->pCharArray[i].bNotify);
+								pSrvc->pCharArray[i].SetNotifCB(&pSrvc->pCharArray[i], pSrvc->pCharArray[i].bNotify, pBleEvt->evt.gatts_evt.conn_handle);
 							}
 						}
 						else if ((p_evt_write->handle == pSrvc->pCharArray[i].ValHdl) &&

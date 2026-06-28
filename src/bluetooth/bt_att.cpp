@@ -161,6 +161,19 @@ BtAttDBEntry_t * const BtAttDBFindHandle(uint16_t Hdl)
 	return nullptr;
 }
 
+// Strong override of the weak default in bt_gatt.cpp. On the native host the
+// ATT DB exists, so mirror the aggregate CCCD value into the descriptor entry
+// for a local CCCD read.
+void BtGattCccdDbSync(uint16_t CccdHdl, uint16_t CccVal)
+{
+	BtAttDBEntry_t *entry = BtAttDBFindHandle(CccdHdl);
+	if (entry != nullptr)
+	{
+		BtDescClientCharConfig_t *pCccd = (BtDescClientCharConfig_t*)entry->Data;
+		pCccd->CccVal = CccVal;
+	}
+}
+
 BtAttDBEntry_t * const BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid)
 {
 	BtAttDBEntry_t *p = pStart;
@@ -602,12 +615,12 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 					p->pChar->bNotify = p->CccVal & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION ? true: false;
 					if (p->pChar->SetNotifCB)
 					{
-						p->pChar->SetNotifCB(p->pChar, p->pChar->bNotify);
+						p->pChar->SetNotifCB(p->pChar, p->pChar->bNotify, BT_CONN_HDL_INVALID);
 					}
 					p->pChar->bIndic = p->CccVal & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION ? true: false;
 					if (p->pChar->SetIndCB)
 					{
-						p->pChar->SetIndCB(p->pChar, p->pChar->bIndic);
+						p->pChar->SetIndCB(p->pChar, p->pChar->bIndic, BT_CONN_HDL_INVALID);
 					}
 					len = 2;
 //					DEBUG_PRINTF("CccdHdl : %x\r\n", p->pChar->CccdHdl);

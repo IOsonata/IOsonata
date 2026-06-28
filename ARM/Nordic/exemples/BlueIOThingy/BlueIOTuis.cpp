@@ -41,7 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "BlueIOThingy.h"
 
 void LedCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
-void ButtonCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ButtonCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
 
 // TUIS (Thingy User Interface Service characteristics)
 #define BLE_UUID_TUIS_SERVICE          		0x0300
@@ -147,7 +147,7 @@ void LedCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 	}
 }
 
-void ButtonCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ButtonCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	// Peer subscribed (bEnable == true) or unsubscribed (false).
 	// The stack already records subscription state on pChar->bNotify;

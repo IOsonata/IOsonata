@@ -45,15 +45,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "BlueIOICM20948.h"
 
 void ImuConfCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
-void ImuTapCharSetNotify(BtGattChar_t *pChar, bool bEnable);
-void ImuOrientCharSetNotify(BtGattChar_t *pChar, bool bEnable);
-void ImuQuaternionCharSetNotify(BtGattChar_t *pChar, bool bEnable);
-void ImuPedometerCharSetNotify(BtGattChar_t *pChar, bool bEnable);
-void ImuRawCharSetNotify(BtGattChar_t *pChar, bool bEnable);
-void ImuEulerCharSetNotify(BtGattChar_t *pChar, bool bEnable);
-void ImuRotMatCharSetNotify(BtGattChar_t *pChar, bool bEnable);
-void ImuHeadingCharSetNotify(BtGattChar_t *pChar, bool bEnable);
-void ImuGravityCharSetNotify(BtGattChar_t *pChar, bool bEnable);
+void ImuTapCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
+void ImuOrientCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
+void ImuQuaternionCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
+void ImuPedometerCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
+void ImuRawCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
+void ImuEulerCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
+void ImuRotMatCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
+void ImuHeadingCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
+void ImuGravityCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
 
 #define BLE_UUID_TMS_SERVICE 0x0400                      /**< The UUID of the Motion Service. */
 
@@ -272,7 +272,7 @@ void ImuConfCharWrhandler(BtGattChar_t *pChar, uint8_t *pData, int Offset, int L
 
 }
 
-void ImuTapCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ImuTapCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
@@ -280,7 +280,7 @@ void ImuTapCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 	}
 }
 
-void ImuOrientCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ImuOrientCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
@@ -288,7 +288,7 @@ void ImuOrientCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 	}
 }
 
-void ImuQuaternionCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ImuQuaternionCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
@@ -327,7 +327,7 @@ void ImuQuatDataSend(long Quat[4])
 	}
 }
 
-void ImuPedometerCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ImuPedometerCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
@@ -335,7 +335,7 @@ void ImuPedometerCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 	}
 }
 
-void ImuRawCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ImuRawCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
@@ -371,7 +371,7 @@ void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSe
 	}
 }
 
-void ImuEulerCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ImuEulerCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
@@ -379,14 +379,14 @@ void ImuEulerCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 	}
 }
 
-void ImuRotMatCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ImuRotMatCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
 		MPU9250EnableFeature(MPU9250_MOTION_FEATURE_ROT_MAT);
 	}
 }
-void ImuHeadingCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ImuHeadingCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
@@ -394,7 +394,7 @@ void ImuHeadingCharSetNotify(BtGattChar_t *pChar, bool bEnable)
 	}
 }
 
-void ImuGravityCharSetNotify(BtGattChar_t *pChar, bool bEnable)
+void ImuGravityCharSetNotify(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{

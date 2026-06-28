@@ -121,12 +121,12 @@ typedef void (*BtCharWrCb_t) (BtChar_t *pChar, uint8_t *pData, int Offset, int L
 /**
  * @brief	Callback on set notification
  */
-typedef void (*BtCharSetNotifCb_t) (BtChar_t *pChar, bool bEnable);
+typedef void (*BtCharSetNotifCb_t) (BtChar_t *pChar, bool bEnable, uint16_t ConnHdl);
 
 /**
  * @brief	Callback on set indication
  */
-typedef void (*BtCharSetIndCb_t) (BtChar_t *pChar, bool bEnable);
+typedef void (*BtCharSetIndCb_t) (BtChar_t *pChar, bool bEnable, uint16_t ConnHdl);
 
 /**
  * @brief	Callback when transmission is completed
@@ -518,8 +518,13 @@ struct __Bt_Characteristic {
 	void *pValue;						//!< Characteristic data value
 	uint16_t ValueLen;					//!< Current length in bytes of data value
 	// Bellow are private data. Do not modify
-	bool bNotify;                       //!< Notify enable flag for read characteristic
-	bool bIndic;						//!< Indication enable flag
+	// bNotify/bIndic are an advisory OR-aggregate across all connected peers
+	// (true if any peer has subscribed), kept for the CccVal mirror and legacy
+	// reads. They are NOT per-connection state. For a per-connection decision
+	// use BtGattCharNotifyEnabled(ConnHdl, pChar) / BtGattCharIndicateEnabled on
+	// the native host; on a SoftDevice or ST port the stack is the authority.
+	bool bNotify;                       //!< Advisory aggregate notify-subscribed flag (see note above)
+	bool bIndic;						//!< Advisory aggregate indicate-subscribed flag (see note above)
 	uint8_t BaseUuidIdx;				//!< Index of Base UUID used for this characteristic.
 	uint16_t Hdl;       				//!< char handle
 	uint16_t ValHdl;					//!< char value handle

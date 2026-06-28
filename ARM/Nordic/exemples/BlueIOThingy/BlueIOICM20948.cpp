@@ -29,7 +29,7 @@
 
 //#define INVN
 //#define IMU_FUSION_VQF
-//#define IMU_FUSION_EQF
+#define IMU_FUSION_EQF
 
 // Fusion backend test selector. Define one of:
 //   IMU_FUSION_VQF - software VQF fusion (AttVqf)

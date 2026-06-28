@@ -186,13 +186,18 @@ static void BtGattCccdUpdateMirror(BtGattChar_t *pChar)
 	pChar->bNotify = bNotify;
 	pChar->bIndic = bIndic;
 
-	BtAttDBEntry_t *entry = BtAttDBFindHandle(pChar->CccdHdl);
-	if (entry != nullptr)
-	{
-		BtDescClientCharConfig_t *pCccd = (BtDescClientCharConfig_t*)entry->Data;
-		pCccd->CccVal = (bNotify ? BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION : 0) |
-						 (bIndic ? BT_DESC_CLIENT_CHAR_CONFIG_INDICATION : 0);
-	}
+	uint16_t cccval = (bNotify ? BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION : 0) |
+					  (bIndic ? BT_DESC_CLIENT_CHAR_CONFIG_INDICATION : 0);
+	BtGattCccdDbSync(pChar->CccdHdl, cccval);
+}
+
+// Weak no-op default. On a SoftDevice/ST port there is no native ATT DB, so the
+// aggregate does not need to be mirrored into a descriptor entry. The native
+// host (bt_att.cpp) overrides this with the strong version that writes CccVal.
+__attribute__((weak)) void BtGattCccdDbSync(uint16_t CccdHdl, uint16_t CccVal)
+{
+	(void)CccdHdl;
+	(void)CccVal;
 }
 
 uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl)
@@ -243,14 +248,14 @@ bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 	bool newNotify = (Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
 	if (oldNotify != newNotify && pChar->SetNotifCB != nullptr)
 	{
-		pChar->SetNotifCB(pChar, newNotify);
+		pChar->SetNotifCB(pChar, newNotify, ConnHdl);
 	}
 
 	bool oldIndic = (oldValue & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
 	bool newIndic = (Value & BT_DESC_CLIENT_CHAR_CONFIG_INDICATION) != 0;
 	if (oldIndic != newIndic && pChar->SetIndCB != nullptr)
 	{
-		pChar->SetIndCB(pChar, newIndic);
+		pChar->SetIndCB(pChar, newIndic, ConnHdl);
 	}
 
 	return true;

@@ -55,7 +55,7 @@ SOFTWARE.
 //#include "audio/audiodev.h"
 #include "board.h"
 
-void MicCharSetNotify(BtGattChar_t *pBleSvc, bool bEnable);
+void MicCharSetNotify(BtGattChar_t *pBleSvc, bool bEnable, uint16_t ConnHdl);
 void CfgSrvcCallback(BtGattChar_t *pBleSvc, uint8_t *pData, int Offset, int Len);
 
 #define DEVICE_NAME                     "BlePdmDemo"                          /**< Name of device. Will be included in the advertising data. */
@@ -269,7 +269,7 @@ void CfgSrvcCallback(BtGattChar_t *pBleSvc, uint8_t *pData, int Offset, int Len)
 
 }
 
-void MicCharSetNotify(BtGattChar_t *pBleSvc, bool bEnable)
+void MicCharSetNotify(BtGattChar_t *pBleSvc, bool bEnable, uint16_t ConnHdl)
 {
 	g_bEnable = bEnable;
 	if (bEnable)

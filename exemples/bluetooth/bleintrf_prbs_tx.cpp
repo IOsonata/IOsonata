@@ -90,7 +90,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define BLE_UART_UUID_WRITE_CHAR		BLUEIO_UUID_UART_TX_CHAR		//!< Command control characteristic
 
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-void ReadCharSetNotif(BtGattChar_t *pChar, bool bEnable);
+void ReadCharSetNotif(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl);
 
 static const BtUuidArr_t s_AdvUuid = {
 	.BaseIdx = 1,
@@ -284,7 +284,7 @@ void PrbsChedHandler(uint32_t Evt, void *pCtx)
 	}
 }
 
-void ReadCharSetNotif(BtGattChar_t *pChar, bool bEnable)
+void ReadCharSetNotif(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{

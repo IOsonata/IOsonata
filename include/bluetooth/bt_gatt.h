@@ -190,6 +190,11 @@ void BtGattHandleValueConfirm(uint16_t ConnHdl);
 uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl);
 bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
 void BtGattCccdClear(uint16_t ConnHdl);
+// Mirror the aggregate CCCD value into the native ATT DB descriptor so a local
+// CCCD read reflects it. Weak no-op default in bt_gatt.cpp; the native host
+// (bt_att.cpp) provides the strong version. SoftDevice/ST ports have no native
+// DB and use the no-op, which keeps bt_gatt.cpp free of BtAttDBFindHandle.
+void BtGattCccdDbSync(uint16_t CccdHdl, uint16_t CccVal);
 bool BtGattCharNotifyEnabled(uint16_t ConnHdl, BtGattChar_t *pChar);
 bool BtGattCharIndicateEnabled(uint16_t ConnHdl, BtGattChar_t *pChar);
 
