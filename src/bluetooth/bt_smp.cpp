@@ -1799,3 +1799,52 @@ extern "C" int BtSmpF4SelfTest(void)
 	SmpF4(U, V, X, 0, out);
 	return memcmp(out, expect, 16) == 0 ? 0 : -1;
 }
+
+// Resolve a resolvable private address against a peer IRK with the ah function
+// (Core spec Vol 3 Part H 2.2.2). Rpa is a 6-byte BD_ADDR in little-endian wire
+// order: Rpa[3..5] are prand (random part, top two bits 0b01), Rpa[0..2] are the
+// hash. Returns true when Rpa was generated from Irk. Byte order matches SmpAes
+// and is checked by BtSmpRpaSelfTest against the spec ah sample.
+extern "C" bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6])
+{
+	// No IRK was distributed for this peer: nothing to resolve against.
+	bool present = false;
+	for (int i = 0; i < 16; i++)
+	{
+		if (Irk[i] != 0)
+		{
+			present = true;
+			break;
+		}
+	}
+	if (present == false)
+	{
+		return false;
+	}
+
+	uint8_t rp[16];
+	uint8_t out[16];
+
+	memset(rp, 0, sizeof(rp));
+	rp[0] = Rpa[3];			// prand, least significant byte first
+	rp[1] = Rpa[4];
+	rp[2] = Rpa[5];
+
+	SmpAes(Irk, rp, out);	// ah = e(Irk, prand'), low 24 bits
+
+	return out[0] == Rpa[0] && out[1] == Rpa[1] && out[2] == Rpa[2];
+}
+
+extern "C" int BtSmpRpaSelfTest(void)
+{
+	// Core spec ah sample (Vol 3 Part H): IRK ec0234a3..0a397d9b, prand 0x708194,
+	// hash 0x0dfbaa, stored little-endian here to match SmpAes. The address holds
+	// hash(0dfbaa) in Rpa[0..2] and prand(708194) in Rpa[3..5].
+	static const uint8_t irk[16] = {
+		0x9b,0x7d,0x39,0x0a,0xa6,0x10,0x10,0x34,
+		0x05,0xad,0xc8,0x57,0xa3,0x34,0x02,0xec };
+	static const uint8_t rpa[6] = {
+		0xaa,0xfb,0x0d,0x94,0x81,0x70 };
+
+	return BtSmpRpaResolve(irk, rpa) ? 0 : -1;
+}

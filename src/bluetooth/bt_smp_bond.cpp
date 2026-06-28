@@ -101,8 +101,17 @@ void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 }
 
 // Find a bond slot matching the peer address, or -1.
+// True if Addr is a resolvable private address: a random address whose most
+// significant byte has its top two bits set to 0b01 (Core spec Vol 6 Part B
+// 1.3.2.2).
+static bool BtSmpAddrIsRpa(const uint8_t Addr[6])
+{
+	return (Addr[5] & 0xC0) == 0x40;
+}
+
 static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 {
+	// Identity match: a public or static-random address used as the bond key.
 	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 	{
 		if (s_BtSmpBondTable[i].bValid &&
@@ -112,6 +121,24 @@ static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 			return i;
 		}
 	}
+
+	// No identity match. A central that rotates its resolvable private address
+	// presents a new random address on every connection, so resolve it against
+	// each bond's distributed IRK with ah (Core spec Vol 3 Part H 2.2.2).
+	// Without this a bonded phone re-pairs on every reconnect and its persisted
+	// CCCDs are never restored.
+	if (BtSmpAddrIsRpa(Addr))
+	{
+		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
+		{
+			if (s_BtSmpBondTable[i].bValid &&
+				BtSmpRpaResolve(s_BtSmpBondTable[i].Keys.Irk, Addr))
+			{
+				return i;
+			}
+		}
+	}
+
 	return -1;
 }
 

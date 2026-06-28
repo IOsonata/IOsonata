@@ -478,6 +478,12 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6]);
  */
 int BtSmpF4SelfTest(void);
 
+// Resolve a resolvable private address (6-byte BD_ADDR) against a peer IRK.
+bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6]);
+
+// ah / RPA-resolution self-test against the spec sample. Returns 0 on PASS.
+int BtSmpRpaSelfTest(void);
+
 #ifdef __cplusplus
 }
 #endif
