@@ -407,6 +407,7 @@ bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 	}
 
 	pBond->SignCounter = cnt + 1;	// next accepted counter must be higher
+	BtSmpBondSave(slot, pBond, sizeof(BtSmpBond_t));	// persist so it survives reset
 	return true;
 }
 
