@@ -808,7 +808,20 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				}
 				retval = sizeof(BtAttExchgMtuReqRsp_t) + 1;
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
-				pRspAtt->ExchgMtuReqRsp.RxMtu = BtAttSetMtu(pReqAtt->ExchgMtuReqRsp.RxMtu);
+
+				uint16_t negMtu = BtAttSetMtu(pReqAtt->ExchgMtuReqRsp.RxMtu);
+				pRspAtt->ExchgMtuReqRsp.RxMtu = negMtu;
+
+				// Record the negotiated MTU on the link so server-initiated PDUs
+				// (notifications/indications) are sized to it, mirroring the
+				// client-side path in bt_attrsp.cpp. s_AttMtu still drives this
+				// handler's response sizing until the per-connection MTU refactor
+				// noted at BtAttSetMtu lands.
+				BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+				if (pConn != nullptr)
+				{
+					pConn->Conn.MaxMtu = negMtu;
+				}
 
 				//DEBUG_PRINTF("MTU : %d\r\n", s_AttMtu);
 			}
