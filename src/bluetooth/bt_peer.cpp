@@ -214,6 +214,16 @@ void BtPeerFree(BtDevice_t *pPeer)
 {
 	if (pPeer != nullptr)
 	{
+		// Drop this link's CCCD subscriptions and recompute the aggregate
+		// notify/indicate mirror across the peers that remain, while this
+		// slot's handle is still valid (BtGattCccdClear resolves the peer by
+		// handle, so it must run before the memset below). This covers a
+		// partial disconnect, where other links stay up and the last-link
+		// BtGattSrvcDisconnected path further down does not run; without it
+		// the departed peer's subscription would linger in pChar->bNotify/
+		// bIndic and the shared CCCD value until that CCCD was written again.
+		BtGattCccdClear(pPeer->Conn.Hdl);
+
 		// Zero the slot - prevents stale MaxMtu, Role, Addr, Services and
 		// any future per-link fields from surviving into the next peer
 		// that lands on this slot. BtPeerAlloc memsets on allocation too,
