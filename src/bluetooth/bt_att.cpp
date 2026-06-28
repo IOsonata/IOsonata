@@ -73,8 +73,9 @@ static uint16_t s_LastHdl = 0;
 // value is min(peer_offered, BT_ATT_MTU_MAX). Offers below BT_ATT_MTU_MIN
 // are rejected (BT Core spec mandates 23 as the absolute floor).
 //
-// NOTE: s_AttMtu is currently a single global. Multi-link operation needs
-// per-connection MTU; that refactor is tracked separately.
+// NOTE: s_AttMtu is the stack-wide default/fallback MTU. Per-connection
+// response sizing resolves the link MTU via BtAttGetMtuForConn(), which falls
+// back to this global when a peer has not (yet) negotiated one.
 uint16_t BtAttSetMtu(uint16_t Mtu)
 {
 	if (Mtu < BT_ATT_MTU_MIN)
@@ -826,11 +827,10 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				uint16_t negMtu = BtAttSetMtu(pReqAtt->ExchgMtuReqRsp.RxMtu);
 				pRspAtt->ExchgMtuReqRsp.RxMtu = negMtu;
 
-				// Record the negotiated MTU on the link so server-initiated PDUs
-				// (notifications/indications) are sized to it, mirroring the
-				// client-side path in bt_attrsp.cpp. s_AttMtu still drives this
-				// handler's response sizing until the per-connection MTU refactor
-				// noted at BtAttSetMtu lands.
+				// Record the negotiated MTU on the link so later requests size
+				// their responses to it (via BtAttGetMtuForConn) and
+				// server-initiated PDUs (notifications/indications) use it too,
+				// mirroring the client-side path in bt_attrsp.cpp.
 				BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 				if (pConn != nullptr)
 				{
@@ -1028,7 +1028,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					p[0] = entry->Hdl & 0xFF;
 					p[1] = entry->Hdl >> 8;
 					p +=2;
-					pRspAtt->ReadByTypeRsp.Len = BtAttReadValueForConn(ConnHdl, entry, 0, p, s_AttMtu - 2) + 2;
+					pRspAtt->ReadByTypeRsp.Len = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - 2) + 2;
 
 					retval = 2 + pRspAtt->ReadByTypeRsp.Len;//rsp->Len * c;
 					break;
@@ -1453,7 +1453,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				uint8_t *p = pRspAtt->ReadMultipleVarRsp.Data;
 				int l = 0;
 
-				while (ReqLen > 0 && (s_AttMtu - l) >= BT_ATT_MTU_MIN)
+				while (ReqLen > 0 && (rspMtu - l) >= BT_ATT_MTU_MIN)
 				{
 					BtAttDBEntry_t *entry = BtAttDBFindHandle(*hdl);
 
