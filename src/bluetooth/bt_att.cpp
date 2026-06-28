@@ -93,6 +93,18 @@ uint16_t BtAttGetMtu()
 {
 	return s_AttMtu;
 }
+
+static uint16_t BtAttGetMtuForConn(uint16_t ConnHdl)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+
+	if (pConn != nullptr && pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN)
+	{
+		return pConn->Conn.MaxMtu;
+	}
+
+	return s_AttMtu;
+}
 /*
 void BtAttSetHandler(AttReadValFct_t ReadFct, AttWriteValFct_t WriteFct)
 {
@@ -792,6 +804,8 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		}
 	}
 
+	uint16_t rspMtu = BtAttGetMtuForConn(ConnHdl);
+
 	switch (pReqAtt->OpCode)
 	{
 		case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_REQ:
@@ -822,6 +836,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				{
 					pConn->Conn.MaxMtu = negMtu;
 				}
+				rspMtu = negMtu;
 
 				//DEBUG_PRINTF("MTU : %d\r\n", s_AttMtu);
 			}
@@ -840,33 +855,69 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_FIND_INFORMATION_RSP;
 
 				int l = 0;
-				BtAttDBEntry_t *entry = BtAttDBFindHandle(req->StartHdl);
+				uint8_t fmt = 0;
+				uint8_t *p = (uint8_t*)pRspAtt->FindInfoRsp.HdlUuid16;
 
-				if (entry)
+				for (uint16_t hdl = req->StartHdl; hdl <= req->EndHdl; hdl++)
 				{
-					if (entry->TypeUuid.BaseIdx > 0)
+					BtAttDBEntry_t *entry = BtAttDBFindHandle(hdl);
+					if (entry == nullptr)
 					{
+						continue;
+					}
+
+					uint8_t entryFmt = entry->TypeUuid.BaseIdx > 0 ?
+							BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128 :
+							BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16;
+					uint16_t entryLen = entryFmt == BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128 ?
+							sizeof(BtAttHdlUuid128_t) :
+							sizeof(BtAttHdlUuid16_t);
+
+					if (fmt == 0)
+					{
+						fmt = entryFmt;
+						pRspAtt->FindInfoRsp.Fmt = fmt;
+					}
+					else if (entryFmt != fmt)
+					{
+						break;
+					}
+
+					if ((uint16_t)(2 + l + entryLen) > rspMtu)
+					{
+						break;
+					}
+
+					if (fmt == BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128)
+					{
+						BtAttHdlUuid128_t *hu = (BtAttHdlUuid128_t*)p;
 						uint8_t uuid128[16];
 
 						BtUuidGetBase(entry->TypeUuid.BaseIdx, uuid128);
-
-						pRspAtt->FindInfoRsp.Fmt = BT_ATT_FIND_INFORMATION_RSP_FMT_UUID128;
-
-						pRspAtt->FindInfoRsp.HdlUuid128[0].Hdl = entry->Hdl;
 						uuid128[12] = entry->TypeUuid.Uuid & 0xff;
 						uuid128[13] = entry->TypeUuid.Uuid >> 8;
-						memcpy(pRspAtt->FindInfoRsp.HdlUuid128[0].Uuid, uuid128, 16);
-						l = sizeof(BtAttHdlUuid128_t);
+
+						hu->Hdl = entry->Hdl;
+						memcpy(hu->Uuid, uuid128, sizeof(hu->Uuid));
 					}
 					else
 					{
-						pRspAtt->FindInfoRsp.Fmt = BT_ATT_FIND_INFORMATION_RSP_FMT_UUID16;
-
-						pRspAtt->FindInfoRsp.HdlUuid16[0].Hdl = entry->Hdl;
-						pRspAtt->FindInfoRsp.HdlUuid16[0].Uuid = entry->TypeUuid.Uuid;
-						l = sizeof(BtAttHdlUuid16_t);
+						BtAttHdlUuid16_t *hu = (BtAttHdlUuid16_t*)p;
+						hu->Hdl = entry->Hdl;
+						hu->Uuid = entry->TypeUuid.Uuid;
 					}
 
+					p += entryLen;
+					l += entryLen;
+
+					if (hdl == 0xFFFF)
+					{
+						break;
+					}
+				}
+
+				if (l > 0)
+				{
 					retval = 2 + l;
 				}
 				else
@@ -897,7 +948,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_FIND_BY_TYPE_VALUE_RSP;
 
 				while (start <= req->EndHdl &&
-					   (size_t)(1 + l) + sizeof(BtAttHdlRange_t) <= s_AttMtu)
+					   (size_t)(1 + l) + sizeof(BtAttHdlRange_t) <= rspMtu)
 				{
 					uint16_t hdlStart = start;
 					uint16_t hdlEnd   = req->EndHdl;
@@ -988,7 +1039,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				int l = 0;
 				pRspAtt->ReadByTypeRsp.Len = 0;
 
-				while (entry && (s_AttMtu - l) >= BT_ATT_MTU_MIN)
+				while (entry && (rspMtu - l) >= BT_ATT_MTU_MIN)
 				{
 					if (entry->Hdl < req->StartHdl || entry->Hdl > req->EndHdl)
 					{
@@ -1008,7 +1059,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						break;
 					}
 
-					int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, s_AttMtu - l - 2) + 2;
+					int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - 2) + 2;
 					if (pRspAtt->ReadByTypeRsp.Len == 0)
 					{
 						pRspAtt->ReadByTypeRsp.Len = cnt;
@@ -1058,7 +1109,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					else
 					{
 						retval = BtAttReadValueForConn(ConnHdl, entry, 0, pRspAtt->ReadRsp.Data,
-												s_AttMtu - 1)  + 1;
+												rspMtu - 1)  + 1;
 					}
 				}
 				else
@@ -1085,7 +1136,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					else
 					{
 						retval = BtAttReadValueForConn(ConnHdl, entry, pReqAtt->ReadBlobReq.Offset,
-												pRspAtt->ReadBlobRsp.Data, s_AttMtu - 1) + 1;
+												pRspAtt->ReadBlobRsp.Data, rspMtu - 1) + 1;
 					}
 				}
 				else
@@ -1107,7 +1158,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				int nhdl = (ReqLen - 1) >> 1;
 				uint8_t *p = pRspAtt->ReadMultipleRsp.Data;
 				retval = 1;
-				for (int i = 0; i < nhdl && (s_AttMtu - retval) >= BT_ATT_MTU_MIN; i++)
+				for (int i = 0; i < nhdl && (rspMtu - retval) >= BT_ATT_MTU_MIN; i++)
 				{
 					BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->ReadMultipleReq.Hdl[i]);
 					if (entry == nullptr)
@@ -1126,7 +1177,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					// Cap each value at the space remaining in the response
 					// buffer (MTU - bytes already written), not the full MTU,
 					// so cumulative values cannot overrun the response.
-					int l = BtAttReadValueForConn(ConnHdl, entry, 0, p, s_AttMtu - retval);
+					int l = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - retval);
 					p += l;
 					retval += l;
 				}
@@ -1175,7 +1226,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				pRspAtt->ReadByGroupTypeRsp.Len = 0;
 				int temp_cnt = 0;
 
-				while (entry && (s_AttMtu - l) >= BT_ATT_MTU_MIN)
+				while (entry && (rspMtu - l) >= BT_ATT_MTU_MIN)
 				{
 					DEBUG_PRINTF("#%d BaseIdx = %d, entry->Hdl = %d, entry->pNext->Hdl = %d, UuidType = %d, uuid16 = 0x%x\r\n",
 							temp_cnt, entry->TypeUuid.BaseIdx, entry->Hdl, entry->pNext->Hdl, entry->TypeUuid.Type, entry->TypeUuid.Uuid);
@@ -1184,7 +1235,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					{
 						p += sizeof(BtAttHdlRange_t);
 
-						int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, s_AttMtu - l - sizeof(BtAttHdlRange_t));
+						int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - sizeof(BtAttHdlRange_t));
 
 						BtAttSrvcDeclar_t *x = (BtAttSrvcDeclar_t *) p;
 						DEBUG_PRINTF("Ble Service UUID16 = 0x%X \r\n", x->Uuid.Uuid16);
@@ -1419,7 +1470,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					}
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP;
-					uint16_t n = BtAttReadValueForConn(ConnHdl, entry, 0, p + 2, s_AttMtu - l - 2);
+					uint16_t n = BtAttReadValueForConn(ConnHdl, entry, 0, p + 2, rspMtu - l - 2);
 					p[0] = n & 0xFF;
 					p[1] = n >> 8;
 					p += n + 2;

@@ -232,10 +232,13 @@ static void WbaGattAttrModified(uint16_t ConnHdl, uint16_t AttrHdl,
 		{
 			BtGattChar_t *pChar = &pSrvc->pCharArray[i];
 
-			if (AttrHdl == pChar->CccdHdl && Len >= 2)
+			if (AttrHdl == pChar->CccdHdl)
 			{
-				uint16_t cccd = (uint16_t)(pData[0] | (pData[1] << 8));
-				BtGattCccdSet(ConnHdl, pChar->CccdHdl, cccd);
+				if (Len == 2 && pData != nullptr)
+				{
+					uint16_t cccd = (uint16_t)(pData[0] | (pData[1] << 8));
+					BtGattCccdSet(ConnHdl, pChar->CccdHdl, cccd);
+				}
 				return;
 			}
 
@@ -263,7 +266,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_disconnection_complete_event_rp0 *p =
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
-			if (BtPeerIsConnected() && p->Connection_Handle == BtPeerActiveHdl())
+			if (BtPeerFindByHdl(p->Connection_Handle) != nullptr)
 			{
 				g_BtAppData.State = BTAPP_DISCONNECTED;
 				BtAppConnLedOff();

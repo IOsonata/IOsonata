@@ -684,15 +684,18 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			return;
 		}
 
-		if ((uint32_t)ctx->Received + pPkt->Hdr.Len > BT_HCI_BUFFER_MAX_SIZE)
+		uint32_t next = (uint32_t)ctx->Received + pPkt->Hdr.Len;
+		if (next > ctx->Expected || next > BT_HCI_BUFFER_MAX_SIZE)
 		{
-			// Would overrun the reassembly buffer - abort this PDU.
+			// Would overrun the declared L2CAP PDU or the reassembly buffer -
+			// abort this PDU. A complete reassembled PDU must end exactly at
+			// Expected, not carry trailing bytes from a malformed fragment.
 			ctx->Active = false;
 			return;
 		}
 
 		memcpy(&ctx->Buf[ctx->Received], pPkt->Data, pPkt->Hdr.Len);
-		ctx->Received += pPkt->Hdr.Len;
+		ctx->Received = (uint16_t)next;
 
 		if (ctx->Received < ctx->Expected)
 		{
@@ -763,10 +766,19 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		return;
 	}
 
-	DEBUG_PRINTF("L2 RX cid=0x%04x len=%d d=%02x%02x%02x%02x%02x%02x\r\n",
+	{
+		const uint8_t *raw = (const uint8_t*)l2rcv;
+		uint8_t d[6] = { 0, 0, 0, 0, 0, 0 };
+
+		for (uint16_t i = 0; i < sizeof(d) && (uint16_t)(sizeof(BtL2CapHdr_t) + i) < avail; i++)
+		{
+			d[i] = raw[sizeof(BtL2CapHdr_t) + i];
+		}
+
+		DEBUG_PRINTF("L2 RX cid=0x%04x len=%d d=%02x%02x%02x%02x%02x%02x\r\n",
 				 l2rcv->Hdr.Cid, l2rcv->Hdr.Len,
-				 ((const uint8_t*)l2rcv)[4], ((const uint8_t*)l2rcv)[5], ((const uint8_t*)l2rcv)[6],
-				 ((const uint8_t*)l2rcv)[7], ((const uint8_t*)l2rcv)[8], ((const uint8_t*)l2rcv)[9]);
+				 d[0], d[1], d[2], d[3], d[4], d[5]);
+	}
 /*
 	DEBUG_PRINTF("** BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
 	for (int i = 0; i < pPkt->Hdr.Len; i++)
