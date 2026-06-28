@@ -19,6 +19,7 @@ distributed EDIV/Rand and are matched on those first.
 
 @author	Hoan
 -------------------------------------------------------------------------*/
+#include <stdint.h>
 #include <string.h>
 
 #include "bluetooth/bt_smp.h"
@@ -104,9 +105,15 @@ void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 // Find a bond slot matching the peer address, or -1.
 // True if Addr is a resolvable private address: a random address whose most
 // significant byte has its top two bits set to 0b01 (Core spec Vol 6 Part B
-// 1.3.2.2).
-static bool BtSmpAddrIsRpa(const uint8_t Addr[6])
+// 1.3.2.2). The bit pattern is valid only for random addresses; do not run
+// public addresses through IRK resolution.
+static bool BtSmpAddrIsRpa(uint8_t AddrType, const uint8_t Addr[6])
 {
+	if (Addr == nullptr || AddrType != BTADDR_TYPE_RAND)
+	{
+		return false;
+	}
+
 	return (Addr[5] & 0xC0) == 0x40;
 }
 
@@ -128,7 +135,7 @@ static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 	// each bond's distributed IRK with ah (Core spec Vol 3 Part H 2.2.2).
 	// Without this a bonded phone re-pairs on every reconnect and its persisted
 	// CCCDs are never restored.
-	if (BtSmpAddrIsRpa(Addr))
+	if (BtSmpAddrIsRpa(AddrType, Addr))
 	{
 		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 		{
@@ -361,6 +368,11 @@ bool BtSmpBonded(uint16_t ConnHdl)
 bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 					 const uint8_t *pSig)
 {
+	if (pSig == nullptr || (pMsg == nullptr && MsgLen > 0))
+	{
+		return false;
+	}
+
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr)
 	{
@@ -396,6 +408,12 @@ bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 				   ((uint32_t)pSig[2] << 16) | ((uint32_t)pSig[3] << 24);
 	if (cnt < pBond->SignCounter)
 	{
+		return false;
+	}
+
+	if (cnt == UINT32_MAX)
+	{
+		// Accepting this value would wrap the stored next counter back to 0.
 		return false;
 	}
 

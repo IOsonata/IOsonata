@@ -1807,6 +1807,11 @@ extern "C" int BtSmpF4SelfTest(void)
 // and is checked by BtSmpRpaSelfTest against the spec ah sample.
 extern "C" bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6])
 {
+	if (Irk == nullptr || Rpa == nullptr)
+	{
+		return false;
+	}
+
 	// No IRK was distributed for this peer: nothing to resolve against.
 	bool present = false;
 	for (int i = 0; i < 16; i++)
