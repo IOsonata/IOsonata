@@ -15,6 +15,7 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 @author	Nguyen Hoan Hoang
 ----------------------------------------------------------------------------*/
 #include <string.h>
+#include <stdint.h>
 
 #include "stm32wbaxx.h"
 #include "stm32wbaxx_hal.h"
@@ -26,6 +27,7 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_att.h"
+#include "bluetooth/bt_gap.h"
 
 // ST lays a characteristic out as a run of consecutive handles: the declaration
 // at the handle returned by aci_gatt_add_char, the value at declaration + 1,
@@ -150,15 +152,35 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 // policy as the SoftDevice ports). Update_Type 0x01 = Notification.
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	if (pChar == nullptr || pChar->pSrvc == nullptr)
+	if (ConnHdl == BT_CONN_HDL_INVALID)
 	{
 		return false;
 	}
 
+	if (pChar == nullptr || pChar->pSrvc == nullptr ||
+		pChar->Hdl == BT_ATT_HANDLE_INVALID ||
+		pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	if (Len > 0 && pVal == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > pChar->MaxDataLen || Len > UINT8_MAX)
+	{
+		return false;
+	}
+
+	uint8_t dummy = 0;
+	const uint8_t *p = (Len > 0) ? (const uint8_t *)pVal : &dummy;
+
 	tBleStatus st = aci_gatt_update_char_value_ext(ConnHdl, pChar->pSrvc->Hdl,
 												   pChar->Hdl, 0x01,
 												   (uint16_t)Len, 0,
-												   (uint8_t)Len, (const uint8_t *)pVal);
+												   (uint8_t)Len, p);
 	return st == BLE_STATUS_SUCCESS;
 }
 
@@ -166,14 +188,34 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 // the single outstanding indication and the client confirmation internally.
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
-	if (pChar == nullptr || pChar->pSrvc == nullptr)
+	if (ConnHdl == BT_CONN_HDL_INVALID)
 	{
 		return false;
 	}
 
+	if (pChar == nullptr || pChar->pSrvc == nullptr ||
+		pChar->Hdl == BT_ATT_HANDLE_INVALID ||
+		pChar->ValHdl == BT_ATT_HANDLE_INVALID)
+	{
+		return false;
+	}
+
+	if (Len > 0 && pVal == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > pChar->MaxDataLen || Len > UINT8_MAX)
+	{
+		return false;
+	}
+
+	uint8_t dummy = 0;
+	const uint8_t *p = (Len > 0) ? (const uint8_t *)pVal : &dummy;
+
 	tBleStatus st = aci_gatt_update_char_value_ext(ConnHdl, pChar->pSrvc->Hdl,
 												   pChar->Hdl, 0x02,
 												   (uint16_t)Len, 0,
-												   (uint8_t)Len, (const uint8_t *)pVal);
+												   (uint8_t)Len, p);
 	return st == BLE_STATUS_SUCCESS;
 }
