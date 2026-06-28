@@ -97,8 +97,6 @@ typedef struct __Bt_Device {
 	uint16_t		ProductVer;					//!< PnP product version
 	bool			bIsLocal;					//!< true for the local stack instance, false for tracked remotes
 	bool			bSecure;					//!< true if link is encrypted or device is bonded
-	bool			bAuthenticated;				//!< true if the encryption uses an MITM-protected (authenticated) key
-	uint8_t			EncKeySize;					//!< Negotiated encryption key size in bytes (0 when not encrypted)
 	BtHciDevice_t	*pHciDev;					//!< Associated HCI device
 	int				NbSrvc;						//!< Number of services in the Services array
 	BtGattDBSrvc_t	Services[BT_DEV_SERVICE_MAXCNT];	//!< Services: exposed if local, discovered if remote

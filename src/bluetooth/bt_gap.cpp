@@ -48,6 +48,9 @@ SOFTWARE.
 
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_smp.h"
 
 #ifndef BT_GAP_DEVNAME_MAX_LEN
 #define BT_GAP_DEVNAME_MAX_LEN			64
@@ -154,5 +157,50 @@ void BtGapInit(const BtGapCfg_t *pCfg)
 	if (pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL))
 	{
 		BtGapParamInit(pCfg);
+	}
+}
+
+// Generic connection-security accessors over the per-connection store. The
+// security layer (generic SMP, or a vendor port mapping its stack) writes the
+// state with BtGapConnSecSet; the ATT permission checks read it with
+// BtGapConnSecGet. An arch overrides these only when the vendor stack owns the
+// security database. Weak so a host-side build can substitute its own.
+__attribute__((weak)) bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
+{
+	if (pSec == nullptr)
+	{
+		return false;
+	}
+
+	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
+	if (p == nullptr)
+	{
+		return false;
+	}
+
+	*pSec = p->Conn.Sec;
+
+	// Bond existence is always current and is needed before this link has
+	// re-encrypted, so the ATT gate can answer INSUF_ENCRYPT (re-encrypt from
+	// the stored key) rather than INSUF_AUTHEN (pair first).
+	if (BtSmpBonded(ConnHdl))
+	{
+		pSec->Flags |= BT_GAP_SEC_FLAG_BONDED;
+	}
+
+	return true;
+}
+
+__attribute__((weak)) void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec)
+{
+	if (pSec == nullptr)
+	{
+		return;
+	}
+
+	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
+	if (p != nullptr)
+	{
+		p->Conn.Sec = *pSec;
 	}
 }

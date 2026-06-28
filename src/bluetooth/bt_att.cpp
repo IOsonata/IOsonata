@@ -42,7 +42,6 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
-#include "bluetooth/bt_smp.h"
 
 /******** For DEBUG ************/
 //#define DEBUG_ENABLE
@@ -500,21 +499,11 @@ static BtGattChar_t *BtAttEntryChar(BtAttDBEntry_t *pEntry)
 	return nullptr;
 }
 
-// Link security hooks. The generic ATT layer does not own SMP/link state, so
-// ports or the SMP module override these. The defaults preserve open-service
-// behaviour unless an attribute explicitly sets Permission bits.
-__attribute__((weak)) bool BtAttLinkEncrypted(uint16_t ConnHdl)
-{
-	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
-	return p != nullptr && p->bSecure;
-}
-
-__attribute__((weak)) bool BtAttLinkAuthenticated(uint16_t ConnHdl)
-{
-	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
-	return p != nullptr && p->bSecure && p->bAuthenticated;
-}
-
+// Link security (encryption / authentication / key size) is read from the
+// generic BtGapConnSecGet snapshot, not from SMP internals. Authorization stays
+// a per-attribute hook here because it is app policy, not link state: ports or
+// apps override it. The default authorizes everything; gating happens only when
+// an attribute sets the AUTHOR Permission bit.
 __attribute__((weak)) bool BtAttLinkAuthorized(uint16_t ConnHdl,
 											  BtAttDBEntry_t *pEntry,
 											  bool bRead)
@@ -523,12 +512,6 @@ __attribute__((weak)) bool BtAttLinkAuthorized(uint16_t ConnHdl,
 	(void)pEntry;
 	(void)bRead;
 	return true;
-}
-
-__attribute__((weak)) uint8_t BtAttLinkEncryptKeySize(uint16_t ConnHdl)
-{
-	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
-	return (p != nullptr && p->bSecure) ? p->EncKeySize : 0;
 }
 
 // Compatibility hook for ports/apps that already enforce security externally.
@@ -578,16 +561,24 @@ static uint8_t BtAttAccessPolicyError(uint16_t ConnHdl,
 	uint32_t keyFlag = bRead ? BT_ATT_PERMISSION_READ_KEY_SIZE :
 							   BT_ATT_PERMISSION_WRITE_KEY_SIZE;
 
-	if ((perm & encFlag) != 0 && BtAttLinkEncrypted(ConnHdl) == false)
+	BtConnSec_t sec;
+	if (BtGapConnSecGet(ConnHdl, &sec) == false)
 	{
-		// Link must be encrypted but isn't. A bonded peer can encrypt from the
-		// stored key (Insufficient Encryption); an unbonded peer has to pair
-		// first (Insufficient Authentication). Core spec Vol 3 Part C 10.3.
-		return BtSmpBonded(ConnHdl) ? BT_ATT_ERROR_INSUF_ENCRYPT
-									: BT_ATT_ERROR_INSUF_AUTHEN;
+		sec.Level = BT_GAP_SEC_LEVEL_NONE;
+		sec.KeySize = 0;
+		sec.Flags = 0;
 	}
 
-	if ((perm & authFlag) != 0 && BtAttLinkAuthenticated(ConnHdl) == false)
+	if ((perm & encFlag) != 0 && sec.Level < BT_GAP_SEC_LEVEL_ENC_UNAUTH)
+	{
+		// Encrypted link required but absent. A bonded peer can re-encrypt from
+		// the stored key (Insufficient Encryption); an unbonded peer has to pair
+		// first (Insufficient Authentication). Core spec Vol 3 Part C 10.3.
+		return (sec.Flags & BT_GAP_SEC_FLAG_BONDED) ? BT_ATT_ERROR_INSUF_ENCRYPT
+													: BT_ATT_ERROR_INSUF_AUTHEN;
+	}
+
+	if ((perm & authFlag) != 0 && sec.Level < BT_GAP_SEC_LEVEL_ENC_AUTH)
 	{
 		return BT_ATT_ERROR_INSUF_AUTHEN;
 	}
@@ -598,7 +589,7 @@ static uint8_t BtAttAccessPolicyError(uint16_t ConnHdl,
 		return BT_ATT_ERROR_INSUF_AUTHOR;
 	}
 
-	if ((perm & keyFlag) != 0 && BtAttLinkEncryptKeySize(ConnHdl) < 16)
+	if ((perm & keyFlag) != 0 && sec.KeySize < 16)
 	{
 		return BT_ATT_ERROR_ENCRYPT_KEY_TOO_SHORT;
 	}

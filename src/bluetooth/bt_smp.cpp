@@ -1384,11 +1384,30 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	if (pPeer != nullptr)
 	{
 		pPeer->bSecure = (Status == 0) && (Enabled != 0);
-		if (pPeer->bSecure == false)
+
+		// Produce the generic security state the ATT permission checks consume.
+		// This build pairs Just Works only, so an encrypted link is
+		// unauthenticated (ENC_UNAUTH); the level rises here when authenticated
+		// association models (passkey / numeric comparison) are added.
+		BtConnSec_t sec;
+		memset(&sec, 0, sizeof(sec));
+		if (pPeer->bSecure)
 		{
-			pPeer->bAuthenticated = false;
-			pPeer->EncKeySize = 0;
+			sec.Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
+
+			BtSmpLink_t *pSecLink = SmpLinkFind(ConnHdl);
+			sec.KeySize = (pSecLink != nullptr) ? pSecLink->Keys.EncKeySize
+												: BT_SMP_MAX_ENC_KEY_SIZE;
+			if (pSecLink != nullptr && pSecLink->Keys.bSc)
+			{
+				sec.Flags |= BT_GAP_SEC_FLAG_SC;
+			}
+			if (BtSmpBonded(ConnHdl))
+			{
+				sec.Flags |= BT_GAP_SEC_FLAG_BONDED;
+			}
 		}
+		BtGapConnSecSet(ConnHdl, &sec);
 	}
 
 	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
@@ -1415,14 +1434,6 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 	if (pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT)
 	{
-		// Surface the freshly negotiated security level on the link so the ATT
-		// permission checks can gate secured attributes.
-		if (pPeer != nullptr)
-		{
-			pPeer->EncKeySize = pLink->Keys.EncKeySize;
-			pPeer->bAuthenticated = pLink->Keys.bAuthenticated;
-		}
-
 		// Encrypted via fresh pairing. Run the key distribution phase that was
 		// negotiated. The local device distributes the keys it offered:
 		// InitiatorKeyDist (PReq[6 of req = byte 5]) when we are the central,

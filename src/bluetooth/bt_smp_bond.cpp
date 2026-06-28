@@ -273,19 +273,6 @@ uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue, uin
 }
 
 // Override: look up an LTK for an incoming controller LTK request.
-// Copy a bond's encryption key size and authentication level onto the live
-// link so the ATT permission checks (BtAttLinkEncryptKeySize / Authenticated)
-// can gate secured attributes once this link encrypts from the stored key.
-static void BtSmpBondApplySecurity(uint16_t ConnHdl, const BtSmpBond_t *pBond)
-{
-	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
-	if (p != nullptr)
-	{
-		p->EncKeySize = pBond->Keys.EncKeySize;
-		p->bAuthenticated = pBond->Keys.bAuthenticated;
-	}
-}
-
 bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 								   uint16_t Ediv, uint8_t Ltk[16])
 {
@@ -300,7 +287,6 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 				s_BtSmpBondTable[i].Keys.Rand == Rand)
 			{
 				memcpy(Ltk, s_BtSmpBondTable[i].Keys.Ltk, 16);
-				BtSmpBondApplySecurity(ConnHdl, &s_BtSmpBondTable[i]);
 				return true;
 			}
 		}
@@ -316,7 +302,6 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 		if (slot >= 0)
 		{
 			memcpy(Ltk, s_BtSmpBondTable[slot].Keys.Ltk, 16);
-			BtSmpBondApplySecurity(ConnHdl, &s_BtSmpBondTable[slot]);
 			return true;
 		}
 	}

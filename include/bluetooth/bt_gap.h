@@ -178,6 +178,31 @@ typedef struct __Bt_Gap_Conn_Params {
 // high layer owns the storage and passes &pPeer->Conn down to GATT/GAP code
 // that needs link context. The low layer operates on the pointer it is
 // handed; it never owns a pool nor looks up by handle.
+// Generic link security level. Values follow the spec security-level numbering
+// (LE security mode 1): spec Level 1 (no security) is represented as NONE here
+// so a zero-initialised connection reads as unsecured. SC-vs-legacy and bonded
+// are carried in Flags, not the level: an SC Just Works link is ENC_UNAUTH with
+// FLAG_SC set, not LESC_AUTH (which is SC plus MITM).
+typedef enum __Bt_Gap_Sec_Level {
+	BT_GAP_SEC_LEVEL_NONE		= 0,	//!< No security (unencrypted)
+	BT_GAP_SEC_LEVEL_ENC_UNAUTH	= 2,	//!< Encrypted, unauthenticated (Just Works)
+	BT_GAP_SEC_LEVEL_ENC_AUTH	= 3,	//!< Encrypted, authenticated (MITM)
+	BT_GAP_SEC_LEVEL_LESC_AUTH	= 4		//!< LE Secure Connections, authenticated (MITM)
+} BtGapSecLevel_t;
+
+#define BT_GAP_SEC_FLAG_BONDED		(1UL << 0)	//!< A stored bond exists for the peer
+#define BT_GAP_SEC_FLAG_SC			(1UL << 1)	//!< Key produced by LE Secure Connections
+#define BT_GAP_SEC_FLAG_SIGNED		(1UL << 2)	//!< A CSRK is available for signed writes
+
+// Generic per-connection security state. Produced by the security layer (SMP on
+// a host-side build, the vendor stack mapped through BtGapConnSecGet otherwise)
+// and consumed by the ATT permission checks. Replaces ad-hoc per-link flags.
+typedef struct __Bt_Conn_Sec {
+	uint8_t Level;		//!< BtGapSecLevel_t
+	uint8_t KeySize;	//!< Encryption key size in bytes, 0 when not encrypted
+	uint8_t Flags;		//!< BT_GAP_SEC_FLAG_* bitfield
+} BtConnSec_t;
+
 typedef struct __Bt_Gap_Connection {
 	uint16_t Hdl;				//!< Connection handle (BT_ATT_HANDLE_INVALID when slot is free)
 	uint8_t Role;				//!< LL role on this link
@@ -191,7 +216,18 @@ typedef struct __Bt_Gap_Connection {
 	uint32_t IndCfmTime;		//!< BtGattMsTick() value when the outstanding indication was sent (for the 30s transaction timeout)
 	uint8_t NbCccd;				//!< Number of active per-peer CCCD states
 	BtGattCccdState_t Cccd[BT_GATT_CCCD_STATE_MAX];	//!< Per-peer CCCD values keyed by CCCD handle
+	BtConnSec_t Sec;			//!< Live link security state (produced by the security layer)
 } BtGapConnection_t;
+
+// Read the current security state of ConnHdl into *pSec. Returns false when the
+// connection is unknown. Implemented by the generic host over the connection
+// store; an arch port overrides it only when the vendor stack owns the security
+// database (it then maps the vendor state into BtConnSec_t).
+bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec);
+
+// Record the security state of ConnHdl. Called by the security layer when
+// pairing or encryption completes or is lost.
+void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec);
 
 typedef enum __Bt_Scan_Type {
 	BTSCAN_TYPE_PASSIVE,		//!< without scan/response data

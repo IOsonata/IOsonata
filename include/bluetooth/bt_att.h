@@ -588,10 +588,7 @@ void BtAttDBEntrySetPermission(BtAttDBEntry_t *pEntry, uint32_t Permission);
 uint32_t BtAttDBEntryGetPermission(BtAttDBEntry_t *pEntry);
 
 uint8_t BtAttAccessSecurityError(uint16_t ConnHdl, BtAttDBEntry_t *pEntry, bool bRead);
-bool BtAttLinkEncrypted(uint16_t ConnHdl);
-bool BtAttLinkAuthenticated(uint16_t ConnHdl);
 bool BtAttLinkAuthorized(uint16_t ConnHdl, BtAttDBEntry_t *pEntry, bool bRead);
-uint8_t BtAttLinkEncryptKeySize(uint16_t ConnHdl);
 bool BtAttSignedWriteVerify(uint16_t ConnHdl, const BtAttSignedWriteCmd_t *pCmd,
 							uint16_t ValueLen, const uint8_t *pSignature);
 
