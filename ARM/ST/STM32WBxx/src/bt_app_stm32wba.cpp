@@ -222,7 +222,7 @@ static void WbaDiscProcComplete(void);
 // notify/indicate subscribe callbacks) and a value write to the char WrCB. This
 // mirrors the nRF52 BLE_GATTS_EVT_WRITE handler.
 static void WbaGattAttrModified(uint16_t ConnHdl, uint16_t AttrHdl,
-								uint8_t *pData, uint16_t Len)
+								uint16_t Offset, uint8_t *pData, uint16_t Len)
 {
 	BtGattSrvc_t *pSrvc = BtGattGetSrvcList();
 
@@ -241,7 +241,7 @@ static void WbaGattAttrModified(uint16_t ConnHdl, uint16_t AttrHdl,
 
 			if (AttrHdl == pChar->ValHdl && pChar->WrCB != nullptr)
 			{
-				pChar->WrCB(pChar, pData, 0, (int)Len);
+				pChar->WrCB(pChar, pData, (int)Offset, (int)Len);
 				return;
 			}
 		}
@@ -371,7 +371,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					aci_gatt_attribute_modified_event_rp0 *pM =
 						(aci_gatt_attribute_modified_event_rp0 *)pAci->data;
 					WbaGattAttrModified(pM->Connection_Handle, pM->Attr_Handle,
-										pM->Attr_Data, pM->Attr_Data_Length);
+										pM->Offset, pM->Attr_Data, pM->Attr_Data_Length);
 					break;
 				}
 

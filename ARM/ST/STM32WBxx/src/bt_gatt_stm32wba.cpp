@@ -28,6 +28,7 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_peer.h"
 
 // ST lays a characteristic out as a run of consecutive handles: the declaration
 // at the handle returned by aci_gatt_add_char, the value at declaration + 1,
