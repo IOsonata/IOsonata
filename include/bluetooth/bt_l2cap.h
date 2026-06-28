@@ -37,6 +37,7 @@ SOFTWARE.
 #define __BT_L2CAP_H__
 
 #include <inttypes.h>
+#include <stdbool.h>
 
 #include "bt_att.h"
 

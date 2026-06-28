@@ -597,7 +597,14 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			{
 				l2pdu->Hdr.Cid = BT_L2CAP_CID_SIGNAL;
 				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
-				pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+
+				uint32_t sent = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+				if (sent == 0)
+				{
+					SysLogPrintf(SysLogGet(),
+						"L2CAP SIG TX FAILED code=0x%02x len=%u\r\n",
+						l2rcv->CFrame.Code, acl->Hdr.Len);
+				}
 			}
 		}
 			break;
