@@ -252,6 +252,49 @@ static void WbaGattAttrModified(uint16_t ConnHdl, uint16_t AttrHdl,
 	}
 }
 
+// On a bonded reconnection the ST stack restores each subscribed client's CCCD
+// from its security database but does not emit ACI_GATT_ATTRIBUTE_MODIFIED for
+// the restore, so the notify/indicate re-arm callbacks never fire. Read the
+// per-connection CCCD the stack restored and replay each enabled one through
+// BtGattCccdSet, which fires SetNotifCB/SetIndCB. This is the WBA equivalent of
+// the SDC port's BtGattCccdRestoreBonded, sourced from the stack instead of the
+// IOsonata bond table (which ST owns on this port). Called on encryption enabled.
+static void WbaGattCccdReArm(uint16_t ConnHdl)
+{
+	BtGattSrvc_t *pSrvc = BtGattGetSrvcList();
+
+	while (pSrvc != nullptr)
+	{
+		for (int i = 0; i < pSrvc->NbChar; i++)
+		{
+			BtGattChar_t *pChar = &pSrvc->pCharArray[i];
+
+			if (pChar->CccdHdl == BT_ATT_HANDLE_INVALID)
+			{
+				continue;
+			}
+
+			uint16_t length = 0;
+			uint16_t valLen = 0;
+			uint8_t val[2] = { 0, 0 };
+
+			// A Connection_Handle selects the per-connection CCCD instance.
+			tBleStatus st = aci_gatt_get_attribute_value(ConnHdl, pChar->CccdHdl,
+														 0, sizeof(val),
+														 &length, &valLen, val);
+			if (st == BLE_STATUS_SUCCESS && valLen >= 2)
+			{
+				uint16_t cccd = (uint16_t)(val[0] | (val[1] << 8));
+				if (cccd != 0)
+				{
+					BtGattCccdSet(ConnHdl, pChar->CccdHdl, cccd);
+				}
+			}
+		}
+		pSrvc = pSrvc->pNext;
+	}
+}
+
 // HCI event callback registered with the stack. ST's stack invokes this
 // for every HCI / vendor event; we route by type to the appropriate
 // handler. Adv-report events go to the scan path (handled in
@@ -276,6 +319,22 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 				{
 					BtAdvStart();
 				}
+			}
+			break;
+		}
+
+		case HCI_ENCRYPTION_CHANGE_EVT_CODE:
+		{
+			hci_encryption_change_event_rp0 *p =
+				(hci_encryption_change_event_rp0 *)pEvtPkt->data;
+			// Link encrypted. On a bonded reconnect the stack has restored the
+			// peer's CCCDs by this point, so re-arm the notify/indicate callbacks.
+			// On a fresh pairing the CCCDs are still clear, so this is a no-op and
+			// the later client subscribe drives the callbacks instead.
+			if (p->Status == 0 && p->Encryption_Enabled != 0 &&
+				BtPeerFindByHdl(p->Connection_Handle) != nullptr)
+			{
+				WbaGattCccdReArm(p->Connection_Handle);
 			}
 			break;
 		}
