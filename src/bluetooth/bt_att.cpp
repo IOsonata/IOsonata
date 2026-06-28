@@ -909,6 +909,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			case BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ:	minLen = 7; break;	// op + start(2) + end(2) + uuid16(2)
 			case BT_ATT_OPCODE_ATT_WRITE_REQ:				minLen = 3; break;	// op + hdl(2) + value(>=0)
 			case BT_ATT_OPCODE_ATT_CMD:						minLen = 3; break;	// op + hdl(2) + value(>=0)
+			case BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD:			minLen = 15; break;	// op + hdl(2) + signature(12)
 			case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:		minLen = 5; break;	// op + hdl(2) + offset(2)
 			case BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ:		minLen = 2; break;	// op + flags(1)
 			case BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF:		minLen = 3; break;	// op + hdl(2) + value(>=0)
@@ -1484,6 +1485,42 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 					retval = 0;
 				}
+			}
+			break;
+		case BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD:
+			{
+				DEBUG_PRINTF("BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD (0xD2):\r\n");
+
+				// Signed Write Command is a command PDU: no ATT Error Response.
+				// The generic fallback does not own CSRK/signature state, so it
+				// must ignore the command unless a port/SMP override verifies it.
+				int dlen = ReqLen - 15;	// opcode + handle + 12-byte signature
+				if (dlen < 0)
+				{
+					retval = 0;
+					break;
+				}
+
+				BtAttDBEntry_t *entry = BtAttDBFindHandle(pReqAtt->SignedWriteCmd.Hdl);
+				const uint8_t *sig = &pReqAtt->SignedWriteCmd.Data[dlen];
+
+				if (entry != nullptr &&
+					BtAttSignedWriteVerify(ConnHdl, &pReqAtt->SignedWriteCmd,
+										   (uint16_t)dlen, sig))
+				{
+					uint8_t err = BtAttWritePermError(ConnHdl, entry,
+													  BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD,
+													  pReqAtt->SignedWriteCmd.Data,
+													  (uint16_t)dlen);
+					if (err == 0)
+					{
+						BtAttWriteValueForConn(ConnHdl, entry, 0,
+											   pReqAtt->SignedWriteCmd.Data,
+											   (uint16_t)dlen);
+					}
+				}
+
+				retval = 0;
 			}
 			break;
 		case BT_ATT_OPCODE_ATT_PREPARE_WRITE_REQ:

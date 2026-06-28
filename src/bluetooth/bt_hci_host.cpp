@@ -812,8 +812,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			{
 				acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-				SysLogPrintf(SysLogGet(),
-					"ATT TX rsp=0x%02x (req=0x%02x) len=%d\r\n",
+				DEBUG_PRINTF("ATT TX rsp=0x%02x (req=0x%02x) len=%d\r\n",
 					l2pdu->Att.OpCode, l2rcv->Att.OpCode, l2pdu->Hdr.Len);
 
 				uint32_t sent = BtHciSendAcl(pDev, acl);
@@ -826,8 +825,7 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			}
 			else
 			{
-				SysLogPrintf(SysLogGet(),
-					"ATT no rsp for req=0x%02x (treated as client rsp)\r\n",
+				DEBUG_PRINTF("ATT no rsp for req=0x%02x (treated as client rsp)\r\n",
 					l2rcv->Att.OpCode);
 				BtAttProcessRsp(pPkt->Hdr.ConnHdl, &l2rcv->Att, l2rcv->Hdr.Len);
 			}
