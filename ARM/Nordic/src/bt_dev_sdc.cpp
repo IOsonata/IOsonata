@@ -1295,7 +1295,7 @@ bool BtDevNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	if (isBtGattCharNotifyEnabled(pChar) == false)
+	if (BtGattCharNotifyEnabled(s_BtDevSdc.Conn.Hdl, pChar) == false)
 	{
 		return false;
 	}

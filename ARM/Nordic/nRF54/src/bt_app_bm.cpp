@@ -414,8 +414,7 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
 		return false;
 
-	if (pChar->bNotify == false)
-		return false;
+	// SoftDevice enforces the CCCD per connection on sd_ble_gatts_hvx.
 
 	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
 		return false;
@@ -454,8 +453,7 @@ bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
 		return false;
 
-	if (pChar->bIndic == false)
-		return false;
+	// SoftDevice enforces the CCCD per connection on sd_ble_gatts_hvx.
 
 	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
 		return false;

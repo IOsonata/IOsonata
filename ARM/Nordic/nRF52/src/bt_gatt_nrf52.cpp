@@ -110,10 +110,9 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 //	if (pSrvc->pCharArray[Idx].bNotify == false)
 //		return NRF_ERROR_INVALID_STATE;
 
-	if (pChar->bNotify == false)
-	{
-		return false;
-	}
+	// No local CCCD gate. The SoftDevice tracks the CCCD per connection (and
+	// restores it per bond) and sd_ble_gatts_hvx returns an error when this
+	// connection has not enabled notification, so it is the authority.
 
     ble_gatts_hvx_params_t params;
 
@@ -162,10 +161,10 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal
 		return false;
 	}
 
-	if (pChar->bIndic == false)
-	{
-		return false;
-	}
+	// No local CCCD gate. sd_ble_gatts_hvx with BLE_GATT_HVX_INDICATION returns
+	// an error when this connection has not enabled indication, so the
+	// SoftDevice is the authority. The local bIndic flag was never set here, so
+	// gating on it blocked every indication.
 
     ble_gatts_hvx_params_t params;
 

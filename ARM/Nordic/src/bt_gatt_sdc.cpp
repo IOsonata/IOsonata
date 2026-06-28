@@ -60,7 +60,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 	memcpy(pChar->pValue, pData, Len);
 	pChar->ValueLen = Len;
 
-	if (isBtGattCharNotifyEnabled(pChar))
+	if (BtGattCharNotifyEnabled(ConnHdl, pChar))
 	{
 		uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
 		BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
