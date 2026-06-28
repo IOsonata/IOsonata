@@ -46,6 +46,7 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_gatt.h"
 #include "crypto/crypto.h"
 #include "coredev/rng.h"
 
@@ -1397,6 +1398,11 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		BtSmpPairingComplete(ConnHdl, false, nullptr);
 		return;
 	}
+
+	// Link is encrypted. Restore persisted CCCD subscriptions for a bonded peer
+	// so notifications resume without re-subscription. No-op on a fresh pairing:
+	// the bond and its CCCD snapshot are created later in key distribution.
+	BtGattCccdRestoreBonded(ConnHdl);
 
 	if (pLink->Ctx.State == BT_SMP_STATE_LTK_WAIT)
 	{

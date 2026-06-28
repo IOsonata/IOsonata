@@ -1685,8 +1685,6 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				BtGattHandleValueConfirm(ConnHdl);
 			}
 			break;
-		case BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD:
-			break;
 		default:
 			//DEBUG_PRINTF("OpCode : %x\r\n", pReqAtt->OpCode);
 			// ATT spec: a server that receives a Request it does not support

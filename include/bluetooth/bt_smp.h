@@ -416,6 +416,15 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, uint8_t 
 void BtSmpBondClearAll(void);
 
 /**
+ * @brief	Persist (BtSmpBondCccdSave) or fetch (BtSmpBondCccdGet) the CCCD set
+ *			for the bonded peer on ConnHdl. Save is a no-op for unbonded peers,
+ *			so CCCD stays volatile unless the client is bonded (Core spec Vol 3
+ *			Part G 3.3.3.3). Get returns the entry count via handle/value arrays.
+ */
+void    BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
+uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue, uint8_t Max);
+
+/**
  * @brief	Platform persistence seam (weak, RAM-only by default).
  *
  * BtSmpBondSave   : generic layer calls this when slot Slot changes; the

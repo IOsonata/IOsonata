@@ -34,6 +34,8 @@ typedef struct __Bt_Smp_Bond {
 	uint8_t		PeerAddrType;	//!< Peer address type used on the link
 	uint8_t		PeerAddr[6];	//!< Peer address used on the link (match key)
 	BtSmpKeys_t	Keys;			//!< Stored key set (LTK, IRK, identity, ...)
+	uint8_t		NbCccd;			//!< Number of persisted CCCD entries
+	BtGattCccdState_t Cccd[BT_GATT_CCCD_STATE_MAX];	//!< CCCD set persisted for this bond (spec: bonded clients keep CCCD across connections)
 } BtSmpBond_t;
 
 static BtSmpBond_t s_BtSmpBondTable[BT_SMP_BOND_MAX];
@@ -163,7 +165,111 @@ void BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	memcpy(s_BtSmpBondTable[slot].PeerAddr, addr, 6);
 	memcpy(&s_BtSmpBondTable[slot].Keys, pKeys, sizeof(BtSmpKeys_t));
 
+	// Snapshot any CCCD subscriptions already active on this link so a client
+	// that subscribed before bonding keeps them across reconnects.
+	uint8_t nc = pPeer->Conn.NbCccd;
+	if (nc > BT_GATT_CCCD_STATE_MAX)
+	{
+		nc = BT_GATT_CCCD_STATE_MAX;
+	}
+	for (uint8_t i = 0; i < nc; i++)
+	{
+		s_BtSmpBondTable[slot].Cccd[i] = pPeer->Conn.Cccd[i];
+	}
+	s_BtSmpBondTable[slot].NbCccd = nc;
+
 	BtSmpBondSave(slot, &s_BtSmpBondTable[slot], sizeof(BtSmpBond_t));
+}
+
+// Persist a CCCD value into the bond for the peer on ConnHdl. No-op when the
+// peer is not bonded: CCCD stays volatile for unbonded clients (Core spec Vol 3
+// Part G 3.3.3.3). Value 0 removes the entry. Save is skipped when the stored
+// value is unchanged, so replaying the set on reconnect costs no NVM writes.
+void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr)
+	{
+		return;
+	}
+
+	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr);
+	if (slot < 0)
+	{
+		return;					// not bonded
+	}
+
+	BtSmpBond_t *p = &s_BtSmpBondTable[slot];
+	int idx = -1;
+	for (uint8_t i = 0; i < p->NbCccd; i++)
+	{
+		if (p->Cccd[i].Hdl == CccdHdl)
+		{
+			idx = i;
+			break;
+		}
+	}
+
+	if (Value == 0)
+	{
+		if (idx < 0)
+		{
+			return;				// nothing stored for this handle
+		}
+		p->Cccd[idx] = p->Cccd[p->NbCccd - 1];
+		p->NbCccd--;
+	}
+	else if (idx >= 0)
+	{
+		if (p->Cccd[idx].Value == Value)
+		{
+			return;				// unchanged: no NVM write
+		}
+		p->Cccd[idx].Value = Value;
+	}
+	else
+	{
+		if (p->NbCccd >= BT_GATT_CCCD_STATE_MAX)
+		{
+			return;				// set full
+		}
+		idx = p->NbCccd++;
+		p->Cccd[idx].Hdl = CccdHdl;
+		p->Cccd[idx].Value = Value;
+	}
+
+	BtSmpBondSave(slot, p, sizeof(BtSmpBond_t));
+}
+
+// Copy the persisted CCCD set for the peer on ConnHdl out as handle/value
+// arrays. Returns the entry count, 0 when the peer is not bonded.
+uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue, uint8_t Max)
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || pHdl == nullptr || pValue == nullptr)
+	{
+		return 0;
+	}
+
+	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr);
+	if (slot < 0)
+	{
+		return 0;
+	}
+
+	BtSmpBond_t *p = &s_BtSmpBondTable[slot];
+	uint8_t n = p->NbCccd;
+	if (n > Max)
+	{
+		n = Max;
+	}
+	for (uint8_t i = 0; i < n; i++)
+	{
+		pHdl[i] = p->Cccd[i].Hdl;
+		pValue[i] = p->Cccd[i].Value;
+	}
+
+	return n;
 }
 
 // Override: look up an LTK for an incoming controller LTK request.

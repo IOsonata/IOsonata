@@ -42,6 +42,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_smp.h"
 
 static BtGattSrvc_t *s_pBtGattSrvcList = nullptr;
 
@@ -244,6 +245,9 @@ bool BtGattCccdSet(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 
 	BtGattCccdUpdateMirror(pChar);
 
+	// Persist for bonded clients; no-op (volatile) otherwise.
+	BtSmpBondCccdSave(ConnHdl, CccdHdl, Value);
+
 	bool oldNotify = (oldValue & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
 	bool newNotify = (Value & BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION) != 0;
 	if (oldNotify != newNotify && pChar->SetNotifCB != nullptr)
@@ -282,6 +286,23 @@ void BtGattCccdClear(uint16_t ConnHdl)
 	for (uint8_t i = 0; i < n; i++)
 	{
 		BtGattCccdUpdateMirror(BtGattFindCharByCccd(hdl[i]));
+	}
+}
+
+// Restore persisted CCCD subscriptions for a bonded peer once its link is
+// encrypted, replaying each through BtGattCccdSet so the live state, the
+// per-characteristic aggregate, and the notify/indicate re-arm callbacks all
+// run. A no-op for unbonded links and fresh pairings (empty bond CCCD set).
+void BtGattCccdRestoreBonded(uint16_t ConnHdl)
+{
+	uint16_t hdl[BT_GATT_CCCD_STATE_MAX];
+	uint16_t val[BT_GATT_CCCD_STATE_MAX];
+
+	uint8_t n = BtSmpBondCccdGet(ConnHdl, hdl, val, BT_GATT_CCCD_STATE_MAX);
+
+	for (uint8_t i = 0; i < n; i++)
+	{
+		BtGattCccdSet(ConnHdl, hdl[i], val[i]);
 	}
 }
 
