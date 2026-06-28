@@ -484,6 +484,18 @@ bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6]);
 // ah / RPA-resolution self-test against the spec sample. Returns 0 on PASS.
 int BtSmpRpaSelfTest(void);
 
+// Compute the 8-byte signed-write MAC over pMsg (signed data || SignCounter, wire
+// order) with the little-endian Csrk. Mac is written little-endian.
+void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg, size_t Len, uint8_t Mac[8]);
+
+// Verify a signed-write signature for the peer on ConnHdl. pMsg is the signed
+// message (opcode || handle || value || SignCounter) in wire order; pSig is the
+// 12-byte signature. Advances the stored SignCounter on success.
+bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen, const uint8_t *pSig);
+
+// Signed-write MAC self-test (byte-order check). Returns 0 on PASS.
+int BtSmpSignSelfTest(void);
+
 #ifdef __cplusplus
 }
 #endif

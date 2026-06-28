@@ -1822,17 +1822,27 @@ extern "C" bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6])
 		return false;
 	}
 
+	uint8_t key[16];
 	uint8_t rp[16];
 	uint8_t out[16];
 
+	// SmpAes is standard big-endian. The stored IRK and the address are little-
+	// endian (wire order), so reverse the IRK into the key and place prand in the
+	// low 24 bits big-endian.
+	for (int i = 0; i < 16; i++)
+	{
+		key[i] = Irk[15 - i];
+	}
 	memset(rp, 0, sizeof(rp));
-	rp[0] = Rpa[3];			// prand, least significant byte first
-	rp[1] = Rpa[4];
-	rp[2] = Rpa[5];
+	rp[13] = Rpa[5];		// prand, most significant byte first
+	rp[14] = Rpa[4];
+	rp[15] = Rpa[3];
 
-	SmpAes(Irk, rp, out);	// ah = e(Irk, prand'), low 24 bits
+	SmpAes(key, rp, out);	// ah = e(IRK, prand'), low 24 bits
 
-	return out[0] == Rpa[0] && out[1] == Rpa[1] && out[2] == Rpa[2];
+	// Hash is the low 24 bits of the address (Rpa[0..2], little-endian); compare
+	// to the cipher's low 24 bits (out[13..15], big-endian).
+	return out[13] == Rpa[2] && out[14] == Rpa[1] && out[15] == Rpa[0];
 }
 
 extern "C" int BtSmpRpaSelfTest(void)
@@ -1847,4 +1857,47 @@ extern "C" int BtSmpRpaSelfTest(void)
 		0xaa,0xfb,0x0d,0x94,0x81,0x70 };
 
 	return BtSmpRpaResolve(irk, rpa) ? 0 : -1;
+}
+
+// Compute the 8-byte data-signing MAC over pMsg (the signed ATT data followed by
+// the 4-byte SignCounter, all in wire/little-endian order) with Csrk (stored
+// little-endian). Writes the little-endian MAC to Mac (Core spec Vol 3 Part H
+// 2.4.5). SmpAesCmac is standard big-endian, so the key is reversed in and the
+// leading 8 bytes of the CMAC are reversed back to wire order.
+extern "C" void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
+							 size_t Len, uint8_t Mac[8])
+{
+	uint8_t key[16];
+	uint8_t mac[16];
+
+	for (int i = 0; i < 16; i++)
+	{
+		key[i] = Csrk[15 - i];
+	}
+
+	SmpAesCmac(key, pMsg, Len, mac);
+
+	for (int i = 0; i < 8; i++)
+	{
+		Mac[i] = mac[7 - i];
+	}
+}
+
+extern "C" int BtSmpSignSelfTest(void)
+{
+	// Implementation check for BtSmpSignMac byte order using the documented
+	// signing convention. CSRK little-endian 01..10; signed message is
+	// opcode(0xD2) || handle(0x0003) || value(0x55) || SignCounter(0).
+	static const uint8_t csrk[16] = {
+		0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,
+		0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10 };
+	static const uint8_t msg[8] = {
+		0xd2,0x03,0x00,0x55,0x00,0x00,0x00,0x00 };
+	static const uint8_t expect[8] = {
+		0x28,0xda,0x5d,0x44,0x8a,0xce,0x8e,0xd5 };
+	uint8_t mac[8];
+
+	BtSmpSignMac(csrk, msg, sizeof(msg), mac);
+
+	return memcmp(mac, expect, 8) == 0 ? 0 : -1;
 }

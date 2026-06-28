@@ -36,6 +36,7 @@ typedef struct __Bt_Smp_Bond {
 	BtSmpKeys_t	Keys;			//!< Stored key set (LTK, IRK, identity, ...)
 	uint8_t		NbCccd;			//!< Number of persisted CCCD entries
 	BtGattCccdState_t Cccd[BT_GATT_CCCD_STATE_MAX];	//!< CCCD set persisted for this bond (spec: bonded clients keep CCCD across connections)
+	uint32_t	SignCounter;	//!< Last accepted signed-write SignCounter (replay guard)
 } BtSmpBond_t;
 
 static BtSmpBond_t s_BtSmpBondTable[BT_SMP_BOND_MAX];
@@ -355,6 +356,58 @@ bool BtSmpBonded(uint16_t ConnHdl)
 	}
 
 	return BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr) >= 0;
+}
+
+bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
+					 const uint8_t *pSig)
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr)
+	{
+		return false;
+	}
+
+	int slot = BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr);
+	if (slot < 0)
+	{
+		return false;
+	}
+
+	BtSmpBond_t *pBond = &s_BtSmpBondTable[slot];
+
+	// A signing relationship needs a CSRK distributed by the peer.
+	bool csrk = false;
+	for (int i = 0; i < 16; i++)
+	{
+		if (pBond->Keys.Csrk[i] != 0)
+		{
+			csrk = true;
+			break;
+		}
+	}
+	if (csrk == false)
+	{
+		return false;
+	}
+
+	// SignCounter replay guard: the received counter must not be below the last
+	// accepted value (Core spec Vol 3 Part C 10.4.2).
+	uint32_t cnt = (uint32_t)pSig[0] | ((uint32_t)pSig[1] << 8) |
+				   ((uint32_t)pSig[2] << 16) | ((uint32_t)pSig[3] << 24);
+	if (cnt < pBond->SignCounter)
+	{
+		return false;
+	}
+
+	uint8_t mac[8];
+	BtSmpSignMac(pBond->Keys.Csrk, pMsg, MsgLen, mac);
+	if (memcmp(mac, &pSig[4], 8) != 0)
+	{
+		return false;
+	}
+
+	pBond->SignCounter = cnt + 1;	// next accepted counter must be higher
+	return true;
 }
 
 // Remove all stored bonds, RAM table and non-volatile copy.

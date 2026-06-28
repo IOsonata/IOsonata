@@ -42,6 +42,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_smp.h"
 
 /******** For DEBUG ************/
 //#define DEBUG_ENABLE
@@ -531,14 +532,26 @@ __attribute__((weak)) bool BtAttSignedWriteVerify(uint16_t ConnHdl,
 												 uint16_t ValueLen,
 												 const uint8_t *pSignature)
 {
-	(void)ConnHdl;
-	(void)pCmd;
-	(void)ValueLen;
-	(void)pSignature;
+	// Rebuild the signed message in wire order: opcode || handle || value ||
+	// SignCounter. The SignCounter is the first 4 bytes of the 12-byte signature
+	// and is part of the data covered by the MAC (Core spec Vol 3 Part H 2.4.5).
+	uint8_t m[BT_ATT_MTU_MAX];
+	size_t n = 0;
 
-	// Signed Write Command requires CSRK/signature verification. The generic
-	// fallback does not have CSRK state yet, so it must not write.
-	return false;
+	if ((size_t)ValueLen + 7 > sizeof(m))
+	{
+		return false;
+	}
+
+	m[n++] = BT_ATT_OPCODE_ATT_SIGNED_WRITE_CMD;
+	m[n++] = (uint8_t)(pCmd->Hdl & 0xFF);
+	m[n++] = (uint8_t)(pCmd->Hdl >> 8);
+	memcpy(&m[n], pCmd->Data, ValueLen);
+	n += ValueLen;
+	memcpy(&m[n], pSignature, 4);
+	n += 4;
+
+	return BtSmpSignVerify(ConnHdl, m, n, pSignature);
 }
 
 static uint8_t BtAttAccessPolicyError(uint16_t ConnHdl,
