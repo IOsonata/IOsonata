@@ -309,6 +309,68 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 	}
 }
 
+// --- ACL fragment reassembly -------------------------------------------------
+// The controller delivers an L2CAP PDU larger than its ACL data buffer as a
+// START fragment followed by CONTINUING fragments. One context per connection
+// holds the partial PDU until it is complete. BT_L2CAP_REASSEMBLY_COUNT bounds
+// how many connections can be mid-reassembly at once; raise it for multi-link.
+#ifndef BT_L2CAP_REASSEMBLY_COUNT
+#define BT_L2CAP_REASSEMBLY_COUNT		2
+#endif
+
+typedef struct __Bt_Hci_Reassembly {
+	bool     Active;						//!< Slot holds a partial PDU
+	uint16_t ConnHdl;						//!< Owning connection handle
+	uint16_t Expected;						//!< Total L2CAP PDU bytes expected
+	uint16_t Received;						//!< Bytes accumulated so far
+	uint8_t  Buf[BT_HCI_BUFFER_MAX_SIZE];	//!< Accumulated L2CAP PDU
+} BtHciReasm_t;
+
+static BtHciReasm_t s_BtHciReasm[BT_L2CAP_REASSEMBLY_COUNT];
+
+static BtHciReasm_t *BtHciReasmFind(uint16_t ConnHdl)
+{
+	for (int i = 0; i < BT_L2CAP_REASSEMBLY_COUNT; i++)
+	{
+		if (s_BtHciReasm[i].Active && s_BtHciReasm[i].ConnHdl == ConnHdl)
+		{
+			return &s_BtHciReasm[i];
+		}
+	}
+
+	return nullptr;
+}
+
+static BtHciReasm_t *BtHciReasmAlloc(uint16_t ConnHdl)
+{
+	BtHciReasm_t *p = BtHciReasmFind(ConnHdl);
+
+	if (p != nullptr)
+	{
+		return p;
+	}
+
+	for (int i = 0; i < BT_L2CAP_REASSEMBLY_COUNT; i++)
+	{
+		if (s_BtHciReasm[i].Active == false)
+		{
+			return &s_BtHciReasm[i];
+		}
+	}
+
+	return nullptr;
+}
+
+static void BtHciReasmReset(uint16_t ConnHdl)
+{
+	BtHciReasm_t *p = BtHciReasmFind(ConnHdl);
+
+	if (p != nullptr)
+	{
+		p->Active = false;
+	}
+}
+
 void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 {
 	//DEBUG_PRINTF("### BtHciProcessEvent %x ###\r\n", pEvtPkt->Hdr.Evt);
@@ -340,6 +402,8 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				{
 					pDev->Disconnected(p->ConnHdl, p->Reason);
 				}
+
+				BtHciReasmReset(p->ConnHdl);
 			}
 			break;
 		case BT_HCI_EVT_AUTHEN_COMPLETE:
@@ -501,30 +565,107 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 
 void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt)
 {
-	BtL2CapPdu_t *l2rcv = (BtL2CapPdu_t*)pPkt->Data;
+	uint16_t connHdl = pPkt->Hdr.ConnHdl;
+	BtL2CapPdu_t *l2rcv;
+	uint16_t avail;
 
-	// This host does not reassemble fragmented ACL data. A continuation
-	// fragment does not begin with an L2CAP header, so parsing it as a
-	// complete PDU would read garbage handles/lengths - drop it.
+	// Reassemble fragmented ACL data. The controller sends the first fragment
+	// of an L2CAP PDU with a START packet-boundary flag and the remainder with
+	// the CONTINUING flag. A continuation does not carry an L2CAP header, so it
+	// is only meaningful appended to the connection's pending start fragment.
 	if (pPkt->Hdr.PBFlag == BT_HCI_PBFLAG_CONTINUING_FRAGMENT)
 	{
-		return;
+		BtHciReasm_t *ctx = BtHciReasmFind(connHdl);
+
+		if (ctx == nullptr)
+		{
+			// Continuation with no pending start on this connection - drop.
+			return;
+		}
+
+		if ((uint32_t)ctx->Received + pPkt->Hdr.Len > BT_HCI_BUFFER_MAX_SIZE)
+		{
+			// Would overrun the reassembly buffer - abort this PDU.
+			ctx->Active = false;
+			return;
+		}
+
+		memcpy(&ctx->Buf[ctx->Received], pPkt->Data, pPkt->Hdr.Len);
+		ctx->Received += pPkt->Hdr.Len;
+
+		if (ctx->Received < ctx->Expected)
+		{
+			// More fragments still to come.
+			return;
+		}
+
+		ctx->Active = false;
+		l2rcv = (BtL2CapPdu_t*)ctx->Buf;
+		avail = ctx->Received;
+	}
+	else
+	{
+		// Start of a new L2CAP PDU (PB flag START or COMPLETE).
+		if (pPkt->Hdr.Len < sizeof(BtL2CapHdr_t))
+		{
+			return;
+		}
+
+		BtL2CapPdu_t *frag = (BtL2CapPdu_t*)pPkt->Data;
+		uint32_t expected = (uint32_t)frag->Hdr.Len + sizeof(BtL2CapHdr_t);
+
+		// A new start supersedes any half-built PDU on this connection.
+		BtHciReasm_t *stale = BtHciReasmFind(connHdl);
+		if (stale != nullptr)
+		{
+			stale->Active = false;
+		}
+
+		if (pPkt->Hdr.Len >= expected)
+		{
+			// Whole PDU delivered in a single fragment.
+			l2rcv = frag;
+			avail = pPkt->Hdr.Len;
+		}
+		else
+		{
+			// Partial first fragment - buffer it and wait for continuations.
+			if (expected > BT_HCI_BUFFER_MAX_SIZE)
+			{
+				// Larger than this host can reassemble.
+				return;
+			}
+
+			BtHciReasm_t *ctx = BtHciReasmAlloc(connHdl);
+			if (ctx == nullptr)
+			{
+				// No free reassembly slot.
+				return;
+			}
+
+			memcpy(ctx->Buf, pPkt->Data, pPkt->Hdr.Len);
+			ctx->ConnHdl = connHdl;
+			ctx->Expected = (uint16_t)expected;
+			ctx->Received = pPkt->Hdr.Len;
+			ctx->Active = true;
+
+			return;
+		}
 	}
 
-	// Validate the received ACL payload actually contains the L2CAP header and
-	// that the L2CAP length field does not claim more bytes than were
-	// received. Without this, a truncated or oversized length drives
-	// out-of-bounds reads in the ATT/SMP parsers below.
-	if (pPkt->Hdr.Len < sizeof(BtL2CapHdr_t) ||
-		(uint32_t)l2rcv->Hdr.Len + sizeof(BtL2CapHdr_t) > pPkt->Hdr.Len)
+	// l2rcv now points at a complete L2CAP PDU holding 'avail' bytes. Validate
+	// the L2CAP length does not claim more than was received before the ATT/SMP
+	// parsers read it.
+	if (avail < sizeof(BtL2CapHdr_t) ||
+		(uint32_t)l2rcv->Hdr.Len + sizeof(BtL2CapHdr_t) > avail)
 	{
 		return;
 	}
 
-	SysLogPrintf(SysLogGet(), "L2 RX cid=0x%04x len=%d d=%02x%02x%02x%02x%02x%02x\r\n",
+	DEBUG_PRINTF("L2 RX cid=0x%04x len=%d d=%02x%02x%02x%02x%02x%02x\r\n",
 				 l2rcv->Hdr.Cid, l2rcv->Hdr.Len,
-				 pPkt->Data[4], pPkt->Data[5], pPkt->Data[6],
-				 pPkt->Data[7], pPkt->Data[8], pPkt->Data[9]);
+				 ((const uint8_t*)l2rcv)[4], ((const uint8_t*)l2rcv)[5], ((const uint8_t*)l2rcv)[6],
+				 ((const uint8_t*)l2rcv)[7], ((const uint8_t*)l2rcv)[8], ((const uint8_t*)l2rcv)[9]);
 /*
 	DEBUG_PRINTF("** BtHciProcessData : Con :%d, PB :%d, PC :%d, Len :%d\r\n", pPkt->Hdr.ConnHdl, pPkt->Hdr.PBFlag, pPkt->Hdr.BCFlag, pPkt->Hdr.Len);
 	for (int i = 0; i < pPkt->Hdr.Len; i++)

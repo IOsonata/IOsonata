@@ -396,7 +396,8 @@ uint32_t BtL2CapProcessSignal(BtHciDevice_t * const pDev,
 				BtL2CapCreditBasedReconfRsp_t rsp;
 				rsp.Result = BT_L2CAP_RECONFIG_RESULT_INVALID_DCID;
 
-				if (cmdLen >= 4)
+				// MTU (2) + MPS (2) + at least one Destination CID (2).
+				if (cmdLen >= 6)
 				{
 					rsp.Result = BtL2CapCreditBasedReconfigureReq(
 						ConnHdl, (BtL2CapCreditBasedReconfReq_t const *)data, cmdLen);
