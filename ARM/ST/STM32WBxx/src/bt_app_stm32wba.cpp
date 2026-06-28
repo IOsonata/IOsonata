@@ -216,6 +216,39 @@ static void WbaDiscChar(const aci_att_read_by_type_resp_event_rp0 *p);
 static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p);
 static void WbaDiscProcComplete(void);
 
+// Server side write from a connected client. ST reports CCCD writes and
+// characteristic value writes through ACI_GATT_ATTRIBUTE_MODIFIED. Route a CCCD
+// write to BtGattCccdSet (which stores the per connection value and fires the
+// notify/indicate subscribe callbacks) and a value write to the char WrCB. This
+// mirrors the nRF52 BLE_GATTS_EVT_WRITE handler.
+static void WbaGattAttrModified(uint16_t ConnHdl, uint16_t AttrHdl,
+								uint8_t *pData, uint16_t Len)
+{
+	BtGattSrvc_t *pSrvc = BtGattGetSrvcList();
+
+	while (pSrvc != nullptr)
+	{
+		for (int i = 0; i < pSrvc->NbChar; i++)
+		{
+			BtGattChar_t *pChar = &pSrvc->pCharArray[i];
+
+			if (AttrHdl == pChar->CccdHdl && Len >= 2)
+			{
+				uint16_t cccd = (uint16_t)(pData[0] | (pData[1] << 8));
+				BtGattCccdSet(ConnHdl, pChar->CccdHdl, cccd);
+				return;
+			}
+
+			if (AttrHdl == pChar->ValHdl && pChar->WrCB != nullptr)
+			{
+				pChar->WrCB(pChar, pData, 0, (int)Len);
+				return;
+			}
+		}
+		pSrvc = pSrvc->pNext;
+	}
+}
+
 // HCI event callback registered with the stack. ST's stack invokes this
 // for every HCI / vendor event; we route by type to the appropriate
 // handler. Adv-report events go to the scan path (handled in
@@ -330,6 +363,15 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 										 pI->Attribute_Value, pI->Attribute_Value_Length);
 					// ST requires the client to confirm a received indication.
 					aci_gatt_confirm_indication(pI->Connection_Handle);
+					break;
+				}
+
+				case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:
+				{
+					aci_gatt_attribute_modified_event_rp0 *pM =
+						(aci_gatt_attribute_modified_event_rp0 *)pAci->data;
+					WbaGattAttrModified(pM->Connection_Handle, pM->Attr_Handle,
+										pM->Attr_Data, pM->Attr_Data_Length);
 					break;
 				}
 
@@ -641,12 +683,10 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	// aci_gatt_update_char_value pushes the value to the attribute table;
-	// if the CCCD has notifications enabled the stack sends the notify
-	// PDU automatically.
-	uint8_t ret = aci_gatt_update_char_value(pChar->Hdl, pChar->ValHdl,
-	                                         0, (uint8_t)DataLen, pData);
-	return ret == BLE_STATUS_SUCCESS;
+	// Notify the active connection. BtGattCharNotify targets that connection and
+	// the ST stack gates on its CCCD, so this matches the active-peer semantics
+	// of the other ports.
+	return BtGattCharNotify(BtPeerActiveHdl(), pChar, pData, DataLen);
 }
 
 bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
@@ -661,14 +701,9 @@ bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	// Update_Type 0x02 forces an Indication. The ST stack tracks the single
-	// outstanding indication and the client confirmation internally; it sends
-	// the PDU only if the CCCD has indications enabled.
-	uint8_t ret = aci_gatt_update_char_value_ext(BtPeerActiveHdl(),
-	                                              pChar->Hdl, pChar->ValHdl,
-	                                              0x02, (uint16_t)DataLen,
-	                                              0, (uint8_t)DataLen, pData);
-	return ret == BLE_STATUS_SUCCESS;
+	// Indicate the active connection; the ST stack gates on its CCCD and tracks
+	// the outstanding confirmation internally.
+	return BtGattCharIndicate(BtPeerActiveHdl(), pChar, pData, DataLen);
 }
 
 void BtAppDisconnect(void)
