@@ -209,6 +209,11 @@ static void SmpSendHciCmd(BtHciDevice_t * const pDev, uint16_t OpCode,
 
 static BtHciDevice_t *s_pSmpActiveDev = nullptr;
 
+// Runtime association configuration. Defaults mirror the compile-time
+// BT_SMP_LOCAL_* values, i.e. Just Works, until BtSmpAuthConfig overrides them.
+static uint8_t s_SmpIoCaps  = BT_SMP_LOCAL_IOCAPS;
+static uint8_t s_SmpAuthReq = BT_SMP_LOCAL_AUTHREQ;
+
 static inline void SmpAes(const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16])
 {
 	BtSmpCryptoAes128(s_pSmpActiveDev, Key, In, Out);
@@ -492,12 +497,111 @@ static void SmpF6(const uint8_t w[16], const uint8_t n1[16], const uint8_t n2[16
 // Pairing feature negotiation
 //-----------------------------------------------------------------------------
 
+// Map the local and peer IO capabilities to an SC association model. Core
+// spec Vol 3 Part H, 2.3.5.1, Table 2.8 (LE Secure Connections). Rows index
+// the initiator IO capability, columns the responder, both using the
+// BT_SMP_IOCAPS_* values (DisplayOnly 0 .. KeyboardDisplay 4). Cell values are
+// BT_SMP_MODEL_JUST_WORKS / NUMERIC_COMPARISON / PASSKEY_ENTRY. The passkey
+// display/input direction is derived from role and IO capability where it is
+// used, not stored here.
+static const uint8_t s_SmpModelMap[5][5] = {
+	//              resp DO  DYN  KO  NIO  KD
+	/* init DO  */ {  0,   0,   2,   0,   2 },
+	/* init DYN */ {  0,   1,   2,   0,   1 },
+	/* init KO  */ {  2,   2,   2,   0,   2 },
+	/* init NIO */ {  0,   0,   0,   0,   0 },
+	/* init KD  */ {  2,   1,   2,   0,   1 },
+};
+
+// Select the association model for this pairing. OOB takes precedence when
+// present. Without a MITM requirement from either side the result is Just
+// Works. Otherwise the IO capability table decides; a capability value outside
+// the table range falls back to Just Works rather than indexing out of bounds.
+static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oob)
+{
+	if (Oob)
+	{
+		return BT_SMP_MODEL_OOB;
+	}
+	if (!Mitm)
+	{
+		return BT_SMP_MODEL_JUST_WORKS;
+	}
+	if (InitIo > BT_SMP_IOCAPS_KEYBOARD_DISPLAY ||
+		RespIo > BT_SMP_IOCAPS_KEYBOARD_DISPLAY)
+	{
+		return BT_SMP_MODEL_JUST_WORKS;
+	}
+	return s_SmpModelMap[InitIo][RespIo];
+}
+
+// g2 -> 6 digit Numeric Comparison value.
+//
+// g2(U, V, X, Y) = AES-CMAC_X(U || V || Y) mod 2^32 (Core spec Vol 3 Part H,
+// 2.2.9). U and V are the 32-octet public key X coordinates, X and Y are the
+// 16-octet nonces, all passed in SMP byte order. The CMAC core works on the
+// big-endian form (same handling as SmpF4): each field is reversed into the
+// message, the nonce X is reversed into the key. The result is the least
+// significant 32 bits of the big-endian MAC, i.e. the last four octets.
+static uint32_t SmpG2(const uint8_t u[32], const uint8_t v[32],
+					  const uint8_t x[16], const uint8_t y[16])
+{
+	uint8_t m[80];
+	uint8_t xs[16];
+	uint8_t mac[16];
+
+	for (int i = 0; i < 32; i++)
+	{
+		m[i]      = u[31 - i];
+		m[32 + i] = v[31 - i];
+	}
+	for (int i = 0; i < 16; i++)
+	{
+		m[64 + i] = y[15 - i];
+	}
+
+	SmpReverse16(x, xs);
+	SmpAesCmac(xs, m, sizeof(m), mac);
+
+	return ((uint32_t)mac[12] << 24) | ((uint32_t)mac[13] << 16) |
+		   ((uint32_t)mac[14] << 8)  | (uint32_t)mac[15];
+}
+
+// Compute the 6 digit Numeric Comparison value both sides display. Inputs are
+// g2(PKax, PKbx, Na, Nb): the initiator public key X, the responder public key
+// X, the initiator nonce, the responder nonce. Both roles assemble the same
+// ordered set so the displayed values match.
+static uint32_t SmpNumericValue(BtSmpLink_t *pLink)
+{
+	uint8_t pkaX[32];
+	uint8_t pkbX[32];
+	const uint8_t *na;
+	const uint8_t *nb;
+
+	if (pLink->Ctx.bInitiator)
+	{
+		SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], pkaX);
+		SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], pkbX);
+		na = pLink->Ctx.LocalRand;
+		nb = pLink->Ctx.PeerRand;
+	}
+	else
+	{
+		SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], pkaX);
+		SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], pkbX);
+		na = pLink->Ctx.PeerRand;
+		nb = pLink->Ctx.LocalRand;
+	}
+
+	return SmpG2(pkaX, pkbX, na, nb) % 1000000;
+}
+
 static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 {
 	pRsp->Code = BT_SMP_CODE_PAIRING_RSP;
-	pRsp->IOCaps = BT_SMP_LOCAL_IOCAPS;
+	pRsp->IOCaps = s_SmpIoCaps;
 	pRsp->OOBFlag = BT_SMP_OOB_AUTH_NOT_PRESENT;
-	pRsp->AuthReq = (uint8_t)(BT_SMP_LOCAL_AUTHREQ & ~BT_SMP_AUTHREQ_KEYPRESS);
+	pRsp->AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
 	pRsp->MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
 
 	const BtSmpPairingReq_t *pReq = (const BtSmpPairingReq_t*)pLink->Ctx.PReq;
@@ -613,6 +717,26 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	pLink->Keys.EncKeySize = pReq->MaxKeySize < BT_SMP_MAX_ENC_KEY_SIZE ?
 							 pReq->MaxKeySize : BT_SMP_MAX_ENC_KEY_SIZE;
+
+	// Select the association model now both IO capabilities are known: the peer
+	// is the initiator, the local device is the responder. MITM applies when
+	// either side sets the flag. Only Just Works is wired so far; any MITM model
+	// fails closed rather than continuing to an unauthenticated link the peer
+	// would treat as authenticated.
+	bool mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) ||
+				(pReq->AuthReq & BT_SMP_AUTHREQ_MITM);
+	pLink->Ctx.Model = SmpSelectModel(pReq->IOCaps, s_SmpIoCaps, mitm, false);
+	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
+			  pLink->Ctx.Model, pReq->IOCaps, s_SmpIoCaps, mitm ? 1 : 0);
+	if (pLink->Ctx.Model != BT_SMP_MODEL_JUST_WORKS &&
+		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON)
+	{
+		// Passkey Entry and OOB are not wired yet; fail closed rather than
+		// continuing to a link the peer would treat as authenticated.
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
 
 	BtSmpPairingRsp_t rsp;
 	SmpBuildPairingRsp(pLink, &rsp);
@@ -730,6 +854,26 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	pLink->Ctx.bSc = true;
 	pLink->Keys.EncKeySize = pRsp->MaxKeySize < BT_SMP_MAX_ENC_KEY_SIZE ?
 							 pRsp->MaxKeySize : BT_SMP_MAX_ENC_KEY_SIZE;
+
+	// Select the association model now both IO capabilities are known: the local
+	// device is the initiator, the peer is the responder. MITM applies when
+	// either side sets the flag. Only Just Works is wired so far; any MITM model
+	// fails closed rather than continuing to an unauthenticated link the peer
+	// would treat as authenticated.
+	bool mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) ||
+				(pRsp->AuthReq & BT_SMP_AUTHREQ_MITM);
+	pLink->Ctx.Model = SmpSelectModel(s_SmpIoCaps, pRsp->IOCaps, mitm, false);
+	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
+			  pLink->Ctx.Model, s_SmpIoCaps, pRsp->IOCaps, mitm ? 1 : 0);
+	if (pLink->Ctx.Model != BT_SMP_MODEL_JUST_WORKS &&
+		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON)
+	{
+		// Passkey Entry and OOB are not wired yet; fail closed rather than
+		// continuing to a link the peer would treat as authenticated.
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
 
 	// The initiator sends its public key after the Pairing Response. If the
 	// local P-256 key is not ready yet, BtSmpLocalPubKeyReady sends it.
@@ -875,6 +1019,17 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		pLink->Keys.bValid = true;
 		SmpApplyKeySize(&pLink->Keys);
 
+		if (pLink->Ctx.Model == BT_SMP_MODEL_NUMERIC_COMPARISON)
+		{
+			// Hold the initiator DHKey Check (Ea) and have the application
+			// display the value for the user to confirm. The flow resumes from
+			// BtSmpNumericComparisonReply.
+			uint32_t v = SmpNumericValue(pLink);
+			pLink->Ctx.State = BT_SMP_STATE_NUMERIC_WAIT;
+			BtSmpNumericComparison(ConnHdl, v);
+			return;
+		}
+
 		// Ea = f6(MacKey, Na, Nb, 0, IOcapA, A=initiator(local), B=responder(peer)).
 		uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
 		uint8_t zeroR[16] = {0};
@@ -914,6 +1069,14 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		pLink->Keys.bSc = true;
 		pLink->Keys.bValid = true;
 		SmpApplyKeySize(&pLink->Keys);
+		if (pLink->Ctx.Model == BT_SMP_MODEL_NUMERIC_COMPARISON)
+		{
+			// Both nonces are known: display the value for the user. The
+			// responder DHKey Check (Eb) is held in the DHKey Check handler
+			// until the user confirms through BtSmpNumericComparisonReply.
+			uint32_t v = SmpNumericValue(pLink);
+			BtSmpNumericComparison(ConnHdl, v);
+		}
 		pLink->Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
 		return;
 	}
@@ -1034,6 +1197,15 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		SmpApplyKeySize(&pLink->Keys);
 		memcpy(ea, altEa, 16);
 		SMP_TRACE("Ea matched with raw DHKey f5 input\r\n");
+	}
+
+	if (pLink->Ctx.Model == BT_SMP_MODEL_NUMERIC_COMPARISON &&
+		!pLink->Keys.bAuthenticated)
+	{
+		// Ea verified. Hold the responder DHKey Check (Eb) until the user
+		// confirms the displayed value through BtSmpNumericComparisonReply.
+		pLink->Ctx.State = BT_SMP_STATE_NUMERIC_WAIT;
+		return;
 	}
 
 	uint8_t eb[16];
@@ -1386,19 +1558,30 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		pPeer->bSecure = (Status == 0) && (Enabled != 0);
 
 		// Produce the generic security state the ATT permission checks consume.
-		// This build pairs Just Works only, so an encrypted link is
-		// unauthenticated (ENC_UNAUTH); the level rises here when authenticated
-		// association models (passkey / numeric comparison) are added.
+		// An authenticated association model (numeric comparison; passkey / OOB
+		// when added) raises the level above ENC_UNAUTH. Authenticated Secure
+		// Connections is LESC_AUTH; authenticated legacy would be ENC_AUTH.
 		BtConnSec_t sec;
 		memset(&sec, 0, sizeof(sec));
 		if (pPeer->bSecure)
 		{
-			sec.Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
-
 			BtSmpLink_t *pSecLink = SmpLinkFind(ConnHdl);
 			sec.KeySize = (pSecLink != nullptr) ? pSecLink->Keys.EncKeySize
 												: BT_SMP_MAX_ENC_KEY_SIZE;
-			if (pSecLink != nullptr && pSecLink->Keys.bSc)
+
+			bool authd = (pSecLink != nullptr) && pSecLink->Keys.bAuthenticated;
+			bool sc    = (pSecLink != nullptr) && pSecLink->Keys.bSc;
+
+			if (authd)
+			{
+				sec.Level = sc ? BT_GAP_SEC_LEVEL_LESC_AUTH
+							   : BT_GAP_SEC_LEVEL_ENC_AUTH;
+			}
+			else
+			{
+				sec.Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
+			}
+			if (sc)
 			{
 				sec.Flags |= BT_GAP_SEC_FLAG_SC;
 			}
@@ -1660,6 +1843,108 @@ extern "C" void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes)
 	BtSmpBondLoad();
 }
 
+void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
+{
+	// Force the Secure Connections bit: this build does not pair with legacy,
+	// so a caller that passes only bonding/MITM still negotiates SC.
+	s_SmpIoCaps  = IoCaps;
+	s_SmpAuthReq = (uint8_t)(AuthReq | BT_SMP_AUTHREQ_SC);
+}
+
+// Weak default for the Numeric Comparison user interaction. Unlike the event
+// notification handlers, this one must drive the pairing to a conclusion: with
+// no application display there is no way to perform the user check, so reject.
+// An application advertising DisplayYesNo / KeyboardDisplay overrides this with
+// a strong definition that displays Value and later calls the reply function.
+__attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
+{
+	(void)Value;
+	BtSmpNumericComparisonReply(ConnHdl, false);
+}
+
+// Resume a Numeric Comparison pairing after the user has compared the value
+// shown on both devices. Confirm true sends the held DHKey Check and raises the
+// link to an authenticated level on success; Confirm false aborts with a
+// Numeric Comparison Failed reason. Called from the application in response to
+// the NumericComparison callback.
+void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
+{
+	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
+	if (pLink == nullptr ||
+		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON)
+	{
+		return;
+	}
+
+	BtHciDevice_t * const pDev = s_pSmpActiveDev;
+
+	if (!Confirm)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_NUMERIC_COMPARISON_FAILED);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
+
+	// Values matched: the link is MITM authenticated.
+	pLink->Keys.bAuthenticated = true;
+
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	uint8_t peerAddr[6] = {0};
+	uint8_t peerAddrType = 0;
+	if (pPeer != nullptr)
+	{
+		memcpy(peerAddr, pPeer->Conn.PeerAddr, 6);
+		peerAddrType = pPeer->Conn.PeerAddrType;
+	}
+
+	uint8_t localAddr[6];
+	uint8_t localAddrType = 0;
+	BtSmpLocalAddrGet(&localAddrType, localAddr);
+	uint8_t zeroR[16] = {0};
+
+	if (pLink->Ctx.bInitiator)
+	{
+		if (pLink->Ctx.State != BT_SMP_STATE_NUMERIC_WAIT)
+		{
+			return;
+		}
+
+		// Send the held initiator DHKey Check Ea.
+		uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
+		uint8_t ea[16];
+		SmpF6(pLink->Ctx.Mackey, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+			  zeroR, iocapA,
+			  localAddrType, localAddr, peerAddrType, peerAddr, ea);
+
+		BtSmpDhKeyCheck_t chk;
+		chk.Code = BT_SMP_CODE_PAIRING_DHKEY_CHECK;
+		memcpy(chk.Value, ea, 16);
+		SmpSend(pDev, ConnHdl, &chk, sizeof(chk));
+
+		pLink->Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
+		return;
+	}
+
+	// Responder: send the held DHKey Check Eb only when the peer Ea has already
+	// arrived and was verified (NUMERIC_WAIT). If Ea has not arrived yet the
+	// DHKey Check handler sends Eb once it does, now that bAuthenticated is set.
+	if (pLink->Ctx.State == BT_SMP_STATE_NUMERIC_WAIT)
+	{
+		uint8_t iocapB[3] = { pLink->Ctx.PRsp[1], pLink->Ctx.PRsp[2], pLink->Ctx.PRsp[3] };
+		uint8_t eb[16];
+		SmpF6(pLink->Ctx.Mackey, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+			  zeroR, iocapB,
+			  localAddrType, localAddr, peerAddrType, peerAddr, eb);
+
+		BtSmpDhKeyCheck_t chk;
+		chk.Code = BT_SMP_CODE_PAIRING_DHKEY_CHECK;
+		memcpy(chk.Value, eb, 16);
+		SmpSend(pDev, ConnHdl, &chk, sizeof(chk));
+
+		pLink->Ctx.State = BT_SMP_STATE_LTK_WAIT;
+	}
+}
+
 // Peripheral-initiated security. Sends an SMP Security Request to prompt the
 // central to either encrypt with an existing bond or start pairing. This is
 // the standard way a peripheral signals that it wants a secure/bonded link;
@@ -1749,9 +2034,9 @@ extern "C" void BtSmpStartPairing(uint16_t ConnHdl)
 
 	BtSmpPairingReq_t req;
 	req.Code = BT_SMP_CODE_PAIRING_REQ;
-	req.IOCaps = BT_SMP_LOCAL_IOCAPS;
+	req.IOCaps = s_SmpIoCaps;
 	req.OOBFlag = BT_SMP_OOB_AUTH_NOT_PRESENT;
-	req.AuthReq = (uint8_t)(BT_SMP_LOCAL_AUTHREQ & ~BT_SMP_AUTHREQ_KEYPRESS);
+	req.AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
 	req.MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
 	req.InitiatorKeyDist = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
 	req.ResponderKeyDist = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;

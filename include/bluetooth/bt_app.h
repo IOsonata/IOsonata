@@ -94,6 +94,7 @@ typedef enum __Bt_App_Security_Type {
 #define BTAPP_SECEXCHG_KEYBOARD			(1<<0)
 #define BTAPP_SECEXCHG_DISPLAY			(1<<1)
 #define BTAPP_SECEXCHG_OOB				(1<<2)
+#define BTAPP_SECEXCHG_YESNO			(1<<3)	//!< Yes/No confirm input; with DISPLAY selects DisplayYesNo
 
 typedef enum __Bt_App_State {
 	BTAPP_STATE_UNKNOWN,

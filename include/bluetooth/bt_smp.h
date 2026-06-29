@@ -81,6 +81,15 @@ SOFTWARE.
 #define BT_SMP_OOB_AUTH_NOT_PRESENT					0	//!< OOB Authentication data not present
 #define BT_SMP_OOB_AUTH_PRESENT 					1	//!< OOB Authentication data from remote device present
 
+// Association models selected from the IO capability mapping (Core spec
+// Vol 3 Part H, 2.3.5.1, Table 2.8, LE Secure Connections). JUST_WORKS is
+// unauthenticated. NUMERIC_COMPARISON, PASSKEY_ENTRY and OOB are MITM
+// protected and raise the link to an authenticated level on success.
+#define BT_SMP_MODEL_JUST_WORKS						0
+#define BT_SMP_MODEL_NUMERIC_COMPARISON				1
+#define BT_SMP_MODEL_PASSKEY_ENTRY					2
+#define BT_SMP_MODEL_OOB							3
+
 // AuthReq flags (Vol 3, Part H, 3.5.1, Figure 3.3).
 #define BT_SMP_AUTHREQ_BONDING_FLAG_MASK			(3<<0)
 #define BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING		(0<<0)	//!< No bonding
@@ -130,6 +139,7 @@ typedef enum __Bt_Smp_State {
 	BT_SMP_STATE_CONFIRM_WAIT,		//!< Waiting for peer Pairing Confirm
 	BT_SMP_STATE_RANDOM_WAIT,		//!< Waiting for peer Pairing Random
 	BT_SMP_STATE_DHKEY_CHECK_WAIT,	//!< SC: waiting for peer DHKey Check
+	BT_SMP_STATE_NUMERIC_WAIT,		//!< SC: waiting for user numeric comparison confirm
 	BT_SMP_STATE_LTK_WAIT,			//!< Waiting for controller LTK request (enc start)
 	BT_SMP_STATE_KEYDIST,			//!< Distributing / receiving transport keys
 	BT_SMP_STATE_DONE				//!< Pairing complete, link encrypted
@@ -161,6 +171,7 @@ typedef struct __Bt_Smp_Ctx {
 	uint8_t  IoCaps;				//!< Local IO capability in use
 	uint8_t  AuthReq;				//!< Negotiated AuthReq
 	uint8_t  PeerAuthReq;			//!< Peer-requested AuthReq
+	uint8_t  Model;					//!< Selected association model (BT_SMP_MODEL_*)
 	bool     bSc;					//!< true if SC negotiated for this pairing
 	bool     bInitiator;			//!< true if local device is the SMP initiator (central)
 	uint8_t  Tk[16];				//!< Temporary Key (legacy) / 0 for Just Works
@@ -324,6 +335,26 @@ void BtSmpStartPairing(uint16_t ConnHdl);
  * @param	pAes	Engine providing CRYPTO_CAP_AES128_ECB.
  */
 void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes);
+
+/// Configure the local IO capability and authentication requirements. Call
+/// after BtSmpInit. When never called the defaults are NoInputNoOutput /
+/// bonding + Secure Connections, which resolves to Just Works. The Secure
+/// Connections bit is forced set; this build does not pair with legacy.
+void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq);
+
+/// Numeric Comparison user interaction. The SMP core calls this when a pairing
+/// selects the Numeric Comparison model: display Value (a 6 digit number) and
+/// ask the user whether it matches the value shown on the peer, then resume by
+/// calling BtSmpNumericComparisonReply. The library provides a weak default
+/// that rejects the pairing; an application advertising DisplayYesNo or
+/// KeyboardDisplay overrides it with a strong definition.
+void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value);
+
+/// Resume a Numeric Comparison pairing from the application. Call in response
+/// to BtSmpNumericComparison: Confirm true when the user reports the values on
+/// both devices match, false otherwise. On a false reply pairing aborts; the
+/// link is left unencrypted.
+void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm);
 
 /**
  * @brief	Bring up the Bluetooth-owned controller CryptoDev_t (SDC).

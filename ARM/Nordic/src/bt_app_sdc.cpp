@@ -897,6 +897,48 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	BtCryptoCtlrSdcInit(&s_CryptoAes);
 	BtSmpInit(&s_CryptoEcdh, &s_CryptoAes);
 
+	// Translate the application security configuration into the SMP IO
+	// capability, authentication requirements and association-model callbacks.
+	// SecExchg selects the IO capability; SecType selects bonding and MITM. The
+	// Secure Connections bit is forced inside BtSmpAuthConfig.
+	uint8_t smpIoCaps;
+	if ((pCfg->SecExchg & BTAPP_SECEXCHG_KEYBOARD) &&
+		(pCfg->SecExchg & BTAPP_SECEXCHG_DISPLAY))
+	{
+		smpIoCaps = BT_SMP_IOCAPS_KEYBOARD_DISPLAY;
+	}
+	else if ((pCfg->SecExchg & BTAPP_SECEXCHG_DISPLAY) &&
+			 (pCfg->SecExchg & BTAPP_SECEXCHG_YESNO))
+	{
+		smpIoCaps = BT_SMP_IOCAPS_DISPLAY_YESNO;
+	}
+	else if (pCfg->SecExchg & BTAPP_SECEXCHG_KEYBOARD)
+	{
+		smpIoCaps = BT_SMP_IOCAPS_KEYBOARD_ONLY;
+	}
+	else if (pCfg->SecExchg & BTAPP_SECEXCHG_DISPLAY)
+	{
+		smpIoCaps = BT_SMP_IOCAPS_DISPLAY_ONLY;
+	}
+	else
+	{
+		smpIoCaps = BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT;
+	}
+
+	uint8_t smpAuthReq = 0;
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE)
+	{
+		smpAuthReq |= BT_SMP_AUTHREQ_BONDING_FLAG_BONDING;
+	}
+	if (pCfg->SecType == BTGAP_SECTYPE_STATICKEY_MITM ||
+		pCfg->SecType == BTGAP_SECTYPE_LESC_MITM ||
+		pCfg->SecType == BTGAP_SECTYPE_SIGNED_MITM)
+	{
+		smpAuthReq |= BT_SMP_AUTHREQ_MITM;
+	}
+
+	BtSmpAuthConfig(smpIoCaps, smpAuthReq);
+
 	// Record whether security was requested, so the connected handler can
 	// initiate it. Backend-internal - mirrors the SoftDevice backend.
 	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
