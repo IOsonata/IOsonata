@@ -417,6 +417,12 @@ bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 		return false;
 	}
 
+	if (cnt == UINT32_MAX)
+	{
+		// Accepting this value would wrap the stored next counter back to 0.
+		return false;
+	}
+
 	uint8_t mac[8];
 	BtSmpSignMac(pBond->Keys.Csrk, pMsg, MsgLen, mac);
 	if (memcmp(mac, &pSig[4], 8) != 0)

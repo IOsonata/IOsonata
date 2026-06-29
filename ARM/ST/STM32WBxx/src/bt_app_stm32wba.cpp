@@ -282,7 +282,7 @@ static void WbaGattCccdReArm(uint16_t ConnHdl)
 			tBleStatus st = aci_gatt_get_attribute_value(ConnHdl, pChar->CccdHdl,
 														 0, sizeof(val),
 														 &length, &valLen, val);
-			if (st == BLE_STATUS_SUCCESS && valLen >= 2)
+			if (st == BLE_STATUS_SUCCESS && valLen == 2)
 			{
 				uint16_t cccd = (uint16_t)(val[0] | (val[1] << 8));
 				if (cccd != 0)
