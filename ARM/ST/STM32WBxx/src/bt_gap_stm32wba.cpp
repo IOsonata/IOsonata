@@ -298,3 +298,55 @@ void BtGapScanStop(void)
 {
 	(void)aci_gap_terminate_gap_procedure(GAP_OBSERVATION_PROC);
 }
+
+// Strong override of the weak generic BtGapConnSecGet. The ST host owns link
+// security on this port, so query it through aci_gap_get_security_level and map
+// the reported security level (1 to 4) into BtConnSec_t.
+bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
+{
+	if (pSec == nullptr)
+	{
+		return false;
+	}
+
+	uint8_t mode = 0;
+	uint8_t level = 0;
+	if (aci_gap_get_security_level(ConnHdl, &mode, &level) != BLE_STATUS_SUCCESS)
+	{
+		return false;
+	}
+
+	pSec->Level = BT_GAP_SEC_LEVEL_NONE;
+	pSec->KeySize = 0;
+	pSec->Flags = 0;
+
+	switch (level)
+	{
+		case 0x02:
+			pSec->Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
+			break;
+		case 0x03:
+			pSec->Level = BT_GAP_SEC_LEVEL_ENC_AUTH;
+			break;
+		case 0x04:
+			pSec->Level = BT_GAP_SEC_LEVEL_LESC_AUTH;
+			pSec->Flags |= BT_GAP_SEC_FLAG_SC;
+			break;
+		default:
+			// 0x01 is security mode 1 level 1 (no security).
+			break;
+	}
+
+	if (level >= 0x02)
+	{
+		// aci_gap_get_security_level does not report the per-link key size. SC
+		// and WBA pairing use a 16-octet key, so report 16 on an encrypted link.
+		pSec->KeySize = 16;
+	}
+
+	// The ST host owns the bond table as an opaque blob and a reliable per-link
+	// bonded query is not available here (resolvable peer address plus opaque
+	// storage), so BT_GAP_SEC_FLAG_BONDED is left unset on this port.
+
+	return true;
+}
