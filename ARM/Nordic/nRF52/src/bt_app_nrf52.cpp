@@ -1054,9 +1054,18 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 					p_ble_evt->evt.gap_evt.params.auth_status.bonded);
 			break;
 		case BLE_GAP_EVT_CONN_SEC_UPDATE:
-			DEBUG_PRINTF("SEC: EVT_CONN_SEC_UPDATE sm=%d lv=%d\r\n",
-					p_ble_evt->evt.gap_evt.params.conn_sec_update.conn_sec.sec_mode.sm,
-					p_ble_evt->evt.gap_evt.params.conn_sec_update.conn_sec.sec_mode.lv);
+		{
+			const ble_gap_conn_sec_t *pcs = &p_ble_evt->evt.gap_evt.params.conn_sec_update.conn_sec;
+			DEBUG_PRINTF("SEC: EVT_CONN_SEC_UPDATE sm=%d lv=%d ks=%d\r\n",
+					pcs->sec_mode.sm, pcs->sec_mode.lv, pcs->encr_key_size);
+			// Capture the negotiated encryption key size for BtGapConnSecGet.
+			// pm_conn_sec_status_get does not report key size; this event does.
+			BtDevice_t *pdev = BtPeerFindByHdl(p_ble_evt->evt.gap_evt.conn_handle);
+			if (pdev != nullptr)
+			{
+				pdev->Conn.Sec.KeySize = pcs->encr_key_size;
+			}
+		}
 			break;
 		default:
 			break;
