@@ -1269,6 +1269,11 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 					l += pRspAtt->ReadByTypeRsp.Len;
 					p += pRspAtt->ReadByTypeRsp.Len - 2;
+					// entry is the last DB node; no next handle to continue the scan
+					if (entry->pNext == nullptr)
+					{
+						break;
+					}
 					req->StartHdl = entry->pNext->Hdl;
 					entry = BtAttDBFindUuidRange(&uid16, req->StartHdl, req->EndHdl);
 				}
@@ -1432,7 +1437,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				while (entry && (rspMtu - l) >= BT_ATT_MTU_MIN)
 				{
 					DEBUG_PRINTF("#%d BaseIdx = %d, entry->Hdl = %d, entry->pNext->Hdl = %d, UuidType = %d, uuid16 = 0x%x\r\n",
-							temp_cnt, entry->TypeUuid.BaseIdx, entry->Hdl, entry->pNext->Hdl, entry->TypeUuid.Type, entry->TypeUuid.Uuid);
+							temp_cnt, entry->TypeUuid.BaseIdx, entry->Hdl, (entry->pNext ? entry->pNext->Hdl : 0), entry->TypeUuid.Type, entry->TypeUuid.Uuid);
 
 					if (entry->Hdl >= req->StartHdl && entry->Hdl <= req->EndHdl && baseidx == entry->TypeUuid.BaseIdx)
 					{
