@@ -551,8 +551,9 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
     for (int i = 0; i < pSrvc->NbChar; i++)
     {
-        err = BtGattCharAdd(pSrvc, &pSrvc->pCharArray[i],
-                            BTSRVC_SECTYPE_NONE);
+        BTSRVC_SECTYPE sec = (BTSRVC_SECTYPE)(pSrvc->pCharArray[i].SecType != BT_GAP_SECTYPE_NONE
+                             ? pSrvc->pCharArray[i].SecType : pSrvc->SecType);
+        err = BtGattCharAdd(pSrvc, &pSrvc->pCharArray[i], sec);
         if (err != NRF_SUCCESS)
         {
             return false;

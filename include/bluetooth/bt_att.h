@@ -527,6 +527,7 @@ struct __Bt_Characteristic {
 	BtCharTxComplete_t TxCompleteCB;	//!< Callback when TX is completed
 	void *pValue;						//!< Characteristic data value
 	uint16_t ValueLen;					//!< Current length in bytes of data value
+	uint8_t SecType;					//!< Per-characteristic security, a BT_GAP_SECTYPE_* value. NONE inherits the service SecType.
 	// Bellow are private data. Do not modify
 	// bNotify/bIndic are an advisory OR-aggregate across all connected peers
 	// (true if any peer has subscribed), kept for the CccVal mirror and legacy
@@ -559,6 +560,7 @@ struct __Bt_Service {
 	BtGattChar_t *pCharArray;			//!< Pointer to array of characteristics
 	BtSrvcAuthRqst_t AuthReqCB;			//!< Authorization request callback (NULL if not used)
 	void *pContext;						//!< Opaque pointer for the user (e.g. BtIntrf back-pointer)
+	uint8_t SecType;					//!< Default BT_GAP_SECTYPE_* security for characteristics that leave SecType as NONE.
 
 	// --- Runtime state (managed by the stack) ---
 	uint16_t Hdl;						//!< Service handle
