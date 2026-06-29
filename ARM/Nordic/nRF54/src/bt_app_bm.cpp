@@ -232,6 +232,19 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 		}
 			break;
 
+		case BLE_GAP_EVT_CONN_SEC_UPDATE:
+		{
+			const ble_gap_conn_sec_t *pcs = &p_gap_evt->params.conn_sec_update.conn_sec;
+			// Capture the negotiated encryption key size for BtGapConnSecGet.
+			// pm_conn_sec_status_get does not report key size; this event does.
+			BtDevice_t *pdev = BtPeerFindByHdl(p_gap_evt->conn_handle);
+			if (pdev != nullptr)
+			{
+				pdev->Conn.Sec.KeySize = pcs->encr_key_size;
+			}
+		}
+			break;
+
 		case BLE_GAP_EVT_ADV_SET_TERMINATED:
 			BtAppAdvTimeoutHandler();
 			break;
