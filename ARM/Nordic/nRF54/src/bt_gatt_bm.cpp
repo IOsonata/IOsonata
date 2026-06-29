@@ -367,8 +367,16 @@ static void BtSrvcEncSec(ble_gap_conn_sec_mode_t *pSecMode, BTSRVC_SECTYPE SecTy
 			BLE_GAP_CONN_SEC_MODE_SET_LESC_ENC_WITH_MITM(pSecMode);
 			break;
 		case BTSRVC_SECTYPE_SIGNED_NO_MITM:
+			// S145 has no signed-write verification. Require encryption instead
+			// of leaving the attribute open; encryption is stronger than the
+			// signed (mode 2) protection that cannot be enforced on this stack.
+			BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(pSecMode);
+			break;
 		case BTSRVC_SECTYPE_SIGNED_MITM:
-			// S145 does not support signed writes - fall through to open
+			// S145 has no signed-write verification. Require authenticated
+			// encryption instead of leaving the attribute open.
+			BLE_GAP_CONN_SEC_MODE_SET_ENC_WITH_MITM(pSecMode);
+			break;
 		case BTSRVC_SECTYPE_NONE:
 		default:
 			BLE_GAP_CONN_SEC_MODE_SET_OPEN(pSecMode);
