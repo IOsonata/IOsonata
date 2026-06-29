@@ -729,10 +729,11 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
 			  pLink->Ctx.Model, pReq->IOCaps, s_SmpIoCaps, mitm ? 1 : 0);
 	if (pLink->Ctx.Model != BT_SMP_MODEL_JUST_WORKS &&
-		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON)
+		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON &&
+		pLink->Ctx.Model != BT_SMP_MODEL_PASSKEY_ENTRY)
 	{
-		// Passkey Entry and OOB are not wired yet; fail closed rather than
-		// continuing to a link the peer would treat as authenticated.
+		// OOB is not wired yet; fail closed rather than continuing to a link
+		// the peer would treat as authenticated.
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
 		pLink->Ctx.State = BT_SMP_STATE_IDLE;
 		return;
@@ -866,10 +867,11 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
 			  pLink->Ctx.Model, s_SmpIoCaps, pRsp->IOCaps, mitm ? 1 : 0);
 	if (pLink->Ctx.Model != BT_SMP_MODEL_JUST_WORKS &&
-		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON)
+		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON &&
+		pLink->Ctx.Model != BT_SMP_MODEL_PASSKEY_ENTRY)
 	{
-		// Passkey Entry and OOB are not wired yet; fail closed rather than
-		// continuing to a link the peer would treat as authenticated.
+		// OOB is not wired yet; fail closed rather than continuing to a link
+		// the peer would treat as authenticated.
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
 		pLink->Ctx.State = BT_SMP_STATE_IDLE;
 		return;
@@ -921,10 +923,310 @@ static void SmpHandlePublicKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	}
 }
 
+// ===========================================================================
+// Passkey Entry (LE Secure Connections). Core spec Vol 3 Part H, 2.3.5.6.3.
+//
+// Twenty rounds, one passkey bit per round. The initiator commits first each
+// round: A->B Confirm(Cai), B->A Confirm(Cbi), A->B Random(Nai), B->A
+// Random(Nbi), both verify, advance. After the last round f5 derives the keys
+// from the final nonces and the DHKey Check uses r = passkey (not 0). One side
+// displays a generated passkey, the other inputs it; the input side resumes
+// from BtSmpPasskeyReply. These handlers run only when the model is
+// BT_SMP_MODEL_PASSKEY_ENTRY, leaving the Just Works / Numeric Comparison path
+// unchanged.
+// ===========================================================================
+
+#define BT_SMP_PASSKEY_ROUNDS	20
+
+// Per round ra / rb: the round-th passkey bit (LSB first) in bit 0, fixed 0x80
+// high bit.
+static uint8_t SmpPasskeyRa(uint32_t Passkey, uint8_t Round)
+{
+	return (uint8_t)(0x80 | ((Passkey >> Round) & 1));
+}
+
+// Decide whether the local device displays the passkey (true) or inputs it
+// (false), from the local and peer IO capabilities. KeyboardOnly always inputs;
+// DisplayOnly and DisplayYesNo always display; KeyboardDisplay displays only
+// against a KeyboardOnly peer (KeyboardDisplay against KeyboardDisplay resolves
+// to Numeric Comparison, not Passkey Entry).
+static bool SmpPasskeyLocalDisplays(uint8_t LocalIo, uint8_t PeerIo)
+{
+	if (LocalIo == BT_SMP_IOCAPS_KEYBOARD_ONLY)
+	{
+		return false;
+	}
+	if (LocalIo == BT_SMP_IOCAPS_DISPLAY_ONLY ||
+		LocalIo == BT_SMP_IOCAPS_DISPLAY_YESNO)
+	{
+		return true;
+	}
+	// LocalIo == BT_SMP_IOCAPS_KEYBOARD_DISPLAY
+	return (PeerIo == BT_SMP_IOCAPS_KEYBOARD_ONLY);
+}
+
+// Fill the 16 octet r value for the DHKey Check f6. Zero for Just Works and
+// Numeric Comparison; the passkey (SMP little-endian, low octet first) for
+// Passkey Entry. f6 reverses r internally to big-endian.
+static void SmpDhKeyCheckR(const BtSmpLink_t *pLink, uint8_t r[16])
+{
+	memset(r, 0, 16);
+	if (pLink->Ctx.Model == BT_SMP_MODEL_PASSKEY_ENTRY)
+	{
+		uint32_t pk = pLink->Ctx.Passkey;
+		r[0] = (uint8_t)(pk & 0xFF);
+		r[1] = (uint8_t)((pk >> 8) & 0xFF);
+		r[2] = (uint8_t)((pk >> 16) & 0xFF);
+		r[3] = (uint8_t)((pk >> 24) & 0xFF);
+	}
+}
+
+// Initiator: send the round Confirm Cai = f4(PKax, PKbx, Nai, rai) with a fresh
+// nonce, then wait for the responder Confirm Cbi.
+static void SmpPasskeySendInitiatorConfirm(BtHciDevice_t * const pDev,
+										   BtSmpLink_t *pLink, uint16_t ConnHdl)
+{
+	uint8_t localX[32];
+	uint8_t peerX[32];
+	SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], localX);	// PKax
+	SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], peerX);		// PKbx
+
+	BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);					// Nai
+	uint8_t ra = SmpPasskeyRa(pLink->Ctx.Passkey, pLink->Ctx.PkRound);
+
+	BtSmpPairingConfirm_t cf;
+	cf.Code = BT_SMP_CODE_PAIRING_CONFIRM;
+	SmpF4(localX, peerX, pLink->Ctx.LocalRand, ra, cf.Value);
+	memcpy(pLink->Ctx.LocalConfirm, cf.Value, 16);
+	SmpSend(pDev, ConnHdl, &cf, sizeof(cf));
+
+	pLink->Ctx.State = BT_SMP_STATE_CONFIRM_WAIT;
+}
+
+// Responder: send the round Confirm Cbi = f4(PKbx, PKax, Nbi, rbi) with a fresh
+// nonce, then wait for the initiator Random Nai.
+static void SmpPasskeyResponderConfirm(BtHciDevice_t * const pDev,
+									   BtSmpLink_t *pLink, uint16_t ConnHdl)
+{
+	uint8_t localX[32];
+	uint8_t peerX[32];
+	SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], localX);	// PKbx
+	SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], peerX);		// PKax
+
+	BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);					// Nbi
+	uint8_t rb = SmpPasskeyRa(pLink->Ctx.Passkey, pLink->Ctx.PkRound);
+
+	BtSmpPairingConfirm_t cf;
+	cf.Code = BT_SMP_CODE_PAIRING_CONFIRM;
+	SmpF4(localX, peerX, pLink->Ctx.LocalRand, rb, cf.Value);
+	memcpy(pLink->Ctx.LocalConfirm, cf.Value, 16);
+	SmpSend(pDev, ConnHdl, &cf, sizeof(cf));
+
+	pLink->Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
+}
+
+// Initiator: all rounds verified. Derive keys with f5 from the final nonces and
+// send the DHKey Check Ea = f6(MacKey, Na, Nb, passkey, IOcapA, A, B).
+static void SmpPasskeyInitiatorFinish(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+									  uint16_t ConnHdl, const uint8_t *PeerAddr,
+									  uint8_t PeerAddrType)
+{
+	uint8_t localAddr[6];
+	uint8_t localAddrType = 0;
+	BtSmpLocalAddrGet(&localAddrType, localAddr);
+
+	uint8_t dhKeySmp[32];
+	SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
+
+	SmpF5(dhKeySmp, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+		  localAddrType, localAddr, PeerAddrType, PeerAddr,
+		  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+
+	memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
+	pLink->Keys.bSc = true;
+	pLink->Keys.bValid = true;
+	pLink->Keys.bAuthenticated = true;
+	SmpApplyKeySize(&pLink->Keys);
+
+	uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
+	uint8_t rChk[16];
+	SmpDhKeyCheckR(pLink, rChk);
+	uint8_t ea[16];
+	SmpF6(pLink->Ctx.Mackey, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
+		  rChk, iocapA,
+		  localAddrType, localAddr, PeerAddrType, PeerAddr, ea);
+
+	BtSmpDhKeyCheck_t chk;
+	chk.Code = BT_SMP_CODE_PAIRING_DHKEY_CHECK;
+	memcpy(chk.Value, ea, 16);
+	SmpSend(pDev, ConnHdl, &chk, sizeof(chk));
+
+	pLink->Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
+}
+
+// Responder: all rounds verified. Derive keys with f5 from the final nonces and
+// wait for the initiator DHKey Check Ea; the DHKey Check handler sends Eb.
+static void SmpPasskeyResponderFinish(BtSmpLink_t *pLink, const uint8_t *PeerAddr,
+									  uint8_t PeerAddrType)
+{
+	uint8_t localAddr[6];
+	uint8_t localAddrType = 0;
+	BtSmpLocalAddrGet(&localAddrType, localAddr);
+
+	uint8_t dhKeySmp[32];
+	SmpReverse32(pLink->Ctx.DhKey, dhKeySmp);
+
+	SmpF5(dhKeySmp, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
+		  PeerAddrType, PeerAddr, localAddrType, localAddr,
+		  pLink->Ctx.Mackey, pLink->Ctx.Ltk);
+
+	memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
+	pLink->Keys.bSc = true;
+	pLink->Keys.bValid = true;
+	pLink->Keys.bAuthenticated = true;
+	SmpApplyKeySize(&pLink->Keys);
+
+	pLink->Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
+}
+
+// Passkey Entry Pairing Confirm. PeerConfirm is already stored by the caller.
+static void SmpPasskeyHandleConfirm(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+									uint16_t ConnHdl)
+{
+	if (pLink->Ctx.bInitiator)
+	{
+		// Received Cbi. Reveal Nai; Cbi is verified against Nbi in the random
+		// handler.
+		BtSmpPairingRandom_t rnd;
+		rnd.Code = BT_SMP_CODE_PAIRING_RANDOM;
+		memcpy(rnd.Value, pLink->Ctx.LocalRand, 16);
+		SmpSend(pDev, ConnHdl, &rnd, sizeof(rnd));
+		pLink->Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
+		return;
+	}
+
+	// Responder received Cai. If the user has not entered the passkey yet,
+	// buffer this Confirm and respond from BtSmpPasskeyReply.
+	if (!pLink->Ctx.bPkReady)
+	{
+		pLink->Ctx.bPkPeerCommit = true;
+		return;
+	}
+	SmpPasskeyResponderConfirm(pDev, pLink, ConnHdl);
+}
+
+// Passkey Entry Pairing Random. PeerRand is already stored by the caller.
+static void SmpPasskeyHandleRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+								   uint16_t ConnHdl, const uint8_t *PeerAddr,
+								   uint8_t PeerAddrType)
+{
+	uint8_t localX[32];
+	uint8_t peerX[32];
+	SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], localX);
+	SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], peerX);
+	uint8_t r = SmpPasskeyRa(pLink->Ctx.Passkey, pLink->Ctx.PkRound);
+
+	if (pLink->Ctx.bInitiator)
+	{
+		// Received Nbi. Verify Cbi = f4(PKbx, PKax, Nbi, rbi).
+		uint8_t cb[16];
+		SmpF4(peerX, localX, pLink->Ctx.PeerRand, r, cb);
+		if (!SmpEqualCT(cb, pLink->Ctx.PeerConfirm, 16))
+		{
+			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+			pLink->Ctx.State = BT_SMP_STATE_IDLE;
+			return;
+		}
+
+		if (pLink->Ctx.PkRound < BT_SMP_PASSKEY_ROUNDS - 1)
+		{
+			pLink->Ctx.PkRound++;
+			SmpPasskeySendInitiatorConfirm(pDev, pLink, ConnHdl);
+			return;
+		}
+		SmpPasskeyInitiatorFinish(pDev, pLink, ConnHdl, PeerAddr, PeerAddrType);
+		return;
+	}
+
+	// Responder received Nai. Verify Cai = f4(PKax, PKbx, Nai, rai).
+	uint8_t ca[16];
+	SmpF4(peerX, localX, pLink->Ctx.PeerRand, r, ca);
+	if (!SmpEqualCT(ca, pLink->Ctx.PeerConfirm, 16))
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
+
+	// Reveal Nbi.
+	BtSmpPairingRandom_t rnd;
+	rnd.Code = BT_SMP_CODE_PAIRING_RANDOM;
+	memcpy(rnd.Value, pLink->Ctx.LocalRand, 16);
+	SmpSend(pDev, ConnHdl, &rnd, sizeof(rnd));
+
+	if (pLink->Ctx.PkRound < BT_SMP_PASSKEY_ROUNDS - 1)
+	{
+		pLink->Ctx.PkRound++;
+		pLink->Ctx.State = BT_SMP_STATE_CONFIRM_WAIT;
+		return;
+	}
+	SmpPasskeyResponderFinish(pLink, PeerAddr, PeerAddrType);
+}
+
+// Begin Passkey Entry after the DHKey is ready. Decide display vs input, show
+// or request the passkey, and start round 0 on the initiator once it is known.
+static void SmpPasskeyBegin(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
+							uint16_t ConnHdl)
+{
+	uint8_t localIo = pLink->Ctx.bInitiator ? pLink->Ctx.PReq[1] : pLink->Ctx.PRsp[1];
+	uint8_t peerIo  = pLink->Ctx.bInitiator ? pLink->Ctx.PRsp[1] : pLink->Ctx.PReq[1];
+
+	pLink->Ctx.PkRound = 0;
+	pLink->Ctx.bPkPeerCommit = false;
+	pLink->Ctx.bPkDisplay = SmpPasskeyLocalDisplays(localIo, peerIo);
+
+	// Park in the waiting state before any user callback so a synchronous reject
+	// (the weak BtSmpPasskeyRequest default sets IDLE) is not overwritten here.
+	pLink->Ctx.State = pLink->Ctx.bInitiator ?
+		BT_SMP_STATE_PASSKEY_WAIT : BT_SMP_STATE_CONFIRM_WAIT;
+
+	if (pLink->Ctx.bPkDisplay)
+	{
+		uint8_t rnd[4];
+		BtSmpCryptoRand(rnd, 4);
+		uint32_t v = ((uint32_t)rnd[0] | ((uint32_t)rnd[1] << 8) |
+					  ((uint32_t)rnd[2] << 16) | ((uint32_t)rnd[3] << 24)) % 1000000u;
+		pLink->Ctx.Passkey = v;
+		pLink->Ctx.bPkReady = true;
+		BtSmpPasskeyDisplay(ConnHdl, v);
+	}
+	else
+	{
+		pLink->Ctx.Passkey = 0;
+		pLink->Ctx.bPkReady = false;
+		BtSmpPasskeyRequest(ConnHdl);
+	}
+
+	// The initiator drives round 0 once it knows the passkey. Proceed only if
+	// still parked in PASSKEY_WAIT; a synchronous reject moved the state to
+	// IDLE. The input side starts later from BtSmpPasskeyReply.
+	if (pLink->Ctx.bInitiator && pLink->Ctx.bPkReady &&
+		pLink->Ctx.State == BT_SMP_STATE_PASSKEY_WAIT)
+	{
+		SmpPasskeySendInitiatorConfirm(pDev, pLink, ConnHdl);
+	}
+}
+
 static void SmpHandlePairingConfirm(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 									uint16_t ConnHdl, const BtSmpPairingConfirm_t *pC)
 {
 	memcpy(pLink->Ctx.PeerConfirm, pC->Value, 16);
+
+	if (pLink->Ctx.Model == BT_SMP_MODEL_PASSKEY_ENTRY)
+	{
+		SmpPasskeyHandleConfirm(pDev, pLink, ConnHdl);
+		return;
+	}
 
 	if (pLink->Ctx.bInitiator)
 	{
@@ -982,6 +1284,12 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	{
 		memcpy(peerAddr, pPeer->Conn.PeerAddr, 6);
 		peerAddrType = pPeer->Conn.PeerAddrType;
+	}
+
+	if (pLink->Ctx.Model == BT_SMP_MODEL_PASSKEY_ENTRY)
+	{
+		SmpPasskeyHandleRandom(pDev, pLink, ConnHdl, peerAddr, peerAddrType);
+		return;
 	}
 
 	if (pLink->Ctx.bInitiator)
@@ -1069,6 +1377,10 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		pLink->Keys.bSc = true;
 		pLink->Keys.bValid = true;
 		SmpApplyKeySize(&pLink->Keys);
+		// Park in DHKEY_CHECK_WAIT before the user callback. A synchronous
+		// reject inside BtSmpNumericComparison takes the reply path and sets
+		// the state to IDLE; do not overwrite it afterward.
+		pLink->Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
 		if (pLink->Ctx.Model == BT_SMP_MODEL_NUMERIC_COMPARISON)
 		{
 			// Both nonces are known: display the value for the user. The
@@ -1077,7 +1389,6 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 			uint32_t v = SmpNumericValue(pLink);
 			BtSmpNumericComparison(ConnHdl, v);
 		}
-		pLink->Ctx.State = BT_SMP_STATE_DHKEY_CHECK_WAIT;
 		return;
 	}
 
@@ -1135,10 +1446,11 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		// Initiator: the peer sent its DHKey Check Eb. Verify it:
 		// Eb = f6(MacKey, Nb, Na, 0, IOcapB, B=responder(peer), A=initiator(local)).
 		uint8_t iocapB[3] = { pLink->Ctx.PRsp[1], pLink->Ctx.PRsp[2], pLink->Ctx.PRsp[3] };
-		uint8_t zeroR[16] = {0};
+		uint8_t rChk[16];
+		SmpDhKeyCheckR(pLink, rChk);
 		uint8_t eb[16];
 		SmpF6(pLink->Ctx.Mackey, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
-			  zeroR, iocapB,
+			  rChk, iocapB,
 			  peerAddrType, peerAddr, localAddrType, localAddr, eb);
 
 		if (!SmpEqualCT(eb, pChk->Value, 16))
@@ -1157,11 +1469,12 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
 	uint8_t iocapB[3] = { pLink->Ctx.PRsp[1], pLink->Ctx.PRsp[2], pLink->Ctx.PRsp[3] };
-	uint8_t zeroR[16] = {0};
+	uint8_t rChk[16];
+	SmpDhKeyCheckR(pLink, rChk);
 
 	uint8_t ea[16];
 	SmpF6(pLink->Ctx.Mackey, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
-		  zeroR, iocapA,
+		  rChk, iocapA,
 		  peerAddrType, peerAddr, localAddrType, localAddr, ea);
 
 	if (!SmpEqualCT(ea, pChk->Value, 16))
@@ -1178,7 +1491,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 			  altMackey, altLtk);
 
 		SmpF6(altMackey, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
-			  zeroR, iocapA,
+			  rChk, iocapA,
 			  peerAddrType, peerAddr, localAddrType, localAddr, altEa);
 
 		SMP_TRACE("Ea mismatch cur0=%02x alt0=%02x peer0=%02x\r\n",
@@ -1210,7 +1523,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	uint8_t eb[16];
 	SmpF6(pLink->Ctx.Mackey, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
-		  zeroR, iocapB,
+		  rChk, iocapB,
 		  localAddrType, localAddr, peerAddrType, peerAddr, eb);
 
 	BtSmpDhKeyCheck_t chk;
@@ -1465,6 +1778,12 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		}
 
 		memcpy(pLink->Ctx.DhKey, pDhKey, 32);
+
+		if (pLink->Ctx.Model == BT_SMP_MODEL_PASSKEY_ENTRY)
+		{
+			SmpPasskeyBegin(pDev, pLink, pLink->ConnHdl);
+			continue;
+		}
 
 		if (pLink->Ctx.bInitiator)
 		{
@@ -1876,7 +2195,15 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 		return;
 	}
 
-	BtHciDevice_t * const pDev = s_pSmpActiveDev;
+	// Derive the HCI device from this connection rather than the global active
+	// device: the user reply is asynchronous and a concurrent link could have
+	// moved s_pSmpActiveDev since the value was displayed.
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
+	{
+		return;
+	}
+	BtHciDevice_t * const pDev = (BtHciDevice_t *)pPeer->pHciDev;
 
 	if (!Confirm)
 	{
@@ -1888,14 +2215,10 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 	// Values matched: the link is MITM authenticated.
 	pLink->Keys.bAuthenticated = true;
 
-	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-	uint8_t peerAddr[6] = {0};
-	uint8_t peerAddrType = 0;
-	if (pPeer != nullptr)
-	{
-		memcpy(peerAddr, pPeer->Conn.PeerAddr, 6);
-		peerAddrType = pPeer->Conn.PeerAddrType;
-	}
+	uint8_t peerAddr[6];
+	uint8_t peerAddrType;
+	memcpy(peerAddr, pPeer->Conn.PeerAddr, 6);
+	peerAddrType = pPeer->Conn.PeerAddrType;
 
 	uint8_t localAddr[6];
 	uint8_t localAddrType = 0;
@@ -1945,6 +2268,78 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 	}
 }
 
+// Weak default for the Passkey Entry display. The displaying device shows the
+// generated 6 digit passkey so the user can enter it on the peer. With no
+// application display there is nothing to show; pairing then fails at the per
+// round Confirm check because the input side cannot match an unshown value. An
+// application advertising a display overrides this with a strong definition.
+__attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
+{
+	(void)ConnHdl;
+	(void)Passkey;
+}
+
+// Weak default for the Passkey Entry request. The inputting device must obtain
+// the value the user reads from the peer. With no application input there is no
+// way to enter it, so reject. An application with a keypad overrides this with
+// a strong definition that prompts the user and calls BtSmpPasskeyReply.
+__attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
+{
+	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+}
+
+// Resume a Passkey Entry pairing after the user has entered the value shown on
+// the peer. A value in 0..999999 drives the per round Confirm exchange; a value
+// above that range (BT_SMP_PASSKEY_INVALID) cancels with a Passkey Entry Failed
+// reason. Called from the application in response to BtSmpPasskeyRequest.
+void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
+{
+	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
+	if (pLink == nullptr ||
+		pLink->Ctx.Model != BT_SMP_MODEL_PASSKEY_ENTRY)
+	{
+		return;
+	}
+
+	// Derive the HCI device from this connection rather than the global active
+	// device: the user reply is asynchronous and a concurrent link could have
+	// moved s_pSmpActiveDev since the passkey was requested.
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
+	{
+		return;
+	}
+	BtHciDevice_t * const pDev = (BtHciDevice_t *)pPeer->pHciDev;
+
+	if (Passkey > 999999u)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_PASSKEY_ENTRY_FAILED);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
+
+	pLink->Ctx.Passkey = Passkey;
+	pLink->Ctx.bPkReady = true;
+
+	if (pLink->Ctx.bInitiator)
+	{
+		// Drive round 0 now that the passkey is known.
+		if (pLink->Ctx.State == BT_SMP_STATE_PASSKEY_WAIT)
+		{
+			SmpPasskeySendInitiatorConfirm(pDev, pLink, ConnHdl);
+		}
+		return;
+	}
+
+	// Responder: if the initiator Confirm already arrived it was buffered;
+	// answer it now with the round Confirm Cbi.
+	if (pLink->Ctx.bPkPeerCommit)
+	{
+		pLink->Ctx.bPkPeerCommit = false;
+		SmpPasskeyResponderConfirm(pDev, pLink, ConnHdl);
+	}
+}
+
 // Peripheral-initiated security. Sends an SMP Security Request to prompt the
 // central to either encrypt with an existing bond or start pairing. This is
 // the standard way a peripheral signals that it wants a secure/bonded link;
@@ -1974,7 +2369,7 @@ extern "C" void BtSmpRequestSecurity(uint16_t ConnHdl)
 
 	BtSmpSecurityReq_t req;
 	req.Code = BT_SMP_CODE_PAIRING_SECURITY_REQ;
-	req.AuthReq = (uint8_t)(BT_SMP_LOCAL_AUTHREQ & ~BT_SMP_AUTHREQ_KEYPRESS);
+	req.AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
 	SMP_TRACE("SMP TX SecurityReq auth=0x%02x\r\n", req.AuthReq);
 	SmpSend(pDev, ConnHdl, &req, sizeof(req));
 }

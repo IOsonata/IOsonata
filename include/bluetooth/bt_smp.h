@@ -90,6 +90,10 @@ SOFTWARE.
 #define BT_SMP_MODEL_PASSKEY_ENTRY					2
 #define BT_SMP_MODEL_OOB							3
 
+// Passkey value passed to BtSmpPasskeyReply to reject / cancel entry. Any value
+// above the 6 digit range is treated as a cancel.
+#define BT_SMP_PASSKEY_INVALID						0xFFFFFFFFu
+
 // AuthReq flags (Vol 3, Part H, 3.5.1, Figure 3.3).
 #define BT_SMP_AUTHREQ_BONDING_FLAG_MASK			(3<<0)
 #define BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING		(0<<0)	//!< No bonding
@@ -140,6 +144,7 @@ typedef enum __Bt_Smp_State {
 	BT_SMP_STATE_RANDOM_WAIT,		//!< Waiting for peer Pairing Random
 	BT_SMP_STATE_DHKEY_CHECK_WAIT,	//!< SC: waiting for peer DHKey Check
 	BT_SMP_STATE_NUMERIC_WAIT,		//!< SC: waiting for user numeric comparison confirm
+	BT_SMP_STATE_PASSKEY_WAIT,		//!< SC: input side waiting for user passkey entry
 	BT_SMP_STATE_LTK_WAIT,			//!< Waiting for controller LTK request (enc start)
 	BT_SMP_STATE_KEYDIST,			//!< Distributing / receiving transport keys
 	BT_SMP_STATE_DONE				//!< Pairing complete, link encrypted
@@ -184,6 +189,11 @@ typedef struct __Bt_Smp_Ctx {
 	uint8_t  DhKey[32];				//!< SC: computed DHKey
 	uint8_t  Mackey[16];			//!< SC: MacKey from f5
 	uint8_t  Ltk[16];				//!< Derived/working LTK
+	uint32_t Passkey;				//!< Passkey Entry: 6 digit value 0..999999
+	uint8_t  PkRound;				//!< Passkey Entry: current round 0..19
+	bool     bPkDisplay;			//!< Passkey Entry: true if local displays, false if local inputs
+	bool     bPkReady;				//!< Passkey Entry: true once Passkey is known
+	bool     bPkPeerCommit;			//!< Passkey Entry: peer Confirm buffered before Passkey was entered
 } BtSmpCtx_t;
 
 #pragma pack(push, 1)
@@ -355,6 +365,24 @@ void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value);
 /// both devices match, false otherwise. On a false reply pairing aborts; the
 /// link is left unencrypted.
 void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm);
+
+/// Passkey Entry display. The SMP core calls this on the device that displays
+/// the passkey when a pairing selects the Passkey Entry model: show Passkey (a
+/// 6 digit number) to the user. The peer device inputs the same value. The
+/// library provides a weak default that does nothing.
+void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey);
+
+/// Passkey Entry request. The SMP core calls this on the device that inputs the
+/// passkey: prompt the user for the 6 digit number shown on the peer, then
+/// resume by calling BtSmpPasskeyReply. The library provides a weak default
+/// that rejects the pairing.
+void BtSmpPasskeyRequest(uint16_t ConnHdl);
+
+/// Resume a Passkey Entry pairing from the application. Call in response to
+/// BtSmpPasskeyRequest with the value the user entered (0..999999). Pass
+/// BT_SMP_PASSKEY_INVALID (or any value above the 6 digit range) to cancel; the
+/// pairing then aborts and the link is left unencrypted.
+void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey);
 
 /**
  * @brief	Bring up the Bluetooth-owned controller CryptoDev_t (SDC).
