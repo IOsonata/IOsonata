@@ -66,6 +66,7 @@ SOFTWARE.
 #include "ble_gatt_aci.h"
 #include "ble_hal_aci.h"
 #include "ble_events.h"
+#include "ble_hci_le.h"
 #include "ble_vs_codes.h"
 #include "host_stack_if.h"
 #include "ll_sys.h"
@@ -83,6 +84,7 @@ SOFTWARE.
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_att.h"
 #include "app_evt_handler.h"
@@ -295,6 +297,80 @@ static void WbaGattCccdReArm(uint16_t ConnHdl)
 	}
 }
 
+// ===========================================================================
+// SMP user interaction bridge (STM32WBA / ST host stack).
+//
+// The ST stack owns the SMP exchange and surfaces the user steps as ACI GAP
+// events: ACI_GAP_NUMERIC_COMPARISON_VALUE (Numeric Comparison) and
+// ACI_GAP_PASS_KEY_REQ (Passkey Entry, display or input depending on IO
+// capability). These are bridged to the same BtSmp* interaction API the
+// generic SMP host exposes, so an application sees one set of callbacks across
+// ports. ST carries the passkey as a plain integer, so no ASCII conversion is
+// needed. The reply functions route the user answer back through
+// aci_gap_numeric_comparison_value_confirm_yesno and aci_gap_pass_key_resp.
+// The generic weak defaults live in bt_smp.cpp, which is not linked on this
+// port, so equivalent weak defaults are provided here.
+// ===========================================================================
+
+// Decide whether the local device displays the passkey (true) or inputs it
+// (false), from the local and peer IO capabilities. KeyboardOnly inputs;
+// DisplayOnly and DisplayYesNo display; KeyboardDisplay displays only against a
+// KeyboardOnly peer.
+static bool WbaPasskeyLocalDisplays(uint8_t LocalIo, uint8_t PeerIo)
+{
+	if (LocalIo == IO_CAP_KEYBOARD_ONLY)
+	{
+		return false;
+	}
+	if (LocalIo == IO_CAP_DISPLAY_ONLY || LocalIo == IO_CAP_DISPLAY_YES_NO)
+	{
+		return true;
+	}
+	// IO_CAP_KEYBOARD_DISPLAY
+	return (PeerIo == IO_CAP_KEYBOARD_ONLY);
+}
+
+// Resume Numeric Comparison. Confirm true reports a match, false rejects and
+// aborts pairing.
+void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
+{
+	(void)aci_gap_numeric_comparison_value_confirm_yesno(ConnHdl, Confirm ? 1 : 0);
+}
+
+// Resume Passkey Entry on the input side. A value in 0..999999 is handed to the
+// stack. A value above that range cancels: ST has no explicit passkey reject,
+// so a zero value is sent and pairing fails at the Confirm stage on the
+// resulting mismatch.
+void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
+{
+	if (Passkey > 999999u)
+	{
+		(void)aci_gap_pass_key_resp(ConnHdl, 0);
+		return;
+	}
+	(void)aci_gap_pass_key_resp(ConnHdl, Passkey);
+}
+
+// Weak defaults. With no application override the only safe action is to reject,
+// so the user interaction cannot be performed silently. An application that can
+// display or input overrides these.
+__attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
+{
+	(void)Value;
+	BtSmpNumericComparisonReply(ConnHdl, false);
+}
+
+__attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
+{
+	(void)ConnHdl;
+	(void)Passkey;
+}
+
+__attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
+{
+	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+}
+
 // HCI event callback registered with the stack. ST's stack invokes this
 // for every HCI / vendor event; we route by type to the appropriate
 // handler. Adv-report events go to the scan path (handled in
@@ -444,6 +520,43 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					if (pPc->Status == 0)
 					{
 						BtAppEvtSecured(pPc->Connection_Handle);
+					}
+					break;
+				}
+
+				case ACI_GAP_NUMERIC_COMPARISON_VALUE_VSEVT_CODE:
+				{
+					aci_gap_numeric_comparison_value_event_rp0 *pNc =
+						(aci_gap_numeric_comparison_value_event_rp0 *)pAci->data;
+					// LESC Numeric Comparison: the application confirms the
+					// match through BtSmpNumericComparisonReply.
+					BtSmpNumericComparison(pNc->Connection_Handle, pNc->Numeric_Value);
+					break;
+				}
+
+				case ACI_GAP_PASS_KEY_REQ_VSEVT_CODE:
+				{
+					aci_gap_pass_key_req_event_rp0 *pPk =
+						(aci_gap_pass_key_req_event_rp0 *)pAci->data;
+					uint16_t connHdl = pPk->Connection_Handle;
+					// The event reports the peer IO capability; the local one is
+					// the configured value.
+					if (WbaPasskeyLocalDisplays(s_WbaData.IoCapability, pPk->IO_Capability))
+					{
+						// Display side: generate a six digit passkey, show it,
+						// and hand the same value to the stack.
+						uint8_t rnd[8] = {0};
+						(void)hci_le_rand(rnd);
+						uint32_t val = ((uint32_t)rnd[0] | ((uint32_t)rnd[1] << 8) |
+										((uint32_t)rnd[2] << 16) | ((uint32_t)rnd[3] << 24)) % 1000000u;
+						BtSmpPasskeyDisplay(connHdl, val);
+						(void)aci_gap_pass_key_resp(connHdl, val);
+					}
+					else
+					{
+						// Input side: the application provides the value the user
+						// reads from the peer through BtSmpPasskeyReply.
+						BtSmpPasskeyRequest(connHdl);
 					}
 					break;
 				}
@@ -641,6 +754,30 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	                                       0,	// use fixed pin = no
 	                                       0,	// fixed pin value
 	                                       0);	// identity address type
+
+	// Map the application key-exchange capability to the ST IO capability so the
+	// MITM models (Numeric Comparison, Passkey Entry) can be selected. With no
+	// exchange bits the configured default (No Input No Output) stays.
+	uint8_t ioExchg = pCfg->SecExchg &
+			(BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO);
+	switch (ioExchg)
+	{
+		case BTAPP_SECEXCHG_KEYBOARD:
+			s_WbaData.IoCapability = IO_CAP_KEYBOARD_ONLY;
+			break;
+		case BTAPP_SECEXCHG_DISPLAY:
+			s_WbaData.IoCapability = IO_CAP_DISPLAY_ONLY;
+			break;
+		case (BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
+			s_WbaData.IoCapability = IO_CAP_DISPLAY_YES_NO;
+			break;
+		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY):
+		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
+			s_WbaData.IoCapability = IO_CAP_KEYBOARD_DISPLAY;
+			break;
+		default:
+			break;
+	}
 
 	aci_gap_set_io_capability(s_WbaData.IoCapability);
 

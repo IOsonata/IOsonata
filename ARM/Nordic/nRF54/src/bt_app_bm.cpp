@@ -80,6 +80,7 @@ extern "C" void BtLescSetCryptoEngine(CryptoDev_t *pDev);
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_dev.h"
 #include "app_evt_handler.h"
 
@@ -181,6 +182,87 @@ static void BtAppDiscPrimSrvcRsp(const ble_gattc_evt_t *pEvt);
 static void BtAppDiscCharRsp(const ble_gattc_evt_t *pEvt);
 static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt);
 
+// ===========================================================================
+// SMP user interaction bridge (sdk-nrf-bm / Peer Manager port, S145).
+//
+// The SoftDevice owns the SMP exchange and surfaces the user steps as GAP
+// events: BLE_GAP_EVT_PASSKEY_DISPLAY (Numeric Comparison when match_request is
+// set, otherwise Passkey Entry display) and BLE_GAP_EVT_AUTH_KEY_REQUEST
+// (Passkey Entry input). These are bridged to the same BtSmp* interaction API
+// the generic SMP host exposes, so an application sees one set of callbacks
+// across ports. The reply functions route the user answer back through
+// sd_ble_gap_auth_key_reply. The generic weak defaults live in bt_smp.cpp,
+// which is not linked on this port, so equivalent weak defaults are provided
+// here; an application strong definition overrides them.
+// ===========================================================================
+
+// SoftDevice passkey octets are six ASCII digits, most significant first.
+// Convert to the six digit integer used by the BtSmp interaction API.
+static uint32_t BmPasskeyToVal(const uint8_t *pAscii)
+{
+	uint32_t v = 0;
+	for (int i = 0; i < BLE_GAP_PASSKEY_LEN; i++)
+	{
+		v = v * 10 + (uint32_t)(pAscii[i] - '0');
+	}
+	return v;
+}
+
+// Convert the six digit integer to six ASCII digits, most significant first,
+// zero padded, for sd_ble_gap_auth_key_reply.
+static void BmPasskeyFromVal(uint32_t Val, uint8_t *pAscii)
+{
+	for (int i = BLE_GAP_PASSKEY_LEN - 1; i >= 0; i--)
+	{
+		pAscii[i] = (uint8_t)('0' + (Val % 10));
+		Val /= 10;
+	}
+}
+
+// Resume Numeric Comparison. Confirm true reports a match (reply PASSKEY type
+// with no key), false reports no match (reply NONE) and aborts pairing.
+void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
+{
+	(void)sd_ble_gap_auth_key_reply(ConnHdl,
+			Confirm ? BLE_GAP_AUTH_KEY_TYPE_PASSKEY : BLE_GAP_AUTH_KEY_TYPE_NONE,
+			NULL);
+}
+
+// Resume Passkey Entry on the input side. A value in 0..999999 is sent as six
+// ASCII digits; a value above that range cancels with a NONE reply.
+void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
+{
+	if (Passkey > 999999u)
+	{
+		(void)sd_ble_gap_auth_key_reply(ConnHdl, BLE_GAP_AUTH_KEY_TYPE_NONE, NULL);
+		return;
+	}
+
+	uint8_t ascii[BLE_GAP_PASSKEY_LEN];
+	BmPasskeyFromVal(Passkey, ascii);
+	(void)sd_ble_gap_auth_key_reply(ConnHdl, BLE_GAP_AUTH_KEY_TYPE_PASSKEY, ascii);
+}
+
+// Weak defaults. With no application override the only safe action is to reject,
+// so the user interaction cannot be performed silently. An application that can
+// display or input overrides these.
+__attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
+{
+	(void)Value;
+	BtSmpNumericComparisonReply(ConnHdl, false);
+}
+
+__attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
+{
+	(void)ConnHdl;
+	(void)Passkey;
+}
+
+__attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
+{
+	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+}
+
 // --- BLE event dispatch (registered as observer) ---
 
 static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
@@ -243,6 +325,36 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 				pdev->Conn.Sec.KeySize = pcs->encr_key_size;
 			}
 		}
+			break;
+
+		case BLE_GAP_EVT_PASSKEY_DISPLAY:
+		{
+			const ble_gap_evt_passkey_display_t *pPd =
+					&p_gap_evt->params.passkey_display;
+			uint16_t connHdl = p_gap_evt->conn_handle;
+			uint32_t val = BmPasskeyToVal(pPd->passkey);
+			if (pPd->match_request)
+			{
+				// LESC Numeric Comparison: the application confirms the match
+				// through BtSmpNumericComparisonReply.
+				BtSmpNumericComparison(connHdl, val);
+			}
+			else
+			{
+				// Passkey Entry display side: show the value the peer enters.
+				BtSmpPasskeyDisplay(connHdl, val);
+			}
+		}
+			break;
+
+		case BLE_GAP_EVT_AUTH_KEY_REQUEST:
+			if (p_gap_evt->params.auth_key_request.key_type ==
+				BLE_GAP_AUTH_KEY_TYPE_PASSKEY)
+			{
+				// Passkey Entry input side: the application provides the value
+				// through BtSmpPasskeyReply.
+				BtSmpPasskeyRequest(p_gap_evt->conn_handle);
+			}
 			break;
 
 		case BLE_GAP_EVT_ADV_SET_TERMINATED:
@@ -873,7 +985,7 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 			break;
 	}
 
-	int exchg = SecKeyExchg & (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY);
+	int exchg = SecKeyExchg & (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO);
 	switch (exchg)
 	{
 		case BTAPP_SECEXCHG_KEYBOARD:
@@ -883,7 +995,11 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 		case BTAPP_SECEXCHG_DISPLAY:
 			sec_param.io_caps  = BLE_GAP_IO_CAPS_DISPLAY_ONLY;
 			break;
+		case (BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
+			sec_param.io_caps  = BLE_GAP_IO_CAPS_DISPLAY_YESNO;
+			break;
 		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY):
+		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
 			sec_param.keypress = 1;
 			sec_param.io_caps  = BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY;
 			break;
