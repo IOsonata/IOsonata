@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	bt_crypto_ctlr_sdc.cpp
 
-@brief	Bluetooth-owned CryptoDev_t: AES-128 / RNG via the BLE SoftDevice
+@brief	Bluetooth-owned CryptoDev_t: AES-128 via the BLE SoftDevice
 		Controller HCI.
 
 This is NOT a generic crypto engine and does NOT belong in the crypto layer
@@ -12,15 +12,15 @@ it into its AES slot uniformly alongside real crypto engines - but it is never
 advertised in crypto.h and a non-Bluetooth consumer (TLS, DFU) must never use
 it.
 
-It taps the BLE link-layer controller's mandatory HCI primitives - LE Encrypt
-(AES-128 ECB) and LE Rand - which the Bluetooth Core Spec guarantees every LE
-controller implements. The synchronous call form is the Nordic SDC library's
-API (sdc_hci_cmd_le_*), matching how the rest of the SDC backend issues HCI
-commands. It advertises CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_RNG; no ECDH (the
-controller has no LE ECDH commands), so it composes with an ECDH engine
-(CryptoUeccInit) to cover the ECDH capability the controller lacks.
-On parts with a hardware RNG peripheral, prefer the generic hardware RNG engine
-for the RNG slot and use this only for AES.
+It taps the BLE link-layer controller's mandatory HCI primitive LE Encrypt
+(AES-128 ECB), which the Bluetooth Core Spec guarantees every LE controller
+implements. The synchronous call form is the Nordic SDC library's API
+(sdc_hci_cmd_le_*), matching how the rest of the SDC path issues HCI commands.
+It advertises CRYPTO_CAP_AES128_ECB only; no ECDH (the controller has no LE ECDH
+commands), so it composes with an ECDH engine (CryptoUeccInit) to cover the ECDH
+capability the controller lacks. Random bytes are a coredev service
+(coredev/rng.h), not a crypto capability, so this adapter no longer provides RNG;
+a target that uses the controller for entropy wires LE Rand into RngGet.
 
 SDC-platform only: guarded on the sdc_hci_cmd_le.h header.
 
@@ -69,25 +69,6 @@ static CRYPTO_STATUS CtlrAes128Ecb(CryptoDev_t * const pDev,
 	return CRYPTO_STATUS_OK;
 }
 
-static void CtlrRand(CryptoDev_t * const pDev, uint8_t *pBuf, size_t Len)
-{
-	(void)pDev;
-	size_t off = 0;
-	while (off < Len)
-	{
-		sdc_hci_cmd_le_rand_return_t rr;
-		if (sdc_hci_cmd_le_rand(&rr) != 0)
-		{
-			memset(pBuf + off, 0, Len - off);
-			return;
-		}
-		size_t n = (Len - off) < sizeof(rr.random_number) ?
-				   (Len - off) : sizeof(rr.random_number);
-		memcpy(pBuf + off, &rr.random_number, n);
-		off += n;
-	}
-}
-
 bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev)
 {
 	if (pDev == nullptr)
@@ -96,12 +77,12 @@ bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev)
 	}
 	pDev->pDevData       = nullptr;
 	pDev->pName          = "ctlr-sdc";
-	pDev->Cap            = CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_RNG;	// AES + RNG (no ECDH)
+	pDev->Cap            = CRYPTO_CAP_AES128_ECB;	// AES only (no ECDH, no RNG)
+	pDev->KeyCtxSize     = 0;										// AES key is passed in; no per-instance key context
 	pDev->EvtCB          = nullptr;									// synchronous
 	pDev->Aes128Ecb      = CtlrAes128Ecb;
 	pDev->EcdhP256KeyGen = nullptr;
 	pDev->EcdhP256       = nullptr;
-	pDev->Rand           = CtlrRand;
 	pDev->SelfTest       = nullptr;
 	return true;
 }

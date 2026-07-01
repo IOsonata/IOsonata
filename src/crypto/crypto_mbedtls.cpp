@@ -1,10 +1,11 @@
 /**-------------------------------------------------------------------------
-@file	bt_smp_mbedtls.cpp
+@file	crypto_mbedtls.cpp
 
 @brief	SMP crypto provider: software mbedTLS (AES + P-256 ECDH).
 
-Portable provider (generic, not platform-specific). Provides CryptoMbedtlsInit (App-owned instance);
-the application installs it via BtAppCfg_t.pSmpCrypto -> BtSmpInit. Compiled
+Portable provider (generic, not platform-specific). Provides CryptoMbedtlsInit
+(App-owned instance): the application initializes a CryptoDev_t and injects it
+into the subsystem. Compiled
 into the lib alongside any targeted provider without symbol collision (the
 implementations are file-static; only the const vtable instance is exported).
 
@@ -33,6 +34,7 @@ satisfied by nrf_security (CC3xx) or the vanilla mbedtls module.
 #include <string.h>
 
 #include "crypto/crypto.h"
+#include "coredev/rng.h"
 
 // Platform availability guard (NOT feature selection): this provider needs the
 // mbedTLS headers. On a target whose lib does not ship mbedTLS (e.g. the bare
@@ -55,7 +57,6 @@ satisfied by nrf_security (CC3xx) or the vanilla mbedtls module.
 #endif
 
 // IOsonata TRNG (rng_nrfx.c on Nordic; provide on other platforms).
-extern "C" bool RngGet(uint8_t *pBuff, size_t Len);
 
 //-----------------------------------------------------------------------------
 // DRBG seeded from the platform TRNG. mbedTLS wants an f_rng for the
@@ -72,25 +73,51 @@ static int RngForMbed(void *ctx, unsigned char *buf, size_t len)
 // layer drives one SC pairing at a time per device, so a single context is
 // sufficient; size up to an array indexed by link if concurrent SC pairings
 // on one local device are ever needed.
+// The P-256 group parameters are read-only after load and shared by every
+// instance (one copy). Only the per-instance secret state (private key d and
+// public point Q) lives in App-owned pMem, reached via pDev->pDevData or via a
+// Cryptor-supplied pCtx. The control structs sit in pMem; mbedTLS allocates
+// MPI limbs through its own allocator, so the real working set also depends on
+// the mbedTLS heap configuration.
 static mbedtls_ecp_group s_Grp;
-static mbedtls_mpi       s_PrivD;	// our private key d
-static mbedtls_ecp_point s_PubQ;	// our public key Q
-static bool              s_Init = false;
+static bool              s_GrpInit = false;
+
+typedef struct {
+	mbedtls_mpi       PrivD;	// our private key d
+	mbedtls_ecp_point PubQ;		// our public key Q
+	bool              bInit;	// keygen has run for this instance
+} CryptoMbedtlsData_t;
+
+static inline CryptoMbedtlsData_t *MbedData(CryptoDev_t * const pDev, void *pKeyCtx)
+{
+	return (CryptoMbedtlsData_t *)(pKeyCtx != nullptr ? pKeyCtx : pDev->pDevData);
+}
+
+// Free and reinit an instance key context (private key d and public point Q)
+// and mark it not-keyed. Used to start keygen from a clean state, to wipe a
+// partially generated key on failure, and to wipe the single-use ephemeral key
+// after a DH.
+static void MbedKeyReset(CryptoMbedtlsData_t *pd)
+{
+	mbedtls_mpi_free(&pd->PrivD);
+	mbedtls_mpi_init(&pd->PrivD);
+	mbedtls_ecp_point_free(&pd->PubQ);
+	mbedtls_ecp_point_init(&pd->PubQ);
+	pd->bInit = false;
+}
 
 static int EnsureGroup(void)
 {
-	if (s_Init)
+	if (s_GrpInit)
 	{
 		return 0;
 	}
 	mbedtls_ecp_group_init(&s_Grp);
-	mbedtls_mpi_init(&s_PrivD);
-	mbedtls_ecp_point_init(&s_PubQ);
 	if (mbedtls_ecp_group_load(&s_Grp, MBEDTLS_ECP_DP_SECP256R1) != 0)
 	{
 		return -1;
 	}
-	s_Init = true;
+	s_GrpInit = true;
 	return 0;
 }
 
@@ -117,37 +144,45 @@ static CRYPTO_STATUS MbedAes128Ecb(CryptoDev_t * const pDev,
 	return st;
 }
 
-static CRYPTO_STATUS MbedEcdhKeyGen(CryptoDev_t * const pDev, uint8_t pPubKey[64], void *pCtx)
+static CRYPTO_STATUS MbedEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
+									uint8_t pPubKey[64], void *pOpCtx)
 {
-	(void)pDev; (void)pCtx;
-
-	if (EnsureGroup() != 0)
+	(void)pOpCtx;
+	CryptoMbedtlsData_t *pd = MbedData(pDev, pKeyCtx);
+	if (pd == nullptr || EnsureGroup() != 0)
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	// Generate d and Q = d*G.
-	if (mbedtls_ecdh_gen_public(&s_Grp, &s_PrivD, &s_PubQ,
+	// Start from a clean context: wipe any prior or partial key state so a
+	// re-keygen does not leak the previous d/Q allocations.
+	MbedKeyReset(pd);
+
+	// Generate d and Q = d*G into this instance's context.
+	if (mbedtls_ecdh_gen_public(&s_Grp, &pd->PrivD, &pd->PubQ,
 								RngForMbed, nullptr) != 0)
 	{
+		MbedKeyReset(pd);
 		return CRYPTO_STATUS_FAIL;
 	}
 
 	// Export Q as raw X||Y (32 + 32), big-endian, matching the SMP toolbox.
-	if (mbedtls_mpi_write_binary(&s_PubQ.MBEDTLS_PRIVATE(X), &pPubKey[0],  32) != 0 ||
-		mbedtls_mpi_write_binary(&s_PubQ.MBEDTLS_PRIVATE(Y), &pPubKey[32], 32) != 0)
+	if (mbedtls_mpi_write_binary(&pd->PubQ.MBEDTLS_PRIVATE(X), &pPubKey[0],  32) != 0 ||
+		mbedtls_mpi_write_binary(&pd->PubQ.MBEDTLS_PRIVATE(Y), &pPubKey[32], 32) != 0)
 	{
+		MbedKeyReset(pd);	// wipe the partially generated key
 		return CRYPTO_STATUS_FAIL;
 	}
+	pd->bInit = true;
 	return CRYPTO_STATUS_OK;
 }
 
-static CRYPTO_STATUS MbedEcdh(CryptoDev_t * const pDev,
-					const uint8_t pPeerPubKey[64], uint8_t pDhKey[32], void *pCtx)
+static CRYPTO_STATUS MbedEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
+					const uint8_t pPeerPubKey[64], uint8_t pDhKey[32], void *pOpCtx)
 {
-	(void)pDev; (void)pCtx;
-
-	if (!s_Init)
+	(void)pOpCtx;
+	CryptoMbedtlsData_t *pd = MbedData(pDev, pKeyCtx);
+	if (pd == nullptr || !pd->bInit)
 	{
 		return CRYPTO_STATUS_FAIL;	// keygen must run first
 	}
@@ -159,12 +194,15 @@ static CRYPTO_STATUS MbedEcdh(CryptoDev_t * const pDev,
 
 	CRYPTO_STATUS rc = CRYPTO_STATUS_FAIL;
 
-	// Load peer Q from raw X||Y. Z = 1 (affine).
+	// Load peer Q from raw X||Y. Z = 1 (affine). Reject an off-curve peer key
+	// before the DH (invalid-curve attack, CVE-2018-5383); compute_shared does
+	// not perform this check.
 	if (mbedtls_mpi_read_binary(&peerQ.MBEDTLS_PRIVATE(X), &pPeerPubKey[0],  32) == 0 &&
 		mbedtls_mpi_read_binary(&peerQ.MBEDTLS_PRIVATE(Y), &pPeerPubKey[32], 32) == 0 &&
-		mbedtls_mpi_lset(&peerQ.MBEDTLS_PRIVATE(Z), 1) == 0)
+		mbedtls_mpi_lset(&peerQ.MBEDTLS_PRIVATE(Z), 1) == 0 &&
+		mbedtls_ecp_check_pubkey(&s_Grp, &peerQ) == 0)
 	{
-		if (mbedtls_ecdh_compute_shared(&s_Grp, &z, &peerQ, &s_PrivD,
+		if (mbedtls_ecdh_compute_shared(&s_Grp, &z, &peerQ, &pd->PrivD,
 										RngForMbed, nullptr) == 0)
 		{
 			// DHKey is the X coordinate of the shared point, 32 bytes BE.
@@ -177,13 +215,10 @@ static CRYPTO_STATUS MbedEcdh(CryptoDev_t * const pDev,
 
 	mbedtls_mpi_free(&z);
 	mbedtls_ecp_point_free(&peerQ);
-	return rc;
-}
 
-static void MbedRand(CryptoDev_t * const pDev, uint8_t *pBuf, size_t Len)
-{
-	(void)pDev;
-	RngGet(pBuf, Len);
+	// Ephemeral key is single-use: wipe d and Q and mark the instance not-keyed.
+	MbedKeyReset(pd);
+	return rc;
 }
 
 // Self-test: BLE spec P-256 DH known vector (Vol 3 Part H 2.3.5.6.1). Loads the
@@ -234,6 +269,7 @@ static int MbedSelfTest(CryptoDev_t * const pDev)
 		}
 	}
 
+	CryptoSecureWipe(dh, sizeof(dh));	// wipe the test shared secret
 	mbedtls_mpi_free(&z);
 	mbedtls_ecp_point_free(&peerQ);
 	mbedtls_mpi_free(&d);
@@ -244,29 +280,62 @@ static int MbedSelfTest(CryptoDev_t * const pDev)
 // Exported provider instance
 //-----------------------------------------------------------------------------
 
-extern "C" bool CryptoMbedtlsInit(CryptoDev_t * const pDev)
+bool CryptoMbedtlsInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
-	if (pDev == nullptr)
+	if (pDev == nullptr || pCfg == nullptr)
 	{
 		return false;
 	}
-	pDev->pDevData       = nullptr;
+	if (pCfg->pMem == nullptr || pCfg->MemSize < sizeof(CryptoMbedtlsData_t))
+	{
+		return false;	// caller must supply per-instance state
+	}
+	if ((pCfg->ReqCaps & ~(uint32_t)(CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256)) != 0)
+	{
+		return false;	// requested a capability this engine does not provide
+	}
+
+	// Lifecycle rule: INIT ONCE per pMem. Call CryptoMbedtlsInit with fresh
+	// App-owned memory that does not already hold an initialized mbedTLS
+	// context. A second call on the same live pMem leaks the prior d/Q
+	// allocations: this init does not free them first. The memset only clears
+	// the field bytes (a clean start for fresh, even non-zeroed, memory); it
+	// does not release any mbedTLS-internal buffers a prior init attached. To
+	// bind a new instance to the same arena, obtain fresh memory. In-place
+	// reinit is not supported (there is no Deinit path today).
+	CryptoMbedtlsData_t *pd = (CryptoMbedtlsData_t *)pCfg->pMem;
+	memset(pd, 0, sizeof(*pd));
+	mbedtls_mpi_init(&pd->PrivD);
+	mbedtls_ecp_point_init(&pd->PubQ);
+	pd->bInit = false;
+
+	pDev->pDevData       = pCfg->pMem;
 	pDev->pName          = "mbedtls";
-	pDev->Cap            = CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256 | CRYPTO_CAP_RNG;
-	pDev->EvtCB          = nullptr;			// synchronous
+	pDev->Cap            = CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256;
+	pDev->KeyCtxSize     = sizeof(CryptoMbedtlsData_t);
+	pDev->EvtCB          = pCfg->EvtCB;			// synchronous engine
 	pDev->Aes128Ecb      = MbedAes128Ecb;
 	pDev->EcdhP256KeyGen = MbedEcdhKeyGen;
 	pDev->EcdhP256       = MbedEcdh;
-	pDev->Rand           = MbedRand;
 	pDev->SelfTest       = MbedSelfTest;
+
+	if ((pCfg->Flags & CRYPTO_FLAG_SELFTEST) && MbedSelfTest(pDev) != 0)
+	{
+		return false;
+	}
 	return true;
+}
+
+size_t CryptoMbedtlsMemSize(void)
+{
+	return sizeof(CryptoMbedtlsData_t);
 }
 
 #else  // mbedTLS not available on this target
 
-extern "C" bool CryptoMbedtlsInit(CryptoDev_t * const pDev)
+bool CryptoMbedtlsInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
-	(void)pDev;
+	(void)pDev; (void)pCfg;
 	return false;	// mbedTLS not present in this build
 }
 
