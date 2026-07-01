@@ -163,6 +163,31 @@ static int UeccSelfTest(CryptoDev_t * const pDev)
 	return rc;
 }
 
+static CRYPTO_STATUS UeccEcdsaVerify(CryptoDev_t * const pDev, const uint8_t PubKey[64],
+									const uint8_t Hash[32], const uint8_t Sig[64],
+									void *pCtx)
+{
+	(void)pDev;
+	(void)pCtx;
+	// uECC_verify returns 1 for a valid signature. PubKey is X||Y and Sig is
+	// r||s, both big-endian, matching the interface byte order.
+	int ok = uECC_verify(PubKey, Hash, 32, Sig, uECC_secp256r1());
+	return (ok == 1) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
+static CRYPTO_STATUS UeccEcdsaSign(CryptoDev_t * const pDev, const uint8_t PrivKey[32],
+								  const uint8_t Hash[32], uint8_t Sig[64], void *pCtx)
+{
+	(void)pDev;
+	(void)pCtx;
+	if (uECC_get_rng() == nullptr)
+	{
+		uECC_set_rng(UeccRngAdapter);	// per-signature nonce from RngGet
+	}
+	int ok = uECC_sign(PrivKey, Hash, 32, Sig, uECC_secp256r1());
+	return (ok == 1) ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
 bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr)
@@ -173,20 +198,29 @@ bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	{
 		return false;	// caller must supply per-instance state
 	}
-	if ((pCfg->ReqCaps & ~(uint32_t)CRYPTO_CAP_ECDH_P256) != 0)
+	uint32_t caps = CRYPTO_CAP_ECDH_P256 | CRYPTO_CAP_SHA256 | CRYPTO_CAP_HMAC_SHA256 |
+					CRYPTO_CAP_ECDSA_P256_SIGN | CRYPTO_CAP_ECDSA_P256_VERIFY;
+	if ((pCfg->ReqCaps & ~caps) != 0)
 	{
-		return false;	// this engine provides ECDH only
+		return false;	// requested capability not provided by this engine
 	}
 
 	memset(pCfg->pMem, 0, sizeof(CryptoUeccData_t));
 	pDev->pDevData       = pCfg->pMem;
 	pDev->pName          = "uecc";
-	pDev->Cap            = CRYPTO_CAP_ECDH_P256 | CRYPTO_CAP_PLAIN_KEYCTX;	// ECDH only; key ctx is plain bytes
+	pDev->Cap            = caps;					// ECDH + ECDSA verify; SHA/HMAC via base
+	pDev->Props          = CRYPTO_PROP_PLAIN_KEYCTX | CRYPTO_PROP_SYNC;	// plain zeroable key ctx; synchronous
 	pDev->KeyCtxSize     = sizeof(CryptoUeccData_t);
 	pDev->EvtCB          = pCfg->EvtCB;
 	pDev->Aes128Ecb      = nullptr;					// not provided
+	pDev->Cmac           = nullptr;					// no AES, no CMAC
+	pDev->Ccm            = nullptr;					// no AES, no CCM
+	pDev->Gcm            = nullptr;					// no AES, no GCM
+	pDev->Sha256         = nullptr;					// software SHA-256 in the base
 	pDev->EcdhP256KeyGen = UeccEcdhKeyGen;
 	pDev->EcdhP256       = UeccEcdh;
+	pDev->EcdsaP256Verify = UeccEcdsaVerify;
+	pDev->EcdsaP256Sign  = UeccEcdsaSign;
 	pDev->SelfTest       = UeccSelfTest;
 
 	if ((pCfg->Flags & CRYPTO_FLAG_SELFTEST) && UeccSelfTest(pDev) != 0)

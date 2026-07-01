@@ -68,13 +68,23 @@ typedef enum __Crypto_Status {
 /// capability: it is a coredev service (coredev/rng.h) that crypto engines call.
 #define CRYPTO_CAP_AES128_ECB		(1U << 0)	//!< Single-block AES-128 ECB encrypt
 #define CRYPTO_CAP_ECDH_P256		(1U << 1)	//!< P-256 key generation + ECDH
-// Property bit (not an operation): the engine per-instance key context is
-// plain bytes that are valid when zeroed, so a Cryptor may hand it App-owned
-// pMem. A structured key-context engine (mbedTLS) does NOT set this and must be
-// composed with pMem NULL. High bit, clear of the operation caps a consumer queries.
-#define CRYPTO_CAP_PLAIN_KEYCTX		(1U << 31)	//!< Per-instance key ctx is plain zeroable bytes
+#define CRYPTO_CAP_AES_CMAC			(1U << 3)	//!< AES-CMAC (RFC 4493); available on any AES-128 ECB engine
+#define CRYPTO_CAP_AES_CCM			(1U << 4)	//!< AES-CCM AEAD (RFC 3610); available on any AES-128 ECB engine
+#define CRYPTO_CAP_AES_GCM			(1U << 5)	//!< AES-GCM AEAD (SP 800-38D); available on any AES-128 ECB engine
+#define CRYPTO_CAP_SHA256			(1U << 6)	//!< SHA-256 (base software core; native via the Sha256 slot)
+#define CRYPTO_CAP_HMAC_SHA256		(1U << 7)	//!< HMAC-SHA-256 (RFC 2104), computed over SHA-256
+#define CRYPTO_CAP_ECDSA_P256_SIGN	(1U << 8)	//!< ECDSA P-256 signature generation
+#define CRYPTO_CAP_ECDSA_P256_VERIFY	(1U << 9)	//!< ECDSA P-256 signature verify (DFU image signature)
 // Reserved for future consumers (TLS, DFU): AES-GCM/CTR/CBC, SHA-256, HMAC,
 // ECDSA, X.509. Append here; do not renumber existing bits.
+
+// Provider/context properties. These describe the engine, not operations, and
+// are NOT part of the Cap operation mask a consumer queries. A Cryptor and the
+// selector read them through pDev->Props (see CryptoHasProp).
+#define CRYPTO_PROP_PLAIN_KEYCTX	(1U << 0)	//!< Per-instance key ctx is plain zeroable bytes (Cryptor may hand it pMem)
+#define CRYPTO_PROP_HARDWARE		(1U << 1)	//!< Backed by a hardware accelerator
+#define CRYPTO_PROP_SECURE_DOMAIN	(1U << 2)	//!< Key stays inside a secure domain / keystore
+#define CRYPTO_PROP_SYNC			(1U << 3)	//!< Engine is always synchronous (no PENDING completion)
 
 typedef struct __Crypto_Dev CryptoDev_t;
 
@@ -151,7 +161,8 @@ typedef struct __Crypto_Cfg {
 struct __Crypto_Dev {
 	void       *pDevData;	//!< Private engine data (software ctx, HW handle, or far-side ref for a proxy)
 	const char *pName;		//!< Engine name for trace ("mbedtls", "sdc", "cc3xx", "proxy")
-	uint32_t    Cap;		//!< Capability bitmask (CRYPTO_CAP_*)
+	uint32_t    Cap;		//!< Capability bitmask (CRYPTO_CAP_*), operations only
+	uint32_t    Props;	//!< Provider/context properties (CRYPTO_PROP_*)
 	size_t      KeyCtxSize;	//!< Bytes this engine needs for one per-instance key context in App pMem; 0 if the engine keeps no forwardable key context
 	CryptoEvtHandler_t EvtCB;	//!< Completion callback for PENDING ops; NULL if engine is always synchronous
 
@@ -162,6 +173,45 @@ struct __Crypto_Dev {
 	CRYPTO_STATUS (*Aes128Ecb)(CryptoDev_t * const pDev,
 							   const uint8_t Key[16], const uint8_t In[16],
 							   uint8_t Out[16], void *pCtx);
+
+	/**
+	 * @brief	Optional native AES-CMAC (RFC 4493). NULL when the engine has
+	 *			no native MAC; CryptoCmac then computes it over Aes128Ecb.
+	 */
+	CRYPTO_STATUS (*Cmac)(CryptoDev_t * const pDev, const uint8_t Key[16],
+						  const uint8_t *pMsg, size_t Len, uint8_t Mac[16],
+						  void *pCtx);
+
+	/**
+	 * @brief	Optional native AES-CCM AEAD (RFC 3610). bEncrypt selects the
+	 *			direction; on decrypt pTag is the tag to verify and the call
+	 *			fails on mismatch. NULL when the engine has no native AEAD;
+	 *			CryptoCcm* then compute it over Aes128Ecb.
+	 */
+	CRYPTO_STATUS (*Ccm)(CryptoDev_t * const pDev, int bEncrypt,
+						 const uint8_t Key[16], const uint8_t *pNonce, size_t NonceLen,
+						 const uint8_t *pAad, size_t AadLen,
+						 const uint8_t *pIn, size_t Len, uint8_t *pOut,
+						 uint8_t *pTag, size_t TagLen, void *pCtx);
+
+	/**
+	 * @brief	Optional native AES-GCM AEAD (SP 800-38D). bEncrypt selects the
+	 *			direction; on decrypt pTag is the tag to verify and the call
+	 *			fails on mismatch. NULL when the engine has no native AEAD;
+	 *			CryptoGcm* then compute it over Aes128Ecb.
+	 */
+	CRYPTO_STATUS (*Gcm)(CryptoDev_t * const pDev, int bEncrypt,
+						 const uint8_t Key[16], const uint8_t *pIv, size_t IvLen,
+						 const uint8_t *pAad, size_t AadLen,
+						 const uint8_t *pIn, size_t Len, uint8_t *pOut,
+						 uint8_t *pTag, size_t TagLen, void *pCtx);
+
+	/**
+	 * @brief	Optional native SHA-256. NULL when the engine has no native
+	 *			hash; CryptoSha256 then uses the built-in software core.
+	 */
+	CRYPTO_STATUS (*Sha256)(CryptoDev_t * const pDev, const uint8_t *pMsg,
+							size_t Len, uint8_t Digest[32], void *pCtx);
 
 	/**
 	 * @brief	Generate a local P-256 key pair; return the 64-byte public key
@@ -182,6 +232,26 @@ struct __Crypto_Dev {
 							  void *pOpCtx);
 
 	/**
+	 * @brief	Optional ECDSA P-256 signature verify. PubKey is 64 bytes
+	 *			(X||Y, big-endian), Hash is the 32-byte message hash, Sig is 64
+	 *			bytes (r||s, big-endian). Returns CRYPTO_STATUS_OK when valid,
+	 *			CRYPTO_STATUS_FAIL when not.
+	 */
+	CRYPTO_STATUS (*EcdsaP256Verify)(CryptoDev_t * const pDev,
+									 const uint8_t PubKey[64], const uint8_t Hash[32],
+									 const uint8_t Sig[64], void *pCtx);
+
+	/**
+	 * @brief	Optional ECDSA P-256 sign. PrivKey is the 32-byte private
+	 *			scalar (big-endian), Hash is the 32-byte message hash. Writes the
+	 *			64-byte signature (r||s, big-endian). Needs an RNG for the
+	 *			per-signature nonce. OK on success, FAIL otherwise.
+	 */
+	CRYPTO_STATUS (*EcdsaP256Sign)(CryptoDev_t * const pDev,
+								   const uint8_t PrivKey[32], const uint8_t Hash[32],
+								   uint8_t Sig[64], void *pCtx);
+
+	/**
 	 * @brief	Optional known-answer self-test. 0 = PASS, nonzero = FAIL.
 	 *			May be NULL.
 	 */
@@ -197,6 +267,13 @@ struct __Crypto_Dev {
  */
 static inline bool CryptoIsCapable(CryptoDev_t * const pDev, uint32_t Mask) {
 	return pDev != NULL && (pDev->Cap & Mask) == Mask;
+}
+
+/**
+ * @brief	True if the engine sets every property in Mask (CRYPTO_PROP_*).
+ */
+static inline bool CryptoHasProp(CryptoDev_t * const pDev, uint32_t Mask) {
+	return pDev != NULL && (pDev->Props & Mask) == Mask;
 }
 
 static inline const char * CryptoName(CryptoDev_t * const pDev) {
@@ -229,6 +306,34 @@ static inline CRYPTO_STATUS CryptoEcdhP256(CryptoDev_t * const pDev,
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 	return pDev->EcdhP256(pDev, pKeyCtx, pPeerPubKey, pDhKey, pOpCtx);
+}
+
+/**
+ * @brief	ECDSA P-256 verify. OK when the signature is valid, FAIL when
+ *			not, UNSUPPORTED when the engine has no verify.
+ */
+static inline CRYPTO_STATUS CryptoEcdsaP256Verify(CryptoDev_t * const pDev,
+		const uint8_t PubKey[64], const uint8_t Hash[32], const uint8_t Sig[64],
+		void *pCtx) {
+	if (pDev == NULL || pDev->EcdsaP256Verify == NULL)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	return pDev->EcdsaP256Verify(pDev, PubKey, Hash, Sig, pCtx);
+}
+
+/**
+ * @brief	ECDSA P-256 sign. OK on success, FAIL on error, UNSUPPORTED when
+ *			the engine has no sign.
+ */
+static inline CRYPTO_STATUS CryptoEcdsaP256Sign(CryptoDev_t * const pDev,
+		const uint8_t PrivKey[32], const uint8_t Hash[32], uint8_t Sig[64],
+		void *pCtx) {
+	if (pDev == NULL || pDev->EcdsaP256Sign == NULL)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	return pDev->EcdsaP256Sign(pDev, PrivKey, Hash, Sig, pCtx);
 }
 
 static inline int CryptoSelfTest(CryptoDev_t * const pDev) {
@@ -276,6 +381,78 @@ bool CryptoInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg);			//!< Confi
 // Zeroize sensitive memory so the compiler cannot elide the clear. Use for key
 // material and intermediate secret buffers instead of plain memset.
 void CryptoSecureWipe(void *pData, size_t Len);
+
+/**
+ * @brief	AES-CMAC (RFC 4493) with a 16-byte key over Len bytes; writes
+ *			the 16-byte MAC. Uses the engine native Cmac if present, else
+ *			computes it over the engine Aes128Ecb. UNSUPPORTED if the engine
+ *			has neither.
+ */
+CRYPTO_STATUS CryptoCmac(CryptoDev_t * const pDev, const uint8_t Key[16],
+						 const uint8_t *pMsg, size_t Len, uint8_t Mac[16],
+						 void *pCtx);
+
+/**
+ * @brief	AES-CCM AEAD encrypt (RFC 3610). NonceLen 7..13, TagLen even
+ *			4..16. Writes Len ciphertext bytes to pCipher and TagLen tag bytes
+ *			to pTag. Uses a native Ccm if present, else computes it over
+ *			Aes128Ecb. AAD length must be below 0xFF00.
+ */
+CRYPTO_STATUS CryptoCcmEncrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+							   const uint8_t *pNonce, size_t NonceLen,
+							   const uint8_t *pAad, size_t AadLen,
+							   const uint8_t *pPlain, size_t Len, uint8_t *pCipher,
+							   uint8_t *pTag, size_t TagLen, void *pCtx);
+
+/**
+ * @brief	AES-CCM AEAD decrypt and verify (RFC 3610). Writes Len plaintext
+ *			bytes to pPlain only if the tag verifies; on mismatch it wipes
+ *			pPlain and returns CRYPTO_STATUS_FAIL.
+ */
+CRYPTO_STATUS CryptoCcmDecrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+							   const uint8_t *pNonce, size_t NonceLen,
+							   const uint8_t *pAad, size_t AadLen,
+							   const uint8_t *pCipher, size_t Len, uint8_t *pPlain,
+							   const uint8_t *pTag, size_t TagLen, void *pCtx);
+
+/**
+ * @brief	SHA-256 (FIPS 180-4) over Len bytes; writes the 32-byte digest.
+ *			Uses the engine native Sha256 if present, else a built-in software
+ *			core. Always available; pDev may be NULL for the software path.
+ */
+/**
+ * @brief	AES-GCM AEAD encrypt (SP 800-38D). IvLen any (12 is the fast
+ *			path), TagLen 4..16. Writes Len ciphertext bytes and TagLen tag
+ *			bytes. Uses a native Gcm if present, else over Aes128Ecb.
+ */
+CRYPTO_STATUS CryptoGcmEncrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+							   const uint8_t *pIv, size_t IvLen,
+							   const uint8_t *pAad, size_t AadLen,
+							   const uint8_t *pPlain, size_t Len, uint8_t *pCipher,
+							   uint8_t *pTag, size_t TagLen, void *pCtx);
+
+/**
+ * @brief	AES-GCM AEAD decrypt and verify (SP 800-38D). Writes plaintext
+ *			only if the tag verifies; on mismatch it wipes pPlain and returns
+ *			CRYPTO_STATUS_FAIL.
+ */
+CRYPTO_STATUS CryptoGcmDecrypt(CryptoDev_t * const pDev, const uint8_t Key[16],
+							   const uint8_t *pIv, size_t IvLen,
+							   const uint8_t *pAad, size_t AadLen,
+							   const uint8_t *pCipher, size_t Len, uint8_t *pPlain,
+							   const uint8_t *pTag, size_t TagLen, void *pCtx);
+
+CRYPTO_STATUS CryptoSha256(CryptoDev_t * const pDev, const uint8_t *pMsg,
+						   size_t Len, uint8_t Digest[32], void *pCtx);
+
+/**
+ * @brief	HMAC-SHA-256 (RFC 2104) with a KeyLen-byte key; writes the
+ *			32-byte MAC. Computed over the SHA-256 core.
+ */
+CRYPTO_STATUS CryptoHmacSha256(CryptoDev_t * const pDev,
+							   const uint8_t *pKey, size_t KeyLen,
+							   const uint8_t *pMsg, size_t Len, uint8_t Mac[32],
+							   void *pCtx);
 
 // Exact per-instance arena size for the mbedTLS provider on this build, for
 // sizing an App-owned pMem where CRYPTO_MEMSIZE_MBEDTLS would be a guess.
@@ -325,10 +502,47 @@ public:
 	virtual operator CryptoDev_t * const () = 0;	// concrete returns its embedded handle
 	virtual uint32_t Capability() { return ((CryptoDev_t*)*this)->Cap; }
 	virtual bool IsCapable(uint32_t Mask) { return CryptoIsCapable(*this, Mask); }
+	virtual bool HasProp(uint32_t Mask) { return CryptoHasProp(*this, Mask); }
 	virtual const char *Name() { return CryptoName(*this); }
 	virtual CRYPTO_STATUS Aes128Ecb(const uint8_t Key[16], const uint8_t In[16],
 									uint8_t Out[16], void *pCtx = nullptr) {
 		return CryptoAes128Ecb(*this, Key, In, Out, pCtx);
+	}
+	virtual CRYPTO_STATUS Cmac(const uint8_t Key[16], const uint8_t *pMsg,
+							   size_t Len, uint8_t Mac[16], void *pCtx = nullptr) {
+		return CryptoCmac(*this, Key, pMsg, Len, Mac, pCtx);
+	}
+	virtual CRYPTO_STATUS CcmEncrypt(const uint8_t Key[16], const uint8_t *pNonce,
+			size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pPlain, size_t Len, uint8_t *pCipher,
+			uint8_t *pTag, size_t TagLen, void *pCtx = nullptr) {
+		return CryptoCcmEncrypt(*this, Key, pNonce, NonceLen, pAad, AadLen, pPlain, Len, pCipher, pTag, TagLen, pCtx);
+	}
+	virtual CRYPTO_STATUS CcmDecrypt(const uint8_t Key[16], const uint8_t *pNonce,
+			size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pCipher, size_t Len, uint8_t *pPlain,
+			const uint8_t *pTag, size_t TagLen, void *pCtx = nullptr) {
+		return CryptoCcmDecrypt(*this, Key, pNonce, NonceLen, pAad, AadLen, pCipher, Len, pPlain, pTag, TagLen, pCtx);
+	}
+	virtual CRYPTO_STATUS GcmEncrypt(const uint8_t Key[16], const uint8_t *pIv,
+			size_t IvLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pPlain, size_t Len, uint8_t *pCipher,
+			uint8_t *pTag, size_t TagLen, void *pCtx = nullptr) {
+		return CryptoGcmEncrypt(*this, Key, pIv, IvLen, pAad, AadLen, pPlain, Len, pCipher, pTag, TagLen, pCtx);
+	}
+	virtual CRYPTO_STATUS GcmDecrypt(const uint8_t Key[16], const uint8_t *pIv,
+			size_t IvLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pCipher, size_t Len, uint8_t *pPlain,
+			const uint8_t *pTag, size_t TagLen, void *pCtx = nullptr) {
+		return CryptoGcmDecrypt(*this, Key, pIv, IvLen, pAad, AadLen, pCipher, Len, pPlain, pTag, TagLen, pCtx);
+	}
+	virtual CRYPTO_STATUS Sha256(const uint8_t *pMsg, size_t Len,
+								 uint8_t Digest[32], void *pCtx = nullptr) {
+		return CryptoSha256(*this, pMsg, Len, Digest, pCtx);
+	}
+	virtual CRYPTO_STATUS HmacSha256(const uint8_t *pKey, size_t KeyLen,
+			const uint8_t *pMsg, size_t Len, uint8_t Mac[32], void *pCtx = nullptr) {
+		return CryptoHmacSha256(*this, pKey, KeyLen, pMsg, Len, Mac, pCtx);
 	}
 	virtual CRYPTO_STATUS EcdhP256KeyGen(uint8_t Pub[64], void *pKeyCtx = nullptr,
 										 void *pOpCtx = nullptr) {
@@ -337,6 +551,14 @@ public:
 	virtual CRYPTO_STATUS EcdhP256(const uint8_t Peer[64], uint8_t Dh[32],
 								   void *pKeyCtx = nullptr, void *pOpCtx = nullptr) {
 		return CryptoEcdhP256(*this, pKeyCtx, Peer, Dh, pOpCtx);
+	}
+	virtual CRYPTO_STATUS EcdsaP256Verify(const uint8_t PubKey[64],
+			const uint8_t Hash[32], const uint8_t Sig[64], void *pCtx = nullptr) {
+		return CryptoEcdsaP256Verify(*this, PubKey, Hash, Sig, pCtx);
+	}
+	virtual CRYPTO_STATUS EcdsaP256Sign(const uint8_t PrivKey[32],
+			const uint8_t Hash[32], uint8_t Sig[64], void *pCtx = nullptr) {
+		return CryptoEcdsaP256Sign(*this, PrivKey, Hash, Sig, pCtx);
 	}
 	virtual int SelfTest() { return CryptoSelfTest(*this); }
 	virtual ~CryptoDevice() {}

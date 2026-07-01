@@ -1571,11 +1571,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/rng_nrfx.c</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.c</locationURI>
-		</link>
-		<link>
 			<name>src/display/display.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display.cpp</locationURI>

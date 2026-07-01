@@ -108,13 +108,14 @@ consumer is curve-blind and key-blind:
   file static, so concurrent or sequential instances do not collide.
 - **Key-context guard**: a Cryptor forwards its `pMem` arena to the ECDH engine
   as the key context. That is valid only for an engine whose key context is
-  plain zeroable bytes (`CRYPTO_CAP_PLAIN_KEYCTX`, set by micro-ecc), and the
-  arena must be at least the engine `KeyCtxSize`. `CryptorComposeInit` fails
-  closed when the ECDH engine lacks the property bit or when `pMem` is smaller
-  than its `KeyCtxSize`, so a keyed op cannot write past the arena. An engine
-  with a structured key context (mbedTLS) has no property bit and is composed
-  with `pMem` NULL. The property bit is masked out of the handle `Cap` the
-  consumer sees.
+  plain zeroable bytes (`CRYPTO_PROP_PLAIN_KEYCTX` in `Dev.Props`, set by
+  micro-ecc), and the arena must be at least the engine `KeyCtxSize`.
+  `CryptorComposeInit` fails closed when the ECDH engine lacks that property
+  or when `pMem` is smaller than its `KeyCtxSize`, so a keyed op cannot write
+  past the arena. An engine with a structured key context (mbedTLS) does not
+  set the property and is composed with `pMem` NULL. Properties live in
+  `Dev.Props`, separate from the operation `Cap`, so nothing is masked out of
+  the `Cap` the consumer sees.
 - **Strong RNG required**: RNG is a coredev service (`coredev/rng.h`), not a
   crypto capability. The P-256 engines call the platform `RngGet` for key
   generation. The default `RngGet` is weak software randomness for non-security
