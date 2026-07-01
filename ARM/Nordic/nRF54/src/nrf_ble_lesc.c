@@ -131,7 +131,7 @@ uint32_t nrf_ble_lesc_keypair_generate(void)
 	/* Generate a fresh P-256 key pair. The private key is retained inside the
 	 * engine for the matching ECDH call and never crosses the interface.
 	 */
-	if (CryptoEcdhP256KeyGen(s_pLescCrypto, pub_key_be, NULL) != CRYPTO_STATUS_OK) {
+	if (CryptoEcdhP256KeyGen(s_pLescCrypto, NULL, pub_key_be, NULL) != CRYPTO_STATUS_OK) {
 		LOG_ERR("LESC keypair generate failed");
 		return NRF_ERROR_INTERNAL;
 	}
@@ -205,7 +205,7 @@ static uint32_t compute_and_give_dhkey(struct lesc_peer_pub_key *peer_public_key
 		/* Peer key arrives little-endian; CryptoDev_t wants big-endian X||Y. */
 		ecc_public_key_byte_order_invert(peer_public_key->value, peer_be);
 
-		if (CryptoEcdhP256(s_pLescCrypto, peer_be, dh_be, NULL) == CRYPTO_STATUS_OK) {
+		if (CryptoEcdhP256(s_pLescCrypto, NULL, peer_be, dh_be, NULL) == CRYPTO_STATUS_OK) {
 			/* CryptoDev_t returns the DH key big-endian; BLE wants it
 			 * little-endian.
 			 */

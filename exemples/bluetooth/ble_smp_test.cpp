@@ -206,12 +206,6 @@ extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 // path once an IO backend exists.
 //-----------------------------------------------------------------------------
 
-// App-owned crypto engine instances, brought up in HardwareInit and injected
-// via the app config (ownership model mirrors an SPI/I2C object given to a sensor).
-CryptoDev_t g_CryptoEcdh;	// ECDH P-256
-CryptoDev_t g_CryptoAes;	// AES-128 ECB
-CryptoDev_t g_CryptoRng;	// RNG
-
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0,
@@ -229,9 +223,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.SrManDataLen = 0,
 	.SecType = BTGAP_SECTYPE_STATICKEY_NO_MITM,	// Just Works pairing + bonding
 	.SecExchg = BTAPP_SECEXCHG_KEYBOARD,		// distribute keys (IRK/CSRK)
-	.pCryptoEcdh = &g_CryptoEcdh,		// SMP crypto: ECDH (uECC) - brought up in HardwareInit
-	.pCryptoAes  = &g_CryptoAes,		// SMP crypto: AES (BLE controller LE Encrypt)
-	.pCryptoRng  = &g_CryptoRng,		// SMP crypto: RNG (hardware peripheral)
 	.bCompleteUuidList = true,
 	.pAdvUuid = &s_AdvUuid,
 	.AdvInterval = APP_ADV_INTERVAL,
@@ -346,12 +337,9 @@ void HardwareInit()
 	// HCI DEBUG_PRINTF) appears here. No timer -> no timestamps; emit all.
 	SysLogInit(SysLogGet(), (DevIntrf_t*)g_Uart, 0, nullptr, 0);
 
-	// Bring up the App-owned crypto engines. These only populate the vtable;
-	// the controller-AES engine touches the controller lazily (during pairing,
-	// long after BtAppInit enables it), so initialising here is safe.
-	CryptoUeccInit(&g_CryptoEcdh);		// ECDH via software uECC
-	CryptoCtlrSdcInit(&g_CryptoAes);	// AES via BLE controller LE Encrypt
-	CryptoRngHwInit(&g_CryptoRng);		// RNG via hardware peripheral
+	// SMP crypto (software uECC ECDH + BLE controller AES) is owned and brought
+	// up by the BLE app layer during BtAppInit; the application does not set it
+	// up here.
 }
 
 int main()

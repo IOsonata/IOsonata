@@ -937,7 +937,13 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	// injected here later with no change to the LESC code. RNG underneath comes
 	// from the CRACEN-backed RngGet via crypto_uecc.
 	static CryptoDev_t s_LescEcdh;
-	CryptoUeccInit(&s_LescEcdh);
+	static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_UECC];	// uECC per-instance key arena
+	CryptoCfg_t lescCfg = { };
+	lescCfg.Provider = CRYPTO_PROVIDER_UECC;
+	lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
+	lescCfg.pMem     = s_LescEcdhMem;
+	lescCfg.MemSize  = sizeof(s_LescEcdhMem);
+	CryptoUeccInit(&s_LescEcdh, &lescCfg);
 	BtLescSetCryptoEngine(&s_LescEcdh);
 
 	err_code = pm_init();

@@ -2070,14 +2070,14 @@ extern "C" void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 extern "C" int BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64])
 {
 	(void)pDev;
-	return CryptoStatusToSmp(CryptoEcdhP256KeyGen(s_pCryptoEcdh, pPubKey, nullptr));
+	return CryptoStatusToSmp(CryptoEcdhP256KeyGen(s_pCryptoEcdh, nullptr, pPubKey, nullptr));
 }
 
 extern "C" int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
 							   const uint8_t pPeerPubKey[64], uint8_t pDhKey[32])
 {
 	(void)pDev;
-	return CryptoStatusToSmp(CryptoEcdhP256(s_pCryptoEcdh, pPeerPubKey, pDhKey, nullptr));
+	return CryptoStatusToSmp(CryptoEcdhP256(s_pCryptoEcdh, nullptr, pPeerPubKey, pDhKey, nullptr));
 }
 
 extern "C" void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
