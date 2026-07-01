@@ -2186,6 +2186,7 @@ __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Val
 // link to an authenticated level on success; Confirm false aborts with a
 // Numeric Comparison Failed reason. Called from the application in response to
 // the NumericComparison callback.
+__attribute__((weak))
 void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 {
 	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);
@@ -2292,6 +2293,7 @@ __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
 // the peer. A value in 0..999999 drives the per round Confirm exchange; a value
 // above that range (BT_SMP_PASSKEY_INVALID) cancels with a Passkey Entry Failed
 // reason. Called from the application in response to BtSmpPasskeyRequest.
+__attribute__((weak))
 void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 {
 	BtSmpLink_t *pLink = SmpLinkFind(ConnHdl);

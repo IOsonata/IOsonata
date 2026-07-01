@@ -1451,14 +1451,14 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/uart_nrf54x.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/crypto_mbedtls.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_mbedtls.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_rng.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/crypto_rng.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>
