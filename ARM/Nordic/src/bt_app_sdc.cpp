@@ -946,11 +946,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	BtSmpAuthConfig(smpIoCaps, smpAuthReq);
 
 	// Record whether security was requested, so the connected handler can
-	// initiate it. Backend-internal - mirrors the SoftDevice backend.
+	// initiate it. Internal to this path - mirrors the SoftDevice implementation.
 	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
 
 	// Bring up flash-backed bond persistence when security is enabled. This is
-	// backend-internal: it loads any stored bonds into the SMP bond table and
+	// internal to this path: it loads any stored bonds into the SMP bond table and
 	// links the strong BtSmpBondSave/Load/Erase overrides. The application does
 	// not call it - persistence follows from the configured SecType.
 	if (g_BtAppData.AppDevice.bSecure)

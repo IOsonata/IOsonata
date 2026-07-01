@@ -414,8 +414,8 @@ void BtSmpCryptoRand(uint8_t *pBuf, size_t Len);
 int  BtSmpCryptoSelfTest(void);
 
 /**
- * @brief	Backend hooks to answer the controller LE Long Term Key Request.
- *			These send HCI COMMANDS (not ACL data); the active backend
+ * @brief	Platform hooks to answer the controller LE Long Term Key Request.
+ *			These send HCI COMMANDS (not ACL data); the active implementation
  *			overrides them to use its real HCI command channel (e.g. the SDC
  *			sdc_hci_cmd_le_long_term_key_request_reply function).
  */
@@ -424,9 +424,9 @@ void BtSmpHciLtkReply(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl);
 
 /**
- * @brief	Backend hook to start link encryption as the central via HCI LE
+ * @brief	Platform hook to start link encryption as the central via HCI LE
  *			Enable Encryption. Sends an HCI COMMAND (not ACL data); the active
- *			backend overrides it to use its real HCI command channel (e.g. the
+ *			implementation overrides it to use its real HCI command channel (e.g. the
  *			SDC sdc_hci_cmd_le_enable_encryption function). For SC, Rand and Ediv
  *			are zero.
  */
@@ -501,7 +501,7 @@ void BtSmpBondLoad(void);
 void BtSmpBondErase(void);
 
 /**
- * @brief	Access functions for a platform persistence backend.
+ * @brief	Access functions for a platform persistence store.
  *
  * BtSmpBondSlotCount  : number of slots in the table (NVM region sizing).
  * BtSmpBondRecordSize : size of one saved/loaded blob, in bytes.
@@ -523,7 +523,7 @@ void   BtSmpBondRestore(int Slot, const void *pBond, size_t Len);
  * check value mismatch and pairing fails with CONFIRM_VALUE / DHKEY_CHECK.
  *
  * Weak default returns public, all-zero - which is almost never correct, so
- * the active backend MUST override this. The SDC backend reports the random
+ * the active implementation MUST override this. The SDC implementation reports the random
  * static address it set at init.
  *
  * @param	pType	out: address type (0 public, 1 random).

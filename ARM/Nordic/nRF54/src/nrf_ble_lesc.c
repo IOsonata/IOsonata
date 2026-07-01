@@ -8,21 +8,21 @@
 		application expect (nrf_ble_lesc_init, _keypair_generate,
 		_request_handler, _public_key_get, _on_ble_evt, OOB helpers), so nothing
 		above it changes. The only difference from the stock Nordic file is the
-		crypto backend: the five psa_* calls are replaced by calls through a
+		crypto implementation: the five psa_* calls are replaced by calls through a
 		CryptoDev_t (crypto/crypto.h). The engine is App-owned and injected via
 		BtLescSetCryptoEngine before nrf_ble_lesc_init, exactly as bt_app_sdc.cpp
 		owns a CryptoDev_t and injects it into BtSmpInit.
 
-		Backend independence is the point: today the injected engine is software
+		Implementation independence is the point: today the injected engine is software
 		P-256 (CryptoUeccInit). On a target with a hardware accelerator (nRF54L
 		CRACEN, CryptoCell), the App injects a hardware-backed CryptoDev_t
 		instead and this file does not change. The accelerator is reached through
 		the same abstraction, not bypassed.
 
 		Key byte order (must match what the SoftDevice expects):
-		- BLE carries P-256 public keys and the DHKey little-endian, per
+		- BLE holds P-256 public keys and the DHKey little-endian, per
 		  coordinate (BLE_GAP_LESC_* buffers).
-		- The CryptoDev_t contract (crypto.h) is big-endian X||Y for public keys
+		- The CryptoDev_t interface (crypto.h) is big-endian X||Y for public keys
 		  and big-endian X for the DHKey.
 		So every crossing inverts byte order per 32-byte coordinate. There is no
 		0x04 uncompressed-format marker on the CryptoDev_t side (that was a PSA
@@ -63,9 +63,9 @@ struct lesc_peer_pub_key {
 
 #define COORD_SIZE (BLE_GAP_LESC_P256_PK_LEN / 2)
 
-/** LESC ECC Public Key (little-endian, as BLE carries it). */
+/** LESC ECC Public Key (little-endian, as BLE holds it). */
 __ALIGN(4) static ble_gap_lesc_p256_pk_t lesc_public_key;
-/** LESC ECC DH Key (little-endian, as BLE carries it). */
+/** LESC ECC DH Key (little-endian, as BLE holds it). */
 __ALIGN(4) static ble_gap_lesc_dhkey_t lesc_dh_key;
 
 static bool ble_lesc_internal_error;

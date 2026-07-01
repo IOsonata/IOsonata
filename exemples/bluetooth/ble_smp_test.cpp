@@ -4,7 +4,7 @@
 @brief	SMP (Security Manager Protocol) test peripheral.
 
 A connectable peripheral with one custom service, used to exercise the SMP
-secure-connection path on the SDC backend. It traces every milestone of the
+secure-connection path on the SDC implementation. It traces every milestone of the
 pairing handshake over UART so the exchange can be watched live:
 
   connect -> pairing request from central -> (SC: pubkey/DHKey) ->
@@ -203,7 +203,7 @@ extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 //-----------------------------------------------------------------------------
 // App configuration. SecType requests Just Works (no MITM). Switch to
 // BTGAP_SECTYPE_LESC_MITM later to exercise the MITM / numeric-comparison
-// path once an IO backend exists.
+// path once an IO implementation exists.
 //-----------------------------------------------------------------------------
 
 const BtAppCfg_t s_BleAppCfg = {

@@ -1554,7 +1554,7 @@ static void SmpHandleIdAddrInfo(BtSmpLink_t *pLink, const BtSmpIdAddrInfo_t *pIn
 {
 	pLink->Keys.IdAddrType = pInfo->AddrType;
 	memcpy(pLink->Keys.IdAddr, pInfo->Addr, 6);
-	// Peer identity now known. Refresh the stored bond so it carries the peer
+	// Peer identity now known. Refresh the stored bond so it holds the peer
 	// IRK. BtSmpBondAdd keys the slot by the connection address (not this
 	// identity address), so the refresh updates the same slot the lookup will
 	// match on reconnect.
@@ -1600,7 +1600,7 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		}
 	}
 
-	// Validate the PDU carries enough bytes for its code before any handler
+	// Validate the PDU has enough bytes for its code before any handler
 	// dereferences fixed-size key/nonce/confirm fields. Pairing PDUs are
 	// attacker-controlled; a short PDU (e.g. a 1-byte Public Key) would
 	// otherwise over-read 16-64 bytes past the received L2CAP buffer, feeding
@@ -1855,7 +1855,7 @@ void BtSmpProcessLtkRequest(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 				  key[0], key[1], key[2], key[3],
 				  key[12], key[13], key[14], key[15]);
 		// The LTK Request Reply is an HCI COMMAND, not ACL data. On the SDC
-		// backend it must go through sdc_hci_cmd_le_long_term_key_request_reply,
+		// implementation it must go through sdc_hci_cmd_le_long_term_key_request_reply,
 		// not the ACL data path. Route via the provider hook.
 		BtSmpHciLtkReply(pDev, ConnHdl, key);
 	}
@@ -2095,7 +2095,7 @@ extern "C" int BtSmpCryptoSelfTest(void)
 	return CryptoSelfTest(s_pCryptoEcdh);
 }
 
-// LTK Request Reply hooks. The active backend overrides these to route the
+// LTK Request Reply hooks. The active implementation overrides these to route the
 // reply through its real HCI command channel (e.g. the SDC command function).
 // The weak default uses the generic HCI command builder, which is correct for
 // transports where the HCI command and ACL data share one sink.

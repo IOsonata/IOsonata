@@ -864,7 +864,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 // drives it and persists bonds (through the IOsonata bt_pds store), and
 // nrf_ble_lesc performs the LESC ECDH. The application observes link security
 // through these peer_manager events; no key material is surfaced to the app on
-// this path (peer_manager is the source of truth), matching nRF52.
+// this path (peer_manager is the authority), matching nRF52.
 // ---------------------------------------------------------------------------
 
 #define BT_APP_SEC_PARAM_MIN_KEY_SIZE	7
