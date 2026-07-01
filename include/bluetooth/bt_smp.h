@@ -394,7 +394,13 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey);
  * software ECDH engine (randomness comes from the RngGet utility):
  *
  *   CryptoDev_t ecdh, aes;
- *   CryptoUeccInit(&ecdh);
+ *   static uint8_t ecdhMem[CRYPTO_MEMSIZE_UECC];
+ *   CryptoCfg_t cfg = { };
+ *   cfg.Provider = CRYPTO_PROVIDER_UECC;
+ *   cfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
+ *   cfg.pMem     = ecdhMem;
+ *   cfg.MemSize  = sizeof(ecdhMem);
+ *   CryptoUeccInit(&ecdh, &cfg);
  *   BtCryptoCtlrSdcInit(&aes);   // controller AES
  *   BtSmpInit(&ecdh, &aes);
  *
