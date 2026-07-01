@@ -933,17 +933,20 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	// via CryptoIsCapable. The engine must already be injected at that point, else
 	// nrf_ble_lesc_init fails and pm_init returns an error. The App owns the
 	// CryptoDev_t and injects it, mirroring the BtSmpInit model on the SDC port.
-	// Software P-256 today (CryptoUeccInit); a hardware-backed engine can be
-	// injected here later with no change to the LESC code. RNG underneath comes
-	// from the CRACEN-backed RngGet via crypto_uecc.
+	// ECDH goes through CryptoInit with CRYPTO_PROVIDER_AUTO: the hardware
+	// engine (CryptoHwInit, PSA over CRACEN) is selected when it is linked,
+	// otherwise it falls back to software uECC, with no change to the LESC
+	// code. The arena is sized CRYPTO_MEMSIZE_ECDH, which fits whichever engine
+	// AUTO selects. Random bytes come from the PSA DRBG on the hardware path,
+	// or from the CRACEN-backed RngGet on the uECC path.
 	static CryptoDev_t s_LescEcdh;
-	static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_UECC];	// uECC per-instance key arena
+	static uint8_t     s_LescEcdhMem[CRYPTO_MEMSIZE_ECDH];	// ECDH per-instance key arena (fits HW or uECC)
 	CryptoCfg_t lescCfg = { };
-	lescCfg.Provider = CRYPTO_PROVIDER_UECC;
+	lescCfg.Provider = CRYPTO_PROVIDER_AUTO;
 	lescCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
 	lescCfg.pMem     = s_LescEcdhMem;
 	lescCfg.MemSize  = sizeof(s_LescEcdhMem);
-	CryptoUeccInit(&s_LescEcdh, &lescCfg);
+	CryptoInit(&s_LescEcdh, &lescCfg);
 	BtLescSetCryptoEngine(&s_LescEcdh);
 
 	err_code = pm_init();

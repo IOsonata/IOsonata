@@ -887,19 +887,25 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	BtGapInit(&gapcfg);
 
-	// The SDC path owns its SMP crypto: software uECC for ECDH and the BLE
-	// controller (HCI LE Encrypt) for AES. These are internal to this path -
-	// the application does not supply or see them; it only requests security
-	// via SecType. Randomness comes from the RngGet utility.
+	// The SDC path owns its SMP crypto: P-256 ECDH and the BLE controller
+	// (HCI LE Encrypt) for AES. These are internal to this path - the
+	// application does not supply or see them; it only requests security via
+	// SecType. Randomness comes from the RngGet utility.
+	//
+	// ECDH goes through CryptoInit with CRYPTO_PROVIDER_AUTO: the hardware
+	// engine (CryptoHwInit, PSA over CRACEN or cc3xx) is selected when it is
+	// linked, otherwise it falls back to software uECC. The arena is sized for
+	// CRYPTO_MEMSIZE_ECDH, which fits whichever engine AUTO selects (the
+	// hardware key object or the software uECC key).
 	static CryptoDev_t s_CryptoEcdh;
 	static CryptoDev_t s_CryptoAes;
-	static uint8_t     s_CryptoEcdhMem[CRYPTO_MEMSIZE_UECC];	// uECC per-instance key arena
+	static uint8_t     s_CryptoEcdhMem[CRYPTO_MEMSIZE_ECDH];	// ECDH per-instance key arena (fits HW or uECC)
 	CryptoCfg_t ecdhCfg = { };
-	ecdhCfg.Provider = CRYPTO_PROVIDER_UECC;
+	ecdhCfg.Provider = CRYPTO_PROVIDER_AUTO;
 	ecdhCfg.ReqCaps  = CRYPTO_CAP_ECDH_P256;
 	ecdhCfg.pMem     = s_CryptoEcdhMem;
 	ecdhCfg.MemSize  = sizeof(s_CryptoEcdhMem);
-	CryptoUeccInit(&s_CryptoEcdh, &ecdhCfg);
+	CryptoInit(&s_CryptoEcdh, &ecdhCfg);
 	BtCryptoCtlrSdcInit(&s_CryptoAes);
 	BtSmpInit(&s_CryptoEcdh, &s_CryptoAes);
 

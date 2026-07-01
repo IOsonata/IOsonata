@@ -35,7 +35,11 @@ through with no reversal.
 // instances. No file-static key: each instance is independent.
 typedef struct {
 	uint8_t PrivKey[32];	// P-256 private key, retained between keygen and DH
+	bool    bKeyValid;	// true only while PrivKey holds a usable single-use key
 } CryptoUeccData_t;
+
+static_assert(sizeof(CryptoUeccData_t) <= CRYPTO_MEMSIZE_UECC,
+			  "CRYPTO_MEMSIZE_UECC too small for CryptoUeccData_t");
 
 // Resolve the per-instance key context: a caller-supplied pKeyCtx (a Cryptor
 // sharing one engine) overrides this engine's own pDevData (dedicated engine).
@@ -63,6 +67,10 @@ static CRYPTO_STATUS UeccEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 		return CRYPTO_STATUS_FAIL;
 	}
 
+	// Start from a clean state: no valid key until make_key succeeds.
+	pd->bKeyValid = false;
+	CryptoSecureWipe(pd->PrivKey, sizeof(pd->PrivKey));
+
 	if (uECC_get_rng() == nullptr)
 	{
 		uECC_set_rng(UeccRngAdapter);
@@ -74,6 +82,7 @@ static CRYPTO_STATUS UeccEcdhKeyGen(CryptoDev_t * const pDev, void *pKeyCtx,
 		CryptoSecureWipe(pd->PrivKey, sizeof(pd->PrivKey));
 		return CRYPTO_STATUS_FAIL;
 	}
+	pd->bKeyValid = true;
 	return CRYPTO_STATUS_OK;
 }
 
@@ -88,12 +97,20 @@ static CRYPTO_STATUS UeccEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
 		return CRYPTO_STATUS_FAIL;
 	}
 
+	// Fail closed when no valid private key is present: Ecdh called before
+	// KeyGen, or a second Ecdh after the single-use key was consumed and wiped.
+	if (!pd->bKeyValid)
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+
 	// Reject a peer public key that is not on the P-256 curve before the DH.
 	// Without this the engine is open to the invalid-curve attack (CVE-2018-5383).
 	// The private key is single-use, so wipe it on this exit path too.
 	if (uECC_valid_public_key(pPeerPubKey, uECC_secp256r1()) != 1)
 	{
 		CryptoSecureWipe(pd->PrivKey, sizeof(pd->PrivKey));
+		pd->bKeyValid = false;
 		return CRYPTO_STATUS_FAIL;
 	}
 
@@ -112,6 +129,7 @@ static CRYPTO_STATUS UeccEcdh(CryptoDev_t * const pDev, void *pKeyCtx,
 	// on every exit so no secret material survives the call.
 	CryptoSecureWipe(secret, sizeof(secret));
 	CryptoSecureWipe(pd->PrivKey, sizeof(pd->PrivKey));
+	pd->bKeyValid = false;
 	return st;
 }
 

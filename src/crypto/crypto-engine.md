@@ -134,7 +134,7 @@ stub `Init` returns false.
 |---|---|---|---|
 | `CryptoUeccInit` | ECDH P-256 | `src/crypto/crypto_uecc.cpp` | Software (micro-ecc). ECDH only. Borrows `RngGet`. |
 | `CryptoMbedtlsInit` | AES + ECDH | `src/crypto/crypto_mbedtls.cpp` | Software; hardware-accelerated where the platform mbedTLS sits over CC3xx/CRACEN/PKA (nRF52840, nRF54, nRF91). Also serves TLS/DFU. |
-| `CryptoHwInit` | per block | per-MCU port lib (`ARM/Nordic/...`, `ARM/ST/...`) | Architecture hardware engine. The public symbol is always `CryptoHwInit`; target-specific inits (for CRACEN, CC3xx, STM32 PKA) are file-local inside the port. |
+| `CryptoHwInit` | ECDH (+AES on PSA) | `ARM/Nordic/nRF54/src/crypto_psa.cpp`, `ARM/Nordic/nRF52/src/crypto_cc310.cpp` | Architecture hardware engine. Two Nordic implementations of the one public symbol: `crypto_psa.cpp` uses the PSA Crypto API that sdk-nrf-bm ships bare-metal (dispatching to CRACEN on nRF54L; also CC3xx where a PSA lib is present), `crypto_cc310.cpp` uses nrf_crypto over CC310 (nRF5 SDK, nRF52840). Each is guarded by the presence of its SDK header; PSA takes precedence when both are present, so they never collide. A target with neither falls back to the weak stub, and `CryptoInit(AUTO)` then uses software uECC. Other ports (STM32 PKA, ESP) add their own `CryptoHwInit` later. |
 
 Public engine names are provider-class, never target-specific. A port implements
 `CryptoHwInit` for its architecture, but the public symbol stays `CryptoHwInit`;
@@ -270,4 +270,5 @@ consumers need them; existing bits are never renumbered.
 | `src/crypto/crypto.cpp` | Base layer: the Cryptor instance, weak fail-closed provider inits, and the `CryptoInit` selector. |
 | `src/crypto/crypto_uecc.cpp` | Software ECDH P-256 engine (micro-ecc). |
 | `src/crypto/crypto_mbedtls.cpp` | Software AES + ECDH engine (mbedTLS). |
-| per-MCU port lib | Architecture hardware engine behind `CryptoHwInit`. |
+| `ARM/Nordic/nRF54/src/crypto_psa.cpp` | Hardware `CryptoHwInit` via PSA Crypto shipped by sdk-nrf-bm (CRACEN on nRF54L). |
+| `ARM/Nordic/nRF52/src/crypto_cc310.cpp` | Hardware `CryptoHwInit` via nrf_crypto over CC310 (nRF5 SDK, nRF52840). |

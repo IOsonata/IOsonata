@@ -127,12 +127,21 @@ typedef struct __Crypto_Cfg {
 } CryptoCfg_t;
 
 // Per-instance state arena sizes, for declaring the App-owned pMem buffer.
-// CRYPTO_MEMSIZE_UECC is exact. CRYPTO_MEMSIZE_MBEDTLS covers the per-instance
+// CRYPTO_MEMSIZE_UECC covers CryptoUeccData_t; a compile-time assert in
+// crypto_uecc.cpp keeps it in sync. CRYPTO_MEMSIZE_MBEDTLS covers the per-instance
 // control structs only; mbedTLS allocates MPI limbs through its own allocator,
 // so the real working set also depends on the mbedTLS heap configuration. Each
 // engine Init re-checks MemSize against its true sizeof and fails closed.
-#define CRYPTO_MEMSIZE_UECC		32U
+#define CRYPTO_MEMSIZE_UECC		40U
 #define CRYPTO_MEMSIZE_MBEDTLS	256U
+#define CRYPTO_MEMSIZE_HW		1024U	// Hardware engine (CryptoHwInit) per-instance arena. Covers the
+									// small PSA key-id context and the large nrf_crypto/CC310 key
+									// object (about 828 bytes measured). A per-engine static_assert
+									// validates the exact size at compile time.
+// Arena for an ECDH engine picked at runtime by CryptoInit(AUTO): sized for
+// whichever engine wins, hardware or software uECC.
+#define CRYPTO_MEMSIZE_ECDH \
+	((CRYPTO_MEMSIZE_HW) > (CRYPTO_MEMSIZE_UECC) ? (CRYPTO_MEMSIZE_HW) : (CRYPTO_MEMSIZE_UECC))
 
 /// @brief	Crypto engine interface (vtable). Canonical C form, like DevIntrf_t.
 ///
