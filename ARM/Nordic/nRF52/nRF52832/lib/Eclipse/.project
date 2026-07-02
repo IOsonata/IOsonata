@@ -711,11 +711,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_host.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_host.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_intrf.h</locationURI>

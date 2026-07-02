@@ -189,23 +189,6 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 
 
 alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
-#if 0
-static BtHciDevCfg_t s_BtHciDevCfg = {
-	.SendData = HciSdcSendData,
-	.EvtHandler = BleAppEvtHandler,
-	.ConnectedHandler = BleAppConnected,
-	.DisconnectedHandler = BleAppDisconnected,
-	.SendCompletedHandler = BleAppSendCompleted,
-};
-
-alignas(4) static BtHciDevice_t s_HciDevice = {
-		251, 251,
-		.SendData = HciSdcSendData,
-		.EvtHandler = BleAppEvtHandler,
-		.Connected = BleAppConnected,
-		.Disconnected = BleAppDisconnected,
-};
-#endif
 
 const static TimerCfg_t s_BtAppSdcTimerCfg = {
     .DevNo = 1,
@@ -1045,7 +1028,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
-	//BtHciInit(&s_BtDevCfg);
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 

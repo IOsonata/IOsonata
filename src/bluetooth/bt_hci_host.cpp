@@ -58,20 +58,6 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};
 
-/*
-bool BtHciInit(BtHciDevCfg_t const *pCfg)
-{
-	if (pCfg == nullptr)
-	{
-		return false;
-	}
-
-	s_HciDevice.SendData = pCfg->SendData;
-	s_HciDevice.EvtHandler = pCfg->EvtHandler;
-	s_HciDevice.ConnectedHandler = pCfg->ConnectedHandler;
-
-	return true;
-}*/
 
 
 //void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)

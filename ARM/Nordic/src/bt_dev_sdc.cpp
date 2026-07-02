@@ -1254,7 +1254,6 @@ bool BtDevInit(const BtDevCfg_t *pCfg)
     	return false;
     }
 
-	//BtHciInit(&s_BtDevCfg);
 #endif
     s_BtDevSdc.State = BTDEV_STATE_INITIALIZED;
 

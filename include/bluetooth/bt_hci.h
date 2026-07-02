@@ -686,21 +686,6 @@ typedef struct Bt_Hci_Ext_Scan_Param {
 
 typedef struct __Bt_Hci_Device		BtHciDevice_t;
 
-#if 0
-
-typedef uint32_t (*BtHciSendDataFct_t)(void *pData, uint32_t Len);
-typedef void (*BtEvtHandler_t)(BtHciDevice_t * const pDev, uint32_t Evt);
-typedef void (*BtEvtConnected_t)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
-
-/*
-typedef struct __Bt_Hci_Dev_Config {
-	BtHciSendDataFct_t SendData;
-	BtEvtHandler_t EvtHandler;
-	BtEvtConnected_t ConnectedHandler;
-} BtHciDevCfg_t;
-*/
-
-#endif
 
 struct __Bt_Hci_Device {
 	void *pCtx;
@@ -736,7 +721,6 @@ static inline uint16_t mSecTo1_25(float Val) {
 };
 */
 
-//bool BtHciInit(BtHciDevCfg_t const *pCfg);
 void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt);
 
 // Transmit a fully built ACL data packet to the controller. Fragments the L2CAP
