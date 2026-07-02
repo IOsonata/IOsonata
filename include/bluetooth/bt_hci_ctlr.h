@@ -37,7 +37,6 @@ SOFTWARE.
 
 #include "device_intrf.h"
 #include "cfifo.h"
-#include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_hcievt.h"
 
 /** @addtogroup Bluetooth
@@ -54,17 +53,12 @@ SOFTWARE.
 
 typedef struct __Bt_Ctlr_Dev		BtCtlrDev_t;
 
-typedef void (*AttDataHandler_t)(BtCtlrDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pL2Frame);
-typedef void (*SmpDataHandler_t)(BtCtlrDev_t * const pDev, BtL2CapPdu_t * const pL2Frame);
-
 typedef struct __Bt_Ctlr_Config {
 	uint16_t MaxMtu;
 	size_t PacketSize;
 	uint8_t *pRxFifoMem;
 	int RxFifoMemSize;
 	DevIntrfEvtHandler_t EvtHandler;
-	AttDataHandler_t AttHandler;
-	SmpDataHandler_t SmpHandler;
 //	uint32_t (*Send)(BtCtlrDev_t * const pDev, void * const pData, uint32_t Len);
 //	uint32_t (*Receive)(BtCtlrDev_t * const pDev, void * const pData, uint32_t Len);
 } BtCtlrCfg_t;
@@ -79,8 +73,6 @@ struct __Bt_Ctlr_Dev {
 	uint16_t ConnHdl;				//<! Connection handle
 	uint16_t ValHdl;				//<! Characteristic value handle
 	hCFifo_t hRxFifo;
-	AttDataHandler_t AttHandler;
-	SmpDataHandler_t SmpHandler;
 	size_t (*Send)(BtCtlrDev_t * const pDev, void * const pData, size_t Len);
 	size_t (*Receive)(BtCtlrDev_t * const pDev, uint16_t Hdl, void * const pData, size_t Len);
 };// BtCtlrDev_t;
@@ -112,10 +104,6 @@ extern "C" {
  * @return
  */
 bool BtCtlrInit(BtCtlrDev_t * const pDev, const BtCtlrCfg_t *pCfg);
-void BtCtlrProcessAttData(BtCtlrDev_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
-void BtCtlrProcessSmpData(BtCtlrDev_t * const pDev, BtL2CapPdu_t * const pRcvPdu);
-void BtCtlrProcessEvent(BtCtlrDev_t * const pDev, BtHciEvtPacket_t * const pEvtPkt);
-void BtCtlrProcessData(BtCtlrDev_t * const pDev, BtHciACLDataPacket_t * const pPkt);
 
 #ifdef __cplusplus
 }
