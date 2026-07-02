@@ -392,7 +392,7 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 // Record a characteristic with a notification/indication just handed to the
 // transport, so its TxCompleteCB can be fired in send order when the controller
 // reports the packet complete. Only tracked when the char wants the callback.
-static void BtGattTxPendPush(uint16_t ConnHdl, BtGattChar_t *pChar)
+void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar)
 {
 	if (pChar == nullptr || pChar->TxCompleteCB == nullptr)
 	{
@@ -426,7 +426,7 @@ __attribute__((weak)) bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pCha
 									pChar->ValHdl, pVal, Len) >= 0;
 	if (ok)
 	{
-		BtGattTxPendPush(ConnHdl, pChar);
+		BtGattTxPendingAdd(ConnHdl, pChar);
 	}
 
 	return ok;
@@ -460,7 +460,7 @@ __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pC
 
 	pConn->Conn.bIndCfmPending = true;
 	pConn->Conn.IndCfmTime = BtGattMsTick();
-	BtGattTxPendPush(ConnHdl, pChar);
+	BtGattTxPendingAdd(ConnHdl, pChar);
 	return true;
 }
 

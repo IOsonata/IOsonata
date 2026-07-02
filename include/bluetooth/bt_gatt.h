@@ -185,6 +185,9 @@ bool isBtGattCharNotifyEnabled(BtGattChar_t *pChar);
 bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len);
+// Record a notify/indicate packet accepted by the transport so
+// BtGattSendCompleted() can fire TxCompleteCB in send order.
+void BtGattTxPendingAdd(uint16_t ConnHdl, BtGattChar_t *pChar);
 void BtGattHandleValueConfirm(uint16_t ConnHdl);
 
 uint16_t BtGattCccdGet(uint16_t ConnHdl, uint16_t CccdHdl);

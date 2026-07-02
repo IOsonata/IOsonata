@@ -61,17 +61,25 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		return false;
 	}
 
-	size_t maxData = BT_HCI_BUFFER_MAX_SIZE - sizeof(BtHciACLDataPacketHdr_t) -
-					 sizeof(BtL2CapHdr_t) - sizeof(BtAttHandleValueNtf_t);
-	if (Len > maxData)
-	{
-		return false;
-	}
-
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
 	{
 		return false;
+	}
+
+	// Match the generic native-host path: notification value length is
+	// limited by ATT_MTU - 3 and by the local ACL buffer.
+	uint16_t mtu = pPeer->Conn.MaxMtu >= BT_ATT_MTU_MIN ? pPeer->Conn.MaxMtu : BT_ATT_MTU_MIN;
+	size_t maxData = (size_t)mtu - 3;
+	size_t bufMax = BT_HCI_BUFFER_MAX_SIZE - sizeof(BtHciACLDataPacketHdr_t) -
+					sizeof(BtL2CapHdr_t) - sizeof(BtAttHandleValueNtf_t);
+	if (maxData > bufMax)
+	{
+		maxData = bufMax;
+	}
+	if (Len > maxData)
+	{
+		Len = maxData;
 	}
 
 	if (Len > 0)
@@ -106,6 +114,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		if (BtHciSendAcl(pPeer->pHciDev, acl) == aclLen)
 		{
 			//acl->Hdr.Len + sizeof(acl->Hdr);
+			BtGattTxPendingAdd(ConnHdl, pChar);
 			return true;
 		}
 	}
