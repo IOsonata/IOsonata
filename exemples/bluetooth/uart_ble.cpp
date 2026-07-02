@@ -49,24 +49,59 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
-#define BLE_SECURE_CONNECTION	1
-// Secure connection toggle. Define BLE_SECURE_CONNECTION=1 (e.g. as a build
-// symbol or before this line) to enable LE Secure Connections + bonding
-// (Just Works, no MITM). Leave it 0 (default) for an open, unencrypted link.
-// When enabled the peripheral issues an SMP Security Request on connect so the
-// central is prompted to pair/encrypt; the GATT service is identical either
-// way, so the same example exercises both paths.
-#ifndef BLE_SECURE_CONNECTION
-#define BLE_SECURE_CONNECTION	0
+// LE Secure Connections method selector.
+//
+// This board has no screen and no buttons: the UART console is both the display
+// and the keyboard. The SMP core prints the numeric value or the passkey to the
+// terminal and reads the y/n or the typed passkey back from it, so one firmware
+// can exercise any association model. Pick a method here and build the peer
+// (uart_ble_central) with a compatible row:
+//
+//   this side             peer side             resulting method
+//   BLE_SC_NONE           BLE_SC_NONE           open link, no pairing
+//   BLE_SC_JUSTWORKS      BLE_SC_JUSTWORKS      Just Works (bonded, no MITM)
+//   BLE_SC_NUMCOMP        BLE_SC_NUMCOMP        Numeric Comparison
+//   BLE_SC_PASSKEY_DISP   BLE_SC_PASSKEY_INPUT  Passkey Entry (this side shows)
+//   BLE_SC_PASSKEY_INPUT  BLE_SC_PASSKEY_DISP   Passkey Entry (this side types)
+#define BLE_SC_NONE				0
+#define BLE_SC_JUSTWORKS		1
+#define BLE_SC_NUMCOMP			2
+#define BLE_SC_PASSKEY_DISP		3
+#define BLE_SC_PASSKEY_INPUT	4
+
+#ifndef BLE_SC_METHOD
+#define BLE_SC_METHOD			BLE_SC_NUMCOMP
 #endif
 
-#if BLE_SECURE_CONNECTION
-#include "bluetooth/bt_smp.h"		// BtSmpKeys_t and bond hooks (BtSmpBondAdd/LtkLookup)
-#define BLE_SEC_TYPE		BTGAP_SECTYPE_LESC_MITM			// LESC Secure Connection
-#define BLE_SEC_EXCHG		BTAPP_SECEXCHG_KEYBOARD			// distribute IRK/CSRK
+#if BLE_SC_METHOD != BLE_SC_NONE
+#include "bluetooth/bt_smp.h"		// SMP IO caps, console pairing callbacks, bond hooks
+#define BLE_SEC_EXCHG			BTAPP_SECEXCHG_KEYBOARD		// distribute IRK/CSRK
+#endif
+
+#if BLE_SC_METHOD == BLE_SC_JUSTWORKS
+#define BLE_SEC_TYPE			BTGAP_SECTYPE_STATICKEY_NO_MITM
+#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT
+#define BLE_SC_AUTHREQ			BT_SMP_AUTHREQ_BONDING_FLAG_BONDING
+#define BLE_SC_NAME				"Just Works (bonded, no MITM)"
+#elif BLE_SC_METHOD == BLE_SC_NUMCOMP
+#define BLE_SEC_TYPE			BTGAP_SECTYPE_LESC_MITM
+#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_DISPLAY_YESNO
+#define BLE_SC_AUTHREQ			(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
+#define BLE_SC_NAME				"Numeric Comparison"
+#elif BLE_SC_METHOD == BLE_SC_PASSKEY_DISP
+#define BLE_SEC_TYPE			BTGAP_SECTYPE_LESC_MITM
+#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_DISPLAY_ONLY
+#define BLE_SC_AUTHREQ			(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
+#define BLE_SC_NAME				"Passkey Entry (display)"
+#elif BLE_SC_METHOD == BLE_SC_PASSKEY_INPUT
+#define BLE_SEC_TYPE			BTGAP_SECTYPE_LESC_MITM
+#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_KEYBOARD_ONLY
+#define BLE_SC_AUTHREQ			(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
+#define BLE_SC_NAME				"Passkey Entry (keyboard)"
 #else
-#define BLE_SEC_TYPE		BTGAP_SECTYPE_NONE
-#define BLE_SEC_EXCHG		BTAPP_SECEXCHG_NONE
+#define BLE_SEC_TYPE			BTGAP_SECTYPE_NONE
+#define BLE_SEC_EXCHG			BTAPP_SECEXCHG_NONE
+#define BLE_SC_NAME				"NONE (open link)"
 #endif
 
 #define DEVICE_NAME                     "UARTDemo"
@@ -159,7 +194,7 @@ const BtAppCfg_t s_BleAppCfg = {
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BLE_SEC_TYPE,			// Secure connection type (see BLE_SECURE_CONNECTION)
+	.SecType = BLE_SEC_TYPE,			// Secure connection type (see BLE_SC_METHOD selector)
 	.SecExchg = BLE_SEC_EXCHG,			// Security key exchange
 	.bCompleteUuidList = false,
 	.pAdvUuid = &s_AdvUuid,      			// Service uuids to advertise
@@ -242,10 +277,10 @@ void BtAppInitUserServices()
     res = BtGattSrvcAdd(&g_UartBleSrvc);
 }
 
-#if BLE_SECURE_CONNECTION
+#if BLE_SC_METHOD != BLE_SC_NONE
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
-	// Security is initiated by the active backend when a secure SecType is
+	// Security is initiated by the underlying stack when a secure SecType is
 	// configured - the application stays SDK-neutral and does not request it here.
 	g_Uart.printf("CONNECTED hdl=%d\r\n", ConnHdl);
 }
@@ -295,17 +330,112 @@ void HardwareInit()
 
 void BtAppInitUserData()
 {
-	// Add passkey pairing
-    //ble_opt_t opt;
-    //opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
-	//uint32_t err_code =  sd_ble_opt_set(BLE_GAP_OPT_PASSKEY, &opt);
-	//APP_ERROR_CHECK(err_code);
-
+#if BLE_SC_METHOD != BLE_SC_NONE
+	// Set the local IO capability so the SMP core negotiates the selected
+	// method; the console then fills whatever role that capability implies.
+	BtSmpAuthConfig(BLE_SC_IOCAPS, BLE_SC_AUTHREQ);
+#endif
 }
+
+#if BLE_SC_METHOD != BLE_SC_NONE
+// Console pairing IO. The board has no physical display or keypad, so the SMP
+// core routes the user step through the UART: BtSmpNumericComparison and
+// BtSmpPasskeyDisplay print, and PairInputPoll (called from the UART RX path)
+// reads the y/n or the typed passkey and resumes pairing.
+enum { PAIR_INPUT_NONE = 0, PAIR_INPUT_NUMERIC, PAIR_INPUT_PASSKEY };
+static volatile int s_PairInput = PAIR_INPUT_NONE;
+static uint16_t s_PairConnHdl = 0;
+static uint8_t  s_PairDigits = 0;
+static uint32_t s_PairPasskey = 0;
+
+void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
+{
+	g_Uart.printf("\r\nSMP numeric comparison: %06u\r\n", (unsigned)Value);
+	g_Uart.printf("Do both devices show this value? type y or n\r\n");
+	s_PairConnHdl = ConnHdl;
+	s_PairInput = PAIR_INPUT_NUMERIC;
+}
+
+void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
+{
+	(void)ConnHdl;
+	g_Uart.printf("\r\nSMP passkey (enter this on the peer): %06u\r\n", (unsigned)Passkey);
+}
+
+void BtSmpPasskeyRequest(uint16_t ConnHdl)
+{
+	g_Uart.printf("\r\nSMP passkey entry: type the 6 digits shown on the peer\r\n");
+	s_PairConnHdl = ConnHdl;
+	s_PairDigits = 0;
+	s_PairPasskey = 0;
+	s_PairInput = PAIR_INPUT_PASSKEY;
+}
+
+// Consume console bytes while a pairing user step is pending. Returns true while
+// it owns the RX bytes so the data path does not forward them.
+static bool PairInputPoll(void)
+{
+	if (s_PairInput == PAIR_INPUT_NONE)
+	{
+		return false;
+	}
+	uint8_t c;
+	while (g_Uart.Rx(&c, 1) == 1)
+	{
+		if (s_PairInput == PAIR_INPUT_NUMERIC)
+		{
+			if (c == 'y' || c == 'Y')
+			{
+				s_PairInput = PAIR_INPUT_NONE;
+				g_Uart.printf("match\r\n");
+				BtSmpNumericComparisonReply(s_PairConnHdl, true);
+				return true;
+			}
+			if (c == 'n' || c == 'N')
+			{
+				s_PairInput = PAIR_INPUT_NONE;
+				g_Uart.printf("no match\r\n");
+				BtSmpNumericComparisonReply(s_PairConnHdl, false);
+				return true;
+			}
+		}
+		else
+		{
+			if (c >= '0' && c <= '9' && s_PairDigits < 6)
+			{
+				s_PairPasskey = s_PairPasskey * 10 + (uint32_t)(c - '0');
+				s_PairDigits++;
+				g_Uart.Tx(&c, 1);
+				if (s_PairDigits == 6)
+				{
+					s_PairInput = PAIR_INPUT_NONE;
+					g_Uart.printf("\r\n");
+					BtSmpPasskeyReply(s_PairConnHdl, s_PairPasskey);
+					return true;
+				}
+			}
+			else if (c == 0x1b)
+			{
+				s_PairInput = PAIR_INPUT_NONE;
+				g_Uart.printf("\r\ncancelled\r\n");
+				BtSmpPasskeyReply(s_PairConnHdl, BT_SMP_PASSKEY_INVALID);
+				return true;
+			}
+		}
+	}
+	return true;
+}
+#endif
 
 //void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
+#if BLE_SC_METHOD != BLE_SC_NONE
+	if (PairInputPoll())
+	{
+		return;		// console bytes consumed by the pairing step
+	}
+#endif
 	static uint8_t buff[PACKET_SIZE];
 	static int bufflen = 0;
 	bool flush = false;
@@ -387,11 +517,7 @@ int main()
 	HardwareInit();
 
     g_Uart.printf("UART over BLE Demo\r\n");
-#if BLE_SECURE_CONNECTION
-    g_Uart.printf("security    : LE Secure Connections + bonding (Just Works)\r\n");
-#else
-    g_Uart.printf("security    : NONE (open link)\r\n");
-#endif
+    g_Uart.printf("security    : %s\r\n", BLE_SC_NAME);
 
     //g_Uart.Disable();
 
