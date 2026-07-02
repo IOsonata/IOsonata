@@ -326,6 +326,12 @@ void BtSmpRequestSecurity(uint16_t ConnHdl);
 void BtSmpStartPairing(uint16_t ConnHdl);
 
 /**
+ * @brief	Release the SMP link state for a connection. Call from the
+ *			disconnection hook to free the per-connection pairing context.
+ */
+void BtSmpDisconnected(uint16_t ConnHdl);
+
+/**
  * @brief	Initialise the SMP layer and compose its crypto from engines.
  *
  * SMP needs two composed primitives - ECDH (P-256) and AES-128 ECB - each

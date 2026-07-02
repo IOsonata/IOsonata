@@ -2057,7 +2057,7 @@ static int CryptoStatusToSmp(CRYPTO_STATUS st)
 	}
 }
 
-extern "C" void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
+void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 								  const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16])
 {
 	(void)pDev;		// the engine holds whatever handle it needs in pDevData
@@ -2067,27 +2067,27 @@ extern "C" void BtSmpCryptoAes128(BtHciDevice_t * const pDev,
 	}
 }
 
-extern "C" int BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64])
+int BtSmpCryptoP256KeyGen(BtHciDevice_t * const pDev, uint8_t pPubKey[64])
 {
 	(void)pDev;
 	return CryptoStatusToSmp(CryptoEcdhP256KeyGen(s_pCryptoEcdh, nullptr, pPubKey, nullptr));
 }
 
-extern "C" int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
+int BtSmpCryptoEcdh(BtHciDevice_t * const pDev,
 							   const uint8_t pPeerPubKey[64], uint8_t pDhKey[32])
 {
 	(void)pDev;
 	return CryptoStatusToSmp(CryptoEcdhP256(s_pCryptoEcdh, nullptr, pPeerPubKey, pDhKey, nullptr));
 }
 
-extern "C" void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
+void BtSmpCryptoRand(uint8_t *pBuf, size_t Len)
 {
 	// RNG is a target utility (coredev/rng.h), not a crypto engine: hardware
 	// where the MCU has an RNG peripheral, weak software default otherwise.
 	RngGet(pBuf, Len);
 }
 
-extern "C" int BtSmpCryptoSelfTest(void)
+int BtSmpCryptoSelfTest(void)
 {
 	// Run the ECDH engine's self-test (the security-critical path). AES/RNG
 	// engines may have their own; the ECDH known-answer vector is the one that
@@ -2142,7 +2142,7 @@ void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl)
 	SmpSendHciCmd(pDev, BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY, param, sizeof(param));
 }
 
-extern "C" void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes)
+void BtSmpInit(CryptoDev_t *pEcdh, CryptoDev_t *pAes)
 {
 	// Compose the crypto from the engines the target provides. Each slot must
 	// advertise the capability it is being used for; a mismatch leaves the slot
@@ -2348,7 +2348,7 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 // without it a central has no indication to pair (and apps like nRF Connect
 // show no security/bond action), and any pairing the user forces has no
 // natural begin/end in the central security flow.
-extern "C" void BtSmpRequestSecurity(uint16_t ConnHdl)
+void BtSmpRequestSecurity(uint16_t ConnHdl)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
@@ -2376,7 +2376,7 @@ extern "C" void BtSmpRequestSecurity(uint16_t ConnHdl)
 	SmpSend(pDev, ConnHdl, &req, sizeof(req));
 }
 
-extern "C" void BtSmpStartPairing(uint16_t ConnHdl)
+void BtSmpStartPairing(uint16_t ConnHdl)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
@@ -2454,14 +2454,14 @@ extern "C" void BtSmpStartPairing(uint16_t ConnHdl)
 	}
 }
 
-extern "C" void BtSmpDisconnected(uint16_t ConnHdl)
+void BtSmpDisconnected(uint16_t ConnHdl)
 {
 	SmpLinkFree(ConnHdl);
 }
 
 // f4 self-test against the BLE spec worked example (Vol 3 Part H, D.2).
 // Verifies SmpF4 + AES-CMAC + AES are correct on the target. Returns 0 on PASS.
-extern "C" int BtSmpF4SelfTest(void)
+int BtSmpF4SelfTest(void)
 {
 	// BLE spec worked example (Vol 3 Part H, D.2). The toolbox f4 takes its
 	// inputs and returns its output in little-endian (wire) order, swapping to
@@ -2487,7 +2487,7 @@ extern "C" int BtSmpF4SelfTest(void)
 // order: Rpa[3..5] are prand (random part, top two bits 0b01), Rpa[0..2] are the
 // hash. Returns true when Rpa was generated from Irk. Byte order matches SmpAes
 // and is checked by BtSmpRpaSelfTest against the spec ah sample.
-extern "C" bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6])
+bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6])
 {
 	if (Irk == nullptr || Rpa == nullptr)
 	{
@@ -2532,7 +2532,7 @@ extern "C" bool BtSmpRpaResolve(const uint8_t Irk[16], const uint8_t Rpa[6])
 	return out[13] == Rpa[2] && out[14] == Rpa[1] && out[15] == Rpa[0];
 }
 
-extern "C" int BtSmpRpaSelfTest(void)
+int BtSmpRpaSelfTest(void)
 {
 	// Core spec ah sample (Vol 3 Part H): IRK ec0234a3..0a397d9b, prand 0x708194,
 	// hash 0x0dfbaa, stored little-endian here to match SmpAes. The address holds
@@ -2551,7 +2551,7 @@ extern "C" int BtSmpRpaSelfTest(void)
 // little-endian). Writes the little-endian MAC to Mac (Core spec Vol 3 Part H
 // 2.4.5). SmpAesCmac is standard big-endian, so the key is reversed in and the
 // leading 8 bytes of the CMAC are reversed back to wire order.
-extern "C" void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
+void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
 							 size_t Len, uint8_t Mac[8])
 {
 	uint8_t key[16];
@@ -2570,7 +2570,7 @@ extern "C" void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
 	}
 }
 
-extern "C" int BtSmpSignSelfTest(void)
+int BtSmpSignSelfTest(void)
 {
 	// Implementation check for BtSmpSignMac byte order using the documented
 	// signing convention. CSRK little-endian 01..10; signed message is
