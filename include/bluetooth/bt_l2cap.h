@@ -299,7 +299,10 @@ typedef struct __Bt_L2Cap_Pdu {
 
 #pragma pack(pop)
 
+#ifndef BT_HCI_DEVICE_T_DEFINED
+#define BT_HCI_DEVICE_T_DEFINED
 typedef struct __Bt_Hci_Device BtHciDevice_t;
+#endif
 
 #ifdef __cplusplus
 extern "C" {

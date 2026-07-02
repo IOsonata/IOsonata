@@ -684,7 +684,10 @@ typedef struct Bt_Hci_Ext_Scan_Param {
 
 #pragma pack(pop)
 
+#ifndef BT_HCI_DEVICE_T_DEFINED
+#define BT_HCI_DEVICE_T_DEFINED
 typedef struct __Bt_Hci_Device		BtHciDevice_t;
+#endif
 
 
 struct __Bt_Hci_Device {
