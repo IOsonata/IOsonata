@@ -219,7 +219,6 @@ const static TimerCfg_t s_BtAppSdcTimerCfg = {
 };
 
 static Timer g_BtAppSdcTimer;
-volatile int s_SdcAclTxPktAvail = BT_SDC_TX_MAX_PACKET_COUNT + 1;
 
 #if 0
 static void BtStackMpslAssert(const char * const file, const uint32_t line)
@@ -349,8 +348,6 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 {
 	BtGattSendCompleted(ConnHdl, NbPktSent);
-
-	s_SdcAclTxPktAvail += NbPktSent;
 }
 
 void BtAppEnterDfu()
@@ -437,6 +434,11 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	{
 		return false;
 	}
+
+	// The controller was configured with these ACL buffer parameters above.
+	// Use the generic HCI host credit gate instead of the old SDC-local
+	// s_SdcAclTxPktAvail counter.
+	BtHciSetLeAclBuffer(&s_BtHciDev, ctlrcfg.MaxDataLen, ctlrcfg.TxPktCount);
 
 	if (pCfg->AttDBMemSize > 0)
 	{
@@ -599,10 +601,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	};
 
 	res = sdc_hci_cmd_le_write_suggested_default_data_length(&datalen);
-
-	sdc_hci_cmd_le_read_buffer_size_return_t rbr;
-
-	res = sdc_hci_cmd_le_read_buffer_size(&rbr);
 
 	sdc_default_tx_power_set(pCfg->TxPower);
 

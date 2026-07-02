@@ -35,16 +35,14 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <memory.h>
 
-#include "sdc_hci.h"
-
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_l2cap.h"
+#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_peer.h"
 
-extern volatile int s_SdcAclTxPktAvail;
-extern "C" size_t BtHciCtlrSdcSend(void *pData, size_t Len);
 
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData, size_t Len)
 {
@@ -70,7 +68,8 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		return false;
 	}
 
-	if (s_SdcAclTxPktAvail <= 0)
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
 	{
 		return false;
 	}
@@ -103,11 +102,10 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		l2pdu->Hdr.Len = sizeof(BtAttHandleValueNtf_t) + Len;
 		acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-		size_t aclLen = acl->Hdr.Len + sizeof(BtHciACLDataPacketHdr_t);
-		if (BtHciCtlrSdcSend(acl, aclLen) == aclLen)
+		uint32_t aclLen = acl->Hdr.Len + sizeof(BtHciACLDataPacketHdr_t);
+		if (BtHciSendAcl(pPeer->pHciDev, acl) == aclLen)
 		{
 			//acl->Hdr.Len + sizeof(acl->Hdr);
-			s_SdcAclTxPktAvail--;
 			return true;
 		}
 	}
