@@ -36,7 +36,7 @@ SOFTWARE.
 #define __BT_HOST_H__
 
 #include "device.h"
-#include "bt_ctlr.h"
+#include "bt_hci_ctlr.h"
 
 /** @addtogroup Bluetooth
   * @{
@@ -58,14 +58,14 @@ typedef struct __Bt_Host_Dev {
 extern "C" {
 #endif
 
-bool BtHostInit(const BtHostCfg_t *pCfg, BtCtlrDev_t * const pDev);
+bool BtHostInit(const BtHostCfg_t *pCfg, BtHciCtlrDev_t * const pDev);
 
 #ifdef __cplusplus
 }
 
 class BtHost : public Device {
 public:
-	virtual bool Init(const BtHostCfg_t &Cfg, BtCtlr * const pCtlr) { return BtHostInit(&Cfg, *pCtlr); }
+	virtual bool Init(const BtHostCfg_t &Cfg, BtHciCtlr * const pCtlr) { return BtHostInit(&Cfg, *pCtlr); }
 	virtual int Send(uint8_t * const pData, int DataLen);
 	virtual int Receive(uint8_t * const pBuff, int BuffLen);
 

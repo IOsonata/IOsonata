@@ -40,10 +40,10 @@ SOFTWARE.
 #include "ble_gatts.h"
 
 #include "cfifo.h"
-#include "bluetooth/bt_ctlr.h"
+#include "bluetooth/bt_hci_ctlr.h"
 
-#define BTCTLR_FIFO_MEM_SIZE			BTCTLR_PKT_CFIFO_TOTAL_MEMSIZE(4, BT_CTLR_MTU_MAX)
-alignas(4) static uint8_t s_BtCtlrRxFifoMem[BTCTLR_FIFO_MEM_SIZE];
+#define BTHCICTLR_FIFO_MEM_SIZE			BTHCICTLR_PKT_CFIFO_TOTAL_MEMSIZE(4, BT_HCI_CTLR_MTU_MAX)
+alignas(4) static uint8_t s_BtHciCtlrRxFifoMem[BTHCICTLR_FIFO_MEM_SIZE];
 
 static void nRF5CtlrDisable(DevIntrf_t * const pDev)
 {
@@ -55,14 +55,14 @@ static void nRF5CtlrEnable(DevIntrf_t * const pDev)
 
 static uint32_t nRF5CtlrGetRate(DevIntrf_t * const pDev)
 {
-	BtCtlrDev_t *p = (BtCtlrDev_t *)pDev->pDevData;
+	BtHciCtlrDev_t *p = (BtHciCtlrDev_t *)pDev->pDevData;
 
 	return p->Rate;
 }
 
 static uint32_t nRF5CtlrSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
-	BtCtlrDev_t *p = (BtCtlrDev_t *)pDev->pDevData;
+	BtHciCtlrDev_t *p = (BtHciCtlrDev_t *)pDev->pDevData;
 
 	if (Rate < 200000)
 	{
@@ -106,7 +106,7 @@ static void nRF5CtlrStopRx(DevIntrf_t * const pDev)
 
 static bool nRF5CtlrStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	BtCtlrDev_t *p = (BtCtlrDev_t *)pDev->pDevData;
+	BtHciCtlrDev_t *p = (BtHciCtlrDev_t *)pDev->pDevData;
 
 	p->ConnHdl = DevAddr >> 16;
 	p->ValHdl = DevAddr & 0xFFFF;
@@ -117,7 +117,7 @@ static bool nRF5CtlrStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 static int nRF5CtlrTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
 {
 	int cnt = 0;
-	BtCtlrDev_t *p = (BtCtlrDev_t *)pDev->pDevData;
+	BtHciCtlrDev_t *p = (BtHciCtlrDev_t *)pDev->pDevData;
 
 	ble_gatts_hvx_params_t params;
 
@@ -144,7 +144,7 @@ void nRF5CtlrPowerOff(DevIntrf_t * const pDev)
 {
 }
 
-bool BtCtlrInit(BtCtlrDev_t * const pDev, const BtCtlrCfg_t *pCfg)
+bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr)
 	{
@@ -153,16 +153,16 @@ bool BtCtlrInit(BtCtlrDev_t * const pDev, const BtCtlrCfg_t *pCfg)
 
 	if (pCfg->PacketSize <= 0)
 	{
-		pDev->PacketSize = BT_CTLR_MTU_MAX + BTCTLR_PKTHDR_LEN;
+		pDev->PacketSize = BT_HCI_CTLR_MTU_MAX + BTHCICTLR_PKTHDR_LEN;
 	}
 	else
 	{
-		pDev->PacketSize = pCfg->PacketSize + BTCTLR_PKTHDR_LEN;
+		pDev->PacketSize = pCfg->PacketSize + BTHCICTLR_PKTHDR_LEN;
 	}
 
 	if (pCfg->pRxFifoMem == NULL)// || pCfg->pTxFifoMem == NULL)
 	{
-		pDev->hRxFifo = CFifoInit(s_BtCtlrRxFifoMem, BTCTLR_FIFO_MEM_SIZE, pDev->PacketSize, true);
+		pDev->hRxFifo = CFifoInit(s_BtHciCtlrRxFifoMem, BTHCICTLR_FIFO_MEM_SIZE, pDev->PacketSize, true);
 		//pDev->hTxFifo = CFifoInit(s_BtDevIntrfRxFifoMem, BTINTRF_CFIFO_SIZE, pIntrf->PacketSize, pCfg->bBlocking);
 	}
 	else
@@ -203,7 +203,7 @@ bool BtCtlrInit(BtCtlrDev_t * const pDev, const BtCtlrCfg_t *pCfg)
  *
  * @param[in] p_ble_evt  SoftDevice event.
  */
-static void BtCtlrDispatch(ble_evt_t const * p_ble_evt, void *p_context)
+static void BtHciCtlrDispatch(ble_evt_t const * p_ble_evt, void *p_context)
 {
 #if 0
  //   uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
@@ -244,8 +244,8 @@ static void BtCtlrDispatch(ble_evt_t const * p_ble_evt, void *p_context)
 #endif
 }
 
-#define BTCTLR_OBSERVER_PRIO           1
+#define BTHCICTLR_OBSERVER_PRIO           1
 
-NRF_SDH_BLE_OBSERVER(g_BtCtlrObserver, BTCTLR_OBSERVER_PRIO, BtCtlrDispatch, NULL);
+NRF_SDH_BLE_OBSERVER(g_BtHciCtlrObserver, BTHCICTLR_OBSERVER_PRIO, BtHciCtlrDispatch, NULL);
 
 

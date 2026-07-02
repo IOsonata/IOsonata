@@ -43,27 +43,27 @@ SOFTWARE.
   * @{
   */
 
-#define BT_CTLR_MTU_MAX									512
+#define BT_HCI_CTLR_MTU_MAX									512
 
-#define BT_CTLR_PHY_1MBITS								(1<<0)
-#define BT_CTLR_PHY_2MBITS								(1<<1)
-#define BT_CTLR_PHY_CODED								(1<<2)
+#define BT_HCI_CTLR_PHY_1MBITS								(1<<0)
+#define BT_HCI_CTLR_PHY_2MBITS								(1<<1)
+#define BT_HCI_CTLR_PHY_CODED								(1<<2)
 
 #pragma pack(push, 4)
 
-typedef struct __Bt_Ctlr_Dev		BtCtlrDev_t;
+typedef struct __Bt_Hci_Ctlr_Dev		BtHciCtlrDev_t;
 
-typedef struct __Bt_Ctlr_Config {
+typedef struct __Bt_Hci_Ctlr_Config {
 	uint16_t MaxMtu;
 	size_t PacketSize;
 	uint8_t *pRxFifoMem;
 	int RxFifoMemSize;
 	DevIntrfEvtHandler_t EvtHandler;
-//	uint32_t (*Send)(BtCtlrDev_t * const pDev, void * const pData, uint32_t Len);
-//	uint32_t (*Receive)(BtCtlrDev_t * const pDev, void * const pData, uint32_t Len);
-} BtCtlrCfg_t;
+//	uint32_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);
+//	uint32_t (*Receive)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);
+} BtHciCtlrCfg_t;
 
-struct __Bt_Ctlr_Dev {
+struct __Bt_Hci_Ctlr_Dev {
 	uint16_t MaxMtu;
 	size_t PacketSize;
 	uint8_t Phy;
@@ -73,23 +73,23 @@ struct __Bt_Ctlr_Dev {
 	uint16_t ConnHdl;				//<! Connection handle
 	uint16_t ValHdl;				//<! Characteristic value handle
 	hCFifo_t hRxFifo;
-	size_t (*Send)(BtCtlrDev_t * const pDev, void * const pData, size_t Len);
-	size_t (*Receive)(BtCtlrDev_t * const pDev, uint16_t Hdl, void * const pData, size_t Len);
-};// BtCtlrDev_t;
+	size_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, size_t Len);
+	size_t (*Receive)(BtHciCtlrDev_t * const pDev, uint16_t Hdl, void * const pData, size_t Len);
+};// BtHciCtlrDev_t;
 
 /// NOTE: Variable length
-typedef struct __Bt_Ctlr_Packet {
+typedef struct __Bt_Hci_Ctlr_Packet {
 	uint16_t ValHdl;				//!< Char value handle
 	uint16_t Len;					//!< Data length in bytes
 	uint16_t Off;					//!< Data start offset for fragmented packet
 	uint8_t Data[1];				//!< Variable length data
-} BtCtlrPkt_t;
+} BtHciCtlrPkt_t;
 
 /**
  * Calculate require mem
  */
-#define BTCTLR_PKTHDR_LEN								(sizeof(BtCtlrPkt_t) - 1)
-#define BTCTLR_PKT_CFIFO_TOTAL_MEMSIZE(npk, pksize)		CFIFO_TOTAL_MEMSIZE(npk, pksize + BTCTLR_PKTHDR_LEN)
+#define BTHCICTLR_PKTHDR_LEN								(sizeof(BtHciCtlrPkt_t) - 1)
+#define BTHCICTLR_PKT_CFIFO_TOTAL_MEMSIZE(npk, pksize)		CFIFO_TOTAL_MEMSIZE(npk, pksize + BTHCICTLR_PKTHDR_LEN)
 
 #pragma pack(pop)
 
@@ -103,17 +103,17 @@ extern "C" {
  * @param pCfg
  * @return
  */
-bool BtCtlrInit(BtCtlrDev_t * const pDev, const BtCtlrCfg_t *pCfg);
+bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
 
 #ifdef __cplusplus
 }
 
-class BtCtlr : public DeviceIntrf {
+class BtHciCtlr : public DeviceIntrf {
 public:
-	operator BtCtlrDev_t *  const () { return &vDevData; }
+	operator BtHciCtlrDev_t *  const () { return &vDevData; }
 	operator DevIntrf_t * const () { return &vDevData.DevIntrf; }
 
-	virtual bool Init(const BtCtlrCfg_t &Cfg) { return BtCtlrInit(&vDevData, &Cfg); }
+	virtual bool Init(const BtHciCtlrCfg_t &Cfg) { return BtHciCtlrInit(&vDevData, &Cfg); }
 	// Set data baudrate
 	virtual uint32_t Rate(uint32_t DataRate) { return DeviceIntrfSetRate(&vDevData.DevIntrf, DataRate); }
 	// Get current data baudrate
@@ -141,9 +141,9 @@ public:
 
 protected:
 private:
-	BtCtlrDev_t vDevData;
+	BtHciCtlrDev_t vDevData;
 
-	BtCtlr(&BtCtlr);
+	BtHciCtlr(&BtHciCtlr);
 };
 
 #endif

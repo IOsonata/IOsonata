@@ -41,16 +41,16 @@ SOFTWARE.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hci_ctlr.h"
 
-#define BTCTLR_FIFO_MEM_SIZE			BTCTLR_PKT_CFIFO_TOTAL_MEMSIZE(4, BT_CTLR_MTU_MAX)
-alignas(4) static uint8_t s_BtCtlrRxFifoMem[BTCTLR_FIFO_MEM_SIZE];
+#define BTHCICTLR_FIFO_MEM_SIZE			BTHCICTLR_PKT_CFIFO_TOTAL_MEMSIZE(4, BT_HCI_CTLR_MTU_MAX)
+alignas(4) static uint8_t s_BtHciCtlrRxFifoMem[BTHCICTLR_FIFO_MEM_SIZE];
 
-static inline size_t BtCtlrSendData(BtCtlrDev_t * const pDev, void *pData, size_t Len) {
+static inline size_t BtHciCtlrSendData(BtHciCtlrDev_t * const pDev, void *pData, size_t Len) {
 	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
 }
 
-size_t BtCtlrReceive(BtCtlrDev_t * const pDev, uint16_t Hdl, void * const pData, size_t Len)
+size_t BtHciCtlrReceive(BtHciCtlrDev_t * const pDev, uint16_t Hdl, void * const pData, size_t Len)
 {
-	BtCtlrPkt_t *p = (BtCtlrPkt_t*)CFifoPut(pDev->hRxFifo);
+	BtHciCtlrPkt_t *p = (BtHciCtlrPkt_t*)CFifoPut(pDev->hRxFifo);
 	if (p)
 	{
 		p->Len = Len;
@@ -102,7 +102,7 @@ static void SdcCtlrStopRx(DevIntrf_t * const pDev)
 
 static bool SdcCtlrStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
-	BtCtlrDev_t *p = (BtCtlrDev_t *)pDev->pDevData;
+	BtHciCtlrDev_t *p = (BtHciCtlrDev_t *)pDev->pDevData;
 
 	p->ConnHdl = DevAddr >> 16;
 	p->ValHdl = DevAddr & 0xFFFF;
@@ -125,7 +125,7 @@ void SdcCtlrPowerOff(DevIntrf_t * const pDev)
 {
 }
 
-bool BtCtlrInit(BtCtlrDev_t * const pDev, const BtCtlrCfg_t *pCfg)
+bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr)
 	{
@@ -134,16 +134,16 @@ bool BtCtlrInit(BtCtlrDev_t * const pDev, const BtCtlrCfg_t *pCfg)
 
 	if (pCfg->PacketSize <= 0)
 	{
-		pDev->PacketSize = BT_CTLR_MTU_MAX + BTCTLR_PKTHDR_LEN;
+		pDev->PacketSize = BT_HCI_CTLR_MTU_MAX + BTHCICTLR_PKTHDR_LEN;
 	}
 	else
 	{
-		pDev->PacketSize = pCfg->PacketSize + BTCTLR_PKTHDR_LEN;
+		pDev->PacketSize = pCfg->PacketSize + BTHCICTLR_PKTHDR_LEN;
 	}
 
 	if (pCfg->pRxFifoMem == NULL)// || pCfg->pTxFifoMem == NULL)
 	{
-		pDev->hRxFifo = CFifoInit(s_BtCtlrRxFifoMem, BTCTLR_FIFO_MEM_SIZE, pDev->PacketSize, true);
+		pDev->hRxFifo = CFifoInit(s_BtHciCtlrRxFifoMem, BTHCICTLR_FIFO_MEM_SIZE, pDev->PacketSize, true);
 		//pDev->hTxFifo = CFifoInit(s_BtDevIntrfRxFifoMem, BTINTRF_CFIFO_SIZE, pIntrf->PacketSize, pCfg->bBlocking);
 	}
 	else
@@ -168,8 +168,8 @@ bool BtCtlrInit(BtCtlrDev_t * const pDev, const BtCtlrCfg_t *pCfg)
 	pDev->DevIntrf.PowerOff = SdcCtlrPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.EvtCB = pCfg->EvtHandler;
-	pDev->Receive = BtCtlrReceive;
-	pDev->Send = BtCtlrSendData;
+	pDev->Receive = BtHciCtlrReceive;
+	pDev->Send = BtHciCtlrSendData;
 
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
