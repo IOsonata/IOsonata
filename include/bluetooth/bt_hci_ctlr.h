@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	bt_ctlr.h
+@file	bt_hci_ctlr.h
 
 @brief	Generic implementation of Bluetooth controller device.
 
@@ -32,8 +32,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __BT_CTLR_H__
-#define __BT_CTLR_H__
+#ifndef __BT_HCI_CTLR_H__
+#define __BT_HCI_CTLR_H__
 
 #include "device_intrf.h"
 #include "cfifo.h"
@@ -162,4 +162,4 @@ private:
 
 /** @} end group Bluetooth */
 
-#endif // __BT_CTLR_H__
+#endif // __BT_HCI_CTLR_H__

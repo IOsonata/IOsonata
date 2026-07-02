@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	bt_ctlr_sdc.cpp
+@file	bt_hci_ctlr_sdc.cpp
 
 @brief	Generic implementation of Bluetooth controller device.
 
@@ -39,9 +39,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
-#include "bluetooth/bt_att.h"
-#include "bluetooth/bt_l2cap.h"
-#include "bluetooth/bt_ctlr.h"
+#include "bluetooth/bt_hci_ctlr.h"
 
 #define BTCTLR_FIFO_MEM_SIZE			BTCTLR_PKT_CFIFO_TOTAL_MEMSIZE(4, BT_CTLR_MTU_MAX)
 alignas(4) static uint8_t s_BtCtlrRxFifoMem[BTCTLR_FIFO_MEM_SIZE];
@@ -112,35 +110,11 @@ static bool SdcCtlrStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-static int SdcCtlrTxData(DevIntrf_t * const pDev, uint8_t *pData, int DataLen)
+static int SdcCtlrTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
-	BtCtlrDev_t *p = (BtCtlrDev_t *)pDev->pDevData;
-	uint8_t buf[BT_HCI_BUFFER_MAX_SIZE];
-	BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
-	BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
-
-//	g_Uart.printf("BtHciMotify : %d %d \r\n", ConnHdl, ValHdl);
-
-	acl->Hdr.ConnHdl = p->ConnHdl;
-	acl->Hdr.PBFlag = BT_HCI_PBFLAG_COMPLETE_L2CAP_PDU;
-	acl->Hdr.BCFlag = 0;
-
-	l2pdu->Hdr.Cid = BT_L2CAP_CID_ATT;
-
-	l2pdu->Att.OpCode = BT_ATT_OPCODE_ATT_HANDLE_VALUE_NTF;
-
-	uint8_t *param = l2pdu->Att.Param;
-
-	*(uint16_t*)param = p->ValHdl;
-	param += 2;
-	memcpy(param, pData, DataLen);
-	l2pdu->Hdr.Len = 2 + DataLen;
-	acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
-
-	return sdc_hci_data_put((uint8_t*)pData) == 0 ? acl->Hdr.Len + sizeof(acl->Hdr) : 0;
-
-//	g_Uart.printf("Len : %d, %d, %d\r\n", Len, l2pdu->Hdr.Len, acl->Hdr.Len);
-	//uint32_t n = pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	// Forward a formed HCI ACL packet to the SDC controller. The host assembles
+	// the packet above the HCI line; the controller only transmits it.
+	return sdc_hci_data_put((uint8_t*)pData) == 0 ? DataLen : 0;
 }
 
 static void SdcCtlrStopTx(DevIntrf_t * const pDev)
@@ -201,46 +175,3 @@ bool BtCtlrInit(BtCtlrDev_t * const pDev, const BtCtlrCfg_t *pCfg)
 
 	return true;
 }
-
-void BtCtlrProcessData(BtCtlrDev_t * const pDev, BtHciACLDataPacket_t * const pPkt)
-{
-	BtL2CapPdu_t *l2frame = (BtL2CapPdu_t*)pPkt->Data;
-
-	switch (l2frame->Hdr.Cid)
-	{
-		case BT_L2CAP_CID_ACL_U:
-			break;
-		case BT_L2CAP_CID_CONNECTIONLESS:
-			break;
-		case BT_L2CAP_CID_ATT:
-			BtCtlrProcessAttData(pDev, pPkt->Hdr.ConnHdl, l2frame);
-			break;
-		case BT_L2CAP_CID_SIGNAL:
-			break;
-		case BT_L2CAP_CID_SEC_MNGR:
-			BtCtlrProcessSmpData(pDev, l2frame);
-			break;
-	}
-}
-
-void BtCtlrHandler(BtCtlrDev_t * const pDev)
-{
-	uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
-	int32_t res = 0;
-	sdc_hci_msg_type_t mtype;
-	res = sdc_hci_get(buf, &mtype);
-	if (res == 0)
-	{
-		switch (mtype)
-		{
-			case SDC_HCI_MSG_TYPE_EVT:
-				// Event available
-				BtCtlrProcessEvent(pDev, (BtHciEvtPacket_t*)buf);
-				break;
-			case SDC_HCI_MSG_TYPE_DATA:
-				BtCtlrProcessData(pDev, (BtHciACLDataPacket_t*)buf);
-				break;
-		}
-	}
-}
-
