@@ -220,6 +220,16 @@ void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev)
 
 static BtHciCtlrDev_t *s_pBtHciCtlrSdc = nullptr;
 
+extern "C" size_t BtHciCtlrSdcSend(void *pData, size_t Len)
+{
+	if (s_pBtHciCtlrSdc == nullptr || s_pBtHciCtlrSdc->Send == nullptr)
+	{
+		return 0;
+	}
+
+	return s_pBtHciCtlrSdc->Send(s_pBtHciCtlrSdc, pData, Len);
+}
+
 alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
 
 static void BtStackSdcAssert(const char * file, const uint32_t line)

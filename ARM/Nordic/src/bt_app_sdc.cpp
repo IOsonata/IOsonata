@@ -84,8 +84,10 @@ SOFTWARE.
 #endif
 /*******************************/
 
+extern "C" size_t BtHciCtlrSdcSend(void *pData, size_t Len);
+
 static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
-	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
+	return (uint32_t)BtHciCtlrSdcSend(pData, Len);
 }
 void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt);
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);

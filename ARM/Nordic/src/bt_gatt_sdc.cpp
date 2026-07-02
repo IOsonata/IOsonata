@@ -44,6 +44,7 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 
 extern volatile int s_SdcAclTxPktAvail;
+extern "C" size_t BtHciCtlrSdcSend(void *pData, size_t Len);
 
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData, size_t Len)
 {
@@ -102,7 +103,8 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pData,
 		l2pdu->Hdr.Len = sizeof(BtAttHandleValueNtf_t) + Len;
 		acl->Hdr.Len = l2pdu->Hdr.Len + sizeof(BtL2CapHdr_t);
 
-		if (sdc_hci_data_put((uint8_t*)acl) == 0)
+		size_t aclLen = acl->Hdr.Len + sizeof(BtHciACLDataPacketHdr_t);
+		if (BtHciCtlrSdcSend(acl, aclLen) == aclLen)
 		{
 			//acl->Hdr.Len + sizeof(acl->Hdr);
 			s_SdcAclTxPktAvail--;
