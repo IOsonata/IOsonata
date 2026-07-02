@@ -53,12 +53,19 @@ SOFTWARE.
 
 typedef struct __Bt_Hci_Ctlr_Dev		BtHciCtlrDev_t;
 
+// HCI receive callback. The controller fires this for each HCI packet pulled
+// from the wrapped stack. bIsEvent selects the host entry: true for an HCI
+// event packet, false for an ACL data packet. The host layer wires this to
+// its process entry; the controller holds no host type.
+typedef void (*BtHciCtlrRxHandler_t)(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *pPacket);
+
 typedef struct __Bt_Hci_Ctlr_Config {
 	uint16_t MaxMtu;
 	size_t PacketSize;
 	uint8_t *pRxFifoMem;
 	int RxFifoMemSize;
 	DevIntrfEvtHandler_t EvtHandler;
+	BtHciCtlrRxHandler_t RxHandler;	//!< HCI receive handler, host wires it to its process entry
 //	uint32_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);
 //	uint32_t (*Receive)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);
 } BtHciCtlrCfg_t;
@@ -73,6 +80,7 @@ struct __Bt_Hci_Ctlr_Dev {
 	uint16_t ConnHdl;				//<! Connection handle
 	uint16_t ValHdl;				//<! Characteristic value handle
 	hCFifo_t hRxFifo;
+	BtHciCtlrRxHandler_t RxHandler;	//!< HCI receive handler set from config
 	size_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, size_t Len);
 	size_t (*Receive)(BtHciCtlrDev_t * const pDev, uint16_t Hdl, void * const pData, size_t Len);
 };// BtHciCtlrDev_t;
@@ -104,6 +112,16 @@ extern "C" {
  * @return
  */
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
+
+/**
+ * @brief	Drain all HCI packets currently queued by the controller.
+ *
+ * Fires RxHandler once per packet. Call from the controller receive context.
+ * For the SDC controller that is the low priority callback and the main loop.
+ *
+ * @param	pDev	Controller device.
+ */
+void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev);
 
 #ifdef __cplusplus
 }

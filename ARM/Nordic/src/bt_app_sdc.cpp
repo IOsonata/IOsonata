@@ -63,6 +63,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/services/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
+#include "bluetooth/bt_hci_ctlr.h"
 #include "bt_pds_sdc.h"				// BtSmpBondSdcInit (flash-backed bond persistence)
 #include "nrf_mpsl.h"
 #include "iopinctrl.h"
@@ -181,6 +182,27 @@ static BtHciDevice_t s_BtHciDev = {
 	//.DiscoverDevice = BtAppDiscoverDevice,
 };
 
+// SDC controller instance. The HCI pump and transport live in
+// bt_hci_ctlr_sdc; this app wires the receive handler to the host.
+static BtHciCtlrDev_t s_BtHciCtlr;
+
+// Route each HCI packet the controller drains to the host process entry.
+static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *pPacket)
+{
+	if (bIsEvent)
+	{
+		BtHciProcessEvent(&s_BtHciDev, (BtHciEvtPacket_t*)pPacket);
+	}
+	else
+	{
+		BtHciProcessData(&s_BtHciDev, (BtHciACLDataPacket_t*)pPacket);
+	}
+}
+
+static const BtHciCtlrCfg_t s_BtHciCtlrCfg = {
+	.RxHandler = BtAppSdcCtlrRx,
+};
+
 /**@brief Bluetooth SIG debug mode Private Key */
 __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
     0xbd,0x1a,0x3c,0xcd,0xa6,0xb8,0x99,0x58,0x99,0xb7,0x40,0xeb,0x7b,0x60,0xff,0x4a,
@@ -227,21 +249,7 @@ static void BtStackSdcCB()
 	// later events (encryption never completes, pairing hangs).
 	BtAppEvtNotify();
 
-	uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
-	sdc_hci_msg_type_t mtype;
-
-	while (sdc_hci_get(buf, (uint8_t*)&mtype) == 0)
-	{
-		switch (mtype)
-		{
-			case SDC_HCI_MSG_TYPE_EVT:
-				BtHciProcessEvent(&s_BtHciDev, (BtHciEvtPacket_t*)buf);
-				break;
-			case SDC_HCI_MSG_TYPE_DATA:
-				BtHciProcessData(&s_BtHciDev, (BtHciACLDataPacket_t*)buf);
-				break;
-		}
-	}
+	BtHciCtlrProcess(&s_BtHciCtlr);
 }
 
 static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
@@ -655,6 +663,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	BtHciCtlrInit(&s_BtHciCtlr, &s_BtHciCtlrCfg);
+
 	if (pCfg->AttDBMemSize > 0)
 	{
 		BtAttDBInit(pCfg->AttDBMemSize);
@@ -1054,26 +1064,7 @@ DEBUG_PRINTF("Loop\r\n");
 		BtAppEvtWait();
 		AppEvtHandlerExec();
 
-#if 1
-		uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
-		sdc_hci_msg_type_t mtype;
-		// Drain ALL queued HCI messages, not just one. The SDC can queue
-		// several at once (command completion + Encryption Change event during
-		// pairing); processing one per wake can strand the later ones and hang
-		// encryption/pairing completion.
-		while (sdc_hci_get(buf, (uint8_t*)&mtype) == 0)
-		{
-			switch (mtype)
-			{
-				case SDC_HCI_MSG_TYPE_EVT:
-					BtHciProcessEvent(&s_BtHciDev, (BtHciEvtPacket_t*)buf);
-					break;
-				case SDC_HCI_MSG_TYPE_DATA:
-					BtHciProcessData(&s_BtHciDev, (BtHciACLDataPacket_t*)buf);
-					break;
-			}
-		}
-#endif
+		BtHciCtlrProcess(&s_BtHciCtlr);
 	}
 }
 

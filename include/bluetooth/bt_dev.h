@@ -106,17 +106,6 @@ typedef struct __Bt_Device {
 	uint8_t			TxPendCount;				//!< Ring occupancy
 } BtDevice_t;
 
-// --- Legacy aliases (pre-Voci rename) ---
-//
-// The previous public type was BtDev_t with BLEPERIPH_* constants. The
-// aliases below let bt_dev_sdc.cpp keep compiling against the renamed type.
-// bt_attrsp.cpp was lifted off these in the discovery-state refactor;
-// ble_dev.cpp was deleted. Once bt_dev_sdc.cpp is updated the aliases can
-// be dropped.
-typedef BtDevice_t BtDev_t;
-#define BLEPERIPH_DEV_NAME_MAXLEN	BT_DEV_NAME_MAXLEN
-#define BLEPERIPH_DEV_SERVICE_MAXCNT	BT_DEV_SERVICE_MAXCNT
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -160,19 +149,6 @@ int BtDeviceFindService(BtDevice_t * const pDev, uint16_t Uuid);
  * @return	Index of the matching characteristic, or -1 if not found.
  */
 int BtDeviceFindCharacteristic(BtDevice_t * const pDev, int SrvcIdx, uint16_t Uuid);
-
-// Legacy name forwarders. The three central-mode example apps still call
-// these. Step 7 updates the apps to the BtDevice* names; remove these
-// inlines at that point.
-static inline int BleDevFindService(BtDev_t * const pDev, uint16_t Uuid)
-{
-	return BtDeviceFindService(pDev, Uuid);
-}
-
-static inline int BleDevFindCharacteristic(BtDev_t * const pDev, int SrvcIdx, uint16_t Uuid)
-{
-	return BtDeviceFindCharacteristic(pDev, SrvcIdx, Uuid);
-}
 
 #ifdef __cplusplus
 }

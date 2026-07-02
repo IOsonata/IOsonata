@@ -170,8 +170,28 @@ bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	pDev->DevIntrf.EvtCB = pCfg->EvtHandler;
 	pDev->Receive = BtHciCtlrReceive;
 	pDev->Send = BtHciCtlrSendData;
+	pDev->RxHandler = pCfg->RxHandler;
 
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	return true;
+}
+
+void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev)
+{
+	if (pDev == nullptr || pDev->RxHandler == nullptr)
+	{
+		return;
+	}
+
+	uint8_t buf[HCI_MSG_BUFFER_MAX_SIZE];
+	sdc_hci_msg_type_t mtype;
+
+	// Drain every queued message. The controller can queue several at once,
+	// for example a command completion followed by an Encryption Change event
+	// during pairing; stopping after one strands the later packets.
+	while (sdc_hci_get(buf, (uint8_t*)&mtype) == 0)
+	{
+		pDev->RxHandler(pDev, mtype == SDC_HCI_MSG_TYPE_EVT, buf);
+	}
 }

@@ -60,7 +60,6 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 
 
-//void BtHciProcessLeEvent(BtDev_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt)
 // EvtLen is the HCI event parameter length (bytes of pLeEvtPkt, i.e. Evt + Data),
 // used to bound walks over variable-length, controller-supplied report lists.
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt, int EvtLen)
