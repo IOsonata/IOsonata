@@ -66,6 +66,13 @@ typedef struct __Bt_Hci_Ctlr_Config {
 	int RxFifoMemSize;
 	DevIntrfEvtHandler_t EvtHandler;
 	BtHciCtlrRxHandler_t RxHandler;	//!< HCI receive handler, host wires it to its process entry
+	uint16_t Role;					//!< BT_GAP_ROLE_* bitmask the controller must support
+	uint8_t PeriLinkCount;			//!< Peripheral link count for resource sizing
+	uint8_t CentLinkCount;			//!< Central link count for resource sizing
+	uint8_t RxPktCount;				//!< Controller RX ACL packet count
+	uint8_t TxPktCount;				//!< Controller TX ACL packet count
+	uint16_t MaxDataLen;			//!< ACL data length for buffer sizing
+	void (*OnWake)(void);			//!< Fired from the controller receive context to wake a host waiter
 //	uint32_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);
 //	uint32_t (*Receive)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);
 } BtHciCtlrCfg_t;
@@ -81,6 +88,7 @@ struct __Bt_Hci_Ctlr_Dev {
 	uint16_t ValHdl;				//<! Characteristic value handle
 	hCFifo_t hRxFifo;
 	BtHciCtlrRxHandler_t RxHandler;	//!< HCI receive handler set from config
+	void (*OnWake)(void);			//!< Host waiter wake, set from config
 	size_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, size_t Len);
 	size_t (*Receive)(BtHciCtlrDev_t * const pDev, uint16_t Hdl, void * const pData, size_t Len);
 };// BtHciCtlrDev_t;
@@ -112,6 +120,21 @@ extern "C" {
  * @return
  */
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
+
+/**
+ * @brief	Bring up the controller: initialize the underlying stack, apply
+ *			role and resource configuration, and enable it.
+ *
+ * For the SDC controller this runs sdc_init, the role-gated sdc_support_*
+ * calls, sdc_cfg_set resource sizing, MpslInit, and sdc_enable, then wires
+ * the device through BtHciCtlrInit. Call once at startup before the pump.
+ *
+ * @param	pDev	Controller device.
+ * @param	pCfg	Controller configuration.
+ *
+ * @return	true on success.
+ */
+bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
 
 /**
  * @brief	Drain all HCI packets currently queued by the controller.

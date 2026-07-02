@@ -199,9 +199,6 @@ static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *
 	}
 }
 
-static const BtHciCtlrCfg_t s_BtHciCtlrCfg = {
-	.RxHandler = BtAppSdcCtlrRx,
-};
 
 /**@brief Bluetooth SIG debug mode Private Key */
 __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
@@ -210,7 +207,6 @@ __ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
 };
 
 
-alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
 
 const static TimerCfg_t s_BtAppSdcTimerCfg = {
     .DevNo = 1,
@@ -231,26 +227,8 @@ static void BtStackMpslAssert(const char * const file, const uint32_t line)
 }
 #endif
 
-static void BtStackSdcAssert(const char * file, const uint32_t line)
-{
-	DEBUG_PRINTF("SDC Fault: %s, %d\n", file, line);
-	while(1);
-}
 
 
-static void BtStackSdcCB()
-{
-	// SDC invokes this from the low-priority SWI when HCI messages are
-	// queued. Wake any RTOS waiter so deferred work runs promptly; the
-	// weak BtAppEvtNotify default is empty so bare-metal apps see no
-	// effect. Then drain EVERYTHING available - the SDC can queue several
-	// messages (e.g. a command completion followed by an Encryption Change
-	// event during pairing). Draining only one per callback can strand the
-	// later events (encryption never completes, pairing hangs).
-	BtAppEvtNotify();
-
-	BtHciCtlrProcess(&s_BtHciCtlr);
-}
 
 static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
@@ -437,240 +415,33 @@ uint16_t BleAppGetConnHandle()
 	return BtAppGetConnHandle();
 }
 
-static uint8_t BtStackRandPrioLowGet(uint8_t *pBuff, uint8_t Len)
-{
-	DEBUG_PRINTF("BtStackRandPrioLowGet\r\n");
-	for (int i = 0; i < Len; i++)
-	{
-		pBuff[i] = rand();
-	}
-
-	return Len;
-}
-
-static uint8_t BtStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
-{
-	return BtStackRandPrioLowGet(pBuff, Len);
-}
-
-static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
-{
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
-	NRF_CRACEN_Type *reg = NRF_CRACEN_S;
-
-	BtStackRandPrioLowGet(pBuff, Len);
-
-#else
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_RNG_Type *reg = NRF_RNG_NS;
-#else
-	NRF_RNG_Type *reg = NRF_RNG_S;
-#endif
-#else
-	NRF_RNG_Type *reg = NRF_RNG;
-#endif
-
-	reg->CONFIG = RNG_CONFIG_DERCEN_Enabled;
-
-	reg->EVENTS_VALRDY = 0;
-	reg->TASKS_START = 1;
-
-	for (int i = 0; i < Len; i++)
-	{
-		while (reg->EVENTS_VALRDY == 0);
-
-		pBuff[i] = reg->VALUE;
-		reg->EVENTS_VALRDY = 0;		// clear so the next VALUE is fresh entropy
-	}
-
-	reg->TASKS_STOP = 1;
-
-	reg->CONFIG = RNG_CONFIG_DERCEN_Disabled;
-#endif
-}
 
 
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {
-	// Initialize Nordic Softdevice controller
+	BtAttSetMtu(pCfg->MaxMtu);
 
-	DEBUG_PRINTF("BtAppStackInit\r\n");
+	BtHciCtlrCfg_t ctlrcfg = { };
+	ctlrcfg.RxHandler = BtAppSdcCtlrRx;
+	ctlrcfg.OnWake = BtAppEvtNotify;
+	ctlrcfg.Role = pCfg->Role;
+	ctlrcfg.PeriLinkCount = pCfg->PeriLinkCount;
+	ctlrcfg.CentLinkCount = pCfg->CentLinkCount;
+	ctlrcfg.RxPktCount = BT_SDC_RX_MAX_PACKET_COUNT;
+	ctlrcfg.TxPktCount = BT_SDC_TX_MAX_PACKET_COUNT;
+	ctlrcfg.MaxDataLen = BTAPP_DEFAULT_MAX_DATA_LEN;
 
-	int32_t res = sdc_init(BtStackSdcAssert);
-
-	//sdc_hci_cmd_cb_reset();
-
-	sdc_rand_source_t rand_functions = {
-		//.rand_prio_low_get = BtStackRandPrioLowGet,
-		//.rand_prio_high_get = BtStackRandPrioHighGet,
-		.rand_poll = BtStackRandPrioLowGetBlocking
-	};
-
-	res = sdc_rand_source_register(&rand_functions);
-
-	sdc_support_le_2m_phy();
-	sdc_support_le_coded_phy();
-	//sdc_support_le_power_control();
-
-	if (pCfg->Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
-	{
-		// Config for peripheral role
-		sdc_support_adv();
-		sdc_support_ext_adv();
-		sdc_support_le_periodic_adv();
-		sdc_support_le_periodic_sync();
-		sdc_support_peripheral();
-		sdc_support_dle_peripheral();
-		sdc_support_phy_update_peripheral();
-		sdc_support_le_power_control_peripheral();
-		sdc_support_le_conn_cte_rsp_peripheral();
-
-		if (pCfg->CoexMode != BTAPP_COEXMODE_NONE)
-		{
-//			sdc_coex_adv_mode_configure(true);
-		}
-	}
-	if (pCfg->Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
-	{
-		// Config for central role
-		sdc_support_scan();
-		sdc_support_ext_scan();
-		sdc_support_central();
-		sdc_support_ext_central();
-		sdc_support_dle_central();
-		sdc_support_phy_update_central();
-		sdc_support_le_power_control_central();
-		sdc_support_le_conn_cte_rsp_central();
-	}
-
-    uint32_t ram = 0;
-	sdc_cfg_t cfg;
-
-	DEBUG_PRINTF("BtAttSetMtu\r\n");
-
-	uint16_t mtu = 	BtAttSetMtu(pCfg->MaxMtu);
-
-	//int l = pCfg->MaxMtu == 0 ? BTAPP_DEFAULT_MAX_DATA_LEN : mtu + 4;
-
-	// Reserve max always. It seems sdc lib is not capable of changing it in runtime
-	cfg.buffer_cfg.rx_packet_size = BTAPP_DEFAULT_MAX_DATA_LEN;
-	cfg.buffer_cfg.tx_packet_size = BTAPP_DEFAULT_MAX_DATA_LEN;
-	cfg.buffer_cfg.rx_packet_count = BT_SDC_RX_MAX_PACKET_COUNT;
-	cfg.buffer_cfg.tx_packet_count = BT_SDC_TX_MAX_PACKET_COUNT;
-
-	DEBUG_PRINTF("sdc_cfg_set\r\n");
-
-	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-				       	  SDC_CFG_TYPE_BUFFER_CFG,
-						  &cfg);
-	if (ram < 0)
+	if (BtHciCtlrEnable(&s_BtHciCtlr, &ctlrcfg) == false)
 	{
 		return false;
 	}
-
-
-	sdc_hci_cmd_vs_event_length_set_t evlen = {
-		.event_length_us = 7500,
-	};
-	sdc_hci_cmd_vs_event_length_set(&evlen);
-
-	/*
-	cfg.event_length.event_length_us = 7500;
-	ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-				       	  SDC_CFG_TYPE_EVENT_LENGTH,
-						  &cfg);
-	if (ram < 0)
-	{
-		return false;
-	}
-*/
-	if (pCfg->Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
-	{
-		// Config for peripheral role
-		cfg.peripheral_count.count = pCfg->PeriLinkCount;
-
-		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-					       	  SDC_CFG_TYPE_PERIPHERAL_COUNT,
-							  &cfg);
-		if (ram < 0)
-		{
-			return false;
-		}
-
-		cfg.adv_count.count = 1;
-
-		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-							  SDC_CFG_TYPE_ADV_COUNT,
-							  &cfg);
-		if (ram < 0)
-		{
-			return false;
-		}
-
-		cfg.adv_buffer_cfg.max_adv_data = 255;
-
-		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-							  SDC_CFG_TYPE_ADV_BUFFER_CFG,
-							  &cfg);
-		if (ram < 0)
-		{
-			return false;
-		}
-	}
-
-	if (pCfg->Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
-	{
-		// Config for central role
-		cfg.central_count.count = pCfg->CentLinkCount;
-		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-					       	  SDC_CFG_TYPE_CENTRAL_COUNT,
-							  &cfg);
-		if (ram < 0)
-		{
-			return false;
-		}
-
-
-		cfg.scan_buffer_cfg.count = 10;
-
-		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
-						  SDC_CFG_TYPE_SCAN_BUFFER_CFG,
-						  &cfg);
-		if (ram < 0)
-		{
-			return false;
-		}
-	}
-
-	if (sizeof(s_BtStackSdcMemPool) < ram)
-	{
-		return false;
-	}
-
-	if (MpslInit() == false)
-	{
-		return false;
-	}
-
-	// Enable BLE stack.
-
-	DEBUG_PRINTF("sdc_enable\r\n");
-
-	res = sdc_enable(BtStackSdcCB, s_BtStackSdcMemPool);
-	if (res != 0)
-	{
-		return false;
-	}
-
-	BtHciCtlrInit(&s_BtHciCtlr, &s_BtHciCtlrCfg);
 
 	if (pCfg->AttDBMemSize > 0)
 	{
 		BtAttDBInit(pCfg->AttDBMemSize);
 	}
 
-    return true;
+	return true;
 }
 
 /**
