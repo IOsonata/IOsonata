@@ -119,6 +119,11 @@ void BtAttDBInit(size_t MemSize)
 	s_BtAttDBMemSize = MemSize;
 	memset(s_BtAttDBMem, 0, s_BtAttDBMemSize);
 	s_BtAttDBMemEnd = (uint32_t)s_BtAttDBMem + s_BtAttDBMemSize;
+
+	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
+	s_LastHdl = 0;
+	s_pBtAttDbEntryEnd->pNext = nullptr;
+	s_pBtAttDbEntryEnd->pPrev = nullptr;
 }
 
 BtAttDBEntry_t * const BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
@@ -346,10 +351,23 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 		{
 			DEBUG_PRINTF("BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION (0x2901)\r\n");
 			BtDescCharUserDesc_t *p = (BtDescCharUserDesc_t*) pEntry->Data;
-			strncpy((char*) pBuff, p->pChar->pDesc, Len);
-			len = strlen((char*) pBuff);
-			//DEBUG_PRINTF("%d : %s\r\n", len, pBuff);
-			len = min(len, Len);
+			const char *desc = (p != nullptr && p->pChar != nullptr) ? p->pChar->pDesc : nullptr;
+
+			if (desc != nullptr && Len > 0)
+			{
+				size_t dlen = strlen(desc);
+
+				if (Offset < dlen)
+				{
+					size_t l = dlen - Offset;
+					if (l > Len)
+					{
+						l = Len;
+					}
+					memcpy(pBuff, desc + Offset, l);
+					len = l;
+				}
+			}
 		}
 			break;
 		case BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION:
@@ -772,14 +790,33 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 				{
 					BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
 
-					p->pChar->ValueLen = min(Len, p->pChar->MaxDataLen);// - sizeof(BtGattCharValue_t));
-					memcpy(p->pChar->pValue, pData, p->pChar->ValueLen);
-					len = p->pChar->ValueLen;
-
-					if (p->pChar->WrCB)
+					if (p != nullptr && p->pChar != nullptr &&
+						(pData != nullptr || Len == 0) &&
+						Offset <= p->pChar->MaxDataLen)
 					{
-	//					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-						p->pChar->WrCB(p->pChar, pData, 0, Len);
+						size_t l = Len;
+						size_t avail = (size_t)p->pChar->MaxDataLen - Offset;
+
+						if (l > avail)
+						{
+							l = avail;
+						}
+
+						if (l > 0 && p->pChar->pValue != nullptr)
+						{
+							memcpy((uint8_t*)p->pChar->pValue + Offset, pData, l);
+						}
+
+						if ((uint32_t)Offset + l > p->pChar->ValueLen)
+						{
+							p->pChar->ValueLen = (uint16_t)(Offset + l);
+						}
+						len = l;
+
+						if (p->pChar->WrCB)
+						{
+							p->pChar->WrCB(p->pChar, pData, (int)Offset, (int)l);
+						}
 					}
 				}
 
@@ -789,14 +826,33 @@ size_t BtAttWriteValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pData, 
 	{
 		BtAttCharValue_t *p = (BtAttCharValue_t*)pEntry->Data;
 
-		p->pChar->ValueLen = min(Len,  p->pChar->MaxDataLen);//- sizeof(BtGattCharValue_t));
-		memcpy(p->pChar->pValue, pData, p->pChar->ValueLen);
-		len = p->pChar->ValueLen;
-
-		if (p->pChar->WrCB)
+		if (p != nullptr && p->pChar != nullptr &&
+			(pData != nullptr || Len == 0) &&
+			Offset <= p->pChar->MaxDataLen)
 		{
-//					len = p->CharVal.WrHandler(p->Hdl, pBuff, Len, p->CharVal.pCtx);
-			p->pChar->WrCB(p->pChar, pData, 0, Len);
+			size_t l = Len;
+			size_t avail = (size_t)p->pChar->MaxDataLen - Offset;
+
+			if (l > avail)
+			{
+				l = avail;
+			}
+
+			if (l > 0 && p->pChar->pValue != nullptr)
+			{
+				memcpy((uint8_t*)p->pChar->pValue + Offset, pData, l);
+			}
+
+			if ((uint32_t)Offset + l > p->pChar->ValueLen)
+			{
+				p->pChar->ValueLen = (uint16_t)(Offset + l);
+			}
+			len = l;
+
+			if (p->pChar->WrCB)
+			{
+				p->pChar->WrCB(p->pChar, pData, (int)Offset, (int)l);
+			}
 		}
 	}
 
@@ -985,6 +1041,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 			case BT_ATT_OPCODE_ATT_READ_REQ:				minLen = 3; break;	// op + hdl(2)
 			case BT_ATT_OPCODE_ATT_READ_BLOB_REQ:			minLen = 5; break;	// op + hdl(2) + offset(2)
 			case BT_ATT_OPCODE_ATT_READ_MULTIPLE_REQ:		minLen = 5; break;	// op + at least 2 handles
+			case BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ: minLen = 3; break;	// op + at least 1 handle
 			case BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ:	minLen = 7; break;	// op + start(2) + end(2) + uuid16(2)
 			case BT_ATT_OPCODE_ATT_WRITE_REQ:				minLen = 3; break;	// op + hdl(2) + value(>=0)
 			case BT_ATT_OPCODE_ATT_CMD:						minLen = 3; break;	// op + hdl(2) + value(>=0)
@@ -1674,8 +1731,17 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 		case BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ:
 			{
 				BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+				uint8_t flag = pReqAtt->ExecuteWriteReq.Flag;
 
-				if (pReqAtt->ExecuteWriteReq.Flag != 0)
+				if (flag != 0x00 && flag != 0x01)
+				{
+					retval = BtAttError(pRspAtt, 0,
+										BT_ATT_OPCODE_ATT_EXECUTE_WRITE_REQ,
+										BT_ATT_ERROR_INVALID_PDU);
+					break;
+				}
+
+				if (flag == 0x01)
 				{
 					// Execute: apply the queued writes, firing each char WrCB.
 					// A queued write that fails validation aborts the execute
@@ -1704,13 +1770,25 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				uint16_t *hdl = pReqAtt->ReadMultipleVarReq.Hdl;
 				uint8_t *p = pRspAtt->ReadMultipleVarRsp.Data;
 				int l = 0;
+				int hdlBytes = ReqLen - 1;	// exclude opcode
 
-				while (ReqLen > 0 && (rspMtu - l) >= BT_ATT_MTU_MIN)
+				if (hdlBytes < 2 || (hdlBytes & 1))
+				{
+					retval = BtAttError(pRspAtt, 0,
+										BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ,
+										BT_ATT_ERROR_INVALID_PDU);
+					break;
+				}
+
+				while (hdlBytes > 0 && l + 3 <= rspMtu)
 				{
 					BtAttDBEntry_t *entry = BtAttDBFindHandle(*hdl);
 
 					if (entry == nullptr)
 					{
+						retval = BtAttError(pRspAtt, *hdl,
+											BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ,
+											BT_ATT_ERROR_INVALID_HANDLE);
 						break;
 					}
 					uint8_t err = BtAttReadPermError(ConnHdl, entry);
@@ -1722,21 +1800,30 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 					}
 
 					pRspAtt->OpCode = BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP;
-					uint16_t n = BtAttReadValueForConn(ConnHdl, entry, 0, p + 2, rspMtu - l - 2);
+					uint16_t space = (uint16_t)(rspMtu - 1 - l - 2);	// MTU - opcode - existing payload - length field
+					uint16_t n = BtAttReadValueForConn(ConnHdl, entry, 0, p + 2, space);
 					p[0] = n & 0xFF;
 					p[1] = n >> 8;
 					p += n + 2;
 					l += n + 2;
 					hdl++;
-					ReqLen -= 2;
+					hdlBytes -= 2;
 				}
-				if (l > 0)
+
+				if (retval != 0 && pRspAtt->OpCode == BT_ATT_OPCODE_ATT_ERROR_RSP)
+				{
+					break;
+				}
+				else if (l > 0)
 				{
 					retval = l + 1;
 				}
 				else
 				{
-					retval = BtAttError(pRspAtt, pReqAtt->ReadMultipleVarReq.Hdl[0], BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ, BT_ATT_ERROR_ATT_NOT_FOUND);
+					retval = BtAttError(pRspAtt,
+										pReqAtt->ReadMultipleVarReq.Hdl[0],
+										BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_REQ,
+										BT_ATT_ERROR_ATT_NOT_FOUND);
 				}
 			}
 			break;

@@ -396,10 +396,19 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 			{
 				return 0;					// no controller buffer available
 			}
-			pDev->AclCredit--;
 		}
 
-		return pDev->SendData((uint8_t*)pAcl, (uint32_t)l2Len + sizeof(pAcl->Hdr));
+		uint32_t txLen = (uint32_t)l2Len + sizeof(pAcl->Hdr);
+		uint32_t sent = pDev->SendData((uint8_t*)pAcl, txLen);
+		if (sent != txLen)
+		{
+			return 0;
+		}
+		if (pDev->AclCreditMax > 0)
+		{
+			pDev->AclCredit--;
+		}
+		return sent;
 	}
 
 	// Fragmentation path: split the L2CAP PDU across ACL packets of at most
@@ -435,9 +444,22 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 
 		if (pDev->AclCreditMax > 0)
 		{
+			if (pDev->AclCredit <= 0)
+			{
+				return 0;
+			}
+		}
+
+		uint32_t txLen = (uint32_t)chunk + sizeof(frag->Hdr);
+		uint32_t sent = pDev->SendData((uint8_t*)frag, txLen);
+		if (sent != txLen)
+		{
+			return 0;
+		}
+		if (pDev->AclCreditMax > 0)
+		{
 			pDev->AclCredit--;
 		}
-		pDev->SendData((uint8_t*)frag, (uint32_t)chunk + sizeof(frag->Hdr));
 
 		off = (uint16_t)(off + chunk);
 	}
