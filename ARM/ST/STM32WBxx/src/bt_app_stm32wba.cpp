@@ -305,7 +305,7 @@ static void WbaGattCccdReArm(uint16_t ConnHdl)
 // ACI_GAP_PASS_KEY_REQ (Passkey Entry, display or input depending on IO
 // capability). These are bridged to the same BtSmp* interaction API the
 // generic SMP host exposes, so an application sees one set of callbacks across
-// ports. ST carries the passkey as a plain integer, so no ASCII conversion is
+// ports. ST passes the passkey as a plain integer, so no ASCII conversion is
 // needed. The reply functions route the user answer back through
 // aci_gap_numeric_comparison_value_confirm_yesno and aci_gap_pass_key_resp.
 // The generic weak defaults live in bt_smp.cpp, which is not linked on this
@@ -349,6 +349,50 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 		return;
 	}
 	(void)aci_gap_pass_key_resp(ConnHdl, Passkey);
+}
+
+// Set the local SMP IO capability and authentication requirement at runtime,
+// the same entry point the SDC and BM ports expose. Maps the generic
+// BT_SMP_IOCAPS_* / BT_SMP_AUTHREQ_* values to ST's IO_CAP_* and the split
+// arguments of aci_gap_set_authentication_requirement, then applies them so a
+// call after BtAppInit reconfigures the next pairing. This port pairs with LE
+// Secure Connections only, so the SC bit stays set regardless of AuthReq.
+void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
+{
+	uint8_t io;
+	switch (IoCaps)
+	{
+		case BT_SMP_IOCAPS_DISPLAY_ONLY:
+			io = IO_CAP_DISPLAY_ONLY;
+			break;
+		case BT_SMP_IOCAPS_DISPLAY_YESNO:
+			io = IO_CAP_DISPLAY_YES_NO;
+			break;
+		case BT_SMP_IOCAPS_KEYBOARD_ONLY:
+			io = IO_CAP_KEYBOARD_ONLY;
+			break;
+		case BT_SMP_IOCAPS_KEYBOARD_DISPLAY:
+			io = IO_CAP_KEYBOARD_DISPLAY;
+			break;
+		case BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT:
+		default:
+			io = IO_CAP_NO_INPUT_NO_OUTPUT;
+			break;
+	}
+	s_WbaData.IoCapability    = io;
+	s_WbaData.AuthRequirement = AuthReq;
+
+	uint8_t bonding = (AuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) != 0 ? 1 : 0;
+	uint8_t mitm    = (AuthReq & BT_SMP_AUTHREQ_MITM) != 0 ? 1 : 0;
+	aci_gap_set_authentication_requirement(bonding, mitm,
+	                                       1,	// LE Secure Connections
+	                                       0,	// keypress not supported
+	                                       SEC_PARAM_MIN_KEY_SIZE,
+	                                       SEC_PARAM_MAX_KEY_SIZE,
+	                                       0,	// use fixed pin = no
+	                                       0,	// fixed pin value
+	                                       0);	// identity address type
+	aci_gap_set_io_capability(io);
 }
 
 // Weak defaults. With no application override the only safe action is to reject,
@@ -937,7 +981,7 @@ void BtAppEnterDfu(void)
 }
 
 // Extract a 16-bit UUID (or the 16-bit alias of a 128-bit UUID) from an event
-// field that is Len bytes long, little-endian on air. A 128-bit UUID carries
+// field that is Len bytes long, little-endian on air. A 128-bit UUID holds
 // its 16-bit alias at byte offset 12..13 (standard base layout, also used by
 // the BlueIO base), matching the 16-bit storage the GATT DB uses.
 static uint16_t WbaUuid16(const uint8_t *pUuid, uint8_t Len)
