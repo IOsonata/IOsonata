@@ -1238,7 +1238,7 @@ static void WbaDiscProcComplete(void)
 	}
 }
 
-bool BtAppDiscoverDevice(BtDev_t * const pDev)
+bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 {
 	if (pDev == nullptr)
 	{

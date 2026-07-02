@@ -223,14 +223,14 @@ const ble_uuid_t s_UartBleSrvAdvUuid = {
 	.type = BLE_UUID_TYPE_BLE,
 };
 
-BLEPERIPH_DEV g_ConnectedDev = {
+BtDevice_t g_ConnectedDev = {
 	.ConnHdl = BLE_CONN_HANDLE_INVALID,
 };
 
 uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
 uint16_t g_BleRxCharHdl = BLE_CONN_HANDLE_INVALID;
 
-void BleDevDiscovered(BLEPERIPH_DEV *pDev)
+void BleDevDiscovered(BtDevice_t *pDev)
 {
 	g_Uart.printf("Number service discovered: %d\r\n", g_ConnectedDev.NbSrvc);
     for (int i = 0; i < pDev->NbSrvc; i++)
@@ -246,13 +246,13 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
 
     // Find the desired UART-BLE Service
     g_Uart.printf("Looking for UART Service with UUID = 0x%x ...", BLUEIO_UUID_UART_SERVICE);
-    int idx = BleDevFindService(pDev, BLUEIO_UUID_UART_SERVICE);
+    int idx = BtDeviceFindService(pDev, BLUEIO_UUID_UART_SERVICE);
 
     if (idx != -1)
     {
     	g_Uart.printf("Found!\r\n");
     	// Rx characteristic
-    	int dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
+    	int dcharidx = BtDeviceFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
     	g_Uart.printf("Find UART_RX_CHAR idx = 0x%x (%d)...", idx, idx);
     	if (dcharidx >= 0 && pDev->Services[idx].characteristics[dcharidx].characteristic.char_props.notify)
     	{
@@ -268,7 +268,7 @@ void BleDevDiscovered(BLEPERIPH_DEV *pDev)
 		}
 
     	// Tx characteristic
-    	dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
+    	dcharidx = BtDeviceFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
     	g_Uart.printf("Find UART_TX_CHAR idx = 0x%x (%d) ...", idx, idx);
     	if (dcharidx >= 0)
     	{

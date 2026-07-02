@@ -170,39 +170,6 @@ typedef struct __Bt_App_Cfg {
 	size_t AttDBMemSize;			//!< User overload mem size for stack usage, set to 0 if not overloading default.
 } BtAppCfg_t;
 
-#if 0
-typedef struct __Bt_Dev_Data {
-	uint8_t Role;							//!< Device role
-	char *pDevName;
-	uint16_t VendorId;				//!< PnP Bluetooth/USB vendor id. iBeacon mode, this is Major value
-	uint16_t ProductId;				//!< PnP product ID. iBeacon mode, this is Minor value
-	uint16_t ProductVer;			//!< PnP product version
-	uint16_t Appearance;			//!< 16 bits Bluetooth appearance value
-	bool bExtAdv;
-	uint16_t ConnHdl;
-	uint8_t AdvHdl;
-	//int NbSrvc;
-	//BtGattSrvc_t Srvc[BTDEV_SERVICE_MAXCNT];
-	BtGattSrvc_t *pSrvc;
-	uint32_t RxDataLen;
-	uint32_t TxDataLen;
-	BTDEV_COEXMODE CoexMode;
-	//int8_t ConnLedPort;				//!< Connection LED port number
-	//int8_t ConnLedPin;				//!< Connection LED pin number
-	//uint8_t ConnLedActLevel;        //!< Connection LED ON logic level (0: Logic low, 1: Logic high)
-
-	void (*EvtHandler)(uint32_t Evt, void * const pCtx);
-	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
-	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
-	uint32_t (*SendData)(void * const pData, uint32_t Len);
-	void (*SendCompleted)(uint16_t ConnHdl, uint16_t NbPktSent);
-	BTDEV_STATE State;
-	uint16_t MaxMtu;
-	bool bSecure;
-	bool bScan;
-} BtDev_t;
-
-#endif
 
 #pragma pack(pop)
 
@@ -399,7 +366,7 @@ bool BtInitialized(void);
 /// return true - Ble connected
 bool BtConnected(void);
 
-bool BtAppDiscoverDevice(BtDev_t * const pDev);//uint16_t ConnHdl);
+bool BtAppDiscoverDevice(BtDevice_t * const pDev);//uint16_t ConnHdl);
 
 #ifdef __cplusplus
 }

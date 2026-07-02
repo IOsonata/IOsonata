@@ -246,7 +246,7 @@ static BtGapConnParams_t s_ConnParams = {
 	.Timeout = 4000,
 };
 
-BtDev_t g_ConnectedDev = {
+BtDevice_t g_ConnectedDev = {
 	.Conn = { .Hdl = BT_CONN_HDL_INVALID },
 };
 
@@ -259,7 +259,7 @@ uint16_t g_BleRxCharHdl = BT_ATT_HANDLE_INVALID;   // BlueIO UART RX characteris
 // BLE_SC_METHOD.
 static void StartPeerDiscovery(uint16_t ConnHdl)
 {
-	BtDev_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer)
 	{
 		BtAppDiscoverDevice(pPeer);

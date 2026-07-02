@@ -591,14 +591,14 @@ static const BtGapScanCfg_t s_bleScanInitCfg = {
 	.ServUid = BLUEIO_UUID_UART_SERVICE,
 };
 
-BtDev_t g_ConnectedDev = {
+BtDevice_t g_ConnectedDev = {
 	.Conn = { .Hdl = BT_CONN_HDL_INVALID },
 };
 
 uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
 uint16_t g_BleRxCharHdl = BLE_CONN_HANDLE_INVALID;
 
-void BleDevDiscovered(BtDev_t *pDev)
+void BleDevDiscovered(BtDevice_t *pDev)
 {
 	char s[256];
 	int l;
@@ -625,13 +625,13 @@ void BleDevDiscovered(BtDev_t *pDev)
     // Find the desired UART-BLE Service
     l = snprintf(s, sizeof(s), "Looking for UART Service with UUID = 0x%x ...", BLUEIO_UUID_UART_SERVICE);
     PRINT_DEBUG(s,l)
-    int idx = BleDevFindService(pDev, BLUEIO_UUID_UART_SERVICE);
+    int idx = BtDeviceFindService(pDev, BLUEIO_UUID_UART_SERVICE);
     if (idx != -1)
     {
     	l = snprintf(s, sizeof(s), "Found!\r\n");
     	PRINT_DEBUG(s,l);
     	// Rx characteristic
-    	int dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
+    	int dcharidx = BtDeviceFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
     	l = snprintf(s, sizeof(s), "Find UART_RX_CHAR idx = 0x%x (%d)...", idx, idx);
     	PRINT_DEBUG(s,l);
     	if (dcharidx >= 0 && pDev->Services[idx].characteristics[dcharidx].characteristic.char_props.notify)
@@ -649,7 +649,7 @@ void BleDevDiscovered(BtDev_t *pDev)
 		}
 
     	// Tx characteristic
-    	dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
+    	dcharidx = BtDeviceFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
     	l = snprintf(s, sizeof(s), "Find UART_TX_CHAR idx = 0x%x (%d) ...", idx, idx);
     	PRINT_DEBUG(s,l);
     	if (dcharidx >= 0)

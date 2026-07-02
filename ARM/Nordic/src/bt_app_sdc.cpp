@@ -310,13 +310,13 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 	BtAppEvtConnected(ConnHdl);
 }
 
-bool BtAppDiscoverDevice(BtDev_t * const pDev)
+bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 {
 	DEBUG_PRINTF("Start discovering device\r\n");
 
 	// Reset counter and Service list
 	pDev->NbSrvc = 0;
-	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BLEPERIPH_DEV_SERVICE_MAXCNT);
+	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
 
 	// Start the discover process by discovering the Primary services
 	BtUuid_t Uuid = {

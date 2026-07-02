@@ -208,7 +208,7 @@ static BtGapConnParams_t s_ConnParams = {
 	.Timeout = 4000,
 };
 
-BtDev_t g_ConnectedDev = {
+BtDevice_t g_ConnectedDev = {
 	.Conn = { .Hdl = BT_CONN_HDL_INVALID },
 };
 
@@ -253,7 +253,7 @@ const ble_uuid_t s_UartBleSrvAdvUuid = {
 uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
 uint16_t g_BleRxCharHdl = BLE_CONN_HANDLE_INVALID;
 
-void BleDevDiscovered(BtDev_t *pDev)
+void BleDevDiscovered(BtDevice_t *pDev)
 {
 	int flag = 3;
 #if 0
@@ -274,7 +274,7 @@ void BleDevDiscovered(BtDev_t *pDev)
 #endif
 #endif
 
-    int idx = BleDevFindService(pDev, BLUEIO_UUID_UART_SERVICE);
+    int idx = BtDeviceFindService(pDev, BLUEIO_UUID_UART_SERVICE);
     if (idx != -1)
     {
     	flag--;
@@ -282,7 +282,7 @@ void BleDevDiscovered(BtDev_t *pDev)
     	g_Uart.printf("Device found and paired with!\r\n");
 #endif
     	// Rx characteristic
-    	int dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
+    	int dcharidx = BtDeviceFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
 #ifdef DEBUG_PRINT
     	g_Uart.printf("Find UART_RX_CHAR idx = 0x%x (%d)...", dcharidx, dcharidx);
 #endif
@@ -306,7 +306,7 @@ void BleDevDiscovered(BtDev_t *pDev)
 		}
 
     	// Tx characteristic
-    	dcharidx = BleDevFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
+    	dcharidx = BtDeviceFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
 #ifdef DEBUG_PRINT
     	g_Uart.printf("Find UART_TX_CHAR idx = 0x%x (%d) ...", dcharidx, dcharidx);
 #endif

@@ -178,7 +178,7 @@ NRF_BLE_GATT_DEF(s_Gatt);
 // g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
 // BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
 
-//BtDev_t g_BtDevnRF5;
+//BtDevice_t g_BtDevnRF5;
 
 //static volatile bool s_BleStarted = false;
 
@@ -215,7 +215,7 @@ NRF_SDH_BLE_OBSERVER(s_DbDiscovery_obs,
 // uses BtUuid16_t / BtGattcHdlRange_t. Keeping it here as a reference
 // until step 7's replacement lands; remove this block at that point.
 #if 0
-static BtDev_t *s_pBlePeriphData = NULL;
+static BtDevice_t *s_pBlePeriphData = NULL;
 
 void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context);
 
@@ -234,7 +234,7 @@ static ble_gattc_handle_range_t s_CurRange;
 
 void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 {
-	BtDev_t *periph = *(BtDev_t**)p_context;
+	BtDevice_t *periph = *(BtDevice_t**)p_context;
 	ble_gattc_evt_t    const * p_ble_gattc_evt = &(p_ble_evt->evt.gattc_evt);
 
     switch (p_ble_evt->header.evt_id)
@@ -389,7 +389,7 @@ void BlePeriphDiscEvtHandler(ble_evt_t const *p_ble_evt, void *p_context)
 
 }
 
-bool BtAppDiscoverDevice(BtDev_t * const pDev)
+bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 {
 	s_pBlePeriphData = pDev;
 	s_CurSrvcIdx = 0;
@@ -424,7 +424,7 @@ static uint8_t     s_DiscCharIdx = 0;       // characteristic cursor (desc phase
 static void BtAppDiscStartChar(BtDevice_t *pDev);
 static void BtAppDiscStartDesc(BtDevice_t *pDev);
 
-bool BtAppDiscoverDevice(BtDev_t * const pDev)
+bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 {
 	if (pDev == NULL)
 	{

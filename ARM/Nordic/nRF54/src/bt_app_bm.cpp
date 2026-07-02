@@ -1343,7 +1343,7 @@ static uint8_t     s_DiscCharIdx = 0;       // characteristic cursor (desc phase
 static void BtAppDiscStartChar(BtDevice_t *pDev);
 static void BtAppDiscStartDesc(BtDevice_t *pDev);
 
-bool BtAppDiscoverDevice(BtDev_t * const pDev)
+bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 {
 	if (pDev == NULL)
 	{

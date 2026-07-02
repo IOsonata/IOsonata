@@ -42,7 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdbool.h>
 
 // "device.h" is included for compatibility - the old bt_dev.h pulled it in,
-// and several ports (notably the BM nRF54 backend) rely on the transitive
+// and several ports (notably the BM nRF54 port) rely on the transitive
 // inclusion of coredev/timer.h, coredev/iopincfg.h, and device_intrf.h
 // that comes from this header. Removing it would force every dependent
 // port to add explicit includes.
@@ -124,7 +124,7 @@ extern "C" {
 /**
  * @brief	Weak callback invoked when GATT discovery on a peer completes.
  *
- * Backend's discovery flow populates pDev->Services with the discovered
+ * The discovery flow populates pDev->Services with the discovered
  * GATT DB and then calls this. Applications override to handle the
  * completion (typically by calling BtDeviceFindService and
  * BtDeviceFindCharacteristic to navigate the result).
