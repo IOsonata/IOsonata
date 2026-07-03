@@ -66,7 +66,7 @@ static void serial_tx(void const * p_context, char const * p_buffer, size_t len)
 {
 	if (g_pUart)
     {
-		UARTTx(g_pUart, (uint8_t *)p_buffer, len);
+		UARTTx((UARTDev_t *)g_pUart, (uint8_t *)p_buffer, len);
     }
 }
 
