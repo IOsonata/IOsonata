@@ -90,6 +90,7 @@ struct __Bt_Hci_Ctlr_Dev {
 	BtHciCtlrRxHandler_t RxHandler;	//!< HCI receive handler set from config
 	void (*OnWake)(void);			//!< Host waiter wake, set from config
 	size_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, size_t Len);
+	size_t (*SendCommand)(BtHciCtlrDev_t * const pDev, void * const pData, size_t Len);	//!< Send a formed HCI command down to the controller
 	size_t (*Receive)(BtHciCtlrDev_t * const pDev, uint16_t Hdl, void * const pData, size_t Len);
 };// BtHciCtlrDev_t;
 

@@ -347,7 +347,7 @@ static int BtGattSendHandleValue(uint16_t ConnHdl, uint8_t OpCode, uint16_t ValH
 		return -1;
 	}
 
-	// A notifiable/indicatable value carries at most ATT_MTU - 3 bytes (opcode
+	// A notifiable/indicatable value holds at most ATT_MTU - 3 bytes (opcode
 	// + value handle). Fall back to the default MTU if none was negotiated.
 	uint16_t mtu = pConn->Conn.MaxMtu >= BT_ATT_MTU_MIN ? pConn->Conn.MaxMtu : BT_ATT_MTU_MIN;
 	size_t maxData = (size_t)mtu - 3;

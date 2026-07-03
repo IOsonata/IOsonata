@@ -412,7 +412,7 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 	}
 
 	// Fragmentation path: split the L2CAP PDU across ACL packets of at most
-	// AclMaxLen payload bytes. The first carries a START boundary flag, the rest
+	// AclMaxLen payload bytes. The first holds a START boundary flag, the rest
 	// CONTINUING. Reserve all credits up front so a partial PDU is never left in
 	// the controller waiting for fragments that cannot be sent.
 	uint16_t nFrag = (uint16_t)((l2Len + pDev->AclMaxLen - 1) / pDev->AclMaxLen);
