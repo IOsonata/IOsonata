@@ -149,3 +149,26 @@ bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 	return true;
 }
+
+size_t BtHciCtlrSendCommand(BtHciCtlrDev_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen)
+{
+	if (pDev == nullptr || pDev->SendCommand == nullptr)
+	{
+		return 0;
+	}
+
+	// Standard HCI command packet: opcode little endian, parameter total
+	// length, then the parameters.
+	uint8_t buf[BTHCICTLR_CMD_HDR_LEN + BTHCICTLR_CMD_PARAM_MAX];
+
+	buf[0] = (uint8_t)(OpCode & 0xFF);
+	buf[1] = (uint8_t)((OpCode >> 8) & 0xFF);
+	buf[2] = ParamLen;
+
+	if (ParamLen > 0 && pParam != nullptr)
+	{
+		memcpy(&buf[BTHCICTLR_CMD_HDR_LEN], pParam, ParamLen);
+	}
+
+	return pDev->SendCommand(pDev, buf, BTHCICTLR_CMD_HDR_LEN + ParamLen);
+}

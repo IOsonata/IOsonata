@@ -36,6 +36,7 @@ SOFTWARE.
 #include <memory.h>
 
 #include "sdc_hci.h"
+#include "sdc_hci_cmd_le.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
@@ -95,6 +96,56 @@ extern "C" size_t BtHciCtlrSdcSend(void *pData, size_t Len)
 	}
 
 	return s_pBtHciCtlrSdc->Send(s_pBtHciCtlrSdc, pData, Len);
+}
+
+// SDC command executor. Sends the command, then pumps the controller until the
+// matching Command Complete or Command Status sets CmdDone, and returns the HCI
+// status. Command credit and opcode match are the generic fields filled by
+// BtHciProcessEvent. This is the SDC response model: a busy wait on sdc_hci_get
+// through BtHciCtlrProcess. A target with an event driven SDK would bind its own.
+// SDC command executor. The SDC HCI command interface is typed, not raw: each
+// opcode maps to a sdc_hci_cmd_le_* wrapper. The generic parameters are the
+// standard HCI wire layout, which matches the SDC command struct, so they cast
+// directly. The wrappers are synchronous, so this returns the status inline; the
+// generic command credit and match path is used only by a raw HCI controller.
+extern "C" uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
+{
+	int32_t res;
+
+	switch (OpCode)
+	{
+		case BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM:
+			{
+				sdc_hci_cmd_le_set_ext_adv_params_return_t r;
+				res = sdc_hci_cmd_le_set_ext_adv_params((const sdc_hci_cmd_le_set_ext_adv_params_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA:
+			res = sdc_hci_cmd_le_set_ext_adv_data((const sdc_hci_cmd_le_set_ext_adv_data_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_RESP_DATA:
+			res = sdc_hci_cmd_le_set_ext_scan_response_data((const sdc_hci_cmd_le_set_ext_scan_response_data_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE:
+			res = sdc_hci_cmd_le_set_ext_adv_enable((const sdc_hci_cmd_le_set_ext_adv_enable_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_ADV_SET_RAND_ADDR:
+			res = sdc_hci_cmd_le_set_adv_set_random_address((const sdc_hci_cmd_le_set_adv_set_random_address_t*)pParam);
+			break;
+
+		default:
+			return 0xFF;
+	}
+
+	return res == 0 ? 0 : 0xFF;
 }
 
 alignas(8) static uint8_t s_BtStackSdcMemPool[10000];

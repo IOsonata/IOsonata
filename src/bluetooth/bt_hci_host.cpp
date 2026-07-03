@@ -374,6 +374,10 @@ void BtHciSetLeAclBuffer(BtHciDevice_t * const pDev, uint16_t MaxLen, uint8_t Pk
 	pDev->AclMaxLen = MaxLen;
 	pDev->AclCreditMax = PktCount;
 	pDev->AclCredit = (int16_t)PktCount;
+
+	// Command flow control starts with one credit per spec: the host may send a
+	// single command before the first Command Complete or Command Status.
+	pDev->CmdCredit = 1;
 }
 
 uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pAcl)
@@ -528,12 +532,42 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case BT_HCI_EVT_QOS_SETTUP_COMPLETE:
 			break;
 		case BT_HCI_EVT_COMMAND_COMPLETE:
+			{
+				BtHciEvtCmdComplete_t *p = (BtHciEvtCmdComplete_t*)pEvtPkt->Data;
+
+				// Num_HCI_Command_Packets is the absolute command allowance per
+				// spec, so set rather than add.
+				pDev->CmdCredit = p->NbCmdPacket;
+
+				// Match a blocking command waiting on this opcode. RetParam[0] is
+				// the status; the command return parameters follow it.
+				if (pDev->CmdOpCode != 0 && p->CmdCode == pDev->CmdOpCode)
+				{
+					pDev->CmdStatus = p->RetParam[0];
+
+					int retlen = (int)pEvtPkt->Hdr.Len - 4;		// less NbCmdPacket, CmdCode, status
+					if (retlen > 0 && pDev->pCmdRet != nullptr)
+					{
+						int l = retlen < (int)pDev->CmdRetLen ? retlen : (int)pDev->CmdRetLen;
+						memcpy(pDev->pCmdRet, &p->RetParam[1], l);
+					}
+
+					pDev->CmdDone = true;
+				}
+			}
 			break;
 		case BT_HCI_EVT_COMMAND_STATUS:
-//			DEBUG_PRINTF("BT_HCI_EVT_COMMAND_STATUS : %d\r\n", pEvtPkt->Hdr.Len);//
-//			for (int i = 0; i < pEvtPkt->Hdr.Len; i++)
-//				DEBUG_PRINTF("%x ", pEvtPkt->Data[i]);
-//			DEBUG_PRINTF("\r\n");
+			{
+				BtHciEvtCmdStatus_t *p = (BtHciEvtCmdStatus_t*)pEvtPkt->Data;
+
+				pDev->CmdCredit = p->NbCmdPacket;
+
+				if (pDev->CmdOpCode != 0 && p->CmdCode == pDev->CmdOpCode)
+				{
+					pDev->CmdStatus = p->Status;
+					pDev->CmdDone = true;
+				}
+			}
 			break;
 		case BT_HCI_EVT_HARDWARE_ERROR:
 			break;

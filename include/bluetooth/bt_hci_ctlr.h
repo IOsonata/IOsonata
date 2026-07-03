@@ -108,6 +108,9 @@ typedef struct __Bt_Hci_Ctlr_Packet {
 #define BTHCICTLR_PKTHDR_LEN								(sizeof(BtHciCtlrPkt_t) - 1)
 #define BTHCICTLR_PKT_CFIFO_TOTAL_MEMSIZE(npk, pksize)		CFIFO_TOTAL_MEMSIZE(npk, pksize + BTHCICTLR_PKTHDR_LEN)
 
+#define BTHCICTLR_CMD_HDR_LEN								3		// HCI command header: opcode (2) plus parameter length (1)
+#define BTHCICTLR_CMD_PARAM_MAX								255		// Max HCI command parameter length
+
 #pragma pack(pop)
 
 #ifdef __cplusplus
@@ -146,6 +149,23 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
  * @param	pDev	Controller device.
  */
 void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev);
+
+/**
+ * @brief	Frame a standard HCI command and send it to the controller.
+ *
+ * Builds the standard HCI command packet (opcode little endian, parameter
+ * length, parameters) and sends it through the controller SendCommand op. This
+ * is the send only step. The response arrives asynchronously as a Command
+ * Complete or Command Status event on the RX path.
+ *
+ * @param	pDev		Controller device.
+ * @param	OpCode		16 bit HCI opcode.
+ * @param	pParam		Command parameters, or NULL when ParamLen is 0.
+ * @param	ParamLen	Parameter length in bytes.
+ *
+ * @return	Bytes sent, 0 on failure.
+ */
+size_t BtHciCtlrSendCommand(BtHciCtlrDev_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen);
 
 #ifdef __cplusplus
 }

@@ -85,6 +85,7 @@ SOFTWARE.
 /*******************************/
 
 extern "C" size_t BtHciCtlrSdcSend(void *pData, size_t Len);
+extern "C" uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
 
 static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
 	return (uint32_t)BtHciCtlrSdcSend(pData, Len);
@@ -175,6 +176,7 @@ extern "C" void BtSmpPairingComplete(uint16_t ConnHdl, bool Success,
 static BtHciDevice_t s_BtHciDev = {
 	.pCtx = (void*)&g_BtAppData,
 	.SendData = BtAppSendData,
+	.Command = BtHciCmdSdc,
 	.EvtHandler = BtAppEvtHandler,
 	.Connected = BtAppConnected,
 	.Disconnected = BtAppDisconnected,
@@ -534,6 +536,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
+	g_BtAppData.AppDevice.pHciDev = &s_BtHciDev;		// host used by the HCI operation layer (bt_adv_hci etc.)
 	DEBUG_PRINTF("g_BtAppData.AppDevice.Conn.Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
 
 	g_BtAppData.bScan = false;

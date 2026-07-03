@@ -697,7 +697,14 @@ struct __Bt_Hci_Device {
 	uint16_t AclMaxLen;		//!< Controller LE ACL data packet length. 0 leaves TX fragmentation and flow control disabled (single-packet pass-through).
 	uint8_t  AclCreditMax;	//!< Controller total LE ACL data buffers. 0 disables flow control.
 	int16_t  AclCredit;		//!< Available ACL TX credits (decremented per packet sent, replenished by Number-Of-Completed-Packets).
+	int16_t  CmdCredit;		//!< HCI command credits (Num_HCI_Command_Packets). Set absolute from Command Complete/Status, starts at 1 per spec.
+	uint16_t CmdOpCode;		//!< Opcode a blocking command is waiting on, 0 when none.
+	uint8_t  CmdStatus;		//!< Status from the matched Command Complete/Status.
+	uint8_t  CmdRetLen;		//!< Size of the pCmdRet buffer in bytes.
+	uint8_t *pCmdRet;		//!< Destination for command return parameters, or NULL.
+	volatile bool CmdDone;	//!< Set when the awaited command response arrives.
 	uint32_t (*SendData)(void *pData, uint32_t Len);
+	uint8_t (*Command)(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);	//!< Target command executor: sends and returns the HCI status. The target picks the response model its SDK offers.
 	void (*EvtHandler)(BtHciDevice_t * const pDev, uint32_t Evt);
 	void (*Connected)(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PerrAddr[6]);
 	void (*Disconnected)(uint16_t ConnHdl, uint8_t Reason);
@@ -740,6 +747,26 @@ void BtHciSetLeAclBuffer(BtHciDevice_t * const pDev, uint16_t MaxLen, uint8_t Pk
 
 static inline int BtHciSendData(BtHciDevice_t * const pDev, void * const pData, int Len) {
 	return pDev->SendData(pData, Len);
+}
+
+/**
+ * @brief	Send an HCI command and return its status.
+ *
+ * Dispatches to the target command executor, which sends the command and
+ * returns the HCI status (0 on success), copying any command return parameters
+ * into pRet. Whether it blocks or is event-driven is the target's choice.
+ *
+ * @param	pDev		HCI device.
+ * @param	OpCode		16 bit HCI opcode.
+ * @param	pParam		Command parameters, or NULL when ParamLen is 0.
+ * @param	ParamLen	Parameter length in bytes.
+ * @param	pRet		Buffer for return parameters, or NULL.
+ * @param	RetLen		Size of pRet in bytes.
+ *
+ * @return	HCI status, 0 on success. 0xFF when no executor is wired.
+ */
+static inline uint8_t BtHciCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen) {
+	return pDev->Command != NULL ? pDev->Command(pDev, OpCode, pParam, ParamLen, pRet, RetLen) : 0xFF;
 }
 //void BtHciNotify(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint16_t ValHdl, void * const pData, size_t Len);
 
