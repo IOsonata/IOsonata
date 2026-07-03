@@ -153,6 +153,24 @@ extern "C" uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, cons
 			res = sdc_hci_cmd_le_create_conn((const sdc_hci_cmd_le_create_conn_t*)pParam);
 			break;
 
+		case BT_HCI_CMD_CTLR_ENABLE_ENCRYPTION:
+			res = sdc_hci_cmd_le_enable_encryption((const sdc_hci_cmd_le_enable_encryption_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_REPLY:
+			{
+				sdc_hci_cmd_le_long_term_key_request_reply_return_t r;
+				res = sdc_hci_cmd_le_long_term_key_request_reply((const sdc_hci_cmd_le_long_term_key_request_reply_t*)pParam, &r);
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY:
+			{
+				sdc_hci_cmd_le_long_term_key_request_negative_reply_return_t r;
+				res = sdc_hci_cmd_le_long_term_key_request_negative_reply((const sdc_hci_cmd_le_long_term_key_request_negative_reply_t*)pParam, &r);
+			}
+			break;
+
 		default:
 			return 0xFF;
 	}

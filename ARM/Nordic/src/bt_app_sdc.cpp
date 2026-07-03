@@ -118,48 +118,6 @@ extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 	memcpy(pAddr, s_BtSmpLocalAddr, 6);
 }
 
-// Answer the controller LE Long Term Key Request via the real SDC HCI command
-// function. The generic SMP path would push this through the ACL data channel
-// (sdc_hci_data_put), which the controller ignores - encryption then stalls.
-extern "C" void BtSmpHciLtkReply(BtHciDevice_t * const pDev, uint16_t ConnHdl,
-								 const uint8_t Ltk[16])
-{
-	(void)pDev;
-	sdc_hci_cmd_le_long_term_key_request_reply_t cmd;
-	sdc_hci_cmd_le_long_term_key_request_reply_return_t ret;
-	cmd.conn_handle = ConnHdl;
-	memcpy(cmd.long_term_key, Ltk, 16);
-	sdc_hci_cmd_le_long_term_key_request_reply(&cmd, &ret);
-}
-
-extern "C" void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl)
-{
-	(void)pDev;
-	sdc_hci_cmd_le_long_term_key_request_negative_reply_t cmd;
-	sdc_hci_cmd_le_long_term_key_request_negative_reply_return_t ret;
-	cmd.conn_handle = ConnHdl;
-	sdc_hci_cmd_le_long_term_key_request_negative_reply(&cmd, &ret);
-}
-
-// Central-role link encryption. Routes HCI LE Enable Encryption through the real
-// SDC command function. LE Enable Encryption returns Command Status (no return
-// parameter struct). For SC the random number and EDIV are zero.
-extern "C" void BtSmpHciEnableEncryption(BtHciDevice_t * const pDev, uint16_t ConnHdl,
-										 uint64_t Rand, uint16_t Ediv, const uint8_t Ltk[16])
-{
-	(void)pDev;
-	sdc_hci_cmd_le_enable_encryption_t cmd;
-	cmd.conn_handle = ConnHdl;
-	for (int i = 0; i < 8; i++)
-	{
-		cmd.random_number[i] = (uint8_t)(Rand >> (8 * i));
-	}
-	cmd.encrypted_diversifier[0] = (uint8_t)(Ediv & 0xFF);
-	cmd.encrypted_diversifier[1] = (uint8_t)(Ediv >> 8);
-	memcpy(cmd.long_term_key, Ltk, 16);
-	sdc_hci_cmd_le_enable_encryption(&cmd);
-}
-
 // Surface a secured link (fresh pairing or bonded reconnect) to the application.
 // The generic SMP engine calls this on every successful encryption; translate it
 // to the port-neutral BtAppEvtSecured hook the example gates discovery on.

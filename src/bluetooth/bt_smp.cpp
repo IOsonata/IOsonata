@@ -190,17 +190,11 @@ static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t 
 static void SmpSendHciCmd(BtHciDevice_t * const pDev, uint16_t OpCode,
 						  const void *pParam, uint8_t ParamLen)
 {
-	uint8_t buf[sizeof(BtHciCmdPacketHdr_t) + 255];
-	BtHciCmd_Packet_t *c = (BtHciCmd_Packet_t*)buf;
-
-	c->Hdr.OpCode = OpCode;
-	c->Hdr.ParamLen = ParamLen;
-	if (ParamLen > 0 && pParam != nullptr)
-	{
-		memcpy(c->Param, pParam, ParamLen);
-	}
-
-	pDev->SendData((uint8_t*)c, sizeof(BtHciCmdPacketHdr_t) + ParamLen);
+	// Route the SMP command through the controller command op. On the SDC this
+	// dispatches to the typed wrapper; on a raw HCI controller it is framed and
+	// sent as a command. Sending it down the data path does not reach a typed
+	// command controller.
+	BtHciCommand(pDev, OpCode, pParam, ParamLen, NULL, 0);
 }
 
 //-----------------------------------------------------------------------------

@@ -1,9 +1,9 @@
 /**-------------------------------------------------------------------------
-@file	bt_gatt_sdc.cpp
+@file	bt_gatt_hci.cpp
 
 @brief	Bluetooth GATT  
 
-Generic implementation Bluetooth Generic Attribute Profile with Nordic SDC
+Generic implementation of Bluetooth Generic Attribute Profile over standard HCI.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 22, 2022
