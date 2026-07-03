@@ -141,6 +141,18 @@ extern "C" uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, cons
 			res = sdc_hci_cmd_le_set_adv_set_random_address((const sdc_hci_cmd_le_set_adv_set_random_address_t*)pParam);
 			break;
 
+		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM:
+			res = sdc_hci_cmd_le_set_ext_scan_params((const sdc_hci_cmd_le_set_ext_scan_params_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE:
+			res = sdc_hci_cmd_le_set_ext_scan_enable((const sdc_hci_cmd_le_set_ext_scan_enable_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_CREATE_CONN:
+			res = sdc_hci_cmd_le_create_conn((const sdc_hci_cmd_le_create_conn_t*)pParam);
+			break;
+
 		default:
 			return 0xFF;
 	}
