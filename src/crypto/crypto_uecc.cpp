@@ -205,6 +205,7 @@ bool CryptoUeccInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 		return false;	// requested capability not provided by this engine
 	}
 
+	memset(pDev, 0, sizeof(*pDev));
 	memset(pCfg->pMem, 0, sizeof(CryptoUeccData_t));
 	pDev->pDevData       = pCfg->pMem;
 	pDev->pName          = "uecc";

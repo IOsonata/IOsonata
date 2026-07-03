@@ -201,6 +201,7 @@ bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 		return false;	// nrf_crypto / CC310 not available on this target
 	}
 
+	memset(pDev, 0, sizeof(*pDev));
 	memset(pCfg->pMem, 0, sizeof(CryptoCc310Data_t));
 	CryptoCc310Data_t *pd = (CryptoCc310Data_t *)pCfg->pMem;
 	pd->bKeyValid = false;
@@ -209,6 +210,7 @@ bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	pDev->pName          = "cc310-hw";
 	pDev->Cap            = CRYPTO_CAP_ECDH_P256;	// ECDH only; structured key ctx, no PLAIN_KEYCTX
 	pDev->KeyCtxSize     = sizeof(CryptoCc310Data_t);
+	pDev->Props          = CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SYNC;
 	pDev->EvtCB          = pCfg->EvtCB;			// synchronous engine
 	pDev->Aes128Ecb      = nullptr;				// AES via the BLE controller on this path
 	pDev->EcdhP256KeyGen = Cc310EcdhKeyGen;

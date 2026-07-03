@@ -83,9 +83,11 @@ bool BtCryptoCtlrSdcInit(CryptoDev_t * const pDev)
 	{
 		return false;
 	}
+	memset(pDev, 0, sizeof(*pDev));
 	pDev->pDevData       = nullptr;
 	pDev->pName          = "ctlr-sdc";
 	pDev->Cap            = CRYPTO_CAP_AES128_ECB;	// AES only (no ECDH, no RNG)
+	pDev->Props          = CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SYNC;
 	pDev->KeyCtxSize     = 0;										// AES key is passed in; no per-instance key context
 	pDev->EvtCB          = nullptr;									// synchronous
 	pDev->Aes128Ecb      = CtlrAes128Ecb;

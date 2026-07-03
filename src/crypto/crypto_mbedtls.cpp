@@ -295,6 +295,8 @@ bool CryptoMbedtlsInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 		return false;	// requested a capability this engine does not provide
 	}
 
+	memset(pDev, 0, sizeof(*pDev));
+
 	// Lifecycle rule: INIT ONCE per pMem. Call CryptoMbedtlsInit with fresh
 	// App-owned memory that does not already hold an initialized mbedTLS
 	// context. A second call on the same live pMem leaks the prior d/Q
@@ -313,6 +315,7 @@ bool CryptoMbedtlsInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	pDev->pName          = "mbedtls";
 	pDev->Cap            = CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256;
 	pDev->KeyCtxSize     = sizeof(CryptoMbedtlsData_t);
+	pDev->Props          = CRYPTO_PROP_SYNC;
 	pDev->EvtCB          = pCfg->EvtCB;			// synchronous engine
 	pDev->Aes128Ecb      = MbedAes128Ecb;
 	pDev->EcdhP256KeyGen = MbedEcdhKeyGen;

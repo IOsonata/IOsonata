@@ -224,6 +224,7 @@ bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 		return false;	// PSA driver not available on this target
 	}
 
+	memset(pDev, 0, sizeof(*pDev));
 	memset(pCfg->pMem, 0, sizeof(CryptoPsaData_t));
 	CryptoPsaData_t *pd = (CryptoPsaData_t *)pCfg->pMem;
 	pd->KeyId     = PSA_KEY_ID_NULL;
@@ -233,6 +234,7 @@ bool CryptoHwInit(CryptoDev_t * const pDev, const CryptoCfg_t *pCfg)
 	pDev->pName          = "psa-hw";
 	pDev->Cap            = CRYPTO_CAP_AES128_ECB | CRYPTO_CAP_ECDH_P256;	// structured key ctx: no PLAIN_KEYCTX
 	pDev->KeyCtxSize     = sizeof(CryptoPsaData_t);
+	pDev->Props          = CRYPTO_PROP_HARDWARE | CRYPTO_PROP_SECURE_DOMAIN | CRYPTO_PROP_SYNC;
 	pDev->EvtCB          = pCfg->EvtCB;			// synchronous engine
 	pDev->Aes128Ecb      = PsaAes128Ecb;
 	pDev->EcdhP256KeyGen = PsaEcdhKeyGen;
