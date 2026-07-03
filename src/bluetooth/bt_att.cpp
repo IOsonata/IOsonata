@@ -286,8 +286,15 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 			DEBUG_PRINTF("BT_UUID_DECLARATIONS_PRIMARY_SERVICE (0x2800)/ SECONDARY_SERVICE (0x2801)\r\n");
 			BtAttSrvcDeclar_t *p = (BtAttSrvcDeclar_t*) pEntry->Data;
 
+			// Honour the caller's buffer/MTU cap (Len) before writing the fixed
+			// declaration value, so this helper cannot overrun the response
+			// buffer if it is ever handed less room than the value size.
 			if (p->Uuid.BaseIdx > 0)
 			{
+				if (Len < 16)
+				{
+					break;
+				}
 				BtUuidGetBase(p->Uuid.BaseIdx, pBuff);
 
 				pBuff[12] = p->Uuid.Uuid16 & 0xFF;
@@ -297,6 +304,10 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 			}
 			else
 			{
+				if (Len < 2)
+				{
+					break;
+				}
 				pBuff[0] = p->Uuid.Uuid16 & 0xFF;
 				pBuff[1] = p->Uuid.Uuid16 >> 8;
 
@@ -308,7 +319,29 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 		{
 			DEBUG_PRINTF("BT_UUID_DECLARATIONS_INCLUDE (0x2802)\r\n");
 			BtAttSrvcInclude_t *p = (BtAttSrvcInclude_t*) pEntry->Data;
-			len = p->SrvcUuid.BaseIdx > 0 ? 20 : 6;
+
+			// Include Definition value (Core Vol 3 Part G 3.2): Included Service
+			// Attribute Handle, End Group Handle, then the Service UUID only when
+			// it is a 16-bit Bluetooth UUID. For a 128-bit included service UUID
+			// the UUID field is omitted and the client reads the included
+			// service's own declaration. The value MUST be written here: the
+			// previous code set the length but left pBuff untouched, returning
+			// stale response-buffer contents to the peer.
+			uint16_t need = p->SrvcUuid.BaseIdx > 0 ? 4 : 6;
+			if (Len < need)
+			{
+				break;
+			}
+			pBuff[0] = p->SrvcHdl & 0xFF;
+			pBuff[1] = (p->SrvcHdl >> 8) & 0xFF;
+			pBuff[2] = p->EndGrpHdl & 0xFF;
+			pBuff[3] = (p->EndGrpHdl >> 8) & 0xFF;
+			if (p->SrvcUuid.BaseIdx == 0)
+			{
+				pBuff[4] = p->SrvcUuid.Uuid16 & 0xFF;
+				pBuff[5] = p->SrvcUuid.Uuid16 >> 8;
+			}
+			len = need;
 		}
 
 			break;
@@ -318,6 +351,14 @@ size_t BtAttReadValue(BtAttDBEntry_t *pEntry, uint16_t Offset, uint8_t *pBuff, u
 			BtAttCharDeclar_t *p = (BtAttCharDeclar_t*) pEntry->Data;
 			//len = pEntry->DataLen;
 			//memcpy(pBuff, pEntry->Data, len);
+
+			// Honour the caller's buffer/MTU cap (Len): a 128-bit characteristic
+			// declaration is 19 octets, a 16-bit one 5. Bail before writing if
+			// the buffer cannot hold the value, so this cannot overrun.
+			if (Len < (p->Uuid.BaseIdx > 0 ? 19 : 5))
+			{
+				break;
+			}
 			pBuff[0] = p->pChar->Property;
 			pBuff[1] = p->pChar->ValHdl & 0xFF;
 			pBuff[2] = (p->pChar->ValHdl >> 8) & 0xFF;
@@ -1079,19 +1120,28 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				retval = sizeof(BtAttExchgMtuReqRsp_t) + 1;
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
 
-				uint16_t negMtu = BtAttSetMtu(pReqAtt->ExchgMtuReqRsp.RxMtu);
-				pRspAtt->ExchgMtuReqRsp.RxMtu = negMtu;
+				// Core Vol 3 Part F 3.4.2.2: the response carries the server's
+				// own Rx MTU (a fixed local capability), and the ATT_MTU for the
+				// link is min(client Rx MTU, server Rx MTU). Advertise the
+				// largest ATT PDU this server can receive (BT_ATT_MTU_MAX, bounded
+				// by the HCI buffer). Do NOT overwrite the stack-wide s_AttMtu
+				// with the peer's offer: that global is the client-role/local
+				// setting and one peer's value must not leak into other links.
+				uint16_t serverRxMtu = BT_ATT_MTU_MAX;
+				uint16_t peerRxMtu   = pReqAtt->ExchgMtuReqRsp.RxMtu;
+				uint16_t linkMtu     = peerRxMtu < serverRxMtu ? peerRxMtu : serverRxMtu;
 
-				// Record the negotiated MTU on the link so later requests size
-				// their responses to it (via BtAttGetMtuForConn) and
-				// server-initiated PDUs (notifications/indications) use it too,
-				// mirroring the client-side path in bt_attrsp.cpp.
+				pRspAtt->ExchgMtuReqRsp.RxMtu = serverRxMtu;
+
+				// Record the negotiated per-link MTU so later requests size their
+				// responses to it (via BtAttGetMtuForConn) and server-initiated
+				// PDUs (notifications/indications) use it too.
 				BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 				if (pConn != nullptr)
 				{
-					pConn->Conn.MaxMtu = negMtu;
+					pConn->Conn.MaxMtu = linkMtu;
 				}
-				rspMtu = negMtu;
+				rspMtu = linkMtu;
 
 				//DEBUG_PRINTF("MTU : %d\r\n", s_AttMtu);
 			}
@@ -1292,6 +1342,8 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 
 #else
 				int l = 0;
+				uint8_t permErr = 0;
+				uint16_t permErrHdl = 0;
 				pRspAtt->ReadByTypeRsp.Len = 0;
 
 				while (entry && (rspMtu - l) >= BT_ATT_MTU_MIN)
@@ -1301,18 +1353,22 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 						break;
 					}
 
-					p[0] = entry->Hdl & 0xFF;
-					p[1] = entry->Hdl >> 8;
-					p +=2;
-
+					// Check permission before writing this attribute. Per Vol 3
+					// Part F 3.4.4.1 a permission failure aborts with an Error
+					// Response only when it is the first attribute; if any
+					// attribute was already collected, return those instead. So
+					// record the error and stop rather than emitting it here.
 					uint8_t err = BtAttReadPermError(ConnHdl, entry);
 					if (err != 0)
 					{
-						retval = BtAttError(pRspAtt, entry->Hdl,
-											BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ,
-											err);
+						permErr = err;
+						permErrHdl = entry->Hdl;
 						break;
 					}
+
+					p[0] = entry->Hdl & 0xFF;
+					p[1] = entry->Hdl >> 8;
+					p +=2;
 
 					int cnt = BtAttReadValueForConn(ConnHdl, entry, 0, p, rspMtu - l - 2) + 2;
 					if (pRspAtt->ReadByTypeRsp.Len == 0)
@@ -1338,6 +1394,12 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				if (l > 0)
 				{
 					retval = l + 2;
+				}
+				else if (permErr != 0)
+				{
+					// First attribute failed the permission check: return the
+					// permission error, not Attribute Not Found.
+					retval = BtAttError(pRspAtt, permErrHdl, BT_ATT_OPCODE_ATT_READ_BY_TYPE_REQ, permErr);
 				}
 				else
 				{
@@ -1463,6 +1525,19 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				if (req->StartHdl > req->EndHdl)
 				{
 					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_INVALID_HANDLE);
+					break;
+				}
+
+				// Read By Group Type is defined only for the Primary Service
+				// (0x2800) and Secondary Service (0x2801) group types (Core Vol 3
+				// Part F 3.4.4.9). Any other group type - including a 128-bit type
+				// (ReqLen 21, not 7) - must return Unsupported Group Type rather
+				// than being grouped by the generic handle-range heuristic.
+				if (ReqLen != 7 ||
+					(req->Uuid.Uuid16 != BT_UUID_DECLARATIONS_PRIMARY_SERVICE &&
+					 req->Uuid.Uuid16 != BT_UUID_DECLARATIONS_SECONDARY_SERVICE))
+				{
+					retval = BtAttError(pRspAtt, req->StartHdl, BT_ATT_OPCODE_ATT_READ_BY_GROUP_TYPE_REQ, BT_ATT_ERROR_UNSUPP_GROUP_TYPE);
 					break;
 				}
 

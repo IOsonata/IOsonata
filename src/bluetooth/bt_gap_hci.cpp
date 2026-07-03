@@ -85,6 +85,36 @@ static inline BtHciDevice_t *BtGapHciDev(void)
 	return g_BtAppData.AppDevice.pHciDev;
 }
 
+// Validate the HCI-encoded connection parameters before LE Create Connection
+// (Core Vol 4 Part E 7.8.12, Vol 6 Part B 4.5.2). Arguments are in HCI units:
+// interval in 1.25 ms steps, timeout in 10 ms steps, latency a raw count.
+// Rejecting out-of-range or self-inconsistent values here avoids a controller
+// error and, worse, a link that supervision-times-out immediately.
+static bool BtGapCreateConnParamValid(uint16_t IntervalMin, uint16_t IntervalMax,
+									  uint16_t Latency, uint16_t Timeout)
+{
+	if (IntervalMin < 0x0006 || IntervalMax > 0x0C80 || IntervalMin > IntervalMax)
+	{
+		return false;
+	}
+	if (Latency > 0x01F3)
+	{
+		return false;
+	}
+	if (Timeout < 0x000A || Timeout > 0x0C80)
+	{
+		return false;
+	}
+	// Supervision_Timeout (ms) must exceed 2 * (1 + Latency) * ConnIntervalMax
+	// (ms). In HCI units (Timeout x 10 ms, IntervalMax x 1.25 ms) this reduces
+	// to the integer test Timeout * 4 > (1 + Latency) * IntervalMax.
+	if ((uint32_t)Timeout * 4 <= (uint32_t)(1 + Latency) * IntervalMax)
+	{
+		return false;
+	}
+	return true;
+}
+
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 {
 	BtHciDevice_t *pDev = BtGapHciDev();
@@ -99,7 +129,12 @@ bool BtGapScanInit(BtGapScanCfg_t * const pCfg)
 	p.OwnAddrType  = 1;
 	p.FilterPolicy = 0;
 	p.ScanPhys     = pCfg->Param.Phy;
-	p.ScanType     = pCfg->Type;
+	// Map the API scan type to the HCI Scan_Type field (Core Vol 4 Part E
+	// 7.8.64): 0x00 = passive, 0x01 = active. Only BTSCAN_TYPE_ACTIVE requests
+	// active scanning; the passive variants map to passive. Assigning the enum
+	// directly would send ACTIVE (2) as an invalid value and PASSIVE_EXT (1) as
+	// active.
+	p.ScanType     = (pCfg->Type == BTSCAN_TYPE_ACTIVE) ? 1 : 0;
 	BtGapWr16(p.ScanInterval, mSecTo0_625(pCfg->Param.Interval));
 	BtGapWr16(p.ScanWindow, mSecTo0_625(pCfg->Param.Duration));
 
@@ -156,6 +191,16 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 		return false;
 	}
 
+	uint16_t connIntervalMin = mSecTo1_25(pConnParam->IntervalMin);
+	uint16_t connIntervalMax = mSecTo1_25(pConnParam->IntervalMax);
+	uint16_t supTimeout      = (uint16_t)(pConnParam->Timeout / 10);
+
+	if (BtGapCreateConnParamValid(connIntervalMin, connIntervalMax,
+								  pConnParam->Latency, supTimeout) == false)
+	{
+		return false;
+	}
+
 	BtHciLeCreateConn_t p;
 	BtGapWr16(p.ScanInterval, mSecTo0_625(s_ScanParams.Interval));
 	BtGapWr16(p.ScanWindow, mSecTo0_625(s_ScanParams.Duration));
@@ -163,10 +208,10 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 	p.PeerAddrType  = pPeerAddr->Type;
 	memcpy(p.PeerAddr, pPeerAddr->Addr, 6);
 	p.OwnAddrType   = s_ScanParams.OwnAddrType;
-	BtGapWr16(p.ConnIntervalMin, mSecTo1_25(pConnParam->IntervalMin));
-	BtGapWr16(p.ConnIntervalMax, mSecTo1_25(pConnParam->IntervalMax));
+	BtGapWr16(p.ConnIntervalMin, connIntervalMin);
+	BtGapWr16(p.ConnIntervalMax, connIntervalMax);
 	BtGapWr16(p.MaxLatency, pConnParam->Latency);
-	BtGapWr16(p.SupervisionTimeout, (uint16_t)(pConnParam->Timeout / 10));
+	BtGapWr16(p.SupervisionTimeout, supTimeout);
 	BtGapWr16(p.MinCeLength, 0);
 	BtGapWr16(p.MaxCeLength, 0);
 

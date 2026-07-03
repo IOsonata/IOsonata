@@ -128,7 +128,35 @@ SOFTWARE.
 #define BT_SMP_ERR_KEY_REJECTED						0x0F
 
 #define BT_SMP_MAX_ENC_KEY_SIZE						16
-#define BT_SMP_MIN_ENC_KEY_SIZE						7
+#define BT_SMP_MIN_ENC_KEY_SIZE						7	//!< Spec absolute floor (Core Vol 3 Part H 2.3.4)
+
+/// Locally-enforced minimum encryption key size. Defaults to the spec floor (7)
+/// for interoperability; a security-sensitive build raises it (16 for full LE
+/// Secure Connections entropy) to refuse a KNOB-style key-size downgrade, where
+/// an active MITM rewrites the MaxKeySize octet in the Pairing Request/Response
+/// to force both sides down to 56-bit keys. Must be within 7..16.
+#ifndef BT_SMP_CFG_MIN_ENC_KEY_SIZE
+#define BT_SMP_CFG_MIN_ENC_KEY_SIZE					BT_SMP_MIN_ENC_KEY_SIZE
+#endif
+
+#if (BT_SMP_CFG_MIN_ENC_KEY_SIZE < BT_SMP_MIN_ENC_KEY_SIZE) || (BT_SMP_CFG_MIN_ENC_KEY_SIZE > BT_SMP_MAX_ENC_KEY_SIZE)
+#error "BT_SMP_CFG_MIN_ENC_KEY_SIZE must be between BT_SMP_MIN_ENC_KEY_SIZE (7) and BT_SMP_MAX_ENC_KEY_SIZE (16)"
+#endif
+
+/// SMP pairing timeout in milliseconds (Core Vol 3 Part H 3.4). If a pairing
+/// makes no progress within this window it is failed and no further SMP is
+/// accepted on the link until it disconnects.
+#ifndef BT_SMP_TIMEOUT_MS
+#define BT_SMP_TIMEOUT_MS							30000
+#endif
+
+/// Lock a link after this many failed pairing attempts within one connection
+/// (Core Vol 3 Part H 2.3.6, repeated attempts). Further attempts are refused
+/// until the link disconnects. Cross-connection exponential back-off needs
+/// persistent state and is left to the platform.
+#ifndef BT_SMP_MAX_PAIR_ATTEMPTS
+#define BT_SMP_MAX_PAIR_ATTEMPTS					3
+#endif
 
 /// SMP pairing phase. Drives the per-link state machine in bt_smp.cpp.
 /// The responder (peripheral) path is implemented end to end; the
@@ -194,6 +222,10 @@ typedef struct __Bt_Smp_Ctx {
 	bool     bPkDisplay;			//!< Passkey Entry: true if local displays, false if local inputs
 	bool     bPkReady;				//!< Passkey Entry: true once Passkey is known
 	bool     bPkPeerCommit;			//!< Passkey Entry: peer Confirm buffered before Passkey was entered
+	uint8_t  KeyDistExp;			//!< Phase-3 peer key-distribution bits still expected (BT_SMP_KEYDIST_*)
+	uint32_t TmrStart;				//!< BtSmpMsTick() when the current pairing started (SMP timeout anchor)
+	uint8_t  FailCount;				//!< Failed pairing attempts on this link (repeated-attempts guard)
+	bool     bLocked;				//!< Link locked after timeout / repeated attempts; reject all SMP until disconnect
 } BtSmpCtx_t;
 
 #pragma pack(push, 1)
@@ -330,6 +362,26 @@ void BtSmpStartPairing(uint16_t ConnHdl);
  *			disconnection hook to free the per-connection pairing context.
  */
 void BtSmpDisconnected(uint16_t ConnHdl);
+
+/**
+ * @brief	Millisecond tick for the SMP pairing timeout (Core Vol 3 Part H 3.4).
+ *
+ * Weak default returns 0, so the timeout is inert on ports that do not supply a
+ * clock: elapsed time is always 0 and a pairing never times out. An app with a
+ * running millisecond counter overrides this to enable the timeout. The value
+ * only needs to advance in milliseconds; wrap-around is handled.
+ */
+uint32_t BtSmpMsTick(void);
+
+/**
+ * @brief	Fail and lock any pairing that has exceeded BT_SMP_TIMEOUT_MS.
+ *
+ * Call periodically from the application main loop (or a timer). A stalled
+ * pairing produces no further SMP PDUs, so this external tick fires the timeout
+ * for a peer that connects, starts pairing, then stops sending. Has no effect
+ * until BtSmpMsTick() is overridden with a running millisecond counter.
+ */
+void BtSmpTimeoutCheck(void);
 
 /**
  * @brief	Initialise the SMP layer and compose its crypto from engines.

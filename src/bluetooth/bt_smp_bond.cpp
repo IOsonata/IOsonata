@@ -42,6 +42,21 @@ typedef struct __Bt_Smp_Bond {
 
 static BtSmpBond_t s_BtSmpBondTable[BT_SMP_BOND_MAX];
 
+// Constant-time byte compare: returns true iff the buffers are equal, with no
+// early-out on the first differing byte. Used for the signed-write MAC, which
+// is attacker-supplied: a data-dependent memcmp leaks how many leading bytes
+// matched and lets a remote peer forge the tag byte-by-byte across retries.
+// Mirrors SmpEqualCT in bt_smp.cpp (static there, so duplicated here).
+static bool BtSmpBondEqualCT(const uint8_t *a, const uint8_t *b, size_t len)
+{
+	uint8_t diff = 0;
+	for (size_t i = 0; i < len; i++)
+	{
+		diff |= (uint8_t)(a[i] ^ b[i]);
+	}
+	return diff == 0;
+}
+
 // Weak persistence hooks. Default is RAM only. A flash-backed port overrides
 // these to mirror the table to non-volatile storage.
 //
@@ -419,7 +434,7 @@ bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 
 	uint8_t mac[8];
 	BtSmpSignMac(pBond->Keys.Csrk, pMsg, MsgLen, mac);
-	if (memcmp(mac, &pSig[4], 8) != 0)
+	if (BtSmpBondEqualCT(mac, &pSig[4], 8) == false)
 	{
 		return false;
 	}

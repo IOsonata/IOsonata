@@ -170,7 +170,7 @@ typedef struct __Bt_Gap_Conn_Params {
 	float IntervalMin;			//!< Min connection interval in ms
 	float IntervalMax;			//!< Max connection interval in ms
 	uint16_t Latency;			//!< Peripheral latency
-	uint16_t Timeout;			//!< Supervision timeout in 10ms count
+	uint16_t Timeout;			//!< Supervision timeout in ms (converted to the HCI 10 ms unit in BtGapConnect)
 } BtGapConnParams_t;
 
 // Per-connection (per-link) state. This is the canonical link record and

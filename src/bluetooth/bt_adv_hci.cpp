@@ -291,6 +291,17 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 		extprop |= BTADV_EXTADV_EVT_PROP_CONNECTABLE;
 	}
 
+	// A legacy connectable set is ADV_IND, which is always scannable. Core Vol 4
+	// Part E 7.8.53 defines only a fixed set of legacy event-property values;
+	// LEGACY|CONNECTABLE on its own (0x11) is not one of them and the controller
+	// rejects it with Invalid HCI Command Parameters. Force the scannable
+	// property (an empty scan response is valid) so a name-only peripheral, the
+	// most common configuration, is accepted and advertises.
+	if (g_BtAppData.bExtAdv == false && (pCfg->Role & BTAPP_ROLE_PERIPHERAL))
+	{
+		scannable = true;
+	}
+
 	if (scannable)
 	{
 		extprop |= BTADV_EXTADV_EVT_PROP_SCANNABLE;

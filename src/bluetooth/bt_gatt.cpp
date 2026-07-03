@@ -465,9 +465,9 @@ __attribute__((weak)) bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pC
 }
 
 // Clear the outstanding-indication flag for ConnHdl when the peer's Handle
-// Value Confirmation arrives, allowing the next indication to be sent. (There
-// is no transaction timeout here yet; a peer that never confirms blocks further
-// indications on that link until it disconnects.)
+// Value Confirmation arrives, allowing the next indication to be sent. The ATT
+// transaction timeout for a peer that never confirms is handled by
+// BtGattIndicationTimeoutCheck (call it periodically from the app).
 void BtGattHandleValueConfirm(uint16_t ConnHdl)
 {
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
@@ -510,6 +510,35 @@ bool BtGattIndicationTimedOut(uint16_t ConnHdl, uint32_t TimeoutMs)
 	// Unsigned subtraction wraps cleanly, so a tick rollover during the wait
 	// does not produce a false timeout.
 	return (uint32_t)(BtGattMsTick() - pConn->Conn.IndCfmTime) >= TimeoutMs;
+}
+
+// Action taken when an indication is not confirmed within the ATT transaction
+// timeout. Weak default releases the link (clears the outstanding-indication
+// flag) so it is not blocked forever. Core Vol 3 Part F 3.3.3 requires the
+// bearer be closed - i.e. the link disconnected - on transaction timeout; a
+// port overrides this to disconnect for strict conformance. The generic default
+// cannot drive GAP disconnect, hence the release fallback.
+__attribute__((weak)) void BtGattIndicationTimeout(uint16_t ConnHdl)
+{
+	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+	if (pConn != nullptr)
+	{
+		pConn->Conn.bIndCfmPending = false;
+	}
+}
+
+void BtGattIndicationTimeoutCheck(void)
+{
+	uint16_t hdl[BT_GATT_TIMEOUT_CHECK_MAX];
+	size_t n = BtPeerGetConnectedHandles(hdl, BT_GATT_TIMEOUT_CHECK_MAX);
+
+	for (size_t i = 0; i < n; i++)
+	{
+		if (BtGattIndicationTimedOut(hdl[i], BT_GATT_INDICATION_TIMEOUT_MS))
+		{
+			BtGattIndicationTimeout(hdl[i]);
+		}
+	}
 }
 
 __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)

@@ -177,6 +177,20 @@ const static TimerCfg_t s_BtAppSdcTimerCfg = {
 
 static Timer g_BtAppSdcTimer;
 
+// Millisecond clock for the generic SMP/GATT transaction timeouts. These
+// override the weak BtSmpMsTick/BtGattMsTick defaults (which return 0, leaving
+// the timeouts inert). Both are declared in bt_smp.h / bt_gatt.h, so no
+// linkage specifier is needed here. g_BtAppSdcTimer is started in BtAppInit.
+uint32_t BtSmpMsTick(void)
+{
+	return g_BtAppSdcTimer.mSecond();
+}
+
+uint32_t BtGattMsTick(void)
+{
+	return g_BtAppSdcTimer.mSecond();
+}
+
 #if 0
 static void BtStackMpslAssert(const char * const file, const uint32_t line)
 {
@@ -192,7 +206,10 @@ static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
     {
-
+        // Drive the generic transaction timeouts (Core Vol 3 Part H 3.4,
+        // Part F 3.3.3). Both are cheap no-ops when nothing is pending.
+        BtSmpTimeoutCheck();
+        BtGattIndicationTimeoutCheck();
     }
 }
 
@@ -765,6 +782,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
+
+	// Start the app timer with a 1 s continuous trigger. It sources the SMP/GATT
+	// millisecond clock (BtSmp/GattMsTick above) and its handler drives the
+	// 30 s transaction-timeout checks. 1 s cadence is ample for a 30 s deadline.
+	g_BtAppSdcTimer.Init(s_BtAppSdcTimerCfg);
+	g_BtAppSdcTimer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 

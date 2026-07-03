@@ -153,6 +153,72 @@ static void SmpLinkFree(uint16_t ConnHdl)
 	}
 }
 
+// Wipe pairing/key material after a failed attempt but keep the slot bound to
+// the connection along with the repeated-attempts counter and lock flag, so
+// FailCount accumulates across attempts on the same connection (the record is
+// only fully freed by BtSmpDisconnected). Preserves the security property of
+// SmpLinkFree - no key material survives - without losing the counter.
+static void SmpLinkResetKeepCount(BtSmpLink_t *pLink)
+{
+	uint16_t hdl    = pLink->ConnHdl;
+	uint8_t  fc     = pLink->Ctx.FailCount;
+	bool     locked = pLink->Ctx.bLocked;
+
+	memset(&pLink->Ctx, 0, sizeof(pLink->Ctx));
+	memset(&pLink->Keys, 0, sizeof(pLink->Keys));
+
+	pLink->ConnHdl       = hdl;
+	pLink->Ctx.FailCount = fc;
+	pLink->Ctx.bLocked   = locked;
+	pLink->Ctx.State     = BT_SMP_STATE_IDLE;
+}
+
+//-----------------------------------------------------------------------------
+// Pairing timeout (Core Vol 3 Part H 3.4)
+//-----------------------------------------------------------------------------
+
+static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason);
+
+// Millisecond tick for the pairing timeout. Weak default returns 0 so the
+// timeout is inert on ports without a clock; an app with a running millisecond
+// counter overrides this to enable it. Mirrors the BtGattMsTick pattern.
+__attribute__((weak)) uint32_t BtSmpMsTick(void)
+{
+	return 0;
+}
+
+// A pairing procedure is in progress (before encryption): the states in which
+// the SMP timeout applies. IDLE, KEYDIST (post-encryption key exchange) and
+// DONE are excluded - the link is either idle or already secure.
+static inline bool SmpPairingActive(BtSmpState_t State)
+{
+	return State != BT_SMP_STATE_IDLE &&
+		   State != BT_SMP_STATE_KEYDIST &&
+		   State != BT_SMP_STATE_DONE;
+}
+
+// True once the pairing on pLink has exceeded BT_SMP_TIMEOUT_MS. The unsigned
+// subtraction handles counter rollover during the wait. The timer is anchored
+// to the pairing start, so the elapsed time cannot be extended by the peer
+// sending further PDUs.
+static inline bool SmpPairingTimedOut(const BtSmpLink_t *pLink)
+{
+	return SmpPairingActive(pLink->Ctx.State) &&
+		   (uint32_t)(BtSmpMsTick() - pLink->Ctx.TmrStart) >= BT_SMP_TIMEOUT_MS;
+}
+
+// Fail an overdue pairing and lock the link: send Pairing Failed, count the
+// attempt, and mark the link so no further SMP is accepted until it
+// disconnects (BtSmpDisconnected frees the record and clears the lock).
+static void SmpFailAndLock(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+						   BtSmpLink_t *pLink, uint8_t Reason)
+{
+	SmpSendFailed(pDev, ConnHdl, Reason);
+	pLink->Ctx.State = BT_SMP_STATE_IDLE;
+	pLink->Ctx.bLocked = true;
+	BtSmpPairingComplete(ConnHdl, false, nullptr);
+}
+
 //-----------------------------------------------------------------------------
 // Outbound packet helpers
 //-----------------------------------------------------------------------------
@@ -680,7 +746,11 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		return;
 	}
 
-	if (pReq->MaxKeySize < BT_SMP_MIN_ENC_KEY_SIZE ||
+	// Enforce the locally-required minimum key size, not just the spec floor:
+	// rejecting a peer that offers below BT_SMP_CFG_MIN_ENC_KEY_SIZE closes the
+	// KNOB-style downgrade where a MITM forces MaxKeySize down (Core Vol 3 Part
+	// H 2.3.4). Default floor is 7 (spec) unless the build raises it.
+	if (pReq->MaxKeySize < BT_SMP_CFG_MIN_ENC_KEY_SIZE ||
 		pReq->MaxKeySize > BT_SMP_MAX_ENC_KEY_SIZE)
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_ENC_KEY_SIZE);
@@ -828,7 +898,10 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		return;
 	}
 
-	if (pRsp->MaxKeySize < BT_SMP_MIN_ENC_KEY_SIZE ||
+	// Enforce the locally-required minimum key size (see the responder path):
+	// reject a peer offering below BT_SMP_CFG_MIN_ENC_KEY_SIZE to close the
+	// KNOB-style downgrade. Default floor is 7 (spec) unless the build raises it.
+	if (pRsp->MaxKeySize < BT_SMP_CFG_MIN_ENC_KEY_SIZE ||
 		pRsp->MaxKeySize > BT_SMP_MAX_ENC_KEY_SIZE)
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_ENC_KEY_SIZE);
@@ -1567,6 +1640,18 @@ static void SmpHandleSigningInfo(BtSmpLink_t *pLink, const BtSmpSigningInfo_t *p
 	}
 }
 
+// Mark one key type of the peer's Phase-3 key distribution as received and, once
+// every negotiated key has arrived, close the key-distribution window by moving
+// the link to DONE. This bounds how long the H4 gate stays open on the link.
+static void SmpKeyDistReceived(BtSmpLink_t *pLink, uint8_t KeyBit)
+{
+	pLink->Ctx.KeyDistExp &= (uint8_t)~KeyBit;
+	if (pLink->Ctx.KeyDistExp == 0)
+	{
+		pLink->Ctx.State = BT_SMP_STATE_DONE;
+	}
+}
+
 //-----------------------------------------------------------------------------
 // Public entry points
 //-----------------------------------------------------------------------------
@@ -1592,6 +1677,32 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
 			return;
 		}
+	}
+
+	// H5: once a link is locked (SMP timeout or too many failed attempts) no
+	// further SMP is accepted until it disconnects (Core Vol 3 Part H 3.4/2.3.6).
+	if (pLink->Ctx.bLocked)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_REPEATED_ATTEMPTS);
+		return;
+	}
+
+	// H5: anchor the pairing timer on the first PDU of an exchange (state still
+	// IDLE). The timer is not refreshed per PDU, so total pairing time is bounded
+	// to BT_SMP_TIMEOUT_MS and the peer cannot extend it by sending further PDUs.
+	if (pLink->Ctx.State == BT_SMP_STATE_IDLE)
+	{
+		pLink->Ctx.TmrStart = BtSmpMsTick();
+	}
+
+	// H5: fail an overdue in-progress pairing before handling this PDU. The
+	// external BtSmpTimeoutCheck() covers the silent-peer case; this covers a
+	// peer that resumes after the deadline.
+	if (SmpPairingTimedOut(pLink))
+	{
+		pLink->Ctx.FailCount++;
+		SmpFailAndLock(pDev, ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
+		return;
 	}
 
 	// Validate the PDU has enough bytes for its code before any handler
@@ -1627,6 +1738,35 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		}
 	}
 
+	// H4: phase-3 key-distribution PDUs are only valid on an encrypted link
+	// during the key-distribution phase of an active pairing (Core Vol 3 Part H
+	// 2.4.6 / 3.6.1). Accepting them before encryption or outside that phase
+	// lets an unauthenticated / off-phase peer overwrite the stored
+	// LTK/IRK/identity/CSRK in the bond record. Reject such PDUs.
+	switch (pSmp->Code)
+	{
+		case BT_SMP_CODE_PAIRING_ENCRYP_INFO:
+		case BT_SMP_CODE_PAIRING_CENTRAL_ID:
+		case BT_SMP_CODE_PAIRING_ID_INFO:
+		case BT_SMP_CODE_PAIRING_ID_ADDR_INFO:
+		case BT_SMP_CODE_PAIRING_SIGNING_INFO:
+		{
+			BtDevice_t *pKdPeer = BtPeerFindByHdl(ConnHdl);
+			if (pKdPeer == nullptr || pKdPeer->bSecure == false ||
+				pLink->Ctx.State != BT_SMP_STATE_KEYDIST)
+			{
+				SMP_TRACE("SMP drop key-dist code 0x%02x (secure=%d state=%d)\r\n",
+						  pSmp->Code, (pKdPeer != nullptr) && pKdPeer->bSecure,
+						  (int)pLink->Ctx.State);
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				return;
+			}
+			break;
+		}
+		default:
+			break;
+	}
+
 	switch (pSmp->Code)
 	{
 		case BT_SMP_CODE_PAIRING_REQ:
@@ -1659,6 +1799,8 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 		case BT_SMP_CODE_PAIRING_CENTRAL_ID:
 			SmpHandleCentralId(pLink, (const BtSmpCentralId_t*)pSmp);
+			// Central Identification is the last PDU of the ENCKEY set (legacy).
+			SmpKeyDistReceived(pLink, BT_SMP_KEYDIST_ENCKEY);
 			break;
 
 		case BT_SMP_CODE_PAIRING_ID_INFO:
@@ -1667,10 +1809,13 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 		case BT_SMP_CODE_PAIRING_ID_ADDR_INFO:
 			SmpHandleIdAddrInfo(pLink, (const BtSmpIdAddrInfo_t*)pSmp);
+			// Identity Address is the last PDU of the IDKEY set (IRK + address).
+			SmpKeyDistReceived(pLink, BT_SMP_KEYDIST_IDKEY);
 			break;
 
 		case BT_SMP_CODE_PAIRING_SIGNING_INFO:
 			SmpHandleSigningInfo(pLink, (const BtSmpSigningInfo_t*)pSmp);
+			SmpKeyDistReceived(pLink, BT_SMP_KEYDIST_SIGNKEY);
 			break;
 
 		case BT_SMP_CODE_PAIRING_FAILED:
@@ -1682,7 +1827,20 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			}
 			pLink->Ctx.State = BT_SMP_STATE_IDLE;
 			BtSmpPairingComplete(ConnHdl, false, nullptr);
-			SmpLinkFree(ConnHdl);
+
+			// H5 repeated attempts (Core Vol 3 Part H 2.3.6): count the failure
+			// and, once too many have occurred on this connection, lock the link
+			// so further pairing is refused until it disconnects. Otherwise keep
+			// the slot (with the counter) so the next attempt is still counted.
+			pLink->Ctx.FailCount++;
+			if (pLink->Ctx.FailCount >= BT_SMP_MAX_PAIR_ATTEMPTS)
+			{
+				pLink->Ctx.bLocked = true;
+			}
+			else
+			{
+				SmpLinkResetKeepCount(pLink);
+			}
 			break;
 		}
 
@@ -1970,9 +2128,23 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			SmpSend(pDev, ConnHdl, &si, sizeof(si));
 		}
 
-		pLink->Ctx.State = BT_SMP_STATE_DONE;
+		// Compute which keys the peer will distribute in return. The negotiated
+		// key-distribution fields live in the Pairing Response (byte 5 =
+		// InitiatorKeyDist, byte 6 = ResponderKeyDist): the peer sends the field
+		// for its own role. While those are still outstanding the link sits in
+		// KEYDIST, the only state in which the H4 gate accepts inbound
+		// key-distribution PDUs; once all have arrived SmpKeyDistReceived moves it
+		// to DONE. If the peer distributes nothing, go straight to DONE.
+		uint8_t peerKeyDist = (pLink->Ctx.bInitiator ?
+									pLink->Ctx.PRsp[6] : pLink->Ctx.PRsp[5]) &
+							   (BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY);
+		pLink->Ctx.KeyDistExp = peerKeyDist;
+
 		BtSmpBondAdd(ConnHdl, &pLink->Keys);
 		BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
+
+		pLink->Ctx.State = (peerKeyDist != 0) ? BT_SMP_STATE_KEYDIST
+											  : BT_SMP_STATE_DONE;
 	}
 	else if (pLink->Ctx.State == BT_SMP_STATE_DONE)
 	{
@@ -2390,6 +2562,13 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 		}
 	}
 
+	// Do not (re)start pairing on a link locked by an SMP timeout or too many
+	// failed attempts; it stays locked until the connection drops.
+	if (pLink->Ctx.bLocked)
+	{
+		return;
+	}
+
 	// Idempotent: if pairing/encryption already started on this link, do not
 	// restart it (e.g. a Security Request arriving after we began on connect).
 	if (pLink->Ctx.State != BT_SMP_STATE_IDLE)
@@ -2422,6 +2601,7 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	// Just Works only.
 	pLink->Ctx.bInitiator = true;
 	pLink->Ctx.bSc = true;
+	pLink->Ctx.TmrStart = BtSmpMsTick();	// anchor the SMP pairing timeout
 
 	BtSmpPairingReq_t req;
 	req.Code = BT_SMP_CODE_PAIRING_REQ;
@@ -2451,6 +2631,29 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 void BtSmpDisconnected(uint16_t ConnHdl)
 {
 	SmpLinkFree(ConnHdl);
+}
+
+void BtSmpTimeoutCheck(void)
+{
+	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
+	{
+		BtSmpLink_t *pLink = &s_SmpLink[i];
+
+		if (pLink->ConnHdl == BT_CONN_HDL_INVALID || pLink->Ctx.bLocked)
+		{
+			continue;
+		}
+
+		if (SmpPairingTimedOut(pLink))
+		{
+			BtDevice_t *pPeer = BtPeerFindByHdl(pLink->ConnHdl);
+			BtHciDevice_t *pDev = (pPeer != nullptr) ?
+									(BtHciDevice_t*)pPeer->pHciDev : s_pSmpActiveDev;
+			SMP_TRACE("SMP pairing timed out on hdl %d\r\n", pLink->ConnHdl);
+			pLink->Ctx.FailCount++;
+			SmpFailAndLock(pDev, pLink->ConnHdl, pLink, BT_SMP_ERR_UNSPECIFIED);
+		}
+	}
 }
 
 // f4 self-test against the BLE spec worked example (Vol 3 Part H, D.2).

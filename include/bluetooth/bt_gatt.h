@@ -226,9 +226,38 @@ uint32_t BtGattMsTick(void);
  *			outstanding on ConnHdl for at least TimeoutMs without the peer's
  *			confirmation. The spec action on timeout is to terminate the link, so
  *			the caller disconnects ConnHdl when this returns true. Always false
- *			unless BtGattMsTick() is overridden with a real clock.
+ *			unless BtGattMsTick() is overridden with a running millisecond counter.
  */
 bool BtGattIndicationTimedOut(uint16_t ConnHdl, uint32_t TimeoutMs);
+
+/// ATT transaction timeout in milliseconds (Core Vol 3 Part F, 3.3.3).
+#ifndef BT_GATT_INDICATION_TIMEOUT_MS
+#define BT_GATT_INDICATION_TIMEOUT_MS				30000
+#endif
+
+/// Max connections scanned per BtGattIndicationTimeoutCheck() call.
+#ifndef BT_GATT_TIMEOUT_CHECK_MAX
+#define BT_GATT_TIMEOUT_CHECK_MAX					8
+#endif
+
+/**
+ * @brief	Action when an indication is not confirmed within the ATT
+ *			transaction timeout (Core Vol 3 Part F, 3.3.3). Weak default clears
+ *			the outstanding-indication flag so the link is not blocked forever;
+ *			the spec-correct action is to disconnect the link, which a port
+ *			overrides this to do.
+ */
+void BtGattIndicationTimeout(uint16_t ConnHdl);
+
+/**
+ * @brief	Fire BtGattIndicationTimeout() for every connection whose
+ *			outstanding indication has exceeded BT_GATT_INDICATION_TIMEOUT_MS.
+ *			Call periodically from the application main loop or a timer. Has no
+ *			effect until BtGattMsTick() is overridden with a running millisecond
+ *			counter.
+ */
+void BtGattIndicationTimeoutCheck(void);
+
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc);
 void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc);
 //void BtGattServiceInit(BtGattSrvc_t * const pSrvc);
