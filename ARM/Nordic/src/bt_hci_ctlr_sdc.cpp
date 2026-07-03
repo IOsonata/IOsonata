@@ -350,7 +350,7 @@ bool BtHciCtlrEnable(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		sdc_support_le_conn_cte_rsp_central();
 	}
 
-    uint32_t ram = 0;
+    int32_t ram = 0;
 	sdc_cfg_t cfg;
 
 	// Reserve max always. It seems sdc lib is not capable of changing it in runtime

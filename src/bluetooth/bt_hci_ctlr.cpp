@@ -56,11 +56,14 @@ static size_t BtHciCtlrReceive(BtHciCtlrDev_t * const pDev, uint16_t Hdl, void *
 	BtHciCtlrPkt_t *p = (BtHciCtlrPkt_t*)CFifoPut(pDev->hRxFifo);
 	if (p)
 	{
-		p->Len = Len;
+		// Data capacity is the element size less the packet header.
+		size_t cap = pDev->PacketSize - BTHCICTLR_PKTHDR_LEN;
+		size_t l = min(Len, cap);
+
+		p->Len = l;
 		p->ValHdl = Hdl;
 		p->Off = 0;
 
-		size_t l = min(Len, pDev->PacketSize);
 		memcpy(p->Data, pData, l);
 
 		return l;
@@ -153,6 +156,11 @@ bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 size_t BtHciCtlrSendCommand(BtHciCtlrDev_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen)
 {
 	if (pDev == nullptr || pDev->SendCommand == nullptr)
+	{
+		return 0;
+	}
+
+	if (ParamLen > 0 && pParam == nullptr)
 	{
 		return 0;
 	}

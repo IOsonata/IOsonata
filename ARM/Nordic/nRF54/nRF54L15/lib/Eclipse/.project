@@ -1176,9 +1176,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_adv_bm.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_adv_sdc.cpp</name>
+			<name>src/bluetooth/bt_adv_hci.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_adv_sdc.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_adv_hci.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_app.cpp</name>
@@ -1226,11 +1226,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_ctlr_sdc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_dev.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_dev.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_dev_sdc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_dev_sdc.cpp</locationURI>
@@ -1246,9 +1241,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_gap_bm.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_gap_sdc.cpp</name>
+			<name>src/bluetooth/bt_gap_hci.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gap_sdc.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gap_hci.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gatt.cpp</name>
@@ -1261,9 +1256,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_gatt_bm.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_gatt_sdc.cpp</name>
+			<name>src/bluetooth/bt_gatt_hci.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_gatt_sdc.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gatt_hci.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_hci_host.cpp</name>
@@ -1321,9 +1316,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_scan_bm.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_scan_sdc.cpp</name>
+			<name>src/bluetooth/bt_scan_hci.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_scan_sdc.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_scan_hci.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_sdp.cpp</name>

@@ -173,7 +173,7 @@ static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	memcpy(&l2->Smp, pData, Len);
 
 	acl->Hdr.Len = (uint16_t)(Len + sizeof(BtL2CapHdr_t));
-	pDev->SendData((uint8_t*)acl, acl->Hdr.Len + sizeof(acl->Hdr));
+	BtHciSendAcl(pDev, acl);
 
 	SMP_TRACE_PDU("TX", ((const uint8_t*)pData)[0],
 				  SmpLinkFind(ConnHdl) ? (int)SmpLinkFind(ConnHdl)->Ctx.State : -1);

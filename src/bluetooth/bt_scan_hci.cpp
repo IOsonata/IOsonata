@@ -26,7 +26,10 @@ Copyright (c) 2022, I-SYST inc., all rights reserved
 
 void BtAppScan()
 {
-	BtGapScanStart(NULL, 0);
+	if (BtGapScanStart(NULL, 0))
+	{
+		g_BtAppData.bScan = true;
+	}
 }
 
 void BtAppScanStop()
