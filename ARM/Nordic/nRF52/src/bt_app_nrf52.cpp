@@ -467,9 +467,6 @@ void BtAppEnterDfu()
 
 bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	uint16_t connHdl = BtAppGetConnHandle();
-	uint8_t emptyData = 0;
-
 	if (pChar == nullptr)
 	{
 		return false;
@@ -480,39 +477,14 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	if (connHdl == BLE_CONN_HANDLE_INVALID)
-	{
-		return false;
-	}
-
 	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{
 		return false;
 	}
 
-	// SoftDevice enforces the CCCD per connection on sd_ble_gatts_hvx.
-
-	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
-	{
-		return false;
-	}
-
-	if (pData == nullptr)
-	{
-		pData = &emptyData;
-	}
-
-    ble_gatts_hvx_params_t params;
-
-    memset(&params, 0, sizeof(params));
-    params.type = BLE_GATT_HVX_NOTIFICATION;
-    params.handle = pChar->ValHdl;//.value_handle;
-    params.p_data = pData;
-    params.p_len = &DataLen;
-
-    uint32_t err_code = sd_ble_gatts_hvx(connHdl, &params);
-
-    return err_code == NRF_SUCCESS;
+	// Delegate the send to BtGattCharNotify so the notification is tracked in
+	// the TX-pending ring and TxCompleteCB fires on completion.
+	return BtGattCharNotify(BtAppGetConnHandle(), pChar, pData, DataLen);
 }
 
 bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)

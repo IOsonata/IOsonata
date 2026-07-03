@@ -554,7 +554,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	uint16_t maxTxOctets = (uint16_t)(maxlen[0] | (maxlen[1] << 8));
 	uint16_t maxTxTime   = (uint16_t)(maxlen[2] | (maxlen[3] << 8));
 
-	uint16_t txOctets = (uint16_t)max(maxTxOctets, pCfg->MaxMtu);
+	uint16_t txOctets = (uint16_t)min(maxTxOctets, pCfg->MaxMtu);
 	uint8_t datalen[4];
 	datalen[0] = (uint8_t)(txOctets & 0xff);
 	datalen[1] = (uint8_t)(txOctets >> 8);
