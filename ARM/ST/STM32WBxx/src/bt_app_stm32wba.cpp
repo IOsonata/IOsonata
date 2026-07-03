@@ -478,16 +478,21 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						                   p->Peer_Address);
 						BtAppEvtConnected(p->Connection_Handle);
 
-						// Central + secure: start pairing. ST owns the SMP
-						// exchange and emits ACI_GAP_PAIRING_COMPLETE, which
-						// surfaces below as BtAppEvtSecured. The peripheral does
-						// not initiate; it waits for the central or a Security
-						// Request issued elsewhere.
+						// Secure link setup. ST owns the SMP exchange and emits
+						// ACI_GAP_PAIRING_COMPLETE, which surfaces below as
+						// BtAppEvtSecured. A central starts pairing directly; a
+						// peripheral asks the central with a Security Request.
 						if (g_BtAppData.AppDevice.bSecure &&
 						    (g_BtAppData.AppDevice.Conn.Role &
 						     (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)))
 						{
 							aci_gap_send_pairing_req(p->Connection_Handle, 0);
+						}
+						else if (g_BtAppData.AppDevice.bSecure &&
+						    (g_BtAppData.AppDevice.Conn.Role &
+						     (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
+						{
+							aci_gap_slave_security_req(p->Connection_Handle);
 						}
 					}
 					break;
@@ -769,6 +774,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	aci_gatt_update_char_value(gapSrvcHdl, appearanceHdl,
 	                           0, sizeof(appearance), (uint8_t *)&appearance);
 
+	// Store the app security type so the GATT layer can gate characteristic
+	// permissions before user services are registered.
+	g_BtAppData.SecType = pCfg->SecType;
+
 	// SMP / pairing config. Map BtGap SecType to ST auth requirement.
 	uint8_t authReq      = 0;	// bonding NO, MITM NO by default
 	uint8_t scSupport    = 0;	// LE Secure Connections off by default
@@ -781,6 +790,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		case BTGAP_SECTYPE_LESC_MITM:
 			authReq   = 0x05;
 			scSupport = 1;
+			break;
+		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
+		case BTGAP_SECTYPE_SIGNED_NO_MITM:
+			authReq = 0x01;	// bonding, no MITM (encryption without authentication)
 			break;
 		case BTGAP_SECTYPE_NONE:
 		default:

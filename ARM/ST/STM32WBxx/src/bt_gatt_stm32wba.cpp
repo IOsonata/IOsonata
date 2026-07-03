@@ -29,6 +29,7 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_app.h"
 
 // ST lays a characteristic out as a run of consecutive handles: the declaration
 // at the handle returned by aci_gatt_add_char, the value at declaration + 1,
@@ -38,6 +39,27 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 // later added, as that shifts the CCCD handle.
 #define WBA_CHAR_VALUE_OFFSET		1
 #define WBA_CHAR_CCCD_OFFSET		2
+
+// Map the app security type to ST attribute permission bits. The model has
+// no per-characteristic security, so the app level SecType applies to every
+// user characteristic. MITM types require authenticated access; no-MITM
+// types require encryption only.
+static uint8_t WbaSecPerm(uint32_t SecType)
+{
+	switch (SecType)
+	{
+		case BTGAP_SECTYPE_STATICKEY_MITM:
+		case BTGAP_SECTYPE_LESC_MITM:
+		case BTGAP_SECTYPE_SIGNED_MITM:
+			return ATTR_PERMISSION_AUTHEN_READ | ATTR_PERMISSION_AUTHEN_WRITE;
+		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
+		case BTGAP_SECTYPE_SIGNED_NO_MITM:
+			return ATTR_PERMISSION_ENCRY_READ | ATTR_PERMISSION_ENCRY_WRITE;
+		case BTGAP_SECTYPE_NONE:
+		default:
+			return ATTR_PERMISSION_NONE;
+	}
+}
 
 static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc, BtGattChar_t * const pChar)
 {
@@ -64,7 +86,7 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc, BtGattChar_t * const pCha
 	uint16_t charHdl = BT_ATT_HANDLE_INVALID;
 	tBleStatus st = aci_gatt_add_char(pSrvc->Hdl, uuidType, &uuid,
 									  pChar->MaxDataLen, (uint8_t)pChar->Property,
-									  ATTR_PERMISSION_NONE, GATT_NOTIFY_ATTRIBUTE_WRITE,
+									  WbaSecPerm(g_BtAppData.SecType), GATT_NOTIFY_ATTRIBUTE_WRITE,
 									  MIN_ENCRY_KEY_SIZE, CHAR_VALUE_LEN_VARIABLE,
 									  &charHdl);
 	if (st != BLE_STATUS_SUCCESS)
