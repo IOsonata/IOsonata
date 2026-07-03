@@ -126,7 +126,13 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 
     uint32_t err_code = sd_ble_gatts_hvx(hdl, &params);
 
-    return err_code == NRF_SUCCESS;
+    if (err_code == NRF_SUCCESS)
+    {
+        BtGattTxPendingAdd(ConnHdl, pChar);
+        return true;
+    }
+
+    return false;
 }
 
 // Native indication path. The SoftDevice enforces the single-outstanding-
@@ -338,14 +344,9 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt, void * const
 
 //				if (hdl == pBleEvt->evt.gatts_evt.conn_handle)
 				{
-					for (int i = 0; i < pSrvc->NbChar; i++)
-					{
-						if (pBleEvt->evt.gatts_evt.params.hvc.handle == pSrvc->pCharArray[i].ValHdl &&
-							pSrvc->pCharArray[i].TxCompleteCB != NULL)
-						{
-							pSrvc->pCharArray[i].TxCompleteCB(&pSrvc->pCharArray[i], i);
-						}
-					}
+					// HVN TX complete gives only a count, not a handle. It is
+					// handled once per event in the global handler through
+					// BtGattSendCompleted, which drains the send-order ring.
 				}
         	}
             break;

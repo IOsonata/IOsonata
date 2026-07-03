@@ -1159,6 +1159,13 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     }
     if (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)
     {
+    	// HVN TX complete gives a count, not a handle. Drain the per-peer
+    	// send-order ring once per event.
+    	if (p_ble_evt->header.evt_id == BLE_GATTS_EVT_HVN_TX_COMPLETE)
+    	{
+    		BtGattSendCompleted(p_ble_evt->evt.gatts_evt.conn_handle,
+    			p_ble_evt->evt.gatts_evt.params.hvn_tx_complete.count);
+    	}
     	BtGattEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);
     	BtAppPeriphEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);
     }
