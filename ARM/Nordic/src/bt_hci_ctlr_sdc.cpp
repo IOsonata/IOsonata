@@ -37,6 +37,8 @@ SOFTWARE.
 
 #include "sdc_hci.h"
 #include "sdc_hci_cmd_le.h"
+#include "sdc_hci_cmd_controller_baseband.h"
+#include "sdc_hci_cmd_link_control.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
@@ -169,6 +171,52 @@ extern "C" uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, cons
 				sdc_hci_cmd_le_long_term_key_request_negative_reply_return_t r;
 				res = sdc_hci_cmd_le_long_term_key_request_negative_reply((const sdc_hci_cmd_le_long_term_key_request_negative_reply_t*)pParam, &r);
 			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_RANDOM_ADDR:
+			res = sdc_hci_cmd_le_set_random_address((const sdc_hci_cmd_le_set_random_address_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_READ_MAX_DATA_LEN:
+			{
+				sdc_hci_cmd_le_read_max_data_length_return_t r;
+				res = sdc_hci_cmd_le_read_max_data_length(&r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_WRITE_SUGG_DEFAULT_DATA_LEN:
+			res = sdc_hci_cmd_le_write_suggested_default_data_length((const sdc_hci_cmd_le_write_suggested_default_data_length_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_EVENT_MASK:
+			res = sdc_hci_cmd_le_set_event_mask((const sdc_hci_cmd_le_set_event_mask_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_BASEBAND_SET_EVENT_MASK:
+			res = sdc_hci_cmd_cb_set_event_mask((const sdc_hci_cmd_cb_set_event_mask_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_BASEBAND_SET_EVENT_MASK_PAGE2:
+			res = sdc_hci_cmd_cb_set_event_mask_page_2((const sdc_hci_cmd_cb_set_event_mask_page_2_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_ENCRYPT:
+			{
+				sdc_hci_cmd_le_encrypt_return_t r;
+				res = sdc_hci_cmd_le_encrypt((const sdc_hci_cmd_le_encrypt_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_LINKCTRL_DISCONNECT:
+			res = sdc_hci_cmd_lc_disconnect((const sdc_hci_cmd_lc_disconnect_t*)pParam);
 			break;
 
 		default:

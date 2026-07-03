@@ -14,8 +14,8 @@ it.
 
 It taps the BLE link-layer controller's mandatory HCI primitive LE Encrypt
 (AES-128 ECB), which the Bluetooth Core Spec guarantees every LE controller
-implements. The synchronous call form is the Nordic SDC library's API
-(sdc_hci_cmd_le_*), matching how the rest of the SDC path issues HCI commands.
+implements. It issues the command through the generic BtHciCommand path, so it
+works with any HCI controller; the SDC dispatch maps it to the typed wrapper.
 It advertises CRYPTO_CAP_AES128_ECB only; no ECDH (the controller has no LE ECDH
 commands), so it composes with an ECDH engine (CryptoUeccInit) to cover the ECDH
 capability the controller lacks. Random bytes are a coredev service
@@ -37,7 +37,8 @@ SDC-platform only: guarded on the sdc_hci_cmd_le.h header.
 #if defined(CRYPTO_HAS_SDC) || \
 	(defined(__has_include) && __has_include("sdc_hci_cmd_le.h"))
 
-#include "sdc_hci_cmd_le.h"
+#include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_app.h"
 
 static void ReverseCopy(uint8_t *pDst, const uint8_t *pSrc, size_t Len)
 {
@@ -53,19 +54,26 @@ static CRYPTO_STATUS CtlrAes128Ecb(CryptoDev_t * const pDev,
 {
 	(void)pDev; (void)pCtx;
 
-	// SMP toolbox is big-endian; LE Encrypt is little-endian. Reverse both.
-	sdc_hci_cmd_le_encrypt_t        cmd;
-	sdc_hci_cmd_le_encrypt_return_t rsp;
+	BtHciDevice_t *pHci = g_BtAppData.AppDevice.pHciDev;
+	if (pHci == nullptr)
+	{
+		memset(Out, 0, 16);
+		return CRYPTO_STATUS_FAIL;
+	}
 
-	ReverseCopy(cmd.key, Key, 16);
-	ReverseCopy(cmd.plaintext_data, In, 16);
+	// LE Encrypt parameters: key then plaintext, each 16 bytes little endian.
+	// The SMP toolbox is big-endian, so reverse both ways.
+	uint8_t param[32];
+	ReverseCopy(&param[0], Key, 16);
+	ReverseCopy(&param[16], In, 16);
 
-	if (sdc_hci_cmd_le_encrypt(&cmd, &rsp) != 0)
+	uint8_t enc[16];
+	if (BtHciCommand(pHci, BT_HCI_CMD_CTLR_ENCRYPT, param, sizeof(param), enc, sizeof(enc)) != 0)
 	{
 		memset(Out, 0, 16);		// fail loud
 		return CRYPTO_STATUS_FAIL;
 	}
-	ReverseCopy(Out, rsp.encrypted_data, 16);
+	ReverseCopy(Out, enc, 16);
 	return CRYPTO_STATUS_OK;
 }
 

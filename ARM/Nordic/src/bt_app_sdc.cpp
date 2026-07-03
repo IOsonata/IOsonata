@@ -41,11 +41,8 @@ SOFTWARE.
 //#include "mpsl_fem_init.h"
 #include "sdc.h"
 #include "sdc_soc.h"
-#include "sdc_hci_cmd_le.h"
 #include "sdc_hci.h"
 #include "sdc_hci_vs.h"
-#include "sdc_hci_cmd_controller_baseband.h"
-#include "sdc_hci_cmd_link_control.h"
 
 #include "istddef.h"
 #include "convutil.h"
@@ -327,12 +324,12 @@ void BtAppDisconnect()
 
 	// HCI Disconnect, Link Control OGF=0x01/OCF=0x0006.
 	// Reason 0x13 = Remote User Terminated Connection.
-	sdc_hci_cmd_lc_disconnect_t cmd;
+	uint8_t param[3];
+	param[0] = (uint8_t)(connHdl & 0xFF);
+	param[1] = (uint8_t)(connHdl >> 8);
+	param[2] = 0x13;
 
-	cmd.conn_handle = connHdl;
-	cmd.reason = 0x13;
-
-	uint8_t rc = sdc_hci_cmd_lc_disconnect(&cmd);
+	uint8_t rc = BtHciCommand(&s_BtHciDev, BT_HCI_CMD_LINKCTRL_DISCONNECT, param, sizeof(param), NULL, 0);
 	DEBUG_PRINTF("BtAppDisconnect: hdl=%u rc=%u\r\n", connHdl, rc);
 }
 /*
@@ -530,69 +527,67 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// static random address; nrf_get_mac_address() already sets them.
 	uint64_t mac = nrf_get_mac_address();
 
-	sdc_hci_cmd_le_set_random_address_t ranaddr;
+	uint8_t ranaddr[6];
 	for (int i = 0; i < 6; i++)
 	{
-		ranaddr.random_address[i] = (uint8_t)(mac >> (8 * i));	// LSB first
+		ranaddr[i] = (uint8_t)(mac >> (8 * i));	// LSB first
 	}
 	// Ensure the static-random marker even if the FICR value changes.
-	ranaddr.random_address[5] = (ranaddr.random_address[5] & 0x3f) | 0xc0;
+	ranaddr[5] = (ranaddr[5] & 0x3f) | 0xc0;
 
-	if (sdc_hci_cmd_le_set_random_address(&ranaddr) != 0)
+	if (BtHciCommand(&s_BtHciDev, BT_HCI_CMD_CTLR_SET_RANDOM_ADDR, ranaddr, sizeof(ranaddr), NULL, 0) != 0)
 	{
 		return false;
 	}
 
 	// SMP f5/f6 must use the same local address/type the peer sees.
-	memcpy(s_BtSmpLocalAddr, ranaddr.random_address, 6);
+	memcpy(s_BtSmpLocalAddr, ranaddr, 6);
 	s_BtSmpLocalAddrType = 1;	// random
 
 	DEBUG_PRINTF("local addr %02x:%02x:%02x:%02x:%02x:%02x type=1\r\n",
-				 ranaddr.random_address[5], ranaddr.random_address[4],
-				 ranaddr.random_address[3], ranaddr.random_address[2],
-				 ranaddr.random_address[1], ranaddr.random_address[0]);
+				 ranaddr[5], ranaddr[4], ranaddr[3], ranaddr[2], ranaddr[1], ranaddr[0]);
 
-	sdc_hci_cmd_le_read_max_data_length_return_t maxlen;
+	// LE Read Maximum Data Length return: supported max TX octets, TX time, RX
+	// octets, RX time, each 2 bytes little endian.
+	uint8_t maxlen[8] = {0};
+	BtHciCommand(&s_BtHciDev, BT_HCI_CMD_CTLR_READ_MAX_DATA_LEN, NULL, 0, maxlen, sizeof(maxlen));
+	uint16_t maxTxOctets = (uint16_t)(maxlen[0] | (maxlen[1] << 8));
+	uint16_t maxTxTime   = (uint16_t)(maxlen[2] | (maxlen[3] << 8));
 
-	res = sdc_hci_cmd_le_read_max_data_length(&maxlen);
-
-	sdc_hci_cmd_le_write_suggested_default_data_length_t datalen = {
-		(uint16_t)max(maxlen.supported_max_tx_octets, pCfg->MaxMtu),
-		maxlen.supported_max_tx_time
-	};
-
-	res = sdc_hci_cmd_le_write_suggested_default_data_length(&datalen);
+	uint16_t txOctets = (uint16_t)max(maxTxOctets, pCfg->MaxMtu);
+	uint8_t datalen[4];
+	datalen[0] = (uint8_t)(txOctets & 0xff);
+	datalen[1] = (uint8_t)(txOctets >> 8);
+	datalen[2] = (uint8_t)(maxTxTime & 0xff);
+	datalen[3] = (uint8_t)(maxTxTime >> 8);
+	BtHciCommand(&s_BtHciDev, BT_HCI_CMD_CTLR_WRITE_SUGG_DEFAULT_DATA_LEN, datalen, sizeof(datalen), NULL, 0);
 
 	sdc_default_tx_power_set(pCfg->TxPower);
 
-	sdc_hci_cmd_le_set_event_mask_t evmask = {0, };
-
-	// Enable all LE meta events EXCEPT the Remote Connection Parameter Request
-	// event. When that event is unmasked the controller defers every peer
-	// connection-parameter-update to the host and waits for an explicit
-	// LE Remote Connection Parameter Request Reply. The SDC HCI app layer does
-	// not issue that reply, so leaving the event enabled stalls the link-layer
-	// parameter update a central runs right after connecting/pairing - the
-	// procedure never completes and the link drops on supervision timeout.
-	// Masking the event off lets the controller accept the update autonomously.
-	memset(evmask.raw, 0xff, sizeof(evmask.raw));
-	evmask.params.le_remote_connection_parameter_request_event = 0;
-	if (sdc_hci_cmd_le_set_event_mask(&evmask))
+	// Enable all LE meta events EXCEPT the LE Remote Connection Parameter Request
+	// event (LE event mask octet 0, bit 5). When that event is unmasked the
+	// controller defers every peer connection-parameter-update to the host and
+	// waits for an explicit reply. The app layer does not issue that reply, so
+	// leaving it enabled stalls the link-layer parameter update a central runs
+	// right after connecting or pairing, and the link drops on supervision timeout.
+	uint8_t evmask[8];
+	memset(evmask, 0xff, sizeof(evmask));
+	evmask[0] &= ~(1 << 5);		// LE Remote Connection Parameter Request event
+	if (BtHciCommand(&s_BtHciDev, BT_HCI_CMD_CTLR_SET_EVENT_MASK, evmask, sizeof(evmask), NULL, 0))
 	{
 		return false;
 	}
 
-	sdc_hci_cmd_cb_set_event_mask_t cbevmask;
-
-	memset(cbevmask.raw, 0xff, sizeof(cbevmask.raw));
-	if (sdc_hci_cmd_cb_set_event_mask(&cbevmask))
+	uint8_t cbevmask[8];
+	memset(cbevmask, 0xff, sizeof(cbevmask));
+	if (BtHciCommand(&s_BtHciDev, BT_HCI_CMD_BASEBAND_SET_EVENT_MASK, cbevmask, sizeof(cbevmask), NULL, 0))
 	{
 		return false;
 	}
 
-	sdc_hci_cmd_cb_set_event_mask_page_2_t cbevmask2;
-	memset(cbevmask2.raw, 0xff, sizeof(cbevmask2.raw));
-	if (sdc_hci_cmd_cb_set_event_mask_page_2(&cbevmask2))
+	uint8_t cbevmask2[8];
+	memset(cbevmask2, 0xff, sizeof(cbevmask2));
+	if (BtHciCommand(&s_BtHciDev, BT_HCI_CMD_BASEBAND_SET_EVENT_MASK_PAGE2, cbevmask2, sizeof(cbevmask2), NULL, 0))
 	{
 		return false;
 	}

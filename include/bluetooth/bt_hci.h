@@ -115,6 +115,7 @@ SOFTWARE.
 #define BT_HCI_CMD_BASEBAND			3
 
 #define BT_HCI_CMD_BASEBAND_SET_EVENT_MASK						((3<<10) | 1)		//!< Set Event Mask command
+#define BT_HCI_CMD_BASEBAND_SET_EVENT_MASK_PAGE2				((3<<10) | 0x63)	//!< Set Event Mask Page 2 command
 #define BT_HCI_CMD_BASEBAND_RESET								((3<<10) | 3)		//!< Reset command
 #define BT_HCI_CMD_BASEBAND_SET_EVENT_FILTER					((3<<10) | 5)		//!< Set Event Filter command
 #define BT_HCI_CMD_BASEBAND_FLUSH								((3<<10) | 8)		//!< Flush command
@@ -279,6 +280,8 @@ SOFTWARE.
 #define BT_HCI_CMD_CTLR_SET_HOST_CHAN_CLASS						((8<<10) | 0x14)	//!< LE Set Host Channel Classification command
 #define BT_HCI_CMD_CTLR_READ_CHAN_MAP							((8<<10) | 0x15)	//!< LE Read Channel Map command
 #define BT_HCI_CMD_CTLR_READ_REMOTE_FEATURES					((8<<10) | 0x16)	//!< LE Read Remote Features command
+#define BT_HCI_CMD_CTLR_SET_EVENT_MASK							((8<<10) | 1)		//!< LE Set Event Mask command
+#define BT_HCI_CMD_CTLR_SET_RANDOM_ADDR							((8<<10) | 5)		//!< LE Set Random Address command
 #define BT_HCI_CMD_CTLR_ENCRYPT									((8<<10) | 0x17)	//!< LE Encrypt command
 #define BT_HCI_CMD_CTLR_RAND									((8<<10) | 0x18)	//!< LE Rand command
 #define BT_HCI_CMD_CTLR_ENABLE_ENCRYPTION						((8<<10) | 0x19)	//!< LE Enable Encryption command
