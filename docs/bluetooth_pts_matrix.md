@@ -16,7 +16,7 @@ Bluetooth SIG Profile Tuning Suite cases for that backend.
 | L2CAP LE Credit Based Channels | No | N/A | Vendor stack | No | No | No | Dynamic CoC data path not implemented. |
 | SMP Peripheral | Partial | Vendor stack | Vendor stack | No | Partial | No | Just Works/Bonding work exists; MITM/Passkey/OOB incomplete. |
 | SMP Central | Partial | Vendor stack | Vendor stack | No | No | No | Needs role-specific validation. |
-| Signed Write Command | Explicit no-op fallback | Vendor stack | Vendor stack | No | No | No | Generic path requires CSRK verification hook before enabling. |
+| Signed Write Command | Verified via bond CSRK | Vendor stack | Vendor stack | No | Partial | No | Signed Write verified through BtSmpSignVerify using the bond CSRK; sign counter and signature checked, rejected on mismatch. |
 | Device Information Service | Yes | Vendor/Generic | Vendor/Generic | No | Partial | No | Generic DIS module exists. |
 | Battery Service | Yes | Generic module | Generic module | No | No | No | Generic BAS module exposes Battery Level read/notify. |
 | Bond Management Service | No | No | No | No | No | No | Requires security/bond-delete policy first. |
@@ -27,6 +27,6 @@ Bluetooth SIG Profile Tuning Suite cases for that backend.
 
 1. Build generic/SDC target with `src/bluetooth/bt_l2cap.cpp`, `bt_bas.cpp`, and `bt_dis.cpp`.
 2. Confirm ATT Find Information returns multiple handles until MTU or UUID-format break.
-3. Confirm Signed Write Command does not modify attributes without an override.
+3. Confirm Signed Write Command verifies the signature against the bond CSRK and rejects a bad signature or stale sign counter.
 4. Confirm `BtAttDBEntrySetPermission()` rejects access when security hooks report insufficient link state.
 5. Confirm Battery Level read returns one byte and notification only sends after CCCD subscribe.
