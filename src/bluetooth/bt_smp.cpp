@@ -299,6 +299,19 @@ static BtHciDevice_t *s_pSmpActiveDev = nullptr;
 static uint8_t s_SmpIoCaps  = BT_SMP_LOCAL_IOCAPS;
 static uint8_t s_SmpAuthReq = BT_SMP_LOCAL_AUTHREQ;
 
+// Pending LE Secure Connections OOB data. The local set holds the key pair
+// commitment handed to the peer out of band; the peer set holds the material
+// received from the peer. Both are copied into the link context when a
+// pairing selects the OOB model.
+static struct {
+	bool bLocalValid;
+	bool bPeerValid;
+	uint8_t LocalRand[16];
+	uint8_t LocalPubKey[64];
+	uint8_t PeerRand[16];
+	uint8_t PeerConfirm[16];
+} s_SmpOob = {};
+
 static inline void SmpAes(const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16])
 {
 	BtSmpCryptoAes128(s_pSmpActiveDev, Key, In, Out);
@@ -620,6 +633,34 @@ static uint8_t SmpSelectModel(uint8_t InitIo, uint8_t RespIo, bool Mitm, bool Oo
 	return s_SmpModelMap[InitIo][RespIo];
 }
 
+// Copy the pending OOB material into the link context of an OOB pairing.
+static void SmpOobCtxLoad(BtSmpLink_t *pLink)
+{
+	if (s_SmpOob.bLocalValid)
+	{
+		memcpy(pLink->Ctx.OobLocalRand, s_SmpOob.LocalRand, 16);
+	}
+	if (s_SmpOob.bPeerValid)
+	{
+		pLink->Ctx.bOobPeerData = true;
+		memcpy(pLink->Ctx.OobPeerRand, s_SmpOob.PeerRand, 16);
+		memcpy(pLink->Ctx.OobPeerConfirm, s_SmpOob.PeerConfirm, 16);
+	}
+}
+
+// Generate the local SC key pair, or reuse the pair the pending local OOB
+// data commits to. The crypto provider retains the private key from the key
+// generation done at BtSmpOobLocalDataGen.
+static int SmpLocalKeyGen(BtHciDevice_t * const pDev, BtSmpLink_t *pLink)
+{
+	if (s_SmpOob.bLocalValid)
+	{
+		memcpy(pLink->Ctx.LocalPubKey, s_SmpOob.LocalPubKey, 64);
+		return BT_SMP_CRYPTO_OK;
+	}
+	return BtSmpCryptoP256KeyGen(pDev, pLink->Ctx.LocalPubKey);
+}
+
 // g2 -> 6 digit Numeric Comparison value.
 //
 // g2(U, V, X, Y) = AES-CMAC_X(U || V || Y) mod 2^32 (Core spec Vol 3 Part H,
@@ -685,7 +726,8 @@ static void SmpBuildPairingRsp(BtSmpLink_t *pLink, BtSmpPairingRsp_t *pRsp)
 {
 	pRsp->Code = BT_SMP_CODE_PAIRING_RSP;
 	pRsp->IOCaps = s_SmpIoCaps;
-	pRsp->OOBFlag = BT_SMP_OOB_AUTH_NOT_PRESENT;
+	pRsp->OOBFlag = (s_SmpOob.bPeerValid && pLink->Ctx.bSc) ?
+					BT_SMP_OOB_AUTH_PRESENT : BT_SMP_OOB_AUTH_NOT_PRESENT;
 	pRsp->AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
 	pRsp->MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
 
@@ -814,14 +856,21 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	// would treat as authenticated.
 	bool mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) ||
 				(pReq->AuthReq & BT_SMP_AUTHREQ_MITM);
-	pLink->Ctx.Model = SmpSelectModel(pReq->IOCaps, s_SmpIoCaps, mitm, false);
+	bool oob = pLink->Ctx.bSc &&
+			   ((pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || s_SmpOob.bPeerValid);
+	pLink->Ctx.Model = SmpSelectModel(pReq->IOCaps, s_SmpIoCaps, mitm, oob);
+	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
+	{
+		SmpOobCtxLoad(pLink);
+	}
 	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
 			  pLink->Ctx.Model, pReq->IOCaps, s_SmpIoCaps, mitm ? 1 : 0);
 	if (pLink->Ctx.Model != BT_SMP_MODEL_JUST_WORKS &&
 		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON &&
-		pLink->Ctx.Model != BT_SMP_MODEL_PASSKEY_ENTRY)
+		pLink->Ctx.Model != BT_SMP_MODEL_PASSKEY_ENTRY &&
+		pLink->Ctx.Model != BT_SMP_MODEL_OOB)
 	{
-		// OOB is not wired yet; fail closed rather than continuing to a link
+		// Unknown model; fail closed rather than continuing to a link
 		// the peer would treat as authenticated.
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
 		pLink->Ctx.State = BT_SMP_STATE_IDLE;
@@ -835,7 +884,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (pLink->Ctx.bSc)
 	{
 		pLink->Ctx.State = BT_SMP_STATE_PUBKEY_WAIT;
-		int rc = BtSmpCryptoP256KeyGen(pDev, pLink->Ctx.LocalPubKey);
+		int rc = SmpLocalKeyGen(pDev, pLink);
 		SMP_TRACE("SMP P256KeyGen rc=%d\r\n", rc);
 		if (rc == BT_SMP_CRYPTO_FAIL)
 		{
@@ -955,14 +1004,21 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	// would treat as authenticated.
 	bool mitm = (s_SmpAuthReq & BT_SMP_AUTHREQ_MITM) ||
 				(pRsp->AuthReq & BT_SMP_AUTHREQ_MITM);
-	pLink->Ctx.Model = SmpSelectModel(s_SmpIoCaps, pRsp->IOCaps, mitm, false);
+	bool oob = pLink->Ctx.bSc &&
+			   ((pRsp->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || s_SmpOob.bPeerValid);
+	pLink->Ctx.Model = SmpSelectModel(s_SmpIoCaps, pRsp->IOCaps, mitm, oob);
+	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
+	{
+		SmpOobCtxLoad(pLink);
+	}
 	SMP_TRACE("SMP model=%d init_io=%d resp_io=%d mitm=%d\r\n",
 			  pLink->Ctx.Model, s_SmpIoCaps, pRsp->IOCaps, mitm ? 1 : 0);
 	if (pLink->Ctx.Model != BT_SMP_MODEL_JUST_WORKS &&
 		pLink->Ctx.Model != BT_SMP_MODEL_NUMERIC_COMPARISON &&
-		pLink->Ctx.Model != BT_SMP_MODEL_PASSKEY_ENTRY)
+		pLink->Ctx.Model != BT_SMP_MODEL_PASSKEY_ENTRY &&
+		pLink->Ctx.Model != BT_SMP_MODEL_OOB)
 	{
-		// OOB is not wired yet; fail closed rather than continuing to a link
+		// Unknown model; fail closed rather than continuing to a link
 		// the peer would treat as authenticated.
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
 		pLink->Ctx.State = BT_SMP_STATE_IDLE;
@@ -1057,10 +1113,16 @@ static bool SmpPasskeyLocalDisplays(uint8_t LocalIo, uint8_t PeerIo)
 	return (PeerIo == BT_SMP_IOCAPS_KEYBOARD_ONLY);
 }
 
-// Fill the 16 octet r value for the DHKey Check f6. Zero for Just Works and
-// Numeric Comparison; the passkey (SMP little-endian, low octet first) for
-// Passkey Entry. f6 reverses r internally to big-endian.
-static void SmpDhKeyCheckR(const BtSmpLink_t *pLink, uint8_t r[16])
+// Fill the 16 octet r value for the DHKey Check f6 (Core Vol 3 Part H,
+// 2.3.5.6.5). Ea uses rb, Eb uses ra; bRa selects which. Zero for Just Works
+// and Numeric Comparison. The passkey (SMP little-endian, low octet first)
+// for Passkey Entry, identical on both sides. For OOB, ra is the random the
+// initiator distributed out of band and rb the one the responder distributed;
+// each is nonzero only when the other side received it, signaled by the OOB
+// flag it sent in the feature exchange (initiator flag in PReq for rb,
+// responder flag in PRsp for ra). On each device one of the two values is its
+// own distributed random, the other the received peer random.
+static void SmpDhKeyCheckR(const BtSmpLink_t *pLink, bool bRa, uint8_t r[16])
 {
 	memset(r, 0, 16);
 	if (pLink->Ctx.Model == BT_SMP_MODEL_PASSKEY_ENTRY)
@@ -1070,6 +1132,16 @@ static void SmpDhKeyCheckR(const BtSmpLink_t *pLink, uint8_t r[16])
 		r[1] = (uint8_t)((pk >> 8) & 0xFF);
 		r[2] = (uint8_t)((pk >> 16) & 0xFF);
 		r[3] = (uint8_t)((pk >> 24) & 0xFF);
+	}
+	else if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
+	{
+		uint8_t flag = bRa ? pLink->Ctx.PRsp[2] : pLink->Ctx.PReq[2];
+		if (flag == BT_SMP_OOB_AUTH_NOT_PRESENT)
+		{
+			return;
+		}
+		bool own = (bRa == pLink->Ctx.bInitiator);
+		memcpy(r, own ? pLink->Ctx.OobLocalRand : pLink->Ctx.OobPeerRand, 16);
 	}
 }
 
@@ -1142,7 +1214,7 @@ static void SmpPasskeyInitiatorFinish(BtHciDevice_t * const pDev, BtSmpLink_t *p
 
 	uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
 	uint8_t rChk[16];
-	SmpDhKeyCheckR(pLink, rChk);
+	SmpDhKeyCheckR(pLink, false, rChk);
 	uint8_t ea[16];
 	SmpF6(pLink->Ctx.Mackey, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
 		  rChk, iocapA,
@@ -1386,20 +1458,25 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 
 	if (pLink->Ctx.bInitiator)
 	{
-		// Initiator (SC Just Works): received responder nonce Nb. First verify
-		// the responder Confirm Cb = f4(PKbx, PKax, Nb, 0).
-		uint8_t localX[32];
-		uint8_t peerX[32];
-		SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], localX);	// PKax
-		SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], peerX);		// PKbx
-
-		uint8_t cb[16];
-		SmpF4(peerX, localX, pLink->Ctx.PeerRand, 0, cb);
-		if (!SmpEqualCT(cb, pLink->Ctx.PeerConfirm, 16))
+		// Initiator: received responder nonce Nb. For SC Just Works and Numeric
+		// Comparison verify the responder Confirm Cb = f4(PKbx, PKax, Nb, 0).
+		// OOB has no Confirm exchange; the peer key was authenticated against
+		// the out of band confirm at DHKey time.
+		if (pLink->Ctx.Model != BT_SMP_MODEL_OOB)
 		{
-			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
-			pLink->Ctx.State = BT_SMP_STATE_IDLE;
-			return;
+			uint8_t localX[32];
+			uint8_t peerX[32];
+			SmpP256CoordBeToSmpLe(&pLink->Ctx.LocalPubKey[0], localX);	// PKax
+			SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], peerX);		// PKbx
+
+			uint8_t cb[16];
+			SmpF4(peerX, localX, pLink->Ctx.PeerRand, 0, cb);
+			if (!SmpEqualCT(cb, pLink->Ctx.PeerConfirm, 16))
+			{
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+				pLink->Ctx.State = BT_SMP_STATE_IDLE;
+				return;
+			}
 		}
 
 		uint8_t localAddr[6];
@@ -1417,6 +1494,10 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
 		pLink->Keys.bSc = true;
 		pLink->Keys.bValid = true;
+		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
+		{
+			pLink->Keys.bAuthenticated = true;
+		}
 		SmpApplyKeySize(&pLink->Keys);
 
 		if (pLink->Ctx.Model == BT_SMP_MODEL_NUMERIC_COMPARISON)
@@ -1430,12 +1511,14 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 			return;
 		}
 
-		// Ea = f6(MacKey, Na, Nb, 0, IOcapA, A=initiator(local), B=responder(peer)).
+		// Ea = f6(MacKey, Na, Nb, rb, IOcapA, A=initiator(local), B=responder(peer)).
+		// rb is zero for Just Works, the responder OOB random for OOB.
 		uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
-		uint8_t zeroR[16] = {0};
+		uint8_t rChk[16];
+		SmpDhKeyCheckR(pLink, false, rChk);
 		uint8_t ea[16];
 		SmpF6(pLink->Ctx.Mackey, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
-			  zeroR, iocapA,
+			  rChk, iocapA,
 			  localAddrType, localAddr, peerAddrType, peerAddr, ea);
 
 		BtSmpDhKeyCheck_t chk;
@@ -1468,6 +1551,10 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		memcpy(pLink->Keys.Ltk, pLink->Ctx.Ltk, 16);
 		pLink->Keys.bSc = true;
 		pLink->Keys.bValid = true;
+		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
+		{
+			pLink->Keys.bAuthenticated = true;
+		}
 		SmpApplyKeySize(&pLink->Keys);
 		// Park in DHKEY_CHECK_WAIT before the user callback. A synchronous
 		// reject inside BtSmpNumericComparison takes the reply path and sets
@@ -1539,7 +1626,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		// Eb = f6(MacKey, Nb, Na, 0, IOcapB, B=responder(peer), A=initiator(local)).
 		uint8_t iocapB[3] = { pLink->Ctx.PRsp[1], pLink->Ctx.PRsp[2], pLink->Ctx.PRsp[3] };
 		uint8_t rChk[16];
-		SmpDhKeyCheckR(pLink, rChk);
+		SmpDhKeyCheckR(pLink, true, rChk);
 		uint8_t eb[16];
 		SmpF6(pLink->Ctx.Mackey, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
 			  rChk, iocapB,
@@ -1562,7 +1649,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	uint8_t iocapA[3] = { pLink->Ctx.PReq[1], pLink->Ctx.PReq[2], pLink->Ctx.PReq[3] };
 	uint8_t iocapB[3] = { pLink->Ctx.PRsp[1], pLink->Ctx.PRsp[2], pLink->Ctx.PRsp[3] };
 	uint8_t rChk[16];
-	SmpDhKeyCheckR(pLink, rChk);
+	SmpDhKeyCheckR(pLink, false, rChk);
 
 	uint8_t ea[16];
 	SmpF6(pLink->Ctx.Mackey, pLink->Ctx.PeerRand, pLink->Ctx.LocalRand,
@@ -1618,6 +1705,9 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		pLink->Ctx.State = BT_SMP_STATE_NUMERIC_WAIT;
 		return;
 	}
+
+	// Eb uses ra where the Ea verification above used rb; recompute.
+	SmpDhKeyCheckR(pLink, true, rChk);
 
 	uint8_t eb[16];
 	SmpF6(pLink->Ctx.Mackey, pLink->Ctx.LocalRand, pLink->Ctx.PeerRand,
@@ -1965,6 +2055,42 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		if (pLink->Ctx.Model == BT_SMP_MODEL_PASSKEY_ENTRY)
 		{
 			SmpPasskeyBegin(pDev, pLink, pLink->ConnHdl);
+			continue;
+		}
+
+		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
+		{
+			// OOB (Core Vol 3 Part H, 2.3.5.6.4): no Confirm exchange over the
+			// air. When the peer data was provided, authenticate its public key
+			// against the out of band confirm C = f4(PKx, PKx, r, 0) over the
+			// peer own key.
+			if (pLink->Ctx.bOobPeerData)
+			{
+				uint8_t peerX[32];
+				uint8_t c[16];
+				SmpP256CoordBeToSmpLe(&pLink->Ctx.PeerPubKey[0], peerX);
+				SmpF4(peerX, peerX, pLink->Ctx.OobPeerRand, 0, c);
+				if (!SmpEqualCT(c, pLink->Ctx.OobPeerConfirm, 16))
+				{
+					SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
+					pLink->Ctx.State = BT_SMP_STATE_IDLE;
+					continue;
+				}
+			}
+
+			BtSmpCryptoRand(pLink->Ctx.LocalRand, 16);
+
+			if (pLink->Ctx.bInitiator)
+			{
+				// Initiator sends Na and waits for Nb.
+				BtSmpPairingRandom_t rnd;
+				rnd.Code = BT_SMP_CODE_PAIRING_RANDOM;
+				memcpy(rnd.Value, pLink->Ctx.LocalRand, 16);
+				SmpSend(pDev, pLink->ConnHdl, &rnd, sizeof(rnd));
+			}
+			// Responder holds Nb until the initiator Na arrives; the Pairing
+			// Random handler replies with it.
+			pLink->Ctx.State = BT_SMP_STATE_RANDOM_WAIT;
 			continue;
 		}
 
@@ -2637,7 +2763,8 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	BtSmpPairingReq_t req;
 	req.Code = BT_SMP_CODE_PAIRING_REQ;
 	req.IOCaps = s_SmpIoCaps;
-	req.OOBFlag = BT_SMP_OOB_AUTH_NOT_PRESENT;
+	req.OOBFlag = (s_SmpOob.bPeerValid && (s_SmpAuthReq & BT_SMP_AUTHREQ_SC)) ?
+				  BT_SMP_OOB_AUTH_PRESENT : BT_SMP_OOB_AUTH_NOT_PRESENT;
 	req.AuthReq = (uint8_t)(s_SmpAuthReq & ~BT_SMP_AUTHREQ_KEYPRESS);
 	req.MaxKeySize = BT_SMP_MAX_ENC_KEY_SIZE;
 	req.InitiatorKeyDist = BT_SMP_KEYDIST_IDKEY | BT_SMP_KEYDIST_SIGNKEY;
@@ -2651,12 +2778,57 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	SmpSend(pDev, ConnHdl, &req, sizeof(req));
 
 	pLink->Ctx.State = BT_SMP_STATE_PUBKEY_LOCAL_WAIT;
-	int rc = BtSmpCryptoP256KeyGen(pDev, pLink->Ctx.LocalPubKey);
+	int rc = SmpLocalKeyGen(pDev, pLink);
 	if (rc == BT_SMP_CRYPTO_FAIL)
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
 		pLink->Ctx.State = BT_SMP_STATE_IDLE;
 	}
+}
+
+int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf)
+{
+	if (pRand == nullptr || pConf == nullptr)
+	{
+		return -1;
+	}
+
+	// The confirm commits to the public key, so the key pair is generated here
+	// and reused by the next pairing (SmpLocalKeyGen). Asynchronous providers
+	// are not supported on this path.
+	int rc = BtSmpCryptoP256KeyGen(pDev, s_SmpOob.LocalPubKey);
+	if (rc != BT_SMP_CRYPTO_OK)
+	{
+		s_SmpOob.bLocalValid = false;
+		return -1;
+	}
+
+	BtSmpCryptoRand(s_SmpOob.LocalRand, 16);
+
+	uint8_t x[32];
+	SmpP256CoordBeToSmpLe(&s_SmpOob.LocalPubKey[0], x);
+	SmpF4(x, x, s_SmpOob.LocalRand, 0, pConf);
+
+	memcpy(pRand, s_SmpOob.LocalRand, 16);
+	s_SmpOob.bLocalValid = true;
+
+	return 0;
+}
+
+void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pConf)
+{
+	if (pRand == nullptr || pConf == nullptr)
+	{
+		return;
+	}
+	memcpy(s_SmpOob.PeerRand, pRand, 16);
+	memcpy(s_SmpOob.PeerConfirm, pConf, 16);
+	s_SmpOob.bPeerValid = true;
+}
+
+void BtSmpOobDataClear(void)
+{
+	memset(&s_SmpOob, 0, sizeof(s_SmpOob));
 }
 
 void BtSmpDisconnected(uint16_t ConnHdl)

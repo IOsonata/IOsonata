@@ -222,6 +222,10 @@ typedef struct __Bt_Smp_Ctx {
 	bool     bPkDisplay;			//!< Passkey Entry: true if local displays, false if local inputs
 	bool     bPkReady;				//!< Passkey Entry: true once Passkey is known
 	bool     bPkPeerCommit;			//!< Passkey Entry: peer Confirm buffered before Passkey was entered
+	bool     bOobPeerData;			//!< OOB: peer OOB data was provided for this pairing
+	uint8_t  OobLocalRand[16];		//!< OOB: local random distributed out of band (SMP order)
+	uint8_t  OobPeerRand[16];		//!< OOB: peer random received out of band (SMP order)
+	uint8_t  OobPeerConfirm[16];	//!< OOB: peer confirm received out of band (SMP order)
 	uint8_t  KeyDistExp;			//!< Phase-3 peer key-distribution bits still expected (BT_SMP_KEYDIST_*)
 	uint32_t TmrStart;				//!< BtSmpMsTick() when the current pairing started (SMP timeout anchor)
 	uint8_t  FailCount;				//!< Failed pairing attempts on this link (repeated-attempts guard)
@@ -441,6 +445,43 @@ void BtSmpPasskeyRequest(uint16_t ConnHdl);
 /// BT_SMP_PASSKEY_INVALID (or any value above the 6 digit range) to cancel; the
 /// pairing then aborts and the link is left unencrypted.
 void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey);
+
+/**
+ * @brief	Generate the local LE Secure Connections OOB data set.
+ *
+ * Generates the P-256 key pair the next pairing will use, a 16 octet random r
+ * and the confirm C = f4(PKx, PKx, r, 0). The application transfers r and C
+ * (with the local address) to the peer over the out of band channel. The
+ * crypto provider retains the private key; the next pairing reuses this key
+ * pair so the confirm stays valid. All values are SMP byte order, low octet
+ * first.
+ *
+ * @param	pDev	HCI device used by the crypto provider.
+ * @param	pRand	Filled with the 16 octet random r.
+ * @param	pConf	Filled with the 16 octet confirm C.
+ *
+ * @return	0 on success, negative on crypto failure or a pending asynchronous
+ *			key generation, which this call does not support.
+ */
+int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf);
+
+/**
+ * @brief	Provide the peer LE Secure Connections OOB data set.
+ *
+ * Stores the random and confirm received from the peer over the out of band
+ * channel. The next pairing advertises OOB data present, selects the OOB
+ * association model and verifies the peer public key against this confirm.
+ * Values are SMP byte order, low octet first.
+ *
+ * @param	pRand	Peer 16 octet random r.
+ * @param	pConf	Peer 16 octet confirm C.
+ */
+void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pConf);
+
+/**
+ * @brief	Discard any pending local and peer OOB data.
+ */
+void BtSmpOobDataClear(void);
 
 /**
  * @brief	Bring up the Bluetooth-owned controller CryptoDev_t (SDC).
