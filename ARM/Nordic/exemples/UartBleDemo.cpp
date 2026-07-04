@@ -62,6 +62,32 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define DEVICE_NAME                     "UARTDemo"//2 long long 1234567890"                          /**< Name of device. Will be included in the advertising data. */
 
+#ifndef BTAPP_ENABLE_LESC_OOB_TEST
+#define BTAPP_ENABLE_LESC_OOB_TEST		1
+#endif
+
+#if BTAPP_ENABLE_LESC_OOB_TEST
+#include "bluetooth/bt_smp.h"
+#if !defined(NRFXLIB_SDC)
+#include "ble_gap.h"
+#if defined(NRF54L15_XXAA) || defined(NRF54L15) || defined(NRF54)
+#include "bm/bluetooth/peer_manager/nrf_ble_lesc.h"
+#else
+#include "nrf_ble_lesc.h"
+#endif
+#endif
+#endif
+
+#if BTAPP_ENABLE_LESC_OOB_TEST
+#define UARTBLE_SEC_TYPE				BTGAP_SECTYPE_LESC_MITM
+#define UARTBLE_SEC_EXCHG				BTAPP_SECEXCHG_OOB
+#else
+#define UARTBLE_SEC_TYPE				BTGAP_SECTYPE_NONE
+#define UARTBLE_SEC_EXCHG				BTAPP_SECEXCHG_NONE
+#endif
+
+#define UARTBLE_OOB_CENTRAL			0
+
 #define PACKET_SIZE						244
 
 #define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
@@ -173,8 +199,8 @@ const BtAppCfg_t s_BleAppCfg = {
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
-	.SecType = BTGAP_SECTYPE_NONE,//BLEAPP_SECTYPE_STATICKEY_MITM,//BLEAPP_SECTYPE_NONE,    // Secure connection type
-	.SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
+	.SecType = UARTBLE_SEC_TYPE,			// Secure connection type
+	.SecExchg = UARTBLE_SEC_EXCHG,		// Security key exchange
 	.bCompleteUuidList = false,
 	.pAdvUuid = &s_AdvUuid,      			// Service uuids to advertise
 	//.NbAdvUuid = sizeof(s_AdvUuids) / sizeof(BleUuid_t), 					// Total number of uuids
@@ -229,6 +255,235 @@ const UARTCfg_t g_UartCfg = {
 
 /// UART object instance
 UART g_Uart;
+
+
+#if BTAPP_ENABLE_LESC_OOB_TEST
+#if !defined(NRFXLIB_SDC)
+static ble_gap_lesc_oob_data_t s_UartBlePeerOob;
+#endif
+static bool s_UartBlePeerOobValid = false;
+
+static int UartBleHexVal(uint8_t c)
+{
+	if (c >= '0' && c <= '9') return c - '0';
+	if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+	return -1;
+}
+
+static int UartBleHexDecode(const uint8_t *pText, int Len, uint8_t *pOut, int MaxOut)
+{
+	int high = -1;
+	int out = 0;
+
+	for (int i = 0; i < Len; i++)
+	{
+		int v = UartBleHexVal(pText[i]);
+		if (v < 0)
+		{
+			if (pText[i] == ' ' || pText[i] == ':' || pText[i] == '-' ||
+				pText[i] == '\r' || pText[i] == '\n' || pText[i] == '\t')
+			{
+				continue;
+			}
+			return -1;
+		}
+
+		if (high < 0)
+		{
+			high = v;
+		}
+		else
+		{
+			if (out >= MaxOut)
+			{
+				return -1;
+			}
+			pOut[out++] = (uint8_t)((high << 4) | v);
+			high = -1;
+		}
+	}
+
+	return (high < 0) ? out : -1;
+}
+
+static void UartBlePrintHex(const uint8_t *pData, int Len)
+{
+	for (int i = 0; i < Len; i++)
+	{
+		g_Uart.printf("%02X", pData[i]);
+	}
+}
+
+#if defined(NRFXLIB_SDC)
+static void UartBleOobPrintLocal(void)
+{
+	uint8_t r[16];
+	uint8_t c[16];
+
+	if (BtSmpOobLocalDataGen(g_BtAppData.AppDevice.pHciDev, r, c) != 0)
+	{
+		g_Uart.printf("OOB local data generation failed\r\n");
+		return;
+	}
+
+	g_Uart.printf("OOB local data. Paste this line on peer:\r\n");
+	g_Uart.printf("oob peer ");
+	UartBlePrintHex(r, sizeof(r));
+	UartBlePrintHex(c, sizeof(c));
+	g_Uart.printf("\r\n");
+}
+
+static bool UartBleOobSetPeer(const uint8_t *pText, int Len)
+{
+	uint8_t raw[1 + 6 + 16 + 16];
+	int cnt = UartBleHexDecode(pText, Len, raw, sizeof(raw));
+
+	if (cnt == 32)
+	{
+		BtSmpOobPeerDataSet(&raw[0], &raw[16]);
+		s_UartBlePeerOobValid = true;
+		g_Uart.printf("OOB peer data loaded\r\n");
+		return true;
+	}
+
+	if (cnt == 39)
+	{
+		BtSmpOobPeerDataSet(&raw[7], &raw[23]);
+		s_UartBlePeerOobValid = true;
+		g_Uart.printf("OOB peer data loaded\r\n");
+		return true;
+	}
+
+	g_Uart.printf("OOB peer format: oob peer <r+c hex> or <addrtype+addr+r+c hex>\r\n");
+	return false;
+}
+#else
+static ble_gap_lesc_oob_data_t *UartBleOobPeerDataGet(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+	return s_UartBlePeerOobValid ? &s_UartBlePeerOob : NULL;
+}
+
+static void UartBleOobPrintLocal(void)
+{
+	ble_gap_lesc_oob_data_t *pOob = nrf_ble_lesc_own_oob_data_get();
+
+	if (pOob == NULL)
+	{
+		g_Uart.printf("OOB local data not ready\r\n");
+		return;
+	}
+
+	g_Uart.printf("OOB local data. Paste this line on peer:\r\n");
+	g_Uart.printf("oob peer %02X", pOob->addr.addr_type);
+	UartBlePrintHex(pOob->addr.addr, sizeof(pOob->addr.addr));
+	UartBlePrintHex(pOob->r, sizeof(pOob->r));
+	UartBlePrintHex(pOob->c, sizeof(pOob->c));
+	g_Uart.printf("\r\n");
+}
+
+static bool UartBleOobSetPeer(const uint8_t *pText, int Len)
+{
+	uint8_t raw[1 + 6 + 16 + 16];
+	int cnt = UartBleHexDecode(pText, Len, raw, sizeof(raw));
+
+	if (cnt != 39)
+	{
+		g_Uart.printf("OOB peer format: oob peer <addrtype+addr+r+c hex>\r\n");
+		return false;
+	}
+
+	s_UartBlePeerOob.addr.addr_type = raw[0];
+	memcpy(s_UartBlePeerOob.addr.addr, &raw[1], 6);
+	memcpy(s_UartBlePeerOob.r, &raw[7], 16);
+	memcpy(s_UartBlePeerOob.c, &raw[23], 16);
+	s_UartBlePeerOobValid = true;
+
+	g_Uart.printf("OOB peer data loaded\r\n");
+	return true;
+}
+#endif
+
+static void UartBleOobInit(void)
+{
+#if !defined(NRFXLIB_SDC)
+	nrf_ble_lesc_peer_oob_data_handler_set(UartBleOobPeerDataGet);
+	if (nrf_ble_lesc_own_oob_data_generate() != 0)
+	{
+		g_Uart.printf("OOB local data generation failed\r\n");
+		return;
+	}
+#endif
+	UartBleOobPrintLocal();
+}
+
+static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
+{
+	if (Len < 3 || memcmp(pData, "oob", 3) != 0)
+	{
+		return false;
+	}
+
+	const uint8_t *p = pData + 3;
+	int l = Len - 3;
+
+	while (l > 0 && (*p == ' ' || *p == '\t'))
+	{
+		p++;
+		l--;
+	}
+
+	if (l <= 0 || *p == '\r' || *p == '\n')
+	{
+		UartBleOobPrintLocal();
+		return true;
+	}
+
+	if (l >= 4 && memcmp(p, "peer", 4) == 0)
+	{
+		p += 4;
+		l -= 4;
+		while (l > 0 && (*p == ' ' || *p == '\t' || *p == ':'))
+		{
+			p++;
+			l--;
+		}
+		(void)UartBleOobSetPeer(p, l);
+		return true;
+	}
+
+#if UARTBLE_OOB_CENTRAL
+	if (l >= 4 && memcmp(p, "scan", 4) == 0)
+	{
+		if (!s_UartBlePeerOobValid)
+		{
+			g_Uart.printf("OOB peer data not loaded; paste peer line first\r\n");
+			return true;
+		}
+		g_Uart.printf("OOB peer data present, starting scan\r\n");
+		BtAppScan();
+		return true;
+	}
+#endif
+
+	g_Uart.printf("Commands: oob, oob peer <hex>");
+#if UARTBLE_OOB_CENTRAL
+	g_Uart.printf(", oob scan");
+#endif
+	g_Uart.printf("\r\n");
+	return true;
+}
+#else
+static void UartBleOobInit(void) {}
+static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
+{
+	(void)pData;
+	(void)Len;
+	return false;
+}
+#endif
+
 
 static const IOPinCfg_t s_LedPins[] = {
 	{BLUEIO_LED_BLUE_PORT, BLUEIO_LED_BLUE_PIN, BLUEIO_LED_BLUE_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// LED1 (Blue)
@@ -338,6 +593,11 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	}
 	if (flush)
 	{
+		if (UartBleOobTryCommand(buff, bufflen))
+		{
+			bufflen = 0;
+			return;
+		}
 //		if (BleSrvcCharNotify(&g_UartBleSrvc, 0, buff, bufflen) == 0)
 		if (BtAppNotify(&g_UartChars[0], buff, (uint16_t)bufflen) == true)
 		{
@@ -401,6 +661,7 @@ int main()
     //g_Uart.Disable();
 
     BtAppInit(&s_BleAppCfg);
+    UartBleOobInit();
 
     BtAppRun();
 
