@@ -79,7 +79,7 @@ typedef struct __RFTag_Config {
 	uint32_t Size;					//!< Tag memory size in bytes
 	uint32_t WrDelay;				//!< Write delay in msec
 	uint32_t NdefAddr;				//!< NDEF storage offset
-	uint32_t NdefMaxLen;			//!< Max NDEF payload length. 0 uses Size - NdefAddr
+	uint32_t NdefMaxLen;			//!< Max NDEF area in bytes incl format framing. 0 uses Size - NdefAddr
 	RFTAG_NDEF_FMT NdefFmt;			//!< NDEF storage layout
 	IOPinCfg_t FdPin;				//!< Field-detect pin, optional
 	IOPinCfg_t WrProtPin;			//!< Write-protect pin, optional

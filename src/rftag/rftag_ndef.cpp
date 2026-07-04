@@ -257,7 +257,23 @@ bool RFNdefParse(const uint8_t *pData,
 			idLen = pData[off++];
 		}
 
-		if ((Len - off) < (typeLen + idLen + payloadLen))
+		// Check each field against the remaining bytes one at a time.
+		// A 4 byte payloadLen could wrap an added sum, so subtract instead.
+		size_t remain = Len - off;
+
+		if (typeLen > remain)
+		{
+			return false;
+		}
+		remain -= typeLen;
+
+		if (idLen > remain)
+		{
+			return false;
+		}
+		remain -= idLen;
+
+		if (payloadLen > remain)
 		{
 			return false;
 		}

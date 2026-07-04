@@ -206,7 +206,8 @@ static bool RFTagSetNdefNLen16(RFTagDev_t * const pDev, const uint8_t *pNdef, ui
 {
 	uint8_t hdr[2];
 
-	if ((uint32_t)Len > pDev->NdefMaxLen)
+	// Length prefix plus payload must fit the NDEF area
+	if ((uint32_t)Len + sizeof(hdr) > pDev->NdefMaxLen)
 	{
 		return false;
 	}
@@ -228,7 +229,8 @@ static bool RFTagSetNdefTlv(RFTagDev_t * const pDev, const uint8_t *pNdef, uint1
 	uint32_t addr = pDev->NdefAddr;
 	int hlen = 0;
 
-	if ((uint32_t)(Len + 2) > pDev->NdefMaxLen)
+	// Short form framing is 0x03, length, payload, 0xFE terminator
+	if ((uint32_t)(Len + 3) > pDev->NdefMaxLen)
 	{
 		return false;
 	}
@@ -241,7 +243,8 @@ static bool RFTagSetNdefTlv(RFTagDev_t * const pDev, const uint8_t *pNdef, uint1
 	}
 	else
 	{
-		if ((uint32_t)(Len + 4) > pDev->NdefMaxLen)
+		// Long form framing adds 0xFF and a 2 byte length ahead of payload
+		if ((uint32_t)(Len + 5) > pDev->NdefMaxLen)
 		{
 			return false;
 		}
@@ -305,7 +308,7 @@ static int RFTagGetNdefNLen16(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t 
 
 	uint16_t nlen = ((uint16_t)hdr[0] << 8) | hdr[1];
 
-	if (nlen > pDev->NdefMaxLen)
+	if ((uint32_t)nlen + sizeof(hdr) > pDev->NdefMaxLen)
 	{
 		return 0;
 	}
