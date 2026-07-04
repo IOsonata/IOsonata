@@ -68,14 +68,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #if BTAPP_ENABLE_LESC_OOB_TEST
 #include "bluetooth/bt_smp.h"
-#if !defined(NRFXLIB_SDC)
-#include "ble_gap.h"
-#if defined(NRF54L15_XXAA) || defined(NRF54L15) || defined(NRF54)
-#include "bm/bluetooth/peer_manager/nrf_ble_lesc.h"
-#else
-#include "nrf_ble_lesc.h"
-#endif
-#endif
 #endif
 
 #if BTAPP_ENABLE_LESC_OOB_TEST
@@ -258,9 +250,6 @@ UART g_Uart;
 
 
 #if BTAPP_ENABLE_LESC_OOB_TEST
-#if !defined(NRFXLIB_SDC)
-static ble_gap_lesc_oob_data_t s_UartBlePeerOob;
-#endif
 static bool s_UartBlePeerOobValid = false;
 
 static int UartBleHexVal(uint8_t c)
@@ -315,7 +304,6 @@ static void UartBlePrintHex(const uint8_t *pData, int Len)
 	}
 }
 
-#if defined(NRFXLIB_SDC)
 static void UartBleOobPrintLocal(void)
 {
 	uint8_t r[16];
@@ -358,63 +346,9 @@ static bool UartBleOobSetPeer(const uint8_t *pText, int Len)
 	g_Uart.printf("OOB peer format: oob peer <r+c hex> or <addrtype+addr+r+c hex>\r\n");
 	return false;
 }
-#else
-static ble_gap_lesc_oob_data_t *UartBleOobPeerDataGet(uint16_t ConnHdl)
-{
-	(void)ConnHdl;
-	return s_UartBlePeerOobValid ? &s_UartBlePeerOob : NULL;
-}
-
-static void UartBleOobPrintLocal(void)
-{
-	ble_gap_lesc_oob_data_t *pOob = nrf_ble_lesc_own_oob_data_get();
-
-	if (pOob == NULL)
-	{
-		g_Uart.printf("OOB local data not ready\r\n");
-		return;
-	}
-
-	g_Uart.printf("OOB local data. Paste this line on peer:\r\n");
-	g_Uart.printf("oob peer %02X", pOob->addr.addr_type);
-	UartBlePrintHex(pOob->addr.addr, sizeof(pOob->addr.addr));
-	UartBlePrintHex(pOob->r, sizeof(pOob->r));
-	UartBlePrintHex(pOob->c, sizeof(pOob->c));
-	g_Uart.printf("\r\n");
-}
-
-static bool UartBleOobSetPeer(const uint8_t *pText, int Len)
-{
-	uint8_t raw[1 + 6 + 16 + 16];
-	int cnt = UartBleHexDecode(pText, Len, raw, sizeof(raw));
-
-	if (cnt != 39)
-	{
-		g_Uart.printf("OOB peer format: oob peer <addrtype+addr+r+c hex>\r\n");
-		return false;
-	}
-
-	s_UartBlePeerOob.addr.addr_type = raw[0];
-	memcpy(s_UartBlePeerOob.addr.addr, &raw[1], 6);
-	memcpy(s_UartBlePeerOob.r, &raw[7], 16);
-	memcpy(s_UartBlePeerOob.c, &raw[23], 16);
-	s_UartBlePeerOobValid = true;
-
-	g_Uart.printf("OOB peer data loaded\r\n");
-	return true;
-}
-#endif
 
 static void UartBleOobInit(void)
 {
-#if !defined(NRFXLIB_SDC)
-	nrf_ble_lesc_peer_oob_data_handler_set(UartBleOobPeerDataGet);
-	if (nrf_ble_lesc_own_oob_data_generate() != 0)
-	{
-		g_Uart.printf("OOB local data generation failed\r\n");
-		return;
-	}
-#endif
 	UartBleOobPrintLocal();
 }
 

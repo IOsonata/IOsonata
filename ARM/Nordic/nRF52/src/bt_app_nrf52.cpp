@@ -804,6 +804,74 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 	(void)sd_ble_gap_auth_key_reply(ConnHdl, BLE_GAP_AUTH_KEY_TYPE_PASSKEY, ascii);
 }
 
+// LE Secure Connections OOB data (strong overrides of the generic weak API).
+// On this port nrf_ble_lesc owns the SC key pair, so the local OOB set comes
+// from it and the peer set is staged here; the peer data handler hands it to
+// the pairing with the link peer address filled in.
+static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
+static bool s_BtAppPeerOobValid = false;
+
+static ble_gap_lesc_oob_data_t *BtAppOobPeerDataHandler(uint16_t ConnHdl)
+{
+	if (!s_BtAppPeerOobValid)
+	{
+		DEBUG_PRINTF("SEC: no OOB peer data, pairing will fail\r\n");
+		return NULL;
+	}
+
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer != nullptr)
+	{
+		s_BtAppPeerOob.addr.addr_type = pPeer->Conn.PeerAddrType;
+		memcpy(s_BtAppPeerOob.addr.addr, pPeer->Conn.PeerAddr, 6);
+	}
+
+	return &s_BtAppPeerOob;
+}
+
+int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf)
+{
+	(void)pDev;
+
+	if (pRand == NULL || pConf == NULL)
+	{
+		return -1;
+	}
+	if (nrf_ble_lesc_own_oob_data_generate() != NRF_SUCCESS)
+	{
+		return -1;
+	}
+
+	ble_gap_lesc_oob_data_t *p = nrf_ble_lesc_own_oob_data_get();
+	if (p == NULL)
+	{
+		return -1;
+	}
+
+	memcpy(pRand, p->r, 16);
+	memcpy(pConf, p->c, 16);
+
+	return 0;
+}
+
+void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pConf)
+{
+	if (pRand == NULL || pConf == NULL)
+	{
+		return;
+	}
+	memset(&s_BtAppPeerOob, 0, sizeof(s_BtAppPeerOob));
+	memcpy(s_BtAppPeerOob.r, pRand, 16);
+	memcpy(s_BtAppPeerOob.c, pConf, 16);
+	s_BtAppPeerOobValid = true;
+}
+
+void BtSmpOobDataClear(void)
+{
+	s_BtAppPeerOobValid = false;
+	memset(&s_BtAppPeerOob, 0, sizeof(s_BtAppPeerOob));
+}
+
 // Weak defaults. With no application override the only safe action is to reject,
 // so the user interaction cannot be performed silently. An application that can
 // display or input overrides these.
@@ -1222,6 +1290,10 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     err_code = nrf_ble_lesc_init();
     DEBUG_PRINTF("SEC: nrf_ble_lesc_init=0x%X\r\n", err_code);
     APP_ERROR_CHECK(err_code);
+
+	// Route the staged peer OOB data into the pairing when the SoftDevice
+	// asks for it (LESC OOB association model).
+	nrf_ble_lesc_peer_oob_data_handler_set(BtAppOobPeerDataHandler);
 }
 
 /**@brief Function for handling events from the GATT library. */

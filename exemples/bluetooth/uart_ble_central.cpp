@@ -66,20 +66,27 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //   BLE_SC_JUSTWORKS      BLE_SC_JUSTWORKS      Just Works (bonded, no MITM)
 //   BLE_SC_NUMCOMP        BLE_SC_NUMCOMP        Numeric Comparison
 //   BLE_SC_PASSKEY_INPUT  BLE_SC_PASSKEY_DISP   Passkey Entry (this side types)
+//   BLE_SC_OOB            BLE_SC_OOB            LESC OOB via UART copy/paste
 //   BLE_SC_PASSKEY_DISP   BLE_SC_PASSKEY_INPUT  Passkey Entry (this side shows)
 #define BLE_SC_NONE				0
 #define BLE_SC_JUSTWORKS		1
 #define BLE_SC_NUMCOMP			2
 #define BLE_SC_PASSKEY_DISP		3
 #define BLE_SC_PASSKEY_INPUT	4
+#define BLE_SC_OOB				5
 
 #ifndef BLE_SC_METHOD
-#define BLE_SC_METHOD			BLE_SC_NUMCOMP
+#define BLE_SC_METHOD			BLE_SC_OOB
 #endif
 
 #if BLE_SC_METHOD != BLE_SC_NONE
 #include "bluetooth/bt_smp.h"		// SMP IO caps and console pairing callbacks
+#if BLE_SC_METHOD == BLE_SC_OOB
+#define BLE_SEC_EXCHG			BTAPP_SECEXCHG_OOB
+#else
 #define BLE_SEC_EXCHG			BTAPP_SECEXCHG_KEYBOARD
+#endif
+
 #endif
 
 #if BLE_SC_METHOD == BLE_SC_JUSTWORKS
@@ -102,6 +109,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLE_SC_IOCAPS			BT_SMP_IOCAPS_KEYBOARD_ONLY
 #define BLE_SC_AUTHREQ			(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
 #define BLE_SC_NAME				"Passkey Entry (keyboard)"
+#elif BLE_SC_METHOD == BLE_SC_OOB
+#define BLE_SEC_TYPE			BTGAP_SECTYPE_LESC_MITM
+#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT
+#define BLE_SC_AUTHREQ			(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
+#define BLE_SC_NAME				"LESC OOB"
 #else
 #define BLE_SEC_TYPE			BTGAP_SECTYPE_NONE
 #define BLE_SEC_EXCHG			BTAPP_SECEXCHG_NONE
@@ -529,6 +541,158 @@ static bool PairInputPoll(void)
 }
 #endif
 
+#if BLE_SC_METHOD == BLE_SC_OOB
+static bool s_UartBlePeerOobValid = false;
+
+static int UartBleHexVal(uint8_t c)
+{
+	if (c >= '0' && c <= '9') return c - '0';
+	if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+	return -1;
+}
+
+static int UartBleHexDecode(const uint8_t *pText, int Len, uint8_t *pOut, int MaxOut)
+{
+	int high = -1;
+	int out = 0;
+
+	for (int i = 0; i < Len; i++)
+	{
+		int v = UartBleHexVal(pText[i]);
+		if (v < 0)
+		{
+			if (pText[i] == ' ' || pText[i] == ':' || pText[i] == '-' ||
+				pText[i] == '\r' || pText[i] == '\n' || pText[i] == '\t')
+			{
+				continue;
+			}
+			return -1;
+		}
+
+		if (high < 0)
+		{
+			high = v;
+		}
+		else
+		{
+			if (out >= MaxOut)
+			{
+				return -1;
+			}
+			pOut[out++] = (uint8_t)((high << 4) | v);
+			high = -1;
+		}
+	}
+
+	return (high < 0) ? out : -1;
+}
+
+static void UartBlePrintHex(const uint8_t *pData, int Len)
+{
+	for (int i = 0; i < Len; i++)
+	{
+		g_Uart.printf("%02X", pData[i]);
+	}
+}
+
+static void UartBleOobPrintLocal(void)
+{
+	uint8_t r[16];
+	uint8_t c[16];
+
+	if (BtSmpOobLocalDataGen(g_BtAppData.AppDevice.pHciDev, r, c) != 0)
+	{
+		g_Uart.printf("OOB local data generation failed\r\n");
+		return;
+	}
+
+	g_Uart.printf("OOB local data. Paste this line on peer:\r\n");
+	g_Uart.printf("oob peer ");
+	UartBlePrintHex(r, sizeof(r));
+	UartBlePrintHex(c, sizeof(c));
+	g_Uart.printf("\r\n");
+}
+
+static bool UartBleOobSetPeer(const uint8_t *pText, int Len)
+{
+	uint8_t raw[1 + 6 + 16 + 16];
+	int cnt = UartBleHexDecode(pText, Len, raw, sizeof(raw));
+
+	if (cnt == 32)
+	{
+		BtSmpOobPeerDataSet(&raw[0], &raw[16]);
+		s_UartBlePeerOobValid = true;
+		g_Uart.printf("OOB peer data loaded\r\n");
+		return true;
+	}
+
+	if (cnt == 39)
+	{
+		BtSmpOobPeerDataSet(&raw[7], &raw[23]);
+		s_UartBlePeerOobValid = true;
+		g_Uart.printf("OOB peer data loaded\r\n");
+		return true;
+	}
+
+	g_Uart.printf("OOB peer format: oob peer <r+c hex> or <addrtype+addr+r+c hex>\r\n");
+	return false;
+}
+
+static void UartBleOobInit(void)
+{
+	UartBleOobPrintLocal();
+	g_Uart.printf("Enter peer data before pairing. Commands: oob, oob peer <hex>\r\n");
+}
+
+static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
+{
+	if (Len < 3 || memcmp(pData, "oob", 3) != 0)
+	{
+		return false;
+	}
+
+	const uint8_t *p = pData + 3;
+	int l = Len - 3;
+
+	while (l > 0 && (*p == ' ' || *p == '\t'))
+	{
+		p++;
+		l--;
+	}
+
+	if (l <= 0 || *p == '\r' || *p == '\n')
+	{
+		UartBleOobPrintLocal();
+		return true;
+	}
+
+	if (l >= 4 && memcmp(p, "peer", 4) == 0)
+	{
+		p += 4;
+		l -= 4;
+		while (l > 0 && (*p == ' ' || *p == '\t' || *p == ':'))
+		{
+			p++;
+			l--;
+		}
+		(void)UartBleOobSetPeer(p, l);
+		return true;
+	}
+
+	g_Uart.printf("Commands: oob, oob peer <hex>\r\n");
+	return true;
+}
+#else
+static void UartBleOobInit(void) {}
+static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
+{
+	(void)pData;
+	(void)Len;
+	return false;
+}
+#endif
+
 void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
@@ -566,6 +730,11 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 	// Flush data ExternalUartRxBuffer -> g_UartRx2BleFifo
 	if (flush)
 	{
+		if (UartBleOobTryCommand(g_UartRxExtBuff, g_UartRxExtBuffLen))
+		{
+			g_UartRxExtBuffLen = 0;
+			return;
+		}
 		int l2 = g_UartRxExtBuffLen;
 		p = CFifoPutMultiple(g_UartRx2BleFifo, &l2);
 		if (p == NULL)
@@ -672,6 +841,7 @@ int main()
 	// Local IO capability for the selected method; the console fills the role.
 	BtSmpAuthConfig(BLE_SC_IOCAPS, BLE_SC_AUTHREQ);
 #endif
+	UartBleOobInit();
 
 	// Register the non-GATT service and its characteristics
 	BtAppScanInit((BtGapScanCfg_t*)&g_ScanParams);

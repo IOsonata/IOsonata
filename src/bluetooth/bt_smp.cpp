@@ -2786,6 +2786,7 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	}
 }
 
+__attribute__((weak))
 int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf)
 {
 	if (pRand == nullptr || pConf == nullptr)
@@ -2815,6 +2816,7 @@ int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint
 	return 0;
 }
 
+__attribute__((weak))
 void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pConf)
 {
 	if (pRand == nullptr || pConf == nullptr)
@@ -2826,6 +2828,7 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 	s_SmpOob.bPeerValid = true;
 }
 
+__attribute__((weak))
 void BtSmpOobDataClear(void)
 {
 	memset(&s_SmpOob, 0, sizeof(s_SmpOob));

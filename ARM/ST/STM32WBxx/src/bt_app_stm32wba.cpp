@@ -395,6 +395,82 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 	aci_gap_set_io_capability(io);
 }
 
+// LE Secure Connections OOB data (strong overrides of the generic weak API).
+// The ST stack owns the SC key pair: aci_gap_set_oob_data with a zero length
+// makes the stack generate its OOB Random and Confirm, and aci_gap_get_oob_data
+// extracts them. The peer set is staged here and pushed to the stack at
+// connection time, when the peer address is known; without privacy the
+// connection address is the identity address the command expects.
+static uint8_t s_BtAppPeerOobRand[16];
+static uint8_t s_BtAppPeerOobConf[16];
+static bool s_BtAppPeerOobValid = false;
+
+int BtSmpOobLocalDataGen(BtHciDevice_t * const pDev, uint8_t * const pRand, uint8_t * const pConf)
+{
+	(void)pDev;
+
+	if (pRand == NULL || pConf == NULL)
+	{
+		return -1;
+	}
+
+	uint8_t zaddr[6] = {0};
+
+	// Length 0 = generate a fresh SC Random/Confirm pair in the stack.
+	if (aci_gap_set_oob_data(0, 0, zaddr, 0, 0, NULL) != BLE_STATUS_SUCCESS)
+	{
+		return -1;
+	}
+
+	uint8_t atype;
+	uint8_t addr[6];
+	uint8_t len;
+
+	// OOB_Data_Type 1 = SC Random, 2 = SC Confirm.
+	if (aci_gap_get_oob_data(1, &atype, addr, &len, pRand) != BLE_STATUS_SUCCESS ||
+		len != 16)
+	{
+		return -1;
+	}
+	if (aci_gap_get_oob_data(2, &atype, addr, &len, pConf) != BLE_STATUS_SUCCESS ||
+		len != 16)
+	{
+		return -1;
+	}
+
+	return 0;
+}
+
+void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pConf)
+{
+	if (pRand == NULL || pConf == NULL)
+	{
+		return;
+	}
+	memcpy(s_BtAppPeerOobRand, pRand, 16);
+	memcpy(s_BtAppPeerOobConf, pConf, 16);
+	s_BtAppPeerOobValid = true;
+}
+
+void BtSmpOobDataClear(void)
+{
+	s_BtAppPeerOobValid = false;
+	memset(s_BtAppPeerOobRand, 0, 16);
+	memset(s_BtAppPeerOobConf, 0, 16);
+}
+
+// Push the staged peer OOB data into the stack for this link. Called from the
+// connection complete event, before any pairing initiation.
+static void BtAppOobPeerDataPush(uint8_t AddrType, const uint8_t *pAddr)
+{
+	if (!s_BtAppPeerOobValid)
+	{
+		return;
+	}
+	aci_gap_set_oob_data(1, AddrType, pAddr, 1, 16, s_BtAppPeerOobRand);
+	aci_gap_set_oob_data(1, AddrType, pAddr, 2, 16, s_BtAppPeerOobConf);
+}
+
 // Weak defaults. With no application override the only safe action is to reject,
 // so the user interaction cannot be performed silently. An application that can
 // display or input overrides these.
@@ -477,6 +553,11 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 						                   p->Peer_Address_Type,
 						                   p->Peer_Address);
 						BtAppEvtConnected(p->Connection_Handle);
+
+						// Staged LESC OOB peer data must be in the stack before
+						// pairing starts on this link.
+						BtAppOobPeerDataPush(p->Peer_Address_Type,
+						                     p->Peer_Address);
 
 						// Secure link setup. ST owns the SMP exchange and emits
 						// ACI_GAP_PAIRING_COMPLETE, which surfaces below as
