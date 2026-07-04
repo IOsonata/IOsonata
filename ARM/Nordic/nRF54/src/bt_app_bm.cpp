@@ -1200,6 +1200,22 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
  * main event loop.  SoftDevice events are dispatched through the
  * observer infrastructure triggered by the SD_EVT interrupt.
  */
+// Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
+// the weak BtSmpMsTick/BtGattMsTick defaults. The RTC/timer is owned by the
+// SDK + SoftDevice; this reads the free-running GRTC3 count via the s_BtAppSdGrtc3
+// handle the port enables as a SoftDevice prerequisite (a read is
+// non-destructive). Declared in bt_smp.h / bt_gatt.h, so no linkage specifier is
+// needed here.
+uint32_t BtSmpMsTick(void)
+{
+	return s_BtAppSdGrtc3.mSecond();
+}
+
+uint32_t BtGattMsTick(void)
+{
+	return s_BtAppSdGrtc3.mSecond();
+}
+
 void BtAppRun()
 {
 	if (g_BtAppData.State != BTAPP_STATE_INITIALIZED)
@@ -1225,6 +1241,15 @@ void BtAppRun()
 		}
 
 		AppEvtHandlerExec();
+
+		// Drive the generic transaction timeouts (Core Vol 3 Part H 3.4, Part F
+		// 3.3.3). Cheap no-ops when nothing is pending. NOTE: this loop wakes on
+		// events, so a link that goes fully silent needs a periodic wake to also
+		// call these - hook them into an existing SDK/SoftDevice periodic callback
+		// (do not add a trigger to GRTC3, which the SoftDevice owns).
+		BtSmpTimeoutCheck();
+		BtGattIndicationTimeoutCheck();
+
 		BtAppEvtWait();
 	}
 }

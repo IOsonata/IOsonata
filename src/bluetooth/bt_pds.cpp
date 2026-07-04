@@ -21,7 +21,7 @@
 		highest valid Seq is the live value. Len == BT_PDS_TOMBSTONE marks a
 		delete. Crc8 over Id..data validates the record; a record truncated by
 		power loss fails Crc and is ignored, so the previous version remains
-		authoritative.
+		in effect.
 
 		Compaction
 		----------
@@ -474,7 +474,7 @@ ssize_t BtPdsWrite(uint32_t Id, const void *pData, size_t Len)
 		}
 		if (s_WriteHead + need > limit)
 		{
-			return -ENOMEM;		// genuinely full
+			return -ENOMEM;		// no space left
 		}
 	}
 

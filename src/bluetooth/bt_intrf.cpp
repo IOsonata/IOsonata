@@ -105,8 +105,8 @@ uint32_t BtIntrfGetRate(DevIntrf_t *pDevIntrf)
  * 		pDevIntrf : Pointer to an instance of the Device Interface
  * 		Rate 	  : Data rate to be set in Hertz (transfer per second)
  *
- * @return 	Actual transfer rate per second set.  It is the real capable rate
- * 			closes to rate being requested.
+ * @return 	Actual transfer rate per second set. It is the closest achievable
+ * 			rate to the requested rate.
  */
 uint32_t BtIntrfSetRate(DevIntrf_t *pDevIntrf, uint32_t Rate)
 {

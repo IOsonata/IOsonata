@@ -479,8 +479,8 @@ int  BtSmpCryptoSelfTest(void);
 
 /**
  * @brief	Platform hooks to answer the controller LE Long Term Key Request.
- *			These send HCI COMMANDS (not ACL data); the active implementation
- *			overrides them to use its real HCI command channel (e.g. the SDC
+ *			These send HCI COMMANDS (not ACL data); the port implementation
+ *			overrides them to use its own HCI command channel (e.g. the SDC
  *			sdc_hci_cmd_le_long_term_key_request_reply function).
  */
 void BtSmpHciLtkReply(BtHciDevice_t * const pDev, uint16_t ConnHdl,
@@ -489,8 +489,8 @@ void BtSmpHciLtkNegReply(BtHciDevice_t * const pDev, uint16_t ConnHdl);
 
 /**
  * @brief	Platform hook to start link encryption as the central via HCI LE
- *			Enable Encryption. Sends an HCI COMMAND (not ACL data); the active
- *			implementation overrides it to use its real HCI command channel (e.g. the
+ *			Enable Encryption. Sends an HCI COMMAND (not ACL data); the port
+ *			implementation overrides it to use its own HCI command channel (e.g. the
  *			SDC sdc_hci_cmd_le_enable_encryption function). For SC, Rand and Ediv
  *			are zero.
  */

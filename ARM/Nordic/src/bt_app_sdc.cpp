@@ -108,8 +108,9 @@ static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 static uint8_t s_BtSmpLocalAddr[6] = {0};
 static uint8_t s_BtSmpLocalAddrType = 0;
 
-// Override the weak SMP accessor so the toolbox uses our real address.
-extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
+// Override the weak SMP accessor so the toolbox uses the device's configured
+// address. Declared in bt_smp.h, so no linkage specifier is needed here.
+void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
 	*pType = s_BtSmpLocalAddrType;
 	memcpy(pAddr, s_BtSmpLocalAddr, 6);
@@ -118,8 +119,9 @@ extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 // Surface a secured link (fresh pairing or bonded reconnect) to the application.
 // The generic SMP engine calls this on every successful encryption; translate it
 // to the port-neutral BtAppEvtSecured hook the example gates discovery on.
-extern "C" void BtSmpPairingComplete(uint16_t ConnHdl, bool Success,
-									 const BtSmpKeys_t *pKeys)
+// Declared in bt_smp.h, so no linkage specifier is needed here.
+void BtSmpPairingComplete(uint16_t ConnHdl, bool Success,
+						  const BtSmpKeys_t *pKeys)
 {
 	(void)pKeys;
 	if (Success)

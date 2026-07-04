@@ -886,6 +886,20 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	return true;
 }
 
+// Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
+// the weak BtSmpMsTick/BtGattMsTick defaults. Sourced from the STM32 HAL tick
+// (HAL_GetTick, milliseconds since boot). Declared in bt_smp.h / bt_gatt.h, so
+// no linkage specifier is needed here.
+uint32_t BtSmpMsTick(void)
+{
+	return HAL_GetTick();
+}
+
+uint32_t BtGattMsTick(void)
+{
+	return HAL_GetTick();
+}
+
 void BtAppRun(void)
 {
 	if (g_BtAppData.State != BTAPP_STATE_INITIALIZED)
@@ -908,6 +922,13 @@ void BtAppRun(void)
 		// Pump the sequencer. UTIL_SEQ_Run dispatches whichever task the
 		// notification hooks scheduled (HCI evt drain, BLE host work).
 		UTIL_SEQ_Run(UTIL_SEQ_DEFAULT);
+
+		// Drive the generic transaction timeouts (Core Vol 3 Part H 3.4, Part F
+		// 3.3.3). Cheap no-ops when nothing is pending. NOTE: this loop wakes on
+		// events, so a link that goes fully silent needs a periodic tick to also
+		// call these - schedule a repeating UTIL_TIMER/HW_TS task if required.
+		BtSmpTimeoutCheck();
+		BtGattIndicationTimeoutCheck();
 
 		BtAppEvtWait();
 	}

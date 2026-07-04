@@ -768,7 +768,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	// pairing (no SC bit), reject with Authentication Requirements rather than
 	// entering the legacy flow. A central that opens with legacy (e.g. nRF
 	// Connect Desktop) then retries with SC. Accepting legacy here and failing
-	// later at the confirm/random step leaves such a central wedged.
+	// later at the confirm/random step leaves such a central unable to pair.
 	if ((BT_SMP_LOCAL_AUTHREQ & BT_SMP_AUTHREQ_SC) &&
 		!(pReq->AuthReq & BT_SMP_AUTHREQ_SC))
 	{
@@ -2261,16 +2261,16 @@ int BtSmpCryptoSelfTest(void)
 	return CryptoSelfTest(s_pCryptoEcdh);
 }
 
-// LTK Request Reply hooks. The active implementation overrides these to route the
-// reply through its real HCI command channel (e.g. the SDC command function).
+// LTK Request Reply hooks. The port implementation overrides these to route the
+// reply through its own HCI command channel (e.g. the SDC command function).
 // The weak default uses the generic HCI command builder, which is correct for
 // transports where the HCI command and ACL data share one sink.
 
 // Central-only: start link encryption from a (just-derived or stored) LTK via
 // HCI LE Enable Encryption. The peripheral instead waits for the controller's
 // LTK request and answers BtSmpHciLtkReply. For SC the Rand/Ediv are zero. The
-// LTK is little-endian (HCI order). Weak: the active stack overrides this to use
-// its real HCI command channel (the SDC command function), same as LtkReply.
+// LTK is little-endian (HCI order). Weak: the port overrides this to use its own
+// HCI command channel (the SDC command function), same as LtkReply.
 __attribute__((weak))
 void BtSmpHciEnableEncryption(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 							 uint64_t Rand, uint16_t Ediv, const uint8_t Ltk[16])

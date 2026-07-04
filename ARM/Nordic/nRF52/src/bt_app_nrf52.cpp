@@ -1545,6 +1545,23 @@ uint32_t GetLFAccuracy(uint32_t AccPpm)
  */
 static void BtAppSDDispatch(void);
 
+// Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
+// the weak BtSmpMsTick/BtGattMsTick defaults. Sourced from the SDK app_timer
+// running count (the RTC is initialised and driven by the SDK/SoftDevice), so
+// this port does not own a timer. app_timer_cnt_get() returns 24-bit RTC ticks
+// at APP_TIMER_CLOCK_FREQ / (APP_TIMER_CONFIG_RTC_FREQUENCY + 1) Hz. Declared in
+// bt_smp.h / bt_gatt.h, so no linkage specifier is needed here.
+uint32_t BtSmpMsTick(void)
+{
+	return (uint32_t)(((uint64_t)app_timer_cnt_get() *
+					   (APP_TIMER_CONFIG_RTC_FREQUENCY + 1) * 1000) / APP_TIMER_CLOCK_FREQ);
+}
+
+uint32_t BtGattMsTick(void)
+{
+	return BtSmpMsTick();
+}
+
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
@@ -1736,6 +1753,15 @@ void BtAppRun()
 		app_sched_execute();
 		AppEvtHandlerExec();
 		nrf_ble_lesc_request_handler();
+
+		// Drive the generic transaction timeouts (Core Vol 3 Part H 3.4, Part F
+		// 3.3.3). Cheap no-ops when nothing is pending. NOTE: this loop wakes on
+		// events, so a link that goes fully silent needs a periodic wake to also
+		// call these - hook them into an existing SDK app_timer handler if
+		// required.
+		BtSmpTimeoutCheck();
+		BtGattIndicationTimeoutCheck();
+
 		BtAppEvtWait();
     }
 

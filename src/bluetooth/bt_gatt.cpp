@@ -507,8 +507,8 @@ bool BtGattIndicationTimedOut(uint16_t ConnHdl, uint32_t TimeoutMs)
 		return false;
 	}
 
-	// Unsigned subtraction wraps cleanly, so a tick rollover during the wait
-	// does not produce a false timeout.
+	// Unsigned subtraction handles counter rollover, so a tick rollover during
+	// the wait does not produce a false timeout.
 	return (uint32_t)(BtGattMsTick() - pConn->Conn.IndCfmTime) >= TimeoutMs;
 }
 
