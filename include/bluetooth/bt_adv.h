@@ -223,8 +223,8 @@ void BtAdvStop(void);
  *
  * Legacy advertising PDUs cap both the advertising data and the scan response
  * data at BT_ADV_LEGACY_DATA_MAX (31) octets each. When either assembled
- * payload exceeds that, extended PDUs must be used. This is the single source
- * of truth for the legacy/extended selection; each backend measures its
+ * payload exceeds that, extended PDUs must be used. This function alone decides
+ * the legacy/extended selection; each implementation measures its
  * assembled packets and applies the result to its native advertising type or
  * event-property fields.
  *

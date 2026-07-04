@@ -10,8 +10,8 @@
 
 		The store is generic and platform independent. It performs all record
 		management (lookup, append, tombstone, compaction) and calls a thin
-		BtPdsNvm backend for the actual medium access. Each target provides a
-		backend: RRAM through the SoftDevice on the bm port, flash on SDC, etc.
+		BtPdsNvm implementation for the actual medium access. Each target provides a
+		implementation: RRAM through the SoftDevice on the bm port, flash on SDC, etc.
 
 		Keying and semantics match what peer_data_storage.c expects from the
 		old bm_zms API:
@@ -44,7 +44,7 @@ Copyright (c) 2016, I-SYST inc., all rights reserved
 #define BT_PDS_RECORD_DATA_MAX		128
 
 /**
- * @brief	NVM backend interface.
+ * @brief	NVM implementation interface.
  *
  * The store accesses the medium only through these calls. A platform supplies
  * one instance describing its region and the read/write/erase primitives.
@@ -53,8 +53,8 @@ Copyright (c) 2016, I-SYST inc., all rights reserved
  * absolute addresses, so the store logic is medium agnostic.
  *
  * Write must be synchronous from the caller's view: on return the data is
- * committed (the bm backend pumps sd_flash_write to completion). Len passed to
- * Write is always a multiple of the backend WriteGran. Erase clears a sector
+ * committed (the bm implementation pumps sd_flash_write to completion). Len passed to
+ * Write is always a multiple of the implementation WriteGran. Erase clears a sector
  * to the erased value (0xFF bytes) if the medium needs it; on rewrite-in-place
  * media such as RRAM it may simply overwrite, in which case Erase can write
  * the sector with the erased pattern or be a documented no-op the store
@@ -84,7 +84,7 @@ extern "C" {
 
 
 /**
- * @brief	Initialize the store on the given backend.
+ * @brief	Initialize the store on the given implementation.
  *
  * Scans the region, rebuilds the in-RAM index of live records, and runs
  * recovery if a prior compaction was interrupted. Synchronous.

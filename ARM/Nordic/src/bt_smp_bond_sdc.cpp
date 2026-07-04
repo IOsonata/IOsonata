@@ -13,12 +13,12 @@
 		    bt_smp_bond.cpp (RAM table, weak hooks)
 		      -> these strong hooks (slot <-> bt_pds key)
 		        -> bt_pds.cpp (log structured KV over a region)
-		          -> BtPdsNvm_t backend, radio safe per target:
+		          -> BtPdsNvm_t implementation, radio safe per target:
 		             nRF54L SDC : bt_pds_nvm_rramc_sdc.cpp (RRAMC via MPSL)
 		             nRF52  SDC : bt_pds_nvm_nvmc_sdc.cpp  (NVMC via MPSL)
 
-		The backend init is provided by the linked backend translation unit
-		(BtPdsSdcNvmInit). Only one backend is linked per build, so this glue
+		The implementation init is provided by the linked implementation translation unit
+		(BtPdsSdcNvmInit). Only one implementation is linked per build, so this glue
 		stays target neutral: it never touches RRAMC, NVMC, or MPSL directly.
 
 		Each bond slot maps to a fixed bt_pds key (BOND_KEY_BASE + Slot). The
@@ -45,7 +45,7 @@
 
 static bool s_PdsReady;
 
-// Bring up the KV store and its backend once. Returns 0 on success.
+// Bring up the KV store and its implementation once. Returns 0 on success.
 static int PdsEnsureReady(void)
 {
 	if (s_PdsReady)
@@ -121,9 +121,9 @@ void BtSmpBondErase(void)
 //      bt_smp_bond.cpp; in an archive, the linker only extracts this object if
 //      something references a symbol it defines. Without this referenced entry,
 //      the already-linked weak no-ops win and bonds are never persisted.
-//   2. Bring up the NVM backend and load any stored bonds into the RAM table
+//   2. Bring up the NVM implementation and load any stored bonds into the RAM table
 //      now, so a reconnect right after boot finds its LTK.
-// Returns 0 on success, negative errno on backend init failure.
+// Returns 0 on success, negative errno on implementation init failure.
 int BtSmpBondSdcInit(void)
 {
 	int r = PdsEnsureReady();

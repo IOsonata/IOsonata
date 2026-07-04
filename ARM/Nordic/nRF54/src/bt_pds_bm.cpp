@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	bt_pds_bm.cpp
 
-@brief	BtPds NVM backend for the nRF54L bm (sdk-nrf-bm / S145) port.
+@brief	BtPds NVM implementation for the nRF54L bm (sdk-nrf-bm / S145) port.
 
 		Implements the BtPdsNvm_t primitives over RRAM. The region is the
 		peer_manager partition reserved in the linker script. Writes go through
@@ -204,7 +204,7 @@ static const BtPdsNvm_t s_BtPdsBmNvm = {
 	.Erase        = BtPdsBmErase,
 };
 
-// Convenience init the platform calls instead of building the backend itself.
+// Convenience init the platform calls instead of building the implementation itself.
 // extern "C" so peer_data_storage.c (compiled as C) links to the unmangled
 // symbol it declares and calls.
 extern "C" int BtPdsBmInit(void)

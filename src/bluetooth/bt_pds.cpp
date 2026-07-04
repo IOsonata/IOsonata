@@ -276,7 +276,7 @@ static int AppendRaw(uint32_t Id, uint16_t Len, const void *pData)
 
 	// Assemble header + word-padded payload in a stack buffer so the medium
 	// write is a single word-granular operation (the data must remain valid
-	// until commit; the backend write is synchronous so a local buffer is ok).
+	// until commit; the implementation write is synchronous so a local buffer is ok).
 	uint8_t rec[BT_PDS_HDR_SIZE + WordPad(BT_PDS_RECORD_DATA_MAX)];
 	memset(rec, 0xFF, sizeof(rec));
 	memcpy(rec, &hdr, BT_PDS_HDR_SIZE);

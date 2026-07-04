@@ -1270,7 +1270,7 @@ __attribute__((weak)) void BtAppEvtWait(void)
 {
 	if (BtPeerIsConnected())
 	{
-		idelayms(BTAPP_TIMEOUT_POLL_MS);
+		msDelay(BTAPP_TIMEOUT_POLL_MS);
 	}
 	else
 	{

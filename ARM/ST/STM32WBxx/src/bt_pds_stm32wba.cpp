@@ -1,12 +1,12 @@
 /**-------------------------------------------------------------------------
 @file	bt_pds_stm32wba.cpp
 
-@brief	bt_pds NVM backend over STM32WBA on-chip flash.
+@brief	bt_pds NVM implementation over STM32WBA on-chip flash.
 
 	Provides the BtPdsNvm_t medium primitives (Read/Write/Erase) that the
 	generic log-structured KV store (src/bluetooth/bt_pds.cpp) uses to
 	persist bond records. This is the WBA equivalent of the Nordic
-	bt_pds_nvm_nvmc_sdc.cpp backend.
+	bt_pds_nvm_nvmc_sdc.cpp implementation.
 
 	Layering (same opaque-blob seam as Nordic):
 	    bt_smp_bond.cpp (RAM table, weak hooks)

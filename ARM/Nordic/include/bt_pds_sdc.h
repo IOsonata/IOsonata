@@ -9,7 +9,7 @@
 		softdevice_controller) owns the radio timeline through MPSL, so a flash
 		write must run inside an MPSL timeslot, a gap MPSL grants where the
 		radio is guaranteed idle. This module wraps the MPSL timeslot session
-		so a target NVM backend (RRAMC on nRF54L, NVMC on nRF52) can perform its
+		so a target NVM implementation (RRAMC on nRF54L, NVMC on nRF52) can perform its
 		write or erase in a radio-safe window, behind a synchronous call.
 
 		The target supplies a single callback that does the actual medium
@@ -19,7 +19,7 @@
 		sd_flash_write + SoC-event-pump pattern, MPSL-arbitrated instead of
 		SoftDevice-arbitrated, and free of nRF5_SDK.
 
-		This header is target agnostic. RRAMC and NVMC backends include it and
+		This header is target agnostic. RRAMC and NVMC implementations include it and
 		provide their own medium primitives plus the BtPdsNvm_t vtable.
 
 @author	Hoang Nguyen Hoan
@@ -69,17 +69,17 @@ typedef struct {
 int BtPdsMpslRun(BtPdsMpslOp_t *pOp);
 
 // One-time init: register the MPSL timeslot session memory. Called once before
-// the first BtPdsMpslRun, typically from the target backend's init.
+// the first BtPdsMpslRun, typically from the target implementation's init.
 int BtPdsMpslInit(void);
 
-// Per-target NVM backend init. Brings up the timeslot session and mounts the
+// Per-target NVM implementation init. Brings up the timeslot session and mounts the
 // bt_pds store over the target medium (NVMC on nRF52, RRAMC on nRF54L). One
-// backend is linked per build; all expose this same name.
+// implementation is linked per build; all expose this same name.
 int BtPdsSdcNvmInit(void);
 
 // SDC bond persistence init. Called internally by the SDC app init when a
 // secure SecType is configured (not by the application). Initializes the NVM
-// backend, loads stored bonds into the SMP bond table, and pulls in the strong
+// implementation, loads stored bonds into the SMP bond table, and pulls in the strong
 // BtSmpBondSave/Load/Erase overrides that persist bonds. Returns 0 on success.
 int BtSmpBondSdcInit(void);
 

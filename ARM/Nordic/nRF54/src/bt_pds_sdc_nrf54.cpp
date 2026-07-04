@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	bt_pds_nvm_rramc_sdc.cpp
 
-@brief	BtPdsNvm_t backend over nRF54L RRAM for SDC (SoftDevice Controller)
+@brief	BtPdsNvm_t implementation over nRF54L RRAM for SDC (SoftDevice Controller)
 		builds.
 
 		Same medium as the bm port (RRAM), but the arbitration differs: there is
@@ -15,7 +15,7 @@
 		write head, so Erase writes 0xFF over the sector (still arbitrated).
 
 		Pair this with the SDC bt_smp_bond persistence hooks (bt_smp_bond over
-		BtPds). BtPdsInit(&g_BtPdsRramcSdcNvm) wires the store to this backend.
+		BtPds). BtPdsInit(&g_BtPdsRramcSdcNvm) wires the store to this implementation.
 
 @author	Hoang Nguyen Hoan
 @date	Jun 09, 2026
@@ -34,7 +34,7 @@
 // RRAM region reserved for the persistent store on the SDC build. Keep this in
 // sync with the SDC linker script's reserved storage partition. Defaults match
 // the bm port's region so a board can carry one bond region regardless of
-// backend; override per board/linker as needed.
+// implementation; override per board/linker as needed.
 #ifndef BT_PDS_RRAMC_REGION_ADDR
 #define BT_PDS_RRAMC_REGION_ADDR	0x00158800UL
 #endif

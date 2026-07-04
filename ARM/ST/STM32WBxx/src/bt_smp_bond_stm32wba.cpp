@@ -13,10 +13,10 @@
 	        BLEPLAT_NvmStore. The bond is an OPAQUE BLOB to IOsonata.
 
 	Because the bt_smp_bond / bt_pds seam was built to store opaque blobs
-	through a swappable BtPdsNvm_t backend (see bt_smp_bond_sdc.cpp comment:
+	through a swappable BtPdsNvm_t implementation (see bt_smp_bond_sdc.cpp comment:
 	"the record is an opaque blob ... this file does not need the layout"),
 	the WBA cache image drops straight into the same store. Only the medium
-	backend differs (bt_pds_stm32wba.cpp).
+	implementation differs (bt_pds_stm32wba.cpp).
 
 	Layering:
 	    ST stack NVM cache  --BLEPLAT_NvmStore-->  THIS FILE
@@ -43,7 +43,7 @@
 
 #include "bluetooth/bt_pds.h"
 
-// Forward decl of the WBA flash backend init (bt_pds_stm32wba.cpp).
+// Forward decl of the WBA flash implementation init (bt_pds_stm32wba.cpp).
 extern "C" int BtPdsWbaInit(void);
 
 // bt_pds key holding the ST NVM-cache blob. The WBA bond table is a single
@@ -59,7 +59,7 @@ static int PdsEnsureReady(void)
 	{
 		return 0;
 	}
-	int r = BtPdsWbaInit();			// [VERIFIED] bt_pds.h backend init
+	int r = BtPdsWbaInit();			// [VERIFIED] bt_pds.h implementation init
 	if (r != 0)
 	{
 		return r;
@@ -129,7 +129,7 @@ extern "C" void BtSmpBondWbaCommit(uint16_t ConnHdl)
 // ---------------------------------------------------------------------------
 // Init entry point, called internally from bt_app_stm32wba.cpp gated on
 // bSecure (mirrors the BtSmpBondSdcInit placement rule). Ensures the store +
-// backend are up so the first BLEPLAT_NvmStore/Restore succeeds. Having a
+// implementation are up so the first BLEPLAT_NvmStore/Restore succeeds. Having a
 // referenced entry point also guarantees this TU is pulled from the archive
 // (the weak/strong archive-extraction lesson).
 // ---------------------------------------------------------------------------

@@ -531,7 +531,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	// device name and appearance are set via sd_ble_gap_device_name_set and
 	// sd_ble_gap_appearance_set. Treat a request to add them as a no-op success
 	// so shared BtGapInit stays portable across the SDC (software DB) and
-	// SoftDevice backends.
+	// SoftDevice ports.
 	if (pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ACCESS ||
 		pSrvc->UuidSrvc == BT_UUID_GATT_SERVICE_GENERIC_ATTRIBUTE)
 	{

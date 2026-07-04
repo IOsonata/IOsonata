@@ -915,10 +915,10 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
         					   (uint8_t*)p_gap_evt->params.connected.peer_addr.addr);
         	g_BtAppData.State = BTAPP_STATE_CONNECTED;
 
-        	// If a secure SecType was configured, the SoftDevice backend requests
+        	// If a secure SecType was configured, the SoftDevice implementation requests
         	// security on the link itself (pm_conn_secure -> sd_ble_gap_authenticate).
-        	// This is backend-internal so the application stays SDK-neutral - it
-        	// does not call any backend-specific security-request function.
+        	// This is port-internal so the application stays SDK-neutral - it
+        	// does not call any port-specific security-request function.
         	if (g_BtAppData.AppDevice.bSecure)
         	{
         		err_code = pm_conn_secure(p_gap_evt->conn_handle, false);
@@ -1214,7 +1214,7 @@ static void BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool b
     DEBUG_PRINTF("SEC: pm_register=0x%X\r\n", err_code);
     APP_ERROR_CHECK(err_code);
 
-    // Initialise the LESC module. This sets up nrf_crypto (mbedTLS backend on
+    // Initialise the LESC module. This sets up nrf_crypto (mbedTLS implementation on
     // this target provides the secp256r1 ECDH) and generates the local ECDH key
     // pair. The module owns the key pair, handles the LESC DHKey request, and
     // replies to the SoftDevice; the app only routes BLE events to

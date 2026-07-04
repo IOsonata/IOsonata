@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	bt_pds_sdc_nrf52.cpp
 
-@brief	BtPdsNvm_t backend over nRF52 internal flash (NVMC) for SDC builds.
+@brief	BtPdsNvm_t implementation over nRF52 internal flash (NVMC) for SDC builds.
 
 		Provides the radio safe NVM primitives the bt_pds store needs, with no
 		dependency on nRF5_SDK. The SoftDevice Controller exposes no flash
@@ -20,7 +20,7 @@
 		Erase: an nRF52 page erase takes ~85 ms, far longer than a radio safe
 		timeslot. The driver call (nrfx_nvmc_page_erase) busy waits to
 		completion, and the hardware partial erase exists only on nRF52840, not
-		nRF52832. So this backend drives the erase at the HAL layer: it starts
+		nRF52832. So this implementation drives the erase at the HAL layer: it starts
 		the page erase (nrf_nvmc_page_erase_start), yields the timeslot, and
 		polls nrf_nvmc_ready_check on later timeslots until done. The NVMC
 		controller runs the erase autonomously, so the radio runs between polls.
@@ -37,8 +37,8 @@
 		skipped, so a clean spare page costs nothing.
 
 		Init entry BtPdsSdcNvmInit matches the name the bond glue
-		(bt_smp_bond_sdc.cpp) calls, so the same glue serves this backend and
-		the nRF54L RRAMC backend; only one backend is linked per build.
+		(bt_smp_bond_sdc.cpp) calls, so the same glue serves this implementation and
+		the nRF54L RRAMC implementation; only one implementation is linked per build.
 
 @author	Hoang Nguyen Hoan
 @date	Jun 09, 2026
@@ -227,7 +227,7 @@ static const BtPdsNvm_t s_BtPdsNvmcSdcNvm = {
 
 // Init entry: bring up the MPSL timeslot session, then mount the store. Name
 // matches the bond glue (bt_smp_bond_sdc.cpp) so the same glue serves this and
-// the nRF54L RRAMC backend.
+// the nRF54L RRAMC implementation.
 int BtPdsSdcNvmInit(void)
 {
 	int r = BtPdsMpslInit();
