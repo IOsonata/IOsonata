@@ -106,6 +106,11 @@ extern UART g_Uart;
 
 #define BTAPP_CONN_CFG_TAG				CONFIG_NRF_SDH_BLE_CONN_TAG
 
+// Bare-metal fallback polling interval while connected. This guarantees generic
+// SMP/GATT transaction timeouts advance even when the peer goes fully silent.
+// RTOS ports should override BtAppEvtWait with a blocking primitive plus timer.
+#define BTAPP_TIMEOUT_POLL_MS			100U
+
 #define BTAPP_OBSERVER_PRIO				USER		/**< Application's BLE observer priority. */
 
 #ifndef GATT_MTU_SIZE_DEFAULT
@@ -1263,7 +1268,14 @@ void BtAppRun()
 // RTOS apps override with sem take in their bridge code.
 __attribute__((weak)) void BtAppEvtWait(void)
 {
-	__WFE();
+	if (BtPeerIsConnected())
+	{
+		idelayms(BTAPP_TIMEOUT_POLL_MS);
+	}
+	else
+	{
+		__WFE();
+	}
 }
 
 // Drains queued SoftDevice stack events by running the registered observers.

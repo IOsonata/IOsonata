@@ -1624,9 +1624,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	// event to return). The handler body is empty: the RTC interrupt itself
 	// is the wakeup. This also gives BtSmpMsTick the call cadence its 24-bit
 	// counter extension needs.
-	app_timer_create(&s_BtAppPeriodicTimerId, APP_TIMER_MODE_REPEATED,
-					 BtAppPeriodicTimerHandler);
-	app_timer_start(s_BtAppPeriodicTimerId, APP_TIMER_TICKS(1000), NULL);
+	err_code = app_timer_create(&s_BtAppPeriodicTimerId, APP_TIMER_MODE_REPEATED,
+								BtAppPeriodicTimerHandler);
+	APP_ERROR_CHECK(err_code);
+	err_code = app_timer_start(s_BtAppPeriodicTimerId, APP_TIMER_TICKS(1000), NULL);
+	APP_ERROR_CHECK(err_code);
 	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
 
     if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
