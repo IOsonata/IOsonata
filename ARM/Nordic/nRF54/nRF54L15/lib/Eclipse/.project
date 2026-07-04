@@ -211,6 +211,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/rftag</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/sensors</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -432,6 +437,11 @@
 		</link>
 		<link>
 			<name>src/pwrmgnt</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/rftag</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -934,6 +944,21 @@
 			<name>include/pwrmgnt/pwrmgnt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/rftag.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/rftag_controller.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_controller.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/rftag_ndef.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_ndef.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_adxl362.h</name>
@@ -1619,6 +1644,21 @@
 			<name>src/pwrmgnt/pm_mp2696a.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_mp2696a.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/rftag.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/rftag_controller.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_controller.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/rftag_ndef.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_ndef.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/include</name>
