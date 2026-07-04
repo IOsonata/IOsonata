@@ -223,6 +223,17 @@ static void SmpFailAndLock(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 // Outbound packet helpers
 //-----------------------------------------------------------------------------
 
+// Weak fallback so builds that exclude the generic HCI host (vendor-owned stacks
+// run their own SMP/GATT and never reach the native ACL send) still link. The
+// strong BtHciSendAcl in bt_hci_host.cpp does the credit-gated ACL fragmentation
+// and replaces this in HCI-host builds.
+__attribute__((weak)) uint32_t BtHciSendAcl(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pAcl)
+{
+	(void)pDev;
+	(void)pAcl;
+	return 0;
+}
+
 static void SmpSend(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 					const void *pData, size_t Len)
 {

@@ -136,8 +136,11 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 }
 
 // Native indication path. The SoftDevice enforces the single-outstanding-
-// indication rule itself (sd_ble_gatts_hvx returns NRF_ERROR_BUSY while one is
-// pending) and signals the client confirmation with BLE_GATTS_EVT_HVC.
+// indication rule (sd_ble_gatts_hvx returns NRF_ERROR_BUSY while one is pending).
+// A successful send is recorded on the TX-pending ring and starts the per-link
+// indication transaction timeout. The client confirmation is delivered to the
+// app event handler as the SoftDevice BLE_GATTS_EVT_HVC event, which routes it
+// to BtGattHandleValueConfirm.
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr)
@@ -183,7 +186,19 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal
 
     uint32_t err_code = sd_ble_gatts_hvx(hdl, &params);
 
-    return err_code == NRF_SUCCESS;
+    if (err_code == NRF_SUCCESS)
+    {
+        BtDevice_t *pConn = BtPeerFindByHdl(hdl);
+        if (pConn != nullptr)
+        {
+            pConn->Conn.bIndCfmPending = true;
+            pConn->Conn.IndCfmTime = BtGattMsTick();
+        }
+        BtGattTxPendingAdd(hdl, pChar);
+        return true;
+    }
+
+    return false;
 }
 
 //uint32_t BleSrvcCharSetValue(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_t DataLen)

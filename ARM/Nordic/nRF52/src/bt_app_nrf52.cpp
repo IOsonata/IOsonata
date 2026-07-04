@@ -489,9 +489,6 @@ bool BtAppNotify(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 
 bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 {
-	uint16_t connHdl = BtAppGetConnHandle();
-	uint8_t emptyData = 0;
-
 	if (pChar == nullptr)
 	{
 		return false;
@@ -502,39 +499,14 @@ bool BtAppIndicate(BtGattChar_t *pChar, uint8_t *pData, uint16_t DataLen)
 		return false;
 	}
 
-	if (connHdl == BLE_CONN_HANDLE_INVALID)
-	{
-		return false;
-	}
-
 	if (DataLen > 0 && BtGattCharSetValue(pChar, pData, DataLen) == false)
 	{
 		return false;
 	}
 
-	// SoftDevice enforces the CCCD per connection on sd_ble_gatts_hvx.
-
-	if (pChar->ValHdl == BT_ATT_HANDLE_INVALID)
-	{
-		return false;
-	}
-
-	if (pData == nullptr)
-	{
-		pData = &emptyData;
-	}
-
-    ble_gatts_hvx_params_t params;
-
-    memset(&params, 0, sizeof(params));
-    params.type = BLE_GATT_HVX_INDICATION;
-    params.handle = pChar->ValHdl;
-    params.p_data = pData;
-    params.p_len = &DataLen;
-
-    uint32_t err_code = sd_ble_gatts_hvx(connHdl, &params);
-
-    return err_code == NRF_SUCCESS;
+	// Delegate to BtGattCharIndicate so the indication is tracked: pending flag,
+	// transaction timeout, and TX-pending ring.
+	return BtGattCharIndicate(BtAppGetConnHandle(), pChar, pData, DataLen);
 }
 
 /**@brief Function for assert macro callback.
@@ -1137,6 +1109,11 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     	{
     		BtGattSendCompleted(p_ble_evt->evt.gatts_evt.conn_handle,
     			p_ble_evt->evt.gatts_evt.params.hvn_tx_complete.count);
+    	}
+    	else if (p_ble_evt->header.evt_id == BLE_GATTS_EVT_HVC)
+    	{
+    		// Client confirmed the outstanding indication.
+    		BtGattHandleValueConfirm(p_ble_evt->evt.gatts_evt.conn_handle);
     	}
     	BtGattEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);
     	BtAppPeriphEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);

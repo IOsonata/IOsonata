@@ -193,6 +193,19 @@ uint32_t BtGattMsTick(void)
 	return g_BtAppSdcTimer.mSecond();
 }
 
+// Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
+// closing the bearer, so disconnect the link. The generic weak default only
+// clears the outstanding-indication flag.
+void BtGattIndicationTimeout(uint16_t ConnHdl)
+{
+	uint8_t param[3];
+	param[0] = (uint8_t)(ConnHdl & 0xFF);
+	param[1] = (uint8_t)(ConnHdl >> 8);
+	param[2] = 0x13;	// Remote User Terminated Connection
+
+	BtHciCommand(&s_BtHciDev, BT_HCI_CMD_LINKCTRL_DISCONNECT, param, sizeof(param), NULL, 0);
+}
+
 #if 0
 static void BtStackMpslAssert(const char * const file, const uint32_t line)
 {
