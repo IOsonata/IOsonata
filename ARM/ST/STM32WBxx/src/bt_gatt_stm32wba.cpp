@@ -204,11 +204,26 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, 
 												   pChar->Hdl, 0x01,
 												   (uint16_t)Len, 0,
 												   (uint8_t)Len, p);
-	return st == BLE_STATUS_SUCCESS;
+
+	if (st == BLE_STATUS_SUCCESS)
+	{
+		// The ST stack copies the value into its TX pool synchronously and has
+		// no per-notification on-air completion event, so acceptance is the
+		// completion point on this port. Queue then drain so TxCompleteCB
+		// fires with the same semantics as the other ports.
+		BtGattTxPendingAdd(ConnHdl, pChar);
+		BtGattSendCompleted(ConnHdl, 1);
+		return true;
+	}
+
+	return false;
 }
 
-// Per-connection indicate. Update_Type 0x02 = Indication; the ST stack tracks
-// the single outstanding indication and the client confirmation internally.
+// Per-connection indicate. Update_Type 0x02 = Indication. The ST stack owns
+// the on-air exchange; a successful send is recorded on the TX-pending ring
+// and starts the per-link indication transaction timeout. The client
+// confirmation arrives as ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE and routes
+// to BtGattHandleValueConfirm plus a ring drain.
 bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (ConnHdl == BT_CONN_HDL_INVALID)
@@ -240,5 +255,18 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar, void * const pVal
 												   pChar->Hdl, 0x02,
 												   (uint16_t)Len, 0,
 												   (uint8_t)Len, p);
-	return st == BLE_STATUS_SUCCESS;
+
+	if (st == BLE_STATUS_SUCCESS)
+	{
+		BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
+		if (pConn != nullptr)
+		{
+			pConn->Conn.bIndCfmPending = true;
+			pConn->Conn.IndCfmTime = BtGattMsTick();
+		}
+		BtGattTxPendingAdd(ConnHdl, pChar);
+		return true;
+	}
+
+	return false;
 }

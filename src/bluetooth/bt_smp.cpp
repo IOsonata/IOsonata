@@ -50,9 +50,23 @@ SOFTWARE.
 #include "crypto/crypto.h"
 #include "coredev/rng.h"
 
-// SMP handshake trace. Set to 1 to print every SMP PDU in/out and the link
-// state over SysLog. Leave at 0 for release builds.
-#if 1
+// SMP handshake trace. Define BT_SMP_TRACE_ENABLE to 1 to print every SMP PDU
+// in/out and the link state over SysLog. Defaults off for release and library
+// builds.
+#ifndef BT_SMP_TRACE_ENABLE
+#define BT_SMP_TRACE_ENABLE 0
+#endif
+
+// DHKey byte-order interop fallback. When enabled, a failed Ea verification
+// retries f5 with the raw DHKey order before failing, to tolerate a crypto
+// provider that returns the shared secret in the opposite byte order. Leave
+// off for release: it can mask a provider byte-order bug. Enable only for
+// provider bring-up or interop debugging.
+#ifndef BT_SMP_DHKEY_ORDER_FALLBACK
+#define BT_SMP_DHKEY_ORDER_FALLBACK 0
+#endif
+
+#if BT_SMP_TRACE_ENABLE
 #include "syslog.h"
 #define SMP_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
@@ -1557,6 +1571,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 
 	if (!SmpEqualCT(ea, pChk->Value, 16))
 	{
+#if BT_SMP_DHKEY_ORDER_FALLBACK
 		// The Confirm stage already passed, so ECDH produced the same point as
 		// the peer. If Ea fails here, the most common remaining issue is DHKey
 		// byte order at f5. Try the other provider order before failing.
@@ -1588,6 +1603,11 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		SmpApplyKeySize(&pLink->Keys);
 		memcpy(ea, altEa, 16);
 		SMP_TRACE("Ea matched with raw DHKey f5 input\r\n");
+#else
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+#endif
 	}
 
 	if (pLink->Ctx.Model == BT_SMP_MODEL_NUMERIC_COMPARISON &&

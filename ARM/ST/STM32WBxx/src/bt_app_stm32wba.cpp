@@ -553,6 +553,16 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 					break;
 				}
 
+				case ACI_GATT_SERVER_CONFIRMATION_VSEVT_CODE:
+				{
+					// The client confirmed our indication. Clear the pending state
+					// and drain the send-order ring so TxCompleteCB fires.
+					uint16_t ch = *(uint16_t*)pAci->data;
+					BtGattHandleValueConfirm(ch);
+					BtGattSendCompleted(ch, 1);
+					break;
+				}
+
 				case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:
 				{
 					aci_gatt_attribute_modified_event_rp0 *pM =
