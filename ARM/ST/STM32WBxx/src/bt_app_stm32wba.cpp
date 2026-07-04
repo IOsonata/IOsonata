@@ -910,6 +910,14 @@ uint32_t BtGattMsTick(void)
 	return HAL_GetTick();
 }
 
+// Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
+// closing the bearer, so terminate the link. Overrides the generic weak
+// default that only clears the outstanding-indication flag.
+void BtGattIndicationTimeout(uint16_t ConnHdl)
+{
+	aci_gap_terminate(ConnHdl, 0x13);	// remote user terminated connection
+}
+
 void BtAppRun(void)
 {
 	if (g_BtAppData.State != BTAPP_STATE_INITIALIZED)
@@ -953,6 +961,11 @@ __attribute__((weak)) void BtAppEvtDispatch(void)
 
 // Bare-metal default: wait for any event. RTOS apps override with a
 // semaphore-take in the bridge code (same pattern as BM/nRF52 ports).
+// In the default HAL configuration the SysTick interrupt (1 ms, required by
+// HAL_GetTick) ends this wait, so the loop reaches the SMP/GATT transaction
+// timeout checks even on a fully silent link. A low power build that stops
+// SysTick must provide another periodic wakeup (LPTIM or RTC) for the 30 s
+// timeouts to fire.
 __attribute__((weak)) void BtAppEvtWait(void)
 {
 	__WFE();

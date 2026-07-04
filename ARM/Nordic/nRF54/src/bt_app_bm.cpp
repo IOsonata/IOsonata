@@ -142,7 +142,9 @@ const static TimerCfg_t s_BtAppSdTimerCfg = {
     .DevNo = 3,	// GRTC3 needed for Softdevice
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default frequency
-	.IntPrio = 0,
+	.IntPrio = 6,		// App-level priority. 0, 1 and 4 are reserved by the SoftDevice;
+						// priority 0 here would fault the interrupt configuration check
+						// once the wakeup trigger below enables the GRTC IRQ.
 	.EvtHandler = nullptr,
 	.bTickInt = false,
 };
@@ -822,6 +824,13 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	(void)sdh_state_evt_observer_notify(NRF_SDH_STATE_EVT_BLE_ENABLED);
 
+	// 1 s continuous wakeup trigger so a fully silent link still reaches the
+	// SMP/GATT transaction timeout checks in the main loop. Enabled only after
+	// the SoftDevice is up: GRTC3 must be initialized with its interrupt
+	// disabled before nrf_sdh_enable_request. No handler is needed, the GRTC
+	// interrupt itself ends the WFE wait; the ISR tolerates a null handler.
+	s_BtAppSdGrtc3.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
+
 	// Enable BLE stack (cfg_set from CONFIG_ defaults, handled in nrf_sdh_ble.c)
 	//err = nrf_sdh_ble_enable(BTAPP_CONN_CFG_TAG);
 	//if (err)
@@ -1202,6 +1211,14 @@ uint32_t BtSmpMsTick(void)
 uint32_t BtGattMsTick(void)
 {
 	return s_BtAppSdGrtc3.mSecond();
+}
+
+// Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
+// closing the bearer, so disconnect the link. Overrides the generic weak
+// default that only clears the outstanding-indication flag.
+void BtGattIndicationTimeout(uint16_t ConnHdl)
+{
+	sd_ble_gap_disconnect(ConnHdl, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 }
 
 void BtAppRun()

@@ -1522,6 +1522,14 @@ uint32_t GetLFAccuracy(uint32_t AccPpm)
  */
 static void BtAppSDDispatch(void);
 
+APP_TIMER_DEF(s_BtAppPeriodicTimerId);
+
+static void BtAppPeriodicTimerHandler(void *p_context)
+{
+	(void)p_context;
+	// Wakeup only. The main loop runs the timeout checks after the wait returns.
+}
+
 // Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
 // the weak BtSmpMsTick/BtGattMsTick defaults. Sourced from the SDK app_timer
 // running count (the RTC is initialised and driven by the SDK/SoftDevice), so
@@ -1530,13 +1538,33 @@ static void BtAppSDDispatch(void);
 // bt_smp.h / bt_gatt.h, so no linkage specifier is needed here.
 uint32_t BtSmpMsTick(void)
 {
-	return (uint32_t)(((uint64_t)app_timer_cnt_get() *
+	// app_timer_cnt_get() is a 24-bit RTC count that wraps about every 512 s.
+	// The generic timeout arithmetic assumes a full 32-bit millisecond wrap, so
+	// extend the counter in software: accumulate wrap-aware 24-bit deltas into
+	// a 64-bit tick total. Correct as long as this is called at least once per
+	// 512 s, which the 1 s periodic wakeup timer guarantees while the loop runs.
+	static uint32_t lastCnt = 0;
+	static uint64_t totalTicks = 0;
+
+	uint32_t cnt = app_timer_cnt_get();
+	totalTicks += (cnt - lastCnt) & 0xFFFFFF;
+	lastCnt = cnt;
+
+	return (uint32_t)((totalTicks *
 					   (APP_TIMER_CONFIG_RTC_FREQUENCY + 1) * 1000) / APP_TIMER_CLOCK_FREQ);
 }
 
 uint32_t BtGattMsTick(void)
 {
 	return BtSmpMsTick();
+}
+
+// Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
+// closing the bearer, so disconnect the link. Overrides the generic weak
+// default that only clears the outstanding-indication flag.
+void BtGattIndicationTimeout(uint16_t ConnHdl)
+{
+	sd_ble_gap_disconnect(ConnHdl, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 }
 
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
@@ -1590,6 +1618,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     	g_BtAppData.AppDevice.Conn.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
 
     app_timer_init();
+
+	// 1 s repeating wakeup so a fully silent link still reaches the SMP/GATT
+	// transaction timeout checks in the main loop (sd_app_evt_wait needs an
+	// event to return). The handler body is empty: the RTC interrupt itself
+	// is the wakeup. This also gives BtSmpMsTick the call cadence its 24-bit
+	// counter extension needs.
+	app_timer_create(&s_BtAppPeriodicTimerId, APP_TIMER_MODE_REPEATED,
+					 BtAppPeriodicTimerHandler);
+	app_timer_start(s_BtAppPeriodicTimerId, APP_TIMER_TICKS(1000), NULL);
 	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
 
     if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
