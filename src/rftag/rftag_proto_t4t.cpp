@@ -228,6 +228,8 @@ static int T4tReadBinary(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen,
 		le = 256;
 	}
 
+	le = min(le, (int)T4T_MLE);
+
 	if (T4tIsSelectedCc(pDev))
 	{
 		if (off >= sizeof(st->CcFile))
@@ -384,6 +386,12 @@ static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 		uint8_t cid = 0;
 		bool bCid = (pcb & PCB_CID_PRESENT) != 0;
 
+		if (pcb & PCB_CHAINING)
+		{
+			// APDU chaining is not implemented yet. Do not process partial APDUs.
+			return 0;
+		}
+
 		if (bCid)
 		{
 			if (RxLen < 2)
@@ -404,7 +412,7 @@ static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 			return 0;
 		}
 
-		// Chaining is not handled in this pass. The response uses one I-block.
+		// The response uses one I-block.
 		int rhdr = 1;
 		uint8_t rpcb = (uint8_t)(PCB_IBLOCK_VAL | (pcb & PCB_BLOCKNUM));
 
