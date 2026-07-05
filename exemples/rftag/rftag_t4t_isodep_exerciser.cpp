@@ -17,6 +17,10 @@ Sequence groups:
 	4. Chained I-block, sent when a payload exceeds one frame
 	5. Duplicate block number, reader retransmission after a missed reply
 
+Link rule: build this file with rftag_proto_t4t.cpp only. Do not link
+rftag.cpp, it defines RFTagEvtDispatch and this file provides its own as
+the event observation hook, linking both is a duplicate symbol.
+
 Expected results are marked PASS for behavior that must hold and GAP for
 sequences the module does not answer yet. A GAP turning into a response is
 a change to review, not an automatic pass.
@@ -185,18 +189,44 @@ int main()
 		Check("NLEN 0004 read", l == 5 && tx[1] == 0x00 && tx[2] == 0x04);
 	}
 
-	printf("== 2. Presence check R-blocks ==\n");
+	printf("== 2. R-blocks per ISO 14443-4 rules 11 and 12 ==\n");
 
+	// Session state here: last exchange was I(0) READ NLEN, PICC block
+	// number is 0 and the stored response is the NLEN read. Rule 11 uses
+	// the last block sent, whatever kind it was, so the retransmission
+	// flow is exercised before the presence check changes the last block.
 	{
-		uint8_t f[] = { 0xA2 };	// R(ACK) bn 0
+		// Rule 11: the PCD missed the response and asks again with the
+		// same number. The NLEN I-block is replayed, not re executed.
+		uint8_t f[] = { 0xB2 };	// R(NAK) bn 0, PICC bn 0
 		l = dev.pProto->OnFrame(&dev, f, sizeof(f), tx, sizeof(tx));
-		Gap("R(ACK) unanswered, phone presence check will fail", l == 0);
+		Dump("R(NAK,0) retransmit", tx, l);
+		Check("rule 11 NLEN response replayed", l == 5 && tx[0] == 0x02 && tx[1] == 0x00 && tx[2] == 0x04);
 	}
 
 	{
-		uint8_t f[] = { 0xB3 };	// R(NAK) bn 1
+		// Rule 12: R(NAK) with a different number is answered by R(ACK)
+		// with the PICC current number. This is the phone presence check.
+		uint8_t f[] = { 0xB3 };	// R(NAK) bn 1, PICC bn 0
 		l = dev.pProto->OnFrame(&dev, f, sizeof(f), tx, sizeof(tx));
-		Gap("R(NAK) unanswered, no retransmission path", l == 0);
+		Dump("R(NAK,1) presence", tx, l);
+		Check("rule 12 R(ACK,0) answered", l == 1 && tx[0] == 0xA2);
+	}
+
+	{
+		// Rule 11 after the presence check: the last block sent is now the
+		// rule 12 R(ACK), so that is what a same number R(ACK) replays.
+		uint8_t f[] = { 0xA2 };	// R(ACK) bn 0, PICC bn 0
+		l = dev.pProto->OnFrame(&dev, f, sizeof(f), tx, sizeof(tx));
+		Check("rule 11 replays last block, the R(ACK)", l == 1 && tx[0] == 0xA2);
+	}
+
+	{
+		// Rule 13: R(ACK) with a different number continues chaining only.
+		// Not chaining, no reply expected.
+		uint8_t f[] = { 0xA3 };	// R(ACK) bn 1, PICC bn 0
+		l = dev.pProto->OnFrame(&dev, f, sizeof(f), tx, sizeof(tx));
+		Check("rule 13 no reply outside chaining", l == 0);
 	}
 
 	printf("== 3. S(DESELECT) ==\n");
@@ -228,20 +258,27 @@ int main()
 		Check("chained frame caused no memory write", s_MemChanged == mem0);
 	}
 
-	printf("== 5. Duplicate block number ==\n");
+	printf("== 5. Duplicate block number, rule D retransmission ==\n");
 
 	{
-		// Same READ sent twice with the same block number simulates a reader
-		// retransmission. The spec expects the previous response again without
-		// re executing the command. The module re executes, which is harmless
-		// for READ but wrong for UPDATE. Recorded as a gap.
-		uint8_t f[] = { 0x02, 0x00, 0xB0, 0x00, 0x00, 0x02 };
-		int l1 = dev.pProto->OnFrame(&dev, f, sizeof(f), tx, sizeof(tx));
-		uint8_t first[8];
-		memcpy(first, tx, l1 < 8 ? l1 : 8);
-		int l2 = dev.pProto->OnFrame(&dev, f, sizeof(f), tx, sizeof(tx));
-		bool bSame = (l1 == l2) && memcmp(first, tx, l1 < 8 ? l1 : 8) == 0;
-		Gap("duplicate bn re executes instead of replaying stored response", bSame);
+		// An I-block received with the PICC current number is a PCD
+		// retransmission. The stored response is replayed and the command
+		// is not executed again. Verified with UPDATE, where a second
+		// execution would be a double write.
+		int mem0 = s_MemChanged;
+		uint8_t u[] = { 0x02, 0x00, 0xD6, 0x00, 0x02, 0x02, 0x41, 0x42 };
+		int l1 = dev.pProto->OnFrame(&dev, u, sizeof(u), tx, sizeof(tx));
+		Check("UPDATE executed once", l1 == 3 && tx[1] == 0x90 && s_MemChanged == mem0 + 1);
+		int l2 = dev.pProto->OnFrame(&dev, u, sizeof(u), tx, sizeof(tx));
+		Check("duplicate replayed, no second write", l2 == l1 && tx[1] == 0x90 && s_MemChanged == mem0 + 1);
+	}
+
+	printf("== 6. DESELECT with CID ==\n");
+
+	{
+		uint8_t f[] = { 0xCA, 0x00 };
+		l = dev.pProto->OnFrame(&dev, f, sizeof(f), tx, sizeof(tx));
+		Check("S(DESELECT) CID echoed", l == 2 && tx[0] == 0xCA && tx[1] == 0x00);
 	}
 
 	printf("\nresult: pass=%d fail=%d gap=%d\n", s_Pass, s_Fail, s_Gap);

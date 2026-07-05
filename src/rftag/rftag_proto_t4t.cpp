@@ -72,12 +72,19 @@ using namespace std;
 #define PCB_NAD_PRESENT			0x04
 #define PCB_CHAINING			0x10
 #define PCB_SBLOCK_DESELECT		0xC2
+#define PCB_SBLOCK_MASK			0xF7
+#define PCB_RBLOCK_MASK			0xE0
+#define PCB_RBLOCK_VAL			0xA0
+#define PCB_RBLOCK_NAK			0x10
 #define PCB_RATS				0xE0
 
 typedef struct {
 	bool bAppSelected;
 	uint16_t SelectedFileId;
 	uint8_t CcFile[T4T_CC_LEN];
+	uint8_t BlockNum;			//!< PICC current block number, ISO 14443-4 rule C
+	uint16_t LastTxLen;			//!< Length of the last response for retransmission
+	bool bLastValid;			//!< Last response is valid for retransmission
 } T4tState_t;
 
 static_assert(sizeof(T4tState_t) <= RFTAG_PROTO_STATE_SIZE, "T4T state too large for RFTag ProtoState");
@@ -332,6 +339,21 @@ static bool T4tProtoInit(RFTagDev_t * const pDev)
 	return true;
 }
 
+// ISO 14443-4 PICC side block handling.
+//
+// Block number rules: rule C inits the PICC block number to 1 at activation.
+// Rule D toggles it on each received I-block. A received I-block whose block
+// number equals the current one is a PCD retransmission, the stored response
+// is replayed without executing the command again.
+//
+// R-block rules: rule 11 retransmits the last block when the received block
+// number equals the current one. Rule 12 answers R(NAK) with R(ACK) when the
+// numbers differ. Rule 13 continues chaining on R(ACK) with a different
+// number, response chaining is not implemented so no reply is sent.
+//
+// Retransmission precondition: pTx must be the same buffer on every call of
+// a session. RFTagProcessFrame passes the tag TxFrame, which satisfies this.
+// The stored response is replayed from that buffer without rebuilding it.
 static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap)
 {
 	if (RxLen < 1)
@@ -339,14 +361,17 @@ static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 		return 0;
 	}
 
+	T4tState_t *st = T4tGetState(pDev);
 	uint8_t pcb = pRx[0];
 
 	// RATS starts the ISO-DEP layer. Answer with an ATS.
 	if (pcb == PCB_RATS)
 	{
-		T4tState_t *st = T4tGetState(pDev);
 		st->bAppSelected = false;
 		st->SelectedFileId = 0;
+		st->BlockNum = 1;
+		st->bLastValid = false;
+		st->LastTxLen = 0;
 
 		if (TxCap < 3)
 		{
@@ -361,22 +386,77 @@ static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 		return 3;
 	}
 
-	// S-block DESELECT ends the exchange. Echo it and clear selection.
-	if (pcb == PCB_SBLOCK_DESELECT)
+	// S-block DESELECT ends the exchange. Echo it and clear selection. The
+	// CID bit is preserved in the echo when present.
+	if ((pcb & PCB_SBLOCK_MASK) == PCB_SBLOCK_DESELECT)
 	{
-		T4tState_t *st = T4tGetState(pDev);
-		st->bAppSelected = false;
-		st->SelectedFileId = 0;
+		bool bCid = (pcb & PCB_CID_PRESENT) != 0;
+		int flen = bCid ? 2 : 1;
 
-		if (TxCap < 1)
+		if (RxLen < flen || TxCap < flen)
 		{
 			return 0;
 		}
 
+		st->bAppSelected = false;
+		st->SelectedFileId = 0;
+		st->bLastValid = false;
+
 		pTx[0] = pcb;
+		if (bCid)
+		{
+			pTx[1] = pRx[1];
+		}
+
 		RFTagEvtDispatch(pDev, RFTAG_EVT_DESELECTED, 0, 0, 0);
 
-		return 1;
+		return flen;
+	}
+
+	// R-block. Rules 11 and 12.
+	if ((pcb & PCB_RBLOCK_MASK) == PCB_RBLOCK_VAL)
+	{
+		uint8_t rxbn = pcb & PCB_BLOCKNUM;
+
+		if (rxbn == (st->BlockNum & 1))
+		{
+			// Rule 11, retransmit the last block. The response bytes are
+			// still in pTx from the previous call.
+			if (st->bLastValid && st->LastTxLen > 0 && (int)st->LastTxLen <= TxCap)
+			{
+				return st->LastTxLen;
+			}
+
+			return 0;
+		}
+
+		if (pcb & PCB_RBLOCK_NAK)
+		{
+			// Rule 12, answer R(NAK) with R(ACK) using the current number.
+			bool bCid = (pcb & PCB_CID_PRESENT) != 0;
+			int flen = bCid ? 2 : 1;
+
+			if (RxLen < flen || TxCap < flen)
+			{
+				return 0;
+			}
+
+			pTx[0] = (uint8_t)(PCB_RBLOCK_VAL | 0x02 | (st->BlockNum & 1));
+			if (bCid)
+			{
+				pTx[0] |= PCB_CID_PRESENT;
+				pTx[1] = pRx[1];
+			}
+
+			st->bLastValid = true;
+			st->LastTxLen = flen;
+
+			return flen;
+		}
+
+		// Rule 13, R(ACK) with a different number continues response
+		// chaining. Not chaining, no reply.
+		return 0;
 	}
 
 	// I-block holds an APDU. Strip the header, run the command, wrap the reply.
@@ -385,10 +465,23 @@ static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 		int hdr = 1;
 		uint8_t cid = 0;
 		bool bCid = (pcb & PCB_CID_PRESENT) != 0;
+		uint8_t rxbn = pcb & PCB_BLOCKNUM;
 
 		if (pcb & PCB_CHAINING)
 		{
 			// APDU chaining is not implemented yet. Do not process partial APDUs.
+			return 0;
+		}
+
+		if (rxbn == (st->BlockNum & 1))
+		{
+			// PCD retransmission of the last I-block. Replay the stored
+			// response without executing the command again.
+			if (st->bLastValid && st->LastTxLen > 0 && (int)st->LastTxLen <= TxCap)
+			{
+				return st->LastTxLen;
+			}
+
 			return 0;
 		}
 
@@ -412,9 +505,13 @@ static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 			return 0;
 		}
 
+		// Rule D, toggle on I-block reception. After the toggle the current
+		// number equals the received one and the response uses it.
+		st->BlockNum = rxbn;
+
 		// The response uses one I-block.
 		int rhdr = 1;
-		uint8_t rpcb = (uint8_t)(PCB_IBLOCK_VAL | (pcb & PCB_BLOCKNUM));
+		uint8_t rpcb = (uint8_t)(PCB_IBLOCK_VAL | (st->BlockNum & 1));
 
 		if (bCid)
 		{
@@ -437,13 +534,17 @@ static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 
 		if (l <= 0)
 		{
+			st->bLastValid = false;
 			return 0;
 		}
+
+		st->bLastValid = true;
+		st->LastTxLen = (uint16_t)(rhdr + l);
 
 		return rhdr + l;
 	}
 
-	// R-block and other frames are not answered in this pass.
+	// Other frames are not answered.
 	return 0;
 }
 
