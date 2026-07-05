@@ -199,6 +199,13 @@ bool RFTagProtoT2tBind(RFTagDev_t * const pDev);
 // Type 2 module default UID. The transport NFCID1 should match it.
 const uint8_t *RFTagProtoT2tDefaultUid(void);
 
+// Protocol bind hook provided by the ISO15693 Type 5 module. Referenced from
+// RFTagInit when Proto is RFTAG_PROTO_ISO15693 so the module object is pulled.
+bool RFTagProtoIso15693Bind(RFTagDev_t * const pDev);
+
+// ISO15693 module default 8 byte UID. The transport id should match it.
+const uint8_t *RFTagProtoIso15693DefaultUid(void);
+
 #ifdef __cplusplus
 }
 
