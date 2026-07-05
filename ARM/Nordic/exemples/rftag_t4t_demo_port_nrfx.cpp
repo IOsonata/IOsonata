@@ -78,5 +78,5 @@ DeviceIntrf *RFTagDemoGetTransport(void)
 
 	s_NfctIntrf.Enable();
 
-	return &s_NfctIntrf;
+	return (DevIntrf_t*)s_NfctIntrf;
 }
