@@ -55,13 +55,13 @@ SOFTWARE.
 #include "rftag/rftag.h"
 #include "rftag/rftag_ndef.h"
 
+static int s_Pass = 0;
+static int s_Fail = 0;
+
 // Host stub for the target pin driver, not used on this path.
 extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
 }
-
-static int s_Pass = 0;
-static int s_Fail = 0;
 
 static void Check(const char *pName, bool bOk)
 {

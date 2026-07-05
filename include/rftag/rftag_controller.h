@@ -119,8 +119,8 @@ typedef enum {
 /**
  * @brief IOsonata adapter command for remote tag memory access.
  *
- * This is not a chip command format. PN7160, PN532, ST25R and vendor API
- * ports translate this structure to their own command sequence.
+ * This is not a chip command format. Reader IC ports translate this
+ * structure to their own command sequence.
  */
 typedef struct {
 	uint8_t Cmd;

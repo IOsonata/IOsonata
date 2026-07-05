@@ -5,14 +5,15 @@
 
 RFTag protocol behavior selected when RFTagCfg_t Proto is RFTAG_PROTO_ISO15693.
 ISO15693 is a 13.56 MHz vicinity protocol. This is the tag, VICC, side. After
-the frontend finishes activation and anticollision the reader, VCD, sends
+the transport finishes activation and anticollision the reader, VCD, sends
 requests and the tag answers. This module answers the mandatory NFC Type 5
 command set against the tag local memory pointed to by RFTagDev_t pMem.
 
-The nRF52 NFCT peripheral does not run the vicinity air interface, so this
-protocol needs an external HF frontend such as the ST25R class as its frame
-transport, not NFCT. The transport moves whole ISO15693 requests and replies,
-the SOF, EOF and CRC are handled by the frontend, so RFTAG_XCAP_CRC applies.
+The vicinity air interface is a different transport from the proximity NFC
+used by the Type 2 and Type 4 tags, so this protocol needs an HF vicinity
+frame transport that runs activation and anticollision. The transport moves
+whole ISO15693 requests and replies, the SOF, EOF and CRC are handled below
+the protocol, so RFTAG_XCAP_CRC applies.
 
 Memory image, 4 byte blocks, the whole image is pMem:
 	block 0		Capability Container
@@ -25,7 +26,7 @@ must equal the UID the transport uses for anticollision.
 
 First pass notes, checked on hardware:
 	Inventory answers a single tag in every slot, slot and mask handling for
-	multi tag anticollision is left to the frontend or a later pass.
+	multi tag anticollision is left to the transport or a later pass.
 	The Capability Container MLEN and access bits and the Get System
 	Information geometry are set to common values and tuned on hardware.
 	Only the 1 byte Capability Container is built, memory up to 2040 bytes.
@@ -111,6 +112,15 @@ static_assert(sizeof(Iso15693State_t) <= RFTAG_PROTO_STATE_SIZE, "ISO15693 state
 // 0xE0 is the fixed ISO15693 indicator, the next is the manufacturer code.
 static const uint8_t s_Iso15693DefaultUid[ISO15693_UID_LEN] = {
 	0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x04, 0xE0
+};
+
+static bool Iso15693ProtoInit(RFTagDev_t * const pDev);
+static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap);
+
+static const RFTagProto_t s_Iso15693Proto = {
+	.Init = Iso15693ProtoInit,
+	.OnFrame = Iso15693OnFrame,
+	.OnApdu = nullptr,
 };
 
 static inline Iso15693State_t *Iso15693GetState(RFTagDev_t * const pDev)
@@ -469,12 +479,6 @@ static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLe
 			return Iso15693Error(pTx, TxCap, ERR_NOT_SUPPORTED);
 	}
 }
-
-static const RFTagProto_t s_Iso15693Proto = {
-	.Init = Iso15693ProtoInit,
-	.OnFrame = Iso15693OnFrame,
-	.OnApdu = nullptr,
-};
 
 bool RFTagProtoIso15693Bind(RFTagDev_t * const pDev)
 {

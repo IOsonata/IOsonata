@@ -143,6 +143,11 @@ const MKFS_PARM s_MkFsParm = {
 	.au_size = 0
 };
 
+uint8_t g_Data[4096];
+uint8_t g_Temp[4096];
+uint8_t g_FFBuf[4096];
+static FATFS FatFs;
+
 bool FlashWriteDelayCallback(int DevNo, DevIntrf_t *pInterf)
 {
 	msDelay(3);
@@ -169,11 +174,6 @@ int nRFUartEvtHandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 
 	return cnt;
 }
-
-uint8_t g_Data[4096];
-uint8_t g_Temp[4096];
-uint8_t g_FFBuf[4096];
-static FATFS FatFs;
 
 // nrfutil pkg generate --hw-version 52 --sd-req 0x0100 --application-version 0x0 --application app.hex --key-file ../../dfu_ble/src/capsule_key.pem app_package.zip
 

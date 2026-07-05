@@ -55,6 +55,25 @@ extern DeviceIntrf *RFTagDemoGetIntrf(void);
 static RFTag g_RFTag;
 static uint8_t s_NdefMem[256];
 
+static void RFTagEvent(void *pCtx, const RFTagEvt_t *pEvt);
+
+static const RFTagCfg_t s_RFTagCfg = {
+	.DevAddr = 0,
+	.AddrLen = 2,
+	.PageSize = 4,
+	.Size = 512,
+	.WrDelay = 5,
+	.NdefAddr = 0,
+	.NdefMaxLen = sizeof(s_NdefMem),
+	.NdefFmt = RFTAG_NDEF_FMT_TLV,
+	.FdPin = {-1, -1},
+	.WrProtPin = {-1, -1},
+	.pInitCB = nullptr,
+	.pWaitCB = nullptr,
+	.pEvtCB = RFTagEvent,
+	.pCtx = nullptr,
+};
+
 static void RFTagEvent(void *pCtx, const RFTagEvt_t *pEvt)
 {
 	(void)pCtx;
@@ -77,23 +96,6 @@ static void RFTagEvent(void *pCtx, const RFTagEvt_t *pEvt)
 			break;
 	}
 }
-
-static const RFTagCfg_t s_RFTagCfg = {
-	.DevAddr = 0,
-	.AddrLen = 2,
-	.PageSize = 4,
-	.Size = 512,
-	.WrDelay = 5,
-	.NdefAddr = 0,
-	.NdefMaxLen = sizeof(s_NdefMem),
-	.NdefFmt = RFTAG_NDEF_FMT_TLV,
-	.FdPin = {-1, -1},
-	.WrProtPin = {-1, -1},
-	.pInitCB = nullptr,
-	.pWaitCB = nullptr,
-	.pEvtCB = RFTagEvent,
-	.pCtx = nullptr,
-};
 
 int main()
 {

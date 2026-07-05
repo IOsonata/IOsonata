@@ -63,22 +63,7 @@ RFTag g_Tag;
 static uint8_t s_NdefFile[512];
 static uint8_t s_NdefMsg[256];
 
-static void TagEvent(void *pCtx, const RFTagEvt_t *pEvt)
-{
-	(void)pCtx;
-
-	switch (pEvt->Evt)
-	{
-		case RFTAG_EVT_MEM_CHANGED:
-			// A reader updated the NDEF file. Re-read with g_Tag.GetNdef if needed.
-			break;
-
-		case RFTAG_EVT_SELECTED:
-		case RFTAG_EVT_DESELECTED:
-		default:
-			break;
-	}
-}
+static void TagEvent(void *pCtx, const RFTagEvt_t *pEvt);
 
 static const RFTagCfg_t s_TagCfg = {
 	.Proto = RFTAG_PROTO_NFC_T4,
@@ -100,6 +85,23 @@ static const RFTagCfg_t s_TagCfg = {
 	.pEvtCB = TagEvent,
 	.pCtx = nullptr,
 };
+
+static void TagEvent(void *pCtx, const RFTagEvt_t *pEvt)
+{
+	(void)pCtx;
+
+	switch (pEvt->Evt)
+	{
+		case RFTAG_EVT_MEM_CHANGED:
+			// A reader updated the NDEF file. Re-read with g_Tag.GetNdef if needed.
+			break;
+
+		case RFTAG_EVT_SELECTED:
+		case RFTAG_EVT_DESELECTED:
+		default:
+			break;
+	}
+}
 
 int main()
 {

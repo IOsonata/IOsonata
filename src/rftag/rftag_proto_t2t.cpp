@@ -91,6 +91,15 @@ static const uint8_t s_T2tDefaultUid[7] = {
 	0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66
 };
 
+static bool T2tProtoInit(RFTagDev_t * const pDev);
+static int T2tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap);
+
+static const RFTagProto_t s_T2tProto = {
+	.Init = T2tProtoInit,
+	.OnFrame = T2tOnFrame,
+	.OnApdu = nullptr,
+};
+
 static inline T2tState_t *T2tGetState(RFTagDev_t * const pDev)
 {
 	return (T2tState_t *)pDev->ProtoState;
@@ -305,12 +314,6 @@ static int T2tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 			return 0;
 	}
 }
-
-static const RFTagProto_t s_T2tProto = {
-	.Init = T2tProtoInit,
-	.OnFrame = T2tOnFrame,
-	.OnApdu = nullptr,
-};
 
 bool RFTagProtoT2tBind(RFTagDev_t * const pDev)
 {

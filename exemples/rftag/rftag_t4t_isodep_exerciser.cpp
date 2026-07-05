@@ -9,7 +9,7 @@ module against each sequence, and a regression once R-block and S-block
 handling and chaining are added. Build and run on the host, no hardware.
 
 Sequence groups:
-	1. Activation and NDEF read, the mandatory happy path
+	1. Activation and NDEF read, the mandatory sequence
 	2. Presence check R(ACK) and R(NAK), phones poll with these mid session
 	3. S(DESELECT) end of exchange
 	4. Chained I-block, sent when a payload exceeds one frame

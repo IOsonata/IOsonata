@@ -125,6 +125,8 @@ uint8_t g_LvglMem[LV_MEM_SIZE];
 lv_disp_t *g_pDispl = NULL;
 bool g_bLandscape = false;
 
+lv_obj_t img;
+
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
@@ -244,8 +246,6 @@ void HardwareInit()
 // If functionality is not required, to only pass the build, use
 // `--specs=nosys.specs`.
 //
-lv_obj_t img;
-
 int main()
 {
 	HardwareInit();

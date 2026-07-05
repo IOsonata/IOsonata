@@ -248,6 +248,8 @@ MagSensor *g_pMag = NULL;
 uint32_t g_DT = 0;
 static uint32_t g_TPrev = 0;
 
+uint32_t g_Pdt = 0;
+
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
@@ -272,8 +274,6 @@ void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 			break;
 	}
 }
-
-uint32_t g_Pdt = 0;
 
 void ImuIntHandler(int IntNo, void *pCtx)
 {

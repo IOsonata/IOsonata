@@ -161,6 +161,10 @@ const struct lfs_config cfg = {
     .lookahead_size = 16,
 };
 
+uint8_t g_Data[4096];
+uint8_t g_Temp[4096];
+uint8_t g_FFBuf[4096];
+
 int LittleFsRead(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size)
 {
 	g_FlashDiskIO.Read(block, off, (uint8_t*)buffer, size);
@@ -213,10 +217,6 @@ int nRFUartEvtHandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 
 	return cnt;
 }
-
-uint8_t g_Data[4096];
-uint8_t g_Temp[4096];
-uint8_t g_FFBuf[4096];
 
 // nrfutil pkg generate --hw-version 52 --sd-req 0x0100 --application-version 0x0 --application app.hex --key-file ../../dfu_ble/src/capsule_key.pem app_package.zip
 

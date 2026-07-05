@@ -207,7 +207,6 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
 alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
-
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// RX
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// TX
@@ -239,6 +238,10 @@ const UARTCfg_t g_UartCfg = {
 /// UART object instance
 UART g_Uart;
 
+int g_DelayCnt = 0;
+static volatile bool s_bStreamming = false;
+static uint32_t drop = 0;
+uint32_t schedcnt = 0;
 
 #if BLE_SC_METHOD == BLE_SC_OOB
 static bool s_UartBlePeerOobValid = false;
@@ -392,9 +395,6 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 }
 #endif
 
-
-int g_DelayCnt = 0;
-
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
@@ -430,10 +430,7 @@ void BtAppInitUserData()
 
 }
 
-static volatile bool s_bStreamming = false;
-
 //void UartRxChedHandler(void * p_event_data, uint16_t event_size)
-static uint32_t drop = 0;
 void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
 	static uint8_t buff[PACKET_SIZE];
@@ -485,7 +482,6 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	s_bStreamming = true;
 	AppEvtHandlerQue(0, 0, UartRxChedHandler);
 }
-uint32_t schedcnt = 0;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {

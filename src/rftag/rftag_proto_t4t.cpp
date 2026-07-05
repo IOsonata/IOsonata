@@ -93,6 +93,16 @@ static const uint8_t s_T4tAid[T4T_AID_LEN] = {
 	0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01
 };
 
+static bool T4tProtoInit(RFTagDev_t * const pDev);
+static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap);
+static int T4tApdu(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint8_t *pTx, int TxCap);
+
+static const RFTagProto_t s_T4tProto = {
+	.Init = T4tProtoInit,
+	.OnFrame = T4tOnFrame,
+	.OnApdu = T4tApdu,
+};
+
 static inline T4tState_t *T4tGetState(RFTagDev_t * const pDev)
 {
 	return (T4tState_t *)pDev->ProtoState;
@@ -548,12 +558,6 @@ static int T4tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 	// Other frames are not answered.
 	return 0;
 }
-
-static const RFTagProto_t s_T4tProto = {
-	.Init = T4tProtoInit,
-	.OnFrame = T4tOnFrame,
-	.OnApdu = T4tApdu,
-};
 
 bool RFTagProtoT4tBind(RFTagDev_t * const pDev)
 {
