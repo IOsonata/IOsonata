@@ -231,6 +231,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/rftag</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/sdk_config.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/include/sdk_config.h</locationURI>
@@ -492,6 +497,11 @@
 		</link>
 		<link>
 			<name>src/pwrmgnt</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/rftag</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -929,6 +939,26 @@
 			<name>include/pwrmgnt/pwrmgnt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/nfct_nrfx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/nfct_nrfx.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/rftag.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/rftag_controller.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_controller.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/rftag_ndef.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_ndef.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_adxl362.h</name>
@@ -1909,6 +1939,31 @@
 			<name>src/pwrmgnt/pm_npm1300.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_npm1300.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/nfct_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nfct_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/rftag.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/rftag_controller.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_controller.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/rftag_ndef.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_ndef.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/rftag_proto_t4t.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t4t.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_adxl362.cpp</name>
