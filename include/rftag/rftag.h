@@ -51,6 +51,15 @@ typedef enum {
 } RFTAG_NDEF_FMT;
 
 typedef enum {
+	RFTAG_PROTO_NONE = 0,		//!< Raw memory tag, host access over the transport
+	RFTAG_PROTO_NFC_T2,			//!< NFC Forum Type 2 Tag
+	RFTAG_PROTO_NFC_T4,			//!< NFC Forum Type 4 Tag
+	RFTAG_PROTO_ISO15693,		//!< ISO15693 vicinity tag, NFC Forum Type 5
+	RFTAG_PROTO_EPC_GEN2,		//!< UHF EPC Gen2, ISO18000-63. Remote or chip tag only
+	RFTAG_PROTO_VENDOR,			//!< Vendor specific protocol
+} RFTAG_PROTO;
+
+typedef enum {
 	RFTAG_EVT_FIELD_ON,
 	RFTAG_EVT_FIELD_OFF,
 	RFTAG_EVT_SELECTED,
@@ -72,7 +81,44 @@ typedef void (*RFTAGCB)(void *pCtx, const RFTagEvt_t *pEvt);
 
 typedef bool (*RFTAGDEVOP)(int DevAddr, DevIntrf_t * const pIntrf);
 
+// Transport capability flags. They state which protocol layers the transport
+// hardware or firmware already performs, so the protocol module can skip them
+// instead of running them again in software.
+#define RFTAG_XCAP_ANTICOL		(1 << 0)	//!< Activation and anticollision in hardware
+#define RFTAG_XCAP_CRC			(1 << 1)	//!< RX frames arrive CRC checked, TX CRC appended
+#define RFTAG_XCAP_FDT			(1 << 2)	//!< Reply timing enforced in hardware
+#define RFTAG_XCAP_ISODEP		(1 << 3)	//!< Transport delivers bare APDUs, ISO-DEP in the chip
+#define RFTAG_XCAP_TAGFULL		(1 << 4)	//!< Chip runs the whole tag, host only syncs memory
+
+// Size of the protocol scratch area kept inside the tag object. Must hold the
+// largest protocol state. Protocol modules verify this at compile time.
+#define RFTAG_PROTO_STATE_SIZE	64
+
+// Largest response frame a protocol may build.
+#define RFTAG_TX_FRAME_MAX		260
+
+typedef struct __RFTag_Device RFTagDev_t;
+
+// Pluggable per protocol behavior, selected by RFTagCfg_t Proto at init.
+// OnFrame and OnApdu are the two target entry levels. The transport XCap
+// decides which one runs: RFTAG_XCAP_ISODEP routes to OnApdu, otherwise
+// OnFrame handles the raw frame including the ISO-DEP layer.
+typedef struct {
+	bool (*Init)(RFTagDev_t * const pDev);	//!< Per protocol setup, may be null
+	// Target path, raw frame level. Process one reader frame in pRx, build a
+	// response in pTx. Returns the response length in bytes, 0 for no response.
+	int (*OnFrame)(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen,
+	               uint8_t *pTx, int TxCap);
+	// Target path, APDU level, for transports that run ISO-DEP themselves.
+	int (*OnApdu)(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen,
+	              uint8_t *pTx, int TxCap);
+} RFTagProto_t;
+
 typedef struct __RFTag_Config {
+	RFTAG_PROTO Proto;				//!< Tag protocol, selects the tag behavior
+	uint32_t XCap;					//!< Transport capability flags, RFTAG_XCAP_*
+	uint8_t *pMem;					//!< Local tag memory for target protocols. Null for bus tags
+	uint32_t MemSize;				//!< Local tag memory size in bytes
 	uint8_t DevAddr;				//!< Device address or selection id
 	uint8_t AddrLen;				//!< Memory address length in bytes
 	uint16_t PageSize;				//!< Write page size in bytes
@@ -89,7 +135,11 @@ typedef struct __RFTag_Config {
 	void *pCtx;						//!< Callback context
 } RFTagCfg_t;
 
-typedef struct __RFTag_Device {
+struct __RFTag_Device {
+	RFTAG_PROTO Proto;
+	uint32_t XCap;
+	uint8_t *pMem;
+	uint32_t MemSize;
 	uint8_t DevAddr;
 	uint8_t AddrLen;
 	uint16_t PageSize;
@@ -104,7 +154,10 @@ typedef struct __RFTag_Device {
 	RFTAGDEVOP pWaitCB;
 	RFTAGCB pEvtCB;
 	void *pCtx;
-} RFTagDev_t;
+	const RFTagProto_t *pProto;
+	uint8_t ProtoState[RFTAG_PROTO_STATE_SIZE];
+	uint8_t TxFrame[RFTAG_TX_FRAME_MAX];
+};
 
 #pragma pack(pop)
 
@@ -124,6 +177,14 @@ int RFTagGetNdef(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len);
 
 void RFTagSetWriteProt(RFTagDev_t * const pDev, bool bVal);
 void RFTagEvtDispatch(RFTagDev_t * const pDev, RFTAG_EVT Evt, uint32_t Addr, uint32_t Len, uint32_t Flags);
+
+// Target entry. Feed one reader frame from the transport. Runs the configured
+// protocol and sends the response frame back through the transport.
+int RFTagProcessFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen);
+
+// Protocol bind hook provided by the Type 4 module. Referenced from RFTagInit
+// when Proto is RFTAG_PROTO_NFC_T4 so the module object is pulled from the archive.
+bool RFTagProtoT4tBind(RFTagDev_t * const pDev);
 
 #ifdef __cplusplus
 }
@@ -152,6 +213,10 @@ public:
 
 	virtual int GetNdef(uint8_t *pNdef, uint16_t Len) {
 		return RFTagGetNdef(&vDevData, pNdef, Len);
+	}
+
+	virtual int ProcessFrame(const uint8_t *pRx, int RxLen) {
+		return RFTagProcessFrame(&vDevData, pRx, RxLen);
 	}
 
 	uint32_t GetSize() {

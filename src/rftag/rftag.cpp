@@ -82,6 +82,10 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 	memset(pDev, 0, sizeof(RFTagDev_t));
 
 	pDev->pIntrf = pIntrf;
+	pDev->Proto = pCfg->Proto;
+	pDev->XCap = pCfg->XCap;
+	pDev->pMem = pCfg->pMem;
+	pDev->MemSize = pCfg->MemSize;
 	pDev->DevAddr = pCfg->DevAddr;
 	pDev->PageSize = pCfg->PageSize;
 	pDev->AddrLen = pCfg->AddrLen;
@@ -107,6 +111,29 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 		IOPinCfg(&pCfg->FdPin, 1);
 	}
 
+	// Select the tag behavior from the protocol. Each case references a bind
+	// function so the linker pulls that module object from the archive. A
+	// transport that runs the whole tag itself needs no protocol module.
+	switch (pCfg->XCap & RFTAG_XCAP_TAGFULL ? RFTAG_PROTO_NONE : pCfg->Proto)
+	{
+#ifdef RFTAG_PROTO_T4T_ENABLE
+		case RFTAG_PROTO_NFC_T4:
+			RFTagProtoT4tBind(pDev);
+			break;
+#endif
+		default:
+			pDev->pProto = nullptr;
+			break;
+	}
+
+	if (pDev->pProto && pDev->pProto->Init)
+	{
+		if (pDev->pProto->Init(pDev) == false)
+		{
+			return false;
+		}
+	}
+
 	if (pCfg->pInitCB)
 	{
 		return pCfg->pInitCB(pCfg->DevAddr, pIntrf);
@@ -115,17 +142,64 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 	return true;
 }
 
+int RFTagProcessFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen)
+{
+	if (pDev == nullptr || pRx == nullptr || RxLen <= 0)
+	{
+		return 0;
+	}
+
+	if (pDev->pProto == nullptr)
+	{
+		return 0;
+	}
+
+	int l = 0;
+
+	// Route by transport capability. A transport that already runs ISO-DEP
+	// hands up bare APDUs, so the frame layer of the module is skipped.
+	if ((pDev->XCap & RFTAG_XCAP_ISODEP) && pDev->pProto->OnApdu)
+	{
+		l = pDev->pProto->OnApdu(pDev, pRx, RxLen, pDev->TxFrame, sizeof(pDev->TxFrame));
+	}
+	else if (pDev->pProto->OnFrame)
+	{
+		l = pDev->pProto->OnFrame(pDev, pRx, RxLen, pDev->TxFrame, sizeof(pDev->TxFrame));
+	}
+
+	if (l > 0 && pDev->pIntrf)
+	{
+		DeviceIntrfTx(pDev->pIntrf, pDev->DevAddr, pDev->TxFrame, l);
+	}
+
+	return l;
+}
+
 int RFTagRead(RFTagDev_t * const pDev, uint32_t Addr, uint8_t *pBuff, int Len)
 {
 	uint8_t ad[4];
 	int count = 0;
 
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pBuff == nullptr || Len <= 0)
+	if (pDev == nullptr || pBuff == nullptr || Len <= 0)
 	{
 		return 0;
 	}
 
-	if (pDev->AddrLen > sizeof(ad))
+	// Target tags keep their memory local. Host access is a direct copy.
+	if (pDev->pMem)
+	{
+		if (Addr >= pDev->MemSize)
+		{
+			return 0;
+		}
+
+		int l = min(Len, (int)(pDev->MemSize - Addr));
+		memcpy(pBuff, &pDev->pMem[Addr], l);
+
+		return l;
+	}
+
+	if (pDev->pIntrf == nullptr || pDev->AddrLen > sizeof(ad))
 	{
 		return 0;
 	}
@@ -143,6 +217,7 @@ int RFTagRead(RFTagDev_t * const pDev, uint32_t Addr, uint8_t *pBuff, int Len)
 			break;
 		}
 
+
 		count += l;
 		Addr += l;
 		Len -= l;
@@ -157,12 +232,26 @@ int RFTagWrite(RFTagDev_t * const pDev, uint32_t Addr, const uint8_t *pData, int
 	uint8_t ad[4];
 	int count = 0;
 
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pData == nullptr || Len <= 0)
+	if (pDev == nullptr || pData == nullptr || Len <= 0)
 	{
 		return 0;
 	}
 
-	if (pDev->AddrLen > sizeof(ad))
+	// Target tags keep their memory local. Host access is a direct copy.
+	if (pDev->pMem)
+	{
+		if (Addr >= pDev->MemSize)
+		{
+			return 0;
+		}
+
+		int l = min(Len, (int)(pDev->MemSize - Addr));
+		memcpy(&pDev->pMem[Addr], pData, l);
+
+		return l;
+	}
+
+	if (pDev->pIntrf == nullptr || pDev->AddrLen > sizeof(ad))
 	{
 		return 0;
 	}
@@ -193,6 +282,7 @@ int RFTagWrite(RFTagDev_t * const pDev, uint32_t Addr, const uint8_t *pData, int
 		{
 			usDelay(pDev->WrDelay);
 		}
+
 
 		Addr += l;
 		Len -= l;
@@ -493,12 +583,12 @@ void RFTagEvtDispatch(RFTagDev_t * const pDev, RFTAG_EVT Evt, uint32_t Addr, uin
 		return;
 	}
 
-	RFTagEvt_t e = {
-		.Evt = Evt,
-		.Addr = Addr,
-		.Len = Len,
-		.Flags = Flags,
-	};
+	RFTagEvt_t e;
+
+	e.Evt = Evt;
+	e.Addr = Addr;
+	e.Len = Len;
+	e.Flags = Flags;
 
 	pDev->pEvtCB(pDev->pCtx, &e);
 }
