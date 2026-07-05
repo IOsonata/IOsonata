@@ -64,6 +64,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //   BLE_SC_PASSKEY_DISP   BLE_SC_PASSKEY_INPUT  Passkey Entry (this side shows)
 //   BLE_SC_PASSKEY_INPUT  BLE_SC_PASSKEY_DISP   Passkey Entry (this side types)
 //   BLE_SC_OOB            BLE_SC_OOB            LESC OOB via UART copy/paste
+//
+// With BLE_SC_METHOD == BLE_SC_OOB the local OOB data can additionally be
+// published on a local NFC tag by defining BLE_SC_OOB_NFC. The peer phone
+// taps the tag, reads the le.oob record and pairs with the OOB model. The
+// target port provides the NFC frame transport through BleOobNfcGetTransport,
+// see uart_ble_oob_nfc_port_nrfx.cpp for the Nordic NFCT one.
 #define BLE_SC_NONE				0
 #define BLE_SC_JUSTWORKS		1
 #define BLE_SC_NUMCOMP			2
@@ -262,6 +268,83 @@ UART g_Uart;
 #if BLE_SC_METHOD == BLE_SC_OOB
 static bool s_UartBlePeerOobValid = false;
 
+#ifdef BLE_SC_OOB_NFC
+#include "rftag/rftag.h"
+#include "rftag/rftag_ndef.h"
+#include "bluetooth/bt_oob_rftag.h"
+
+// NFC frame transport provided by the target port.
+extern DeviceIntrf *BleOobNfcGetTransport(void);
+
+// External linkage, the target port frame handler references this tag.
+RFTag g_BleOobTag;
+
+static uint8_t s_BleOobNdefFile[256];
+static bool s_BleOobNfcReady = false;
+
+static const RFTagCfg_t s_BleOobTagCfg = {
+	.Proto = RFTAG_PROTO_NFC_T4,
+	.XCap = RFTAG_XCAP_ANTICOL | RFTAG_XCAP_CRC | RFTAG_XCAP_FDT,
+	.pMem = s_BleOobNdefFile,
+	.MemSize = sizeof(s_BleOobNdefFile),
+	.DevAddr = 0,
+	.AddrLen = 2,
+	.PageSize = 0,
+	.Size = sizeof(s_BleOobNdefFile),
+	.WrDelay = 0,
+	.NdefAddr = 0,
+	.NdefMaxLen = sizeof(s_BleOobNdefFile),
+	.NdefFmt = RFTAG_NDEF_FMT_NLEN16,
+	.FdPin = {-1, -1},
+	.WrProtPin = {-1, -1},
+	.pInitCB = nullptr,
+	.pWaitCB = nullptr,
+	.pEvtCB = nullptr,
+	.pCtx = nullptr,
+};
+
+// Publish the local OOB data set on the NFC tag. Must be called with the
+// same r and c as the UART printout, the generator makes a new key pair on
+// every call so a second generation would invalidate the published confirm.
+static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
+{
+	if (s_BleOobNfcReady == false)
+	{
+		DeviceIntrf *pTransport = BleOobNfcGetTransport();
+
+		if (pTransport == nullptr || g_BleOobTag.Init(s_BleOobTagCfg, pTransport) == false)
+		{
+			g_Uart.printf("OOB NFC tag init failed\r\n");
+			return;
+		}
+
+		s_BleOobNfcReady = true;
+	}
+
+	BtOobLe_t oob;
+	RFNdefMsg_t msg;
+	uint8_t msgbuf[160];
+
+	memset(&oob, 0, sizeof(oob));
+	BtSmpLocalAddrGet(&oob.AddrType, oob.Addr);
+	oob.Role = BT_OOB_LEROLE_PERIPH;
+	memcpy(oob.Confirm, pConf, 16);
+	memcpy(oob.Rand, pRand, 16);
+	oob.pName = DEVICE_NAME;
+
+	RFNdefInit(&msg, msgbuf, sizeof(msgbuf));
+
+	if (BtOobLeNdefAdd(&msg, &oob) == false ||
+		g_BleOobTag.SetNdef(msg.pBuf, msg.Len) == false)
+	{
+		g_Uart.printf("OOB NFC publish failed\r\n");
+		return;
+	}
+
+	g_Uart.printf("OOB data published on NFC tag, tap to pair\r\n");
+}
+#endif
+
 static int UartBleHexVal(uint8_t c)
 {
 	if (c >= '0' && c <= '9') return c - '0';
@@ -330,6 +413,11 @@ static void UartBleOobPrintLocal(void)
 	UartBlePrintHex(r, sizeof(r));
 	UartBlePrintHex(c, sizeof(c));
 	g_Uart.printf("\r\n");
+
+#ifdef BLE_SC_OOB_NFC
+	// Same r and c as the printout, one generation feeds both channels.
+	UartBleOobNfcPublish(r, c);
+#endif
 }
 
 static bool UartBleOobSetPeer(const uint8_t *pText, int Len)
