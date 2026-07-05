@@ -102,7 +102,10 @@ const uint8_t *RFTagProtoT2tDefaultUid(void)
 static void T2tBuildHeader(RFTagDev_t * const pDev)
 {
 	uint8_t *p = pDev->pMem;
-	const uint8_t *uid = s_T2tDefaultUid;
+
+	// Type 2 uses a 7 byte double size UID. Take it from the config when a
+	// 7 byte id is set, otherwise fall back to the module default.
+	const uint8_t *uid = pDev->IdLen == 7 ? pDev->NfcId : s_T2tDefaultUid;
 
 	// Blocks 0..2, UID with the two block check bytes and lock bytes
 	p[0] = uid[0];
@@ -179,16 +182,18 @@ static int T2tWrite(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint
 		return 0;
 	}
 
-	uint8_t blk = pRx[1];
+	// Apply the selected sector, the same way READ does. The static UID,
+	// lock and CC region is absolute blocks 0..3, that is sector 0 only.
+	uint32_t blk = (uint32_t)T2tGetState(pDev)->Sector * 256u + pRx[1];
 
-	// Blocks 0..3 are UID, lock and CC. A read only tag rejects every write.
+	// A read only tag rejects every write.
 	if (blk < 4 || pDev->bReadOnly)
 	{
 		pTx[0] = T2T_NAK;
 		return 1;
 	}
 
-	uint32_t addr = (uint32_t)blk * T2T_BLOCK_SIZE;
+	uint32_t addr = blk * T2T_BLOCK_SIZE;
 
 	if (addr + T2T_BLOCK_SIZE > pDev->MemSize)
 	{
@@ -228,15 +233,28 @@ static int T2tOnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, ui
 	T2tState_t *st = T2tGetState(pDev);
 
 	// Second frame of a SECTOR SELECT, the sector number and 3 RFU bytes.
-	// A valid selection switches sector with no reply.
+	// Require the full 4 byte frame. A sector whose base is past the memory
+	// is not available, answer NAK. A valid selection switches with no reply.
 	if (st->bSecSelPending)
 	{
 		st->bSecSelPending = false;
 
-		if (RxLen >= 1)
+		if (RxLen < 4)
 		{
-			st->Sector = pRx[0];
+			return 0;
 		}
+
+		if ((uint32_t)pRx[0] * 256u * T2T_BLOCK_SIZE >= pDev->MemSize)
+		{
+			if (TxCap >= 1)
+			{
+				pTx[0] = T2T_NAK;
+				return 1;
+			}
+			return 0;
+		}
+
+		st->Sector = pRx[0];
 
 		return 0;
 	}

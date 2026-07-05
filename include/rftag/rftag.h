@@ -52,11 +52,11 @@ typedef enum {
 
 typedef enum {
 	RFTAG_PROTO_NONE = 0,		//!< Raw memory tag, host access over the transport
-	RFTAG_PROTO_NFC_T2,			//!< NFC Forum Type 2 Tag
-	RFTAG_PROTO_NFC_T4,			//!< NFC Forum Type 4 Tag
-	RFTAG_PROTO_ISO15693,		//!< ISO15693 vicinity tag, NFC Forum Type 5
-	RFTAG_PROTO_EPC_GEN2,		//!< UHF EPC Gen2, ISO18000-63. Remote or chip tag only
-	RFTAG_PROTO_VENDOR,			//!< Vendor specific protocol
+	RFTAG_PROTO_NFC_T2 = 1,		//!< NFC Forum Type 2 Tag
+	RFTAG_PROTO_NFC_T4 = 2,		//!< NFC Forum Type 4 Tag
+	RFTAG_PROTO_ISO15693 = 3,	//!< ISO15693 vicinity tag, NFC Forum Type 5
+	RFTAG_PROTO_EPC_GEN2 = 4,	//!< UHF EPC Gen2, ISO18000-63. Remote or chip tag only
+	RFTAG_PROTO_VENDOR = 5,		//!< Vendor specific protocol
 } RFTAG_PROTO;
 
 typedef enum {
@@ -118,6 +118,8 @@ typedef struct __RFTag_Config {
 	RFTAG_PROTO Proto;				//!< Tag protocol, selects the tag behavior
 	uint32_t XCap;					//!< Transport capability flags, RFTAG_XCAP_*
 	bool bReadOnly;					//!< RF side is read only, protocol rejects writes. Host access unaffected
+	uint8_t NfcId[10];				//!< Tag UID or NFCID1. Must match the transport id
+	uint8_t IdLen;					//!< UID length 4, 7 or 10. 0 uses the protocol default
 	uint8_t *pMem;					//!< Local tag memory for target protocols. Null for bus tags
 	uint32_t MemSize;				//!< Local tag memory size in bytes
 	uint8_t DevAddr;				//!< Device address or selection id
@@ -140,6 +142,8 @@ struct __RFTag_Device {
 	RFTAG_PROTO Proto;
 	uint32_t XCap;
 	bool bReadOnly;
+	uint8_t NfcId[10];
+	uint8_t IdLen;
 	uint8_t *pMem;
 	uint32_t MemSize;
 	uint8_t DevAddr;

@@ -161,9 +161,44 @@ int main()
 		uint8_t f1[] = { 0xC2, 0xFF };
 		l = dev.pProto->OnFrame(&dev, f1, sizeof(f1), tx, sizeof(tx));
 		Check("sector select frame 1 ACK", l == 1 && tx[0] == 0x0A);
-		uint8_t f2[] = { 0x00, 0x00, 0x00, 0x00 };
+		// Sector 1 base is 1024, past this 64 byte image, so it is not
+		// available and the second frame must NAK.
+		uint8_t f2[] = { 0x01, 0x00, 0x00, 0x00 };
 		l = dev.pProto->OnFrame(&dev, f2, sizeof(f2), tx, sizeof(tx));
-		Check("sector select frame 2 no reply", l == 0);
+		Check("unavailable sector NAK", l == 1 && tx[0] == 0x00);
+		// Short second frame is ignored
+		uint8_t f1b[] = { 0xC2, 0xFF };
+		dev.pProto->OnFrame(&dev, f1b, sizeof(f1b), tx, sizeof(tx));
+		uint8_t f2b[] = { 0x00, 0x00 };
+		l = dev.pProto->OnFrame(&dev, f2b, sizeof(f2b), tx, sizeof(tx));
+		Check("short second frame ignored", l == 0);
+	}
+
+	printf("== 4b. Multi sector write applies sector ==\n");
+
+	{
+		// A 2 sector image, one full sector plus a second sector block 4.
+		static uint8_t big[1024 + 32];
+		RFTagDev_t ms;
+		SetupTag(&ms, big, sizeof(big), false);
+
+		// Select sector 1
+		uint8_t s1[] = { 0xC2, 0xFF };
+		ms.pProto->OnFrame(&ms, s1, sizeof(s1), tx, sizeof(tx));
+		uint8_t s2[] = { 0x01, 0x00, 0x00, 0x00 };
+		l = ms.pProto->OnFrame(&ms, s2, sizeof(s2), tx, sizeof(tx));
+		Check("sector 1 selected, no reply", l == 0);
+
+		// Write block 4 in sector 1, absolute block 260, byte 1040
+		uint8_t w[] = { 0xA2, 0x04, 0xCA, 0xFE, 0xF0, 0x0D };
+		l = ms.pProto->OnFrame(&ms, w, sizeof(w), tx, sizeof(tx));
+		Check("sector 1 write ACK", l == 1 && tx[0] == 0x0A);
+		Check("landed in sector 1 not sector 0", big[1040] == 0xCA && big[16] != 0xCA);
+
+		// Read block 4 in sector 1 returns the written data
+		uint8_t r[] = { 0x30, 0x04 };
+		ms.pProto->OnFrame(&ms, r, sizeof(r), tx, sizeof(tx));
+		Check("sector 1 read back", tx[0] == 0xCA && tx[1] == 0xFE);
 	}
 
 	printf("== 5. Unknown command ==\n");
