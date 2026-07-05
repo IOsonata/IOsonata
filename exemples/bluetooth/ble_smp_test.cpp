@@ -288,7 +288,7 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 }
 
 // SMP completion hook (weak default lives in bt_smp.cpp; this overrides it).
-extern "C" void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKeys)
+void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKeys)
 {
 	if (!Success || pKeys == nullptr)
 	{

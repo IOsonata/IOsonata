@@ -59,7 +59,7 @@ static int s_Pass = 0;
 static int s_Fail = 0;
 
 // Host stub for the target pin driver, not used on this path.
-extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
+void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
 }
 
