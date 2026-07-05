@@ -140,12 +140,12 @@ static void RFTagControllerFillMemCmd(RFTagControllerMemCmd_t *pCmd,
                                       uint8_t Cmd,
                                       const RFTagInfo_t * const pTag,
                                       uint32_t Addr,
-                                      int Len)
+                                      uint16_t Len)
 {
 	memset(pCmd, 0, sizeof(RFTagControllerMemCmd_t));
 
 	pCmd->Cmd = Cmd;
-	pCmd->Len = (uint16_t)Len;
+	pCmd->Len = Len;
 	pCmd->Proto = pTag ? pTag->Proto : RF_PROTO_NONE;
 	pCmd->Addr = Addr;
 
@@ -162,14 +162,14 @@ int RFTagControllerTagRead(RFTagControllerDev_t * const pDev,
                            uint8_t *pBuff,
                            int Len)
 {
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pTag == nullptr || pBuff == nullptr || Len <= 0)
+	if (pDev == nullptr || pDev->pIntrf == nullptr || pTag == nullptr || pBuff == nullptr || Len <= 0 || Len > UINT16_MAX)
 	{
 		return 0;
 	}
 
 	RFTagControllerMemCmd_t cmd;
 
-	RFTagControllerFillMemCmd(&cmd, RFTAGCTRL_CMD_TAG_READ, pTag, Addr, Len);
+	RFTagControllerFillMemCmd(&cmd, RFTAGCTRL_CMD_TAG_READ, pTag, Addr, (uint16_t)Len);
 
 	int l = DeviceIntrfRead(pDev->pIntrf, pDev->DevAddr, (const uint8_t*)&cmd, sizeof(cmd), pBuff, Len);
 
@@ -187,14 +187,14 @@ int RFTagControllerTagWrite(RFTagControllerDev_t * const pDev,
                             const uint8_t *pData,
                             int Len)
 {
-	if (pDev == nullptr || pDev->pIntrf == nullptr || pTag == nullptr || pData == nullptr || Len <= 0)
+	if (pDev == nullptr || pDev->pIntrf == nullptr || pTag == nullptr || pData == nullptr || Len <= 0 || Len > UINT16_MAX)
 	{
 		return 0;
 	}
 
 	RFTagControllerMemCmd_t cmd;
 
-	RFTagControllerFillMemCmd(&cmd, RFTAGCTRL_CMD_TAG_WRITE, pTag, Addr, Len);
+	RFTagControllerFillMemCmd(&cmd, RFTAGCTRL_CMD_TAG_WRITE, pTag, Addr, (uint16_t)Len);
 
 	int l = DeviceIntrfWrite(pDev->pIntrf, pDev->DevAddr, (const uint8_t*)&cmd, sizeof(cmd), pData, Len);
 
