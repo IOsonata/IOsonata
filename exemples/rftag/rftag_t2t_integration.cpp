@@ -15,8 +15,11 @@ Build with RFTAG_PROTO_T2T_ENABLE and link rftag.cpp, rftag_ndef.cpp,
 rftag_proto_t2t.cpp and device_intrf.cpp. This test uses the real
 RFTagEvtDispatch from rftag.cpp, it does not define its own.
 
-The two host stubs below stand in for the target pin driver, which is not
-part of this protocol test.
+rftag.cpp includes the target headers idelay.h and iopinctrl.h, which are per
+part. To build this on a host, put a host include path ahead that provides
+small stubs for usDelay, msDelay and the IOPin inline helpers, and link the
+IOPinConfig stub below. The IOsonata host test include set already carries
+these stubs.
 
 Copyright (c) 2026, I-SYST inc., all rights reserved
 

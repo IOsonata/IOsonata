@@ -345,7 +345,7 @@ static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
 	if (BtOobLeNdefAdd(&msg, &oob) == false ||
 		g_BleOobTag.SetNdef(msg.pBuf, msg.Len) == false)
 	{
-		g_Uart.printf("OOB NFC publish failed\r\n");
+		g_Uart.printf("OOB NFC publish failed, NFC disabled\r\n");
 		return;
 	}
 
@@ -506,21 +506,28 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 	return true;
 }
 
-// Strong override of the weak SMP hook. The published OOB set is single use,
-// the pairing consumed it whether it succeeded or not. Discard the pending
-// set and generate a fresh one, which also republishes the NFC record when
-// BLE_SC_OOB_NFC is enabled. Peer data from the last exchange is stale too.
-void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKeys)
+// The published OOB set is single use. BtSmpPairingComplete stays owned by the
+// port, which calls BtAppEvtSecured on a successful pairing. That hook flags a
+// refresh and the work runs in app context from UartRxChedHandler, so no
+// crypto, UART or NFCT work runs in the pairing event callback.
+void UartRxChedHandler(uint32_t Evt, void *pCtx);
+
+static volatile bool s_OobRefreshPending = false;
+
+static void UartBleOobRefresh(void)
 {
-	(void)ConnHdl;
-	(void)pKeys;
-
-	g_Uart.printf("Pairing %s, refreshing OOB data\r\n", Success ? "complete" : "failed");
-
 	BtSmpOobDataClear();
 	s_UartBlePeerOobValid = false;
-
 	UartBleOobPrintLocal();
+}
+
+void BtAppEvtSecured(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+
+	// Keep the callback light. Queue the app context handler to do the refresh.
+	s_OobRefreshPending = true;
+	AppEvtHandlerQue(0, nullptr, UartRxChedHandler);
 }
 #else
 static void UartBleOobInit(void) {}
@@ -717,6 +724,13 @@ static bool PairInputPoll(void)
 //void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
+#if BLE_SC_METHOD == BLE_SC_OOB
+	if (s_OobRefreshPending)
+	{
+		s_OobRefreshPending = false;
+		UartBleOobRefresh();
+	}
+#endif
 #if BLE_SC_METHOD != BLE_SC_NONE
 	if (PairInputPoll())
 	{

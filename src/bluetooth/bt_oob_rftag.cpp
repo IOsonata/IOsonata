@@ -102,6 +102,11 @@ int BtOobLePayload(const BtOobLe_t * const pOob, uint8_t *pBuf, size_t Size)
 	{
 		size_t nl = strlen(pOob->pName);
 
+		if (nl > 64)
+		{
+			return 0;
+		}
+
 		if (nl > 0)
 		{
 			off = AdAppend(pBuf, Size, off, AD_TYPE_LOCAL_NAME,
