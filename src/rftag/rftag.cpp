@@ -64,6 +64,21 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 		return false;
 	}
 
+	if (pCfg->AddrLen > 4)
+	{
+		return false;
+	}
+
+	if (pCfg->NdefAddr > pCfg->Size)
+	{
+		return false;
+	}
+
+	if (pCfg->NdefMaxLen > 0 && pCfg->NdefMaxLen > (pCfg->Size - pCfg->NdefAddr))
+	{
+		return false;
+	}
+
 	memset(pDev, 0, sizeof(RFTagDev_t));
 
 	pDev->pIntrf = pIntrf;
@@ -128,8 +143,6 @@ int RFTagRead(RFTagDev_t * const pDev, uint32_t Addr, uint8_t *pBuff, int Len)
 			break;
 		}
 
-		RFTagEvtDispatch(pDev, RFTAG_EVT_READ, Addr, l, 0);
-
 		count += l;
 		Addr += l;
 		Len -= l;
@@ -180,8 +193,6 @@ int RFTagWrite(RFTagDev_t * const pDev, uint32_t Addr, const uint8_t *pData, int
 		{
 			usDelay(pDev->WrDelay);
 		}
-
-		RFTagEvtDispatch(pDev, RFTAG_EVT_WRITE, Addr, l, 0);
 
 		Addr += l;
 		Len -= l;
@@ -274,7 +285,12 @@ static bool RFTagSetNdefTlv(RFTagDev_t * const pDev, const uint8_t *pNdef, uint1
 
 bool RFTagSetNdef(RFTagDev_t * const pDev, const uint8_t *pNdef, uint16_t Len)
 {
-	if (pDev == nullptr || pNdef == nullptr)
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	if (Len > 0 && pNdef == nullptr)
 	{
 		return false;
 	}
@@ -344,6 +360,11 @@ static int RFTagGetNdefTlv(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len
 			return 0;
 		}
 
+		if (addr >= end)
+		{
+			return 0;
+		}
+
 		if (b != 0x03)
 		{
 			if (RFTagRead(pDev, addr++, &b, 1) != 1)
@@ -356,12 +377,23 @@ static int RFTagGetNdefTlv(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len
 			if (b == 0xFF)
 			{
 				uint8_t lbuf[2];
+
+				if (addr + sizeof(lbuf) > end)
+				{
+					return 0;
+				}
+
 				if (RFTagRead(pDev, addr, lbuf, sizeof(lbuf)) != (int)sizeof(lbuf))
 				{
 					return 0;
 				}
 				addr += 2;
 				skip = ((uint16_t)lbuf[0] << 8) | lbuf[1];
+			}
+
+			if (addr + skip > end)
+			{
+				return 0;
 			}
 
 			addr += skip;
@@ -378,12 +410,23 @@ static int RFTagGetNdefTlv(RFTagDev_t * const pDev, uint8_t *pNdef, uint16_t Len
 		if (b == 0xFF)
 		{
 			uint8_t lbuf[2];
+
+			if (addr + sizeof(lbuf) > end)
+			{
+				return 0;
+			}
+
 			if (RFTagRead(pDev, addr, lbuf, sizeof(lbuf)) != (int)sizeof(lbuf))
 			{
 				return 0;
 			}
 			addr += 2;
 			nlen = ((uint16_t)lbuf[0] << 8) | lbuf[1];
+		}
+
+		if (addr + nlen > end)
+		{
+			return 0;
 		}
 
 		if (Len < nlen)

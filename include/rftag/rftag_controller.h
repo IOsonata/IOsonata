@@ -102,14 +102,26 @@ typedef struct {
 	void *pCtx;
 } RFTagControllerDev_t;
 
+/**
+ * @brief IOsonata RFTagController adapter command code.
+ *
+ * These commands are used by adapter implementations that expose an RF tag
+ * controller through DeviceIntrf. RFTagControllerTransceive() is raw and does
+ * not wrap data with one of these command values.
+ */
 typedef enum {
 	RFTAGCTRL_CMD_DETECT = 1,
 	RFTAGCTRL_CMD_SELECT,
 	RFTAGCTRL_CMD_TAG_READ,
 	RFTAGCTRL_CMD_TAG_WRITE,
-	RFTAGCTRL_CMD_TRANSCEIVE,
 } RFTAGCTRL_CMD;
 
+/**
+ * @brief IOsonata adapter command for remote tag memory access.
+ *
+ * This is not a chip command format. PN7160, PN532, ST25R and vendor API
+ * ports translate this structure to their own command sequence.
+ */
 typedef struct {
 	uint8_t Cmd;
 	uint8_t UidLen;
