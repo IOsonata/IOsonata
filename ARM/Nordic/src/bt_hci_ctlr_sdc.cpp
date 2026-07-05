@@ -35,6 +35,15 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <memory.h>
 
+// ---- SDC controller bring-up (relocated from bt_app_sdc) ----
+
+#include <stdlib.h>
+#include "nrf.h"
+#include "sdc.h"
+#include "sdc_soc.h"
+#include "sdc_hci_vs.h"
+#include "nrf_mpsl.h"
+
 #include "sdc_hci.h"
 #include "sdc_hci_cmd_le.h"
 #include "sdc_hci_cmd_controller_baseband.h"
@@ -43,6 +52,20 @@ SOFTWARE.
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hci_ctlr.h"
+#include "bluetooth/bt_gap.h"
+#include "coredev/system_core_clock.h"
+
+#if 0
+/******** For DEBUG ************/
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+/*******************************/
+#else
+#define DEBUG_PRINTF(...)
+#endif
+
+// PCD-side controller device pointer, set by BtHciCtlrSdcInit.
+static BtHciCtlrDev_t *s_pBtHciCtlrSdc = nullptr;
 
 static inline size_t BtHciCtlrSendData(BtHciCtlrDev_t * const pDev, void *pData, size_t Len) {
 	return sdc_hci_data_put((uint8_t*)pData) == 0 ? Len : 0;
@@ -67,30 +90,7 @@ void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev)
 	}
 }
 
-
-// ---- SDC controller bring-up (relocated from bt_app_sdc) ----
-
-#include <stdlib.h>
-#include "nrf.h"
-#include "sdc.h"
-#include "sdc_soc.h"
-#include "sdc_hci_vs.h"
-#include "nrf_mpsl.h"
-#include "bluetooth/bt_gap.h"
-#include "coredev/system_core_clock.h"
-
-#if 0
-/******** For DEBUG ************/
-#include "syslog.h"
-#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
-/*******************************/
-#else
-#define DEBUG_PRINTF(...)
-#endif
-
-static BtHciCtlrDev_t *s_pBtHciCtlrSdc = nullptr;
-
-extern "C" size_t BtHciCtlrSdcSend(void *pData, size_t Len)
+size_t BtHciCtlrSdcSend(void *pData, size_t Len)
 {
 	if (s_pBtHciCtlrSdc == nullptr || s_pBtHciCtlrSdc->Send == nullptr)
 	{
@@ -110,7 +110,7 @@ extern "C" size_t BtHciCtlrSdcSend(void *pData, size_t Len)
 // standard HCI wire layout, which matches the SDC command struct, so they cast
 // directly. The wrappers are synchronous, so this returns the status inline; the
 // generic command credit and match path is used only by a raw HCI controller.
-extern "C" uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
+uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
 {
 	int32_t res;
 

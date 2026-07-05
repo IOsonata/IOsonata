@@ -71,26 +71,6 @@ SOFTWARE.
 #define SMP_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
 static const char *SmpCodeName(uint8_t c)
-{
-	switch (c)
-	{
-		case BT_SMP_CODE_PAIRING_REQ:			return "PairingReq";
-		case BT_SMP_CODE_PAIRING_RSP:			return "PairingRsp";
-		case BT_SMP_CODE_PAIRING_CONFIRM:		return "Confirm";
-		case BT_SMP_CODE_PAIRING_RANDOM:		return "Random";
-		case BT_SMP_CODE_PAIRING_FAILED:		return "Failed";
-		case BT_SMP_CODE_PAIRING_ENCRYP_INFO:	return "EncInfo";
-		case BT_SMP_CODE_PAIRING_CENTRAL_ID:	return "CentralId";
-		case BT_SMP_CODE_PAIRING_ID_INFO:		return "IdInfo";
-		case BT_SMP_CODE_PAIRING_ID_ADDR_INFO:	return "IdAddrInfo";
-		case BT_SMP_CODE_PAIRING_SIGNING_INFO:	return "SigningInfo";
-		case BT_SMP_CODE_PAIRING_SECURITY_REQ:	return "SecurityReq";
-		case BT_SMP_CODE_PAIRING_PUBLIC_KEY:	return "PublicKey";
-		case BT_SMP_CODE_PAIRING_DHKEY_CHECK:	return "DhKeyCheck";
-		case BT_SMP_CODE_PAIRING_KEYPRESS_NOTIF:return "Keypress";
-		default:								return "?";
-	}
-}
 
 #define SMP_TRACE_PDU(dir, code, state) \
 		SMP_TRACE("SMP " dir " %s state=%d\r\n", SmpCodeName(code), state)
@@ -118,6 +98,75 @@ typedef struct __Bt_Smp_Link {
 } BtSmpLink_t;
 
 static BtSmpLink_t s_SmpLink[BT_SMP_MAX_LINK];
+
+//-----------------------------------------------------------------------------
+// Crypto primitives
+//-----------------------------------------------------------------------------
+
+static BtHciDevice_t *s_pSmpActiveDev = nullptr;
+
+// Runtime association configuration. Defaults mirror the compile-time
+// BT_SMP_LOCAL_* values, i.e. Just Works, until BtSmpAuthConfig overrides them.
+static uint8_t s_SmpIoCaps  = BT_SMP_LOCAL_IOCAPS;
+static uint8_t s_SmpAuthReq = BT_SMP_LOCAL_AUTHREQ;
+
+// Pending LE Secure Connections OOB data. The local set holds the key pair
+// commitment handed to the peer out of band; the peer set holds the material
+// received from the peer. Both are copied into the link context when a
+// pairing selects the OOB model.
+static struct {
+	bool bLocalValid;
+	bool bPeerValid;
+	uint8_t LocalRand[16];
+	uint8_t LocalPubKey[64];
+	uint8_t PeerRand[16];
+	uint8_t PeerConfirm[16];
+} s_SmpOob = {};
+
+// Map the local and peer IO capabilities to an SC association model. Core
+// spec Vol 3 Part H, 2.3.5.1, Table 2.8 (LE Secure Connections). Rows index
+// the initiator IO capability, columns the responder, both using the
+// BT_SMP_IOCAPS_* values (DisplayOnly 0 .. KeyboardDisplay 4). Cell values are
+// BT_SMP_MODEL_JUST_WORKS / NUMERIC_COMPARISON / PASSKEY_ENTRY. The passkey
+// display/input direction is derived from role and IO capability where it is
+// used, not stored here.
+static const uint8_t s_SmpModelMap[5][5] = {
+	//              resp DO  DYN  KO  NIO  KD
+	/* init DO  */ {  0,   0,   2,   0,   2 },
+	/* init DYN */ {  0,   1,   2,   0,   1 },
+	/* init KO  */ {  2,   2,   2,   0,   2 },
+	/* init NIO */ {  0,   0,   0,   0,   0 },
+	/* init KD  */ {  2,   1,   2,   0,   1 },
+};
+
+// Crypto engine slots, bound by BtSmpInit before first use.
+static CryptoDev_t *s_pCryptoEcdh = nullptr;	// CRYPTO_CAP_ECDH_P256
+static CryptoDev_t *s_pCryptoAes  = nullptr;	// CRYPTO_CAP_AES128_ECB
+
+
+static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason);
+
+static const char *SmpCodeName(uint8_t c)
+{
+	switch (c)
+	{
+		case BT_SMP_CODE_PAIRING_REQ:			return "PairingReq";
+		case BT_SMP_CODE_PAIRING_RSP:			return "PairingRsp";
+		case BT_SMP_CODE_PAIRING_CONFIRM:		return "Confirm";
+		case BT_SMP_CODE_PAIRING_RANDOM:		return "Random";
+		case BT_SMP_CODE_PAIRING_FAILED:		return "Failed";
+		case BT_SMP_CODE_PAIRING_ENCRYP_INFO:	return "EncInfo";
+		case BT_SMP_CODE_PAIRING_CENTRAL_ID:	return "CentralId";
+		case BT_SMP_CODE_PAIRING_ID_INFO:		return "IdInfo";
+		case BT_SMP_CODE_PAIRING_ID_ADDR_INFO:	return "IdAddrInfo";
+		case BT_SMP_CODE_PAIRING_SIGNING_INFO:	return "SigningInfo";
+		case BT_SMP_CODE_PAIRING_SECURITY_REQ:	return "SecurityReq";
+		case BT_SMP_CODE_PAIRING_PUBLIC_KEY:	return "PublicKey";
+		case BT_SMP_CODE_PAIRING_DHKEY_CHECK:	return "DhKeyCheck";
+		case BT_SMP_CODE_PAIRING_KEYPRESS_NOTIF:return "Keypress";
+		default:								return "?";
+	}
+}
 
 //-----------------------------------------------------------------------------
 // Per-link context lookup
@@ -190,8 +239,6 @@ static void SmpLinkResetKeepCount(BtSmpLink_t *pLink)
 //-----------------------------------------------------------------------------
 // Pairing timeout (Core Vol 3 Part H 3.4)
 //-----------------------------------------------------------------------------
-
-static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason);
 
 // Millisecond tick for the pairing timeout. Weak default returns 0 so the
 // timeout is inert on ports without a clock; an app with a running millisecond
@@ -287,30 +334,6 @@ static void SmpSendHciCmd(BtHciDevice_t * const pDev, uint16_t OpCode,
 	// command controller.
 	BtHciCommand(pDev, OpCode, pParam, ParamLen, NULL, 0);
 }
-
-//-----------------------------------------------------------------------------
-// Crypto primitives
-//-----------------------------------------------------------------------------
-
-static BtHciDevice_t *s_pSmpActiveDev = nullptr;
-
-// Runtime association configuration. Defaults mirror the compile-time
-// BT_SMP_LOCAL_* values, i.e. Just Works, until BtSmpAuthConfig overrides them.
-static uint8_t s_SmpIoCaps  = BT_SMP_LOCAL_IOCAPS;
-static uint8_t s_SmpAuthReq = BT_SMP_LOCAL_AUTHREQ;
-
-// Pending LE Secure Connections OOB data. The local set holds the key pair
-// commitment handed to the peer out of band; the peer set holds the material
-// received from the peer. Both are copied into the link context when a
-// pairing selects the OOB model.
-static struct {
-	bool bLocalValid;
-	bool bPeerValid;
-	uint8_t LocalRand[16];
-	uint8_t LocalPubKey[64];
-	uint8_t PeerRand[16];
-	uint8_t PeerConfirm[16];
-} s_SmpOob = {};
 
 static inline void SmpAes(const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16])
 {
@@ -594,22 +617,6 @@ static void SmpF6(const uint8_t w[16], const uint8_t n1[16], const uint8_t n2[16
 //-----------------------------------------------------------------------------
 // Pairing feature negotiation
 //-----------------------------------------------------------------------------
-
-// Map the local and peer IO capabilities to an SC association model. Core
-// spec Vol 3 Part H, 2.3.5.1, Table 2.8 (LE Secure Connections). Rows index
-// the initiator IO capability, columns the responder, both using the
-// BT_SMP_IOCAPS_* values (DisplayOnly 0 .. KeyboardDisplay 4). Cell values are
-// BT_SMP_MODEL_JUST_WORKS / NUMERIC_COMPARISON / PASSKEY_ENTRY. The passkey
-// display/input direction is derived from role and IO capability where it is
-// used, not stored here.
-static const uint8_t s_SmpModelMap[5][5] = {
-	//              resp DO  DYN  KO  NIO  KD
-	/* init DO  */ {  0,   0,   2,   0,   2 },
-	/* init DYN */ {  0,   1,   2,   0,   1 },
-	/* init KO  */ {  2,   2,   2,   0,   2 },
-	/* init NIO */ {  0,   0,   0,   0,   0 },
-	/* init KD  */ {  2,   1,   2,   0,   1 },
-};
 
 // Select the association model for this pairing. OOB takes precedence when
 // present. Without a MITM requirement from either side the result is Just
@@ -2366,9 +2373,6 @@ void BtSmpBondClearAll(void)
 // existing signatures so the state machine is unchanged; they translate
 // CRYPTO_STATUS to the BT_SMP_CRYPTO_* codes the state machine expects.
 //-----------------------------------------------------------------------------
-
-static CryptoDev_t *s_pCryptoEcdh = nullptr;	// CRYPTO_CAP_ECDH_P256
-static CryptoDev_t *s_pCryptoAes  = nullptr;	// CRYPTO_CAP_AES128_ECB
 
 static int CryptoStatusToSmp(CRYPTO_STATUS st)
 {

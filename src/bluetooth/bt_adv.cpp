@@ -230,7 +230,7 @@ void BtAdvDataRemove(BtAdvPacket_t * const pAdvPkt, uint8_t Type)
 /**
  * @brief	Add UUID list to the advertising data
  *
- * When BaseIdx > 0 the array carries short identifiers (uuid16 or uuid32)
+ * When BaseIdx > 0 the array holds short identifiers (uuid16 or uuid32)
  * on top of a 128-bit base UUID. The output AD record is always uuid128:
  * each entry is expanded to a full 128-bit UUID by combining the base
  * with the short.

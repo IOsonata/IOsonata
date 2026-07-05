@@ -233,7 +233,7 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		break;
 	case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP:
 	{
-		// Client side: server's response carries the server's RxMtu (its
+		// Client side: server's response holds the server's RxMtu (its
 		// full receive capability). Compute negotiated = min(local_mtu,
 		// server_RxMtu) and stash on the peer record.
 		//

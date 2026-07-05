@@ -89,7 +89,7 @@ extern "C" {
  * Scans the region, rebuilds the in-RAM index of live records, and runs
  * recovery if a prior compaction was interrupted. Synchronous.
  *
- * @param	pNvm	Backend describing the region and medium primitives.
+ * @param	pNvm	Implementation describing the region and medium primitives.
  *
  * @return	0 on success, negative errno on failure.
  */

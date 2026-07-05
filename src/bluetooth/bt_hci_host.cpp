@@ -62,6 +62,25 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 
 // EvtLen is the HCI event parameter length (bytes of pLeEvtPkt, i.e. Evt + Data),
 // used to bound walks over variable-length, controller-supplied report lists.
+// --- ACL fragment reassembly -------------------------------------------------
+// The controller delivers an L2CAP PDU larger than its ACL data buffer as a
+// START fragment followed by CONTINUING fragments. One context per connection
+// holds the partial PDU until it is complete. BT_L2CAP_REASSEMBLY_COUNT bounds
+// how many connections can be mid-reassembly at once; raise it for multi-link.
+#ifndef BT_L2CAP_REASSEMBLY_COUNT
+#define BT_L2CAP_REASSEMBLY_COUNT		2
+#endif
+
+typedef struct __Bt_Hci_Reassembly {
+	bool     Active;						//!< Slot holds a partial PDU
+	uint16_t ConnHdl;						//!< Owning connection handle
+	uint16_t Expected;						//!< Total L2CAP PDU bytes expected
+	uint16_t Received;						//!< Bytes accumulated so far
+	uint8_t  Buf[BT_HCI_BUFFER_MAX_SIZE];	//!< Accumulated L2CAP PDU
+} BtHciReasm_t;
+
+static BtHciReasm_t s_BtHciReasm[BT_L2CAP_REASSEMBLY_COUNT];
+
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt, int EvtLen)
 {
 	// End of the received event payload; report parsers must not read past it.
@@ -293,26 +312,6 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 	}
 }
-
-// --- ACL fragment reassembly -------------------------------------------------
-// The controller delivers an L2CAP PDU larger than its ACL data buffer as a
-// START fragment followed by CONTINUING fragments. One context per connection
-// holds the partial PDU until it is complete. BT_L2CAP_REASSEMBLY_COUNT bounds
-// how many connections can be mid-reassembly at once; raise it for multi-link.
-#ifndef BT_L2CAP_REASSEMBLY_COUNT
-#define BT_L2CAP_REASSEMBLY_COUNT		2
-#endif
-
-typedef struct __Bt_Hci_Reassembly {
-	bool     Active;						//!< Slot holds a partial PDU
-	uint16_t ConnHdl;						//!< Owning connection handle
-	uint16_t Expected;						//!< Total L2CAP PDU bytes expected
-	uint16_t Received;						//!< Bytes accumulated so far
-	uint8_t  Buf[BT_HCI_BUFFER_MAX_SIZE];	//!< Accumulated L2CAP PDU
-} BtHciReasm_t;
-
-static BtHciReasm_t s_BtHciReasm[BT_L2CAP_REASSEMBLY_COUNT];
-
 static BtHciReasm_t *BtHciReasmFind(uint16_t ConnHdl)
 {
 	for (int i = 0; i < BT_L2CAP_REASSEMBLY_COUNT; i++)

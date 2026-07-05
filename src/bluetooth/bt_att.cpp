@@ -1120,7 +1120,7 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReqAtt, int Re
 				retval = sizeof(BtAttExchgMtuReqRsp_t) + 1;
 				pRspAtt->OpCode = BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP;
 
-				// Core Vol 3 Part F 3.4.2.2: the response carries the server's
+				// Core Vol 3 Part F 3.4.2.2: the response holds the server's
 				// own Rx MTU (a fixed local capability), and the ATT_MTU for the
 				// link is min(client Rx MTU, server Rx MTU). Advertise the
 				// largest ATT PDU this server can receive (BT_ATT_MTU_MAX, bounded

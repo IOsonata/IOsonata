@@ -6,7 +6,7 @@
 Storage is a static, app-sized pool. The application declares a memory
 block sized via BT_PEER_POOL_MEMSIZE(N) and passes it to the stack through
 BtAppCfg_t's pPeerPoolMem / PeerPoolMemSize fields. The library no longer
-carries a compile-time peer-count baked into a precompiled archive; a
+holds a compile-time peer-count baked into a precompiled archive; a
 single .a can serve a 1-peer peripheral or a multi-link central by changing
 the cfg fields only.
 

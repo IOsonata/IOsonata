@@ -124,6 +124,8 @@ extern "C" {
  * @return
  */
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
+size_t BtHciCtlrSdcSend(void *pData, size_t Len);
+uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
 
 /**
  * @brief	Bring up the controller: initialize the underlying stack, apply

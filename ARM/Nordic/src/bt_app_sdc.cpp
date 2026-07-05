@@ -81,12 +81,6 @@ SOFTWARE.
 #endif
 /*******************************/
 
-extern "C" size_t BtHciCtlrSdcSend(void *pData, size_t Len);
-extern "C" uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
-
-static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
-	return (uint32_t)BtHciCtlrSdcSend(pData, Len);
-}
 void BtAppEvtHandler(BtHciDevice_t * const pDev, uint32_t Evt);
 void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, uint8_t PeerAddr[6]);
 void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason);
@@ -94,6 +88,24 @@ void BtAppSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent);
 bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *DavData);
 
 static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
+static inline uint32_t BtAppSendData(void *pData, uint32_t Len);
+
+static BtHciDevice_t s_BtHciDev = {
+	.pCtx = (void*)&g_BtAppData,
+	.SendData = BtAppSendData,
+	.Command = BtHciCmdSdc,
+	.EvtHandler = BtAppEvtHandler,
+	.Connected = BtAppConnected,
+	.Disconnected = BtAppDisconnected,
+	.SendCompleted = BtAppSendCompleted,
+	.ScanReport = BtAppScanReport,
+	.AdvTimeout = BtAppAdvTimeoutHandler,
+	//.DiscoverDevice = BtAppDiscoverDevice,
+};
+
+// SDC controller instance. The HCI pump and transport live in
+// bt_hci_ctlr_sdc; this app wires the receive handler to the host.
+static BtHciCtlrDev_t s_BtHciCtlr;
 
 
 // BtAppData_t now declared in bluetooth/bt_app.h, accessed via g_BtAppData.
@@ -107,6 +119,30 @@ static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 // random static address below). Defaults to public/zero until then.
 static uint8_t s_BtSmpLocalAddr[6] = {0};
 static uint8_t s_BtSmpLocalAddrType = 0;
+
+
+
+/**@brief Bluetooth SIG debug mode Private Key */
+__ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
+    0xbd,0x1a,0x3c,0xcd,0xa6,0xb8,0x99,0x58,0x99,0xb7,0x40,0xeb,0x7b,0x60,0xff,0x4a,
+    0x50,0x3f,0x10,0xd2,0xe3,0xb3,0xc9,0x74,0x38,0x5f,0xc5,0xa3,0xd4,0xf6,0x49,0x3f,
+};
+
+
+
+const static TimerCfg_t s_BtAppSdcTimerCfg = {
+    .DevNo = 1,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,			// 0 => Default frequency
+	.IntPrio = 6,
+	.EvtHandler = BtAppSdcTimerHandler
+};
+
+static Timer g_BtAppSdcTimer;
+
+static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
+	return (uint32_t)BtHciCtlrSdcSend(pData, Len);
+}
 
 // Override the weak SMP accessor so the toolbox uses the device's configured
 // address. Declared in bt_smp.h, so no linkage specifier is needed here.
@@ -130,23 +166,6 @@ void BtSmpPairingComplete(uint16_t ConnHdl, bool Success,
 	}
 }
 
-static BtHciDevice_t s_BtHciDev = {
-	.pCtx = (void*)&g_BtAppData,
-	.SendData = BtAppSendData,
-	.Command = BtHciCmdSdc,
-	.EvtHandler = BtAppEvtHandler,
-	.Connected = BtAppConnected,
-	.Disconnected = BtAppDisconnected,
-	.SendCompleted = BtAppSendCompleted,
-	.ScanReport = BtAppScanReport,
-	.AdvTimeout = BtAppAdvTimeoutHandler,
-	//.DiscoverDevice = BtAppDiscoverDevice,
-};
-
-// SDC controller instance. The HCI pump and transport live in
-// bt_hci_ctlr_sdc; this app wires the receive handler to the host.
-static BtHciCtlrDev_t s_BtHciCtlr;
-
 // Route each HCI packet the controller drains to the host process entry.
 static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *pPacket)
 {
@@ -159,25 +178,6 @@ static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *
 		BtHciProcessData(&s_BtHciDev, (BtHciACLDataPacket_t*)pPacket);
 	}
 }
-
-
-/**@brief Bluetooth SIG debug mode Private Key */
-__ALIGN(4) __WEAK extern const uint8_t g_lesc_private_key[32] = {
-    0xbd,0x1a,0x3c,0xcd,0xa6,0xb8,0x99,0x58,0x99,0xb7,0x40,0xeb,0x7b,0x60,0xff,0x4a,
-    0x50,0x3f,0x10,0xd2,0xe3,0xb3,0xc9,0x74,0x38,0x5f,0xc5,0xa3,0xd4,0xf6,0x49,0x3f,
-};
-
-
-
-const static TimerCfg_t s_BtAppSdcTimerCfg = {
-    .DevNo = 1,
-	.ClkSrc = TIMER_CLKSRC_DEFAULT,
-	.Freq = 0,			// 0 => Default frequency
-	.IntPrio = 6,
-	.EvtHandler = BtAppSdcTimerHandler
-};
-
-static Timer g_BtAppSdcTimer;
 
 // Millisecond clock for the generic SMP/GATT transaction timeouts. These
 // override the weak BtSmpMsTick/BtGattMsTick defaults (which return 0, leaving
