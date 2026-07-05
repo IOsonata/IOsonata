@@ -1,7 +1,6 @@
 /**-------------------------------------------------------------------------
 @example	uart_ble.cpp
 
-
 @brief	Uart BLE demo
 
 This application demo shows UART Rx/Tx over BLE custom service using EHAL library.
@@ -231,6 +230,31 @@ const BtAppCfg_t s_BleAppCfg = {
 	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
 };
 
+// Board IO tables and UART state, grouped ahead of the first function.
+static const IOPinCfg_t s_LedPins[] = LED_PINS;
+
+static int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPinCfg_t);
+
+static const IOPinCfg_t s_ButPins[] = UART_PINS;//{
+//	{BUTTON1_PORT, BUTTON1_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 1
+//	{BUTTON2_PORT, BUTTON2_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 2
+//};
+
+static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
+
+int g_DelayCnt = 0;
+volatile bool g_bUartState = false;
+#if BLE_SC_METHOD == BLE_SC_OOB
+static volatile bool s_OobRefreshPending = false;
+#endif
+#if BLE_SC_METHOD != BLE_SC_NONE
+enum { PAIR_INPUT_NONE = 0, PAIR_INPUT_NUMERIC, PAIR_INPUT_PASSKEY };
+static volatile int s_PairInput = PAIR_INPUT_NONE;
+static uint16_t s_PairConnHdl = 0;
+static uint8_t  s_PairDigits = 0;
+static uint32_t s_PairPasskey = 0;
+#endif
+
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
@@ -263,7 +287,6 @@ const UARTCfg_t g_UartCfg = {
 
 /// UART object instance
 UART g_Uart;
-
 
 #if BLE_SC_METHOD == BLE_SC_OOB
 static bool s_UartBlePeerOobValid = false;
@@ -512,8 +535,6 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 // crypto, UART or NFCT work runs in the pairing event callback.
 void UartRxChedHandler(uint32_t Evt, void *pCtx);
 
-static volatile bool s_OobRefreshPending = false;
-
 static void UartBleOobRefresh(void)
 {
 	BtSmpOobDataClear();
@@ -538,22 +559,6 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 	return false;
 }
 #endif
-
-
-static const IOPinCfg_t s_LedPins[] = LED_PINS;
-
-static int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPinCfg_t);
-
-static const IOPinCfg_t s_ButPins[] = UART_PINS;//{
-//	{BUTTON1_PORT, BUTTON1_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 1
-//	{BUTTON2_PORT, BUTTON2_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 2
-//};
-
-static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
-
-int g_DelayCnt = 0;
-volatile bool g_bUartState = false;
-
 
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
 {
@@ -636,12 +641,6 @@ void BtAppInitUserData()
 // core routes the user step through the UART: BtSmpNumericComparison and
 // BtSmpPasskeyDisplay print, and PairInputPoll (called from the UART RX path)
 // reads the y/n or the typed passkey and resumes pairing.
-enum { PAIR_INPUT_NONE = 0, PAIR_INPUT_NUMERIC, PAIR_INPUT_PASSKEY };
-static volatile int s_PairInput = PAIR_INPUT_NONE;
-static uint16_t s_PairConnHdl = 0;
-static uint8_t  s_PairDigits = 0;
-static uint32_t s_PairPasskey = 0;
-
 void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 {
 	g_Uart.printf("\r\nSMP numeric comparison: %06u\r\n", (unsigned)Value);
@@ -803,7 +802,6 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 
 	return cnt;
 }
-
 
 //
 // Print a greeting message on standard output and exit.

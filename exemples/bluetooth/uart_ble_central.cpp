@@ -1,7 +1,6 @@
 /**-------------------------------------------------------------------------
 @example	uart_ble_central.cpp
 
-
 @brief	Uart BLE Central demo
 
 This application demo shows UART Rx/Tx over BLE central using EHAL library.
@@ -269,6 +268,20 @@ uint16_t g_BleRxCharHdl = BT_ATT_HANDLE_INVALID;   // BlueIO UART RX characteris
 // Kick off GATT discovery on the connected peer. Called from connect on an
 // open link, or from the secured event on an encrypted link, selected by
 // BLE_SC_METHOD.
+// Pairing IO state and OOB validity, grouped ahead of the first function.
+#if BLE_SC_METHOD != BLE_SC_NONE
+// Console pairing IO: the SMP core prints through these callbacks and reads the
+// y/n or the typed passkey back via PairInputPoll on the UART RX path.
+enum { PAIR_INPUT_NONE = 0, PAIR_INPUT_NUMERIC, PAIR_INPUT_PASSKEY };
+static volatile int s_PairInput = PAIR_INPUT_NONE;
+static uint16_t s_PairConnHdl = 0;
+static uint8_t  s_PairDigits = 0;
+static uint32_t s_PairPasskey = 0;
+#endif
+#if BLE_SC_METHOD == BLE_SC_OOB
+static bool s_UartBlePeerOobValid = false;
+#endif
+
 static void StartPeerDiscovery(uint16_t ConnHdl)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
@@ -348,7 +361,6 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 
 	return true; // keep scanning
 }
-
 
 void BleAppInitUserData()
 {
@@ -456,14 +468,6 @@ void BleTxSchedHandler(uint32_t Evt, void *pCtx)
 }
 
 #if BLE_SC_METHOD != BLE_SC_NONE
-// Console pairing IO: the SMP core prints through these callbacks and reads the
-// y/n or the typed passkey back via PairInputPoll on the UART RX path.
-enum { PAIR_INPUT_NONE = 0, PAIR_INPUT_NUMERIC, PAIR_INPUT_PASSKEY };
-static volatile int s_PairInput = PAIR_INPUT_NONE;
-static uint16_t s_PairConnHdl = 0;
-static uint8_t  s_PairDigits = 0;
-static uint32_t s_PairPasskey = 0;
-
 void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 {
 	g_Uart.printf("\r\nSMP numeric comparison: %06u\r\n", (unsigned)Value);
@@ -542,8 +546,6 @@ static bool PairInputPoll(void)
 #endif
 
 #if BLE_SC_METHOD == BLE_SC_OOB
-static bool s_UartBlePeerOobValid = false;
-
 static int UartBleHexVal(uint8_t c)
 {
 	if (c >= '0' && c <= '9') return c - '0';

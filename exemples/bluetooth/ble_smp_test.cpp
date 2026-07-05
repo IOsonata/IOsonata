@@ -110,54 +110,22 @@ static const UARTCfg_t s_UartCfg = {
 
 UART g_Uart;
 
-int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
-{
-	(void)pDev;
-	(void)EvtId;
-	(void)pBuffer;
-	(void)BufferLen;
-
-	return 0;
-}
-
-// Hex dump helper for keys.
-static void TraceHex(const char *pLabel, const uint8_t *pData, size_t Len)
-{
-	g_Uart.printf("%s", pLabel);
-	for (size_t i = 0; i < Len; i++)
-	{
-		g_Uart.printf("%02x", pData[i]);
-	}
-	g_Uart.printf("\r\n");
-}
-
-//-----------------------------------------------------------------------------
-// GATT service (one writable/readable value char so the central has a reason
-// to connect; pairing is driven by the central, not by reads here).
-//-----------------------------------------------------------------------------
-
 static const char s_ValueCharDesc[] = "SMP test value";
-
 static uint8_t s_ValueData[PACKET_SIZE] = { 0 };
-
 BtGattChar_t g_SmpChars[] = {
 	BT_CHAR(SMP_UUID_VALUE_CHAR, PACKET_SIZE,
 			BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_NOTIFY,
 			s_ValueCharDesc,
 			.WrCB = SmpValueWriteCallback),
 };
-
 uint8_t g_LWrBuffer[512];
-
 BtGattSrvc_t g_SmpSrvc = BT_SRVC_CUSTOM(SMP_UUID_BASE, SMP_UUID_SERVICE, g_SmpChars);
-
 static const BtUuidArr_t s_AdvUuid = {
 	.BaseIdx = 1,
 	.Type = BT_UUID_TYPE_16,
 	.Count = 1,
 	.Uuid16 = { SMP_UUID_SERVICE, }
 };
-
 static const BtAppDevInfo_t s_SmpDevInfo = {
 	MODEL_NAME,
 	MANUFACTURER_NAME,
@@ -165,47 +133,9 @@ static const BtAppDevInfo_t s_SmpDevInfo = {
 	"0.0",		// fw
 	"0.0",		// hw
 };
-
 uint8_t g_ManData[4] = { 0 };
-
-//-----------------------------------------------------------------------------
-// RAM bond store for this test app.
-//
-// This is intentionally small: one central, one generated LTK. It proves the
-// bonding path without pulling in a flash settings layer yet. It survives
-// disconnect/reconnect while the board remains powered. It does not survive
-// reset, reflash, or power-cycle.
-//-----------------------------------------------------------------------------
-
 static BtSmpKeys_t s_SmpBondKeys;
 static bool s_SmpBondValid = false;
-
-extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
-								   uint16_t Ediv, uint8_t Ltk[16])
-{
-	(void)ConnHdl;
-
-	// LE Secure Connections uses EDIV=0 and Rand=0 for the generated LTK.
-	// This SMP test is single-peer, so one cached bond record is enough.
-	if (s_SmpBondValid && s_SmpBondKeys.bValid &&
-		s_SmpBondKeys.bSc && Ediv == 0 && Rand == 0)
-	{
-		memcpy(Ltk, s_SmpBondKeys.Ltk, 16);
-		g_Uart.printf("SMP bond lookup: found SC LTK\r\n");
-		return true;
-	}
-
-	g_Uart.printf("SMP bond lookup: no key (ediv=%u rand=%llu)\r\n",
-				  (unsigned)Ediv, (unsigned long long)Rand);
-	return false;
-}
-
-//-----------------------------------------------------------------------------
-// App configuration. SecType requests Just Works (no MITM). Switch to
-// BTGAP_SECTYPE_LESC_MITM later to exercise the MITM / numeric-comparison
-// path once an IO implementation exists.
-//-----------------------------------------------------------------------------
-
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
 	.CentLinkCount = 0,
@@ -236,6 +166,67 @@ const BtAppCfg_t s_BleAppCfg = {
 	.pLongWrPoolMem = g_LWrBuffer,
 	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
 };
+
+int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+{
+	(void)pDev;
+	(void)EvtId;
+	(void)pBuffer;
+	(void)BufferLen;
+
+	return 0;
+}
+
+// Hex dump helper for keys.
+static void TraceHex(const char *pLabel, const uint8_t *pData, size_t Len)
+{
+	g_Uart.printf("%s", pLabel);
+	for (size_t i = 0; i < Len; i++)
+	{
+		g_Uart.printf("%02x", pData[i]);
+	}
+	g_Uart.printf("\r\n");
+}
+
+//-----------------------------------------------------------------------------
+// GATT service (one writable/readable value char so the central has a reason
+// to connect; pairing is driven by the central, not by reads here).
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// RAM bond store for this test app.
+//
+// This is intentionally small: one central, one generated LTK. It proves the
+// bonding path without pulling in a flash settings layer yet. It survives
+// disconnect/reconnect while the board remains powered. It does not survive
+// reset, reflash, or power-cycle.
+//-----------------------------------------------------------------------------
+
+extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
+								   uint16_t Ediv, uint8_t Ltk[16])
+{
+	(void)ConnHdl;
+
+	// LE Secure Connections uses EDIV=0 and Rand=0 for the generated LTK.
+	// This SMP test is single-peer, so one cached bond record is enough.
+	if (s_SmpBondValid && s_SmpBondKeys.bValid &&
+		s_SmpBondKeys.bSc && Ediv == 0 && Rand == 0)
+	{
+		memcpy(Ltk, s_SmpBondKeys.Ltk, 16);
+		g_Uart.printf("SMP bond lookup: found SC LTK\r\n");
+		return true;
+	}
+
+	g_Uart.printf("SMP bond lookup: no key (ediv=%u rand=%llu)\r\n",
+				  (unsigned)Ediv, (unsigned long long)Rand);
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// App configuration. SecType requests Just Works (no MITM). Switch to
+// BTGAP_SECTYPE_LESC_MITM later to exercise the MITM / numeric-comparison
+// path once an IO implementation exists.
+//-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
 // App hooks
