@@ -184,6 +184,14 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 			case RFTAG_PROTO_NFC_T4:
 				return false;
 #endif
+#ifdef RFTAG_PROTO_T2T_ENABLE
+			case RFTAG_PROTO_NFC_T2:
+				RFTagProtoT2tBind(pDev);
+				break;
+#else
+			case RFTAG_PROTO_NFC_T2:
+				return false;
+#endif
 			default:
 				pDev->pProto = nullptr;
 				break;

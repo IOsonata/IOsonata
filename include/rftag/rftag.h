@@ -188,6 +188,13 @@ int RFTagProcessFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen);
 // when Proto is RFTAG_PROTO_NFC_T4 so the module object is pulled from the archive.
 bool RFTagProtoT4tBind(RFTagDev_t * const pDev);
 
+// Protocol bind hook provided by the Type 2 module. Referenced from RFTagInit
+// when Proto is RFTAG_PROTO_NFC_T2 so the module object is pulled from the archive.
+bool RFTagProtoT2tBind(RFTagDev_t * const pDev);
+
+// Type 2 module default UID. The transport NFCID1 should match it.
+const uint8_t *RFTagProtoT2tDefaultUid(void);
+
 #ifdef __cplusplus
 }
 
