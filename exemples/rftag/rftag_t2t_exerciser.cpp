@@ -227,6 +227,37 @@ int main()
 		Check("no memory write", s_MemChanged == mem0);
 	}
 
+	printf("== 7. UID length handling ==\n");
+
+	{
+		static uint8_t um[64];
+		RFTagDev_t u;
+
+		// A 7 byte configured UID is used in the header
+		uint8_t myuid[7] = { 0x04, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF };
+		memset(&u, 0, sizeof(u));
+		u.pMem = um;
+		u.MemSize = sizeof(um);
+		u.IdLen = 7;
+		memcpy(u.NfcId, myuid, 7);
+		RFTagProtoT2tBind(&u);
+		Check("init with 7 byte UID", u.pProto->Init(&u));
+
+		uint8_t r[] = { 0x30, 0x00 };
+		u.pProto->OnFrame(&u, r, sizeof(r), tx, sizeof(tx));
+		Check("configured UID in block 0", tx[0] == 0x04 && tx[1] == 0xAA && tx[2] == 0xBB);
+		Check("BCC0 of configured UID", tx[3] == (uint8_t)(0x88 ^ 0x04 ^ 0xAA ^ 0xBB));
+
+		// A 4 byte length is not supported and must fail init
+		RFTagDev_t u4;
+		memset(&u4, 0, sizeof(u4));
+		u4.pMem = um;
+		u4.MemSize = sizeof(um);
+		u4.IdLen = 4;
+		RFTagProtoT2tBind(&u4);
+		Check("init rejects IdLen 4", u4.pProto->Init(&u4) == false);
+	}
+
 	printf("\nresult: pass=%d fail=%d\n", s_Pass, s_Fail);
 
 	return s_Fail == 0 ? 0 : 1;

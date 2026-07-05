@@ -21,8 +21,10 @@ NdefFmt RFTAG_NDEF_FMT_TLV and NdefAddr 16, which is block 4.
 
 The UID in block 0..2 must equal the NFCID1 the transport uses for
 anticollision, otherwise a reader that cross checks the two rejects the tag.
-RFTagProtoT2tDefaultUid returns the module default so the transport can be
-configured with the same value.
+Type 2 uses the 7 byte double size UID only. Configure RFTagCfg_t IdLen as 0
+for the module default or 7 for a supplied id, any other length is rejected
+at init. RFTagProtoT2tDefaultUid returns the module default so the transport
+can be configured with the same value.
 
 READ replies with 16 bytes and the hardware appends the CRC. WRITE and
 SECTOR SELECT reply with a 4 bit ACK or NAK per the Type 2 specification.
@@ -211,6 +213,14 @@ static int T2tWrite(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLen, uint
 static bool T2tProtoInit(RFTagDev_t * const pDev)
 {
 	if (pDev->pMem == nullptr || pDev->MemSize < T2T_HEADER_LEN + T2T_BLOCK_SIZE)
+	{
+		return false;
+	}
+
+	// Type 2 uses the 7 byte double size UID only. Accept 0, meaning use the
+	// module default, or 7. Any other length is a configuration error and is
+	// rejected rather than silently replaced by the default.
+	if (pDev->IdLen != 0 && pDev->IdLen != 7)
 	{
 		return false;
 	}
