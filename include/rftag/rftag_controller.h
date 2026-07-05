@@ -184,7 +184,7 @@ public:
 	RFTagController(RFTagController&);	// copy ctor not allowed
 
 	virtual bool Init(const RFTagControllerCfg_t &Cfg, DeviceIntrf * const pIntrf) {
-		return RFTagControllerInit(&vDevData, &Cfg, *pIntrf);
+		return pIntrf ? RFTagControllerInit(&vDevData, &Cfg, *pIntrf) : false;
 	}
 
 	virtual void Enable() {
