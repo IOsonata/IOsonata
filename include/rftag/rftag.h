@@ -196,7 +196,7 @@ public:
 	RFTag(RFTag&);		// copy ctor not allowed
 
 	virtual bool Init(const RFTagCfg_t &Cfg, DeviceIntrf * const pIntrf) {
-		return RFTagInit(&vDevData, &Cfg, *pIntrf);
+		return pIntrf ? RFTagInit(&vDevData, &Cfg, *pIntrf) : false;
 	}
 
 	virtual int Read(uint32_t Addr, uint8_t *pBuff, int Len) {
