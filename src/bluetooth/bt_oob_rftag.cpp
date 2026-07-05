@@ -61,7 +61,7 @@ static int AdAppend(uint8_t *pBuf, size_t Size, size_t Off, uint8_t Type,
 
 int BtOobLePayload(const BtOobLe_t * const pOob, uint8_t *pBuf, size_t Size)
 {
-	if (pOob == nullptr || pBuf == nullptr)
+	if (pOob == nullptr || pBuf == nullptr || pOob->Role > BT_OOB_LEROLE_BOTH_CENTRAL)
 	{
 		return 0;
 	}

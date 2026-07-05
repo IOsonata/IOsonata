@@ -79,7 +79,8 @@ DeviceIntrf *BleOobNfcGetTransport(void)
 		return nullptr;
 	}
 
-	s_BleOobNfct.Enable();
-
+	// Not enabled here. The example enables the transport after the tag is
+	// initialized and the NDEF record is in place, so a reader can never see
+	// an uninitialized tag or an empty record.
 	return &s_BleOobNfct;
 }

@@ -77,7 +77,8 @@ typedef struct __Bt_OobLe {
 	uint8_t Role;				//!< BT_OOB_LEROLE_ value
 	uint8_t Confirm[16];		//!< LE SC confirm C, low octet first
 	uint8_t Rand[16];			//!< LE SC random r, low octet first
-	const char *pName;			//!< Optional local name, null for none
+	const char *pName;			//!< Optional local name, null for none. Longest
+								//!< accepted name is 64 bytes, longer fails the build
 } BtOobLe_t;
 
 #pragma pack(pop)

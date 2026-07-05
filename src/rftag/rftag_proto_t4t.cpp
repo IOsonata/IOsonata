@@ -118,7 +118,8 @@ static void T4tBuildCcFile(RFTagDev_t * const pDev)
 	p[11] = (uint8_t)(ndefSize >> 8);
 	p[12] = (uint8_t)ndefSize;
 	p[13] = 0x00;
-	p[14] = 0x00;
+	// Write access byte, 0x00 open, 0xFF no write access
+	p[14] = pDev->bReadOnly ? 0xFF : 0x00;
 }
 
 static int T4tRespSw(uint8_t *pTx, int TxCap, uint16_t Sw)
@@ -269,7 +270,7 @@ static int T4tUpdateBinary(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLe
 		return T4tRespSw(pTx, TxCap, ISO7816_SW_WRONG_LEN);
 	}
 
-	if (T4tIsSelectedNdef(pDev) == false)
+	if (T4tIsSelectedNdef(pDev) == false || pDev->bReadOnly)
 	{
 		return T4tRespSw(pTx, TxCap, ISO7816_SW_NOT_ALLOWED);
 	}

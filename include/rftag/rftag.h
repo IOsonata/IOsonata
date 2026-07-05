@@ -117,6 +117,7 @@ typedef struct {
 typedef struct __RFTag_Config {
 	RFTAG_PROTO Proto;				//!< Tag protocol, selects the tag behavior
 	uint32_t XCap;					//!< Transport capability flags, RFTAG_XCAP_*
+	bool bReadOnly;					//!< RF side is read only, protocol rejects writes. Host access unaffected
 	uint8_t *pMem;					//!< Local tag memory for target protocols. Null for bus tags
 	uint32_t MemSize;				//!< Local tag memory size in bytes
 	uint8_t DevAddr;				//!< Device address or selection id
@@ -138,6 +139,7 @@ typedef struct __RFTag_Config {
 struct __RFTag_Device {
 	RFTAG_PROTO Proto;
 	uint32_t XCap;
+	bool bReadOnly;
 	uint8_t *pMem;
 	uint32_t MemSize;
 	uint8_t DevAddr;

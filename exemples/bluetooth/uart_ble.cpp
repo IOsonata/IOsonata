@@ -285,6 +285,7 @@ static bool s_BleOobNfcReady = false;
 static const RFTagCfg_t s_BleOobTagCfg = {
 	.Proto = RFTAG_PROTO_NFC_T4,
 	.XCap = RFTAG_XCAP_ANTICOL | RFTAG_XCAP_CRC | RFTAG_XCAP_FDT,
+	.bReadOnly = true,				// pairing record, a reader must not overwrite it
 	.pMem = s_BleOobNdefFile,
 	.MemSize = sizeof(s_BleOobNdefFile),
 	.DevAddr = 0,
@@ -308,17 +309,24 @@ static const RFTagCfg_t s_BleOobTagCfg = {
 // every call so a second generation would invalidate the published confirm.
 static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
 {
+	static DeviceIntrf *s_pOobTransport = nullptr;
+
 	if (s_BleOobNfcReady == false)
 	{
-		DeviceIntrf *pTransport = BleOobNfcGetTransport();
+		s_pOobTransport = BleOobNfcGetTransport();
 
-		if (pTransport == nullptr || g_BleOobTag.Init(s_BleOobTagCfg, pTransport) == false)
+		if (s_pOobTransport == nullptr ||
+			g_BleOobTag.Init(s_BleOobTagCfg, s_pOobTransport) == false)
 		{
 			g_Uart.printf("OOB NFC tag init failed\r\n");
 			return;
 		}
-
-		s_BleOobNfcReady = true;
+	}
+	else if (s_pOobTransport)
+	{
+		// Republish. Take the field interface down so a reader cannot see a
+		// half written record, the update is not atomic against RF reads.
+		s_pOobTransport->Disable();
 	}
 
 	BtOobLe_t oob;
@@ -340,6 +348,14 @@ static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
 		g_Uart.printf("OOB NFC publish failed\r\n");
 		return;
 	}
+
+	// The record is in place, bring the field interface up.
+	if (s_pOobTransport)
+	{
+		s_pOobTransport->Enable();
+	}
+
+	s_BleOobNfcReady = true;
 
 	g_Uart.printf("OOB data published on NFC tag, tap to pair\r\n");
 }
@@ -488,6 +504,23 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 
 	g_Uart.printf("Commands: oob, oob peer <hex>\r\n");
 	return true;
+}
+
+// Strong override of the weak SMP hook. The published OOB set is single use,
+// the pairing consumed it whether it succeeded or not. Discard the pending
+// set and generate a fresh one, which also republishes the NFC record when
+// BLE_SC_OOB_NFC is enabled. Peer data from the last exchange is stale too.
+void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKeys)
+{
+	(void)ConnHdl;
+	(void)pKeys;
+
+	g_Uart.printf("Pairing %s, refreshing OOB data\r\n", Success ? "complete" : "failed");
+
+	BtSmpOobDataClear();
+	s_UartBlePeerOobValid = false;
+
+	UartBleOobPrintLocal();
 }
 #else
 static void UartBleOobInit(void) {}

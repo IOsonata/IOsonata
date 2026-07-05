@@ -141,6 +141,7 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 	pDev->pIntrf = pIntrf;
 	pDev->Proto = pCfg->Proto;
 	pDev->XCap = pCfg->XCap;
+	pDev->bReadOnly = pCfg->bReadOnly;
 	pDev->pMem = pCfg->pMem;
 	pDev->MemSize = pCfg->MemSize;
 	pDev->DevAddr = pCfg->DevAddr;

@@ -281,6 +281,47 @@ int main()
 		Check("S(DESELECT) CID echoed", l == 2 && tx[0] == 0xCA && tx[1] == 0x00);
 	}
 
+	printf("== 7. Read only tag ==\n");
+
+	{
+		RFTagDev_t ro;
+
+		memset(&ro, 0, sizeof(ro));
+		ro.pMem = file;
+		ro.MemSize = sizeof(file);
+		ro.bReadOnly = true;
+		RFTagProtoT4tBind(&ro);
+		ro.pProto->Init(&ro);
+
+		// Activate and select through the frame path
+		uint8_t r0[] = { 0xE0, 0x80 };
+		ro.pProto->OnFrame(&ro, r0, sizeof(r0), tx, sizeof(tx));
+		uint8_t a0[] = { 0x02, 0x00, 0xA4, 0x04, 0x00, 0x07,
+						 0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01 };
+		ro.pProto->OnFrame(&ro, a0, sizeof(a0), tx, sizeof(tx));
+
+		// CC write access byte must advertise no write access
+		uint8_t sc[] = { 0x03, 0x00, 0xA4, 0x00, 0x0C, 0x02, 0xE1, 0x03 };
+		ro.pProto->OnFrame(&ro, sc, sizeof(sc), tx, sizeof(tx));
+		uint8_t rc[] = { 0x02, 0x00, 0xB0, 0x00, 0x00, 0x0F };
+		l = ro.pProto->OnFrame(&ro, rc, sizeof(rc), tx, sizeof(tx));
+		Check("CC write access 0xFF", l == 18 && tx[15] == 0xFF);
+
+		// UPDATE BINARY must be rejected and memory untouched
+		uint8_t sn[] = { 0x03, 0x00, 0xA4, 0x00, 0x0C, 0x02, 0xE1, 0x04 };
+		ro.pProto->OnFrame(&ro, sn, sizeof(sn), tx, sizeof(tx));
+		int mem0 = s_MemChanged;
+		uint8_t up[] = { 0x02, 0x00, 0xD6, 0x00, 0x02, 0x02, 0x55, 0x66 };
+		l = ro.pProto->OnFrame(&ro, up, sizeof(up), tx, sizeof(tx));
+		Check("UPDATE rejected 6982", l == 3 && tx[1] == 0x69 && tx[2] == 0x82);
+		Check("no memory write on read only tag", s_MemChanged == mem0);
+
+		// READ still works
+		uint8_t rd[] = { 0x03, 0x00, 0xB0, 0x00, 0x00, 0x02 };
+		l = ro.pProto->OnFrame(&ro, rd, sizeof(rd), tx, sizeof(tx));
+		Check("READ still allowed", l == 5 && tx[l-2] == 0x90);
+	}
+
 	printf("\nresult: pass=%d fail=%d gap=%d\n", s_Pass, s_Fail, s_Gap);
 
 	return s_Fail == 0 ? 0 : 1;
