@@ -251,6 +251,11 @@ static void NfctIntrfReset(DevIntrf_t * const pIntrf)
 	nrfx_nfct_enable();
 }
 
+static void *NfctIntrfGetHandle(DevIntrf_t * const pIntrf)
+{
+	return pIntrf ? pIntrf->pDevData : nullptr;
+}
+
 bool NfctIntrfInit(NfctIntrfDev_t * const pDev, const NfctIntrfCfg_t * const pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr || pCfg->pFrameCB == nullptr)
@@ -329,10 +334,13 @@ bool NfctIntrfInit(NfctIntrfDev_t * const pDev, const NfctIntrfCfg_t * const pCf
 	p->StopTx = NfctIntrfStopTx;
 	p->Reset = NfctIntrfReset;
 	p->PowerOff = NfctIntrfDisable;
-	p->GetHandle = nullptr;
+	p->GetHandle = NfctIntrfGetHandle;
 	p->EvtCB = nullptr;
 	p->MaxTrxLen = NFCT_INTRF_FRAME_MAX;
 	atomic_flag_clear(&p->bBusy);
+	atomic_store(&p->EnCnt, 0);
+	atomic_store(&p->bTxReady, true);
+	atomic_store(&p->bNoStop, false);
 
 	return true;
 }
