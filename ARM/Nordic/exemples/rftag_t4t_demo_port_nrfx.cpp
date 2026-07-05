@@ -41,7 +41,7 @@ Modified by          Date              Description
 #include "device_intrf.h"
 #include "coredev/system_core_clock.h"
 #include "rftag/rftag.h"
-#include "nfct_intrf_nrfx.h"
+#include "nfct_nrfx.h"
 
 // The tag object lives in the demo main file.
 extern RFTag g_Tag;
