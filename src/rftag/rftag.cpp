@@ -57,6 +57,53 @@ static void RFTagAddrEncode(RFTagDev_t * const pDev, uint32_t Addr, uint8_t *pAd
 	}
 }
 
+static int RFTagReadLimit(RFTagDev_t * const pDev, uint32_t Addr, int Len)
+{
+	if (Addr >= pDev->Size || Len <= 0)
+	{
+		return 0;
+	}
+
+	int l = min(Len, (int)(pDev->Size - Addr));
+	size_t maxtrx = DeviceIntrfGetMaxTransferLen(pDev->pIntrf);
+
+	if (maxtrx > 0)
+	{
+		l = min(l, (int)maxtrx);
+	}
+
+	return l;
+}
+
+static int RFTagWriteLimit(RFTagDev_t * const pDev, uint32_t Addr, int Len)
+{
+	if (Addr >= pDev->Size || Len <= 0)
+	{
+		return 0;
+	}
+
+	int l = min(Len, (int)(pDev->Size - Addr));
+
+	if (pDev->PageSize > 0)
+	{
+		l = min(l, (int)(pDev->PageSize - (Addr % pDev->PageSize)));
+	}
+
+	size_t maxtrx = DeviceIntrfGetMaxTransferLen(pDev->pIntrf);
+
+	if (maxtrx > 0)
+	{
+		if (maxtrx <= pDev->AddrLen)
+		{
+			return 0;
+		}
+
+		l = min(l, (int)(maxtrx - pDev->AddrLen));
+	}
+
+	return l;
+}
+
 bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_t * const pIntrf)
 {
 	if (pDev == nullptr || pCfg == nullptr || pIntrf == nullptr)
@@ -64,7 +111,12 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 		return false;
 	}
 
-	if (pCfg->AddrLen > 4)
+	if (pCfg->AddrLen > 4 || pCfg->Size == 0)
+	{
+		return false;
+	}
+
+	if (pCfg->pMem && pCfg->MemSize < pCfg->Size)
 	{
 		return false;
 	}
@@ -75,6 +127,11 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 	}
 
 	if (pCfg->NdefMaxLen > 0 && pCfg->NdefMaxLen > (pCfg->Size - pCfg->NdefAddr))
+	{
+		return false;
+	}
+
+	if (pCfg->WrDelay > (UINT32_MAX / 1000u))
 	{
 		return false;
 	}
@@ -90,7 +147,7 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 	pDev->PageSize = pCfg->PageSize;
 	pDev->AddrLen = pCfg->AddrLen;
 	pDev->Size = pCfg->Size;
-	pDev->WrDelay = pCfg->WrDelay * 1000;
+	pDev->WrDelay = pCfg->WrDelay * 1000u;
 	pDev->NdefAddr = pCfg->NdefAddr;
 	pDev->NdefMaxLen = pCfg->NdefMaxLen ? pCfg->NdefMaxLen : (pCfg->Size - pCfg->NdefAddr);
 	pDev->NdefFmt = pCfg->NdefFmt;
@@ -114,16 +171,22 @@ bool RFTagInit(RFTagDev_t * const pDev, const RFTagCfg_t * const pCfg, DevIntrf_
 	// Select the tag behavior from the protocol. Each case references a bind
 	// function so the linker pulls that module object from the archive. A
 	// transport that runs the whole tag itself needs no protocol module.
-	switch (pCfg->XCap & RFTAG_XCAP_TAGFULL ? RFTAG_PROTO_NONE : pCfg->Proto)
+	if ((pCfg->XCap & RFTAG_XCAP_TAGFULL) == 0)
 	{
+		switch (pCfg->Proto)
+		{
 #ifdef RFTAG_PROTO_T4T_ENABLE
-		case RFTAG_PROTO_NFC_T4:
-			RFTagProtoT4tBind(pDev);
-			break;
+			case RFTAG_PROTO_NFC_T4:
+				RFTagProtoT4tBind(pDev);
+				break;
+#else
+			case RFTAG_PROTO_NFC_T4:
+				return false;
 #endif
-		default:
-			pDev->pProto = nullptr;
-			break;
+			default:
+				pDev->pProto = nullptr;
+				break;
+		}
 	}
 
 	if (pDev->pProto && pDev->pProto->Init)
@@ -206,8 +269,13 @@ int RFTagRead(RFTagDev_t * const pDev, uint32_t Addr, uint8_t *pBuff, int Len)
 
 	while (Len > 0 && Addr < pDev->Size)
 	{
-		int l = min(Len, (int)(pDev->Size - Addr));
+		int l = RFTagReadLimit(pDev, Addr, Len);
 		uint8_t devaddr = pDev->DevAddr;
+
+		if (l <= 0)
+		{
+			break;
+		}
 
 		RFTagAddrEncode(pDev, Addr, ad);
 
@@ -216,7 +284,6 @@ int RFTagRead(RFTagDev_t * const pDev, uint32_t Addr, uint8_t *pBuff, int Len)
 		{
 			break;
 		}
-
 
 		count += l;
 		Addr += l;
@@ -259,11 +326,11 @@ int RFTagWrite(RFTagDev_t * const pDev, uint32_t Addr, const uint8_t *pData, int
 	while (Len > 0 && Addr < pDev->Size)
 	{
 		uint8_t devaddr = pDev->DevAddr;
-		int l = min(Len, (int)(pDev->Size - Addr));
+		int l = RFTagWriteLimit(pDev, Addr, Len);
 
-		if (pDev->PageSize > 0)
+		if (l <= 0)
 		{
-			l = min(l, (int)(pDev->PageSize - (Addr % pDev->PageSize)));
+			break;
 		}
 
 		RFTagAddrEncode(pDev, Addr, ad);
@@ -282,7 +349,6 @@ int RFTagWrite(RFTagDev_t * const pDev, uint32_t Addr, const uint8_t *pData, int
 		{
 			usDelay(pDev->WrDelay);
 		}
-
 
 		Addr += l;
 		Len -= l;
