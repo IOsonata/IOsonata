@@ -70,7 +70,7 @@ SOFTWARE.
 #include "syslog.h"
 #define SMP_TRACE(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
-static const char *SmpCodeName(uint8_t c)
+static const char *SmpCodeName(uint8_t c);
 
 #define SMP_TRACE_PDU(dir, code, state) \
 		SMP_TRACE("SMP " dir " %s state=%d\r\n", SmpCodeName(code), state)
@@ -146,6 +146,7 @@ static CryptoDev_t *s_pCryptoAes  = nullptr;	// CRYPTO_CAP_AES128_ECB
 
 static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t Reason);
 
+#if BT_SMP_TRACE_ENABLE
 static const char *SmpCodeName(uint8_t c)
 {
 	switch (c)
@@ -167,6 +168,7 @@ static const char *SmpCodeName(uint8_t c)
 		default:								return "?";
 	}
 }
+#endif	// BT_SMP_TRACE_ENABLE
 
 //-----------------------------------------------------------------------------
 // Per-link context lookup
@@ -865,6 +867,17 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 				(pReq->AuthReq & BT_SMP_AUTHREQ_MITM);
 	bool oob = pLink->Ctx.bSc &&
 			   ((pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || s_SmpOob.bPeerValid);
+	// The peer's OOB flag asserts it received our OOB data. Without a local
+	// data set backing that claim the ra/rb inputs fall back to zero, so a
+	// peer that merely set the flag would finish a Just-Works-equivalent
+	// pairing that gets reported as authenticated. Fail closed instead.
+	if (pLink->Ctx.bSc && pReq->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT &&
+		!s_SmpOob.bLocalValid)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
 	pLink->Ctx.Model = SmpSelectModel(pReq->IOCaps, s_SmpIoCaps, mitm, oob);
 	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
 	{
@@ -1013,6 +1026,16 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 				(pRsp->AuthReq & BT_SMP_AUTHREQ_MITM);
 	bool oob = pLink->Ctx.bSc &&
 			   ((pRsp->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT) || s_SmpOob.bPeerValid);
+	// Same guard as the responder side: the peer may not claim receipt of
+	// local OOB data that was never generated, else zero ra/rb turn this
+	// into Just Works reported as authenticated.
+	if (pLink->Ctx.bSc && pRsp->OOBFlag != BT_SMP_OOB_AUTH_NOT_PRESENT &&
+		!s_SmpOob.bLocalValid)
+	{
+		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+		pLink->Ctx.State = BT_SMP_STATE_IDLE;
+		return;
+	}
 	pLink->Ctx.Model = SmpSelectModel(s_SmpIoCaps, pRsp->IOCaps, mitm, oob);
 	if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
 	{
@@ -1948,10 +1971,10 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 
 		case BT_SMP_CODE_PAIRING_FAILED:
 		{
-			const BtSmpPairingFailed_t *pFail = (const BtSmpPairingFailed_t*)pSmp;
 			if (Len >= sizeof(BtSmpPairingFailed_t))
 			{
-				SMP_TRACE("SMP RX Failed reason=0x%02x\r\n", pFail->Reason);
+				SMP_TRACE("SMP RX Failed reason=0x%02x\r\n",
+						  ((const BtSmpPairingFailed_t*)pSmp)->Reason);
 			}
 			pLink->Ctx.State = BT_SMP_STATE_IDLE;
 			BtSmpPairingComplete(ConnHdl, false, nullptr);
@@ -2126,13 +2149,16 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		SmpF4(localX, peerX, pLink->Ctx.LocalRand, 0, cf.Value);
 		memcpy(pLink->Ctx.LocalConfirm, cf.Value, 16);
 
+#if BT_SMP_TRACE_ENABLE
 		{
+			// Trace-only self-check: recompute Cb to confirm f4 is deterministic.
 			uint8_t cb2[16];
 			SmpF4(localX, peerX, pLink->Ctx.LocalRand, 0, cb2);
 			bool stable = (memcmp(cb2, cf.Value, 16) == 0);
 			SMP_TRACE("Cb stable=%d firstbyte=%02x Nb0=%02x\r\n",
 					  stable ? 1 : 0, cf.Value[0], pLink->Ctx.LocalRand[0]);
 		}
+#endif
 
 		SmpSend(pDev, pLink->ConnHdl, &cf, sizeof(cf));
 

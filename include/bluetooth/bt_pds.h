@@ -10,7 +10,7 @@
 
 		The store is generic and platform independent. It performs all record
 		management (lookup, append, tombstone, compaction) and calls a thin
-		BtPdsNvm implementation for the actual medium access. Each target provides a
+		BtPdsNvm implementation for the actual medium access. Each target provides an
 		implementation: RRAM through the SoftDevice on the bm port, flash on SDC, etc.
 
 		Keying and semantics match what peer_data_storage.c expects from the
