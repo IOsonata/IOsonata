@@ -222,6 +222,50 @@ int main()
 		Check("inventory answered after select", l == 10);
 	}
 
+	printf("== 8b. Addressed and selected mode gating ==\n");
+
+	{
+		static uint8_t selmem[64];
+		RFTagDev_t sd;
+		SetupTag(&sd, selmem, sizeof(selmem), false);
+		const uint8_t *suid = RFTagProtoIso15693DefaultUid();
+
+		// Stay Quiet without address must not silence the tag.
+		uint8_t sqn[] = { 0x02, 0x02 };
+		sd.pProto->OnFrame(&sd, sqn, sizeof(sqn), tx, sizeof(tx));
+		uint8_t invq[] = { 0x26, 0x01, 0x00 };
+		l = sd.pProto->OnFrame(&sd, invq, sizeof(invq), tx, sizeof(tx));
+		Check("unaddressed stay quiet ignored", l == 10);
+
+		// Selected flag read before Select must be silent.
+		uint8_t rsel[] = { 0x12, 0x20, 0x00 };
+		l = sd.pProto->OnFrame(&sd, rsel, sizeof(rsel), tx, sizeof(tx));
+		Check("selected read before select silent", l == 0);
+
+		// Select without address must not select the tag.
+		uint8_t seln[] = { 0x02, 0x25 };
+		sd.pProto->OnFrame(&sd, seln, sizeof(seln), tx, sizeof(tx));
+		l = sd.pProto->OnFrame(&sd, rsel, sizeof(rsel), tx, sizeof(tx));
+		Check("unaddressed select does not select", l == 0);
+
+		// Select addressed, then selected flag read must answer.
+		uint8_t sela[16];
+		int n = 0;
+		sela[n++] = 0x22;
+		sela[n++] = 0x25;
+		memcpy(&sela[n], suid, 8);
+		n += 8;
+		sd.pProto->OnFrame(&sd, sela, n, tx, sizeof(tx));
+		l = sd.pProto->OnFrame(&sd, rsel, sizeof(rsel), tx, sizeof(tx));
+		Check("selected read after select answers", l > 0);
+
+		// Reset to Ready clears selected state.
+		uint8_t rtr[] = { 0x02, 0x26 };
+		sd.pProto->OnFrame(&sd, rtr, sizeof(rtr), tx, sizeof(tx));
+		l = sd.pProto->OnFrame(&sd, rsel, sizeof(rsel), tx, sizeof(tx));
+		Check("selected read after reset silent", l == 0);
+	}
+
 	printf("== 9. Read only tag ==\n");
 
 	{

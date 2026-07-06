@@ -92,6 +92,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 	{
 		case BT_HCI_EVT_LE_CONN_COMPLETE:
 			{
+				if ((const uint8_t*)pLeEvtPkt->Data + sizeof(BtHciLeEvtConnComplete_t) > evtEnd)
+				{
+					break;
+				}
 				BtHciLeEvtConnComplete_t *p = (BtHciLeEvtConnComplete_t*)pLeEvtPkt->Data;
 				if (p->Status == 0)
 				{
@@ -181,6 +185,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_READ_LOCAL_P256_PUBLIC_KEY_COMPLETE:
 			{
+				if ((const uint8_t*)pLeEvtPkt->Data + sizeof(BtHciLeEvtReadLocalP256PubKeyComplete_t) > evtEnd)
+				{
+					break;
+				}
 				BtHciLeEvtReadLocalP256PubKeyComplete_t *p =
 						(BtHciLeEvtReadLocalP256PubKeyComplete_t*)pLeEvtPkt->Data;
 				BtSmpLocalPubKeyReady(pDev, p->Status, p->KeyXCoord, p->KeyYCoord);
@@ -188,6 +196,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE:
 			{
+				if ((const uint8_t*)pLeEvtPkt->Data + sizeof(BtHciLeEvtGenerateDHKeyComplete_t) > evtEnd)
+				{
+					break;
+				}
 				BtHciLeEvtGenerateDHKeyComplete_t *p =
 						(BtHciLeEvtGenerateDHKeyComplete_t*)pLeEvtPkt->Data;
 				BtSmpDhKeyReady(pDev, p->Status, p->DHKey);
@@ -514,6 +526,10 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 		case 0x5a:	// Encryption Change [v2] as emitted by the SDC controller
 					// (payload: status, conn_handle, enabled[, key_size]).
 			{
+				if (pEvtPkt->Hdr.Len < 4)
+				{
+					break;
+				}
 				uint8_t  status  = pEvtPkt->Data[0];
 				uint16_t connHdl = pEvtPkt->Data[1] | (pEvtPkt->Data[2] << 8);
 				uint8_t  enabled = pEvtPkt->Data[3];

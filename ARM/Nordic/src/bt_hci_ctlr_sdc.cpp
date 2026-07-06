@@ -54,6 +54,7 @@ SOFTWARE.
 #include "bluetooth/bt_hci_ctlr.h"
 #include "bluetooth/bt_gap.h"
 #include "coredev/system_core_clock.h"
+#include "coredev/rng.h"
 
 #if 0
 /******** For DEBUG ************/
@@ -234,14 +235,16 @@ static void BtStackSdcAssert(const char * file, const uint32_t line)
 	while(1);
 }
 
+// Controller entropy source. RngGet is the hardware-backed RNG abstraction in
+// coredev/rng.h: CRACEN CTR-DRBG (seeded from the CRACEN TRNG) on nRF54L/H, the
+// NRF_RNG peripheral on nRF52/53/91. Routing every priority through it removes
+// the libc rand path so BLE pairing, SMP, OOB and key material never draw from
+// a software PRNG. The build must link the nrfx RngGet (rng_nrfx.c); the weak
+// software default in coredev/rng.c is not for security use.
 static uint8_t BtStackRandPrioLowGet(uint8_t *pBuff, uint8_t Len)
 {
 	DEBUG_PRINTF("BtStackRandPrioLowGet\r\n");
-	for (int i = 0; i < Len; i++)
-	{
-		pBuff[i] = rand();
-	}
-
+	RngGet(pBuff, Len);
 	return Len;
 }
 
@@ -252,39 +255,7 @@ static uint8_t BtStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
 
 static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 {
-#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
-	NRF_CRACEN_Type *reg = NRF_CRACEN_S;
-
-	BtStackRandPrioLowGet(pBuff, Len);
-
-#else
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-#ifdef NRF5340_XXAA_NETWORK
-	NRF_RNG_Type *reg = NRF_RNG_NS;
-#else
-	NRF_RNG_Type *reg = NRF_RNG_S;
-#endif
-#else
-	NRF_RNG_Type *reg = NRF_RNG;
-#endif
-
-	reg->CONFIG = RNG_CONFIG_DERCEN_Enabled;
-
-	reg->EVENTS_VALRDY = 0;
-	reg->TASKS_START = 1;
-
-	for (int i = 0; i < Len; i++)
-	{
-		while (reg->EVENTS_VALRDY == 0);
-
-		pBuff[i] = reg->VALUE;
-		reg->EVENTS_VALRDY = 0;		// clear so the next VALUE is fresh entropy
-	}
-
-	reg->TASKS_STOP = 1;
-
-	reg->CONFIG = RNG_CONFIG_DERCEN_Disabled;
-#endif
+	RngGet(pBuff, Len);
 }
 
 static void BtStackSdcCB()

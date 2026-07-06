@@ -437,9 +437,16 @@ static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLe
 
 	bool bOption = (flags & REQ_FLAG_OPTION) != 0;
 	bool bAddressed = (flags & REQ_FLAG_ADDRESS) != 0;
+	bool bSelectedReq = (flags & REQ_FLAG_SELECT) != 0;
 
 	// A quiet tag answers only addressed or selected requests.
-	if (st->bQuiet && bAddressed == false && (flags & REQ_FLAG_SELECT) == 0)
+	if (st->bQuiet && bAddressed == false && bSelectedReq == false)
+	{
+		return 0;
+	}
+
+	// A selected mode request is answered only by the tag in selected state.
+	if (bSelectedReq && st->bSelected == false)
 	{
 		return 0;
 	}
@@ -447,11 +454,20 @@ static int Iso15693OnFrame(RFTagDev_t * const pDev, const uint8_t *pRx, int RxLe
 	switch (cmd)
 	{
 		case CMD_STAY_QUIET:
-			// Addressed only, no response.
+			// Addressed only. Do not go quiet on a non-addressed request.
+			if (bAddressed == false)
+			{
+				return 0;
+			}
 			st->bQuiet = true;
 			return 0;
 
 		case CMD_SELECT:
+			// Addressed only. Reject a non-addressed SELECT.
+			if (bAddressed == false)
+			{
+				return Iso15693Error(pTx, TxCap, ERR_NOT_RECOGNIZED);
+			}
 			st->bSelected = true;
 			st->bQuiet = false;
 			pTx[0] = 0x00;

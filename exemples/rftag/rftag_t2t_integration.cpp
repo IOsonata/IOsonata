@@ -15,9 +15,10 @@ RFTagEvtDispatch from rftag.cpp, it does not define its own.
 
 rftag.cpp includes the target headers idelay.h and iopinctrl.h, which are per
 part. To build this on a host, put a host include path ahead that provides
-small stubs for usDelay, msDelay and the IOPin inline helpers, and link the
-IOPinConfig stub below. The IOsonata host test include set already provides
-these stubs.
+small stubs for usDelay, msDelay and the IOPin inline helpers. IOPinConfig is
+a library function for GPIO pin configuration; link the IOsonata GPIO driver
+that defines it rather than redefining it here. The IOsonata host test set
+already provides these.
 
 @author	Hoang Nguyen Hoan
 @date	Jul. 5, 2026
@@ -57,11 +58,6 @@ SOFTWARE.
 
 static int s_Pass = 0;
 static int s_Fail = 0;
-
-// Host stub for the target pin driver, not used on this path.
-void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
-{
-}
 
 static void Check(const char *pName, bool bOk)
 {

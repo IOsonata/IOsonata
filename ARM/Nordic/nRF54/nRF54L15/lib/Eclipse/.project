@@ -1681,6 +1681,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_ndef.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/rftag/rftag_proto_iso15693.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_iso15693.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/rftag/rftag_proto_t2t.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t2t.cpp</locationURI>
