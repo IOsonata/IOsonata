@@ -2333,6 +2333,18 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		BtSmpBondAdd(ConnHdl, &pLink->Keys);
 		BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
 
+		// Single use OOB material: a successful OOB pairing consumes the
+		// pending random and confirm, the peer commitment they bind to is
+		// spent. The application generates fresh data with
+		// BtSmpOobLocalDataGen before the next OOB pairing. A failed pairing
+		// keeps the material so a retry against the same out of band exchange
+		// still works.
+		if (pLink->Ctx.Model == BT_SMP_MODEL_OOB)
+		{
+			s_SmpOob.bLocalValid = false;
+			s_SmpOob.bPeerValid = false;
+		}
+
 		pLink->Ctx.State = (peerKeyDist != 0) ? BT_SMP_STATE_KEYDIST
 											  : BT_SMP_STATE_DONE;
 	}

@@ -53,7 +53,10 @@ void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 /*******************************/
 #else
-#define DEBUG_PRINTF(...)
+// The disabled form keeps the arguments in an unevaluated sizeof so variables
+// used only in debug prints do not raise unused warnings. No code and no call
+// is generated, the expression is never evaluated.
+#define DEBUG_PRINTF(...)	((void)sizeof(SysLogPrintf(SysLogGet(), __VA_ARGS__)))
 #endif
 
 //alignas(4) static BtHciDevice_t s_HciDevice = {0,};
@@ -153,7 +156,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_READ_REMOTE_FEATURES_COMPLETE:
 			{
-				BtHciLeEvtReadRemoteFeatureComplete_t *p = (BtHciLeEvtReadRemoteFeatureComplete_t*)pLeEvtPkt->Data;
+//				BtHciLeEvtReadRemoteFeatureComplete_t *p = (BtHciLeEvtReadRemoteFeatureComplete_t*)pLeEvtPkt->Data;
 //				DEBUG_PRINTF("BT_HCI_EVT_LE_READ_REMOTE_FEATURES_COMPLETE \r\n");
 			}
 			break;
@@ -165,7 +168,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST:
 			{
-				BtHciLeEvtRemoteConnParamReq_t *p = (BtHciLeEvtRemoteConnParamReq_t*)pLeEvtPkt->Data;
+//				BtHciLeEvtRemoteConnParamReq_t *p = (BtHciLeEvtRemoteConnParamReq_t*)pLeEvtPkt->Data;
 				DEBUG_PRINTF("BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST\r\n");
 			}
 			break;
@@ -290,7 +293,7 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 			break;
 		case BT_HCI_EVT_LE_CHAN_SELECTION_ALGO:
 			{
-				BtHciLeEvtChanSelAlgo_t *p = (BtHciLeEvtChanSelAlgo_t *)pLeEvtPkt->Data;
+//				BtHciLeEvtChanSelAlgo_t *p = (BtHciLeEvtChanSelAlgo_t *)pLeEvtPkt->Data;
 
 //				DEBUG_PRINTF("BT_HCI_EVT_LE_CHAN_SELECTION_ALGO : hdl:%x %d\r\n", p->ConnHdl, p->ChanSelAlgo);
 			}
