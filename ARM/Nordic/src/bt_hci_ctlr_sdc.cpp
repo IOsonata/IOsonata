@@ -244,8 +244,8 @@ static void BtStackSdcAssert(const char * file, const uint32_t line)
 static uint8_t BtStackRandPrioLowGet(uint8_t *pBuff, uint8_t Len)
 {
 	DEBUG_PRINTF("BtStackRandPrioLowGet\r\n");
-	RngGet(pBuff, Len);
-	return Len;
+	// Fail closed: report 0 bytes if the hardware RNG did not deliver entropy.
+	return RngGet(pBuff, Len) ? Len : 0;
 }
 
 static uint8_t BtStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
@@ -255,7 +255,11 @@ static uint8_t BtStackRandPrioHighGet(uint8_t *pBuff, uint8_t Len)
 
 static void BtStackRandPrioLowGetBlocking(uint8_t *pBuff, uint8_t Len)
 {
-	RngGet(pBuff, Len);
+	// Fail closed: the poll source must not report weak entropy. Retry until the
+	// hardware RNG delivers, rather than proceeding with an unfilled buffer.
+	while (RngGet(pBuff, Len) == false)
+	{
+	}
 }
 
 static void BtStackSdcCB()

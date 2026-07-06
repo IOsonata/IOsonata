@@ -208,6 +208,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		case BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V1:
 		case BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V2:
 			{
+				if ((const uint8_t*)pLeEvtPkt->Data + sizeof(BtHciLeEvtEnhConnComplete_t) > evtEnd)
+				{
+					break;
+				}
 				BtHciLeEvtEnhConnComplete_t *p = (BtHciLeEvtEnhConnComplete_t*)pLeEvtPkt->Data;
 
 //				DEBUG_PRINTF("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE : hdl %x, role:%d\n", p->ConnHdl, p->Role);
