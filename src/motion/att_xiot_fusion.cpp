@@ -133,11 +133,11 @@ bool AttXiotFusion::UpdateData()
 	if (vpMag)
 	{
 		FusionVector fvmag = { mag.X,  mag.Y, mag.Z };
-	    FusionAhrsUpdate(&vAhrs, fvgyro, fvacc, fvmag, deltatime);
+	    FusionAhrsUpdate(&vAhrs, fvgyro, fvacc, fvmag);
 	}
 	else
 	{
-		FusionAhrsUpdateNoMagnetometer(&vAhrs, fvgyro, fvacc, deltatime);
+		FusionAhrsUpdateNoMagnetometer(&vAhrs, fvgyro, fvacc);
 	}
 
     FusionAhrsGetQuaternion(&vAhrs);

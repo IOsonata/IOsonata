@@ -1131,6 +1131,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_ndef.h</locationURI>
 		</link>
 		<link>
+			<name>include/rftag/rftag_proto_iso15693.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_proto_iso15693.h</locationURI>
+		</link>
+		<link>
 			<name>include/rftag/rftag_proto_t2.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rftag_proto_t2.h</locationURI>
@@ -2156,19 +2161,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t2.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/rftag/rftag_proto_t2t.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t2t.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/rftag/rftag_proto_t4.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t4.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/rftag/rftag_proto_t4t.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t4t.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/rftag/st25dv.cpp</name>
